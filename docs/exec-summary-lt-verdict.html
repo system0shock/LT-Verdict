@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>LT Verdict — краткая выжимка для руководства</title>
+<style>
+  @page { size: A4; margin: 13mm 14mm; }
+  * { box-sizing: border-box; }
+  body { font-family: "Segoe UI", Arial, sans-serif; font-size: 9pt; line-height: 1.27; color: #1a1a1a; margin: 0; }
+  .header { border-bottom: 3px solid #1f4e79; padding-bottom: 4px; margin-bottom: 7px; }
+  h1 { font-size: 17pt; color: #1f4e79; margin: 0 0 2px 0; }
+  .subtitle { color: #555; font-size: 9pt; }
+  h2 { font-size: 10pt; color: #1f4e79; margin: 7px 0 2px 0; text-transform: uppercase; letter-spacing: .4px; border-bottom: 1px solid #cfd8e3; padding-bottom: 2px; }
+  p { margin: 3px 0; }
+  ul { margin: 3px 0 3px 16px; padding: 0; }
+  li { margin: 1px 0; }
+  table { border-collapse: collapse; width: 100%; margin: 4px 0; }
+  th, td { border: 1px solid #b9c6d4; padding: 2px 5px; text-align: left; vertical-align: top; }
+  th { background: #eaf0f6; font-weight: 600; }
+  .kpi { display: flex; gap: 8px; margin: 6px 0; }
+  .kpi div { flex: 1; border: 1px solid #cfd8e3; border-left: 3px solid #1f4e79; padding: 5px 8px; background: #f7fafc; }
+  .kpi b { display: block; font-size: 11.5pt; color: #1f4e79; }
+  .note { color: #555; font-size: 8.6pt; }
+  .footer { margin-top: 6px; padding-top: 4px; border-top: 1px solid #cfd8e3; color: #666; font-size: 8.2pt; }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1>LT Verdict</h1>
+  <div class="subtitle">Платформа анализа результатов нагрузочного тестирования · выжимка по проектной концепции (PRC v0.4) · июль 2026</div>
+</div>
+
+<h2>Проблема</h2>
+<p>Разбор результатов нагрузочных тестов сегодня — ручная работа: перцентили усредняются математически некорректно, сравнение с прошлыми прогонами — «на глаз», протокол НТ собирается вручную в Confluence. Вердикт зависит от исполнителя и невоспроизводим: по одним и тем же данным два инженера могут вынести разные заключения.</p>
+
+<h2>Решение</h2>
+<p>Дистрибутив, который команда разворачивает в своём контуре. Платформа собирает факты прогона из трёх источников — результаты <b>Gatling/JMeter</b>, аппаратные метрики из существующей <b>VictoriaMetrics</b>, APM из <b>ELK</b> — и выносит <b>детерминированный вердикт</b> по версионируемому контракту правил с автоматической публикацией <b>формального протокола в Confluence</b>. Заложен контракт регистрации прогона — задел под запуск из Jenkins и CI-гейты без переделки архитектуры.</p>
+
+<h2>Ключевые свойства</h2>
+<ul>
+  <li><b>Воспроизводимость:</b> вердикт побайтово повторяется из тех же входов и версии правил; неполные данные → NO_VERDICT, а не «зелёный по умолчанию».</li>
+  <li><b>Безопасность:</b> все доступы к источникам — read-only (испортить мониторинг/ELK платформа не может физически); данные прогонов не покидают контур команды (152-ФЗ, PCI DSS).</li>
+  <li><b>Управляемость:</b> правила вердикта — код в Git; правки из GUI проходят merge request с ревью человеком; append-only журнал всех решений.</li>
+</ul>
+
+<h2>Возможности MVP</h2>
+<ul>
+  <li><b>Приём результатов</b> Gatling (3.9.5/3.12) и JMeter: push через API (curl / Jenkins pipeline) или загрузка через GUI.</li>
+  <li><b>Регистрация прогона</b> с provenance (сценарий, стенд, commit, датасет, фазы нагрузки) — задел под запуск из Jenkins и будущие CI-гейты.</li>
+  <li><b>Автосбор фактов прогона:</b> аппаратные метрики из VictoriaMetrics и APM из ELK за окно прогона.</li>
+  <li><b>Детерминированный вердикт</b> по версионируемым SLA-правилам: абсолютные пороги + сравнение с baseline со статистической значимостью; fail-closed при неполных данных.</li>
+  <li><b>Корректная статистика:</b> перцентили из HDR-гистограмм (без усреднения перцентилей), drill-down по группам и запросам.</li>
+  <li><b>Протокол НТ в Confluence</b> — автоматически, идемпотентно, с версионированием страниц; воспроизводимый комплект (AsciiDoc + графики + verdict.json) в MinIO.</li>
+  <li><b>GUI:</b> список и карточка прогона, сравнение двух прогонов, live-наблюдение за идущим тестом, структурный SLA-редактор с циклом merge request.</li>
+</ul>
+
+<h2>Ресурсы</h2>
+<ul>
+  <li><b>Персонал:</b> 1 инженер НТ (part-time, совмещение с текущими задачами) + AI-ассистент разработки; точечные консультации администраторов источников данных (VictoriaMetrics, ELK) и DevOps (OpenShift, дистрибутив). Отдельная команда разработки не требуется.</li>
+  <li><b>Инфраструктура</b> (на команду): ~7–10 vCPU, ~20 GiB RAM, ~1 TiB диск; PostgreSQL + MinIO; развёртывание Helm (OpenShift) или docker-compose.</li>
+</ul>
+
+<h2>Сроки: пилот на одной команде — до конца января 2027</h2>
+<table>
+  <tr><th>Период</th><th>Результат</th></tr>
+  <tr><td>авг–сен 2026</td><td>Ingest-ядро: регистрация прогона, приём результатов (push/GUI), парсеры Gatling и JMeter, HDR-нормализация</td></tr>
+  <tr><td>сен–окт 2026</td><td>Коллекторы VictoriaMetrics и ELK APM — полный факт прогона из трёх источников</td></tr>
+  <tr><td>ноя 2026</td><td>Verdict engine — первый детерминированный вердикт по реальному прогону</td></tr>
+  <tr><td>дек 2026</td><td>Протоколы НТ в Confluence, GUI с SLA-редактором</td></tr>
+  <tr><td>янв 2027</td><td>Дистрибутив (Helm/compose), пилот на одной команде: ≥10 прогонов с вердиктами и протоколами</td></tr>
+</table>
+<p class="note">Инженерная трудоёмкость — 13–16 недель эквивалента полной занятости; план соответствует сроку при занятости инженера ~50%. Согласования ИБ и выдача доступов идут параллельно разработке (заявки — в первую неделю); их задержка сдвигает коллекторы и пилот, но не увеличивает трудоёмкость.</p>
+
+<div class="footer">Полный текст: PRC v0.4 («prc-lt-verdict-v0.4.md»). Протокол архитектурных решений: «docs/decisions-2026-07-20.md».</div>
+
+</body>
+</html>

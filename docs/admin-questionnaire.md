@@ -10,7 +10,7 @@
 |---|---|---|---|
 | 1 | Какие варианты развёртывания доступны? | Docker или Podman; Docker Compose; OpenShift/Kubernetes; отдельная Linux/Windows ВМ. Указать версии и предпочтительный вариант. | |
 | 2 | Какие ограничения действуют для контейнеров? | Разрешённые registry и базовые образы; rootless/не-root; запрет privileged; возможность запускать дополнительные контейнеры или sidecar. | |
-| 3 | Какие ресурсы и платформенные сервисы доступны? | vCPU, RAM, SSD/HDD, объём и квоты (ориентир: 8 vCPU, 24 GiB RAM, от 1 TiB); PostgreSQL 15+; MinIO/S3; постоянные тома; backup/restore. Указать версии. | |
+| 3 | Какие ресурсы и платформенные сервисы доступны? | vCPU, RAM, SSD/HDD, объём и квоты (ориентир: 8 vCPU, 24 GiB RAM, отдельный том 0,5–2 TiB для каталога артефактов); PostgreSQL 15+; bind mount/постоянный том; backup/restore. Указать версии. | |
 
 ## 2. Источники данных и интеграции
 
@@ -25,8 +25,8 @@
 
 | № | Вопрос | Что указать | Ответ |
 |---|---|---|---|
-| 8 | Какие сетевые маршруты можно открыть? | Core → VictoriaMetrics/Elastic/InfluxDB/Git/Confluence; генераторы/Jenkins → Core или MinIO. Указать proxy, firewall, DNS и TLS-требования. | |
-| 9 | Как разрешено передавать JTL размером 0,5–3 ГБ? | Прямой multipart upload в MinIO; загрузка через Core ingress; Jenkins artifacts. Указать лимиты тела запроса, таймауты proxy/ingress и возможность resume. | |
+| 8 | Какие сетевые маршруты можно открыть? | Core → VictoriaMetrics/Elastic/InfluxDB/Git/Confluence; генераторы/Jenkins → Core. Указать proxy, firewall, DNS и TLS-требования. | |
+| 9 | Как разрешено передавать JTL размером 0,5–3 ГБ? | Chunked/resumable upload через Core ingress или доставка через Jenkins artifacts. Указать лимиты тела запроса, таймауты proxy/ingress и возможность resume. | |
 | 10 | Можно ли установить подписанный uploader CLI? | На удалённых генераторах и/или Jenkins-агентах; порядок установки, обновления и согласования исполняемого файла. | |
 | 11 | Какие механизмы идентификации и секретов обязательны? | SSO/OIDC/AD для GUI; сервисные аккаунты; Vault/OpenShift Secrets; TLS/mTLS; правила ротации и журналирования. | |
 

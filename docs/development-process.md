@@ -34,6 +34,9 @@
 
 ## Ветки и worktree
 
+Проект использует GitHub Flow с защищённой веткой `main`, короткоживущими
+тематическими ветками и обязательными Pull Request.
+
 - Прямые изменения и push в `main` запрещены.
 - Каждая задача выполняется в отдельной короткоживущей ветке или worktree.
 - Допустимые префиксы веток: `feat/`, `fix/`, `docs/`, `refactor/`, `test/`,
@@ -159,10 +162,9 @@ Superpowers, а проектную инструкцию применяет ка�
 `superpowers:requesting-code-review` и `superpowers:receiving-code-review` для
 review; `superpowers:finishing-a-development-branch` для завершения ветки.
 
-Новые project skills допустимы только для самостоятельной, неочевидной и
-повторяемой техники. Соглашения остаются в `AGENTS.md`, а механически
-проверяемые требования — в CI. До создания skill обязателен RED–GREEN–REFACTOR
-с проверкой поведения агента без skill и с ним.
+Проектные skills и проектные scripts запрещены. Проектные соглашения остаются в
+`AGENTS.md`, а механически проверяемые требования — в CI. Этот rollout не
+создаёт ни project skills, ни project scripts.
 
 ## Матрица моделей субагентов
 

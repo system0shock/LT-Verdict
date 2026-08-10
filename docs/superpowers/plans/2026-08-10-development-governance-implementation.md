@@ -13,7 +13,7 @@
 ## Global Constraints
 
 - Утверждённый источник требований: `docs/superpowers/specs/2026-08-10-project-development-governance-design.md`.
-- Не создавать project skills: проектные соглашения принадлежат `AGENTS.md`, механические проверки — CI.
+- Не создавать project skills в этом rollout: проектные соглашения принадлежат `AGENTS.md`, механические проверки — CI.
 - Не создавать файлы в `scripts/` и не добавлять локальные Git hooks.
 - Не изменять и не добавлять в индекс существующие пользовательские untracked-файлы: `docs/stage-1-spec.md`, `docs/superpowers/plans/2026-08-10-development-plan.md`, `k3-prc-review.md`, `prc-lt-verdict-v0.5.md`.
 - Использовать только явный `git add -- <paths>`; не использовать `git add .` и `git add -A`.
@@ -726,7 +726,7 @@ Expected: markdownlint и diff check возвращают `0`; placeholder searc
 - same-PR documentation rule;
 - Superpowers compatibility;
 - Luna/Terra/Sol Max routing и fallback;
-- запрет project skills и scripts;
+- условия допустимости project skills и отсутствие project scripts;
 - Definition of Done и remote-operation consent;
 - Markdown, link, PR-title и secret checks.
 
@@ -767,7 +767,18 @@ Expected: проверки зелёные; staged-файлов нет; поль�
 docs: establish development governance
 ```
 
-В PR заполнить шаблон, дождаться checks `Markdown`, `Links`, `Secrets`, `PR title` и записать фактические ссылки/результаты. При недоступном или красном check не считать регламент внедрённым.
+`PR title` использует `pull_request_target`, поэтому workflow должен сначала
+появиться в default branch. Rollout выполняется в два PR после явного разрешения
+пользователя:
+
+1. Минимальный bootstrap PR добавляет только `.github/workflows/pr-title.yml` с
+   заголовком `ci: bootstrap pull request title check`. Отсутствие `PR title` на
+   этом bootstrap PR фиксируется как наблюдаемое ограничение.
+2. После merge bootstrap PR governance PR заполняет шаблон, дожидается checks
+   `Markdown`, `Links`, `Secrets`, `PR title` и записывает фактические
+   ссылки/результаты.
+
+При недоступном или красном обязательном check не считать регламент внедрённым.
 
 - [ ] **Step 8: Настроить branch protection вручную**
 

@@ -13,6 +13,8 @@
 2. Run `git status --short --branch` and preserve unrelated changes.
 3. Define observable acceptance criteria and verification commands.
 4. Use an isolated branch/worktree for implementation when supported.
+5. Record every production dependency or public-contract change explicitly in
+   the implementation plan or an ADR before implementation.
 
 ## Superpowers workflow
 

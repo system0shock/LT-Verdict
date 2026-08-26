@@ -36,9 +36,9 @@ runtime, connectors и framework для контрактов не создают
 | Slice 5 | Отдельный `capacity_step` режим и консервативная оценка максимума |
 | Slice 6 | JVM и OpenShift analysis packs |
 | Slice 7 | OpenSearch 2.6 errors, overlay на графики, optional correlation |
-| Slice 8 | Local/Grafana rendering, сравнение прогонов, таблица динамики за N тестов |
+| Slice 8 | Local rendering, Grafana links, сравнение прогонов, таблица динамики за N тестов |
 | Slice 9 | JSON, self-contained HTML, AsciiDoc, Confluence-ready и REST skeleton |
-| Slice 10 | Рекомендательный headless GigaCode analysis и Skill адаптации НТ-скриптов |
+| Slice 10 | Grafana rendered evidence, рекомендательный headless GigaCode analysis и Skill адаптации НТ-скриптов |
 | Post-MVP | Server deployment, shared history/RBAC, code-aware RCA |
 
 ---

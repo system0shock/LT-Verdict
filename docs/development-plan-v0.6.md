@@ -36,9 +36,9 @@ MVP — локально запускаемое приложение с обяз
 | 5. Capacity analysis | PLANNED | Отдельный `capacity_step` режим, таблица ступеней и консервативная оценка максимума | Результат различает bounded/lower/upper/indeterminate и не принимает насыщение генератора за предел продукта |
 | 6. JVM and OpenShift | PLANNED | JVM и OpenShift metric packs | Findings строятся только по доступным capabilities и ссылаются на raw evidence |
 | 7. OpenSearch | PLANNED | Ошибки OpenSearch 2.6 за окно: services, types/fingerprints, frequency, distribution; overlay на прочие графики; correlation opt-in | Error report и overlay работают с governor; correlation failure не меняет verdict |
-| 8. Charts and comparison | PLANNED | Локальный renderer, Grafana links/optional render, baseline comparison и таблица динамики метрик за настраиваемые N прогонов | Сравнение использует сохранённые RunBundles и не повторяет external queries |
+| 8. Charts and comparison | PLANNED | Локальный renderer, Grafana links, baseline comparison и таблица динамики метрик за настраиваемые N прогонов | Сравнение использует сохранённые RunBundles и не повторяет external queries |
 | 9. Reports and publishing | PLANNED | JSON, self-contained HTML, AsciiDoc, Confluence-ready output и fail-soft Confluence REST skeleton | Все форматы строятся из одного result; transport failure не меняет analysis |
-| 10. Advisory add-ons | PLANNED | Рекомендательный analysis через headless GigaCode (fork Qwen Code 0.21.1) и GigaCode Skill для audit/patch адаптации НТ-скриптов | AI output явно advisory; Skill проверяет platform tags/invariants и не применяет patch без подтверждения |
+| 10. Advisory add-ons | PLANNED | Grafana rendered evidence, рекомендательный analysis через headless GigaCode (fork Qwen Code 0.21.1) и GigaCode Skill для audit/patch адаптации НТ-скриптов | AI output явно advisory; Skill проверяет platform tags/invariants и не применяет patch без подтверждения |
 
 Каждый следующий slice получает собственные короткие spec и implementation
 plan. Он не обязан ждать не связанных с ним optional add-ons, но не дублирует

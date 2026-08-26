@@ -2,8 +2,8 @@
 
 **Дата:** 2026-08-26
 
-**Статус:** дизайн согласован в диалоге; письменная версия ожидает ревью
-пользователя
+**Статус:** утверждён пользователем 2026-08-26; границы Slice 0 упрощены
+2026-08-27
 
 **Основание:** `lt-verdict-prc-prd-v0.6.md`,
 `docs/prc-v0.6-alignment-review.md` и решения пользователя от 2026-08-26
@@ -1116,46 +1116,28 @@ implementation plan обязан создать короткий provenance reco
 
 ## 25. Planned public contracts
 
-До production implementation должны быть зафиксированы schemas или ADR для:
+Контракт фиксируется перед реализацией использующего его slice, а не заранее
+для всего MVP. Slice 0 фиксирует только:
 
-- RunBundle v1, canonical serialization и AnalysisRun identity;
-- module manifest/capability, evidence version и reason-code schemas;
-- parser/version, archive и source snapshot contracts;
-- `analysis_mode` и stage metadata;
-- `verdict.json`, `analysis.json` и `capacity.json`;
-- Finding, Evidence, Incident и association labels;
-- source snapshot and acquisition provenance;
-- common HTTP request governor;
-- Jenkins durable trigger lifecycle/correlation и artifact contract;
-- PostgreSQL pre/post snapshot and DML diff;
-- `EvidenceChart`;
-- report formats и Confluence publisher status;
-- `ai-advice.json`;
-- GigaCode Skill compatibility report and patch modes.
+- `run.v1` — идентичность запуска, режим анализа и ссылки с SHA-256 на входы;
+- `analysis-result.v1` — validity, verdict, coverage, findings и evidence.
 
-Эта spec не добавляет production dependency. Implementation plan должен
-зафиксировать каждую новую dependency до её добавления. Для static charts
-разрешена только одна JVM chart library.
+Остальные контракты не удалены: parser/archive и local runtime принадлежат
+Slice 1; source snapshots и request governor — Slice 2; Jenkins transport и
+artifacts — Slices 3–4; capacity — Slice 5; JVM/OpenShift и OpenSearch —
+Slices 6–7; charts/comparison — Slice 8; reports/Confluence — Slice 9;
+GigaCode runner и Skill — Slice 10.
 
-## 26. ADR перед реализацией
+Эта spec не добавляет production dependency. Каждая новая dependency и каждый
+новый public contract фиксируются в плане своего slice или ADR до реализации.
 
-Минимальный набор решений:
+## 26. ADR по мере реализации
 
-1. PRC v0.6 baseline и migration from v0.5.
-2. Local Web runtime, loopback security и storage boundaries.
-3. RunBundle identity, immutable inputs и re-analysis.
-4. Verdict/analysis/capacity split и determinism boundaries.
-5. Module capabilities и fail-closed/fail-soft semantics.
-6. Stage inference и `capacity_step`.
-7. Connector snapshots, request governor и source provenance.
-8. PostgreSQL online snapshots и DML diff limits.
-9. Jenkins trigger, artifact acquisition и idempotency.
-10. EvidenceChart, deterministic reports и Confluence publisher.
-11. GigaCode runner, advisory AI и Skill safety boundaries.
-12. Reference repository permission and provenance.
-
-Допускается объединить тесно связанные решения в меньшее число ADR, если
-каждый public contract и consequence остаётся явным.
+Отдельный пакет предварительных ADR не нужен. Утверждённые PRC, эта spec и
+implementation plan фиксируют решения Slice 0. ADR создаётся в том slice, где
+реально появляется значимое решение о runtime, API, schema, dependency,
+security или эксплуатации; один ADR может покрывать несколько тесно связанных
+решений.
 
 ## 27. Реализационные срезы
 
@@ -1165,35 +1147,25 @@ implementation plan обязан создать короткий provenance reco
 миграцию v0.5 to v0.6. Каждый следующий slice получает собственные
 specification, implementation plan и exit gate.
 
-Slice — milestone group, а не обещание одного PR. Каждый public contract,
-connector/report family и независимо проверяемое UI behavior оформляются
-отдельным atomic PR; implementation plan может дробить перечисленные пункты ещё
-мельче, но не объединять соседние slices ради удобства доставки.
+Slice — milestone group, а не обещание одного PR. Один PR содержит одну
+законченную проверяемую задачу; связанные небольшие контракты разрешено
+доставлять вместе.
 
 ### Slice 0. Contracts and evidence
 
-- нормативный PRC v0.6 и ADR;
-- RunBundle, AnalysisRun и result schemas с canonical serialization/hashing;
-- module manifest/capability schema, module/evidence versions и blocking reason
-  code dictionary;
-- versioned JMeter/Gatling parser, archive и source snapshot contracts;
-- pinned source/connector, stepped-capacity, malicious-input fixtures и parser
-  oracles;
-- offline verifier;
-- deterministic generator и bounded-memory benchmark protocol с limits и
-  required evidence; фактическое parser measurement входит в exit gate Slice 1;
-- local-input/loopback threat model;
-- documentation verification и milestone report.
+- нормативный PRC v0.6, компактный roadmap и superseded-маркеры v0.5;
+- две минимальные JSON Schema: `run.v1` и `analysis-result.v1`;
+- по одному маленькому синтетическому JMeter JTL и Gatling `simulation.log`;
+- один stdlib-only offline verifier для JSON, required-полей и SHA-256 входов;
+- короткий milestone report.
 
 Минимальный executable exit gate Slice 0 —
-`python tools/fixtures/verify_stage0.py --root .`. Он работает offline и
-завершается non-zero при schema/hash/oracle/provenance mismatch, неизвестной
-module/evidence version, неизвестном blocking reason code или неполном fixture
-corpus. Точный набор файлов и tests фиксирует следующий implementation plan.
-Нормативная миграция этого же Slice явно сужает временный запрет project scripts
-из `docs/development-process.md`: разрешается только deterministic offline
-verification/test tooling без production runtime role. До принятия этой правки
-verifier не добавляется.
+`python tools/verify_slice0.py`. Он работает offline, не требует сторонних
+зависимостей и завершается non-zero при невалидном JSON, отсутствии обязательного
+верхнеуровневого поля или несовпадении SHA-256. Registry, version matrix,
+semantic oracles, benchmark, source/security/capacity corpora и production
+runtime в Slice 0 не создаются: они добавляются только вместе с использующим их
+slice.
 
 ### Slice 1. Local usable shell
 
@@ -1325,10 +1297,10 @@ MVP design считается реализованным только при в�
 29. Malicious JTL/OpenSearch/SQL/link fixtures подтверждают contextual escaping,
     safe URL schemes, report CSP и запрет credentialed cross-origin redirects.
 30. Secrets отсутствуют в RunBundle, browser storage, reports и AI staging.
-31. Offline Slice 0 verifier отклоняет неизвестные schema, parser/archive,
-    module/evidence versions, blocking reason codes и повреждённые hashes/oracles.
-32. Bounded-memory benchmark protocol и deterministic input hash зафиксированы в
-    Slice 0; фактический parser benchmark проходит exit gate Slice 1.
+31. Offline Slice 0 verifier читает обе schema и оба example, проверяет их
+    обязательные верхнеуровневые поля и отклоняет повреждённые hashes входов.
+32. Каждая MVP-фича из разделов 3 и 5 имеет owning Slice 1–10; упрощение
+    Slice 0 не удаляет её из roadmap.
 33. Серверное развёртывание не является prerequisite ни одного критерия выше.
 
 ## 29. Проверка этой спецификации
@@ -1348,9 +1320,8 @@ git status --short --branch
 После письменного утверждения этой spec следующий implementation plan должен:
 
 - сделать PRC v0.6 tracked и нормативным;
-- пометить v0.5 plans/specs как superseded;
-- создать необходимые ADR и contracts;
-- переписать development plan и current stage gate;
+- пометить v0.5 PRC/plan/spec как superseded;
+- создать только два контракта и два синтетических примера Slice 0;
+- создать компактный roadmap со всеми Slices 1–10;
 - обновить README и CHANGELOG;
-- не начинать production implementation до проверяемого contract/evidence
-  gate.
+- закрыть Slice 0 одним stdlib-only verifier и коротким milestone report.

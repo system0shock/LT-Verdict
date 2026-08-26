@@ -44,11 +44,24 @@ def verify_input(item: object) -> None:
     if expected_hash != expected_hash.lower():
         raise ValueError(f"{relative_path}: sha256 must be lowercase")
 
-    path = (ROOT / relative_path).resolve()
+    relative = Path(relative_path)
+    if (
+        "\\" in relative_path
+        or ":" in relative_path
+        or relative.is_absolute()
+        or ".." in relative.parts
+    ):
+        raise ValueError(
+            f"{relative_path}: input path must be portable and repository-relative"
+        )
+
+    path = (ROOT / relative).resolve()
     try:
         path.relative_to(ROOT)
     except ValueError as error:
         raise ValueError(f"{relative_path}: input escapes repository root") from error
+    if not path.is_file():
+        raise ValueError(f"{relative_path}: input must be a regular file")
 
     actual_hash = hashlib.sha256(path.read_bytes()).hexdigest()
     if actual_hash != expected_hash:

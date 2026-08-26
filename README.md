@@ -5,14 +5,15 @@ LT Verdict — платформа детерминированного анал�
 
 ## Статус
 
-Принят local-first baseline v0.6. Выполняется Slice 0: минимальная
-документационно-контрактная подготовка перед локальным runtime.
+Принят local-first baseline v0.6. Локальный gate-кандидат Slice 0 готов к
+пользовательскому review перед началом runtime-разработки.
 
 ## Документация
 
 - [Краткое резюме](exec-summary-lt-verdict.pdf)
 - [Нормативный PRC/PRD v0.6](lt-verdict-prc-prd-v0.6.md)
 - [Текущий план v0.6](docs/development-plan-v0.6.md)
+- [Milestone report Slice 0](docs/milestones/slice-0.md)
 - [Уточнения local-first MVP](docs/superpowers/specs/2026-08-26-v06-local-mvp-delta-design.md)
 - [Alignment review v0.6](docs/prc-v0.6-alignment-review.md)
 - [Исторический PRC v0.5](prc-lt-verdict-v0.5.md)

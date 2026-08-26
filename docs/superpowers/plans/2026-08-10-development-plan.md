@@ -1,5 +1,8 @@
 # LT Verdict — план разработки (по PRC v0.5)
 
+> **Superseded:** нормативный baseline и текущий план находятся в
+> `lt-verdict-prc-prd-v0.6.md` и `docs/development-plan-v0.6.md`.
+>
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** довести LT Verdict от концепции (PRC v0.5) до готового к пилоту дистрибутива: контракты → ingest-ядро → коллекторы → вердикт → протокол/GUI + ИИ-слой → RCA с ИИ → дистрибутив. Разработка ведётся вне боевой среды.

@@ -5,13 +5,18 @@ LT Verdict — платформа детерминированного анал�
 
 ## Статус
 
-Проект находится на стадии подготовки к реализации. Основные архитектурные и
-процессные решения фиксируются в Git до начала разработки компонентов.
+Принят local-first baseline v0.6. Выполняется Slice 0: минимальная
+документационно-контрактная подготовка перед локальным runtime.
 
 ## Документация
 
 - [Краткое резюме](exec-summary-lt-verdict.pdf)
-- [Историческая базовая версия PRC](prc-lt-verdict-v0.4.md)
+- [Нормативный PRC/PRD v0.6](lt-verdict-prc-prd-v0.6.md)
+- [Текущий план v0.6](docs/development-plan-v0.6.md)
+- [Уточнения local-first MVP](docs/superpowers/specs/2026-08-26-v06-local-mvp-delta-design.md)
+- [Alignment review v0.6](docs/prc-v0.6-alignment-review.md)
+- [Исторический PRC v0.5](prc-lt-verdict-v0.5.md)
+- [Исторический PRC v0.4](prc-lt-verdict-v0.4.md)
 - [Протокол решений](docs/decisions-2026-07-20.md)
 - [Регламент разработки](docs/development-process.md)
 - [Дизайн регламента для AI-агентов](docs/superpowers/specs/2026-08-10-project-development-governance-design.md)

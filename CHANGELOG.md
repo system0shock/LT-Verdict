@@ -7,4 +7,5 @@
 
 ### Added
 
+- Принят local-first baseline PRC/PRD v0.6 и план MVP по Slices 0–10.
 - Регламент разработки и правила работы AI-агентов.

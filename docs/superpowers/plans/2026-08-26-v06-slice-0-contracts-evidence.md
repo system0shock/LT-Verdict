@@ -67,8 +67,10 @@ runtime, connectors и framework для контрактов не создают
 
 - [ ] **Step 1: Add the reviewed baseline without rewriting it**
 
-  Добавить точное содержимое двух утверждённых source-файлов. Сравнить SHA-256
-  source и tracked copy через `Get-FileHash`; обе пары должны совпасть.
+  Добавить утверждённое содержимое двух source-файлов. В tracked PRC изменить
+  статус на нормативный со ссылкой на delta design и заменить три
+  trailing-space hard breaks в metadata на пустые строки, чтобы пройти
+  `git diff --check`; alignment review переносится побайтово.
 
 - [ ] **Step 2: Write the compact roadmap**
 

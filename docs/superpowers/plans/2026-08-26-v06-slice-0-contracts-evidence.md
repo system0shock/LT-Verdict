@@ -52,6 +52,7 @@ runtime, connectors и framework для контрактов не создают
 - Create: `lt-verdict-prc-prd-v0.6.md`
 - Create: `docs/prc-v0.6-alignment-review.md`
 - Create: `docs/development-plan-v0.6.md`
+- Modify: `.markdownlint-cli2.yaml`
 - Modify: `README.md`
 - Modify: `CHANGELOG.md`
 - Modify: `prc-lt-verdict-v0.5.md`
@@ -89,16 +90,20 @@ runtime, connectors и framework для контрактов не создают
 
   README должен ссылаться на PRC v0.6, roadmap, delta-spec и alignment review.
   В `CHANGELOG.md` добавить одну строку о принятии local-first baseline v0.6.
+  Accepted PRC и superseded legacy documents сохраняют reviewed formatting и
+  явно исключаются в `.markdownlint-cli2.yaml`; новые активные документы
+  остаются под lint.
 
 - [ ] **Step 4: Verify documentation**
 
   ```powershell
-  npx --yes markdownlint-cli2@0.23.2 README.md CHANGELOG.md lt-verdict-prc-prd-v0.6.md docs/prc-v0.6-alignment-review.md docs/development-plan-v0.6.md prc-lt-verdict-v0.5.md docs/stage-1-spec.md docs/superpowers/plans/2026-08-10-development-plan.md
+  npx --yes markdownlint-cli2@0.23.2 "**/*.md"
   git diff --check
   git grep -n -I -E "(BEGIN (RSA|OPENSSH|EC) PRIVATE KEY|AKIA[0-9A-Z]{16})" -- .
   ```
 
-  Expected: markdownlint and diff checks exit `0`; secret scan returns no match.
+  Expected: markdownlint проверяет все non-ignored Markdown files и вместе с
+  diff check завершается с exit `0`; secret scan не находит совпадений.
 
 - [ ] **Step 5: Commit only the listed files**
 
@@ -117,6 +122,7 @@ runtime, connectors и framework для контрактов не создают
 - Create: `fixtures/slice0/jmeter.jtl`
 - Create: `fixtures/slice0/simulation.log`
 - Create: `tools/verify_slice0.py`
+- Create: `.gitattributes`
 
 **Interfaces:**
 
@@ -127,8 +133,9 @@ runtime, connectors и framework для контрактов не создают
 - [ ] **Step 1: Write the verifier first and confirm RED**
 
   The script loads the two fixed schema paths, reads `examples[0]`, checks every
-  top-level name from `required`, resolves each `run.v1.inputs[].path` below the
-  repository root and compares its lowercase SHA-256. It prints
+  top-level name from `required`, accepts each `run.v1.inputs[].path` only as a
+  portable repository-relative regular file and compares its lowercase
+  SHA-256. It prints
   `slice 0 verification: OK` only after every check succeeds.
 
   ```powershell
@@ -141,8 +148,8 @@ runtime, connectors и framework для контрактов не создают
 
   `run.schema.json` requires `schema_version = run.v1`, `run_id`,
   `analysis_mode` (`standard | capacity_step`), RFC 3339 `started_at`/`ended_at`
-  and non-empty `inputs` with `type`, relative `path` and 64-char lowercase
-  `sha256`. Its embedded example references both fixtures.
+  and non-empty `inputs` with `type`, portable relative `path` and 64-char
+  lowercase `sha256`. Its embedded example references both fixtures.
 
   `analysis-result.schema.json` requires
   `schema_version = analysis-result.v1`, `run_id`, the same `analysis_mode`,
@@ -154,20 +161,21 @@ runtime, connectors и framework для контрактов не создают
   JTL contains a header, one successful sample and one synthetic error.
   `simulation.log` contains one synthetic run, one user and one successful
   request. Store both as UTF-8 with LF and record their actual SHA-256 values in
-  the embedded `run.v1` example.
+  the embedded `run.v1` example. Exact-path `.gitattributes` rules preserve LF
+  after checkout.
 
 - [ ] **Step 4: Run GREEN checks**
 
   ```powershell
   python tools/verify_slice0.py
   python -m py_compile tools/verify_slice0.py
-  npx --yes markdownlint-cli2@0.23.2 docs/contracts fixtures tools
+  npx --yes markdownlint-cli2@0.23.2 "**/*.md"
   git diff --check
   ```
 
   Expected: all commands exit `0`; verifier prints its single success line.
 
-- [ ] **Step 5: Commit only the five created files**
+- [ ] **Step 5: Commit only the six created files**
 
   ```powershell
   git commit -m "test: add minimal slice 0 contracts"

@@ -23,8 +23,11 @@
 
 - `python tools/verify_slice0.py` — exit `0`,
   `slice 0 verification: OK`.
+- Targeted negative probes: verifier отклоняет Windows `NUL` с exit `1`,
+  schema отклоняет backslash traversal, rooted/UNC и URL paths.
 - `python -m py_compile tools/verify_slice0.py` — exit `0`.
-- `npx --yes markdownlint-cli2@0.23.2 "**/*.md"` — exit `0`, ошибок нет.
+- `npx --yes markdownlint-cli2@0.23.2 "**/*.md"` — exit `0`, ошибок среди
+  non-ignored Markdown files нет.
 - `git diff --check` — exit `0`.
 - `git grep -n -I -E "(BEGIN (RSA|OPENSSH|EC) PRIVATE KEY|AKIA[0-9A-Z]{16})" -- .`
   — exit `1` без вывода, то есть совпадений нет.
@@ -34,7 +37,8 @@
 ## Scope изменений
 
 - baseline и roadmap: нормативный PRC v0.6, alignment review, superseded-маркеры
-  v0.5, README и CHANGELOG;
+  v0.5, README, CHANGELOG и явные lint exclusions для accepted/superseded
+  документов;
 - executable evidence: две schemas, два fixtures, один verifier и точечные
   LF-правила;
 - gate candidate: этот отчёт, статус Slice 0 в roadmap и ссылка из README.
@@ -46,8 +50,9 @@ Production runtime и зависимости не добавлены.
 - Remote CI, push, PR, merge и tag не выполнялись.
 - Verifier намеренно не является полным JSON Schema engine: Slice 0 проверяет
   только JSON, required-поля примеров, пути и SHA-256.
-- Каталоговая команда markdownlint из implementation plan захватывает
-  non-Markdown fixtures; gate использует эквивалентный Markdown-only glob.
+- Full Markdown gate соблюдает exclusions из `.markdownlint-cli2.yaml`:
+  нормативный PRC v0.6 и superseded legacy documents сохраняют reviewed
+  formatting и не входят в число linted files.
 
 ## Непроверенные предположения
 

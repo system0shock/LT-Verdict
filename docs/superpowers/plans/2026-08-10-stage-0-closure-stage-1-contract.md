@@ -1,5 +1,9 @@
 # Stage 0 Closure and Stage 1 Contract Implementation Plan
 
+> **Superseded:** текущий baseline и roadmap находятся в
+> [`local-first MVP delta design`](../specs/2026-08-26-v06-local-mvp-delta-design.md)
+> и [`плане разработки v0.6`](../../development-plan-v0.6.md).
+>
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Закрыть полный exit gate этапа 0 и подготовить проверяемый,

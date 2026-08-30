@@ -1,8 +1,12 @@
 # Закрытие этапа 0 и контракт этапа 1 — дизайн
 
+> **Superseded:** текущий baseline и roadmap находятся в
+> [`local-first MVP delta design`](2026-08-26-v06-local-mvp-delta-design.md)
+> и [`плане разработки v0.6`](../../development-plan-v0.6.md).
+
 **Дата:** 2026-08-10
 
-**Статус:** утверждён пользователем 2026-08-10
+**Статус:** исторический; superseded 2026-08-26
 
 **Основание:** PRC v0.5, `docs/superpowers/plans/2026-08-10-development-plan.md`,
 `docs/stage-1-spec.md` и exit gate этапа 0.

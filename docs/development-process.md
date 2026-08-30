@@ -172,8 +172,9 @@ RED–GREEN–REFACTOR с проверкой поведения агента б�
 дублируют Superpowers: проектные соглашения остаются в `AGENTS.md`, а
 механически проверяемые требования — в CI.
 
-Проектные scripts на данном этапе запрещены. Этот rollout не создаёт ни project
-skills, ни project scripts.
+Этот governance rollout не создаёт project skills или scripts. Исполняемые
+project scripts добавляются только по утверждённым spec/plan соответствующего
+slice.
 
 ## Матрица моделей субагентов
 

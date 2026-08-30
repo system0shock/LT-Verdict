@@ -10,7 +10,7 @@ LT Verdict — платформа детерминированного анал�
 
 ## Документация
 
-- [Краткое резюме](exec-summary-lt-verdict.pdf)
+- [Историческое краткое резюме (до v0.6)](exec-summary-lt-verdict.pdf)
 - [Нормативный PRC/PRD v0.6](lt-verdict-prc-prd-v0.6.md)
 - [Текущий план v0.6](docs/development-plan-v0.6.md)
 - [Milestone report Slice 0](docs/milestones/slice-0.md)

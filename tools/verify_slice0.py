@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 import sys
 from pathlib import Path
 
@@ -12,6 +13,13 @@ ROOT = Path(__file__).resolve().parents[1]
 SCHEMAS = (
     ROOT / "docs/contracts/run/v1/run.schema.json",
     ROOT / "docs/contracts/result/v1/analysis-result.schema.json",
+)
+PORTABLE_PATH_PATTERN = (
+    r"^(?!.*(?:^|/)(?:[Cc][Oo][Nn]|[Pp][Rr][Nn]|[Aa][Uu][Xx]|"
+    r"[Nn][Uu][Ll]|[Cc][Oo][Mm][1-9]|[Ll][Pp][Tt][1-9])"
+    r"(?:\.[A-Za-z0-9_-]+)*(?:/|$))[A-Za-z0-9_-]+"
+    r"(?:\.[A-Za-z0-9_-]+)*(?:/[A-Za-z0-9_-]+"
+    r"(?:\.[A-Za-z0-9_-]+)*)*$"
 )
 
 
@@ -44,17 +52,12 @@ def verify_input(item: object) -> None:
     if expected_hash != expected_hash.lower():
         raise ValueError(f"{relative_path}: sha256 must be lowercase")
 
-    relative = Path(relative_path)
-    if (
-        "\\" in relative_path
-        or ":" in relative_path
-        or relative.is_absolute()
-        or ".." in relative.parts
-    ):
+    if re.fullmatch(PORTABLE_PATH_PATTERN, relative_path) is None:
         raise ValueError(
             f"{relative_path}: input path must be portable and repository-relative"
         )
 
+    relative = Path(relative_path)
     path = (ROOT / relative).resolve()
     try:
         path.relative_to(ROOT)

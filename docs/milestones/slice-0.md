@@ -26,6 +26,8 @@
 - Targeted negative probes: verifier отклоняет Windows `NUL` с exit `1`,
   schema отклоняет backslash traversal, rooted/UNC и URL paths.
 - `python -m py_compile tools/verify_slice0.py` — exit `0`.
+- `python -m unittest tools.test_verify_slice0 -v` — exit `0`, один regression
+  test portable-path contract проходит.
 - `npx --yes markdownlint-cli2@0.23.2 "**/*.md"` — exit `0`, ошибок среди
   non-ignored Markdown files нет.
 - `git diff --check` — exit `0`.
@@ -39,15 +41,16 @@
 - baseline и roadmap: нормативный PRC v0.6, alignment review, superseded-маркеры
   v0.5, README, CHANGELOG и явные lint exclusions для accepted/superseded
   документов;
-- executable evidence: две schemas, два fixtures, один verifier и точечные
-  LF-правила;
+- executable evidence: две schemas, два fixtures, один verifier, regression
+  test, CI gate и точечные LF-правила;
 - gate candidate: этот отчёт, статус Slice 0 в roadmap и ссылка из README.
 
 Production runtime и зависимости не добавлены.
 
 ## Ограничения
 
-- Remote CI, push, PR, merge и tag не выполнялись.
+- Результаты remote CI не входят в локальные evidence этого отчёта; merge и tag
+  не выполнялись.
 - Verifier намеренно не является полным JSON Schema engine: Slice 0 проверяет
   только JSON, required-поля примеров, пути и SHA-256.
 - Full Markdown gate соблюдает exclusions из `.markdownlint-cli2.yaml`:

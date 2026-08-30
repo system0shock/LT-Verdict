@@ -6,9 +6,9 @@
 
 **Плановый срез:** `Slice 0`
 
-**Локальный статус:** `READY FOR REVIEW`
+**Локальный статус:** `ACCEPTED`
 
-**Решение:** `PENDING_USER_REVIEW`
+**Решение:** `APPROVED_FOR_MERGE`
 
 ## Результат
 
@@ -58,10 +58,15 @@
 
 Production runtime и зависимости не добавлены.
 
+## Решение пользователя
+
+- 2026-08-30: пользователь подтвердил приёмку Slice 0 и разрешил merge PR #2.
+- Tag и release не разрешены.
+
 ## Ограничения
 
-- Результаты remote CI не входят в локальные evidence этого отчёта; merge и tag
-  не выполнялись.
+- Результаты remote CI не входят в локальные evidence этого отчёта. Merge
+  разрешён пользователем; tag требует отдельного разрешения.
 - Verifier намеренно не является полным JSON Schema engine: Slice 0 проверяет
   только JSON, required-поля примеров, timestamps, пути и SHA-256.
 - Full Markdown gate соблюдает exclusions из `.markdownlint-cli2.yaml`:
@@ -72,4 +77,3 @@ Production runtime и зависимости не добавлены.
 
 - Cross-platform checkout отдельно не выполнялся; `eol=lf` проверен через Git
   attributes в текущем Windows worktree.
-- Решение о приёмке и переходе к Slice 1 остаётся за пользователем.

@@ -1,0 +1,4 @@
+RUN	lt-verdict.synthetic.Simulation	lt-verdict-slice0	1767225600000		3.10.5
+USER	synthetic-scenario	1	START	1767225600000
+REQUEST	synthetic-scenario	1		GET /health	1767225600100	1767225600125	OK
+USER	synthetic-scenario	1	END	1767225600200

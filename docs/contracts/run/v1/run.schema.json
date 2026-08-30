@@ -1,0 +1,90 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://lt-verdict.local/schemas/run/v1/run.schema.json",
+  "title": "LT Verdict run.v1",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "run_id",
+    "analysis_mode",
+    "started_at",
+    "ended_at",
+    "inputs"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "run.v1"
+    },
+    "run_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "analysis_mode": {
+      "enum": [
+        "standard",
+        "capacity_step"
+      ]
+    },
+    "started_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "LT Verdict RFC 3339 profile with required timezone; leap seconds are not supported.",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}[Tt](?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:[Zz]|[+-](?:[01]\\d|2[0-3]):[0-5]\\d)$"
+    },
+    "ended_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "LT Verdict RFC 3339 profile with required timezone; leap seconds are not supported.",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}[Tt](?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:[Zz]|[+-](?:[01]\\d|2[0-3]):[0-5]\\d)$"
+    },
+    "inputs": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": [
+          "type",
+          "path",
+          "sha256"
+        ],
+        "properties": {
+          "type": {
+            "type": "string",
+            "minLength": 1
+          },
+          "path": {
+            "type": "string",
+            "pattern": "^(?!.*(?:^|/)(?:[Cc][Oo][Nn]|[Pp][Rr][Nn]|[Aa][Uu][Xx]|[Nn][Uu][Ll]|[Cc][Oo][Mm][1-9]|[Ll][Pp][Tt][1-9])(?:\\.[A-Za-z0-9_-]+)*(?:/|$))[A-Za-z0-9_-]+(?:\\.[A-Za-z0-9_-]+)*(?:/[A-Za-z0-9_-]+(?:\\.[A-Za-z0-9_-]+)*)*$"
+          },
+          "sha256": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$"
+          }
+        },
+        "additionalProperties": false
+      }
+    }
+  },
+  "additionalProperties": false,
+  "examples": [
+    {
+      "schema_version": "run.v1",
+      "run_id": "slice0-synthetic",
+      "analysis_mode": "standard",
+      "started_at": "2026-01-01T00:00:00Z",
+      "ended_at": "2026-01-01T00:01:00Z",
+      "inputs": [
+        {
+          "type": "jmeter_jtl",
+          "path": "fixtures/slice0/jmeter.jtl",
+          "sha256": "150557329781e91d81c3496b76c4c69200be44b2fcd59fddac5f046b699fa19b"
+        },
+        {
+          "type": "gatling_simulation_log",
+          "path": "fixtures/slice0/simulation.log",
+          "sha256": "2d9105eda69c3c5c583d277f63cf142a2af94b02af2f043223380efcf744ae21"
+        }
+      ]
+    }
+  ]
+}

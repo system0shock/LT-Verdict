@@ -1,0 +1,15 @@
+config:
+  default: true
+  MD013: false
+  MD024:
+    siblings_only: true
+  MD033: false
+
+ignores:
+  # Accepted baseline and superseded documents retain their reviewed formatting.
+  - lt-verdict-prc-prd-v0.6.md
+  - prc-lt-verdict-v0.4.md
+  - prc-lt-verdict-v0.5.md
+  - prc-nt-analysis-platform.md
+  - docs/stage-1-spec.md
+  - docs/superpowers/plans/2026-08-10-development-plan.md

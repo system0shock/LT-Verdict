@@ -1,0 +1,74 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://lt-verdict.local/schemas/result/v1/analysis-result.schema.json",
+  "title": "LT Verdict analysis-result.v1",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "run_id",
+    "analysis_mode",
+    "run_validity",
+    "policy_verdict",
+    "analysis_coverage",
+    "findings",
+    "evidence"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "analysis-result.v1"
+    },
+    "run_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "analysis_mode": {
+      "enum": [
+        "standard",
+        "capacity_step"
+      ]
+    },
+    "run_validity": {
+      "enum": [
+        "VALID",
+        "DEGRADED",
+        "INVALID"
+      ]
+    },
+    "policy_verdict": {
+      "enum": [
+        "PASS",
+        "FAIL",
+        "NO_POLICY",
+        "NO_VERDICT"
+      ]
+    },
+    "analysis_coverage": {
+      "type": "object"
+    },
+    "findings": {
+      "type": "array",
+      "items": {
+        "type": "object"
+      }
+    },
+    "evidence": {
+      "type": "array",
+      "items": {
+        "type": "object"
+      }
+    }
+  },
+  "additionalProperties": false,
+  "examples": [
+    {
+      "schema_version": "analysis-result.v1",
+      "run_id": "slice0-synthetic",
+      "analysis_mode": "standard",
+      "run_validity": "VALID",
+      "policy_verdict": "NO_POLICY",
+      "analysis_coverage": {},
+      "findings": [],
+      "evidence": []
+    }
+  ]
+}

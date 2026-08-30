@@ -75,9 +75,10 @@ runtime, connectors и framework для контрактов не создают
 
 - [ ] **Step 2: Write the compact roadmap**
 
-  `docs/development-plan-v0.6.md` должен содержать только: статус документа,
-  ссылку на PRC и delta-spec, таблицу Slices 0–10 из ledger выше, текущий статус
-  `Slice 0 — IN PROGRESS`, exit gate каждого slice одной строкой и post-MVP.
+  `docs/development-plan-v0.6.md` должен содержать: статус документа, ссылку на
+  PRC и delta-spec, отображение `Slice N → Stage N`, таблицу Slices 0–10 из
+  ledger выше, текущий статус `Slice 0 — IN PROGRESS`, exit gate каждого slice
+  одной строкой и post-MVP.
 
 - [ ] **Step 3: Remove ambiguity with v0.5**
 
@@ -119,10 +120,13 @@ runtime, connectors и framework для контрактов не создают
 
 - Create: `docs/contracts/run/v1/run.schema.json`
 - Create: `docs/contracts/result/v1/analysis-result.schema.json`
+- Create: `docs/adr/0001-slice-0-public-contracts.md`
 - Create: `fixtures/slice0/jmeter.jtl`
 - Create: `fixtures/slice0/simulation.log`
 - Create: `tools/verify_slice0.py`
+- Create: `tools/test_verify_slice0.py`
 - Create: `.gitattributes`
+- Modify: `.gitignore`
 
 **Interfaces:**
 
@@ -133,9 +137,10 @@ runtime, connectors и framework для контрактов не создают
 - [ ] **Step 1: Write the verifier first and confirm RED**
 
   The script loads the two fixed schema paths, reads `examples[0]`, checks every
-  top-level name from `required`, accepts each `run.v1.inputs[].path` only as a
-  portable repository-relative regular file and compares its lowercase
-  SHA-256. It prints
+  top-level name from `required`, validates `started_at`/`ended_at` against the
+  LT Verdict RFC 3339 profile (timezone required, leap seconds unsupported),
+  accepts each `run.v1.inputs[].path` only as a portable repository-relative
+  regular file and compares its lowercase SHA-256. It prints
   `slice 0 verification: OK` only after every check succeeds.
 
   ```powershell
@@ -147,14 +152,18 @@ runtime, connectors и framework для контрактов не создают
 - [ ] **Step 2: Add the minimal contracts**
 
   `run.schema.json` requires `schema_version = run.v1`, `run_id`,
-  `analysis_mode` (`standard | capacity_step`), RFC 3339 `started_at`/`ended_at`
-  and non-empty `inputs` with `type`, portable relative `path` and 64-char
+  `analysis_mode` (`standard | capacity_step`), LT Verdict RFC 3339 profile
+  `started_at`/`ended_at` and non-empty `inputs` with `type`, portable relative
+  `path` and 64-char
   lowercase `sha256`. Its embedded example references both fixtures.
 
   `analysis-result.schema.json` requires
   `schema_version = analysis-result.v1`, `run_id`, the same `analysis_mode`,
   independent `run_validity`, `policy_verdict`, `analysis_coverage`, plus arrays
   `findings` and `evidence`. Its embedded example is a valid empty analysis.
+
+  ADR 0001 фиксирует назначение обоих публичных contracts и правило: после
+  merge любое изменение validation semantics требует новой major-версии.
 
 - [ ] **Step 3: Add two tiny synthetic fixtures and record their hashes**
 
@@ -168,14 +177,15 @@ runtime, connectors и framework для контрактов не создают
 
   ```powershell
   python tools/verify_slice0.py
-  python -m py_compile tools/verify_slice0.py
+  python -m unittest tools.test_verify_slice0 -v
+  python -m py_compile tools/verify_slice0.py tools/test_verify_slice0.py
   npx --yes markdownlint-cli2@0.23.2 "**/*.md"
   git diff --check
   ```
 
   Expected: all commands exit `0`; verifier prints its single success line.
 
-- [ ] **Step 5: Commit only the six created files**
+- [ ] **Step 5: Commit only the listed files**
 
   ```powershell
   git commit -m "test: add minimal slice 0 contracts"
@@ -187,7 +197,7 @@ runtime, connectors и framework для контрактов не создают
 
 **Files:**
 
-- Create: `docs/milestones/slice-0.md`
+- Create: `docs/milestones/stage-0.md`
 - Modify: `docs/development-plan-v0.6.md`
 - Modify: `README.md`
 
@@ -229,4 +239,6 @@ runtime, connectors и framework для контрактов не создают
 - [ ] Exactly two Slice 0 schemas, two synthetic inputs and one verifier exist.
 - [ ] `python tools/verify_slice0.py` passes offline without dependencies.
 - [ ] Deferred-feature ledger still maps every agreed MVP feature to a slice.
+- [ ] Slice 0 однозначно отображён на governance Stage 0, а public contracts
+  зафиксированы в ADR 0001.
 - [ ] Gate report contains fresh local evidence and no unsupported completion claim.

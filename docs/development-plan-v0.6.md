@@ -8,6 +8,13 @@
 [`local-first MVP delta design`](superpowers/specs/2026-08-26-v06-local-mvp-delta-design.md)
 и [`alignment review`](prc-v0.6-alignment-review.md)
 
+## Governance-идентификаторы
+
+В плане v0.6 каждый `Slice N` соответствует проектному `Stage N` из
+[регламента разработки](development-process.md). Для него используются GitHub
+Milestone `Stage N — <название>`, отчёт `docs/milestones/stage-N.md` и после
+явного разрешения пользователя — подписанный аннотированный тег `stage-N`.
+
 ## Граница MVP
 
 MVP — локально запускаемое приложение с обязательным Web UI и постоянным

@@ -27,11 +27,15 @@
     },
     "started_at": {
       "type": "string",
-      "format": "date-time"
+      "format": "date-time",
+      "description": "LT Verdict RFC 3339 profile with required timezone; leap seconds are not supported.",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}[Tt](?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:[Zz]|[+-](?:[01]\\d|2[0-3]):[0-5]\\d)$"
     },
     "ended_at": {
       "type": "string",
-      "format": "date-time"
+      "format": "date-time",
+      "description": "LT Verdict RFC 3339 profile with required timezone; leap seconds are not supported.",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}[Tt](?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:[Zz]|[+-](?:[01]\\d|2[0-3]):[0-5]\\d)$"
     },
     "inputs": {
       "type": "array",

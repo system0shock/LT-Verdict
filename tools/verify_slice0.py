@@ -6,6 +6,7 @@ import hashlib
 import json
 import re
 import sys
+from datetime import datetime
 from pathlib import Path
 
 
@@ -20,6 +21,11 @@ PORTABLE_PATH_PATTERN = (
     r"(?:\.[A-Za-z0-9_-]+)*(?:/|$))[A-Za-z0-9_-]+"
     r"(?:\.[A-Za-z0-9_-]+)*(?:/[A-Za-z0-9_-]+"
     r"(?:\.[A-Za-z0-9_-]+)*)*$"
+)
+RFC3339_PATTERN = (
+    r"^\d{4}-\d{2}-\d{2}[Tt](?:[01]\d|2[0-3]):"
+    r"[0-5]\d:[0-5]\d(?:\.\d+)?"
+    r"(?:[Zz]|[+-](?:[01]\d|2[0-3]):[0-5]\d)$"
 )
 
 
@@ -71,12 +77,30 @@ def verify_input(item: object) -> None:
         raise ValueError(f"{relative_path}: sha256 mismatch")
 
 
+def verify_rfc3339(value: object, field: str) -> None:
+    if not isinstance(value, str) or re.fullmatch(RFC3339_PATTERN, value) is None:
+        raise ValueError(
+            f"{field}: must match the LT Verdict RFC 3339 profile with timezone"
+        )
+
+    normalized = value[:-1] + "+00:00" if value[-1] in "Zz" else value
+    normalized = normalized[:10] + "T" + normalized[11:]
+    try:
+        datetime.fromisoformat(normalized)
+    except ValueError as error:
+        raise ValueError(
+            f"{field}: must be an RFC 3339 date-time with timezone"
+        ) from error
+
+
 def main() -> int:
     try:
         run, _result = (load_example(path) for path in SCHEMAS)
         inputs = run.get("inputs")
         if not isinstance(inputs, list) or not inputs:
             raise ValueError("run.v1 inputs must be a non-empty array")
+        for field in ("started_at", "ended_at"):
+            verify_rfc3339(run.get(field), field)
         for item in inputs:
             verify_input(item)
     except (OSError, json.JSONDecodeError, TypeError, ValueError) as error:

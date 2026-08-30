@@ -1133,11 +1133,12 @@ GigaCode runner и Skill — Slice 10.
 
 ## 26. ADR по мере реализации
 
-Отдельный пакет предварительных ADR не нужен. Утверждённые PRC, эта spec и
-implementation plan фиксируют решения Slice 0. ADR создаётся в том slice, где
-реально появляется значимое решение о runtime, API, schema, dependency,
-security или эксплуатации; один ADR может покрывать несколько тесно связанных
-решений.
+Публичные `run.v1` и `analysis-result.v1` вместе с их evolution policy
+зафиксированы в
+[`ADR 0001`](../../adr/0001-slice-0-public-contracts.md). Отдельный пакет
+предварительных ADR не нужен. Следующий ADR создаётся в том slice, где реально
+появляется значимое решение о runtime, API, schema, dependency, security или
+эксплуатации; один ADR может покрывать несколько тесно связанных решений.
 
 ## 27. Реализационные срезы
 
@@ -1147,9 +1148,10 @@ security или эксплуатации; один ADR может покрыва
 миграцию v0.5 to v0.6. Каждый следующий slice получает собственные
 specification, implementation plan и exit gate.
 
-Slice — milestone group, а не обещание одного PR. Один PR содержит одну
-законченную проверяемую задачу; связанные небольшие контракты разрешено
-доставлять вместе.
+Slice — milestone group, а не обещание одного PR. Для governance `Slice N`
+соответствует `Stage N`; используются milestone/report/tag идентификаторы
+`Stage N`, `stage-N.md` и `stage-N`. Один PR содержит одну законченную
+проверяемую задачу; связанные небольшие контракты разрешено доставлять вместе.
 
 ### Slice 0. Contracts and evidence
 
@@ -1162,10 +1164,11 @@ Slice — milestone group, а не обещание одного PR. Один PR
 Минимальный executable exit gate Slice 0 —
 `python tools/verify_slice0.py`. Он работает offline, не требует сторонних
 зависимостей и завершается non-zero при невалидном JSON, отсутствии обязательного
-верхнеуровневого поля или несовпадении SHA-256. Registry, version matrix,
-semantic oracles, benchmark, source/security/capacity corpora и production
-runtime в Slice 0 не создаются: они добавляются только вместе с использующим их
-slice.
+верхнеуровневого поля, невалидном LT Verdict RFC 3339 profile timestamp embedded
+example (timezone обязательна, leap seconds не поддерживаются) или
+несовпадении SHA-256. Registry, version matrix, semantic oracles, benchmark,
+source/security/capacity corpora и production runtime в Slice 0 не создаются:
+они добавляются только вместе с использующим их slice.
 
 ### Slice 1. Local usable shell
 

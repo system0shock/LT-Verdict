@@ -1,0 +1,25 @@
+{
+  "schemaVersion": 1,
+  "targets": {
+    "runs-dashboard": {
+      "targetKind": "new-ui",
+      "projectId": "57a2cd74-4144-499b-8c51-dcc85ea1f653",
+      "activeDraftId": "3370023d-ac16-4ce5-94d1-b70bb3a7e7b9",
+      "designSystemPath": ".superdesign/design-system.md",
+      "contextFiles": [
+        ".superdesign/design-system.md"
+      ],
+      "fingerprints": {
+        ".superdesign/design-system.md": "8661d36ef0adaa878cf9ce0d22fbe788b7f496dc29641c0fa7c03ad63a904270"
+      },
+      "drafts": {
+        "3370023d-ac16-4ce5-94d1-b70bb3a7e7b9": {
+          "title": "LT Verdict Trace Ledger",
+          "visualDirection": "original technical-minimalist light and dark engineering dashboard restored from version 1",
+          "currentVersion": 4
+        }
+      },
+      "updatedAt": "2026-08-30T22:21:27.087Z"
+    }
+  }
+}

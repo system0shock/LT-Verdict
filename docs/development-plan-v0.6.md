@@ -35,8 +35,8 @@ MVP — локально запускаемое приложение с обяз
 
 | Slice | Статус | Результат | Exit gate |
 | --- | --- | --- | --- |
-| 0. Minimal foundation | **ACCEPTED FOR MERGE** | Нормативный v0.6, два контракта, JTL/`simulation.log` examples, один offline verifier | `python tools/verify_slice0.py` проходит без dependencies |
-| 1. Local usable shell | PLANNED | Одна команда запуска, loopback backend, обязательный Web UI, ручная загрузка JTL/`simulation.log`, basic verdict | Один JTL и один Gatling run анализируются через UI локально |
+| 0. Minimal foundation | **COMPLETE** | Нормативный v0.6, два контракта, JTL/`simulation.log` examples, один offline verifier | `python tools/verify_slice0.py` проходит без dependencies |
+| 1. Local usable shell | **READY FOR IMPLEMENTATION** | [Утверждённый дизайн](superpowers/specs/2026-08-31-slice-1-local-usable-shell-design.md) и [план реализации](superpowers/plans/2026-08-31-slice-1-local-usable-shell.md): одна команда запуска, loopback backend, обязательный Web UI, ручная загрузка JTL/`simulation.log`, basic verdict | Один JTL и один Gatling run анализируются через UI локально |
 | 2. Primary online sources | PLANNED | VictoriaMetrics, Prometheus, InfluxDB и PostgreSQL; online pre/post DML snapshots, `pg_stat_statements`, `pg_profile`; общий governor | Каждый источник даёт raw snapshot; отказ одного не ломает load-only result; ручной fallback эквивалентен |
 | 3. Jenkins workflow | PLANNED | REST skeleton для существующих jobs, trigger, queue/build tracking, изоляция credentials | Из UI запускается настроенная job и определяется её build без повторного POST при неизвестном outcome |
 | 4. Artifact collection | PLANNED | Автоматическое скачивание архивированного JTL/`simulation.log` из Jenkins; ручная загрузка любого файла | Artifact проверяется по size/SHA-256; отсутствие переводит run в ожидание, не создаёт ложный verdict |

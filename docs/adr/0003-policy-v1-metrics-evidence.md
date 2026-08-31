@@ -175,7 +175,7 @@ numeric configuration canonical decimal strings.
 
 Identity содержит все и только result-affecting inputs/configuration:
 
-- identity schema version и `analysis_mode`;
+- identity schema version;
 - `run_id`, detected `source_type` и full lowercase input SHA-256;
 - canonical policy SHA-256 либо explicit `NO_POLICY`;
 - engine id/version;

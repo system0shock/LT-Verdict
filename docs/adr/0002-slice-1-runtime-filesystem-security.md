@@ -108,7 +108,7 @@ UUID staging path, включая size overflow, unsupported input, writer excep
 и failed move. Startup cleanup служит только crash fallback. На
 `DataDirectory.open`, уже удерживая exclusive lock, приложение:
 
-- отвергает symlink для переданного root и app-owned `.ltv.lock`, `.staging`,
+- отвергает symlink для app-owned `.ltv.lock`, `.staging`,
   `runs`, а также любой traversed app-owned path;
 - проверяет, что real `.staging` расположен непосредственно под real data root;
 - просматривает только direct children `.staging`;

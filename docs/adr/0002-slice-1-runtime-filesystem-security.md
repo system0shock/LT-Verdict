@@ -2,15 +2,15 @@
 
 **Дата:** 2026-08-31
 
-**Статус:** Proposed
+**Статус:** Accepted
 
 ## Контекст
 
 Slice 1 должен дать один локальный CLI/Web flow без обязательной database и
 без исходящей сети. До production code необходимо зафиксировать runtime,
 зависимости, границы компонентов, безопасную запись immutable RunBundle,
-ограниченную конкурентность и private loopback API. Единственное условное
-решение — production CSV parser: его promotion зависит от gate Task 2.
+ограниченную конкурентность и private loopback API. Production CSV pipeline
+принят по результатам gate Task 2.
 
 ## Решение
 
@@ -40,7 +40,7 @@ Slice 1 должен дать один локальный CLI/Web flow без о
 | HTTP | Ktor BOM/server `3.5.2` | Core, Netty, content negotiation, JSON, test host |
 | JSON | kotlinx.serialization `1.11.0` | Runtime contracts and canonical JSON input tree |
 | Metrics | HdrHistogram `2.2.2` | `PackedHistogram`, без самописного percentile code |
-| CSV candidate | uniVocity parsers `2.9.1` | Только tests до gate Task 2; после него ровно один production CSV parser |
+| CSV parser | uniVocity parsers `2.9.1` | Один production parser; streaming quote-parity `Reader` отклоняет unmatched quote на EOF |
 | Logging | slf4j-simple `2.0.18` | Один local-process backend |
 | JVM tests | JUnit BOM `6.1.3` | Jupiter engine and assertions |
 | Kotlin lint | ktlint Gradle plugin `14.2.0` | Только build-time |
@@ -52,15 +52,20 @@ Slice 1 должен дать один локальный CLI/Web flow без о
 | Browser tests | `@playwright/test` `1.62.1`, `@axe-core/playwright` `4.13.0` | Chromium flow, security и accessibility |
 | Schema test | Ajv `8.18.0` | Dev-only проверка policy schema/examples; в browser не поставляется |
 
-uniVocity сначала подключается только как `testImplementation`. Gate Task 2
-проверяет quoted comma, escaped quote, embedded newline, одинаковую семантику LF
-и CRLF без trimming, fail-closed для незакрытой quote, пределы 64 columns и
-64 KiB на field, а также 1 000 000 rows менее чем за 60 секунд с `-Xmx256m` без
-retention rows. После успешного gate та же coordinate переносится в
-`implementation`, в этом ADR фиксируются command, elapsed time и max heap, а
-статус меняется на `Accepted`. Если gate не проходит, работа останавливается до
-любого CSV parser code в `src/main`, failure записывается в ADR, а plan проходит
-review; вторая CSV library не добавляется.
+uniVocity сначала подключён как `testImplementation`. Прямая конфигурация с
+`UnescapedQuoteHandling.RAISE_ERROR` прошла четыре случая, но приняла поле с
+незакрытой quote на EOF. Исходный код 2.9.1 подтверждает, что
+`consumeValueOnEOF()` завершает такое значение и штатной strict option нет.
+
+План дополнен минимальным streaming `Reader`: он меняет parity для каждого
+сырого `"` и бросает `IOException` на EOF при нечётном количестве. uniVocity
+остаётся единственным CSV parser; input не удерживается и вторая library не
+добавляется. Повторный gate проверил quoted comma, escaped quote, embedded
+newline, одинаковую семантику LF/CRLF без trimming, fail-closed для незакрытой
+quote, пределы 64 columns и 64 KiB на field, а также 1 000 000 rows с
+`-Xmx256m`, одним fork и без retention rows. Команда
+`.\gradlew.bat --no-daemon csvSpike` завершилась успешно за 9 секунд по выводу
+Gradle. После gate та же coordinate перенесена в `implementation`.
 
 ### Data directory, lock и immutable layout
 
@@ -256,5 +261,5 @@ requests.
 - Accepted inputs и completed analyses проверяемы по hashes и не изменяются на
   месте.
 - Private API и process-local jobs не создают server compatibility promise.
-- ADR остаётся `Proposed` только до получения CSV evidence Task 2; успешный gate
-  переводит его в `Accepted`, не меняя остальные решения.
+- CSV pipeline принят после gate Task 2; quote-parity guard является частью
+  fail-closed parsing boundary.

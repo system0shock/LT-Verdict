@@ -1,2 +1,5 @@
 fixtures/slice0/jmeter.jtl text eol=lf
 fixtures/slice0/simulation.log text eol=lf
+gradlew text eol=lf
+gradlew.bat text eol=crlf
+gradle/wrapper/gradle-wrapper.jar binary

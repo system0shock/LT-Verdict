@@ -7,6 +7,24 @@ internal enum class SampleKind {
     GATLING_GROUP,
 }
 
+internal enum class RunValidity {
+    VALID,
+    DEGRADED,
+    INVALID,
+}
+
+internal data class Diagnostic(
+    val code: String,
+    val message: String,
+    val sourceOffset: Long? = null,
+)
+
+internal data class ParseReport(
+    val validity: RunValidity,
+    val processedBytes: Long,
+    val diagnostics: List<Diagnostic>,
+)
+
 internal data class LoadSample(
     val startedAtEpochMillis: Long,
     val elapsedMillis: Long,

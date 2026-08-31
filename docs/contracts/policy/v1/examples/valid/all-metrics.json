@@ -1,0 +1,44 @@
+{
+  "schema_version": "policy.v1",
+  "policy_id": "all-metrics",
+  "rules": [
+    {
+      "id": "overall-p95",
+      "metric": "response_time_p95_ms",
+      "operator": "lte",
+      "threshold": 100,
+      "scope": {
+        "kind": "overall"
+      }
+    },
+    {
+      "id": "orders-p99",
+      "metric": "response_time_p99_ms",
+      "operator": "lte",
+      "threshold": 100,
+      "scope": {
+        "kind": "transaction",
+        "name": "POST /orders"
+      }
+    },
+    {
+      "id": "overall-errors",
+      "metric": "error_rate_ratio",
+      "operator": "lte",
+      "threshold": 0.5,
+      "scope": {
+        "kind": "overall"
+      }
+    },
+    {
+      "id": "orders-throughput",
+      "metric": "throughput_rps",
+      "operator": "gte",
+      "threshold": 0.1,
+      "scope": {
+        "kind": "transaction",
+        "name": "POST /orders"
+      }
+    }
+  ]
+}

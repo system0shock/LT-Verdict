@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE testResults [
+  <!ENTITY a "x">
+  <!ENTITY b "&a;&a;&a;&a;">
+  <!ENTITY c "&b;&b;&b;&b;">
+]>
+<testResults version="1.2">&c;</testResults>

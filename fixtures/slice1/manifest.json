@@ -1,0 +1,631 @@
+{
+  "schema_version": "fixture-manifest.v1",
+  "artifacts": [
+    {
+      "path": "docs/contracts/policy/v1/examples/invalid/duplicate-rule-id.json",
+      "sha256": "8011032a00050062aa6292d4cf37e54a267a3089ebfb7d0efdbe8f664f86773d"
+    },
+    {
+      "path": "docs/contracts/policy/v1/examples/invalid/empty-rules.json",
+      "sha256": "ea941561aa70a758c9fd636a66aa1a66d8a412f35ed82a152c3dd49ddc5fa78b"
+    },
+    {
+      "path": "docs/contracts/policy/v1/examples/invalid/error-rate-out-of-range.json",
+      "sha256": "c0b7a6ccdd1529e74b49ff7988faa26eb7ef7597c4df2b37fe57f84dfd98157d"
+    },
+    {
+      "path": "docs/contracts/policy/v1/examples/invalid/unknown-field.json",
+      "sha256": "13c02ed5d4efcddcaacb85c1ec61c4eadecb7e7fedb79ca9087a4919ecdd891f"
+    },
+    {
+      "path": "docs/contracts/policy/v1/examples/invalid/unknown-metric.json",
+      "sha256": "1ad860cacaeaf2dba179ad4d37bb6b7c253aa6e76624848085f7f4a2f8c40323"
+    },
+    {
+      "path": "docs/contracts/policy/v1/examples/invalid/wrong-operator.json",
+      "sha256": "4dc1c3d34f8da024c7810b24127f2ce68862aabec6314db9c44aee8ed1162611"
+    },
+    {
+      "path": "docs/contracts/policy/v1/examples/valid/all-metrics.json",
+      "sha256": "fbd8005334cb1fd2e7216429a1b5e3df1e4c25a66baff31e61f2937c7bc883c4"
+    },
+    {
+      "path": "docs/contracts/policy/v1/policy.schema.json",
+      "sha256": "e0ecc2e109a1278014240dabb2a5998f37824d68cbedf34c8b2dacc9f0960c03"
+    },
+    {
+      "path": "fixtures/slice1/gatling/binary-3.13.5/oracle.json",
+      "sha256": "943bda4f8d3669eb75e5f37a35a1463a25a75cc544bc9b3ed8ea345bd69a956b"
+    },
+    {
+      "path": "fixtures/slice1/gatling/binary-3.13.5/simulation.log",
+      "sha256": "8da3213878832d29170c5888bb08b94e187cf02acc95767c0df275571143840a"
+    },
+    {
+      "path": "fixtures/slice1/gatling/binary-3.15.1/oracle.json",
+      "sha256": "3d3820da0ab07ef8715467e5821a0a912564ba8fe39db291779ba472a488764c"
+    },
+    {
+      "path": "fixtures/slice1/gatling/binary-3.15.1/simulation.log",
+      "sha256": "eb96be9e3fff6e74427ac9f5af6c9c7e788c67601ddde28eeb92879312afa706"
+    },
+    {
+      "path": "fixtures/slice1/gatling/text-3.12.0/oracle.json",
+      "sha256": "6898fe926002eb4cd92303d5e98d511ceeafe265135a0fbd0ae86a1e3077af7b"
+    },
+    {
+      "path": "fixtures/slice1/gatling/text-3.12.0/simulation.log",
+      "sha256": "d0bbdc54e8dd4c7adf1c0a7d0558f276b4be57dfa4c384faadf8b761654dede6"
+    },
+    {
+      "path": "fixtures/slice1/gatling/text-3.9.5/oracle.json",
+      "sha256": "d0c4d82dd71c599d44a0ab33e15b5a7dd7df44b3f435766ce303c8eb083ae840"
+    },
+    {
+      "path": "fixtures/slice1/gatling/text-3.9.5/simulation.log",
+      "sha256": "1acda10bdc870c7db8b6a0f86c381aeed1f0987765f235b8659dbca2b72f3ad3"
+    },
+    {
+      "path": "fixtures/slice1/identity/analysis-identity.sha256",
+      "sha256": "56516c624e4ee206f60151ae0245e5edc5f97070e594dd848884daad5054d079"
+    },
+    {
+      "path": "fixtures/slice1/identity/analysis-identity.v1.json",
+      "sha256": "9788d43f17f0ba45db05d638c19590e15af6494696cc85cc307f32a798575514"
+    },
+    {
+      "path": "fixtures/slice1/identity/policy.canonical.json",
+      "sha256": "22c2036369dcd547643909dee86e2b43f6287fcc5fc21d4e5b113c417c4cf307"
+    },
+    {
+      "path": "fixtures/slice1/jmeter/csv-5.6.3/input.jtl",
+      "sha256": "6f9e658876e83eda9a3727dbb32612a2f54800ee34ea22641deeab6781f82601"
+    },
+    {
+      "path": "fixtures/slice1/jmeter/csv-5.6.3/oracle.json",
+      "sha256": "753ff66d11ace43aa106fb79fd3fddb48bf106c0b9a33da9e6e3a2ce3d556448"
+    },
+    {
+      "path": "fixtures/slice1/jmeter/xml-5.6.3/input.xml",
+      "sha256": "e01fcf204803ad94f66f5bd5e96c7750a26922abfdc929489b6a5fc44627d82e"
+    },
+    {
+      "path": "fixtures/slice1/jmeter/xml-5.6.3/oracle.json",
+      "sha256": "b1be2f824e24821bfea8257ff658a312ec52afa65449f7d662c4716d33d1329d"
+    },
+    {
+      "path": "fixtures/slice1/normalization/spike-drop.jtl",
+      "sha256": "04c2171c4902ec1f6adb592e7d53d5a122f99b6621a5d13faa6739c69dea7b20"
+    },
+    {
+      "path": "fixtures/slice1/policies/fail.json",
+      "sha256": "d58a44dee6860af7ce85ab4413b503a4ad3b82cdf1dd5d96019877758e04ec46"
+    },
+    {
+      "path": "fixtures/slice1/policies/missing-transaction.json",
+      "sha256": "d4dbab3024bbd203e6ac261ee13a0f78efe73a4219c08d96f53390ad368fff47"
+    },
+    {
+      "path": "fixtures/slice1/policies/pass.json",
+      "sha256": "0c987baa0765024c9df7eb9ce66c6baf6be47f63c5f9cadb6c72d5055b6d4fa4"
+    },
+    {
+      "path": "fixtures/slice1/security/dtd.xml",
+      "sha256": "887e44441f969cc2bb2c76183547d3b768e8495bf5a07cba09fab3d1f45cdc4f"
+    },
+    {
+      "path": "fixtures/slice1/security/entity-expansion.xml",
+      "sha256": "33625ce83eae20328a863e4b33439d017c98c865776cc15f522907d3ce303ee6"
+    },
+    {
+      "path": "fixtures/slice1/security/html-label.jtl",
+      "sha256": "4de4b8eb09eed65ddb3bb19589a657fe234cc410e171bc6caeae8feb256242f1"
+    },
+    {
+      "path": "fixtures/slice1/security/xxe.xml",
+      "sha256": "d7fec366d1c32fdf25f1687a371de2d9a8267a6c06cf8a70f5491e34bedc015b"
+    }
+  ],
+  "policy_examples": [
+    {
+      "path": "docs/contracts/policy/v1/examples/valid/all-metrics.json",
+      "schema_valid": true,
+      "runtime_valid": true
+    },
+    {
+      "path": "docs/contracts/policy/v1/examples/invalid/empty-rules.json",
+      "schema_valid": false,
+      "runtime_valid": false,
+      "expected_diagnostic": "EMPTY_RULES"
+    },
+    {
+      "path": "docs/contracts/policy/v1/examples/invalid/duplicate-rule-id.json",
+      "schema_valid": true,
+      "runtime_valid": false,
+      "expected_diagnostic": "DUPLICATE_RULE_ID"
+    },
+    {
+      "path": "docs/contracts/policy/v1/examples/invalid/unknown-field.json",
+      "schema_valid": false,
+      "runtime_valid": false,
+      "expected_diagnostic": "UNKNOWN_FIELD"
+    },
+    {
+      "path": "docs/contracts/policy/v1/examples/invalid/unknown-metric.json",
+      "schema_valid": false,
+      "runtime_valid": false,
+      "expected_diagnostic": "UNKNOWN_METRIC"
+    },
+    {
+      "path": "docs/contracts/policy/v1/examples/invalid/wrong-operator.json",
+      "schema_valid": false,
+      "runtime_valid": false,
+      "expected_diagnostic": "METRIC_OPERATOR_MISMATCH"
+    },
+    {
+      "path": "docs/contracts/policy/v1/examples/invalid/error-rate-out-of-range.json",
+      "schema_valid": false,
+      "runtime_valid": false,
+      "expected_diagnostic": "THRESHOLD_OUT_OF_RANGE"
+    }
+  ],
+  "parser_cases": [
+    {
+      "id": "jmeter-csv-5.6.3",
+      "input": "fixtures/slice1/jmeter/csv-5.6.3/input.jtl",
+      "oracle": "fixtures/slice1/jmeter/csv-5.6.3/oracle.json",
+      "producer": {
+        "name": "Apache JMeter",
+        "version": "5.6.3",
+        "release_tag": "rel/v5.6.3",
+        "source_url": "https://downloads.apache.org/jmeter/binaries/apache-jmeter-5.6.3.zip",
+        "distribution_sha512": "387fadca903ee0aa30e3f2115fdfedb3898b102e6b9fe7cc3942703094bd2e65b235df2b0c6d0d3248e74c9a7950a36e42625fd74425368342c12e40b0163076",
+        "generation_command": "bin/jmeter.bat -n -t csv-fixture.jmx -l generated-csv.jtl -Jjmeter.save.saveservice.output_format=csv -Jjmeter.save.saveservice.print_field_names=true -Jjmeter.save.saveservice.timestamp_format=ms -Jsampleresult.timestamp.start=true",
+        "artifact_normalization": "Converted generated JTL line endings from CRLF to LF; bytes otherwise unchanged."
+      },
+      "oracle_method": "Manually derived from the three producer rows and cross-checked against the JMeter report.",
+      "expected": {
+        "overall": {
+          "sample_count": 3,
+          "error_count": 1,
+          "latency_ms": {
+            "p50": 84,
+            "p95": 496,
+            "p99": 496,
+            "max": 496
+          }
+        },
+        "transactions": [
+          {
+            "group_path": [],
+            "label": "GET /health",
+            "kind": "JMETER_SAMPLER",
+            "sample_count": 1,
+            "error_count": 0,
+            "latency_ms": {
+              "p50": 496,
+              "p95": 496,
+              "p99": 496,
+              "max": 496
+            }
+          },
+          {
+            "group_path": [],
+            "label": "GET /items, detail",
+            "kind": "JMETER_SAMPLER",
+            "sample_count": 1,
+            "error_count": 1,
+            "latency_ms": {
+              "p50": 62,
+              "p95": 62,
+              "p99": 62,
+              "max": 62
+            }
+          },
+          {
+            "group_path": [],
+            "label": "POST /orders",
+            "kind": "JMETER_SAMPLER",
+            "sample_count": 1,
+            "error_count": 0,
+            "latency_ms": {
+              "p50": 84,
+              "p95": 84,
+              "p99": 84,
+              "max": 84
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "jmeter-xml-5.6.3",
+      "input": "fixtures/slice1/jmeter/xml-5.6.3/input.xml",
+      "oracle": "fixtures/slice1/jmeter/xml-5.6.3/oracle.json",
+      "producer": {
+        "name": "Apache JMeter",
+        "version": "5.6.3",
+        "release_tag": "rel/v5.6.3",
+        "source_url": "https://downloads.apache.org/jmeter/binaries/apache-jmeter-5.6.3.zip",
+        "distribution_sha512": "387fadca903ee0aa30e3f2115fdfedb3898b102e6b9fe7cc3942703094bd2e65b235df2b0c6d0d3248e74c9a7950a36e42625fd74425368342c12e40b0163076",
+        "generation_command": "python loopback-responder.py 18081; bin/jmeter.bat -n -t xml-fixture.jmx -l generated-xml.jtl -Jjmeter.save.saveservice.output_format=xml -Jjmeter.save.saveservice.subresults=true -Jsubresults.disable_renaming=true -Jsampleresult.timestamp.start=true"
+      },
+      "oracle_method": "Manually derived from nested sample/httpSample leaves and cross-checked against the JMeter report.",
+      "expected": {
+        "overall": {
+          "sample_count": 3,
+          "error_count": 1,
+          "latency_ms": {
+            "p50": 1,
+            "p95": 26,
+            "p99": 26,
+            "max": 26
+          }
+        },
+        "transactions": [
+          {
+            "group_path": [],
+            "label": "Checkout scenario",
+            "kind": "JMETER_CONTAINER",
+            "sample_count": 1,
+            "error_count": 1,
+            "latency_ms": {
+              "p50": 28,
+              "p95": 28,
+              "p99": 28,
+              "max": 28
+            }
+          },
+          {
+            "group_path": [
+              "Checkout scenario"
+            ],
+            "label": "HTTP checkout",
+            "kind": "JMETER_CONTAINER",
+            "sample_count": 1,
+            "error_count": 0,
+            "latency_ms": {
+              "p50": 28,
+              "p95": 28,
+              "p99": 28,
+              "max": 28
+            }
+          },
+          {
+            "group_path": [
+              "Checkout scenario",
+              "HTTP checkout"
+            ],
+            "label": "http://127.0.0.1:18081/start",
+            "kind": "JMETER_SAMPLER",
+            "sample_count": 1,
+            "error_count": 0,
+            "latency_ms": {
+              "p50": 26,
+              "p95": 26,
+              "p99": 26,
+              "max": 26
+            }
+          },
+          {
+            "group_path": [
+              "Checkout scenario",
+              "HTTP checkout"
+            ],
+            "label": "http://127.0.0.1:18081/final",
+            "kind": "JMETER_SAMPLER",
+            "sample_count": 1,
+            "error_count": 0,
+            "latency_ms": {
+              "p50": 1,
+              "p95": 1,
+              "p99": 1,
+              "max": 1
+            }
+          },
+          {
+            "group_path": [
+              "Checkout scenario"
+            ],
+            "label": "POST /order",
+            "kind": "JMETER_SAMPLER",
+            "sample_count": 1,
+            "error_count": 1,
+            "latency_ms": {
+              "p50": 0,
+              "p95": 0,
+              "p99": 0,
+              "max": 0
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "gatling-text-3.9.5",
+      "input": "fixtures/slice1/gatling/text-3.9.5/simulation.log",
+      "oracle": "fixtures/slice1/gatling/text-3.9.5/oracle.json",
+      "producer": {
+        "name": "Gatling OSS",
+        "version": "3.9.5",
+        "release_tag": "v3.9.5",
+        "source_url": "https://github.com/gatling/gatling/releases/tag/v3.9.5",
+        "maven_plugin_version": "4.3.4",
+        "generation_command": "mvn -B '-Dgatling.version=3.9.5' '-Dgatling-maven-plugin.version=4.3.4' gatling:test",
+        "artifact_normalization": "Converted generated simulation.log line endings to LF; bytes otherwise unchanged."
+      },
+      "oracle_method": "Copied from the producer HTML report and manually cross-checked against the four request records and group interval.",
+      "expected": {
+        "overall": {
+          "sample_count": 4,
+          "error_count": 1,
+          "latency_ms": {
+            "p50": 2,
+            "p95": 138,
+            "p99": 138,
+            "max": 138
+          }
+        },
+        "transactions": [
+          {
+            "group_path": [],
+            "label": "checkout",
+            "kind": "GATLING_GROUP",
+            "sample_count": 1,
+            "error_count": 1,
+            "latency_ms": {
+              "p50": 188,
+              "p95": 188,
+              "p99": 188,
+              "max": 188
+            }
+          },
+          {
+            "group_path": [
+              "checkout"
+            ],
+            "label": "catalog",
+            "kind": "GATLING_REQUEST",
+            "sample_count": 3,
+            "error_count": 0,
+            "latency_ms": {
+              "p50": 4,
+              "p95": 138,
+              "p99": 138,
+              "max": 138
+            }
+          },
+          {
+            "group_path": [
+              "checkout"
+            ],
+            "label": "missing",
+            "kind": "GATLING_REQUEST",
+            "sample_count": 1,
+            "error_count": 1,
+            "latency_ms": {
+              "p50": 2,
+              "p95": 2,
+              "p99": 2,
+              "max": 2
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "gatling-text-3.12.0",
+      "input": "fixtures/slice1/gatling/text-3.12.0/simulation.log",
+      "oracle": "fixtures/slice1/gatling/text-3.12.0/oracle.json",
+      "producer": {
+        "name": "Gatling OSS",
+        "version": "3.12.0",
+        "release_tag": "v3.12.0",
+        "source_url": "https://github.com/gatling/gatling/releases/tag/v3.12.0",
+        "maven_plugin_version": "4.9.6",
+        "generation_command": "mvn -B '-Dgatling.version=3.12.0' '-Dgatling-maven-plugin.version=4.9.6' clean gatling:test",
+        "artifact_normalization": "Converted generated simulation.log line endings to LF; bytes otherwise unchanged."
+      },
+      "oracle_method": "Copied from the producer HTML report and manually cross-checked against the four request records and group interval.",
+      "expected": {
+        "overall": {
+          "sample_count": 4,
+          "error_count": 1,
+          "latency_ms": {
+            "p50": 1,
+            "p95": 107,
+            "p99": 107,
+            "max": 107
+          }
+        },
+        "transactions": [
+          {
+            "group_path": [],
+            "label": "checkout",
+            "kind": "GATLING_GROUP",
+            "sample_count": 1,
+            "error_count": 1,
+            "latency_ms": {
+              "p50": 139,
+              "p95": 139,
+              "p99": 139,
+              "max": 139
+            }
+          },
+          {
+            "group_path": [
+              "checkout"
+            ],
+            "label": "catalog",
+            "kind": "GATLING_REQUEST",
+            "sample_count": 3,
+            "error_count": 0,
+            "latency_ms": {
+              "p50": 3,
+              "p95": 107,
+              "p99": 107,
+              "max": 107
+            }
+          },
+          {
+            "group_path": [
+              "checkout"
+            ],
+            "label": "missing",
+            "kind": "GATLING_REQUEST",
+            "sample_count": 1,
+            "error_count": 1,
+            "latency_ms": {
+              "p50": 1,
+              "p95": 1,
+              "p99": 1,
+              "max": 1
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "gatling-binary-3.13.5",
+      "input": "fixtures/slice1/gatling/binary-3.13.5/simulation.log",
+      "oracle": "fixtures/slice1/gatling/binary-3.13.5/oracle.json",
+      "producer": {
+        "name": "Gatling OSS",
+        "version": "3.13.5",
+        "release_tag": "v3.13.5",
+        "source_url": "https://github.com/gatling/gatling/releases/tag/v3.13.5",
+        "maven_plugin_version": "4.16.1",
+        "generation_command": "mvn -B '-Dgatling.version=3.13.5' '-Dgatling-maven-plugin.version=4.16.1' clean gatling:test"
+      },
+      "oracle_method": "Copied from the producer HTML report and manually cross-checked after the official runtime reread the binary log.",
+      "expected": {
+        "overall": {
+          "sample_count": 4,
+          "error_count": 1,
+          "latency_ms": {
+            "p50": 2,
+            "p95": 103,
+            "p99": 103,
+            "max": 103
+          }
+        },
+        "transactions": [
+          {
+            "group_path": [],
+            "label": "checkout",
+            "kind": "GATLING_GROUP",
+            "sample_count": 1,
+            "error_count": 1,
+            "latency_ms": {
+              "p50": 141,
+              "p95": 141,
+              "p99": 141,
+              "max": 141
+            }
+          },
+          {
+            "group_path": [
+              "checkout"
+            ],
+            "label": "catalog",
+            "kind": "GATLING_REQUEST",
+            "sample_count": 3,
+            "error_count": 0,
+            "latency_ms": {
+              "p50": 3,
+              "p95": 103,
+              "p99": 103,
+              "max": 103
+            }
+          },
+          {
+            "group_path": [
+              "checkout"
+            ],
+            "label": "missing",
+            "kind": "GATLING_REQUEST",
+            "sample_count": 1,
+            "error_count": 1,
+            "latency_ms": {
+              "p50": 2,
+              "p95": 2,
+              "p99": 2,
+              "max": 2
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "gatling-binary-3.15.1",
+      "input": "fixtures/slice1/gatling/binary-3.15.1/simulation.log",
+      "oracle": "fixtures/slice1/gatling/binary-3.15.1/oracle.json",
+      "producer": {
+        "name": "Gatling OSS",
+        "version": "3.15.1",
+        "release_tag": "v3.15.1",
+        "source_url": "https://github.com/gatling/gatling/releases/tag/v3.15.1",
+        "maven_plugin_version": "4.21.10",
+        "generation_command": "mvn -B '-Dgatling.version=3.15.1' '-Dgatling-maven-plugin.version=4.21.10' clean gatling:test"
+      },
+      "oracle_method": "Copied from the producer HTML report and manually cross-checked after the official runtime reread the binary log.",
+      "expected": {
+        "overall": {
+          "sample_count": 4,
+          "error_count": 1,
+          "latency_ms": {
+            "p50": 2,
+            "p95": 78,
+            "p99": 78,
+            "max": 78
+          }
+        },
+        "transactions": [
+          {
+            "group_path": [],
+            "label": "checkout",
+            "kind": "GATLING_GROUP",
+            "sample_count": 1,
+            "error_count": 1,
+            "latency_ms": {
+              "p50": 110,
+              "p95": 110,
+              "p99": 110,
+              "max": 110
+            }
+          },
+          {
+            "group_path": [
+              "checkout"
+            ],
+            "label": "catalog",
+            "kind": "GATLING_REQUEST",
+            "sample_count": 3,
+            "error_count": 0,
+            "latency_ms": {
+              "p50": 4,
+              "p95": 78,
+              "p99": 78,
+              "max": 78
+            }
+          },
+          {
+            "group_path": [
+              "checkout"
+            ],
+            "label": "missing",
+            "kind": "GATLING_REQUEST",
+            "sample_count": 1,
+            "error_count": 1,
+            "latency_ms": {
+              "p50": 2,
+              "p95": 2,
+              "p99": 2,
+              "max": 2
+            }
+          }
+        ]
+      }
+    }
+  ]
+}

@@ -1,0 +1,15 @@
+{
+  "schema_version": "policy.v1",
+  "policy_id": "error-rate-out-of-range",
+  "rules": [
+    {
+      "id": "errors",
+      "metric": "error_rate_ratio",
+      "operator": "lte",
+      "threshold": 1.01,
+      "scope": {
+        "kind": "overall"
+      }
+    }
+  ]
+}

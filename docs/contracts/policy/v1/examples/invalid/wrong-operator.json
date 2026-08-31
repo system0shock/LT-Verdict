@@ -1,0 +1,15 @@
+{
+  "schema_version": "policy.v1",
+  "policy_id": "wrong-operator",
+  "rules": [
+    {
+      "id": "latency",
+      "metric": "response_time_p95_ms",
+      "operator": "gte",
+      "threshold": 100,
+      "scope": {
+        "kind": "overall"
+      }
+    }
+  ]
+}

@@ -85,24 +85,44 @@ ADR 0002 and ADR 0003 must record these exact values before implementation:
   whitespace/BOM/timestamps/provenance, canonical decimal strings for numeric
   configuration.
 - Internal transaction identity is exact `(groupPath, label, kind)`. A policy
-  matches exact `label`; zero matches yields `TRANSACTION_NOT_FOUND`, multiple
-  paths with the same label yield `AMBIGUOUS_TRANSACTION`; both yield
-  `NO_VERDICT`. CSV stays flat because it has no reliable parent relation.
-- Overall and transaction throughput use the same run window
-  `min(start)..max(start + elapsed)`, with a minimum denominator of 1 ms.
+  matches exact `label`; zero distinct identities yields `TRANSACTION_NOT_FOUND`
+  and more than one distinct identity yields `AMBIGUOUS_TRANSACTION`; both yield
+  `NO_VERDICT`. CSV stays flat because it has no reliable parent or sampler-kind
+  signal.
+- Overall and transaction throughput use the same run window over every complete
+  normalized event: `min(start)..max(Math.addExact(start, elapsed))`, with a
+  minimum denominator of 1 ms. Timestamp and elapsed are non-negative `Long`
+  values; start and checked end must not exceed `253_402_300_799_999`
+  (`9999-12-31T23:59:59.999Z`), the upper bound representable by the existing
+  four-digit-year `run.v1` timestamp profile. Overflow/range failure is invalid
+  input, never a wrapped or schema-invalid timestamp.
 - A sample belongs to half-open 1-second bucket
   `[floor((start-runStart)/1000), nextSecond)`; absent seconds remain absent.
-  Rollups 10/30/60 seconds are merges of these 1-second histograms only.
+  `runStart` is frozen by a first streaming validation/window pass; a second
+  streaming pass builds metrics, so out-of-order input cannot shift an already
+  recorded bucket. Rollups 10/30/60 seconds merge these histograms only.
 - HdrHistogram configuration is `PackedHistogram(1, 86_400_000, 3)` in
   milliseconds. Percentile values remain integer milliseconds; policy compares
   exact counts/rationals, never display-rounded decimals.
-- Bounded limits are 4 GiB input/expanded ZIP content, 1 MiB policy, 255-byte
-  filename, 1,024 ZIP entries, 64 CSV columns, 64 KiB text field, 1 MiB text
-  line/binary blob, 4 KiB UTF-8 label, hierarchy/XML depth 64, 10,000 distinct
-  transactions, 100,000 non-empty one-second buckets, 65,536 Gatling cache
-  entries and 64 MiB total decoded Gatling cache strings. Exceeding a
-  result-affecting limit fails closed with `RESOURCE_LIMIT_EXCEEDED` and no
-  partial PASS.
+- Overall metrics and buckets include every flat JMeter CSV row, leaf JMeter XML
+  result and Gatling `REQUEST` record. Exact transaction summaries additionally
+  include JMeter XML containers and Gatling `GROUP` records. CSV does not infer
+  controller semantics from optional columns; XML/Gatling hierarchy prevents
+  parent/child double-counting.
+- Bounded limits are 4 GiB input, 1 MiB policy read with a `limit + 1` guard
+  before allocating its complete byte array, 255-byte filename, 64 CSV columns,
+  64 KiB text field, 1 MiB text line/binary blob, 4 KiB UTF-8 label,
+  hierarchy/XML depth 64, 64 KiB UTF-8 per exact transaction identity, 10,000
+  distinct transactions, 64 MiB total retained transaction-identity bytes,
+  100,000 non-empty one-second buckets, 65,536 Gatling cache entries and 64 MiB
+  total decoded Gatling cache strings. Policy-specific limits are JSON depth 16,
+  256 rules, 128 UTF-8 bytes for `policy_id` and rule `id`, 4 KiB for a
+  transaction scope,
+  64 ASCII bytes for a numeric token, absolute exponent at most 64 and at most
+  128 bytes after canonical decimal expansion. Exceeding a result-affecting
+  limit fails closed with `RESOURCE_LIMIT_EXCEEDED` and no partial PASS.
+- Non-result process/API caps are 1,024 retained terminal job statuses, 100 runs
+  per page and 500 buckets per page; they do not enter `analysis-identity.v1`.
 - Malformed CSV/XML/text is `INVALID + NO_VERDICT`. Binary EOF inside a record
   after at least one complete sample is `DEGRADED + NO_VERDICT`; before any
   sample it is `INVALID + NO_VERDICT`. EOF on a record boundary is normal.
@@ -173,15 +193,26 @@ contract, ADR, CI and documentation paths are named in their owning tasks.
   <data>/.staging/
   <data>/runs/<run_id>/inputs/source.bin
   <data>/runs/<run_id>/source.json
-  <data>/runs/<run_id>/run.json
   <data>/runs/<run_id>/analyses/<analysis_id>/identity.json
+  <data>/runs/<run_id>/analyses/<analysis_id>/run.json
   <data>/runs/<run_id>/analyses/<analysis_id>/analysis-result.json
   <data>/runs/<run_id>/analyses/<analysis_id>/normalized-1s.ndjson
   <data>/runs/<run_id>/analyses/<analysis_id>/rollup-10s.ndjson
   <data>/runs/<run_id>/analyses/<analysis_id>/rollup-30s.ndjson
   <data>/runs/<run_id>/analyses/<analysis_id>/rollup-60s.ndjson
+  <data>/runs/<run_id>/analyses/<analysis_id>/manifest.json
   ```
 
+- every failed operation removes its exact UUID staging path in `finally`; on
+  `DataDirectory.open`, while holding the exclusive lock, remove only
+  non-symlink direct children of `.staging` whose names are generated UUIDs;
+  reject symlinked `.ltv.lock`, `.staging`, `runs` or traversed app-owned path
+  and verify `.staging` resolves directly under the real data root before cleanup;
+- each completed analysis manifest records relative path, byte size and
+  lowercase SHA-256 for every analysis artifact except the self-referential
+  manifest itself; manifest paths must be normalized descendants of the exact
+  analysis directory and may not traverse symlinks; reuse verifies every entry
+  before returning cached data;
 - file `force(true)` before same-filesystem `ATOMIC_MOVE`; unsupported atomic
   move fails closed; parent-directory fsync is attempted where the JDK/OS allows
   it and the Windows limitation is explicit;
@@ -189,13 +220,16 @@ contract, ADR, CI and documentation paths are named in their owning tasks.
   capacity equal to parallelism, no virtual-thread or coroutine claim;
 - bind exactly `127.0.0.1`, one random in-memory server session and CSRF token,
   exact Host/Origin checks, no CORS, CSP and no outbound client;
+- exact private HTTP request/response/status/error envelopes and bounded bucket
+  range pagination from Task 11;
 - all fixed resource ceilings and CLI exit codes from this plan.
 
 **ADR 0003 must contain:**
 
 - strict `policy.v1`, canonical policy hash and two-stage validation;
 - transaction matching and ambiguity rule from this plan;
-- exact run-window, bucket, rollup, HdrHistogram and rational-comparison rules;
+- exact run-window with checked timestamp arithmetic, sample-kind contribution
+  matrix, bucket, rollup, HdrHistogram and rational-comparison rules;
 - normalized/rollup histogram encoding as standard Base64 of deterministic
   HdrHistogram compressed V2 bytes;
 - state precedence for VALID/DEGRADED/INVALID and
@@ -332,7 +366,7 @@ contract, ADR, CI and documentation paths are named in their owning tasks.
 - Create: `fixtures/slice1/jmeter/csv-5.6.3/oracle.json`
 - Create: `fixtures/slice1/jmeter/xml-5.6.3/input.xml`
 - Create: `fixtures/slice1/jmeter/xml-5.6.3/oracle.json`
-- Create: `fixtures/slice1/gatling/text-3.9.5/input.zip`
+- Create: `fixtures/slice1/gatling/text-3.9.5/simulation.log`
 - Create: `fixtures/slice1/gatling/text-3.9.5/oracle.json`
 - Create: `fixtures/slice1/gatling/text-3.12.0/simulation.log`
 - Create: `fixtures/slice1/gatling/text-3.12.0/oracle.json`
@@ -357,9 +391,14 @@ contract, ADR, CI and documentation paths are named in their owning tasks.
 **Contract rules:**
 
 The schema is Draft 2020-12, has `additionalProperties: false` at top/rule/scope
-levels and contains only the four approved metric/operator pairs. The valid
-example exercises all metrics and both scope forms. Each invalid example has
-one declared expected diagnostic code in `manifest.json`.
+levels, `maxItems: 256` for rules, character-length caps where JSON Schema can
+express them and only the four approved metric/operator pairs. Runtime
+validation additionally applies the UTF-8 byte caps. The valid example
+exercises all metrics and both scope forms. For every example,
+`manifest.json` records separate `schema_valid` and `runtime_valid` expectations;
+runtime-invalid examples also name one expected diagnostic code. Duplicate rule
+ids are schema-valid but runtime-invalid because JSON Schema does not express
+uniqueness by object property.
 
 **Fixture provenance:**
 
@@ -370,12 +409,15 @@ SHA-256 and the independent expected sample/error counts, transaction paths and
 p50/p95/p99/max. Copy expected values from the producer HTML/report or derive
 them manually from tiny known samples; never generate an oracle with LT Verdict
 parser code. Keep `fixtures/slice0/simulation.log` unchanged and do not use it as
-a parser oracle.
+a parser oracle. The JMeter XML oracle contains both nested `sample` and
+`httpSample` containers around leaves; the Gatling oracle contains a group
+around requests. Each states overall leaf counts and separate exact summaries.
 
-The 3.9.5 artifact is one deterministic ZIP bundle: root-level `.log` entries
-only, timestamps normalized, entry order by Unicode code point and no symlink,
-encrypted or nested entries. `.gitattributes` marks ZIP and binary logs `-text`
-and text fixtures as UTF-8/LF.
+The 3.9.5 and 3.12.0 artifacts are raw text `simulation.log` files, matching the
+approved input boundary. `.gitattributes` marks binary logs `-text` and text
+fixtures as UTF-8/LF. `normalization/spike-drop.jtl` deliberately places an
+earlier start after a later row, so the same small oracle proves the two-pass
+`runStart` rule as well as spike/drop preservation.
 
 - [ ] **Step 1: Write the manifest test and confirm RED**
 
@@ -399,7 +441,7 @@ and text fixtures as UTF-8/LF.
 
   ```powershell
   .\gradlew.bat test --tests "io.ltverdict.fixtures.FixtureManifestTest"
-  git check-attr text -- fixtures/slice1/gatling/text-3.9.5/input.zip fixtures/slice1/gatling/binary-3.13.5/simulation.log fixtures/slice1/gatling/binary-3.15.1/simulation.log
+  git check-attr text -- fixtures/slice1/gatling/binary-3.13.5/simulation.log fixtures/slice1/gatling/binary-3.15.1/simulation.log
   git diff --check
   ```
 
@@ -408,7 +450,7 @@ and text fixtures as UTF-8/LF.
 - [ ] **Step 4: Commit the contract and corpus**
 
   ```powershell
-  git add docs/contracts/policy/v1 fixtures/slice1 src/test/kotlin/io/ltverdict/fixtures/FixtureManifestTest.kt .gitattributes
+  git add docs/contracts/policy/v1/policy.schema.json docs/contracts/policy/v1/examples/valid/all-metrics.json docs/contracts/policy/v1/examples/invalid/empty-rules.json docs/contracts/policy/v1/examples/invalid/duplicate-rule-id.json docs/contracts/policy/v1/examples/invalid/unknown-field.json docs/contracts/policy/v1/examples/invalid/unknown-metric.json docs/contracts/policy/v1/examples/invalid/wrong-operator.json docs/contracts/policy/v1/examples/invalid/error-rate-out-of-range.json fixtures/slice1/manifest.json fixtures/slice1/jmeter/csv-5.6.3/input.jtl fixtures/slice1/jmeter/csv-5.6.3/oracle.json fixtures/slice1/jmeter/xml-5.6.3/input.xml fixtures/slice1/jmeter/xml-5.6.3/oracle.json fixtures/slice1/gatling/text-3.9.5/simulation.log fixtures/slice1/gatling/text-3.9.5/oracle.json fixtures/slice1/gatling/text-3.12.0/simulation.log fixtures/slice1/gatling/text-3.12.0/oracle.json fixtures/slice1/gatling/binary-3.13.5/simulation.log fixtures/slice1/gatling/binary-3.13.5/oracle.json fixtures/slice1/gatling/binary-3.15.1/simulation.log fixtures/slice1/gatling/binary-3.15.1/oracle.json fixtures/slice1/normalization/spike-drop.jtl fixtures/slice1/policies/pass.json fixtures/slice1/policies/fail.json fixtures/slice1/policies/missing-transaction.json fixtures/slice1/security/dtd.xml fixtures/slice1/security/xxe.xml fixtures/slice1/security/entity-expansion.xml fixtures/slice1/security/html-label.jtl fixtures/slice1/identity/policy.canonical.json fixtures/slice1/identity/analysis-identity.v1.json fixtures/slice1/identity/analysis-identity.sha256 src/test/kotlin/io/ltverdict/fixtures/FixtureManifestTest.kt .gitattributes
   git commit -m "test(slice-1): add policy contract and parser goldens"
   ```
 
@@ -441,14 +483,21 @@ internal sealed interface PolicyValidation {
     data class Invalid(val errors: List<PolicyValidationError>) : PolicyValidation
 }
 
-internal fun validatePolicy(bytes: ByteArray): PolicyValidation
+internal fun validatePolicy(
+    source: InputStream,
+    maxBytes: Int = 1_048_576,
+): PolicyValidation
 internal fun canonicalJson(element: JsonElement): ByteArray
 internal fun canonicalDecimal(value: BigDecimal): String
 internal fun sha256Hex(bytes: ByteArray): String
 ```
 
-Parse UTF-8 strictly, reject unknown fields and non-finite/out-of-range numbers,
-then apply semantic rule-id and
+Read at most `maxBytes + 1` before creating the complete policy byte array.
+Strictly decode UTF-8, then run one bounded lexical pre-scan that compares
+decoded object keys (including `\u` escapes), rejects duplicates and enforces
+JSON depth and numeric-token/exponent limits before the kotlinx.serialization
+tree parse. Reject unknown fields and
+non-finite/out-of-range numbers, then apply identifier, rule-count and
 metric/operator validation. Object key order and numeric spellings such as
 `6e2`, `600.0` and `600` produce the same policy hash; rule array order remains
 significant.
@@ -456,8 +505,11 @@ significant.
 - [ ] **Step 1: Add table-driven policy/canonicalization tests and run RED**
 
   Tests consume every contract example and identity golden, assert exact JSON
-  pointers/codes, duplicate key rejection, canonical numeric equivalence and a
-  changed hash when policy rule order changes.
+  pointers/codes, nested and escaped-equivalent duplicate-key rejection,
+  byte/depth/rule/id/numeric bounds including `1e2147483647`, canonical numeric
+  equivalence and a changed hash when policy rule order changes. Assert schema
+  and runtime expectations independently so semantic duplicate rule ids are not
+  attributed to JSON Schema validation.
 
   ```powershell
   .\gradlew.bat test --tests "io.ltverdict.core.PolicyTest" --tests "io.ltverdict.core.CanonicalJsonTest"
@@ -467,8 +519,10 @@ significant.
 
 - [ ] **Step 2: Implement the minimum strict validator and canonical writer**
 
-  Use kotlinx.serialization JSON tree plus explicit allowed-key checks; do not
-  add a runtime JSON Schema library or validation framework.
+  Use the bounded pre-scan, kotlinx.serialization JSON tree and explicit
+  allowed-key checks in `Policy.kt`; do not add a runtime JSON Schema library,
+  second JSON parser or validation framework. CLI and HTTP must pass streams to
+  this entry point and never call `readBytes` for policy input.
 
 - [ ] **Step 3: Run GREEN and commit**
 
@@ -519,6 +573,11 @@ internal class DataDirectory private constructor(val root: Path) : AutoCloseable
     }
 }
 
+internal data class RunPage(
+    val runs: List<RunSummary>,
+    val nextAfter: String?,
+)
+
 internal class RunBundleStore(private val dataDirectory: DataDirectory) {
     fun acceptInput(
         source: InputStream,
@@ -527,9 +586,8 @@ internal class RunBundleStore(private val dataDirectory: DataDirectory) {
     ): AcceptedInput
 
     fun requireInput(runId: String): AcceptedInput
-    fun listRuns(): List<RunSummary>
+    fun listRuns(afterRunId: String?, limit: Int): RunPage
     fun readAnalysis(runId: String, analysisId: String): StoredAnalysis?
-    fun writeRunMetadataIfAbsent(runId: String, canonicalRun: ByteArray)
     fun writeAnalysisAtomically(
         runId: String,
         analysisId: String,
@@ -544,20 +602,30 @@ internal fun detectSource(path: Path): SourceType
 hashing, rejects zero/overflow/unsafe metadata, detects content, computes the
 id, forces files and atomically moves one new run directory. A pre-existing
 identical run is verified and reused. No caller supplies a filesystem-relative
-path derived from the filename.
+path derived from the filename. `acceptInput` and `writeAnalysisAtomically` each
+delete their own UUID staging path in `finally` after every non-crash failure,
+including overflow, unsupported input, writer exception and failed move;
+startup cleanup remains only the crash fallback.
 
-Format detection reads bounded prefixes and, for the 3.9 bundle, safe central
-directory metadata: XML prolog/root, exact CSV header, Gatling text `RUN`
-record, ZIP signature plus safe `.log` entries, or binary Run header/version.
-Extension and filename never decide the type.
+Format detection reads bounded prefixes: XML prolog/root, exact CSV header,
+Gatling text `RUN` record or binary Run header/version. Extension and filename
+never decide the type.
+
+`listRuns` accepts only `1..100`, scans run directory names once and retains at
+most `limit + 1` lexicographically smallest names after the exclusive cursor in
+a JDK `PriorityQueue`; it never accumulates the whole filesystem catalog.
 
 - [ ] **Step 1: Add failing lock, path, detection and atomicity tests**
 
   Cover same bytes/type identity, source type participation, all committed
   formats with misleading extensions, empty/unknown input, 4 GiB boundary via
   an injected small test limit, symlink/traversal/reserved device names,
-  failure before atomic move, idempotent re-upload and a second JVM process
-  receiving `DATA_DIR_BUSY` before any mutation.
+  failure before atomic move, idempotent re-upload, no owned staging residue
+  after overflow/unknown input/writer exception/failed move, rejection of
+  symlinked app-owned root entries, safe cleanup of UUID-named stale staging
+  directories without following symlinks, preservation of every other
+  `.staging` entry, bounded/cursor-stable run listing across more than one page
+  and a second JVM process receiving `DATA_DIR_BUSY` before any mutation.
 
   ```powershell
   .\gradlew.bat test --tests "io.ltverdict.storage.*" --tests "io.ltverdict.ingest.FormatDetectorTest"
@@ -568,8 +636,10 @@ Extension and filename never decide the type.
 - [ ] **Step 2: Implement the minimum safe filesystem flow**
 
   Use `java.nio.file`, `FileChannel.tryLock`, `MessageDigest` and generated UUID
-  staging names. Reject symbolic links at the supplied CLI path and every ZIP
-  entry boundary. Do not add a repository abstraction or filesystem index.
+  staging names plus one operation-local `try/finally`. Reject symbolic links at
+  the supplied CLI path. Cleanup runs only after acquiring the exclusive lock
+  and only for the exact app-owned UUID path. Do not add a repository abstraction
+  or filesystem index.
 
 - [ ] **Step 3: Run GREEN, inspect the on-disk tree and commit**
 
@@ -580,7 +650,7 @@ Extension and filename never decide the type.
   ```
 
   ```powershell
-  git add src/main/kotlin/io/ltverdict/storage src/main/kotlin/io/ltverdict/ingest/FormatDetector.kt src/test/kotlin/io/ltverdict/storage src/test/kotlin/io/ltverdict/ingest/FormatDetectorTest.kt
+  git add src/main/kotlin/io/ltverdict/storage/DataDirectory.kt src/main/kotlin/io/ltverdict/storage/RunBundleStore.kt src/main/kotlin/io/ltverdict/ingest/FormatDetector.kt src/test/kotlin/io/ltverdict/storage/DataDirectoryTest.kt src/test/kotlin/io/ltverdict/storage/RunBundleStoreTest.kt src/test/kotlin/io/ltverdict/ingest/FormatDetectorTest.kt
   git commit -m "feat(storage): add immutable run bundles"
   ```
 
@@ -597,8 +667,8 @@ Extension and filename never decide the type.
 
 ```kotlin
 internal enum class SampleKind {
-    JMETER_SAMPLE,
-    JMETER_HTTP_SAMPLE,
+    JMETER_SAMPLER,
+    JMETER_CONTAINER,
     GATLING_REQUEST,
     GATLING_GROUP,
 }
@@ -617,28 +687,38 @@ internal data class MetricsConfig(
     val highestTrackableValueMillis: Long = 86_400_000,
     val significantDigits: Int = 3,
     val maxTransactions: Int = 10_000,
+    val maxTransactionIdentityBytes: Int = 65_536,
+    val maxTotalTransactionIdentityBytes: Long = 67_108_864,
     val maxOneSecondBuckets: Int = 100_000,
 )
 
-internal class MetricsAccumulator(private val config: MetricsConfig) {
+internal class MetricsAccumulator(
+    private val runStartEpochMillis: Long,
+    private val runEndEpochMillis: Long,
+    private val config: MetricsConfig,
+) {
     fun record(sample: LoadSample)
     fun finish(): NormalizedMetrics
 }
 ```
 
-Each accumulator owns all mutable `PackedHistogram` instances. It produces
-overall and exact-transaction summaries plus sparse overall 1-second buckets.
-Transaction-specific time-series are deferred; exact transaction summaries and
-raw immutable input preserve the required Slice 1 information. Rollups merge
-1-second histograms and counts, never raw events or summary percentiles.
+Each accumulator receives the final first-pass run window and owns all mutable
+`PackedHistogram` instances. Overall metrics and sparse 1-second buckets record
+`JMETER_SAMPLER` and `GATLING_REQUEST`; all four kinds produce exact
+`(groupPath, label, kind)` summaries. Transaction-specific time-series are
+deferred; exact summaries and raw immutable input preserve the required Slice 1
+information. Rollups merge 1-second histograms and counts, never raw events or
+summary percentiles.
 
 - [ ] **Step 1: Add failing metric and normalization tests**
 
   Cover sample/error counts, error-rate and throughput rationals, p50/p95/p99/max,
-  exact path/label distinction, ambiguous duplicate labels, half-open bucket
-  boundaries, absent seconds, merge-only 10/30/60 rollups, spike/drop golden,
-  latency/cardinality/bucket ceilings and two accumulators sharing no mutable
-  state. Assert each normalized row has deterministic fields
+  exact path/label/kind distinction, nested container/group exclusion from
+  overall counts, ambiguity across kind as well as path, timestamp upper bound
+  and checked overflow, out-of-order starts against a frozen `runStart`, half-open
+  bucket boundaries, absent seconds, merge-only 10/30/60 rollups, spike/drop
+  golden, latency/cardinality/retained-identity/bucket ceilings and two
+  accumulators sharing no mutable state. Assert each normalized row has fields
   `{bucket_start_ms,sample_count,error_count,max_latency_ms,hdr_v2_base64}`;
   `hdr_v2_base64` is standard Base64 of HdrHistogram compressed V2 encoding.
 
@@ -652,7 +732,11 @@ raw immutable input preserve the required Slice 1 information. Rollups merge
 
   Use `PackedHistogram` directly. Compare error rate and throughput by
   cross-multiplication with `BigDecimal`; round only separately labelled display
-  values. Sort finalized transaction data deterministically.
+  values. When admitting a distinct key, count the UTF-8 bytes of each path
+  segment and label, ASCII kind bytes and one separator byte per component;
+  count each key once and fail before exceeding either ceiling. Include both
+  ceilings in `EngineConfig` and `analysis-identity.v1`; sort finalized
+  transaction data deterministically.
 
 - [ ] **Step 3: Run GREEN and commit**
 
@@ -663,7 +747,7 @@ raw immutable input preserve the required Slice 1 information. Rollups merge
   ```
 
   ```powershell
-  git add src/main/kotlin/io/ltverdict/ingest/LoadSample.kt src/main/kotlin/io/ltverdict/metrics/Metrics.kt src/test/kotlin/io/ltverdict/metrics
+  git add src/main/kotlin/io/ltverdict/ingest/LoadSample.kt src/main/kotlin/io/ltverdict/metrics/Metrics.kt src/test/kotlin/io/ltverdict/metrics/MetricsTest.kt src/test/kotlin/io/ltverdict/metrics/NormalizationGoldenTest.kt
   git commit -m "feat(metrics): normalize load samples"
   ```
 
@@ -703,21 +787,27 @@ internal fun parseJtlXml(
 ```
 
 CSV requires unique `timeStamp`, `elapsed`, `label` and `success` headers,
-accepts/ignores bounded extras and uses optional `URL` only to distinguish a
-flat controller-like record from a sampler. It never invents a parent path.
-Timestamp and elapsed are non-negative integers; success is exact
-case-insensitive `true|false`; any malformed row invalidates the analysis.
+accepts/ignores bounded extras and emits every row as a flat `JMETER_SAMPLER`.
+Optional `URL` is data only and never used to infer controller semantics. CSV
+never invents a parent path. Timestamp and elapsed are non-negative integers;
+their sum uses
+`Math.addExact` and both start/end obey the fixed `run.v1` timestamp bound;
+success is exact case-insensitive `true|false`; any malformed row, overflow or
+range violation invalidates the analysis.
 
 XML uses JDK StAX only. Disable DTD, external general/parameter entities and
-entity replacement and install an `XMLResolver` that always throws. Emit
-`sample` and `httpSample`, preserve their nesting stack, require `ts`, `t`, `lb`
-and `s`, and never retain response data, headers, assertions or raw XML.
+entity replacement and install an `XMLResolver` that always throws. Emit a leaf
+`sample` or `httpSample` as `JMETER_SAMPLER`; emit either element containing a
+child `sample`/`httpSample` as `JMETER_CONTAINER`. Preserve the nesting stack,
+require `ts`, `t`, `lb` and `s`, apply checked timestamp arithmetic and never
+retain response data, headers, assertions or raw XML.
 
 - [ ] **Step 1: Add failing CSV tests and run RED**
 
-  Cover quoted UTF-8/commas/newlines, LF/CRLF, exact labels, optional extras,
-  missing/duplicate required headers, malformed quote/number/boolean, field
-  limit, cancellation and the JMeter 5.6.3 oracle.
+  Cover quoted UTF-8/commas/newlines, LF/CRLF, exact labels, empty/non-empty/
+  absent optional `URL` with identical flat-sampler semantics, missing/duplicate
+  required headers, malformed quote/number/boolean, field limit, cancellation
+  and the JMeter 5.6.3 oracle.
 
   ```powershell
   .\gradlew.bat test --tests "io.ltverdict.ingest.JtlCsvParserTest" --tests "io.ltverdict.ingest.JtlGoldenTest"
@@ -735,9 +825,9 @@ and `s`, and never retain response data, headers, assertions or raw XML.
 - [ ] **Step 3: Add failing XML/security tests and run RED**
 
   Cover nesting, golden parity, malformed/empty/missing attributes, depth/label
-  limits, cancellation and committed DTD/XXE/entity-expansion fixtures. Assert a
-  marker placed in response body/header/raw XML never reaches samples or result
-  data.
+  limits, checked timestamp overflow, leaf/container contribution, cancellation
+  and committed DTD/XXE/entity-expansion fixtures. Assert a marker placed in
+  response body/header/raw XML never reaches samples or result data.
 
   ```powershell
   .\gradlew.bat test --tests "io.ltverdict.ingest.JtlXmlParserTest"
@@ -754,7 +844,7 @@ and `s`, and never retain response data, headers, assertions or raw XML.
 - [ ] **Step 5: Commit both JMeter parsers**
 
   ```powershell
-  git add src/main/kotlin/io/ltverdict/ingest/JtlCsvParser.kt src/main/kotlin/io/ltverdict/ingest/JtlXmlParser.kt src/test/kotlin/io/ltverdict/ingest/JtlCsvParserTest.kt src/test/kotlin/io/ltverdict/ingest/JtlXmlParserTest.kt src/test/kotlin/io/ltverdict/ingest/JtlGoldenTest.kt
+  git add src/main/kotlin/io/ltverdict/ingest/LoadSample.kt src/main/kotlin/io/ltverdict/ingest/JtlCsvParser.kt src/main/kotlin/io/ltverdict/ingest/JtlXmlParser.kt src/test/kotlin/io/ltverdict/ingest/JtlCsvParserTest.kt src/test/kotlin/io/ltverdict/ingest/JtlXmlParserTest.kt src/test/kotlin/io/ltverdict/ingest/JtlGoldenTest.kt
   git commit -m "feat(parser): support JMeter JTL"
   ```
 
@@ -802,20 +892,20 @@ implementation must not guess.
 
 Text supports official tab-delimited `RUN`, `USER`, `REQUEST`, `GROUP`, `ERROR`
 and `ASSERTION` records for 3.9.x through 3.12.x using a bounded UTF-8 line
-reader. The 3.9 ZIP reader rejects traversal, nesting, symlinks, encryption,
-non-log entries and duplicate names and processes entries by Unicode-code-point
-filename order.
+reader. `REQUEST` emits `GATLING_REQUEST`; `GROUP` emits `GATLING_GROUP`; all
+other record types affect parser state or diagnostics but not request metrics.
 
 Binary is big-endian, requires Run first, handles header tags, timestamp deltas,
 bounded lists/blobs and the exact LATIN1/UTF16 string cache used by supported
 tags. It accepts 3.13.x, 3.14.x, 3.15.0 and 3.15.1 only. Unknown header, coder,
-cache index, negative length or newer version fails closed.
+cache index, negative length, checked timestamp overflow/range violation or
+newer version fails closed.
 
 - [ ] **Step 1: Add failing text boundary/golden tests**
 
-  Cover 3.9.5/3.12.0, official record layouts, exact group paths, bounded lines,
-  deterministic bundle order, unsafe ZIP entries, malformed records and
-  cancellation.
+  Cover raw 3.9.5/3.12.0 `simulation.log`, official record layouts, exact group
+  paths, request/group contribution without overall double-counting, bounded
+  lines, malformed records, checked timestamp overflow and cancellation.
 
   ```powershell
   .\gradlew.bat test --tests "io.ltverdict.ingest.GatlingTextParserTest" --tests "io.ltverdict.ingest.GatlingGoldenTest"
@@ -894,6 +984,28 @@ The service alone composes parse, metrics, policy evaluation, closed identity,
 invalid policy is rejected before `AnalysisRequest`; `capacity_step` returns
 `UNSUPPORTED_ANALYSIS_MODE` before an analysis directory exists.
 
+The immutable input is parsed in at most two streaming passes with the same
+parser. Pass 1 validates and freezes validity, diagnostics and the complete
+run window without retaining events. INVALID stops there. VALID/DEGRADED runs
+use pass 2 to feed `MetricsAccumulator` with the final `runStart` and write
+normalized artifacts. Logical job progress remains `0..input.sizeBytes`: pass 1
+maps to `bytes / 2`, pass 2 to
+`input.sizeBytes / 2 + (bytes + 1) / 2`; both passes check cancellation. No event
+spool or second parser path is introduced. A pass-2 validity, diagnostic or
+window mismatch fails internally before commit.
+
+`run.v1` is analysis-scoped at
+`analyses/<analysis_id>/run.json`, so a parser/configuration change cannot leave
+first-writer metadata at run root. For VALID or DEGRADED input with at least one
+complete event, set `schema_version` to `run.v1`, `run_id` to the accepted run
+id and `analysis_mode` to `standard`; set `started_at` to the minimum event start
+and `ended_at` to the maximum checked `start + elapsed`, formatting both as UTC
+`Instant`; set the sole input's `type` to `SourceType.wireName`, `path` to
+`inputs/source.bin` and `sha256` to the accepted input hash. No additional field
+is emitted. INVALID input commits only `identity.json`, canonical
+`analysis-result.v1` and their manifest; it does not emit `run.json` or
+normalized/rollup artifacts.
+
 Evaluation precedence is exact: invalid input cannot PASS; degraded input is
 NO_VERDICT; missing/ambiguous required transaction makes the whole evaluated
 policy NO_VERDICT even if another rule fails; otherwise any failed rule yields
@@ -905,8 +1017,13 @@ valid run.
   Cover PASS, FAIL, NO_POLICY, missing/ambiguous NO_VERDICT, DEGRADED and INVALID;
   all required and no additional top-level fields from the existing
   `analysis-result.v1` schema; typed evidence ids; deterministic ordering;
-  identity golden; byte-identical repeat; new policy creating a new analysis
-  without changing the old result; unsupported mode creating no analysis.
+  identity golden; byte-identical repeat; exact `run.v1` fields for VALID and
+  DEGRADED, absence of `run.json`/NDJSON for INVALID; full manifest hash/size
+  validation including corruption rejection; an out-of-order fixture whose
+  correct relative buckets require the first-pass minimum start; equal pass
+  validity/diagnostics and monotonic two-pass progress; new policy creating a new
+  analysis without changing the old result; unsupported mode creating no
+  analysis.
 
   ```powershell
   .\gradlew.bat test --tests "io.ltverdict.core.PolicyEvaluationTest" --tests "io.ltverdict.core.Analysis*"
@@ -914,9 +1031,11 @@ valid run.
 
 - [ ] **Step 2: Implement the service and canonical artifacts**
 
-  Stream NDJSON into the staging analysis directory; do not build the raw event
-  list in memory. Reuse a completed identical analysis only after verifying its
-  identity and result hashes.
+  Reuse `parseInput` for both passes and stream second-pass NDJSON into the
+  staging analysis directory; do not build the raw event list in memory. Write
+  the manifest last, force files, then atomically commit the directory. Reuse a
+  completed identical analysis only after validating every manifest entry's
+  path, byte size and SHA-256.
 
 - [ ] **Step 3: Run GREEN and commit**
 
@@ -949,7 +1068,7 @@ internal data class JobStatus(
     val state: JobState,
     val processedBytes: Long,
     val totalBytes: Long,
-    val runId: String?,
+    val runId: String,
     val analysisId: String?,
     val diagnostic: Diagnostic?,
 )
@@ -972,7 +1091,9 @@ internal class AnalysisJobs(
 Use one fixed `ThreadPoolExecutor` of platform threads and an
 `ArrayBlockingQueue` whose capacity equals validated parallelism. Accept only
 `1..Runtime.getRuntime().availableProcessors()`. Job state is process-local;
-accepted inputs and completed analyses are durable. Upload never enters this
+accepted inputs and completed analyses are durable. Active states are retained;
+after transition, keep only the 1,024 most recent terminal statuses in terminal-
+transition order and evict the oldest terminal entry. Upload never enters this
 executor.
 
 - [ ] **Step 1: Add failing admission, cancel and isolation tests**
@@ -980,12 +1101,14 @@ executor.
   With parallelism `1`, one running plus one queued means the third submit is
   BUSY. Cover queued cancel never starting, running cancel observing interruption
   and deleting only derived staging files, immutable input preservation,
-  monotonic processed bytes, terminal state stability and worker names proving
-  they are not Netty event-loop threads.
+  monotonic processed bytes within exact `totalBytes`, terminal state stability,
+  deterministic oldest-terminal eviction after 1,024 entries and worker names
+  proving they are not Netty event-loop threads.
 
   The concurrency acceptance test analyzes two different RunBundles in
   parallelism `2` and compares each canonical result byte-for-byte with fresh
-  sequential analyses.
+  sequential analyses. A second case submits the same run/policy twice and
+  proves both jobs converge on one intact `analysis_id` directory and manifest.
 
   ```powershell
   .\gradlew.bat test --tests "io.ltverdict.jobs.*"
@@ -1008,7 +1131,7 @@ executor.
   ```
 
   ```powershell
-  git add src/main/kotlin/io/ltverdict/jobs/AnalysisJobs.kt src/test/kotlin/io/ltverdict/jobs
+  git add src/main/kotlin/io/ltverdict/jobs/AnalysisJobs.kt src/test/kotlin/io/ltverdict/jobs/AnalysisJobsTest.kt src/test/kotlin/io/ltverdict/jobs/ConcurrencyAcceptanceTest.kt
   git commit -m "feat(jobs): bound analysis concurrency"
   ```
 
@@ -1048,16 +1171,40 @@ internal fun startLocalServer(
 **Private HTTP contract:**
 
 ```text
-GET    /api/bootstrap
-GET    /api/runs
-POST   /api/inputs
-POST   /api/policies/validate
-POST   /api/jobs
-GET    /api/jobs/{jobId}
-DELETE /api/jobs/{jobId}
-GET    /api/runs/{runId}/analyses/{analysisId}/result
-GET    /api/runs/{runId}/analyses/{analysisId}/buckets?rollup=1|10|30|60
+GET    /api/bootstrap -> 200 {csrf_token,max_upload_bytes}
+GET    /api/runs?after=<run_id>&limit=1..100
+       -> 200 {runs:[{run_id,source_type,sha256,size_bytes,original_filename}],next_after}
+POST   /api/inputs -> 201 {run_id,source_type,sha256,size_bytes,original_filename}
+POST   /api/policies/validate -> 200 {valid:true,policy,sha256}
+                                422 {valid:false,errors:[{code,json_pointer,message}]}
+POST   /api/jobs multipart(run_id, policy?) -> 202 JobStatus
+GET    /api/jobs/{jobId} -> 200 JobStatus
+DELETE /api/jobs/{jobId} -> 200 JobStatus
+GET    /api/runs/{runId}/analyses/{analysisId}/result -> 200 analysis-result.v1
+GET    /api/runs/{runId}/analyses/{analysisId}/buckets
+       ?rollup=1|10|30|60&from_ms=<inclusive>&to_ms=<exclusive>&limit=1..500
+       -> 200 {buckets:[...],next_from_ms:<integer|null>}
 ```
+
+Run lists are sorted by `run_id`; `after` is exclusive, `limit` defaults to 100
+and `next_after` is the last returned id only when another item exists.
+`JobStatus` mirrors the core exactly as
+`{job_id,state,processed_bytes,total_bytes,run_id,analysis_id,diagnostic}`;
+`analysis_id` is nullable, and `diagnostic` is null or
+`{code,message,source_offset}` with nullable `source_offset`. `state` is
+`QUEUED|PROCESSING|COMPLETE|FAILED|CANCELLED`. Bucket offsets are non-negative
+and relative to run start; `from_ms` defaults to `0`, `to_ms` is optional,
+`limit` defaults to `500`, and `next_from_ms` is the first omitted bucket start.
+The server never returns more than 500 buckets, so the 100,000-bucket artifact
+is not materialized in one response. Range reads stream the selected NDJSON
+artifact and stop after the first omitted row; they do not load the artifact
+into memory.
+
+All other failures use
+`{"error":{"code":"...","message":"...","details":[]}}`: `400` for
+malformed JSON/multipart/query, `403` for Host/Origin/session/CSRF failure, `404`
+for an unknown run/job/analysis, `409` for `BUSY`, `413` for upload or policy
+size overflow, `415` for wrong content type and `422` for unsupported input.
 
 `/api/bootstrap` sets one 256-bit random server-process session cookie
 (`HttpOnly; SameSite=Strict; Path=/`) and returns a separate 256-bit CSRF token
@@ -1066,9 +1213,13 @@ kept only in page memory. Every HTTP request rejects a Host other than the actua
 Origin, cookie and `X-LTV-CSRF` header. Do not install CORS.
 
 Upload accepts exactly one multipart `file` part and streams it directly into
-`RunBundleStore.acceptInput`; it never calls `readBytes`. JSON POST endpoints
-require `application/json`. Responses use JSON data only, including hostile
-labels.
+`RunBundleStore.acceptInput`; it never calls `readBytes`. Policy validation
+requires `application/json` and passes the bounded raw request stream to
+`validatePolicy`. Job creation accepts exactly one UTF-8 `run_id` form field
+(at most 128 bytes) and zero or one raw `policy` part; the policy part is streamed
+unchanged through the same 1 MiB validator, preserving duplicate-key detection.
+An invalid policy returns the same `422 {valid:false,errors:[...]}` and creates no
+job or analysis. Responses use JSON data only, including hostile labels.
 
 Every response sets this baseline:
 
@@ -1076,15 +1227,18 @@ Every response sets this baseline:
 Content-Security-Policy: default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'
 X-Content-Type-Options: nosniff
 Referrer-Policy: no-referrer
+Cache-Control: no-store
 ```
 
 - [ ] **Step 1: Add failing API/security tests**
 
   Cover bind host, bootstrap randomness/cookie flags, correct API flow, missing
   and wrong Host/Origin/session/CSRF, no CORS headers, wrong content type,
-  streaming overflow with no accepted run, BUSY status, cancel, malicious HTML
-  returned only as JSON text, CSP/header values and absence of a runtime HTTP
-  client dependency.
+  streaming upload/policy overflow and raw duplicate/escaped-equivalent job
+  policy with no accepted run/analysis, every exact request/response/status/error
+  envelope, bounded run/bucket pagination and invalid ranges, terminal-job
+  eviction, BUSY status, cancel, malicious HTML returned only as JSON text,
+  CSP/`no-store` header values and absence of a runtime HTTP client dependency.
 
   ```powershell
   .\gradlew.bat test --tests "io.ltverdict.web.*"
@@ -1107,7 +1261,7 @@ Referrer-Policy: no-referrer
   ```
 
   ```powershell
-  git add src/main/kotlin/io/ltverdict/web src/test/kotlin/io/ltverdict/web
+  git add src/main/kotlin/io/ltverdict/web/LocalApi.kt src/main/kotlin/io/ltverdict/web/LocalServer.kt src/test/kotlin/io/ltverdict/web/LocalApiTest.kt src/test/kotlin/io/ltverdict/web/LocalSecurityTest.kt
   git commit -m "feat(web): expose secure loopback API"
   ```
 
@@ -1227,8 +1381,10 @@ server shutdown and defaults to one analysis thread.
 
 Use only the fixed frontend ledger dependencies. ESLint enables
 `vue/no-v-html` and rejects `localStorage` and `sessionStorage` member access.
-The schema script validates every policy contract example through Ajv; Ajv is
-dev-only and absent from the Vite production bundle.
+The schema script checks every policy example against its declared
+`schema_valid` value through Ajv; Kotlin `PolicyTest` independently checks
+`runtime_valid` and diagnostic codes such as duplicate rule id. Ajv is dev-only
+and absent from the Vite production bundle.
 
 `App.vue` owns the small state machine; no router or store. `api.ts` keeps the
 CSRF token in module memory, uploads with `XMLHttpRequest` for byte progress and
@@ -1252,17 +1408,37 @@ Preserve `.superdesign/design-system.md` exactly:
 
 Gradle defines OS-aware native `npmCi`, `uiTypecheck`, `uiLint`,
 `uiContractTest`, `uiBuild` and `uiE2e` `Exec` tasks without a Node Gradle
-plugin. `processResources` depends on `uiBuild` and copies `ui/dist` into
-`build/generated-resources/web`; Ktor serves those classpath assets with SPA
-fallback. When Gradle property `npmOffline=true` is present, `npmCi` adds
-`--offline`; no separate build path is introduced.
+plugin. `processResources` depends on `uiBuild` and uses
+`from(layout.projectDirectory.dir("ui/dist")) { into("web") }`, placing the
+assets in the standard resources output and packaged classpath; Ktor serves
+`classpath:/web` with SPA fallback. When Gradle property `npmOffline=true` is
+present, `npmCi` adds `--offline`; no separate build path is introduced.
 
 The test-only `E2eServerMain` starts the real packaged API on
 `127.0.0.1:18473`, disables browser auto-open and uses a new temporary data
-directory. The Node launcher chooses `gradlew.bat` on Windows and `./gradlew`
-elsewhere, forwards signals and removes only that known temporary directory.
+directory. Gradle defines `runE2eServer` as `JavaExec`, depending on
+`testClasses` and `processResources`, with `sourceSets.test.runtimeClasspath` and
+the `E2eServerMain` main class. The Node launcher creates the temp directory,
+chooses `gradlew.bat` on Windows and `./gradlew` elsewhere, launches
+`runE2eServer -x npmCi -Pe2eDataDir=<that-directory>`, waits for the bootstrap
+endpoint, forwards signals and removes only that known directory. Skipping only
+`npmCi` is safe here because the launcher itself is invoked from the already
+installed npm environment; it prevents Gradle from replacing `node_modules`
+under the running Playwright process while still rebuilding `ui/dist`.
+`playwright.config.ts` binds this launcher to every browser run with
+`webServer.command: "npm run e2e:server"`, readiness URL
+`http://127.0.0.1:18473/api/bootstrap`, a 120-second timeout and
+`reuseExistingServer: false`.
 
-- [ ] **Step 1: Create package metadata/config, lock dependencies and verify schema**
+- [ ] **Step 1: Create package metadata, buildable mount and real E2E harness**
+
+  Add the smallest buildable Vue mount (`main.ts` plus an empty semantic
+  `App.vue`) so the real Ktor/Playwright harness can start before behavior is
+  implemented. This is test scaffolding only and contains no feature
+  placeholder; Step 3 replaces it with the approved shell. In this step also
+  implement `processResources`, `runE2eServer`, `E2eServerMain`, the Node launcher,
+  Playwright `webServer` and Ktor classpath/static fallback described above;
+  these are test/build plumbing, not UI behavior.
 
   ```powershell
   npm --prefix ui install --package-lock-only
@@ -1290,17 +1466,19 @@ elsewhere, forwards signals and removes only that known temporary directory.
   npm --prefix ui run e2e
   ```
 
-  Expected: non-zero because UI assets/components do not exist.
+  Expected: the buildable empty mount and real server start, then Playwright
+  exits non-zero on the new behavior assertions.
 
 - [ ] **Step 3: Implement the approved shell and API client**
 
   Reuse the tracked design tokens verbatim. Render all untrusted strings through
   Vue interpolation. Keep policy form fields limited to the public schema.
 
-- [ ] **Step 4: Wire the embedded build and real E2E server**
+- [ ] **Step 4: Verify the embedded distribution**
 
-  Verify `installDist` contains no CDN URL and serves the same hashed assets used
-  by Playwright.
+  Verify `runE2eServer` starts from the test runtime classpath, `installDist`
+  contains the generated `/web` resources with no CDN URL and Playwright reaches
+  the same hashed assets through the real Ktor server.
 
 - [ ] **Step 5: Run frontend and browser GREEN checks**
 
@@ -1326,7 +1504,7 @@ elsewhere, forwards signals and removes only that known temporary directory.
 - [ ] **Step 7: Commit UI and embedding**
 
   ```powershell
-  git add ui src/test/kotlin/io/ltverdict/e2e/E2eServerMain.kt src/main/kotlin/io/ltverdict/web/LocalServer.kt build.gradle.kts .gitignore
+  git add ui/package.json ui/package-lock.json ui/index.html ui/tsconfig.json ui/vite.config.ts ui/eslint.config.js ui/playwright.config.ts ui/scripts/start-e2e-server.mjs ui/scripts/verify-policy-schema.mjs ui/src/main.ts ui/src/api.ts ui/src/types.ts ui/src/App.vue ui/src/RunSetup.vue ui/src/PolicyEditor.vue ui/src/JobStatus.vue ui/src/AnalysisView.vue ui/src/styles.css ui/e2e/local-flow.spec.ts ui/e2e/security-a11y.spec.ts src/test/kotlin/io/ltverdict/e2e/E2eServerMain.kt src/main/kotlin/io/ltverdict/web/LocalServer.kt build.gradle.kts .gitignore
   git commit -m "feat(ui): add approved local analysis shell"
   ```
 
@@ -1367,18 +1545,20 @@ runs the complete gate; performance runs the shell probe after runtime succeeds.
 **Documentation:**
 
 - Architecture doc explains the one-process flow, RunBundle layout, identity,
-  executor/admission model, private API and security limits.
+  two-pass normalization, executor/admission/terminal-retention model, bounded
+  private API and security limits.
 - User guide contains Windows/Linux quick start, upload/status/error meanings,
   all four policy metrics with JSON examples, import/edit/download, exact
   transaction matching, validation error table and the normative external-AI
   prompt copied unchanged from the approved spec.
 - README points to install/run/guide; CHANGELOG records the user-visible Slice 1
   shell; roadmap becomes `Slice 1 — READY FOR REVIEW`.
-- Milestone report records fresh commands, exit codes, CI links when available,
-  changed-file scope, performance numbers, known limits and decision
-  `PENDING_USER_REVIEW`. It must not claim merge or final acceptance.
+- Milestone report records fresh commands, exit codes, the green CI run URL and
+  job conclusions, changed-file scope, performance numbers, known limits and
+  decision `PENDING_USER_REVIEW`. Without green runtime and performance jobs the
+  milestone remains `GATE_PENDING`; it must not claim merge or final acceptance.
 
-- [ ] **Step 1: Test the deterministic generator in RED/GREEN**
+- [ ] **Step 1: Write the deterministic-generator test and confirm RED**
 
   The unit test generates 100 rows twice, compares SHA-256, validates header and
   row count and confirms spike/error positions from seed `1`.
@@ -1387,7 +1567,21 @@ runs the complete gate; performance runs the shell probe after runtime succeeds.
   python -m unittest tools.test_generate_jtl -v
   ```
 
-- [ ] **Step 2: Add the CI workflow and run the local equivalent**
+  Expected: non-zero because `tools/perf/generate_jtl.py` does not exist.
+
+- [ ] **Step 2: Implement the generator and probe, then obtain GREEN**
+
+  Implement the two small streaming scripts exactly to the performance contract;
+  do not introduce a benchmark framework or Python dependency.
+
+  ```powershell
+  python -m unittest tools.test_generate_jtl -v
+  bash -n tools/perf/jtl_probe.sh
+  ```
+
+  Expected: both commands exit `0`.
+
+- [ ] **Step 3: Add the CI workflow and run the local equivalent**
 
   ```powershell
   python tools/verify_slice0.py
@@ -1403,7 +1597,7 @@ runs the complete gate; performance runs the shell probe after runtime succeeds.
 
   Expected: all commands exit `0` from a clean dependency state.
 
-- [ ] **Step 3: Prove offline rebuild after dependencies are present**
+- [ ] **Step 4: Prove offline rebuild after dependencies are present**
 
   ```powershell
   npm --prefix ui ci --offline
@@ -1414,7 +1608,7 @@ runs the complete gate; performance runs the shell probe after runtime succeeds.
   Expected: no network is required; all commands exit `0` with the previously
   acquired Gradle/npm/Chromium caches.
 
-- [ ] **Step 4: Run the bounded large-JTL probe on Linux/CI**
+- [ ] **Step 5: Run the bounded large-JTL probe on Linux/CI**
 
   ```bash
   bash tools/perf/jtl_probe.sh
@@ -1425,12 +1619,12 @@ runs the complete gate; performance runs the shell probe after runtime succeeds.
   `/usr/bin/time`, record that limitation and require the Linux CI job before
   the milestone can pass.
 
-- [ ] **Step 5: Write user/architecture documentation and candidate report**
+- [ ] **Step 6: Write user/architecture documentation and candidate report**
 
   Record observed output only. Keep the AI prompt byte-for-byte semantically
   equivalent to the approved normative block and do not invent example SLAs.
 
-- [ ] **Step 6: Run the full completion gate fresh**
+- [ ] **Step 7: Run the full completion gate fresh**
 
   ```powershell
   python tools/verify_slice0.py
@@ -1444,21 +1638,25 @@ runs the complete gate; performance runs the shell probe after runtime succeeds.
   npm --prefix ui run e2e
   npx --yes markdownlint-cli2@0.23.2 "**/*.md"
   git diff --check
-  git grep -n -I -E "(BEGIN (RSA|OPENSSH|EC) PRIVATE KEY|AKIA[0-9A-Z]{16})" -- .
+  $secretMatches = git grep -n -I -E "(BEGIN (RSA|OPENSSH|EC) PRIVATE KEY|AKIA[0-9A-Z]{16})" -- .
+  $secretExit = $LASTEXITCODE
+  if ($secretExit -gt 1) { throw "secret scan failed with exit $secretExit" }
+  if ($secretMatches) { $secretMatches; throw "potential secret found" }
+  Write-Output "secret scan: OK"
   git status --short --branch
   ```
 
   Expected: all executable checks exit `0`; secret scan has no matches; status
   contains only the files owned by this task before commit.
 
-- [ ] **Step 7: Commit gates and documentation**
+- [ ] **Step 8: Commit gates and documentation**
 
   ```powershell
-  git add tools/perf tools/test_generate_jtl.py .github/workflows/runtime-quality.yml docs/architecture/slice-1-local-runtime.md docs/user/slice-1-local-analysis.md docs/milestones/stage-1.md README.md CHANGELOG.md docs/development-plan-v0.6.md
+  git add tools/perf/generate_jtl.py tools/perf/jtl_probe.sh tools/test_generate_jtl.py .github/workflows/runtime-quality.yml docs/architecture/slice-1-local-runtime.md docs/user/slice-1-local-analysis.md docs/milestones/stage-1.md README.md CHANGELOG.md docs/development-plan-v0.6.md
   git commit -m "docs(slice-1): add runtime gate and user guide"
   ```
 
-- [ ] **Step 8: Request independent code review and resolve findings**
+- [ ] **Step 9: Request independent code review and resolve findings**
 
   Use `superpowers:requesting-code-review` with a fresh high-effort reviewer for
   the full branch diff, routing security, concurrency, binary parsing, public
@@ -1467,9 +1665,9 @@ runs the complete gate; performance runs the shell probe after runtime succeeds.
   a regression test first for confirmed defects. Commit each bounded fix with an
   appropriate Conventional Commit.
 
-- [ ] **Step 9: Re-run verification after the last review fix**
+- [ ] **Step 10: Re-run verification after the last review fix**
 
-  Repeat Steps 4 and 6 from the final commit, inspect `git diff origin/main...HEAD`
+  Repeat Steps 5 and 7 from the final commit, inspect `git diff origin/main...HEAD`
   and confirm no unrelated, generated or temporary artifacts are tracked.
   Update the milestone report only with fresh final evidence and commit that
   report update separately:
@@ -1479,7 +1677,7 @@ runs the complete gate; performance runs the shell probe after runtime succeeds.
   git commit -m "docs(slice-1): finalize stage 1 evidence"
   ```
 
-- [ ] **Step 10: Prepare the reviewed branch for user-directed integration**
+- [ ] **Step 11: Prepare the reviewed branch for user-directed integration**
 
   Use `superpowers:finishing-a-development-branch` to report the exact final
   commit, fresh gate results, CI/performance status and remaining limitations.
@@ -1495,18 +1693,22 @@ runs the complete gate; performance runs the shell probe after runtime succeeds.
   unchanged normative AI prompt agree on all four metrics.
 - [ ] Independent JMeter CSV/XML and Gatling text/binary goldens match producer
   oracles; malformed/unknown/DTD/XXE inputs never PASS.
-- [ ] Upload is streaming to 4 GiB, accepted input is immutable, identities are
-  deterministic and every writer honors the same data-directory lock.
-- [ ] Metrics, sparse 1-second buckets and merge-only 10/30/60 rollups preserve
-  the spike/drop golden and exact transaction hierarchy.
+- [ ] Upload is streaming to 4 GiB, failed operations leave no staging residue,
+  accepted input is immutable, manifests verify every analysis artifact and
+  every writer honors the same data-directory lock.
+- [ ] Two streaming passes, bounded identity retention, sparse 1-second buckets
+  and merge-only 10/30/60 rollups preserve the out-of-order spike/drop golden
+  and exact transaction hierarchy.
 - [ ] VALID/DEGRADED/INVALID and PASS/FAIL/NO_POLICY/NO_VERDICT remain independent;
   missing or ambiguous transaction has an exact coverage reason.
 - [ ] CLI and private HTTP/UI flow produce byte-identical canonical results for
   every source family.
-- [ ] Bounded platform-thread jobs prove sequential/parallel parity, BUSY and
-  cancellation without immutable-input loss.
-- [ ] Server binds only `127.0.0.1`; session/CSRF/Origin/Host/CSP, file/XML and
-  rendering trust boundaries pass malicious tests with no outbound requests.
+- [ ] Bounded platform-thread jobs and terminal retention prove
+  sequential/parallel parity, BUSY and cancellation without immutable-input
+  loss; run and bucket APIs are cursor/range bounded.
+- [ ] Server binds only `127.0.0.1`; session/CSRF/Origin/Host/CSP/no-store,
+  file/XML and rendering trust boundaries pass malicious tests with no outbound
+  requests.
 - [ ] Approved light/dark UI hierarchy, accessibility and states pass at 1440 px;
   no chart, DnD, result export or feature placeholder is present.
 - [ ] Ten-million-row Linux probe meets the 2 CPU, <2 GiB and <=600-second gate

@@ -2,6 +2,7 @@
 
 package io.ltverdict.ingest
 
+import io.ltverdict.storage.AcceptedInput
 import java.io.ByteArrayInputStream
 import java.nio.ByteBuffer
 import java.nio.charset.StandardCharsets
@@ -36,35 +37,54 @@ internal fun detectSource(path: Path): SourceType {
     if (firstLine == JMETER_CSV_HEADER) return SourceType.JMETER_CSV
     if (isJmeterXml(prefix)) return SourceType.JMETER_XML
     if (isSupportedTextRun(firstLine)) return SourceType.GATLING_TEXT
+    if (firstLine.startsWith("ASSERTION\t")) {
+        val run =
+            text
+                .lineSequence()
+                .map { it.removeSuffix("\r") }
+                .dropWhile { it.startsWith("ASSERTION\t") }
+                .firstOrNull()
+        if (run != null && isSupportedTextRun(run)) return SourceType.GATLING_TEXT
+    }
     unsupported()
 }
+
+internal fun parseInput(
+    input: AcceptedInput,
+    emit: (LoadSample) -> Unit,
+    processedBytes: (Long) -> Unit = {},
+    checkCancelled: () -> Unit = {},
+): ParseReport =
+    when (input.sourceType) {
+        SourceType.JMETER_CSV -> parseJtlCsv(input.path, emit, processedBytes, checkCancelled)
+        SourceType.JMETER_XML -> parseJtlXml(input.path, emit, processedBytes, checkCancelled)
+        SourceType.GATLING_TEXT -> parseGatlingText(input.path, emit, processedBytes, checkCancelled)
+        SourceType.GATLING_BINARY -> parseGatlingBinary(input.path, emit, processedBytes, checkCancelled)
+    }
 
 private fun binaryVersion(prefix: ByteArray): String? {
     val buffer = ByteBuffer.wrap(prefix)
     if (!buffer.hasRemaining() || buffer.get().toInt() != GATLING_RUN_HEADER) return null
-    val version = buffer.readGatlingString(MAX_VERSION_BYTES, requiredCoder = 0) ?: return null
+    val version = buffer.readGatlingString(MAX_VERSION_BYTES) ?: return null
     if (version.isEmpty()) return null
-    if (version.any { it.toInt() !in 0x20..0x7e }) return null
+    if (version.any { it.code !in 0x20..0x7e }) return null
     val simulationClass = buffer.readGatlingString(MAX_PREFIX_BYTES) ?: return null
     if (simulationClass.isEmpty() || buffer.remaining() < Long.SIZE_BYTES) return null
     if (buffer.long <= 0) return null
-    return version.toString(StandardCharsets.US_ASCII)
+    return version
 }
 
-private fun ByteBuffer.readGatlingString(
-    maxBytes: Int,
-    requiredCoder: Int? = null,
-): ByteArray? {
+private fun ByteBuffer.readGatlingString(maxBytes: Int): String? {
     if (remaining() < Int.SIZE_BYTES) return null
     val length = int
     if (length !in 0..maxBytes) return null
-    if (length == 0) return byteArrayOf()
+    if (length == 0) return ""
     if (remaining() < length + 1) return null
     val bytes = ByteArray(length)
     get(bytes)
     val coder = get().toInt()
-    if (coder !in 0..1 || (requiredCoder != null && coder != requiredCoder) || (coder == 1 && length % 2 != 0)) return null
-    return bytes
+    if (coder !in 0..1 || (coder == 1 && length % 2 != 0)) return null
+    return String(bytes, if (coder == 0) StandardCharsets.ISO_8859_1 else StandardCharsets.UTF_16LE)
 }
 
 private fun isSupportedBinary(version: String): Boolean {

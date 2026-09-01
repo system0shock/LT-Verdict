@@ -16,6 +16,7 @@ import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.long
+import org.HdrHistogram.PackedHistogram
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertTrue
@@ -28,10 +29,12 @@ import java.net.URI
 import java.net.http.HttpClient
 import java.net.http.HttpRequest
 import java.net.http.HttpResponse
+import java.nio.ByteBuffer
 import java.nio.charset.StandardCharsets.UTF_8
 import java.nio.file.Files
 import java.nio.file.Path
 import java.time.Duration
+import java.util.Base64
 import java.util.UUID
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
@@ -156,6 +159,7 @@ class LocalApiTest {
                 2,
                 0,
                 900,
+                900,
             )
             assertEquals(1_000L, firstPageJson.getValue("next_from_ms").jsonPrimitive.long)
 
@@ -176,6 +180,7 @@ class LocalApiTest {
                 1_000,
                 1,
                 0,
+                20,
                 20,
             )
             assertEquals(null, secondPageJson.getValue("next_from_ms").jsonPrimitive.contentOrNull)
@@ -303,9 +308,12 @@ class LocalApiTest {
         withServer { store, api ->
             val input = store.acceptInput(ByteArrayInputStream(SPIKE_DROP.bytes()), SPIKE_DROP.filename)
             store.writeAnalysisAtomically(input.runId, SYNTHETIC_ANALYSIS_ID) { staging ->
+                val histogram = PackedHistogram(1, 86_400_000, 3).apply { recordValue(1) }
+                val buffer = ByteBuffer.allocate(histogram.neededByteBufferCapacity)
+                val encoded = Base64.getEncoder().encodeToString(buffer.array().copyOf(histogram.encodeIntoCompressedByteBuffer(buffer)))
                 val rows =
                     (0..500).joinToString(separator = "", postfix = "") { index ->
-                        "{\"bucket_start_ms\":${index * 1_000L},\"error_count\":0,\"hdr_v2_base64\":\"AA==\"," +
+                        "{\"bucket_start_ms\":${index * 1_000L},\"error_count\":0,\"hdr_v2_base64\":\"$encoded\"," +
                             "\"max_latency_ms\":1,\"sample_count\":1}\n"
                     }
                 Files.writeString(staging.resolve("normalized-1s.ndjson"), rows)
@@ -427,15 +435,17 @@ class LocalApiTest {
         sampleCount: Long,
         errorCount: Long,
         maxLatencyMillis: Long,
+        p95LatencyMillis: Long,
     ) {
         assertEquals(
-            setOf("bucket_start_ms", "sample_count", "error_count", "max_latency_ms", "hdr_v2_base64"),
+            setOf("bucket_start_ms", "sample_count", "error_count", "max_latency_ms", "p95_latency_ms", "hdr_v2_base64"),
             actual.keys,
         )
         assertEquals(startMillis, actual.getValue("bucket_start_ms").jsonPrimitive.long)
         assertEquals(sampleCount, actual.getValue("sample_count").jsonPrimitive.long)
         assertEquals(errorCount, actual.getValue("error_count").jsonPrimitive.long)
         assertEquals(maxLatencyMillis, actual.getValue("max_latency_ms").jsonPrimitive.long)
+        assertEquals(p95LatencyMillis, actual.getValue("p95_latency_ms").jsonPrimitive.long)
         assertTrue(
             actual
                 .getValue("hdr_v2_base64")

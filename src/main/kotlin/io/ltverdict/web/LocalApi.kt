@@ -48,8 +48,11 @@ import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.long
 import kotlinx.serialization.json.put
+import org.HdrHistogram.PackedHistogram
+import java.nio.ByteBuffer
 import java.nio.file.Files
 import java.security.SecureRandom
+import java.util.Base64
 import java.util.HexFormat
 
 internal data class LocalApiContext(
@@ -196,7 +199,7 @@ internal fun Application.installLocalApi(context: LocalApiContext) {
             )
         }
 
-        route("/{...}") {
+        route("/api/{...}") {
             handle {
                 notFound("Endpoint was not found")
             }
@@ -414,10 +417,20 @@ private fun readBucketPage(
                 next = start
                 break
             }
-            buckets += bucket
+            buckets += bucket.withP95()
         }
     }
     return BucketPage(buckets, next)
+}
+
+private fun JsonObject.withP95(): JsonObject {
+    val encoded = getValue("hdr_v2_base64").jsonPrimitive.content
+    val histogram =
+        PackedHistogram.decodeFromCompressedByteBuffer(
+            ByteBuffer.wrap(Base64.getDecoder().decode(encoded)),
+            MAX_BUCKET_LATENCY_MILLIS,
+        )
+    return JsonObject(this + ("p95_latency_ms" to JsonPrimitive(histogram.getValueAtPercentile(95.0))))
 }
 
 private data class BucketPage(
@@ -556,6 +569,7 @@ private const val DEFAULT_RUN_LIMIT = 100
 private const val MAX_RUN_LIMIT = 100
 private const val DEFAULT_BUCKET_LIMIT = 500
 private const val MAX_BUCKET_LIMIT = 500
+private const val MAX_BUCKET_LATENCY_MILLIS = 86_400_000L
 private const val RESULT_FILE = "analysis-result.json"
 private const val NORMALIZED_FILE = "normalized-1s.ndjson"
 private const val CONTENT_SECURITY_POLICY =

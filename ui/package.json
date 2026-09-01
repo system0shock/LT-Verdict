@@ -1,0 +1,29 @@
+{
+  "name": "lt-verdict-ui",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "typecheck": "vue-tsc --noEmit",
+    "lint": "eslint .",
+    "build": "vue-tsc --noEmit && vite build",
+    "test:contracts": "node scripts/verify-policy-schema.mjs",
+    "e2e:server": "node scripts/start-e2e-server.mjs",
+    "e2e": "playwright test"
+  },
+  "dependencies": {
+    "vue": "3.5.42"
+  },
+  "devDependencies": {
+    "@axe-core/playwright": "4.13.0",
+    "@playwright/test": "1.62.1",
+    "@vitejs/plugin-vue": "6.0.8",
+    "ajv": "8.18.0",
+    "eslint": "10.9.1",
+    "eslint-plugin-vue": "10.10.0",
+    "typescript": "6.0.2",
+    "typescript-eslint": "8.68.0",
+    "vite": "8.2.2",
+    "vue-tsc": "3.3.11"
+  }
+}

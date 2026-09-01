@@ -83,3 +83,76 @@ val csvSpike by tasks.registering(Test::class) {
     maxHeapSize = "256m"
     maxParallelForks = 1
 }
+
+val uiDirectory = layout.projectDirectory.dir("ui")
+val npmExecutable = if (System.getProperty("os.name").startsWith("Windows", ignoreCase = true)) "npm.cmd" else "npm"
+
+val npmCi by tasks.registering(Exec::class) {
+    group = "build"
+    description = "Installs locked frontend dependencies."
+    workingDir(uiDirectory)
+    commandLine(npmExecutable, "ci")
+    if (providers.gradleProperty("npmOffline").isPresent) args("--offline")
+    inputs.files(uiDirectory.file("package.json"), uiDirectory.file("package-lock.json"))
+    outputs.dir(uiDirectory.dir("node_modules"))
+}
+
+val uiTypecheck by tasks.registering(Exec::class) {
+    group = "verification"
+    dependsOn(npmCi)
+    workingDir(uiDirectory)
+    commandLine(npmExecutable, "run", "typecheck")
+}
+
+val uiLint by tasks.registering(Exec::class) {
+    group = "verification"
+    dependsOn(npmCi)
+    workingDir(uiDirectory)
+    commandLine(npmExecutable, "run", "lint")
+}
+
+val uiContractTest by tasks.registering(Exec::class) {
+    group = "verification"
+    dependsOn(npmCi)
+    workingDir(uiDirectory)
+    commandLine(npmExecutable, "run", "test:contracts")
+}
+
+val uiBuild by tasks.registering(Exec::class) {
+    group = "build"
+    dependsOn(npmCi)
+    workingDir(uiDirectory)
+    commandLine(npmExecutable, "run", "build")
+    inputs.files(uiDirectory.file("package.json"), uiDirectory.file("package-lock.json"))
+    inputs.dir(uiDirectory.dir("src"))
+    inputs.file(uiDirectory.file("index.html"))
+    inputs.file(uiDirectory.file("vite.config.ts"))
+    inputs.file(uiDirectory.file("tsconfig.json"))
+    outputs.dir(uiDirectory.dir("dist"))
+}
+
+tasks.processResources {
+    dependsOn(uiBuild)
+    from(uiDirectory.dir("dist")) { into("web") }
+}
+
+val runE2eServer by tasks.registering(JavaExec::class) {
+    group = "verification"
+    description = "Starts the real local server for browser tests."
+    dependsOn(tasks.testClasses, tasks.processResources)
+    classpath = sourceSets.test.get().runtimeClasspath
+    mainClass.set("io.ltverdict.e2e.E2eServerMainKt")
+    doFirst {
+        systemProperty(
+            "e2eDataDir",
+            providers.gradleProperty("e2eDataDir").orNull ?: throw GradleException("-Pe2eDataDir is required"),
+        )
+    }
+}
+
+val uiE2e by tasks.registering(Exec::class) {
+    group = "verification"
+    dependsOn(npmCi)
+    workingDir(uiDirectory)
+    commandLine(npmExecutable, "run", "e2e")
+}

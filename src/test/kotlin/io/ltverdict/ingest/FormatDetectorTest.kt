@@ -16,6 +16,7 @@ class FormatDetectorTest {
         val cases =
             listOf(
                 "fixtures/slice1/jmeter/csv-5.6.3/input.jtl" to SourceType.JMETER_CSV,
+                "fixtures/slice1/security/html-label.jtl" to SourceType.JMETER_CSV,
                 "fixtures/slice1/jmeter/xml-5.6.3/input.xml" to SourceType.JMETER_XML,
                 "fixtures/slice1/gatling/text-3.9.5/simulation.log" to SourceType.GATLING_TEXT,
                 "fixtures/slice1/gatling/text-3.12.0/simulation.log" to SourceType.GATLING_TEXT,

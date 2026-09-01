@@ -1,4 +1,9 @@
 .worktrees/
 __pycache__/
 .gradle/
+.kotlin/
 /build/
+/ui/node_modules/
+/ui/dist/
+/ui/playwright-report/
+/ui/test-results/

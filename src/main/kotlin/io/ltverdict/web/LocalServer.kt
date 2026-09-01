@@ -4,7 +4,9 @@ package io.ltverdict.web
 
 import io.ktor.server.engine.ApplicationEngine
 import io.ktor.server.engine.embeddedServer
+import io.ktor.server.http.content.singlePageApplication
 import io.ktor.server.netty.Netty
+import io.ktor.server.routing.routing
 import kotlinx.coroutines.runBlocking
 import java.awt.Desktop
 import java.net.URI
@@ -24,6 +26,12 @@ internal fun startLocalServer(
     val server =
         embeddedServer(Netty, host = LOOPBACK_HOST, port = port) {
             installLocalApi(context)
+            routing {
+                singlePageApplication {
+                    filesPath = "web"
+                    useResources = true
+                }
+            }
         }.start(wait = false)
     val engine = server.engine
     return try {

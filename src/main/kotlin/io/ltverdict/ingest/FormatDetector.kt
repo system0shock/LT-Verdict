@@ -34,7 +34,7 @@ internal fun detectSource(path: Path): SourceType {
 
     val text = prefix.toString(StandardCharsets.ISO_8859_1)
     val firstLine = text.lineSequence().first().removeSuffix("\r")
-    if (firstLine == JMETER_CSV_HEADER) return SourceType.JMETER_CSV
+    if (isJmeterCsvHeader(firstLine)) return SourceType.JMETER_CSV
     if (isJmeterXml(prefix)) return SourceType.JMETER_XML
     if (isSupportedTextRun(firstLine)) return SourceType.GATLING_TEXT
     if (firstLine.startsWith("ASSERTION\t")) {
@@ -106,6 +106,11 @@ private fun isSupportedTextRun(line: String): Boolean {
     return parts.joinToString(".") == version && parts[0] == 3 && parts[1] in 9..12
 }
 
+private fun isJmeterCsvHeader(line: String): Boolean {
+    val columns = line.split(',')
+    return JMETER_CSV_REQUIRED_HEADERS.all { required -> columns.count { it == required } == 1 }
+}
+
 private fun isJmeterXml(prefix: ByteArray): Boolean =
     try {
         val factory = XMLInputFactory.newDefaultFactory()
@@ -133,5 +138,4 @@ private fun unsupported(): Nothing = throw IllegalArgumentException("UNSUPPORTED
 private const val MAX_PREFIX_BYTES = 4_096
 private const val MAX_VERSION_BYTES = 32
 private const val GATLING_RUN_HEADER = 0
-private const val JMETER_CSV_HEADER =
-    "timeStamp,elapsed,label,responseCode,responseMessage,threadName,dataType,success,failureMessage,bytes,sentBytes,grpThreads,allThreads,URL,Latency,IdleTime,Connect"
+private val JMETER_CSV_REQUIRED_HEADERS = listOf("timeStamp", "elapsed", "label", "success")

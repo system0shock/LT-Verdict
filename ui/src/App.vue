@@ -170,7 +170,7 @@ async function refreshBuckets() {
   const from = optionalNumber(rangeStart.value)
   const to = optionalNumber(rangeEnd.value)
   if (from === null || to === null) {
-    errorMessage.value = 'Normalized-data range must use epoch milliseconds.'
+    errorMessage.value = 'Normalized-data range must use non-negative offsets from run start in milliseconds.'
     return
   }
   try {

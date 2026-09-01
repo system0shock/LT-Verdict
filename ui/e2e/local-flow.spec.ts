@@ -105,11 +105,15 @@ test.describe.serial('local analysis flow', () => {
       await uploadAndAnalyze(page, input)
       await expect(page.locator('#verdict')).toContainText('NO_POLICY')
     }
+    await expect(page.getByLabel('Start offset (ms)')).toBeVisible()
+    await expect(page.getByLabel('End offset (ms)')).toBeVisible()
   })
 
   test('renders PASS, FAIL, NO_POLICY and NO_VERDICT independently', async ({ page }) => {
     await uploadAndAnalyze(page, verdictInput, policies.pass)
     await expect(page.locator('#verdict')).toContainText('PASS')
+    await expect(page.getByText('Run validity', { exact: true }).locator('..').locator('dd')).toHaveText('VALID')
+    await expect(page.getByText('Coverage', { exact: true }).locator('..').locator('dd')).toHaveText('COMPLETE')
 
     await uploadAndAnalyze(page, verdictInput, policies.fail)
     await expect(page.locator('#verdict')).toContainText('FAIL')
@@ -119,6 +123,8 @@ test.describe.serial('local analysis flow', () => {
 
     await uploadAndAnalyze(page, verdictInput, policies.missing)
     await expect(page.locator('#verdict')).toContainText('NO_VERDICT')
+    await expect(page.getByText('Coverage', { exact: true }).locator('..').locator('dd')).toHaveText('INCOMPLETE')
+    await expect(page.locator('#verdict')).toContainText('TRANSACTION_NOT_FOUND')
   })
 
   test('shows BUSY and keeps cancellation visible', async ({ page }) => {
@@ -126,7 +132,7 @@ test.describe.serial('local analysis flow', () => {
     const input = join(directory, 'sustained.jtl')
     const header = 'timeStamp,elapsed,label,responseCode,responseMessage,threadName,dataType,success,failureMessage,bytes,sentBytes,grpThreads,allThreads,URL,Latency,IdleTime,Connect\n'
     const row = '1767225600000,20,steady,200,OK,fixture 1-1,text,true,,0,0,1,1,null,0,0,0\n'
-    await writeFile(input, header + row.repeat(350_000))
+    await writeFile(input, header + row)
     let activeJobId: string | undefined
     let queuedJobId: string | undefined
 

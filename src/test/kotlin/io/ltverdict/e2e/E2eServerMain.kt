@@ -14,7 +14,12 @@ import java.util.concurrent.atomic.AtomicBoolean
 fun main() {
     val dataDirectory = DataDirectory.open(Path.of(checkNotNull(System.getProperty("e2eDataDir"))))
     val store = RunBundleStore(dataDirectory)
-    val jobs = AnalysisJobs(1, AnalysisService(store, EngineConfig())::analyze)
+    val service = AnalysisService(store, EngineConfig())
+    val jobs =
+        AnalysisJobs(1) { request, processedBytes, checkCancelled ->
+            if (request.input.originalFilename == BLOCKING_INPUT) blockUntilCancelled()
+            service.analyze(request, processedBytes, checkCancelled)
+        }
     val server = startLocalServer(LocalApiContext(store, jobs), port = 18_473, openBrowser = false)
     val stopped = CountDownLatch(1)
     val closed = AtomicBoolean()
@@ -35,3 +40,10 @@ fun main() {
     Runtime.getRuntime().addShutdownHook(Thread(close, "lt-verdict-e2e-shutdown"))
     stopped.await()
 }
+
+private fun blockUntilCancelled(): Nothing {
+    CountDownLatch(1).await()
+    error("blocking E2E analysis was released")
+}
+
+private const val BLOCKING_INPUT = "sustained.jtl"

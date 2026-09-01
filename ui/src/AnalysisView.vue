@@ -245,8 +245,16 @@ function updateRange(name: 'update:range-start' | 'update:range-end', event: Eve
         Policy verdict
       </p>
       <h2>{{ verdictText }}</h2>
+      <p
+        v-if="result.analysis_coverage.reasons.length"
+        class="muted"
+      >
+        {{ result.analysis_coverage.reasons.join(', ') }}
+      </p>
     </div>
     <dl class="verdict-facts">
+      <div><dt>Run validity</dt><dd>{{ result.run_validity }}</dd></div>
+      <div><dt>Coverage</dt><dd>{{ result.analysis_coverage.status }}</dd></div>
       <div><dt>Duration</dt><dd>{{ duration }}</dd></div>
       <div><dt>Samples</dt><dd>{{ overallMetrics.samples.toLocaleString() }}</dd></div>
       <div><dt>Error rate</dt><dd>{{ overallMetrics.errorRate }}</dd></div>
@@ -367,13 +375,13 @@ function updateRange(name: 'update:range-start' | 'update:range-end', event: Eve
         :key="seconds"
         :value="seconds"
       >{{ seconds }} second{{ seconds === 1 ? '' : 's' }}</option></select></label>
-      <label>Start (ms) <input
+      <label>Start offset (ms) <input
         :value="rangeStart"
         type="number"
         min="0"
         @input="updateRange('update:range-start', $event)"
       ></label>
-      <label>End (ms) <input
+      <label>End offset (ms) <input
         :value="rangeEnd"
         type="number"
         min="0"

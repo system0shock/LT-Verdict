@@ -6,6 +6,9 @@ config:
   MD033: false
 
 ignores:
+  # Generated dependencies and local agent artifacts are not project docs.
+  - ui/node_modules/**
+  - .superpowers/sdd/**
   # Accepted baseline and superseded documents retain their reviewed formatting.
   - lt-verdict-prc-prd-v0.6.md
   - prc-lt-verdict-v0.4.md

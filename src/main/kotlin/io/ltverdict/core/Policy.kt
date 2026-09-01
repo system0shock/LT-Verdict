@@ -1,5 +1,12 @@
 package io.ltverdict.core
 
+import io.ltverdict.ingest.Diagnostic
+import io.ltverdict.ingest.RunValidity
+import io.ltverdict.metrics.ExactRatio
+import io.ltverdict.metrics.MetricSummary
+import io.ltverdict.metrics.NormalizedMetrics
+import io.ltverdict.metrics.TransactionIdentity
+import io.ltverdict.metrics.TransactionSummary
 import kotlinx.serialization.SerializationException
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
@@ -7,6 +14,10 @@ import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.buildJsonArray
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.jsonPrimitive
+import kotlinx.serialization.json.put
 import java.io.ByteArrayOutputStream
 import java.io.IOException
 import java.io.InputStream
@@ -22,6 +33,20 @@ private const val MAX_IDENTIFIER_BYTES = 128
 private const val MAX_TRANSACTION_SCOPE_BYTES = 4_096
 private const val MAX_NUMERIC_TOKEN_BYTES = 64
 private const val MAX_ABSOLUTE_EXPONENT = 64
+
+internal enum class PolicyVerdict {
+    PASS,
+    FAIL,
+    NO_POLICY,
+    NO_VERDICT,
+}
+
+internal data class PolicyEvaluation(
+    val verdict: PolicyVerdict,
+    val coverageReasons: List<String>,
+    val findings: List<JsonObject>,
+    val evidence: List<JsonObject>,
+)
 
 internal fun validatePolicy(
     source: InputStream,
@@ -45,6 +70,283 @@ internal fun validatePolicy(
     } catch (_: IllegalArgumentException) {
         invalid("MALFORMED_JSON", "", "policy is not valid JSON")
     }
+
+internal fun evaluatePolicy(
+    policy: PolicyV1?,
+    validity: RunValidity,
+    metrics: NormalizedMetrics?,
+    diagnostics: List<Diagnostic> = emptyList(),
+): PolicyEvaluation {
+    val orderedDiagnostics = diagnostics.sortedWith(compareBy<Diagnostic> { it.code }.thenBy { it.sourceOffset })
+    val findings = orderedDiagnostics.map(::diagnosticFinding).toMutableList()
+    val metricEvidence = metrics?.let(::metricEvidence).orEmpty()
+    val evidence = metricEvidence.map(MetricEvidence::json).toMutableList()
+    evidence += orderedDiagnostics.map(::diagnosticEvidence)
+    val reasons = orderedDiagnostics.map(Diagnostic::code).toMutableList()
+
+    if (validity != RunValidity.VALID) {
+        return PolicyEvaluation(PolicyVerdict.NO_VERDICT, reasons.distinct(), findings, evidence)
+    }
+    if (policy == null) return PolicyEvaluation(PolicyVerdict.NO_POLICY, reasons.distinct(), findings, evidence)
+
+    val checks = mutableListOf<JsonObject>()
+    var failed = false
+    policy.rules.forEach { rule ->
+        val binding = bind(rule, metrics, metricEvidence)
+        if (binding.reason != null) {
+            reasons += binding.reason
+            checks += policyCheck(rule, null, null, binding.reason)
+            return@forEach
+        }
+        val metric = binding.metric ?: error("metric binding is incomplete")
+        val observed = observed(rule, metric.summary)
+        if (observed == null) {
+            reasons += METRIC_NOT_AVAILABLE
+            checks += policyCheck(rule, metric, null, METRIC_NOT_AVAILABLE)
+            return@forEach
+        }
+        val passed =
+            when (rule.operator) {
+                PolicyOperator.LTE -> observed.comparison <= 0
+                PolicyOperator.GTE -> observed.comparison >= 0
+            }
+        checks += policyCheck(rule, metric, observed.json, if (passed) null else POLICY_FAILED)
+        if (!passed) {
+            failed = true
+            findings +=
+                policyFailure(
+                    rule,
+                    checks
+                        .last()
+                        .getValue("id")
+                        .jsonPrimitive.content,
+                )
+        }
+    }
+    evidence += checks
+    val verdict =
+        when {
+            reasons.isNotEmpty() -> PolicyVerdict.NO_VERDICT
+            failed -> PolicyVerdict.FAIL
+            else -> PolicyVerdict.PASS
+        }
+    return PolicyEvaluation(verdict, reasons.distinct(), findings, evidence)
+}
+
+private data class MetricEvidence(
+    val identity: TransactionIdentity?,
+    val summary: MetricSummary,
+    val id: String,
+    val json: JsonObject,
+)
+
+private data class Binding(
+    val metric: MetricEvidence? = null,
+    val reason: String? = null,
+)
+
+private data class Observed(
+    val json: JsonElement,
+    val comparison: Int,
+)
+
+private fun metricEvidence(metrics: NormalizedMetrics): List<MetricEvidence> {
+    val overallId = "metric-summary-overall"
+    val overall = MetricEvidence(null, metrics.overall, overallId, metricSummary(overallId, null, metrics.overall))
+    val transactions =
+        metrics.transactions
+            .sortedWith(TRANSACTION_SUMMARY_COMPARATOR)
+            .map { transaction ->
+                val key = transaction.identity.stableKey()
+                val id = stableId("metric-summary", key)
+                MetricEvidence(transaction.identity, transaction.metrics, id, metricSummary(id, transaction.identity, transaction.metrics))
+            }
+    return listOf(overall) + transactions
+}
+
+private fun bind(
+    rule: PolicyRuleV1,
+    metrics: NormalizedMetrics?,
+    evidence: List<MetricEvidence>,
+): Binding {
+    if (metrics == null) return Binding(reason = METRIC_NOT_AVAILABLE)
+    return when (val scope = rule.scope) {
+        PolicyScope.Overall -> Binding(evidence.first())
+        is PolicyScope.Transaction -> {
+            val matches = evidence.drop(1).filter { it.identity?.label == scope.name }.distinctBy { it.identity }
+            when (matches.size) {
+                0 -> Binding(reason = "TRANSACTION_NOT_FOUND")
+                1 -> Binding(matches.single())
+                else -> Binding(reason = "AMBIGUOUS_TRANSACTION")
+            }
+        }
+    }
+}
+
+private fun observed(
+    rule: PolicyRuleV1,
+    summary: MetricSummary,
+): Observed? {
+    if (summary.sampleCount == 0L) return null
+    return when (rule.metric) {
+        PolicyMetric.RESPONSE_TIME_P95_MS -> integerObserved(summary.latency.p95Millis, rule.threshold)
+        PolicyMetric.RESPONSE_TIME_P99_MS -> integerObserved(summary.latency.p99Millis, rule.threshold)
+        PolicyMetric.ERROR_RATE_RATIO -> summary.errorRate?.ratioObserved(rule.threshold)
+        PolicyMetric.THROUGHPUT_RPS -> summary.throughputRps.ratioObserved(rule.threshold)
+    }
+}
+
+private fun integerObserved(
+    value: Long,
+    threshold: BigDecimal,
+) = Observed(JsonPrimitive(value), BigDecimal.valueOf(value).compareTo(threshold))
+
+private fun ExactRatio.ratioObserved(threshold: BigDecimal) =
+    Observed(
+        ratioJson(this),
+        compareTo(threshold),
+    )
+
+private fun policyCheck(
+    rule: PolicyRuleV1,
+    metric: MetricEvidence?,
+    observed: JsonElement?,
+    reason: String?,
+): JsonObject =
+    buildJsonObject {
+        put("id", stableId("policy-check", rule.id))
+        put("type", "policy_check")
+        put("rule_id", rule.id)
+        put("metric", rule.metric.wireName)
+        put("operator", rule.operator.wireName)
+        put("threshold", JsonPrimitive(rule.threshold))
+        put(
+            "status",
+            when {
+                reason == POLICY_FAILED -> "FAIL"
+                observed != null -> "PASS"
+                else -> "NO_VERDICT"
+            },
+        )
+        if (metric != null) put("metric_evidence_id", metric.id)
+        if (observed != null) put("observed", observed)
+        if (reason != null && reason != POLICY_FAILED) put("reason_code", reason)
+    }
+
+private fun metricSummary(
+    id: String,
+    identity: TransactionIdentity?,
+    summary: MetricSummary,
+): JsonObject =
+    buildJsonObject {
+        put("id", id)
+        put("type", "metric_summary")
+        put(
+            "scope",
+            if (identity == null) {
+                buildJsonObject { put("kind", "overall") }
+            } else {
+                buildJsonObject {
+                    put("kind", "transaction")
+                    put("group_path", buildJsonArray { identity.groupPath.forEach { add(JsonPrimitive(it)) } })
+                    put("label", identity.label)
+                    put("sample_kind", identity.kind.name)
+                }
+            },
+        )
+        put("sample_count", summary.sampleCount)
+        put("error_count", summary.errorCount)
+        put("error_rate_ratio", summary.errorRate?.let(::ratioJson) ?: JsonNull)
+        put("throughput_rps", ratioJson(summary.throughputRps))
+        put(
+            "latency_ms",
+            buildJsonObject {
+                put("p50", summary.latency.p50Millis)
+                put("p95", summary.latency.p95Millis)
+                put("p99", summary.latency.p99Millis)
+                put("max", summary.latency.maxMillis)
+            },
+        )
+    }
+
+private fun ratioJson(value: ExactRatio): JsonObject =
+    buildJsonObject {
+        put("numerator", value.numerator)
+        put("denominator", value.denominator)
+    }
+
+private fun diagnosticEvidence(diagnostic: Diagnostic): JsonObject {
+    val id = diagnosticId(diagnostic)
+    return buildJsonObject {
+        put("id", id)
+        put("type", "diagnostic")
+        put("code", diagnostic.code)
+        put("message", diagnostic.message)
+        diagnostic.sourceOffset?.let { put("source_offset", it) }
+    }
+}
+
+private fun diagnosticFinding(diagnostic: Diagnostic): JsonObject =
+    buildJsonObject {
+        put("id", stableId("diagnostic-finding", diagnosticKey(diagnostic)))
+        put("type", "diagnostic")
+        put("code", diagnostic.code)
+        put("evidence_id", diagnosticId(diagnostic))
+    }
+
+private fun policyFailure(
+    rule: PolicyRuleV1,
+    evidenceId: String,
+): JsonObject =
+    buildJsonObject {
+        put("id", stableId("policy-failure", rule.id))
+        put("type", "policy_failure")
+        put("rule_id", rule.id)
+        put("evidence_id", evidenceId)
+    }
+
+private fun diagnosticId(diagnostic: Diagnostic) = stableId("diagnostic", diagnosticKey(diagnostic))
+
+private fun diagnosticKey(diagnostic: Diagnostic) = "${diagnostic.code}\u0000${diagnostic.sourceOffset ?: ""}"
+
+private fun stableId(
+    prefix: String,
+    key: String,
+) = "$prefix-${sha256Hex(key.encodeToByteArray())}"
+
+private fun TransactionIdentity.stableKey(): String =
+    canonicalJson(
+        buildJsonObject {
+            put("group_path", buildJsonArray { groupPath.forEach { add(JsonPrimitive(it)) } })
+            put("label", label)
+            put("kind", kind.name)
+        },
+    ).decodeToString()
+
+private fun compareTransactions(
+    left: TransactionSummary,
+    right: TransactionSummary,
+): Int {
+    val leftPath = left.identity.groupPath
+    val rightPath = right.identity.groupPath
+    for (index in 0 until minOf(leftPath.size, rightPath.size)) {
+        val comparison = leftPath[index].compareTo(rightPath[index])
+        if (comparison != 0) return comparison
+    }
+    val pathComparison = leftPath.size.compareTo(rightPath.size)
+    if (pathComparison != 0) return pathComparison
+    val labelComparison = left.identity.label.compareTo(right.identity.label)
+    return if (labelComparison != 0) {
+        labelComparison
+    } else {
+        left.identity.kind.name
+            .compareTo(right.identity.kind.name)
+    }
+}
+
+private val TRANSACTION_SUMMARY_COMPARATOR = Comparator(::compareTransactions)
+private const val METRIC_NOT_AVAILABLE = "METRIC_NOT_AVAILABLE"
+private const val POLICY_FAILED = "POLICY_FAILED"
 
 private fun readBounded(
     source: InputStream,

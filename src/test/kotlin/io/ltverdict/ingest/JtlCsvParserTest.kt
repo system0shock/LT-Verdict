@@ -78,6 +78,21 @@ class JtlCsvParserTest {
     }
 
     @Test
+    fun `physical text line over 1 MiB is a resource limit`() {
+        val header = (listOf("timeStamp", "elapsed", "label", "success") + List(16) { "extra$it" }).joinToString(",")
+        val row =
+            (listOf("1", "2", "label", "true") +
+                List(15) { "x".repeat(65_535) } +
+                "x".repeat(65_522)).joinToString(",")
+        assertEquals(1_048_577, row.encodeToByteArray().size)
+
+        val report = parseJtlCsv(csv(header, row), {})
+
+        assertEquals(RunValidity.INVALID, report.validity)
+        assertEquals(listOf("RESOURCE_LIMIT_EXCEEDED"), report.diagnostics.map { it.code })
+    }
+
+    @Test
     fun `successful parse reports monotonic progress ending at file size`() {
         val file = csv("timeStamp,elapsed,label,success", "1,2,one,true", "3,4,two,false")
         val progress = mutableListOf<Long>()

@@ -27,17 +27,33 @@ internal fun parseJtlCsv(
         Files.newInputStream(path, LinkOption.NOFOLLOW_LINKS).use { input ->
             val counted =
                 object : FilterInputStream(input) {
-                    override fun read(): Int = super.read().also { if (it >= 0) report(1) }
+                    private var lineBytes = 0
+
+                    override fun read(): Int = super.read().also { if (it >= 0) report(it) }
 
                     override fun read(
                         buffer: ByteArray,
                         offset: Int,
                         length: Int,
-                    ): Int = super.read(buffer, offset, length).also { if (it > 0) report(it) }
+                    ): Int =
+                        super.read(buffer, offset, length).also { count ->
+                            if (count > 0) {
+                                for (index in offset until offset + count) report(buffer[index].toInt() and 0xff, false)
+                                processedBytes(bytesRead)
+                            }
+                        }
 
-                    private fun report(count: Int) {
-                        bytesRead += count
-                        processedBytes(bytesRead)
+                    private fun report(
+                        value: Int,
+                        notify: Boolean = true,
+                    ) {
+                        bytesRead++
+                        if (value == '\r'.code || value == '\n'.code) {
+                            lineBytes = 0
+                        } else if (lineBytes++ == MAX_LINE_BYTES) {
+                            invalidCsv("RESOURCE_LIMIT_EXCEEDED")
+                        }
+                        if (notify) processedBytes(bytesRead)
                     }
                 }
             val decoder =
@@ -89,8 +105,9 @@ internal fun parseJtlCsv(
         }
     } catch (failure: InvalidCsv) {
         invalidCsvReport(failure.code, bytesRead)
-    } catch (_: TextParsingException) {
-        invalidCsvReport("MALFORMED_JMETER_CSV", bytesRead)
+    } catch (failure: TextParsingException) {
+        val invalid = generateSequence<Throwable>(failure) { it.cause }.filterIsInstance<InvalidCsv>().firstOrNull()
+        invalidCsvReport(invalid?.code ?: "MALFORMED_JMETER_CSV", bytesRead)
     }
 }
 
@@ -175,3 +192,4 @@ private val REQUIRED_HEADERS = listOf("timeStamp", "elapsed", "label", "success"
 private const val MAX_COLUMNS = 64
 private const val MAX_FIELD_BYTES = 65_536
 private const val MAX_LABEL_BYTES = 4_096
+private const val MAX_LINE_BYTES = 1_048_576

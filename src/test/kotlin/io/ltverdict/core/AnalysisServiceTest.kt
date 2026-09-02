@@ -1,9 +1,11 @@
 package io.ltverdict.core
 
+import io.ltverdict.metrics.MetricsConfig
 import io.ltverdict.storage.AcceptedInput
 import io.ltverdict.storage.DataDirectory
 import io.ltverdict.storage.RunBundleStore
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import org.junit.jupiter.api.Assertions.assertArrayEquals
@@ -149,6 +151,31 @@ class AnalysisServiceTest {
         }
 
     @Test
+    fun `metric bucket limit commits invalid resource-limit result`() =
+        withService(EngineConfig(metrics = MetricsConfig(maxOneSecondBuckets = 1))) { store, service ->
+            val input = accept(store, OUT_OF_ORDER_CSV.encodeToByteArray(), "bucket-limit.jtl")
+
+            val outcome = service.analyze(AnalysisRequest(input, passPolicy()))
+            val result = Json.parseToJsonElement(outcome.canonicalResult.decodeToString()).jsonObject
+
+            assertEquals("INVALID", result.getValue("run_validity").jsonPrimitive.content)
+            assertEquals("NO_VERDICT", result.getValue("policy_verdict").jsonPrimitive.content)
+            assertEquals(
+                listOf("RESOURCE_LIMIT_EXCEEDED"),
+                result
+                    .getValue("analysis_coverage")
+                    .jsonObject
+                    .getValue("reasons")
+                    .jsonArray
+                    .map { it.jsonPrimitive.content },
+            )
+            assertEquals(
+                setOf("analysis-result.json", "identity.json"),
+                store.readAnalysis(input.runId, outcome.analysisId)!!.artifacts.map { it.path }.toSet(),
+            )
+        }
+
+    @Test
     fun `capacity mode is rejected before an analysis directory exists`() =
         withService { store, service ->
             val input = accept(store, OUT_OF_ORDER_CSV.encodeToByteArray(), "capacity.jtl")
@@ -165,11 +192,14 @@ class AnalysisServiceTest {
             assertFalse(Files.exists(analyses))
         }
 
-    private fun withService(block: (RunBundleStore, AnalysisService) -> Unit) {
+    private fun withService(
+        config: EngineConfig = EngineConfig(),
+        block: (RunBundleStore, AnalysisService) -> Unit,
+    ) {
         val root = tempDir.resolve("data-${System.nanoTime()}")
         DataDirectory.open(root).use { directory ->
             val store = RunBundleStore(directory)
-            block(store, AnalysisService(store, EngineConfig()))
+            block(store, AnalysisService(store, config))
         }
     }
 

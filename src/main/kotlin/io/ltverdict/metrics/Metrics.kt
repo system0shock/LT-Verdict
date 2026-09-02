@@ -22,6 +22,8 @@ internal data class MetricsConfig(
     val maxOneSecondBuckets: Int = 100_000,
 )
 
+internal class MetricsResourceLimitExceeded : IllegalStateException("RESOURCE_LIMIT_EXCEEDED")
+
 internal data class ExactRatio(
     val numerator: Long,
     val denominator: Long,
@@ -263,7 +265,7 @@ private fun compareIdentities(
     return if (label != 0) label else left.kind.name.compareTo(right.kind.name)
 }
 
-private fun resourceLimit(): Nothing = throw IllegalStateException("RESOURCE_LIMIT_EXCEEDED")
+private fun resourceLimit(): Nothing = throw MetricsResourceLimitExceeded()
 
 private val TRANSACTION_IDENTITY_COMPARATOR = Comparator(::compareIdentities)
 private val ROLLUP_SECONDS = listOf(10, 30, 60)

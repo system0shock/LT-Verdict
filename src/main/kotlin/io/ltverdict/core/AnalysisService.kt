@@ -1,8 +1,10 @@
 package io.ltverdict.core
 
+import io.ltverdict.ingest.Diagnostic
 import io.ltverdict.ingest.RunValidity
 import io.ltverdict.ingest.parseInput
 import io.ltverdict.metrics.MetricsAccumulator
+import io.ltverdict.metrics.MetricsResourceLimitExceeded
 import io.ltverdict.metrics.NormalizedBucket
 import io.ltverdict.metrics.toJsonObject
 import io.ltverdict.storage.AcceptedInput
@@ -52,6 +54,20 @@ internal class AnalysisService(
             )
         }
 
+        fun invalidOutcome(diagnostics: List<Diagnostic>): AnalysisOutcome {
+            processedBytes(request.input.sizeBytes)
+            checkCancelled()
+            val evaluation = evaluatePolicy(request.policy?.policy, RunValidity.INVALID, null, diagnostics)
+            val result = analysisResult(request.input.runId, RunValidity.INVALID, evaluation)
+            val directory =
+                store.writeAnalysisAtomically(request.input.runId, analysisId) { staging ->
+                    checkCancelled()
+                    Files.write(staging.resolve(IDENTITY_FILE), identity, StandardOpenOption.CREATE_NEW, StandardOpenOption.WRITE)
+                    Files.write(staging.resolve(RESULT_FILE), result, StandardOpenOption.CREATE_NEW, StandardOpenOption.WRITE)
+                }
+            return AnalysisOutcome(request.input.runId, analysisId, result, directory)
+        }
+
         var firstStart: Long? = null
         var firstEnd: Long? = null
         val first =
@@ -66,17 +82,7 @@ internal class AnalysisService(
             )
 
         if (first.validity == RunValidity.INVALID) {
-            processedBytes(request.input.sizeBytes)
-            checkCancelled()
-            val evaluation = evaluatePolicy(request.policy?.policy, first.validity, null, first.diagnostics)
-            val result = analysisResult(request.input.runId, first.validity, evaluation)
-            val directory =
-                store.writeAnalysisAtomically(request.input.runId, analysisId) { staging ->
-                    checkCancelled()
-                    Files.write(staging.resolve(IDENTITY_FILE), identity, StandardOpenOption.CREATE_NEW, StandardOpenOption.WRITE)
-                    Files.write(staging.resolve(RESULT_FILE), result, StandardOpenOption.CREATE_NEW, StandardOpenOption.WRITE)
-                }
-            return AnalysisOutcome(request.input.runId, analysisId, result, directory)
+            return invalidOutcome(first.diagnostics)
         }
 
         val runStart = firstStart ?: error("PARSER_PASS_MISMATCH")
@@ -85,19 +91,23 @@ internal class AnalysisService(
         var secondStart: Long? = null
         var secondEnd: Long? = null
         val second =
-            parseInput(
-                request.input,
-                { sample ->
-                    secondStart = minOf(secondStart ?: sample.startedAtEpochMillis, sample.startedAtEpochMillis)
-                    secondEnd = maxOf(secondEnd ?: sample.endedAtEpochMillis, sample.endedAtEpochMillis)
-                    accumulator.record(sample)
-                },
-                { bytes ->
-                    val bounded = minOf(bytes, request.input.sizeBytes)
-                    processedBytes(request.input.sizeBytes / 2 + (bounded + 1) / 2)
-                },
-                checkCancelled,
-            )
+            try {
+                parseInput(
+                    request.input,
+                    { sample ->
+                        secondStart = minOf(secondStart ?: sample.startedAtEpochMillis, sample.startedAtEpochMillis)
+                        secondEnd = maxOf(secondEnd ?: sample.endedAtEpochMillis, sample.endedAtEpochMillis)
+                        accumulator.record(sample)
+                    },
+                    { bytes ->
+                        val bounded = minOf(bytes, request.input.sizeBytes)
+                        processedBytes(request.input.sizeBytes / 2 + (bounded + 1) / 2)
+                    },
+                    checkCancelled,
+                )
+            } catch (_: MetricsResourceLimitExceeded) {
+                return invalidOutcome(listOf(Diagnostic("RESOURCE_LIMIT_EXCEEDED", "Metric resource limit exceeded")))
+            }
         if (second.validity != first.validity ||
             second.diagnostics != first.diagnostics ||
             secondStart != runStart ||

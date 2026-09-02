@@ -12,7 +12,6 @@ import {
   getJob,
   getResult,
   listRuns,
-  parsePolicy,
   uploadInput,
   validatePolicy,
 } from './api'
@@ -71,16 +70,8 @@ async function selectPolicyFile(file: File | null) {
     policyStatus.value = ''
     return
   }
-  try {
-    const parsed = parsePolicy(await file.text())
-    policy.value = parsed
-    await validateDraft(parsed)
-  } catch (failure) {
-    policy.value = null
-    policyStatus.value = 'Policy is invalid'
-    policyErrors.value = [{ code: 'MALFORMED_JSON', json_pointer: '', message: 'Policy is not valid JSON.' }]
-    if (!(failure instanceof SyntaxError)) showError(failure)
-  }
+  policy.value = null
+  await validateDraft(file)
 }
 
 function updatePolicy(draft: Policy) {
@@ -88,7 +79,7 @@ function updatePolicy(draft: Policy) {
   void validateDraft(draft)
 }
 
-async function validateDraft(draft: Policy): Promise<Policy | null> {
+async function validateDraft(draft: Policy | File): Promise<Policy | null> {
   const revision = ++policyRevision
   policyStatus.value = 'Validating policy…'
   try {
@@ -104,7 +95,14 @@ async function validateDraft(draft: Policy): Promise<Policy | null> {
     policyStatus.value = `Policy is valid — ${validation.policy.policy_id}`
     return validation.policy
   } catch (failure) {
-    if (revision === policyRevision) showError(failure)
+    if (revision === policyRevision) {
+      policyStatus.value = 'Policy is invalid'
+      if (failure instanceof ApiError && failure.code === 'MALFORMED_JSON') {
+        policyErrors.value = [{ code: 'MALFORMED_JSON', json_pointer: '', message: 'Policy is not valid JSON.' }]
+      } else {
+        showError(failure)
+      }
+    }
     return null
   }
 }
@@ -148,7 +146,7 @@ async function pollJob(revision: number) {
   if (revision !== analysisRevision || job.value?.state !== 'COMPLETE' || !job.value.analysis_id) return
   result.value = await getResult(job.value.run_id, job.value.analysis_id)
   completedAt.value = new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'medium' }).format(new Date())
-  await refreshBuckets()
+  if (result.value.run_validity !== 'INVALID') await refreshBuckets()
 }
 
 async function cancel() {
@@ -226,6 +224,7 @@ function focusPolicy() {
         <ul
           data-testid="run-list"
           class="run-list"
+          tabindex="0"
         >
           <li
             v-for="run in runs"

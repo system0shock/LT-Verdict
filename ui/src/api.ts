@@ -36,12 +36,12 @@ export function listRuns(): Promise<RunPage> {
   return request('/api/runs?limit=100')
 }
 
-export async function validatePolicy(policy: Policy): Promise<PolicyValidation> {
+export async function validatePolicy(policy: Policy | File): Promise<PolicyValidation> {
   const response = await fetch('/api/policies/validate', {
     credentials: 'same-origin',
     method: 'POST',
     headers: mutationHeaders({ 'Content-Type': 'application/json' }),
-    body: stringifyPolicy(policy),
+    body: policy instanceof File ? policy : stringifyPolicy(policy),
   })
   const text = await response.text()
   if (response.status === 200 || response.status === 422) {
@@ -101,10 +101,6 @@ export function getBuckets(
   return request(
     `/api/runs/${encodeURIComponent(runId)}/analyses/${encodeURIComponent(analysisId)}/buckets?${query}`,
   )
-}
-
-export function parsePolicy(text: string): Policy {
-  return JSON.parse(text, exactThreshold) as Policy
 }
 
 export function stringifyPolicy(policy: Policy, space?: number): string {

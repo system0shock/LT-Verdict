@@ -11,6 +11,7 @@ const policies = {
   pass: fixture('slice1/policies/pass.json'),
 }
 const verdictInput = fixture('slice1/jmeter/xml-5.6.3/input.xml')
+const jmeterCsvHeader = 'timeStamp,elapsed,label,responseCode,responseMessage,threadName,dataType,success,failureMessage,bytes,sentBytes,grpThreads,allThreads,URL,Latency,IdleTime,Connect'
 
 async function uploadAndAnalyze(page: import('@playwright/test').Page, input: string, policy?: string) {
   await page.goto('/')
@@ -95,6 +96,37 @@ test.describe.serial('local analysis flow', () => {
     expect(await readFile(downloadPath, 'utf8')).toContain(`"threshold": ${exactThreshold}`)
   })
 
+  test('preserves duplicate keys for server-side policy validation', async ({ page }) => {
+    const duplicatePolicy = '{"schema_version":"policy.v1","policy_id":"first","policy_id":"second","rules":[{"id":"p95","metric":"response_time_p95_ms","operator":"lte","threshold":1000,"scope":{"kind":"overall"}}]}'
+    await page.goto('/')
+
+    await page.getByTestId('policy-file').setInputFiles({
+      name: 'duplicate.json',
+      mimeType: 'application/json',
+      buffer: Buffer.from(duplicatePolicy),
+    })
+
+    await expect(page.locator('#run-setup')).toContainText('Policy is invalid')
+    await expect(page.locator('#run-setup')).toContainText('/policy_id: duplicate object key')
+    await expect(page.getByLabel('Policy ID')).toHaveCount(0)
+  })
+
+  test('preserves the 1 MiB server limit for imported policies', async ({ page }) => {
+    const policy = await readFile(policies.pass)
+    const oversizedPolicy = Buffer.concat([policy, Buffer.alloc(1_048_577 - policy.length, 0x20)])
+    await page.goto('/')
+
+    await page.getByTestId('policy-file').setInputFiles({
+      name: 'oversized.json',
+      mimeType: 'application/json',
+      buffer: oversizedPolicy,
+    })
+
+    await expect(page.locator('#run-setup')).toContainText('Policy is invalid')
+    await expect(page.getByRole('alert')).toContainText('Policy exceeds 1 MiB')
+    await expect(page.getByLabel('Policy ID')).toHaveCount(0)
+  })
+
   test('analyzes every supported golden input through the browser', async ({ page }) => {
     for (const input of [
       fixture('slice1/jmeter/csv-5.6.3/input.jtl'),
@@ -127,12 +159,31 @@ test.describe.serial('local analysis flow', () => {
     await expect(page.locator('#verdict')).toContainText('TRANSACTION_NOT_FOUND')
   })
 
+  test('does not request bucket artifacts for a recognized invalid CSV', async ({ page }) => {
+    const directory = await mkdtemp(join(tmpdir(), 'ltv-invalid-'))
+    const input = join(directory, 'invalid.jtl')
+    const bucketRequests: string[] = []
+    page.on('request', (request) => {
+      if (new URL(request.url()).pathname.endsWith('/buckets')) bucketRequests.push(request.url())
+    })
+
+    try {
+      await writeFile(input, `${jmeterCsvHeader}\nmalformed\n`)
+      await uploadAndAnalyze(page, input)
+      await expect(page.getByText('Run validity', { exact: true }).locator('..').locator('dd')).toHaveText('INVALID')
+      await page.waitForLoadState('networkidle')
+
+      expect(bucketRequests).toEqual([])
+    } finally {
+      await rm(directory, { force: true, recursive: true })
+    }
+  })
+
   test('shows BUSY and keeps cancellation visible', async ({ page }) => {
     const directory = await mkdtemp(join(tmpdir(), 'ltv-flow-'))
     const input = join(directory, 'sustained.jtl')
-    const header = 'timeStamp,elapsed,label,responseCode,responseMessage,threadName,dataType,success,failureMessage,bytes,sentBytes,grpThreads,allThreads,URL,Latency,IdleTime,Connect\n'
     const row = '1767225600000,20,steady,200,OK,fixture 1-1,text,true,,0,0,1,1,null,0,0,0\n'
-    await writeFile(input, header + row)
+    await writeFile(input, `${jmeterCsvHeader}\n${row}`)
     let activeJobId: string | undefined
     let queuedJobId: string | undefined
 

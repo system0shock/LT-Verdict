@@ -103,6 +103,7 @@ test.describe.serial('local UI security and accessibility', () => {
     const focusOrder = [
       navigation.nth(0),
       navigation.nth(1),
+      page.getByTestId('run-list'),
       page.getByRole('button', { name: /Dark theme|Light theme/ }),
       input,
       policy,

@@ -43,8 +43,9 @@ ltv ui --data-dir <path>
 - Gatling OSS binary `simulation.log` 3.13–3.15.1.
 
 Формат определяется по содержимому, не по extension. Максимальный input —
-4 GiB. Response bodies, response headers и raw XML content не сохраняются и не
-показываются.
+4 GiB. Исходный upload целиком хранится как immutable `inputs/source.bin`;
+response bodies, response headers и XML payload fields не извлекаются в
+результаты и не показываются.
 
 ## Анализ через UI
 

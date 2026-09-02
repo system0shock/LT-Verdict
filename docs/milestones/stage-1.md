@@ -1,6 +1,6 @@
 # Stage 1 / Slice 1 — candidate milestone report
 
-**Дата:** 2026-09-01
+**Дата:** 2026-09-02
 
 **Governance-идентификатор:** `Stage 1 — Local usable shell`
 
@@ -31,7 +31,7 @@ accepted state без зелёных `runtime` и `performance` jobs и отде
 
 ## Fresh local evidence
 
-Финальный набор команд будет повторён после branch review. Уже получены
+Финальный набор команд повторён после branch review и исправлений. Получены
 следующие наблюдаемые результаты на Windows, JDK `21.0.9`, Node.js `24.14.0` и
 Python `3.14.3`:
 
@@ -46,17 +46,20 @@ Python `3.14.3`:
 | `npm --prefix ui run lint` | `0` | ESLint passed |
 | `npm --prefix ui run test:contracts` | `0` | Policy-schema contract check passed |
 | `npm --prefix ui run build` | `0` | Vite production build passed |
-| `npm --prefix ui run e2e` | `0` | Fresh full run: `10/10` tests passed |
+| `npm --prefix ui run e2e` | `0` | Fresh full run: `13/13` tests passed |
 | `npm --prefix ui ci --offline` | `0` | Locked npm reinstall completed without network |
 | `.\gradlew.bat -PnpmOffline=true --offline --no-daemon clean check installDist` | `0` | Offline `BUILD SUCCESSFUL` |
-| `npx --yes markdownlint-cli2@0.23.2 "**/*.md"` | `0` | `31` project Markdown files, `0` issues |
+| `npx --yes markdownlint-cli2@0.23.2 "**/*.md"` | `0` | Project Markdown files, `0` issues |
 | `git diff --check` | `0` | No whitespace errors |
+| tracked secret scan | `0` | No credential-like assignment found |
 
-Один offline E2E rerun выявил race в test fixture: synthetic running job мог
-завершиться раньше cancellation. Test-only server получил deterministic blocker,
-после чего targeted cancellation test прошёл. Отображение validity/coverage и
-run-relative bucket labels также закреплено targeted E2E. После исправлений
-fresh full E2E run прошёл `10/10`; весь gate будет повторён после branch review.
+Branch review подтвердил семь замечаний: cached-analysis identity, unknown run,
+raw policy import, metrics/CSV resource ceilings, buckets для invalid result и
+полноту runtime workflow. Они исправлены targeted tests; fresh full E2E прошёл
+`13/13`. Замечание о неограниченном chunked upload отклонено: Ktor применяет
+переданный `formFieldLimit` и к file parts, а превышение лимита завершается 413.
+Дополнительно final gate выявил только Kotlin formatting в новых tests; после
+исправления fresh Gradle gate прошёл полностью.
 
 Sandboxed попытки Python/Vite/Playwright/Gradle, которым Windows sandbox запретил
 system temp, child process или Gradle cache, не учитываются как code failures;
@@ -73,7 +76,8 @@ job conclusions пока отсутствуют.
 | `performance` | not available | `NOT_RUN` |
 
 Новый workflow закрепляет checkout, JDK и Node actions полными commit SHA,
-выполняет runtime, browser и offline gates, а затем Linux performance probe.
+выполняет runtime, browser, offline, Markdown, diff и secret gates, а затем Linux
+performance probe.
 
 ## Performance gate
 
@@ -108,10 +112,10 @@ result SHA-256 во всех трёх measured runs. Локальный Windows 
 - documentation: architecture, user guide, normative external-AI prompt,
   README, CHANGELOG, roadmap и этот candidate report.
 
-Gate-found changes outside the original Task 14 file list are bounded to the
-test-only cancellation fixture, validity/coverage visibility, correct bucket
-offset wording and generated Markdown exclusions. No new production dependency
-or public contract was added by Task 14.
+Gate-found changes outside the original Task 14 file list ограничены regression
+fixes и tests для storage/API, parser/resource limits, policy import, invalid UI,
+accessibility и workflow checks. Новых production dependencies и public
+contracts не добавлено.
 
 ## Known limits
 
@@ -133,6 +137,6 @@ or public contract was added by Task 14.
 
 ## Следующее решение
 
-После final branch review и повторного local gate branch можно push/open PR
-только по отдельной команде пользователя. Даже после green CI milestone остаётся
+После пройденного local gate branch можно push/open PR только по отдельной
+команде пользователя. Даже после green CI milestone остаётся
 `PENDING_USER_REVIEW`, пока пользователь явно не примет Slice 1.

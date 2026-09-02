@@ -171,7 +171,11 @@ class AnalysisServiceTest {
             )
             assertEquals(
                 setOf("analysis-result.json", "identity.json"),
-                store.readAnalysis(input.runId, outcome.analysisId)!!.artifacts.map { it.path }.toSet(),
+                store
+                    .readAnalysis(input.runId, outcome.analysisId)!!
+                    .artifacts
+                    .map { it.path }
+                    .toSet(),
             )
         }
 

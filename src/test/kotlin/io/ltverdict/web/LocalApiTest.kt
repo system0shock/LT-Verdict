@@ -3,6 +3,7 @@ package io.ltverdict.web
 import io.ltverdict.core.AnalysisOutcome
 import io.ltverdict.core.AnalysisService
 import io.ltverdict.core.EngineConfig
+import io.ltverdict.core.sha256Hex
 import io.ltverdict.jobs.AnalysisJobs
 import io.ltverdict.storage.DataDirectory
 import io.ltverdict.storage.RunBundleStore
@@ -216,6 +217,20 @@ class LocalApiTest {
     }
 
     @Test
+    fun `unknown valid run is not found for jobs and analyses`() =
+        withServer { _, api ->
+            api.bootstrap()
+            val runId = "jmeter_jtl_csv-${"0".repeat(64)}"
+
+            assertError(api.createJob(runId), 404, "NOT_FOUND")
+            assertError(
+                api.get("/api/runs/$runId/analyses/${"0".repeat(64)}/result"),
+                404,
+                "NOT_FOUND",
+            )
+        }
+
+    @Test
     fun `job API exposes queued status BUSY and cancellation`() {
         val started = CountDownLatch(1)
         val release = CountDownLatch(1)
@@ -307,7 +322,10 @@ class LocalApiTest {
     fun `bucket API caps pages and rejects invalid ranges`() =
         withServer { store, api ->
             val input = store.acceptInput(ByteArrayInputStream(SPIKE_DROP.bytes()), SPIKE_DROP.filename)
-            store.writeAnalysisAtomically(input.runId, SYNTHETIC_ANALYSIS_ID) { staging ->
+            val identity = """{"run_id":"${input.runId}"}""".encodeToByteArray()
+            val analysisId = sha256Hex(identity)
+            store.writeAnalysisAtomically(input.runId, analysisId) { staging ->
+                Files.write(staging.resolve("identity.json"), identity)
                 val histogram = PackedHistogram(1, 86_400_000, 3).apply { recordValue(1) }
                 val buffer = ByteBuffer.allocate(histogram.neededByteBufferCapacity)
                 val encoded = Base64.getEncoder().encodeToString(buffer.array().copyOf(histogram.encodeIntoCompressedByteBuffer(buffer)))
@@ -323,7 +341,7 @@ class LocalApiTest {
             val page =
                 api
                     .get(
-                        "/api/runs/${input.runId}/analyses/$SYNTHETIC_ANALYSIS_ID/buckets?rollup=1&limit=500",
+                        "/api/runs/${input.runId}/analyses/$analysisId/buckets?rollup=1&limit=500",
                     ).jsonObject()
             assertEquals(500, page.getValue("buckets").jsonArray.size)
             assertEquals(500_000L, page.getValue("next_from_ms").jsonPrimitive.long)
@@ -334,7 +352,7 @@ class LocalApiTest {
                 "?rollup=1&limit=501",
             ).forEach { query ->
                 assertError(
-                    api.get("/api/runs/${input.runId}/analyses/$SYNTHETIC_ANALYSIS_ID/buckets$query"),
+                    api.get("/api/runs/${input.runId}/analyses/$analysisId/buckets$query"),
                     400,
                 )
             }
@@ -618,7 +636,6 @@ class LocalApiTest {
         const val PASS_POLICY = "fixtures/slice1/policies/pass.json"
         const val PASS_POLICY_SHA256 = "22c2036369dcd547643909dee86e2b43f6287fcc5fc21d4e5b113c417c4cf307"
         const val FAKE_ANALYSIS_ID = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
-        const val SYNTHETIC_ANALYSIS_ID = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
         const val DUPLICATE_POLICY =
             """{"schema_version":"policy.v1","policy\u005fid":"first","policy_id":"second","rules":[{"id":"p95","metric":"response_time_p95_ms","operator":"lte","threshold":1000,"scope":{"kind":"overall"}}]}"""
 

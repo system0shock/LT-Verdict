@@ -320,6 +320,8 @@ private suspend fun receiveJob(
     val input =
         try {
             withContext(Dispatchers.IO) { store.requireInput(checkNotNull(runId)) }
+        } catch (_: NoSuchElementException) {
+            notFound("Run was not found")
         } catch (_: IllegalArgumentException) {
             notFound("Run was not found")
         }
@@ -444,6 +446,8 @@ private suspend fun RunBundleStore.requireAnalysis(call: ApplicationCall): io.lt
     return withContext(Dispatchers.IO) {
         try {
             readAnalysis(runId, analysisId) ?: notFound("Analysis was not found")
+        } catch (_: NoSuchElementException) {
+            notFound("Analysis was not found")
         } catch (_: IllegalArgumentException) {
             notFound("Analysis was not found")
         }

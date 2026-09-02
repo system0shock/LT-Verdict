@@ -1,5 +1,6 @@
 package io.ltverdict.storage
 
+import io.ltverdict.core.sha256Hex
 import io.ltverdict.ingest.SourceType
 import org.junit.jupiter.api.Assertions.assertArrayEquals
 import org.junit.jupiter.api.Assertions.assertEquals
@@ -103,10 +104,11 @@ class RunBundleStoreTest {
     fun `analysis publish is atomic verified and cleans failures`() =
         withStore { store, root ->
             val input = store.acceptInput(Files.newInputStream(Path.of(CSV_FIXTURE)), "input.jtl")
-            val analysisId = "a".repeat(64)
+            val identity = """{"run_id":"${input.runId}"}""".encodeToByteArray()
+            val analysisId = sha256Hex(identity)
             val target =
                 store.writeAnalysisAtomically(input.runId, analysisId) { staging ->
-                    Files.writeString(staging.resolve("identity.json"), "{}")
+                    Files.write(staging.resolve("identity.json"), identity)
                     Files.createDirectories(staging.resolve("nested"))
                     Files.writeString(staging.resolve("nested/result.json"), "{\"ok\":true}")
                 }
@@ -137,6 +139,23 @@ class RunBundleStoreTest {
                 }
             }
             assertTrue(Files.isRegularFile(collision))
+
+            val transplantedId = "d".repeat(64)
+            store.writeAnalysisAtomically(input.runId, transplantedId) { staging ->
+                Files.write(staging.resolve("identity.json"), identity)
+            }
+            assertThrows(IllegalStateException::class.java) {
+                store.readAnalysis(input.runId, transplantedId)
+            }
+
+            val otherInput = store.acceptInput(ByteArrayInputStream(csvWithTimestamp(1_700_000_000_999L)), "other.jtl")
+            store.writeAnalysisAtomically(otherInput.runId, analysisId) { staging ->
+                Files.write(staging.resolve("identity.json"), identity)
+            }
+            assertThrows(IllegalStateException::class.java) {
+                store.readAnalysis(otherInput.runId, analysisId)
+            }
+
             assertThrows(IllegalArgumentException::class.java) {
                 store.writeAnalysisAtomically(input.runId, "../escape") { }
             }

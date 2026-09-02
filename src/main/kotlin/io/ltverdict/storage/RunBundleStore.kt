@@ -183,6 +183,7 @@ internal class RunBundleStore(
         requireRunId(runId)
         requireOwnedDirectory(dataDirectory.runs)
         val run = dataDirectory.runs.resolve(runId)
+        if (!Files.exists(run, LinkOption.NOFOLLOW_LINKS)) throw NoSuchElementException("RUN_NOT_FOUND")
         requireOwnedDirectory(run)
         val inputs = requireOwnedDirectory(run.resolve("inputs"))
         val source = requireOwnedFile(inputs.resolve("source.bin"))
@@ -237,6 +238,11 @@ internal class RunBundleStore(
         val sortedArtifacts = artifacts.sortedBy { it.path }
         if (!manifestBytes.contentEquals(analysisManifest(sortedArtifacts))) corrupt("analysis manifest is not canonical")
 
+        val identityPath = requireOwnedFile(analysis.resolve("identity.json"))
+        if (sha256(identityPath) != analysisId) corrupt("analysis identity differs")
+        if (parseObject(Files.readAllBytes(identityPath), "analysis identity").string("run_id") != runId) {
+            corrupt("analysis run identity differs")
+        }
         val actual = inspectPublishedArtifacts(analysis)
         if (actual != sortedArtifacts) corrupt("analysis artifacts differ")
         return StoredAnalysis(analysis, artifacts)

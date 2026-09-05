@@ -6,7 +6,21 @@ LT Verdict — платформа детерминированного анал�
 ## Статус
 
 Принят local-first baseline v0.6. Slice 0 завершён и отмечен тегом `stage-0`.
-Дизайн и исполнимый план Slice 1 утверждены и готовы к реализации.
+Slice 1 реализован как candidate и готов к review; milestone gate остаётся
+pending до зелёных runtime/performance jobs.
+
+## Быстрый запуск
+
+Нужны JDK 21 и Node.js 24.14.0.
+
+```powershell
+.\gradlew.bat installDist
+.\build\install\ltv\bin\ltv.bat ui
+```
+
+Linux использует `./gradlew installDist` и
+`./build/install/ltv/bin/ltv ui`. Полный flow, supported formats, policy и
+ошибки описаны в [руководстве локального анализа](docs/user/slice-1-local-analysis.md).
 
 ## Документация
 
@@ -14,6 +28,9 @@ LT Verdict — платформа детерминированного анал�
 - [Нормативный PRC/PRD v0.6](lt-verdict-prc-prd-v0.6.md)
 - [Текущий план v0.6](docs/development-plan-v0.6.md)
 - [Milestone report Stage 0 / Slice 0](docs/milestones/stage-0.md)
+- [Milestone report Stage 1 / Slice 1](docs/milestones/stage-1.md)
+- [Руководство локального анализа Slice 1](docs/user/slice-1-local-analysis.md)
+- [Архитектура локального runtime Slice 1](docs/architecture/slice-1-local-runtime.md)
 - [ADR 0001 — публичные контракты Slice 0](docs/adr/0001-slice-0-public-contracts.md)
 - [Утверждённый дизайн Slice 1](docs/superpowers/specs/2026-08-31-slice-1-local-usable-shell-design.md)
 - [План реализации Slice 1](docs/superpowers/plans/2026-08-31-slice-1-local-usable-shell.md)

@@ -12,3 +12,11 @@
   CI gate.
 - Зафиксированы ADR публичных контрактов и отображение Slice 0 на Stage 0.
 - Регламент разработки и правила работы AI-агентов.
+- Добавлен local-only Slice 1: Web UI и CLI для потокового анализа JMeter JTL
+  CSV/XML и Gatling logs, deterministic metrics/verdict, strict `policy.v1`,
+  immutable RunBundle, light/dark themes и offline/runtime quality gates.
+
+### Fixed
+
+- Устранено переполнение памяти при завершении анализа больших JTL со
+  множеством sparse one-second buckets.

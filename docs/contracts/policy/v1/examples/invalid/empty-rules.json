@@ -1,0 +1,5 @@
+{
+  "schema_version": "policy.v1",
+  "policy_id": "empty-rules",
+  "rules": []
+}

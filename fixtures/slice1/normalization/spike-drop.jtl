@@ -1,0 +1,4 @@
+timeStamp,elapsed,label,success
+1767225601000,20,steady,true
+1767225600000,900,spike,true
+1767225600010,850,spike,true

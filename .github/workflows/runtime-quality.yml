@@ -1,0 +1,102 @@
+name: Runtime quality
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+concurrency:
+  group: runtime-quality-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  runtime:
+    name: Runtime
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          fetch-depth: 0
+      - name: Set up JDK 21
+        uses: actions/setup-java@dd06d9cba3e5552c54d9f8ea23572deb30010f7c # v5.2.0
+        with:
+          distribution: temurin
+          java-version: "21"
+          cache: gradle
+      - name: Set up Node.js 24.14.0
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v6.3.0
+        with:
+          node-version: 24.14.0
+          cache: npm
+          cache-dependency-path: ui/package-lock.json
+      - name: Install frontend dependencies
+        run: npm --prefix ui ci
+      - name: Install Chromium
+        working-directory: ui
+        run: npx playwright install --with-deps chromium
+      - name: Verify Slice 0 contracts
+        run: python tools/verify_slice0.py
+      - name: Run Python tests
+        run: python -m unittest tools.test_verify_slice0 tools.test_generate_jtl -v
+      - name: Lint Markdown
+        run: npx --yes markdownlint-cli2@0.23.2 "**/*.md"
+      - name: Check committed whitespace
+        run: git diff --check "${{ github.event.pull_request.base.sha || github.event.before }}"...HEAD
+      - name: Scan tracked files for private keys and AWS access keys
+        shell: bash
+        run: |
+          set +e
+          matches="$(git grep -n -I -E '(BEGIN (RSA|OPENSSH|EC) PRIVATE KEY|AKIA[0-9A-Z]{16})' -- .)"
+          status=$?
+          set -e
+          if (( status > 1 )); then exit "$status"; fi
+          if [[ -n "$matches" ]]; then echo "$matches"; exit 1; fi
+      - name: Check and package runtime
+        run: ./gradlew --no-daemon clean check installDist
+      - name: Type-check frontend
+        run: npm --prefix ui run typecheck
+      - name: Lint frontend
+        run: npm --prefix ui run lint
+      - name: Verify frontend contracts
+        run: npm --prefix ui run test:contracts
+      - name: Build frontend
+        run: npm --prefix ui run build
+      - name: Run browser tests
+        run: npm --prefix ui run e2e
+      - name: Reinstall frontend dependencies offline
+        run: npm --prefix ui ci --offline
+      - name: Rebuild runtime offline
+        run: ./gradlew -PnpmOffline=true --offline --no-daemon clean check installDist
+      - name: Run browser tests after offline rebuild
+        run: npm --prefix ui run e2e
+
+  performance:
+    name: Performance
+    needs: runtime
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - name: Set up JDK 21
+        uses: actions/setup-java@dd06d9cba3e5552c54d9f8ea23572deb30010f7c # v5.2.0
+        with:
+          distribution: temurin
+          java-version: "21"
+          cache: gradle
+      - name: Set up Node.js 24.14.0
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v6.3.0
+        with:
+          node-version: 24.14.0
+          cache: npm
+          cache-dependency-path: ui/package-lock.json
+      - name: Install frontend dependencies
+        run: npm --prefix ui ci
+      - name: Build distribution
+        run: ./gradlew --no-daemon installDist
+      - name: Run bounded JTL probe
+        run: bash tools/perf/jtl_probe.sh

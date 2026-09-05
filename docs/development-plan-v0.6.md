@@ -92,6 +92,11 @@ core или contracts предыдущих slices.
 
 Под источниками здесь понимаются источники метрик, не S3/MinIO buckets.
 Первый рабочий connector не заменяет остальные источники полного MVP.
+Последующее решение пользователя: блок 1 охватывает **все источники** MVP.
+Сначала VM/Prometheus + Grafana proxy и общий HTTP governor; затем InfluxDB,
+PostgreSQL и OpenSearch независимыми поставками. Метрики, события и SQL snapshots
+не объединяются искусственно в один формат. Первая поставка описана в
+[дизайне online sources](superpowers/specs/2026-09-05-online-sources-design.md).
 Jenkins/artifacts, PostgreSQL analysis, JVM/OpenShift packs, OpenSearch,
 оставшиеся charts/comparison/export функции и GigaCode Skill сохраняются
 в scope таблицы Slices 2–10; их порядок после пилота ещё не утверждён.

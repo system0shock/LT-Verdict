@@ -1,6 +1,7 @@
 package io.ltverdict.storage
 
 import io.ltverdict.core.canonicalJson
+import io.ltverdict.core.validateBaselineSelection
 import io.ltverdict.ingest.SourceType
 import io.ltverdict.ingest.detectSource
 import kotlinx.serialization.SerializationException
@@ -243,6 +244,82 @@ internal class RunBundleStore(
             }
         }
 
+    fun readBaseline(): JsonObject? =
+        synchronized(dataDirectory.operationLock) {
+            dataDirectory.requireOpen()
+            readBaselineUnlocked()
+        }
+
+    fun replaceBaseline(selection: JsonObject): JsonObject =
+        synchronized(dataDirectory.operationLock) {
+            dataDirectory.requireOpen()
+            val validated = validateBaselineSelection(selection)
+            val bytes = canonicalJson(validated)
+            check(bytes.size <= MAX_BASELINE_BYTES)
+            requireOwnedDirectory(dataDirectory.staging)
+            val target = dataDirectory.root.resolve(BASELINE_FILE)
+            if (Files.exists(target, LinkOption.NOFOLLOW_LINKS)) requireBaselineFile(target)
+            val staging = dataDirectory.staging.resolve(UUID.randomUUID().toString())
+            Files.createDirectory(staging)
+            try {
+                val staged = staging.resolve(BASELINE_FILE)
+                writeForced(staged, bytes)
+                forceDirectory(staging)
+                Files.move(staged, target, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING)
+                forceDirectory(dataDirectory.root)
+                validated
+            } finally {
+                DataDirectory.deleteTree(staging)
+            }
+        }
+
+    fun clearBaseline() {
+        synchronized(dataDirectory.operationLock) {
+            dataDirectory.requireOpen()
+            val target = dataDirectory.root.resolve(BASELINE_FILE)
+            if (!Files.exists(target, LinkOption.NOFOLLOW_LINKS)) return
+            Files.delete(requireBaselineFile(target))
+            forceDirectory(dataDirectory.root)
+        }
+    }
+
+    fun readAnalysisDocuments(
+        runId: String,
+        analysisId: String,
+    ): Pair<JsonObject, JsonObject>? =
+        synchronized(dataDirectory.operationLock) {
+            dataDirectory.requireOpen()
+            val stored = readAnalysisUnlocked(runId, analysisId) ?: return@synchronized null
+            val result = parseObject(Files.readAllBytes(requireOwnedFile(stored.path.resolve(RESULT_FILE))), "analysis result")
+            val identity = parseObject(Files.readAllBytes(requireOwnedFile(stored.path.resolve(IDENTITY_FILE))), "analysis identity")
+            result to identity
+        }
+
+    private fun readBaselineUnlocked(): JsonObject? {
+        val target = dataDirectory.root.resolve(BASELINE_FILE)
+        if (!Files.exists(target, LinkOption.NOFOLLOW_LINKS)) return null
+        val path = requireBaselineFile(target)
+        if (Files.size(path) > MAX_BASELINE_BYTES) corruptBaseline("selection exceeds 32 KiB")
+        val bytes = Files.newInputStream(path).use { it.readNBytes(MAX_BASELINE_BYTES + 1) }
+        if (bytes.size > MAX_BASELINE_BYTES) corruptBaseline("selection exceeds 32 KiB")
+        val selection =
+            try {
+                Json.parseToJsonElement(bytes.decodeToString()).jsonObject
+            } catch (_: SerializationException) {
+                corruptBaseline("selection JSON is invalid")
+            } catch (_: IllegalArgumentException) {
+                corruptBaseline("selection JSON is invalid")
+            }
+        val validated =
+            try {
+                validateBaselineSelection(selection)
+            } catch (_: RuntimeException) {
+                corruptBaseline("selection contract is invalid")
+            }
+        if (!bytes.contentEquals(canonicalJson(validated))) corruptBaseline("selection is not canonical")
+        return validated
+    }
+
     private fun requireInputUnlocked(runId: String): AcceptedInput {
         requireRunId(runId)
         requireOwnedDirectory(dataDirectory.runs)
@@ -482,6 +559,13 @@ private fun requireOwnedFile(path: Path): Path {
     return path
 }
 
+private fun requireBaselineFile(path: Path): Path {
+    if (Files.isSymbolicLink(path) || !Files.isRegularFile(path, LinkOption.NOFOLLOW_LINKS)) {
+        corruptBaseline("unsafe file at $path")
+    }
+    return path
+}
+
 private fun requireRunId(runId: String) {
     require(RUN_ID.matches(runId)) { "INVALID_RUN_ID" }
 }
@@ -519,6 +603,12 @@ private fun sha256(path: Path): String {
 
 private fun corrupt(message: String): Nothing = throw IllegalStateException("CORRUPT_RUN_BUNDLE: $message")
 
+private fun corruptBaseline(message: String): Nothing = throw IllegalStateException("CORRUPT_BASELINE: $message")
+
+private const val BASELINE_FILE = "baseline.json"
+private const val RESULT_FILE = "analysis-result.json"
+private const val IDENTITY_FILE = "identity.json"
+private const val MAX_BASELINE_BYTES = 32 * 1024
 private val SHA256 = Regex("[0-9a-f]{64}")
 private val RUN_ID = Regex("(?:jmeter_jtl_csv|jmeter_jtl_xml|gatling_text|gatling_binary)-[0-9a-f]{64}")
 private val SOURCE_FIELDS = setOf("original_filename", "run_id", "sha256", "size_bytes", "source_type")

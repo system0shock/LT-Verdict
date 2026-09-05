@@ -1,6 +1,6 @@
 # Stage 1 / Slice 1 — candidate milestone report
 
-**Дата:** 2026-09-02
+**Дата:** 2026-09-05
 
 **Governance-идентификатор:** `Stage 1 — Local usable shell`
 
@@ -84,18 +84,19 @@ performance probe.
 Probe создаёт отдельный warm-up на `1 000 000` rows и три measured runs на
 `10 000 000` rows. Каждый measured analysis получает fresh process/data
 directory, two-CPU affinity, effective `-Xmx1536m` и timeout `600 s`.
+Локальный запуск в WSL 2 использовал JRE `21.0.9+10` и свежий `installDist` из
+ветки исправления histogram encoding memory.
 
 | Run | Elapsed | Peak RSS | Result SHA-256 | Статус |
 | --- | ---: | ---: | --- | --- |
-| Warm-up, 1M | not measured | not measured | not recorded | `NOT_RUN` |
-| Measured 1, 10M | pending | pending | pending | `NOT_RUN` |
-| Measured 2, 10M | pending | pending | pending | `NOT_RUN` |
-| Measured 3, 10M | pending | pending | pending | `NOT_RUN` |
+| Warm-up, 1M | excluded | not recorded | not recorded | `PASS (local WSL)` |
+| Measured 1, 10M | 48.53 s | 582388 KiB | `583a46a9844089889fdaeaae13ad2878a963e2016fea6d70ed53d0aea9b56c82` | `PASS (local WSL)` |
+| Measured 2, 10M | 56.01 s | 591292 KiB | `583a46a9844089889fdaeaae13ad2878a963e2016fea6d70ed53d0aea9b56c82` | `PASS (local WSL)` |
+| Measured 3, 10M | 55.55 s | 588152 KiB | `583a46a9844089889fdaeaae13ad2878a963e2016fea6d70ed53d0aea9b56c82` | `PASS (local WSL)` |
 
 Required ceilings: elapsed `<= 600 s`, peak RSS `< 2 GiB`, одинаковый canonical
-result SHA-256 во всех трёх measured runs. Локальный Windows environment не
-предоставляет требуемые Linux `taskset` и GNU `/usr/bin/time`; green
-`performance` CI job обязателен для закрытия gate.
+result SHA-256 во всех трёх measured runs. Локальный WSL run выполнил predicates
+probe, но не заменяет обязательный green `performance` CI job для закрытия gate.
 
 ## Scope изменений
 
@@ -126,7 +127,8 @@ contracts не добавлено.
 - Manual 1440 px visual pass через in-app browser не выполнен из-за отсутствия
   доступного browser connection; automated Chromium, accessibility и structural
   theme tests входят в final gate.
-- Linux 10M performance numbers и GitHub job conclusions отсутствуют.
+- GitHub job conclusions отсутствуют; приведённые Linux 10M performance numbers
+  получены локально в WSL 2, а не в CI.
 
 ## Непроверенные предположения
 

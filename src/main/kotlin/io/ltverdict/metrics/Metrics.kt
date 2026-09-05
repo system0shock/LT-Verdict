@@ -246,8 +246,10 @@ private fun TransactionIdentity.byteSize(): Long {
 }
 
 private fun PackedHistogram.compressedV2Base64(): String {
-    val buffer = ByteBuffer.allocate(neededByteBufferCapacity)
-    val length = encodeIntoCompressedByteBuffer(buffer)
+    // HdrHistogram retains its full compression buffer on the encoded instance, so keep that instance short-lived.
+    val encodingCopy = copy()
+    val buffer = ByteBuffer.allocate(encodingCopy.neededByteBufferCapacity)
+    val length = encodingCopy.encodeIntoCompressedByteBuffer(buffer)
     return Base64.getEncoder().encodeToString(buffer.array().copyOf(length))
 }
 

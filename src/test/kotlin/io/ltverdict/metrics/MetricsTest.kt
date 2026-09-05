@@ -149,6 +149,31 @@ class MetricsTest {
     }
 
     @Test
+    fun `ten thousand sparse buckets finish within the test heap`() {
+        val bucketCount = 10_000
+        val accumulator =
+            MetricsAccumulator(
+                0,
+                bucketCount * 1_000L,
+                MetricsConfig(maxOneSecondBuckets = bucketCount),
+            )
+        repeat(bucketCount) { index ->
+            accumulator.record(sample(index * 1_000L, 42, "same", emptyList(), SampleKind.JMETER_SAMPLER))
+        }
+
+        val metrics = accumulator.finish()
+
+        assertEquals(bucketCount, metrics.oneSecondBuckets.size)
+        assertEquals(mapOf(10 to 1_000, 30 to 334, 60 to 167), metrics.rollups.mapValues { it.value.size })
+        assertEquals(0L, metrics.oneSecondBuckets.first().bucketStartMillis)
+        assertEquals(1L, metrics.oneSecondBuckets.first().sampleCount)
+        assertEquals(42L, metrics.oneSecondBuckets.first().maxLatencyMillis)
+        assertEquals(9_999_000L, metrics.oneSecondBuckets.last().bucketStartMillis)
+        assertEquals(1L, metrics.oneSecondBuckets.last().sampleCount)
+        assertEquals(42L, metrics.oneSecondBuckets.last().maxLatencyMillis)
+    }
+
+    @Test
     fun `accumulators do not share mutable state`() {
         val first = accumulator().apply { record(sample(0, 10, "first", emptyList(), SampleKind.JMETER_SAMPLER)) }
         val second =

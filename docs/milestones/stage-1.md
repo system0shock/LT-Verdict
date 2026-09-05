@@ -67,17 +67,47 @@ system temp, child process или Gradle cache, не учитываются ка
 
 ## CI evidence
 
-Branch не push-ился: пользователь не разрешал внешнюю интеграцию. Поэтому URL и
-job conclusions пока отсутствуют.
+2026-09-05 пользователь разрешил push и создание PR. Опубликован
+[Slice 1 PR #4](https://github.com/system0shock/LT-Verdict/pull/4), поверх него —
+[локальный просмотр и export PR #5](https://github.com/system0shock/LT-Verdict/pull/5).
+Merge и закрытие milestone не разрешены.
 
 | Job | Run URL | Conclusion |
 | --- | --- | --- |
-| `runtime` | not available | `NOT_RUN` |
-| `performance` | not available | `NOT_RUN` |
+| `runtime` | [33963938741](https://github.com/system0shock/LT-Verdict/actions/runs/33963938741) | `FAILURE`: missing dependency checksum до тестов |
+| `performance` | тот же run | `SKIPPED`: зависит от runtime |
 
 Новый workflow закрепляет checkout, JDK и Node actions полными commit SHA,
 выполняет runtime, browser, offline, Markdown, diff и secret gates, а затем Linux
 performance probe.
+
+### Исправление cold-resolution gate
+
+`gradlew.bat --no-daemon --refresh-dependencies help` воспроизвёл CI failure:
+в verification metadata не было POM checksum для уже используемого plugin
+dependency `kotlinx-coroutines-bom:1.8.0`. После его добавления полный `check`
+выявил такой же пропуск для ktlint dependency `kotlinx-coroutines-bom:1.6.4`.
+Обычный offline build с прогретым resolution cache эти POM не запрашивал.
+
+Следующий dependency resolution выявил отсутствующую `.module` запись уже
+используемого `bc-jdk18on-bom:1.84`. Добавлены только три SHA-256 записи;
+скачанные из Maven Central bytes проверены против опубликованных `.sha256`:
+
+- coroutines BOM `1.8.0` POM: `1239e9dbe1397cd5971342956b2511bc3ace7b641842e4372a088dcfa8b9ad55`;
+- coroutines BOM `1.6.4` POM: `ab2614855fba66aa8a42514dbe3d5a884315ffe1ed63f5932e710a8006245ce1`;
+- Bouncy Castle BOM `1.84` module: `88ab8884a5e7412e98f091c146eec144d79e8f8c958f380bc2d4cd0f0ad46869`.
+
+Источник — `repo.maven.apache.org/maven2/org/jetbrains/kotlinx/`,
+`kotlinx-coroutines-bom/<version>/kotlinx-coroutines-bom-<version>.pom` и
+соответствующий `.sha256`; для Bouncy Castle —
+`repo.maven.apache.org/maven2/org/bouncycastle/bc-jdk18on-bom/1.84/`.
+Версии, dependency graph, lockfiles и strict
+verification не меняются; новых production dependencies и public contracts
+нет. ADR и CHANGELOG для build-metadata correction не требуются.
+GREEN: `gradlew.bat --no-daemon --refresh-dependencies -PnpmOffline=true check installDist`
+прошёл за 1 min 2 s со strict verification; runtime/tests без изменений,
+соответствующие tasks up-to-date. Markdown и `git diff --check` прошли.
+Повторный CI после исправления ещё ожидается; предыдущий failure не скрывается.
 
 ## Performance gate
 
@@ -127,8 +157,8 @@ contracts не добавлено.
 - Manual 1440 px visual pass через in-app browser не выполнен из-за отсутствия
   доступного browser connection; automated Chromium, accessibility и structural
   theme tests входят в final gate.
-- GitHub job conclusions отсутствуют; приведённые Linux 10M performance numbers
-  получены локально в WSL 2, а не в CI.
+- Первый GitHub runtime job остановился на dependency verification; приведённые
+  Linux 10M performance numbers получены локально в WSL 2, а не в CI.
 
 ## Непроверенные предположения
 
@@ -139,6 +169,6 @@ contracts не добавлено.
 
 ## Следующее решение
 
-После пройденного local gate branch можно push/open PR только по отдельной
-команде пользователя. Даже после green CI milestone остаётся
-`PENDING_USER_REVIEW`, пока пользователь явно не примет Slice 1.
+Push/open PR разрешены и выполнены. Даже после green CI milestone остаётся
+`PENDING_USER_REVIEW`, пока пользователь явно не примет Slice 1; merge и tag
+требуют отдельного разрешения.

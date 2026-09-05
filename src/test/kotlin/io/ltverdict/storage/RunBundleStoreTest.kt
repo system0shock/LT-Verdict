@@ -101,6 +101,44 @@ class RunBundleStoreTest {
         }
 
     @Test
+    fun `analysis listing is sorted cursor stable and validates published summaries`() =
+        withStore { store, _ ->
+            val input = store.acceptInput(Files.newInputStream(Path.of(CSV_FIXTURE)), "input.jtl")
+
+            fun publish(
+                suffix: String,
+                policy: String,
+            ): String {
+                val identity = "{\"policy_sha256\":\"$policy\",\"run_id\":\"${input.runId}\",\"suffix\":\"$suffix\"}".encodeToByteArray()
+                val analysisId = sha256Hex(identity)
+                store.writeAnalysisAtomically(input.runId, analysisId) { staging ->
+                    Files.write(staging.resolve("identity.json"), identity)
+                    Files.writeString(
+                        staging.resolve("analysis-result.json"),
+                        "{\"policy_verdict\":\"PASS\",\"run_validity\":\"VALID\"}",
+                    )
+                }
+                return analysisId
+            }
+
+            val firstId = publish("a", "a".repeat(64))
+            val secondId = publish("b", "b".repeat(64))
+            val first = store.listAnalyses(input.runId, null, 1)
+            val second = store.listAnalyses(input.runId, first.nextAfter, 1)
+
+            assertEquals(
+                listOf(firstId, secondId).sorted(),
+                listOf(first.analyses.single().analysisId, second.analyses.single().analysisId),
+            )
+            assertEquals(first.analyses.single().analysisId, first.nextAfter)
+            assertEquals(null, second.nextAfter)
+            assertEquals("PASS", first.analyses.single().policyVerdict)
+            assertEquals("VALID", first.analyses.single().runValidity)
+            assertThrows(IllegalArgumentException::class.java) { store.listAnalyses(input.runId, null, 0) }
+            assertThrows(NoSuchElementException::class.java) { store.listAnalyses("jmeter_jtl_csv-${"0".repeat(64)}", null, 1) }
+        }
+
+    @Test
     fun `analysis publish is atomic verified and cleans failures`() =
         withStore { store, root ->
             val input = store.acceptInput(Files.newInputStream(Path.of(CSV_FIXTURE)), "input.jtl")

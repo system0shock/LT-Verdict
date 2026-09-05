@@ -104,6 +104,7 @@ test.describe.serial('local UI security and accessibility', () => {
       navigation.nth(0),
       navigation.nth(1),
       page.getByTestId('run-list'),
+      ...await page.getByTestId('run-list').getByRole('button').all(),
       page.getByRole('button', { name: /Dark theme|Light theme/ }),
       input,
       policy,

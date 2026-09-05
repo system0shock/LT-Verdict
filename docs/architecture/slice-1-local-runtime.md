@@ -121,6 +121,7 @@ compatibility.
 ```text
 GET    /api/bootstrap
 GET    /api/runs?after=<run-id>&limit=1..100
+GET    /api/runs/<run-id>/analyses?after=<analysis-id>&limit=1..100
 POST   /api/inputs
 POST   /api/policies/validate
 POST   /api/jobs
@@ -128,6 +129,7 @@ GET    /api/jobs/<job-id>
 DELETE /api/jobs/<job-id>
 GET    /api/runs/<run-id>/analyses/<analysis-id>/result
 GET    /api/runs/<run-id>/analyses/<analysis-id>/buckets
+GET    /api/runs/<run-id>/analyses/<analysis-id>/report?format=json|html
 ```
 
 Runs выдаются максимум по `100`, buckets — по `500`; bucket range читается
@@ -141,6 +143,25 @@ Handled failures используют envelope
 `400`, local security `403`, missing object `404`, `BUSY` `409`, size overflow
 `413`, wrong media type `415`, unsupported input `422`. Structural policy
 validation возвращает отдельный `{valid:false,errors:[...]}`.
+
+## Просмотр и экспорт сохранённого analysis
+
+Private API выдаёт analyses принятого run с cursor pagination по id,
+default limit `25`, maximum `100`. Summary содержит `analysis_id`,
+`policy_sha256`, `policy_verdict` и `run_validity`. Возвращаемые analyses
+проходят существующую manifest validation. UI хранит выбранный analysis
+отдельно от transient job state и читает уже опубликованные artifacts.
+
+Vue отображает три SVG над текущей страницей buckets: RPS, errors/bin и
+P95/ms. Relative-time axis общая; gaps разрывают линии. Нового aggregation
+pipeline нет: rollups и P95 предоставляет существующий backend.
+
+`ltv report` и private report endpoint используют один чистый HTML renderer
+над сохранённым result. JSON возвращается исходными bytes. HTML содержит
+escaped acquired text и встроенный CSS с SHA-256 hash в meta CSP; scripts,
+remote assets, forms и acquired markup не исполняются. HTTP export отдаётся
+как attachment с генерируемым именем по analysis id. Renderers не изменяют
+canonical result, identity или manifests. Новых dependencies не добавлено.
 
 ## Security boundary
 

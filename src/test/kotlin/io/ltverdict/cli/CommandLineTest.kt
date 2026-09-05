@@ -17,6 +17,7 @@ import java.io.PrintStream
 import java.nio.charset.StandardCharsets.UTF_8
 import java.nio.file.Files
 import java.nio.file.Path
+import java.security.MessageDigest
 
 class CommandLineTest {
     @TempDir
@@ -120,6 +121,71 @@ class CommandLineTest {
         }
     }
 
+    @Test
+    fun `report returns stored JSON bytes without changing the analysis`() {
+        val dataDir = tempDir.resolve("report-data")
+        val analyzed = run("analyze", fixture("jmeter/xml-5.6.3/input.xml").toString(), "--data-dir", dataDir.toString())
+        assertEquals(0, analyzed.exitCode)
+        val runId = analyzed.stdout.json("run_id")
+        val analyses = dataDir.resolve("runs").resolve(runId).resolve("analyses")
+        val analysisId =
+            Files.list(analyses).use {
+                it
+                    .findFirst()
+                    .orElseThrow()
+                    .fileName
+                    .toString()
+            }
+        val result = analyses.resolve(analysisId).resolve("analysis-result.json")
+        val before = MessageDigest.getInstance("SHA-256").digest(Files.readAllBytes(result))
+
+        val exported = run("report", runId, analysisId, "--format", "json", "--data-dir", dataDir.toString())
+
+        assertEquals(0, exported.exitCode)
+        assertEquals(Files.readAllBytes(result).decodeToString(), exported.stdout)
+        assertEquals(before.toList(), MessageDigest.getInstance("SHA-256").digest(Files.readAllBytes(result)).toList())
+    }
+
+    @Test
+    fun `report validates syntax and maps missing busy corrupt and fail results without partial stdout`() {
+        val saved = savedAnalysis("report-boundaries")
+        listOf(
+            arrayOf("report"),
+            arrayOf("report", saved.runId, saved.analysisId, "--format", "xml"),
+            arrayOf("report", saved.runId, saved.analysisId, "--format", "json", "--format", "html"),
+            arrayOf("report", saved.runId, saved.analysisId, "--unknown", "json"),
+        ).forEach { args -> assertError(run(*args), 64, args.joinToString(" ")) }
+        assertError(
+            run("report", "jmeter_jtl_csv-${"0".repeat(64)}", saved.analysisId, "--format", "json", "--data-dir", saved.dataDir.toString()),
+            4,
+            "unknown run",
+        )
+        assertError(
+            run("report", saved.runId, "0".repeat(64), "--format", "json", "--data-dir", saved.dataDir.toString()),
+            4,
+            "unknown analysis",
+        )
+        DataDirectory.open(saved.dataDir).use {
+            assertError(
+                run("report", saved.runId, saved.analysisId, "--format", "json", "--data-dir", saved.dataDir.toString()),
+                6,
+                "busy data directory",
+            )
+        }
+        Files.writeString(saved.result, "{}")
+        assertError(
+            run("report", saved.runId, saved.analysisId, "--format", "json", "--data-dir", saved.dataDir.toString()),
+            70,
+            "corrupt analysis",
+        )
+
+        val failed = savedAnalysis("failed-report", fixture("policies/fail.json"))
+        val exported = run("report", failed.runId, failed.analysisId, "--format", "html", "--data-dir", failed.dataDir.toString())
+        assertEquals(0, exported.exitCode)
+        assertTrue(exported.stderr.isEmpty(), exported.stderr)
+        assertTrue(exported.stdout.startsWith("<!doctype html>"))
+    }
+
     private fun run(vararg args: String): CliResult {
         val stdout = ByteArrayOutputStream()
         val stderr = ByteArrayOutputStream()
@@ -138,6 +204,42 @@ class CommandLineTest {
     }
 
     private fun fixture(path: String): Path = Path.of("fixtures/slice1").resolve(path)
+
+    private fun savedAnalysis(
+        name: String,
+        policy: Path? = null,
+    ): SavedAnalysis {
+        val dataDir = tempDir.resolve(name)
+        val analyzed =
+            run(
+                "analyze",
+                fixture("jmeter/xml-5.6.3/input.xml").toString(),
+                *(policy?.let { arrayOf("--policy", it.toString()) } ?: emptyArray()),
+                "--data-dir",
+                dataDir.toString(),
+            )
+        assertTrue(analyzed.exitCode in setOf(0, 2), analyzed.stderr)
+        val runId = analyzed.stdout.json("run_id")
+        val analysisId =
+            Files.list(dataDir.resolve("runs").resolve(runId).resolve("analyses")).use {
+                it
+                    .findFirst()
+                    .orElseThrow()
+                    .fileName
+                    .toString()
+            }
+        return SavedAnalysis(
+            dataDir,
+            runId,
+            analysisId,
+            dataDir
+                .resolve("runs")
+                .resolve(runId)
+                .resolve("analyses")
+                .resolve(analysisId)
+                .resolve("analysis-result.json"),
+        )
+    }
 
     private fun validCanonical(path: Path): String =
         (Files.newInputStream(path).use(::validatePolicy) as PolicyValidation.Valid).canonicalBytes.decodeToString()
@@ -171,5 +273,12 @@ class CommandLineTest {
         val exitCode: Int,
         val stdout: String,
         val stderr: String,
+    )
+
+    private data class SavedAnalysis(
+        val dataDir: Path,
+        val runId: String,
+        val analysisId: String,
+        val result: Path,
     )
 }

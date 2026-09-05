@@ -6,6 +6,7 @@ import io.ktor.http.HttpMethod
 import io.ktor.http.HttpStatusCode
 import io.ktor.http.content.PartData
 import io.ktor.http.content.forEachPart
+import io.ktor.http.withCharset
 import io.ktor.server.application.Application
 import io.ktor.server.application.ApplicationCall
 import io.ktor.server.application.ApplicationCallPipeline
@@ -31,6 +32,7 @@ import io.ltverdict.core.validatePolicy
 import io.ltverdict.jobs.AnalysisJobs
 import io.ltverdict.jobs.JobStatus
 import io.ltverdict.jobs.SubmitResult
+import io.ltverdict.report.renderHtmlReport
 import io.ltverdict.storage.AcceptedInput
 import io.ltverdict.storage.RunBundleStore
 import kotlinx.coroutines.Dispatchers
@@ -178,6 +180,56 @@ internal fun Application.installLocalApi(context: LocalApiContext) {
             val stored = context.store.requireAnalysis(call)
             val bytes = withContext(Dispatchers.IO) { Files.readAllBytes(stored.path.resolve(RESULT_FILE)) }
             call.respondBytes(bytes, ContentType.Application.Json, HttpStatusCode.OK)
+        }
+
+        get("/api/runs/{runId}/analyses/{analysisId}/report") {
+            call.requireOnlyQueries("format")
+            val format = call.singleQuery("format")
+            if (format !in setOf("json", "html")) malformed("format must be json or html")
+            val stored = context.store.requireAnalysis(call)
+            val bytes = withContext(Dispatchers.IO) { Files.readAllBytes(stored.path.resolve(RESULT_FILE)) }
+            val analysisId = stored.path.fileName.toString()
+            val report = if (format == "json") bytes else renderHtmlReport(bytes, analysisId)
+            call.response.headers.append(
+                HttpHeaders.ContentDisposition,
+                "attachment; filename=\"lt-verdict-$analysisId.$format\"",
+            )
+            val contentType = if (format == "json") ContentType.Application.Json else ContentType.Text.Html.withCharset(Charsets.UTF_8)
+            call.respondBytes(report, contentType, HttpStatusCode.OK)
+        }
+
+        get("/api/runs/{runId}/analyses") {
+            call.requireOnlyQueries("after", "limit")
+            val after = call.singleQuery("after")
+            val limit = call.intQuery("limit", DEFAULT_ANALYSIS_LIMIT, 1..MAX_ANALYSIS_LIMIT)
+            val page =
+                try {
+                    withContext(Dispatchers.IO) { context.store.listAnalyses(call.parameters["runId"].orEmpty(), after, limit) }
+                } catch (_: NoSuchElementException) {
+                    notFound("Run was not found")
+                } catch (_: IllegalArgumentException) {
+                    malformed("Analysis query is invalid")
+                }
+            call.respondJson(
+                buildJsonObject {
+                    put(
+                        "analyses",
+                        buildJsonArray {
+                            page.analyses.forEach { analysis ->
+                                add(
+                                    buildJsonObject {
+                                        put("analysis_id", analysis.analysisId)
+                                        put("policy_sha256", analysis.policySha256)
+                                        put("policy_verdict", analysis.policyVerdict)
+                                        put("run_validity", analysis.runValidity)
+                                    },
+                                )
+                            }
+                        },
+                    )
+                    put("next_after", page.nextAfter?.let(::JsonPrimitive) ?: JsonNull)
+                },
+            )
         }
 
         get("/api/runs/{runId}/analyses/{analysisId}/buckets") {
@@ -571,6 +623,8 @@ private const val MAX_POLICY_BYTES = 1_048_576
 private const val MAX_RUN_ID_BYTES = 128
 private const val DEFAULT_RUN_LIMIT = 100
 private const val MAX_RUN_LIMIT = 100
+private const val DEFAULT_ANALYSIS_LIMIT = 25
+private const val MAX_ANALYSIS_LIMIT = 100
 private const val DEFAULT_BUCKET_LIMIT = 500
 private const val MAX_BUCKET_LIMIT = 500
 private const val MAX_BUCKET_LATENCY_MILLIS = 86_400_000L

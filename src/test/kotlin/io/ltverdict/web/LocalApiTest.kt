@@ -5,6 +5,7 @@ import io.ltverdict.core.AnalysisService
 import io.ltverdict.core.EngineConfig
 import io.ltverdict.core.sha256Hex
 import io.ltverdict.jobs.AnalysisJobs
+import io.ltverdict.report.renderHtmlReport
 import io.ltverdict.storage.DataDirectory
 import io.ltverdict.storage.RunBundleStore
 import kotlinx.serialization.json.Json
@@ -217,6 +218,75 @@ class LocalApiTest {
     }
 
     @Test
+    fun `analysis API paginates summaries and rejects invalid queries`() =
+        withServer { store, api ->
+            val input = store.acceptInput(ByteArrayInputStream(SPIKE_DROP.bytes()), SPIKE_DROP.filename)
+            val empty = store.acceptInput(ByteArrayInputStream(GATLING_TEXT.bytes()), GATLING_TEXT.filename)
+
+            fun publish(
+                suffix: String,
+                policy: String,
+            ): String {
+                val identity = "{\"policy_sha256\":\"$policy\",\"run_id\":\"${input.runId}\",\"suffix\":\"$suffix\"}".encodeToByteArray()
+                val analysisId = sha256Hex(identity)
+                store.writeAnalysisAtomically(input.runId, analysisId) { staging ->
+                    Files.write(staging.resolve("identity.json"), identity)
+                    Files.writeString(
+                        staging.resolve("analysis-result.json"),
+                        "{\"policy_verdict\":\"PASS\",\"run_validity\":\"VALID\"}",
+                    )
+                }
+                return analysisId
+            }
+            val policies =
+                mapOf(
+                    publish("a", "a".repeat(64)) to "a".repeat(64),
+                    publish("b", "b".repeat(64)) to "b".repeat(64),
+                )
+            val ids = policies.keys.sorted()
+            api.bootstrap()
+
+            assertTrue(
+                api
+                    .get("/api/runs/${empty.runId}/analyses")
+                    .jsonObject()
+                    .getValue("analyses")
+                    .jsonArray
+                    .isEmpty(),
+            )
+            val first = api.get("/api/runs/${input.runId}/analyses?limit=1").jsonObject()
+            assertEquals(setOf("analyses", "next_after"), first.keys)
+            val firstSummary =
+                first
+                    .getValue("analyses")
+                    .jsonArray
+                    .single()
+                    .jsonObject
+            assertEquals(setOf("analysis_id", "policy_sha256", "policy_verdict", "run_validity"), firstSummary.keys)
+            assertEquals(ids.first(), firstSummary.getValue("analysis_id").jsonPrimitive.content)
+            assertEquals(policies.getValue(ids.first()), firstSummary.getValue("policy_sha256").jsonPrimitive.content)
+            assertEquals("PASS", firstSummary.getValue("policy_verdict").jsonPrimitive.content)
+            assertEquals("VALID", firstSummary.getValue("run_validity").jsonPrimitive.content)
+            assertEquals(ids.first(), first.getValue("next_after").jsonPrimitive.content)
+            val second = api.get("/api/runs/${input.runId}/analyses?after=${ids.first()}&limit=1").jsonObject()
+            assertEquals(
+                ids.last(),
+                second
+                    .getValue("analyses")
+                    .jsonArray
+                    .single()
+                    .jsonObject
+                    .getValue("analysis_id")
+                    .jsonPrimitive.content,
+            )
+            assertEquals(JsonNull, second.getValue("next_after"))
+            assertError(api.get("/api/runs/${input.runId}/analyses?limit=0"), 400, "MALFORMED_REQUEST")
+            assertError(api.get("/api/runs/${input.runId}/analyses?after=invalid"), 400, "MALFORMED_REQUEST")
+            assertError(api.get("/api/runs/${input.runId}/analyses?after=${ids.first()}&after=${ids.last()}"), 400, "MALFORMED_REQUEST")
+            assertError(api.get("/api/runs/jmeter_jtl_csv-${"0".repeat(64)}/analyses"), 404, "NOT_FOUND")
+        }
+
+    @Test
     fun `unknown valid run is not found for jobs and analyses`() =
         withServer { _, api ->
             api.bootstrap()
@@ -356,6 +426,55 @@ class LocalApiTest {
                     400,
                 )
             }
+        }
+
+    @Test
+    fun `report downloads preserve result bytes and reject invalid queries without new analyses`() =
+        withServer { store, api ->
+            val input = store.acceptInput(ByteArrayInputStream(SPIKE_DROP.bytes()), SPIKE_DROP.filename)
+            api.bootstrap()
+            val submitted = api.createJob(input.runId)
+            val complete =
+                awaitComplete(
+                    api,
+                    submitted
+                        .jsonObject()
+                        .getValue("job_id")
+                        .jsonPrimitive.content,
+                )
+            val analysisId = complete.getValue("analysis_id").jsonPrimitive.content
+            val stored = checkNotNull(store.readAnalysis(input.runId, analysisId))
+            val resultBytes = Files.readAllBytes(stored.path.resolve("analysis-result.json"))
+            val before = Files.list(stored.path.parent).use { it.map { path -> path.fileName.toString() }.sorted().toList() }
+            val base = "/api/runs/${input.runId}/analyses/$analysisId/report"
+
+            for (format in listOf("json", "html")) {
+                val response = api.get("$base?format=$format")
+                assertEquals(200, response.statusCode())
+                assertEquals(
+                    "attachment; filename=\"lt-verdict-$analysisId.$format\"",
+                    response.headers().firstValue("Content-Disposition").orElseThrow(),
+                )
+                val expected = if (format == "json") resultBytes else renderHtmlReport(resultBytes, analysisId)
+                assertEquals(expected.decodeToString(), response.body())
+                assertTrue(
+                    response.headers().firstValue("Content-Type").orElseThrow().startsWith(
+                        if (format ==
+                            "json"
+                        ) {
+                            "application/json"
+                        } else {
+                            "text/html"
+                        },
+                    ),
+                )
+            }
+            for (query in listOf("", "?format=pdf", "?format=json&format=html", "?format=json&path=identity.json")) {
+                assertError(api.get(base + query), 400, "MALFORMED_REQUEST")
+            }
+            assertError(api.get("/api/runs/${input.runId}/analyses/${"0".repeat(64)}/report?format=json"), 404, "NOT_FOUND")
+            assertEquals(resultBytes.toList(), Files.readAllBytes(stored.path.resolve("analysis-result.json")).toList())
+            assertEquals(before, Files.list(stored.path.parent).use { it.map { path -> path.fileName.toString() }.sorted().toList() })
         }
 
     private fun withServer(

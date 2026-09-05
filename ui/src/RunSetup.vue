@@ -1,11 +1,17 @@
 <script setup lang="ts">
 import PolicyEditor from './PolicyEditor.vue'
-import type { Policy, PolicyError } from './types'
+import type { Policy, PolicyError, SourceProfile } from './types'
 
 defineProps<{
   inputFile: File | null
   resourceFile: File | null
   diagnosticFile: File | null
+  sourceProfiles: SourceProfile[]
+  sourceProfileId: string
+  sourceStart: string
+  sourceEnd: string
+  sourceStep: string
+  sourceRequestError: string
   policy: Policy | null
   policyStatus: string
   policyErrors: PolicyError[]
@@ -16,6 +22,10 @@ const emit = defineEmits<{
   input: [file: File | null]
   resources: [file: File | null]
   diagnostics: [file: File | null]
+  'source-profile': [id: string]
+  'source-start': [value: string]
+  'source-end': [value: string]
+  'source-step': [value: string]
   'policy-file': [file: File | null]
   'update-policy': [policy: Policy]
   analyze: []
@@ -92,7 +102,7 @@ function selectedFile(event: Event) {
           class="control control--file"
           type="file"
           accept="application/json,.json"
-          :disabled="busy"
+          :disabled="busy || !!sourceProfileId"
           @change="emit('resources', selectedFile($event))"
         >
         <p class="field__hint">
@@ -108,7 +118,7 @@ function selectedFile(event: Event) {
           class="control control--file"
           type="file"
           accept="application/json,.json"
-          :disabled="busy"
+          :disabled="busy || !!sourceProfileId"
           aria-describedby="correlation-plan-hint"
           @change="emit('diagnostics', selectedFile($event))"
         >
@@ -119,6 +129,78 @@ function selectedFile(event: Event) {
           {{ diagnosticFile?.name ?? 'No correlation plan selected.' }} Requires a matching resource snapshot.
         </p>
       </div>
+
+      <div class="field">
+        <label for="source-profile">Online source profile <span class="muted">(optional)</span></label>
+        <select
+          id="source-profile"
+          data-testid="source-profile"
+          :value="sourceProfileId"
+          :disabled="busy || sourceProfiles.length === 0"
+          @change="emit('source-profile', ($event.target as HTMLSelectElement).value)"
+        >
+          <option value="">
+            No online source
+          </option>
+          <option
+            v-for="profile in sourceProfiles"
+            :key="profile.id"
+            :value="profile.id"
+          >
+            {{ profile.id }} — {{ profile.source_kind }} / {{ profile.transport }}
+          </option>
+        </select>
+        <p class="field__hint">
+          Acquires a resource snapshot, which you can download and use for offline correlation only with its matching snapshot hash.
+        </p>
+      </div>
+
+      <template v-if="sourceProfileId">
+        <div class="field">
+          <label for="source-start">Source start (UTC epoch ms)</label>
+          <input
+            id="source-start"
+            type="number"
+            min="0"
+            step="1"
+            :value="sourceStart"
+            :disabled="busy"
+            @input="emit('source-start', ($event.target as HTMLInputElement).value)"
+          >
+        </div>
+        <div class="field">
+          <label for="source-end">Source end (UTC epoch ms)</label>
+          <input
+            id="source-end"
+            type="number"
+            min="0"
+            step="1"
+            :value="sourceEnd"
+            :disabled="busy"
+            @input="emit('source-end', ($event.target as HTMLInputElement).value)"
+          >
+        </div>
+        <div class="field">
+          <label for="source-step">Source step (ms)</label>
+          <input
+            id="source-step"
+            type="number"
+            min="1000"
+            step="1"
+            :value="sourceStep"
+            :disabled="busy"
+            @input="emit('source-step', ($event.target as HTMLInputElement).value)"
+          >
+        </div>
+        <p
+          v-if="sourceRequestError"
+          data-testid="source-request-error"
+          class="validation-error"
+          role="alert"
+        >
+          {{ sourceRequestError }}
+        </p>
+      </template>
     </div>
 
     <PolicyEditor
@@ -132,7 +214,7 @@ function selectedFile(event: Event) {
     <button
       class="control button button--primary"
       type="button"
-      :disabled="!inputFile || busy"
+      :disabled="!inputFile || busy || !!sourceRequestError"
       @click="emit('analyze')"
     >
       Analyze run

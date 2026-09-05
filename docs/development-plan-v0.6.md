@@ -97,6 +97,12 @@ core или contracts предыдущих slices.
 PostgreSQL и OpenSearch независимыми поставками. Метрики, события и SQL snapshots
 не объединяются искусственно в один формат. Первая поставка описана в
 [дизайне online sources](superpowers/specs/2026-09-05-online-sources-design.md).
+Первая поставка локально проверена на `feat/online-sources` по
+[implementation plan](superpowers/plans/2026-09-05-online-sources.md): CLI/UI,
+Prometheus/VM direct и Grafana proxy, общий governor и offline replay.
+Проверки: 215 JVM passed + 2 прежних skips; 34 browser tests passed.
+Следующая независимая поставка источников — InfluxDB, PostgreSQL и OpenSearch;
+блок источников целиком ещё не закрыт.
 Jenkins/artifacts, PostgreSQL analysis, JVM/OpenShift packs, OpenSearch,
 оставшиеся charts/comparison/export функции и GigaCode Skill сохраняются
 в scope таблицы Slices 2–10; их порядок после пилота ещё не утверждён.

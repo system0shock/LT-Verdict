@@ -14,16 +14,22 @@ import {
   getResult,
   listAnalyses,
   listRuns,
+  listSources,
   uploadInput,
   validatePolicy,
 } from './api'
-import type { AnalysisResult, AnalysisSummary, Bucket, JobStatus, Policy, PolicyError, RunSummary, Theme } from './types'
+import type { AnalysisResult, AnalysisSummary, Bucket, JobStatus, Policy, PolicyError, RunSummary, SourceProfile, SourceRequest, Theme } from './types'
 
 const theme = ref<Theme>(window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light')
 const apiReady = ref(false)
 const inputFile = ref<File | null>(null)
 const resourceFile = ref<File | null>(null)
 const diagnosticFile = ref<File | null>(null)
+const sourceProfiles = ref<SourceProfile[]>([])
+const sourceProfileId = ref('')
+const sourceStart = ref('')
+const sourceEnd = ref('')
+const sourceStep = ref('')
 const policy = ref<Policy | null>(null)
 const policyStatus = ref('')
 const policyErrors = ref<PolicyError[]>([])
@@ -54,6 +60,18 @@ const working = computed(() => job.value?.state === 'QUEUED' || job.value?.state
 const selectedReference = computed(() => result.value && selectedAnalysisId.value
   ? { run_id: result.value.run_id, analysis_id: selectedAnalysisId.value }
   : null)
+const sourceRequestState = computed<{ request: SourceRequest | null; error: string }>(() => {
+  if (!sourceProfileId.value) return { request: null, error: '' }
+  if (!sourceStart.value || !sourceEnd.value || !sourceStep.value) return { request: null, error: 'Online source requires start, end, and step in UTC epoch milliseconds.' }
+  const start = Number(sourceStart.value)
+  const end = Number(sourceEnd.value)
+  const step = Number(sourceStep.value)
+  if (![start, end, step].every(Number.isSafeInteger)) return { request: null, error: 'Source times and step must be safe integer milliseconds.' }
+  if (start < 0 || end <= start) return { request: null, error: 'Source end must be after a non-negative start.' }
+  if (step < 1_000) return { request: null, error: 'Source step must be at least 1000 ms.' }
+  if ((end - start) % step !== 0) return { request: null, error: 'Source range must be divisible by its step.' }
+  return { request: { schema_version: 'source-request.v1', profile_id: sourceProfileId.value, start_epoch_ms: start, end_epoch_ms: end, step_ms: step }, error: '' }
+})
 
 watch(
   theme,
@@ -69,6 +87,11 @@ onMounted(async () => {
     await bootstrap()
     apiReady.value = true
     await refreshRuns()
+    try {
+      await refreshSources()
+    } catch {
+      sourceProfiles.value = []
+    }
   } catch (failure) {
     showError(failure)
   }
@@ -88,6 +111,16 @@ function selectResources(file: File | null) {
 
 function selectDiagnostics(file: File | null) {
   diagnosticFile.value = file
+  queueBusy.value = false
+  errorMessage.value = ''
+}
+
+function selectSourceProfile(id: string) {
+  sourceProfileId.value = id
+  if (id) {
+    resourceFile.value = null
+    diagnosticFile.value = null
+  }
   queueBusy.value = false
   errorMessage.value = ''
 }
@@ -138,6 +171,10 @@ async function validateDraft(draft: Policy | File): Promise<Policy | null> {
 
 async function analyze() {
   if (!inputFile.value || working.value) return
+  if (sourceRequestState.value.error) {
+    errorMessage.value = sourceRequestState.value.error
+    return
+  }
   const revision = ++analysisRevision
   queueBusy.value = false
   errorMessage.value = ''
@@ -162,7 +199,7 @@ async function analyze() {
     if (revision !== analysisRevision) return
     currentRun.value = accepted
     await refreshRuns()
-    job.value = await createJob(accepted.run_id, activePolicy, resourceFile.value, diagnosticFile.value)
+    job.value = await createJob(accepted.run_id, activePolicy, resourceFile.value, diagnosticFile.value, sourceRequestState.value.request)
     uploadProgress.value = 100
     await pollJob(revision)
   } catch (failure) {
@@ -203,6 +240,10 @@ async function refreshRuns(after?: string) {
   const page = await listRuns(after)
   runs.value = after ? [...runs.value, ...page.runs] : page.runs
   nextRunAfter.value = page.next_after
+}
+
+async function refreshSources() {
+  sourceProfiles.value = (await listSources()).profiles
 }
 
 async function selectRun(run: RunSummary) {
@@ -429,6 +470,12 @@ function focusPolicy() {
           :input-file="inputFile"
           :resource-file="resourceFile"
           :diagnostic-file="diagnosticFile"
+          :source-profiles="sourceProfiles"
+          :source-profile-id="sourceProfileId"
+          :source-start="sourceStart"
+          :source-end="sourceEnd"
+          :source-step="sourceStep"
+          :source-request-error="sourceRequestState.error"
           :policy="policy"
           :policy-status="policyStatus"
           :policy-errors="policyErrors"
@@ -436,6 +483,10 @@ function focusPolicy() {
           @input="selectInput"
           @resources="selectResources"
           @diagnostics="selectDiagnostics"
+          @source-profile="selectSourceProfile"
+          @source-start="sourceStart = $event"
+          @source-end="sourceEnd = $event"
+          @source-step="sourceStep = $event"
           @policy-file="selectPolicyFile"
           @update-policy="updatePolicy"
           @analyze="analyze"
@@ -475,6 +526,12 @@ function focusPolicy() {
             :href="`/api/runs/${encodeURIComponent(result.run_id)}/analyses/${selectedAnalysisId}/report?format=${format}`"
             download
           >Download {{ format === 'asciidoc' ? 'AsciiDoc' : format.toUpperCase() }}</a>
+          <a
+            v-if="result.evidence.some(item => item.type === 'source_summary' || item.type === 'resource_binding')"
+            class="button-secondary"
+            :href="`/api/runs/${encodeURIComponent(result.run_id)}/analyses/${selectedAnalysisId}/resource-snapshot`"
+            download
+          >Download resource snapshot</a>
         </div>
 
         <AnalysisView

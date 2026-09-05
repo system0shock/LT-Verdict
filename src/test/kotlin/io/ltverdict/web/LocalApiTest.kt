@@ -9,6 +9,14 @@ import io.ltverdict.core.validateResourceSnapshot
 import io.ltverdict.jobs.AnalysisJobs
 import io.ltverdict.report.renderAsciiDocReport
 import io.ltverdict.report.renderHtmlReport
+import io.ltverdict.sources.ONLINE_LOAD
+import io.ltverdict.sources.ONLINE_SOURCE_REQUEST
+import io.ltverdict.sources.OnlineSourceFixture
+import io.ltverdict.sources.PromqlSource
+import io.ltverdict.sources.SourceHttp
+import io.ltverdict.sources.SourceProfile
+import io.ltverdict.sources.analyzeWithSources
+import io.ltverdict.sources.readSourceProfiles
 import io.ltverdict.storage.DataDirectory
 import io.ltverdict.storage.RunBundleStore
 import kotlinx.serialization.json.Json
@@ -48,6 +56,105 @@ import java.util.concurrent.locks.LockSupport
 class LocalApiTest {
     @TempDir
     lateinit var tempDir: Path
+
+    @Test
+    fun `unconfigured backend exposes no online profiles`() =
+        withServer { _, api ->
+            api.bootstrap()
+            val response = api.get("/api/sources")
+            assertEquals(200, response.statusCode())
+            assertTrue(
+                response
+                    .jsonObject()
+                    .getValue("profiles")
+                    .jsonArray
+                    .isEmpty(),
+            )
+        }
+
+    @Test
+    fun `online job persists evidence and snapshot download replays without network`() {
+        OnlineSourceFixture().use { fixture ->
+            val profiles = readSourceProfiles(fixture.profilesJson().byteInputStream())
+            val source = PromqlSource(profiles, SourceHttp(profiles))
+            withServer(
+                jobsFactory = { store ->
+                    val service = AnalysisService(store, EngineConfig())
+                    AnalysisJobs(1) { request, progress, cancelled -> analyzeWithSources(service, request, source, progress, cancelled) }
+                },
+                sourceProfiles = profiles,
+            ) { store, api ->
+                api.bootstrap()
+                val listed =
+                    api
+                        .get("/api/sources")
+                        .jsonObject()
+                        .getValue("profiles")
+                        .jsonArray
+                        .single()
+                        .jsonObject
+                assertEquals(setOf("id", "source_kind", "transport"), listed.keys)
+                val input = store.acceptInput(ONLINE_LOAD.byteInputStream(), "online.jtl")
+                val id = api.createJob(input.runId, source = ONLINE_SOURCE_REQUEST.encodeToByteArray()).analysisId(api)
+                val base = "/api/runs/${input.runId}/analyses/$id"
+                val result = api.get("$base/result").jsonObject()
+                val summary =
+                    result
+                        .getValue("evidence")
+                        .jsonArray
+                        .single {
+                            it.jsonObject["type"]?.jsonPrimitive?.content ==
+                                "source_summary"
+                        }.jsonObject
+                assertEquals("COMPLETE", summary.getValue("status").jsonPrimitive.content)
+                val download = api.get("$base/resource-snapshot")
+                assertEquals(200, download.statusCode())
+                assertTrue(
+                    download
+                        .headers()
+                        .firstValue("Content-Disposition")
+                        .orElse("")
+                        .contains("attachment"),
+                )
+                val replayId = api.createJob(input.runId, resources = download.body().encodeToByteArray()).analysisId(api)
+                assertEquals(
+                    result.getValue("policy_verdict"),
+                    api.get("/api/runs/${input.runId}/analyses/$replayId/result").jsonObject().getValue("policy_verdict"),
+                )
+                assertEquals(1, fixture.requests.get())
+                assertTrue(store.readAnalysis(input.runId, id)!!.artifacts.any { it.path == "source-acquisition.json" })
+                fixture.responseStatus = 401
+                val failedId = api.createJob(input.runId, source = ONLINE_SOURCE_REQUEST.encodeToByteArray()).analysisId(api)
+                val failedResult = api.get("/api/runs/${input.runId}/analyses/$failedId/result").jsonObject()
+                val failedEvidence = failedResult.getValue("evidence").jsonArray
+                assertEquals(
+                    "FAILED",
+                    failedEvidence
+                        .single {
+                            it.jsonObject["type"]?.jsonPrimitive?.content == "source_summary"
+                        }.jsonObject
+                        .getValue("status")
+                        .jsonPrimitive.content,
+                )
+                assertTrue(
+                    failedEvidence.any {
+                        it.jsonObject["type"]?.jsonPrimitive?.content == "window_policy_summary" &&
+                            it.jsonObject["resource_verdict"]?.jsonPrimitive?.content == "NO_VERDICT"
+                    },
+                )
+                assertEquals(2, fixture.requests.get())
+                assertError(api.createJob(input.runId, source = ONLINE_SOURCE_REQUEST.replace("local", "unknown").encodeToByteArray()), 400)
+                assertError(
+                    api.createJob(
+                        input.runId,
+                        resources = download.body().encodeToByteArray(),
+                        source = ONLINE_SOURCE_REQUEST.encodeToByteArray(),
+                    ),
+                    400,
+                )
+            }
+        }
+    }
 
     @Test
     fun `baseline API rejects malformed unauthenticated oversized and ineligible requests`() =
@@ -709,12 +816,13 @@ class LocalApiTest {
             val service = AnalysisService(store, EngineConfig())
             AnalysisJobs(1, service::analyze)
         },
+        sourceProfiles: List<SourceProfile> = emptyList(),
         block: (RunBundleStore, ApiClient) -> Unit,
     ) {
         DataDirectory.open(tempDir.resolve("data-${System.nanoTime()}")).use { directory ->
             val store = RunBundleStore(directory)
             jobsFactory(store).use { jobs ->
-                startLocalServer(LocalApiContext(store, jobs), openBrowser = false).use { server ->
+                startLocalServer(LocalApiContext(store, jobs, sourceProfiles), openBrowser = false).use { server ->
                     block(store, ApiClient(server.origin))
                 }
             }
@@ -917,6 +1025,7 @@ class LocalApiTest {
             policy: ByteArray? = null,
             resources: ByteArray? = null,
             diagnostics: ByteArray? = null,
+            source: ByteArray? = null,
         ): HttpResponse<String> =
             multipart(
                 "/api/jobs",
@@ -925,6 +1034,7 @@ class LocalApiTest {
                     if (policy != null) add(FormPart("policy", policy, "policy.json", "application/json"))
                     if (resources != null) add(FormPart("resource_snapshot", resources, "resources.json", "application/json"))
                     if (diagnostics != null) add(FormPart("correlation_plan", diagnostics, "correlation.json", "application/json"))
+                    if (source != null) add(FormPart("source_request", source, "source.json", "application/json"))
                 },
             )
 

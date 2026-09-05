@@ -39,6 +39,8 @@ Linux использует `./gradlew installDist` и
 - [Milestone report Stage 0 / Slice 0](docs/milestones/stage-0.md)
 - [Milestone report Stage 1 / Slice 1](docs/milestones/stage-1.md)
 - [Руководство локального анализа Slice 1](docs/user/slice-1-local-analysis.md)
+- [Онлайн-источники и offline replay](docs/user/online-sources.md)
+- [ADR 0007 — opt-in онлайн-источники](docs/adr/0007-opt-in-online-sources.md)
 - [Архитектура локального runtime Slice 1](docs/architecture/slice-1-local-runtime.md)
 - [ADR 0001 — публичные контракты Slice 0](docs/adr/0001-slice-0-public-contracts.md)
 - [ADR 0005 — resource snapshot и оконные SLA](docs/adr/0005-resource-window-sla.md)

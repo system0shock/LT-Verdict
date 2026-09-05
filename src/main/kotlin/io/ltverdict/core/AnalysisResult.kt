@@ -28,6 +28,7 @@ internal fun analysisIdentity(
     config: EngineConfig,
     resources: ResourceValidation.Valid? = null,
     diagnostics: DiagnosticValidation.Valid? = null,
+    sourceAcquisitionSha256: String? = null,
 ): ByteArray =
     canonicalJson(
         buildJsonObject {
@@ -41,6 +42,7 @@ internal fun analysisIdentity(
                 put("resource_config_sha256", it.configSha256)
             }
             diagnostics?.let { put("diagnostic_plan_sha256", it.sha256) }
+            sourceAcquisitionSha256?.let { put("source_acquisition_sha256", it) }
             put(
                 "engine",
                 buildJsonObject {

@@ -3,6 +3,11 @@ package io.ltverdict.e2e
 import io.ltverdict.core.AnalysisService
 import io.ltverdict.core.EngineConfig
 import io.ltverdict.jobs.AnalysisJobs
+import io.ltverdict.sources.OnlineSourceFixture
+import io.ltverdict.sources.PromqlSource
+import io.ltverdict.sources.SourceHttp
+import io.ltverdict.sources.analyzeWithSources
+import io.ltverdict.sources.readSourceProfiles
 import io.ltverdict.storage.DataDirectory
 import io.ltverdict.storage.RunBundleStore
 import io.ltverdict.web.LocalApiContext
@@ -15,12 +20,15 @@ fun main() {
     val dataDirectory = DataDirectory.open(Path.of(checkNotNull(System.getProperty("e2eDataDir"))))
     val store = RunBundleStore(dataDirectory)
     val service = AnalysisService(store, EngineConfig())
+    val sourceFixture = OnlineSourceFixture()
+    val profiles = readSourceProfiles(sourceFixture.profilesJson().byteInputStream())
+    val source = PromqlSource(profiles, SourceHttp(profiles))
     val jobs =
         AnalysisJobs(1) { request, processedBytes, checkCancelled ->
             if (request.input.originalFilename == BLOCKING_INPUT) blockUntilCancelled()
-            service.analyze(request, processedBytes, checkCancelled)
+            analyzeWithSources(service, request, source, processedBytes, checkCancelled)
         }
-    val server = startLocalServer(LocalApiContext(store, jobs), port = 18_473, openBrowser = false)
+    val server = startLocalServer(LocalApiContext(store, jobs, profiles), port = 18_473, openBrowser = false)
     val stopped = CountDownLatch(1)
     val closed = AtomicBoolean()
     val close = {
@@ -32,6 +40,7 @@ fun main() {
                     jobs.close()
                 } finally {
                     dataDirectory.close()
+                    sourceFixture.close()
                     stopped.countDown()
                 }
             }

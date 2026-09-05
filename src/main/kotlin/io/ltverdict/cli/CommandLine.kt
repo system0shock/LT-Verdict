@@ -13,6 +13,11 @@ import io.ltverdict.core.validateResourceSnapshot
 import io.ltverdict.jobs.AnalysisJobs
 import io.ltverdict.report.renderAsciiDocReport
 import io.ltverdict.report.renderHtmlReport
+import io.ltverdict.sources.PromqlSource
+import io.ltverdict.sources.SourceHttp
+import io.ltverdict.sources.analyzeWithSources
+import io.ltverdict.sources.readSourceProfiles
+import io.ltverdict.sources.readSourceRequest
 import io.ltverdict.storage.DataDirectory
 import io.ltverdict.storage.RunBundleStore
 import io.ltverdict.web.LocalApiContext
@@ -67,6 +72,8 @@ private fun analyze(
     var policyPath: Path? = null
     var resourcesPath: Path? = null
     var diagnosticsPath: Path? = null
+    var connectionsPath: Path? = null
+    var sourcePath: Path? = null
     var dataDir = defaultDataDir()
     var policySeen = false
     var dataDirSeen = false
@@ -86,6 +93,14 @@ private fun analyze(
                 if (diagnosticsPath != null || index + 1 >= args.size) usage()
                 diagnosticsPath = path(args[index + 1])
             }
+            "--connections" -> {
+                if (connectionsPath != null || index + 1 >= args.size) usage()
+                connectionsPath = path(args[index + 1])
+            }
+            "--source" -> {
+                if (sourcePath != null || index + 1 >= args.size) usage()
+                sourcePath = path(args[index + 1])
+            }
             "--data-dir" -> {
                 if (dataDirSeen || index + 1 >= args.size) usage()
                 dataDirSeen = true
@@ -97,6 +112,16 @@ private fun analyze(
     }
 
     requireRegularFile(input, EXIT_INVALID_INPUT, "INVALID_INPUT")
+    if ((sourcePath == null) != (connectionsPath == null)) usage()
+    if (sourcePath != null && (resourcesPath != null || diagnosticsPath != null)) {
+        throw CliFailure(EXIT_INVALID_INPUT, "SOURCE_INPUT_CONFLICT: acquire first, then replay the saved snapshot with --correlation")
+    }
+    val profiles = connectionsPath?.let { readSourceFile(it, ::readSourceProfiles) }.orEmpty()
+    val sourceRequest = sourcePath?.let { readSourceFile(it, ::readSourceRequest) }
+    if (sourceRequest != null && profiles.none { it.id == sourceRequest.profileId }) {
+        throw CliFailure(EXIT_INVALID_INPUT, "SOURCE_PROFILE_NOT_FOUND")
+    }
+    val source = if (sourceRequest == null) null else PromqlSource(profiles, SourceHttp(profiles))
     val policy = policyPath?.let(::readPolicy)
     val resources = resourcesPath?.let(::readResources)
     val diagnostics = diagnosticsPath?.let(::readDiagnostics)
@@ -124,10 +149,11 @@ private fun analyze(
                     throw CliFailure(EXIT_INVALID_INPUT, failure.message ?: "INVALID_INPUT")
                 }
             try {
-                AnalysisService(
-                    store,
-                    EngineConfig(),
-                ).analyze(AnalysisRequest(accepted, policy, resources = resources, diagnostics = diagnostics)).canonicalResult
+                analyzeWithSources(
+                    AnalysisService(store, EngineConfig()),
+                    AnalysisRequest(accepted, policy, resources = resources, diagnostics = diagnostics, sourceRequest = sourceRequest),
+                    source,
+                ).canonicalResult
             } catch (failure: IllegalArgumentException) {
                 throw CliFailure(EXIT_INVALID_INPUT, failure.message ?: "INVALID_INPUT")
             }
@@ -217,6 +243,7 @@ private fun ui(args: List<String>): Int {
     var parallelism = 1
     var dataDirSeen = false
     var parallelismSeen = false
+    var connectionsPath: Path? = null
     var index = 0
     while (index < args.size) {
         if (index + 1 >= args.size) usage()
@@ -232,24 +259,32 @@ private fun ui(args: List<String>): Int {
                 parallelism = args[index + 1].toIntOrNull() ?: usage()
                 if (parallelism !in 1..Runtime.getRuntime().availableProcessors()) usage()
             }
+            "--connections" -> {
+                if (connectionsPath != null) usage()
+                connectionsPath = path(args[index + 1])
+            }
             else -> usage()
         }
         index += 2
     }
 
+    val profiles = connectionsPath?.let { readSourceFile(it, ::readSourceProfiles) }.orEmpty()
+    val source = if (profiles.isEmpty()) null else PromqlSource(profiles, SourceHttp(profiles))
     val directory = DataDirectory.open(dataDir)
     val store = RunBundleStore(directory)
     val service = AnalysisService(store, EngineConfig())
     val jobs =
         try {
-            AnalysisJobs(parallelism, service::analyze)
+            AnalysisJobs(parallelism) { request, progress, cancelled ->
+                analyzeWithSources(service, request, source, progress, cancelled)
+            }
         } catch (failure: Exception) {
             directory.close()
             throw failure
         }
     val server =
         try {
-            startLocalServer(LocalApiContext(store, jobs))
+            startLocalServer(LocalApiContext(store, jobs, profiles))
         } catch (failure: Exception) {
             jobs.close()
             directory.close()
@@ -286,6 +321,20 @@ private fun ui(args: List<String>): Int {
     } finally {
         runCatching { Runtime.getRuntime().removeShutdownHook(shutdownHook) }
         close()
+    }
+}
+
+private fun <T> readSourceFile(
+    path: Path,
+    read: (java.io.InputStream) -> T,
+): T {
+    requireRegularFile(path, EXIT_INVALID_INPUT, "SOURCE_FILE_INVALID")
+    return try {
+        Files.newInputStream(path, LinkOption.NOFOLLOW_LINKS).use(read)
+    } catch (failure: IllegalArgumentException) {
+        throw CliFailure(EXIT_INVALID_INPUT, failure.message?.takeIf { Regex("SOURCE_[A-Z_]+").matches(it) } ?: "SOURCE_CONFIG_INVALID")
+    } catch (_: IOException) {
+        throw CliFailure(EXIT_INVALID_INPUT, "SOURCE_READ_ERROR")
     }
 }
 
@@ -370,9 +419,9 @@ private fun defaultDataDir(): Path = Path.of(System.getProperty("user.home"), ".
 private fun usage(): Nothing =
     throw CliFailure(
         EXIT_USAGE,
-        "Usage: ltv ui [--data-dir <path>] [--analysis-parallelism <n>] | " +
+        "Usage: ltv ui [--data-dir <path>] [--analysis-parallelism <n>] [--connections <profiles.json>] | " +
             "ltv analyze <input> [--policy <policy.json>] [--resources <snapshot.json>] " +
-            "[--correlation <plan.json>] [--data-dir <path>] | " +
+            "[--correlation <plan.json>] [--connections <profiles.json> --source <source.json>] [--data-dir <path>] | " +
             "ltv policy validate <policy.json> | ltv report <run-id> <analysis-id> --format json|html|asciidoc [--data-dir <path>]",
     )
 

@@ -12,6 +12,8 @@ import io.ltverdict.metrics.UtcLoadMetricsAccumulator
 import io.ltverdict.metrics.WindowMetricsAccumulator
 import io.ltverdict.metrics.byteSize
 import io.ltverdict.metrics.toJsonObject
+import io.ltverdict.sources.SourceAcquisition
+import io.ltverdict.sources.SourceRequest
 import io.ltverdict.storage.AcceptedInput
 import io.ltverdict.storage.RunBundleStore
 import kotlinx.serialization.json.buildJsonArray
@@ -28,6 +30,8 @@ internal data class AnalysisRequest(
     val mode: AnalysisMode = AnalysisMode.STANDARD,
     val resources: ResourceValidation.Valid? = null,
     val diagnostics: DiagnosticValidation.Valid? = null,
+    val sourceRequest: SourceRequest? = null,
+    val sourceAcquisition: SourceAcquisition? = null,
 )
 
 internal data class AnalysisOutcome(
@@ -48,6 +52,10 @@ internal class AnalysisService(
     ): AnalysisOutcome {
         if (request.mode != AnalysisMode.STANDARD) throw IllegalArgumentException("UNSUPPORTED_ANALYSIS_MODE")
         checkCancelled()
+        require(request.sourceRequest == null) { "SOURCE_ACQUISITION_REQUIRED" }
+        request.sourceAcquisition?.let {
+            require(request.resources?.semanticSha256 == it.snapshot.semanticSha256) { "SOURCE_SNAPSHOT_MISMATCH" }
+        }
         request.resources?.let { resources ->
             require(resources.snapshot.loadInputSha256 == request.input.sha256) { "RESOURCE_LOAD_HASH_MISMATCH" }
         }
@@ -56,7 +64,24 @@ internal class AnalysisService(
             validateDiagnosticBinding(diagnostics, resources).firstOrNull()?.let { throw IllegalArgumentException(it.code) }
         }
 
-        val identity = analysisIdentity(request.input, request.policy, engineConfig, request.resources, request.diagnostics)
+        val acquisitionHash =
+            request.sourceAcquisition?.let { acquisition ->
+                sha256Hex(
+                    canonicalJson(
+                        buildJsonObject {
+                            put("evidence", acquisition.evidence)
+                            put(
+                                "artifacts",
+                                buildJsonObject {
+                                    acquisition.artifacts.toSortedMap().forEach { (name, bytes) -> put(name, sha256Hex(bytes)) }
+                                },
+                            )
+                        },
+                    ),
+                )
+            }
+        val identity =
+            analysisIdentity(request.input, request.policy, engineConfig, request.resources, request.diagnostics, acquisitionHash)
         val analysisId = sha256Hex(identity)
         store.readAnalysis(request.input.runId, analysisId)?.let { stored ->
             processedBytes(request.input.sizeBytes)
@@ -81,12 +106,14 @@ internal class AnalysisService(
                             evaluation.evidence + diagnostic.evidence,
                     )
             }
+            request.sourceAcquisition?.let { evaluation = evaluation.copy(evidence = evaluation.evidence + it.evidence) }
             val result = analysisResult(request.input.runId, RunValidity.INVALID, evaluation)
             val resourceBytes = request.resources?.rawBytes()
             val diagnosticBytes = request.diagnostics?.rawBytes()
             val directory =
                 store.writeAnalysisAtomically(request.input.runId, analysisId) { staging ->
                     checkCancelled()
+                    writeAcquisition(staging, request.sourceAcquisition, checkCancelled)
                     Files.write(staging.resolve(IDENTITY_FILE), identity, StandardOpenOption.CREATE_NEW, StandardOpenOption.WRITE)
                     Files.write(staging.resolve(RESULT_FILE), result, StandardOpenOption.CREATE_NEW, StandardOpenOption.WRITE)
                     resourceBytes?.let {
@@ -270,6 +297,7 @@ internal class AnalysisService(
                     evidence = evaluation.evidence + diagnostic.evidence,
                 )
         }
+        request.sourceAcquisition?.let { evaluation = evaluation.copy(evidence = evaluation.evidence + it.evidence) }
         val result = analysisResult(request.input.runId, first.validity, evaluation)
         val resourceBytes = request.resources?.rawBytes()
         val diagnosticBytes = request.diagnostics?.rawBytes()
@@ -285,6 +313,7 @@ internal class AnalysisService(
         checkCancelled()
         val directory =
             store.writeAnalysisAtomically(request.input.runId, analysisId) { staging ->
+                writeAcquisition(staging, request.sourceAcquisition, checkCancelled)
                 listOf(
                     IDENTITY_FILE to identity,
                     RUN_FILE to run,
@@ -311,6 +340,20 @@ internal class AnalysisService(
                 }
             }
         return AnalysisOutcome(request.input.runId, analysisId, result, directory)
+    }
+}
+
+private fun writeAcquisition(
+    staging: Path,
+    acquisition: SourceAcquisition?,
+    checkCancelled: () -> Unit,
+) {
+    acquisition?.artifacts?.forEach { (name, bytes) ->
+        checkCancelled()
+        require(name == "source-acquisition.json" || Regex("source-response-[0-9]{1,2}\\.json").matches(name)) {
+            "SOURCE_ARTIFACT_NAME_INVALID"
+        }
+        Files.write(staging.resolve(name), bytes, StandardOpenOption.CREATE_NEW, StandardOpenOption.WRITE)
     }
 }
 

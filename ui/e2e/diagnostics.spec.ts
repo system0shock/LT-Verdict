@@ -26,6 +26,7 @@ async function fixtureApi(page: Page) {
     const path = new URL(route.request().url()).pathname
     let body: unknown
     if (path === '/api/bootstrap') body = { csrf_token: 'ui-test', max_upload_bytes: 1000000 }
+    else if (path === '/api/sources') body = { profiles: [] }
     else if (path === '/api/runs') body = { runs: [run], next_after: null }
     else if (path === '/api/baseline') body = { baseline }
     else if (path.endsWith('/analyses')) body = { analyses: [{ analysis_id: reference.analysis_id, policy_sha256: 'c'.repeat(64), policy_verdict: 'NO_POLICY', run_validity: 'VALID' }], next_after: null }

@@ -5,6 +5,12 @@ import { resolve } from 'node:path'
 
 const root = resolve(fileURLToPath(new URL('../..', import.meta.url)))
 const readJson = async (path) => JSON.parse(await readFile(resolve(root, path), 'utf8'))
+const sourceSchema = await readJson('docs/contracts/sources/v1/source-request.schema.json')
+const validateSource = new Ajv2020({ strict: false }).compile(sourceSchema)
+const sourceExample = await readJson('docs/contracts/sources/v1/request.example.json')
+for (const [value, expected] of [[sourceExample, true], [{ ...sourceExample, url: 'http://unconfigured' }, false], [{ ...sourceExample, step_ms: 999 }, false]]) {
+  if (validateSource(value) !== expected) throw new Error(`source request schema: ${JSON.stringify(validateSource.errors)}`)
+}
 const manifest = await readJson('fixtures/slice1/manifest.json')
 const schema = await readJson('docs/contracts/policy/v1/policy.schema.json')
 const validate = new Ajv2020({ strict: false }).compile(schema)

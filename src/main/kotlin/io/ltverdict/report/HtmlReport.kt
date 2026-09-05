@@ -35,6 +35,7 @@ internal fun renderHtmlReport(
         }
     val diagnosticSections =
         listOf(
+            "source_summary" to "Source acquisition",
             "diagnostic_summary" to "Diagnostic analysis",
             "correlation_pair" to "Correlations",
             "anomaly_check" to "Anomaly checks",

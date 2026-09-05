@@ -1,13 +1,16 @@
 package io.ltverdict.core
 
 import io.ltverdict.metrics.MetricsConfig
+import io.ltverdict.sources.SourceAcquisition
 import io.ltverdict.storage.AcceptedInput
 import io.ltverdict.storage.DataDirectory
 import io.ltverdict.storage.RunBundleStore
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
+import kotlinx.serialization.json.put
 import org.junit.jupiter.api.Assertions.assertArrayEquals
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
@@ -26,6 +29,34 @@ import java.util.HexFormat
 class AnalysisServiceTest {
     @TempDir
     lateinit var tempDir: Path
+
+    @Test
+    fun `acquisition artifacts and status are immutable and distinct from offline replay`() =
+        withService { store, service ->
+            val input = accept(store, OUT_OF_ORDER_CSV.encodeToByteArray(), "online.jtl")
+            val resource = resources(resourceJson(input.sha256, "online", "0.8").encodeToByteArray())
+            val evidence =
+                buildJsonObject {
+                    put("id", "source-summary")
+                    put("type", "source_summary")
+                    put("status", "PARTIAL")
+                }
+            val artifacts =
+                mapOf("source-acquisition.json" to canonicalJson(evidence), "source-response-0.json" to "{}".encodeToByteArray())
+            val acquisition = SourceAcquisition(resource, evidence, artifacts)
+            val request = AnalysisRequest(input, passPolicy(), resources = resource, sourceAcquisition = acquisition)
+            val online = service.analyze(request)
+            val stored = store.readAnalysis(input.runId, online.analysisId)!!
+            assertTrue(stored.artifacts.map { it.path }.containsAll(artifacts.keys))
+            artifacts.forEach { (name, bytes) -> assertArrayEquals(bytes, Files.readAllBytes(stored.path.resolve(name))) }
+            val onlineResult = Json.parseToJsonElement(online.canonicalResult.decodeToString()).jsonObject
+            assertTrue(onlineResult.getValue("evidence").jsonArray.contains(evidence))
+            assertArrayEquals(online.canonicalResult, service.analyze(request).canonicalResult)
+            val replay = service.analyze(AnalysisRequest(input, passPolicy(), resources = resource))
+            assertNotEquals(online.analysisId, replay.analysisId)
+            assertEquals(result(online, "policy_verdict"), result(replay, "policy_verdict"))
+            assertFalse(Files.exists(replay.analysisDirectory.resolve("source-acquisition.json")))
+        }
 
     @Test
     fun `standard analysis uses the final two-pass window and commits the complete bundle`() =

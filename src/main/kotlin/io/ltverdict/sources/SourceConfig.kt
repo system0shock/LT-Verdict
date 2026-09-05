@@ -1,0 +1,535 @@
+package io.ltverdict.sources
+
+import io.ltverdict.core.MAX_LABEL_KEY_BYTES
+import io.ltverdict.core.MAX_LABEL_VALUE_BYTES
+import io.ltverdict.core.MAX_POINTS_PER_SERIES
+import io.ltverdict.core.ResourceAggregation
+import io.ltverdict.core.ResourceOperator
+import io.ltverdict.core.ResourceRole
+import io.ltverdict.core.ResourceRuleEffect
+import io.ltverdict.core.ResourceRuleV1
+import io.ltverdict.core.StrictJsonScanner
+import io.ltverdict.ingest.MAX_TIMESTAMP_EPOCH_MILLIS
+import kotlinx.serialization.SerializationException
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonNull
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
+import java.io.IOException
+import java.io.InputStream
+import java.math.BigDecimal
+import java.net.URI
+import java.nio.ByteBuffer
+import java.nio.charset.CharacterCodingException
+import java.nio.charset.CodingErrorAction
+import java.nio.charset.StandardCharsets
+
+internal enum class SourceKind(
+    val wireName: String,
+) {
+    PROMETHEUS("prometheus"),
+    VICTORIA_METRICS("victoria_metrics"),
+}
+
+internal enum class SourceTransport(
+    val wireName: String,
+) {
+    DIRECT("direct"),
+    GRAFANA_PROXY("grafana_proxy"),
+}
+
+internal sealed interface SourceAuth {
+    data object None : SourceAuth
+
+    data class Bearer(
+        val tokenEnv: String,
+    ) : SourceAuth
+
+    data class Basic(
+        val usernameEnv: String,
+        val passwordEnv: String,
+    ) : SourceAuth
+}
+
+internal data class SourceGovernor(
+    val requestsPerSecond: Double = 0.5,
+    val burst: Int = 1,
+    val maxConcurrent: Int = 1,
+    val timeoutMillis: Long = 30_000,
+    val maxAttempts: Int = 3,
+    val honorRetryAfter: Boolean = true,
+    val maxRequestsPerRun: Int? = null,
+)
+
+internal data class SourceQuery(
+    val id: String,
+    val expression: String,
+    val metric: String,
+    val unit: String,
+    val entity: String,
+    val role: ResourceRole,
+    val aggregation: ResourceAggregation,
+    val labels: Map<String, String>,
+)
+
+internal data class SourceProfile(
+    val id: String,
+    val sourceKind: SourceKind,
+    val transport: SourceTransport,
+    val baseUrl: URI,
+    val datasourceUid: String?,
+    val auth: SourceAuth = SourceAuth.None,
+    val allowInsecureHttp: Boolean = false,
+    val governor: SourceGovernor = SourceGovernor(),
+    val queries: List<SourceQuery>,
+    val rules: List<ResourceRuleV1> = emptyList(),
+)
+
+internal data class SourceRequest(
+    val profileId: String,
+    val startEpochMillis: Long,
+    val endEpochMillis: Long,
+    val stepMillis: Long,
+)
+
+internal class SourceBudget(
+    val maxRequests: Int? = null,
+) {
+    @Volatile
+    var requestCount: Int = 0
+        private set
+
+    @Volatile
+    var retries: Int = 0
+        private set
+
+    @Volatile
+    var throttleWaitMillis: Long = 0
+        private set
+
+    @Volatile
+    var capExceeded: Boolean = false
+        private set
+
+    init {
+        require(maxRequests == null || maxRequests >= 0) { "SOURCE_INVALID_BUDGET" }
+    }
+
+    @Synchronized
+    internal fun reserveAttempt(retry: Boolean): Boolean {
+        if (maxRequests != null && requestCount >= maxRequests) {
+            capExceeded = true
+            return false
+        }
+        requestCount++
+        if (retry) retries++
+        return true
+    }
+
+    @Synchronized
+    internal fun addThrottleWait(millis: Long) {
+        if (millis <= 0) return
+        throttleWaitMillis =
+            try {
+                Math.addExact(throttleWaitMillis, millis)
+            } catch (_: ArithmeticException) {
+                Long.MAX_VALUE
+            }
+    }
+}
+
+internal class SourceHttpFailure(
+    val code: String,
+) : RuntimeException(code)
+
+internal fun readSourceProfiles(source: InputStream): List<SourceProfile> =
+    readSourceInput(source, MAX_SOURCE_CONFIG_BYTES, "CONFIG") { text ->
+        scanSourceJson(text, "source connections", "SOURCE_CONFIG_INVALID")
+        parseProfiles(Json.parseToJsonElement(text))
+    }
+
+internal fun readSourceRequest(source: InputStream): SourceRequest =
+    readSourceInput(source, MAX_SOURCE_REQUEST_BYTES, "REQUEST") { text ->
+        scanSourceJson(text, "source request", "SOURCE_REQUEST_INVALID")
+        parseRequest(Json.parseToJsonElement(text))
+    }
+
+private fun parseProfiles(element: JsonElement): List<SourceProfile> {
+    val root = element.sourceObject()
+    root.rejectUnknown(setOf("schema_version", "connections"))
+    if (root.sourceString("schema_version") != "source-connections.v1") configInvalid()
+    val values = root.sourceArray("connections")
+    if (values.isEmpty() || values.size > MAX_SOURCE_PROFILES) configInvalid()
+    val ids = HashSet<String>()
+    return values.map { value ->
+        val profile = parseProfile(value)
+        if (!ids.add(profile.id)) configInvalid()
+        profile
+    }
+}
+
+private fun parseProfile(element: JsonElement): SourceProfile {
+    val value = element.sourceObject()
+    value.rejectUnknown(
+        setOf(
+            "id",
+            "source_kind",
+            "transport",
+            "base_url",
+            "datasource_uid",
+            "auth",
+            "allow_insecure_http",
+            "governor",
+            "queries",
+            "rules",
+        ),
+    )
+    val id = value.sourceText("id", MAX_IDENTIFIER_BYTES)
+    val sourceKind = SourceKind.entries.find { it.wireName == value.sourceString("source_kind") } ?: configInvalid()
+    val transport = SourceTransport.entries.find { it.wireName == value.sourceString("transport") } ?: configInvalid()
+    val baseUrl = parseBaseUrl(value.sourceString("base_url"))
+    val datasourceUid = value.optionalString("datasource_uid")
+    when (transport) {
+        SourceTransport.DIRECT -> if (datasourceUid != null) configInvalid()
+        SourceTransport.GRAFANA_PROXY -> {
+            if (datasourceUid == null || datasourceUid in setOf(".", "..") || !SAFE_PATH_SEGMENT.matches(datasourceUid)) configInvalid()
+        }
+    }
+    val auth = value["auth"]?.let(::parseAuth) ?: SourceAuth.None
+    val allowInsecureHttp = value.optionalBoolean("allow_insecure_http") ?: false
+    if (baseUrl.scheme == "http" && auth != SourceAuth.None && !allowInsecureHttp) configInvalid()
+    val governor = value["governor"]?.let(::parseGovernor) ?: SourceGovernor()
+    val queries = parseQueries(value.sourceArray("queries"))
+    val rules = value.optionalArray("rules")?.let { parseRules(it, queries) }.orEmpty()
+    return SourceProfile(id, sourceKind, transport, baseUrl, datasourceUid, auth, allowInsecureHttp, governor, queries, rules)
+}
+
+private fun parseAuth(element: JsonElement): SourceAuth {
+    val value = element.sourceObject()
+    return when (value.sourceString("type")) {
+        "none" -> {
+            value.rejectUnknown(setOf("type"))
+            SourceAuth.None
+        }
+
+        "bearer" -> {
+            value.rejectUnknown(setOf("type", "token_env"))
+            SourceAuth.Bearer(value.sourceEnvironmentName("token_env"))
+        }
+
+        "basic" -> {
+            value.rejectUnknown(setOf("type", "username_env", "password_env"))
+            SourceAuth.Basic(value.sourceEnvironmentName("username_env"), value.sourceEnvironmentName("password_env"))
+        }
+
+        else -> configInvalid()
+    }
+}
+
+private fun parseGovernor(element: JsonElement): SourceGovernor {
+    val value = element.sourceObject()
+    value.rejectUnknown(
+        setOf(
+            "requests_per_second",
+            "burst",
+            "max_concurrent",
+            "timeout_ms",
+            "max_attempts",
+            "honor_retry_after",
+            "max_requests_per_run",
+        ),
+    )
+    val requestsPerSecond = value.optionalDecimal("requests_per_second")?.toDouble() ?: 0.5
+    val burst = value.optionalInt("burst") ?: 1
+    val maxConcurrent = value.optionalInt("max_concurrent") ?: 1
+    val timeoutMillis = value.optionalLong("timeout_ms") ?: 30_000
+    val maxAttempts = value.optionalInt("max_attempts") ?: 3
+    val honorRetryAfter = value.optionalBoolean("honor_retry_after") ?: true
+    val maxRequestsPerRun = value.optionalInt("max_requests_per_run")
+    if (!requestsPerSecond.isFinite() || requestsPerSecond <= 0.0 || requestsPerSecond > MAX_REQUESTS_PER_SECOND) configInvalid()
+    if (burst !in 1..MAX_BURST || maxConcurrent !in 1..MAX_CONCURRENT) configInvalid()
+    if (timeoutMillis !in 1..MAX_TIMEOUT_MILLIS || maxAttempts !in 1..MAX_ATTEMPTS) configInvalid()
+    if (maxRequestsPerRun != null && maxRequestsPerRun !in 0..MAX_REQUESTS_PER_RUN) configInvalid()
+    return SourceGovernor(
+        requestsPerSecond,
+        burst,
+        maxConcurrent,
+        timeoutMillis,
+        maxAttempts,
+        honorRetryAfter,
+        maxRequestsPerRun,
+    )
+}
+
+private fun parseQueries(values: JsonArray): List<SourceQuery> {
+    if (values.isEmpty() || values.size > MAX_SOURCE_QUERIES) configInvalid()
+    val ids = HashSet<String>()
+    return values.map { element ->
+        val value = element.sourceObject()
+        value.rejectUnknown(setOf("id", "expression", "metric", "unit", "entity", "role", "aggregation", "labels"))
+        val id = value.sourceText("id", MAX_IDENTIFIER_BYTES)
+        if (!ids.add(id)) configInvalid()
+        val expression = value.sourceText("expression", MAX_QUERY_BYTES)
+        if (!expression.contains(INTERVAL_PLACEHOLDER)) configInvalid()
+        val role = ResourceRole.entries.find { it.wireName == value.sourceString("role") } ?: configInvalid()
+        val aggregation =
+            ResourceAggregation.entries.find { it.wireName == value.sourceString("aggregation") } ?: configInvalid()
+        SourceQuery(
+            id,
+            expression,
+            value.sourceText("metric", MAX_IDENTIFIER_BYTES),
+            value.sourceText("unit", MAX_IDENTIFIER_BYTES),
+            value.sourceText("entity", MAX_IDENTIFIER_BYTES),
+            role,
+            aggregation,
+            value["labels"]?.let(::parseLabels).orEmpty(),
+        )
+    }
+}
+
+private fun parseLabels(element: JsonElement): Map<String, String> {
+    val value = element.sourceObject()
+    if (value.size > MAX_LABELS) configInvalid()
+    return value.mapValues { (key, element) ->
+        validateText(key, MAX_LABEL_KEY_BYTES)
+        val label = element as? JsonPrimitive ?: configInvalid()
+        if (!label.isString) configInvalid()
+        validateText(label.content, MAX_LABEL_VALUE_BYTES)
+    }
+}
+
+private fun parseRules(
+    values: JsonArray,
+    queries: List<SourceQuery>,
+): List<ResourceRuleV1> {
+    if (values.size > MAX_RESOURCE_RULES) configInvalid()
+    val ids = HashSet<String>()
+    val queryById = queries.associateBy(SourceQuery::id)
+    return values.map { element ->
+        val value = element.sourceObject()
+        value.rejectUnknown(setOf("id", "series_id", "unit", "operator", "threshold", "min_consecutive_cells", "effect"))
+        val id = value.sourceText("id", MAX_IDENTIFIER_BYTES)
+        if (!ids.add(id)) configInvalid()
+        val seriesId = value.sourceText("series_id", MAX_IDENTIFIER_BYTES)
+        val unit = value.sourceText("unit", MAX_IDENTIFIER_BYTES)
+        if (queryById[seriesId]?.unit != unit) configInvalid()
+        val operator = ResourceOperator.entries.find { it.wireName == value.sourceString("operator") } ?: configInvalid()
+        val threshold = value.sourceDecimal("threshold")
+        if (threshold.precision() > MAX_DECIMAL_PRECISION || maxOf(threshold.scale(), 0) > MAX_DECIMAL_SCALE) configInvalid()
+        if (threshold.abs() > MAX_DECIMAL_MAGNITUDE) configInvalid()
+        val minimum = value.sourceInt("min_consecutive_cells")
+        if (minimum !in 1..MAX_POINTS_PER_SERIES) configInvalid()
+        val effect = ResourceRuleEffect.entries.find { it.wireName == value.sourceString("effect") } ?: configInvalid()
+        ResourceRuleV1(id, seriesId, unit, operator, threshold, minimum, effect)
+    }
+}
+
+private fun parseRequest(element: JsonElement): SourceRequest =
+    try {
+        val value = element.sourceObject()
+        value.rejectUnknown(setOf("schema_version", "profile_id", "start_epoch_ms", "end_epoch_ms", "step_ms"))
+        if (value.sourceString("schema_version") != "source-request.v1") requestInvalid()
+        val profileId = value.sourceText("profile_id", MAX_IDENTIFIER_BYTES, ::requestInvalid)
+        val start = value.sourceLong("start_epoch_ms", ::requestInvalid)
+        val end = value.sourceLong("end_epoch_ms", ::requestInvalid)
+        val step = value.sourceLong("step_ms", ::requestInvalid)
+        if (start !in 0 until MAX_TIMESTAMP_EPOCH_MILLIS || end !in 1..MAX_TIMESTAMP_EPOCH_MILLIS || end <= start) {
+            requestInvalid()
+        }
+        if (step < 1_000 || (end - start) % step != 0L) requestInvalid()
+        if ((end - start) / step !in 1..MAX_POINTS_PER_SERIES.toLong()) requestInvalid()
+        SourceRequest(profileId, start, end, step)
+    } catch (_: SourceInputFailure) {
+        requestInvalid()
+    }
+
+private fun parseBaseUrl(value: String): URI {
+    val uri =
+        try {
+            URI(value)
+        } catch (_: Exception) {
+            configInvalid()
+        }
+    val scheme = uri.scheme?.lowercase() ?: configInvalid()
+    if (scheme !in setOf("http", "https") || uri.isOpaque || uri.host == null || uri.port == 0 || uri.port > 65_535) configInvalid()
+    if (uri.rawUserInfo != null || uri.rawQuery != null || uri.rawFragment != null || '%' in (uri.rawPath ?: "")) configInvalid()
+    val path = uri.path.orEmpty()
+    if (path.split('/').any { it == "." || it == ".." }) configInvalid()
+    return try {
+        URI(scheme, null, uri.host.lowercase(), uri.port, path, null, null)
+    } catch (_: Exception) {
+        configInvalid()
+    }
+}
+
+private inline fun <T> readSourceInput(
+    source: InputStream,
+    maxBytes: Int,
+    subject: String,
+    parse: (String) -> T,
+): T =
+    try {
+        val bytes = source.readNBytes(maxBytes + 1)
+        if (bytes.size > maxBytes) sourceInputFailure("SOURCE_${subject}_TOO_LARGE")
+        parse(decodeUtf8(bytes, subject))
+    } catch (failure: SourceInputFailure) {
+        throw failure
+    } catch (_: IOException) {
+        sourceInputFailure("SOURCE_${subject}_READ_ERROR")
+    } catch (_: SerializationException) {
+        sourceInputFailure("SOURCE_${subject}_INVALID")
+    } catch (_: IllegalArgumentException) {
+        sourceInputFailure("SOURCE_${subject}_INVALID")
+    }
+
+private fun scanSourceJson(
+    text: String,
+    subject: String,
+    failureCode: String,
+) {
+    StrictJsonScanner(text, MAX_JSON_DEPTH, MAX_NUMERIC_TOKEN_BYTES, MAX_NUMERIC_EXPONENT, subject) { _, _, _ ->
+        sourceInputFailure(failureCode)
+    }.scan()
+}
+
+private fun decodeUtf8(
+    bytes: ByteArray,
+    subject: String,
+): String =
+    try {
+        StandardCharsets.UTF_8
+            .newDecoder()
+            .onMalformedInput(CodingErrorAction.REPORT)
+            .onUnmappableCharacter(CodingErrorAction.REPORT)
+            .decode(ByteBuffer.wrap(bytes))
+            .toString()
+    } catch (_: CharacterCodingException) {
+        sourceInputFailure("SOURCE_${subject}_INVALID_UTF8")
+    }
+
+private fun JsonElement.sourceObject(): JsonObject = this as? JsonObject ?: configInvalid()
+
+private fun JsonObject.sourceArray(name: String): JsonArray = this[name] as? JsonArray ?: configInvalid()
+
+private fun JsonObject.optionalArray(name: String): JsonArray? {
+    val value = this[name] ?: return null
+    return value as? JsonArray ?: configInvalid()
+}
+
+private fun JsonObject.sourceString(name: String): String =
+    (this[name] as? JsonPrimitive)?.takeIf(JsonPrimitive::isString)?.content ?: configInvalid()
+
+private fun JsonObject.optionalString(name: String): String? {
+    val value = this[name] ?: return null
+    return (value as? JsonPrimitive)?.takeIf(JsonPrimitive::isString)?.content ?: configInvalid()
+}
+
+private fun JsonObject.sourceEnvironmentName(name: String): String =
+    sourceString(name).also { if (!ENVIRONMENT_NAME.matches(it)) configInvalid() }
+
+private fun JsonObject.sourceText(
+    name: String,
+    maxBytes: Int,
+    invalid: () -> Nothing = ::configInvalid,
+): String {
+    val value =
+        try {
+            sourceString(name)
+        } catch (_: SourceInputFailure) {
+            invalid()
+        }
+    return try {
+        validateText(value, maxBytes)
+    } catch (_: SourceInputFailure) {
+        invalid()
+    }
+}
+
+private fun validateText(
+    value: String,
+    maxBytes: Int,
+): String {
+    if (value.isEmpty() || value.any(Char::isISOControl) || value.encodeToByteArray().size > maxBytes) configInvalid()
+    return value
+}
+
+private fun JsonObject.optionalBoolean(name: String): Boolean? {
+    val value = this[name] ?: return null
+    if (value !is JsonPrimitive || value.isString) configInvalid()
+    return value.content.toBooleanStrictOrNull() ?: configInvalid()
+}
+
+private fun JsonObject.sourceDecimal(name: String): BigDecimal {
+    val value = this[name] as? JsonPrimitive ?: configInvalid()
+    if (value.isString || value === JsonNull || value.content in setOf("true", "false")) configInvalid()
+    return try {
+        BigDecimal(value.content)
+    } catch (_: NumberFormatException) {
+        configInvalid()
+    }
+}
+
+private fun JsonObject.optionalDecimal(name: String): BigDecimal? = if (name in this) sourceDecimal(name) else null
+
+private fun JsonObject.sourceLong(
+    name: String,
+    invalid: () -> Nothing = ::configInvalid,
+): Long =
+    try {
+        sourceDecimal(name).longValueExact()
+    } catch (_: ArithmeticException) {
+        invalid()
+    } catch (_: SourceInputFailure) {
+        invalid()
+    }
+
+private fun JsonObject.optionalLong(name: String): Long? = if (name in this) sourceLong(name) else null
+
+private fun JsonObject.sourceInt(name: String): Int =
+    try {
+        sourceDecimal(name).intValueExact()
+    } catch (_: ArithmeticException) {
+        configInvalid()
+    }
+
+private fun JsonObject.optionalInt(name: String): Int? = if (name in this) sourceInt(name) else null
+
+private fun JsonObject.rejectUnknown(allowed: Set<String>) {
+    if (keys.any { it !in allowed }) configInvalid()
+}
+
+private fun configInvalid(): Nothing = sourceInputFailure("SOURCE_CONFIG_INVALID")
+
+private fun requestInvalid(): Nothing = sourceInputFailure("SOURCE_REQUEST_INVALID")
+
+private fun sourceInputFailure(code: String): Nothing = throw SourceInputFailure(code)
+
+private class SourceInputFailure(
+    code: String,
+) : IllegalArgumentException(code)
+
+private const val MAX_SOURCE_CONFIG_BYTES = 1_048_576
+private const val MAX_SOURCE_REQUEST_BYTES = 16 * 1024
+private const val MAX_SOURCE_PROFILES = 16
+private const val MAX_SOURCE_QUERIES = 32
+private const val MAX_RESOURCE_RULES = 256
+private const val MAX_LABELS = 16
+private const val MAX_IDENTIFIER_BYTES = 128
+private const val MAX_QUERY_BYTES = 65_536
+private const val MAX_JSON_DEPTH = 12
+private const val MAX_NUMERIC_TOKEN_BYTES = 64
+private const val MAX_NUMERIC_EXPONENT = 64
+private const val MAX_REQUESTS_PER_SECOND = 1_000.0
+private const val MAX_BURST = 1_000
+private const val MAX_CONCURRENT = 64
+private const val MAX_TIMEOUT_MILLIS = 300_000L
+private const val MAX_ATTEMPTS = 10
+private const val MAX_REQUESTS_PER_RUN = 1_000_000
+private const val MAX_DECIMAL_PRECISION = 32
+private const val MAX_DECIMAL_SCALE = 12
+private const val INTERVAL_PLACEHOLDER = "${'$'}__interval"
+private val MAX_DECIMAL_MAGNITUDE = BigDecimal("1000000000000000000")
+private val ENVIRONMENT_NAME = Regex("[A-Za-z_][A-Za-z0-9_]{0,127}")
+private val SAFE_PATH_SEGMENT = Regex("[A-Za-z0-9._~-]{1,128}")

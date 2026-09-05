@@ -30,6 +30,24 @@ export interface AnalysisPage {
   next_after: string | null
 }
 
+export interface SourceProfile {
+  id: string
+  source_kind: string
+  transport: string
+}
+
+export interface SourcesResponse {
+  profiles: SourceProfile[]
+}
+
+export interface SourceRequest {
+  schema_version: 'source-request.v1'
+  profile_id: string
+  start_epoch_ms: number
+  end_epoch_ms: number
+  step_ms: number
+}
+
 export interface PolicyError {
   code: string
   json_pointer: string
@@ -243,7 +261,21 @@ export interface WindowMetricSummaryEvidence {
   resource_bindings: unknown[]
 }
 
-export type AnalysisEvidence = MetricSummaryEvidence | PolicyCheckEvidence | DiagnosticEvidence | ResourceSummaryEvidence | WindowPolicySummaryEvidence | ResourcePolicyCheckEvidence | ResourceBindingEvidence | DiagnosticSummaryEvidence | CorrelationPairEvidence | AnomalyCheckEvidence | WindowMetricSummaryEvidence
+export interface SourceSummaryEvidence {
+  id: string
+  type: 'source_summary'
+  status: 'COMPLETE' | 'PARTIAL' | 'FAILED'
+  profile_id: string
+  source_kind: string
+  transport: string
+  queries: Array<{ id: string; status: string; reason?: string }>
+  request_count: number
+  retries: number
+  throttle_wait_ms: number
+  cap_exceeded: boolean
+}
+
+export type AnalysisEvidence = MetricSummaryEvidence | PolicyCheckEvidence | DiagnosticEvidence | ResourceSummaryEvidence | WindowPolicySummaryEvidence | ResourcePolicyCheckEvidence | ResourceBindingEvidence | DiagnosticSummaryEvidence | CorrelationPairEvidence | AnomalyCheckEvidence | WindowMetricSummaryEvidence | SourceSummaryEvidence
 
 export interface AnalysisResult {
   schema_version: 'analysis-result.v1'

@@ -2,8 +2,14 @@ package io.ltverdict.cli
 
 import io.ltverdict.core.PolicyValidation
 import io.ltverdict.core.validatePolicy
+import io.ltverdict.sources.ONLINE_LOAD
+import io.ltverdict.sources.ONLINE_SOURCE_REQUEST
+import io.ltverdict.sources.OnlineSourceFixture
+import io.ltverdict.sources.readSourceProfiles
+import io.ltverdict.sources.readSourceRequest
 import io.ltverdict.storage.DataDirectory
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import org.junit.jupiter.api.Assertions.assertEquals
@@ -22,6 +28,64 @@ import java.security.MessageDigest
 class CommandLineTest {
     @TempDir
     lateinit var tempDir: Path
+
+    @Test
+    fun `documented source files use the runtime contract`() {
+        val profiles = Files.newInputStream(Path.of("docs/contracts/sources/v1/connections.example.json")).use(::readSourceProfiles)
+        val request = Files.newInputStream(Path.of("docs/contracts/sources/v1/request.example.json")).use(::readSourceRequest)
+        assertEquals(profiles.single().id, request.profileId)
+    }
+
+    @Test
+    fun `CLI acquires resources and replays saved snapshot offline`() {
+        OnlineSourceFixture().use { fixture ->
+            val profiles = tempDir.resolve("connections.json")
+            val selection = tempDir.resolve("source.json")
+            val input = tempDir.resolve("online.jtl")
+            Files.writeString(profiles, fixture.profilesJson())
+            Files.writeString(selection, ONLINE_SOURCE_REQUEST)
+            Files.writeString(input, ONLINE_LOAD)
+            val data = tempDir.resolve("online-data")
+            val online =
+                run(
+                    "analyze",
+                    input.toString(),
+                    "--connections",
+                    profiles.toString(),
+                    "--source",
+                    selection.toString(),
+                    "--data-dir",
+                    data.toString(),
+                )
+            assertEquals(2, online.exitCode, online.stderr)
+            assertTrue(
+                Json.parseToJsonElement(online.stdout).jsonObject.getValue("evidence").jsonArray.any {
+                    it.jsonObject["type"]?.jsonPrimitive?.content ==
+                        "source_summary"
+                },
+            )
+            val analyses = data.resolve("runs/${online.stdout.json("run_id")}/analyses")
+            val saved = Files.list(analyses).use { it.findFirst().orElseThrow() }
+            assertTrue(Files.isRegularFile(saved.resolve("source-acquisition.json")))
+            val replay =
+                run(
+                    "analyze",
+                    input.toString(),
+                    "--resources",
+                    saved.resolve("resource-snapshot.json").toString(),
+                    "--data-dir",
+                    data.toString(),
+                )
+            assertEquals(online.exitCode, replay.exitCode, replay.stderr)
+            assertEquals(1, fixture.requests.get())
+            assertFalse(
+                Json.parseToJsonElement(replay.stdout).jsonObject.getValue("evidence").jsonArray.any {
+                    it.jsonObject["type"]?.jsonPrimitive?.content ==
+                        "source_summary"
+                },
+            )
+        }
+    }
 
     @Test
     fun `usage rejects exact syntax unknown flags and duplicate flags without stdout`() {

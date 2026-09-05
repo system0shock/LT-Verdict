@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import LoadCharts from './LoadCharts.vue'
-import type { AnalysisResult, Bucket } from './types'
+import type { AnalysisResult, Bucket, SourceSummaryEvidence } from './types'
 
 const props = defineProps<{
   result: AnalysisResult
@@ -28,6 +28,7 @@ const resourceSummaries = computed(() => evidence.value.filter((item) => item.ty
 const windowPolicySummaries = computed(() => evidence.value.filter((item) => item.type === 'window_policy_summary'))
 const resourceChecks = computed(() => evidence.value.filter((item) => item.type === 'resource_policy_check'))
 const resourceBindings = computed(() => evidence.value.filter((item) => item.type === 'resource_binding'))
+const sourceSummaries = computed(() => props.result.evidence.filter((item): item is SourceSummaryEvidence => item.type === 'source_summary'))
 const diagnosticSummaries = computed(() => props.result.evidence.filter((item) => item.type === 'diagnostic_summary'))
 const correlationPairs = computed(() => props.result.evidence.filter((item) => item.type === 'correlation_pair'))
 const anomalyChecks = computed(() => props.result.evidence.filter((item) => item.type === 'anomaly_check'))
@@ -435,6 +436,43 @@ function updateRange(name: 'update:range-start' | 'update:range-end', event: Eve
                 :data-status="formatOptional(item.status)"
               >{{ formatOptional(item.status) }}</span>
             </td><td>{{ formatOptional(item.reason) }}</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section
+    v-if="sourceSummaries.length"
+    id="source-acquisition"
+    data-testid="source-acquisition"
+    class="panel"
+    aria-labelledby="source-acquisition-title"
+  >
+    <div class="section-heading">
+      <p class="eyebrow">
+        Online source
+      </p><h2 id="source-acquisition-title">
+        Source acquisition
+      </h2>
+    </div>
+    <div
+      v-for="item in sourceSummaries"
+      :key="item.id"
+      class="table-wrap"
+    >
+      <table>
+        <thead><tr><th>Profile</th><th>Source</th><th>Status</th><th>Requests / retries</th><th>Throttle wait (ms)</th><th>Request cap</th></tr></thead>
+        <tbody><tr><td>{{ item.profile_id }}</td><td>{{ item.source_kind }} / {{ item.transport }}</td><td>{{ item.status }}</td><td>{{ item.request_count }} / {{ item.retries }}</td><td>{{ item.throttle_wait_ms }}</td><td>{{ item.cap_exceeded ? 'Exceeded' : 'Not exceeded' }}</td></tr></tbody>
+      </table>
+      <table>
+        <thead><tr><th>Query</th><th>Status</th><th>Reason</th></tr></thead>
+        <tbody>
+          <tr
+            v-for="query in item.queries"
+            :key="query.id"
+          >
+            <td>{{ query.id }}</td><td>{{ query.status }}</td><td>{{ query.reason ?? '—' }}</td>
           </tr>
         </tbody>
       </table>

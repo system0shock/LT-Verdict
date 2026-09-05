@@ -7,6 +7,10 @@
 
 ### Added
 
+- Opt-in Prometheus/VictoriaMetrics acquisition напрямую и через Grafana proxy:
+  профили с env credentials, общий bounded HTTP governor, snapshot/provenance,
+  статусы неполноты, CLI/UI и offline replay сохранённого snapshot.
+
 - Opt-in correlation plan: описательные Spearman/partial-rank связи,
   ограниченные лаги и explicit-reference аномальные эпизоды с порогами эффекта
   и длительности. Uncertainty не оценивается; диагностика не меняет SLA.

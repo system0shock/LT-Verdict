@@ -12,6 +12,8 @@ import type {
   PolicyValidation,
   RunPage,
   RunSummary,
+  SourceRequest,
+  SourcesResponse,
   WindowComparisonRequest,
 } from './types'
 
@@ -83,12 +85,15 @@ export function uploadInput(file: File, progress: (percent: number) => void): Pr
   })
 }
 
-export function createJob(runId: string, policy: Policy | null, resources?: File | null, diagnostics?: File | null): Promise<JobStatus> {
+export function createJob(runId: string, policy: Policy | null, resources?: File | null, diagnostics?: File | null, sourceRequest?: SourceRequest | null): Promise<JobStatus> {
   const body = new FormData()
   body.append('run_id', runId)
   if (policy) body.append('policy', new Blob([stringifyPolicy(policy)], { type: 'application/json' }), 'policy.json')
-  if (resources) body.append('resource_snapshot', resources)
-  if (diagnostics) body.append('correlation_plan', diagnostics)
+  if (sourceRequest) body.append('source_request', new Blob([JSON.stringify(sourceRequest)], { type: 'application/json' }), 'source-request.json')
+  else {
+    if (resources) body.append('resource_snapshot', resources)
+    if (diagnostics) body.append('correlation_plan', diagnostics)
+  }
   return request('/api/jobs', { method: 'POST', headers: mutationHeaders(), body })
 }
 
@@ -102,6 +107,10 @@ export function cancelJob(jobId: string): Promise<JobStatus> {
 
 export function getResult(runId: string, analysisId: string): Promise<AnalysisResult> {
   return request(`/api/runs/${encodeURIComponent(runId)}/analyses/${encodeURIComponent(analysisId)}/result`)
+}
+
+export function listSources(): Promise<SourcesResponse> {
+  return request('/api/sources')
 }
 
 export function getBaseline(): Promise<{ baseline: BaselineSelection | null }> {

@@ -42,6 +42,7 @@ internal fun renderAsciiDocReport(
             objectsSection("Resource policy checks", resourceChecks)
         }
         listOf(
+            "source_summary" to "Source acquisition",
             "diagnostic_summary" to "Diagnostic analysis",
             "correlation_pair" to "Correlations",
             "anomaly_check" to "Anomaly checks",

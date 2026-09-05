@@ -1,0 +1,106 @@
+# Онлайн-источники: Prometheus, VictoriaMetrics и Grafana proxy
+
+Первая поставка использует read-only PromQL `query_range`. InfluxDB,
+PostgreSQL и OpenSearch следуют отдельно; Grafana dashboard discovery и panel
+transformations не поддерживаются. Боевой plugin/auth route нужно проверить
+на вашем стенде. Без connections file приложение не выполняет acquisition.
+
+## Запуск
+
+Скопируйте [пример профилей](../contracts/sources/v1/connections.example.json),
+задайте адрес и запросы своего стенда. В UI:
+
+```powershell
+.\build\install\ltv\bin\ltv.bat ui --connections connections.json
+```
+
+Выберите профиль и UTC start/end в epoch milliseconds, step в milliseconds.
+Интервал должен состоять из полных cells, step >= 1000 и укладываться в прогон.
+Вместо online selection по-прежнему можно загрузить resource snapshot.
+
+CLI использует [пример source request](../contracts/sources/v1/request.example.json):
+
+```powershell
+.\build\install\ltv\bin\ltv.bat analyze input.jtl --connections connections.json --source source.json --data-dir data
+```
+
+Профили загружаются при запуске; изменение файла требует перезапуска backend.
+`source_kind`: `prometheus` или `victoria_metrics`; `transport`: `direct` или
+`grafana_proxy`. Direct добавляет `/api/v1/query_range` к `base_url` (VM tenant
+prefix сохраняется). Grafana добавляет
+`/api/datasources/proxy/uid/{datasource_uid}/api/v1/query_range` к base URL Grafana.
+Subpath установки задаётся в base URL. Redirects и произвольные URLs из UI запрещены.
+
+## Метрики и время
+
+Каждый query задаёт id, expression, metric, unit, entity, role, aggregation и
+необязательные ожидаемые labels. Ответ должен содержать ровно одну серию;
+несколько серий — ошибка, не автоматическая агрегация. Сохранённые labels —
+фактические labels ответа; ожидаемые проверяются как subset. Пустой ответ — missing.
+
+`$__interval` в expression заменяется на step в ms. Для interval_mean обычно
+нужен `avg_over_time(metric[$__interval])`, для interval_rate —
+`rate(counter[$__interval])`. Корректность выражения и единиц задаёт автор
+профиля: приложение не доказывает семантику произвольного PromQL и не конвертирует
+проценты/байты/секунды по имени метрики. Правила используют единицы результата.
+
+Запрашиваются правые границы `start+step` ... `end`; ответ на границе `t+step`
+относится к snapshot cell `[t,t+step)`. Реальные scrape/rate особенности
+источника сохраняются, интерполяции нет. NaN/Inf и gaps не становятся нулями;
+duplicate/off-grid timestamps, histograms и неоднозначные labels дают явную ошибку.
+Непустые source warnings в первой поставке также отклоняют query (`SOURCE_WARNINGS`):
+частично отброшенные источником данные не выдаются за полный ответ.
+
+## Credentials и limits
+
+Auth по умолчанию `{"type":"none"}`. Bearer:
+`{"type":"bearer","token_env":"LTV_METRICS_TOKEN"}`; Basic:
+`{"type":"basic","username_env":"LTV_METRICS_USER","password_env":"LTV_METRICS_PASSWORD"}`.
+Значения задаются environment процесса backend, не в JSON/UI. TLS verification
+всегда включена. Credentials по HTTP требуют `allow_insecure_http:true`;
+используйте HTTPS вне доверенного локального теста.
+
+Governor defaults: `requests_per_second:0.5`, `burst:1`, `max_concurrent:1`,
+`timeout_ms:30000`, `max_attempts:3`, `honor_retry_after:true`.
+`max_requests_per_run` необязателен, скрытого request cap нет.
+Один origin (scheme/host/effective port) разделяет strictest budget всех
+настроенных профилей, jobs и retries. Первый запрос после старта ждёт interval.
+
+Config <= 1 MiB/16 profiles/32 queries; source request <= 16 KiB; response
+<= 16 MiB, acquisition raw total <= 64 MiB. Snapshot <= 16 MiB,
+100000 points/series, 500000 cells; остальные limits проверяет общий validator.
+Timeout/retries/body read отменяются вместе с job. HTTP error bodies не публикуются.
+
+## Результат и offline replay
+
+`source_summary` evidence показывает COMPLETE/PARTIAL/FAILED и статусы запросов,
+request_count/retries/throttle_wait_ms/cap_exceeded. Failed query сохраняется
+all-null серией: соответствующий ресурсный SLA не получает ложный PASS.
+Бизнес-анализ доступен независимо от отсутствующих метрик.
+Если сумма нормализованных серий превышает snapshot byte limit, данные заменяются
+проверенным all-null snapshot с `SOURCE_SNAPSHOT_LIMIT_EXCEEDED`; успешные raw
+ответы остаются в артефактах. Полный анализ нагрузки при этом не теряется.
+
+Analysis directory атомарно содержит `resource-snapshot.json`,
+`source-acquisition.json` и успешные `source-response-N.json` с manifest hashes.
+Profiles/credentials там не сохраняются. Источник данных всё равно считается
+недоверенным: labels/raw metrics могут содержать служебные данные стенда.
+
+Скачайте snapshot из сохранённого анализа либо возьмите файл из analysis directory:
+
+```powershell
+.\build\install\ltv\bin\ltv.bat analyze input.jtl --resources saved-resource-snapshot.json --data-dir data
+```
+
+Это offline анализ с теми же metric/SLA facts, но отдельной identity без acquisition
+provenance. Открытие старого результата также не выполняет HTTP requests.
+Для correlation plan сначала получите snapshot hash, затем запускайте offline
+`--resources ... --correlation ...`: online acquisition и correlation plan в одном
+запросе не смешиваются, потому что план привязан к конкретному snapshot.
+
+Private API: `GET /api/sources` выдаёт только id/source_kind/transport;
+`POST /api/jobs` принимает optional file part `source_request` вместо
+`resource_snapshot`; `GET /api/runs/{runId}/analyses/{analysisId}/resource-snapshot`
+скачивает существующий проверенный артефакт. Existing Origin/CSRF/size guards действуют.
+
+Решение: [ADR 0007](../adr/0007-opt-in-online-sources.md).

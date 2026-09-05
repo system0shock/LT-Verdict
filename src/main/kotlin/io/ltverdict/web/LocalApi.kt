@@ -43,6 +43,9 @@ import io.ltverdict.jobs.JobStatus
 import io.ltverdict.jobs.SubmitResult
 import io.ltverdict.report.renderAsciiDocReport
 import io.ltverdict.report.renderHtmlReport
+import io.ltverdict.sources.SourceProfile
+import io.ltverdict.sources.SourceRequest
+import io.ltverdict.sources.readSourceRequest
 import io.ltverdict.storage.AcceptedInput
 import io.ltverdict.storage.RunBundleStore
 import kotlinx.coroutines.Dispatchers
@@ -72,6 +75,7 @@ import java.util.HexFormat
 internal data class LocalApiContext(
     val store: RunBundleStore,
     val jobs: AnalysisJobs,
+    val sourceProfiles: List<SourceProfile> = emptyList(),
 )
 
 internal fun Application.installLocalApi(context: LocalApiContext) {
@@ -217,11 +221,42 @@ internal fun Application.installLocalApi(context: LocalApiContext) {
 
         post("/api/jobs") {
             call.requireMultipart()
-            val request = receiveJob(call, context.store)
+            val request = receiveJob(call, context.store, context.sourceProfiles)
             when (val submitted = context.jobs.submit(request)) {
                 is SubmitResult.Accepted -> call.respondJson(submitted.status.toJson(), HttpStatusCode.Accepted)
                 SubmitResult.Busy -> conflict("BUSY", "Analysis queue is full")
             }
+        }
+
+        get("/api/sources") {
+            call.requireOnlyQueries()
+            call.respondJson(
+                buildJsonObject {
+                    put(
+                        "profiles",
+                        buildJsonArray {
+                            context.sourceProfiles.forEach { profile ->
+                                add(
+                                    buildJsonObject {
+                                        put("id", profile.id)
+                                        put("source_kind", profile.sourceKind.wireName)
+                                        put("transport", profile.transport.wireName)
+                                    },
+                                )
+                            }
+                        },
+                    )
+                },
+            )
+        }
+
+        get("/api/runs/{runId}/analyses/{analysisId}/resource-snapshot") {
+            call.requireOnlyQueries()
+            val stored = context.store.requireAnalysis(call)
+            if (stored.artifacts.none { it.path == "resource-snapshot.json" }) notFound("Resource snapshot was not found")
+            val bytes = withContext(Dispatchers.IO) { Files.readAllBytes(stored.path.resolve("resource-snapshot.json")) }
+            call.response.headers.append(HttpHeaders.ContentDisposition, "attachment; filename=\"resource-snapshot.json\"")
+            call.respondBytes(bytes, ContentType.Application.Json, HttpStatusCode.OK)
         }
 
         get("/api/jobs/{jobId}") {
@@ -499,6 +534,7 @@ private suspend fun receivePolicy(call: ApplicationCall): PolicyValidation {
 private suspend fun receiveJob(
     call: ApplicationCall,
     store: RunBundleStore,
+    sourceProfiles: List<SourceProfile>,
 ): AnalysisRequest {
     val contentLength =
         call.request.contentLength()
@@ -508,6 +544,7 @@ private suspend fun receiveJob(
     var policy: PolicyValidation.Valid? = null
     var resources: ResourceValidation.Valid? = null
     var diagnostics: DiagnosticValidation.Valid? = null
+    var sourceRequest: SourceRequest? = null
     var policySeen = false
     var resourcesSeen = false
     var diagnosticsSeen = false
@@ -518,6 +555,14 @@ private suspend fun receiveJob(
             try {
                 if (++parts > 4) malformed("Job multipart body has too many parts")
                 when {
+                    part is PartData.FileItem && part.name == "source_request" && sourceRequest == null && !invalidParts -> {
+                        sourceRequest =
+                            try {
+                                withContext(Dispatchers.IO) { readSourceRequest(part.provider().toInputStream()) }
+                            } catch (_: IllegalArgumentException) {
+                                malformed("Source request is invalid")
+                            }
+                    }
                     part is PartData.FormItem && part.name == "run_id" && runId == null && !invalidParts -> {
                         if (part.value.isEmpty() || part.value.encodeToByteArray().size > MAX_RUN_ID_BYTES) {
                             malformed("run_id is invalid")
@@ -595,6 +640,10 @@ private suspend fun receiveJob(
         malformed("Multipart body is malformed")
     }
     if (invalidParts || runId == null || !RUN_ID.matches(runId)) malformed("Job multipart body is invalid")
+    sourceRequest?.let { selection ->
+        if (resourcesSeen || diagnosticsSeen) malformed("Online acquisition cannot be combined with snapshot or correlation plan")
+        if (sourceProfiles.none { it.id == selection.profileId }) malformed("Source profile is not configured")
+    }
     val input =
         try {
             withContext(Dispatchers.IO) { store.requireInput(checkNotNull(runId)) }
@@ -622,7 +671,7 @@ private suspend fun receiveJob(
         val errors = validateDiagnosticBinding(plan, snapshot)
         if (errors.isNotEmpty()) throw InvalidDiagnostics(errors)
     }
-    return AnalysisRequest(input, policy, resources = resources, diagnostics = diagnostics)
+    return AnalysisRequest(input, policy, resources = resources, diagnostics = diagnostics, sourceRequest = sourceRequest)
 }
 
 private fun PolicyValidation.failureResponse(): ApiFailure? =

@@ -143,7 +143,8 @@ fabricating identity fields. No runtime behavior change is included here.
 - `npx --offline --yes markdownlint-cli2@0.23.2 "**/*.md"` — 39 files, no issues.
 - `git diff --check` — clean; local private-key/AWS-key pattern scan found no matches.
 - Whole-concern review: no Critical, three Important corrected in one batch;
-  scoped fix review pending. The Minor typed-scope debt is recorded above.
+  scoped review of `aee8b11..ae7fabf` confirmed all three addressed, no new
+  breakage or blockers. The Minor typed-scope debt is recorded above.
 - After corrections: three regression tests RED/GREEN; fresh sequential
   `ktlintFormat`, `check installDist` — OK, JVM 161 tests, 159 passed, same two
   Windows skips. UI lint/contracts, Markdown and diff/secret checks — OK.

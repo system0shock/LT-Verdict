@@ -9,6 +9,7 @@ import io.ltverdict.metrics.MetricsResourceLimitExceeded
 import io.ltverdict.metrics.NormalizedBucket
 import io.ltverdict.metrics.TransactionIdentity
 import io.ltverdict.metrics.WindowMetricsAccumulator
+import io.ltverdict.metrics.byteSize
 import io.ltverdict.metrics.toJsonObject
 import io.ltverdict.storage.AcceptedInput
 import io.ltverdict.storage.RunBundleStore
@@ -93,20 +94,35 @@ internal class AnalysisService(
                     .toSet()
             }
         val transactionCandidates = requestedTransactions.associateWith { mutableListOf<TransactionIdentity>() }
+        var retainedCandidateBytes = 0L
         val first =
-            parseInput(
-                request.input,
-                { sample ->
-                    firstStart = minOf(firstStart ?: sample.startedAtEpochMillis, sample.startedAtEpochMillis)
-                    firstEnd = maxOf(firstEnd ?: sample.endedAtEpochMillis, sample.endedAtEpochMillis)
-                    transactionCandidates[sample.label]?.let { candidates ->
-                        val identity = TransactionIdentity(sample.groupPath.toList(), sample.label, sample.kind)
-                        if (identity !in candidates && candidates.size < 2) candidates += identity
-                    }
-                },
-                { bytes -> processedBytes(minOf(bytes, request.input.sizeBytes) / 2) },
-                checkCancelled,
-            )
+            try {
+                parseInput(
+                    request.input,
+                    { sample ->
+                        firstStart = minOf(firstStart ?: sample.startedAtEpochMillis, sample.startedAtEpochMillis)
+                        firstEnd = maxOf(firstEnd ?: sample.endedAtEpochMillis, sample.endedAtEpochMillis)
+                        transactionCandidates[sample.label]?.let { candidates ->
+                            if (candidates.size < 2) {
+                                val identity = TransactionIdentity(sample.groupPath, sample.label, sample.kind)
+                                if (identity in candidates) return@let
+                                val bytes = identity.byteSize()
+                                if (bytes > engineConfig.metrics.maxTransactionIdentityBytes ||
+                                    bytes > engineConfig.metrics.maxTotalTransactionIdentityBytes - retainedCandidateBytes
+                                ) {
+                                    throw MetricsResourceLimitExceeded()
+                                }
+                                retainedCandidateBytes += bytes
+                                candidates += identity.copy(groupPath = identity.groupPath.toList())
+                            }
+                        }
+                    },
+                    { bytes -> processedBytes(minOf(bytes, request.input.sizeBytes) / 2) },
+                    checkCancelled,
+                )
+            } catch (_: MetricsResourceLimitExceeded) {
+                return invalidOutcome(listOf(Diagnostic("RESOURCE_LIMIT_EXCEEDED", "Metric resource limit exceeded")))
+            }
 
         if (first.validity == RunValidity.INVALID) {
             return invalidOutcome(first.diagnostics)
@@ -185,7 +201,7 @@ internal class AnalysisService(
             }
         val result = analysisResult(request.input.runId, first.validity, evaluation)
         val resourceBytes = request.resources?.rawBytes()
-        val run = runMetadata(request.input, runStart, runEnd, resourceBytes?.let(::sha256Hex))
+        val run = runMetadata(request.input, runStart, runEnd, analysisId, resourceBytes?.let(::sha256Hex))
         checkCancelled()
         val directory =
             store.writeAnalysisAtomically(request.input.runId, analysisId) { staging ->
@@ -218,6 +234,7 @@ private fun runMetadata(
     input: AcceptedInput,
     runStart: Long,
     runEnd: Long,
+    analysisId: String,
     resourceSha256: String? = null,
 ): ByteArray =
     canonicalJson(
@@ -241,7 +258,7 @@ private fun runMetadata(
                         add(
                             buildJsonObject {
                                 put("type", "resource_snapshot")
-                                put("path", RESOURCE_FILE)
+                                put("path", "analyses/$analysisId/$RESOURCE_FILE")
                                 put("sha256", sha256)
                             },
                         )

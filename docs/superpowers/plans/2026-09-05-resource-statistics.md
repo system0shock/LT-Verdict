@@ -118,6 +118,20 @@ No stage exit, merge, push or full-MVP completion claim.
 
 ## Verification record — 2026-09-05
 
+Final-review correction scope: apply existing per-identity/aggregate byte limits
+before first-pass policy transaction candidates are retained. Keep `run.json`
+input paths uniformly run-root-relative: resource input references
+`analyses/<analysis_id>/resource-snapshot.json`. No new limits, dependencies or
+contract fields; add focused limit and artifact-resolution regression tests.
+Align integer parsing with the existing JSON Schema: accept integral-valued
+decimal/exponent tokens through bounded exact conversion, reject fractions.
+
+Non-blocking review debt: unresolved/ambiguous transaction `policy_check.scope`
+contains a selector label without `group_path`/`sample_kind`, while the UI type
+currently requires those identity fields. Rendering and verdicts tolerate this;
+model unresolved selector scope explicitly in a later contract cleanup without
+fabricating identity fields. No runtime behavior change is included here.
+
 - `gradlew.bat -PnpmOffline=true --offline --no-daemon ktlintFormat -x npmCi` — OK.
 - `gradlew.bat -PnpmOffline=true --offline --no-daemon check installDist -x npmCi`
   — OK; JVM 158 tests, 156 passed, two existing Windows symlink skips.
@@ -128,5 +142,11 @@ No stage exit, merge, push or full-MVP completion claim.
   tools.test_generate_jtl -v` — OK, four tests.
 - `npx --offline --yes markdownlint-cli2@0.23.2 "**/*.md"` — 39 files, no issues.
 - `git diff --check` — clean; local private-key/AWS-key pattern scan found no matches.
-- Whole-concern review pending. Remote CI/performance probe and real VM/Grafana
-  not run for this local branch; Stage 1/full MVP gates are not closed.
+- Whole-concern review: no Critical, three Important corrected in one batch;
+  scoped fix review pending. The Minor typed-scope debt is recorded above.
+- After corrections: three regression tests RED/GREEN; fresh sequential
+  `ktlintFormat`, `check installDist` — OK, JVM 161 tests, 159 passed, same two
+  Windows skips. UI lint/contracts, Markdown and diff/secret checks — OK.
+  UI runtime was unchanged by the correction batch; the 27/27 browser run stands.
+- Remote CI/performance probe and real VM/Grafana not run for this local branch;
+  Stage 1/full MVP gates are not closed.

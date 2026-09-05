@@ -21,6 +21,8 @@ const validateResource = new Ajv2020({ strict: false }).compile(resourceSchema)
 const resourceExample = await readJson('docs/contracts/resources/v1/examples/valid/basic.json')
 for (const [name, value, expected] of [
   ['basic resources', resourceExample, true],
+  ['decimal integer grid', { ...resourceExample, ...JSON.parse('{"step_ms":1000.0}') }, true],
+  ['exponent integer grid', { ...resourceExample, ...JSON.parse('{"step_ms":1e3}') }, true],
   ['unknown resource field', { ...resourceExample, token: 'not-allowed' }, false],
   ['subsecond resource grid', { ...resourceExample, step_ms: 100 }, false],
   ['empty resource grid', { ...resourceExample, point_count: 0 }, false],

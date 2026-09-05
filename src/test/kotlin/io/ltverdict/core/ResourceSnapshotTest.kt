@@ -74,6 +74,25 @@ class ResourceSnapshotTest {
     }
 
     @Test
+    fun `mathematically integral JSON numbers share canonical identity while fractions are rejected`() {
+        val ordinary = valid(snapshot().encodeToByteArray())
+        val equivalent =
+            valid(
+                snapshot()
+                    .replace("\"start_epoch_ms\":10000", "\"start_epoch_ms\":1e4")
+                    .replace("\"step_ms\":10000", "\"step_ms\":10000.0")
+                    .replace("\"point_count\":4", "\"point_count\":4.0")
+                    .replace("\"from_epoch_ms\":20000", "\"from_epoch_ms\":2e4")
+                    .replace("\"to_epoch_ms\":40000", "\"to_epoch_ms\":4.0e4")
+                    .encodeToByteArray(),
+            )
+
+        assertEquals(ordinary.semanticSha256, equivalent.semanticSha256)
+        assertEquals(ordinary.configSha256, equivalent.configSha256)
+        assertInvalid(snapshot().replace("\"step_ms\":10000", "\"step_ms\":10000.5"), "INVALID_TYPE", "/step_ms")
+    }
+
+    @Test
     fun `binding checks hash and run bounds and derives full-cell intersection`() {
         val explicit = valid(snapshot().encodeToByteArray()).snapshot
         val mismatch =

@@ -20,6 +20,8 @@ import org.junit.jupiter.api.io.TempDir
 import java.io.ByteArrayInputStream
 import java.nio.file.Files
 import java.nio.file.Path
+import java.security.MessageDigest
+import java.util.HexFormat
 
 class AnalysisServiceTest {
     @TempDir
@@ -302,6 +304,86 @@ class AnalysisServiceTest {
             assertEquals("RESOURCE_LOAD_HASH_MISMATCH", hashFailure.message)
             assertEquals("RESOURCE_WINDOW_OUTSIDE_RUN", windowFailure.message)
             assertFalse(Files.exists(analyses))
+        }
+
+    @Test
+    fun `first pass bounds transaction candidate identity bytes before retaining them`() {
+        val header = OUT_OF_ORDER_CSV.lineSequence().first()
+        val cases =
+            listOf(
+                Triple(
+                    MetricsConfig(maxTransactionIdentityBytes = 20),
+                    policy(
+                        """{"schema_version":"policy.v1","policy_id":"per-identity","rules":[{"id":"oversized","metric":"response_time_p95_ms","operator":"lte","threshold":1000,"scope":{"kind":"transaction","name":"oversized"}}]}""",
+                    ),
+                    listOf("oversized"),
+                ),
+                Triple(
+                    MetricsConfig(maxTransactionIdentityBytes = 100, maxTotalTransactionIdentityBytes = 30),
+                    policy(
+                        """{"schema_version":"policy.v1","policy_id":"total","rules":[{"id":"first","metric":"response_time_p95_ms","operator":"lte","threshold":1000,"scope":{"kind":"transaction","name":"first"}},{"id":"second","metric":"response_time_p95_ms","operator":"lte","threshold":1000,"scope":{"kind":"transaction","name":"second"}}]}""",
+                    ),
+                    listOf("first", "second"),
+                ),
+            )
+
+        cases.forEachIndexed { index, (metrics, candidatePolicy, labels) ->
+            withService(EngineConfig(metrics = metrics)) { store, service ->
+                val rows =
+                    labels.mapIndexed { row, label ->
+                        "17672256000${row}0,10,$label,200,OK,fixture,text,true,,0,0,1,1,null,0,0,0"
+                    }
+                val input =
+                    accept(store, (listOf(header) + rows + "malformed").joinToString("\n").encodeToByteArray(), "candidate-$index.jtl")
+                val raw = resourceJson(input.sha256, "candidate-$index", "1.0").encodeToByteArray()
+
+                val outcome = service.analyze(AnalysisRequest(input, candidatePolicy, resources = resources(raw)))
+                val result = Json.parseToJsonElement(outcome.canonicalResult.decodeToString()).jsonObject
+
+                assertEquals("INVALID", result.getValue("run_validity").jsonPrimitive.content)
+                assertEquals(
+                    listOf("RESOURCE_LIMIT_EXCEEDED"),
+                    result
+                        .getValue("analysis_coverage")
+                        .jsonObject
+                        .getValue("reasons")
+                        .jsonArray
+                        .map { it.jsonPrimitive.content },
+                )
+            }
+        }
+    }
+
+    @Test
+    fun `resource metadata path resolves from the run root and its hash matches the artifact`() =
+        withService { store, service ->
+            val input = accept(store, OUT_OF_ORDER_CSV.encodeToByteArray(), "resource-path.jtl")
+            val raw = resourceJson(input.sha256, "path", "1.0").encodeToByteArray()
+            val outcome = service.analyze(AnalysisRequest(input, null, resources = resources(raw)))
+            val inputs =
+                Json
+                    .parseToJsonElement(Files.readString(outcome.analysisDirectory.resolve("run.json")))
+                    .jsonObject
+                    .getValue("inputs")
+                    .jsonArray
+                    .map { it.jsonObject }
+            val runRoot = input.path.parent.parent
+            inputs.forEach { metadata ->
+                val path = Path.of(metadata.getValue("path").jsonPrimitive.content)
+                assertFalse(path.isAbsolute)
+                val storedBytes = Files.readAllBytes(runRoot.resolve(path).normalize())
+                assertEquals(
+                    HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(storedBytes)),
+                    metadata.getValue("sha256").jsonPrimitive.content,
+                )
+            }
+            val resourceInput = inputs.single { it.getValue("type").jsonPrimitive.content == "resource_snapshot" }
+            val relativePath = resourceInput.getValue("path").jsonPrimitive.content
+            val resolvedPath = runRoot.resolve(relativePath).normalize()
+
+            assertEquals("analyses/${outcome.analysisId}/$RESOURCE_FILE", relativePath)
+            assertEquals(outcome.analysisDirectory.resolve(RESOURCE_FILE), resolvedPath)
+            assertArrayEquals(raw, Files.readAllBytes(resolvedPath))
         }
 
     @Test

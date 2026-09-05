@@ -323,7 +323,7 @@ private fun emptySummary(windowMillis: Long): MetricSummary =
         latency = LatencySummary(0, 0, 0, 0),
     )
 
-private fun TransactionIdentity.byteSize(): Long {
+internal fun TransactionIdentity.byteSize(): Long {
     var bytes = 0L
     (groupPath + label + kind.name).forEach { component ->
         bytes =

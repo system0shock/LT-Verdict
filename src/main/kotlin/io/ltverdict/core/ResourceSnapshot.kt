@@ -542,8 +542,11 @@ private fun JsonObject.resourceLong(
     if (value !is JsonPrimitive || value.isString || value === JsonNull || value.content in setOf("true", "false")) {
         resourceFail("INVALID_TYPE", child, "$name must be an integer")
     }
-    validateResourceDecimal(value.content, child)
-    return value.content.toLongOrNull() ?: resourceFail("INVALID_TYPE", child, "$name must be an integer")
+    return try {
+        validateResourceDecimal(value.content, child).longValueExact()
+    } catch (_: ArithmeticException) {
+        resourceFail("INVALID_TYPE", child, "$name must be an integer")
+    }
 }
 
 private fun JsonObject.resourceInt(

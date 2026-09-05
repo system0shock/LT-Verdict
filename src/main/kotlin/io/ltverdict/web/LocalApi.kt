@@ -198,6 +198,40 @@ internal fun Application.installLocalApi(context: LocalApiContext) {
             call.respondBytes(report, contentType, HttpStatusCode.OK)
         }
 
+        get("/api/runs/{runId}/analyses") {
+            call.requireOnlyQueries("after", "limit")
+            val after = call.singleQuery("after")
+            val limit = call.intQuery("limit", DEFAULT_ANALYSIS_LIMIT, 1..MAX_ANALYSIS_LIMIT)
+            val page =
+                try {
+                    withContext(Dispatchers.IO) { context.store.listAnalyses(call.parameters["runId"].orEmpty(), after, limit) }
+                } catch (_: NoSuchElementException) {
+                    notFound("Run was not found")
+                } catch (_: IllegalArgumentException) {
+                    malformed("Analysis query is invalid")
+                }
+            call.respondJson(
+                buildJsonObject {
+                    put(
+                        "analyses",
+                        buildJsonArray {
+                            page.analyses.forEach { analysis ->
+                                add(
+                                    buildJsonObject {
+                                        put("analysis_id", analysis.analysisId)
+                                        put("policy_sha256", analysis.policySha256)
+                                        put("policy_verdict", analysis.policyVerdict)
+                                        put("run_validity", analysis.runValidity)
+                                    },
+                                )
+                            }
+                        },
+                    )
+                    put("next_after", page.nextAfter?.let(::JsonPrimitive) ?: JsonNull)
+                },
+            )
+        }
+
         get("/api/runs/{runId}/analyses/{analysisId}/buckets") {
             call.requireOnlyQueries("rollup", "from_ms", "to_ms", "limit")
             val rollup = call.singleQuery("rollup")?.toIntOrNull()
@@ -589,6 +623,8 @@ private const val MAX_POLICY_BYTES = 1_048_576
 private const val MAX_RUN_ID_BYTES = 128
 private const val DEFAULT_RUN_LIMIT = 100
 private const val MAX_RUN_LIMIT = 100
+private const val DEFAULT_ANALYSIS_LIMIT = 25
+private const val MAX_ANALYSIS_LIMIT = 100
 private const val DEFAULT_BUCKET_LIMIT = 500
 private const val MAX_BUCKET_LIMIT = 500
 private const val MAX_BUCKET_LATENCY_MILLIS = 86_400_000L

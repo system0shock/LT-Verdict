@@ -18,6 +18,18 @@ export interface RunPage {
   next_after: string | null
 }
 
+export interface AnalysisSummary {
+  analysis_id: string
+  policy_sha256: string
+  policy_verdict: AnalysisResult['policy_verdict']
+  run_validity: AnalysisResult['run_validity']
+}
+
+export interface AnalysisPage {
+  analyses: AnalysisSummary[]
+  next_after: string | null
+}
+
 export interface PolicyError {
   code: string
   json_pointer: string

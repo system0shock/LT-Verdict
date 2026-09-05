@@ -11,11 +11,12 @@ import {
   getBuckets,
   getJob,
   getResult,
+  listAnalyses,
   listRuns,
   uploadInput,
   validatePolicy,
 } from './api'
-import type { AnalysisResult, Bucket, JobStatus, Policy, PolicyError, RunSummary, Theme } from './types'
+import type { AnalysisResult, AnalysisSummary, Bucket, JobStatus, Policy, PolicyError, RunSummary, Theme } from './types'
 
 const theme = ref<Theme>(window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light')
 const inputFile = ref<File | null>(null)
@@ -29,12 +30,19 @@ const result = ref<AnalysisResult | null>(null)
 const buckets = ref<Bucket[]>([])
 const runs = ref<RunSummary[]>([])
 const currentRun = ref<RunSummary | null>(null)
+const analyses = ref<AnalysisSummary[]>([])
+const selectedAnalysisId = ref<string | null>(null)
+const nextRunAfter = ref<string | null>(null)
+const nextAnalysisAfter = ref<string | null>(null)
+const bucketNextFrom = ref<number | null>(null)
+const bucketPageFrom = ref(0)
 const completedAt = ref('')
 const errorMessage = ref('')
 const rollup = ref(1)
 const rangeStart = ref('')
 const rangeEnd = ref('')
 let analysisRevision = 0
+let bucketRevision = 0
 let policyRevision = 0
 
 const working = computed(() => job.value?.state === 'QUEUED' || job.value?.state === 'PROCESSING')
@@ -144,8 +152,12 @@ async function pollJob(revision: number) {
     job.value = await getJob(job.value.job_id)
   }
   if (revision !== analysisRevision || job.value?.state !== 'COMPLETE' || !job.value.analysis_id) return
-  result.value = await getResult(job.value.run_id, job.value.analysis_id)
+  selectedAnalysisId.value = job.value.analysis_id
+  const loaded = await getResult(job.value.run_id, selectedAnalysisId.value)
+  if (revision !== analysisRevision) return
+  result.value = loaded
   completedAt.value = new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'medium' }).format(new Date())
+  await refreshAnalyses(job.value.run_id)
   if (result.value.run_validity !== 'INVALID') await refreshBuckets()
 }
 
@@ -159,22 +171,78 @@ async function cancel() {
   }
 }
 
-async function refreshRuns() {
-  runs.value = (await listRuns()).runs
+async function refreshRuns(after?: string) {
+  const page = await listRuns(after)
+  runs.value = after ? [...runs.value, ...page.runs] : page.runs
+  nextRunAfter.value = page.next_after
 }
 
-async function refreshBuckets() {
-  if (!job.value?.analysis_id) return
-  const from = optionalNumber(rangeStart.value)
+async function selectRun(run: RunSummary) {
+  const revision = ++analysisRevision
+  currentRun.value = run
+  selectedAnalysisId.value = null
+  analyses.value = []
+  result.value = null
+  buckets.value = []
+  completedAt.value = ''
+  bucketNextFrom.value = null
+  errorMessage.value = ''
+  try {
+    await refreshAnalyses(run.run_id)
+    if (revision !== analysisRevision) return
+  } catch (failure) {
+    if (revision === analysisRevision) showError(failure)
+  }
+}
+
+async function refreshAnalyses(runId = currentRun.value?.run_id, after?: string) {
+  if (!runId) return
+  const page = await listAnalyses(runId, after)
+  if (currentRun.value?.run_id !== runId) return
+  analyses.value = after ? [...analyses.value, ...page.analyses] : page.analyses
+  nextAnalysisAfter.value = page.next_after
+}
+
+async function selectAnalysis(analysis: AnalysisSummary) {
+  const runId = currentRun.value?.run_id
+  if (!runId) return
+  const revision = ++analysisRevision
+  selectedAnalysisId.value = analysis.analysis_id
+  result.value = null
+  buckets.value = []
+  completedAt.value = ''
+  bucketNextFrom.value = null
+  errorMessage.value = ''
+  try {
+    const loaded = await getResult(runId, analysis.analysis_id)
+    if (revision !== analysisRevision || selectedAnalysisId.value !== analysis.analysis_id) return
+    result.value = loaded
+    if (loaded.run_validity !== 'INVALID') await refreshBuckets()
+  } catch (failure) {
+    if (revision === analysisRevision) showError(failure)
+  }
+}
+
+async function refreshBuckets(nextFrom?: number) {
+  const runId = currentRun.value?.run_id
+  const analysisId = selectedAnalysisId.value
+  if (!runId || !analysisId) return
+  const from = nextFrom ?? optionalNumber(rangeStart.value)
   const to = optionalNumber(rangeEnd.value)
   if (from === null || to === null) {
     errorMessage.value = 'Normalized-data range must use non-negative offsets from run start in milliseconds.'
     return
   }
+  const selectionRevision = analysisRevision
+  const revision = ++bucketRevision
   try {
-    buckets.value = (await getBuckets(job.value.run_id, job.value.analysis_id, rollup.value, from, to)).buckets
+    const page = await getBuckets(runId, analysisId, rollup.value, from, to)
+    if (selectionRevision !== analysisRevision || revision !== bucketRevision || selectedAnalysisId.value !== analysisId) return
+    buckets.value = page.buckets
+    bucketNextFrom.value = page.next_from_ms
+    bucketPageFrom.value = from ?? 0
   } catch (failure) {
-    showError(failure)
+    if (revision === analysisRevision) showError(failure)
   }
 }
 
@@ -231,8 +299,15 @@ function focusPolicy() {
             :key="run.run_id"
             :title="run.run_id"
           >
-            <span>{{ run.original_filename }}</span>
-            <small>{{ run.source_type }}</small>
+            <button
+              type="button"
+              :disabled="working"
+              :aria-pressed="currentRun?.run_id === run.run_id"
+              @click="selectRun(run)"
+            >
+              <span>{{ run.original_filename }}</span>
+              <small>{{ run.source_type }}</small>
+            </button>
           </li>
           <li
             v-if="runs.length === 0"
@@ -241,6 +316,52 @@ function focusPolicy() {
             No runs yet
           </li>
         </ul>
+        <button
+          v-if="nextRunAfter"
+          type="button"
+          @click="refreshRuns(nextRunAfter ?? undefined)"
+        >
+          More runs
+        </button>
+      </section>
+      <section
+        v-if="currentRun"
+        class="run-list-section"
+        aria-labelledby="analysis-list-title"
+      >
+        <h2 id="analysis-list-title">
+          Saved analyses
+        </h2>
+        <ul class="run-list">
+          <li
+            v-for="analysis in analyses"
+            :key="analysis.analysis_id"
+          >
+            <button
+              type="button"
+              :disabled="working"
+              :title="analysis.analysis_id"
+              :aria-pressed="selectedAnalysisId === analysis.analysis_id"
+              @click="selectAnalysis(analysis)"
+            >
+              <span>Analysis {{ analysis.analysis_id.slice(0, 12) }}</span>
+              <small>{{ analysis.policy_verdict }} · {{ analysis.run_validity }}</small>
+            </button>
+          </li>
+          <li
+            v-if="analyses.length === 0"
+            class="muted"
+          >
+            No saved analyses for this run.
+          </li>
+        </ul>
+        <button
+          v-if="nextAnalysisAfter"
+          type="button"
+          @click="refreshAnalyses(undefined, nextAnalysisAfter ?? undefined)"
+        >
+          More analyses
+        </button>
       </section>
     </aside>
 
@@ -305,6 +426,19 @@ function focusPolicy() {
           @update:range-end="rangeEnd = $event"
           @refresh-buckets="refreshBuckets"
         />
+        <p
+          v-if="result && result.run_validity !== 'INVALID'"
+          class="muted"
+        >
+          Showing buckets from {{ bucketPageFrom.toLocaleString() }} ms.
+          <button
+            v-if="bucketNextFrom !== null"
+            type="button"
+            @click="refreshBuckets(bucketNextFrom)"
+          >
+            Next bucket page
+          </button>
+        </p>
       </main>
     </div>
   </div>

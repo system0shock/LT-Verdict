@@ -1,5 +1,6 @@
 import type {
   AnalysisResult,
+  AnalysisPage,
   Bootstrap,
   BucketPage,
   JobStatus,
@@ -32,8 +33,16 @@ export async function bootstrap(): Promise<Bootstrap> {
   return value
 }
 
-export function listRuns(): Promise<RunPage> {
-  return request('/api/runs?limit=100')
+export function listRuns(after?: string): Promise<RunPage> {
+  const query = new URLSearchParams({ limit: '100' })
+  if (after) query.set('after', after)
+  return request(`/api/runs?${query}`)
+}
+
+export function listAnalyses(runId: string, after?: string): Promise<AnalysisPage> {
+  const query = new URLSearchParams({ limit: '25' })
+  if (after) query.set('after', after)
+  return request(`/api/runs/${encodeURIComponent(runId)}/analyses?${query}`)
 }
 
 export async function validatePolicy(policy: Policy | File): Promise<PolicyValidation> {

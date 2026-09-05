@@ -280,6 +280,13 @@ td:not(:first-child), th:not(:first-child) { font-family: "Cascadia Mono", Conso
 .bucket-controls { display: flex; flex-wrap: wrap; align-items: end; gap: 12px; margin-bottom: 16px; }
 .bucket-controls label { display: grid; gap: 4px; color: var(--text-muted); font-size: 12px; line-height: 18px; }
 .bucket-controls button { width: auto; }
+.load-charts { display: grid; gap: 12px; margin: 0 0 16px; }
+.load-charts figure { margin: 0; }
+.load-charts svg { display: block; width: 100%; height: auto; border: 1px solid var(--border); border-radius: 6px; background: var(--surface-muted); }
+.chart-axis { stroke: var(--text-muted); stroke-width: 1; }
+.chart-line { stroke: var(--info); stroke-width: 2; }
+.chart-point { fill: var(--info); }
+.chart-label { fill: var(--text-muted); font-size: 11px; }
 
 @media (max-width: 960px) {
   .app-shell, .app-layout { grid-template-columns: 1fr; }

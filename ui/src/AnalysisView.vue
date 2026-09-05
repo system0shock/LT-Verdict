@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue'
+import LoadCharts from './LoadCharts.vue'
 import type { AnalysisResult, Bucket } from './types'
 
 const props = defineProps<{
@@ -394,6 +395,10 @@ function updateRange(name: 'update:range-start' | 'update:range-end', event: Eve
         Refresh data
       </button>
     </div>
+    <LoadCharts
+      :buckets="buckets"
+      :rollup="rollup"
+    />
     <div class="table-wrap">
       <table>
         <thead><tr><th>Time bin</th><th>RPS</th><th>Errors</th><th>P95</th><th>Max latency</th><th>Data status</th></tr></thead>

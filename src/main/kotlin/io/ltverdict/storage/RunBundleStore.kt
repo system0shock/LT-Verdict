@@ -49,6 +49,18 @@ internal data class RunPage(
     val nextAfter: String?,
 )
 
+internal data class AnalysisSummary(
+    val analysisId: String,
+    val policySha256: String,
+    val policyVerdict: String,
+    val runValidity: String,
+)
+
+internal data class AnalysisPage(
+    val analyses: List<AnalysisSummary>,
+    val nextAfter: String?,
+)
+
 internal data class StoredArtifact(
     val path: String,
     val sizeBytes: Long,
@@ -145,6 +157,49 @@ internal class RunBundleStore(
         synchronized(dataDirectory.operationLock) {
             dataDirectory.requireOpen()
             readAnalysisUnlocked(runId, analysisId)
+        }
+
+    fun listAnalyses(
+        runId: String,
+        afterAnalysisId: String?,
+        limit: Int,
+    ): AnalysisPage =
+        synchronized(dataDirectory.operationLock) {
+            dataDirectory.requireOpen()
+            require(limit in 1..100) { "INVALID_PAGE_LIMIT" }
+            if (afterAnalysisId != null) requireAnalysisId(afterAnalysisId)
+            requireInputUnlocked(runId)
+            val analyses = dataDirectory.runs.resolve(runId).resolve("analyses")
+            if (!Files.exists(analyses, LinkOption.NOFOLLOW_LINKS)) return@synchronized AnalysisPage(emptyList(), null)
+            requireOwnedDirectory(analyses)
+
+            val names = PriorityQueue<String>(limit + 1, reverseOrder())
+            Files.newDirectoryStream(analyses).use { entries ->
+                entries.forEach { path ->
+                    val name = path.fileName.toString()
+                    if (SHA256.matches(name) &&
+                        (afterAnalysisId == null || name > afterAnalysisId) &&
+                        !Files.isSymbolicLink(path) &&
+                        Files.isDirectory(path, LinkOption.NOFOLLOW_LINKS)
+                    ) {
+                        names.add(name)
+                        if (names.size > limit + 1) names.remove()
+                    }
+                }
+            }
+            val selected = names.toList().sorted()
+            val returned = selected.take(limit).map { analysisId ->
+                val stored = readAnalysisUnlocked(runId, analysisId) ?: corrupt("listed analysis disappeared")
+                val identity = parseObject(Files.readAllBytes(requireOwnedFile(stored.path.resolve("identity.json"))), "analysis identity")
+                val result = parseObject(Files.readAllBytes(requireOwnedFile(stored.path.resolve("analysis-result.json"))), "analysis result")
+                AnalysisSummary(
+                    analysisId,
+                    identity.string("policy_sha256"),
+                    result.string("policy_verdict"),
+                    result.string("run_validity"),
+                )
+            }
+            AnalysisPage(returned, if (selected.size > limit) returned.last().analysisId else null)
         }
 
     fun writeAnalysisAtomically(

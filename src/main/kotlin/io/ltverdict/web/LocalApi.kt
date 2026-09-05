@@ -6,6 +6,7 @@ import io.ktor.http.HttpMethod
 import io.ktor.http.HttpStatusCode
 import io.ktor.http.content.PartData
 import io.ktor.http.content.forEachPart
+import io.ktor.http.withCharset
 import io.ktor.server.application.Application
 import io.ktor.server.application.ApplicationCall
 import io.ktor.server.application.ApplicationCallPipeline
@@ -31,6 +32,7 @@ import io.ltverdict.core.validatePolicy
 import io.ltverdict.jobs.AnalysisJobs
 import io.ltverdict.jobs.JobStatus
 import io.ltverdict.jobs.SubmitResult
+import io.ltverdict.report.renderHtmlReport
 import io.ltverdict.storage.AcceptedInput
 import io.ltverdict.storage.RunBundleStore
 import kotlinx.coroutines.Dispatchers
@@ -178,6 +180,22 @@ internal fun Application.installLocalApi(context: LocalApiContext) {
             val stored = context.store.requireAnalysis(call)
             val bytes = withContext(Dispatchers.IO) { Files.readAllBytes(stored.path.resolve(RESULT_FILE)) }
             call.respondBytes(bytes, ContentType.Application.Json, HttpStatusCode.OK)
+        }
+
+        get("/api/runs/{runId}/analyses/{analysisId}/report") {
+            call.requireOnlyQueries("format")
+            val format = call.singleQuery("format")
+            if (format !in setOf("json", "html")) malformed("format must be json or html")
+            val stored = context.store.requireAnalysis(call)
+            val bytes = withContext(Dispatchers.IO) { Files.readAllBytes(stored.path.resolve(RESULT_FILE)) }
+            val analysisId = stored.path.fileName.toString()
+            val report = if (format == "json") bytes else renderHtmlReport(bytes, analysisId)
+            call.response.headers.append(
+                HttpHeaders.ContentDisposition,
+                "attachment; filename=\"lt-verdict-$analysisId.$format\"",
+            )
+            val contentType = if (format == "json") ContentType.Application.Json else ContentType.Text.Html.withCharset(Charsets.UTF_8)
+            call.respondBytes(report, contentType, HttpStatusCode.OK)
         }
 
         get("/api/runs/{runId}/analyses/{analysisId}/buckets") {

@@ -5,6 +5,7 @@ import io.ltverdict.core.AnalysisService
 import io.ltverdict.core.EngineConfig
 import io.ltverdict.core.sha256Hex
 import io.ltverdict.jobs.AnalysisJobs
+import io.ltverdict.report.renderHtmlReport
 import io.ltverdict.storage.DataDirectory
 import io.ltverdict.storage.RunBundleStore
 import kotlinx.serialization.json.Json
@@ -356,6 +357,55 @@ class LocalApiTest {
                     400,
                 )
             }
+        }
+
+    @Test
+    fun `report downloads preserve result bytes and reject invalid queries without new analyses`() =
+        withServer { store, api ->
+            val input = store.acceptInput(ByteArrayInputStream(SPIKE_DROP.bytes()), SPIKE_DROP.filename)
+            api.bootstrap()
+            val submitted = api.createJob(input.runId)
+            val complete =
+                awaitComplete(
+                    api,
+                    submitted
+                        .jsonObject()
+                        .getValue("job_id")
+                        .jsonPrimitive.content,
+                )
+            val analysisId = complete.getValue("analysis_id").jsonPrimitive.content
+            val stored = checkNotNull(store.readAnalysis(input.runId, analysisId))
+            val resultBytes = Files.readAllBytes(stored.path.resolve("analysis-result.json"))
+            val before = Files.list(stored.path.parent).use { it.map { path -> path.fileName.toString() }.sorted().toList() }
+            val base = "/api/runs/${input.runId}/analyses/$analysisId/report"
+
+            for (format in listOf("json", "html")) {
+                val response = api.get("$base?format=$format")
+                assertEquals(200, response.statusCode())
+                assertEquals(
+                    "attachment; filename=\"lt-verdict-$analysisId.$format\"",
+                    response.headers().firstValue("Content-Disposition").orElseThrow(),
+                )
+                val expected = if (format == "json") resultBytes else renderHtmlReport(resultBytes, analysisId)
+                assertEquals(expected.decodeToString(), response.body())
+                assertTrue(
+                    response.headers().firstValue("Content-Type").orElseThrow().startsWith(
+                        if (format ==
+                            "json"
+                        ) {
+                            "application/json"
+                        } else {
+                            "text/html"
+                        },
+                    ),
+                )
+            }
+            for (query in listOf("", "?format=pdf", "?format=json&format=html", "?format=json&path=identity.json")) {
+                assertError(api.get(base + query), 400, "MALFORMED_REQUEST")
+            }
+            assertError(api.get("/api/runs/${input.runId}/analyses/${"0".repeat(64)}/report?format=json"), 404, "NOT_FOUND")
+            assertEquals(resultBytes.toList(), Files.readAllBytes(stored.path.resolve("analysis-result.json")).toList())
+            assertEquals(before, Files.list(stored.path.parent).use { it.map { path -> path.fileName.toString() }.sorted().toList() })
         }
 
     private fun withServer(

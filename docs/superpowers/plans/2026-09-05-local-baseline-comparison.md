@@ -186,7 +186,7 @@ npm --prefix ui run e2e -- e2e/baseline.spec.ts
   heuristic/rounding/N/A limitations, private file/routes and unchanged verdict.
 - [x] Mark only implemented baseline slice portion; N-run history, charts,
   transaction comparison, exports and policy gates are not complete.
-- [ ] Run fresh full gate, inspect full diff; one Sol review of this concern,
+- [x] Run fresh full gate, inspect full diff; one Sol review of this concern,
   then only scoped fixes and their covering checks. Record limitations and
   local-only publication status. No Stage 1 acceptance or MVP completion claim.
 
@@ -203,3 +203,14 @@ git diff --check
 
 Secret check uses existing tracked-file scan from `.github/workflows/runtime-quality.yml`.
 Report exact test results; remote CI for this unpublished branch is unverified.
+
+## Result — 2026-09-05
+
+Implemented and locally verified at `9e4ea52`: full `check installDist` PASS,
+130 JVM tests (128 passed, 2 Windows skips), full E2E 25/25; Kotlin/UI lint,
+typecheck, contracts, Slice0/Python, Markdown and secret-pattern checks PASS.
+One Sol Max review of `367abdc..9e4ea52`: READY, Critical 0, Important 0.
+Optional UI-minor remains report-only: an earlier error alert can persist after
+changing analysis, while comparison data is correctly cleared. No second full
+review or unrequested UI refactor. The branch/worktree stays local; remote CI,
+merge, Stage 1 acceptance and full MVP completion are not claimed.

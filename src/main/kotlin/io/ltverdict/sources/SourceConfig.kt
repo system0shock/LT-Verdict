@@ -32,6 +32,7 @@ internal enum class SourceKind(
     PROMETHEUS("prometheus"),
     VICTORIA_METRICS("victoria_metrics"),
     INFLUXDB("influxdb"),
+    OPENSEARCH("opensearch"),
 }
 
 internal enum class SourceTransport(
@@ -91,6 +92,7 @@ internal data class SourceProfile(
     val queries: List<SourceQuery>,
     val rules: List<ResourceRuleV1> = emptyList(),
     val database: String? = null,
+    val openSearch: OpenSearchMapping? = null,
 )
 
 internal data class SourceRequest(
@@ -186,6 +188,7 @@ private fun parseProfile(element: JsonElement): SourceProfile {
             "base_url",
             "datasource_uid",
             "database",
+            "opensearch",
             "auth",
             "allow_insecure_http",
             "governor",
@@ -203,6 +206,7 @@ private fun parseProfile(element: JsonElement): SourceProfile {
         SourceKind.INFLUXDB -> if (database == null) configInvalid()
         SourceKind.PROMETHEUS,
         SourceKind.VICTORIA_METRICS,
+        SourceKind.OPENSEARCH,
         -> if (database != null) configInvalid()
     }
     when (transport) {
@@ -215,9 +219,60 @@ private fun parseProfile(element: JsonElement): SourceProfile {
     val allowInsecureHttp = value.optionalBoolean("allow_insecure_http") ?: false
     if (baseUrl.scheme == "http" && auth != SourceAuth.None && !allowInsecureHttp) configInvalid()
     val governor = value["governor"]?.let(::parseGovernor) ?: SourceGovernor()
-    val queries = parseQueries(value.sourceArray("queries"), sourceKind)
+    val openSearch =
+        if (sourceKind == SourceKind.OPENSEARCH) {
+            if (transport != SourceTransport.DIRECT ||
+                listOf("queries", "rules", "database", "datasource_uid").any { it in value }
+            ) {
+                configInvalid()
+            }
+            parseOpenSearch(value["opensearch"] ?: configInvalid())
+        } else {
+            if ("opensearch" in value) configInvalid()
+            null
+        }
+    val queries = if (openSearch != null) emptyList() else parseQueries(value.sourceArray("queries"), sourceKind)
     val rules = value.optionalArray("rules")?.let { parseRules(it, queries) }.orEmpty()
-    return SourceProfile(id, sourceKind, transport, baseUrl, datasourceUid, auth, allowInsecureHttp, governor, queries, rules, database)
+    return SourceProfile(
+        id,
+        sourceKind,
+        transport,
+        baseUrl,
+        datasourceUid,
+        auth,
+        allowInsecureHttp,
+        governor,
+        queries,
+        rules,
+        database,
+        openSearch,
+    )
+}
+
+private fun parseOpenSearch(element: JsonElement): OpenSearchMapping {
+    val value = element.sourceObject()
+    value.rejectUnknown(
+        setOf(
+            "indices",
+            "timestamp_field",
+            "service_field",
+            "error_type_field",
+            "message_field",
+            "group_limit",
+            "samples_per_group",
+            "sample_message_bytes_max",
+        ),
+    )
+    return OpenSearchMapping(
+        value.sourceArray("indices").map { (it as? JsonPrimitive)?.takeIf(JsonPrimitive::isString)?.content ?: configInvalid() },
+        value.sourceString("timestamp_field"),
+        value.sourceString("service_field"),
+        value.sourceString("error_type_field"),
+        value.sourceString("message_field"),
+        value.optionalInt("group_limit") ?: 50,
+        value.optionalInt("samples_per_group") ?: 2,
+        value.optionalInt("sample_message_bytes_max") ?: 4096,
+    )
 }
 
 private fun parseAuth(element: JsonElement): SourceAuth {
@@ -296,6 +351,7 @@ private fun parseQueries(
         val expression = value.sourceText("expression", MAX_QUERY_BYTES)
         when (sourceKind) {
             SourceKind.INFLUXDB -> validateInfluxqlExpression(expression)
+            SourceKind.OPENSEARCH -> configInvalid()
             SourceKind.PROMETHEUS,
             SourceKind.VICTORIA_METRICS,
             -> if (!expression.contains(INTERVAL_PLACEHOLDER)) configInvalid()

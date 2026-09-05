@@ -16,6 +16,7 @@ import io.ltverdict.report.renderHtmlReport
 import io.ltverdict.sources.PromqlSource
 import io.ltverdict.sources.SourceHttp
 import io.ltverdict.sources.analyzeWithSources
+import io.ltverdict.sources.readOpenSearchContext
 import io.ltverdict.sources.readSourceProfiles
 import io.ltverdict.sources.readSourceRequest
 import io.ltverdict.storage.DataDirectory
@@ -74,6 +75,7 @@ private fun analyze(
     var diagnosticsPath: Path? = null
     var connectionsPath: Path? = null
     var sourcePath: Path? = null
+    var sourceContextPath: Path? = null
     var dataDir = defaultDataDir()
     var policySeen = false
     var dataDirSeen = false
@@ -101,6 +103,10 @@ private fun analyze(
                 if (sourcePath != null || index + 1 >= args.size) usage()
                 sourcePath = path(args[index + 1])
             }
+            "--source-context" -> {
+                if (sourceContextPath != null || index + 1 >= args.size) usage()
+                sourceContextPath = path(args[index + 1])
+            }
             "--data-dir" -> {
                 if (dataDirSeen || index + 1 >= args.size) usage()
                 dataDirSeen = true
@@ -113,7 +119,7 @@ private fun analyze(
 
     requireRegularFile(input, EXIT_INVALID_INPUT, "INVALID_INPUT")
     if ((sourcePath == null) != (connectionsPath == null)) usage()
-    if (sourcePath != null && (resourcesPath != null || diagnosticsPath != null)) {
+    if (sourcePath != null && (resourcesPath != null || diagnosticsPath != null || sourceContextPath != null)) {
         throw CliFailure(EXIT_INVALID_INPUT, "SOURCE_INPUT_CONFLICT: acquire first, then replay the saved snapshot with --correlation")
     }
     val profiles = connectionsPath?.let { readSourceFile(it, ::readSourceProfiles) }.orEmpty()
@@ -149,9 +155,20 @@ private fun analyze(
                     throw CliFailure(EXIT_INVALID_INPUT, failure.message ?: "INVALID_INPUT")
                 }
             try {
+                val context =
+                    sourceContextPath?.let { file ->
+                        readSourceFile(file) { readOpenSearchContext(it, accepted.sha256, resources) }
+                    }
                 analyzeWithSources(
                     AnalysisService(store, EngineConfig()),
-                    AnalysisRequest(accepted, policy, resources = resources, diagnostics = diagnostics, sourceRequest = sourceRequest),
+                    AnalysisRequest(
+                        accepted,
+                        policy,
+                        resources = resources,
+                        diagnostics = diagnostics,
+                        sourceRequest = sourceRequest,
+                        sourceAcquisition = context,
+                    ),
                     source,
                 ).canonicalResult
             } catch (failure: IllegalArgumentException) {
@@ -421,7 +438,8 @@ private fun usage(): Nothing =
         EXIT_USAGE,
         "Usage: ltv ui [--data-dir <path>] [--analysis-parallelism <n>] [--connections <profiles.json>] | " +
             "ltv analyze <input> [--policy <policy.json>] [--resources <snapshot.json>] " +
-            "[--correlation <plan.json>] [--connections <profiles.json> --source <source.json>] [--data-dir <path>] | " +
+            "[--correlation <plan.json>] [--source-context <context.json>] " +
+            "[--connections <profiles.json> --source <source.json>] [--data-dir <path>] | " +
             "ltv policy validate <policy.json> | ltv report <run-id> <analysis-id> --format json|html|asciidoc [--data-dir <path>]",
     )
 

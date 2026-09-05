@@ -198,15 +198,17 @@ class PromqlSourceTest {
                 requests.first(),
             )
             val series =
-                acquisition.snapshot.snapshot.series
+                requireNotNull(acquisition.snapshot)
+                    .snapshot.series
                     .associateBy { it.id }
             assertEquals(listOf(BigDecimal("1"), null), series.getValue("cpu").values)
             assertEquals(listOf(null, null), series.getValue("memory").values)
             assertEquals(listOf(null, null), series.getValue("labels").values)
-            assertEquals(listOf(rule), acquisition.snapshot.snapshot.rules)
+            assertEquals(listOf(rule), requireNotNull(acquisition.snapshot).snapshot.rules)
             assertEquals(
                 "full",
-                acquisition.snapshot.snapshot.windows
+                requireNotNull(acquisition.snapshot)
+                    .snapshot.windows
                     .single()
                     .id,
             )
@@ -341,7 +343,8 @@ class PromqlSourceTest {
             assertEquals("FAILED", acquisition.evidence.string("status"))
             assertEquals("SOURCE_SNAPSHOT_LIMIT_EXCEEDED", acquisition.evidence.queryStatus("cpu-0").second)
             assertTrue(
-                acquisition.snapshot.snapshot.series
+                requireNotNull(acquisition.snapshot)
+                    .snapshot.series
                     .all { series -> series.values.all { it == null } },
             )
             assertEquals(33, acquisition.artifacts.size)

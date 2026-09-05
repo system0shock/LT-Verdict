@@ -1,6 +1,8 @@
 package io.ltverdict.cli
 
+import com.sun.net.httpserver.HttpServer
 import io.ltverdict.core.PolicyValidation
+import io.ltverdict.core.sha256Hex
 import io.ltverdict.core.validatePolicy
 import io.ltverdict.sources.ONLINE_LOAD
 import io.ltverdict.sources.ONLINE_SOURCE_REQUEST
@@ -20,6 +22,7 @@ import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.io.TempDir
 import java.io.ByteArrayOutputStream
 import java.io.PrintStream
+import java.net.InetSocketAddress
 import java.nio.charset.StandardCharsets.UTF_8
 import java.nio.file.Files
 import java.nio.file.Path
@@ -34,6 +37,155 @@ class CommandLineTest {
         val profiles = Files.newInputStream(Path.of("docs/contracts/sources/v1/connections.example.json")).use(::readSourceProfiles)
         val request = Files.newInputStream(Path.of("docs/contracts/sources/v1/request.example.json")).use(::readSourceRequest)
         assertEquals(profiles.single().id, request.profileId)
+    }
+
+    @Test
+    fun `CLI acquires OpenSearch errors without fabricating resource metrics`() {
+        val server = HttpServer.create(InetSocketAddress("127.0.0.1", 0), 0)
+        var method = ""
+        var path = ""
+        var query = ""
+        var body = ""
+        server.createContext("/") { exchange ->
+            method = exchange.requestMethod
+            path = exchange.requestURI.path
+            query = exchange.requestURI.query
+            body = exchange.requestBody.readAllBytes().decodeToString()
+            val response =
+                """{"timed_out":false,"_shards":{"total":1,"successful":1,"skipped":0,"failed":0},
+                "hits":{"total":{"value":3,"relation":"eq"}},"aggregations":{
+                "timeline":{"buckets":[{"key":1000,"doc_count":1},{"key":2000,"doc_count":2}]},
+                "groups":{"sum_other_doc_count":0,"doc_count_error_upper_bound":0,"buckets":[
+                {"key":["api","Timeout"],"doc_count":3,"first_at":{"value":1000},"last_at":{"value":2500}}]}}}""".encodeToByteArray()
+            exchange.sendResponseHeaders(200, response.size.toLong())
+            exchange.responseBody.use { it.write(response) }
+            exchange.close()
+        }
+        server.start()
+        try {
+            val input = tempDir.resolve("errors.jtl")
+            Files.writeString(input, ONLINE_LOAD.replace("1767225600000,1000", "1000,2000"))
+            val profiles = tempDir.resolve("errors-connections.json")
+            Files.writeString(
+                profiles,
+                """{"schema_version":"source-connections.v1","connections":[{
+                "id":"errors","source_kind":"opensearch","transport":"direct",
+                "base_url":"http://127.0.0.1:${server.address.port}",
+                "governor":{"requests_per_second":1000},
+                "opensearch":{"indices":["logs-*"],"timestamp_field":"@timestamp","service_field":"service",
+                "error_type_field":"error.type","message_field":"message","samples_per_group":0}}]}""",
+            )
+            val selection = tempDir.resolve("errors-request.json")
+            Files.writeString(
+                selection,
+                """{"schema_version":"source-request.v1","profile_id":"errors",
+                "start_epoch_ms":1000,"end_epoch_ms":3000,"step_ms":1000}""",
+            )
+            val data = tempDir.resolve("errors-data")
+            val result =
+                run(
+                    "analyze",
+                    input.toString(),
+                    "--connections",
+                    profiles.toString(),
+                    "--source",
+                    selection.toString(),
+                    "--data-dir",
+                    data.toString(),
+                )
+            assertEquals(0, result.exitCode, result.stderr)
+            assertEquals("POST", method)
+            assertEquals("/logs-*/_search", path)
+            assertTrue(query.contains("allow_no_indices=false"))
+            assertEquals(
+                "0",
+                Json
+                    .parseToJsonElement(body)
+                    .jsonObject
+                    .getValue("size")
+                    .jsonPrimitive.content,
+            )
+            val context =
+                Json
+                    .parseToJsonElement(result.stdout)
+                    .jsonObject
+                    .getValue("evidence")
+                    .jsonArray
+                    .single { it.jsonObject["type"]?.jsonPrimitive?.content == "opensearch_errors" }
+            assertEquals(
+                "3",
+                context.jsonObject
+                    .getValue("total_errors")
+                    .jsonPrimitive.content,
+            )
+            val saved =
+                Files
+                    .list(data.resolve("runs/${result.stdout.json("run_id")}/analyses"))
+                    .use { it.findFirst().orElseThrow() }
+            assertTrue(Files.isRegularFile(saved.resolve("opensearch-errors.json")))
+            assertTrue(Files.isRegularFile(saved.resolve("source-response-1.json")))
+            assertFalse(Files.exists(saved.resolve("resource-snapshot.json")))
+        } finally {
+            server.stop(0)
+        }
+    }
+
+    @Test
+    fun `CLI imports OpenSearch context without a resource snapshot and replays saved facts`() {
+        val load = ONLINE_LOAD.replace("1767225600000,1000", "1000,2000")
+        val input = tempDir.resolve("context.jtl")
+        Files.writeString(input, load)
+        val context = tempDir.resolve("errors.json")
+        Files.writeString(
+            context,
+            Files
+                .readString(Path.of("docs/contracts/sources/v1/opensearch-errors.example.json"))
+                .replace("a".repeat(64), sha256Hex(load.encodeToByteArray())),
+        )
+        val data = tempDir.resolve("context-data")
+        val imported = run("analyze", input.toString(), "--source-context", context.toString(), "--data-dir", data.toString())
+        assertEquals(0, imported.exitCode, imported.stderr)
+        val evidence =
+            Json
+                .parseToJsonElement(imported.stdout)
+                .jsonObject
+                .getValue("evidence")
+                .jsonArray
+                .single { it.jsonObject["type"]?.jsonPrimitive?.content == "opensearch_errors" }
+        assertEquals(
+            "3",
+            evidence.jsonObject
+                .getValue("total_errors")
+                .jsonPrimitive.content,
+        )
+        assertEquals(
+            "90",
+            evidence.jsonObject
+                .getValue("error_rate_per_minute")
+                .jsonPrimitive.content,
+        )
+        val analyses = data.resolve("runs/${imported.stdout.json("run_id")}/analyses")
+        val saved = Files.list(analyses).use { it.findFirst().orElseThrow() }
+        assertFalse(Files.exists(saved.resolve("resource-snapshot.json")))
+        val replay =
+            run(
+                "analyze",
+                input.toString(),
+                "--source-context",
+                saved.resolve("opensearch-errors.json").toString(),
+                "--data-dir",
+                tempDir.resolve("context-replay").toString(),
+            )
+        assertEquals(0, replay.exitCode, replay.stderr)
+        assertEquals(
+            evidence,
+            Json
+                .parseToJsonElement(replay.stdout)
+                .jsonObject
+                .getValue("evidence")
+                .jsonArray
+                .single { it.jsonObject["type"]?.jsonPrimitive?.content == "opensearch_errors" },
+        )
     }
 
     @Test

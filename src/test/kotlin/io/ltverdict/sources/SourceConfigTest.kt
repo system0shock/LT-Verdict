@@ -13,6 +13,37 @@ import java.math.BigDecimal
 
 class SourceConfigTest {
     @Test
+    fun `OpenSearch profile accepts bounded mapping and rejects metric fields or proxy transport`() {
+        val example =
+            java.nio.file.Files
+                .readString(
+                    java.nio.file.Path
+                        .of("docs/contracts/sources/v1/opensearch-connections.example.json"),
+                )
+        val profile = readSourceProfiles(example.byteInputStream()).single()
+        assertEquals(SourceKind.OPENSEARCH, profile.sourceKind)
+        assertEquals(listOf("application-errors-*"), requireNotNull(profile.openSearch).indices)
+        assertTrue(profile.queries.isEmpty())
+        listOf(
+            example.replace("\"direct\"", "\"grafana_proxy\""),
+            example.replace("\"opensearch\": {", "\"queries\":[],\"opensearch\": {"),
+            example.replace("\"opensearch\": {", "\"rules\":[],\"opensearch\": {"),
+            example.replace("\"opensearch\": {", "\"database\":\"db\",\"opensearch\": {"),
+            example.replace("\"opensearch\": {", "\"datasource_uid\":\"uid\",\"opensearch\": {"),
+            example.replace("\"samples_per_group\": 2", "\"samples_per_group\": 6"),
+            example.replace("\"application-errors-*\"", "\"**\""),
+            example.replace("\"source_kind\": \"opensearch\"", "\"source_kind\": \"prometheus\""),
+        ).forEach { invalid ->
+            assertEquals(
+                "SOURCE_CONFIG_INVALID",
+                assertThrows(IllegalArgumentException::class.java) {
+                    readSourceProfiles(invalid.byteInputStream())
+                }.message,
+            )
+        }
+    }
+
+    @Test
     fun `influxdb profile accepts database and required time placeholders`() {
         val profile =
             readSourceProfiles(

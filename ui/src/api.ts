@@ -85,7 +85,7 @@ export function uploadInput(file: File, progress: (percent: number) => void): Pr
   })
 }
 
-export function createJob(runId: string, policy: Policy | null, resources?: File | null, diagnostics?: File | null, sourceRequest?: SourceRequest | null): Promise<JobStatus> {
+export function createJob(runId: string, policy: Policy | null, resources?: File | null, diagnostics?: File | null, sourceRequest?: SourceRequest | null, sourceContext?: File | null): Promise<JobStatus> {
   const body = new FormData()
   body.append('run_id', runId)
   if (policy) body.append('policy', new Blob([stringifyPolicy(policy)], { type: 'application/json' }), 'policy.json')
@@ -93,6 +93,7 @@ export function createJob(runId: string, policy: Policy | null, resources?: File
   else {
     if (resources) body.append('resource_snapshot', resources)
     if (diagnostics) body.append('correlation_plan', diagnostics)
+    if (sourceContext) body.append('source_context', sourceContext)
   }
   return request('/api/jobs', { method: 'POST', headers: mutationHeaders(), body })
 }
@@ -168,7 +169,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(path, { credentials: 'same-origin', ...init })
   const text = await response.text()
   if (!response.ok) throw apiError(response.status, text)
-  return JSON.parse(text) as T
+  return JSON.parse(text, exactErrorCounts) as T
 }
 
 function mutationHeaders(extra: Record<string, string> = {}): HeadersInit {
@@ -191,4 +192,10 @@ function apiError(status: number, text: string): ApiError {
 
 function exactThreshold(key: string, value: unknown, context?: JsonParseContext): unknown {
   return key === 'threshold' && typeof value === 'number' && context ? context.source : value
+}
+
+function exactErrorCounts(this: Record<string, unknown>, key: string, value: unknown, context?: JsonParseContext): unknown {
+  const errorCount = (this.type === 'opensearch_errors' && ['total_errors', 'error_rate_per_minute'].includes(key)) ||
+    (key === 'count' && typeof this.service === 'string' && typeof this.error_type === 'string')
+  return errorCount && typeof value === 'number' && context ? context.source : value
 }

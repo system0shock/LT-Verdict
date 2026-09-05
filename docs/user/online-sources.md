@@ -1,7 +1,7 @@
-# Онлайн-источники: Prometheus, VictoriaMetrics, InfluxDB и Grafana proxy
+# Онлайн-источники метрик и ошибок
 
-Поддерживаются read-only PromQL `query_range` и InfluxQL GET `/query`.
-PostgreSQL и OpenSearch следуют отдельно; Grafana dashboard discovery и panel
+Поддерживаются read-only PromQL `query_range`, InfluxQL GET `/query` и
+OpenSearch POST `/_search`. PostgreSQL следует отдельно; Grafana dashboard discovery и panel
 transformations не поддерживаются. Боевой plugin/auth route нужно проверить на
 вашем стенде. Без connections file приложение не выполняет acquisition.
 
@@ -80,6 +80,46 @@ InfluxQL timestamp является левой границей snapshot cell. �
 `[1000,2000)`, `[2000,3000)`, `[3000,4000)` принимает timestamps `1000`, `2000`,
 `3000`. Отсутствующая точка и JSON `null` остаются gap (`null`), не становятся
 нулём и не интерполируются.
+
+## OpenSearch error context
+
+[Пример профиля](../contracts/sources/v1/opensearch-connections.example.json)
+использует `source_kind:opensearch`, только `transport:direct` и mapping
+`opensearch`. Поля `queries`, `rules`, `database`, `datasource_uid` запрещены.
+Задайте ограниченный index pattern: wildcard-only `*`, `**`, `_all` запрещены.
+Timestamp должен быть date, service/error type — single-valued keyword.
+Ошибкой считается документ с существующим `error_type_field`.
+
+Backend отправляет фиксированный POST `{base_url}/{indices}/_search`,
+без пользовательского Query DSL. Окно `[start,end)`, timeline имеет step ms;
+сохраняются total, errors/minute, service/type groups, first/last и samples.
+Limits: до 16 index patterns, 200 groups (default 50), 5 samples/group
+(default 2), message до 65536 UTF-8 bytes (default 4096). `samples_per_group:0`
+отключает сообщения. Учётной записи нужны только права чтения этих индексов.
+
+Timeout, failed shards, lower-bound totals, truncated/approximate terms и
+несогласованные суммы дают `PARTIAL` с причинами. Malformed response даёт
+`FAILED`, а не нулевые ошибки. Эти факты не меняют бизнес-SLA и не являются
+метриками железа или новой корреляцией. Для context-only analysis
+`resource-snapshot.json` не создаётся.
+
+Сохранённый `opensearch-errors.json` привязан к SHA-256 load input. Его можно
+скачать в UI и импортировать без connections через поле OpenSearch context:
+
+```powershell
+.\build\install\ltv\bin\ltv.bat analyze input.jtl --source-context opensearch-errors.json --data-dir data
+```
+
+Допустимы одновременно offline `--resources` и `--correlation`; online
+`--source` с manual context запрещён. Import повторно проверяет counts,
+rates, coverage, grid, URLs и load binding, а не доверяет готовым итогам.
+Sample messages выводятся как текст, document URLs — внешние ссылки;
+raw ответы и сообщения могут содержать чувствительные данные стенда.
+
+Private API принимает file part `source_context` в `POST /api/jobs`;
+`GET /api/runs/{runId}/analyses/{analysisId}/source-context` скачивает только
+существующий manifest-validated JSON attachment. Context ограничен 16 MiB;
+job — пять частей и сумма отдельных limits с multipart overhead.
 
 ## Credentials и limits
 

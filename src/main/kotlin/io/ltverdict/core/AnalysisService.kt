@@ -16,6 +16,7 @@ import io.ltverdict.sources.SourceAcquisition
 import io.ltverdict.sources.SourceRequest
 import io.ltverdict.storage.AcceptedInput
 import io.ltverdict.storage.RunBundleStore
+import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
@@ -54,7 +55,7 @@ internal class AnalysisService(
         checkCancelled()
         require(request.sourceRequest == null) { "SOURCE_ACQUISITION_REQUIRED" }
         request.sourceAcquisition?.let {
-            require(request.resources?.semanticSha256 == it.snapshot.semanticSha256) { "SOURCE_SNAPSHOT_MISMATCH" }
+            require(request.resources?.semanticSha256 == it.snapshot?.semanticSha256) { "SOURCE_SNAPSHOT_MISMATCH" }
         }
         request.resources?.let { resources ->
             require(resources.snapshot.loadInputSha256 == request.input.sha256) { "RESOURCE_LOAD_HASH_MISMATCH" }
@@ -70,6 +71,7 @@ internal class AnalysisService(
                     canonicalJson(
                         buildJsonObject {
                             put("evidence", acquisition.evidence)
+                            if (acquisition.contextEvidence.isNotEmpty()) put("context_evidence", JsonArray(acquisition.contextEvidence))
                             put(
                                 "artifacts",
                                 buildJsonObject {
@@ -106,7 +108,12 @@ internal class AnalysisService(
                             evaluation.evidence + diagnostic.evidence,
                     )
             }
-            request.sourceAcquisition?.let { evaluation = evaluation.copy(evidence = evaluation.evidence + it.evidence) }
+            request.sourceAcquisition?.let {
+                evaluation =
+                    evaluation.copy(
+                        evidence = evaluation.evidence + it.evidence + it.contextEvidence,
+                    )
+            }
             val result = analysisResult(request.input.runId, RunValidity.INVALID, evaluation)
             val resourceBytes = request.resources?.rawBytes()
             val diagnosticBytes = request.diagnostics?.rawBytes()
@@ -297,7 +304,7 @@ internal class AnalysisService(
                     evidence = evaluation.evidence + diagnostic.evidence,
                 )
         }
-        request.sourceAcquisition?.let { evaluation = evaluation.copy(evidence = evaluation.evidence + it.evidence) }
+        request.sourceAcquisition?.let { evaluation = evaluation.copy(evidence = evaluation.evidence + it.evidence + it.contextEvidence) }
         val result = analysisResult(request.input.runId, first.validity, evaluation)
         val resourceBytes = request.resources?.rawBytes()
         val diagnosticBytes = request.diagnostics?.rawBytes()
@@ -350,7 +357,9 @@ private fun writeAcquisition(
 ) {
     acquisition?.artifacts?.forEach { (name, bytes) ->
         checkCancelled()
-        require(name == "source-acquisition.json" || Regex("source-response-[0-9]{1,2}\\.json").matches(name)) {
+        require(
+            name in setOf("source-acquisition.json", "opensearch-errors.json") || Regex("source-response-[0-9]{1,2}\\.json").matches(name),
+        ) {
             "SOURCE_ARTIFACT_NAME_INVALID"
         }
         Files.write(staging.resolve(name), bytes, StandardOpenOption.CREATE_NEW, StandardOpenOption.WRITE)

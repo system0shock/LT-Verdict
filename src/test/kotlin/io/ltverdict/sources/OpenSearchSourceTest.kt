@@ -68,6 +68,8 @@ class OpenSearchSourceTest {
                 { valid.copy(indices = List(17) { "logs-$it" }) },
                 { valid.copy(indices = listOf("Logs-*")) },
                 { valid.copy(indices = listOf("*")) },
+                { valid.copy(indices = listOf("**")) },
+                { valid.copy(indices = listOf("***")) },
                 { valid.copy(indices = listOf("_all")) },
                 { valid.copy(indices = listOf("logs..old")) },
                 { valid.copy(indices = listOf("logs,old")) },
@@ -156,7 +158,12 @@ class OpenSearchSourceTest {
                 mapping(samplesPerGroup = 2, messageBytesMax = 5),
                 URI.create("https://search.example/base/"),
             )
-        val samples = artifact.arr("groups").single().jsonObject.arr("samples")
+        val samples =
+            artifact
+                .arr("groups")
+                .single()
+                .jsonObject
+                .arr("samples")
         val first = samples[0].jsonObject
         val second = samples[1].jsonObject
 
@@ -324,15 +331,25 @@ class OpenSearchSourceTest {
             listOf(
                 ImportCase(canonicalJson(JsonObject(artifact + ("extra" to JsonPrimitive(true)))), "OPENSEARCH_UNKNOWN_FIELD"),
                 ImportCase(
-                    raw.replaceFirst(
-                        "\"schema_version\":\"opensearch-errors.v1\"",
-                        "\"schema_version\":\"opensearch-errors.v1\",\"\\u0073chema_version\":\"opensearch-errors.v1\"",
-                    ).encodeToByteArray(),
+                    raw
+                        .replaceFirst(
+                            "\"schema_version\":\"opensearch-errors.v1\"",
+                            "\"schema_version\":\"opensearch-errors.v1\",\"\\u0073chema_version\":\"opensearch-errors.v1\"",
+                        ).encodeToByteArray(),
                     "OPENSEARCH_DUPLICATE_OBJECT_KEY",
                 ),
-                ImportCase(raw.replace("\"to_epoch_ms\":2000", "\"to_epoch_ms\":1999").encodeToByteArray(), "OPENSEARCH_TIMELINE_GRID_INVALID"),
-                ImportCase(raw.replace("\"error_rate_per_minute\":90", "\"error_rate_per_minute\":91").encodeToByteArray(), "OPENSEARCH_DERIVED_FIELD_MISMATCH"),
-                ImportCase(raw.replace("\"status\":\"COMPLETE\"", "\"status\":\"PARTIAL\"").encodeToByteArray(), "OPENSEARCH_DERIVED_FIELD_MISMATCH"),
+                ImportCase(
+                    raw.replace("\"to_epoch_ms\":2000", "\"to_epoch_ms\":1999").encodeToByteArray(),
+                    "OPENSEARCH_TIMELINE_GRID_INVALID",
+                ),
+                ImportCase(
+                    raw.replace("\"error_rate_per_minute\":90", "\"error_rate_per_minute\":91").encodeToByteArray(),
+                    "OPENSEARCH_DERIVED_FIELD_MISMATCH",
+                ),
+                ImportCase(
+                    raw.replace("\"status\":\"COMPLETE\"", "\"status\":\"PARTIAL\"").encodeToByteArray(),
+                    "OPENSEARCH_DERIVED_FIELD_MISMATCH",
+                ),
                 ImportCase(unsafeUrl.encodeToByteArray(), "OPENSEARCH_UNSAFE_SOURCE_URL"),
             )
 

@@ -56,12 +56,42 @@ internal class SourceHttp(
         queryParameters: Map<String, String>,
         budget: SourceBudget,
         checkCancelled: () -> Unit = {},
+    ): ByteArray = execute(profile, queryParameters, null, budget, checkCancelled)
+
+    internal fun search(
+        profile: SourceProfile,
+        body: ByteArray,
+        budget: SourceBudget,
+        checkCancelled: () -> Unit = {},
+    ): ByteArray {
+        if (profile.sourceKind != SourceKind.OPENSEARCH) sourceFailure("SOURCE_PROFILE_INVALID")
+        return execute(
+            profile,
+            mapOf(
+                "allow_no_indices" to "false",
+                "ignore_unavailable" to "false",
+                "allow_partial_search_results" to "true",
+                "typed_keys" to "false",
+            ),
+            body,
+            budget,
+            checkCancelled,
+        )
+    }
+
+    private fun execute(
+        profile: SourceProfile,
+        queryParameters: Map<String, String>,
+        body: ByteArray?,
+        budget: SourceBudget,
+        checkCancelled: () -> Unit,
     ): ByteArray {
         val configuredProfile =
             configured[profile.id]?.takeIf { it.profile == profile }
                 ?: sourceFailure("SOURCE_PROFILE_NOT_CONFIGURED")
         val authorization = authorization(profile.auth, environment)
-        val request = request(uriWithQuery(configuredProfile.endpoint, queryParameters), authorization, configuredProfile.state.settings)
+        val request =
+            request(uriWithQuery(configuredProfile.endpoint, queryParameters), authorization, configuredProfile.state.settings, body)
         var attempt = 0
         while (true) {
             checkCancelled()
@@ -317,10 +347,18 @@ private fun endpoint(profile: SourceProfile): URI {
         when (profile.transport) {
             SourceTransport.DIRECT -> {
                 if (profile.datasourceUid != null) sourceFailure("SOURCE_PROFILE_INVALID")
-                if (profile.sourceKind == SourceKind.INFLUXDB) "/query" else "/api/v1/query_range"
+                when (profile.sourceKind) {
+                    SourceKind.INFLUXDB -> "/query"
+                    SourceKind.OPENSEARCH -> {
+                        val indices = (profile.openSearch ?: sourceFailure("SOURCE_PROFILE_INVALID")).indices
+                        "/${indices.joinToString(",")}/_search"
+                    }
+                    else -> "/api/v1/query_range"
+                }
             }
 
             SourceTransport.GRAFANA_PROXY -> {
+                if (profile.sourceKind == SourceKind.OPENSEARCH) sourceFailure("SOURCE_PROFILE_INVALID")
                 val uid =
                     profile.datasourceUid
                         ?.takeIf { it !in setOf(".", "..") && SAFE_PATH_SEGMENT.matches(it) }
@@ -417,13 +455,21 @@ private fun SourceHttp.request(
     uri: URI,
     authorization: String?,
     settings: OriginSettings,
+    body: ByteArray?,
 ): HttpRequest =
     try {
         HttpRequest
             .newBuilder(uri)
             .timeout(Duration.ofMillis(settings.timeoutMillis))
-            .GET()
-            .apply { if (authorization != null) header("Authorization", authorization) }
+            .apply {
+                if (body == null) {
+                    GET()
+                } else {
+                    header("Accept", "application/json")
+                    header("Content-Type", "application/json")
+                    POST(HttpRequest.BodyPublishers.ofByteArray(body))
+                }
+            }.apply { if (authorization != null) header("Authorization", authorization) }
             .build()
     } catch (_: IllegalArgumentException) {
         sourceFailure("SOURCE_REQUEST_INVALID")

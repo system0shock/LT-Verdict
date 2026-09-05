@@ -565,7 +565,8 @@ private fun validateArtifact(
         validatePlainText(group.service, MAX_GROUP_KEY_BYTES, INVALID_ARTIFACT)
         validatePlainText(group.errorType, MAX_GROUP_KEY_BYTES, INVALID_ARTIFACT)
         if (!uniqueGroups.add(group.service to group.errorType)) fail("OPENSEARCH_DUPLICATE_GROUP")
-        if (group.count <= 0 || group.firstEpochMillis > group.lastEpochMillis ||
+        if (group.count <= 0 ||
+            group.firstEpochMillis > group.lastEpochMillis ||
             group.firstEpochMillis !in artifact.startEpochMillis until artifact.endEpochMillis ||
             group.lastEpochMillis !in artifact.startEpochMillis until artifact.endEpochMillis
         ) {
@@ -587,15 +588,23 @@ private fun validateArtifact(
     }
 
     val coverage = artifact.coverage
-    if (coverage.totalRelation !in TOTAL_RELATIONS || coverage.shards.total < 0 || coverage.shards.successful < 0 ||
-        coverage.shards.skipped < 0 || coverage.shards.failed < 0 || coverage.shards.successful > coverage.shards.total ||
-        coverage.shards.skipped > coverage.shards.successful || coverage.shards.failed > coverage.shards.total
+    if (coverage.totalRelation !in TOTAL_RELATIONS ||
+        coverage.shards.total < 0 ||
+        coverage.shards.successful < 0 ||
+        coverage.shards.skipped < 0 ||
+        coverage.shards.failed < 0 ||
+        coverage.shards.successful > coverage.shards.total ||
+        coverage.shards.skipped > coverage.shards.successful ||
+        coverage.shards.failed > coverage.shards.total
     ) {
         fail(INVALID_ARTIFACT)
     }
-    if (coverage.terms.groupLimit !in 1..MAX_GROUPS || coverage.terms.returnedGroups != artifact.groups.size ||
-        artifact.groups.size > coverage.terms.groupLimit || coverage.terms.sumOtherDocCount < 0 ||
-        coverage.terms.docCountErrorUpperBound < -1 || coverage.samplesPerGroupLimit !in 0..MAX_SAMPLES_PER_GROUP ||
+    if (coverage.terms.groupLimit !in 1..MAX_GROUPS ||
+        coverage.terms.returnedGroups != artifact.groups.size ||
+        artifact.groups.size > coverage.terms.groupLimit ||
+        coverage.terms.sumOtherDocCount < 0 ||
+        coverage.terms.docCountErrorUpperBound < -1 ||
+        coverage.samplesPerGroupLimit !in 0..MAX_SAMPLES_PER_GROUP ||
         coverage.sampleMessageBytesMax !in 1..MAX_SAMPLE_MESSAGE_BYTES
     ) {
         fail(INVALID_ARTIFACT)
@@ -714,7 +723,8 @@ private fun rate(
     durationMillis: Long,
 ): BigDecimal {
     val normalized =
-        BigDecimal.valueOf(count)
+        BigDecimal
+            .valueOf(count)
             .multiply(MILLIS_PER_MINUTE)
             .divide(BigDecimal.valueOf(durationMillis), RATE_SCALE, RoundingMode.HALF_UP)
             .stripTrailingZeros()
@@ -734,7 +744,8 @@ private fun addCount(
 private fun validateRequest(request: SourceRequest) {
     validatePlainText(request.profileId, MAX_PROFILE_ID_BYTES, "OPENSEARCH_INVALID_REQUEST")
     if (request.startEpochMillis !in 0 until MAX_TIMESTAMP_EPOCH_MILLIS ||
-        request.endEpochMillis !in 1..MAX_TIMESTAMP_EPOCH_MILLIS || request.endEpochMillis <= request.startEpochMillis ||
+        request.endEpochMillis !in 1..MAX_TIMESTAMP_EPOCH_MILLIS ||
+        request.endEpochMillis <= request.startEpochMillis ||
         request.stepMillis < 1_000
     ) {
         fail("OPENSEARCH_INVALID_REQUEST")
@@ -752,7 +763,8 @@ private fun validateHash(value: String) {
 private fun validIndex(value: String): Boolean =
     value.encodeToByteArray().size in 1..MAX_INDEX_BYTES &&
         INDEX.matches(value) &&
-        value !in setOf("*", "_all") &&
+        value != "_all" &&
+        value.any { it != '*' } &&
         ".." !in value &&
         value.first() !in "-._"
 
@@ -797,8 +809,11 @@ private fun encodePathSegment(value: String): String =
             val unsigned = byte.toInt() and 0xff
             if ((unsigned in 'a'.code..'z'.code) ||
                 (unsigned in 'A'.code..'Z'.code) ||
-                (unsigned in '0'.code..'9'.code) || unsigned == '-'.code || unsigned == '.'.code ||
-                unsigned == '_'.code || unsigned == '~'.code
+                (unsigned in '0'.code..'9'.code) ||
+                unsigned == '-'.code ||
+                unsigned == '.'.code ||
+                unsigned == '_'.code ||
+                unsigned == '~'.code
             ) {
                 append(unsigned.toChar())
             } else {
@@ -826,12 +841,23 @@ private fun validateHttpUri(
 ) {
     val unsafeCode = if (requireDocumentPath) "OPENSEARCH_UNSAFE_SOURCE_URL" else "OPENSEARCH_UNSAFE_BASE_URL"
     val scheme = uri.scheme?.lowercase()
-    if (scheme !in setOf("http", "https") || uri.isOpaque || uri.host == null || uri.port == 0 || uri.port > 65_535 ||
-        uri.rawUserInfo != null || uri.rawQuery != null || uri.rawFragment != null || uri.toString().any(Char::isISOControl)
+    if (scheme !in setOf("http", "https") ||
+        uri.isOpaque ||
+        uri.host == null ||
+        uri.port == 0 ||
+        uri.port > 65_535 ||
+        uri.rawUserInfo != null ||
+        uri.rawQuery != null ||
+        uri.rawFragment != null ||
+        uri.toString().any(Char::isISOControl)
     ) {
         fail(unsafeCode)
     }
-    val segments = uri.rawPath.orEmpty().split('/').filter(String::isNotEmpty)
+    val segments =
+        uri.rawPath
+            .orEmpty()
+            .split('/')
+            .filter(String::isNotEmpty)
     if (segments.any(::isUrlDotSegment) || ENCODED_CONTROL.containsMatchIn(uri.rawPath.orEmpty())) fail(unsafeCode)
     if (requireDocumentPath &&
         (segments.size < 3 || segments[segments.lastIndex - 1] != "_doc" || segments[segments.lastIndex - 2].isEmpty())

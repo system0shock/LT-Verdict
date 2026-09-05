@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import LoadCharts from './LoadCharts.vue'
-import type { AnalysisResult, Bucket, SourceSummaryEvidence } from './types'
+import type { AnalysisResult, Bucket, SourceSummaryEvidence, OpenSearchEvidence } from './types'
 
 const props = defineProps<{
   result: AnalysisResult
@@ -29,6 +29,7 @@ const windowPolicySummaries = computed(() => evidence.value.filter((item) => ite
 const resourceChecks = computed(() => evidence.value.filter((item) => item.type === 'resource_policy_check'))
 const resourceBindings = computed(() => evidence.value.filter((item) => item.type === 'resource_binding'))
 const sourceSummaries = computed(() => props.result.evidence.filter((item): item is SourceSummaryEvidence => item.type === 'source_summary'))
+const errorContexts = computed(() => props.result.evidence.filter((item): item is OpenSearchEvidence => item.type === 'opensearch_errors'))
 const diagnosticSummaries = computed(() => props.result.evidence.filter((item) => item.type === 'diagnostic_summary'))
 const correlationPairs = computed(() => props.result.evidence.filter((item) => item.type === 'correlation_pair'))
 const anomalyChecks = computed(() => props.result.evidence.filter((item) => item.type === 'anomaly_check'))
@@ -473,6 +474,48 @@ function updateRange(name: 'update:range-start' | 'update:range-end', event: Eve
             :key="query.id"
           >
             <td>{{ query.id }}</td><td>{{ query.status }}</td><td>{{ query.reason ?? '—' }}</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section
+    v-for="context in errorContexts"
+    :key="context.id"
+    class="panel"
+    data-testid="opensearch-context"
+    :aria-label="`OpenSearch errors: ${context.profile_id}`"
+  >
+    <h2>OpenSearch errors — {{ context.profile_id }}</h2>
+    <p>{{ context.total_errors }} errors · {{ context.error_rate_per_minute }} errors/min · {{ context.coverage.status }}</p>
+    <p v-if="context.coverage.reasons.length">
+      {{ context.coverage.reasons.join(', ') }}
+    </p>
+    <p>Error context does not change SLA verdicts. Samples are bounded, not an exhaustive error log.</p>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Service</th><th>Error type</th><th>Count</th><th>First / last (epoch ms)</th><th>Samples</th></tr></thead>
+        <tbody>
+          <tr
+            v-for="group in context.groups"
+            :key="JSON.stringify([group.service, group.error_type])"
+          >
+            <td>{{ group.service }}</td><td>{{ group.error_type }}</td><td>{{ group.count }}</td>
+            <td>{{ group.first_epoch_ms }} / {{ group.last_epoch_ms }}</td>
+            <td>
+              <div
+                v-for="(sample, index) in group.samples"
+                :key="index"
+              >
+                <p>{{ sample.message }}{{ sample.message_truncated ? ' [truncated]' : '' }}</p>
+                <a
+                  :href="sample.source_url"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >Source document</a>
+              </div>
+            </td>
           </tr>
         </tbody>
       </table>

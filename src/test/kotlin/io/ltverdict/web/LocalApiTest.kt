@@ -73,6 +73,45 @@ class LocalApiTest {
         }
 
     @Test
+    fun `OpenSearch context import downloads and rejects wrong load binding`() =
+        withServer { store, api ->
+            api.bootstrap()
+            val load = ONLINE_LOAD.replace("1767225600000,1000", "1000,2000")
+            val input = store.acceptInput(load.byteInputStream(), "errors.jtl")
+            val context =
+                Files
+                    .readString(Path.of("docs/contracts/sources/v1/opensearch-errors.example.json"))
+                    .replace("a".repeat(64), input.sha256)
+            val id = api.createJob(input.runId, sourceContext = context.encodeToByteArray()).analysisId(api)
+            val base = "/api/runs/${input.runId}/analyses/$id"
+            val download = api.get("$base/source-context")
+            assertEquals(200, download.statusCode())
+            assertTrue(
+                download
+                    .headers()
+                    .firstValue("Content-Disposition")
+                    .orElse("")
+                    .contains("attachment"),
+            )
+            assertEquals(
+                "3",
+                download
+                    .jsonObject()
+                    .getValue("total_errors")
+                    .jsonPrimitive.content,
+            )
+            assertError(api.get("$base/resource-snapshot"), 404)
+            val replay = api.createJob(input.runId, sourceContext = download.body().encodeToByteArray()).analysisId(api)
+            assertEquals(id, replay)
+            assertError(api.createJob(input.runId, sourceContext = context.replace(input.sha256, "b".repeat(64)).encodeToByteArray()), 400)
+            assertError(api.createJob(input.runId, sourceContext = "{}".encodeToByteArray()), 400)
+            assertError(
+                api.createJob(input.runId, sourceContext = context.encodeToByteArray(), source = ONLINE_SOURCE_REQUEST.encodeToByteArray()),
+                400,
+            )
+        }
+
+    @Test
     fun `online job persists evidence and snapshot download replays without network`() {
         OnlineSourceFixture().use { fixture ->
             val profiles = readSourceProfiles(fixture.profilesJson().byteInputStream())
@@ -1026,6 +1065,7 @@ class LocalApiTest {
             resources: ByteArray? = null,
             diagnostics: ByteArray? = null,
             source: ByteArray? = null,
+            sourceContext: ByteArray? = null,
         ): HttpResponse<String> =
             multipart(
                 "/api/jobs",
@@ -1035,6 +1075,7 @@ class LocalApiTest {
                     if (resources != null) add(FormPart("resource_snapshot", resources, "resources.json", "application/json"))
                     if (diagnostics != null) add(FormPart("correlation_plan", diagnostics, "correlation.json", "application/json"))
                     if (source != null) add(FormPart("source_request", source, "source.json", "application/json"))
+                    if (sourceContext != null) add(FormPart("source_context", sourceContext, "context.json", "application/json"))
                 },
             )
 

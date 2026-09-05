@@ -232,10 +232,10 @@ class InfluxqlSourceTest {
                 parameters.get(),
             )
             assertEquals("Token top-secret-token", authorization.get())
-            val series = acquisition.snapshot.snapshot.series.single()
+            val series = requireNotNull(acquisition.snapshot).snapshot.series.single()
             assertEquals(listOf(BigDecimal("0.8"), null, BigDecimal("0.9")), series.values)
             assertEquals(mapOf("host" to "a"), series.labels)
-            val provenance = requireNotNull(acquisition.snapshot.snapshot.provenance)
+            val provenance = requireNotNull(requireNotNull(acquisition.snapshot).snapshot.provenance)
             assertEquals("influxdb", provenance.sourceKind)
             assertEquals("left_boundary", provenance.clockAlignment)
             assertTrue(provenance.querySemantics.contains("sample_at=left_boundary"))
@@ -310,13 +310,18 @@ class InfluxqlSourceTest {
                     HASH,
                 )
 
-            assertTrue(acquisition.snapshot.snapshot.series.all { item -> item.values.all { it == null } })
-            assertEquals(listOf(rule), acquisition.snapshot.snapshot.rules)
+            assertTrue(requireNotNull(acquisition.snapshot).snapshot.series.all { item -> item.values.all { it == null } })
+            assertEquals(listOf(rule), requireNotNull(acquisition.snapshot).snapshot.rules)
             assertEquals("FAILED" to "SOURCE_HTTP_AUTH", acquisition.evidence.queryStatus("cpu"))
             assertEquals("FAILED" to "SOURCE_PARTIAL_RESPONSE", acquisition.evidence.queryStatus("memory"))
             assertEquals("FAILED", acquisition.evidence.string("status"))
             assertEquals(setOf("source-acquisition.json"), acquisition.artifacts.keys)
-            assertFalse(acquisition.artifacts.getValue("source-acquisition.json").decodeToString().contains("top-secret"))
+            assertFalse(
+                acquisition.artifacts
+                    .getValue("source-acquisition.json")
+                    .decodeToString()
+                    .contains("top-secret"),
+            )
         }
 
     private fun profile(

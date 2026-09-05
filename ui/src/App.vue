@@ -25,6 +25,7 @@ const apiReady = ref(false)
 const inputFile = ref<File | null>(null)
 const resourceFile = ref<File | null>(null)
 const diagnosticFile = ref<File | null>(null)
+const sourceContextFile = ref<File | null>(null)
 const sourceProfiles = ref<SourceProfile[]>([])
 const sourceProfileId = ref('')
 const sourceStart = ref('')
@@ -120,7 +121,14 @@ function selectSourceProfile(id: string) {
   if (id) {
     resourceFile.value = null
     diagnosticFile.value = null
+    sourceContextFile.value = null
   }
+  queueBusy.value = false
+  errorMessage.value = ''
+}
+
+function selectSourceContext(file: File | null) {
+  sourceContextFile.value = file
   queueBusy.value = false
   errorMessage.value = ''
 }
@@ -199,7 +207,7 @@ async function analyze() {
     if (revision !== analysisRevision) return
     currentRun.value = accepted
     await refreshRuns()
-    job.value = await createJob(accepted.run_id, activePolicy, resourceFile.value, diagnosticFile.value, sourceRequestState.value.request)
+    job.value = await createJob(accepted.run_id, activePolicy, resourceFile.value, diagnosticFile.value, sourceRequestState.value.request, sourceContextFile.value)
     uploadProgress.value = 100
     await pollJob(revision)
   } catch (failure) {
@@ -470,6 +478,7 @@ function focusPolicy() {
           :input-file="inputFile"
           :resource-file="resourceFile"
           :diagnostic-file="diagnosticFile"
+          :source-context-file="sourceContextFile"
           :source-profiles="sourceProfiles"
           :source-profile-id="sourceProfileId"
           :source-start="sourceStart"
@@ -483,6 +492,7 @@ function focusPolicy() {
           @input="selectInput"
           @resources="selectResources"
           @diagnostics="selectDiagnostics"
+          @source-context="selectSourceContext"
           @source-profile="selectSourceProfile"
           @source-start="sourceStart = $event"
           @source-end="sourceEnd = $event"
@@ -527,11 +537,17 @@ function focusPolicy() {
             download
           >Download {{ format === 'asciidoc' ? 'AsciiDoc' : format.toUpperCase() }}</a>
           <a
-            v-if="result.evidence.some(item => item.type === 'source_summary' || item.type === 'resource_binding')"
+            v-if="result.evidence.some(item => item.type === 'resource_binding')"
             class="button-secondary"
             :href="`/api/runs/${encodeURIComponent(result.run_id)}/analyses/${selectedAnalysisId}/resource-snapshot`"
             download
           >Download resource snapshot</a>
+          <a
+            v-if="result.evidence.some(item => item.type === 'opensearch_errors')"
+            class="button-secondary"
+            :href="`/api/runs/${encodeURIComponent(result.run_id)}/analyses/${selectedAnalysisId}/source-context`"
+            download
+          >Download OpenSearch context</a>
         </div>
 
         <AnalysisView

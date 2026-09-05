@@ -26,6 +26,70 @@ import java.util.concurrent.atomic.AtomicInteger
 
 class SourceHttpTest {
     @Test
+    fun `OpenSearch does not persist HTTP success bodies that fail response validation`() =
+        withServer { fixture ->
+            var body = """{"error":"private source diagnostic"}"""
+            fixture.server.createContext("/") { exchange -> exchange.respond(200, body) }
+            val sourceProfile = profile(fixture.baseUrl, governor = governor())
+                .copy(sourceKind = SourceKind.OPENSEARCH, queries = emptyList(), openSearch = OpenSearchMapping(
+                    listOf("logs-*"), "@timestamp", "service", "type", "message", samplesPerGroup = 0,
+                ))
+            val source = PromqlSource(listOf(sourceProfile), SourceHttp(listOf(sourceProfile)))
+            listOf(body, "{malformed private source diagnostic").forEach { response ->
+                body = response
+                val result = source.acquire(SourceRequest(sourceProfile.id, 1000, 3000, 1000), "a".repeat(64))
+                assertEquals(setOf("source-acquisition.json"), result.artifacts.keys)
+                assertTrue(result.contextEvidence.isEmpty())
+                assertFalse(result.evidence.toString().contains("private"))
+            }
+        }
+
+    @Test
+    fun `OpenSearch search retries within budget and acquisition failure is not zero errors`() =
+        withServer { fixture ->
+            val attempts = AtomicInteger()
+            fixture.server.createContext("/") { exchange ->
+                attempts.incrementAndGet()
+                assertEquals("POST", exchange.requestMethod)
+                assertEquals("application/json", exchange.requestHeaders.getFirst("Content-Type"))
+                exchange.respond(503, "sensitive source failure")
+            }
+            val sourceProfile =
+                profile(fixture.baseUrl, governor = governor().copy(maxAttempts = 2))
+                    .copy(
+                        sourceKind = SourceKind.OPENSEARCH,
+                        queries = emptyList(),
+                        openSearch =
+                            OpenSearchMapping(
+                                listOf("logs-*"),
+                                "@timestamp",
+                                "service",
+                                "type",
+                                "message",
+                                samplesPerGroup = 0,
+                            ),
+                    )
+            val http = SourceHttp(listOf(sourceProfile))
+            val result =
+                PromqlSource(listOf(sourceProfile), http)
+                    .acquire(SourceRequest(sourceProfile.id, 1000, 3000, 1000), "a".repeat(64))
+            assertEquals(2, attempts.get())
+            assertEquals(null, result.snapshot)
+            assertTrue(result.contextEvidence.isEmpty())
+            assertEquals(setOf("source-acquisition.json"), result.artifacts.keys)
+            assertTrue(result.evidence.toString().contains("SOURCE_HTTP_5XX"))
+            assertFalse(result.evidence.toString().contains("sensitive"))
+            val budget = SourceBudget(0)
+            assertEquals(
+                "SOURCE_REQUEST_CAP_EXCEEDED",
+                assertThrows(SourceHttpFailure::class.java) {
+                    http.search(sourceProfile, "{}".encodeToByteArray(), budget)
+                }.code,
+            )
+            assertEquals(2, attempts.get())
+        }
+
+    @Test
     fun `unrelated origin cannot shorten connection timeout`() {
         val short = profile(URI("http://short.example.test"), governor = governor(timeoutMillis = 1), id = "short")
         val normal = profile(URI("http://normal.example.test"), governor = governor(timeoutMillis = 30_000), id = "normal")

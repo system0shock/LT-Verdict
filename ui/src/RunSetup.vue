@@ -6,6 +6,7 @@ defineProps<{
   inputFile: File | null
   resourceFile: File | null
   diagnosticFile: File | null
+  sourceContextFile: File | null
   sourceProfiles: SourceProfile[]
   sourceProfileId: string
   sourceStart: string
@@ -22,6 +23,7 @@ const emit = defineEmits<{
   input: [file: File | null]
   resources: [file: File | null]
   diagnostics: [file: File | null]
+  'source-context': [file: File | null]
   'source-profile': [id: string]
   'source-start': [value: string]
   'source-end': [value: string]
@@ -131,6 +133,21 @@ function selectedFile(event: Event) {
       </div>
 
       <div class="field">
+        <label for="source-context-file">OpenSearch context <span class="muted">(optional)</span></label>
+        <input
+          id="source-context-file"
+          class="control control--file"
+          type="file"
+          accept="application/json,.json"
+          :disabled="busy || !!sourceProfileId"
+          @change="emit('source-context', selectedFile($event))"
+        >
+        <p class="field__hint">
+          {{ sourceContextFile?.name ?? 'No error context selected.' }} Must belong to the same load input.
+        </p>
+      </div>
+
+      <div class="field">
         <label for="source-profile">Online source profile <span class="muted">(optional)</span></label>
         <select
           id="source-profile"
@@ -151,7 +168,7 @@ function selectedFile(event: Event) {
           </option>
         </select>
         <p class="field__hint">
-          Acquires a resource snapshot, which you can download and use for offline correlation only with its matching snapshot hash.
+          Acquires metrics or error context, which you can download for offline analysis of the same load input.
         </p>
       </div>
 

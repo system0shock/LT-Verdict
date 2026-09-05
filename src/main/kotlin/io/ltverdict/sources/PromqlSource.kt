@@ -27,9 +27,10 @@ import java.nio.charset.CodingErrorAction
 import java.nio.charset.StandardCharsets
 
 internal data class SourceAcquisition(
-    val snapshot: ResourceValidation.Valid,
+    val snapshot: ResourceValidation.Valid?,
     val evidence: JsonObject,
     val artifacts: Map<String, ByteArray>,
+    val contextEvidence: List<JsonObject> = emptyList(),
 )
 
 internal class PromqlSource(
@@ -43,6 +44,7 @@ internal class PromqlSource(
     ): SourceAcquisition {
         checkCancelled()
         val profile = profiles.singleOrNull { it.id == request.profileId } ?: throw IllegalArgumentException("SOURCE_PROFILE_NOT_FOUND")
+        if (profile.sourceKind == SourceKind.OPENSEARCH) return acquireOpenSearch(profile, request, loadInputSha256, http, checkCancelled)
         val pointCount = ((request.endEpochMillis - request.startEpochMillis) / request.stepMillis).toInt()
         require(profile.queries.isNotEmpty()) { "SOURCE_QUERIES_EMPTY" }
         require(profile.queries.size.toLong() * pointCount <= MAX_RESOURCE_CELLS) { "RESOURCE_LIMIT_EXCEEDED" }
@@ -80,6 +82,7 @@ internal class PromqlSource(
                     http.get(
                         profile,
                         when (profile.sourceKind) {
+                            SourceKind.OPENSEARCH -> error("SOURCE_PROFILE_INVALID")
                             SourceKind.INFLUXDB ->
                                 mapOf(
                                     "db" to (profile.database ?: throw IllegalArgumentException("SOURCE_PROFILE_INVALID")),
@@ -101,6 +104,7 @@ internal class PromqlSource(
                     )
                 val decoded =
                     when (profile.sourceKind) {
+                        SourceKind.OPENSEARCH -> error("SOURCE_PROFILE_INVALID")
                         SourceKind.INFLUXDB ->
                             decodeInfluxqlResponse(
                                 body,

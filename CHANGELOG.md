@@ -7,6 +7,8 @@
 
 ### Added
 
+- OpenSearch error context: bounded read-only search, counts/rates и
+  service/type groups, явная coverage, сохранение и manual offline import.
 - Opt-in InfluxDB acquisition через read-only InfluxQL GET `/query`: direct и
   Grafana proxy profiles, env token, left-boundary cells, strict response
   validation, snapshot persistence и offline replay.

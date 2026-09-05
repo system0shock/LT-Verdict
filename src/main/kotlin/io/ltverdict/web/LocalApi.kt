@@ -45,6 +45,7 @@ import io.ltverdict.report.renderAsciiDocReport
 import io.ltverdict.report.renderHtmlReport
 import io.ltverdict.sources.SourceProfile
 import io.ltverdict.sources.SourceRequest
+import io.ltverdict.sources.readOpenSearchContext
 import io.ltverdict.sources.readSourceRequest
 import io.ltverdict.storage.AcceptedInput
 import io.ltverdict.storage.RunBundleStore
@@ -256,6 +257,15 @@ internal fun Application.installLocalApi(context: LocalApiContext) {
             if (stored.artifacts.none { it.path == "resource-snapshot.json" }) notFound("Resource snapshot was not found")
             val bytes = withContext(Dispatchers.IO) { Files.readAllBytes(stored.path.resolve("resource-snapshot.json")) }
             call.response.headers.append(HttpHeaders.ContentDisposition, "attachment; filename=\"resource-snapshot.json\"")
+            call.respondBytes(bytes, ContentType.Application.Json, HttpStatusCode.OK)
+        }
+
+        get("/api/runs/{runId}/analyses/{analysisId}/source-context") {
+            call.requireOnlyQueries()
+            val stored = context.store.requireAnalysis(call)
+            if (stored.artifacts.none { it.path == "opensearch-errors.json" }) notFound("Source context was not found")
+            val bytes = withContext(Dispatchers.IO) { Files.readAllBytes(stored.path.resolve("opensearch-errors.json")) }
+            call.response.headers.append(HttpHeaders.ContentDisposition, "attachment; filename=\"opensearch-errors.json\"")
             call.respondBytes(bytes, ContentType.Application.Json, HttpStatusCode.OK)
         }
 
@@ -545,6 +555,7 @@ private suspend fun receiveJob(
     var resources: ResourceValidation.Valid? = null
     var diagnostics: DiagnosticValidation.Valid? = null
     var sourceRequest: SourceRequest? = null
+    var sourceContext: ByteArray? = null
     var policySeen = false
     var resourcesSeen = false
     var diagnosticsSeen = false
@@ -553,8 +564,12 @@ private suspend fun receiveJob(
     try {
         call.receiveMultipart(formFieldLimit = (MAX_RESOURCE_BYTES + 1).toLong()).forEachPart { part ->
             try {
-                if (++parts > 4) malformed("Job multipart body has too many parts")
+                if (++parts > 5) malformed("Job multipart body has too many parts")
                 when {
+                    part is PartData.FileItem && part.name == "source_context" && sourceContext == null && !invalidParts -> {
+                        sourceContext = withContext(Dispatchers.IO) { part.provider().toInputStream().readNBytes(MAX_RESOURCE_BYTES + 1) }
+                        if (checkNotNull(sourceContext).size > MAX_RESOURCE_BYTES) tooLarge("Source context exceeds its resource limit")
+                    }
                     part is PartData.FileItem && part.name == "source_request" && sourceRequest == null && !invalidParts -> {
                         sourceRequest =
                             try {
@@ -641,7 +656,12 @@ private suspend fun receiveJob(
     }
     if (invalidParts || runId == null || !RUN_ID.matches(runId)) malformed("Job multipart body is invalid")
     sourceRequest?.let { selection ->
-        if (resourcesSeen || diagnosticsSeen) malformed("Online acquisition cannot be combined with snapshot or correlation plan")
+        if (resourcesSeen ||
+            diagnosticsSeen ||
+            sourceContext != null
+        ) {
+            malformed("Online acquisition cannot be combined with manual source inputs")
+        }
         if (sourceProfiles.none { it.id == selection.profileId }) malformed("Source profile is not configured")
     }
     val input =
@@ -671,7 +691,22 @@ private suspend fun receiveJob(
         val errors = validateDiagnosticBinding(plan, snapshot)
         if (errors.isNotEmpty()) throw InvalidDiagnostics(errors)
     }
-    return AnalysisRequest(input, policy, resources = resources, diagnostics = diagnostics, sourceRequest = sourceRequest)
+    val acquisition =
+        sourceContext?.let { bytes ->
+            try {
+                withContext(Dispatchers.IO) { readOpenSearchContext(bytes.inputStream(), input.sha256, resources) }
+            } catch (_: IllegalArgumentException) {
+                malformed("Source context is invalid or belongs to another load input")
+            }
+        }
+    return AnalysisRequest(
+        input,
+        policy,
+        resources = resources,
+        diagnostics = diagnostics,
+        sourceRequest = sourceRequest,
+        sourceAcquisition = acquisition,
+    )
 }
 
 private fun PolicyValidation.failureResponse(): ApiFailure? =
@@ -959,7 +994,7 @@ private const val MAX_UPLOAD_REQUEST_BYTES = MAX_UPLOAD_BYTES + MAX_MULTIPART_OV
 private const val MAX_POLICY_BYTES = 1_048_576
 private const val MAX_RESOURCE_BYTES = 16 * 1024 * 1024
 private const val MAX_DIAGNOSTIC_BYTES = 1024 * 1024
-private const val MAX_JOB_REQUEST_BYTES = MAX_RESOURCE_BYTES + MAX_POLICY_BYTES + MAX_DIAGNOSTIC_BYTES + MAX_MULTIPART_OVERHEAD_BYTES
+private const val MAX_JOB_REQUEST_BYTES = 2 * MAX_RESOURCE_BYTES + MAX_POLICY_BYTES + MAX_DIAGNOSTIC_BYTES + MAX_MULTIPART_OVERHEAD_BYTES
 private const val MAX_RUN_ID_BYTES = 128
 private const val MAX_BASELINE_REQUEST_BYTES = 16_384
 private const val DEFAULT_RUN_LIMIT = 100

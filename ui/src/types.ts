@@ -275,7 +275,24 @@ export interface SourceSummaryEvidence {
   cap_exceeded: boolean
 }
 
-export type AnalysisEvidence = MetricSummaryEvidence | PolicyCheckEvidence | DiagnosticEvidence | ResourceSummaryEvidence | WindowPolicySummaryEvidence | ResourcePolicyCheckEvidence | ResourceBindingEvidence | DiagnosticSummaryEvidence | CorrelationPairEvidence | AnomalyCheckEvidence | WindowMetricSummaryEvidence | SourceSummaryEvidence
+export interface OpenSearchEvidence {
+  id: string
+  type: 'opensearch_errors'
+  profile_id: string
+  total_errors: number | string
+  error_rate_per_minute: number | string
+  coverage: { status: string; reasons: string[] }
+  groups: Array<{
+    service: string
+    error_type: string
+    count: number | string
+    first_epoch_ms: number
+    last_epoch_ms: number
+    samples: Array<{ timestamp_epoch_ms: number; message: string; message_truncated: boolean; source_url: string }>
+  }>
+}
+
+export type AnalysisEvidence = MetricSummaryEvidence | PolicyCheckEvidence | DiagnosticEvidence | ResourceSummaryEvidence | WindowPolicySummaryEvidence | ResourcePolicyCheckEvidence | ResourceBindingEvidence | DiagnosticSummaryEvidence | CorrelationPairEvidence | AnomalyCheckEvidence | WindowMetricSummaryEvidence | SourceSummaryEvidence | OpenSearchEvidence
 
 export interface AnalysisResult {
   schema_version: 'analysis-result.v1'

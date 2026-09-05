@@ -191,5 +191,11 @@ external sample URLs use safe anchors, messages plain escaped text.
 
 ## Progress
 
-Tasks 1–2 not started. Multi-source online selection and PostgreSQL remain a
-separate shared integration plan; this delivery must not claim that block closed.
+Task 1 implemented; focused tests 9/9, scoped review fix for wildcard-only
+indices addressed. Task 2 CLI/API/UI integration implemented; full local
+test/check/installDist passed (256 tests, 2 existing Windows skips), then scoped
+HTTP/config/CLI/API tests passed after the 2xx invalid-body persistence fix.
+Review fix addressed; 4 source UI and 2 real-backend source browser tests pass.
+Broader final sources gate and external CI/secret scan remain pending.
+Multi-source online selection
+and PostgreSQL remain separate work; this delivery does not close that block.

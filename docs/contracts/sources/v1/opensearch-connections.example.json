@@ -1,0 +1,20 @@
+{
+  "schema_version": "source-connections.v1",
+  "connections": [{
+    "id": "errors",
+    "source_kind": "opensearch",
+    "transport": "direct",
+    "base_url": "https://logs.example.invalid",
+    "auth": {"type": "bearer", "token_env": "LTV_LOGS_TOKEN"},
+    "opensearch": {
+      "indices": ["application-errors-*"],
+      "timestamp_field": "@timestamp",
+      "service_field": "service.keyword",
+      "error_type_field": "error.type.keyword",
+      "message_field": "message",
+      "group_limit": 50,
+      "samples_per_group": 2,
+      "sample_message_bytes_max": 4096
+    }
+  }]
+}

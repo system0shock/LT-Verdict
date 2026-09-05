@@ -70,32 +70,56 @@ internal class PromqlSource(
                         query.id,
                         "FAILED",
                         "SOURCE_REQUEST_CAP_EXCEEDED",
-                        sha256Hex(resolvedExpression(query, request.stepMillis).encodeToByteArray()),
+                        sha256Hex(resolvedExpression(profile, query, request).encodeToByteArray()),
                     )
                 return@forEachIndexed
             }
             try {
-                val expression = resolvedExpression(query, request.stepMillis)
+                val expression = resolvedExpression(profile, query, request)
                 val body =
                     http.get(
                         profile,
-                        mapOf(
-                            "query" to expression,
-                            "start" to seconds(request.startEpochMillis + request.stepMillis),
-                            "end" to seconds(request.endEpochMillis),
-                            "step" to seconds(request.stepMillis),
-                        ),
+                        when (profile.sourceKind) {
+                            SourceKind.INFLUXDB ->
+                                mapOf(
+                                    "db" to (profile.database ?: throw IllegalArgumentException("SOURCE_PROFILE_INVALID")),
+                                    "q" to expression,
+                                    "epoch" to "ms",
+                                )
+                            SourceKind.PROMETHEUS,
+                            SourceKind.VICTORIA_METRICS,
+                            ->
+                                mapOf(
+                                    "query" to expression,
+                                    "start" to seconds(request.startEpochMillis + request.stepMillis),
+                                    "end" to seconds(request.endEpochMillis),
+                                    "step" to seconds(request.stepMillis),
+                                )
+                        },
                         budget,
                         checkCancelled,
                     )
                 val decoded =
-                    decodePromqlMatrix(
-                        body,
-                        query.labels,
-                        request.startEpochMillis,
-                        request.stepMillis,
-                        pointCount,
-                    )
+                    when (profile.sourceKind) {
+                        SourceKind.INFLUXDB ->
+                            decodeInfluxqlResponse(
+                                body,
+                                query.labels,
+                                request.startEpochMillis,
+                                request.stepMillis,
+                                pointCount,
+                            )
+                        SourceKind.PROMETHEUS,
+                        SourceKind.VICTORIA_METRICS,
+                        ->
+                            decodePromqlMatrix(
+                                body,
+                                query.labels,
+                                request.startEpochMillis,
+                                request.stepMillis,
+                                pointCount,
+                            )
+                    }
                 if (rawBytes + body.size > MAX_ACQUISITION_RESPONSE_BYTES) fail("RESOURCE_LIMIT_EXCEEDED")
 
                 val series =
@@ -132,7 +156,7 @@ internal class PromqlSource(
                         query.id,
                         "FAILED",
                         failure.code,
-                        sha256Hex(resolvedExpression(query, request.stepMillis).encodeToByteArray()),
+                        sha256Hex(resolvedExpression(profile, query, request).encodeToByteArray()),
                     )
             } catch (failure: PromqlDecodeFailure) {
                 collected += failedSeries(query, pointCount)
@@ -141,7 +165,7 @@ internal class PromqlSource(
                         query.id,
                         "FAILED",
                         failure.code,
-                        sha256Hex(resolvedExpression(query, request.stepMillis).encodeToByteArray()),
+                        sha256Hex(resolvedExpression(profile, query, request).encodeToByteArray()),
                     )
             }
         }
@@ -349,12 +373,18 @@ private fun snapshotBytes(
                     put("source_kind", profile.sourceKind.wireName)
                     put(
                         "query_semantics",
-                        "trailing_window_ms=${request.stepMillis}; sample_at=right_boundary; query_set_sha256=${querySetSha256(
-                            profile,
-                            request.stepMillis,
-                        )}",
+                        if (profile.sourceKind == SourceKind.INFLUXDB) {
+                            "interval_ms=${request.stepMillis}; sample_at=left_boundary; " +
+                                "query_set_sha256=${querySetSha256(profile, request)}"
+                        } else {
+                            "trailing_window_ms=${request.stepMillis}; sample_at=right_boundary; " +
+                                "query_set_sha256=${querySetSha256(profile, request)}"
+                        },
                     )
-                    put("clock_alignment", "right_boundary_to_preceding_cell")
+                    put(
+                        "clock_alignment",
+                        if (profile.sourceKind == SourceKind.INFLUXDB) "left_boundary" else "right_boundary_to_preceding_cell",
+                    )
                 },
             )
         },
@@ -466,13 +496,23 @@ private fun decodeUtf8(bytes: ByteArray): String =
 private fun seconds(epochMillis: Long): String = BigDecimal.valueOf(epochMillis, 3).stripTrailingZeros().toPlainString()
 
 private fun resolvedExpression(
+    profile: SourceProfile,
     query: SourceQuery,
-    stepMillis: Long,
-): String = query.expression.replace("\$__interval", "${stepMillis}ms")
+    request: SourceRequest,
+): String =
+    if (profile.sourceKind == SourceKind.INFLUXDB) {
+        query.expression
+            .replace("\$__start", "${request.startEpochMillis}ms")
+            .replace("\$__end", "${request.endEpochMillis}ms")
+            .replace("\$__interval", "${request.stepMillis}ms")
+            .replace("\$__offset", "${request.startEpochMillis % request.stepMillis}ms")
+    } else {
+        query.expression.replace("\$__interval", "${request.stepMillis}ms")
+    }
 
 private fun querySetSha256(
     profile: SourceProfile,
-    stepMillis: Long,
+    request: SourceRequest,
 ): String =
     sha256Hex(
         canonicalJson(
@@ -481,7 +521,7 @@ private fun querySetSha256(
                     add(
                         buildJsonObject {
                             put("id", query.id)
-                            put("expression_sha256", sha256Hex(resolvedExpression(query, stepMillis).encodeToByteArray()))
+                            put("expression_sha256", sha256Hex(resolvedExpression(profile, query, request).encodeToByteArray()))
                         },
                     )
                 }

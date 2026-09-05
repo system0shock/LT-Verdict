@@ -13,6 +13,93 @@ import java.math.BigDecimal
 
 class SourceConfigTest {
     @Test
+    fun `influxdb profile accepts database and required time placeholders`() {
+        val profile =
+            readSourceProfiles(
+                """
+                {
+                  "schema_version":"source-connections.v1",
+                  "connections":[{
+                    "id":"influx-main",
+                    "source_kind":"influxdb",
+                    "transport":"direct",
+                    "base_url":"https://influx.example.test",
+                    "database":"metrics",
+                    "auth":{"type":"token","token_env":"INFLUX_TOKEN"},
+                    "queries":[{
+                      "id":"cpu",
+                      "expression":"SELECT mean(\"cpu\") AS \"value\" FROM \"host\" WHERE time >= ${'$'}__start AND time < ${'$'}__end GROUP BY time(${'$'}__interval, ${'$'}__offset) fill(null)",
+                      "metric":"cpu_used",
+                      "unit":"ratio",
+                      "entity":"host-a",
+                      "role":"system",
+                      "aggregation":"interval_mean"
+                    }]
+                  }]
+                }
+                """.trimIndent().byteInputStream(),
+            ).single()
+
+        assertEquals(SourceKind.INFLUXDB, profile.sourceKind)
+        assertEquals("metrics", profile.database)
+        assertEquals(SourceAuth.Token("INFLUX_TOKEN"), profile.auth)
+    }
+
+    @Test
+    fun `database is required for influxdb and forbidden for promql profiles`() {
+        val missingDatabase = influxConnections().replace("\"database\":\"metrics\",", "")
+        val emptyDatabase = influxConnections().replace("\"database\":\"metrics\"", "\"database\":\"\"")
+        val oversizedDatabase = influxConnections().replace("\"metrics\"", "\"${"d".repeat(129)}\"")
+        val promqlDatabase =
+            """{"schema_version":"source-connections.v1","connections":[${
+                minimalConnection("prom-with-database").replace("\"queries\":", "\"database\":\"metrics\",\"queries\":")
+            }]}"""
+
+        listOf(missingDatabase, emptyDatabase, oversizedDatabase, promqlDatabase).forEach { json ->
+            assertEquals(
+                "SOURCE_CONFIG_INVALID",
+                assertThrows(IllegalArgumentException::class.java) { readSourceProfiles(json.byteInputStream()) }.message,
+            )
+        }
+    }
+
+    @Test
+    fun `influxdb queries require window placeholders and reject unsafe statements`() {
+        val invalid =
+            listOf(
+                influxConnections().replace("${'$'}__start", "1000ms"),
+                influxConnections().replace("${'$'}__end", "2000ms"),
+                influxConnections().replace("${'$'}__interval", "1000ms"),
+                influxConnections().replace(" fill(null)", "; SELECT value FROM other"),
+                influxConnections().replace("SELECT mean", "SELECT mean INTO archive"),
+                influxConnections().replace(" fill(null)", " -- unsafe"),
+                influxConnections().replace(" fill(null)", " /* unsafe */"),
+                influxConnections().replace(" fill(null)", " ${'$'}__unknown"),
+                influxConnections().replace("SELECT mean", "DELETE mean"),
+                influxConnections().replace(" AS \\\"value\\\"", ""),
+            )
+
+        invalid.forEach { json ->
+            assertEquals(
+                "SOURCE_CONFIG_INVALID",
+                assertThrows(IllegalArgumentException::class.java) { readSourceProfiles(json.byteInputStream()) }.message,
+            )
+        }
+    }
+
+    @Test
+    fun `token credentials over HTTP require explicit opt in`() {
+        val insecure = influxConnections().replace("https://influx.example.test", "http://influx.example.test")
+        val optedIn = insecure.replace("\"database\":\"metrics\",", "\"database\":\"metrics\",\"allow_insecure_http\":true,")
+
+        assertEquals(
+            "SOURCE_CONFIG_INVALID",
+            assertThrows(IllegalArgumentException::class.java) { readSourceProfiles(insecure.byteInputStream()) }.message,
+        )
+        assertEquals(SourceAuth.Token("INFLUX_TOKEN"), readSourceProfiles(optedIn.byteInputStream()).single().auth)
+    }
+
+    @Test
     fun `profiles parse strict bounded query rule auth and governor contracts`() {
         val profiles = readSourceProfiles(validConnections().byteInputStream())
 
@@ -192,4 +279,28 @@ class SourceConfigTest {
 
     private fun minimalConnection(id: String): String =
         """{"id":"$id","source_kind":"prometheus","transport":"direct","base_url":"https://example.test","queries":[{"id":"q","expression":"rate(x[${'$'}__interval])","metric":"x","unit":"ratio","entity":"e","role":"system","aggregation":"interval_rate"}]}"""
+
+    private fun influxConnections(): String =
+        """
+        {
+          "schema_version":"source-connections.v1",
+          "connections":[{
+            "id":"influx-main",
+            "source_kind":"influxdb",
+            "transport":"direct",
+            "base_url":"https://influx.example.test",
+            "database":"metrics",
+            "auth":{"type":"token","token_env":"INFLUX_TOKEN"},
+            "queries":[{
+              "id":"cpu",
+              "expression":"SELECT mean(\"cpu\") AS \"value\" FROM \"host\" WHERE time >= ${'$'}__start AND time < ${'$'}__end GROUP BY time(${'$'}__interval, ${'$'}__offset) fill(null)",
+              "metric":"cpu_used",
+              "unit":"ratio",
+              "entity":"host-a",
+              "role":"system",
+              "aggregation":"interval_mean"
+            }]
+          }]
+        }
+        """.trimIndent()
 }

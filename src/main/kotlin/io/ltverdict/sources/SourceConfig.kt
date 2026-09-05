@@ -31,6 +31,7 @@ internal enum class SourceKind(
 ) {
     PROMETHEUS("prometheus"),
     VICTORIA_METRICS("victoria_metrics"),
+    INFLUXDB("influxdb"),
 }
 
 internal enum class SourceTransport(
@@ -44,6 +45,10 @@ internal sealed interface SourceAuth {
     data object None : SourceAuth
 
     data class Bearer(
+        val tokenEnv: String,
+    ) : SourceAuth
+
+    data class Token(
         val tokenEnv: String,
     ) : SourceAuth
 
@@ -85,6 +90,7 @@ internal data class SourceProfile(
     val governor: SourceGovernor = SourceGovernor(),
     val queries: List<SourceQuery>,
     val rules: List<ResourceRuleV1> = emptyList(),
+    val database: String? = null,
 )
 
 internal data class SourceRequest(
@@ -179,6 +185,7 @@ private fun parseProfile(element: JsonElement): SourceProfile {
             "transport",
             "base_url",
             "datasource_uid",
+            "database",
             "auth",
             "allow_insecure_http",
             "governor",
@@ -191,6 +198,13 @@ private fun parseProfile(element: JsonElement): SourceProfile {
     val transport = SourceTransport.entries.find { it.wireName == value.sourceString("transport") } ?: configInvalid()
     val baseUrl = parseBaseUrl(value.sourceString("base_url"))
     val datasourceUid = value.optionalString("datasource_uid")
+    val database = value.optionalString("database")?.let { validateText(it, MAX_DATABASE_BYTES) }
+    when (sourceKind) {
+        SourceKind.INFLUXDB -> if (database == null) configInvalid()
+        SourceKind.PROMETHEUS,
+        SourceKind.VICTORIA_METRICS,
+        -> if (database != null) configInvalid()
+    }
     when (transport) {
         SourceTransport.DIRECT -> if (datasourceUid != null) configInvalid()
         SourceTransport.GRAFANA_PROXY -> {
@@ -201,9 +215,9 @@ private fun parseProfile(element: JsonElement): SourceProfile {
     val allowInsecureHttp = value.optionalBoolean("allow_insecure_http") ?: false
     if (baseUrl.scheme == "http" && auth != SourceAuth.None && !allowInsecureHttp) configInvalid()
     val governor = value["governor"]?.let(::parseGovernor) ?: SourceGovernor()
-    val queries = parseQueries(value.sourceArray("queries"))
+    val queries = parseQueries(value.sourceArray("queries"), sourceKind)
     val rules = value.optionalArray("rules")?.let { parseRules(it, queries) }.orEmpty()
-    return SourceProfile(id, sourceKind, transport, baseUrl, datasourceUid, auth, allowInsecureHttp, governor, queries, rules)
+    return SourceProfile(id, sourceKind, transport, baseUrl, datasourceUid, auth, allowInsecureHttp, governor, queries, rules, database)
 }
 
 private fun parseAuth(element: JsonElement): SourceAuth {
@@ -217,6 +231,11 @@ private fun parseAuth(element: JsonElement): SourceAuth {
         "bearer" -> {
             value.rejectUnknown(setOf("type", "token_env"))
             SourceAuth.Bearer(value.sourceEnvironmentName("token_env"))
+        }
+
+        "token" -> {
+            value.rejectUnknown(setOf("type", "token_env"))
+            SourceAuth.Token(value.sourceEnvironmentName("token_env"))
         }
 
         "basic" -> {
@@ -263,7 +282,10 @@ private fun parseGovernor(element: JsonElement): SourceGovernor {
     )
 }
 
-private fun parseQueries(values: JsonArray): List<SourceQuery> {
+private fun parseQueries(
+    values: JsonArray,
+    sourceKind: SourceKind,
+): List<SourceQuery> {
     if (values.isEmpty() || values.size > MAX_SOURCE_QUERIES) configInvalid()
     val ids = HashSet<String>()
     return values.map { element ->
@@ -272,7 +294,12 @@ private fun parseQueries(values: JsonArray): List<SourceQuery> {
         val id = value.sourceText("id", MAX_IDENTIFIER_BYTES)
         if (!ids.add(id)) configInvalid()
         val expression = value.sourceText("expression", MAX_QUERY_BYTES)
-        if (!expression.contains(INTERVAL_PLACEHOLDER)) configInvalid()
+        when (sourceKind) {
+            SourceKind.INFLUXDB -> validateInfluxqlExpression(expression)
+            SourceKind.PROMETHEUS,
+            SourceKind.VICTORIA_METRICS,
+            -> if (!expression.contains(INTERVAL_PLACEHOLDER)) configInvalid()
+        }
         val role = ResourceRole.entries.find { it.wireName == value.sourceString("role") } ?: configInvalid()
         val aggregation =
             ResourceAggregation.entries.find { it.wireName == value.sourceString("aggregation") } ?: configInvalid()
@@ -287,6 +314,15 @@ private fun parseQueries(values: JsonArray): List<SourceQuery> {
             value["labels"]?.let(::parseLabels).orEmpty(),
         )
     }
+}
+
+private fun validateInfluxqlExpression(expression: String) {
+    if (INFLUX_REQUIRED_PLACEHOLDERS.any { it !in expression }) configInvalid()
+    val withoutKnownPlaceholders = INFLUX_PLACEHOLDERS.fold(expression) { query, placeholder -> query.replace(placeholder, "") }
+    if ("${'$'}__" in withoutKnownPlaceholders) configInvalid()
+    if (';' in expression || INFLUX_COMMENTS.any(expression::contains) || INFLUX_INTO.containsMatchIn(expression)) configInvalid()
+    if (!INFLUX_SELECT.matches(expression)) configInvalid()
+    if (!INFLUX_VALUE_ALIAS.containsMatchIn(expression) && !INFLUX_DIRECT_VALUE.matches(expression)) configInvalid()
 }
 
 private fun parseLabels(element: JsonElement): Map<String, String> {
@@ -517,6 +553,7 @@ private const val MAX_SOURCE_QUERIES = 32
 private const val MAX_RESOURCE_RULES = 256
 private const val MAX_LABELS = 16
 private const val MAX_IDENTIFIER_BYTES = 128
+private const val MAX_DATABASE_BYTES = 128
 private const val MAX_QUERY_BYTES = 65_536
 private const val MAX_JSON_DEPTH = 12
 private const val MAX_NUMERIC_TOKEN_BYTES = 64
@@ -530,6 +567,16 @@ private const val MAX_REQUESTS_PER_RUN = 1_000_000
 private const val MAX_DECIMAL_PRECISION = 32
 private const val MAX_DECIMAL_SCALE = 12
 private const val INTERVAL_PLACEHOLDER = "${'$'}__interval"
+private const val START_PLACEHOLDER = "${'$'}__start"
+private const val END_PLACEHOLDER = "${'$'}__end"
+private const val OFFSET_PLACEHOLDER = "${'$'}__offset"
+private val INFLUX_REQUIRED_PLACEHOLDERS = listOf(START_PLACEHOLDER, END_PLACEHOLDER, INTERVAL_PLACEHOLDER)
+private val INFLUX_PLACEHOLDERS = INFLUX_REQUIRED_PLACEHOLDERS + OFFSET_PLACEHOLDER
+private val INFLUX_COMMENTS = listOf("--", "/*", "*/", "#")
+private val INFLUX_INTO = Regex("""(?i)\bINTO\b""")
+private val INFLUX_SELECT = Regex("""(?is)^\s*SELECT\b.+\bFROM\b.+$""")
+private val INFLUX_VALUE_ALIAS = Regex("""(?i)\bAS\s+"?value"?(?=\s|,|$)""")
+private val INFLUX_DIRECT_VALUE = Regex("""(?is)^\s*SELECT\s+"?value"?(?:\s*,|\s+FROM\b).*$""")
 private val MAX_DECIMAL_MAGNITUDE = BigDecimal("1000000000000000000")
 private val ENVIRONMENT_NAME = Regex("[A-Za-z_][A-Za-z0-9_]{0,127}")
 private val SAFE_PATH_SEGMENT = Regex("[A-Za-z0-9._~-]{1,128}")

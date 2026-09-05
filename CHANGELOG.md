@@ -7,6 +7,9 @@
 
 ### Added
 
+- Opt-in InfluxDB acquisition через read-only InfluxQL GET `/query`: direct и
+  Grafana proxy profiles, env token, left-boundary cells, strict response
+  validation, snapshot persistence и offline replay.
 - Opt-in Prometheus/VictoriaMetrics acquisition напрямую и через Grafana proxy:
   профили с env credentials, общий bounded HTTP governor, snapshot/provenance,
   статусы неполноты, CLI/UI и offline replay сохранённого snapshot.

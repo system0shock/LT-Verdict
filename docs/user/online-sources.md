@@ -1,13 +1,14 @@
-# Онлайн-источники: Prometheus, VictoriaMetrics и Grafana proxy
+# Онлайн-источники: Prometheus, VictoriaMetrics, InfluxDB и Grafana proxy
 
-Первая поставка использует read-only PromQL `query_range`. InfluxDB,
+Поддерживаются read-only PromQL `query_range` и InfluxQL GET `/query`.
 PostgreSQL и OpenSearch следуют отдельно; Grafana dashboard discovery и panel
-transformations не поддерживаются. Боевой plugin/auth route нужно проверить
-на вашем стенде. Без connections file приложение не выполняет acquisition.
+transformations не поддерживаются. Боевой plugin/auth route нужно проверить на
+вашем стенде. Без connections file приложение не выполняет acquisition.
 
 ## Запуск
 
-Скопируйте [пример профилей](../contracts/sources/v1/connections.example.json),
+Скопируйте [пример PromQL-профиля](../contracts/sources/v1/connections.example.json)
+или [пример InfluxDB-профиля](../contracts/sources/v1/influxdb-connections.example.json),
 задайте адрес и запросы своего стенда. В UI:
 
 ```powershell
@@ -25,11 +26,12 @@ CLI использует [пример source request](../contracts/sources/v1/r
 ```
 
 Профили загружаются при запуске; изменение файла требует перезапуска backend.
-`source_kind`: `prometheus` или `victoria_metrics`; `transport`: `direct` или
-`grafana_proxy`. Direct добавляет `/api/v1/query_range` к `base_url` (VM tenant
-prefix сохраняется). Grafana добавляет
-`/api/datasources/proxy/uid/{datasource_uid}/api/v1/query_range` к base URL Grafana.
-Subpath установки задаётся в base URL. Redirects и произвольные URLs из UI запрещены.
+`source_kind`: `prometheus`, `victoria_metrics` или `influxdb`; `transport`:
+`direct` или `grafana_proxy`. Для PromQL direct добавляет `/api/v1/query_range`
+к `base_url` (VM tenant prefix сохраняется), а Grafana добавляет
+`/api/datasources/proxy/uid/{datasource_uid}/api/v1/query_range`. InfluxDB-маршруты
+описаны ниже. Subpath установки задаётся в base URL. Redirects и произвольные
+URLs из UI запрещены.
 
 ## Метрики и время
 
@@ -51,11 +53,41 @@ duplicate/off-grid timestamps, histograms и неоднозначные labels �
 Непустые source warnings в первой поставке также отклоняют query (`SOURCE_WARNINGS`):
 частично отброшенные источником данные не выдаются за полный ответ.
 
+## InfluxDB / InfluxQL
+
+Профиль `influxdb` требует `database` длиной 1..128 UTF-8 bytes. Поддерживается
+только InfluxQL: Flux и InfluxDB 3 SQL не входят в эту поставку. Для InfluxDB 2
+совместимый endpoint `/query` требует заранее настроенный DBRP mapping, а
+`database` содержит имя mapped database/retention policy. Учётная запись БД
+должна иметь read-only роль: проверка текста SELECT не заменяет права доступа.
+
+Direct отправляет GET на `{base_url}/query`, Grafana proxy — на
+`{base_url}/api/datasources/proxy/uid/{datasource_uid}/query`; `/write` никогда
+не используется. Параметры запроса: `db`, `q`, `epoch=ms`. Expression обязан
+содержать `$__start`, `$__end`, `$__interval`; `$__offset` необязателен и равен
+`start % step`. Первые три значения заменяются соответственно на start/end/step
+с суффиксом `ms`.
+
+Запрос должен быть одним SELECT и возвращать ровно колонки `time`,`value` в
+любом порядке. Полю метрики задайте alias `AS "value"`; `time` возвращает сам
+InfluxQL. Консервативный validator отклоняет `INTO`, semicolon, comments,
+неизвестные placeholders и выражения, форму которых нельзя подтвердить без
+полного SQL parser. Один результат с нулём или одной series допустим; несколько
+statements/series, partial response, messages/errors, неверные tags,
+duplicate/off-grid timestamps отклоняются.
+
+InfluxQL timestamp является левой границей snapshot cell. Пример с cells
+`[1000,2000)`, `[2000,3000)`, `[3000,4000)` принимает timestamps `1000`, `2000`,
+`3000`. Отсутствующая точка и JSON `null` остаются gap (`null`), не становятся
+нулём и не интерполируются.
+
 ## Credentials и limits
 
 Auth по умолчанию `{"type":"none"}`. Bearer:
 `{"type":"bearer","token_env":"LTV_METRICS_TOKEN"}`; Basic:
 `{"type":"basic","username_env":"LTV_METRICS_USER","password_env":"LTV_METRICS_PASSWORD"}`.
+Influx token: `{"type":"token","token_env":"LTV_INFLUX_TOKEN"}`; backend
+отправляет его как `Authorization: Token ...`.
 Значения задаются environment процесса backend, не в JSON/UI. TLS verification
 всегда включена. Credentials по HTTP требуют `allow_insecure_http:true`;
 используйте HTTPS вне доверенного локального теста.
@@ -94,6 +126,8 @@ Profiles/credentials там не сохраняются. Источник дан
 
 Это offline анализ с теми же metric/SLA facts, но отдельной identity без acquisition
 provenance. Открытие старого результата также не выполняет HTTP requests.
+Тот же ручной replay применяется к сохранённому InfluxDB snapshot: подключение,
+DBRP mapping и token при повторном анализе не нужны.
 Для correlation plan сначала получите snapshot hash, затем запускайте offline
 `--resources ... --correlation ...`: online acquisition и correlation plan в одном
 запросе не смешиваются, потому что план привязан к конкретному snapshot.

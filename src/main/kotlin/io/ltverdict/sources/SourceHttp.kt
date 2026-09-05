@@ -317,7 +317,7 @@ private fun endpoint(profile: SourceProfile): URI {
         when (profile.transport) {
             SourceTransport.DIRECT -> {
                 if (profile.datasourceUid != null) sourceFailure("SOURCE_PROFILE_INVALID")
-                "/api/v1/query_range"
+                if (profile.sourceKind == SourceKind.INFLUXDB) "/query" else "/api/v1/query_range"
             }
 
             SourceTransport.GRAFANA_PROXY -> {
@@ -325,7 +325,11 @@ private fun endpoint(profile: SourceProfile): URI {
                     profile.datasourceUid
                         ?.takeIf { it !in setOf(".", "..") && SAFE_PATH_SEGMENT.matches(it) }
                         ?: sourceFailure("SOURCE_PROFILE_INVALID")
-                "/api/datasources/proxy/uid/$uid/api/v1/query_range"
+                if (profile.sourceKind == SourceKind.INFLUXDB) {
+                    "/api/datasources/proxy/uid/$uid/query"
+                } else {
+                    "/api/datasources/proxy/uid/$uid/api/v1/query_range"
+                }
             }
         }
     return try {
@@ -392,6 +396,7 @@ private fun authorization(
     when (auth) {
         SourceAuth.None -> null
         is SourceAuth.Bearer -> "Bearer ${credential(auth.tokenEnv, environment)}"
+        is SourceAuth.Token -> "Token ${credential(auth.tokenEnv, environment)}"
         is SourceAuth.Basic -> {
             val username = credential(auth.usernameEnv, environment)
             val password = credential(auth.passwordEnv, environment)

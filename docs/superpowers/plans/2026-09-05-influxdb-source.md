@@ -99,6 +99,7 @@ assertEquals(listOf(BigDecimal("0.8"), null, BigDecimal("0.9")), decoded.values)
   Add literal malformed/error/partial/duplicate/off-grid/ambiguous cases;
   config acceptance and rejection of database on PromQL, missing placeholders,
   unsafe query, credentials on non-opted-in HTTP.
+
 - [ ] Run RED: `./gradlew.bat -PnpmOffline=true --offline --no-daemon test --tests '*InfluxqlSourceTest' --tests '*SourceConfigTest' -x npmCi`.
   Missing decoder/enum compilation is initial RED; behavioral rejection test
   must also demonstrate the prior unsupported profile behavior before code.

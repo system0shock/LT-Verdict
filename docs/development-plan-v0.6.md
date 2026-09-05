@@ -103,6 +103,11 @@ Prometheus/VM direct и Grafana proxy, общий governor и offline replay.
 Проверки: 215 JVM passed + 2 прежних skips; 34 browser tests passed.
 Следующая независимая поставка источников — InfluxDB, PostgreSQL и OpenSearch;
 блок источников целиком ещё не закрыт.
+Границы продолжения согласованы в
+[дизайне оставшихся источников](superpowers/specs/2026-09-05-remaining-sources-design.md):
+несколько источников на анализ, отдельный PostgreSQL pre/post, ручной импорт
+и offline replay. Первым выполняется
+[план InfluxQL](superpowers/plans/2026-09-05-influxdb-source.md).
 Jenkins/artifacts, PostgreSQL analysis, JVM/OpenShift packs, OpenSearch,
 оставшиеся charts/comparison/export функции и GigaCode Skill сохраняются
 в scope таблицы Slices 2–10; их порядок после пилота ещё не утверждён.

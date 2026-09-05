@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
 import AnalysisView from './AnalysisView.vue'
+import BaselinePanel from './BaselinePanel.vue'
 import JobStatusView from './JobStatus.vue'
 import RunSetup from './RunSetup.vue'
 import {
@@ -19,6 +20,7 @@ import {
 import type { AnalysisResult, AnalysisSummary, Bucket, JobStatus, Policy, PolicyError, RunSummary, Theme } from './types'
 
 const theme = ref<Theme>(window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light')
+const apiReady = ref(false)
 const inputFile = ref<File | null>(null)
 const policy = ref<Policy | null>(null)
 const policyStatus = ref('')
@@ -47,6 +49,9 @@ let bucketRevision = 0
 let policyRevision = 0
 
 const working = computed(() => job.value?.state === 'QUEUED' || job.value?.state === 'PROCESSING')
+const selectedReference = computed(() => result.value && selectedAnalysisId.value
+  ? { run_id: result.value.run_id, analysis_id: selectedAnalysisId.value }
+  : null)
 
 watch(
   theme,
@@ -60,6 +65,7 @@ watch(
 onMounted(async () => {
   try {
     await bootstrap()
+    apiReady.value = true
     await refreshRuns()
   } catch (failure) {
     showError(failure)
@@ -430,6 +436,13 @@ function focusPolicy() {
           :upload-progress="uploadProgress"
           :busy="queueBusy"
           @cancel="cancel"
+        />
+
+        <BaselinePanel
+          v-if="apiReady"
+          :selection="selectedReference"
+          :filename="currentRun?.original_filename ?? ''"
+          :working="working"
         />
 
         <div

@@ -289,6 +289,17 @@ td:not(:first-child), th:not(:first-child) { font-family: "Cascadia Mono", Conso
 .chart-point { fill: var(--info); }
 .chart-label { fill: var(--text-muted); font-size: 11px; }
 
+.baseline-panel { display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; }
+.baseline-panel .panel__header { margin-bottom: 0; }
+.baseline-selection, .baseline-statistics li { overflow-wrap: anywhere; }
+.baseline-statistics > :not(summary) { margin-top: 12px; }
+.baseline-panel summary { min-height: 44px; padding: 10px 0; cursor: pointer; }
+.baseline-panel summary:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+.baseline-confirmation { display: flex; align-items: center; gap: 8px; min-height: 44px; }
+.baseline-confirmation input { width: 20px; min-height: 20px; height: 20px; }
+.baseline-statistics li { margin-bottom: 8px; }
+.baseline-statistics li button { margin-left: 8px; }
+
 @media (max-width: 960px) {
   .app-shell, .app-layout { grid-template-columns: 1fr; }
   .sidebar, .navigation, .side-navigation { grid-row: auto; width: auto; min-height: auto; border-right: 0; border-bottom: 1px solid var(--border); padding: 12px 24px; }

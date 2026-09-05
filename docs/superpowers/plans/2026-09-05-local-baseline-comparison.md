@@ -76,7 +76,9 @@ Every new endpoint rejects extra or duplicate query parameters.
 
 ## Task 1: Baseline calculations, persistence and private API
 
-**Owner:** backend implementer; no frontend or project prose edits.
+**Owner:** backend implementer owns core/store; root owns LocalApi and HTTP
+tests alongside UI. File ownership was split after core GREEN to avoid waiting
+for sequential storage/API implementation. No frontend or prose worker edits.
 
 **Files:**
 
@@ -93,13 +95,13 @@ Every new endpoint rejects extra or duplicate query parameters.
 validated JSON results/identities and pinned References. Private helper types
 remain in the new calculation file; reuse JsonObject at store/API boundaries.
 
-- [ ] Write integration RED for GET/POST manual/reload/compare/clear; expected
+- [x] Write integration RED for GET/POST manual/reload/compare/clear; expected
   before implementation: missing baseline endpoint. Capture output.
-- [ ] Write statistical RED with real/literal candidates:
+- [x] Write statistical RED with real/literal candidates:
   `(P95,RPS,errors) = (100,100,0), (110,90,0), (1000,10,0)`; middle candidate
   wins regardless of request order. Ties resolve by reference. Duplicate runs,
   fewer than 3, missing metrics, degraded/invalid and mixed semantics reject.
-- [ ] Implement ranks with exact rational ordering:
+- [x] Implement ranks with exact rational ordering:
 
 ```text
 rank2(candidate, metric) = 2 * count(values < value) + count(values == value) + 1
@@ -107,19 +109,19 @@ score(candidate) = sum(abs(rank2(candidate, metric) - (n + 1)))
 winner = minBy(score, run_id, analysis_id)
 ```
 
-- [ ] Implement safe state read/atomic replacement in RunBundleStore under its
+- [x] Implement safe state read/atomic replacement in RunBundleStore under its
   existing operationLock; reuse staging/forced-write/path helpers. Do not add
   a new store class. Validate all candidates before publishing selection.
   For failed update assert previous selection bytes unchanged. GET after
   DataDirectory close/reopen must return the same pinned reference.
-- [ ] Implement exact deltas, missing/zero behavior and semantic compatibility.
+- [x] Implement exact deltas, missing/zero behavior and semantic compatibility.
   Hand-derived checks: 100 -> 125 gives delta `25`, percent `25`; baseline 0
   to current 1 gives delta `1`, percent null/`ZERO_BASELINE`; different RPS
   alone still yields deltas; unknown planned context is `UNCONFIRMED`.
-- [ ] Add private routes with existing CSRF/Origin/session checks. Bound raw
+- [x] Add private routes with existing CSRF/Origin/session checks. Bound raw
   UTF-8 JSON before parsing; validate shape/depth before recursive processing.
   Existing policy scanner stays unchanged; no generic parser refactor.
-- [ ] Run focused JVM tests, report RED/GREEN, self-review and commit explicit
+- [x] Run focused JVM tests, report RED/GREEN, self-review and commit explicit
   backend files only. Root owns full build after frontend integration.
 
 ```powershell
@@ -132,30 +134,33 @@ winner = minBy(score, run_id, analysis_id)
 
 **Files:** create `ui/src/BaselinePanel.vue`, `ui/e2e/baseline.spec.ts`; modify
 `ui/src/App.vue`, `ui/src/api.ts`, `ui/src/types.ts`, `ui/src/styles.css` only
-where required by the panel.
+where required by the panel. `ui/e2e/security-a11y.spec.ts` additionally waits
+for the real run list before capturing keyboard order: the expanded fixture
+set exposed an asynchronous-listing race in the existing test. Assertions and
+production focus behavior are unchanged.
 
-- [ ] Browser RED: real analyze, click `Set as baseline`, reload and see pinned
+- [x] Browser RED: real analyze, click `Set as baseline`, reload and see pinned
   baseline without any new job; initial failure is missing action.
-- [ ] Render the panel using existing section/table/notice controls and tokens.
+- [x] Render the panel using existing section/table/notice controls and tokens.
   Pass current saved reference from App, without fake JobStatus. Default series
   label `Selected test series` is editable. Show full IDs through title/text.
-- [ ] Manual action posts the exact selected reference. Clear returns empty
+- [x] Manual action posts the exact selected reference. Clear returns empty
   state. Baseline is visible after reload even before choosing current analysis.
-- [ ] A collapsed `Statistical selection` section accumulates selected analyses
+- [x] A collapsed `Statistical selection` section accumulates selected analyses
   with add/remove actions, max 20 and one per run. Candidate set changes reset
   the `Same planned test conditions` checkbox; it means declared conditions,
   never equality of achieved RPS. Explain the 3-metric heuristic and limitations.
-- [ ] `Select statistically` posts frozen candidates and confirmation; show
+- [x] `Select statistically` posts frozen candidates and confirmation; show
   selected reference, algorithm and candidate scores. New analyses do not
   silently enter the candidate set or update baseline.
-- [ ] `Compare selected analysis` loads the comparison table. Show raw values,
+- [x] `Compare selected analysis` loads the comparison table. Show raw values,
   absolute delta and relative delta with reasons for N/A, explicit ratio units,
   and caution that deltas alone are not a regression verdict.
-- [ ] Protect baseline/comparison load and mutation responses with revisions.
+- [x] Protect baseline/comparison load and mutation responses with revisions.
   Selection changes immediately clear stale comparison; failed mutations leave
   last confirmed baseline visible. No previous-run response may overwrite a
   newer selection. All acquired content uses Vue text interpolation.
-- [ ] Real E2E covers manual persistence, known deltas with a changed RPS,
+- [x] Real E2E covers manual persistence, known deltas with a changed RPS,
   statistical middle winner from 3 synthetic JTLs, fixed winner after another
   run, clear, failures and stale response. Existing axe/theme/keyboard checks
   continue to pass; add a baseline-panel axe check if not already reached.
@@ -177,9 +182,9 @@ npm --prefix ui run e2e -- e2e/baseline.spec.ts
 **Files:** this plan, `CHANGELOG.md`, `docs/user/slice-1-local-analysis.md`,
 `docs/architecture/slice-1-local-runtime.md`, `docs/development-plan-v0.6.md`.
 
-- [ ] Document manual/statistical use, candidate confirmation, pinned selection,
+- [x] Document manual/statistical use, candidate confirmation, pinned selection,
   heuristic/rounding/N/A limitations, private file/routes and unchanged verdict.
-- [ ] Mark only implemented baseline slice portion; N-run history, charts,
+- [x] Mark only implemented baseline slice portion; N-run history, charts,
   transaction comparison, exports and policy gates are not complete.
 - [ ] Run fresh full gate, inspect full diff; one Sol review of this concern,
   then only scoped fixes and their covering checks. Record limitations and
@@ -192,9 +197,9 @@ npm --prefix ui run test:contracts
 npm --prefix ui run e2e
 python tools/verify_slice0.py
 python -m unittest tools.test_verify_slice0 tools.test_generate_jtl -v
-npx --offline --yes markdownlint-cli2@0.23.2 "**/*.md"
+npx --offline --yes markdownlint-cli2@0.23.2 "**/*.md" "!ui/test-results/**"
 git diff --check
 ```
 
-Secret check uses existing tracked-file scan from `.github/workflows/runtime.yml`.
+Secret check uses existing tracked-file scan from `.github/workflows/runtime-quality.yml`.
 Report exact test results; remote CI for this unpublished branch is unverified.

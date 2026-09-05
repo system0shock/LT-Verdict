@@ -49,6 +49,100 @@ class LocalApiTest {
     lateinit var tempDir: Path
 
     @Test
+    fun `baseline API rejects malformed unauthenticated oversized and ineligible requests`() =
+        withServer { _, api ->
+            assertError(api.postUnauthenticated("/api/baseline", "{}".encodeToByteArray()), 403, "FORBIDDEN")
+            api.bootstrap()
+            assertError(api.get("/api/baseline?extra=1"), 400)
+            assertError(api.delete("/api/baseline?extra=1&extra=2"), 400)
+            listOf(
+                "{}",
+                "[]",
+                "{",
+                """{"mode":"manual","series":"x","reference":{"run_id":"../outside","analysis_id":"a"}}""",
+                """{"mode":"manual","series":"x","reference":null}""",
+                """{"mode":"manual","series":"x","reference":{},"extra":true}""",
+            ).forEach { body -> assertError(api.post("/api/baseline", "application/json", body.encodeToByteArray()), 400) }
+            assertError(api.post("/api/baseline", "application/json", byteArrayOf(0xff.toByte())), 400)
+            assertError(api.post("/api/baseline", "text/plain", "{}".encodeToByteArray()), 415)
+            assertError(api.post("/api/baseline", "application/json", " ".repeat(16_385).encodeToByteArray()), 413)
+            assertError(api.post("/api/baseline", "application/json", ("[".repeat(9) + "]".repeat(9)).encodeToByteArray()), 413)
+            assertError(
+                api.post(
+                    "/api/baseline",
+                    "application/json",
+                    """{"mode":"statistical","series":"x","candidates":[],"comparable":true}""".encodeToByteArray(),
+                ),
+                422,
+            )
+            assertError(
+                api.post(
+                    "/api/baseline",
+                    "application/json",
+                    """{"mode":"statistical","series":"x","candidates":[],"comparable":false}""".encodeToByteArray(),
+                ),
+                422,
+            )
+            assertEquals(JsonNull, api.get("/api/baseline").jsonObject().getValue("baseline"))
+        }
+
+    @Test
+    fun `baseline API manually selects reloads compares and clears a pinned analysis`() =
+        withServer { store, api ->
+            val input = store.acceptInput(ByteArrayInputStream(SPIKE_DROP.bytes()), SPIKE_DROP.filename)
+            api.bootstrap()
+            val baselineId = api.createJob(input.runId).analysisId(api)
+            val currentId = api.createJob(input.runId, Files.readAllBytes(Path.of(PASS_POLICY))).analysisId(api)
+
+            assertEquals(JsonNull, api.get("/api/baseline").jsonObject().getValue("baseline"))
+
+            val selection =
+                api
+                    .post(
+                        "/api/baseline",
+                        "application/json",
+                        """{"mode":"manual","series":"release","reference":{"run_id":"${input.runId}","analysis_id":"$baselineId"}}"""
+                            .encodeToByteArray(),
+                    ).jsonObject()
+                    .getValue("baseline")
+                    .jsonObject
+            assertEquals(
+                setOf("schema_version", "series", "mode", "reference", "algorithm", "candidates", "scores"),
+                selection.keys,
+            )
+            assertEquals("local-baseline.v1", selection.getValue("schema_version").jsonPrimitive.content)
+            assertEquals("release", selection.getValue("series").jsonPrimitive.content)
+            assertEquals("manual", selection.getValue("mode").jsonPrimitive.content)
+            assertEquals(JsonNull, selection.getValue("algorithm"))
+            assertEquals(selection.getValue("reference"), selection.getValue("candidates").jsonArray.single())
+            assertTrue(selection.getValue("scores").jsonArray.isEmpty())
+            assertEquals(selection, api.get("/api/baseline").jsonObject().getValue("baseline"))
+
+            val comparison =
+                api
+                    .get("/api/runs/${input.runId}/analyses/$currentId/comparison")
+                    .jsonObject()
+            assertEquals(setOf("baseline", "current", "comparability", "metrics"), comparison.keys)
+            assertEquals(selection, comparison.getValue("baseline"))
+            assertEquals("UNCONFIRMED", comparison.getValue("comparability").jsonPrimitive.content)
+            assertEquals(
+                listOf("response_time_p95_ms", "response_time_p99_ms", "throughput_rps", "error_rate_ratio"),
+                comparison
+                    .getValue("metrics")
+                    .jsonArray
+                    .map {
+                        it.jsonObject
+                            .getValue("metric")
+                            .jsonPrimitive.content
+                    },
+            )
+
+            assertEquals(JsonNull, api.delete("/api/baseline").jsonObject().getValue("baseline"))
+            assertEquals(JsonNull, api.get("/api/baseline").jsonObject().getValue("baseline"))
+            assertError(api.get("/api/runs/${input.runId}/analyses/$currentId/comparison"), 404, "NOT_FOUND")
+        }
+
+    @Test
     fun `private API uploads validates analyzes and returns exact result and bucket pages`() =
         withServer { store, api ->
             val bootstrap = api.bootstrap()
@@ -516,6 +610,11 @@ class LocalApiTest {
         return fail("job did not complete: $jobId")
     }
 
+    private fun HttpResponse<String>.analysisId(api: ApiClient): String =
+        awaitComplete(api, jsonObject().getValue("job_id").jsonPrimitive.content)
+            .getValue("analysis_id")
+            .jsonPrimitive.content
+
     private fun assertRunPage(
         response: HttpResponse<String>,
         expected: RunFixture?,
@@ -709,6 +808,12 @@ class LocalApiTest {
             )
 
         fun delete(path: String): HttpResponse<String> = send(authenticated(request(path)).DELETE())
+
+        fun postUnauthenticated(
+            path: String,
+            body: ByteArray,
+        ): HttpResponse<String> =
+            send(request(path).header("Content-Type", "application/json").POST(HttpRequest.BodyPublishers.ofByteArray(body)))
 
         private fun multipart(
             path: String,

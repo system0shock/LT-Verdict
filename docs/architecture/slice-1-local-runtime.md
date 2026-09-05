@@ -166,6 +166,41 @@ AsciiDoc отдаётся как `text/plain; charset=UTF-8` с именем `.a
 values — compact JSON tokens только в literal blocks с `specialchars`, а
 canonical JSON сохраняет исходный текст. Это export, не создание job.
 
+## Local baseline state и comparison
+
+[ADR 0004](../adr/0004-local-baseline-selection.md) добавляет private
+`<data>/baseline.json` (`local-baseline.v1`) вне immutable RunBundles.
+RunBundleStore использует existing operation/data-directory locks, UUID staging,
+forced write и atomic replacement. Сохранённые candidate references проходят
+manifest/hash validation; ошибка не подменяет отсутствующий baseline.
+
+Private API:
+
+```text
+GET    /api/baseline
+POST   /api/baseline
+DELETE /api/baseline
+GET    /api/runs/<run-id>/analyses/<analysis-id>/comparison
+```
+
+GET/POST/DELETE baseline возвращают `{baseline: selection|null}`. Manual POST
+содержит `mode`, `series`, `reference`; statistical POST — `mode`, `series`,
+`candidates`, `comparable:true`. Selection закрепляет точный run/analysis,
+режим, алгоритм, candidate set и scores. API ограничивает body 16 KiB/depth 8,
+series 128 UTF-8 bytes и statistical candidates 3..20 разных runs; file cap
+32 KiB. Route mutations проходят обычную Host/Origin/session/CSRF boundary.
+
+`BaselineComparison.kt` вычисляет deterministic rank selection и overall
+deltas. Round-to-6 decimal strings — только presentation; ratio comparison
+точный. Техническая identity semantics и подтверждение пользователем заданных
+условий учитываются отдельно; фактический RPS не является equality gate.
+Comparison не добавляет поля в canonical analysis, не меняет policy или
+analysis identity. Baseline policy для PASS/FAIL потребует отдельного решения.
+
+Vue panel хранит transient candidate selection только в page memory, получает
+persisted selection из API и защищает отображение comparison от stale responses.
+Новые зависимости, registry/store interfaces или browser storage не добавлены.
+
 ## Security boundary
 
 При установке local API процесс создаёт отдельные random 256-bit session и CSRF

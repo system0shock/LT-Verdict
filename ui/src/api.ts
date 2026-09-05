@@ -1,6 +1,10 @@
 import type {
   AnalysisResult,
   AnalysisPage,
+  AnalysisReference,
+  BaselineComparison,
+  BaselineRequest,
+  BaselineSelection,
   Bootstrap,
   BucketPage,
   JobStatus,
@@ -95,6 +99,26 @@ export function cancelJob(jobId: string): Promise<JobStatus> {
 
 export function getResult(runId: string, analysisId: string): Promise<AnalysisResult> {
   return request(`/api/runs/${encodeURIComponent(runId)}/analyses/${encodeURIComponent(analysisId)}/result`)
+}
+
+export function getBaseline(): Promise<{ baseline: BaselineSelection | null }> {
+  return request('/api/baseline')
+}
+
+export function setBaseline(body: BaselineRequest): Promise<{ baseline: BaselineSelection }> {
+  return request('/api/baseline', {
+    method: 'POST',
+    headers: mutationHeaders({ 'Content-Type': 'application/json' }),
+    body: JSON.stringify(body),
+  })
+}
+
+export function clearBaseline(): Promise<{ baseline: null }> {
+  return request('/api/baseline', { method: 'DELETE', headers: mutationHeaders() })
+}
+
+export function compareBaseline(reference: AnalysisReference): Promise<BaselineComparison> {
+  return request(`/api/runs/${encodeURIComponent(reference.run_id)}/analyses/${encodeURIComponent(reference.analysis_id)}/comparison`)
 }
 
 export function getBuckets(

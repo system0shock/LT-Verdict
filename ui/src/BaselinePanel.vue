@@ -1,0 +1,326 @@
+<script setup lang="ts">
+import { computed, onMounted, ref, watch } from 'vue'
+import { clearBaseline, compareBaseline, getBaseline, setBaseline } from './api'
+import type { AnalysisReference, BaselineComparison, BaselineRequest, BaselineSelection } from './types'
+
+const props = defineProps<{ selection: AnalysisReference | null; filename: string; working: boolean }>()
+const baseline = ref<BaselineSelection | null>(null)
+const comparison = ref<BaselineComparison | null>(null)
+const series = ref('Selected test series')
+const candidates = ref<Array<{ reference: AnalysisReference; filename: string }>>([])
+const comparable = ref(false)
+const loading = ref(true)
+const saving = ref(false)
+const comparing = ref(false)
+const error = ref('')
+let baselineRevision = 0
+let comparisonRevision = 0
+
+const busy = computed(() => loading.value || saving.value || props.working)
+const canAdd = computed(() => props.selection && candidates.value.length < 20
+  && !candidates.value.some((candidate) => candidate.reference.run_id === props.selection?.run_id))
+const validSeries = computed(() => series.value.trim().length > 0 && new TextEncoder().encode(series.value).length <= 128)
+const metricLabels: Record<string, string> = {
+  response_time_p95_ms: 'P95 latency',
+  response_time_p99_ms: 'P99 latency',
+  throughput_rps: 'Throughput',
+  error_rate_ratio: 'Error rate',
+}
+
+onMounted(loadBaseline)
+watch(() => props.selection, invalidateComparison)
+watch(series, () => { comparable.value = false })
+
+function invalidateComparison() {
+  comparisonRevision += 1
+  comparison.value = null
+  comparing.value = false
+}
+
+async function loadBaseline() {
+  const revision = ++baselineRevision
+  loading.value = true
+  error.value = ''
+  try {
+    const response = await getBaseline()
+    if (revision !== baselineRevision) return
+    baseline.value = response.baseline
+    if (response.baseline) series.value = response.baseline.series
+  } catch (failure) {
+    if (revision === baselineRevision) showError(failure)
+  } finally {
+    if (revision === baselineRevision) loading.value = false
+  }
+}
+
+function addCandidate() {
+  if (!canAdd.value || !props.selection) return
+  candidates.value.push({ reference: { ...props.selection }, filename: props.filename })
+  comparable.value = false
+}
+
+function removeCandidate(runId: string) {
+  candidates.value = candidates.value.filter((candidate) => candidate.reference.run_id !== runId)
+  comparable.value = false
+}
+
+function assignManual() {
+  if (!props.selection || !validSeries.value || busy.value) return
+  void save({ mode: 'manual', series: series.value.trim(), reference: { ...props.selection } })
+}
+
+function assignStatistical() {
+  if (!comparable.value || candidates.value.length < 3 || !validSeries.value || busy.value) return
+  void save({ mode: 'statistical', series: series.value.trim(), candidates: candidates.value.map((candidate) => ({ ...candidate.reference })), comparable: true })
+}
+
+async function save(request: BaselineRequest | null) {
+  const revision = ++baselineRevision
+  saving.value = true
+  error.value = ''
+  invalidateComparison()
+  try {
+    const response = request ? await setBaseline(request) : await clearBaseline()
+    if (revision !== baselineRevision) return
+    baseline.value = response.baseline
+  } catch (failure) {
+    if (revision === baselineRevision) showError(failure)
+  } finally {
+    if (revision === baselineRevision) saving.value = false
+  }
+}
+
+async function compare() {
+  if (!props.selection || !baseline.value || busy.value) return
+  const revision = ++comparisonRevision
+  const stateRevision = baselineRevision
+  comparison.value = null
+  comparing.value = true
+  error.value = ''
+  try {
+    const response = await compareBaseline({ ...props.selection })
+    if (revision !== comparisonRevision || stateRevision !== baselineRevision) return
+    comparison.value = response
+    baseline.value = response.baseline
+  } catch (failure) {
+    if (revision === comparisonRevision && stateRevision === baselineRevision) showError(failure)
+  } finally {
+    if (revision === comparisonRevision) comparing.value = false
+  }
+}
+
+function showError(failure: unknown) {
+  error.value = failure instanceof Error ? failure.message : 'Baseline request failed.'
+}
+</script>
+
+<template>
+  <section
+    id="baseline-panel"
+    class="panel baseline-panel"
+    aria-labelledby="baseline-title"
+  >
+    <header class="panel__header">
+      <h2 id="baseline-title">
+        Baseline comparison
+      </h2>
+      <p>A fixed saved analysis, selected manually or statistically. New runs do not replace it.</p>
+    </header>
+
+    <div class="field">
+      <label for="baseline-series">Comparison series</label>
+      <input
+        id="baseline-series"
+        v-model="series"
+        :disabled="busy"
+        aria-describedby="baseline-series-hint"
+      >
+      <p
+        id="baseline-series-hint"
+        class="field__hint"
+      >
+        Name the scenario and test conditions (up to 128 UTF-8 bytes). A name alone does not prove comparability.
+      </p>
+    </div>
+
+    <p
+      v-if="loading"
+      role="status"
+    >
+      Loading baseline…
+    </p>
+    <div
+      v-else-if="baseline"
+      data-testid="baseline-selection"
+      class="baseline-selection"
+      role="status"
+    >
+      <p><strong>{{ baseline.series }}</strong> · {{ baseline.mode }}</p>
+      <p>Run <span class="mono">{{ baseline.reference.run_id }}</span></p>
+      <p>Analysis <span class="mono">{{ baseline.reference.analysis_id }}</span></p>
+      <template v-if="baseline.algorithm">
+        <p>{{ baseline.algorithm }} · {{ baseline.candidates.length }} candidates</p>
+        <details>
+          <summary>Selection scores</summary>
+          <ul>
+            <li
+              v-for="score in baseline.scores"
+              :key="score.reference.run_id"
+              :title="`${score.reference.run_id} / ${score.reference.analysis_id}`"
+            >
+              {{ score.reference.analysis_id.slice(0, 12) }}: {{ score.score }} (lower is more central)
+            </li>
+          </ul>
+        </details>
+      </template>
+    </div>
+    <p v-else>
+      No baseline selected. Open a saved analysis to assign one.
+    </p>
+
+    <div class="policy-editor__actions">
+      <button
+        type="button"
+        :disabled="busy || !selection || !validSeries"
+        @click="assignManual"
+      >
+        Set as baseline
+      </button>
+      <button
+        type="button"
+        :disabled="busy || !baseline || !selection || comparing"
+        @click="compare"
+      >
+        {{ comparing ? 'Comparing…' : 'Compare selected analysis' }}
+      </button>
+      <button
+        v-if="baseline"
+        type="button"
+        :disabled="busy"
+        @click="save(null)"
+      >
+        Clear baseline
+      </button>
+    </div>
+
+    <details class="baseline-statistics">
+      <summary>Statistical selection</summary>
+      <p>
+        Select 3–20 different runs from the same planned test conditions.
+        The central real run is chosen using P95, throughput and error-rate ranks.
+        This heuristic does not establish a stable norm or statistical significance.
+      </p>
+      <button
+        type="button"
+        :disabled="busy || !canAdd"
+        @click="addCandidate"
+      >
+        Add selected candidate
+      </button>
+      <ul data-testid="baseline-candidates">
+        <li
+          v-for="candidate in candidates"
+          :key="candidate.reference.run_id"
+        >
+          <span :title="`${candidate.reference.run_id} / ${candidate.reference.analysis_id}`">
+            {{ candidate.filename }} · {{ candidate.reference.analysis_id.slice(0, 12) }}
+          </span>
+          <button
+            type="button"
+            :disabled="busy"
+            :aria-label="`Remove candidate ${candidate.filename}`"
+            @click="removeCandidate(candidate.reference.run_id)"
+          >
+            Remove
+          </button>
+        </li>
+      </ul>
+      <label class="baseline-confirmation">
+        <input
+          v-model="comparable"
+          type="checkbox"
+          :disabled="busy"
+          aria-describedby="baseline-conditions-hint"
+        >
+        Same planned test conditions
+      </label>
+      <p
+        id="baseline-conditions-hint"
+        class="field__hint"
+      >
+        Confirm scenario/mix, environment/dataset, load model, targets, pacing and generator limits.
+        Achieved RPS may differ. Invalid or incomplete candidates are rejected, not silently omitted.
+      </p>
+      <button
+        type="button"
+        :disabled="busy || !validSeries || !comparable || candidates.length < 3"
+        @click="assignStatistical"
+      >
+        Select statistically
+      </button>
+    </details>
+
+    <p
+      v-if="error"
+      class="notice notice-fail"
+      role="alert"
+    >
+      {{ error }}
+    </p>
+
+    <section
+      v-if="comparison"
+      data-testid="baseline-comparison"
+      aria-labelledby="baseline-metrics-title"
+    >
+      <h3 id="baseline-metrics-title">
+        Overall metrics against baseline
+      </h3>
+      <p>Planned conditions: {{ comparison.comparability }}. Deltas alone do not prove a version regression or change the policy verdict.</p>
+      <div
+        class="table-wrap"
+        tabindex="0"
+        role="region"
+        aria-label="Baseline metric deltas"
+      >
+        <table>
+          <thead>
+            <tr>
+              <th scope="col">
+                Metric / unit
+              </th>
+              <th scope="col">
+                Baseline
+              </th>
+              <th scope="col">
+                Current
+              </th>
+              <th scope="col">
+                Absolute delta
+              </th>
+              <th scope="col">
+                Relative delta
+              </th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr
+              v-for="metric in comparison.metrics"
+              :key="metric.metric"
+              :data-testid="`comparison-${metric.metric}`"
+            >
+              <td>{{ metricLabels[metric.metric] ?? metric.metric }} / {{ metric.unit }}</td>
+              <td>{{ metric.baseline ?? 'N/A' }}</td>
+              <td>{{ metric.current ?? 'N/A' }}</td>
+              <td>{{ metric.delta ?? `N/A (${metric.reason})` }}</td>
+              <td>{{ metric.delta_percent === null ? `N/A (${metric.percent_reason})` : `${metric.delta_percent}%` }}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="field__hint">
+        Display rounded to 6 decimal places. Error rate uses ratio units: 0.01 = 1%.
+      </p>
+    </section>
+  </section>
+</template>

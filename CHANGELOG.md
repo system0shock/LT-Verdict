@@ -7,6 +7,9 @@
 
 ### Added
 
+- Ручное назначение baseline и deterministic статистический выбор одного
+  реального прогона из подтверждённой серии; сохранение выбора и overall
+  metric deltas в UI без повторного analysis или изменения verdict.
 - Local AsciiDoc export сохранённого analysis через UI и `ltv report`, с
   безопасными literal blocks и без создания нового analysis.
 - Открытие сохранённых analyses после reload UI, графики RPS/errors/P95 с

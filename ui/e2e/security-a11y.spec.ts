@@ -88,7 +88,10 @@ test.describe.serial('local UI security and accessibility', () => {
   })
 
   test('follows the visual keyboard order with visible focus and 44px targets', async ({ page }) => {
+    const listing = page.waitForResponse((response) => new URL(response.url()).pathname === '/api/runs')
     await page.goto('/')
+    const listedRuns = await (await listing).json() as { runs: unknown[] }
+    await expect(page.getByTestId('run-list').getByRole('button')).toHaveCount(listedRuns.runs.length)
     const input = page.getByTestId('input-file')
     const policy = page.getByTestId('policy-file')
     const analyze = page.getByRole('button', { name: 'Analyze run' })

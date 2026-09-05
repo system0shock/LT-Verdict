@@ -28,6 +28,9 @@ import io.ltverdict.core.AnalysisRequest
 import io.ltverdict.core.PolicyValidation
 import io.ltverdict.core.PolicyValidationError
 import io.ltverdict.core.canonicalJson
+import io.ltverdict.core.compareAnalyses
+import io.ltverdict.core.manualBaselineSelection
+import io.ltverdict.core.statisticalBaselineSelection
 import io.ltverdict.core.validatePolicy
 import io.ltverdict.jobs.AnalysisJobs
 import io.ltverdict.jobs.JobStatus
@@ -45,6 +48,7 @@ import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.booleanOrNull
 import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.jsonObject
@@ -142,6 +146,40 @@ internal fun Application.installLocalApi(context: LocalApiContext) {
                     put("next_after", page.nextAfter?.let(::JsonPrimitive) ?: JsonNull)
                 },
             )
+        }
+
+        get("/api/baseline") {
+            call.requireOnlyQueries()
+            val baseline = baselineOperation { context.store.readBaseline() }
+            call.respondJson(buildJsonObject { put("baseline", baseline ?: JsonNull) })
+        }
+
+        post("/api/baseline") {
+            call.requireOnlyQueries()
+            call.requireJson()
+            val request = receiveBaselineRequest(call)
+            val selected = selectBaseline(request, context.store)
+            val baseline = baselineOperation { context.store.replaceBaseline(selected) }
+            call.respondJson(buildJsonObject { put("baseline", baseline) })
+        }
+
+        delete("/api/baseline") {
+            call.requireOnlyQueries()
+            baselineOperation { context.store.clearBaseline() }
+            call.respondJson(buildJsonObject { put("baseline", JsonNull) })
+        }
+
+        get("/api/runs/{runId}/analyses/{analysisId}/comparison") {
+            call.requireOnlyQueries()
+            val current =
+                buildJsonObject {
+                    put("run_id", call.parameters["runId"].orEmpty())
+                    put("analysis_id", call.parameters["analysisId"].orEmpty())
+                }.baselineReference()
+            val selected = baselineOperation { context.store.readBaseline() } ?: notFound("No baseline is selected")
+            val (baselineResult, baselineIdentity) = context.store.baselineDocuments(selected.getValue("reference").jsonObject)
+            val (currentResult, currentIdentity) = context.store.baselineDocuments(current)
+            call.respondJson(compareAnalyses(selected, current, baselineResult, baselineIdentity, currentResult, currentIdentity))
         }
 
         post("/api/inputs") {
@@ -269,6 +307,112 @@ internal fun Application.installLocalApi(context: LocalApiContext) {
         }
     }
 }
+
+private suspend fun receiveBaselineRequest(call: ApplicationCall): JsonObject {
+    if ((call.request.contentLength() ?: 0) > MAX_BASELINE_REQUEST_BYTES) tooLarge("Baseline request exceeds 16 KiB")
+    val bytes = withContext(Dispatchers.IO) { call.receiveChannel().toInputStream().use { it.readNBytes(MAX_BASELINE_REQUEST_BYTES + 1) } }
+    if (bytes.size > MAX_BASELINE_REQUEST_BYTES) tooLarge("Baseline request exceeds 16 KiB")
+    val text =
+        try {
+            bytes.decodeToString(throwOnInvalidSequence = true)
+        } catch (_: java.nio.charset.CharacterCodingException) {
+            malformed("Baseline request must be UTF-8 JSON")
+        }
+    var depth = 0
+    var quoted = false
+    var escaped = false
+    text.forEach { character ->
+        if (quoted) {
+            when {
+                escaped -> escaped = false
+                character == '\\' -> escaped = true
+                character == '"' -> quoted = false
+            }
+        } else {
+            when (character) {
+                '"' -> quoted = true
+                '{', '[' -> if (++depth > 8) tooLarge("Baseline request JSON depth exceeds 8")
+                '}', ']' -> depth -= 1
+            }
+        }
+    }
+    return try {
+        Json.parseToJsonElement(text) as? JsonObject ?: malformed("Baseline request must be an object")
+    } catch (_: kotlinx.serialization.SerializationException) {
+        malformed("Baseline JSON is malformed")
+    }
+}
+
+private suspend fun selectBaseline(
+    request: JsonObject,
+    store: RunBundleStore,
+): JsonObject {
+    val mode = request.baselineString("mode")
+    val series = request.baselineString("series")
+    if (series.isBlank() || series.encodeToByteArray().size > 128) malformed("Comparison series must contain 1–128 UTF-8 bytes")
+    return when (mode) {
+        "manual" -> {
+            if (request.keys != setOf("mode", "series", "reference")) malformed("Manual baseline fields are invalid")
+            val reference = (request["reference"] as? JsonObject)?.baselineReference() ?: malformed("Baseline reference is invalid")
+            store.baselineDocuments(reference)
+            manualBaselineSelection(series, reference)
+        }
+        "statistical" -> {
+            if (request.keys != setOf("mode", "series", "candidates", "comparable")) malformed("Statistical baseline fields are invalid")
+            val comparable =
+                (request["comparable"] as? JsonPrimitive)?.takeUnless { it.isString }?.booleanOrNull
+                    ?: malformed("comparable must be a boolean")
+            if (!comparable) baselineIneligible("BASELINE_COMPARABILITY_UNCONFIRMED")
+            val values = request["candidates"] as? JsonArray ?: malformed("candidates must be an array")
+            if (values.size !in 3..20) baselineIneligible("BASELINE_CANDIDATE_COUNT")
+            val references = values.map { (it as? JsonObject)?.baselineReference() ?: malformed("Candidate reference is invalid") }
+            if (references.map { it.getValue("run_id") }.toSet().size != references.size) baselineIneligible("BASELINE_DUPLICATE_RUN")
+            val documents = references.map { store.baselineDocuments(it) }
+            try {
+                statisticalBaselineSelection(series, references, documents.map { it.first }, documents.map { it.second })
+            } catch (failure: IllegalArgumentException) {
+                baselineIneligible(failure.message ?: "BASELINE_CANDIDATE_INVALID")
+            }
+        }
+        else -> malformed("mode must be manual or statistical")
+    }
+}
+
+private fun JsonObject.baselineString(name: String): String =
+    (this[name] as? JsonPrimitive)?.takeIf { it.isString }?.content ?: malformed("$name must be a string")
+
+private fun JsonObject.baselineReference(): JsonObject {
+    if (keys != setOf("run_id", "analysis_id") ||
+        !RUN_ID.matches(baselineString("run_id")) ||
+        !Regex("[0-9a-f]{64}").matches(baselineString("analysis_id"))
+    ) {
+        malformed("Baseline reference is invalid")
+    }
+    return this
+}
+
+private suspend fun RunBundleStore.baselineDocuments(reference: JsonObject): Pair<JsonObject, JsonObject> =
+    baselineOperation {
+        readAnalysisDocuments(reference.baselineString("run_id"), reference.baselineString("analysis_id"))
+            ?: notFound("Referenced analysis was not found")
+    }
+
+private suspend fun <T> baselineOperation(action: () -> T): T =
+    withContext(Dispatchers.IO) {
+        try {
+            action()
+        } catch (_: NoSuchElementException) {
+            notFound("Referenced run or analysis was not found")
+        } catch (failure: IllegalStateException) {
+            if (failure.message?.startsWith("CORRUPT_BASELINE") == true || failure.message?.startsWith("CORRUPT_RUN_BUNDLE") == true) {
+                throw ApiFailure(HttpStatusCode.InternalServerError, "CORRUPT_BASELINE", "Baseline or referenced analysis is corrupt")
+            }
+            throw failure
+        }
+    }
+
+private fun baselineIneligible(code: String): Nothing =
+    throw ApiFailure(HttpStatusCode.UnprocessableEntity, code, "Statistical baseline is unavailable: $code")
 
 private suspend fun receiveInput(
     call: ApplicationCall,
@@ -632,6 +776,7 @@ private const val MAX_MULTIPART_OVERHEAD_BYTES = 65_536L
 private const val MAX_UPLOAD_REQUEST_BYTES = MAX_UPLOAD_BYTES + MAX_MULTIPART_OVERHEAD_BYTES
 private const val MAX_POLICY_BYTES = 1_048_576
 private const val MAX_RUN_ID_BYTES = 128
+private const val MAX_BASELINE_REQUEST_BYTES = 16_384
 private const val DEFAULT_RUN_LIMIT = 100
 private const val MAX_RUN_LIMIT = 100
 private const val DEFAULT_ANALYSIS_LIMIT = 25

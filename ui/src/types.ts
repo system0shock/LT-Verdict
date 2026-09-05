@@ -142,3 +142,38 @@ export interface BucketPage {
   buckets: Bucket[]
   next_from_ms: number | null
 }
+
+export interface AnalysisReference {
+  run_id: string
+  analysis_id: string
+}
+
+export interface BaselineSelection {
+  schema_version: 'local-baseline.v1'
+  series: string
+  mode: 'manual' | 'statistical'
+  reference: AnalysisReference
+  algorithm: 'median-rank-v1' | null
+  candidates: AnalysisReference[]
+  scores: Array<{ reference: AnalysisReference; score: number }>
+}
+
+export type BaselineRequest =
+  | { mode: 'manual'; series: string; reference: AnalysisReference }
+  | { mode: 'statistical'; series: string; candidates: AnalysisReference[]; comparable: true }
+
+export interface BaselineComparison {
+  baseline: BaselineSelection
+  current: AnalysisReference
+  comparability: 'UNCONFIRMED' | 'USER_CONFIRMED'
+  metrics: Array<{
+    metric: string
+    unit: string
+    current: string | null
+    baseline: string | null
+    delta: string | null
+    delta_percent: string | null
+    reason: string | null
+    percent_reason: string | null
+  }>
+}

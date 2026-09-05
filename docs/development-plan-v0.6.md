@@ -40,6 +40,12 @@ MVP — локально запускаемое приложение с обяз
 часть Slices 8–9 по [короткому плану](superpowers/plans/2026-09-05-local-review-pilot.md).
 Она не закрывает gate Slice 1 и не заменяет остальные требования MVP.
 
+Следующее согласованное расширение — ручной и статистический выбор фиксированного
+baseline по [ADR 0004](adr/0004-local-baseline-selection.md) и
+[плану реализации](superpowers/plans/2026-09-05-local-baseline-comparison.md).
+Оно добавляет overall metric comparison; N-run history, chart overlays,
+transaction comparison и comparison exports остаются отдельными шагами Slice 8.
+
 | Slice | Статус | Результат | Exit gate |
 | --- | --- | --- | --- |
 | 0. Minimal foundation | **COMPLETE** | Нормативный v0.6, два контракта, JTL/`simulation.log` examples, один offline verifier | `python tools/verify_slice0.py` проходит без dependencies |

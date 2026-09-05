@@ -59,6 +59,7 @@ internal fun statisticalBaselineSelection(
     require(candidates.map { it.semantics }.distinct().size == 1) { "BASELINE_MIXED_SEMANTICS" }
 
     val center2 = candidates.size + 1
+    // ponytail: quadratic ranks are bounded to 20 candidates; sort columns if the cap grows.
     val scores =
         candidates.associate { candidate ->
             candidate.reference to

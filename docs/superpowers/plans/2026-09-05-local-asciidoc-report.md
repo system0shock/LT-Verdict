@@ -89,3 +89,20 @@ UI typecheck/lint, `npm --prefix ui run e2e`, markdownlint, slice0 verifier,
 `git diff --check`, tracked-secret scan. No new test framework or fixture tree.
 Root verifies actual AsciiDoc conversion as a one-off QA when available;
 converter is not bundled as a project dependency.
+
+## Verification evidence
+
+Implementation: `d78f367`. RED подтверждён existing CLI (exit 64), API (reject
+format) и browser flow (отсутствующая download link). GREEN: focused renderer,
+CLI/API tests; полный Gradle `check installDist`, UI typecheck/lint и
+Playwright 21/21; slice0 verifier, Python 4/4, Markdown, diff и secret scans.
+
+Root отдельно выполнил настоящий CLI export и conversion через одноразовый
+`@asciidoctor/cli@4.0.0` (Asciidoctor.js 3.0.4), без project dependency changes.
+`--safe-mode unsafe --failure-level WARN` завершился без warnings: labels с
+переносами строк, block delimiters, `include::`, conditionals и HTML остались
+данными. Synthetic canary file не включён. Converted HTML проверен headless
+Chromium: title/status/field labels и escaped acquired text видимы; script,
+image, iframe, form, base, network requests и dialogs отсутствуют.
+
+Это локальный candidate, не опубликованный PR и не закрытие Slice 9/MVP.

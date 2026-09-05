@@ -15,6 +15,13 @@ import java.math.BigInteger
 import java.math.RoundingMode
 import kotlin.math.abs
 
+internal data class WindowComparisonRequest(
+    val baselineWindowId: String,
+    val currentWindowId: String,
+    val minChangePercent: BigDecimal = BigDecimal("5"),
+    val minErrorRateDelta: BigDecimal = BigDecimal("0.001"),
+)
+
 internal fun manualBaselineSelection(
     series: String,
     reference: JsonObject,
@@ -90,6 +97,7 @@ internal fun compareAnalyses(
     baselineIdentity: JsonObject,
     currentResult: JsonObject,
     currentIdentity: JsonObject,
+    windows: WindowComparisonRequest? = null,
 ): JsonObject {
     val parsedSelection = selection.toSelection()
     val current = currentReference.toReference()
@@ -113,7 +121,365 @@ internal fun compareAnalyses(
                 }
             },
         )
+        windows?.let { request ->
+            put(
+                "window_comparison",
+                windowComparison(
+                    request,
+                    baselineResult,
+                    currentResult,
+                    compatible,
+                    parsedSelection.mode == Mode.STATISTICAL && current in parsedSelection.candidates,
+                ),
+            )
+        }
     }
+}
+
+private fun windowComparison(
+    request: WindowComparisonRequest,
+    baselineResult: JsonObject,
+    currentResult: JsonObject,
+    compatible: Boolean,
+    conditionsConfirmed: Boolean,
+): JsonObject {
+    val baseline = baselineResult.windowSummary(request.baselineWindowId)
+    val current = currentResult.windowSummary(request.currentWindowId)
+    val notEvaluatedReasons = mutableListOf<String>()
+    if (!compatible) notEvaluatedReasons += "INCOMPATIBLE_METRIC_DEFINITION"
+    if (baseline == null) notEvaluatedReasons += "BASELINE_WINDOW_NOT_FOUND"
+    if (current == null) notEvaluatedReasons += "CURRENT_WINDOW_NOT_FOUND"
+    if (notEvaluatedReasons.isNotEmpty()) {
+        return windowComparisonJson("NOT_EVALUATED", request, notEvaluatedReasons, emptyList())
+    }
+    val baselineWindow = checkNotNull(baseline)
+    val currentWindow = checkNotNull(current)
+    val rows =
+        WindowMetric.entries.map { metric ->
+            windowMetricComparison(metric, currentWindow, baselineWindow, request, conditionsConfirmed)
+        } + resourceMetricComparisons(baselineResult, currentResult, baselineWindow, currentWindow, request, conditionsConfirmed)
+    val status =
+        when {
+            rows.any { it.status == "CANDIDATE" } -> "CANDIDATE"
+            rows.any { it.status == "DESCRIPTIVE" } -> "DESCRIPTIVE"
+            rows.any { it.status == "INSUFFICIENT_DATA" } -> "INSUFFICIENT_DATA"
+            else -> "NO_MATERIAL_CHANGE"
+        }
+    val reasons =
+        buildList {
+            if (!conditionsConfirmed) add("CONDITIONS_UNCONFIRMED")
+            if (rows.any { it.status == "INSUFFICIENT_DATA" }) add("INCOMPLETE_METRICS")
+        }
+    return windowComparisonJson(status, request, reasons, rows, baselineWindow, currentWindow)
+}
+
+private fun windowComparisonJson(
+    status: String,
+    request: WindowComparisonRequest,
+    reasons: List<String>,
+    rows: List<ComparisonRow>,
+    baseline: WindowSummary? = null,
+    current: WindowSummary? = null,
+): JsonObject =
+    buildJsonObject {
+        put("status", status)
+        put("baseline_window", request.baselineWindowId)
+        put("current_window", request.currentWindowId)
+        put("min_change_percent", request.minChangePercent.stripTrailingZeros().toPlainString())
+        put("min_error_rate_delta", request.minErrorRateDelta.stripTrailingZeros().toPlainString())
+        put("baseline_sample_count", baseline?.sampleCount?.let(::JsonPrimitive) ?: JsonNull)
+        put("current_sample_count", current?.sampleCount?.let(::JsonPrimitive) ?: JsonNull)
+        put("baseline_duration_ms", baseline?.durationMillis?.let(::JsonPrimitive) ?: JsonNull)
+        put("current_duration_ms", current?.durationMillis?.let(::JsonPrimitive) ?: JsonNull)
+        put("reasons", buildJsonArray { reasons.forEach { add(JsonPrimitive(it)) } })
+        put("metrics", buildJsonArray { rows.forEach { add(it.toJson()) } })
+    }
+
+private fun windowMetricComparison(
+    metric: WindowMetric,
+    current: WindowSummary,
+    baseline: WindowSummary,
+    request: WindowComparisonRequest,
+    conditionsConfirmed: Boolean,
+): WindowMetricComparison {
+    val currentValue = current.value(metric)
+    val baselineValue = baseline.value(metric)
+    val reason = if (currentValue == null || baselineValue == null) "MISSING_METRIC" else null
+    val delta = if (reason == null) checkNotNull(currentValue) - checkNotNull(baselineValue) else null
+    val zeroBaseline = reason == null && checkNotNull(baselineValue).isZero()
+    val percent = if (reason == null && !zeroBaseline) checkNotNull(delta) / checkNotNull(baselineValue) * HUNDRED else null
+    val material =
+        when {
+            reason != null || (zeroBaseline && metric != WindowMetric.ERROR_RATE) -> false
+            metric == WindowMetric.ERROR_RATE -> checkNotNull(delta).absoluteValue() >= Rational.fromDecimal(request.minErrorRateDelta)
+            else -> checkNotNull(percent).absoluteValue() >= Rational.fromDecimal(request.minChangePercent)
+        }
+    val status =
+        when {
+            reason != null -> "INSUFFICIENT_DATA"
+            zeroBaseline && metric != WindowMetric.ERROR_RATE -> "DESCRIPTIVE"
+            material && conditionsConfirmed -> "CANDIDATE"
+            material -> "DESCRIPTIVE"
+            else -> "NO_MATERIAL_CHANGE"
+        }
+    val rowReason =
+        reason
+            ?: if (zeroBaseline &&
+                metric != WindowMetric.ERROR_RATE
+            ) {
+                "ZERO_BASELINE"
+            } else if (material &&
+                !conditionsConfirmed
+            ) {
+                "CONDITIONS_UNCONFIRMED"
+            } else {
+                null
+            }
+    return WindowMetricComparison(metric, currentValue, baselineValue, delta, percent, status, rowReason, current, baseline)
+}
+
+private fun resourceMetricComparisons(
+    baselineResult: JsonObject,
+    currentResult: JsonObject,
+    baselineWindow: WindowSummary,
+    currentWindow: WindowSummary,
+    request: WindowComparisonRequest,
+    conditionsConfirmed: Boolean,
+): List<ResourceMetricComparison> {
+    val baselineBindings = baselineResult.windowBindings(request.baselineWindowId).groupBy { it }
+    val currentBindings = currentResult.windowBindings(request.currentWindowId).groupBy { it }
+    return (baselineBindings.keys + currentBindings.keys).toSet().sortedBy { it.resourceName("median", false) }.flatMap { binding ->
+        val baselineGroup = baselineBindings[binding].orEmpty()
+        val currentGroup = currentBindings[binding].orEmpty()
+        val reason =
+            when {
+                baselineGroup.isEmpty() || currentGroup.isEmpty() -> "RESOURCE_BINDING_MISSING"
+                baselineGroup.size != 1 || currentGroup.size != 1 -> "RESOURCE_BINDING_AMBIGUOUS"
+                else -> null
+            }
+        val baseline = if (reason == null) baselineResult.resourceSummary(request.baselineWindowId, binding) else null
+        val current = if (reason == null) currentResult.resourceSummary(request.currentWindowId, binding) else null
+        listOf("median", "q95").map { statistic ->
+            resourceMetricComparison(
+                binding,
+                statistic,
+                current,
+                baseline,
+                currentWindow,
+                baselineWindow,
+                request,
+                conditionsConfirmed,
+                reason,
+            )
+        }
+    }
+}
+
+private fun JsonObject.windowBindings(windowId: String): List<JsonObject> =
+    windowSummaryEvidence(windowId)
+        ?.get("resource_bindings")
+        ?.let { it as? JsonArray }
+        ?.mapNotNull { it as? JsonObject }
+        .orEmpty()
+
+private fun JsonObject.resourceSummary(
+    windowId: String,
+    binding: JsonObject,
+): JsonObject? =
+    (this["evidence"] as? JsonArray)
+        ?.mapNotNull { it as? JsonObject }
+        ?.singleOrNull {
+            it.stringOrNull("type") == "resource_summary" &&
+                it.stringOrNull("window_id") == windowId &&
+                RESOURCE_BINDING_FIELDS.all { field -> it[field] == binding[field] }
+        }
+
+private fun resourceMetricComparison(
+    binding: JsonObject,
+    statistic: String,
+    currentSummary: JsonObject?,
+    baselineSummary: JsonObject?,
+    currentWindow: WindowSummary,
+    baselineWindow: WindowSummary,
+    request: WindowComparisonRequest,
+    conditionsConfirmed: Boolean,
+    bindingReason: String?,
+): ResourceMetricComparison {
+    val current = currentSummary?.statisticsValue(statistic)
+    val baseline = baselineSummary?.statisticsValue(statistic)
+    val reason = bindingReason ?: if (current == null || baseline == null) "MISSING_METRIC" else null
+    val delta = if (reason == null) checkNotNull(current) - checkNotNull(baseline) else null
+    val zeroBaseline = reason == null && checkNotNull(baseline).isZero()
+    val percent = if (reason == null && !zeroBaseline) checkNotNull(delta) / checkNotNull(baseline) * HUNDRED else null
+    val material =
+        reason == null && !zeroBaseline && checkNotNull(percent).absoluteValue() >= Rational.fromDecimal(request.minChangePercent)
+    val status =
+        when {
+            reason != null -> "INSUFFICIENT_DATA"
+            zeroBaseline -> "DESCRIPTIVE"
+            material && conditionsConfirmed -> "CANDIDATE"
+            material -> "DESCRIPTIVE"
+            else -> "NO_MATERIAL_CHANGE"
+        }
+    return ResourceMetricComparison(
+        binding.resourceName(statistic, reason == "RESOURCE_BINDING_MISSING"),
+        binding.stringOrNull("unit") ?: "",
+        binding.stringOrNull("series_id"),
+        binding.stringOrNull("entity"),
+        current,
+        baseline,
+        delta,
+        percent,
+        status,
+        reason ?: if (zeroBaseline) {
+            "ZERO_BASELINE"
+        } else if (material && !conditionsConfirmed) {
+            "CONDITIONS_UNCONFIRMED"
+        } else {
+            null
+        },
+        currentSummary?.stringOrNull("id"),
+        baselineSummary?.stringOrNull("id"),
+        currentWindow,
+        baselineWindow,
+    )
+}
+
+private fun JsonObject.statisticsValue(name: String): Rational? =
+    objectOrNull("statistics")
+        ?.get(name)
+        ?.let { it as? JsonPrimitive }
+        ?.takeIf(JsonPrimitive::isString)
+        ?.content
+        ?.toBigDecimalOrNull()
+        ?.let(Rational::fromDecimal)
+
+private fun JsonObject.resourceName(
+    statistic: String,
+    disambiguate: Boolean,
+): String {
+    val name = "${stringOrNull("metric") ?: "resource"}_$statistic"
+    val stage = (objectOrNull("labels")?.get("stage") as? JsonPrimitive)?.content
+    return if (disambiguate && stage != null) "$name:$stage" else name
+}
+
+private fun JsonObject.windowSummary(windowId: String): WindowSummary? {
+    val evidence = windowSummaryEvidence(windowId) ?: return null
+    val from = evidence.longOrNull("from_epoch_ms") ?: return null
+    val to = evidence.longOrNull("to_epoch_ms") ?: return null
+    val samples = evidence.longOrNull("sample_count") ?: return null
+    if (from >= to || samples < 0) return null
+    return WindowSummary(
+        evidence.stringOrNull("id") ?: return null,
+        samples,
+        to - from,
+        evidence.objectOrNull("latency_ms"),
+        evidence.ratioOrNull("throughput_rps"),
+        evidence.ratioOrNull("error_rate_ratio"),
+    )
+}
+
+private fun JsonObject.windowSummaryEvidence(windowId: String): JsonObject? =
+    (this["evidence"] as? JsonArray)
+        ?.mapNotNull { it as? JsonObject }
+        ?.singleOrNull { it.stringOrNull("type") == "window_metric_summary" && it.stringOrNull("window_id") == windowId }
+
+private fun JsonObject.longOrNull(name: String): Long? =
+    (this[name] as? JsonPrimitive)?.takeUnless(JsonPrimitive::isString)?.content?.toLongOrNull()
+
+private data class WindowSummary(
+    val evidenceId: String,
+    val sampleCount: Long,
+    val durationMillis: Long,
+    val latency: JsonObject?,
+    val throughput: Rational?,
+    val errorRate: Rational?,
+) {
+    fun value(metric: WindowMetric): Rational? =
+        when (metric) {
+            WindowMetric.P50 -> latency?.nonNegativeInteger("p50")
+            WindowMetric.P95 -> latency?.nonNegativeInteger("p95")
+            WindowMetric.P99 -> latency?.nonNegativeInteger("p99")
+            WindowMetric.THROUGHPUT -> throughput
+            WindowMetric.ERROR_RATE -> errorRate
+        }
+}
+
+private sealed interface ComparisonRow {
+    val status: String
+
+    fun toJson(): JsonObject
+}
+
+private data class WindowMetricComparison(
+    val metric: WindowMetric,
+    val current: Rational?,
+    val baseline: Rational?,
+    val delta: Rational?,
+    val percent: Rational?,
+    override val status: String,
+    val reason: String?,
+    val currentWindow: WindowSummary,
+    val baselineWindow: WindowSummary,
+) : ComparisonRow {
+    override fun toJson(): JsonObject =
+        buildJsonObject {
+            put("metric", metric.wireName)
+            put("unit", metric.unit)
+            put("current", current?.format()?.let(::JsonPrimitive) ?: JsonNull)
+            put("baseline", baseline?.format()?.let(::JsonPrimitive) ?: JsonNull)
+            put("delta", delta?.format()?.let(::JsonPrimitive) ?: JsonNull)
+            put("delta_percent", percent?.format()?.let(::JsonPrimitive) ?: JsonNull)
+            put("reason", reason?.let(::JsonPrimitive) ?: JsonNull)
+            put("percent_reason", (reason ?: if (baseline?.isZero() == true) "ZERO_BASELINE" else null)?.let(::JsonPrimitive) ?: JsonNull)
+            put("status", status)
+            put("resource_series_id", JsonNull)
+            put("entity", JsonNull)
+            put("baseline_evidence_id", baselineWindow.evidenceId)
+            put("current_evidence_id", currentWindow.evidenceId)
+            put("baseline_sample_count", baselineWindow.sampleCount)
+            put("current_sample_count", currentWindow.sampleCount)
+            put("baseline_duration_ms", baselineWindow.durationMillis)
+            put("current_duration_ms", currentWindow.durationMillis)
+        }
+}
+
+private data class ResourceMetricComparison(
+    val metric: String,
+    val unit: String,
+    val resourceSeriesId: String?,
+    val entity: String?,
+    val current: Rational?,
+    val baseline: Rational?,
+    val delta: Rational?,
+    val percent: Rational?,
+    override val status: String,
+    val reason: String?,
+    val currentEvidenceId: String?,
+    val baselineEvidenceId: String?,
+    val currentWindow: WindowSummary,
+    val baselineWindow: WindowSummary,
+) : ComparisonRow {
+    override fun toJson(): JsonObject =
+        buildJsonObject {
+            put("metric", metric)
+            put("unit", unit)
+            put("current", current?.format()?.let(::JsonPrimitive) ?: JsonNull)
+            put("baseline", baseline?.format()?.let(::JsonPrimitive) ?: JsonNull)
+            put("delta", delta?.format()?.let(::JsonPrimitive) ?: JsonNull)
+            put("delta_percent", percent?.format()?.let(::JsonPrimitive) ?: JsonNull)
+            put("reason", reason?.let(::JsonPrimitive) ?: JsonNull)
+            put("percent_reason", (reason ?: if (baseline?.isZero() == true) "ZERO_BASELINE" else null)?.let(::JsonPrimitive) ?: JsonNull)
+            put("status", status)
+            put("resource_series_id", resourceSeriesId?.let(::JsonPrimitive) ?: JsonNull)
+            put("entity", entity?.let(::JsonPrimitive) ?: JsonNull)
+            put("baseline_evidence_id", baselineEvidenceId?.let(::JsonPrimitive) ?: JsonNull)
+            put("current_evidence_id", currentEvidenceId?.let(::JsonPrimitive) ?: JsonNull)
+            put("baseline_sample_count", baselineWindow.sampleCount)
+            put("current_sample_count", currentWindow.sampleCount)
+            put("baseline_duration_ms", baselineWindow.durationMillis)
+            put("current_duration_ms", currentWindow.durationMillis)
+        }
 }
 
 internal fun validateBaselineSelection(selection: JsonObject): JsonObject = selection.toSelection().toJson()
@@ -331,17 +697,36 @@ private data class Rational(
             denominator * other.denominator,
         )
 
-    operator fun div(other: Rational) = Rational(numerator * other.denominator, denominator * other.numerator)
+    operator fun div(other: Rational): Rational {
+        val quotientNumerator = numerator * other.denominator
+        val quotientDenominator = denominator * other.numerator
+        return if (quotientDenominator.signum() < 0) {
+            Rational(-quotientNumerator, -quotientDenominator)
+        } else {
+            Rational(quotientNumerator, quotientDenominator)
+        }
+    }
 
     operator fun times(value: BigInteger) = Rational(numerator * value, denominator)
 
     fun isZero(): Boolean = numerator.signum() == 0
+
+    fun absoluteValue(): Rational = Rational(numerator.abs(), denominator)
 
     fun format(): String =
         BigDecimal(numerator)
             .divide(BigDecimal(denominator), DISPLAY_SCALE, RoundingMode.HALF_UP)
             .stripTrailingZeros()
             .toPlainString()
+
+    companion object {
+        fun fromDecimal(value: BigDecimal): Rational =
+            if (value.scale() >= 0) {
+                Rational(value.unscaledValue(), BigInteger.TEN.pow(value.scale()))
+            } else {
+                Rational(value.unscaledValue() * BigInteger.TEN.pow(-value.scale()), BigInteger.ONE)
+            }
+    }
 }
 
 private enum class Mode(
@@ -361,6 +746,17 @@ private enum class Metric(
     ERROR_RATE("error_rate_ratio", "ratio"),
 }
 
+private enum class WindowMetric(
+    val wireName: String,
+    val unit: String,
+) {
+    P50("response_time_p50_ms", "ms"),
+    P95("response_time_p95_ms", "ms"),
+    P99("response_time_p99_ms", "ms"),
+    THROUGHPUT("throughput_rps", "requests/second"),
+    ERROR_RATE("error_rate_ratio", "ratio"),
+}
+
 private fun BigInteger.equalsZero(): Boolean = signum() == 0
 
 private const val SCHEMA_VERSION = "local-baseline.v1"
@@ -374,6 +770,7 @@ private val REFERENCE_FIELDS = setOf("run_id", "analysis_id")
 private val SCORE_FIELDS = setOf("reference", "score")
 private val SELECTION_FIELDS = setOf("schema_version", "series", "mode", "reference", "algorithm", "candidates", "scores")
 private val RATIO_FIELDS = setOf("numerator", "denominator")
+private val RESOURCE_BINDING_FIELDS = listOf("series_id", "metric", "unit", "entity", "role", "aggregation")
 private val SEMANTIC_FIELDS =
     listOf("source_type", "engine", "parsers", "modules", "input_versions", "outputs", "histogram", "normalization", "limits")
 private val SHA256 = Regex("[0-9a-f]{64}")

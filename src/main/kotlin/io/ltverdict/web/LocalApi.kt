@@ -25,13 +25,17 @@ import io.ktor.server.routing.route
 import io.ktor.server.routing.routing
 import io.ktor.utils.io.jvm.javaio.toInputStream
 import io.ltverdict.core.AnalysisRequest
+import io.ltverdict.core.DiagnosticValidation
 import io.ltverdict.core.PolicyValidation
 import io.ltverdict.core.PolicyValidationError
 import io.ltverdict.core.ResourceValidation
+import io.ltverdict.core.WindowComparisonRequest
 import io.ltverdict.core.canonicalJson
 import io.ltverdict.core.compareAnalyses
 import io.ltverdict.core.manualBaselineSelection
 import io.ltverdict.core.statisticalBaselineSelection
+import io.ltverdict.core.validateDiagnosticBinding
+import io.ltverdict.core.validateDiagnosticPlan
 import io.ltverdict.core.validatePolicy
 import io.ltverdict.core.validateResourceSnapshot
 import io.ltverdict.jobs.AnalysisJobs
@@ -58,6 +62,7 @@ import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.long
 import kotlinx.serialization.json.put
 import org.HdrHistogram.PackedHistogram
+import java.math.BigDecimal
 import java.nio.ByteBuffer
 import java.nio.file.Files
 import java.security.SecureRandom
@@ -104,6 +109,9 @@ internal fun Application.installLocalApi(context: LocalApiContext) {
                 "Resource snapshot is invalid",
                 failure.errors,
             )
+            finish()
+        } catch (failure: InvalidDiagnostics) {
+            call.respondError(HttpStatusCode.UnprocessableEntity, "INVALID_DIAGNOSTICS", "Diagnostic plan is invalid", failure.errors)
             finish()
         } catch (failure: ApiFailure) {
             call.respondError(failure.status, failure.code, failure.message)
@@ -180,7 +188,8 @@ internal fun Application.installLocalApi(context: LocalApiContext) {
         }
 
         get("/api/runs/{runId}/analyses/{analysisId}/comparison") {
-            call.requireOnlyQueries()
+            call.requireOnlyQueries("baseline_window", "current_window", "min_change_percent", "min_error_rate_delta")
+            val windows = call.windowComparisonQuery()
             val current =
                 buildJsonObject {
                     put("run_id", call.parameters["runId"].orEmpty())
@@ -189,7 +198,7 @@ internal fun Application.installLocalApi(context: LocalApiContext) {
             val selected = baselineOperation { context.store.readBaseline() } ?: notFound("No baseline is selected")
             val (baselineResult, baselineIdentity) = context.store.baselineDocuments(selected.getValue("reference").jsonObject)
             val (currentResult, currentIdentity) = context.store.baselineDocuments(current)
-            call.respondJson(compareAnalyses(selected, current, baselineResult, baselineIdentity, currentResult, currentIdentity))
+            call.respondJson(compareAnalyses(selected, current, baselineResult, baselineIdentity, currentResult, currentIdentity, windows))
         }
 
         post("/api/inputs") {
@@ -491,18 +500,23 @@ private suspend fun receiveJob(
     call: ApplicationCall,
     store: RunBundleStore,
 ): AnalysisRequest {
-    if ((call.request.contentLength() ?: 0) > MAX_JOB_REQUEST_BYTES) tooLarge("Job request exceeds its resource limit")
+    val contentLength =
+        call.request.contentLength()
+            ?: throw ApiFailure(HttpStatusCode.LengthRequired, "LENGTH_REQUIRED", "Job request requires Content-Length")
+    if (contentLength > MAX_JOB_REQUEST_BYTES) tooLarge("Job request exceeds its resource limit")
     var runId: String? = null
     var policy: PolicyValidation.Valid? = null
     var resources: ResourceValidation.Valid? = null
+    var diagnostics: DiagnosticValidation.Valid? = null
     var policySeen = false
     var resourcesSeen = false
+    var diagnosticsSeen = false
     var parts = 0
     var invalidParts = false
     try {
         call.receiveMultipart(formFieldLimit = (MAX_RESOURCE_BYTES + 1).toLong()).forEachPart { part ->
             try {
-                if (++parts > 3) malformed("Job multipart body has too many parts")
+                if (++parts > 4) malformed("Job multipart body has too many parts")
                 when {
                     part is PartData.FormItem && part.name == "run_id" && runId == null && !invalidParts -> {
                         if (part.value.isEmpty() || part.value.encodeToByteArray().size > MAX_RUN_ID_BYTES) {
@@ -544,6 +558,25 @@ private suspend fun receiveJob(
                             }
                     }
 
+                    part is PartData.FileItem && part.name == "correlation_plan" && !diagnosticsSeen && !invalidParts -> {
+                        diagnosticsSeen = true
+                        diagnostics =
+                            when (
+                                val validation =
+                                    withContext(Dispatchers.IO) {
+                                        validateDiagnosticPlan(part.provider().toInputStream(), MAX_DIAGNOSTIC_BYTES)
+                                    }
+                            ) {
+                                is DiagnosticValidation.Valid -> validation
+                                is DiagnosticValidation.Invalid -> {
+                                    if (validation.errors.any { it.code == "RESOURCE_LIMIT_EXCEEDED" }) {
+                                        tooLarge("Diagnostic plan exceeds its resource limit")
+                                    }
+                                    throw InvalidDiagnostics(validation.errors)
+                                }
+                            }
+                    }
+
                     else -> invalidParts = true
                 }
             } finally {
@@ -555,6 +588,8 @@ private suspend fun receiveJob(
     } catch (failure: InvalidPolicy) {
         throw failure
     } catch (failure: InvalidResources) {
+        throw failure
+    } catch (failure: InvalidDiagnostics) {
         throw failure
     } catch (_: Exception) {
         malformed("Multipart body is malformed")
@@ -573,7 +608,21 @@ private suspend fun receiveJob(
             listOf(PolicyValidationError("RESOURCE_INPUT_MISMATCH", "/load_input_sha256", "Snapshot belongs to another load input")),
         )
     }
-    return AnalysisRequest(input, policy, resources = resources)
+    diagnostics?.let { plan ->
+        val snapshot =
+            resources ?: throw InvalidDiagnostics(
+                listOf(
+                    PolicyValidationError(
+                        "DIAGNOSTIC_RESOURCE_REQUIRED",
+                        "/resource_snapshot_sha256",
+                        "Diagnostic plan requires a resource snapshot",
+                    ),
+                ),
+            )
+        val errors = validateDiagnosticBinding(plan, snapshot)
+        if (errors.isNotEmpty()) throw InvalidDiagnostics(errors)
+    }
+    return AnalysisRequest(input, policy, resources = resources, diagnostics = diagnostics)
 }
 
 private fun PolicyValidation.failureResponse(): ApiFailure? =
@@ -711,6 +760,40 @@ private fun ApplicationCall.requireOnlyQueries(vararg allowed: String) {
 
 private fun ApplicationCall.singleQuery(name: String): String? = request.queryParameters.getAll(name)?.singleOrNull()
 
+private fun ApplicationCall.windowComparisonQuery(): WindowComparisonRequest? {
+    val baseline = singleQuery("baseline_window")
+    val current = singleQuery("current_window")
+    if (baseline == null && current == null) {
+        if (singleQuery("min_change_percent") != null || singleQuery("min_error_rate_delta") != null) {
+            malformed("Materiality thresholds require both windows")
+        }
+        return null
+    }
+    if (listOf(baseline, current).any { it == null || it.isBlank() || it.encodeToByteArray().size > 128 || it.any(Char::isISOControl) }) {
+        malformed("Both window IDs must contain 1–128 UTF-8 bytes without control characters")
+    }
+    return WindowComparisonRequest(
+        checkNotNull(baseline),
+        checkNotNull(current),
+        boundedDecimalQuery("min_change_percent", "5", "1000"),
+        boundedDecimalQuery("min_error_rate_delta", "0.001", "1"),
+    )
+}
+
+private fun ApplicationCall.boundedDecimalQuery(
+    name: String,
+    default: String,
+    maximum: String,
+): BigDecimal {
+    val raw = singleQuery(name) ?: default
+    if (raw.length > 64 || !Regex("[0-9]+(?:\\.[0-9]+)?(?:[eE][+-]?[0-9]{1,3})?").matches(raw)) malformed("$name is invalid")
+    val value = raw.toBigDecimalOrNull() ?: malformed("$name is invalid")
+    if (value.precision() > 32 || value.scale() !in -12..12 || value.signum() <= 0 || value > BigDecimal(maximum)) {
+        malformed("$name is invalid")
+    }
+    return value
+}
+
 private fun ApplicationCall.intQuery(
     name: String,
     default: Int,
@@ -809,6 +892,10 @@ private class InvalidResources(
     val errors: List<PolicyValidationError>,
 ) : RuntimeException()
 
+private class InvalidDiagnostics(
+    val errors: List<PolicyValidationError>,
+) : RuntimeException()
+
 private fun randomToken(): String {
     val bytes = ByteArray(32)
     SecureRandom().nextBytes(bytes)
@@ -822,7 +909,8 @@ private const val MAX_MULTIPART_OVERHEAD_BYTES = 65_536L
 private const val MAX_UPLOAD_REQUEST_BYTES = MAX_UPLOAD_BYTES + MAX_MULTIPART_OVERHEAD_BYTES
 private const val MAX_POLICY_BYTES = 1_048_576
 private const val MAX_RESOURCE_BYTES = 16 * 1024 * 1024
-private const val MAX_JOB_REQUEST_BYTES = MAX_RESOURCE_BYTES + MAX_POLICY_BYTES + MAX_MULTIPART_OVERHEAD_BYTES
+private const val MAX_DIAGNOSTIC_BYTES = 1024 * 1024
+private const val MAX_JOB_REQUEST_BYTES = MAX_RESOURCE_BYTES + MAX_POLICY_BYTES + MAX_DIAGNOSTIC_BYTES + MAX_MULTIPART_OVERHEAD_BYTES
 private const val MAX_RUN_ID_BYTES = 128
 private const val MAX_BASELINE_REQUEST_BYTES = 16_384
 private const val DEFAULT_RUN_LIMIT = 100

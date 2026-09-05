@@ -1,0 +1,32 @@
+{
+  "schema_version": "correlation-plan.v1",
+  "resource_snapshot_sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+  "pairs": [
+    {
+      "id": "cpu-latency",
+      "resource_series_id": "cpu",
+      "load_metric": "response_time_p95_ms",
+      "window_ids": ["steady"],
+      "expected_sign": "positive",
+      "max_lag_ms": 0,
+      "min_abs_effect": 0.3,
+      "min_resource_delta": 0.1,
+      "min_load_delta": 20,
+      "controls": [{ "meaning": "target_rps", "series_id": "target" }],
+      "topology_basis": "node serving the tested workload",
+      "clock_alignment": "unknown"
+    }
+  ],
+  "anomalies": [
+    {
+      "id": "cpu-episode",
+      "signal": { "series_id": "cpu" },
+      "reference_window_id": "reference",
+      "window_id": "steady",
+      "direction": "increase",
+      "min_abs_delta": 0.2,
+      "min_duration_ms": 15000,
+      "z_threshold": 3.5
+    }
+  ]
+}

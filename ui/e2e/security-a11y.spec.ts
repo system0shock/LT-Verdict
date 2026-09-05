@@ -95,6 +95,7 @@ test.describe.serial('local UI security and accessibility', () => {
     const input = page.getByTestId('input-file')
     const policy = page.getByTestId('policy-file')
     const resources = page.getByTestId('resource-snapshot-file')
+    const diagnostics = page.getByTestId('correlation-plan-file')
     const analyze = page.getByRole('button', { name: 'Analyze run' })
     await input.setInputFiles(fixture('slice1/jmeter/csv-5.6.3/input.jtl'))
     await expect(analyze).toBeEnabled()
@@ -113,6 +114,7 @@ test.describe.serial('local UI security and accessibility', () => {
       input,
       policy,
       resources,
+      diagnostics,
       analyze,
     ]
     for (const target of focusOrder) {
@@ -120,7 +122,7 @@ test.describe.serial('local UI security and accessibility', () => {
       await expectVisibleKeyboardFocus(target)
     }
 
-    for (const labelledInput of [input, policy, resources]) {
+    for (const labelledInput of [input, policy, resources, diagnostics]) {
       const labels = await labelledInput.evaluate((element) =>
         [...((element as HTMLInputElement).labels ?? [])].map((label) => {
           const style = getComputedStyle(label)

@@ -41,6 +41,15 @@ internal fun renderAsciiDocReport(
             objectsSection("Window policy outcomes", windowSummaries)
             objectsSection("Resource policy checks", resourceChecks)
         }
+        listOf(
+            "diagnostic_summary" to "Diagnostic analysis",
+            "correlation_pair" to "Correlations",
+            "anomaly_check" to "Anomaly checks",
+            "window_metric_summary" to "Window metrics",
+        ).forEach { (type, title) ->
+            val values = evidence.filter { it.string("type") == type }
+            if (values.isNotEmpty()) objectsSection(title, values)
+        }
         objectsSection("Findings", result.objects("findings"))
         append("\n== Evidence IDs\n")
         if (evidence.isEmpty()) append("unavailable\n") else evidence.forEach { literal(it["id"]) }

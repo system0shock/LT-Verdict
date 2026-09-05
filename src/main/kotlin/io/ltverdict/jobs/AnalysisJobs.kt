@@ -187,6 +187,14 @@ internal class AnalysisJobs(
                                                 "RESOURCE_FINDINGS_LIMIT_EXCEEDED",
                                                 "Resource threshold findings exceed 10000; narrow windows or rules",
                                             )
+                                        "DIAGNOSTIC_RESOURCE_REQUIRED" ->
+                                            Diagnostic("DIAGNOSTIC_RESOURCE_REQUIRED", "Diagnostic plan requires a resource snapshot")
+                                        "DIAGNOSTIC_SNAPSHOT_MISMATCH" ->
+                                            Diagnostic("DIAGNOSTIC_SNAPSHOT_MISMATCH", "Diagnostic plan belongs to another snapshot")
+                                        "DIAGNOSTIC_WINDOW_NOT_FOUND" ->
+                                            Diagnostic("DIAGNOSTIC_WINDOW_NOT_FOUND", "Diagnostic window was not found")
+                                        "DIAGNOSTIC_INVALID_BINDING" ->
+                                            Diagnostic("DIAGNOSTIC_INVALID_BINDING", "Diagnostic plan binding is invalid")
                                         else -> Diagnostic("ANALYSIS_FAILED", "Analysis failed")
                                     }
                                 },

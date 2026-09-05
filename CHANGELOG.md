@@ -7,6 +7,13 @@
 
 ### Added
 
+- Opt-in correlation plan: описательные Spearman/partial-rank связи,
+  ограниченные лаги и explicit-reference аномальные эпизоды с порогами эффекта
+  и длительности. Uncertainty не оценивается; диагностика не меняет SLA.
+- Оконное сравнение baseline/current с load/resource deltas, явными порогами
+  материальности и ограничениями сопоставимости двух наблюдаемых прогонов.
+- `POST /api/jobs` требует `Content-Length` для общего multipart limit;
+  запрос неизвестной длины возвращает `411 LENGTH_REQUIRED`.
 - Resource snapshot: оконные статистики аппаратных метрик и совместная проверка
   бизнес-/ресурсных SLA через UI и CLI, с coverage, отдельными результатами
   правил и сохранением evidence в JSON/HTML/AsciiDoc.

@@ -242,6 +242,29 @@ Origin, session cookie и `X-LTV-CSRF`. CORS не включается.
 outbound resources. JMeter XML разбирается JDK StAX с отключёнными DTD,
 external entities и filesystem/network resolution.
 
+## Optional diagnostic analysis
+
+`correlation-plan.v1` поступает через общий CLI/API validator (1MiB, depth12).
+Он связывается с semantic resource SHA-256; raw bytes сохраняются immutable,
+plan hash/module version/limits участвуют в identity только при наличии плана.
+Четвёртая multipart часть — `correlation_plan`; общий body ceiling
+18MiB+64KiB (resources16MiB, policy1MiB, plan1MiB плюс envelope).
+`POST /api/jobs` требует `Content-Length`; без него возвращает
+`411 LENGTH_REQUIRED` до чтения multipart. UI передаёт длину автоматически.
+Schema string lengths дополняются runtime-пределами 128/512 UTF-8 bytes.
+
+UTC load cells собираются в существующем втором parser pass, без пересчёта
+run-relative bins и без усреднения percentiles. Existing window + diagnostic
+cell histogram budget<=10000. Бюджет пар/окон<=128, lag points<=2688, эпизоды
+<=1000. Optional module limit/недостаток наблюдений не меняет SLA coverage/verdict.
+Диагностика не делает outbound requests и не добавляет production dependencies.
+
+Новые typed evidence занимают existing analysis-result slots. Window summaries
+с точными resource bindings позволяют compareAnalyses сравнивать выбранные
+окна без новых jobs; результат comparison остаётся отдельно от immutable analysis.
+Подробные контракты и отложенная uncertainty — в
+[ADR 0006](../adr/0006-bounded-load-resource-correlation.md).
+
 Полный перечень result-affecting ceilings и crash-durability границ закреплён в
 [ADR 0002](../adr/0002-slice-1-runtime-filesystem-security.md). Семантика policy,
 exact transaction identity, verdict precedence и evidence закреплены в

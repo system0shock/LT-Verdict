@@ -13,7 +13,10 @@ pending до зелёных runtime/performance jobs.
 нагрузки и JSON/HTML export через UI и CLI. Полный MVP остаётся в разработке.
 
 Resource snapshot добавляет статистики аппаратных метрик и совместные оконные
-бизнес-/ресурсные SLA. Корреляция и поиск capacity — следующие поставки.
+бизнес-/ресурсные SLA. По явному плану доступны эпизоды median/MAD,
+Spearman/partial rank correlation и сравнение окон двух прогонов.
+Поиск capacity — следующая поставка; статистическая неопределённость
+пока не оценивается (`NOT_ESTIMATED`).
 
 ## Быстрый запуск
 
@@ -39,8 +42,9 @@ Linux использует `./gradlew installDist` и
 - [Архитектура локального runtime Slice 1](docs/architecture/slice-1-local-runtime.md)
 - [ADR 0001 — публичные контракты Slice 0](docs/adr/0001-slice-0-public-contracts.md)
 - [ADR 0005 — resource snapshot и оконные SLA](docs/adr/0005-resource-window-sla.md)
-- [Дизайн корреляционного среза — на согласовании](docs/superpowers/specs/2026-09-05-load-resource-correlation-design.md)
-- [ADR 0006 — ограниченная корреляция, proposed](docs/adr/0006-bounded-load-resource-correlation.md)
+- [Дизайн корреляционного среза](docs/superpowers/specs/2026-09-05-load-resource-correlation-design.md)
+- [ADR 0006 — ограниченная корреляция](docs/adr/0006-bounded-load-resource-correlation.md)
+- [Выбранные и отложенные методы статистического анализа](docs/statistical-method-roadmap.md)
 - [Утверждённый дизайн Slice 1](docs/superpowers/specs/2026-08-31-slice-1-local-usable-shell-design.md)
 - [План реализации Slice 1](docs/superpowers/plans/2026-08-31-slice-1-local-usable-shell.md)
 - [План локального просмотра и экспорта](docs/superpowers/plans/2026-09-05-local-review-pilot.md)

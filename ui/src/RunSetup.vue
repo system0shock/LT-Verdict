@@ -5,6 +5,7 @@ import type { Policy, PolicyError } from './types'
 defineProps<{
   inputFile: File | null
   resourceFile: File | null
+  diagnosticFile: File | null
   policy: Policy | null
   policyStatus: string
   policyErrors: PolicyError[]
@@ -14,6 +15,7 @@ defineProps<{
 const emit = defineEmits<{
   input: [file: File | null]
   resources: [file: File | null]
+  diagnostics: [file: File | null]
   'policy-file': [file: File | null]
   'update-policy': [policy: Policy]
   analyze: []
@@ -95,6 +97,26 @@ function selectedFile(event: Event) {
         >
         <p class="field__hint">
           {{ resourceFile?.name ?? 'No resource snapshot selected.' }}
+        </p>
+      </div>
+
+      <div class="field">
+        <label for="correlation-plan-file">Correlation plan <span class="muted">(optional)</span></label>
+        <input
+          id="correlation-plan-file"
+          data-testid="correlation-plan-file"
+          class="control control--file"
+          type="file"
+          accept="application/json,.json"
+          :disabled="busy"
+          aria-describedby="correlation-plan-hint"
+          @change="emit('diagnostics', selectedFile($event))"
+        >
+        <p
+          id="correlation-plan-hint"
+          class="field__hint"
+        >
+          {{ diagnosticFile?.name ?? 'No correlation plan selected.' }} Requires a matching resource snapshot.
         </p>
       </div>
     </div>

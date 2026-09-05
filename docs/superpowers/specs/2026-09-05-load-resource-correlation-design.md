@@ -1,7 +1,40 @@
 # Load/resource correlation — диагностический срез
 
-**Статус:** Draft for user review. Состав среза согласован в чате; этот документ
-уточняет контракт и численные правила перед implementation plan.
+**Статус:** Accepted with amendment — пользователь согласовал дизайн и затем
+отбор Astra; реализация разрешена. Поправка ниже имеет приоритет над исходными
+§§2, 5, 6 и их resampling acceptance criteria.
+
+## Принятая поправка после отбора методов
+
+В текущем срезе нет `resampling` input, p-values, Holm computation или
+автоматической находки по максимальному соседнему median shift. Их обсуждение
+ниже — обоснование отложенной работы, не требование реализации. Выходная
+uncertainty всегда `NOT_ESTIMATED`; никакой HIGH confidence.
+
+Добавить optional `anomalies` в correlation plan: signal (resource или overall
+load), explicit reference/evaluation window ids, min_abs_delta, min_duration_ms,
+direction и modified-Z threshold. Reference/evaluation не пересекаются, значение
+reference median/MAD не трактуется как доказанная норма. Достаточные non-null
+наблюдения, порог абсолютного эффекта, threshold modified-Z (кроме MAD=0) и
+длительность обязательны; gaps разрывают эпизоды, короткие всплески учитываются
+как suppressed count. SLA не фильтруется этими правилами.
+
+Описательная correlation таблица доступна для всех declared pairs; большой rho
+без материального изменения X/Y не создаёт headline. В pair добавить
+`min_resource_delta` и `min_load_delta`, применять к max-min исходных paired
+значений. Partial correlation требует явных controls, missing context виден.
+Нельзя повысить выбранный результат по меньшему p или лучшему control set.
+
+Сравнение двух runs расширяет существующий baseline flow: пользователь явно
+выбирает baseline/current windows и пороги материальности. По сохранённым
+window summaries считаем load/resource deltas, не усредняя percentiles.
+Matching windows не доказывает одинаковые условия, comparability остаётся
+UNCONFIRMED/USER_CONFIRMED из existing selection. Нет population regression claim.
+
+Точный контракт и тестовые literals — в
+[implementation plan](../plans/2026-09-05-load-resource-correlation.md).
+Отложенные методы и условия включения — в
+[методической очереди](../../statistical-method-roadmap.md).
 
 **База:** `8fbab03`, ветка `feat/load-resource-correlation`.
 

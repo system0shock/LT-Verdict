@@ -28,6 +28,11 @@ const resourceSummaries = computed(() => evidence.value.filter((item) => item.ty
 const windowPolicySummaries = computed(() => evidence.value.filter((item) => item.type === 'window_policy_summary'))
 const resourceChecks = computed(() => evidence.value.filter((item) => item.type === 'resource_policy_check'))
 const resourceBindings = computed(() => evidence.value.filter((item) => item.type === 'resource_binding'))
+const diagnosticSummaries = computed(() => props.result.evidence.filter((item) => item.type === 'diagnostic_summary'))
+const correlationPairs = computed(() => props.result.evidence.filter((item) => item.type === 'correlation_pair'))
+const anomalyChecks = computed(() => props.result.evidence.filter((item) => item.type === 'anomaly_check'))
+const anomalyEpisodes = computed(() => props.result.findings.filter((item) => item.type === 'anomaly_episode'))
+const diagnosticDetails = computed(() => JSON.stringify([...diagnosticSummaries.value, ...correlationPairs.value, ...anomalyChecks.value, ...anomalyEpisodes.value], null, 2))
 const slaResourceChecks = computed(() => resourceChecks.value.filter((item) => item.effect === 'sla'))
 const allSlaChecks = computed(() => [...checks.value, ...slaResourceChecks.value])
 const overall = computed(() => metrics.value.find((item) => scope(item).kind === 'overall'))
@@ -434,6 +439,162 @@ function updateRange(name: 'update:range-start' | 'update:range-end', event: Eve
         </tbody>
       </table>
     </div>
+  </section>
+
+  <section
+    v-if="diagnosticSummaries.length || correlationPairs.length || anomalyChecks.length || anomalyEpisodes.length"
+    id="diagnostic-results"
+    class="panel"
+    aria-labelledby="diagnostic-results-title"
+  >
+    <h2 id="diagnostic-results-title">
+      Run diagnostics
+    </h2>
+    <p>Observed associations and reference-based episodes. They do not establish causality or change SLA verdicts. No finding does not establish healthy operation.</p>
+    <div
+      v-for="item in diagnosticSummaries"
+      :key="item.id"
+    >
+      <p>{{ item.status }} · Uncertainty: {{ item.uncertainty }}</p>
+      <p>{{ item.pairs_evaluable }} / {{ item.pairs_tested }} pairs evaluable; {{ item.anomalies_tested }} anomaly checks; {{ item.episodes_reported }} episodes; {{ item.suppressed_short_episodes }} short episodes suppressed.</p>
+      <p v-if="item.reasons.length">
+        {{ item.reasons.join(', ') }}
+      </p>
+    </div>
+    <div
+      v-if="correlationPairs.length"
+      class="table-wrap"
+      tabindex="0"
+      role="region"
+      aria-label="Observed associations"
+    >
+      <table>
+        <thead>
+          <tr>
+            <th scope="col">
+              Pair / window
+            </th><th scope="col">
+              Resource / entity
+            </th><th scope="col">
+              Load metric
+            </th><th scope="col">
+              Paired / expected cells
+            </th><th scope="col">
+              Raw rho
+            </th><th scope="col">
+              Partial rho (zero lag)
+            </th><th scope="col">
+              Best lag (ms) / rho
+            </th><th scope="col">
+              Status / uncertainty / reasons
+            </th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr
+            v-for="item in correlationPairs"
+            :key="item.id"
+          >
+            <td>{{ item.pair_id }} / {{ item.window_id }}</td>
+            <td>{{ item.resource_series_id }} ({{ item.resource_unit }}) / {{ item.entity }}</td>
+            <td>{{ item.load_metric }} ({{ item.load_unit }})</td>
+            <td>{{ item.paired_cells }} / {{ item.expected_cells }}</td>
+            <td>{{ item.raw_rho ?? 'N/A' }}</td>
+            <td>{{ item.partial_rho ?? 'N/A' }}</td>
+            <td>{{ item.best_lag_ms ?? 'N/A' }} / {{ item.best_lag_rho ?? 'N/A' }}</td>
+            <td>{{ item.status }} · {{ item.uncertainty }} · {{ item.reasons.join(', ') || '—' }}</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <div
+      v-if="anomalyChecks.length"
+      class="table-wrap"
+      tabindex="0"
+      role="region"
+      aria-label="Reference anomaly checks"
+    >
+      <table>
+        <thead>
+          <tr>
+            <th scope="col">
+              Rule / window / reference
+            </th><th scope="col">
+              Reference median / MAD
+            </th><th scope="col">
+              Reference cells
+            </th><th scope="col">
+              Evaluation cells
+            </th><th scope="col">
+              Episodes / suppressed
+            </th><th scope="col">
+              Status / reasons
+            </th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr
+            v-for="item in anomalyChecks"
+            :key="item.id"
+          >
+            <td>{{ item.rule_id }} / {{ item.window_id }} / {{ item.reference_window_id }}</td>
+            <td>{{ item.reference_median ?? 'N/A' }} / {{ item.reference_mad ?? 'N/A' }}</td>
+            <td>{{ item.reference_observed_cells }} / {{ item.reference_expected_cells }}</td>
+            <td>{{ item.observed_cells }} / {{ item.expected_cells }}</td>
+            <td>{{ item.episodes_reported }} / {{ item.suppressed_short_episodes }}</td>
+            <td>{{ item.status }} · {{ item.reasons.join(', ') || '—' }}</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <div
+      v-if="anomalyEpisodes.length"
+      class="table-wrap"
+      tabindex="0"
+      role="region"
+      aria-label="Observed anomaly episodes"
+      data-testid="anomaly-episodes"
+    >
+      <table>
+        <thead>
+          <tr>
+            <th scope="col">
+              Rule / window / reference
+            </th><th scope="col">
+              Metric / entity
+            </th><th scope="col">
+              UTC interval (epoch ms)
+            </th><th scope="col">
+              Duration / direction
+            </th><th scope="col">
+              Observed range / unit
+            </th><th scope="col">
+              Maximum absolute delta
+            </th><th scope="col">
+              Reasons
+            </th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr
+            v-for="item in anomalyEpisodes"
+            :key="String(item.id)"
+          >
+            <td>{{ item.rule_id }} / {{ item.window_id }} / {{ item.reference_window_id }}</td>
+            <td>{{ item.metric }} / {{ item.entity }}</td>
+            <td>{{ item.from_epoch_ms }}–{{ item.to_epoch_ms }}</td>
+            <td>{{ formatDuration(Number(item.duration_ms)) }} / {{ item.direction }}</td>
+            <td>{{ formatOptional(item.observed_min) }}–{{ formatOptional(item.observed_max) }} {{ item.unit }}</td>
+            <td>{{ formatOptional(item.max_abs_delta) }}</td>
+            <td>{{ arrayAt(item, 'reasons').join(', ') || '—' }}</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <details>
+      <summary>Raw diagnostic evidence</summary>
+      <pre>{{ diagnosticDetails }}</pre>
+    </details>
   </section>
 
   <section

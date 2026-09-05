@@ -3,7 +3,9 @@ package io.ltverdict.integration
 import io.ltverdict.cli.runCli
 import io.ltverdict.core.AnalysisService
 import io.ltverdict.core.EngineConfig
+import io.ltverdict.core.ResourceValidation
 import io.ltverdict.core.sha256Hex
+import io.ltverdict.core.validateResourceSnapshot
 import io.ltverdict.jobs.AnalysisJobs
 import io.ltverdict.storage.DataDirectory
 import io.ltverdict.storage.RunBundleStore
@@ -102,11 +104,48 @@ class ShellParityTest {
         assertEquals("FAIL", window.getValue("verdict").jsonPrimitive.content)
     }
 
+    @Test
+    fun `diagnostic episodes have identical CLI and HTTP results without changing verdict`() {
+        val input = tempDir.resolve("diagnostic.jtl")
+        Files.writeString(
+            input,
+            "timeStamp,elapsed,label,success\n" + (0 until 60).joinToString("\n") { "${it * 1000},1000,request,true" } + "\n",
+        )
+        val resources = tempDir.resolve("diagnostic-resources.json")
+        val values = (0 until 60).joinToString(",") { if (it >= 50) "160" else "100" }
+        Files.writeString(
+            resources,
+            """{"schema_version":"resource-snapshot.v1","load_input_sha256":"${sha256Hex(
+                Files.readAllBytes(input),
+            )}","start_epoch_ms":0,"step_ms":1000,"point_count":60,"series":[{"id":"cpu","metric":"cpu_usage","unit":"cores","entity":"vm-1","role":"system","aggregation":"interval_mean","values":[$values]}],"windows":[{"id":"reference","from_epoch_ms":0,"to_epoch_ms":30000},{"id":"steady","from_epoch_ms":30000,"to_epoch_ms":60000}]}""",
+        )
+        val snapshot = Files.newInputStream(resources).use(::validateResourceSnapshot) as ResourceValidation.Valid
+        val plan = tempDir.resolve("correlation.json")
+        Files.writeString(
+            plan,
+            """{"schema_version":"correlation-plan.v1","resource_snapshot_sha256":"${snapshot.semanticSha256}","anomalies":[{"id":"cpu-spike","signal":{"series_id":"cpu"},"reference_window_id":"reference","window_id":"steady","direction":"increase","min_abs_delta":20,"min_duration_ms":5000}]}""",
+        )
+        val cli = analyzeWithCli(input, tempDir.resolve("diagnostic-cli"), resources, diagnostics = plan)
+        val http = analyzeWithHttp(input, tempDir.resolve("diagnostic-http"), resources, plan)
+        assertEquals(cli.analysisId, http.analysisId)
+        assertArrayEquals(cli.result, http.result)
+        val result = Json.parseToJsonElement(cli.result.decodeToString()).jsonObject
+        assertEquals("NO_POLICY", result.getValue("policy_verdict").jsonPrimitive.content)
+        val episode =
+            result.getValue("findings").jsonArray.map { it.jsonObject }.single {
+                it["type"]?.jsonPrimitive?.content ==
+                    "anomaly_episode"
+            }
+        assertEquals("10000", episode.getValue("duration_ms").jsonPrimitive.content)
+        assertEquals("60", episode.getValue("max_abs_delta").jsonPrimitive.content)
+    }
+
     private fun analyzeWithCli(
         input: Path,
         dataDir: Path,
         resources: Path? = null,
         expectedExitCode: Int = 0,
+        diagnostics: Path? = null,
     ): AnalysisSnapshot {
         val stdout = ByteArrayOutputStream()
         val stderr = ByteArrayOutputStream()
@@ -120,6 +159,7 @@ class ShellParityTest {
                             "--data-dir",
                             dataDir.toString(),
                             *(resources?.let { arrayOf("--resources", it.toString()) } ?: emptyArray()),
+                            *(diagnostics?.let { arrayOf("--correlation", it.toString()) } ?: emptyArray()),
                         ),
                         out,
                         err,
@@ -148,6 +188,7 @@ class ShellParityTest {
         input: Path,
         dataDir: Path,
         resources: Path? = null,
+        diagnostics: Path? = null,
     ): AnalysisSnapshot =
         DataDirectory.open(dataDir).use { directory ->
             val store = RunBundleStore(directory)
@@ -165,7 +206,7 @@ class ShellParityTest {
                             .getValue("run_id")
                             .jsonPrimitive.content
 
-                    val submitted = api.createJob(runId, resources)
+                    val submitted = api.createJob(runId, resources, diagnostics)
                     assertEquals(202, submitted.statusCode())
                     val jobId =
                         submitted
@@ -241,6 +282,7 @@ class ShellParityTest {
         fun createJob(
             runId: String,
             resources: Path?,
+            diagnostics: Path? = null,
         ): HttpResponse<ByteArray> {
             if (resources == null) return multipart("/api/jobs", "form-data; name=\"run_id\"", runId.encodeToByteArray())
             val boundary = "ltv-resource-parity"
@@ -249,6 +291,12 @@ class ShellParityTest {
             body.writeUtf8("--$boundary\r\nContent-Disposition: form-data; name=\"resource_snapshot\"; filename=\"resources.json\"\r\n")
             body.writeUtf8("Content-Type: application/json\r\n\r\n")
             body.write(Files.readAllBytes(resources))
+            if (diagnostics != null) {
+                body.writeUtf8(
+                    "\r\n--$boundary\r\nContent-Disposition: form-data; name=\"correlation_plan\"; filename=\"correlation.json\"\r\nContent-Type: application/json\r\n\r\n",
+                )
+                body.write(Files.readAllBytes(diagnostics))
+            }
             body.writeUtf8("\r\n--$boundary--\r\n")
             return send(
                 authenticated(request("/api/jobs"))

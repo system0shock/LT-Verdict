@@ -99,10 +99,15 @@ snapshot contract фиксируется вместе с первой испол
 
 ### 2. Корреляция load ↔ infrastructure
 
-- Реализовать предусмотренный delta-spec §16 pipeline: разрешённые пары и
-  topology constraints, load-conditioned residuals, partial Spearman,
-  ограниченные lagged cross-correlations, порядок change points и поправка
-  на множественные проверки. Не искать «всё со всем».
+- Первый срез: явный план пар и окон, topology basis, descriptive Spearman,
+  partial rank correlation и ограниченный профиль лагов. Дополняется эпизодами
+  median/MAD относительно явного reference-окна и сравнением двух окон с
+  порогами практической значимости. Не искать «всё со всем».
+- Порядок change points, inferential tests и поправки на множественные проверки
+  отложены: текущая неопределённость — `NOT_ESTIMATED`, без p-values.
+  Pearson, Kendall и условия включения следующих методов сохранены в
+  [roadmap методов](statistical-method-roadmap.md); границы первого среза —
+  [ADR 0006](adr/0006-bounded-load-resource-correlation.md).
 - Различать совместный рост из-за увеличения заданной нагрузки и связь внутри
   ступени. Учитывать request mix, concurrency и replica count при доступности.
   Фактический RPS может быть результатом деградации: не использовать его как

@@ -1,0 +1,120 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://lt-verdict.local/contracts/diagnostics/v1/correlation-plan.schema.json",
+  "title": "LT Verdict correlation plan v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "resource_snapshot_sha256"],
+  "properties": {
+    "schema_version": { "const": "correlation-plan.v1" },
+    "resource_snapshot_sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "pairs": {
+      "type": "array",
+      "maxItems": 16,
+      "items": { "$ref": "#/$defs/pair" }
+    },
+    "anomalies": {
+      "type": "array",
+      "maxItems": 32,
+      "items": { "$ref": "#/$defs/anomaly" }
+    }
+  },
+  "anyOf": [
+    { "required": ["pairs"], "properties": { "pairs": { "minItems": 1 } } },
+    { "required": ["anomalies"], "properties": { "anomalies": { "minItems": 1 } } }
+  ],
+  "$defs": {
+    "identifier": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "description": "Runtime additionally requires non-blank text and at most 128 UTF-8 bytes.",
+      "pattern": "^[^\\u0000-\\u001F\\u007F-\\u009F]+$"
+    },
+    "plainText": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 512,
+      "description": "Runtime additionally requires non-blank text and at most 512 UTF-8 bytes.",
+      "pattern": "^[^\\u0000-\\u001F\\u007F-\\u009F]+$"
+    },
+    "loadMetric": {
+      "enum": ["response_time_p95_ms", "error_rate", "throughput_rps"]
+    },
+    "control": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["meaning"],
+          "properties": { "meaning": { "const": "achieved_rps" } }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["meaning", "series_id"],
+          "properties": {
+            "meaning": { "enum": ["target_rps", "concurrency", "replicas", "request_mix", "other"] },
+            "series_id": { "$ref": "#/$defs/identifier" }
+          }
+        }
+      ]
+    },
+    "pair": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "resource_series_id", "load_metric", "window_ids", "min_resource_delta", "min_load_delta", "topology_basis"],
+      "properties": {
+        "id": { "$ref": "#/$defs/identifier" },
+        "resource_series_id": { "$ref": "#/$defs/identifier" },
+        "load_metric": { "$ref": "#/$defs/loadMetric" },
+        "window_ids": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 128,
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/identifier" }
+        },
+        "expected_sign": { "enum": ["positive", "negative", "either"], "default": "either" },
+        "max_lag_ms": { "type": "integer", "minimum": 0, "maximum": 60000, "default": 0 },
+        "min_abs_effect": { "type": "number", "exclusiveMinimum": 0, "maximum": 1, "default": 0.3 },
+        "min_resource_delta": { "type": "number", "exclusiveMinimum": 0 },
+        "min_load_delta": { "type": "number", "exclusiveMinimum": 0 },
+        "controls": { "type": "array", "maxItems": 4, "uniqueItems": true, "items": { "$ref": "#/$defs/control" }, "default": [] },
+        "topology_basis": { "$ref": "#/$defs/plainText" },
+        "clock_alignment": { "enum": ["unknown", "declared_aligned"], "default": "unknown" }
+      }
+    },
+    "signal": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["series_id"],
+          "properties": { "series_id": { "$ref": "#/$defs/identifier" } }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["load_metric"],
+          "properties": { "load_metric": { "$ref": "#/$defs/loadMetric" } }
+        }
+      ]
+    },
+    "anomaly": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "signal", "reference_window_id", "window_id", "direction", "min_abs_delta", "min_duration_ms"],
+      "properties": {
+        "id": { "$ref": "#/$defs/identifier" },
+        "signal": { "$ref": "#/$defs/signal" },
+        "reference_window_id": { "$ref": "#/$defs/identifier" },
+        "window_id": { "$ref": "#/$defs/identifier" },
+        "direction": { "enum": ["increase", "decrease", "either"] },
+        "min_abs_delta": { "type": "number", "exclusiveMinimum": 0 },
+        "min_duration_ms": { "type": "integer", "minimum": 1 },
+        "z_threshold": { "type": "number", "exclusiveMinimum": 0, "maximum": 100, "default": 3.5 }
+      }
+    }
+  }
+}

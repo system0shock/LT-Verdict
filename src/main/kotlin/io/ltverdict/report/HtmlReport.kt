@@ -33,6 +33,16 @@ internal fun renderHtmlReport(
                 windowSummaries,
             )}</section><section><h2>Resource policy checks</h2>${list(resourceChecks)}</section>"
         }
+    val diagnosticSections =
+        listOf(
+            "diagnostic_summary" to "Diagnostic analysis",
+            "correlation_pair" to "Correlations",
+            "anomaly_check" to "Anomaly checks",
+            "window_metric_summary" to "Window metrics",
+        ).joinToString("") { (type, title) ->
+            val values = evidence.filter { it.string("type") == type }
+            if (values.isEmpty()) "" else "<section><h2>$title</h2>${list(values)}</section>"
+        }
     val html =
         """<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'sha256-${styleHash()}'; base-uri 'none'; form-action 'none'"><title>LT Verdict report</title><style>$STYLE</style></head><body><main><h1>LT Verdict report</h1><dl><dt>Run</dt><dd>${result.value(
             "run_id",
@@ -58,7 +68,7 @@ internal fun renderHtmlReport(
                 }
         }}</section><section><h2>Policy checks</h2>${list(
             checks,
-        )}</section>$resourceSections<section><h2>Findings</h2>${list(
+        )}</section>$resourceSections$diagnosticSections<section><h2>Findings</h2>${list(
             result.array("findings"),
         )}</section><section><h2>Evidence IDs</h2><ul>${evidence.joinToString(
             "",

@@ -3,7 +3,9 @@ package io.ltverdict.web
 import io.ltverdict.core.AnalysisOutcome
 import io.ltverdict.core.AnalysisService
 import io.ltverdict.core.EngineConfig
+import io.ltverdict.core.ResourceValidation
 import io.ltverdict.core.sha256Hex
+import io.ltverdict.core.validateResourceSnapshot
 import io.ltverdict.jobs.AnalysisJobs
 import io.ltverdict.report.renderAsciiDocReport
 import io.ltverdict.report.renderHtmlReport
@@ -134,6 +136,26 @@ class LocalApiTest {
                             .getValue("metric")
                             .jsonPrimitive.content
                     },
+            )
+
+            val windowPath = "/api/runs/${input.runId}/analyses/$currentId/comparison"
+            val windows = api.get("$windowPath?baseline_window=before&current_window=after")
+            assertEquals(200, windows.statusCode())
+            assertEquals(
+                "NOT_EVALUATED",
+                windows
+                    .jsonObject()
+                    .getValue("window_comparison")
+                    .jsonObject
+                    .getValue("status")
+                    .jsonPrimitive.content,
+            )
+            assertError(api.get("$windowPath?baseline_window=before"), 400, "MALFORMED_REQUEST")
+            assertError(api.get("$windowPath?baseline_window=before&current_window=after&min_change_percent=0"), 400, "MALFORMED_REQUEST")
+            assertError(
+                api.get("$windowPath?baseline_window=before&current_window=after&min_error_rate_delta=1e999999"),
+                400,
+                "MALFORMED_REQUEST",
             )
 
             assertEquals(JsonNull, api.delete("/api/baseline").jsonObject().getValue("baseline"))
@@ -308,6 +330,84 @@ class LocalApiTest {
                         .resolve("analyses"),
                 ),
             )
+        }
+    }
+
+    @Test
+    fun `job rejects unknown length multipart before consuming it`() =
+        withServer { _, api ->
+            api.bootstrap()
+            assertError(api.chunkedJob(), 411, "LENGTH_REQUIRED")
+        }
+
+    @Test
+    fun `invalid diagnostic plan is rejected before job submission`() {
+        val submissions = AtomicInteger()
+        withServer(jobsFactory = {
+            AnalysisJobs(1) { request, _, _ ->
+                submissions.incrementAndGet()
+                AnalysisOutcome(request.input.runId, FAKE_ANALYSIS_ID, byteArrayOf(), tempDir)
+            }
+        }) { store, api ->
+            val input = store.acceptInput(ByteArrayInputStream(SPIKE_DROP.bytes()), SPIKE_DROP.filename)
+            api.bootstrap()
+            val response = api.createJob(input.runId, diagnostics = "{}".encodeToByteArray())
+            assertEquals(422, response.statusCode())
+            assertEquals(
+                "INVALID_DIAGNOSTICS",
+                response
+                    .jsonObject()
+                    .getValue("error")
+                    .jsonObject
+                    .getValue("code")
+                    .jsonPrimitive.content,
+            )
+            assertError(api.createJob(input.runId, diagnostics = ByteArray(1024 * 1024 + 1) { 32 }), 413)
+            val plan =
+                """
+                {"schema_version":"correlation-plan.v1","resource_snapshot_sha256":"${"0".repeat(64)}",
+                 "anomalies":[{"id":"a","signal":{"series_id":"cpu"},"reference_window_id":"ref",
+                 "window_id":"steady","direction":"increase","min_abs_delta":1,"min_duration_ms":1000}]}
+                """.trimIndent()
+            val missingResources = api.createJob(input.runId, diagnostics = plan.encodeToByteArray())
+            assertError(missingResources, 422, "INVALID_DIAGNOSTICS", hasDetails = true)
+            assertTrue(missingResources.body().contains("DIAGNOSTIC_RESOURCE_REQUIRED"))
+            assertEquals(0, submissions.get())
+        }
+    }
+
+    @Test
+    fun `four job parts retain policy resources and diagnostics and reject wrong snapshot`() {
+        withServer(jobsFactory = {
+            AnalysisJobs(1) { request, _, _ ->
+                check(request.policy != null && request.resources != null && request.diagnostics != null)
+                AnalysisOutcome(request.input.runId, FAKE_ANALYSIS_ID, byteArrayOf(), tempDir)
+            }
+        }) { store, api ->
+            val input = store.acceptInput(ByteArrayInputStream(SPIKE_DROP.bytes()), SPIKE_DROP.filename)
+            val resources =
+                """{"schema_version":"resource-snapshot.v1","load_input_sha256":"${input.sha256}","start_epoch_ms":0,"step_ms":1000,"point_count":2,"series":[{"id":"cpu","metric":"cpu_used","unit":"ratio","entity":"vm","role":"system","aggregation":"interval_mean","values":[0.1,0.9]}],"windows":[{"id":"ref","from_epoch_ms":0,"to_epoch_ms":1000},{"id":"steady","from_epoch_ms":1000,"to_epoch_ms":2000}]}"""
+                    .encodeToByteArray()
+            val hash = (validateResourceSnapshot(resources.inputStream()) as ResourceValidation.Valid).semanticSha256
+            val plan =
+                """
+                {"schema_version":"correlation-plan.v1","resource_snapshot_sha256":"$hash",
+                "anomalies":[{"id":"a","signal":{"series_id":"cpu"},"reference_window_id":"ref",
+                "window_id":"steady","direction":"increase","min_abs_delta":0.1,"min_duration_ms":1000}]}
+                """.trimIndent()
+            api.bootstrap()
+            assertEquals(
+                FAKE_ANALYSIS_ID,
+                api.createJob(input.runId, Files.readAllBytes(Path.of(PASS_POLICY)), resources, plan.encodeToByteArray()).analysisId(api),
+            )
+            val mismatch =
+                api.createJob(
+                    input.runId,
+                    resources = resources,
+                    diagnostics = plan.replace(hash, "0".repeat(64)).encodeToByteArray(),
+                )
+            assertError(mismatch, 422, "INVALID_DIAGNOSTICS", hasDetails = true)
+            assertTrue(mismatch.body().contains("DIAGNOSTIC_SNAPSHOT_MISMATCH"))
         }
     }
 
@@ -816,6 +916,7 @@ class LocalApiTest {
             runId: String,
             policy: ByteArray? = null,
             resources: ByteArray? = null,
+            diagnostics: ByteArray? = null,
         ): HttpResponse<String> =
             multipart(
                 "/api/jobs",
@@ -823,6 +924,7 @@ class LocalApiTest {
                     add(FormPart("run_id", runId.encodeToByteArray()))
                     if (policy != null) add(FormPart("policy", policy, "policy.json", "application/json"))
                     if (resources != null) add(FormPart("resource_snapshot", resources, "resources.json", "application/json"))
+                    if (diagnostics != null) add(FormPart("correlation_plan", diagnostics, "correlation.json", "application/json"))
                 },
             )
 
@@ -840,6 +942,13 @@ class LocalApiTest {
             )
 
         fun delete(path: String): HttpResponse<String> = send(authenticated(request(path)).DELETE())
+
+        fun chunkedJob(): HttpResponse<String> =
+            send(
+                authenticated(request("/api/jobs"))
+                    .header("Content-Type", "multipart/form-data; boundary=ltv-test")
+                    .POST(HttpRequest.BodyPublishers.ofInputStream { "--ltv-test--\r\n".byteInputStream() }),
+            )
 
         fun postUnauthenticated(
             path: String,

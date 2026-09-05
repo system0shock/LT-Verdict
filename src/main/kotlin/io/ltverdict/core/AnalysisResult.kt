@@ -27,6 +27,7 @@ internal fun analysisIdentity(
     policy: PolicyValidation.Valid?,
     config: EngineConfig,
     resources: ResourceValidation.Valid? = null,
+    diagnostics: DiagnosticValidation.Valid? = null,
 ): ByteArray =
     canonicalJson(
         buildJsonObject {
@@ -39,6 +40,7 @@ internal fun analysisIdentity(
                 put("resource_snapshot_sha256", it.semanticSha256)
                 put("resource_config_sha256", it.configSha256)
             }
+            diagnostics?.let { put("diagnostic_plan_sha256", it.sha256) }
             put(
                 "engine",
                 buildJsonObject {
@@ -62,6 +64,7 @@ internal fun analysisIdentity(
                 buildJsonArray {
                     val modules = mutableListOf("normalization", "metrics", "policy-evaluation")
                     if (resources != null) modules += listOf("resource-statistics", "window-policy-evaluation")
+                    if (diagnostics != null) modules += "load-resource-diagnostics"
                     modules.forEach { id ->
                         add(
                             buildJsonObject {
@@ -78,6 +81,7 @@ internal fun analysisIdentity(
                     put("source", input.sourceType.inputVersion())
                     put("policy", "policy.v1")
                     if (resources != null) put("resources", "resource-snapshot.v1")
+                    if (diagnostics != null) put("diagnostics", "correlation-plan.v1")
                 },
             )
             put(
@@ -105,7 +109,7 @@ internal fun analysisIdentity(
                     put("rollup_seconds", buildJsonArray { listOf("10", "30", "60").forEach { add(JsonPrimitive(it)) } })
                 },
             )
-            put("limits", limits(config.metrics, resources != null))
+            put("limits", limits(config.metrics, resources != null, diagnostics != null))
         },
     )
 
@@ -136,6 +140,7 @@ internal fun analysisResult(
 private fun limits(
     metrics: MetricsConfig,
     includeResources: Boolean,
+    includeDiagnostics: Boolean,
 ) = buildJsonObject {
     put("input_bytes_max", "4294967296")
     put("policy_bytes_max", "1048576")
@@ -178,6 +183,15 @@ private fun limits(
         put("resource_numeric_magnitude_max", "1000000000000000000")
         put("resource_significant_digits_max", RESOURCE_SIGNIFICANT_DIGITS_MAX.toString())
         put("resource_fractional_digits_max", RESOURCE_FRACTIONAL_DIGITS_MAX.toString())
+    }
+    if (includeDiagnostics) {
+        put("diagnostic_plan_bytes_max", MAX_DIAGNOSTIC_PLAN_BYTES.toString())
+        put("diagnostic_json_depth_max", DIAGNOSTIC_JSON_DEPTH_MAX.toString())
+        put("diagnostic_pairs_max", MAX_DIAGNOSTIC_PAIRS.toString())
+        put("diagnostic_anomalies_max", MAX_DIAGNOSTIC_ANOMALIES.toString())
+        put("diagnostic_pair_windows_max", MAX_DIAGNOSTIC_PAIR_WINDOWS.toString())
+        put("diagnostic_episodes_max", MAX_DIAGNOSTIC_EPISODES.toString())
+        put("diagnostic_p95_samples_min", MIN_DIAGNOSTIC_P95_SAMPLES.toString())
     }
 }
 

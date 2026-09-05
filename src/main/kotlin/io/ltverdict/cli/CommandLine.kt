@@ -2,9 +2,12 @@ package io.ltverdict.cli
 
 import io.ltverdict.core.AnalysisRequest
 import io.ltverdict.core.AnalysisService
+import io.ltverdict.core.DiagnosticValidation
 import io.ltverdict.core.EngineConfig
 import io.ltverdict.core.PolicyValidation
 import io.ltverdict.core.ResourceValidation
+import io.ltverdict.core.validateDiagnosticBinding
+import io.ltverdict.core.validateDiagnosticPlan
 import io.ltverdict.core.validatePolicy
 import io.ltverdict.core.validateResourceSnapshot
 import io.ltverdict.jobs.AnalysisJobs
@@ -63,6 +66,7 @@ private fun analyze(
     val input = path(args.first())
     var policyPath: Path? = null
     var resourcesPath: Path? = null
+    var diagnosticsPath: Path? = null
     var dataDir = defaultDataDir()
     var policySeen = false
     var dataDirSeen = false
@@ -78,6 +82,10 @@ private fun analyze(
                 if (resourcesPath != null || index + 1 >= args.size) usage()
                 resourcesPath = path(args[index + 1])
             }
+            "--correlation" -> {
+                if (diagnosticsPath != null || index + 1 >= args.size) usage()
+                diagnosticsPath = path(args[index + 1])
+            }
             "--data-dir" -> {
                 if (dataDirSeen || index + 1 >= args.size) usage()
                 dataDirSeen = true
@@ -91,6 +99,17 @@ private fun analyze(
     requireRegularFile(input, EXIT_INVALID_INPUT, "INVALID_INPUT")
     val policy = policyPath?.let(::readPolicy)
     val resources = resourcesPath?.let(::readResources)
+    val diagnostics = diagnosticsPath?.let(::readDiagnostics)
+    if (diagnostics != null) {
+        if (resources == null) throw CliFailure(EXIT_INVALID_INPUT, "DIAGNOSTIC_RESOURCE_REQUIRED")
+        val errors = validateDiagnosticBinding(diagnostics, resources)
+        if (errors.isNotEmpty()) {
+            throw CliFailure(
+                EXIT_INVALID_INPUT,
+                errors.joinToString("\n") { "${it.code} ${it.jsonPointer}: ${it.message}" },
+            )
+        }
+    }
     val result =
         DataDirectory.open(dataDir).use { directory ->
             val store = RunBundleStore(directory)
@@ -105,7 +124,10 @@ private fun analyze(
                     throw CliFailure(EXIT_INVALID_INPUT, failure.message ?: "INVALID_INPUT")
                 }
             try {
-                AnalysisService(store, EngineConfig()).analyze(AnalysisRequest(accepted, policy, resources = resources)).canonicalResult
+                AnalysisService(
+                    store,
+                    EngineConfig(),
+                ).analyze(AnalysisRequest(accepted, policy, resources = resources, diagnostics = diagnostics)).canonicalResult
             } catch (failure: IllegalArgumentException) {
                 throw CliFailure(EXIT_INVALID_INPUT, failure.message ?: "INVALID_INPUT")
             }
@@ -307,6 +329,25 @@ private fun readResources(path: Path): ResourceValidation.Valid {
     }
 }
 
+private fun readDiagnostics(path: Path): DiagnosticValidation.Valid {
+    requireRegularFile(path, EXIT_INVALID_INPUT, "INVALID_DIAGNOSTICS")
+    val validation =
+        try {
+            Files.newInputStream(path, LinkOption.NOFOLLOW_LINKS).use(::validateDiagnosticPlan)
+        } catch (_: IOException) {
+            throw CliFailure(EXIT_INVALID_INPUT, "INVALID_DIAGNOSTICS: read failed")
+        }
+    return when (validation) {
+        is DiagnosticValidation.Valid -> validation
+        is DiagnosticValidation.Invalid -> throw CliFailure(
+            EXIT_INVALID_INPUT,
+            validation.errors.joinToString("\n") {
+                "${it.code} ${it.jsonPointer}: ${it.message}"
+            },
+        )
+    }
+}
+
 private fun requireRegularFile(
     path: Path,
     exitCode: Int,
@@ -330,7 +371,8 @@ private fun usage(): Nothing =
     throw CliFailure(
         EXIT_USAGE,
         "Usage: ltv ui [--data-dir <path>] [--analysis-parallelism <n>] | " +
-            "ltv analyze <input> [--policy <policy.json>] [--resources <snapshot.json>] [--data-dir <path>] | " +
+            "ltv analyze <input> [--policy <policy.json>] [--resources <snapshot.json>] " +
+            "[--correlation <plan.json>] [--data-dir <path>] | " +
             "ltv policy validate <policy.json> | ltv report <run-id> <analysis-id> --format json|html|asciidoc [--data-dir <path>]",
     )
 

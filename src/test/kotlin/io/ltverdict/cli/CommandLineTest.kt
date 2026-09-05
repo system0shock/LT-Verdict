@@ -111,6 +111,16 @@ class CommandLineTest {
     }
 
     @Test
+    fun `correlation rejects malformed missing and duplicate plan inputs`() {
+        val input = fixture("jmeter/csv-5.6.3/input.jtl").toString()
+        val plan = tempDir.resolve("correlation.json")
+        Files.writeString(plan, "{}")
+        assertError(run("analyze", input, "--correlation", plan.toString()), 4, "invalid correlation plan")
+        assertError(run("analyze", input, "--correlation", tempDir.resolve("missing.json").toString()), 4, "missing plan")
+        assertError(run("analyze", input, "--correlation", plan.toString(), "--correlation", plan.toString()), 64, "duplicate flag")
+    }
+
+    @Test
     fun `analyze rejects nonregular and symlink input before writing stdout`() {
         assertError(
             run("analyze", tempDir.toString(), "--data-dir", tempDir.resolve("directory-data").toString()),

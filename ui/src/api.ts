@@ -12,6 +12,7 @@ import type {
   PolicyValidation,
   RunPage,
   RunSummary,
+  WindowComparisonRequest,
 } from './types'
 
 let csrfToken = ''
@@ -82,11 +83,12 @@ export function uploadInput(file: File, progress: (percent: number) => void): Pr
   })
 }
 
-export function createJob(runId: string, policy: Policy | null, resources?: File | null): Promise<JobStatus> {
+export function createJob(runId: string, policy: Policy | null, resources?: File | null, diagnostics?: File | null): Promise<JobStatus> {
   const body = new FormData()
   body.append('run_id', runId)
   if (policy) body.append('policy', new Blob([stringifyPolicy(policy)], { type: 'application/json' }), 'policy.json')
   if (resources) body.append('resource_snapshot', resources)
+  if (diagnostics) body.append('correlation_plan', diagnostics)
   return request('/api/jobs', { method: 'POST', headers: mutationHeaders(), body })
 }
 
@@ -118,8 +120,9 @@ export function clearBaseline(): Promise<{ baseline: null }> {
   return request('/api/baseline', { method: 'DELETE', headers: mutationHeaders() })
 }
 
-export function compareBaseline(reference: AnalysisReference): Promise<BaselineComparison> {
-  return request(`/api/runs/${encodeURIComponent(reference.run_id)}/analyses/${encodeURIComponent(reference.analysis_id)}/comparison`)
+export function compareBaseline(reference: AnalysisReference, windows?: WindowComparisonRequest): Promise<BaselineComparison> {
+  const query = windows ? `?${new URLSearchParams({ ...windows })}` : ''
+  return request(`/api/runs/${encodeURIComponent(reference.run_id)}/analyses/${encodeURIComponent(reference.analysis_id)}/comparison${query}`)
 }
 
 export function getBuckets(

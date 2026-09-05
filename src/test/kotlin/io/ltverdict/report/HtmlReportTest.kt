@@ -6,6 +6,23 @@ import org.junit.jupiter.api.Test
 
 class HtmlReportTest {
     @Test
+    fun `diagnostic sections expose uncertainty and escape evidence`() {
+        val result =
+            """
+            {"evidence":[{"id":"d","type":"diagnostic_summary","uncertainty":"NOT_ESTIMATED"},
+            {"id":"p","type":"correlation_pair","pair_id":"<script>bad</script>","raw_rho":"0.8","partial_rho":null},
+            {"id":"a","type":"anomaly_check","status":"NO_MATERIAL_CHANGE"}],"findings":[]}
+            """.trimIndent()
+        val html = renderHtmlReport(result.encodeToByteArray(), "a").decodeToString()
+        assertTrue(html.contains("<h2>Diagnostic analysis</h2>"))
+        assertTrue(html.contains("<h2>Correlations</h2>"))
+        assertTrue(html.contains("<h2>Anomaly checks</h2>"))
+        assertTrue(html.contains("NOT_ESTIMATED"))
+        assertTrue(html.contains("&lt;script&gt;bad&lt;/script&gt;"))
+        assertFalse(html.contains("<script>"))
+    }
+
+    @Test
     fun `renders statuses metrics checks findings evidence and escapes acquired text`() {
         val html =
             render(

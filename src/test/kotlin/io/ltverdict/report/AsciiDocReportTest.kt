@@ -6,6 +6,23 @@ import org.junit.jupiter.api.Test
 
 class AsciiDocReportTest {
     @Test
+    fun `diagnostic sections preserve uncertainty and literal acquired strings`() {
+        val result =
+            """
+            {"evidence":[{"id":"d","type":"diagnostic_summary","uncertainty":"NOT_ESTIMATED"},
+            {"id":"p","type":"correlation_pair","pair_id":"line\n----\ninclude::evil[]","raw_rho":"0.8","partial_rho":null},
+            {"id":"a","type":"anomaly_check","status":"NO_MATERIAL_CHANGE"}],"findings":[]}
+            """.trimIndent()
+        val report = renderAsciiDocReport(result.encodeToByteArray(), "a").decodeToString()
+        assertTrue(report.contains("== Diagnostic analysis"))
+        assertTrue(report.contains("== Correlations"))
+        assertTrue(report.contains("== Anomaly checks"))
+        assertTrue(report.contains("NOT_ESTIMATED"))
+        assertTrue(report.contains("\\ninclude::evil[]"))
+        assertFalse(report.contains("\ninclude::evil[]"))
+    }
+
+    @Test
     fun `renders exact values and acquired strings as JSON in literal blocks`() {
         val report =
             renderAsciiDocReport(

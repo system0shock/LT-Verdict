@@ -16,6 +16,261 @@ import org.junit.jupiter.api.Test
 
 class BaselineComparisonTest {
     @Test
+    fun `window comparison computes latency deltas and duration-normalized rates`() {
+        val candidates = listOf(candidate('a'), candidate('b'), candidate('c'))
+        val selection = statisticalBaselineSelection("release", candidates.references(), candidates.results(), candidates.identities())
+        val baseline = windowResult("steady", from = 0, to = 10_000, p95 = 100, samples = 100, errors = 1)
+        val current = windowResult("steady", from = 10_000, to = 30_000, p95 = 120, samples = 400, errors = 6)
+
+        val comparison =
+            compareAnalyses(
+                selection,
+                reference('c'),
+                baseline,
+                identity(),
+                current,
+                identity(),
+                WindowComparisonRequest("steady", "steady"),
+            )
+        val window = comparison.getValue("window_comparison").jsonObject
+        val metrics =
+            window.getValue("metrics").jsonArray.associateBy {
+                it.jsonObject
+                    .getValue("metric")
+                    .jsonPrimitive.content
+            }
+
+        assertEquals("CANDIDATE", window.getValue("status").jsonPrimitive.content)
+        assertEquals(
+            100,
+            window
+                .getValue("baseline_sample_count")
+                .jsonPrimitive.content
+                .toInt(),
+        )
+        assertEquals(
+            400,
+            window
+                .getValue("current_sample_count")
+                .jsonPrimitive.content
+                .toInt(),
+        )
+        assertEquals(
+            10_000,
+            window
+                .getValue("baseline_duration_ms")
+                .jsonPrimitive.content
+                .toInt(),
+        )
+        assertEquals(
+            20_000,
+            window
+                .getValue("current_duration_ms")
+                .jsonPrimitive.content
+                .toInt(),
+        )
+        assertWindowMetric(metrics.getValue("response_time_p95_ms").jsonObject, "120", "100", "20", "20", "CANDIDATE", null)
+        assertWindowMetric(metrics.getValue("throughput_rps").jsonObject, "20", "10", "10", "100", "CANDIDATE", null)
+        assertWindowMetric(metrics.getValue("error_rate_ratio").jsonObject, "0.015", "0.01", "0.005", "50", "CANDIDATE", null)
+    }
+
+    @Test
+    fun `window comparison preserves the old response when no windows are requested`() {
+        val selection = manualBaselineSelection("release", reference('a'))
+
+        val comparison = compareAnalyses(selection, reference('b'), result(), identity(), result(), identity())
+
+        assertEquals(setOf("baseline", "current", "comparability", "metrics"), comparison.keys)
+    }
+
+    @Test
+    fun `window comparison keeps material observations descriptive without confirmed conditions`() {
+        val comparison =
+            compareAnalyses(
+                manualBaselineSelection("release", reference('a')),
+                reference('b'),
+                windowResult("steady", 0, 10_000, 100, 100, 0),
+                identity(),
+                windowResult("steady", 0, 10_000, 120, 100, 0),
+                identity(),
+                WindowComparisonRequest("steady", "steady"),
+            )
+        val window = comparison.getValue("window_comparison").jsonObject
+        val p95 =
+            window
+                .getValue("metrics")
+                .jsonArray
+                .single {
+                    it.jsonObject
+                        .getValue("metric")
+                        .jsonPrimitive.content ==
+                        "response_time_p95_ms"
+                }.jsonObject
+
+        assertEquals("DESCRIPTIVE", window.getValue("status").jsonPrimitive.content)
+        assertEquals(listOf("CONDITIONS_UNCONFIRMED"), window.getValue("reasons").jsonArray.map { it.jsonPrimitive.content })
+        assertWindowMetric(p95, "120", "100", "20", "20", "DESCRIPTIVE", "CONDITIONS_UNCONFIRMED")
+    }
+
+    @Test
+    fun `window comparison handles zero baselines and inclusive error thresholds`() {
+        val candidates = listOf(candidate('a'), candidate('b'), candidate('c'))
+        val comparison =
+            compareAnalyses(
+                statisticalBaselineSelection("release", candidates.references(), candidates.results(), candidates.identities()),
+                reference('c'),
+                windowResult("steady", 0, 10_000, 0, 100, 0),
+                identity(),
+                windowResult("steady", 0, 10_000, 5, 1_000, 1),
+                identity(),
+                WindowComparisonRequest("steady", "steady"),
+            )
+        val metrics =
+            comparison.getValue("window_comparison").jsonObject.getValue("metrics").jsonArray.associateBy {
+                it.jsonObject
+                    .getValue("metric")
+                    .jsonPrimitive.content
+            }
+
+        assertWindowMetric(metrics.getValue("error_rate_ratio").jsonObject, "0.001", "0", "0.001", null, "CANDIDATE", null)
+        assertWindowMetric(metrics.getValue("response_time_p95_ms").jsonObject, "5", "0", "5", null, "DESCRIPTIVE", "ZERO_BASELINE")
+    }
+
+    @Test
+    fun `window comparison exposes unavailable windows and technical mismatches without changing raw metrics`() {
+        val selection = manualBaselineSelection("release", reference('a'))
+        val missing =
+            compareAnalyses(
+                selection,
+                reference('b'),
+                result(),
+                identity(),
+                result(),
+                identity(),
+                WindowComparisonRequest("gone", "steady"),
+            )
+        val incompatible =
+            compareAnalyses(
+                selection,
+                reference('b'),
+                windowResult("steady", 0, 10_000, 100, 100, 0),
+                identity(),
+                windowResult("steady", 0, 10_000, 100, 100, 0),
+                identity("other"),
+                WindowComparisonRequest("steady", "steady"),
+            )
+
+        assertEquals(
+            "NOT_EVALUATED",
+            missing
+                .getValue("window_comparison")
+                .jsonObject
+                .getValue("status")
+                .jsonPrimitive.content,
+        )
+        assertEquals(
+            "NOT_EVALUATED",
+            incompatible
+                .getValue("window_comparison")
+                .jsonObject
+                .getValue("status")
+                .jsonPrimitive.content,
+        )
+        assertEquals(
+            "INCOMPATIBLE_METRIC_DEFINITION",
+            incompatible
+                .getValue("metrics")
+                .jsonArray
+                .first()
+                .jsonObject
+                .getValue("reason")
+                .jsonPrimitive.content,
+        )
+    }
+
+    @Test
+    fun `window comparison matches resource summaries only when labels match`() {
+        val candidates = listOf(candidate('a'), candidate('b'), candidate('c'))
+        val baselineBinding = resourceBinding("cpu", "checkout")
+        val currentBinding = resourceBinding("cpu", "checkout")
+        val otherBinding = resourceBinding("cpu", "payment")
+        val comparison =
+            compareAnalyses(
+                statisticalBaselineSelection("release", candidates.references(), candidates.results(), candidates.identities()),
+                reference('c'),
+                windowResult(
+                    "steady",
+                    0,
+                    10_000,
+                    100,
+                    100,
+                    0,
+                    listOf(baselineBinding, otherBinding),
+                    listOf(resourceSummary("steady", baselineBinding, "10", "20")),
+                ),
+                identity(),
+                windowResult(
+                    "steady",
+                    0,
+                    10_000,
+                    100,
+                    100,
+                    0,
+                    listOf(currentBinding),
+                    listOf(resourceSummary("steady", currentBinding, "12", "24")),
+                ),
+                identity(),
+                WindowComparisonRequest("steady", "steady"),
+            )
+        val metrics =
+            comparison.getValue("window_comparison").jsonObject.getValue("metrics").jsonArray.associateBy {
+                it.jsonObject
+                    .getValue("metric")
+                    .jsonPrimitive.content
+            }
+
+        assertWindowMetric(metrics.getValue("cpu_usage_median").jsonObject, "12", "10", "2", "20", "CANDIDATE", null)
+        assertWindowMetric(metrics.getValue("cpu_usage_q95").jsonObject, "24", "20", "4", "20", "CANDIDATE", null)
+        assertEquals(
+            "RESOURCE_BINDING_MISSING",
+            metrics
+                .getValue("cpu_usage_median:payment")
+                .jsonObject
+                .getValue("reason")
+                .jsonPrimitive.content,
+        )
+    }
+
+    @Test
+    fun `window comparison keeps signed resource percent deltas`() {
+        val candidates = listOf(candidate('a'), candidate('b'), candidate('c'))
+        val binding = resourceBinding("cpu", "checkout")
+        val comparison =
+            compareAnalyses(
+                statisticalBaselineSelection("release", candidates.references(), candidates.results(), candidates.identities()),
+                reference('c'),
+                windowResult("steady", 0, 10_000, 100, 100, 0, listOf(binding), listOf(resourceSummary("steady", binding, "-10", "-20"))),
+                identity(),
+                windowResult("steady", 0, 10_000, 100, 100, 0, listOf(binding), listOf(resourceSummary("steady", binding, "-8", "-16"))),
+                identity(),
+                WindowComparisonRequest("steady", "steady"),
+            )
+        val median =
+            comparison
+                .getValue("window_comparison")
+                .jsonObject
+                .getValue("metrics")
+                .jsonArray
+                .single {
+                    it.jsonObject
+                        .getValue("metric")
+                        .jsonPrimitive.content == "cpu_usage_median"
+                }.jsonObject
+
+        assertWindowMetric(median, "-8", "-10", "2", "-20", "CANDIDATE", null)
+    }
+
+    @Test
     fun `statistical selection chooses the median ranks regardless of request order`() {
         val candidates =
             listOf(
@@ -212,6 +467,23 @@ class BaselineComparisonTest {
         assertEquals(percentReason, metric.getValue("percent_reason").nullableString())
     }
 
+    private fun assertWindowMetric(
+        metric: JsonObject,
+        current: String?,
+        baseline: String?,
+        delta: String?,
+        percent: String?,
+        status: String,
+        reason: String?,
+    ) {
+        assertEquals(current, metric.getValue("current").nullableString())
+        assertEquals(baseline, metric.getValue("baseline").nullableString())
+        assertEquals(delta, metric.getValue("delta").nullableString())
+        assertEquals(percent, metric.getValue("delta_percent").nullableString())
+        assertEquals(status, metric.getValue("status").jsonPrimitive.content)
+        assertEquals(reason, metric.getValue("reason").nullableString())
+    }
+
     private data class Candidate(
         val reference: JsonObject,
         val result: JsonObject,
@@ -268,6 +540,81 @@ class BaselineComparisonTest {
                         put("error_rate_ratio", ratio(errors))
                     },
                 )
+            },
+        )
+    }
+
+    private fun windowResult(
+        windowId: String,
+        from: Long,
+        to: Long,
+        p95: Long,
+        samples: Long,
+        errors: Long,
+        bindings: List<JsonObject> = emptyList(),
+        resources: List<JsonObject> = emptyList(),
+    ) = buildJsonObject {
+        result().forEach { (name, value) -> put(name, value) }
+        put(
+            "evidence",
+            buildJsonArray {
+                result().getValue("evidence").jsonArray.forEach(::add)
+                add(
+                    buildJsonObject {
+                        put("id", "window-metric-summary-$windowId")
+                        put("type", "window_metric_summary")
+                        put("window_id", windowId)
+                        put("from_epoch_ms", from)
+                        put("to_epoch_ms", to)
+                        put("sample_count", samples)
+                        put("error_count", errors)
+                        put("error_rate_ratio", ratio(errors to samples))
+                        put("throughput_rps", ratio(samples * 1_000L to (to - from)))
+                        put(
+                            "latency_ms",
+                            buildJsonObject {
+                                put("p50", maxOf(0, p95 - 20))
+                                put("p95", p95)
+                                put("p99", p95 + 20)
+                                put("max", p95 + 40)
+                            },
+                        )
+                        put("resource_bindings", buildJsonArray { bindings.forEach(::add) })
+                    },
+                )
+                resources.forEach(::add)
+            },
+        )
+    }
+
+    private fun resourceBinding(
+        seriesId: String,
+        stage: String,
+    ) = buildJsonObject {
+        put("series_id", seriesId)
+        put("metric", "cpu_usage")
+        put("unit", "ratio")
+        put("entity", "api-1")
+        put("role", "diagnostic")
+        put("aggregation", "mean")
+        put("labels", buildJsonObject { put("stage", stage) })
+    }
+
+    private fun resourceSummary(
+        windowId: String,
+        binding: JsonObject,
+        median: String,
+        q95: String,
+    ) = buildJsonObject {
+        put("id", "resource-summary-${binding.getValue("series_id").jsonPrimitive.content}-$windowId")
+        put("type", "resource_summary")
+        listOf("series_id", "metric", "unit", "entity", "role", "aggregation").forEach { field -> put(field, binding.getValue(field)) }
+        put("window_id", windowId)
+        put(
+            "statistics",
+            buildJsonObject {
+                put("median", median)
+                put("q95", q95)
             },
         )
     }

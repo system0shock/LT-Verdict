@@ -23,6 +23,7 @@ const theme = ref<Theme>(window.matchMedia('(prefers-color-scheme: dark)').match
 const apiReady = ref(false)
 const inputFile = ref<File | null>(null)
 const resourceFile = ref<File | null>(null)
+const diagnosticFile = ref<File | null>(null)
 const policy = ref<Policy | null>(null)
 const policyStatus = ref('')
 const policyErrors = ref<PolicyError[]>([])
@@ -81,6 +82,12 @@ function selectInput(file: File | null) {
 
 function selectResources(file: File | null) {
   resourceFile.value = file
+  queueBusy.value = false
+  errorMessage.value = ''
+}
+
+function selectDiagnostics(file: File | null) {
+  diagnosticFile.value = file
   queueBusy.value = false
   errorMessage.value = ''
 }
@@ -155,7 +162,7 @@ async function analyze() {
     if (revision !== analysisRevision) return
     currentRun.value = accepted
     await refreshRuns()
-    job.value = await createJob(accepted.run_id, activePolicy, resourceFile.value)
+    job.value = await createJob(accepted.run_id, activePolicy, resourceFile.value, diagnosticFile.value)
     uploadProgress.value = 100
     await pollJob(revision)
   } catch (failure) {
@@ -421,12 +428,14 @@ function focusPolicy() {
         <RunSetup
           :input-file="inputFile"
           :resource-file="resourceFile"
+          :diagnostic-file="diagnosticFile"
           :policy="policy"
           :policy-status="policyStatus"
           :policy-errors="policyErrors"
           :busy="working"
           @input="selectInput"
           @resources="selectResources"
+          @diagnostics="selectDiagnostics"
           @policy-file="selectPolicyFile"
           @update-policy="updatePolicy"
           @analyze="analyze"

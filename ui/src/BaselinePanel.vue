@@ -12,6 +12,10 @@ const comparable = ref(false)
 const loading = ref(true)
 const saving = ref(false)
 const comparing = ref(false)
+const baselineWindow = ref('')
+const currentWindow = ref('')
+const minChangePercent = ref('5')
+const minErrorRateDelta = ref('0.001')
 const error = ref('')
 let baselineRevision = 0
 let comparisonRevision = 0
@@ -20,6 +24,12 @@ const busy = computed(() => loading.value || saving.value || props.working)
 const canAdd = computed(() => props.selection && candidates.value.length < 20
   && !candidates.value.some((candidate) => candidate.reference.run_id === props.selection?.run_id))
 const validSeries = computed(() => series.value.trim().length > 0 && new TextEncoder().encode(series.value).length <= 128)
+const windowSelection = computed(() => baselineWindow.value.trim() !== '' || currentWindow.value.trim() !== '')
+const validWindows = computed(() => !windowSelection.value || (
+  baselineWindow.value.trim() !== '' && currentWindow.value.trim() !== ''
+  && Number(minChangePercent.value) > 0 && Number(minChangePercent.value) <= 1000
+  && Number(minErrorRateDelta.value) > 0 && Number(minErrorRateDelta.value) <= 1
+))
 const metricLabels: Record<string, string> = {
   response_time_p95_ms: 'P95 latency',
   response_time_p99_ms: 'P99 latency',
@@ -29,6 +39,7 @@ const metricLabels: Record<string, string> = {
 
 onMounted(loadBaseline)
 watch(() => props.selection, invalidateComparison)
+watch([baselineWindow, currentWindow, minChangePercent, minErrorRateDelta], invalidateComparison)
 watch(series, () => { comparable.value = false })
 
 function invalidateComparison() {
@@ -91,14 +102,19 @@ async function save(request: BaselineRequest | null) {
 }
 
 async function compare() {
-  if (!props.selection || !baseline.value || busy.value) return
+  if (!props.selection || !baseline.value || busy.value || !validWindows.value) return
   const revision = ++comparisonRevision
   const stateRevision = baselineRevision
   comparison.value = null
   comparing.value = true
   error.value = ''
   try {
-    const response = await compareBaseline({ ...props.selection })
+    const response = await compareBaseline({ ...props.selection }, windowSelection.value ? {
+      baseline_window: baselineWindow.value.trim(),
+      current_window: currentWindow.value.trim(),
+      min_change_percent: minChangePercent.value,
+      min_error_rate_delta: minErrorRateDelta.value,
+    } : undefined)
     if (revision !== comparisonRevision || stateRevision !== baselineRevision) return
     comparison.value = response
     baseline.value = response.baseline
@@ -178,6 +194,59 @@ function showError(failure: unknown) {
       No baseline selected. Open a saved analysis to assign one.
     </p>
 
+    <div class="form-grid">
+      <div class="field">
+        <label for="baseline-window">Baseline window ID</label>
+        <input
+          id="baseline-window"
+          v-model="baselineWindow"
+          :disabled="busy"
+          aria-describedby="window-comparison-hint"
+        >
+      </div>
+      <div class="field">
+        <label for="current-window">Current window ID</label>
+        <input
+          id="current-window"
+          v-model="currentWindow"
+          :disabled="busy"
+          aria-describedby="window-comparison-hint"
+        >
+      </div>
+      <div class="field">
+        <label for="minimum-change">Minimum change (%)</label>
+        <input
+          id="minimum-change"
+          v-model="minChangePercent"
+          type="number"
+          min="0"
+          max="1000"
+          step="any"
+          :disabled="busy || !windowSelection"
+        >
+      </div>
+      <div class="field">
+        <label for="minimum-error-delta">Minimum error-rate delta (ratio)</label>
+        <input
+          id="minimum-error-delta"
+          v-model="minErrorRateDelta"
+          type="number"
+          min="0"
+          max="1"
+          step="any"
+          :disabled="busy || !windowSelection"
+        >
+      </div>
+    </div>
+    <p
+      id="window-comparison-hint"
+      class="field__hint"
+    >
+      Optional: enter both window IDs to compare their saved metrics. Leave both empty for overall metrics.
+      Matching names do not establish the same planned load, request mix or test conditions.
+      Materiality thresholds must be greater than zero; an error-rate delta of 0.001 is 0.1 percentage points.
+    </p>
+
     <div class="policy-editor__actions">
       <button
         type="button"
@@ -188,7 +257,7 @@ function showError(failure: unknown) {
       </button>
       <button
         type="button"
-        :disabled="busy || !baseline || !selection || comparing"
+        :disabled="busy || !baseline || !selection || comparing || !validWindows"
         @click="compare"
       >
         {{ comparing ? 'Comparing…' : 'Compare selected analysis' }}
@@ -321,6 +390,65 @@ function showError(failure: unknown) {
       <p class="field__hint">
         Display rounded to 6 decimal places. Error rate uses ratio units: 0.01 = 1%.
       </p>
+      <section
+        v-if="comparison.window_comparison"
+        data-testid="window-comparison"
+        aria-labelledby="window-comparison-title"
+      >
+        <h3 id="window-comparison-title">
+          Selected-window observations
+        </h3>
+        <p>{{ comparison.window_comparison.baseline_window }} → {{ comparison.window_comparison.current_window }} · {{ comparison.window_comparison.status }}</p>
+        <p>{{ comparison.window_comparison.reasons.join(', ') || '—' }}</p>
+        <p>
+          Baseline: {{ comparison.window_comparison.baseline_sample_count ?? 'N/A' }} samples / {{ comparison.window_comparison.baseline_duration_ms ?? 'N/A' }} ms.
+          Current: {{ comparison.window_comparison.current_sample_count ?? 'N/A' }} samples / {{ comparison.window_comparison.current_duration_ms ?? 'N/A' }} ms.
+        </p>
+        <p>Uncertainty: NOT_ESTIMATED. These two observations do not establish a reproducible version regression.</p>
+        <div
+          class="table-wrap"
+          tabindex="0"
+          role="region"
+          aria-label="Selected-window metric deltas"
+        >
+          <table>
+            <thead>
+              <tr>
+                <th scope="col">
+                  Metric / entity / unit
+                </th><th scope="col">
+                  Baseline
+                </th><th scope="col">
+                  Current
+                </th><th scope="col">
+                  Absolute delta
+                </th><th scope="col">
+                  Relative delta
+                </th><th scope="col">
+                  Status / reason
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr
+                v-for="(metric, index) in comparison.window_comparison.metrics"
+                :key="`${metric.metric}-${metric.entity}-${metric.resource_series_id}-${index}`"
+              >
+                <td>{{ metricLabels[metric.metric] ?? metric.metric }} / {{ metric.entity ?? 'Overall' }} / {{ metric.resource_series_id ?? '—' }} / {{ metric.unit }}</td>
+                <td>{{ metric.baseline ?? 'N/A' }}</td>
+                <td>{{ metric.current ?? 'N/A' }}</td>
+                <td>{{ metric.delta ?? `N/A (${metric.reason})` }}</td>
+                <td>{{ metric.delta_percent === null ? `N/A (${metric.percent_reason})` : `${metric.delta_percent}%` }}</td>
+                <td>{{ metric.status }} · {{ metric.reason ?? '—' }}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <details>
+          <summary>Raw window comparison evidence</summary>
+          <pre>{{ JSON.stringify(comparison.window_comparison, null, 2) }}</pre>
+        </details>
+      </section>
     </section>
   </section>
 </template>

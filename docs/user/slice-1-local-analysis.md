@@ -130,6 +130,7 @@ spikes заполнением или усреднением готовых perce
 | `NOT_FOUND` / 404 | Run, job или analysis отсутствует | Обновить список runs и повторить |
 | `BUSY` / 409 | Analysis queue заполнена | Подождать или отменить queued job |
 | `RESOURCE_LIMIT_EXCEEDED` / 413 | Input больше 4 GiB, policy больше 1 MiB или resource snapshot превышает limits | Уменьшить файл; partial result не создаётся |
+| `LENGTH_REQUIRED` / 411 | У запроса `POST /api/jobs` нет `Content-Length` | Передать размер multipart body; браузерный UI делает это автоматически |
 | `INVALID_RESOURCES` / 422 | Snapshot не соответствует контракту или другому load input | Проверить validation details и SHA-256 |
 | `UNSUPPORTED_MEDIA_TYPE` / 415 | Неверный request content type | Использовать UI или documented CLI |
 | `UNSUPPORTED_INPUT` / 422 | Input пуст или формат не распознан | Экспортировать один из supported formats |
@@ -386,7 +387,7 @@ Snapshot и настройки входят в identity; исходные bytes 
 bundle. Семантически одинаковые данные с другим transport provenance могут
 переиспользовать предыдущий analysis и его первоначальный provenance.
 Без snapshot поведение прежнего load-only анализа сохраняется. Baseline не
-переназначается. Корреляция, автоматическая сегментация и capacity bounds пока
+переназначается. Автоматическая сегментация и capacity bounds пока
 не вычисляются.
 
 ## CLI
@@ -423,6 +424,62 @@ report в stdout.
 | `6` | `DATA_DIR_BUSY` |
 | `64` | Usage error |
 | `70` | Unexpected internal failure |
+
+## Описательная диагностика одного прогона
+
+Optional `correlation-plan.v1` включает только явно перечисленные пары и правила
+аномалий. В UI выберите файл плана вместе с resource snapshot. CLI:
+
+```powershell
+.\build\install\ltv\bin\ltv.bat analyze input.jtl --resources resources.json --correlation correlation.json --data-dir data
+```
+
+План ссылается на **semantic** SHA-256 snapshot, не hash исходного JSON файла.
+Его можно взять из `resource_snapshot_sha256` сохранённого `identity.json`
+предварительного анализа с тем же snapshot без плана; файл лежит в
+`data/runs/<run-id>/analyses/<analysis-id>/identity.json`. Адаптер может
+подготовить план по [контракту](../superpowers/plans/2026-09-05-load-resource-correlation.md).
+Исходный `correlation-plan.json` сохраняется рядом и защищён manifest.
+
+Правило аномалии выбирает signal, непересекающиеся reference/evaluation windows,
+направление, минимальное абсолютное изменение и длительность. Modified-Z
+использует reference median/MAD; при MAD=0 остаётся только абсолютный порог.
+Reference — явно выбранный режим, не автоматически доказанная норма. Пропуски
+разрывают эпизоды; короткие превышения учитываются в suppressed count.
+Нарушения SLA отображаются независимо от фильтра аномалий.
+
+Корреляция показывает исходный Spearman и conditional rank association при
+выбранных controls; при недостатке наблюдений коэффициент отсутствует. Лаг
+положителен, если resource наблюдается раньше load outcome; неизвестные часы
+запрещают трактовать это как технический порядок событий. Achieved RPS может
+сам падать из-за деградации: он не выбирается автоматическим контролем.
+Не усредняются cell percentiles; диагностический P95 требует минимум20 requests
+в ячейке (технический порог, не confidence level).
+
+`CANDIDATE` — наблюдаемая ассоциация/эпизод, не доказанная причина.
+`DESCRIPTIVE`, `INSUFFICIENT_DATA` и `NO_MATERIAL_CHANGE` различаются.
+Uncertainty всегда `NOT_ESTIMATED`; p-values и HIGH confidence отсутствуют.
+Все declared pairs и причины непроверяемости остаются в evidence. Optional
+diagnostic limit не меняет бизнес-/ресурсный SLA verdict. Без плана старый
+результат не меняется, и baseline не переназначается.
+
+## Сравнение двух окон
+
+В панели baseline comparison явно задайте id окна baseline и current. Для
+сохранённых analyses с correlation plan доступны window summaries и точные
+resource bindings. Старые analyses без этих summaries дают `NOT_EVALUATED`,
+но их прежние overall deltas остаются доступными.
+
+Пороги материальности задаются **до** сравнения: процент изменения для обычных
+метрик (default5%) и абсолютная разность error-rate ratio (default0.001, то
+есть0.1 процентного пункта). При нулевом baseline относительная дельта
+неопределена; абсолютная сохраняется, это не `NO_MATERIAL_CHANGE`.
+
+Сравниваются load P50/P95/P99, error rate и achieved RPS, resource median/Q95
+при точном совпадении series binding. Число samples и длительность окон видны.
+Одинаковые имена окон или достигнутый RPS не доказывают одинаковых заданных
+условий. Разные ступени не объединяются в средний percentile; результат
+относится к этим двум измерениям, а не к популяции запусков версии продукта.
 
 ## Локальная security boundary
 

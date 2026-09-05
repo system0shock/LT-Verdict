@@ -32,3 +32,23 @@ for (const [name, value, expected] of [
     throw new Error(`${name}: expected schema_valid=${expected}; ${JSON.stringify(validateResource.errors)}`)
   }
 }
+
+const diagnosticSchema = await readJson('docs/contracts/diagnostics/v1/correlation-plan.schema.json')
+const validateDiagnostic = new Ajv2020({ strict: false }).compile(diagnosticSchema)
+const diagnostic = await readJson('docs/contracts/diagnostics/v1/examples/valid/basic.json')
+for (const [name, value, expected] of [
+  ['basic diagnostics', diagnostic, true],
+  ['anomalies only', { ...diagnostic, pairs: [] }, true],
+  ['pairs only', { ...diagnostic, anomalies: [] }, true],
+  ['empty diagnostics', { ...diagnostic, pairs: [], anomalies: [] }, false],
+  ['unknown diagnostic field', { ...diagnostic, token: 'not-allowed' }, false],
+  ['C1 identifier', { ...diagnostic, pairs: [{ ...diagnostic.pairs[0], id: 'pair\u0085' }] }, false],
+  ['C1 plain text', { ...diagnostic, pairs: [{ ...diagnostic.pairs[0], topology_basis: 'node\u009f' }] }, false],
+  ['unbounded lag', { ...diagnostic, pairs: [{ ...diagnostic.pairs[0], max_lag_ms: 60001 }] }, false],
+  ['zero materiality', { ...diagnostic, pairs: [{ ...diagnostic.pairs[0], min_resource_delta: 0 }] }, false],
+  ['ambiguous signal', { ...diagnostic, anomalies: [{ ...diagnostic.anomalies[0], signal: { series_id: 'cpu', load_metric: 'error_rate' } }] }, false],
+]) {
+  if (validateDiagnostic(value) !== expected) {
+    throw new Error(`${name}: expected schema_valid=${expected}; ${JSON.stringify(validateDiagnostic.errors)}`)
+  }
+}

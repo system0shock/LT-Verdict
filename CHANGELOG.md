@@ -7,6 +7,10 @@
 
 ### Added
 
+- Открытие сохранённых analyses после reload UI, графики RPS/errors/P95 с
+  сохранением gaps и пагинацией normalized data.
+- Экспорт сохранённого результата в canonical JSON и автономный HTML через UI
+  и `ltv report`, без повторного анализа и изменения вердикта.
 - Принят local-first baseline PRC/PRD v0.6 и план MVP по Slices 0–10.
 - Добавлен минимальный Slice 0: два контракта, два fixtures, offline verifier и
   CI gate.

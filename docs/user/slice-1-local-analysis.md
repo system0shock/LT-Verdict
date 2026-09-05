@@ -61,6 +61,33 @@ response bodies, response headers и XML payload fields не извлекают�
 Повтор тех же input bytes переиспользует run. Новая policy создаёт новый
 immutable analysis, не изменяя прежний.
 
+### Сохранённые результаты и графики
+
+В списке принятых прогонов выберите файл, затем нужный analysis. Рядом с
+analysis показаны его id, validity и verdict. Результат можно открыть после
+перезагрузки страницы без повторного upload или запуска job. Если для input
+ещё нет законченных analyses, UI сообщает об этом. Списки имеют пагинацию;
+порядок по id не обозначает порядок завершения.
+
+Графики показывают RPS, число ошибок за bucket и P95 latency по выбранным
+normalized data. Время отсчитывается от начала прогона. Отсутствующие buckets
+разрывают линии; они не заменяются нулями. Rollup и границы интервала задаются
+теми же controls, что и для таблицы. Одна страница содержит не более 500
+buckets; индикатор и переход к следующему интервалу не позволяют принять её
+за весь прогон. Таблица остаётся доступным текстовым представлением графиков.
+
+### Скачать результат
+
+Для открытого analysis доступны `Download JSON` и `Download HTML`.
+JSON совпадает по bytes с сохранённым `analysis-result.json`. HTML содержит
+идентификаторы, validity, verdict, coverage, metrics, policy checks, findings
+и evidence. Он открывается локально без приложения и сетевого доступа.
+Графики в этот первый HTML export не входят.
+
+Просмотр и экспорт не создают новых analyses и не меняют вердикт.
+Baseline comparison, N-run history и остальные форматы относятся к следующим
+изменениям Slices 8–9.
+
 ### Состояния и действия
 
 | Состояние | Значение | Действие |
@@ -107,8 +134,8 @@ spikes заполнением или усреднением готовых perce
 `Policy file` импортирует один JSON object `policy.v1`. После успешной
 validation UI показывает editor для `policy_id`, rules, metric, operator,
 threshold и scope. `Add rule`/`Remove rule` меняют только текущий draft;
-`Download policy` сохраняет его как `policy.json`. В Slice 1 download относится
-к policy: export analysis result входит в будущий Slice 9.
+`Download policy` сохраняет его как `policy.json`. Это отдельное действие от
+экспорта готового analysis через `Download JSON`/`Download HTML`.
 
 Перед использованием сохранённого файла выполните:
 
@@ -250,16 +277,30 @@ Scope — только overall или transaction с точным передан
 ltv ui [--data-dir <path>] [--analysis-parallelism <n>]
 ltv analyze <input> [--policy <policy.json>] [--data-dir <path>]
 ltv policy validate <policy.json>
+ltv report <run-id> <analysis-id> --format json|html [--data-dir <path>]
 ```
 
 `ltv analyze` печатает canonical `analysis-result.v1` в stdout.
 
+`ltv report` читает уже сохранённый analysis, проверяет его manifest и выводит
+JSON либо UTF-8 HTML в stdout. `--format` обязателен. Для сохранения файла
+перенаправьте stdout, сохранив исходную кодировку/bytes. На Windows используйте
+PowerShell 7.4+ либо redirection в `cmd`; Windows PowerShell 5.1 перекодирует
+native stdout ([поведение redirection](https://learn.microsoft.com/en-us/powershell/module/microsoft.powershell.core/about/about_redirection)).
+Перед запуском CLI остановите UI, использующий тот же data
+directory; скачивание из работающего UI доступно без остановки.
+
+Успешный export возвращает `0` даже для `FAIL` или `NO_VERDICT`: exit описывает
+экспорт, исходный verdict остаётся в отчёте. Отсутствующий run/analysis даёт
+`4`; usage error — `64`; повреждение сохранённых данных — `70` без partial
+report в stdout.
+
 | Exit | Значение |
 | ---: | --- |
-| `0` | `PASS`, `NO_POLICY` или valid policy |
+| `0` | `PASS`, `NO_POLICY`, valid policy или успешный export |
 | `2` | `FAIL` |
 | `3` | `NO_VERDICT` или `DEGRADED` |
-| `4` | Invalid/unsupported input |
+| `4` | Invalid/unsupported input или отсутствующий analysis для export |
 | `5` | Invalid policy |
 | `6` | `DATA_DIR_BUSY` |
 | `64` | Usage error |

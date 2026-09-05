@@ -188,17 +188,26 @@ internal class RunBundleStore(
                 }
             }
             val selected = names.toList().sorted()
-            val returned = selected.take(limit).map { analysisId ->
-                val stored = readAnalysisUnlocked(runId, analysisId) ?: corrupt("listed analysis disappeared")
-                val identity = parseObject(Files.readAllBytes(requireOwnedFile(stored.path.resolve("identity.json"))), "analysis identity")
-                val result = parseObject(Files.readAllBytes(requireOwnedFile(stored.path.resolve("analysis-result.json"))), "analysis result")
-                AnalysisSummary(
-                    analysisId,
-                    identity.string("policy_sha256"),
-                    result.string("policy_verdict"),
-                    result.string("run_validity"),
-                )
-            }
+            val returned =
+                selected.take(limit).map { analysisId ->
+                    val stored = readAnalysisUnlocked(runId, analysisId) ?: corrupt("listed analysis disappeared")
+                    val identity =
+                        parseObject(
+                            Files.readAllBytes(requireOwnedFile(stored.path.resolve("identity.json"))),
+                            "analysis identity",
+                        )
+                    val result =
+                        parseObject(
+                            Files.readAllBytes(requireOwnedFile(stored.path.resolve("analysis-result.json"))),
+                            "analysis result",
+                        )
+                    AnalysisSummary(
+                        analysisId,
+                        identity.string("policy_sha256"),
+                        result.string("policy_verdict"),
+                        result.string("run_validity"),
+                    )
+                }
             AnalysisPage(returned, if (selected.size > limit) returned.last().analysisId else null)
         }
 

@@ -9,6 +9,9 @@ LT Verdict — платформа детерминированного анал�
 Slice 1 реализован как candidate и готов к review; milestone gate остаётся
 pending до зелёных runtime/performance jobs.
 
+Первая часть Slices 8–9 добавляет открытие сохранённых analyses, графики
+нагрузки и JSON/HTML export через UI и CLI. Полный MVP остаётся в разработке.
+
 ## Быстрый запуск
 
 Нужны JDK 21 и Node.js 24.14.0.
@@ -34,6 +37,7 @@ Linux использует `./gradlew installDist` и
 - [ADR 0001 — публичные контракты Slice 0](docs/adr/0001-slice-0-public-contracts.md)
 - [Утверждённый дизайн Slice 1](docs/superpowers/specs/2026-08-31-slice-1-local-usable-shell-design.md)
 - [План реализации Slice 1](docs/superpowers/plans/2026-08-31-slice-1-local-usable-shell.md)
+- [План локального просмотра и экспорта](docs/superpowers/plans/2026-09-05-local-review-pilot.md)
 - [Уточнения local-first MVP](docs/superpowers/specs/2026-08-26-v06-local-mvp-delta-design.md)
 - [Alignment review v0.6](docs/prc-v0.6-alignment-review.md)
 - [Исторический PRC v0.5](prc-lt-verdict-v0.5.md)

@@ -164,6 +164,8 @@ base-uri 'none'; form-action 'none'. Renderer deterministic, без wall-clock.
 - Test: `src/test/kotlin/io/ltverdict/web/LocalApiTest.kt`
 - Test: `ui/e2e/saved-analysis.spec.ts`
 - Modify: `README.md`, `CHANGELOG.md`
+- Test: `ui/e2e/report-export.spec.ts` (отдельный download/offline сценарий)
+- Modify: `ui/e2e/security-a11y.spec.ts` (keyboard order новых run buttons)
 - Modify: `docs/user/slice-1-local-analysis.md`
 - Modify: `docs/architecture/slice-1-local-runtime.md`
 - Modify: `docs/development-plan-v0.6.md`, этот plan

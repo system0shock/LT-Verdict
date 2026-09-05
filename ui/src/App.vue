@@ -36,6 +36,7 @@ const nextRunAfter = ref<string | null>(null)
 const nextAnalysisAfter = ref<string | null>(null)
 const bucketNextFrom = ref<number | null>(null)
 const bucketPageFrom = ref(0)
+const bucketRollup = ref(1)
 const completedAt = ref('')
 const errorMessage = ref('')
 const rollup = ref(1)
@@ -179,6 +180,9 @@ async function refreshRuns(after?: string) {
 
 async function selectRun(run: RunSummary) {
   const revision = ++analysisRevision
+  job.value = null
+  uploadProgress.value = 0
+  queueBusy.value = false
   currentRun.value = run
   selectedAnalysisId.value = null
   analyses.value = []
@@ -207,6 +211,9 @@ async function selectAnalysis(analysis: AnalysisSummary) {
   const runId = currentRun.value?.run_id
   if (!runId) return
   const revision = ++analysisRevision
+  job.value = null
+  uploadProgress.value = 0
+  queueBusy.value = false
   selectedAnalysisId.value = analysis.analysis_id
   result.value = null
   buckets.value = []
@@ -235,10 +242,12 @@ async function refreshBuckets(nextFrom?: number) {
   }
   const selectionRevision = analysisRevision
   const revision = ++bucketRevision
+  const requestedRollup = rollup.value
   try {
-    const page = await getBuckets(runId, analysisId, rollup.value, from, to)
+    const page = await getBuckets(runId, analysisId, requestedRollup, from, to)
     if (selectionRevision !== analysisRevision || revision !== bucketRevision || selectedAnalysisId.value !== analysisId) return
     buckets.value = page.buckets
+    bucketRollup.value = requestedRollup
     bucketNextFrom.value = page.next_from_ms
     bucketPageFrom.value = from ?? 0
   } catch (failure) {
@@ -301,7 +310,7 @@ function focusPolicy() {
           >
             <button
               type="button"
-              :disabled="working"
+              :disabled="working || (uploadProgress > 0 && !job)"
               :aria-pressed="currentRun?.run_id === run.run_id"
               @click="selectRun(run)"
             >
@@ -339,7 +348,7 @@ function focusPolicy() {
           >
             <button
               type="button"
-              :disabled="working"
+              :disabled="working || (uploadProgress > 0 && !job)"
               :title="analysis.analysis_id"
               :aria-pressed="selectedAnalysisId === analysis.analysis_id"
               @click="selectAnalysis(analysis)"
@@ -414,11 +423,26 @@ function focusPolicy() {
           @cancel="cancel"
         />
 
+        <div
+          v-if="result && selectedAnalysisId"
+          class="bucket-controls"
+          aria-label="Analysis downloads"
+        >
+          <a
+            v-for="format in ['json', 'html']"
+            :key="format"
+            class="button-secondary"
+            :href="`/api/runs/${encodeURIComponent(result.run_id)}/analyses/${selectedAnalysisId}/report?format=${format}`"
+            download
+          >Download {{ format.toUpperCase() }}</a>
+        </div>
+
         <AnalysisView
           v-if="result"
           :result="result"
           :buckets="buckets"
           :rollup="rollup"
+          :bucket-rollup="bucketRollup"
           :range-start="rangeStart"
           :range-end="rangeEnd"
           @update:rollup="rollup = $event"
@@ -430,7 +454,8 @@ function focusPolicy() {
           v-if="result && result.run_validity !== 'INVALID'"
           class="muted"
         >
-          Showing buckets from {{ bucketPageFrom.toLocaleString() }} ms.
+          Showing {{ buckets.length }} buckets from {{ bucketPageFrom.toLocaleString() }} ms
+          ({{ bucketRollup }} s rollup; maximum 500 per page).
           <button
             v-if="bucketNextFrom !== null"
             type="button"

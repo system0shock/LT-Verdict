@@ -3,12 +3,33 @@ import { fileURLToPath } from 'node:url'
 
 const fixture = (path: string) => fileURLToPath(new URL(`../../fixtures/${path}`, import.meta.url))
 
+test('keeps displayed bucket units until a new rollup page is loaded', async ({ page }) => {
+  await page.goto('/')
+  await page.getByTestId('input-file').setInputFiles({
+    name: 'rollup-display.jtl',
+    mimeType: 'text/csv',
+    buffer: Buffer.from('timeStamp,elapsed,label,success\n1767225600000,0,one,true\n1767225600500,0,two,true\n'),
+  })
+  await page.getByRole('button', { name: 'Analyze run' }).click()
+  const rps = page.locator('#normalized-data tbody tr[data-status="available"]').first().locator('td').nth(1)
+  await expect(rps).toHaveText('2.00')
+  await expect(page.getByRole('img', { name: 'Requests per second' }).locator('circle')).toHaveCount(1)
+  await page.getByLabel('Bucket rollup').selectOption('10')
+  await expect(rps).toHaveText('2.00')
+  await page.getByRole('button', { name: 'Refresh data' }).click()
+  await expect(rps).toHaveText('0.20')
+  await expect(page.getByText(/maximum 500 per page/)).toBeVisible()
+  await page.getByRole('button', { name: 'rollup-display.jtl' }).click()
+  await expect(page.locator('#job-status')).toHaveCount(0)
+})
+
 test('loads a saved analysis after reload without creating a job', async ({ page }) => {
   await page.goto('/')
   await page.getByTestId('input-file').setInputFiles(fixture('slice1/jmeter/xml-5.6.3/input.xml'))
   await page.getByRole('button', { name: 'Analyze run' }).click()
   await expect(page.locator('#verdict')).toBeVisible()
   const verdict = await page.locator('#verdict h2').innerText()
+  const analysisId = await page.locator('button[aria-pressed="true"][title]').getAttribute('title')
   const validity = await page.getByText('Run validity', { exact: true }).locator('..').locator('dd').innerText()
   let jobRequests = 0
   page.on('request', (request) => {
@@ -17,7 +38,7 @@ test('loads a saved analysis after reload without creating a job', async ({ page
 
   await page.reload()
   await page.getByRole('button', { name: 'input.xml' }).click()
-  await page.getByRole('button', { name: /analysis/i }).first().click()
+  await page.locator(`button[title="${analysisId}"]`).click()
 
   await expect(page.locator('#verdict h2')).toHaveText(verdict)
   await expect(page.getByText('Run validity', { exact: true }).locator('..').locator('dd')).toHaveText(validity)

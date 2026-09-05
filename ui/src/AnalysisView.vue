@@ -7,6 +7,7 @@ const props = defineProps<{
   result: AnalysisResult
   buckets: Bucket[]
   rollup: number
+  bucketRollup: number
   rangeStart: string
   rangeEnd: string
 }>()
@@ -36,7 +37,7 @@ const verdictText = computed(() => {
 
 const overallMetrics = computed(() => metricValues(overall.value))
 const bucketRows = computed(() => {
-  const width = props.rollup * 1_000
+  const width = props.bucketRollup * 1_000
   const rows: Array<{ id: string; time: string; rps: string; errors: string; p95: string; max: string; status: string }> = []
   let previousStart: number | undefined
   for (const bucket of [...props.buckets].sort((left, right) => left.bucket_start_ms - right.bucket_start_ms)) {
@@ -55,7 +56,7 @@ const bucketRows = computed(() => {
     rows.push({
       id: `bucket-${start}`,
       time: `${start} ms`,
-      rps: (bucket.sample_count / props.rollup).toFixed(2),
+      rps: (bucket.sample_count / props.bucketRollup).toFixed(2),
       errors: bucket.error_count.toLocaleString(),
       p95: formatMillis(bucket.p95_latency_ms),
       max: formatMillis(bucket.max_latency_ms),
@@ -397,7 +398,7 @@ function updateRange(name: 'update:range-start' | 'update:range-end', event: Eve
     </div>
     <LoadCharts
       :buckets="buckets"
-      :rollup="rollup"
+      :rollup="bucketRollup"
     />
     <div class="table-wrap">
       <table>

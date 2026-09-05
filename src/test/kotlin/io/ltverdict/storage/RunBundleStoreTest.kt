@@ -104,7 +104,11 @@ class RunBundleStoreTest {
     fun `analysis listing is sorted cursor stable and validates published summaries`() =
         withStore { store, _ ->
             val input = store.acceptInput(Files.newInputStream(Path.of(CSV_FIXTURE)), "input.jtl")
-            fun publish(suffix: String, policy: String): String {
+
+            fun publish(
+                suffix: String,
+                policy: String,
+            ): String {
                 val identity = "{\"policy_sha256\":\"$policy\",\"run_id\":\"${input.runId}\",\"suffix\":\"$suffix\"}".encodeToByteArray()
                 val analysisId = sha256Hex(identity)
                 store.writeAnalysisAtomically(input.runId, analysisId) { staging ->
@@ -122,7 +126,10 @@ class RunBundleStoreTest {
             val first = store.listAnalyses(input.runId, null, 1)
             val second = store.listAnalyses(input.runId, first.nextAfter, 1)
 
-            assertEquals(listOf(firstId, secondId).sorted(), listOf(first.analyses.single().analysisId, second.analyses.single().analysisId))
+            assertEquals(
+                listOf(firstId, secondId).sorted(),
+                listOf(first.analyses.single().analysisId, second.analyses.single().analysisId),
+            )
             assertEquals(first.analyses.single().analysisId, first.nextAfter)
             assertEquals(null, second.nextAfter)
             assertEquals("PASS", first.analyses.single().policyVerdict)

@@ -43,6 +43,7 @@ const p95 = computed(() => series((bucket) => bucket.p95_latency_ms))
       v-for="chart in [{ id: 'rps', label: 'Requests per second', unit: 'RPS', data: rps }, { id: 'errors', label: 'Errors per bin', unit: 'count/bin', data: errors }, { id: 'p95', label: 'P95 latency', unit: 'ms', data: p95 }]"
       :key="chart.id"
     >
+      <figcaption>{{ chart.label }}</figcaption>
       <svg
         :aria-label="chart.label"
         role="img"
@@ -80,7 +81,19 @@ const p95 = computed(() => series((bucket) => bucket.p95_latency_ms))
         />
         <text
           :x="left"
+          :y="height - bottom + 13"
+          class="chart-label"
+        >{{ start.toLocaleString() }}</text>
+        <text
+          :x="width - right"
+          :y="height - bottom + 13"
+          text-anchor="end"
+          class="chart-label"
+        >{{ (start + span).toLocaleString() }}</text>
+        <text
+          :x="width / 2"
           :y="height - 8"
+          text-anchor="middle"
           class="chart-label"
         >Time from run start (ms)</text>
         <text

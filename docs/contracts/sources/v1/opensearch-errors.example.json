@@ -1,0 +1,56 @@
+{
+  "schema_version": "opensearch-errors.v1",
+  "id": "opensearch-errors:errors",
+  "type": "opensearch_errors",
+  "load_input_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "profile_id": "errors",
+  "start_epoch_ms": 1000,
+  "end_epoch_ms": 3000,
+  "step_ms": 1000,
+  "total_errors": 3,
+  "error_rate_per_minute": 90,
+  "timeline": [
+    {
+      "from_epoch_ms": 1000,
+      "to_epoch_ms": 2000,
+      "count": 1,
+      "rate_per_minute": 60
+    },
+    {
+      "from_epoch_ms": 2000,
+      "to_epoch_ms": 3000,
+      "count": 2,
+      "rate_per_minute": 120
+    }
+  ],
+  "groups": [
+    {
+      "service": "api",
+      "error_type": "Timeout",
+      "count": 3,
+      "first_epoch_ms": 1100,
+      "last_epoch_ms": 2900,
+      "samples": []
+    }
+  ],
+  "coverage": {
+    "status": "COMPLETE",
+    "reasons": [],
+    "timed_out": false,
+    "total_relation": "eq",
+    "shards": {
+      "total": 1,
+      "successful": 1,
+      "skipped": 0,
+      "failed": 0
+    },
+    "terms": {
+      "group_limit": 50,
+      "returned_groups": 1,
+      "sum_other_doc_count": 0,
+      "doc_count_error_upper_bound": 0
+    },
+    "samples_per_group_limit": 0,
+    "sample_message_bytes_max": 4096
+  }
+}

@@ -156,6 +156,11 @@ class CommandLineTest {
             arrayOf("report", saved.runId, saved.analysisId, "--unknown", "json"),
         ).forEach { args -> assertError(run(*args), 64, args.joinToString(" ")) }
         assertError(
+            run("report", "jmeter_jtl_csv-${"0".repeat(64)}", saved.analysisId, "--format", "json", "--data-dir", saved.dataDir.toString()),
+            4,
+            "unknown run",
+        )
+        assertError(
             run("report", saved.runId, "0".repeat(64), "--format", "json", "--data-dir", saved.dataDir.toString()),
             4,
             "unknown analysis",

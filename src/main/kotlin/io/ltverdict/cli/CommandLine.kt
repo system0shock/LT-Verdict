@@ -147,6 +147,8 @@ private fun report(
             val analysis =
                 try {
                     RunBundleStore(directory).readAnalysis(runId, analysisId)
+                } catch (_: NoSuchElementException) {
+                    null
                 } catch (_: IllegalArgumentException) {
                     null
                 }

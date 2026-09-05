@@ -123,6 +123,11 @@ async function analyze() {
   errorMessage.value = ''
   result.value = null
   buckets.value = []
+  selectedAnalysisId.value = null
+  analyses.value = []
+  nextAnalysisAfter.value = null
+  bucketNextFrom.value = null
+  bucketPageFrom.value = 0
   completedAt.value = ''
   job.value = null
   uploadProgress.value = 1
@@ -133,7 +138,7 @@ async function analyze() {
       uploadProgress.value = 0
       return
     }
-    const accepted = await uploadInput(inputFile.value, (value) => (uploadProgress.value = value))
+    const accepted = await uploadInput(inputFile.value, (value) => (uploadProgress.value = Math.max(1, value)))
     if (revision !== analysisRevision) return
     currentRun.value = accepted
     await refreshRuns()
@@ -141,6 +146,7 @@ async function analyze() {
     uploadProgress.value = 100
     await pollJob(revision)
   } catch (failure) {
+    if (revision !== analysisRevision) return
     uploadProgress.value = 0
     if (failure instanceof ApiError && failure.code === 'BUSY') queueBusy.value = true
     else showError(failure)
@@ -159,6 +165,7 @@ async function pollJob(revision: number) {
   result.value = loaded
   completedAt.value = new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'medium' }).format(new Date())
   await refreshAnalyses(job.value.run_id)
+  if (revision !== analysisRevision || !result.value) return
   if (result.value.run_validity !== 'INVALID') await refreshBuckets()
 }
 
@@ -186,6 +193,7 @@ async function selectRun(run: RunSummary) {
   currentRun.value = run
   selectedAnalysisId.value = null
   analyses.value = []
+  nextAnalysisAfter.value = null
   result.value = null
   buckets.value = []
   completedAt.value = ''
@@ -201,8 +209,9 @@ async function selectRun(run: RunSummary) {
 
 async function refreshAnalyses(runId = currentRun.value?.run_id, after?: string) {
   if (!runId) return
+  const revision = analysisRevision
   const page = await listAnalyses(runId, after)
-  if (currentRun.value?.run_id !== runId) return
+  if (revision !== analysisRevision || currentRun.value?.run_id !== runId) return
   analyses.value = after ? [...analyses.value, ...page.analyses] : page.analyses
   nextAnalysisAfter.value = page.next_after
 }

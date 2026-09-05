@@ -211,3 +211,35 @@ rollup и границы выбранных данных; JSON byte-identical; �
 renderer; повторное открытие и экспорт не создают analysis и не меняют verdict.
 Документация описывает точные команды и ограничения. Stage 1 CI/performance
 и полный MVP остаются отдельными незакрытыми gates.
+
+## Результат локальной реализации — 2026-09-05
+
+Tasks 1–3 реализованы в `feat/local-review-pilot`. Ветка поставки основана на
+`73abdbc` (`fix/histogram-encoding-memory`): это отдельное исправление
+воспроизведённого Slice 1 OOM, а не изменение metrics semantics в pilot.
+Пользовательская ветка Slice 1 сохранена без изменений.
+
+Подтверждены RED/GREEN для новых endpoints/CLI, сохранённого выбора, gaps,
+rollup display, устаревших completion/bucket responses и очистки списка при
+отмене следующего run. Browser download сравнивается с исходными JSON bytes;
+локальный HTML проверен с malicious label, без scripts и сетевых requests.
+
+| Проверка | Локальный результат |
+| --- | --- |
+| `gradlew.bat -PnpmOffline=true --offline --no-daemon check installDist` | PASS: 114 JVM tests, 112 passed, 2 Windows symlink skips |
+| `npm --prefix ui run e2e` | PASS: 21 tests, включая keyboard/axe и offline export |
+| UI lint, typecheck/build, `test:contracts` | PASS |
+| `python tools/verify_slice0.py` | PASS |
+| `python -m unittest tools.test_verify_slice0 tools.test_generate_jtl -v` | PASS: 4 tests |
+| Markdown lint, whitespace, tracked secret scan | PASS |
+| Визуальная проверка Chromium | Light/dark, 1280/500 px; labels, gaps, без page overflow |
+
+Один итоговый scoped review проверил pilot и минимальный prerequisite fix.
+Замечания об exit code отсутствующего run, stale completion responses и
+сохранении списка предыдущего run воспроизведены и исправлены в существующих
+компонентах; regression tests проходят. Новых dependencies и public schemas нет.
+
+Linux performance gate prerequisite прошёл три 10M-row runs с одинаковым SHA-256;
+цифры и ограничения среды записаны в [Stage 1 report](../../milestones/stage-1.md).
+Это локальное доказательство, не GitHub CI. Ветки не опубликованы, Stage 1
+остаётся `GATE_PENDING`, пользовательская приёмка и полный MVP не объявлены.

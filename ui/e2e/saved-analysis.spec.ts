@@ -84,6 +84,54 @@ test('keeps a newer bucket refresh failure over an older response', async ({ pag
   await expect(page.getByText('999 ms', { exact: true })).toHaveCount(0)
 })
 
+for (const status of [200, 500]) {
+  test(`ignores superseded completion listing with status ${status}`, async ({ page }) => {
+    await page.goto('/')
+    await page.getByTestId('input-file').setInputFiles(fixture('slice1/jmeter/xml-5.6.3/input.xml'))
+    await page.getByRole('button', { name: 'Analyze run' }).click()
+    await expect(page.locator('#normalized-data tbody tr').first()).toBeVisible()
+    let held = false
+    let finished = false
+    let release!: () => void
+    const pending = new Promise<void>((resolve) => { release = resolve })
+    await page.route(/\/analyses\?/, async (route) => {
+      if (held) return route.continue()
+      held = true
+      const response = await route.fetch()
+      await pending
+      if (status === 200) await route.fulfill({ response })
+      else await route.fulfill({ status, json: { error: { code: 'TEST_FAILURE', message: 'Stale completion failed', details: [] } } })
+      finished = true
+    })
+    await page.getByRole('button', { name: 'Analyze run' }).click()
+    await expect.poll(() => held).toBe(true)
+    await expect(page.locator('#verdict')).toBeVisible()
+    await page.getByRole('button', { name: 'input.xml' }).click()
+    release()
+    await expect.poll(() => finished).toBe(true)
+    await page.waitForLoadState('networkidle')
+    await expect(page.getByRole('alert')).toHaveCount(0)
+    await expect(page.locator('#verdict')).toHaveCount(0)
+  })
+}
+
+test('clears the previous run analyses when a new run is cancelled', async ({ page }) => {
+  await page.goto('/')
+  await page.getByTestId('input-file').setInputFiles(fixture('slice1/jmeter/xml-5.6.3/input.xml'))
+  await page.getByRole('button', { name: 'Analyze run' }).click()
+  const analyses = page.getByRole('region', { name: 'Saved analyses' })
+  await expect(analyses.getByRole('button', { name: /^Analysis / }).first()).toBeVisible()
+  await page.getByTestId('input-file').setInputFiles({
+    name: 'sustained.jtl',
+    mimeType: 'text/csv',
+    buffer: Buffer.from('timeStamp,elapsed,label,success\n1767225600000,321,cancel-selection,true\n'),
+  })
+  await page.getByRole('button', { name: 'Analyze run' }).click()
+  await page.getByRole('button', { name: 'Cancel analysis' }).click()
+  await expect(page.locator('#job-status')).toContainText('CANCELLED')
+  await expect(analyses.getByRole('button', { name: /^Analysis / })).toHaveCount(0)
+})
+
 test('renders separate chart segments for missing intervals', async ({ page }) => {
   const header = 'timeStamp,elapsed,label,responseCode,responseMessage,threadName,dataType,success,failureMessage,bytes,sentBytes,grpThreads,allThreads,URL,Latency,IdleTime,Connect'
   const rows = [

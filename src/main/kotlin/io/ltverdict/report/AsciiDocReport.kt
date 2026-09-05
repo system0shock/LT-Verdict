@@ -3,6 +3,7 @@ package io.ltverdict.report
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.jsonObject
@@ -70,7 +71,10 @@ private fun StringBuilder.field(
     literal(value)
 }
 
-private fun StringBuilder.literal(value: JsonElement?) = literal(value?.toString() ?: "unavailable")
+private fun StringBuilder.literal(value: JsonElement?) =
+    literal(
+        if (value == null || value is JsonNull) "unavailable" else value.toString(),
+    )
 
 private fun StringBuilder.literal(value: String) {
     append("[subs=specialchars]\n----\n$value\n----\n")

@@ -140,7 +140,7 @@ spikes заполнением или усреднением готовых perce
 validation UI показывает editor для `policy_id`, rules, metric, operator,
 threshold и scope. `Add rule`/`Remove rule` меняют только текущий draft;
 `Download policy` сохраняет его как `policy.json`. Это отдельное действие от
-экспорта готового analysis через `Download JSON`/`Download HTML`.
+экспорта готового analysis через `Download JSON`/`Download HTML`/`Download AsciiDoc`.
 
 Перед использованием сохранённого файла выполните:
 

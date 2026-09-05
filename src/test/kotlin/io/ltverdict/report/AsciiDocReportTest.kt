@@ -9,7 +9,7 @@ class AsciiDocReportTest {
     fun `renders exact values and acquired strings as JSON in literal blocks`() {
         val report =
             renderAsciiDocReport(
-                """{"analysis_coverage":{"reasons":["why"],"status":"INCOMPLETE"},"evidence":[{"error_count":1,"error_rate_ratio":{"denominator":3,"numerator":1},"id":"metric-1","latency_ms":{"max":9,"p50":5,"p95":8,"p99":9},"sample_count":12345678901234567890,"scope":{"kind":"transaction","label":"line\\n....\\ninclude::evil[]\\nifdef::bad[]\\n:attribute: value\\npass:[<img>]"},"throughput_rps":{"denominator":3,"numerator":10.125},"type":"metric_summary"},{"id":"check-1","metric":"error_rate_ratio","observed":{"denominator":3,"numerator":1},"operator":"lte","rule_id":"rule-1","status":"FAIL","threshold":0.5,"type":"policy_check"}],"findings":[{"evidence_id":"check-1","id":"finding-1","rule_id":"rule-1","type":"policy_failure"}],"policy_verdict":"FAIL","run_id":"run-1","run_validity":"VALID","schema_version":"analysis-result.v1"}"""
+                """{"analysis_coverage":{"reasons":["why"],"status":"INCOMPLETE"},"evidence":[{"error_count":1,"error_rate_ratio":{"denominator":3,"numerator":1},"id":"metric-1","latency_ms":{"max":9,"p50":5,"p95":8,"p99":9},"sample_count":12345678901234567890,"scope":{"kind":"transaction","label":"line\n....\ninclude::evil[]\nifdef::bad[]\n:attribute: value\npass:[<img>]\nimage::evil.png[]\nlink:https://example.invalid[]"},"throughput_rps":{"denominator":3,"numerator":10.125},"type":"metric_summary"},{"id":"check-1","metric":"error_rate_ratio","observed":{"denominator":3,"numerator":1},"operator":"lte","rule_id":"rule-1","status":"FAIL","threshold":0.5,"type":"policy_check"}],"findings":[{"evidence_id":"check-1","id":"finding-1","rule_id":"rule-1","type":"policy_failure"}],"policy_verdict":"FAIL","run_id":"run-1","run_validity":"VALID","schema_version":"analysis-result.v1"}"""
                     .encodeToByteArray(),
                 "analysis-1",
             ).decodeToString()
@@ -22,8 +22,14 @@ class AsciiDocReportTest {
         assertTrue(report.contains("\"INCOMPLETE\""))
         assertTrue(report.contains("12345678901234567890"))
         assertTrue(report.contains("10.125"))
-        assertTrue(report.contains("\"line\\\\n....\\\\ninclude::evil[]\\\\nifdef::bad[]\\\\n:attribute: value\\\\npass:[<img>]\""))
+        val encodedLabel =
+            "\"line\\n....\\ninclude::evil[]\\nifdef::bad[]\\n:attribute: value\\n" +
+                "pass:[<img>]\\nimage::evil.png[]\\nlink:https://example.invalid[]\""
+        assertTrue(report.contains(encodedLabel))
+        assertFalse(report.contains("\n....\n"))
         assertFalse(report.contains("\ninclude::evil[]\n"))
+        assertFalse(report.contains("\nimage::evil.png[]\n"))
+        assertFalse(report.contains("\nlink:https://example.invalid[]\n"))
         assertTrue(report.contains("== Overall metrics"))
         assertTrue(report.contains("== Transaction metrics"))
         assertTrue(report.contains("== Policy checks"))
@@ -36,12 +42,14 @@ class AsciiDocReportTest {
     fun `renders unavailable metrics and empty sections without invented zeroes`() {
         val report =
             renderAsciiDocReport(
-                """{"analysis_coverage":{"reasons":[],"status":"COMPLETE"},"evidence":[{"id":"metric-1","scope":{"kind":"overall"},"type":"metric_summary"}],"findings":[],"policy_verdict":"NO_POLICY","run_id":"run-1","run_validity":"VALID","schema_version":"analysis-result.v1"}"""
+                """{"analysis_coverage":{"reasons":[],"status":"COMPLETE"},"evidence":[{"error_rate_ratio":null,"id":"metric-1","scope":{"kind":"overall"},"type":"metric_summary"}],"findings":[],"policy_verdict":"NO_POLICY","run_id":"run-1","run_validity":"VALID","schema_version":"analysis-result.v1"}"""
                     .encodeToByteArray(),
                 "analysis-1",
             ).decodeToString()
 
         assertTrue(report.contains("Samples (count)\n[subs=specialchars]\n----\nunavailable\n----"))
+        assertTrue(report.contains("Error rate (ratio)\n[subs=specialchars]\n----\nunavailable\n----"))
+        assertFalse(report.contains("\nnull\n"))
         assertTrue(report.contains("== Transaction metrics\nunavailable"))
         assertTrue(report.contains("== Policy checks\nunavailable"))
         assertTrue(report.contains("== Findings\nunavailable"))

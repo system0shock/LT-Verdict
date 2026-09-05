@@ -17,6 +17,7 @@ import java.io.PrintStream
 import java.nio.charset.StandardCharsets.UTF_8
 import java.nio.file.Files
 import java.nio.file.Path
+import java.security.MessageDigest
 
 class CommandLineTest {
     @TempDir
@@ -118,6 +119,31 @@ class CommandLineTest {
                 "DATA_DIR_BUSY",
             )
         }
+    }
+
+    @Test
+    fun `report returns stored JSON bytes without changing the analysis`() {
+        val dataDir = tempDir.resolve("report-data")
+        val analyzed = run("analyze", fixture("jmeter/xml-5.6.3/input.xml").toString(), "--data-dir", dataDir.toString())
+        assertEquals(0, analyzed.exitCode)
+        val runId = analyzed.stdout.json("run_id")
+        val analyses = dataDir.resolve("runs").resolve(runId).resolve("analyses")
+        val analysisId =
+            Files.list(analyses).use {
+                it
+                    .findFirst()
+                    .orElseThrow()
+                    .fileName
+                    .toString()
+            }
+        val result = analyses.resolve(analysisId).resolve("analysis-result.json")
+        val before = MessageDigest.getInstance("SHA-256").digest(Files.readAllBytes(result))
+
+        val exported = run("report", runId, analysisId, "--format", "json", "--data-dir", dataDir.toString())
+
+        assertEquals(0, exported.exitCode)
+        assertEquals(Files.readAllBytes(result).decodeToString(), exported.stdout)
+        assertEquals(before.toList(), MessageDigest.getInstance("SHA-256").digest(Files.readAllBytes(result)).toList())
     }
 
     private fun run(vararg args: String): CliResult {

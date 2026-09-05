@@ -6,6 +6,7 @@ import io.ltverdict.core.EngineConfig
 import io.ltverdict.core.PolicyValidation
 import io.ltverdict.core.validatePolicy
 import io.ltverdict.jobs.AnalysisJobs
+import io.ltverdict.report.renderHtmlReport
 import io.ltverdict.storage.DataDirectory
 import io.ltverdict.storage.RunBundleStore
 import io.ltverdict.web.LocalApiContext
@@ -31,6 +32,7 @@ internal fun runCli(
         when (args.firstOrNull()) {
             "analyze" -> analyze(args.drop(1), stdout)
             "policy" -> validatePolicyCommand(args.drop(1), stdout)
+            "report" -> report(args.drop(1), stdout)
             "ui" -> ui(args.drop(1))
             else -> usage()
         }
@@ -111,6 +113,51 @@ private fun analyze(
         }
     stdout.write(result)
     return exitCode
+}
+
+private fun report(
+    args: List<String>,
+    stdout: PrintStream,
+): Int {
+    if (args.size < 4 || args[0].startsWith("--") || args[1].startsWith("--")) usage()
+    val runId = args[0]
+    val analysisId = args[1]
+    var dataDir = defaultDataDir()
+    var format: String? = null
+    var dataDirSeen = false
+    var index = 2
+    while (index < args.size) {
+        if (index + 1 >= args.size) usage()
+        when (args[index]) {
+            "--format" -> if (format == null) format = args[index + 1] else usage()
+            "--data-dir" ->
+                if (!dataDirSeen) {
+                    dataDirSeen = true
+                    dataDir = path(args[index + 1])
+                } else {
+                    usage()
+                }
+            else -> usage()
+        }
+        index += 2
+    }
+    if (format !in setOf("json", "html")) usage()
+    val result =
+        DataDirectory.open(dataDir).use { directory ->
+            val analysis =
+                try {
+                    RunBundleStore(directory).readAnalysis(runId, analysisId)
+                } catch (_: IllegalArgumentException) {
+                    null
+                }
+                    ?: throw CliFailure(EXIT_INVALID_INPUT, "ANALYSIS_NOT_FOUND")
+            val artifact =
+                analysis.artifacts.singleOrNull { it.path == "analysis-result.json" }
+                    ?: throw IllegalStateException("CORRUPT_RUN_BUNDLE: missing analysis result")
+            Files.readAllBytes(analysis.path.resolve(artifact.path))
+        }
+    stdout.write(if (format == "json") result else renderHtmlReport(result, analysisId))
+    return EXIT_OK
 }
 
 private fun validatePolicyCommand(
@@ -243,7 +290,7 @@ private fun usage(): Nothing =
         EXIT_USAGE,
         "Usage: ltv ui [--data-dir <path>] [--analysis-parallelism <n>] | " +
             "ltv analyze <input> [--policy <policy.json>] [--data-dir <path>] | " +
-            "ltv policy validate <policy.json>",
+            "ltv policy validate <policy.json> | ltv report <run-id> <analysis-id> --format json|html [--data-dir <path>]",
     )
 
 private class CliFailure(

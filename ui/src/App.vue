@@ -242,7 +242,7 @@ async function refreshBuckets(nextFrom?: number) {
     bucketNextFrom.value = page.next_from_ms
     bucketPageFrom.value = from ?? 0
   } catch (failure) {
-    if (revision === analysisRevision) showError(failure)
+    if (selectionRevision === analysisRevision && revision === bucketRevision) showError(failure)
   }
 }
 

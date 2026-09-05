@@ -97,8 +97,8 @@ const p95 = computed(() => series((bucket) => bucket.p95_latency_ms))
           class="chart-label"
         >Time from run start (ms)</text>
         <text
-          x="4"
-          :y="top + 10"
+          :x="left"
+          :y="top - 4"
           class="chart-label"
         >{{ chart.data.max.toLocaleString() }} {{ chart.unit }}</text>
       </svg>

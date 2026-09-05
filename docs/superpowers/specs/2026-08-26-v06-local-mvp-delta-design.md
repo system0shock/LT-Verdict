@@ -837,7 +837,12 @@ optional image, но локальный renderer остаётся запасны
 
 ### 18.3. Сравнение двух прогонов
 
-В MVP пользователь вручную выбирает один baseline. Прогоны выравниваются:
+В MVP пользователь вручную назначает один baseline либо явно запускает
+статистический автовыбор одного реального прогона из выбранной сопоставимой
+серии. Ручной режим — стартовый; оба режима закрепляют конкретный сохранённый
+analysis до явной замены. Алгоритм, provenance и ограничения определены в
+[ADR 0004](../../adr/0004-local-baseline-selection.md).
+Прогоны выравниваются:
 
 1. по общим подтверждённым stages;
 2. иначе по relative time от фактического начала нагрузки.
@@ -1284,7 +1289,8 @@ MVP design считается реализованным только при в�
 20. Capacity policy отличает `PASS`, `FAIL`, `NO_POLICY` и `NO_VERDICT` по
     verified bounds относительно `required_capacity`.
 21. `capacity_knee` явно помечен как diagnostic, а не canonical maximum.
-22. Текущий run сравнивается с одним manual baseline без wall-clock stretching.
+22. Текущий run сравнивается с одним фиксированным baseline без wall-clock
+    stretching; доступны ручное назначение и статистический автовыбор по ADR 0004.
 23. N-run table по умолчанию показывает 10 локальных comparable RunBundles и
     не выполняет external queries.
 24. JSON, self-contained HTML, AsciiDoc и Confluence-ready outputs создаются из

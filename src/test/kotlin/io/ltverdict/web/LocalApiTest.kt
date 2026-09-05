@@ -5,6 +5,7 @@ import io.ltverdict.core.AnalysisService
 import io.ltverdict.core.EngineConfig
 import io.ltverdict.core.sha256Hex
 import io.ltverdict.jobs.AnalysisJobs
+import io.ltverdict.report.renderAsciiDocReport
 import io.ltverdict.report.renderHtmlReport
 import io.ltverdict.storage.DataDirectory
 import io.ltverdict.storage.RunBundleStore
@@ -448,23 +449,26 @@ class LocalApiTest {
             val before = Files.list(stored.path.parent).use { it.map { path -> path.fileName.toString() }.sorted().toList() }
             val base = "/api/runs/${input.runId}/analyses/$analysisId/report"
 
-            for (format in listOf("json", "html")) {
+            for (format in listOf("json", "html", "asciidoc")) {
                 val response = api.get("$base?format=$format")
                 assertEquals(200, response.statusCode())
                 assertEquals(
-                    "attachment; filename=\"lt-verdict-$analysisId.$format\"",
+                    "attachment; filename=\"lt-verdict-$analysisId.${if (format == "asciidoc") "adoc" else format}\"",
                     response.headers().firstValue("Content-Disposition").orElseThrow(),
                 )
-                val expected = if (format == "json") resultBytes else renderHtmlReport(resultBytes, analysisId)
+                val expected =
+                    when (format) {
+                        "json" -> resultBytes
+                        "html" -> renderHtmlReport(resultBytes, analysisId)
+                        else -> renderAsciiDocReport(resultBytes, analysisId)
+                    }
                 assertEquals(expected.decodeToString(), response.body())
                 assertTrue(
                     response.headers().firstValue("Content-Type").orElseThrow().startsWith(
-                        if (format ==
-                            "json"
-                        ) {
-                            "application/json"
-                        } else {
-                            "text/html"
+                        when (format) {
+                            "json" -> "application/json"
+                            "html" -> "text/html"
+                            else -> "text/plain"
                         },
                     ),
                 )

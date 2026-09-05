@@ -438,12 +438,12 @@ function focusPolicy() {
           aria-label="Analysis downloads"
         >
           <a
-            v-for="format in ['json', 'html']"
+            v-for="format in ['json', 'html', 'asciidoc']"
             :key="format"
             class="button-secondary"
             :href="`/api/runs/${encodeURIComponent(result.run_id)}/analyses/${selectedAnalysisId}/report?format=${format}`"
             download
-          >Download {{ format.toUpperCase() }}</a>
+          >Download {{ format === 'asciidoc' ? 'AsciiDoc' : format.toUpperCase() }}</a>
         </div>
 
         <AnalysisView

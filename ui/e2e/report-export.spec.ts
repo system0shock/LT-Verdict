@@ -27,6 +27,14 @@ test('downloads exact JSON and a safe offline HTML report without another job', 
   expect(json.suggestedFilename()).toMatch(/^lt-verdict-[a-f0-9]{64}\.json$/)
   expect(await readFile((await json.path())!)).toEqual(await result.body())
 
+  const asciidocDownload = page.waitForEvent('download')
+  await page.getByRole('link', { name: 'Download AsciiDoc' }).click()
+  const asciidoc = await asciidocDownload
+  expect(asciidoc.suggestedFilename()).toMatch(/^lt-verdict-[a-f0-9]{64}\.adoc$/)
+  const asciidocText = await readFile((await asciidoc.path())!, 'utf8')
+  expect(asciidocText).toContain('= LT Verdict report')
+  expect(asciidocText).toContain('Analysis ID')
+
   const htmlDownload = page.waitForEvent('download')
   await page.getByRole('link', { name: 'Download HTML' }).click()
   const html = await htmlDownload

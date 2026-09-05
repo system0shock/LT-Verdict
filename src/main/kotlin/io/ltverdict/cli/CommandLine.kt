@@ -6,6 +6,7 @@ import io.ltverdict.core.EngineConfig
 import io.ltverdict.core.PolicyValidation
 import io.ltverdict.core.validatePolicy
 import io.ltverdict.jobs.AnalysisJobs
+import io.ltverdict.report.renderAsciiDocReport
 import io.ltverdict.report.renderHtmlReport
 import io.ltverdict.storage.DataDirectory
 import io.ltverdict.storage.RunBundleStore
@@ -141,7 +142,7 @@ private fun report(
         }
         index += 2
     }
-    if (format !in setOf("json", "html")) usage()
+    if (format !in setOf("json", "html", "asciidoc")) usage()
     val result =
         DataDirectory.open(dataDir).use { directory ->
             val analysis =
@@ -158,7 +159,13 @@ private fun report(
                     ?: throw IllegalStateException("CORRUPT_RUN_BUNDLE: missing analysis result")
             Files.readAllBytes(analysis.path.resolve(artifact.path))
         }
-    stdout.write(if (format == "json") result else renderHtmlReport(result, analysisId))
+    stdout.write(
+        when (format) {
+            "json" -> result
+            "html" -> renderHtmlReport(result, analysisId)
+            else -> renderAsciiDocReport(result, analysisId)
+        },
+    )
     return EXIT_OK
 }
 
@@ -292,7 +299,7 @@ private fun usage(): Nothing =
         EXIT_USAGE,
         "Usage: ltv ui [--data-dir <path>] [--analysis-parallelism <n>] | " +
             "ltv analyze <input> [--policy <policy.json>] [--data-dir <path>] | " +
-            "ltv policy validate <policy.json> | ltv report <run-id> <analysis-id> --format json|html [--data-dir <path>]",
+            "ltv policy validate <policy.json> | ltv report <run-id> <analysis-id> --format json|html|asciidoc [--data-dir <path>]",
     )
 
 private class CliFailure(

@@ -7,6 +7,8 @@
 
 ### Added
 
+- Local AsciiDoc export сохранённого analysis через UI и `ltv report`, с
+  безопасными literal blocks и без создания нового analysis.
 - Открытие сохранённых analyses после reload UI, графики RPS/errors/P95 с
   сохранением gaps и пагинацией normalized data.
 - Экспорт сохранённого результата в canonical JSON и автономный HTML через UI

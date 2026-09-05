@@ -147,6 +147,21 @@ class CommandLineTest {
     }
 
     @Test
+    fun `report renders saved analysis as AsciiDoc without changing the analysis`() {
+        val saved = savedAnalysis("asciidoc-report")
+        val before = MessageDigest.getInstance("SHA-256").digest(Files.readAllBytes(saved.result))
+
+        val exported = run("report", saved.runId, saved.analysisId, "--format", "asciidoc", "--data-dir", saved.dataDir.toString())
+
+        assertEquals(0, exported.exitCode)
+        assertTrue(exported.stderr.isEmpty(), exported.stderr)
+        assertTrue(exported.stdout.startsWith("= LT Verdict report\n:!webfonts:\n"))
+        assertTrue(exported.stdout.contains("Run ID\n[subs=specialchars]\n----\n\"${saved.runId}\"\n----"))
+        assertTrue(exported.stdout.contains("Analysis ID\n[subs=specialchars]\n----\n\"${saved.analysisId}\"\n----"))
+        assertEquals(before.toList(), MessageDigest.getInstance("SHA-256").digest(Files.readAllBytes(saved.result)).toList())
+    }
+
+    @Test
     fun `report validates syntax and maps missing busy corrupt and fail results without partial stdout`() {
         val saved = savedAnalysis("report-boundaries")
         listOf(

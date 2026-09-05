@@ -32,6 +32,7 @@ import io.ltverdict.core.validatePolicy
 import io.ltverdict.jobs.AnalysisJobs
 import io.ltverdict.jobs.JobStatus
 import io.ltverdict.jobs.SubmitResult
+import io.ltverdict.report.renderAsciiDocReport
 import io.ltverdict.report.renderHtmlReport
 import io.ltverdict.storage.AcceptedInput
 import io.ltverdict.storage.RunBundleStore
@@ -185,16 +186,26 @@ internal fun Application.installLocalApi(context: LocalApiContext) {
         get("/api/runs/{runId}/analyses/{analysisId}/report") {
             call.requireOnlyQueries("format")
             val format = call.singleQuery("format")
-            if (format !in setOf("json", "html")) malformed("format must be json or html")
+            if (format !in setOf("json", "html", "asciidoc")) malformed("format must be json, html or asciidoc")
             val stored = context.store.requireAnalysis(call)
             val bytes = withContext(Dispatchers.IO) { Files.readAllBytes(stored.path.resolve(RESULT_FILE)) }
             val analysisId = stored.path.fileName.toString()
-            val report = if (format == "json") bytes else renderHtmlReport(bytes, analysisId)
+            val report =
+                when (format) {
+                    "json" -> bytes
+                    "html" -> renderHtmlReport(bytes, analysisId)
+                    else -> renderAsciiDocReport(bytes, analysisId)
+                }
             call.response.headers.append(
                 HttpHeaders.ContentDisposition,
-                "attachment; filename=\"lt-verdict-$analysisId.$format\"",
+                "attachment; filename=\"lt-verdict-$analysisId.${if (format == "asciidoc") "adoc" else format}\"",
             )
-            val contentType = if (format == "json") ContentType.Application.Json else ContentType.Text.Html.withCharset(Charsets.UTF_8)
+            val contentType =
+                when (format) {
+                    "json" -> ContentType.Application.Json
+                    "html" -> ContentType.Text.Html.withCharset(Charsets.UTF_8)
+                    else -> ContentType.Text.Plain.withCharset(Charsets.UTF_8)
+                }
             call.respondBytes(report, contentType, HttpStatusCode.OK)
         }
 

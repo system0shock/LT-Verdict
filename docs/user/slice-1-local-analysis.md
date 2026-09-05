@@ -78,10 +78,15 @@ buckets; индикатор и переход к следующему интер
 
 ### Скачать результат
 
-Для открытого analysis доступны `Download JSON` и `Download HTML`.
+Для открытого analysis доступны `Download JSON`, `Download HTML` и `Download AsciiDoc`.
 JSON совпадает по bytes с сохранённым `analysis-result.json`. HTML содержит
 идентификаторы, validity, verdict, coverage, metrics, policy checks, findings
 и evidence. Он открывается локально без приложения и сетевого доступа.
+AsciiDoc — детерминированный UTF-8 report с теми же разделами; значения из
+analysis остаются compact JSON tokens внутри literal blocks с `specialchars`,
+поэтому текст input не становится AsciiDoc directive или markup. Canonical JSON
+сохраняет исходные bytes как точный machine-readable export. Конвертация и
+публикация AsciiDoc не входят в этот local export.
 Графики в этот первый HTML export не входят.
 
 Просмотр и экспорт не создают новых analyses и не меняют вердикт.
@@ -277,13 +282,13 @@ Scope — только overall или transaction с точным передан
 ltv ui [--data-dir <path>] [--analysis-parallelism <n>]
 ltv analyze <input> [--policy <policy.json>] [--data-dir <path>]
 ltv policy validate <policy.json>
-ltv report <run-id> <analysis-id> --format json|html [--data-dir <path>]
+ltv report <run-id> <analysis-id> --format json|html|asciidoc [--data-dir <path>]
 ```
 
 `ltv analyze` печатает canonical `analysis-result.v1` в stdout.
 
 `ltv report` читает уже сохранённый analysis, проверяет его manifest и выводит
-JSON либо UTF-8 HTML в stdout. `--format` обязателен. Для сохранения файла
+JSON, UTF-8 HTML либо UTF-8 AsciiDoc в stdout. `--format` обязателен. Для сохранения файла
 перенаправьте stdout, сохранив исходную кодировку/bytes. На Windows используйте
 PowerShell 7.4+ либо redirection в `cmd`; Windows PowerShell 5.1 перекодирует
 native stdout ([поведение redirection](https://learn.microsoft.com/en-us/powershell/module/microsoft.powershell.core/about/about_redirection)).

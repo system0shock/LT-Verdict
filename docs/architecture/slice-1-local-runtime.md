@@ -129,7 +129,7 @@ GET    /api/jobs/<job-id>
 DELETE /api/jobs/<job-id>
 GET    /api/runs/<run-id>/analyses/<analysis-id>/result
 GET    /api/runs/<run-id>/analyses/<analysis-id>/buckets
-GET    /api/runs/<run-id>/analyses/<analysis-id>/report?format=json|html
+GET    /api/runs/<run-id>/analyses/<analysis-id>/report?format=json|html|asciidoc
 ```
 
 Runs выдаются максимум по `100`, buckets — по `500`; bucket range читается
@@ -156,12 +156,15 @@ Vue отображает три SVG над текущей страницей buc
 P95/ms. Relative-time axis общая; gaps разрывают линии. Нового aggregation
 pipeline нет: rollups и P95 предоставляет существующий backend.
 
-`ltv report` и private report endpoint используют один чистый HTML renderer
+`ltv report` и private report endpoint используют чистые HTML и AsciiDoc renderers
 над сохранённым result. JSON возвращается исходными bytes. HTML содержит
 escaped acquired text и встроенный CSS с SHA-256 hash в meta CSP; scripts,
 remote assets, forms и acquired markup не исполняются. HTTP export отдаётся
 как attachment с генерируемым именем по analysis id. Renderers не изменяют
 canonical result, identity или manifests. Новых dependencies не добавлено.
+AsciiDoc отдаётся как `text/plain; charset=UTF-8` с именем `.adoc`; acquired
+values — compact JSON tokens только в literal blocks с `specialchars`, а
+canonical JSON сохраняет исходный текст. Это export, не создание job.
 
 ## Security boundary
 

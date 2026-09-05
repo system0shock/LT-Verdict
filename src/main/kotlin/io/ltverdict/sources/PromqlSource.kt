@@ -501,11 +501,15 @@ private fun resolvedExpression(
     request: SourceRequest,
 ): String =
     if (profile.sourceKind == SourceKind.INFLUXDB) {
-        query.expression
-            .replace("\$__start", "${request.startEpochMillis}ms")
-            .replace("\$__end", "${request.endEpochMillis}ms")
-            .replace("\$__interval", "${request.stepMillis}ms")
-            .replace("\$__offset", "${request.startEpochMillis % request.stepMillis}ms")
+        INFLUX_PLACEHOLDER_PATTERN.replace(query.expression) { match ->
+            when (match.value) {
+                "\$__start" -> "${request.startEpochMillis}ms"
+                "\$__end" -> "${request.endEpochMillis}ms"
+                "\$__interval" -> "${request.stepMillis}ms"
+                "\$__offset" -> "${request.startEpochMillis % request.stepMillis}ms"
+                else -> match.value
+            }
+        }
     } else {
         query.expression.replace("\$__interval", "${request.stepMillis}ms")
     }
@@ -532,4 +536,5 @@ private fun querySetSha256(
 private fun fail(code: String): Nothing = throw PromqlDecodeFailure(code)
 
 private const val MAX_ACQUISITION_RESPONSE_BYTES = 64L * 1024 * 1024
+private val INFLUX_PLACEHOLDER_PATTERN = Regex("\\${'$'}__[A-Za-z0-9_]+")
 private val NONFINITE_VALUES = setOf("NaN", "+Inf", "-Inf", "Inf")

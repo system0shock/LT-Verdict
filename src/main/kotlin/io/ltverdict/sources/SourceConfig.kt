@@ -317,9 +317,11 @@ private fun parseQueries(
 }
 
 private fun validateInfluxqlExpression(expression: String) {
-    if (INFLUX_REQUIRED_PLACEHOLDERS.any { it !in expression }) configInvalid()
-    val withoutKnownPlaceholders = INFLUX_PLACEHOLDERS.fold(expression) { query, placeholder -> query.replace(placeholder, "") }
-    if ("${'$'}__" in withoutKnownPlaceholders) configInvalid()
+    val placeholders = INFLUX_PLACEHOLDER_PATTERN.findAll(expression).map(MatchResult::value).toList()
+    if (INFLUX_REQUIRED_PLACEHOLDERS.any { it !in placeholders } || placeholders.any { it !in INFLUX_PLACEHOLDERS }) {
+        configInvalid()
+    }
+    if ("${'$'}__" in INFLUX_PLACEHOLDER_PATTERN.replace(expression, "")) configInvalid()
     if (';' in expression || INFLUX_COMMENTS.any(expression::contains) || INFLUX_INTO.containsMatchIn(expression)) configInvalid()
     if (!INFLUX_SELECT.matches(expression)) configInvalid()
     if (!INFLUX_VALUE_ALIAS.containsMatchIn(expression) && !INFLUX_DIRECT_VALUE.matches(expression)) configInvalid()
@@ -572,6 +574,7 @@ private const val END_PLACEHOLDER = "${'$'}__end"
 private const val OFFSET_PLACEHOLDER = "${'$'}__offset"
 private val INFLUX_REQUIRED_PLACEHOLDERS = listOf(START_PLACEHOLDER, END_PLACEHOLDER, INTERVAL_PLACEHOLDER)
 private val INFLUX_PLACEHOLDERS = INFLUX_REQUIRED_PLACEHOLDERS + OFFSET_PLACEHOLDER
+private val INFLUX_PLACEHOLDER_PATTERN = Regex("\\${'$'}__[A-Za-z0-9_]+")
 private val INFLUX_COMMENTS = listOf("--", "/*", "*/", "#")
 private val INFLUX_INTO = Regex("""(?i)\bINTO\b""")
 private val INFLUX_SELECT = Regex("""(?is)^\s*SELECT\b.+\bFROM\b.+$""")

@@ -217,7 +217,9 @@ uses same comparator without JDBC. HTML import bounded/hashed/download-only.
 
 ## Progress and test environment
 
-Tasks 1–3 not started. Docker CLI exists but engine is stopped; user asked
+Task 1 implemented: validated phase/comparison, focused 16/16 tests and scoped
+review fix verified. Task 2 JDBC implementation in progress; Task 3 pending.
+Docker CLI exists but engine is stopped; user asked
 asynchronously about a separate synthetic PostgreSQL container. No permission
 to start it has been received yet. pg_profile real-server validation separately
 requires an extension-enabled test instance; absence remains explicit.

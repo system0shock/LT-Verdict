@@ -7,6 +7,9 @@
 
 ### Added
 
+- Resource snapshot: оконные статистики аппаратных метрик и совместная проверка
+  бизнес-/ресурсных SLA через UI и CLI, с coverage, отдельными результатами
+  правил и сохранением evidence в JSON/HTML/AsciiDoc.
 - Ручное назначение baseline и deterministic статистический выбор одного
   реального прогона из подтверждённой серии; сохранение выбора и overall
   metric deltas в UI без повторного analysis или изменения verdict.

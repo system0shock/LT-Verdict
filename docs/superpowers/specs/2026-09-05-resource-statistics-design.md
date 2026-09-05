@@ -1,7 +1,7 @@
 # Resource statistics — первая аналитическая поставка
 
-**Статус:** Proposed — направление согласовано, конкретный контракт ожидает
-подтверждения пользователя перед implementation plan и production code.
+**Статус:** Accepted — пользователь согласовал реализацию с совместной проверкой
+бизнес- и ресурсных SLA на одинаковых evaluation windows.
 
 **База:** `cb61190`, ветка `feat/resource-statistics`.
 
@@ -65,6 +65,12 @@ dependencies, plugin registry, generic execution framework или database не�
 NaN/Infinity, overflow и несовместимые units/thresholds отклоняются до job.
 Numeric magnitude не выше `1e18`, не более 32 цифр значимости и 12 fractional
 digits после canonical expansion; расчёт не должен создавать non-finite output.
+Чтобы набор правил не размножал короткие превышения до миллионов JSON objects,
+analysis ограничен 10 000 resource threshold findings суммарно. Превышение —
+явная ошибка `RESOURCE_FINDINGS_LIMIT_EXCEEDED`, без partial publication.
+Оконные бизнес-метрики сохраняют только policy-referenced transaction identities;
+бюджет `windows × (1 + retained identities)` — максимум 10 000 histograms,
+включая overall. Это отдельная граница от количества global transaction metrics.
 
 ## Статистические механизмы `resource-statistics.v1`
 
@@ -114,9 +120,18 @@ CPU ratio, CPU cores и memory bytes не смешиваются. Без пор�
 означает наблюдаемое нарушение правила, а не доказанную причину SLA failure.
 
 Пороги и windows — result-affecting configuration, отдельно от `policy.v1`.
-Load validity/verdict остаются прежними; resource gaps уменьшают coverage
-resource analysis и явно отражаются в общей coverage, но не превращают
-самостоятельно load PASS в FAIL. Секреты/HTML интерпретироваться не должны.
+Resource rule явно задаёт effect `diagnostic|sla`: диагностические findings
+не меняют verdict; SLA rules обязательны. Existing `policy.v1` задаёт бизнес-SLA
+и в enriched analysis проверяется отдельно на каждом том же окне. Samples
+принадлежат окну по start timestamp; latency сохраняется целиком, throughput
+делится на длительность окна. Окно без business observations даёт NO_VERDICT.
+Отсутствующие ячейки обязательного resource rule дают NO_VERDICT, даже если
+наблюдаемая часть проходит порог; observed violations сохраняются отдельно.
+Для каждого окна и всего анализа приоритет: invalid/degraded load или
+непроверяемый обязательный SLA → NO_VERDICT; нет обязательных правил → NO_POLICY;
+иначе любое нарушение → FAIL; иначе PASS. Диагностика и будущая корреляция не
+подменяют обязательные SLA. Load validity не меняется из-за resource gaps.
+Секреты/HTML интерпретироваться не должны.
 
 ## Интеграция в существующее приложение
 

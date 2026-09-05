@@ -4,7 +4,9 @@ import io.ltverdict.core.AnalysisRequest
 import io.ltverdict.core.AnalysisService
 import io.ltverdict.core.EngineConfig
 import io.ltverdict.core.PolicyValidation
+import io.ltverdict.core.ResourceValidation
 import io.ltverdict.core.validatePolicy
+import io.ltverdict.core.validateResourceSnapshot
 import io.ltverdict.jobs.AnalysisJobs
 import io.ltverdict.report.renderAsciiDocReport
 import io.ltverdict.report.renderHtmlReport
@@ -60,6 +62,7 @@ private fun analyze(
     if (args.isEmpty() || args.first().startsWith("--")) usage()
     val input = path(args.first())
     var policyPath: Path? = null
+    var resourcesPath: Path? = null
     var dataDir = defaultDataDir()
     var policySeen = false
     var dataDirSeen = false
@@ -70,6 +73,10 @@ private fun analyze(
                 if (policySeen || index + 1 >= args.size) usage()
                 policySeen = true
                 policyPath = path(args[index + 1])
+            }
+            "--resources" -> {
+                if (resourcesPath != null || index + 1 >= args.size) usage()
+                resourcesPath = path(args[index + 1])
             }
             "--data-dir" -> {
                 if (dataDirSeen || index + 1 >= args.size) usage()
@@ -83,6 +90,7 @@ private fun analyze(
 
     requireRegularFile(input, EXIT_INVALID_INPUT, "INVALID_INPUT")
     val policy = policyPath?.let(::readPolicy)
+    val resources = resourcesPath?.let(::readResources)
     val result =
         DataDirectory.open(dataDir).use { directory ->
             val store = RunBundleStore(directory)
@@ -96,7 +104,11 @@ private fun analyze(
                 } catch (failure: IllegalArgumentException) {
                     throw CliFailure(EXIT_INVALID_INPUT, failure.message ?: "INVALID_INPUT")
                 }
-            AnalysisService(store, EngineConfig()).analyze(AnalysisRequest(accepted, policy)).canonicalResult
+            try {
+                AnalysisService(store, EngineConfig()).analyze(AnalysisRequest(accepted, policy, resources = resources)).canonicalResult
+            } catch (failure: IllegalArgumentException) {
+                throw CliFailure(EXIT_INVALID_INPUT, failure.message ?: "INVALID_INPUT")
+            }
         }
 
     val json = Json.parseToJsonElement(result.decodeToString()).jsonObject
@@ -275,6 +287,26 @@ private fun readPolicy(path: Path): PolicyValidation.Valid {
     }
 }
 
+private fun readResources(path: Path): ResourceValidation.Valid {
+    requireRegularFile(path, EXIT_INVALID_INPUT, "INVALID_RESOURCES")
+    val validation =
+        try {
+            Files.newInputStream(path, LinkOption.NOFOLLOW_LINKS).use(::validateResourceSnapshot)
+        } catch (failure: IOException) {
+            throw CliFailure(EXIT_INVALID_INPUT, "INVALID_RESOURCES: ${failure.message ?: "read failed"}")
+        }
+    return when (validation) {
+        is ResourceValidation.Valid -> validation
+        is ResourceValidation.Invalid ->
+            throw CliFailure(
+                EXIT_INVALID_INPUT,
+                validation.errors.joinToString(System.lineSeparator()) {
+                    "${it.code} ${it.jsonPointer.ifEmpty { "/" }}: ${it.message}"
+                },
+            )
+    }
+}
+
 private fun requireRegularFile(
     path: Path,
     exitCode: Int,
@@ -298,7 +330,7 @@ private fun usage(): Nothing =
     throw CliFailure(
         EXIT_USAGE,
         "Usage: ltv ui [--data-dir <path>] [--analysis-parallelism <n>] | " +
-            "ltv analyze <input> [--policy <policy.json>] [--data-dir <path>] | " +
+            "ltv analyze <input> [--policy <policy.json>] [--resources <snapshot.json>] [--data-dir <path>] | " +
             "ltv policy validate <policy.json> | ltv report <run-id> <analysis-id> --format json|html|asciidoc [--data-dir <path>]",
     )
 

@@ -12,6 +12,9 @@ pending до зелёных runtime/performance jobs.
 Первая часть Slices 8–9 добавляет открытие сохранённых analyses, графики
 нагрузки и JSON/HTML export через UI и CLI. Полный MVP остаётся в разработке.
 
+Resource snapshot добавляет статистики аппаратных метрик и совместные оконные
+бизнес-/ресурсные SLA. Корреляция и поиск capacity — следующие поставки.
+
 ## Быстрый запуск
 
 Нужны JDK 21 и Node.js 24.14.0.
@@ -35,6 +38,7 @@ Linux использует `./gradlew installDist` и
 - [Руководство локального анализа Slice 1](docs/user/slice-1-local-analysis.md)
 - [Архитектура локального runtime Slice 1](docs/architecture/slice-1-local-runtime.md)
 - [ADR 0001 — публичные контракты Slice 0](docs/adr/0001-slice-0-public-contracts.md)
+- [ADR 0005 — resource snapshot и оконные SLA](docs/adr/0005-resource-window-sla.md)
 - [Утверждённый дизайн Slice 1](docs/superpowers/specs/2026-08-31-slice-1-local-usable-shell-design.md)
 - [План реализации Slice 1](docs/superpowers/plans/2026-08-31-slice-1-local-usable-shell.md)
 - [План локального просмотра и экспорта](docs/superpowers/plans/2026-09-05-local-review-pilot.md)

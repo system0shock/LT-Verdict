@@ -53,7 +53,7 @@ response bodies, response headers и XML payload fields не извлекают�
 2. При необходимости выберите `Policy file` или продолжите без policy.
 3. Для загруженной policy исправьте поля в editor и дождитесь статуса
    `Policy is valid`.
-4. Нажмите `Analyze run`.
+4. При необходимости выберите `Resource snapshot`, затем нажмите `Analyze run`.
 5. Следите за upload percentage, job state и processed bytes.
 6. Просмотрите validity, verdict, coverage reasons, policy checks, transactions
    и sparse normalized data.
@@ -129,7 +129,8 @@ spikes заполнением или усреднением готовых perce
 | 403 | Неверные Host, Origin, local session или CSRF | Перезагрузить только открытый local URL |
 | `NOT_FOUND` / 404 | Run, job или analysis отсутствует | Обновить список runs и повторить |
 | `BUSY` / 409 | Analysis queue заполнена | Подождать или отменить queued job |
-| `RESOURCE_LIMIT_EXCEEDED` / 413 | Input больше 4 GiB или policy больше 1 MiB | Уменьшить файл; partial result не создаётся |
+| `RESOURCE_LIMIT_EXCEEDED` / 413 | Input больше 4 GiB, policy больше 1 MiB или resource snapshot превышает limits | Уменьшить файл; partial result не создаётся |
+| `INVALID_RESOURCES` / 422 | Snapshot не соответствует контракту или другому load input | Проверить validation details и SHA-256 |
 | `UNSUPPORTED_MEDIA_TYPE` / 415 | Неверный request content type | Использовать UI или documented CLI |
 | `UNSUPPORTED_INPUT` / 422 | Input пуст или формат не распознан | Экспортировать один из supported formats |
 | `DATA_DIR_BUSY` / CLI exit 6 | Другой process держит data directory | Остановить его или выбрать другой directory |
@@ -330,11 +331,69 @@ Transaction comparison, графические overlays и N-run history пок�
 в реализованную часть baseline. Подробные правила — в
 [ADR 0004](../adr/0004-local-baseline-selection.md).
 
+## Аппаратные метрики и совместные SLA
+
+Optional `Resource snapshot` — подготовленный локальным адаптером JSON
+`resource-snapshot.v1`, привязанный к SHA-256 загруженного load log.
+Приложение не обращается к VM/Grafana. Используйте
+[контракт](../contracts/resources/v1/resource-snapshot.schema.json) и
+[пример](../contracts/resources/v1/examples/valid/basic.json); замените hash,
+timestamps и значения своими данными, а thresholds — согласованными SLA.
+
+Series содержит metric, unit, entity, role `system|generator`, aggregation
+`interval_mean|interval_rate` и значения на общей UTC grid. `null` означает gap,
+а не ноль. Raw counters, instant samples и percentile series сначала требуется
+преобразовать в поддерживаемую семантику в адаптере. Credentials и URL в snapshot
+не передавайте. Limits: файл 16 MiB, 64 series, 100 000 points на series,
+500 000 cells суммарно, 64 непересекающихся окна и 256 resource rules.
+Не более 10 000 интервалов resource threshold violations на analysis;
+превышение даёт `RESOURCE_FINDINGS_LIMIT_EXCEEDED` без partial result.
+Оконные бизнес-метрики ограничены 10 000 потенциальных histograms:
+число окон × (overall + число policy-referenced transaction identities).
+
+Explicit windows задают интервалы `[from_epoch_ms, to_epoch_ms)` на grid внутри
+load run. Без windows берутся полностью включённые ячейки пересечения run и
+snapshot; отброшенные края отражаются в evidence. Sample относится к окну по
+start timestamp: latency не обрезается на правом краю, RPS делится на полную
+длительность окна. Бизнес-правила existing `policy.v1` проверяются на этих же
+окнах, включая exact transaction matching.
+Transaction identity разрешается по каталогу всего прогона; окно меняет
+наблюдения, но не снимает неоднозначность одинаковых labels разных paths/kinds.
+Binding evidence показывает границы и отброшенные края. Clock alignment помечен
+`not_verified_by_core`: сведения адаптера в raw provenance не являются
+независимой проверкой синхронизации часов.
+
+Resource rule задаёт series_id, unit, `gt|lt`, threshold,
+`min_consecutive_cells` и effect `sla|diagnostic`. Сравнение означает нарушение;
+например, `gt` считает превышения. Null разрывает последовательность. Порог
+interval mean не означает превышение в каждый instant. CPU cores, ratio и bytes
+не конвертируются автоматически. Без правил нет автоматического saturation.
+
+UI и reports показывают min/max, mean/median, Q05/Q25/Q75/Q95, IQR, unscaled MAD,
+sample standard deviation, slope/sec и split-half median shift, а также
+observed/expected cells и gaps. Малые/пустые выборки дают null и причины, не
+фиктивные нули. Это описательные статистики, не confidence, change point или
+доказательство причинности.
+
+Общий verdict и verdict каждого окна учитывают обязательные бизнес- и resource
+SLA. Любые недостающие необходимые данные дают `NO_VERDICT`, даже если другое
+правило уже нарушено; наблюдаемые нарушения всё равно остаются в evidence.
+При полных данных любое нарушение даёт `FAIL`, иначе `PASS`. Без обязательных
+правил — `NO_POLICY`. Diagnostic rules не влияют на verdict. Resource gaps
+не меняют load validity; invalid/degraded load не получает PASS.
+
+Snapshot и настройки входят в identity; исходные bytes сохраняются в immutable
+bundle. Семантически одинаковые данные с другим transport provenance могут
+переиспользовать предыдущий analysis и его первоначальный provenance.
+Без snapshot поведение прежнего load-only анализа сохраняется. Baseline не
+переназначается. Корреляция, автоматическая сегментация и capacity bounds пока
+не вычисляются.
+
 ## CLI
 
 ```text
 ltv ui [--data-dir <path>] [--analysis-parallelism <n>]
-ltv analyze <input> [--policy <policy.json>] [--data-dir <path>]
+ltv analyze <input> [--policy <policy.json>] [--resources <snapshot.json>] [--data-dir <path>]
 ltv policy validate <policy.json>
 ltv report <run-id> <analysis-id> --format json|html|asciidoc [--data-dir <path>]
 ```
@@ -359,7 +418,7 @@ report в stdout.
 | `0` | `PASS`, `NO_POLICY`, valid policy или успешный export |
 | `2` | `FAIL` |
 | `3` | `NO_VERDICT` или `DEGRADED` |
-| `4` | Invalid/unsupported input или отсутствующий analysis для export |
+| `4` | Invalid/unsupported input, неверный resource snapshot/binding или отсутствующий analysis для export |
 | `5` | Invalid policy |
 | `6` | `DATA_DIR_BUSY` |
 | `64` | Usage error |

@@ -4,6 +4,7 @@ import type { Policy, PolicyError } from './types'
 
 defineProps<{
   inputFile: File | null
+  resourceFile: File | null
   policy: Policy | null
   policyStatus: string
   policyErrors: PolicyError[]
@@ -12,6 +13,7 @@ defineProps<{
 
 const emit = defineEmits<{
   input: [file: File | null]
+  resources: [file: File | null]
   'policy-file': [file: File | null]
   'update-policy': [policy: Policy]
   analyze: []
@@ -78,6 +80,22 @@ function selectedFile(event: Event) {
             {{ error.json_pointer }}: {{ error.message }}
           </li>
         </ul>
+      </div>
+
+      <div class="field">
+        <label for="resource-snapshot-file">Resource snapshot <span class="muted">(optional)</span></label>
+        <input
+          id="resource-snapshot-file"
+          data-testid="resource-snapshot-file"
+          class="control control--file"
+          type="file"
+          accept="application/json,.json"
+          :disabled="busy"
+          @change="emit('resources', selectedFile($event))"
+        >
+        <p class="field__hint">
+          {{ resourceFile?.name ?? 'No resource snapshot selected.' }}
+        </p>
       </div>
     </div>
 

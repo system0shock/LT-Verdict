@@ -10,7 +10,6 @@ import io.ltverdict.report.renderHtmlReport
 import io.ltverdict.storage.DataDirectory
 import io.ltverdict.storage.RunBundleStore
 import kotlinx.serialization.json.Json
-import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.boolean
@@ -309,6 +308,36 @@ class LocalApiTest {
                         .resolve("analyses"),
                 ),
             )
+        }
+    }
+
+    @Test
+    fun `invalid resources return structured errors before job submission`() {
+        val submissions = AtomicInteger()
+        withServer(
+            jobsFactory = {
+                AnalysisJobs(1) { request, _, _ ->
+                    submissions.incrementAndGet()
+                    AnalysisOutcome(request.input.runId, FAKE_ANALYSIS_ID, byteArrayOf(), tempDir)
+                }
+            },
+        ) { store, api ->
+            val input = store.acceptInput(ByteArrayInputStream(SPIKE_DROP.bytes()), SPIKE_DROP.filename)
+            api.bootstrap()
+            val invalid = api.createJob(input.runId, resources = "{}".encodeToByteArray())
+            assertError(invalid, 422, "INVALID_RESOURCES", hasDetails = true)
+            assertTrue(
+                invalid
+                    .jsonObject()
+                    .getValue("error")
+                    .jsonObject
+                    .getValue("details")
+                    .jsonArray
+                    .isNotEmpty(),
+            )
+            assertError(api.createJob(input.runId, resources = "{".encodeToByteArray()), 422, "INVALID_RESOURCES", hasDetails = true)
+            assertError(api.createJob(input.runId, resources = ByteArray(16 * 1024 * 1024 + 1) { 32 }), 413)
+            assertEquals(0, submissions.get())
         }
     }
 
@@ -715,6 +744,7 @@ class LocalApiTest {
         response: HttpResponse<String>,
         status: Int,
         code: String? = null,
+        hasDetails: Boolean = false,
     ) {
         assertEquals(status, response.statusCode())
         val body = response.jsonObject()
@@ -729,7 +759,7 @@ class LocalApiTest {
                 .jsonPrimitive.content
                 .isNotEmpty(),
         )
-        assertEquals(JsonArray(emptyList()), error.getValue("details"))
+        assertEquals(hasDetails, error.getValue("details").jsonArray.isNotEmpty())
     }
 
     private data class RunFixture(
@@ -785,12 +815,14 @@ class LocalApiTest {
         fun createJob(
             runId: String,
             policy: ByteArray? = null,
+            resources: ByteArray? = null,
         ): HttpResponse<String> =
             multipart(
                 "/api/jobs",
                 buildList {
                     add(FormPart("run_id", runId.encodeToByteArray()))
                     if (policy != null) add(FormPart("policy", policy, "policy.json", "application/json"))
+                    if (resources != null) add(FormPart("resource_snapshot", resources, "resources.json", "application/json"))
                 },
             )
 

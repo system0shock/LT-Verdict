@@ -27,11 +27,13 @@ import io.ktor.utils.io.jvm.javaio.toInputStream
 import io.ltverdict.core.AnalysisRequest
 import io.ltverdict.core.PolicyValidation
 import io.ltverdict.core.PolicyValidationError
+import io.ltverdict.core.ResourceValidation
 import io.ltverdict.core.canonicalJson
 import io.ltverdict.core.compareAnalyses
 import io.ltverdict.core.manualBaselineSelection
 import io.ltverdict.core.statisticalBaselineSelection
 import io.ltverdict.core.validatePolicy
+import io.ltverdict.core.validateResourceSnapshot
 import io.ltverdict.jobs.AnalysisJobs
 import io.ltverdict.jobs.JobStatus
 import io.ltverdict.jobs.SubmitResult
@@ -94,6 +96,14 @@ internal fun Application.installLocalApi(context: LocalApiContext) {
             proceed()
         } catch (failure: InvalidPolicy) {
             call.respondPolicyValidation(failure.validation)
+            finish()
+        } catch (failure: InvalidResources) {
+            call.respondError(
+                HttpStatusCode.UnprocessableEntity,
+                "INVALID_RESOURCES",
+                "Resource snapshot is invalid",
+                failure.errors,
+            )
             finish()
         } catch (failure: ApiFailure) {
             call.respondError(failure.status, failure.code, failure.message)
@@ -481,13 +491,18 @@ private suspend fun receiveJob(
     call: ApplicationCall,
     store: RunBundleStore,
 ): AnalysisRequest {
+    if ((call.request.contentLength() ?: 0) > MAX_JOB_REQUEST_BYTES) tooLarge("Job request exceeds its resource limit")
     var runId: String? = null
     var policy: PolicyValidation.Valid? = null
+    var resources: ResourceValidation.Valid? = null
     var policySeen = false
+    var resourcesSeen = false
+    var parts = 0
     var invalidParts = false
     try {
-        call.receiveMultipart(formFieldLimit = (MAX_POLICY_BYTES + 1).toLong()).forEachPart { part ->
+        call.receiveMultipart(formFieldLimit = (MAX_RESOURCE_BYTES + 1).toLong()).forEachPart { part ->
             try {
+                if (++parts > 3) malformed("Job multipart body has too many parts")
                 when {
                     part is PartData.FormItem && part.name == "run_id" && runId == null && !invalidParts -> {
                         if (part.value.isEmpty() || part.value.encodeToByteArray().size > MAX_RUN_ID_BYTES) {
@@ -510,6 +525,25 @@ private suspend fun receiveJob(
                             }
                     }
 
+                    part is PartData.FileItem && part.name == "resource_snapshot" && !resourcesSeen && !invalidParts -> {
+                        resourcesSeen = true
+                        resources =
+                            when (
+                                val validation =
+                                    withContext(
+                                        Dispatchers.IO,
+                                    ) { validateResourceSnapshot(part.provider().toInputStream()) }
+                            ) {
+                                is ResourceValidation.Valid -> validation
+                                is ResourceValidation.Invalid -> {
+                                    if (validation.errors.any { it.code == "RESOURCE_LIMIT_EXCEEDED" }) {
+                                        tooLarge("Resource snapshot exceeds its resource limit")
+                                    }
+                                    throw InvalidResources(validation.errors)
+                                }
+                            }
+                    }
+
                     else -> invalidParts = true
                 }
             } finally {
@@ -519,6 +553,8 @@ private suspend fun receiveJob(
     } catch (failure: ApiFailure) {
         throw failure
     } catch (failure: InvalidPolicy) {
+        throw failure
+    } catch (failure: InvalidResources) {
         throw failure
     } catch (_: Exception) {
         malformed("Multipart body is malformed")
@@ -532,7 +568,12 @@ private suspend fun receiveJob(
         } catch (_: IllegalArgumentException) {
             notFound("Run was not found")
         }
-    return AnalysisRequest(input, policy)
+    if (resources?.snapshot?.loadInputSha256?.let { it != input.sha256 } == true) {
+        throw InvalidResources(
+            listOf(PolicyValidationError("RESOURCE_INPUT_MISMATCH", "/load_input_sha256", "Snapshot belongs to another load input")),
+        )
+    }
+    return AnalysisRequest(input, policy, resources = resources)
 }
 
 private fun PolicyValidation.failureResponse(): ApiFailure? =
@@ -716,6 +757,7 @@ private suspend fun ApplicationCall.respondError(
     status: HttpStatusCode,
     code: String,
     message: String,
+    details: List<PolicyValidationError> = emptyList(),
 ) = respondJson(
     buildJsonObject {
         put(
@@ -723,7 +765,7 @@ private suspend fun ApplicationCall.respondError(
             buildJsonObject {
                 put("code", code)
                 put("message", message)
-                put("details", JsonArray(emptyList()))
+                put("details", JsonArray(details.map { it.toJson() }))
             },
         )
     },
@@ -763,6 +805,10 @@ private class InvalidPolicy(
     val validation: PolicyValidation.Invalid,
 ) : RuntimeException()
 
+private class InvalidResources(
+    val errors: List<PolicyValidationError>,
+) : RuntimeException()
+
 private fun randomToken(): String {
     val bytes = ByteArray(32)
     SecureRandom().nextBytes(bytes)
@@ -775,6 +821,8 @@ private const val MAX_UPLOAD_BYTES = 4_294_967_296L
 private const val MAX_MULTIPART_OVERHEAD_BYTES = 65_536L
 private const val MAX_UPLOAD_REQUEST_BYTES = MAX_UPLOAD_BYTES + MAX_MULTIPART_OVERHEAD_BYTES
 private const val MAX_POLICY_BYTES = 1_048_576
+private const val MAX_RESOURCE_BYTES = 16 * 1024 * 1024
+private const val MAX_JOB_REQUEST_BYTES = MAX_RESOURCE_BYTES + MAX_POLICY_BYTES + MAX_MULTIPART_OVERHEAD_BYTES
 private const val MAX_RUN_ID_BYTES = 128
 private const val MAX_BASELINE_REQUEST_BYTES = 16_384
 private const val DEFAULT_RUN_LIMIT = 100

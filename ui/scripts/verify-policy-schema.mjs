@@ -15,3 +15,18 @@ for (const example of manifest.policy_examples) {
     throw new Error(`${example.path}: expected schema_valid=${example.schema_valid}, got ${valid}; ${JSON.stringify(validate.errors)}`)
   }
 }
+
+const resourceSchema = await readJson('docs/contracts/resources/v1/resource-snapshot.schema.json')
+const validateResource = new Ajv2020({ strict: false }).compile(resourceSchema)
+const resourceExample = await readJson('docs/contracts/resources/v1/examples/valid/basic.json')
+for (const [name, value, expected] of [
+  ['basic resources', resourceExample, true],
+  ['unknown resource field', { ...resourceExample, token: 'not-allowed' }, false],
+  ['subsecond resource grid', { ...resourceExample, step_ms: 100 }, false],
+  ['empty resource grid', { ...resourceExample, point_count: 0 }, false],
+  ['resource magnitude', { ...resourceExample, rules: [{ ...resourceExample.rules[0], threshold: 1e19 }] }, false],
+]) {
+  if (validateResource(value) !== expected) {
+    throw new Error(`${name}: expected schema_valid=${expected}; ${JSON.stringify(validateResource.errors)}`)
+  }
+}

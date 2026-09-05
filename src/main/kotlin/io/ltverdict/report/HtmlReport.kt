@@ -2,6 +2,7 @@ package io.ltverdict.report
 
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.jsonObject
@@ -16,6 +17,22 @@ internal fun renderHtmlReport(
     val evidence = result.array("evidence")
     val metrics = evidence.filter { it.string("type") == "metric_summary" }
     val checks = evidence.filter { it.string("type") == "policy_check" }
+    val resourceSummaries = evidence.filter { it.string("type") == "resource_summary" }
+    val windowSummaries = evidence.filter { it.string("type") == "window_policy_summary" }
+    val resourceChecks = evidence.filter { it.string("type") == "resource_policy_check" }
+    val resourceBindings = evidence.filter { it.string("type") == "resource_binding" }
+    val resourceSections =
+        if (resourceSummaries.isEmpty() && windowSummaries.isEmpty() && resourceChecks.isEmpty() && resourceBindings.isEmpty()) {
+            ""
+        } else {
+            "<section><h2>Resource binding</h2>${list(
+                resourceBindings,
+            )}</section><section><h2>Resource summaries</h2>${resourceSummariesSection(
+                resourceSummaries,
+            )}</section><section><h2>Window policy outcomes</h2>${list(
+                windowSummaries,
+            )}</section><section><h2>Resource policy checks</h2>${list(resourceChecks)}</section>"
+        }
     val html =
         """<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'sha256-${styleHash()}'; base-uri 'none'; form-action 'none'"><title>LT Verdict report</title><style>$STYLE</style></head><body><main><h1>LT Verdict report</h1><dl><dt>Run</dt><dd>${result.value(
             "run_id",
@@ -41,7 +58,7 @@ internal fun renderHtmlReport(
                 }
         }}</section><section><h2>Policy checks</h2>${list(
             checks,
-        )}</section><section><h2>Findings</h2>${list(
+        )}</section>$resourceSections<section><h2>Findings</h2>${list(
             result.array("findings"),
         )}</section><section><h2>Evidence IDs</h2><ul>${evidence.joinToString(
             "",
@@ -76,6 +93,43 @@ private fun metric(metric: JsonObject): String {
     ) ?: "unavailable"}, p99 ${latency?.value("p99") ?: "unavailable"}, max ${latency?.value("max") ?: "unavailable"}</p></article>"
 }
 
+private fun resourceSummariesSection(values: List<JsonObject>): String =
+    if (values.isEmpty()) {
+        "<p>unavailable</p>"
+    } else {
+        values.joinToString("") { value ->
+            "<article><h3>${value.value(
+                "id",
+            )}</h3><p>Series: ${value.value(
+                "series_id",
+            )}; metric: ${value.value(
+                "metric",
+            )}; unit: ${value.value(
+                "unit",
+            )}; entity: ${value.value(
+                "entity",
+            )}; role: ${value.value(
+                "role",
+            )}; aggregation: ${value.value(
+                "aggregation",
+            )}</p><p>Window: ${value.value(
+                "window_id",
+            )} [${value.value(
+                "from_epoch_ms",
+            )}, ${value.value(
+                "to_epoch_ms",
+            )}); cells: expected ${value.value(
+                "expected_cells",
+            )}, observed ${value.value(
+                "observed_cells",
+            )}, missing ${value.value(
+                "missing_cells",
+            )}, longest gap ${value.value(
+                "longest_gap_cells",
+            )}; Statistics: ${value.resourceValue("statistics")}; reasons: ${value.resourceValue("reasons")}</p></article>"
+        }
+    }
+
 private fun list(values: List<JsonObject>): String =
     if (values.isEmpty()) {
         "<p>unavailable</p>"
@@ -90,6 +144,9 @@ private fun JsonObject.array(name: String): List<JsonObject> = (this[name] as? J
 private fun JsonObject.string(name: String): String? = (this[name] as? JsonPrimitive)?.content
 
 private fun JsonObject.value(name: String): String = escape(string(name) ?: "unavailable")
+
+private fun JsonObject.resourceValue(name: String): String =
+    escape(this[name]?.takeUnless { it is JsonNull }?.let(::valueText) ?: "unavailable")
 
 private fun JsonObject.objectValue(
     objectName: String,

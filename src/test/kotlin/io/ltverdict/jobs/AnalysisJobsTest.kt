@@ -33,6 +33,30 @@ class AnalysisJobsTest {
     }
 
     @Test
+    fun `resource binding failures are actionable while unexpected failures stay private`() {
+        listOf(
+            "RESOURCE_LOAD_HASH_MISMATCH" to "RESOURCE_LOAD_HASH_MISMATCH",
+            "RESOURCE_WINDOW_OUTSIDE_RUN" to "RESOURCE_WINDOW_OUTSIDE_RUN",
+            "RESOURCE_WINDOW_NO_FULL_CELLS" to "RESOURCE_WINDOW_NO_FULL_CELLS",
+            "RESOURCE_FINDINGS_LIMIT_EXCEEDED" to "RESOURCE_FINDINGS_LIMIT_EXCEEDED",
+            "private filesystem detail" to "ANALYSIS_FAILED",
+        ).forEach { (failureMessage, expectedCode) ->
+            AnalysisJobs(1) { _, _, _ -> throw IllegalArgumentException(failureMessage) }.use { jobs ->
+                val submitted = accepted(jobs.submit(request(42)))
+                val failed = awaitState(jobs, submitted.status.jobId, JobState.FAILED)
+                assertEquals(expectedCode, failed.diagnostic?.code)
+                assertFalse(
+                    failed.diagnostic
+                        ?.message
+                        .orEmpty()
+                        .contains("private filesystem detail"),
+                )
+                assertNull(failed.analysisId)
+            }
+        }
+    }
+
+    @Test
     fun `one running and one queued job make the next submission busy`() {
         val first = request(1)
         val second = request(2)

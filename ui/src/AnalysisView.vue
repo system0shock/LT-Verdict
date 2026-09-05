@@ -24,13 +24,19 @@ type Evidence = Record<string, unknown>
 const evidence = computed(() => props.result.evidence as unknown as Evidence[])
 const metrics = computed(() => evidence.value.filter((item) => item.type === 'metric_summary'))
 const checks = computed(() => evidence.value.filter((item) => item.type === 'policy_check'))
+const resourceSummaries = computed(() => evidence.value.filter((item) => item.type === 'resource_summary'))
+const windowPolicySummaries = computed(() => evidence.value.filter((item) => item.type === 'window_policy_summary'))
+const resourceChecks = computed(() => evidence.value.filter((item) => item.type === 'resource_policy_check'))
+const resourceBindings = computed(() => evidence.value.filter((item) => item.type === 'resource_binding'))
+const slaResourceChecks = computed(() => resourceChecks.value.filter((item) => item.effect === 'sla'))
+const allSlaChecks = computed(() => [...checks.value, ...slaResourceChecks.value])
 const overall = computed(() => metrics.value.find((item) => scope(item).kind === 'overall'))
-const failedChecks = computed(() => checks.value.filter((item) => item.status === 'FAIL'))
+const failedChecks = computed(() => allSlaChecks.value.filter((item) => item.status === 'FAIL'))
 
 const verdict = computed(() => props.result.policy_verdict)
 const verdictText = computed(() => {
-  if (verdict.value === 'FAIL') return `FAIL — ${failedChecks.value.length} of ${checks.value.length} rules failed`
-  if (verdict.value === 'PASS') return `PASS — all ${checks.value.length} rules passed`
+  if (verdict.value === 'FAIL') return `FAIL — ${failedChecks.value.length} of ${allSlaChecks.value.length} rules failed`
+  if (verdict.value === 'PASS') return `PASS — all ${allSlaChecks.value.length} rules passed`
   if (verdict.value === 'NO_POLICY') return 'NO_POLICY — no policy was supplied'
   return 'NO_VERDICT — one or more rules could not be evaluated'
 })
@@ -76,17 +82,19 @@ const duration = computed(() => {
 const policyRows = computed(() =>
   checks.value.map((check) => {
     const metric = metrics.value.find((item) => item.id === check.metric_evidence_id)
-    const checkScope = scope(metric)
+    const checkScope = metric ? scope(metric) : scope(check)
     return {
       id: stringAt(check, 'id') ?? stringAt(check, 'rule_id') ?? 'policy-check',
       transaction: metric
         ? checkScope.kind === 'transaction' ? stringAt(checkScope, 'label') ?? 'Unknown' : 'Overall'
-        : 'Unresolved',
+        : checkScope.kind === 'transaction' ? stringAt(checkScope, 'label') ?? 'Unknown'
+          : checkScope.kind === 'overall' ? 'Overall' : 'Unresolved',
       metric: stringAt(check, 'metric') ?? 'Not available',
       operator: stringAt(check, 'operator') ?? '—',
       threshold: formatPolicyValue(check),
       observed: formatPolicyValue(check, 'observed'),
-      scope: metric ? scopeText(checkScope) : 'Not available',
+      scope: metric || checkScope.kind ? scopeText(checkScope) : 'Not available',
+      window: formatOptional(valueAt(check, 'window_id')),
       status: stringAt(check, 'status') ?? 'NO_VERDICT',
     }
   }),
@@ -194,6 +202,21 @@ function formatValue(value: unknown) {
   return 'Not available'
 }
 
+function formatOptional(value: unknown) {
+  return value === null || value === undefined ? 'Not available (null)' : String(value)
+}
+
+function statistic(item: Evidence, key: string) {
+  const values = valueAt(item, 'statistics')
+  return values !== null && typeof values === 'object' && !Array.isArray(values)
+    ? formatOptional(valueAt(values as Evidence, key))
+    : 'Not available (null)'
+}
+
+function bindingText(item: Evidence) {
+  return JSON.stringify(item, null, 2)
+}
+
 function formatPolicyValue(check: Evidence, field: 'threshold' | 'observed' = 'threshold') {
   const value = valueAt(check, field)
   const metric = stringAt(check, 'metric')
@@ -260,7 +283,7 @@ function updateRange(name: 'update:range-start' | 'update:range-end', event: Eve
       <div><dt>Duration</dt><dd>{{ duration }}</dd></div>
       <div><dt>Samples</dt><dd>{{ overallMetrics.samples.toLocaleString() }}</dd></div>
       <div><dt>Error rate</dt><dd>{{ overallMetrics.errorRate }}</dd></div>
-      <div><dt>Rules</dt><dd>{{ checks.length }}</dd></div>
+      <div><dt>Rules</dt><dd>{{ allSlaChecks.length }}</dd></div>
     </dl>
   </section>
 
@@ -305,18 +328,108 @@ function updateRange(name: 'update:range-start' | 'update:range-end', event: Eve
     </div>
     <div class="table-wrap">
       <table>
-        <thead><tr><th>Transaction</th><th>Metric</th><th>Operator</th><th>Threshold</th><th>Measured</th><th>Scope</th><th>Status</th></tr></thead>
+        <thead><tr><th>Window</th><th>Transaction</th><th>Metric</th><th>Operator</th><th>Threshold</th><th>Measured</th><th>Scope</th><th>Status</th></tr></thead>
         <tbody>
           <tr
             v-for="row in policyRows"
             :key="row.id"
           >
-            <td>{{ row.transaction }}</td><td>{{ row.metric }}</td><td>{{ row.operator }}</td><td>{{ row.threshold }}</td><td>{{ row.observed }}</td><td>{{ row.scope }}</td><td>
+            <td>{{ row.window }}</td><td>{{ row.transaction }}</td><td>{{ row.metric }}</td><td>{{ row.operator }}</td><td>{{ row.threshold }}</td><td>{{ row.observed }}</td><td>{{ row.scope }}</td><td>
               <span
                 class="status-text"
                 :data-status="row.status"
               >{{ row.status }}</span>
             </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section
+    v-if="resourceSummaries.length || windowPolicySummaries.length || resourceChecks.length || resourceBindings.length"
+    id="resource-results"
+    class="panel"
+    aria-labelledby="resource-results-title"
+  >
+    <div class="section-heading">
+      <p class="eyebrow">
+        Resource snapshot
+      </p><h2 id="resource-results-title">
+        Resource statistics and SLA
+      </h2>
+    </div>
+    <details
+      v-for="item in resourceBindings"
+      :key="String(item.id)"
+    >
+      <summary>Resource binding</summary>
+      <pre>{{ bindingText(item) }}</pre>
+    </details>
+    <div
+      v-if="windowPolicySummaries.length"
+      class="table-wrap"
+    >
+      <table>
+        <thead><tr><th>Window</th><th>From epoch (ms)</th><th>To epoch (ms)</th><th>Business verdict</th><th>Resource verdict</th><th>Verdict</th></tr></thead>
+        <tbody>
+          <tr
+            v-for="item in windowPolicySummaries"
+            :key="String(item.id)"
+          >
+            <td>{{ formatOptional(item.window_id) }}</td><td>{{ formatOptional(item.from_epoch_ms) }}</td><td>{{ formatOptional(item.to_epoch_ms) }}</td><td>
+              <span
+                class="status-text"
+                :data-status="formatOptional(item.business_verdict)"
+              >{{ formatOptional(item.business_verdict) }}</span>
+            </td><td>
+              <span
+                class="status-text"
+                :data-status="formatOptional(item.resource_verdict)"
+              >{{ formatOptional(item.resource_verdict) }}</span>
+            </td><td>
+              <span
+                class="status-text"
+                :data-status="formatOptional(item.verdict)"
+              >{{ formatOptional(item.verdict) }}</span>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <div
+      v-if="resourceSummaries.length"
+      class="table-wrap"
+    >
+      <table>
+        <thead><tr><th>Series</th><th>Metric</th><th>Unit</th><th>Entity</th><th>Role</th><th>Aggregation</th><th>Window</th><th>Coverage (observed / expected)</th><th>Missing cells</th><th>Longest gap</th><th>Min</th><th>Max</th><th>Mean</th><th>Median</th><th>Q05</th><th>Q25</th><th>Q75</th><th>Q95</th><th>IQR</th><th>MAD</th><th>Sample standard deviation</th><th>Slope per second</th><th>Split-half shift</th><th>Reasons</th></tr></thead>
+        <tbody>
+          <tr
+            v-for="item in resourceSummaries"
+            :key="String(item.id)"
+          >
+            <td>{{ formatOptional(item.series_id) }}</td><td>{{ formatOptional(item.metric) }}</td><td>{{ formatOptional(item.unit) }}</td><td>{{ formatOptional(item.entity) }}</td><td>{{ formatOptional(item.role) }}</td><td>{{ formatOptional(item.aggregation) }}</td><td>{{ formatOptional(item.window_id) }}</td><td>{{ formatOptional(item.observed_cells) }} / {{ formatOptional(item.expected_cells) }}</td><td>{{ formatOptional(item.missing_cells) }}</td><td>{{ formatOptional(item.longest_gap_cells) }}</td><td>{{ statistic(item, 'min') }}</td><td>{{ statistic(item, 'max') }}</td><td>{{ statistic(item, 'mean') }}</td><td>{{ statistic(item, 'median') }}</td><td>{{ statistic(item, 'q05') }}</td><td>{{ statistic(item, 'q25') }}</td><td>{{ statistic(item, 'q75') }}</td><td>{{ statistic(item, 'q95') }}</td><td>{{ statistic(item, 'iqr') }}</td><td>{{ statistic(item, 'mad') }}</td><td>{{ statistic(item, 'sample_standard_deviation') }}</td><td>{{ statistic(item, 'slope_per_second') }}</td><td>{{ statistic(item, 'split_half_shift') }}</td><td>{{ arrayAt(item, 'reasons').join(', ') || '—' }}</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <div
+      v-if="resourceChecks.length"
+      class="table-wrap"
+    >
+      <table>
+        <thead><tr><th>Window</th><th>Rule</th><th>Series</th><th>Operator</th><th>Threshold</th><th>Effect</th><th>Status</th><th>Reason</th></tr></thead>
+        <tbody>
+          <tr
+            v-for="item in resourceChecks"
+            :key="String(item.id)"
+          >
+            <td>{{ formatOptional(item.window_id) }}</td><td>{{ formatOptional(item.rule_id) }}</td><td>{{ formatOptional(item.series_id) }}</td><td>{{ formatOptional(item.operator) }}</td><td>{{ formatOptional(item.threshold) }} {{ formatOptional(item.unit) }}</td><td>{{ formatOptional(item.effect) }}</td><td>
+              <span
+                class="status-text"
+                :data-status="formatOptional(item.status)"
+              >{{ formatOptional(item.status) }}</span>
+            </td><td>{{ formatOptional(item.reason) }}</td>
           </tr>
         </tbody>
       </table>

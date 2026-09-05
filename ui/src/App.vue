@@ -22,6 +22,7 @@ import type { AnalysisResult, AnalysisSummary, Bucket, JobStatus, Policy, Policy
 const theme = ref<Theme>(window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light')
 const apiReady = ref(false)
 const inputFile = ref<File | null>(null)
+const resourceFile = ref<File | null>(null)
 const policy = ref<Policy | null>(null)
 const policyStatus = ref('')
 const policyErrors = ref<PolicyError[]>([])
@@ -74,6 +75,12 @@ onMounted(async () => {
 
 function selectInput(file: File | null) {
   inputFile.value = file
+  queueBusy.value = false
+  errorMessage.value = ''
+}
+
+function selectResources(file: File | null) {
+  resourceFile.value = file
   queueBusy.value = false
   errorMessage.value = ''
 }
@@ -148,7 +155,7 @@ async function analyze() {
     if (revision !== analysisRevision) return
     currentRun.value = accepted
     await refreshRuns()
-    job.value = await createJob(accepted.run_id, activePolicy)
+    job.value = await createJob(accepted.run_id, activePolicy, resourceFile.value)
     uploadProgress.value = 100
     await pollJob(revision)
   } catch (failure) {
@@ -413,11 +420,13 @@ function focusPolicy() {
       <main>
         <RunSetup
           :input-file="inputFile"
+          :resource-file="resourceFile"
           :policy="policy"
           :policy-status="policyStatus"
           :policy-errors="policyErrors"
           :busy="working"
           @input="selectInput"
+          @resources="selectResources"
           @policy-file="selectPolicyFile"
           @update-policy="updatePolicy"
           @analyze="analyze"

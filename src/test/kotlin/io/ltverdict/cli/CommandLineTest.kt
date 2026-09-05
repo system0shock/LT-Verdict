@@ -97,6 +97,20 @@ class CommandLineTest {
     }
 
     @Test
+    fun `resources rejects missing malformed and duplicate inputs without analysis output`() {
+        val input = fixture("jmeter/csv-5.6.3/input.jtl").toString()
+        val snapshot = tempDir.resolve("resources.json")
+        Files.writeString(snapshot, "{}")
+        assertError(run("analyze", input, "--resources", snapshot.toString()), 4, "invalid resources")
+        assertError(run("analyze", input, "--resources", tempDir.resolve("missing.json").toString()), 4, "missing resources")
+        assertError(
+            run("analyze", input, "--resources", snapshot.toString(), "--resources", snapshot.toString()),
+            64,
+            "duplicate resources flag",
+        )
+    }
+
+    @Test
     fun `analyze rejects nonregular and symlink input before writing stdout`() {
         assertError(
             run("analyze", tempDir.toString(), "--data-dir", tempDir.resolve("directory-data").toString()),

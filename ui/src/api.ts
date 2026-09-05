@@ -82,10 +82,11 @@ export function uploadInput(file: File, progress: (percent: number) => void): Pr
   })
 }
 
-export function createJob(runId: string, policy: Policy | null): Promise<JobStatus> {
+export function createJob(runId: string, policy: Policy | null, resources?: File | null): Promise<JobStatus> {
   const body = new FormData()
   body.append('run_id', runId)
   if (policy) body.append('policy', new Blob([stringifyPolicy(policy)], { type: 'application/json' }), 'policy.json')
+  if (resources) body.append('resource_snapshot', resources)
   return request('/api/jobs', { method: 'POST', headers: mutationHeaders(), body })
 }
 

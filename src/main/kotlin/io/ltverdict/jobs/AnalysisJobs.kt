@@ -172,7 +172,23 @@ internal class AnalysisJobs(
                                 if (cancelled) {
                                     null
                                 } else {
-                                    Diagnostic("ANALYSIS_FAILED", "Analysis failed")
+                                    when (failure.message.takeIf { failure is IllegalArgumentException }) {
+                                        "RESOURCE_LOAD_HASH_MISMATCH" ->
+                                            Diagnostic("RESOURCE_LOAD_HASH_MISMATCH", "Snapshot belongs to another load input")
+                                        "RESOURCE_WINDOW_OUTSIDE_RUN" ->
+                                            Diagnostic("RESOURCE_WINDOW_OUTSIDE_RUN", "Resource window must be inside the load run")
+                                        "RESOURCE_WINDOW_NO_FULL_CELLS" ->
+                                            Diagnostic(
+                                                "RESOURCE_WINDOW_NO_FULL_CELLS",
+                                                "Run and snapshot have no fully overlapping grid cells",
+                                            )
+                                        "RESOURCE_FINDINGS_LIMIT_EXCEEDED" ->
+                                            Diagnostic(
+                                                "RESOURCE_FINDINGS_LIMIT_EXCEEDED",
+                                                "Resource threshold findings exceed 10000; narrow windows or rules",
+                                            )
+                                        else -> Diagnostic("ANALYSIS_FAILED", "Analysis failed")
+                                    }
                                 },
                         ),
                     )

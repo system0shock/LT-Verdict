@@ -56,7 +56,14 @@ internal fun validatePolicy(
         require(maxBytes >= 0)
         val bytes = readBounded(source, maxBytes)
         val text = decodeUtf8(bytes)
-        PolicyLexicalScanner(text).scan()
+        StrictJsonScanner(
+            text,
+            MAX_POLICY_DEPTH,
+            MAX_NUMERIC_TOKEN_BYTES,
+            MAX_ABSOLUTE_EXPONENT,
+            "policy",
+            ::fail,
+        ).scan()
         val element = Json.parseToJsonElement(text)
         val policy = parsePolicy(element)
         val canonical = canonicalJson(element)
@@ -76,11 +83,13 @@ internal fun evaluatePolicy(
     validity: RunValidity,
     metrics: NormalizedMetrics?,
     diagnostics: List<Diagnostic> = emptyList(),
+    windowId: String? = null,
+    includeMetricEvidence: Boolean = true,
 ): PolicyEvaluation {
     val orderedDiagnostics = diagnostics.sortedWith(compareBy<Diagnostic> { it.code }.thenBy { it.sourceOffset })
     val findings = orderedDiagnostics.map(::diagnosticFinding).toMutableList()
-    val metricEvidence = metrics?.let(::metricEvidence).orEmpty()
-    val evidence = metricEvidence.map(MetricEvidence::json).toMutableList()
+    val metricEvidence = metrics?.let { metricEvidence(it, windowId) }.orEmpty()
+    val evidence = if (includeMetricEvidence) metricEvidence.map(MetricEvidence::json).toMutableList() else mutableListOf()
     evidence += orderedDiagnostics.map(::diagnosticEvidence)
     val reasons = orderedDiagnostics.map(Diagnostic::code).toMutableList()
 
@@ -95,14 +104,14 @@ internal fun evaluatePolicy(
         val binding = bind(rule, metrics, metricEvidence)
         if (binding.reason != null) {
             reasons += binding.reason
-            checks += policyCheck(rule, null, null, binding.reason)
+            checks += policyCheck(rule, null, null, binding.reason, windowId, includeMetricEvidence)
             return@forEach
         }
         val metric = binding.metric ?: error("metric binding is incomplete")
         val observed = observed(rule, metric.summary)
         if (observed == null) {
             reasons += METRIC_NOT_AVAILABLE
-            checks += policyCheck(rule, metric, null, METRIC_NOT_AVAILABLE)
+            checks += policyCheck(rule, metric, null, METRIC_NOT_AVAILABLE, windowId, includeMetricEvidence)
             return@forEach
         }
         val passed =
@@ -110,7 +119,7 @@ internal fun evaluatePolicy(
                 PolicyOperator.LTE -> observed.comparison <= 0
                 PolicyOperator.GTE -> observed.comparison >= 0
             }
-        checks += policyCheck(rule, metric, observed.json, if (passed) null else POLICY_FAILED)
+        checks += policyCheck(rule, metric, observed.json, if (passed) null else POLICY_FAILED, windowId, includeMetricEvidence)
         if (!passed) {
             failed = true
             findings +=
@@ -120,6 +129,7 @@ internal fun evaluatePolicy(
                         .last()
                         .getValue("id")
                         .jsonPrimitive.content,
+                    windowId,
                 )
         }
     }
@@ -150,16 +160,29 @@ private data class Observed(
     val comparison: Int,
 )
 
-private fun metricEvidence(metrics: NormalizedMetrics): List<MetricEvidence> {
-    val overallId = "metric-summary-overall"
-    val overall = MetricEvidence(null, metrics.overall, overallId, metricSummary(overallId, null, metrics.overall))
+private fun metricEvidence(
+    metrics: NormalizedMetrics,
+    windowId: String?,
+): List<MetricEvidence> {
+    val overallId = windowId?.let { stableId("metric-summary-window", "$it\u0000overall") } ?: "metric-summary-overall"
+    val overall = MetricEvidence(null, metrics.overall, overallId, metricSummary(overallId, null, metrics.overall, windowId))
     val transactions =
         metrics.transactions
             .sortedWith(TRANSACTION_SUMMARY_COMPARATOR)
             .map { transaction ->
                 val key = transaction.identity.stableKey()
-                val id = stableId("metric-summary", key)
-                MetricEvidence(transaction.identity, transaction.metrics, id, metricSummary(id, transaction.identity, transaction.metrics))
+                val id =
+                    if (windowId == null) {
+                        stableId("metric-summary", key)
+                    } else {
+                        stableId("metric-summary-window", "$windowId\u0000$key")
+                    }
+                MetricEvidence(
+                    transaction.identity,
+                    transaction.metrics,
+                    id,
+                    metricSummary(id, transaction.identity, transaction.metrics, windowId),
+                )
             }
     return listOf(overall) + transactions
 }
@@ -212,10 +235,16 @@ private fun policyCheck(
     metric: MetricEvidence?,
     observed: JsonElement?,
     reason: String?,
+    windowId: String?,
+    includeMetricReference: Boolean,
 ): JsonObject =
     buildJsonObject {
-        put("id", stableId("policy-check", rule.id))
+        put("id", windowId?.let { stableId("policy-check-window", "$it\u0000${rule.id}") } ?: stableId("policy-check", rule.id))
         put("type", "policy_check")
+        windowId?.let {
+            put("window_id", it)
+            put("scope", metric?.json?.getValue("scope") ?: rule.scope.json())
+        }
         put("rule_id", rule.id)
         put("metric", rule.metric.wireName)
         put("operator", rule.operator.wireName)
@@ -228,19 +257,32 @@ private fun policyCheck(
                 else -> "NO_VERDICT"
             },
         )
-        if (metric != null) put("metric_evidence_id", metric.id)
+        if (metric != null && includeMetricReference) put("metric_evidence_id", metric.id)
         if (observed != null) put("observed", observed)
         if (reason != null && reason != POLICY_FAILED) put("reason_code", reason)
+    }
+
+private fun PolicyScope.json(): JsonObject =
+    buildJsonObject {
+        when (this@json) {
+            PolicyScope.Overall -> put("kind", "overall")
+            is PolicyScope.Transaction -> {
+                put("kind", "transaction")
+                put("label", name)
+            }
+        }
     }
 
 private fun metricSummary(
     id: String,
     identity: TransactionIdentity?,
     summary: MetricSummary,
+    windowId: String?,
 ): JsonObject =
     buildJsonObject {
         put("id", id)
         put("type", "metric_summary")
+        windowId?.let { put("window_id", it) }
         put(
             "scope",
             if (identity == null) {
@@ -297,10 +339,12 @@ private fun diagnosticFinding(diagnostic: Diagnostic): JsonObject =
 private fun policyFailure(
     rule: PolicyRuleV1,
     evidenceId: String,
+    windowId: String?,
 ): JsonObject =
     buildJsonObject {
-        put("id", stableId("policy-failure", rule.id))
+        put("id", windowId?.let { stableId("policy-failure-window", "$it\u0000${rule.id}") } ?: stableId("policy-failure", rule.id))
         put("type", "policy_failure")
+        windowId?.let { put("window_id", it) }
         put("rule_id", rule.id)
         put("evidence_id", evidenceId)
     }
@@ -519,8 +563,13 @@ private fun invalid(
     message: String,
 ): PolicyValidation.Invalid = PolicyValidation.Invalid(listOf(PolicyValidationError(code, pointer, message)))
 
-private class PolicyLexicalScanner(
+internal class StrictJsonScanner(
     private val source: String,
+    private val maxDepth: Int,
+    private val maxNumericTokenBytes: Int,
+    private val maxAbsoluteExponent: Int,
+    private val subject: String,
+    private val failure: (String, String, String) -> Nothing,
 ) {
     private var offset = 0
 
@@ -561,7 +610,7 @@ private class PolicyLexicalScanner(
             if (offset >= source.length || source[offset] != '"') malformed(pointer)
             val key = stringValue(pointer)
             val child = pointer.child(key)
-            if (!keys.add(key)) fail("DUPLICATE_OBJECT_KEY", child, "duplicate object key")
+            if (!keys.add(key)) failure("DUPLICATE_OBJECT_KEY", child, "duplicate object key")
             skipWhitespace()
             expect(':', pointer)
             skipWhitespace()
@@ -650,22 +699,22 @@ private class PolicyLexicalScanner(
             val exponentStart = offset
             var exponent = 0
             while (offset < source.length && source[offset] in '0'..'9') {
-                exponent = minOf(MAX_ABSOLUTE_EXPONENT + 1, exponent * 10 + (source[offset] - '0'))
+                exponent = minOf(maxAbsoluteExponent + 1, exponent * 10 + (source[offset] - '0'))
                 offset++
             }
             if (offset == exponentStart) malformed(pointer)
-            if (exponent > MAX_ABSOLUTE_EXPONENT) {
-                fail("RESOURCE_LIMIT_EXCEEDED", pointer, "numeric exponent exceeds 64")
+            if (exponent > maxAbsoluteExponent) {
+                failure("RESOURCE_LIMIT_EXCEEDED", pointer, "numeric exponent exceeds $maxAbsoluteExponent")
             }
         }
         val token = source.substring(start, offset)
-        if (token.length > MAX_NUMERIC_TOKEN_BYTES) {
-            fail("RESOURCE_LIMIT_EXCEEDED", pointer, "numeric token exceeds 64 bytes")
+        if (token.length > maxNumericTokenBytes) {
+            failure("RESOURCE_LIMIT_EXCEEDED", pointer, "numeric token exceeds $maxNumericTokenBytes bytes")
         }
         try {
             canonicalDecimal(BigDecimal(token))
         } catch (_: IllegalArgumentException) {
-            fail("RESOURCE_LIMIT_EXCEEDED", pointer, "canonical decimal exceeds 128 bytes")
+            failure("RESOURCE_LIMIT_EXCEEDED", pointer, "canonical decimal exceeds 128 bytes")
         }
     }
 
@@ -678,7 +727,7 @@ private class PolicyLexicalScanner(
     }
 
     private fun checkDepth(depth: Int) {
-        if (depth > MAX_POLICY_DEPTH) fail("RESOURCE_LIMIT_EXCEEDED", "", "policy JSON depth exceeds 16")
+        if (depth > maxDepth) failure("RESOURCE_LIMIT_EXCEEDED", "", "$subject JSON depth exceeds $maxDepth")
     }
 
     private fun expect(
@@ -702,5 +751,5 @@ private class PolicyLexicalScanner(
         }
     }
 
-    private fun malformed(pointer: String): Nothing = fail("MALFORMED_JSON", pointer, "policy is not valid JSON")
+    private fun malformed(pointer: String): Nothing = failure("MALFORMED_JSON", pointer, "$subject is not valid JSON")
 }

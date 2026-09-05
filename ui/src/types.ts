@@ -104,6 +104,8 @@ export interface PolicyCheckEvidence {
   threshold: number
   status: 'PASS' | 'FAIL' | 'NO_VERDICT'
   metric_evidence_id?: string
+  window_id?: string
+  scope?: MetricScopeOverall | MetricScopeTransaction
   observed?: number | ExactRatio
   reason_code?: string
 }
@@ -116,7 +118,58 @@ export interface DiagnosticEvidence {
   source_offset?: number
 }
 
-export type AnalysisEvidence = MetricSummaryEvidence | PolicyCheckEvidence | DiagnosticEvidence
+export interface ResourceSummaryEvidence {
+  id: string
+  type: 'resource_summary'
+  series_id: string
+  metric: string
+  unit: string
+  entity: string
+  role: 'system' | 'generator'
+  aggregation: 'interval_mean' | 'interval_rate'
+  window_id: string
+  from_epoch_ms: number
+  to_epoch_ms: number
+  expected_cells: number
+  observed_cells: number
+  missing_cells: number
+  longest_gap_cells: number
+  statistics: Record<string, string | null> | null
+  reasons: string[]
+}
+
+export interface WindowPolicySummaryEvidence {
+  id: string
+  type: 'window_policy_summary'
+  window_id: string
+  from_epoch_ms: number
+  to_epoch_ms: number
+  business_verdict: AnalysisResult['policy_verdict']
+  resource_verdict: AnalysisResult['policy_verdict']
+  verdict: AnalysisResult['policy_verdict']
+}
+
+export interface ResourcePolicyCheckEvidence {
+  id: string
+  type: 'resource_policy_check'
+  window_id: string
+  rule_id: string
+  series_id: string
+  unit: string
+  operator: 'gt' | 'lt'
+  threshold: string
+  effect: 'diagnostic' | 'sla'
+  status: 'PASS' | 'FAIL' | 'NO_VERDICT'
+  reason: string | null
+}
+
+export interface ResourceBindingEvidence {
+  id: string
+  type: 'resource_binding'
+  [key: string]: unknown
+}
+
+export type AnalysisEvidence = MetricSummaryEvidence | PolicyCheckEvidence | DiagnosticEvidence | ResourceSummaryEvidence | WindowPolicySummaryEvidence | ResourcePolicyCheckEvidence | ResourceBindingEvidence
 
 export interface AnalysisResult {
   schema_version: 'analysis-result.v1'

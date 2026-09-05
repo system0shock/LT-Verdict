@@ -20,6 +20,7 @@ internal data class MetricsConfig(
     val maxTransactionIdentityBytes: Int = 65_536,
     val maxTotalTransactionIdentityBytes: Long = 67_108_864,
     val maxOneSecondBuckets: Int = 100_000,
+    val maxWindowHistograms: Int = 10_000,
 )
 
 internal class MetricsResourceLimitExceeded : IllegalStateException("RESOURCE_LIMIT_EXCEEDED")
@@ -79,6 +80,86 @@ internal data class NormalizedMetrics(
     val rollups: Map<Int, List<NormalizedBucket>>,
 )
 
+internal data class MetricWindow(
+    val id: String,
+    val fromEpochMillis: Long,
+    val toEpochMillis: Long,
+)
+
+internal class WindowMetricsAccumulator(
+    private val windows: List<MetricWindow>,
+    retainedTransactions: Set<TransactionIdentity>,
+    private val config: MetricsConfig,
+) {
+    private val retainedTransactions = retainedTransactions.sortedWith(TRANSACTION_IDENTITY_COMPARATOR)
+    private val retainedSet = retainedTransactions.toHashSet()
+    private val overall = arrayOfNulls<MutableMetrics>(windows.size)
+    private val transactions = List(windows.size) { HashMap<TransactionIdentity, MutableMetrics>() }
+
+    init {
+        windows.forEach { window ->
+            require(
+                window.id.isNotEmpty() &&
+                    window.fromEpochMillis >= 0 &&
+                    window.toEpochMillis > window.fromEpochMillis &&
+                    window.toEpochMillis <= MAX_TIMESTAMP_EPOCH_MILLIS,
+            ) { "INVALID_METRIC_WINDOW" }
+        }
+        require(windows.zipWithNext().all { (left, right) -> left.toEpochMillis <= right.fromEpochMillis }) {
+            "INVALID_METRIC_WINDOWS"
+        }
+        require(retainedTransactions.size <= config.maxTransactions) { "INVALID_RETAINED_TRANSACTIONS" }
+        if (windows.size.toLong() * (retainedTransactions.size + 1L) > config.maxWindowHistograms) resourceLimit()
+    }
+
+    fun record(sample: LoadSample) {
+        val index = membership(sample.startedAtEpochMillis) ?: return
+        val contributesOverall = sample.kind == SampleKind.JMETER_SAMPLER || sample.kind == SampleKind.GATLING_REQUEST
+        if (contributesOverall) {
+            val metrics = overall[index] ?: MutableMetrics(config).also { overall[index] = it }
+            metrics.record(sample)
+        }
+        val identity = TransactionIdentity(sample.groupPath.toList(), sample.label, sample.kind)
+        if (identity in retainedSet) {
+            transactions[index].getOrPut(identity) { MutableMetrics(config) }.record(sample)
+        }
+    }
+
+    fun finish(checkCancelled: () -> Unit = {}): Map<String, NormalizedMetrics> =
+        windows
+            .mapIndexed { index, window ->
+                checkCancelled()
+                val duration = window.toEpochMillis - window.fromEpochMillis
+                val transactionSummaries =
+                    retainedTransactions.map { identity ->
+                        checkCancelled()
+                        TransactionSummary(identity, transactions[index][identity]?.summary(duration) ?: emptySummary(duration))
+                    }
+                window.id to
+                    NormalizedMetrics(
+                        overall[index]?.summary(duration) ?: emptySummary(duration),
+                        transactionSummaries,
+                        emptyList(),
+                        emptyMap(),
+                    )
+            }.toMap(LinkedHashMap())
+
+    private fun membership(startEpochMillis: Long): Int? {
+        var low = 0
+        var high = windows.lastIndex
+        while (low <= high) {
+            val middle = (low + high).ushr(1)
+            val window = windows[middle]
+            when {
+                startEpochMillis < window.fromEpochMillis -> high = middle - 1
+                startEpochMillis >= window.toEpochMillis -> low = middle + 1
+                else -> return middle
+            }
+        }
+        return null
+    }
+}
+
 internal fun NormalizedBucket.toJsonObject(): JsonObject =
     buildJsonObject {
         put("bucket_start_ms", bucketStartMillis)
@@ -111,7 +192,8 @@ internal class MetricsAccumulator(
                 config.maxTransactions >= 0 &&
                 config.maxTransactionIdentityBytes >= 0 &&
                 config.maxTotalTransactionIdentityBytes >= 0 &&
-                config.maxOneSecondBuckets >= 0,
+                config.maxOneSecondBuckets >= 0 &&
+                config.maxWindowHistograms >= 0,
         ) { "INVALID_METRICS_CONFIG" }
         runWindowMillis = maxOf(1, runEndEpochMillis - runStartEpochMillis)
         overall = MutableMetrics(config)
@@ -180,7 +262,7 @@ internal class MetricsAccumulator(
     }
 }
 
-private class MutableMetrics(
+internal class MutableMetrics(
     config: MetricsConfig,
 ) {
     private val histogram =
@@ -231,6 +313,15 @@ private class MutableMetrics(
             hdrV2Base64 = histogram.compressedV2Base64(),
         )
 }
+
+private fun emptySummary(windowMillis: Long): MetricSummary =
+    MetricSummary(
+        sampleCount = 0,
+        errorCount = 0,
+        errorRate = null,
+        throughputRps = ExactRatio(0, windowMillis),
+        latency = LatencySummary(0, 0, 0, 0),
+    )
 
 private fun TransactionIdentity.byteSize(): Long {
     var bytes = 0L

@@ -55,5 +55,25 @@ class AsciiDocReportTest {
         assertTrue(report.contains("== Findings\nunavailable"))
         assertTrue(report.contains("== Evidence IDs\n[subs=specialchars]\n----\n\"metric-1\"\n----"))
         assertFalse(report.contains("sample_count: 0"))
+        assertFalse(report.contains("== Resource summaries"))
+    }
+
+    @Test
+    fun `renders typed resource and window evidence with unavailable statistics in literal blocks`() {
+        val report =
+            renderAsciiDocReport(
+                """{"analysis_coverage":{"status":"COMPLETE"},"evidence":[{"clock_alignment":"not_verified_by_core","dropped_leading_cells":1,"mode":"explicit_windows","type":"resource_binding"},{"aggregation":"interval_mean","entity":"node-1","expected_cells":4,"from_epoch_ms":0,"id":"resource-1","longest_gap_cells":2,"metric":"cpu\n....\ninclude::evil[]","missing_cells":2,"observed_cells":2,"reasons":["NO_OBSERVATIONS"],"role":"system","series_id":"cpu-1","statistics":null,"to_epoch_ms":4000,"type":"resource_summary","unit":"ratio","window_id":"evaluation"},{"business_verdict":"FAIL","from_epoch_ms":0,"id":"window-1","resource_verdict":"NO_VERDICT","to_epoch_ms":4000,"type":"window_policy_summary","verdict":"NO_VERDICT","window_id":"evaluation"},{"effect":"sla","id":"resource-check-1","operator":"gt","reason":"missing <cells>","rule_id":"cpu-rule","series_id":"cpu-1","status":"NO_VERDICT","threshold":"0.8","type":"resource_policy_check","unit":"ratio","window_id":"evaluation"},{"id":"business-check-1","metric":"latency","status":"FAIL","type":"policy_check","window_id":"evaluation"}],"findings":[],"policy_verdict":"NO_VERDICT","run_id":"run-1","run_validity":"VALID"}"""
+                    .encodeToByteArray(),
+                "analysis-1",
+            ).decodeToString()
+
+        assertTrue(report.contains("== Resource summaries"))
+        assertTrue(report.contains("\"dropped_leading_cells\":1"))
+        assertTrue(report.contains("== Window policy outcomes"))
+        assertTrue(report.contains("== Resource policy checks"))
+        assertTrue(report.contains("Statistics\n[subs=specialchars]\n----\nunavailable\n----"))
+        assertTrue(report.contains("Window ID\n[subs=specialchars]\n----\n\"evaluation\"\n----"))
+        assertTrue(report.contains("\"cpu\\n....\\ninclude::evil[]\""))
+        assertFalse(report.contains("\ninclude::evil[]\n"))
     }
 }

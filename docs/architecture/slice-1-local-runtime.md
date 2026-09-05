@@ -71,8 +71,8 @@ Filename остаётся metadata; internal paths генерирует прил
 `analysis_id` — lowercase SHA-256 canonical `analysis-identity.v1`. Identity
 включает `run_id`, input hash/type, canonical policy hash либо `NO_POLICY`,
 версии engine/parsers/modules/contracts, normalization и histogram settings, а
-также result-affecting ceilings. Timestamps, provenance и UI state в identity не
-входят. Изменение policy или любой result-affecting настройки создаёт новый
+также result-affecting ceilings. Время создания, transport provenance и UI state
+в identity не входят. Изменение policy или любой result-affecting настройки создаёт новый
 analysis directory и не перезаписывает прежний результат.
 
 Canonical `analysis-result.v1` одинаков для CLI и UI при одинаковых input,
@@ -143,6 +143,33 @@ Handled failures используют envelope
 `400`, local security `403`, missing object `404`, `BUSY` `409`, size overflow
 `413`, wrong media type `415`, unsupported input `422`. Structural policy
 validation возвращает отдельный `{valid:false,errors:[...]}`.
+
+## Resource snapshot и оконные SLA
+
+[ADR 0005](../adr/0005-resource-window-sla.md) добавляет optional
+`resource-snapshot.v1`: CLI `--resources` и multipart file `resource_snapshot`
+в existing `POST /api/jobs`, рядом с `run_id` и optional `policy`.
+Структура и load hash проверяются до job; привязка окна к parsed load run —
+в первом проходе core. Структурные ошибки дают `422 INVALID_RESOURCES` с
+`error.details` (code/json_pointer/message); превышение limits — `413`.
+Неверные окна завершают job с безопасным diagnostic
+`RESOURCE_WINDOW_OUTSIDE_RUN` или `RESOURCE_WINDOW_NO_FULL_CELLS`.
+Более 10 000 resource threshold findings дают
+`RESOURCE_FINDINGS_LIMIT_EXCEEDED` до публикации partial analysis.
+
+Snapshot ограничен 16 MiB; multipart job содержит максимум три parts, declared
+общий body ограничен snapshot + policy + 64 KiB overhead. Core проверяет depth,
+duplicate/unknown fields, numeric bounds и cardinality до помещения в queue.
+Расчёты используют existing analysis worker и cooperative cancellation.
+
+Для enriched analysis identity включает semantic snapshot/config hashes,
+версии статистики и оконных SLA, limits. Grid/windows — result-affecting input;
+transport-only provenance исключён из semantic hash. Raw snapshot сохраняется
+в том же immutable analysis под manifest. Без snapshot identity/result прежние.
+Бизнес-policy проверяется на тех же half-open windows, что resource SLA;
+resource diagnostics не участвуют в общем verdict. Новые typed evidence
+используют existing `analysis-result.v1` object slots. UI и reports читают эти
+evidence без повторного вычисления статистик. VM/Grafana transport отсутствует.
 
 ## Просмотр и экспорт сохранённого analysis
 

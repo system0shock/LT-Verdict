@@ -40,6 +40,26 @@ class HtmlReportTest {
         assertTrue(html.contains("NO_POLICY"))
         assertTrue(html.contains("Overall and transaction metrics</h2><p>unavailable</p>"))
         assertFalse(html.contains("Samples: 0"))
+        assertFalse(html.contains("Resource summaries"))
+    }
+
+    @Test
+    fun `renders typed resource and window evidence with unavailable statistics safely`() {
+        val html =
+            render(
+                """{"analysis_coverage":{"status":"COMPLETE"},"evidence":[{"clock_alignment":"not_verified_by_core","dropped_leading_cells":1,"mode":"explicit_windows","type":"resource_binding"},{"aggregation":"interval_mean","entity":"node-1","expected_cells":4,"from_epoch_ms":0,"id":"resource-1","longest_gap_cells":2,"metric":"cpu</p><script>alert(1)</script>","missing_cells":2,"observed_cells":2,"reasons":["NO_OBSERVATIONS"],"role":"system","series_id":"cpu-1","statistics":null,"to_epoch_ms":4000,"type":"resource_summary","unit":"ratio","window_id":"evaluation"},{"business_verdict":"FAIL","from_epoch_ms":0,"id":"window-1","resource_verdict":"NO_VERDICT","to_epoch_ms":4000,"type":"window_policy_summary","verdict":"NO_VERDICT","window_id":"evaluation"},{"effect":"sla","id":"resource-check-1","operator":"gt","reason":"missing <cells>","rule_id":"cpu-rule","series_id":"cpu-1","status":"NO_VERDICT","threshold":"0.8","type":"resource_policy_check","unit":"ratio","window_id":"evaluation"},{"id":"business-check-1","metric":"latency","status":"FAIL","type":"policy_check","window_id":"evaluation"}],"findings":[],"policy_verdict":"NO_VERDICT","run_id":"run-1","run_validity":"VALID"}"""
+                    .encodeToByteArray(),
+                "analysis-1",
+            ).decodeToString()
+
+        assertTrue(html.contains("Resource summaries"))
+        assertTrue(html.contains("dropped_leading_cells: 1"))
+        assertTrue(html.contains("Window policy outcomes"))
+        assertTrue(html.contains("Resource policy checks"))
+        assertTrue(html.contains("Statistics: unavailable"))
+        assertTrue(html.contains("window_id: evaluation"))
+        assertTrue(html.contains("&lt;/p&gt;&lt;script&gt;alert(1)&lt;/script&gt;"))
+        assertFalse(html.contains("<script>alert(1)</script>"))
     }
 
     private fun render(

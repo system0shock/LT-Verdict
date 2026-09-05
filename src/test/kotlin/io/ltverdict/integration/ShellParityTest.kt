@@ -3,6 +3,7 @@ package io.ltverdict.integration
 import io.ltverdict.cli.runCli
 import io.ltverdict.core.AnalysisService
 import io.ltverdict.core.EngineConfig
+import io.ltverdict.core.sha256Hex
 import io.ltverdict.jobs.AnalysisJobs
 import io.ltverdict.storage.DataDirectory
 import io.ltverdict.storage.RunBundleStore
@@ -10,11 +11,13 @@ import io.ltverdict.web.LocalApiContext
 import io.ltverdict.web.startLocalServer
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import org.junit.jupiter.api.Assertions.assertArrayEquals
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.fail
+import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.io.TempDir
 import org.junit.jupiter.params.ParameterizedTest
 import org.junit.jupiter.params.provider.ValueSource
@@ -55,20 +58,76 @@ class ShellParityTest {
         assertArrayEquals(cli.result, http.result)
     }
 
+    @Test
+    fun `resource SLA failure has identical window evidence through CLI and HTTP`() {
+        val input = tempDir.resolve("load.jtl")
+        Files.writeString(
+            input,
+            "timeStamp,elapsed,label,success\n1000,1000,request,true\n2000,1000,request,true\n" +
+                "3000,1000,request,true\n4000,1000,request,true\n",
+        )
+        val resources = tempDir.resolve("resources.json")
+        Files.writeString(
+            resources,
+            """
+            {
+              "schema_version":"resource-snapshot.v1","load_input_sha256":"${sha256Hex(Files.readAllBytes(input))}",
+              "start_epoch_ms":1000,"step_ms":1000,"point_count":4,
+              "series":[{"id":"cpu","metric":"cpu_usage","unit":"cores","entity":"vm-1","role":"system",
+              "aggregation":"interval_mean","values":[0,1,2,3]}],
+              "windows":[{"id":"steady","from_epoch_ms":1000,"to_epoch_ms":5000}],
+              "rules":[{"id":"cpu-limit","series_id":"cpu","unit":"cores","operator":"gt",
+              "threshold":2,"min_consecutive_cells":1,"effect":"sla"}]
+            }
+            """.trimIndent(),
+        )
+        val cli = analyzeWithCli(input, tempDir.resolve("resource-cli"), resources, 2)
+        val http = analyzeWithHttp(input, tempDir.resolve("resource-http"), resources)
+        assertEquals(cli.analysisId, http.analysisId)
+        assertArrayEquals(cli.result, http.result)
+        val result = Json.parseToJsonElement(cli.result.decodeToString()).jsonObject
+        assertEquals("FAIL", result.getValue("policy_verdict").jsonPrimitive.content)
+        val evidence = result.getValue("evidence").jsonArray.map { it.jsonObject }
+        val summary = evidence.single { it["type"]?.jsonPrimitive?.content == "resource_summary" }
+        assertEquals(
+            "1.5",
+            summary
+                .getValue("statistics")
+                .jsonObject
+                .getValue("mean")
+                .jsonPrimitive.content,
+        )
+        val window = evidence.single { it["type"]?.jsonPrimitive?.content == "window_policy_summary" }
+        assertEquals("steady", window.getValue("window_id").jsonPrimitive.content)
+        assertEquals("FAIL", window.getValue("verdict").jsonPrimitive.content)
+    }
+
     private fun analyzeWithCli(
         input: Path,
         dataDir: Path,
+        resources: Path? = null,
+        expectedExitCode: Int = 0,
     ): AnalysisSnapshot {
         val stdout = ByteArrayOutputStream()
         val stderr = ByteArrayOutputStream()
         val exitCode =
             PrintStream(stdout, true, UTF_8).use { out ->
                 PrintStream(stderr, true, UTF_8).use { err ->
-                    runCli(arrayOf("analyze", input.toString(), "--data-dir", dataDir.toString()), out, err)
+                    runCli(
+                        arrayOf(
+                            "analyze",
+                            input.toString(),
+                            "--data-dir",
+                            dataDir.toString(),
+                            *(resources?.let { arrayOf("--resources", it.toString()) } ?: emptyArray()),
+                        ),
+                        out,
+                        err,
+                    )
                 }
             }
 
-        assertEquals(0, exitCode, stderr.toString(UTF_8))
+        assertEquals(expectedExitCode, exitCode, stderr.toString(UTF_8))
         assertEquals("", stderr.toString(UTF_8))
         val run = onlyChild(dataDir.resolve("runs"))
         val analysis = onlyChild(run.resolve("analyses"))
@@ -88,6 +147,7 @@ class ShellParityTest {
     private fun analyzeWithHttp(
         input: Path,
         dataDir: Path,
+        resources: Path? = null,
     ): AnalysisSnapshot =
         DataDirectory.open(dataDir).use { directory ->
             val store = RunBundleStore(directory)
@@ -105,7 +165,7 @@ class ShellParityTest {
                             .getValue("run_id")
                             .jsonPrimitive.content
 
-                    val submitted = api.createJob(runId)
+                    val submitted = api.createJob(runId, resources)
                     assertEquals(202, submitted.statusCode())
                     val jobId =
                         submitted
@@ -178,8 +238,24 @@ class ShellParityTest {
                 "application/octet-stream",
             )
 
-        fun createJob(runId: String): HttpResponse<ByteArray> =
-            multipart("/api/jobs", "form-data; name=\"run_id\"", runId.encodeToByteArray())
+        fun createJob(
+            runId: String,
+            resources: Path?,
+        ): HttpResponse<ByteArray> {
+            if (resources == null) return multipart("/api/jobs", "form-data; name=\"run_id\"", runId.encodeToByteArray())
+            val boundary = "ltv-resource-parity"
+            val body = ByteArrayOutputStream()
+            body.writeUtf8("--$boundary\r\nContent-Disposition: form-data; name=\"run_id\"\r\n\r\n$runId\r\n")
+            body.writeUtf8("--$boundary\r\nContent-Disposition: form-data; name=\"resource_snapshot\"; filename=\"resources.json\"\r\n")
+            body.writeUtf8("Content-Type: application/json\r\n\r\n")
+            body.write(Files.readAllBytes(resources))
+            body.writeUtf8("\r\n--$boundary--\r\n")
+            return send(
+                authenticated(request("/api/jobs"))
+                    .header("Content-Type", "multipart/form-data; boundary=$boundary")
+                    .POST(HttpRequest.BodyPublishers.ofByteArray(body.toByteArray())),
+            )
+        }
 
         fun get(path: String): HttpResponse<ByteArray> = send(request(path).GET())
 

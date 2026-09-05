@@ -15,6 +15,10 @@ internal fun renderAsciiDocReport(
     val result = Json.parseToJsonElement(resultBytes.decodeToString()).jsonObject
     val evidence = result.objects("evidence")
     val metrics = evidence.filter { it.string("type") == "metric_summary" }
+    val resourceSummaries = evidence.filter { it.string("type") == "resource_summary" }
+    val windowSummaries = evidence.filter { it.string("type") == "window_policy_summary" }
+    val resourceChecks = evidence.filter { it.string("type") == "resource_policy_check" }
+    val resourceBindings = evidence.filter { it.string("type") == "resource_binding" }
     return buildString {
         append("= LT Verdict report\n:!webfonts:\n\n")
         append("== Run\n")
@@ -27,12 +31,48 @@ internal fun renderAsciiDocReport(
         metricsSection("Overall metrics", metrics.filter { it.scopeKind() == "overall" })
         metricsSection("Transaction metrics", metrics.filter { it.scopeKind() == "transaction" })
         objectsSection("Policy checks", evidence.filter { it.string("type") == "policy_check" })
+        if (resourceSummaries.isNotEmpty() ||
+            windowSummaries.isNotEmpty() ||
+            resourceChecks.isNotEmpty() ||
+            resourceBindings.isNotEmpty()
+        ) {
+            objectsSection("Resource binding", resourceBindings)
+            resourceSummariesSection(resourceSummaries)
+            objectsSection("Window policy outcomes", windowSummaries)
+            objectsSection("Resource policy checks", resourceChecks)
+        }
         objectsSection("Findings", result.objects("findings"))
         append("\n== Evidence IDs\n")
         if (evidence.isEmpty()) append("unavailable\n") else evidence.forEach { literal(it["id"]) }
         append("\n== Canonical JSON\n")
         literal(resultBytes.decodeToString())
     }.encodeToByteArray()
+}
+
+private fun StringBuilder.resourceSummariesSection(values: List<JsonObject>) {
+    append("\n== Resource summaries\n")
+    if (values.isEmpty()) {
+        append("unavailable\n")
+        return
+    }
+    values.forEach { value ->
+        field("Evidence ID", value["id"])
+        field("Series ID", value["series_id"])
+        field("Metric", value["metric"])
+        field("Unit", value["unit"])
+        field("Entity", value["entity"])
+        field("Role", value["role"])
+        field("Aggregation", value["aggregation"])
+        field("Window ID", value["window_id"])
+        field("From epoch ms", value["from_epoch_ms"])
+        field("To epoch ms", value["to_epoch_ms"])
+        field("Expected cells", value["expected_cells"])
+        field("Observed cells", value["observed_cells"])
+        field("Missing cells", value["missing_cells"])
+        field("Longest gap cells", value["longest_gap_cells"])
+        field("Statistics", value["statistics"])
+        field("Reasons", value["reasons"])
+    }
 }
 
 private fun StringBuilder.metricsSection(

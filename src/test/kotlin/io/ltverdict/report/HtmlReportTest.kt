@@ -28,6 +28,20 @@ class HtmlReportTest {
         assertFalse(html.contains("<script"))
     }
 
+    @Test
+    fun `renders no policy result with missing metrics as unavailable`() {
+        val html =
+            render(
+                """{"analysis_coverage":{"reasons":[],"status":"COMPLETE"},"evidence":[],"findings":[],"policy_verdict":"NO_POLICY","run_id":"run-1","run_validity":"VALID","schema_version":"analysis-result.v1"}"""
+                    .encodeToByteArray(),
+                "analysis-1",
+            ).decodeToString()
+
+        assertTrue(html.contains("NO_POLICY"))
+        assertTrue(html.contains("Overall and transaction metrics</h2><p>unavailable</p>"))
+        assertFalse(html.contains("Samples: 0"))
+    }
+
     private fun render(
         resultBytes: ByteArray,
         analysisId: String,

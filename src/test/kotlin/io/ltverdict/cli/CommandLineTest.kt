@@ -2,8 +2,10 @@ package io.ltverdict.cli
 
 import com.sun.net.httpserver.HttpServer
 import io.ltverdict.core.PolicyValidation
+import io.ltverdict.core.ResourceValidation
 import io.ltverdict.core.sha256Hex
 import io.ltverdict.core.validatePolicy
+import io.ltverdict.core.validateResourceSnapshot
 import io.ltverdict.sources.ONLINE_LOAD
 import io.ltverdict.sources.ONLINE_SOURCE_REQUEST
 import io.ltverdict.sources.OnlineSourceFixture
@@ -37,6 +39,51 @@ class CommandLineTest {
         val profiles = Files.newInputStream(Path.of("docs/contracts/sources/v1/connections.example.json")).use(::readSourceProfiles)
         val request = Files.newInputStream(Path.of("docs/contracts/sources/v1/request.example.json")).use(::readSourceRequest)
         assertEquals(profiles.single().id, request.profileId)
+    }
+
+    @Test
+    fun `CLI imports PostgreSQL pre and inert HTML and rejects capture without credentials`() {
+        val input = tempDir.resolve("postgres.jtl")
+        Files.writeString(input, ONLINE_LOAD)
+        val pre = Path.of("docs/contracts/sources/v1/postgres-phase.example.json")
+        val html = tempDir.resolve("report.html")
+        Files.writeString(html, "<script>throw new Error('not executable')</script>")
+        val result =
+            run(
+                "analyze",
+                input.toString(),
+                "--postgres-pre",
+                pre.toString(),
+                "--pg-profile-html",
+                html.toString(),
+                "--data-dir",
+                tempDir.resolve("postgres-data").toString(),
+            )
+        assertEquals(0, result.exitCode, result.stderr)
+        val context =
+            Json
+                .parseToJsonElement(result.stdout)
+                .jsonObject
+                .getValue("evidence")
+                .jsonArray
+                .single { it.jsonObject["type"]?.jsonPrimitive?.content == "postgres_context" }
+                .jsonObject
+        assertTrue(context.getValue("reasons").jsonArray.any { it.jsonPrimitive.content == "PG_POST_CAPTURE_MISSING" })
+        val config = tempDir.resolve("postgres-connections.json")
+        Files.writeString(
+            config,
+            """{"schema_version":"source-connections.v2","connections":[{
+          "id":"pg","source_kind":"postgresql","source_database_id":"test","host":"127.0.0.1",
+          "database":"test","username_env":"LTV_TEST_MISSING_PG_USER_671DB","password_env":"LTV_TEST_MISSING_PG_PASSWORD_671DB"}]}""",
+        )
+        val capture = run("source", "pre", "--connections", config.toString(), "--profile", "pg")
+        assertEquals(4, capture.exitCode)
+        assertEquals("PG_CREDENTIALS_MISSING", capture.stderr.trim())
+        assertEquals("", capture.stdout)
+        val overwrite = run("source", "pre", "--connections", config.toString(), "--profile", "pg", "--pg-profile-html", html.toString())
+        assertEquals(4, overwrite.exitCode)
+        assertEquals("PG_REPORT_EXISTS", overwrite.stderr.trim())
+        assertEquals("<script>throw new Error('not executable')</script>", Files.readString(html))
     }
 
     @Test
@@ -189,6 +236,53 @@ class CommandLineTest {
     }
 
     @Test
+    fun `CLI accepts repeated source context files`() {
+        val input = tempDir.resolve("multiple.jtl")
+        Files.writeString(input, ONLINE_LOAD)
+        val original =
+            Files
+                .readString(Path.of("docs/contracts/sources/v1/opensearch-errors.example.json"))
+                .replace("a".repeat(64), sha256Hex(ONLINE_LOAD.encodeToByteArray()))
+        val profile =
+            Json
+                .parseToJsonElement(original)
+                .jsonObject
+                .getValue("profile_id")
+                .jsonPrimitive.content
+        val files =
+            listOf("a-errors", "b-errors").map { id ->
+                tempDir.resolve("$id.json").also { Files.writeString(it, original.replace("\"$profile\"", "\"$id\"")) }
+            }
+        val result =
+            run(
+                "analyze",
+                input.toString(),
+                "--source-context",
+                files[1].toString(),
+                "--source-context",
+                files[0].toString(),
+                "--data-dir",
+                tempDir.resolve("multiple-data").toString(),
+            )
+        assertEquals(0, result.exitCode, result.stderr)
+        val contexts =
+            Json
+                .parseToJsonElement(result.stdout)
+                .jsonObject
+                .getValue("evidence")
+                .jsonArray
+                .filter { it.jsonObject["type"]?.jsonPrimitive?.content == "opensearch_errors" }
+        assertEquals(
+            listOf("a-errors", "b-errors"),
+            contexts.map {
+                it.jsonObject
+                    .getValue("profile_id")
+                    .jsonPrimitive.content
+            },
+        )
+    }
+
+    @Test
     fun `CLI acquires resources and replays saved snapshot offline`() {
         OnlineSourceFixture().use { fixture ->
             val profiles = tempDir.resolve("connections.json")
@@ -337,6 +431,84 @@ class CommandLineTest {
     }
 
     @Test
+    fun `capacity rejects malformed missing duplicate and resource-less plans`() {
+        val input = fixture("jmeter/csv-5.6.3/input.jtl").toString()
+        val plan = tempDir.resolve("capacity.json")
+        Files.writeString(plan, "{}")
+        assertError(run("analyze", input, "--capacity", plan.toString()), 4, "invalid capacity plan")
+        assertError(run("analyze", input, "--capacity", tempDir.resolve("missing.json").toString()), 4, "missing capacity plan")
+        assertError(
+            run("analyze", input, "--capacity", plan.toString(), "--capacity", plan.toString()),
+            64,
+            "duplicate capacity flag",
+        )
+
+        Files.writeString(plan, validCapacityPlan())
+        assertError(run("analyze", input, "--capacity", plan.toString()), 4, "capacity plan needs resources")
+    }
+
+    @Test
+    fun `CLI persists bounded capacity facts for two real stages`() {
+        val input = tempDir.resolve("capacity.jtl")
+        Files.writeString(input, capacityLoad())
+        val resources = tempDir.resolve("resources.json")
+        val dataDir = tempDir.resolve("capacity-data")
+        val inputHash = sha256Hex(Files.readAllBytes(input))
+        Files.writeString(resources, capacityResources(inputHash))
+        val validation = Files.newInputStream(resources).use(::validateResourceSnapshot)
+        assertTrue(validation is ResourceValidation.Valid, validation.toString())
+        val resourceHash = (validation as ResourceValidation.Valid).semanticSha256
+        val plan = tempDir.resolve("capacity.json")
+        Files.writeString(plan, capacityPlan(inputHash, resourceHash))
+
+        val first =
+            run(
+                "analyze",
+                input.toString(),
+                "--policy",
+                fixture("policies/pass.json").toString(),
+                "--resources",
+                resources.toString(),
+                "--capacity",
+                plan.toString(),
+                "--data-dir",
+                dataDir.toString(),
+            )
+        assertEquals(3, first.exitCode, first.stderr)
+        val result = Json.parseToJsonElement(first.stdout).jsonObject
+        assertEquals("capacity_step", result.getValue("analysis_mode").jsonPrimitive.content)
+        assertEquals("NO_VERDICT", result.getValue("policy_verdict").jsonPrimitive.content, first.stdout)
+        val capacity = result.getValue("capacity_summary").jsonObject
+        assertEquals("BOUNDED", capacity.getValue("bound_type").jsonPrimitive.content)
+        assertEquals("296", capacity.getValue("lower_inclusive").jsonPrimitive.content)
+        assertEquals("344", capacity.getValue("upper_exclusive").jsonPrimitive.content)
+        val analysis =
+            Files
+                .list(dataDir.resolve("runs").resolve(result.getValue("run_id").jsonPrimitive.content).resolve("analyses"))
+                .use { it.findFirst().orElseThrow() }
+        val beforePlan = Files.readAllBytes(analysis.resolve("capacity-plan.json"))
+        val beforeCapacity = Files.readAllBytes(analysis.resolve("capacity.json"))
+
+        val replay =
+            run(
+                "analyze",
+                input.toString(),
+                "--policy",
+                fixture("policies/pass.json").toString(),
+                "--resources",
+                resources.toString(),
+                "--capacity",
+                plan.toString(),
+                "--data-dir",
+                dataDir.toString(),
+            )
+        assertEquals(3, replay.exitCode, replay.stderr)
+        assertEquals(first.stdout, replay.stdout)
+        assertEquals(beforePlan.toList(), Files.readAllBytes(analysis.resolve("capacity-plan.json")).toList())
+        assertEquals(beforeCapacity.toList(), Files.readAllBytes(analysis.resolve("capacity.json")).toList())
+    }
+
+    @Test
     fun `analyze rejects nonregular and symlink input before writing stdout`() {
         assertError(
             run("analyze", tempDir.toString(), "--data-dir", tempDir.resolve("directory-data").toString()),
@@ -459,6 +631,59 @@ class CommandLineTest {
     }
 
     private fun fixture(path: String): Path = Path.of("fixtures/slice1").resolve(path)
+
+    private fun validCapacityPlan(): String {
+        val inputHash = "a".repeat(64)
+        val resourceHash = "b".repeat(64)
+        val plan =
+            """{"schema_version":"capacity-plan.v1","load_input_sha256":"$inputHash","resource_snapshot_sha256":"$resourceHash","load_axis":"rps","achieved_load":{"statistic":"p05_10s","target_tolerance_ratio":0},"generator_guard_rule_ids":[],"stages":[{"id":"stage-1","target":1,"from_epoch_ms":0,"to_epoch_ms":10000,"evaluation_window_id":"steady"}]}"""
+        return plan
+    }
+
+    private fun capacityLoad(): String =
+        buildString {
+            append(
+                "timeStamp,elapsed,label,responseCode,responseMessage,threadName,dataType,success," +
+                    "failureMessage,bytes,sentBytes,grpThreads,allThreads,URL,Latency,IdleTime,Connect\n",
+            )
+            repeat(600) { second ->
+                val starts = if (second < 300) 296 else 344
+                repeat(starts) { index ->
+                    val offset = if (second == 599 && index == starts - 1) 999 else index
+                    append("${1767225600000L + second * 1000L + offset},1,steady,200,OK,fixture,text,true,,0,0,1,1,null,0,0,0\n")
+                }
+            }
+        }
+
+    private fun capacityResources(inputHash: String): String {
+        val cpu = List(30) { "0.5" } + List(30) { "1.5" }
+        val generator = List(60) { "1.5" }
+        val cpuValues = cpu.joinToString(",")
+        val generatorValues = generator.joinToString(",")
+        return """
+            {"schema_version":"resource-snapshot.v1","load_input_sha256":"$inputHash",
+             "start_epoch_ms":1767225600000,"step_ms":10000,"point_count":60,
+             "series":[
+               {"id":"cpu","metric":"cpu_used","unit":"ratio","entity":"host","role":"system",
+                "aggregation":"interval_mean","values":[$cpuValues]},
+               {"id":"generator","metric":"cpu_used","unit":"ratio","entity":"load-generator",
+                "role":"generator","aggregation":"interval_mean","values":[$generatorValues]}],
+             "windows":[
+               {"id":"stage-300","from_epoch_ms":1767225600000,"to_epoch_ms":1767225900000},
+               {"id":"stage-350","from_epoch_ms":1767225900000,"to_epoch_ms":1767226200000}],
+             "rules":[
+               {"id":"cpu-sla","series_id":"cpu","unit":"ratio","operator":"gt","threshold":1,
+                "min_consecutive_cells":1,"effect":"sla"},
+               {"id":"generator-ok","series_id":"generator","unit":"ratio","operator":"lt","threshold":1,
+                "min_consecutive_cells":1,"effect":"diagnostic"}]}
+            """.trimIndent()
+    }
+
+    private fun capacityPlan(
+        inputHash: String,
+        resourceHash: String,
+    ): String =
+        """{"schema_version":"capacity-plan.v1","load_input_sha256":"$inputHash","resource_snapshot_sha256":"$resourceHash","load_axis":"rps","achieved_load":{"statistic":"p05_10s","target_tolerance_ratio":0.02,"required_capacity":300},"generator_guard_rule_ids":["generator-ok"],"stages":[{"id":"stage-300","target":300,"from_epoch_ms":1767225600000,"to_epoch_ms":1767225900000,"evaluation_window_id":"stage-300"},{"id":"stage-350","target":350,"from_epoch_ms":1767225900000,"to_epoch_ms":1767226200000,"evaluation_window_id":"stage-350"}]}"""
 
     private fun savedAnalysis(
         name: String,

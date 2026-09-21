@@ -100,6 +100,7 @@ internal data class SourceRequest(
     val startEpochMillis: Long,
     val endEpochMillis: Long,
     val stepMillis: Long,
+    val additionalProfileIds: List<String> = emptyList(),
 )
 
 internal class SourceBudget(
@@ -152,10 +153,17 @@ internal class SourceHttpFailure(
     val code: String,
 ) : RuntimeException(code)
 
-internal fun readSourceProfiles(source: InputStream): List<SourceProfile> =
+internal data class SourceConnections(
+    val http: List<SourceProfile>,
+    val postgres: List<PostgresProfile>,
+)
+
+internal fun readSourceProfiles(source: InputStream): List<SourceProfile> = readSourceConnections(source).http
+
+internal fun readSourceConnections(source: InputStream): SourceConnections =
     readSourceInput(source, MAX_SOURCE_CONFIG_BYTES, "CONFIG") { text ->
         scanSourceJson(text, "source connections", "SOURCE_CONFIG_INVALID")
-        parseProfiles(Json.parseToJsonElement(text))
+        parseConnections(Json.parseToJsonElement(text))
     }
 
 internal fun readSourceRequest(source: InputStream): SourceRequest =
@@ -164,18 +172,80 @@ internal fun readSourceRequest(source: InputStream): SourceRequest =
         parseRequest(Json.parseToJsonElement(text))
     }
 
-private fun parseProfiles(element: JsonElement): List<SourceProfile> {
+private fun parseConnections(element: JsonElement): SourceConnections {
     val root = element.sourceObject()
     root.rejectUnknown(setOf("schema_version", "connections"))
-    if (root.sourceString("schema_version") != "source-connections.v1") configInvalid()
+    val version = root.sourceString("schema_version")
+    if (version !in setOf("source-connections.v1", "source-connections.v2")) configInvalid()
     val values = root.sourceArray("connections")
     if (values.isEmpty() || values.size > MAX_SOURCE_PROFILES) configInvalid()
     val ids = HashSet<String>()
-    return values.map { value ->
-        val profile = parseProfile(value)
-        if (!ids.add(profile.id)) configInvalid()
-        profile
+    val http = mutableListOf<SourceProfile>()
+    val postgres = mutableListOf<PostgresProfile>()
+    values.forEach { value ->
+        if (!ids.add(value.sourceObject().sourceString("id"))) configInvalid()
+        if (version == "source-connections.v2" && value.sourceObject().sourceString("source_kind") == "postgresql") {
+            postgres += parsePostgresProfile(value)
+        } else {
+            http += parseProfile(value)
+        }
     }
+    return SourceConnections(http, postgres)
+}
+
+private fun parsePostgresProfile(element: JsonElement): PostgresProfile {
+    val value = element.sourceObject()
+    value.rejectUnknown(
+        setOf(
+            "id",
+            "source_kind",
+            "source_database_id",
+            "host",
+            "port",
+            "database",
+            "username_env",
+            "password_env",
+            "allow_insecure",
+            "tables",
+            "pg_profile",
+        ),
+    )
+    val tables =
+        value.optionalArray("tables").orEmpty().map { element ->
+            val table = element.sourceObject()
+            table.rejectUnknown(setOf("schema", "table", "columns", "key", "row_limit", "byte_limit"))
+
+            fun strings(name: String): List<String> =
+                table.sourceArray(name).map {
+                    (it as? JsonPrimitive)?.takeIf(JsonPrimitive::isString)?.content ?: configInvalid()
+                }
+            PostgresTableProfile(
+                table.sourceString("schema"),
+                table.sourceString("table"),
+                strings("columns"),
+                if ("key" in table) strings("key") else emptyList(),
+                table.optionalInt("row_limit") ?: 10_000,
+                table.optionalInt("byte_limit") ?: 1_048_576,
+            )
+        }
+    val report =
+        value["pg_profile"]?.sourceObject()?.also {
+            it.rejectUnknown(setOf("server_id", "start_sample_id", "end_sample_id"))
+        }
+    return PostgresProfile(
+        id = value.sourceString("id"),
+        sourceDatabaseId = value.sourceString("source_database_id"),
+        host = value.sourceString("host"),
+        port = value.optionalInt("port") ?: 5432,
+        database = value.sourceString("database"),
+        usernameEnv = value.sourceEnvironmentName("username_env"),
+        passwordEnv = value.sourceEnvironmentName("password_env"),
+        allowInsecure = value.optionalBoolean("allow_insecure") ?: false,
+        tables = tables,
+        pgProfileServerId = report?.sourceInt("server_id"),
+        pgProfileStartSampleId = report?.sourceInt("start_sample_id"),
+        pgProfileEndSampleId = report?.sourceInt("end_sample_id"),
+    ).also(::validatePostgresProfile)
 }
 
 private fun parseProfile(element: JsonElement): SourceProfile {
@@ -423,9 +493,24 @@ private fun parseRules(
 private fun parseRequest(element: JsonElement): SourceRequest =
     try {
         val value = element.sourceObject()
-        value.rejectUnknown(setOf("schema_version", "profile_id", "start_epoch_ms", "end_epoch_ms", "step_ms"))
-        if (value.sourceString("schema_version") != "source-request.v1") requestInvalid()
-        val profileId = value.sourceText("profile_id", MAX_IDENTIFIER_BYTES, ::requestInvalid)
+        val profileIds =
+            when (value.sourceString("schema_version")) {
+                "source-request.v1" -> {
+                    value.rejectUnknown(setOf("schema_version", "profile_id", "start_epoch_ms", "end_epoch_ms", "step_ms"))
+                    listOf(value.sourceText("profile_id", MAX_IDENTIFIER_BYTES, ::requestInvalid))
+                }
+                "source-request.v2" -> {
+                    value.rejectUnknown(setOf("schema_version", "profile_ids", "start_epoch_ms", "end_epoch_ms", "step_ms"))
+                    val ids =
+                        value.sourceArray("profile_ids").map {
+                            val id = (it as? JsonPrimitive)?.takeIf(JsonPrimitive::isString)?.content ?: requestInvalid()
+                            validateText(id, MAX_IDENTIFIER_BYTES)
+                        }
+                    if (ids.size !in 1..MAX_SOURCE_PROFILES || ids.distinct().size != ids.size) requestInvalid()
+                    ids.sorted()
+                }
+                else -> requestInvalid()
+            }
         val start = value.sourceLong("start_epoch_ms", ::requestInvalid)
         val end = value.sourceLong("end_epoch_ms", ::requestInvalid)
         val step = value.sourceLong("step_ms", ::requestInvalid)
@@ -434,7 +519,7 @@ private fun parseRequest(element: JsonElement): SourceRequest =
         }
         if (step < 1_000 || (end - start) % step != 0L) requestInvalid()
         if ((end - start) / step !in 1..MAX_POINTS_PER_SERIES.toLong()) requestInvalid()
-        SourceRequest(profileId, start, end, step)
+        SourceRequest(profileIds.first(), start, end, step, profileIds.drop(1))
     } catch (_: SourceInputFailure) {
         requestInvalid()
     }

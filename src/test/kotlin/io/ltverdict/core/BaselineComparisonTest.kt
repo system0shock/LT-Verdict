@@ -11,10 +11,95 @@ import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertThrows
+import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
+import java.time.Instant
 
 class BaselineComparisonTest {
+    @Test
+    fun `condition record preserves three states and matches only its exact pair and windows`() {
+        val baseline = reference('a')
+        val current = reference('b')
+        val updatedAt = Instant.parse("2026-09-06T12:34:56Z")
+
+        mapOf(
+            "CONFIRMED" to true,
+            "NOT_CONFIRMED" to false,
+            "UNKNOWN" to null,
+        ).forEach { (decision, confirmation) ->
+            val record = baselineConditionRecord(baseline, current, null, decision, updatedAt)
+            assertEquals(record, validateBaselineCondition(record))
+            assertEquals(confirmation, baselineConditionConfirmation(record))
+        }
+
+        val windows = WindowComparisonRequest("before", "after")
+        val record = baselineConditionRecord(baseline, current, windows, "CONFIRMED", updatedAt)
+        assertEquals(
+            setOf("schema_version", "baseline", "current", "windows", "decision", "provenance", "updated_at"),
+            record.keys,
+        )
+        assertEquals("local-baseline-conditions.v1", record.getValue("schema_version").jsonPrimitive.content)
+        assertEquals("EXPLICIT_LOCAL_ACTION", record.getValue("provenance").jsonPrimitive.content)
+        assertEquals("2026-09-06T12:34:56Z", record.getValue("updated_at").jsonPrimitive.content)
+        assertTrue(baselineConditionMatches(record, baseline, current, windows))
+        assertFalse(baselineConditionMatches(record, baseline, reference('c'), windows))
+        assertFalse(baselineConditionMatches(record, baseline, current, WindowComparisonRequest("before", "other")))
+        assertFalse(baselineConditionMatches(record, baseline, current, null))
+
+        assertThrows(IllegalArgumentException::class.java) {
+            validateBaselineCondition(JsonObject(record + ("updated_at" to JsonPrimitive("not-an-instant"))))
+        }
+        assertThrows(IllegalArgumentException::class.java) {
+            validateBaselineCondition(JsonObject(record + ("decision" to JsonPrimitive("MAYBE"))))
+        }
+    }
+
+    @Test
+    fun `explicit comparison context changes interpretation only and does not persist`() {
+        val selection = manualBaselineSelection("release", reference('a'))
+        val baseline = windowResult("steady", 0, 10_000, 100, 100, 0)
+        val current = windowResult("steady", 0, 10_000, 120, 100, 0)
+
+        fun compare(
+            confirmed: Boolean? = null,
+            currentIdentity: JsonObject = identity(),
+        ) = compareAnalyses(
+            selection,
+            reference('b'),
+            baseline,
+            identity(),
+            current,
+            currentIdentity,
+            WindowComparisonRequest("steady", "steady"),
+            conditionsConfirmed = confirmed,
+        )
+
+        val before = compare()
+        val confirmed = compare(true)
+        assertEquals("USER_CONFIRMED", confirmed.getValue("comparability").jsonPrimitive.content)
+        assertEquals(before.getValue("metrics"), confirmed.getValue("metrics"))
+        val p95 =
+            confirmed
+                .getValue("window_comparison")
+                .jsonObject
+                .getValue("metrics")
+                .jsonArray[1]
+                .jsonObject
+        assertWindowMetric(p95, "120", "100", "20", "20", "CANDIDATE", null)
+        assertEquals(before, compare(false))
+        assertEquals(before, compare())
+        assertEquals(
+            "NOT_EVALUATED",
+            compare(true, identity("other"))
+                .getValue("window_comparison")
+                .jsonObject
+                .getValue("status")
+                .jsonPrimitive.content,
+        )
+    }
+
     @Test
     fun `window comparison computes latency deltas and duration-normalized rates`() {
         val candidates = listOf(candidate('a'), candidate('b'), candidate('c'))
@@ -442,6 +527,10 @@ class BaselineComparisonTest {
         val comparison = compareAnalyses(selection, reference('c'), result(), identity(), result(), identity())
 
         assertEquals("USER_CONFIRMED", comparison.getValue("comparability").jsonPrimitive.content)
+        val unconfirmed =
+            compareAnalyses(selection, reference('c'), result(), identity(), result(), identity(), conditionsConfirmed = false)
+        assertEquals("UNCONFIRMED", unconfirmed.getValue("comparability").jsonPrimitive.content)
+        assertEquals(comparison.getValue("metrics"), unconfirmed.getValue("metrics"))
     }
 
     private fun assertMetric(

@@ -1,6 +1,10 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
 import AnalysisView from './AnalysisView.vue'
+import AdvicePanel from './AdvicePanel.vue'
+import JenkinsPanel from './JenkinsPanel.vue'
+import AnalyticsPanel from './AnalyticsPanel.vue'
+import GrafanaPanel from './GrafanaPanel.vue'
 import BaselinePanel from './BaselinePanel.vue'
 import JobStatusView from './JobStatus.vue'
 import RunSetup from './RunSetup.vue'
@@ -8,6 +12,7 @@ import {
   ApiError,
   bootstrap,
   cancelJob,
+  capturePostgresPhase,
   createJob,
   getBuckets,
   getJob,
@@ -18,16 +23,22 @@ import {
   uploadInput,
   validatePolicy,
 } from './api'
-import type { AnalysisResult, AnalysisSummary, Bucket, JobStatus, Policy, PolicyError, RunSummary, SourceProfile, SourceRequest, Theme } from './types'
+import type { AnalysisResult, AnalysisSummary, Bucket, JobStatus, OpenSearchEvidence, Policy, PolicyError, PostgresContextEvidence, RunSummary, SourceProfile, SourceRequest, Theme } from './types'
 
 const theme = ref<Theme>(window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light')
 const apiReady = ref(false)
 const inputFile = ref<File | null>(null)
 const resourceFile = ref<File | null>(null)
 const diagnosticFile = ref<File | null>(null)
-const sourceContextFile = ref<File | null>(null)
+const capacityFile = ref<File | null>(null)
+const sourceContextFiles = ref<File[]>([])
 const sourceProfiles = ref<SourceProfile[]>([])
-const sourceProfileId = ref('')
+const sourceProfileIds = ref<string[]>([])
+const postgresProfileId = ref('')
+const postgresPreFile = ref<File | null>(null)
+const postgresPostFile = ref<File | null>(null)
+const pgProfileHtmlFile = ref<File | null>(null)
+const postgresCapturePhase = ref<'pre' | 'post' | null>(null)
 const sourceStart = ref('')
 const sourceEnd = ref('')
 const sourceStep = ref('')
@@ -39,6 +50,7 @@ const job = ref<JobStatus | null>(null)
 const queueBusy = ref(false)
 const result = ref<AnalysisResult | null>(null)
 const buckets = ref<Bucket[]>([])
+const chartMarkers = ref<Array<{ at_ms: number; service: string; error_type: string; message: string }>>([])
 const runs = ref<RunSummary[]>([])
 const currentRun = ref<RunSummary | null>(null)
 const analyses = ref<AnalysisSummary[]>([])
@@ -61,8 +73,14 @@ const working = computed(() => job.value?.state === 'QUEUED' || job.value?.state
 const selectedReference = computed(() => result.value && selectedAnalysisId.value
   ? { run_id: result.value.run_id, analysis_id: selectedAnalysisId.value }
   : null)
+watch(selectedReference, () => { chartMarkers.value = [] })
+const httpSourceProfiles = computed(() => sourceProfiles.value.filter((profile) => profile.source_kind !== 'postgresql'))
+const postgresProfiles = computed(() => sourceProfiles.value.filter((profile) => profile.source_kind === 'postgresql' && profile.transport === 'jdbc'))
 const sourceRequestState = computed<{ request: SourceRequest | null; error: string }>(() => {
-  if (!sourceProfileId.value) return { request: null, error: '' }
+  if (sourceContextFiles.value.length > 16) return { request: null, error: 'OpenSearch context accepts at most 16 files.' }
+  const profileIds = [...sourceProfileIds.value].sort()
+  if (!profileIds.length) return { request: null, error: '' }
+  if (profileIds.length > 16) return { request: null, error: 'Online source accepts at most 16 profiles.' }
   if (!sourceStart.value || !sourceEnd.value || !sourceStep.value) return { request: null, error: 'Online source requires start, end, and step in UTC epoch milliseconds.' }
   const start = Number(sourceStart.value)
   const end = Number(sourceEnd.value)
@@ -71,8 +89,17 @@ const sourceRequestState = computed<{ request: SourceRequest | null; error: stri
   if (start < 0 || end <= start) return { request: null, error: 'Source end must be after a non-negative start.' }
   if (step < 1_000) return { request: null, error: 'Source step must be at least 1000 ms.' }
   if ((end - start) % step !== 0) return { request: null, error: 'Source range must be divisible by its step.' }
-  return { request: { schema_version: 'source-request.v1', profile_id: sourceProfileId.value, start_epoch_ms: start, end_epoch_ms: end, step_ms: step }, error: '' }
+  const window = { start_epoch_ms: start, end_epoch_ms: end, step_ms: step }
+  const request: SourceRequest = profileIds.length === 1
+    ? { schema_version: 'source-request.v1', profile_id: profileIds[0], ...window }
+    : { schema_version: 'source-request.v2', profile_ids: profileIds, ...window }
+  return { request, error: '' }
 })
+const downloadableSourceContexts = computed(() => result.value?.evidence
+  .filter((item): item is OpenSearchEvidence => item.type === 'opensearch_errors')
+  .sort((left, right) => left.profile_id < right.profile_id ? -1 : left.profile_id > right.profile_id ? 1 : 0) ?? [])
+const postgresContext = computed(() => result.value?.evidence
+  .find((item): item is PostgresContextEvidence => item.type === 'postgres_context'))
 
 watch(
   theme,
@@ -116,21 +143,79 @@ function selectDiagnostics(file: File | null) {
   errorMessage.value = ''
 }
 
-function selectSourceProfile(id: string) {
-  sourceProfileId.value = id
-  if (id) {
+function selectCapacity(file: File | null) {
+  capacityFile.value = file
+  queueBusy.value = false
+  errorMessage.value = ''
+}
+
+function selectSourceProfiles(ids: string[]) {
+  sourceProfileIds.value = ids
+  if (ids.length) {
     resourceFile.value = null
     diagnosticFile.value = null
-    sourceContextFile.value = null
+    capacityFile.value = null
+    sourceContextFiles.value = []
   }
   queueBusy.value = false
   errorMessage.value = ''
 }
 
-function selectSourceContext(file: File | null) {
-  sourceContextFile.value = file
+function selectSourceContexts(files: File[]) {
+  sourceContextFiles.value = files
   queueBusy.value = false
   errorMessage.value = ''
+}
+
+function selectPostgresProfile(id: string) {
+  postgresProfileId.value = id
+  errorMessage.value = ''
+}
+
+function selectPostgresPre(file: File | null) {
+  postgresPreFile.value = file
+  errorMessage.value = ''
+}
+
+function selectPostgresPost(file: File | null) {
+  postgresPostFile.value = file
+  errorMessage.value = ''
+}
+
+function selectPgProfileHtml(file: File | null) {
+  pgProfileHtmlFile.value = file
+  errorMessage.value = ''
+}
+
+async function capturePostgres(phase: 'pre' | 'post') {
+  if (!postgresProfileId.value || postgresCapturePhase.value) return
+  postgresCapturePhase.value = phase
+  errorMessage.value = ''
+  try {
+    const capture = await capturePostgresPhase(
+      postgresProfileId.value,
+      phase,
+      phase === 'post' ? postgresPreFile.value : null,
+    )
+    downloadBlob(new Blob([capture.phase_json], { type: 'application/json' }), `postgres-${phase}.json`)
+    if (capture.pg_profile_html_base64 !== null) {
+      const bytes = Uint8Array.from(atob(capture.pg_profile_html_base64), (character) => character.charCodeAt(0))
+      downloadBlob(new Blob([bytes], { type: 'application/octet-stream' }), 'pg-profile.html')
+    }
+  } catch (failure) {
+    showError(failure)
+  } finally {
+    postgresCapturePhase.value = null
+  }
+}
+
+function downloadBlob(blob: Blob, filename: string) {
+  const url = URL.createObjectURL(blob)
+  const link = document.createElement('a')
+  link.href = url
+  link.download = filename
+  link.click()
+  URL.revokeObjectURL(url)
 }
 
 async function selectPolicyFile(file: File | null) {
@@ -178,9 +263,13 @@ async function validateDraft(draft: Policy | File): Promise<Policy | null> {
 }
 
 async function analyze() {
-  if (!inputFile.value || working.value) return
+  if (!inputFile.value || working.value || postgresCapturePhase.value) return
   if (sourceRequestState.value.error) {
     errorMessage.value = sourceRequestState.value.error
+    return
+  }
+  if (capacityFile.value && !resourceFile.value) {
+    errorMessage.value = 'Capacity plan requires a matching resource snapshot.'
     return
   }
   const revision = ++analysisRevision
@@ -207,7 +296,18 @@ async function analyze() {
     if (revision !== analysisRevision) return
     currentRun.value = accepted
     await refreshRuns()
-    job.value = await createJob(accepted.run_id, activePolicy, resourceFile.value, diagnosticFile.value, sourceRequestState.value.request, sourceContextFile.value)
+    job.value = await createJob(
+      accepted.run_id,
+      activePolicy,
+      resourceFile.value,
+      diagnosticFile.value,
+      sourceRequestState.value.request,
+      sourceContextFiles.value,
+      postgresPreFile.value,
+      postgresPostFile.value,
+      pgProfileHtmlFile.value,
+      capacityFile.value,
+    )
     uploadProgress.value = 100
     await pollJob(revision)
   } catch (failure) {
@@ -478,9 +578,15 @@ function focusPolicy() {
           :input-file="inputFile"
           :resource-file="resourceFile"
           :diagnostic-file="diagnosticFile"
-          :source-context-file="sourceContextFile"
-          :source-profiles="sourceProfiles"
-          :source-profile-id="sourceProfileId"
+          :capacity-file="capacityFile"
+          :source-context-files="sourceContextFiles"
+          :source-profiles="httpSourceProfiles"
+          :source-profile-ids="sourceProfileIds"
+          :postgres-profiles="postgresProfiles"
+          :postgres-profile-id="postgresProfileId"
+          :postgres-pre-file="postgresPreFile"
+          :postgres-post-file="postgresPostFile"
+          :pg-profile-html-file="pgProfileHtmlFile"
           :source-start="sourceStart"
           :source-end="sourceEnd"
           :source-step="sourceStep"
@@ -488,12 +594,18 @@ function focusPolicy() {
           :policy="policy"
           :policy-status="policyStatus"
           :policy-errors="policyErrors"
-          :busy="working"
+          :busy="working || !!postgresCapturePhase"
           @input="selectInput"
           @resources="selectResources"
           @diagnostics="selectDiagnostics"
-          @source-context="selectSourceContext"
-          @source-profile="selectSourceProfile"
+          @capacity="selectCapacity"
+          @source-contexts="selectSourceContexts"
+          @source-profiles="selectSourceProfiles"
+          @postgres-profile="selectPostgresProfile"
+          @postgres-pre="selectPostgresPre"
+          @postgres-post="selectPostgresPost"
+          @pg-profile-html="selectPgProfileHtml"
+          @capture-postgres="capturePostgres"
           @source-start="sourceStart = $event"
           @source-end="sourceEnd = $event"
           @source-step="sourceStep = $event"
@@ -517,6 +629,11 @@ function focusPolicy() {
           @cancel="cancel"
         />
 
+        <JenkinsPanel
+          v-if="apiReady"
+          @imported="selectRun($event); refreshRuns()"
+        />
+
         <BaselinePanel
           v-if="apiReady"
           :selection="selectedReference"
@@ -530,7 +647,7 @@ function focusPolicy() {
           aria-label="Analysis downloads"
         >
           <a
-            v-for="format in ['json', 'html', 'asciidoc']"
+            v-for="format in ['json', 'html', 'asciidoc', 'confluence', 'svg']"
             :key="format"
             class="button-secondary"
             :href="`/api/runs/${encodeURIComponent(result.run_id)}/analyses/${selectedAnalysisId}/report?format=${format}`"
@@ -543,17 +660,72 @@ function focusPolicy() {
             download
           >Download resource snapshot</a>
           <a
-            v-if="result.evidence.some(item => item.type === 'opensearch_errors')"
+            v-if="result.capacity_summary"
             class="button-secondary"
-            :href="`/api/runs/${encodeURIComponent(result.run_id)}/analyses/${selectedAnalysisId}/source-context`"
+            :href="`/api/runs/${encodeURIComponent(result.run_id)}/analyses/${selectedAnalysisId}/capacity-plan`"
             download
-          >Download OpenSearch context</a>
+          >Download capacity plan</a>
+          <a
+            v-if="result.capacity_summary"
+            class="button-secondary"
+            :href="`/api/runs/${encodeURIComponent(result.run_id)}/analyses/${selectedAnalysisId}/capacity`"
+            download
+          >Download capacity result</a>
+          <a
+            v-for="(context, index) in downloadableSourceContexts"
+            :key="context.profile_id"
+            class="button-secondary"
+            :href="`/api/runs/${encodeURIComponent(result.run_id)}/analyses/${selectedAnalysisId}/source-context${downloadableSourceContexts.length === 1 ? '' : `/${index + 1}`}`"
+            download
+          >Download OpenSearch context{{ downloadableSourceContexts.length === 1 ? '' : ` — ${context.profile_id}` }}</a>
+          <a
+            v-if="postgresContext?.pre_sha256"
+            class="button-secondary"
+            :href="`/api/runs/${encodeURIComponent(result.run_id)}/analyses/${selectedAnalysisId}/postgres-pre`"
+            download
+          >Download PostgreSQL pre capture</a>
+          <a
+            v-if="postgresContext?.post_sha256"
+            class="button-secondary"
+            :href="`/api/runs/${encodeURIComponent(result.run_id)}/analyses/${selectedAnalysisId}/postgres-post`"
+            download
+          >Download PostgreSQL post capture</a>
+          <a
+            v-if="postgresContext"
+            class="button-secondary"
+            :href="`/api/runs/${encodeURIComponent(result.run_id)}/analyses/${selectedAnalysisId}/postgres-context`"
+            download
+          >Download PostgreSQL context</a>
+          <a
+            v-if="postgresContext?.pg_profile_html_sha256"
+            class="button-secondary"
+            :href="`/api/runs/${encodeURIComponent(result.run_id)}/analyses/${selectedAnalysisId}/pg-profile`"
+            download
+          >Download pg_profile report</a>
         </div>
+
+        <AnalyticsPanel
+          v-if="selectedReference"
+          :selection="selectedReference"
+          :working="working"
+          @loaded="chartMarkers = $event?.overlay?.markers ?? []"
+        />
+
+        <AdvicePanel
+          v-if="selectedReference"
+          :selection="selectedReference"
+        />
+
+        <GrafanaPanel
+          v-if="selectedReference"
+          :selection="selectedReference"
+        />
 
         <AnalysisView
           v-if="result"
           :result="result"
           :buckets="buckets"
+          :markers="chartMarkers"
           :rollup="rollup"
           :bucket-rollup="bucketRollup"
           :range-start="rangeStart"

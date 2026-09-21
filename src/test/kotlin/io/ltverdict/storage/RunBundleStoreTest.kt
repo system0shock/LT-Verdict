@@ -1,5 +1,7 @@
 package io.ltverdict.storage
 
+import io.ltverdict.core.WindowComparisonRequest
+import io.ltverdict.core.baselineConditionRecord
 import io.ltverdict.core.canonicalJson
 import io.ltverdict.core.manualBaselineSelection
 import io.ltverdict.core.sha256Hex
@@ -21,10 +23,34 @@ import java.io.ByteArrayInputStream
 import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.StandardOpenOption
+import java.time.Instant
 
 class RunBundleStoreTest {
     @TempDir
     lateinit var tempDir: Path
+
+    @Test
+    fun `history verifies bounded saved documents without rereading raw input`() =
+        withStore { store, _ ->
+            val input = store.acceptInput(Files.newInputStream(Path.of(CSV_FIXTURE)), "history.jtl")
+            val identity = """{"run_id":"${input.runId}"}""".encodeToByteArray()
+            val analysisId = sha256Hex(identity)
+            val saved =
+                store.writeAnalysisAtomically(input.runId, analysisId) { staging ->
+                    Files.write(staging.resolve("identity.json"), identity)
+                    Files.write(staging.resolve("analysis-result.json"), identity)
+                }
+            assertTrue(store.readComparisonHistory(byteLimit = 1).truncated)
+            assertTrue(store.readComparisonHistory(byteLimit = 1).entries.isEmpty())
+            // History is a view of saved facts; opening/replaying an analysis still verifies the raw file.
+            Files.writeString(input.path, "changed source")
+            val history = store.readComparisonHistory()
+            assertEquals(1, history.entries.size)
+            assertFalse(history.truncated)
+            assertThrows(IllegalStateException::class.java) { store.readAnalysis(input.runId, analysisId) }
+            Files.writeString(saved.resolve("analysis-result.json"), "{}")
+            assertThrows(IllegalStateException::class.java) { store.readComparisonHistory() }
+        }
 
     @Test
     fun `accept is streaming content-addressed and idempotent`() =
@@ -255,6 +281,62 @@ class RunBundleStoreTest {
         Files.write(root.resolve("baseline.json"), ByteArray(32 * 1024 + 1))
         DataDirectory.open(root).use { directory ->
             assertThrows(IllegalStateException::class.java) { RunBundleStore(directory).readBaseline() }
+        }
+    }
+
+    @Test
+    fun `baseline conditions persist per exact binding and explicit clear removes them`() {
+        val root = tempDir.resolve("baseline-conditions-reopen")
+        val baseline = reference('a', 'a')
+        val firstCurrent = reference('b', 'b')
+        val secondCurrent = reference('c', 'c')
+        val first = baselineConditionRecord(baseline, firstCurrent, null, "CONFIRMED", Instant.parse("2026-09-06T10:00:00Z"))
+        val windows = WindowComparisonRequest("before", "after")
+        val second = baselineConditionRecord(baseline, secondCurrent, windows, "NOT_CONFIRMED", Instant.parse("2026-09-06T11:00:00Z"))
+
+        DataDirectory.open(root).use { directory ->
+            val store = RunBundleStore(directory)
+            store.replaceBaseline(manualBaselineSelection("release", baseline))
+            assertEquals(first, store.replaceBaselineCondition(first))
+            assertEquals(second, store.replaceBaselineCondition(second))
+            assertEquals(first, store.readBaselineCondition(baseline, firstCurrent, null))
+            assertEquals(second, store.readBaselineCondition(baseline, secondCurrent, windows))
+            assertEquals(null, store.readBaselineCondition(baseline, reference('d', 'd'), null))
+            assertEquals(null, store.readBaselineCondition(baseline, secondCurrent, WindowComparisonRequest("before", "other")))
+            assertEquals(2L, Files.list(root.resolve("baseline-conditions")).use { it.count() })
+        }
+
+        DataDirectory.open(root).use { directory ->
+            val store = RunBundleStore(directory)
+            assertEquals(first, store.readBaselineCondition(baseline, firstCurrent, null))
+            assertEquals(second, store.readBaselineCondition(baseline, secondCurrent, windows))
+            store.clearBaseline()
+            assertEquals(null, store.readBaselineCondition(baseline, firstCurrent, null))
+            assertFalse(Files.exists(root.resolve("baseline-conditions")))
+        }
+    }
+
+    @Test
+    fun `baseline condition read rejects corrupt oversized and special keyed state`() {
+        val root = tempDir.resolve("baseline-conditions-corrupt")
+        val baseline = reference('a', 'a')
+        val current = reference('b', 'b')
+        val record = baselineConditionRecord(baseline, current, null, "UNKNOWN", Instant.parse("2026-09-06T12:00:00Z"))
+
+        DataDirectory.open(root).use { directory ->
+            val store = RunBundleStore(directory)
+            store.replaceBaselineCondition(record)
+            val path = Files.list(root.resolve("baseline-conditions")).use { it.findFirst().orElseThrow() }
+
+            Files.writeString(path, "{}", StandardOpenOption.TRUNCATE_EXISTING)
+            assertThrows(IllegalStateException::class.java) { store.readBaselineCondition(baseline, current, null) }
+
+            Files.write(path, ByteArray(4 * 1024 + 1), StandardOpenOption.TRUNCATE_EXISTING)
+            assertThrows(IllegalStateException::class.java) { store.readBaselineCondition(baseline, current, null) }
+
+            Files.delete(path)
+            Files.createDirectory(path)
+            assertThrows(IllegalStateException::class.java) { store.readBaselineCondition(baseline, current, null) }
         }
     }
 

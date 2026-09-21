@@ -15,6 +15,12 @@ async function analyze(page: Page, name: string, elapsed: number, timestamp: num
   return { run_id: match![1]!, analysis_id: match![2]! }
 }
 
+async function openAnalysis(page: Page, filename: string, analysisId: string) {
+  await page.getByTestId('run-list').getByRole('button').filter({ hasText: filename }).click()
+  await page.getByTitle(analysisId).click()
+  await expect(page.locator('#verdict')).toContainText('NO_POLICY')
+}
+
 test.beforeEach(async ({ page }) => {
   await page.goto('/')
   const bootstrap = await (await page.request.get('/api/bootstrap')).json() as { csrf_token: string }
@@ -32,11 +38,14 @@ test('pins manual baseline across reload and compares changed achieved load with
   await page.reload()
   await expect(page.getByTestId('baseline-selection')).toContainText('manual')
   await expect(page.getByTestId('baseline-selection')).toContainText(baseline.analysis_id)
-  await analyze(page, 'baseline-current.jtl', 200, 1767225601000)
+  const current = await analyze(page, 'baseline-current.jtl', 200, 1767225601000)
   let jobs = 0
   page.on('request', (request) => {
     if (request.method() === 'POST' && new URL(request.url()).pathname === '/api/jobs') jobs += 1
   })
+  await page.getByLabel('Confirmed same planned test conditions', { exact: true }).check()
+  await page.getByRole('button', { name: 'Save condition decision', exact: true }).click()
+  await expect(page.getByTestId('baseline-condition-status')).toContainText('Saved CONFIRMED')
   await page.getByRole('button', { name: 'Compare selected analysis', exact: true }).click()
   const p95 = page.getByTestId('comparison-response_time_p95_ms')
   await expect(p95).toContainText('100')
@@ -47,9 +56,37 @@ test('pins manual baseline across reload and compares changed achieved load with
   await expect(throughput.locator('td').nth(3)).toHaveText('-5')
   await expect(throughput.locator('td').nth(4)).toHaveText('-50%')
   await expect(page.getByTestId('comparison-error_rate_ratio')).toContainText('ZERO_BASELINE')
-  await expect(page.getByTestId('baseline-comparison')).toContainText('UNCONFIRMED')
+  await expect(page.getByTestId('baseline-comparison')).toContainText('USER_CONFIRMED')
+  await page.getByText('Baseline/current charts', { exact: true }).click()
+  await page.getByRole('button', { name: 'Load comparison charts', exact: true }).click()
+  await expect(page.getByTestId('baseline-comparison').getByRole('img', { name: 'P95 latency', exact: true })).toBeVisible()
+  await expect(page.getByTestId('baseline-comparison')).toContainText('Solid: current · dashed: baseline')
   await expect(page.locator('#verdict')).toContainText('NO_POLICY')
   expect(jobs).toBe(0)
+
+  await page.reload()
+  await openAnalysis(page, 'baseline-current.jtl', current.analysis_id)
+  await expect(page.getByLabel('Confirmed same planned test conditions', { exact: true })).toBeChecked()
+  await expect(page.getByTestId('baseline-condition-status')).toContainText('Saved CONFIRMED')
+
+  await openAnalysis(page, 'baseline-manual.jtl', baseline.analysis_id)
+  await page.getByLabel('Not confirmed', { exact: true }).check()
+  await page.getByRole('button', { name: 'Save condition decision', exact: true }).click()
+  await page.getByRole('button', { name: 'Compare selected analysis', exact: true }).click()
+  await expect(page.getByTestId('baseline-condition-status')).toContainText('Saved NOT_CONFIRMED')
+  await expect(page.getByTestId('baseline-comparison')).toContainText('UNCONFIRMED')
+
+  await openAnalysis(page, 'baseline-current.jtl', current.analysis_id)
+  await expect(page.getByLabel('Confirmed same planned test conditions', { exact: true })).toBeChecked()
+  await page.getByLabel('Unknown', { exact: true }).check()
+  await page.getByRole('button', { name: 'Save condition decision', exact: true }).click()
+  await page.reload()
+  await openAnalysis(page, 'baseline-current.jtl', current.analysis_id)
+  await expect(page.getByLabel('Unknown', { exact: true })).toBeChecked()
+  await expect(page.getByTestId('baseline-condition-status')).toContainText('Saved UNKNOWN')
+  await page.getByRole('button', { name: 'Compare selected analysis', exact: true }).click()
+  await expect(page.getByTestId('baseline-comparison')).toContainText('UNCONFIRMED')
+
   const audit = await new AxeBuilder({ page }).include('#baseline-panel').analyze()
   expect(audit.violations).toEqual([])
   await page.locator('#baseline-panel').screenshot({ path: testInfo.outputPath('baseline-desktop.png') })

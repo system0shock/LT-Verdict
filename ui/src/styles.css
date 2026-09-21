@@ -89,6 +89,7 @@ body {
 button, input, select { font: inherit; }
 
 button, input, select, a, [tabindex] { min-height: 44px; }
+input[type="radio"], input[type="checkbox"] { min-width: 44px; }
 
 button, select { cursor: pointer; }
 

@@ -213,7 +213,7 @@ class AnalysisServiceTest {
         }
 
     @Test
-    fun `capacity mode is rejected before an analysis directory exists`() =
+    fun `capacity mode without a plan is rejected before an analysis directory exists`() =
         withService { store, service ->
             val input = accept(store, OUT_OF_ORDER_CSV.encodeToByteArray(), "capacity.jtl")
             val analyses =
@@ -225,8 +225,127 @@ class AnalysisServiceTest {
                     service.analyze(AnalysisRequest(input, null, AnalysisMode.CAPACITY_STEP))
                 }
 
-            assertEquals("UNSUPPORTED_ANALYSIS_MODE", failure.message)
+            assertEquals("CAPACITY_PLAN_REQUIRED", failure.message)
             assertFalse(Files.exists(analyses))
+        }
+
+    @Test
+    fun `capacity plan is bound and stored with a stable canonical result`() =
+        withService { store, service ->
+            val input = accept(store, capacityCsv().encodeToByteArray(), "capacity.jtl")
+            val resource = resources(capacityResourceJson(input.sha256).encodeToByteArray())
+            val rawPlan = capacityPlanJson(input.sha256, resource.semanticSha256).encodeToByteArray()
+            val plan = assertInstanceOf(CapacityPlanValidation.Valid::class.java, validateCapacityPlan(ByteArrayInputStream(rawPlan)))
+            val analyses =
+                input.path.parent.parent
+                    .resolve("analyses")
+
+            val resourceRequired =
+                assertThrows(IllegalArgumentException::class.java) {
+                    service.analyze(AnalysisRequest(input, passPolicy(), capacity = plan))
+                }
+            val bindingFailure =
+                assertThrows(IllegalArgumentException::class.java) {
+                    service.analyze(
+                        AnalysisRequest(
+                            input,
+                            passPolicy(),
+                            resources = resources(capacityResourceJson(input.sha256).replace("0.5", "0.6").encodeToByteArray()),
+                            capacity = plan,
+                        ),
+                    )
+                }
+            assertEquals("CAPACITY_RESOURCE_REQUIRED", resourceRequired.message)
+            assertEquals("CAPACITY_SNAPSHOT_MISMATCH", bindingFailure.message)
+            assertFalse(Files.exists(analyses))
+
+            val contradictory =
+                assertThrows(IllegalArgumentException::class.java) {
+                    service.analyze(AnalysisRequest(input, passPolicy(), AnalysisMode.STANDARD, resource, capacity = plan))
+                }
+            assertEquals("CAPACITY_MODE_CONFLICT", contradictory.message)
+            assertFalse(Files.exists(analyses))
+
+            val outcome = service.analyze(AnalysisRequest(input, passPolicy(), resources = resource, capacity = plan))
+            val stored = store.readAnalysis(input.runId, outcome.analysisId)!!
+            val result = Json.parseToJsonElement(outcome.canonicalResult.decodeToString()).jsonObject
+
+            assertEquals("capacity_step", result.getValue("analysis_mode").jsonPrimitive.content)
+            assertEquals(
+                "INDETERMINATE",
+                result
+                    .getValue("capacity_summary")
+                    .jsonObject
+                    .getValue("bound_type")
+                    .jsonPrimitive
+                    .content,
+            )
+            assertArrayEquals(rawPlan, Files.readAllBytes(outcome.analysisDirectory.resolve(CAPACITY_PLAN_FILE)))
+            assertArrayEquals(
+                canonicalJson(result.getValue("capacity_summary").jsonObject),
+                Files.readAllBytes(outcome.analysisDirectory.resolve(CAPACITY_FILE)),
+            )
+            assertEquals(
+                COMPLETE_ARTIFACTS + RESOURCE_FILE + CAPACITY_PLAN_FILE + CAPACITY_FILE,
+                stored.artifacts.map { it.path }.toSet(),
+            )
+            assertTrue(
+                Json
+                    .parseToJsonElement(Files.readString(outcome.analysisDirectory.resolve("identity.json")))
+                    .jsonObject
+                    .containsKey("capacity_plan_sha256"),
+            )
+
+            val repeated = service.analyze(AnalysisRequest(input, passPolicy(), resources = resource, capacity = plan))
+            assertEquals(outcome.analysisId, repeated.analysisId)
+            assertSnapshotEquals(snapshot(outcome), snapshot(repeated))
+            listOf(CAPACITY_PLAN_FILE, CAPACITY_FILE, RESOURCE_FILE).forEach { name ->
+                assertArrayEquals(
+                    Files.readAllBytes(outcome.analysisDirectory.resolve(name)),
+                    Files.readAllBytes(repeated.analysisDirectory.resolve(name)),
+                    name,
+                )
+            }
+        }
+
+    @Test
+    fun `invalid capacity load preserves raw plan and indeterminate metrics`() =
+        withService { store, service ->
+            val input = accept(store, "${OUT_OF_ORDER_CSV.lineSequence().first()}\nmalformed\n".encodeToByteArray(), "invalid-capacity.jtl")
+            val resource = resources(capacityResourceJson(input.sha256).encodeToByteArray())
+            val rawPlan = capacityPlanJson(input.sha256, resource.semanticSha256).encodeToByteArray()
+            val plan = assertInstanceOf(CapacityPlanValidation.Valid::class.java, validateCapacityPlan(ByteArrayInputStream(rawPlan)))
+
+            val outcome = service.analyze(AnalysisRequest(input, passPolicy(), resources = resource, capacity = plan))
+            val result = Json.parseToJsonElement(outcome.canonicalResult.decodeToString()).jsonObject
+            val stage =
+                result
+                    .getValue("capacity_summary")
+                    .jsonObject
+                    .getValue("stages")
+                    .jsonArray
+                    .single()
+                    .jsonObject
+
+            assertEquals("INVALID", result.getValue("run_validity").jsonPrimitive.content)
+            assertEquals("NO_VERDICT", result.getValue("policy_verdict").jsonPrimitive.content)
+            assertFalse(result.getValue("capacity_summary").toString().contains("CAPACITY_SLA_MISSING"))
+            assertEquals(
+                "INDETERMINATE",
+                result
+                    .getValue("capacity_summary")
+                    .jsonObject
+                    .getValue("bound_type")
+                    .jsonPrimitive
+                    .content,
+            )
+            assertEquals("null", stage.getValue("achieved").toString())
+            assertEquals("0", stage.getValue("complete_bins").jsonPrimitive.content)
+            assertArrayEquals(rawPlan, Files.readAllBytes(outcome.analysisDirectory.resolve(CAPACITY_PLAN_FILE)))
+            assertArrayEquals(
+                canonicalJson(result.getValue("capacity_summary").jsonObject),
+                Files.readAllBytes(outcome.analysisDirectory.resolve(CAPACITY_FILE)),
+            )
         }
 
     @Test
@@ -502,6 +621,37 @@ class AnalysisServiceTest {
             """.trimIndent()
     }
 
+    private fun capacityResourceJson(loadHash: String): String {
+        val values = List(30) { "0.5" }.joinToString(",")
+        return """
+            {
+              "schema_version":"resource-snapshot.v1",
+              "load_input_sha256":"$loadHash",
+              "start_epoch_ms":1767225600000,
+              "step_ms":10000,
+              "point_count":30,
+              "series":[{"id":"cpu","metric":"cpu_used","unit":"ratio","entity":"host","role":"system","aggregation":"interval_mean","values":[$values]}],
+              "windows":[{"id":"steady","from_epoch_ms":1767225600000,"to_epoch_ms":1767225900000}],
+              "rules":[{"id":"cpu-high","series_id":"cpu","unit":"ratio","operator":"gt","threshold":1,"min_consecutive_cells":1,"effect":"sla"}],
+              "provenance":{"source_kind":"fixture","query_semantics":"interval mean","clock_alignment":"capacity"}
+            }
+            """.trimIndent()
+    }
+
+    private fun capacityPlanJson(
+        loadHash: String,
+        resourceHash: String,
+    ): String =
+        """{"schema_version":"capacity-plan.v1","load_input_sha256":"$loadHash","resource_snapshot_sha256":"$resourceHash","load_axis":"rps","achieved_load":{"statistic":"p05_10s","target_tolerance_ratio":0,"required_capacity":1},"generator_guard_rule_ids":[],"stages":[{"id":"steady","target":1,"from_epoch_ms":1767225600000,"to_epoch_ms":1767225900000,"evaluation_window_id":"steady"}]}"""
+
+    private fun capacityCsv(): String =
+        (
+            listOf(OUT_OF_ORDER_CSV.lineSequence().first()) +
+                (0 until 30).map { index ->
+                    "${1767225600000L + index * 10_000L},${if (index == 29) 10_000 else 10},steady,200,OK,fixture,text,true,,0,0,1,1,null,0,0,0"
+                }
+        ).joinToString("\n")
+
     private fun storedArtifacts(
         store: RunBundleStore,
         input: AcceptedInput,
@@ -558,6 +708,8 @@ class AnalysisServiceTest {
         const val FAIL_POLICY = "fixtures/slice1/policies/fail.json"
         const val GATLING_BINARY_FIXTURE = "fixtures/slice1/gatling/binary-3.13.5/simulation.log"
         const val RESOURCE_FILE = "resource-snapshot.json"
+        const val CAPACITY_PLAN_FILE = "capacity-plan.json"
+        const val CAPACITY_FILE = "capacity.json"
 
         val COMPLETE_ARTIFACTS =
             setOf(

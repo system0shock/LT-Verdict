@@ -6,9 +6,15 @@ defineProps<{
   inputFile: File | null
   resourceFile: File | null
   diagnosticFile: File | null
-  sourceContextFile: File | null
+  capacityFile: File | null
+  sourceContextFiles: File[]
   sourceProfiles: SourceProfile[]
-  sourceProfileId: string
+  sourceProfileIds: string[]
+  postgresProfiles: SourceProfile[]
+  postgresProfileId: string
+  postgresPreFile: File | null
+  postgresPostFile: File | null
+  pgProfileHtmlFile: File | null
   sourceStart: string
   sourceEnd: string
   sourceStep: string
@@ -23,8 +29,14 @@ const emit = defineEmits<{
   input: [file: File | null]
   resources: [file: File | null]
   diagnostics: [file: File | null]
-  'source-context': [file: File | null]
-  'source-profile': [id: string]
+  capacity: [file: File | null]
+  'source-contexts': [files: File[]]
+  'source-profiles': [ids: string[]]
+  'postgres-profile': [id: string]
+  'postgres-pre': [file: File | null]
+  'postgres-post': [file: File | null]
+  'pg-profile-html': [file: File | null]
+  'capture-postgres': [phase: 'pre' | 'post']
   'source-start': [value: string]
   'source-end': [value: string]
   'source-step': [value: string]
@@ -35,6 +47,14 @@ const emit = defineEmits<{
 
 function selectedFile(event: Event) {
   return (event.target as HTMLInputElement).files?.item(0) ?? null
+}
+
+function selectedFiles(event: Event) {
+  return Array.from((event.target as HTMLInputElement).files ?? [])
+}
+
+function selectedValues(event: Event) {
+  return Array.from((event.target as HTMLSelectElement).selectedOptions, (option) => option.value).filter(Boolean)
 }
 </script>
 
@@ -104,7 +124,7 @@ function selectedFile(event: Event) {
           class="control control--file"
           type="file"
           accept="application/json,.json"
-          :disabled="busy || !!sourceProfileId"
+          :disabled="busy || sourceProfileIds.length > 0"
           @change="emit('resources', selectedFile($event))"
         >
         <p class="field__hint">
@@ -120,7 +140,7 @@ function selectedFile(event: Event) {
           class="control control--file"
           type="file"
           accept="application/json,.json"
-          :disabled="busy || !!sourceProfileId"
+          :disabled="busy || sourceProfileIds.length > 0"
           aria-describedby="correlation-plan-hint"
           @change="emit('diagnostics', selectedFile($event))"
         >
@@ -133,17 +153,38 @@ function selectedFile(event: Event) {
       </div>
 
       <div class="field">
+        <label for="capacity-plan-file">Capacity plan <span class="muted">(optional)</span></label>
+        <input
+          id="capacity-plan-file"
+          data-testid="capacity-plan-file"
+          class="control control--file"
+          type="file"
+          accept="application/json,.json"
+          :disabled="busy || sourceProfileIds.length > 0"
+          aria-describedby="capacity-plan-hint"
+          @change="emit('capacity', selectedFile($event))"
+        >
+        <p
+          id="capacity-plan-hint"
+          class="field__hint"
+        >
+          {{ capacityFile?.name ?? 'No capacity plan selected.' }} Requires a matching resource snapshot.
+        </p>
+      </div>
+
+      <div class="field">
         <label for="source-context-file">OpenSearch context <span class="muted">(optional)</span></label>
         <input
           id="source-context-file"
           class="control control--file"
           type="file"
+          multiple
           accept="application/json,.json"
-          :disabled="busy || !!sourceProfileId"
-          @change="emit('source-context', selectedFile($event))"
+          :disabled="busy || sourceProfileIds.length > 0"
+          @change="emit('source-contexts', selectedFiles($event))"
         >
         <p class="field__hint">
-          {{ sourceContextFile?.name ?? 'No error context selected.' }} Must belong to the same load input.
+          {{ sourceContextFiles.length ? sourceContextFiles.map((file) => file.name).join(', ') : 'No error context selected.' }} Must belong to the same load input.
         </p>
       </div>
 
@@ -152,27 +193,31 @@ function selectedFile(event: Event) {
         <select
           id="source-profile"
           data-testid="source-profile"
-          :value="sourceProfileId"
+          multiple
           :disabled="busy || sourceProfiles.length === 0"
-          @change="emit('source-profile', ($event.target as HTMLSelectElement).value)"
+          @change="emit('source-profiles', selectedValues($event))"
         >
-          <option value="">
+          <option
+            value=""
+            :selected="sourceProfileIds.length === 0"
+          >
             No online source
           </option>
           <option
             v-for="profile in sourceProfiles"
             :key="profile.id"
             :value="profile.id"
+            :selected="sourceProfileIds.includes(profile.id)"
           >
             {{ profile.id }} — {{ profile.source_kind }} / {{ profile.transport }}
           </option>
         </select>
         <p class="field__hint">
-          Acquires metrics or error context, which you can download for offline analysis of the same load input.
+          Select up to 16 profiles. They share one time grid and produce downloadable metrics or error context.
         </p>
       </div>
 
-      <template v-if="sourceProfileId">
+      <template v-if="sourceProfileIds.length">
         <div class="field">
           <label for="source-start">Source start (UTC epoch ms)</label>
           <input
@@ -209,15 +254,102 @@ function selectedFile(event: Event) {
             @input="emit('source-step', ($event.target as HTMLInputElement).value)"
           >
         </div>
-        <p
-          v-if="sourceRequestError"
-          data-testid="source-request-error"
-          class="validation-error"
-          role="alert"
-        >
-          {{ sourceRequestError }}
-        </p>
       </template>
+      <p
+        v-if="sourceRequestError"
+        data-testid="source-request-error"
+        class="validation-error"
+        role="alert"
+      >
+        {{ sourceRequestError }}
+      </p>
+
+      <div class="field">
+        <label for="postgres-profile">PostgreSQL profile <span class="muted">(optional)</span></label>
+        <select
+          id="postgres-profile"
+          :value="postgresProfileId"
+          :disabled="busy || postgresProfiles.length === 0"
+          @change="emit('postgres-profile', ($event.target as HTMLSelectElement).value)"
+        >
+          <option value="">
+            No PostgreSQL capture
+          </option>
+          <option
+            v-for="profile in postgresProfiles"
+            :key="profile.id"
+            :value="profile.id"
+          >
+            {{ profile.id }} — {{ profile.source_kind }} / {{ profile.transport }}
+          </option>
+        </select>
+        <div class="policy-editor__actions">
+          <button
+            class="button-secondary"
+            type="button"
+            :disabled="busy || !postgresProfileId"
+            @click="emit('capture-postgres', 'pre')"
+          >
+            Capture pre
+          </button>
+          <button
+            class="button-secondary"
+            type="button"
+            :disabled="busy || !postgresProfileId"
+            @click="emit('capture-postgres', 'post')"
+          >
+            Capture post
+          </button>
+        </div>
+        <p class="field__hint">
+          Download pre before the load test, attach it below, then capture post after the test.
+        </p>
+      </div>
+
+      <div class="field">
+        <label for="postgres-pre-file">PostgreSQL pre capture <span class="muted">(optional)</span></label>
+        <input
+          id="postgres-pre-file"
+          class="control control--file"
+          type="file"
+          accept="application/json,.json"
+          :disabled="busy"
+          @change="emit('postgres-pre', selectedFile($event))"
+        >
+        <p class="field__hint">
+          {{ postgresPreFile?.name ?? 'No pre capture selected.' }} Also binds an explicit post capture.
+        </p>
+      </div>
+
+      <div class="field">
+        <label for="postgres-post-file">PostgreSQL post capture <span class="muted">(optional)</span></label>
+        <input
+          id="postgres-post-file"
+          class="control control--file"
+          type="file"
+          accept="application/json,.json"
+          :disabled="busy"
+          @change="emit('postgres-post', selectedFile($event))"
+        >
+        <p class="field__hint">
+          {{ postgresPostFile?.name ?? 'No post capture selected.' }}
+        </p>
+      </div>
+
+      <div class="field">
+        <label for="pg-profile-html-file">pg_profile HTML <span class="muted">(optional, download only)</span></label>
+        <input
+          id="pg-profile-html-file"
+          class="control control--file"
+          type="file"
+          accept="text/html,.html"
+          :disabled="busy"
+          @change="emit('pg-profile-html', selectedFile($event))"
+        >
+        <p class="field__hint">
+          {{ pgProfileHtmlFile?.name ?? 'No pg_profile report selected.' }} Stored as an inert download; never rendered.
+        </p>
+      </div>
     </div>
 
     <PolicyEditor

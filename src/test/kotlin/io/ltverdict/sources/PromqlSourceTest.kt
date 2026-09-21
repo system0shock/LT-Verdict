@@ -7,10 +7,12 @@ import io.ltverdict.core.ResourceRole
 import io.ltverdict.core.ResourceRuleEffect
 import io.ltverdict.core.ResourceRuleV1
 import kotlinx.serialization.json.jsonArray
+import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import org.junit.jupiter.api.Assertions.assertArrayEquals
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
+import org.junit.jupiter.api.Assertions.assertNotEquals
 import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertThrows
 import org.junit.jupiter.api.Assertions.assertTrue
@@ -24,6 +26,161 @@ import java.util.ArrayDeque
 import java.util.concurrent.atomic.AtomicInteger
 
 class PromqlSourceTest {
+    @Test
+    fun `mixed metric and error sources retain good facts after an independent failure`() {
+        OnlineSourceFixture().use { fixture ->
+            val metric = readSourceProfiles(fixture.profilesJson().byteInputStream()).single()
+            val errors =
+                SourceProfile(
+                    "errors",
+                    SourceKind.OPENSEARCH,
+                    SourceTransport.DIRECT,
+                    metric.baseUrl,
+                    null,
+                    governor = metric.governor,
+                    queries = emptyList(),
+                    openSearch =
+                        OpenSearchMapping(
+                            listOf("application-errors-*"),
+                            "@timestamp",
+                            "service",
+                            "type",
+                            "message",
+                            samplesPerGroup = 0,
+                        ),
+                )
+            val profiles = listOf(metric, errors)
+            val source = PromqlSource(profiles, SourceHttp(profiles))
+            val request = SourceRequest("local", 1767225600000, 1767225601000, 1000, listOf("errors"))
+            val complete = source.acquire(request, "a".repeat(64))
+            assertEquals(
+                "COMPLETE",
+                complete.evidence
+                    .getValue("status")
+                    .jsonPrimitive.content,
+            )
+            assertEquals(
+                "1",
+                complete.contextEvidence
+                    .single()
+                    .getValue("total_errors")
+                    .jsonPrimitive.content,
+            )
+            assertEquals(
+                "60",
+                complete.contextEvidence
+                    .single()
+                    .getValue("error_rate_per_minute")
+                    .jsonPrimitive.content,
+            )
+            assertEquals(
+                listOf(BigDecimal("0.9")),
+                requireNotNull(complete.snapshot)
+                    .snapshot.series
+                    .single()
+                    .values,
+            )
+            assertTrue("opensearch-errors.json" in complete.artifacts)
+            fixture.errorResponseStatus = 503
+            val partial = source.acquire(request, "a".repeat(64))
+            assertEquals(
+                "PARTIAL",
+                partial.evidence
+                    .getValue("status")
+                    .jsonPrimitive.content,
+            )
+            assertEquals(
+                listOf(BigDecimal("0.9")),
+                requireNotNull(partial.snapshot)
+                    .snapshot.series
+                    .single()
+                    .values,
+            )
+            assertTrue(partial.contextEvidence.isEmpty())
+            assertEquals(
+                "FAILED",
+                partial.evidence
+                    .getValue("profiles")
+                    .jsonArray
+                    .first()
+                    .jsonObject
+                    .getValue("status")
+                    .jsonPrimitive.content,
+            )
+        }
+    }
+
+    @Test
+    fun `multiple profiles qualify series and SLA ids and reject unknown profiles before network`() {
+        OnlineSourceFixture().use { fixture ->
+            val first = readSourceProfiles(fixture.profilesJson().byteInputStream()).single()
+            val profiles = listOf(first, first.copy(id = "second"))
+            val source = PromqlSource(profiles, SourceHttp(profiles))
+
+            fun selection(ids: String) =
+                readSourceRequest(
+                    """{"schema_version":"source-request.v2","profile_ids":$ids,
+                "start_epoch_ms":1767225600000,"end_epoch_ms":1767225601000,"step_ms":1000}""".byteInputStream(),
+                )
+            val result = source.acquire(selection("[\"second\",\"local\"]"), "a".repeat(64))
+            val snapshot = requireNotNull(result.snapshot)
+            assertEquals(listOf("local/cpu", "second/cpu"), snapshot.snapshot.series.map { it.id })
+            assertEquals(listOf("local/cpu-high", "second/cpu-high"), snapshot.snapshot.rules.map { it.id })
+            assertEquals(listOf("local/cpu", "second/cpu"), snapshot.snapshot.rules.map { it.seriesId })
+            assertTrue(snapshot.snapshot.series.all { it.values == listOf(BigDecimal("0.9")) })
+            assertEquals(setOf("source-acquisition.json", "source-response-1.json", "source-response-2.json"), result.artifacts.keys)
+            assertEquals(2, fixture.requests.get())
+            val reversed = source.acquire(selection("[\"local\",\"second\"]"), "a".repeat(64))
+            assertEquals(snapshot.semanticSha256, requireNotNull(reversed.snapshot).semanticSha256)
+            assertThrows(IllegalArgumentException::class.java) {
+                source.acquire(selection("[\"local\",\"unknown\"]"), "a".repeat(64))
+            }
+            assertEquals(4, fixture.requests.get())
+            val changedProfiles =
+                profiles.map {
+                    it.copy(
+                        queries =
+                            it.queries.map { query ->
+                                query.copy(
+                                    expression =
+                                        query.expression + " + 0",
+                                )
+                            },
+                    )
+                }
+            val changed =
+                PromqlSource(
+                    changedProfiles,
+                    SourceHttp(changedProfiles),
+                ).acquire(selection("[\"local\",\"second\"]"), "a".repeat(64))
+            assertEquals(snapshot.semanticSha256, requireNotNull(changed.snapshot).semanticSha256)
+            assertNotEquals(
+                snapshot.snapshot.provenance?.querySemantics,
+                changed.snapshot.snapshot.provenance
+                    ?.querySemantics,
+            )
+        }
+    }
+
+    @Test
+    fun `multiple profile resource caps are checked before HTTP`() {
+        OnlineSourceFixture().use { fixture ->
+            val first = readSourceProfiles(fixture.profilesJson().byteInputStream()).single()
+            val profiles =
+                (1..3).map { index ->
+                    first.copy(id = "p$index", queries = (1..32).map { first.queries.single().copy(id = "q$it") })
+                }
+            val request = SourceRequest("p1", 1767225600000, 1767225601000, 1000, listOf("p2", "p3"))
+            assertEquals(
+                "RESOURCE_LIMIT_EXCEEDED",
+                assertThrows(IllegalArgumentException::class.java) {
+                    PromqlSource(profiles, SourceHttp(profiles)).acquire(request, "a".repeat(64))
+                }.message,
+            )
+            assertEquals(0, fixture.requests.get())
+        }
+    }
+
     @Test
     fun `matrix samples on right boundaries map to preceding cells and keep returned labels`() {
         val decoded =

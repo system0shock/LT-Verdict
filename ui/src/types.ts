@@ -40,13 +40,27 @@ export interface SourcesResponse {
   profiles: SourceProfile[]
 }
 
-export interface SourceRequest {
-  schema_version: 'source-request.v1'
-  profile_id: string
-  start_epoch_ms: number
-  end_epoch_ms: number
-  step_ms: number
+export interface PostgresCaptureResponse {
+  schema_version: 'postgres-capture.v1'
+  phase_json: string
+  pg_profile_html_base64: string | null
 }
+
+export type SourceRequest =
+  | {
+    schema_version: 'source-request.v1'
+    profile_id: string
+    start_epoch_ms: number
+    end_epoch_ms: number
+    step_ms: number
+  }
+  | {
+    schema_version: 'source-request.v2'
+    profile_ids: string[]
+    start_epoch_ms: number
+    end_epoch_ms: number
+    step_ms: number
+  }
 
 export interface PolicyError {
   code: string
@@ -273,6 +287,7 @@ export interface SourceSummaryEvidence {
   retries: number
   throttle_wait_ms: number
   cap_exceeded: boolean
+  profiles?: SourceSummaryEvidence[]
 }
 
 export interface OpenSearchEvidence {
@@ -292,7 +307,89 @@ export interface OpenSearchEvidence {
   }>
 }
 
-export type AnalysisEvidence = MetricSummaryEvidence | PolicyCheckEvidence | DiagnosticEvidence | ResourceSummaryEvidence | WindowPolicySummaryEvidence | ResourcePolicyCheckEvidence | ResourceBindingEvidence | DiagnosticSummaryEvidence | CorrelationPairEvidence | AnomalyCheckEvidence | WindowMetricSummaryEvidence | SourceSummaryEvidence | OpenSearchEvidence
+export interface PostgresContextEvidence {
+  schema_version: 'postgres-context.v1'
+  type: 'postgres_context'
+  profile_id: string | null
+  load_input_sha256: string
+  start_epoch_ms: number | null
+  end_epoch_ms: number | null
+  pre_sha256: string | null
+  post_sha256: string | null
+  pg_profile_html_sha256?: string | null
+  status: 'COMPLETE' | 'DEGRADED'
+  reasons: string[]
+  configuration_changes?: Array<{ name: string; pre: string | null; post: string | null }>
+  tables: Array<{
+    schema: string
+    table: string
+    stable_key: string[]
+    status: 'COMPLETE' | 'DEGRADED'
+    reasons: string[]
+    row_count_delta: number | string | null
+    inserted: number | string | null
+    deleted: number | string | null
+    updated: number | string | null
+    changed_keys: Array<{ change: 'inserted' | 'deleted' | 'updated'; key: string[] }>
+    keys_truncated: boolean
+  }>
+  statements: {
+    status: 'COMPLETE' | 'DEGRADED'
+    reasons: string[]
+    rows: Array<{
+      dbid: string
+      userid: string
+      queryid: string | null
+      toplevel: boolean
+      calls: number | string
+      total_exec_time: number | string
+      rows: number | string
+      shared_blks_hit: number | string
+      shared_blks_read: number | string
+      temp_blks_written: number | string
+    }>
+    unmatched_pre: Array<{ dbid: string; userid: string; queryid: string | null; toplevel: boolean }>
+    unmatched_post: Array<{ dbid: string; userid: string; queryid: string | null; toplevel: boolean }>
+  }
+  pg_profile: {
+    status: 'COMPLETE' | 'DEGRADED'
+    reasons: string[]
+    pre_report_sha256: string | null
+    post_report_sha256: string | null
+  }
+}
+
+export type AnalysisEvidence = MetricSummaryEvidence | PolicyCheckEvidence | DiagnosticEvidence | ResourceSummaryEvidence | WindowPolicySummaryEvidence | ResourcePolicyCheckEvidence | ResourceBindingEvidence | DiagnosticSummaryEvidence | CorrelationPairEvidence | AnomalyCheckEvidence | WindowMetricSummaryEvidence | SourceSummaryEvidence | OpenSearchEvidence | PostgresContextEvidence
+
+export interface CapacityStage {
+  id: string
+  target: number | string
+  achieved: number | string | null
+  achieved_statistic: string
+  observed_min: number | string | null
+  observed_max: number | string | null
+  complete_bins: number | null
+  expected_bins: number | null
+  target_tolerance_ratio: number | string
+  verified_bound_load: number | string | null
+  verdict: string
+  reasons: string[]
+  evidence_refs: string[]
+}
+
+export interface CapacitySummary {
+  schema_version: 'capacity.v1'
+  load_axis: string
+  unit: string
+  stages: CapacityStage[]
+  bound_type: string
+  lower_inclusive: number | string | null
+  upper_exclusive: number | string | null
+  policy_verdict: AnalysisResult['policy_verdict']
+  reasons: string[]
+  capacity_knee: number | string | null
+  knee_reason: string
+}
 
 export interface AnalysisResult {
   schema_version: 'analysis-result.v1'
@@ -303,6 +400,7 @@ export interface AnalysisResult {
   analysis_coverage: { status: 'COMPLETE' | 'INCOMPLETE'; reasons: string[] }
   findings: Array<Record<string, unknown>>
   evidence: AnalysisEvidence[]
+  capacity_summary?: CapacitySummary
 }
 
 export interface Bucket {
@@ -338,10 +436,28 @@ export type BaselineRequest =
   | { mode: 'manual'; series: string; reference: AnalysisReference }
   | { mode: 'statistical'; series: string; candidates: AnalysisReference[]; comparable: true }
 
+export type BaselineConditionDecision = 'CONFIRMED' | 'NOT_CONFIRMED' | 'UNKNOWN'
+
+export interface BaselineConditionWindows {
+  baseline_window: string
+  current_window: string
+}
+
+export interface BaselineCondition {
+  schema_version: 'local-baseline-conditions.v1'
+  baseline: AnalysisReference
+  current: AnalysisReference
+  windows: BaselineConditionWindows | null
+  decision: BaselineConditionDecision
+  provenance: 'EXPLICIT_LOCAL_ACTION'
+  updated_at: string
+}
+
 export interface BaselineComparison {
   baseline: BaselineSelection
   current: AnalysisReference
   comparability: 'UNCONFIRMED' | 'USER_CONFIRMED'
+  conditions: BaselineCondition | null
   metrics: ComparisonMetric[]
   window_comparison?: {
     status: 'NOT_EVALUATED' | 'DESCRIPTIVE' | 'NO_MATERIAL_CHANGE' | 'CANDIDATE' | 'INSUFFICIENT_DATA'
@@ -380,4 +496,41 @@ export interface ComparisonMetric {
   delta_percent: string | null
   reason: string | null
   percent_reason: string | null
+}
+
+export interface AdviceJob {
+  job_id: string
+  run_id: string
+  analysis_id: string
+  state: 'QUEUED' | 'PROCESSING' | 'COMPLETE' | 'FAILED' | 'UNAVAILABLE' | 'CANCELLED'
+  reused: boolean | null
+  failure: string | null
+  unavailable_reason: string | null
+}
+
+export interface AdviceDocument {
+  advisory: true
+  run_id: string
+  analysis_id: string
+  output: {
+    summary: string
+    hypotheses: Array<{ rank: number; observation: string; possible_explanation: string; recommended_check: string; evidence_refs: string[] }>
+    recommendations: Array<{ rank: number; action: string; rationale: string; evidence_refs: string[] }>
+    caveats: string[]
+  }
+}
+
+export interface JenkinsProfile {
+  id: string
+  controller: string
+  job_path: string
+  parameter_names: string[]
+  artifact_paths: string[]
+}
+export interface JenkinsAttempt {
+  attempt_id: string
+  status: string
+  build_number: number | null
+  failure_code: string | null
+  artifact: { relative_path: string; size_bytes: number; sha256: string } | null
 }

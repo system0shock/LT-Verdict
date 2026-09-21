@@ -24,33 +24,67 @@ import io.ktor.server.routing.post
 import io.ktor.server.routing.route
 import io.ktor.server.routing.routing
 import io.ktor.utils.io.jvm.javaio.toInputStream
+import io.ltverdict.ai.AdviceJobStatus
+import io.ltverdict.ai.AdviceSubmitResult
+import io.ltverdict.ai.AdvisoryAiJobs
+import io.ltverdict.ai.AdvisoryAiService
 import io.ltverdict.core.AnalysisRequest
+import io.ltverdict.core.AnalyticsExportFormat
+import io.ltverdict.core.CapacityPlanValidation
 import io.ltverdict.core.DiagnosticValidation
+import io.ltverdict.core.MAX_CAPACITY_PLAN_BYTES
 import io.ltverdict.core.PolicyValidation
 import io.ltverdict.core.PolicyValidationError
 import io.ltverdict.core.ResourceValidation
+import io.ltverdict.core.SavedAnalysisForComparison
 import io.ltverdict.core.WindowComparisonRequest
+import io.ltverdict.core.baselineConditionConfirmation
+import io.ltverdict.core.baselineConditionRecord
+import io.ltverdict.core.buildRunDynamics
 import io.ltverdict.core.canonicalJson
 import io.ltverdict.core.compareAnalyses
+import io.ltverdict.core.compareTransactions
 import io.ltverdict.core.manualBaselineSelection
+import io.ltverdict.core.metricPackAnalysis
+import io.ltverdict.core.openSearchOverlay
+import io.ltverdict.core.renderRunDynamicsExport
 import io.ltverdict.core.statisticalBaselineSelection
+import io.ltverdict.core.validateCapacityBinding
+import io.ltverdict.core.validateCapacityPlan
 import io.ltverdict.core.validateDiagnosticBinding
 import io.ltverdict.core.validateDiagnosticPlan
 import io.ltverdict.core.validatePolicy
 import io.ltverdict.core.validateResourceSnapshot
+import io.ltverdict.integrations.grafana.GrafanaPanelRequest
+import io.ltverdict.integrations.grafana.grafanaPanelLink
+import io.ltverdict.integrations.grafana.renderGrafanaPanel
+import io.ltverdict.integrations.jenkins.ArtifactExpectation
+import io.ltverdict.integrations.jenkins.JenkinsProfileSummary
+import io.ltverdict.integrations.jenkins.JenkinsRunState
+import io.ltverdict.integrations.jenkins.JenkinsTriggerRequest
+import io.ltverdict.integrations.jenkins.JenkinsWorkflow
+import io.ltverdict.integrations.report.renderConfluenceReport
+import io.ltverdict.integrations.report.renderSavedLoadChart
 import io.ltverdict.jobs.AnalysisJobs
 import io.ltverdict.jobs.JobStatus
 import io.ltverdict.jobs.SubmitResult
 import io.ltverdict.report.renderAsciiDocReport
 import io.ltverdict.report.renderHtmlReport
+import io.ltverdict.sources.PostgresProfile
+import io.ltverdict.sources.SourceHttp
 import io.ltverdict.sources.SourceProfile
 import io.ltverdict.sources.SourceRequest
-import io.ltverdict.sources.readOpenSearchContext
+import io.ltverdict.sources.SourceTransport
+import io.ltverdict.sources.capturePostgresPhase
+import io.ltverdict.sources.readOpenSearchContexts
+import io.ltverdict.sources.readPostgresAnalysisInput
 import io.ltverdict.sources.readSourceRequest
 import io.ltverdict.storage.AcceptedInput
 import io.ltverdict.storage.RunBundleStore
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
@@ -69,19 +103,31 @@ import org.HdrHistogram.PackedHistogram
 import java.math.BigDecimal
 import java.nio.ByteBuffer
 import java.nio.file.Files
+import java.nio.file.Path
 import java.security.SecureRandom
+import java.time.Instant
 import java.util.Base64
 import java.util.HexFormat
+import java.util.concurrent.Semaphore
 
 internal data class LocalApiContext(
     val store: RunBundleStore,
     val jobs: AnalysisJobs,
     val sourceProfiles: List<SourceProfile> = emptyList(),
+    val postgresProfiles: List<PostgresProfile> = emptyList(),
+    val adviceService: AdvisoryAiService? = null,
+    val adviceJobs: AdvisoryAiJobs? = null,
+    val jenkinsProfiles: List<JenkinsProfileSummary> = emptyList(),
+    val jenkinsWorkflows: Map<String, JenkinsWorkflow> = emptyMap(),
+    val jenkinsArtifactRoot: Path? = null,
+    val sourceHttp: SourceHttp? = null,
 )
 
 internal fun Application.installLocalApi(context: LocalApiContext) {
     val sessionToken = randomToken()
     val csrfToken = randomToken()
+    val postgresCapturePermit = Semaphore(1)
+    val jenkinsPermit = Semaphore(1)
 
     intercept(ApplicationCallPipeline.Plugins) {
         call.addSecurityHeaders()
@@ -117,6 +163,9 @@ internal fun Application.installLocalApi(context: LocalApiContext) {
             finish()
         } catch (failure: InvalidDiagnostics) {
             call.respondError(HttpStatusCode.UnprocessableEntity, "INVALID_DIAGNOSTICS", "Diagnostic plan is invalid", failure.errors)
+            finish()
+        } catch (failure: InvalidCapacity) {
+            call.respondError(HttpStatusCode.UnprocessableEntity, "INVALID_CAPACITY_PLAN", "Capacity plan is invalid", failure.errors)
             finish()
         } catch (failure: ApiFailure) {
             call.respondError(failure.status, failure.code, failure.message)
@@ -171,6 +220,155 @@ internal fun Application.installLocalApi(context: LocalApiContext) {
             )
         }
 
+        get("/api/grafana") {
+            call.requireOnlyQueries()
+            call.respondJson(
+                buildJsonObject {
+                    put(
+                        "profiles",
+                        buildJsonArray {
+                            context.sourceProfiles.filter { it.transport == SourceTransport.GRAFANA_PROXY }.forEach {
+                                add(
+                                    buildJsonObject {
+                                        put("id", it.id)
+                                        put("base_url", it.baseUrl.toString())
+                                    },
+                                )
+                            }
+                        },
+                    )
+                },
+            )
+        }
+
+        get("/api/runs/{runId}/analyses/{analysisId}/grafana-link") {
+            val (profile, panel) = grafanaRequest(call, context)
+            call.respondJson(buildJsonObject { put("source_link", grafanaPanelLink(profile, panel).toString()) })
+        }
+
+        post("/api/runs/{runId}/analyses/{analysisId}/grafana-render") {
+            val (profile, panel) = grafanaRequest(call, context)
+            call.requireJson()
+            if (receiveBaselineRequest(call).isNotEmpty()) malformed("Render body must be empty")
+            val http =
+                context.sourceHttp
+                    ?: throw ApiFailure(HttpStatusCode.ServiceUnavailable, "GRAFANA_UNAVAILABLE", "Grafana transport is not configured")
+            val rendered = withContext(Dispatchers.IO) { renderGrafanaPanel(profile, panel) { http.getGrafanaPanel(profile, panel) } }
+            call.respondJson(
+                buildJsonObject {
+                    put("source_link", rendered.sourceLink.toString())
+                    put("png_base64", rendered.png?.let { JsonPrimitive(Base64.getEncoder().encodeToString(it)) } ?: JsonNull)
+                    put("failure_code", rendered.failureCode?.let(::JsonPrimitive) ?: JsonNull)
+                },
+            )
+        }
+
+        get("/api/jenkins") {
+            call.requireOnlyQueries()
+            call.respondJson(
+                buildJsonObject {
+                    put(
+                        "profiles",
+                        buildJsonArray {
+                            context.jenkinsProfiles.forEach { profile ->
+                                add(
+                                    buildJsonObject {
+                                        put("id", profile.id)
+                                        put("controller", profile.controller.toString())
+                                        put("job_path", profile.jobPath)
+                                        put("parameter_names", JsonArray(profile.parameterNames.map(::JsonPrimitive)))
+                                        put("artifact_paths", JsonArray(profile.artifactPaths.map(::JsonPrimitive)))
+                                    },
+                                )
+                            }
+                        },
+                    )
+                },
+            )
+        }
+
+        get("/api/jenkins/{profileId}/attempts") {
+            call.requireOnlyQueries()
+            val workflow = context.jenkinsWorkflows[call.parameters["profileId"]] ?: notFound("Jenkins profile was not found")
+            val states = withContext(Dispatchers.IO) { workflow.listStates() }
+            call.respondJson(buildJsonObject { put("attempts", JsonArray(states.map { it.toJson() })) })
+        }
+
+        post("/api/jenkins/{profileId}/trigger") {
+            call.requireOnlyQueries()
+            call.requireJson()
+            val workflow = context.jenkinsWorkflows[call.parameters["profileId"]] ?: notFound("Jenkins profile was not found")
+            val body = receiveBaselineRequest(call)
+            if (body.keys != setOf("parameters")) malformed("Only parameters are allowed")
+            val parameters = body["parameters"] as? JsonObject ?: malformed("parameters must be an object")
+            val values =
+                parameters.mapValues { (_, value) ->
+                    (value as? JsonPrimitive)?.takeIf { it.isString }?.content ?: malformed("Parameter values must be strings")
+                }
+            if (!jenkinsPermit.tryAcquire()) throw ApiFailure(HttpStatusCode.Conflict, "JENKINS_BUSY", "A Jenkins operation is active")
+            try {
+                val state = withContext(Dispatchers.IO) { workflow.trigger(JenkinsTriggerRequest(values)) }
+                call.respondJson(state.toJson(), HttpStatusCode.Accepted)
+            } catch (_: IllegalArgumentException) {
+                malformed("Jenkins request is invalid")
+            } finally {
+                jenkinsPermit.release()
+            }
+        }
+
+        post("/api/jenkins/{profileId}/attempts/{attemptId}/{operation}") {
+            call.requireOnlyQueries()
+            call.requireJson()
+            val workflow = context.jenkinsWorkflows[call.parameters["profileId"]] ?: notFound("Jenkins profile was not found")
+            val attemptId = call.parameters["attemptId"].orEmpty()
+            val operation = call.parameters["operation"].orEmpty()
+            val body = receiveBaselineRequest(call)
+            if (operation !in setOf("advance", "reconcile", "collect")) notFound("Jenkins operation was not found")
+            if (operation != "collect" && body.isNotEmpty()) malformed("Operation body must be empty")
+            if (!jenkinsPermit.tryAcquire()) throw ApiFailure(HttpStatusCode.Conflict, "JENKINS_BUSY", "A Jenkins operation is active")
+            try {
+                val response =
+                    withContext(Dispatchers.IO) {
+                        val state =
+                            when (operation) {
+                                "advance" -> workflow.advance(attemptId)
+                                "reconcile" -> workflow.reconcile(attemptId)
+                                else -> {
+                                    if (body.keys != setOf("artifact_path")) malformed("artifact_path is required")
+                                    val artifact =
+                                        (body["artifact_path"] as? JsonPrimitive)?.takeIf { it.isString }?.content
+                                            ?: malformed("artifact_path must be a string")
+                                    workflow.collectArtifact(
+                                        attemptId,
+                                        ArtifactExpectation(artifact),
+                                        context.jenkinsArtifactRoot ?: error("JENKINS_STORAGE_UNAVAILABLE"),
+                                    )
+                                }
+                            }
+                        buildJsonObject {
+                            put("attempt", state.toJson())
+                            if (operation == "collect" && state.artifact != null) {
+                                val artifact = checkNotNull(state.artifact)
+                                val input =
+                                    Files.newInputStream(artifact.path).use {
+                                        context.store.acceptInput(it, Path.of(artifact.relativePath).fileName.toString())
+                                    }
+                                put("run", input.toJson())
+                            } else {
+                                put("run", JsonNull)
+                            }
+                        }
+                    }
+                call.respondJson(response)
+            } catch (_: NoSuchElementException) {
+                notFound("Jenkins attempt was not found")
+            } catch (_: IllegalArgumentException) {
+                malformed("Jenkins operation or artifact is invalid")
+            } finally {
+                jenkinsPermit.release()
+            }
+        }
+
         get("/api/baseline") {
             call.requireOnlyQueries()
             val baseline = baselineOperation { context.store.readBaseline() }
@@ -192,6 +390,44 @@ internal fun Application.installLocalApi(context: LocalApiContext) {
             call.respondJson(buildJsonObject { put("baseline", JsonNull) })
         }
 
+        get("/api/runs/{runId}/analyses/{analysisId}/baseline-conditions") {
+            call.requireOnlyQueries("baseline_window", "current_window")
+            val windows = call.windowComparisonQuery()
+            val current =
+                buildJsonObject {
+                    put("run_id", call.parameters["runId"].orEmpty())
+                    put("analysis_id", call.parameters["analysisId"].orEmpty())
+                }.baselineReference()
+            val selected = baselineOperation { context.store.readBaseline() } ?: notFound("No baseline is selected")
+            val baselineReference = selected.manualBaselineReference()
+            context.store.baselineDocuments(baselineReference)
+            context.store.baselineDocuments(current)
+            val conditions = baselineOperation { context.store.readBaselineCondition(baselineReference, current, windows) }
+            call.respondJson(buildJsonObject { put("conditions", conditions ?: JsonNull) })
+        }
+
+        post("/api/runs/{runId}/analyses/{analysisId}/baseline-conditions") {
+            call.requireOnlyQueries("baseline_window", "current_window")
+            call.requireJson()
+            val windows = call.windowComparisonQuery()
+            val request = receiveBaselineRequest(call)
+            if (request.keys != setOf("decision")) malformed("Baseline condition fields are invalid")
+            val decision = request.baselineString("decision")
+            if (decision !in BASELINE_CONDITION_DECISIONS) malformed("decision is invalid")
+            val current =
+                buildJsonObject {
+                    put("run_id", call.parameters["runId"].orEmpty())
+                    put("analysis_id", call.parameters["analysisId"].orEmpty())
+                }.baselineReference()
+            val selected = baselineOperation { context.store.readBaseline() } ?: notFound("No baseline is selected")
+            val baselineReference = selected.manualBaselineReference()
+            context.store.baselineDocuments(baselineReference)
+            context.store.baselineDocuments(current)
+            val condition = baselineConditionRecord(baselineReference, current, windows, decision, Instant.now())
+            val stored = baselineOperation { context.store.replaceBaselineCondition(condition) }
+            call.respondJson(buildJsonObject { put("conditions", stored) })
+        }
+
         get("/api/runs/{runId}/analyses/{analysisId}/comparison") {
             call.requireOnlyQueries("baseline_window", "current_window", "min_change_percent", "min_error_rate_delta")
             val windows = call.windowComparisonQuery()
@@ -201,9 +437,32 @@ internal fun Application.installLocalApi(context: LocalApiContext) {
                     put("analysis_id", call.parameters["analysisId"].orEmpty())
                 }.baselineReference()
             val selected = baselineOperation { context.store.readBaseline() } ?: notFound("No baseline is selected")
-            val (baselineResult, baselineIdentity) = context.store.baselineDocuments(selected.getValue("reference").jsonObject)
+            val baselineReference = selected.getValue("reference").jsonObject
+            val (baselineResult, baselineIdentity) = context.store.baselineDocuments(baselineReference)
             val (currentResult, currentIdentity) = context.store.baselineDocuments(current)
-            call.respondJson(compareAnalyses(selected, current, baselineResult, baselineIdentity, currentResult, currentIdentity, windows))
+            val conditions =
+                if (selected.baselineString("mode") == "manual") {
+                    baselineOperation { context.store.readBaselineCondition(baselineReference, current, windows) }
+                } else {
+                    null
+                }
+            val comparison =
+                compareAnalyses(
+                    selected,
+                    current,
+                    baselineResult,
+                    baselineIdentity,
+                    currentResult,
+                    currentIdentity,
+                    windows,
+                    conditions?.let(::baselineConditionConfirmation),
+                )
+            call.respondJson(
+                buildJsonObject {
+                    comparison.forEach { (name, value) -> put(name, value) }
+                    put("conditions", conditions ?: JsonNull)
+                },
+            )
         }
 
         post("/api/inputs") {
@@ -245,10 +504,74 @@ internal fun Application.installLocalApi(context: LocalApiContext) {
                                     },
                                 )
                             }
+                            context.postgresProfiles.forEach { profile ->
+                                add(
+                                    buildJsonObject {
+                                        put("id", profile.id)
+                                        put("source_kind", "postgresql")
+                                        put("transport", "jdbc")
+                                    },
+                                )
+                            }
                         },
                     )
                 },
             )
+        }
+
+        listOf("pre", "post").forEach { phase ->
+            post("/api/sources/postgresql/$phase") {
+                call.requireOnlyQueries()
+                call.requireMultipart()
+                val (profileId, pre) = receivePostgresCapture(call, phase == "post")
+                val profile = context.postgresProfiles.singleOrNull { it.id == profileId } ?: malformed("Source profile is not configured")
+                if (!postgresCapturePermit.tryAcquire()) conflict("BUSY", "PostgreSQL capture is already running")
+                val captured =
+                    try {
+                        withContext(Dispatchers.IO) {
+                            val jobContext = currentCoroutineContext()
+                            capturePostgresPhase(profile, pre, post = phase == "post", checkCancelled = { jobContext.ensureActive() })
+                        }
+                    } catch (failure: IllegalArgumentException) {
+                        throw ApiFailure(
+                            HttpStatusCode.UnprocessableEntity,
+                            failure.message?.takeIf { Regex("PG_[A-Z_]+").matches(it) } ?: "PG_CAPTURE_FAILED",
+                            "PostgreSQL capture failed",
+                        )
+                    } finally {
+                        postgresCapturePermit.release()
+                    }
+                call.respondJson(
+                    buildJsonObject {
+                        put("schema_version", "postgres-capture.v1")
+                        put("phase_json", canonicalJson(captured.phase).decodeToString())
+                        put(
+                            "pg_profile_html_base64",
+                            captured.pgProfileHtml?.let { JsonPrimitive(Base64.getEncoder().encodeToString(it)) } ?: JsonNull,
+                        )
+                    },
+                )
+            }
+        }
+
+        mapOf(
+            "postgres-pre" to "postgres-pre.json",
+            "postgres-post" to "postgres-post.json",
+            "postgres-context" to "postgres-context.json",
+            "pg-profile" to "pg-profile.html",
+        ).forEach { (route, name) ->
+            get("/api/runs/{runId}/analyses/{analysisId}/$route") {
+                call.requireOnlyQueries()
+                val stored = context.store.requireAnalysis(call)
+                if (stored.artifacts.none { it.path == name }) notFound("PostgreSQL artifact was not found")
+                val bytes = withContext(Dispatchers.IO) { Files.readAllBytes(stored.path.resolve(name)) }
+                call.response.headers.append(HttpHeaders.ContentDisposition, "attachment; filename=\"$name\"")
+                call.respondBytes(
+                    bytes,
+                    if (name.endsWith(".html")) ContentType.Application.OctetStream else ContentType.Application.Json,
+                    HttpStatusCode.OK,
+                )
+            }
         }
 
         get("/api/runs/{runId}/analyses/{analysisId}/resource-snapshot") {
@@ -260,12 +583,38 @@ internal fun Application.installLocalApi(context: LocalApiContext) {
             call.respondBytes(bytes, ContentType.Application.Json, HttpStatusCode.OK)
         }
 
+        mapOf(
+            "capacity-plan" to "capacity-plan.json",
+            "capacity" to "capacity.json",
+        ).forEach { (route, name) ->
+            get("/api/runs/{runId}/analyses/{analysisId}/$route") {
+                call.requireOnlyQueries()
+                val stored = context.store.requireAnalysis(call)
+                if (stored.artifacts.none { it.path == name }) notFound("Capacity artifact was not found")
+                val bytes = withContext(Dispatchers.IO) { Files.readAllBytes(stored.path.resolve(name)) }
+                call.response.headers.append(HttpHeaders.ContentDisposition, "attachment; filename=\"$name\"")
+                call.respondBytes(bytes, ContentType.Application.Json, HttpStatusCode.OK)
+            }
+        }
+
         get("/api/runs/{runId}/analyses/{analysisId}/source-context") {
             call.requireOnlyQueries()
             val stored = context.store.requireAnalysis(call)
             if (stored.artifacts.none { it.path == "opensearch-errors.json" }) notFound("Source context was not found")
             val bytes = withContext(Dispatchers.IO) { Files.readAllBytes(stored.path.resolve("opensearch-errors.json")) }
             call.response.headers.append(HttpHeaders.ContentDisposition, "attachment; filename=\"opensearch-errors.json\"")
+            call.respondBytes(bytes, ContentType.Application.Json, HttpStatusCode.OK)
+        }
+
+        get("/api/runs/{runId}/analyses/{analysisId}/source-context/{index}") {
+            call.requireOnlyQueries()
+            val index = call.parameters["index"].orEmpty()
+            if (!Regex("[1-9]|1[0-6]").matches(index)) notFound("Source context was not found")
+            val name = "opensearch-errors-$index.json"
+            val stored = context.store.requireAnalysis(call)
+            if (stored.artifacts.none { it.path == name }) notFound("Source context was not found")
+            val bytes = withContext(Dispatchers.IO) { Files.readAllBytes(stored.path.resolve(name)) }
+            call.response.headers.append(HttpHeaders.ContentDisposition, "attachment; filename=\"$name\"")
             call.respondBytes(bytes, ContentType.Application.Json, HttpStatusCode.OK)
         }
 
@@ -279,6 +628,185 @@ internal fun Application.installLocalApi(context: LocalApiContext) {
             call.respondJson(status.toJson())
         }
 
+        get("/api/runs/{runId}/analyses/{analysisId}/analytics") {
+            val query = call.request.queryParameters
+            if (query.names().any { it !in setOf("limit", "transaction", "transaction_limit", "format", "exclude") } ||
+                query.names().any { it != "exclude" && query.getAll(it)?.size != 1 }
+            ) {
+                malformed("Query parameters are invalid")
+            }
+            val excluded = query.getAll("exclude").orEmpty()
+            if (excluded.size > 100 || excluded.any { it.length > 256 }) malformed("Excluded rows are invalid")
+            val formatName = call.singleQuery("format") ?: "json"
+            val format = AnalyticsExportFormat.fromWireName(formatName)
+            if (formatName != "json" && format == null) malformed("Unsupported analytics format")
+            val limit = call.intQuery("limit", 10, 1..100)
+            val transactionLimit = call.intQuery("transaction_limit", 100, 1..200)
+            val filter = call.singleQuery("transaction")
+            if (filter != null &&
+                (filter.encodeToByteArray().size > 256 || filter.any(Char::isISOControl))
+            ) {
+                malformed("Transaction filter is invalid")
+            }
+            context.store.requireAnalysis(call)
+            val runId = call.parameters["runId"].orEmpty()
+            val analysisId = call.parameters["analysisId"].orEmpty()
+            val response =
+                withContext(Dispatchers.IO) {
+                    val current = context.store.readComparisonDocuments(runId, analysisId) ?: notFound("Analysis was not found")
+                    val baseline = context.store.readBaseline()?.get("reference") as? JsonObject
+                    val candidates = mutableListOf<SavedAnalysisForComparison>()
+                    val history = context.store.readComparisonHistory()
+                    for (entry in history.entries) {
+                        val documents = entry.documents
+                        val runDocument = documents.run ?: continue
+                        candidates +=
+                            SavedAnalysisForComparison(
+                                buildJsonObject {
+                                    put("run_id", entry.runId)
+                                    put("analysis_id", entry.analysisId)
+                                },
+                                runDocument,
+                                documents.result,
+                                documents.identity,
+                            )
+                    }
+                    val baselineDocuments =
+                        baseline?.let {
+                            context.store.readComparisonDocuments(
+                                it.getValue("run_id").jsonPrimitive.content,
+                                it.getValue("analysis_id").jsonPrimitive.content,
+                            )
+                        }
+                    if (baseline != null && baselineDocuments?.run != null) {
+                        candidates +=
+                            SavedAnalysisForComparison(
+                                baseline,
+                                checkNotNull(baselineDocuments.run),
+                                baselineDocuments.result,
+                                baselineDocuments.identity,
+                            )
+                    }
+                    val currentReference =
+                        buildJsonObject {
+                            put("run_id", runId)
+                            put("analysis_id", analysisId)
+                        }
+                    buildJsonObject {
+                        put("schema_version", "saved-analytics.v1")
+                        put("history_scan_truncated", history.truncated)
+                        put("history_scan_limit", 1000)
+                        put("history_metadata_byte_limit", 16 * 1024 * 1024)
+                        put("history_integrity", "SAVED_DOCUMENT_HASHES")
+                        put(
+                            "dynamics",
+                            current.run?.let {
+                                buildRunDynamics(
+                                    SavedAnalysisForComparison(currentReference, it, current.result, current.identity),
+                                    candidates,
+                                    baseline,
+                                    limit,
+                                )
+                            } ?: JsonNull,
+                        )
+                        put(
+                            "transactions",
+                            baselineDocuments?.let {
+                                compareTransactions(it.result, it.identity, current.result, current.identity, filter, transactionLimit)
+                            } ?: JsonNull,
+                        )
+                        put("overlay", current.run?.let { openSearchOverlay(it, current.result) } ?: JsonNull)
+                        put("metric_packs", metricPackAnalysis(current.result))
+                    }
+                }
+            val dynamics = response["dynamics"] as? JsonObject
+            val rows = (dynamics?.get("rows") as? JsonArray).orEmpty()
+
+            fun rowKey(row: JsonElement): String {
+                val reference = row.jsonObject.getValue("reference").jsonObject
+                return reference.getValue("run_id").jsonPrimitive.content + "/" + reference.getValue("analysis_id").jsonPrimitive.content
+            }
+            if (!rows.map(::rowKey).containsAll(excluded)) malformed("Excluded row is not in this result")
+            val selectedDynamics =
+                dynamics?.let {
+                    JsonObject(
+                        it +
+                            mapOf(
+                                "rows" to JsonArray(rows.filterNot { row -> rowKey(row) in excluded }),
+                                "history_scan_truncated" to response.getValue("history_scan_truncated"),
+                                "history_scan_limit" to response.getValue("history_scan_limit"),
+                            ),
+                    )
+                }
+            if (format == null) {
+                call.respondJson(JsonObject(response + ("dynamics" to (selectedDynamics ?: JsonNull))))
+            } else {
+                if (selectedDynamics ==
+                    null
+                ) {
+                    throw ApiFailure(HttpStatusCode.UnprocessableEntity, "DYNAMICS_UNAVAILABLE", "Run metadata is unavailable")
+                }
+                val extension =
+                    when (format) {
+                        AnalyticsExportFormat.HTML -> "html"
+                        AnalyticsExportFormat.ASCIIDOC -> "adoc"
+                        AnalyticsExportFormat.CONFLUENCE -> "xhtml"
+                    }
+                call.response.headers.append(HttpHeaders.ContentDisposition, "attachment; filename=\"run-dynamics.$extension\"")
+                call.respondBytes(renderRunDynamicsExport(selectedDynamics, format), ContentType.Text.Plain.withCharset(Charsets.UTF_8))
+            }
+        }
+
+        get("/api/runs/{runId}/analyses/{analysisId}/advice") {
+            call.requireOnlyQueries()
+            context.store.requireAnalysis(call)
+            val advice =
+                withContext(Dispatchers.IO) {
+                    context.adviceService?.read(call.parameters["runId"].orEmpty(), call.parameters["analysisId"].orEmpty())
+                }
+            call.respondJson(
+                buildJsonObject {
+                    put("advice", advice?.document ?: JsonNull)
+                    put(
+                        "job",
+                        context.adviceJobs?.latest(call.parameters["runId"].orEmpty(), call.parameters["analysisId"].orEmpty())?.toJson()
+                            ?: JsonNull,
+                    )
+                },
+            )
+        }
+
+        post("/api/runs/{runId}/analyses/{analysisId}/advice") {
+            call.requireOnlyQueries()
+            call.requireJson()
+            val bytes = withContext(Dispatchers.IO) { call.receiveChannel().toInputStream().use { it.readNBytes(257) } }
+            if (bytes.size > 256) tooLarge("Advice request exceeds 256 bytes")
+            // A single exact consent field avoids coercion and ambiguous duplicate JSON keys.
+            val consent = bytes.decodeToString(throwOnInvalidSequence = false)
+            if (!Regex("""\s*\{\s*"confirm_external_transfer"\s*:\s*true\s*}\s*""").matches(consent)) {
+                malformed("Explicit external transfer consent is required")
+            }
+            context.store.requireAnalysis(call)
+            val jobs =
+                context.adviceJobs ?: throw ApiFailure(HttpStatusCode.ServiceUnavailable, "AI_UNAVAILABLE", "AI runner is not configured")
+            when (val submitted = jobs.submit(call.parameters["runId"].orEmpty(), call.parameters["analysisId"].orEmpty())) {
+                is AdviceSubmitResult.Accepted -> call.respondJson(submitted.status.toJson(), HttpStatusCode.Accepted)
+                AdviceSubmitResult.Busy -> throw ApiFailure(HttpStatusCode.Conflict, "AI_BUSY", "An AI task is already running")
+            }
+        }
+
+        get("/api/advice-jobs/{jobId}") {
+            call.requireOnlyQueries()
+            val status = context.adviceJobs?.status(call.parameters["jobId"].orEmpty()) ?: notFound("Advice task was not found")
+            call.respondJson(status.toJson())
+        }
+
+        delete("/api/advice-jobs/{jobId}") {
+            call.requireOnlyQueries()
+            val status = context.adviceJobs?.cancel(call.parameters["jobId"].orEmpty()) ?: notFound("Advice task was not found")
+            call.respondJson(status.toJson())
+        }
+
         get("/api/runs/{runId}/analyses/{analysisId}/result") {
             val stored = context.store.requireAnalysis(call)
             val bytes = withContext(Dispatchers.IO) { Files.readAllBytes(stored.path.resolve(RESULT_FILE)) }
@@ -288,23 +816,36 @@ internal fun Application.installLocalApi(context: LocalApiContext) {
         get("/api/runs/{runId}/analyses/{analysisId}/report") {
             call.requireOnlyQueries("format")
             val format = call.singleQuery("format")
-            if (format !in setOf("json", "html", "asciidoc")) malformed("format must be json, html or asciidoc")
+            if (format !in
+                setOf("json", "html", "asciidoc", "confluence", "svg")
+            ) {
+                malformed("format must be json, html, asciidoc, confluence or svg")
+            }
             val stored = context.store.requireAnalysis(call)
             val bytes = withContext(Dispatchers.IO) { Files.readAllBytes(stored.path.resolve(RESULT_FILE)) }
             val analysisId = stored.path.fileName.toString()
             val report =
                 when (format) {
                     "json" -> bytes
+                    "svg" -> withContext(Dispatchers.IO) { renderSavedLoadChart(stored.path.resolve("rollup-60s.ndjson")) }
                     "html" -> renderHtmlReport(bytes, analysisId)
+                    "confluence" -> renderConfluenceReport(bytes, analysisId)
                     else -> renderAsciiDocReport(bytes, analysisId)
                 }
             call.response.headers.append(
                 HttpHeaders.ContentDisposition,
-                "attachment; filename=\"lt-verdict-$analysisId.${if (format == "asciidoc") "adoc" else format}\"",
+                "attachment; filename=\"lt-verdict-$analysisId.${if (format == "asciidoc") {
+                    "adoc"
+                } else if (format == "confluence") {
+                    "xhtml"
+                } else {
+                    format
+                }}\"",
             )
             val contentType =
                 when (format) {
                     "json" -> ContentType.Application.Json
+                    "svg" -> ContentType.parse("image/svg+xml")
                     "html" -> ContentType.Text.Html.withCharset(Charsets.UTF_8)
                     else -> ContentType.Text.Plain.withCharset(Charsets.UTF_8)
                 }
@@ -370,6 +911,50 @@ internal fun Application.installLocalApi(context: LocalApiContext) {
             }
         }
     }
+}
+
+private suspend fun receivePostgresCapture(
+    call: ApplicationCall,
+    post: Boolean,
+): Pair<String, JsonObject?> {
+    val length =
+        call.request.contentLength()
+            ?: throw ApiFailure(HttpStatusCode.LengthRequired, "LENGTH_REQUIRED", "Capture request requires Content-Length")
+    if (length > MAX_RESOURCE_BYTES + MAX_POLICY_BYTES) tooLarge("Capture request exceeds its resource limit")
+    var profileId: String? = null
+    var pre: JsonObject? = null
+    var parts = 0
+    try {
+        call.receiveMultipart(formFieldLimit = (MAX_RESOURCE_BYTES + 1).toLong()).forEachPart { part ->
+            try {
+                if (++parts > 2) malformed("Capture request has too many parts")
+                when {
+                    part is PartData.FormItem && part.name == "profile_id" && profileId == null -> {
+                        if (part.value.isBlank() ||
+                            part.value.encodeToByteArray().size > 128 ||
+                            part.value.any(Char::isISOControl)
+                        ) {
+                            malformed("Profile ID is invalid")
+                        }
+                        profileId = part.value
+                    }
+                    part is PartData.FileItem && part.name == "pre" && post && pre == null -> {
+                        pre = withContext(Dispatchers.IO) { readPostgresAnalysisInput(pre = part.provider().toInputStream()).pre }
+                    }
+                    else -> malformed("Capture multipart body is invalid")
+                }
+            } finally {
+                part.release()
+            }
+        }
+    } catch (failure: ApiFailure) {
+        throw failure
+    } catch (_: IllegalArgumentException) {
+        malformed("PostgreSQL pre phase is invalid")
+    } catch (_: java.io.IOException) {
+        malformed("Capture multipart body is malformed")
+    }
+    return (profileId ?: malformed("Profile ID is required")) to pre
 }
 
 private suspend fun receiveBaselineRequest(call: ApplicationCall): JsonObject {
@@ -455,6 +1040,11 @@ private fun JsonObject.baselineReference(): JsonObject {
     return this
 }
 
+private fun JsonObject.manualBaselineReference(): JsonObject {
+    if (baselineString("mode") != "manual") baselineManualRequired()
+    return getValue("reference").jsonObject
+}
+
 private suspend fun RunBundleStore.baselineDocuments(reference: JsonObject): Pair<JsonObject, JsonObject> =
     baselineOperation {
         readAnalysisDocuments(reference.baselineString("run_id"), reference.baselineString("analysis_id"))
@@ -477,6 +1067,9 @@ private suspend fun <T> baselineOperation(action: () -> T): T =
 
 private fun baselineIneligible(code: String): Nothing =
     throw ApiFailure(HttpStatusCode.UnprocessableEntity, code, "Statistical baseline is unavailable: $code")
+
+private fun baselineManualRequired(): Nothing =
+    throw ApiFailure(HttpStatusCode.UnprocessableEntity, "BASELINE_MANUAL_REQUIRED", "Condition decisions require a manual baseline")
 
 private suspend fun receiveInput(
     call: ApplicationCall,
@@ -554,21 +1147,35 @@ private suspend fun receiveJob(
     var policy: PolicyValidation.Valid? = null
     var resources: ResourceValidation.Valid? = null
     var diagnostics: DiagnosticValidation.Valid? = null
+    var capacity: CapacityPlanValidation.Valid? = null
     var sourceRequest: SourceRequest? = null
-    var sourceContext: ByteArray? = null
+    val sourceContexts = mutableListOf<ByteArray>()
+    val postgresFiles = mutableMapOf<String, ByteArray>()
     var policySeen = false
     var resourcesSeen = false
     var diagnosticsSeen = false
+    var capacitySeen = false
     var parts = 0
     var invalidParts = false
     try {
         call.receiveMultipart(formFieldLimit = (MAX_RESOURCE_BYTES + 1).toLong()).forEachPart { part ->
             try {
-                if (++parts > 5) malformed("Job multipart body has too many parts")
+                if (++parts > 24) malformed("Job multipart body has too many parts")
                 when {
-                    part is PartData.FileItem && part.name == "source_context" && sourceContext == null && !invalidParts -> {
-                        sourceContext = withContext(Dispatchers.IO) { part.provider().toInputStream().readNBytes(MAX_RESOURCE_BYTES + 1) }
-                        if (checkNotNull(sourceContext).size > MAX_RESOURCE_BYTES) tooLarge("Source context exceeds its resource limit")
+                    part is PartData.FileItem && part.name in POSTGRES_PART_LIMITS && part.name !in postgresFiles && !invalidParts -> {
+                        val name = checkNotNull(part.name)
+                        val limit = POSTGRES_PART_LIMITS.getValue(name)
+                        val bytes = withContext(Dispatchers.IO) { part.provider().toInputStream().readNBytes(limit + 1) }
+                        if (bytes.size > limit) tooLarge("PostgreSQL artifact exceeds its resource limit")
+                        postgresFiles[name] = bytes
+                    }
+                    part is PartData.FileItem && part.name == "source_context" && !invalidParts -> {
+                        if (sourceContexts.size == 16) malformed("Too many source contexts")
+                        val bytes = withContext(Dispatchers.IO) { part.provider().toInputStream().readNBytes(MAX_RESOURCE_BYTES + 1) }
+                        if (bytes.size > MAX_RESOURCE_BYTES || sourceContexts.sumOf { it.size.toLong() } + bytes.size > MAX_CONTEXT_BYTES) {
+                            tooLarge("Source context exceeds its resource limit")
+                        }
+                        sourceContexts += bytes
                     }
                     part is PartData.FileItem && part.name == "source_request" && sourceRequest == null && !invalidParts -> {
                         sourceRequest =
@@ -637,6 +1244,25 @@ private suspend fun receiveJob(
                             }
                     }
 
+                    part is PartData.FileItem && part.name == "capacity_plan" && !capacitySeen && !invalidParts -> {
+                        capacitySeen = true
+                        capacity =
+                            when (
+                                val validation =
+                                    withContext(Dispatchers.IO) {
+                                        validateCapacityPlan(part.provider().toInputStream(), MAX_CAPACITY_PLAN_BYTES)
+                                    }
+                            ) {
+                                is CapacityPlanValidation.Valid -> validation
+                                is CapacityPlanValidation.Invalid -> {
+                                    if (validation.errors.any { it.code == "RESOURCE_LIMIT_EXCEEDED" }) {
+                                        tooLarge("Capacity plan exceeds its resource limit")
+                                    }
+                                    throw InvalidCapacity(validation.errors)
+                                }
+                            }
+                    }
+
                     else -> invalidParts = true
                 }
             } finally {
@@ -651,6 +1277,8 @@ private suspend fun receiveJob(
         throw failure
     } catch (failure: InvalidDiagnostics) {
         throw failure
+    } catch (failure: InvalidCapacity) {
+        throw failure
     } catch (_: Exception) {
         malformed("Multipart body is malformed")
     }
@@ -658,11 +1286,14 @@ private suspend fun receiveJob(
     sourceRequest?.let { selection ->
         if (resourcesSeen ||
             diagnosticsSeen ||
-            sourceContext != null
+            capacitySeen ||
+            sourceContexts.isNotEmpty()
         ) {
             malformed("Online acquisition cannot be combined with manual source inputs")
         }
-        if (sourceProfiles.none { it.id == selection.profileId }) malformed("Source profile is not configured")
+        if ((listOf(selection.profileId) + selection.additionalProfileIds).any { id -> sourceProfiles.none { it.id == id } }) {
+            malformed("Source profile is not configured")
+        }
     }
     val input =
         try {
@@ -691,12 +1322,42 @@ private suspend fun receiveJob(
         val errors = validateDiagnosticBinding(plan, snapshot)
         if (errors.isNotEmpty()) throw InvalidDiagnostics(errors)
     }
+    capacity?.let { plan ->
+        val snapshot =
+            resources ?: throw InvalidCapacity(
+                listOf(
+                    PolicyValidationError(
+                        "CAPACITY_RESOURCE_REQUIRED",
+                        "/resource_snapshot_sha256",
+                        "Capacity plan requires a resource snapshot",
+                    ),
+                ),
+            )
+        val errors = validateCapacityBinding(plan, input.sha256, snapshot)
+        if (errors.isNotEmpty()) throw InvalidCapacity(errors)
+    }
     val acquisition =
-        sourceContext?.let { bytes ->
+        sourceContexts.takeIf { it.isNotEmpty() }?.let { contexts ->
             try {
-                withContext(Dispatchers.IO) { readOpenSearchContext(bytes.inputStream(), input.sha256, resources) }
+                withContext(Dispatchers.IO) { readOpenSearchContexts(contexts, input.sha256, resources) }
             } catch (_: IllegalArgumentException) {
                 malformed("Source context is invalid or belongs to another load input")
+            }
+        }
+    val postgres =
+        if (postgresFiles.isEmpty()) {
+            null
+        } else {
+            try {
+                withContext(Dispatchers.IO) {
+                    readPostgresAnalysisInput(
+                        postgresFiles["postgres_pre"]?.inputStream(),
+                        postgresFiles["postgres_post"]?.inputStream(),
+                        postgresFiles["pg_profile_html"]?.inputStream(),
+                    )
+                }
+            } catch (_: IllegalArgumentException) {
+                malformed("PostgreSQL artifacts are invalid")
             }
         }
     return AnalysisRequest(
@@ -704,8 +1365,10 @@ private suspend fun receiveJob(
         policy,
         resources = resources,
         diagnostics = diagnostics,
+        capacity = capacity,
         sourceRequest = sourceRequest,
         sourceAcquisition = acquisition,
+        postgres = postgres,
     )
 }
 
@@ -980,6 +1643,10 @@ private class InvalidDiagnostics(
     val errors: List<PolicyValidationError>,
 ) : RuntimeException()
 
+private class InvalidCapacity(
+    val errors: List<PolicyValidationError>,
+) : RuntimeException()
+
 private fun randomToken(): String {
     val bytes = ByteArray(32)
     SecureRandom().nextBytes(bytes)
@@ -994,7 +1661,16 @@ private const val MAX_UPLOAD_REQUEST_BYTES = MAX_UPLOAD_BYTES + MAX_MULTIPART_OV
 private const val MAX_POLICY_BYTES = 1_048_576
 private const val MAX_RESOURCE_BYTES = 16 * 1024 * 1024
 private const val MAX_DIAGNOSTIC_BYTES = 1024 * 1024
-private const val MAX_JOB_REQUEST_BYTES = 2 * MAX_RESOURCE_BYTES + MAX_POLICY_BYTES + MAX_DIAGNOSTIC_BYTES + MAX_MULTIPART_OVERHEAD_BYTES
+private const val MAX_CONTEXT_BYTES = 32L * 1024 * 1024
+private const val MAX_JOB_REQUEST_BYTES =
+    3 * MAX_RESOURCE_BYTES + MAX_CONTEXT_BYTES + 4 * 1024 * 1024 +
+        MAX_POLICY_BYTES + MAX_DIAGNOSTIC_BYTES + MAX_CAPACITY_PLAN_BYTES + MAX_MULTIPART_OVERHEAD_BYTES
+private val POSTGRES_PART_LIMITS =
+    mapOf(
+        "postgres_pre" to MAX_RESOURCE_BYTES,
+        "postgres_post" to MAX_RESOURCE_BYTES,
+        "pg_profile_html" to 4 * 1024 * 1024,
+    )
 private const val MAX_RUN_ID_BYTES = 128
 private const val MAX_BASELINE_REQUEST_BYTES = 16_384
 private const val DEFAULT_RUN_LIMIT = 100
@@ -1011,3 +1687,64 @@ private const val CONTENT_SECURITY_POLICY =
         "object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'"
 private val ROLLUPS = setOf(1, 10, 30, 60)
 private val RUN_ID = Regex("(?:jmeter_jtl_csv|jmeter_jtl_xml|gatling_text|gatling_binary)-[0-9a-f]{64}")
+private val BASELINE_CONDITION_DECISIONS = setOf("CONFIRMED", "NOT_CONFIRMED", "UNKNOWN")
+
+private fun AdviceJobStatus.toJson(): JsonObject =
+    buildJsonObject {
+        put("job_id", jobId)
+        put("run_id", runId)
+        put("analysis_id", analysisId)
+        put("state", state.name)
+        put("reused", reused?.let(::JsonPrimitive) ?: JsonNull)
+        put("failure", failure?.name?.let(::JsonPrimitive) ?: JsonNull)
+        put("unavailable_reason", unavailableReason?.name?.let(::JsonPrimitive) ?: JsonNull)
+    }
+
+private fun JenkinsRunState.toJson(): JsonObject =
+    buildJsonObject {
+        put("attempt_id", attemptId)
+        put("status", status.name)
+        put("build_number", buildNumber?.let(::JsonPrimitive) ?: JsonNull)
+        put("failure_code", failureCode?.let(::JsonPrimitive) ?: JsonNull)
+        put(
+            "artifact",
+            artifact?.let { value ->
+                buildJsonObject {
+                    put("relative_path", value.relativePath)
+                    put("size_bytes", value.sizeBytes)
+                    put("sha256", value.sha256)
+                }
+            } ?: JsonNull,
+        )
+    }
+
+private suspend fun grafanaRequest(
+    call: ApplicationCall,
+    context: LocalApiContext,
+): Pair<SourceProfile, GrafanaPanelRequest> {
+    call.requireOnlyQueries("profile", "dashboard", "panel", "theme")
+    val profile =
+        context.sourceProfiles.singleOrNull { it.id == call.singleQuery("profile") && it.transport == SourceTransport.GRAFANA_PROXY }
+            ?: notFound("Grafana profile was not found")
+    context.store.requireAnalysis(call)
+    val documents =
+        withContext(Dispatchers.IO) {
+            context.store.readComparisonDocuments(call.parameters["runId"].orEmpty(), call.parameters["analysisId"].orEmpty())
+        }
+    val run =
+        documents?.run ?: throw ApiFailure(HttpStatusCode.UnprocessableEntity, "RUN_TIMING_UNAVAILABLE", "Run timing is not available")
+    val panel =
+        GrafanaPanelRequest(
+            call.singleQuery("dashboard") ?: malformed("Dashboard UID is required"),
+            call.intQuery("panel", 1, 1..Int.MAX_VALUE),
+            Instant.parse(run.getValue("started_at").jsonPrimitive.content).toEpochMilli(),
+            Instant.parse(run.getValue("ended_at").jsonPrimitive.content).toEpochMilli(),
+            theme = call.singleQuery("theme") ?: "light",
+        )
+    try {
+        grafanaPanelLink(profile, panel)
+    } catch (_: IllegalArgumentException) {
+        malformed("Grafana panel request is invalid")
+    }
+    return profile to panel
+}

@@ -1,8 +1,16 @@
+import type { SavedAnalytics } from './analyticsTypes'
 import type {
+  AdviceDocument,
+  AdviceJob,
+  JenkinsAttempt,
+  JenkinsProfile,
   AnalysisResult,
   AnalysisPage,
   AnalysisReference,
   BaselineComparison,
+  BaselineCondition,
+  BaselineConditionDecision,
+  BaselineConditionWindows,
   BaselineRequest,
   BaselineSelection,
   Bootstrap,
@@ -10,6 +18,7 @@ import type {
   JobStatus,
   Policy,
   PolicyValidation,
+  PostgresCaptureResponse,
   RunPage,
   RunSummary,
   SourceRequest,
@@ -85,7 +94,14 @@ export function uploadInput(file: File, progress: (percent: number) => void): Pr
   })
 }
 
-export function createJob(runId: string, policy: Policy | null, resources?: File | null, diagnostics?: File | null, sourceRequest?: SourceRequest | null, sourceContext?: File | null): Promise<JobStatus> {
+export function capturePostgresPhase(profileId: string, phase: 'pre' | 'post', pre?: File | null): Promise<PostgresCaptureResponse> {
+  const body = new FormData()
+  body.append('profile_id', profileId)
+  if (phase === 'post' && pre) body.append('pre', pre)
+  return request(`/api/sources/postgresql/${phase}`, { method: 'POST', headers: mutationHeaders(), body })
+}
+
+export function createJob(runId: string, policy: Policy | null, resources?: File | null, diagnostics?: File | null, sourceRequest?: SourceRequest | null, sourceContexts: File[] = [], postgresPre?: File | null, postgresPost?: File | null, pgProfileHtml?: File | null, capacity?: File | null): Promise<JobStatus> {
   const body = new FormData()
   body.append('run_id', runId)
   if (policy) body.append('policy', new Blob([stringifyPolicy(policy)], { type: 'application/json' }), 'policy.json')
@@ -93,8 +109,12 @@ export function createJob(runId: string, policy: Policy | null, resources?: File
   else {
     if (resources) body.append('resource_snapshot', resources)
     if (diagnostics) body.append('correlation_plan', diagnostics)
-    if (sourceContext) body.append('source_context', sourceContext)
+    for (const sourceContext of sourceContexts) body.append('source_context', sourceContext)
   }
+  if (postgresPre) body.append('postgres_pre', postgresPre)
+  if (postgresPost) body.append('postgres_post', postgresPost)
+  if (pgProfileHtml) body.append('pg_profile_html', pgProfileHtml)
+  if (capacity) body.append('capacity_plan', capacity)
   return request('/api/jobs', { method: 'POST', headers: mutationHeaders(), body })
 }
 
@@ -128,6 +148,30 @@ export function setBaseline(body: BaselineRequest): Promise<{ baseline: Baseline
 
 export function clearBaseline(): Promise<{ baseline: null }> {
   return request('/api/baseline', { method: 'DELETE', headers: mutationHeaders() })
+}
+
+export function getBaselineConditions(
+  reference: AnalysisReference,
+  windows?: BaselineConditionWindows,
+): Promise<{ conditions: BaselineCondition | null }> {
+  return request(baselineConditionsPath(reference, windows))
+}
+
+export function setBaselineConditions(
+  reference: AnalysisReference,
+  decision: BaselineConditionDecision,
+  windows?: BaselineConditionWindows,
+): Promise<{ conditions: BaselineCondition }> {
+  return request(baselineConditionsPath(reference, windows), {
+    method: 'POST',
+    headers: mutationHeaders({ 'Content-Type': 'application/json' }),
+    body: JSON.stringify({ decision }),
+  })
+}
+
+function baselineConditionsPath(reference: AnalysisReference, windows?: BaselineConditionWindows): string {
+  const query = windows ? `?${new URLSearchParams({ ...windows })}` : ''
+  return `/api/runs/${encodeURIComponent(reference.run_id)}/analyses/${encodeURIComponent(reference.analysis_id)}/baseline-conditions${query}`
 }
 
 export function compareBaseline(reference: AnalysisReference, windows?: WindowComparisonRequest): Promise<BaselineComparison> {
@@ -197,5 +241,60 @@ function exactThreshold(key: string, value: unknown, context?: JsonParseContext)
 function exactErrorCounts(this: Record<string, unknown>, key: string, value: unknown, context?: JsonParseContext): unknown {
   const errorCount = (this.type === 'opensearch_errors' && ['total_errors', 'error_rate_per_minute'].includes(key)) ||
     (key === 'count' && typeof this.service === 'string' && typeof this.error_type === 'string')
-  return errorCount && typeof value === 'number' && context ? context.source : value
+  const postgresTableCount = ['row_count_delta', 'inserted', 'deleted', 'updated'].includes(key) &&
+    typeof this.schema === 'string' && typeof this.table === 'string'
+  const postgresStatementCount = ['calls', 'total_exec_time', 'rows', 'shared_blks_hit', 'shared_blks_read', 'temp_blks_written'].includes(key) &&
+    typeof this.dbid === 'string' && typeof this.userid === 'string' && typeof this.toplevel === 'boolean'
+  return (errorCount || postgresTableCount || postgresStatementCount) && typeof value === 'number' && context ? context.source : value
+}
+
+export function getAdvice(reference: AnalysisReference): Promise<{ advice: AdviceDocument | null; job: AdviceJob | null }> {
+  return request(`/api/runs/${encodeURIComponent(reference.run_id)}/analyses/${encodeURIComponent(reference.analysis_id)}/advice`)
+}
+
+export function startAdvice(reference: AnalysisReference): Promise<AdviceJob> {
+  return request(`/api/runs/${encodeURIComponent(reference.run_id)}/analyses/${encodeURIComponent(reference.analysis_id)}/advice`, {
+    method: 'POST', headers: mutationHeaders({ 'Content-Type': 'application/json' }),
+    body: JSON.stringify({ confirm_external_transfer: true }),
+  })
+}
+
+export function getAdviceJob(jobId: string): Promise<AdviceJob> {
+  return request(`/api/advice-jobs/${encodeURIComponent(jobId)}`)
+}
+
+export function cancelAdviceJob(jobId: string): Promise<AdviceJob> {
+  return request(`/api/advice-jobs/${encodeURIComponent(jobId)}`, { method: 'DELETE', headers: mutationHeaders() })
+}
+
+export function listJenkins(): Promise<{ profiles: JenkinsProfile[] }> { return request('/api/jenkins') }
+export function listJenkinsAttempts(profileId: string): Promise<{ attempts: JenkinsAttempt[] }> {
+  return request(`/api/jenkins/${encodeURIComponent(profileId)}/attempts`)
+}
+export function triggerJenkins(profileId: string, parameters: Record<string, string>): Promise<JenkinsAttempt> {
+  return request(`/api/jenkins/${encodeURIComponent(profileId)}/trigger`, {
+    method: 'POST', headers: mutationHeaders({ 'Content-Type': 'application/json' }), body: JSON.stringify({ parameters }),
+  })
+}
+export function advanceJenkins(profileId: string, attemptId: string, operation: 'advance' | 'reconcile' | 'collect', artifactPath?: string): Promise<{ attempt: JenkinsAttempt; run: RunSummary | null }> {
+  return request(`/api/jenkins/${encodeURIComponent(profileId)}/attempts/${encodeURIComponent(attemptId)}/${operation}`, {
+    method: 'POST', headers: mutationHeaders({ 'Content-Type': 'application/json' }), body: JSON.stringify(operation === 'collect' ? { artifact_path: artifactPath } : {}),
+  })
+}
+
+export function getSavedAnalytics(reference: AnalysisReference, limit = 10, transaction = '', transactionLimit = 100): Promise<SavedAnalytics> {
+  const query = new URLSearchParams({ limit: String(limit), transaction_limit: String(transactionLimit) })
+  if (transaction.trim()) query.set('transaction', transaction.trim())
+  return request(`/api/runs/${encodeURIComponent(reference.run_id)}/analyses/${encodeURIComponent(reference.analysis_id)}/analytics?${query}`)
+}
+
+export function listGrafana(): Promise<{ profiles: Array<{ id: string; base_url: string }> }> {
+  return request('/api/grafana')
+}
+
+export function grafanaPanel(reference: AnalysisReference, profile: string, dashboard: string, panel: number, render: boolean): Promise<{ source_link: string; png_base64?: string | null; failure_code?: string | null }> {
+  const query = new URLSearchParams({ profile, dashboard, panel: String(panel) })
+  return request(`/api/runs/${encodeURIComponent(reference.run_id)}/analyses/${encodeURIComponent(reference.analysis_id)}/grafana-${render ? 'render' : 'link'}?${query}`, render ? {
+    method: 'POST', headers: mutationHeaders({ 'Content-Type': 'application/json' }), body: '{}',
+  } : undefined)
 }

@@ -35,6 +35,7 @@ internal fun evaluateDiagnostics(
     val byWindow = windows.associateBy(ResourceWindowV1::id)
     val bySeries = resources.snapshot.series.associateBy(ResourceSeriesV1::id)
     val pairEvidence = mutableListOf<JsonObject>()
+    val pairResults = mutableListOf<PairResult>()
     val findings = mutableListOf<JsonObject>()
     var evaluablePairs = 0
 
@@ -44,7 +45,19 @@ internal fun evaluateDiagnostics(
             val window = requireNotNull(byWindow[windowId]) { "DIAGNOSTIC_WINDOW_NOT_FOUND" }
             val result = evaluatePair(pair, resources.snapshot, bySeries, window, load.windows.getValue(windowId), checkCancelled)
             pairEvidence += result.evidence
+            pairResults += result
             if (result.evaluable) evaluablePairs++
+        }
+    }
+    val headlineSelections =
+        selectCorrelationHeadlines(
+            pairResults.map(PairResult::hypothesis),
+            "${validation.sha256}/${resources.semanticSha256}",
+            checkCancelled,
+        )
+    val selectionByPair = headlineSelections.associateBy { it.pairId to it.windowId }
+    pairResults.forEach { result ->
+        if (selectionByPair.getValue(result.hypothesis.pairId to result.hypothesis.windowId).selected) {
             result.finding?.let(findings::add)
         }
     }
@@ -89,7 +102,10 @@ internal fun evaluateDiagnostics(
             suppressedShortEpisodes = suppressed,
             reasons = emptyList(),
         )
-    return DiagnosticEvaluation(findings, windowsEvidence + pairEvidence + anomalyEvidence + summary)
+    return DiagnosticEvaluation(
+        findings,
+        windowsEvidence + pairEvidence + headlineSelections.map(CorrelationHeadlineSelection::evidence) + anomalyEvidence + summary,
+    )
 }
 
 internal fun diagnosticUnavailable(
@@ -135,6 +151,7 @@ private data class PairResult(
     val evidence: JsonObject,
     val finding: JsonObject?,
     val evaluable: Boolean,
+    val hypothesis: CorrelationHeadlineHypothesis,
 )
 
 private fun evaluatePair(
@@ -276,7 +293,26 @@ private fun evaluatePair(
         } else {
             null
         }
-    return PairResult(evidence, finding, coefficient != null)
+    val unavailableReason =
+        when {
+            association.controlsUsed.isNotEmpty() || lagAssociation.controlsUsed.isNotEmpty() ->
+                "GENUINE_PARTIAL_UNCALIBRATED"
+            coefficient == null || bestRho == null || lagProfile.isEmpty() -> "PAIR_NOT_EVALUABLE"
+            else -> null
+        }
+    val hypothesis =
+        CorrelationHeadlineHypothesis(
+            pairId = pair.id,
+            windowId = window.id,
+            epochs = LongArray(longest.size) { longest[it].epochMillis },
+            resource = DoubleArray(longest.size) { longest[it].resource.toDouble() },
+            outcome = DoubleArray(longest.size) { longest[it].load.toDouble() },
+            outcomeKey = pair.loadMetric.wireName,
+            maxLagCells = lagCells,
+            materialCandidate = status == "CANDIDATE",
+            unavailableReason = unavailableReason,
+        )
+    return PairResult(evidence, finding, coefficient != null, hypothesis)
 }
 
 private fun association(
@@ -788,6 +824,30 @@ private fun diagnosticSummary(
         put("episodes_reported", episodesReported)
         put("suppressed_short_episodes", suppressedShortEpisodes)
         put("uncertainty", "NOT_ESTIMATED")
+        put("reasons", strings(reasons))
+    }
+
+private fun CorrelationHeadlineSelection.evidence(): JsonObject =
+    buildJsonObject {
+        put("id", diagnosticId("correlation-headline-selection", pairId, windowId))
+        put("type", "correlation_headline_selection")
+        put("pair_id", pairId)
+        put("window_id", windowId)
+        put("method", CORRELATION_HEADLINE_METHOD)
+        put("rng", CORRELATION_HEADLINE_RNG)
+        put("status", status.name)
+        put("family_hypotheses", familyHypotheses)
+        put("bootstrap_replicates", CORRELATION_HEADLINE_REPLICATES)
+        put(
+            "block_lengths_cells",
+            buildJsonArray { CORRELATION_HEADLINE_BLOCKS.forEach { add(JsonPrimitive(it)) } },
+        )
+        put("alpha", "0.05")
+        putDecimal("p_value_b10", pValueBlock10)
+        putDecimal("p_value_b20", pValueBlock20)
+        putDecimal("max_p_value", maxPValue)
+        putDecimal("holm_adjusted_p_value", holmAdjustedPValue)
+        put("selected", selected)
         put("reasons", strings(reasons))
     }
 

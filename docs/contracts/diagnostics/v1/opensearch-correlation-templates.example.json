@@ -1,0 +1,25 @@
+{
+  "schema_version": "opensearch-correlation-templates.v1",
+  "templates": [
+    {
+      "id": "errors-vs-p95",
+      "profile_id": "errors",
+      "load_metric": "response_time_p95_ms",
+      "window_ids": [
+        "run-intersection"
+      ],
+      "expected_sign": "positive",
+      "max_lag_ms": 1000,
+      "min_abs_effect": 0.3,
+      "min_resource_delta": 1,
+      "min_load_delta": 5,
+      "controls": [
+        {
+          "meaning": "achieved_rps"
+        }
+      ],
+      "topology_basis": "declared OpenSearch errors to load latency",
+      "clock_alignment": "declared_aligned"
+    }
+  ]
+}

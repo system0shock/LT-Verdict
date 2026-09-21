@@ -4,6 +4,7 @@ import com.sun.net.httpserver.HttpExchange
 import com.sun.net.httpserver.HttpServer
 import io.ltverdict.core.ResourceAggregation
 import io.ltverdict.core.ResourceRole
+import io.ltverdict.integrations.grafana.GrafanaPanelRequest
 import org.junit.jupiter.api.Assertions.assertArrayEquals
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
@@ -26,14 +27,47 @@ import java.util.concurrent.atomic.AtomicInteger
 
 class SourceHttpTest {
     @Test
+    fun `Grafana rendering uses configured proxy origin auth and shared request budget`() =
+        withServer { fixture ->
+            val calls = AtomicInteger()
+            fixture.server.createContext("/") { exchange ->
+                calls.incrementAndGet()
+                assertEquals("Bearer test-token", exchange.requestHeaders.getFirst("Authorization"))
+                assertTrue(exchange.requestURI.path.startsWith("/grafana/render/d-solo/"))
+                assertTrue(exchange.requestURI.rawQuery.contains("panelId=1"))
+                exchange.respond(200, "png-fixture")
+            }
+            val proxy = profile(fixture.baseUrl.resolve("/grafana"), SourceTransport.GRAFANA_PROXY, SourceAuth.Bearer("TEST_TOKEN"), "vm")
+            val http = SourceHttp(listOf(proxy)) { "test-token" }
+            val request = GrafanaPanelRequest("dashboard", 1, 1000, 2000)
+            val budget = SourceBudget(1)
+            assertEquals("png-fixture", http.getGrafanaPanel(proxy, request, budget).decodeToString())
+            assertThrows(SourceHttpFailure::class.java) { http.getGrafanaPanel(proxy, request, budget) }
+            assertEquals(1, calls.get())
+            assertThrows(IllegalArgumentException::class.java) { http.getGrafanaPanel(proxy, request.copy(dashboardUid = "../outside")) }
+            assertEquals(1, calls.get())
+        }
+
+    @Test
     fun `OpenSearch does not persist HTTP success bodies that fail response validation`() =
         withServer { fixture ->
             var body = """{"error":"private source diagnostic"}"""
             fixture.server.createContext("/") { exchange -> exchange.respond(200, body) }
-            val sourceProfile = profile(fixture.baseUrl, governor = governor())
-                .copy(sourceKind = SourceKind.OPENSEARCH, queries = emptyList(), openSearch = OpenSearchMapping(
-                    listOf("logs-*"), "@timestamp", "service", "type", "message", samplesPerGroup = 0,
-                ))
+            val sourceProfile =
+                profile(fixture.baseUrl, governor = governor())
+                    .copy(
+                        sourceKind = SourceKind.OPENSEARCH,
+                        queries = emptyList(),
+                        openSearch =
+                            OpenSearchMapping(
+                                listOf("logs-*"),
+                                "@timestamp",
+                                "service",
+                                "type",
+                                "message",
+                                samplesPerGroup = 0,
+                            ),
+                    )
             val source = PromqlSource(listOf(sourceProfile), SourceHttp(listOf(sourceProfile)))
             listOf(body, "{malformed private source diagnostic").forEach { response ->
                 body = response

@@ -13,6 +13,49 @@ import java.math.BigDecimal
 
 class SourceConfigTest {
     @Test
+    fun `v2 connections accept PostgreSQL without fabricating an HTTP profile`() {
+        val config = """{"schema_version":"source-connections.v2","connections":[{
+            "id":"pg","source_kind":"postgresql","source_database_id":"orders-test",
+            "host":"db.example","database":"orders","username_env":"PG_USER","password_env":"PG_PASSWORD",
+            "tables":[{"schema":"public","table":"orders","columns":["id","state"],"key":["id"]}]}]}"""
+        assertTrue(readSourceProfiles(config.byteInputStream()).isEmpty())
+        val postgres = readSourceConnections(config.byteInputStream()).postgres.single()
+        assertEquals("orders-test", postgres.sourceDatabaseId)
+        assertEquals(5432, postgres.port)
+        assertEquals(listOf("id"), postgres.tables.single().key)
+        listOf(
+            config.replace("source-connections.v2", "source-connections.v1"),
+            config.replace("\"host\":\"db.example\"", "\"host\":\"jdbc:postgresql://db\""),
+            config.replace("\"database\":", "\"sql\":\"SELECT 1\",\"database\":"),
+            config.replace("\"database\":", "\"port\":0,\"database\":"),
+            config.replace("\"username_env\":\"PG_USER\"", "\"username_env\":\"literal user\""),
+        ).forEach { invalid ->
+            assertEquals(
+                "SOURCE_CONFIG_INVALID",
+                assertThrows(IllegalArgumentException::class.java) {
+                    readSourceProfiles(invalid.byteInputStream())
+                }.message,
+            )
+        }
+    }
+
+    @Test
+    fun `v2 source selection normalizes profiles and rejects duplicates or oversized sets`() {
+        val request = """{"schema_version":"source-request.v2","profile_ids":["z","a"],
+            "start_epoch_ms":1000,"end_epoch_ms":3000,"step_ms":1000}"""
+        assertEquals("a", readSourceRequest(request.byteInputStream()).profileId)
+        listOf(
+            request.replace("[\"z\",\"a\"]", "[\"a\",\"a\"]"),
+            request.replace("[\"z\",\"a\"]", "[]"),
+            request.replace("[\"z\",\"a\"]", (1..17).joinToString(",", "[", "]") { "\"p$it\"" }),
+            request.replace("[\"z\",\"a\"]", "[1]"),
+            request.replace("\"profile_ids\":", "\"profile_id\":\"z\",\"profile_ids\":"),
+        ).forEach { invalid ->
+            assertThrows(IllegalArgumentException::class.java) { readSourceRequest(invalid.byteInputStream()) }
+        }
+    }
+
+    @Test
     fun `OpenSearch profile accepts bounded mapping and rejects metric fields or proxy transport`() {
         val example =
             java.nio.file.Files

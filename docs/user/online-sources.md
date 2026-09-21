@@ -1,7 +1,7 @@
 # Онлайн-источники метрик и ошибок
 
 Поддерживаются read-only PromQL `query_range`, InfluxQL GET `/query` и
-OpenSearch POST `/_search`. PostgreSQL следует отдельно; Grafana dashboard discovery и panel
+OpenSearch POST `/_search` и PostgreSQL pre/post capture. Grafana dashboard discovery и panel
 transformations не поддерживаются. Боевой plugin/auth route нужно проверить на
 вашем стенде. Без connections file приложение не выполняет acquisition.
 
@@ -119,7 +119,99 @@ raw ответы и сообщения могут содержать чувст�
 Private API принимает file part `source_context` в `POST /api/jobs`;
 `GET /api/runs/{runId}/analyses/{analysisId}/source-context` скачивает только
 существующий manifest-validated JSON attachment. Context ограничен 16 MiB;
-job — пять частей и сумма отдельных limits с multipart overhead.
+Для нескольких контекстов используйте повторные file parts `source_context`
+(до16, суммарно32 MiB); каждому нужен отдельный profile_id.
+
+## Несколько источников
+
+UI позволяет выбрать до16 HTTP-профилей на общей start/end/step сетке.
+CLI принимает [source-request.v2](../contracts/sources/v1/multiple-request.example.json)
+с `profile_ids`; прежний v1 для одного профиля остаётся совместимым.
+Порядок выбора не влияет на нормализованные данные. Series/rule IDs становятся
+`profileId/queryId` и `profileId/ruleId`; `%` и `/` в profileId экранируются
+как `%25` и `%2F`. SLA-ссылки меняются вместе с series IDs, единицы — нет.
+Общий cap:64 series,500000 cells,256 rules; превышение отклоняется до сети.
+Governor остаётся общим по origin, запросы выполняются последовательно.
+
+Несколько OpenSearch contexts сохраняются как `opensearch-errors-N.json`,
+отсортированные по profile_id. В UI скачивается каждый файл отдельно;
+private API использует `/source-context/{index}` с index1..16.
+Один context сохраняет прежние имя файла и download route. Для offline replay:
+
+```powershell
+.\build\install\ltv\bin\ltv.bat analyze input.jtl --resources resource-snapshot.json --source-context opensearch-errors-1.json --source-context opensearch-errors-2.json --data-dir data
+```
+
+Повторный profile_id, неверный load hash и превышение limits отклоняются.
+Суммарный cap raw responses —64 MiB, contexts —32 MiB. Пропуск артефакта
+из-за cap отражается в source summary, отсутствующий источник не становится
+нулевой метрикой или нулевым числом ошибок.
+
+## PostgreSQL pre/post
+
+[Пример PostgreSQL-профиля](../contracts/sources/v1/postgresql-connections.example.json)
+использует `source-connections.v2`; HTTP-профили можно добавить в тот же массив
+connections. Нужны отдельная read-only роль и environment-переменные credentials.
+Роль capture не должна выполнять нагрузку: её userid исключается из statement
+дельт и записывается в configuration как `lt_verdict.excluded_statement_userid`.
+Для чужих statement IDs нужны эффективные права `pg_read_all_stats`, а не
+только membership без наследования. Проверьте от имени capture-роли:
+`SELECT pg_has_role(current_user, 'pg_read_all_stats', 'USAGE');` — ожидается true.
+При отсутствии прав PostgreSQL скрывает query IDs, точные дельты недоступны.
+По умолчанию TLS `verify-full`; `allow_insecure:true` отключает TLS только для
+явно выбранного доверенного тестового окружения.
+
+Снимите pre **до** нагрузки, post — **после**, передав исходный pre файл:
+
+```powershell
+.\build\install\ltv\bin\ltv.bat source pre --connections connections.json --profile pg > pre.json
+# Выполните нагрузочный тест.
+.\build\install\ltv\bin\ltv.bat source post --connections connections.json --profile pg --pre pre.json --pg-profile-html report.html > post.json
+.\build\install\ltv\bin\ltv.bat analyze input.jtl --postgres-pre pre.json --postgres-post post.json --data-dir data
+```
+
+В PowerShell используйте UTF-8 перенаправление вывода (старый Windows PowerShell
+может записать UTF-16); UI скачивает phase JSON без перекодирования чисел.
+UI предлагает отдельные capture pre/post и загрузку phase-файлов. Analyze
+не снимает pre/post автоматически. Пара совместима с HTTP online selection,
+resource snapshot и OpenSearch contexts в рамках их прежних ограничений.
+Для offline replay подключения к PostgreSQL не нужны.
+
+Allowlist таблиц задаёт schema/table/columns/key. Уникальный ненулевой key
+позволяет считать inserted/deleted/updated; без key доступна только разница
+количества строк. Сравниваются также выбранные настройки БД и шесть прямых
+pg_stat_statements counters. Reset, eviction, новые/пропавшие statements,
+неполный снимок или неверная временная/hash-привязка отмечаются явно.
+Время capture сравнивается с фактическим окном parsed load, не с введённым
+пользователем диапазоном. Отсутствующий pre не подменяется нулями.
+
+Limits: phase16 MiB, до16 tables,10000 rows/table,1 MiB/table,64 KiB/cell;
+statements до10000 rows; connect/query/socket30s, lock5s. SQL фиксирован,
+пользовательские SQL/JDBC URL/properties не принимаются.
+Для supplementary pg_profile report задайте `pg_profile` с целыми положительными
+`server_id`, `start_sample_id`, `end_sample_id` (start < end). Connector не вызывает
+sample/reset/management. Отсутствующее расширение или неподдержанный report
+дают DEGRADED и не отменяют пригодные table facts.
+
+HTML максимум4 MiB, UTF-8, только download; `--pg-profile-html FILE` при analyze
+импортирует его как attachment. Он не исполняется внутри приложения и не служит
+источником SQL-статистики. При capture этот флаг задаёт create-new output path;
+если report недоступен, файл не создаётся, причина остаётся в phase JSON.
+Не открывайте недоверенный HTML без проверки вне origin приложения.
+
+Private API: `POST /api/sources/postgresql/pre` или `/post`, multipart
+`profile_id` и optional `pre` file для post. Обязателен Content-Length,
+request до17 MiB; допускается один capture одновременно, иначе409 BUSY.
+Ответ `postgres-capture.v1`: `phase_json` — строка с точным JSON,
+`pg_profile_html_base64` — строка или null. В `POST /api/jobs` передаются
+`postgres_pre`, `postgres_post`, `pg_profile_html`. Fixed download routes:
+`/postgres-pre`, `/postgres-post`, `/postgres-context`, `/pg-profile` под analysis.
+HTML выдаётся application/octet-stream + attachment, JSON — application/json.
+
+Синтетическая проверка 2026-09-06: PostgreSQL 16.15 + pg_stat_statements 1.10,
+pg_profile 4.8 (read-only report, CLI capture и SHA-256) прошла.
+PostgreSQL 15 и TLS в этом прогоне не проверялись; это не приёмка боевого стенда.
+[ADR 0008](../adr/0008-postgresql-pre-post-capture.md).
 
 ## Credentials и limits
 

@@ -1,6 +1,10 @@
 package io.ltverdict.storage
 
+import io.ltverdict.core.WindowComparisonRequest
+import io.ltverdict.core.baselineConditionBinding
 import io.ltverdict.core.canonicalJson
+import io.ltverdict.core.sha256Hex
+import io.ltverdict.core.validateBaselineCondition
 import io.ltverdict.core.validateBaselineSelection
 import io.ltverdict.ingest.SourceType
 import io.ltverdict.ingest.detectSource
@@ -71,6 +75,23 @@ internal data class StoredArtifact(
 internal data class StoredAnalysis(
     val path: Path,
     val artifacts: List<StoredArtifact>,
+)
+
+internal data class ComparisonDocuments(
+    val run: JsonObject?,
+    val result: JsonObject,
+    val identity: JsonObject,
+)
+
+internal data class ComparisonHistoryEntry(
+    val runId: String,
+    val analysisId: String,
+    val documents: ComparisonDocuments,
+)
+
+internal data class ComparisonHistory(
+    val entries: List<ComparisonHistoryEntry>,
+    val truncated: Boolean,
 )
 
 internal class RunBundleStore(
@@ -273,12 +294,72 @@ internal class RunBundleStore(
             }
         }
 
+    fun readBaselineCondition(
+        baselineReference: JsonObject,
+        currentReference: JsonObject,
+        windows: WindowComparisonRequest?,
+    ): JsonObject? =
+        synchronized(dataDirectory.operationLock) {
+            dataDirectory.requireOpen()
+            readBaselineConditionUnlocked(baselineConditionBinding(baselineReference, currentReference, windows))
+        }
+
+    fun replaceBaselineCondition(condition: JsonObject): JsonObject =
+        synchronized(dataDirectory.operationLock) {
+            dataDirectory.requireOpen()
+            val validated = validateBaselineCondition(condition)
+            val bytes = canonicalJson(validated)
+            check(bytes.size <= MAX_BASELINE_CONDITION_BYTES)
+            requireOwnedDirectory(dataDirectory.staging)
+            val directoryTarget = dataDirectory.root.resolve(BASELINE_CONDITIONS_DIRECTORY)
+            val directory =
+                if (Files.exists(directoryTarget, LinkOption.NOFOLLOW_LINKS)) {
+                    requireBaselineConditionsDirectory(directoryTarget)
+                } else {
+                    Files.createDirectory(directoryTarget)
+                    forceDirectory(dataDirectory.root)
+                    directoryTarget
+                }
+            val target = baselineConditionPath(directory, baselineConditionBinding(validated))
+            if (Files.exists(target, LinkOption.NOFOLLOW_LINKS)) requireBaselineConditionFile(target)
+            val staging = dataDirectory.staging.resolve(UUID.randomUUID().toString())
+            Files.createDirectory(staging)
+            try {
+                val staged = staging.resolve(target.fileName.toString())
+                writeForced(staged, bytes)
+                forceDirectory(staging)
+                Files.move(staged, target, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING)
+                forceDirectory(directory)
+                validated
+            } finally {
+                DataDirectory.deleteTree(staging)
+            }
+        }
+
     fun clearBaseline() {
         synchronized(dataDirectory.operationLock) {
             dataDirectory.requireOpen()
             val target = dataDirectory.root.resolve(BASELINE_FILE)
-            if (!Files.exists(target, LinkOption.NOFOLLOW_LINKS)) return
-            Files.delete(requireBaselineFile(target))
+            val baseline = if (Files.exists(target, LinkOption.NOFOLLOW_LINKS)) requireBaselineFile(target) else null
+            val conditionsTarget = dataDirectory.root.resolve(BASELINE_CONDITIONS_DIRECTORY)
+            val conditionsDirectory =
+                if (Files.exists(conditionsTarget, LinkOption.NOFOLLOW_LINKS)) {
+                    requireBaselineConditionsDirectory(conditionsTarget)
+                } else {
+                    null
+                }
+            val conditionFiles =
+                conditionsDirectory
+                    ?.let { directory ->
+                        Files.list(directory).use { paths -> paths.toList().map(::requireBaselineConditionFile) }
+                    }.orEmpty()
+            if (baseline == null && conditionsDirectory == null) return
+            conditionFiles.forEach(Files::delete)
+            conditionsDirectory?.let {
+                forceDirectory(it)
+                Files.delete(it)
+            }
+            baseline?.let(Files::delete)
             forceDirectory(dataDirectory.root)
         }
     }
@@ -293,6 +374,131 @@ internal class RunBundleStore(
             val result = parseObject(Files.readAllBytes(requireOwnedFile(stored.path.resolve(RESULT_FILE))), "analysis result")
             val identity = parseObject(Files.readAllBytes(requireOwnedFile(stored.path.resolve(IDENTITY_FILE))), "analysis identity")
             result to identity
+        }
+
+    fun readComparisonDocuments(
+        runId: String,
+        analysisId: String,
+    ): ComparisonDocuments? =
+        synchronized(dataDirectory.operationLock) {
+            dataDirectory.requireOpen()
+            val stored = readAnalysisUnlocked(runId, analysisId) ?: return@synchronized null
+            val run = stored.path.resolve("run.json")
+            ComparisonDocuments(
+                run =
+                    if (stored.artifacts.any { it.path == "run.json" }) {
+                        parseObject(Files.readAllBytes(requireOwnedFile(run)), "run metadata")
+                    } else {
+                        null
+                    },
+                result = parseObject(Files.readAllBytes(requireOwnedFile(stored.path.resolve(RESULT_FILE))), "analysis result"),
+                identity = parseObject(Files.readAllBytes(requireOwnedFile(stored.path.resolve(IDENTITY_FILE))), "analysis identity"),
+            )
+        }
+
+    // History displays saved facts: verify the documents consumed, not every raw input again.
+    // ponytail: bounded directory scan; add an index only if histories routinely exceed these limits.
+    fun readComparisonHistory(
+        limit: Int = 1000,
+        byteLimit: Int = 16 * 1024 * 1024,
+    ): ComparisonHistory =
+        synchronized(dataDirectory.operationLock) {
+            dataDirectory.requireOpen()
+            require(limit in 1..1000 && byteLimit in 1..16 * 1024 * 1024)
+            requireOwnedDirectory(dataDirectory.runs)
+            val entries = mutableListOf<ComparisonHistoryEntry>()
+            var remaining = byteLimit
+            var inspected = 0
+            var truncated = false
+
+            fun bounded(
+                path: Path,
+                maximum: Int,
+            ): ByteArray? {
+                val size = Files.size(requireOwnedFile(path))
+                if (size > maximum || size > remaining) {
+                    truncated = true
+                    return null
+                }
+                val bytes = Files.newInputStream(path).use { it.readNBytes(minOf(maximum, remaining) + 1) }
+                if (bytes.size > maximum || bytes.size > remaining) {
+                    truncated = true
+                    return null
+                }
+                remaining -= bytes.size
+                return bytes
+            }
+            Files.newDirectoryStream(dataDirectory.runs).use { runs ->
+                for (run in runs) {
+                    if (++inspected > 4096) {
+                        truncated = true
+                        break
+                    }
+                    val runId = run.fileName.toString()
+                    if (!RUN_ID.matches(runId)) continue
+                    requireOwnedDirectory(run)
+                    val analyses = run.resolve("analyses")
+                    if (!Files.exists(analyses, LinkOption.NOFOLLOW_LINKS)) continue
+                    requireOwnedDirectory(analyses)
+                    Files.newDirectoryStream(analyses).use { saved ->
+                        for (analysis in saved) {
+                            if (++inspected > 4096 || entries.size == limit) {
+                                truncated = true
+                                break
+                            }
+                            val analysisId = analysis.fileName.toString()
+                            if (!SHA256.matches(analysisId)) continue
+                            requireOwnedDirectory(analysis)
+                            val manifestBytes = bounded(analysis.resolve("manifest.json"), 256 * 1024) ?: break
+                            val manifest = parseObject(manifestBytes, "history manifest")
+                            if (manifest.keys != MANIFEST_FIELDS ||
+                                manifest.string("schema_version") != "analysis-manifest.v1"
+                            ) {
+                                corrupt("history manifest differs")
+                            }
+                            val artifacts =
+                                (manifest["artifacts"] as? JsonArray ?: corrupt("history artifacts missing")).map { value ->
+                                    val item = value as? JsonObject ?: corrupt("history artifact invalid")
+                                    if (item.keys != ARTIFACT_FIELDS) corrupt("history artifact fields differ")
+                                    StoredArtifact(item.string("path"), item.long("size_bytes"), item.string("sha256"))
+                                }
+                            if (artifacts.map { it.path }.distinct().size != artifacts.size ||
+                                !manifestBytes.contentEquals(analysisManifest(artifacts.sortedBy { it.path }))
+                            ) {
+                                corrupt("history manifest is not canonical")
+                            }
+                            val documents = mutableMapOf<String, JsonObject>()
+                            for (name in listOf(IDENTITY_FILE, RESULT_FILE, "run.json")) {
+                                val artifact = artifacts.singleOrNull { it.path == name }
+                                if (artifact == null) {
+                                    if (name != "run.json") corrupt("history document missing")
+                                    continue
+                                }
+                                val bytes = bounded(analysis.resolve(name), 8 * 1024 * 1024) ?: break
+                                if (bytes.size.toLong() != artifact.sizeBytes ||
+                                    sha256Hex(bytes) != artifact.sha256
+                                ) {
+                                    corrupt("history document differs")
+                                }
+                                if (name == IDENTITY_FILE && sha256Hex(bytes) != analysisId) corrupt("history identity differs")
+                                documents[name] = parseObject(bytes, "history document")
+                            }
+                            if (truncated) break
+                            val identity = documents.getValue(IDENTITY_FILE)
+                            val result = documents.getValue(RESULT_FILE)
+                            if (identity.string("run_id") != runId ||
+                                result.string("run_id") != runId
+                            ) {
+                                corrupt("history run binding differs")
+                            }
+                            entries +=
+                                ComparisonHistoryEntry(runId, analysisId, ComparisonDocuments(documents["run.json"], result, identity))
+                        }
+                    }
+                    if (truncated) break
+                }
+            }
+            ComparisonHistory(entries, truncated)
         }
 
     private fun readBaselineUnlocked(): JsonObject? {
@@ -317,6 +523,35 @@ internal class RunBundleStore(
                 corruptBaseline("selection contract is invalid")
             }
         if (!bytes.contentEquals(canonicalJson(validated))) corruptBaseline("selection is not canonical")
+        return validated
+    }
+
+    private fun readBaselineConditionUnlocked(binding: JsonObject): JsonObject? {
+        val directoryTarget = dataDirectory.root.resolve(BASELINE_CONDITIONS_DIRECTORY)
+        if (!Files.exists(directoryTarget, LinkOption.NOFOLLOW_LINKS)) return null
+        val directory = requireBaselineConditionsDirectory(directoryTarget)
+        val target = baselineConditionPath(directory, binding)
+        if (!Files.exists(target, LinkOption.NOFOLLOW_LINKS)) return null
+        val path = requireBaselineConditionFile(target)
+        if (Files.size(path) > MAX_BASELINE_CONDITION_BYTES) corruptBaseline("condition record exceeds 4 KiB")
+        val bytes = Files.newInputStream(path).use { it.readNBytes(MAX_BASELINE_CONDITION_BYTES + 1) }
+        if (bytes.size > MAX_BASELINE_CONDITION_BYTES) corruptBaseline("condition record exceeds 4 KiB")
+        val condition =
+            try {
+                Json.parseToJsonElement(bytes.decodeToString()).jsonObject
+            } catch (_: SerializationException) {
+                corruptBaseline("condition record JSON is invalid")
+            } catch (_: IllegalArgumentException) {
+                corruptBaseline("condition record JSON is invalid")
+            }
+        val validated =
+            try {
+                validateBaselineCondition(condition)
+            } catch (_: RuntimeException) {
+                corruptBaseline("condition record contract is invalid")
+            }
+        if (!bytes.contentEquals(canonicalJson(validated))) corruptBaseline("condition record is not canonical")
+        if (baselineConditionBinding(validated) != binding) corruptBaseline("condition record binding differs from its key")
         return validated
     }
 
@@ -566,6 +801,28 @@ private fun requireBaselineFile(path: Path): Path {
     return path
 }
 
+private fun requireBaselineConditionsDirectory(path: Path): Path {
+    if (Files.isSymbolicLink(path) || !Files.isDirectory(path, LinkOption.NOFOLLOW_LINKS)) {
+        corruptBaseline("unsafe conditions directory at $path")
+    }
+    return path
+}
+
+private fun requireBaselineConditionFile(path: Path): Path {
+    if (!BASELINE_CONDITION_FILE.matches(path.fileName.toString()) ||
+        Files.isSymbolicLink(path) ||
+        !Files.isRegularFile(path, LinkOption.NOFOLLOW_LINKS)
+    ) {
+        corruptBaseline("unsafe condition record at $path")
+    }
+    return path
+}
+
+private fun baselineConditionPath(
+    directory: Path,
+    binding: JsonObject,
+): Path = directory.resolve("${sha256Hex(canonicalJson(binding))}.json")
+
 private fun requireRunId(runId: String) {
     require(RUN_ID.matches(runId)) { "INVALID_RUN_ID" }
 }
@@ -606,9 +863,12 @@ private fun corrupt(message: String): Nothing = throw IllegalStateException("COR
 private fun corruptBaseline(message: String): Nothing = throw IllegalStateException("CORRUPT_BASELINE: $message")
 
 private const val BASELINE_FILE = "baseline.json"
+private const val BASELINE_CONDITIONS_DIRECTORY = "baseline-conditions"
 private const val RESULT_FILE = "analysis-result.json"
 private const val IDENTITY_FILE = "identity.json"
 private const val MAX_BASELINE_BYTES = 32 * 1024
+private const val MAX_BASELINE_CONDITION_BYTES = 4 * 1024
+private val BASELINE_CONDITION_FILE = Regex("[0-9a-f]{64}\\.json")
 private val SHA256 = Regex("[0-9a-f]{64}")
 private val RUN_ID = Regex("(?:jmeter_jtl_csv|jmeter_jtl_xml|gatling_text|gatling_binary)-[0-9a-f]{64}")
 private val SOURCE_FIELDS = setOf("original_filename", "run_id", "sha256", "size_bytes", "source_type")

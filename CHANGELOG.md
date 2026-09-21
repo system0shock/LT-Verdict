@@ -7,6 +7,31 @@
 
 ### Added
 
+- Подготовка к приёмке: advisory AI jobs/API/UI и изолированный ModelStudio/Qwen
+  runtime, consent, отмена и fail-soft без изменения deterministic verdict.
+  Изменённый prompt требует отдельной оценки качества; пилот не возобновлялся.
+- Jenkins profiles и журнал trigger/queue/build/artifact, восстановление неизвестного
+  исхода без автоматического повторного POST; импорт проверенного artifact в RunBundle.
+- Локальная N-run/transaction аналитика, OpenSearch chart markers и capability coverage
+  JVM/OpenShift; Grafana source links и bounded PNG render по явному запросу.
+- Confluence-ready XHTML export и offline onboarding skill/wrapper с проверкой
+  подтверждённого hash и добавлением нового внешнего metadata manifest.
+- Статический SVG load chart, выбор строк и HTML/AsciiDoc/Confluence exports
+  истории; offline `opensearch prepare` для явно включаемой корреляции.
+
+- Сохраняемое ручное подтверждение одинаковых условий baseline/current:
+  `CONFIRMED`/`NOT_CONFIRMED`/`UNKNOWN`, с привязкой к точной паре analyses и окон.
+- Отбор correlation headlines через bounded MBB, lag-max и Holm; raw evidence
+  и SLA verdict не меняются. Версия диагностического модуля identity повышена до `2`.
+- Capacity через CLI/API/UI: явные ступени `rps`/`concurrency`/`users`, observed `p05_10s`,
+  консервативные границы, совместные SLA и generator guards; raw plan и расчёт
+  сохраняются неизменно. Для concurrency/users нужна telemetry, для каждой
+  оценки — минимум 300s; автоматический поиск knee не реализован.
+- PostgreSQL pre/post: read-only capture, сравнение таблиц/configuration и
+  pg_stat_statements, явные ограничения binding/coverage, offline phases и
+  download-only pg_profile HTML.
+- Несколько HTTP-источников на общей сетке: qualified series/SLA IDs,
+  раздельные OpenSearch contexts и повторный offline import через CLI/UI.
 - OpenSearch error context: bounded read-only search, counts/rates и
   service/type groups, явная coverage, сохранение и manual offline import.
 - Opt-in InfluxDB acquisition через read-only InfluxQL GET `/query`: direct и
@@ -18,7 +43,8 @@
 
 - Opt-in correlation plan: описательные Spearman/partial-rank связи,
   ограниченные лаги и explicit-reference аномальные эпизоды с порогами эффекта
-  и длительности. Uncertainty не оценивается; диагностика не меняет SLA.
+  и длительности. Доверительные интервалы raw-оценок не строятся; диагностика
+  не меняет SLA.
 - Оконное сравнение baseline/current с load/resource deltas, явными порогами
   материальности и ограничениями сопоставимости двух наблюдаемых прогонов.
 - `POST /api/jobs` требует `Content-Length` для общего multipart limit;

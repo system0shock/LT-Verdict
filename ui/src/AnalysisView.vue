@@ -1,13 +1,14 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import LoadCharts from './LoadCharts.vue'
-import type { AnalysisResult, Bucket, SourceSummaryEvidence, OpenSearchEvidence } from './types'
+import type { AnalysisResult, Bucket, SourceSummaryEvidence, OpenSearchEvidence, PostgresContextEvidence } from './types'
 
 const props = defineProps<{
   result: AnalysisResult
   buckets: Bucket[]
   rollup: number
   bucketRollup: number
+  markers?: Array<{ at_ms: number; service: string; error_type: string; message: string }>
   rangeStart: string
   rangeEnd: string
 }>()
@@ -28,8 +29,15 @@ const resourceSummaries = computed(() => evidence.value.filter((item) => item.ty
 const windowPolicySummaries = computed(() => evidence.value.filter((item) => item.type === 'window_policy_summary'))
 const resourceChecks = computed(() => evidence.value.filter((item) => item.type === 'resource_policy_check'))
 const resourceBindings = computed(() => evidence.value.filter((item) => item.type === 'resource_binding'))
-const sourceSummaries = computed(() => props.result.evidence.filter((item): item is SourceSummaryEvidence => item.type === 'source_summary'))
-const errorContexts = computed(() => props.result.evidence.filter((item): item is OpenSearchEvidence => item.type === 'opensearch_errors'))
+const sourceSummaries = computed(() => props.result.evidence
+  .filter((item): item is SourceSummaryEvidence => item.type === 'source_summary')
+  .flatMap((item) => item.profiles?.length ? item.profiles : [item])
+  .sort((left, right) => left.profile_id < right.profile_id ? -1 : left.profile_id > right.profile_id ? 1 : 0))
+const errorContexts = computed(() => props.result.evidence
+  .filter((item): item is OpenSearchEvidence => item.type === 'opensearch_errors')
+  .sort((left, right) => left.profile_id < right.profile_id ? -1 : left.profile_id > right.profile_id ? 1 : 0))
+const postgresContexts = computed(() => props.result.evidence
+  .filter((item): item is PostgresContextEvidence => item.type === 'postgres_context'))
 const diagnosticSummaries = computed(() => props.result.evidence.filter((item) => item.type === 'diagnostic_summary'))
 const correlationPairs = computed(() => props.result.evidence.filter((item) => item.type === 'correlation_pair'))
 const anomalyChecks = computed(() => props.result.evidence.filter((item) => item.type === 'anomaly_check'))
@@ -39,9 +47,11 @@ const slaResourceChecks = computed(() => resourceChecks.value.filter((item) => i
 const allSlaChecks = computed(() => [...checks.value, ...slaResourceChecks.value])
 const overall = computed(() => metrics.value.find((item) => scope(item).kind === 'overall'))
 const failedChecks = computed(() => allSlaChecks.value.filter((item) => item.status === 'FAIL'))
+const capacity = computed(() => props.result.capacity_summary)
 
 const verdict = computed(() => props.result.policy_verdict)
 const verdictText = computed(() => {
+  if (props.result.analysis_mode === 'capacity_step') return `${verdict.value} — capacity evaluation; see saved bounds and reasons`
   if (verdict.value === 'FAIL') return `FAIL — ${failedChecks.value.length} of ${allSlaChecks.value.length} rules failed`
   if (verdict.value === 'PASS') return `PASS — all ${allSlaChecks.value.length} rules passed`
   if (verdict.value === 'NO_POLICY') return 'NO_POLICY — no policy was supplied'
@@ -213,6 +223,10 @@ function formatOptional(value: unknown) {
   return value === null || value === undefined ? 'Not available (null)' : String(value)
 }
 
+function capacityValue(value: number | string | null) {
+  return value === null ? '—' : String(value)
+}
+
 function statistic(item: Evidence, key: string) {
   const values = valueAt(item, 'statistics')
   return values !== null && typeof values === 'object' && !Array.isArray(values)
@@ -354,6 +368,38 @@ function updateRange(name: 'update:range-start' | 'update:range-end', event: Eve
   </section>
 
   <section
+    v-if="capacity"
+    id="capacity-results"
+    data-testid="capacity-results"
+    class="panel"
+    aria-labelledby="capacity-results-title"
+  >
+    <div class="section-heading">
+      <p class="eyebrow">
+        Capacity plan
+      </p><h2 id="capacity-results-title">
+        Saved capacity facts
+      </h2>
+    </div>
+    <p>Axis: {{ capacity.load_axis }} ({{ capacity.unit }}) · Capacity bound: {{ capacity.bound_type }} [{{ capacityValue(capacity.lower_inclusive) }}, {{ capacityValue(capacity.upper_exclusive) }})</p>
+    <p>Policy: {{ capacity.policy_verdict }} · Knee: {{ capacityValue(capacity.capacity_knee) }} · {{ capacity.knee_reason }}</p>
+    <p>Reasons: {{ capacity.reasons.join(', ') || '—' }}</p>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Stage</th><th>Target</th><th>Achieved (p05 10s)</th><th>Observed min / max</th><th>Bins complete / expected</th><th>Verified bound</th><th>Verdict</th><th>Reasons</th><th>Evidence</th></tr></thead>
+        <tbody>
+          <tr
+            v-for="stage in capacity.stages"
+            :key="stage.id"
+          >
+            <td>{{ stage.id }}</td><td>{{ capacityValue(stage.target) }}</td><td>{{ capacityValue(stage.achieved) }}</td><td>{{ capacityValue(stage.observed_min) }} / {{ capacityValue(stage.observed_max) }}</td><td>{{ capacityValue(stage.complete_bins) }} / {{ capacityValue(stage.expected_bins) }}</td><td>{{ capacityValue(stage.verified_bound_load) }}</td><td>{{ stage.verdict }}</td><td>{{ stage.reasons.join(', ') || '—' }}</td><td>{{ stage.evidence_refs.join(', ') || '—' }}</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section
     v-if="resourceSummaries.length || windowPolicySummaries.length || resourceChecks.length || resourceBindings.length"
     id="resource-results"
     class="panel"
@@ -459,7 +505,7 @@ function updateRange(name: 'update:range-start' | 'update:range-end', event: Eve
     </div>
     <div
       v-for="item in sourceSummaries"
-      :key="item.id"
+      :key="`${item.profile_id}:${item.id}`"
       class="table-wrap"
     >
       <table>
@@ -482,7 +528,7 @@ function updateRange(name: 'update:range-start' | 'update:range-end', event: Eve
 
   <section
     v-for="context in errorContexts"
-    :key="context.id"
+    :key="`${context.profile_id}:${context.id}`"
     class="panel"
     data-testid="opensearch-context"
     :aria-label="`OpenSearch errors: ${context.profile_id}`"
@@ -520,6 +566,154 @@ function updateRange(name: 'update:range-start' | 'update:range-end', event: Eve
         </tbody>
       </table>
     </div>
+  </section>
+
+  <section
+    v-for="context in postgresContexts"
+    :key="context.profile_id ?? 'postgres-context'"
+    class="panel"
+    data-testid="postgres-context"
+    :aria-label="`PostgreSQL context: ${context.profile_id ?? 'unknown profile'}`"
+  >
+    <h2>PostgreSQL changes — {{ context.profile_id ?? 'unknown profile' }}</h2>
+    <p>{{ context.status }} · {{ context.reasons.join(', ') || 'No coverage gaps' }}</p>
+    <template v-if="context.configuration_changes?.length">
+      <h3>Configuration changes</h3>
+      <div
+        class="table-wrap"
+        tabindex="0"
+        role="region"
+        aria-label="PostgreSQL configuration changes"
+      >
+        <table>
+          <thead>
+            <tr>
+              <th scope="col">
+                Setting
+              </th>
+              <th scope="col">
+                Pre
+              </th>
+              <th scope="col">
+                Post
+              </th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr
+              v-for="change in context.configuration_changes"
+              :key="change.name"
+            >
+              <td>{{ change.name }}</td><td>{{ formatOptional(change.pre) }}</td><td>{{ formatOptional(change.post) }}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </template>
+    <h3>Table changes</h3>
+    <div
+      v-if="context.tables.length"
+      class="table-wrap"
+      tabindex="0"
+      role="region"
+      aria-label="PostgreSQL table changes"
+    >
+      <table>
+        <thead>
+          <tr>
+            <th scope="col">
+              Table
+            </th>
+            <th scope="col">
+              Status / reasons
+            </th>
+            <th scope="col">
+              Rows Δ
+            </th>
+            <th scope="col">
+              Inserted / deleted / updated
+            </th>
+            <th scope="col">
+              Changed keys
+            </th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr
+            v-for="table in context.tables"
+            :key="`${table.schema}.${table.table}`"
+          >
+            <td>{{ table.schema }}.{{ table.table }}</td>
+            <td>{{ table.status }} · {{ table.reasons.join(', ') || '—' }}</td>
+            <td>{{ formatOptional(table.row_count_delta) }}</td>
+            <td>{{ formatOptional(table.inserted) }} / {{ formatOptional(table.deleted) }} / {{ formatOptional(table.updated) }}</td>
+            <td>
+              {{ table.changed_keys.map((change) => `${change.change}: ${change.key.join(' / ')}`).join(', ') || '—' }}{{ table.keys_truncated ? ' [truncated]' : '' }}
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <p v-else>
+      No table captures.
+    </p>
+    <h3>Statement deltas</h3>
+    <p>
+      {{ context.statements.status }} · {{ context.statements.reasons.join(', ') || 'No coverage gaps' }} ·
+      unmatched pre/post: {{ context.statements.unmatched_pre.length }} / {{ context.statements.unmatched_post.length }}
+    </p>
+    <div
+      v-if="context.statements.rows.length"
+      class="table-wrap"
+      tabindex="0"
+      role="region"
+      aria-label="PostgreSQL statement deltas"
+    >
+      <table>
+        <thead>
+          <tr>
+            <th scope="col">
+              Database / user / query
+            </th>
+            <th scope="col">
+              Calls
+            </th>
+            <th scope="col">
+              Total execution time
+            </th>
+            <th scope="col">
+              Rows
+            </th>
+            <th scope="col">
+              Shared blocks hit / read
+            </th>
+            <th scope="col">
+              Temp blocks written
+            </th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr
+            v-for="statement in context.statements.rows"
+            :key="JSON.stringify([statement.dbid, statement.userid, statement.queryid, statement.toplevel])"
+          >
+            <td>{{ statement.dbid }} / {{ statement.userid }} / {{ statement.queryid ?? 'N/A' }}{{ statement.toplevel ? '' : ' (nested)' }}</td>
+            <td>{{ statement.calls }}</td>
+            <td>{{ statement.total_exec_time }}</td>
+            <td>{{ statement.rows }}</td>
+            <td>{{ statement.shared_blks_hit }} / {{ statement.shared_blks_read }}</td>
+            <td>{{ statement.temp_blks_written }}</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <p v-else>
+      No matched statement deltas.
+    </p>
+    <p>
+      pg_profile: {{ context.pg_profile.status }} · {{ context.pg_profile.reasons.join(', ') || 'No coverage gaps' }}.
+      Attached HTML is download-only and is never rendered here.
+    </p>
   </section>
 
   <section
@@ -752,6 +946,7 @@ function updateRange(name: 'update:range-start' | 'update:range-end', event: Eve
       </button>
     </div>
     <LoadCharts
+      :markers="markers"
       :buckets="buckets"
       :rollup="bucketRollup"
     />

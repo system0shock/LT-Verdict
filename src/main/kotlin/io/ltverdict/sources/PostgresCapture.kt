@@ -68,6 +68,26 @@ internal fun comparePostgresPhases(
         putNullableString("post_sha256", postSha256)
         put("status", if (reasons.isEmpty()) "COMPLETE" else "DEGRADED")
         put("reasons", reasons.jsonStrings())
+        put(
+            "configuration_changes",
+            buildJsonArray {
+                if (bindingReasons.isEmpty() && validatedPre != null && validatedPost != null) {
+                    (validatedPre.configuration.keys + validatedPost.configuration.keys).sorted().forEach { name ->
+                        val before = validatedPre.configuration[name]
+                        val after = validatedPost.configuration[name]
+                        if (before != after) {
+                            add(
+                                buildJsonObject {
+                                    put("name", name)
+                                    putNullableString("pre", before)
+                                    putNullableString("post", after)
+                                },
+                            )
+                        }
+                    }
+                }
+            },
+        )
         put("tables", JsonArray(tables.values))
         put("statements", statements.json)
         put("pg_profile", pgProfile.json)

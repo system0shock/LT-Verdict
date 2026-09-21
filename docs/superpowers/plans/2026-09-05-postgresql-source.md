@@ -120,6 +120,10 @@ Each matched output retains its key and six delta counters above. Overall
 module status/reasons reflect unmatched keys and partial/missing captures.
 pg_profile reset=true/null or unavailable report remains DEGRADED and does not
 invalidate otherwise usable table facts. No SQL stats from HTML.
+Context includes `configuration_changes`: sorted `{name,pre,post}` values for
+changed/added/removed settings, only when global pre/post binding is valid.
+Missing values are null; invalid binding yields an empty list with existing
+binding reasons, not invented settings. Invalid-load context also has no changes.
 
 - [ ] RED tests with literal pre rows `[(1,new),(2,old)]`, post rows
   `[(1,done),(3,new)]` expect inserted=1/deleted=1/updated=1; statements calls
@@ -147,6 +151,12 @@ readOnly=true, readOnlyMode=always, REPEATABLE_READ, autoCommit=false, UTC/ISO
 session formatting, fixed timeout settings from Global Constraints. Use
 savepoint per optional module so unavailable extensions do not abort capture.
 Bound rows before materialization and serialized bytes while streaming.
+Task2 review correction: a dedicated capture role is excluded from statement
+rows by userid; capture records `lt_verdict.excluded_statement_userid` in its
+configuration map. This excludes connector SQL without claiming it is workload;
+the capture role must not run the load. Fixed driver maxResultBuffer16 MiB and
+SQL byte-prefix projections (cell/report limit+1) bound wire allocation before
+getBinaryStream. Retain overflow detection and use compatible bounded fetch size.
 
 API:
 
@@ -208,6 +218,60 @@ context and optional HTML under fixed filenames in existing immutable bundle.
 Online multi-source selection can obtain post with attached pre; offline import
 uses same comparator without JDBC. HTML import bounded/hashed/download-only.
 
+Connection contract: `source-connections.v2` retains the `connections` array,
+permits existing HTTP profiles and PostgreSQL records. v1 remains HTTP-only.
+PostgreSQL record fields: id, source_kind="postgresql", source_database_id,
+host, port(default5432), database, username_env, password_env,
+allow_insecure(defaultfalse), tables(default[]), optional pg_profile object
+with server_id/start_sample_id/end_sample_id (all three together). Tables:
+schema/table/columns/key(default[])/row_limit(default10000)/byte_limit(default1048576).
+Unknown fields rejected; total <=16 unique IDs across both kinds. Internal
+SourceConnections holds concrete HTTP and PostgreSQL lists; shared strict JSON
+reader and governor are retained. No fake HTTP URL for PostgreSQL.
+
+CLI `source post` takes `--pre FILE` (optional means missing-pre coverage) and
+optional `--pg-profile-html PATH` for a create-new HTML attachment. stdout is
+canonical phase JSON. UI endpoints `POST /api/sources/postgresql/pre` and
+`/post` accept multipart profile_id plus optional pre file on post, require
+Content-Length, and return `postgres-capture.v1` with `phase_json` (canonical
+phase JSON string) and nullable `pg_profile_html_base64`. The phase is a string
+intentionally: browser download retains exact integer counters, without
+JavaScript number rounding. UI creates File/Blob downloads; HTML uses
+application/octet-stream and download attribute, never inline rendering.
+No capture-session store. Request <=17 MiB, phase <=16 MiB, HTML <=4 MiB;
+response envelope derives only from those bounded artifacts.
+Capture endpoint permits one in-flight capture per local backend, rejects an
+additional operation with existing `409 BUSY` (no waiting queue). Existing
+Origin/session/CSRF protects both actions. `GET /api/sources` lists PostgreSQL
+as id/source_kind="postgresql"/transport="jdbc", without host or credentials.
+UI obtains post via the explicit capture action before analysis; neither pre
+nor post is silently collected when Analyze is pressed.
+Analysis manual inputs `--postgres-pre FILE`, `--postgres-post FILE`, optional
+`--pg-profile-html FILE` are one pair per run; phase hash/profile/time binding
+is checked against actual parsed load window, not user-supplied times.
+HTTP source selection may coexist with the PostgreSQL pair. Invalid load input
+retains validated phase artifacts but emits PG_LOAD_WINDOW_UNAVAILABLE, no
+computed deltas. Online post acquisition may use the attached pre's configured
+profile; pre itself is never collected during analysis.
+
+Integration boundary: `PostgresAnalysisInput(pre: JsonObject? = null,
+post: JsonObject? = null, pgProfileHtml: ByteArray? = null)` is a concrete input
+record, optional `AnalysisRequest.postgres`. `readPostgresAnalysisInput` accepts
+nullable pre/post/HTML InputStreams, validates phases and exact pre/post roles,
+bounds HTML to4 MiB/UTF-8, rejects all-absent input. A standalone manual HTML
+attachment is allowed but never interpreted as SQL evidence. If a supplied
+post (otherwise pre) declares report_sha256, attached HTML must match it.
+Analysis revalidates input before identity/persistence. Optional identity field
+`postgres_input_sha256` hashes canonical phases and HTML content hashes; absent
+PG retains existing identity. Fixed artifacts: postgres-pre.json,
+postgres-post.json, postgres-context.json, pg-profile.html (only supplied files).
+Context for invalid load has null start/end and no computed modules/deltas,
+DEGRADED/PG_LOAD_WINDOW_UNAVAILABLE. Indexed download is not used for PG;
+fixed `/postgres-pre`, `/postgres-post`, `/postgres-context`, `/pg-profile`.
+Stored analysis context adds nullable `pg_profile_html_sha256` for the actual
+attached HTML bytes. UI download visibility uses this field, not report hashes
+declared in phases (a declaration alone does not prove the file was attached).
+
 - [ ] RED CLI/API tests for true separate pre/post, capture binding and rejected
   arbitrary endpoint/SQL/paths; browser test capture/download/attach workflow.
 - [ ] Implement with existing jobs for analysis and bounded capture operation;
@@ -217,12 +281,69 @@ uses same comparator without JDBC. HTML import bounded/hashed/download-only.
 
 ## Progress and test environment
 
-Task 1 implemented: validated phase/comparison, focused 16/16 tests and scoped
-review fix verified. Task 2 JDBC implementation in progress; Task 3 pending.
-Docker CLI exists but engine is stopped; user asked
-asynchronously about a separate synthetic PostgreSQL container. No permission
-to start it has been received yet. pg_profile real-server validation separately
-requires an extension-enabled test instance; absence remains explicit.
+Tasks 1–3 implemented locally: validated phases/comparison, bounded JDBC,
+CLI/API capture and manual analysis inputs, actual load-window binding,
+fixed artifacts, exact-number UI and download-only HTML. Configuration deltas
+and actual HTML attachment hash are included in stored context.
+Task2 review found connector-traffic contamination and pre-validation JDBC
+allocation; both have focused fixes (10 passed/1 live-DB skip), with independent
+fix review APPROVED (no remaining Critical/Important in those fixes).
+Core7/7, CLI/API2/2 and real-backend source browser3/3 passed;
+full browser suite `npm run e2e` PASS41/41.
+Full `test check installDist -x npmCi` PASS on2026-09-06:
+289 tests,286 passed/3 skipped (two existing Windows skips and real PostgreSQL).
+Final independent Task3 integration review: COMPLIANT / APPROVED, no
+Critical/Important findings. UI lint, markdownlint and diff whitespace checks
+passed; external CI and unavailable local secret scanner remain unverified.
+Source block/stage closure remains pending external gates, not asserted.
+
+### Live evidence — 2026-09-06
+
+User authorized Docker and a separate synthetic database. Container
+`ltv-pg-it-20260906`, label `io.ltverdict.synthetic=true`, publishes only
+`127.0.0.1:54321`; PGDATA is a512 MiB tmpfs, no host mounts. PostgreSQL16.15,
+pg_stat_statements1.10, image `postgres:16` resolved digest:
+`sha256:f1c3376c26f2609ab9f29f71f824103fe2fcd8ee0346485cb6122a4f93df6f94`.
+No existing container or real database was modified.
+
+Dedicated live `PostgresSourceTest`:11 tests,0 skipped,0 failures/errors.
+Final `test check -x npmCi --rerun-tasks`: BUILD SUCCESSFUL in1m26s,
+289 tests,287 passed/2 existing Windows skips,0 failures/errors; ktlint passed.
+Known insert gives table inserted1/deleted0/updated0 and workload calls delta1;
+capture userid is excluded. A16777217-byte table value is rejected with
+PG_TABLE_CELL_TOO_LARGE before unbounded client materialization.
+Initial failure was test-role configuration: NOINHERIT hid query IDs despite
+membership. Corrected effective pg_read_all_stats inheritance, retained read-only
+capture. Production unchanged; test status assertions now precede row lookup
+and include module diagnostics instead of a bare NoSuchElementException.
+
+Reproduction: dedicated database, pg_stat_statements preloaded/installed,
+separate admin and read-only capture roles, effective pg_read_all_stats.
+Set LT_VERDICT_PG_IT_DEDICATED=true, HOST/PORT/DATABASE, ADMIN_USER/ADMIN_PASSWORD,
+CAPTURE_USER/CAPTURE_PASSWORD (all names prefixed LT_VERDICT_PG_IT_), and
+LT_VERDICT_PG_IT_ALLOW_INSECURE=true only for this loopback test. Run:
+
+```powershell
+.\gradlew.bat --no-daemon test --tests '*PostgresSourceTest' --rerun-tasks -x npmCi
+```
+
+Official pg_profile4.8 release archive SHA-256:
+`67a5ac87d40c56547321a5cc4ef2925a121beb78fb502888fe452a52ac38d236`.
+Installed dblink and pg_profile into schema profile; test admin created samples1/2
+using take_sample (test setup only; connector never samples). Under capture role,
+BEGIN READ ONLY + profile.get_report(1,1,2) succeeded. CLI source pre with configured
+report IDs produced492404 bytes; actual HTML SHA-256 matched phase.report_sha256:
+`b43b29070b53f846b1a7699e40ba9d9e4f45cd2e3da8372fd84a4f634aeac7d1`.
+Report remains DEGRADED/PG_PROFILE_SETTING_UNAVAILABLE, statements_reset=null:
+successful download does not invent reset/coverage evidence. HTML was not opened.
+Existing report path correctly rejected with PG_REPORT_EXISTS, no overwrite.
+Artifacts reside in ignored `.superpowers/sdd/pg-profile-live-assets`.
+
+Not verified: PostgreSQL15, live TLS verify-full, production workload or external
+CI/secret scanner. These limitations are not converted to PASS.
+
+Sources: [pg_profile4.8 release](https://github.com/zubkov-andrei/pg_profile/releases/tag/4.8),
+[PostgreSQL16 role inheritance](https://www.postgresql.org/docs/16/sql-grant.html).
 
 Driver basis: [pgJDBC downloads](https://jdbc.postgresql.org/download/).
 SQL basis: [PostgreSQL 15 pg_stat_statements](https://www.postgresql.org/docs/15/pgstatstatements.html).

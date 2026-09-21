@@ -1,5 +1,11 @@
 package io.ltverdict.web
 
+import io.ltverdict.ai.AdviceUnavailableReason
+import io.ltverdict.ai.AdvisoryAiJobs
+import io.ltverdict.ai.AdvisoryAiService
+import io.ltverdict.ai.AdvisoryRunner
+import io.ltverdict.ai.AiAdviceStore
+import io.ltverdict.ai.RunnerOutcome
 import io.ltverdict.core.AnalysisOutcome
 import io.ltverdict.core.AnalysisService
 import io.ltverdict.core.EngineConfig
@@ -12,6 +18,7 @@ import io.ltverdict.report.renderHtmlReport
 import io.ltverdict.sources.ONLINE_LOAD
 import io.ltverdict.sources.ONLINE_SOURCE_REQUEST
 import io.ltverdict.sources.OnlineSourceFixture
+import io.ltverdict.sources.PostgresProfile
 import io.ltverdict.sources.PromqlSource
 import io.ltverdict.sources.SourceHttp
 import io.ltverdict.sources.SourceProfile
@@ -46,6 +53,7 @@ import java.nio.charset.StandardCharsets.UTF_8
 import java.nio.file.Files
 import java.nio.file.Path
 import java.time.Duration
+import java.time.Instant
 import java.util.Base64
 import java.util.UUID
 import java.util.concurrent.CountDownLatch
@@ -56,6 +64,164 @@ import java.util.concurrent.locks.LockSupport
 class LocalApiTest {
     @TempDir
     lateinit var tempDir: Path
+
+    @Test
+    fun `saved analytics is bounded read only and Confluence report is downloadable`() =
+        withServer { store, api ->
+            api.bootstrap()
+            val input = store.acceptInput(SPIKE_DROP.bytes().inputStream(), "spike-drop.jtl")
+            val id = api.createJob(input.runId).analysisId(api)
+            val base = "/api/runs/${input.runId}/analyses/$id"
+            val original = api.get("$base/result").body()
+            val analytics = api.get("$base/analytics")
+            assertEquals(200, analytics.statusCode())
+            assertEquals(
+                "saved-analytics.v1",
+                analytics
+                    .jsonObject()
+                    .getValue("schema_version")
+                    .jsonPrimitive.content,
+            )
+            assertEquals(
+                1,
+                analytics
+                    .jsonObject()
+                    .getValue("dynamics")
+                    .jsonObject
+                    .getValue("rows")
+                    .jsonArray.size,
+            )
+            assertEquals(JsonNull, analytics.jsonObject()["transactions"])
+            val hidden = api.get("$base/analytics?exclude=${input.runId}/$id").jsonObject()
+            assertTrue(
+                hidden
+                    .getValue("dynamics")
+                    .jsonObject
+                    .getValue("rows")
+                    .jsonArray
+                    .isEmpty(),
+            )
+            assertEquals(400, api.get("$base/analytics?exclude=missing/analysis").statusCode())
+            assertEquals(400, api.get("$base/analytics?format=unknown").statusCode())
+            for (format in listOf("html", "asciidoc", "confluence")) {
+                val export = api.get("$base/analytics?format=$format")
+                assertEquals(200, export.statusCode())
+                assertTrue(export.body().contains("LT Verdict N-run dynamics"))
+                assertTrue(
+                    export
+                        .headers()
+                        .firstValue("Content-Disposition")
+                        .orElse("")
+                        .contains("attachment"),
+                )
+            }
+            for (query in listOf("limit=0", "limit=101", "transaction_limit=201", "transaction=" + "a".repeat(257))) {
+                assertEquals(400, api.get("$base/analytics?$query").statusCode())
+            }
+            val report = api.get("$base/report?format=confluence")
+            val chart = api.get("$base/report?format=svg")
+            assertEquals(200, chart.statusCode())
+            assertTrue(chart.body().startsWith("<svg "))
+            assertTrue(
+                chart
+                    .headers()
+                    .firstValue("Content-Type")
+                    .orElse("")
+                    .contains("image/svg+xml"),
+            )
+            assertEquals(200, report.statusCode())
+            assertTrue(
+                report
+                    .headers()
+                    .firstValue("Content-Disposition")
+                    .orElse("")
+                    .contains(".xhtml"),
+            )
+            assertEquals(original, api.get("$base/result").body())
+            assertTrue(
+                api
+                    .get("/api/grafana")
+                    .jsonObject()
+                    .getValue("profiles")
+                    .jsonArray
+                    .isEmpty(),
+            )
+            assertEquals(404, api.get("$base/grafana-link?profile=missing&dashboard=demo&panel=1").statusCode())
+        }
+
+    @Test
+    fun `advice status is restored by analysis and unavailable runner never changes verdict`() =
+        withServer(
+            adviceRunner = AdvisoryRunner { RunnerOutcome.Unavailable(AdviceUnavailableReason.OS_ISOLATION_NOT_PROVEN) },
+        ) { store, api ->
+            api.bootstrap()
+            val input = store.acceptInput(SPIKE_DROP.bytes().inputStream(), "spike-drop.jtl")
+            val id = api.createJob(input.runId).analysisId(api)
+            val base = "/api/runs/${input.runId}/analyses/$id"
+            val original = api.get("$base/result").body()
+            val response = api.post("$base/advice", "application/json", """{"confirm_external_transfer":true}""".encodeToByteArray())
+            assertEquals(202, response.statusCode())
+            val jobId =
+                response
+                    .jsonObject()
+                    .getValue("job_id")
+                    .jsonPrimitive.content
+            val deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5)
+            var status = api.get("/api/advice-jobs/$jobId").jsonObject()
+            while (status.getValue("state").jsonPrimitive.content in setOf("QUEUED", "PROCESSING") && System.nanoTime() < deadline) {
+                LockSupport.parkNanos(1_000_000)
+                status = api.get("/api/advice-jobs/$jobId").jsonObject()
+            }
+            assertEquals("UNAVAILABLE", status.getValue("state").jsonPrimitive.content)
+            assertEquals(
+                jobId,
+                api
+                    .get("$base/advice")
+                    .jsonObject()
+                    .getValue("job")
+                    .jsonObject
+                    .getValue("job_id")
+                    .jsonPrimitive.content,
+            )
+            assertEquals(original, api.get("$base/result").body())
+        }
+
+    @Test
+    fun `unconfigured Jenkins exposes no profiles or triggers`() =
+        withServer { _, api ->
+            api.bootstrap()
+            assertTrue(
+                api
+                    .get("/api/jenkins")
+                    .jsonObject()
+                    .getValue("profiles")
+                    .jsonArray
+                    .isEmpty(),
+            )
+            assertEquals(
+                404,
+                api.post("/api/jenkins/missing/trigger", "application/json", "{\"parameters\":{}}".encodeToByteArray()).statusCode(),
+            )
+        }
+
+    @Test
+    fun `advice requires explicit transfer consent and missing runner preserves result`() =
+        withServer { store, api ->
+            api.bootstrap()
+            val input = store.acceptInput(SPIKE_DROP.bytes().inputStream(), "spike-drop.jtl")
+            val id = api.createJob(input.runId).analysisId(api)
+            val base = "/api/runs/${input.runId}/analyses/$id"
+            val original = api.get("$base/result").body()
+            assertEquals(200, api.get("$base/advice").statusCode())
+            assertEquals(JsonNull, api.get("$base/advice").jsonObject()["advice"])
+            for (body in listOf("{}", """{"confirm_external_transfer":false}""", """{"confirm_external_transfer":"true"}""")) {
+                assertEquals(400, api.post("$base/advice", "application/json", body.encodeToByteArray()).statusCode())
+            }
+            val confirmed = """{"confirm_external_transfer":true}""".encodeToByteArray()
+            assertEquals(403, api.postUnauthenticated("$base/advice", confirmed).statusCode())
+            assertEquals(503, api.post("$base/advice", "application/json", confirmed).statusCode())
+            assertEquals(original, api.get("$base/result").body())
+        }
 
     @Test
     fun `unconfigured backend exposes no online profiles`() =
@@ -110,6 +276,118 @@ class LocalApiTest {
                 400,
             )
         }
+
+    @Test
+    fun `multiple contexts download in profile order and replay deterministically`() =
+        withServer { store, api ->
+            api.bootstrap()
+            val input = store.acceptInput(ONLINE_LOAD.byteInputStream(), "multiple.jtl")
+            val first =
+                Files
+                    .readString(Path.of("docs/contracts/sources/v1/opensearch-errors.example.json"))
+                    .replace("a".repeat(64), input.sha256)
+            val profile =
+                Json
+                    .parseToJsonElement(first)
+                    .jsonObject
+                    .getValue("profile_id")
+                    .jsonPrimitive.content
+            val second = first.replace("\"$profile\"", "\"z-errors\"")
+            val contexts = listOf(second.encodeToByteArray(), first.encodeToByteArray())
+            val id = api.createJob(input.runId, sourceContexts = contexts).analysisId(api)
+            val base = "/api/runs/${input.runId}/analyses/$id/source-context"
+            val downloads =
+                (1..2).map { index ->
+                    api
+                        .get("$base/$index")
+                        .also { assertEquals(200, it.statusCode()) }
+                        .body()
+                        .encodeToByteArray()
+                }
+            assertEquals(
+                profile,
+                Json
+                    .parseToJsonElement(downloads.first().decodeToString())
+                    .jsonObject
+                    .getValue("profile_id")
+                    .jsonPrimitive.content,
+            )
+            assertEquals(id, api.createJob(input.runId, sourceContexts = downloads).analysisId(api))
+            assertError(api.get(base), 404)
+            listOf("0", "3", "17", "01", "foo").forEach { assertError(api.get("$base/$it"), 404) }
+            assertError(api.createJob(input.runId, sourceContexts = listOf(contexts.first(), contexts.first())), 400)
+            assertError(api.createJob(input.runId, sourceContexts = List(17) { contexts.first() }), 400)
+        }
+
+    @Test
+    fun `PostgreSQL files replay with inert download and capture rejects unconfigured profiles`() =
+        withServer { store, api ->
+            api.bootstrap()
+            val input = store.acceptInput(ONLINE_LOAD.byteInputStream(), "postgres.jtl")
+            val pre = Files.readAllBytes(Path.of("docs/contracts/sources/v1/postgres-phase.example.json"))
+            val html = "<script>throw new Error('never inline')</script>".encodeToByteArray()
+            val id = api.createJob(input.runId, postgresPre = pre, pgProfileHtml = html).analysisId(api)
+            val base = "/api/runs/${input.runId}/analyses/$id"
+            val downloaded = api.get("$base/postgres-pre")
+            assertEquals(200, downloaded.statusCode())
+            val report = api.get("$base/pg-profile")
+            assertEquals(200, report.statusCode())
+            assertTrue(
+                report
+                    .headers()
+                    .firstValue("Content-Type")
+                    .orElseThrow()
+                    .startsWith("application/octet-stream"),
+            )
+            assertTrue(
+                report
+                    .headers()
+                    .firstValue("Content-Disposition")
+                    .orElseThrow()
+                    .contains("attachment"),
+            )
+            assertEquals(html.decodeToString(), report.body())
+            assertEquals(200, api.get("$base/postgres-context").statusCode())
+            assertError(api.get("$base/postgres-post"), 404)
+            assertEquals(
+                id,
+                api.createJob(input.runId, postgresPre = downloaded.body().encodeToByteArray(), pgProfileHtml = html).analysisId(api),
+            )
+            assertError(api.createJob(input.runId, postgresPost = pre), 400)
+            assertError(
+                api.multipart("/api/sources/postgresql/pre", listOf(FormPart("profile_id", "not-configured".encodeToByteArray()))),
+                400,
+            )
+        }
+
+    @Test
+    fun `PostgreSQL capture exposes only profile metadata and stable credential errors`() {
+        val profile =
+            PostgresProfile(
+                id = "pg-private",
+                sourceDatabaseId = "private-db-id",
+                host = "private-db.example",
+                database = "private-db",
+                usernameEnv = "LTV_TEST_MISSING_PG_USER_671DB",
+                passwordEnv = "LTV_TEST_MISSING_PG_PASSWORD_671DB",
+            )
+        withServer(postgresProfiles = listOf(profile)) { _, api ->
+            api.bootstrap()
+            val listed = api.get("/api/sources")
+            assertEquals(
+                Json.parseToJsonElement("""{"profiles":[{"id":"pg-private","source_kind":"postgresql","transport":"jdbc"}]}"""),
+                listed.jsonObject(),
+            )
+            val part = FormPart("profile_id", "pg-private".encodeToByteArray())
+            val failed = api.multipart("/api/sources/postgresql/pre", listOf(part))
+            assertError(failed, 422, "PG_CREDENTIALS_MISSING")
+            assertFalse(failed.body().contains("private-db"))
+            assertFalse(failed.body().contains("LTV_TEST"))
+            assertError(api.multipart("/api/sources/postgresql/pre", listOf(part, FormPart("sql", "SELECT 1".encodeToByteArray()))), 400)
+            assertError(api.multipart("/api/sources/postgresql/pre", listOf(part, part)), 400)
+            assertError(api.post("/api/sources/postgresql/pre", "multipart/form-data; boundary=broken", "broken".encodeToByteArray()), 400)
+        }
+    }
 
     @Test
     fun `online job persists evidence and snapshot download replays without network`() {
@@ -269,9 +547,10 @@ class LocalApiTest {
                 api
                     .get("/api/runs/${input.runId}/analyses/$currentId/comparison")
                     .jsonObject()
-            assertEquals(setOf("baseline", "current", "comparability", "metrics"), comparison.keys)
+            assertEquals(setOf("baseline", "current", "comparability", "metrics", "conditions"), comparison.keys)
             assertEquals(selection, comparison.getValue("baseline"))
             assertEquals("UNCONFIRMED", comparison.getValue("comparability").jsonPrimitive.content)
+            assertEquals(JsonNull, comparison.getValue("conditions"))
             assertEquals(
                 listOf("response_time_p95_ms", "response_time_p99_ms", "throughput_rps", "error_rate_ratio"),
                 comparison
@@ -307,6 +586,111 @@ class LocalApiTest {
             assertEquals(JsonNull, api.delete("/api/baseline").jsonObject().getValue("baseline"))
             assertEquals(JsonNull, api.get("/api/baseline").jsonObject().getValue("baseline"))
             assertError(api.get("/api/runs/${input.runId}/analyses/$currentId/comparison"), 404, "NOT_FOUND")
+        }
+
+    @Test
+    fun `baseline conditions API persists three states and isolates exact pair and windows`() =
+        withServer { store, api ->
+            val input = store.acceptInput(ByteArrayInputStream(SPIKE_DROP.bytes()), SPIKE_DROP.filename)
+            api.bootstrap()
+            val baselineId = api.createJob(input.runId).analysisId(api)
+            val currentId = api.createJob(input.runId, Files.readAllBytes(Path.of(PASS_POLICY))).analysisId(api)
+            val baselineBody =
+                """{"mode":"manual","series":"release","reference":{"run_id":"${input.runId}","analysis_id":"$baselineId"}}"""
+            api.post("/api/baseline", "application/json", baselineBody.encodeToByteArray())
+            val path = "/api/runs/${input.runId}/analyses/$currentId/baseline-conditions"
+
+            assertEquals(JsonNull, api.get(path).jsonObject().getValue("conditions"))
+            assertError(api.postUnauthenticated(path, """{"decision":"CONFIRMED"}""".encodeToByteArray()), 403, "FORBIDDEN")
+            listOf(
+                "{}",
+                """{"decision":true}""",
+                """{"decision":"MAYBE"}""",
+                """{"decision":"CONFIRMED","extra":true}""",
+            ).forEach { body -> assertError(api.post(path, "application/json", body.encodeToByteArray()), 400, "MALFORMED_REQUEST") }
+            assertError(api.post(path, "text/plain", """{"decision":"CONFIRMED"}""".encodeToByteArray()), 415)
+            assertError(api.post(path, "application/json", " ".repeat(16_385).encodeToByteArray()), 413)
+            assertError(api.get("$path?extra=1"), 400)
+            assertError(api.get("$path?baseline_window=before"), 400)
+            assertError(api.get("/api/runs/not-a-run/analyses/$currentId/baseline-conditions"), 400)
+
+            val confirmed =
+                api
+                    .post(path, "application/json", """{"decision":"CONFIRMED"}""".encodeToByteArray())
+                    .jsonObject()
+                    .getValue("conditions")
+                    .jsonObject
+            assertEquals(
+                setOf("schema_version", "baseline", "current", "windows", "decision", "provenance", "updated_at"),
+                confirmed.keys,
+            )
+            assertEquals("local-baseline-conditions.v1", confirmed.getValue("schema_version").jsonPrimitive.content)
+            assertEquals("CONFIRMED", confirmed.getValue("decision").jsonPrimitive.content)
+            assertEquals("EXPLICIT_LOCAL_ACTION", confirmed.getValue("provenance").jsonPrimitive.content)
+            Instant.parse(confirmed.getValue("updated_at").jsonPrimitive.content)
+            assertEquals(confirmed, api.get(path).jsonObject().getValue("conditions"))
+
+            val comparison = api.get("/api/runs/${input.runId}/analyses/$currentId/comparison").jsonObject()
+            assertEquals("USER_CONFIRMED", comparison.getValue("comparability").jsonPrimitive.content)
+            assertEquals(confirmed, comparison.getValue("conditions"))
+            val otherPair = api.get("/api/runs/${input.runId}/analyses/$baselineId/comparison").jsonObject()
+            assertEquals("UNCONFIRMED", otherPair.getValue("comparability").jsonPrimitive.content)
+            assertEquals(JsonNull, otherPair.getValue("conditions"))
+
+            val notConfirmed =
+                api
+                    .post(path, "application/json", """{"decision":"NOT_CONFIRMED"}""".encodeToByteArray())
+                    .jsonObject()
+                    .getValue("conditions")
+            assertEquals(
+                "NOT_CONFIRMED",
+                notConfirmed.jsonObject
+                    .getValue("decision")
+                    .jsonPrimitive.content,
+            )
+            assertEquals(
+                "UNCONFIRMED",
+                api
+                    .get("/api/runs/${input.runId}/analyses/$currentId/comparison")
+                    .jsonObject()
+                    .getValue("comparability")
+                    .jsonPrimitive.content,
+            )
+
+            val unknown =
+                api
+                    .post(path, "application/json", """{"decision":"UNKNOWN"}""".encodeToByteArray())
+                    .jsonObject()
+                    .getValue("conditions")
+            assertEquals(
+                "UNKNOWN",
+                unknown.jsonObject
+                    .getValue("decision")
+                    .jsonPrimitive.content,
+            )
+            assertEquals(unknown, api.get(path).jsonObject().getValue("conditions"))
+
+            val windowPath = "$path?baseline_window=before&current_window=after"
+            val windowed =
+                api
+                    .post(windowPath, "application/json", """{"decision":"CONFIRMED"}""".encodeToByteArray())
+                    .jsonObject()
+                    .getValue("conditions")
+            assertEquals(windowed, api.get(windowPath).jsonObject().getValue("conditions"))
+            assertEquals(JsonNull, api.get("$path?baseline_window=before&current_window=other").jsonObject().getValue("conditions"))
+            assertEquals(
+                windowed,
+                api
+                    .get(
+                        "/api/runs/${input.runId}/analyses/$currentId/comparison?baseline_window=before&current_window=after&min_change_percent=10",
+                    ).jsonObject()
+                    .getValue("conditions"),
+            )
+
+            api.delete("/api/baseline")
+            api.post("/api/baseline", "application/json", baselineBody.encodeToByteArray())
+            assertEquals(JsonNull, api.get(path).jsonObject().getValue("conditions"))
+            assertEquals(JsonNull, api.get(windowPath).jsonObject().getValue("conditions"))
         }
 
     @Test
@@ -519,6 +903,60 @@ class LocalApiTest {
             assertError(missingResources, 422, "INVALID_DIAGNOSTICS", hasDetails = true)
             assertTrue(missingResources.body().contains("DIAGNOSTIC_RESOURCE_REQUIRED"))
             assertEquals(0, submissions.get())
+        }
+    }
+
+    @Test
+    fun `capacity plan is bounded and bound before job submission`() {
+        val submissions = AtomicInteger()
+        withServer(jobsFactory = {
+            AnalysisJobs(1) { request, _, _ ->
+                submissions.incrementAndGet()
+                check(request.capacity != null)
+                AnalysisOutcome(request.input.runId, FAKE_ANALYSIS_ID, byteArrayOf(), tempDir)
+            }
+        }) { store, api ->
+            val input = store.acceptInput(ByteArrayInputStream(SPIKE_DROP.bytes()), SPIKE_DROP.filename)
+            val resources =
+                """{"schema_version":"resource-snapshot.v1","load_input_sha256":"${input.sha256}","start_epoch_ms":0,"step_ms":1000,"point_count":10,"series":[{"id":"cpu","metric":"cpu_used","unit":"ratio","entity":"vm","role":"system","aggregation":"interval_mean","values":[0.1,0.1,0.1,0.1,0.1,0.1,0.1,0.1,0.1,0.1]}],"windows":[{"id":"steady","from_epoch_ms":0,"to_epoch_ms":10000}]}"""
+                    .encodeToByteArray()
+            val hash = (validateResourceSnapshot(resources.inputStream()) as ResourceValidation.Valid).semanticSha256
+
+            fun plan(snapshotHash: String = hash) =
+                """{"schema_version":"capacity-plan.v1","load_input_sha256":"${input.sha256}","resource_snapshot_sha256":"$snapshotHash","load_axis":"rps","achieved_load":{"statistic":"p05_10s","target_tolerance_ratio":0},"generator_guard_rule_ids":[],"stages":[{"id":"steady","target":300,"from_epoch_ms":0,"to_epoch_ms":10000,"evaluation_window_id":"steady"}]}"""
+                    .encodeToByteArray()
+
+            api.bootstrap()
+            assertError(api.createJob(input.runId, capacity = "{}".encodeToByteArray()), 422, "INVALID_CAPACITY_PLAN", hasDetails = true)
+            assertError(api.createJob(input.runId, capacity = ByteArray(1024 * 1024 + 1) { 32 }), 413)
+            val missingResources = api.createJob(input.runId, capacity = plan())
+            assertError(missingResources, 422, "INVALID_CAPACITY_PLAN", hasDetails = true)
+            assertTrue(missingResources.body().contains("CAPACITY_RESOURCE_REQUIRED"))
+            val mismatch = api.createJob(input.runId, resources = resources, capacity = plan("0".repeat(64)))
+            assertError(mismatch, 422, "INVALID_CAPACITY_PLAN", hasDetails = true)
+            assertTrue(mismatch.body().contains("CAPACITY_SNAPSHOT_MISMATCH"))
+            assertError(
+                api.multipart(
+                    "/api/jobs",
+                    listOf(
+                        FormPart("run_id", input.runId.encodeToByteArray()),
+                        FormPart("capacity_plan", plan(), "capacity.json", "application/json"),
+                        FormPart("capacity_plan", plan(), "capacity.json", "application/json"),
+                    ),
+                ),
+                400,
+                "MALFORMED_REQUEST",
+            )
+            assertError(
+                api.multipart(
+                    "/api/jobs",
+                    listOf(FormPart("run_id", input.runId.encodeToByteArray()), FormPart("unexpected", byteArrayOf())),
+                ),
+                400,
+                "MALFORMED_REQUEST",
+            )
+            assertEquals(FAKE_ANALYSIS_ID, api.createJob(input.runId, resources = resources, capacity = plan()).analysisId(api))
+            assertEquals(1, submissions.get())
         }
     }
 
@@ -856,13 +1294,21 @@ class LocalApiTest {
             AnalysisJobs(1, service::analyze)
         },
         sourceProfiles: List<SourceProfile> = emptyList(),
+        postgresProfiles: List<PostgresProfile> = emptyList(),
+        adviceRunner: AdvisoryRunner? = null,
         block: (RunBundleStore, ApiClient) -> Unit,
     ) {
         DataDirectory.open(tempDir.resolve("data-${System.nanoTime()}")).use { directory ->
             val store = RunBundleStore(directory)
             jobsFactory(store).use { jobs ->
-                startLocalServer(LocalApiContext(store, jobs, sourceProfiles), openBrowser = false).use { server ->
-                    block(store, ApiClient(server.origin))
+                val adviceService = adviceRunner?.let { AdvisoryAiService(store, AiAdviceStore(directory, store), it) }
+                adviceService?.let { AdvisoryAiJobs(it) }.use { adviceJobs ->
+                    startLocalServer(
+                        LocalApiContext(store, jobs, sourceProfiles, postgresProfiles, adviceService, adviceJobs),
+                        openBrowser = false,
+                    ).use { server ->
+                        block(store, ApiClient(server.origin))
+                    }
                 }
             }
         }
@@ -1066,6 +1512,11 @@ class LocalApiTest {
             diagnostics: ByteArray? = null,
             source: ByteArray? = null,
             sourceContext: ByteArray? = null,
+            sourceContexts: List<ByteArray> = emptyList(),
+            postgresPre: ByteArray? = null,
+            postgresPost: ByteArray? = null,
+            pgProfileHtml: ByteArray? = null,
+            capacity: ByteArray? = null,
         ): HttpResponse<String> =
             multipart(
                 "/api/jobs",
@@ -1076,6 +1527,11 @@ class LocalApiTest {
                     if (diagnostics != null) add(FormPart("correlation_plan", diagnostics, "correlation.json", "application/json"))
                     if (source != null) add(FormPart("source_request", source, "source.json", "application/json"))
                     if (sourceContext != null) add(FormPart("source_context", sourceContext, "context.json", "application/json"))
+                    sourceContexts.forEach { add(FormPart("source_context", it, "context.json", "application/json")) }
+                    if (postgresPre != null) add(FormPart("postgres_pre", postgresPre, "pre.json", "application/json"))
+                    if (postgresPost != null) add(FormPart("postgres_post", postgresPost, "post.json", "application/json"))
+                    if (pgProfileHtml != null) add(FormPart("pg_profile_html", pgProfileHtml, "report.html", "text/html"))
+                    if (capacity != null) add(FormPart("capacity_plan", capacity, "capacity.json", "application/json"))
                 },
             )
 
@@ -1107,7 +1563,7 @@ class LocalApiTest {
         ): HttpResponse<String> =
             send(request(path).header("Content-Type", "application/json").POST(HttpRequest.BodyPublishers.ofByteArray(body)))
 
-        private fun multipart(
+        fun multipart(
             path: String,
             parts: List<FormPart>,
         ): HttpResponse<String> {

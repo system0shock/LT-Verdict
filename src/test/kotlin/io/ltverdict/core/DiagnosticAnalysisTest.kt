@@ -65,6 +65,46 @@ class DiagnosticAnalysisTest {
     }
 
     @Test
+    fun `genuine partial candidate remains raw evidence without a calibrated headline`() {
+        val values = List(40) { BigDecimal.valueOf((it + 1).toLong()) }
+        val resources =
+            resources(
+                1_000,
+                listOf(window("evaluation", 0, 40_000)),
+                mapOf(
+                    "cpu" to values,
+                    "target" to List(40) { BigDecimal.ONE },
+                    "driver" to List(40) { BigDecimal.valueOf((it % 3).toLong()) },
+                ),
+            )
+        val plan =
+            plan(
+                resources,
+                pairs =
+                    """[{"id":"partial","resource_series_id":"cpu","load_metric":"response_time_p95_ms","window_ids":["evaluation"],"min_resource_delta":1,"min_load_delta":1,"topology_basis":"host","controls":[{"meaning":"target_rps","series_id":"target"},{"meaning":"other","series_id":"driver"}]}]""",
+            )
+
+        val result =
+            evaluateDiagnostics(
+                plan,
+                resources,
+                resources.snapshot.windows,
+                loadMetrics("evaluation", 0, 1_000, values),
+                windowMetrics(resources.snapshot.windows),
+            )
+        val pair = result.evidence.single { it.string("type") == "correlation_pair" }
+        val selection = result.evidence.single { it.string("type") == "correlation_headline_selection" }
+
+        assertEquals("CANDIDATE", pair.string("status"))
+        assertEquals("1", pair.string("raw_rho"))
+        assertEquals("1", pair.string("partial_rho"))
+        assertEquals("UNAVAILABLE", selection.string("status"))
+        assertEquals(listOf("GENUINE_PARTIAL_UNCALIBRATED"), selection.strings("reasons"))
+        assertEquals(JsonNull, selection["p_value_b10"])
+        assertTrue(result.findings.none { it.string("type") == "correlation_candidate" })
+    }
+
+    @Test
     fun `all-null lag profile falls back to zero lag and states abstention`() {
         val values = listOf(BigDecimal.ZERO) + List(30) { BigDecimal.ONE } + listOf(BigDecimal("2"))
         val windows = listOf(window("evaluation", 0, 32_000))

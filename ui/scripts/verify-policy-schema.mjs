@@ -5,6 +5,23 @@ import { resolve } from 'node:path'
 
 const root = resolve(fileURLToPath(new URL('../..', import.meta.url)))
 const readJson = async (path) => JSON.parse(await readFile(resolve(root, path), 'utf8'))
+
+const runSchema = await readJson('docs/contracts/run/v1/run.schema.json')
+const validateRun = new Ajv2020({ strict: false, validateFormats: false }).compile(runSchema)
+const standardRun = runSchema.examples[0]
+const capacityInput = { type: 'capacity_plan', path: 'capacity-plan.json', sha256: '0'.repeat(64) }
+const resourceInput = { type: 'resource_snapshot', path: 'resource-snapshot.json', sha256: '0'.repeat(64) }
+for (const [name, mode, additions, expected] of [
+  ['standard unchanged', 'standard', [], true],
+  ['standard forbids capacity plan', 'standard', [capacityInput, resourceInput], false],
+  ['capacity requires resources', 'capacity_step', [capacityInput], false],
+  ['capacity requires plan', 'capacity_step', [resourceInput], false],
+  ['capacity bound inputs', 'capacity_step', [capacityInput, resourceInput], true],
+]) {
+  if (validateRun({ ...standardRun, analysis_mode: mode, inputs: [...standardRun.inputs, ...additions] }) !== expected) {
+    throw new Error(`${name}: expected schema_valid=${expected}; ${JSON.stringify(validateRun.errors)}`)
+  }
+}
 const sourceSchema = await readJson('docs/contracts/sources/v1/source-request.schema.json')
 const validateSource = new Ajv2020({ strict: false }).compile(sourceSchema)
 const sourceExample = await readJson('docs/contracts/sources/v1/request.example.json')

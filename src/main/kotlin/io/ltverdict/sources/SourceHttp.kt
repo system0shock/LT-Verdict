@@ -1,5 +1,7 @@
 package io.ltverdict.sources
 
+import io.ltverdict.integrations.grafana.GrafanaPanelRequest
+import io.ltverdict.integrations.grafana.grafanaRenderUri
 import java.io.ByteArrayOutputStream
 import java.io.IOException
 import java.net.URI
@@ -58,6 +60,13 @@ internal class SourceHttp(
         checkCancelled: () -> Unit = {},
     ): ByteArray = execute(profile, queryParameters, null, budget, checkCancelled)
 
+    internal fun getGrafanaPanel(
+        profile: SourceProfile,
+        panel: GrafanaPanelRequest,
+        budget: SourceBudget = SourceBudget(),
+        checkCancelled: () -> Unit = {},
+    ): ByteArray = execute(profile, emptyMap(), null, budget, checkCancelled, grafanaRenderUri(profile, panel), 8 * 1024 * 1024)
+
     internal fun search(
         profile: SourceProfile,
         body: ByteArray,
@@ -85,13 +94,20 @@ internal class SourceHttp(
         body: ByteArray?,
         budget: SourceBudget,
         checkCancelled: () -> Unit,
+        endpointOverride: URI? = null,
+        responseLimit: Int = MAX_HTTP_RESPONSE_BYTES,
     ): ByteArray {
         val configuredProfile =
             configured[profile.id]?.takeIf { it.profile == profile }
                 ?: sourceFailure("SOURCE_PROFILE_NOT_CONFIGURED")
         val authorization = authorization(profile.auth, environment)
         val request =
-            request(uriWithQuery(configuredProfile.endpoint, queryParameters), authorization, configuredProfile.state.settings, body)
+            request(
+                uriWithQuery(endpointOverride ?: configuredProfile.endpoint, queryParameters),
+                authorization,
+                configuredProfile.state.settings,
+                body,
+            )
         var attempt = 0
         while (true) {
             checkCancelled()
@@ -101,7 +117,7 @@ internal class SourceHttp(
                     configuredProfile.state.acquireToken(budget, checkCancelled)
                     checkCancelled()
                     if (!budget.reserveAttempt(attempt > 0)) sourceFailure("SOURCE_REQUEST_CAP_EXCEEDED")
-                    send(request, configuredProfile.state.settings.timeoutMillis, checkCancelled)
+                    send(request, configuredProfile.state.settings.timeoutMillis, checkCancelled, responseLimit)
                 } catch (failure: AttemptFailure) {
                     if (!failure.retryable || attempt + 1 >= configuredProfile.state.settings.maxAttempts) {
                         sourceFailure(failure.code)
@@ -145,8 +161,9 @@ internal class SourceHttp(
         request: HttpRequest,
         timeoutMillis: Long,
         checkCancelled: () -> Unit,
+        responseLimit: Int,
     ): HttpResponse<ByteArray> {
-        val future = client.sendAsync(request, BoundedBodyHandler(MAX_HTTP_RESPONSE_BYTES))
+        val future = client.sendAsync(request, BoundedBodyHandler(responseLimit))
         val deadline = saturatedDeadline(System.nanoTime(), TimeUnit.MILLISECONDS.toNanos(timeoutMillis))
         while (true) {
             try {

@@ -9,6 +9,9 @@ internal class OnlineSourceFixture : AutoCloseable {
 
     @Volatile
     var responseStatus = 200
+
+    @Volatile
+    var errorResponseStatus = 200
     private val server = HttpServer.create(InetSocketAddress("127.0.0.1", 0), 0)
 
     init {
@@ -18,6 +21,19 @@ internal class OnlineSourceFixture : AutoCloseable {
                 """{"status":"success","data":{"resultType":"matrix",
                     "result":[{"metric":{"instance":"host"},"values":[[1767225601,"0.9"]]}]}}""".encodeToByteArray()
             exchange.sendResponseHeaders(responseStatus, bytes.size.toLong())
+            exchange.responseBody.use { it.write(bytes) }
+        }
+        server.createContext("/application-errors-") { exchange ->
+            requests.incrementAndGet()
+            exchange.requestBody.use { it.readAllBytes() }
+            val bytes =
+                """{"timed_out":false,"_shards":{"total":1,"successful":1,"skipped":0,"failed":0},
+                "hits":{"total":{"value":1,"relation":"eq"}},"aggregations":{
+                "timeline":{"buckets":[{"key":1767225600000,"doc_count":1}]},
+                "groups":{"sum_other_doc_count":0,"doc_count_error_upper_bound":0,"buckets":[
+                {"key":["api","Timeout"],"doc_count":1,"first_at":{"value":1767225600000},
+                "last_at":{"value":1767225600000}}]}}}""".encodeToByteArray()
+            exchange.sendResponseHeaders(errorResponseStatus, bytes.size.toLong())
             exchange.responseBody.use { it.write(bytes) }
         }
         server.start()

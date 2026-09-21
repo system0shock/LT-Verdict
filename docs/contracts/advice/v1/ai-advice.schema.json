@@ -1,0 +1,34 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://lt-verdict.local/schemas/advice/v1/ai-advice.schema.json",
+  "title": "LT Verdict ai-advice.v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "advisory", "run_id", "analysis_id", "analysis_manifest_sha256", "evidence_input_sha256", "output", "provenance"],
+  "properties": {
+    "schema_version": { "const": "ai-advice.v1" },
+    "advisory": { "const": true },
+    "run_id": { "type": "string", "minLength": 1 },
+    "analysis_id": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "analysis_manifest_sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "evidence_input_sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "output": { "$ref": "ai-advice-output.schema.json" },
+    "provenance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["invocation_id", "runner_id", "runner_version", "runner_artifact_sha256", "model_id", "prompt_version", "prompt_sha256", "duration_ms", "exit_code", "validation"],
+      "properties": {
+        "invocation_id": { "type": "string", "format": "uuid" },
+        "runner_id": { "const": "gigacode-qwen-code" },
+        "runner_version": { "const": "0.21.1" },
+        "runner_artifact_sha256": { "const": "1db9709bf1753611ca2fec234cf5adf517376efeb1540fcf9e309da010f9ed38" },
+        "model_id": { "const": "deepseek-v4-flash-0731" },
+        "prompt_version": { "const": "advisory-system.v1" },
+        "prompt_sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+        "duration_ms": { "type": "integer", "minimum": 0, "maximum": 613000 },
+        "exit_code": { "const": 0 },
+        "validation": { "const": "PASSED" }
+      }
+    }
+  }
+}

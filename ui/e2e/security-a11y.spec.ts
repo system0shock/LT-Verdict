@@ -96,7 +96,12 @@ test.describe.serial('local UI security and accessibility', () => {
     const policy = page.getByTestId('policy-file')
     const resources = page.getByTestId('resource-snapshot-file')
     const diagnostics = page.getByTestId('correlation-plan-file')
+    const capacity = page.getByTestId('capacity-plan-file')
+    const sourceContext = page.getByLabel('OpenSearch context')
     const sourceProfile = page.getByTestId('source-profile')
+    const postgresPre = page.getByLabel('PostgreSQL pre capture')
+    const postgresPost = page.getByLabel('PostgreSQL post capture')
+    const pgProfileHtml = page.getByLabel('pg_profile HTML')
     await expect(sourceProfile).toBeEnabled()
     const analyze = page.getByRole('button', { name: 'Analyze run' })
     await input.setInputFiles(fixture('slice1/jmeter/csv-5.6.3/input.jtl'))
@@ -117,7 +122,12 @@ test.describe.serial('local UI security and accessibility', () => {
       policy,
       resources,
       diagnostics,
+      capacity,
+      sourceContext,
       sourceProfile,
+      postgresPre,
+      postgresPost,
+      pgProfileHtml,
       analyze,
     ]
     for (const target of focusOrder) {
@@ -125,7 +135,7 @@ test.describe.serial('local UI security and accessibility', () => {
       await expectVisibleKeyboardFocus(target)
     }
 
-    for (const labelledInput of [input, policy, resources, diagnostics, sourceProfile]) {
+    for (const labelledInput of [input, policy, resources, diagnostics, capacity, sourceContext, sourceProfile, postgresPre, postgresPost, pgProfileHtml]) {
       const labels = await labelledInput.evaluate((element) =>
         [...((element as HTMLInputElement).labels ?? [])].map((label) => {
           const style = getComputedStyle(label)

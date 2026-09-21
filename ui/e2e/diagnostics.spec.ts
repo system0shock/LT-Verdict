@@ -24,11 +24,16 @@ const result = {
 async function fixtureApi(page: Page) {
   await page.route('**/api/**', async (route) => {
     const path = new URL(route.request().url()).pathname
+    const method = route.request().method()
     let body: unknown
     if (path === '/api/bootstrap') body = { csrf_token: 'ui-test', max_upload_bytes: 1000000 }
+    else if (method === 'GET' && path === '/api/jenkins') body = { profiles: [] }
+    else if (method === 'GET' && path === '/api/grafana') body = { profiles: [] }
+    else if (method === 'GET' && /^\/api\/runs\/[^/]+\/analyses\/[^/]+\/advice$/.test(path)) body = { advice: null, job: null }
     else if (path === '/api/sources') body = { profiles: [] }
     else if (path === '/api/runs') body = { runs: [run], next_after: null }
     else if (path === '/api/baseline') body = { baseline }
+    else if (method === 'GET' && path === `/api/runs/${reference.run_id}/analyses/${reference.analysis_id}/baseline-conditions`) body = { conditions: null }
     else if (path.endsWith('/analyses')) body = { analyses: [{ analysis_id: reference.analysis_id, policy_sha256: 'c'.repeat(64), policy_verdict: 'NO_POLICY', run_validity: 'VALID' }], next_after: null }
     else if (path.endsWith('/result')) body = result
     else if (path.endsWith('/buckets')) body = { buckets: [], next_from_ms: null }

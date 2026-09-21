@@ -43,6 +43,15 @@ internal class PromqlSource(
         checkCancelled: () -> Unit = {},
     ): SourceAcquisition {
         checkCancelled()
+        if (request.additionalProfileIds.isNotEmpty()) {
+            return acquireMultipleSources(
+                profiles,
+                this,
+                request,
+                loadInputSha256,
+                checkCancelled,
+            )
+        }
         val profile = profiles.singleOrNull { it.id == request.profileId } ?: throw IllegalArgumentException("SOURCE_PROFILE_NOT_FOUND")
         if (profile.sourceKind == SourceKind.OPENSEARCH) return acquireOpenSearch(profile, request, loadInputSha256, http, checkCancelled)
         val pointCount = ((request.endEpochMillis - request.startEpochMillis) / request.stepMillis).toInt()

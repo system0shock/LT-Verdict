@@ -39,6 +39,7 @@ dependencies {
     implementation("org.hdrhistogram:HdrHistogram:2.2.2")
     implementation("org.slf4j:slf4j-simple:2.0.18")
     implementation("com.univocity:univocity-parsers:2.9.1")
+    implementation("org.postgresql:postgresql:42.7.13")
     testImplementation(platform("org.junit:junit-bom:6.1.3"))
     testImplementation("org.junit.jupiter:junit-jupiter")
     testRuntimeOnly("org.junit.jupiter:junit-jupiter-engine")
@@ -85,6 +86,32 @@ val csvSpike by tasks.registering(Test::class) {
 }
 
 val uiDirectory = layout.projectDirectory.dir("ui")
+distributions {
+    main {
+        contents {
+            from(
+                files(
+                    "tools/advisory_ai_runtime.ps1",
+                    "tools/advisory_ai_runtime_qwen.sh",
+                    "tools/advisory_ai_runtime_relay.mjs",
+                    "tools/onboard_test.py",
+                ),
+            ) {
+                into("tools")
+            }
+            from(files("docs/contracts/advice/v1/system-prompt.md", "docs/contracts/advice/v1/ai-advice-output.schema.json")) {
+                into("docs/contracts/advice/v1")
+            }
+            from("skills/lt-verdict-onboard-test") { into("skills/lt-verdict-onboard-test") }
+            from(
+                files("docs/user/test-onboarding.md", "docs/user/advisory-ai.md", "docs/user/jenkins-and-reports.md"),
+            ) { into("docs/user") }
+            from(files("docs/user/saved-analytics.md", "docs/user/opensearch-correlation-preparation.md")) { into("docs/user") }
+            from("docs/contracts/diagnostics/v1/opensearch-correlation-templates.example.json") { into("docs/contracts/diagnostics/v1") }
+        }
+    }
+}
+
 val npmExecutable = if (System.getProperty("os.name").startsWith("Windows", ignoreCase = true)) "npm.cmd" else "npm"
 
 val npmCi by tasks.registering(Exec::class) {

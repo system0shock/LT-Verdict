@@ -28,6 +28,25 @@ import java.nio.file.Path
 
 class PostgresCaptureTest {
     @Test
+    fun `configuration changes are sorted and require valid phase binding`() {
+        val pre = JsonObject(phase("pre") + ("configuration" to Json.parseToJsonElement("""{"work_mem":"4096","old":"yes"}""")))
+        val post =
+            bindPost(
+                pre,
+                JsonObject(
+                    phase("post") + ("configuration" to Json.parseToJsonElement("""{"work_mem":"8192","new":"yes"}""")),
+                ),
+            )
+        assertEquals(
+            Json.parseToJsonElement(
+                """[{"name":"new","pre":null,"post":"yes"},{"name":"old","pre":"yes","post":null},{"name":"work_mem","pre":"4096","post":"8192"}]""",
+            ),
+            comparePostgresPhases(pre, post, HASH_C, 200, 300).getValue("configuration_changes"),
+        )
+        assertEquals(JsonArray(emptyList()), comparePostgresPhases(pre, post, HASH_C, 0, 300).getValue("configuration_changes"))
+    }
+
+    @Test
     fun `comparison reports literal table and statement deltas without raw rows`() {
         val pre =
             phase(

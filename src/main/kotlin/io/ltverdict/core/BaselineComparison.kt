@@ -13,6 +13,8 @@ import kotlinx.serialization.json.put
 import java.math.BigDecimal
 import java.math.BigInteger
 import java.math.RoundingMode
+import java.time.Instant
+import java.time.format.DateTimeParseException
 import kotlin.math.abs
 
 internal data class WindowComparisonRequest(
@@ -20,6 +22,54 @@ internal data class WindowComparisonRequest(
     val currentWindowId: String,
     val minChangePercent: BigDecimal = BigDecimal("5"),
     val minErrorRateDelta: BigDecimal = BigDecimal("0.001"),
+)
+
+internal fun baselineConditionRecord(
+    baselineReference: JsonObject,
+    currentReference: JsonObject,
+    windows: WindowComparisonRequest?,
+    decision: String,
+    updatedAt: Instant,
+): JsonObject =
+    BaselineCondition(
+        conditionBinding(baselineReference, currentReference, windows),
+        ConditionDecision.entries.singleOrNull { it.name == decision }
+            ?: throw IllegalArgumentException("INVALID_BASELINE_CONDITION"),
+        updatedAt,
+    ).toJson()
+
+internal fun baselineConditionBinding(
+    baselineReference: JsonObject,
+    currentReference: JsonObject,
+    windows: WindowComparisonRequest?,
+): JsonObject = conditionBinding(baselineReference, currentReference, windows).toJson()
+
+internal fun baselineConditionBinding(condition: JsonObject): JsonObject = condition.toBaselineCondition().binding.toJson()
+
+internal fun validateBaselineCondition(condition: JsonObject): JsonObject = condition.toBaselineCondition().toJson()
+
+internal fun baselineConditionMatches(
+    condition: JsonObject,
+    baselineReference: JsonObject,
+    currentReference: JsonObject,
+    windows: WindowComparisonRequest?,
+): Boolean = condition.toBaselineCondition().binding == conditionBinding(baselineReference, currentReference, windows)
+
+internal fun baselineConditionConfirmation(condition: JsonObject): Boolean? = condition.toBaselineCondition().decision.confirmation
+
+private fun conditionBinding(
+    baselineReference: JsonObject,
+    currentReference: JsonObject,
+    windows: WindowComparisonRequest?,
+) = ConditionBinding(
+    baselineReference.toReference(),
+    currentReference.toReference(),
+    windows?.let {
+        ConditionWindows(
+            requireConditionWindow(it.baselineWindowId),
+            requireConditionWindow(it.currentWindowId),
+        )
+    },
 )
 
 internal fun manualBaselineSelection(
@@ -98,16 +148,18 @@ internal fun compareAnalyses(
     currentResult: JsonObject,
     currentIdentity: JsonObject,
     windows: WindowComparisonRequest? = null,
+    conditionsConfirmed: Boolean? = null,
 ): JsonObject {
     val parsedSelection = selection.toSelection()
     val current = currentReference.toReference()
+    val confirmed = conditionsConfirmed ?: (parsedSelection.mode == Mode.STATISTICAL && current in parsedSelection.candidates)
     val compatible = semanticKey(baselineResult, baselineIdentity)?.let { it == semanticKey(currentResult, currentIdentity) } == true
     return buildJsonObject {
         put("baseline", parsedSelection.toJson())
         put("current", current.toJson())
         put(
             "comparability",
-            if (parsedSelection.mode == Mode.STATISTICAL && current in parsedSelection.candidates) {
+            if (confirmed) {
                 "USER_CONFIRMED"
             } else {
                 "UNCONFIRMED"
@@ -129,7 +181,7 @@ internal fun compareAnalyses(
                     baselineResult,
                     currentResult,
                     compatible,
-                    parsedSelection.mode == Mode.STATISTICAL && current in parsedSelection.candidates,
+                    confirmed,
                 ),
             )
         }
@@ -560,6 +612,71 @@ private fun JsonObject.toReference(): Reference {
     return Reference(runId, analysisId)
 }
 
+private fun JsonObject.toBaselineCondition(): BaselineCondition {
+    require(keys == BASELINE_CONDITION_FIELDS) { "INVALID_BASELINE_CONDITION" }
+    require(conditionString("schema_version") == BASELINE_CONDITION_SCHEMA) { "INVALID_BASELINE_CONDITION" }
+    val baseline = (this["baseline"] as? JsonObject)?.toReference() ?: throw IllegalArgumentException("INVALID_BASELINE_CONDITION")
+    val current = (this["current"] as? JsonObject)?.toReference() ?: throw IllegalArgumentException("INVALID_BASELINE_CONDITION")
+    val windows =
+        when (val value = getValue("windows")) {
+            JsonNull -> null
+            is JsonObject -> {
+                require(value.keys == BASELINE_CONDITION_WINDOW_FIELDS) { "INVALID_BASELINE_CONDITION" }
+                ConditionWindows(
+                    requireConditionWindow(value.conditionString("baseline_window")),
+                    requireConditionWindow(value.conditionString("current_window")),
+                )
+            }
+            else -> throw IllegalArgumentException("INVALID_BASELINE_CONDITION")
+        }
+    val decision =
+        ConditionDecision.entries.singleOrNull { it.name == conditionString("decision") }
+            ?: throw IllegalArgumentException("INVALID_BASELINE_CONDITION")
+    require(conditionString("provenance") == BASELINE_CONDITION_PROVENANCE) { "INVALID_BASELINE_CONDITION" }
+    val updatedAt =
+        try {
+            Instant.parse(conditionString("updated_at"))
+        } catch (_: DateTimeParseException) {
+            throw IllegalArgumentException("INVALID_BASELINE_CONDITION")
+        }
+    return BaselineCondition(ConditionBinding(baseline, current, windows), decision, updatedAt)
+}
+
+private fun BaselineCondition.toJson(): JsonObject =
+    buildJsonObject {
+        put("schema_version", BASELINE_CONDITION_SCHEMA)
+        put("baseline", binding.baseline.toJson())
+        put("current", binding.current.toJson())
+        put("windows", binding.windows?.toJson() ?: JsonNull)
+        put("decision", decision.name)
+        put("provenance", BASELINE_CONDITION_PROVENANCE)
+        put("updated_at", updatedAt.toString())
+    }
+
+private fun ConditionBinding.toJson(): JsonObject =
+    buildJsonObject {
+        put("baseline", baseline.toJson())
+        put("current", current.toJson())
+        put("windows", windows?.toJson() ?: JsonNull)
+    }
+
+private fun ConditionWindows.toJson(): JsonObject =
+    buildJsonObject {
+        put("baseline_window", baselineWindowId)
+        put("current_window", currentWindowId)
+    }
+
+private fun JsonObject.conditionString(name: String): String =
+    (this[name] as? JsonPrimitive)?.takeIf(JsonPrimitive::isString)?.content
+        ?: throw IllegalArgumentException("INVALID_BASELINE_CONDITION")
+
+private fun requireConditionWindow(value: String): String {
+    require(value.isNotBlank() && value.encodeToByteArray().size <= MAX_CONDITION_WINDOW_BYTES && value.none(Char::isISOControl)) {
+        "INVALID_BASELINE_CONDITION"
+    }
+    return value
+}
+
 private fun JsonObject.toSelection(): Selection {
     require(keys == SELECTION_FIELDS && requiredString("schema_version") == SCHEMA_VERSION) { "INVALID_BASELINE_SELECTION" }
     val mode = Mode.entries.singleOrNull { it.wireName == requiredString("mode") } ?: error("INVALID_BASELINE_SELECTION")
@@ -661,6 +778,31 @@ private data class Reference(
     override fun compareTo(other: Reference): Int = compareValuesBy(this, other, Reference::runId, Reference::analysisId)
 }
 
+private data class ConditionWindows(
+    val baselineWindowId: String,
+    val currentWindowId: String,
+)
+
+private data class ConditionBinding(
+    val baseline: Reference,
+    val current: Reference,
+    val windows: ConditionWindows?,
+)
+
+private data class BaselineCondition(
+    val binding: ConditionBinding,
+    val decision: ConditionDecision,
+    val updatedAt: Instant,
+)
+
+private enum class ConditionDecision(
+    val confirmation: Boolean?,
+) {
+    CONFIRMED(true),
+    NOT_CONFIRMED(false),
+    UNKNOWN(null),
+}
+
 private data class Candidate(
     val reference: Reference,
     val metrics: List<Rational>,
@@ -760,15 +902,20 @@ private enum class WindowMetric(
 private fun BigInteger.equalsZero(): Boolean = signum() == 0
 
 private const val SCHEMA_VERSION = "local-baseline.v1"
+private const val BASELINE_CONDITION_SCHEMA = "local-baseline-conditions.v1"
+private const val BASELINE_CONDITION_PROVENANCE = "EXPLICIT_LOCAL_ACTION"
 private const val ALGORITHM = "median-rank-v1"
 private const val MIN_CANDIDATES = 3
 private const val MAX_CANDIDATES = 20
 private const val MAX_SERIES_BYTES = 128
+private const val MAX_CONDITION_WINDOW_BYTES = 128
 private const val DISPLAY_SCALE = 6
 private val HUNDRED = BigInteger.valueOf(100)
 private val REFERENCE_FIELDS = setOf("run_id", "analysis_id")
 private val SCORE_FIELDS = setOf("reference", "score")
 private val SELECTION_FIELDS = setOf("schema_version", "series", "mode", "reference", "algorithm", "candidates", "scores")
+private val BASELINE_CONDITION_FIELDS = setOf("schema_version", "baseline", "current", "windows", "decision", "provenance", "updated_at")
+private val BASELINE_CONDITION_WINDOW_FIELDS = setOf("baseline_window", "current_window")
 private val RATIO_FIELDS = setOf("numerator", "denominator")
 private val RESOURCE_BINDING_FIELDS = listOf("series_id", "metric", "unit", "entity", "role", "aggregation")
 private val SEMANTIC_FIELDS =

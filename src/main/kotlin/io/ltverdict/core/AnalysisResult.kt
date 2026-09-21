@@ -29,6 +29,8 @@ internal fun analysisIdentity(
     resources: ResourceValidation.Valid? = null,
     diagnostics: DiagnosticValidation.Valid? = null,
     sourceAcquisitionSha256: String? = null,
+    postgresInputSha256: String? = null,
+    capacity: CapacityPlanValidation.Valid? = null,
 ): ByteArray =
     canonicalJson(
         buildJsonObject {
@@ -43,6 +45,11 @@ internal fun analysisIdentity(
             }
             diagnostics?.let { put("diagnostic_plan_sha256", it.sha256) }
             sourceAcquisitionSha256?.let { put("source_acquisition_sha256", it) }
+            postgresInputSha256?.let { put("postgres_input_sha256", it) }
+            capacity?.let {
+                put("capacity_plan_sha256", it.semanticSha256)
+                put("capacity_plan_version", "capacity-plan.v1")
+            }
             put(
                 "engine",
                 buildJsonObject {
@@ -67,11 +74,12 @@ internal fun analysisIdentity(
                     val modules = mutableListOf("normalization", "metrics", "policy-evaluation")
                     if (resources != null) modules += listOf("resource-statistics", "window-policy-evaluation")
                     if (diagnostics != null) modules += "load-resource-diagnostics"
+                    if (capacity != null) modules += "capacity-stage-evaluation"
                     modules.forEach { id ->
                         add(
                             buildJsonObject {
                                 put("id", id)
-                                put("version", "1")
+                                put("version", if (id == "load-resource-diagnostics") "2" else "1")
                             },
                         )
                     }
@@ -84,6 +92,7 @@ internal fun analysisIdentity(
                     put("policy", "policy.v1")
                     if (resources != null) put("resources", "resource-snapshot.v1")
                     if (diagnostics != null) put("diagnostics", "correlation-plan.v1")
+                    if (capacity != null) put("capacity", "capacity-plan.v1")
                 },
             )
             put(
@@ -111,7 +120,7 @@ internal fun analysisIdentity(
                     put("rollup_seconds", buildJsonArray { listOf("10", "30", "60").forEach { add(JsonPrimitive(it)) } })
                 },
             )
-            put("limits", limits(config.metrics, resources != null, diagnostics != null))
+            put("limits", limits(config.metrics, resources != null, diagnostics != null, capacity != null))
         },
     )
 
@@ -119,14 +128,16 @@ internal fun analysisResult(
     runId: String,
     validity: RunValidity,
     evaluation: PolicyEvaluation,
+    mode: AnalysisMode = AnalysisMode.STANDARD,
+    capacity: CapacityAnalysis? = null,
 ): ByteArray =
     canonicalJson(
         buildJsonObject {
             put("schema_version", "analysis-result.v1")
             put("run_id", runId)
-            put("analysis_mode", AnalysisMode.STANDARD.wireName)
+            put("analysis_mode", mode.wireName)
             put("run_validity", validity.name)
-            put("policy_verdict", evaluation.verdict.name)
+            put("policy_verdict", (capacity?.policyVerdict ?: evaluation.verdict).name)
             put(
                 "analysis_coverage",
                 buildJsonObject {
@@ -136,6 +147,7 @@ internal fun analysisResult(
             )
             put("findings", buildJsonArray { evaluation.findings.forEach(::add) })
             put("evidence", buildJsonArray { evaluation.evidence.forEach(::add) })
+            capacity?.let { put("capacity_summary", it.capacityJson) }
         },
     )
 
@@ -143,6 +155,7 @@ private fun limits(
     metrics: MetricsConfig,
     includeResources: Boolean,
     includeDiagnostics: Boolean,
+    includeCapacity: Boolean,
 ) = buildJsonObject {
     put("input_bytes_max", "4294967296")
     put("policy_bytes_max", "1048576")
@@ -194,6 +207,14 @@ private fun limits(
         put("diagnostic_pair_windows_max", MAX_DIAGNOSTIC_PAIR_WINDOWS.toString())
         put("diagnostic_episodes_max", MAX_DIAGNOSTIC_EPISODES.toString())
         put("diagnostic_p95_samples_min", MIN_DIAGNOSTIC_P95_SAMPLES.toString())
+    }
+    if (includeCapacity) {
+        put("capacity_plan_bytes_max", MAX_CAPACITY_PLAN_BYTES.toString())
+        put("capacity_json_depth_max", CAPACITY_JSON_DEPTH_MAX.toString())
+        put("capacity_stages_max", MAX_CAPACITY_STAGES.toString())
+        put("capacity_guards_max", MAX_CAPACITY_GUARDS.toString())
+        put("capacity_bin_millis", "10000")
+        put("capacity_minimum_bins", "30")
     }
 }
 

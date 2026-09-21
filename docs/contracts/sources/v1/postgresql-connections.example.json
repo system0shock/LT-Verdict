@@ -1,0 +1,23 @@
+{
+  "schema_version": "source-connections.v2",
+  "connections": [
+    {
+      "id": "pg",
+      "source_kind": "postgresql",
+      "source_database_id": "load-test-db",
+      "host": "postgres.example.test",
+      "port": 5432,
+      "database": "loadtest",
+      "username_env": "LTV_POSTGRES_USER",
+      "password_env": "LTV_POSTGRES_PASSWORD",
+      "tables": [
+        {
+          "schema": "public",
+          "table": "orders",
+          "columns": ["id", "status"],
+          "key": ["id"]
+        }
+      ]
+    }
+  ]
+}

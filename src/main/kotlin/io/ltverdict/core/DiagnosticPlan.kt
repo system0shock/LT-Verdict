@@ -1,5 +1,6 @@
 package io.ltverdict.core
 
+import io.ltverdict.metrics.MIN_P95_SAMPLES
 import kotlinx.serialization.SerializationException
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
@@ -747,7 +748,9 @@ internal const val MAX_DIAGNOSTIC_CONTROLS = 4
 internal const val MAX_DIAGNOSTIC_LAG_MILLIS = 60_000L
 internal const val MAX_DIAGNOSTIC_LAG_CELLS = 10L
 internal const val MAX_DIAGNOSTIC_EPISODES = 1_000
-internal const val MIN_DIAGNOSTIC_P95_SAMPLES = 20L
+
+// Единый источник порога: то же значение применяется в UtcLoadMetrics при расчёте cell p95.
+internal const val MIN_DIAGNOSTIC_P95_SAMPLES = MIN_P95_SAMPLES
 private const val DIAGNOSTIC_SCHEMA_VERSION = "correlation-plan.v1"
 private const val DIAGNOSTIC_IDENTIFIER_BYTES = 128
 private const val DIAGNOSTIC_TEXT_BYTES = 512

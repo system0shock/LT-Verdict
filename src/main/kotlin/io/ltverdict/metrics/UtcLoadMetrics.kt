@@ -99,4 +99,4 @@ internal class UtcLoadMetricsAccumulator(
     }
 }
 
-private const val MIN_P95_SAMPLES = 20L
+internal const val MIN_P95_SAMPLES = 20L

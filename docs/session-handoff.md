@@ -1,5 +1,112 @@
 # LT Verdict — передача сессии
 
+## Передача 2026-09-22 (ночь): ветка fix/input-unit-fill-coverage
+
+Ворктри `.worktrees/local-baseline-comparison` переключён с `feat/remaining-sources`
+на новую локальную ветку `fix/input-unit-fill-coverage` от `c100ed2`. Push не
+выполнялся, ветка существует только локально. Запись «Подготовка 2026-09-22:
+актуальная точка» ниже остаётся в силе по составу поставки, но её контекст
+устарел в одном: `c100ed2` (200 файлов, 36791 вставка) уже в
+`origin/feat/remaining-sources`, поэтому аналитический слой больше не является
+незакоммиченным.
+
+### Пять коммитов ветки
+
+- `8717cab fix(ingest)`: timestamps в `1000000000..99999999999` отклоняются как
+  `INVALID_SAMPLE_TIMESTAMP`. Границы опубликованы в `limits` identity как
+  `timestamp_epoch_millis_unit_suspect_min/max`; golden-фикстура
+  `analysis-identity.v1.json`, её `.sha256` и две записи `fixtures/slice1/manifest.json`
+  перегенерированы байт-в-байт. Поправка к ADR 0003, пользовательская дока, CHANGELOG.
+- `afb8b2f fix(sources)`: InfluxQL `fill(...)` разрешён только для `null` и `none`;
+  `0`, `previous`, `linear`, число и пустой аргумент дают `SOURCE_CONFIG_INVALID`.
+- `5ba2a28 fix(analysis)`: статус онлайн-сбора и исчерпанный request budget дают
+  `SOURCE_ACQUISITION_PARTIAL`, `SOURCE_ACQUISITION_FAILED`,
+  `SOURCE_REQUEST_CAP_EXCEEDED` в `coverageReasons`, поэтому `analysis_coverage.status`
+  становится `INCOMPLETE`. Применено в обычном и invalid-input путях.
+- `230ef59 refactor(metrics)`: `MIN_DIAGNOSTIC_P95_SAMPLES` выводится из
+  `MIN_P95_SAMPLES`, плюс тест, что identity публикует именно применяемый порог.
+- `94240db docs`: `docs/analytics-scale-triage.md` и `docs/analytics-trend-detection.md`
+  — границы работ, ничего не объявляют реализованным.
+
+### Осознанное отклонение от первоначальной формулировки
+
+Пункт 1 сделан не как нижняя граница правдоподобия, а как отклонение диапазона
+epoch-seconds. Жёсткая граница потребовала бы переписать синтетические epoch
+примерно в 20 тестовых файлах, включая Gatling `RUN ... 1 ...` в
+`GatlingTextParserTest`, и не закрыла бы ничего сверх подмены единицы измерения.
+Выбранный диапазон как epoch-millis означает 1970-01-12..1973-03-03, а как
+epoch-seconds покрывает 2001..5138. Существующие фикстуры не затронуты: они
+используют `1767225600000`, а PromQL-секунды идут мимо `LoadSample`.
+
+### Проверено
+
+- Полный JVM-набор offline: 67 классов, 386 тестов, 0 failures, 0 errors,
+  9 skipped (env-gated корпусные раннеры, как и раньше). Без `clean`.
+- `ktlintMainSourceCheck ktlintTestSourceCheck`: pass.
+- `tools/verify_slice0.py`: OK; `unittest tools.test_verify_slice0
+  tools.test_generate_jtl tools.test_onboard_test`: 9 тестов OK.
+- Полный набор прогнан до последних doc-правок; код после этого не менялся.
+
+### Не проверено
+
+markdownlint (локально не установлен, пакет не скачивался — проверит CI),
+`gradlew check installDist`, UI typecheck/lint/build/e2e, offline rebuild,
+browser gates, performance probe.
+
+### Известная нечистота истории
+
+Строка CHANGELOG про `fill(...)` попала в `8717cab`, хотя относится к `afb8b2f`.
+Исправление через `git commit --amend` заблокировано политикой инструмента;
+обходить блокировку не следует. Оставить как есть либо исправить при squash PR.
+
+### Следствия, которые нельзя «откатить» по ошибке
+
+Изменение `limits` меняет `analysis_id` всех новых анализов. Сохранённые analyses
+остаются immutable и читаемыми, переиспользования прежнего результата для того же
+входа больше не будет — это штатное поведение по ADR 0003.
+
+### Следующие пункты того же списка
+
+- Пункт 4, L0-тренд: форма согласована пользователем — отдельный optional
+  `trend-plan.v1` со своим semantic SHA-256 и модулем identity
+  `resource-trend-evaluation` версии `1`, по образцу `correlation-plan.v1` и
+  `capacity-plan.v1`. Содержательная часть — в `docs/analytics-trend-detection.md`.
+- Пункт 5, документационные противоречия: `docs/user/slice-1-local-analysis.md`
+  утверждает «p-values отсутствуют», тогда как `DiagnosticAnalysis.kt` публикует
+  `correlation_headline_selection` с `holm_adjusted_p_value`; ограничения выводной
+  семьи в `docs/user/*` не описаны вовсе. Эта запись ниже также держит
+  `BASELINE-CONDITIONS-01` как OPEN, хотя ADR 0010 и `LocalApi.kt:392,408`
+  реализованы.
+- Пункт 7: `processed_bytes`, число прочитанных записей и число проигнорированных
+  Gatling `ERROR`/`USER` в evidence. Сейчас `ParseReport.processedBytes` не
+  персистится, а `diagnostics` на успехе пуст.
+- Пункт 8: типизация `analysis_coverage`, `findings[]`, `evidence[]` в
+  `analysis-result.schema.json` и включение схемы в `verify-policy-schema.mjs`
+  (сейчас она не компилируется нигде).
+
+### Не закрыто обзором и не должно потеряться
+
+- Приёмка v1 описывает прежнюю версию продукта: 22 из 167 замороженных файлов
+  отличаются, `CorrelationHeadlineSelection.kt` отсутствует в freeze, а во frozen
+  `actual.jsonl` на 28000 отчётов нет ни одного `correlation_headline_selection`.
+- JVM-селектор никогда не калибровался Monte-Carlo; принятые 7.7-13.2% получены
+  в NumPy на development-seeds и выше pre-registered гейта 5%.
+- Шум two-run сравнения (T02 36.8% при нулевой истинной дельте) не исправлен.
+- Выводная семья поддерживается только в полосе: одно окно, один outcome,
+  не более 16 гипотез, 30-240 непрерывных ячеек, вырожденные controls. Вне её
+  находок не публикуется вовсе; форма не измерялась.
+- Для контура с одной моделью: `AGENTS.md` маршрутизирует задачи на
+  `gpt-5.6-luna/terra/sol`, что невыполнимо; host ModelStudio захардкожен в
+  `tools/advisory_ai_runtime_relay.mjs:193`, поэтому замена модели — новый runner,
+  новая версия контракта advice и новая приёмка, а не конфигурация.
+
+### Окружение
+
+Gradle offline: 7 классов примерно 15 s, полный JVM-набор 1m48s. Не запускать
+`clean`: `build/stats-validation` и `build/ai-acceptance` содержат 6.58 ГБ
+первичных трасс и 2.24 ГБ evidence-архивов, которые не закоммичены. Один
+Gradle-процесс за раз.
+
 ## Подготовка 2026-09-22: актуальная точка
 
 Продолжаем в `.worktrees/local-baseline-comparison`, ветка `feat/remaining-sources`.

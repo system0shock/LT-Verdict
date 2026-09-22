@@ -153,6 +153,11 @@ class SourceConfigTest {
                 influxConnections().replace(" fill(null)", " -- unsafe"),
                 influxConnections().replace(" fill(null)", " /* unsafe */"),
                 influxConnections().replace(" fill(null)", " ${'$'}__unknown"),
+                influxConnections().replace("fill(null)", "fill(0)"),
+                influxConnections().replace("fill(null)", "fill(previous)"),
+                influxConnections().replace("fill(null)", "fill(linear)"),
+                influxConnections().replace("fill(null)", "fill(999)"),
+                influxConnections().replace("fill(null)", "fill()"),
                 influxConnections().replace("SELECT mean", "DELETE mean"),
                 influxConnections().replace(" AS \\\"value\\\"", ""),
             )
@@ -162,6 +167,15 @@ class SourceConfigTest {
                 "SOURCE_CONFIG_INVALID",
                 assertThrows(IllegalArgumentException::class.java) { readSourceProfiles(json.byteInputStream()) }.message,
             )
+        }
+    }
+
+    @Test
+    fun `gap preserving fill modes stay valid`() {
+        listOf("fill(null)", "fill(none)", "FILL( None )").forEach { fill ->
+            val json = influxConnections().replace("fill(null)", fill)
+
+            assertEquals(1, readSourceProfiles(json.byteInputStream()).size)
         }
     }
 

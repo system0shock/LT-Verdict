@@ -71,10 +71,13 @@ Direct отправляет GET на `{base_url}/query`, Grafana proxy — на
 Запрос должен быть одним SELECT и возвращать ровно колонки `time`,`value` в
 любом порядке. Полю метрики задайте alias `AS "value"`; `time` возвращает сам
 InfluxQL. Консервативный validator отклоняет `INTO`, semicolon, comments,
-неизвестные placeholders и выражения, форму которых нельзя подтвердить без
-полного SQL parser. Один результат с нулём или одной series допустим; несколько
-statements/series, partial response, messages/errors, неверные tags,
-duplicate/off-grid timestamps отклоняются.
+неизвестные placeholders, `fill(...)` с режимом, фабрикующим значения, и
+выражения, форму которых нельзя подтвердить без полного SQL parser. Разрешены
+только сохраняющие пропуски `fill(null)` и `fill(none)`; `fill(0)`,
+`fill(previous)`, `fill(linear)` и числовые аргументы отклоняются, потому что
+их результат неотличим от наблюдений. Один результат с нулём или одной series
+допустим; несколько statements/series, partial response, messages/errors,
+неверные tags, duplicate/off-grid timestamps отклоняются.
 
 InfluxQL timestamp является левой границей snapshot cell. Пример с cells
 `[1000,2000)`, `[2000,3000)`, `[3000,4000)` принимает timestamps `1000`, `2000`,

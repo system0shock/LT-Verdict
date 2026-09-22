@@ -449,6 +449,7 @@ private fun validateInfluxqlExpression(expression: String) {
     }
     if ("${'$'}__" in INFLUX_PLACEHOLDER_PATTERN.replace(expression, "")) configInvalid()
     if (';' in expression || INFLUX_COMMENTS.any(expression::contains) || INFLUX_INTO.containsMatchIn(expression)) configInvalid()
+    if (INFLUX_FILL.findAll(expression).any { it.groupValues[1].trim().lowercase() !in INFLUX_GAP_PRESERVING_FILL }) configInvalid()
     if (!INFLUX_SELECT.matches(expression)) configInvalid()
     if (!INFLUX_VALUE_ALIAS.containsMatchIn(expression) && !INFLUX_DIRECT_VALUE.matches(expression)) configInvalid()
 }
@@ -718,9 +719,14 @@ private val INFLUX_PLACEHOLDERS = INFLUX_REQUIRED_PLACEHOLDERS + OFFSET_PLACEHOL
 private val INFLUX_PLACEHOLDER_PATTERN = Regex("\\${'$'}__[A-Za-z0-9_]+")
 private val INFLUX_COMMENTS = listOf("--", "/*", "*/", "#")
 private val INFLUX_INTO = Regex("""(?i)\bINTO\b""")
+private val INFLUX_FILL = Regex("""(?i)\bfill\s*\(([^()]*)\)""")
 private val INFLUX_SELECT = Regex("""(?is)^\s*SELECT\b.+\bFROM\b.+$""")
 private val INFLUX_VALUE_ALIAS = Regex("""(?i)\bAS\s+"?value"?(?=\s|,|$)""")
 private val INFLUX_DIRECT_VALUE = Regex("""(?is)^\s*SELECT\s+"?value"?(?:\s*,|\s+FROM\b).*$""")
+
+// `fill(null)` и `fill(none)` сохраняют пропуски; остальные режимы фабрикуют значения,
+// которые resource statistics приняли бы за наблюдения.
+private val INFLUX_GAP_PRESERVING_FILL = setOf("null", "none")
 private val MAX_DECIMAL_MAGNITUDE = BigDecimal("1000000000000000000")
 private val ENVIRONMENT_NAME = Regex("[A-Za-z_][A-Za-z0-9_]{0,127}")
 private val SAFE_PATH_SEGMENT = Regex("[A-Za-z0-9._~-]{1,128}")

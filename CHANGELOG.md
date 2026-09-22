@@ -72,5 +72,12 @@
 
 ### Fixed
 
+- Timestamps в диапазоне epoch-seconds `1000000000..99999999999` отклоняются как
+  `INVALID_SAMPLE_TIMESTAMP` вместо тихой интерпретации как миллисекунды 1970
+  года с валидным `PASS`/`FAIL`. Границы опубликованы в `limits`
+  `analysis-identity.v1`, поэтому прежние `analysis_id` не переиспользуются.
+- InfluxQL-выражения с `fill(...)`, фабрикующим значения (`0`, `previous`,
+  `linear`, число), отклоняются как `SOURCE_CONFIG_INVALID`; разрешены только
+  сохраняющие пропуски `fill(null)` и `fill(none)`.
 - Устранено переполнение памяти при завершении анализа больших JTL со
   множеством sparse one-second buckets.

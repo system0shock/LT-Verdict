@@ -69,6 +69,26 @@ class JtlCsvParserTest {
     }
 
     @Test
+    fun `epoch-seconds timestamps are rejected as a unit error`() {
+        val report = parseJtlCsv(csv("timeStamp,elapsed,label,success", "1767225600,200,request,true"), {})
+
+        assertEquals(RunValidity.INVALID, report.validity)
+        assertEquals(listOf("INVALID_SAMPLE_TIMESTAMP"), report.diagnostics.map { it.code })
+    }
+
+    @Test
+    fun `timestamps outside the unit-suspect range stay valid`() {
+        listOf(TIMESTAMP_UNIT_SUSPECT_RANGE.first - 1, TIMESTAMP_UNIT_SUSPECT_RANGE.last + 1).forEach { timestamp ->
+            val samples = mutableListOf<LoadSample>()
+
+            val report = parseJtlCsv(csv("timeStamp,elapsed,label,success", "$timestamp,200,request,true"), samples::add)
+
+            assertEquals(RunValidity.VALID, report.validity)
+            assertEquals(timestamp, samples.single().startedAtEpochMillis)
+        }
+    }
+
+    @Test
     fun `CSV resource limits are invalid with diagnostics`() {
         val header = (listOf("timeStamp", "elapsed", "label", "success") + List(61) { "extra$it" }).joinToString(",")
         val row = (listOf("1", "2", "label", "true") + List(61) { "x" }).joinToString(",")

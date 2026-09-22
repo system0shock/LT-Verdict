@@ -67,11 +67,11 @@
     },
     {
       "path": "fixtures/slice1/identity/analysis-identity.sha256",
-      "sha256": "56516c624e4ee206f60151ae0245e5edc5f97070e594dd848884daad5054d079"
+      "sha256": "edc66d17e816311f29085c6bd6fe146d099c9667094bd6fb6d14a456a116a953"
     },
     {
       "path": "fixtures/slice1/identity/analysis-identity.v1.json",
-      "sha256": "9788d43f17f0ba45db05d638c19590e15af6494696cc85cc307f32a798575514"
+      "sha256": "bde95aeee50eaffe17953112ed0800202a9f19f0addfcdaba14afcbc116a98b2"
     },
     {
       "path": "fixtures/slice1/identity/policy.canonical.json",

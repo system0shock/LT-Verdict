@@ -47,6 +47,11 @@ ltv ui --data-dir <path>
 response bodies, response headers и XML payload fields не извлекаются в
 результаты и не показываются.
 
+Timestamps должны быть epoch в миллисекундах. Значения в диапазоне
+`1000000000..99999999999` отклоняются как `INVALID_SAMPLE_TIMESTAMP`: это epoch
+в секундах, который иначе молча дал бы run window в 1970 году. Для JMeter
+перегенерируйте JTL с `-Jjmeter.save.saveservice.timestamp_format=ms`.
+
 ## Анализ через UI
 
 1. В `Runs` выберите `Load test log`.

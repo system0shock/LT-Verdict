@@ -2,6 +2,7 @@ package io.ltverdict.core
 
 import io.ltverdict.ingest.RunValidity
 import io.ltverdict.ingest.SourceType
+import io.ltverdict.ingest.TIMESTAMP_UNIT_SUSPECT_RANGE
 import io.ltverdict.metrics.MetricsConfig
 import io.ltverdict.storage.AcceptedInput
 import kotlinx.serialization.json.JsonPrimitive
@@ -179,6 +180,8 @@ private fun limits(
     put("policy_numeric_exponent_abs_max", "64")
     put("policy_canonical_decimal_bytes_max", "128")
     put("timestamp_epoch_millis_max", "253402300799999")
+    put("timestamp_epoch_millis_unit_suspect_min", TIMESTAMP_UNIT_SUSPECT_RANGE.first.toString())
+    put("timestamp_epoch_millis_unit_suspect_max", TIMESTAMP_UNIT_SUSPECT_RANGE.last.toString())
     if (includeResources) {
         put("resource_snapshot_bytes_max", MAX_RESOURCE_SNAPSHOT_BYTES.toString())
         put("resource_json_depth_max", RESOURCE_JSON_DEPTH_MAX.toString())

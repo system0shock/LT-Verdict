@@ -23,8 +23,10 @@ import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.booleanOrNull
 import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
@@ -150,6 +152,7 @@ internal class AnalysisService(
             request.sourceAcquisition?.let {
                 evaluation =
                     evaluation.copy(
+                        coverageReasons = (evaluation.coverageReasons + sourceCoverageReasons(it.evidence)).distinct(),
                         evidence = evaluation.evidence + it.evidence + it.contextEvidence,
                     )
             }
@@ -403,7 +406,13 @@ internal class AnalysisService(
                     evidence = evaluation.evidence + diagnostic.evidence,
                 )
         }
-        request.sourceAcquisition?.let { evaluation = evaluation.copy(evidence = evaluation.evidence + it.evidence + it.contextEvidence) }
+        request.sourceAcquisition?.let {
+            evaluation =
+                evaluation.copy(
+                    coverageReasons = (evaluation.coverageReasons + sourceCoverageReasons(it.evidence)).distinct(),
+                    evidence = evaluation.evidence + it.evidence + it.contextEvidence,
+                )
+        }
         postgresContext?.let { evaluation = evaluation.copy(evidence = evaluation.evidence + it) }
         val capacity =
             request.capacity?.let {
@@ -563,6 +572,16 @@ private fun writePostgres(
         Files.write(staging.resolve(name), bytes, StandardOpenOption.CREATE_NEW, StandardOpenOption.WRITE)
     }
 }
+
+private fun sourceCoverageReasons(summary: JsonObject): List<String> =
+    buildList {
+        when ((summary["status"] as? JsonPrimitive)?.contentOrNull) {
+            "PARTIAL" -> add("SOURCE_ACQUISITION_PARTIAL")
+            "FAILED" -> add("SOURCE_ACQUISITION_FAILED")
+            else -> Unit
+        }
+        if ((summary["cap_exceeded"] as? JsonPrimitive)?.booleanOrNull == true) add("SOURCE_REQUEST_CAP_EXCEEDED")
+    }
 
 private fun writeAcquisition(
     staging: Path,

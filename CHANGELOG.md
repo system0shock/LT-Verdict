@@ -79,5 +79,9 @@
 - InfluxQL-выражения с `fill(...)`, фабрикующим значения (`0`, `previous`,
   `linear`, число), отклоняются как `SOURCE_CONFIG_INVALID`; разрешены только
   сохраняющие пропуски `fill(null)` и `fill(none)`.
+- `analysis_coverage` отражает деградацию онлайн-сбора: `PARTIAL`/`FAILED`
+  статус и исчерпанный request budget дают `SOURCE_ACQUISITION_PARTIAL`,
+  `SOURCE_ACQUISITION_FAILED` и `SOURCE_REQUEST_CAP_EXCEEDED`, поэтому
+  `COMPLETE` больше не маскирует неполный сбор.
 - Устранено переполнение памяти при завершении анализа больших JTL со
   множеством sparse one-second buckets.

@@ -241,7 +241,11 @@ Timeout/retries/body read отменяются вместе с job. HTTP error b
 ## Результат и offline replay
 
 `source_summary` evidence показывает COMPLETE/PARTIAL/FAILED и статусы запросов,
-request_count/retries/throttle_wait_ms/cap_exceeded. Failed query сохраняется
+request_count/retries/throttle_wait_ms/cap_exceeded. Те же состояния отражаются в
+`analysis_coverage`: `PARTIAL` и `FAILED` дают `SOURCE_ACQUISITION_PARTIAL` и
+`SOURCE_ACQUISITION_FAILED`, исчерпанный request budget —
+`SOURCE_REQUEST_CAP_EXCEEDED`, поэтому `analysis_coverage.status` становится
+`INCOMPLETE`. Failed query сохраняется
 all-null серией: соответствующий ресурсный SLA не получает ложный PASS.
 Бизнес-анализ доступен независимо от отсутствующих метрик.
 Если сумма нормализованных серий превышает snapshot byte limit, данные заменяются

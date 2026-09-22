@@ -6,6 +6,7 @@ import io.ltverdict.storage.AcceptedInput
 import io.ltverdict.storage.DataDirectory
 import io.ltverdict.storage.RunBundleStore
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
@@ -56,6 +57,28 @@ class AnalysisServiceTest {
             assertNotEquals(online.analysisId, replay.analysisId)
             assertEquals(result(online, "policy_verdict"), result(replay, "policy_verdict"))
             assertFalse(Files.exists(replay.analysisDirectory.resolve("source-acquisition.json")))
+        }
+
+    @Test
+    fun `source acquisition degradation reaches analysis coverage`() =
+        withService { store, service ->
+            val input = accept(store, OUT_OF_ORDER_CSV.encodeToByteArray(), "coverage.jtl")
+            val resource = resources(resourceJson(input.sha256, "coverage", "0.8").encodeToByteArray())
+
+            val complete = analyzeWithSummary(service, input, resource, "COMPLETE", capExceeded = false)
+            assertTrue(coverageReasons(complete).none { it.startsWith("SOURCE_") })
+
+            val partial = analyzeWithSummary(service, input, resource, "PARTIAL", capExceeded = false)
+            assertEquals("INCOMPLETE", coverageStatus(partial))
+            assertTrue(coverageReasons(partial).contains("SOURCE_ACQUISITION_PARTIAL"))
+
+            val failed = analyzeWithSummary(service, input, resource, "FAILED", capExceeded = false)
+            assertEquals("INCOMPLETE", coverageStatus(failed))
+            assertTrue(coverageReasons(failed).contains("SOURCE_ACQUISITION_FAILED"))
+
+            val capped = analyzeWithSummary(service, input, resource, "COMPLETE", capExceeded = true)
+            assertEquals("INCOMPLETE", coverageStatus(capped))
+            assertTrue(coverageReasons(capped).contains("SOURCE_REQUEST_CAP_EXCEEDED"))
         }
 
     @Test
@@ -662,6 +685,43 @@ class AnalysisServiceTest {
             .artifacts
             .map { it.path }
             .toSet()
+
+    private fun analyzeWithSummary(
+        service: AnalysisService,
+        input: AcceptedInput,
+        resource: ResourceValidation.Valid,
+        status: String,
+        capExceeded: Boolean,
+    ): AnalysisOutcome {
+        val evidence =
+            buildJsonObject {
+                put("id", "source-summary")
+                put("type", "source_summary")
+                put("status", status)
+                put("cap_exceeded", capExceeded)
+            }
+        val artifacts = mapOf("source-acquisition.json" to canonicalJson(evidence))
+        val request =
+            AnalysisRequest(
+                input,
+                passPolicy(),
+                resources = resource,
+                sourceAcquisition = SourceAcquisition(resource, evidence, artifacts),
+            )
+        return service.analyze(request)
+    }
+
+    private fun coverage(outcome: AnalysisOutcome): JsonObject =
+        Json
+            .parseToJsonElement(outcome.canonicalResult.decodeToString())
+            .jsonObject
+            .getValue("analysis_coverage")
+            .jsonObject
+
+    private fun coverageStatus(outcome: AnalysisOutcome): String = coverage(outcome).getValue("status").jsonPrimitive.content
+
+    private fun coverageReasons(outcome: AnalysisOutcome): List<String> =
+        coverage(outcome).getValue("reasons").jsonArray.map { it.jsonPrimitive.content }
 
     private fun result(
         outcome: AnalysisOutcome,

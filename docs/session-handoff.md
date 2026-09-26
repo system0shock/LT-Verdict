@@ -3,14 +3,14 @@
 ## Передача 2026-09-22 (ночь): ветка fix/input-unit-fill-coverage
 
 Ворктри `.worktrees/local-baseline-comparison` переключён с `feat/remaining-sources`
-на новую локальную ветку `fix/input-unit-fill-coverage` от `c100ed2`. Push не
-выполнялся, ветка существует только локально. Запись «Подготовка 2026-09-22:
+на новую ветку `fix/input-unit-fill-coverage` от `c100ed2`. 2026-09-27 ветка
+запушена в `origin` с tracking; PR не создан. Запись «Подготовка 2026-09-22:
 актуальная точка» ниже остаётся в силе по составу поставки, но её контекст
 устарел в одном: `c100ed2` (200 файлов, 36791 вставка) уже в
 `origin/feat/remaining-sources`, поэтому аналитический слой больше не является
 незакоммиченным.
 
-### Пять коммитов ветки
+### Коммиты ветки
 
 - `8717cab fix(ingest)`: timestamps в `1000000000..99999999999` отклоняются как
   `INVALID_SAMPLE_TIMESTAMP`. Границы опубликованы в `limits` identity как
@@ -27,6 +27,8 @@
   `MIN_P95_SAMPLES`, плюс тест, что identity публикует именно применяемый порог.
 - `94240db docs`: `docs/analytics-scale-triage.md` и `docs/analytics-trend-detection.md`
   — границы работ, ничего не объявляют реализованным.
+- `docs`: отчёт о полном локальном verification 2026-09-27 и о публикации ветки
+  (этот коммит).
 
 ### Осознанное отклонение от первоначальной формулировки
 
@@ -38,20 +40,37 @@ epoch-seconds. Жёсткая граница потребовала бы пер�
 epoch-seconds покрывает 2001..5138. Существующие фикстуры не затронуты: они
 используют `1767225600000`, а PromQL-секунды идут мимо `LoadSample`.
 
-### Проверено
+### Проверено 2026-09-27 на закоммиченном состоянии
 
-- Полный JVM-набор offline: 67 классов, 386 тестов, 0 failures, 0 errors,
-  9 skipped (env-gated корпусные раннеры, как и раньше). Без `clean`.
-- `ktlintMainSourceCheck ktlintTestSourceCheck`: pass.
-- `tools/verify_slice0.py`: OK; `unittest tools.test_verify_slice0
+Команды взяты из `docs/mvp-acceptance-checklist.md`, offline, без `clean`:
+
+- `gradlew --offline --no-daemon check installDist -x npmCi --no-parallel`: PASS.
+- `gradlew --offline --no-daemon test -x npmCi --no-parallel --rerun-tasks`:
+  PASS за 2m25s, все задачи выполнены заново, включая `uiBuild`
+  (`vue-tsc --noEmit` и `vite build`).
+- `npm --prefix ui run typecheck`, `lint`, `test:contracts`: PASS.
+- `npm --prefix ui run e2e`: 47/47 passed за 44.8s.
+- `python tools/verify_slice0.py`: OK; `unittest tools.test_verify_slice0
   tools.test_generate_jtl tools.test_onboard_test`: 9 тестов OK.
-- Полный набор прогнан до последних doc-правок; код после этого не менялся.
+- `node --test tools/test_advisory_ai_runtime_relay.mjs`: 1 pass.
+- `markdownlint-cli2` v0.23.3 по семи затронутым веткой документам: 0 issues.
 
-### Не проверено
+Ранее в этой же ветке: полный JVM-набор 67 классов, 386 тестов, 0 failures,
+0 errors, 9 skipped (env-gated корпусные раннеры); ktlint main и test pass.
 
-markdownlint (локально не установлен, пакет не скачивался — проверит CI),
-`gradlew check installDist`, UI typecheck/lint/build/e2e, offline rebuild,
-browser gates, performance probe.
+### Не закрыто и почему
+
+- `powershell -NoProfile -File tools/test_advisory_ai_runtime.ps1`: FAIL
+  `RUNTIME_IMAGE_MISSING` на стадии `validate_runtime`. Docker client 29.2.1
+  установлен, daemon не запущен (pipe `dockerDesktopLinuxEngine` отсутствует),
+  поэтому pinned-образ не загружен. Это условие окружения, а не дефект продукта
+  и не следствие правок ветки; для закрытия нужен запущенный Docker и доступ
+  к реестру образов.
+- Performance gate не запускался: по чек-листу это Linux, два CPU, 10 млн строк,
+  три измерения, и локальный smoke его не подменяет.
+- Два предупреждения компилятора существовали до ветки и относятся к файлам,
+  которых она не касается: `web/LocalApi.kt:277` (redundant conversion call) и
+  `test/.../UsefulnessValidationTest.kt:256` (unnecessary safe call).
 
 ### Известная нечистота истории
 

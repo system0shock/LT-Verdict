@@ -28,6 +28,17 @@ const sourceExample = await readJson('docs/contracts/sources/v1/request.example.
 for (const [value, expected] of [[sourceExample, true], [{ ...sourceExample, url: 'http://unconfigured' }, false], [{ ...sourceExample, step_ms: 999 }, false]]) {
   if (validateSource(value) !== expected) throw new Error(`source request schema: ${JSON.stringify(validateSource.errors)}`)
 }
+const sourceV2Schema = await readJson('docs/contracts/sources/v2/source-request.schema.json')
+const validateSourceV2 = new Ajv2020({ strict: false }).compile(sourceV2Schema)
+for (const [name, path, expected] of [
+  ['two profiles', 'docs/contracts/sources/v2/examples/valid/two-profiles.json', true],
+  ['unknown field', 'docs/contracts/sources/v2/examples/invalid/unknown-field.json', false],
+  ['duplicate profile', 'docs/contracts/sources/v2/examples/invalid/duplicate-profile.json', false],
+]) {
+  if (validateSourceV2(await readJson(path)) !== expected) {
+    throw new Error(`source request v2 schema ${name}: expected schema_valid=${expected}; ${JSON.stringify(validateSourceV2.errors)}`)
+  }
+}
 const manifest = await readJson('fixtures/slice1/manifest.json')
 const schema = await readJson('docs/contracts/policy/v1/policy.schema.json')
 const validate = new Ajv2020({ strict: false }).compile(schema)

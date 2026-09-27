@@ -35,7 +35,9 @@ Decimal fields являются canonical decimal strings либо `null`. `SELE
 
 - `GENUINE_PARTIAL_UNCALIBRATED` — хотя бы один control реально использован;
 - `PAIR_NOT_EVALUABLE` — observed lag-max statistic отсутствует;
-- `FAMILY_SIZE_UNSUPPORTED` — family пуста или содержит больше 16 hypotheses;
+- `FAMILY_SIZE_UNSUPPORTED` — family содержит больше 16 hypotheses; пустой вход
+  возвращает пустой список selections раньше этой проверки, поэтому для пустой
+  семьи причина не выдаётся и ни одного selection evidence не публикуется;
 - `MULTI_WINDOW_FAMILY_UNSUPPORTED` — hypotheses относятся к разным windows;
 - `FAMILY_GRID_MISMATCH` — timestamps/step/complete-case masks различаются;
 - `FAMILY_OUTCOME_MISMATCH` — outcome metric или values различаются;

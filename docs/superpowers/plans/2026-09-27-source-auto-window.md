@@ -35,11 +35,11 @@ Modify `ui/scripts/verify-policy-schema.mjs`,
 
 **Шаги:**
 
-- [ ] Прочитать фактическую валидацию `v2` в `sources/SourceConfig.kt` (ветка `v2`, сортировка и уникальность идентификаторов, предел числа профилей, предел размера файла) и отразить её в схеме без расхождений.
-- [ ] Схема: `additionalProperties: false`, `required` из фактического набора ключей, `profile_ids` с `minItems`/`maxItems`/`uniqueItems`, границы `start_epoch_ms`/`end_epoch_ms`/`step_ms` как в рантайме, `description` для ограничений, которые рантайм проверяет сверх схемы (байты на идентификатор, предел размера файла).
-- [ ] Подключить компиляцию схемы и кейсы в `ui/scripts/verify-policy-schema.mjs` по образцу существующих блоков.
-- [ ] Исправить утверждение, что `FAMILY_SIZE_UNSUPPORTED` покрывает пустую семью: пустой вход возвращает пустой список раньше.
-- [ ] Проверка: `npm --prefix ui run test:contracts`.
+- [x] Прочитать фактическую валидацию `v2` в `sources/SourceConfig.kt` (ветка `v2`, сортировка и уникальность идентификаторов, предел числа профилей, предел размера файла) и отразить её в схеме без расхождений.
+- [x] Схема: `additionalProperties: false`, `required` из фактического набора ключей, `profile_ids` с `minItems`/`maxItems`/`uniqueItems`, границы `start_epoch_ms`/`end_epoch_ms`/`step_ms` как в рантайме, `description` для ограничений, которые рантайм проверяет сверх схемы (байты на идентификатор, предел размера файла).
+- [x] Подключить компиляцию схемы и кейсы в `ui/scripts/verify-policy-schema.mjs` по образцу существующих блоков.
+- [x] Исправить утверждение, что `FAMILY_SIZE_UNSUPPORTED` покрывает пустую семью: пустой вход возвращает пустой список раньше.
+- [x] Проверка: `npm --prefix ui run test:contracts`.
 
 ## Task 2: Fail-fast проверка `step_ms`
 

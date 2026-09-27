@@ -1038,6 +1038,57 @@ class LocalApiTest {
     }
 
     @Test
+    fun `trend plan is bounded and bound before job submission`() {
+        val submissions = AtomicInteger()
+        withServer(jobsFactory = {
+            AnalysisJobs(1) { request, _, _ ->
+                submissions.incrementAndGet()
+                check(request.trend != null)
+                AnalysisOutcome(request.input.runId, FAKE_ANALYSIS_ID, byteArrayOf(), tempDir)
+            }
+        }) { store, api ->
+            val input = store.acceptInput(ByteArrayInputStream(SPIKE_DROP.bytes()), SPIKE_DROP.filename)
+            val resources =
+                """{"schema_version":"resource-snapshot.v1","load_input_sha256":"${input.sha256}","start_epoch_ms":0,"step_ms":1000,"point_count":10,"series":[{"id":"cpu","metric":"cpu_used","unit":"ratio","entity":"vm","role":"system","aggregation":"interval_mean","values":[0.1,0.1,0.1,0.1,0.1,0.1,0.1,0.1,0.1,0.1]}],"windows":[{"id":"steady","from_epoch_ms":0,"to_epoch_ms":10000}]}"""
+                    .encodeToByteArray()
+            val hash = (validateResourceSnapshot(resources.inputStream()) as ResourceValidation.Valid).semanticSha256
+
+            fun plan(snapshotHash: String = hash) =
+                """{"schema_version":"trend-plan.v1","resource_snapshot_sha256":"$snapshotHash","checks":[{"id":"cpu-growth","series_id":"cpu","window_id":"steady","direction":"increase","min_cells":30,"magnitude_gate":{"min_slope_units_per_second":0.001,"min_split_half_shift_pct":5}}]}"""
+                    .encodeToByteArray()
+
+            api.bootstrap()
+            assertError(api.createJob(input.runId, trend = "{}".encodeToByteArray()), 422, "INVALID_TREND_PLAN", hasDetails = true)
+            assertError(api.createJob(input.runId, trend = ByteArray(1024 * 1024 + 1) { 32 }), 413)
+            val missingResources = api.createJob(input.runId, trend = plan())
+            assertError(missingResources, 422, "INVALID_TREND_PLAN", hasDetails = true)
+            assertTrue(missingResources.body().contains("TREND_RESOURCE_REQUIRED"))
+            val mismatch = api.createJob(input.runId, resources = resources, trend = plan("0".repeat(64)))
+            assertError(mismatch, 422, "INVALID_TREND_PLAN", hasDetails = true)
+            assertTrue(mismatch.body().contains("TREND_SNAPSHOT_MISMATCH"))
+            val unknownSeries = api.createJob(input.runId, resources = resources, trend = unknownSeriesPlan(plan()))
+            assertError(unknownSeries, 422, "INVALID_TREND_PLAN", hasDetails = true)
+            assertTrue(unknownSeries.body().contains("TREND_SERIES_NOT_FOUND"))
+            assertError(
+                api.multipart(
+                    "/api/jobs",
+                    listOf(
+                        FormPart("run_id", input.runId.encodeToByteArray()),
+                        FormPart("trend_plan", plan(), "trend.json", "application/json"),
+                        FormPart("trend_plan", plan(), "trend.json", "application/json"),
+                    ),
+                ),
+                400,
+                "MALFORMED_REQUEST",
+            )
+            assertEquals(FAKE_ANALYSIS_ID, api.createJob(input.runId, resources = resources, trend = plan()).analysisId(api))
+            assertEquals(1, submissions.get())
+        }
+    }
+
+    private fun unknownSeriesPlan(plan: ByteArray): ByteArray = plan.decodeToString().replace("\"cpu\"", "\"absent\"").encodeToByteArray()
+
+    @Test
     fun `four job parts retain policy resources and diagnostics and reject wrong snapshot`() {
         withServer(jobsFactory = {
             AnalysisJobs(1) { request, _, _ ->
@@ -1612,6 +1663,7 @@ class LocalApiTest {
             postgresPost: ByteArray? = null,
             pgProfileHtml: ByteArray? = null,
             capacity: ByteArray? = null,
+            trend: ByteArray? = null,
         ): HttpResponse<String> =
             multipart(
                 "/api/jobs",
@@ -1627,6 +1679,7 @@ class LocalApiTest {
                     if (postgresPost != null) add(FormPart("postgres_post", postgresPost, "post.json", "application/json"))
                     if (pgProfileHtml != null) add(FormPart("pg_profile_html", pgProfileHtml, "report.html", "text/html"))
                     if (capacity != null) add(FormPart("capacity_plan", capacity, "capacity.json", "application/json"))
+                    if (trend != null) add(FormPart("trend_plan", trend, "trend.json", "application/json"))
                 },
             )
 

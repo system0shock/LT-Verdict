@@ -101,7 +101,7 @@ export function capturePostgresPhase(profileId: string, phase: 'pre' | 'post', p
   return request(`/api/sources/postgresql/${phase}`, { method: 'POST', headers: mutationHeaders(), body })
 }
 
-export function createJob(runId: string, policy: Policy | null, resources?: File | null, diagnostics?: File | null, sourceRequest?: SourceRequest | null, sourceContexts: File[] = [], postgresPre?: File | null, postgresPost?: File | null, pgProfileHtml?: File | null, capacity?: File | null): Promise<JobStatus> {
+export function createJob(runId: string, policy: Policy | null, resources?: File | null, diagnostics?: File | null, sourceRequest?: SourceRequest | null, sourceContexts: File[] = [], postgresPre?: File | null, postgresPost?: File | null, pgProfileHtml?: File | null, capacity?: File | null, trend?: File | null): Promise<JobStatus> {
   const body = new FormData()
   body.append('run_id', runId)
   if (policy) body.append('policy', new Blob([stringifyPolicy(policy)], { type: 'application/json' }), 'policy.json')
@@ -115,6 +115,7 @@ export function createJob(runId: string, policy: Policy | null, resources?: File
   if (postgresPost) body.append('postgres_post', postgresPost)
   if (pgProfileHtml) body.append('pg_profile_html', pgProfileHtml)
   if (capacity) body.append('capacity_plan', capacity)
+  if (trend) body.append('trend_plan', trend)
   return request('/api/jobs', { method: 'POST', headers: mutationHeaders(), body })
 }
 

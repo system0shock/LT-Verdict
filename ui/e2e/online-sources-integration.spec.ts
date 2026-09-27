@@ -14,13 +14,20 @@ test('acquires a configured online source, downloads its snapshot, and reloads t
   await page.goto('/')
   await page.getByTestId('input-file').setInputFiles({ name: 'online-source.jtl', mimeType: 'text/csv', buffer: input })
   await page.getByLabel('Online source profile').selectOption('local')
-  await page.getByLabel('Source start (UTC epoch ms)').fill('1767225600000')
-  await page.getByLabel('Source end (UTC epoch ms)').fill('1767225601000')
+  // Auto over this load derives the same 1767225600000..1767225601000 window at step 1000 that the explicit v1 request used.
+  await expect(page.getByLabel('Source window')).toHaveValue('auto')
+  await expect(page.getByLabel('Margin (ms)')).toHaveValue('0')
+  await expect(page.getByLabel('Max idle gap (ms)')).toHaveValue('60000')
   await page.getByLabel('Source step (ms)').fill('1000')
   await page.getByRole('button', { name: 'Analyze run', exact: true }).click()
 
   const acquisition = page.getByTestId('source-acquisition')
   await expect(acquisition).toContainText('COMPLETE')
+  const provenance = page.getByTestId('window-provenance')
+  await expect(provenance.getByRole('row', { name: 'Window origin auto' })).toBeVisible()
+  await expect(provenance).toContainText('2026-01-01T00:00:00.000Z – 2026-01-01T00:00:01.000Z')
+  await expect(provenance.getByRole('row', { name: 'Applied margin 0 ms' })).toBeVisible()
+  await expect(provenance.getByRole('row', { name: 'Auto window status DERIVED' })).toBeVisible()
   const snapshot = page.getByRole('link', { name: 'Download resource snapshot' })
   const response = await page.request.get(await snapshot.getAttribute('href') ?? '')
   expect(response.ok()).toBe(true)
@@ -30,6 +37,7 @@ test('acquires a configured online source, downloads its snapshot, and reloads t
   await page.getByRole('button', { name: 'online-source.jtl' }).click()
   await page.getByRole('button', { name: /^Analysis / }).click()
   await expect(page.getByTestId('source-acquisition')).toContainText('COMPLETE')
+  await expect(page.getByTestId('window-provenance').getByRole('row', { name: 'Auto window status DERIVED' })).toBeVisible()
 })
 
 test('imports error context with resource metrics and reloads both saved artifacts', async ({ page }) => {

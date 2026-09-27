@@ -15,9 +15,12 @@ defineProps<{
   postgresPreFile: File | null
   postgresPostFile: File | null
   pgProfileHtmlFile: File | null
+  sourceWindowOrigin: 'auto' | 'explicit'
   sourceStart: string
   sourceEnd: string
   sourceStep: string
+  sourceMargin: string
+  sourceMaxIdleGap: string
   sourceRequestError: string
   policy: Policy | null
   policyStatus: string
@@ -37,9 +40,12 @@ const emit = defineEmits<{
   'postgres-post': [file: File | null]
   'pg-profile-html': [file: File | null]
   'capture-postgres': [phase: 'pre' | 'post']
+  'source-window-origin': [value: 'auto' | 'explicit']
   'source-start': [value: string]
   'source-end': [value: string]
   'source-step': [value: string]
+  'source-margin': [value: string]
+  'source-max-idle-gap': [value: string]
   'policy-file': [file: File | null]
   'update-policy': [policy: Policy]
   analyze: []
@@ -55,6 +61,10 @@ function selectedFiles(event: Event) {
 
 function selectedValues(event: Event) {
   return Array.from((event.target as HTMLSelectElement).selectedOptions, (option) => option.value).filter(Boolean)
+}
+
+function selectedWindowOrigin(event: Event) {
+  return (event.target as HTMLSelectElement).value as 'auto' | 'explicit'
 }
 </script>
 
@@ -219,29 +229,48 @@ function selectedValues(event: Event) {
 
       <template v-if="sourceProfileIds.length">
         <div class="field">
-          <label for="source-start">Source start (UTC epoch ms)</label>
-          <input
-            id="source-start"
-            type="number"
-            min="0"
-            step="1"
-            :value="sourceStart"
+          <label for="source-window-origin">Source window</label>
+          <select
+            id="source-window-origin"
+            :value="sourceWindowOrigin"
             :disabled="busy"
-            @input="emit('source-start', ($event.target as HTMLInputElement).value)"
+            @input="emit('source-window-origin', selectedWindowOrigin($event))"
+            @change="emit('source-window-origin', selectedWindowOrigin($event))"
           >
+            <option value="auto">
+              Auto (from the load file)
+            </option>
+            <option value="explicit">
+              Explicit period
+            </option>
+          </select>
         </div>
-        <div class="field">
-          <label for="source-end">Source end (UTC epoch ms)</label>
-          <input
-            id="source-end"
-            type="number"
-            min="0"
-            step="1"
-            :value="sourceEnd"
-            :disabled="busy"
-            @input="emit('source-end', ($event.target as HTMLInputElement).value)"
-          >
-        </div>
+        <template v-if="sourceWindowOrigin === 'explicit'">
+          <div class="field">
+            <label for="source-start">Source start (UTC epoch ms)</label>
+            <input
+              id="source-start"
+              type="number"
+              min="0"
+              step="1"
+              :value="sourceStart"
+              :disabled="busy"
+              @input="emit('source-start', ($event.target as HTMLInputElement).value)"
+            >
+          </div>
+          <div class="field">
+            <label for="source-end">Source end (UTC epoch ms)</label>
+            <input
+              id="source-end"
+              type="number"
+              min="0"
+              step="1"
+              :value="sourceEnd"
+              :disabled="busy"
+              @input="emit('source-end', ($event.target as HTMLInputElement).value)"
+            >
+          </div>
+        </template>
         <div class="field">
           <label for="source-step">Source step (ms)</label>
           <input
@@ -254,6 +283,46 @@ function selectedValues(event: Event) {
             @input="emit('source-step', ($event.target as HTMLInputElement).value)"
           >
         </div>
+        <template v-if="sourceWindowOrigin === 'auto'">
+          <div class="field">
+            <label for="source-margin">Margin (ms)</label>
+            <input
+              id="source-margin"
+              type="number"
+              min="0"
+              step="1000"
+              :value="sourceMargin"
+              :disabled="busy"
+              aria-describedby="source-margin-hint"
+              @input="emit('source-margin', ($event.target as HTMLInputElement).value)"
+            >
+            <p
+              id="source-margin-hint"
+              class="field__hint"
+            >
+              Extends the recognized run period on both sides before grid alignment; must be a multiple of the step.
+            </p>
+          </div>
+          <div class="field">
+            <label for="source-max-idle-gap">Max idle gap (ms)</label>
+            <input
+              id="source-max-idle-gap"
+              type="number"
+              min="1000"
+              step="1000"
+              :value="sourceMaxIdleGap"
+              :disabled="busy"
+              aria-describedby="source-max-idle-gap-hint"
+              @input="emit('source-max-idle-gap', ($event.target as HTMLInputElement).value)"
+            >
+            <p
+              id="source-max-idle-gap-hint"
+              class="field__hint"
+            >
+              Refuses the auto window when the load file contains a longer idle gap; at least the step and a multiple of it.
+            </p>
+          </div>
+        </template>
       </template>
       <p
         v-if="sourceRequestError"

@@ -33,6 +33,28 @@ const sourceSummaries = computed(() => props.result.evidence
   .filter((item): item is SourceSummaryEvidence => item.type === 'source_summary')
   .flatMap((item) => item.profiles?.length ? item.profiles : [item])
   .sort((left, right) => left.profile_id < right.profile_id ? -1 : left.profile_id > right.profile_id ? 1 : 0))
+// The window is one per acquisition, so only the aggregate summary carries its provenance.
+const windowProvenance = computed(() => props.result.evidence
+  .filter((item): item is SourceSummaryEvidence => item.type === 'source_summary')
+  .find((item) => item.window_origin !== undefined))
+const windowProvenanceRows = computed(() => {
+  const provenance = windowProvenance.value
+  if (!provenance) return []
+  const rows = [{ label: 'Window origin', value: String(provenance.window_origin) }]
+  const recognizedStart = provenance.recognized_start_epoch_ms
+  const recognizedEnd = provenance.recognized_end_epoch_ms
+  if (recognizedStart !== undefined && recognizedEnd !== undefined) {
+    rows.push({ label: 'Recognized period', value: `${formatEpochMs(recognizedStart)} – ${formatEpochMs(recognizedEnd)}` })
+  }
+  if (provenance.requested_margin_ms !== undefined) rows.push({ label: 'Requested margin', value: formatMillis(provenance.requested_margin_ms) })
+  if (provenance.applied_margin_ms !== undefined) rows.push({ label: 'Applied margin', value: formatMillis(provenance.applied_margin_ms) })
+  if (provenance.max_idle_gap_ms !== undefined) rows.push({ label: 'Max idle gap', value: formatMillis(provenance.max_idle_gap_ms) })
+  if (provenance.detected_idle_gaps !== undefined) rows.push({ label: 'Detected idle gaps', value: String(provenance.detected_idle_gaps) })
+  const longestIdleGap = provenance.longest_idle_gap_ms
+  if (longestIdleGap !== undefined) rows.push({ label: 'Longest idle gap', value: longestIdleGap === null ? '—' : formatMillis(longestIdleGap) })
+  if (provenance.auto_window_status !== undefined) rows.push({ label: 'Auto window status', value: provenance.auto_window_status })
+  return rows
+})
 const errorContexts = computed(() => props.result.evidence
   .filter((item): item is OpenSearchEvidence => item.type === 'opensearch_errors')
   .sort((left, right) => left.profile_id < right.profile_id ? -1 : left.profile_id > right.profile_id ? 1 : 0))
@@ -194,6 +216,10 @@ function arrayAt(item: Evidence, key: string): string[] {
 
 function formatMillis(value: number | undefined) {
   return value === undefined ? 'Not available' : `${value.toLocaleString()} ms`
+}
+
+function formatEpochMs(value: number) {
+  return new Date(value).toISOString()
 }
 
 function formatRatio(value: unknown) {
@@ -520,6 +546,23 @@ function updateRange(name: 'update:range-start' | 'update:range-end', event: Eve
             :key="query.id"
           >
             <td>{{ query.id }}</td><td>{{ query.status }}</td><td>{{ query.reason ?? '—' }}</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <div
+      v-if="windowProvenance"
+      data-testid="window-provenance"
+      class="table-wrap"
+    >
+      <table>
+        <thead><tr><th>Window</th><th>Value</th></tr></thead>
+        <tbody>
+          <tr
+            v-for="row in windowProvenanceRows"
+            :key="row.label"
+          >
+            <td>{{ row.label }}</td><td>{{ row.value }}</td>
           </tr>
         </tbody>
       </table>

@@ -9,6 +9,8 @@ const result = {
   evidence: [{
     id: 'source-summary', type: 'source_summary', status: 'PARTIAL', profile_id: 'prod-prometheus', source_kind: 'prometheus', transport: 'direct',
     queries: [{ id: 'cpu', status: 'COMPLETE' }, { id: 'memory', status: 'FAILED', reason: 'HTTP_FAILURE' }], request_count: 3, retries: 1, throttle_wait_ms: 250, cap_exceeded: false,
+    window_origin: 'auto', recognized_start_epoch_ms: 1000, recognized_end_epoch_ms: 4000, requested_margin_ms: 2000, applied_margin_ms: 2000,
+    max_idle_gap_ms: 60000, detected_idle_gaps: 0, longest_idle_gap_ms: null, auto_window_status: 'DERIVED',
   }, { id: 'resource-binding', type: 'resource_binding' }],
 }
 
@@ -41,22 +43,88 @@ test('submits a validated online source request and renders its saved acquisitio
   await page.getByLabel('Online source profile').selectOption('prod-prometheus')
   await expect(page.getByTestId('resource-snapshot-file')).toBeDisabled()
   await expect(page.getByTestId('correlation-plan-file')).toBeDisabled()
+  await page.getByLabel('Source window').selectOption('explicit')
   await page.getByLabel('Source start (UTC epoch ms)').fill('1000')
   await page.getByLabel('Source end (UTC epoch ms)').fill('4000')
   await page.getByLabel('Source step (ms)').fill('999')
-  await expect(page.getByTestId('source-request-error')).toContainText('at least 1000')
+  await expect(page.getByTestId('source-request-error')).toContainText('whole seconds from 1000 to 60000')
   await expect(page.getByRole('button', { name: 'Analyze run', exact: true })).toBeDisabled()
   await page.getByLabel('Source step (ms)').fill('1000')
   const request = page.waitForRequest((value) => new URL(value.url()).pathname === '/api/jobs')
   await page.getByRole('button', { name: 'Analyze run', exact: true }).click()
   const submitted = (await request).postDataBuffer()!.toString()
   expect(submitted).toContain('name="source_request"; filename="source-request.json"')
-  expect(submitted).toContain('{"schema_version":"source-request.v1","profile_id":"prod-prometheus","start_epoch_ms":1000,"end_epoch_ms":4000,"step_ms":1000}')
+  expect(submitted).toContain('{"schema_version":"source-request.v3","profile_ids":["prod-prometheus"],"window":{"origin":"explicit","start_epoch_ms":1000,"end_epoch_ms":4000,"step_ms":1000}}')
   expect(submitted).not.toContain('resource_snapshot')
   expect(submitted).not.toContain('correlation_plan')
   await expect(page.getByTestId('source-acquisition')).toContainText('PARTIAL')
   await expect(page.getByTestId('source-acquisition')).toContainText('memory')
   await expect(page.getByRole('link', { name: 'Download resource snapshot' })).toHaveAttribute('href', `/api/runs/${reference.run_id}/analyses/${reference.analysis_id}/resource-snapshot`)
+})
+
+test('submits an auto source window without asking for a period', async ({ page }) => {
+  await fixtureApi(page)
+  await page.goto('/')
+  await page.getByTestId('input-file').setInputFiles({ name: 'auto.jtl', mimeType: 'text/csv', buffer: Buffer.from('load') })
+  await page.getByLabel('Online source profile').selectOption('prod-prometheus')
+  await expect(page.getByLabel('Source window')).toHaveValue('auto')
+  await expect(page.getByLabel('Source start (UTC epoch ms)')).toHaveCount(0)
+  await expect(page.getByLabel('Source end (UTC epoch ms)')).toHaveCount(0)
+  await page.getByLabel('Source step (ms)').fill('1000')
+  await page.getByLabel('Margin (ms)').fill('2000')
+  await page.getByLabel('Max idle gap (ms)').fill('60000')
+  const request = page.waitForRequest((value) => new URL(value.url()).pathname === '/api/jobs')
+  await page.getByRole('button', { name: 'Analyze run', exact: true }).click()
+  const submitted = (await request).postDataBuffer()!.toString()
+  expect(submitted).toContain('name="source_request"; filename="source-request.json"')
+  expect(submitted).toContain('{"schema_version":"source-request.v3","profile_ids":["prod-prometheus"],"window":{"origin":"auto","step_ms":1000,"margin_ms":2000,"max_idle_gap_ms":60000}}')
+  expect(submitted).not.toContain('resource_snapshot')
+  expect(submitted).not.toContain('correlation_plan')
+})
+
+test('refuses a margin that is not a multiple of the step before any request', async ({ page }) => {
+  await fixtureApi(page)
+  const jobRequests: string[] = []
+  await page.route((url) => url.pathname === '/api/jobs', async (route) => {
+    jobRequests.push(route.request().url())
+    await route.fallback()
+  })
+  await page.goto('/')
+  await page.getByTestId('input-file').setInputFiles({ name: 'margin.jtl', mimeType: 'text/csv', buffer: Buffer.from('load') })
+  await page.getByLabel('Online source profile').selectOption('prod-prometheus')
+  await page.getByLabel('Source step (ms)').fill('1000')
+  await page.getByLabel('Margin (ms)').fill('1500')
+  await expect(page.getByTestId('source-request-error')).toContainText('multiple of the step')
+  await expect(page.getByRole('button', { name: 'Analyze run', exact: true })).toBeDisabled()
+  expect(jobRequests).toEqual([])
+})
+
+test('renders the auto window provenance and keeps it after a reload', async ({ page }) => {
+  await fixtureApi(page)
+  const saved = { analysis_id: reference.analysis_id, policy_sha256: 'c'.repeat(64), policy_verdict: 'NO_POLICY', run_validity: 'VALID' }
+  await page.route((url) => url.pathname.endsWith('/analyses'), (route) => route.fulfill({ json: { analyses: [saved], next_after: null } }))
+  await page.goto('/')
+  await page.getByTestId('input-file').setInputFiles({ name: 'provenance.jtl', mimeType: 'text/csv', buffer: Buffer.from('load') })
+  await page.getByLabel('Online source profile').selectOption('prod-prometheus')
+  await page.getByLabel('Source step (ms)').fill('1000')
+  await page.getByLabel('Margin (ms)').fill('2000')
+  await page.getByRole('button', { name: 'Analyze run', exact: true }).click()
+  const provenance = page.getByTestId('window-provenance')
+  await expect(provenance.getByRole('row', { name: 'Window origin auto' })).toBeVisible()
+  await expect(provenance).toContainText('1970-01-01T00:00:01.000Z – 1970-01-01T00:00:04.000Z')
+  await expect(provenance.getByRole('row', { name: 'Requested margin 2,000 ms' })).toBeVisible()
+  await expect(provenance.getByRole('row', { name: 'Applied margin 2,000 ms' })).toBeVisible()
+  await expect(provenance.getByRole('row', { name: 'Max idle gap 60,000 ms' })).toBeVisible()
+  await expect(provenance.getByRole('row', { name: 'Detected idle gaps 0' })).toBeVisible()
+  await expect(provenance.getByRole('row', { name: 'Longest idle gap —' })).toBeVisible()
+  await expect(provenance.getByRole('row', { name: 'Auto window status DERIVED' })).toBeVisible()
+
+  await page.reload()
+  await page.getByRole('button', { name: run.original_filename }).click()
+  await page.getByRole('button', { name: /^Analysis / }).click()
+  await expect(provenance.getByRole('row', { name: 'Window origin auto' })).toBeVisible()
+  await expect(provenance).toContainText('1970-01-01T00:00:01.000Z – 1970-01-01T00:00:04.000Z')
+  await expect(provenance.getByRole('row', { name: 'Longest idle gap —' })).toBeVisible()
 })
 
 test('does not offer a missing snapshot for load-only analysis', async ({ page }) => {
@@ -122,12 +190,13 @@ test('submits multiple online profiles on one shared time grid', async ({ page }
   await page.goto('/')
   await page.getByTestId('input-file').setInputFiles({ name: 'multi.jtl', mimeType: 'text/csv', buffer: Buffer.from('load') })
   await page.getByLabel('Online source profile').selectOption(['prom', 'errors'])
+  await page.getByLabel('Source window').selectOption('explicit')
   await page.getByLabel('Source start (UTC epoch ms)').fill('1000')
   await page.getByLabel('Source end (UTC epoch ms)').fill('3000')
   await page.getByLabel('Source step (ms)').fill('1000')
   const request = page.waitForRequest((value) => new URL(value.url()).pathname === '/api/jobs')
   await page.getByRole('button', { name: 'Analyze run', exact: true }).click()
-  expect((await request).postDataBuffer()!.toString()).toContain('"schema_version":"source-request.v2","profile_ids":["errors","prom"]')
+  expect((await request).postDataBuffer()!.toString()).toContain('{"schema_version":"source-request.v3","profile_ids":["errors","prom"],"window":{"origin":"explicit","start_epoch_ms":1000,"end_epoch_ms":3000,"step_ms":1000}}')
   await expect(page.getByTestId('source-acquisition')).toContainText('errors')
   await expect(page.getByTestId('source-acquisition')).toContainText('prom')
   await expect(page.getByRole('link', { name: 'Download OpenSearch context' })).toHaveAttribute('href', `/api/runs/${reference.run_id}/analyses/${reference.analysis_id}/source-context`)
@@ -268,6 +337,7 @@ test('captures exact PostgreSQL phases and attaches them without rendering the r
   })
   await page.getByTestId('input-file').setInputFiles({ name: 'postgres.jtl', mimeType: 'text/csv', buffer: Buffer.from('load') })
   await page.getByLabel('Online source profile').selectOption('prom')
+  await page.getByLabel('Source window').selectOption('explicit')
   await page.getByLabel('Source start (UTC epoch ms)').fill('1000')
   await page.getByLabel('Source end (UTC epoch ms)').fill('3000')
   await page.getByLabel('Source step (ms)').fill('1000')

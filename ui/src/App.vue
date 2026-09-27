@@ -39,9 +39,12 @@ const postgresPreFile = ref<File | null>(null)
 const postgresPostFile = ref<File | null>(null)
 const pgProfileHtmlFile = ref<File | null>(null)
 const postgresCapturePhase = ref<'pre' | 'post' | null>(null)
+const sourceWindowOrigin = ref<'auto' | 'explicit'>('auto')
 const sourceStart = ref('')
 const sourceEnd = ref('')
 const sourceStep = ref('')
+const sourceMargin = ref('0')
+const sourceMaxIdleGap = ref('60000')
 const policy = ref<Policy | null>(null)
 const policyStatus = ref('')
 const policyErrors = ref<PolicyError[]>([])
@@ -81,18 +84,27 @@ const sourceRequestState = computed<{ request: SourceRequest | null; error: stri
   const profileIds = [...sourceProfileIds.value].sort()
   if (!profileIds.length) return { request: null, error: '' }
   if (profileIds.length > 16) return { request: null, error: 'Online source accepts at most 16 profiles.' }
+  if (sourceWindowOrigin.value === 'auto') {
+    if (!sourceStep.value || !sourceMargin.value || !sourceMaxIdleGap.value) return { request: null, error: 'Online source requires step, margin, and max idle gap in milliseconds.' }
+    const step = Number(sourceStep.value)
+    const margin = Number(sourceMargin.value)
+    const maxIdleGap = Number(sourceMaxIdleGap.value)
+    if (![step, margin, maxIdleGap].every(Number.isSafeInteger)) return { request: null, error: 'Step, margin, and max idle gap must be safe integer milliseconds.' }
+    if (!wholeSeconds(step)) return { request: null, error: 'Source step must be whole seconds from 1000 to 60000 ms.' }
+    if (margin < 0 || margin > 3_600_000 || margin % step !== 0) return { request: null, error: 'Margin must be at most 3 600 000 ms and a multiple of the step.' }
+    if (maxIdleGap < step || maxIdleGap % step !== 0) return { request: null, error: 'Max idle gap must be at least the step and a multiple of it.' }
+    const request: SourceRequest = { schema_version: 'source-request.v3', profile_ids: profileIds, window: { origin: 'auto', step_ms: step, margin_ms: margin, max_idle_gap_ms: maxIdleGap } }
+    return { request, error: '' }
+  }
   if (!sourceStart.value || !sourceEnd.value || !sourceStep.value) return { request: null, error: 'Online source requires start, end, and step in UTC epoch milliseconds.' }
   const start = Number(sourceStart.value)
   const end = Number(sourceEnd.value)
   const step = Number(sourceStep.value)
   if (![start, end, step].every(Number.isSafeInteger)) return { request: null, error: 'Source times and step must be safe integer milliseconds.' }
   if (start < 0 || end <= start) return { request: null, error: 'Source end must be after a non-negative start.' }
-  if (step < 1_000) return { request: null, error: 'Source step must be at least 1000 ms.' }
+  if (!wholeSeconds(step)) return { request: null, error: 'Source step must be whole seconds from 1000 to 60000 ms.' }
   if ((end - start) % step !== 0) return { request: null, error: 'Source range must be divisible by its step.' }
-  const window = { start_epoch_ms: start, end_epoch_ms: end, step_ms: step }
-  const request: SourceRequest = profileIds.length === 1
-    ? { schema_version: 'source-request.v1', profile_id: profileIds[0], ...window }
-    : { schema_version: 'source-request.v2', profile_ids: profileIds, ...window }
+  const request: SourceRequest = { schema_version: 'source-request.v3', profile_ids: profileIds, window: { origin: 'explicit', start_epoch_ms: start, end_epoch_ms: end, step_ms: step } }
   return { request, error: '' }
 })
 const downloadableSourceContexts = computed(() => result.value?.evidence
@@ -439,6 +451,10 @@ function optionalNumber(value: string): number | undefined | null {
   return Number.isSafeInteger(parsed) && parsed >= 0 ? parsed : null
 }
 
+function wholeSeconds(value: number) {
+  return value >= 1_000 && value <= 60_000 && value % 1_000 === 0
+}
+
 function showError(failure: unknown) {
   errorMessage.value =
     failure instanceof ApiError || failure instanceof Error ? failure.message : 'Unexpected local application error.'
@@ -587,9 +603,12 @@ function focusPolicy() {
           :postgres-pre-file="postgresPreFile"
           :postgres-post-file="postgresPostFile"
           :pg-profile-html-file="pgProfileHtmlFile"
+          :source-window-origin="sourceWindowOrigin"
           :source-start="sourceStart"
           :source-end="sourceEnd"
           :source-step="sourceStep"
+          :source-margin="sourceMargin"
+          :source-max-idle-gap="sourceMaxIdleGap"
           :source-request-error="sourceRequestState.error"
           :policy="policy"
           :policy-status="policyStatus"
@@ -606,9 +625,12 @@ function focusPolicy() {
           @postgres-post="selectPostgresPost"
           @pg-profile-html="selectPgProfileHtml"
           @capture-postgres="capturePostgres"
+          @source-window-origin="sourceWindowOrigin = $event"
           @source-start="sourceStart = $event"
           @source-end="sourceEnd = $event"
           @source-step="sourceStep = $event"
+          @source-margin="sourceMargin = $event"
+          @source-max-idle-gap="sourceMaxIdleGap = $event"
           @policy-file="selectPolicyFile"
           @update-policy="updatePolicy"
           @analyze="analyze"

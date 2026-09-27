@@ -99,6 +99,10 @@ test.describe.serial('local UI security and accessibility', () => {
     const capacity = page.getByTestId('capacity-plan-file')
     const sourceContext = page.getByLabel('OpenSearch context')
     const sourceProfile = page.getByTestId('source-profile')
+    const sourceWindowOrigin = page.locator('#source-window-origin')
+    const sourceStep = page.locator('#source-step')
+    const sourceMargin = page.locator('#source-margin')
+    const sourceMaxIdleGap = page.locator('#source-max-idle-gap')
     const postgresPre = page.getByLabel('PostgreSQL pre capture')
     const postgresPost = page.getByLabel('PostgreSQL post capture')
     const pgProfileHtml = page.getByLabel('pg_profile HTML')
@@ -135,7 +139,17 @@ test.describe.serial('local UI security and accessibility', () => {
       await expectVisibleKeyboardFocus(target)
     }
 
-    for (const labelledInput of [input, policy, resources, diagnostics, capacity, sourceContext, sourceProfile, postgresPre, postgresPost, pgProfileHtml]) {
+    // The source window renders only with a profile selected, and selecting one disables the manual snapshot inputs above it.
+    await sourceProfile.selectOption('local')
+    await expect(sourceWindowOrigin).toHaveValue('auto')
+    await expect(page.locator('#source-start')).toHaveCount(0)
+    await sourceProfile.focus()
+    for (const target of [sourceWindowOrigin, sourceStep, sourceMargin, sourceMaxIdleGap, postgresPre]) {
+      await page.keyboard.press('Tab')
+      await expectVisibleKeyboardFocus(target)
+    }
+
+    for (const labelledInput of [input, policy, resources, diagnostics, capacity, sourceContext, sourceProfile, sourceWindowOrigin, sourceStep, sourceMargin, sourceMaxIdleGap, postgresPre, postgresPost, pgProfileHtml]) {
       const labels = await labelledInput.evaluate((element) =>
         [...((element as HTMLInputElement).labels ?? [])].map((label) => {
           const style = getComputedStyle(label)

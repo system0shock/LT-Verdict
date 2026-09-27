@@ -46,6 +46,20 @@ export interface PostgresCaptureResponse {
   pg_profile_html_base64: string | null
 }
 
+export type SourceWindowV3 =
+  | {
+    origin: 'explicit'
+    start_epoch_ms: number
+    end_epoch_ms: number
+    step_ms: number
+  }
+  | {
+    origin: 'auto'
+    step_ms: number
+    margin_ms: number
+    max_idle_gap_ms: number
+  }
+
 export type SourceRequest =
   | {
     schema_version: 'source-request.v1'
@@ -60,6 +74,11 @@ export type SourceRequest =
     start_epoch_ms: number
     end_epoch_ms: number
     step_ms: number
+  }
+  | {
+    schema_version: 'source-request.v3'
+    profile_ids: string[]
+    window: SourceWindowV3
   }
 
 export interface PolicyError {
@@ -287,6 +306,15 @@ export interface SourceSummaryEvidence {
   retries: number
   throttle_wait_ms: number
   cap_exceeded: boolean
+  window_origin?: 'auto' | 'explicit'
+  recognized_start_epoch_ms?: number
+  recognized_end_epoch_ms?: number
+  requested_margin_ms?: number
+  applied_margin_ms?: number
+  max_idle_gap_ms?: number
+  detected_idle_gaps?: number
+  longest_idle_gap_ms?: number | null
+  auto_window_status?: string
   profiles?: SourceSummaryEvidence[]
 }
 

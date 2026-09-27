@@ -145,12 +145,12 @@ Modify `src/main/kotlin/io/ltverdict/sources/SourceConfig.kt`,
 
 **Шаги:**
 
-- [ ] Типы: форма `v3` и новые поля `SourceSummaryEvidence`.
-- [ ] RunSetup: переключатель `auto`/`explicit`; для `auto` — поля margin и максимального простоя с подсказками; для `explicit` — существующие три поля. Все новые input получают label, входят в focus order и в проверку labelled inputs.
-- [ ] App: построение `v3` вместо `v1`/`v2` при выбранных профилях, клиентская валидация кратности и диапазона, сообщение об ошибке до отправки.
-- [ ] AnalysisView: отображение `window_origin`, распознанного периода, заявленного и фактического margin, числа и длительности простоев.
-- [ ] e2e: отправка `v3` с `origin=auto`; блокировка при невалидном margin; отображение provenance после reload.
-- [ ] Проверка: `npm --prefix ui run typecheck`, `npm --prefix ui run lint`, `npm --prefix ui run e2e`.
+- [x] Типы: форма `v3` и новые поля `SourceSummaryEvidence`.
+- [x] RunSetup: переключатель `auto`/`explicit`; для `auto` — поля margin и максимального простоя с подсказками; для `explicit` — существующие три поля. Все новые input получают label, входят в focus order и в проверку labelled inputs (двухфазно: выбор профиля дизейблит ручные snapshot-входы выше по порядку).
+- [x] App: построение `v3` вместо `v1`/`v2` при выбранных профилях, клиентская валидация кратности и диапазона, сообщение об ошибке до отправки.
+- [x] AnalysisView: отображение `window_origin`, распознанного периода, заявленного и фактического margin, числа и длительности простоев.
+- [x] e2e: отправка `v3` с `origin=auto`; блокировка при невалидном margin; отображение provenance после reload.
+- [x] Проверка: `npm --prefix ui run typecheck`, `npm --prefix ui run lint`, `npm --prefix ui run e2e`.
 
 ## Task 7: Документация
 

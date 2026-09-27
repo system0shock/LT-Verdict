@@ -172,12 +172,35 @@ v0.23.3 по четырём изменённым документам и по в
   объявленные пороги материальности.
 - Отчётные рендереры (HTML, AsciiDoc, Confluence) игнорируют новый evidence-тип,
   как сейчас игнорируют capacity.
-- `docs/development-plan-v0.6.md` не обновлялся: новая возможность не внесена в
-  ledger плана.
+- В ledger `docs/development-plan-v0.6.md` внесено только закрытие
+  `BASELINE-CONDITIONS-01`; `trend-plan.v1` как новая возможность в очередь
+  плана не внесена.
+
+### Документационная сверка (пункт 5)
+
+- `docs/user/slice-1-local-analysis.md`: снято противоречие «p-values
+  отсутствуют». Описан слой `correlation_headline_selection`
+  (`mbb-lag-max-holm.v1`, 999 реплик, блоки 10 и 20, max-p, одна поправка Holm),
+  правило публикации `correlation_candidate` только при `selected = true` и
+  полоса поддерживаемых форм семейства со всеми reason-кодами отказа. Принятые
+  7.7–13.2% помечены как измерение NumPy на development-seeds, а не гарантия
+  JVM-реализации.
+- `docs/development-plan-v0.6.md`: `BASELINE-CONDITIONS-01` переведён в CLOSED
+  по реализации (ADR 0010, `local-baseline-conditions.v1`, endpoints
+  `baseline-conditions`, three-state `CONFIRMED`/`NOT_CONFIRMED`/`UNKNOWN`).
+  Исходное описание gap сохранено как историческое и явно помечено; сквозная
+  приёмка сценария осталась отдельной задачей.
+- `docs/statistical-validation-results-v1.md`: добавлен датированный
+  постскриптум о поставках после приёмки. Сам отчёт не переписан и остаётся
+  записью результата v1. Файл не входит в замороженный список `freeze.json`.
+- Исторические обзоры (`docs/lt-verdict-analysis-and-remediation.md`,
+  `docs/statistical-validation-expert-brief-v1.md`) намеренно не правились: они
+  описывают состояние на дату обзора. `docs/statistical-validation-methodology-v1.md`
+  входит в `freeze.json`, поэтому не редактировался.
 
 ### Дальше
 
-Пункты 5, 7 и 8 из предыдущей записи не начаты. Первый шаг к L1 —
+Пункт 5 закрыт. Пункты 7 и 8 из предыдущей записи не начаты. Первый шаг к L1 —
 переиспользовать `movingBlockIndices` из `CorrelationHeadlineSelection.kt` для
 блочного null и держать объявленную семью не больше 32 при `B = 999`, иначе Holm
 не отвергает ничего.
@@ -276,8 +299,8 @@ epoch-seconds покрывает 2001..5138. Существующие фикст
   утверждает «p-values отсутствуют», тогда как `DiagnosticAnalysis.kt` публикует
   `correlation_headline_selection` с `holm_adjusted_p_value`; ограничения выводной
   семьи в `docs/user/*` не описаны вовсе. Эта запись ниже также держит
-  `BASELINE-CONDITIONS-01` как OPEN, хотя ADR 0010 и `LocalApi.kt:392,408`
-  реализованы.
+  `BASELINE-CONDITIONS-01` как OPEN, хотя ADR 0010 и `LocalApi.kt:400,416`
+  реализованы. Оба противоречия сняты в разделе от 2026-09-27 выше.
 - Пункт 7: `processed_bytes`, число прочитанных записей и число проигнорированных
   Gatling `ERROR`/`USER` в evidence. Сейчас `ParseReport.processedBytes` не
   персистится, а `diagnostics` на успехе пуст.

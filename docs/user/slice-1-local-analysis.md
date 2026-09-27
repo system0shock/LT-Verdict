@@ -463,7 +463,31 @@ Reference — явно выбранный режим, не автоматиче�
 
 `CANDIDATE` — наблюдаемая ассоциация/эпизод, не доказанная причина.
 `DESCRIPTIVE`, `INSUFFICIENT_DATA` и `NO_MATERIAL_CHANGE` различаются.
-Uncertainty всегда `NOT_ESTIMATED`; p-values и HIGH confidence отсутствуют.
+Uncertainty сырых коэффициентов всегда `NOT_ESTIMATED`; `HIGH confidence`
+отсутствует. Отдельный слой выбора главной находки p-values публикует:
+evidence `correlation_headline_selection` несёт `p_value_b10`, `p_value_b20`,
+`max_p_value`, `holm_adjusted_p_value` и `selected` для каждой гипотезы
+объявленного семейства.
+
+Находка `correlation_candidate` публикуется только при `selected = true`, то
+есть когда Holm-скорректированное p не выше 0.05 и порог материальности пройден.
+Метод `mbb-lag-max-holm.v1`: moving-block bootstrap (999 реплик, блоки 10 и 20),
+статистика `max |rho|` по всему объявленному поиску лагов, консервативный
+max-p по двум длинам блока и одна поправка Holm на объявленное семейство.
+Неотклонённая гипотеза означает `HOLM_NOT_REJECTED`, а не отсутствие связи.
+
+Слой работает только для одного окна, одной outcome-метрики, не более 16 гипотез,
+30–240 непрерывных ячеек и без фактически использованных controls. За пределами
+этой полосы всё семейство получает `UNAVAILABLE` с точной причиной
+(`MULTI_WINDOW_FAMILY_UNSUPPORTED`, `FAMILY_OUTCOME_MISMATCH`,
+`FAMILY_SIZE_UNSUPPORTED`, `FAMILY_GRID_MISMATCH`,
+`OBSERVATION_COUNT_UNSUPPORTED`, `LAG_ANCHOR_COUNT_UNSUPPORTED`,
+`GENUINE_PARTIAL_UNCALIBRATED`, `COMPUTATION_LIMIT_EXCEEDED`), и находки не
+публикуются вовсе, хотя сырые коэффициенты и статусы остаются в evidence.
+Принятая остаточная частота шумных
+отчётов 7.7–13.2% измерена на development-seeds в NumPy и не является измеренной
+гарантией JVM-реализации.
+
 Все declared pairs и причины непроверяемости остаются в evidence. Optional
 diagnostic limit не меняет бизнес-/ресурсный SLA verdict. Без плана старый
 результат не меняется, и baseline не переназначается.

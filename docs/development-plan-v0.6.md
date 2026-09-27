@@ -63,8 +63,11 @@ partial или two-run T02/T03 и не означает готовность pro
    параметрами, limitations и регрессионными проверками; без нового подбора
    методов и порогов. Существующие SLA/verdict и raw evidence сохраняются.
    Это необходимая интеграция, а не отложенная оптимизация.
-3. **Завершить ручной comparison workflow.** `BASELINE-CONDITIONS-01`:
-   UI/API и сохранение подтверждения условий пары с корректным reload.
+3. **Завершить ручной comparison workflow.** `BASELINE-CONDITIONS-01`
+   реализован: ADR 0010, three-state `CONFIRMED`/`NOT_CONFIRMED`/`UNKNOWN` в
+   `local-baseline-conditions.v1`, `GET` и `POST
+   /api/runs/{runId}/analyses/{analysisId}/baseline-conditions`, сохранение и
+   reload решения. Остаётся сквозная приёмка сценария на настоящих runs.
    Observed delta не становится доказанной межпрогонной регрессией;
    нерешённый шум two-run p50 отмечается отдельно от correlation limitation.
 4. **Первая сквозная приёмка.** Настоящие источники -> анализ/SLA -> сохранение
@@ -297,9 +300,16 @@ advisory-функции остаются в полном MVP, но не блок
 закрытие milestone. Детальные алгоритмы, thresholds, contracts и dependencies
 утверждаются в отдельных коротких spec/планах перед соответствующей реализацией.
 
-## Открытый MVP gap: подтверждение условий ручной пары
+## MVP gap: подтверждение условий ручной пары — закрыт реализацией
 
-`BASELINE-CONDITIONS-01`, статус OPEN. При ручном выборе baseline сравнение
+`BASELINE-CONDITIONS-01`, статус CLOSED по реализации (ADR 0010,
+`local-baseline-conditions.v1`, endpoints `baseline-conditions`, three-state
+решение и reload). Сквозная приёмка сценария на настоящих runs остаётся
+отдельной задачей. Ниже сохранено исходное описание gap; утверждение «Сейчас
+`USER_CONFIRMED` доступен только для statistical selection» описывает состояние
+до реализации и больше не действует.
+
+При ручном выборе baseline сравнение
 двух реальных runs всегда получает `UNCONFIRMED`. Сейчас `USER_CONFIRMED`
 доступен только для statistical selection из3..20кандидатов. Выбор baseline
 и подтверждение одинаковых условий — разные действия; третьего прогона

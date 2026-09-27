@@ -174,6 +174,15 @@ PostgreSQL 15, TLS и внешний CI остаются непроверенн�
 [InfluxQL](superpowers/plans/2026-09-05-influxdb-source.md),
 [PostgreSQL](superpowers/plans/2026-09-05-postgresql-source.md) и
 [multiple sources](superpowers/plans/2026-09-05-multiple-sources.md).
+Авто-окно выборки источника реализовано на ветке `feat/source-auto-window` по
+[ADR 0012](adr/0012-auto-window-recognized-period.md) и
+[плану](superpowers/plans/2026-09-27-source-auto-window.md): `source-request.v3`
+с `window.origin` `auto`, распознавание периода отдельным timestamps-only
+проходом и run-артефакт `run-period.v1`, три fail-closed отказа до внешних
+запросов, provenance окна в `source_summary`, опубликованная схема `v2` и
+ужесточение `step_ms` до целых секунд 1..60 для всех версий запроса.
+Реализация и документация завершены; branch-level offline Verification из
+плана и ревью ветки не выполнены, поэтому поставка не объявляется принятой.
 Capacity из этой очереди уже реализован и локально проверен; следующий активный
 трек — advisory AI. Проверка настоящих источников не заменяется unit fixtures
 и сохраняется перед сквозной приёмкой.

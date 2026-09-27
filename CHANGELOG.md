@@ -7,6 +7,26 @@
 
 ### Added
 
+- Авто-окно выборки источника: `source-request.v3` с `window.origin` `auto`
+  выводит окно из периода, распознанного по timestamps самой нагрузки, и
+  отказывает до внешних запросов с `AUTO_WINDOW_UNAVAILABLE`,
+  `AUTO_WINDOW_MULTI_TEST_SUSPECTED` или `AUTO_WINDOW_SPAN_UNSUPPORTED`,
+  требуя явное окно. Распознанный период сохраняется run-артефактом
+  `runs/<runId>/run-period.json` (`run-period.v1`), привязан к hash нагрузки и
+  переиспользуется при повторном открытии. `v1` и `v2` принимаются без
+  изменений; CLI `--source` и file part `source_request` принимают все три
+  версии, UI отправляет только `v3` и по умолчанию предлагает авто-окно.
+  Смещение часов генератора и системы мониторинга не компенсируется (ADR 0012).
+- Provenance окна в `source_summary` для `source-request.v3`: `window_origin`,
+  а для авто-окна также распознанный период, заявленный и фактически
+  применённый margin, допуск простоя, число и длительность простоев и
+  `auto_window_status`. UI показывает эти поля таблицей `Window` в секции
+  source acquisition; summaries `v1`/`v2` и ручной импорт OpenSearch-контекста
+  полей окна не получают.
+- Опубликована схема `source-request.v2` с valid/invalid примерами,
+  подключёнными к Ajv contract check: рантайм принимал `v2` с появлением
+  multi-profile selection, но опубликованные контракты фиксировали только `v1`,
+  поэтому проверять документы `v2` было нечем.
 - Подготовка к приёмке: advisory AI jobs/API/UI и изолированный ModelStudio/Qwen
   runtime, consent, отмена и fail-soft без изменения deterministic verdict.
   Изменённый prompt требует отдельной оценки качества; пилот не возобновлялся.
@@ -69,6 +89,14 @@
 - Добавлен local-only Slice 1: Web UI и CLI для потокового анализа JMeter JTL
   CSV/XML и Gatling logs, deterministic metrics/verdict, strict `policy.v1`,
   immutable RunBundle, light/dark themes и offline/runtime quality gates.
+
+### Changed
+
+- `step_ms` запроса источника ограничен целыми секундами от 1000 до 60000 для
+  всех версий `source-request`, и проверка выполняется при разборе запроса, до
+  внешних обращений. Множество успешных сценариев не изменилось: snapshot grid
+  всегда требовал целых секунд 1..60, поэтому запрос с шагом вроде 1500 ms или
+  90 s и раньше завершался отказом — но уже после реальной выборки.
 
 ### Fixed
 

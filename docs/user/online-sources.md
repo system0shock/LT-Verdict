@@ -15,11 +15,16 @@ transformations не поддерживаются. Боевой plugin/auth rout
 .\build\install\ltv\bin\ltv.bat ui --connections connections.json
 ```
 
-Выберите профиль и UTC start/end в epoch milliseconds, step в milliseconds.
-Интервал должен состоять из полных cells, step >= 1000 и укладываться в прогон.
+Выберите профиль и окно выборки. По умолчанию стоит `Auto (from the load file)`:
+период распознаётся из байтов нагрузки, а пользователь задаёт только step,
+margin и допуск простоя. Режим `Explicit period` сохраняет прежние UTC start/end
+в epoch milliseconds. Step — целые секунды от 1000 до 60000 ms. Интервал должен
+состоять из полных cells и укладываться в прогон. Правила окна, версии запроса,
+отказы и provenance описаны в разделах «Окно выборки» и «Авто-окно» ниже.
 Вместо online selection по-прежнему можно загрузить resource snapshot.
 
-CLI использует [пример source request](../contracts/sources/v1/request.example.json):
+CLI использует [пример source request](../contracts/sources/v1/request.example.json);
+`--source` принимает `source-request.v1`, `v2` и `v3`:
 
 ```powershell
 .\build\install\ltv\bin\ltv.bat analyze input.jtl --connections connections.json --source source.json --data-dir data
@@ -32,6 +37,106 @@ CLI использует [пример source request](../contracts/sources/v1/r
 `/api/datasources/proxy/uid/{datasource_uid}/api/v1/query_range`. InfluxDB-маршруты
 описаны ниже. Subpath установки задаётся в base URL. Redirects и произвольные
 URLs из UI запрещены.
+
+## Окно выборки
+
+Запрос источника объявляет окно выборки. Поддерживаются три версии документа:
+CLI `--source` и file part `source_request` в `POST /api/jobs` принимают все
+три, UI отправляет только `v3` и по умолчанию предлагает авто-окно.
+
+| Версия | Назначение | Схема |
+| --- | --- | --- |
+| `source-request.v1` | один профиль, явное окно | [v1](../contracts/sources/v1/source-request.schema.json) |
+| `source-request.v2` | до 16 профилей на общей сетке, явное окно | [v2](../contracts/sources/v2/source-request.schema.json) |
+| `source-request.v3` | до 16 профилей, явное или распознанное окно | [v3](../contracts/sources/v3/source-request.schema.json) |
+
+`profile_ids` — от 1 до 16 уникальных идентификаторов до 128 UTF-8 bytes; при
+разборе они сортируются, поэтому порядок в документе не значим. Файл запроса —
+до 16 KiB. `step_ms` во всех трёх версиях — целые секунды от 1000 до 60000,
+поэтому шаг 1500 ms или 90 s отклоняется при разборе запроса, до внешних
+обращений. Документы `v1` и `v2` принимаются без изменений, их сохранённые
+evidence bytes не меняются.
+
+`window.origin: explicit` в `v3` повторяет семантику `v2`: `start_epoch_ms`,
+`end_epoch_ms`, `step_ms` и интервал из полных cells.
+[Пример explicit-окна](../contracts/sources/v3/examples/valid/explicit-window.json).
+
+## Авто-окно
+
+`window.origin: auto` объявляет только шаг, запас и допуск простоя; границы
+периода пользователь не задаёт:
+
+```json
+{
+  "schema_version": "source-request.v3",
+  "profile_ids": ["errors", "metrics"],
+  "window": {
+    "origin": "auto",
+    "step_ms": 15000,
+    "margin_ms": 60000,
+    "max_idle_gap_ms": 1800000
+  }
+}
+```
+
+В UI это режим `Auto (from the load file)` с полями `Source step (ms)`,
+`Margin (ms)` и `Max idle gap (ms)`; невалидные значения блокируют отправку
+до запроса. `margin_ms` — от 0 до 3 600 000 и кратен `step_ms`;
+`max_idle_gap_ms` — не менее `step_ms` и кратен ему.
+[Пример auto-окна](../contracts/sources/v3/examples/valid/auto-window.json).
+
+Период распознаётся из самого файла нагрузки: от start первого sample до end
+последнего. Отдельный проход читает только timestamps, не строит метрики и не
+выполняет внешних запросов. Результат сохраняется один раз на run как
+`runs/<runId>/run-period.json`
+([`run-period.v1`](../contracts/run-period/v1/run-period.schema.json)),
+привязан к hash нагрузки и переиспользуется при каждом повторном открытии:
+для неизменных байтов распознавание не повторяется. Простой считается по
+отсутствию samples между соседними секундными бакетами, а сохранённые факты
+простоев не зависят от заявленного допуска, поэтому тот же артефакт пригоден
+для запросов с другим `max_idle_gap_ms`.
+
+Окно выводится из распознанного периода: расширение на `margin_ms` с обеих
+сторон, обрезка нижней границы до нуля, затем выравнивание обеих границ по
+абсолютной сетке шага — start вниз, end вверх. Выравнивание может только
+увеличить запас, поэтому применённый запас не меньше заявленного; единственное
+исключение — обрезка у нуля. Фактически применённое значение публикуется
+отдельно от заявленного как гарантированный минимум обеих сторон. Запас
+выбирайте не меньше задержки сбора (scrape interval и окно rate-выражения),
+а допуск простоя — длиннее штатных пауз внутри одного теста.
+
+Все три отказа выносятся до любого внешнего запроса, поэтому partial analysis
+bundle и coverage не появляются:
+
+- `AUTO_WINDOW_UNAVAILABLE` — период не распознан: вход невалиден или не
+  содержит samples. Задайте явное окно.
+- `AUTO_WINDOW_MULTI_TEST_SUSPECTED` — внутри периода найден простой строго
+  длиннее `max_idle_gap_ms`; вероятно, файл содержит несколько тестов.
+  Разделите файл или задайте явное окно.
+- `AUTO_WINDOW_SPAN_UNSUPPORTED` — число ячеек выведенной сетки вне диапазона
+  1..100 000. Задайте явное окно или более крупный step.
+
+Смещение часов между генератором нагрузки и системой мониторинга не
+компенсируется и не оценивается: margin только расширяет покрытие. При
+смещённых часах распознанный период может не покрыть нужный диапазон; средство
+то же — явное окно.
+
+Для acquisition по `v3` evidence `source_summary` публикует provenance окна:
+`window_origin`, а для авто-окна также `recognized_start_epoch_ms`,
+`recognized_end_epoch_ms`, `requested_margin_ms`, `applied_margin_ms`,
+`max_idle_gap_ms`, `detected_idle_gaps`, `longest_idle_gap_ms` (null, если
+простоев не было) и `auto_window_status` со значением `DERIVED`. UI показывает
+эти поля таблицей `Window` в секции source acquisition. Summaries `v1`/`v2` и
+ручной импорт OpenSearch-контекста полей окна не содержат.
+
+Снапшот авто-окна намеренно не объявляет окон, поэтому core связывает его
+пересечением полученной сетки snapshot с прогоном нагрузки:
+`resource_binding.mode` равен `run_intersection`. Запас, выходящий за границы
+прогона, обрезается при связывании; это видно по сравнению
+`snapshot_from_epoch_ms`/`snapshot_to_epoch_ms` с
+`evaluation_from_epoch_ms`/`evaluation_to_epoch_ms`. Счётчики
+`dropped_leading_cells` и `dropped_trailing_cells` сохраняют прежнее значение —
+остаток выравнивания неполной ячейки — и обрезанный запас не считают.
 
 ## Метрики и время
 
@@ -127,9 +232,9 @@ Private API принимает file part `source_context` в `POST /api/jobs`;
 
 ## Несколько источников
 
-UI позволяет выбрать до16 HTTP-профилей на общей start/end/step сетке.
+UI позволяет выбрать до16 HTTP-профилей на общей сетке окна выборки.
 CLI принимает [source-request.v2](../contracts/sources/v1/multiple-request.example.json)
-с `profile_ids`; прежний v1 для одного профиля остаётся совместимым.
+и `v3` с `profile_ids`; прежний v1 для одного профиля остаётся совместимым.
 Порядок выбора не влияет на нормализованные данные. Series/rule IDs становятся
 `profileId/queryId` и `profileId/ruleId`; `%` и `/` в profileId экранируются
 как `%25` и `%2F`. SLA-ссылки меняются вместе с series IDs, единицы — нет.
@@ -276,4 +381,5 @@ Private API: `GET /api/sources` выдаёт только id/source_kind/transpo
 `resource_snapshot`; `GET /api/runs/{runId}/analyses/{analysisId}/resource-snapshot`
 скачивает существующий проверенный артефакт. Existing Origin/CSRF/size guards действуют.
 
-Решение: [ADR 0007](../adr/0007-opt-in-online-sources.md).
+Решение: [ADR 0007](../adr/0007-opt-in-online-sources.md); авто-окно и
+распознанный период — [ADR 0012](../adr/0012-auto-window-recognized-period.md).

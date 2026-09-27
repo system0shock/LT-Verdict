@@ -1,5 +1,111 @@
 # LT Verdict — передача сессии
 
+## Передача 2026-09-28: ветка feat/source-auto-window
+
+Ворктри `.worktrees/local-baseline-comparison` переключён с
+`fix/input-unit-fill-coverage` на новую ветку `feat/source-auto-window` от
+`073b56d` (tip `fix/input-unit-fill-coverage`). Ветка не запушена, PR не
+создан. Документация Task 7 — `docs/user/online-sources.md`, `CHANGELOG.md`,
+этот файл и `docs/development-plan-v0.6.md` — изменена в рабочем дереве и не
+закоммичена. План:
+[auto window](superpowers/plans/2026-09-27-source-auto-window.md), спецификация
+[evidence triage / auto window](superpowers/specs/2026-09-27-evidence-triage-auto-window-design.md),
+решение [ADR 0012](adr/0012-auto-window-recognized-period.md). Запись
+«Передача 2026-09-22 (ночь)» ниже остаётся в силе по своей поставке, но её
+контекст устарел: ветка `fix/input-unit-fill-coverage` запушена и больше не
+является активной.
+
+### Коммиты ветки
+
+Семь коммитов `073b56d..2e6be01`:
+
+- `7a85660 docs: design auto window and evidence triage`
+- `0109657 docs: publish source-request.v2 schema`
+- `36c5d31 fix(sources): fail fast on steps the snapshot grid cannot use`
+- `045f4a7 feat(core): recognize run periods from sample timestamps`
+- `bd8c177 feat(sources): add source-request.v3 with the auto window contract`
+- `7874dc7 feat(sources): wire the auto window through acquisition, CLI, and API`
+- `2e6be01 feat(ui): derive the source window from the load file by default`
+
+### Что сделано
+
+Tasks 1–7 плана закрыты по реализации:
+
+- опубликованная схема `source-request.v2` с примерами в Ajv contract check и
+  поправка контракта headline selection про пустую семью;
+- fail-fast `step_ms`: целые секунды 1000..60000 для всех версий запроса,
+  отказ при разборе, до внешних обращений;
+- распознавание периода отдельным timestamps-only проходом и run-артефакт
+  `runs/<runId>/run-period.json` (`run-period.v1`, привязка к hash нагрузки,
+  staging и atomic move, `CORRUPT_RUN_PERIOD` при повреждении или подмене
+  hash, переиспользование при повторном открытии);
+- контракт `source-request.v3` и чистая функция вывода окна;
+- интеграция в `analyzeWithSources` — общую точку CLI и web, — в CLI
+  `--source`, в file part `source_request` и в provenance `source_summary`;
+- UI: режим `auto` по умолчанию, клиентская валидация до отправки, таблица
+  `Window` в секции source acquisition, обновлённые e2e;
+- документация Task 7.
+
+Отказы `AUTO_WINDOW_UNAVAILABLE`, `AUTO_WINDOW_MULTI_TEST_SUSPECTED` и
+`AUTO_WINDOW_SPAN_UNSUPPORTED` решаются до любого внешнего запроса: нет
+частичного analysis bundle и нет coverage, границы теста не угадываются.
+Байты `v1`/`v2` и manual OpenSearch import не меняются.
+
+Проверки уровня задач зафиксированы в сообщениях коммитов, в том числе полный
+offline-набор 411 тестов с 0 failures и UI typecheck/lint/e2e. На итоговом
+состоянии ветки заново выполнен только markdownlint: `markdownlint-cli2`
+v0.23.3 по четырём изменённым документам и по всем tracked-документам репозитория
+(98 файлов) — 0 issues.
+
+### Что осталось
+
+- Branch-level offline Verification из раздела «Verification» плана целиком:
+  `gradlew --offline --no-daemon check installDist -x npmCi --no-parallel`,
+  `gradlew --offline --no-daemon test -x npmCi --no-parallel --rerun-tasks`,
+  `npm --prefix ui run typecheck`, `npm --prefix ui run lint`,
+  `npm --prefix ui run test:contracts`, `npm --prefix ui run e2e`,
+  `python tools/verify_slice0.py`,
+  `python -m unittest tools.test_verify_slice0 tools.test_generate_jtl tools.test_onboard_test -v`,
+  `node --test tools/test_advisory_ai_runtime_relay.mjs`,
+  `npx --yes markdownlint-cli2`. Без `clean`, один Gradle process за раз.
+  Команда markdownlint без glob-аргументов линтит 0 файлов и ничего не
+  проверяет; задавать `"docs/**/*.md" "*.md"`. Запуск с `"**/*.md"` даёт 550
+  замечаний в 69 файлах — все внутри `build/` (первичные приёмочные артефакты и
+  vendored `qwen-code` node_modules), к проекту они не относятся и не чинятся.
+- Ревью ветки и PR по [регламенту](development-process.md); публикация, push и
+  merge только с явного разрешения пользователя.
+- Не входят в локальное закрытие: `tools/test_advisory_ai_runtime.ps1` (нужен
+  запущенный Docker daemon), performance gate
+  `.github/workflows/runtime-quality.yml` и `tools/perf/jtl_probe.sh`, зелёный
+  runtime CI.
+- Отдельная поставка вне этого плана: триаж `evidence-triage.v1` по ADR 0013 и
+  замер шумовой характеристики для фактических размеров семьи — до боевого
+  запуска.
+
+### Решения интерпретации, которые нельзя потерять
+
+- `applied_margin_ms` — гарантированный минимум обеих сторон, а не «сколько
+  добавилось слева». Выравнивание по абсолютной сетке шага (start вниз, end
+  вверх) может только увеличить запас, поэтому применённое значение не меньше
+  заявленного; единственное уменьшение даёт обрезка нижней границы у нуля.
+- `AUTO_WINDOW_SPAN_UNSUPPORTED` покрывает только правило 1..100 000 ячеек
+  выведенной сетки. Временного ограничения на длину распознанного периода нет:
+  длинный прогон с достаточно крупным `step_ms` остаётся допустимым.
+- Снапшот авто-окна намеренно не объявляет окон, его обрезает существующий
+  путь `resource_binding.mode = run_intersection`. Счётчики
+  `dropped_leading_cells` и `dropped_trailing_cells` сохраняют прежнее значение
+  остатка выравнивания неполной ячейки и обрезанный запас не считают; инвариант
+  `RESOURCE_WINDOW_OUTSIDE_RUN` не ослаблен.
+- Смещение часов генератора и системы мониторинга не компенсируется и не
+  оценивается: margin только расширяет покрытие, средство при смещении —
+  явное окно.
+
+### Окружение
+
+Прежнее в силе: не запускать `gradlew clean` (`build/stats-validation` и
+`build/ai-acceptance` содержат первичные корпусные данные), один Gradle process
+за раз, основной checkout `F:/Coding/LT-Verdict` не трогать.
+
 ## Передача 2026-09-22 (ночь): ветка fix/input-unit-fill-coverage
 
 Ворктри `.worktrees/local-baseline-comparison` переключён с `feat/remaining-sources`

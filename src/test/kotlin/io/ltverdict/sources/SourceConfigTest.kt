@@ -286,11 +286,20 @@ class SourceConfigTest {
             )
 
         assertEquals(SourceRequest("prom-main", 1_000, 3_000, 1_000), request)
+        assertEquals(
+            SourceRequest("prom-main", 0, 120_000, 60_000),
+            readSourceRequest(
+                """{"schema_version":"source-request.v1","profile_id":"prom-main","start_epoch_ms":0,"end_epoch_ms":120000,"step_ms":60000}"""
+                    .byteInputStream(),
+            ),
+        )
 
         val invalid =
             listOf(
                 """{"schema_version":"source-request.v1","profile_id":"prom-main","start_epoch_ms":1000,"end_epoch_ms":2500,"step_ms":1000}""",
                 """{"schema_version":"source-request.v1","profile_id":"prom-main","start_epoch_ms":1000,"end_epoch_ms":3000,"step_ms":999}""",
+                """{"schema_version":"source-request.v1","profile_id":"prom-main","start_epoch_ms":0,"end_epoch_ms":3000,"step_ms":1500}""",
+                """{"schema_version":"source-request.v1","profile_id":"prom-main","start_epoch_ms":0,"end_epoch_ms":122000,"step_ms":61000}""",
                 """{"schema_version":"source-request.v1","profile_id":"prom-main","start_epoch_ms":0,"end_epoch_ms":100001000,"step_ms":1000}""",
                 """{"schema_version":"source-request.v1","profile_id":"prom-main","start_epoch_ms":1000,"end_epoch_ms":3000,"step_ms":1000,"unknown":"top-secret"}""",
             )

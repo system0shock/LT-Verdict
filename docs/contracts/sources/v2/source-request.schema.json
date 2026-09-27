@@ -17,6 +17,6 @@
     },
     "start_epoch_ms": { "type": "integer", "minimum": 0, "maximum": 253402300799998 },
     "end_epoch_ms": { "type": "integer", "minimum": 1, "maximum": 253402300799999 },
-    "step_ms": { "type": "integer", "minimum": 1000, "maximum": 253402300799999 }
+    "step_ms": { "type": "integer", "minimum": 1000, "maximum": 60000, "multipleOf": 1000 }
   }
 }

@@ -518,7 +518,8 @@ private fun parseRequest(element: JsonElement): SourceRequest =
         if (start !in 0 until MAX_TIMESTAMP_EPOCH_MILLIS || end !in 1..MAX_TIMESTAMP_EPOCH_MILLIS || end <= start) {
             requestInvalid()
         }
-        if (step < 1_000 || (end - start) % step != 0L) requestInvalid()
+        // Сетка snapshot принимает только целые секунды 1..60; запрос отказывает до внешних обращений, а не после выборки.
+        if (step !in 1_000..60_000 || step % 1_000L != 0L || (end - start) % step != 0L) requestInvalid()
         if ((end - start) / step !in 1..MAX_POINTS_PER_SERIES.toLong()) requestInvalid()
         SourceRequest(profileIds.first(), start, end, step, profileIds.drop(1))
     } catch (_: SourceInputFailure) {

@@ -330,6 +330,7 @@ class SourceConfigTest {
 
         assertEquals(listOf("errors", "metrics"), request.profileIds)
         assertEquals(AutoWindow(60_000L, 1_800_000L, 15_000L), request.window)
+        assertEquals("source-request.v3", request.schemaVersion)
     }
 
     @Test
@@ -338,6 +339,7 @@ class SourceConfigTest {
 
         assertEquals(listOf("metrics"), request.profileIds)
         assertEquals(ExplicitWindow(1_767_225_600_000L, 1_767_225_660_000L, 1_000L), request.window)
+        assertEquals("source-request.v3", request.schemaVersion)
     }
 
     @Test
@@ -378,11 +380,11 @@ class SourceConfigTest {
             "start_epoch_ms":1000,"end_epoch_ms":3000,"step_ms":1000}"""
 
         assertEquals(
-            WindowedSourceRequest(listOf("prom-main"), ExplicitWindow(1_000L, 3_000L, 1_000L)),
+            WindowedSourceRequest("source-request.v1", listOf("prom-main"), ExplicitWindow(1_000L, 3_000L, 1_000L)),
             readWindowedSourceRequest(v1.byteInputStream()),
         )
         assertEquals(
-            WindowedSourceRequest(listOf("a", "z"), ExplicitWindow(1_000L, 3_000L, 1_000L)),
+            WindowedSourceRequest("source-request.v2", listOf("a", "z"), ExplicitWindow(1_000L, 3_000L, 1_000L)),
             readWindowedSourceRequest(v2.byteInputStream()),
         )
         listOf(v1, v2).forEach { document ->

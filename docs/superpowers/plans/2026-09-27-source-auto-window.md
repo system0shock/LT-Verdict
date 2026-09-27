@@ -128,14 +128,14 @@ Modify `src/main/kotlin/io/ltverdict/sources/SourceConfig.kt`,
 
 **Шаги:**
 
-- [ ] Вызвать распознавание в начале `analyzeWithSources` до внешней выборки, если запрос имеет `origin=auto`; сохранить или переиспользовать `run-period.json`. Точка покрывает и CLI, и web, поскольку оба маршрута идут через `analyzeWithSources`, и выполняется в worker-потоке, а не в event loop.
-- [ ] При отказе распознавания внешние запросы не выполняются; возвращается bounded outcome с reason code.
-- [ ] CLI: `--source` принимает `v3`; правила взаимоисключения входов и проверки идентичности профилей сохраняются; usage обновляется.
-- [ ] LocalApi: multipart part `source_request` принимает `v3`; пределы размера и взаимоисключение частей сохраняются.
-- [ ] Provenance: добавить в `source_summary` поля `window_origin`, `recognized_start_epoch_ms`, `recognized_end_epoch_ms`, `requested_margin_ms`, `applied_margin_ms`, `max_idle_gap_ms`, `detected_idle_gaps`, `longest_idle_gap_ms`, `auto_window_status`. Для ручного импорта OpenSearch-контекста поля окна по-прежнему отсутствуют.
-- [ ] Подтвердить, что `analysis_coverage` по-прежнему получает `SOURCE_ACQUISITION_PARTIAL`, `SOURCE_ACQUISITION_FAILED` и `SOURCE_REQUEST_CAP_EXCEEDED`, и что отказ авто-окна до выборки не выдаёт ложное покрытие.
-- [ ] Тесты: авто-окно выполняет выборку за выведенный период; простой дольше порога даёт отказ без HTTP; `INVALID` вход даёт отказ; повторный анализ переиспользует артефакт; provenance содержит заявленный и фактический margin.
-- [ ] Проверка: `gradlew --offline --no-daemon test -x npmCi --no-parallel`.
+- [x] Вызвать распознавание в начале `analyzeWithSources` до внешней выборки, если запрос имеет `origin=auto`; сохранить или переиспользовать `run-period.json`. Точка покрывает и CLI, и web, поскольку оба маршрута идут через `analyzeWithSources`, и выполняется в worker-потоке, а не в event loop.
+- [x] При отказе распознавания внешние запросы не выполняются; возвращается bounded outcome с reason code. Отказ — исключение с голым reason code по прецеденту `SOURCE_PROFILE_NOT_FOUND`; каталог анализа не создаётся. Снапшот авто-окна не объявляет окон: запас шире прогона, его обрезает существующий implicit-путь `run-intersection`, и обрезка видна в `resource_binding` (инвариант `RESOURCE_WINDOW_OUTSIDE_RUN` не ослаблен).
+- [x] CLI: `--source` принимает `v3`; правила взаимоисключения входов и проверки идентичности профилей сохраняются; usage обновляется.
+- [x] LocalApi: multipart part `source_request` принимает `v3`; пределы размера и взаимоисключение частей сохраняются.
+- [x] Provenance: добавить в `source_summary` поля `window_origin`, `recognized_start_epoch_ms`, `recognized_end_epoch_ms`, `requested_margin_ms`, `applied_margin_ms`, `max_idle_gap_ms`, `detected_idle_gaps`, `longest_idle_gap_ms`, `auto_window_status`. Для ручного импорта OpenSearch-контекста поля окна по-прежнему отсутствуют. Байты v1/v2 неизменны; `v3 explicit` публикует только `window_origin`.
+- [x] Подтвердить, что `analysis_coverage` по-прежнему получает `SOURCE_ACQUISITION_PARTIAL`, `SOURCE_ACQUISITION_FAILED` и `SOURCE_REQUEST_CAP_EXCEEDED`, и что отказ авто-окна до выборки не выдаёт ложное покрытие.
+- [x] Тесты: авто-окно выполняет выборку за выведенный период; простой дольше порога даёт отказ без HTTP; `INVALID` вход даёт отказ; повторный анализ переиспользует артефакт; provenance содержит заявленный и фактический margin.
+- [x] Проверка: `gradlew --offline --no-daemon test -x npmCi --no-parallel`.
 
 ## Task 6: UI
 

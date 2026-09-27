@@ -14,7 +14,7 @@ import io.ltverdict.metrics.byteSize
 import io.ltverdict.metrics.toJsonObject
 import io.ltverdict.sources.PostgresAnalysisInput
 import io.ltverdict.sources.SourceAcquisition
-import io.ltverdict.sources.SourceRequest
+import io.ltverdict.sources.WindowedSourceRequest
 import io.ltverdict.sources.comparePostgresPhases
 import io.ltverdict.sources.readPostgresAnalysisInput
 import io.ltverdict.storage.AcceptedInput
@@ -41,7 +41,7 @@ internal data class AnalysisRequest(
     val mode: AnalysisMode? = null,
     val resources: ResourceValidation.Valid? = null,
     val diagnostics: DiagnosticValidation.Valid? = null,
-    val sourceRequest: SourceRequest? = null,
+    val sourceRequest: WindowedSourceRequest? = null,
     val sourceAcquisition: SourceAcquisition? = null,
     val postgres: PostgresAnalysisInput? = null,
     val capacity: CapacityPlanValidation.Valid? = null,
@@ -55,7 +55,7 @@ internal data class AnalysisOutcome(
 )
 
 internal class AnalysisService(
-    private val store: RunBundleStore,
+    internal val store: RunBundleStore,
     private val engineConfig: EngineConfig,
 ) {
     fun analyze(

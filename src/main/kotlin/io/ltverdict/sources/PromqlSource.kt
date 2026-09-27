@@ -367,18 +367,21 @@ private fun snapshotBytes(
                     }
                 },
             )
-            put(
-                "windows",
-                buildJsonArray {
-                    add(
-                        buildJsonObject {
-                            put("id", "full")
-                            put("from_epoch_ms", request.startEpochMillis)
-                            put("to_epoch_ms", request.endEpochMillis)
-                        },
-                    )
-                },
-            )
+            // Авто-окно шире прогона, поэтому объявленного окна нет: привязка идёт по пересечению с прогоном.
+            if (!request.autoDerivedWindow) {
+                put(
+                    "windows",
+                    buildJsonArray {
+                        add(
+                            buildJsonObject {
+                                put("id", "full")
+                                put("from_epoch_ms", request.startEpochMillis)
+                                put("to_epoch_ms", request.endEpochMillis)
+                            },
+                        )
+                    },
+                )
+            }
             put("rules", buildJsonArray { rules.forEach { add(it.json()) } })
             put(
                 "provenance",
@@ -455,8 +458,12 @@ private fun sourceEvidence(
         put("retries", budget.retries)
         put("throttle_wait_ms", budget.throttleWaitMillis)
         put("cap_exceeded", budget.capExceeded)
-    }
+    }.withWindowProvenance(request.windowProvenance)
 }
+
+// Provenance окна добавляется только запросами v3; для v1 и v2 сводка возвращается байт-в-байт прежней.
+internal fun JsonObject.withWindowProvenance(provenance: JsonObject?): JsonObject =
+    if (provenance == null) this else JsonObject(this + provenance)
 
 private fun JsonObject.objectValue(name: String): JsonObject = get(name)?.objectValue() ?: fail("MALFORMED_RESPONSE")
 

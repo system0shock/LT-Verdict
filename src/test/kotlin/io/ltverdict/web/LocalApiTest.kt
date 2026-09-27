@@ -17,6 +17,7 @@ import io.ltverdict.report.renderAsciiDocReport
 import io.ltverdict.report.renderHtmlReport
 import io.ltverdict.sources.ONLINE_LOAD
 import io.ltverdict.sources.ONLINE_SOURCE_REQUEST
+import io.ltverdict.sources.ONLINE_SOURCE_REQUEST_V3_AUTO
 import io.ltverdict.sources.OnlineSourceFixture
 import io.ltverdict.sources.PostgresProfile
 import io.ltverdict.sources.PromqlSource
@@ -469,6 +470,47 @@ class LocalApiTest {
                     ),
                     400,
                 )
+            }
+        }
+    }
+
+    @Test
+    fun `online job derives the v3 auto window and rejects an invalid v3 document`() {
+        OnlineSourceFixture().use { fixture ->
+            val profiles = readSourceProfiles(fixture.profilesJson().byteInputStream())
+            val source = PromqlSource(profiles, SourceHttp(profiles))
+            withServer(
+                jobsFactory = { store ->
+                    val service = AnalysisService(store, EngineConfig())
+                    AnalysisJobs(1) { request, progress, cancelled -> analyzeWithSources(service, request, source, progress, cancelled) }
+                },
+                sourceProfiles = profiles,
+            ) { store, api ->
+                api.bootstrap()
+                val input = store.acceptInput(ONLINE_LOAD.byteInputStream(), "auto.jtl")
+                val id = api.createJob(input.runId, source = ONLINE_SOURCE_REQUEST_V3_AUTO.encodeToByteArray()).analysisId(api)
+                val summary =
+                    api
+                        .get("/api/runs/${input.runId}/analyses/$id/result")
+                        .jsonObject()
+                        .getValue("evidence")
+                        .jsonArray
+                        .single { it.jsonObject["type"]?.jsonPrimitive?.content == "source_summary" }
+                        .jsonObject
+                assertEquals("COMPLETE", summary.getValue("status").jsonPrimitive.content)
+                assertEquals("auto", summary.getValue("window_origin").jsonPrimitive.content)
+                assertEquals("DERIVED", summary.getValue("auto_window_status").jsonPrimitive.content)
+                assertEquals(1, fixture.requests.get())
+
+                assertError(
+                    api.createJob(
+                        input.runId,
+                        source = ONLINE_SOURCE_REQUEST_V3_AUTO.replace("\"margin_ms\":0", "\"margin_ms\":1500").encodeToByteArray(),
+                    ),
+                    400,
+                    "MALFORMED_REQUEST",
+                )
+                assertEquals(1, fixture.requests.get())
             }
         }
     }

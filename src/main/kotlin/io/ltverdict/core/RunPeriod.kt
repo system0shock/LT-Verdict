@@ -39,6 +39,7 @@ internal fun recognizeRunPeriod(
     source: Path,
     loadInputSha256: String,
     maxIdleGapMillis: Long,
+    checkCancelled: () -> Unit = {},
 ): RunPeriodV1 {
     require(maxIdleGapMillis >= ONE_SECOND_MILLIS && maxIdleGapMillis % ONE_SECOND_MILLIS == 0L) { "INVALID_MAX_IDLE_GAP" }
     return try {
@@ -57,6 +58,7 @@ internal fun recognizeRunPeriod(
                         occupied += Math.floorDiv(sample.startedAtEpochMillis, ONE_SECOND_MILLIS)
                     }
                 },
+                checkCancelled = checkCancelled,
             )
         val firstSample = first
         val lastSample = last
@@ -107,6 +109,20 @@ internal fun runPeriodJson(period: RunPeriodV1): JsonObject =
         put("idle_gap_count", period.idleGapCount)
         put("status", period.status)
     }
+
+internal fun runPeriodFromJson(document: JsonObject): RunPeriodV1 {
+    val validated = validateRunPeriod(document)
+    return RunPeriodV1(
+        validated.periodString("schema_version"),
+        validated.periodString("load_input_sha256"),
+        validated.periodString("recognition_method"),
+        validated.periodLong("first_sample_epoch_millis"),
+        validated.periodLong("last_sample_epoch_millis"),
+        validated.optionalPeriodLong("longest_idle_gap_millis"),
+        validated.periodLong("idle_gap_count").toInt(),
+        validated.periodString("status"),
+    )
+}
 
 internal fun validateRunPeriod(document: JsonObject): JsonObject {
     if (document.keys != RUN_PERIOD_FIELDS) periodInvalid("period fields differ")

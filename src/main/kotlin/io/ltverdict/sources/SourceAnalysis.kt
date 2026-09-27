@@ -7,7 +7,11 @@ import io.ltverdict.core.MAX_RESOURCE_CELLS
 import io.ltverdict.core.MAX_RESOURCE_RULES
 import io.ltverdict.core.MAX_RESOURCE_SERIES
 import io.ltverdict.core.ResourceValidation
+import io.ltverdict.core.RunPeriodV1
 import io.ltverdict.core.canonicalJson
+import io.ltverdict.core.recognizeRunPeriod
+import io.ltverdict.core.runPeriodFromJson
+import io.ltverdict.core.runPeriodJson
 import io.ltverdict.core.sha256Hex
 import io.ltverdict.core.validateResourceSnapshot
 import kotlinx.serialization.json.Json
@@ -106,15 +110,91 @@ internal fun analyzeWithSources(
     processedBytes: (Long) -> Unit = {},
     checkCancelled: () -> Unit = {},
 ): AnalysisOutcome {
-    val selection = request.sourceRequest ?: return service.analyze(request, processedBytes, checkCancelled)
+    val windowed = request.sourceRequest ?: return service.analyze(request, processedBytes, checkCancelled)
     require(request.resources == null && request.diagnostics == null && request.sourceAcquisition == null) { "SOURCE_INPUT_CONFLICT" }
-    val acquisition = requireNotNull(source) { "SOURCE_NOT_CONFIGURED" }.acquire(selection, request.input.sha256, checkCancelled)
+    val configured = requireNotNull(source) { "SOURCE_NOT_CONFIGURED" }
+    val selection = resolveWindow(service, request, windowed, checkCancelled)
+    val acquisition = configured.acquire(selection, request.input.sha256, checkCancelled)
     return service.analyze(
         request.copy(sourceRequest = null, resources = acquisition.snapshot, sourceAcquisition = acquisition),
         processedBytes,
         checkCancelled,
     )
 }
+
+private fun resolveWindow(
+    service: AnalysisService,
+    request: AnalysisRequest,
+    windowed: WindowedSourceRequest,
+    checkCancelled: () -> Unit,
+): SourceRequest {
+    val profileId = windowed.profileIds.first()
+    val additional = windowed.profileIds.drop(1)
+    return when (val window = windowed.window) {
+        is ExplicitWindow ->
+            SourceRequest(
+                profileId,
+                window.startMillis,
+                window.endMillis,
+                window.stepMillis,
+                additional,
+                // Байты v1 и v2 остаются неизменными: provenance окна публикует только v3.
+                if (windowed.schemaVersion == "source-request.v3") buildJsonObject { put("window_origin", "explicit") } else null,
+            )
+        is AutoWindow -> {
+            val period = runPeriodFromJson(recognizedPeriod(service, request, window, checkCancelled))
+            val derived =
+                when (val outcome = deriveAutoWindow(period, window)) {
+                    is AutoWindowOutcome.Derived -> outcome.window
+                    // Отказ авто-окна возвращается до внешней выборки: границы теста не угадываются.
+                    is AutoWindowOutcome.Refused -> throw IllegalArgumentException(outcome.reasonCode)
+                }
+            val provenance = autoWindowProvenance(period, window, derived)
+            SourceRequest(
+                profileId,
+                derived.startMillis,
+                derived.endMillis,
+                derived.stepMillis,
+                additional,
+                provenance,
+                autoDerivedWindow = true,
+            )
+        }
+    }
+}
+
+private fun recognizedPeriod(
+    service: AnalysisService,
+    request: AnalysisRequest,
+    window: AutoWindow,
+    checkCancelled: () -> Unit,
+): JsonObject =
+    service.store.readRunPeriod(request.input.runId)
+        ?: recognizeRunPeriod(
+            request.input.sourceType,
+            request.input.path,
+            request.input.sha256,
+            window.maxIdleGapMillis,
+            checkCancelled,
+        ).let { recognized -> runPeriodJson(recognized).also { service.store.replaceRunPeriod(request.input.runId, it) } }
+
+private fun autoWindowProvenance(
+    period: RunPeriodV1,
+    window: AutoWindow,
+    derived: DerivedAutoWindow,
+): JsonObject =
+    buildJsonObject {
+        put("window_origin", "auto")
+        put("recognized_start_epoch_ms", period.firstSampleEpochMillis)
+        put("recognized_end_epoch_ms", period.lastSampleEpochMillis)
+        put("requested_margin_ms", window.marginMillis)
+        put("applied_margin_ms", derived.appliedMarginMillis)
+        put("max_idle_gap_ms", window.maxIdleGapMillis)
+        put("detected_idle_gaps", period.idleGapCount)
+        val longest = period.longestIdleGapMillis
+        if (longest == null) put("longest_idle_gap_ms", JsonNull) else put("longest_idle_gap_ms", longest)
+        put("auto_window_status", "DERIVED")
+    }
 
 internal fun readOpenSearchContext(
     input: InputStream,
@@ -291,7 +371,7 @@ internal fun acquireOpenSearch(
                     )
                 },
             )
-        }
+        }.withWindowProvenance(request.windowProvenance)
     artifacts["source-acquisition.json"] = canonicalJson(summary)
     return SourceAcquisition(null, summary, artifacts, listOfNotNull(context))
 }
@@ -334,7 +414,8 @@ internal fun acquireMultipleSources(
         checkCancelled()
         val acquired =
             source.acquire(
-                request.copy(profileId = profile.id, additionalProfileIds = emptyList()),
+                // Provenance окна публикует только агрегированная сводка, а не сводки отдельных профилей.
+                request.copy(profileId = profile.id, additionalProfileIds = emptyList(), windowProvenance = null),
                 loadInputSha256,
                 checkCancelled,
             )
@@ -427,18 +508,21 @@ internal fun acquireMultipleSources(
                 put("point_count", (request.endEpochMillis - request.startEpochMillis) / request.stepMillis)
                 put("series", JsonArray(values))
                 put("rules", JsonArray(rules))
-                put(
-                    "windows",
-                    buildJsonArray {
-                        add(
-                            buildJsonObject {
-                                put("id", "full")
-                                put("from_epoch_ms", request.startEpochMillis)
-                                put("to_epoch_ms", request.endEpochMillis)
-                            },
-                        )
-                    },
-                )
+                // Как и в одиночной выборке: авто-окно не объявляется, его обрезает пересечение с прогоном.
+                if (!request.autoDerivedWindow) {
+                    put(
+                        "windows",
+                        buildJsonArray {
+                            add(
+                                buildJsonObject {
+                                    put("id", "full")
+                                    put("from_epoch_ms", request.startEpochMillis)
+                                    put("to_epoch_ms", request.endEpochMillis)
+                                },
+                            )
+                        },
+                    )
+                }
                 put("provenance", provenance)
             },
         )
@@ -529,7 +613,7 @@ internal fun acquireMultipleSources(
             put("retries", total("retries"))
             put("throttle_wait_ms", total("throttle_wait_ms"))
             put("cap_exceeded", summaries.any { it.getValue("cap_exceeded").jsonPrimitive.boolean })
-        }
+        }.withWindowProvenance(request.windowProvenance)
     artifacts["source-acquisition.json"] = canonicalJson(summary)
     return SourceAcquisition(snapshot, summary, artifacts, contexts)
 }

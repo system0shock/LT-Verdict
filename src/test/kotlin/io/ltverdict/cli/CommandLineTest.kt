@@ -8,6 +8,7 @@ import io.ltverdict.core.validatePolicy
 import io.ltverdict.core.validateResourceSnapshot
 import io.ltverdict.sources.ONLINE_LOAD
 import io.ltverdict.sources.ONLINE_SOURCE_REQUEST
+import io.ltverdict.sources.ONLINE_SOURCE_REQUEST_V3_AUTO
 import io.ltverdict.sources.OnlineSourceFixture
 import io.ltverdict.sources.readSourceProfiles
 import io.ltverdict.sources.readSourceRequest
@@ -330,6 +331,61 @@ class CommandLineTest {
                         "source_summary"
                 },
             )
+        }
+    }
+
+    @Test
+    fun `CLI derives the v3 auto window and refuses a malformed v3 document before acquisition`() {
+        OnlineSourceFixture().use { fixture ->
+            val profiles = tempDir.resolve("auto-connections.json")
+            val selection = tempDir.resolve("auto-source.json")
+            val input = tempDir.resolve("auto.jtl")
+            val data = tempDir.resolve("auto-data")
+            Files.writeString(profiles, fixture.profilesJson())
+            Files.writeString(selection, ONLINE_SOURCE_REQUEST_V3_AUTO)
+            Files.writeString(input, ONLINE_LOAD)
+
+            val online =
+                run(
+                    "analyze",
+                    input.toString(),
+                    "--connections",
+                    profiles.toString(),
+                    "--source",
+                    selection.toString(),
+                    "--data-dir",
+                    data.toString(),
+                )
+
+            assertEquals(2, online.exitCode, online.stderr)
+            assertEquals(1, fixture.requests.get())
+            val summary =
+                Json
+                    .parseToJsonElement(online.stdout)
+                    .jsonObject
+                    .getValue("evidence")
+                    .jsonArray
+                    .map { it.jsonObject }
+                    .single { it["type"]?.jsonPrimitive?.content == "source_summary" }
+            assertEquals("auto", summary.getValue("window_origin").jsonPrimitive.content)
+            assertEquals("DERIVED", summary.getValue("auto_window_status").jsonPrimitive.content)
+            assertTrue(Files.exists(data.resolve("runs/${online.stdout.json("run_id")}").resolve("run-period.json")))
+
+            Files.writeString(selection, ONLINE_SOURCE_REQUEST_V3_AUTO.replace("\"margin_ms\":0", "\"margin_ms\":1500"))
+            val malformed =
+                run(
+                    "analyze",
+                    input.toString(),
+                    "--connections",
+                    profiles.toString(),
+                    "--source",
+                    selection.toString(),
+                    "--data-dir",
+                    data.toString(),
+                )
+            assertError(malformed, 4, "malformed v3 source request")
+            assertTrue(malformed.stderr.contains("SOURCE_REQUEST_INVALID"), malformed.stderr)
+            assertEquals(1, fixture.requests.get())
         }
     }
 

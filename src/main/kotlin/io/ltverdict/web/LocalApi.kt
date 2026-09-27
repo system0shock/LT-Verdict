@@ -73,12 +73,12 @@ import io.ltverdict.report.renderHtmlReport
 import io.ltverdict.sources.PostgresProfile
 import io.ltverdict.sources.SourceHttp
 import io.ltverdict.sources.SourceProfile
-import io.ltverdict.sources.SourceRequest
 import io.ltverdict.sources.SourceTransport
+import io.ltverdict.sources.WindowedSourceRequest
 import io.ltverdict.sources.capturePostgresPhase
 import io.ltverdict.sources.readOpenSearchContexts
 import io.ltverdict.sources.readPostgresAnalysisInput
-import io.ltverdict.sources.readSourceRequest
+import io.ltverdict.sources.readWindowedSourceRequest
 import io.ltverdict.storage.AcceptedInput
 import io.ltverdict.storage.RunBundleStore
 import kotlinx.coroutines.Dispatchers
@@ -1148,7 +1148,7 @@ private suspend fun receiveJob(
     var resources: ResourceValidation.Valid? = null
     var diagnostics: DiagnosticValidation.Valid? = null
     var capacity: CapacityPlanValidation.Valid? = null
-    var sourceRequest: SourceRequest? = null
+    var sourceRequest: WindowedSourceRequest? = null
     val sourceContexts = mutableListOf<ByteArray>()
     val postgresFiles = mutableMapOf<String, ByteArray>()
     var policySeen = false
@@ -1180,7 +1180,7 @@ private suspend fun receiveJob(
                     part is PartData.FileItem && part.name == "source_request" && sourceRequest == null && !invalidParts -> {
                         sourceRequest =
                             try {
-                                withContext(Dispatchers.IO) { readSourceRequest(part.provider().toInputStream()) }
+                                withContext(Dispatchers.IO) { readWindowedSourceRequest(part.provider().toInputStream()) }
                             } catch (_: IllegalArgumentException) {
                                 malformed("Source request is invalid")
                             }
@@ -1291,7 +1291,7 @@ private suspend fun receiveJob(
         ) {
             malformed("Online acquisition cannot be combined with manual source inputs")
         }
-        if ((listOf(selection.profileId) + selection.additionalProfileIds).any { id -> sourceProfiles.none { it.id == id } }) {
+        if (selection.profileIds.any { id -> sourceProfiles.none { it.id == id } }) {
             malformed("Source profile is not configured")
         }
     }

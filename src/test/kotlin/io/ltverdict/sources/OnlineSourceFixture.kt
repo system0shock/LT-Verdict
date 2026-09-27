@@ -58,6 +58,10 @@ internal class OnlineSourceFixture : AutoCloseable {
 
 internal const val ONLINE_SOURCE_REQUEST = """{"schema_version":"source-request.v1","profile_id":"local",
     "start_epoch_ms":1767225600000,"end_epoch_ms":1767225601000,"step_ms":1000}"""
+
+// Авто-окно над ONLINE_LOAD выводит то же окно 1767225600000..1767225601000 с шагом 1000, что и v1 выше.
+internal const val ONLINE_SOURCE_REQUEST_V3_AUTO = """{"schema_version":"source-request.v3","profile_ids":["local"],
+    "window":{"origin":"auto","step_ms":1000,"margin_ms":0,"max_idle_gap_ms":60000}}"""
 internal const val ONLINE_LOAD =
     "timeStamp,elapsed,label,responseCode,responseMessage,threadName,success,bytes,sentBytes," +
         "grpThreads,allThreads,Latency,IdleTime,Connect\n" +

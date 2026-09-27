@@ -35,7 +35,7 @@ import io.ltverdict.sources.readOpenSearchContexts
 import io.ltverdict.sources.readPostgresAnalysisInput
 import io.ltverdict.sources.readSourceConnections
 import io.ltverdict.sources.readSourceProfiles
-import io.ltverdict.sources.readSourceRequest
+import io.ltverdict.sources.readWindowedSourceRequest
 import io.ltverdict.storage.DataDirectory
 import io.ltverdict.storage.RunBundleStore
 import io.ltverdict.web.LocalApiContext
@@ -168,10 +168,8 @@ private fun analyze(
         throw CliFailure(EXIT_INVALID_INPUT, "SOURCE_INPUT_CONFLICT: acquire first, then replay the saved snapshot with --correlation")
     }
     val profiles = connectionsPath?.let { readSourceFile(it, ::readSourceProfiles) }.orEmpty()
-    val sourceRequest = sourcePath?.let { readSourceFile(it, ::readSourceRequest) }
-    if (sourceRequest != null &&
-        (listOf(sourceRequest.profileId) + sourceRequest.additionalProfileIds).any { id -> profiles.none { it.id == id } }
-    ) {
+    val sourceRequest = sourcePath?.let { readSourceFile(it, ::readWindowedSourceRequest) }
+    if (sourceRequest != null && sourceRequest.profileIds.any { id -> profiles.none { it.id == id } }) {
         throw CliFailure(EXIT_INVALID_INPUT, "SOURCE_PROFILE_NOT_FOUND")
     }
     val source = if (sourceRequest == null) null else PromqlSource(profiles, SourceHttp(profiles))
@@ -667,7 +665,8 @@ private fun usage(): Nothing =
             "ltv source pre|post --connections <profiles.json> --profile <id> [--pre <pre.json>] [--pg-profile-html <output.html>] | " +
             "ltv opensearch prepare --context <file> --templates <file> --load-sha256 <hash> --output-dir <new-dir> | " +
             "ltv policy validate <policy.json> | ltv report <run-id> <analysis-id> " +
-            "--format json|html|asciidoc|confluence|svg [--data-dir <path>]",
+            "--format json|html|asciidoc|confluence|svg [--data-dir <path>]" + System.lineSeparator() +
+            "--source accepts source-request.v1|v2|v3; a v3 window is explicit or auto",
     )
 
 private class CliFailure(

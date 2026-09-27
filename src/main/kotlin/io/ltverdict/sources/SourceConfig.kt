@@ -103,6 +103,10 @@ internal data class SourceRequest(
     val endEpochMillis: Long,
     val stepMillis: Long,
     val additionalProfileIds: List<String> = emptyList(),
+    // Provenance окна публикуется только для v3: байты v1/v2 остаются неизменными.
+    val windowProvenance: JsonObject? = null,
+    // Выведенное окно шире прогона, поэтому snapshot не объявляет окна: ядро само обрезает его по пересечению с прогоном.
+    val autoDerivedWindow: Boolean = false,
 )
 
 internal sealed interface RequestWindow {
@@ -122,6 +126,7 @@ internal data class AutoWindow(
 ) : RequestWindow
 
 internal data class WindowedSourceRequest(
+    val schemaVersion: String,
     val profileIds: List<String>,
     val window: RequestWindow,
 )
@@ -581,9 +586,9 @@ private fun parseWindowedRequest(element: JsonElement): WindowedSourceRequest =
         if (version == "source-request.v3") {
             value.rejectUnknown(setOf("schema_version", "profile_ids", "window"))
             val window = value["window"]?.let(::parseWindow) ?: requestInvalid()
-            WindowedSourceRequest(sortedProfileIds(value.sourceArray("profile_ids")), window)
+            WindowedSourceRequest(version, sortedProfileIds(value.sourceArray("profile_ids")), window)
         } else {
-            WindowedSourceRequest(parseProfileIds(value, version), parseExplicitWindow(value))
+            WindowedSourceRequest(version, parseProfileIds(value, version), parseExplicitWindow(value))
         }
     } catch (_: SourceInputFailure) {
         requestInvalid()

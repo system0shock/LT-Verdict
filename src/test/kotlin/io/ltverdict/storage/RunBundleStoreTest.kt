@@ -4,9 +4,12 @@ import io.ltverdict.core.WindowComparisonRequest
 import io.ltverdict.core.baselineConditionRecord
 import io.ltverdict.core.canonicalJson
 import io.ltverdict.core.manualBaselineSelection
+import io.ltverdict.core.recognizeRunPeriod
+import io.ltverdict.core.runPeriodJson
 import io.ltverdict.core.sha256Hex
 import io.ltverdict.ingest.SourceType
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
@@ -341,6 +344,74 @@ class RunBundleStoreTest {
     }
 
     @Test
+    fun `run period round trips canonically and survives reopen`() {
+        val root = tempDir.resolve("run-period-reopen")
+        lateinit var runId: String
+        lateinit var period: JsonObject
+
+        DataDirectory.open(root).use { directory ->
+            val store = RunBundleStore(directory)
+            val accepted = store.acceptInput(Files.newInputStream(Path.of(CSV_FIXTURE)), "period.jtl")
+            runId = accepted.runId
+            assertEquals(null, store.readRunPeriod(runId))
+
+            val recognized = recognizeRunPeriod(accepted.sourceType, accepted.path, accepted.sha256, 60_000)
+            period = runPeriodJson(recognized)
+            assertEquals(period, store.replaceRunPeriod(runId, period))
+
+            val path = root.resolve("runs").resolve(runId).resolve("run-period.json")
+            assertArrayEquals(canonicalJson(period), Files.readAllBytes(path))
+            assertEquals(period, store.readRunPeriod(runId))
+            assertEquals(period, store.readRunPeriod(runId))
+            assertStagingEmpty(root)
+        }
+
+        DataDirectory.open(root).use { directory ->
+            assertEquals(period, RunBundleStore(directory).readRunPeriod(runId))
+        }
+    }
+
+    @Test
+    fun `run period write refuses documents bound to other input bytes`() =
+        withStore { store, root ->
+            val accepted = store.acceptInput(Files.newInputStream(Path.of(CSV_FIXTURE)), "period.jtl")
+
+            assertThrows(IllegalArgumentException::class.java) {
+                store.replaceRunPeriod(accepted.runId, periodJson("b".repeat(64)))
+            }
+
+            assertFalse(Files.exists(root.resolve("runs").resolve(accepted.runId).resolve("run-period.json")))
+            assertStagingEmpty(root)
+        }
+
+    @Test
+    fun `run period read rejects corrupt oversized and rebound private state`() =
+        withStore { store, root ->
+            val accepted = store.acceptInput(Files.newInputStream(Path.of(CSV_FIXTURE)), "period.jtl")
+            val period = periodJson(accepted.sha256)
+            store.replaceRunPeriod(accepted.runId, period)
+            val path = root.resolve("runs").resolve(accepted.runId).resolve("run-period.json")
+
+            fun assertCorrupt() {
+                val failure = assertThrows(IllegalStateException::class.java) { store.readRunPeriod(accepted.runId) }
+                assertTrue((failure.message ?: "").startsWith("CORRUPT_RUN_PERIOD"))
+            }
+
+            Files.writeString(path, canonicalJson(period).decodeToString() + " ", StandardOpenOption.TRUNCATE_EXISTING)
+            assertCorrupt()
+
+            val withToken = JsonObject(period + ("token" to JsonPrimitive("not-allowed")))
+            Files.writeString(path, canonicalJson(withToken).decodeToString(), StandardOpenOption.TRUNCATE_EXISTING)
+            assertCorrupt()
+
+            Files.write(path, ByteArray(4 * 1024 + 1), StandardOpenOption.TRUNCATE_EXISTING)
+            assertCorrupt()
+
+            Files.writeString(path, canonicalJson(periodJson("c".repeat(64))).decodeToString(), StandardOpenOption.TRUNCATE_EXISTING)
+            assertCorrupt()
+        }
+
+    @Test
     fun `analysis documents are returned only after bundle verification`() =
         withStore { store, _ ->
             val input = store.acceptInput(Files.newInputStream(Path.of(CSV_FIXTURE)), "input.jtl")
@@ -379,6 +450,18 @@ class RunBundleStoreTest {
         put("run_id", "jmeter_jtl_csv-${run.toString().repeat(64)}")
         put("analysis_id", analysis.toString().repeat(64))
     }
+
+    private fun periodJson(sha256: String): JsonObject =
+        buildJsonObject {
+            put("schema_version", "run-period.v1")
+            put("load_input_sha256", sha256)
+            put("recognition_method", "sample-timestamps.v1")
+            put("first_sample_epoch_millis", 1_767_225_600_000L)
+            put("last_sample_epoch_millis", 1_767_225_660_000L)
+            put("longest_idle_gap_millis", JsonNull)
+            put("idle_gap_count", 0)
+            put("status", "RECOGNIZED")
+        }
 
     private companion object {
         const val CSV_FIXTURE = "fixtures/slice1/jmeter/csv-5.6.3/input.jtl"

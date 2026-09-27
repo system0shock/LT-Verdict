@@ -6,6 +6,7 @@ import io.ltverdict.core.canonicalJson
 import io.ltverdict.core.sha256Hex
 import io.ltverdict.core.validateBaselineCondition
 import io.ltverdict.core.validateBaselineSelection
+import io.ltverdict.core.validateRunPeriod
 import io.ltverdict.ingest.SourceType
 import io.ltverdict.ingest.detectSource
 import kotlinx.serialization.SerializationException
@@ -364,6 +365,41 @@ internal class RunBundleStore(
         }
     }
 
+    fun readRunPeriod(runId: String): JsonObject? =
+        synchronized(dataDirectory.operationLock) {
+            dataDirectory.requireOpen()
+            readRunPeriodUnlocked(requireInputUnlocked(runId))
+        }
+
+    fun replaceRunPeriod(
+        runId: String,
+        period: JsonObject,
+    ): JsonObject =
+        synchronized(dataDirectory.operationLock) {
+            dataDirectory.requireOpen()
+            val accepted = requireInputUnlocked(runId)
+            val validated = validateRunPeriod(period)
+            require(validated.string("load_input_sha256") == accepted.sha256) { "RUN_PERIOD_INPUT_MISMATCH" }
+            val bytes = canonicalJson(validated)
+            check(bytes.size <= MAX_RUN_PERIOD_BYTES)
+            requireOwnedDirectory(dataDirectory.staging)
+            val run = dataDirectory.runs.resolve(runId)
+            val target = run.resolve(RUN_PERIOD_FILE)
+            if (Files.exists(target, LinkOption.NOFOLLOW_LINKS)) requireRunPeriodFile(target)
+            val staging = dataDirectory.staging.resolve(UUID.randomUUID().toString())
+            Files.createDirectory(staging)
+            try {
+                val staged = staging.resolve(RUN_PERIOD_FILE)
+                writeForced(staged, bytes)
+                forceDirectory(staging)
+                Files.move(staged, target, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING)
+                forceDirectory(run)
+                validated
+            } finally {
+                DataDirectory.deleteTree(staging)
+            }
+        }
+
     fun readAnalysisDocuments(
         runId: String,
         analysisId: String,
@@ -552,6 +588,32 @@ internal class RunBundleStore(
             }
         if (!bytes.contentEquals(canonicalJson(validated))) corruptBaseline("condition record is not canonical")
         if (baselineConditionBinding(validated) != binding) corruptBaseline("condition record binding differs from its key")
+        return validated
+    }
+
+    private fun readRunPeriodUnlocked(accepted: AcceptedInput): JsonObject? {
+        val target = dataDirectory.runs.resolve(accepted.runId).resolve(RUN_PERIOD_FILE)
+        if (!Files.exists(target, LinkOption.NOFOLLOW_LINKS)) return null
+        val path = requireRunPeriodFile(target)
+        if (Files.size(path) > MAX_RUN_PERIOD_BYTES) corruptRunPeriod("period exceeds 4 KiB")
+        val bytes = Files.newInputStream(path).use { it.readNBytes(MAX_RUN_PERIOD_BYTES + 1) }
+        if (bytes.size > MAX_RUN_PERIOD_BYTES) corruptRunPeriod("period exceeds 4 KiB")
+        val document =
+            try {
+                Json.parseToJsonElement(bytes.decodeToString()).jsonObject
+            } catch (_: SerializationException) {
+                corruptRunPeriod("period JSON is invalid")
+            } catch (_: IllegalArgumentException) {
+                corruptRunPeriod("period JSON is invalid")
+            }
+        val validated =
+            try {
+                validateRunPeriod(document)
+            } catch (_: RuntimeException) {
+                corruptRunPeriod("period contract is invalid")
+            }
+        if (!bytes.contentEquals(canonicalJson(validated))) corruptRunPeriod("period is not canonical")
+        if (validated.string("load_input_sha256") != accepted.sha256) corruptRunPeriod("period refers to different input bytes")
         return validated
     }
 
@@ -818,6 +880,13 @@ private fun requireBaselineConditionFile(path: Path): Path {
     return path
 }
 
+private fun requireRunPeriodFile(path: Path): Path {
+    if (Files.isSymbolicLink(path) || !Files.isRegularFile(path, LinkOption.NOFOLLOW_LINKS)) {
+        corruptRunPeriod("unsafe file at $path")
+    }
+    return path
+}
+
 private fun baselineConditionPath(
     directory: Path,
     binding: JsonObject,
@@ -862,12 +931,16 @@ private fun corrupt(message: String): Nothing = throw IllegalStateException("COR
 
 private fun corruptBaseline(message: String): Nothing = throw IllegalStateException("CORRUPT_BASELINE: $message")
 
+private fun corruptRunPeriod(message: String): Nothing = throw IllegalStateException("CORRUPT_RUN_PERIOD: $message")
+
 private const val BASELINE_FILE = "baseline.json"
 private const val BASELINE_CONDITIONS_DIRECTORY = "baseline-conditions"
+private const val RUN_PERIOD_FILE = "run-period.json"
 private const val RESULT_FILE = "analysis-result.json"
 private const val IDENTITY_FILE = "identity.json"
 private const val MAX_BASELINE_BYTES = 32 * 1024
 private const val MAX_BASELINE_CONDITION_BYTES = 4 * 1024
+private const val MAX_RUN_PERIOD_BYTES = 4 * 1024
 private val BASELINE_CONDITION_FILE = Regex("[0-9a-f]{64}\\.json")
 private val SHA256 = Regex("[0-9a-f]{64}")
 private val RUN_ID = Regex("(?:jmeter_jtl_csv|jmeter_jtl_xml|gatling_text|gatling_binary)-[0-9a-f]{64}")

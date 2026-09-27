@@ -27,6 +27,17 @@
   подключёнными к Ajv contract check: рантайм принимал `v2` с появлением
   multi-profile selection, но опубликованные контракты фиксировали только `v1`,
   поэтому проверять документы `v2` было нечем.
+- Optional `trend-plan.v1` и L0-детектор роста ресурсных метрик в пределах SLA:
+  объявленные проверки (не более 32) на уже публикуемых `slope_per_second` и
+  `split_half_shift` с двумя заранее объявленными порогами материальности и
+  требованием согласия знаков. Статусы `TREND_OBSERVED`, `NO_MATERIAL_TREND`,
+  `INSUFFICIENT_CELLS`, `UNAVAILABLE` с точными reason-кодами; finding
+  `resource_trend` с `effect=diagnostic`. Вердикт и `analysis_coverage` не
+  меняются, p-values и оценка неопределённости отсутствуют
+  (`uncertainty=NOT_ESTIMATED`), рост не трактуется как утечка или причина.
+  Доступно через CLI (`--trend`), API (part `trend_plan`) и UI; артефакты
+  `trend-plan.json` и `trend.json`, в identity — модуль
+  `resource-trend-evaluation`.
 - Подготовка к приёмке: advisory AI jobs/API/UI и изолированный ModelStudio/Qwen
   runtime, consent, отмена и fail-soft без изменения deterministic verdict.
   Изменённый prompt требует отдельной оценки качества; пилот не возобновлялся.

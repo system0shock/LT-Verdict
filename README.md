@@ -16,7 +16,9 @@ Resource snapshot добавляет статистики аппаратных �
 бизнес-/ресурсные SLA. По явному плану доступны эпизоды median/MAD,
 Spearman/partial rank correlation и сравнение окон двух прогонов.
 Capacity доступен по явным ступеням и SLA с generator guards; автоматический
-поиск knee не реализован. Статистическая неопределённость raw-оценок
+поиск knee не реализован. По явному `trend-plan.v1` доступен L0-детектор роста
+ресурсных метрик в пределах SLA: это наблюдение с объявленной величиной, а не
+статистический вывод и не диагноз. Статистическая неопределённость raw-оценок
 пока не оценивается (`NOT_ESTIMATED`).
 
 Источники реализованы: PromQL/VictoriaMetrics/Grafana proxy, InfluxQL,
@@ -68,6 +70,10 @@ Linux использует `./gradlew installDist` и
 - [Методика проверки статанализа v1 и Applicability](docs/statistical-validation-methodology-v1.md)
 - [Результаты проверки статанализа v1](docs/statistical-validation-results-v1.md)
 - [Согласованный дизайн capacity](docs/superpowers/specs/2026-09-06-capacity-design.md)
+- [ADR 0011 — L0-тренд по объявленному плану](docs/adr/0011-trend-plan-l0-materiality.md)
+- [Контракт trend-plan.v1](docs/contracts/trend/v1/trend-plan.schema.json)
+- [Границы трендового детектора](docs/analytics-trend-detection.md)
+- [Границы масштабирования аналитики](docs/analytics-scale-triage.md)
 - [Утверждённый дизайн Slice 1](docs/superpowers/specs/2026-08-31-slice-1-local-usable-shell-design.md)
 - [План реализации Slice 1](docs/superpowers/plans/2026-08-31-slice-1-local-usable-shell.md)
 - [План локального просмотра и экспорта](docs/superpowers/plans/2026-09-05-local-review-pilot.md)

@@ -109,20 +109,38 @@ L0 поставляется независимо от L1 и остаётся п�
 
 ## Статусы и reason-коды
 
+Реализовано в L0 (ADR 0011):
+
 ```text
 TREND_OBSERVED            величина прошла гейт, направление согласовано
 NO_MATERIAL_TREND         тренд есть, но ниже объявленной величины
-HOLM_NOT_REJECTED         L1: скорректированное p выше alpha
-INSUFFICIENT_CELLS        меньше min_cells непрерывных ячеек
-NON_STATIONARY_WINDOW     окно содержит ступень, разгон или смену режима
-GAPS_SPLIT_WINDOW         пропуск делит окно, вывод относится к участку
-CONSTANT_SERIES           нулевая вариация, тренд не определён
-ZERO_MAD                  робастная шкала вырождена
-FAMILY_SIZE_UNSUPPORTED   больше 32 объявленных проверок
-MULTI_WINDOW_FAMILY_UNSUPPORTED
-COMPUTATION_LIMIT_EXCEEDED
+INSUFFICIENT_CELLS        меньше min_cells наблюдаемых ячеек
 UNAVAILABLE               точная причина обязательна
 ```
+
+Reason-коды L0:
+
+```text
+NO_OBSERVATIONS           в окне нет ни одной наблюдаемой ячейки
+TREND_MIN_CELLS_NOT_MET   наблюдаемых ячеек меньше объявленного минимума
+INSUFFICIENT_OBSERVATIONS статистики не определены на доступных ячейках
+RESOURCE_GAPS             пропуски есть, время не сжимается
+TREND_MEDIAN_ZERO         процентный порог не определён при нулевой медиане
+TREND_DIRECTION_MISMATCH  знак не совпал с объявленным направлением
+TREND_DIRECTION_DISAGREEMENT  slope и split-half shift имеют разные знаки
+TREND_SLOPE_BELOW_MINIMUM наклон ниже объявленного порога
+TREND_SHIFT_BELOW_MINIMUM сдвиг половин ниже требуемой величины
+STATIONARITY_NOT_EVALUATED  сопровождает каждый TREND_OBSERVED
+TREND_SERIES_NOT_FOUND / TREND_WINDOW_NOT_FOUND / TREND_SNAPSHOT_MISMATCH
+TREND_RESOURCE_REQUIRED / TREND_PLAN_REQUIRED / TREND_READ_ERROR
+RESOURCE_LIMIT_EXCEEDED   размер плана, глубина JSON или число проверок
+```
+
+В L0 не выдаются и остаются зарезервированными: `HOLM_NOT_REJECTED`,
+`NON_STATIONARY_WINDOW`, `GAPS_SPLIT_WINDOW`, `FAMILY_SIZE_UNSUPPORTED`,
+`MULTI_WINDOW_FAMILY_UNSUPPORTED`, `COMPUTATION_LIMIT_EXCEEDED`,
+`CONSTANT_SERIES`, `ZERO_MAD`. Постоянная series в L0 даёт
+`TREND_SLOPE_BELOW_MINIMUM`, а вырожденная шкала — `TREND_MEDIAN_ZERO`.
 
 Отказ никогда не интерпретируется как «тренда нет». Отсутствие находки не
 доказывает отсутствие деградации.
@@ -133,7 +151,9 @@ UNAVAILABLE               точная причина обязательна
   отличающий накопление, кэш и циклы освобождения от утечки, отсутствует, и без
   него слово leak в выводе недопустимо.
 - Тренд, посчитанный по окну со ступенями, описывает профиль нагрузки, а не
-  проблему. Ступенчатое окно даёт `NON_STATIONARY_WINDOW`, а не находку.
+  проблему. Детектора смены режима в L0 нет, поэтому окно выбирает автор плана,
+  а каждый `TREND_OBSERVED` несёт `STATIONARITY_NOT_EVALUATED`. Статус
+  `NON_STATIONARY_WINDOW` появится только вместе с детектором.
 - CUSUM/EWMA не добавляются до появления истории сопоставимых прогонов: без
   in-control распределения и параметра drift их пороги произвольны, а частота
   ложных срабатываний неизмерима.
@@ -184,12 +204,15 @@ regression.
 
 ## Критерий готовности
 
-**L0.** Контракт правила, golden-тесты на литеральные величины, статусы и
-reason-коды, отсутствие влияния на verdict, публикация в evidence и в отчётах.
+**L0 — поставлено, ADR 0011.** Контракт `trend-plan.v1`, golden-тесты на
+литеральные величины, статусы и reason-коды, отсутствие влияния на verdict,
+публикация в evidence, identity-модуль `resource-trend-evaluation` версии `1` с
+условным ключом `trend_plan_sha256`, артефакты `trend-plan.json` и `trend.json`,
+доступ через CLI, API и UI.
 
-**L1.** Блочный null на существующей машинерии, Holm по объявленной семье,
-identity-модуль `resource-trend-evaluation` версии `1`, отдельный
-`trend-plan_sha256`, отказ целиком при неподдержанной форме.
+**L1.** Блочный null на существующей машинерии, Holm по объявленной семье, отказ
+целиком при неподдержанной форме, поле `budget` в контракте и статус
+`NON_STATIONARY_WINDOW` вместе с детектором смены режима.
 
 **Harness.** Все семейства таблицы выше прогнаны, ожидания заморожены до
 прогонов, результат опубликован вместе с отрицательным, если он получен.

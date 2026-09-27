@@ -468,6 +468,49 @@ Uncertainty всегда `NOT_ESTIMATED`; p-values и HIGH confidence отсут
 diagnostic limit не меняет бизнес-/ресурсный SLA verdict. Без плана старый
 результат не меняется, и baseline не переназначается.
 
+## Рост метрики в пределах SLA
+
+Optional `trend-plan.v1` отвечает на вопрос «растёт ли метрика, даже если порог
+не пересечён». В UI выберите файл плана вместе с resource snapshot. CLI:
+
+```powershell
+.\build\install\ltv\bin\ltv.bat analyze input.jtl --resources resources.json --trend trend.json --data-dir data
+```
+
+План ссылается на тот же **semantic** SHA-256 snapshot, что и correlation plan,
+и объявляет не более 32 проверок. Каждая проверка задаёт series, окно,
+направление (`increase`, `decrease`, `either`), минимум наблюдаемых ячеек
+(30 и больше) и `magnitude_gate` из двух положительных величин: минимального
+абсолютного наклона в единицах series в секунду и минимального абсолютного
+сдвига медиан половин окна в процентах от медианы окна. Обе величины объявляются
+**до** прогона.
+
+Тренд наблюдается только если прошли оба порога и обе статистики согласованы по
+знаку; при `either` требуемый знак берётся из наклона. Используются те же
+`slope_per_second` и `split_half_shift`, что публикует `resource_summary`.
+Пропуски не заполняются и не сжимают время: проверка видит
+`expected_cells`, `observed_cells`, `missing_cells`, `longest_gap_cells` и
+reason `RESOURCE_GAPS`.
+
+Статусы: `TREND_OBSERVED`, `NO_MATERIAL_TREND`, `INSUFFICIENT_CELLS`,
+`UNAVAILABLE`. Каждый отказ несёт точный reason — `NO_OBSERVATIONS`,
+`TREND_MIN_CELLS_NOT_MET`, `INSUFFICIENT_OBSERVATIONS`, `TREND_MEDIAN_ZERO`
+(процентный порог не определён при нулевой медиане), `TREND_DIRECTION_MISMATCH`,
+`TREND_DIRECTION_DISAGREEMENT`, `TREND_SLOPE_BELOW_MINIMUM`,
+`TREND_SHIFT_BELOW_MINIMUM`. Каждый `TREND_OBSERVED` дополнительно несёт
+`STATIONARITY_NOT_EVALUATED`: объявленное окно не доказывает стационарность,
+детектора смены режима нет, поэтому ступень нагрузки может выглядеть как рост.
+
+`resource_trend` — finding с `effect=diagnostic`: он не меняет бизнес- или
+ресурсный verdict и не попадает в `analysis_coverage`. Это наблюдение, а не
+диагноз: рост памяти или пула не является доказательством утечки, причины или
+исчерпания ресурса. Отсутствие находки не доказывает отсутствие роста.
+Uncertainty остаётся `NOT_ESTIMATED`; p-values в этом уровне нет.
+
+Сохраняются `trend-plan.json` (исходные загруженные байты) и `trend.json`
+(`trend.v1`); оба доступны для скачивания рядом с capacity-артефактами. Без
+плана результат, identity и verdict не меняются.
+
 ## Сравнение двух окон
 
 В панели baseline comparison явно задайте id окна baseline и current. Для

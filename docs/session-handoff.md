@@ -115,6 +115,73 @@ v0.23.3 по четырём изменённым документам и по в
 `build/ai-acceptance` содержат первичные корпусные данные), один Gradle process
 за раз, основной checkout `F:/Coding/LT-Verdict` не трогать.
 
+## Передача 2026-09-27: trend-plan.v1 и L0-детектор тренда
+
+Пункт 4 из предыдущей записи выполнен целиком, включая UI. Работа в ветке
+`feat/trend-plan-l0` от `073b56d`. Ветка `fix/input-unit-fill-coverage` запушена
+в origin и больше не менялась.
+
+### Что поставлено
+
+- Контракт `trend-plan.v1`: optional вход, привязка к semantic hash snapshot, до
+  32 проверок, `direction`, `min_cells` (30..100000) и `magnitude_gate` из двух
+  положительных величин. Schema, два valid и один invalid пример, 12 кейсов в
+  `ui/scripts/verify-policy-schema.mjs`.
+- L0-оценка без статистического вывода: те же `slope_per_second` и
+  `split_half_shift`, что публикует `resource_summary`; оба порога и согласие
+  знаков обязательны. Статусы `TREND_OBSERVED`, `NO_MATERIAL_TREND`,
+  `INSUFFICIENT_CELLS`, `UNAVAILABLE`; каждый `TREND_OBSERVED` несёт
+  `STATIONARITY_NOT_EVALUATED`.
+- Finding `resource_trend` с `effect=diagnostic`. Verdict, `analysis_coverage` и
+  `analysis-result.v1` не меняются; нового top-level поля нет намеренно —
+  схема результата имеет `additionalProperties: false`, а
+  `ai/AdvisoryAi.kt:461-475` проверяет точное совпадение набора ключей.
+- Identity: `trend_plan_sha256`, `trend_plan_version`, `input_versions.trend`,
+  модуль `resource-trend-evaluation` версии 1 и пять ключей в `limits`. Все поля
+  условные, поэтому golden-фикстуры identity не перегенерировались.
+- Артефакты `trend-plan.json` и `trend.json` (`trend.v1`), input `trend_plan` в
+  `run.v1`, роуты `.../trend-plan` и `.../trend`.
+- Доступ: CLI `--trend`, API part `trend_plan` (422 `INVALID_TREND_PLAN`, 413 на
+  превышении), поле в UI, секция `trend-results`, e2e `trend.spec.ts`.
+- Числовые определения не дублировались: в `ResourceStatistics.kt` шесть
+  деклараций переведены с `private` на `internal` вместо четвёртой копии slope,
+  split-half и квантилей.
+
+### Проверено
+
+- `gradlew --offline --no-daemon check installDist -x npmCi --no-parallel`: PASS.
+- Полный JVM-набор: 69 классов, 412 тестов, 0 failures, 0 errors, 9 skipped
+  (было 67/386, добавилось 26 тестов).
+- ktlint main и test: pass. `npm --prefix ui run typecheck`, `lint`,
+  `test:contracts`: pass. `npm --prefix ui run e2e`: 49/49 passed — 47 прежних и
+  два новых.
+- markdownlint по затронутым документам: 0 issues.
+- Сквозной прогон собранного CLI по документированному сценарию: baseline-анализ
+  без плана не добавляет trend-ключей в identity; анализ с планом даёт
+  `TREND_OBSERVED`, slope `1`, split-half `19.5`, median `119`, required `5.95`,
+  verdict `PASS`, coverage `COMPLETE`, артефакты и input `trend_plan` на месте.
+  Литералы совпали с ручным расчётом.
+
+### Не закрыто
+
+- `powershell tools/test_advisory_ai_runtime.ps1` по-прежнему требует
+  запущенный Docker и pinned-образ; performance gate не запускался.
+- L1 (Theil–Sen, блочный перестановочный null, Holm), поле `budget` в контракте,
+  детектор стационарности и семейства TR-* в приёмочном harness не сделаны. Без
+  них частота ложных `TREND_OBSERVED` не измерена: L0 опирается только на
+  объявленные пороги материальности.
+- Отчётные рендереры (HTML, AsciiDoc, Confluence) игнорируют новый evidence-тип,
+  как сейчас игнорируют capacity.
+- `docs/development-plan-v0.6.md` не обновлялся: новая возможность не внесена в
+  ledger плана.
+
+### Дальше
+
+Пункты 5, 7 и 8 из предыдущей записи не начаты. Первый шаг к L1 —
+переиспользовать `movingBlockIndices` из `CorrelationHeadlineSelection.kt` для
+блочного null и держать объявленную семью не больше 32 при `B = 999`, иначе Holm
+не отвергает ничего.
+
 ## Передача 2026-09-22 (ночь): ветка fix/input-unit-fill-coverage
 
 Ворктри `.worktrees/local-baseline-comparison` переключён с `feat/remaining-sources`

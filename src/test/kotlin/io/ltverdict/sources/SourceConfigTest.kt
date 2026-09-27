@@ -1,15 +1,22 @@
 package io.ltverdict.sources
 
+import io.ltverdict.core.RUN_PERIOD_RECOGNITION_METHOD
+import io.ltverdict.core.RUN_PERIOD_SCHEMA_VERSION
+import io.ltverdict.core.RUN_PERIOD_STATUS_INVALID_INPUT
+import io.ltverdict.core.RUN_PERIOD_STATUS_RECOGNIZED
 import io.ltverdict.core.ResourceAggregation
 import io.ltverdict.core.ResourceOperator
 import io.ltverdict.core.ResourceRole
 import io.ltverdict.core.ResourceRuleEffect
+import io.ltverdict.core.RunPeriodV1
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertThrows
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import java.math.BigDecimal
+import java.nio.file.Files
+import java.nio.file.Path
 
 class SourceConfigTest {
     @Test
@@ -317,6 +324,136 @@ class SourceConfigTest {
         )
     }
 
+    @Test
+    fun `v3 auto window normalizes profiles and keeps the declared grid tolerance`() {
+        val request = readWindowedSourceRequest(v3AutoRequest().byteInputStream())
+
+        assertEquals(listOf("errors", "metrics"), request.profileIds)
+        assertEquals(AutoWindow(60_000L, 1_800_000L, 15_000L), request.window)
+    }
+
+    @Test
+    fun `v3 explicit window keeps the declared epoch bounds`() {
+        val request = readWindowedSourceRequest(v3ExplicitRequest().byteInputStream())
+
+        assertEquals(listOf("metrics"), request.profileIds)
+        assertEquals(ExplicitWindow(1_767_225_600_000L, 1_767_225_660_000L, 1_000L), request.window)
+    }
+
+    @Test
+    fun `v3 rejects unknown fields at both levels and window values the derivation cannot use`() {
+        val auto = v3AutoRequest()
+        val invalid =
+            listOf(
+                auto.replace("\"profile_ids\":", "\"url\":\"http://unconfigured\",\"profile_ids\":"),
+                auto.replace("\"window\":{", "\"window\":{\"origin_url\":\"http://unconfigured\","),
+                v3ExplicitRequest().replace("\"window\":{", "\"window\":{\"origin_url\":\"http://unconfigured\","),
+                auto.replace("\"origin\":\"auto\"", "\"origin\":\"derived\""),
+                """{"schema_version":"source-request.v3","profile_ids":["metrics"]}""",
+                Files.readString(Path.of("docs/contracts/sources/v3/examples/invalid/margin-not-aligned.json")),
+                auto.replace("\"margin_ms\":60000", "\"margin_ms\":3600001"),
+                auto.replace("\"margin_ms\":60000", "\"margin_ms\":-60000"),
+                auto.replace("\"max_idle_gap_ms\":1800000", "\"max_idle_gap_ms\":1800001"),
+                auto.replace("\"max_idle_gap_ms\":1800000", "\"max_idle_gap_ms\":14000"),
+                auto.replace("\"step_ms\":15000", "\"step_ms\":61000"),
+                auto.replace("\"step_ms\":15000", "\"step_ms\":1500"),
+                auto.replace("source-request.v3", "source-request.v4"),
+            )
+
+        invalid.forEach { json ->
+            val failure =
+                assertThrows(IllegalArgumentException::class.java) { readWindowedSourceRequest(json.byteInputStream()) }
+            assertEquals("SOURCE_REQUEST_INVALID", failure.message)
+            assertTrue("unconfigured" !in failure.toString())
+        }
+    }
+
+    @Test
+    fun `v1 and v2 documents keep an explicit window through the windowed reader`() {
+        val v1 =
+            """{"schema_version":"source-request.v1","profile_id":"prom-main",
+            "start_epoch_ms":1000,"end_epoch_ms":3000,"step_ms":1000}"""
+        val v2 =
+            """{"schema_version":"source-request.v2","profile_ids":["z","a"],
+            "start_epoch_ms":1000,"end_epoch_ms":3000,"step_ms":1000}"""
+
+        assertEquals(
+            WindowedSourceRequest(listOf("prom-main"), ExplicitWindow(1_000L, 3_000L, 1_000L)),
+            readWindowedSourceRequest(v1.byteInputStream()),
+        )
+        assertEquals(
+            WindowedSourceRequest(listOf("a", "z"), ExplicitWindow(1_000L, 3_000L, 1_000L)),
+            readWindowedSourceRequest(v2.byteInputStream()),
+        )
+        listOf(v1, v2).forEach { document ->
+            val legacy = readSourceRequest(document.byteInputStream())
+            val windowed = readWindowedSourceRequest(document.byteInputStream())
+            assertEquals(listOf(legacy.profileId) + legacy.additionalProfileIds, windowed.profileIds)
+            assertEquals(ExplicitWindow(legacy.startEpochMillis, legacy.endEpochMillis, legacy.stepMillis), windowed.window)
+        }
+        // v3 остаётся недоступен существующей точке входа, пока вызывающий код не переключён.
+        assertEquals(
+            "SOURCE_REQUEST_INVALID",
+            assertThrows(IllegalArgumentException::class.java) {
+                readSourceRequest(v3AutoRequest().byteInputStream())
+            }.message,
+        )
+    }
+
+    @Test
+    fun `auto window expands the recognized period by the margin it can guarantee`() {
+        val window = derived(period(1_767_268_807_400L, 1_767_270_712_100L), AutoWindow(60_000L, 1_800_000L, 15_000L))
+
+        assertEquals(1_767_268_740_000L, window.startMillis)
+        assertEquals(1_767_270_780_000L, window.endMillis)
+        assertEquals(15_000L, window.stepMillis)
+        assertEquals(67_400L, window.appliedMarginMillis)
+        assertEquals(67_400L, 1_767_268_807_400L - window.startMillis)
+        assertEquals(67_900L, window.endMillis - 1_767_270_712_100L)
+    }
+
+    @Test
+    fun `auto window clamps the lower bound to zero and reports the smaller applied margin`() {
+        val window = derived(period(30_000L, 90_000L), AutoWindow(60_000L, 1_800_000L, 15_000L))
+
+        assertEquals(0L, window.startMillis)
+        assertEquals(150_000L, window.endMillis)
+        assertEquals(30_000L, window.appliedMarginMillis)
+    }
+
+    @Test
+    fun `auto window aligns to the absolute epoch grid instead of the period`() {
+        val window = derived(period(1_767_225_603_500L, 1_767_225_610_500L), AutoWindow(0L, 15_000L, 7_000L))
+
+        assertEquals(Math.floorDiv(1_767_225_603_500L, 7_000L) * 7_000L, window.startMillis)
+        assertEquals(1_767_225_600_000L, window.startMillis)
+        assertEquals(1_767_225_614_000L, window.endMillis)
+    }
+
+    @Test
+    fun `auto window refuses instead of guessing test boundaries`() {
+        val auto = AutoWindow(60_000L, 60_000L, 15_000L)
+
+        assertEquals(
+            AutoWindowOutcome.Refused(AUTO_WINDOW_UNAVAILABLE),
+            deriveAutoWindow(period(0L, 0L, status = RUN_PERIOD_STATUS_INVALID_INPUT), auto),
+        )
+        assertEquals(
+            AutoWindowOutcome.Refused(AUTO_WINDOW_MULTI_TEST_SUSPECTED),
+            deriveAutoWindow(period(1_767_225_600_000L, 1_767_229_200_000L, 120_000L, 1), auto),
+        )
+        // Простой, равный допуску, остаётся одним прогоном: отказывает только строго более длинный простой.
+        assertEquals(
+            DerivedAutoWindow(1_767_225_540_000L, 1_767_229_260_000L, 15_000L, 60_000L),
+            derived(period(1_767_225_600_000L, 1_767_229_200_000L, 60_000L, 1), auto),
+        )
+        // Период длиннее 100 000 ячеек секундного шага не выбирается: требуется явное окно.
+        assertEquals(
+            AutoWindowOutcome.Refused(AUTO_WINDOW_SPAN_UNSUPPORTED),
+            deriveAutoWindow(period(1_767_225_600_000L, 1_767_325_601_000L), AutoWindow(0L, 60_000L, 1_000L)),
+        )
+    }
+
     private fun validConnections(): String =
         """
         {
@@ -404,4 +541,35 @@ class SourceConfigTest {
           }]
         }
         """.trimIndent()
+
+    private fun v3AutoRequest(): String =
+        """{"schema_version":"source-request.v3","profile_ids":["metrics","errors"],
+        "window":{"origin":"auto","step_ms":15000,"margin_ms":60000,"max_idle_gap_ms":1800000}}"""
+
+    private fun v3ExplicitRequest(): String =
+        """{"schema_version":"source-request.v3","profile_ids":["metrics"],
+        "window":{"origin":"explicit","start_epoch_ms":1767225600000,"end_epoch_ms":1767225660000,"step_ms":1000}}"""
+
+    private fun period(
+        first: Long,
+        last: Long,
+        longestIdleGapMillis: Long? = null,
+        idleGapCount: Int = 0,
+        status: String = RUN_PERIOD_STATUS_RECOGNIZED,
+    ): RunPeriodV1 =
+        RunPeriodV1(
+            RUN_PERIOD_SCHEMA_VERSION,
+            "a".repeat(64),
+            RUN_PERIOD_RECOGNITION_METHOD,
+            first,
+            last,
+            longestIdleGapMillis,
+            idleGapCount,
+            status,
+        )
+
+    private fun derived(
+        period: RunPeriodV1,
+        auto: AutoWindow,
+    ): DerivedAutoWindow = (deriveAutoWindow(period, auto) as AutoWindowOutcome.Derived).window
 }

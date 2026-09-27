@@ -109,12 +109,12 @@ Modify `src/main/kotlin/io/ltverdict/sources/SourceConfig.kt`,
 
 **Шаги:**
 
-- [ ] Разбор `v3`: `profile_ids` от 1 до 16, уникальные, сортируются; `window.origin` равен `auto` либо `explicit`; для `explicit` — `start_epoch_ms`, `end_epoch_ms`, `step_ms`; для `auto` — `step_ms`, `margin_ms`, `max_idle_gap_ms`. Неизвестные поля отклоняются.
-- [ ] Ограничения: `step_ms` — целые секунды 1..60; `margin_ms` от 0 до 3 600 000 и кратно `step_ms`; `max_idle_gap_ms` не менее `step_ms` и кратно `step_ms`; итоговое число ячеек от 1 до 100 000; файл до 16 KiB.
-- [ ] Вывод окна: период расширяется на margin, нижняя граница обрезается до нуля, границы выравниваются по сетке шага. Фактически применённый margin сохраняется отдельно от заявленного.
-- [ ] Reason codes: `AUTO_WINDOW_UNAVAILABLE`, `AUTO_WINDOW_MULTI_TEST_SUSPECTED`, `AUTO_WINDOW_SPAN_UNSUPPORTED`. Каждый возвращается до выполнения внешних запросов.
-- [ ] Подключить схему `v3` и негативные кейсы к `ui/scripts/verify-policy-schema.mjs`.
-- [ ] Проверка: `gradlew --offline --no-daemon test -x npmCi --no-parallel --tests "*SourceConfigTest"` и `npm --prefix ui run test:contracts`.
+- [x] Разбор `v3`: `profile_ids` от 1 до 16, уникальные, сортируются; `window.origin` равен `auto` либо `explicit`; для `explicit` — `start_epoch_ms`, `end_epoch_ms`, `step_ms`; для `auto` — `step_ms`, `margin_ms`, `max_idle_gap_ms`. Неизвестные поля отклоняются.
+- [x] Ограничения: `step_ms` — целые секунды 1..60; `margin_ms` от 0 до 3 600 000 и кратно `step_ms`; `max_idle_gap_ms` не менее `step_ms` и кратно `step_ms`; итоговое число ячеек от 1 до 100 000; файл до 16 KiB.
+- [x] Вывод окна: период расширяется на margin, нижняя граница обрезается до нуля, границы выравниваются по сетке шага. Фактически применённый margin сохраняется отдельно от заявленного.
+- [x] Reason codes: `AUTO_WINDOW_UNAVAILABLE`, `AUTO_WINDOW_MULTI_TEST_SUSPECTED`, `AUTO_WINDOW_SPAN_UNSUPPORTED`. Каждый возвращается до выполнения внешних запросов.
+- [x] Подключить схему `v3` и негативные кейсы к `ui/scripts/verify-policy-schema.mjs`.
+- [x] Проверка: `gradlew --offline --no-daemon test -x npmCi --no-parallel --tests "*SourceConfigTest"` и `npm --prefix ui run test:contracts`.
 
 ## Task 5: Интеграция в выборку, CLI и API
 

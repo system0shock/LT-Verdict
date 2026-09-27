@@ -39,6 +39,19 @@ for (const [name, path, expected] of [
     throw new Error(`source request v2 schema ${name}: expected schema_valid=${expected}; ${JSON.stringify(validateSourceV2.errors)}`)
   }
 }
+const sourceV3Schema = await readJson('docs/contracts/sources/v3/source-request.schema.json')
+const validateSourceV3 = new Ajv2020({ strict: false }).compile(sourceV3Schema)
+for (const [name, path, expected] of [
+  ['auto window', 'docs/contracts/sources/v3/examples/valid/auto-window.json', true],
+  ['explicit window', 'docs/contracts/sources/v3/examples/valid/explicit-window.json', true],
+  ['unknown field', 'docs/contracts/sources/v3/examples/invalid/unknown-field.json', false],
+  // Margin divisibility by step is a runtime check JSON Schema cannot express; SourceConfigTest rejects this document.
+  ['margin not aligned', 'docs/contracts/sources/v3/examples/invalid/margin-not-aligned.json', true],
+]) {
+  if (validateSourceV3(await readJson(path)) !== expected) {
+    throw new Error(`source request v3 schema ${name}: expected schema_valid=${expected}; ${JSON.stringify(validateSourceV3.errors)}`)
+  }
+}
 const manifest = await readJson('fixtures/slice1/manifest.json')
 const schema = await readJson('docs/contracts/policy/v1/policy.schema.json')
 const validate = new Ajv2020({ strict: false }).compile(schema)

@@ -3,11 +3,13 @@ package io.ltverdict.sources
 import io.ltverdict.core.MAX_LABEL_KEY_BYTES
 import io.ltverdict.core.MAX_LABEL_VALUE_BYTES
 import io.ltverdict.core.MAX_POINTS_PER_SERIES
+import io.ltverdict.core.RUN_PERIOD_STATUS_RECOGNIZED
 import io.ltverdict.core.ResourceAggregation
 import io.ltverdict.core.ResourceOperator
 import io.ltverdict.core.ResourceRole
 import io.ltverdict.core.ResourceRuleEffect
 import io.ltverdict.core.ResourceRuleV1
+import io.ltverdict.core.RunPeriodV1
 import io.ltverdict.core.StrictJsonScanner
 import io.ltverdict.ingest.MAX_TIMESTAMP_EPOCH_MILLIS
 import kotlinx.serialization.SerializationException
@@ -103,6 +105,48 @@ internal data class SourceRequest(
     val additionalProfileIds: List<String> = emptyList(),
 )
 
+internal sealed interface RequestWindow {
+    val stepMillis: Long
+}
+
+internal data class ExplicitWindow(
+    val startMillis: Long,
+    val endMillis: Long,
+    override val stepMillis: Long,
+) : RequestWindow
+
+internal data class AutoWindow(
+    val marginMillis: Long,
+    val maxIdleGapMillis: Long,
+    override val stepMillis: Long,
+) : RequestWindow
+
+internal data class WindowedSourceRequest(
+    val profileIds: List<String>,
+    val window: RequestWindow,
+)
+
+internal data class DerivedAutoWindow(
+    val startMillis: Long,
+    val endMillis: Long,
+    val stepMillis: Long,
+    val appliedMarginMillis: Long,
+)
+
+internal const val AUTO_WINDOW_UNAVAILABLE = "AUTO_WINDOW_UNAVAILABLE"
+internal const val AUTO_WINDOW_MULTI_TEST_SUSPECTED = "AUTO_WINDOW_MULTI_TEST_SUSPECTED"
+internal const val AUTO_WINDOW_SPAN_UNSUPPORTED = "AUTO_WINDOW_SPAN_UNSUPPORTED"
+
+internal sealed interface AutoWindowOutcome {
+    data class Derived(
+        val window: DerivedAutoWindow,
+    ) : AutoWindowOutcome
+
+    data class Refused(
+        val reasonCode: String,
+    ) : AutoWindowOutcome
+}
+
 internal class SourceBudget(
     val maxRequests: Int? = null,
 ) {
@@ -171,6 +215,35 @@ internal fun readSourceRequest(source: InputStream): SourceRequest =
         scanSourceJson(text, "source request", "SOURCE_REQUEST_INVALID")
         parseRequest(Json.parseToJsonElement(text))
     }
+
+internal fun readWindowedSourceRequest(source: InputStream): WindowedSourceRequest =
+    readSourceInput(source, MAX_SOURCE_REQUEST_BYTES, "REQUEST") { text ->
+        scanSourceJson(text, "source request", "SOURCE_REQUEST_INVALID")
+        parseWindowedRequest(Json.parseToJsonElement(text))
+    }
+
+internal fun deriveAutoWindow(
+    period: RunPeriodV1,
+    auto: AutoWindow,
+): AutoWindowOutcome {
+    if (period.status != RUN_PERIOD_STATUS_RECOGNIZED) return AutoWindowOutcome.Refused(AUTO_WINDOW_UNAVAILABLE)
+    val longestGap = period.longestIdleGapMillis
+    // Отказывает только простой строго длиннее допуска: граница, равная допуску, остаётся одним наблюдаемым прогоном.
+    if (longestGap != null && longestGap > auto.maxIdleGapMillis) {
+        return AutoWindowOutcome.Refused(AUTO_WINDOW_MULTI_TEST_SUSPECTED)
+    }
+    val step = auto.stepMillis
+    // Нижняя граница обрезается до нуля до выравнивания, иначе обрезка ушла бы за пределы epoch.
+    val adjustedStart = maxOf(0L, period.firstSampleEpochMillis - auto.marginMillis)
+    val start = Math.floorDiv(adjustedStart, step) * step
+    // Выравнивание выполняется по абсолютной сетке epoch, а не относительно периода: ячейки совпадают с сеткой источника.
+    val end = -Math.floorDiv(-(period.lastSampleEpochMillis + auto.marginMillis), step) * step
+    val cells = (end - start) / step
+    if (cells !in 1..MAX_POINTS_PER_SERIES.toLong()) return AutoWindowOutcome.Refused(AUTO_WINDOW_SPAN_UNSUPPORTED)
+    // Применённый margin — запас, гарантированный с обеих сторон; после обрезки нуля он может быть меньше заявленного.
+    val appliedMargin = minOf(period.firstSampleEpochMillis - start, end - period.lastSampleEpochMillis)
+    return AutoWindowOutcome.Derived(DerivedAutoWindow(start, end, step, appliedMargin))
+}
 
 private fun parseConnections(element: JsonElement): SourceConnections {
     val root = element.sourceObject()
@@ -494,37 +567,93 @@ private fun parseRules(
 private fun parseRequest(element: JsonElement): SourceRequest =
     try {
         val value = element.sourceObject()
-        val profileIds =
-            when (value.sourceString("schema_version")) {
-                "source-request.v1" -> {
-                    value.rejectUnknown(setOf("schema_version", "profile_id", "start_epoch_ms", "end_epoch_ms", "step_ms"))
-                    listOf(value.sourceText("profile_id", MAX_IDENTIFIER_BYTES, ::requestInvalid))
-                }
-                "source-request.v2" -> {
-                    value.rejectUnknown(setOf("schema_version", "profile_ids", "start_epoch_ms", "end_epoch_ms", "step_ms"))
-                    val ids =
-                        value.sourceArray("profile_ids").map {
-                            val id = (it as? JsonPrimitive)?.takeIf(JsonPrimitive::isString)?.content ?: requestInvalid()
-                            validateText(id, MAX_IDENTIFIER_BYTES)
-                        }
-                    if (ids.size !in 1..MAX_SOURCE_PROFILES || ids.distinct().size != ids.size) requestInvalid()
-                    ids.sorted()
-                }
-                else -> requestInvalid()
-            }
-        val start = value.sourceLong("start_epoch_ms", ::requestInvalid)
-        val end = value.sourceLong("end_epoch_ms", ::requestInvalid)
-        val step = value.sourceLong("step_ms", ::requestInvalid)
-        if (start !in 0 until MAX_TIMESTAMP_EPOCH_MILLIS || end !in 1..MAX_TIMESTAMP_EPOCH_MILLIS || end <= start) {
-            requestInvalid()
-        }
-        // Сетка snapshot принимает только целые секунды 1..60; запрос отказывает до внешних обращений, а не после выборки.
-        if (step !in 1_000..60_000 || step % 1_000L != 0L || (end - start) % step != 0L) requestInvalid()
-        if ((end - start) / step !in 1..MAX_POINTS_PER_SERIES.toLong()) requestInvalid()
-        SourceRequest(profileIds.first(), start, end, step, profileIds.drop(1))
+        val profileIds = parseProfileIds(value, value.sourceString("schema_version"))
+        val window = parseExplicitWindow(value)
+        SourceRequest(profileIds.first(), window.startMillis, window.endMillis, window.stepMillis, profileIds.drop(1))
     } catch (_: SourceInputFailure) {
         requestInvalid()
     }
+
+private fun parseWindowedRequest(element: JsonElement): WindowedSourceRequest =
+    try {
+        val value = element.sourceObject()
+        val version = value.sourceString("schema_version")
+        if (version == "source-request.v3") {
+            value.rejectUnknown(setOf("schema_version", "profile_ids", "window"))
+            val window = value["window"]?.let(::parseWindow) ?: requestInvalid()
+            WindowedSourceRequest(sortedProfileIds(value.sourceArray("profile_ids")), window)
+        } else {
+            WindowedSourceRequest(parseProfileIds(value, version), parseExplicitWindow(value))
+        }
+    } catch (_: SourceInputFailure) {
+        requestInvalid()
+    }
+
+private fun parseProfileIds(
+    value: JsonObject,
+    version: String,
+): List<String> =
+    when (version) {
+        "source-request.v1" -> {
+            value.rejectUnknown(setOf("schema_version", "profile_id", "start_epoch_ms", "end_epoch_ms", "step_ms"))
+            listOf(value.sourceText("profile_id", MAX_IDENTIFIER_BYTES, ::requestInvalid))
+        }
+        "source-request.v2" -> {
+            value.rejectUnknown(setOf("schema_version", "profile_ids", "start_epoch_ms", "end_epoch_ms", "step_ms"))
+            sortedProfileIds(value.sourceArray("profile_ids"))
+        }
+        else -> requestInvalid()
+    }
+
+private fun sortedProfileIds(values: JsonArray): List<String> {
+    val ids =
+        values.map {
+            val id = (it as? JsonPrimitive)?.takeIf(JsonPrimitive::isString)?.content ?: requestInvalid()
+            validateText(id, MAX_IDENTIFIER_BYTES)
+        }
+    if (ids.size !in 1..MAX_SOURCE_PROFILES || ids.distinct().size != ids.size) requestInvalid()
+    return ids.sorted()
+}
+
+private fun parseWindow(element: JsonElement): RequestWindow {
+    val value = element.sourceObject()
+    return when (value.sourceString("origin")) {
+        "explicit" -> {
+            value.rejectUnknown(setOf("origin", "start_epoch_ms", "end_epoch_ms", "step_ms"))
+            parseExplicitWindow(value)
+        }
+        "auto" -> {
+            value.rejectUnknown(setOf("origin", "step_ms", "margin_ms", "max_idle_gap_ms"))
+            val step = value.sourceLong("step_ms", ::requestInvalid)
+            validateStepMillis(step)
+            // Запас и допуск простоя объявляются целым числом ячеек: вывод окна не округляет заявленные границы.
+            val margin = value.sourceLong("margin_ms", ::requestInvalid)
+            if (margin !in 0..MAX_MARGIN_MILLIS || margin % step != 0L) requestInvalid()
+            val maxIdleGap = value.sourceLong("max_idle_gap_ms", ::requestInvalid)
+            if (maxIdleGap < step || maxIdleGap % step != 0L) requestInvalid()
+            AutoWindow(margin, maxIdleGap, step)
+        }
+        else -> requestInvalid()
+    }
+}
+
+private fun parseExplicitWindow(value: JsonObject): ExplicitWindow {
+    val start = value.sourceLong("start_epoch_ms", ::requestInvalid)
+    val end = value.sourceLong("end_epoch_ms", ::requestInvalid)
+    val step = value.sourceLong("step_ms", ::requestInvalid)
+    if (start !in 0 until MAX_TIMESTAMP_EPOCH_MILLIS || end !in 1..MAX_TIMESTAMP_EPOCH_MILLIS || end <= start) {
+        requestInvalid()
+    }
+    validateStepMillis(step)
+    if ((end - start) % step != 0L) requestInvalid()
+    if ((end - start) / step !in 1..MAX_POINTS_PER_SERIES.toLong()) requestInvalid()
+    return ExplicitWindow(start, end, step)
+}
+
+private fun validateStepMillis(step: Long) {
+    // Сетка snapshot принимает только целые секунды 1..60; запрос отказывает до внешних обращений, а не после выборки.
+    if (step !in 1_000..60_000 || step % 1_000L != 0L) requestInvalid()
+}
 
 private fun parseBaseUrl(value: String): URI {
     val uri =
@@ -693,6 +822,7 @@ private class SourceInputFailure(
 
 private const val MAX_SOURCE_CONFIG_BYTES = 1_048_576
 private const val MAX_SOURCE_REQUEST_BYTES = 16 * 1024
+internal const val MAX_MARGIN_MILLIS = 3_600_000L
 private const val MAX_SOURCE_PROFILES = 16
 private const val MAX_SOURCE_QUERIES = 32
 private const val MAX_RESOURCE_RULES = 256

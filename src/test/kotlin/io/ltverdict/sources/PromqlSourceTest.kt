@@ -182,6 +182,72 @@ class PromqlSourceTest {
     }
 
     @Test
+    fun `a metric profile refuses a step the snapshot grid cannot use before HTTP`() {
+        OnlineSourceFixture().use { fixture ->
+            val profile = readSourceProfiles(fixture.profilesJson().byteInputStream()).single()
+            // v1 принимает шаг 1500 при разборе: сетку snapshot проверяет acquire по source_kind профиля.
+            val request =
+                readSourceRequest(
+                    """{"schema_version":"source-request.v1","profile_id":"local",
+                    "start_epoch_ms":1767225600000,"end_epoch_ms":1767225603000,"step_ms":1500}""".byteInputStream(),
+                )
+
+            assertEquals(
+                "SOURCE_REQUEST_INVALID",
+                assertThrows(IllegalArgumentException::class.java) {
+                    PromqlSource(listOf(profile), SourceHttp(listOf(profile))).acquire(request, "a".repeat(64))
+                }.message,
+            )
+            assertEquals(0, fixture.requests.get())
+        }
+    }
+
+    @Test
+    fun `opensearch profiles keep steps the snapshot grid never applied to them`() {
+        OnlineSourceFixture().use { fixture ->
+            val metric = readSourceProfiles(fixture.profilesJson().byteInputStream()).single()
+            val errors =
+                SourceProfile(
+                    "errors",
+                    SourceKind.OPENSEARCH,
+                    SourceTransport.DIRECT,
+                    metric.baseUrl,
+                    null,
+                    governor = metric.governor,
+                    queries = emptyList(),
+                    openSearch =
+                        OpenSearchMapping(
+                            listOf("application-errors-*"),
+                            "@timestamp",
+                            "service",
+                            "type",
+                            "message",
+                            samplesPerGroup = 0,
+                        ),
+                )
+            val profiles = listOf(metric, errors)
+            val source = PromqlSource(profiles, SourceHttp(profiles))
+            // Окно 1767225600000..1767225690000 делится шагом 90 s: одна ячейка, snapshot не строится.
+            val request = SourceRequest("errors", 1767225600000, 1767225690000, 90_000)
+
+            val acquired = source.acquire(request, "a".repeat(64))
+
+            assertEquals("COMPLETE", acquired.evidence.string("status"))
+            assertEquals("90000", acquired.evidence.string("step_ms"))
+            assertEquals(1, fixture.requests.get())
+
+            // Смешанный набор отказывает до первого запроса: метрическому профилю сетка snapshot нужна.
+            assertEquals(
+                "SOURCE_REQUEST_INVALID",
+                assertThrows(IllegalArgumentException::class.java) {
+                    source.acquire(request.copy(additionalProfileIds = listOf("local")), "a".repeat(64))
+                }.message,
+            )
+            assertEquals(1, fixture.requests.get())
+        }
+    }
+
+    @Test
     fun `matrix samples on right boundaries map to preceding cells and keep returned labels`() {
         val decoded =
             decodePromqlMatrix(
@@ -452,7 +518,8 @@ class PromqlSourceTest {
                     )
                 }
 
-            assertEquals("INVALID_GRID", failure.message)
+            // Шаг вне целых секунд 1..60 теперь отклоняет acquire до построения сетки snapshot.
+            assertEquals("SOURCE_REQUEST_INVALID", failure.message)
             assertEquals(0, requestCount.get())
         } finally {
             server.stop(0)

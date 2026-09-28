@@ -573,7 +573,7 @@ private fun parseRequest(element: JsonElement): SourceRequest =
     try {
         val value = element.sourceObject()
         val profileIds = parseProfileIds(value, value.sourceString("schema_version"))
-        val window = parseExplicitWindow(value)
+        val window = parseExplicitWindow(value, strictStep = false)
         SourceRequest(profileIds.first(), window.startMillis, window.endMillis, window.stepMillis, profileIds.drop(1))
     } catch (_: SourceInputFailure) {
         requestInvalid()
@@ -588,7 +588,7 @@ private fun parseWindowedRequest(element: JsonElement): WindowedSourceRequest =
             val window = value["window"]?.let(::parseWindow) ?: requestInvalid()
             WindowedSourceRequest(version, sortedProfileIds(value.sourceArray("profile_ids")), window)
         } else {
-            WindowedSourceRequest(version, parseProfileIds(value, version), parseExplicitWindow(value))
+            WindowedSourceRequest(version, parseProfileIds(value, version), parseExplicitWindow(value, strictStep = false))
         }
     } catch (_: SourceInputFailure) {
         requestInvalid()
@@ -625,12 +625,12 @@ private fun parseWindow(element: JsonElement): RequestWindow {
     return when (value.sourceString("origin")) {
         "explicit" -> {
             value.rejectUnknown(setOf("origin", "start_epoch_ms", "end_epoch_ms", "step_ms"))
-            parseExplicitWindow(value)
+            parseExplicitWindow(value, strictStep = true)
         }
         "auto" -> {
             value.rejectUnknown(setOf("origin", "step_ms", "margin_ms", "max_idle_gap_ms"))
             val step = value.sourceLong("step_ms", ::requestInvalid)
-            validateStepMillis(step)
+            validateStepMillis(step, strict = true)
             // Запас и допуск простоя объявляются целым числом ячеек: вывод окна не округляет заявленные границы.
             val margin = value.sourceLong("margin_ms", ::requestInvalid)
             if (margin !in 0..MAX_MARGIN_MILLIS || margin % step != 0L) requestInvalid()
@@ -642,22 +642,34 @@ private fun parseWindow(element: JsonElement): RequestWindow {
     }
 }
 
-private fun parseExplicitWindow(value: JsonObject): ExplicitWindow {
+private fun parseExplicitWindow(
+    value: JsonObject,
+    strictStep: Boolean,
+): ExplicitWindow {
     val start = value.sourceLong("start_epoch_ms", ::requestInvalid)
     val end = value.sourceLong("end_epoch_ms", ::requestInvalid)
     val step = value.sourceLong("step_ms", ::requestInvalid)
     if (start !in 0 until MAX_TIMESTAMP_EPOCH_MILLIS || end !in 1..MAX_TIMESTAMP_EPOCH_MILLIS || end <= start) {
         requestInvalid()
     }
-    validateStepMillis(step)
+    validateStepMillis(step, strictStep)
     if ((end - start) % step != 0L) requestInvalid()
     if ((end - start) / step !in 1..MAX_POINTS_PER_SERIES.toLong()) requestInvalid()
     return ExplicitWindow(start, end, step)
 }
 
-private fun validateStepMillis(step: Long) {
-    // Сетка snapshot принимает только целые секунды 1..60; запрос отказывает до внешних обращений, а не после выборки.
-    if (step !in 1_000..60_000 || step % 1_000L != 0L) requestInvalid()
+private fun validateStepMillis(
+    step: Long,
+    strict: Boolean,
+) {
+    // Сетка snapshot принимает только целые секунды 1..60, но её нет у профилей opensearch:
+    // поэтому v3 строг при разборе, а v1/v2 оставляют прежний шаг >= 1000 и проверяют его
+    // в acquire по фактическому source_kind профиля — до внешних обращений.
+    if (strict) {
+        if (step !in 1_000..60_000 || step % 1_000L != 0L) requestInvalid()
+    } else if (step < 1_000) {
+        requestInvalid()
+    }
 }
 
 private fun parseBaseUrl(value: String): URI {

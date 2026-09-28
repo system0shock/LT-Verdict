@@ -54,6 +54,7 @@ internal class PromqlSource(
         }
         val profile = profiles.singleOrNull { it.id == request.profileId } ?: throw IllegalArgumentException("SOURCE_PROFILE_NOT_FOUND")
         if (profile.sourceKind == SourceKind.OPENSEARCH) return acquireOpenSearch(profile, request, loadInputSha256, http, checkCancelled)
+        requireSnapshotGridStep(request.stepMillis)
         val pointCount = ((request.endEpochMillis - request.startEpochMillis) / request.stepMillis).toInt()
         require(profile.queries.isNotEmpty()) { "SOURCE_QUERIES_EMPTY" }
         require(profile.queries.size.toLong() * pointCount <= MAX_RESOURCE_CELLS) { "RESOURCE_LIMIT_EXCEEDED" }
@@ -207,6 +208,11 @@ internal data class PromqlSeries(
     val labels: Map<String, String>,
     val values: List<BigDecimal?>,
 )
+
+// Сетка snapshot требует целых секунд 1..60; отказ выносится до внешних обращений.
+internal fun requireSnapshotGridStep(stepMillis: Long) {
+    if (stepMillis !in 1_000..60_000 || stepMillis % 1_000L != 0L) throw IllegalArgumentException("SOURCE_REQUEST_INVALID")
+}
 
 internal class PromqlDecodeFailure(
     val code: String,

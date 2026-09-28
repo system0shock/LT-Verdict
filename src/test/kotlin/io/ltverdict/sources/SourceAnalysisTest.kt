@@ -230,6 +230,38 @@ class SourceAnalysisTest {
     }
 
     @Test
+    fun `multi-profile auto window keeps provenance on the aggregate summary only`() {
+        RecordingPrometheus().use { fixture ->
+            withService { store, service, _ ->
+                val input = accept(store, contiguousCsv(RUN_START, 30), "multi.jtl")
+                val windowed = autoRequest(GRID_WINDOW, listOf("local", "second"))
+
+                val outcome = analyzeWithSources(service, AnalysisRequest(input, null, sourceRequest = windowed), fixture.source())
+
+                // Документированная боевая форма: два метрических профиля на одном распознанном окне.
+                assertEquals(2, fixture.requests.get())
+                assertEquals(2, fixture.windows.size)
+
+                val snapshot =
+                    Json
+                        .parseToJsonElement(Files.readString(outcome.analysisDirectory.resolve("resource-snapshot.json")))
+                        .jsonObject
+                assertFalse("windows" in snapshot)
+                assertEquals("run_intersection", bindingEvidence(outcome).getValue("mode").jsonPrimitive.content)
+
+                val summary = sourceSummary(outcome)
+                assertEquals("multiple", summary.getValue("profile_id").jsonPrimitive.content)
+                assertEquals(WINDOW_PROVENANCE_FIELDS, summary.keys.intersect(WINDOW_PROVENANCE_FIELDS))
+                val profiles = summary.getValue("profiles").jsonArray
+                assertEquals(2, profiles.size)
+                profiles.forEach { profile ->
+                    assertEquals(emptySet<String>(), profile.jsonObject.keys.intersect(WINDOW_PROVENANCE_FIELDS))
+                }
+            }
+        }
+    }
+
+    @Test
     fun `v1 requests keep the source summary free of window provenance`() {
         RecordingPrometheus().use { fixture ->
             withService { store, service, _ ->
@@ -361,7 +393,8 @@ class SourceAnalysisTest {
                             ),
                         ),
                 )
-            return PromqlSource(listOf(profile), SourceHttp(listOf(profile)))
+            val profiles = listOf(profile, profile.copy(id = "second"))
+            return PromqlSource(profiles, SourceHttp(profiles))
         }
 
         private fun queryParameters(raw: String): Map<String, String> =
@@ -406,9 +439,27 @@ class SourceAnalysisTest {
                 "type",
             )
 
-        fun autoRequest(window: AutoWindow): WindowedSourceRequest =
+        // Девять полей provenance окна: их публикует только агрегированная сводка, не сводки профилей.
+        val WINDOW_PROVENANCE_FIELDS =
+            setOf(
+                "applied_margin_ms",
+                "auto_window_status",
+                "detected_idle_gaps",
+                "longest_idle_gap_ms",
+                "max_idle_gap_ms",
+                "recognized_end_epoch_ms",
+                "recognized_start_epoch_ms",
+                "requested_margin_ms",
+                "window_origin",
+            )
+
+        fun autoRequest(
+            window: AutoWindow,
+            profileIds: List<String> = listOf("local"),
+        ): WindowedSourceRequest =
             readWindowedSourceRequest(
-                """{"schema_version":"source-request.v3","profile_ids":["local"],
+                """{"schema_version":"source-request.v3",
+                "profile_ids":${profileIds.joinToString(",", "[", "]") { "\"$it\"" }},
                 "window":{"origin":"auto","step_ms":${window.stepMillis},"margin_ms":${window.marginMillis},
                 "max_idle_gap_ms":${window.maxIdleGapMillis}}}""".byteInputStream(),
             )

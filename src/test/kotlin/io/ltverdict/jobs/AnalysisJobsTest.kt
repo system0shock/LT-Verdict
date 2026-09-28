@@ -43,6 +43,9 @@ class AnalysisJobsTest {
             "DIAGNOSTIC_SNAPSHOT_MISMATCH" to "DIAGNOSTIC_SNAPSHOT_MISMATCH",
             "DIAGNOSTIC_INVALID_BINDING" to "DIAGNOSTIC_INVALID_BINDING",
             "RESOURCE_FINDINGS_LIMIT_EXCEEDED" to "RESOURCE_FINDINGS_LIMIT_EXCEEDED",
+            "AUTO_WINDOW_UNAVAILABLE" to "AUTO_WINDOW_UNAVAILABLE",
+            "AUTO_WINDOW_MULTI_TEST_SUSPECTED" to "AUTO_WINDOW_MULTI_TEST_SUSPECTED",
+            "AUTO_WINDOW_SPAN_UNSUPPORTED" to "AUTO_WINDOW_SPAN_UNSUPPORTED",
             "private filesystem detail" to "ANALYSIS_FAILED",
         ).forEach { (failureMessage, expectedCode) ->
             AnalysisJobs(1) { _, _, _ -> throw IllegalArgumentException(failureMessage) }.use { jobs ->

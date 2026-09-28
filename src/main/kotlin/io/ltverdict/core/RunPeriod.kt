@@ -93,9 +93,12 @@ internal fun recognizeRunPeriod(
     } catch (_: IllegalArgumentException) {
         unrecognized(loadInputSha256, RUN_PERIOD_STATUS_INVALID_INPUT)
     } catch (_: IOException) {
-        unrecognized(loadInputSha256, RUN_PERIOD_STATUS_INVALID_INPUT)
+        // Сбой чтения не является фактом о байтах нагрузки, поэтому артефакт не сохраняется: следующий запуск повторит попытку.
+        throw RunPeriodReadFailure()
     }
 }
+
+internal class RunPeriodReadFailure : IllegalStateException("RUN_PERIOD_READ_FAILURE")
 
 internal fun runPeriodJson(period: RunPeriodV1): JsonObject =
     buildJsonObject {

@@ -143,6 +143,10 @@ test.describe.serial('local UI security and accessibility', () => {
     await sourceProfile.selectOption('local')
     await expect(sourceWindowOrigin).toHaveValue('auto')
     await expect(page.locator('#source-start')).toHaveCount(0)
+    await expect(sourceMargin).toHaveAttribute('aria-describedby', 'source-margin-hint')
+    await expect(sourceMaxIdleGap).toHaveAttribute('aria-describedby', 'source-max-idle-gap-hint')
+    await expect(page.locator('p#source-margin-hint')).toBeVisible()
+    await expect(page.locator('p#source-max-idle-gap-hint')).toBeVisible()
     await sourceProfile.focus()
     for (const target of [sourceWindowOrigin, sourceStep, sourceMargin, sourceMaxIdleGap, postgresPre]) {
       await page.keyboard.press('Tab')

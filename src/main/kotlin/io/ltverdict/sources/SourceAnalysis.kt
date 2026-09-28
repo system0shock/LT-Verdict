@@ -7,6 +7,7 @@ import io.ltverdict.core.MAX_RESOURCE_CELLS
 import io.ltverdict.core.MAX_RESOURCE_RULES
 import io.ltverdict.core.MAX_RESOURCE_SERIES
 import io.ltverdict.core.ResourceValidation
+import io.ltverdict.core.RunPeriodReadFailure
 import io.ltverdict.core.RunPeriodV1
 import io.ltverdict.core.canonicalJson
 import io.ltverdict.core.recognizeRunPeriod
@@ -168,15 +169,23 @@ private fun recognizedPeriod(
     request: AnalysisRequest,
     window: AutoWindow,
     checkCancelled: () -> Unit,
-): JsonObject =
-    service.store.readRunPeriod(request.input.runId)
-        ?: recognizeRunPeriod(
-            request.input.sourceType,
-            request.input.path,
-            request.input.sha256,
-            window.maxIdleGapMillis,
-            checkCancelled,
-        ).let { recognized -> runPeriodJson(recognized).also { service.store.replaceRunPeriod(request.input.runId, it) } }
+): JsonObject {
+    service.store.readRunPeriod(request.input.runId)?.let { return it }
+    val recognized =
+        try {
+            recognizeRunPeriod(
+                request.input.sourceType,
+                request.input.path,
+                request.input.sha256,
+                window.maxIdleGapMillis,
+                checkCancelled,
+            )
+        } catch (_: RunPeriodReadFailure) {
+            // Сбой чтения не становится фактом о байтах: артефакт не сохраняется, отказ повторим следующим запуском.
+            throw IllegalArgumentException(AUTO_WINDOW_UNAVAILABLE)
+        }
+    return runPeriodJson(recognized).also { service.store.replaceRunPeriod(request.input.runId, it) }
+}
 
 private fun autoWindowProvenance(
     period: RunPeriodV1,
@@ -386,6 +395,8 @@ internal fun acquireMultipleSources(
     val ids = (listOf(request.profileId) + request.additionalProfileIds).sorted()
     require(ids.size in 2..16 && ids.distinct().size == ids.size) { "SOURCE_REQUEST_INVALID" }
     val selected = ids.map { id -> profiles.singleOrNull { it.id == id } ?: throw IllegalArgumentException("SOURCE_PROFILE_NOT_FOUND") }
+    // Смешанный набор отказывает до первого HTTP-запроса, а не после выборки opensearch-профиля.
+    if (selected.any { it.sourceKind != SourceKind.OPENSEARCH }) requireSnapshotGridStep(request.stepMillis)
     val seriesCount = selected.sumOf { it.queries.size }
     require(
         seriesCount <= MAX_RESOURCE_SERIES &&

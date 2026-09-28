@@ -60,6 +60,15 @@ class OpenSearchSourceTest {
     }
 
     @Test
+    fun `query accepts any dividing step of at least one second`() {
+        // OpenSearch не строит snapshot grid, поэтому шаг 90 s остаётся допустимым, а не кратным минуте.
+        val query = buildOpenSearchQuery(mapping(), SourceRequest("errors", 0, 180_000, 90_000), 12_345)
+
+        assertTrue("\"fixed_interval\":\"90000ms\"" in query.decodeToString())
+        assertCode("OPENSEARCH_INVALID_REQUEST") { buildOpenSearchQuery(mapping(), SourceRequest("errors", 0, 180_000, 7_000), 12_345) }
+    }
+
+    @Test
     fun `mapping rejects unsafe or unbounded index field and aggregate settings`() {
         val valid = mapping()
         val invalid =

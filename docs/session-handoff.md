@@ -5,9 +5,9 @@
 Ворктри `.worktrees/local-baseline-comparison` переключён с
 `fix/input-unit-fill-coverage` на новую ветку `feat/source-auto-window` от
 `073b56d` (tip `fix/input-unit-fill-coverage`). Ветка не запушена, PR не
-создан. Документация Task 7 — `docs/user/online-sources.md`, `CHANGELOG.md`,
-этот файл и `docs/development-plan-v0.6.md` — изменена в рабочем дереве и не
-закоммичена. План:
+создан. Всё содержимое поставки, включая документацию Task 7
+(`docs/user/online-sources.md`, `CHANGELOG.md`, этот файл и
+`docs/development-plan-v0.6.md`), закоммичено. План:
 [auto window](superpowers/plans/2026-09-27-source-auto-window.md), спецификация
 [evidence triage / auto window](superpowers/specs/2026-09-27-evidence-triage-auto-window-design.md),
 решение [ADR 0012](adr/0012-auto-window-recognized-period.md). Запись
@@ -17,7 +17,7 @@
 
 ### Коммиты ветки
 
-Семь коммитов `073b56d..2e6be01`:
+Восемь коммитов `073b56d..b0dbd00`:
 
 - `7a85660 docs: design auto window and evidence triage`
 - `0109657 docs: publish source-request.v2 schema`
@@ -26,6 +26,14 @@
 - `bd8c177 feat(sources): add source-request.v3 with the auto window contract`
 - `7874dc7 feat(sources): wire the auto window through acquisition, CLI, and API`
 - `2e6be01 feat(ui): derive the source window from the load file by default`
+- `b0dbd00 docs: describe the auto window and record the delivery state`
+
+Поверх них закоммичен пакет исправлений по итогам трёхстороннего ревью ветки:
+коррекция правила `step_ms` с исключением для профилей `opensearch`, диагностики
+`AUTO_WINDOW_*` в web-пути jobs, сбой чтения при распознавании периода больше не
+сохраняется артефактом, добавленные пины покрытия, проводка contract parity и
+уточнения спецификации. Tip ветки содержит эту правку передачи; рабочее дерево
+чистое.
 
 ### Что сделано
 
@@ -33,8 +41,9 @@ Tasks 1–7 плана закрыты по реализации:
 
 - опубликованная схема `source-request.v2` с примерами в Ajv contract check и
   поправка контракта headline selection про пустую семью;
-- fail-fast `step_ms`: целые секунды 1000..60000 для всех версий запроса,
-  отказ при разборе, до внешних обращений;
+- fail-fast `step_ms`: целые секунды 1000..60000 для `v3` при разборе запроса и
+  для профилей метрических семей в acquire — до внешних обращений; профили
+  `opensearch` сохраняют шаг от 1000 ms, делящий окно;
 - распознавание периода отдельным timestamps-only проходом и run-артефакт
   `runs/<runId>/run-period.json` (`run-period.v1`, привязка к hash нагрузки,
   staging и atomic move, `CORRUPT_RUN_PERIOD` при повреждении или подмене

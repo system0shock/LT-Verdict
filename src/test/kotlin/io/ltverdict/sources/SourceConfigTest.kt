@@ -300,13 +300,19 @@ class SourceConfigTest {
                     .byteInputStream(),
             ),
         )
+        // v1/v2 сохраняют прежнее правило step >= 1000: целые секунды 1..60 требует acquire по source_kind профиля.
+        assertEquals(
+            SourceRequest("prom-main", 0, 3_000, 1_500),
+            readSourceRequest(
+                """{"schema_version":"source-request.v1","profile_id":"prom-main","start_epoch_ms":0,"end_epoch_ms":3000,"step_ms":1500}"""
+                    .byteInputStream(),
+            ),
+        )
 
         val invalid =
             listOf(
                 """{"schema_version":"source-request.v1","profile_id":"prom-main","start_epoch_ms":1000,"end_epoch_ms":2500,"step_ms":1000}""",
                 """{"schema_version":"source-request.v1","profile_id":"prom-main","start_epoch_ms":1000,"end_epoch_ms":3000,"step_ms":999}""",
-                """{"schema_version":"source-request.v1","profile_id":"prom-main","start_epoch_ms":0,"end_epoch_ms":3000,"step_ms":1500}""",
-                """{"schema_version":"source-request.v1","profile_id":"prom-main","start_epoch_ms":0,"end_epoch_ms":122000,"step_ms":61000}""",
                 """{"schema_version":"source-request.v1","profile_id":"prom-main","start_epoch_ms":0,"end_epoch_ms":100001000,"step_ms":1000}""",
                 """{"schema_version":"source-request.v1","profile_id":"prom-main","start_epoch_ms":1000,"end_epoch_ms":3000,"step_ms":1000,"unknown":"top-secret"}""",
             )
@@ -403,6 +409,59 @@ class SourceConfigTest {
     }
 
     @Test
+    fun `published request examples agree with the reader of their own version`() {
+        // Каждый опубликованный пример обязан проходить тот reader, для которого схема его объявляет валидным.
+        listOf(
+            "docs/contracts/sources/v1/request.example.json",
+            "docs/contracts/sources/v1/multiple-request.example.json",
+            "docs/contracts/sources/v2/examples/valid/two-profiles.json",
+        ).forEach { path ->
+            val document = example(path)
+            val legacy = readSourceRequest(document.byteInputStream())
+            val windowed = readWindowedSourceRequest(document.byteInputStream())
+            assertEquals(listOf(legacy.profileId) + legacy.additionalProfileIds, windowed.profileIds)
+            assertEquals(ExplicitWindow(legacy.startEpochMillis, legacy.endEpochMillis, legacy.stepMillis), windowed.window)
+        }
+        assertEquals(
+            WindowedSourceRequest("source-request.v3", listOf("errors", "metrics"), AutoWindow(60_000L, 1_800_000L, 15_000L)),
+            readWindowedSourceRequest(example("docs/contracts/sources/v3/examples/valid/auto-window.json").byteInputStream()),
+        )
+        assertEquals(
+            WindowedSourceRequest(
+                "source-request.v3",
+                listOf("metrics"),
+                ExplicitWindow(1_767_225_600_000L, 1_767_225_660_000L, 1_000L),
+            ),
+            readWindowedSourceRequest(example("docs/contracts/sources/v3/examples/valid/explicit-window.json").byteInputStream()),
+        )
+        listOf(
+            "docs/contracts/sources/v2/examples/invalid/unknown-field.json",
+            "docs/contracts/sources/v2/examples/invalid/duplicate-profile.json",
+        ).forEach { path ->
+            val document = example(path)
+            assertEquals(
+                "SOURCE_REQUEST_INVALID",
+                assertThrows(IllegalArgumentException::class.java) { readSourceRequest(document.byteInputStream()) }.message,
+            )
+            assertEquals(
+                "SOURCE_REQUEST_INVALID",
+                assertThrows(IllegalArgumentException::class.java) { readWindowedSourceRequest(document.byteInputStream()) }.message,
+            )
+        }
+        listOf(
+            "docs/contracts/sources/v3/examples/invalid/unknown-field.json",
+            "docs/contracts/sources/v3/examples/invalid/margin-not-aligned.json",
+        ).forEach { path ->
+            val failure =
+                assertThrows(IllegalArgumentException::class.java) {
+                    readWindowedSourceRequest(example(path).byteInputStream())
+                }
+            assertEquals("SOURCE_REQUEST_INVALID", failure.message)
+            assertTrue("unconfigured" !in failure.toString())
+        }
+    }
+
+    @Test
     fun `auto window expands the recognized period by the margin it can guarantee`() {
         val window = derived(period(1_767_268_807_400L, 1_767_270_712_100L), AutoWindow(60_000L, 1_800_000L, 15_000L))
 
@@ -455,6 +514,8 @@ class SourceConfigTest {
             deriveAutoWindow(period(1_767_225_600_000L, 1_767_325_601_000L), AutoWindow(0L, 60_000L, 1_000L)),
         )
     }
+
+    private fun example(path: String): String = Files.readString(Path.of(path))
 
     private fun validConnections(): String =
         """

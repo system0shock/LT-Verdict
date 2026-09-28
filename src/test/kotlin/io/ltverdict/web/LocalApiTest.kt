@@ -516,6 +516,41 @@ class LocalApiTest {
     }
 
     @Test
+    fun `online job reports an auto window refusal as an actionable diagnostic`() {
+        OnlineSourceFixture().use { fixture ->
+            val profiles = readSourceProfiles(fixture.profilesJson().byteInputStream())
+            val source = PromqlSource(profiles, SourceHttp(profiles))
+            withServer(
+                jobsFactory = { store ->
+                    val service = AnalysisService(store, EngineConfig())
+                    AnalysisJobs(1) { request, progress, cancelled -> analyzeWithSources(service, request, source, progress, cancelled) }
+                },
+                sourceProfiles = profiles,
+            ) { store, api ->
+                api.bootstrap()
+                // Простой 298 s между секундными бакетами 1767225601 и 1767225900 длиннее допуска 60000 ms.
+                val load =
+                    "timeStamp,elapsed,label,responseCode,responseMessage,threadName,success,bytes,sentBytes," +
+                        "grpThreads,allThreads,Latency,IdleTime,Connect\n" +
+                        "1767225600000,1000,one,200,OK,thread,true,1,1,1,1,1,0,0\n" +
+                        "1767225601000,1000,two,200,OK,thread,true,1,1,1,1,1,0,0\n" +
+                        "1767225900000,1000,three,200,OK,thread,true,1,1,1,1,1,0,0\n"
+                val input = store.acceptInput(ByteArrayInputStream(load.encodeToByteArray()), "gapped.jtl")
+
+                val submitted = api.createJob(input.runId, source = ONLINE_SOURCE_REQUEST_V3_AUTO.encodeToByteArray())
+                val submittedJob = submitted.jsonObject()
+                val status = awaitFailed(api, submittedJob.getValue("job_id").jsonPrimitive.content)
+                val diagnostic = status.getValue("diagnostic").jsonObject
+                val message = diagnostic.getValue("message").jsonPrimitive.content
+
+                assertEquals("AUTO_WINDOW_MULTI_TEST_SUSPECTED", diagnostic.getValue("code").jsonPrimitive.content)
+                assertTrue(message.contains("max_idle_gap_ms"))
+                assertEquals(0, fixture.requests.get())
+            }
+        }
+    }
+
+    @Test
     fun `baseline API rejects malformed unauthenticated oversized and ineligible requests`() =
         withServer { _, api ->
             assertError(api.postUnauthenticated("/api/baseline", "{}".encodeToByteArray()), 403, "FORBIDDEN")
@@ -1378,6 +1413,24 @@ class LocalApiTest {
         awaitComplete(api, jsonObject().getValue("job_id").jsonPrimitive.content)
             .getValue("analysis_id")
             .jsonPrimitive.content
+
+    private fun awaitFailed(
+        api: ApiClient,
+        jobId: String,
+    ): JsonObject {
+        val deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(10)
+        while (System.nanoTime() < deadline) {
+            val response = api.get("/api/jobs/$jobId")
+            assertEquals(200, response.statusCode())
+            val status = response.jsonObject()
+            when (status.getValue("state").jsonPrimitive.content) {
+                "FAILED" -> return status
+                "COMPLETE", "CANCELLED" -> fail("job ended as ${status.getValue("state")}: $status")
+            }
+            LockSupport.parkNanos(1_000_000)
+        }
+        return fail("job did not fail: $jobId")
+    }
 
     private fun assertRunPage(
         response: HttpResponse<String>,

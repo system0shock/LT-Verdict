@@ -195,6 +195,21 @@ internal class AnalysisJobs(
                                             Diagnostic("DIAGNOSTIC_WINDOW_NOT_FOUND", "Diagnostic window was not found")
                                         "DIAGNOSTIC_INVALID_BINDING" ->
                                             Diagnostic("DIAGNOSTIC_INVALID_BINDING", "Diagnostic plan binding is invalid")
+                                        "AUTO_WINDOW_UNAVAILABLE" ->
+                                            Diagnostic(
+                                                "AUTO_WINDOW_UNAVAILABLE",
+                                                "Run period was not recognized; declare an explicit window",
+                                            )
+                                        "AUTO_WINDOW_MULTI_TEST_SUSPECTED" ->
+                                            Diagnostic(
+                                                "AUTO_WINDOW_MULTI_TEST_SUSPECTED",
+                                                "Idle gap exceeds max_idle_gap_ms; split the file or declare an explicit window",
+                                            )
+                                        "AUTO_WINDOW_SPAN_UNSUPPORTED" ->
+                                            Diagnostic(
+                                                "AUTO_WINDOW_SPAN_UNSUPPORTED",
+                                                "Derived grid exceeds 100000 cells; declare an explicit window or a larger step",
+                                            )
                                         else -> Diagnostic("ANALYSIS_FAILED", "Analysis failed")
                                     }
                                 },

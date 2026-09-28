@@ -52,6 +52,16 @@ for (const [name, path, expected] of [
     throw new Error(`source request v3 schema ${name}: expected schema_valid=${expected}; ${JSON.stringify(validateSourceV3.errors)}`)
   }
 }
+const runPeriodSchema = await readJson('docs/contracts/run-period/v1/run-period.schema.json')
+const validateRunPeriod = new Ajv2020({ strict: false }).compile(runPeriodSchema)
+for (const [name, path, expected] of [
+  ['basic', 'docs/contracts/run-period/v1/examples/valid/basic.json', true],
+  ['unknown field', 'docs/contracts/run-period/v1/examples/invalid/unknown-field.json', false],
+]) {
+  if (validateRunPeriod(await readJson(path)) !== expected) {
+    throw new Error(`run period schema ${name}: expected schema_valid=${expected}; ${JSON.stringify(validateRunPeriod.errors)}`)
+  }
+}
 const manifest = await readJson('fixtures/slice1/manifest.json')
 const schema = await readJson('docs/contracts/policy/v1/policy.schema.json')
 const validate = new Ajv2020({ strict: false }).compile(schema)

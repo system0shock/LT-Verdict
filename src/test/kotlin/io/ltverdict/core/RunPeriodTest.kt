@@ -75,6 +75,60 @@ class RunPeriodTest {
     }
 
     @Test
+    fun `gatling group records fill the span but not the idle gap buckets`() {
+        val start = 1_767_225_600_000L
+        val log =
+            text(
+                run(),
+                "REQUEST\t\tone\t$start\t${start + 500}\tOK\t ",
+                "GROUP\tscene\t$start\t${start + 300_000}\t200\tOK",
+                "REQUEST\t\ttwo\t${start + 300_000}\t${start + 300_500}\tOK\t ",
+            )
+
+        val period = recognizeRunPeriod(SourceType.GATLING_TEXT, log, "a".repeat(64), 60_000)
+
+        // Span считается по всем kind: min(start) = start, max(end) = start + 300500.
+        assertEquals(start, period.firstSampleEpochMillis)
+        assertEquals(start + 300_500, period.lastSampleEpochMillis)
+        // Бакеты занимают только JMETER_SAMPLER и GATLING_REQUEST: start/1000 = 1767225600 и
+        // (start + 300000)/1000 = 1767225900, разница 300 > 1, поэтому простой один и
+        // longest = (300 - 1) * 1000 = 299000 ms. Без фильтра kind GROUP заполнил бы все 300 бакетов
+        // между ними, и idleGapCount стал бы равен 0.
+        assertEquals(1, period.idleGapCount)
+        assertEquals(299_000L, period.longestIdleGapMillis)
+    }
+
+    @Test
+    fun `period bounds ignore the row order of the load file`() {
+        val start = 1_767_225_600_000L
+        val unordered =
+            csv(
+                "timeStamp,elapsed,label,success",
+                "${start + 60_000},500,late,true",
+                "$start,500,early,true",
+            )
+
+        val period = recognizeRunPeriod(SourceType.JMETER_CSV, unordered, "a".repeat(64), 60_000)
+
+        assertEquals(RUN_PERIOD_STATUS_RECOGNIZED, period.status)
+        assertEquals(start, period.firstSampleEpochMillis)
+        assertEquals(start + 60_500, period.lastSampleEpochMillis)
+    }
+
+    @Test
+    fun `a read failure is not recorded as a fact about the load bytes`() {
+        val missing = tempDir.resolve("absent.jtl")
+
+        val failure =
+            assertThrows(RunPeriodReadFailure::class.java) {
+                recognizeRunPeriod(SourceType.JMETER_CSV, missing, "a".repeat(64), 60_000)
+            }
+
+        // Период не возвращается, поэтому вызывающий код не сохраняет артефакт: сбой чтения повторим.
+        assertEquals("RUN_PERIOD_READ_FAILURE", failure.message)
+    }
+
+    @Test
     fun `invalid input is unrecognized without guessing a period`() {
         val malformed = csv("timeStamp,elapsed,label,success", "not-a-number,2,label,true")
 

@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://lt-verdict.local/schemas/sources/v2/source-request.schema.json",
   "title": "LT Verdict source-request.v2",
-  "description": "Backend additionally checks end > start, whole cells ((end - start) divisible by step), 1..100000 cells, at most 128 UTF-8 bytes and no ISO control characters per profile identifier, request file at most 16 KiB, and configured profile identity. Identifiers are sorted during parsing; the document may list them unsorted.",
+  "description": "Backend additionally checks end > start, whole cells ((end - start) divisible by step), 1..100000 cells, at most 128 UTF-8 bytes and no ISO control characters per profile identifier, request file at most 16 KiB, and configured profile identity. Identifiers are sorted during parsing; the document may list them unsorted. Metric profiles (prometheus, victoria_metrics, influxdb) also require a whole-second step from 1000 to 60000, enforced before acquisition; opensearch profiles accept any step of at least 1000 that divides the range.",
   "type": "object",
   "additionalProperties": false,
   "required": ["schema_version", "profile_ids", "start_epoch_ms", "end_epoch_ms", "step_ms"],
@@ -17,6 +17,6 @@
     },
     "start_epoch_ms": { "type": "integer", "minimum": 0, "maximum": 253402300799998 },
     "end_epoch_ms": { "type": "integer", "minimum": 1, "maximum": 253402300799999 },
-    "step_ms": { "type": "integer", "minimum": 1000, "maximum": 60000, "multipleOf": 1000 }
+    "step_ms": { "type": "integer", "minimum": 1000, "maximum": 253402300799999 }
   }
 }

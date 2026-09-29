@@ -362,15 +362,21 @@ async function pollJob(revision: number) {
 }
 
 async function restoreActiveJob() {
+  const initialRevision = analysisRevision
   const { jobs } = await listActiveJobs()
   const active = jobs[0]
-  if (!active || job.value || uploadProgress.value > 0) return
+  if (!active || initialRevision !== analysisRevision || job.value || uploadProgress.value > 0) return
   const revision = ++analysisRevision
   job.value = active
-  while (!runs.value.some((run) => run.run_id === active.run_id) && nextRunAfter.value) {
-    await refreshRuns(nextRunAfter.value)
-    if (revision !== analysisRevision) return
+  try {
+    while (!runs.value.some((run) => run.run_id === active.run_id) && nextRunAfter.value) {
+      await refreshRuns(nextRunAfter.value)
+      if (revision !== analysisRevision) return
+    }
+  } catch (failure) {
+    if (revision === analysisRevision) showError(failure)
   }
+  if (revision !== analysisRevision) return
   currentRun.value = runs.value.find((run) => run.run_id === active.run_id) ?? null
   await pollJob(revision)
 }

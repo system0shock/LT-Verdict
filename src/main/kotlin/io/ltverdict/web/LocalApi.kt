@@ -33,10 +33,12 @@ import io.ltverdict.core.AnalyticsExportFormat
 import io.ltverdict.core.CapacityPlanValidation
 import io.ltverdict.core.DiagnosticValidation
 import io.ltverdict.core.MAX_CAPACITY_PLAN_BYTES
+import io.ltverdict.core.MAX_TREND_PLAN_BYTES
 import io.ltverdict.core.PolicyValidation
 import io.ltverdict.core.PolicyValidationError
 import io.ltverdict.core.ResourceValidation
 import io.ltverdict.core.SavedAnalysisForComparison
+import io.ltverdict.core.TrendPlanValidation
 import io.ltverdict.core.WindowComparisonRequest
 import io.ltverdict.core.baselineConditionConfirmation
 import io.ltverdict.core.baselineConditionRecord
@@ -55,6 +57,8 @@ import io.ltverdict.core.validateDiagnosticBinding
 import io.ltverdict.core.validateDiagnosticPlan
 import io.ltverdict.core.validatePolicy
 import io.ltverdict.core.validateResourceSnapshot
+import io.ltverdict.core.validateTrendBinding
+import io.ltverdict.core.validateTrendPlan
 import io.ltverdict.integrations.grafana.GrafanaPanelRequest
 import io.ltverdict.integrations.grafana.grafanaPanelLink
 import io.ltverdict.integrations.grafana.renderGrafanaPanel
@@ -166,6 +170,9 @@ internal fun Application.installLocalApi(context: LocalApiContext) {
             finish()
         } catch (failure: InvalidCapacity) {
             call.respondError(HttpStatusCode.UnprocessableEntity, "INVALID_CAPACITY_PLAN", "Capacity plan is invalid", failure.errors)
+            finish()
+        } catch (failure: InvalidTrend) {
+            call.respondError(HttpStatusCode.UnprocessableEntity, "INVALID_TREND_PLAN", "Trend plan is invalid", failure.errors)
             finish()
         } catch (failure: ApiFailure) {
             call.respondError(failure.status, failure.code, failure.message)
@@ -591,6 +598,20 @@ internal fun Application.installLocalApi(context: LocalApiContext) {
                 call.requireOnlyQueries()
                 val stored = context.store.requireAnalysis(call)
                 if (stored.artifacts.none { it.path == name }) notFound("Capacity artifact was not found")
+                val bytes = withContext(Dispatchers.IO) { Files.readAllBytes(stored.path.resolve(name)) }
+                call.response.headers.append(HttpHeaders.ContentDisposition, "attachment; filename=\"$name\"")
+                call.respondBytes(bytes, ContentType.Application.Json, HttpStatusCode.OK)
+            }
+        }
+
+        mapOf(
+            "trend-plan" to "trend-plan.json",
+            "trend" to "trend.json",
+        ).forEach { (route, name) ->
+            get("/api/runs/{runId}/analyses/{analysisId}/$route") {
+                call.requireOnlyQueries()
+                val stored = context.store.requireAnalysis(call)
+                if (stored.artifacts.none { it.path == name }) notFound("Trend artifact was not found")
                 val bytes = withContext(Dispatchers.IO) { Files.readAllBytes(stored.path.resolve(name)) }
                 call.response.headers.append(HttpHeaders.ContentDisposition, "attachment; filename=\"$name\"")
                 call.respondBytes(bytes, ContentType.Application.Json, HttpStatusCode.OK)
@@ -1148,6 +1169,7 @@ private suspend fun receiveJob(
     var resources: ResourceValidation.Valid? = null
     var diagnostics: DiagnosticValidation.Valid? = null
     var capacity: CapacityPlanValidation.Valid? = null
+    var trend: TrendPlanValidation.Valid? = null
     var sourceRequest: WindowedSourceRequest? = null
     val sourceContexts = mutableListOf<ByteArray>()
     val postgresFiles = mutableMapOf<String, ByteArray>()
@@ -1155,6 +1177,7 @@ private suspend fun receiveJob(
     var resourcesSeen = false
     var diagnosticsSeen = false
     var capacitySeen = false
+    var trendSeen = false
     var parts = 0
     var invalidParts = false
     try {
@@ -1263,6 +1286,25 @@ private suspend fun receiveJob(
                             }
                     }
 
+                    part is PartData.FileItem && part.name == "trend_plan" && !trendSeen && !invalidParts -> {
+                        trendSeen = true
+                        trend =
+                            when (
+                                val validation =
+                                    withContext(Dispatchers.IO) {
+                                        validateTrendPlan(part.provider().toInputStream(), MAX_TREND_PLAN_BYTES)
+                                    }
+                            ) {
+                                is TrendPlanValidation.Valid -> validation
+                                is TrendPlanValidation.Invalid -> {
+                                    if (validation.errors.any { it.code == "RESOURCE_LIMIT_EXCEEDED" }) {
+                                        tooLarge("Trend plan exceeds its resource limit")
+                                    }
+                                    throw InvalidTrend(validation.errors)
+                                }
+                            }
+                    }
+
                     else -> invalidParts = true
                 }
             } finally {
@@ -1279,6 +1321,8 @@ private suspend fun receiveJob(
         throw failure
     } catch (failure: InvalidCapacity) {
         throw failure
+    } catch (failure: InvalidTrend) {
+        throw failure
     } catch (_: Exception) {
         malformed("Multipart body is malformed")
     }
@@ -1287,6 +1331,7 @@ private suspend fun receiveJob(
         if (resourcesSeen ||
             diagnosticsSeen ||
             capacitySeen ||
+            trendSeen ||
             sourceContexts.isNotEmpty()
         ) {
             malformed("Online acquisition cannot be combined with manual source inputs")
@@ -1336,6 +1381,20 @@ private suspend fun receiveJob(
         val errors = validateCapacityBinding(plan, input.sha256, snapshot)
         if (errors.isNotEmpty()) throw InvalidCapacity(errors)
     }
+    trend?.let { plan ->
+        val snapshot =
+            resources ?: throw InvalidTrend(
+                listOf(
+                    PolicyValidationError(
+                        "TREND_RESOURCE_REQUIRED",
+                        "/resource_snapshot_sha256",
+                        "Trend plan requires a resource snapshot",
+                    ),
+                ),
+            )
+        val errors = validateTrendBinding(plan, snapshot)
+        if (errors.isNotEmpty()) throw InvalidTrend(errors)
+    }
     val acquisition =
         sourceContexts.takeIf { it.isNotEmpty() }?.let { contexts ->
             try {
@@ -1366,6 +1425,7 @@ private suspend fun receiveJob(
         resources = resources,
         diagnostics = diagnostics,
         capacity = capacity,
+        trend = trend,
         sourceRequest = sourceRequest,
         sourceAcquisition = acquisition,
         postgres = postgres,
@@ -1647,6 +1707,10 @@ private class InvalidCapacity(
     val errors: List<PolicyValidationError>,
 ) : RuntimeException()
 
+private class InvalidTrend(
+    val errors: List<PolicyValidationError>,
+) : RuntimeException()
+
 private fun randomToken(): String {
     val bytes = ByteArray(32)
     SecureRandom().nextBytes(bytes)
@@ -1664,7 +1728,8 @@ private const val MAX_DIAGNOSTIC_BYTES = 1024 * 1024
 private const val MAX_CONTEXT_BYTES = 32L * 1024 * 1024
 private const val MAX_JOB_REQUEST_BYTES =
     3 * MAX_RESOURCE_BYTES + MAX_CONTEXT_BYTES + 4 * 1024 * 1024 +
-        MAX_POLICY_BYTES + MAX_DIAGNOSTIC_BYTES + MAX_CAPACITY_PLAN_BYTES + MAX_MULTIPART_OVERHEAD_BYTES
+        MAX_POLICY_BYTES + MAX_DIAGNOSTIC_BYTES + MAX_CAPACITY_PLAN_BYTES + MAX_TREND_PLAN_BYTES +
+        MAX_MULTIPART_OVERHEAD_BYTES
 private val POSTGRES_PART_LIMITS =
     mapOf(
         "postgres_pre" to MAX_RESOURCE_BYTES,

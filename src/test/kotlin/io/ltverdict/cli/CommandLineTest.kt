@@ -17,6 +17,7 @@ import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
+import org.junit.jupiter.api.Assertions.assertArrayEquals
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertTrue
@@ -676,6 +677,95 @@ class CommandLineTest {
         return CliResult(exitCode, stdout.toString(UTF_8), stderr.toString(UTF_8))
     }
 
+    @Test
+    fun `trend rejects malformed missing duplicate and resource-less plans`() {
+        val input = fixture("jmeter/csv-5.6.3/input.jtl").toString()
+        val plan = tempDir.resolve("trend.json")
+        Files.writeString(plan, "{}")
+        assertError(run("analyze", input, "--trend", plan.toString()), 4, "invalid trend plan")
+        assertError(run("analyze", input, "--trend", tempDir.resolve("missing.json").toString()), 4, "missing trend plan")
+        assertError(run("analyze", input, "--trend", plan.toString(), "--trend", plan.toString()), 64, "duplicate trend flag")
+
+        Files.writeString(plan, trendPlan("b".repeat(64)))
+        assertError(run("analyze", input, "--trend", plan.toString()), 4, "trend plan needs resources")
+    }
+
+    @Test
+    fun `CLI persists trend facts and replays them byte identically`() {
+        val input = tempDir.resolve("trend.jtl")
+        Files.writeString(input, trendLoad())
+        val resources = tempDir.resolve("trend-resources.json")
+        val dataDir = tempDir.resolve("trend-data")
+        val inputHash = sha256Hex(Files.readAllBytes(input))
+        Files.writeString(resources, trendResources(inputHash))
+        val validation = Files.newInputStream(resources).use(::validateResourceSnapshot)
+        assertTrue(validation is ResourceValidation.Valid, validation.toString())
+        val plan = tempDir.resolve("trend.json")
+        Files.writeString(plan, trendPlan((validation as ResourceValidation.Valid).semanticSha256))
+        val args =
+            arrayOf(
+                "analyze",
+                input.toString(),
+                "--policy",
+                fixture("policies/pass.json").toString(),
+                "--resources",
+                resources.toString(),
+                "--trend",
+                plan.toString(),
+                "--data-dir",
+                dataDir.toString(),
+            )
+
+        val first = run(*args)
+        assertEquals(0, first.exitCode, first.stderr)
+        val result = Json.parseToJsonElement(first.stdout).jsonObject
+        assertEquals("PASS", result.getValue("policy_verdict").jsonPrimitive.content, first.stdout)
+        assertEquals(
+            "COMPLETE",
+            result
+                .getValue("analysis_coverage")
+                .jsonObject
+                .getValue("status")
+                .jsonPrimitive.content,
+        )
+        val evidence = result.getValue("evidence").jsonArray.map { it.jsonObject }
+        assertEquals(
+            "TREND_OBSERVED",
+            evidence
+                .single { it.getValue("type").jsonPrimitive.content == "trend_check" }
+                .getValue("status")
+                .jsonPrimitive
+                .content,
+        )
+        val finding =
+            result
+                .getValue("findings")
+                .jsonArray
+                .map { it.jsonObject }
+                .single { it.getValue("type").jsonPrimitive.content == "resource_trend" }
+        assertEquals("diagnostic", finding.getValue("effect").jsonPrimitive.content)
+        assertEquals("NOT_ESTIMATED", finding.getValue("uncertainty").jsonPrimitive.content)
+
+        val analysis =
+            Files
+                .list(dataDir.resolve("runs").resolve(result.getValue("run_id").jsonPrimitive.content).resolve("analyses"))
+                .use { it.findFirst().orElseThrow() }
+        assertArrayEquals(Files.readAllBytes(plan), Files.readAllBytes(analysis.resolve("trend-plan.json")))
+        assertEquals(
+            "trend.v1",
+            Json
+                .parseToJsonElement(Files.readAllBytes(analysis.resolve("trend.json")).decodeToString())
+                .jsonObject
+                .getValue("schema_version")
+                .jsonPrimitive
+                .content,
+        )
+
+        val replay = run(*args)
+        assertEquals(0, replay.exitCode, replay.stderr)
+        assertEquals(first.stdout, replay.stdout)
+    }
+
     private fun assertError(
         result: CliResult,
         expectedExitCode: Int,
@@ -740,6 +830,34 @@ class CommandLineTest {
         resourceHash: String,
     ): String =
         """{"schema_version":"capacity-plan.v1","load_input_sha256":"$inputHash","resource_snapshot_sha256":"$resourceHash","load_axis":"rps","achieved_load":{"statistic":"p05_10s","target_tolerance_ratio":0.02,"required_capacity":300},"generator_guard_rule_ids":["generator-ok"],"stages":[{"id":"stage-300","target":300,"from_epoch_ms":1767225600000,"to_epoch_ms":1767225900000,"evaluation_window_id":"stage-300"},{"id":"stage-350","target":350,"from_epoch_ms":1767225900000,"to_epoch_ms":1767226200000,"evaluation_window_id":"stage-350"}]}"""
+
+    private fun trendLoad(): String =
+        buildString {
+            append("timeStamp,elapsed,label,success\n")
+            repeat(40) { second ->
+                append("${1767225600000L + second * 1000L},1,steady,true\n")
+            }
+        }
+
+    private fun trendResources(inputHash: String): String {
+        val values = List(40) { (100 + it).toString() }.joinToString(",")
+        return """
+            {"schema_version":"resource-snapshot.v1","load_input_sha256":"$inputHash",
+             "start_epoch_ms":1767225600000,"step_ms":1000,"point_count":40,
+             "series":[
+               {"id":"cpu","metric":"cpu_used","unit":"percent","entity":"host","role":"system",
+                "aggregation":"interval_mean","values":[$values]}],
+             "windows":[{"id":"steady","from_epoch_ms":1767225600000,"to_epoch_ms":1767225639000}],
+             "rules":[
+               {"id":"cpu-diagnostic","series_id":"cpu","unit":"percent","operator":"gt","threshold":1000,
+                "min_consecutive_cells":1,"effect":"diagnostic"}]}
+            """.trimIndent()
+    }
+
+    private fun trendPlan(resourceHash: String): String =
+        """{"schema_version":"trend-plan.v1","resource_snapshot_sha256":"$resourceHash","checks":[""" +
+            """{"id":"cpu-growth","series_id":"cpu","window_id":"steady","direction":"increase","min_cells":30,""" +
+            """"magnitude_gate":{"min_slope_units_per_second":0.5,"min_split_half_shift_pct":5}}]}"""
 
     private fun savedAnalysis(
         name: String,

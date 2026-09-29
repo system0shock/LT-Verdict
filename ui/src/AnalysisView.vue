@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import LoadCharts from './LoadCharts.vue'
-import type { AnalysisResult, Bucket, SourceSummaryEvidence, OpenSearchEvidence, PostgresContextEvidence } from './types'
+import type { AnalysisResult, Bucket, SourceSummaryEvidence, OpenSearchEvidence, PostgresContextEvidence, TrendCheckEvidence, TrendSummaryEvidence } from './types'
 
 const props = defineProps<{
   result: AnalysisResult
@@ -70,6 +70,10 @@ const allSlaChecks = computed(() => [...checks.value, ...slaResourceChecks.value
 const overall = computed(() => metrics.value.find((item) => scope(item).kind === 'overall'))
 const failedChecks = computed(() => allSlaChecks.value.filter((item) => item.status === 'FAIL'))
 const capacity = computed(() => props.result.capacity_summary)
+const trendChecks = computed(() => props.result.evidence
+  .filter((item): item is TrendCheckEvidence => item.type === 'trend_check'))
+const trendSummary = computed(() => props.result.evidence
+  .find((item): item is TrendSummaryEvidence => item.type === 'trend_summary') ?? null)
 
 const verdict = computed(() => props.result.policy_verdict)
 const verdictText = computed(() => {
@@ -419,6 +423,83 @@ function updateRange(name: 'update:range-start' | 'update:range-end', event: Eve
             :key="stage.id"
           >
             <td>{{ stage.id }}</td><td>{{ capacityValue(stage.target) }}</td><td>{{ capacityValue(stage.achieved) }}</td><td>{{ capacityValue(stage.observed_min) }} / {{ capacityValue(stage.observed_max) }}</td><td>{{ capacityValue(stage.complete_bins) }} / {{ capacityValue(stage.expected_bins) }}</td><td>{{ capacityValue(stage.verified_bound_load) }}</td><td>{{ stage.verdict }}</td><td>{{ stage.reasons.join(', ') || '—' }}</td><td>{{ stage.evidence_refs.join(', ') || '—' }}</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section
+    v-if="trendSummary || trendChecks.length"
+    id="trend-results"
+    data-testid="trend-results"
+    class="panel"
+    aria-labelledby="trend-results-title"
+  >
+    <div class="section-heading">
+      <p class="eyebrow">
+        Trend plan
+      </p><h2 id="trend-results-title">
+        Saved trend facts
+      </h2>
+    </div>
+    <p v-if="trendSummary">
+      Checks: {{ trendSummary.checks_total }} · Observed: {{ trendSummary.observed }} · Not material: {{ trendSummary.not_material }} · Insufficient cells: {{ trendSummary.insufficient }} · Unavailable: {{ trendSummary.unavailable }} · Method: {{ trendSummary.method }} · Uncertainty: not estimated ({{ trendSummary.uncertainty }})
+    </p>
+    <div
+      v-if="trendChecks.length"
+      class="table-wrap"
+      tabindex="0"
+      role="region"
+      aria-label="Resource trend checks"
+    >
+      <table>
+        <thead>
+          <tr>
+            <th scope="col">
+              Check
+            </th><th scope="col">
+              Series
+            </th><th scope="col">
+              Window
+            </th><th scope="col">
+              Declared direction
+            </th><th scope="col">
+              Status
+            </th><th scope="col">
+              Observed direction
+            </th><th scope="col">
+              Slope per second
+            </th><th scope="col">
+              Split-half shift
+            </th><th scope="col">
+              Median
+            </th><th scope="col">
+              Required split-half shift
+            </th><th scope="col">
+              Cells observed / expected
+            </th><th scope="col">
+              Reasons
+            </th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr
+            v-for="item in trendChecks"
+            :key="item.id"
+          >
+            <td>{{ item.check_id }}</td>
+            <td>{{ item.series_id }}</td>
+            <td>{{ item.window_id }}</td>
+            <td>{{ item.declared_direction }}</td>
+            <td>{{ item.status }}</td>
+            <td>{{ item.observed_direction ?? 'N/A' }}</td>
+            <td>{{ item.slope_per_second ?? 'N/A' }}</td>
+            <td>{{ item.split_half_shift ?? 'N/A' }}</td>
+            <td>{{ item.median ?? 'N/A' }}</td>
+            <td>{{ item.magnitude_gate.required_split_half_shift_units ?? 'N/A' }}</td>
+            <td>{{ item.observed_cells }} / {{ item.expected_cells }}</td>
+            <td>{{ item.reasons.join(', ') || '—' }}</td>
           </tr>
         </tbody>
       </table>

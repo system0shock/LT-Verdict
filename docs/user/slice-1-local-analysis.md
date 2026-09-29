@@ -463,10 +463,94 @@ Reference — явно выбранный режим, не автоматиче�
 
 `CANDIDATE` — наблюдаемая ассоциация/эпизод, не доказанная причина.
 `DESCRIPTIVE`, `INSUFFICIENT_DATA` и `NO_MATERIAL_CHANGE` различаются.
-Uncertainty всегда `NOT_ESTIMATED`; p-values и HIGH confidence отсутствуют.
+Uncertainty сырых коэффициентов всегда `NOT_ESTIMATED`; `HIGH confidence`
+отсутствует. Отдельный слой выбора главной находки p-values публикует:
+evidence `correlation_headline_selection` несёт `p_value_b10`, `p_value_b20`,
+`max_p_value`, `holm_adjusted_p_value` и `selected` для каждой гипотезы
+объявленного семейства.
+
+Находка `correlation_candidate` публикуется только при `selected = true`, то
+есть когда Holm-скорректированное p не выше 0.05 и порог материальности пройден.
+Метод `mbb-lag-max-holm.v1`: moving-block bootstrap (999 реплик, блоки 10 и 20),
+статистика `max |rho|` по всему объявленному поиску лагов, консервативный
+max-p по двум длинам блока и одна поправка Holm на объявленное семейство.
+Неотклонённая гипотеза означает `HOLM_NOT_REJECTED`, а не отсутствие связи.
+
+Слой работает только для одного окна, одной outcome-метрики, не более 16 гипотез,
+30–240 непрерывных ячеек и без фактически использованных controls. За пределами
+этой полосы всё семейство получает `UNAVAILABLE` с точной причиной
+(`MULTI_WINDOW_FAMILY_UNSUPPORTED`, `FAMILY_OUTCOME_MISMATCH`,
+`FAMILY_SIZE_UNSUPPORTED`, `FAMILY_GRID_MISMATCH`,
+`OBSERVATION_COUNT_UNSUPPORTED`, `LAG_ANCHOR_COUNT_UNSUPPORTED`,
+`GENUINE_PARTIAL_UNCALIBRATED`, `COMPUTATION_LIMIT_EXCEEDED`), и находки не
+публикуются вовсе, хотя сырые коэффициенты и статусы остаются в evidence.
+Принятая остаточная частота шумных
+отчётов 7.7–13.2% измерена на development-seeds в NumPy и не является измеренной
+гарантией JVM-реализации.
+
 Все declared pairs и причины непроверяемости остаются в evidence. Optional
 diagnostic limit не меняет бизнес-/ресурсный SLA verdict. Без плана старый
 результат не меняется, и baseline не переназначается.
+
+## Рост метрики в пределах SLA
+
+Optional `trend-plan.v1` отвечает на вопрос «растёт ли метрика, даже если порог
+не пересечён». В UI выберите файл плана вместе с resource snapshot. CLI:
+
+```powershell
+.\build\install\ltv\bin\ltv.bat analyze input.jtl --resources resources.json --trend trend.json --data-dir data
+```
+
+План ссылается на тот же **semantic** SHA-256 snapshot, что и correlation plan,
+и объявляет не более 32 проверок. Каждая проверка задаёт series, окно,
+направление (`increase`, `decrease`, `either`), минимум наблюдаемых ячеек
+(30 и больше) и `magnitude_gate` из двух положительных величин: минимального
+абсолютного наклона в единицах series в секунду и минимального абсолютного
+сдвига медиан половин окна в процентах от медианы окна. Обе величины объявляются
+**до** прогона.
+
+Тренд наблюдается только если прошли оба порога и обе статистики согласованы по
+знаку; при `either` требуемый знак берётся из наклона. Используются те же
+`slope_per_second` и `split_half_shift`, что публикует `resource_summary`.
+Пропуски не заполняются и не сжимают время: проверка видит
+`expected_cells`, `observed_cells`, `missing_cells`, `longest_gap_cells` и
+reason `RESOURCE_GAPS`.
+
+Кроме общего минимума, в каждой половине окна должно быть не меньше
+`floor(min_cells / 2)` наблюдаемых ячеек (при `min_cells` 30 это 15 в каждой
+половине). Иначе сдвиг половин сравнивал бы медиану многих точек с единичной, и
+проверка отказывает с `INSUFFICIENT_CELLS` и reason `TREND_HALF_CELLS_NOT_MET`.
+
+Статусы: `TREND_OBSERVED`, `NO_MATERIAL_TREND`, `INSUFFICIENT_CELLS`,
+`UNAVAILABLE`. Каждый отказ несёт точный reason — `NO_OBSERVATIONS`,
+`TREND_MIN_CELLS_NOT_MET`, `TREND_HALF_CELLS_NOT_MET`,
+`INSUFFICIENT_OBSERVATIONS`, `TREND_MEDIAN_ZERO`
+(процентный порог не определён при нулевой медиане), `TREND_DIRECTION_MISMATCH`,
+`TREND_DIRECTION_DISAGREEMENT`, `TREND_SLOPE_BELOW_MINIMUM`,
+`TREND_SHIFT_BELOW_MINIMUM`, `TREND_SERIES_NOT_FOUND` (ряд не найден),
+`TREND_WINDOW_NOT_FOUND` (окно не найдено), `RUN_NOT_VALID` (прогон недействителен).
+Каждый `TREND_OBSERVED` дополнительно несёт
+`STATIONARITY_NOT_EVALUATED`: объявленное окно не доказывает стационарность,
+детектора смены режима нет, поэтому ступень нагрузки может выглядеть как рост.
+
+**Ограничение: ряды со сбросами.** L0 не применим к рядам с перезапусками
+(память с рестартами подов, циклы OOM, пила GC). На синтетической пиле без
+роста огибающей (3 цикла по 40 ячеек, значение от 200 до 980 в каждом) окно от
+границы цикла даёт `TREND_OBSERVED` с направлением `increase` и сдвигом половин
++200 (33,9 % медианы 590), а то же окно, сдвинутое на 20 ячеек, даёт
+`TREND_OBSERVED` с направлением `decrease` и сдвигом -200: знак определяет фаза
+окна, а не поведение метрики. Выбирайте окно внутри одного цикла или не
+объявляйте проверку на таком ряду.
+
+`resource_trend` — finding с `effect=diagnostic`: он не меняет бизнес- или
+ресурсный verdict и не попадает в `analysis_coverage`. Это наблюдение, а не
+диагноз: рост памяти или пула не является доказательством утечки, причины или
+исчерпания ресурса. Отсутствие находки не доказывает отсутствие роста.
+Uncertainty остаётся `NOT_ESTIMATED`; p-values в этом уровне нет.
+
+Сохраняются `trend-plan.json` (исходные загруженные байты) и `trend.json`
+(`trend.v1`); оба доступны для скачивания рядом с capacity-артефактами. Без
+плана результат, identity и verdict не меняются.
 
 ## Сравнение двух окон
 

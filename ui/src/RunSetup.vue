@@ -7,6 +7,7 @@ defineProps<{
   resourceFile: File | null
   diagnosticFile: File | null
   capacityFile: File | null
+  trendFile: File | null
   sourceContextFiles: File[]
   sourceProfiles: SourceProfile[]
   sourceProfileIds: string[]
@@ -33,6 +34,7 @@ const emit = defineEmits<{
   resources: [file: File | null]
   diagnostics: [file: File | null]
   capacity: [file: File | null]
+  trend: [file: File | null]
   'source-contexts': [files: File[]]
   'source-profiles': [ids: string[]]
   'postgres-profile': [id: string]
@@ -179,6 +181,26 @@ function selectedWindowOrigin(event: Event) {
           class="field__hint"
         >
           {{ capacityFile?.name ?? 'No capacity plan selected.' }} Requires a matching resource snapshot.
+        </p>
+      </div>
+
+      <div class="field">
+        <label for="trend-plan-file">Trend plan <span class="muted">(optional)</span></label>
+        <input
+          id="trend-plan-file"
+          data-testid="trend-plan-file"
+          class="control control--file"
+          type="file"
+          accept="application/json,.json"
+          :disabled="busy || sourceProfileIds.length > 0"
+          aria-describedby="trend-plan-hint"
+          @change="emit('trend', selectedFile($event))"
+        >
+        <p
+          id="trend-plan-hint"
+          class="field__hint"
+        >
+          {{ trendFile?.name ?? 'No trend plan selected.' }} Requires a matching resource snapshot.
         </p>
       </div>
 

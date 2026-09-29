@@ -27,6 +27,17 @@
   подключёнными к Ajv contract check: рантайм принимал `v2` с появлением
   multi-profile selection, но опубликованные контракты фиксировали только `v1`,
   поэтому проверять документы `v2` было нечем.
+- Optional `trend-plan.v1` и L0-детектор роста ресурсных метрик в пределах SLA:
+  объявленные проверки (не более 32) на уже публикуемых `slope_per_second` и
+  `split_half_shift` с двумя заранее объявленными порогами материальности и
+  требованием согласия знаков. Статусы `TREND_OBSERVED`, `NO_MATERIAL_TREND`,
+  `INSUFFICIENT_CELLS`, `UNAVAILABLE` с точными reason-кодами; finding
+  `resource_trend` с `effect=diagnostic`. Вердикт и `analysis_coverage` не
+  меняются, p-values и оценка неопределённости отсутствуют
+  (`uncertainty=NOT_ESTIMATED`), рост не трактуется как утечка или причина.
+  Доступно через CLI (`--trend`), API (part `trend_plan`) и UI; артефакты
+  `trend-plan.json` и `trend.json`, в identity — модуль
+  `resource-trend-evaluation`.
 - Подготовка к приёмке: advisory AI jobs/API/UI и изолированный ModelStudio/Qwen
   runtime, consent, отмена и fail-soft без изменения deterministic verdict.
   Изменённый prompt требует отдельной оценки качества; пилот не возобновлялся.
@@ -103,6 +114,11 @@
 
 ### Fixed
 
+- Проверка роста метрики (`trend-plan.v1`) теперь отказывает с
+  `INSUFFICIENT_CELLS` и reason `TREND_HALF_CELLS_NOT_MET`, если в одной из
+  половин окна меньше `floor(min_cells / 2)` наблюдаемых ячеек: раньше минимум
+  проверялся только по всему окну, и сдвиг половин мог опираться на единичную
+  точку. `resource_summary` не меняется.
 - Timestamps в диапазоне epoch-seconds `1000000000..99999999999` отклоняются как
   `INVALID_SAMPLE_TIMESTAMP` вместо тихой интерпретации как миллисекунды 1970
   года с валидным `PASS`/`FAIL`. Границы опубликованы в `limits`

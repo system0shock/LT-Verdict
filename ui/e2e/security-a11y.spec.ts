@@ -97,6 +97,7 @@ test.describe.serial('local UI security and accessibility', () => {
     const resources = page.getByTestId('resource-snapshot-file')
     const diagnostics = page.getByTestId('correlation-plan-file')
     const capacity = page.getByTestId('capacity-plan-file')
+    const trend = page.getByTestId('trend-plan-file')
     const sourceContext = page.getByLabel('OpenSearch context')
     const sourceProfile = page.getByTestId('source-profile')
     const sourceWindowOrigin = page.locator('#source-window-origin')
@@ -127,6 +128,7 @@ test.describe.serial('local UI security and accessibility', () => {
       resources,
       diagnostics,
       capacity,
+      trend,
       sourceContext,
       sourceProfile,
       postgresPre,
@@ -153,7 +155,7 @@ test.describe.serial('local UI security and accessibility', () => {
       await expectVisibleKeyboardFocus(target)
     }
 
-    for (const labelledInput of [input, policy, resources, diagnostics, capacity, sourceContext, sourceProfile, sourceWindowOrigin, sourceStep, sourceMargin, sourceMaxIdleGap, postgresPre, postgresPost, pgProfileHtml]) {
+    for (const labelledInput of [input, policy, resources, diagnostics, capacity, trend, sourceContext, sourceProfile, sourceWindowOrigin, sourceStep, sourceMargin, sourceMaxIdleGap, postgresPre, postgresPost, pgProfileHtml]) {
       const labels = await labelledInput.evaluate((element) =>
         [...((element as HTMLInputElement).labels ?? [])].map((label) => {
           const style = getComputedStyle(label)

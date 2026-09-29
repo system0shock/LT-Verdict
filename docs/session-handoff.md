@@ -115,6 +115,96 @@ v0.23.3 по четырём изменённым документам и по в
 `build/ai-acceptance` содержат первичные корпусные данные), один Gradle process
 за раз, основной checkout `F:/Coding/LT-Verdict` не трогать.
 
+## Передача 2026-09-27: trend-plan.v1 и L0-детектор тренда
+
+Пункт 4 из предыдущей записи выполнен целиком, включая UI. Работа в ветке
+`feat/trend-plan-l0` от `073b56d`. Ветка `fix/input-unit-fill-coverage` запушена
+в origin и больше не менялась.
+
+### Что поставлено
+
+- Контракт `trend-plan.v1`: optional вход, привязка к semantic hash snapshot, до
+  32 проверок, `direction`, `min_cells` (30..100000) и `magnitude_gate` из двух
+  положительных величин. Schema, два valid и один invalid пример, 12 кейсов в
+  `ui/scripts/verify-policy-schema.mjs`.
+- L0-оценка без статистического вывода: те же `slope_per_second` и
+  `split_half_shift`, что публикует `resource_summary`; оба порога и согласие
+  знаков обязательны. Статусы `TREND_OBSERVED`, `NO_MATERIAL_TREND`,
+  `INSUFFICIENT_CELLS`, `UNAVAILABLE`; каждый `TREND_OBSERVED` несёт
+  `STATIONARITY_NOT_EVALUATED`.
+- Finding `resource_trend` с `effect=diagnostic`. Verdict, `analysis_coverage` и
+  `analysis-result.v1` не меняются; нового top-level поля нет намеренно —
+  схема результата имеет `additionalProperties: false`, а
+  `ai/AdvisoryAi.kt:461-475` проверяет точное совпадение набора ключей.
+- Identity: `trend_plan_sha256`, `trend_plan_version`, `input_versions.trend`,
+  модуль `resource-trend-evaluation` версии 1 и пять ключей в `limits`. Все поля
+  условные, поэтому golden-фикстуры identity не перегенерировались.
+- Артефакты `trend-plan.json` и `trend.json` (`trend.v1`), input `trend_plan` в
+  `run.v1`, роуты `.../trend-plan` и `.../trend`.
+- Доступ: CLI `--trend`, API part `trend_plan` (422 `INVALID_TREND_PLAN`, 413 на
+  превышении), поле в UI, секция `trend-results`, e2e `trend.spec.ts`.
+- Числовые определения не дублировались: в `ResourceStatistics.kt` шесть
+  деклараций переведены с `private` на `internal` вместо четвёртой копии slope,
+  split-half и квантилей.
+
+### Проверено
+
+- `gradlew --offline --no-daemon check installDist -x npmCi --no-parallel`: PASS.
+- Полный JVM-набор: 69 классов, 412 тестов, 0 failures, 0 errors, 9 skipped
+  (было 67/386, добавилось 26 тестов).
+- ktlint main и test: pass. `npm --prefix ui run typecheck`, `lint`,
+  `test:contracts`: pass. `npm --prefix ui run e2e`: 49/49 passed — 47 прежних и
+  два новых.
+- markdownlint по затронутым документам: 0 issues.
+- Сквозной прогон собранного CLI по документированному сценарию: baseline-анализ
+  без плана не добавляет trend-ключей в identity; анализ с планом даёт
+  `TREND_OBSERVED`, slope `1`, split-half `19.5`, median `119`, required `5.95`,
+  verdict `PASS`, coverage `COMPLETE`, артефакты и input `trend_plan` на месте.
+  Литералы совпали с ручным расчётом.
+
+### Не закрыто
+
+- `powershell tools/test_advisory_ai_runtime.ps1` по-прежнему требует
+  запущенный Docker и pinned-образ; performance gate не запускался.
+- L1 (Theil–Sen, блочный перестановочный null, Holm), поле `budget` в контракте,
+  детектор стационарности и семейства TR-* в приёмочном harness не сделаны. Без
+  них частота ложных `TREND_OBSERVED` не измерена: L0 опирается только на
+  объявленные пороги материальности.
+- Отчётные рендереры (HTML, AsciiDoc, Confluence) игнорируют новый evidence-тип,
+  как сейчас игнорируют capacity.
+- В ledger `docs/development-plan-v0.6.md` внесено только закрытие
+  `BASELINE-CONDITIONS-01`; `trend-plan.v1` как новая возможность в очередь
+  плана не внесена.
+
+### Документационная сверка (пункт 5)
+
+- `docs/user/slice-1-local-analysis.md`: снято противоречие «p-values
+  отсутствуют». Описан слой `correlation_headline_selection`
+  (`mbb-lag-max-holm.v1`, 999 реплик, блоки 10 и 20, max-p, одна поправка Holm),
+  правило публикации `correlation_candidate` только при `selected = true` и
+  полоса поддерживаемых форм семейства со всеми reason-кодами отказа. Принятые
+  7.7–13.2% помечены как измерение NumPy на development-seeds, а не гарантия
+  JVM-реализации.
+- `docs/development-plan-v0.6.md`: `BASELINE-CONDITIONS-01` переведён в CLOSED
+  по реализации (ADR 0010, `local-baseline-conditions.v1`, endpoints
+  `baseline-conditions`, three-state `CONFIRMED`/`NOT_CONFIRMED`/`UNKNOWN`).
+  Исходное описание gap сохранено как историческое и явно помечено; сквозная
+  приёмка сценария осталась отдельной задачей.
+- `docs/statistical-validation-results-v1.md`: добавлен датированный
+  постскриптум о поставках после приёмки. Сам отчёт не переписан и остаётся
+  записью результата v1. Файл не входит в замороженный список `freeze.json`.
+- Исторические обзоры (`docs/lt-verdict-analysis-and-remediation.md`,
+  `docs/statistical-validation-expert-brief-v1.md`) намеренно не правились: они
+  описывают состояние на дату обзора. `docs/statistical-validation-methodology-v1.md`
+  входит в `freeze.json`, поэтому не редактировался.
+
+### Дальше
+
+Пункт 5 закрыт. Пункты 7 и 8 из предыдущей записи не начаты. Первый шаг к L1 —
+переиспользовать `movingBlockIndices` из `CorrelationHeadlineSelection.kt` для
+блочного null и держать объявленную семью не больше 32 при `B = 999`, иначе Holm
+не отвергает ничего.
+
 ## Передача 2026-09-22 (ночь): ветка fix/input-unit-fill-coverage
 
 Ворктри `.worktrees/local-baseline-comparison` переключён с `feat/remaining-sources`
@@ -209,8 +299,8 @@ epoch-seconds покрывает 2001..5138. Существующие фикст
   утверждает «p-values отсутствуют», тогда как `DiagnosticAnalysis.kt` публикует
   `correlation_headline_selection` с `holm_adjusted_p_value`; ограничения выводной
   семьи в `docs/user/*` не описаны вовсе. Эта запись ниже также держит
-  `BASELINE-CONDITIONS-01` как OPEN, хотя ADR 0010 и `LocalApi.kt:392,408`
-  реализованы.
+  `BASELINE-CONDITIONS-01` как OPEN, хотя ADR 0010 и `LocalApi.kt:400,416`
+  реализованы. Оба противоречия сняты в разделе от 2026-09-27 выше.
 - Пункт 7: `processed_bytes`, число прочитанных записей и число проигнорированных
   Gatling `ERROR`/`USER` в evidence. Сейчас `ParseReport.processedBytes` не
   персистится, а `diagnostics` на успехе пуст.

@@ -60,7 +60,7 @@ test('renders saved capacity facts unchanged after reload', async ({ page }) => 
   await page.getByRole('button', { name: 'capacity.jtl' }).click()
   await page.locator(`button[title="${reference.analysis_id}"]`).click()
   const saved = page.getByTestId('capacity-results')
-  await expect(page.locator('#verdict h2')).toHaveText('NO_VERDICT — capacity evaluation; see saved bounds and reasons')
+  await expect(page.locator('#verdict h2')).toHaveText('Вердикт по ёмкости не выдан — границы недостаточно')
   await expect(saved).toContainText('BOUNDED [296, 344)')
   await expect(saved).toContainText('KNEE_DETECTOR_NOT_IMPLEMENTED')
   await expect(saved.getByRole('row', { name: /ramp-300/ })).toContainText('296')

@@ -30,7 +30,7 @@ test('loads a saved analysis after reload without creating a job', async ({ page
   await expect(page.locator('#verdict')).toBeVisible()
   const verdict = await page.locator('#verdict h2').innerText()
   const analysisId = await page.locator('button[aria-pressed="true"][title]').getAttribute('title')
-  const validity = await page.getByText('Run validity', { exact: true }).locator('..').locator('dd').innerText()
+  const validity = await page.getByText('Валидность прогона', { exact: true }).locator('..').locator('dd').innerText()
   let jobRequests = 0
   page.on('request', (request) => {
     if (request.method() === 'POST' && new URL(request.url()).pathname === '/api/jobs') jobRequests += 1
@@ -41,7 +41,7 @@ test('loads a saved analysis after reload without creating a job', async ({ page
   await page.locator(`button[title="${analysisId}"]`).click()
 
   await expect(page.locator('#verdict h2')).toHaveText(verdict)
-  await expect(page.getByText('Run validity', { exact: true }).locator('..').locator('dd')).toHaveText(validity)
+  await expect(page.getByText('Валидность прогона', { exact: true }).locator('..').locator('dd')).toHaveText(validity)
   expect(jobRequests).toBe(0)
 })
 

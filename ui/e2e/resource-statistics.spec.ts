@@ -82,6 +82,6 @@ test('counts an SLA resource failure in the verdict without a business policy', 
   })
   await page.getByRole('button', { name: 'Analyze run' }).click()
 
-  await expect(page.locator('#verdict h2')).toHaveText('FAIL — 1 of 1 rules failed')
+  await expect(page.locator('#verdict h2')).toHaveText('Прогон не проходит — нарушено проверок: 1 из 1')
   await expect(page.locator('#resource-results')).toContainText('cpu-limit')
 })

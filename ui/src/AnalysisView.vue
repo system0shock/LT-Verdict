@@ -65,10 +65,7 @@ const correlationPairs = computed(() => props.result.evidence.filter((item) => i
 const anomalyChecks = computed(() => props.result.evidence.filter((item) => item.type === 'anomaly_check'))
 const anomalyEpisodes = computed(() => props.result.findings.filter((item) => item.type === 'anomaly_episode'))
 const diagnosticDetails = computed(() => JSON.stringify([...diagnosticSummaries.value, ...correlationPairs.value, ...anomalyChecks.value, ...anomalyEpisodes.value], null, 2))
-const slaResourceChecks = computed(() => resourceChecks.value.filter((item) => item.effect === 'sla'))
-const allSlaChecks = computed(() => [...checks.value, ...slaResourceChecks.value])
 const overall = computed(() => metrics.value.find((item) => scope(item).kind === 'overall'))
-const failedChecks = computed(() => allSlaChecks.value.filter((item) => item.status === 'FAIL'))
 const capacity = computed(() => props.result.capacity_summary)
 const trendChecks = computed(() => props.result.evidence
   .filter((item): item is TrendCheckEvidence => item.type === 'trend_check'))
@@ -76,14 +73,6 @@ const trendSummary = computed(() => props.result.evidence
   .find((item): item is TrendSummaryEvidence => item.type === 'trend_summary') ?? null)
 
 const verdict = computed(() => props.result.policy_verdict)
-const verdictText = computed(() => {
-  if (props.result.analysis_mode === 'capacity_step') return `${verdict.value} — capacity evaluation; see saved bounds and reasons`
-  if (verdict.value === 'FAIL') return `FAIL — ${failedChecks.value.length} of ${allSlaChecks.value.length} rules failed`
-  if (verdict.value === 'PASS') return `PASS — all ${allSlaChecks.value.length} rules passed`
-  if (verdict.value === 'NO_POLICY') return 'NO_POLICY — no policy was supplied'
-  return 'NO_VERDICT — one or more rules could not be evaluated'
-})
-
 const overallMetrics = computed(() => metricValues(overall.value))
 const bucketRows = computed(() => {
   const width = props.bucketRollup * 1_000
@@ -115,13 +104,6 @@ const bucketRows = computed(() => {
   }
   return rows
 })
-const duration = computed(() => {
-  const throughput = valueAt(overall.value, 'throughput_rps')
-  if (throughput === null || typeof throughput !== 'object' || Array.isArray(throughput)) return 'Not available'
-  const milliseconds = numberAt(throughput as Evidence, 'denominator')
-  return milliseconds === undefined ? 'Not available' : formatDuration(milliseconds)
-})
-
 const policyRows = computed(() =>
   checks.value.map((check) => {
     const metric = metrics.value.find((item) => item.id === check.metric_evidence_id)
@@ -305,39 +287,6 @@ function updateRange(name: 'update:range-start' | 'update:range-end', event: Eve
 </script>
 
 <template>
-  <section
-    id="verdict"
-    class="panel verdict-strip"
-    :data-verdict="verdict"
-  >
-    <p
-      class="status-icon"
-      aria-hidden="true"
-    >
-      {{ verdict === 'PASS' ? '✓' : verdict === 'FAIL' ? '×' : '!' }}
-    </p>
-    <div>
-      <p class="eyebrow">
-        Policy verdict
-      </p>
-      <h2>{{ verdictText }}</h2>
-      <p
-        v-if="result.analysis_coverage.reasons.length"
-        class="muted"
-      >
-        {{ result.analysis_coverage.reasons.join(', ') }}
-      </p>
-    </div>
-    <dl class="verdict-facts">
-      <div><dt>Run validity</dt><dd>{{ result.run_validity }}</dd></div>
-      <div><dt>Coverage</dt><dd>{{ result.analysis_coverage.status }}</dd></div>
-      <div><dt>Duration</dt><dd>{{ duration }}</dd></div>
-      <div><dt>Samples</dt><dd>{{ overallMetrics.samples.toLocaleString() }}</dd></div>
-      <div><dt>Error rate</dt><dd>{{ overallMetrics.errorRate }}</dd></div>
-      <div><dt>Rules</dt><dd>{{ allSlaChecks.length }}</dd></div>
-    </dl>
-  </section>
-
   <section
     id="summary-metrics"
     aria-labelledby="summary-metrics-title"

@@ -11,6 +11,7 @@ import io.ltverdict.core.DiagnosticValidation
 import io.ltverdict.core.EngineConfig
 import io.ltverdict.core.PolicyValidation
 import io.ltverdict.core.ResourceValidation
+import io.ltverdict.core.TrendPlanValidation
 import io.ltverdict.core.canonicalJson
 import io.ltverdict.core.validateCapacityBinding
 import io.ltverdict.core.validateCapacityPlan
@@ -18,6 +19,8 @@ import io.ltverdict.core.validateDiagnosticBinding
 import io.ltverdict.core.validateDiagnosticPlan
 import io.ltverdict.core.validatePolicy
 import io.ltverdict.core.validateResourceSnapshot
+import io.ltverdict.core.validateTrendBinding
+import io.ltverdict.core.validateTrendPlan
 import io.ltverdict.integrations.jenkins.JenkinsConnections
 import io.ltverdict.integrations.jenkins.readJenkinsConnections
 import io.ltverdict.integrations.report.renderConfluenceReport
@@ -97,6 +100,7 @@ private fun analyze(
     var resourcesPath: Path? = null
     var diagnosticsPath: Path? = null
     var capacityPath: Path? = null
+    var trendPath: Path? = null
     var connectionsPath: Path? = null
     var sourcePath: Path? = null
     val sourceContextPaths = mutableListOf<Path>()
@@ -125,6 +129,10 @@ private fun analyze(
             "--capacity" -> {
                 if (capacityPath != null || index + 1 >= args.size) usage()
                 capacityPath = path(args[index + 1])
+            }
+            "--trend" -> {
+                if (trendPath != null || index + 1 >= args.size) usage()
+                trendPath = path(args[index + 1])
             }
             "--connections" -> {
                 if (connectionsPath != null || index + 1 >= args.size) usage()
@@ -163,7 +171,13 @@ private fun analyze(
     requireRegularFile(input, EXIT_INVALID_INPUT, "INVALID_INPUT")
     if ((sourcePath == null) != (connectionsPath == null)) usage()
     if (sourcePath != null &&
-        (resourcesPath != null || diagnosticsPath != null || capacityPath != null || sourceContextPaths.isNotEmpty())
+        (
+            resourcesPath != null ||
+                diagnosticsPath != null ||
+                capacityPath != null ||
+                trendPath != null ||
+                sourceContextPaths.isNotEmpty()
+        )
     ) {
         throw CliFailure(EXIT_INVALID_INPUT, "SOURCE_INPUT_CONFLICT: acquire first, then replay the saved snapshot with --correlation")
     }
@@ -177,6 +191,7 @@ private fun analyze(
     val resources = resourcesPath?.let(::readResources)
     val diagnostics = diagnosticsPath?.let(::readDiagnostics)
     val capacity = capacityPath?.let(::readCapacity)
+    val trend = trendPath?.let(::readTrend)
     val postgres = readPostgresFiles(postgresPrePath, postgresPostPath, pgProfileHtmlPath)
     if (diagnostics != null) {
         if (resources == null) throw CliFailure(EXIT_INVALID_INPUT, "DIAGNOSTIC_RESOURCE_REQUIRED")
@@ -189,6 +204,16 @@ private fun analyze(
         }
     }
     if (capacity != null && resources == null) throw CliFailure(EXIT_INVALID_INPUT, "CAPACITY_RESOURCE_REQUIRED")
+    if (trend != null) {
+        if (resources == null) throw CliFailure(EXIT_INVALID_INPUT, "TREND_RESOURCE_REQUIRED")
+        val errors = validateTrendBinding(trend, resources)
+        if (errors.isNotEmpty()) {
+            throw CliFailure(
+                EXIT_INVALID_INPUT,
+                errors.joinToString("\n") { "${it.code} ${it.jsonPointer}: ${it.message}" },
+            )
+        }
+    }
     val result =
         DataDirectory.open(dataDir).use { directory ->
             val store = RunBundleStore(directory)
@@ -236,6 +261,7 @@ private fun analyze(
                         resources = resources,
                         diagnostics = diagnostics,
                         capacity = capacity,
+                        trend = trend,
                         sourceRequest = sourceRequest,
                         sourceAcquisition = context,
                         postgres = postgres,
@@ -634,6 +660,23 @@ private fun readCapacity(path: Path): CapacityPlanValidation.Valid {
     }
 }
 
+private fun readTrend(path: Path): TrendPlanValidation.Valid {
+    requireRegularFile(path, EXIT_INVALID_INPUT, "INVALID_TREND_PLAN")
+    val validation =
+        try {
+            Files.newInputStream(path, LinkOption.NOFOLLOW_LINKS).use(::validateTrendPlan)
+        } catch (_: IOException) {
+            throw CliFailure(EXIT_INVALID_INPUT, "INVALID_TREND_PLAN: read failed")
+        }
+    return when (validation) {
+        is TrendPlanValidation.Valid -> validation
+        is TrendPlanValidation.Invalid -> throw CliFailure(
+            EXIT_INVALID_INPUT,
+            validation.errors.joinToString("\n") { "${it.code} ${it.jsonPointer}: ${it.message}" },
+        )
+    }
+}
+
 private fun requireRegularFile(
     path: Path,
     exitCode: Int,
@@ -659,7 +702,7 @@ private fun usage(): Nothing =
         "Usage: ltv ui [--data-dir <path>] [--analysis-parallelism <n>] " +
             "[--connections <profiles.json>] [--jenkins-config <jenkins.json>] | " +
             "ltv analyze <input> [--policy <policy.json>] [--resources <snapshot.json>] [--capacity <plan.json>] " +
-            "[--correlation <plan.json>] [--source-context <context.json>] " +
+            "[--trend <plan.json>] [--correlation <plan.json>] [--source-context <context.json>] " +
             "[--postgres-pre <pre.json>] [--postgres-post <post.json>] [--pg-profile-html <report.html>] " +
             "[--connections <profiles.json> --source <source.json>] [--data-dir <path>] | " +
             "ltv source pre|post --connections <profiles.json> --profile <id> [--pre <pre.json>] [--pg-profile-html <output.html>] | " +

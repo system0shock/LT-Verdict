@@ -109,3 +109,28 @@ for (const [name, value, expected] of [
     throw new Error(`${name}: expected schema_valid=${expected}; ${JSON.stringify(validateDiagnostic.errors)}`)
   }
 }
+
+const trendSchema = await readJson('docs/contracts/trend/v1/trend-plan.schema.json')
+const validateTrend = new Ajv2020({ strict: false }).compile(trendSchema)
+const trend = await readJson('docs/contracts/trend/v1/examples/valid/basic.json')
+const trendEither = await readJson('docs/contracts/trend/v1/examples/valid/either-direction.json')
+const trendUnknown = await readJson('docs/contracts/trend/v1/examples/invalid/unknown-field.json')
+const trendCheck = trend.checks[0]
+for (const [name, value, expected] of [
+  ['basic trend', trend, true],
+  ['either direction with two checks', trendEither, true],
+  ['unknown check field', trendUnknown, false],
+  ['unknown root field', { ...trend, token: 'not-allowed' }, false],
+  ['empty checks', { ...trend, checks: [] }, false],
+  ['unsupported direction', { ...trend, checks: [{ ...trendCheck, direction: 'up' }] }, false],
+  ['cell floor', { ...trend, checks: [{ ...trendCheck, min_cells: 29 }] }, false],
+  ['fractional cells', { ...trend, checks: [{ ...trendCheck, min_cells: 30.5 }] }, false],
+  ['zero slope gate', { ...trend, checks: [{ ...trendCheck, magnitude_gate: { ...trendCheck.magnitude_gate, min_slope_units_per_second: 0 } }] }, false],
+  ['missing percentage gate', { ...trend, checks: [{ ...trendCheck, magnitude_gate: { min_slope_units_per_second: 0.001 } }] }, false],
+  ['unknown gate field', { ...trend, checks: [{ ...trendCheck, magnitude_gate: { ...trendCheck.magnitude_gate, confidence: 'high' } }] }, false],
+  ['uppercase snapshot hash', { ...trend, resource_snapshot_sha256: 'A'.repeat(64) }, false],
+]) {
+  if (validateTrend(value) !== expected) {
+    throw new Error(`${name}: expected schema_valid=${expected}; ${JSON.stringify(validateTrend.errors)}`)
+  }
+}

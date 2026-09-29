@@ -1,0 +1,17 @@
+{
+  "schema_version": "trend-plan.v1",
+  "resource_snapshot_sha256": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+  "checks": [
+    {
+      "id": "host-a-cpu-growth",
+      "series_id": "host-a-cpu",
+      "window_id": "steady",
+      "direction": "increase",
+      "min_cells": 30,
+      "magnitude_gate": {
+        "min_slope_units_per_second": 0.001,
+        "min_split_half_shift_pct": 5
+      }
+    }
+  ]
+}

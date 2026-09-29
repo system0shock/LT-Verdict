@@ -82,6 +82,135 @@ class AnalysisServiceTest {
         }
 
     @Test
+    fun `trend plan is bound stored and evaluated without touching coverage or verdict`() =
+        withService { store, service ->
+            val input = accept(store, trendCsv().encodeToByteArray(), "trend.jtl")
+            val resource = resources(trendResourceJson(input.sha256).encodeToByteArray())
+            val plan = trendPlanJson(resource.semanticSha256)
+            val trend = validTrend(plan.encodeToByteArray())
+
+            val outcome = service.analyze(AnalysisRequest(input, passPolicy(), resources = resource, trend = trend))
+            val withoutTrend = service.analyze(AnalysisRequest(input, passPolicy(), resources = resource))
+
+            assertEquals("PASS", result(outcome, "policy_verdict"))
+            assertEquals(result(withoutTrend, "policy_verdict"), result(outcome, "policy_verdict"))
+            assertEquals("COMPLETE", coverageStatus(outcome))
+            assertNotEquals(withoutTrend.analysisId, outcome.analysisId)
+
+            val json = Json.parseToJsonElement(outcome.canonicalResult.decodeToString()).jsonObject
+            val evidence = json.getValue("evidence").jsonArray.map { it.jsonObject }
+            assertEquals("1", evidence.single { it.type() == "trend_summary" }.value("checks_total"))
+            assertEquals("TREND_OBSERVED", evidence.single { it.type() == "trend_check" }.value("status"))
+            val finding =
+                json
+                    .getValue("findings")
+                    .jsonArray
+                    .map { it.jsonObject }
+                    .single { it.type() == "resource_trend" }
+            assertEquals("diagnostic", finding.value("effect"))
+            assertEquals("NOT_ESTIMATED", finding.value("uncertainty"))
+
+            val stored = checkNotNull(store.readAnalysis(input.runId, outcome.analysisId))
+            assertTrue(stored.artifacts.map { it.path }.containsAll(listOf("trend-plan.json", "trend.json")))
+            assertArrayEquals(plan.encodeToByteArray(), Files.readAllBytes(stored.path.resolve("trend-plan.json")))
+            assertEquals(
+                "trend.v1",
+                Json
+                    .parseToJsonElement(Files.readAllBytes(stored.path.resolve("trend.json")).decodeToString())
+                    .jsonObject
+                    .value("schema_version"),
+            )
+
+            val identity = Json.parseToJsonElement(Files.readAllBytes(stored.path.resolve("identity.json")).decodeToString()).jsonObject
+            assertEquals(trend.semanticSha256, identity.value("trend_plan_sha256"))
+            assertEquals("trend-plan.v1", identity.value("trend_plan_version"))
+            assertEquals("trend-plan.v1", identity.getValue("input_versions").jsonObject.value("trend"))
+            assertEquals("32", identity.getValue("limits").jsonObject.value("trend_checks_max"))
+            assertEquals("slope-materiality.v1", identity.getValue("limits").jsonObject.value("trend_method"))
+            assertTrue(
+                identity
+                    .getValue("modules")
+                    .jsonArray
+                    .map { it.jsonObject.value("id") to it.jsonObject.value("version") }
+                    .contains("resource-trend-evaluation" to "1"),
+            )
+
+            val run = Json.parseToJsonElement(Files.readAllBytes(stored.path.resolve("run.json")).decodeToString()).jsonObject
+            val trendInput =
+                run
+                    .getValue("inputs")
+                    .jsonArray
+                    .map { it.jsonObject }
+                    .single { it.value("type") == "trend_plan" }
+            assertEquals("analyses/${outcome.analysisId}/trend-plan.json", trendInput.value("path"))
+            assertEquals(sha256Hex(plan.encodeToByteArray()), trendInput.value("sha256"))
+        }
+
+    @Test
+    fun `trend plan requires a matching snapshot before any analysis is stored`() =
+        withService { store, service ->
+            val input = accept(store, trendCsv().encodeToByteArray(), "trend-rejected.jtl")
+            val resource = resources(trendResourceJson(input.sha256).encodeToByteArray())
+
+            val stale = validTrend(trendPlanJson("b".repeat(64)).encodeToByteArray())
+            assertEquals(
+                "TREND_SNAPSHOT_MISMATCH",
+                assertThrows(IllegalArgumentException::class.java) {
+                    service.analyze(AnalysisRequest(input, passPolicy(), resources = resource, trend = stale))
+                }.message,
+            )
+
+            assertEquals(
+                "TREND_RESOURCE_REQUIRED",
+                assertThrows(IllegalArgumentException::class.java) {
+                    service.analyze(AnalysisRequest(input, passPolicy(), trend = stale))
+                }.message,
+            )
+        }
+
+    @Test
+    fun `an invalid load input keeps the raw trend plan and abstains on every check`() =
+        withService { store, service ->
+            val input = accept(store, "timeStamp,elapsed,label,success\nnot-a-number,1,request,true\n".encodeToByteArray(), "bad.jtl")
+            val resource = resources(trendResourceJson(input.sha256).encodeToByteArray())
+            val plan = trendPlanJson(resource.semanticSha256)
+            val trend = validTrend(plan.encodeToByteArray())
+
+            val outcome = service.analyze(AnalysisRequest(input, passPolicy(), resources = resource, trend = trend))
+
+            assertEquals("INVALID", result(outcome, "run_validity"))
+            assertEquals("NO_VERDICT", result(outcome, "policy_verdict"))
+            val evidence =
+                Json
+                    .parseToJsonElement(outcome.canonicalResult.decodeToString())
+                    .jsonObject
+                    .getValue("evidence")
+                    .jsonArray
+                    .map { it.jsonObject }
+            val check = evidence.single { it.type() == "trend_check" }
+            assertEquals("UNAVAILABLE", check.value("status"))
+            assertEquals(
+                "RUN_NOT_VALID",
+                check
+                    .getValue("reasons")
+                    .jsonArray
+                    .single()
+                    .jsonPrimitive.content,
+            )
+            val findings =
+                Json
+                    .parseToJsonElement(outcome.canonicalResult.decodeToString())
+                    .jsonObject
+                    .getValue("findings")
+                    .jsonArray
+                    .map { it.jsonObject }
+            assertTrue(findings.none { it.type() == "resource_trend" })
+
+            val stored = checkNotNull(store.readAnalysis(input.runId, outcome.analysisId))
+            assertArrayEquals(plan.encodeToByteArray(), Files.readAllBytes(stored.path.resolve("trend-plan.json")))
+        }
+
+    @Test
     fun `standard analysis uses the final two-pass window and commits the complete bundle`() =
         withService { store, service ->
             val input = accept(store, OUT_OF_ORDER_CSV.encodeToByteArray(), "out-of-order.jtl")
@@ -685,6 +814,40 @@ class AnalysisServiceTest {
             .artifacts
             .map { it.path }
             .toSet()
+
+    private fun trendCsv(): String {
+        val rows = List(40) { index -> "${1_767_225_600_000L + index * 1_000L},${if (index == 39) 1_000 else 500},request,true" }
+        return (listOf("timeStamp,elapsed,label,success") + rows).joinToString("\n", postfix = "\n")
+    }
+
+    private fun trendResourceJson(loadHash: String): String {
+        val values = List(40) { (100 + it).toString() }.joinToString(",")
+        return """
+            {
+              "schema_version":"resource-snapshot.v1",
+              "load_input_sha256":"$loadHash",
+              "start_epoch_ms":1767225600000,
+              "step_ms":1000,
+              "point_count":40,
+              "series":[{"id":"cpu","metric":"cpu_used","unit":"percent","entity":"host","role":"system","aggregation":"interval_mean","values":[$values]}],
+              "windows":[{"id":"steady","from_epoch_ms":1767225600000,"to_epoch_ms":1767225639000}],
+              "rules":[{"id":"cpu-diagnostic","series_id":"cpu","unit":"percent","operator":"gt","threshold":1000,"min_consecutive_cells":1,"effect":"diagnostic"}],
+              "provenance":{"source_kind":"fixture","query_semantics":"interval mean","clock_alignment":"unknown"}
+            }
+            """.trimIndent()
+    }
+
+    private fun trendPlanJson(snapshotHash: String): String =
+        """{"schema_version":"trend-plan.v1","resource_snapshot_sha256":"$snapshotHash","checks":[""" +
+            """{"id":"cpu-growth","series_id":"cpu","window_id":"steady","direction":"increase","min_cells":30,""" +
+            """"magnitude_gate":{"min_slope_units_per_second":0.5,"min_split_half_shift_pct":5}}]}"""
+
+    private fun validTrend(bytes: ByteArray): TrendPlanValidation.Valid =
+        assertInstanceOf(TrendPlanValidation.Valid::class.java, validateTrendPlan(ByteArrayInputStream(bytes)))
+
+    private fun JsonObject.type(): String = getValue("type").jsonPrimitive.content
+
+    private fun JsonObject.value(name: String): String = getValue(name).jsonPrimitive.content
 
     private fun analyzeWithSummary(
         service: AnalysisService,

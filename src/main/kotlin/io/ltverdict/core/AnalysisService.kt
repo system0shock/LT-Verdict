@@ -45,6 +45,7 @@ internal data class AnalysisRequest(
     val sourceAcquisition: SourceAcquisition? = null,
     val postgres: PostgresAnalysisInput? = null,
     val capacity: CapacityPlanValidation.Valid? = null,
+    val trend: TrendPlanValidation.Valid? = null,
 )
 
 internal data class AnalysisOutcome(
@@ -92,6 +93,10 @@ internal class AnalysisService(
             val resources = request.resources ?: throw IllegalArgumentException("DIAGNOSTIC_RESOURCE_REQUIRED")
             validateDiagnosticBinding(diagnostics, resources).firstOrNull()?.let { throw IllegalArgumentException(it.code) }
         }
+        request.trend?.let { trend ->
+            val resources = request.resources ?: throw IllegalArgumentException("TREND_RESOURCE_REQUIRED")
+            validateTrendBinding(trend, resources).firstOrNull()?.let { throw IllegalArgumentException(it.code) }
+        }
         val postgres = request.postgres?.let(::revalidatePostgresInput)
 
         val acquisitionHash =
@@ -122,6 +127,7 @@ internal class AnalysisService(
                 acquisitionHash,
                 postgresHash,
                 request.capacity,
+                request.trend,
             )
         val analysisId = sha256Hex(identity)
         store.readAnalysis(request.input.runId, analysisId)?.let { stored ->
@@ -147,6 +153,14 @@ internal class AnalysisService(
                         findings = evaluation.findings + diagnostic.findings,
                         evidence =
                             evaluation.evidence + diagnostic.evidence,
+                    )
+            }
+            val trend = request.trend?.let { trendUnavailable(it.plan, "RUN_NOT_VALID") }
+            trend?.let {
+                evaluation =
+                    evaluation.copy(
+                        findings = evaluation.findings + it.findings,
+                        evidence = evaluation.evidence + it.evidence,
                     )
             }
             request.sourceAcquisition?.let {
@@ -180,6 +194,8 @@ internal class AnalysisService(
             val diagnosticBytes = request.diagnostics?.rawBytes()
             val capacityBytes = capacity?.let { canonicalJson(it.capacityJson) }
             val capacityPlanBytes = request.capacity?.rawBytes()
+            val trendBytes = trend?.let { canonicalJson(it.trendJson) }
+            val trendPlanBytes = request.trend?.rawBytes()
             val directory =
                 store.writeAnalysisAtomically(request.input.runId, analysisId) { staging ->
                     checkCancelled()
@@ -198,6 +214,12 @@ internal class AnalysisService(
                     }
                     capacityBytes?.let {
                         Files.write(staging.resolve(CAPACITY_FILE), it, StandardOpenOption.CREATE_NEW, StandardOpenOption.WRITE)
+                    }
+                    trendPlanBytes?.let {
+                        Files.write(staging.resolve(TREND_PLAN_FILE), it, StandardOpenOption.CREATE_NEW, StandardOpenOption.WRITE)
+                    }
+                    trendBytes?.let {
+                        Files.write(staging.resolve(TREND_FILE), it, StandardOpenOption.CREATE_NEW, StandardOpenOption.WRITE)
                     }
                 }
             return AnalysisOutcome(request.input.runId, analysisId, result, directory)
@@ -406,6 +428,17 @@ internal class AnalysisService(
                     evidence = evaluation.evidence + diagnostic.evidence,
                 )
         }
+        val trend =
+            request.trend?.let {
+                evaluateTrend(it.plan, checkNotNull(request.resources).snapshot, checkNotNull(resourceWindows), checkCancelled)
+            }
+        trend?.let {
+            evaluation =
+                evaluation.copy(
+                    findings = evaluation.findings + it.findings,
+                    evidence = evaluation.evidence + it.evidence,
+                )
+        }
         request.sourceAcquisition?.let {
             evaluation =
                 evaluation.copy(
@@ -437,6 +470,8 @@ internal class AnalysisService(
         val diagnosticBytes = request.diagnostics?.rawBytes()
         val capacityPlanBytes = request.capacity?.rawBytes()
         val capacityBytes = capacity?.let { canonicalJson(it.capacityJson) }
+        val trendPlanBytes = request.trend?.rawBytes()
+        val trendBytes = trend?.let { canonicalJson(it.trendJson) }
         val run =
             runMetadata(
                 request.input,
@@ -447,6 +482,7 @@ internal class AnalysisService(
                 resourceBytes?.let(::sha256Hex),
                 diagnosticBytes?.let(::sha256Hex),
                 capacityPlanBytes?.let(::sha256Hex),
+                trendPlanBytes?.let(::sha256Hex),
             )
         checkCancelled()
         val directory =
@@ -476,6 +512,14 @@ internal class AnalysisService(
                 capacityBytes?.let {
                     checkCancelled()
                     Files.write(staging.resolve(CAPACITY_FILE), it, StandardOpenOption.CREATE_NEW, StandardOpenOption.WRITE)
+                }
+                trendPlanBytes?.let {
+                    checkCancelled()
+                    Files.write(staging.resolve(TREND_PLAN_FILE), it, StandardOpenOption.CREATE_NEW, StandardOpenOption.WRITE)
+                }
+                trendBytes?.let {
+                    checkCancelled()
+                    Files.write(staging.resolve(TREND_FILE), it, StandardOpenOption.CREATE_NEW, StandardOpenOption.WRITE)
                 }
                 writeBuckets(staging.resolve(NORMALIZED_FILE), metrics.oneSecondBuckets, checkCancelled)
                 ROLLUPS.forEach { seconds ->
@@ -610,6 +654,7 @@ private fun runMetadata(
     resourceSha256: String? = null,
     diagnosticSha256: String? = null,
     capacityPlanSha256: String? = null,
+    trendPlanSha256: String? = null,
 ): ByteArray =
     canonicalJson(
         buildJsonObject {
@@ -655,6 +700,15 @@ private fun runMetadata(
                             },
                         )
                     }
+                    trendPlanSha256?.let { sha256 ->
+                        add(
+                            buildJsonObject {
+                                put("type", "trend_plan")
+                                put("path", "analyses/$analysisId/$TREND_PLAN_FILE")
+                                put("sha256", sha256)
+                            },
+                        )
+                    }
                 },
             )
         },
@@ -684,6 +738,8 @@ private const val RESOURCE_FILE = "resource-snapshot.json"
 private const val DIAGNOSTIC_FILE = "correlation-plan.json"
 private const val CAPACITY_PLAN_FILE = "capacity-plan.json"
 private const val CAPACITY_FILE = "capacity.json"
+private const val TREND_PLAN_FILE = "trend-plan.json"
+private const val TREND_FILE = "trend.json"
 private const val POSTGRES_PRE_FILE = "postgres-pre.json"
 private const val POSTGRES_POST_FILE = "postgres-post.json"
 private const val POSTGRES_CONTEXT_FILE = "postgres-context.json"

@@ -387,7 +387,69 @@ export interface PostgresContextEvidence {
   }
 }
 
-export type AnalysisEvidence = MetricSummaryEvidence | PolicyCheckEvidence | DiagnosticEvidence | ResourceSummaryEvidence | WindowPolicySummaryEvidence | ResourcePolicyCheckEvidence | ResourceBindingEvidence | DiagnosticSummaryEvidence | CorrelationPairEvidence | AnomalyCheckEvidence | WindowMetricSummaryEvidence | SourceSummaryEvidence | OpenSearchEvidence | PostgresContextEvidence
+export interface TrendCheckEvidence {
+  id: string
+  type: 'trend_check'
+  check_id: string
+  series_id: string
+  metric: string | null
+  unit: string | null
+  entity: string | null
+  window_id: string
+  window_from_epoch_ms: number | null
+  window_to_epoch_ms: number | null
+  declared_direction: 'increase' | 'decrease' | 'either'
+  status: 'TREND_OBSERVED' | 'NO_MATERIAL_TREND' | 'INSUFFICIENT_CELLS' | 'UNAVAILABLE'
+  min_cells: number
+  expected_cells: number
+  observed_cells: number
+  missing_cells: number
+  longest_gap_cells: number
+  median: string | null
+  slope_per_second: string | null
+  split_half_shift: string | null
+  magnitude_gate: { min_slope_units_per_second: string; min_split_half_shift_pct: string; required_split_half_shift_units: string | null }
+  observed_direction: 'increase' | 'decrease' | 'flat' | null
+  method: 'slope-materiality.v1'
+  uncertainty: 'NOT_ESTIMATED'
+  reasons: string[]
+}
+
+export interface TrendSummaryEvidence {
+  id: string
+  type: 'trend_summary'
+  checks_total: number
+  observed: number
+  not_material: number
+  insufficient: number
+  unavailable: number
+  method: 'slope-materiality.v1'
+  uncertainty: 'NOT_ESTIMATED'
+}
+
+export interface ResourceTrendFinding {
+  id: string
+  type: 'resource_trend'
+  check_id: string
+  series_id: string
+  metric: string
+  unit: string
+  entity: string
+  window_id: string
+  observed_direction: 'increase' | 'decrease' | 'flat'
+  from_epoch_ms: number
+  to_epoch_ms: number
+  expected_cells: number
+  observed_cells: number
+  median: string
+  slope_per_second: string
+  split_half_shift: string
+  effect: 'diagnostic'
+  uncertainty: 'NOT_ESTIMATED'
+  evidence_id: string
+}
+
+export type AnalysisEvidence = MetricSummaryEvidence | PolicyCheckEvidence | DiagnosticEvidence | ResourceSummaryEvidence | WindowPolicySummaryEvidence | ResourcePolicyCheckEvidence | ResourceBindingEvidence | DiagnosticSummaryEvidence | CorrelationPairEvidence | AnomalyCheckEvidence | WindowMetricSummaryEvidence | SourceSummaryEvidence | OpenSearchEvidence | PostgresContextEvidence | TrendCheckEvidence | TrendSummaryEvidence
 
 export interface CapacityStage {
   id: string

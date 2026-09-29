@@ -32,6 +32,7 @@ internal fun analysisIdentity(
     sourceAcquisitionSha256: String? = null,
     postgresInputSha256: String? = null,
     capacity: CapacityPlanValidation.Valid? = null,
+    trend: TrendPlanValidation.Valid? = null,
 ): ByteArray =
     canonicalJson(
         buildJsonObject {
@@ -50,6 +51,10 @@ internal fun analysisIdentity(
             capacity?.let {
                 put("capacity_plan_sha256", it.semanticSha256)
                 put("capacity_plan_version", "capacity-plan.v1")
+            }
+            trend?.let {
+                put("trend_plan_sha256", it.semanticSha256)
+                put("trend_plan_version", "trend-plan.v1")
             }
             put(
                 "engine",
@@ -76,6 +81,7 @@ internal fun analysisIdentity(
                     if (resources != null) modules += listOf("resource-statistics", "window-policy-evaluation")
                     if (diagnostics != null) modules += "load-resource-diagnostics"
                     if (capacity != null) modules += "capacity-stage-evaluation"
+                    if (trend != null) modules += "resource-trend-evaluation"
                     modules.forEach { id ->
                         add(
                             buildJsonObject {
@@ -94,6 +100,7 @@ internal fun analysisIdentity(
                     if (resources != null) put("resources", "resource-snapshot.v1")
                     if (diagnostics != null) put("diagnostics", "correlation-plan.v1")
                     if (capacity != null) put("capacity", "capacity-plan.v1")
+                    if (trend != null) put("trend", "trend-plan.v1")
                 },
             )
             put(
@@ -121,7 +128,7 @@ internal fun analysisIdentity(
                     put("rollup_seconds", buildJsonArray { listOf("10", "30", "60").forEach { add(JsonPrimitive(it)) } })
                 },
             )
-            put("limits", limits(config.metrics, resources != null, diagnostics != null, capacity != null))
+            put("limits", limits(config.metrics, resources != null, diagnostics != null, capacity != null, trend != null))
         },
     )
 
@@ -157,6 +164,7 @@ private fun limits(
     includeResources: Boolean,
     includeDiagnostics: Boolean,
     includeCapacity: Boolean,
+    includeTrend: Boolean,
 ) = buildJsonObject {
     put("input_bytes_max", "4294967296")
     put("policy_bytes_max", "1048576")
@@ -218,6 +226,13 @@ private fun limits(
         put("capacity_guards_max", MAX_CAPACITY_GUARDS.toString())
         put("capacity_bin_millis", "10000")
         put("capacity_minimum_bins", "30")
+    }
+    if (includeTrend) {
+        put("trend_plan_bytes_max", MAX_TREND_PLAN_BYTES.toString())
+        put("trend_json_depth_max", TREND_JSON_DEPTH_MAX.toString())
+        put("trend_checks_max", MAX_TREND_CHECKS.toString())
+        put("trend_min_cells_floor", TREND_MIN_CELLS_FLOOR.toString())
+        put("trend_method", "slope-materiality.v1")
     }
 }
 

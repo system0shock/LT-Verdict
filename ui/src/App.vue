@@ -31,6 +31,7 @@ const inputFile = ref<File | null>(null)
 const resourceFile = ref<File | null>(null)
 const diagnosticFile = ref<File | null>(null)
 const capacityFile = ref<File | null>(null)
+const trendFile = ref<File | null>(null)
 const sourceContextFiles = ref<File[]>([])
 const sourceProfiles = ref<SourceProfile[]>([])
 const sourceProfileIds = ref<string[]>([])
@@ -161,12 +162,19 @@ function selectCapacity(file: File | null) {
   errorMessage.value = ''
 }
 
+function selectTrend(file: File | null) {
+  trendFile.value = file
+  queueBusy.value = false
+  errorMessage.value = ''
+}
+
 function selectSourceProfiles(ids: string[]) {
   sourceProfileIds.value = ids
   if (ids.length) {
     resourceFile.value = null
     diagnosticFile.value = null
     capacityFile.value = null
+    trendFile.value = null
     sourceContextFiles.value = []
   }
   queueBusy.value = false
@@ -284,6 +292,10 @@ async function analyze() {
     errorMessage.value = 'Capacity plan requires a matching resource snapshot.'
     return
   }
+  if (trendFile.value && !resourceFile.value) {
+    errorMessage.value = 'Trend plan requires a matching resource snapshot.'
+    return
+  }
   const revision = ++analysisRevision
   queueBusy.value = false
   errorMessage.value = ''
@@ -319,6 +331,7 @@ async function analyze() {
       postgresPostFile.value,
       pgProfileHtmlFile.value,
       capacityFile.value,
+      trendFile.value,
     )
     uploadProgress.value = 100
     await pollJob(revision)
@@ -595,6 +608,7 @@ function focusPolicy() {
           :resource-file="resourceFile"
           :diagnostic-file="diagnosticFile"
           :capacity-file="capacityFile"
+          :trend-file="trendFile"
           :source-context-files="sourceContextFiles"
           :source-profiles="httpSourceProfiles"
           :source-profile-ids="sourceProfileIds"
@@ -618,6 +632,7 @@ function focusPolicy() {
           @resources="selectResources"
           @diagnostics="selectDiagnostics"
           @capacity="selectCapacity"
+          @trend="selectTrend"
           @source-contexts="selectSourceContexts"
           @source-profiles="selectSourceProfiles"
           @postgres-profile="selectPostgresProfile"
@@ -693,6 +708,18 @@ function focusPolicy() {
             :href="`/api/runs/${encodeURIComponent(result.run_id)}/analyses/${selectedAnalysisId}/capacity`"
             download
           >Download capacity result</a>
+          <a
+            v-if="result.evidence.some(item => item.type === 'trend_summary')"
+            class="button-secondary"
+            :href="`/api/runs/${encodeURIComponent(result.run_id)}/analyses/${selectedAnalysisId}/trend-plan`"
+            download
+          >Download trend plan</a>
+          <a
+            v-if="result.evidence.some(item => item.type === 'trend_summary')"
+            class="button-secondary"
+            :href="`/api/runs/${encodeURIComponent(result.run_id)}/analyses/${selectedAnalysisId}/trend`"
+            download
+          >Download trend result</a>
           <a
             v-for="(context, index) in downloadableSourceContexts"
             :key="context.profile_id"

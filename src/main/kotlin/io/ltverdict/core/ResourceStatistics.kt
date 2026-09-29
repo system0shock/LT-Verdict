@@ -74,12 +74,12 @@ internal fun evaluateResources(
     return ResourceEvaluation(verdicts, reasons.distinct(), findings, summaries + checks)
 }
 
-private data class IndexedValue(
+internal data class IndexedValue(
     val cellIndex: Int,
     val value: BigDecimal,
 )
 
-private data class Statistics(
+internal data class Statistics(
     val min: BigDecimal?,
     val max: BigDecimal?,
     val mean: BigDecimal?,
@@ -93,6 +93,8 @@ private data class Statistics(
     val sampleStandardDeviation: BigDecimal?,
     val slopePerSecond: BigDecimal?,
     val splitHalfShift: BigDecimal?,
+    val firstHalfCells: Int,
+    val secondHalfCells: Int,
 )
 
 private data class RuleOutcome(
@@ -155,13 +157,13 @@ private fun resourceSummary(
     }
 }
 
-private fun statistics(
+internal fun statistics(
     observed: List<IndexedValue>,
     expectedCells: Int,
     stepMillis: Long,
     checkCancelled: () -> Unit,
 ): Statistics {
-    if (observed.isEmpty()) return Statistics(null, null, null, null, null, null, null, null, null, null, null, null, null)
+    if (observed.isEmpty()) return Statistics(null, null, null, null, null, null, null, null, null, null, null, null, null, 0, 0)
     checkCancelled()
     val ordered = observed.map(IndexedValue::value).sorted()
     checkCancelled()
@@ -230,6 +232,8 @@ private fun statistics(
         sampleStandardDeviation,
         slope,
         splitHalf,
+        firstHalf.size,
+        secondHalf.size,
     )
 }
 
@@ -390,16 +394,17 @@ private fun kotlinx.serialization.json.JsonObjectBuilder.putDecimal(
     put(name, value?.let { JsonPrimitive(canonicalDecimal(it)) } ?: JsonNull)
 }
 
-private fun ResourceSnapshotV1.cellIndex(epochMillis: Long): Int = ((epochMillis - startEpochMillis) / stepMillis).toInt()
+internal fun ResourceSnapshotV1.cellIndex(epochMillis: Long): Int = ((epochMillis - startEpochMillis) / stepMillis).toInt()
 
-private fun ResourceSnapshotV1.cellStart(index: Int): Long = Math.addExact(startEpochMillis, Math.multiplyExact(index.toLong(), stepMillis))
+internal fun ResourceSnapshotV1.cellStart(index: Int): Long =
+    Math.addExact(startEpochMillis, Math.multiplyExact(index.toLong(), stepMillis))
 
-private fun resourceId(
+internal fun resourceId(
     prefix: String,
     vararg parts: String,
 ): String = "$prefix-${sha256Hex(parts.joinToString("\u0000").encodeToByteArray())}"
 
-private fun Int.bd(): BigDecimal = BigDecimal.valueOf(toLong())
+internal fun Int.bd(): BigDecimal = BigDecimal.valueOf(toLong())
 
 private fun JsonObject.string(name: String): String = getValue(name).jsonPrimitive.content
 

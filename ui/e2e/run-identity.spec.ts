@@ -14,7 +14,6 @@ async function fixtureApi(page: Page, listed: typeof runs) {
     if (path === '/api/bootstrap') body = { csrf_token: 'ui-test', max_upload_bytes: 1000000 }
     else if (method === 'GET' && path === '/api/jenkins') body = { profiles: [] }
     else if (method === 'GET' && path === '/api/grafana') body = { profiles: [] }
-    else if (method === 'GET' && path === '/api/jobs') body = { jobs: [] }
     else if (path === '/api/sources') body = { profiles: [] }
     else if (path === '/api/baseline') body = { baseline: null }
     else if (path === '/api/runs') body = { runs: listed, next_after: null }

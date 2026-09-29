@@ -1,0 +1,15 @@
+{
+  "schema_version": "policy.v1",
+  "policy_id": "slice1-fail",
+  "rules": [
+    {
+      "id": "overall-errors",
+      "metric": "error_rate_ratio",
+      "operator": "lte",
+      "threshold": 0.1,
+      "scope": {
+        "kind": "overall"
+      }
+    }
+  ]
+}

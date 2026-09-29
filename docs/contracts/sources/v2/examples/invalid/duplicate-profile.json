@@ -1,0 +1,7 @@
+{
+  "schema_version": "source-request.v2",
+  "profile_ids": ["metrics", "metrics"],
+  "start_epoch_ms": 1767225600000,
+  "end_epoch_ms": 1767225660000,
+  "step_ms": 1000
+}

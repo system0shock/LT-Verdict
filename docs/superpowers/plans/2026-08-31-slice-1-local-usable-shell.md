@@ -57,7 +57,7 @@ TypeScript 6.0.2, Vite 8.2.2, native CSS Grid, Playwright 1.62.1.
 | HTTP | Ktor BOM/server `3.5.2` | Core, Netty, content negotiation, JSON, test host |
 | JSON | kotlinx.serialization `1.11.0` | Runtime contracts and canonical JSON input tree |
 | Metrics | HdrHistogram `2.2.2` | `PackedHistogram`, no home-grown percentile code |
-| CSV candidate | uniVocity parsers `2.9.1` | Test-only until Task 2 gate passes; exactly one production CSV parser afterward |
+| CSV parser | uniVocity parsers `2.9.1` | One production parser; a streaming quote-parity `Reader` guard rejects an unmatched quote at EOF |
 | Logging | slf4j-simple `2.0.18` | One local-process backend |
 | JVM tests | JUnit BOM `6.1.3` | Jupiter engine and assertions |
 | Kotlin lint | ktlint Gradle plugin `14.2.0` | Build-time only |
@@ -69,9 +69,11 @@ TypeScript 6.0.2, Vite 8.2.2, native CSS Grid, Playwright 1.62.1.
 | Browser tests | `@playwright/test` `1.62.1`, `@axe-core/playwright` `4.13.0` | Chromium flow, security and accessibility |
 | Schema test | Ajv `8.18.0` | Dev-only policy schema/example check; not shipped to browser |
 
-If the Task 2 CSV gate fails, stop before any `src/main` parser code, record the
-failure in ADR 0002 and amend this plan through review. Do not silently add a
-second CSV library.
+The direct Task 2 uniVocity configuration accepted an unmatched quote at EOF,
+so parser production code remained stopped. The bounded amendment is one
+streaming quote-parity `Reader` guard; uniVocity remains the only CSV parser.
+If the amended gate fails, stop before any `src/main` parser code, record the
+failure in ADR 0002 and do not silently add a second CSV library.
 
 ## Result-Affecting Decisions to Freeze
 
@@ -292,6 +294,9 @@ contract, ADR, CI and documentation paths are named in their owning tasks.
   dynamic/changing versions.
 - Wrapper uses Gradle 9.5.0 `bin` distribution and the fixed SHA-256 above.
 - Start `com.univocity:univocity-parsers:2.9.1` as `testImplementation` only.
+- Wrap the spike input in one streaming `Reader` that toggles parity for each
+  raw `"` and throws at EOF when the count is odd. This covers the one strictness
+  gap in uniVocity 2.9.1 without a second parser or retained input.
 - A dedicated `csvSpike` `Test` task uses `-Xmx256m`, one fork and only
   `CsvDependencySpikeTest`.
 
@@ -325,7 +330,9 @@ contract, ADR, CI and documentation paths are named in their owning tasks.
   .\gradlew.bat --no-daemon csvSpike
   ```
 
-  Expected: all five cases pass within the task limits.
+  Expected: direct uniVocity parsing exposes the unmatched-quote EOF gap; the
+  amended uniVocity-plus-guard pipeline passes all five cases within the task
+  limits.
 
 - [ ] **Step 4: Promote the one proven parser and accept ADR 0002**
 
@@ -815,8 +822,8 @@ retain response data, headers, assertions or raw XML.
 
 - [ ] **Step 2: Implement CSV and obtain GREEN**
 
-  Configure the already-approved uniVocity parser once in this file. Emit each
-  row immediately; do not collect input rows.
+  Configure the already-approved uniVocity parser and quote-parity `Reader`
+  guard once in this file. Emit each row immediately; do not collect input rows.
 
   ```powershell
   .\gradlew.bat test --tests "io.ltverdict.ingest.JtlCsvParserTest" --tests "io.ltverdict.ingest.JtlGoldenTest"

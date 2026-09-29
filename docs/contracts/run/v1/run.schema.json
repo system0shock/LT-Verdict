@@ -66,6 +66,56 @@
     }
   },
   "additionalProperties": false,
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "analysis_mode": {
+            "const": "capacity_step"
+          }
+        },
+        "required": [
+          "analysis_mode"
+        ]
+      },
+      "then": {
+        "properties": {
+          "inputs": {
+            "allOf": [
+              {
+                "contains": {
+                  "properties": { "type": { "const": "resource_snapshot" } },
+                  "required": ["type"]
+                }
+              }
+            ],
+            "contains": {
+              "properties": {
+                "type": {
+                  "const": "capacity_plan"
+                }
+              },
+              "required": [
+                "type"
+              ]
+            }
+          }
+        }
+      },
+      "else": {
+        "properties": {
+          "inputs": {
+            "not": {
+              "contains": {
+                "properties": { "type": { "const": "capacity_plan" } },
+                "required": ["type"]
+              }
+            }
+          }
+        }
+      }
+    }
+  ],
   "examples": [
     {
       "schema_version": "run.v1",

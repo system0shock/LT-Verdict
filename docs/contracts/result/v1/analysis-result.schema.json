@@ -56,9 +56,38 @@
       "items": {
         "type": "object"
       }
+    },
+    "capacity_summary": {
+      "type": "object"
     }
   },
   "additionalProperties": false,
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "analysis_mode": {
+            "const": "capacity_step"
+          }
+        },
+        "required": [
+          "analysis_mode"
+        ]
+      },
+      "then": {
+        "required": [
+          "capacity_summary"
+        ]
+      },
+      "else": {
+        "not": {
+          "required": [
+            "capacity_summary"
+          ]
+        }
+      }
+    }
+  ],
   "examples": [
     {
       "schema_version": "analysis-result.v1",

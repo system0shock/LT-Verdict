@@ -1,0 +1,33 @@
+{
+  "overall": {
+    "sample_count": 4,
+    "error_count": 1,
+    "latency_ms": { "p50": 1, "p95": 107, "p99": 107, "max": 107 }
+  },
+  "transactions": [
+    {
+      "group_path": [],
+      "label": "checkout",
+      "kind": "GATLING_GROUP",
+      "sample_count": 1,
+      "error_count": 1,
+      "latency_ms": { "p50": 139, "p95": 139, "p99": 139, "max": 139 }
+    },
+    {
+      "group_path": ["checkout"],
+      "label": "catalog",
+      "kind": "GATLING_REQUEST",
+      "sample_count": 3,
+      "error_count": 0,
+      "latency_ms": { "p50": 3, "p95": 107, "p99": 107, "max": 107 }
+    },
+    {
+      "group_path": ["checkout"],
+      "label": "missing",
+      "kind": "GATLING_REQUEST",
+      "sample_count": 1,
+      "error_count": 1,
+      "latency_ms": { "p50": 1, "p95": 1, "p99": 1, "max": 1 }
+    }
+  ]
+}

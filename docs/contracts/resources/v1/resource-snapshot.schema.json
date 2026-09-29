@@ -1,0 +1,71 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://lt-verdict.local/contracts/resources/v1/resource-snapshot.schema.json",
+  "title": "LT Verdict resource snapshot v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "load_input_sha256", "start_epoch_ms", "step_ms", "point_count", "series"],
+  "properties": {
+    "schema_version": { "const": "resource-snapshot.v1" },
+    "load_input_sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "start_epoch_ms": { "type": "integer", "minimum": 0, "maximum": 253402300799999 },
+    "step_ms": { "type": "integer", "minimum": 1000, "maximum": 60000, "multipleOf": 1000 },
+    "point_count": { "type": "integer", "minimum": 1, "maximum": 100000 },
+    "series": { "type": "array", "minItems": 1, "maxItems": 64, "items": { "$ref": "#/$defs/series" } },
+    "windows": { "type": "array", "maxItems": 64, "items": { "$ref": "#/$defs/window" } },
+    "rules": { "type": "array", "maxItems": 256, "items": { "$ref": "#/$defs/rule" } },
+    "provenance": { "$ref": "#/$defs/provenance" }
+  },
+  "$defs": {
+    "identifier": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[^\\u0000-\\u001F\\u007F-\\u009F]+$", "description": "Runtime limit is 128 UTF-8 bytes." },
+    "series": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "metric", "unit", "entity", "role", "aggregation", "values"],
+      "properties": {
+        "id": { "$ref": "#/$defs/identifier" },
+        "metric": { "$ref": "#/$defs/identifier" },
+        "unit": { "$ref": "#/$defs/identifier" },
+        "entity": { "$ref": "#/$defs/identifier" },
+        "role": { "enum": ["system", "generator"] },
+        "aggregation": { "enum": ["interval_mean", "interval_rate"] },
+        "labels": { "type": "object", "maxProperties": 16, "propertyNames": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[^\\u0000-\\u001F\\u007F-\\u009F]+$" }, "additionalProperties": { "type": "string", "minLength": 1, "maxLength": 512, "pattern": "^[^\\u0000-\\u001F\\u007F-\\u009F]+$" }, "description": "Runtime label key/value limits are 128/512 UTF-8 bytes." },
+        "values": { "type": "array", "minItems": 1, "maxItems": 100000, "items": { "type": ["number", "null"], "minimum": -1000000000000000000, "maximum": 1000000000000000000 }, "description": "Runtime additionally enforces 32 significant digits and 12 fractional digits after canonical expansion." }
+      }
+    },
+    "window": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "from_epoch_ms", "to_epoch_ms"],
+      "properties": {
+        "id": { "$ref": "#/$defs/identifier" },
+        "from_epoch_ms": { "type": "integer", "minimum": 0, "maximum": 253402300799999 },
+        "to_epoch_ms": { "type": "integer", "minimum": 0, "maximum": 253402300799999 }
+      }
+    },
+    "rule": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "series_id", "unit", "operator", "threshold", "min_consecutive_cells", "effect"],
+      "properties": {
+        "id": { "$ref": "#/$defs/identifier" },
+        "series_id": { "$ref": "#/$defs/identifier" },
+        "unit": { "$ref": "#/$defs/identifier" },
+        "operator": { "enum": ["gt", "lt"] },
+        "threshold": { "type": "number", "minimum": -1000000000000000000, "maximum": 1000000000000000000, "description": "Runtime additionally enforces 32 significant digits and 12 fractional digits after canonical expansion." },
+        "min_consecutive_cells": { "type": "integer", "minimum": 1, "maximum": 100000 },
+        "effect": { "enum": ["diagnostic", "sla"] }
+      }
+    },
+    "provenance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["source_kind", "query_semantics", "clock_alignment"],
+      "properties": {
+        "source_kind": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "query_semantics": { "type": "string", "minLength": 1, "maxLength": 512 },
+        "clock_alignment": { "type": "string", "minLength": 1, "maxLength": 128 }
+      }
+    }
+  }
+}

@@ -1,0 +1,79 @@
+{
+  "overall": {
+    "sample_count": 3,
+    "error_count": 1,
+    "latency_ms": {
+      "p50": 1,
+      "p95": 26,
+      "p99": 26,
+      "max": 26
+    }
+  },
+  "transactions": [
+    {
+      "group_path": [],
+      "label": "Checkout scenario",
+      "kind": "JMETER_CONTAINER",
+      "sample_count": 1,
+      "error_count": 1,
+      "latency_ms": {
+        "p50": 28,
+        "p95": 28,
+        "p99": 28,
+        "max": 28
+      }
+    },
+    {
+      "group_path": ["Checkout scenario"],
+      "label": "HTTP checkout",
+      "kind": "JMETER_CONTAINER",
+      "sample_count": 1,
+      "error_count": 0,
+      "latency_ms": {
+        "p50": 28,
+        "p95": 28,
+        "p99": 28,
+        "max": 28
+      }
+    },
+    {
+      "group_path": ["Checkout scenario", "HTTP checkout"],
+      "label": "http://127.0.0.1:18081/start",
+      "kind": "JMETER_SAMPLER",
+      "sample_count": 1,
+      "error_count": 0,
+      "latency_ms": {
+        "p50": 26,
+        "p95": 26,
+        "p99": 26,
+        "max": 26
+      }
+    },
+    {
+      "group_path": ["Checkout scenario", "HTTP checkout"],
+      "label": "http://127.0.0.1:18081/final",
+      "kind": "JMETER_SAMPLER",
+      "sample_count": 1,
+      "error_count": 0,
+      "latency_ms": {
+        "p50": 1,
+        "p95": 1,
+        "p99": 1,
+        "max": 1
+      }
+    },
+    {
+      "group_path": ["Checkout scenario"],
+      "label": "POST /order",
+      "kind": "JMETER_SAMPLER",
+      "sample_count": 1,
+      "error_count": 1,
+      "latency_ms": {
+        "p50": 0,
+        "p95": 0,
+        "p99": 0,
+        "max": 0
+      }
+    }
+  ]
+}

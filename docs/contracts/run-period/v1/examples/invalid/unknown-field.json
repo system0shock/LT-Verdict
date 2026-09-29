@@ -1,0 +1,11 @@
+{
+  "schema_version": "run-period.v1",
+  "load_input_sha256": "9b74c9897bac770ffc029102a200c5de9b74c9897bac770ffc029102a200c5de",
+  "recognition_method": "sample-timestamps.v1",
+  "first_sample_epoch_millis": 1767225600000,
+  "last_sample_epoch_millis": 1767225660000,
+  "longest_idle_gap_millis": null,
+  "idle_gap_count": 0,
+  "status": "RECOGNIZED",
+  "token": "not-allowed"
+}

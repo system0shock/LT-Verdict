@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://lt-verdict.local/schemas/sources/v1/source-request.schema.json",
+  "title": "LT Verdict source-request.v1",
+  "description": "Backend additionally checks end > start, whole cells, timestamp and cell limits, and configured profile identity. Metric profiles (prometheus, victoria_metrics, influxdb) also require a whole-second step from 1000 to 60000, enforced before acquisition; opensearch profiles accept any step of at least 1000 that divides the range.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "profile_id", "start_epoch_ms", "end_epoch_ms", "step_ms"],
+  "properties": {
+    "schema_version": { "const": "source-request.v1" },
+    "profile_id": { "type": "string", "minLength": 1, "maxLength": 128 },
+    "start_epoch_ms": { "type": "integer", "minimum": 0, "maximum": 253402300799998 },
+    "end_epoch_ms": { "type": "integer", "minimum": 1, "maximum": 253402300799999 },
+    "step_ms": { "type": "integer", "minimum": 1000, "maximum": 253402300799999 }
+  }
+}

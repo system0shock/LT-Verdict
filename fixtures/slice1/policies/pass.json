@@ -1,0 +1,15 @@
+{
+  "schema_version": "policy.v1",
+  "policy_id": "slice1-pass",
+  "rules": [
+    {
+      "id": "overall-p95",
+      "metric": "response_time_p95_ms",
+      "operator": "lte",
+      "threshold": 100,
+      "scope": {
+        "kind": "overall"
+      }
+    }
+  ]
+}

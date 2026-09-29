@@ -1,0 +1,20 @@
+{
+  "schema_version": "source-connections.v1",
+  "connections": [{
+    "id": "local-influxdb",
+    "source_kind": "influxdb",
+    "transport": "direct",
+    "base_url": "http://127.0.0.1:8086",
+    "database": "metrics",
+    "auth": { "type": "none" },
+    "queries": [{
+      "id": "cpu", "expression": "SELECT mean(\"cpu\") AS \"value\" FROM \"host\" WHERE time >= $__start AND time < $__end GROUP BY time($__interval, $__offset) fill(null)",
+      "metric": "cpu_used", "unit": "ratio", "entity": "host",
+      "role": "system", "aggregation": "interval_mean"
+    }],
+    "rules": [{
+      "id": "cpu-high", "series_id": "cpu", "unit": "ratio", "operator": "gt",
+      "threshold": 0.8, "min_consecutive_cells": 2, "effect": "sla"
+    }]
+  }]
+}

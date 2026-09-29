@@ -1,0 +1,53 @@
+{
+  "overall": {
+    "sample_count": 3,
+    "error_count": 1,
+    "latency_ms": {
+      "p50": 84,
+      "p95": 496,
+      "p99": 496,
+      "max": 496
+    }
+  },
+  "transactions": [
+    {
+      "group_path": [],
+      "label": "GET /health",
+      "kind": "JMETER_SAMPLER",
+      "sample_count": 1,
+      "error_count": 0,
+      "latency_ms": {
+        "p50": 496,
+        "p95": 496,
+        "p99": 496,
+        "max": 496
+      }
+    },
+    {
+      "group_path": [],
+      "label": "GET /items, detail",
+      "kind": "JMETER_SAMPLER",
+      "sample_count": 1,
+      "error_count": 1,
+      "latency_ms": {
+        "p50": 62,
+        "p95": 62,
+        "p99": 62,
+        "max": 62
+      }
+    },
+    {
+      "group_path": [],
+      "label": "POST /orders",
+      "kind": "JMETER_SAMPLER",
+      "sample_count": 1,
+      "error_count": 0,
+      "latency_ms": {
+        "p50": 84,
+        "p95": 84,
+        "p99": 84,
+        "max": 84
+      }
+    }
+  ]
+}

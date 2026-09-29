@@ -1,0 +1,33 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://lt-verdict.local/schemas/run-period/v1/run-period.schema.json",
+  "title": "LT Verdict run-period.v1",
+  "description": "Run-level recognition artifact derived from load sample timestamps only. Idle gaps are threshold-independent counts of empty one-second sample buckets between the lowest and highest occupied bucket; comparison against a requested max_idle_gap_ms happens later, at window derivation. The backend additionally enforces cross-field consistency (RECOGNIZED implies last >= first; UNRECOGNIZED statuses imply zeroed period fields, null longest gap, and zero count; longest_idle_gap_millis is null exactly when idle_gap_count is 0) and canonical byte form bound to the actual hash of inputs/source.bin.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "load_input_sha256",
+    "recognition_method",
+    "first_sample_epoch_millis",
+    "last_sample_epoch_millis",
+    "longest_idle_gap_millis",
+    "idle_gap_count",
+    "status"
+  ],
+  "properties": {
+    "schema_version": { "const": "run-period.v1" },
+    "load_input_sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "recognition_method": { "const": "sample-timestamps.v1" },
+    "first_sample_epoch_millis": { "type": "integer", "minimum": 0, "maximum": 253402300799999 },
+    "last_sample_epoch_millis": { "type": "integer", "minimum": 0, "maximum": 253402300799999 },
+    "longest_idle_gap_millis": {
+      "anyOf": [
+        { "type": "integer", "minimum": 1000, "maximum": 253402300799999 },
+        { "type": "null" }
+      ]
+    },
+    "idle_gap_count": { "type": "integer", "minimum": 0, "maximum": 2147483647 },
+    "status": { "enum": ["RECOGNIZED", "UNRECOGNIZED_INVALID_INPUT", "UNRECOGNIZED_NO_SAMPLES"] }
+  }
+}

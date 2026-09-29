@@ -249,7 +249,7 @@ server design и не включаются как скрытая настрой�
 | --- | --- | --- | --- |
 | JMeter JTL | Обязательный load artifact | Jenkins artifact или файл | Да |
 | Gatling `simulation.log` | Обязательный load artifact | Jenkins artifact или файл | Да |
-| VictoriaMetrics | Raw PromQL time series | Direct REST | Snapshot file |
+| VictoriaMetrics | Raw PromQL time series | REST напрямую или через Grafana proxy | Snapshot file |
 | Prometheus | Raw PromQL time series | Direct REST | Snapshot file |
 | InfluxDB | Raw time series | Direct REST | Snapshot file |
 | PostgreSQL | Pre/post и online snapshots | SQL connector | Exported files |
@@ -258,14 +258,18 @@ server design и не включаются как скрытая настрой�
 | OpenShift metrics | Platform analysis pack | VM/Prometheus | Metrics snapshot |
 | Load generator metrics | Validity and capacity guard | VM/Prometheus | Metrics snapshot |
 | OpenSearch 2.6 | Errors за окно прогона | Direct REST | JSON snapshot |
-| Grafana | Links и optional rendered evidence | Read-only API/URL | PNG/link upload |
+| Grafana | Transport proxy, links и optional rendered evidence | Read-only API/URL | Metrics snapshot или PNG/link upload по роли |
 | Jenkins | Trigger и transport | Remote API | Manual artifact upload |
 
 VictoriaMetrics и Prometheus используют один PromQL connector contract, но
 имеют независимые connection profiles.
 
-Grafana не является источником raw metrics. Raw data берутся напрямую из
-VictoriaMetrics, Prometheus или InfluxDB.
+Grafana не является первичным источником raw metrics. Raw data принадлежат
+VictoriaMetrics, Prometheus или InfluxDB; для VM допускается transport через
+Grafana API, когда прямой доступ отсутствует. Dashboard rendering и panel
+transformations не подменяют metric semantics. Источник данных и маршрут
+получения различаются в provenance; адаптация endpoint/auth к стенду отделена
+от статистического анализа сохранённых snapshots.
 
 Для каждой строки source matrix фиксируется versioned snapshot/artifact schema.
 Connector output можно сохранить и затем загрузить вручную. При одинаковых
@@ -837,7 +841,12 @@ optional image, но локальный renderer остаётся запасны
 
 ### 18.3. Сравнение двух прогонов
 
-В MVP пользователь вручную выбирает один baseline. Прогоны выравниваются:
+В MVP пользователь вручную назначает один baseline либо явно запускает
+статистический автовыбор одного реального прогона из выбранной сопоставимой
+серии. Ручной режим — стартовый; оба режима закрепляют конкретный сохранённый
+analysis до явной замены. Алгоритм, provenance и ограничения определены в
+[ADR 0004](../../adr/0004-local-baseline-selection.md).
+Прогоны выравниваются:
 
 1. по общим подтверждённым stages;
 2. иначе по relative time от фактического начала нагрузки.
@@ -1284,7 +1293,8 @@ MVP design считается реализованным только при в�
 20. Capacity policy отличает `PASS`, `FAIL`, `NO_POLICY` и `NO_VERDICT` по
     verified bounds относительно `required_capacity`.
 21. `capacity_knee` явно помечен как diagnostic, а не canonical maximum.
-22. Текущий run сравнивается с одним manual baseline без wall-clock stretching.
+22. Текущий run сравнивается с одним фиксированным baseline без wall-clock
+    stretching; доступны ручное назначение и статистический автовыбор по ADR 0004.
 23. N-run table по умолчанию показывает 10 локальных comparable RunBundles и
     не выполняет external queries.
 24. JSON, self-contained HTML, AsciiDoc и Confluence-ready outputs создаются из

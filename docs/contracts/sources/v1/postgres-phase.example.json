@@ -1,0 +1,61 @@
+{
+  "schema_version": "postgres-phase.v1",
+  "phase": "pre",
+  "profile_id": "pg",
+  "source_database_id": "test-db",
+  "profile_revision_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "pre_sha256": null,
+  "capture_started_epoch_ms": 100,
+  "capture_ended_epoch_ms": 200,
+  "server_version": "15.0",
+  "configuration": {
+    "work_mem": "4096"
+  },
+  "tables": [
+    {
+      "schema": "public",
+      "table": "orders",
+      "columns": ["id", "status"],
+      "column_types": ["int8", "text"],
+      "stable_key": ["id"],
+      "row_limit": 10000,
+      "byte_limit": 1048576,
+      "status": "COMPLETE",
+      "reason": null,
+      "row_count": 1,
+      "rows": [["1", "new"]]
+    }
+  ],
+  "statements": {
+    "status": "COMPLETE",
+    "reason": null,
+    "extension_version": "1.10",
+    "stats_reset": "2026-01-01T00:00:00Z",
+    "dealloc": 0,
+    "row_limit": 10000,
+    "rows": [
+      {
+        "dbid": "1",
+        "userid": "10",
+        "queryid": "42",
+        "toplevel": true,
+        "calls": 1,
+        "total_exec_time": 2.5,
+        "rows": 1,
+        "shared_blks_hit": 2,
+        "shared_blks_read": 0,
+        "temp_blks_written": 0
+      }
+    ]
+  },
+  "pg_profile": {
+    "status": "DEGRADED",
+    "reason": "PG_PROFILE_UNAVAILABLE",
+    "extension_version": null,
+    "statements_reset": null,
+    "server_id": null,
+    "start_sample_id": null,
+    "end_sample_id": null,
+    "report_sha256": null
+  }
+}

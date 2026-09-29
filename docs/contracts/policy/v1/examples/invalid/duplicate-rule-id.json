@@ -1,0 +1,24 @@
+{
+  "schema_version": "policy.v1",
+  "policy_id": "duplicate-rule-id",
+  "rules": [
+    {
+      "id": "latency",
+      "metric": "response_time_p95_ms",
+      "operator": "lte",
+      "threshold": 100,
+      "scope": {
+        "kind": "overall"
+      }
+    },
+    {
+      "id": "latency",
+      "metric": "response_time_p99_ms",
+      "operator": "lte",
+      "threshold": 200,
+      "scope": {
+        "kind": "overall"
+      }
+    }
+  ]
+}

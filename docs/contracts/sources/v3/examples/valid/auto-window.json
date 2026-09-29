@@ -1,0 +1,10 @@
+{
+  "schema_version": "source-request.v3",
+  "profile_ids": ["errors", "metrics"],
+  "window": {
+    "origin": "auto",
+    "step_ms": 15000,
+    "margin_ms": 60000,
+    "max_idle_gap_ms": 1800000
+  }
+}

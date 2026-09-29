@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testResults version="1.2">
+<sample t="28" it="59" lt="0" ct="13" ts="1788212136719" s="false" lb="Checkout scenario" rc="500" rm="Number of samples in transaction : 2, number of failing samples : 1" tn="fixture 1-1" dt="" by="211" sby="352" ng="1" na="1">
+  <httpSample t="28" it="0" lt="24" ct="13" ts="1788212136776" s="true" lb="HTTP checkout" rc="200" rm="OK" tn="fixture 1-1" dt="" by="135" sby="234" ng="1" na="1">
+    <httpSample t="26" it="0" lt="24" ct="13" ts="1788212136776" s="true" lb="http://127.0.0.1:18081/start" rc="302" rm="Found" tn="fixture 1-1" dt="" by="78" sby="117" ng="1" na="1">
+      <java.net.URL>http://127.0.0.1:18081/start</java.net.URL>
+    </httpSample>
+    <httpSample t="1" it="0" lt="1" ct="1" ts="1788212136803" s="true" lb="http://127.0.0.1:18081/final" rc="200" rm="OK" tn="fixture 1-1" dt="" by="57" sby="117" ng="1" na="1">
+      <java.net.URL>http://127.0.0.1:18081/final</java.net.URL>
+    </httpSample>
+    <java.net.URL>http://127.0.0.1:18081/final</java.net.URL>
+  </httpSample>
+  <httpSample t="0" it="0" lt="0" ct="0" ts="1788212136805" s="false" lb="POST /order" rc="500" rm="Internal Server Error" tn="fixture 1-1" dt="" by="76" sby="118" ng="1" na="1">
+    <java.net.URL>http://127.0.0.1:18081/status</java.net.URL>
+  </httpSample>
+</sample>
+
+</testResults>

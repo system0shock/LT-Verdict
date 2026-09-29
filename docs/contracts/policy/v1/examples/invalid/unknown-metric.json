@@ -1,0 +1,15 @@
+{
+  "schema_version": "policy.v1",
+  "policy_id": "unknown-metric",
+  "rules": [
+    {
+      "id": "median-latency",
+      "metric": "response_time_p50_ms",
+      "operator": "lte",
+      "threshold": 100,
+      "scope": {
+        "kind": "overall"
+      }
+    }
+  ]
+}

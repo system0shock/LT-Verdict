@@ -525,7 +525,7 @@ function focusPolicy() {
               @click="selectRun(run)"
             >
               <span>{{ run.original_filename }}</span>
-              <small>{{ run.source_type }}</small>
+              <small>{{ run.source_type }} · {{ run.sha256.slice(0, 8) }}</small>
             </button>
           </li>
           <li

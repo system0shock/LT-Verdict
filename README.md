@@ -19,7 +19,17 @@ Capacity доступен по явным ступеням и SLA с generator g
 поиск knee не реализован. По явному `trend-plan.v1` доступен L0-детектор роста
 ресурсных метрик в пределах SLA: это наблюдение с объявленной величиной, а не
 статистический вывод и не диагноз. Статистическая неопределённость raw-оценок
-пока не оценивается (`NOT_ESTIMATED`).
+пока не оценивается (`NOT_ESTIMATED`). Исключение — выбор главных корреляционных
+находок: `correlation_candidate` публикуется только после moving-block bootstrap
+p-values с одной поправкой Holm (`mbb-lag-max-holm.v1`, одно окно и одна
+outcome-метрика, до 16 гипотез, 30–240 ячеек; вне полосы — `UNAVAILABLE`).
+Статистическая приёмка v1 не пройдена: USEFULNESS FAIL, 8 из 28 конфигураций
+по шуму ([результаты](docs/statistical-validation-results-v1.md)). Диапазон шума
+корреляций 7.7–13.2% (гейт ≤5% не пройден) измерен в Python/NumPy development-
+прогоне на раскрытых seeds; продуктовый JVM-код (`java.util.Random`) в нём не
+участвовал и отдельно не калибровался, независимой приёмки нет
+([контракт](docs/contracts/diagnostics/v1/correlation-headline-selection.md)).
+Шум сравнения двух прогонов (T02 36.8%, T03 5.4%) остаётся.
 
 Источники реализованы: PromQL/VictoriaMetrics/Grafana proxy, InfluxQL,
 OpenSearch и PostgreSQL pre/post. Поддерживаются несколько источников,

@@ -24,6 +24,46 @@ class ModelStudioAdvisoryRunnerTest {
     }
 
     @Test
+    fun `windows canonicalizes mixed case host environment names`() {
+        assertEquals(mapOf("PATH" to "X"), hostEnvironmentForChild(mapOf("Path" to "X"), windows = true))
+    }
+
+    @Test
+    fun `windows exact host environment names take precedence`() {
+        assertEquals(
+            mapOf("PATH" to "A", "SystemRoot" to "R1"),
+            hostEnvironmentForChild(
+                mapOf("PATH" to "A", "Path" to "B", "SystemRoot" to "R1", "systemroot" to "R2"),
+                windows = true,
+            ),
+        )
+    }
+
+    @Test
+    fun `windows chooses the first sorted non exact variant`() {
+        assertEquals(
+            mapOf("PATH" to "B"),
+            hostEnvironmentForChild(mapOf("path" to "C", "Path" to "B"), windows = true),
+        )
+    }
+
+    @Test
+    fun `non windows retains only exact host environment names`() {
+        assertEquals(
+            mapOf("PATH" to "A"),
+            hostEnvironmentForChild(mapOf("Path" to "X", "PATH" to "A"), windows = false),
+        )
+        assertEquals(emptyMap<String, String>(), hostEnvironmentForChild(mapOf("Path" to "X"), windows = false))
+    }
+
+    @Test
+    fun `host environment drops non allowlist keys on every platform`() {
+        val host = mapOf("OPENAI_API_KEY" to "secret", "LT_VERDICT_AI_CREDENTIAL_ENV_FILE" to "credential")
+        assertEquals(emptyMap<String, String>(), hostEnvironmentForChild(host, windows = true))
+        assertEquals(emptyMap<String, String>(), hostEnvironmentForChild(host, windows = false))
+    }
+
+    @Test
     @EnabledOnOs(OS.WINDOWS)
     fun `runtime result maps to bounded success without exposing credential value`() {
         val tools = Files.createDirectories(tempDir.resolve("tools"))

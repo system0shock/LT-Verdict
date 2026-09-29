@@ -49,9 +49,7 @@ internal class ModelStudioAdvisoryRunner private constructor(
                         .also { builder ->
                             builder.environment().clear()
                             val windows = System.getProperty("os.name").startsWith("Windows", ignoreCase = true)
-                            hostEnvironment
-                                .filterKeys { key -> HOST_ENVIRONMENT_ALLOWLIST.any { it.equals(key, ignoreCase = windows) } }
-                                .forEach(builder.environment()::put)
+                            builder.environment().putAll(hostEnvironmentForChild(hostEnvironment, windows))
                         }.start()
                 } catch (_: IOException) {
                     return RunnerOutcome.Unavailable(AdviceUnavailableReason.DOCKER_UNAVAILABLE)
@@ -208,11 +206,32 @@ private fun requestCancellation(
     }
 }
 
+internal fun hostEnvironmentForChild(
+    host: Map<String, String>,
+    windows: Boolean,
+): Map<String, String> =
+    buildMap {
+        for (name in HOST_ENVIRONMENT_ALLOWLIST) {
+            val value =
+                host[name]
+                    ?: if (windows) {
+                        host.keys
+                            .filter { it.equals(name, ignoreCase = true) }
+                            .minOrNull()
+                            ?.let(host::get)
+                    } else {
+                        null
+                    }
+            if (value != null) put(name, value)
+        }
+    }
+
 private fun powershellPath(environment: Map<String, String>): String {
     if (!System.getProperty("os.name").startsWith("Windows", ignoreCase = true)) return "pwsh"
+    val host = hostEnvironmentForChild(environment, windows = true)
     val systemRoot =
-        environment.entries.firstOrNull { it.key.equals("SystemRoot", ignoreCase = true) }?.value
-            ?: environment.entries.firstOrNull { it.key.equals("WINDIR", ignoreCase = true) }?.value
+        host["SystemRoot"]
+            ?: host["WINDIR"]
             ?: "C:\\Windows"
     return Path.of(systemRoot, "System32", "WindowsPowerShell", "v1.0", "powershell.exe").toString()
 }

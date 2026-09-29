@@ -114,6 +114,8 @@
 
 ### Fixed
 
+- AI-ENV-01: на Windows имена переменных окружения (`Path`, `SystemRoot`, `WINDIR`) сопоставляются без учёта регистра, поэтому
+  дочерний AI runtime получает `PATH` и находит Docker вместо ложного `UNAVAILABLE — DOCKER_UNAVAILABLE`.
 - Проверка роста метрики (`trend-plan.v1`) теперь отказывает с
   `INSUFFICIENT_CELLS` и reason `TREND_HALF_CELLS_NOT_MET`, если в одной из
   половин окна меньше `floor(min_cells / 2)` наблюдаемых ячеек: раньше минимум

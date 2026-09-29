@@ -24,6 +24,46 @@ class ModelStudioAdvisoryRunnerTest {
     }
 
     @Test
+    fun `windows canonicalizes mixed case host environment names`() {
+        assertEquals(mapOf("PATH" to "X"), hostEnvironmentForChild(mapOf("Path" to "X"), windows = true))
+    }
+
+    @Test
+    fun `windows exact host environment names take precedence`() {
+        assertEquals(
+            mapOf("PATH" to "A", "SystemRoot" to "R1"),
+            hostEnvironmentForChild(
+                mapOf("PATH" to "A", "Path" to "B", "SystemRoot" to "R1", "systemroot" to "R2"),
+                windows = true,
+            ),
+        )
+    }
+
+    @Test
+    fun `windows chooses the first sorted non exact variant`() {
+        assertEquals(
+            mapOf("PATH" to "B"),
+            hostEnvironmentForChild(mapOf("path" to "C", "Path" to "B"), windows = true),
+        )
+    }
+
+    @Test
+    fun `non windows retains only exact host environment names`() {
+        assertEquals(
+            mapOf("PATH" to "A"),
+            hostEnvironmentForChild(mapOf("Path" to "X", "PATH" to "A"), windows = false),
+        )
+        assertEquals(emptyMap<String, String>(), hostEnvironmentForChild(mapOf("Path" to "X"), windows = false))
+    }
+
+    @Test
+    fun `host environment drops non allowlist keys on every platform`() {
+        val host = mapOf("OPENAI_API_KEY" to "secret", "LT_VERDICT_AI_CREDENTIAL_ENV_FILE" to "credential")
+        assertEquals(emptyMap<String, String>(), hostEnvironmentForChild(host, windows = true))
+        assertEquals(emptyMap<String, String>(), hostEnvironmentForChild(host, windows = false))
+    }
+
+    @Test
     @EnabledOnOs(OS.WINDOWS)
     fun `runtime result maps to bounded success without exposing credential value`() {
         val tools = Files.createDirectories(tempDir.resolve("tools"))
@@ -63,6 +103,39 @@ class ModelStudioAdvisoryRunnerTest {
         val capture = Files.readString(tools.resolve("capture.txt"))
         assertFalse(capture.contains("probe-secret-value"))
         assertTrue(capture.contains(credential.toString()))
+    }
+
+    @Test
+    @EnabledOnOs(OS.WINDOWS)
+    fun `mixed case host environment names reach the runtime`() {
+        val tools = Files.createDirectories(tempDir.resolve("tools"))
+        val prompt = Files.createDirectories(tempDir.resolve("docs/contracts/advice/v1")).resolve("system-prompt.md")
+        Files.writeString(prompt, "bounded prompt")
+        val credential = tempDir.resolve("modelstudio.env")
+        Files.writeString(credential, "OPENAI_API_KEY=fake\n")
+        Files.writeString(
+            tools.resolve("advisory_ai_runtime.ps1"),
+            """
+            param([string]${'$'}Mode,[string]${'$'}EvidencePath,[string]${'$'}OutputPath,[string]${'$'}ResultPath,[string]${'$'}CancelPath,[string]${'$'}CredentialEnvFile,[string]${'$'}QwenPackageRoot)
+            [IO.File]::WriteAllText((Join-Path ${'$'}PSScriptRoot 'capture.txt'), ((Get-ChildItem Env: | ForEach-Object { ${'$'}_.Name + '=' + ${'$'}_.Value }) -join "`n"))
+            [IO.File]::WriteAllText(${'$'}OutputPath, '{"schema_version":"ai-advice-output.v1","summary":"bounded","hypotheses":[],"recommendations":[],"caveats":[]}')
+            [IO.File]::WriteAllText(${'$'}ResultPath, '{"schema_version":"advisory-ai-runtime-result.v1","status":"SUCCESS","duration_ms":12,"exit_code":0}')
+            exit 0
+            """.trimIndent(),
+        )
+        val pathMarker = tempDir.resolve("missing-path-marker").toString()
+        val runner =
+            ModelStudioAdvisoryRunner.fromEnvironment(
+                mapOf(
+                    "LT_VERDICT_AI_CREDENTIAL_ENV_FILE" to credential.toString(),
+                    "LT_VERDICT_AI_RUNTIME_ROOT" to tempDir.toString(),
+                    "Path" to pathMarker,
+                    "systemroot" to (System.getenv("SystemRoot") ?: "C:\\Windows"),
+                ),
+            )
+
+        assertInstanceOf(RunnerOutcome.Success::class.java, runner.invoke(EVIDENCE))
+        assertTrue(Files.readString(tools.resolve("capture.txt")).contains(pathMarker))
     }
 
     @Test

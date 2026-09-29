@@ -127,6 +127,10 @@ export function cancelJob(jobId: string): Promise<JobStatus> {
   return request(`/api/jobs/${encodeURIComponent(jobId)}`, { method: 'DELETE', headers: mutationHeaders() })
 }
 
+export function listActiveJobs(): Promise<{ jobs: JobStatus[] }> {
+  return request('/api/jobs?state=active')
+}
+
 export function getResult(runId: string, analysisId: string): Promise<AnalysisResult> {
   return request(`/api/runs/${encodeURIComponent(runId)}/analyses/${encodeURIComponent(analysisId)}/result`)
 }

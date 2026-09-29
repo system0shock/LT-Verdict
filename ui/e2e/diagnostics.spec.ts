@@ -38,6 +38,7 @@ async function fixtureApi(page: Page) {
     else if (path.endsWith('/result')) body = result
     else if (path.endsWith('/buckets')) body = { buckets: [], next_from_ms: null }
     else if (path === '/api/inputs') body = run
+    else if (method === 'GET' && path === '/api/jobs') body = { jobs: [] }
     else if (path === '/api/jobs') body = { job_id: 'job-1', state: 'COMPLETE', processed_bytes: 100, total_bytes: 100, ...reference, diagnostic: null }
     else throw new Error(`Unexpected UI request ${path}`)
     await route.fulfill({ json: body })
@@ -58,7 +59,7 @@ test('submits the optional diagnostic plan with the resource snapshot', async ({
   await page.getByTestId('input-file').setInputFiles({ name: 'diagnostic.jtl', mimeType: 'text/csv', buffer: Buffer.from('load') })
   await page.getByTestId('resource-snapshot-file').setInputFiles({ name: 'resource.json', mimeType: 'application/json', buffer: Buffer.from('{"resource":"selected"}') })
   await page.getByLabel('Correlation plan', { exact: false }).setInputFiles({ name: 'plan.json', mimeType: 'application/json', buffer: Buffer.from('{"plan":"selected"}') })
-  const request = page.waitForRequest((request) => new URL(request.url()).pathname === '/api/jobs')
+  const request = page.waitForRequest((request) => request.method() === 'POST' && new URL(request.url()).pathname === '/api/jobs')
   await page.getByRole('button', { name: 'Analyze run', exact: true }).click()
   const submitted = (await request).postDataBuffer()!.toString()
   expect(submitted).toContain('name="correlation_plan"; filename="plan.json"')

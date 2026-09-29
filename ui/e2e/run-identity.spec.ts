@@ -12,6 +12,7 @@ async function fixtureApi(page: Page, listed: typeof runs) {
     const method = route.request().method()
     let body: unknown
     if (path === '/api/bootstrap') body = { csrf_token: 'ui-test', max_upload_bytes: 1000000 }
+    else if (method === 'GET' && path === '/api/jobs') body = { jobs: [] }
     else if (method === 'GET' && path === '/api/jenkins') body = { profiles: [] }
     else if (method === 'GET' && path === '/api/grafana') body = { profiles: [] }
     else if (path === '/api/sources') body = { profiles: [] }

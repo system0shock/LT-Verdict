@@ -30,6 +30,7 @@ async function fixtureApi(page: Page) {
     else if (path.endsWith('/buckets')) body = { buckets: [], next_from_ms: null }
     else if (path === '/api/baseline') body = { baseline: null }
     else if (path === '/api/inputs') body = run
+    else if (method === 'GET' && path === '/api/jobs') body = { jobs: [] }
     else if (path === '/api/jobs') body = { job_id: 'job-1', state: 'COMPLETE', processed_bytes: 100, total_bytes: 100, ...reference, diagnostic: null }
     else throw new Error(`Unexpected UI request ${path}`)
     await route.fulfill({ json: body })
@@ -50,7 +51,7 @@ test('submits a validated online source request and renders its saved acquisitio
   await expect(page.getByTestId('source-request-error')).toContainText('whole seconds from 1000 to 60000')
   await expect(page.getByRole('button', { name: 'Analyze run', exact: true })).toBeDisabled()
   await page.getByLabel('Source step (ms)').fill('1000')
-  const request = page.waitForRequest((value) => new URL(value.url()).pathname === '/api/jobs')
+  const request = page.waitForRequest((value) => value.method() === 'POST' && new URL(value.url()).pathname === '/api/jobs')
   await page.getByRole('button', { name: 'Analyze run', exact: true }).click()
   const submitted = (await request).postDataBuffer()!.toString()
   expect(submitted).toContain('name="source_request"; filename="source-request.json"')
@@ -73,7 +74,7 @@ test('submits an auto source window without asking for a period', async ({ page 
   await page.getByLabel('Source step (ms)').fill('1000')
   await page.getByLabel('Margin (ms)').fill('2000')
   await page.getByLabel('Max idle gap (ms)').fill('60000')
-  const request = page.waitForRequest((value) => new URL(value.url()).pathname === '/api/jobs')
+  const request = page.waitForRequest((value) => value.method() === 'POST' && new URL(value.url()).pathname === '/api/jobs')
   await page.getByRole('button', { name: 'Analyze run', exact: true }).click()
   const submitted = (await request).postDataBuffer()!.toString()
   expect(submitted).toContain('name="source_request"; filename="source-request.json"')
@@ -86,7 +87,7 @@ test('refuses a margin that is not a multiple of the step before any request', a
   await fixtureApi(page)
   const jobRequests: string[] = []
   await page.route((url) => url.pathname === '/api/jobs', async (route) => {
-    jobRequests.push(route.request().url())
+    if (route.request().method() === 'POST') jobRequests.push(route.request().url())
     await route.fallback()
   })
   await page.goto('/')
@@ -145,7 +146,7 @@ test('imports OpenSearch context and shows counts without a resource download', 
   await page.goto('/')
   await page.getByTestId('input-file').setInputFiles({ name: 'errors.jtl', mimeType: 'text/csv', buffer: Buffer.from('load') })
   await page.getByLabel('OpenSearch context').setInputFiles({ name: 'context.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(context)) })
-  const request = page.waitForRequest((value) => new URL(value.url()).pathname === '/api/jobs')
+  const request = page.waitForRequest((value) => value.method() === 'POST' && new URL(value.url()).pathname === '/api/jobs')
   await page.getByRole('button', { name: 'Analyze run', exact: true }).click()
   expect((await request).postDataBuffer()!.toString()).toContain('name="source_context"; filename="context.json"')
   const errors = page.getByTestId('opensearch-context')
@@ -194,7 +195,7 @@ test('submits multiple online profiles on one shared time grid', async ({ page }
   await page.getByLabel('Source start (UTC epoch ms)').fill('1000')
   await page.getByLabel('Source end (UTC epoch ms)').fill('3000')
   await page.getByLabel('Source step (ms)').fill('1000')
-  const request = page.waitForRequest((value) => new URL(value.url()).pathname === '/api/jobs')
+  const request = page.waitForRequest((value) => value.method() === 'POST' && new URL(value.url()).pathname === '/api/jobs')
   await page.getByRole('button', { name: 'Analyze run', exact: true }).click()
   expect((await request).postDataBuffer()!.toString()).toContain('{"schema_version":"source-request.v3","profile_ids":["errors","prom"],"window":{"origin":"explicit","start_epoch_ms":1000,"end_epoch_ms":3000,"step_ms":1000}}')
   await expect(page.getByTestId('source-acquisition')).toContainText('errors')
@@ -219,7 +220,7 @@ test('submits up to sixteen manual contexts and uses sorted indexed downloads', 
     { name: 'zeta.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(zeta)) },
     { name: 'alpha.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(alpha)) },
   ])
-  const request = page.waitForRequest((value) => new URL(value.url()).pathname === '/api/jobs')
+  const request = page.waitForRequest((value) => value.method() === 'POST' && new URL(value.url()).pathname === '/api/jobs')
   await page.getByRole('button', { name: 'Analyze run', exact: true }).click()
   const submitted = (await request).postDataBuffer()!.toString()
   expect(submitted.match(/name="source_context"/g)).toHaveLength(2)
@@ -341,7 +342,7 @@ test('captures exact PostgreSQL phases and attaches them without rendering the r
   await page.getByLabel('Source start (UTC epoch ms)').fill('1000')
   await page.getByLabel('Source end (UTC epoch ms)').fill('3000')
   await page.getByLabel('Source step (ms)').fill('1000')
-  const request = page.waitForRequest((value) => new URL(value.url()).pathname === '/api/jobs')
+  const request = page.waitForRequest((value) => value.method() === 'POST' && new URL(value.url()).pathname === '/api/jobs')
   await page.getByRole('button', { name: 'Analyze run', exact: true }).click()
   const submitted = (await request).postDataBuffer()!.toString()
   expect(submitted).toContain('name="source_request"; filename="source-request.json"')

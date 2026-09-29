@@ -31,6 +31,7 @@ async function fixtureApi(page: Page) {
     else if (path.endsWith('/result')) body = result
     else if (path.endsWith('/buckets')) body = { buckets: [], next_from_ms: null }
     else if (path === '/api/inputs') body = run
+    else if (method === 'GET' && path === '/api/jobs') body = { jobs: [] }
     else if (path === '/api/jobs') body = { job_id: 'job-1', state: 'COMPLETE', processed_bytes: 100, total_bytes: 100, ...reference, diagnostic: null }
     else throw new Error(`Unexpected UI request ${path}`)
     await route.fulfill({ json: body })
@@ -47,7 +48,7 @@ test('submits capacity with its resource snapshot and blocks a plan without one'
   await expect(page.getByRole('alert')).toContainText('Capacity plan requires a matching resource snapshot.')
 
   await page.getByTestId('resource-snapshot-file').setInputFiles({ name: 'resource.json', mimeType: 'application/json', buffer: Buffer.from('{"resource":"selected"}') })
-  const request = page.waitForRequest((value) => new URL(value.url()).pathname === '/api/jobs')
+  const request = page.waitForRequest((value) => value.method() === 'POST' && new URL(value.url()).pathname === '/api/jobs')
   await page.getByRole('button', { name: 'Analyze run', exact: true }).click()
   const submitted = (await request).postDataBuffer()!.toString()
   expect(submitted).toContain('name="resource_snapshot"; filename="resource.json"')

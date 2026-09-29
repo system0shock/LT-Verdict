@@ -18,6 +18,7 @@ import {
   getBuckets,
   getJob,
   getResult,
+  listActiveJobs,
   listAnalyses,
   listRuns,
   listSources,
@@ -136,6 +137,7 @@ onMounted(async () => {
     } catch {
       sourceProfiles.value = []
     }
+    await restoreActiveJob()
   } catch (failure) {
     showError(failure)
   }
@@ -360,6 +362,26 @@ async function pollJob(revision: number) {
   await refreshAnalyses(job.value.run_id)
   if (revision !== analysisRevision || !result.value) return
   if (result.value.run_validity !== 'INVALID') await refreshBuckets()
+}
+
+async function restoreActiveJob() {
+  const initialRevision = analysisRevision
+  const { jobs } = await listActiveJobs()
+  const active = jobs[0]
+  if (!active || initialRevision !== analysisRevision || job.value || uploadProgress.value > 0) return
+  const revision = ++analysisRevision
+  job.value = active
+  try {
+    while (!runs.value.some((run) => run.run_id === active.run_id) && nextRunAfter.value) {
+      await refreshRuns(nextRunAfter.value)
+      if (revision !== analysisRevision) return
+    }
+  } catch (failure) {
+    if (revision === analysisRevision) showError(failure)
+  }
+  if (revision !== analysisRevision) return
+  currentRun.value = runs.value.find((run) => run.run_id === active.run_id) ?? null
+  await pollJob(revision)
 }
 
 async function cancel() {

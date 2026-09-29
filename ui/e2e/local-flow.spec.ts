@@ -67,6 +67,13 @@ async function cancelJob(page: import('@playwright/test').Page, jobId: string) {
   }, jobId)
 }
 
+async function activeJobIds(page: import('@playwright/test').Page) {
+  return page.evaluate(async () => {
+    const body = await fetch('/api/jobs?state=active').then((response) => response.json())
+    return (body.jobs as Array<{ job_id: string }>).map((job) => job.job_id)
+  })
+}
+
 test.describe.serial('local analysis flow', () => {
   test('shows the supported empty state', async ({ page }) => {
     await page.goto('/')
@@ -188,9 +195,16 @@ test.describe.serial('local analysis flow', () => {
     let queuedJobId: string | undefined
 
     try {
+      const initialListing = page.waitForResponse((response) => response.request().method() === 'GET' && new URL(response.url()).pathname === '/api/jobs')
       await page.goto('/')
+      await initialListing
       await page.getByTestId('input-file').setInputFiles(input)
       const uploaded = await uploadSelectedInput(page)
+      const competing = await page.context().newPage()
+      const activeListing = competing.waitForResponse((response) => response.request().method() === 'GET' && new URL(response.url()).pathname === '/api/jobs')
+      await competing.goto('/')
+      await activeListing
+      await competing.getByTestId('input-file').setInputFiles(fixture('slice1/jmeter/csv-5.6.3/input.jtl'))
       const active = await submitJob(page, uploaded.run_id)
       expect(active.status).toBe(202)
       activeJobId = active.body.job_id
@@ -200,10 +214,7 @@ test.describe.serial('local analysis flow', () => {
       expect(queued.status).toBe(202)
       queuedJobId = queued.body.job_id
 
-      const competing = await page.context().newPage()
       try {
-        await competing.goto('/')
-        await competing.getByTestId('input-file').setInputFiles(fixture('slice1/jmeter/csv-5.6.3/input.jtl'))
         await competing.getByRole('button', { name: 'Analyze run' }).click()
         await expect(competing.getByTestId('busy-notice')).toContainText('BUSY')
       } finally {
@@ -224,6 +235,41 @@ test.describe.serial('local analysis flow', () => {
       if (activeJobId) await cancelJob(page, activeJobId)
       await rm(directory, { force: true, recursive: true })
     }
+  })
+
+  test('restores the active job and its cancel action after a reload', async ({ page }) => {
+    await page.goto('/')
+    try {
+      await page.getByTestId('input-file').setInputFiles({
+        name: 'sustained.jtl',
+        mimeType: 'text/csv',
+        buffer: Buffer.from('timeStamp,elapsed,label,success\n1767225600000,7,reload-restore,true\n'),
+      })
+      await page.getByRole('button', { name: 'Analyze run' }).click()
+      await expect(page.locator('#job-status')).toContainText('PROCESSING')
+
+      await page.reload()
+
+      await expect(page.locator('#job-status')).toContainText('PROCESSING')
+      await expect(page.getByRole('button', { name: 'Cancel analysis' })).toBeVisible()
+      await expect(page.getByTestId('run-list').locator('button[aria-pressed="true"]')).toContainText('sustained.jtl')
+      await page.getByRole('button', { name: 'Cancel analysis' }).click()
+      await expect(page.locator('#job-status')).toContainText('CANCELLED')
+      await expect.poll(() => activeJobIds(page)).toEqual([])
+    } finally {
+      for (const id of await activeJobIds(page)) await cancelJob(page, id)
+    }
+  })
+
+  test('does not restore a finished job after a reload', async ({ page }) => {
+    await uploadAndAnalyze(page, verdictInput)
+    const listing = page.waitForResponse((response) => new URL(response.url()).pathname === '/api/jobs')
+
+    await page.reload()
+
+    expect((await (await listing).json()).jobs).toEqual([])
+    await expect(page.getByTestId('run-list')).toContainText('input.xml')
+    await expect(page.locator('#job-status')).toHaveCount(0)
   })
 
   test('lists accepted runs and preserves structural parity between themes', async ({ page }) => {

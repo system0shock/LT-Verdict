@@ -48,7 +48,10 @@ internal class ModelStudioAdvisoryRunner private constructor(
                         .redirectError(ProcessBuilder.Redirect.DISCARD)
                         .also { builder ->
                             builder.environment().clear()
-                            hostEnvironment.filterKeys(HOST_ENVIRONMENT_ALLOWLIST::contains).forEach(builder.environment()::put)
+                            val windows = System.getProperty("os.name").startsWith("Windows", ignoreCase = true)
+                            hostEnvironment
+                                .filterKeys { key -> HOST_ENVIRONMENT_ALLOWLIST.any { it.equals(key, ignoreCase = windows) } }
+                                .forEach(builder.environment()::put)
                         }.start()
                 } catch (_: IOException) {
                     return RunnerOutcome.Unavailable(AdviceUnavailableReason.DOCKER_UNAVAILABLE)
@@ -207,7 +210,10 @@ private fun requestCancellation(
 
 private fun powershellPath(environment: Map<String, String>): String {
     if (!System.getProperty("os.name").startsWith("Windows", ignoreCase = true)) return "pwsh"
-    val systemRoot = environment["SystemRoot"] ?: environment["WINDIR"] ?: "C:\\Windows"
+    val systemRoot =
+        environment.entries.firstOrNull { it.key.equals("SystemRoot", ignoreCase = true) }?.value
+            ?: environment.entries.firstOrNull { it.key.equals("WINDIR", ignoreCase = true) }?.value
+            ?: "C:\\Windows"
     return Path.of(systemRoot, "System32", "WindowsPowerShell", "v1.0", "powershell.exe").toString()
 }
 

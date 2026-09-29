@@ -103,6 +103,8 @@
 
 ### Fixed
 
+- AI-ENV-01: на Windows имена переменных окружения (`Path`, `SystemRoot`, `WINDIR`) сопоставляются без учёта регистра, поэтому
+  дочерний AI runtime получает `PATH` и находит Docker вместо ложного `UNAVAILABLE — DOCKER_UNAVAILABLE`.
 - Timestamps в диапазоне epoch-seconds `1000000000..99999999999` отклоняются как
   `INVALID_SAMPLE_TIMESTAMP` вместо тихой интерпретации как миллисекунды 1970
   года с валидным `PASS`/`FAIL`. Границы опубликованы в `limits`

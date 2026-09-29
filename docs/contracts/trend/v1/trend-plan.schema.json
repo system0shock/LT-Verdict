@@ -18,7 +18,7 @@
         "series_id": {"$ref":"#/$defs/id"},
         "window_id": {"$ref":"#/$defs/id"},
         "direction": {"enum":["increase","decrease","either"],"description":"either takes the required sign from the observed slope and still requires the split-half shift to agree."},
-        "min_cells": {"type":"integer","minimum":30,"maximum":100000,"description":"Observed non-null cells required inside the window; fewer abstains as TREND_MIN_CELLS_NOT_MET."},
+        "min_cells": {"type":"integer","minimum":30,"maximum":100000,"description":"Observed non-null cells required inside the window; fewer abstains as TREND_MIN_CELLS_NOT_MET. Each half of the window must also contain at least floor(min_cells / 2) observed cells; otherwise the check abstains as TREND_HALF_CELLS_NOT_MET."},
         "magnitude_gate": {"$ref":"#/$defs/gate"}
       }
     },

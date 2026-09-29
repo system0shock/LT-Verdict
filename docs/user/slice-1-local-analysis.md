@@ -527,7 +527,9 @@ reason `RESOURCE_GAPS`.
 `INSUFFICIENT_OBSERVATIONS`, `TREND_MEDIAN_ZERO`
 (процентный порог не определён при нулевой медиане), `TREND_DIRECTION_MISMATCH`,
 `TREND_DIRECTION_DISAGREEMENT`, `TREND_SLOPE_BELOW_MINIMUM`,
-`TREND_SHIFT_BELOW_MINIMUM`. Каждый `TREND_OBSERVED` дополнительно несёт
+`TREND_SHIFT_BELOW_MINIMUM`, `TREND_SERIES_NOT_FOUND` (ряд не найден),
+`TREND_WINDOW_NOT_FOUND` (окно не найдено), `RUN_NOT_VALID` (прогон недействителен).
+Каждый `TREND_OBSERVED` дополнительно несёт
 `STATIONARITY_NOT_EVALUATED`: объявленное окно не доказывает стационарность,
 детектора смены режима нет, поэтому ступень нагрузки может выглядеть как рост.
 

@@ -180,6 +180,37 @@ class TrendAnalysisTest {
     }
 
     @Test
+    fun `sawtooth restarts are not distinguished from a trend`() {
+        // Характеризация, а не желаемое поведение: 3 цикла по 40 ячеек, каждый линейно от 200 до 980, без роста огибающей.
+        val values = List<BigDecimal?>(160) { index -> BigDecimal.valueOf(200L + 20L * (index % 40)) }
+        val windows =
+            listOf(
+                ResourceWindowV1("cycle-boundary", START, START + 120_000L),
+                ResourceWindowV1("mid-cycle", START + 20_000L, START + 140_000L),
+                ResourceWindowV1("single-cycle", START, START + 40_000L),
+            )
+        // окно: (направление, slope_per_second, split_half_shift); медиана везде 590, порог сдвига 5 % = 29,5
+        val expected =
+            mapOf(
+                "cycle-boundary" to Triple("increase", "2.2209875685811514688520036113619", "200"),
+                "mid-cycle" to Triple("decrease", "-1.112577262309882630738245711507744", "-200"),
+                "single-cycle" to Triple("increase", "20", "400"),
+            )
+        for (window in windows) {
+            val analysis = evaluateTrend(plan(direction = TrendDirection.EITHER, windowId = window.id), snapshot(values, windows), windows)
+            val evidence = singleCheck(analysis)
+            val (direction, slope, shift) = expected.getValue(window.id)
+            assertEquals("TREND_OBSERVED", evidence.string("status"), window.id)
+            assertEquals(direction, evidence.string("observed_direction"), window.id)
+            assertEquals(slope, evidence.string("slope_per_second"), window.id)
+            assertEquals(shift, evidence.string("split_half_shift"), window.id)
+            assertEquals("590", evidence.string("median"), window.id)
+            assertEquals(listOf("STATIONARITY_NOT_EVALUATED"), evidence.reasons(), window.id)
+            assertEquals(1, analysis.findings.size, window.id)
+        }
+    }
+
+    @Test
     fun `an empty window reports no observations instead of a flat trend`() {
         val analysis = evaluateTrend(plan(), snapshot(List<BigDecimal?>(40) { null }), WINDOWS)
 

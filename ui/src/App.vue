@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import AnalysisView from './AnalysisView.vue'
 import AdvicePanel from './AdvicePanel.vue'
 import JenkinsPanel from './JenkinsPanel.vue'
@@ -9,6 +9,10 @@ import BaselinePanel from './BaselinePanel.vue'
 import JobStatusView from './JobStatus.vue'
 import RunSetup from './RunSetup.vue'
 import VerdictCard from './VerdictCard.vue'
+import ShellPanel from './shell/ShellPanel.vue'
+import ShellTabs from './shell/ShellTabs.vue'
+import { SHELL_DEFAULT_TAB, SHELL_LABELS, type ShellTabKey } from './shell/labels'
+import { isNewShell } from './shell/shell'
 import {
   ApiError,
   bootstrap,
@@ -29,6 +33,13 @@ import { summarizeVerdict } from './verdictSummary'
 import type { AnalysisResult, AnalysisSummary, Bucket, JobStatus, OpenSearchEvidence, Policy, PolicyError, PostgresContextEvidence, RunSummary, SourceProfile, SourceRequest, Theme } from './types'
 
 const theme = ref<Theme>(window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light')
+const shellNew = isNewShell(window.location.search)
+const activeTab = ref<ShellTabKey>(SHELL_DEFAULT_TAB)
+const legacyHref = window.location.pathname
+const chrome = shellNew
+  ? { noRun: SHELL_LABELS.noRun, completed: SHELL_LABELS.completed, toDark: SHELL_LABELS.themeToDark, toLight: SHELL_LABELS.themeToLight, runsTitle: SHELL_LABELS.runsTitle, runsEmpty: SHELL_LABELS.runsEmpty, runsMore: SHELL_LABELS.runsMore, analysesTitle: SHELL_LABELS.analysesTitle, analysisItem: SHELL_LABELS.analysisItem, analysesEmpty: SHELL_LABELS.analysesEmpty, analysesMore: SHELL_LABELS.analysesMore }
+  : { noRun: 'No run selected', completed: 'Completed', toDark: 'Dark theme', toLight: 'Light theme', runsTitle: 'Accepted runs', runsEmpty: 'No runs yet', runsMore: 'More runs', analysesTitle: 'Saved analyses', analysisItem: 'Analysis', analysesEmpty: 'No saved analyses for this run.', analysesMore: 'More analyses' }
+const shownIn = (tab: ShellTabKey) => !shellNew || activeTab.value === tab
 const apiReady = ref(false)
 const inputFile = ref<File | null>(null)
 const resourceFile = ref<File | null>(null)
@@ -77,6 +88,7 @@ let bucketRevision = 0
 let policyRevision = 0
 
 const verdictSummary = computed(() => (result.value ? summarizeVerdict(result.value) : null))
+watch(result, (value) => { if (shellNew && value) activeTab.value = 'overview' })
 const working = computed(() => job.value?.state === 'QUEUED' || job.value?.state === 'PROCESSING')
 const selectedReference = computed(() => result.value && selectedAnalysisId.value
   ? { run_id: result.value.run_id, analysis_id: selectedAnalysisId.value }
@@ -498,16 +510,29 @@ function showError(failure: unknown) {
     failure instanceof ApiError || failure instanceof Error ? failure.message : 'Unexpected local application error.'
 }
 
+async function showVerdict() {
+  if (!shellNew) return
+  activeTab.value = 'overview'
+  await nextTick()
+  document.getElementById('verdict')?.scrollIntoView()
+}
+
 function focusPolicy() {
   document.getElementById('policy-file')?.focus()
 }
 </script>
 
 <template>
-  <div class="app-shell">
+  <div
+    class="app-shell"
+    :class="{ shell: shellNew }"
+  >
     <aside class="sidebar side-navigation">
       <h1>LT Verdict</h1>
-      <nav aria-label="Application">
+      <nav
+        v-if="!shellNew"
+        aria-label="Application"
+      >
         <button
           type="button"
           class="nav-item nav-item--active"
@@ -523,12 +548,17 @@ function focusPolicy() {
           Policies
         </button>
       </nav>
+      <ShellTabs
+        v-else
+        v-model="activeTab"
+      />
       <section
         class="run-list-section"
         aria-labelledby="run-list-title"
+        :lang="shellNew ? 'ru' : undefined"
       >
         <h2 id="run-list-title">
-          Accepted runs
+          {{ chrome.runsTitle }}
         </h2>
         <ul
           data-testid="run-list"
@@ -554,7 +584,7 @@ function focusPolicy() {
             v-if="runs.length === 0"
             class="muted"
           >
-            No runs yet
+            {{ chrome.runsEmpty }}
           </li>
         </ul>
         <button
@@ -562,16 +592,17 @@ function focusPolicy() {
           type="button"
           @click="refreshRuns(nextRunAfter ?? undefined)"
         >
-          More runs
+          {{ chrome.runsMore }}
         </button>
       </section>
       <section
         v-if="currentRun"
         class="run-list-section"
         aria-labelledby="analysis-list-title"
+        :lang="shellNew ? 'ru' : undefined"
       >
         <h2 id="analysis-list-title">
-          Saved analyses
+          {{ chrome.analysesTitle }}
         </h2>
         <ul class="run-list">
           <li
@@ -585,7 +616,7 @@ function focusPolicy() {
               :aria-pressed="selectedAnalysisId === analysis.analysis_id"
               @click="selectAnalysis(analysis)"
             >
-              <span>Analysis {{ analysis.analysis_id.slice(0, 12) }}</span>
+              <span>{{ chrome.analysisItem }} {{ analysis.analysis_id.slice(0, 12) }}</span>
               <small>{{ analysis.policy_verdict }} · {{ analysis.run_validity }}</small>
             </button>
           </li>
@@ -593,7 +624,7 @@ function focusPolicy() {
             v-if="analyses.length === 0"
             class="muted"
           >
-            No saved analyses for this run.
+            {{ chrome.analysesEmpty }}
           </li>
         </ul>
         <button
@@ -601,20 +632,23 @@ function focusPolicy() {
           type="button"
           @click="refreshAnalyses(undefined, nextAnalysisAfter ?? undefined)"
         >
-          More analyses
+          {{ chrome.analysesMore }}
         </button>
       </section>
     </aside>
 
     <div class="workspace">
-      <header class="app-header top-header">
+      <header
+        class="app-header top-header"
+        :lang="shellNew ? 'ru' : undefined"
+      >
         <div class="run-identity">
-          <strong>{{ currentRun?.original_filename ?? 'No run selected' }}</strong>
+          <strong>{{ currentRun?.original_filename ?? chrome.noRun }}</strong>
           <span
             v-if="currentRun"
             class="mono"
           >{{ currentRun.source_type }} · {{ currentRun.run_id.slice(0, 24) }}…</span>
-          <span v-if="completedAt">Completed {{ completedAt }}</span>
+          <span v-if="completedAt">{{ chrome.completed }} {{ completedAt }}</span>
         </div>
         <a
           v-if="verdictSummary"
@@ -623,219 +657,254 @@ function focusPolicy() {
           data-testid="verdict-chip"
           :data-verdict="verdictSummary.verdict"
           :aria-label="`Вердикт ${verdictSummary.verdict} ${verdictSummary.chip}, перейти к описанию`"
+          @click="showVerdict"
         ><strong>{{ verdictSummary.verdict }}</strong> <span>{{ verdictSummary.chip }}</span></a>
         <button
           type="button"
           class="theme-toggle"
-          :aria-label="theme === 'light' ? 'Dark theme' : 'Light theme'"
+          :aria-label="theme === 'light' ? chrome.toDark : chrome.toLight"
           @click="theme = theme === 'light' ? 'dark' : 'light'"
         >
           <span aria-hidden="true">{{ theme === 'light' ? '◐' : '◑' }}</span>
-          {{ theme === 'light' ? 'Dark theme' : 'Light theme' }}
+          {{ theme === 'light' ? chrome.toDark : chrome.toLight }}
         </button>
+        <a
+          v-if="shellNew"
+          class="shell-legacy-link"
+          :href="legacyHref"
+        >{{ SHELL_LABELS.legacyLink }}</a>
       </header>
 
       <main>
-        <VerdictCard
-          v-if="verdictSummary"
-          :summary="verdictSummary"
-        />
-
-        <RunSetup
-          :input-file="inputFile"
-          :resource-file="resourceFile"
-          :diagnostic-file="diagnosticFile"
-          :capacity-file="capacityFile"
-          :trend-file="trendFile"
-          :source-context-files="sourceContextFiles"
-          :source-profiles="httpSourceProfiles"
-          :source-profile-ids="sourceProfileIds"
-          :postgres-profiles="postgresProfiles"
-          :postgres-profile-id="postgresProfileId"
-          :postgres-pre-file="postgresPreFile"
-          :postgres-post-file="postgresPostFile"
-          :pg-profile-html-file="pgProfileHtmlFile"
-          :source-window-origin="sourceWindowOrigin"
-          :source-start="sourceStart"
-          :source-end="sourceEnd"
-          :source-step="sourceStep"
-          :source-margin="sourceMargin"
-          :source-max-idle-gap="sourceMaxIdleGap"
-          :source-request-error="sourceRequestState.error"
-          :policy="policy"
-          :policy-status="policyStatus"
-          :policy-errors="policyErrors"
-          :busy="working || !!postgresCapturePhase"
-          @input="selectInput"
-          @resources="selectResources"
-          @diagnostics="selectDiagnostics"
-          @capacity="selectCapacity"
-          @trend="selectTrend"
-          @source-contexts="selectSourceContexts"
-          @source-profiles="selectSourceProfiles"
-          @postgres-profile="selectPostgresProfile"
-          @postgres-pre="selectPostgresPre"
-          @postgres-post="selectPostgresPost"
-          @pg-profile-html="selectPgProfileHtml"
-          @capture-postgres="capturePostgres"
-          @source-window-origin="sourceWindowOrigin = $event"
-          @source-start="sourceStart = $event"
-          @source-end="sourceEnd = $event"
-          @source-step="sourceStep = $event"
-          @source-margin="sourceMargin = $event"
-          @source-max-idle-gap="sourceMaxIdleGap = $event"
-          @policy-file="selectPolicyFile"
-          @update-policy="updatePolicy"
-          @analyze="analyze"
-        />
-
-        <p
-          v-if="errorMessage"
-          class="notice notice-fail"
-          role="alert"
+        <ShellPanel
+          :enabled="shellNew"
+          :active-tab="activeTab"
         >
-          ✕ {{ errorMessage }}
-        </p>
+          <VerdictCard
+            v-if="verdictSummary && shownIn('overview')"
+            :summary="verdictSummary"
+          />
 
-        <JobStatusView
-          :job="job"
-          :upload-progress="uploadProgress"
-          :busy="queueBusy"
-          @cancel="cancel"
-        />
-
-        <JenkinsPanel
-          v-if="apiReady"
-          @imported="selectRun($event); refreshRuns()"
-        />
-
-        <BaselinePanel
-          v-if="apiReady"
-          :selection="selectedReference"
-          :filename="currentRun?.original_filename ?? ''"
-          :working="working"
-        />
-
-        <div
-          v-if="result && selectedAnalysisId"
-          class="bucket-controls"
-          aria-label="Analysis downloads"
-        >
-          <a
-            v-for="format in ['json', 'html', 'asciidoc', 'confluence', 'svg']"
-            :key="format"
-            class="button-secondary"
-            :href="`/api/runs/${encodeURIComponent(result.run_id)}/analyses/${selectedAnalysisId}/report?format=${format}`"
-            download
-          >Download {{ format === 'asciidoc' ? 'AsciiDoc' : format.toUpperCase() }}</a>
-          <a
-            v-if="result.evidence.some(item => item.type === 'resource_binding')"
-            class="button-secondary"
-            :href="`/api/runs/${encodeURIComponent(result.run_id)}/analyses/${selectedAnalysisId}/resource-snapshot`"
-            download
-          >Download resource snapshot</a>
-          <a
-            v-if="result.capacity_summary"
-            class="button-secondary"
-            :href="`/api/runs/${encodeURIComponent(result.run_id)}/analyses/${selectedAnalysisId}/capacity-plan`"
-            download
-          >Download capacity plan</a>
-          <a
-            v-if="result.capacity_summary"
-            class="button-secondary"
-            :href="`/api/runs/${encodeURIComponent(result.run_id)}/analyses/${selectedAnalysisId}/capacity`"
-            download
-          >Download capacity result</a>
-          <a
-            v-if="result.evidence.some(item => item.type === 'trend_summary')"
-            class="button-secondary"
-            :href="`/api/runs/${encodeURIComponent(result.run_id)}/analyses/${selectedAnalysisId}/trend-plan`"
-            download
-          >Download trend plan</a>
-          <a
-            v-if="result.evidence.some(item => item.type === 'trend_summary')"
-            class="button-secondary"
-            :href="`/api/runs/${encodeURIComponent(result.run_id)}/analyses/${selectedAnalysisId}/trend`"
-            download
-          >Download trend result</a>
-          <a
-            v-for="(context, index) in downloadableSourceContexts"
-            :key="context.profile_id"
-            class="button-secondary"
-            :href="`/api/runs/${encodeURIComponent(result.run_id)}/analyses/${selectedAnalysisId}/source-context${downloadableSourceContexts.length === 1 ? '' : `/${index + 1}`}`"
-            download
-          >Download OpenSearch context{{ downloadableSourceContexts.length === 1 ? '' : ` — ${context.profile_id}` }}</a>
-          <a
-            v-if="postgresContext?.pre_sha256"
-            class="button-secondary"
-            :href="`/api/runs/${encodeURIComponent(result.run_id)}/analyses/${selectedAnalysisId}/postgres-pre`"
-            download
-          >Download PostgreSQL pre capture</a>
-          <a
-            v-if="postgresContext?.post_sha256"
-            class="button-secondary"
-            :href="`/api/runs/${encodeURIComponent(result.run_id)}/analyses/${selectedAnalysisId}/postgres-post`"
-            download
-          >Download PostgreSQL post capture</a>
-          <a
-            v-if="postgresContext"
-            class="button-secondary"
-            :href="`/api/runs/${encodeURIComponent(result.run_id)}/analyses/${selectedAnalysisId}/postgres-context`"
-            download
-          >Download PostgreSQL context</a>
-          <a
-            v-if="postgresContext?.pg_profile_html_sha256"
-            class="button-secondary"
-            :href="`/api/runs/${encodeURIComponent(result.run_id)}/analyses/${selectedAnalysisId}/pg-profile`"
-            download
-          >Download pg_profile report</a>
-        </div>
-
-        <AnalyticsPanel
-          v-if="selectedReference"
-          :selection="selectedReference"
-          :working="working"
-          @loaded="chartMarkers = $event?.overlay?.markers ?? []"
-        />
-
-        <AdvicePanel
-          v-if="selectedReference"
-          :selection="selectedReference"
-        />
-
-        <GrafanaPanel
-          v-if="selectedReference"
-          :selection="selectedReference"
-        />
-
-        <AnalysisView
-          v-if="result"
-          :result="result"
-          :buckets="buckets"
-          :markers="chartMarkers"
-          :rollup="rollup"
-          :bucket-rollup="bucketRollup"
-          :range-start="rangeStart"
-          :range-end="rangeEnd"
-          @update:rollup="rollup = $event"
-          @update:range-start="rangeStart = $event"
-          @update:range-end="rangeEnd = $event"
-          @refresh-buckets="refreshBuckets"
-        />
-        <p
-          v-if="result && result.run_validity !== 'INVALID'"
-          class="muted"
-        >
-          Showing {{ buckets.length }} buckets from {{ bucketPageFrom.toLocaleString() }} ms
-          ({{ bucketRollup }} s rollup; maximum 500 per page).
-          <button
-            v-if="bucketNextFrom !== null"
-            type="button"
-            @click="refreshBuckets(bucketNextFrom)"
+          <p
+            v-if="shellNew && shownIn('overview') && !result"
+            class="notice notice-info"
+            lang="ru"
           >
-            Next bucket page
-          </button>
-        </p>
+            {{ SHELL_LABELS.overviewEmpty }}
+          </p>
+
+          <RunSetup
+            v-show="shownIn('setup')"
+            :input-file="inputFile"
+            :resource-file="resourceFile"
+            :diagnostic-file="diagnosticFile"
+            :capacity-file="capacityFile"
+            :trend-file="trendFile"
+            :source-context-files="sourceContextFiles"
+            :source-profiles="httpSourceProfiles"
+            :source-profile-ids="sourceProfileIds"
+            :postgres-profiles="postgresProfiles"
+            :postgres-profile-id="postgresProfileId"
+            :postgres-pre-file="postgresPreFile"
+            :postgres-post-file="postgresPostFile"
+            :pg-profile-html-file="pgProfileHtmlFile"
+            :source-window-origin="sourceWindowOrigin"
+            :source-start="sourceStart"
+            :source-end="sourceEnd"
+            :source-step="sourceStep"
+            :source-margin="sourceMargin"
+            :source-max-idle-gap="sourceMaxIdleGap"
+            :source-request-error="sourceRequestState.error"
+            :policy="policy"
+            :policy-status="policyStatus"
+            :policy-errors="policyErrors"
+            :busy="working || !!postgresCapturePhase"
+            @input="selectInput"
+            @resources="selectResources"
+            @diagnostics="selectDiagnostics"
+            @capacity="selectCapacity"
+            @trend="selectTrend"
+            @source-contexts="selectSourceContexts"
+            @source-profiles="selectSourceProfiles"
+            @postgres-profile="selectPostgresProfile"
+            @postgres-pre="selectPostgresPre"
+            @postgres-post="selectPostgresPost"
+            @pg-profile-html="selectPgProfileHtml"
+            @capture-postgres="capturePostgres"
+            @source-window-origin="sourceWindowOrigin = $event"
+            @source-start="sourceStart = $event"
+            @source-end="sourceEnd = $event"
+            @source-step="sourceStep = $event"
+            @source-margin="sourceMargin = $event"
+            @source-max-idle-gap="sourceMaxIdleGap = $event"
+            @policy-file="selectPolicyFile"
+            @update-policy="updatePolicy"
+            @analyze="analyze"
+          />
+
+          <p
+            v-if="errorMessage"
+            class="notice notice-fail"
+            role="alert"
+          >
+            ✕ {{ errorMessage }}
+          </p>
+
+          <JobStatusView
+            :job="job"
+            :upload-progress="uploadProgress"
+            :busy="queueBusy"
+            @cancel="cancel"
+          />
+
+          <JenkinsPanel
+            v-if="apiReady && shownIn('setup')"
+            @imported="selectRun($event); refreshRuns()"
+          />
+
+          <BaselinePanel
+            v-if="apiReady"
+            v-show="shownIn('compare')"
+            :selection="selectedReference"
+            :filename="currentRun?.original_filename ?? ''"
+            :working="working"
+          />
+
+          <div
+            v-if="result && selectedAnalysisId"
+            v-show="shownIn('overview')"
+            class="bucket-controls"
+            aria-label="Analysis downloads"
+          >
+            <a
+              v-for="format in ['json', 'html', 'asciidoc', 'confluence', 'svg']"
+              :key="format"
+              class="button-secondary"
+              :href="`/api/runs/${encodeURIComponent(result.run_id)}/analyses/${selectedAnalysisId}/report?format=${format}`"
+              download
+            >Download {{ format === 'asciidoc' ? 'AsciiDoc' : format.toUpperCase() }}</a>
+            <a
+              v-if="result.evidence.some(item => item.type === 'resource_binding')"
+              class="button-secondary"
+              :href="`/api/runs/${encodeURIComponent(result.run_id)}/analyses/${selectedAnalysisId}/resource-snapshot`"
+              download
+            >Download resource snapshot</a>
+            <a
+              v-if="result.capacity_summary"
+              class="button-secondary"
+              :href="`/api/runs/${encodeURIComponent(result.run_id)}/analyses/${selectedAnalysisId}/capacity-plan`"
+              download
+            >Download capacity plan</a>
+            <a
+              v-if="result.capacity_summary"
+              class="button-secondary"
+              :href="`/api/runs/${encodeURIComponent(result.run_id)}/analyses/${selectedAnalysisId}/capacity`"
+              download
+            >Download capacity result</a>
+            <a
+              v-if="result.evidence.some(item => item.type === 'trend_summary')"
+              class="button-secondary"
+              :href="`/api/runs/${encodeURIComponent(result.run_id)}/analyses/${selectedAnalysisId}/trend-plan`"
+              download
+            >Download trend plan</a>
+            <a
+              v-if="result.evidence.some(item => item.type === 'trend_summary')"
+              class="button-secondary"
+              :href="`/api/runs/${encodeURIComponent(result.run_id)}/analyses/${selectedAnalysisId}/trend`"
+              download
+            >Download trend result</a>
+            <a
+              v-for="(context, index) in downloadableSourceContexts"
+              :key="context.profile_id"
+              class="button-secondary"
+              :href="`/api/runs/${encodeURIComponent(result.run_id)}/analyses/${selectedAnalysisId}/source-context${downloadableSourceContexts.length === 1 ? '' : `/${index + 1}`}`"
+              download
+            >Download OpenSearch context{{ downloadableSourceContexts.length === 1 ? '' : ` — ${context.profile_id}` }}</a>
+            <a
+              v-if="postgresContext?.pre_sha256"
+              class="button-secondary"
+              :href="`/api/runs/${encodeURIComponent(result.run_id)}/analyses/${selectedAnalysisId}/postgres-pre`"
+              download
+            >Download PostgreSQL pre capture</a>
+            <a
+              v-if="postgresContext?.post_sha256"
+              class="button-secondary"
+              :href="`/api/runs/${encodeURIComponent(result.run_id)}/analyses/${selectedAnalysisId}/postgres-post`"
+              download
+            >Download PostgreSQL post capture</a>
+            <a
+              v-if="postgresContext"
+              class="button-secondary"
+              :href="`/api/runs/${encodeURIComponent(result.run_id)}/analyses/${selectedAnalysisId}/postgres-context`"
+              download
+            >Download PostgreSQL context</a>
+            <a
+              v-if="postgresContext?.pg_profile_html_sha256"
+              class="button-secondary"
+              :href="`/api/runs/${encodeURIComponent(result.run_id)}/analyses/${selectedAnalysisId}/pg-profile`"
+              download
+            >Download pg_profile report</a>
+          </div>
+
+          <AnalyticsPanel
+            v-if="selectedReference"
+            v-show="shownIn('overview')"
+            :selection="selectedReference"
+            :working="working"
+            @loaded="chartMarkers = $event?.overlay?.markers ?? []"
+          />
+
+          <AdvicePanel
+            v-if="selectedReference"
+            v-show="shownIn('advice')"
+            :selection="selectedReference"
+          />
+
+          <GrafanaPanel
+            v-if="selectedReference && shownIn('overview')"
+            :selection="selectedReference"
+          />
+
+          <AnalysisView
+            v-if="result && shownIn('tables')"
+            :result="result"
+            :buckets="buckets"
+            :markers="chartMarkers"
+            :rollup="rollup"
+            :bucket-rollup="bucketRollup"
+            :range-start="rangeStart"
+            :range-end="rangeEnd"
+            @update:rollup="rollup = $event"
+            @update:range-start="rangeStart = $event"
+            @update:range-end="rangeEnd = $event"
+            @refresh-buckets="refreshBuckets"
+          />
+          <p
+            v-if="result && result.run_validity !== 'INVALID' && shownIn('tables')"
+            class="muted"
+          >
+            Showing {{ buckets.length }} buckets from {{ bucketPageFrom.toLocaleString() }} ms
+            ({{ bucketRollup }} s rollup; maximum 500 per page).
+            <button
+              v-if="bucketNextFrom !== null"
+              type="button"
+              @click="refreshBuckets(bucketNextFrom)"
+            >
+              Next bucket page
+            </button>
+          </p>
+          <section
+            v-if="shellNew && activeTab === 'rules'"
+            class="panel"
+            lang="ru"
+            aria-labelledby="shell-rules-title"
+          >
+            <h2 id="shell-rules-title">
+              {{ SHELL_LABELS.rulesPendingTitle }}
+            </h2>
+            <p>{{ SHELL_LABELS.rulesPendingText }}</p>
+          </section>
+        </ShellPanel>
       </main>
     </div>
   </div>

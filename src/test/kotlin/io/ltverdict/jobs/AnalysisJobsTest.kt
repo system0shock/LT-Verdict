@@ -102,6 +102,43 @@ class AnalysisJobsTest {
     }
 
     @Test
+    fun `active statuses list queued and processing jobs oldest first and drop finished ones`() {
+        val first = request(20)
+        val second = request(21)
+        val firstStarted = CountDownLatch(1)
+        val releaseFirst = CountDownLatch(1)
+        AnalysisJobs(1) { request, _, _ ->
+            if (request == first) {
+                firstStarted.countDown()
+                check(releaseFirst.await(TIMEOUT_SECONDS, TimeUnit.SECONDS)) { "test did not release first job" }
+            }
+            outcome(request)
+        }.use { jobs ->
+            try {
+                assertEquals(emptyList<JobStatus>(), jobs.activeStatuses())
+                val running = accepted(jobs.submit(first))
+                assertTrue(firstStarted.await(TIMEOUT_SECONDS, TimeUnit.SECONDS))
+                awaitState(jobs, running.status.jobId, JobState.PROCESSING)
+                val queued = accepted(jobs.submit(second))
+
+                assertEquals(
+                    listOf(running.status.jobId to JobState.PROCESSING, queued.status.jobId to JobState.QUEUED),
+                    jobs.activeStatuses().map { it.jobId to it.state },
+                )
+
+                jobs.cancel(queued.status.jobId)
+                assertEquals(listOf(running.status.jobId), jobs.activeStatuses().map { it.jobId })
+
+                releaseFirst.countDown()
+                awaitState(jobs, running.status.jobId, JobState.COMPLETE)
+                assertEquals(emptyList<JobStatus>(), jobs.activeStatuses())
+            } finally {
+                releaseFirst.countDown()
+            }
+        }
+    }
+
+    @Test
     fun `cancelling a queued job prevents it from starting`() {
         val first = request(10)
         val queued = request(11)

@@ -639,6 +639,16 @@ internal fun Application.installLocalApi(context: LocalApiContext) {
             call.respondBytes(bytes, ContentType.Application.Json, HttpStatusCode.OK)
         }
 
+        get("/api/jobs") {
+            call.requireOnlyQueries("state")
+            if (call.singleQuery("state") != "active") malformed("Query parameters are invalid")
+            call.respondJson(
+                buildJsonObject {
+                    put("jobs", buildJsonArray { context.jobs.activeStatuses().forEach { add(it.toJson()) } })
+                },
+            )
+        }
+
         get("/api/jobs/{jobId}") {
             val status = context.jobs.status(call.parameters["jobId"].orEmpty()) ?: notFound("Job was not found")
             call.respondJson(status.toJson())

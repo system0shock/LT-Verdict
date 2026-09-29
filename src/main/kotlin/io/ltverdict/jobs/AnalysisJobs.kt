@@ -98,6 +98,8 @@ internal class AnalysisJobs(
 
     fun status(jobId: String): JobStatus? = synchronized(lock) { statuses[jobId] }
 
+    fun activeStatuses(): List<JobStatus> = synchronized(lock) { active.keys.map(statuses::getValue) }
+
     fun cancel(jobId: String): JobStatus? {
         synchronized(lock) {
             val current = statuses[jobId] ?: return null

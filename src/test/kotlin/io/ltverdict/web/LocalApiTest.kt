@@ -1325,6 +1325,54 @@ class LocalApiTest {
     }
 
     @Test
+    fun `job API lists only active jobs and rejects other queries`() {
+        val started = CountDownLatch(1)
+        val release = CountDownLatch(1)
+        try {
+            withServer(
+                jobsFactory = {
+                    AnalysisJobs(1) { request, _, _ ->
+                        started.countDown()
+                        check(release.await(5, TimeUnit.SECONDS)) { "test did not release analysis" }
+                        AnalysisOutcome(request.input.runId, FAKE_ANALYSIS_ID, byteArrayOf(), tempDir)
+                    }
+                },
+            ) { store, api ->
+                store.acceptInput(ByteArrayInputStream(SPIKE_DROP.bytes()), SPIKE_DROP.filename)
+                api.bootstrap()
+
+                val empty = api.get("/api/jobs?state=active")
+                assertEquals(200, empty.statusCode())
+                val emptyBody = empty.jsonObject()
+                assertEquals(setOf("jobs"), emptyBody.keys)
+                assertTrue(emptyBody.getValue("jobs").jsonArray.isEmpty())
+
+                val created = api.createJob(SPIKE_DROP.runId)
+                assertEquals(202, created.statusCode())
+                val createdBody = created.jsonObject()
+                val jobId = createdBody.getValue("job_id").jsonPrimitive.content
+                assertTrue(started.await(5, TimeUnit.SECONDS))
+
+                val listed = api.get("/api/jobs?state=active")
+                assertEquals(200, listed.statusCode())
+                val listedJobs = listed.jsonObject().getValue("jobs").jsonArray
+                val job = listedJobs.single().jsonObject
+                assertJobStatus(job, "PROCESSING", SPIKE_DROP.runId, 0, SPIKE_DROP.sizeBytes, jobId)
+
+                assertEquals(200, api.delete("/api/jobs/$jobId").statusCode())
+                val drained = api.get("/api/jobs?state=active").jsonObject()
+                assertTrue(drained.getValue("jobs").jsonArray.isEmpty())
+
+                assertError(api.get("/api/jobs"), 400, "MALFORMED_REQUEST")
+                assertError(api.get("/api/jobs?state=all"), 400, "MALFORMED_REQUEST")
+                assertError(api.get("/api/jobs?state=active&limit=1"), 400, "MALFORMED_REQUEST")
+            }
+        } finally {
+            release.countDown()
+        }
+    }
+
+    @Test
     fun `bucket API caps pages and rejects invalid ranges`() =
         withServer { store, api ->
             val input = store.acceptInput(ByteArrayInputStream(SPIKE_DROP.bytes()), SPIKE_DROP.filename)

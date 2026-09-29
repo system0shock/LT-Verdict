@@ -120,6 +120,10 @@
 
 ### Fixed
 
+- Прокручиваемые таблицы результата (policy results, capacity stages, resource
+  и window summaries, source acquisition, error groups, transaction metrics,
+  time bins) доступны с клавиатуры: у каждой обёртки есть `tabindex="0"`,
+  `role="region"` и уникальное `aria-label` (UI-TABLE-FOCUS-01).
 - В списке принятых прогонов рядом с типом источника показаны первые 8 символов
   SHA-256 содержимого, поэтому прогоны с одинаковым именем файла различимы без
   наведения курсора (UI-RUN-IDENTITY-01). Время прогона не добавлено: сервер его

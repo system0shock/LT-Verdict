@@ -1,0 +1,129 @@
+.shell {
+  --canvas: #EEF1F4;
+  --surface: #FFFFFF;
+  --surface-muted: #E8EDF2;
+  --surface-inset: #F5F7F9;
+  --text: #13202B;
+  --text-muted: #56667A;
+  --border: #DCE2E8;
+  --control-border: #6B7A89;
+  --border-strong: #8FA1B3;
+  --brand: #1D5FA8;
+  --brand-contrast: #FFFFFF;
+  --focus: #1D5FA8;
+  --pass: #256F4F;
+  --pass-bg: #E2F2EA;
+  --warn: #8A5A00;
+  --warn-bg: #FCEFD0;
+  --fail: #B3261E;
+  --fail-bg: #FBE9E7;
+  --info: #1D5FA8;
+  --info-bg: #E4EEF9;
+  --shell-rail-width: 232px;
+  --shell-radius: 8px;
+  background: var(--canvas);
+  color: var(--text);
+  min-height: 100vh;
+}
+
+:root[data-theme="dark"] .shell {
+  --canvas: #0F171F;
+  --surface: #17222D;
+  --surface-muted: #22303D;
+  --surface-inset: #1C2935;
+  --text: #E6ECF2;
+  --text-muted: #93A3B5;
+  --border: #2A3846;
+  --control-border: #8496A8;
+  --border-strong: #637587;
+  --brand: #6FA8F0;
+  --brand-contrast: #0F171F;
+  --focus: #8CC7FF;
+  --pass: #6FCB9F;
+  --pass-bg: #12301F;
+  --warn: #F2C265;
+  --warn-bg: #33290F;
+  --fail: #FF8F86;
+  --fail-bg: #3A1D1B;
+  --info: #6FA8F0;
+  --info-bg: #1B2C42;
+}
+
+.shell .panel,
+.shell .metric-card,
+.shell .job-status {
+  border-radius: var(--shell-radius);
+}
+
+.shell .shell-tabs {
+  display: grid;
+}
+
+.shell .shell-tabs [role="tablist"] {
+  display: grid;
+  gap: 4px;
+}
+
+.shell .shell-tab {
+  gap: 8px;
+  justify-content: space-between;
+  text-align: left;
+  border-radius: var(--shell-radius);
+  border-left-width: 2px;
+}
+
+.shell .shell-tab[aria-selected="true"] {
+  border-left-color: var(--brand);
+  background: var(--info-bg);
+  color: var(--brand);
+  font-weight: 650;
+}
+
+.shell .shell-tab__badge {
+  border-radius: 999px;
+  background: var(--surface-muted);
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 18px;
+  padding: 0 8px;
+  white-space: nowrap;
+}
+
+.shell .shell-panel {
+  display: grid;
+  gap: 24px;
+  min-width: 0;
+}
+
+.shell .shell-panel > * {
+  min-width: 0;
+}
+
+.shell .top-header {
+  flex-wrap: wrap;
+}
+
+.shell .shell-legacy-link {
+  display: inline-flex;
+  align-items: center;
+}
+
+.shell #verdict {
+  scroll-margin-top: 96px;
+}
+
+@media (min-width: 961px) {
+  .shell.app-shell {
+    grid-template-columns: var(--shell-rail-width) minmax(0, 1fr);
+  }
+
+  .shell .side-navigation {
+    width: var(--shell-rail-width);
+  }
+}
+
+@media (max-width: 680px) {
+  .shell .shell-tabs [role="tablist"] {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}

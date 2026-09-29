@@ -19,8 +19,10 @@ P01 7.8%, P02 11.1%, P03 11.7%. Краткое обозначение: **7-13% �
 
 Это принятие результата эксперимента с ограничениями, не PASS прежнего gate
 <=5% по каждой configuration и не независимая acceptance на новых seeds.
-Исторический USEFULNESS FAIL v1 сохраняется. Новая policy пока реализована
-только в test-only runner; её подключение к продукту остаётся отдельной задачей.
+Исторический USEFULNESS FAIL v1 сохраняется. На момент этого отчёта новая
+policy была реализована только в test-only runner; позднее она подключена к
+продукту как `mbb-lag-max-holm.v1` (см.
+[контракт](contracts/diagnostics/v1/correlation-headline-selection.md)).
 SLA/verdict не менялись. Genuine partial и two-run comparisons не исследовались
 новым фильтром; прежний шум T02/T03 не покрывается принятым диапазоном 7-13%.
 

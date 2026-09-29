@@ -236,7 +236,8 @@ snapshot contract фиксируется вместе с первой испол
   median/MAD относительно явного reference-окна и сравнением двух окон с
   порогами практической значимости. Не искать «всё со всем».
 - Порядок change points, inferential tests и поправки на множественные проверки
-  отложены: текущая неопределённость — `NOT_ESTIMATED`, без p-values.
+  отложены: неопределённость raw-оценок — `NOT_ESTIMATED`; p-values есть только
+  в отборе главных корреляционных находок (`mbb-lag-max-holm.v1`).
   Pearson, Kendall и условия включения следующих методов сохранены в
   [roadmap методов](statistical-method-roadmap.md); границы первого среза —
   [ADR 0006](adr/0006-bounded-load-resource-correlation.md).

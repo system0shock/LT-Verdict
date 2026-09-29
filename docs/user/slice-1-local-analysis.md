@@ -152,7 +152,7 @@ Baseline comparison, N-run history и остальные форматы отно
 | `INVALID_JMETER_CSV_HEADER` | В заголовке JMeter CSV нет обязательного столбца или он повторяется | Экспортировать JTL с `timeStamp`, `elapsed`, `label`, `success`, каждый один раз |
 | `MALFORMED_JMETER_CSV`, `MALFORMED_JMETER_XML`, `MALFORMED_GATLING_TEXT`, `MALFORMED_GATLING_BINARY` | Файл повреждён; карточка показывает позицию в файле | Скопировать файл заново или переэкспортировать |
 | `UNSAFE_XML` | В XML есть DTD или внешние сущности | Экспортировать XML без них |
-| `UNSUPPORTED_GATLING_TEXT`, `UNSUPPORTED_GATLING_BINARY` | Версия журнала Gatling не поддерживается | Использовать поддерживаемую версию из раздела «Поддерживаемые файлы» |
+| `UNSUPPORTED_GATLING_TEXT`, `UNSUPPORTED_GATLING_BINARY` | Версия журнала Gatling не поддерживается (для текстового журнала также повторная или неполная запись `RUN`) | Использовать поддерживаемую версию из раздела «Поддерживаемые файлы» |
 | `TRUNCATED_GATLING_BINARY` | Бинарный журнал оборван; `run_validity` равен `DEGRADED` | Дождаться конца теста и взять полный журнал |
 | `INVALID_SAMPLE_TIMESTAMP` | У запроса недопустимая отметка времени, возможно секунды вместо миллисекунд | Экспортировать время в миллисекундах эпохи |
 | `RESOURCE_LIMIT_EXCEEDED` | Превышен предел обработки | Сократить прогон или число транзакций |

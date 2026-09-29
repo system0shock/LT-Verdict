@@ -125,6 +125,7 @@ GET    /api/runs/<run-id>/analyses?after=<analysis-id>&limit=1..100
 POST   /api/inputs
 POST   /api/policies/validate
 POST   /api/jobs
+GET    /api/jobs?state=active
 GET    /api/jobs/<job-id>
 DELETE /api/jobs/<job-id>
 GET    /api/runs/<run-id>/analyses/<analysis-id>/result
@@ -136,7 +137,11 @@ Runs выдаются максимум по `100`, buckets — по `500`; bucke
 потоково. `from_ms` — inclusive offset от начала run, `to_ms` — exclusive;
 доступны rollups `1`, `10`, `30` и `60` seconds. Response дополняет bucket
 вычисленным `p95_latency_ms`. Job state имеет значения `QUEUED`, `PROCESSING`,
-`COMPLETE`, `FAILED` и `CANCELLED`. Upload ограничен 4 GiB, policy — 1 MiB.
+`COMPLETE`, `FAILED` и `CANCELLED`. `GET /api/jobs?state=active` возвращает `{jobs:[JobStatus]}` для
+задач `QUEUED` и `PROCESSING` в порядке принятия (не больше
+`2 * parallelism`); любой другой query даёт `400 MALFORMED_REQUEST`
+(ADR [0015](../adr/0015-list-active-analysis-jobs.md)). Upload ограничен
+4 GiB, policy — 1 MiB.
 
 Handled failures используют envelope
 `{"error":{"code":"...","message":"...","details":[]}}`: malformed request

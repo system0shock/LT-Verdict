@@ -105,6 +105,10 @@ private fun evaluateTrendCheck(
     }
 
     val statistics = statistics(observed, expectedCells, snapshot.stepMillis, checkCancelled)
+    val halfFloor = check.minCells / 2
+    if (statistics.firstHalfCells < halfFloor || statistics.secondHalfCells < halfFloor) {
+        return abstain(check, series, window, "INSUFFICIENT_CELLS", reasons + "TREND_HALF_CELLS_NOT_MET", partial)
+    }
     val slope = statistics.slopePerSecond
     val shift = statistics.splitHalfShift
     val median = statistics.median

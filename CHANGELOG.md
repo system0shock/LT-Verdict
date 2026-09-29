@@ -5,6 +5,14 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- Проверка роста метрики (`trend-plan.v1`) теперь отказывает с
+  `INSUFFICIENT_CELLS` и reason `TREND_HALF_CELLS_NOT_MET`, если в одной из
+  половин окна меньше `floor(min_cells / 2)` наблюдаемых ячеек: раньше минимум
+  проверялся только по всему окну, и сдвиг половин мог опираться на единичную
+  точку. `resource_summary` не меняется.
+
 ### Added
 
 - Авто-окно выборки источника: `source-request.v3` с `window.origin` `auto`

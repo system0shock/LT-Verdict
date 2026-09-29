@@ -131,6 +131,55 @@ class TrendAnalysisTest {
     }
 
     @Test
+    fun `a sparse half abstains even when the whole window meets min_cells`() {
+        // 60 ячеек, середина 30; в первой половине одна точка, во второй 30, всего 31 >= 30
+        val values = List<BigDecimal?>(60) { index -> if (index < 29) null else BigDecimal.valueOf(100L + index) }
+
+        val analysis = evaluateTrend(plan(), snapshot(values, WINDOWS_60), WINDOWS_60)
+
+        val evidence = singleCheck(analysis)
+        assertEquals("INSUFFICIENT_CELLS", evidence.string("status"))
+        assertEquals(listOf("RESOURCE_GAPS", "TREND_HALF_CELLS_NOT_MET"), evidence.reasons())
+        assertEquals("31", evidence.string("observed_cells"))
+        assertTrue(analysis.findings.isEmpty())
+    }
+
+    @Test
+    fun `a half at exactly half of min_cells is enough and one fewer is not`() {
+        // min_cells = 30 -> порог половины 15. Первая половина: 15 точек (проходит) и 14 (отказ).
+        fun window(firstHalfObserved: Int) =
+            List<BigDecimal?>(60) { index ->
+                when {
+                    index < 30 && index >= 30 - firstHalfObserved -> BigDecimal.valueOf(100L + index)
+                    index >= 30 -> BigDecimal.valueOf(100L + index)
+                    else -> null
+                }
+            }
+
+        val enough = evaluateTrend(plan(), snapshot(window(15), WINDOWS_60), WINDOWS_60)
+        assertEquals("TREND_OBSERVED", singleCheck(enough).string("status"))
+
+        val notEnough = evaluateTrend(plan(), snapshot(window(14), WINDOWS_60), WINDOWS_60)
+        assertEquals("INSUFFICIENT_CELLS", singleCheck(notEnough).string("status"))
+        assertEquals(listOf("RESOURCE_GAPS", "TREND_HALF_CELLS_NOT_MET"), singleCheck(notEnough).reasons())
+    }
+
+    @Test
+    fun `the half threshold follows a min_cells above the floor and is symmetric`() {
+        // min_cells = 60 -> порог половины 30.
+        // 80 ячеек, середина 40: первая половина 40, вторая 11, всего 51 < 60 -> срабатывает общий минимум
+        val values = List<BigDecimal?>(80) { index -> if (index >= 40 + 11) null else BigDecimal.valueOf(100L + index) }
+        val total = evaluateTrend(plan(minCells = 60), snapshot(values, WINDOWS_80), WINDOWS_80)
+        assertEquals(listOf("RESOURCE_GAPS", "TREND_MIN_CELLS_NOT_MET"), singleCheck(total).reasons())
+
+        // 100 ячеек, середина 50; вторая половина 29 наблюдённых, первая 50, всего 79 >= 60
+        val sparseSecond = List<BigDecimal?>(100) { index -> if (index >= 50 + 29) null else BigDecimal.valueOf(100L + index) }
+        val half = evaluateTrend(plan(minCells = 60), snapshot(sparseSecond, WINDOWS_100), WINDOWS_100)
+        assertEquals("INSUFFICIENT_CELLS", singleCheck(half).string("status"))
+        assertEquals(listOf("RESOURCE_GAPS", "TREND_HALF_CELLS_NOT_MET"), singleCheck(half).reasons())
+    }
+
+    @Test
     fun `an empty window reports no observations instead of a flat trend`() {
         val analysis = evaluateTrend(plan(), snapshot(List<BigDecimal?>(40) { null }), WINDOWS)
 
@@ -240,7 +289,10 @@ class TrendAnalysisTest {
 
     private fun ramp(): List<BigDecimal?> = List(40) { BigDecimal.valueOf(100L + it) }
 
-    private fun snapshot(values: List<BigDecimal?>): ResourceSnapshotV1 =
+    private fun snapshot(
+        values: List<BigDecimal?>,
+        windows: List<ResourceWindowV1> = WINDOWS,
+    ): ResourceSnapshotV1 =
         ResourceSnapshotV1(
             "resource-snapshot.v1",
             "a".repeat(64),
@@ -259,7 +311,7 @@ class TrendAnalysisTest {
                     values,
                 ),
             ),
-            WINDOWS,
+            windows,
             emptyList(),
             null,
         )
@@ -277,5 +329,8 @@ class TrendAnalysisTest {
     private companion object {
         const val START = 1_767_225_600_000L
         val WINDOWS = listOf(ResourceWindowV1("evaluation", START, START + 40_000L))
+        val WINDOWS_60 = listOf(ResourceWindowV1("evaluation", START, START + 60_000L))
+        val WINDOWS_80 = listOf(ResourceWindowV1("evaluation", START, START + 80_000L))
+        val WINDOWS_100 = listOf(ResourceWindowV1("evaluation", START, START + 100_000L))
     }
 }

@@ -93,6 +93,8 @@ internal data class Statistics(
     val sampleStandardDeviation: BigDecimal?,
     val slopePerSecond: BigDecimal?,
     val splitHalfShift: BigDecimal?,
+    val firstHalfCells: Int,
+    val secondHalfCells: Int,
 )
 
 private data class RuleOutcome(
@@ -161,7 +163,7 @@ internal fun statistics(
     stepMillis: Long,
     checkCancelled: () -> Unit,
 ): Statistics {
-    if (observed.isEmpty()) return Statistics(null, null, null, null, null, null, null, null, null, null, null, null, null)
+    if (observed.isEmpty()) return Statistics(null, null, null, null, null, null, null, null, null, null, null, null, null, 0, 0)
     checkCancelled()
     val ordered = observed.map(IndexedValue::value).sorted()
     checkCancelled()
@@ -230,6 +232,8 @@ internal fun statistics(
         sampleStandardDeviation,
         slope,
         splitHalf,
+        firstHalf.size,
+        secondHalf.size,
     )
 }
 

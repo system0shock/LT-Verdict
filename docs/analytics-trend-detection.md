@@ -123,6 +123,7 @@ Reason-коды L0:
 ```text
 NO_OBSERVATIONS           в окне нет ни одной наблюдаемой ячейки
 TREND_MIN_CELLS_NOT_MET   наблюдаемых ячеек меньше объявленного минимума
+TREND_HALF_CELLS_NOT_MET  в одной из половин окна меньше floor(min_cells / 2) наблюдаемых ячеек
 INSUFFICIENT_OBSERVATIONS статистики не определены на доступных ячейках
 RESOURCE_GAPS             пропуски есть, время не сжимается
 TREND_MEDIAN_ZERO         процентный порог не определён при нулевой медиане

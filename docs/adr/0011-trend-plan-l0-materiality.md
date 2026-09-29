@@ -26,7 +26,8 @@
 
 Статусы проверки: `TREND_OBSERVED`, `NO_MATERIAL_TREND`, `INSUFFICIENT_CELLS`,
 `UNAVAILABLE`. Каждый отказ несёт точный reason: `NO_OBSERVATIONS`,
-`TREND_MIN_CELLS_NOT_MET`, `INSUFFICIENT_OBSERVATIONS`, `TREND_MEDIAN_ZERO`,
+`TREND_MIN_CELLS_NOT_MET`, `TREND_HALF_CELLS_NOT_MET` (см. дополнение
+2026-09-29), `INSUFFICIENT_OBSERVATIONS`, `TREND_MEDIAN_ZERO`,
 `TREND_DIRECTION_MISMATCH`, `TREND_DIRECTION_DISAGREEMENT`,
 `TREND_SLOPE_BELOW_MINIMUM`, `TREND_SHIFT_BELOW_MINIMUM`,
 `TREND_SERIES_NOT_FOUND`, `TREND_WINDOW_NOT_FOUND`. Каждый `TREND_OBSERVED`
@@ -78,3 +79,39 @@
   накопления истории сопоставимых прогонов.
 - Автоматический поиск «подозрительных» метрик без объявления: неконтролируемая
   мультипликативность, измеренная в v1 как 91,7 % ложных главных находок.
+
+## Дополнение 2026-09-29
+
+Основание: ревью ветки `feat/trend-plan-l0`, пункты M1–M3. Владелец согласовал
+вариант A для M1.
+
+### M1. Минимум наблюдений в каждой половине окна
+
+`min_cells` проверялся по всему окну, а `split_half_shift` делит окно по индексу
+ячейки (`midpoint = expectedCells / 2`). При 30 наблюдённых ячейках в первой
+половине могла оказаться одна точка: сдвиг сравнивал медиану 29 точек с одной,
+и гейт был пройден при статистически пустой оценке.
+
+Решение: проверка, у которой в любой из половин наблюдённых ячеек меньше
+`floor(min_cells / 2)`, получает статус `INSUFFICIENT_CELLS` и reason
+`TREND_HALF_CELLS_NOT_MET`. Порядок: после `NO_OBSERVATIONS` и
+`TREND_MIN_CELLS_NOT_MET`, до расчёта гейта. Reason `RESOURCE_GAPS` сохраняется,
+если пропуски есть. При `min_cells = 30` нужно не меньше 15 наблюдённых в каждой
+половине, при `min_cells = 60` не меньше 30.
+
+Единственное определение середины остаётся в `statistics()`: он же считает два
+внутренних счётчика половин (`firstHalfCells`, `secondHalfCells`), а
+`TrendAnalysis` их читает. Счётчики в JSON не выводятся, в `evidence.trend_check`
+и `trend.v1` новых полей нет. `resource_summary` и его `split_half_shift` не
+меняются.
+
+Идентичность: схема `trend-plan.v1`, блок `limits` и `trend_method` не меняются;
+`trend_method` остаётся `slope-materiality.v1`, потому что L0 не выпущен. Байты
+результата меняются только для проверок, которые раньше проходили минимум по
+окну при разреженной половине. Если к моменту слияния L0 уже используется вне
+разработки, идентификатор поднимается до `slope-materiality.v2`.
+
+Отклонённые варианты: фиксированный пол половины (новая константа попадает в
+блок `limits` identity и меняет байты всех прогонов с планом); поле плана
+`min_cells_per_half` (меняет публичный контракт `trend-plan.v1`, нужен отдельный
+ADR).

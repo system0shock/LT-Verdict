@@ -516,9 +516,15 @@ Optional `trend-plan.v1` отвечает на вопрос «растёт ли 
 `expected_cells`, `observed_cells`, `missing_cells`, `longest_gap_cells` и
 reason `RESOURCE_GAPS`.
 
+Кроме общего минимума, в каждой половине окна должно быть не меньше
+`floor(min_cells / 2)` наблюдаемых ячеек (при `min_cells` 30 это 15 в каждой
+половине). Иначе сдвиг половин сравнивал бы медиану многих точек с единичной, и
+проверка отказывает с `INSUFFICIENT_CELLS` и reason `TREND_HALF_CELLS_NOT_MET`.
+
 Статусы: `TREND_OBSERVED`, `NO_MATERIAL_TREND`, `INSUFFICIENT_CELLS`,
 `UNAVAILABLE`. Каждый отказ несёт точный reason — `NO_OBSERVATIONS`,
-`TREND_MIN_CELLS_NOT_MET`, `INSUFFICIENT_OBSERVATIONS`, `TREND_MEDIAN_ZERO`
+`TREND_MIN_CELLS_NOT_MET`, `TREND_HALF_CELLS_NOT_MET`,
+`INSUFFICIENT_OBSERVATIONS`, `TREND_MEDIAN_ZERO`
 (процентный порог не определён при нулевой медиане), `TREND_DIRECTION_MISMATCH`,
 `TREND_DIRECTION_DISAGREEMENT`, `TREND_SLOPE_BELOW_MINIMUM`,
 `TREND_SHIFT_BELOW_MINIMUM`. Каждый `TREND_OBSERVED` дополнительно несёт

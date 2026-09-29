@@ -102,6 +102,8 @@ class RunBundleStoreTest {
             assertEquals(accepted, store.requireInput(accepted.runId))
             assertEquals(listOf(accepted.runId), store.listRuns(null, 10).runs.map { it.runId })
             assertTrue(store.listAnalyses(accepted.runId, null, 10).analyses.isEmpty())
+            // Re-accepting the original bytes still compares them byte-for-byte with the stored file.
+            assertThrows(IllegalStateException::class.java) { store.acceptInput(ByteArrayInputStream(bytes), "again.csv") }
 
             // The cheap size check remains.
             Files.write(accepted.path, bytes + 0)

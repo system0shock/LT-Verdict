@@ -11,7 +11,7 @@ import RunSetup from './RunSetup.vue'
 import VerdictCard from './VerdictCard.vue'
 import ShellPanel from './shell/ShellPanel.vue'
 import ShellTabs from './shell/ShellTabs.vue'
-import { SHELL_LABELS, type ShellTabKey } from './shell/labels'
+import { SHELL_DEFAULT_TAB, SHELL_LABELS, type ShellTabKey } from './shell/labels'
 import { isNewShell } from './shell/shell'
 import {
   ApiError,
@@ -34,11 +34,11 @@ import type { AnalysisResult, AnalysisSummary, Bucket, JobStatus, OpenSearchEvid
 
 const theme = ref<Theme>(window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light')
 const shellNew = isNewShell(window.location.search)
-const activeTab = ref<ShellTabKey>('overview')
+const activeTab = ref<ShellTabKey>(SHELL_DEFAULT_TAB)
 const legacyHref = window.location.pathname
 const chrome = shellNew
-  ? { noRun: SHELL_LABELS.noRun, completed: SHELL_LABELS.completed, toDark: SHELL_LABELS.themeToDark, toLight: SHELL_LABELS.themeToLight }
-  : { noRun: 'No run selected', completed: 'Completed', toDark: 'Dark theme', toLight: 'Light theme' }
+  ? { noRun: SHELL_LABELS.noRun, completed: SHELL_LABELS.completed, toDark: SHELL_LABELS.themeToDark, toLight: SHELL_LABELS.themeToLight, runsTitle: SHELL_LABELS.runsTitle, runsEmpty: SHELL_LABELS.runsEmpty, runsMore: SHELL_LABELS.runsMore, analysesTitle: SHELL_LABELS.analysesTitle, analysisItem: SHELL_LABELS.analysisItem, analysesEmpty: SHELL_LABELS.analysesEmpty, analysesMore: SHELL_LABELS.analysesMore }
+  : { noRun: 'No run selected', completed: 'Completed', toDark: 'Dark theme', toLight: 'Light theme', runsTitle: 'Accepted runs', runsEmpty: 'No runs yet', runsMore: 'More runs', analysesTitle: 'Saved analyses', analysisItem: 'Analysis', analysesEmpty: 'No saved analyses for this run.', analysesMore: 'More analyses' }
 const shownIn = (tab: ShellTabKey) => !shellNew || activeTab.value === tab
 const apiReady = ref(false)
 const inputFile = ref<File | null>(null)
@@ -555,9 +555,10 @@ function focusPolicy() {
       <section
         class="run-list-section"
         aria-labelledby="run-list-title"
+        :lang="shellNew ? 'ru' : undefined"
       >
         <h2 id="run-list-title">
-          Accepted runs
+          {{ chrome.runsTitle }}
         </h2>
         <ul
           data-testid="run-list"
@@ -583,7 +584,7 @@ function focusPolicy() {
             v-if="runs.length === 0"
             class="muted"
           >
-            No runs yet
+            {{ chrome.runsEmpty }}
           </li>
         </ul>
         <button
@@ -591,16 +592,17 @@ function focusPolicy() {
           type="button"
           @click="refreshRuns(nextRunAfter ?? undefined)"
         >
-          More runs
+          {{ chrome.runsMore }}
         </button>
       </section>
       <section
         v-if="currentRun"
         class="run-list-section"
         aria-labelledby="analysis-list-title"
+        :lang="shellNew ? 'ru' : undefined"
       >
         <h2 id="analysis-list-title">
-          Saved analyses
+          {{ chrome.analysesTitle }}
         </h2>
         <ul class="run-list">
           <li
@@ -614,7 +616,7 @@ function focusPolicy() {
               :aria-pressed="selectedAnalysisId === analysis.analysis_id"
               @click="selectAnalysis(analysis)"
             >
-              <span>Analysis {{ analysis.analysis_id.slice(0, 12) }}</span>
+              <span>{{ chrome.analysisItem }} {{ analysis.analysis_id.slice(0, 12) }}</span>
               <small>{{ analysis.policy_verdict }} · {{ analysis.run_validity }}</small>
             </button>
           </li>
@@ -622,7 +624,7 @@ function focusPolicy() {
             v-if="analyses.length === 0"
             class="muted"
           >
-            No saved analyses for this run.
+            {{ chrome.analysesEmpty }}
           </li>
         </ul>
         <button
@@ -630,7 +632,7 @@ function focusPolicy() {
           type="button"
           @click="refreshAnalyses(undefined, nextAnalysisAfter ?? undefined)"
         >
-          More analyses
+          {{ chrome.analysesMore }}
         </button>
       </section>
     </aside>

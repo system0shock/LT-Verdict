@@ -9,14 +9,18 @@ export interface ShellTab {
   pending: boolean
 }
 
+// Порядок как в макете: главное действие «Новый анализ» первой вкладкой.
 export const SHELL_TABS: readonly ShellTab[] = [
+  { key: 'setup', label: 'Новый анализ', pending: false },
   { key: 'overview', label: 'Обзор', pending: false },
   { key: 'tables', label: 'Таблицы', pending: false },
   { key: 'compare', label: 'Сравнение', pending: false },
   { key: 'rules', label: 'Правила', pending: true },
   { key: 'advice', label: 'ИИ-разбор', pending: false },
-  { key: 'setup', label: 'Новый анализ', pending: false },
 ]
+
+// Вкладка при открытии страницы, пока прогон не выбран; после загрузки результата открывается «Обзор».
+export const SHELL_DEFAULT_TAB: ShellTabKey = 'setup'
 
 export const SHELL_LABELS = {
   navLabel: 'Разделы',
@@ -29,4 +33,11 @@ export const SHELL_LABELS = {
   themeToDark: 'Тёмная тема',
   themeToLight: 'Светлая тема',
   legacyLink: 'Старый интерфейс',
+  runsTitle: 'Принятые прогоны',
+  runsEmpty: 'Прогонов пока нет',
+  runsMore: 'Ещё прогоны',
+  analysesTitle: 'Сохранённые анализы',
+  analysisItem: 'Анализ',
+  analysesEmpty: 'Для этого прогона нет сохранённых анализов.',
+  analysesMore: 'Ещё анализы',
 } as const

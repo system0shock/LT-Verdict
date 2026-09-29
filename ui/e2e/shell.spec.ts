@@ -1,6 +1,6 @@
 import AxeBuilder from '@axe-core/playwright'
 import { expect, test, type Page } from '@playwright/test'
-import { SHELL_LABELS, SHELL_TABS } from '../src/shell/labels'
+import { SHELL_DEFAULT_TAB, SHELL_LABELS, SHELL_TABS } from '../src/shell/labels'
 
 const reference = { run_id: 'shell-run', analysis_id: 'a'.repeat(64) }
 const run = { ...reference, source_type: 'jmeter', sha256: 'b'.repeat(64), size_bytes: 100, original_filename: 'shell.jtl' }
@@ -80,7 +80,7 @@ for (const search of ['?shell=old', '?shell=', '?shell=NEW', '?shell=new%20', '?
   })
 }
 
-test('the new interface exposes six tabs with one selected and a labelled panel', async ({ page }) => {
+test('the new interface exposes six tabs, New analysis first and selected, with a labelled panel', async ({ page }) => {
   await fixtureApi(page)
   await page.goto('/?shell=new')
 
@@ -90,14 +90,16 @@ test('the new interface exposes six tabs with one selected and a labelled panel'
     SHELL_TABS.map((tab) => new RegExp(`^${tab.label}`)),
   )
   await expect(page.getByRole('navigation', { name: 'Application' })).toHaveCount(0)
-  await expect(tabByKey(page, 'overview')).toHaveAttribute('aria-selected', 'true')
-  for (const tab of SHELL_TABS.filter((item) => item.key !== 'overview')) {
+  expect(SHELL_TABS[0].key).toBe('setup')
+  expect(SHELL_DEFAULT_TAB).toBe('setup')
+  await expect(tabByKey(page, 'setup')).toHaveAttribute('aria-selected', 'true')
+  for (const tab of SHELL_TABS.filter((item) => item.key !== 'setup')) {
     await expect(tabByKey(page, tab.key)).toHaveAttribute('aria-selected', 'false')
   }
   const panel = page.getByRole('tabpanel')
   await expect(panel).toHaveCount(1)
-  await expect(panel).toHaveAttribute('aria-labelledby', 'shell-tab-overview')
-  await expect(tabByKey(page, 'overview')).toHaveAttribute('aria-controls', await panel.getAttribute('id') ?? '')
+  await expect(panel).toHaveAttribute('aria-labelledby', 'shell-tab-setup')
+  await expect(tabByKey(page, 'setup')).toHaveAttribute('aria-controls', await panel.getAttribute('id') ?? '')
   await expect(tablist.getByText(SHELL_LABELS.pendingBadge)).toHaveCount(SHELL_TABS.filter((tab) => tab.pending).length)
   await expect(tabByKey(page, 'rules')).toContainText(SHELL_LABELS.pendingBadge)
 })
@@ -108,12 +110,13 @@ test('arrow keys, Home and End move between tabs with a roving tabindex', async 
   const tabs = page.getByRole('tab')
   await tabs.first().focus()
 
+  await expect(tabs.first()).toHaveAttribute('aria-selected', 'true')
   await page.keyboard.press('ArrowDown')
   await expect(tabs.nth(1)).toBeFocused()
   await expect(tabs.nth(1)).toHaveAttribute('aria-selected', 'true')
   await expect(tabs.nth(1)).toHaveAttribute('tabindex', '0')
   await expect(tabs.first()).toHaveAttribute('tabindex', '-1')
-  await expect(page.getByRole('tabpanel')).toHaveAttribute('aria-labelledby', 'shell-tab-tables')
+  await expect(page.getByRole('tabpanel')).toHaveAttribute('aria-labelledby', 'shell-tab-overview')
 
   await page.keyboard.press('ArrowRight')
   await expect(tabs.nth(2)).toBeFocused()
@@ -136,25 +139,25 @@ test('arrow keys, Home and End move between tabs with a roving tabindex', async 
 test('Tab leaves the tab list instead of walking through every tab', async ({ page }) => {
   await fixtureApi(page)
   await page.goto('/?shell=new')
-  await tabByKey(page, 'overview').focus()
+  await tabByKey(page, 'setup').focus()
 
   await page.keyboard.press('Tab')
 
   expect(await page.evaluate(() => document.activeElement?.getAttribute('role'))).not.toBe('tab')
   await page.keyboard.press('Shift+Tab')
-  await expect(tabByKey(page, 'overview')).toBeFocused()
+  await expect(tabByKey(page, 'setup')).toBeFocused()
 })
 
 test('tabs show the existing panels and never fake data', async ({ page }) => {
   await fixtureApi(page)
   await page.goto('/?shell=new')
 
-  await expect(page.getByText(SHELL_LABELS.overviewEmpty)).toBeVisible()
-  await expect(page.locator('#run-setup')).toBeHidden()
-
-  await tabByKey(page, 'setup').click()
   await expect(page.locator('#run-setup')).toBeVisible()
   await expect(page.getByText(SHELL_LABELS.overviewEmpty)).toBeHidden()
+
+  await tabByKey(page, 'overview').click()
+  await expect(page.getByText(SHELL_LABELS.overviewEmpty)).toBeVisible()
+  await expect(page.locator('#run-setup')).toBeHidden()
 
   await tabByKey(page, 'rules').click()
   await expect(page.getByRole('heading', { name: SHELL_LABELS.rulesPendingTitle })).toBeVisible()
@@ -169,7 +172,7 @@ test('tabs show the existing panels and never fake data', async ({ page }) => {
 test('choosing a saved analysis opens the overview and every tab keeps its own content', async ({ page }) => {
   await fixtureApi(page)
   await page.goto('/?shell=new')
-  await tabByKey(page, 'setup').click()
+  await expect(tabByKey(page, 'setup')).toHaveAttribute('aria-selected', 'true')
 
   await pickSavedAnalysis(page)
 
@@ -236,7 +239,7 @@ test('the theme follows the system, toggles in memory and is never stored', asyn
   expect(stored).toEqual({ local: 0, session: 0, cookie: '' })
   await page.reload()
   await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark')
-  await expect(tabByKey(page, 'overview')).toHaveAttribute('aria-selected', 'true')
+  await expect(tabByKey(page, SHELL_DEFAULT_TAB)).toHaveAttribute('aria-selected', 'true')
 })
 
 for (const theme of ['light', 'dark'] as const) {
@@ -270,6 +273,24 @@ for (const size of [{ width: 1280, height: 800 }, { width: 375, height: 800 }]) 
     }
   })
 }
+
+test('the run lists are in Russian in the new shell and unchanged in the old one', async ({ page }) => {
+  await fixtureApi(page)
+  await page.goto('/?shell=new')
+  await expect(page.getByRole('heading', { name: SHELL_LABELS.runsTitle })).toBeVisible()
+  await expect(page.getByText('Accepted runs')).toHaveCount(0)
+  await page.getByRole('button', { name: 'shell.jtl' }).click()
+  await expect(page.getByRole('heading', { name: SHELL_LABELS.analysesTitle })).toBeVisible()
+  await expect(page.locator(`button[title="${reference.analysis_id}"]`)).toContainText(SHELL_LABELS.analysisItem)
+  await expect(page.getByText('Saved analyses')).toHaveCount(0)
+
+  await page.goto('/')
+  await expect(page.getByRole('heading', { name: 'Accepted runs' })).toBeVisible()
+  await page.getByRole('button', { name: 'shell.jtl' }).click()
+  await expect(page.getByRole('heading', { name: 'Saved analyses' })).toBeVisible()
+  await expect(page.locator(`button[title="${reference.analysis_id}"]`)).toContainText('Analysis')
+  await expect(page.getByText(SHELL_LABELS.runsTitle)).toHaveCount(0)
+})
 
 test('the sticky header does not cover the verdict card after the chip jump', async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 500 })

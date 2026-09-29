@@ -326,7 +326,12 @@ function updateRange(name: 'update:range-start' | 'update:range-end', event: Eve
         Policy results
       </h2>
     </div>
-    <div class="table-wrap">
+    <div
+      class="table-wrap"
+      tabindex="0"
+      role="region"
+      aria-label="Policy results"
+    >
       <table>
         <thead><tr><th>Window</th><th>Transaction</th><th>Metric</th><th>Operator</th><th>Threshold</th><th>Measured</th><th>Scope</th><th>Status</th></tr></thead>
         <tbody>
@@ -363,7 +368,12 @@ function updateRange(name: 'update:range-start' | 'update:range-end', event: Eve
     <p>Axis: {{ capacity.load_axis }} ({{ capacity.unit }}) · Capacity bound: {{ capacity.bound_type }} [{{ capacityValue(capacity.lower_inclusive) }}, {{ capacityValue(capacity.upper_exclusive) }})</p>
     <p>Policy: {{ capacity.policy_verdict }} · Knee: {{ capacityValue(capacity.capacity_knee) }} · {{ capacity.knee_reason }}</p>
     <p>Reasons: {{ capacity.reasons.join(', ') || '—' }}</p>
-    <div class="table-wrap">
+    <div
+      class="table-wrap"
+      tabindex="0"
+      role="region"
+      aria-label="Capacity stages"
+    >
       <table>
         <thead><tr><th>Stage</th><th>Target</th><th>Achieved (p05 10s)</th><th>Observed min / max</th><th>Bins complete / expected</th><th>Verified bound</th><th>Verdict</th><th>Reasons</th><th>Evidence</th></tr></thead>
         <tbody>
@@ -478,6 +488,9 @@ function updateRange(name: 'update:range-start' | 'update:range-end', event: Eve
     <div
       v-if="windowPolicySummaries.length"
       class="table-wrap"
+      tabindex="0"
+      role="region"
+      aria-label="Window policy summaries"
     >
       <table>
         <thead><tr><th>Window</th><th>From epoch (ms)</th><th>To epoch (ms)</th><th>Business verdict</th><th>Resource verdict</th><th>Verdict</th></tr></thead>
@@ -509,6 +522,9 @@ function updateRange(name: 'update:range-start' | 'update:range-end', event: Eve
     <div
       v-if="resourceSummaries.length"
       class="table-wrap"
+      tabindex="0"
+      role="region"
+      aria-label="Resource summaries"
     >
       <table>
         <thead><tr><th>Series</th><th>Metric</th><th>Unit</th><th>Entity</th><th>Role</th><th>Aggregation</th><th>Window</th><th>Coverage (observed / expected)</th><th>Missing cells</th><th>Longest gap</th><th>Min</th><th>Max</th><th>Mean</th><th>Median</th><th>Q05</th><th>Q25</th><th>Q75</th><th>Q95</th><th>IQR</th><th>MAD</th><th>Sample standard deviation</th><th>Slope per second</th><th>Split-half shift</th><th>Reasons</th></tr></thead>
@@ -525,6 +541,9 @@ function updateRange(name: 'update:range-start' | 'update:range-end', event: Eve
     <div
       v-if="resourceChecks.length"
       class="table-wrap"
+      tabindex="0"
+      role="region"
+      aria-label="Resource policy checks"
     >
       <table>
         <thead><tr><th>Window</th><th>Rule</th><th>Series</th><th>Operator</th><th>Threshold</th><th>Effect</th><th>Status</th><th>Reason</th></tr></thead>
@@ -563,6 +582,9 @@ function updateRange(name: 'update:range-start' | 'update:range-end', event: Eve
       v-for="item in sourceSummaries"
       :key="`${item.profile_id}:${item.id}`"
       class="table-wrap"
+      tabindex="0"
+      role="region"
+      :aria-label="`Source acquisition: ${item.profile_id}`"
     >
       <table>
         <thead><tr><th>Profile</th><th>Source</th><th>Status</th><th>Requests / retries</th><th>Throttle wait (ms)</th><th>Request cap</th></tr></thead>
@@ -584,6 +606,9 @@ function updateRange(name: 'update:range-start' | 'update:range-end', event: Eve
       v-if="windowProvenance"
       data-testid="window-provenance"
       class="table-wrap"
+      tabindex="0"
+      role="region"
+      aria-label="Window provenance"
     >
       <table>
         <thead><tr><th>Window</th><th>Value</th></tr></thead>
@@ -612,7 +637,12 @@ function updateRange(name: 'update:range-start' | 'update:range-end', event: Eve
       {{ context.coverage.reasons.join(', ') }}
     </p>
     <p>Error context does not change SLA verdicts. Samples are bounded, not an exhaustive error log.</p>
-    <div class="table-wrap">
+    <div
+      class="table-wrap"
+      tabindex="0"
+      role="region"
+      :aria-label="`OpenSearch error groups: ${context.profile_id}`"
+    >
       <table>
         <thead><tr><th>Service</th><th>Error type</th><th>Count</th><th>First / last (epoch ms)</th><th>Samples</th></tr></thead>
         <tbody>
@@ -957,7 +987,12 @@ function updateRange(name: 'update:range-start' | 'update:range-end', event: Eve
         Transaction metrics
       </h2>
     </div>
-    <div class="table-wrap">
+    <div
+      class="table-wrap"
+      tabindex="0"
+      role="region"
+      aria-label="Transaction metrics"
+    >
       <table>
         <thead><tr><th>Path</th><th>Transaction</th><th>Kind</th><th>Samples</th><th>Errors</th><th>Error rate</th><th>P99</th><th>Throughput</th><th>Policy</th></tr></thead>
         <tbody>
@@ -1023,7 +1058,12 @@ function updateRange(name: 'update:range-start' | 'update:range-end', event: Eve
       :buckets="buckets"
       :rollup="bucketRollup"
     />
-    <div class="table-wrap">
+    <div
+      class="table-wrap"
+      tabindex="0"
+      role="region"
+      aria-label="Time bins"
+    >
       <table>
         <thead><tr><th>Time bin</th><th>RPS</th><th>Errors</th><th>P95</th><th>Max latency</th><th>Data status</th></tr></thead>
         <tbody>

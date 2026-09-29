@@ -432,7 +432,7 @@ internal class RunBundleStore(
             )
         }
 
-    // History displays saved facts: verify the documents consumed, not every raw input again.
+    // History displays saved facts: hash-verify only the (bounded) documents consumed; raw inputs and other artifacts are never read.
     // ponytail: bounded directory scan; add an index only if histories routinely exceed these limits.
     fun readComparisonHistory(
         limit: Int = 1000,
@@ -638,7 +638,8 @@ internal class RunBundleStore(
         val originalFilename = metadata.string("original_filename")
         if (storedRunId != runId || runId != "${sourceType.wireName}-$sha256") corrupt("run identity differs")
         if (!SHA256.matches(sha256) || sizeBytes < 1 || !isSafeFilename(originalFilename)) corrupt("source metadata is invalid")
-        if (Files.size(source) != sizeBytes || sha256(source) != sha256) corrupt("source bytes differ")
+        // Trusted local contour: content is hashed once at accept time (run_id); reads check size only.
+        if (Files.size(source) != sizeBytes) corrupt("source size differs")
 
         val accepted = AcceptedInput(runId, sourceType, sha256, sizeBytes, originalFilename, source)
         if (!metadataBytes.contentEquals(sourceMetadata(accepted))) corrupt("source metadata is not canonical")
@@ -681,8 +682,9 @@ internal class RunBundleStore(
         if (parseObject(Files.readAllBytes(identityPath), "analysis identity").string("run_id") != runId) {
             corrupt("analysis run identity differs")
         }
+        // Artifact bytes are hashed when written (manifest); reads compare paths and sizes only.
         val actual = inspectPublishedArtifacts(analysis)
-        if (actual != sortedArtifacts) corrupt("analysis artifacts differ")
+        if (actual != sortedArtifacts.map { it.path to it.sizeBytes }) corrupt("analysis artifacts differ")
         return StoredAnalysis(analysis, artifacts)
     }
 
@@ -707,8 +709,8 @@ internal class RunBundleStore(
         return artifacts.sortedBy { it.path }
     }
 
-    private fun inspectPublishedArtifacts(analysis: Path): List<StoredArtifact> {
-        val artifacts = mutableListOf<StoredArtifact>()
+    private fun inspectPublishedArtifacts(analysis: Path): List<Pair<String, Long>> {
+        val artifacts = mutableListOf<Pair<String, Long>>()
         Files.walk(analysis).use { paths ->
             paths.forEach { path ->
                 if (path == analysis) return@forEach
@@ -717,11 +719,11 @@ internal class RunBundleStore(
                 if (!Files.isRegularFile(path, LinkOption.NOFOLLOW_LINKS)) corrupt("analysis contains a special file")
                 val relative = analysis.relativize(path).invariantPath()
                 if (relative != "manifest.json") {
-                    artifacts += StoredArtifact(relative, Files.size(path), sha256(path))
+                    artifacts += relative to Files.size(path)
                 }
             }
         }
-        return artifacts.sortedBy { it.path }
+        return artifacts.sortedBy { it.first }
     }
 }
 

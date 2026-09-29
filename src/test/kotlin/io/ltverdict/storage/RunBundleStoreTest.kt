@@ -45,7 +45,7 @@ class RunBundleStoreTest {
                 }
             assertTrue(store.readComparisonHistory(byteLimit = 1).truncated)
             assertTrue(store.readComparisonHistory(byteLimit = 1).entries.isEmpty())
-            // History is a view of saved facts; opening/replaying an analysis still verifies the raw file.
+            // History is a view of saved facts; opening/replaying an analysis checks only the raw file size (not its hash).
             Files.writeString(input.path, "changed source")
             val history = store.readComparisonHistory()
             assertEquals(1, history.entries.size)
@@ -88,6 +88,56 @@ class RunBundleStoreTest {
                 store.acceptInput(ByteArrayInputStream(bytes), "results.csv")
             }
             assertStagingEmpty(root)
+        }
+
+    @Test
+    fun `reads do not rehash stored input so same-length substitution is intentionally not detected`() =
+        withStore { store, root ->
+            val bytes = Files.readAllBytes(Path.of(CSV_FIXTURE))
+            val accepted = store.acceptInput(ByteArrayInputStream(bytes), "results.csv")
+
+            // Trusted local contour: run_id = source type + hash at accept time; reads check existence and size only.
+            val substituted = bytes.copyOf().also { it[it.size - 1] = (it[it.size - 1].toInt() xor 1).toByte() }
+            Files.write(accepted.path, substituted)
+            assertEquals(accepted, store.requireInput(accepted.runId))
+            assertEquals(listOf(accepted.runId), store.listRuns(null, 10).runs.map { it.runId })
+            assertTrue(store.listAnalyses(accepted.runId, null, 10).analyses.isEmpty())
+
+            // The cheap size check remains.
+            Files.write(accepted.path, bytes + 0)
+            assertThrows(IllegalStateException::class.java) { store.requireInput(accepted.runId) }
+            assertThrows(IllegalStateException::class.java) { store.listRuns(null, 10) }
+            Files.write(accepted.path, bytes)
+            assertEquals(accepted, store.requireInput(accepted.runId))
+            assertStagingEmpty(root)
+        }
+
+    @Test
+    fun `reading a saved analysis does not rehash artifacts but still checks paths and sizes`() =
+        withStore { store, _ ->
+            val input = store.acceptInput(Files.newInputStream(Path.of(CSV_FIXTURE)), "input.jtl")
+            val identity = """{"policy_sha256":"${"a".repeat(64)}","run_id":"${input.runId}"}""".encodeToByteArray()
+            val analysisId = sha256Hex(identity)
+            val saved =
+                store.writeAnalysisAtomically(input.runId, analysisId) { staging ->
+                    Files.write(staging.resolve("identity.json"), identity)
+                    Files.writeString(staging.resolve("analysis-result.json"), """{"policy_verdict":"PASS","run_validity":"VALID"}""")
+                    Files.writeString(staging.resolve("normalized-1s.ndjson"), "0123456789")
+                }
+            val artifact = saved.resolve("normalized-1s.ndjson")
+
+            Files.writeString(artifact, "9876543210")
+            assertEquals(saved, store.readAnalysis(input.runId, analysisId)?.path)
+            assertEquals(1, store.listAnalyses(input.runId, null, 10).analyses.size)
+
+            Files.writeString(artifact, "short")
+            assertThrows(IllegalStateException::class.java) { store.readAnalysis(input.runId, analysisId) }
+            Files.writeString(artifact, "0123456789")
+            Files.writeString(saved.resolve("extra.json"), "{}")
+            assertThrows(IllegalStateException::class.java) { store.readAnalysis(input.runId, analysisId) }
+            Files.delete(saved.resolve("extra.json"))
+            Files.delete(artifact)
+            assertThrows(IllegalStateException::class.java) { store.readAnalysis(input.runId, analysisId) }
         }
 
     @Test

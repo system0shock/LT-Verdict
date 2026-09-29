@@ -321,3 +321,35 @@ td:not(:first-child), th:not(:first-child) { font-family: "Cascadia Mono", Conso
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { scroll-behavior: auto !important; transition-duration: 0ms !important; animation-duration: 0ms !important; animation-iteration-count: 1 !important; }
 }
+
+.verdict-card { align-items: start; }
+.verdict-main { display: grid; gap: 8px; min-width: 0; }
+.verdict-main h2 { font-size: 20px; line-height: 28px; }
+.verdict-main h3 { margin-top: 8px; font-size: 14px; line-height: 20px; }
+.verdict-badge { font-family: "Cascadia Mono", Consolas, monospace; font-size: 16px; }
+.verdict-lines { display: grid; gap: 8px; margin: 0; padding: 0; list-style: none; }
+.verdict-lines li { display: grid; gap: 2px; border-top: 1px solid var(--border); padding-top: 8px; overflow-wrap: anywhere; }
+.verdict-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 44px;
+  min-height: 44px;
+  border: 1px solid var(--border-strong);
+  border-left-width: 4px;
+  border-radius: 2px;
+  background: var(--surface);
+  color: var(--text);
+  padding: 0 12px;
+  text-decoration: none;
+}
+.verdict-chip[data-verdict="PASS"] { border-left-color: var(--pass); }
+.verdict-chip[data-verdict="FAIL"] { border-left-color: var(--fail); }
+.verdict-chip[data-verdict="NO_VERDICT"] { border-left-color: var(--warn); }
+.verdict-chip[data-verdict="NO_POLICY"] { border-left-color: var(--info); }
+.verdict-chip:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+
+@media (min-width: 681px) {
+  html { scroll-padding-top: 72px; }
+  .top-header { position: sticky; top: 0; z-index: 10; }
+}

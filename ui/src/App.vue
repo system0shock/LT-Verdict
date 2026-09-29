@@ -8,6 +8,7 @@ import GrafanaPanel from './GrafanaPanel.vue'
 import BaselinePanel from './BaselinePanel.vue'
 import JobStatusView from './JobStatus.vue'
 import RunSetup from './RunSetup.vue'
+import VerdictCard from './VerdictCard.vue'
 import {
   ApiError,
   bootstrap,
@@ -23,6 +24,7 @@ import {
   uploadInput,
   validatePolicy,
 } from './api'
+import { summarizeVerdict } from './verdictSummary'
 import type { AnalysisResult, AnalysisSummary, Bucket, JobStatus, OpenSearchEvidence, Policy, PolicyError, PostgresContextEvidence, RunSummary, SourceProfile, SourceRequest, Theme } from './types'
 
 const theme = ref<Theme>(window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light')
@@ -73,6 +75,7 @@ let analysisRevision = 0
 let bucketRevision = 0
 let policyRevision = 0
 
+const verdictSummary = computed(() => (result.value ? summarizeVerdict(result.value) : null))
 const working = computed(() => job.value?.state === 'QUEUED' || job.value?.state === 'PROCESSING')
 const selectedReference = computed(() => result.value && selectedAnalysisId.value
   ? { run_id: result.value.run_id, analysis_id: selectedAnalysisId.value }
@@ -591,6 +594,14 @@ function focusPolicy() {
           >{{ currentRun.source_type }} · {{ currentRun.run_id.slice(0, 24) }}…</span>
           <span v-if="completedAt">Completed {{ completedAt }}</span>
         </div>
+        <a
+          v-if="verdictSummary"
+          href="#verdict"
+          class="verdict-chip"
+          data-testid="verdict-chip"
+          :data-verdict="verdictSummary.verdict"
+          :aria-label="`Вердикт ${verdictSummary.verdict} ${verdictSummary.chip}, перейти к описанию`"
+        ><strong>{{ verdictSummary.verdict }}</strong> <span>{{ verdictSummary.chip }}</span></a>
         <button
           type="button"
           class="theme-toggle"
@@ -603,6 +614,11 @@ function focusPolicy() {
       </header>
 
       <main>
+        <VerdictCard
+          v-if="verdictSummary"
+          :summary="verdictSummary"
+        />
+
         <RunSetup
           :input-file="inputFile"
           :resource-file="resourceFile"

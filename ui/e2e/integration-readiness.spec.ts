@@ -46,6 +46,7 @@ test('an unknown Jenkins trigger can only reconcile and never posts another trig
       parameter_names: ['SCENARIO'], artifact_paths: ['run/results.jtl'],
     }] }
     else if (path === '/api/jenkins/perf/attempts' && request.method() === 'GET') body = { attempts: [unknown] }
+    else if (request.method() === 'GET' && path === '/api/jobs') body = { jobs: [] }
     else if (path.endsWith('/trigger')) {
       triggerPosts++
       body = unknown

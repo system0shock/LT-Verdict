@@ -105,15 +105,17 @@ function businessLine(check: PolicyCheckEvidence, metrics: Map<string, MetricSum
   let digits = 2
   let observed = valueText(check.metric, check.observed, digits)
   let threshold = valueText(check.metric, check.threshold, digits)
-  while (observed === threshold && digits < 8) {
-    digits *= 2
+  while (observed === threshold && digits < 20) {
+    digits = Math.min(digits * 2, 20)
     observed = valueText(check.metric, check.observed, digits)
     threshold = valueText(check.metric, check.threshold, digits)
   }
+  // Если и 20 знаков не различают значения (для FAIL), прямо говорим, что порог нарушен.
+  const tie = check.status === 'FAIL' && observed === threshold ? ' (нарушение меньше точности отображения)' : ''
   return {
     key: check.id,
     title: `Правило ${check.rule_id} · ${METRIC_LABELS[check.metric] ?? check.metric} · ${scopeLabel(scope)}${window}`,
-    detail: `${observed} при пороге ${sign} ${threshold}`,
+    detail: `${observed} при пороге ${sign} ${threshold}${tie}`,
   }
 }
 
@@ -175,8 +177,6 @@ function checksOf(result: AnalysisResult) {
 }
 
 function causesOf(result: AnalysisResult): CauseGroup[] {
-  if (result.analysis_mode === 'capacity_step') return capacityCauses(result)
-  const { business, resource } = checksOf(result)
   const items: Array<{ code: string | null; detail?: string | null; label?: string; subject?: string }> = []
   if (result.run_validity !== 'VALID') {
     for (const item of result.evidence) {
@@ -184,6 +184,8 @@ function causesOf(result: AnalysisResult): CauseGroup[] {
       items.push({ code: item.code, detail: item.source_offset === undefined ? null : `Позиция в файле: ${item.source_offset} байт` })
     }
   }
+  if (result.analysis_mode === 'capacity_step') return [...group(items), ...capacityCauses(result)]
+  const { business, resource } = checksOf(result)
   for (const check of business) {
     if (check.status !== 'NO_VERDICT') continue
     items.push({ code: check.reason_code ?? null, label: 'Правила', subject: check.window_id ? `${check.rule_id} (окно ${check.window_id})` : check.rule_id })
@@ -217,7 +219,8 @@ export function summarizeVerdict(result: AnalysisResult): VerdictSummary {
 
   const failedLines = [
     ...business.filter((check) => check.status === 'FAIL').map((check) => businessLine(check, metrics)),
-    ...resource.filter((check) => check.status === 'FAIL').map((check) => resourceLine(check, violationsOf(check))),
+    // Пропуск ячейки даёт NO_VERDICT, но найденные нарушения того же правила ядро сохраняет: держим их на виду.
+    ...resource.filter((check) => check.status === 'FAIL' || (check.status === 'NO_VERDICT' && violationsOf(check).length > 0)).map((check) => resourceLine(check, violationsOf(check))),
   ]
   const passedLines = [
     ...business.filter((check) => check.status === 'PASS').map((check) => businessLine(check, metrics)),

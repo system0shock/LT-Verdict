@@ -64,6 +64,15 @@ test.describe('verdict summary', () => {
     ])
   })
 
+  test('a FAIL stays distinguishable from its threshold beyond eight digits', () => {
+    const summary = summarizeVerdict(build({
+      policy_verdict: 'FAIL',
+      evidence: [checkout, p95Rule('tiny-p95', 'FAIL', 100.000000002, { threshold: 100.000000001 })],
+    }))
+
+    expect(summary.lines.map((line) => flat(line.detail))).toEqual(['100,000000002 мс при пороге ≤ 100,000000001 мс'])
+  })
+
   test('FAIL shows at most three rules and counts the rest', () => {
     const rules = ['a', 'b', 'c', 'd', 'e'].map((id) => p95Rule(id, 'FAIL', 3000))
     const summary = summarizeVerdict(build({ policy_verdict: 'FAIL', evidence: [checkout, ...rules] }))
@@ -154,6 +163,34 @@ test.describe('verdict summary', () => {
     expect(summary.causes.map((cause) => cause.code)).toEqual(['MISSING_RESOURCE_CELLS'])
     expect(summary.causes[0].subjects).toEqual(['memory-limit (окно w)'])
     expect(summary.notes.map((note) => note.code)).toEqual(['RESOURCE_GAPS', 'NO_OBSERVATIONS', 'INSUFFICIENT_OBSERVATIONS'])
+  })
+
+  test('a NO_VERDICT check that also has violations shows them', () => {
+    const summary = summarizeVerdict(build({
+      policy_verdict: 'NO_VERDICT',
+      analysis_coverage: { status: 'INCOMPLETE', reasons: ['MISSING_RESOURCE_CELLS'] },
+      evidence: [{ id: 'r1', type: 'resource_policy_check', window_id: 'w', rule_id: 'cpu-limit', series_id: 'cpu', unit: 'ratio', operator: 'gt', threshold: '0.8', effect: 'sla', status: 'NO_VERDICT', reason: 'MISSING_RESOURCE_CELLS' }],
+      findings: [{ id: 'f1', type: 'resource_threshold_violation', window_id: 'w', rule_id: 'cpu-limit', series_id: 'cpu', entity: 'server-1', unit: 'ratio', from_epoch_ms: 1000, to_epoch_ms: 5000, cell_count: 4, observed_min: '0.9', observed_max: '0.9', evidence_id: 'r1' }],
+    }))
+
+    expect(summary.headline).toBe('Вердикт не выдан — не удалось проверить: 1 из 1')
+    expect(summary.linesTitle).toBe('Найденные нарушения')
+    expect(summary.lines.map((line) => line.title)).toEqual(['Правило cpu-limit · ряд cpu (server-1) · окно w'])
+    expect(summary.lead).toContain('Нарушения уже найдены')
+    expect(summary.causes.map((cause) => cause.code)).toEqual(['MISSING_RESOURCE_CELLS'])
+  })
+
+  test('capacity on an unreadable file keeps the parser reason', () => {
+    const summary = summarizeVerdict(build({
+      analysis_mode: 'capacity_step',
+      run_validity: 'INVALID',
+      policy_verdict: 'NO_VERDICT',
+      analysis_coverage: { status: 'INCOMPLETE', reasons: ['MALFORMED_JMETER_CSV', 'CAPACITY_RUN_NOT_VALID'] },
+      evidence: [{ id: 'd1', type: 'diagnostic', code: 'MALFORMED_JMETER_CSV', message: 'JMeter CSV input is invalid', source_offset: 64 }],
+      capacity_summary: { schema_version: 'capacity.v1', load_axis: 'rps', unit: 'requests/s', bound_type: 'INDETERMINATE', lower_inclusive: null, upper_exclusive: null, policy_verdict: 'NO_VERDICT', reasons: ['CAPACITY_RUN_NOT_VALID'], capacity_knee: null, knee_reason: 'KNEE_DETECTOR_NOT_IMPLEMENTED', stages: [] },
+    }))
+
+    expect(summary.causes.map((cause) => `${cause.code}:${cause.detail}`)).toEqual(['MALFORMED_JMETER_CSV:Позиция в файле: 64 байт', 'CAPACITY_RUN_NOT_VALID:null'])
   })
 
   test('windows without requests are named only by rules over the whole run', () => {

@@ -108,7 +108,7 @@ plugin/auth route подтверждается отдельно; неподде�
 
 - [Local-first delta §§8, 17](2026-08-26-v06-local-mvp-delta-design.md).
 - [Текущая очередь MVP](../../development-plan-v0.6.md).
-- [Prometheus HTTP API](https://prometheus.io/docs/prometheus/3.5/querying/api/):
+- [Prometheus HTTP API](https://prometheus.io/docs/prometheus/latest/querying/api/):
   range matrix, inclusive start/end и явный step.
 - [Grafana datasource proxy](https://grafana.com/docs/grafana/latest/developer-resources/api-reference/http-api/api-legacy/data_source/):
   маршрут по datasource UID; совместимость конкретного стенда требует проверки.

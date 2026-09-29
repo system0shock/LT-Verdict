@@ -619,7 +619,7 @@ endpoint. Qwen получает только placeholder, реальный су�
 Это остановка неисправного внешнего вызова, не отбор ответов по качеству;
 автоматические повторы, настройка prompt и замена модели в серии запрещены.
 
-После перенастройки ключа пользователем регион Token Plan подтверждён как Singapore / International. Следующая отдельная серия использует <https://token-plan.ap-southeast-1.maas.aliyuncs.com/compatible-mode/v1/chat/completions>; остальные ограничения и критерии сохранены. Beijing-серия остановлена после трёх HTTP401 и не перезаписывается.
+После перенастройки ключа пользователем регион Token Plan подтверждён как Singapore / International. Следующая отдельная серия использует `https://token-plan.ap-southeast-1.maas.aliyuncs.com/compatible-mode/v1/chat/completions`; остальные ограничения и критерии сохранены. Beijing-серия остановлена после трёх HTTP401 и не перезаписывается.
 
 Проверка авторизации Singapore вернула HTTP200. В каталоге подписки точный ID DeepSeek V4 Flash — deepseek-v4-flash-0731; короткий deepseek-v4-flash отсутствует. Новая Singapore-серия фиксирует доступный ID deepseek-v4-flash-0731, без изменения prompt/corpus/oracle.
 

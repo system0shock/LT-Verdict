@@ -237,7 +237,7 @@ or public contract changes, no CHANGELOG entry required.
 
 Итоговое уточнение пользователя: ModelStudio Token Plan из настроенного Qwen,
 модель deepseek-v4-flash, фиксированный endpoint
-<https://token-plan.cn-beijing.maas.aliyuncs.com/compatible-mode/v1/chat/completions>.
+`https://token-plan.cn-beijing.maas.aliyuncs.com/compatible-mode/v1/chat/completions`.
 OpenRouter-вариант новой серии не запускался. Денежный резерв отключён явно;
 OpenRouter provider/max_price параметры не передаются. Три подряд upstream
 ошибки прекращают серию с INCOMPLETE; повторов и изменения prompt нет.

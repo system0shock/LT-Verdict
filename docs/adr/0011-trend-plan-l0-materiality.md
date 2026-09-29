@@ -30,7 +30,11 @@
 2026-09-29), `INSUFFICIENT_OBSERVATIONS`, `TREND_MEDIAN_ZERO`,
 `TREND_DIRECTION_MISMATCH`, `TREND_DIRECTION_DISAGREEMENT`,
 `TREND_SLOPE_BELOW_MINIMUM`, `TREND_SHIFT_BELOW_MINIMUM`,
-`TREND_SERIES_NOT_FOUND`, `TREND_WINDOW_NOT_FOUND`. Каждый `TREND_OBSERVED`
+`TREND_SERIES_NOT_FOUND`, `TREND_WINDOW_NOT_FOUND`, `RUN_NOT_VALID` (статус
+`UNAVAILABLE` у всех проверок плана при невалидном прогоне). Коды входа и
+ошибок (`TREND_READ_ERROR`, `TREND_SNAPSHOT_MISMATCH`,
+`TREND_RESOURCE_REQUIRED`, `RESOURCE_LIMIT_EXCEEDED`) возвращаются API и CLI до
+расчёта и в reasons проверки не входят. Каждый `TREND_OBSERVED`
 дополнительно несёт `STATIONARITY_NOT_EVALUATED`: объявленное окно не
 доказывает стационарность, детектора смены режима в L0 нет.
 
@@ -142,3 +146,11 @@ L0 не применим к рядам с перезапусками (памят
 не меняется: гейт по монотонности или огибающей откладывается в L1 или в фазу 6.
 Тест является характеризацией, а не желаемым поведением, и должен быть
 пересмотрен при появлении такого гейта.
+
+### M3. Коды документации приведены к реализации
+
+Сверка со `src/main`: код `TREND_PLAN_REQUIRED` нигде не выдаётся и убран из
+`docs/analytics-trend-detection.md`; новый код не вводится. `RUN_NOT_VALID`
+выдаётся (`AnalysisService.kt`, статус `UNAVAILABLE`) и добавлен в список reason
+проверки. Reason-коды проверки (`evidence.trend_check.reasons`) и коды входа и
+ошибок API/CLI разведены в два списка.

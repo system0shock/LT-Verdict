@@ -132,8 +132,18 @@ TREND_DIRECTION_DISAGREEMENT  slope и split-half shift имеют разные 
 TREND_SLOPE_BELOW_MINIMUM наклон ниже объявленного порога
 TREND_SHIFT_BELOW_MINIMUM сдвиг половин ниже требуемой величины
 STATIONARITY_NOT_EVALUATED  сопровождает каждый TREND_OBSERVED
-TREND_SERIES_NOT_FOUND / TREND_WINDOW_NOT_FOUND / TREND_SNAPSHOT_MISMATCH
-TREND_RESOURCE_REQUIRED / TREND_PLAN_REQUIRED / TREND_READ_ERROR
+TREND_SERIES_NOT_FOUND    series_id проверки отсутствует в snapshot (UNAVAILABLE)
+TREND_WINDOW_NOT_FOUND    window_id проверки отсутствует в snapshot (UNAVAILABLE)
+RUN_NOT_VALID             прогон невалиден, все проверки плана UNAVAILABLE
+```
+
+Эти коды живут в `evidence.trend_check.reasons`. Коды входа и ошибок
+возвращаются API и CLI до расчёта и в reasons проверки не попадают:
+
+```text
+TREND_READ_ERROR          план не удалось прочитать как trend-plan.v1
+TREND_SNAPSHOT_MISMATCH   план привязан к другому semantic hash snapshot
+TREND_RESOURCE_REQUIRED   план передан без resource snapshot
 RESOURCE_LIMIT_EXCEEDED   размер плана, глубина JSON или число проверок
 ```
 

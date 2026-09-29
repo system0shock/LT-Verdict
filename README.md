@@ -24,9 +24,12 @@ Capacity доступен по явным ступеням и SLA с generator g
 p-values с одной поправкой Holm (`mbb-lag-max-holm.v1`, одно окно и одна
 outcome-метрика, до 16 гипотез, 30–240 ячеек; вне полосы — `UNAVAILABLE`).
 Статистическая приёмка v1 не пройдена: USEFULNESS FAIL, 8 из 28 конфигураций
-по шуму ([результаты](docs/statistical-validation-results-v1.md)). Отбор снизил
-шум корреляций до 7.7–13.2% на development-данных при гейте ≤5%; независимой
-приёмки нет, шум сравнения двух прогонов (T02 36.8%, T03 5.4%) остаётся.
+по шуму ([результаты](docs/statistical-validation-results-v1.md)). Диапазон шума
+корреляций 7.7–13.2% (гейт ≤5% не пройден) измерен в Python/NumPy development-
+прогоне на раскрытых seeds; продуктовый JVM-код (`java.util.Random`) в нём не
+участвовал и отдельно не калибровался, независимой приёмки нет
+([контракт](docs/contracts/diagnostics/v1/correlation-headline-selection.md)).
+Шум сравнения двух прогонов (T02 36.8%, T03 5.4%) остаётся.
 
 Источники реализованы: PromQL/VictoriaMetrics/Grafana proxy, InfluxQL,
 OpenSearch и PostgreSQL pre/post. Поддерживаются несколько источников,

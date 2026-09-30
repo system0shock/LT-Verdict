@@ -18,7 +18,13 @@ latency без обрезания, throughput denominator — полная дл�
 даже при общем NO_VERDICT. Correlation не является основанием SLA verdict.
 
 Обогащённая identity включает canonical semantic snapshot/config hash, версии
-алгоритмов и limits. Provenance исключён из semantic hash; исходный файл
+алгоритмов и limits. Provenance исключён из semantic hash. Hash считается по
+canonical bytes ADR 0003: ключи объектов и `id` рядов сортируются по возрастанию
+UTF-16 code units, числа пишутся canonical decimal (точное значение без exponent,
+незначащих нулей и знака нуля, `-0.0` даёт `0`), строки пишутся UTF-8, не-ASCII
+не экранируется, отсутствующие `windows` и `rules` равны пустым спискам, а
+`labels` ряда без меток равен `{}`.
+Клиент, воспроизводящий hash сам, обязан совпасть с ядром; исходный файл
 сохраняется в immutable bundle и защищён manifest. Cache с тем же semantic
 hash вправе вернуть уже сохранённый эквивалентный analysis с исходным provenance.
 Без snapshot старые identity/result bytes не меняются. Existing evidence slots

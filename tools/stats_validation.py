@@ -336,6 +336,7 @@ def _canonical(value):
 
 
 def snapshot_hash(snapshot):
+    """Semantic hash of a snapshot object; read files with parse_float=Decimal so 18+ digit values stay exact."""
     semantic = {key: value for key, value in snapshot.items() if key != 'provenance'}
     semantic['series'] = sorted([{'labels': {}} | value for value in snapshot['series']],
                                 key=lambda v: _utf16_order(v['id']))

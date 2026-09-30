@@ -60,6 +60,13 @@ VECTORS = {
     'astral_series_ids': _snapshot(_series('\\uff5e', '1,2,3,4,5') + ',' +
                                    _series('\\ud83d\\ude00', '1,2,3,4,5') + ',' + _series('a', '1,2,3,4,5')),
     'astral_label_keys': _snapshot(_series('s1', '1,2,3,4,5', '{"\\uff5e":"1","\\ud83d\\ude00":"2","z":"3"}')),
+    # Label value with U+2028, U+00A0 and a slash: raw UTF-8, only quote and backslash are escaped.
+    'label_value_specials': _snapshot(_series('s1', '1,2,3,4,5', '{"k":"a\\u2028b\\u00a0c/d"}')),
+    # Windows sort by (from, to, id); rules keep the input order.
+    'windows_and_rule_order': _snapshot(
+        _series('s1', '1,2,3,4,5'),
+        _window('w2', 1767225603000, 1767225604000) + ',' + _window('w1', 1767225601000, 1767225602000),
+        _rule('0.5').replace('"r1"', '"r2"') + ',' + _rule('0.7')),
     # windows and rules are optional in the contract.
     'no_windows_no_rules': _snapshot(_series('s1', '1,2,3,4,5')),
     'no_rules': _snapshot(_series('s1', '1,2,3,4,5'), _window('w1')),
@@ -73,6 +80,7 @@ FLOAT_UNSAFE = {'long_digits'}
 EXPECTED = {
     'astral_label_keys': 'e5bd7881be75c892a0f356a73c94b9fcb29e65f3a255e49ddc8c848889d64687',
     'astral_series_ids': '71a404c0e738b271f768576715632269df4bd6d7697e0b10eb4704c8f1aa358e',
+    'label_value_specials': 'dd4d8b321ef4e4a07f29a34d1089966cabeec76cce2a48bd4b3adaf68c327436',
     'long_digits': '5703b1c2d5e86ed1404cc88ed2aaef65769443bf46c4b2026354412e3f2cec6a',
     'no_rules': 'ac6d0359483757871ec29fe0946f0f8351f6fc1b81c5da6f32f505654201dfbd',
     'no_windows': 'b16f4de7bce9463f1901bd36bfef757934629a261c775f322020f50f02ca833c',
@@ -82,6 +90,7 @@ EXPECTED = {
     'numbers_basic': '7502594fad41440fbf30f6f18b17dfd9fc4c9b7d38320ec272ebfa6063dceb8d',
     'provenance_ignored': '6306e3505974d66d757d25c145780d94987b55b6861e94a231350ed391b77284',
     'small_and_large': '3cff4b927568d930c601dec3778d2910862388c885676ede590de333c470b306',
+    'windows_and_rule_order': '529d866a5abf8cda803c02e14a30243d85c1b16f69c68f9ad2530dffde115e9a',
     'zeros_and_signs': 'ae0bd8a3ea931fa2fc6e1285f0f501fccb81d6ea03810c1ab14a2e0b87b669ce',
 }
 
@@ -95,6 +104,12 @@ class SnapshotHashVectorsTest(unittest.TestCase):
             with self.subTest(name):
                 snapshot = json.loads(text, parse_float=Decimal)
                 self.assertEqual(oracle.snapshot_hash(snapshot), EXPECTED[name])
+
+    def test_nonfinite_numbers_are_rejected_and_bool_is_not_a_number(self):
+        for value in (float('nan'), float('inf'), Decimal('NaN')):
+            with self.assertRaises(ValueError):
+                oracle._canonical([value])
+        self.assertEqual(oracle._canonical([True, False, None]), '[true,false,null]')
 
     def test_matches_kotlin_when_read_as_float(self):
         for name, text in VECTORS.items():

@@ -9,6 +9,7 @@ import BaselinePanel from './BaselinePanel.vue'
 import JobStatusView from './JobStatus.vue'
 import RunSetup from './RunSetup.vue'
 import VerdictCard from './VerdictCard.vue'
+import OverviewPanel from './shell/OverviewPanel.vue'
 import ShellPanel from './shell/ShellPanel.vue'
 import ShellTabs from './shell/ShellTabs.vue'
 import { SHELL_DEFAULT_TAB, SHELL_LABELS, type ShellTabKey } from './shell/labels'
@@ -30,6 +31,7 @@ import {
   validatePolicy,
 } from './api'
 import { summarizeVerdict } from './verdictSummary'
+import type { AttentionTarget } from './shell/overview'
 import type { AnalysisResult, AnalysisSummary, Bucket, JobStatus, OpenSearchEvidence, Policy, PolicyError, PostgresContextEvidence, RunSummary, SourceProfile, SourceRequest, Theme } from './types'
 
 const theme = ref<Theme>(window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light')
@@ -517,6 +519,18 @@ async function showVerdict() {
   document.getElementById('verdict')?.scrollIntoView()
 }
 
+async function jumpTo(target: AttentionTarget) {
+  activeTab.value = target.tab
+  await nextTick()
+  const element = document.getElementById(target.targetId)
+  if (!element) return
+  element.scrollIntoView()
+  const focusable = element.matches('input, select, textarea, button, [tabindex]')
+    ? element
+    : element.querySelector<HTMLElement>('[tabindex="0"]')
+  focusable?.focus({ preventScroll: true })
+}
+
 function focusPolicy() {
   document.getElementById('policy-file')?.focus()
 }
@@ -683,6 +697,15 @@ function focusPolicy() {
           <VerdictCard
             v-if="verdictSummary && shownIn('overview')"
             :summary="verdictSummary"
+          />
+
+          <OverviewPanel
+            v-if="shellNew && result && shownIn('overview')"
+            :result="result"
+            :buckets="buckets"
+            :bucket-rollup="bucketRollup"
+            :has-more-buckets="bucketNextFrom !== null"
+            @navigate="jumpTo"
           />
 
           <p

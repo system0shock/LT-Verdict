@@ -231,6 +231,8 @@ class FixtureManifestTest {
                     "fixtures/slice1/identity/policy.canonical.json",
                     "fixtures/slice1/identity/analysis-identity.v1.json",
                     "fixtures/slice1/identity/analysis-identity.sha256",
+                    "fixtures/slice1/identity/analysis-identity-resources.v1.json",
+                    "fixtures/slice1/identity/analysis-identity-resources.sha256",
                 )
     }
 }

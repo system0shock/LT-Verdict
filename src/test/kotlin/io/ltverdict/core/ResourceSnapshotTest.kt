@@ -1,5 +1,8 @@
 package io.ltverdict.core
 
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.int
+import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import org.junit.jupiter.api.Assertions.assertArrayEquals
 import org.junit.jupiter.api.Assertions.assertEquals
@@ -167,6 +170,98 @@ class ResourceSnapshotTest {
         assertEquals("not_verified_by_core", evidence.getValue("clock_alignment").jsonPrimitive.content)
     }
 
+    @Test
+    fun `limits equal the values accepted by ADR 0014 and the schema`() {
+        assertEquals(1024, MAX_RESOURCE_SERIES)
+        assertEquals(1_500_000L, MAX_RESOURCE_CELLS)
+        assertEquals(32 * 1024 * 1024, MAX_RESOURCE_SNAPSHOT_BYTES)
+        assertEquals(100_000, MAX_POINTS_PER_SERIES)
+        val schema =
+            Json
+                .parseToJsonElement(
+                    Files.readString(Path.of("docs/contracts/resources/v1/resource-snapshot.schema.json")),
+                ).jsonObject
+        val series =
+            schema
+                .getValue("properties")
+                .jsonObject
+                .getValue("series")
+                .jsonObject
+        assertEquals(MAX_RESOURCE_SERIES, series.getValue("maxItems").jsonPrimitive.int)
+    }
+
+    @Test
+    fun `series count boundary accepts 64 and 1024 and rejects 1025 with the previous code`() {
+        assertEquals(64, valid(gridSnapshot(seriesCount = 64, pointCount = 1)).snapshot.series.size)
+        assertEquals(1024, valid(gridSnapshot(seriesCount = 1024, pointCount = 1)).snapshot.series.size)
+
+        val invalid = invalid(gridSnapshot(seriesCount = 1025, pointCount = 1))
+
+        assertEquals("RESOURCE_LIMIT_EXCEEDED", invalid.errors.first().code)
+        assertEquals("/series", invalid.errors.first().jsonPointer)
+        assertEquals("too many series", invalid.errors.first().message)
+    }
+
+    @Test
+    fun `cell boundary accepts 1500000 and rejects the next reachable product`() {
+        val accepted = valid(gridSnapshot(seriesCount = 1000, pointCount = 1500))
+        assertEquals(1500, accepted.snapshot.pointCount)
+        assertEquals(1000, accepted.snapshot.series.size)
+
+        // 557 x 2693 = 1 500 001 is the smallest reachable product above the limit (1500001 = 557 * 2693).
+        val invalid = invalid(gridSnapshot(seriesCount = 557, pointCount = 2693, valuesPerSeries = 1))
+
+        assertEquals("RESOURCE_LIMIT_EXCEEDED", invalid.errors.first().code)
+        assertEquals("/series", invalid.errors.first().jsonPointer)
+        assertEquals("too many resource cells", invalid.errors.first().message)
+    }
+
+    @Test
+    fun `size boundary accepts exactly 32 MiB and rejects one byte more`() {
+        val limit = 32 * 1024 * 1024
+        val json = gridSnapshot(seriesCount = 1, pointCount = 1)
+
+        val accepted = valid(padded(json, limit))
+        assertEquals(limit, accepted.rawBytes().size)
+
+        val invalid = invalid(padded(json, limit + 1))
+        assertEquals("RESOURCE_LIMIT_EXCEEDED", invalid.errors.first().code)
+        assertEquals("", invalid.errors.first().jsonPointer)
+    }
+
+    @Test
+    fun `the previous contract example keeps its semantic and config hashes`() {
+        val valid = valid(Files.readAllBytes(Path.of("docs/contracts/resources/v1/examples/valid/basic.json")))
+
+        assertEquals("fbb4c398ae0d40bca8c6dc2f2a3d0b9502f1c27515e702853599aa6b6d572097", valid.semanticSha256)
+        assertEquals("7fc69b1a3fd9b3e26363d2041efb2d4a57e2c9e786996303f33f03ba99590325", valid.configSha256)
+    }
+
+    private fun invalid(bytes: ByteArray): ResourceValidation.Invalid =
+        assertInstanceOf(ResourceValidation.Invalid::class.java, validateResourceSnapshot(ByteArrayInputStream(bytes)))
+
+    /** All-null grid: one shared JsonNull keeps a 1.5M-cell fixture small enough for the test heap. */
+    private fun gridSnapshot(
+        seriesCount: Int,
+        pointCount: Int,
+        valuesPerSeries: Int = pointCount,
+    ): ByteArray {
+        val values = List(valuesPerSeries) { "null" }.joinToString(",", "[", "]")
+        val series =
+            (0 until seriesCount).joinToString(",") { index ->
+                """{"id":"s$index","metric":"cpu_used","unit":"ratio","entity":"host","role":"system","aggregation":"interval_mean","values":$values}"""
+            }
+        return (
+            """{"schema_version":"resource-snapshot.v1","load_input_sha256":"$HASH","start_epoch_ms":0,"step_ms":1000,""" +
+                """"point_count":$pointCount,"series":[$series]}"""
+        ).encodeToByteArray()
+    }
+
+    private fun padded(
+        json: ByteArray,
+        size: Int,
+    ): ByteArray = ByteArray(size) { ' '.code.toByte() }.also { json.copyInto(it) }
+
     private fun valid(bytes: ByteArray): ResourceValidation.Valid =
         assertInstanceOf(
             ResourceValidation.Valid::class.java,
@@ -177,7 +272,7 @@ class ResourceSnapshotTest {
         json: String,
         code: String,
         pointer: String,
-        maxBytes: Int = 16 * 1024 * 1024,
+        maxBytes: Int = MAX_RESOURCE_SNAPSHOT_BYTES,
     ) {
         val invalid =
             assertInstanceOf(

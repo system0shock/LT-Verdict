@@ -116,6 +116,7 @@ class BaselineComparisonTest {
                 current,
                 identity(),
                 WindowComparisonRequest("steady", "steady"),
+                conditionsConfirmed = true,
             )
         val window = comparison.getValue("window_comparison").jsonObject
         val metrics =
@@ -165,7 +166,7 @@ class BaselineComparisonTest {
 
         val comparison = compareAnalyses(selection, reference('b'), result(), identity(), result(), identity())
 
-        assertEquals(setOf("baseline", "current", "comparability", "metrics"), comparison.keys)
+        assertEquals(setOf("baseline", "current", "comparability", "warnings", "metrics"), comparison.keys)
     }
 
     @Test
@@ -209,6 +210,7 @@ class BaselineComparisonTest {
                 windowResult("steady", 0, 10_000, 5, 1_000, 1),
                 identity(),
                 WindowComparisonRequest("steady", "steady"),
+                conditionsConfirmed = true,
             )
         val metrics =
             comparison.getValue("window_comparison").jsonObject.getValue("metrics").jsonArray.associateBy {
@@ -306,6 +308,7 @@ class BaselineComparisonTest {
                 ),
                 identity(),
                 WindowComparisonRequest("steady", "steady"),
+                conditionsConfirmed = true,
             )
         val metrics =
             comparison.getValue("window_comparison").jsonObject.getValue("metrics").jsonArray.associateBy {
@@ -339,6 +342,7 @@ class BaselineComparisonTest {
                 windowResult("steady", 0, 10_000, 100, 100, 0, listOf(binding), listOf(resourceSummary("steady", binding, "-8", "-16"))),
                 identity(),
                 WindowComparisonRequest("steady", "steady"),
+                conditionsConfirmed = true,
             )
         val median =
             comparison
@@ -520,18 +524,264 @@ class BaselineComparisonTest {
     }
 
     @Test
-    fun `statistical candidate comparison carries user confirmation`() {
+    fun `statistical membership never confirms comparability and is reported as a warning`() {
         val candidates = listOf(candidate('a'), candidate('b'), candidate('c'))
         val selection = statisticalBaselineSelection("release", candidates.references(), candidates.results(), candidates.identities())
 
-        val comparison = compareAnalyses(selection, reference('c'), result(), identity(), result(), identity())
+        val member = compareAnalyses(selection, reference('c'), result(), identity(), result(), identity())
+        assertEquals("UNCONFIRMED", member.getValue("comparability").jsonPrimitive.content)
+        assertEquals(listOf("CURRENT_IN_CANDIDATE_SET"), warnings(member))
 
-        assertEquals("USER_CONFIRMED", comparison.getValue("comparability").jsonPrimitive.content)
-        val unconfirmed =
+        val rejected =
             compareAnalyses(selection, reference('c'), result(), identity(), result(), identity(), conditionsConfirmed = false)
-        assertEquals("UNCONFIRMED", unconfirmed.getValue("comparability").jsonPrimitive.content)
-        assertEquals(comparison.getValue("metrics"), unconfirmed.getValue("metrics"))
+        assertEquals("UNCONFIRMED", rejected.getValue("comparability").jsonPrimitive.content)
+
+        val confirmed =
+            compareAnalyses(selection, reference('c'), result(), identity(), result(), identity(), conditionsConfirmed = true)
+        assertEquals("USER_CONFIRMED", confirmed.getValue("comparability").jsonPrimitive.content)
+        assertEquals(member.getValue("metrics"), confirmed.getValue("metrics"))
+        assertEquals(listOf("CURRENT_IN_CANDIDATE_SET"), warnings(confirmed))
+
+        val outsider = compareAnalyses(selection, reference('d'), result(), identity(), result(), identity())
+        assertEquals("UNCONFIRMED", outsider.getValue("comparability").jsonPrimitive.content)
+        assertEquals(emptyList<String>(), warnings(outsider))
     }
+
+    @Test
+    fun `comparison reports a run compared with itself at analysis and run level`() {
+        val selection = manualBaselineSelection("release", reference('a'))
+
+        fun warningsFor(current: JsonObject) = warnings(compareAnalyses(selection, current, result(), identity(), result(), identity()))
+
+        assertEquals(listOf("BASELINE_IS_CURRENT_ANALYSIS"), warningsFor(reference('a')))
+        assertEquals(listOf("BASELINE_IS_CURRENT_RUN"), warningsFor(reference('a', analysis = 'b')))
+        assertEquals(emptyList<String>(), warningsFor(reference('b')))
+    }
+
+    @Test
+    fun `statistical winner compared with itself reports both the analysis and the candidate set`() {
+        val candidates = listOf(candidate('a'), candidate('b'), candidate('c'))
+        val selection = statisticalBaselineSelection("release", candidates.references(), candidates.results(), candidates.identities())
+        val winner = selection.getValue("reference").jsonObject
+        val winnerRun = winner.getValue("run_id").jsonPrimitive.content
+
+        val itself = compareAnalyses(selection, winner, result(), identity(), result(), identity())
+        assertEquals(listOf("BASELINE_IS_CURRENT_ANALYSIS", "CURRENT_IN_CANDIDATE_SET"), warnings(itself))
+
+        val sameRun =
+            buildJsonObject {
+                put("run_id", winnerRun)
+                put("analysis_id", "d".repeat(64))
+            }
+        val other = compareAnalyses(selection, sameRun, result(), identity(), result(), identity())
+        assertEquals(listOf("BASELINE_IS_CURRENT_RUN", "CURRENT_IN_CANDIDATE_SET"), warnings(other))
+    }
+
+    @Test
+    fun `another analysis of a candidate run is still a candidate`() {
+        val candidates = listOf(candidate('a'), candidate('b'), candidate('c'))
+        val selection = statisticalBaselineSelection("release", candidates.references(), candidates.results(), candidates.identities())
+
+        val comparison = compareAnalyses(selection, reference('c', analysis = 'd'), result(), identity(), result(), identity())
+
+        assertEquals(listOf("CURRENT_IN_CANDIDATE_SET"), warnings(comparison))
+    }
+
+    @Test
+    fun `empty current window makes load rows unavailable instead of a 100 percent change`() {
+        val selection = manualBaselineSelection("release", reference('a'))
+        listOf(false, true).forEach { nullLatency ->
+            val comparison =
+                compareAnalyses(
+                    selection,
+                    reference('b'),
+                    windowResult("steady", 0, 10_000, 500, 100, 0),
+                    identity(),
+                    emptyWindowResult("steady", 0, 10_000, nullLatency),
+                    identity(),
+                    WindowComparisonRequest("steady", "steady"),
+                    conditionsConfirmed = true,
+                )
+            val window = comparison.getValue("window_comparison").jsonObject
+
+            assertEquals("INSUFFICIENT_DATA", window.getValue("status").jsonPrimitive.content)
+            assertEquals(listOf("CURRENT_WINDOW_EMPTY", "INCOMPLETE_METRICS"), window.reasons())
+            val rows = window.getValue("metrics").jsonArray.map { it.jsonObject }
+            assertEquals(5, rows.size)
+            rows.forEach { row ->
+                assertEquals("INSUFFICIENT_DATA", row.getValue("status").jsonPrimitive.content)
+                assertEquals("EMPTY_WINDOW", row.getValue("reason").jsonPrimitive.content)
+                assertEquals(JsonNull, row.getValue("current"))
+                assertEquals(JsonNull, row.getValue("delta"))
+                assertEquals(JsonNull, row.getValue("delta_percent"))
+            }
+            assertEquals(
+                "500",
+                window
+                    .row("response_time_p95_ms")
+                    .getValue("baseline")
+                    .jsonPrimitive.content,
+            )
+        }
+    }
+
+    @Test
+    fun `empty baseline window makes load rows unavailable instead of a numeric delta`() {
+        listOf(false, true).forEach { nullLatency ->
+            val comparison =
+                compareAnalyses(
+                    manualBaselineSelection("release", reference('a')),
+                    reference('b'),
+                    emptyWindowResult("steady", 0, 10_000, nullLatency),
+                    identity(),
+                    windowResult("steady", 0, 10_000, 500, 100, 0),
+                    identity(),
+                    WindowComparisonRequest("steady", "steady"),
+                    conditionsConfirmed = true,
+                )
+            val window = comparison.getValue("window_comparison").jsonObject
+
+            assertEquals("INSUFFICIENT_DATA", window.getValue("status").jsonPrimitive.content)
+            assertEquals(listOf("BASELINE_WINDOW_EMPTY", "INCOMPLETE_METRICS"), window.reasons())
+            val rows = window.getValue("metrics").jsonArray.map { it.jsonObject }
+            assertEquals(5, rows.size)
+            rows.forEach { row ->
+                assertEquals("INSUFFICIENT_DATA", row.getValue("status").jsonPrimitive.content)
+                assertEquals("EMPTY_WINDOW", row.getValue("reason").jsonPrimitive.content)
+                assertEquals(JsonNull, row.getValue("baseline"))
+                assertEquals(JsonNull, row.getValue("delta"))
+                assertEquals(JsonNull, row.getValue("delta_percent"))
+            }
+            assertEquals(
+                "500",
+                window
+                    .row("response_time_p95_ms")
+                    .getValue("current")
+                    .jsonPrimitive.content,
+            )
+        }
+    }
+
+    @Test
+    fun `two empty windows keep the reason order and stay unconfirmed until decided`() {
+        val comparison =
+            compareAnalyses(
+                manualBaselineSelection("release", reference('a')),
+                reference('b'),
+                emptyWindowResult("steady", 0, 10_000, nullLatency = false),
+                identity(),
+                emptyWindowResult("steady", 0, 10_000, nullLatency = true),
+                identity(),
+                WindowComparisonRequest("steady", "steady"),
+            )
+        val window = comparison.getValue("window_comparison").jsonObject
+
+        assertEquals("INSUFFICIENT_DATA", window.getValue("status").jsonPrimitive.content)
+        assertEquals(
+            listOf("CONDITIONS_UNCONFIRMED", "BASELINE_WINDOW_EMPTY", "CURRENT_WINDOW_EMPTY", "INCOMPLETE_METRICS"),
+            window.reasons(),
+        )
+    }
+
+    @Test
+    fun `empty window turns resource rows into unavailable observations and keeps resource values visible`() {
+        val binding = resourceBinding("cpu", "checkout")
+        val otherBinding = resourceBinding("cpu", "payment")
+        val baseline =
+            windowResult(
+                "steady",
+                0,
+                10_000,
+                100,
+                100,
+                0,
+                listOf(binding, otherBinding),
+                listOf(resourceSummary("steady", binding, "10", "20")),
+            )
+
+        fun window(current: JsonObject) =
+            compareAnalyses(
+                manualBaselineSelection("release", reference('a')),
+                reference('b'),
+                baseline,
+                identity(),
+                current,
+                identity(),
+                WindowComparisonRequest("steady", "steady"),
+                conditionsConfirmed = true,
+            ).getValue("window_comparison").jsonObject
+
+        val filled =
+            window(
+                windowResult("steady", 0, 10_000, 100, 100, 0, listOf(binding), listOf(resourceSummary("steady", binding, "12", "24"))),
+            )
+        assertWindowMetric(filled.row("cpu_usage_median"), "12", "10", "2", "20", "CANDIDATE", null)
+
+        val empty =
+            window(
+                emptyWindowResult(
+                    "steady",
+                    0,
+                    10_000,
+                    nullLatency = false,
+                    bindings = listOf(binding),
+                    resources = listOf(resourceSummary("steady", binding, "12", "24")),
+                ),
+            )
+        assertEquals("INSUFFICIENT_DATA", empty.getValue("status").jsonPrimitive.content)
+        assertEquals(listOf("CURRENT_WINDOW_EMPTY", "INCOMPLETE_METRICS"), empty.reasons())
+        assertWindowMetric(empty.row("cpu_usage_median"), "12", "10", null, null, "INSUFFICIENT_DATA", "EMPTY_WINDOW")
+        assertWindowMetric(empty.row("cpu_usage_q95"), "24", "20", null, null, "INSUFFICIENT_DATA", "EMPTY_WINDOW")
+        assertWindowMetric(empty.row("cpu_usage_median:payment"), null, null, null, null, "INSUFFICIENT_DATA", "EMPTY_WINDOW")
+        empty.getValue("metrics").jsonArray.forEach { row ->
+            assertEquals(
+                "INSUFFICIENT_DATA",
+                row.jsonObject
+                    .getValue("status")
+                    .jsonPrimitive.content,
+            )
+            assertEquals(
+                "EMPTY_WINDOW",
+                row.jsonObject
+                    .getValue("reason")
+                    .jsonPrimitive.content,
+            )
+        }
+    }
+
+    @Test
+    fun `empty window with an incompatible definition or a missing window stays not evaluated`() {
+        val selection = manualBaselineSelection("release", reference('a'))
+        val empty = emptyWindowResult("steady", 0, 10_000, nullLatency = false)
+        val filled = windowResult("steady", 0, 10_000, 100, 100, 0)
+
+        val incompatible =
+            compareAnalyses(
+                selection,
+                reference('b'),
+                empty,
+                identity(),
+                filled,
+                identity("other"),
+                WindowComparisonRequest("steady", "steady"),
+            )
+        val missing =
+            compareAnalyses(selection, reference('b'), empty, identity(), filled, identity(), WindowComparisonRequest("steady", "gone"))
+
+        val incompatibleWindow = incompatible.getValue("window_comparison").jsonObject
+        assertEquals("NOT_EVALUATED", incompatibleWindow.getValue("status").jsonPrimitive.content)
+        assertEquals(listOf("INCOMPATIBLE_METRIC_DEFINITION"), incompatibleWindow.reasons())
+        val missingWindow = missing.getValue("window_comparison").jsonObject
+        assertEquals("NOT_EVALUATED", missingWindow.getValue("status").jsonPrimitive.content)
+        assertEquals(listOf("CURRENT_WINDOW_NOT_FOUND"), missingWindow.reasons())
+    }
+
+    private fun warnings(comparison: JsonObject): List<String> = comparison.getValue("warnings").jsonArray.map { it.jsonPrimitive.content }
+
+    private fun JsonObject.reasons(): List<String> = getValue("reasons").jsonArray.map { it.jsonPrimitive.content }
+
+    private fun JsonObject.row(metric: String): JsonObject =
+        getValue("metrics").jsonArray.map { it.jsonObject }.single { it.getValue("metric").jsonPrimitive.content == metric }
 
     private fun assertMetric(
         comparison: JsonObject,
@@ -704,6 +954,46 @@ class BaselineComparisonTest {
             buildJsonObject {
                 put("median", median)
                 put("q95", q95)
+            },
+        )
+    }
+
+    private fun emptyWindowResult(
+        windowId: String,
+        from: Long,
+        to: Long,
+        nullLatency: Boolean,
+        bindings: List<JsonObject> = emptyList(),
+        resources: List<JsonObject> = emptyList(),
+    ) = buildJsonObject {
+        result().forEach { (name, value) -> put(name, value) }
+        put(
+            "evidence",
+            buildJsonArray {
+                result().getValue("evidence").jsonArray.forEach(::add)
+                add(
+                    buildJsonObject {
+                        put("id", "window-metric-summary-$windowId")
+                        put("type", "window_metric_summary")
+                        put("window_id", windowId)
+                        put("from_epoch_ms", from)
+                        put("to_epoch_ms", to)
+                        put("sample_count", 0L)
+                        put("error_count", 0L)
+                        put("error_rate_ratio", JsonNull)
+                        put("throughput_rps", ratio(0L to (to - from)))
+                        put(
+                            "latency_ms",
+                            buildJsonObject {
+                                listOf("p50", "p95", "p99", "max").forEach { name ->
+                                    put(name, if (nullLatency) JsonNull else JsonPrimitive(0L))
+                                }
+                            },
+                        )
+                        put("resource_bindings", buildJsonArray { bindings.forEach(::add) })
+                    },
+                )
+                resources.forEach(::add)
             },
         )
     }

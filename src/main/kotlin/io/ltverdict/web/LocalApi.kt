@@ -406,7 +406,7 @@ internal fun Application.installLocalApi(context: LocalApiContext) {
                     put("analysis_id", call.parameters["analysisId"].orEmpty())
                 }.baselineReference()
             val selected = baselineOperation { context.store.readBaseline() } ?: notFound("No baseline is selected")
-            val baselineReference = selected.manualBaselineReference()
+            val baselineReference = selected.getValue("reference").jsonObject
             context.store.baselineDocuments(baselineReference)
             context.store.baselineDocuments(current)
             val conditions = baselineOperation { context.store.readBaselineCondition(baselineReference, current, windows) }
@@ -427,7 +427,7 @@ internal fun Application.installLocalApi(context: LocalApiContext) {
                     put("analysis_id", call.parameters["analysisId"].orEmpty())
                 }.baselineReference()
             val selected = baselineOperation { context.store.readBaseline() } ?: notFound("No baseline is selected")
-            val baselineReference = selected.manualBaselineReference()
+            val baselineReference = selected.getValue("reference").jsonObject
             context.store.baselineDocuments(baselineReference)
             context.store.baselineDocuments(current)
             val condition = baselineConditionRecord(baselineReference, current, windows, decision, Instant.now())
@@ -447,12 +447,7 @@ internal fun Application.installLocalApi(context: LocalApiContext) {
             val baselineReference = selected.getValue("reference").jsonObject
             val (baselineResult, baselineIdentity) = context.store.baselineDocuments(baselineReference)
             val (currentResult, currentIdentity) = context.store.baselineDocuments(current)
-            val conditions =
-                if (selected.baselineString("mode") == "manual") {
-                    baselineOperation { context.store.readBaselineCondition(baselineReference, current, windows) }
-                } else {
-                    null
-                }
+            val conditions = baselineOperation { context.store.readBaselineCondition(baselineReference, current, windows) }
             val comparison =
                 compareAnalyses(
                     selected,
@@ -1071,11 +1066,6 @@ private fun JsonObject.baselineReference(): JsonObject {
     return this
 }
 
-private fun JsonObject.manualBaselineReference(): JsonObject {
-    if (baselineString("mode") != "manual") baselineManualRequired()
-    return getValue("reference").jsonObject
-}
-
 private suspend fun RunBundleStore.baselineDocuments(reference: JsonObject): Pair<JsonObject, JsonObject> =
     baselineOperation {
         readAnalysisDocuments(reference.baselineString("run_id"), reference.baselineString("analysis_id"))
@@ -1098,9 +1088,6 @@ private suspend fun <T> baselineOperation(action: () -> T): T =
 
 private fun baselineIneligible(code: String): Nothing =
     throw ApiFailure(HttpStatusCode.UnprocessableEntity, code, "Statistical baseline is unavailable: $code")
-
-private fun baselineManualRequired(): Nothing =
-    throw ApiFailure(HttpStatusCode.UnprocessableEntity, "BASELINE_MANUAL_REQUIRED", "Condition decisions require a manual baseline")
 
 private suspend fun receiveInput(
     call: ApplicationCall,

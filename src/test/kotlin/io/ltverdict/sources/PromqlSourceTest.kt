@@ -170,7 +170,8 @@ class PromqlSourceTest {
                 (1..3).map { index ->
                     first.copy(id = "p$index", queries = (1..32).map { first.queries.single().copy(id = "q$it") })
                 }
-            val request = SourceRequest("p1", 1767225600000, 1767225601000, 1000, listOf("p2", "p3"))
+            // 96 series x 20 000 cells = 1 920 000 exceeds the 1 500 000 cell cap.
+            val request = SourceRequest("p1", 1767225600000, 1767225600000 + 20_000_000, 1000, listOf("p2", "p3"))
             assertEquals(
                 "RESOURCE_LIMIT_EXCEEDED",
                 assertThrows(IllegalArgumentException::class.java) {
@@ -532,7 +533,7 @@ class PromqlSourceTest {
             (0 until 16).joinToString(",", "{", "}") { index ->
                 "\"${index.toString().padEnd(128, 'k')}\":\"${"v".repeat(512)}\""
             }
-        val samples = (1..15_625).joinToString(",", "[", "]") { "[$it,\"-999999999999999999.999999999999\"]" }
+        val samples = (1..32_000).joinToString(",", "[", "]") { "[$it,\"-999999999999999999.999999999999\"]" }
         val body = matrix(labels, samples).encodeToByteArray()
         val server = HttpServer.create(InetSocketAddress("127.0.0.1", 0), 0)
         server.createContext("/api/v1/query_range") { exchange ->
@@ -561,7 +562,7 @@ class PromqlSourceTest {
                 )
             val acquisition =
                 PromqlSource(listOf(profile), SourceHttp(listOf(profile))).acquire(
-                    SourceRequest("local", 0, 15_625_000, 1_000),
+                    SourceRequest("local", 0, 32_000_000, 1_000),
                     HASH,
                 )
             assertEquals("FAILED", acquisition.evidence.string("status"))

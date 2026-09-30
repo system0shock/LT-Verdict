@@ -9,6 +9,7 @@ import io.ltverdict.ai.RunnerOutcome
 import io.ltverdict.core.AnalysisOutcome
 import io.ltverdict.core.AnalysisService
 import io.ltverdict.core.EngineConfig
+import io.ltverdict.core.MAX_RESOURCE_SNAPSHOT_BYTES
 import io.ltverdict.core.ResourceValidation
 import io.ltverdict.core.sha256Hex
 import io.ltverdict.core.validateResourceSnapshot
@@ -1124,6 +1125,30 @@ class LocalApiTest {
     }
 
     @Test
+    fun `resource snapshot upload accepts exactly 32 MiB`() {
+        val submissions = AtomicInteger()
+        withServer(
+            jobsFactory = {
+                AnalysisJobs(1) { request, _, _ ->
+                    submissions.incrementAndGet()
+                    check(request.resources != null)
+                    AnalysisOutcome(request.input.runId, FAKE_ANALYSIS_ID, byteArrayOf(), tempDir)
+                }
+            },
+        ) { store, api ->
+            val input = store.acceptInput(ByteArrayInputStream(SPIKE_DROP.bytes()), SPIKE_DROP.filename)
+            val json =
+                """{"schema_version":"resource-snapshot.v1","load_input_sha256":"${input.sha256}","start_epoch_ms":0,"step_ms":1000,"point_count":2,"series":[{"id":"cpu","metric":"cpu_used","unit":"ratio","entity":"vm","role":"system","aggregation":"interval_mean","values":[0.1,0.9]}]}"""
+                    .encodeToByteArray()
+            val exact = ByteArray(32 * 1024 * 1024) { ' '.code.toByte() }.also { json.copyInto(it) }
+            api.bootstrap()
+
+            assertEquals(FAKE_ANALYSIS_ID, api.createJob(input.runId, resources = exact).analysisId(api))
+            assertEquals(1, submissions.get())
+        }
+    }
+
+    @Test
     fun `invalid resources return structured errors before job submission`() {
         val submissions = AtomicInteger()
         withServer(
@@ -1148,7 +1173,7 @@ class LocalApiTest {
                     .isNotEmpty(),
             )
             assertError(api.createJob(input.runId, resources = "{".encodeToByteArray()), 422, "INVALID_RESOURCES", hasDetails = true)
-            assertError(api.createJob(input.runId, resources = ByteArray(16 * 1024 * 1024 + 1) { 32 }), 413)
+            assertError(api.createJob(input.runId, resources = ByteArray(MAX_RESOURCE_SNAPSHOT_BYTES + 1) { 32 }), 413)
             assertEquals(0, submissions.get())
         }
     }

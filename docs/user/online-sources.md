@@ -124,7 +124,7 @@ bundle и coverage не появляются:
   Разделите файл или задайте явное окно.
 - `AUTO_WINDOW_SPAN_UNSUPPORTED` — число ячеек выведенной сетки вне диапазона
   1..100 000. Задайте явное окно или более крупный step. Это ограничение на
-  ячейки одной серии; отдельно snapshot требует `серии × ячейки <= 500 000`,
+  ячейки одной серии; отдельно snapshot требует `серии × ячейки <= 1 500 000`,
   поэтому широкое авто-окно при многих профилях может упереться и в него:
   превышение после выборки даёт `SOURCE_SNAPSHOT_LIMIT_EXCEEDED` и статус
   `FAILED` в сводках профилей.
@@ -251,7 +251,9 @@ CLI принимает [source-request.v2](../contracts/sources/v1/multiple-requ
 Порядок выбора не влияет на нормализованные данные. Series/rule IDs становятся
 `profileId/queryId` и `profileId/ruleId`; `%` и `/` в profileId экранируются
 как `%25` и `%2F`. SLA-ссылки меняются вместе с series IDs, единицы — нет.
-Общий cap:64 series,500000 cells,256 rules; превышение отклоняется до сети.
+Общий cap снимка: 1 024 series, 1 500 000 cells, 256 rules; превышение отклоняется
+до сети. Фактически число series ограничено конфигурацией: до 32 queries на
+профиль и до 16 профилей, то есть не более 512 series.
 Governor остаётся общим по origin, запросы выполняются последовательно.
 
 Несколько OpenSearch contexts сохраняются как `opensearch-errors-N.json`,
@@ -352,8 +354,8 @@ Governor defaults: `requests_per_second:0.5`, `burst:1`, `max_concurrent:1`,
 настроенных профилей, jobs и retries. Первый запрос после старта ждёт interval.
 
 Config <= 1 MiB/16 profiles/32 queries; source request <= 16 KiB; response
-<= 16 MiB, acquisition raw total <= 64 MiB. Snapshot <= 16 MiB,
-100000 points/series, 500000 cells; остальные limits проверяет общий validator.
+<= 16 MiB, acquisition raw total <= 64 MiB. Snapshot <= 32 MiB,
+100000 points/series, 1500000 cells; остальные limits проверяет общий validator.
 Timeout/retries/body read отменяются вместе с job. HTTP error bodies не публикуются.
 
 ## Результат и offline replay

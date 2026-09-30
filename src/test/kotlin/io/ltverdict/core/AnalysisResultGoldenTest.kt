@@ -44,6 +44,48 @@ class AnalysisResultGoldenTest {
     }
 
     @Test
+    fun `analysis identity with a snapshot pins the resource limits`() {
+        val inputHash = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+        val input =
+            AcceptedInput(
+                runId = "jmeter_jtl_csv-$inputHash",
+                sourceType = SourceType.JMETER_CSV,
+                sha256 = inputHash,
+                sizeBytes = 1,
+                originalFilename = "input.jtl",
+                path = Path.of("unused"),
+            )
+        val policy =
+            validatePolicy(
+                ByteArrayInputStream(Files.readAllBytes(Path.of("fixtures/slice1/identity/policy.canonical.json"))),
+            ) as PolicyValidation.Valid
+        val resources =
+            validateResourceSnapshot(
+                ByteArrayInputStream(Files.readAllBytes(Path.of("docs/contracts/resources/v1/examples/valid/basic.json"))),
+            ) as ResourceValidation.Valid
+        val expected = Files.readAllBytes(Path.of("fixtures/slice1/identity/analysis-identity-resources.v1.json"))
+        val expectedHash =
+            Files
+                .readString(Path.of("fixtures/slice1/identity/analysis-identity-resources.sha256"))
+                .trim()
+
+        val actual = analysisIdentity(input, policy, EngineConfig(), resources = resources)
+
+        assertArrayEquals(expected, actual)
+        assertEquals(expectedHash, sha256Hex(actual))
+        val limits =
+            Json
+                .parseToJsonElement(actual.decodeToString())
+                .jsonObject
+                .getValue("limits")
+                .jsonObject
+        assertEquals("1024", limits.getValue("resource_series_max").jsonPrimitive.content)
+        assertEquals("1500000", limits.getValue("resource_cells_total_max").jsonPrimitive.content)
+        assertEquals("33554432", limits.getValue("resource_snapshot_bytes_max").jsonPrimitive.content)
+        assertEquals("100000", limits.getValue("resource_points_per_series_max").jsonPrimitive.content)
+    }
+
+    @Test
     fun `analysis result is canonical typed and byte identical`() {
         val evaluation =
             PolicyEvaluation(

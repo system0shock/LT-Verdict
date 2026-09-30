@@ -24,7 +24,7 @@
 
 | Ограничение | Значение | Источник |
 | --- | --- | --- |
-| series в `resource-snapshot.v1` | ≤64, ≤100 000 точек на series, ≤500 000 ячеек суммарно, файл ≤16 MiB | `ResourceSnapshot.kt` |
+| series в `resource-snapshot.v1` | ≤1 024, ≤100 000 точек на series, ≤1 500 000 ячеек суммарно, файл ≤32 MiB | `ResourceSnapshot.kt` |
 | окон / resource rules | ≤64 / ≤256 | `ResourceSnapshot.kt` |
 | корреляционных пар | ≤16 | `DiagnosticPlan.kt:743` |
 | правил аномалий / controls на пару / lag | ≤32 / ≤4 / ≤10 ячеек | `DiagnosticPlan.kt:744,746,748` |

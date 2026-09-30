@@ -162,8 +162,9 @@ validation возвращает отдельный `{valid:false,errors:[...]}`.
 Более 10 000 resource threshold findings дают
 `RESOURCE_FINDINGS_LIMIT_EXCEEDED` до публикации partial analysis.
 
-Snapshot ограничен 16 MiB; multipart job содержит максимум три parts, declared
-общий body ограничен snapshot + policy + 64 KiB overhead. Core проверяет depth,
+Snapshot ограничен 32 MiB, 1 024 series и 1 500 000 cells (ADR 0014); multipart
+job содержит не более 24 parts, declared общий body ограничен суммой максимальных
+parts (`MAX_JOB_REQUEST_BYTES`, snapshot 32 MiB) и 64 KiB overhead. Core проверяет depth,
 duplicate/unknown fields, numeric bounds и cardinality до помещения в queue.
 Расчёты используют existing analysis worker и cooperative cancellation.
 
@@ -253,7 +254,8 @@ external entities и filesystem/network resolution.
 Он связывается с semantic resource SHA-256; raw bytes сохраняются immutable,
 plan hash/module version/limits участвуют в identity только при наличии плана.
 Четвёртая multipart часть — `correlation_plan`; общий body ceiling
-18MiB+64KiB (resources16MiB, policy1MiB, plan1MiB плюс envelope).
+(`MAX_JOB_REQUEST_BYTES`) суммирует максимальные parts (snapshot 32MiB,
+policy1MiB, plan1MiB и остальные) плюс envelope.
 `POST /api/jobs` требует `Content-Length`; без него возвращает
 `411 LENGTH_REQUIRED` до чтения multipart. UI передаёт длину автоматически.
 Schema string lengths дополняются runtime-пределами 128/512 UTF-8 bytes.

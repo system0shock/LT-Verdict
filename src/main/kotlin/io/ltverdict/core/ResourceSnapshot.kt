@@ -648,10 +648,10 @@ private fun resourceInvalid(
     message: String,
 ): ResourceValidation.Invalid = ResourceValidation.Invalid(listOf(PolicyValidationError(code, pointer, message)))
 
-internal const val MAX_RESOURCE_SNAPSHOT_BYTES = 16 * 1024 * 1024
-internal const val MAX_RESOURCE_SERIES = 64
+internal const val MAX_RESOURCE_SNAPSHOT_BYTES = 32 * 1024 * 1024
+internal const val MAX_RESOURCE_SERIES = 1024
 internal const val MAX_POINTS_PER_SERIES = 100_000
-internal const val MAX_RESOURCE_CELLS = 500_000L
+internal const val MAX_RESOURCE_CELLS = 1_500_000L
 internal const val MAX_RESOURCE_WINDOWS = 64
 internal const val MAX_RESOURCE_RULES = 256
 internal const val MAX_LABELS = 16

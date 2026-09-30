@@ -33,6 +33,7 @@ import io.ltverdict.core.AnalyticsExportFormat
 import io.ltverdict.core.CapacityPlanValidation
 import io.ltverdict.core.DiagnosticValidation
 import io.ltverdict.core.MAX_CAPACITY_PLAN_BYTES
+import io.ltverdict.core.MAX_RESOURCE_SNAPSHOT_BYTES
 import io.ltverdict.core.MAX_TREND_PLAN_BYTES
 import io.ltverdict.core.PolicyValidation
 import io.ltverdict.core.PolicyValidationError
@@ -1191,7 +1192,7 @@ private suspend fun receiveJob(
     var parts = 0
     var invalidParts = false
     try {
-        call.receiveMultipart(formFieldLimit = (MAX_RESOURCE_BYTES + 1).toLong()).forEachPart { part ->
+        call.receiveMultipart(formFieldLimit = (MAX_RESOURCE_SNAPSHOT_BYTES + 1).toLong()).forEachPart { part ->
             try {
                 if (++parts > 24) malformed("Job multipart body has too many parts")
                 when {
@@ -1733,11 +1734,13 @@ private const val MAX_UPLOAD_BYTES = 4_294_967_296L
 private const val MAX_MULTIPART_OVERHEAD_BYTES = 65_536L
 private const val MAX_UPLOAD_REQUEST_BYTES = MAX_UPLOAD_BYTES + MAX_MULTIPART_OVERHEAD_BYTES
 private const val MAX_POLICY_BYTES = 1_048_576
+
+// 16 MiB: source_context, PostgreSQL parts and capture. The resource snapshot has its own limit in the core.
 private const val MAX_RESOURCE_BYTES = 16 * 1024 * 1024
 private const val MAX_DIAGNOSTIC_BYTES = 1024 * 1024
 private const val MAX_CONTEXT_BYTES = 32L * 1024 * 1024
 private const val MAX_JOB_REQUEST_BYTES =
-    3 * MAX_RESOURCE_BYTES + MAX_CONTEXT_BYTES + 4 * 1024 * 1024 +
+    MAX_RESOURCE_SNAPSHOT_BYTES + 2 * MAX_RESOURCE_BYTES + MAX_CONTEXT_BYTES + 4 * 1024 * 1024 +
         MAX_POLICY_BYTES + MAX_DIAGNOSTIC_BYTES + MAX_CAPACITY_PLAN_BYTES + MAX_TREND_PLAN_BYTES +
         MAX_MULTIPART_OVERHEAD_BYTES
 private val POSTGRES_PART_LIMITS =

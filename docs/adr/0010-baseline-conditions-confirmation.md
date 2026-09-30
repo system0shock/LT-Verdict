@@ -3,6 +3,10 @@
 **Дата:** 2026-09-06
 
 **Статус:** Accepted — пользователь разрешил реализацию `BASELINE-CONDITIONS-01`.
+Частично отменён [ADR 0017](0017-baseline-candidates-and-confirmation.md): ограничение
+«только для active manual baseline» снято, endpoints условий работают и для statistical
+baseline (binding по выбранному победителю), код `BASELINE_MANUAL_REQUIRED` не
+возвращается.
 
 ## Контекст
 

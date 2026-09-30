@@ -173,6 +173,8 @@ test.describe('attention items', () => {
         summary('mem-b', ['RESOURCE_GAPS', 'NO_OBSERVATIONS']),
         summary('cpu-unbound', ['NO_OBSERVATIONS']),
         summary('mem-gaps', ['RESOURCE_GAPS']),
+        { ...summary('gen-cpu', ['NO_OBSERVATIONS']), role: 'generator' },
+        { ...resourceCheck('gen-guard', 'PASS', 'sla'), series_id: 'gen-cpu' },
       ],
     }))
 

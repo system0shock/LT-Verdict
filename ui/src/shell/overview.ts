@@ -121,7 +121,7 @@ export function attentionItems(result: AnalysisResult): AttentionItem[] {
     .filter((evidence): evidence is ResourcePolicyCheckEvidence => evidence.type === 'resource_policy_check' && evidence.effect === 'sla')
     .map((evidence) => `${evidence.series_id}|${evidence.window_id}`))
   const resourceSummaries = result.evidence.filter((evidence): evidence is ResourceSummaryEvidence =>
-    evidence.type === 'resource_summary' && bound.has(`${evidence.series_id}|${evidence.window_id}`))
+    evidence.type === 'resource_summary' && evidence.role !== 'generator' && bound.has(`${evidence.series_id}|${evidence.window_id}`))
   const empty = resourceSummaries.filter((evidence) => evidence.reasons.includes('NO_OBSERVATIONS'))
   if (empty.length) {
     const seriesIds = [...new Set(empty.map((evidence) => evidence.series_id))]

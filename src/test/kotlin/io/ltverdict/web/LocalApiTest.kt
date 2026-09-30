@@ -625,7 +625,11 @@ class LocalApiTest {
                 api
                     .get("/api/runs/${input.runId}/analyses/$currentId/comparison")
                     .jsonObject()
-            assertEquals(setOf("baseline", "current", "comparability", "metrics", "conditions"), comparison.keys)
+            assertEquals(setOf("baseline", "current", "comparability", "warnings", "metrics", "conditions"), comparison.keys)
+            assertEquals(
+                listOf("BASELINE_IS_CURRENT_RUN"),
+                comparison.getValue("warnings").jsonArray.map { it.jsonPrimitive.content },
+            )
             assertEquals(selection, comparison.getValue("baseline"))
             assertEquals("UNCONFIRMED", comparison.getValue("comparability").jsonPrimitive.content)
             assertEquals(JsonNull, comparison.getValue("conditions"))
@@ -770,6 +774,131 @@ class LocalApiTest {
             assertEquals(JsonNull, api.get(path).jsonObject().getValue("conditions"))
             assertEquals(JsonNull, api.get(windowPath).jsonObject().getValue("conditions"))
         }
+
+    @Test
+    fun `statistical baseline is confirmed only by an explicit pair decision and reports warnings`() =
+        withServer { store, api ->
+            api.bootstrap()
+            val runs = statisticalRuns(store, api, listOf(100, 110, 1000, 2000))
+            val candidates = runs.take(3)
+            val baseline = api.selectStatistical(candidates)
+            val winner = baseline.getValue("reference").jsonObject
+            val winnerRun = winner.getValue("run_id").jsonPrimitive.content
+            val winnerAnalysis = winner.getValue("analysis_id").jsonPrimitive.content
+            val (testedRun, testedAnalysis) = runs[3]
+
+            val before = api.comparisonOf(testedRun, testedAnalysis)
+            assertEquals("UNCONFIRMED", before.getValue("comparability").jsonPrimitive.content)
+            assertEquals(emptyList<String>(), before.warnings())
+            assertEquals(JsonNull, before.getValue("conditions"))
+
+            val saved =
+                api
+                    .post(
+                        "/api/runs/$testedRun/analyses/$testedAnalysis/baseline-conditions",
+                        "application/json",
+                        """{"decision":"CONFIRMED"}""".encodeToByteArray(),
+                    ).jsonObject()
+                    .getValue("conditions")
+            val after = api.comparisonOf(testedRun, testedAnalysis)
+            assertEquals("USER_CONFIRMED", after.getValue("comparability").jsonPrimitive.content)
+            assertEquals(saved, after.getValue("conditions"))
+            assertEquals(before.getValue("metrics"), after.getValue("metrics"))
+            assertEquals(emptyList<String>(), after.warnings())
+
+            val (memberRun, memberAnalysis) = candidates.first { it.first != winnerRun }
+            val member = api.comparisonOf(memberRun, memberAnalysis)
+            assertEquals("UNCONFIRMED", member.getValue("comparability").jsonPrimitive.content)
+            assertEquals(listOf("CURRENT_IN_CANDIDATE_SET"), member.warnings())
+
+            val itself = api.comparisonOf(winnerRun, winnerAnalysis)
+            assertEquals("UNCONFIRMED", itself.getValue("comparability").jsonPrimitive.content)
+            assertEquals(listOf("BASELINE_IS_CURRENT_ANALYSIS", "CURRENT_IN_CANDIDATE_SET"), itself.warnings())
+
+            val otherId = api.createJob(winnerRun, Files.readAllBytes(Path.of(PASS_POLICY))).analysisId(api)
+            val sameRun = api.comparisonOf(winnerRun, otherId)
+            assertEquals(listOf("BASELINE_IS_CURRENT_RUN", "CURRENT_IN_CANDIDATE_SET"), sameRun.warnings())
+        }
+
+    @Test
+    fun `a saved pair decision follows the statistical winner across candidate changes and is cleared with the baseline`() =
+        withServer { store, api ->
+            api.bootstrap()
+            val runs = statisticalRuns(store, api, listOf(100, 110, 1000, 2000, 1500))
+            val first = api.selectStatistical(runs.take(3))
+            val winner = first.getValue("reference").jsonObject
+            val winnerRun = winner.getValue("run_id").jsonPrimitive.content
+            val (testedRun, testedAnalysis) = runs[3]
+            val conditionsPath = "/api/runs/$testedRun/analyses/$testedAnalysis/baseline-conditions"
+
+            val manualBody = """{"mode":"manual","series":"release","reference":$winner}"""
+            assertEquals(200, api.post("/api/baseline", "application/json", manualBody.encodeToByteArray()).statusCode())
+            val saved =
+                api
+                    .post(conditionsPath, "application/json", """{"decision":"CONFIRMED"}""".encodeToByteArray())
+                    .jsonObject()
+                    .getValue("conditions")
+
+            api.selectStatistical(runs.take(3))
+            val carried = api.comparisonOf(testedRun, testedAnalysis)
+            assertEquals("USER_CONFIRMED", carried.getValue("comparability").jsonPrimitive.content)
+            assertEquals(saved, carried.getValue("conditions"))
+
+            val changed = api.selectStatistical(listOf(runs[0], runs[1], runs[4]))
+            assertEquals(winner, changed.getValue("reference"))
+            assertEquals(3, changed.getValue("candidates").jsonArray.size)
+            assertTrue(
+                changed.getValue("candidates").jsonArray.none {
+                    it.jsonObject
+                        .getValue("run_id")
+                        .jsonPrimitive.content == testedRun
+                },
+            )
+            val kept = api.comparisonOf(testedRun, testedAnalysis)
+            assertEquals("USER_CONFIRMED", kept.getValue("comparability").jsonPrimitive.content)
+            assertEquals(saved, api.get(conditionsPath).jsonObject().getValue("conditions"))
+
+            assertEquals(JsonNull, api.delete("/api/baseline").jsonObject().getValue("baseline"))
+            api.selectStatistical(runs.take(3))
+            assertEquals(JsonNull, api.get(conditionsPath).jsonObject().getValue("conditions"))
+            assertEquals(
+                "UNCONFIRMED",
+                api
+                    .comparisonOf(testedRun, testedAnalysis)
+                    .getValue("comparability")
+                    .jsonPrimitive.content,
+            )
+        }
+
+    private fun statisticalRuns(
+        store: RunBundleStore,
+        api: ApiClient,
+        elapsed: List<Int>,
+    ): List<Pair<String, String>> =
+        elapsed.mapIndexed { index, value ->
+            val load = "timeStamp,elapsed,label,success\n${1_767_225_600_000L + index * 1_000L},$value,checkout,true\n"
+            val input = store.acceptInput(ByteArrayInputStream(load.encodeToByteArray()), "series-$index.jtl")
+            input.runId to api.createJob(input.runId).analysisId(api)
+        }
+
+    private fun ApiClient.selectStatistical(candidates: List<Pair<String, String>>): JsonObject {
+        val references = candidates.joinToString(",") { (run, analysis) -> """{"run_id":"$run","analysis_id":"$analysis"}""" }
+        val response =
+            post(
+                "/api/baseline",
+                "application/json",
+                """{"mode":"statistical","series":"release","candidates":[$references],"comparable":true}""".encodeToByteArray(),
+            )
+        assertEquals(200, response.statusCode())
+        return response.jsonObject().getValue("baseline").jsonObject
+    }
+
+    private fun ApiClient.comparisonOf(
+        run: String,
+        analysis: String,
+    ): JsonObject = get("/api/runs/$run/analyses/$analysis/comparison").jsonObject()
+
+    private fun JsonObject.warnings(): List<String> = getValue("warnings").jsonArray.map { it.jsonPrimitive.content }
 
     @Test
     fun `private API uploads validates analyzes and returns exact result and bucket pages`() =

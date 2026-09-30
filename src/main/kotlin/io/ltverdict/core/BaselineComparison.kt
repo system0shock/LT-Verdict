@@ -152,7 +152,17 @@ internal fun compareAnalyses(
 ): JsonObject {
     val parsedSelection = selection.toSelection()
     val current = currentReference.toReference()
-    val confirmed = conditionsConfirmed ?: (parsedSelection.mode == Mode.STATISTICAL && current in parsedSelection.candidates)
+    val confirmed = conditionsConfirmed == true
+    val warnings =
+        buildList {
+            when {
+                parsedSelection.reference == current -> add("BASELINE_IS_CURRENT_ANALYSIS")
+                parsedSelection.reference.runId == current.runId -> add("BASELINE_IS_CURRENT_RUN")
+            }
+            if (parsedSelection.mode == Mode.STATISTICAL && parsedSelection.candidates.any { it.runId == current.runId }) {
+                add("CURRENT_IN_CANDIDATE_SET")
+            }
+        }
     val compatible = semanticKey(baselineResult, baselineIdentity)?.let { it == semanticKey(currentResult, currentIdentity) } == true
     return buildJsonObject {
         put("baseline", parsedSelection.toJson())
@@ -165,6 +175,7 @@ internal fun compareAnalyses(
                 "UNCONFIRMED"
             },
         )
+        put("warnings", buildJsonArray { warnings.forEach { add(JsonPrimitive(it)) } })
         put(
             "metrics",
             buildJsonArray {
@@ -220,6 +231,8 @@ private fun windowComparison(
     val reasons =
         buildList {
             if (!conditionsConfirmed) add("CONDITIONS_UNCONFIRMED")
+            if (baselineWindow.sampleCount == 0L) add("BASELINE_WINDOW_EMPTY")
+            if (currentWindow.sampleCount == 0L) add("CURRENT_WINDOW_EMPTY")
             if (rows.any { it.status == "INSUFFICIENT_DATA" }) add("INCOMPLETE_METRICS")
         }
     return windowComparisonJson(status, request, reasons, rows, baselineWindow, currentWindow)
@@ -256,7 +269,12 @@ private fun windowMetricComparison(
 ): WindowMetricComparison {
     val currentValue = current.value(metric)
     val baselineValue = baseline.value(metric)
-    val reason = if (currentValue == null || baselineValue == null) "MISSING_METRIC" else null
+    val reason =
+        when {
+            current.sampleCount == 0L || baseline.sampleCount == 0L -> "EMPTY_WINDOW"
+            currentValue == null || baselineValue == null -> "MISSING_METRIC"
+            else -> null
+        }
     val delta = if (reason == null) checkNotNull(currentValue) - checkNotNull(baselineValue) else null
     val zeroBaseline = reason == null && checkNotNull(baselineValue).isZero()
     val percent = if (reason == null && !zeroBaseline) checkNotNull(delta) / checkNotNull(baselineValue) * HUNDRED else null
@@ -359,7 +377,8 @@ private fun resourceMetricComparison(
 ): ResourceMetricComparison {
     val current = currentSummary?.statisticsValue(statistic)
     val baseline = baselineSummary?.statisticsValue(statistic)
-    val reason = bindingReason ?: if (current == null || baseline == null) "MISSING_METRIC" else null
+    val empty = baselineWindow.sampleCount == 0L || currentWindow.sampleCount == 0L
+    val reason = if (empty) "EMPTY_WINDOW" else bindingReason ?: if (current == null || baseline == null) "MISSING_METRIC" else null
     val delta = if (reason == null) checkNotNull(current) - checkNotNull(baseline) else null
     val zeroBaseline = reason == null && checkNotNull(baseline).isZero()
     val percent = if (reason == null && !zeroBaseline) checkNotNull(delta) / checkNotNull(baseline) * HUNDRED else null
@@ -374,7 +393,7 @@ private fun resourceMetricComparison(
             else -> "NO_MATERIAL_CHANGE"
         }
     return ResourceMetricComparison(
-        binding.resourceName(statistic, reason == "RESOURCE_BINDING_MISSING"),
+        binding.resourceName(statistic, bindingReason == "RESOURCE_BINDING_MISSING"),
         binding.stringOrNull("unit") ?: "",
         binding.stringOrNull("series_id"),
         binding.stringOrNull("entity"),
@@ -447,14 +466,16 @@ private data class WindowSummary(
     val throughput: Rational?,
     val errorRate: Rational?,
 ) {
-    fun value(metric: WindowMetric): Rational? =
-        when (metric) {
+    fun value(metric: WindowMetric): Rational? {
+        if (sampleCount == 0L) return null
+        return when (metric) {
             WindowMetric.P50 -> latency?.nonNegativeInteger("p50")
             WindowMetric.P95 -> latency?.nonNegativeInteger("p95")
             WindowMetric.P99 -> latency?.nonNegativeInteger("p99")
             WindowMetric.THROUGHPUT -> throughput
             WindowMetric.ERROR_RATE -> errorRate
         }
+    }
 }
 
 private sealed interface ComparisonRow {

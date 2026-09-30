@@ -543,10 +543,16 @@ export interface BaselineCondition {
   updated_at: string
 }
 
+export type BaselineComparisonWarning =
+  | 'BASELINE_IS_CURRENT_ANALYSIS'
+  | 'BASELINE_IS_CURRENT_RUN'
+  | 'CURRENT_IN_CANDIDATE_SET'
+
 export interface BaselineComparison {
   baseline: BaselineSelection
   current: AnalysisReference
   comparability: 'UNCONFIRMED' | 'USER_CONFIRMED'
+  warnings: BaselineComparisonWarning[]
   conditions: BaselineCondition | null
   metrics: ComparisonMetric[]
   window_comparison?: {

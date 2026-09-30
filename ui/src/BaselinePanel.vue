@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
 import BaselineCharts from './BaselineCharts.vue'
-import { clearBaseline, compareBaseline, getBaseline, getBaselineConditions, setBaseline, setBaselineConditions } from './api'
+import { ApiError, clearBaseline, compareBaseline, getBaseline, getBaselineConditions, setBaseline, setBaselineConditions } from './api'
+import { BASELINE_LABELS } from './shell/labels'
 import type { AnalysisReference, BaselineComparison, BaselineCondition, BaselineConditionDecision, BaselineConditionWindows, BaselineRequest, BaselineSelection } from './types'
 
 const props = defineProps<{ selection: AnalysisReference | null; filename: string; working: boolean }>()
@@ -22,11 +23,12 @@ const currentWindow = ref('')
 const minChangePercent = ref('5')
 const minErrorRateDelta = ref('0.001')
 const error = ref('')
+const errorCode = ref('')
 let baselineRevision = 0
 let comparisonRevision = 0
 let conditionRevision = 0
 
-const busy = computed(() => loading.value || saving.value || props.working)
+const busy = computed(() => loading.value || saving.value || conditionSaving.value || props.working)
 const canAdd = computed(() => props.selection && candidates.value.length < 20
   && !candidates.value.some((candidate) => candidate.reference.run_id === props.selection?.run_id))
 const validSeries = computed(() => series.value.trim().length > 0 && new TextEncoder().encode(series.value).length <= 128)
@@ -37,6 +39,16 @@ const validWindows = computed(() => !windowSelection.value || (
   && Number(minErrorRateDelta.value) > 0 && Number(minErrorRateDelta.value) <= 1
 ))
 const conditionBusy = computed(() => conditionLoading.value || conditionSaving.value)
+const emptyWindowNotes = computed(() => {
+  const reasons = comparison.value?.window_comparison?.reasons ?? []
+  return [
+    ...(reasons.includes('BASELINE_WINDOW_EMPTY') ? [BASELINE_LABELS.emptyBaselineWindow] : []),
+    ...(reasons.includes('CURRENT_WINDOW_EMPTY') ? [BASELINE_LABELS.emptyCurrentWindow] : []),
+  ]
+})
+const oldRules = computed(() => errorCode.value === 'BASELINE_MIXED_SEMANTICS'
+  || comparison.value?.metrics.some((metric) => metric.reason === 'INCOMPATIBLE_METRIC_DEFINITION')
+  || comparison.value?.window_comparison?.reasons.includes('INCOMPATIBLE_METRIC_DEFINITION'))
 const metricLabels: Record<string, string> = {
   response_time_p95_ms: 'P95 latency',
   response_time_p99_ms: 'P99 latency',
@@ -46,7 +58,8 @@ const metricLabels: Record<string, string> = {
 
 onMounted(loadBaseline)
 watch(() => props.selection, conditionBindingChanged)
-watch([baselineWindow, currentWindow, minChangePercent, minErrorRateDelta], invalidateComparison)
+watch([baselineWindow, currentWindow], conditionBindingChanged)
+watch([minChangePercent, minErrorRateDelta], invalidateComparison)
 watch(series, () => { comparable.value = false })
 
 function invalidateComparison() {
@@ -72,9 +85,10 @@ async function loadConditions() {
   conditions.value = null
   conditionDecision.value = 'UNKNOWN'
   conditionLoading.value = false
-  if (baseline.value?.mode !== 'manual' || !props.selection || !validWindows.value) return
+  if (!baseline.value || !props.selection || !validWindows.value) return
   conditionLoading.value = true
   error.value = ''
+  errorCode.value = ''
   try {
     const response = await getBaselineConditions({ ...props.selection }, selectedConditionWindows())
     if (revision !== conditionRevision) return
@@ -91,6 +105,7 @@ async function loadBaseline() {
   const revision = ++baselineRevision
   loading.value = true
   error.value = ''
+  errorCode.value = ''
   try {
     const response = await getBaseline()
     if (revision !== baselineRevision) return
@@ -129,6 +144,7 @@ async function save(request: BaselineRequest | null) {
   const revision = ++baselineRevision
   saving.value = true
   error.value = ''
+  errorCode.value = ''
   invalidateComparison()
   try {
     const response = request ? await setBaseline(request) : await clearBaseline()
@@ -146,11 +162,12 @@ async function save(request: BaselineRequest | null) {
 }
 
 async function saveConditions() {
-  if (baseline.value?.mode !== 'manual' || !props.selection || busy.value || conditionBusy.value || !validWindows.value) return
+  if (!baseline.value || !props.selection || busy.value || conditionBusy.value || !validWindows.value) return
   const revision = ++conditionRevision
   const stateRevision = baselineRevision
   conditionSaving.value = true
   error.value = ''
+  errorCode.value = ''
   invalidateComparison()
   try {
     const response = await setBaselineConditions({ ...props.selection }, conditionDecision.value, selectedConditionWindows())
@@ -160,7 +177,7 @@ async function saveConditions() {
   } catch (failure) {
     if (revision === conditionRevision && stateRevision === baselineRevision) showError(failure)
   } finally {
-    if (revision === conditionRevision) conditionSaving.value = false
+    conditionSaving.value = false
   }
 }
 
@@ -171,6 +188,7 @@ async function compare() {
   comparison.value = null
   comparing.value = true
   error.value = ''
+  errorCode.value = ''
   try {
     const response = await compareBaseline({ ...props.selection }, windowSelection.value ? {
       baseline_window: baselineWindow.value.trim(),
@@ -192,6 +210,11 @@ async function compare() {
 
 function showError(failure: unknown) {
   error.value = failure instanceof Error ? failure.message : 'Baseline request failed.'
+  errorCode.value = failure instanceof ApiError ? failure.code : ''
+}
+
+function warningText(code: string): string {
+  return (BASELINE_LABELS.warnings as Record<string, string>)[code] ?? code
 }
 </script>
 
@@ -267,7 +290,6 @@ function showError(failure: unknown) {
           v-model="baselineWindow"
           :disabled="busy"
           aria-describedby="window-comparison-hint"
-          @change="conditionBindingChanged"
         >
       </div>
       <div class="field">
@@ -277,7 +299,6 @@ function showError(failure: unknown) {
           v-model="currentWindow"
           :disabled="busy"
           aria-describedby="window-comparison-hint"
-          @change="conditionBindingChanged"
         >
       </div>
       <div class="field">
@@ -314,7 +335,7 @@ function showError(failure: unknown) {
       Materiality thresholds must be greater than zero; an error-rate delta of 0.001 is 0.1 percentage points.
     </p>
 
-    <template v-if="baseline?.mode === 'manual'">
+    <template v-if="baseline">
       <fieldset
         class="field"
         :disabled="busy || conditionBusy || !selection || !validWindows"
@@ -405,7 +426,7 @@ function showError(failure: unknown) {
       <p>
         Select 3–20 different runs from the same planned test conditions.
         The central real run is chosen using P95, throughput and error-rate ranks.
-        This heuristic does not establish a stable norm or statistical significance.
+        This heuristic does not establish a stable norm or statistical significance. Do not add the run you are testing as a candidate.
       </p>
       <button
         type="button"
@@ -446,7 +467,7 @@ function showError(failure: unknown) {
         class="field__hint"
       >
         Confirm scenario/mix, environment/dataset, load model, targets, pacing and generator limits.
-        Achieved RPS may differ. Invalid or incomplete candidates are rejected, not silently omitted.
+        Achieved RPS may differ. Invalid or incomplete candidates are rejected, not silently omitted. This confirms the candidate set only; confirm each compared pair in the planned-conditions form.
       </p>
       <button
         type="button"
@@ -464,6 +485,14 @@ function showError(failure: unknown) {
     >
       {{ error }}
     </p>
+    <p
+      v-if="oldRules"
+      data-testid="baseline-old-rules"
+      class="notice notice-info"
+      role="status"
+    >
+      {{ BASELINE_LABELS.oldRulesHint }}
+    </p>
 
     <section
       v-if="comparison"
@@ -474,6 +503,22 @@ function showError(failure: unknown) {
         Overall metrics against baseline
       </h3>
       <p>Planned conditions: {{ comparison.comparability }}. Deltas alone do not prove a version regression or change the policy verdict.</p>
+      <div
+        v-if="comparison.warnings.length"
+        data-testid="baseline-warnings"
+        class="notice notice-warn"
+        role="status"
+      >
+        <strong>{{ BASELINE_LABELS.warningsTitle }}</strong>
+        <ul>
+          <li
+            v-for="warning in comparison.warnings"
+            :key="warning"
+          >
+            {{ warningText(warning) }}
+          </li>
+        </ul>
+      </div>
       <BaselineCharts :comparison="comparison" />
       <div
         class="table-wrap"
@@ -529,6 +574,22 @@ function showError(failure: unknown) {
         </h3>
         <p>{{ comparison.window_comparison.baseline_window }} → {{ comparison.window_comparison.current_window }} · {{ comparison.window_comparison.status }}</p>
         <p>{{ comparison.window_comparison.reasons.join(', ') || '—' }}</p>
+        <div
+          v-if="emptyWindowNotes.length"
+          data-testid="baseline-empty-window"
+          class="notice notice-warn"
+          role="status"
+        >
+          <p>{{ BASELINE_LABELS.emptyWindowHint }}</p>
+          <ul>
+            <li
+              v-for="note in emptyWindowNotes"
+              :key="note"
+            >
+              {{ note }}
+            </li>
+          </ul>
+        </div>
         <p>
           Baseline: {{ comparison.window_comparison.baseline_sample_count ?? 'N/A' }} samples / {{ comparison.window_comparison.baseline_duration_ms ?? 'N/A' }} ms.
           Current: {{ comparison.window_comparison.current_sample_count ?? 'N/A' }} samples / {{ comparison.window_comparison.current_duration_ms ?? 'N/A' }} ms.

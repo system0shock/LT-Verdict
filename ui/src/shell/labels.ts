@@ -42,6 +42,21 @@ export const SHELL_LABELS = {
   analysesMore: 'Ещё анализы',
 } as const
 
+// Строки сравнения с эталоном (ADR 0017): предупреждения и подсказки для BaselinePanel.vue.
+export const BASELINE_LABELS = {
+  warningsTitle: 'Предупреждения',
+  warnings: {
+    BASELINE_IS_CURRENT_ANALYSIS: 'Эталон и сравниваемый анализ совпадают: это сравнение прогона с самим собой.',
+    BASELINE_IS_CURRENT_RUN: 'Эталон и сравниваемый анализ относятся к одному прогону: нагрузочные данные у них одинаковые.',
+    CURRENT_IN_CANDIDATE_SET: 'Сравниваемый прогон входил в набор кандидатов статистического эталона: эталон выбран с его участием.',
+  },
+  emptyWindowHint: 'В окне нет нагрузки: проверьте границы окна и синхронизацию часов генератора и кластера.',
+  emptyBaselineWindow: 'Пусто окно эталона (baseline).',
+  emptyCurrentWindow: 'Пусто текущее окно (current).',
+  oldRulesHint:
+    'Эталон создан по старым правилам анализа: пересчитайте его (заново проанализируйте исходные данные и закрепите baseline).',
+} as const
+
 // Русское склонение: 1 пункт, 2 пункта, 5 пунктов.
 export function pluralRu(count: number, one: string, few: string, many: string): string {
   const mod100 = Math.abs(count) % 100

@@ -66,6 +66,14 @@
       "sha256": "1acda10bdc870c7db8b6a0f86c381aeed1f0987765f235b8659dbca2b72f3ad3"
     },
     {
+      "path": "fixtures/slice1/identity/analysis-identity-resources.sha256",
+      "sha256": "fd9bb1bd8ec2afde719b822d7f6475f247ae3b9792a48466c94afb88d3d7973f"
+    },
+    {
+      "path": "fixtures/slice1/identity/analysis-identity-resources.v1.json",
+      "sha256": "c9985dfb0dfcb285ec4a3a68e861418aaeef9139ffb788ea2d1d20ada568cb2e"
+    },
+    {
       "path": "fixtures/slice1/identity/analysis-identity.sha256",
       "sha256": "edc66d17e816311f29085c6bd6fe146d099c9667094bd6fb6d14a456a116a953"
     },

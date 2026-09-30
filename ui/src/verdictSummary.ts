@@ -18,6 +18,10 @@ export interface RuleLine {
   detail: string
 }
 
+export interface FailedLine extends RuleLine {
+  source: 'business' | 'resource'
+}
+
 export interface CauseGroup {
   code: string | null
   text: string
@@ -208,20 +212,27 @@ function overallMetrics(result: AnalysisResult): MetricSummaryEvidence | undefin
   )
 }
 
-export function summarizeVerdict(result: AnalysisResult): VerdictSummary {
-  const verdict = result.policy_verdict
-  const capacity = result.analysis_mode === 'capacity_step' ? result.capacity_summary : undefined
+export function failedLinesOf(result: AnalysisResult): FailedLine[] {
   const { business, resource } = checksOf(result)
   const metrics = new Map(result.evidence.filter((item): item is MetricSummaryEvidence => item.type === 'metric_summary').map((item) => [item.id, item]))
   const violations = result.findings.filter(isViolation)
   const violationsOf = (check: ResourcePolicyCheckEvidence) =>
     violations.filter((item) => item.rule_id === check.rule_id && item.window_id === check.window_id)
 
-  const failedLines = [
-    ...business.filter((check) => check.status === 'FAIL').map((check) => businessLine(check, metrics)),
-    // Пропуск ячейки даёт NO_VERDICT, но найденные нарушения того же правила ядро сохраняет: держим их на виду.
-    ...resource.filter((check) => check.status === 'FAIL' || (check.status === 'NO_VERDICT' && violationsOf(check).length > 0)).map((check) => resourceLine(check, violationsOf(check))),
+  return [
+    ...business.filter((check) => check.status === 'FAIL').map((check) => ({ ...businessLine(check, metrics), source: 'business' as const })),
+    ...resource
+      .filter((check) => check.status === 'FAIL' || (check.status === 'NO_VERDICT' && violationsOf(check).length > 0))
+      .map((check) => ({ ...resourceLine(check, violationsOf(check)), source: 'resource' as const })),
   ]
+}
+
+export function summarizeVerdict(result: AnalysisResult): VerdictSummary {
+  const verdict = result.policy_verdict
+  const capacity = result.analysis_mode === 'capacity_step' ? result.capacity_summary : undefined
+  const { business, resource } = checksOf(result)
+  const metrics = new Map(result.evidence.filter((item): item is MetricSummaryEvidence => item.type === 'metric_summary').map((item) => [item.id, item]))
+  const failedLines = failedLinesOf(result).map(({ key, title, detail }) => ({ key, title, detail }))
   const passedLines = [
     ...business.filter((check) => check.status === 'PASS').map((check) => businessLine(check, metrics)),
     ...resource.filter((check) => check.status === 'PASS').map((check) => resourceLine(check, [])),

@@ -127,3 +127,9 @@
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
+
+.shell .shell-panel section[id],
+.shell #overview-attention,
+.shell #overview-load {
+  scroll-margin-top: 96px;
+}

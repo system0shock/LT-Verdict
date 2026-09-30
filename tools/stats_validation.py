@@ -312,25 +312,37 @@ def check_cases(directory, manifest_sha256, actual_path):
 EPOCH = 1767225600000
 
 
+def _utf16_order(text):
+    """Sort key equal to JVM String order (UTF-16 code units), unlike code-point order for non-BMP text."""
+    return text.encode('utf-16-be', 'surrogatepass')
+
+
 def _canonical(value):
-    """Wire contract canonicalization, independent of production imports."""
+    """Wire contract canonicalization (ADR-0003), independent of production imports."""
     if isinstance(value, dict):
-        return '{' + ','.join(json.dumps(k) + ':' + _canonical(value[k]) for k in sorted(value)) + '}'
+        return '{' + ','.join(json.dumps(k, ensure_ascii=False) + ':' + _canonical(value[k])
+                              for k in sorted(value, key=_utf16_order)) + '}'
     if isinstance(value, list):
         return '[' + ','.join(map(_canonical, value)) + ']'
     if isinstance(value, (int, float, Decimal)) and not isinstance(value, bool):
         number = Decimal(str(value))
         if not number.is_finite():
             raise ValueError('nonfinite input')
-        return format(number, 'f').rstrip('0').rstrip('.') if '.' in format(number, 'f') else str(number)
+        text = format(number, 'f')
+        if '.' in text:
+            text = text.rstrip('0').rstrip('.')
+        return '0' if text in ('-0', '') else text
     return json.dumps(value, ensure_ascii=False, separators=(',', ':'))
 
 
 def snapshot_hash(snapshot):
+    """Semantic hash of a snapshot object; read files with parse_float=Decimal so 18+ digit values stay exact."""
     semantic = {key: value for key, value in snapshot.items() if key != 'provenance'}
-    semantic['series'] = sorted([{'labels': {}} | value for value in snapshot['series']], key=lambda v: v['id'])
-    semantic['windows'] = sorted(snapshot['windows'], key=lambda v: (v['from_epoch_ms'], v['to_epoch_ms'], v['id']))
-    semantic['rules'] = list(snapshot['rules'])
+    semantic['series'] = sorted([{'labels': {}} | value for value in snapshot['series']],
+                                key=lambda v: _utf16_order(v['id']))
+    semantic['windows'] = sorted(snapshot.get('windows', []),
+                                 key=lambda v: (v['from_epoch_ms'], v['to_epoch_ms'], _utf16_order(v['id'])))
+    semantic['rules'] = list(snapshot.get('rules', []))
     return _sha(_canonical(semantic).encode())
 
 

@@ -142,6 +142,13 @@
 
 ### Fixed
 
+- Python-оракул `snapshot_hash` (`tools/stats_validation.py`) приведён к
+  canonical bytes ядра (ADR 0003): `-0.0` даёт `0`, числа от `1e16` пишутся без
+  exponent, ключи и `id` сортируются по UTF-16 code units, не-ASCII ключи меток
+  не экранируются, отсутствующие `windows` и `rules` не приводят к `KeyError`.
+  Раньше клиент, считавший hash оракулом, получал `*_SNAPSHOT_MISMATCH` на таких
+  снимках. Ядро, контракты и golden не менялись; общие векторы сверены с ядром
+  в `tools/test_snapshot_hash_vectors.py`.
 - Прокручиваемые таблицы результата (policy results, capacity stages, resource
   и window summaries, source acquisition, error groups, transaction metrics,
   time bins) доступны с клавиатуры: у каждой обёртки есть `tabindex="0"`,

@@ -20,8 +20,9 @@ REQUIRED TO ACHIEVE IT:
     500 000 -> 1 500 000, MAX_RESOURCE_SNAPSHOT_BYTES 16 -> 32 MiB;
   - схема resource-snapshot.schema.json: series.maxItems 64 -> 1024 и
     пояснение про ячейки и байты (в схеме они не выражены);
-  - LocalApi.kt: производный MAX_JOB_REQUEST_BYTES учитывает снимок 32 MiB
-    (остальные 16 MiB-пределы файла не трогаются, см. допущение 2);
+  - LocalApi.kt: formFieldLimit загрузки job и производный
+    MAX_JOB_REQUEST_BYTES учитывают снимок 32 MiB (остальные 16 MiB-пределы
+    файла не трогаются, см. допущение 2);
   - блок limits identity меняется сам (AnalysisResult.kt читает константы,
     правок кода нет); новая golden-фикстура identity со снимком
     (ADR 0014, часть 7, п. 2) фиксирует блок ресурсных пределов;
@@ -45,6 +46,7 @@ EXPECTED FILES TO CHANGE:
   modify src/test/kotlin/io/ltverdict/core/ResourceSnapshotTest.kt
   modify src/test/kotlin/io/ltverdict/core/AnalysisResultGoldenTest.kt
   modify src/test/kotlin/io/ltverdict/web/LocalApiTest.kt
+  modify src/test/kotlin/io/ltverdict/sources/PromqlSourceTest.kt
   modify src/test/kotlin/io/ltverdict/fixtures/FixtureManifestTest.kt
   modify fixtures/slice1/manifest.json
   create fixtures/slice1/identity/analysis-identity-resources.v1.json
@@ -82,14 +84,15 @@ EXPECTED FILES TO CHANGE:
 Расхождения, найденные при сверке:
 
 1. `MAX_RESOURCE_BYTES` (`LocalApi.kt:1736`) не относится только к снимку: им заданы предел части `source_context` (`:1207-1208`), части `postgres_pre` и `postgres_post` (`:1745-1746`), запроса `capture` (`:954`, `:959`) и `formFieldLimit` (`:959`, `:1194`). Сам снимок в multipart ограничивается не им, а `validateResourceSnapshot` (умолчание `MAX_RESOURCE_SNAPSHOT_BYTES`). Если поднять `MAX_RESOURCE_BYTES` до 32 MiB, как буквально написано в ADR, молча расширятся публичные пределы `source_context` и PostgreSQL-артефактов (в CLI они жёстко 16 MiB: `CommandLine.kt:246-249`, `:353-354`; `PostgresCapture.kt:1168`), то есть API и CLI разойдутся, а память запроса вырастет без нужды.
-2. Ktor `receiveMultipart(formFieldLimit)` ограничивает только поля формы (`FormItem`), не файлы; снимок он не ограничивает.
+2. Ktor `receiveMultipart(formFieldLimit)` ограничивает не только поля формы, но и размер файловой части: это выяснено экспериментом (часть 17 MiB при `formFieldLimit` 16 MiB + 1 даёт `400 MALFORMED_REQUEST`, а часть 20 MiB и больше подвешивает клиента до таймаута, потому что сервер отвечает, не дочитав тело). Поэтому `receiveMultipart` в `receiveJob` (`LocalApi.kt:1194`) обязан получить предел снимка, иначе снимок больше 16 MiB не загрузить через API. Побочный эффект: поле формы `run_id` читается в память до проверки длины, его потолок вырастает с 16 до 32 MiB (report-only).
 3. В ADR `:1207-1208` названы частью multipart снимка: это `source_context`, не `resource_snapshot`.
-4. Разбор снимка строит целое JSON-дерево до проверок рядов и ячеек (`Json.parseToJsonElement`, `ResourceSnapshot.kt:129`, проверки `:274-277` позже), поэтому худший случай памяти для враждебного файла в 32 MiB (десятки миллионов однобайтовых элементов) вдвое хуже прежнего для 16 MiB. ADR это отмечает как стоимость отказа; исправление вне D1 (report-only, вопрос владельцу).
+4. Два теста онлайн-цепочки (`PromqlSourceTest`, `multiple profile resource caps are checked before HTTP` и `aggregate snapshot byte limit degrades the source and retains raw artifacts`) были привязаны к прежним пределам (96 рядов при кэпе 64; снимок чуть больше 16 MiB). Они переписываются на новые пределы (окно 20 000 ячеек на ряд и 32 000 ячеек на ряд в 32 рядах), production-код онлайн-цепочки не меняется.
+5. Разбор снимка строит целое JSON-дерево до проверок рядов и ячеек (`Json.parseToJsonElement`, `ResourceSnapshot.kt:129`, проверки `:274-277` позже), поэтому худший случай памяти для враждебного файла в 32 MiB (десятки миллионов однобайтовых элементов) вдвое хуже прежнего для 16 MiB. ADR это отмечает как стоимость отказа; исправление вне D1 (report-only, вопрос владельцу).
 
 ### Допущения
 
 1. Значения `S_max`, `C_max`, `B_max` принятые (ADR, «Значения лимитов»); менять их нельзя. Коды ошибок прежние: `RESOURCE_LIMIT_EXCEEDED` с указателем `/series` (ряды и ячейки) и `""` (размер), через API `413`.
-2. Отклонение от буквы ADR: `MAX_RESOURCE_BYTES` в `LocalApi.kt` остаётся 16 MiB (пределы `source_context`, PostgreSQL и capture не расширяются). Единственное, что требует нового значения, это производный `MAX_JOB_REQUEST_BYTES`: он должен допускать корректный запрос со снимком 32 MiB рядом с максимальными PostgreSQL-частями. Формула меняется с `3 * MAX_RESOURCE_BYTES` на `MAX_RESOURCE_SNAPSHOT_BYTES + 2 * MAX_RESOURCE_BYTES` (снимок + `postgres_pre` + `postgres_post`), итог растёт ровно на 16 MiB. Само значение 32 MiB для снимка берётся из одной константы ядра, дубля в `LocalApi.kt` нет.
+2. Отклонение от буквы ADR: `MAX_RESOURCE_BYTES` в `LocalApi.kt` остаётся 16 MiB (пределы `source_context`, PostgreSQL и capture не расширяются). Единственное, что требует нового значения, это производный `MAX_JOB_REQUEST_BYTES`: он должен допускать корректный запрос со снимком 32 MiB рядом с максимальными PostgreSQL-частями. Формула меняется с `3 * MAX_RESOURCE_BYTES` на `MAX_RESOURCE_SNAPSHOT_BYTES + 2 * MAX_RESOURCE_BYTES` (снимок + `postgres_pre` + `postgres_post`), итог растёт ровно на 16 MiB. Само значение 32 MiB для снимка берётся из одной константы ядра, дубля в `LocalApi.kt` нет. Тот же предел (`MAX_RESOURCE_SNAPSHOT_BYTES + 1`) задаётся `formFieldLimit` в `receiveJob`; `receivePostgresCapture` (`:959`) остаётся на 16 MiB.
 3. Онлайн-источники: `SourceAnalysis.kt` и `PromqlSource.kt` читают константы ядра и поднимаются автоматически. Число запросов на профиль (`MAX_SOURCE_QUERIES = 32`) для лимитов снимка не обязательно: эффективный онлайн-потолок остаётся 16 x 32 = 512 рядов (меньше `S_max`). ADR относит подъём до 16 x 64 к срезу автошага (контракт конфигурации). Документация должна прямо называть 512, а не 1 024.
 4. Identity: блок `limits` меняется только у анализов со снимком; анализ без снимка остаётся байт-в-байт прежним (существующий golden). Значения в блоке: `resource_series_max` "1024", `resource_cells_total_max` "1500000", `resource_snapshot_bytes_max` "33554432". Прежние анализы со снимком не находятся кэшем и считаются заново; сохранённые остаются как есть; перезакрепление baseline отдельно (решение владельца).
 5. Новая golden-фикстура: `analysis-identity-resources.v1.json` (identity с примером `basic.json` как снимком), `.sha256` рядом; регистрируется в `fixtures/slice1/manifest.json` и в `requiredArtifacts` `FixtureManifestTest`. Фикстура порождается однократно выводом самого кода и проверяется глазами против существующей фикстуры без снимка и против значений ADR (в тесте значения пределов заданы литералами независимо от констант).
@@ -279,8 +282,8 @@ internal const val MAX_RESOURCE_CELLS = 1_500_000L
 
 Проверить, что `SPIKE_DROP`, `FAKE_ANALYSIS_ID`, `tempDir`, `analysisId(api)` доступны так же, как в соседних тестах (копировать сигнатуры оттуда).
 
-- [ ] **Step 2: RED.** `.\gradlew.bat test --tests "io.ltverdict.web.LocalApiTest" --offline`. Если ядро из Task 1 уже слито, новый тест зелёный уже на старом `MAX_JOB_REQUEST_BYTES` (тело 32 MiB меньше прежней суммы): это нормально, изменение `MAX_JOB_REQUEST_BYTES` производное и наблюдаемого теста при разумной памяти не имеет (см. допущение 2 и Review Focus); зафиксировать это в отчёте.
-- [ ] **Step 3: реализация.** В `LocalApi.kt`:
+- [ ] **Step 2: RED.** `.\gradlew.bat test --tests "io.ltverdict.web.LocalApiTest" --offline`. Новый тест с ядром из Task 1, но без правки `formFieldLimit`, падает по таймауту клиента (часть больше 16 MiB отвергается 400, см. расхождение 2). Изменение `MAX_JOB_REQUEST_BYTES` производное и наблюдаемого теста при разумной памяти не имеет (тело 32 MiB меньше прежней суммы; см. допущение 2 и Review Focus).
+- [ ] **Step 3: реализация.** В `LocalApi.kt` в `receiveJob` заменить `formFieldLimit = (MAX_RESOURCE_BYTES + 1).toLong()` на `(MAX_RESOURCE_SNAPSHOT_BYTES + 1).toLong()` и:
 
 ```kotlin
 // 16 MiB: source_context, PostgreSQL parts and capture. The resource snapshot has its own limit in the core.

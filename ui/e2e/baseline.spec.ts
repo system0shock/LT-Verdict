@@ -175,25 +175,35 @@ test('changing a window id shows the decision of the new pair', async ({ page })
   await page.getByLabel('Confirmed same planned test conditions', { exact: true }).check()
   await page.getByRole('button', { name: 'Save condition decision', exact: true }).click()
   await expect(page.getByTestId('baseline-condition-status')).toContainText('Saved CONFIRMED')
+  await page.getByLabel('Current window ID', { exact: true }).fill('other')
+  await expect(page.getByLabel('Unknown', { exact: true })).toBeChecked()
+  await expect(page.getByTestId('baseline-condition-status')).toContainText('No saved decision for this exact pair.')
+  await page.getByLabel('Current window ID', { exact: true }).fill('after')
+  await expect(page.getByLabel('Confirmed same planned test conditions', { exact: true })).toBeChecked()
+  await expect(page.getByTestId('baseline-condition-status')).toContainText('Saved CONFIRMED')
+})
+
+test('does not allow replacing the baseline while a condition decision is being saved', async ({ page }) => {
+  await analyze(page, 'baseline-busy-a.jtl', 100, 1767225760000)
+  await page.getByRole('button', { name: 'Set as baseline', exact: true }).click()
+  await analyze(page, 'baseline-busy-b.jtl', 200, 1767225761000)
   let started = false
   let release!: () => void
   const held = new Promise<void>((resolve) => { release = resolve })
-  await page.route('**/baseline-conditions?**', async (route) => {
+  await page.route('**/baseline-conditions', async (route) => {
     if (route.request().method() !== 'POST') return route.continue()
     started = true
     await held
     await route.continue()
   })
+  await page.getByLabel('Confirmed same planned test conditions', { exact: true }).check()
   await page.getByRole('button', { name: 'Save condition decision', exact: true }).click()
   await expect.poll(() => started).toBe(true)
-  await page.getByLabel('Current window ID', { exact: true }).fill('other')
-  await expect(page.getByLabel('Unknown', { exact: true })).toBeChecked()
-  await expect(page.getByTestId('baseline-condition-status')).toContainText('No saved decision for this exact pair.')
+  await expect(page.getByRole('button', { name: 'Set as baseline', exact: true })).toBeDisabled()
+  await expect(page.getByRole('button', { name: 'Clear baseline', exact: true })).toBeDisabled()
   release()
-  await expect(page.getByRole('button', { name: /condition decision/ })).toBeEnabled()
-  await page.getByLabel('Current window ID', { exact: true }).fill('after')
-  await expect(page.getByLabel('Confirmed same planned test conditions', { exact: true })).toBeChecked()
   await expect(page.getByTestId('baseline-condition-status')).toContainText('Saved CONFIRMED')
+  await expect(page.getByRole('button', { name: 'Set as baseline', exact: true })).toBeEnabled()
 })
 
 test('shows the empty-window hint for the empty side and the old-rules hint for an incompatible baseline', async ({ page }) => {

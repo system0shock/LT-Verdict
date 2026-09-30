@@ -28,7 +28,7 @@ let baselineRevision = 0
 let comparisonRevision = 0
 let conditionRevision = 0
 
-const busy = computed(() => loading.value || saving.value || props.working)
+const busy = computed(() => loading.value || saving.value || conditionSaving.value || props.working)
 const canAdd = computed(() => props.selection && candidates.value.length < 20
   && !candidates.value.some((candidate) => candidate.reference.run_id === props.selection?.run_id))
 const validSeries = computed(() => series.value.trim().length > 0 && new TextEncoder().encode(series.value).length <= 128)

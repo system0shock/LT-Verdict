@@ -95,7 +95,7 @@ test('compares explicit windows and materiality while preserving unconfirmed and
     const query = new URL(route.request().url()).searchParams
     expect(Object.fromEntries(query)).toEqual({ baseline_window: 'reference', current_window: 'steady', min_change_percent: '10', min_error_rate_delta: '0.002' })
     await route.fulfill({ json: {
-      baseline, current: reference, comparability: 'UNCONFIRMED', metrics: [],
+      baseline, current: reference, comparability: 'UNCONFIRMED', warnings: [], metrics: [],
       window_comparison: { status: 'DESCRIPTIVE', baseline_window: 'reference', current_window: 'steady', baseline_sample_count: 600, current_sample_count: 800, baseline_duration_ms: 30000, current_duration_ms: 40000, min_change_percent: '10', min_error_rate_delta: '0.002', reasons: ['CONDITIONS_UNCONFIRMED'],
         metrics: [{ metric: 'resource_median', entity: 'server-1', resource_series_id: 'cpu', unit: 'ratio', baseline: '0', current: '0.2', delta: '0.2', delta_percent: null, reason: null, percent_reason: 'ZERO_BASELINE', status: 'DESCRIPTIVE', baseline_evidence_id: 'baseline-cpu', current_evidence_id: 'current-cpu' }],
       },

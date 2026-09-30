@@ -1,5 +1,6 @@
 import { expect, test, type Page } from '@playwright/test'
 import AxeBuilder from '@axe-core/playwright'
+import { BASELINE_LABELS } from '../src/shell/labels'
 
 async function analyze(page: Page, name: string, elapsed: number, timestamp: number) {
   await page.getByTestId('input-file').setInputFiles({
@@ -17,7 +18,7 @@ async function analyze(page: Page, name: string, elapsed: number, timestamp: num
 
 async function openAnalysis(page: Page, filename: string, analysisId: string) {
   await page.getByTestId('run-list').getByRole('button').filter({ hasText: filename }).click()
-  await page.getByTitle(analysisId).click()
+  await page.getByRole('button', { name: `Analysis ${analysisId.slice(0, 12)}`, exact: false }).click()
   await expect(page.locator('#verdict')).toContainText('NO_POLICY')
 }
 
@@ -57,6 +58,7 @@ test('pins manual baseline across reload and compares changed achieved load with
   await expect(throughput.locator('td').nth(4)).toHaveText('-50%')
   await expect(page.getByTestId('comparison-error_rate_ratio')).toContainText('ZERO_BASELINE')
   await expect(page.getByTestId('baseline-comparison')).toContainText('USER_CONFIRMED')
+  await expect(page.getByTestId('baseline-warnings')).toHaveCount(0)
   await page.getByText('Baseline/current charts', { exact: true }).click()
   await page.getByRole('button', { name: 'Load comparison charts', exact: true }).click()
   await expect(page.getByTestId('baseline-comparison').getByRole('img', { name: 'P95 latency', exact: true })).toBeVisible()
@@ -109,7 +111,17 @@ test('pins manual baseline across reload and compares changed achieved load with
   await expect(page.getByTestId('baseline-comparison')).toHaveCount(0)
 })
 
-test('selects the middle real run statistically and does not replace it after another run', async ({ page }) => {
+test('warns when a run is compared with itself', async ({ page }) => {
+  await analyze(page, 'baseline-self.jtl', 100, 1767225650000)
+  await page.getByRole('button', { name: 'Set as baseline', exact: true }).click()
+  await page.getByRole('button', { name: 'Compare selected analysis', exact: true }).click()
+  await expect(page.getByTestId('baseline-comparison')).toContainText('UNCONFIRMED')
+  await expect(page.getByTestId('baseline-warnings').locator('li')).toHaveText([
+    BASELINE_LABELS.warnings.BASELINE_IS_CURRENT_ANALYSIS,
+  ])
+})
+
+test('selects the middle real run statistically and confirms a new compared pair', async ({ page }) => {
   await page.locator('#baseline-panel summary').click()
   await analyze(page, 'stat-fast.jtl', 100, 1767225700000)
   await page.getByRole('button', { name: 'Add selected candidate', exact: true }).click()
@@ -126,14 +138,188 @@ test('selects the middle real run statistically and does not replace it after an
   await expect(page.getByTestId('baseline-selection')).toContainText('statistical')
   await expect(page.getByTestId('baseline-selection')).toContainText('median-rank-v1')
   await page.getByRole('button', { name: 'Compare selected analysis', exact: true }).click()
-  await expect(page.getByTestId('baseline-comparison')).toContainText('USER_CONFIRMED')
+  await expect(page.getByTestId('baseline-comparison')).toContainText('UNCONFIRMED')
+  await expect(page.getByTestId('baseline-warnings').locator('li')).toHaveText([
+    BASELINE_LABELS.warnings.CURRENT_IN_CANDIDATE_SET,
+  ])
   await expect(page.getByTestId('comparison-response_time_p95_ms').locator('td').nth(3)).toHaveText('890')
+  await openAnalysis(page, 'stat-middle.jtl', middle.analysis_id)
+  await page.getByRole('button', { name: 'Compare selected analysis', exact: true }).click()
+  await expect(page.getByTestId('baseline-warnings').locator('li')).toHaveText([
+    BASELINE_LABELS.warnings.BASELINE_IS_CURRENT_ANALYSIS,
+    BASELINE_LABELS.warnings.CURRENT_IN_CANDIDATE_SET,
+  ])
   await analyze(page, 'stat-new.jtl', 2000, 1767225703000)
   await expect(page.getByTestId('baseline-selection')).toContainText(middle.analysis_id)
   await expect(page.getByTestId('baseline-comparison')).toHaveCount(0)
+  await page.getByRole('button', { name: 'Compare selected analysis', exact: true }).click()
+  await expect(page.getByTestId('baseline-comparison')).toContainText('UNCONFIRMED')
+  await expect(page.getByTestId('baseline-warnings')).toHaveCount(0)
+  await page.getByLabel('Confirmed same planned test conditions', { exact: true }).check()
+  await page.getByRole('button', { name: 'Save condition decision', exact: true }).click()
+  await expect(page.getByTestId('baseline-condition-status')).toContainText('Saved CONFIRMED')
+  await page.getByRole('button', { name: 'Compare selected analysis', exact: true }).click()
+  await expect(page.getByTestId('baseline-comparison')).toContainText('USER_CONFIRMED')
+  await expect(page.getByTestId('comparison-response_time_p95_ms').locator('td').nth(3)).toHaveText('1890')
   await expect(page.getByTestId('baseline-candidates').locator('li')).toHaveCount(3)
   await page.reload()
   await expect(page.getByTestId('baseline-selection')).toContainText(middle.analysis_id)
+})
+
+test('changing a window id shows the decision of the new pair', async ({ page }) => {
+  await analyze(page, 'baseline-window-a.jtl', 100, 1767225750000)
+  await page.getByRole('button', { name: 'Set as baseline', exact: true }).click()
+  await analyze(page, 'baseline-window-b.jtl', 200, 1767225751000)
+  await page.getByLabel('Baseline window ID', { exact: true }).fill('before')
+  await page.getByLabel('Current window ID', { exact: true }).fill('after')
+  await page.getByLabel('Confirmed same planned test conditions', { exact: true }).check()
+  await page.getByRole('button', { name: 'Save condition decision', exact: true }).click()
+  await expect(page.getByTestId('baseline-condition-status')).toContainText('Saved CONFIRMED')
+  let started = false
+  let release!: () => void
+  const held = new Promise<void>((resolve) => { release = resolve })
+  await page.route('**/baseline-conditions?**', async (route) => {
+    if (route.request().method() !== 'POST') return route.continue()
+    started = true
+    await held
+    await route.continue()
+  })
+  await page.getByRole('button', { name: 'Save condition decision', exact: true }).click()
+  await expect.poll(() => started).toBe(true)
+  await page.getByLabel('Current window ID', { exact: true }).fill('other')
+  await expect(page.getByLabel('Unknown', { exact: true })).toBeChecked()
+  await expect(page.getByTestId('baseline-condition-status')).toContainText('No saved decision for this exact pair.')
+  release()
+  await expect(page.getByRole('button', { name: /condition decision/ })).toBeEnabled()
+  await page.getByLabel('Current window ID', { exact: true }).fill('after')
+  await expect(page.getByLabel('Confirmed same planned test conditions', { exact: true })).toBeChecked()
+  await expect(page.getByTestId('baseline-condition-status')).toContainText('Saved CONFIRMED')
+})
+
+test('shows the empty-window hint for the empty side and the old-rules hint for an incompatible baseline', async ({ page }) => {
+  await analyze(page, 'baseline-hints-a.jtl', 100, 1767225770000)
+  await page.getByRole('button', { name: 'Set as baseline', exact: true }).click()
+  const current = await analyze(page, 'baseline-hints-b.jtl', 200, 1767225771000)
+  const baseline = (await (await page.request.get('/api/baseline')).json()).baseline
+  const emptyWindowMetrics = [
+    { metric: 'response_time_p50_ms', unit: 'ms' },
+    { metric: 'response_time_p95_ms', unit: 'ms' },
+    { metric: 'response_time_p99_ms', unit: 'ms' },
+    { metric: 'throughput_rps', unit: 'rps' },
+    { metric: 'error_rate_ratio', unit: 'ratio' },
+  ].map((metric) => ({
+    ...metric,
+    baseline: null,
+    current: null,
+    delta: null,
+    delta_percent: null,
+    reason: 'EMPTY_WINDOW',
+    percent_reason: 'EMPTY_WINDOW',
+    status: 'INSUFFICIENT_DATA',
+  }))
+  const compatibleWindowMetrics = emptyWindowMetrics.map((metric) => ({
+    ...metric,
+    baseline: '100',
+    current: '200',
+    delta: '100',
+    delta_percent: '100',
+    reason: null,
+    percent_reason: null,
+    status: 'DESCRIPTIVE',
+  }))
+  const overallMetrics = [
+    { metric: 'response_time_p95_ms', unit: 'ms' },
+    { metric: 'response_time_p99_ms', unit: 'ms' },
+    { metric: 'throughput_rps', unit: 'rps' },
+    { metric: 'error_rate_ratio', unit: 'ratio' },
+  ]
+  let scenario = {
+    reasons: ['BASELINE_WINDOW_EMPTY', 'INCOMPLETE_METRICS'],
+    incompatible: false,
+    windowStatus: 'INSUFFICIENT_DATA',
+    empty: true,
+  }
+  await page.route(/\/api\/runs\/[^/]+\/analyses\/[^/]+\/comparison/, async (route) => {
+    const reason = scenario.incompatible ? 'INCOMPATIBLE_METRIC_DEFINITION' : null
+    await route.fulfill({ json: {
+      baseline,
+      current,
+      comparability: 'UNCONFIRMED',
+      warnings: [],
+      conditions: null,
+      metrics: overallMetrics.map((metric) => ({
+        ...metric,
+        baseline: null,
+        current: null,
+        delta: null,
+        delta_percent: null,
+        reason,
+        percent_reason: reason,
+      })),
+      window_comparison: {
+        status: scenario.windowStatus,
+        baseline_window: 'steady',
+        current_window: 'steady',
+        baseline_sample_count: 0,
+        current_sample_count: 0,
+        baseline_duration_ms: 1000,
+        current_duration_ms: 1000,
+        min_change_percent: '5',
+        min_error_rate_delta: '0.001',
+        reasons: scenario.reasons,
+        metrics: scenario.empty ? emptyWindowMetrics : compatibleWindowMetrics,
+      },
+    } })
+  })
+  await page.getByLabel('Baseline window ID', { exact: true }).fill('steady')
+  await page.getByLabel('Current window ID', { exact: true }).fill('steady')
+  const compare = page.getByRole('button', { name: 'Compare selected analysis', exact: true })
+  await compare.click()
+  await expect(page.getByTestId('baseline-empty-window')).toContainText(BASELINE_LABELS.emptyWindowHint)
+  await expect(page.getByTestId('baseline-empty-window')).toContainText(BASELINE_LABELS.emptyBaselineWindow)
+  await expect(page.getByTestId('baseline-empty-window')).not.toContainText(BASELINE_LABELS.emptyCurrentWindow)
+  scenario = { reasons: ['CURRENT_WINDOW_EMPTY', 'INCOMPLETE_METRICS'], incompatible: false, windowStatus: 'INSUFFICIENT_DATA', empty: true }
+  await compare.click()
+  await expect(page.getByTestId('baseline-empty-window')).toContainText(BASELINE_LABELS.emptyCurrentWindow)
+  await expect(page.getByTestId('baseline-empty-window')).not.toContainText(BASELINE_LABELS.emptyBaselineWindow)
+  scenario = { reasons: ['BASELINE_WINDOW_EMPTY', 'CURRENT_WINDOW_EMPTY', 'INCOMPLETE_METRICS'], incompatible: false, windowStatus: 'INSUFFICIENT_DATA', empty: true }
+  await compare.click()
+  await expect(page.getByTestId('baseline-empty-window')).toContainText(BASELINE_LABELS.emptyBaselineWindow)
+  await expect(page.getByTestId('baseline-empty-window')).toContainText(BASELINE_LABELS.emptyCurrentWindow)
+  scenario = { reasons: ['INCOMPLETE_METRICS'], incompatible: false, windowStatus: 'INSUFFICIENT_DATA', empty: true }
+  await compare.click()
+  await expect(page.getByTestId('baseline-empty-window')).toHaveCount(0)
+  scenario = { reasons: ['INCOMPATIBLE_METRIC_DEFINITION'], incompatible: true, windowStatus: 'NOT_EVALUATED', empty: true }
+  await compare.click()
+  await expect(page.getByTestId('baseline-old-rules')).toContainText(BASELINE_LABELS.oldRulesHint)
+  scenario = { reasons: [], incompatible: false, windowStatus: 'DESCRIPTIVE', empty: false }
+  await compare.click()
+  await expect(page.getByTestId('baseline-old-rules')).toHaveCount(0)
+})
+
+test('explains the old-rules hint when a mixed-semantics candidate set is rejected', async ({ page }) => {
+  await page.locator('#baseline-panel summary').click()
+  await analyze(page, 'mixed-fast.jtl', 100, 1767225790000)
+  await page.getByRole('button', { name: 'Add selected candidate', exact: true }).click()
+  await analyze(page, 'mixed-middle.jtl', 110, 1767225791000)
+  await page.getByRole('button', { name: 'Add selected candidate', exact: true }).click()
+  await page.getByLabel('Same planned test conditions', { exact: true }).check()
+  await analyze(page, 'mixed-slow.jtl', 1000, 1767225792000)
+  await page.getByRole('button', { name: 'Add selected candidate', exact: true }).click()
+  await page.getByLabel('Same planned test conditions', { exact: true }).check()
+  await page.route('**/api/baseline', async (route) => {
+    if (route.request().method() !== 'POST') return route.continue()
+    await route.fulfill({ status: 422, json: {
+      error: {
+        code: 'BASELINE_MIXED_SEMANTICS',
+        message: 'Statistical baseline is unavailable: BASELINE_MIXED_SEMANTICS',
+        details: [],
+      },
+    } })
+  })
+  await page.getByRole('button', { name: 'Select statistically', exact: true }).click()
+  await expect(page.locator('#baseline-panel [role="alert"]')).toContainText('BASELINE_MIXED_SEMANTICS')
+  await expect(page.getByTestId('baseline-old-rules')).toContainText(BASELINE_LABELS.oldRulesHint)
 })
 
 test('failed replacement keeps the last confirmed baseline visible', async ({ page }) => {

@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test'
+import { SETUP_LABELS } from '../src/shell/labels'
 
 const run = { run_id: `jmeter_jtl_csv-${'b'.repeat(64)}`, source_type: 'jmeter_jtl_csv', sha256: 'b'.repeat(64), size_bytes: 1, original_filename: 'big.jtl' }
 const failed = { job_id: 'job-1', state: 'FAILED', processed_bytes: 1, total_bytes: 1, run_id: run.run_id, analysis_id: null, diagnostic: { code: 'TEST_DONE', message: 'finished by the test' } }
@@ -38,8 +39,8 @@ async function fixtureApi(page: Page): Promise<Fixture> {
 }
 
 for (const scenario of [
-  { name: 'legacy', path: '/', cancel: 'Cancel upload', cancelled: 'Upload cancelled' },
-  { name: 'new shell', path: '/?shell=new', cancel: 'Отменить загрузку', cancelled: 'Загрузка отменена' },
+  { name: 'legacy', path: '/', analyze: 'Analyze run', cancel: 'Cancel upload', cancelled: 'Upload cancelled' },
+  { name: 'new shell', path: '/?shell=new', analyze: SETUP_LABELS.startButton, cancel: 'Отменить загрузку', cancelled: 'Загрузка отменена' },
 ]) {
   test(`cancels a pending upload without creating a job (${scenario.name})`, async ({ page }) => {
     await page.addInitScript(() => {
@@ -54,7 +55,7 @@ for (const scenario of [
     const api = await fixtureApi(page)
     await page.goto(scenario.path)
     await page.getByTestId('input-file').setInputFiles({ name: 'big.jtl', mimeType: 'text/plain', buffer: Buffer.from('x') })
-    await page.getByRole('button', { name: 'Analyze run' }).click()
+    await page.getByRole('button', { name: scenario.analyze }).click()
 
     await expect(page.locator('#job-status')).toContainText('UPLOADING')
     await expect(page.getByTestId('input-file')).toBeDisabled()
@@ -67,11 +68,11 @@ for (const scenario of [
     await expect(page.getByRole('alert')).toHaveCount(0)
     await expect(page.getByTestId('input-file')).toBeEnabled()
     await expect(page.getByTestId('input-file')).toBeFocused()
-    await expect(page.getByRole('button', { name: 'Analyze run' })).toBeEnabled()
+    await expect(page.getByRole('button', { name: scenario.analyze })).toBeEnabled()
     expect(await page.evaluate(() => (window as unknown as { __xhrAborts: { count: number } }).__xhrAborts.count)).toBe(1)
     expect(api.jobPosts()).toBe(0)
 
-    await page.getByRole('button', { name: 'Analyze run' }).click()
+    await page.getByRole('button', { name: scenario.analyze }).click()
     await expect(page.locator('#job-status')).toContainText('FAILED')
     await expect(page.locator('#job-status')).not.toContainText(scenario.cancelled)
     expect(api.uploads()).toBe(2)

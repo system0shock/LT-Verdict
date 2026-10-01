@@ -1,5 +1,6 @@
 import { expect, test, type Page } from '@playwright/test'
 import { fileURLToPath } from 'node:url'
+import { SETUP_LABELS } from '../src/shell/labels'
 
 // Сверка с настоящим сервером: числа вкладки «Обзор» новой оболочки совпадают с числами прежнего интерфейса.
 const fixture = (path: string) => fileURLToPath(new URL(`../../fixtures/${path}`, import.meta.url))
@@ -11,7 +12,7 @@ async function analyzeInNewShell(page: Page) {
   await page.goto('/?shell=new')
   await page.getByTestId('input-file').setInputFiles(input)
   await page.getByTestId('policy-file').setInputFiles(policy)
-  await page.getByRole('button', { name: 'Analyze run' }).click()
+  await page.getByRole('button', { name: SETUP_LABELS.startButton }).click()
   await expect(page.getByTestId('overview-panel')).toBeVisible()
 }
 

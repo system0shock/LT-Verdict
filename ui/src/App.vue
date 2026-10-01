@@ -9,10 +9,11 @@ import BaselinePanel from './BaselinePanel.vue'
 import JobStatusView from './JobStatus.vue'
 import RunSetup from './RunSetup.vue'
 import VerdictCard from './VerdictCard.vue'
+import NewAnalysisPanel from './shell/NewAnalysisPanel.vue'
 import OverviewPanel from './shell/OverviewPanel.vue'
 import ShellPanel from './shell/ShellPanel.vue'
 import ShellTabs from './shell/ShellTabs.vue'
-import { JOB_LABELS, SHELL_DEFAULT_TAB, SHELL_LABELS, UPLOAD_LABELS, type ShellTabKey } from './shell/labels'
+import { JOB_LABELS, SETUP_MESSAGES, SHELL_DEFAULT_TAB, SHELL_LABELS, UPLOAD_LABELS, type ShellTabKey } from './shell/labels'
 import { isNewShell } from './shell/shell'
 import {
   ApiError,
@@ -47,6 +48,27 @@ const chrome = shellNew
 const jobLabels = shellNew
   ? JOB_LABELS
   : { retrying: 'Connection problem. Retrying the job status request...', lost: 'Connection lost. The job status is no longer updating, but the job may still be running on the server.', retry: 'Retry' }
+type SetupMessages = { [K in keyof typeof SETUP_MESSAGES]: (typeof SETUP_MESSAGES)[K] extends string ? string : (id: string) => string }
+const legacySetupMessages: SetupMessages = {
+  contextTooMany: 'OpenSearch context accepts at most 16 files.',
+  profilesTooMany: 'Online source accepts at most 16 profiles.',
+  autoRequired: 'Online source requires step, margin, and max idle gap in milliseconds.',
+  autoNotInteger: 'Step, margin, and max idle gap must be safe integer milliseconds.',
+  stepWholeSeconds: 'Source step must be whole seconds from 1000 to 60000 ms.',
+  marginRange: 'Margin must be at most 3 600 000 ms and a multiple of the step.',
+  idleGap: 'Max idle gap must be at least the step and a multiple of it.',
+  explicitRequired: 'Online source requires start, end, and step in UTC epoch milliseconds.',
+  explicitNotInteger: 'Source times and step must be safe integer milliseconds.',
+  explicitOrder: 'Source end must be after a non-negative start.',
+  explicitDivisible: 'Source range must be divisible by its step.',
+  capacityNeedsSnapshot: 'Capacity plan requires a matching resource snapshot.',
+  trendNeedsSnapshot: 'Trend plan requires a matching resource snapshot.',
+  policyValidating: 'Validating policy…',
+  policyInvalid: 'Policy is invalid',
+  policyMalformed: 'Policy is not valid JSON.',
+  policyValid: (id) => `Policy is valid — ${id}`,
+}
+const setupMsg: SetupMessages = shellNew ? SETUP_MESSAGES : legacySetupMessages
 const POLL_FAST_WINDOW_MS = 10_000
 const POLL_FAST_DELAY_MS = 500
 const POLL_NORMAL_DELAY_MS = 1_000
@@ -117,30 +139,30 @@ watch(selectedReference, () => { chartMarkers.value = [] })
 const httpSourceProfiles = computed(() => sourceProfiles.value.filter((profile) => profile.source_kind !== 'postgresql'))
 const postgresProfiles = computed(() => sourceProfiles.value.filter((profile) => profile.source_kind === 'postgresql' && profile.transport === 'jdbc'))
 const sourceRequestState = computed<{ request: SourceRequest | null; error: string }>(() => {
-  if (sourceContextFiles.value.length > 16) return { request: null, error: 'OpenSearch context accepts at most 16 files.' }
+  if (sourceContextFiles.value.length > 16) return { request: null, error: setupMsg.contextTooMany }
   const profileIds = [...sourceProfileIds.value].sort()
   if (!profileIds.length) return { request: null, error: '' }
-  if (profileIds.length > 16) return { request: null, error: 'Online source accepts at most 16 profiles.' }
+  if (profileIds.length > 16) return { request: null, error: setupMsg.profilesTooMany }
   if (sourceWindowOrigin.value === 'auto') {
-    if (!sourceStep.value || !sourceMargin.value || !sourceMaxIdleGap.value) return { request: null, error: 'Online source requires step, margin, and max idle gap in milliseconds.' }
+    if (!sourceStep.value || !sourceMargin.value || !sourceMaxIdleGap.value) return { request: null, error: setupMsg.autoRequired }
     const step = Number(sourceStep.value)
     const margin = Number(sourceMargin.value)
     const maxIdleGap = Number(sourceMaxIdleGap.value)
-    if (![step, margin, maxIdleGap].every(Number.isSafeInteger)) return { request: null, error: 'Step, margin, and max idle gap must be safe integer milliseconds.' }
-    if (!wholeSeconds(step)) return { request: null, error: 'Source step must be whole seconds from 1000 to 60000 ms.' }
-    if (margin < 0 || margin > 3_600_000 || margin % step !== 0) return { request: null, error: 'Margin must be at most 3 600 000 ms and a multiple of the step.' }
-    if (maxIdleGap < step || maxIdleGap % step !== 0) return { request: null, error: 'Max idle gap must be at least the step and a multiple of it.' }
+    if (![step, margin, maxIdleGap].every(Number.isSafeInteger)) return { request: null, error: setupMsg.autoNotInteger }
+    if (!wholeSeconds(step)) return { request: null, error: setupMsg.stepWholeSeconds }
+    if (margin < 0 || margin > 3_600_000 || margin % step !== 0) return { request: null, error: setupMsg.marginRange }
+    if (maxIdleGap < step || maxIdleGap % step !== 0) return { request: null, error: setupMsg.idleGap }
     const request: SourceRequest = { schema_version: 'source-request.v3', profile_ids: profileIds, window: { origin: 'auto', step_ms: step, margin_ms: margin, max_idle_gap_ms: maxIdleGap } }
     return { request, error: '' }
   }
-  if (!sourceStart.value || !sourceEnd.value || !sourceStep.value) return { request: null, error: 'Online source requires start, end, and step in UTC epoch milliseconds.' }
+  if (!sourceStart.value || !sourceEnd.value || !sourceStep.value) return { request: null, error: setupMsg.explicitRequired }
   const start = Number(sourceStart.value)
   const end = Number(sourceEnd.value)
   const step = Number(sourceStep.value)
-  if (![start, end, step].every(Number.isSafeInteger)) return { request: null, error: 'Source times and step must be safe integer milliseconds.' }
-  if (start < 0 || end <= start) return { request: null, error: 'Source end must be after a non-negative start.' }
-  if (!wholeSeconds(step)) return { request: null, error: 'Source step must be whole seconds from 1000 to 60000 ms.' }
-  if ((end - start) % step !== 0) return { request: null, error: 'Source range must be divisible by its step.' }
+  if (![start, end, step].every(Number.isSafeInteger)) return { request: null, error: setupMsg.explicitNotInteger }
+  if (start < 0 || end <= start) return { request: null, error: setupMsg.explicitOrder }
+  if (!wholeSeconds(step)) return { request: null, error: setupMsg.stepWholeSeconds }
+  if ((end - start) % step !== 0) return { request: null, error: setupMsg.explicitDivisible }
   const request: SourceRequest = { schema_version: 'source-request.v3', profile_ids: profileIds, window: { origin: 'explicit', start_epoch_ms: start, end_epoch_ms: end, step_ms: step } }
   return { request, error: '' }
 })
@@ -300,24 +322,24 @@ function updatePolicy(draft: Policy) {
 
 async function validateDraft(draft: Policy | File): Promise<Policy | null> {
   const revision = ++policyRevision
-  policyStatus.value = 'Validating policy…'
+  policyStatus.value = setupMsg.policyValidating
   try {
     const validation = await validatePolicy(draft)
     if (revision !== policyRevision) return null
     if (!validation.valid) {
       policyErrors.value = validation.errors
-      policyStatus.value = 'Policy is invalid'
+      policyStatus.value = setupMsg.policyInvalid
       return null
     }
     policy.value = validation.policy
     policyErrors.value = []
-    policyStatus.value = `Policy is valid — ${validation.policy.policy_id}`
+    policyStatus.value = setupMsg.policyValid(validation.policy.policy_id)
     return validation.policy
   } catch (failure) {
     if (revision === policyRevision) {
-      policyStatus.value = 'Policy is invalid'
+      policyStatus.value = setupMsg.policyInvalid
       if (failure instanceof ApiError && failure.code === 'MALFORMED_JSON') {
-        policyErrors.value = [{ code: 'MALFORMED_JSON', json_pointer: '', message: 'Policy is not valid JSON.' }]
+        policyErrors.value = [{ code: 'MALFORMED_JSON', json_pointer: '', message: setupMsg.policyMalformed }]
       } else {
         showError(failure)
       }
@@ -333,11 +355,11 @@ async function analyze() {
     return
   }
   if (capacityFile.value && !resourceFile.value) {
-    errorMessage.value = 'Capacity plan requires a matching resource snapshot.'
+    errorMessage.value = setupMsg.capacityNeedsSnapshot
     return
   }
   if (trendFile.value && !resourceFile.value) {
-    errorMessage.value = 'Trend plan requires a matching resource snapshot.'
+    errorMessage.value = setupMsg.trendNeedsSnapshot
     return
   }
   const revision = ++analysisRevision
@@ -820,7 +842,8 @@ function focusPolicy() {
             {{ SHELL_LABELS.overviewEmpty }}
           </p>
 
-          <RunSetup
+          <component
+            :is="shellNew ? NewAnalysisPanel : RunSetup"
             v-show="shownIn('setup')"
             :input-file="inputFile"
             :resource-file="resourceFile"

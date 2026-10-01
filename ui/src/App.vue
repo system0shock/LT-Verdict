@@ -12,7 +12,7 @@ import VerdictCard from './VerdictCard.vue'
 import OverviewPanel from './shell/OverviewPanel.vue'
 import ShellPanel from './shell/ShellPanel.vue'
 import ShellTabs from './shell/ShellTabs.vue'
-import { SHELL_DEFAULT_TAB, SHELL_LABELS, type ShellTabKey } from './shell/labels'
+import { JOB_LABELS, SHELL_DEFAULT_TAB, SHELL_LABELS, UPLOAD_LABELS, type ShellTabKey } from './shell/labels'
 import { isNewShell } from './shell/shell'
 import {
   ApiError,
@@ -36,11 +36,25 @@ import type { AnalysisResult, AnalysisSummary, Bucket, JobStatus, OpenSearchEvid
 
 const theme = ref<Theme>(window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light')
 const shellNew = isNewShell(window.location.search)
+const uploadLabels = shellNew
+  ? UPLOAD_LABELS
+  : { cancel: 'Cancel upload', cancelled: 'Upload cancelled. No analysis was started; choose the file again if needed.' }
 const activeTab = ref<ShellTabKey>(SHELL_DEFAULT_TAB)
 const legacyHref = window.location.pathname
 const chrome = shellNew
   ? { noRun: SHELL_LABELS.noRun, completed: SHELL_LABELS.completed, toDark: SHELL_LABELS.themeToDark, toLight: SHELL_LABELS.themeToLight, runsTitle: SHELL_LABELS.runsTitle, runsEmpty: SHELL_LABELS.runsEmpty, runsMore: SHELL_LABELS.runsMore, analysesTitle: SHELL_LABELS.analysesTitle, analysisItem: SHELL_LABELS.analysisItem, analysesEmpty: SHELL_LABELS.analysesEmpty, analysesMore: SHELL_LABELS.analysesMore }
   : { noRun: 'No run selected', completed: 'Completed', toDark: 'Dark theme', toLight: 'Light theme', runsTitle: 'Accepted runs', runsEmpty: 'No runs yet', runsMore: 'More runs', analysesTitle: 'Saved analyses', analysisItem: 'Analysis', analysesEmpty: 'No saved analyses for this run.', analysesMore: 'More analyses' }
+const jobLabels = shellNew
+  ? JOB_LABELS
+  : { retrying: 'Connection problem. Retrying the job status request...', lost: 'Connection lost. The job status is no longer updating, but the job may still be running on the server.', retry: 'Retry' }
+const POLL_FAST_WINDOW_MS = 10_000
+const POLL_FAST_DELAY_MS = 500
+const POLL_NORMAL_DELAY_MS = 1_000
+const POLL_BACKOFF_BASE_MS = 500
+const POLL_MAX_BACKOFF_MS = 10_000
+const POLL_MAX_FAILURES = 10
+const POLL_REQUEST_TIMEOUT_MS = 10_000
+const POLL_MAX_FAILURE_DURATION_MS = 120_000
 const shownIn = (tab: ShellTabKey) => !shellNew || activeTab.value === tab
 const apiReady = ref(false)
 const inputFile = ref<File | null>(null)
@@ -66,7 +80,10 @@ const policy = ref<Policy | null>(null)
 const policyStatus = ref('')
 const policyErrors = ref<PolicyError[]>([])
 const uploadProgress = ref(0)
+const uploading = ref(false)
+const uploadCancelled = ref(false)
 const job = ref<JobStatus | null>(null)
+const pollIssue = ref<'none' | 'retrying' | 'lost'>('none')
 const queueBusy = ref(false)
 const result = ref<AnalysisResult | null>(null)
 const buckets = ref<Bucket[]>([])
@@ -88,6 +105,7 @@ const rangeEnd = ref('')
 let analysisRevision = 0
 let bucketRevision = 0
 let policyRevision = 0
+let uploadAbort: AbortController | null = null
 
 const verdictSummary = computed(() => (result.value ? summarizeVerdict(result.value) : null))
 watch(result, (value) => { if (shellNew && value) activeTab.value = 'overview' })
@@ -160,30 +178,35 @@ onMounted(async () => {
 function selectInput(file: File | null) {
   inputFile.value = file
   queueBusy.value = false
+  uploadCancelled.value = false
   errorMessage.value = ''
 }
 
 function selectResources(file: File | null) {
   resourceFile.value = file
   queueBusy.value = false
+  uploadCancelled.value = false
   errorMessage.value = ''
 }
 
 function selectDiagnostics(file: File | null) {
   diagnosticFile.value = file
   queueBusy.value = false
+  uploadCancelled.value = false
   errorMessage.value = ''
 }
 
 function selectCapacity(file: File | null) {
   capacityFile.value = file
   queueBusy.value = false
+  uploadCancelled.value = false
   errorMessage.value = ''
 }
 
 function selectTrend(file: File | null) {
   trendFile.value = file
   queueBusy.value = false
+  uploadCancelled.value = false
   errorMessage.value = ''
 }
 
@@ -197,12 +220,14 @@ function selectSourceProfiles(ids: string[]) {
     sourceContextFiles.value = []
   }
   queueBusy.value = false
+  uploadCancelled.value = false
   errorMessage.value = ''
 }
 
 function selectSourceContexts(files: File[]) {
   sourceContextFiles.value = files
   queueBusy.value = false
+  uploadCancelled.value = false
   errorMessage.value = ''
 }
 
@@ -328,6 +353,7 @@ async function analyze() {
   completedAt.value = ''
   job.value = null
   uploadProgress.value = 1
+  uploadCancelled.value = false
 
   try {
     const activePolicy = policy.value ? await validateDraft(policy.value) : null
@@ -335,7 +361,23 @@ async function analyze() {
       uploadProgress.value = 0
       return
     }
-    const accepted = await uploadInput(inputFile.value, (value) => (uploadProgress.value = Math.max(1, value)))
+    if (revision !== analysisRevision) return
+    const controller = new AbortController()
+    uploadAbort = controller
+    uploading.value = true
+    let accepted: RunSummary
+    try {
+      accepted = await uploadInput(
+        inputFile.value,
+        (value) => (uploadProgress.value = Math.max(1, value)),
+        controller.signal,
+      )
+    } finally {
+      if (uploadAbort === controller) {
+        uploadAbort = null
+        uploading.value = false
+      }
+    }
     if (revision !== analysisRevision) return
     currentRun.value = accepted
     await refreshRuns()
@@ -363,9 +405,39 @@ async function analyze() {
 }
 
 async function pollJob(revision: number) {
+  const startedAt = Date.now()
+  let failures = 0
+  let firstFailureAt: number | null = null
+  pollIssue.value = 'none'
   while (revision === analysisRevision && working.value && job.value) {
-    await new Promise((resolve) => window.setTimeout(resolve, 50))
-    job.value = await getJob(job.value.job_id)
+    const delay = failures > 0
+      ? Math.min(POLL_BACKOFF_BASE_MS * 2 ** (failures - 1), POLL_MAX_BACKOFF_MS)
+      : Date.now() - startedAt < POLL_FAST_WINDOW_MS ? POLL_FAST_DELAY_MS : POLL_NORMAL_DELAY_MS
+    await new Promise((resolve) => window.setTimeout(resolve, delay))
+    if (revision !== analysisRevision) return
+    try {
+      const polled = await getJob(job.value.job_id, AbortSignal.timeout(POLL_REQUEST_TIMEOUT_MS))
+      if (revision !== analysisRevision) return
+      job.value = polled
+      failures = 0
+      firstFailureAt = null
+      pollIssue.value = 'none'
+    } catch (failure) {
+      if (revision !== analysisRevision) return
+      const transient = failure instanceof TypeError || failure instanceof DOMException
+        || (failure instanceof ApiError && (failure.status >= 500 || failure.status === 408 || failure.status === 429))
+      if (!transient) {
+        pollIssue.value = 'none'
+        throw failure
+      }
+      failures += 1
+      if (firstFailureAt === null) firstFailureAt = Date.now()
+      if (failures >= POLL_MAX_FAILURES || Date.now() - firstFailureAt >= POLL_MAX_FAILURE_DURATION_MS) {
+        pollIssue.value = 'lost'
+        return
+      }
+      pollIssue.value = 'retrying'
+    }
   }
   if (revision !== analysisRevision || job.value?.state !== 'COMPLETE' || !job.value.analysis_id) return
   selectedAnalysisId.value = job.value.analysis_id
@@ -400,12 +472,42 @@ async function restoreActiveJob() {
 
 async function cancel() {
   if (!job.value || !working.value) return
-  analysisRevision += 1
+  const revision = ++analysisRevision
+  pollIssue.value = 'none'
   try {
-    job.value = await cancelJob(job.value.job_id)
+    const status = await cancelJob(job.value.job_id)
+    if (revision !== analysisRevision) return
+    job.value = status
+    await pollJob(revision)
   } catch (failure) {
-    showError(failure)
+    if (revision === analysisRevision) {
+      showError(failure)
+      if (job.value && working.value) pollIssue.value = 'lost'
+    }
   }
+}
+
+async function retryPoll() {
+  if (pollIssue.value !== 'lost' || !job.value || !working.value) return
+  const revision = analysisRevision
+  try {
+    await pollJob(revision)
+  } catch (failure) {
+    if (revision === analysisRevision) showError(failure)
+  }
+}
+
+function cancelUpload() {
+  if (!uploadAbort) return
+  const controller = uploadAbort
+  analysisRevision += 1
+  uploadProgress.value = 0
+  uploadCancelled.value = true
+  uploadAbort = null
+  uploading.value = false
+  controller.abort()
+  if (shellNew) activeTab.value = 'setup'
+  void nextTick(() => document.getElementById('input-file')?.focus())
 }
 
 async function refreshRuns(after?: string) {
@@ -423,6 +525,7 @@ async function selectRun(run: RunSummary) {
   job.value = null
   uploadProgress.value = 0
   queueBusy.value = false
+  uploadCancelled.value = false
   currentRun.value = run
   selectedAnalysisId.value = null
   analyses.value = []
@@ -456,6 +559,7 @@ async function selectAnalysis(analysis: AnalysisSummary) {
   job.value = null
   uploadProgress.value = 0
   queueBusy.value = false
+  uploadCancelled.value = false
   selectedAnalysisId.value = analysis.analysis_id
   result.value = null
   buckets.value = []
@@ -741,7 +845,7 @@ function focusPolicy() {
             :policy="policy"
             :policy-status="policyStatus"
             :policy-errors="policyErrors"
-            :busy="working || !!postgresCapturePhase"
+            :busy="working || (uploadProgress > 0 && !job) || !!postgresCapturePhase"
             @input="selectInput"
             @resources="selectResources"
             @diagnostics="selectDiagnostics"
@@ -777,7 +881,16 @@ function focusPolicy() {
             :job="job"
             :upload-progress="uploadProgress"
             :busy="queueBusy"
+            :uploading="uploading"
+            :upload-cancelled="uploadCancelled"
+            :upload-labels="uploadLabels"
+            :upload-lang="shellNew ? 'ru' : undefined"
+            :poll-issue="pollIssue"
+            :labels="jobLabels"
+            :notice-lang="shellNew ? 'ru' : undefined"
             @cancel="cancel"
+            @cancel-upload="cancelUpload"
+            @retry="retryPoll"
           />
 
           <JenkinsPanel

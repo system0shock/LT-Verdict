@@ -63,6 +63,7 @@ internal class AnalysisService(
         request: AnalysisRequest,
         processedBytes: (Long) -> Unit = {},
         checkCancelled: () -> Unit = {},
+        beforePublish: () -> Unit = checkCancelled,
     ): AnalysisOutcome {
         val mode =
             when {
@@ -197,7 +198,7 @@ internal class AnalysisService(
             val trendBytes = trend?.let { canonicalJson(it.trendJson) }
             val trendPlanBytes = request.trend?.rawBytes()
             val directory =
-                store.writeAnalysisAtomically(request.input.runId, analysisId) { staging ->
+                store.writeAnalysisAtomically(request.input.runId, analysisId, beforePublish) { staging ->
                     checkCancelled()
                     writeAcquisition(staging, request.sourceAcquisition, checkCancelled)
                     postgres?.let { writePostgres(staging, it, requireNotNull(invalidPostgresContext), checkCancelled) }
@@ -486,7 +487,7 @@ internal class AnalysisService(
             )
         checkCancelled()
         val directory =
-            store.writeAnalysisAtomically(request.input.runId, analysisId) { staging ->
+            store.writeAnalysisAtomically(request.input.runId, analysisId, beforePublish) { staging ->
                 writeAcquisition(staging, request.sourceAcquisition, checkCancelled)
                 postgres?.let { writePostgres(staging, it, requireNotNull(postgresContext), checkCancelled) }
                 listOf(
@@ -636,7 +637,7 @@ private fun writeAcquisition(
         checkCancelled()
         require(
             name in setOf("source-acquisition.json", "opensearch-errors.json") ||
-                Regex("source-response-[0-9]{1,3}\\.json").matches(name) ||
+                Regex("source-response-[0-9]{1,4}\\.json").matches(name) ||
                 Regex("opensearch-errors-([1-9]|1[0-6])\\.json").matches(name),
         ) {
             "SOURCE_ARTIFACT_NAME_INVALID"

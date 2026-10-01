@@ -143,3 +143,16 @@ export const OVERVIEW_LABELS = {
   cursorText: (time: string, rps: string, errors: string, p95: string) =>
     `${time}: ${rps} запросов в секунду, ошибок за интервал ${errors}, p95 ${p95} мс`,
 } as const
+
+// Отмена загрузки входного файла (JobStatus.vue): кнопка и сообщение после отмены.
+export const UPLOAD_LABELS = {
+  cancel: 'Отменить загрузку',
+  cancelled: 'Загрузка отменена. Анализ не запускался, файл можно выбрать заново.',
+} as const
+
+// Состояние связи при опросе задачи (JobStatus.vue): повтор и потеря связи.
+export const JOB_LABELS = {
+  retrying: 'Проблема со связью. Повторяем запрос статуса задачи…',
+  lost: 'Связь потеряна. Статус задачи не обновляется, но сама задача на сервере могла продолжиться.',
+  retry: 'Повторить',
+} as const

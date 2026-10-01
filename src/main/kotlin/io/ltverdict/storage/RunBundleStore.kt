@@ -237,6 +237,7 @@ internal class RunBundleStore(
     fun writeAnalysisAtomically(
         runId: String,
         analysisId: String,
+        beforePublish: () -> Unit = {},
         writeStagingDirectory: (Path) -> Unit,
     ): Path =
         synchronized(dataDirectory.operationLock) {
@@ -258,6 +259,7 @@ internal class RunBundleStore(
                 writeForced(staging.resolve("manifest.json"), analysisManifest(artifacts))
                 forceDirectory(staging)
                 if (Files.exists(target, LinkOption.NOFOLLOW_LINKS)) corrupt("analysis target appeared during publish")
+                beforePublish()
                 Files.move(staging, target, StandardCopyOption.ATOMIC_MOVE)
                 forceDirectory(analyses)
                 target

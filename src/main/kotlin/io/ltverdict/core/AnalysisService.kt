@@ -63,6 +63,7 @@ internal class AnalysisService(
         request: AnalysisRequest,
         processedBytes: (Long) -> Unit = {},
         checkCancelled: () -> Unit = {},
+        beforePublish: () -> Unit = checkCancelled,
     ): AnalysisOutcome {
         val mode =
             when {
@@ -197,7 +198,7 @@ internal class AnalysisService(
             val trendBytes = trend?.let { canonicalJson(it.trendJson) }
             val trendPlanBytes = request.trend?.rawBytes()
             val directory =
-                store.writeAnalysisAtomically(request.input.runId, analysisId) { staging ->
+                store.writeAnalysisAtomically(request.input.runId, analysisId, beforePublish) { staging ->
                     checkCancelled()
                     writeAcquisition(staging, request.sourceAcquisition, checkCancelled)
                     postgres?.let { writePostgres(staging, it, requireNotNull(invalidPostgresContext), checkCancelled) }
@@ -486,7 +487,7 @@ internal class AnalysisService(
             )
         checkCancelled()
         val directory =
-            store.writeAnalysisAtomically(request.input.runId, analysisId) { staging ->
+            store.writeAnalysisAtomically(request.input.runId, analysisId, beforePublish) { staging ->
                 writeAcquisition(staging, request.sourceAcquisition, checkCancelled)
                 postgres?.let { writePostgres(staging, it, requireNotNull(postgresContext), checkCancelled) }
                 listOf(

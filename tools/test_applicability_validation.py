@@ -1,4 +1,5 @@
 """Independent literals for the system-trace acceptance oracle."""
+import sys
 import unittest
 from concurrent.futures import ProcessPoolExecutor
 from pathlib import Path
@@ -12,6 +13,7 @@ def toy_worker(value):
 
 
 class TraceOracleTest(unittest.TestCase):
+    @unittest.skipUnless(sys.version_info >= (3, 14), 'ProcessPoolExecutor.map(buffersize=) needs Python 3.14')
     def test_process_pool_consumes_more_tasks_than_buffer_in_order(self):
         try:
             with ProcessPoolExecutor(max_workers=2) as pool:

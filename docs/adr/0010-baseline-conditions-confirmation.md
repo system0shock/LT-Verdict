@@ -7,6 +7,9 @@
 «только для active manual baseline» снято, endpoints условий работают и для statistical
 baseline (binding по выбранному победителю), код `BASELINE_MANUAL_REQUIRED` не
 возвращается.
+Частично отменён [ADR 0019](0019-release-history-and-baseline-eligibility.md): `DELETE /api/baseline`
+удаляет не все записи условий, а только относящиеся к удаляемому baseline и не используемые
+другими активными baseline.
 
 ## Контекст
 

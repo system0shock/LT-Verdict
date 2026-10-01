@@ -3,7 +3,12 @@ from pathlib import Path
 import sys
 import unittest
 
-import numpy as np
+try:
+    import numpy as np
+except ModuleNotFoundError as error:
+    if error.name != "numpy":
+        raise
+    raise unittest.SkipTest("numpy is not installed")
 
 sys.path.insert(0, str(Path(__file__).parent))
 import correlation_pilot as pilot

@@ -402,10 +402,12 @@ async function cancel() {
   if (!job.value || !working.value) return
   const revision = ++analysisRevision
   try {
-    job.value = await cancelJob(job.value.job_id)
+    const status = await cancelJob(job.value.job_id)
+    if (revision !== analysisRevision) return
+    job.value = status
     await pollJob(revision)
   } catch (failure) {
-    showError(failure)
+    if (revision === analysisRevision) showError(failure)
   }
 }
 

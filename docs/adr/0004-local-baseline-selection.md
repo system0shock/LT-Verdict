@@ -7,6 +7,9 @@
 «Сравнение и интерпретация» про `USER_CONFIRMED` для членов подтверждённой
 statistical candidate series больше не действует, `USER_CONFIRMED` выдаётся только по
 явному решению для пары.
+Частично отменён [ADR 0019](0019-release-history-and-baseline-eligibility.md): допуск `FAIL` и
+`NO_POLICY` к выбору baseline снят (baseline только из `VALID`, `COMPLETE`, `PASS` в обоих
+режимах), «один активный baseline» заменён активным baseline на пару `(series, arm)`.
 
 ## Контекст
 

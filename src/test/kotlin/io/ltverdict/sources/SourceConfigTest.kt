@@ -239,6 +239,55 @@ class SourceConfigTest {
     }
 
     @Test
+    fun `profile accepts 64 queries`() {
+        val queries =
+            (1..64).joinToString(",") { index ->
+                """{"id":"q$index","expression":"rate(x[${'$'}__interval])","metric":"x","unit":"ratio","entity":"e","role":"system","aggregation":"interval_rate"}"""
+            }
+        val config =
+            """{"schema_version":"source-connections.v1","connections":[{"id":"p1","source_kind":"prometheus","transport":"direct","base_url":"https://example.test","queries":[$queries]}]}"""
+
+        assertEquals(64, readSourceProfiles(config.byteInputStream()).single().queries.size)
+    }
+
+    @Test
+    fun `profile rejects 65 queries`() {
+        val queries =
+            (1..65).joinToString(",") { index ->
+                """{"id":"q$index","expression":"rate(x[${'$'}__interval])","metric":"x","unit":"ratio","entity":"e","role":"system","aggregation":"interval_rate"}"""
+            }
+        val config =
+            """{"schema_version":"source-connections.v1","connections":[{"id":"p1","source_kind":"prometheus","transport":"direct","base_url":"https://example.test","queries":[$queries]}]}"""
+
+        assertEquals(
+            "SOURCE_CONFIG_INVALID",
+            assertThrows(IllegalArgumentException::class.java) { readSourceProfiles(config.byteInputStream()) }.message,
+        )
+    }
+
+    @Test
+    fun `16 profiles with 64 queries parse and 17 profiles reject`() {
+        val queries =
+            (1..64).joinToString(",") { index ->
+                """{"id":"q$index","expression":"rate(x[${'$'}__interval])","metric":"x","unit":"ratio","entity":"e","role":"system","aggregation":"interval_rate"}"""
+            }
+        val profile =
+            """{"id":"p1","source_kind":"prometheus","transport":"direct","base_url":"https://example.test","queries":[$queries]}"""
+        val profiles16 = (1..16).joinToString(",") { index -> profile.replace("\"id\":\"p1\"", "\"id\":\"p$index\"") }
+        val profiles17 = (1..17).joinToString(",") { index -> profile.replace("\"id\":\"p1\"", "\"id\":\"p$index\"") }
+        val config16 = """{"schema_version":"source-connections.v1","connections":[$profiles16]}"""
+        val config17 = """{"schema_version":"source-connections.v1","connections":[$profiles17]}"""
+
+        val parsed = readSourceProfiles(config16.byteInputStream())
+        assertEquals(16, parsed.size)
+        assertEquals(1_024, parsed.sumOf { it.queries.size })
+        assertEquals(
+            "SOURCE_CONFIG_INVALID",
+            assertThrows(IllegalArgumentException::class.java) { readSourceProfiles(config17.byteInputStream()) }.message,
+        )
+    }
+
+    @Test
     fun `profiles reject unsafe urls plaintext credentials and invalid env references without echoing input`() {
         val cases =
             listOf(

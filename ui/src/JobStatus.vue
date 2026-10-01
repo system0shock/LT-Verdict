@@ -5,9 +5,12 @@ const props = defineProps<{
   job: JobStatus | null
   uploadProgress: number
   busy: boolean
+  pollIssue: 'none' | 'retrying' | 'lost'
+  labels: { retrying: string; lost: string; retry: string }
+  noticeLang?: string
 }>()
 
-defineEmits<{ cancel: [] }>()
+defineEmits<{ cancel: []; retry: [] }>()
 
 const active = () => props.job?.state === 'QUEUED' || props.job?.state === 'PROCESSING'
 const processed = () => props.job?.processed_bytes ?? props.uploadProgress
@@ -51,6 +54,33 @@ const total = () => props.job?.total_bytes ?? 100
       >
         Cancel analysis
       </button>
+      <template v-if="active()">
+        <p
+          v-if="pollIssue === 'retrying'"
+          class="notice notice-warn"
+          data-testid="poll-retrying"
+          role="status"
+          :lang="noticeLang"
+        >
+          {{ labels.retrying }}
+        </p>
+        <div
+          v-else-if="pollIssue === 'lost'"
+          class="notice notice-warn"
+          data-testid="poll-lost"
+          role="alert"
+          :lang="noticeLang"
+        >
+          <span>{{ labels.lost }}</span>
+          <button
+            type="button"
+            class="button-secondary"
+            @click="$emit('retry')"
+          >
+            {{ labels.retry }}
+          </button>
+        </div>
+      </template>
       <span
         v-if="job?.diagnostic"
         class="validation-error"

@@ -42,7 +42,9 @@ jobs:
       - name: Verify Slice 0 contracts
         run: python tools/verify_slice0.py
       - name: Run Python tests
-        run: python -m unittest tools.test_verify_slice0 tools.test_generate_jtl tools.test_onboard_test tools.test_snapshot_hash_vectors -v
+        # Discovers every tools/test_*.py. The numpy-based correlation tests skip
+        # themselves when numpy is absent (CI installs standard Python only).
+        run: python -m unittest discover -s tools -p "test_*.py" -v
       - name: Verify isolated AI relay contract without provider calls
         run: node --test tools/test_advisory_ai_runtime_relay.mjs
       - name: Lint Markdown

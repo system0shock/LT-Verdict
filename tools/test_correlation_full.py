@@ -3,7 +3,12 @@ import sys
 import unittest
 
 sys.path.insert(0, str(Path(__file__).parent))
-import correlation_full as full
+try:
+    import correlation_full as full
+except ModuleNotFoundError as error:
+    if error.name != "numpy":
+        raise
+    raise unittest.SkipTest("numpy is not installed")
 
 
 class CorrelationFullTest(unittest.TestCase):

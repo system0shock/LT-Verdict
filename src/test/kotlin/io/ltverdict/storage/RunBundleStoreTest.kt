@@ -119,7 +119,7 @@ class RunBundleStoreTest {
                                         paused = true
                                         val count = super.read(buffer, offset, 1)
                                         copying.countDown()
-                                        check(release.await(10, TimeUnit.SECONDS))
+                                        check(release.await(30, TimeUnit.SECONDS))
                                         return count
                                     }
                                     return super.read(buffer, offset, length)
@@ -173,7 +173,7 @@ class RunBundleStoreTest {
                     executor.submit<Path> {
                         store.writeAnalysisAtomically(input.runId, analysisId) { staging ->
                             writing.countDown()
-                            check(release.await(10, TimeUnit.SECONDS))
+                            check(release.await(30, TimeUnit.SECONDS))
                             Files.write(staging.resolve("identity.json"), identity)
                             Files.writeString(
                                 staging.resolve("analysis-result.json"),

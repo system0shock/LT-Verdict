@@ -60,6 +60,37 @@ class AnalysisServiceTest {
         }
 
     @Test
+    fun `acquisition artifacts accept response numbers up to 1024 and reject 5 digits`() =
+        withService { store, service ->
+            val input = accept(store, OUT_OF_ORDER_CSV.encodeToByteArray(), "responses.jtl")
+            val resource = resources(resourceJson(input.sha256, "responses", "0.8").encodeToByteArray())
+            val evidence =
+                buildJsonObject {
+                    put("id", "source-summary")
+                    put("type", "source_summary")
+                    put("status", "COMPLETE")
+                }
+
+            fun request(responses: List<String>): AnalysisRequest {
+                val extra = responses.associateWith { "{}".encodeToByteArray() }
+                val artifacts = mapOf("source-acquisition.json" to canonicalJson(evidence)) + extra
+                val acquisition = SourceAcquisition(resource, evidence, artifacts)
+                return AnalysisRequest(input, passPolicy(), resources = resource, sourceAcquisition = acquisition)
+            }
+
+            val names = listOf("source-response-1000.json", "source-response-1024.json")
+            val outcome = service.analyze(request(names))
+            val stored = store.readAnalysis(input.runId, outcome.analysisId)!!
+            assertTrue(stored.artifacts.map { it.path }.containsAll(names))
+
+            val failure =
+                assertThrows(IllegalArgumentException::class.java) {
+                    service.analyze(request(listOf("source-response-10000.json")))
+                }
+            assertEquals("SOURCE_ARTIFACT_NAME_INVALID", failure.message)
+        }
+
+    @Test
     fun `source acquisition degradation reaches analysis coverage`() =
         withService { store, service ->
             val input = accept(store, OUT_OF_ORDER_CSV.encodeToByteArray(), "coverage.jtl")

@@ -636,7 +636,7 @@ private fun writeAcquisition(
         checkCancelled()
         require(
             name in setOf("source-acquisition.json", "opensearch-errors.json") ||
-                Regex("source-response-[0-9]{1,3}\\.json").matches(name) ||
+                Regex("source-response-[0-9]{1,4}\\.json").matches(name) ||
                 Regex("opensearch-errors-([1-9]|1[0-6])\\.json").matches(name),
         ) {
             "SOURCE_ARTIFACT_NAME_INVALID"

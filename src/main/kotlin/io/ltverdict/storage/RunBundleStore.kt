@@ -102,41 +102,47 @@ internal class RunBundleStore(
         source: InputStream,
         originalFilename: String,
         maxBytes: Long = 4_294_967_296L,
-    ): AcceptedInput =
-        synchronized(dataDirectory.operationLock) {
-            dataDirectory.requireOpen()
-            requireOwnedDirectory(dataDirectory.staging)
-            requireOwnedDirectory(dataDirectory.runs)
-            require(maxBytes >= 0) { "INVALID_SIZE_LIMIT" }
-            require(isSafeFilename(originalFilename)) { "UNSAFE_FILENAME" }
-            val staging = dataDirectory.staging.resolve(UUID.randomUUID().toString())
-            Files.createDirectory(staging)
-            try {
-                val inputs = Files.createDirectory(staging.resolve("inputs"))
-                val stagedSource = inputs.resolve("source.bin")
-                val (sizeBytes, sha256) = copyInput(source, stagedSource, maxBytes)
-                if (sizeBytes == 0L) throw IllegalArgumentException("EMPTY_INPUT")
-                val sourceType = detectSource(stagedSource)
-                val runId = "${sourceType.wireName}-$sha256"
-                val target = dataDirectory.runs.resolve(runId)
-                val accepted = AcceptedInput(runId, sourceType, sha256, sizeBytes, originalFilename, target.resolve("inputs/source.bin"))
-                writeForced(staging.resolve("source.json"), sourceMetadata(accepted))
-                forceDirectory(inputs)
-                forceDirectory(staging)
-
-                if (Files.exists(target, LinkOption.NOFOLLOW_LINKS)) {
-                    val existing = requireInputUnlocked(runId)
-                    if (Files.mismatch(stagedSource, existing.path) != -1L) corrupt("existing input bytes differ")
-                    return@synchronized existing
-                }
-
-                Files.move(staging, target, StandardCopyOption.ATOMIC_MOVE)
-                forceDirectory(dataDirectory.runs)
-                requireInputUnlocked(runId)
-            } finally {
-                DataDirectory.deleteTree(staging)
+    ): AcceptedInput {
+        val staging =
+            synchronized(dataDirectory.operationLock) {
+                dataDirectory.requireOpen()
+                requireOwnedDirectory(dataDirectory.staging)
+                requireOwnedDirectory(dataDirectory.runs)
+                require(maxBytes >= 0) { "INVALID_SIZE_LIMIT" }
+                require(isSafeFilename(originalFilename)) { "UNSAFE_FILENAME" }
+                val staging = dataDirectory.staging.resolve(UUID.randomUUID().toString())
+                Files.createDirectory(staging)
+                staging
             }
+        try {
+            val inputs = Files.createDirectory(staging.resolve("inputs"))
+            val stagedSource = inputs.resolve("source.bin")
+            val (sizeBytes, sha256) = copyInput(source, stagedSource, maxBytes)
+            if (sizeBytes == 0L) throw IllegalArgumentException("EMPTY_INPUT")
+            val sourceType = detectSource(stagedSource)
+            val runId = "${sourceType.wireName}-$sha256"
+            val target = dataDirectory.runs.resolve(runId)
+            val accepted = AcceptedInput(runId, sourceType, sha256, sizeBytes, originalFilename, target.resolve("inputs/source.bin"))
+            writeForced(staging.resolve("source.json"), sourceMetadata(accepted))
+            forceDirectory(inputs)
+            forceDirectory(staging)
+
+            val existing =
+                synchronized(dataDirectory.operationLock) {
+                    dataDirectory.requireOpen()
+                    if (!Files.exists(target, LinkOption.NOFOLLOW_LINKS)) {
+                        Files.move(staging, target, StandardCopyOption.ATOMIC_MOVE)
+                        forceDirectory(dataDirectory.runs)
+                        return requireInputUnlocked(runId)
+                    }
+                    requireInputUnlocked(runId)
+                }
+            if (Files.mismatch(stagedSource, existing.path) != -1L) corrupt("existing input bytes differ")
+            return existing
+        } finally {
+            DataDirectory.deleteTree(staging)
         }
+    }
 
     fun requireInput(runId: String): AcceptedInput =
         synchronized(dataDirectory.operationLock) {
@@ -237,34 +243,45 @@ internal class RunBundleStore(
     fun writeAnalysisAtomically(
         runId: String,
         analysisId: String,
+        beforePublish: () -> Unit = {},
         writeStagingDirectory: (Path) -> Unit,
-    ): Path =
-        synchronized(dataDirectory.operationLock) {
-            dataDirectory.requireOpen()
-            requireInputUnlocked(runId)
-            requireAnalysisId(analysisId)
-            requireOwnedDirectory(dataDirectory.staging)
-            val analyses = ensureOwnedDirectory(dataDirectory.runs.resolve(runId).resolve("analyses"))
-            val target = analyses.resolve(analysisId)
-            if (Files.exists(target, LinkOption.NOFOLLOW_LINKS)) {
-                return@synchronized readAnalysisUnlocked(runId, analysisId)?.path ?: corrupt("analysis is incomplete")
-            }
+    ): Path {
+        val (analyses, staging) =
+            synchronized(dataDirectory.operationLock) {
+                dataDirectory.requireOpen()
+                requireInputUnlocked(runId)
+                requireAnalysisId(analysisId)
+                requireOwnedDirectory(dataDirectory.staging)
+                val analyses = ensureOwnedDirectory(dataDirectory.runs.resolve(runId).resolve("analyses"))
+                val target = analyses.resolve(analysisId)
+                if (Files.exists(target, LinkOption.NOFOLLOW_LINKS)) {
+                    return readAnalysisUnlocked(runId, analysisId)?.path ?: corrupt("analysis is incomplete")
+                }
 
-            val staging = dataDirectory.staging.resolve(UUID.randomUUID().toString())
-            Files.createDirectory(staging)
-            try {
-                writeStagingDirectory(staging)
-                val artifacts = inspectStagedArtifacts(staging)
-                writeForced(staging.resolve("manifest.json"), analysisManifest(artifacts))
-                forceDirectory(staging)
-                if (Files.exists(target, LinkOption.NOFOLLOW_LINKS)) corrupt("analysis target appeared during publish")
+                val staging = dataDirectory.staging.resolve(UUID.randomUUID().toString())
+                Files.createDirectory(staging)
+                analyses to staging
+            }
+        val target = analyses.resolve(analysisId)
+        try {
+            writeStagingDirectory(staging)
+            val artifacts = inspectStagedArtifacts(staging)
+            writeForced(staging.resolve("manifest.json"), analysisManifest(artifacts))
+            forceDirectory(staging)
+            return synchronized(dataDirectory.operationLock) {
+                dataDirectory.requireOpen()
+                if (Files.exists(target, LinkOption.NOFOLLOW_LINKS)) {
+                    return@synchronized readAnalysisUnlocked(runId, analysisId)?.path ?: corrupt("analysis is incomplete")
+                }
+                beforePublish()
                 Files.move(staging, target, StandardCopyOption.ATOMIC_MOVE)
                 forceDirectory(analyses)
                 target
-            } finally {
-                DataDirectory.deleteTree(staging)
             }
+        } finally {
+            DataDirectory.deleteTree(staging)
         }
+    }
 
     fun readBaseline(): JsonObject? =
         synchronized(dataDirectory.operationLock) {

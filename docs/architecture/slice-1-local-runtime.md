@@ -107,6 +107,11 @@ request threads.
 - queue capacity равна parallelism;
 - переполнение возвращает `BUSY`, accepted input сохраняется;
 - cancel прерывает незавершённый analysis и удаляет только его staging files;
+- отмена согласована с публикацией: worker под lock задач проверяет отмену и
+  необратимо входит в публикацию непосредственно перед atomic move. До этой точки
+  cancel возвращает `CANCELLED`, и результат не публикуется. После неё cancel не
+  прерывает worker и ждёт его завершения не дольше 2 секунд; ответ содержит
+  фактическое состояние (`COMPLETE`, при таймауте `PROCESSING`), но не `CANCELLED`;
 - хранятся последние `1 024` terminal job statuses.
 
 Каждый analysis использует собственные mutable accumulators. Эта граница даёт

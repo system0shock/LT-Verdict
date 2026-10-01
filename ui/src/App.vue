@@ -12,7 +12,7 @@ import VerdictCard from './VerdictCard.vue'
 import OverviewPanel from './shell/OverviewPanel.vue'
 import ShellPanel from './shell/ShellPanel.vue'
 import ShellTabs from './shell/ShellTabs.vue'
-import { SHELL_DEFAULT_TAB, SHELL_LABELS, UPLOAD_LABELS, type ShellTabKey } from './shell/labels'
+import { JOB_LABELS, SHELL_DEFAULT_TAB, SHELL_LABELS, UPLOAD_LABELS, type ShellTabKey } from './shell/labels'
 import { isNewShell } from './shell/shell'
 import {
   ApiError,
@@ -44,6 +44,17 @@ const legacyHref = window.location.pathname
 const chrome = shellNew
   ? { noRun: SHELL_LABELS.noRun, completed: SHELL_LABELS.completed, toDark: SHELL_LABELS.themeToDark, toLight: SHELL_LABELS.themeToLight, runsTitle: SHELL_LABELS.runsTitle, runsEmpty: SHELL_LABELS.runsEmpty, runsMore: SHELL_LABELS.runsMore, analysesTitle: SHELL_LABELS.analysesTitle, analysisItem: SHELL_LABELS.analysisItem, analysesEmpty: SHELL_LABELS.analysesEmpty, analysesMore: SHELL_LABELS.analysesMore }
   : { noRun: 'No run selected', completed: 'Completed', toDark: 'Dark theme', toLight: 'Light theme', runsTitle: 'Accepted runs', runsEmpty: 'No runs yet', runsMore: 'More runs', analysesTitle: 'Saved analyses', analysisItem: 'Analysis', analysesEmpty: 'No saved analyses for this run.', analysesMore: 'More analyses' }
+const jobLabels = shellNew
+  ? JOB_LABELS
+  : { retrying: 'Connection problem. Retrying the job status request...', lost: 'Connection lost. The job status is no longer updating, but the job may still be running on the server.', retry: 'Retry' }
+const POLL_FAST_WINDOW_MS = 10_000
+const POLL_FAST_DELAY_MS = 500
+const POLL_NORMAL_DELAY_MS = 1_000
+const POLL_BACKOFF_BASE_MS = 500
+const POLL_MAX_BACKOFF_MS = 10_000
+const POLL_MAX_FAILURES = 10
+const POLL_REQUEST_TIMEOUT_MS = 10_000
+const POLL_MAX_FAILURE_DURATION_MS = 120_000
 const shownIn = (tab: ShellTabKey) => !shellNew || activeTab.value === tab
 const apiReady = ref(false)
 const inputFile = ref<File | null>(null)
@@ -72,6 +83,7 @@ const uploadProgress = ref(0)
 const uploading = ref(false)
 const uploadCancelled = ref(false)
 const job = ref<JobStatus | null>(null)
+const pollIssue = ref<'none' | 'retrying' | 'lost'>('none')
 const queueBusy = ref(false)
 const result = ref<AnalysisResult | null>(null)
 const buckets = ref<Bucket[]>([])
@@ -393,9 +405,39 @@ async function analyze() {
 }
 
 async function pollJob(revision: number) {
+  const startedAt = Date.now()
+  let failures = 0
+  let firstFailureAt: number | null = null
+  pollIssue.value = 'none'
   while (revision === analysisRevision && working.value && job.value) {
-    await new Promise((resolve) => window.setTimeout(resolve, 50))
-    job.value = await getJob(job.value.job_id)
+    const delay = failures > 0
+      ? Math.min(POLL_BACKOFF_BASE_MS * 2 ** (failures - 1), POLL_MAX_BACKOFF_MS)
+      : Date.now() - startedAt < POLL_FAST_WINDOW_MS ? POLL_FAST_DELAY_MS : POLL_NORMAL_DELAY_MS
+    await new Promise((resolve) => window.setTimeout(resolve, delay))
+    if (revision !== analysisRevision) return
+    try {
+      const polled = await getJob(job.value.job_id, AbortSignal.timeout(POLL_REQUEST_TIMEOUT_MS))
+      if (revision !== analysisRevision) return
+      job.value = polled
+      failures = 0
+      firstFailureAt = null
+      pollIssue.value = 'none'
+    } catch (failure) {
+      if (revision !== analysisRevision) return
+      const transient = failure instanceof TypeError || failure instanceof DOMException
+        || (failure instanceof ApiError && (failure.status >= 500 || failure.status === 408 || failure.status === 429))
+      if (!transient) {
+        pollIssue.value = 'none'
+        throw failure
+      }
+      failures += 1
+      if (firstFailureAt === null) firstFailureAt = Date.now()
+      if (failures >= POLL_MAX_FAILURES || Date.now() - firstFailureAt >= POLL_MAX_FAILURE_DURATION_MS) {
+        pollIssue.value = 'lost'
+        return
+      }
+      pollIssue.value = 'retrying'
+    }
   }
   if (revision !== analysisRevision || job.value?.state !== 'COMPLETE' || !job.value.analysis_id) return
   selectedAnalysisId.value = job.value.analysis_id
@@ -431,10 +473,22 @@ async function restoreActiveJob() {
 async function cancel() {
   if (!job.value || !working.value) return
   analysisRevision += 1
+  pollIssue.value = 'none'
   try {
     job.value = await cancelJob(job.value.job_id)
   } catch (failure) {
     showError(failure)
+    if (job.value && working.value) pollIssue.value = 'lost'
+  }
+}
+
+async function retryPoll() {
+  if (pollIssue.value !== 'lost' || !job.value || !working.value) return
+  const revision = analysisRevision
+  try {
+    await pollJob(revision)
+  } catch (failure) {
+    if (revision === analysisRevision) showError(failure)
   }
 }
 
@@ -826,8 +880,12 @@ function focusPolicy() {
             :upload-cancelled="uploadCancelled"
             :upload-labels="uploadLabels"
             :upload-lang="shellNew ? 'ru' : undefined"
+            :poll-issue="pollIssue"
+            :labels="jobLabels"
+            :notice-lang="shellNew ? 'ru' : undefined"
             @cancel="cancel"
             @cancel-upload="cancelUpload"
+            @retry="retryPoll"
           />
 
           <JenkinsPanel

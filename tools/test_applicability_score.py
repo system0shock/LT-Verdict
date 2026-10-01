@@ -15,7 +15,9 @@ PAIR = "/correlation_pairs/workload-01/association-01/"
 
 class ApplicabilityScoreTests(unittest.TestCase):
     def setUp(self):
-        self.temp = TemporaryDirectory(dir=Path(__file__).resolve().parents[1] / ".tmp-tests")
+        base = Path(__file__).resolve().parents[1] / ".tmp-tests"
+        base.mkdir(exist_ok=True)
+        self.temp = TemporaryDirectory(dir=base)
         self.addCleanup(self.temp.cleanup)
         self.root = Path(self.temp.name)
         self.corpus, self.actual, self.manifest_sha = build_corpus(self.root)

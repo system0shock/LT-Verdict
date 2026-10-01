@@ -110,8 +110,9 @@ internal fun analyzeWithSources(
     source: PromqlSource?,
     processedBytes: (Long) -> Unit = {},
     checkCancelled: () -> Unit = {},
+    beforePublish: () -> Unit = checkCancelled,
 ): AnalysisOutcome {
-    val windowed = request.sourceRequest ?: return service.analyze(request, processedBytes, checkCancelled)
+    val windowed = request.sourceRequest ?: return service.analyze(request, processedBytes, checkCancelled, beforePublish)
     require(request.resources == null && request.diagnostics == null && request.sourceAcquisition == null) { "SOURCE_INPUT_CONFLICT" }
     val configured = requireNotNull(source) { "SOURCE_NOT_CONFIGURED" }
     val selection = resolveWindow(service, request, windowed, checkCancelled)
@@ -120,6 +121,7 @@ internal fun analyzeWithSources(
         request.copy(sourceRequest = null, resources = acquisition.snapshot, sourceAcquisition = acquisition),
         processedBytes,
         checkCancelled,
+        beforePublish,
     )
 }
 

@@ -7,6 +7,7 @@ import java.util.ArrayDeque
 import java.util.UUID
 import java.util.concurrent.ArrayBlockingQueue
 import java.util.concurrent.CancellationException
+import java.util.concurrent.CountDownLatch
 import java.util.concurrent.RejectedExecutionException
 import java.util.concurrent.ThreadFactory
 import java.util.concurrent.ThreadPoolExecutor
@@ -40,9 +41,13 @@ internal sealed interface SubmitResult {
     data object Busy : SubmitResult
 }
 
+internal interface JobCancellation : () -> Unit {
+    fun beforePublish()
+}
+
 internal class AnalysisJobs(
     parallelism: Int,
-    private val analyze: (AnalysisRequest, (Long) -> Unit, () -> Unit) -> AnalysisOutcome,
+    private val analyze: (AnalysisRequest, (Long) -> Unit, JobCancellation) -> AnalysisOutcome,
 ) : AutoCloseable {
     private val lock = Any()
     private val statuses = mutableMapOf<String, JobStatus>()
@@ -101,15 +106,28 @@ internal class AnalysisJobs(
     fun activeStatuses(): List<JobStatus> = synchronized(lock) { active.keys.map(statuses::getValue) }
 
     fun cancel(jobId: String): JobStatus? {
-        synchronized(lock) {
-            val current = statuses[jobId] ?: return null
-            if (current.state.isTerminal()) return current
-            val record = active.getValue(jobId)
-            record.cancelled.set(true)
-            executor.remove(record.task)
-            record.runner?.interrupt()
-            return terminal(jobId, current.copy(state = JobState.CANCELLED))
+        var observed: JobStatus? = null
+        val finished =
+            synchronized(lock) {
+                val current = statuses[jobId] ?: return null
+                if (current.state.isTerminal()) return current
+                val record = active.getValue(jobId)
+                if (record.publishing) {
+                    observed = current
+                    return@synchronized record.finished
+                }
+                record.cancelled.set(true)
+                executor.remove(record.task)
+                record.runner?.interrupt()
+                return terminal(jobId, current.copy(state = JobState.CANCELLED))
+            }
+        try {
+            finished.await(PUBLISH_WAIT_SECONDS, TimeUnit.SECONDS)
+        } catch (_: InterruptedException) {
+            Thread.currentThread().interrupt()
         }
+        // The terminal status can be evicted while waiting; fall back to the status seen before the wait.
+        return synchronized(lock) { statuses[jobId] } ?: observed
     }
 
     override fun close() {
@@ -118,6 +136,8 @@ internal class AnalysisJobs(
                 if (closed) return
                 closed = true
                 active.entries.toList().mapNotNull { (jobId, record) ->
+                    // A job that already committed its publication finishes on its own; it is never reported CANCELLED.
+                    if (record.publishing) return@mapNotNull null
                     record.cancelled.set(true)
                     executor.remove(record.task)
                     val current = statuses.getValue(jobId)
@@ -126,7 +146,7 @@ internal class AnalysisJobs(
                 }
             }
         runners.forEach(Thread::interrupt)
-        executor.shutdownNow()
+        executor.shutdown()
         executor.awaitTermination(CLOSE_TIMEOUT_SECONDS, TimeUnit.SECONDS)
     }
 
@@ -146,7 +166,16 @@ internal class AnalysisJobs(
                 analyze(
                     record.request,
                     { processed -> updateProgress(jobId, processed) },
-                    { requireNotCancelled(record) },
+                    object : JobCancellation {
+                        override fun invoke() = requireNotCancelled(record)
+
+                        override fun beforePublish() {
+                            synchronized(lock) {
+                                requireNotCancelled(record)
+                                record.publishing = true
+                            }
+                        }
+                    },
                 )
             synchronized(lock) {
                 val current = statuses[jobId] ?: return@synchronized
@@ -221,6 +250,7 @@ internal class AnalysisJobs(
             }
         } finally {
             synchronized(lock) { record.runner = null }
+            record.finished.countDown()
         }
     }
 
@@ -258,6 +288,8 @@ internal class AnalysisJobs(
         val request: AnalysisRequest,
     ) {
         val cancelled = AtomicBoolean()
+        var publishing = false
+        val finished = CountDownLatch(1)
         lateinit var task: Runnable
         var runner: Thread? = null
     }
@@ -265,6 +297,7 @@ internal class AnalysisJobs(
     private companion object {
         const val RETAINED_TERMINAL_STATUSES = 1_024
         const val CLOSE_TIMEOUT_SECONDS = 5L
+        const val PUBLISH_WAIT_SECONDS = 2L
     }
 }
 

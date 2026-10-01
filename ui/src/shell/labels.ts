@@ -143,3 +143,9 @@ export const OVERVIEW_LABELS = {
   cursorText: (time: string, rps: string, errors: string, p95: string) =>
     `${time}: ${rps} запросов в секунду, ошибок за интервал ${errors}, p95 ${p95} мс`,
 } as const
+
+// Отмена загрузки входного файла (JobStatus.vue): кнопка и сообщение после отмены.
+export const UPLOAD_LABELS = {
+  cancel: 'Отменить загрузку',
+  cancelled: 'Загрузка отменена. Анализ не запускался, файл можно выбрать заново.',
+} as const

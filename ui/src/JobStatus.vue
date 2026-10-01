@@ -5,9 +5,13 @@ const props = defineProps<{
   job: JobStatus | null
   uploadProgress: number
   busy: boolean
+  uploading: boolean
+  uploadCancelled: boolean
+  uploadLabels: { cancel: string; cancelled: string }
+  uploadLang?: string
 }>()
 
-defineEmits<{ cancel: [] }>()
+defineEmits<{ cancel: []; cancelUpload: [] }>()
 
 const active = () => props.job?.state === 'QUEUED' || props.job?.state === 'PROCESSING'
 const processed = () => props.job?.processed_bytes ?? props.uploadProgress
@@ -16,7 +20,7 @@ const total = () => props.job?.total_bytes ?? 100
 
 <template>
   <section
-    v-if="job || uploadProgress > 0 || busy"
+    v-if="job || uploadProgress > 0 || busy || uploadCancelled"
     id="job-status"
     class="job-status"
     aria-live="polite"
@@ -30,6 +34,16 @@ const total = () => props.job?.total_bytes ?? 100
       <strong>⚠ BUSY</strong>
       <span>The local analysis queue is full. Cancel a queued job or wait, then try again.</span>
     </div>
+    <template v-else-if="uploadCancelled && !job && uploadProgress === 0">
+      <p
+        class="notice notice-info"
+        data-testid="upload-cancelled"
+        role="status"
+        :lang="uploadLang"
+      >
+        {{ uploadLabels.cancelled }}
+      </p>
+    </template>
     <template v-else>
       <div class="job-copy">
         <strong>{{ job?.state ?? 'UPLOADING' }}</strong>
@@ -50,6 +64,15 @@ const total = () => props.job?.total_bytes ?? 100
         @click="$emit('cancel')"
       >
         Cancel analysis
+      </button>
+      <button
+        v-if="uploading"
+        type="button"
+        class="button-secondary"
+        :lang="uploadLang"
+        @click="$emit('cancelUpload')"
+      >
+        {{ uploadLabels.cancel }}
       </button>
       <span
         v-if="job?.diagnostic"

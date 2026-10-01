@@ -119,8 +119,8 @@ export function createJob(runId: string, policy: Policy | null, resources?: File
   return request('/api/jobs', { method: 'POST', headers: mutationHeaders(), body })
 }
 
-export function getJob(jobId: string): Promise<JobStatus> {
-  return request(`/api/jobs/${encodeURIComponent(jobId)}`)
+export function getJob(jobId: string, signal?: AbortSignal): Promise<JobStatus> {
+  return request(`/api/jobs/${encodeURIComponent(jobId)}`, { signal })
 }
 
 export function cancelJob(jobId: string): Promise<JobStatus> {

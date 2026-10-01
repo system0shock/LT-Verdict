@@ -75,13 +75,18 @@ export async function validatePolicy(policy: Policy | File): Promise<PolicyValid
   throw apiError(response.status, text)
 }
 
-export function uploadInput(file: File, progress: (percent: number) => void): Promise<RunSummary> {
+export function uploadInput(file: File, progress: (percent: number) => void, signal?: AbortSignal): Promise<RunSummary> {
   return new Promise((resolve, reject) => {
+    if (signal?.aborted) {
+      reject(new DOMException('Upload cancelled', 'AbortError'))
+      return
+    }
     const body = new FormData()
     body.append('file', file)
     const xhr = new XMLHttpRequest()
     xhr.open('POST', '/api/inputs')
     xhr.setRequestHeader('X-LTV-CSRF', requireCsrf())
+    signal?.addEventListener('abort', () => xhr.abort(), { once: true })
     xhr.upload.addEventListener('progress', (event) => {
       if (event.lengthComputable) progress(Math.round((event.loaded / event.total) * 100))
     })
@@ -90,6 +95,7 @@ export function uploadInput(file: File, progress: (percent: number) => void): Pr
       else reject(apiError(xhr.status, xhr.responseText))
     })
     xhr.addEventListener('error', () => reject(new ApiError(0, 'NETWORK_ERROR', 'Local request failed')))
+    xhr.addEventListener('abort', () => reject(new DOMException('Upload cancelled', 'AbortError')))
     xhr.send(body)
   })
 }

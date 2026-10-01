@@ -6,7 +6,7 @@
 
 ## Контекст
 
-В ядре используется `PackedHistogram(1, 86_400_000, 3)` (`Metrics.kt:18`). При трёх значащих цифрах значения меньше 2048 мс хранятся точно. Начиная с 2048 мс `getValueAtPercentile` возвращает верхнюю границу эквивалентного диапазона. Перебор значений 1–3000 мс показал первое превышение над наблюдённым значением при 2048 мс. Расчёт на HdrHistogram 2.2.2 для 100 одинаковых сэмплов даёт:
+В ядре используется `PackedHistogram(1, 86_400_000, 3)` (`Metrics.kt:15-18`, `:268-273`). При трёх значащих цифрах значения меньше 2048 мс хранятся точно. Начиная с 2048 мс `getValueAtPercentile` возвращает верхнюю границу эквивалентного диапазона. Перебор значений 1–3000 мс показал первое превышение над наблюдённым значением при 2048 мс. Расчёт на HdrHistogram 2.2.2 для 100 одинаковых сэмплов даёт:
 
 | Наблюдённое значение, мс | p50 = p95 = p99, мс |
 | --- | --- |
@@ -19,7 +19,7 @@
 
 Последнее значение перцентиля превышает даже настроенный `highestTrackableValue` 86 400 000 мс. Для значений от 2048 мс относительное превышение строго меньше `1/1024` (около 0,0977 %); наибольшее найденное при переборе — `9,73e-4`.
 
-Сейчас `MutableMetrics.summary` публикует эти значения без ограничения фактическим максимумом (`Metrics.kt:265-283`, `:300-302`). Из summary они попадают в `UtcLoadMetrics`, policy evidence и сравнение с порогом `lte` (`Policy.kt:215-216`, `:306-308`), а также в диагностическое evidence (`DiagnosticAnalysis.kt:765-767`). Bucket API вычисляет p95 при чтении сжатой гистограммы (`LocalApi.kt:1524`, `:1530-1538`); статический график отчёта делает то же (`StaticLoadChart.kt:90-106`). Python-оракул воспроизводит округление (`tools/applicability_validation.py:28-33`): тест сейчас ожидает для `[4094]` значение `4095` (`tools/test_applicability_validation.py:79-84`).
+Сейчас `MutableMetrics.summary` публикует эти значения без ограничения фактическим максимумом (`Metrics.kt:265-283`, `:300-302`). Из summary они попадают в `UtcLoadMetrics`, policy evidence и сравнение с порогом `lte` (`Policy.kt:215-216`, `:306-308`), а также в диагностическое evidence (`DiagnosticAnalysis.kt:765-767`). Bucket API вычисляет p95 при чтении сжатой гистограммы (`LocalApi.kt:1524`, `:1530-1538`); статический график отчёта делает то же (`StaticLoadChart.kt:90-106`). Python-оракул воспроизводит округление (`tools/applicability_validation.py:28-34`): тест сейчас ожидает для `[4094]` значение `4095` (`tools/test_applicability_validation.py:79-84`).
 
 Ограничение перцентиля фактическим максимумом устраняет превышение над `max`, но не делает оценку точной. Для `95 × 60000 + 5 × 60010` точный p95 равен 60000 мс, HDR даёт 60031 мс, а ограничение максимумом оставляет 60010 мс. Для `100 × 60000 + 1 × 70000` точный p95 равен 60000 мс; HDR и после ограничения даёт 60031 мс. Поэтому порог между точным и опубликованным значением всё ещё может дать ложный `FAIL`.
 
@@ -88,7 +88,7 @@ sample_count == 0
 
 Marker не создаёт иерархию: `groupPath` у CSV остаётся пустым. Parent не входит в overall, 1-секундные buckets, rollups и UTC load, но входит в собственную точную сводку транзакции (`Metrics.kt:117`, `:212`, `UtcLoadMetrics.kt:51`). Окно прогона по-прежнему строится по всем строкам, включая parent: минимум start и максимум end (`AnalysisService.kt:248-249`), согласно разделу «Run window» ADR 0003. Поэтому parent может влиять на знаменатель throughput, хотя не увеличивает число overall-сэмплов.
 
-Идентичность транзакции включает kind. При одинаковом label у parent и sampler возникают две разные транзакции; policy scope по этому label возвращает `AMBIGUOUS_TRANSACTION` (`Policy.kt:199-203`). Раньше flat CSV объединял такие строки в одну сводку. Если после разметки нет ни одной строки `JMETER_SAMPLER`, вход становится `INVALID` с `EMPTY_INPUT` (`JtlCsvParser.kt:100`). Так overall валидного JMeter-прогона непуст, а window-независимый `metric_summary` не публикует нулевую латентность пустой сводки.
+Идентичность транзакции включает kind. При одинаковом label у parent и sampler возникают две разные транзакции; policy scope по этому label возвращает `AMBIGUOUS_TRANSACTION` (`Policy.kt:199-203`). Раньше flat CSV объединял такие строки в одну сводку. Если после разметки нет ни одной строки `JMETER_SAMPLER`, вход становится `INVALID` с `EMPTY_INPUT` (`JtlCsvParser.kt:100`). Так overall валидного JMeter CSV непуст, а window-независимый `metric_summary` не публикует нулевую латентность пустой сводки. Gatling-прогон только со строками `GROUP` остаётся валидным и пустым по overall (`GatlingTextParser.kt:84-103`): `metric_summary` публикует четыре нуля, а политика даёт `NO_VERDICT`; это известный остаток, вне объёма ADR (вопрос 9).
 
 Обычный CSV без marker остаётся flat: parent, если он присутствует, продолжает считаться вместе с детьми, без предупреждения. Для работы решения нужен проверяемый producer или конвертер, который добавляет marker по известной ему семантике. Для сценариев с Transaction Controller пользовательская документация также рекомендует JTL XML. Утверждений о том, как живой JMeter 5.x записывает parent в CSV или поддерживает ли такую колонку штатно, это решение не делает.
 
@@ -115,7 +115,9 @@ Marker не создаёт иерархию: `groupPath` у CSV остаётся
 
 Сохранённые analyses, их canonical bytes, SHA-256 и baseline bindings не переписываются. Новый запуск тех же входных bytes получает новый `analysis_id` и пересчитывается по новым правилам. Старые результаты остаются читаемыми по прежней identity.
 
-Версия `metrics` входит в каждый analysis, поэтому любой старый baseline при сравнении с новым анализом получает `INCOMPATIBLE_METRIC_DEFINITION` (`BaselineComparison.kt:212`, `:569`). Смешанный старый и новый набор кандидатов получает `BASELINE_MIXED_SEMANTICS` (`BaselineComparison.kt:116`). История динамики исключает старые analyses из сопоставимого ряда и увеличивает `excluded_incompatible_count` (`RunComparison.kt:39-41`). Это относится и к analyses без diagnostics.
+Версия `metrics` входит в каждый analysis, поэтому оконное сравнение старого baseline с новым анализом возвращает `NOT_EVALUATED` с причиной `INCOMPATIBLE_METRIC_DEFINITION` (`BaselineComparison.kt:212`); для строк метрик причина тоже `INCOMPATIBLE_METRIC_DEFINITION` (`:569`), если метрики доступны. Если метрик нет (например, у ручного baseline с `INVALID` analysis), приоритет у `MISSING_METRIC` (`:566-570`): это существующее поведение ADR 0016 не меняет. Смешанный старый и новый набор кандидатов получает `BASELINE_MIXED_SEMANTICS` (`BaselineComparison.kt:116`). История динамики исключает старые analyses из сопоставимого ряда и увеличивает `excluded_incompatible_count` (`RunComparison.kt:39-41`). Это относится и к analyses без diagnostics.
+
+Сохранённый `run-period.json` (`RunPeriod.kt:55-58`) строится по интервалам, занятым строками `JMETER_SAMPLER` и `GATLING_REQUEST`, и привязан к hash входа (`SourceAnalysis.kt:167-176`). Вход без marker разбирается как раньше, поэтому старые `run-period.json` остаются верными. Вход с marker имеет другие bytes, то есть другой `run_id`, и получает собственный период; родитель с `true` в занятые интервалы авто-окна уже не входит, как контейнер XML. Допущение: ранее существовавший CSV, который случайно содержал колонку с таким именем, не ожидается; если он есть, его нужно перезагрузить как новый вход.
 
 Bucket API вычисляет p95 при чтении, не хранит его. Ограничение по `max_latency_ms` действует и на старые analyses: у старого анализа p95 графика может стать 60000 мс, тогда как его неизменяемое evidence содержит 60031 мс. Статический график также является производным представлением. Старые canonical bytes от этого не меняются; различие явно описывается пользователю.
 
@@ -172,7 +174,10 @@ ADR 0014 принят для измеренных лимитов и отдель
 | `yes`, дубль marker, пустое значение, CSV без marker | Заданные diagnostic codes и legacy-поведение | `JtlCsvParserTest`, `JtlGoldenTest` |
 | Все строки помечены parent | `INVALID` с `EMPTY_INPUT` | `JtlCsvParserTest` |
 | Новые canonical identity bytes, обе `.sha256`, manifest | Версии соответствуют таблице, hashes совпадают | `AnalysisResultGoldenTest`, `AnalysisIdentityDiagnosticVersionTest`, `FixtureManifestTest` |
-| Старый baseline против нового анализа; смешанные кандидаты; история динамики | `INCOMPATIBLE_METRIC_DEFINITION`, `BASELINE_MIXED_SEMANTICS`, `excluded_incompatible_count` | `BaselineComparisonTest`, `RunComparisonTest` |
+| Старый baseline против нового анализа; смешанные кандидаты; история динамики | `INCOMPATIBLE_METRIC_DEFINITION`, `BASELINE_MIXED_SEMANTICS`, `excluded_incompatible_count`; для analysis без метрик `MISSING_METRIC` | `BaselineComparisonTest`, `RunComparisonTest` |
+| Реальные identity: старая (версии `1`, из golden) и новая из `analysisIdentity`; сохранённый старый analysis читается без перезаписи | Несовместимы по ключу; старый результат неизменен | `AnalysisServiceTest`, `BaselineComparisonTest`, `RunComparisonTest` (существующие тесты используют синтетические identity с пустыми `parsers` и `modules`) |
+| Сквозной CSV с marker и политикой по общему label | Две транзакции, `AMBIGUOUS_TRANSACTION` | `AnalysisServiceTest` |
+| Старый `run-period.json` и вход без marker | Период и отказ авто-окна не меняются | `RunPeriodTest` |
 | Старое и новое evidence пустого окна | Одинаковое `INSUFFICIENT_DATA` и `EMPTY_WINDOW` | `BaselineComparisonTest` |
 | `[4094]` в Python-оракуле | Опубликованный p95 равен 4094 | `tools.test_applicability_validation` |
 
@@ -213,10 +218,12 @@ git status --short --branch
 
 8. **Происхождение golden-фикстуры marker.** Варианты: реальный JMeter 5.6.3 run с документированным преобразованием; синтетический CSV без подтверждённого producer. Рекомендация: предоставить или получить реальный run, сохранить описание преобразования и его provenance в manifest. Поведение живого JMeter CSV и `sample_variables` до такой проверки считать непроверенным допущением.
 
+9. **Gatling-прогон только с `GROUP`.** Overall пуст, `metric_summary` публикует нулевую латентность, политика даёт `NO_VERDICT` (`GatlingTextParser.kt:84-103`, `Policy.kt:213`). Варианты: оставить как известный остаток; считать такой вход `INVALID` с `EMPTY_INPUT` (потребует версии Gatling parser); публиковать `null` в window-независимом `metric_summary` (меняет числовой тип `ui/src/types.ts:146`). Рекомендация: оставить и вести отдельной задачей, поскольку вердикт уже `NO_VERDICT`, а ADR 0016 ограничен JMeter CSV.
+
 ## Не входит
 
 - Минимальный размер выборки и `INSUFFICIENT_SAMPLES`: это другой дефект и предмет ADR-B.
 - Правила выбора baseline, сопоставимости и статусы пустого окна на стороне потребителя: они принадлежат ADR 0017.
 - Измеренные лимиты и блок `limits` identity ADR 0014.
-- Изменения Gatling и JMeter XML parser.
+- Изменения Gatling и JMeter XML parser, в том числе обработка Gatling-прогона только с `GROUP`.
 - Изменение схемы `analysis-result.v1`, Vue-кода и production-зависимостей.

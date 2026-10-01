@@ -492,7 +492,7 @@ private fun ui(args: List<String>): Int {
     val jobs =
         try {
             AnalysisJobs(parallelism) { request, progress, cancelled ->
-                analyzeWithSources(service, request, source, progress, cancelled)
+                analyzeWithSources(service, request, source, progress, cancelled, cancelled::beforePublish)
             }
         } catch (failure: Exception) {
             directory.close()

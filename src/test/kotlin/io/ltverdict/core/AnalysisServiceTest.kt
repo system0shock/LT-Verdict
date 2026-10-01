@@ -26,10 +26,46 @@ import java.nio.file.Files
 import java.nio.file.Path
 import java.security.MessageDigest
 import java.util.HexFormat
+import java.util.concurrent.CancellationException
+import java.util.concurrent.atomic.AtomicInteger
 
 class AnalysisServiceTest {
     @TempDir
     lateinit var tempDir: Path
+
+    @Test
+    fun `beforePublish gates valid and invalid analysis writes exactly once`() {
+        listOf(
+            OUT_OF_ORDER_CSV to "valid.jtl",
+            "${OUT_OF_ORDER_CSV.lineSequence().first()}\nmalformed\n" to "invalid.jtl",
+        ).forEach { (contents, name) ->
+            withService { store, service ->
+                val input = accept(store, contents.encodeToByteArray(), name)
+                val request = AnalysisRequest(input, null)
+                val analyses =
+                    input.path.parent.parent
+                        .resolve("analyses")
+                val cancelledCalls = AtomicInteger()
+                assertThrows(CancellationException::class.java) {
+                    service.analyze(
+                        request,
+                        beforePublish = {
+                            cancelledCalls.incrementAndGet()
+                            throw CancellationException("CANCELLED")
+                        },
+                    )
+                }
+                assertEquals(1, cancelledCalls.get())
+                assertEquals(0L, Files.list(analyses).use { it.count() })
+
+                val publishedCalls = AtomicInteger()
+                val outcome = service.analyze(request, beforePublish = { publishedCalls.incrementAndGet() })
+                assertEquals(1, publishedCalls.get())
+                assertTrue(store.readAnalysis(input.runId, outcome.analysisId) != null)
+                assertEquals(if (name == "invalid.jtl") "INVALID" else "VALID", result(outcome, "run_validity"))
+            }
+        }
+    }
 
     @Test
     fun `acquisition artifacts and status are immutable and distinct from offline replay`() =
@@ -57,6 +93,37 @@ class AnalysisServiceTest {
             assertNotEquals(online.analysisId, replay.analysisId)
             assertEquals(result(online, "policy_verdict"), result(replay, "policy_verdict"))
             assertFalse(Files.exists(replay.analysisDirectory.resolve("source-acquisition.json")))
+        }
+
+    @Test
+    fun `acquisition artifacts accept response numbers up to 1024 and reject 5 digits`() =
+        withService { store, service ->
+            val input = accept(store, OUT_OF_ORDER_CSV.encodeToByteArray(), "responses.jtl")
+            val resource = resources(resourceJson(input.sha256, "responses", "0.8").encodeToByteArray())
+            val evidence =
+                buildJsonObject {
+                    put("id", "source-summary")
+                    put("type", "source_summary")
+                    put("status", "COMPLETE")
+                }
+
+            fun request(responses: List<String>): AnalysisRequest {
+                val extra = responses.associateWith { "{}".encodeToByteArray() }
+                val artifacts = mapOf("source-acquisition.json" to canonicalJson(evidence)) + extra
+                val acquisition = SourceAcquisition(resource, evidence, artifacts)
+                return AnalysisRequest(input, passPolicy(), resources = resource, sourceAcquisition = acquisition)
+            }
+
+            val names = listOf("source-response-1000.json", "source-response-1024.json")
+            val outcome = service.analyze(request(names))
+            val stored = store.readAnalysis(input.runId, outcome.analysisId)!!
+            assertTrue(stored.artifacts.map { it.path }.containsAll(names))
+
+            val failure =
+                assertThrows(IllegalArgumentException::class.java) {
+                    service.analyze(request(listOf("source-response-10000.json")))
+                }
+            assertEquals("SOURCE_ARTIFACT_NAME_INVALID", failure.message)
         }
 
     @Test

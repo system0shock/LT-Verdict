@@ -252,8 +252,8 @@ CLI принимает [source-request.v2](../contracts/sources/v1/multiple-requ
 `profileId/queryId` и `profileId/ruleId`; `%` и `/` в profileId экранируются
 как `%25` и `%2F`. SLA-ссылки меняются вместе с series IDs, единицы — нет.
 Общий cap снимка: 1 024 series, 1 500 000 cells, 256 rules; превышение отклоняется
-до сети. Фактически число series ограничено конфигурацией: до 32 queries на
-профиль и до 16 профилей, то есть не более 512 series.
+до сети. Фактически число series ограничено конфигурацией: до 64 queries на
+профиль и до 16 профилей, то есть не более 1 024 series (равно общему cap снимка).
 Governor остаётся общим по origin, запросы выполняются последовательно.
 
 Несколько OpenSearch contexts сохраняются как `opensearch-errors-N.json`,
@@ -353,7 +353,7 @@ Governor defaults: `requests_per_second:0.5`, `burst:1`, `max_concurrent:1`,
 Один origin (scheme/host/effective port) разделяет strictest budget всех
 настроенных профилей, jobs и retries. Первый запрос после старта ждёт interval.
 
-Config <= 1 MiB/16 profiles/32 queries; source request <= 16 KiB; response
+Config <= 1 MiB/16 profiles/64 queries; source request <= 16 KiB; response
 <= 16 MiB, acquisition raw total <= 64 MiB. Snapshot <= 32 MiB,
 100000 points/series, 1500000 cells; остальные limits проверяет общий validator.
 Timeout/retries/body read отменяются вместе с job. HTTP error bodies не публикуются.

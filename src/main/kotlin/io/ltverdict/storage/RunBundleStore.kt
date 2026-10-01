@@ -243,6 +243,7 @@ internal class RunBundleStore(
     fun writeAnalysisAtomically(
         runId: String,
         analysisId: String,
+        beforePublish: () -> Unit = {},
         writeStagingDirectory: (Path) -> Unit,
     ): Path {
         val (analyses, staging) =
@@ -272,6 +273,7 @@ internal class RunBundleStore(
                 if (Files.exists(target, LinkOption.NOFOLLOW_LINKS)) {
                     return@synchronized readAnalysisUnlocked(runId, analysisId)?.path ?: corrupt("analysis is incomplete")
                 }
+                beforePublish()
                 Files.move(staging, target, StandardCopyOption.ATOMIC_MOVE)
                 forceDirectory(analyses)
                 target

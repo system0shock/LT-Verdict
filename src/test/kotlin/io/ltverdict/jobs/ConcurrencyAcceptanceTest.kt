@@ -1,5 +1,6 @@
 package io.ltverdict.jobs
 
+import io.ltverdict.core.AnalysisOutcome
 import io.ltverdict.core.AnalysisRequest
 import io.ltverdict.core.AnalysisService
 import io.ltverdict.core.EngineConfig
@@ -13,6 +14,7 @@ import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertInstanceOf
 import org.junit.jupiter.api.Assertions.assertNotEquals
 import org.junit.jupiter.api.Assertions.assertNull
+import org.junit.jupiter.api.Assertions.assertThrows
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Assertions.fail
 import org.junit.jupiter.api.Test
@@ -20,8 +22,12 @@ import org.junit.jupiter.api.io.TempDir
 import java.io.ByteArrayInputStream
 import java.nio.file.Files
 import java.nio.file.Path
+import java.security.MessageDigest
+import java.util.HexFormat
 import java.util.concurrent.CountDownLatch
+import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.TimeoutException
 import java.util.concurrent.atomic.AtomicReference
 
 class ConcurrencyAcceptanceTest {
@@ -170,6 +176,176 @@ class ConcurrencyAcceptanceTest {
             }
         }
     }
+
+    @Test
+    fun `cancel after the last cooperative check but before the move publishes nothing`() {
+        val bytes = Files.readAllBytes(Path.of(CSV_FIXTURE))
+        DataDirectory.open(Files.createTempDirectory(tempDir, "cancel-before-publish-")).use { directory ->
+            val store = RunBundleStore(directory)
+            val input = store.acceptInput(ByteArrayInputStream(bytes), "input.jtl")
+            val identity = """{"run_id":"${input.runId}"}"""
+            val analysisId = sha256(identity)
+            val arrived = CountDownLatch(1)
+            val release = CountDownLatch(1)
+            val finished = CountDownLatch(1)
+            AnalysisJobs(1) { request, _, cancelled ->
+                try {
+                    val path =
+                        store.writeAnalysisAtomically(
+                            request.input.runId,
+                            analysisId,
+                            beforePublish = {
+                                arrived.countDown()
+                                awaitUninterruptibly(release)
+                                cancelled.beforePublish()
+                            },
+                        ) { staging -> Files.writeString(staging.resolve("identity.json"), identity) }
+                    AnalysisOutcome(request.input.runId, analysisId, byteArrayOf(), path)
+                } finally {
+                    finished.countDown()
+                }
+            }.use { jobs ->
+                val job = accepted(jobs.submit(AnalysisRequest(input, null)))
+                try {
+                    assertTrue(arrived.await(TIMEOUT_SECONDS, TimeUnit.SECONDS))
+                    assertEquals(JobState.CANCELLED, jobs.cancel(job.jobId)?.state)
+                } finally {
+                    release.countDown()
+                }
+                assertTrue(finished.await(TIMEOUT_SECONDS, TimeUnit.SECONDS))
+                assertEquals(JobState.CANCELLED, jobs.status(job.jobId)?.state)
+                assertNull(store.readAnalysis(input.runId, analysisId))
+                assertEquals(
+                    0L,
+                    Files
+                        .list(
+                            input.path.parent.parent
+                                .resolve("analyses"),
+                        ).use { it.count() },
+                )
+                assertEquals(0L, Files.list(directory.staging).use { it.count() })
+                assertArrayEquals(bytes, Files.readAllBytes(input.path))
+            }
+        }
+    }
+
+    @Test
+    fun `cancel racing a publication that already committed waits and reports COMPLETE`() {
+        val bytes = Files.readAllBytes(Path.of(CSV_FIXTURE))
+        DataDirectory.open(Files.createTempDirectory(tempDir, "publish-before-cancel-")).use { directory ->
+            val store = RunBundleStore(directory)
+            val input = store.acceptInput(ByteArrayInputStream(bytes), "input.jtl")
+            val identity = """{"run_id":"${input.runId}"}"""
+            val analysisId = sha256(identity)
+            val arrived = CountDownLatch(1)
+            val release = CountDownLatch(1)
+            val finished = CountDownLatch(1)
+            val observedInterrupt = AtomicReference<Boolean>()
+            AnalysisJobs(1) { request, _, cancelled ->
+                try {
+                    val path =
+                        store.writeAnalysisAtomically(
+                            request.input.runId,
+                            analysisId,
+                            beforePublish = {
+                                cancelled.beforePublish()
+                                arrived.countDown()
+                                val interruptedWhileWaiting = awaitUninterruptibly(release)
+                                observedInterrupt.set(interruptedWhileWaiting || Thread.currentThread().isInterrupted)
+                            },
+                        ) { staging -> Files.writeString(staging.resolve("identity.json"), identity) }
+                    AnalysisOutcome(request.input.runId, analysisId, byteArrayOf(), path)
+                } finally {
+                    finished.countDown()
+                }
+            }.use { jobs ->
+                val job = accepted(jobs.submit(AnalysisRequest(input, null)))
+                val executor = Executors.newSingleThreadExecutor()
+                try {
+                    assertTrue(arrived.await(TIMEOUT_SECONDS, TimeUnit.SECONDS))
+                    val cancelling = CountDownLatch(1)
+                    val cancel =
+                        executor.submit<JobStatus?> {
+                            cancelling.countDown()
+                            jobs.cancel(job.jobId)
+                        }
+                    assertTrue(cancelling.await(TIMEOUT_SECONDS, TimeUnit.SECONDS))
+                    assertThrows(TimeoutException::class.java) { cancel.get(100, TimeUnit.MILLISECONDS) }
+                    release.countDown()
+                    assertEquals(JobState.COMPLETE, cancel.get(TIMEOUT_SECONDS, TimeUnit.SECONDS)?.state)
+                    assertTrue(finished.await(TIMEOUT_SECONDS, TimeUnit.SECONDS))
+                    assertEquals(false, observedInterrupt.get())
+                    assertEquals(JobState.COMPLETE, jobs.status(job.jobId)?.state)
+                    assertTrue(store.readAnalysis(input.runId, analysisId) != null)
+                } finally {
+                    release.countDown()
+                    executor.shutdownNow()
+                }
+            }
+        }
+    }
+
+    @Test
+    fun `closing while a publication is committed keeps the job COMPLETE`() {
+        val bytes = Files.readAllBytes(Path.of(CSV_FIXTURE))
+        DataDirectory.open(Files.createTempDirectory(tempDir, "close-during-publish-")).use { directory ->
+            val store = RunBundleStore(directory)
+            val input = store.acceptInput(ByteArrayInputStream(bytes), "input.jtl")
+            val identity = """{"run_id":"${input.runId}"}"""
+            val analysisId = sha256(identity)
+            val arrived = CountDownLatch(1)
+            val release = CountDownLatch(1)
+            val jobs =
+                AnalysisJobs(1) { request, _, cancelled ->
+                    val path =
+                        store.writeAnalysisAtomically(
+                            request.input.runId,
+                            analysisId,
+                            beforePublish = {
+                                cancelled.beforePublish()
+                                arrived.countDown()
+                                awaitUninterruptibly(release)
+                            },
+                        ) { staging -> Files.writeString(staging.resolve("identity.json"), identity) }
+                    AnalysisOutcome(request.input.runId, analysisId, byteArrayOf(), path)
+                }
+            val executor = Executors.newSingleThreadExecutor()
+            try {
+                val job = accepted(jobs.submit(AnalysisRequest(input, null)))
+                assertTrue(arrived.await(TIMEOUT_SECONDS, TimeUnit.SECONDS))
+                val closing = executor.submit { jobs.close() }
+                assertThrows(TimeoutException::class.java) { closing.get(100, TimeUnit.MILLISECONDS) }
+                release.countDown()
+                closing.get(TIMEOUT_SECONDS, TimeUnit.SECONDS)
+                assertEquals(JobState.COMPLETE, jobs.status(job.jobId)?.state)
+                assertTrue(store.readAnalysis(input.runId, analysisId) != null)
+            } finally {
+                release.countDown()
+                executor.shutdownNow()
+                jobs.close()
+            }
+        }
+    }
+
+    private fun awaitUninterruptibly(latch: CountDownLatch): Boolean {
+        val deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(TIMEOUT_SECONDS)
+        var interrupted = false
+        while (true) {
+            val remaining = deadline - System.nanoTime()
+            if (remaining <= 0) throw IllegalStateException("publish barrier timed out")
+            try {
+                if (!latch.await(remaining, TimeUnit.NANOSECONDS)) throw IllegalStateException("publish barrier timed out")
+                break
+            } catch (_: InterruptedException) {
+                interrupted = true
+            }
+        }
+        if (interrupted) Thread.currentThread().interrupt()
+        return interrupted
+    }
+
+    private fun sha256(value: String): String =
+        HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(value.encodeToByteArray()))
 
     private fun sequentialResult(
         bytes: ByteArray,

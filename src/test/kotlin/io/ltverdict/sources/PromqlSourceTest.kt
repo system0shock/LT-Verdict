@@ -183,6 +183,34 @@ class PromqlSourceTest {
     }
 
     @Test
+    fun `16 profiles with 64 queries acquire a 1024 series snapshot`() {
+        OnlineSourceFixture().use { fixture ->
+            val first = readSourceProfiles(fixture.profilesJson().byteInputStream()).single()
+            val profiles =
+                (1..16).map { index ->
+                    first.copy(
+                        id = "p$index",
+                        queries = (1..64).map { first.queries.single().copy(id = "q$it") },
+                        governor = first.governor.copy(requestsPerSecond = 1_000.0, burst = 1_000),
+                    )
+                }
+            val request =
+                SourceRequest(
+                    "p1",
+                    1767225600000,
+                    1767225601000,
+                    1000,
+                    additionalProfileIds = (2..16).map { "p$it" },
+                )
+
+            val snapshot = requireNotNull(PromqlSource(profiles, SourceHttp(profiles)).acquire(request, "a".repeat(64)).snapshot)
+
+            assertEquals(1_024, snapshot.snapshot.series.size)
+            assertEquals(1_024, fixture.requests.get())
+        }
+    }
+
+    @Test
     fun `a metric profile refuses a step the snapshot grid cannot use before HTTP`() {
         OnlineSourceFixture().use { fixture ->
             val profile = readSourceProfiles(fixture.profilesJson().byteInputStream()).single()

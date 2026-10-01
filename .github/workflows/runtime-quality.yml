@@ -34,6 +34,13 @@ jobs:
           node-version: 24.14.0
           cache: npm
           cache-dependency-path: ui/package-lock.json
+      - name: Set up Python 3.14
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.14"
+      - name: Install Python test dependencies
+        # numpy is needed only by the correlation validation tests.
+        run: python -m pip install numpy==2.4.2
       - name: Install frontend dependencies
         run: npm --prefix ui ci
       - name: Install Chromium
@@ -42,7 +49,9 @@ jobs:
       - name: Verify Slice 0 contracts
         run: python tools/verify_slice0.py
       - name: Run Python tests
-        run: python -m unittest tools.test_verify_slice0 tools.test_generate_jtl tools.test_onboard_test tools.test_snapshot_hash_vectors -v
+        # Discovers every tools/test_*.py. Python 3.14 and numpy are installed above,
+        # so the correlation and process-pool tests run here instead of skipping.
+        run: python -m unittest discover -s tools -p "test_*.py" -v
       - name: Verify isolated AI relay contract without provider calls
         run: node --test tools/test_advisory_ai_runtime_relay.mjs
       - name: Lint Markdown

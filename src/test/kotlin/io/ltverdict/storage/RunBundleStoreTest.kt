@@ -23,10 +23,15 @@ import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.io.TempDir
 import java.io.ByteArrayInputStream
+import java.io.IOException
 import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.StandardOpenOption
 import java.time.Instant
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.CyclicBarrier
+import java.util.concurrent.Executors
+import java.util.concurrent.TimeUnit
 
 class RunBundleStoreTest {
     @TempDir
@@ -87,6 +92,229 @@ class RunBundleStoreTest {
             assertThrows(IllegalStateException::class.java) {
                 store.acceptInput(ByteArrayInputStream(bytes), "results.csv")
             }
+            assertStagingEmpty(root)
+        }
+
+    @Test
+    fun `a slow upload does not block store reads`() =
+        withStore { store, root ->
+            val existing = store.acceptInput(ByteArrayInputStream(csvWithTimestamp(1_700_000_000_000L)), "existing.jtl")
+            val bytes = csvWithTimestamp(1_700_000_000_001L)
+            val copying = CountDownLatch(1)
+            val release = CountDownLatch(1)
+            val executor = Executors.newFixedThreadPool(3)
+            try {
+                val upload =
+                    executor.submit<AcceptedInput> {
+                        store.acceptInput(
+                            object : ByteArrayInputStream(bytes) {
+                                private var paused = false
+
+                                override fun read(
+                                    buffer: ByteArray,
+                                    offset: Int,
+                                    length: Int,
+                                ): Int {
+                                    if (!paused) {
+                                        paused = true
+                                        val count = super.read(buffer, offset, 1)
+                                        copying.countDown()
+                                        check(release.await(10, TimeUnit.SECONDS))
+                                        return count
+                                    }
+                                    return super.read(buffer, offset, length)
+                                }
+                            },
+                            "slow.jtl",
+                        )
+                    }
+                assertTrue(copying.await(5, TimeUnit.SECONDS))
+                val listed = executor.submit<RunPage> { store.listRuns(null, 10) }
+                val required = executor.submit<AcceptedInput> { store.requireInput(existing.runId) }
+                assertEquals(listOf(existing.runId), listed.get(5, TimeUnit.SECONDS).runs.map { it.runId })
+                assertEquals(existing, required.get(5, TimeUnit.SECONDS))
+                release.countDown()
+                val uploaded = upload.get(10, TimeUnit.SECONDS)
+                assertEquals(
+                    setOf(existing.runId, uploaded.runId),
+                    store
+                        .listRuns(null, 10)
+                        .runs
+                        .map { it.runId }
+                        .toSet(),
+                )
+                assertStagingEmpty(root)
+            } finally {
+                copying.countDown()
+                release.countDown()
+                executor.shutdownNow()
+                assertTrue(executor.awaitTermination(10, TimeUnit.SECONDS))
+            }
+        }
+
+    @Test
+    fun `a slow analysis writer does not block store reads`() =
+        withStore { store, root ->
+            val input = store.acceptInput(Files.newInputStream(Path.of(CSV_FIXTURE)), "input.jtl")
+            val existingIdentity =
+                """{"policy_sha256":"${"a".repeat(64)}","run_id":"${input.runId}","version":1}""".encodeToByteArray()
+            val existingId = sha256Hex(existingIdentity)
+            store.writeAnalysisAtomically(input.runId, existingId) { staging ->
+                Files.write(staging.resolve("identity.json"), existingIdentity)
+                Files.writeString(staging.resolve("analysis-result.json"), """{"policy_verdict":"PASS","run_validity":"VALID"}""")
+            }
+            val identity = """{"run_id":"${input.runId}","version":2}""".encodeToByteArray()
+            val analysisId = sha256Hex(identity)
+            val writing = CountDownLatch(1)
+            val release = CountDownLatch(1)
+            val executor = Executors.newFixedThreadPool(4)
+            try {
+                val writer =
+                    executor.submit<Path> {
+                        store.writeAnalysisAtomically(input.runId, analysisId) { staging ->
+                            writing.countDown()
+                            check(release.await(10, TimeUnit.SECONDS))
+                            Files.write(staging.resolve("identity.json"), identity)
+                            Files.writeString(
+                                staging.resolve("analysis-result.json"),
+                                """{"policy_verdict":"PASS","run_validity":"VALID"}""",
+                            )
+                        }
+                    }
+                assertTrue(writing.await(5, TimeUnit.SECONDS))
+                val listedRuns = executor.submit<RunPage> { store.listRuns(null, 10) }
+                val read = executor.submit<StoredAnalysis?> { store.readAnalysis(input.runId, existingId) }
+                val listedAnalyses = executor.submit<AnalysisPage> { store.listAnalyses(input.runId, null, 10) }
+                assertEquals(listOf(input.runId), listedRuns.get(5, TimeUnit.SECONDS).runs.map { it.runId })
+                assertEquals(
+                    existingId,
+                    read
+                        .get(5, TimeUnit.SECONDS)
+                        ?.path
+                        ?.fileName
+                        ?.toString(),
+                )
+                assertEquals(listOf(existingId), listedAnalyses.get(5, TimeUnit.SECONDS).analyses.map { it.analysisId })
+                release.countDown()
+                assertEquals(analysisId, writer.get(10, TimeUnit.SECONDS).fileName.toString())
+                assertEquals(
+                    analysisId,
+                    store
+                        .readAnalysis(input.runId, analysisId)
+                        ?.path
+                        ?.fileName
+                        ?.toString(),
+                )
+                assertStagingEmpty(root)
+            } finally {
+                writing.countDown()
+                release.countDown()
+                executor.shutdownNow()
+                assertTrue(executor.awaitTermination(10, TimeUnit.SECONDS))
+            }
+        }
+
+    @Test
+    fun `two identical uploads stage concurrently and converge on one run`() =
+        withStore { store, root ->
+            val bytes = Files.readAllBytes(Path.of(CSV_FIXTURE))
+            val barrier = CyclicBarrier(2)
+            val executor = Executors.newFixedThreadPool(2)
+            try {
+                val uploads =
+                    (1..2).map {
+                        executor.submit<AcceptedInput> {
+                            store.acceptInput(
+                                object : ByteArrayInputStream(bytes) {
+                                    private var first = true
+
+                                    override fun read(
+                                        buffer: ByteArray,
+                                        offset: Int,
+                                        length: Int,
+                                    ): Int {
+                                        if (first) {
+                                            first = false
+                                            barrier.await(5, TimeUnit.SECONDS)
+                                        }
+                                        return super.read(buffer, offset, length)
+                                    }
+                                },
+                                "same.jtl",
+                            )
+                        }
+                    }
+                val accepted = uploads.map { it.get(10, TimeUnit.SECONDS) }
+                assertEquals(accepted[0], accepted[1])
+                assertEquals(1L, Files.list(root.resolve("runs")).use { it.count() })
+                assertArrayEquals(bytes, Files.readAllBytes(accepted[0].path))
+                assertStagingEmpty(root)
+            } finally {
+                barrier.reset()
+                executor.shutdownNow()
+                assertTrue(executor.awaitTermination(10, TimeUnit.SECONDS))
+            }
+        }
+
+    @Test
+    fun `two identical analysis writes converge on one analysis`() =
+        withStore { store, root ->
+            val input = store.acceptInput(Files.newInputStream(Path.of(CSV_FIXTURE)), "input.jtl")
+            val identity = """{"run_id":"${input.runId}"}""".encodeToByteArray()
+            val analysisId = sha256Hex(identity)
+            val barrier = CyclicBarrier(2)
+            val executor = Executors.newFixedThreadPool(2)
+            try {
+                val writes =
+                    (1..2).map {
+                        executor.submit<Path> {
+                            store.writeAnalysisAtomically(input.runId, analysisId) { staging ->
+                                barrier.await(5, TimeUnit.SECONDS)
+                                Files.write(staging.resolve("identity.json"), identity)
+                                Files.writeString(
+                                    staging.resolve("analysis-result.json"),
+                                    """{"policy_verdict":"PASS","run_validity":"VALID"}""",
+                                )
+                            }
+                        }
+                    }
+                val paths = writes.map { it.get(10, TimeUnit.SECONDS) }
+                assertEquals(paths[0], paths[1])
+                assertEquals(1L, Files.list(paths[0].parent).use { it.count() })
+                assertEquals(paths[0], store.readAnalysis(input.runId, analysisId)?.path)
+                assertStagingEmpty(root)
+            } finally {
+                barrier.reset()
+                executor.shutdownNow()
+                assertTrue(executor.awaitTermination(10, TimeUnit.SECONDS))
+            }
+        }
+
+    @Test
+    fun `failed upload clears staging after partial copy`() =
+        withStore { store, root ->
+            val bytes = Files.readAllBytes(Path.of(CSV_FIXTURE))
+            assertThrows(IOException::class.java) {
+                store.acceptInput(
+                    object : ByteArrayInputStream(bytes) {
+                        private var first = true
+
+                        override fun read(
+                            buffer: ByteArray,
+                            offset: Int,
+                            length: Int,
+                        ): Int {
+                            if (first) {
+                                first = false
+                                return super.read(buffer, offset, 1)
+                            }
+                            throw IOException("copy failed")
+                        }
+                    },
+                    "failed.jtl",
+                )
+            }
+            assertEquals(0L, Files.list(root.resolve("runs")).use { it.count() })
             assertStagingEmpty(root)
         }
 

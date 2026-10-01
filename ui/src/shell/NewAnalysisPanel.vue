@@ -159,12 +159,11 @@ function levelLabel(level: ReadinessLevel) {
             <ul
               v-if="policyErrors.length"
               class="field__errors"
-              lang="en"
-              aria-live="polite"
             >
               <li
                 v-for="error in policyErrors"
                 :key="`${error.code}-${error.json_pointer}`"
+                :lang="error.code === 'MALFORMED_JSON' ? undefined : 'en'"
               >
                 {{ error.json_pointer }}: {{ error.message }}
               </li>

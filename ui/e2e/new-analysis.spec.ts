@@ -32,6 +32,7 @@ async function fixtureApi(page: Page): Promise<Calls> {
     if (method === 'GET' && path === '/api/jobs') return route.fulfill({ json: { jobs: [] } })
     if (path === '/api/policies/validate') {
       const draft = JSON.parse(request.postData() ?? '{}') as { policy_id: string }
+      if (draft.policy_id === 'malformed') return route.fulfill({ status: 400, json: { error: { code: 'MALFORMED_JSON', message: 'malformed' } } })
       if (draft.policy_id === '' || draft.policy_id === 'reject-me') {
         return route.fulfill({ status: 422, json: { valid: false, errors: [{ code: 'POLICY_ID_INVALID', json_pointer: '/policy_id', message: 'policy id is not accepted' }] } })
       }
@@ -165,6 +166,22 @@ test('an invalid policy draft blocks the start and a rejected policy file does n
   await page.getByLabel('Policy ID').fill('fixed')
   await expect(readiness(page, 'policy')).toHaveAttribute('data-level', 'ok')
   await expect(start(page)).toBeEnabled()
+})
+
+test('policy error lists are not live regions, server messages are English islands and the local one is Russian', async ({ page }) => {
+  await openSetup(page)
+  const errors = page.locator('#run-setup .field__errors')
+
+  await page.locator('#policy-file').setInputFiles(policyFile('reject-me'))
+  await expect(errors).toContainText('/policy_id: policy id is not accepted')
+  await expect(errors).not.toHaveAttribute('aria-live', /.*/)
+  await expect(errors.locator('li')).toHaveAttribute('lang', 'en')
+
+  await page.locator('#policy-file').setInputFiles(policyFile('malformed'))
+  await expect(errors).toContainText(SETUP_MESSAGES.policyMalformed)
+  await expect(errors.locator('li')).not.toHaveAttribute('lang', /.*/)
+  await expect(page.locator('#readiness-status')).toHaveAttribute('role', 'status')
+  await expect(start(page)).toHaveAttribute('aria-describedby', 'readiness-status')
 })
 
 async function fillEverythingFromFiles(page: Page) {

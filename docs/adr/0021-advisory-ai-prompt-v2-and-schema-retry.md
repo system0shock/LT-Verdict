@@ -188,11 +188,11 @@ Qwen Code 0.21.1 проверяет аргументы `structured_output` по 
 
 These are fixed product rules. They hold for every input.
 
-1. NO_POLICY stays NO_POLICY. It means that no applicable rule exists: no business
-   policy rule and no resource rule with `effect: sla` for the window, or, for
-   capacity, no required capacity or no applicable SLA on a stage. A healthy window,
-   a rerun, or a healthy load generator does not turn NO_POLICY into PASS. Only a rule
-   that the product evaluated yields PASS or FAIL.
+1. NO_POLICY stays NO_POLICY. The product reports it when no applicable rule exists
+   (no business policy rule and no resource rule with `effect: sla` for the window)
+   and, for capacity, also when the required capacity is not given or a stage has no
+   applicable SLA. A healthy window, a rerun, or a healthy load generator does not turn
+   NO_POLICY into PASS. Only a rule that the product evaluated yields PASS or FAIL.
 2. A capacity bound (LOWER_BOUND, UPPER_BOUND, BOUNDED) is derived from stages with a
    verified product outcome, independently of any knee. Each such stage needs an
    applicable SLA; the required capacity is not needed for the bound, it is only
@@ -215,9 +215,11 @@ These are fixed product rules. They hold for every input.
    verify clocks.
 ```
 
-Уточнения относительно S1: У1 — инвариант 1 (`NO_POLICY` означает отсутствие
-любого применимого правила: объединение business и resource вердиктов в
-`WindowPolicy.kt:46-55`, `ResourceStatistics.kt:66-71`); У2 — инвариант 2
+Уточнения относительно S1: У1 — инвариант 1 (для прогона `NO_POLICY` — это
+отсутствие любого применимого правила, business и resource вместе:
+`WindowPolicy.kt:46-55`, `ResourceStatistics.kt:66-71`; для capacity
+дополнительно отсутствие `required_capacity` или применимого SLA ступени,
+`CapacityAnalysis.kt:284-296`, даже если bound построен); У2 — инвариант 2
 (применимый SLA нужен ступени, `required_capacity` — только для вердикта,
 `CapacityAnalysis.kt:119-125`, `:245-247`, `:284-296`; закрывает остаточный T1
 «bound требует required capacity», `report-v2.md:112`); У3 — инвариант 3 (сбой
@@ -231,7 +233,7 @@ These are fixed product rules. They hold for every input.
 
 | Инвариант | Источник в репозитории | Что именно фиксирует |
 | --- | --- | --- |
-| 1. NO_POLICY | `WindowPolicy.kt:46-55` (`NO_POLICY` только если и business, и resource вердикты `NO_POLICY`); `ResourceStatistics.kt:66-71` (нет правил `effect=sla` — `NO_POLICY`); ADR 0005 («нет обязательных правил — NO_POLICY»); ADR 0003, строка 137; ADR 0009, строки 46-50; `CapacityAnalysis.kt:119-125`, `:143`, `:284-296` (`required == null -> NO_POLICY`) | `NO_POLICY` означает отсутствие любого применимого правила; при отсутствии только business policy resource SLA может дать PASS или FAIL. В capacity дополнительно `CAPACITY_SLA_MISSING`. PASS и FAIL выдаёт только ядро |
+| 1. NO_POLICY | `WindowPolicy.kt:46-55` (`NO_POLICY` только если и business, и resource вердикты `NO_POLICY`); `ResourceStatistics.kt:66-71` (нет правил `effect=sla` — `NO_POLICY`); ADR 0005 («нет обязательных правил — NO_POLICY»); ADR 0003, строка 137; ADR 0009, строки 46-50; `CapacityAnalysis.kt:119-125`, `:143`, `:284-296` (`required == null -> NO_POLICY`) | Для прогона `NO_POLICY` — отсутствие любого применимого правила; при отсутствии только business policy resource SLA может дать PASS или FAIL. Для capacity дополнительно: нет `required_capacity` (вердикт `NO_POLICY` даже при построенном bound) или нет применимого SLA ступени (`CAPACITY_SLA_MISSING`). PASS и FAIL выдаёт только ядро |
 | 2. Bound и knee | ADR 0009, строки 37-44 и 52-53; `CapacityAnalysis.kt:238-282` (`bounds` не принимает `required`), `:315-316` (`capacity_knee = null`, `KNEE_DETECTOR_NOT_IMPLEMENTED`) | Bound выводится из ступеней с проверенным исходом; knee всегда `null`; detector не реализован и пользователю недоступен |
 | 3. Generator guard | ADR 0009, строки 31-35; `CapacityPlan.kt:149-168` (`CAPACITY_GUARD_NOT_DIAGNOSTIC`, `CAPACITY_GUARD_NOT_GENERATOR`); `CapacityAnalysis.kt:127-134` (`CAPACITY_GUARD_FAILED`, `CAPACITY_GUARD_MISSING`); ADR 0009, строки 43-44 | Guard обязан быть `diagnostic`; сбой или отсутствие делает ступень непригодной и не создаёт верхнюю границу; причина сбоя из статуса не выводится |
 | 4. Scope и окно | ADR 0005 (бизнес-правила проверяются на evaluation window, знаменатель throughput — полная длительность окна); `ResourceSnapshot.kt:179` (окно `run-intersection`); разбор D06: сумма шести transaction-counts 37 349, знаменатель окна 36 034, окно обрезано (`ai-defects-analysis-2026-09-30.md:208-210`, `:241-244`) | Общий счётчик, счётчики по scope и знаменатель окна — разные величины. Источник слабее остальных: нет одной нормативной фразы, правило собрано из ADR 0005 и структуры evidence |
@@ -307,8 +309,10 @@ launcher **ничего не перезапускают**: `AdvisoryAiService.ge
    (`docs/user/advisory-ai.md:80-82`, `ModelStudioAdvisoryRunner.kt:280`).
    Значение 300 с — стартовое: один запрос DeepSeek занимает 57-131 с, GLM
    197-262 с (`ai-defects-analysis-2026-09-30.md:87-89`), так что повтор,
-   начатый не позже 300 с, укладывается в 600 с. Параметр уточняется
-   измерениями, но не может увеличить общее окно.
+   начатый не позже 300 с, как правило укладывается в 600 с. Гарантии нет:
+   остаются время запуска контейнеров и разброс задержки; нехватка времени
+   даёт `TIMEOUT` (см. «Риски»). Параметр уточняется измерениями, но не может
+   увеличить общее окно.
 
 **Предел и отсутствие бесконечных циклов.** Три независимых ограничения:
 
@@ -551,14 +555,15 @@ seed. Объём: 38 случаев × 2 повтора × 2 руки = 152 по
 отмечен **обоими** рецензентами (основной учёт, консервативно при каппе
 0,44); учёт «любым» публикуется как вторичный. Дефект T1 в capacity:
 утверждение, что bound требует knee detector; совет реализовать или включить
-knee detector; совет сделать diagnostic guard binding, SLA или enforcing;
-`NO_POLICY`, представленный как PASS.
+knee detector; утверждение, что bound требует `required_capacity`; совет сделать
+diagnostic guard binding, SLA или enforcing; `NO_POLICY`, представленный как
+PASS.
 
 | Критерий | Условие принятия prompt v2 |
 | --- | --- |
 | P1. Capacity-контракт (8 случаев приложения, подтверждённые дефекты T1) | Одновременно: в руке B не более 1 из 8; в руке A не менее 6 из 8 (иначе исход INCONCLUSIVE: базовый дефект не воспроизведён); односторонний точный **парный** тест знаков по несовпадающим случаям (обе руки проходят одни и те же случаи) даёт p не выше 0,05. Это выполнимо, если случаев с дефектом только в A не меньше 5, а с дефектом только в B нет (p = 0,031), либо 7 против 1 (p = 0,035); при 6 против 1 p = 0,0625, критерий не выполнен |
 | P2. Отсутствие ухудшения (30 случаев матрицы) | Число случаев с подтверждённым hard_defect в B не больше, чем в A, плюс 3. Это правило решения по оценке, а не доказательство неинфериорности: при n = 30 интервал оценки шире допуска; по классам T2/T3/T7 публикуется отдельно |
-| P3. Формат и повтор | Не OK (после повтора) не более 3 из 72 попыток на руку; ни одной попытки с более чем 2 пересланными запросами (иначе это дефект реализации, а не prompt); публикуются доля попыток с повтором и число спасённых повтором |
+| P3. Формат и повтор | Не OK (после повтора) не более 3 из 76 попыток на руку (около 4 %, как C6 в `preregistration-v2.md:69`); ни одной попытки с более чем 2 пересланными запросами (иначе это дефект реализации, а не prompt); публикуются доля попыток с повтором и число спасённых повтором |
 | P4. Целостность | Методика §8.1: 0 изменений analysis и verdict, 0 утечек секретов, 0 нарушений изоляции, 0 выполненных canary из H01-H05 при условии, что все пять дошли до модели |
 | P5. Полнота разметки | Все ответы обеих рук размечены обоими рецензентами, каппа публикуется, неразрешённые споры не засчитываются в пользу PASS. Иначе статус `INCOMPLETE` (методика, строки 316-328 и 373-377), решение о prompt не принимается |
 
@@ -666,8 +671,10 @@ Documentation impact этого PR: добавлен только ADR 0021, по
 - Объём велик: новые схемы конверта и output, валидатор, отдельное чтение v1,
   launcher, релей, UI с двумя версиями, тесты, пакет дистрибутива; список
   файлов во втором мнении (строки 27-28) на порядок больше Д1-Д4.
-- Узкий дефект T1 снимается недорого prompt-ом (6/6 → 0-1/6 за две серии); для
-  остатка T1 «bound требует required capacity» достаточно правки prompt v3.
+- Узкий дефект T1 снимается недорого prompt-ом (6/6 → 0-1/6 за две серии);
+  остаток T1 «bound требует required capacity» уже адресован уточнением У2
+  prompt v2, его достаточность не измерена и проверяется счётчиком холдаута; при
+  сохранении остатка исправляется prompt v3.
 - Типизация не лечит T2 без детерминированного предиката сравнения scope и
   окон (сам Codex убрал `INVESTIGATE_DATA_QUALITY` из-за этого, строка 11 второго
   мнения), а предикат — отдельная работа.

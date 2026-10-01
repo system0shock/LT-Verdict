@@ -400,9 +400,10 @@ async function restoreActiveJob() {
 
 async function cancel() {
   if (!job.value || !working.value) return
-  analysisRevision += 1
+  const revision = ++analysisRevision
   try {
     job.value = await cancelJob(job.value.job_id)
+    await pollJob(revision)
   } catch (failure) {
     showError(failure)
   }

@@ -285,6 +285,48 @@ class ConcurrencyAcceptanceTest {
         }
     }
 
+    @Test
+    fun `closing while a publication is committed keeps the job COMPLETE`() {
+        val bytes = Files.readAllBytes(Path.of(CSV_FIXTURE))
+        DataDirectory.open(Files.createTempDirectory(tempDir, "close-during-publish-")).use { directory ->
+            val store = RunBundleStore(directory)
+            val input = store.acceptInput(ByteArrayInputStream(bytes), "input.jtl")
+            val identity = """{"run_id":"${input.runId}"}"""
+            val analysisId = sha256(identity)
+            val arrived = CountDownLatch(1)
+            val release = CountDownLatch(1)
+            val jobs =
+                AnalysisJobs(1) { request, _, cancelled ->
+                    val path =
+                        store.writeAnalysisAtomically(
+                            request.input.runId,
+                            analysisId,
+                            beforePublish = {
+                                cancelled.beforePublish()
+                                arrived.countDown()
+                                awaitUninterruptibly(release)
+                            },
+                        ) { staging -> Files.writeString(staging.resolve("identity.json"), identity) }
+                    AnalysisOutcome(request.input.runId, analysisId, byteArrayOf(), path)
+                }
+            val executor = Executors.newSingleThreadExecutor()
+            try {
+                val job = accepted(jobs.submit(AnalysisRequest(input, null)))
+                assertTrue(arrived.await(TIMEOUT_SECONDS, TimeUnit.SECONDS))
+                val closing = executor.submit { jobs.close() }
+                assertThrows(TimeoutException::class.java) { closing.get(100, TimeUnit.MILLISECONDS) }
+                release.countDown()
+                closing.get(TIMEOUT_SECONDS, TimeUnit.SECONDS)
+                assertEquals(JobState.COMPLETE, jobs.status(job.jobId)?.state)
+                assertTrue(store.readAnalysis(input.runId, analysisId) != null)
+            } finally {
+                release.countDown()
+                executor.shutdownNow()
+                jobs.close()
+            }
+        }
+    }
+
     private fun awaitUninterruptibly(latch: CountDownLatch): Boolean {
         val deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(TIMEOUT_SECONDS)
         var interrupted = false

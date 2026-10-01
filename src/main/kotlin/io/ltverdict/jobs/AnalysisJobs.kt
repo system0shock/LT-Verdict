@@ -106,12 +106,16 @@ internal class AnalysisJobs(
     fun activeStatuses(): List<JobStatus> = synchronized(lock) { active.keys.map(statuses::getValue) }
 
     fun cancel(jobId: String): JobStatus? {
+        var observed: JobStatus? = null
         val finished =
             synchronized(lock) {
                 val current = statuses[jobId] ?: return null
                 if (current.state.isTerminal()) return current
                 val record = active.getValue(jobId)
-                if (record.publishing) return@synchronized record.finished
+                if (record.publishing) {
+                    observed = current
+                    return@synchronized record.finished
+                }
                 record.cancelled.set(true)
                 executor.remove(record.task)
                 record.runner?.interrupt()
@@ -122,7 +126,8 @@ internal class AnalysisJobs(
         } catch (_: InterruptedException) {
             Thread.currentThread().interrupt()
         }
-        return synchronized(lock) { statuses[jobId] }
+        // The terminal status can be evicted while waiting; fall back to the status seen before the wait.
+        return synchronized(lock) { statuses[jobId] } ?: observed
     }
 
     override fun close() {
@@ -131,6 +136,8 @@ internal class AnalysisJobs(
                 if (closed) return
                 closed = true
                 active.entries.toList().mapNotNull { (jobId, record) ->
+                    // A job that already committed its publication finishes on its own; it is never reported CANCELLED.
+                    if (record.publishing) return@mapNotNull null
                     record.cancelled.set(true)
                     executor.remove(record.task)
                     val current = statuses.getValue(jobId)
@@ -139,7 +146,7 @@ internal class AnalysisJobs(
                 }
             }
         runners.forEach(Thread::interrupt)
-        executor.shutdownNow()
+        executor.shutdown()
         executor.awaitTermination(CLOSE_TIMEOUT_SECONDS, TimeUnit.SECONDS)
     }
 

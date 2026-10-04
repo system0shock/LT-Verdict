@@ -138,6 +138,56 @@ class PlatformProfilesTest(unittest.TestCase):
             with self.subTest(step=step), self.assertRaisesRegex(ValueError, "subquery_step must be between 1s and 60s"):
                 build_connections(dict(BASE, subquery_step=step))
 
+    def test_scrape_interval_selects_v3_and_is_on_every_profile(self):
+        config = dict(BASE, services=[f"svc-{i:02d}" for i in range(25)], signals=list(SIGNALS)[:3])
+        legacy = build_connections(config)
+        self.assertEqual("source-connections.v1", legacy["schema_version"])
+        self.assertTrue(all("scrape_interval_ms" not in p for p in legacy["connections"]))
+        v3 = build_connections(dict(config, scrape_interval_ms=30000))
+        self.assertEqual("source-connections.v3", v3["schema_version"])
+        self.assertEqual([30000, 30000], [p["scrape_interval_ms"] for p in v3["connections"]])
+
+    def test_request_step_requires_scrape_interval(self):
+        with self.assertRaisesRegex(ValueError, "^request_step_ms requires scrape_interval_ms$"):
+            build_connections(dict(BASE, request_step_ms=60000))
+
+    def test_scrape_and_request_step_must_be_whole_seconds_in_range(self):
+        for scrape in (0, 500, 1500, 3600001, True, 30000.0, "30000"):
+            with self.subTest(scrape=scrape), self.assertRaises(ValueError):
+                build_connections(dict(BASE, scrape_interval_ms=scrape))
+        for step in (0, 500, 1500, 60001, True, 30000.0, "30000"):
+            with self.subTest(step=step), self.assertRaises(ValueError):
+                build_connections(dict(BASE, scrape_interval_ms=30000, request_step_ms=step))
+
+    def test_rate_signals_refuse_a_window_below_two_scrapes(self):
+        # P0c is not in this worktree; exercise the generic guard with a temporary JVM rate signal.
+        jvm_gc_time = replace(SIGNALS["oom"], metric="openshift_jvm_gc_time")
+        with patch.dict(SIGNALS, {"jvm_gc_time": jvm_gc_time}):
+            for signal in ("oom", "restarts", "cpu_throttling", "jvm_gc_time"):
+                with self.subTest(signal=signal), self.assertRaisesRegex(
+                    ValueError, f"PLATFORM_RATE_WINDOW_TOO_SHORT.*{signal}"
+                ):
+                    build_connections(dict(BASE, signals=[signal], scrape_interval_ms=30000, request_step_ms=15000))
+
+    def test_rate_refusal_names_all_affected_signals(self):
+        with self.assertRaisesRegex(ValueError, "PLATFORM_RATE_WINDOW_TOO_SHORT: oom, restarts"):
+            build_connections(dict(BASE, signals=["oom", "restarts"], scrape_interval_ms=30000, request_step_ms=15000))
+
+    def test_rate_window_at_two_scrapes_passes(self):
+        document = build_connections(dict(BASE, scrape_interval_ms=30000, request_step_ms=60000))
+        self.assertEqual("source-connections.v3", document["schema_version"])
+
+    def test_step_below_scrape_refuses_even_without_rate(self):
+        config = dict(BASE, signals=["cpu_limit_ratio"], scrape_interval_ms=30000)
+        with self.assertRaisesRegex(ValueError, "^PLATFORM_STEP_BELOW_SCRAPE_INTERVAL$"):
+            build_connections(dict(config, request_step_ms=15000))
+        build_connections(dict(config, request_step_ms=30000))
+
+    def test_subquery_step_must_not_exceed_scrape_interval(self):
+        with self.assertRaisesRegex(ValueError, "^PLATFORM_SUBQUERY_COARSER_THAN_SCRAPE$"):
+            build_connections(dict(BASE, scrape_interval_ms=5000, subquery_step="15s"))
+        build_connections(dict(BASE, scrape_interval_ms=5000, subquery_step="5s"))
+
     def test_rendered_expression_must_fit_parser_limit(self):
         oversized = replace(SIGNALS["oom"], expression="\u00e9" * 32_769)
         with patch.dict(SIGNALS, {"oom": oversized}):
@@ -180,6 +230,7 @@ class PlatformProfilesTest(unittest.TestCase):
         pairs = (
             ("fixtures/platform/profile-config.example.json", "docs/contracts/sources/v1/platform-openshift-connections.example.json"),
             ("fixtures/platform/profile-config.peak.example.json", "docs/contracts/sources/v1/platform-openshift-peak-connections.example.json"),
+            ("fixtures/platform/profile-config.autostep.example.json", "docs/contracts/sources/v1/platform-openshift-autostep-connections.example.json"),
         )
         for config_path, example_path in pairs:
             config = json.loads(Path(config_path).read_text(encoding="utf-8"))

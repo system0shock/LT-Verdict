@@ -680,6 +680,65 @@ class SourceConfigTest {
     }
 
     @Test
+    fun `connections v3 declare non negative events and older versions reject the field`() {
+        fun connections(
+            version: String,
+            flag: String,
+        ) = """{"schema_version":"$version","connections":[{"id":"p","source_kind":"prometheus","transport":"direct",
+            "base_url":"https://example.test","queries":[{"id":"oom","expression":"increase(x[${'$'}__interval])",
+            "metric":"x","unit":"events","entity":"e","role":"system","aggregation":"interval_rate"$flag}]}]}"""
+
+        assertEquals(
+            true,
+            readSourceProfiles(connections("source-connections.v3", ",\"non_negative_events\":true").byteInputStream())
+                .single()
+                .queries
+                .single()
+                .nonNegativeEvents,
+        )
+        assertEquals(
+            false,
+            readSourceProfiles(connections("source-connections.v3", "").byteInputStream())
+                .single()
+                .queries
+                .single()
+                .nonNegativeEvents,
+        )
+        listOf("source-connections.v1", "source-connections.v2").forEach { version ->
+            assertThrows(IllegalArgumentException::class.java) {
+                readSourceProfiles(connections(version, ",\"non_negative_events\":true").byteInputStream())
+            }
+        }
+        assertThrows(IllegalArgumentException::class.java) {
+            readSourceProfiles(connections("source-connections.v3", ",\"non_negative_events\":\"true\"").byteInputStream())
+        }
+    }
+
+    @Test
+    fun `an event series with gt up to zero and interval min is rejected at any step`() {
+        fun profile(
+            aggregation: String,
+            threshold: String,
+            flag: String,
+        ) = """{"schema_version":"source-connections.v3","connections":[{"id":"p","source_kind":"prometheus","transport":"direct",
+            "base_url":"https://example.test","queries":[{"id":"oom","expression":"min_over_time(x[${'$'}__interval])",
+            "metric":"x","unit":"events","entity":"e","role":"system","aggregation":"$aggregation"$flag}],
+            "rules":[{"id":"r","series_id":"oom","unit":"events","operator":"gt","threshold":$threshold,
+            "min_consecutive_cells":1,"effect":"sla"}]}]}"""
+
+        listOf("0", "-1").forEach { threshold ->
+            assertEquals(
+                "SOURCE_CONFIG_INVALID",
+                assertThrows(IllegalArgumentException::class.java) {
+                    readSourceProfiles(profile("interval_min", threshold, ",\"non_negative_events\":true").byteInputStream())
+                }.message,
+            )
+        }
+        readSourceProfiles(profile("interval_min", "0", "").byteInputStream())
+        readSourceProfiles(profile("interval_min", "5", ",\"non_negative_events\":true").byteInputStream())
+    }
+
+    @Test
     fun `connections v3 declare a rule by duration and exactly one of cells or duration`() {
         val declared =
             """{"id":"r","series_id":"q","unit":"ratio","operator":"gt",

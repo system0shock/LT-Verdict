@@ -430,6 +430,49 @@ class PromqlSourceTest {
     }
 
     @Test
+    fun `a negative value in a declared non negative event series fails the query`() {
+        val server = HttpServer.create(InetSocketAddress("127.0.0.1", 0), 0)
+        server.createContext("/api/v1/query_range") { exchange ->
+            val body = matrix("""{"instance":"node-a"}""", """[[1,"0"],[2,"-1"]]""").encodeToByteArray()
+            exchange.sendResponseHeaders(200, body.size.toLong())
+            exchange.responseBody.use { it.write(body) }
+        }
+        server.start()
+        try {
+            val profile =
+                SourceProfile(
+                    id = "local",
+                    sourceKind = SourceKind.PROMETHEUS,
+                    transport = SourceTransport.DIRECT,
+                    baseUrl = URI.create("http://127.0.0.1:${server.address.port}"),
+                    datasourceUid = null,
+                    allowInsecureHttp = true,
+                    governor = SourceGovernor(requestsPerSecond = 1_000.0, timeoutMillis = 2_000, maxAttempts = 1),
+                    queries =
+                        listOf(
+                            query("oom", "increase(oom[\$__interval])", "events", ResourceAggregation.INTERVAL_RATE)
+                                .copy(nonNegativeEvents = true),
+                            query("plain", "plain[\$__interval]", "events", ResourceAggregation.INTERVAL_RATE),
+                        ),
+                )
+
+            val acquisition =
+                PromqlSource(listOf(profile), SourceHttp(listOf(profile))).acquire(
+                    SourceRequest("local", 0, 2_000, 1_000),
+                    HASH,
+                )
+
+            assertEquals("FAILED" to "NEGATIVE_EVENT_VALUE", acquisition.evidence.queryStatus("oom"))
+            assertEquals("SUCCESS" to null, acquisition.evidence.queryStatus("plain"))
+            val series = requireNotNull(acquisition.snapshot).snapshot.series.associateBy { it.id }
+            assertEquals(listOf(null, null), series.getValue("oom").values)
+            assertEquals(listOf(BigDecimal.ZERO, BigDecimal("-1")), series.getValue("plain").values)
+        } finally {
+            server.stop(0)
+        }
+    }
+
+    @Test
     fun `collector uses right-bound query persists only accepted responses and keeps failed SLA series`() {
         val good = matrix("""{"instance":"node-a","zone":"test"}""", """[[1,"1"]]""").encodeToByteArray()
         val warningResponse =

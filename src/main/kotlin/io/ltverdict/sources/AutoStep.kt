@@ -148,14 +148,16 @@ private fun checkCoarsening(selected: List<SourceProfile>): List<ReducedSeries> 
         profile.queries.forEach { query ->
             val rules = profile.rules.filter { it.seriesId == query.id }
             rules.forEach { rule ->
-                if (rule.id !in profile.ruleSpansMillis) {
+                if (rule.id !in profile.ruleSpansMillis &&
+                    !(query.nonNegativeEvents && eventIncrementRule(rule) && rule.minConsecutiveCells == 1)
+                ) {
                     throw SourcePlanRefusal(
                         AUTO_STEP_RULE_IN_CELLS,
                         "Rule ${rule.id} on series ${query.id} of profile ${profile.id} is declared in cells; " +
                             "declare min_consecutive_span_ms (source-connections.v3) to use a coarser step",
                     )
                 }
-                if (query.aggregation !in survivingAggregations(rule)) {
+                if (query.aggregation !in survivingAggregations(rule, query)) {
                     throw SourcePlanRefusal(
                         AUTO_STEP_AGGREGATION_MISMATCH,
                         "Rule ${rule.id} on series ${query.id} of profile ${profile.id} needs " +
@@ -175,7 +177,17 @@ private fun checkCoarsening(selected: List<SourceProfile>): List<ReducedSeries> 
 private fun peakAggregation(operator: ResourceOperator): ResourceAggregation =
     if (operator == ResourceOperator.GT) ResourceAggregation.INTERVAL_MAX else ResourceAggregation.INTERVAL_MIN
 
-private fun survivingAggregations(rule: ResourceRuleV1): Set<ResourceAggregation> = setOf(peakAggregation(rule.operator))
+internal fun eventIncrementRule(rule: ResourceRuleV1): Boolean = rule.operator == ResourceOperator.GT && rule.threshold.signum() <= 0
+
+private fun survivingAggregations(
+    rule: ResourceRuleV1,
+    query: SourceQuery,
+): Set<ResourceAggregation> =
+    if (query.nonNegativeEvents && eventIncrementRule(rule)) {
+        setOf(ResourceAggregation.INTERVAL_MEAN, ResourceAggregation.INTERVAL_RATE, ResourceAggregation.INTERVAL_MAX)
+    } else {
+        setOf(peakAggregation(rule.operator))
+    }
 
 /** Add v4 step selection fields to source_summary. */
 internal fun JsonObjectBuilder.putStepProvenance(applied: AppliedStep?) {

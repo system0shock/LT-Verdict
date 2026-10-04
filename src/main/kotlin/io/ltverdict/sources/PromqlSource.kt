@@ -135,6 +135,9 @@ internal class PromqlSource(
                             )
                     }
                 if (rawBytes + body.size > MAX_ACQUISITION_RESPONSE_BYTES) fail("RESOURCE_LIMIT_EXCEEDED")
+                if (query.nonNegativeEvents && decoded != null && decoded.values.any { it != null && it.signum() < 0 }) {
+                    fail("NEGATIVE_EVENT_VALUE")
+                }
 
                 val series =
                     CollectedSeries(

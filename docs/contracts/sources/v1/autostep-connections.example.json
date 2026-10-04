@@ -16,6 +16,16 @@
           "entity": "service-a",
           "role": "system",
           "aggregation": "interval_max"
+        },
+        {
+          "id": "oom-kills",
+          "expression": "increase(container_oom_events_total[$__interval])",
+          "metric": "oom_events",
+          "unit": "events",
+          "entity": "service-a",
+          "role": "system",
+          "aggregation": "interval_rate",
+          "non_negative_events": true
         }
       ],
       "rules": [
@@ -26,6 +36,15 @@
           "operator": "gt",
           "threshold": 0.8,
           "min_consecutive_span_ms": 60000,
+          "effect": "sla"
+        },
+        {
+          "id": "oom-any",
+          "series_id": "oom-kills",
+          "unit": "events",
+          "operator": "gt",
+          "threshold": 0,
+          "min_consecutive_cells": 1,
           "effect": "sla"
         }
       ]

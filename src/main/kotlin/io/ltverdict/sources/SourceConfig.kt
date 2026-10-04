@@ -80,6 +80,8 @@ internal data class SourceQuery(
     val role: ResourceRole,
     val aggregation: ResourceAggregation,
     val labels: Map<String, String>,
+    // Only source-connections.v3: series values are non-negative event increments; data is checked via NEGATIVE_EVENT_VALUE.
+    val nonNegativeEvents: Boolean = false,
 )
 
 internal data class SourceProfile(
@@ -413,10 +415,23 @@ private fun parseProfile(
             if ("opensearch" in value) configInvalid()
             null
         }
-    val queries = if (openSearch != null) emptyList() else parseQueries(value.sourceArray("queries"), sourceKind)
+    val queries = if (openSearch != null) emptyList() else parseQueries(value.sourceArray("queries"), sourceKind, allowAutoStep)
     val (rules, spans) =
         value.optionalArray("rules")?.let { parseRules(it, queries, allowAutoStep) }
             ?: (emptyList<ResourceRuleV1>() to emptyMap<String, Long>())
+    if (allowAutoStep) {
+        val byId = queries.associateBy(SourceQuery::id)
+        rules.forEach { rule ->
+            val query = byId[rule.seriesId]
+            if (query != null &&
+                query.nonNegativeEvents &&
+                eventIncrementRule(rule) &&
+                query.aggregation == ResourceAggregation.INTERVAL_MIN
+            ) {
+                configInvalid()
+            }
+        }
+    }
     return SourceProfile(
         id,
         sourceKind,
@@ -526,12 +541,16 @@ private fun parseGovernor(element: JsonElement): SourceGovernor {
 private fun parseQueries(
     values: JsonArray,
     sourceKind: SourceKind,
+    allowAutoStep: Boolean,
 ): List<SourceQuery> {
     if (values.isEmpty() || values.size > MAX_SOURCE_QUERIES) configInvalid()
     val ids = HashSet<String>()
     return values.map { element ->
         val value = element.sourceObject()
-        value.rejectUnknown(setOf("id", "expression", "metric", "unit", "entity", "role", "aggregation", "labels"))
+        value.rejectUnknown(
+            setOf("id", "expression", "metric", "unit", "entity", "role", "aggregation", "labels") +
+                if (allowAutoStep) setOf("non_negative_events") else emptySet(),
+        )
         val id = value.sourceText("id", MAX_IDENTIFIER_BYTES)
         if (!ids.add(id)) configInvalid()
         val expression = value.sourceText("expression", MAX_QUERY_BYTES)
@@ -554,6 +573,7 @@ private fun parseQueries(
             role,
             aggregation,
             value["labels"]?.let(::parseLabels).orEmpty(),
+            if (allowAutoStep) value.optionalBoolean("non_negative_events") ?: false else false,
         )
     }
 }

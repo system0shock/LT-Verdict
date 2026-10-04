@@ -290,6 +290,61 @@ class AutoStepTest {
     }
 
     @Test
+    fun `non negative events keep mean rate and max only for gt up to zero`() {
+        fun refused(
+            aggregation: ResourceAggregation,
+            operator: ResourceOperator = ResourceOperator.GT,
+            threshold: String = "0",
+            events: Boolean = true,
+            cells: Int? = 1,
+        ): String? =
+            try {
+                val declared =
+                    profile(
+                        queries = listOf(query("q1", aggregation).copy(nonNegativeEvents = events), query("q2")),
+                        rules = listOf(rule("r", "q1", operator, BigDecimal(threshold), cells = cells ?: 1)),
+                    )
+                val selected = if (cells == null) declared.copy(ruleSpansMillis = mapOf("r" to 60_000L)) else declared
+                apply(listOf(selected), cellBudget = 400L)
+                null
+            } catch (refusal: SourcePlanRefusal) {
+                refusal.code
+            }
+
+        assertEquals(null, refused(ResourceAggregation.INTERVAL_RATE))
+        assertEquals(null, refused(ResourceAggregation.INTERVAL_MEAN))
+        assertEquals(null, refused(ResourceAggregation.INTERVAL_MAX))
+        assertEquals(null, refused(ResourceAggregation.INTERVAL_RATE, threshold = "-1"))
+        assertEquals(AUTO_STEP_AGGREGATION_MISMATCH, refused(ResourceAggregation.INTERVAL_MIN))
+        assertEquals(AUTO_STEP_AGGREGATION_MISMATCH, refused(ResourceAggregation.INTERVAL_RATE, threshold = "0.5", cells = null))
+        assertEquals(
+            AUTO_STEP_AGGREGATION_MISMATCH,
+            refused(ResourceAggregation.INTERVAL_MEAN, operator = ResourceOperator.LT, cells = null),
+        )
+        assertEquals(AUTO_STEP_AGGREGATION_MISMATCH, refused(ResourceAggregation.INTERVAL_RATE, events = false, cells = null))
+        assertEquals(AUTO_STEP_RULE_IN_CELLS, refused(ResourceAggregation.INTERVAL_RATE, cells = 2))
+        assertEquals(AUTO_STEP_RULE_IN_CELLS, refused(ResourceAggregation.INTERVAL_RATE, events = false))
+        assertEquals(AUTO_STEP_RULE_IN_CELLS, refused(ResourceAggregation.INTERVAL_RATE, threshold = "0.5"))
+    }
+
+    @Test
+    fun `an event series with a mean aggregation is still listed as reduced`() {
+        val events = query("oom", ResourceAggregation.INTERVAL_RATE).copy(nonNegativeEvents = true)
+        val declared =
+            profile(
+                queries = listOf(events, query("q2")),
+                rules = listOf(rule("r", "oom", ResourceOperator.GT, BigDecimal.ZERO)),
+            )
+
+        val applied = apply(listOf(declared), cellBudget = 400L)
+
+        assertEquals(
+            listOf(ReducedSeries("oom", ResourceAggregation.INTERVAL_RATE), ReducedSeries("q2", ResourceAggregation.INTERVAL_MEAN)),
+            applied.reduced,
+        )
+    }
+
+    @Test
     fun `a series with a gt and an lt rule can satisfy neither and a duration rule is allowed`() {
         val both =
             profile(

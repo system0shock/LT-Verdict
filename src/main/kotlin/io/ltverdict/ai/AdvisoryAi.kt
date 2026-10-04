@@ -197,6 +197,8 @@ internal data class RunnerProvenance(
     val runnerVersion: String,
     val runnerArtifactSha256: String,
     val modelId: String,
+    /** Host and port the relay reported as the actual destination of the evidence (ADR 0023, D4). */
+    val endpointHost: String,
     val promptVersion: String,
     val promptSha256: String,
     val durationMillis: Long,
@@ -311,6 +313,7 @@ internal class AdvisoryAiService(
                         put("runner_version", success.provenance.runnerVersion)
                         put("runner_artifact_sha256", success.provenance.runnerArtifactSha256)
                         put("model_id", success.provenance.modelId)
+                        put("endpoint_host", success.provenance.endpointHost)
                         put("prompt_version", success.provenance.promptVersion)
                         put("prompt_sha256", success.provenance.promptSha256)
                         put("duration_ms", success.provenance.durationMillis)
@@ -345,11 +348,17 @@ internal fun validateStoredAdvice(
     }
     AdviceOutputValidator.validate(canonicalJson(document.objectValue("output")), evidence.references)
     val provenance = document.objectValue("provenance")
-    if (provenance.keys != PROVENANCE_FIELDS ||
+    // The model is not compared with the current configuration: the operator may change the file, and advice saved
+    // earlier must stay readable (ADR 0023, D4). The slug pattern and the closed key set are checked instead.
+    val hasEndpointHost = provenance.keys == PROVENANCE_FIELDS + "endpoint_host"
+    if ((provenance.keys != PROVENANCE_FIELDS && !hasEndpointHost) ||
         provenance.string("runner_id") != QwenCode0211.RUNNER_ID ||
         provenance.string("runner_version") != QwenCode0211.RUNNER_VERSION ||
         provenance.string("runner_artifact_sha256") != QwenCode0211.CLI_ENTRY_SHA256 ||
-        provenance.string("model_id") != QwenCode0211.MODEL_ID ||
+        !validModelSlug(provenance.string("model_id")) ||
+        (hasEndpointHost && !validEndpointHost(provenance.string("endpoint_host"))) ||
+        // Advice saved before endpoint_host existed could only come from the built-in ModelStudio endpoint and its model.
+        (!hasEndpointHost && provenance.string("model_id") != QwenCode0211.MODEL_ID) ||
         provenance.string("prompt_version") != QwenCode0211.PROMPT_VERSION ||
         !SHA256.matches(provenance.string("prompt_sha256")) ||
         provenance.string("validation") != "PASSED" ||
@@ -369,7 +378,8 @@ private fun validProvenance(value: RunnerProvenance): Boolean =
     value.runnerId == QwenCode0211.RUNNER_ID &&
         value.runnerVersion == QwenCode0211.RUNNER_VERSION &&
         value.runnerArtifactSha256 == QwenCode0211.CLI_ENTRY_SHA256 &&
-        value.modelId == QwenCode0211.MODEL_ID &&
+        validModelSlug(value.modelId) &&
+        validEndpointHost(value.endpointHost) &&
         value.promptVersion == QwenCode0211.PROMPT_VERSION &&
         SHA256.matches(value.promptSha256) &&
         value.durationMillis in 0..613_000 &&

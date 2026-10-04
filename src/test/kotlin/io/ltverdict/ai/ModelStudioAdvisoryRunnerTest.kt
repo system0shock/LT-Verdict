@@ -87,7 +87,7 @@ class ModelStudioAdvisoryRunnerTest {
             Write-Output ('suppressed-host-output' * 2000)
             [IO.File]::WriteAllText((Join-Path ${'$'}PSScriptRoot 'capture.txt'), ${'$'}CredentialEnvFile + "`n" + ((Get-ChildItem Env: | ForEach-Object { ${'$'}_.Name + '=' + ${'$'}_.Value }) -join "`n"))
             [IO.File]::WriteAllText(${'$'}OutputPath, '{"schema_version":"ai-advice-output.v1","summary":"bounded","hypotheses":[],"recommendations":[],"caveats":[]}')
-            [IO.File]::WriteAllText(${'$'}ResultPath, '{"schema_version":"advisory-ai-runtime-result.v1","status":"SUCCESS","duration_ms":12,"exit_code":0}')
+            [IO.File]::WriteAllText(${'$'}ResultPath, '{"schema_version":"advisory-ai-runtime-result.v1","status":"SUCCESS","duration_ms":12,"exit_code":0,"endpoint_host":"token-plan.ap-southeast-1.maas.aliyuncs.com:443"}')
             exit 0
             """.trimIndent(),
         )
@@ -100,6 +100,7 @@ class ModelStudioAdvisoryRunnerTest {
                 ),
             )
         val success = assertInstanceOf(RunnerOutcome.Success::class.java, runner.invoke(EVIDENCE))
+        assertEquals("token-plan.ap-southeast-1.maas.aliyuncs.com:443", success.provenance.endpointHost)
 
         assertArrayEquals(
             """{"schema_version":"ai-advice-output.v1","summary":"bounded","hypotheses":[],"recommendations":[],"caveats":[]}"""
@@ -111,6 +112,45 @@ class ModelStudioAdvisoryRunnerTest {
         val capture = Files.readString(tools.resolve("capture.txt"))
         assertFalse(capture.contains("probe-secret-value"))
         assertTrue(capture.contains(credential.toString()))
+    }
+
+    @Test
+    @EnabledOnOs(OS.WINDOWS)
+    fun `success without a valid observed endpoint host is a process failure`() {
+        val tools = Files.createDirectories(tempDir.resolve("tools"))
+        val prompt = Files.createDirectories(tempDir.resolve("docs/contracts/advice/v1")).resolve("system-prompt.md")
+        Files.writeString(prompt, "bounded prompt")
+        val credential = tempDir.resolve("modelstudio.env")
+        Files.writeString(credential, "OPENAI_API_KEY=fake\n")
+        val script = tools.resolve("advisory_ai_runtime.ps1")
+        val runner =
+            ModelStudioAdvisoryRunner.fromEnvironment(
+                mapOf(
+                    "LT_VERDICT_AI_CREDENTIAL_ENV_FILE" to credential.toString(),
+                    "LT_VERDICT_AI_RUNTIME_ROOT" to tempDir.toString(),
+                ),
+            )
+        // Absent, null, a number, and values that are not lower case host:port.
+        listOf(
+            "",
+            ",\"endpoint_host\":null",
+            ",\"endpoint_host\":443",
+            ",\"endpoint_host\":\"\"",
+            ",\"endpoint_host\":\"models.example\"",
+            ",\"endpoint_host\":\"https://models.example:443\"",
+        ).forEach { member ->
+            Files.writeString(
+                script,
+                """
+                param([string]${'$'}Mode,[string]${'$'}EvidencePath,[string]${'$'}OutputPath,[string]${'$'}ResultPath,[string]${'$'}CancelPath,[string]${'$'}CredentialEnvFile,[string]${'$'}QwenPackageRoot)
+                [IO.File]::WriteAllText(${'$'}OutputPath, '{"schema_version":"ai-advice-output.v1","summary":"bounded","hypotheses":[],"recommendations":[],"caveats":[]}')
+                [IO.File]::WriteAllText(${'$'}ResultPath, '{"schema_version":"advisory-ai-runtime-result.v1","status":"SUCCESS","duration_ms":12,"exit_code":0$member}')
+                exit 0
+                """.trimIndent(),
+            )
+
+            assertEquals(RunnerOutcome.Failed(AdviceFailure.PROCESS_FAILED), runner.invoke(EVIDENCE), member)
+        }
     }
 
     @Test
@@ -127,7 +167,7 @@ class ModelStudioAdvisoryRunnerTest {
             param([string]${'$'}Mode,[string]${'$'}EvidencePath,[string]${'$'}OutputPath,[string]${'$'}ResultPath,[string]${'$'}CancelPath,[string]${'$'}CredentialEnvFile,[string]${'$'}QwenPackageRoot)
             [IO.File]::WriteAllText((Join-Path ${'$'}PSScriptRoot 'capture.txt'), ((Get-ChildItem Env: | ForEach-Object { ${'$'}_.Name + '=' + ${'$'}_.Value }) -join "`n"))
             [IO.File]::WriteAllText(${'$'}OutputPath, '{"schema_version":"ai-advice-output.v1","summary":"bounded","hypotheses":[],"recommendations":[],"caveats":[]}')
-            [IO.File]::WriteAllText(${'$'}ResultPath, '{"schema_version":"advisory-ai-runtime-result.v1","status":"SUCCESS","duration_ms":12,"exit_code":0}')
+            [IO.File]::WriteAllText(${'$'}ResultPath, '{"schema_version":"advisory-ai-runtime-result.v1","status":"SUCCESS","duration_ms":12,"exit_code":0,"endpoint_host":"models.internal.example:443"}')
             exit 0
             """.trimIndent(),
         )

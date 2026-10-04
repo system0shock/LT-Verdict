@@ -232,6 +232,13 @@ private fun parseModels(element: JsonElement): List<AiModel> {
 
 internal fun validModelSlug(value: String): Boolean = MODEL_SLUG.matches(value) && ".." !in value && "//" !in value
 
+/**
+ * `endpoint_host` of provenance (ADR 0023, D4): the host and port the relay sent the evidence to, lower case, the
+ * port always present, no scheme, path or credentials. The same pattern is in `ai-advice.schema.json` and in
+ * `advisory_ai_runtime.ps1`.
+ */
+internal fun validEndpointHost(value: String): Boolean = value.length <= MAX_ENDPOINT_HOST_LENGTH && ENDPOINT_HOST.matches(value)
+
 private fun validLabel(value: String): Boolean {
     if (value.isBlank() || value.codePointCount(0, value.length) !in 1..MAX_LABEL_CODE_POINTS) return false
     return value.codePoints().noneMatch { codePoint ->
@@ -321,7 +328,13 @@ private const val MAX_URL_BYTES = 512
 private const val SCAN_DEPTH_MAX = 8
 private const val SCAN_NUMBER_BYTES_MAX = 64
 private const val SCAN_EXPONENT_MAX = 64
-private val MODEL_SLUG = Regex("[A-Za-z0-9][A-Za-z0-9._:/-]{0,127}")
+internal val MODEL_SLUG = Regex("[A-Za-z0-9][A-Za-z0-9._:/-]{0,127}")
+private const val MAX_ENDPOINT_HOST_LENGTH = 260
+internal val ENDPOINT_HOST =
+    Regex(
+        "(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?){0,126}|\\[[0-9a-f:.]{2,45}\\])" +
+            ":(?:[1-9][0-9]{0,3}|[1-5][0-9]{4}|6[0-4][0-9]{3}|65[0-4][0-9]{2}|655[0-2][0-9]|6553[0-5])",
+    )
 private val EXPERIMENT_MODEL_IDS = setOf(QwenCode0211.MODEL_ID)
 private val POINTER_TOKENS =
     setOf("schema_version", "endpoint", "default_model", "models", "url", "label", "allow_insecure_http", "id")

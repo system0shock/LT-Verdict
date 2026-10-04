@@ -129,9 +129,13 @@ internal class ModelStudioAdvisoryRunner private constructor(
         val exitCode = result.integer("exit_code") ?: return RunnerOutcome.Failed(AdviceFailure.PROCESS_FAILED)
         return when (result.string("status")) {
             "SUCCESS" -> {
+                // The relay's observation of where the evidence went; without it the advice cannot be saved (ADR 0023, D4).
+                val endpointHost = result.string("endpoint_host")
                 if (processExitCode != 0 ||
                     exitCode != 0 ||
                     duration !in 0..613_000 ||
+                    endpointHost == null ||
+                    !validEndpointHost(endpointHost) ||
                     !Files.isRegularFile(outputPath) ||
                     Files.size(outputPath) > MAX_ADVICE_OUTPUT_BYTES
                 ) {
@@ -144,6 +148,7 @@ internal class ModelStudioAdvisoryRunner private constructor(
                             runnerVersion = QwenCode0211.RUNNER_VERSION,
                             runnerArtifactSha256 = QwenCode0211.CLI_ENTRY_SHA256,
                             modelId = QwenCode0211.MODEL_ID,
+                            endpointHost = endpointHost,
                             promptVersion = QwenCode0211.PROMPT_VERSION,
                             promptSha256 = sha256Hex(Files.readAllBytes(promptPath)),
                             durationMillis = duration,

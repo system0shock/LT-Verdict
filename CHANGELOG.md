@@ -14,15 +14,26 @@
   запроса к источнику выбирает наименьший подходящий целый шаг не выше 60 с.
   Огрубление отказывает с кодами `AUTO_STEP_UNSATISFIABLE`,
   `AUTO_STEP_SCRAPE_INTERVAL_REQUIRED`, `AUTO_STEP_BELOW_SCRAPE_INTERVAL`,
-  `AUTO_STEP_QUERY_NOT_INTERVAL_BOUND` и (временно, до правил по длительности)
-  `AUTO_STEP_AGGREGATION_MISMATCH` при любых правилах выбранных профилей.
+  `AUTO_STEP_QUERY_NOT_INTERVAL_BOUND`, `AUTO_STEP_RULE_IN_CELLS` и
+  `AUTO_STEP_AGGREGATION_MISMATCH` (срез S3, см. ниже).
   `source_summary` для `v4` публикует `step_origin`, `requested_step_ms`,
   `series_count`, `cell_budget`, `cells_per_series` и предупреждение
   `RESOLUTION_REDUCED`; поля входят в `source_acquisition_sha256`. Документы
   `v1`-`v3` и их сводки не меняются; сборка без `v4` и `scrape_interval_ms`
   отказывает на таком документе (`SOURCE_REQUEST_INVALID`,
-  `SOURCE_CONFIG_INVALID`). Правила по длительности, исключение для событийных
-  приращений и UI режима шага не входят в срез.
+  `SOURCE_CONFIG_INVALID`). Исключение для событийных приращений и UI режима
+  шага не входят в срез.
+- Правила по длительности (ADR 0014, срез S3): правило профиля в
+  `source-connections.v3` объявляется полем `min_consecutive_span_ms` (1 -
+  86 400 000 мс) вместо `min_consecutive_cells`; при сборке длительность
+  переводится в ячейки как `ceil(span / step)`, а `source_summary` профиля
+  публикует `rule_spans` (входит в `source_acquisition_sha256`). Огрубление
+  шага в режиме `auto` теперь проверяет каждое правило: правило в ячейках
+  отказывает `AUTO_STEP_RULE_IN_CELLS`, а агрегация ряда, не сохраняющая пик для
+  оператора (`gt` - `interval_max`, `lt` - `interval_min`), отказывает
+  `AUTO_STEP_AGGREGATION_MISMATCH`; ряды без подходящего правила попадают в
+  `RESOLUTION_REDUCED`. Документы `source-connections.v1`, `v2` и сводки
+  профилей без правил по длительности не меняются.
 - Снимок ресурсов `resource-snapshot.v1` принимает агрегации `interval_max` и
   `interval_min` (максимум и минимум за интервал сетки, ADR 0014); профили
   онлайн-источников получают их без правок конфигурации. Изменение аддитивно:

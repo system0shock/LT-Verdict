@@ -53,3 +53,78 @@ export const TABLES_LABELS = {
     status: 'Статус',
   },
 } as const
+
+// Русские строки таблиц «Ёмкость» и «Тренды» новой оболочки (срез U3b).
+
+const CAPACITY_BOUND_WORDS = {
+  BOUNDED: (lower: string, upper: string, unit: string): string =>
+    `От ${lower} до ${upper} ${unit} (верхняя граница не включается): на ${lower} требования выполнены, на ${upper} нарушены`,
+  UPPER_BOUND: (_lower: string, upper: string, unit: string): string =>
+    `Ниже ${upper} ${unit}: на ${upper} требования нарушены, ступени без нарушений нет`,
+  LOWER_BOUND: (lower: string, _upper: string, unit: string): string =>
+    `Не менее ${lower} ${unit}: нарушений на проверенных ступенях нет, верхняя граница не найдена`,
+  INDETERMINATE: (): string => 'Граница ёмкости не определена',
+} as const
+
+export const CAPACITY_LABELS = {
+  title: 'Ёмкость: ступени теста максимума',
+  region: 'Ступени теста максимума',
+  axisLabel: 'Ось нагрузки',
+  axisValue: (axis: string, unit: string): string => `${axis} (${unit})`,
+  boundLabel: 'Граница ёмкости',
+  boundText: (bound: string, lower: string, upper: string, unit: string): string => {
+    const words = (CAPACITY_BOUND_WORDS as Record<string, ((lower: string, upper: string, unit: string) => string) | undefined>)[bound]
+    return words ? words(lower, upper, unit) : `Тип границы без расшифровки: ${bound}`
+  },
+  verdictLabel: 'Вердикт по ёмкости',
+  kneeLabel: 'Точка перегиба',
+  kneeNotImplemented: 'Точка перегиба в этой версии не определяется',
+  kneeNone: (reason: string): string => `Точка перегиба не найдена (${reason})`,
+  kneeValue: (value: string, unit: string): string => `${value} ${unit}`,
+  reasonsLabel: 'Причины',
+  noReasons: 'нет',
+  smallSampleNote: 'Малая выборка: у ступеней с этой пометкой запросов в окне меньше минимума или у правила окна малая выборка. Такая ступень не подтверждена и не определяет границу ёмкости. Сама метка не означает нарушения SLA, а результат SLA в этом окне для границы не используется.',
+  smallSampleMark: 'малая выборка',
+  heads: ['Ступень', 'Цель', 'Достигнуто (p05 за 10 с)', 'Наблюдалось, мин. / макс.', 'Интервалы, полных / ожидалось', 'Подтверждённая нагрузка', 'Итог ступени', 'Причины', 'Данные'],
+  stageVerdict: {
+    PASS: 'Выдержана',
+    FAIL: 'Нарушение',
+    NO_POLICY: 'Без правил',
+    INDETERMINATE: 'Не подтверждена',
+  },
+  noEvidence: 'нет',
+  empty: 'В результате нет сводки по ёмкости.',
+} as const
+
+const TREND_REASON_WORDS: Record<string, string> = {
+  TREND_SERIES_NOT_FOUND: 'Ряд из проверки тренда отсутствует в снимке ресурсов.',
+  TREND_WINDOW_NOT_FOUND: 'Окно из проверки тренда не найдено в снимке ресурсов.',
+  TREND_MIN_CELLS_NOT_MET: 'В окне меньше значений, чем требует проверка.',
+  TREND_HALF_CELLS_NOT_MET: 'В одной из половин окна слишком мало значений, чтобы сравнить половины.',
+  TREND_MEDIAN_ZERO: 'Медиана равна нулю, относительный порог сдвига не определён.',
+  TREND_DIRECTION_MISMATCH: 'Направление наклона не совпадает с заявленным.',
+  TREND_DIRECTION_DISAGREEMENT: 'Знак сдвига половин окна не совпадает со знаком наклона (сдвиг может быть равен нулю).',
+  TREND_SLOPE_BELOW_MINIMUM: 'Наклон ниже минимального порога.',
+  TREND_SHIFT_BELOW_MINIMUM: 'Сдвиг половин окна ниже порога.',
+  STATIONARITY_NOT_EVALUATED: 'Стационарность ряда не оценивалась.',
+}
+
+export const TREND_LABELS = {
+  title: 'Тренды ресурсов',
+  region: 'Проверки трендов ресурсов',
+  method: 'Метод slope-materiality.v1: наклон и сдвиг медиан половин окна должны пройти порог и совпасть по знаку. Неопределённость не оценивается. Отсутствие находки не доказывает отсутствие деградации. Тренд это диагностика, на вердикт он не влияет.',
+  summary: (total: number, observed: number, notMaterial: number, insufficient: number, unavailable: number): string =>
+    `Проверок: ${total}. Наблюдается: ${observed}. Не существенно: ${notMaterial}. Мало данных: ${insufficient}. Недоступно: ${unavailable}.`,
+  heads: ['Проверка', 'Ряд', 'Окно', 'Заявленное направление', 'Статус', 'Наблюдаемое направление', 'Наклон в секунду', 'Сдвиг половин окна', 'Медиана', 'Требуемый сдвиг', 'Ячеек, наблюдалось / ожидалось', 'Причины'],
+  noData: 'нет данных',
+  noReasons: 'нет',
+  statusText: {
+    TREND_OBSERVED: 'Наблюдается',
+    NO_MATERIAL_TREND: 'Не существенно',
+    INSUFFICIENT_CELLS: 'Мало данных',
+    UNAVAILABLE: 'Недоступно',
+  },
+  declaredText: { increase: 'рост', decrease: 'снижение', either: 'любое' },
+  observedText: { increase: 'рост', decrease: 'снижение', flat: 'без изменения' },
+  reasonWords: TREND_REASON_WORDS,
+} as const

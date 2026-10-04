@@ -1,7 +1,7 @@
-import type { AnalysisResult, ExactRatio, MetricSummaryEvidence, PolicyCheckEvidence } from '../types'
+import type { AnalysisResult, CapacityStage, ExactRatio, MetricSummaryEvidence, PolicyCheckEvidence, TrendCheckEvidence, TrendSummaryEvidence } from '../types'
 import { METRIC_LABELS, scopeLabel, valueText } from '../verdictSummary'
 import { reasonText as verdictReasonText } from '../verdictReasons'
-import { TABLES_LABELS } from './labels.tables'
+import { CAPACITY_LABELS, TABLES_LABELS, TREND_LABELS } from './labels.tables'
 
 export type RuleStatus = 'PASS' | 'FAIL' | 'NO_VERDICT'
 
@@ -168,4 +168,132 @@ export function queryTransactions(rows: readonly TxRow[], query: TxQuery): TxRow
         : left.sort[query.sort] - right.sort[query.sort]
       return order * query.dir || impact(left, right)
     })
+}
+
+export interface CapacityStageRow {
+  key: string
+  stage: string
+  target: string
+  achieved: string
+  observed: string
+  bins: string
+  verified: string
+  verdict: string
+  verdictText: string
+  smallSample: boolean
+  reasons: Array<{ code: string; text: string }>
+  evidence: string[]
+}
+
+export interface CapacityView {
+  axis: string
+  unit: string
+  bound: string
+  boundText: string
+  verdict: string
+  verdictText: string
+  reasons: Array<{ code: string; text: string }>
+  kneeText: string
+  smallSample: boolean
+  stages: CapacityStageRow[]
+}
+
+const capacityGroups = new Intl.NumberFormat('ru-RU')
+// Capacity values are exact decimals: the digits are kept as the server sent them (no rounding), only grouped and with a decimal comma.
+function capacityNumber(value: number | string | null | undefined): string {
+  if (value == null) return TABLES_LABELS.noData
+  const text = String(value)
+  const match = /^(-?)(\d+)(?:\.(\d+))?$/.exec(text)
+  if (!match) return Number.isFinite(Number(value)) ? new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 20 }).format(Number(value)) : text
+  const fraction = (match[3] ?? '').replace(/0+$/, '')
+  return `${match[1]}${capacityGroups.format(BigInt(match[2]))}${fraction ? `,${fraction}` : ''}`
+}
+const capacityReasons = (codes: string[] | undefined) => (codes ?? []).map((code) => ({ code, text: verdictReasonText(code) }))
+
+export function capacityView(result: AnalysisResult): CapacityView | null {
+  const summary = result.capacity_summary
+  if (!summary) return null
+  const stages = (summary.stages ?? []).map((stage: CapacityStage): CapacityStageRow => ({
+    key: stage.id,
+    stage: stage.id,
+    target: capacityNumber(stage.target),
+    achieved: capacityNumber(stage.achieved),
+    observed: `${capacityNumber(stage.observed_min)} / ${capacityNumber(stage.observed_max)}`,
+    bins: `${capacityNumber(stage.complete_bins)} / ${capacityNumber(stage.expected_bins)}`,
+    verified: capacityNumber(stage.verified_bound_load),
+    verdict: stage.verdict,
+    verdictText: (CAPACITY_LABELS.stageVerdict as Record<string, string>)[stage.verdict] ?? stage.verdict,
+    smallSample: (stage.reasons ?? []).includes('CAPACITY_INSUFFICIENT_SAMPLES'),
+    reasons: capacityReasons(stage.reasons),
+    evidence: stage.evidence_refs ?? [],
+  }))
+  return {
+    axis: summary.load_axis,
+    unit: summary.unit,
+    bound: summary.bound_type,
+    boundText: CAPACITY_LABELS.boundText(summary.bound_type, capacityNumber(summary.lower_inclusive), capacityNumber(summary.upper_exclusive), summary.unit),
+    verdict: summary.policy_verdict,
+    verdictText: (TABLES_LABELS.statusText as Record<string, string>)[summary.policy_verdict] ?? summary.policy_verdict,
+    reasons: capacityReasons(summary.reasons),
+    kneeText: summary.capacity_knee == null
+      ? summary.knee_reason === 'KNEE_DETECTOR_NOT_IMPLEMENTED' ? CAPACITY_LABELS.kneeNotImplemented : CAPACITY_LABELS.kneeNone(summary.knee_reason)
+      : CAPACITY_LABELS.kneeValue(capacityNumber(summary.capacity_knee), summary.unit),
+    smallSample: stages.some((stage) => stage.smallSample) || (summary.reasons ?? []).includes('CAPACITY_INSUFFICIENT_SAMPLES'),
+    stages,
+  }
+}
+
+export interface TrendRow {
+  key: string
+  check: string
+  series: string
+  window: string
+  declared: string
+  status: string
+  statusText: string
+  observed: string
+  slope: string
+  shift: string
+  median: string
+  required: string
+  cells: string
+  reasons: Array<{ code: string; text: string }>
+}
+
+export interface TrendView { summaryText: string; rows: TrendRow[] }
+
+function trendMeasure(value: string | null | undefined, unit: string | null, slope = false): string {
+  return value == null ? TREND_LABELS.noData : `${value.replace('.', ',')}${unit == null ? '' : ` ${unit}${slope ? '/\u0441' : ''}`}`
+}
+
+export function trendView(result: AnalysisResult): TrendView | null {
+  const summary = result.evidence.find((item): item is TrendSummaryEvidence => item.type === 'trend_summary')
+  const checks = result.evidence.filter((item): item is TrendCheckEvidence => item.type === 'trend_check')
+  if (!summary && !checks.length) return null
+  const count = (status: TrendCheckEvidence['status']) => checks.filter((check) => check.status === status).length
+  return {
+    summaryText: TREND_LABELS.summary(
+      summary?.checks_total ?? checks.length,
+      summary?.observed ?? count('TREND_OBSERVED'),
+      summary?.not_material ?? count('NO_MATERIAL_TREND'),
+      summary?.insufficient ?? count('INSUFFICIENT_CELLS'),
+      summary?.unavailable ?? count('UNAVAILABLE'),
+    ),
+    rows: checks.map((check) => ({
+      key: check.id,
+      check: check.check_id,
+      series: check.series_id,
+      window: check.window_id,
+      declared: (TREND_LABELS.declaredText as Record<string, string>)[check.declared_direction] ?? check.declared_direction,
+      status: check.status,
+      statusText: (TREND_LABELS.statusText as Record<string, string>)[check.status] ?? check.status,
+      observed: check.observed_direction == null ? TREND_LABELS.noData : (TREND_LABELS.observedText as Record<string, string>)[check.observed_direction] ?? check.observed_direction,
+      slope: trendMeasure(check.slope_per_second, check.unit, true),
+      shift: trendMeasure(check.split_half_shift, check.unit),
+      median: trendMeasure(check.median, check.unit),
+      required: trendMeasure(check.magnitude_gate?.required_split_half_shift_units, check.unit),
+      cells: `${capacityNumber(check.observed_cells)} / ${capacityNumber(check.expected_cells)}`,
+      reasons: (check.reasons ?? []).map((code) => ({ code, text: TREND_LABELS.reasonWords[code] ?? verdictReasonText(code) })),
+    })),
+  }
 }

@@ -358,7 +358,7 @@ function updateRange(name: 'update:range-start' | 'update:range-end', event: Eve
   </section>
 
   <section
-    v-if="capacity"
+    v-if="capacity && !shellTables"
     id="capacity-results"
     data-testid="capacity-results"
     class="panel"
@@ -395,7 +395,7 @@ function updateRange(name: 'update:range-start' | 'update:range-end', event: Eve
   </section>
 
   <section
-    v-if="trendSummary || trendChecks.length"
+    v-if="(trendSummary || trendChecks.length) && !shellTables"
     id="trend-results"
     data-testid="trend-results"
     class="panel"

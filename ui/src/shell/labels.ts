@@ -1,7 +1,7 @@
 // Все русские строки новой оболочки (срезы U0 и U1) живут только в этом файле.
 // Остальной код оболочки ссылается на них по ключам и остаётся ASCII.
 
-export type ShellTabKey = 'overview' | 'tables' | 'compare' | 'rules' | 'advice' | 'setup'
+export type ShellTabKey = 'overview' | 'deep' | 'tables' | 'compare' | 'rules' | 'advice' | 'setup'
 
 export interface ShellTab {
   key: ShellTabKey
@@ -13,6 +13,7 @@ export interface ShellTab {
 export const SHELL_TABS: readonly ShellTab[] = [
   { key: 'setup', label: 'Новый анализ', pending: false },
   { key: 'overview', label: 'Обзор', pending: false },
+  { key: 'deep', label: 'Глубокий анализ', pending: false },
   { key: 'tables', label: 'Таблицы', pending: false },
   { key: 'compare', label: 'Сравнение', pending: false },
   { key: 'rules', label: 'Правила', pending: false },
@@ -140,6 +141,61 @@ export const OVERVIEW_LABELS = {
   cursorTime: (time: string) => `Время ${time}`,
   cursorText: (time: string, rps: string, errors: string, p95: string) =>
     `${time}: ${rps} запросов в секунду, ошибок за интервал ${errors}, p95 ${p95} мс`,
+} as const
+
+// Срез D2-min: вкладка «Глубокий анализ». Нагрузка и выбранные ряды ресурсов на общей шкале времени.
+export const DEEP_LABELS = {
+  title: 'Глубокий анализ',
+  lead: 'Нагрузка и выбранные ряды ресурсов стоят друг под другом на общей шкале времени. Курсор общий: он показывает значение каждого ряда в один и тот же момент.',
+  readNote: 'Как читать: совпадение по времени подсказывает, где искать. Причину оно не доказывает.',
+  clockNote: 'Часы генератора нагрузки и кластера ядро не сверяет: сдвиг между ними на графике неотличим от причинной связи.',
+  noSnapshot: 'Ряды ресурсов не загружены: у этого анализа нет снимка ресурсов. Показана только нагрузка.',
+  loading: 'Загрузка данных...',
+  requestFailed: (detail: string) => `Не удалось загрузить данные: ${detail}`,
+
+  // Выбор рядов
+  seriesTitle: 'Ряды ресурсов',
+  seriesFilter: 'Фильтр по имени',
+  seriesNone: 'Нет рядов с таким именем.',
+  seriesEmpty: 'В снимке нет рядов ресурсов.',
+  seriesCount: (selected: number, max: number) => `Выбрано ${selected} из ${max}`,
+  limitReached: (max: number) => `Выбрано максимум рядов: ${max}. Снимите один, чтобы выбрать другой.`,
+  seriesMeta: (unit: string, entity: string) => `${unit}, ${entity}`,
+  violatedBadge: 'правило нарушено',
+  noValuesBadge: 'нет значений',
+
+  // Период и шаг
+  periodTitle: 'Период',
+  periodFrom: 'С, мин от начала прогона',
+  periodTo: 'По, мин от начала прогона',
+  periodApply: 'Применить',
+  periodAll: 'Весь прогон',
+  periodInvalid: 'Период задан неверно: значения должны быть неотрицательными числами минут, а «с» меньше «по».',
+  periodSnapped: (from: string, to: string) => `Период привязан к границам ячеек: от ${from} до ${to} от начала прогона.`,
+  cellStep: (seconds: number) => `Шаг ячейки ресурсов: ${seconds} с (подобран автоматически, не более 1500 ячеек).`,
+  loadRollup: (seconds: number) => `Шаг нагрузки: ${seconds} с.`,
+  loadOutsideRun: 'Выбранный период целиком расположен до начала прогона: нагрузки в нём нет.',
+  loadTruncated: (shown: number) => `Нагрузка показана не на весь период: загружено ${shown} интервалов, это предел. Сузьте период.`,
+  loadEmpty: 'Данных нагрузки за период нет.',
+
+  // График и курсор
+  chartAria: 'Нагрузка и ряды ресурсов на общей шкале времени',
+  axisLabel: 'Время от начала прогона',
+  cursorLabel: 'Курсор по времени',
+  cursorHint: 'Стрелки влево и вправо двигают курсор по ячейкам самого мелкого ряда, Home и End переходят к краям. Курсор можно двигать и мышью над графиками.',
+  cursorNone: 'курсор не выбран',
+  cursorTime: (ms: string, offset: string) => `Курсор: ${ms} мс от начала прогона (${offset})`,
+  cursorText: (ms: string, offset: string) => `${ms} мс от начала прогона, ${offset}`,
+  gap: 'нет данных',
+  partialCell: (observed: number, total: number) => `наблюдено ${observed} из ${total}`,
+  trackMax: (value: string) => `максимум ${value}`,
+  reducerLabels: {
+    mean: 'среднее за интервал',
+    max: 'максимум за интервал',
+    min: 'минимум за интервал',
+  },
+  thresholdLabel: (operator: 'gt' | 'lt', value: string, unit: string) =>
+    `${operator === 'gt' ? 'нарушение выше' : 'нарушение ниже'} ${value} ${unit}`,
 } as const
 
 // Отмена загрузки входного файла (JobStatus.vue): кнопка и сообщение после отмены.

@@ -82,5 +82,26 @@ class ResourceSeriesOracleTest(unittest.TestCase):
         self.assertTrue(all(case["expected"]["resource_snapshot_sha256"] == digest for case in _cases().values()))
 
 
+class LiveVectorsTest(unittest.TestCase):
+    def test_committed_live_vectors_equal_the_regenerated_ones(self):
+        generated = vectors.generate_live()
+        self.assertEqual(_read("live-snapshot.template.json"), generated["live-snapshot.template.json"])
+        self.assertEqual(_read("live-expected.json"), generated["live-expected.json"])
+
+    def test_live_snapshot_forces_coarsening_with_a_partial_last_cell(self):
+        full = json.loads(_read("live-expected.json"))["full"]["grid"]
+        self.assertEqual((3000, 3, 1001, 1), (full["step_ms"], full["source_cells_per_cell"],
+                                              full["cell_count"], full["last_cell_source_cells"]))
+
+    def test_live_narrow_period_is_not_coarsened(self):
+        narrow = json.loads(_read("live-expected.json"))["narrow"]
+        self.assertEqual((1, 12), (narrow["grid"]["source_cells_per_cell"], narrow["grid"]["cell_count"]))
+        self.assertTrue(all("observed" not in item for item in narrow["series"]))
+
+    def test_live_ids_include_a_qualified_non_ascii_id(self):
+        ids = json.loads(_read("live-expected.json"))["ids"]
+        self.assertTrue(any("/" in i and "%" in i and " " in i and not i.isascii() for i in ids))
+
+
 if __name__ == "__main__":
     unittest.main()

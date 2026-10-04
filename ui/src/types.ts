@@ -636,3 +636,52 @@ export interface JenkinsAttempt {
   failure_code: string | null
   artifact: { relative_path: string; size_bytes: number; sha256: string } | null
 }
+
+export interface ResourceSeriesEntry {
+  id: string
+  metric: string
+  unit: string
+  entity: string
+  role: 'system' | 'generator'
+  aggregation: 'interval_mean' | 'interval_rate' | 'interval_max' | 'interval_min'
+  reducer: 'mean' | 'max' | 'min'
+  labels: Record<string, string>
+  observed_cells: number
+}
+
+export interface ResourceSeriesCatalog {
+  schema_version: 'resource-series.v1'
+  kind: 'catalog'
+  resource_snapshot_sha256: string
+  numeric_encoding: 'ieee754-double'
+  grid: { start_epoch_ms: number; step_ms: number; point_count: number }
+  windows: Array<{ id: string; from_epoch_ms: number; to_epoch_ms: number }>
+  series: ResourceSeriesEntry[]
+  next_after: string | null
+}
+
+export interface ResourceSeriesValuesSeries {
+  id: string
+  aggregation: 'interval_mean' | 'interval_rate' | 'interval_max' | 'interval_min'
+  reducer: 'mean' | 'max' | 'min'
+  values: Array<number | null>
+  observed?: number[]
+}
+
+export interface ResourceSeriesValues {
+  schema_version: 'resource-series.v1'
+  kind: 'values'
+  resource_snapshot_sha256: string
+  numeric_encoding: 'ieee754-double'
+  grid: {
+    start_epoch_ms: number
+    source_step_ms: number
+    step_ms: number
+    first_cell_start_ms: number
+    cell_count: number
+    source_cells_per_cell: number
+    last_cell_source_cells: number
+  }
+  series: ResourceSeriesValuesSeries[]
+  next_from_ms: number | null
+}

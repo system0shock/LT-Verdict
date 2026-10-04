@@ -126,6 +126,16 @@
   .shell .shell-tabs [role="tablist"] {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
+
+  .shell .shell-tab {
+    flex-wrap: wrap;
+    min-width: 0;
+  }
+
+  .shell .shell-tab > span {
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
 }
 
 .shell .shell-panel section[id],

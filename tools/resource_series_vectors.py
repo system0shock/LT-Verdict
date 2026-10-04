@@ -77,9 +77,51 @@ def generate():
     }
 
 
+LIVE_START = 1767225600000
+LIVE_STEP = 1000
+LIVE_COUNT = 3001
+LIVE_QUALIFIED_ID = "prom-main/\u043f\u0430\u043c\u044f\u0442\u044c \u043b\u0438\u043c\u0438\u0442 100%"
+LIVE_IDS = ["cpu", "queue", LIVE_QUALIFIED_ID]
+LIVE_NARROW_FROM = LIVE_START + 300000
+LIVE_NARROW_TO = LIVE_START + 312000
+
+
+def generate_live():
+    """Snapshot longer than 1500 cells: the UI must coarsen it (step 3 s, last cell partial)."""
+    cpu = ["null" if i % 97 == 5 else format(Decimal((i * 37) % 1000) / Decimal(1000), ".3f")
+           for i in range(LIVE_COUNT)]
+    queue = [format(Decimal(2 if i % 3 == 2 else 1), "f") for i in range(LIVE_COUNT)]
+    memory = ["null" if i % 211 == 7 else format(Decimal((i * 53) % 997) / Decimal(997), ".6f")
+              for i in range(LIVE_COUNT)]
+    series = [
+        _series_text("cpu", "interval_mean", cpu, {"host": "h1"}),
+        _series_text("queue", "interval_rate", queue),
+        _series_text(LIVE_QUALIFIED_ID, "interval_mean", memory),
+    ]
+    template = (
+        '{"schema_version":"resource-snapshot.v1","load_input_sha256":"' + "0" * 64
+        + f'","start_epoch_ms":{LIVE_START},"step_ms":{LIVE_STEP},"point_count":{LIVE_COUNT},"series":['
+        + ",".join(series) + "]}\n"
+    )
+    snapshot = oracle.read_snapshot(template)
+    expected = {
+        "start_epoch_ms": LIVE_START,
+        "step_ms": LIVE_STEP,
+        "point_count": LIVE_COUNT,
+        "ids": LIVE_IDS,
+        "full": oracle.values(snapshot, LIVE_IDS, step_ms=3000),
+        "narrow": oracle.values(snapshot, LIVE_IDS, step_ms=LIVE_STEP,
+                                from_ms=LIVE_NARROW_FROM, to_ms=LIVE_NARROW_TO),
+    }
+    return {
+        "live-snapshot.template.json": template,
+        "live-expected.json": json.dumps(expected, indent=2, ensure_ascii=True) + "\n",
+    }
+
+
 if __name__ == "__main__":
     output = Path(__file__).resolve().parents[1] / "fixtures" / "resource-series"
     output.mkdir(parents=True, exist_ok=True)
-    for name, content in generate().items():
+    for name, content in (generate() | generate_live()).items():
         with (output / name).open("w", encoding="utf-8", newline="\n") as stream:
             stream.write(content)

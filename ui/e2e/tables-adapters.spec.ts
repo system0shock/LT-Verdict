@@ -107,6 +107,16 @@ test('transactions keep the statuses of the old table and stay unique by id', ()
   expect(failing.every((row) => !row.key.includes('overall'))).toBe(true)
 })
 
+test('a windowed check without a metric reference still marks its own transaction only', () => {
+  const nested = transaction('m-nested', 'POST /checkout', { scope: { kind: 'transaction', group_path: ['flow'], label: 'POST /checkout', sample_kind: 'JMETER_SAMPLER' } })
+  const rows = transactionRows(build({
+    policy_verdict: 'FAIL',
+    evidence: [overall, checkout, nested, check({ id: 'w1', metric_evidence_id: undefined, window_id: 'steady-1', scope: checkout.scope })],
+  }))
+
+  expect(rows.map((row) => [row.key, row.status])).toEqual([['m-checkout', 'FAIL'], ['m-nested', 'NOT_CHECKED']])
+})
+
 test('search, status filter and impact order', () => {
   const rows = transactionRows(build({ policy_verdict: 'FAIL', evidence: [overall, login, checkout, check({}), check({ id: 'c2', rule_id: 'l', status: 'PASS', metric_evidence_id: 'm-login' })] }))
 

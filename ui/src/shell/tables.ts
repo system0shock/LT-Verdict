@@ -82,6 +82,11 @@ function display(metric: string, value: number | ExactRatio | null | undefined):
   return value == null ? TABLES_LABELS.noData : valueText(metric, value)
 }
 
+function sameTransaction(left: PolicyCheckEvidence['scope'], right: MetricSummaryEvidence['scope']): boolean {
+  if (left?.kind !== 'transaction' || right.kind !== 'transaction') return false
+  return left.label === right.label && left.sample_kind === right.sample_kind && (left.group_path ?? []).join('\u0000') === (right.group_path ?? []).join('\u0000')
+}
+
 export function transactionRows(result: AnalysisResult): TxRow[] {
   const checks = result.evidence.filter((item): item is PolicyCheckEvidence => item.type === 'policy_check')
   return result.evidence
@@ -89,7 +94,8 @@ export function transactionRows(result: AnalysisResult): TxRow[] {
     .map((item) => {
       const scope = item.scope
       if (scope.kind !== 'transaction') throw new Error('Expected transaction scope')
-      const related = checks.filter((check) => check.metric_evidence_id === item.id)
+      // Windowed checks carry the full transaction scope instead of a metric reference.
+      const related = checks.filter((check) => check.metric_evidence_id === item.id || (!check.metric_evidence_id && sameTransaction(check.scope, scope)))
       const status: TxStatus = related.some((check) => check.status === 'FAIL') ? 'FAIL'
         : related.some((check) => check.status === 'NO_VERDICT') ? 'NO_VERDICT'
           : related.some((check) => check.status === 'PASS') ? 'PASS'

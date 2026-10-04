@@ -57,6 +57,13 @@ function toggleSort(key: TxSortKey) {
       {{ TABLES_LABELS.shownOf(shown.length, rows.length) }}
     </p>
     <p
+      v-if="query.sort === 'impact'"
+      class="tx-path"
+      data-testid="tx-default-order"
+    >
+      {{ TABLES_LABELS.impactOrder }}
+    </p>
+    <p
       v-if="!rows.length"
       data-testid="tx-empty"
     >

@@ -79,6 +79,17 @@ analysis directory и не перезаписывает прежний резу�
 истории динамики считаются несопоставимыми с новыми.
 Версия модуля `load-resource-diagnostics` равна `3` (ADR 0016: пустое окно как
 `null`, было `2`); она входит в identity только при наличии плана диагностики.
+Анализ с политикой добавляет в identity объект `verdict_gates` (строковые значения
+`min_samples_floor`, `min_samples_default`, `throughput_exempt`: запасные константы
+проверки минимума выборки бизнес-правил, ADR
+[0018](../adr/0018-policy-platform-rules-small-samples.md)). Блок не входит в ключ
+сопоставимости baseline; фактические `defaults` и `min_samples` политики входят в
+`policy_sha256`. Тот же вход и тот же файл политики получают новый `analysis_id`;
+сохранённые анализы не переписываются. Анализ без политики identity не меняет.
+Проверка выборки выполняется в `evaluatePolicy` для каждого бизнес-правила по счёту
+запросов в его области в оцениваемом окне; `SMALL_SAMPLE` (информационная причина)
+даёт `analysis_coverage.status = INCOMPLETE`, но не меняет `PASS`/`FAIL`, а
+`INSUFFICIENT_SAMPLES` блокирует вердикт (`NO_VERDICT`).
 
 Canonical `analysis-result.v1` одинаков для CLI и UI при одинаковых input,
 policy и engine configuration.

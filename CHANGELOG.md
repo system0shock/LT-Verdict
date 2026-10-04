@@ -150,6 +150,18 @@
 
 ### Changed
 
+- Бизнес-правила политики проверяют размер выборки (ADR 0018): при `0 < n < 20`
+  правило даёт `NO_VERDICT` (`INSUFFICIENT_SAMPLES`), при `20 <= n < 100`
+  `PASS`/`FAIL` сохраняется с меткой `SMALL_SAMPLE` (статус покрытия
+  `INCOMPLETE`, код выхода CLI прежний), `throughput_rps` не проверяется.
+  Значения настраиваются необязательными полями `policy.v1` `defaults`
+  (`sample_floor`, `min_samples`) и `min_samples` у правила; новые коды
+  валидации `MIN_SAMPLES_OUT_OF_RANGE`, `MIN_SAMPLES_BELOW_FLOOR`,
+  `FIELD_NOT_APPLICABLE`; `policy_check` получает поля `sample_count`,
+  `sample_floor`, `min_samples`, `sample_mode`. Существующие политики на малых
+  прогонах теперь дают `NO_VERDICT` либо метку; анализ с политикой получает
+  новый `analysis_id` (блок `verdict_gates` в identity вне ключа сопоставимости
+  baseline), сохранённые анализы не меняются.
 - Прежняя форма запуска «Run setup» теперь тоже сразу отклоняет план
   корреляций без снимка ресурсов и явное окно источника больше 100 000 ячеек
   (длина окна, делённая на шаг): сервер отклонял такие запуски и раньше, но

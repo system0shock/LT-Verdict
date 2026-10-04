@@ -218,8 +218,9 @@ Baseline comparison, N-run history и остальные форматы отно
   ячеек подряд.
 - `PASS`: первые проверки с порогом. Для SLA-правил ресурса измеренное значение
   в результате не хранится, поэтому показаны только порог и «нарушений нет».
-  Карточка не утверждает, что выборка достаточна: ядро число запросов не
-  проверяет, оно показано отдельным фактом.
+  Если у правила запросов меньше рекомендуемого минимума, `PASS` остаётся
+  `PASS`, но результат помечен причиной `SMALL_SAMPLE` (см. «Минимум выборки»);
+  число запросов показано отдельным фактом.
 - `NO_POLICY`: пороги не проверялись, потому что не заданы политика и SLA-правила.
 - `NO_VERDICT`: блок «Почему вердикта нет» с причиной словами, правилами или
   окнами и сырым кодом для поддержки. Если нарушения уже найдены, они показаны
@@ -243,6 +244,7 @@ Baseline comparison, N-run history и остальные форматы отно
 | `TRANSACTION_NOT_FOUND` | Транзакция из правила не найдена в результатах | Сверить имя в правиле с логом, включая регистр и пробелы |
 | `AMBIGUOUS_TRANSACTION` | Имя подходит нескольким транзакциям | Сделать имена уникальными или изменить правило |
 | `BUSINESS_OBSERVATIONS_NOT_FOUND` | В окне нет запросов нагрузки | Исправить границы окна в снимке ресурсов |
+| `INSUFFICIENT_SAMPLES` | В области правила есть запросы, но их меньше пола выборки (по умолчанию 20): порог не сравнивался | Взять более длинный прогон или осознанно снизить `sample_floor` (см. «Минимум выборки») |
 | `RESOURCE_SERIES_NOT_FOUND` | Ряд из правила отсутствует в снимке | Добавить ряд или исправить `series_id` |
 | `MISSING_RESOURCE_CELLS` | В ряду есть пропуски в окне оценки | Дополнить снимок или сузить окно |
 
@@ -519,6 +521,63 @@ policy остаются integer milliseconds.
 }
 ```
 
+### Минимум выборки
+
+Каждое бизнес-правило (метрики задержки и доли ошибок) проверяет, сколько
+запросов попало в его область (всего прогона, одна транзакция или окно).
+Правило `throughput_rps` этой проверкой не охватывается.
+
+| Запросов `n` в области правила | Результат правила | Причина |
+| --- | --- | --- |
+| `0` | `NO_VERDICT` | `METRIC_NOT_AVAILABLE` |
+| `1` до `sample_floor - 1` | `NO_VERDICT`, порог не сравнивается | `INSUFFICIENT_SAMPLES` |
+| от `sample_floor` до `min_samples - 1` | обычный `PASS` или `FAIL` с пометкой | `SMALL_SAMPLE` (информационная) |
+| `min_samples` и больше | обычный результат | нет |
+
+Пол по умолчанию равен 20, рекомендуемый минимум равен 100. Значения задаются
+политикой: у правила `min_samples`, для всей политики блок `defaults` с полями
+`sample_floor` и `min_samples` (целые `1..1000000`). Приоритет такой: поле
+правила, затем `defaults`, затем запасная константа ядра (20 и 100). Минимум не
+может быть меньше пола; нарушение даёт `MIN_SAMPLES_BELOW_FLOOR`.
+
+```json
+{
+  "schema_version": "policy.v1",
+  "policy_id": "sample-gate",
+  "defaults": { "sample_floor": 20, "min_samples": 100 },
+  "rules": [
+    {
+      "id": "checkout-p99",
+      "metric": "response_time_p99_ms",
+      "operator": "lte",
+      "threshold": 800,
+      "scope": { "kind": "transaction", "name": "POST /checkout" },
+      "min_samples": 1000
+    }
+  ]
+}
+```
+
+`SMALL_SAMPLE` не превращает вердикт в `NO_VERDICT`: достоверный `FAIL` остаётся
+`FAIL`, а `PASS` остаётся `PASS`. Пометка попадает в `analysis_coverage.reasons`
+(статус покрытия становится `INCOMPLETE`) и в проверку правила
+(`policy_check`: поля `sample_count`, `sample_floor`, `min_samples`,
+`sample_mode` со значениями `FULL`, `SMALL_SAMPLE`, `INSUFFICIENT`,
+`NOT_GATED`). Код выхода CLI не меняется: `0` для `PASS`, `2` для `FAIL`, `3`
+для `NO_VERDICT`. Малая выборка пригодна как baseline с предупреждением по
+решению пользователя; отбор по этой пометке появится отдельным срезом.
+
+Внимание: при выборке меньше 100 запросов p95 и p99 опираются на единицы
+наблюдений, а при `n` меньше 20 p95 может совпасть с максимумом. Ложный `FAIL`
+по p95 на малой выборке возможен, оценивайте его осторожно.
+
+Существующие политики, не задающие `defaults`, на коротких прогонах теперь дают
+`NO_VERDICT` (меньше 20 запросов в области правила) или пометку `SMALL_SAMPLE`
+(от 20 до 99). Чтобы вернуть прежнее поведение на малых входах, укажите
+`"defaults": { "sample_floor": 1, "min_samples": 1 }`. Анализ с политикой
+получает новый `analysis_id`, поскольку запасные константы входят в identity;
+уже сохранённые анализы не меняются.
+
 ### Exact transaction matching
 
 Transaction scope имеет ровно форму:
@@ -553,6 +612,9 @@ UI и CLI используют один validator. Ошибка содержит
 | `UNKNOWN_METRIC`, `UNKNOWN_OPERATOR` | Metric/operator не поддерживается |
 | `METRIC_OPERATOR_MISMATCH` | Operator не соответствует metric |
 | `THRESHOLD_OUT_OF_RANGE` | Threshold отрицателен или ratio не входит в `0..1` |
+| `MIN_SAMPLES_OUT_OF_RANGE` | `sample_floor` или `min_samples` вне `1..1000000` |
+| `MIN_SAMPLES_BELOW_FLOOR` | Действующий минимум выборки меньше действующего пола |
+| `FIELD_NOT_APPLICABLE` | Поле не применимо к правилу: `min_samples` у `throughput_rps` |
 | `INVALID_SCOPE` | Scope не равен exact `overall` или `transaction` form |
 | `RESOURCE_LIMIT_EXCEEDED` | Превышен размер, depth, count или lexical numeric limit |
 
@@ -574,7 +636,9 @@ UI и CLI используют один validator. Ошибка содержит
 - throughput_rps с operator gte.
 
 Scope — только overall или transaction с точным переданным пользователем name.
-Не используй regex, wildcard, phases, baseline, implicit defaults и новые поля.
+Не используй regex, wildcard, phases, baseline, implicit defaults и новые поля,
+кроме необязательных defaults.sample_floor, defaults.min_samples и min_samples у
+правила: их указывай только если пользователь назвал значения, не придумывай их.
 Не придумывай thresholds, transaction names, units или SLA. Если хотя бы одно
 значение отсутствует, задай пользователю уточняющий вопрос и не создавай JSON.
 Каждому правилу дай короткий уникальный id. Верни один JSON object без Markdown,
@@ -785,7 +849,7 @@ report в stdout.
 
 | Exit | Значение |
 | ---: | --- |
-| `0` | `PASS`, `NO_POLICY`, valid policy или успешный export |
+| `0` | `PASS`, `NO_POLICY`, valid policy или успешный export (в том числе `PASS` с пометкой `SMALL_SAMPLE`: метку читайте из JSON) |
 | `2` | `FAIL` |
 | `3` | `NO_VERDICT` или `DEGRADED` |
 | `4` | Invalid/unsupported input, неверный resource snapshot/binding или отсутствующий analysis для export |

@@ -180,6 +180,18 @@
 
 ### Changed
 
+- Ступень capacity не подтверждается при малой выборке (ADR 0018, срез S3):
+  если в окне ступени запросов меньше действующего минимума (`defaults.min_samples`
+  политики, иначе запасное значение 100) либо у бизнес-правила окна пометка
+  `SMALL_SAMPLE`/`INSUFFICIENT`, ступень получает причину
+  `CAPACITY_INSUFFICIENT_SAMPLES` и вердикт `INDETERMINATE`, граница ёмкости не
+  определяется. `window_policy_summary` получает аддитивные поля `sample_count`
+  (всегда) и `min_samples` (если задан `defaults.min_samples`). Блок
+  `verdict_gates` в identity пишется и для анализа capacity без политики (ключи
+  `min_samples_default`, `capacity_stage_sample_gate`), а у анализа с политикой и
+  capacity получает ключ `capacity_stage_sample_gate`: такие анализы получают
+  новый `analysis_id`, сохранённые анализы не меняются, ключ сопоставимости
+  baseline прежний.
 - Бизнес-правила политики проверяют размер выборки (ADR 0018): при `0 < n < 20`
   правило даёт `NO_VERDICT` (`INSUFFICIENT_SAMPLES`), при `20 <= n < 100`
   `PASS`/`FAIL` сохраняется с меткой `SMALL_SAMPLE` (статус покрытия

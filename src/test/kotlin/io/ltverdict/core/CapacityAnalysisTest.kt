@@ -18,6 +18,79 @@ import java.math.BigDecimal
 
 class CapacityAnalysisTest {
     @Test
+    fun `a stage with fewer samples than the minimum is not confirmed`() {
+        val resources = resources()
+        val plan = plan(CapacityLoadAxis.RPS, required = BigDecimal("300"), stages = listOf(stage("300", 300, 0)))
+        val load = load("300" to List(30) { 300 })
+
+        fun stageOf(vararg evidence: JsonObject): Pair<String, List<String>> {
+            val policy = PolicyEvaluation(PolicyVerdict.PASS, emptyList(), emptyList(), evidence.toList() + guard("300", "PASS"))
+            val stage = evaluateCapacity(plan, resources, load, RunValidity.VALID, policy).capacityJson["stages"]!!.jsonArray[0].jsonObject
+            return stage.string("verdict") to stage.getValue("reasons").jsonArray.map { it.jsonPrimitive.content }
+        }
+
+        assertEquals("INDETERMINATE" to listOf("CAPACITY_INSUFFICIENT_SAMPLES"), stageOf(summaryWithSamples("300", 40, null)))
+        assertEquals("PASS" to emptyList<String>(), stageOf(summaryWithSamples("300", 40, 40)))
+        assertEquals("INDETERMINATE" to listOf("CAPACITY_INSUFFICIENT_SAMPLES"), stageOf(summaryWithSamples("300", 120, 500)))
+        assertEquals("PASS" to emptyList<String>(), stageOf(summaryWithSamples("300", 120, null)))
+        assertEquals("PASS" to emptyList<String>(), stageOf(summary("300", "PASS")))
+        assertEquals(
+            "INDETERMINATE" to listOf("CAPACITY_INSUFFICIENT_SAMPLES"),
+            stageOf(summaryWithSamples("300", 5_000, 100), smallRule("300")),
+        )
+        assertEquals(
+            "INDETERMINATE" to listOf("CAPACITY_INSUFFICIENT_SAMPLES"),
+            stageOf(
+                summaryWithSamples("300", 5_000, 100),
+                smallRule("300", "INSUFFICIENT"),
+            ),
+        )
+        assertEquals(
+            "PASS" to emptyList<String>(),
+            stageOf(summaryWithSamples("300", 5_000, 100), smallRule("other")),
+        )
+    }
+
+    @Test
+    fun `a stage without business rules is still gated by the window sample count`() {
+        val resources = resources()
+        val plan = plan(CapacityLoadAxis.RPS, required = BigDecimal("300"), stages = listOf(stage("300", 300, 0)))
+        val load = load("300" to List(30) { 300 })
+
+        fun stageVerdict(samples: Long): String {
+            val summary =
+                JsonObject(
+                    summary("300", "PASS") +
+                        buildJsonObject {
+                            put("business_verdict", "NO_POLICY")
+                            put("resource_verdict", "PASS")
+                            put("sample_count", samples)
+                        },
+                )
+            val slaCheck =
+                buildJsonObject {
+                    put("id", "sla-300")
+                    put("type", "resource_policy_check")
+                    put("window_id", "300")
+                    put("rule_id", "cpu")
+                    put("effect", "sla")
+                    put("status", "PASS")
+                }
+            val policy = PolicyEvaluation(PolicyVerdict.PASS, emptyList(), emptyList(), listOf(summary, slaCheck, guard("300", "PASS")))
+            return evaluateCapacity(
+                plan,
+                resources,
+                load,
+                RunValidity.VALID,
+                policy,
+            ).capacityJson["stages"]!!.jsonArray[0].jsonObject.string("verdict")
+        }
+
+        assertEquals("INDETERMINATE", stageVerdict(99))
+        assertEquals("PASS", stageVerdict(100))
+    }
+
+    @Test
     fun `RPS type 7 p05 produces conservative bounded interval and policy verdicts`() {
         val resources = resources()
         val plan =
@@ -131,12 +204,24 @@ class CapacityAnalysisTest {
                 resources,
                 load,
                 RunValidity.VALID,
-                policy(
-                    "one" to "NO_POLICY",
+                PolicyEvaluation(
+                    PolicyVerdict.PASS,
+                    emptyList(),
+                    emptyList(),
+                    listOf(
+                        JsonObject(summary("one", "NO_POLICY") + buildJsonObject { put("sample_count", 40) }),
+                        guard("one", "PASS"),
+                    ),
                 ),
             )
         assertEquals(PolicyVerdict.NO_POLICY, noSla.policyVerdict)
         assertEquals(true, "CAPACITY_SLA_MISSING" in noSla.coverageReasons)
+        val noSlaStage = noSla.capacityJson["stages"]!!.jsonArray[0].jsonObject
+        assertEquals("NO_POLICY", noSlaStage.string("verdict"))
+        assertEquals(
+            listOf("CAPACITY_SLA_MISSING", "CAPACITY_INSUFFICIENT_SAMPLES"),
+            noSlaStage.getValue("reasons").jsonArray.map { it.jsonPrimitive.content },
+        )
 
         listOf(
             plan(CapacityLoadAxis.RPS, BigDecimal.ONE, listOf(stage("one", 100, 0))),
@@ -451,6 +536,30 @@ class CapacityAnalysisTest {
         put("business_verdict", verdict)
         put("resource_verdict", "NO_POLICY")
         put("verdict", verdict)
+    }
+
+    private fun summaryWithSamples(
+        window: String,
+        sampleCount: Long,
+        minSamples: Long?,
+    ) = JsonObject(
+        summary(window, "PASS") +
+            buildJsonObject {
+                put("sample_count", sampleCount)
+                minSamples?.let { put("min_samples", it) }
+            },
+    )
+
+    private fun smallRule(
+        window: String,
+        sampleMode: String = "SMALL_SAMPLE",
+    ) = buildJsonObject {
+        put("id", "check-$window")
+        put("type", "policy_check")
+        put("window_id", window)
+        put("rule_id", "p95")
+        put("status", "PASS")
+        put("sample_mode", sampleMode)
     }
 
     private fun guard(

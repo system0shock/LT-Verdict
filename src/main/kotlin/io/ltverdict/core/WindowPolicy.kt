@@ -36,7 +36,15 @@ internal fun evaluateSharedWindowPolicy(
         val verdict = jointVerdict(business.verdict, resourceVerdict)
         findings += business.findings
         evidence += business.evidence
-        evidence += windowPolicySummary(window, business.verdict, resourceVerdict, verdict)
+        evidence +=
+            windowPolicySummary(
+                window,
+                business.verdict,
+                resourceVerdict,
+                verdict,
+                metrics.overall.sampleCount,
+                policy?.defaults?.minSamples,
+            )
         reasons += business.coverageReasons
         windowVerdicts += verdict
     }
@@ -67,6 +75,8 @@ private fun windowPolicySummary(
     business: PolicyVerdict,
     resource: PolicyVerdict,
     verdict: PolicyVerdict,
+    sampleCount: Long,
+    minSamples: Long?,
 ): JsonObject =
     buildJsonObject {
         put("id", "window-policy-summary-${sha256Hex(window.id.encodeToByteArray())}")
@@ -77,6 +87,8 @@ private fun windowPolicySummary(
         put("business_verdict", business.name)
         put("resource_verdict", resource.name)
         put("verdict", verdict.name)
+        put("sample_count", sampleCount)
+        minSamples?.let { put("min_samples", it) }
     }
 
 private const val BUSINESS_OBSERVATIONS_NOT_FOUND = "BUSINESS_OBSERVATIONS_NOT_FOUND"

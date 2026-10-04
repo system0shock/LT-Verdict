@@ -41,12 +41,14 @@ import kotlinx.serialization.json.long
 import org.HdrHistogram.PackedHistogram
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
+import org.junit.jupiter.api.Assertions.assertThrows
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Assertions.fail
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.io.TempDir
 import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
+import java.io.InputStream
 import java.net.URI
 import java.net.http.HttpClient
 import java.net.http.HttpRequest
@@ -62,6 +64,7 @@ import java.util.UUID
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
+import java.util.concurrent.atomic.AtomicLong
 import java.util.concurrent.locks.LockSupport
 
 class LocalApiTest {
@@ -1677,6 +1680,63 @@ class LocalApiTest {
             assertEquals(before, Files.list(stored.path.parent).use { it.map { path -> path.fileName.toString() }.sorted().toList() })
         }
 
+    @Test
+    fun `bounded upload copy stops reading one byte past the limit`() {
+        val read = AtomicLong()
+        val endless =
+            object : InputStream() {
+                override fun read(): Int = error("single-byte read is not expected")
+
+                override fun read(
+                    buffer: ByteArray,
+                    offset: Int,
+                    length: Int,
+                ): Int {
+                    buffer.fill('x'.code.toByte(), offset, offset + length)
+                    read.addAndGet(length.toLong())
+                    return length
+                }
+            }
+        val sink = ByteArrayOutputStream()
+
+        val failure = assertThrows(IllegalArgumentException::class.java) { copyBoundedUpload(endless, sink, 100_000L) }
+
+        assertEquals("RESOURCE_LIMIT_EXCEEDED", failure.message)
+        assertEquals(100_001L, read.get())
+        assertTrue(sink.size() <= 100_000)
+    }
+
+    @Test
+    fun `input upload at the limit succeeds with and without Content-Length`() {
+        withServer(uploadLimitBytes = SPIKE_DROP.sizeBytes) { _, api ->
+            api.bootstrap()
+            assertEquals(201, api.upload(SPIKE_DROP).statusCode())
+            assertEquals(201, api.uploadChunked(SPIKE_DROP.filename, SPIKE_DROP.bytes()).statusCode())
+        }
+    }
+
+    @Test
+    fun `input upload over the limit is rejected with and without Content-Length and leaves no residue`() {
+        val before = uploadTemporaryFiles()
+        withServer(uploadLimitBytes = SPIKE_DROP.sizeBytes) { _, api ->
+            api.bootstrap()
+            val oneOver = SPIKE_DROP.bytes() + 'x'.code.toByte()
+            val farOver = SPIKE_DROP.bytes() + ByteArray(65_536) { 'x'.code.toByte() }
+            assertError(api.uploadChunked(SPIKE_DROP.filename, farOver), 413, "RESOURCE_LIMIT_EXCEEDED")
+            assertError(api.uploadChunked(SPIKE_DROP.filename, oneOver), 413, "RESOURCE_LIMIT_EXCEEDED")
+            assertError(api.upload(SPIKE_DROP.copy(inlineBytes = oneOver)), 413, "RESOURCE_LIMIT_EXCEEDED")
+        }
+        assertEquals(before, uploadTemporaryFiles())
+        Files.newDirectoryStream(tempDir, "data-*").use { directories ->
+            directories.forEach { data ->
+                Files.newDirectoryStream(data.resolve(".staging")).use { staged -> assertEquals(emptyList<Path>(), staged.toList()) }
+            }
+        }
+    }
+
+    private fun uploadTemporaryFiles(): Set<Path> =
+        Files.newDirectoryStream(Path.of(System.getProperty("java.io.tmpdir")), "ltv-upload-*.tmp").use { it.toSet() }
+
     private fun withServer(
         jobsFactory: (RunBundleStore) -> AnalysisJobs = { store ->
             val service = AnalysisService(store, EngineConfig())
@@ -1685,6 +1745,7 @@ class LocalApiTest {
         sourceProfiles: List<SourceProfile> = emptyList(),
         postgresProfiles: List<PostgresProfile> = emptyList(),
         adviceRunner: AdvisoryRunner? = null,
+        uploadLimitBytes: Long = 4_294_967_296L,
         block: (RunBundleStore, ApiClient) -> Unit,
     ) {
         DataDirectory.open(tempDir.resolve("data-${System.nanoTime()}")).use { directory ->
@@ -1693,7 +1754,15 @@ class LocalApiTest {
                 val adviceService = adviceRunner?.let { AdvisoryAiService(store, AiAdviceStore(directory, store), it) }
                 adviceService?.let { AdvisoryAiJobs(it) }.use { adviceJobs ->
                     startLocalServer(
-                        LocalApiContext(store, jobs, sourceProfiles, postgresProfiles, adviceService, adviceJobs),
+                        LocalApiContext(
+                            store,
+                            jobs,
+                            sourceProfiles,
+                            postgresProfiles,
+                            adviceService,
+                            adviceJobs,
+                            uploadLimitBytes = uploadLimitBytes,
+                        ),
                         openBrowser = false,
                     ).use { server ->
                         block(store, ApiClient(server.origin))
@@ -1911,6 +1980,25 @@ class LocalApiTest {
                     ),
                 ),
             )
+
+        fun uploadChunked(
+            filename: String,
+            bytes: ByteArray,
+        ): HttpResponse<String> {
+            val boundary = "ltv-test-boundary"
+            val body = ByteArrayOutputStream()
+            body.writeUtf8("--$boundary\r\n")
+            body.writeUtf8("Content-Disposition: form-data; name=\"file\"; filename=\"$filename\"\r\n")
+            body.writeUtf8("Content-Type: application/octet-stream\r\n\r\n")
+            body.write(bytes)
+            body.writeUtf8("\r\n--$boundary--\r\n")
+            // ofInputStream has no known length, so the request is sent chunked without Content-Length.
+            return send(
+                authenticated(request("/api/inputs"))
+                    .header("Content-Type", "multipart/form-data; boundary=$boundary")
+                    .POST(HttpRequest.BodyPublishers.ofInputStream { body.toByteArray().inputStream() }),
+            )
+        }
 
         fun createJob(
             runId: String,

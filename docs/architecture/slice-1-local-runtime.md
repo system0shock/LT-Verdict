@@ -159,7 +159,10 @@ usage error (`64`). Значение входит в identity (`histogram.signif
 
 ## Executor, admission и terminal retention
 
-Upload потоково записывается вне analysis executor. CPU-intensive parsing и
+Upload потоково записывается вне analysis executor. Лимит 4 GiB проверяется во
+время копирования, а не после него: чтение останавливается на `limit + 1`
+байте (в том числе для запроса без `Content-Length`), временный файл
+удаляется, клиент получает `413 RESOURCE_LIMIT_EXCEEDED`. CPU-intensive parsing и
 metrics выполняются на bounded pool обычных JVM platform threads, не на Netty
 request threads.
 

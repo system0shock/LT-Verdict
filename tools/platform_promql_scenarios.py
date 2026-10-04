@@ -63,6 +63,15 @@ SCENARIOS = (
         None,
     ),
     Scenario(
+        "memory: counting is not enough, an expected container without a ratio is a gap even when an unexpected container has one",
+        "memory_limit_ratio", False,
+        (*memory("a1", "app", "500+0x40", "1000+0x40"),
+         *memory("a1", "sidecar", None, "100+0x40"),
+         *memory("a1", "extra", "80+0x40", "100+0x40", expected=False),
+         pod_owner("a1")),
+        None,
+    ),
+    Scenario(
         "memory: without the kube-state container record the completeness is unknown, so a gap",
         "memory_limit_ratio", False,
         (*memory("a1", "app", "500+0x40", "1000+0x40", expected=False), *memory("a1", "sidecar", "80+0x40", "100+0x40", expected=False), pod_owner("a1")),

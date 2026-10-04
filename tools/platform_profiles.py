@@ -14,6 +14,7 @@ from tools.platform_profile_templates import SIGNALS, render
 MAX_QUERIES_PER_PROFILE = 64
 MAX_PROFILES = 16
 MAX_IDENTIFIER_BYTES = 128
+MAX_QUERY_BYTES = 65_536
 MAX_SOURCE_CONFIG_BYTES = 1_048_576
 NAME = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]{0,99}")
 SUBQUERY_STEP = re.compile(r"[1-9][0-9]*s")
@@ -40,7 +41,24 @@ def build_connections(config: dict) -> dict:
         raise ValueError(f"unknown or duplicate signals: {unknown}")
     sub = config.get("subquery_step", "15s")
     if not SUBQUERY_STEP.fullmatch(sub):
-        raise ValueError("subquery_step must look like 15s")
+        raise ValueError("subquery_step must be between 1s and 60s")
+    if not 1 <= int(sub[:-1]) <= 60:
+        raise ValueError("subquery_step must be between 1s and 60s")
+    transport = config.get("transport", "direct")
+    uid = config.get("datasource_uid")
+    if transport not in ("direct", "grafana_proxy"):
+        raise ValueError("transport must be direct or grafana_proxy")
+    if transport == "grafana_proxy":
+        if not isinstance(uid, str) or uid in (".", "..") or not re.fullmatch(r"[A-Za-z0-9._~-]{1,128}", uid):
+            raise ValueError("grafana_proxy requires a valid datasource_uid")
+    elif "datasource_uid" in config:
+        raise ValueError("direct transport must not carry datasource_uid")
+    base_url = config["base_url"]
+    if not isinstance(base_url, str) or not base_url.startswith(("http://", "https://")):
+        raise ValueError("base_url must start with http:// or https://")
+    auth = config.get("auth", {"type": "none"})
+    if base_url.startswith("http://") and auth.get("type") != "none" and not config.get("allow_insecure_http"):
+        raise ValueError("HTTP with auth requires allow_insecure_http")
     legacy = {rule["signal"]: rule for rule in config.get("legacy_sla_rules", [])}
     if set(legacy) - set(signals):
         raise ValueError("legacy_sla_rules reference a signal that is not generated")
@@ -64,10 +82,16 @@ def build_connections(config: dict) -> dict:
             query_id = f"{service}.{signal}"
             if len(query_id.encode()) > MAX_IDENTIFIER_BYTES:
                 raise ValueError(f"query id too long: {query_id}")
+            qualified_query_id = f"{profile_id}/{query_id}"
+            if len(qualified_query_id.encode()) > MAX_IDENTIFIER_BYTES:
+                raise ValueError(f"qualified id too long: {qualified_query_id}")
+            expression = render(spec, config["namespace"], service, sub, peak=use_peak)
+            if len(expression.encode()) > MAX_QUERY_BYTES:
+                raise ValueError("PLATFORM_PROFILE_EXPRESSION_TOO_LARGE")
             queries.append(
                 {
                     "id": query_id,
-                    "expression": render(spec, config["namespace"], service, sub, peak=use_peak),
+                    "expression": expression,
                     "metric": spec.metric,
                     "unit": spec.unit,
                     "entity": service,
@@ -81,6 +105,9 @@ def build_connections(config: dict) -> dict:
                 rule_id = f"{service}.{signal}.{rule['operator']}"
                 if len(rule_id.encode()) > MAX_IDENTIFIER_BYTES:
                     raise ValueError(f"rule id too long: {rule_id}")
+                qualified_rule_id = f"{profile_id}/{rule_id}"
+                if len(qualified_rule_id.encode()) > MAX_IDENTIFIER_BYTES:
+                    raise ValueError(f"qualified id too long: {qualified_rule_id}")
                 rules.append(
                     {
                         "id": rule_id,
@@ -95,14 +122,14 @@ def build_connections(config: dict) -> dict:
         connection = {
             "id": profile_id,
             "source_kind": "prometheus",
-            "transport": config.get("transport", "direct"),
-            "base_url": config["base_url"],
-            "auth": config.get("auth", {"type": "none"}),
+            "transport": transport,
+            "base_url": base_url,
+            "auth": auth,
             "governor": config.get("governor", DEFAULT_GOVERNOR),
             "queries": queries,
         }
-        if config.get("datasource_uid"):
-            connection["datasource_uid"] = config["datasource_uid"]
+        if transport == "grafana_proxy":
+            connection["datasource_uid"] = uid
         if config.get("allow_insecure_http"):
             connection["allow_insecure_http"] = True
         if rules:

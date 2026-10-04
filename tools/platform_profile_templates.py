@@ -34,13 +34,14 @@ EXPECTED = 'kube_pod_container_info{namespace="@ns@"} and on (namespace, pod) @o
 def guarded_ratio(usage: str, limit: str, over: str, expected: str = EXPECTED) -> str:
     """Interval aggregation per container first, then the worst container.
 
-    The value is published only while the number of containers with a ratio equals the number of containers the
-    platform expects (a lost usage series, a lost limit or a lost kube-state source all give a gap, never the max of the rest).
+    Publish only with a non-empty expected inventory and a ratio for every expected container.
+    A missing usage, limit, or inventory gives a gap instead of the max of the remaining containers.
     """
     ratio = f"({usage} / on (namespace, pod, container) {limit})"
     return (
         f"max by (namespace) ({over}({ratio}[$__interval:@sub@])) "
-        f"and on (namespace) (count by (namespace) ({expected}) == count by (namespace) ({ratio}))"
+        f"and on (namespace) (count by (namespace) ({expected}) unless on (namespace) "
+        f"(count by (namespace) ({expected} unless on (namespace, pod, container) {ratio})))"
     )
 
 

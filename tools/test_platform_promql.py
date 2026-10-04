@@ -20,6 +20,11 @@ def promtool_command():
 
 
 class PlatformPromqlTest(unittest.TestCase):
+    def test_ratio_guard_checks_expected_container_identity(self):
+        expression = render(SIGNALS["memory_limit_ratio"], "shop", "orders-svc", "15s")
+        self.assertIn("unless on (namespace, pod, container)", expression)
+        self.assertIn("unless on (namespace) (count by (namespace)", expression)
+
     def test_every_template_has_a_scenario(self):
         covered = {scenario.signal for scenario in SCENARIOS}
         missing = {name for name in SIGNALS if name not in covered}

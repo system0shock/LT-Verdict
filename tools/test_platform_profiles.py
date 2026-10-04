@@ -1,4 +1,6 @@
 import unittest
+from dataclasses import replace
+from unittest.mock import patch
 
 from tools.platform_profile_templates import SIGNALS, render
 from tools.platform_profiles import MAX_QUERIES_PER_PROFILE, build_connections
@@ -83,13 +85,58 @@ class PlatformProfilesTest(unittest.TestCase):
                 build_connections(bad)
 
     def test_names_and_rule_ids_fit_parser_limits(self):
-        build_connections(dict(BASE, arm="a" * 100, services=["s" * 100], signals=["cpu_limit_ratio"]))
+        build_connections(dict(BASE, arm="a" * 8, services=["s" * 80], signals=["cpu_limit_ratio"]))
         with self.assertRaisesRegex(ValueError, "invalid namespace/service/arm name:"):
             build_connections(dict(BASE, arm="a" * 101))
         legacy = {"signal": "cpu_limit_ratio", "operator": "gt", "threshold": 0.4, "min_consecutive_cells": 3, "effect": "sla"}
         with self.assertRaisesRegex(ValueError, "rule id too long"):
             build_connections(dict(BASE, services=["s" * 100], signals=["cpu_limit_ratio"],
                                    legacy_sla_rules=[dict(legacy, operator="x" * 30)]))
+
+    def test_qualified_query_id_must_fit_parser_limit(self):
+        config = dict(BASE, arm="a" * 100, services=["s" * 10], signals=["cpu_limit_ratio"])
+        with self.assertRaisesRegex(ValueError, "qualified id too long:"):
+            build_connections(config)
+
+    def test_qualified_rule_id_must_fit_parser_limit(self):
+        rule = {"signal": "cpu_limit_ratio", "operator": "gt", "threshold": 0.4,
+                "min_consecutive_cells": 3, "effect": "sla"}
+        config = dict(BASE, arm="a" * 100, services=["sss"], signals=["cpu_limit_ratio"], legacy_sla_rules=[rule])
+        with self.assertRaisesRegex(ValueError, "qualified id too long:"):
+            build_connections(config)
+
+    def test_subquery_step_must_be_between_1_and_60_seconds(self):
+        build_connections(dict(BASE, subquery_step="1s"))
+        build_connections(dict(BASE, subquery_step="60s"))
+        for step in ("0s", "61s"):
+            with self.subTest(step=step), self.assertRaisesRegex(ValueError, "subquery_step must be between 1s and 60s"):
+                build_connections(dict(BASE, subquery_step=step))
+
+    def test_rendered_expression_must_fit_parser_limit(self):
+        oversized = replace(SIGNALS["oom"], expression="\u00e9" * 32_769)
+        with patch.dict(SIGNALS, {"oom": oversized}):
+            with self.assertRaisesRegex(ValueError, "PLATFORM_PROFILE_EXPRESSION_TOO_LARGE"):
+                build_connections(dict(BASE, services=["orders-svc"], signals=["oom"]))
+
+    def test_transport_and_endpoint_must_match_parser_contract(self):
+        invalid = (
+            (dict(BASE, transport="other"), "transport"),
+            (dict(BASE, transport="grafana_proxy"), "datasource_uid"),
+            (dict(BASE, transport="grafana_proxy", datasource_uid="."), "datasource_uid"),
+            (dict(BASE, transport="grafana_proxy", datasource_uid=".."), "datasource_uid"),
+            (dict(BASE, transport="grafana_proxy", datasource_uid="bad/uid"), "datasource_uid"),
+            (dict(BASE, transport="grafana_proxy", datasource_uid="a" * 129), "datasource_uid"),
+            (dict(BASE, datasource_uid="uid"), "datasource_uid"),
+            (dict(BASE, base_url="ftp://metrics"), "base_url"),
+            (dict(BASE, auth={"type": "basic", "username": "u", "password": "p"}), "allow_insecure_http"),
+        )
+        for config, message in invalid:
+            with self.subTest(config=config), self.assertRaisesRegex(ValueError, message):
+                build_connections(config)
+        proxy = build_connections(dict(BASE, transport="grafana_proxy", datasource_uid="vm-main"))
+        self.assertEqual("vm-main", proxy["connections"][0]["datasource_uid"])
+        secure = build_connections(dict(BASE, auth={"type": "basic"}, allow_insecure_http=True))
+        self.assertTrue(secure["connections"][0]["allow_insecure_http"])
 
     def test_uses_rate_flag_matches_the_expression(self):
         for name, spec in SIGNALS.items():

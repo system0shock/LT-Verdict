@@ -3,7 +3,7 @@ package io.ltverdict.cli
 import io.ltverdict.ai.AdvisoryAiJobs
 import io.ltverdict.ai.AdvisoryAiService
 import io.ltverdict.ai.AiAdviceStore
-import io.ltverdict.ai.ModelStudioAdvisoryRunner
+import io.ltverdict.ai.advisoryAiSetup
 import io.ltverdict.core.AnalysisRequest
 import io.ltverdict.core.AnalysisService
 import io.ltverdict.core.CapacityPlanValidation
@@ -514,9 +514,10 @@ private fun ui(args: List<String>): Int {
             directory.close()
             throw failure
         }
+    val advisorySetup = advisoryAiSetup()
     val (adviceService, adviceJobs) =
         try {
-            val advisory = AdvisoryAiService(store, AiAdviceStore(directory, store), ModelStudioAdvisoryRunner.fromEnvironment())
+            val advisory = AdvisoryAiService(store, AiAdviceStore(directory, store), advisorySetup.runner)
             advisory to AdvisoryAiJobs(advisory)
         } catch (failure: Exception) {
             jobs.close()
@@ -537,6 +538,7 @@ private fun ui(args: List<String>): Int {
                     jenkinsWorkflows,
                     directory.root.resolve("transport/jenkins-artifacts"),
                     sourceHttp,
+                    aiModels = advisorySetup.models,
                 ),
             )
         } catch (failure: Exception) {

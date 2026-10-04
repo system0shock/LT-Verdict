@@ -51,6 +51,28 @@ class RunComparisonTest {
     }
 
     @Test
+    fun `dynamics keeps only analyses of the same arm`() {
+        fun savedWithArm(
+            suffix: Char,
+            day: Int,
+            arm: String?,
+        ) = saved(suffix, "2026-09-0${day}T10:00:00Z", 100).copy(identity = identity(arm = arm))
+
+        val current = savedWithArm('c', 3, "A")
+        val sameArm = savedWithArm('a', 1, "A")
+        val otherArm = savedWithArm('b', 2, "B")
+        val noArm = savedWithArm('d', 4, null)
+
+        val dynamics = buildRunDynamics(current, listOf(sameArm, otherArm, noArm, current), current.reference)
+        assertEquals(2, dynamics.getValue("comparable_count").jsonPrimitive.int)
+        assertEquals(2, dynamics.getValue("excluded_incompatible_count").jsonPrimitive.int)
+
+        val withoutArm = buildRunDynamics(noArm, listOf(sameArm, otherArm, noArm), noArm.reference)
+        assertEquals(1, withoutArm.getValue("comparable_count").jsonPrimitive.int)
+        assertEquals(2, withoutArm.getValue("excluded_incompatible_count").jsonPrimitive.int)
+    }
+
+    @Test
     fun `diagnostics module version two analysis is excluded from dynamics of version three`() {
         val base =
             Json
@@ -291,7 +313,10 @@ private fun reference(suffix: Char): JsonObject =
         put("analysis_id", suffix.toString().repeat(64))
     }
 
-private fun identity(semantics: String = "same"): JsonObject =
+private fun identity(
+    semantics: String = "same",
+    arm: String? = null,
+): JsonObject =
     buildJsonObject {
         put("source_type", "jmeter_jtl_csv")
         put("engine", buildJsonObject { put("id", semantics) })
@@ -302,6 +327,7 @@ private fun identity(semantics: String = "same"): JsonObject =
         put("histogram", buildJsonObject {})
         put("normalization", buildJsonObject {})
         put("limits", buildJsonObject {})
+        arm?.let { put("resource_arm", it) }
     }
 
 private fun result(

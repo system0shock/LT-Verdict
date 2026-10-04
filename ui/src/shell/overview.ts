@@ -72,7 +72,7 @@ function item(key: string, kind: AttentionKind, title: string, detail: string, t
 
 function noVerdictTarget(result: AnalysisResult, code: string | null): AttentionTarget | null {
   if (result.analysis_mode === 'capacity_step' && result.capacity_summary) return { tab: 'tables', targetId: 'capacity-results' }
-  if (code === 'METRIC_NOT_AVAILABLE' || code === 'TRANSACTION_NOT_FOUND' || code === 'AMBIGUOUS_TRANSACTION' || code === 'BUSINESS_OBSERVATIONS_NOT_FOUND') {
+  if (code === 'METRIC_NOT_AVAILABLE' || code === 'TRANSACTION_NOT_FOUND' || code === 'AMBIGUOUS_TRANSACTION' || code === 'BUSINESS_OBSERVATIONS_NOT_FOUND' || code === 'INSUFFICIENT_SAMPLES') {
     return { tab: 'tables', targetId: 'policy-results' }
   }
   if (code === 'RESOURCE_SERIES_NOT_FOUND' || code === 'MISSING_RESOURCE_CELLS') return { tab: 'tables', targetId: 'resource-results' }
@@ -80,6 +80,7 @@ function noVerdictTarget(result: AnalysisResult, code: string | null): Attention
 }
 
 function noteTarget(code: string | null): AttentionTarget | null {
+  if (code === 'SMALL_SAMPLE') return { tab: 'tables', targetId: 'policy-results' }
   if (code?.startsWith('SOURCE_')) return { tab: 'tables', targetId: 'source-acquisition' }
   if (code === 'RESOURCE_GAPS' || code === 'NO_OBSERVATIONS' || code === 'INSUFFICIENT_OBSERVATIONS' || code?.startsWith('RESOURCE_')) {
     return { tab: 'tables', targetId: 'resource-results' }

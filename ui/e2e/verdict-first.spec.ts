@@ -1,4 +1,5 @@
 import AxeBuilder from '@axe-core/playwright'
+import { SAMPLE_TEXT } from '../src/verdictReasons'
 import { expect, test, type Page } from '@playwright/test'
 
 const reference = { run_id: 'verdict-run', analysis_id: 'a'.repeat(64) }
@@ -25,6 +26,15 @@ const failing = {
 const missing = {
   ...failing, policy_verdict: 'NO_VERDICT', analysis_coverage: { status: 'INCOMPLETE', reasons: ['TRANSACTION_NOT_FOUND'] },
   evidence: [overall, { id: 'c1', type: 'policy_check', rule_id: 'missing-p95', metric: 'response_time_p95_ms', operator: 'lte', threshold: 100, status: 'NO_VERDICT', reason_code: 'TRANSACTION_NOT_FOUND' }],
+}
+
+const smallSample = {
+  ...failing, policy_verdict: 'PASS', analysis_coverage: { status: 'INCOMPLETE', reasons: ['SMALL_SAMPLE'] },
+  evidence: [
+    overall, checkout,
+    { id: 'c1', type: 'policy_check', rule_id: 'checkout-p95', metric: 'response_time_p95_ms', operator: 'lte', threshold: 2000, status: 'PASS', metric_evidence_id: 'm-checkout', observed: 1500, sample_count: 30, sample_floor: 20, min_samples: 50, sample_mode: 'SMALL_SAMPLE' },
+    { id: 'c2', type: 'policy_check', rule_id: 'rps-min', metric: 'throughput_rps', operator: 'gte', threshold: 1, status: 'PASS', metric_evidence_id: 'm-overall', observed: { numerator: 3650000, denominator: 30000 }, sample_count: 3650, sample_mode: 'NOT_GATED' },
+  ],
 }
 
 async function fixtureApi(page: Page, result: unknown) {
@@ -105,7 +115,25 @@ test('explains NO_VERDICT with words and keeps the raw code for support', async 
   await expect(page.getByTestId('verdict-chip')).toContainText('не проверено: 1')
 })
 
-for (const [name, result] of [['FAIL', failing], ['NO_VERDICT', missing]] as const) {
+test('labels a small-sample PASS in the card, the chip and the rules table', async ({ page }) => {
+  await fixtureApi(page, smallSample)
+  await openSaved(page)
+
+  await expect(page.getByTestId('verdict-badge')).toHaveText('PASS')
+  await expect(page.getByTestId('verdict-chip')).toContainText(new RegExp(SAMPLE_TEXT.chipSuffix.replace(/^[^\w\u0400-\u04ff]+/, '')))
+  await expect(page.locator('#verdict')).toContainText(SAMPLE_TEXT.lead(1).trim())
+  await expect(page.getByTestId('verdict-lines')).toContainText(new RegExp(SAMPLE_TEXT.detail(30, 50).replace(/^[^\w\u0400-\u04ff]+/, '').replace(/\s+/g, '\\s+')))
+
+  const table = page.locator('#policy-results')
+  const rows = page.locator('#policy-results tbody tr')
+  await expect(table.locator('thead')).toContainText('Sample')
+  await expect(rows).toHaveCount(2)
+  await expect(rows.nth(0)).toContainText(/30 \/ 50.*SMALL_SAMPLE/)
+  await expect(rows.nth(1)).toContainText('NOT_GATED')
+  await expect(table).not.toContainText(/undefined|NaN/)
+})
+
+for (const [name, result] of [['FAIL', failing], ['NO_VERDICT', missing], ['SMALL_SAMPLE', smallSample]] as const) {
   for (const theme of ['light', 'dark'] as const) {
     test(`verdict card and chip have no serious axe violations: ${name}, ${theme}`, async ({ page }) => {
       await fixtureApi(page, result)

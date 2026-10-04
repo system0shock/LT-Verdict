@@ -285,6 +285,66 @@ test.describe('verdict summary', () => {
     expect(summary.notesTitle).toContain('Это не отменяет вердикт')
   })
 
+  test('a small-sample PASS stays a PASS and says how small the sample is', () => {
+    const summary = summarizeVerdict(build({
+      policy_verdict: 'PASS',
+      analysis_coverage: { status: 'INCOMPLETE', reasons: ['SMALL_SAMPLE'] },
+      evidence: [overall, checkout, p95Rule('checkout-p95', 'PASS', 1500, { sample_count: 30, sample_floor: 20, min_samples: 50, sample_mode: 'SMALL_SAMPLE' })],
+    }))
+
+    expect(summary.headline).toBe('Прогон проходит — нарушений нет, проверок: 1')
+    expect(summary.chip).toBe('нарушений нет · малая выборка')
+    expect(summary.lead).toBe('Ни одно правило не нарушено. Ниже первые проверки с порогом; полный список — в таблицах правил. Для 1 проверки выборка меньше рекомендуемой: результат рассчитан, но помечен как «малая выборка».')
+    expect(summary.lines.map((line) => flat(`${line.title}: ${line.detail}`))).toEqual([
+      'Правило checkout-p95 · p95 отклика · POST /checkout: 1 500 мс при пороге ≤ 2 000 мс · режим малой выборки: 30 сэмплов при минимуме 50',
+    ])
+    expect(summary.notes.map((note) => note.code)).toEqual(['SMALL_SAMPLE'])
+  })
+
+  test('a small-sample FAIL keeps the violation and the label', () => {
+    const summary = summarizeVerdict(build({
+      policy_verdict: 'FAIL',
+      analysis_coverage: { status: 'INCOMPLETE', reasons: ['SMALL_SAMPLE'] },
+      evidence: [overall, checkout, p95Rule('checkout-p95', 'FAIL', 2340, { sample_count: 30, sample_floor: 20, min_samples: 50, sample_mode: 'SMALL_SAMPLE' })],
+    }))
+
+    expect(summary.chip).toBe('нарушено 1 из 1 · малая выборка')
+    expect(flat(summary.lines[0].detail)).toBe('2 340 мс при пороге ≤ 2 000 мс · режим малой выборки: 30 сэмплов при минимуме 50')
+  })
+
+  test('checks with a full sample or without a gate get no small-sample label', () => {
+    const summary = summarizeVerdict(build({
+      policy_verdict: 'PASS',
+      evidence: [
+        overall, checkout,
+        p95Rule('full', 'PASS', 100, { sample_count: 500, sample_floor: 20, min_samples: 50, sample_mode: 'FULL' }),
+        p95Rule('rps', 'PASS', 100, { sample_count: 500, sample_mode: 'NOT_GATED' }),
+        p95Rule('legacy', 'PASS', 100),
+      ],
+    }))
+
+    expect(summary.chip).toBe('нарушений нет')
+    expect(summary.lead).not.toContain('малая выборка')
+    expect(summary.lines.every((line) => !line.detail.includes('малой выборки'))).toBe(true)
+  })
+
+  test('INSUFFICIENT_SAMPLES names the rule with its count and keeps the real violation visible', () => {
+    const summary = summarizeVerdict(build({
+      policy_verdict: 'NO_VERDICT',
+      analysis_coverage: { status: 'INCOMPLETE', reasons: ['INSUFFICIENT_SAMPLES', 'SMALL_SAMPLE'] },
+      evidence: [
+        overall, checkout,
+        errorRule,
+        p95Rule('rare-p95', 'NO_VERDICT', 0, { reason_code: 'INSUFFICIENT_SAMPLES', observed: undefined, window_id: 'steady-1', sample_count: 12, sample_floor: 20, min_samples: 100, sample_mode: 'INSUFFICIENT' }),
+      ],
+    }))
+
+    expect(summary.linesTitle).toBe('Найденные нарушения')
+    expect(summary.causes.map((cause) => cause.code)).toEqual(['INSUFFICIENT_SAMPLES'])
+    expect(summary.causes[0].subjects).toEqual(['rare-p95 (окно steady-1, сэмплов: 12, нужно не меньше 20)'])
+    expect(summary.notes.map((note) => note.code)).toEqual(['SMALL_SAMPLE'])
+  })
+
   test('capacity NO_VERDICT with empty reasons explains the bound instead of staying silent', () => {
     const summary = summarizeVerdict(build({
       analysis_mode: 'capacity_step',

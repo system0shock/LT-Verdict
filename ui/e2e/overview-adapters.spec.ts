@@ -86,6 +86,21 @@ test.describe('attention items', () => {
     expect(items.every((item) => !item.diagnostic)).toBe(true)
   })
 
+  test('small-sample reasons lead to the policy table', () => {
+    const blocked = build({
+      policy_verdict: 'NO_VERDICT',
+      analysis_coverage: { status: 'INCOMPLETE', reasons: ['INSUFFICIENT_SAMPLES', 'SMALL_SAMPLE'] },
+      evidence: [overall, checkout, { ...p95Rule('rare', 'NO_VERDICT', 0), reason_code: 'INSUFFICIENT_SAMPLES', sample_count: 12, sample_floor: 20 }],
+    })
+
+    const targets = attentionItems(blocked).map((entry) => [entry.key, entry.target?.targetId])
+
+    expect(targets).toEqual([
+      ['no_verdict:INSUFFICIENT_SAMPLES|Правила', 'policy-results'],
+      ['coverage:SMALL_SAMPLE', 'policy-results'],
+    ])
+  })
+
   test('PASS and INVALID produce no violation and a plain PASS has nothing to flag', () => {
     expect(attentionItems(build({ policy_verdict: 'PASS', evidence: [overall, checkout, p95Rule('ok', 'PASS', 100)] }))).toEqual([])
     expect(kinds(build({ policy_verdict: 'NO_VERDICT', run_validity: 'INVALID', analysis_coverage: { status: 'INCOMPLETE', reasons: ['MALFORMED_JMETER_CSV'] } })))

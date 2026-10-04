@@ -8,7 +8,7 @@ import type {
   PolicyCheckEvidence,
   ResourcePolicyCheckEvidence,
 } from './types'
-import { isNoVerdictReason, reasonText } from './verdictReasons'
+import { isNoVerdictReason, reasonText, SAMPLE_TEXT } from './verdictReasons'
 
 export type Verdict = AnalysisResult['policy_verdict']
 
@@ -116,11 +116,15 @@ function businessLine(check: PolicyCheckEvidence, metrics: Map<string, MetricSum
   }
   // Если и 20 знаков не различают значения (для FAIL), прямо говорим, что порог нарушен.
   const tie = check.status === 'FAIL' && observed === threshold ? ' (нарушение меньше точности отображения)' : ''
-  return {
+  const line = {
     key: check.id,
     title: `Правило ${check.rule_id} · ${METRIC_LABELS[check.metric] ?? check.metric} · ${scopeLabel(scope)}${window}`,
     detail: `${observed} при пороге ${sign} ${threshold}${tie}`,
   }
+  if (check.sample_mode === 'SMALL_SAMPLE' && typeof check.sample_count === 'number' && typeof check.min_samples === 'number') {
+    line.detail += SAMPLE_TEXT.detail(check.sample_count, check.min_samples)
+  }
+  return line
 }
 
 // Оператор ресурсного правила описывает нарушение (gt: значение выше порога), а не условие прохождения.
@@ -192,7 +196,10 @@ function causesOf(result: AnalysisResult): CauseGroup[] {
   const { business, resource } = checksOf(result)
   for (const check of business) {
     if (check.status !== 'NO_VERDICT') continue
-    items.push({ code: check.reason_code ?? null, label: 'Правила', subject: check.window_id ? `${check.rule_id} (окно ${check.window_id})` : check.rule_id })
+    const subject = check.reason_code === 'INSUFFICIENT_SAMPLES' && typeof check.sample_count === 'number' && typeof check.sample_floor === 'number'
+      ? SAMPLE_TEXT.insufficientSubject(check.rule_id, check.window_id, check.sample_count, check.sample_floor)
+      : check.window_id ? `${check.rule_id} (окно ${check.window_id})` : check.rule_id
+    items.push({ code: check.reason_code ?? null, label: 'Правила', subject })
   }
   for (const check of resource) {
     if (check.status === 'NO_VERDICT') items.push({ code: check.reason, label: 'Правила', subject: `${check.rule_id} (окно ${check.window_id})` })
@@ -240,6 +247,7 @@ export function summarizeVerdict(result: AnalysisResult, context: { policySha256
   const total = business.length + resource.length
   const failed = failedLines.length
   const unresolved = business.filter((check) => check.status === 'NO_VERDICT').length + resource.filter((check) => check.status === 'NO_VERDICT').length
+  const small = business.filter((check) => check.sample_mode === 'SMALL_SAMPLE').length
 
   let causes = verdict === 'NO_VERDICT' ? causesOf(result) : []
   if (verdict === 'NO_VERDICT' && causes.length === 0) {
@@ -280,10 +288,18 @@ export function summarizeVerdict(result: AnalysisResult, context: { policySha256
     headline = `Прогон не проходит — нарушено проверок: ${failed} из ${total}`
     lead = 'Измеренные значения вышли за пороги правил. Первые нарушения показаны ниже, остальные — в таблицах правил.'
     chip = `нарушено ${failed} из ${total}`
+    if (small > 0) {
+      lead += SAMPLE_TEXT.lead(small)
+      chip += SAMPLE_TEXT.chipSuffix
+    }
   } else if (verdict === 'PASS') {
     headline = `Прогон проходит — нарушений нет, проверок: ${total}`
     lead = 'Ни одно правило не нарушено. Ниже первые проверки с порогом; полный список — в таблицах правил.'
     chip = 'нарушений нет'
+    if (small > 0) {
+      lead += SAMPLE_TEXT.lead(small)
+      chip += SAMPLE_TEXT.chipSuffix
+    }
   } else if (verdict === 'NO_POLICY') {
     headline = 'Вердикта нет — политика не задана'
     lead = 'Метрики посчитаны, но пороги не проверялись: не заданы ни политика, ни SLA-правила ресурсов. Добавьте их в форме анализа и запустите анализ заново.'

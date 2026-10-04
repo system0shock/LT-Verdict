@@ -1,0 +1,19 @@
+{
+  "schema_version": "resource-series.v1",
+  "kind": "values",
+  "resource_snapshot_sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+  "numeric_encoding": "ieee754-double",
+  "grid": {
+    "start_epoch_ms": 1767225600000,
+    "source_step_ms": 15000,
+    "step_ms": 0,
+    "first_cell_start_ms": 1767225600000,
+    "cell_count": 1,
+    "source_cells_per_cell": 1,
+    "last_cell_source_cells": 1
+  },
+  "series": [
+    { "id": "cpu", "aggregation": "interval_mean", "reducer": "mean", "values": [0.5] }
+  ],
+  "next_from_ms": null
+}

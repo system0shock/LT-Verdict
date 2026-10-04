@@ -1,0 +1,66 @@
+{
+  "overall": {
+    "sample_count": 45,
+    "error_count": 15,
+    "latency_ms": {
+      "p50": 32,
+      "p95": 58,
+      "p99": 633,
+      "max": 633
+    }
+  },
+  "transactions": [
+    {
+      "group_path": [],
+      "label": "TC-parent",
+      "kind": "JMETER_CONTAINER",
+      "sample_count": 15,
+      "error_count": 15,
+      "latency_ms": {
+        "p50": 109,
+        "p95": 734,
+        "p99": 734,
+        "max": 734
+      }
+    },
+    {
+      "group_path": [],
+      "label": "child1",
+      "kind": "JMETER_SAMPLER",
+      "sample_count": 15,
+      "error_count": 0,
+      "latency_ms": {
+        "p50": 31,
+        "p95": 633,
+        "p99": 633,
+        "max": 633
+      }
+    },
+    {
+      "group_path": [],
+      "label": "child2",
+      "kind": "JMETER_SAMPLER",
+      "sample_count": 15,
+      "error_count": 15,
+      "latency_ms": {
+        "p50": 32,
+        "p95": 43,
+        "p99": 43,
+        "max": 43
+      }
+    },
+    {
+      "group_path": [],
+      "label": "child3",
+      "kind": "JMETER_SAMPLER",
+      "sample_count": 15,
+      "error_count": 0,
+      "latency_ms": {
+        "p50": 47,
+        "p95": 58,
+        "p99": 58,
+        "max": 58
+      }
+    }
+  ]
+}

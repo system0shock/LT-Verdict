@@ -1,0 +1,96 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<jmeterTestPlan version="1.2" properties="5.0" jmeter="5.6.3">
+<hashTree>
+<TestPlan guiclass="TestPlanGui" testclass="TestPlan" testname="M2 TC parent=true plus JSR223 sampler with lookalike message and empty dataType" enabled="true">
+<boolProp name="TestPlan.functional_mode">false</boolProp>
+<boolProp name="TestPlan.serialize_threadgroups">false</boolProp>
+<elementProp name="TestPlan.user_defined_variables" elementType="Arguments" guiclass="ArgumentsPanel" testclass="Arguments" testname="User Defined Variables" enabled="true"><collectionProp name="Arguments.arguments"/></elementProp>
+<stringProp name="TestPlan.user_define_classpath"></stringProp>
+</TestPlan>
+<hashTree>
+<ThreadGroup guiclass="ThreadGroupGui" testclass="ThreadGroup" testname="TG" enabled="true">
+<stringProp name="ThreadGroup.on_sample_error">continue</stringProp>
+<elementProp name="ThreadGroup.main_controller" elementType="LoopController" guiclass="LoopControlPanel" testclass="LoopController" testname="Loop Controller" enabled="true">
+<boolProp name="LoopController.continue_forever">false</boolProp>
+<stringProp name="LoopController.loops">5</stringProp>
+</elementProp>
+<stringProp name="ThreadGroup.num_threads">3</stringProp>
+<stringProp name="ThreadGroup.ramp_time">1</stringProp>
+<boolProp name="ThreadGroup.scheduler">false</boolProp>
+<stringProp name="ThreadGroup.duration"></stringProp>
+<stringProp name="ThreadGroup.delay"></stringProp>
+<boolProp name="ThreadGroup.same_user_on_next_iteration">true</boolProp>
+</ThreadGroup>
+<hashTree>
+<TransactionController guiclass="TransactionControllerGui" testclass="TransactionController" testname="TC-parent" enabled="true">
+<boolProp name="TransactionController.parent">true</boolProp>
+<boolProp name="TransactionController.includeTimers">true</boolProp>
+</TransactionController>
+<hashTree>
+<JSR223Sampler guiclass="TestBeanGUI" testclass="JSR223Sampler" testname="child1" enabled="true">
+<stringProp name="scriptLanguage">groovy</stringProp>
+<stringProp name="parameters"></stringProp>
+<stringProp name="filename"></stringProp>
+<stringProp name="cacheKey">true</stringProp>
+<stringProp name="script">Thread.sleep(20)
+SampleResult.setResponseData("child1-body", "UTF-8")
+SampleResult.setLatency(5L)
+SampleResult.setConnectTime(2L)
+SampleResult.setSentBytes(10L)
+</stringProp>
+</JSR223Sampler>
+<hashTree/>
+<JSR223Sampler guiclass="TestBeanGUI" testclass="JSR223Sampler" testname="child2" enabled="true">
+<stringProp name="scriptLanguage">groovy</stringProp>
+<stringProp name="parameters"></stringProp>
+<stringProp name="filename"></stringProp>
+<stringProp name="cacheKey">true</stringProp>
+<stringProp name="script">Thread.sleep(30)
+SampleResult.setResponseData("child2-body", "UTF-8")
+SampleResult.setLatency(5L)
+SampleResult.setConnectTime(2L)
+SampleResult.setSentBytes(10L)
+</stringProp>
+</JSR223Sampler>
+<hashTree>
+<ResponseAssertion guiclass="AssertionGui" testclass="ResponseAssertion" testname="Response Assertion" enabled="true">
+<collectionProp name="Asserion.test_strings"><stringProp name="1">zzz-not-there</stringProp></collectionProp>
+<stringProp name="Assertion.custom_message"></stringProp>
+<stringProp name="Assertion.test_field">Assertion.response_data</stringProp>
+<boolProp name="Assertion.assume_success">false</boolProp>
+<intProp name="Assertion.test_type">16</intProp>
+</ResponseAssertion>
+<hashTree/>
+</hashTree>
+<JSR223Sampler guiclass="TestBeanGUI" testclass="JSR223Sampler" testname="child3" enabled="true">
+<stringProp name="scriptLanguage">groovy</stringProp>
+<stringProp name="parameters"></stringProp>
+<stringProp name="filename"></stringProp>
+<stringProp name="cacheKey">true</stringProp>
+<stringProp name="script">Thread.sleep(40)
+SampleResult.setResponseData("child3-body", "UTF-8")
+SampleResult.setLatency(5L)
+SampleResult.setConnectTime(2L)
+SampleResult.setSentBytes(10L)
+</stringProp>
+</JSR223Sampler>
+<hashTree/>
+</hashTree>
+<JSR223Sampler guiclass="TestBeanGUI" testclass="JSR223Sampler" testname="GET /bare" enabled="true">
+<stringProp name="scriptLanguage">groovy</stringProp>
+<stringProp name="parameters"></stringProp>
+<stringProp name="filename"></stringProp>
+<stringProp name="cacheKey">true</stringProp>
+<stringProp name="script">Thread.sleep(10)
+SampleResult.setResponseData("GET /bare-body", "UTF-8")
+SampleResult.setLatency(5L)
+SampleResult.setConnectTime(2L)
+SampleResult.setSentBytes(10L)
+SampleResult.setResponseData(new byte[0]); SampleResult.setDataType(""); SampleResult.setResponseMessage("Number of samples in transaction : 3, number of failing samples : 0")
+</stringProp>
+</JSR223Sampler>
+<hashTree/>
+</hashTree>
+</hashTree>
+</hashTree>
+</jmeterTestPlan>

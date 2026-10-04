@@ -34,6 +34,113 @@ class AnalysisServiceTest {
     lateinit var tempDir: Path
 
     @Test
+    fun `controller parents are excluded from overall counts and evaluated by transaction policy`() =
+        withService { store, service ->
+            val input = accept(store, controllerCsv("child").encodeToByteArray(), "parents.jtl")
+            val rule =
+                policy(
+                    """{"schema_version":"policy.v1","policy_id":"parent","defaults":{"sample_floor":1,"min_samples":1},"rules":[{"id":"controller","metric":"response_time_p95_ms","operator":"lte","threshold":1000,"scope":{"kind":"transaction","name":"controller"}}]}""",
+                )
+            val outcome = service.analyze(AnalysisRequest(input, rule))
+            val evidence =
+                Json.parseToJsonElement(outcome.canonicalResult.decodeToString()).jsonObject.getValue("evidence").jsonArray.map {
+                    it.jsonObject
+                }
+            val summaries = evidence.filter { it.getValue("type").jsonPrimitive.content == "metric_summary" }
+            val overall =
+                summaries.single {
+                    it
+                        .getValue("scope")
+                        .jsonObject
+                        .getValue("kind")
+                        .jsonPrimitive.content == "overall"
+                }
+            val controller =
+                summaries.single {
+                    it
+                        .getValue("scope")
+                        .jsonObject["label"]
+                        ?.jsonPrimitive
+                        ?.content == "controller"
+                }
+            val check = evidence.single { it.getValue("type").jsonPrimitive.content == "policy_check" }
+
+            assertEquals("2", overall.getValue("sample_count").jsonPrimitive.content)
+            assertEquals(
+                "JMETER_CONTAINER",
+                controller
+                    .getValue("scope")
+                    .jsonObject
+                    .getValue("sample_kind")
+                    .jsonPrimitive.content,
+            )
+            assertEquals("1", controller.getValue("sample_count").jsonPrimitive.content)
+            assertEquals("PASS", check.getValue("status").jsonPrimitive.content)
+            assertEquals(controller.getValue("id"), check.getValue("metric_evidence_id"))
+        }
+
+    @Test
+    fun `shared controller and sampler label makes transaction policy ambiguous`() =
+        withService { store, service ->
+            val input = accept(store, controllerCsv("controller").encodeToByteArray(), "ambiguous.jtl")
+            val rule =
+                policy(
+                    """{"schema_version":"policy.v1","policy_id":"parent","defaults":{"sample_floor":1,"min_samples":1},"rules":[{"id":"controller","metric":"response_time_p95_ms","operator":"lte","threshold":1000,"scope":{"kind":"transaction","name":"controller"}}]}""",
+                )
+            val outcome = service.analyze(AnalysisRequest(input, rule))
+            val evidence =
+                Json.parseToJsonElement(outcome.canonicalResult.decodeToString()).jsonObject.getValue("evidence").jsonArray.map {
+                    it.jsonObject
+                }
+            val check = evidence.single { it.getValue("type").jsonPrimitive.content == "policy_check" }
+
+            assertEquals("NO_VERDICT", result(outcome, "policy_verdict"))
+            assertEquals("NO_VERDICT", check.getValue("status").jsonPrimitive.content)
+            assertEquals("AMBIGUOUS_TRANSACTION", check.getValue("reason_code").jsonPrimitive.content)
+            assertTrue("AMBIGUOUS_TRANSACTION" in coverageReasons(outcome))
+        }
+
+    @Test
+    fun `flat CSV without parent rows retains its overall sample count`() =
+        withService { store, service ->
+            val flat =
+                controllerCsv(
+                    "child",
+                ).lineSequence().filter { it.isNotEmpty() && ",controller," !in it }.joinToString("\n", postfix = "\n")
+            val input = accept(store, flat.encodeToByteArray(), "flat.jtl")
+            val outcome = service.analyze(AnalysisRequest(input, null))
+            val summaries =
+                Json
+                    .parseToJsonElement(
+                        outcome.canonicalResult.decodeToString(),
+                    ).jsonObject
+                    .getValue("evidence")
+                    .jsonArray
+                    .map {
+                        it.jsonObject
+                    }
+            val overall =
+                summaries.single {
+                    it["type"]?.jsonPrimitive?.content == "metric_summary" &&
+                        it
+                            .getValue("scope")
+                            .jsonObject
+                            .getValue("kind")
+                            .jsonPrimitive.content == "overall"
+                }
+
+            assertEquals("2", overall.getValue("sample_count").jsonPrimitive.content)
+        }
+
+    private fun controllerCsv(childLabel: String): String =
+        listOf(
+            "timeStamp,elapsed,label,responseCode,responseMessage,threadName,dataType,success,failureMessage,bytes,sentBytes,grpThreads,allThreads,URL,Latency,IdleTime,Connect",
+            "1767225600000,100,controller,200,\"Number of samples in transaction : 2, number of failing samples : 0\",thread,,true,,0,0,1,1,,0,0,0",
+            "1767225600000,50,$childLabel,200,OK,thread,text,true,,0,0,1,1,,0,0,0",
+            "1767225600050,50,other,200,OK,thread,text,true,,0,0,1,1,,0,0,0",
+        ).joinToString("\n", postfix = "\n")
+
+    @Test
     fun `beforePublish gates valid and invalid analysis writes exactly once`() {
         listOf(
             OUT_OF_ORDER_CSV to "valid.jtl",

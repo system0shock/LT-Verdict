@@ -75,19 +75,23 @@
     },
     {
       "path": "fixtures/slice1/identity/analysis-identity-resources.sha256",
-      "sha256": "0c594570e2f65415d5847c732d8a3af6f5c3807cf9f5faa343d85406225d33ed"
+      "sha256": "63ad6daa26f4dd26e3f3ce856f28f8d1993cfba4bda01ed4af2f9cc52ca5c971"
     },
     {
       "path": "fixtures/slice1/identity/analysis-identity-resources.v1.json",
-      "sha256": "be4bcb97e8b1202cfc02a5a7f11a4973c566552c5670e164eacb2fd5821414a4"
+      "sha256": "899d77d66167f09c70b6aa82235ea329319b5fb8788d4c39915e30b8f7fbe749"
     },
     {
       "path": "fixtures/slice1/identity/analysis-identity.sha256",
-      "sha256": "4402e74a187fdfae375b3e9a261ddab23bf1cd0c9a1a9fb9c3c58e18ddd33ce9"
+      "sha256": "10d2d19699a6cdcd1fbf7c2dd9c20ab513a76262948874db3e5f4d0a7c3601c8"
     },
     {
       "path": "fixtures/slice1/identity/analysis-identity.v1.json",
-      "sha256": "cdcc45e4cac5bddfdbfda2ea934bc321564de4d0a8bbc3fd38b082bb5bba3f2f"
+      "sha256": "b54b23bf045dc8c8eabcb2f7542f7ce75a0b2a202a98d9d871b81d9b1fe0377e"
+    },
+    {
+      "path": "fixtures/slice1/identity/legacy-pre-adr-0016.v1.json",
+      "sha256": "bde95aeee50eaffe17953112ed0800202a9f19f0addfcdaba14afcbc116a98b2"
     },
     {
       "path": "fixtures/slice1/identity/policy.canonical.json",
@@ -100,6 +104,90 @@
     {
       "path": "fixtures/slice1/jmeter/csv-5.6.3/oracle.json",
       "sha256": "753ff66d11ace43aa106fb79fd3fddb48bf106c0b9a33da9e6e3a2ce3d556448"
+    },
+    {
+      "path": "fixtures/slice1/jmeter/csv-nested-subresults-false-5.6.3/input.jtl",
+      "sha256": "b295345cf7f2105847a9e99574cbd6b8f3c7ae27ae32d315d145125332bba50a"
+    },
+    {
+      "path": "fixtures/slice1/jmeter/csv-nested-subresults-false-5.6.3/oracle.json",
+      "sha256": "0df992335bc0733562d87e61bda4e33581a01e9bf0d5fe3d792537a18683a6fb"
+    },
+    {
+      "path": "fixtures/slice1/jmeter/csv-nested-subresults-false-5.6.3/plan.jmx",
+      "sha256": "85906702a8e57dd948c001e142c786d8aa41587807e3e533787767b14a5ac1aa"
+    },
+    {
+      "path": "fixtures/slice1/jmeter/csv-tc-noparent-sample-5.6.3/input.jtl",
+      "sha256": "27e8e0329ef64cd389920aa95912cd3be84afc296f80d45a9c665f5235a1a757"
+    },
+    {
+      "path": "fixtures/slice1/jmeter/csv-tc-noparent-sample-5.6.3/oracle.json",
+      "sha256": "fa004b325d371abb505a461836fcf13f184ff0d4b514f6c07476c1fb3967faf0"
+    },
+    {
+      "path": "fixtures/slice1/jmeter/csv-tc-noparent-sample-5.6.3/plan.jmx",
+      "sha256": "751ad0ebb18446adb60bd8390749151926b7a28262766f722849c3c51c565261"
+    },
+    {
+      "path": "fixtures/slice1/jmeter/csv-tc-parent-subresults-false-5.6.3/input.jtl",
+      "sha256": "eb9ce3ed8c7424bb69a1416ea269955e57ab40d4b7eadb6e8abb59895a1e409a"
+    },
+    {
+      "path": "fixtures/slice1/jmeter/csv-tc-parent-subresults-false-5.6.3/oracle.json",
+      "sha256": "68b3f807538f1fba8be7d8ff74beabf4afa129a897923845daa12172bc6ca356"
+    },
+    {
+      "path": "fixtures/slice1/jmeter/csv-tc-parent-subresults-false-5.6.3/plan.jmx",
+      "sha256": "449bbb37b118cbd243d20d78a9e62ee4eab092963778066f17b95c185d132e6a"
+    },
+    {
+      "path": "fixtures/slice1/jmeter/csv-tc-parent-subresults-true-5.6.3/input.jtl",
+      "sha256": "1a8d30f2211304d578873ddd9be013967a4ad8f020527b760eff06e96fcd7f62"
+    },
+    {
+      "path": "fixtures/slice1/jmeter/csv-tc-parent-subresults-true-5.6.3/oracle.json",
+      "sha256": "c7e599b23521a0f990227d9be8365791c14d1d239e5f7c7aca73924bb7f82573"
+    },
+    {
+      "path": "fixtures/slice1/jmeter/csv-tc-parent-subresults-true-5.6.3/plan.jmx",
+      "sha256": "449bbb37b118cbd243d20d78a9e62ee4eab092963778066f17b95c185d132e6a"
+    },
+    {
+      "path": "fixtures/slice1/jmeter/csv-tc-plus-http-forged-reason-5.6.3/input.jtl",
+      "sha256": "4a17ca47bd66eb79441df940b51b44b5f78f45b842008f96433ca93a0b31a66a"
+    },
+    {
+      "path": "fixtures/slice1/jmeter/csv-tc-plus-http-forged-reason-5.6.3/oracle.json",
+      "sha256": "3034d3371b370224644aee241d346d5755d07defe0dee1b9d8a28ce195f76fc7"
+    },
+    {
+      "path": "fixtures/slice1/jmeter/csv-tc-plus-http-forged-reason-5.6.3/plan.jmx",
+      "sha256": "614c69c678fb69f759db9c339a50eb97576c2d4889b5a8b6fb33e3c89e93baa8"
+    },
+    {
+      "path": "fixtures/slice1/jmeter/csv-tc-plus-lookalike-empty-datatype-5.6.3/input.jtl",
+      "sha256": "eaaa1d71f4df7bb41b04df390b0dd48141b1015dcf77b15e3f53129160a16b09"
+    },
+    {
+      "path": "fixtures/slice1/jmeter/csv-tc-plus-lookalike-empty-datatype-5.6.3/oracle.json",
+      "sha256": "85fc7c0e6666cf3fdb4caa491f0eb32f80812b623512f4456635c1fcb5786252"
+    },
+    {
+      "path": "fixtures/slice1/jmeter/csv-tc-plus-lookalike-empty-datatype-5.6.3/plan.jmx",
+      "sha256": "791b23fd82bb0cce35009374a77151ef6c87841025b85344837f112e453d6f0b"
+    },
+    {
+      "path": "fixtures/slice1/jmeter/csv-tc-plus-plain-sampler-subresults-false-5.6.3/input.jtl",
+      "sha256": "b08479bb77a11aa464a88471bf69039ca453f6864e2f8cd1302bd6569cae744f"
+    },
+    {
+      "path": "fixtures/slice1/jmeter/csv-tc-plus-plain-sampler-subresults-false-5.6.3/oracle.json",
+      "sha256": "0433ea774df61b1253a359600cacb9f9880e9f62c2c76e7b77a314c080f26f3e"
+    },
+    {
+      "path": "fixtures/slice1/jmeter/csv-tc-plus-plain-sampler-subresults-false-5.6.3/plan.jmx",
+      "sha256": "41c14394aff6f4cf4e31560bf6e6cd5aa463a5e19d528ec3cd15096ccac8d639"
     },
     {
       "path": "fixtures/slice1/jmeter/xml-5.6.3/input.xml",
@@ -260,6 +348,523 @@
               "p95": 84,
               "p99": 84,
               "max": 84
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "jmeter-csv-tc-parent-subresults-true-5.6.3",
+      "input": "fixtures/slice1/jmeter/csv-tc-parent-subresults-true-5.6.3/input.jtl",
+      "oracle": "fixtures/slice1/jmeter/csv-tc-parent-subresults-true-5.6.3/oracle.json",
+      "producer": {
+        "name": "Apache JMeter",
+        "version": "5.6.3",
+        "release_tag": "rel/v5.6.3",
+        "source_url": "https://archive.apache.org/dist/jmeter/binaries/apache-jmeter-5.6.3.zip",
+        "distribution_sha512": "387fadca903ee0aa30e3f2115fdfedb3898b102e6b9fe7cc3942703094bd2e65b235df2b0c6d0d3248e74c9a7950a36e42625fd74425368342c12e40b0163076",
+        "distribution_sha512_check": "Equal to the .sha512 published at https://archive.apache.org/dist/jmeter/binaries/ and at https://downloads.apache.org/jmeter/binaries/ (2026-10-04).",
+        "plugins": "none: freshly unpacked official distribution; lib/ext holds only the bundled ApacheJMeter_*.jar files and readme.txt",
+        "plan": "Transaction Controller with Generate parent sample (one child fails its assertion); subresults=true: parent rows and child rows",
+        "jmx": "fixtures/slice1/jmeter/csv-tc-parent-subresults-true-5.6.3/plan.jmx",
+        "generation_command": "bin/jmeter.bat -n -t plan.jmx -l generated.jtl -j generated.log -Jjmeter.save.saveservice.output_format=csv -Jjmeter.save.saveservice.subresults=true",
+        "artifact_normalization": "Converted generated JTL line endings from CRLF to LF; bytes otherwise unchanged. The plan header attribute jmeter=\"5.6.3\" was set before the run; loopback localhost targets only."
+      },
+      "oracle_method": "Computed from the producer rows by an independent script (standard csv module, nearest-rank percentiles) applying the ADR 0016 parent rule; not produced by LT Verdict code.",
+      "expected": {
+        "overall": {
+          "sample_count": 45,
+          "error_count": 15,
+          "latency_ms": {
+            "p50": 32,
+            "p95": 58,
+            "p99": 633,
+            "max": 633
+          }
+        },
+        "transactions": [
+          {
+            "group_path": [],
+            "label": "TC-parent",
+            "kind": "JMETER_CONTAINER",
+            "sample_count": 15,
+            "error_count": 15,
+            "latency_ms": {
+              "p50": 109,
+              "p95": 734,
+              "p99": 734,
+              "max": 734
+            }
+          },
+          {
+            "group_path": [],
+            "label": "child1",
+            "kind": "JMETER_SAMPLER",
+            "sample_count": 15,
+            "error_count": 0,
+            "latency_ms": {
+              "p50": 31,
+              "p95": 633,
+              "p99": 633,
+              "max": 633
+            }
+          },
+          {
+            "group_path": [],
+            "label": "child2",
+            "kind": "JMETER_SAMPLER",
+            "sample_count": 15,
+            "error_count": 15,
+            "latency_ms": {
+              "p50": 32,
+              "p95": 43,
+              "p99": 43,
+              "max": 43
+            }
+          },
+          {
+            "group_path": [],
+            "label": "child3",
+            "kind": "JMETER_SAMPLER",
+            "sample_count": 15,
+            "error_count": 0,
+            "latency_ms": {
+              "p50": 47,
+              "p95": 58,
+              "p99": 58,
+              "max": 58
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "jmeter-csv-tc-parent-subresults-false-5.6.3",
+      "input": "fixtures/slice1/jmeter/csv-tc-parent-subresults-false-5.6.3/input.jtl",
+      "oracle": "fixtures/slice1/jmeter/csv-tc-parent-subresults-false-5.6.3/oracle.json",
+      "producer": {
+        "name": "Apache JMeter",
+        "version": "5.6.3",
+        "release_tag": "rel/v5.6.3",
+        "source_url": "https://archive.apache.org/dist/jmeter/binaries/apache-jmeter-5.6.3.zip",
+        "distribution_sha512": "387fadca903ee0aa30e3f2115fdfedb3898b102e6b9fe7cc3942703094bd2e65b235df2b0c6d0d3248e74c9a7950a36e42625fd74425368342c12e40b0163076",
+        "distribution_sha512_check": "Equal to the .sha512 published at https://archive.apache.org/dist/jmeter/binaries/ and at https://downloads.apache.org/jmeter/binaries/ (2026-10-04).",
+        "plugins": "none: freshly unpacked official distribution; lib/ext holds only the bundled ApacheJMeter_*.jar files and readme.txt",
+        "plan": "same plan with subresults=false: only parent rows are written",
+        "jmx": "fixtures/slice1/jmeter/csv-tc-parent-subresults-false-5.6.3/plan.jmx",
+        "generation_command": "bin/jmeter.bat -n -t plan.jmx -l generated.jtl -j generated.log -Jjmeter.save.saveservice.output_format=csv -Jjmeter.save.saveservice.subresults=false",
+        "artifact_normalization": "Converted generated JTL line endings from CRLF to LF; bytes otherwise unchanged. The plan header attribute jmeter=\"5.6.3\" was set before the run; loopback localhost targets only."
+      },
+      "oracle_method": "Computed from the producer rows by an independent script (standard csv module, nearest-rank percentiles) applying the ADR 0016 parent rule; not produced by LT Verdict code.",
+      "expected": {
+        "overall": {
+          "sample_count": 15,
+          "error_count": 15,
+          "latency_ms": {
+            "p50": 109,
+            "p95": 559,
+            "p99": 559,
+            "max": 559
+          }
+        },
+        "transactions": [
+          {
+            "group_path": [],
+            "label": "TC-parent",
+            "kind": "JMETER_SAMPLER",
+            "sample_count": 15,
+            "error_count": 15,
+            "latency_ms": {
+              "p50": 109,
+              "p95": 559,
+              "p99": 559,
+              "max": 559
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "jmeter-csv-tc-noparent-sample-5.6.3",
+      "input": "fixtures/slice1/jmeter/csv-tc-noparent-sample-5.6.3/input.jtl",
+      "oracle": "fixtures/slice1/jmeter/csv-tc-noparent-sample-5.6.3/oracle.json",
+      "producer": {
+        "name": "Apache JMeter",
+        "version": "5.6.3",
+        "release_tag": "rel/v5.6.3",
+        "source_url": "https://archive.apache.org/dist/jmeter/binaries/apache-jmeter-5.6.3.zip",
+        "distribution_sha512": "387fadca903ee0aa30e3f2115fdfedb3898b102e6b9fe7cc3942703094bd2e65b235df2b0c6d0d3248e74c9a7950a36e42625fd74425368342c12e40b0163076",
+        "distribution_sha512_check": "Equal to the .sha512 published at https://archive.apache.org/dist/jmeter/binaries/ and at https://downloads.apache.org/jmeter/binaries/ (2026-10-04).",
+        "plugins": "none: freshly unpacked official distribution; lib/ext holds only the bundled ApacheJMeter_*.jar files and readme.txt",
+        "plan": "Transaction Controller without Generate parent sample; subresults=true",
+        "jmx": "fixtures/slice1/jmeter/csv-tc-noparent-sample-5.6.3/plan.jmx",
+        "generation_command": "bin/jmeter.bat -n -t plan.jmx -l generated.jtl -j generated.log -Jjmeter.save.saveservice.output_format=csv -Jjmeter.save.saveservice.subresults=true",
+        "artifact_normalization": "Converted generated JTL line endings from CRLF to LF; bytes otherwise unchanged. The plan header attribute jmeter=\"5.6.3\" was set before the run; loopback localhost targets only."
+      },
+      "oracle_method": "Computed from the producer rows by an independent script (standard csv module, nearest-rank percentiles) applying the ADR 0016 parent rule; not produced by LT Verdict code.",
+      "expected": {
+        "overall": {
+          "sample_count": 45,
+          "error_count": 1,
+          "latency_ms": {
+            "p50": 32,
+            "p95": 78,
+            "p99": 436,
+            "max": 436
+          }
+        },
+        "transactions": [
+          {
+            "group_path": [],
+            "label": "TC-noparent",
+            "kind": "JMETER_CONTAINER",
+            "sample_count": 15,
+            "error_count": 1,
+            "latency_ms": {
+              "p50": 110,
+              "p95": 556,
+              "p99": 556,
+              "max": 556
+            }
+          },
+          {
+            "group_path": [],
+            "label": "child1",
+            "kind": "JMETER_SAMPLER",
+            "sample_count": 15,
+            "error_count": 0,
+            "latency_ms": {
+              "p50": 31,
+              "p95": 436,
+              "p99": 436,
+              "max": 436
+            }
+          },
+          {
+            "group_path": [],
+            "label": "child2",
+            "kind": "JMETER_SAMPLER",
+            "sample_count": 15,
+            "error_count": 0,
+            "latency_ms": {
+              "p50": 32,
+              "p95": 40,
+              "p99": 40,
+              "max": 40
+            }
+          },
+          {
+            "group_path": [],
+            "label": "child3",
+            "kind": "JMETER_SAMPLER",
+            "sample_count": 15,
+            "error_count": 1,
+            "latency_ms": {
+              "p50": 48,
+              "p95": 78,
+              "p99": 78,
+              "max": 78
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "jmeter-csv-tc-plus-http-forged-reason-5.6.3",
+      "input": "fixtures/slice1/jmeter/csv-tc-plus-http-forged-reason-5.6.3/input.jtl",
+      "oracle": "fixtures/slice1/jmeter/csv-tc-plus-http-forged-reason-5.6.3/oracle.json",
+      "producer": {
+        "name": "Apache JMeter",
+        "version": "5.6.3",
+        "release_tag": "rel/v5.6.3",
+        "source_url": "https://archive.apache.org/dist/jmeter/binaries/apache-jmeter-5.6.3.zip",
+        "distribution_sha512": "387fadca903ee0aa30e3f2115fdfedb3898b102e6b9fe7cc3942703094bd2e65b235df2b0c6d0d3248e74c9a7950a36e42625fd74425368342c12e40b0163076",
+        "distribution_sha512_check": "Equal to the .sha512 published at https://archive.apache.org/dist/jmeter/binaries/ and at https://downloads.apache.org/jmeter/binaries/ (2026-10-04).",
+        "plugins": "none: freshly unpacked official distribution; lib/ext holds only the bundled ApacheJMeter_*.jar files and readme.txt",
+        "plan": "Transaction Controller with children plus an HTTP sampler whose server reason phrase equals the controller message (dataType text)",
+        "jmx": "fixtures/slice1/jmeter/csv-tc-plus-http-forged-reason-5.6.3/plan.jmx",
+        "generation_command": "loopback responder (127.0.0.1 only, run in the background): python -c \"from http.server import BaseHTTPRequestHandler as B, HTTPServer as S; H = type('H', (B,), {'do_GET': lambda s: (s.send_response(200, 'Number of samples in transaction : 3, number of failing samples : 0'), s.send_header('Content-Type', 'text/plain'), s.send_header('Content-Length', '2'), s.end_headers(), s.wfile.write(b'ok')), 'log_message': lambda *a: None}); S(('127.0.0.1', 18766), H).serve_forever()\"; then bin/jmeter.bat -n -t plan.jmx -l generated.jtl -j generated.log -Jjmeter.save.saveservice.output_format=csv -Jjmeter.save.saveservice.subresults=true",
+        "artifact_normalization": "Converted generated JTL line endings from CRLF to LF; bytes otherwise unchanged. The plan header attribute jmeter=\"5.6.3\" was set before the run; loopback localhost targets only."
+      },
+      "oracle_method": "Computed from the producer rows by an independent script (standard csv module, nearest-rank percentiles) applying the ADR 0016 parent rule; not produced by LT Verdict code.",
+      "expected": {
+        "overall": {
+          "sample_count": 60,
+          "error_count": 15,
+          "latency_ms": {
+            "p50": 31,
+            "p95": 53,
+            "p99": 503,
+            "max": 503
+          }
+        },
+        "transactions": [
+          {
+            "group_path": [],
+            "label": "GET /fake",
+            "kind": "JMETER_SAMPLER",
+            "sample_count": 15,
+            "error_count": 0,
+            "latency_ms": {
+              "p50": 2,
+              "p95": 21,
+              "p99": 21,
+              "max": 21
+            }
+          },
+          {
+            "group_path": [],
+            "label": "TC-parent",
+            "kind": "JMETER_CONTAINER",
+            "sample_count": 15,
+            "error_count": 15,
+            "latency_ms": {
+              "p50": 107,
+              "p95": 600,
+              "p99": 600,
+              "max": 600
+            }
+          },
+          {
+            "group_path": [],
+            "label": "child1",
+            "kind": "JMETER_SAMPLER",
+            "sample_count": 15,
+            "error_count": 0,
+            "latency_ms": {
+              "p50": 28,
+              "p95": 503,
+              "p99": 503,
+              "max": 503
+            }
+          },
+          {
+            "group_path": [],
+            "label": "child2",
+            "kind": "JMETER_SAMPLER",
+            "sample_count": 15,
+            "error_count": 15,
+            "latency_ms": {
+              "p50": 31,
+              "p95": 46,
+              "p99": 46,
+              "max": 46
+            }
+          },
+          {
+            "group_path": [],
+            "label": "child3",
+            "kind": "JMETER_SAMPLER",
+            "sample_count": 15,
+            "error_count": 0,
+            "latency_ms": {
+              "p50": 47,
+              "p95": 53,
+              "p99": 53,
+              "max": 53
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "jmeter-csv-tc-plus-lookalike-empty-datatype-5.6.3",
+      "input": "fixtures/slice1/jmeter/csv-tc-plus-lookalike-empty-datatype-5.6.3/input.jtl",
+      "oracle": "fixtures/slice1/jmeter/csv-tc-plus-lookalike-empty-datatype-5.6.3/oracle.json",
+      "producer": {
+        "name": "Apache JMeter",
+        "version": "5.6.3",
+        "release_tag": "rel/v5.6.3",
+        "source_url": "https://archive.apache.org/dist/jmeter/binaries/apache-jmeter-5.6.3.zip",
+        "distribution_sha512": "387fadca903ee0aa30e3f2115fdfedb3898b102e6b9fe7cc3942703094bd2e65b235df2b0c6d0d3248e74c9a7950a36e42625fd74425368342c12e40b0163076",
+        "distribution_sha512_check": "Equal to the .sha512 published at https://archive.apache.org/dist/jmeter/binaries/ and at https://downloads.apache.org/jmeter/binaries/ (2026-10-04).",
+        "plugins": "none: freshly unpacked official distribution; lib/ext holds only the bundled ApacheJMeter_*.jar files and readme.txt",
+        "plan": "Transaction Controller with children plus a JSR223 sampler with empty dataType and the controller message (documented false positive)",
+        "jmx": "fixtures/slice1/jmeter/csv-tc-plus-lookalike-empty-datatype-5.6.3/plan.jmx",
+        "generation_command": "bin/jmeter.bat -n -t plan.jmx -l generated.jtl -j generated.log -Jjmeter.save.saveservice.output_format=csv -Jjmeter.save.saveservice.subresults=true",
+        "artifact_normalization": "Converted generated JTL line endings from CRLF to LF; bytes otherwise unchanged. The plan header attribute jmeter=\"5.6.3\" was set before the run; loopback localhost targets only."
+      },
+      "oracle_method": "Computed from the producer rows by an independent script (standard csv module, nearest-rank percentiles) applying the ADR 0016 parent rule; not produced by LT Verdict code.",
+      "expected": {
+        "overall": {
+          "sample_count": 45,
+          "error_count": 15,
+          "latency_ms": {
+            "p50": 32,
+            "p95": 51,
+            "p99": 447,
+            "max": 447
+          }
+        },
+        "transactions": [
+          {
+            "group_path": [],
+            "label": "GET /bare",
+            "kind": "JMETER_CONTAINER",
+            "sample_count": 15,
+            "error_count": 0,
+            "latency_ms": {
+              "p50": 15,
+              "p95": 30,
+              "p99": 30,
+              "max": 30
+            }
+          },
+          {
+            "group_path": [],
+            "label": "TC-parent",
+            "kind": "JMETER_CONTAINER",
+            "sample_count": 15,
+            "error_count": 15,
+            "latency_ms": {
+              "p50": 111,
+              "p95": 537,
+              "p99": 537,
+              "max": 537
+            }
+          },
+          {
+            "group_path": [],
+            "label": "child1",
+            "kind": "JMETER_SAMPLER",
+            "sample_count": 15,
+            "error_count": 0,
+            "latency_ms": {
+              "p50": 32,
+              "p95": 447,
+              "p99": 447,
+              "max": 447
+            }
+          },
+          {
+            "group_path": [],
+            "label": "child2",
+            "kind": "JMETER_SAMPLER",
+            "sample_count": 15,
+            "error_count": 15,
+            "latency_ms": {
+              "p50": 32,
+              "p95": 39,
+              "p99": 39,
+              "max": 39
+            }
+          },
+          {
+            "group_path": [],
+            "label": "child3",
+            "kind": "JMETER_SAMPLER",
+            "sample_count": 15,
+            "error_count": 0,
+            "latency_ms": {
+              "p50": 47,
+              "p95": 51,
+              "p99": 51,
+              "max": 51
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "jmeter-csv-tc-plus-plain-sampler-subresults-false-5.6.3",
+      "input": "fixtures/slice1/jmeter/csv-tc-plus-plain-sampler-subresults-false-5.6.3/input.jtl",
+      "oracle": "fixtures/slice1/jmeter/csv-tc-plus-plain-sampler-subresults-false-5.6.3/oracle.json",
+      "producer": {
+        "name": "Apache JMeter",
+        "version": "5.6.3",
+        "release_tag": "rel/v5.6.3",
+        "source_url": "https://archive.apache.org/dist/jmeter/binaries/apache-jmeter-5.6.3.zip",
+        "distribution_sha512": "387fadca903ee0aa30e3f2115fdfedb3898b102e6b9fe7cc3942703094bd2e65b235df2b0c6d0d3248e74c9a7950a36e42625fd74425368342c12e40b0163076",
+        "distribution_sha512_check": "Equal to the .sha512 published at https://archive.apache.org/dist/jmeter/binaries/ and at https://downloads.apache.org/jmeter/binaries/ (2026-10-04).",
+        "plugins": "none: freshly unpacked official distribution; lib/ext holds only the bundled ApacheJMeter_*.jar files and readme.txt",
+        "plan": "Transaction Controller plus a plain sampler outside it, subresults=false (documented mixed-file limitation)",
+        "jmx": "fixtures/slice1/jmeter/csv-tc-plus-plain-sampler-subresults-false-5.6.3/plan.jmx",
+        "generation_command": "bin/jmeter.bat -n -t plan.jmx -l generated.jtl -j generated.log -Jjmeter.save.saveservice.output_format=csv -Jjmeter.save.saveservice.subresults=false",
+        "artifact_normalization": "Converted generated JTL line endings from CRLF to LF; bytes otherwise unchanged. The plan header attribute jmeter=\"5.6.3\" was set before the run; loopback localhost targets only."
+      },
+      "oracle_method": "Computed from the producer rows by an independent script (standard csv module, nearest-rank percentiles) applying the ADR 0016 parent rule; not produced by LT Verdict code.",
+      "expected": {
+        "overall": {
+          "sample_count": 15,
+          "error_count": 0,
+          "latency_ms": {
+            "p50": 16,
+            "p95": 25,
+            "p99": 25,
+            "max": 25
+          }
+        },
+        "transactions": [
+          {
+            "group_path": [],
+            "label": "TC-parent",
+            "kind": "JMETER_CONTAINER",
+            "sample_count": 15,
+            "error_count": 15,
+            "latency_ms": {
+              "p50": 108,
+              "p95": 642,
+              "p99": 642,
+              "max": 642
+            }
+          },
+          {
+            "group_path": [],
+            "label": "plain-outside",
+            "kind": "JMETER_SAMPLER",
+            "sample_count": 15,
+            "error_count": 0,
+            "latency_ms": {
+              "p50": 16,
+              "p95": 25,
+              "p99": 25,
+              "max": 25
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "jmeter-csv-nested-subresults-false-5.6.3",
+      "input": "fixtures/slice1/jmeter/csv-nested-subresults-false-5.6.3/input.jtl",
+      "oracle": "fixtures/slice1/jmeter/csv-nested-subresults-false-5.6.3/oracle.json",
+      "producer": {
+        "name": "Apache JMeter",
+        "version": "5.6.3",
+        "release_tag": "rel/v5.6.3",
+        "source_url": "https://archive.apache.org/dist/jmeter/binaries/apache-jmeter-5.6.3.zip",
+        "distribution_sha512": "387fadca903ee0aa30e3f2115fdfedb3898b102e6b9fe7cc3942703094bd2e65b235df2b0c6d0d3248e74c9a7950a36e42625fd74425368342c12e40b0163076",
+        "distribution_sha512_check": "Equal to the .sha512 published at https://archive.apache.org/dist/jmeter/binaries/ and at https://downloads.apache.org/jmeter/binaries/ (2026-10-04).",
+        "plugins": "none: freshly unpacked official distribution; lib/ext holds only the bundled ApacheJMeter_*.jar files and readme.txt",
+        "plan": "nested Transaction Controllers (both Generate parent sample), subresults=false: only outer parent rows are written",
+        "jmx": "fixtures/slice1/jmeter/csv-nested-subresults-false-5.6.3/plan.jmx",
+        "generation_command": "bin/jmeter.bat -n -t plan.jmx -l generated.jtl -j generated.log -Jjmeter.save.saveservice.output_format=csv -Jjmeter.save.saveservice.subresults=false",
+        "artifact_normalization": "Converted generated JTL line endings from CRLF to LF; bytes otherwise unchanged. The plan header attribute jmeter=\"5.6.3\" was set before the run; loopback localhost targets only."
+      },
+      "oracle_method": "Computed from the producer rows by an independent script (standard csv module, nearest-rank percentiles) applying the ADR 0016 parent rule; not produced by LT Verdict code.",
+      "expected": {
+        "overall": {
+          "sample_count": 15,
+          "error_count": 1,
+          "latency_ms": {
+            "p50": 140,
+            "p95": 736,
+            "p99": 736,
+            "max": 736
+          }
+        },
+        "transactions": [
+          {
+            "group_path": [],
+            "label": "TC-outer",
+            "kind": "JMETER_SAMPLER",
+            "sample_count": 15,
+            "error_count": 1,
+            "latency_ms": {
+              "p50": 140,
+              "p95": 736,
+              "p99": 736,
+              "max": 736
             }
           }
         ]

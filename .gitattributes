@@ -8,6 +8,7 @@ docs/contracts/policy/v1/examples/**/*.json text eol=lf
 fixtures/slice1/**/*.json text eol=lf
 fixtures/slice1/**/*.jtl text eol=lf
 fixtures/slice1/**/*.xml text eol=lf
+fixtures/slice1/**/*.jmx text eol=lf
 fixtures/slice1/gatling/text-*/simulation.log text eol=lf whitespace=-blank-at-eol
 fixtures/slice1/identity/analysis-identity.sha256 text eol=lf
 fixtures/slice1/gatling/binary-*/simulation.log -text

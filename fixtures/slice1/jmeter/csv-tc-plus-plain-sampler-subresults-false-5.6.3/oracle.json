@@ -1,0 +1,40 @@
+{
+  "overall": {
+    "sample_count": 15,
+    "error_count": 0,
+    "latency_ms": {
+      "p50": 16,
+      "p95": 25,
+      "p99": 25,
+      "max": 25
+    }
+  },
+  "transactions": [
+    {
+      "group_path": [],
+      "label": "TC-parent",
+      "kind": "JMETER_CONTAINER",
+      "sample_count": 15,
+      "error_count": 15,
+      "latency_ms": {
+        "p50": 108,
+        "p95": 642,
+        "p99": 642,
+        "max": 642
+      }
+    },
+    {
+      "group_path": [],
+      "label": "plain-outside",
+      "kind": "JMETER_SAMPLER",
+      "sample_count": 15,
+      "error_count": 0,
+      "latency_ms": {
+        "p50": 16,
+        "p95": 25,
+        "p99": 25,
+        "max": 25
+      }
+    }
+  ]
+}

@@ -1,0 +1,27 @@
+{
+  "overall": {
+    "sample_count": 15,
+    "error_count": 1,
+    "latency_ms": {
+      "p50": 140,
+      "p95": 736,
+      "p99": 736,
+      "max": 736
+    }
+  },
+  "transactions": [
+    {
+      "group_path": [],
+      "label": "TC-outer",
+      "kind": "JMETER_SAMPLER",
+      "sample_count": 15,
+      "error_count": 1,
+      "latency_ms": {
+        "p50": 140,
+        "p95": 736,
+        "p99": 736,
+        "max": 736
+      }
+    }
+  ]
+}

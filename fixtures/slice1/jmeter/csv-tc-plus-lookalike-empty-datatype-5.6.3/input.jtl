@@ -1,0 +1,76 @@
+timeStamp,elapsed,label,responseCode,responseMessage,threadName,dataType,success,failureMessage,bytes,sentBytes,grpThreads,allThreads,URL,Latency,IdleTime,Connect
+1791118176253,537,TC-parent,200,"Number of samples in transaction : 3, number of failing samples : 1",TG 1-1,,false,,33,30,2,2,null,0,0,6
+1791118176583,207,TC-parent,200,"Number of samples in transaction : 3, number of failing samples : 1",TG 1-2,,false,,33,30,2,2,null,0,0,6
+1791118176253,447,child1,200,OK,TG 1-1,text,true,,11,10,2,2,null,5,0,2
+1791118176583,117,child1,200,OK,TG 1-2,text,true,,11,10,2,2,null,5,0,2
+1791118176700,39,child2,200,OK,TG 1-1,text,false,Test failed: text expected to contain /zzz-not-there/,11,10,2,2,null,5,0,2
+1791118176700,39,child2,200,OK,TG 1-2,text,false,Test failed: text expected to contain /zzz-not-there/,11,10,2,2,null,5,0,2
+1791118176739,51,child3,200,OK,TG 1-1,text,true,,11,10,2,2,null,5,0,2
+1791118176739,51,child3,200,OK,TG 1-2,text,true,,11,10,2,2,null,5,0,2
+1791118176791,30,GET /bare,200,"Number of samples in transaction : 3, number of failing samples : 0",TG 1-2,,true,,0,10,2,2,null,5,0,2
+1791118176791,30,GET /bare,200,"Number of samples in transaction : 3, number of failing samples : 0",TG 1-1,,true,,0,10,2,2,null,5,0,2
+1791118176821,94,TC-parent,200,"Number of samples in transaction : 3, number of failing samples : 1",TG 1-1,,false,,33,30,2,2,null,0,0,6
+1791118176821,94,TC-parent,200,"Number of samples in transaction : 3, number of failing samples : 1",TG 1-2,,false,,33,30,2,2,null,0,0,6
+1791118176821,21,child1,200,OK,TG 1-1,text,true,,11,10,2,2,null,5,0,2
+1791118176821,21,child1,200,OK,TG 1-2,text,true,,11,10,2,2,null,5,0,2
+1791118176842,32,child2,200,OK,TG 1-1,text,false,Test failed: text expected to contain /zzz-not-there/,11,10,2,2,null,5,0,2
+1791118176842,32,child2,200,OK,TG 1-2,text,false,Test failed: text expected to contain /zzz-not-there/,11,10,2,2,null,5,0,2
+1791118176874,41,child3,200,OK,TG 1-2,text,true,,11,10,2,2,null,5,0,2
+1791118176874,41,child3,200,OK,TG 1-1,text,true,,11,10,2,2,null,5,0,2
+1791118176915,12,GET /bare,200,"Number of samples in transaction : 3, number of failing samples : 0",TG 1-1,,true,,0,10,3,3,null,5,0,2
+1791118176915,12,GET /bare,200,"Number of samples in transaction : 3, number of failing samples : 0",TG 1-2,,true,,0,10,3,3,null,5,0,2
+1791118176927,99,TC-parent,200,"Number of samples in transaction : 3, number of failing samples : 1",TG 1-1,,false,,33,30,3,3,null,0,0,6
+1791118176927,99,TC-parent,200,"Number of samples in transaction : 3, number of failing samples : 1",TG 1-2,,false,,33,30,3,3,null,0,0,6
+1791118176916,110,TC-parent,200,"Number of samples in transaction : 3, number of failing samples : 1",TG 1-3,,false,,33,30,3,3,null,0,0,6
+1791118176927,21,child1,200,OK,TG 1-2,text,true,,11,10,3,3,null,5,0,2
+1791118176927,21,child1,200,OK,TG 1-1,text,true,,11,10,3,3,null,5,0,2
+1791118176948,31,child2,200,OK,TG 1-2,text,false,Test failed: text expected to contain /zzz-not-there/,11,10,3,3,null,5,0,2
+1791118176916,31,child1,200,OK,TG 1-3,text,true,,11,10,3,3,null,5,0,2
+1791118176948,31,child2,200,OK,TG 1-1,text,false,Test failed: text expected to contain /zzz-not-there/,11,10,3,3,null,5,0,2
+1791118176979,47,child3,200,OK,TG 1-1,text,true,,11,10,3,3,null,5,0,2
+1791118176947,31,child2,200,OK,TG 1-3,text,false,Test failed: text expected to contain /zzz-not-there/,11,10,3,3,null,5,0,2
+1791118176978,48,child3,200,OK,TG 1-3,text,true,,11,10,3,3,null,5,0,2
+1791118176979,47,child3,200,OK,TG 1-2,text,true,,11,10,3,3,null,5,0,2
+1791118177026,15,GET /bare,200,"Number of samples in transaction : 3, number of failing samples : 0",TG 1-3,,true,,0,10,3,3,null,5,0,2
+1791118177026,15,GET /bare,200,"Number of samples in transaction : 3, number of failing samples : 0",TG 1-1,,true,,0,10,3,3,null,5,0,2
+1791118177026,15,GET /bare,200,"Number of samples in transaction : 3, number of failing samples : 0",TG 1-2,,true,,0,10,3,3,null,5,0,2
+1791118177042,111,TC-parent,200,"Number of samples in transaction : 3, number of failing samples : 1",TG 1-2,,false,,33,30,3,3,null,0,0,6
+1791118177042,111,TC-parent,200,"Number of samples in transaction : 3, number of failing samples : 1",TG 1-3,,false,,33,30,3,3,null,0,0,6
+1791118177042,32,child1,200,OK,TG 1-2,text,true,,11,10,3,3,null,5,0,2
+1791118177042,32,child1,200,OK,TG 1-3,text,true,,11,10,3,3,null,5,0,2
+1791118177074,32,child2,200,OK,TG 1-2,text,false,Test failed: text expected to contain /zzz-not-there/,11,10,3,3,null,5,0,2
+1791118177074,32,child2,200,OK,TG 1-3,text,false,Test failed: text expected to contain /zzz-not-there/,11,10,3,3,null,5,0,2
+1791118177106,47,child3,200,OK,TG 1-2,text,true,,11,10,3,3,null,5,0,2
+1791118177106,47,child3,200,OK,TG 1-3,text,true,,11,10,3,3,null,5,0,2
+1791118177042,111,TC-parent,200,"Number of samples in transaction : 3, number of failing samples : 1",TG 1-1,,false,,33,30,3,3,null,0,0,6
+1791118177042,32,child1,200,OK,TG 1-1,text,true,,11,10,3,3,null,5,0,2
+1791118177074,32,child2,200,OK,TG 1-1,text,false,Test failed: text expected to contain /zzz-not-there/,11,10,3,3,null,5,0,2
+1791118177106,47,child3,200,OK,TG 1-1,text,true,,11,10,3,3,null,5,0,2
+1791118177153,16,GET /bare,200,"Number of samples in transaction : 3, number of failing samples : 0",TG 1-2,,true,,0,10,3,3,null,5,0,2
+1791118177153,16,GET /bare,200,"Number of samples in transaction : 3, number of failing samples : 0",TG 1-1,,true,,0,10,3,3,null,5,0,2
+1791118177153,16,GET /bare,200,"Number of samples in transaction : 3, number of failing samples : 0",TG 1-3,,true,,0,10,3,3,null,5,0,2
+1791118177169,111,TC-parent,200,"Number of samples in transaction : 3, number of failing samples : 1",TG 1-2,,false,,33,30,3,3,null,0,0,6
+1791118177169,111,TC-parent,200,"Number of samples in transaction : 3, number of failing samples : 1",TG 1-3,,false,,33,30,3,3,null,0,0,6
+1791118177169,32,child1,200,OK,TG 1-2,text,true,,11,10,3,3,null,5,0,2
+1791118177169,32,child1,200,OK,TG 1-3,text,true,,11,10,3,3,null,5,0,2
+1791118177201,31,child2,200,OK,TG 1-2,text,false,Test failed: text expected to contain /zzz-not-there/,11,10,3,3,null,5,0,2
+1791118177201,31,child2,200,OK,TG 1-3,text,false,Test failed: text expected to contain /zzz-not-there/,11,10,3,3,null,5,0,2
+1791118177233,47,child3,200,OK,TG 1-2,text,true,,11,10,3,3,null,5,0,2
+1791118177233,47,child3,200,OK,TG 1-3,text,true,,11,10,3,3,null,5,0,2
+1791118177169,111,TC-parent,200,"Number of samples in transaction : 3, number of failing samples : 1",TG 1-1,,false,,33,30,3,3,null,0,0,6
+1791118177169,32,child1,200,OK,TG 1-1,text,true,,11,10,3,3,null,5,0,2
+1791118177201,31,child2,200,OK,TG 1-1,text,false,Test failed: text expected to contain /zzz-not-there/,11,10,3,3,null,5,0,2
+1791118177233,47,child3,200,OK,TG 1-1,text,true,,11,10,3,3,null,5,0,2
+1791118177281,15,GET /bare,200,"Number of samples in transaction : 3, number of failing samples : 0",TG 1-3,,true,,0,10,3,3,null,5,0,2
+1791118177281,15,GET /bare,200,"Number of samples in transaction : 3, number of failing samples : 0",TG 1-1,,true,,0,10,3,3,null,5,0,2
+1791118177281,15,GET /bare,200,"Number of samples in transaction : 3, number of failing samples : 0",TG 1-2,,true,,0,10,3,3,null,5,0,2
+1791118177296,111,TC-parent,200,"Number of samples in transaction : 3, number of failing samples : 1",TG 1-3,,false,,33,30,1,1,null,0,0,6
+1791118177296,31,child1,200,OK,TG 1-3,text,true,,11,10,1,1,null,5,0,2
+1791118177327,32,child2,200,OK,TG 1-3,text,false,Test failed: text expected to contain /zzz-not-there/,11,10,1,1,null,5,0,2
+1791118177359,48,child3,200,OK,TG 1-3,text,true,,11,10,1,1,null,5,0,2
+1791118177407,15,GET /bare,200,"Number of samples in transaction : 3, number of failing samples : 0",TG 1-3,,true,,0,10,1,1,null,5,0,2
+1791118177422,112,TC-parent,200,"Number of samples in transaction : 3, number of failing samples : 1",TG 1-3,,false,,33,30,1,1,null,0,0,6
+1791118177422,32,child1,200,OK,TG 1-3,text,true,,11,10,1,1,null,5,0,2
+1791118177454,32,child2,200,OK,TG 1-3,text,false,Test failed: text expected to contain /zzz-not-there/,11,10,1,1,null,5,0,2
+1791118177486,48,child3,200,OK,TG 1-3,text,true,,11,10,1,1,null,5,0,2
+1791118177534,16,GET /bare,200,"Number of samples in transaction : 3, number of failing samples : 0",TG 1-3,,true,,0,10,1,1,null,5,0,2

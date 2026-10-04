@@ -26,7 +26,7 @@ if (mode === "preflight" && retryWindowEnv !== undefined &&
 if (mode === "live" && (preflightScenario !== undefined || preflightResponsesEnv !== undefined)) {
   throw new Error("preflight stubs are not allowed in live mode");
 }
-if (preflightScenario !== undefined && !["wrapped-then-valid", "wrapped-twice", "deep-violation"].includes(preflightScenario)) {
+if (preflightScenario !== undefined && !["wrapped-then-valid", "wrapped-twice", "wrapped-then-error", "deep-violation"].includes(preflightScenario)) {
   throw new Error("invalid preflight scenario");
 }
 let preflightResponses = null;
@@ -398,12 +398,14 @@ const server = http.createServer(async (request, response) => {
   try {
     let provider;
     if (mode === "preflight") {
-      const stub = preflightResponses?.[forwarded - 1];
+      const stub = preflightResponses?.[forwarded - 1] ??
+        (preflightScenario === "wrapped-then-error" && forwarded === 2
+          ? { status: 503, content_type: "text/plain", body: "server error" } : null);
       provider = stub
         ? { status: stub.status, contentType: stub.content_type, body: Buffer.from(stub.body) }
         : { status: 200, contentType: "text/event-stream",
           body: preflightScenario === "wrapped-twice" ||
-            (preflightScenario === "wrapped-then-valid" && forwarded === 1)
+            (["wrapped-then-valid", "wrapped-then-error"].includes(preflightScenario) && forwarded === 1)
             ? fakeWrappedResponse() : fakeResponse(preflightScenario === "deep-violation" && forwarded === 1
               ? { ...fakeAdvice, hypotheses: [{ rank: 1, possible_explanation: "x", recommended_check: "x", evidence_refs: ["analysis-result.json#/run_validity"] }] } : fakeAdvice) };
     } else {

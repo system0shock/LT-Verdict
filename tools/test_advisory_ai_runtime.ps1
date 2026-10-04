@@ -64,6 +64,13 @@ try {
         throw "Wrapped twice preflight result differs."
     }
 
+    $wrappedError = Invoke-Scenario -Name "wrapped-error" -Scenario "wrapped-then-error"
+    if ([string]$wrappedError.Result.status -ne "FAILED" -or
+        [string]$wrappedError.Result.failure_code -ne "PROCESS_FAILED" -or
+        [int]$wrappedError.Result.provider_request_count -ne 2) {
+        throw "Wrapped then error preflight result differs."
+    }
+
     $deepViolation = Invoke-Scenario -Name "deep-violation" -Scenario "deep-violation"
     if ([string]$deepViolation.Result.status -ne "FAILED" -or
         [string]$deepViolation.Result.failure_code -ne "PROCESS_FAILED" -or

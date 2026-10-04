@@ -8,7 +8,7 @@ param(
     [Parameter(Mandatory)] [string]$CancelPath,
     [string]$CredentialEnvFile,
     [string]$QwenPackageRoot,
-    [ValidateSet("", "wrapped-then-valid", "wrapped-twice", "deep-violation")]
+    [ValidateSet("", "wrapped-then-valid", "wrapped-twice", "wrapped-then-error", "deep-violation")]
     [string]$PreflightScenario = ""
 )
 
@@ -423,7 +423,12 @@ try {
         $relayResult = Read-RelayResult (Join-Path $relayOutput "relay-result.json")
         if ($null -ne $relayResult) {
             $providerRequestCount = [int]$relayResult.forwarded_request_count
-            if ($providerRequestCount -eq 2) { $failureCode = "INVALID_OUTPUT" }
+            $outcomes = $relayResult.PSObject.Properties["outcomes"]
+            if ($providerRequestCount -eq 2 -and $null -ne $outcomes -and
+                $outcomes.Value -is [array] -and $outcomes.Value.Count -ge 2 -and
+                $outcomes.Value[1] -is [string] -and $outcomes.Value[1] -ceq "FORWARDED_RETRY") {
+                $failureCode = "INVALID_OUTPUT"
+            }
         }
         throw "Qwen failed"
     }

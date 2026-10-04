@@ -152,6 +152,14 @@ test("retry is forwarded once after wrapped arguments assembled from several str
   }, { ADVISORY_RELAY_PREFLIGHT_SCENARIO: "wrapped-then-valid" });
 });
 
+test("provider error on forwarded retry is blocked", async () => {
+  await withRelay(async (root, port) => {
+    assert.equal((await request(port, firstRequest)).status, 200);
+    assert.equal((await request(port, retryRequest(firstRequest, wrappedArgs))).status, 502);
+    assertResult(root, { received: 2, forwarded: 2, status: "BLOCKED_PROVIDER_RESPONSE", outcomes: ["FORWARDED_STRUCTURED_OUTPUT", "BLOCKED_PROVIDER_RESPONSE"], reason: null });
+  }, { ADVISORY_RELAY_PREFLIGHT_SCENARIO: "wrapped-then-error" });
+});
+
 test("third request is blocked with 409", async () => {
   await withRelay(async (root, port) => {
     await request(port, firstRequest);

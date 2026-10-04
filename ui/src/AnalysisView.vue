@@ -5,6 +5,7 @@ import type { AnalysisResult, Bucket, SourceSummaryEvidence, OpenSearchEvidence,
 
 const props = defineProps<{
   result: AnalysisResult
+  shellTables?: boolean
   buckets: Bucket[]
   rollup: number
   bucketRollup: number
@@ -315,6 +316,7 @@ function updateRange(name: 'update:range-start' | 'update:range-end', event: Eve
   </section>
 
   <section
+    v-if="!shellTables"
     id="policy-results"
     class="panel"
     aria-labelledby="policy-results-title"
@@ -976,6 +978,7 @@ function updateRange(name: 'update:range-start' | 'update:range-end', event: Eve
   </section>
 
   <section
+    v-if="!shellTables"
     id="transaction-metrics"
     class="panel"
     aria-labelledby="transaction-metrics-title"

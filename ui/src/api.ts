@@ -21,6 +21,8 @@ import type {
   PostgresCaptureResponse,
   RunPage,
   RunSummary,
+  ResourceSeriesCatalog,
+  ResourceSeriesValues,
   SourceRequest,
   SourcesResponse,
   WindowComparisonRequest,
@@ -196,13 +198,31 @@ export function getBuckets(
   rollup: number,
   fromMillis?: number,
   toMillis?: number,
+  signal?: AbortSignal,
 ): Promise<BucketPage> {
   const query = new URLSearchParams({ rollup: String(rollup), limit: '500' })
   if (fromMillis !== undefined) query.set('from_ms', String(fromMillis))
   if (toMillis !== undefined) query.set('to_ms', String(toMillis))
   return request(
     `/api/runs/${encodeURIComponent(runId)}/analyses/${encodeURIComponent(analysisId)}/buckets?${query}`,
+    { signal },
   )
+}
+
+export function getResourceSeriesCatalog(runId: string, analysisId: string, after?: string, signal?: AbortSignal): Promise<ResourceSeriesCatalog> {
+  const query = new URLSearchParams({ limit: '256' })
+  if (after) query.set('after', after)
+  return request(`/api/runs/${encodeURIComponent(runId)}/analyses/${encodeURIComponent(analysisId)}/resource-series?${query}`, { signal })
+}
+
+export function resourceSeriesValuesPath(runId: string, analysisId: string, ids: string[], params: Record<string, string>): string {
+  const query = new URLSearchParams(params)
+  for (const id of ids) query.append('series_id', id)
+  return `/api/runs/${encodeURIComponent(runId)}/analyses/${encodeURIComponent(analysisId)}/resource-series/values?${query}`
+}
+
+export function getResourceSeriesValues(path: string, signal?: AbortSignal): Promise<ResourceSeriesValues> {
+  return request(path, { signal })
 }
 
 export function stringifyPolicy(policy: Policy, space?: number): string {

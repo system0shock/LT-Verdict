@@ -45,6 +45,36 @@ class WindowPolicyEvaluationTest {
     }
 
     @Test
+    fun `window summary carries the window sample count and the default minimum only when set`() {
+        val withDefault =
+            evaluateSharedWindowPolicy(
+                policy("100").copy(defaults = PolicyDefaultsV1(sampleFloor = 1, minSamples = 40)),
+                RunValidity.VALID,
+                metrics(90),
+                mapOf("first" to metrics(90, 25), "second" to metrics(90, 7)),
+                resource(PolicyVerdict.PASS, PolicyVerdict.PASS),
+                WINDOWS,
+            )
+        val noPolicy =
+            evaluateSharedWindowPolicy(
+                null,
+                RunValidity.VALID,
+                metrics(90),
+                mapOf("first" to metrics(90, 25), "second" to metrics(90, 7)),
+                resource(PolicyVerdict.PASS, PolicyVerdict.PASS),
+                WINDOWS,
+            )
+
+        fun summaries(evaluation: PolicyEvaluation) =
+            evaluation.evidence.filter { it["type"]?.jsonPrimitive?.content == "window_policy_summary" }
+
+        assertEquals(listOf("25", "7"), summaries(withDefault).map { it.getValue("sample_count").jsonPrimitive.content })
+        assertEquals(listOf("40", "40"), summaries(withDefault).map { it.getValue("min_samples").jsonPrimitive.content })
+        assertEquals(listOf("25", "7"), summaries(noPolicy).map { it.getValue("sample_count").jsonPrimitive.content })
+        assertEquals(listOf(null, null), summaries(noPolicy).map { it["min_samples"] })
+    }
+
+    @Test
     fun `missing required resource data dominates an observed business failure`() {
         val evaluation =
             evaluateSharedWindowPolicy(

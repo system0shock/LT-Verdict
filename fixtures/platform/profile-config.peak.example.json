@@ -1,0 +1,8 @@
+{
+  "base_url": "http://127.0.0.1:9090",
+  "namespace": "shop",
+  "services": ["orders-svc", "payments-svc"],
+  "signals": ["cpu_limit_ratio", "memory_limit_ratio", "oom", "restarts", "cpu_throttling", "unavailable_replicas", "pod_imbalance"],
+  "subquery_step": "15s",
+  "peak_aggregation": true
+}

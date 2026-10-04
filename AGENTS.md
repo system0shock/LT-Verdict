@@ -57,7 +57,12 @@
 - Update technical and user documentation in the same PR as behavior changes.
 - Record significant architecture, API, schema, dependency, and operations
   decisions in an ADR.
-- Update `CHANGELOG.md` for user-visible changes.
+- Record user-visible changes as a fragment `changelog.d/<id>.<added|changed|fixed>.md`
+  (see `changelog.d/README.md`). Do not edit `CHANGELOG.md` directly: direct
+  edits are allowed only when cutting a release.
+- A PR that changes `src/main`, `ui/src`, `docs/contracts`, or `tools` must add
+  a fragment or state `Documentation impact: none` on its own line in the PR
+  body (CI check `Changelog`).
 - If documentation is not needed, state `Documentation impact: none` and why.
 - Russian is the default prose language; preserve English identifiers and
   standard technical terms.

@@ -297,9 +297,9 @@ internal class MutableMetrics(
             throughputRps = ExactRatio(Math.multiplyExact(sampleCount, ONE_SECOND_MILLIS), runWindowMillis),
             latency =
                 LatencySummary(
-                    p50Millis = histogram.getValueAtPercentile(50.0),
-                    p95Millis = histogram.getValueAtPercentile(95.0),
-                    p99Millis = histogram.getValueAtPercentile(99.0),
+                    p50Millis = minOf(histogram.getValueAtPercentile(50.0), maxLatencyMillis),
+                    p95Millis = minOf(histogram.getValueAtPercentile(95.0), maxLatencyMillis),
+                    p99Millis = minOf(histogram.getValueAtPercentile(99.0), maxLatencyMillis),
                     maxMillis = maxLatencyMillis,
                 ),
         )

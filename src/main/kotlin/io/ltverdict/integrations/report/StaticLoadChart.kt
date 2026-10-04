@@ -102,7 +102,7 @@ private fun decodeBucket(source: JsonObject): Bucket {
             MAX_LATENCY,
         )
     if (histogram.totalCount != samples || !histogram.valuesAreEquivalent(max, histogram.maxValue)) invalidBuckets()
-    return Bucket(start, samples, errors, histogram.getValueAtPercentile(95.0))
+    return Bucket(start, samples, errors, minOf(histogram.getValueAtPercentile(95.0), max))
 }
 
 private fun panel(
@@ -195,7 +195,7 @@ private data class Chart(
 
 private const val MAX_BUCKETS = 500
 private const val MAX_ROW_CHARS = 524_288
-private const val MAX_HISTOGRAM_CHARS = 262_144
+private const val MAX_HISTOGRAM_CHARS = 393_216
 private const val MAX_TIMESTAMP = 253_402_300_799_999L
 private const val MAX_LATENCY = 86_400_000L
 private const val INVALID_BUCKETS = "SAVED_BUCKETS_INVALID"

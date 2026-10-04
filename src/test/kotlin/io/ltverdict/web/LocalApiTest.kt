@@ -11,6 +11,7 @@ import io.ltverdict.core.AnalysisService
 import io.ltverdict.core.EngineConfig
 import io.ltverdict.core.MAX_RESOURCE_SNAPSHOT_BYTES
 import io.ltverdict.core.ResourceValidation
+import io.ltverdict.core.analysisIdentity
 import io.ltverdict.core.sha256Hex
 import io.ltverdict.core.validateResourceSnapshot
 import io.ltverdict.jobs.AnalysisJobs
@@ -1564,6 +1565,64 @@ class LocalApiTest {
                     400,
                 )
             }
+        }
+
+    @Test
+    fun `bucket API caps p95 at the stored max for any precision and leaves stored rows unchanged`() =
+        withServer { store, api ->
+            val input = store.acceptInput(ByteArrayInputStream(SPIKE_DROP.bytes()), SPIKE_DROP.filename)
+            // A saved analysis from before the metrics module version 2: same identity, older module version.
+            val identity =
+                analysisIdentity(input, null, EngineConfig())
+                    .decodeToString()
+                    .replace("{\"id\":\"metrics\",\"version\":\"2\"}", "{\"id\":\"metrics\",\"version\":\"1\"}")
+                    .encodeToByteArray()
+            assertTrue(identity.decodeToString().contains("{\"id\":\"metrics\",\"version\":\"1\"}"))
+            val analysisId = sha256Hex(identity)
+
+            fun encoded(
+                digits: Int,
+                values: List<Long>,
+            ): String {
+                val histogram = PackedHistogram(1, 86_400_000, digits).apply { values.forEach { recordValue(it) } }
+                val buffer = ByteBuffer.allocate(histogram.neededByteBufferCapacity)
+                return Base64.getEncoder().encodeToString(buffer.array().copyOf(histogram.encodeIntoCompressedByteBuffer(buffer)))
+            }
+
+            // Rows: precision 3, 4 and 5 with identical 60000 ms samples, then precision 3 with a far maximum.
+            val cases =
+                listOf(
+                    Triple(3, List(100) { 60_000L }, 60_000L),
+                    Triple(4, List(100) { 60_000L }, 60_000L),
+                    Triple(5, List(100) { 60_000L }, 60_000L),
+                    Triple(3, List(100) { 60_000L } + listOf(70_000L), 70_000L),
+                )
+            val rows =
+                cases
+                    .mapIndexed { index, (digits, values, max) ->
+                        "{\"bucket_start_ms\":${index * 1_000L},\"error_count\":0,\"hdr_v2_base64\":\"${encoded(digits, values)}\"," +
+                            "\"max_latency_ms\":$max,\"sample_count\":${values.size}}\n"
+                    }.joinToString("")
+            store.writeAnalysisAtomically(input.runId, analysisId) { staging ->
+                Files.write(staging.resolve("identity.json"), identity)
+                Files.writeString(staging.resolve("normalized-1s.ndjson"), rows)
+            }
+            api.bootstrap()
+
+            val page =
+                api
+                    .get("/api/runs/${input.runId}/analyses/$analysisId/buckets?rollup=1&limit=10")
+                    .jsonObject()
+                    .getValue("buckets")
+                    .jsonArray
+                    .map { it.jsonObject }
+
+            assertEquals(listOf(60_000L, 60_000L, 60_000L, 60_031L), page.map { it.getValue("p95_latency_ms").jsonPrimitive.long })
+            page.forEach { bucket ->
+                assertTrue(bucket.getValue("p95_latency_ms").jsonPrimitive.long <= bucket.getValue("max_latency_ms").jsonPrimitive.long)
+            }
+            val stored = checkNotNull(store.readAnalysis(input.runId, analysisId))
+            assertEquals(rows, Files.readString(stored.path.resolve("normalized-1s.ndjson")))
         }
 
     @Test

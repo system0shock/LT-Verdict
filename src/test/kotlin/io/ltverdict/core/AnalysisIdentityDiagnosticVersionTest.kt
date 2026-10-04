@@ -15,13 +15,13 @@ class AnalysisIdentityDiagnosticVersionTest {
     @Test
     fun `only enabled diagnostic module advances to version two`() {
         assertEquals(
-            listOf("normalization" to "1", "metrics" to "1", "policy-evaluation" to "1"),
+            listOf("normalization" to "1", "metrics" to "2", "policy-evaluation" to "1"),
             modules(analysisIdentity(input(), null, EngineConfig())),
         )
         assertEquals(
             listOf(
                 "normalization" to "1",
-                "metrics" to "1",
+                "metrics" to "2",
                 "policy-evaluation" to "1",
                 "load-resource-diagnostics" to "2",
             ),

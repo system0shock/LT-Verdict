@@ -26,6 +26,7 @@ import io.ltverdict.integrations.jenkins.readJenkinsConnections
 import io.ltverdict.integrations.report.renderConfluenceReport
 import io.ltverdict.integrations.report.renderSavedLoadChart
 import io.ltverdict.jobs.AnalysisJobs
+import io.ltverdict.metrics.MetricsConfig
 import io.ltverdict.report.renderAsciiDocReport
 import io.ltverdict.report.renderHtmlReport
 import io.ltverdict.sources.PostgresAnalysisInput
@@ -108,8 +109,10 @@ private fun analyze(
     var postgresPostPath: Path? = null
     var pgProfileHtmlPath: Path? = null
     var dataDir = defaultDataDir()
+    var significantDigits = 3
     var policySeen = false
     var dataDirSeen = false
+    var significantDigitsSeen = false
     var index = 1
     while (index < args.size) {
         when (args[index]) {
@@ -145,6 +148,11 @@ private fun analyze(
             "--source-context" -> {
                 if (sourceContextPaths.size == 16 || index + 1 >= args.size) usage()
                 sourceContextPaths.add(path(args[index + 1]))
+            }
+            "--histogram-significant-digits" -> {
+                if (significantDigitsSeen || index + 1 >= args.size) usage()
+                significantDigitsSeen = true
+                significantDigits = histogramSignificantDigits(args[index + 1]) ?: usage()
             }
             "--data-dir" -> {
                 if (dataDirSeen || index + 1 >= args.size) usage()
@@ -254,7 +262,7 @@ private fun analyze(
                         readOpenSearchContexts(bytes, accepted.sha256, resources)
                     }
                 analyzeWithSources(
-                    AnalysisService(store, EngineConfig()),
+                    AnalysisService(store, EngineConfig(metrics = MetricsConfig(significantDigits = significantDigits))),
                     AnalysisRequest(
                         accepted,
                         policy,
@@ -432,8 +440,10 @@ private fun validatePolicyCommand(
 private fun ui(args: List<String>): Int {
     var dataDir = defaultDataDir()
     var parallelism = 1
+    var significantDigits = 3
     var dataDirSeen = false
     var parallelismSeen = false
+    var significantDigitsSeen = false
     var connectionsPath: Path? = null
     var jenkinsConfigPath: Path? = null
     var index = 0
@@ -450,6 +460,11 @@ private fun ui(args: List<String>): Int {
                 parallelismSeen = true
                 parallelism = args[index + 1].toIntOrNull() ?: usage()
                 if (parallelism !in 1..Runtime.getRuntime().availableProcessors()) usage()
+            }
+            "--histogram-significant-digits" -> {
+                if (significantDigitsSeen) usage()
+                significantDigitsSeen = true
+                significantDigits = histogramSignificantDigits(args[index + 1]) ?: usage()
             }
             "--connections" -> {
                 if (connectionsPath != null) usage()
@@ -488,7 +503,7 @@ private fun ui(args: List<String>): Int {
             directory.close()
             throw CliFailure(EXIT_INVALID_INPUT, "JENKINS_CONFIG_INVALID")
         }
-    val service = AnalysisService(store, EngineConfig())
+    val service = AnalysisService(store, EngineConfig(metrics = MetricsConfig(significantDigits = significantDigits)))
     val jobs =
         try {
             AnalysisJobs(parallelism) { request, progress, cancelled ->
@@ -694,17 +709,19 @@ private fun path(value: String): Path =
         usage()
     }
 
+internal fun histogramSignificantDigits(value: String): Int? = value.toIntOrNull()?.takeIf { it in 3..5 }
+
 private fun defaultDataDir(): Path = Path.of(System.getProperty("user.home"), ".lt-verdict")
 
 private fun usage(): Nothing =
     throw CliFailure(
         EXIT_USAGE,
-        "Usage: ltv ui [--data-dir <path>] [--analysis-parallelism <n>] " +
+        "Usage: ltv ui [--data-dir <path>] [--analysis-parallelism <n>] [--histogram-significant-digits <3..5>] " +
             "[--connections <profiles.json>] [--jenkins-config <jenkins.json>] | " +
             "ltv analyze <input> [--policy <policy.json>] [--resources <snapshot.json>] [--capacity <plan.json>] " +
             "[--trend <plan.json>] [--correlation <plan.json>] [--source-context <context.json>] " +
             "[--postgres-pre <pre.json>] [--postgres-post <post.json>] [--pg-profile-html <report.html>] " +
-            "[--connections <profiles.json> --source <source.json>] [--data-dir <path>] | " +
+            "[--connections <profiles.json> --source <source.json>] [--histogram-significant-digits <3..5>] [--data-dir <path>] | " +
             "ltv source pre|post --connections <profiles.json> --profile <id> [--pre <pre.json>] [--pg-profile-html <output.html>] | " +
             "ltv opensearch prepare --context <file> --templates <file> --load-sha256 <hash> --output-dir <new-dir> | " +
             "ltv policy validate <policy.json> | ltv report <run-id> <analysis-id> " +

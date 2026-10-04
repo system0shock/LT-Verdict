@@ -78,24 +78,77 @@ class StaticLoadChartTest {
         assertEquals("SAVED_BUCKETS_INVALID", oversized.message)
     }
 
+    @Test
+    fun `chart p95 is capped at the stored maximum for every histogram precision`() {
+        val start = 1_767_225_600_000L
+        listOf(3, 4, 5).forEach { digits ->
+            val svg = renderLoadChart(listOf(bucket(start, samples = 100, errors = 0, p95Millis = 60_000, digits = digits)), rollup = 60)
+
+            val text = svg.decodeToString()
+            assertTrue(text.contains("max 60000 ms"), "digits $digits: ${text.substringAfter("P95 latency").take(200)}")
+            assertTrue(!text.contains("60031") && !text.contains("60001"), "digits $digits")
+        }
+    }
+
+    @Test
+    fun `five digit histograms near the modelled worst case stay within the row and histogram limits`() {
+        val random = java.util.Random(16)
+        val values = LongArray(1_000_000) { 1L + random.nextInt(86_000_000) }
+        val histogram = PackedHistogram(1, 86_400_000, 5).apply { values.forEach { recordValue(it) } }
+        val buffer = ByteBuffer.allocate(histogram.neededByteBufferCapacity)
+        val encoded = Base64.getEncoder().encodeToString(buffer.array().copyOf(histogram.encodeIntoCompressedByteBuffer(buffer)))
+        // Measured 289 552 characters (ADR 0016 model: 289 648), above the former 262 144 character limit.
+        assertTrue(encoded.length > 262_144, "encoded length ${encoded.length}")
+        val row =
+            buildJsonObject {
+                put("bucket_start_ms", 1_767_225_600_000L)
+                put("sample_count", values.size.toLong())
+                put("error_count", 0L)
+                put("max_latency_ms", values.max())
+                put("hdr_v2_base64", encoded)
+            }
+        val path = temporaryDirectory.resolve("rollup-60s.ndjson")
+        Files.writeString(path, row.toString() + "\n")
+
+        val svg = renderSavedLoadChart(path).decodeToString()
+
+        assertTrue(svg.contains("data-bins=\"1\""))
+    }
+
+    @Test
+    fun `histograms above the raised character limit are rejected`() {
+        val row =
+            buildJsonObject {
+                put("bucket_start_ms", 0L)
+                put("sample_count", 1L)
+                put("error_count", 0L)
+                put("max_latency_ms", 1L)
+                put("hdr_v2_base64", "A".repeat(393_217))
+            }
+        val failure = assertThrows(IllegalArgumentException::class.java) { renderLoadChart(listOf(row), rollup = 60) }
+        assertEquals("SAVED_BUCKETS_INVALID", failure.message)
+    }
+
     private fun bucket(
         startMillis: Long,
         samples: Long,
         errors: Long,
         p95Millis: Long,
+        digits: Int = 3,
     ) = buildJsonObject {
         put("bucket_start_ms", startMillis)
         put("sample_count", samples)
         put("error_count", errors)
         put("max_latency_ms", p95Millis)
-        put("hdr_v2_base64", histogram(p95Millis, samples))
+        put("hdr_v2_base64", histogram(p95Millis, samples, digits))
     }
 
     private fun histogram(
         value: Long,
         count: Long,
+        digits: Int = 3,
     ): String {
-        val histogram = PackedHistogram(1, 86_400_000, 3)
+        val histogram = PackedHistogram(1, 86_400_000, digits)
         histogram.recordValueWithCount(value, count)
         val buffer = ByteBuffer.allocate(histogram.neededByteBufferCapacity)
         val length = histogram.encodeIntoCompressedByteBuffer(buffer)

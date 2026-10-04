@@ -2,6 +2,7 @@ package io.ltverdict.core
 
 import io.ltverdict.ingest.RunValidity
 import io.ltverdict.ingest.SourceType
+import io.ltverdict.metrics.MetricsConfig
 import io.ltverdict.storage.AcceptedInput
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.jsonArray
@@ -41,6 +42,43 @@ class AnalysisResultGoldenTest {
 
         assertArrayEquals(expected, actual)
         assertEquals(expectedHash, sha256Hex(actual))
+    }
+
+    @Test
+    fun `histogram precision is part of the identity and changes the analysis id`() {
+        val inputHash = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+        val input =
+            AcceptedInput(
+                runId = "jmeter_jtl_csv-$inputHash",
+                sourceType = SourceType.JMETER_CSV,
+                sha256 = inputHash,
+                sizeBytes = 1,
+                originalFilename = "input.jtl",
+                path = Path.of("unused"),
+            )
+
+        val identities =
+            listOf(3, 4, 5).associateWith { digits ->
+                analysisIdentity(input, null, EngineConfig(metrics = MetricsConfig(significantDigits = digits)))
+            }
+
+        listOf(3, 4, 5).forEach { digits ->
+            val histogram =
+                Json
+                    .parseToJsonElement(identities.getValue(digits).decodeToString())
+                    .jsonObject
+                    .getValue("histogram")
+                    .jsonObject
+            assertEquals(digits.toString(), histogram.getValue("significant_digits").jsonPrimitive.content)
+        }
+        assertEquals(
+            3,
+            identities.values
+                .map { sha256Hex(it) }
+                .toSet()
+                .size,
+        )
+        assertArrayEquals(analysisIdentity(input, null, EngineConfig()), identities.getValue(3))
     }
 
     @Test

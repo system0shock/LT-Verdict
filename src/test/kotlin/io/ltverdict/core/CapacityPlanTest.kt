@@ -152,6 +152,21 @@ class CapacityPlanTest {
     }
 
     @Test
+    fun `an interval max load axis is not a capacity axis`() {
+        val resources = bindingResources(unit = "count", aggregation = ResourceAggregation.INTERVAL_MAX)
+        val plan =
+            validPlanFor(
+                resources,
+                "[${stageJson("s", 1, 0, 300000, "steady")}]",
+                axis = "concurrency",
+                seriesId = "active",
+                guards = "[]",
+            )
+
+        assertEquals("CAPACITY_SERIES_INCOMPATIBLE", validateCapacityBinding(plan, LOAD_HASH, resources).single().code)
+    }
+
+    @Test
     fun `raw guard order drives binding pointers while semantic hash ignores order`() {
         val resources = bindingResources()
         val stages = "[${stageJson("s", 1, 0, 300000, "steady")}]"

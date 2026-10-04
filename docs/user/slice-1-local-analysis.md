@@ -261,7 +261,7 @@ spikes заполнением или усреднением готовых perce
 | 403 | Неверные Host, Origin, local session или CSRF | Перезагрузить только открытый local URL |
 | `NOT_FOUND` / 404 | Run, job или analysis отсутствует | Обновить список runs и повторить |
 | `BUSY` / 409 | Analysis queue заполнена | Подождать или отменить queued job |
-| `RESOURCE_LIMIT_EXCEEDED` / 413 | Input больше 4 GiB, policy больше 1 MiB или resource snapshot превышает limits | Уменьшить файл; partial result не создаётся |
+| `RESOURCE_LIMIT_EXCEEDED` / 413 | Input больше 4 GiB, policy больше 1 MiB или resource snapshot превышает limits | Уменьшить файл; partial result не создаётся. Для input сервер прекращает приём сразу при превышении 4 GiB и удаляет частично записанные данные |
 | `LENGTH_REQUIRED` / 411 | У запроса `POST /api/jobs` нет `Content-Length` | Передать размер multipart body; браузерный UI делает это автоматически |
 | `INVALID_RESOURCES` / 422 | Snapshot не соответствует контракту или другому load input | Проверить validation details и SHA-256 |
 | `UNSUPPORTED_MEDIA_TYPE` / 415 | Неверный request content type | Использовать UI или documented CLI |
@@ -686,7 +686,7 @@ Optional `Resource snapshot` — подготовленный локальным
 timestamps и значения своими данными, а thresholds — согласованными SLA.
 
 Series содержит metric, unit, entity, role `system|generator`, aggregation
-`interval_mean|interval_rate` и значения на общей UTC grid. `null` означает gap,
+`interval_mean|interval_rate|interval_max|interval_min` и значения на общей UTC grid. `null` означает gap,
 а не ноль. Raw counters, instant samples и percentile series сначала требуется
 преобразовать в поддерживаемую семантику в адаптере. Credentials и URL в snapshot
 не передавайте. Limits: файл 32 MiB, 1 024 series, 100 000 points на series,

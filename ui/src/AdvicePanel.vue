@@ -3,7 +3,8 @@ import { computed, onUnmounted, ref, watch } from 'vue'
 import { cancelAdviceJob, getAdvice, getAdviceJob, startAdvice } from './api'
 import type { AdviceDocument, AdviceJob, AnalysisReference } from './types'
 
-const props = defineProps<{ selection: AnalysisReference }>()
+const props = defineProps<{ selection: AnalysisReference; autoStart?: boolean }>()
+const emit = defineEmits<{ 'auto-started': [] }>()
 const advice = ref<AdviceDocument | null>(null)
 const job = ref<AdviceJob | null>(null)
 const consent = ref(false)
@@ -56,8 +57,15 @@ watch(() => `${props.selection.run_id}/${props.selection.analysis_id}`, async ()
   consent.value = false
   sending.value = false
   error.value = ''
-  try { await loadAdvice(expected) }
-  catch (failure) {
+  try {
+    await loadAdvice(expected)
+    // Согласие дано при запуске анализа (новый экран): запрашиваем совет тем же вызовом, что и кнопка.
+    if (expected === revision && props.autoStart && !advice.value && !job.value) {
+      consent.value = true
+      emit('auto-started')
+      await start()
+    }
+  } catch (failure) {
     if (expected === revision) error.value = failure instanceof Error ? failure.message : 'Не удалось прочитать рекомендации.'
   }
 }, { immediate: true })

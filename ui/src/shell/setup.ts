@@ -5,6 +5,7 @@ export type ReadinessLevel = 'ok' | 'info' | 'warn' | 'block'
 
 export interface ReadinessInput {
   busy: boolean
+  aiConsent: boolean
   inputName: string | null
   policyId: string | null
   policyHasErrors: boolean
@@ -63,11 +64,9 @@ export function buildReadiness(input: ReadinessInput): Readiness {
       ? { key: 'resources', level: 'ok', title: SETUP_LABELS.itemResources, detail: SETUP_LABELS.resourcesOnline }
       : input.resourceName
         ? { key: 'resources', level: 'ok', title: SETUP_LABELS.itemResources, detail: input.resourceName }
-        : input.plans.capacity || input.plans.trend
-          ? { key: 'resources', level: 'block', title: SETUP_LABELS.itemResources, detail: SETUP_LABELS.resourcesRequired([input.plans.capacity && SETUP_LABELS.planNames.capacity, input.plans.trend && SETUP_LABELS.planNames.trend].filter(Boolean).join(', ')) }
-          : input.plans.diagnostic
-            ? { key: 'resources', level: 'warn', title: SETUP_LABELS.itemResources, detail: SETUP_LABELS.resourcesDiagnosticRisk }
-            : { key: 'resources', level: 'info', title: SETUP_LABELS.itemResources, detail: SETUP_LABELS.resourcesNoneItem },
+        : planNames
+          ? { key: 'resources', level: 'block', title: SETUP_LABELS.itemResources, detail: SETUP_LABELS.resourcesRequired(planNames) }
+          : { key: 'resources', level: 'info', title: SETUP_LABELS.itemResources, detail: SETUP_LABELS.resourcesNoneItem },
     planNames
       ? { key: 'plans', level: 'ok', title: SETUP_LABELS.itemPlans, detail: planNames }
       : { key: 'plans', level: 'info', title: SETUP_LABELS.itemPlans, detail: SETUP_LABELS.plansNoneItem },
@@ -90,7 +89,18 @@ export function buildReadiness(input: ReadinessInput): Readiness {
     planNames ? SETUP_LABELS.willPlans(planNames) : null,
     input.contextCount > 0 ? SETUP_LABELS.willContext : null,
     postgresNames ? SETUP_LABELS.willPostgres(postgresNames) : null,
+    input.aiConsent ? SETUP_LABELS.willAdvice : null,
   ].filter((line): line is string => line !== null)
 
   return { items, blockers, canStart: blockers.length === 0, will }
+}
+
+export function msToSeconds(ms: string): string {
+  return ms === '' ? '' : String(Number(ms) / 1000)
+}
+
+export function secondsToMs(seconds: string): string {
+  if (seconds === '') return ''
+  const value = Number(seconds)
+  return Number.isFinite(value) ? String(Math.round(value * 1000)) : ''
 }

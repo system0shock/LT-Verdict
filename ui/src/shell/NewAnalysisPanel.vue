@@ -3,7 +3,7 @@ import { computed } from 'vue'
 import PolicyEditor from '../PolicyEditor.vue'
 import type { Policy, PolicyError, SourceProfile } from '../types'
 import { SETUP_LABELS } from './labels'
-import { buildReadiness, type ReadinessLevel } from './setup'
+import { buildReadiness, msToSeconds, secondsToMs, type ReadinessLevel } from './setup'
 
 const props = defineProps<{
   inputFile: File | null
@@ -30,6 +30,7 @@ const props = defineProps<{
   policyStatus: string
   policyErrors: PolicyError[]
   busy: boolean
+  aiConsent: boolean
 }>()
 
 const emit = defineEmits<{
@@ -53,11 +54,13 @@ const emit = defineEmits<{
   'source-max-idle-gap': [value: string]
   'policy-file': [file: File | null]
   'update-policy': [policy: Policy]
+  'ai-consent': [value: boolean]
   analyze: []
 }>()
 
 const readiness = computed(() => buildReadiness({
   busy: props.busy,
+  aiConsent: props.aiConsent,
   inputName: props.inputFile?.name ?? null,
   policyId: props.policy ? props.policy.policy_id : null,
   policyHasErrors: props.policyErrors.length > 0,
@@ -286,9 +289,9 @@ function levelLabel(level: ReadinessLevel) {
                     type="number"
                     min="0"
                     step="1"
-                    :value="sourceStart"
+                    :value="msToSeconds(sourceStart)"
                     :disabled="busy"
-                    @input="emit('source-start', ($event.target as HTMLInputElement).value)"
+                    @input="emit('source-start', secondsToMs(($event.target as HTMLInputElement).value))"
                   >
                 </div>
                 <div class="field">
@@ -298,9 +301,9 @@ function levelLabel(level: ReadinessLevel) {
                     type="number"
                     min="0"
                     step="1"
-                    :value="sourceEnd"
+                    :value="msToSeconds(sourceEnd)"
                     :disabled="busy"
-                    @input="emit('source-end', ($event.target as HTMLInputElement).value)"
+                    @input="emit('source-end', secondsToMs(($event.target as HTMLInputElement).value))"
                   >
                 </div>
               </template>
@@ -309,11 +312,11 @@ function levelLabel(level: ReadinessLevel) {
                 <input
                   id="source-step"
                   type="number"
-                  min="1000"
+                  min="1"
                   step="1"
-                  :value="sourceStep"
+                  :value="msToSeconds(sourceStep)"
                   :disabled="busy"
-                  @input="emit('source-step', ($event.target as HTMLInputElement).value)"
+                  @input="emit('source-step', secondsToMs(($event.target as HTMLInputElement).value))"
                 >
               </div>
               <template v-if="sourceWindowOrigin === 'auto'">
@@ -323,11 +326,11 @@ function levelLabel(level: ReadinessLevel) {
                     id="source-margin"
                     type="number"
                     min="0"
-                    step="1000"
-                    :value="sourceMargin"
+                    step="1"
+                    :value="msToSeconds(sourceMargin)"
                     :disabled="busy"
                     aria-describedby="source-margin-hint"
-                    @input="emit('source-margin', ($event.target as HTMLInputElement).value)"
+                    @input="emit('source-margin', secondsToMs(($event.target as HTMLInputElement).value))"
                   >
                   <p
                     id="source-margin-hint"
@@ -341,12 +344,12 @@ function levelLabel(level: ReadinessLevel) {
                   <input
                     id="source-max-idle-gap"
                     type="number"
-                    min="1000"
-                    step="1000"
-                    :value="sourceMaxIdleGap"
+                    min="1"
+                    step="1"
+                    :value="msToSeconds(sourceMaxIdleGap)"
                     :disabled="busy"
                     aria-describedby="source-max-idle-gap-hint"
-                    @input="emit('source-max-idle-gap', ($event.target as HTMLInputElement).value)"
+                    @input="emit('source-max-idle-gap', secondsToMs(($event.target as HTMLInputElement).value))"
                   >
                   <p
                     id="source-max-idle-gap-hint"
@@ -534,6 +537,19 @@ function levelLabel(level: ReadinessLevel) {
             {{ SETUP_LABELS.aiTitle }}
           </h3>
           <p>{{ SETUP_LABELS.aiText }}</p>
+          <div class="field">
+            <label for="ai-consent">
+              <input
+                id="ai-consent"
+                data-testid="ai-consent"
+                type="checkbox"
+                :checked="aiConsent"
+                :disabled="busy"
+                @change="emit('ai-consent', ($event.target as HTMLInputElement).checked)"
+              >
+              {{ SETUP_LABELS.aiConsentLabel }}
+            </label>
+          </div>
         </section>
       </div>
 

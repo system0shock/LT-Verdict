@@ -1,6 +1,7 @@
 package io.ltverdict.sources
 
 import com.sun.net.httpserver.HttpServer
+import io.ltverdict.core.MAX_RESOURCE_CELLS
 import io.ltverdict.core.ResourceAggregation
 import io.ltverdict.core.ResourceRole
 import io.ltverdict.core.metricPackAnalysis
@@ -11,6 +12,7 @@ import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertThrows
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import java.net.InetSocketAddress
@@ -20,6 +22,49 @@ import java.nio.file.Path
 
 class PlatformProfileExampleTest {
     private val example = Path.of("docs/contracts/sources/v1/platform-openshift-connections.example.json")
+    private val autoStepExample = Path.of("docs/contracts/sources/v1/platform-openshift-autostep-connections.example.json")
+
+    @Test
+    fun `the autostep example parses with a scrape interval on every profile`() {
+        val profiles = Files.newInputStream(autoStepExample).use(::readSourceProfiles)
+
+        assertTrue(profiles.isNotEmpty())
+        assertTrue(profiles.all { it.scrapeIntervalMillis == 30_000L })
+    }
+
+    @Test
+    fun `the autostep example accepts a 60 second step without coarsening`() {
+        val profiles = Files.newInputStream(autoStepExample).use(::readSourceProfiles)
+        val applied =
+            applyAutoStep(
+                profiles,
+                60_000L,
+                60_000L,
+                MAX_RESOURCE_CELLS,
+                explicitGridCells(0L, 3_600_000L),
+            )
+
+        assertEquals(60_000L, applied.stepMillis)
+        assertTrue(applied.reduced.isEmpty())
+    }
+
+    @Test
+    fun `the autostep example refuses coarsening its fixed subquery`() {
+        val profiles = Files.newInputStream(autoStepExample).use(::readSourceProfiles)
+        val queryCount = profiles.sumOf { it.queries.size }
+        val refusal =
+            assertThrows(SourcePlanRefusal::class.java) {
+                applyAutoStep(
+                    profiles,
+                    30_000L,
+                    60_000L,
+                    queryCount * 60L,
+                    explicitGridCells(0L, 3_600_000L),
+                )
+            }
+
+        assertEquals(AUTO_STEP_QUERY_NOT_INTERVAL_BOUND, refusal.code)
+    }
 
     @Test
     fun `the example parses and carries unique binding keys with a folded expression per query`() {

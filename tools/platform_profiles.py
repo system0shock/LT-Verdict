@@ -1,4 +1,4 @@
-"""Generate source-connections.v1 profiles for the OpenShift label contract (plan P0b).
+"""Generate source-connections profiles for the OpenShift label contract (plan P0b/P0d).
 
 One query returns exactly one series (PromqlSource), so every (service, signal) pair is one query and
 queries are packed into profiles of at most 64 queries, at most 16 profiles (1024 series).
@@ -39,11 +39,29 @@ def build_connections(config: dict) -> dict:
     unknown = [name for name in signals if name not in SIGNALS]
     if unknown or len(set(signals)) != len(signals):
         raise ValueError(f"unknown or duplicate signals: {unknown}")
+    scrape = config.get("scrape_interval_ms")
+    if "scrape_interval_ms" in config:
+        if type(scrape) is not int or scrape not in range(1000, 3600001, 1000):
+            raise ValueError("scrape_interval_ms must be a whole second from 1000 to 3600000")
+    request_step = config.get("request_step_ms")
+    if "request_step_ms" in config:
+        if scrape is None:
+            raise ValueError("request_step_ms requires scrape_interval_ms")
+        if type(request_step) is not int or request_step not in range(1000, 60001, 1000):
+            raise ValueError("request_step_ms must be a whole second from 1000 to 60000")
     sub = config.get("subquery_step", "15s")
     if not SUBQUERY_STEP.fullmatch(sub):
         raise ValueError("subquery_step must be between 1s and 60s")
     if not 1 <= int(sub[:-1]) <= 60:
         raise ValueError("subquery_step must be between 1s and 60s")
+    if scrape is not None and int(sub[:-1]) * 1000 > scrape and any(":@sub@]" in SIGNALS[signal].expression for signal in signals):
+        raise ValueError("PLATFORM_SUBQUERY_COARSER_THAN_SCRAPE")
+    if request_step is not None:
+        too_short = [signal for signal in signals if SIGNALS[signal].uses_rate and scrape * 2 > request_step]
+        if too_short:
+            raise ValueError(f"PLATFORM_RATE_WINDOW_TOO_SHORT: {', '.join(too_short)}")
+        if request_step < scrape:
+            raise ValueError("PLATFORM_STEP_BELOW_SCRAPE_INTERVAL")
     transport = config.get("transport", "direct")
     uid = config.get("datasource_uid")
     if transport not in ("direct", "grafana_proxy"):
@@ -134,8 +152,10 @@ def build_connections(config: dict) -> dict:
             connection["allow_insecure_http"] = True
         if rules:
             connection["rules"] = rules
+        if scrape is not None:
+            connection["scrape_interval_ms"] = scrape
         connections.append(connection)
-    document = {"schema_version": SCHEMA_VERSION, "connections": connections}
+    document = {"schema_version": "source-connections.v3" if scrape is not None else SCHEMA_VERSION, "connections": connections}
     if len(serialize(document).encode()) > MAX_SOURCE_CONFIG_BYTES:
         raise ValueError("PLATFORM_PROFILE_TOO_LARGE")
     return document

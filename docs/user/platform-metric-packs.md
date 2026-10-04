@@ -139,13 +139,33 @@ OpenShift (шаг не меньше удвоенного интервала оп
   источника: при меньшем шаге `rate` не видит двух точек, и ряд превращается в
   пропуски (не в нули). Стандартный интервал опроса OpenShift - 30 секунд, то
   есть шаг от 60 секунд.
-- **Версия документа и автошаг.** Генератор выпускает `source-connections.v1`,
-  которая не принимает `scrape_interval_ms`; режим автошага `auto` такому
-  профилю отказывает (`AUTO_STEP_SCRAPE_INTERVAL_REQUIRED`), а выражения с
-  подзапросом `[$__interval:SUB]` не переживают огрубление шага
-  (`AUTO_STEP_QUERY_NOT_INTERVAL_BOUND`). Платформенный анализ запускайте с
-  `step_mode: fixed` и шагом, который укладывается в бюджет 1 500 000 ячеек.
-  Поддержка `scrape_interval_ms` в генераторе - отдельный срез.
+- **Версия документа и автошаг.** Без `scrape_interval_ms` в конфигурации
+  генератор выпускает `source-connections.v1`, которая поля не принимает:
+  режим автошага `auto` такому профилю отказывает
+  (`AUTO_STEP_SCRAPE_INTERVAL_REQUIRED`), анализ запускается с
+  `step_mode: fixed`. С `scrape_interval_ms` (целые секунды, от 1 000 до
+  3 600 000 мс) выпускается `source-connections.v3`, поле записывается в каждый
+  профиль и `auto` работает; шаг режима `auto` не превышает 60 с, поэтому при
+  интервале опроса больше 60 с `auto` всё равно откажет
+  (`AUTO_STEP_BELOW_SCRAPE_INTERVAL`), используйте `fixed`. Если в конфигурации
+  указан `request_step_ms` (заявленный шаг запроса, целые секунды до 60 000 мс),
+  генератор проверяет её и отказывает до записи файла:
+  `PLATFORM_STEP_BELOW_SCRAPE_INTERVAL` (шаг меньше интервала опроса) и
+  `PLATFORM_RATE_WINDOW_TOO_SHORT` (сигнал на `rate` и интервал опроса больше
+  половины шага: `rate` не увидит двух точек). `request_step_ms` - проверка
+  конфигурации, в профиль он не записывается: запрос с другим шагом этой
+  проверки не проходит, ядро соотношение шага и интервала опроса для `rate` не
+  проверяет (оно требует только шаг не меньше интервала опроса). Независимо от
+  `request_step_ms`, при заданном `scrape_interval_ms` генератор отказывает с
+  `PLATFORM_SUBQUERY_COARSER_THAN_SCRAPE`, если выбранный сигнал содержит
+  подзапрос, а `subquery_step` крупнее интервала опроса.
+  Ограничения автошага: выражения с подзапросом `[$__interval:SUB]` не
+  переживают огрубление шага (`AUTO_STEP_QUERY_NOT_INTERVAL_BOUND`), то есть
+  `auto` работает, пока заявленный шаг укладывается в бюджет 1 500 000 ячеек без
+  огрубления (например, 140 рядов на шаге 60 с за 8 часов - 67 тысяч ячеек).
+  Правила `legacy_sla_rules` объявлены в ячейках и при огрублении тоже
+  препятствуют ему (`AUTO_STEP_RULE_IN_CELLS`; код отказа зависит от того, какая
+  из проверок сработает первой).
 
 ## Запуск генератора
 
@@ -165,9 +185,11 @@ python -m tools.platform_profiles --config fixtures/platform/profile-config.exam
 необязательные `arm` (в этом срезе влияет только на префикс `id` профилей),
 `transport` (`direct` или `grafana_proxy`), `datasource_uid`, `auth`,
 `allow_insecure_http`, `governor`, `subquery_step`, `peak_aggregation`,
-`legacy_sla_rules[]`. Примеры: [конфигурация](../../fixtures/platform/profile-config.example.json),
+`scrape_interval_ms`, `request_step_ms`, `legacy_sla_rules[]`. Примеры:
+[конфигурация](../../fixtures/platform/profile-config.example.json),
 [результат](../contracts/sources/v1/platform-openshift-connections.example.json),
-[результат с пиком](../contracts/sources/v1/platform-openshift-peak-connections.example.json).
+[результат с пиком](../contracts/sources/v1/platform-openshift-peak-connections.example.json),
+[результат с `scrape_interval_ms` (`source-connections.v3`)](../contracts/sources/v1/platform-openshift-autostep-connections.example.json).
 
 Пакеты и пределы:
 

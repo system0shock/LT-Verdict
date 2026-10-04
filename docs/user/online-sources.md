@@ -423,12 +423,14 @@ Governor остаётся общим по origin, запросы выполня�
 рестарты, троттлинг, недоступные реплики, перекос по подам) выпускает генератор
 `python -m tools.platform_profiles`, а не пишутся вручную; контракт меток,
 правила и ограничения описаны в [документе о пакетах метрик OpenShift](platform-metric-packs.md).
-Генератор выпускает `source-connections.v1` без `scrape_interval_ms`, поэтому
-автошаг `auto` такому профилю отказывает
-(`AUTO_STEP_SCRAPE_INTERVAL_REQUIRED`); выражения с подзапросом
-`[$__interval:15s]` к тому же не переживают огрубление шага
-(`AUTO_STEP_QUERY_NOT_INTERVAL_BOUND`). Запускайте платформенный анализ с
-`step_mode: fixed`.
+Если в конфигурации генератора задан `scrape_interval_ms`, он выпускает
+`source-connections.v3` с этим полем в каждом профиле, и автошаг `auto` работает
+([пример](../contracts/sources/v1/platform-openshift-autostep-connections.example.json)).
+Без поля выпускается `v1`, автошаг ему отказывает
+(`AUTO_STEP_SCRAPE_INTERVAL_REQUIRED`): запускайте с `step_mode: fixed`.
+Выражения с подзапросом `[$__interval:15s]` не переживают огрубление шага
+(`AUTO_STEP_QUERY_NOT_INTERVAL_BOUND`), поэтому `auto` для платформенных
+профилей годится, пока заявленный шаг укладывается в бюджет ячеек.
 
 Несколько OpenSearch contexts сохраняются как `opensearch-errors-N.json`,
 отсортированные по profile_id. В UI скачивается каждый файл отдельно;

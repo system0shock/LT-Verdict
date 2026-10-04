@@ -61,6 +61,7 @@ test('a consent given at the start requests the advice once after the analysis, 
 
   await page.locator('#shell-tab-setup').click()
   await expect(page.locator('#ai-consent')).not.toBeChecked()
+  const secondLookup = page.waitForResponse((response) => response.request().method() === 'GET' && /\/analyses\/[^/]+\/advice$/.test(response.url()))
   await page.locator('#input-file').setInputFiles(input)
   await page.locator('#policy-file').setInputFiles(policy)
   await expect(page.locator('[data-testid="readiness-item"][data-key="policy"]')).toHaveAttribute('data-level', 'ok')
@@ -69,6 +70,9 @@ test('a consent given at the start requests the advice once after the analysis, 
   await page.locator('#shell-tab-advice').click()
   await expect(page.getByRole('button', { name: 'Получить рекомендации', exact: true })).toBeDisabled()
   await expect(page.getByRole('checkbox', { name: /Разрешаю отправить evidence/ })).not.toBeChecked()
+  await secondLookup
+  // Даём панели обработать ответ: если бы согласие осталось, запрос ушёл бы сразу после него.
+  await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))))
   expect(calls.posts).toHaveLength(1)
 })
 

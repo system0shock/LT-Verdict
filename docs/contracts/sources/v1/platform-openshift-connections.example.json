@@ -1,0 +1,190 @@
+{
+  "schema_version": "source-connections.v1",
+  "connections": [
+    {
+      "id": "ocp-1",
+      "source_kind": "prometheus",
+      "transport": "direct",
+      "base_url": "http://127.0.0.1:9090",
+      "auth": {
+        "type": "none"
+      },
+      "governor": {
+        "requests_per_second": 5,
+        "burst": 5,
+        "timeout_ms": 30000,
+        "max_attempts": 3
+      },
+      "queries": [
+        {
+          "id": "orders-svc.cpu_limit_ratio",
+          "expression": "max by (namespace) (avg_over_time((max by (namespace, pod, container) (node_namespace_pod_container:container_cpu_usage_seconds_total:sum_irate{namespace=\"shop\",container!=\"\",container!=\"POD\"} and on (namespace, pod) namespace_workload_pod:kube_pod_owner:relabel{namespace=\"shop\",workload=\"orders-svc\"}) / on (namespace, pod, container) max by (namespace, pod, container) (kube_pod_container_resource_limits{namespace=\"shop\",resource=\"cpu\"}))[$__interval:15s])) and on (namespace) (count by (namespace) (kube_pod_container_info{namespace=\"shop\"} and on (namespace, pod) namespace_workload_pod:kube_pod_owner:relabel{namespace=\"shop\",workload=\"orders-svc\"}) == count by (namespace) ((max by (namespace, pod, container) (node_namespace_pod_container:container_cpu_usage_seconds_total:sum_irate{namespace=\"shop\",container!=\"\",container!=\"POD\"} and on (namespace, pod) namespace_workload_pod:kube_pod_owner:relabel{namespace=\"shop\",workload=\"orders-svc\"}) / on (namespace, pod, container) max by (namespace, pod, container) (kube_pod_container_resource_limits{namespace=\"shop\",resource=\"cpu\"}))))",
+          "metric": "openshift_container_cpu_limit_ratio",
+          "unit": "ratio",
+          "entity": "orders-svc",
+          "role": "system",
+          "aggregation": "interval_mean",
+          "labels": {
+            "namespace": "shop"
+          }
+        },
+        {
+          "id": "payments-svc.cpu_limit_ratio",
+          "expression": "max by (namespace) (avg_over_time((max by (namespace, pod, container) (node_namespace_pod_container:container_cpu_usage_seconds_total:sum_irate{namespace=\"shop\",container!=\"\",container!=\"POD\"} and on (namespace, pod) namespace_workload_pod:kube_pod_owner:relabel{namespace=\"shop\",workload=\"payments-svc\"}) / on (namespace, pod, container) max by (namespace, pod, container) (kube_pod_container_resource_limits{namespace=\"shop\",resource=\"cpu\"}))[$__interval:15s])) and on (namespace) (count by (namespace) (kube_pod_container_info{namespace=\"shop\"} and on (namespace, pod) namespace_workload_pod:kube_pod_owner:relabel{namespace=\"shop\",workload=\"payments-svc\"}) == count by (namespace) ((max by (namespace, pod, container) (node_namespace_pod_container:container_cpu_usage_seconds_total:sum_irate{namespace=\"shop\",container!=\"\",container!=\"POD\"} and on (namespace, pod) namespace_workload_pod:kube_pod_owner:relabel{namespace=\"shop\",workload=\"payments-svc\"}) / on (namespace, pod, container) max by (namespace, pod, container) (kube_pod_container_resource_limits{namespace=\"shop\",resource=\"cpu\"}))))",
+          "metric": "openshift_container_cpu_limit_ratio",
+          "unit": "ratio",
+          "entity": "payments-svc",
+          "role": "system",
+          "aggregation": "interval_mean",
+          "labels": {
+            "namespace": "shop"
+          }
+        },
+        {
+          "id": "orders-svc.memory_limit_ratio",
+          "expression": "max by (namespace) (avg_over_time((max by (namespace, pod, container) (container_memory_working_set_bytes{namespace=\"shop\",container!=\"\",container!=\"POD\"} and on (namespace, pod) namespace_workload_pod:kube_pod_owner:relabel{namespace=\"shop\",workload=\"orders-svc\"}) / on (namespace, pod, container) max by (namespace, pod, container) (kube_pod_container_resource_limits{namespace=\"shop\",resource=\"memory\"}))[$__interval:15s])) and on (namespace) (count by (namespace) (kube_pod_container_info{namespace=\"shop\"} and on (namespace, pod) namespace_workload_pod:kube_pod_owner:relabel{namespace=\"shop\",workload=\"orders-svc\"}) == count by (namespace) ((max by (namespace, pod, container) (container_memory_working_set_bytes{namespace=\"shop\",container!=\"\",container!=\"POD\"} and on (namespace, pod) namespace_workload_pod:kube_pod_owner:relabel{namespace=\"shop\",workload=\"orders-svc\"}) / on (namespace, pod, container) max by (namespace, pod, container) (kube_pod_container_resource_limits{namespace=\"shop\",resource=\"memory\"}))))",
+          "metric": "openshift_container_memory_limit_ratio",
+          "unit": "ratio",
+          "entity": "orders-svc",
+          "role": "system",
+          "aggregation": "interval_mean",
+          "labels": {
+            "namespace": "shop"
+          }
+        },
+        {
+          "id": "payments-svc.memory_limit_ratio",
+          "expression": "max by (namespace) (avg_over_time((max by (namespace, pod, container) (container_memory_working_set_bytes{namespace=\"shop\",container!=\"\",container!=\"POD\"} and on (namespace, pod) namespace_workload_pod:kube_pod_owner:relabel{namespace=\"shop\",workload=\"payments-svc\"}) / on (namespace, pod, container) max by (namespace, pod, container) (kube_pod_container_resource_limits{namespace=\"shop\",resource=\"memory\"}))[$__interval:15s])) and on (namespace) (count by (namespace) (kube_pod_container_info{namespace=\"shop\"} and on (namespace, pod) namespace_workload_pod:kube_pod_owner:relabel{namespace=\"shop\",workload=\"payments-svc\"}) == count by (namespace) ((max by (namespace, pod, container) (container_memory_working_set_bytes{namespace=\"shop\",container!=\"\",container!=\"POD\"} and on (namespace, pod) namespace_workload_pod:kube_pod_owner:relabel{namespace=\"shop\",workload=\"payments-svc\"}) / on (namespace, pod, container) max by (namespace, pod, container) (kube_pod_container_resource_limits{namespace=\"shop\",resource=\"memory\"}))))",
+          "metric": "openshift_container_memory_limit_ratio",
+          "unit": "ratio",
+          "entity": "payments-svc",
+          "role": "system",
+          "aggregation": "interval_mean",
+          "labels": {
+            "namespace": "shop"
+          }
+        },
+        {
+          "id": "orders-svc.oom",
+          "expression": "(sum by (namespace) (rate(container_oom_events_total{namespace=\"shop\",container!=\"\",container!=\"POD\"}[$__interval]) and on (namespace, pod) namespace_workload_pod:kube_pod_owner:relabel{namespace=\"shop\",workload=\"orders-svc\"})) or ((0 * max by (namespace) (container_memory_working_set_bytes{namespace=\"shop\",container!=\"\",container!=\"POD\"} and on (namespace, pod) namespace_workload_pod:kube_pod_owner:relabel{namespace=\"shop\",workload=\"orders-svc\"})) unless on (namespace) sum by (namespace) (container_oom_events_total{namespace=\"shop\",container!=\"\",container!=\"POD\"} and on (namespace, pod) namespace_workload_pod:kube_pod_owner:relabel{namespace=\"shop\",workload=\"orders-svc\"}))",
+          "metric": "openshift_oom",
+          "unit": "events/s",
+          "entity": "orders-svc",
+          "role": "system",
+          "aggregation": "interval_rate",
+          "labels": {
+            "namespace": "shop"
+          }
+        },
+        {
+          "id": "payments-svc.oom",
+          "expression": "(sum by (namespace) (rate(container_oom_events_total{namespace=\"shop\",container!=\"\",container!=\"POD\"}[$__interval]) and on (namespace, pod) namespace_workload_pod:kube_pod_owner:relabel{namespace=\"shop\",workload=\"payments-svc\"})) or ((0 * max by (namespace) (container_memory_working_set_bytes{namespace=\"shop\",container!=\"\",container!=\"POD\"} and on (namespace, pod) namespace_workload_pod:kube_pod_owner:relabel{namespace=\"shop\",workload=\"payments-svc\"})) unless on (namespace) sum by (namespace) (container_oom_events_total{namespace=\"shop\",container!=\"\",container!=\"POD\"} and on (namespace, pod) namespace_workload_pod:kube_pod_owner:relabel{namespace=\"shop\",workload=\"payments-svc\"}))",
+          "metric": "openshift_oom",
+          "unit": "events/s",
+          "entity": "payments-svc",
+          "role": "system",
+          "aggregation": "interval_rate",
+          "labels": {
+            "namespace": "shop"
+          }
+        },
+        {
+          "id": "orders-svc.restarts",
+          "expression": "(sum by (namespace) (rate(kube_pod_container_status_restarts_total{namespace=\"shop\",container!=\"\",container!=\"POD\"}[$__interval]) and on (namespace, pod) namespace_workload_pod:kube_pod_owner:relabel{namespace=\"shop\",workload=\"orders-svc\"})) or ((0 * max by (namespace) (kube_pod_info{namespace=\"shop\"} and on (namespace, pod) namespace_workload_pod:kube_pod_owner:relabel{namespace=\"shop\",workload=\"orders-svc\"})) unless on (namespace) sum by (namespace) (kube_pod_container_status_restarts_total{namespace=\"shop\",container!=\"\",container!=\"POD\"} and on (namespace, pod) namespace_workload_pod:kube_pod_owner:relabel{namespace=\"shop\",workload=\"orders-svc\"}))",
+          "metric": "openshift_restarts",
+          "unit": "events/s",
+          "entity": "orders-svc",
+          "role": "system",
+          "aggregation": "interval_rate",
+          "labels": {
+            "namespace": "shop"
+          }
+        },
+        {
+          "id": "payments-svc.restarts",
+          "expression": "(sum by (namespace) (rate(kube_pod_container_status_restarts_total{namespace=\"shop\",container!=\"\",container!=\"POD\"}[$__interval]) and on (namespace, pod) namespace_workload_pod:kube_pod_owner:relabel{namespace=\"shop\",workload=\"payments-svc\"})) or ((0 * max by (namespace) (kube_pod_info{namespace=\"shop\"} and on (namespace, pod) namespace_workload_pod:kube_pod_owner:relabel{namespace=\"shop\",workload=\"payments-svc\"})) unless on (namespace) sum by (namespace) (kube_pod_container_status_restarts_total{namespace=\"shop\",container!=\"\",container!=\"POD\"} and on (namespace, pod) namespace_workload_pod:kube_pod_owner:relabel{namespace=\"shop\",workload=\"payments-svc\"}))",
+          "metric": "openshift_restarts",
+          "unit": "events/s",
+          "entity": "payments-svc",
+          "role": "system",
+          "aggregation": "interval_rate",
+          "labels": {
+            "namespace": "shop"
+          }
+        },
+        {
+          "id": "orders-svc.cpu_throttling",
+          "expression": "max by (namespace) (sum by (namespace, pod, container) (rate(container_cpu_cfs_throttled_periods_total{namespace=\"shop\",container!=\"\",container!=\"POD\"}[$__interval]) and on (namespace, pod) namespace_workload_pod:kube_pod_owner:relabel{namespace=\"shop\",workload=\"orders-svc\"}) / sum by (namespace, pod, container) (rate(container_cpu_cfs_periods_total{namespace=\"shop\",container!=\"\",container!=\"POD\"}[$__interval]) and on (namespace, pod) namespace_workload_pod:kube_pod_owner:relabel{namespace=\"shop\",workload=\"orders-svc\"}))",
+          "metric": "openshift_cpu_throttling",
+          "unit": "ratio",
+          "entity": "orders-svc",
+          "role": "system",
+          "aggregation": "interval_mean",
+          "labels": {
+            "namespace": "shop"
+          }
+        },
+        {
+          "id": "payments-svc.cpu_throttling",
+          "expression": "max by (namespace) (sum by (namespace, pod, container) (rate(container_cpu_cfs_throttled_periods_total{namespace=\"shop\",container!=\"\",container!=\"POD\"}[$__interval]) and on (namespace, pod) namespace_workload_pod:kube_pod_owner:relabel{namespace=\"shop\",workload=\"payments-svc\"}) / sum by (namespace, pod, container) (rate(container_cpu_cfs_periods_total{namespace=\"shop\",container!=\"\",container!=\"POD\"}[$__interval]) and on (namespace, pod) namespace_workload_pod:kube_pod_owner:relabel{namespace=\"shop\",workload=\"payments-svc\"}))",
+          "metric": "openshift_cpu_throttling",
+          "unit": "ratio",
+          "entity": "payments-svc",
+          "role": "system",
+          "aggregation": "interval_mean",
+          "labels": {
+            "namespace": "shop"
+          }
+        },
+        {
+          "id": "orders-svc.unavailable_replicas",
+          "expression": "max by (namespace) (avg_over_time((kube_deployment_spec_replicas{namespace=\"shop\",deployment=\"orders-svc\"} - on (namespace, deployment) kube_deployment_status_replicas_available{namespace=\"shop\",deployment=\"orders-svc\"})[$__interval:15s]))",
+          "metric": "openshift_unavailable_replicas",
+          "unit": "count",
+          "entity": "orders-svc",
+          "role": "system",
+          "aggregation": "interval_mean",
+          "labels": {
+            "namespace": "shop"
+          }
+        },
+        {
+          "id": "payments-svc.unavailable_replicas",
+          "expression": "max by (namespace) (avg_over_time((kube_deployment_spec_replicas{namespace=\"shop\",deployment=\"payments-svc\"} - on (namespace, deployment) kube_deployment_status_replicas_available{namespace=\"shop\",deployment=\"payments-svc\"})[$__interval:15s]))",
+          "metric": "openshift_unavailable_replicas",
+          "unit": "count",
+          "entity": "payments-svc",
+          "role": "system",
+          "aggregation": "interval_mean",
+          "labels": {
+            "namespace": "shop"
+          }
+        },
+        {
+          "id": "orders-svc.pod_imbalance",
+          "expression": "(max by (namespace) (avg_over_time((sum by (namespace, pod) (node_namespace_pod_container:container_cpu_usage_seconds_total:sum_irate{namespace=\"shop\",container!=\"\",container!=\"POD\"} and on (namespace, pod) namespace_workload_pod:kube_pod_owner:relabel{namespace=\"shop\",workload=\"orders-svc\"}))[$__interval:15s])) - min by (namespace) (avg_over_time((sum by (namespace, pod) (node_namespace_pod_container:container_cpu_usage_seconds_total:sum_irate{namespace=\"shop\",container!=\"\",container!=\"POD\"} and on (namespace, pod) namespace_workload_pod:kube_pod_owner:relabel{namespace=\"shop\",workload=\"orders-svc\"}))[$__interval:15s]))) / avg by (namespace) (avg_over_time((sum by (namespace, pod) (node_namespace_pod_container:container_cpu_usage_seconds_total:sum_irate{namespace=\"shop\",container!=\"\",container!=\"POD\"} and on (namespace, pod) namespace_workload_pod:kube_pod_owner:relabel{namespace=\"shop\",workload=\"orders-svc\"}))[$__interval:15s]))",
+          "metric": "openshift_pod_imbalance",
+          "unit": "ratio",
+          "entity": "orders-svc",
+          "role": "system",
+          "aggregation": "interval_mean",
+          "labels": {
+            "namespace": "shop"
+          }
+        },
+        {
+          "id": "payments-svc.pod_imbalance",
+          "expression": "(max by (namespace) (avg_over_time((sum by (namespace, pod) (node_namespace_pod_container:container_cpu_usage_seconds_total:sum_irate{namespace=\"shop\",container!=\"\",container!=\"POD\"} and on (namespace, pod) namespace_workload_pod:kube_pod_owner:relabel{namespace=\"shop\",workload=\"payments-svc\"}))[$__interval:15s])) - min by (namespace) (avg_over_time((sum by (namespace, pod) (node_namespace_pod_container:container_cpu_usage_seconds_total:sum_irate{namespace=\"shop\",container!=\"\",container!=\"POD\"} and on (namespace, pod) namespace_workload_pod:kube_pod_owner:relabel{namespace=\"shop\",workload=\"payments-svc\"}))[$__interval:15s]))) / avg by (namespace) (avg_over_time((sum by (namespace, pod) (node_namespace_pod_container:container_cpu_usage_seconds_total:sum_irate{namespace=\"shop\",container!=\"\",container!=\"POD\"} and on (namespace, pod) namespace_workload_pod:kube_pod_owner:relabel{namespace=\"shop\",workload=\"payments-svc\"}))[$__interval:15s]))",
+          "metric": "openshift_pod_imbalance",
+          "unit": "ratio",
+          "entity": "payments-svc",
+          "role": "system",
+          "aggregation": "interval_mean",
+          "labels": {
+            "namespace": "shop"
+          }
+        }
+      ]
+    }
+  ]
+}

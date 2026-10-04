@@ -97,6 +97,8 @@ private const val NBSP = " "
 private const val MAX_TRANSACTION_ROWS = 200
 private const val MAX_DIGITS = 20
 private const val RATIO_SCALE = 40
+private const val MAX_EXPONENT = 100
+private const val MAX_PRECISION = 400
 
 private val METRIC_WORDS =
     mapOf(
@@ -176,7 +178,7 @@ private fun verdictBlock(
         }
     val reasons = LinkedHashSet<String>()
     coverage?.get("reasons").let { (it as? JsonArray).orEmpty() }.forEach {
-        (it as? JsonPrimitive)?.let { code ->
+        (it as? JsonPrimitive)?.takeIf { code -> code.isString }?.let { code ->
             reasons += code.content
         }
     }
@@ -285,7 +287,10 @@ private fun transactionsSection(
 ): String {
     val checks = evidence.filter { it.string("type") == "policy_check" }
     val byMetric = checks.filter { it.text("metric_evidence_id") != null }.groupBy { it.text("metric_evidence_id") }
-    val windowChecks = checks.filter { it.text("metric_evidence_id") == null }
+    val windowChecks =
+        checks
+            .filter { it.text("metric_evidence_id") == null }
+            .groupBy { transactionKey(it.obj("scope")) }
     val noPolicy = result.text("policy_verdict") == "NO_POLICY"
     val missing = BigDecimal.ONE.negate()
     val rows =
@@ -293,7 +298,7 @@ private fun transactionsSection(
             .filter { it.string("type") == "metric_summary" && it.obj("scope")?.text("kind") == "transaction" }
             .map { item ->
                 val scope = item.obj("scope")
-                val related = byMetric[item.text("id")].orEmpty() + windowChecks.filter { sameTransaction(it.obj("scope"), scope) }
+                val related = byMetric[item.text("id")].orEmpty() + windowChecks[transactionKey(scope)].orEmpty()
                 val statuses = related.mapNotNull { it.text("status") }
                 val status =
                     when {
@@ -355,15 +360,15 @@ private fun transactionsSection(
     return "<section><h2>Транзакции</h2>$body</section>"
 }
 
-private fun sameTransaction(
-    left: JsonObject?,
-    right: JsonObject?,
-): Boolean =
-    left?.text("kind") == "transaction" &&
-        right?.text("kind") == "transaction" &&
-        left.text("label") == right.text("label") &&
-        left.text("sample_kind") == right.text("sample_kind") &&
-        left.stringList("group_path") == right.stringList("group_path")
+// Windowed checks carry the full transaction scope instead of a metric reference; null means "not a transaction".
+private fun transactionKey(scope: JsonObject?): List<Any?>? =
+    if (scope?.text("kind") ==
+        "transaction"
+    ) {
+        listOf(scope.text("label"), scope.text("sample_kind"), scope.stringList("group_path"))
+    } else {
+        null
+    }
 
 private fun limitationsBlock(
     result: JsonObject,
@@ -425,7 +430,7 @@ private fun exactValue(element: JsonElement?): BigDecimal? =
                 numerator.divide(denominator, RATIO_SCALE, RoundingMode.HALF_UP)
             }
         }
-        is JsonPrimitive -> if (element.isString) null else element.content.toBigDecimalOrNull()
+        is JsonPrimitive -> if (element.isString) null else parseNumber(element.content)
         else -> null
     }
 
@@ -466,7 +471,8 @@ private fun formatMetric(
         value == null -> NO_DATA
         metric == "error_rate_ratio" -> "${formatNumber(value.multiply(BigDecimal(100)), digits)}$NBSP%"
         metric == "throughput_rps" -> "${formatNumber(value, digits)}${NBSP}RPS"
-        else -> "${formatNumber(value, digits)}${NBSP}мс"
+        metric == "response_time_p95_ms" || metric == "response_time_p99_ms" -> "${formatNumber(value, digits)}${NBSP}мс"
+        else -> formatNumber(value, digits)
     }
 
 // Fixed formatting independent of the JVM locale: no-break space between thousands, decimal comma, no trailing zeros.
@@ -568,7 +574,11 @@ private fun JsonObject.stringList(name: String): List<String> =
     (this[name] as? JsonArray).orEmpty().mapNotNull { (it as? JsonPrimitive)?.takeUnless { value -> value is JsonNull }?.content }
 
 private fun JsonObject.number(name: String): BigDecimal? =
-    (this[name] as? JsonPrimitive)?.takeUnless { it is JsonNull || it.isString }?.content?.toBigDecimalOrNull()
+    (this[name] as? JsonPrimitive)?.takeUnless { it is JsonNull || it.isString }?.content?.let(::parseNumber)
+
+// A compact token such as 1e100000000 must not be expanded when it is rounded and printed: out-of-range values count as no data.
+private fun parseNumber(token: String): BigDecimal? =
+    token.toBigDecimalOrNull()?.takeIf { it.scale() in -MAX_EXPONENT..MAX_EXPONENT && it.precision() <= MAX_PRECISION }
 
 private fun JsonObject.value(name: String): String = escape(string(name) ?: "unavailable")
 

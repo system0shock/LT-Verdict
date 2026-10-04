@@ -3,8 +3,11 @@ package io.ltverdict.report
 import kotlinx.serialization.json.JsonPrimitive
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
+import org.junit.jupiter.api.Assertions.assertTimeoutPreemptively
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
+import org.junit.jupiter.api.function.ThrowingSupplier
+import java.time.Duration
 
 class HtmlReportTest {
     @Test
@@ -266,6 +269,44 @@ class HtmlReportTest {
     }
 
     @Test
+    fun `an absurd exponent or a null reason in the result neither hangs nor prints null`() {
+        val html =
+            page(
+                "NO_VERDICT",
+                listOf(check("huge", "NO_VERDICT", threshold = "1e100000000", observed = "1e-100000000")),
+                coverageStatus = "INCOMPLETE",
+                rawCoverageReasons = "null,5",
+            )
+
+        assertTrue(html.substringAfter(">huge<").substringBefore("</tr>").contains("нет данных"))
+        assertFalse(html.contains("<code>null</code>"))
+        assertFalse(html.contains("<code>5</code>"))
+    }
+
+    @Test
+    fun `an unknown metric is printed without an invented unit`() {
+        val html = page("PASS", listOf(check("custom", "PASS", metric = "custom_metric", threshold = "5", observed = "3")))
+        val row = html.substringAfter(">custom<").substringBefore("</tr>")
+
+        assertTrue(row.contains("custom_metric"))
+        assertFalse(row.contains("мс"))
+    }
+
+    @Test
+    fun `many transactions with many windowed checks are matched without a full scan per row`() {
+        val checks =
+            (0 until 3000).map {
+                val scope = """{"kind":"transaction","label":"tx-$it","group_path":[]}"""
+                check("w-$it", if (it == 2999) "FAIL" else "PASS", scope = scope, windowId = "w")
+            }
+        val html =
+            assertTimeoutPreemptively(Duration.ofSeconds(20), ThrowingSupplier { page("FAIL", checks, (0 until 3000).map { tx(it) }) })
+        val table = html.substringAfter("<h2>Транзакции</h2>").substringBefore("</table>")
+
+        assertTrue(table.indexOf("tx-2999") < table.indexOf("tx-0<"))
+    }
+
+    @Test
     fun `a small sample is marked in the rule row`() {
         val html =
             page(
@@ -317,6 +358,7 @@ class HtmlReportTest {
         reason: String? = null,
         scope: String? = null,
         sample: String? = null,
+        windowId: String? = null,
     ): String =
         buildString {
             append(
@@ -326,6 +368,7 @@ class HtmlReportTest {
             if (observed != null) append(""","observed":$observed""")
             if (reason != null) append(""","reason_code":${q(reason)}""")
             if (scope != null) append(""","scope":$scope""")
+            if (windowId != null) append(""","window_id":${q(windowId)}""")
             if (sample != null) append(",$sample")
             append("}")
         }
@@ -349,20 +392,15 @@ class HtmlReportTest {
         metrics: List<String> = emptyList(),
         coverageStatus: String = "COMPLETE",
         coverageReasons: List<String> = emptyList(),
-    ): String =
-        render(
-            """{"analysis_coverage":{"reasons":[${coverageReasons.joinToString(
-                ",",
-            ) {
-                q(
-                    it,
-                )
-            }}],"status":"$coverageStatus"},"evidence":[${(metrics + checks).joinToString(
-                ",",
-            )}],"findings":[],"policy_verdict":"$verdict","run_id":"run-1","run_validity":"VALID","schema_version":"analysis-result.v1"}"""
-                .encodeToByteArray(),
-            "analysis-1",
-        ).decodeToString()
+        rawCoverageReasons: String = coverageReasons.joinToString(",") { q(it) },
+    ): String {
+        val evidence = (metrics + checks).joinToString(",")
+        val coverage = """{"reasons":[$rawCoverageReasons],"status":"$coverageStatus"}"""
+        val result =
+            """{"analysis_coverage":$coverage,"evidence":[$evidence],"findings":[],"policy_verdict":"$verdict",""" +
+                """"run_id":"run-1","run_validity":"VALID","schema_version":"analysis-result.v1"}"""
+        return render(result.encodeToByteArray(), "analysis-1").decodeToString()
+    }
 
     private fun render(
         resultBytes: ByteArray,

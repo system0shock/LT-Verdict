@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import http from "node:http";
 import https from "node:https";
+import { isDeepStrictEqual } from "node:util";
 
 const mode = process.env.ADVISORY_RELAY_MODE;
 if (mode !== "preflight" && mode !== "live") throw new Error("invalid relay mode");
@@ -12,10 +13,42 @@ const outputRoot = process.env.ADVISORY_RELAY_OUTPUT_ROOT ?? "/out";
 const readyPath = process.env.ADVISORY_RELAY_READY_PATH ?? "/out/relay-ready";
 const port = Number(process.env.ADVISORY_RELAY_PORT ?? 18_080);
 const apiKey = mode === "live" ? process.env.OPENAI_API_KEY : null;
+const TOP_LEVEL_KEYS = ["caveats", "hypotheses", "recommendations", "schema_version", "summary"];
+const retryWindowEnv = process.env.ADVISORY_RELAY_RETRY_WINDOW_MS;
+const retryWindowMs = mode === "preflight" && retryWindowEnv !== undefined
+  ? Math.min(Number(retryWindowEnv), 300_000) : 300_000;
+const preflightScenario = process.env.ADVISORY_RELAY_PREFLIGHT_SCENARIO;
+const preflightResponsesEnv = process.env.ADVISORY_RELAY_PREFLIGHT_RESPONSES;
+if (mode === "preflight" && retryWindowEnv !== undefined &&
+    (!/^\d+$/.test(retryWindowEnv) || !Number.isSafeInteger(Number(retryWindowEnv)))) {
+  throw new Error("invalid retry window");
+}
+if (mode === "live" && (preflightScenario !== undefined || preflightResponsesEnv !== undefined)) {
+  throw new Error("preflight stubs are not allowed in live mode");
+}
+if (preflightScenario !== undefined && !["wrapped-then-valid", "wrapped-twice", "wrapped-then-error", "deep-violation"].includes(preflightScenario)) {
+  throw new Error("invalid preflight scenario");
+}
+let preflightResponses = null;
+if (preflightResponsesEnv !== undefined) {
+  preflightResponses = JSON.parse(preflightResponsesEnv);
+  if (!Array.isArray(preflightResponses) || preflightResponses.length > 2 ||
+      preflightResponses.some(item => !item || !Number.isInteger(item.status) ||
+        typeof item.content_type !== "string" || typeof item.body !== "string")) {
+    throw new Error("invalid preflight responses");
+  }
+}
 if (!Number.isInteger(port) || port < 1 || port > 65_535) throw new Error("invalid relay port");
 if (mode === "live" && !apiKey) throw new Error("OPENAI_API_KEY is required");
 
-let requestCount = 0;
+let received = 0;
+let forwarded = 0;
+let firstStartedAt = 0;
+let firstBody = null;
+let firstCall = null;
+let firstOk = false;
+let refusedReason = null;
+const outcomes = [];
 
 function sendJson(response, status, type) {
   const body = Buffer.from(JSON.stringify({ error: { type, message: "request rejected" } }));
@@ -46,9 +79,19 @@ function readBounded(stream, limit) {
   });
 }
 
-function messagesAreTextOnly(messages) {
+function messagesAreTextOnly(messages, continuation = false) {
+  if (continuation) {
+    if (!Array.isArray(messages) || messages.length < 3) return false;
+    const assistant = messages.at(-2);
+    const tool = messages.at(-1);
+    return messagesAreTextOnly(messages.slice(0, -2)) &&
+      assistant?.role === "assistant" && (assistant.content === null || assistant.content === "") &&
+      Array.isArray(assistant.tool_calls) && assistant.tool_calls.length === 1 &&
+      tool?.role === "tool" && typeof tool.content === "string";
+  }
   return Array.isArray(messages) && messages.length > 0 && messages.every(message => {
     if (!message || typeof message !== "object") return false;
+    if (!["system", "user", "assistant"].includes(message.role) || Object.hasOwn(message, "tool_calls")) return false;
     if (typeof message.content === "string") return true;
     return Array.isArray(message.content) && message.content.every(part =>
       part && typeof part === "object" && part.type === "text" && typeof part.text === "string"
@@ -72,16 +115,16 @@ function forwardBody(body) {
   return forwarded;
 }
 
-function exactForwardingPolicy(body) {
+function exactForwardingPolicy(body, continuation = false) {
   return body.model === fixedModel && body.n === 1 && body.stream === true &&
-    body.parallel_tool_calls === false && messagesAreTextOnly(body.messages) &&
+    body.parallel_tool_calls === false && messagesAreTextOnly(body.messages, continuation) &&
     toolNames(body).length === 1 && toolNames(body)[0] === "structured_output" &&
     !["max_tokens", "max_completion_tokens", "max_output_tokens", "best_of", "provider"]
       .some(field => Object.hasOwn(body, field));
 }
 
-function writeObservation(before, after) {
-  fs.writeFileSync(`${outputRoot}/wire-observation.json`, JSON.stringify({
+function writeObservation(before, after, ordinal) {
+  fs.writeFileSync(`${outputRoot}/wire-observation-${ordinal}.json`, JSON.stringify({
     schema_version: "advisory-ai-runtime-wire.v1",
     model_before: typeof before.model === "string" ? before.model : null,
     model_after: after.model,
@@ -94,12 +137,51 @@ function writeObservation(before, after) {
   }));
 }
 
-function writeResult(status) {
+function writeResult(outcome, ordinal) {
+  outcomes[ordinal - 1] = outcome;
+  const latest = outcomes.at(-1);
   fs.writeFileSync(`${outputRoot}/relay-result.json`, JSON.stringify({
     schema_version: "advisory-ai-runtime-relay.v1",
-    status,
-    request_count: requestCount,
+    status: latest === "FORWARDED_RETRY" ? "FORWARDED_STRUCTURED_OUTPUT" : latest,
+    received_request_count: received,
+    forwarded_request_count: forwarded,
+    outcomes: outcomes.filter(Boolean),
+    retry_refused_reason: refusedReason,
   }));
+}
+
+function topLevelInvalid(argsText) {
+  let value;
+  try { value = JSON.parse(argsText); } catch { return true; }
+  return value === null || typeof value !== "object" || Array.isArray(value) ||
+    !isDeepStrictEqual(Object.keys(value).sort(), TOP_LEVEL_KEYS) ||
+    value.schema_version !== "ai-advice-output.v1";
+}
+
+function isContinuation(first, call, incoming) {
+  if (!incoming || typeof incoming !== "object" || Array.isArray(incoming) ||
+      !Array.isArray(first.messages) || !Array.isArray(incoming.messages) ||
+      incoming.messages.length !== first.messages.length + 2 ||
+      !messagesAreTextOnly(incoming.messages, true) ||
+      !isDeepStrictEqual(incoming.messages.slice(0, first.messages.length), first.messages)) return false;
+  const assistant = incoming.messages.at(-2);
+  const tool = incoming.messages.at(-1);
+  const assistantKeys = ["content", "role", "tool_calls", ...(Object.hasOwn(assistant, "reasoning_content") ? ["reasoning_content"] : [])];
+  if (!isDeepStrictEqual(Object.keys(assistant).sort(), assistantKeys.sort()) ||
+      (Object.hasOwn(assistant, "reasoning_content") && typeof assistant.reasoning_content !== "string")) return false;
+  const calls = assistant.tool_calls;
+  if (!calls[0] || typeof calls[0] !== "object" ||
+      !isDeepStrictEqual(Object.keys(calls[0]).sort(), ["function", "id", "type"]) ||
+      calls[0].id !== call.id || calls[0].type !== "function" ||
+      !calls[0].function || typeof calls[0].function !== "object" ||
+      !isDeepStrictEqual(Object.keys(calls[0].function).sort(), ["arguments", "name"]) ||
+      calls[0].function.name !== "structured_output" || calls[0].function.arguments !== call.args) return false;
+  if (!isDeepStrictEqual(Object.keys(tool).sort(), ["content", "role", "tool_call_id"]) ||
+      tool.tool_call_id !== call.id || tool.content.length === 0 ||
+      Buffer.byteLength(tool.content) > 8192) return false;
+  const { messages: firstMessages, ...firstRest } = first;
+  const { messages: incomingMessages, ...incomingRest } = incoming;
+  return isDeepStrictEqual(incomingRest, firstRest);
 }
 
 const fakeAdvice = {
@@ -116,7 +198,7 @@ const fakeAdvice = {
   caveats: ["This is a transport preflight, not model advice."],
 };
 
-function fakeResponse() {
+function fakeResponse(advice = fakeAdvice) {
   const frame = {
     id: "lt-verdict-preflight",
     model: fixedModel,
@@ -128,7 +210,7 @@ function fakeResponse() {
           index: 0,
           id: "lt-verdict-preflight-call",
           type: "function",
-          function: { name: "structured_output", arguments: JSON.stringify(fakeAdvice) },
+          function: { name: "structured_output", arguments: JSON.stringify(advice) },
         }],
       },
       finish_reason: "tool_calls",
@@ -138,8 +220,24 @@ function fakeResponse() {
   return Buffer.from(`data: ${JSON.stringify(frame)}\n\ndata: [DONE]\n\n`);
 }
 
+function fakeWrappedResponse() {
+  const args = JSON.stringify({ arguments: JSON.stringify(fakeAdvice) });
+  const halfway = Math.ceil(args.length / 2);
+  const frames = [args.slice(0, halfway), args.slice(halfway)].map((part, index) => ({
+    model: fixedModel,
+    choices: [{ index: 0, delta: { tool_calls: [{
+      index: 0,
+      ...(index === 0 ? { id: "call_1" } : {}),
+      function: { ...(index === 0 ? { name: "structured_output" } : {}), arguments: part },
+    }] } }],
+  }));
+  frames.push({ model: fixedModel, choices: [{ index: 0, delta: {}, finish_reason: "tool_calls" }] });
+  return Buffer.from(frames.map(frame => `data: ${JSON.stringify(frame)}\n\n`).join("") + "data: [DONE]\n\n");
+}
+
 function inspectProviderResponse(status, contentType, body) {
-  if (status !== 200 || !String(contentType).toLowerCase().includes("text/event-stream")) return false;
+  const invalid = { ok: false, call: null };
+  if (status !== 200 || !String(contentType).toLowerCase().includes("text/event-stream")) return invalid;
   const calls = new Map();
   let done = false;
   try {
@@ -148,42 +246,49 @@ function inspectProviderResponse(status, contentType, body) {
       const data = line.slice(5).trim();
       if (!data) continue;
       if (data === "[DONE]") {
-        if (done) return false;
+        if (done) return invalid;
         done = true;
         continue;
       }
-      if (done) return false;
+      if (done) return invalid;
       const frame = JSON.parse(data);
-      if (frame.model !== undefined && frame.model !== fixedModel) return false;
+      if (frame.model !== undefined && frame.model !== fixedModel) return invalid;
       for (const choice of Array.isArray(frame.choices) ? frame.choices : []) {
-        if (choice?.index !== 0) return false;
+        if (choice?.index !== 0) return invalid;
         for (const fragments of [choice?.delta?.tool_calls, choice?.message?.tool_calls]) {
           if (fragments === undefined || fragments === null) continue;
-          if (!Array.isArray(fragments)) return false;
+          if (!Array.isArray(fragments)) return invalid;
           for (const call of fragments) {
-            if (!call || call.index !== 0) return false;
+            if (!call || call.index !== 0) return invalid;
+            if (call.id !== undefined && call.id !== null && typeof call.id !== "string") return invalid;
             const name = call.function?.name;
             const args = call.function?.arguments;
-            if (name !== undefined && name !== null && typeof name !== "string") return false;
-            if (args !== undefined && args !== null && typeof args !== "string") return false;
+            if (name !== undefined && name !== null && typeof name !== "string") return invalid;
+            if (args !== undefined && args !== null && typeof args !== "string") return invalid;
             const meaningful = (typeof name === "string" && name.length > 0) ||
               (typeof args === "string" && args.length > 0) ||
               (typeof call.id === "string" && call.id.length > 0);
             if (!meaningful) continue;
-            const current = calls.get(0) ?? { name: null };
+            const current = calls.get(0) ?? { id: null, name: null, args: "" };
+            if (typeof call.id === "string" && call.id.length > 0) {
+              if (current.id !== null && current.id !== call.id) return invalid;
+              current.id = call.id;
+            }
             if (typeof name === "string" && name.length > 0) {
-              if (current.name !== null && current.name !== name) return false;
+              if (current.name !== null && current.name !== name) return invalid;
               current.name = name;
             }
+            if (typeof args === "string") current.args += args;
             calls.set(0, current);
           }
         }
       }
     }
   } catch {
-    return false;
+    return invalid;
   }
-  return done && calls.size === 1 && calls.get(0)?.name === "structured_output";
+  const call = calls.get(0) ?? null;
+  return { ok: done && calls.size === 1 && call?.name === "structured_output", call };
 }
 
 function callProvider(body) {
@@ -227,47 +332,100 @@ const server = http.createServer(async (request, response) => {
     response.writeHead(404).end();
     return;
   }
-  requestCount += 1;
-  if (requestCount > 1) {
+  received += 1;
+  const ordinal = received;
+  if (ordinal === 1) firstStartedAt = Date.now();
+  if (ordinal >= 3) {
     request.resume();
-    writeResult("BLOCKED_ADDITIONAL_REQUEST");
+    refusedReason = "RETRY_LIMIT_REACHED";
+    writeResult("BLOCKED_ADDITIONAL_REQUEST", ordinal);
     sendJson(response, 409, "additional_request_blocked");
     return;
+  }
+  if (ordinal === 2) {
+    if (forwarded !== 1 || !firstOk || !firstCall ||
+        typeof firstCall.id !== "string" || firstCall.id.length === 0 ||
+        firstCall.name !== "structured_output" ||
+        typeof firstCall.args !== "string" || firstCall.args.length === 0) {
+      refusedReason = "RETRY_FIRST_RESPONSE_NOT_ACCEPTED";
+    } else if (!topLevelInvalid(firstCall.args)) {
+      refusedReason = "RETRY_NOT_TOP_LEVEL_SCHEMA";
+    } else if (Date.now() - firstStartedAt > retryWindowMs) {
+      refusedReason = "RETRY_WINDOW_EXPIRED";
+    }
+    if (refusedReason !== null) {
+      request.resume();
+      writeResult("BLOCKED_ADDITIONAL_REQUEST", ordinal);
+      sendJson(response, 409, "additional_request_blocked");
+      return;
+    }
   }
   let incoming;
   try {
     incoming = JSON.parse((await readBounded(request, requestLimit)).toString("utf8"));
   } catch {
-    writeResult("BLOCKED_INVALID_REQUEST");
+    if (ordinal === 2) refusedReason = "RETRY_BODY_INVALID";
+    writeResult("BLOCKED_INVALID_REQUEST", ordinal);
     sendJson(response, 400, "invalid_request");
     return;
   }
-  if (!messagesAreTextOnly(incoming.messages) || toolNames(incoming).length !== 1 || toolNames(incoming)[0] !== "structured_output") {
-    writeResult("BLOCKED_REQUEST_CONTRACT");
+  if (ordinal === 2) {
+    let matches = false;
+    try { matches = isContinuation(firstBody, firstCall, incoming); } catch {}
+    if (!matches) {
+      refusedReason = "RETRY_CONTINUATION_MISMATCH";
+      writeResult("BLOCKED_ADDITIONAL_REQUEST", ordinal);
+      sendJson(response, 409, "additional_request_blocked");
+      return;
+    }
+  }
+  if (ordinal === 1) firstBody = incoming;
+  if (!incoming || typeof incoming !== "object" || Array.isArray(incoming) ||
+      !messagesAreTextOnly(incoming.messages, ordinal === 2) ||
+      toolNames(incoming).length !== 1 || toolNames(incoming)[0] !== "structured_output") {
+    writeResult("BLOCKED_REQUEST_CONTRACT", ordinal);
     sendJson(response, 400, "request_contract");
     return;
   }
-  const forwarded = forwardBody(incoming);
-  writeObservation(incoming, forwarded);
-  if (!exactForwardingPolicy(forwarded)) {
-    writeResult("BLOCKED_FORWARDING_POLICY");
+  const outgoing = forwardBody(incoming);
+  writeObservation(incoming, outgoing, ordinal);
+  if (!exactForwardingPolicy(outgoing, ordinal === 2)) {
+    writeResult("BLOCKED_FORWARDING_POLICY", ordinal);
     sendJson(response, 400, "forwarding_policy");
     return;
   }
+  forwarded += 1;
   try {
-    const provider = mode === "preflight"
-      ? { status: 200, contentType: "text/event-stream", body: fakeResponse() }
-      : await callProvider(forwarded);
-    if (!inspectProviderResponse(provider.status, provider.contentType, provider.body)) {
-      writeResult("BLOCKED_PROVIDER_RESPONSE");
+    let provider;
+    if (mode === "preflight") {
+      const stub = preflightResponses?.[forwarded - 1] ??
+        (preflightScenario === "wrapped-then-error" && forwarded === 2
+          ? { status: 503, content_type: "text/plain", body: "server error" } : null);
+      provider = stub
+        ? { status: stub.status, contentType: stub.content_type, body: Buffer.from(stub.body) }
+        : { status: 200, contentType: "text/event-stream",
+          body: preflightScenario === "wrapped-twice" ||
+            (["wrapped-then-valid", "wrapped-then-error"].includes(preflightScenario) && forwarded === 1)
+            ? fakeWrappedResponse() : fakeResponse(preflightScenario === "deep-violation" && forwarded === 1
+              ? { ...fakeAdvice, hypotheses: [{ rank: 1, possible_explanation: "x", recommended_check: "x", evidence_refs: ["analysis-result.json#/run_validity"] }] } : fakeAdvice) };
+    } else {
+      provider = await callProvider(outgoing);
+    }
+    const inspected = inspectProviderResponse(provider.status, provider.contentType, provider.body);
+    if (ordinal === 1) {
+      firstOk = inspected.ok;
+      firstCall = inspected.call;
+    }
+    if (!inspected.ok) {
+      writeResult("BLOCKED_PROVIDER_RESPONSE", ordinal);
       sendJson(response, 502, "provider_response");
       return;
     }
-    writeResult("FORWARDED_STRUCTURED_OUTPUT");
+    writeResult(ordinal === 2 ? "FORWARDED_RETRY" : "FORWARDED_STRUCTURED_OUTPUT", ordinal);
     response.writeHead(200, { "content-type": provider.contentType, "content-length": provider.body.length });
     response.end(provider.body);
   } catch {
-    writeResult("BLOCKED_PROVIDER_TRANSPORT");
+    writeResult("BLOCKED_PROVIDER_TRANSPORT", ordinal);
     sendJson(response, 502, "provider_transport");
   }
 });

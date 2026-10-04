@@ -7,7 +7,9 @@ param(
     [Parameter(Mandatory)] [string]$ResultPath,
     [Parameter(Mandatory)] [string]$CancelPath,
     [string]$CredentialEnvFile,
-    [string]$QwenPackageRoot
+    [string]$QwenPackageRoot,
+    [ValidateSet("", "wrapped-then-valid", "wrapped-twice", "wrapped-then-error", "deep-violation")]
+    [string]$PreflightScenario = ""
 )
 
 Set-StrictMode -Version Latest
@@ -36,6 +38,8 @@ $status = "FAILED"
 $failureCode = "PROCESS_FAILED"
 $unavailableReason = $null
 $resultExitCode = 1
+$providerRequestCount = $null
+$promptSha256 = $null
 $stage = "initialization"
 $cleanupIncomplete = $false
 $networkName = "ltv-ai-runtime-$([guid]::NewGuid().ToString('N').Substring(0, 12))"
@@ -65,6 +69,8 @@ function Write-RuntimeResult {
         unavailable_reason = if ($script:status -eq "UNAVAILABLE") { $script:unavailableReason } else { $null }
         cleanup_incomplete = $script:cleanupIncomplete
         stage = $script:stage
+        provider_request_count = $script:providerRequestCount
+        prompt_sha256 = $script:promptSha256
     }
     Write-Utf8File -Path $ResultPath -Content ($value | ConvertTo-Json -Compress)
 }
@@ -218,6 +224,17 @@ function Read-BoundedJson {
     return Get-Content -LiteralPath $Path -Raw -Encoding UTF8 | ConvertFrom-Json
 }
 
+function Read-RelayResult {
+    param([Parameter(Mandatory)] [string]$Path)
+    try {
+        $value = Read-BoundedJson $Path
+        if ($null -eq $value.PSObject.Properties["status"] -or
+            $null -eq $value.PSObject.Properties["forwarded_request_count"]) { return $null }
+        $null = [int]$value.PSObject.Properties["forwarded_request_count"].Value
+        return $value
+    } catch { return $null }
+}
+
 function Save-QwenAdvice {
     param([Parameter(Mandatory)] [string]$StdoutPath)
     if (-not (Test-Path -LiteralPath $StdoutPath -PathType Leaf) -or (Get-Item -LiteralPath $StdoutPath).Length -gt 150000) {
@@ -264,6 +281,7 @@ function Remove-TemporaryRoot {
 
 try {
     $stage = "validate_inputs"
+    if ($Mode -ne "Preflight" -and $PreflightScenario -ne "") { throw "preflight scenario requires Preflight mode" }
     if ((Test-Path -LiteralPath $ResultPath -PathType Leaf) -or
         (Test-Path -LiteralPath $OutputPath -PathType Leaf)) {
         throw "runtime outputs already exist"
@@ -287,6 +305,9 @@ try {
         (Get-FileHash -LiteralPath $cliPath -Algorithm SHA256).Hash.ToLowerInvariant() -ne $CliSha256) {
         Set-Unavailable "RUNNER_ARTIFACT_MISMATCH"
     }
+    $promptSnapshot = Join-Path $temporaryRoot "system-prompt.md"
+    Copy-Item -LiteralPath $PromptPath -Destination $promptSnapshot
+    $promptSha256 = (Get-FileHash -LiteralPath $promptSnapshot -Algorithm SHA256).Hash.ToLowerInvariant()
 
     if ($Mode -eq "Live") {
         $stage = "validate_credential"
@@ -329,6 +350,7 @@ try {
         "--mount", "type=bind,src=$RelayPath,dst=/runtime/relay.mjs,readonly",
         "--mount", "type=bind,src=$relayOutput,dst=/out"
     )
+    if ($PreflightScenario -ne "") { $relayArguments += @("--env", "ADVISORY_RELAY_PREFLIGHT_SCENARIO=$PreflightScenario") }
     if ($Mode -eq "Live") { $relayArguments += @("--env-file", $CredentialEnvFile) }
     $relayArguments += @("--entrypoint", "/usr/local/bin/node", $ImageReference, "/runtime/relay.mjs")
     $relayId = Container-Id (Invoke-Docker -Arguments $relayArguments)
@@ -360,7 +382,7 @@ try {
         "--mount", "type=bind,src=$QwenPackageRoot,dst=/opt/qwen,readonly",
         "--mount", "type=bind,src=$QwenScriptPath,dst=/runtime/run-qwen.sh,readonly",
         "--mount", "type=bind,src=$EvidencePath,dst=/input/evidence.json,readonly",
-        "--mount", "type=bind,src=$PromptPath,dst=/input/system-prompt.md,readonly",
+        "--mount", "type=bind,src=$promptSnapshot,dst=/input/system-prompt.md,readonly",
         "--mount", "type=bind,src=$SchemaPath,dst=/input/output.schema.json,readonly",
         "--entrypoint", "/bin/sh", $ImageReference, "/runtime/run-qwen.sh"
     )
@@ -397,10 +419,24 @@ try {
         $failureCode = "OUTPUT_LIMIT"
         throw "runtime output limit"
     }
-    if ($qwenExit -ne 0) { throw "Qwen failed" }
+    if ($qwenExit -ne 0) {
+        $relayResult = Read-RelayResult (Join-Path $relayOutput "relay-result.json")
+        if ($null -ne $relayResult) {
+            $providerRequestCount = [int]$relayResult.forwarded_request_count
+            $outcomes = $relayResult.PSObject.Properties["outcomes"]
+            if ($providerRequestCount -eq 2 -and $null -ne $outcomes -and
+                $outcomes.Value -is [array] -and $outcomes.Value.Count -ge 2 -and
+                $outcomes.Value[1] -is [string] -and $outcomes.Value[1] -ceq "FORWARDED_RETRY") {
+                $failureCode = "INVALID_OUTPUT"
+            }
+        }
+        throw "Qwen failed"
+    }
     $stage = "validate_relay"
-    $relayResult = Read-BoundedJson (Join-Path $relayOutput "relay-result.json")
-    if ([string]$relayResult.status -ne "FORWARDED_STRUCTURED_OUTPUT" -or [int]$relayResult.request_count -ne 1) {
+    $relayResult = Read-RelayResult (Join-Path $relayOutput "relay-result.json")
+    if ($null -ne $relayResult) { $providerRequestCount = [int]$relayResult.forwarded_request_count }
+    if ($null -eq $relayResult -or [string]$relayResult.status -ne "FORWARDED_STRUCTURED_OUTPUT" -or
+        $providerRequestCount -notin @(1, 2)) {
         throw "relay boundary failed"
     }
     $stage = "parse_qwen_output"

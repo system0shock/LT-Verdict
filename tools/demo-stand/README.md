@@ -256,6 +256,17 @@ docker compose -f docker-compose.yml -f docker-compose.soak.yml up -d --wait
 | `platform/platform-compat.rules.yml` | recording rules контракта меток |
 | `platform/profile-config.stand.json` | конфигурация генератора для стенда: `grafana_proxy`, `ltv-demo-prometheus`, `scrape_interval_ms` 5000, `request_step_ms` 10000 |
 
+Подключение к стенду (в `docker-compose.yml` не сделано): добавьте сервис `cadvisor`
+(цель `cadvisor:8080`) и замените монтирование конфигурации Prometheus, сервисам приложения задайте
+`mem_limit` и `cpus`:
+
+```yaml
+    volumes:
+      - promdata:/prometheus
+      - ./platform/prometheus.platform.yml:/etc/prometheus/prometheus.yml:ro
+      - ./platform/platform-compat.rules.yml:/etc/prometheus/platform-compat.rules.yml:ro
+```
+
 Relabel (из меток cAdvisor Docker): `namespace` = `shop`, `pod` = `name` (имя
 контейнера), `container` = `app`, `workload` = `container_label_com_docker_compose_service`.
 Остаются только контейнеры compose-проекта (непустые `name`, проект и сервис): корневые cgroup и чужие
@@ -282,8 +293,10 @@ Relabel (из меток cAdvisor Docker): `namespace` = `shop`, `pod` = `name` 
   производная от cAdvisor превратила бы рестарты в выдуманный ноль. Без неё `restarts` остаётся пропуском.
 - Нет kube-state-metrics: `restarts` и `unavailable_replicas` на стенде не воспроизводятся, в
   `profile-config.stand.json` их нет (подмножество `cpu_limit_ratio`, `memory_limit_ratio`,
-  `cpu_throttling`, `oom`). `oom` нужен `container_oom_events_total`; без счётчика при живом контейнере
-  сигнал даёт 0.
+  `cpu_throttling`). `oom` добавляйте в `signals` только когда cAdvisor отдаёт
+  `container_oom_events_total` (эта метрика в cAdvisor настраивается и может быть отключена,
+  проверьте запросом `count(container_oom_events_total)`): без счётчика при живом контейнере
+  сигнал даёт 0, а не пропуск.
 - Защита полноты слабее боевой: «ожидаемые контейнеры» берутся из того же cAdvisor, поэтому
   исчезновение контейнера целиком из cAdvisor пропуском не станет.
 - Демо-профиль `connections.demo.json` остаётся прежним: платформенный профиль выпускается отдельно

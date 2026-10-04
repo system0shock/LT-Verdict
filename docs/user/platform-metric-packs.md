@@ -230,7 +230,7 @@ python -m unittest discover -s tools -p "test_platform_promql.py" -v
 [`tools/demo-stand/platform/`](../../tools/demo-stand/platform/platform-compat.rules.yml) лежат необязательные
 фрагменты: relabel и recording rules, которые собирают из меток cAdvisor Docker
 `namespace`, `pod`, `container` и `workload`, и конфигурация генератора. На стенде
-воспроизводятся `cpu_limit_ratio`, `memory_limit_ratio`, `cpu_throttling` и `oom`;
+воспроизводятся `cpu_limit_ratio`, `memory_limit_ratio` и `cpu_throttling` (`oom` - если cAdvisor отдаёт `container_oom_events_total`);
 `restarts`, `unavailable_replicas` и список ожидаемых контейнеров от
 kube-state-metrics недоступны (защита полноты слабее боевой). Подробности и границы -
 в [README стенда](../../tools/demo-stand/README.md).

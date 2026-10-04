@@ -18,7 +18,8 @@ PLATFORM = Path(__file__).resolve().parent / "demo-stand" / "platform"
 RULES = PLATFORM / "platform-compat.rules.yml"
 CONFIG = PLATFORM / "prometheus.platform.yml"
 PROFILE_CONFIG = PLATFORM / "profile-config.stand.json"
-STAND_SIGNALS = ["cpu_limit_ratio", "memory_limit_ratio", "cpu_throttling", "oom"]
+STAND_SIGNALS = ["cpu_limit_ratio", "memory_limit_ratio", "cpu_throttling"]
+OPTIONAL_STAND_SIGNALS = ["oom"]  # only when cAdvisor exposes container_oom_events_total; otherwise a live container reads as zero
 CADVISOR_FAMILIES = {
     "container_memory_working_set_bytes",
     "container_oom_events_total",
@@ -72,7 +73,7 @@ class PlatformStandTest(unittest.TestCase):
 
     def test_stand_signals_use_only_recorded_or_cadvisor_families(self):
         recorded = set(re.findall(r"record:\s*(\S+)", RULES.read_text(encoding="utf-8")))
-        for name in STAND_SIGNALS:
+        for name in [*STAND_SIGNALS, *OPTIONAL_STAND_SIGNALS]:
             with self.subTest(signal=name):
                 used = set(FAMILY.findall(render(SIGNALS[name], "shop", "orders-svc", "5s")))
                 self.assertEqual(set(), used - recorded - CADVISOR_FAMILIES)
@@ -99,6 +100,11 @@ class PlatformStandTest(unittest.TestCase):
             self.assertEqual("ltv-demo-prometheus", connection["datasource_uid"])
             self.assertEqual(5000, connection["scrape_interval_ms"])
 
+    def test_rule_file_path_in_the_config_matches_the_documented_mount(self):
+        mount = f"/etc/prometheus/{RULES.name}"
+        self.assertIn(f"- {mount}", CONFIG.read_text(encoding="utf-8"))
+        self.assertIn(f"{mount}:ro", (PLATFORM.parent / "README.md").read_text(encoding="utf-8"))
+
     def test_stand_profile_config_refuses_a_step_below_the_rate_window(self):
         config = json.loads(PROFILE_CONFIG.read_text(encoding="utf-8"))
         config["request_step_ms"] = 5000
@@ -107,7 +113,7 @@ class PlatformStandTest(unittest.TestCase):
 
     def test_every_stand_scenario_signal_is_in_the_stand_subset_or_pins_a_gap(self):
         for scenario in SCENARIOS:
-            if scenario.signal not in STAND_SIGNALS:
+            if scenario.signal not in [*STAND_SIGNALS, *OPTIONAL_STAND_SIGNALS]:
                 self.assertIsNone(scenario.expected, scenario.name)
 
     @unittest.skipUnless(promtool(), "promtool is not installed; set LTV_PROMTOOL or LTV_PROMTOOL_DOCKER_IMAGE")

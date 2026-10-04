@@ -93,4 +93,21 @@ class AsciiDocReportTest {
         assertTrue(report.contains("\"cpu\\n....\\ninclude::evil[]\""))
         assertFalse(report.contains("\ninclude::evil[]\n"))
     }
+
+    @Test
+    fun `window metrics show a null latency for an empty window and keep the older zero form readable`() {
+        val result =
+            """
+            {"evidence":[
+            {"id":"w-empty","type":"window_metric_summary","window_id":"empty","sample_count":0,"error_count":0,"error_rate_ratio":null,"throughput_rps":{"numerator":0,"denominator":5000},"latency_ms":{"p50": null,"p95": null,"p99": null,"max": null}},
+            {"id":"w-old","type":"window_metric_summary","window_id":"old","sample_count":0,"error_count":0,"error_rate_ratio":null,"throughput_rps":{"numerator":0,"denominator":5000},"latency_ms":{"p50": 0,"p95": 0,"p99": 0,"max": 0}},
+            {"id":"w-zero","type":"window_metric_summary","window_id":"zero","sample_count":1,"error_count":0,"error_rate_ratio":{"numerator":0,"denominator":1},"throughput_rps":{"numerator":1000,"denominator":5000},"latency_ms":{"p50": 0,"p95": 0,"p99": 0,"max": 0}}],"findings":[]}
+            """.trimIndent()
+        val report = renderAsciiDocReport(result.encodeToByteArray(), "a").decodeToString()
+
+        assertTrue(report.contains("== Window metrics"))
+        assertTrue(report.contains("\"latency_ms\":{\"p50\":null,\"p95\":null,\"p99\":null,\"max\":null}"))
+        assertTrue(report.contains("\"latency_ms\":{\"p50\":0,\"p95\":0,\"p99\":0,\"max\":0}"))
+        assertTrue(report.contains("\"error_rate_ratio\":null"))
+    }
 }

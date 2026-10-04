@@ -4,6 +4,7 @@ import io.ltverdict.metrics.MetricsConfig
 import io.ltverdict.storage.DataDirectory
 import io.ltverdict.storage.RunBundleStore
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
@@ -134,6 +135,58 @@ class DiagnosticIntegrationTest {
             assertEquals(2, evidence.count { it.jsonObject["type"]?.jsonPrimitive?.content == "window_metric_summary" })
         }
 
+    @Test
+    fun `an analysis window without samples publishes null latency while a loaded window keeps numbers`() =
+        withStore { store ->
+            val input = store.acceptInput(ByteArrayInputStream(csv(skippedCells = 10..29)), "idle-window.jtl")
+            val resources = resourcesWithIdleWindow(input.sha256)
+            val diagnostics = plan(planJson(resources.semanticSha256).encodeToByteArray())
+            val service = AnalysisService(store, EngineConfig())
+
+            val outcome = service.analyze(AnalysisRequest(input, policy(), resources = resources, diagnostics = diagnostics))
+            val summaries =
+                Json
+                    .parseToJsonElement(outcome.canonicalResult.decodeToString())
+                    .jsonObject
+                    .getValue("evidence")
+                    .jsonArray
+                    .map { it.jsonObject }
+                    .filter { it["type"]?.jsonPrimitive?.content == "window_metric_summary" }
+                    .associateBy { it.getValue("window_id").jsonPrimitive.content }
+            val idle = summaries.getValue("idle")
+            val loaded = summaries.getValue("evaluation")
+
+            assertEquals("0", idle.getValue("sample_count").jsonPrimitive.content)
+            assertEquals(
+                mapOf("p50" to JsonNull, "p95" to JsonNull, "p99" to JsonNull, "max" to JsonNull),
+                idle.getValue("latency_ms").jsonObject,
+            )
+            assertEquals(JsonNull, idle["error_rate_ratio"])
+            assertEquals(
+                "0",
+                idle
+                    .getValue("throughput_rps")
+                    .jsonObject
+                    .getValue("numerator")
+                    .jsonPrimitive.content,
+            )
+            assertEquals(
+                "20000",
+                idle
+                    .getValue("throughput_rps")
+                    .jsonObject
+                    .getValue("denominator")
+                    .jsonPrimitive.content,
+            )
+            assertEquals("200", loaded.getValue("sample_count").jsonPrimitive.content)
+            assertTrue(
+                loaded
+                    .getValue("latency_ms")
+                    .jsonObject.values
+                    .none { it is JsonNull },
+            )
+        }
+
     private fun withStore(block: (RunBundleStore) -> Unit) {
         DataDirectory.open(tempDir.resolve("data-${System.nanoTime()}")).use { block(RunBundleStore(it)) }
     }
@@ -183,18 +236,39 @@ class DiagnosticIntegrationTest {
         return validateResourceSnapshot(ByteArrayInputStream(json.encodeToByteArray())) as ResourceValidation.Valid
     }
 
+    private fun resourcesWithIdleWindow(loadHash: String): ResourceValidation.Valid {
+        val values = List(40) { (it + 1).toString() }.joinToString(",")
+        val json =
+            """
+            {
+              "schema_version":"resource-snapshot.v1",
+              "load_input_sha256":"$loadHash",
+              "start_epoch_ms":1767225600250,
+              "step_ms":1000,
+              "point_count":40,
+              "series":[{"id":"cpu","metric":"cpu_used","unit":"ratio","entity":"host","role":"system","aggregation":"interval_mean","values":[$values]}],
+              "windows":[
+                {"id":"evaluation","from_epoch_ms":1767225600250,"to_epoch_ms":1767225610250},
+                {"id":"idle","from_epoch_ms":1767225610250,"to_epoch_ms":1767225630250}
+              ]
+            }
+            """.trimIndent()
+        return validateResourceSnapshot(ByteArrayInputStream(json.encodeToByteArray())) as ResourceValidation.Valid
+    }
+
     private fun plan(raw: ByteArray): DiagnosticValidation.Valid =
         validateDiagnosticPlan(ByteArrayInputStream(raw)) as DiagnosticValidation.Valid
 
     private fun planJson(snapshotHash: String): String =
         """{"schema_version":"correlation-plan.v1","resource_snapshot_sha256":"$snapshotHash","pairs":[{"id":"cpu-latency","resource_series_id":"cpu","load_metric":"response_time_p95_ms","window_ids":["evaluation"],"min_resource_delta":1,"min_load_delta":1,"topology_basis":"load host"}]}"""
 
-    private fun csv(): ByteArray {
+    private fun csv(skippedCells: IntRange = IntRange.EMPTY): ByteArray {
         val header =
             "timeStamp,elapsed,label,responseCode,responseMessage,threadName,dataType,success,failureMessage,bytes,sentBytes,grpThreads,allThreads,URL,Latency,IdleTime,Connect"
         val rows =
             buildList {
                 repeat(40) { cell ->
+                    if (cell in skippedCells) return@repeat
                     repeat(20) { sample ->
                         val start = 1_767_225_600_250L + cell * 1_000L + sample
                         add("$start,${cell + 1},request,200,OK,fixture,text,true,,0,0,1,1,null,0,0,0")

@@ -86,7 +86,14 @@ internal fun analysisIdentity(
                         add(
                             buildJsonObject {
                                 put("id", id)
-                                put("version", if (id == "metrics" || id == "load-resource-diagnostics") "2" else "1")
+                                put(
+                                    "version",
+                                    when (id) {
+                                        "metrics" -> "2"
+                                        "load-resource-diagnostics" -> "3"
+                                        else -> "1"
+                                    },
+                                )
                             },
                         )
                     }

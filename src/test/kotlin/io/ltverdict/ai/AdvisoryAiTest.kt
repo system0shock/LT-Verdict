@@ -5,10 +5,13 @@ import io.ltverdict.core.sha256Hex
 import io.ltverdict.storage.DataDirectory
 import io.ltverdict.storage.RunBundleStore
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.put
 import org.junit.jupiter.api.Assertions.assertArrayEquals
@@ -65,6 +68,53 @@ class AdvisoryAiTest {
                 AdvisoryEvidenceBuilder.build(RUN_ID, ANALYSIS_ID, MANIFEST_SHA, oversized)
             }
         assertEquals(AdviceFailure.INPUT_LIMIT, error.reason)
+    }
+
+    @Test
+    fun `evidence keeps a null latency of an empty window and the older zero form unchanged`() {
+        fun window(
+            id: String,
+            value: JsonElement,
+        ) = buildJsonObject {
+            put("id", id)
+            put("type", "window_metric_summary")
+            put("window_id", id)
+            put("sample_count", 0)
+            put("error_rate_ratio", JsonNull)
+            put("latency_ms", buildJsonObject { listOf("p50", "p95", "p99", "max").forEach { put(it, value) } })
+        }
+
+        val result =
+            buildJsonObject {
+                analysisResult(RUN_ID).forEach { (name, value) -> put(name, value) }
+                put(
+                    "evidence",
+                    buildJsonArray {
+                        add(window("empty", JsonNull))
+                        add(window("older", JsonPrimitive(0)))
+                    },
+                )
+            }
+
+        val evidence = AdvisoryEvidenceBuilder.build(RUN_ID, ANALYSIS_ID, MANIFEST_SHA, result)
+        val records =
+            Json
+                .parseToJsonElement(evidence.bytes.decodeToString())
+                .jsonObject
+                .getValue("evidence")
+                .jsonArray
+        val latencies =
+            records.map {
+                it.jsonObject
+                    .getValue("value")
+                    .jsonObject
+                    .getValue("latency_ms")
+                    .jsonObject
+            }
+
+        assertEquals(listOf(JsonNull, JsonNull, JsonNull, JsonNull), latencies[0].values.toList())
+        assertEquals(List(4) { JsonPrimitive(0) }, latencies[1].values.toList())
+        assertTrue(evidence.references.containsAll(listOf("analysis-result.json#/evidence/0", "analysis-result.json#/evidence/1")))
     }
 
     @Test

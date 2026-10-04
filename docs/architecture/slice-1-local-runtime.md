@@ -77,6 +77,8 @@ analysis directory и не перезаписывает прежний резу�
 Версия общего модуля `metrics` в identity равна `2` (ADR 0016: перцентили не выше
 максимума); analyses с прежней версией `1` читаются без перезаписи, но для baseline и
 истории динамики считаются несопоставимыми с новыми.
+Версия модуля `load-resource-diagnostics` равна `3` (ADR 0016: пустое окно как
+`null`, было `2`); она входит в identity только при наличии плана диагностики.
 
 Canonical `analysis-result.v1` одинаков для CLI и UI при одинаковых input,
 policy и engine configuration.
@@ -333,6 +335,24 @@ cell histogram budget<=10000. Бюджет пар/окон<=128, lag points<=268
 Новые typed evidence занимают existing analysis-result slots. Window summaries
 с точными resource bindings позволяют compareAnalyses сравнивать выбранные
 окна без новых jobs; результат comparison остаётся отдельно от immutable analysis.
+
+Evidence `window_metric_summary` для окна без сэмплов (`sample_count = 0`)
+публикует `null` в четырёх полях `latency_ms` (`p50`, `p95`, `p99`, `max`),
+`error_rate_ratio = null`, `error_count = 0`, а `throughput_rps` остаётся точной
+дробью `0 / длительность окна` (ADR
+[0016](../adr/0016-metric-semantics-percentile-empty-window-jmeter-parents.md),
+срез 2). У нулевой выборки латентность не измерена; сэмпл длительностью 0 мс
+остаётся измерением и даёт число `0`. Внутренняя сводка метрик (`emptySummary`) и
+`metric_summary` без окна остаются числовыми (оконный `metric_summary` не
+публикуется), схема `analysis-result.v1` не меняется (`evidence` без вложенной
+схемы). Ранее сохранённые analyses с нулями в пустом окне не переписываются и
+читаются как раньше: baseline-сравнение определяет пустое окно по `sample_count`,
+поэтому при сравнении совместимых анализов обе формы дают `INSUFFICIENT_DATA` с
+`EMPTY_WINDOW`; старый и новый analysis несопоставимы по версии модуля
+(`INCOMPATIBLE_METRIC_DEFINITION`, приоритет у несовместимости).
+JSON/HTML/AsciiDoc отчёты и evidence для ИИ-совета выводят значения как есть, так
+что `null` показывается как `null`. Другие места не читают латентность
+`window_metric_summary`.
 Подробные контракты и отложенная uncertainty — в
 [ADR 0006](../adr/0006-bounded-load-resource-correlation.md).
 

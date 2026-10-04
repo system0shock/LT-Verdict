@@ -11,6 +11,7 @@ import io.ltverdict.core.AnalysisService
 import io.ltverdict.core.EngineConfig
 import io.ltverdict.core.MAX_RESOURCE_SNAPSHOT_BYTES
 import io.ltverdict.core.ResourceValidation
+import io.ltverdict.core.analysisIdentity
 import io.ltverdict.core.sha256Hex
 import io.ltverdict.core.validateResourceSnapshot
 import io.ltverdict.jobs.AnalysisJobs
@@ -1570,7 +1571,13 @@ class LocalApiTest {
     fun `bucket API caps p95 at the stored max for any precision and leaves stored rows unchanged`() =
         withServer { store, api ->
             val input = store.acceptInput(ByteArrayInputStream(SPIKE_DROP.bytes()), SPIKE_DROP.filename)
-            val identity = """{"run_id":"${input.runId}","legacy":true}""".encodeToByteArray()
+            // A saved analysis from before the metrics module version 2: same identity, older module version.
+            val identity =
+                analysisIdentity(input, null, EngineConfig())
+                    .decodeToString()
+                    .replace("{\"id\":\"metrics\",\"version\":\"2\"}", "{\"id\":\"metrics\",\"version\":\"1\"}")
+                    .encodeToByteArray()
+            assertTrue(identity.decodeToString().contains("{\"id\":\"metrics\",\"version\":\"1\"}"))
             val analysisId = sha256Hex(identity)
 
             fun encoded(

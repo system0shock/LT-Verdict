@@ -1,0 +1,110 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://lt-verdict.local/contracts/resources/v1/resource-series.schema.json",
+  "title": "LT Verdict resource series v1",
+  "description": "Runtime checks that step_ms is a multiple of source_step_ms, period endpoints are cell boundaries, series count times limit is at most 100000, and values and observed array lengths equal cell_count. observed is present iff source_cells_per_cell > 1 (when one cell is one source cell, observed is derivable from null).",
+  "oneOf": [
+    { "$ref": "#/$defs/catalog" },
+    { "$ref": "#/$defs/values" }
+  ],
+  "$defs": {
+    "identifier": { "type": "string", "minLength": 1, "maxLength": 128, "description": "Runtime limit is 128 UTF-8 bytes." },
+    "epoch": { "type": "integer", "minimum": 0, "maximum": 253402300799999 },
+    "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "aggregation": { "enum": ["interval_mean", "interval_rate", "interval_max", "interval_min"] },
+    "reducer": { "enum": ["mean", "max", "min"] },
+    "window": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "from_epoch_ms", "to_epoch_ms"],
+      "properties": {
+        "id": { "$ref": "#/$defs/identifier" },
+        "from_epoch_ms": { "$ref": "#/$defs/epoch" },
+        "to_epoch_ms": { "$ref": "#/$defs/epoch" }
+      }
+    },
+    "catalog_series": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "metric", "unit", "entity", "role", "aggregation", "reducer", "labels", "observed_cells"],
+      "properties": {
+        "id": { "$ref": "#/$defs/identifier" },
+        "metric": { "$ref": "#/$defs/identifier" },
+        "unit": { "$ref": "#/$defs/identifier" },
+        "entity": { "$ref": "#/$defs/identifier" },
+        "role": { "enum": ["system", "generator"] },
+        "aggregation": { "$ref": "#/$defs/aggregation" },
+        "reducer": { "$ref": "#/$defs/reducer" },
+        "labels": { "type": "object", "additionalProperties": { "type": "string" } },
+        "observed_cells": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "catalog": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema_version", "kind", "resource_snapshot_sha256", "numeric_encoding", "grid", "windows", "series", "next_after"],
+      "properties": {
+        "schema_version": { "const": "resource-series.v1" },
+        "kind": { "const": "catalog" },
+        "resource_snapshot_sha256": { "$ref": "#/$defs/sha256" },
+        "numeric_encoding": { "const": "ieee754-double" },
+        "grid": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["start_epoch_ms", "step_ms", "point_count"],
+          "properties": {
+            "start_epoch_ms": { "$ref": "#/$defs/epoch" },
+            "step_ms": { "type": "integer", "minimum": 1000, "maximum": 60000, "multipleOf": 1000 },
+            "point_count": { "type": "integer", "minimum": 1, "maximum": 100000 }
+          }
+        },
+        "windows": { "type": "array", "maxItems": 64, "items": { "$ref": "#/$defs/window" } },
+        "series": { "type": "array", "maxItems": 256, "items": { "$ref": "#/$defs/catalog_series" } },
+        "next_after": { "type": ["string", "null"] }
+      }
+    },
+    "values_series": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "observed is present iff source_cells_per_cell > 1 (when one cell is one source cell, observed is derivable from null). Runtime checks that values and observed lengths equal cell_count.",
+      "required": ["id", "aggregation", "reducer", "values"],
+      "properties": {
+        "id": { "$ref": "#/$defs/identifier" },
+        "aggregation": { "$ref": "#/$defs/aggregation" },
+        "reducer": { "$ref": "#/$defs/reducer" },
+        "values": { "type": "array", "items": { "type": ["number", "null"] } },
+        "observed": { "type": "array", "items": { "type": "integer", "minimum": 0 } }
+      }
+    },
+    "values": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema_version", "kind", "resource_snapshot_sha256", "numeric_encoding", "grid", "series", "next_from_ms"],
+      "if": { "properties": { "grid": { "properties": { "source_cells_per_cell": { "const": 1 } } } } },
+      "then": { "properties": { "series": { "items": { "not": { "required": ["observed"] } } } } },
+      "else": { "properties": { "series": { "items": { "required": ["observed"] } } } },
+      "properties": {
+        "schema_version": { "const": "resource-series.v1" },
+        "kind": { "const": "values" },
+        "resource_snapshot_sha256": { "$ref": "#/$defs/sha256" },
+        "numeric_encoding": { "const": "ieee754-double" },
+        "grid": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["start_epoch_ms", "source_step_ms", "step_ms", "first_cell_start_ms", "cell_count", "source_cells_per_cell", "last_cell_source_cells"],
+          "properties": {
+            "start_epoch_ms": { "$ref": "#/$defs/epoch" },
+            "source_step_ms": { "type": "integer", "minimum": 1000, "maximum": 60000, "multipleOf": 1000 },
+            "step_ms": { "type": "integer", "minimum": 1 },
+            "first_cell_start_ms": { "$ref": "#/$defs/epoch" },
+            "cell_count": { "type": "integer", "minimum": 1 },
+            "source_cells_per_cell": { "type": "integer", "minimum": 1 },
+            "last_cell_source_cells": { "type": "integer", "minimum": 1 }
+          }
+        },
+        "series": { "type": "array", "minItems": 1, "maxItems": 32, "items": { "$ref": "#/$defs/values_series" } },
+        "next_from_ms": { "type": ["integer", "null"] }
+      }
+    }
+  }
+}

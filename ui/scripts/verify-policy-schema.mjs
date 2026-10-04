@@ -106,6 +106,23 @@ for (const [name, value, expected] of [
   }
 }
 
+const seriesSchema = await readJson('docs/contracts/resources/v1/resource-series.schema.json')
+const validateSeries = new Ajv2020({ strict: false }).compile(seriesSchema)
+const seriesCatalog = await readJson('docs/contracts/resources/v1/examples/valid/resource-series-catalog.json')
+const seriesValues = await readJson('docs/contracts/resources/v1/examples/valid/resource-series-values.json')
+const seriesStepZero = await readJson('docs/contracts/resources/v1/examples/invalid/resource-series-values-step-zero.json')
+const seriesUnknownKind = await readJson('docs/contracts/resources/v1/examples/invalid/resource-series-unknown-kind.json')
+for (const [name, value, expected] of [
+  ['series catalog', seriesCatalog, true],
+  ['series values', seriesValues, true],
+  ['series values step zero', seriesStepZero, false],
+  ['series unknown kind', seriesUnknownKind, false],
+]) {
+  if (validateSeries(value) !== expected) {
+    throw new Error(`${name}: expected schema_valid=${expected}; ${JSON.stringify(validateSeries.errors)}`)
+  }
+}
+
 const diagnosticSchema = await readJson('docs/contracts/diagnostics/v1/correlation-plan.schema.json')
 const validateDiagnostic = new Ajv2020({ strict: false }).compile(diagnosticSchema)
 const diagnostic = await readJson('docs/contracts/diagnostics/v1/examples/valid/basic.json')

@@ -1,0 +1,1100 @@
+{
+  "cases": [
+    {
+      "name": "source-step",
+      "snapshot": "snapshot-small.json",
+      "endpoint": "values",
+      "query": {
+        "series_id": [
+          "big",
+          "cpu",
+          "gap",
+          "queue",
+          "tiny"
+        ],
+        "step_ms": 15000
+      },
+      "expected": {
+        "schema_version": "resource-series.v1",
+        "kind": "values",
+        "resource_snapshot_sha256": "0fb4db030c40af7fed9eb902d80c42a459e9eabfd04e61e8a5c3e55c0496a1ff",
+        "numeric_encoding": "ieee754-double",
+        "grid": {
+          "start_epoch_ms": 1767225600000,
+          "source_step_ms": 15000,
+          "step_ms": 15000,
+          "first_cell_start_ms": 1767225600000,
+          "cell_count": 50,
+          "source_cells_per_cell": 1,
+          "last_cell_source_cells": 1
+        },
+        "series": [
+          {
+            "id": "big",
+            "aggregation": "interval_mean",
+            "reducer": "mean",
+            "values": [
+              1e+17,
+              1e+17,
+              1e+17,
+              1e+17,
+              1e+17,
+              1e+17,
+              1e+17,
+              1e+17,
+              1e+17,
+              1e+17,
+              1e+17,
+              1e+17,
+              1e+17,
+              1e+17,
+              1e+17,
+              1e+17,
+              1e+17,
+              1e+17,
+              1e+17,
+              1e+17,
+              1e+17,
+              1e+17,
+              1e+17,
+              1e+17,
+              1e+17,
+              1e+17,
+              1e+17,
+              1e+17,
+              1e+17,
+              1e+17,
+              1e+17,
+              1e+17,
+              1e+17,
+              1e+17,
+              1e+17,
+              1e+17,
+              1e+17,
+              1e+17,
+              1e+17,
+              1e+17,
+              1e+17,
+              1e+17,
+              1e+17,
+              1e+17,
+              1e+17,
+              1e+17,
+              1e+17,
+              1e+17,
+              1e+17,
+              1e+17
+            ]
+          },
+          {
+            "id": "cpu",
+            "aggregation": "interval_mean",
+            "reducer": "mean",
+            "values": [
+              0.0,
+              0.037,
+              0.074,
+              null,
+              0.148,
+              0.185,
+              0.222,
+              0.259,
+              0.296,
+              0.333,
+              null,
+              0.407,
+              0.444,
+              0.481,
+              0.518,
+              0.555,
+              0.592,
+              null,
+              0.666,
+              0.703,
+              0.74,
+              0.777,
+              0.814,
+              0.851,
+              null,
+              0.925,
+              0.962,
+              0.999,
+              0.036,
+              0.073,
+              0.11,
+              null,
+              0.184,
+              0.221,
+              0.258,
+              0.295,
+              0.332,
+              0.369,
+              null,
+              0.443,
+              0.48,
+              0.517,
+              0.554,
+              0.591,
+              0.628,
+              null,
+              0.702,
+              0.739,
+              0.776,
+              0.813
+            ]
+          },
+          {
+            "id": "gap",
+            "aggregation": "interval_mean",
+            "reducer": "mean",
+            "values": [
+              null,
+              null,
+              null,
+              null,
+              null,
+              null,
+              null,
+              null,
+              null,
+              null,
+              null,
+              null,
+              null,
+              null,
+              null,
+              null,
+              null,
+              null,
+              null,
+              null,
+              null,
+              null,
+              null,
+              null,
+              null,
+              null,
+              null,
+              null,
+              null,
+              null,
+              null,
+              null,
+              null,
+              null,
+              null,
+              null,
+              null,
+              null,
+              null,
+              null,
+              null,
+              null,
+              null,
+              null,
+              null,
+              null,
+              null,
+              null,
+              null,
+              null
+            ]
+          },
+          {
+            "id": "queue",
+            "aggregation": "interval_rate",
+            "reducer": "mean",
+            "values": [
+              1.0,
+              1.0,
+              2.0,
+              1.0,
+              1.0,
+              2.0,
+              1.0,
+              1.0,
+              2.0,
+              1.0,
+              1.0,
+              2.0,
+              1.0,
+              1.0,
+              2.0,
+              1.0,
+              1.0,
+              2.0,
+              1.0,
+              1.0,
+              2.0,
+              1.0,
+              1.0,
+              2.0,
+              1.0,
+              1.0,
+              2.0,
+              1.0,
+              1.0,
+              2.0,
+              1.0,
+              1.0,
+              2.0,
+              1.0,
+              1.0,
+              2.0,
+              1.0,
+              1.0,
+              2.0,
+              1.0,
+              1.0,
+              2.0,
+              1.0,
+              1.0,
+              2.0,
+              1.0,
+              1.0,
+              2.0,
+              1.0,
+              1.0
+            ]
+          },
+          {
+            "id": "tiny",
+            "aggregation": "interval_mean",
+            "reducer": "mean",
+            "values": [
+              1e-12,
+              1.0,
+              1e-12,
+              1.0,
+              1e-12,
+              1.0,
+              1e-12,
+              1.0,
+              1e-12,
+              1.0,
+              1e-12,
+              1.0,
+              1e-12,
+              1.0,
+              1e-12,
+              1.0,
+              1e-12,
+              1.0,
+              1e-12,
+              1.0,
+              1e-12,
+              1.0,
+              1e-12,
+              1.0,
+              1e-12,
+              1.0,
+              1e-12,
+              1.0,
+              1e-12,
+              1.0,
+              1e-12,
+              1.0,
+              1e-12,
+              1.0,
+              1e-12,
+              1.0,
+              1e-12,
+              1.0,
+              1e-12,
+              1.0,
+              1e-12,
+              1.0,
+              1e-12,
+              1.0,
+              null,
+              null,
+              null,
+              null,
+              null,
+              null
+            ]
+          }
+        ],
+        "next_from_ms": null
+      }
+    },
+    {
+      "name": "step-60s-all",
+      "snapshot": "snapshot-small.json",
+      "endpoint": "values",
+      "query": {
+        "series_id": [
+          "big",
+          "cpu",
+          "gap",
+          "queue",
+          "tiny"
+        ],
+        "step_ms": 60000
+      },
+      "expected": {
+        "schema_version": "resource-series.v1",
+        "kind": "values",
+        "resource_snapshot_sha256": "0fb4db030c40af7fed9eb902d80c42a459e9eabfd04e61e8a5c3e55c0496a1ff",
+        "numeric_encoding": "ieee754-double",
+        "grid": {
+          "start_epoch_ms": 1767225600000,
+          "source_step_ms": 15000,
+          "step_ms": 60000,
+          "first_cell_start_ms": 1767225600000,
+          "cell_count": 13,
+          "source_cells_per_cell": 4,
+          "last_cell_source_cells": 2
+        },
+        "series": [
+          {
+            "id": "big",
+            "aggregation": "interval_mean",
+            "reducer": "mean",
+            "values": [
+              1e+17,
+              1e+17,
+              1e+17,
+              1e+17,
+              1e+17,
+              1e+17,
+              1e+17,
+              1e+17,
+              1e+17,
+              1e+17,
+              1e+17,
+              1e+17,
+              1e+17
+            ],
+            "observed": [
+              4,
+              4,
+              4,
+              4,
+              4,
+              4,
+              4,
+              4,
+              4,
+              4,
+              4,
+              4,
+              2
+            ]
+          },
+          {
+            "id": "cpu",
+            "aggregation": "interval_mean",
+            "reducer": "mean",
+            "values": [
+              0.037,
+              0.2035,
+              0.3453333333333333,
+              0.4995,
+              0.6536666666666666,
+              0.7955,
+              0.962,
+              0.073,
+              0.2395,
+              0.38133333333333336,
+              0.5355,
+              0.6896666666666667,
+              0.7945
+            ],
+            "observed": [
+              3,
+              4,
+              3,
+              4,
+              3,
+              4,
+              3,
+              3,
+              4,
+              3,
+              4,
+              3,
+              2
+            ]
+          },
+          {
+            "id": "gap",
+            "aggregation": "interval_mean",
+            "reducer": "mean",
+            "values": [
+              null,
+              null,
+              null,
+              null,
+              null,
+              null,
+              null,
+              null,
+              null,
+              null,
+              null,
+              null,
+              null
+            ],
+            "observed": [
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0
+            ]
+          },
+          {
+            "id": "queue",
+            "aggregation": "interval_rate",
+            "reducer": "mean",
+            "values": [
+              1.25,
+              1.25,
+              1.5,
+              1.25,
+              1.25,
+              1.5,
+              1.25,
+              1.25,
+              1.5,
+              1.25,
+              1.25,
+              1.5,
+              1.0
+            ],
+            "observed": [
+              4,
+              4,
+              4,
+              4,
+              4,
+              4,
+              4,
+              4,
+              4,
+              4,
+              4,
+              4,
+              2
+            ]
+          },
+          {
+            "id": "tiny",
+            "aggregation": "interval_mean",
+            "reducer": "mean",
+            "values": [
+              0.5000000000005,
+              0.5000000000005,
+              0.5000000000005,
+              0.5000000000005,
+              0.5000000000005,
+              0.5000000000005,
+              0.5000000000005,
+              0.5000000000005,
+              0.5000000000005,
+              0.5000000000005,
+              0.5000000000005,
+              null,
+              null
+            ],
+            "observed": [
+              4,
+              4,
+              4,
+              4,
+              4,
+              4,
+              4,
+              4,
+              4,
+              4,
+              4,
+              0,
+              0
+            ]
+          }
+        ],
+        "next_from_ms": null
+      }
+    },
+    {
+      "name": "subrange",
+      "snapshot": "snapshot-small.json",
+      "endpoint": "values",
+      "query": {
+        "series_id": [
+          "cpu",
+          "queue"
+        ],
+        "step_ms": 60000,
+        "from_ms": 1767225660000,
+        "to_ms": 1767226140000
+      },
+      "expected": {
+        "schema_version": "resource-series.v1",
+        "kind": "values",
+        "resource_snapshot_sha256": "0fb4db030c40af7fed9eb902d80c42a459e9eabfd04e61e8a5c3e55c0496a1ff",
+        "numeric_encoding": "ieee754-double",
+        "grid": {
+          "start_epoch_ms": 1767225600000,
+          "source_step_ms": 15000,
+          "step_ms": 60000,
+          "first_cell_start_ms": 1767225660000,
+          "cell_count": 8,
+          "source_cells_per_cell": 4,
+          "last_cell_source_cells": 4
+        },
+        "series": [
+          {
+            "id": "cpu",
+            "aggregation": "interval_mean",
+            "reducer": "mean",
+            "values": [
+              0.2035,
+              0.3453333333333333,
+              0.4995,
+              0.6536666666666666,
+              0.7955,
+              0.962,
+              0.073,
+              0.2395
+            ],
+            "observed": [
+              4,
+              3,
+              4,
+              3,
+              4,
+              3,
+              3,
+              4
+            ]
+          },
+          {
+            "id": "queue",
+            "aggregation": "interval_rate",
+            "reducer": "mean",
+            "values": [
+              1.25,
+              1.5,
+              1.25,
+              1.25,
+              1.5,
+              1.25,
+              1.25,
+              1.5
+            ],
+            "observed": [
+              4,
+              4,
+              4,
+              4,
+              4,
+              4,
+              4,
+              4
+            ]
+          }
+        ],
+        "next_from_ms": null
+      }
+    },
+    {
+      "name": "paging-first",
+      "snapshot": "snapshot-small.json",
+      "endpoint": "values",
+      "query": {
+        "series_id": [
+          "cpu",
+          "queue"
+        ],
+        "limit": 5
+      },
+      "expected": {
+        "schema_version": "resource-series.v1",
+        "kind": "values",
+        "resource_snapshot_sha256": "0fb4db030c40af7fed9eb902d80c42a459e9eabfd04e61e8a5c3e55c0496a1ff",
+        "numeric_encoding": "ieee754-double",
+        "grid": {
+          "start_epoch_ms": 1767225600000,
+          "source_step_ms": 15000,
+          "step_ms": 15000,
+          "first_cell_start_ms": 1767225600000,
+          "cell_count": 5,
+          "source_cells_per_cell": 1,
+          "last_cell_source_cells": 1
+        },
+        "series": [
+          {
+            "id": "cpu",
+            "aggregation": "interval_mean",
+            "reducer": "mean",
+            "values": [
+              0.0,
+              0.037,
+              0.074,
+              null,
+              0.148
+            ]
+          },
+          {
+            "id": "queue",
+            "aggregation": "interval_rate",
+            "reducer": "mean",
+            "values": [
+              1.0,
+              1.0,
+              2.0,
+              1.0,
+              1.0
+            ]
+          }
+        ],
+        "next_from_ms": 1767225675000
+      }
+    },
+    {
+      "name": "paging-next",
+      "snapshot": "snapshot-small.json",
+      "endpoint": "values",
+      "query": {
+        "series_id": [
+          "cpu",
+          "queue"
+        ],
+        "limit": 5,
+        "from_ms": 1767225675000
+      },
+      "expected": {
+        "schema_version": "resource-series.v1",
+        "kind": "values",
+        "resource_snapshot_sha256": "0fb4db030c40af7fed9eb902d80c42a459e9eabfd04e61e8a5c3e55c0496a1ff",
+        "numeric_encoding": "ieee754-double",
+        "grid": {
+          "start_epoch_ms": 1767225600000,
+          "source_step_ms": 15000,
+          "step_ms": 15000,
+          "first_cell_start_ms": 1767225675000,
+          "cell_count": 5,
+          "source_cells_per_cell": 1,
+          "last_cell_source_cells": 1
+        },
+        "series": [
+          {
+            "id": "cpu",
+            "aggregation": "interval_mean",
+            "reducer": "mean",
+            "values": [
+              0.185,
+              0.222,
+              0.259,
+              0.296,
+              0.333
+            ]
+          },
+          {
+            "id": "queue",
+            "aggregation": "interval_rate",
+            "reducer": "mean",
+            "values": [
+              2.0,
+              1.0,
+              1.0,
+              2.0,
+              1.0
+            ]
+          }
+        ],
+        "next_from_ms": 1767225750000
+      }
+    },
+    {
+      "name": "partial-last-cell",
+      "snapshot": "snapshot-small.json",
+      "endpoint": "values",
+      "query": {
+        "series_id": [
+          "cpu",
+          "tiny",
+          "queue"
+        ],
+        "step_ms": 45000
+      },
+      "expected": {
+        "schema_version": "resource-series.v1",
+        "kind": "values",
+        "resource_snapshot_sha256": "0fb4db030c40af7fed9eb902d80c42a459e9eabfd04e61e8a5c3e55c0496a1ff",
+        "numeric_encoding": "ieee754-double",
+        "grid": {
+          "start_epoch_ms": 1767225600000,
+          "source_step_ms": 15000,
+          "step_ms": 45000,
+          "first_cell_start_ms": 1767225600000,
+          "cell_count": 17,
+          "source_cells_per_cell": 3,
+          "last_cell_source_cells": 2
+        },
+        "series": [
+          {
+            "id": "cpu",
+            "aggregation": "interval_mean",
+            "reducer": "mean",
+            "values": [
+              0.037,
+              0.1665,
+              0.259,
+              0.37,
+              0.481,
+              0.5735,
+              0.703,
+              0.814,
+              0.9435,
+              0.36933333333333335,
+              0.147,
+              0.258,
+              0.3505,
+              0.48,
+              0.591,
+              0.7205,
+              0.7945
+            ],
+            "observed": [
+              3,
+              2,
+              3,
+              2,
+              3,
+              2,
+              3,
+              3,
+              2,
+              3,
+              2,
+              3,
+              2,
+              3,
+              3,
+              2,
+              2
+            ]
+          },
+          {
+            "id": "tiny",
+            "aggregation": "interval_mean",
+            "reducer": "mean",
+            "values": [
+              0.333333333334,
+              0.666666666667,
+              0.333333333334,
+              0.666666666667,
+              0.333333333334,
+              0.666666666667,
+              0.333333333334,
+              0.666666666667,
+              0.333333333334,
+              0.666666666667,
+              0.333333333334,
+              0.666666666667,
+              0.333333333334,
+              0.666666666667,
+              0.5000000000005,
+              null,
+              null
+            ],
+            "observed": [
+              3,
+              3,
+              3,
+              3,
+              3,
+              3,
+              3,
+              3,
+              3,
+              3,
+              3,
+              3,
+              3,
+              3,
+              2,
+              0,
+              0
+            ]
+          },
+          {
+            "id": "queue",
+            "aggregation": "interval_rate",
+            "reducer": "mean",
+            "values": [
+              1.3333333333333333,
+              1.3333333333333333,
+              1.3333333333333333,
+              1.3333333333333333,
+              1.3333333333333333,
+              1.3333333333333333,
+              1.3333333333333333,
+              1.3333333333333333,
+              1.3333333333333333,
+              1.3333333333333333,
+              1.3333333333333333,
+              1.3333333333333333,
+              1.3333333333333333,
+              1.3333333333333333,
+              1.3333333333333333,
+              1.3333333333333333,
+              1.0
+            ],
+            "observed": [
+              3,
+              3,
+              3,
+              3,
+              3,
+              3,
+              3,
+              3,
+              3,
+              3,
+              3,
+              3,
+              3,
+              3,
+              3,
+              3,
+              2
+            ]
+          }
+        ],
+        "next_from_ms": null
+      }
+    },
+    {
+      "name": "step-larger-than-grid",
+      "snapshot": "snapshot-small.json",
+      "endpoint": "values",
+      "query": {
+        "series_id": [
+          "cpu",
+          "queue"
+        ],
+        "step_ms": 900000
+      },
+      "expected": {
+        "schema_version": "resource-series.v1",
+        "kind": "values",
+        "resource_snapshot_sha256": "0fb4db030c40af7fed9eb902d80c42a459e9eabfd04e61e8a5c3e55c0496a1ff",
+        "numeric_encoding": "ieee754-double",
+        "grid": {
+          "start_epoch_ms": 1767225600000,
+          "source_step_ms": 15000,
+          "step_ms": 900000,
+          "first_cell_start_ms": 1767225600000,
+          "cell_count": 1,
+          "source_cells_per_cell": 50,
+          "last_cell_source_cells": 50
+        },
+        "series": [
+          {
+            "id": "cpu",
+            "aggregation": "interval_mean",
+            "reducer": "mean",
+            "values": [
+              0.4676511627906977
+            ],
+            "observed": [
+              43
+            ]
+          },
+          {
+            "id": "queue",
+            "aggregation": "interval_rate",
+            "reducer": "mean",
+            "values": [
+              1.32
+            ],
+            "observed": [
+              50
+            ]
+          }
+        ],
+        "next_from_ms": null
+      }
+    },
+    {
+      "name": "empty-series",
+      "snapshot": "snapshot-small.json",
+      "endpoint": "values",
+      "query": {
+        "series_id": [
+          "gap"
+        ],
+        "step_ms": 60000
+      },
+      "expected": {
+        "schema_version": "resource-series.v1",
+        "kind": "values",
+        "resource_snapshot_sha256": "0fb4db030c40af7fed9eb902d80c42a459e9eabfd04e61e8a5c3e55c0496a1ff",
+        "numeric_encoding": "ieee754-double",
+        "grid": {
+          "start_epoch_ms": 1767225600000,
+          "source_step_ms": 15000,
+          "step_ms": 60000,
+          "first_cell_start_ms": 1767225600000,
+          "cell_count": 13,
+          "source_cells_per_cell": 4,
+          "last_cell_source_cells": 2
+        },
+        "series": [
+          {
+            "id": "gap",
+            "aggregation": "interval_mean",
+            "reducer": "mean",
+            "values": [
+              null,
+              null,
+              null,
+              null,
+              null,
+              null,
+              null,
+              null,
+              null,
+              null,
+              null,
+              null,
+              null
+            ],
+            "observed": [
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0
+            ]
+          }
+        ],
+        "next_from_ms": null
+      }
+    },
+    {
+      "name": "catalog-first-page",
+      "snapshot": "snapshot-small.json",
+      "endpoint": "catalog",
+      "query": {
+        "limit": 2
+      },
+      "expected": {
+        "schema_version": "resource-series.v1",
+        "kind": "catalog",
+        "resource_snapshot_sha256": "0fb4db030c40af7fed9eb902d80c42a459e9eabfd04e61e8a5c3e55c0496a1ff",
+        "numeric_encoding": "ieee754-double",
+        "grid": {
+          "start_epoch_ms": 1767225600000,
+          "step_ms": 15000,
+          "point_count": 50
+        },
+        "windows": [],
+        "series": [
+          {
+            "id": "big",
+            "metric": "big_metric",
+            "unit": "synthetic_unit",
+            "entity": "service",
+            "role": "system",
+            "aggregation": "interval_mean",
+            "reducer": "mean",
+            "labels": {},
+            "observed_cells": 50
+          },
+          {
+            "id": "cpu",
+            "metric": "cpu_metric",
+            "unit": "synthetic_unit",
+            "entity": "service",
+            "role": "system",
+            "aggregation": "interval_mean",
+            "reducer": "mean",
+            "labels": {
+              "host": "h1"
+            },
+            "observed_cells": 43
+          }
+        ],
+        "next_after": "cpu"
+      }
+    },
+    {
+      "name": "catalog-after",
+      "snapshot": "snapshot-small.json",
+      "endpoint": "catalog",
+      "query": {
+        "after": "cpu"
+      },
+      "expected": {
+        "schema_version": "resource-series.v1",
+        "kind": "catalog",
+        "resource_snapshot_sha256": "0fb4db030c40af7fed9eb902d80c42a459e9eabfd04e61e8a5c3e55c0496a1ff",
+        "numeric_encoding": "ieee754-double",
+        "grid": {
+          "start_epoch_ms": 1767225600000,
+          "step_ms": 15000,
+          "point_count": 50
+        },
+        "windows": [],
+        "series": [
+          {
+            "id": "gap",
+            "metric": "gap_metric",
+            "unit": "synthetic_unit",
+            "entity": "service",
+            "role": "system",
+            "aggregation": "interval_mean",
+            "reducer": "mean",
+            "labels": {},
+            "observed_cells": 0
+          },
+          {
+            "id": "queue",
+            "metric": "queue_metric",
+            "unit": "synthetic_unit",
+            "entity": "service",
+            "role": "system",
+            "aggregation": "interval_rate",
+            "reducer": "mean",
+            "labels": {},
+            "observed_cells": 50
+          },
+          {
+            "id": "tiny",
+            "metric": "tiny_metric",
+            "unit": "synthetic_unit",
+            "entity": "service",
+            "role": "system",
+            "aggregation": "interval_mean",
+            "reducer": "mean",
+            "labels": {},
+            "observed_cells": 44
+          }
+        ],
+        "next_after": null
+      }
+    }
+  ]
+}

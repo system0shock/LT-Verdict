@@ -33,23 +33,29 @@ import io.ltverdict.core.AnalyticsExportFormat
 import io.ltverdict.core.CapacityPlanValidation
 import io.ltverdict.core.DiagnosticValidation
 import io.ltverdict.core.MAX_CAPACITY_PLAN_BYTES
+import io.ltverdict.core.MAX_CATALOG_PAGE
 import io.ltverdict.core.MAX_RESOURCE_SNAPSHOT_BYTES
 import io.ltverdict.core.MAX_TREND_PLAN_BYTES
+import io.ltverdict.core.MAX_VALUES_SERIES
 import io.ltverdict.core.PolicyValidation
 import io.ltverdict.core.PolicyValidationError
 import io.ltverdict.core.ResourceValidation
 import io.ltverdict.core.SavedAnalysisForComparison
+import io.ltverdict.core.SeriesGrid
+import io.ltverdict.core.SeriesQueryException
 import io.ltverdict.core.TrendPlanValidation
 import io.ltverdict.core.WindowComparisonRequest
 import io.ltverdict.core.baselineConditionConfirmation
 import io.ltverdict.core.baselineConditionRecord
 import io.ltverdict.core.buildRunDynamics
 import io.ltverdict.core.canonicalJson
+import io.ltverdict.core.catalogJson
 import io.ltverdict.core.compareAnalyses
 import io.ltverdict.core.compareTransactions
 import io.ltverdict.core.manualBaselineSelection
 import io.ltverdict.core.metricPackAnalysis
 import io.ltverdict.core.openSearchOverlay
+import io.ltverdict.core.planValuesPage
 import io.ltverdict.core.renderRunDynamicsExport
 import io.ltverdict.core.statisticalBaselineSelection
 import io.ltverdict.core.validateCapacityBinding
@@ -60,6 +66,7 @@ import io.ltverdict.core.validatePolicy
 import io.ltverdict.core.validateResourceSnapshot
 import io.ltverdict.core.validateTrendBinding
 import io.ltverdict.core.validateTrendPlan
+import io.ltverdict.core.valuesJson
 import io.ltverdict.integrations.grafana.GrafanaPanelRequest
 import io.ltverdict.integrations.grafana.grafanaPanelLink
 import io.ltverdict.integrations.grafana.renderGrafanaPanel
@@ -133,6 +140,7 @@ internal data class LocalApiContext(
 )
 
 internal fun Application.installLocalApi(context: LocalApiContext) {
+    val seriesCache = SnapshotCache()
     val sessionToken = randomToken()
     val csrfToken = randomToken()
     val postgresCapturePermit = Semaphore(1)
@@ -936,6 +944,65 @@ internal fun Application.installLocalApi(context: LocalApiContext) {
                     put("next_from_ms", page.nextFromMillis?.let(::JsonPrimitive) ?: JsonNull)
                 },
             )
+        }
+
+        get("/api/runs/{runId}/analyses/{analysisId}/resource-series") {
+            call.requireQueries(setOf("after", "limit"), emptySet())
+            val after = call.singleQuery("after")
+            if (after != null && !validSeriesId(after)) malformed("after is invalid")
+            val limit = call.intQuery("limit", MAX_CATALOG_PAGE, 1..MAX_CATALOG_PAGE)
+            val stored = context.store.requireAnalysis(call)
+            val artifact =
+                stored.artifacts.firstOrNull { it.path == RESOURCE_SNAPSHOT_FILE }
+                    ?: notFound("Resource snapshot was not found")
+            val body =
+                withContext(Dispatchers.IO) {
+                    seriesCache.use(
+                        "${stored.path}|${artifact.sha256}",
+                        { decodeResourceSeriesSnapshot(stored.path.resolve(artifact.path)) },
+                    ) {
+                        catalogJson(it.snapshot, it.semanticSha256, after, limit)
+                    }
+                }
+            call.respondJson(body)
+        }
+
+        get("/api/runs/{runId}/analyses/{analysisId}/resource-series/values") {
+            call.requireQueries(setOf("from_ms", "to_ms", "step_ms", "limit"), setOf("series_id"))
+            val ids =
+                call.request.queryParameters
+                    .getAll("series_id")
+                    .orEmpty()
+            if (ids.isEmpty() || ids.size > MAX_VALUES_SERIES || ids.size != ids.toSet().size || ids.any { !validSeriesId(it) }) {
+                malformed("series_id is invalid")
+            }
+            val from = call.optionalLongQuery("from_ms")
+            val to = call.optionalLongQuery("to_ms")
+            val step = call.optionalLongQuery("step_ms")
+            val limit = call.optionalIntQuery("limit")
+            val stored = context.store.requireAnalysis(call)
+            val artifact =
+                stored.artifacts.firstOrNull { it.path == RESOURCE_SNAPSHOT_FILE }
+                    ?: notFound("Resource snapshot was not found")
+            val body =
+                withContext(Dispatchers.IO) {
+                    seriesCache.use(
+                        "${stored.path}|${artifact.sha256}",
+                        { decodeResourceSeriesSnapshot(stored.path.resolve(artifact.path)) },
+                    ) { decoded ->
+                        if (ids.any { id -> decoded.snapshot.series.none { it.id == id } }) notFound("Series was not found")
+                        val grid = SeriesGrid(decoded.snapshot.startEpochMillis, decoded.snapshot.stepMillis, decoded.snapshot.pointCount)
+                        val plan =
+                            try {
+                                planValuesPage(grid, step, from, to, limit, ids.size)
+                            } catch (failure: SeriesQueryException) {
+                                if (failure.tooLarge) tooLarge(failure.message ?: "Resource series limit exceeded")
+                                malformed(failure.message ?: "Resource series query is invalid")
+                            }
+                        valuesJson(decoded.snapshot, decoded.semanticSha256, ids, plan)
+                    }
+                }
+            call.respondJson(body)
         }
 
         route("/api/{...}") {
@@ -1767,6 +1834,8 @@ private const val DEFAULT_ANALYSIS_LIMIT = 25
 private const val MAX_ANALYSIS_LIMIT = 100
 private const val DEFAULT_BUCKET_LIMIT = 500
 private const val MAX_BUCKET_LIMIT = 500
+private const val MAX_SERIES_ID_BYTES = 128
+private const val RESOURCE_SNAPSHOT_FILE = "resource-snapshot.json"
 private const val MAX_BUCKET_LATENCY_MILLIS = 86_400_000L
 private const val RESULT_FILE = "analysis-result.json"
 private const val NORMALIZED_FILE = "normalized-1s.ndjson"
@@ -1836,3 +1905,27 @@ private suspend fun grafanaRequest(
     }
     return profile to panel
 }
+
+private fun ApplicationCall.requireQueries(
+    single: Set<String>,
+    repeatable: Set<String>,
+) {
+    val parameters = request.queryParameters
+    if (parameters.names().any { it !in single && it !in repeatable }) malformed("Query parameters are invalid")
+    if (parameters.names().any { it in single && parameters.getAll(it)?.size != 1 }) malformed("Query parameters are invalid")
+}
+
+private fun ApplicationCall.optionalIntQuery(name: String): Int? {
+    val raw = singleQuery(name) ?: return null
+    return raw.toIntOrNull() ?: malformed("$name is invalid")
+}
+
+private fun validSeriesId(id: String): Boolean =
+    id.isNotEmpty() && id.encodeToByteArray().size <= MAX_SERIES_ID_BYTES && id.none(Char::isISOControl)
+
+private fun decodeResourceSeriesSnapshot(path: Path): DecodedSnapshot =
+    when (val validation = Files.newInputStream(path).use { validateResourceSnapshot(it) }) {
+        is ResourceValidation.Valid -> DecodedSnapshot(validation.snapshot, validation.semanticSha256)
+        is ResourceValidation.Invalid ->
+            throw ApiFailure(HttpStatusCode.InternalServerError, "CORRUPT_RESOURCE_SNAPSHOT", "Stored resource snapshot is invalid")
+    }

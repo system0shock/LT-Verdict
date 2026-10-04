@@ -1,0 +1,23 @@
+{
+  "schema_version": "resource-series.v1",
+  "kind": "catalog",
+  "resource_snapshot_sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+  "numeric_encoding": "ieee754-double",
+  "grid": { "start_epoch_ms": 1767225600000, "step_ms": 15000, "point_count": 50 },
+  "windows": [
+    { "id": "evaluation", "from_epoch_ms": 1767225600000, "to_epoch_ms": 1767226350000 }
+  ],
+  "series": [
+    {
+      "id": "cpu", "metric": "cpu_usage", "unit": "ratio", "entity": "service",
+      "role": "system", "aggregation": "interval_mean", "reducer": "mean",
+      "labels": { "host": "h1" }, "observed_cells": 44
+    },
+    {
+      "id": "memory", "metric": "memory_usage", "unit": "bytes", "entity": "service",
+      "role": "system", "aggregation": "interval_max", "reducer": "max",
+      "labels": { "host": "h1" }, "observed_cells": 46
+    }
+  ],
+  "next_after": null
+}

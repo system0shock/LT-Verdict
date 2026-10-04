@@ -108,7 +108,7 @@ test('server error pointer is marked English inside the rules panel', async ({ p
 
 test('the old interface keeps the English editor', async ({ page }) => {
   await fixtureApi(page)
-  await page.goto('/')
+  await page.goto('/?shell=old')
   await page.getByTestId('policy-file').setInputFiles({ name: 'policy.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(basicPolicy)) })
   await expect(page.getByText('Policy draft')).toBeVisible()
   await expect(page.getByRole('button', { name: 'Add rule' })).toBeVisible()

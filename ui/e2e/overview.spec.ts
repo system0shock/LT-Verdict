@@ -160,6 +160,7 @@ test('only the selected correlation pair is listed, with the fixed mark and no f
   expect(text).toContain(CORRELATION_LABELS.mark)
   expect(text.replaceAll(CORRELATION_LABELS.mark, '')).not.toMatch(forbiddenWords)
   expect(await correlation.locator('.overview-badge').innerText()).toBe(CORRELATION_LABELS.mark)
+  expect(await page.getByTestId('diagnostic-note').innerText()).not.toMatch(forbiddenWords)
 })
 
 test('a result with only unselected candidate pairs lists no correlation', async ({ page }) => {

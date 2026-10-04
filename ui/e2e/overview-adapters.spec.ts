@@ -309,6 +309,24 @@ test.describe('attention items', () => {
     expect(items.map((item) => item.key)).toEqual(['diagnostic:correlation:cp-chosen'])
   })
 
+  test('a pair is joined to its selection by the exact pair and window, even when identifiers contain a separator', () => {
+    const pair = (id: string, window: string, series: string) => ({ ...lagged(id, 'CANDIDATE', 1000, '0.5'), id: `cp-${series}`, window_id: window, resource_series_id: series })
+    const result = build({
+      evidence: [
+        pair('a|b', 'c', 'first'), pair('a', 'b|c', 'second'),
+        { ...selection('a', 'SELECTED'), window_id: 'b|c' }, { ...selection('a|b', 'SELECTED'), window_id: 'c' },
+      ],
+    })
+
+    expect(selectedCorrelations(result).map((item) => item.series)).toEqual(['second', 'first'])
+  })
+
+  test('a selected pair without a lag or lag-max coefficient shows a dash instead of an invented value', () => {
+    const [item] = selectedCorrelations(build({ evidence: [correlation('p1', 'CANDIDATE'), selection('p1', 'SELECTED')] }))
+
+    expect([item.lagSeconds, item.rho]).toEqual([CORRELATION_LABELS.noValue, CORRELATION_LABELS.noValue])
+  })
+
   test('selected correlations carry the method notes and the fixed mark, and no forbidden word', () => {
     const result = build({
       evidence: [

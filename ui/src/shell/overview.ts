@@ -135,22 +135,23 @@ function probability(value: string | null): string {
 // Только пары, отобранные методом (selected=true), со строкой пары по (pair_id, window_id): ряд, исход, лаг и коэффициент
 // берутся из correlation_pair (evidence отбора их не содержит). Результат без evidence отбора не даёт ни одной записи.
 export function selectedCorrelations(result: AnalysisResult): SelectedCorrelation[] {
+  // Ключ-кортеж в JSON: идентификаторы пары и окна могут содержать любой разделитель.
   const pairs = new Map<string, CorrelationPairEvidence>()
   for (const evidence of result.evidence) {
-    if (evidence.type === 'correlation_pair') pairs.set(`${evidence.pair_id}|${evidence.window_id}`, evidence)
+    if (evidence.type === 'correlation_pair') pairs.set(JSON.stringify([evidence.pair_id, evidence.window_id]), evidence)
   }
   const selected: SelectedCorrelation[] = []
   for (const evidence of result.evidence) {
     if (evidence.type !== 'correlation_headline_selection' || evidence.selected !== true) continue
-    const pair = pairs.get(`${evidence.pair_id}|${evidence.window_id}`)
+    const pair = pairs.get(JSON.stringify([evidence.pair_id, evidence.window_id]))
     if (!pair) continue
     selected.push({
       key: pair.id,
       windowId: evidence.window_id,
       series: pair.resource_series_id,
       loadMetric: pair.load_metric,
-      lagSeconds: signed((pair.best_lag_ms ?? 0) / 1000, 3),
-      rho: coefficient(pair.best_lag_rho ?? pair.raw_rho),
+      lagSeconds: pair.best_lag_ms === null ? CORRELATION_LABELS.noValue : signed(pair.best_lag_ms / 1000, 3),
+      rho: coefficient(pair.best_lag_rho),
       adjustedP: probability(evidence.holm_adjusted_p_value),
       familySize: evidence.family_hypotheses,
       note: CORRELATION_LABELS.methodNote(evidence.method, evidence.representation, evidence.stage_count),

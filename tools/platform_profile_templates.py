@@ -112,6 +112,50 @@ SIGNALS = {
 }
 
 
+def per_pod_over_time(selector: str) -> str:
+    """Worst pod of the service; interval aggregation per pod first (ADR 0018, section 2)."""
+    return (
+        f"max by (namespace) (@over@((sum by (namespace, pod) ({selector} and on (namespace, pod) @owner@))"
+        "[$__interval:@sub@]))"
+    )
+
+
+HEAP = 'jvm_memory_used_bytes{namespace="@ns@",area="heap"}'
+OLD_GEN = 'jvm_memory_used_bytes{namespace="@ns@",area="heap",id=~".*Old Gen|Tenured Gen"}'
+NON_HEAP = 'jvm_memory_used_bytes{namespace="@ns@",area="nonheap"}'
+THREADS = 'jvm_threads_live_threads{namespace="@ns@"}'
+PROCESS_CPU = 'process_cpu_usage{namespace="@ns@"}'
+GC_PAUSE_MAX = (
+    "max by (namespace) (max_over_time((max by (namespace, pod) "
+    '(jvm_gc_pause_seconds_max{namespace="@ns@"} and on (namespace, pod) @owner@))[$__interval:@sub@]))'
+)
+GC_TIME = (
+    "max by (namespace) (sum by (namespace, pod) "
+    '(rate(jvm_gc_pause_seconds_sum{namespace="@ns@"}[$__interval]) and on (namespace, pod) @owner@))'
+)
+POOL_SATURATION = (
+    "max by (namespace) (@over@(((sum by (namespace, pod) "
+    '(hikaricp_connections_active{namespace="@ns@"} and on (namespace, pod) @owner@)) '
+    "/ on (namespace, pod) (sum by (namespace, pod) "
+    '(hikaricp_connections_max{namespace="@ns@"} and on (namespace, pod) @owner@)))[$__interval:@sub@]))'
+)
+
+SIGNALS.update(
+    {
+        "jvm_heap_used": Signal("jvm_heap_used", "bytes", "interval_mean", True, False, per_pod_over_time(HEAP)),
+        "jvm_old_gen_used": Signal("jvm_old_gen_used", "bytes", "interval_mean", True, False, per_pod_over_time(OLD_GEN)),
+        "jvm_non_heap_used": Signal("jvm_non_heap_used", "bytes", "interval_mean", True, False, per_pod_over_time(NON_HEAP)),
+        "jvm_thread_count": Signal("jvm_thread_count", "count", "interval_mean", False, False,
+                                   per_pod_over_time(THREADS).replace("@over@", "avg_over_time")),
+        "jvm_process_cpu": Signal("jvm_process_cpu", "ratio", "interval_mean", False, False,
+                                  per_pod_over_time(PROCESS_CPU).replace("@over@", "avg_over_time")),
+        "jvm_gc_pause": Signal("jvm_gc_pause", "s", "interval_max", True, False, GC_PAUSE_MAX, peak_only=True),
+        "jvm_gc_time": Signal("jvm_gc_time", "ratio", "interval_rate", False, True, GC_TIME),
+        "jvm_pool_saturation": Signal("jvm_pool_saturation", "ratio", "interval_mean", True, False, POOL_SATURATION),
+    }
+)
+
+
 def render(signal: Signal, ns: str, svc: str, sub: str, peak: bool = False) -> str:
     if signal.peak_only and not peak:
         raise ValueError(f"{signal.metric} needs interval_max aggregation")

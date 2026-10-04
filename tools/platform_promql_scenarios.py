@@ -188,6 +188,82 @@ SCENARIOS = (
         ),
         1,
     ),
+    Scenario(
+        "jvm heap: peak of the worst pod",
+        "jvm_heap_used", True,
+        (
+            ("jvm_memory_used_bytes", f'namespace="{NS}",pod="a1",area="heap",id="G1 Old Gen"', SPIKE_LOW.format(low=100, high=400)),
+            ("jvm_memory_used_bytes", f'namespace="{NS}",pod="a2",area="heap",id="G1 Old Gen"', "200+0x40"),
+            pod_owner("a1"),
+            pod_owner("a2"),
+        ),
+        400,
+    ),
+    Scenario(
+        "jvm heap: the mean variant picks the steadier but higher pod",
+        "jvm_heap_used", False,
+        (
+            ("jvm_memory_used_bytes", f'namespace="{NS}",pod="a1",area="heap",id="G1 Old Gen"', SPIKE_LOW.format(low=100, high=400)),
+            ("jvm_memory_used_bytes", f'namespace="{NS}",pod="a2",area="heap",id="G1 Old Gen"', "200+0x40"),
+            pod_owner("a1"),
+            pod_owner("a2"),
+        ),
+        200,
+    ),
+    Scenario(
+        "jvm gc pause: maximum of the pause gauge",
+        "jvm_gc_pause", True,
+        (
+            ("jvm_gc_pause_seconds_max", f'namespace="{NS}",pod="a1",action="end of minor GC",cause="G1 Evacuation Pause"', SPIKE_LOW.format(low=0.05, high=0.4)),
+            pod_owner("a1"),
+        ),
+        0.4,
+    ),
+    Scenario(
+        "jvm pool: worst pod saturation",
+        "jvm_pool_saturation", True,
+        tuple(
+            item
+            for pod, active in (("a1", "8"), ("a2", "5"))
+            for item in (
+                ("hikaricp_connections_active", f'namespace="{NS}",pod="{pod}",pool="main"', f"{active}+0x40"),
+                ("hikaricp_connections_max", f'namespace="{NS}",pod="{pod}",pool="main"', "10+0x40"),
+                pod_owner(pod),
+            )
+        ),
+        0.8,
+    ),
+    Scenario(
+        "jvm threads: the busiest pod has 70 live threads",
+        "jvm_thread_count", False,
+        (
+            ("jvm_threads_live_threads", f'namespace="{NS}",pod="a1"', "50+0x40"),
+            ("jvm_threads_live_threads", f'namespace="{NS}",pod="a2"', "70+0x40"),
+            pod_owner("a1"),
+            pod_owner("a2"),
+        ),
+        70,
+    ),
+    Scenario(
+        "jvm gc time: pause seconds increase by 0.15 every 15 seconds",
+        "jvm_gc_time", False,
+        (
+            ("jvm_gc_pause_seconds_sum", f'namespace="{NS}",pod="a1",action="end of minor GC"', "0+0.15x40"),
+            pod_owner("a1"),
+        ),
+        0.01,
+    ),
+    Scenario(
+        "jvm old gen: only the old generation heap pool counts",
+        "jvm_old_gen_used", False,
+        (
+            ("jvm_memory_used_bytes", f'namespace="{NS}",pod="a1",area="heap",id="G1 Old Gen"', "300+0x40"),
+            ("jvm_memory_used_bytes", f'namespace="{NS}",pod="a1",area="heap",id="G1 Eden Space"', "100+0x40"),
+            ("jvm_memory_used_bytes", f'namespace="{NS}",pod="a1",area="nonheap",id="Metaspace"', "50+0x40"),
+            pod_owner("a1"),
+        ),
+        300,
+    ),
 )
 
 

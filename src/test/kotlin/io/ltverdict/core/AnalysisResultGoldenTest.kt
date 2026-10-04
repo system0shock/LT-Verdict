@@ -45,6 +45,33 @@ class AnalysisResultGoldenTest {
     }
 
     @Test
+    fun `verdict gates exist only with a policy`() {
+        val inputHash = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+        val input =
+            AcceptedInput(
+                runId = "jmeter_jtl_csv-$inputHash",
+                sourceType = SourceType.JMETER_CSV,
+                sha256 = inputHash,
+                sizeBytes = 1,
+                originalFilename = "input.jtl",
+                path = Path.of("unused"),
+            )
+        val policy =
+            validatePolicy(
+                ByteArrayInputStream(Files.readAllBytes(Path.of("fixtures/slice1/identity/policy.canonical.json"))),
+            ) as PolicyValidation.Valid
+
+        val withPolicy = Json.parseToJsonElement(analysisIdentity(input, policy, EngineConfig()).decodeToString()).jsonObject
+        val withoutPolicy = Json.parseToJsonElement(analysisIdentity(input, null, EngineConfig()).decodeToString()).jsonObject
+
+        assertEquals(
+            mapOf("min_samples_default" to "100", "min_samples_floor" to "20", "throughput_exempt" to "true"),
+            withPolicy.getValue("verdict_gates").jsonObject.mapValues { it.value.jsonPrimitive.content },
+        )
+        assertEquals(null, withoutPolicy["verdict_gates"])
+    }
+
+    @Test
     fun `histogram precision is part of the identity and changes the analysis id`() {
         val inputHash = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
         val input =

@@ -25,11 +25,10 @@ jobs:
         with:
           fetch-depth: 0
       - name: Set up Node.js 24.14.0
+        # No npm cache here: this job never runs npm ci, so it must not seed the shared npm cache key.
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v6.3.0
         with:
           node-version: 24.14.0
-          cache: npm
-          cache-dependency-path: ui/package-lock.json
       - name: Set up Python 3.14
         uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
@@ -98,6 +97,8 @@ jobs:
           distribution: temurin
           java-version: "21"
           cache: gradle
+          # Only the full-check shards seed the Gradle cache; this job restores it without saving a partial one.
+          cache-read-only: true
       - name: Set up Node.js 24.14.0
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v6.3.0
         with:
@@ -164,6 +165,8 @@ jobs:
           distribution: temurin
           java-version: "21"
           cache: gradle
+          # Only the full-check shards seed the Gradle cache; this job restores it without saving a partial one.
+          cache-read-only: true
       - name: Set up Node.js 24.14.0
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v6.3.0
         with:

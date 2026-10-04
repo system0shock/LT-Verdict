@@ -96,7 +96,8 @@
 - `Performance` остаётся отдельной обязательной проверкой.
 - `Runtime`, `Performance`, `Links`, `Markdown`, `PR title`, `Secrets`, `Slice 0 contracts`
   нельзя переименовывать без обновления branch protection.
-- Упавший шард перезапускают через **Re-run failed jobs**.
+- Упавший шард перезапускают через **Re-run failed jobs** для всего запуска, а не одиночной
+  задачей: итог шардов агрегирует `Runtime`.
 
 ## Майлстоуны и версии
 

@@ -45,7 +45,7 @@ try {
     foreach ($valid in @("token-plan.ap-southeast-1.maas.aliyuncs.com:443", "localhost:1", "[::1]:8443", "10.0.0.5:65535")) {
         if ($valid -cnotmatch $patternMatch.Groups["pattern"].Value) { throw "Launcher rejects a valid endpoint host: $valid" }
     }
-    foreach ($invalid in @("", "host", "host:0", "host:65536", "Host:443", "host:443/v1", "u@host:443", "https://host:443", "host:443`n", "host_name:443")) {
+    foreach ($invalid in @("", "host", "host:0", "host:65536", "Host:443", "host:443/v1", "u@host:443", "https://host:443", "host:443`n", "host_name:443", "[.:]:443", "[:]:443")) {
         if ($invalid -cmatch $patternMatch.Groups["pattern"].Value) { throw "Launcher accepts an invalid endpoint host: $invalid" }
     }
 

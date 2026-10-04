@@ -332,7 +332,8 @@ internal val MODEL_SLUG = Regex("[A-Za-z0-9][A-Za-z0-9._:/-]{0,127}")
 private const val MAX_ENDPOINT_HOST_LENGTH = 260
 internal val ENDPOINT_HOST =
     Regex(
-        "(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?){0,126}|\\[[0-9a-f:.]{2,45}\\])" +
+        "(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?){0,126}|" +
+            "\\[(?=[0-9a-f:.]*:[0-9a-f:.]*:)(?=[0-9a-f:.]*[0-9a-f])[0-9a-f:.]{2,45}\\])" +
             ":(?:[1-9][0-9]{0,3}|[1-5][0-9]{4}|6[0-4][0-9]{3}|65[0-4][0-9]{2}|655[0-2][0-9]|6553[0-5])",
     )
 private val EXPERIMENT_MODEL_IDS = setOf(QwenCode0211.MODEL_ID)

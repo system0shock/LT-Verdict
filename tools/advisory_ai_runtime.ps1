@@ -25,7 +25,7 @@ $DockerCommandTimeoutMilliseconds = 10000
 $DockerCleanupTimeoutMilliseconds = 1500
 $DockerOutputLimit = 65536L
 # Host and port the relay reports as the destination of the evidence: lower case, the port always present (ADR 0023, D4).
-$EndpointHostPattern = '^(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?){0,126}|\[[0-9a-f:.]{2,45}\]):(?:[1-9][0-9]{0,3}|[1-5][0-9]{4}|6[0-4][0-9]{3}|65[0-4][0-9]{2}|655[0-2][0-9]|6553[0-5])\z'
+$EndpointHostPattern = '^(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?){0,126}|\[(?=[0-9a-f:.]*:[0-9a-f:.]*:)(?=[0-9a-f:.]*[0-9a-f])[0-9a-f:.]{2,45}\]):(?:[1-9][0-9]{0,3}|[1-5][0-9]{4}|6[0-4][0-9]{3}|65[0-4][0-9]{2}|655[0-2][0-9]|6553[0-5])\z'
 $RepoRoot = [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot ".."))
 $RelayPath = Join-Path $PSScriptRoot "advisory_ai_runtime_relay.mjs"
 $QwenScriptPath = Join-Path $PSScriptRoot "advisory_ai_runtime_qwen.sh"
@@ -444,7 +444,8 @@ try {
         throw "relay boundary failed"
     }
     $hostProperty = $relayResult.PSObject.Properties["upstream_host"]
-    $observedHost = if ($null -ne $hostProperty) { $hostProperty.Value } else { $null }
+    if ($null -eq $hostProperty) { throw "relay result has no upstream_host" }
+    $observedHost = $hostProperty.Value
     if ($Mode -eq "Live") {
         if ($observedHost -isnot [string] -or $observedHost.Length -gt 260 -or $observedHost -cnotmatch $EndpointHostPattern) {
             throw "relay did not report a valid upstream host"

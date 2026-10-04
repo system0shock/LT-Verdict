@@ -759,13 +759,14 @@ private fun windowMetricSummary(
         put("error_count", metrics.overall.errorCount)
         put("error_rate_ratio", metrics.overall.errorRate?.json() ?: JsonNull)
         put("throughput_rps", metrics.overall.throughputRps.json())
+        val hasSamples = metrics.overall.sampleCount > 0L
         put(
             "latency_ms",
             buildJsonObject {
-                put("p50", metrics.overall.latency.p50Millis)
-                put("p95", metrics.overall.latency.p95Millis)
-                put("p99", metrics.overall.latency.p99Millis)
-                put("max", metrics.overall.latency.maxMillis)
+                put("p50", if (hasSamples) JsonPrimitive(metrics.overall.latency.p50Millis) else JsonNull)
+                put("p95", if (hasSamples) JsonPrimitive(metrics.overall.latency.p95Millis) else JsonNull)
+                put("p99", if (hasSamples) JsonPrimitive(metrics.overall.latency.p99Millis) else JsonNull)
+                put("max", if (hasSamples) JsonPrimitive(metrics.overall.latency.maxMillis) else JsonNull)
             },
         )
         put(

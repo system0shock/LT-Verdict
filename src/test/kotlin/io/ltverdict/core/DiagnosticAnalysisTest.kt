@@ -259,6 +259,81 @@ class DiagnosticAnalysisTest {
         assertTrue(nullCandidates <= 2, "observed null candidates=$nullCandidates/20; descriptive fixture only")
     }
 
+    @Test
+    fun `window metric summary publishes null latency for an empty window and keeps throughput exact`() {
+        val windows = listOf(window("reference", 0, 30_000), window("evaluation", 30_000, 35_000))
+        val resources = resources(1_000, windows, mapOf("cpu" to List(35) { BigDecimal("100") }))
+        val plan = plan(resources, anomalies = ANOMALY_PLAN)
+        val metrics = windowMetrics(windows)
+
+        val summaries = windowSummaries(plan, resources, windows, metrics)
+
+        listOf("reference" to 30_000L, "evaluation" to 5_000L).forEach { (id, duration) ->
+            val summary = summaries.getValue(id)
+            assertEquals(JsonNull, summary["error_rate_ratio"])
+            assertEquals("0", summary.getValue("sample_count").jsonPrimitive.content)
+            assertEquals("0", summary.getValue("error_count").jsonPrimitive.content)
+            assertEquals("0", summary.getValue("throughput_rps").jsonObject.string("numerator"))
+            assertEquals(duration.toString(), summary.getValue("throughput_rps").jsonObject.string("denominator"))
+            assertEquals(
+                mapOf("p50" to JsonNull, "p95" to JsonNull, "p99" to JsonNull, "max" to JsonNull),
+                summary.getValue("latency_ms").jsonObject,
+            )
+        }
+    }
+
+    @Test
+    fun `window metric summary keeps numeric latency when the window has samples including a real zero`() {
+        val windows = listOf(window("reference", 0, 30_000), window("evaluation", 30_000, 35_000))
+        val resources = resources(1_000, windows, mapOf("cpu" to List(35) { BigDecimal("100") }))
+        val plan = plan(resources, anomalies = ANOMALY_PLAN)
+        val metrics =
+            mapOf(
+                "reference" to windowMetric(MetricSummary(3, 1, ExactRatio(1, 3), ExactRatio(3_000, 30_000), LatencySummary(5, 9, 10, 12))),
+                "evaluation" to windowMetric(MetricSummary(1, 0, ExactRatio(0, 1), ExactRatio(1_000, 5_000), LatencySummary(0, 0, 0, 0))),
+            )
+
+        val summaries = windowSummaries(plan, resources, windows, metrics)
+
+        assertEquals(
+            mapOf("p50" to "5", "p95" to "9", "p99" to "10", "max" to "12"),
+            summaries
+                .getValue("reference")
+                .getValue("latency_ms")
+                .jsonObject
+                .mapValues { it.value.jsonPrimitive.content },
+        )
+        assertEquals(
+            mapOf("p50" to "0", "p95" to "0", "p99" to "0", "max" to "0"),
+            summaries
+                .getValue("evaluation")
+                .getValue("latency_ms")
+                .jsonObject
+                .mapValues { it.value.jsonPrimitive.content },
+        )
+        assertEquals(
+            false,
+            summaries
+                .getValue("evaluation")
+                .getValue("latency_ms")
+                .jsonObject.values
+                .any { it is JsonNull },
+        )
+    }
+
+    private fun windowSummaries(
+        plan: DiagnosticValidation.Valid,
+        resources: ResourceValidation.Valid,
+        windows: List<ResourceWindowV1>,
+        metrics: Map<String, NormalizedMetrics>,
+    ): Map<String, JsonObject> =
+        evaluateDiagnostics(plan, resources, windows, emptyLoad(windows, 1_000), metrics)
+            .evidence
+            .filter { it.string("type") == "window_metric_summary" }
+            .associateBy { it.string("window_id") }
+
+    private fun windowMetric(summary: MetricSummary) = NormalizedMetrics(summary, emptyList(), emptyList(), emptyMap())
+
     private fun pairStatus(
         x: List<BigDecimal>,
         y: List<BigDecimal>,
@@ -370,4 +445,9 @@ class DiagnosticAnalysisTest {
     private fun JsonObject.string(name: String): String = getValue(name).jsonPrimitive.content
 
     private fun JsonObject.strings(name: String): List<String> = getValue(name).jsonArray.map { it.jsonPrimitive.content }
+
+    private companion object {
+        const val ANOMALY_PLAN =
+            """[{"id":"missing","signal":{"series_id":"cpu"},"reference_window_id":"reference","window_id":"evaluation","direction":"increase","min_abs_delta":20,"min_duration_ms":1000}]"""
+    }
 }

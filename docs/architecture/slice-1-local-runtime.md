@@ -97,6 +97,20 @@ CSV parser 2) выпускаются вместе и требуют одного
 даёт `analysis_coverage.status = INCOMPLETE`, но не меняет `PASS`/`FAIL`, а
 `INSUFFICIENT_SAMPLES` блокирует вердикт (`NO_VERDICT`).
 
+Необязательное поле `window_ids` бизнес-правила (ADR 0018, решение D5) привязывает
+правило к именованным окнам снимка ресурсов. В оцениваемом окне `evaluatePolicy`
+берёт только применимые правила: без поля правило действует во всех окнах, с полем
+только в названных. Если применимых правил нет, бизнес-часть окна получает
+`NO_POLICY`, а не пустой `PASS`, и пустое окно не превращается в
+`BUSINESS_OBSERVATIONS_NOT_FOUND`. Существование id проверяет
+`evaluateSharedWindowPolicy` при сопоставлении со снимком: неизвестный id даёт
+evidence `rule_window_check` (`rule_id`, `window_id`, `status = NO_VERDICT`,
+`reason_code = RULE_WINDOW_NOT_FOUND`) и блокирует общий вердикт, поэтому опечатка в
+id не даёт молчаливого `PASS`. Анализ без снимка окон не имеет: правило с
+`window_ids` даёт `policy_check` со статусом `NO_VERDICT` и той же причиной. Identity
+и `analysis_id` анализов без `window_ids` не меняются; политика с `window_ids` имеет
+другой `policy_sha256` и потому другой `analysis_id`.
+
 Canonical `analysis-result.v1` одинаков для CLI и UI при одинаковых input,
 policy и engine configuration.
 

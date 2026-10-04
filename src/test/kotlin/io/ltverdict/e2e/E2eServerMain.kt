@@ -30,10 +30,10 @@ fun main() {
         }
     val rawPort = System.getenv("LTV_E2E_PORT")
     val port =
-        if (rawPort.isNullOrBlank()) {
+        if (rawPort.isNullOrEmpty()) {
             18_473
         } else {
-            rawPort.toIntOrNull()?.takeIf { it in 1024..65535 }
+            rawPort.takeIf { value -> value.all { it in '0'..'9' } }?.toIntOrNull()?.takeIf { it in 1024..65535 }
                 ?: error("Invalid LTV_E2E_PORT: $rawPort (expected integer 1024..65535)")
         }
     val server = startLocalServer(LocalApiContext(store, jobs, profiles), port = port, openBrowser = false)

@@ -1534,7 +1534,8 @@ private fun JsonObject.withP95(): JsonObject {
             ByteBuffer.wrap(Base64.getDecoder().decode(encoded)),
             MAX_BUCKET_LATENCY_MILLIS,
         )
-    return JsonObject(this + ("p95_latency_ms" to JsonPrimitive(histogram.getValueAtPercentile(95.0))))
+    val p95 = minOf(histogram.getValueAtPercentile(95.0), getValue("max_latency_ms").jsonPrimitive.long)
+    return JsonObject(this + ("p95_latency_ms" to JsonPrimitive(p95)))
 }
 
 private data class BucketPage(

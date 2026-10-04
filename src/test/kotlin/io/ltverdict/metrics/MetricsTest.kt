@@ -190,6 +190,70 @@ class MetricsTest {
         assertEquals(2, secondResult.overall.errorCount)
     }
 
+    @Test
+    fun `percentiles never exceed the observed maximum for identical samples`() {
+        listOf(2_047L, 2_048L, 4_095L, 4_096L, 60_000L, 86_400_000L).forEach { value ->
+            val latency = publishedLatency(List(100) { value })
+
+            assertEquals(LatencySummary(value, value, value, value), latency, "value $value")
+        }
+    }
+
+    @Test
+    fun `cap keeps the invariant p50 p95 p99 max and documents residual rounding`() {
+        val closeToMax = publishedLatency(List(95) { 60_000L } + List(5) { 60_010L })
+        assertEquals(60_010L, closeToMax.p95Millis)
+        assertTrue(closeToMax.p50Millis <= closeToMax.p95Millis)
+        assertTrue(closeToMax.p95Millis <= closeToMax.p99Millis)
+        assertTrue(closeToMax.p99Millis <= closeToMax.maxMillis)
+
+        // The exact p95 is 60000 but HDR rounds up inside the equivalent range and the maximum is far away.
+        val farMax = publishedLatency(List(100) { 60_000L } + listOf(70_000L))
+        assertEquals(60_031L, farMax.p95Millis)
+        assertEquals(70_000L, farMax.maxMillis)
+    }
+
+    @Test
+    fun `cap applies at any configured precision`() {
+        assertEquals(60_000L, publishedLatency(List(100) { 60_000L }, digits = 4).p95Millis)
+        assertEquals(60_000L, publishedLatency(List(100) { 60_000L }, digits = 5).p95Millis)
+        assertEquals(86_400_000L, publishedLatency(List(100) { 86_400_000L }, digits = 4).p99Millis)
+        assertEquals(86_400_000L, publishedLatency(List(100) { 86_400_000L }, digits = 5).p99Millis)
+        // The maximum is far away, so the cap cannot remove the HDR rounding of 60000 to 60001 at four digits.
+        assertEquals(60_001L, publishedLatency(List(100) { 60_000L } + listOf(70_000L), digits = 4).p95Millis)
+    }
+
+    @Test
+    fun `overall and transaction summaries publish the capped percentile`() {
+        val metrics =
+            accumulator(end = 100_000_000, config = MetricsConfig())
+                .apply { repeat(100) { record(sample(it.toLong(), 60_000, "x", emptyList(), SampleKind.JMETER_SAMPLER)) } }
+                .finish()
+
+        assertEquals(60_000L, metrics.overall.latency.p95Millis)
+        assertEquals(
+            60_000L,
+            metrics.transactions
+                .single()
+                .metrics.latency.p99Millis,
+        )
+    }
+
+    private fun publishedLatency(
+        values: List<Long>,
+        digits: Int = 3,
+    ): LatencySummary =
+        accumulator(end = 100_000_000, config = MetricsConfig(significantDigits = digits))
+            .apply {
+                values.forEachIndexed {
+                    index,
+                    value,
+                    ->
+                    record(sample(index.toLong() % 1_000, value, "x", emptyList(), SampleKind.JMETER_SAMPLER))
+                }
+            }.finish()
+            .overall.latency
+
     private fun accumulator(
         start: Long = 0,
         end: Long = 1_000,

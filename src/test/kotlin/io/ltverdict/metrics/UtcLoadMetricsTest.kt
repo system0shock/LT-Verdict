@@ -27,7 +27,7 @@ class UtcLoadMetricsTest {
         assertEquals(1, cells[0].errorCount)
         assertEquals(ExactRatio(1, 20), cells[0].errorRate)
         assertEquals(ExactRatio(20_000, 1_000), cells[0].throughputRps)
-        assertEquals(8_003, cells[0].responseTimeP95Millis)
+        assertEquals(8_000, cells[0].responseTimeP95Millis)
         assertEquals(19, cells[1].sampleCount)
         assertNull(cells[1].responseTimeP95Millis)
 

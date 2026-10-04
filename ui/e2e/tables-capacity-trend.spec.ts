@@ -6,7 +6,7 @@ import { CAPACITY_LABELS, TREND_LABELS } from '../src/shell/labels.tables'
 const reference = { run_id: 'capacity-trend-run', analysis_id: 'a'.repeat(64) }
 const run = { ...reference, source_type: 'jmeter', sha256: 'b'.repeat(64), size_bytes: 100, original_filename: 'capacity-trend.jtl' }
 const capacity = {
-  schema_version: 'capacity.v1', load_axis: 'rps', unit: 'requests/s', bound_type: 'BOUNDED', lower_inclusive: 296, upper_exclusive: 344,
+  schema_version: 'capacity.v1', load_axis: 'rps', unit: 'requests/s', bound_type: 'INDETERMINATE', lower_inclusive: null, upper_exclusive: null,
   policy_verdict: 'NO_VERDICT', reasons: ['CAPACITY_STAGE_NOT_VERIFIED'], capacity_knee: null, knee_reason: 'KNEE_DETECTOR_NOT_IMPLEMENTED',
   stages: [
     { id: 'ramp-300', target: 300, achieved: 296, achieved_statistic: 'p05_10s', observed_min: 296, observed_max: 296, complete_bins: 30, expected_bins: 30, target_tolerance_ratio: 0.02, verified_bound_load: 296, verdict: 'PASS', reasons: [], evidence_refs: ['ref-1'] },
@@ -20,7 +20,7 @@ const trendCheck = {
   declared_direction: 'either', status: 'TREND_OBSERVED', min_cells: 10, expected_cells: 30, observed_cells: 30, missing_cells: 0, longest_gap_cells: 0,
   median: '41.25', slope_per_second: '0.0135', split_half_shift: '6.40',
   magnitude_gate: { min_slope_units_per_second: '0.001', min_split_half_shift_pct: '5', required_split_half_shift_units: '2.0625' },
-  observed_direction: 'increase', method: 'slope-materiality.v1', uncertainty: 'NOT_ESTIMATED', reasons: ['TREND_MIN_CELLS_NOT_MET'],
+  observed_direction: 'increase', method: 'slope-materiality.v1', uncertainty: 'NOT_ESTIMATED', reasons: ['STATIONARITY_NOT_EVALUATED'],
 }
 const result = {
   schema_version: 'analysis-result.v1', run_id: reference.run_id, analysis_mode: 'capacity_step', run_validity: 'VALID', policy_verdict: 'NO_VERDICT',
@@ -78,7 +78,7 @@ test('new shell shows capacity stages in Russian with sample notes', async ({ pa
 })
 
 test('unknown capacity bound and reason still render', async ({ page }) => {
-  await openTables(page, { ...result, capacity_summary: { ...capacity, bound_type: 'UNKNOWN_BOUND', reasons: ['UNKNOWN_REASON'], stages: [{ ...capacity.stages[0], reasons: ['UNKNOWN_REASON'] }] } })
+  await openTables(page, { ...result, capacity_summary: { ...capacity, bound_type: 'UNKNOWN_BOUND', lower_inclusive: 296, upper_exclusive: 344, reasons: ['UNKNOWN_REASON'], stages: [{ ...capacity.stages[0], reasons: ['UNKNOWN_REASON'] }] } })
   await expect(page.locator('#capacity-results')).toContainText(CAPACITY_LABELS.boundText('UNKNOWN_BOUND', '296', '344', 'requests/s'))
   await expect(page.locator('#capacity-results')).toContainText('UNKNOWN_REASON')
 })
@@ -121,7 +121,7 @@ for (const theme of ['light', 'dark'] as const) {
   })
 }
 
-for (const size of [{ width: 1280, height: 800 }, { width: 375, height: 800 }]) {
+for (const size of [{ width: 1280, height: 800 }, { width: 375, height: 800 }, { width: 320, height: 800 }]) {
   test(`capacity and trend tables have no horizontal page scroll at ${size.width}px`, async ({ page }) => {
     await page.setViewportSize(size)
     await openTables(page)

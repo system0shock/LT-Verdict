@@ -103,7 +103,7 @@ const TREND_REASON_WORDS: Record<string, string> = {
   TREND_HALF_CELLS_NOT_MET: 'В одной из половин окна слишком мало значений, чтобы сравнить половины.',
   TREND_MEDIAN_ZERO: 'Медиана равна нулю, относительный порог сдвига не определён.',
   TREND_DIRECTION_MISMATCH: 'Направление наклона не совпадает с заявленным.',
-  TREND_DIRECTION_DISAGREEMENT: 'Наклон и сдвиг половин окна идут в разные стороны.',
+  TREND_DIRECTION_DISAGREEMENT: 'Знак сдвига половин окна не совпадает со знаком наклона (сдвиг может быть равен нулю).',
   TREND_SLOPE_BELOW_MINIMUM: 'Наклон ниже минимального порога.',
   TREND_SHIFT_BELOW_MINIMUM: 'Сдвиг половин окна ниже порога.',
   STATIONARITY_NOT_EVALUATED: 'Стационарность ряда не оценивалась.',

@@ -180,6 +180,12 @@ test('capacity stages keep verdicts, reason words and missing values', () => {
   expect(capacityView(build({}))).toBeNull()
 })
 
+test('capacity numbers keep every digit the server sent', () => {
+  const view = capacityView(build({ capacity_summary: { ...capacitySummary, lower_inclusive: '1.0000001', upper_exclusive: '1.0000002', capacity_knee: '1234.50', stages: [] } }))!
+  expect(view.boundText).toBe(CAPACITY_LABELS.boundText('BOUNDED', '1,0000001', '1,0000002', 'requests/s'))
+  expect(view.kneeText.replace(/\s/g, ' ')).toBe(CAPACITY_LABELS.kneeValue('1 234,5', 'requests/s'))
+})
+
 test('capacity bound and knee variants retain unknown codes', () => {
   for (const bound of ['UPPER_BOUND', 'LOWER_BOUND', 'INDETERMINATE', 'SOMETHING_NEW']) {
     const view = capacityView(build({ capacity_summary: { ...capacitySummary, bound_type: bound, lower_inclusive: '1.25', upper_exclusive: '2.5', stages: [] } }))!

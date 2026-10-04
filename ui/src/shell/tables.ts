@@ -198,9 +198,16 @@ export interface CapacityView {
   stages: CapacityStageRow[]
 }
 
-const capacityFormatter = new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 6 })
-const capacityNumber = (value: number | string | null | undefined): string =>
-  value == null ? TABLES_LABELS.noData : Number.isFinite(Number(value)) ? capacityFormatter.format(Number(value)) : String(value)
+const capacityGroups = new Intl.NumberFormat('ru-RU')
+// Capacity values are exact decimals: the digits are kept as the server sent them (no rounding), only grouped and with a decimal comma.
+function capacityNumber(value: number | string | null | undefined): string {
+  if (value == null) return TABLES_LABELS.noData
+  const text = String(value)
+  const match = /^(-?)(\d+)(?:\.(\d+))?$/.exec(text)
+  if (!match) return Number.isFinite(Number(value)) ? new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 20 }).format(Number(value)) : text
+  const fraction = (match[3] ?? '').replace(/0+$/, '')
+  return `${match[1]}${capacityGroups.format(BigInt(match[2]))}${fraction ? `,${fraction}` : ''}`
+}
 const capacityReasons = (codes: string[] | undefined) => (codes ?? []).map((code) => ({ code, text: verdictReasonText(code) }))
 
 export function capacityView(result: AnalysisResult): CapacityView | null {

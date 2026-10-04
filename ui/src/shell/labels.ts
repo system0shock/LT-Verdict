@@ -15,7 +15,7 @@ export const SHELL_TABS: readonly ShellTab[] = [
   { key: 'overview', label: 'Обзор', pending: false },
   { key: 'tables', label: 'Таблицы', pending: false },
   { key: 'compare', label: 'Сравнение', pending: false },
-  { key: 'rules', label: 'Правила', pending: true },
+  { key: 'rules', label: 'Правила', pending: false },
   { key: 'advice', label: 'ИИ-разбор', pending: false },
 ]
 
@@ -26,8 +26,6 @@ export const SHELL_LABELS = {
   navLabel: 'Разделы',
   pendingBadge: 'в разработке',
   overviewEmpty: 'Прогон не выбран. Выберите прогон в списке слева или откройте вкладку «Новый анализ».',
-  rulesPendingTitle: 'Правила: раздел в разработке',
-  rulesPendingText: 'Редактор правил появится в одном из следующих срезов. Пока политику можно задать на вкладке «Новый анализ».',
   noRun: 'Прогон не выбран',
   completed: 'Завершён',
   themeToDark: 'Тёмная тема',
@@ -171,7 +169,6 @@ export const SETUP_LABELS = {
   rulesTitle: '2. Правила',
   policyLabel: 'Файл политики',
   policyNone: 'Политика не выбрана. Без правил вердикт не выдаётся: результат получит статус NO_POLICY.',
-  policyEditorNote: 'Редактор политики пока на английском: русский вариант появится в разделе «Правила» отдельным срезом.',
 
   systemTitle: '3. Данные о системе',
   systemLead: 'Снимок ресурсов, планы и контекст OpenSearch берутся из файлов. Если выбрать онлайн-источники, эти файлы не используются: снимок создаётся во время анализа.',

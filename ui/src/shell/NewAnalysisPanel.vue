@@ -1,8 +1,9 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import PolicyEditor from '../PolicyEditor.vue'
 import type { Policy, PolicyError, SourceProfile } from '../types'
 import { SETUP_LABELS } from './labels'
+import { RULES_LABELS } from './labels.rules'
+import { summarizePolicy } from './rules'
 import { buildReadiness, msToSeconds, secondsToMs, type ReadinessLevel } from './setup'
 
 const props = defineProps<{
@@ -53,7 +54,7 @@ const emit = defineEmits<{
   'source-margin': [value: string]
   'source-max-idle-gap': [value: string]
   'policy-file': [file: File | null]
-  'update-policy': [policy: Policy]
+  'open-rules': []
   'ai-consent': [value: boolean]
   analyze: []
 }>()
@@ -173,17 +174,14 @@ function levelLabel(level: ReadinessLevel) {
             </ul>
           </div>
           <template v-if="policy">
-            <p class="field__hint">
-              {{ SETUP_LABELS.policyEditorNote }}
-            </p>
-            <div lang="en">
-              <PolicyEditor
-                :policy="policy"
-                :errors="policyErrors"
-                status=""
-                @update="emit('update-policy', $event)"
-              />
-            </div>
+            <p>{{ RULES_LABELS.summary(summarizePolicy(policy).id, summarizePolicy(policy).rules, summarizePolicy(policy).transactions) }}</p>
+            <button
+              type="button"
+              class="control button"
+              @click="emit('open-rules')"
+            >
+              {{ RULES_LABELS.openRules }}
+            </button>
           </template>
         </section>
 

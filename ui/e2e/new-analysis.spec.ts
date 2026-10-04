@@ -1,6 +1,7 @@
 import AxeBuilder from '@axe-core/playwright'
 import { expect, test, type Page } from '@playwright/test'
 import { SETUP_LABELS, SETUP_MESSAGES } from '../src/shell/labels'
+import { RULES_LABELS } from '../src/shell/labels.rules'
 
 const run = { run_id: `jmeter_jtl_csv-${'b'.repeat(64)}`, source_type: 'jmeter_jtl_csv', sha256: 'b'.repeat(64), size_bytes: 1, original_filename: 'setup.jtl' }
 const failedJob = { job_id: 'job-1', state: 'FAILED', processed_bytes: 1, total_bytes: 1, run_id: run.run_id, analysis_id: null, diagnostic: { code: 'TEST_DONE', message: 'finished by the test' } }
@@ -169,16 +170,20 @@ test('an invalid policy draft blocks the start and a rejected policy file does n
   await page.locator('#input-file').setInputFiles(load)
 
   await page.locator('#policy-file').setInputFiles(policyFile('reject-me'))
-  await expect(page.locator('.field__errors')).toContainText('/policy_id: policy id is not accepted')
+  await expect(page.locator('#run-setup .field__errors')).toContainText('/policy_id: policy id is not accepted')
   await expect(readiness(page, 'policy')).toHaveAttribute('data-level', 'warn')
   await expect(start(page)).toBeEnabled()
 
   await page.locator('#policy-file').setInputFiles(policyFile())
-  await expect(page.getByLabel('Policy ID')).toHaveValue('mock-policy')
-  await page.getByLabel('Policy ID').fill('')
+  await page.locator('#shell-tab-rules').click()
+  await expect(page.getByLabel(RULES_LABELS.policyId)).toHaveValue('mock-policy')
+  await page.getByLabel(RULES_LABELS.policyId).fill('')
+  await page.locator('#shell-tab-setup').click()
   await expect(readiness(page, 'policy')).toHaveAttribute('data-level', 'block')
   await expect(start(page)).toBeDisabled()
-  await page.getByLabel('Policy ID').fill('fixed')
+  await page.locator('#shell-tab-rules').click()
+  await page.getByLabel(RULES_LABELS.policyId).fill('fixed')
+  await page.locator('#shell-tab-setup').click()
   await expect(readiness(page, 'policy')).toHaveAttribute('data-level', 'ok')
   await expect(start(page)).toBeEnabled()
 })
@@ -370,7 +375,7 @@ for (const theme of ['light', 'dark'] as const) {
     await openSetup(page)
     await page.locator('#input-file').setInputFiles(load)
     await page.locator('#policy-file').setInputFiles(policyFile())
-    await expect(page.getByLabel('Policy ID')).toBeVisible()
+    await expect(page.getByRole('button', { name: RULES_LABELS.openRules })).toBeVisible()
     await page.locator('#source-profile').selectOption('prod-prometheus')
     await page.locator('#source-window-origin').selectOption('explicit')
 
@@ -385,7 +390,7 @@ for (const size of [{ width: 1280, height: 800 }, { width: 375, height: 800 }]) 
     await openSetup(page)
     await page.locator('#input-file').setInputFiles(load)
     await page.locator('#policy-file').setInputFiles(policyFile())
-    await expect(page.getByLabel('Policy ID')).toBeVisible()
+    await expect(page.getByRole('button', { name: RULES_LABELS.openRules })).toBeVisible()
     await page.locator('#source-profile').selectOption('prod-prometheus')
     await page.locator('#source-window-origin').selectOption('explicit')
 

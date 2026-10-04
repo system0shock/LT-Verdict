@@ -1070,7 +1070,10 @@ function focusPolicy() {
             v-show="shownIn('advice')"
             :selection="selectedReference"
             :auto-start="adviceAutoFor !== null && adviceAutoFor === selectedAnalysisId"
+            :result="result"
+            :linkable="shellNew"
             @auto-started="adviceAutoFor = null"
+            @navigate="jumpTo"
           />
 
           <GrafanaPanel

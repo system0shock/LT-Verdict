@@ -26,11 +26,12 @@ Advisory AI запускается только по явному запросу
 - **Куда.** На endpoint, который использует runner. Сегодня runner один, и его
   endpoint закреплён: ModelStudio (Alibaba, Singapore), модель
   `deepseek-v4-flash-0731`. Это внешний сервис, данные анализа за пределы
-  вашей сети уходят. Файл конфигурации моделей и смена endpoint описаны в
-  ADR 0023 как следующие срезы и пока не реализованы. Документация не утверждает,
-  что данные остаются внутри периметра: когда endpoint станет настраиваемым,
-  продукт не будет отличать внутренний от внешнего, а адрес будет задавать
-  развёртывание.
+  вашей сети уходят. Файл конфигурации моделей (раздел «Файл конфигурации
+  моделей» ниже) уже читается и проверяется, но смену endpoint и моделей
+  запуск пока не использует: это следующий срез ADR 0023. Документация не
+  утверждает, что данные остаются внутри периметра: когда endpoint станет
+  настраиваемым, продукт не будет отличать внутренний от внешнего, а адрес будет
+  задавать развёртывание.
 - **Необратимость.** Совет неизменяем: один совет на анализ, отправка evidence не
   отзывается.
 - **Явный запуск без ответа.** Если ИИ не настроен или занят, анализ и его
@@ -110,6 +111,102 @@ Credential path передаётся host launcher. Значение credential 
 relay container через Docker `--env-file`; оно не передаётся Qwen container,
 argv, stdout/stderr, advice или provenance. Не помещайте env-file внутрь
 repository, distribution или data directory.
+
+## Файл конфигурации моделей
+
+Список моделей, их подписи, модель по умолчанию и подпись назначения задаёт
+необязательный файл `ai-models.v1` (ADR
+[0023](../adr/0023-advisory-ai-consent-removal-and-model-config.md), Д3).
+Схема: `docs/contracts/advice/v1/ai-models.schema.json`, примеры:
+`docs/contracts/advice/v1/examples/ai-models/`. Файл не содержит секретов:
+credential остаётся в env-файле `LT_VERDICT_AI_CREDENTIAL_ENV_FILE`. Храните
+файл вне repository и data directory.
+
+```powershell
+$env:LT_VERDICT_AI_MODELS_FILE = 'C:\lt-verdict-config\ai-models.json'
+```
+
+```json
+{
+  "schema_version": "ai-models.v1",
+  "endpoint": {
+    "url": "https://models.internal.example/v1/chat/completions",
+    "label": "Внутренний шлюз моделей",
+    "allow_insecure_http": false
+  },
+  "default_model": "qwen3.8-max",
+  "models": [
+    { "id": "qwen3.8-max", "label": "Qwen 3.8 Max" },
+    { "id": "deepseek-v4-flash-0731", "label": "DeepSeek V4 Flash" }
+  ]
+}
+```
+
+| Поле | Правило |
+| --- | --- |
+| `schema_version` | обязательно, `ai-models.v1` |
+| `models` | обязательно, 1-32 элемента `{id, label}` |
+| `models[].id` | слаг `^[A-Za-z0-9][A-Za-z0-9._:/-]{0,127}$`, без `..` и `//`, уникален |
+| `models[].label`, `endpoint.label` | 1-80 символов, без управляющих и невидимых знаков форматирования |
+| `default_model` | обязательно, один из `id` |
+| `endpoint` | необязательно; без него действует встроенный endpoint ModelStudio и его подпись |
+| `endpoint.url` | адрес chat completions: `https` (`http` только при `allow_insecure_http: true`), непустой host, без userinfo, query и fragment, только печатный ASCII, не более 512 байт |
+| `endpoint.label` | необязательная подпись назначения для интерфейса; без неё подписи нет |
+| `endpoint.allow_insecure_http` | необязательно, по умолчанию `false`; при `true` credential уходит по сети открытым текстом, включайте только для внутренней сети |
+
+Закрытый формат: неизвестные ключи на любом уровне (в том числе `api_key` и
+`measured`) и повторяющиеся имена свойств отвергаются, размер файла не более
+65 536 байт, кодировка UTF-8. Признак `measured` оператор не задаёт: продукт
+вычисляет его сам и отдаёт `true` только для пары (слаг, endpoint), которая
+входила в эксперимент ADR 0021 (сейчас `deepseek-v4-flash-0731` на встроенном
+ModelStudio).
+
+Поведение:
+
+- Файл читается один раз при старте; после правки перезапустите LT Verdict.
+- Переменная не задана: действует встроенная конфигурация (ModelStudio, модель
+  `deepseek-v4-flash-0731`, подпись «Alibaba ModelStudio (Singapore)»), как до
+  появления файла. Переменная задана, но пуста: это ошибка, а не «нет файла».
+- Файл есть, но не читается или не проходит проверку: ИИ-разбор недоступен
+  (`UNAVAILABLE`, причина `MODEL_CONFIG_INVALID`), в `advisory_ai` приходит
+  `null`. Запуск LT Verdict и анализ не страдают. В stderr процесса пишется одна
+  строка `MODEL_CONFIG_INVALID LT_VERDICT_AI_MODELS_FILE <код> <указатель>`:
+  код ошибки (`FILE_NOT_READABLE`, `UNKNOWN_FIELD`, `INVALID_URL` и так далее) и
+  JSON-указатель на поле. Значения и имена ключей из файла в сообщение не
+  попадают.
+- **Ограничение до среза выбора модели (ADR 0023, CM4).** Запуск пока использует
+  встроенные endpoint и модель, поэтому файл с другим `endpoint.url` или с
+  слагом, которого нет во встроенном списке, отвергается с кодом
+  `NOT_YET_SUPPORTED`, чтобы подпись и список моделей не описывали назначение,
+  которого нет. Этот пример из ADR схема признаёт корректным, а загрузчик пока
+  отвергает. Допустимы файл без `endpoint` и файл с тем же адресом и слагом
+  `deepseek-v4-flash-0731` (например, с другими подписями). Ограничение
+  снимается в CM4.
+
+### Что отдаёт `GET /api/bootstrap`
+
+К прежним полям `csrf_token` и `max_upload_bytes` добавлено поле
+`advisory_ai`:
+
+```json
+{
+  "csrf_token": "…",
+  "max_upload_bytes": 4294967296,
+  "advisory_ai": {
+    "default_model_id": "deepseek-v4-flash-0731",
+    "endpoint_label": "Alibaba ModelStudio (Singapore)",
+    "models": [
+      { "id": "deepseek-v4-flash-0731", "label": "DeepSeek V4 Flash", "measured": true }
+    ]
+  }
+}
+```
+
+`advisory_ai` равно `null`, если конфигурация моделей недопустима или ИИ-сервис
+не подключён. Отсутствие credential или Docker поле не обнуляет: это ошибка
+запуска, а не конфигурации. `endpoint_label` равен `null`, если подпись не
+задана. **Адрес endpoint в ответ не входит.** Интерфейс пока этих данных не
+использует (селектор модели и информационная строка появятся в CM5).
 
 ## Изоляция и ограничения
 
@@ -210,6 +307,7 @@ model request. Повторный submit для той же пары `(run_id, a
 | `RUNNER_ARTIFACT_MISSING` | нет файлов runtime или пакета Qwen Code | администратору: `LT_VERDICT_AI_QWEN_ROOT` и состав поставки |
 | `RUNNER_ARTIFACT_MISMATCH` | пакет Qwen Code не совпадает с закреплённым | администратору: установить 0.21.1 |
 | `MODEL_ENDPOINT_UNAVAILABLE` | сервис модели недоступен | проверить доступ и повторить позже |
+| `MODEL_CONFIG_INVALID` | файл `LT_VERDICT_AI_MODELS_FILE` не читается или не проходит проверку | администратору: код и указатель в stderr процесса, раздел «Файл конфигурации моделей» |
 | `AI_BUSY` (ответ 409) | сервер занят заданием или это задание уже выполняется | дождаться завершения и запросить ещё раз |
 | `AI_UNAVAILABLE` (ответ 503) | ИИ-runner на сервере не настроен | администратору: настроить runtime по этому документу |
 

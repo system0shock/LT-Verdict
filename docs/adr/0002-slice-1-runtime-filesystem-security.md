@@ -346,3 +346,15 @@ fsync артефактов, манифест и побайтовое сравн�
 - Пока идёт запись staging, на диске временно лежит один дополнительный
   экземпляр входа на каждую параллельную загрузку (как и раньше, но теперь
   загрузки не сериализуются).
+
+## Дополнение 2026-10-05: `advisory_ai` в `GET /api/bootstrap`
+
+Статус: Accepted, 2026-10-05 (решение ADR
+[0023](0023-advisory-ai-consent-removal-and-model-config.md), Д3, п. 5; срез CM2).
+
+Закрытый ответ `GET /api/bootstrap` из раздела «Private loopback HTTP contract»
+(`{csrf_token,max_upload_bytes}`) получает аддитивное поле `advisory_ai`:
+`{default_model_id, endpoint_label|null, models:[{id,label,measured}]}` либо
+`null`. Адрес endpoint в ответ не входит. Существующие поля и их смысл не
+менялись. Подробности и правила: `docs/user/advisory-ai.md`, раздел «Файл
+конфигурации моделей».

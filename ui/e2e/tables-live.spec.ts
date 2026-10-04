@@ -27,7 +27,7 @@ test('new tables match the old interface on a real server', async ({ page }) => 
   const newThreshold = number(await rule.locator('td').nth(2).innerText())
   const newObserved = number(await rule.locator('td').nth(3).innerText())
 
-  await page.goto('/')
+  await page.goto('/?shell=old')
   await page.getByRole('button', { name: 'input.xml' }).click()
   await page.locator('section[aria-labelledby="analysis-list-title"] li button').first().click()
   await expect(page.locator('#policy-results').getByRole('region', { name: 'Policy results' })).toBeVisible()

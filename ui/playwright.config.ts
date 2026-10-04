@@ -11,5 +11,6 @@ export default defineConfig({
   },
   use: {
     baseURL: 'http://127.0.0.1:18473',
+    storageState: 'e2e/old-shell.storage.json',
   },
 })

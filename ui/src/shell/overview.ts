@@ -1,6 +1,6 @@
 import type { AnalysisResult, Bucket, MetricSummaryEvidence, ResourcePolicyCheckEvidence, ResourceSummaryEvidence } from '../types'
 import { OVERVIEW_LABELS, type ShellTabKey, type TrendDirection } from './labels'
-import { failedLinesOf, summarizeVerdict } from '../verdictSummary'
+import { diagnosticFailedLinesOf, failedLinesOf, summarizeVerdict } from '../verdictSummary'
 
 export type TrackKey = 'rps' | 'errors' | 'p95'
 
@@ -57,6 +57,7 @@ const openLabels: Record<string, string> = {
   'resource-results': OVERVIEW_LABELS.openResources,
   'capacity-results': OVERVIEW_LABELS.openCapacity,
   'trend-results': OVERVIEW_LABELS.openTrends,
+  'deep-title': OVERVIEW_LABELS.openDeep,
   'diagnostic-results': OVERVIEW_LABELS.openDiagnostics,
   'source-acquisition': OVERVIEW_LABELS.openSources,
   'policy-file': OVERVIEW_LABELS.openSetup,
@@ -133,6 +134,9 @@ export function attentionItems(result: AnalysisResult): AttentionItem[] {
       OVERVIEW_LABELS.resourceSeriesDetail(seriesIds.slice(0, 3), Math.max(0, seriesIds.length - 3)),
       { tab: 'tables', targetId: 'resource-results' },
     ))
+  }
+  for (const line of diagnosticFailedLinesOf(result)) {
+    items.push(item(`diagnostic:resource:${line.key}`, 'diagnostic', line.title, line.detail, { tab: 'deep', targetId: 'deep-title' }, true))
   }
   for (const evidence of result.evidence) {
     if (evidence.type === 'trend_check' && evidence.status === 'TREND_OBSERVED') {

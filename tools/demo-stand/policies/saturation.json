@@ -1,0 +1,8 @@
+{
+  "schema_version": "policy.v1",
+  "policy_id": "demo-saturation",
+  "rules": [
+    { "id": "overall-p95", "metric": "response_time_p95_ms", "operator": "lte", "threshold": 800, "scope": { "kind": "overall" } },
+    { "id": "overall-errors", "metric": "error_rate_ratio", "operator": "lte", "threshold": 0.01, "scope": { "kind": "overall" } }
+  ]
+}

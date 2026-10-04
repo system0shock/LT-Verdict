@@ -12,3 +12,5 @@ fixtures/slice1/**/*.jmx text eol=lf
 fixtures/slice1/gatling/text-*/simulation.log text eol=lf whitespace=-blank-at-eol
 fixtures/slice1/identity/analysis-identity.sha256 text eol=lf
 fixtures/slice1/gatling/binary-*/simulation.log -text
+tools/demo-stand/** text eol=lf
+tools/test_demo_stand.py text eol=lf

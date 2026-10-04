@@ -1,0 +1,73 @@
+{
+  "id": null,
+  "uid": "ltv-demo",
+  "title": "LT Verdict demo stand",
+  "timezone": "utc",
+  "schemaVersion": 41,
+  "editable": false,
+  "refresh": "",
+  "graphTooltip": 1,
+  "time": {"from": "2026-10-01T09:55:00.000Z", "to": "2026-10-01T10:25:00.000Z"},
+  "links": [
+    {"type": "link", "title": "Scenario 1: SLA fail", "url": "/d/ltv-demo/lt-verdict-demo-stand?from=1790841480000&to=1790842860000"},
+    {"type": "link", "title": "Scenario 2: capacity", "url": "/d/ltv-demo/lt-verdict-demo-stand?from=1790845080000&to=1790847360000"},
+    {"type": "link", "title": "Scenario 3: saturation", "url": "/d/ltv-demo/lt-verdict-demo-stand?from=1790848680000&to=1790850180000"}
+  ],
+  "panels": [
+    {
+      "id": 1, "type": "timeseries", "title": "Load: target and achieved, req/s", "gridPos": {"h": 8, "w": 12, "x": 0, "y": 0},
+      "datasource": {"type": "prometheus", "uid": "ltv-demo-prometheus"},
+      "targets": [
+        {"expr": "demo_target_requests_per_second", "legendFormat": "Target", "refId": "A", "datasource": {"type": "prometheus", "uid": "ltv-demo-prometheus"}},
+        {"expr": "demo_generator_requests_per_second", "legendFormat": "Achieved", "refId": "B", "datasource": {"type": "prometheus", "uid": "ltv-demo-prometheus"}}
+      ],
+      "fieldConfig": {"defaults": {"unit": "reqps"}, "overrides": []},
+      "options": {"legend": {"displayMode": "list", "placement": "bottom"}, "tooltip": {"mode": "multi"}}
+    },
+    {
+      "id": 2, "type": "timeseries", "title": "Response time p95, s", "gridPos": {"h": 8, "w": 12, "x": 12, "y": 0},
+      "datasource": {"type": "prometheus", "uid": "ltv-demo-prometheus"},
+      "targets": [{"expr": "demo_response_time_p95_seconds", "legendFormat": "p95", "refId": "A", "datasource": {"type": "prometheus", "uid": "ltv-demo-prometheus"}}],
+      "fieldConfig": {"defaults": {"unit": "s"}, "overrides": []},
+      "options": {"legend": {"displayMode": "list", "placement": "bottom"}, "tooltip": {"mode": "multi"}}
+    },
+    {
+      "id": 3, "type": "timeseries", "title": "Busy ratio: service CPU and database", "gridPos": {"h": 8, "w": 12, "x": 0, "y": 8},
+      "datasource": {"type": "prometheus", "uid": "ltv-demo-prometheus"},
+      "targets": [
+        {"expr": "demo_service_cpu_busy_ratio", "legendFormat": "Service CPU", "refId": "A", "datasource": {"type": "prometheus", "uid": "ltv-demo-prometheus"}},
+        {"expr": "demo_db_busy_ratio", "legendFormat": "Database", "refId": "B", "datasource": {"type": "prometheus", "uid": "ltv-demo-prometheus"}}
+      ],
+      "fieldConfig": {"defaults": {"unit": "percentunit", "min": 0, "max": 1.05, "thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}, {"color": "red", "value": 0.95}]}, "custom": {"thresholdsStyle": {"mode": "line"}}}, "overrides": []},
+      "options": {"legend": {"displayMode": "list", "placement": "bottom"}, "tooltip": {"mode": "multi"}}
+    },
+    {
+      "id": 4, "type": "timeseries", "title": "Queues: CPU, database, admission", "gridPos": {"h": 8, "w": 12, "x": 12, "y": 8},
+      "datasource": {"type": "prometheus", "uid": "ltv-demo-prometheus"},
+      "targets": [
+        {"expr": "demo_cpu_queue_requests", "legendFormat": "CPU", "refId": "A", "datasource": {"type": "prometheus", "uid": "ltv-demo-prometheus"}},
+        {"expr": "demo_db_queue_requests", "legendFormat": "Database", "refId": "B", "datasource": {"type": "prometheus", "uid": "ltv-demo-prometheus"}},
+        {"expr": "demo_admission_queue_requests", "legendFormat": "Admission", "refId": "C", "datasource": {"type": "prometheus", "uid": "ltv-demo-prometheus"}}
+      ],
+      "fieldConfig": {"defaults": {"unit": "short"}, "overrides": []},
+      "options": {"legend": {"displayMode": "list", "placement": "bottom"}, "tooltip": {"mode": "multi"}}
+    },
+    {
+      "id": 5, "type": "timeseries", "title": "External dependency: requests in flight", "gridPos": {"h": 8, "w": 12, "x": 0, "y": 16},
+      "datasource": {"type": "prometheus", "uid": "ltv-demo-prometheus"},
+      "targets": [{"expr": "demo_downstream_inflight_requests", "legendFormat": "Payments", "refId": "A", "datasource": {"type": "prometheus", "uid": "ltv-demo-prometheus"}}],
+      "fieldConfig": {"defaults": {"unit": "short"}, "overrides": []},
+      "options": {"legend": {"displayMode": "list", "placement": "bottom"}, "tooltip": {"mode": "multi"}}
+    },
+    {
+      "id": 6, "type": "timeseries", "title": "Load generator health: threads and queue", "gridPos": {"h": 8, "w": 12, "x": 12, "y": 16},
+      "datasource": {"type": "prometheus", "uid": "ltv-demo-prometheus"},
+      "targets": [
+        {"expr": "demo_generator_active_threads", "legendFormat": "Threads", "refId": "A", "datasource": {"type": "prometheus", "uid": "ltv-demo-prometheus"}},
+        {"expr": "demo_generator_queue_requests", "legendFormat": "Queue", "refId": "B", "datasource": {"type": "prometheus", "uid": "ltv-demo-prometheus"}}
+      ],
+      "fieldConfig": {"defaults": {"unit": "short"}, "overrides": []},
+      "options": {"legend": {"displayMode": "list", "placement": "bottom"}, "tooltip": {"mode": "multi"}}
+    }
+  ]
+}

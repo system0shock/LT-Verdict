@@ -219,18 +219,26 @@ function overallMetrics(result: AnalysisResult): MetricSummaryEvidence | undefin
   )
 }
 
+function violationsOf(violations: Violation[], check: ResourcePolicyCheckEvidence): Violation[] {
+  return violations.filter((item) => item.rule_id === check.rule_id && item.window_id === check.window_id)
+}
+
+export function diagnosticFailedLinesOf(result: AnalysisResult): Array<RuleLine & { source: 'resource' }> {
+  const violations = result.findings.filter(isViolation)
+  return result.evidence
+    .filter((item): item is ResourcePolicyCheckEvidence => item.type === 'resource_policy_check' && item.effect === 'diagnostic' && item.status === 'FAIL')
+    .map((check) => ({ ...resourceLine(check, violationsOf(violations, check)), source: 'resource' as const }))
+}
+
 export function failedLinesOf(result: AnalysisResult): FailedLine[] {
   const { business, resource } = checksOf(result)
   const metrics = new Map(result.evidence.filter((item): item is MetricSummaryEvidence => item.type === 'metric_summary').map((item) => [item.id, item]))
   const violations = result.findings.filter(isViolation)
-  const violationsOf = (check: ResourcePolicyCheckEvidence) =>
-    violations.filter((item) => item.rule_id === check.rule_id && item.window_id === check.window_id)
-
   return [
     ...business.filter((check) => check.status === 'FAIL').map((check) => ({ ...businessLine(check, metrics), source: 'business' as const })),
     ...resource
-      .filter((check) => check.status === 'FAIL' || (check.status === 'NO_VERDICT' && violationsOf(check).length > 0))
-      .map((check) => ({ ...resourceLine(check, violationsOf(check)), source: 'resource' as const })),
+      .filter((check) => check.status === 'FAIL' || (check.status === 'NO_VERDICT' && violationsOf(violations, check).length > 0))
+      .map((check) => ({ ...resourceLine(check, violationsOf(violations, check)), source: 'resource' as const })),
   ]
 }
 

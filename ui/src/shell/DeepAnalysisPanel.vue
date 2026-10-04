@@ -204,7 +204,10 @@ onUnmounted(() => { revision += 1; controller?.abort() })
       class="panel"
       aria-labelledby="deep-title"
     >
-      <h2 id="deep-title">
+      <h2
+        id="deep-title"
+        tabindex="-1"
+      >
         {{ DEEP_LABELS.title }}
       </h2>
       <p class="muted">

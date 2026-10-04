@@ -31,7 +31,7 @@ const props = defineProps<{
   policyStatus: string
   policyErrors: PolicyError[]
   busy: boolean
-  aiConsent: boolean
+  aiRequested: boolean
 }>()
 
 const emit = defineEmits<{
@@ -55,13 +55,13 @@ const emit = defineEmits<{
   'source-max-idle-gap': [value: string]
   'policy-file': [file: File | null]
   'open-rules': []
-  'ai-consent': [value: boolean]
+  'ai-requested': [value: boolean]
   analyze: []
 }>()
 
 const readiness = computed(() => buildReadiness({
   busy: props.busy,
-  aiConsent: props.aiConsent,
+  aiRequested: props.aiRequested,
   inputName: props.inputFile?.name ?? null,
   policyId: props.policy ? props.policy.policy_id : null,
   policyHasErrors: props.policyErrors.length > 0,
@@ -536,16 +536,17 @@ function levelLabel(level: ReadinessLevel) {
           </h3>
           <p>{{ SETUP_LABELS.aiText }}</p>
           <div class="field">
-            <label for="ai-consent">
+            <label for="ai-requested">
               <input
-                id="ai-consent"
-                data-testid="ai-consent"
+                id="ai-requested"
+                data-testid="ai-requested"
                 type="checkbox"
-                :checked="aiConsent"
+                role="switch"
+                :checked="aiRequested"
                 :disabled="busy"
-                @change="emit('ai-consent', ($event.target as HTMLInputElement).checked)"
+                @change="emit('ai-requested', ($event.target as HTMLInputElement).checked)"
               >
-              {{ SETUP_LABELS.aiConsentLabel }}
+              {{ SETUP_LABELS.aiRequestedLabel }}
             </label>
           </div>
         </section>

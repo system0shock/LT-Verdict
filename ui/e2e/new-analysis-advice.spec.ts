@@ -2,7 +2,7 @@ import { expect, test, type Page } from '@playwright/test'
 import { fileURLToPath } from 'node:url'
 import { SETUP_LABELS } from '../src/shell/labels'
 
-// Согласие на ИИ-разбор при запуске: анализ идёт на настоящем сервере, запросы совета подменены.
+// Запрос ИИ-разбора при запуске: анализ идёт на настоящем сервере, запросы совета подменены.
 const fixture = (path: string) => fileURLToPath(new URL(`../../fixtures/${path}`, import.meta.url))
 const input = fixture('slice1/jmeter/xml-5.6.3/input.xml')
 const policy = fixture('slice1/policies/fail.json')
@@ -44,23 +44,23 @@ async function adviceApi(page: Page): Promise<AdviceCalls> {
   return calls
 }
 
-test('a consent given at the start requests the advice once after the analysis, and is not kept for the next run', async ({ page }) => {
+test('a request made at the start asks for the advice once after the analysis, and is not kept for the next run', async ({ page }) => {
   const calls = await adviceApi(page)
   await page.goto('/?shell=new')
   await page.locator('#input-file').setInputFiles(input)
-  await page.locator('#ai-consent').check()
+  await page.locator('#ai-requested').check()
   await expect(page.getByTestId('readiness-will')).toContainText(SETUP_LABELS.willAdvice)
   await page.getByTestId('start-analysis').click()
   await expect(page.getByTestId('overview-panel')).toBeVisible()
 
   await expect.poll(() => calls.posts.length).toBe(1)
-  expect(calls.posts[0]!.body).toEqual({ confirm_external_transfer: true })
+  expect(calls.posts[0]!.body).toEqual({})
   await page.locator('#shell-tab-advice').click()
   await expect(page.getByText('Сводка из подменённого совета')).toBeVisible({ timeout: 15000 })
   expect(calls.posts).toHaveLength(1)
 
   await page.locator('#shell-tab-setup').click()
-  await expect(page.locator('#ai-consent')).not.toBeChecked()
+  await expect(page.locator('#ai-requested')).not.toBeChecked()
   const secondLookup = page.waitForResponse((response) => response.request().method() === 'GET' && /\/analyses\/[^/]+\/advice$/.test(response.url()))
   await page.locator('#input-file').setInputFiles(input)
   await page.locator('#policy-file').setInputFiles(policy)
@@ -68,15 +68,14 @@ test('a consent given at the start requests the advice once after the analysis, 
   await page.getByTestId('start-analysis').click()
   await expect(page.getByTestId('overview-panel')).toBeVisible()
   await page.locator('#shell-tab-advice').click()
-  await expect(page.getByRole('button', { name: 'Получить рекомендации', exact: true })).toBeDisabled()
-  await expect(page.getByRole('checkbox', { name: /Разрешаю отправить evidence/ })).not.toBeChecked()
+  await expect(page.getByRole('button', { name: 'Получить рекомендации', exact: true })).toBeEnabled()
   await secondLookup
-  // Даём панели обработать ответ: если бы согласие осталось, запрос ушёл бы сразу после него.
+  // Даём панели обработать ответ: если бы запрос ИИ-разбора остался включённым, он ушёл бы сразу после него.
   await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))))
   expect(calls.posts).toHaveLength(1)
 })
 
-test('without the consent nothing is sent and the advice tab keeps its own consent flow', async ({ page }) => {
+test('without the toggle nothing is sent and the advice tab starts the request by its button', async ({ page }) => {
   const calls = await adviceApi(page)
   await page.goto('/?shell=new')
   await page.locator('#input-file').setInputFiles(input)
@@ -85,12 +84,11 @@ test('without the consent nothing is sent and the advice tab keeps its own conse
   await page.locator('#shell-tab-advice').click()
 
   const request = page.getByRole('button', { name: 'Получить рекомендации', exact: true })
-  await expect(request).toBeDisabled()
+  await expect(request).toBeEnabled()
   expect(calls.posts).toHaveLength(0)
-  await page.getByRole('checkbox', { name: /Разрешаю отправить evidence/ }).check()
   await request.click()
   await expect.poll(() => calls.posts.length).toBe(1)
-  expect(calls.posts[0]!.body).toEqual({ confirm_external_transfer: true })
+  expect(calls.posts[0]!.body).toEqual({})
 })
 
 test('a refusal of the automatic request is shown on the advice tab', async ({ page }) => {
@@ -103,7 +101,7 @@ test('a refusal of the automatic request is shown on the advice tab', async ({ p
   })
   await page.goto('/?shell=new')
   await page.locator('#input-file').setInputFiles(input)
-  await page.locator('#ai-consent').check()
+  await page.locator('#ai-requested').check()
   await page.getByTestId('start-analysis').click()
   await expect(page.getByTestId('overview-panel')).toBeVisible()
   await page.locator('#shell-tab-advice').click()

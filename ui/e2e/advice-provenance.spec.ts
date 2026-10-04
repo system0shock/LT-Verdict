@@ -131,23 +131,25 @@ test('the old interface shows the same provenance because the panel is shared', 
   await expect(origin.locator('dd').filter({ hasText: ADVICE_LABELS.requestsRetry })).toBeVisible()
 })
 
-test('before the request the panel names no model and the consent text is unchanged', async ({ page }) => {
+test('before the request the panel names no model and asks no consent', async ({ page }) => {
   const { panel } = await openAdvice(page, { advice: null })
   await expect(panel).toContainText(ADVICE_LABELS.intro)
   await expect(panel).not.toContainText('DeepSeek')
   await expect(panel.getByTestId('advice-provenance')).toHaveCount(0)
-  await expect(panel.getByRole('checkbox', { name: 'Разрешаю отправить evidence этого анализа и системный промпт в Alibaba ModelStudio (Singapore).' })).toBeVisible()
+  await expect(panel.getByRole('checkbox')).toHaveCount(0)
+  for (const word of ['Разрешаю', 'ModelStudio', 'Singapore']) await expect(panel).not.toContainText(word)
+  await expect(panel.getByRole('button', { name: 'Получить рекомендации' })).toBeEnabled()
   await expect(panel.getByRole('heading', { name: 'Рекомендации AI' })).toBeVisible()
 })
 
-test('a failed job shows the Russian reason, the raw code and a hint, without hiding the consent', async ({ page }) => {
+test('a failed job shows the Russian reason, the raw code and a hint, and the request stays available', async ({ page }) => {
   const { panel } = await openAdvice(page, { advice: null, job: failedJob('TIMEOUT') })
   const status = panel.getByRole('status')
   await expect(status).toContainText(ADVICE_LABELS.states.FAILED)
   await expect(status).toContainText(ADVICE_LABELS.failure.TIMEOUT!)
   await expect(status).toContainText('TIMEOUT')
   await expect(status).toContainText(ADVICE_LABELS.failureHint.TIMEOUT!)
-  await expect(panel.getByRole('checkbox')).toBeEnabled()
+  await expect(panel.getByRole('button', { name: 'Получить рекомендации' })).toBeEnabled()
 })
 
 test('UNAVAILABLE names the missing prerequisite', async ({ page }) => {
@@ -165,31 +167,28 @@ test('an unknown failure code is shown with its code and does not break the pane
   await expect(panel.getByRole('status')).toContainText('BRAND_NEW_CODE')
 })
 
-test('without consent no request is sent; with consent exactly one', async ({ page }) => {
+test('no request is sent until the button is clicked, then exactly one without a consent field', async ({ page }) => {
   const { calls, panel } = await openAdvice(page, { advice: null })
   const start = panel.getByRole('button', { name: 'Получить рекомендации' })
-  await expect(start).toBeDisabled()
+  await expect(start).toBeEnabled()
   expect(calls.posts).toBe(0)
-  await panel.getByRole('checkbox').check()
   await start.click()
   await expect.poll(() => calls.posts).toBe(1)
-  expect(calls.postBodies[0]).toEqual({ confirm_external_transfer: true })
+  expect(calls.postBodies[0]).toEqual({})
 })
 
 test('AI_BUSY responses are readable, keep the server message and keep the page usable', async ({ page }) => {
   const { panel } = await openAdvice(page, { advice: null, postStatus: 409, postError: { code: 'AI_BUSY', message: 'An AI task is already running' } })
-  await panel.getByRole('checkbox').check()
   await panel.getByRole('button', { name: 'Получить рекомендации' }).click()
   const alert = panel.getByRole('alert')
   await expect(alert).toContainText(ADVICE_LABELS.apiBusy)
   await expect(alert).toContainText('AI_BUSY')
   await expect(alert.locator('[lang="en"]')).toHaveText('An AI task is already running')
-  await expect(panel.getByRole('checkbox')).toBeEnabled()
+  await expect(panel.getByRole('button', { name: 'Получить рекомендации' })).toBeEnabled()
 })
 
 test('AI_UNAVAILABLE reads as words and other API errors keep the raw message', async ({ page }) => {
   const { panel } = await openAdvice(page, { advice: null, postStatus: 503, postError: { code: 'AI_UNAVAILABLE', message: 'AI runner is not configured' } })
-  await panel.getByRole('checkbox').check()
   await panel.getByRole('button', { name: 'Получить рекомендации' }).click()
   await expect(panel.getByRole('alert')).toContainText(ADVICE_LABELS.apiUnavailable)
   await expect(panel.getByRole('alert')).toContainText('AI_UNAVAILABLE')
@@ -197,7 +196,6 @@ test('AI_UNAVAILABLE reads as words and other API errors keep the raw message', 
 
 test('other API errors keep the raw server message', async ({ page }) => {
   const { panel } = await openAdvice(page, { advice: null, postStatus: 500, postError: { code: 'SOMETHING_ELSE', message: 'Something else failed' } })
-  await panel.getByRole('checkbox').check()
   await panel.getByRole('button', { name: 'Получить рекомендации' }).click()
   await expect(panel.getByRole('alert')).toHaveText('Something else failed')
   await expect(panel.getByRole('alert').locator('[lang="en"]')).toHaveText('Something else failed')

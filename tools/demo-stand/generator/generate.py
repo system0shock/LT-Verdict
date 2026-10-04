@@ -26,6 +26,9 @@ SCENARIOS = {
     "saturation": (1790848800000, 4, 10000, 1, 12000,
                    [("warm", 40, 300), ("saturated", 84, 480), ("recovery", 40, 300)]),
 }
+OPT_IN_SCENARIOS = {
+    "soak-4h": (1790856000000, 1, 10000, 8, 2000, [("steady", 60, 14400)]),
+}
 METRICS = (
     ("system-cpu-work", "demo_service_cpu_busy_ratio", 'service="orders-api"'),
     ("system-db-work", "demo_db_busy_ratio", 'db="orders-db"'),
@@ -78,10 +81,19 @@ def build_scenarios():
     return SCENARIOS
 
 
+def scenario_names(selection):
+    if selection == "all":
+        return list(SCENARIOS)
+    if selection == "all-with-soak":
+        return list(SCENARIOS) + list(OPT_IN_SCENARIOS)
+    return [selection]
+
+
 def parameters_for(name, stage_scale):
-    if name not in SCENARIOS or stage_scale <= 0:
+    scenarios = {**SCENARIOS, **OPT_IN_SCENARIOS}
+    if name not in scenarios or stage_scale <= 0:
         raise ValueError("invalid scenario or stage scale")
-    epoch, cpu_workers, cpu_demand, db_workers, db_demand, stages = SCENARIOS[name]
+    epoch, cpu_workers, cpu_demand, db_workers, db_demand, stages = scenarios[name]
     scaled = [(identifier, rate, max(STEP_US, round(seconds * 1_000_000 * stage_scale / STEP_US) * STEP_US))
               for identifier, rate, seconds in stages]
     parameters = synthetic_service.scenario_parameters("NT01")
@@ -99,6 +111,12 @@ def parameters_for(name, stage_scale):
     if name == "sla-fail":
         parameters["downstream_changes"] = [
             {"from_us": 420_000_000, "to_us": 600_000_000, "add_us": 400_000}]
+    if name == "soak-4h":
+        test_us = sum(duration for _, _, duration in scaled)
+        parameters["cpu_demand_multiplier_schedule"] = [
+            {"from_us": 0 if k == 0 else IDLE_US + test_us * k // 24,
+             "numerator": 100 + round(66 * k / 23), "denominator": 100}
+            for k in range(24)]
     return parameters, scaled
 
 
@@ -239,9 +257,9 @@ def generate(names, out_dir, stage_scale=1.0):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--out", required=True, type=Path)
-    parser.add_argument("--scenario", choices=(*SCENARIOS, "all"), default="all")
+    parser.add_argument("--scenario", choices=(*SCENARIOS, *OPT_IN_SCENARIOS, "all", "all-with-soak"), default="all")
     args = parser.parse_args()
-    generate(list(SCENARIOS) if args.scenario == "all" else [args.scenario], args.out)
+    generate(scenario_names(args.scenario), args.out)
 
 
 if __name__ == "__main__":

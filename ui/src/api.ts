@@ -286,7 +286,7 @@ export function getAdvice(reference: AnalysisReference): Promise<{ advice: Advic
 export function startAdvice(reference: AnalysisReference): Promise<AdviceJob> {
   return request(`/api/runs/${encodeURIComponent(reference.run_id)}/analyses/${encodeURIComponent(reference.analysis_id)}/advice`, {
     method: 'POST', headers: mutationHeaders({ 'Content-Type': 'application/json' }),
-    body: JSON.stringify({ confirm_external_transfer: true }),
+    body: JSON.stringify({}),
   })
 }
 

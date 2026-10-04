@@ -9,7 +9,6 @@ const props = defineProps<{ selection: AnalysisReference; autoStart?: boolean }>
 const emit = defineEmits<{ 'auto-started': [] }>()
 const advice = ref<AdviceDocument | null>(null)
 const job = ref<AdviceJob | null>(null)
-const consent = ref(false)
 const sending = ref(false)
 const error = ref('')
 const errorCode = ref('')
@@ -74,15 +73,13 @@ watch(() => `${props.selection.run_id}/${props.selection.analysis_id}`, async ()
   stopPolling()
   advice.value = null
   job.value = null
-  consent.value = false
   sending.value = false
   error.value = ''
   errorCode.value = ''
   try {
     await loadAdvice(expected)
-    // Согласие дано при запуске анализа (новый экран): запрашиваем совет тем же вызовом, что и кнопка.
+    // ИИ-разбор запрошен при запуске анализа (новый экран): запрашиваем совет тем же вызовом, что и кнопка.
     if (expected === revision && props.autoStart && !advice.value && !job.value) {
-      consent.value = true
       emit('auto-started')
       await start()
     }
@@ -92,7 +89,7 @@ watch(() => `${props.selection.run_id}/${props.selection.analysis_id}`, async ()
 }, { immediate: true })
 
 async function start() {
-  if (!consent.value || busy.value) return
+  if (busy.value) return
   const expected = revision
   sending.value = true
   error.value = ''
@@ -135,18 +132,10 @@ onUnmounted(() => { revision++; stopPolling() })
       {{ ADVICE_LABELS.intro }}
     </p>
     <template v-if="!advice">
-      <label>
-        <input
-          v-model="consent"
-          type="checkbox"
-          :disabled="busy"
-        >
-        Разрешаю отправить evidence этого анализа и системный промпт в Alibaba ModelStudio (Singapore).
-      </label>
       <div class="bucket-controls">
         <button
           type="button"
-          :disabled="!consent || busy"
+          :disabled="busy"
           @click="start"
         >
           Получить рекомендации

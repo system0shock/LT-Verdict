@@ -115,6 +115,83 @@ class ResourceSeriesApiTest {
         }
 
     @Test
+    fun `invalid stored snapshot answers 500 without poisoning the cache`() =
+        withServer { store, api, runId ->
+            val corrupt = publish(store, runId, "{}", "corrupt")
+            val route = base(runId, corrupt)
+            listOf(route, "$route/values?series_id=cpu").forEach { path ->
+                val response = api.get(path)
+                assertEquals(500, response.statusCode(), path)
+                assertEquals(
+                    "CORRUPT_RESOURCE_SNAPSHOT",
+                    response
+                        .json()
+                        .jsonObject
+                        .getValue("error")
+                        .jsonObject
+                        .getValue("code")
+                        .jsonPrimitive.content,
+                )
+            }
+            val valid = publish(store, runId, snapshot(listOf("cpu")), "valid-after-corrupt")
+            assertEquals(200, api.get(base(runId, valid)).statusCode())
+        }
+
+    @Test
+    fun `catalog validates parameters and reports declared windows`() =
+        withServer { store, api, runId ->
+            val windows = """[{"id":"steady","from_epoch_ms":0,"to_epoch_ms":2000}]"""
+            val id = publish(store, runId, snapshot(listOf("a", "b", "c"), windows), "catalog")
+            val route = base(runId, id)
+            listOf("?limit=0", "?limit=257", "?after=%01", "?limit=2&limit=2", "?unknown=1")
+                .forEach { assertEquals(400, api.get(route + it).statusCode(), it) }
+            assertEquals(200, api.get("$route?limit=256").statusCode())
+
+            val first = api.get("$route?limit=2")
+            assertEquals(200, first.statusCode())
+            val firstBody = first.json().jsonObject
+            assertEquals(
+                listOf("a", "b"),
+                firstBody.getValue("series").jsonArray.map {
+                    it.jsonObject
+                        .getValue("id")
+                        .jsonPrimitive.content
+                },
+            )
+            assertEquals("b", firstBody.getValue("next_after").jsonPrimitive.content)
+            assertJsonEqual(Json.parseToJsonElement(windows), firstBody.getValue("windows"))
+
+            val second = api.get("$route?after=b&limit=2")
+            assertEquals(200, second.statusCode())
+            val secondBody = second.json().jsonObject
+            assertEquals(
+                listOf("c"),
+                secondBody.getValue("series").jsonArray.map {
+                    it.jsonObject
+                        .getValue("id")
+                        .jsonPrimitive.content
+                },
+            )
+            assertEquals(JsonNull, secondBody.getValue("next_after"))
+
+            val missingCursor = api.get("$route?after=bb")
+            assertEquals(200, missingCursor.statusCode())
+            assertEquals(
+                listOf("c"),
+                missingCursor
+                    .json()
+                    .jsonObject
+                    .getValue("series")
+                    .jsonArray
+                    .map {
+                        it.jsonObject
+                            .getValue("id")
+                            .jsonPrimitive.content
+                    },
+            )
+        }
+
+    @Test
     fun `values answer 400 for off-grid boundaries and 413 for series times limit above the cap`() =
         withServer { store, api, runId ->
             val id = publish(store, runId, snapshot((0..31).map { "s$it" }), "many")
@@ -279,7 +356,10 @@ class ResourceSeriesApiTest {
             "hash",
         )
 
-    private fun snapshot(ids: List<String>): String {
+    private fun snapshot(
+        ids: List<String>,
+        windows: String = "[]",
+    ): String {
         val series =
             ids.sorted().joinToString(",") { id ->
                 """{"id":${JsonPrimitive(
@@ -288,7 +368,7 @@ class ResourceSeriesApiTest {
             }
         return """{"schema_version":"resource-snapshot.v1","load_input_sha256":"${"0".repeat(
             64,
-        )}","start_epoch_ms":0,"step_ms":1000,"point_count":2,"series":[$series]}"""
+        )}","start_epoch_ms":0,"step_ms":1000,"point_count":2,"series":[$series],"windows":$windows}"""
     }
 
     private fun publish(
@@ -372,6 +452,7 @@ class ResourceSeriesApiTest {
                         actual.content,
                     )
                 } else {
+                    assertTrue(!actual.isString)
                     assertEquals(expected.content.toDouble(), actual.content.toDouble())
                 }
             }

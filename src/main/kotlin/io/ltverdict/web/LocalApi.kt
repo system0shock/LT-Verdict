@@ -1926,5 +1926,6 @@ private fun validSeriesId(id: String): Boolean =
 private fun decodeResourceSeriesSnapshot(path: Path): DecodedSnapshot =
     when (val validation = Files.newInputStream(path).use { validateResourceSnapshot(it) }) {
         is ResourceValidation.Valid -> DecodedSnapshot(validation.snapshot, validation.semanticSha256)
-        is ResourceValidation.Invalid -> throw IllegalStateException("Stored resource snapshot is invalid: ${validation.errors}")
+        is ResourceValidation.Invalid ->
+            throw ApiFailure(HttpStatusCode.InternalServerError, "CORRUPT_RESOURCE_SNAPSHOT", "Stored resource snapshot is invalid")
     }

@@ -292,6 +292,7 @@ test('grounds name the evidence in words and open the table row or the summary c
   await page.locator('#shell-tab-advice').click()
   await grounds.nth(2).getByRole('button', { name: ADVICE_LABELS.evidence.open }).click()
   await expect(page.locator('#shell-tab-tables')).toHaveAttribute('aria-selected', 'true')
+  await expect(page.locator('#summary-metrics')).toBeFocused()
   await expect(page.locator('#summary-metrics')).toBeInViewport()
 })
 

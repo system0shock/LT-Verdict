@@ -13,8 +13,10 @@ import NewAnalysisPanel from './shell/NewAnalysisPanel.vue'
 import RulesPanel from './shell/RulesPanel.vue'
 import OverviewPanel from './shell/OverviewPanel.vue'
 import DeepAnalysisPanel from './shell/DeepAnalysisPanel.vue'
+import CapacityTable from './shell/CapacityTable.vue'
 import RuleChecksTable from './shell/RuleChecksTable.vue'
 import TransactionsTable from './shell/TransactionsTable.vue'
+import TrendTable from './shell/TrendTable.vue'
 import ShellPanel from './shell/ShellPanel.vue'
 import ShellTabs from './shell/ShellTabs.vue'
 import { JOB_LABELS, SETUP_MESSAGES, SHELL_DEFAULT_TAB, SHELL_LABELS, UPLOAD_LABELS, type ShellTabKey } from './shell/labels'
@@ -1072,8 +1074,10 @@ function focusPolicy() {
           />
 
           <template v-if="shellNew && result && shownIn('tables')">
+            <CapacityTable :result="result" />
             <RuleChecksTable :result="result" />
             <TransactionsTable :result="result" />
+            <TrendTable :result="result" />
           </template>
           <AnalysisView
             v-if="result && shownIn('tables')"

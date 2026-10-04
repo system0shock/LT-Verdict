@@ -30,6 +30,7 @@ PromQL `tools/platform_profile_templates.py`. Свёртка pod → серви�
 | `kube_pod_info` | `namespace`, `pod` | kube-state-metrics | живость для `restarts` |
 | `container_cpu_cfs_throttled_periods_total`, `container_cpu_cfs_periods_total` | `namespace`, `pod`, `container` | cAdvisor | `cpu_throttling` |
 | `kube_deployment_spec_replicas`, `kube_deployment_status_replicas_available` | `namespace`, `deployment` | kube-state-metrics | `unavailable_replicas` |
+| `jvm_memory_used_bytes`, `jvm_gc_pause_seconds_max`, `jvm_gc_pause_seconds_sum`, `jvm_threads_live_threads`, `process_cpu_usage`, `hikaricp_connections_active`, `hikaricp_connections_max` | `namespace`, `pod` (и `area`, `id`, `pool` по смыслу) | Micrometer с `ServiceMonitor` | сигналы JVM |
 
 Имя сервиса: значение метки `workload` равно имени Deployment и равно `entity`
 ряда профиля (и, при использовании платформенных правил политики, имени сервиса
@@ -52,6 +53,42 @@ PromQL `tools/platform_profile_templates.py`. Свёртка pod → серви�
 `entity` = имя сервиса и `labels: {namespace}`. Выражение заканчивается
 агрегатом `by (namespace)`, поэтому ответ источника - ровно один ряд (иначе
 ядро отклоняет его кодом `AMBIGUOUS_SERIES`).
+
+## Сигналы JVM
+
+Метрики Micrometer (`ServiceMonitor` добавляет метки `namespace` и `pod`):
+`jvm_memory_used_bytes` (`area`, `id`), `jvm_gc_pause_seconds_max`,
+`jvm_gc_pause_seconds_sum`, `jvm_threads_live_threads`, `process_cpu_usage`,
+`hikaricp_connections_active`, `hikaricp_connections_max` (`pool`). Свёртка в
+сервис - худший под: интервальная агрегация каждого пода, затем максимум по
+подам; среднее и разброс по подам относятся к pod-view, отдельных имён не
+вводится. Имена сигналов совпадают с пакетом `jvm`.
+
+| Ключ в конфигурации | `metric` | `unit` | `aggregation` | Что считается | Вариант с пиком |
+| --- | --- | --- | --- | --- | --- |
+| `jvm_heap_used` | `jvm_heap_used` | `bytes` | `interval_mean` | куча (`area="heap"`), сумма по пулам пода | да, `interval_max` |
+| `jvm_old_gen_used` | `jvm_old_gen_used` | `bytes` | `interval_mean` | пулы старого поколения (`Old Gen`, `Tenured Gen`) | да, `interval_max` |
+| `jvm_non_heap_used` | `jvm_non_heap_used` | `bytes` | `interval_mean` | вне кучи (`area="nonheap"`) | да, `interval_max` |
+| `jvm_thread_count` | `jvm_thread_count` | `count` | `interval_mean` | живые потоки | нет |
+| `jvm_process_cpu` | `jvm_process_cpu` | `ratio` | `interval_mean` | `process_cpu_usage` | нет |
+| `jvm_gc_pause` | `jvm_gc_pause` | `s` | `interval_max` | максимум значений gauge `jvm_gc_pause_seconds_max` за интервал | только пиковый режим |
+| `jvm_gc_time` | `jvm_gc_time` | `ratio` | `interval_rate` | `rate` суммарного времени пауз, худший под | нет |
+| `jvm_pool_saturation` | `jvm_pool_saturation` | `ratio` | `interval_mean` | `active / max` по каждому пулу, худший пул худшего пода (пул без `max` даёт пропуск) | да, `interval_max` |
+
+`jvm_gc_pause` без `peak_aggregation` генератор не выпускает (отказ
+`needs interval_max`): выдать максимум под меткой среднего нельзя. У сигналов
+JVM (кроме пулов соединений) нет защиты полноты: потеря ряда у одного пода даёт
+максимум по остальным подам, а не пропуск (защита есть только у отношений к
+limit и пулов соединений). Суммы по `id` пулов памяти и по сериям GC
+складываются по поду: потеря одной серии даёт заниженную сумму, а несколько
+серий скрейпа одного пода (например, разные `job` или `instance`) удваивают
+значение; ограничивайте источник одним скрейпом приложения, полноту суммы
+профиль не проверяет. `jvm_gc_pause_seconds_max` в Micrometer - затухающий
+gauge: максимум за интервал - это максимум опрошенных значений gauge, а не
+обязательно самая длинная пауза интервала (пауза может перенестись в соседний
+интервал или пройти между опросами). `jvm_gc_time` на
+`rate(...[$__interval])` подчиняется тому же правилу шага, что события
+OpenShift (шаг не меньше удвоенного интервала опроса).
 
 ## Правила шаблонов
 
@@ -181,7 +218,11 @@ python -m unittest discover -s tools -p "test_platform_promql.py" -v
   плечо; лимиты `max_requests_per_run` и скорость запросов профиля достаточны;
 - запись владельца пода присутствует для каждого живого пода: потеря записи у
   одного живого пода не обнаруживается (граница гарантии ADR 0018, раздел 3);
-- виды workload: только Deployment (`unavailable_replicas`).
+- виды workload: только Deployment (`unavailable_replicas`);
+- метрики Micrometer (`jvm_memory_used_bytes`, `jvm_gc_pause_seconds_max`,
+  `hikaricp_*`) с метками `namespace` и `pod`, а не JMX exporter с другими
+  именами; идентификаторы пулов старого поколения (`G1 Old Gen`, `PS Old Gen`,
+  `Tenured Gen`; у ZGC и Shenandoah другие `id`).
 
 Результат `promtool` доказывает семантику выражения на синтетике, а не
 соответствие меткам вашего стенда: первые боевые прогоны, скорее всего,

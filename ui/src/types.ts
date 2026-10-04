@@ -269,6 +269,32 @@ export interface CorrelationPairEvidence {
   reasons: string[]
 }
 
+export interface CorrelationHeadlineSelectionEvidence {
+  id: string
+  type: 'correlation_headline_selection'
+  pair_id: string
+  window_id: string
+  method: string
+  rng: string
+  status: 'SELECTED' | 'NOT_SELECTED' | 'UNAVAILABLE'
+  family_hypotheses: number
+  bootstrap_replicates: number
+  block_lengths_cells: number[]
+  alpha: string
+  p_value_b10: string | null
+  p_value_b20: string | null
+  max_p_value: string | null
+  holm_adjusted_p_value: string | null
+  selected: boolean
+  reasons: string[]
+  // Поля методов v2 и срезов K1, K2 (ADR 0022): у результатов прежних версий их нет.
+  representation?: 'levels' | 'first_difference' | string
+  stage_count?: number
+  family_count?: number
+  source_cells?: number
+  analysed_points?: number
+}
+
 export interface AnomalyCheckEvidence {
   id: string
   type: 'anomaly_check'
@@ -456,7 +482,7 @@ export interface ResourceTrendFinding {
   evidence_id: string
 }
 
-export type AnalysisEvidence = MetricSummaryEvidence | PolicyCheckEvidence | DiagnosticEvidence | ResourceSummaryEvidence | WindowPolicySummaryEvidence | ResourcePolicyCheckEvidence | ResourceBindingEvidence | DiagnosticSummaryEvidence | CorrelationPairEvidence | AnomalyCheckEvidence | WindowMetricSummaryEvidence | SourceSummaryEvidence | OpenSearchEvidence | PostgresContextEvidence | TrendCheckEvidence | TrendSummaryEvidence
+export type AnalysisEvidence = MetricSummaryEvidence | PolicyCheckEvidence | DiagnosticEvidence | ResourceSummaryEvidence | WindowPolicySummaryEvidence | ResourcePolicyCheckEvidence | ResourceBindingEvidence | DiagnosticSummaryEvidence | CorrelationPairEvidence | CorrelationHeadlineSelectionEvidence | AnomalyCheckEvidence | WindowMetricSummaryEvidence | SourceSummaryEvidence | OpenSearchEvidence | PostgresContextEvidence | TrendCheckEvidence | TrendSummaryEvidence
 
 export interface CapacityStage {
   id: string

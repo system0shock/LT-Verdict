@@ -27,6 +27,8 @@ import java.nio.ByteBuffer
 import java.nio.charset.CharacterCodingException
 import java.nio.charset.CodingErrorAction
 import java.nio.charset.StandardCharsets
+import java.nio.file.InvalidPathException
+import java.nio.file.Path
 
 internal enum class SourceKind(
     val wireName: String,
@@ -84,6 +86,12 @@ internal data class SourceQuery(
     val nonNegativeEvents: Boolean = false,
 )
 
+internal data class SourceTls(
+    val caFile: Path?,
+    val clientKeystoreFile: Path?,
+    val clientKeystorePasswordEnv: String?,
+)
+
 internal data class SourceProfile(
     val id: String,
     val sourceKind: SourceKind,
@@ -101,6 +109,7 @@ internal data class SourceProfile(
     // Only source-connections.v3: duration rules store minConsecutiveCells = 1 in rules as a stub.
     // Use rulesAt(stepMillis) to obtain the actual cell count for a snapshot.
     val ruleSpansMillis: Map<String, Long> = emptyMap(),
+    val tls: SourceTls? = null,
 )
 
 internal fun spanToCells(
@@ -365,6 +374,7 @@ private fun parseProfile(
                     "database",
                     "opensearch",
                     "auth",
+                    "tls",
                     "allow_insecure_http",
                     "governor",
                     "queries",
@@ -378,6 +388,7 @@ private fun parseProfile(
     val sourceKind = SourceKind.entries.find { it.wireName == value.sourceString("source_kind") } ?: configInvalid()
     val transport = SourceTransport.entries.find { it.wireName == value.sourceString("transport") } ?: configInvalid()
     val baseUrl = parseBaseUrl(value.sourceString("base_url"))
+    val tls = value["tls"]?.let { parseTls(it, baseUrl) }
     val datasourceUid = value.optionalString("datasource_uid")
     val database = value.optionalString("database")?.let { validateText(it, MAX_DATABASE_BYTES) }
     when (sourceKind) {
@@ -447,7 +458,42 @@ private fun parseProfile(
         openSearch,
         scrapeIntervalMillis,
         spans,
+        tls,
     )
+}
+
+private fun parseTls(
+    element: JsonElement,
+    baseUrl: URI,
+): SourceTls {
+    val value = element.sourceObject()
+    if (value.isEmpty() || baseUrl.scheme != "https") configInvalid()
+    value.rejectUnknown(setOf("ca_file", "client_keystore_file", "client_keystore_password_env"))
+    val caFile = value.optionalString("ca_file")?.let(::sourceTlsPath)
+    val keystoreFile = value.optionalString("client_keystore_file")?.let(::sourceTlsPath)
+    val passwordEnv =
+        if ("client_keystore_password_env" in value) value.sourceEnvironmentName("client_keystore_password_env") else null
+    if ((keystoreFile == null) != (passwordEnv == null)) configInvalid()
+    return SourceTls(caFile, keystoreFile, passwordEnv)
+}
+
+private fun sourceTlsPath(value: String): Path {
+    if (value.isEmpty() ||
+        value.encodeToByteArray().size > 1024 ||
+        value.any(Char::isISOControl) ||
+        value.startsWith("~") ||
+        value.startsWith("//") ||
+        value.startsWith("\\\\") ||
+        value.startsWith("file:", ignoreCase = true) ||
+        value.split('/', '\\').any { it == "." || it == ".." }
+    ) {
+        configInvalid()
+    }
+    return try {
+        Path.of(value).also { if (!it.isAbsolute) configInvalid() }
+    } catch (_: InvalidPathException) {
+        configInvalid()
+    }
 }
 
 private fun parseOpenSearch(element: JsonElement): OpenSearchMapping {

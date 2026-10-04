@@ -324,6 +324,59 @@ cAdvisor после relabel, плюс красные случаи (нулево�
 read-write layer ID»), поэтому имена `container_spec_cpu_quota`/`period`, `container_oom_events_total`
 и метки `container_label_*` реального cAdvisor на стенде не подтверждены.
 
+## mTLS перед Grafana (необязательно)
+
+Отдельный файл `docker-compose.mtls.yml` поднимает nginx с **обязательным**
+клиентским сертификатом перед Grafana работающего демо-стенда: так локально
+проверяется профиль с объектом `tls` (ADR 0025, раздел «mTLS» в
+[документе об онлайн-источниках](../../docs/user/online-sources.md)). Это не
+часть основного стенда и не зависимость продукта; боевой узел и боевые ключи здесь
+не используются.
+
+- Проект compose называется `ltv-mtls-stand` (свои контейнеры), порт публикуется
+  только на `127.0.0.1:13443`. Файл **не** создаёт и не пересоздаёт контейнеры
+  `ltv-demo-stand`: прокси лишь подключается к их сети `ltv-demo-stand_default`.
+  Сначала должен работать основной стенд, запущенный из **своего** каталога
+  (не из другого git worktree: см. предупреждение выше о пересоздании контейнеров),
+  иначе nginx не найдёт `grafana`; проверка: `docker network ls` показывает
+  `ltv-demo-stand_default`.
+- Сертификаты создаёт одноразовый контейнер (`mtls/generate-certs.sh`, образ
+  `alpine/openssl`, теги закреплены) в каталог `out/mtls/`, который в git не
+  входит: CA, серверный сертификат (SAN `127.0.0.1` и `localhost`), клиентский
+  `client/client.p12` со случайным паролем в `client/password.txt` и «чужой»
+  клиент `client-other/client-other.p12` другого CA для негативных проверок.
+  Закрытые ключи и пароли в репозиторий не попадают.
+
+```powershell
+docker compose -f docker-compose.mtls.yml up -d --wait
+$certs = (Resolve-Path out\mtls).Path -replace '\\', '/'
+$c = Get-Content connections.demo.json -Raw | ConvertFrom-Json
+$p = $c.connections[0]
+$p.id = 'demo-grafana-mtls'
+$p.base_url = 'https://127.0.0.1:13443'
+$p | Add-Member tls ([ordered]@{ ca_file = "$certs/ca/ca.pem"; client_keystore_file = "$certs/client/client.p12"; client_keystore_password_env = 'LTV_GRAFANA_MTLS_PASSWORD' })
+$c | ConvertTo-Json -Depth 20 | Set-Content connections.demo-mtls.json -Encoding ascii
+$env:LTV_GRAFANA_MTLS_PASSWORD = (Get-Content out\mtls\client\password.txt -Raw).Trim()
+..\..\build\install\ltv\bin\ltv.bat ui --connections connections.demo-mtls.json
+```
+
+Скрипт строит профиль `demo-grafana-mtls` из `connections.demo.json` (`https://127.0.0.1:13443`, те же ряды и
+правила, что у `demo-grafana`); выберите его в «Новом анализе» и запрос окна
+`source-request.demo.json` с `profile_ids: ["demo-grafana-mtls"]`. Файл
+`connections.demo-mtls.json` содержит пути вашей машины и в git не добавляется.
+
+Что ожидать (проверено 2026-10-05 на этом стенде, анализ сценария `sla-fail`):
+
+| Условие | Результат |
+| --- | --- |
+| клиентский сертификат и пароль заданы | источник `COMPLETE`, 8 запросов, ряды получены |
+| `LTV_GRAFANA_MTLS_PASSWORD` не задана | источник `FAILED`, причина `SOURCE_TLS_CONFIG_INVALID`, запросов 0, анализ нагрузки считается, покрытие `INCOMPLETE` |
+| `client-other.p12` или без сертификата | nginx отвечает HTTP 400 (`No required SSL certificate was sent`): причина `SOURCE_HTTP_STATUS` |
+
+Остановка только этого стенда: `docker compose -f docker-compose.mtls.yml down`
+(основной стенд не затрагивается); ключи и сертификаты лежат в `out/mtls/`, их можно
+удалить вместе с каталогом.
+
 ## Известные ограничения
 
 - Значения рядов с более чем 12 знаками после запятой ядро отвергает
@@ -357,6 +410,8 @@ read-write layer ID»), поэтому имена `container_spec_cpu_quota`/`pe
 ```text
 docker-compose.yml           три сервиса стенда, разовые задания generator и backfill, профиль render
 docker-compose.soak.yml      необязательное дополнение: включает тест на 4 часа (generator --scenario all-with-soak)
+docker-compose.mtls.yml      необязательный отдельный проект ltv-mtls-stand: nginx с обязательным клиентским сертификатом перед Grafana
+mtls/                        generate-certs.sh (сертификаты в out/mtls) и nginx.conf
 generator/generate.py        симуляция сценариев, OpenMetrics, JTL, снимок и план ёмкости
 prometheus/prometheus.yml    конфигурация Prometheus
 grafana/                     провиженинг источника данных и дашборд ltv-demo

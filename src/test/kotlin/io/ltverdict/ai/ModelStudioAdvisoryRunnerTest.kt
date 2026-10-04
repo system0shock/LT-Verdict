@@ -64,6 +64,14 @@ class ModelStudioAdvisoryRunnerTest {
     }
 
     @Test
+    fun `host environment excludes source mTLS password`() {
+        assertEquals(
+            mapOf("PATH" to "p"),
+            hostEnvironmentForChild(mapOf("LTV_GRAFANA_MTLS_PASSWORD" to "x", "PATH" to "p"), windows = false),
+        )
+    }
+
+    @Test
     @EnabledOnOs(OS.WINDOWS)
     fun `runtime result maps to bounded success without exposing credential value`() {
         val tools = Files.createDirectories(tempDir.resolve("tools"))

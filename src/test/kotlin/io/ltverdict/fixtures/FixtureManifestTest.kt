@@ -200,6 +200,8 @@ class FixtureManifestTest {
             setOf(
                 "docs/contracts/policy/v1/examples/valid/all-metrics.json",
                 "docs/contracts/policy/v1/examples/valid/sample-gate.json",
+                "docs/contracts/policy/v1/examples/valid/window-ids.json",
+                "docs/contracts/policy/v1/examples/invalid/window-ids-empty.json",
                 "docs/contracts/policy/v1/examples/invalid/empty-rules.json",
                 "docs/contracts/policy/v1/examples/invalid/min-samples-below-floor.json",
                 "docs/contracts/policy/v1/examples/invalid/duplicate-rule-id.json",

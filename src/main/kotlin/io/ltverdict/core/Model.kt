@@ -39,6 +39,7 @@ internal data class PolicyRuleV1(
     val threshold: BigDecimal,
     val scope: PolicyScope,
     val minSamples: Long? = null,
+    val windowIds: List<String>? = null,
 )
 
 internal enum class PolicyMetric(

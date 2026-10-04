@@ -1,0 +1,17 @@
+{
+  "schema_version": "policy.v1",
+  "policy_id": "window-ids",
+  "rules": [
+    {
+      "id": "checkout-p95-steady",
+      "metric": "response_time_p95_ms",
+      "operator": "lte",
+      "threshold": 800,
+      "scope": {
+        "kind": "transaction",
+        "name": "POST /checkout"
+      },
+      "window_ids": ["steady-1", "steady-2"]
+    }
+  ]
+}

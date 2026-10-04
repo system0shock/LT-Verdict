@@ -493,7 +493,7 @@ private fun parsePolicy(element: JsonElement): PolicyV1 {
         rulesArray.mapIndexed { index, value ->
             val pointer = "/rules/$index"
             val rule = value.objectAt(pointer)
-            rule.rejectUnknown(setOf("id", "metric", "operator", "threshold", "scope", "min_samples"), pointer)
+            rule.rejectUnknown(setOf("id", "metric", "operator", "threshold", "scope", "min_samples", "window_ids"), pointer)
             val id = rule.stringAt("id", pointer)
             validateIdentifier(id, "$pointer/id")
             if (!ids.add(id)) fail("DUPLICATE_RULE_ID", "$pointer/id", "rule id must be unique")
@@ -524,7 +524,8 @@ private fun parsePolicy(element: JsonElement): PolicyV1 {
                     fail("MIN_SAMPLES_BELOW_FLOOR", "$pointer/min_samples", "min_samples is below the effective sample floor")
                 }
             }
-            PolicyRuleV1(id, metric, operator, threshold, scope, minSamples)
+            val windowIds = rule.windowIdsAt(pointer)
+            PolicyRuleV1(id, metric, operator, threshold, scope, minSamples, windowIds)
         }
     return PolicyV1(schemaVersion, policyId, rules, defaults)
 }
@@ -568,6 +569,21 @@ private fun JsonObject.longInRangeAt(
         fail("MIN_SAMPLES_OUT_OF_RANGE", pointer.child(name), "$name must be between 1 and $MAX_SAMPLES_BOUND")
     }
     return number.longValueExact()
+}
+
+private fun JsonObject.windowIdsAt(pointer: String): List<String>? {
+    val field = pointer.child("window_ids")
+    val value = get("window_ids") ?: return null
+    val array = value as? JsonArray ?: fail("WINDOW_IDS_INVALID", field, "window_ids must be an array")
+    if (array.isEmpty()) fail("WINDOW_IDS_INVALID", field, "window_ids must not be empty")
+    val ids =
+        array.map { item ->
+            (item as? JsonPrimitive)?.takeIf { it.isString }?.content ?: fail("WINDOW_IDS_INVALID", field, "window id must be a string")
+        }
+    if (ids.any { it.isEmpty() || it.encodeToByteArray().size > MAX_IDENTIFIER_BYTES } || ids.toSet().size != ids.size) {
+        fail("WINDOW_IDS_INVALID", field, "window ids must be unique, non-empty and at most 128 UTF-8 bytes")
+    }
+    return ids
 }
 
 private fun parseScope(

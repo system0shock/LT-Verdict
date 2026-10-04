@@ -2,6 +2,7 @@ package io.ltverdict.metrics
 
 import io.ltverdict.ingest.LoadSample
 import io.ltverdict.ingest.SampleKind
+import org.HdrHistogram.PackedHistogram
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertThrows
 import org.junit.jupiter.api.Assertions.assertTrue
@@ -237,6 +238,55 @@ class MetricsTest {
                 .single()
                 .metrics.latency.p99Millis,
         )
+    }
+
+    @Test
+    fun `single sample percentiles use the HDR value capped at the observed maximum across precisions`() {
+        listOf(
+            3 to listOf(2_047L, 2_048L, 2_049L),
+            4 to listOf(16_383L, 16_384L, 16_385L, 32_767L, 32_768L, 32_769L),
+            5 to listOf(131_071L, 131_072L, 131_073L, 262_143L, 262_144L, 262_145L),
+        ).forEach { (digits, values) ->
+            values.forEach { value ->
+                assertCappedLatency(listOf(value), digits)
+            }
+        }
+    }
+
+    @Test
+    fun `mixed samples cap HDR upper bound at each precision boundary`() {
+        listOf(3 to 2_048L, 4 to 32_768L, 5 to 262_144L).forEach { (digits, boundary) ->
+            val values = listOf(boundary - 1, boundary)
+            val histogram = PackedHistogram(1, 86_400_000, digits).apply { values.forEach { recordValue(it) } }
+
+            assertTrue(histogram.getValueAtPercentile(95.0) > boundary, "digits $digits")
+            assertCappedLatency(values, digits)
+        }
+    }
+
+    @Test
+    fun `merged histogram caps a large latency at its observed maximum`() {
+        val config = MetricsConfig()
+        val merged = MutableMetrics(config).apply { record(sample(0, 10, "x", emptyList(), SampleKind.JMETER_SAMPLER)) }
+        val source = MutableMetrics(config).apply { record(sample(0, 86_400_000, "x", emptyList(), SampleKind.JMETER_SAMPLER)) }
+        merged.merge(source)
+
+        assertEquals(LatencySummary(10, 86_400_000, 86_400_000, 86_400_000), merged.summary(100_000_000).latency)
+    }
+
+    private fun assertCappedLatency(
+        values: List<Long>,
+        digits: Int,
+    ) {
+        val max = values.max()
+        val histogram = PackedHistogram(1, 86_400_000, digits).apply { values.forEach { recordValue(it) } }
+        val actual = publishedLatency(values, digits)
+
+        assertEquals(max, actual.maxMillis)
+        listOf(50.0 to actual.p50Millis, 95.0 to actual.p95Millis, 99.0 to actual.p99Millis).forEach { (percentile, value) ->
+            assertEquals(minOf(histogram.getValueAtPercentile(percentile), max), value, "digits $digits p$percentile")
+            assertTrue(value <= max, "digits $digits p$percentile")
+        }
     }
 
     private fun publishedLatency(

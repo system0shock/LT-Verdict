@@ -1592,12 +1592,12 @@ class LocalApiTest {
                 return Base64.getEncoder().encodeToString(buffer.array().copyOf(histogram.encodeIntoCompressedByteBuffer(buffer)))
             }
 
-            // Rows: precision 3, 4 and 5 with identical 60000 ms samples, then precision 3 with a far maximum.
+            // Rows: all precisions round 262144 ms upward, then precision 3 retains rounding below a far maximum.
             val cases =
                 listOf(
-                    Triple(3, List(100) { 60_000L }, 60_000L),
-                    Triple(4, List(100) { 60_000L }, 60_000L),
-                    Triple(5, List(100) { 60_000L }, 60_000L),
+                    Triple(3, List(100) { 262_144L }, 262_144L),
+                    Triple(4, List(100) { 262_144L }, 262_144L),
+                    Triple(5, List(100) { 262_144L }, 262_144L),
                     Triple(3, List(100) { 60_000L } + listOf(70_000L), 70_000L),
                 )
             val rows =
@@ -1620,7 +1620,13 @@ class LocalApiTest {
                     .jsonArray
                     .map { it.jsonObject }
 
-            assertEquals(listOf(60_000L, 60_000L, 60_000L, 60_031L), page.map { it.getValue("p95_latency_ms").jsonPrimitive.long })
+            assertEquals(cases.size, page.size)
+            cases.take(3).forEachIndexed { index, (digits, values, max) ->
+                val raw = PackedHistogram(1, 86_400_000, digits).apply { values.forEach { recordValue(it) } }.getValueAtPercentile(95.0)
+                assertTrue(raw > max, "digits $digits")
+                assertEquals(minOf(raw, max), page[index].getValue("p95_latency_ms").jsonPrimitive.long, "digits $digits")
+            }
+            assertEquals(60_031L, page[3].getValue("p95_latency_ms").jsonPrimitive.long)
             page.forEach { bucket ->
                 assertTrue(bucket.getValue("p95_latency_ms").jsonPrimitive.long <= bucket.getValue("max_latency_ms").jsonPrimitive.long)
             }

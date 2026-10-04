@@ -1,6 +1,10 @@
 {
   "schema_version": "policy.v1",
   "policy_id": "slice1-fail",
+  "defaults": {
+    "sample_floor": 1,
+    "min_samples": 1
+  },
   "rules": [
     {
       "id": "overall-errors",

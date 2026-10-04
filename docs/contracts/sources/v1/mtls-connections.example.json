@@ -1,0 +1,21 @@
+{
+  "schema_version": "source-connections.v1",
+  "connections": [{
+    "id": "grafana-mtls",
+    "source_kind": "prometheus",
+    "transport": "grafana_proxy",
+    "base_url": "https://grafana.example.internal",
+    "datasource_uid": "prometheus-main",
+    "auth": { "type": "none" },
+    "tls": {
+      "ca_file": "/etc/ltv/tls/ca.pem",
+      "client_keystore_file": "/etc/ltv/tls/client.p12",
+      "client_keystore_password_env": "LTV_GRAFANA_MTLS_PASSWORD"
+    },
+    "queries": [{
+      "id": "cpu", "expression": "avg_over_time(cpu_used_ratio{instance=\"host\"}[$__interval])",
+      "metric": "cpu_used", "unit": "ratio", "entity": "host",
+      "role": "system", "aggregation": "interval_mean", "labels": { "instance": "host" }
+    }]
+  }]
+}

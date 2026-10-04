@@ -211,7 +211,7 @@ class LocalApiTest {
         }
 
     @Test
-    fun `advice requires explicit transfer consent and missing runner preserves result`() =
+    fun `advice request takes a closed body without a transfer consent and missing runner preserves result`() =
         withServer { store, api ->
             api.bootstrap()
             val input = store.acceptInput(SPIKE_DROP.bytes().inputStream(), "spike-drop.jtl")
@@ -220,14 +220,71 @@ class LocalApiTest {
             val original = api.get("$base/result").body()
             assertEquals(200, api.get("$base/advice").statusCode())
             assertEquals(JsonNull, api.get("$base/advice").jsonObject()["advice"])
-            for (body in listOf("{}", """{"confirm_external_transfer":false}""", """{"confirm_external_transfer":"true"}""")) {
-                assertEquals(400, api.post("$base/advice", "application/json", body.encodeToByteArray()).statusCode())
+            val rejected =
+                listOf(
+                    """{"confirm_external_transfer":false}""",
+                    """{"confirm_external_transfer":"true"}""",
+                    """{"confirm_external_transfer":1}""",
+                    """{"confirm_external_transfer":null}""",
+                    """{"x":1}""",
+                    """{"model_id":"deepseek-v4-flash-0731"}""",
+                    """{"confirm_external_transfer":true,"x":1}""",
+                    """{"confirm_external_transfer":true,"confirm_external_transfer":true}""",
+                    """{"confirm_external_transfer":false,"confirm_external_transfer":true}""",
+                    """{"confirm_external_transfer":true,"confirm_external_transfer":false}""",
+                    """{"confirm\u005fexternal_transfer":true}""",
+                    "[]",
+                    "true",
+                    "null",
+                    "{",
+                    "{} {}",
+                )
+            for (body in rejected) {
+                val response = api.post("$base/advice", "application/json", body.encodeToByteArray())
+                assertEquals(400, response.statusCode(), body)
+                assertEquals("MALFORMED_REQUEST", response.errorCode())
             }
-            val confirmed = """{"confirm_external_transfer":true}""".encodeToByteArray()
-            assertEquals(403, api.postUnauthenticated("$base/advice", confirmed).statusCode())
-            assertEquals(503, api.post("$base/advice", "application/json", confirmed).statusCode())
+            // The size limit is 512 bytes and it is a 400, not a 413.
+            val padded = { size: Int -> "{}" + " ".repeat(size - 2) }
+            val oversized = api.post("$base/advice", "application/json", padded(513).encodeToByteArray())
+            assertEquals(400, oversized.statusCode())
+            assertEquals("MALFORMED_REQUEST", oversized.errorCode())
+            // Valid bodies pass the check and reach the missing-runner branch (503), never a 400.
+            val accepted =
+                listOf(
+                    "",
+                    " ",
+                    "{}",
+                    " { } ",
+                    "{\r\n}",
+                    """{"confirm_external_transfer":true}""",
+                    """ { "confirm_external_transfer" : true } """,
+                    padded(512),
+                )
+            for (body in accepted) {
+                val response = api.post("$base/advice", "application/json", body.encodeToByteArray())
+                assertEquals(503, response.statusCode(), body)
+                assertEquals("AI_UNAVAILABLE", response.errorCode())
+            }
+            assertEquals(403, api.postUnauthenticated("$base/advice", "{}".encodeToByteArray()).statusCode())
             assertEquals(original, api.get("$base/result").body())
         }
+
+    @Test
+    fun `advice request with an empty body or an empty object starts a task`() {
+        for (body in listOf("", "{}")) {
+            withServer(
+                adviceRunner = AdvisoryRunner { RunnerOutcome.Unavailable(AdviceUnavailableReason.OS_ISOLATION_NOT_PROVEN) },
+            ) { store, api ->
+                api.bootstrap()
+                val input = store.acceptInput(SPIKE_DROP.bytes().inputStream(), "spike-drop.jtl")
+                val id = api.createJob(input.runId).analysisId(api)
+                val response = api.post("/api/runs/${input.runId}/analyses/$id/advice", "application/json", body.encodeToByteArray())
+                assertEquals(202, response.statusCode(), body)
+                assertTrue("job_id" in response.jsonObject())
+            }
+        }
+    }
 
     @Test
     fun `unconfigured backend exposes no online profiles`() =
@@ -1795,6 +1852,13 @@ class LocalApiTest {
         }
         return fail("job did not complete: $jobId")
     }
+
+    private fun HttpResponse<String>.errorCode(): String =
+        jsonObject()
+            .getValue("error")
+            .jsonObject
+            .getValue("code")
+            .jsonPrimitive.content
 
     private fun HttpResponse<String>.analysisId(api: ApiClient): String =
         awaitComplete(api, jsonObject().getValue("job_id").jsonPrimitive.content)

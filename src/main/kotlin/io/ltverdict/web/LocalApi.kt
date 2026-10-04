@@ -820,12 +820,13 @@ internal fun Application.installLocalApi(context: LocalApiContext) {
         post("/api/runs/{runId}/analyses/{analysisId}/advice") {
             call.requireOnlyQueries()
             call.requireJson()
-            val bytes = withContext(Dispatchers.IO) { call.receiveChannel().toInputStream().use { it.readNBytes(257) } }
-            if (bytes.size > 256) tooLarge("Advice request exceeds 256 bytes")
-            // A single exact consent field avoids coercion and ambiguous duplicate JSON keys.
-            val consent = bytes.decodeToString(throwOnInvalidSequence = false)
-            if (!Regex("""\s*\{\s*"confirm_external_transfer"\s*:\s*true\s*}\s*""").matches(consent)) {
-                malformed("Explicit external transfer consent is required")
+            val bytes = withContext(Dispatchers.IO) { call.receiveChannel().toInputStream().use { it.readNBytes(ADVICE_BODY_MAX + 1) } }
+            if (bytes.size > ADVICE_BODY_MAX) malformed("Advice request exceeds $ADVICE_BODY_MAX bytes")
+            // ADR 0023 (CM1): no transfer consent is asked. The body is empty, `{}` or the deprecated
+            // `{"confirm_external_transfer":true}`, which is ignored. The grammar is closed: `false`, other keys and duplicate
+            // keys (a second key cannot match) are rejected without a JSON parser that could resolve the ambiguity.
+            if (!ADVICE_REQUEST_BODY.matches(bytes.decodeToString(throwOnInvalidSequence = false))) {
+                malformed("Advice request body must be empty, {} or {\"confirm_external_transfer\":true}")
             }
             context.store.requireAnalysis(call)
             val jobs =
@@ -1757,6 +1758,11 @@ private fun mapInputFailure(failure: IllegalArgumentException): Nothing =
         "UNSUPPORTED_INPUT", "EMPTY_INPUT" -> unsupportedInput("Input format is unsupported")
         else -> malformed("Upload metadata is invalid")
     }
+
+private const val ADVICE_BODY_MAX = 512
+
+private val ADVICE_REQUEST_BODY =
+    Regex("""[ \t\r\n]*(\{[ \t\r\n]*("confirm_external_transfer"[ \t\r\n]*:[ \t\r\n]*true[ \t\r\n]*)?}[ \t\r\n]*)?""")
 
 private fun malformed(message: String): Nothing = throw ApiFailure(HttpStatusCode.BadRequest, "MALFORMED_REQUEST", message)
 

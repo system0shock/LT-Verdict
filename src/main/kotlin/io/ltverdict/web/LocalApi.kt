@@ -28,6 +28,7 @@ import io.ltverdict.ai.AdviceJobStatus
 import io.ltverdict.ai.AdviceSubmitResult
 import io.ltverdict.ai.AdvisoryAiJobs
 import io.ltverdict.ai.AdvisoryAiService
+import io.ltverdict.ai.AiModelsConfig
 import io.ltverdict.core.AnalysisRequest
 import io.ltverdict.core.AnalyticsExportFormat
 import io.ltverdict.core.CapacityPlanValidation
@@ -135,6 +136,7 @@ internal data class LocalApiContext(
     val jenkinsWorkflows: Map<String, JenkinsWorkflow> = emptyMap(),
     val jenkinsArtifactRoot: Path? = null,
     val sourceHttp: SourceHttp? = null,
+    val aiModels: AiModelsConfig? = null,
     // Test seam: production always uses the 4 GiB input limit.
     val uploadLimitBytes: Long = MAX_UPLOAD_BYTES,
 )
@@ -203,6 +205,7 @@ internal fun Application.installLocalApi(context: LocalApiContext) {
                 buildJsonObject {
                     put("csrf_token", csrfToken)
                     put("max_upload_bytes", MAX_UPLOAD_BYTES)
+                    put("advisory_ai", context.aiModels?.bootstrapJson() ?: JsonNull)
                 },
             )
         }

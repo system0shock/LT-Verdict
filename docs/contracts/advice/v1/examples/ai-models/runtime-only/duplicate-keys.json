@@ -1,0 +1,6 @@
+{
+  "schema_version": "ai-models.v1",
+  "default_model": "a",
+  "default_model": "b",
+  "models": [{ "id": "a", "label": "A" }]
+}

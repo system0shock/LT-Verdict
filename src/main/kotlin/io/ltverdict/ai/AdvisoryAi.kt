@@ -46,6 +46,7 @@ internal enum class AdviceUnavailableReason {
     RUNNER_ARTIFACT_MISSING,
     RUNNER_ARTIFACT_MISMATCH,
     MODEL_ENDPOINT_UNAVAILABLE,
+    MODEL_CONFIG_INVALID,
 }
 
 internal class AdviceValidationException(

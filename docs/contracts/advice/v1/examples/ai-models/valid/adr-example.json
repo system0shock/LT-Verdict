@@ -1,0 +1,13 @@
+{
+  "schema_version": "ai-models.v1",
+  "endpoint": {
+    "url": "https://models.internal.example/v1/chat/completions",
+    "label": "Внутренний шлюз моделей",
+    "allow_insecure_http": false
+  },
+  "default_model": "qwen3.8-max",
+  "models": [
+    { "id": "qwen3.8-max", "label": "Qwen 3.8 Max" },
+    { "id": "deepseek-v4-flash-0731", "label": "DeepSeek V4 Flash" }
+  ]
+}

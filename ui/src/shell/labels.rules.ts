@@ -93,6 +93,17 @@ export const RULES_LABELS = {
     TOO_LARGE: 'Разворот отклонён целиком: политика получилась бы больше 1 МиБ (лимит сервера). Политика не изменена.',
     BASE_ID_TOO_LONG: 'Разворот отклонён: идентификатор правила «весь прогон» длиннее 121 байта, для суффикса номера транзакции нет места. Сократите идентификатор.',
   } as Record<string, string>,
+  // Пробный прогон на открытом прогоне (U4b)
+  trialTitle: 'Пробный прогон',
+  trialLead: 'Запускает обычный анализ открытого прогона с этим черновиком политики и показывает вердикт. Это настоящий анализ ядром, поэтому вердикт совпадает с обычным запуском. Создаётся сохранённый анализ; снимок ресурсов и планы не применяются, проверяются только правила нагрузки.',
+  trialButton: 'Проверить на открытом прогоне',
+  trialTarget: (runName: string) => `Прогон: ${runName}.`,
+  trialNoRun: 'Сначала выберите прогон в списке слева.',
+  trialNoPolicy: 'Сначала выберите шаблон или загрузите файл политики.',
+  trialInvalid: 'Исправьте ошибки политики: проверка с невалидным черновиком не запускается.',
+  trialRunning: 'Идёт пробный прогон. Дождитесь вердикта.',
+  trialSummaryTitle: 'Итог пробного прогона',
+  openOverview: 'Открыть обзор',
   perTxList: (items: ReadonlyArray<{ label: string; sampleCount: number }>, withCounts: boolean) => {
     const shown = items.slice(0, LIST_LIMIT).map((item) => (withCounts ? `${item.label} (${item.sampleCount})` : item.label)).join(', ')
     const rest = items.length - LIST_LIMIT

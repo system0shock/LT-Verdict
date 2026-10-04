@@ -297,7 +297,10 @@ class ResourceSnapshotTest {
         assertInvalid(armSnapshot(memory = "A", cpu = "B"), "INVALID_ARM_LABEL", "/series/1/labels/arm")
         assertInvalid(armSnapshot(memory = "A", cpu = null), "INVALID_ARM_LABEL", "/series/1/labels")
         assertInvalid(armSnapshot(memory = null, cpu = "A"), "INVALID_ARM_LABEL", "/series/1/labels/arm")
+        assertEquals("x".repeat(128), valid(armSnapshot(memory = "x".repeat(128), cpu = "x".repeat(128)).encodeToByteArray()).snapshot.arm)
         assertInvalid(armSnapshot(memory = "x".repeat(129), cpu = "x".repeat(129)), "INVALID_ARM_LABEL", "/series/0/labels/arm")
+        assertInvalid(armSnapshot(memory = "x".repeat(513), cpu = "x".repeat(513)), "INVALID_ARM_LABEL", "/series/0/labels/arm")
+        assertInvalid(armSnapshot(memory = "é".repeat(65), cpu = "é".repeat(65)), "INVALID_ARM_LABEL", "/series/0/labels/arm")
         assertInvalid(armSnapshot(memory = "", cpu = ""), "INVALID_TEXT", "/series/0/labels/arm")
     }
 

@@ -333,9 +333,6 @@ private fun requireConsistentArm(series: List<ResourceSeriesV1>) {
     val reference = series.first().labels[ARM_LABEL]
     series.forEachIndexed { index, item ->
         val arm = item.labels[ARM_LABEL]
-        if (arm != null && arm.toByteArray(StandardCharsets.UTF_8).size > MAX_ARM_BYTES) {
-            resourceFail("INVALID_ARM_LABEL", "/series/$index/labels/arm", "arm label is too long")
-        }
         if (arm != reference) {
             val pointer = if (arm != null) "/series/$index/labels/arm" else "/series/$index/labels"
             resourceFail("INVALID_ARM_LABEL", pointer, "arm label must be present with one value on every series or on none")
@@ -354,6 +351,9 @@ private fun parseLabels(
         val primitive = value as? JsonPrimitive
         if (primitive == null || !primitive.isString) {
             resourceFail("INVALID_TYPE", pointer.resourceChild(key), "label value must be a string")
+        }
+        if (key == ARM_LABEL && primitive.content.toByteArray(StandardCharsets.UTF_8).size > MAX_ARM_BYTES) {
+            resourceFail("INVALID_ARM_LABEL", pointer.resourceChild(key), "arm label is too long")
         }
         validateResourceText(primitive.content, pointer.resourceChild(key), MAX_LABEL_VALUE_BYTES, "label value")
         key to primitive.content

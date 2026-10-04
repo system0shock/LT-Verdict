@@ -1,7 +1,8 @@
 import { expect, test } from '@playwright/test'
-import type { AnalysisResult, Bucket } from '../src/types'
+import type { AnalysisResult, Bucket, BucketPage } from '../src/types'
 import { OVERVIEW_LABELS } from '../src/shell/labels'
 import { failedLinesOf, summarizeVerdict } from '../src/verdictSummary'
+import { MAX_LOAD_PAGES, fetchRunLoad } from '../src/shell/deep'
 import {
   attentionItems,
   cursorFraction,
@@ -375,5 +376,88 @@ test.describe('load series', () => {
     expect(readout.raw).toEqual({ rps: '1234.00', errors: '7', p95: '2340.5' })
     expect(readout.time).toBe('1:05')
     expect(readout.text.replace(/\s+/g, ' ')).toBe(OVERVIEW_LABELS.cursorText('1:05', '1 234', '7', '2 340,5').replace(/\s+/g, ' '))
+  })
+})
+
+// Серверная выдача страниц /buckets: файл шага rollup, до 500 интервалов на страницу, next_from_ms указывает на следующий интервал.
+function serverFor(totalSeconds: number) {
+  const requests: Array<{ rollup: number; from: number | undefined }> = []
+  const fetchPage = async (rollup: 1 | 10 | 30 | 60, from: number | undefined): Promise<BucketPage> => {
+    requests.push({ rollup, from })
+    const width = rollup * 1000
+    const all: Bucket[] = []
+    for (let start = 0; start < totalSeconds * 1000; start += width) all.push(bucket(start, rollup, 0, 100))
+    const rest = all.filter((item) => item.bucket_start_ms >= (from ?? 0))
+    return { buckets: rest.slice(0, 500), next_from_ms: rest.length > 500 ? rest[500].bucket_start_ms : null }
+  }
+  return { fetchPage, requests }
+}
+
+test.describe('full run load', () => {
+  test('a 4 hour run is read in full at 10 s: one probe at 60 s, then three pages', async () => {
+    const server = serverFor(4 * 3600)
+
+    const loaded = await fetchRunLoad(server.fetchPage)
+
+    expect(server.requests).toEqual([{ rollup: 60, from: undefined }, { rollup: 10, from: undefined }, { rollup: 10, from: 5_000_000 }, { rollup: 10, from: 10_000_000 }])
+    expect(loaded.rollupSeconds).toBe(10)
+    expect(loaded.truncated).toBe(false)
+    expect(loaded.buckets).toHaveLength(1440)
+    expect(loaded.buckets.at(-1)?.bucket_start_ms).toBe(14_390_000)
+    const series = loadSeries(loaded.buckets, loaded.rollupSeconds)
+    expect(series.missingIntervals).toBe(0)
+    expect(series.segments).toHaveLength(1)
+  })
+
+  test('an 8 hour run uses 30 s and a short run keeps 1 s', async () => {
+    const long = await fetchRunLoad(serverFor(8 * 3600).fetchPage)
+    const short = await fetchRunLoad(serverFor(20 * 60).fetchPage)
+
+    expect([long.rollupSeconds, long.buckets.length, long.truncated]).toEqual([30, 960, false])
+    expect([short.rollupSeconds, short.buckets.length, short.truncated]).toEqual([1, 1200, false])
+  })
+
+  test('a probe of exactly 500 buckets with a cursor keeps 60 s and reuses the probe as the first page', async () => {
+    const server = serverFor(501 * 60)
+
+    const loaded = await fetchRunLoad(server.fetchPage)
+
+    expect(server.requests).toEqual([{ rollup: 60, from: undefined }, { rollup: 60, from: 30_000_000 }])
+    expect(loaded.rollupSeconds).toBe(60)
+    expect(loaded.truncated).toBe(false)
+    expect(loaded.buckets).toHaveLength(501)
+    expect(loaded.buckets.at(-1)?.bucket_start_ms).toBe(30_000_000)
+  })
+
+  test('an empty run costs one request and gives no buckets', async () => {
+    const server = serverFor(0)
+
+    const loaded = await fetchRunLoad(server.fetchPage)
+
+    expect(loaded.buckets).toEqual([])
+    expect(loaded.truncated).toBe(false)
+    expect(server.requests).toHaveLength(1)
+  })
+
+  // Сервер принимает не более 100 000 заполненных секундных интервалов, поэтому это защитный предел клиента.
+  test('a run longer than the page limit at 60 s reuses the probe and reports truncation', async () => {
+    const server = serverFor(200 * 3600)
+
+    const loaded = await fetchRunLoad(server.fetchPage)
+
+    expect(loaded.rollupSeconds).toBe(60)
+    expect(loaded.truncated).toBe(true)
+    expect(loaded.buckets).toHaveLength(MAX_LOAD_PAGES * 500)
+    expect(server.requests).toHaveLength(MAX_LOAD_PAGES)
+    expect(server.requests.every((entry) => entry.rollup === 60)).toBe(true)
+  })
+
+  test('stops when the server does not advance next_from_ms', async () => {
+    const stuck = async (): Promise<BucketPage> => ({ buckets: [bucket(0, 1, 0, 1)], next_from_ms: 0 })
+
+    const loaded = await fetchRunLoad(stuck)
+
+    expect(loaded.truncated).toBe(true)
+    expect(loaded.buckets).toHaveLength(1)
   })
 })

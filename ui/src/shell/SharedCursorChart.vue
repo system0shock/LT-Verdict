@@ -131,6 +131,13 @@ function inputCursor(event: Event) {
       {{ OVERVIEW_LABELS.loadSummary(series.points.length, series.rollupSeconds) }}
     </p>
     <p
+      v-if="series.rollupSeconds > 1"
+      class="muted"
+      data-testid="load-step"
+    >
+      {{ OVERVIEW_LABELS.loadStep(series.rollupSeconds) }}
+    </p>
+    <p
       v-if="series.missingIntervals > 0"
       class="muted"
       data-testid="load-gaps"

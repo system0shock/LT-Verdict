@@ -1,15 +1,16 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, onMounted, onUnmounted, ref } from 'vue'
+import { getBuckets } from '../api'
+import { fetchRunLoad, type RunLoad } from './deep'
 import { OVERVIEW_LABELS } from './labels'
 import SharedCursorChart from './SharedCursorChart.vue'
 import { attentionItems, keyMetrics, loadSeries, type AttentionKind, type AttentionTarget } from './overview'
-import type { AnalysisResult, Bucket } from '../types'
+import type { AnalysisResult } from '../types'
 
 const props = defineProps<{
   result: AnalysisResult
-  buckets: Bucket[]
-  bucketRollup: number
-  hasMoreBuckets: boolean
+  runId: string
+  analysisId: string
 }>()
 const emit = defineEmits<{ navigate: [target: AttentionTarget] }>()
 
@@ -18,7 +19,26 @@ const expanded = ref(false)
 const items = computed(() => attentionItems(props.result))
 const visibleItems = computed(() => expanded.value ? items.value : items.value.slice(0, LIMIT))
 const tiles = computed(() => keyMetrics(props.result))
-const series = computed(() => loadSeries(props.buckets, props.bucketRollup))
+const runLoad = ref<RunLoad>({ buckets: [], rollupSeconds: 60, truncated: false })
+const loading = ref(false)
+const loadError = ref('')
+const series = computed(() => loadSeries(runLoad.value.buckets, runLoad.value.rollupSeconds))
+const controller = new AbortController()
+
+// Обзор грузит весь прогон сам: шаг и диапазон вкладки «Таблицы» на него не влияют.
+onMounted(async () => {
+  if (props.result.run_validity === 'INVALID') return
+  loading.value = true
+  try {
+    const loaded = await fetchRunLoad((rollup, from) => getBuckets(props.runId, props.analysisId, rollup, from, undefined, controller.signal))
+    if (!controller.signal.aborted) runLoad.value = loaded
+  } catch (failure) {
+    if (!controller.signal.aborted) loadError.value = OVERVIEW_LABELS.loadFailed(failure instanceof Error ? failure.message : String(failure))
+  } finally {
+    if (!controller.signal.aborted) loading.value = false
+  }
+})
+onUnmounted(() => controller.abort())
 const kindLabels: Record<AttentionKind, string> = {
   violation: OVERVIEW_LABELS.kindViolation,
   no_verdict: OVERVIEW_LABELS.kindNoVerdict,
@@ -136,8 +156,21 @@ const kindLabels: Record<AttentionKind, string> = {
       <p class="muted">
         {{ OVERVIEW_LABELS.loadReadNote }}
       </p>
+      <p
+        v-if="loading"
+        data-testid="load-loading"
+      >
+        {{ OVERVIEW_LABELS.loadLoading }}
+      </p>
+      <p
+        v-else-if="loadError"
+        role="alert"
+        data-testid="load-error"
+      >
+        {{ loadError }}
+      </p>
       <SharedCursorChart
-        v-if="series.points.length"
+        v-else-if="series.points.length"
         :series="series"
       />
       <p
@@ -147,11 +180,11 @@ const kindLabels: Record<AttentionKind, string> = {
         {{ OVERVIEW_LABELS.loadEmpty }}
       </p>
       <p
-        v-if="hasMoreBuckets"
+        v-if="runLoad.truncated"
         class="muted"
         data-testid="load-partial"
       >
-        {{ OVERVIEW_LABELS.loadPartial }}
+        {{ OVERVIEW_LABELS.loadPartial(runLoad.buckets.length, runLoad.rollupSeconds) }}
       </p>
     </section>
   </div>

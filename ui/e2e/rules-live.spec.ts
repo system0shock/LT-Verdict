@@ -9,6 +9,8 @@ const header = readFileSync(input, 'utf8').split(/\r?\n/, 1)[0]
 const labels = [...Array(30).fill('GET /a'), ...Array(25).fill('POST /b'), ...Array(5).fill('GET /rare')]
 const jtl = Buffer.from([header, ...labels.map((label, index) =>
   `${1788211917499 + index * 1000},100,${label},200,OK,fixture 1-1,text,true,,0,0,1,1,null,0,0,0`)].join('\n') + '\n')
+const jtlNext = Buffer.from([header, ...Array.from({ length: 30 }, (_, index) =>
+  `${1788211917499 + index * 1000},100,GET /c,200,OK,fixture 1-1,text,true,,0,0,1,1,null,0,0,0`)].join('\n') + '\n')
 
 test('live rules template and transaction expansion validate and affect the next analysis', async ({ page }) => {
   await page.goto('/?shell=new')
@@ -38,4 +40,26 @@ test('live rules template and transaction expansion validate and affect the next
   // The expanded rules really reached the core: 2 overall + 4 transaction rule checks.
   await page.locator('#shell-tab-tables').click()
   await expect(page.getByTestId('rule-row')).toHaveCount(6)
+
+  await page.locator('#shell-tab-setup').click()
+  await page.getByTestId('input-file').setInputFiles({ name: 'rules-next.jtl', mimeType: 'text/csv', buffer: jtlNext })
+  await page.getByRole('button', { name: SETUP_LABELS.startButton }).click()
+  await expect(page.getByTestId('overview-panel')).toBeVisible()
+  await expect(page.locator('#verdict')).toHaveAttribute('data-verdict', 'NO_VERDICT')
+
+  await page.locator('#shell-tab-rules').click()
+  const nextValidation = page.waitForResponse((response) => response.url().endsWith('/api/policies/validate') && response.request().method() === 'POST')
+  await page.getByRole('button', { name: RULES_LABELS.perTxButton }).click()
+  await expect(page.locator('#rules-panel')).toContainText(RULES_LABELS.perTxDone(2, 'rules-next.jtl', 4))
+  const nextBody = await (await nextValidation).json() as { valid: boolean; policy: { rules: Array<{ scope: { kind: string; name?: string } }> } }
+  expect(nextBody.valid).toBe(true)
+  expect(nextBody.policy.rules.filter((rule) => rule.scope.kind === 'transaction').map((rule) => rule.scope.name).sort()).toEqual(['GET /c', 'GET /c'])
+
+  await page.locator('#shell-tab-setup').click()
+  await page.getByTestId('input-file').setInputFiles({ name: 'rules-next.jtl', mimeType: 'text/csv', buffer: jtlNext })
+  await page.getByRole('button', { name: SETUP_LABELS.startButton }).click()
+  await expect(page.getByTestId('overview-panel')).toBeVisible()
+  await expect(page.locator('#verdict')).not.toHaveAttribute('data-verdict', 'NO_VERDICT')
+  await page.locator('#shell-tab-tables').click()
+  await expect(page.getByTestId('rule-row')).toHaveCount(4)
 })

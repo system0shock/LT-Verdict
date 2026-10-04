@@ -146,7 +146,7 @@ test('expansion refuses a result that would exceed the rule limit', async ({ pag
   await expect(page.locator('#rules-panel .policy-rule')).toHaveCount(2)
 })
 
-test('expanding for a different run keeps earlier transaction rules and adds the new ones (plan rule 6)', async ({ page }) => {
+test('expanding for a different run replaces the earlier generated rules', async ({ page }) => {
   const validated: Array<Record<string, unknown>> = []
   await fixtureApi(page, validated, { twoRuns: true })
   await page.goto('/?shell=new')
@@ -163,9 +163,11 @@ test('expanding for a different run keeps earlier transaction rules and adds the
   await expect(page.locator('#verdict')).toBeVisible()
   await page.locator('#shell-tab-rules').click()
   await page.getByRole('button', { name: RULES_LABELS.perTxButton }).click()
+  await expect(page.locator('#rules-panel')).toContainText(RULES_LABELS.perTxDone(2, nextRun.original_filename, 4))
   await expect.poll(() => validated.length).toBeGreaterThan(2)
   const latest = validated.at(-1) as typeof basicPolicy
-  expect(latest.rules.filter((rule) => rule.scope.kind === 'transaction').map((rule) => rule.scope.name).sort()).toEqual(['GET /a', 'GET /a', 'POST /b', 'POST /b', 'POST /next', 'POST /next'])
+  expect(latest.rules.filter((rule) => rule.scope.kind === 'transaction').map((rule) => rule.scope.name).sort()).toEqual(['POST /next', 'POST /next'])
+  expect(latest.rules.filter((rule) => rule.scope.kind === 'overall').map((rule) => rule.id)).toEqual(['overall-p95', 'overall-errors'])
 })
 
 for (const theme of ['light', 'dark'] as const) {

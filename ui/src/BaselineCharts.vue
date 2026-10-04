@@ -3,8 +3,9 @@ import { ref, watch } from 'vue'
 import { getBuckets } from './api'
 import type { BaselineComparison, Bucket } from './types'
 import LoadCharts from './LoadCharts.vue'
+import { EN_COMPARE_LABELS, type CompareLabels } from './shell/labels.compare'
 
-const props = defineProps<{ comparison: BaselineComparison }>()
+const props = withDefaults(defineProps<{ comparison: BaselineComparison; labels?: CompareLabels }>(), { labels: () => EN_COMPARE_LABELS })
 const current = ref<Bucket[]>([])
 const baseline = ref<Bucket[]>([])
 const error = ref('')
@@ -23,16 +24,16 @@ async function load() {
     if (token !== revision) return
     current.value = left.buckets; baseline.value = right.buckets
     truncated.value = left.next_from_ms !== null || right.next_from_ms !== null
-  } catch (failure) { if (token === revision) error.value = failure instanceof Error ? failure.message : 'Chart comparison unavailable.' }
+  } catch (failure) { if (token === revision) error.value = failure instanceof Error ? failure.message : props.labels.chartsUnavailable }
   finally { if (token === revision) busy.value = false }
 }
 </script>
 
 <template>
   <details>
-    <summary>Baseline/current charts</summary>
-    <p>Relative time from each load start; this view does not align stages or prove equal test conditions. OpenSearch events remain in their individual run views.</p>
-    <label>Comparison bin width <select
+    <summary>{{ labels.chartsSummary }}</summary>
+    <p>{{ labels.chartsNote }}</p>
+    <label>{{ labels.chartsBin }} <select
       v-model.number="rollup"
       :disabled="busy"
       @change="current = []; baseline = []"
@@ -40,34 +41,36 @@ async function load() {
       v-for="step in [1, 10, 30, 60]"
       :key="step"
       :value="step"
-    >{{ step }} s</option></select></label>
+    >{{ step }} {{ labels.chartsStepUnit }}</option></select></label>
     <button
       type="button"
       :disabled="busy || comparison.metrics.some(item => item.reason === 'INCOMPATIBLE_METRIC_DEFINITION')"
       @click="load"
     >
-      Load comparison charts
+      {{ labels.chartsLoad }}
     </button>
     <p
       v-if="busy"
       role="status"
     >
-      Loading saved buckets…
+      {{ labels.chartsLoading }}
     </p>
     <p
       v-if="error"
       role="alert"
+      :lang="labels.foreignLang"
     >
       {{ error }}
     </p>
     <p v-if="truncated && current.length">
-      Showing the first 500 bins per run. Later bins are omitted; use a wider bin or the individual run view.
+      {{ labels.chartsTruncated }}
     </p>
     <LoadCharts
       v-if="current.length || baseline.length"
       :buckets="current"
       :baseline-buckets="baseline"
       :rollup="rollup"
+      :lang="labels.foreignLang"
     />
   </details>
 </template>

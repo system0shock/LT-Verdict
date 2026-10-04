@@ -3,12 +3,13 @@ import { computed, onMounted, ref, watch } from 'vue'
 import BaselineCharts from './BaselineCharts.vue'
 import { ApiError, clearBaseline, compareBaseline, getBaseline, getBaselineConditions, setBaseline, setBaselineConditions } from './api'
 import { BASELINE_LABELS } from './shell/labels'
+import { EN_COMPARE_LABELS, type CompareLabels } from './shell/labels.compare'
 import type { AnalysisReference, BaselineComparison, BaselineCondition, BaselineConditionDecision, BaselineConditionWindows, BaselineRequest, BaselineSelection } from './types'
 
-const props = defineProps<{ selection: AnalysisReference | null; filename: string; working: boolean }>()
+const props = withDefaults(defineProps<{ selection: AnalysisReference | null; filename: string; working: boolean; labels?: CompareLabels }>(), { labels: () => EN_COMPARE_LABELS })
 const baseline = ref<BaselineSelection | null>(null)
 const comparison = ref<BaselineComparison | null>(null)
-const series = ref('Selected test series')
+const series = ref(props.labels.seriesDefault)
 const candidates = ref<Array<{ reference: AnalysisReference; filename: string }>>([])
 const comparable = ref(false)
 const conditions = ref<BaselineCondition | null>(null)
@@ -49,12 +50,6 @@ const emptyWindowNotes = computed(() => {
 const oldRules = computed(() => errorCode.value === 'BASELINE_MIXED_SEMANTICS'
   || comparison.value?.metrics.some((metric) => metric.reason === 'INCOMPATIBLE_METRIC_DEFINITION')
   || comparison.value?.window_comparison?.reasons.includes('INCOMPATIBLE_METRIC_DEFINITION'))
-const metricLabels: Record<string, string> = {
-  response_time_p95_ms: 'P95 latency',
-  response_time_p99_ms: 'P99 latency',
-  throughput_rps: 'Throughput',
-  error_rate_ratio: 'Error rate',
-}
 
 onMounted(loadBaseline)
 watch(() => props.selection, conditionBindingChanged)
@@ -209,7 +204,7 @@ async function compare() {
 }
 
 function showError(failure: unknown) {
-  error.value = failure instanceof Error ? failure.message : 'Baseline request failed.'
+  error.value = failure instanceof Error ? failure.message : props.labels.requestFailed
   errorCode.value = failure instanceof ApiError ? failure.code : ''
 }
 
@@ -226,13 +221,13 @@ function warningText(code: string): string {
   >
     <header class="panel__header">
       <h2 id="baseline-title">
-        Baseline comparison
+        {{ labels.title }}
       </h2>
-      <p>A fixed saved analysis, selected manually or statistically. New runs do not replace it.</p>
+      <p>{{ labels.intro }}</p>
     </header>
 
     <div class="field">
-      <label for="baseline-series">Comparison series</label>
+      <label for="baseline-series">{{ labels.seriesLabel }}</label>
       <input
         id="baseline-series"
         v-model="series"
@@ -243,7 +238,7 @@ function warningText(code: string): string {
         id="baseline-series-hint"
         class="field__hint"
       >
-        Name the scenario and test conditions (up to 128 UTF-8 bytes). A name alone does not prove comparability.
+        {{ labels.seriesHint }}
       </p>
     </div>
 
@@ -251,7 +246,7 @@ function warningText(code: string): string {
       v-if="loading"
       role="status"
     >
-      Loading baseline…
+      {{ labels.loading }}
     </p>
     <div
       v-else-if="baseline"
@@ -259,32 +254,32 @@ function warningText(code: string): string {
       class="baseline-selection"
       role="status"
     >
-      <p><strong>{{ baseline.series }}</strong> · {{ baseline.mode }}</p>
-      <p>Run <span class="mono">{{ baseline.reference.run_id }}</span></p>
-      <p>Analysis <span class="mono">{{ baseline.reference.analysis_id }}</span></p>
+      <p><strong>{{ baseline.series }}</strong> · {{ labels.mode(baseline.mode) }}</p>
+      <p>{{ labels.runWord }} <span class="mono">{{ baseline.reference.run_id }}</span></p>
+      <p>{{ labels.analysisWord }} <span class="mono">{{ baseline.reference.analysis_id }}</span></p>
       <template v-if="baseline.algorithm">
-        <p>{{ baseline.algorithm }} · {{ baseline.candidates.length }} candidates</p>
+        <p>{{ labels.candidatesLine(baseline.algorithm, baseline.candidates.length) }}</p>
         <details>
-          <summary>Selection scores</summary>
+          <summary>{{ labels.scoresSummary }}</summary>
           <ul>
             <li
               v-for="score in baseline.scores"
               :key="score.reference.run_id"
               :title="`${score.reference.run_id} / ${score.reference.analysis_id}`"
             >
-              {{ score.reference.analysis_id.slice(0, 12) }}: {{ score.score }} (lower is more central)
+              {{ labels.scoreLine(score.reference.analysis_id.slice(0, 12), score.score) }}
             </li>
           </ul>
         </details>
       </template>
     </div>
     <p v-else>
-      No baseline selected. Open a saved analysis to assign one.
+      {{ labels.noBaseline }}
     </p>
 
     <div class="form-grid">
       <div class="field">
-        <label for="baseline-window">Baseline window ID</label>
+        <label for="baseline-window">{{ labels.baselineWindow }}</label>
         <input
           id="baseline-window"
           v-model="baselineWindow"
@@ -293,7 +288,7 @@ function warningText(code: string): string {
         >
       </div>
       <div class="field">
-        <label for="current-window">Current window ID</label>
+        <label for="current-window">{{ labels.currentWindow }}</label>
         <input
           id="current-window"
           v-model="currentWindow"
@@ -302,7 +297,7 @@ function warningText(code: string): string {
         >
       </div>
       <div class="field">
-        <label for="minimum-change">Minimum change (%)</label>
+        <label for="minimum-change">{{ labels.minChange }}</label>
         <input
           id="minimum-change"
           v-model="minChangePercent"
@@ -314,7 +309,7 @@ function warningText(code: string): string {
         >
       </div>
       <div class="field">
-        <label for="minimum-error-delta">Minimum error-rate delta (ratio)</label>
+        <label for="minimum-error-delta">{{ labels.minErrorDelta }}</label>
         <input
           id="minimum-error-delta"
           v-model="minErrorRateDelta"
@@ -330,9 +325,7 @@ function warningText(code: string): string {
       id="window-comparison-hint"
       class="field__hint"
     >
-      Optional: enter both window IDs to compare their saved metrics. Leave both empty for overall metrics.
-      Matching names do not establish the same planned load, request mix or test conditions.
-      Materiality thresholds must be greater than zero; an error-rate delta of 0.001 is 0.1 percentage points.
+      {{ labels.windowHint }}
     </p>
 
     <template v-if="baseline">
@@ -341,14 +334,14 @@ function warningText(code: string): string {
         :disabled="busy || conditionBusy || !selection || !validWindows"
         aria-describedby="manual-conditions-hint"
       >
-        <legend>Planned conditions for this exact pair</legend>
+        <legend>{{ labels.conditionsLegend }}</legend>
         <label>
           <input
             v-model="conditionDecision"
             type="radio"
             value="CONFIRMED"
           >
-          Confirmed same planned test conditions
+          {{ labels.conditionConfirmed }}
         </label>
         <label>
           <input
@@ -356,7 +349,7 @@ function warningText(code: string): string {
             type="radio"
             value="NOT_CONFIRMED"
           >
-          Not confirmed
+          {{ labels.conditionNotConfirmed }}
         </label>
         <label>
           <input
@@ -364,35 +357,34 @@ function warningText(code: string): string {
             type="radio"
             value="UNKNOWN"
           >
-          Unknown
+          {{ labels.conditionUnknown }}
         </label>
       </fieldset>
       <p
         id="manual-conditions-hint"
         class="field__hint"
       >
-        This decision is saved only for the displayed baseline/current analyses and, when entered, both window IDs.
-        It changes interpretation, not metric deltas, SLA or the policy verdict.
+        {{ labels.conditionsHint }}
       </p>
       <p
         v-if="conditionLoading"
         role="status"
       >
-        Loading saved condition decision…
+        {{ labels.conditionLoading }}
       </p>
       <p
         v-else
         data-testid="baseline-condition-status"
         role="status"
       >
-        {{ conditions ? `Saved ${conditions.decision} at ${conditions.updated_at}` : 'No saved decision for this exact pair.' }}
+        {{ conditions ? labels.conditionSaved(conditions.decision, conditions.updated_at) : labels.conditionNone }}
       </p>
       <button
         type="button"
         :disabled="busy || conditionBusy || !selection || !validWindows"
         @click="saveConditions"
       >
-        {{ conditionSaving ? 'Saving condition decision…' : 'Save condition decision' }}
+        {{ conditionSaving ? labels.savingCondition : labels.saveCondition }}
       </button>
     </template>
 
@@ -402,14 +394,14 @@ function warningText(code: string): string {
         :disabled="busy || !selection || !validSeries"
         @click="assignManual"
       >
-        Set as baseline
+        {{ labels.setBaseline }}
       </button>
       <button
         type="button"
         :disabled="busy || conditionSaving || !baseline || !selection || comparing || !validWindows"
         @click="compare"
       >
-        {{ comparing ? 'Comparing…' : 'Compare selected analysis' }}
+        {{ comparing ? labels.comparing : labels.compare }}
       </button>
       <button
         v-if="baseline"
@@ -417,23 +409,21 @@ function warningText(code: string): string {
         :disabled="busy"
         @click="save(null)"
       >
-        Clear baseline
+        {{ labels.clearBaseline }}
       </button>
     </div>
 
     <details class="baseline-statistics">
-      <summary>Statistical selection</summary>
+      <summary>{{ labels.statSummary }}</summary>
       <p>
-        Select 3–20 different runs from the same planned test conditions.
-        The central real run is chosen using P95, throughput and error-rate ranks.
-        This heuristic does not establish a stable norm or statistical significance. Do not add the run you are testing as a candidate.
+        {{ labels.statText }}
       </p>
       <button
         type="button"
         :disabled="busy || !canAdd"
         @click="addCandidate"
       >
-        Add selected candidate
+        {{ labels.addCandidate }}
       </button>
       <ul data-testid="baseline-candidates">
         <li
@@ -446,10 +436,10 @@ function warningText(code: string): string {
           <button
             type="button"
             :disabled="busy"
-            :aria-label="`Remove candidate ${candidate.filename}`"
+            :aria-label="labels.removeAria(candidate.filename)"
             @click="removeCandidate(candidate.reference.run_id)"
           >
-            Remove
+            {{ labels.remove }}
           </button>
         </li>
       </ul>
@@ -460,21 +450,20 @@ function warningText(code: string): string {
           :disabled="busy"
           aria-describedby="baseline-conditions-hint"
         >
-        Same planned test conditions
+        {{ labels.sameConditions }}
       </label>
       <p
         id="baseline-conditions-hint"
         class="field__hint"
       >
-        Confirm scenario/mix, environment/dataset, load model, targets, pacing and generator limits.
-        Achieved RPS may differ. Invalid or incomplete candidates are rejected, not silently omitted. This confirms the candidate set only; confirm each compared pair in the planned-conditions form.
+        {{ labels.candidatesHint }}
       </p>
       <button
         type="button"
         :disabled="busy || !validSeries || !comparable || candidates.length < 3"
         @click="assignStatistical"
       >
-        Select statistically
+        {{ labels.selectStatistically }}
       </button>
     </details>
 
@@ -482,6 +471,7 @@ function warningText(code: string): string {
       v-if="error"
       class="notice notice-fail"
       role="alert"
+      :lang="labels.foreignLang"
     >
       {{ error }}
     </p>
@@ -500,9 +490,9 @@ function warningText(code: string): string {
       aria-labelledby="baseline-metrics-title"
     >
       <h3 id="baseline-metrics-title">
-        Overall metrics against baseline
+        {{ labels.metricsTitle }}
       </h3>
-      <p>Planned conditions: {{ comparison.comparability }}. Deltas alone do not prove a version regression or change the policy verdict.</p>
+      <p>{{ labels.statusLine(comparison.comparability) }}. {{ labels.deltasNote }}</p>
       <div
         v-if="comparison.warnings.length"
         data-testid="baseline-warnings"
@@ -519,30 +509,33 @@ function warningText(code: string): string {
           </li>
         </ul>
       </div>
-      <BaselineCharts :comparison="comparison" />
+      <BaselineCharts
+        :comparison="comparison"
+        :labels="labels"
+      />
       <div
         class="table-wrap"
         tabindex="0"
         role="region"
-        aria-label="Baseline metric deltas"
+        :aria-label="labels.deltasRegion"
       >
         <table>
           <thead>
             <tr>
               <th scope="col">
-                Metric / unit
+                {{ labels.metricHead }}
               </th>
               <th scope="col">
-                Baseline
+                {{ labels.baselineHead }}
               </th>
               <th scope="col">
-                Current
+                {{ labels.currentHead }}
               </th>
               <th scope="col">
-                Absolute delta
+                {{ labels.absoluteHead }}
               </th>
               <th scope="col">
-                Relative delta
+                {{ labels.relativeHead }}
               </th>
             </tr>
           </thead>
@@ -552,17 +545,17 @@ function warningText(code: string): string {
               :key="metric.metric"
               :data-testid="`comparison-${metric.metric}`"
             >
-              <td>{{ metricLabels[metric.metric] ?? metric.metric }} / {{ metric.unit }}</td>
-              <td>{{ metric.baseline ?? 'N/A' }}</td>
-              <td>{{ metric.current ?? 'N/A' }}</td>
-              <td>{{ metric.delta ?? `N/A (${metric.reason})` }}</td>
-              <td>{{ metric.delta_percent === null ? `N/A (${metric.percent_reason})` : `${metric.delta_percent}%` }}</td>
+              <td>{{ labels.metric(metric.metric) }} / {{ labels.unit(metric.unit) }}</td>
+              <td>{{ metric.baseline ?? labels.na }}</td>
+              <td>{{ metric.current ?? labels.na }}</td>
+              <td>{{ metric.delta ?? labels.naReason(metric.reason) }}</td>
+              <td>{{ metric.delta_percent === null ? labels.naReason(metric.percent_reason) : `${metric.delta_percent}%` }}</td>
             </tr>
           </tbody>
         </table>
       </div>
       <p class="field__hint">
-        Display rounded to 6 decimal places. Error rate uses ratio units: 0.01 = 1%.
+        {{ labels.roundingNote }}
       </p>
       <section
         v-if="comparison.window_comparison"
@@ -570,10 +563,10 @@ function warningText(code: string): string {
         aria-labelledby="window-comparison-title"
       >
         <h3 id="window-comparison-title">
-          Selected-window observations
+          {{ labels.windowTitle }}
         </h3>
-        <p>{{ comparison.window_comparison.baseline_window }} → {{ comparison.window_comparison.current_window }} · {{ comparison.window_comparison.status }}</p>
-        <p>{{ comparison.window_comparison.reasons.join(', ') || '—' }}</p>
+        <p>{{ comparison.window_comparison.baseline_window }} → {{ comparison.window_comparison.current_window }} · {{ labels.windowStatus(comparison.window_comparison.status) }}</p>
+        <p>{{ labels.reasons(comparison.window_comparison.reasons) }}</p>
         <div
           v-if="emptyWindowNotes.length"
           data-testid="baseline-empty-window"
@@ -591,31 +584,31 @@ function warningText(code: string): string {
           </ul>
         </div>
         <p>
-          Baseline: {{ comparison.window_comparison.baseline_sample_count ?? 'N/A' }} samples / {{ comparison.window_comparison.baseline_duration_ms ?? 'N/A' }} ms.
-          Current: {{ comparison.window_comparison.current_sample_count ?? 'N/A' }} samples / {{ comparison.window_comparison.current_duration_ms ?? 'N/A' }} ms.
+          {{ labels.windowStats('baseline', comparison.window_comparison.baseline_sample_count, comparison.window_comparison.baseline_duration_ms) }}
+          {{ labels.windowStats('current', comparison.window_comparison.current_sample_count, comparison.window_comparison.current_duration_ms) }}
         </p>
-        <p>Uncertainty: NOT_ESTIMATED. These two observations do not establish a reproducible version regression.</p>
+        <p>{{ labels.uncertaintyNote }}</p>
         <div
           class="table-wrap"
           tabindex="0"
           role="region"
-          aria-label="Selected-window metric deltas"
+          :aria-label="labels.windowRegion"
         >
           <table>
             <thead>
               <tr>
                 <th scope="col">
-                  Metric / entity / unit
+                  {{ labels.windowMetricHead }}
                 </th><th scope="col">
-                  Baseline
+                  {{ labels.baselineHead }}
                 </th><th scope="col">
-                  Current
+                  {{ labels.currentHead }}
                 </th><th scope="col">
-                  Absolute delta
+                  {{ labels.absoluteHead }}
                 </th><th scope="col">
-                  Relative delta
+                  {{ labels.relativeHead }}
                 </th><th scope="col">
-                  Status / reason
+                  {{ labels.statusHead }}
                 </th>
               </tr>
             </thead>
@@ -624,21 +617,26 @@ function warningText(code: string): string {
                 v-for="(metric, index) in comparison.window_comparison.metrics"
                 :key="`${metric.metric}-${metric.entity}-${metric.resource_series_id}-${index}`"
               >
-                <td>{{ metricLabels[metric.metric] ?? metric.metric }} / {{ metric.entity ?? 'Overall' }} / {{ metric.resource_series_id ?? '—' }} / {{ metric.unit }}</td>
-                <td>{{ metric.baseline ?? 'N/A' }}</td>
-                <td>{{ metric.current ?? 'N/A' }}</td>
-                <td>{{ metric.delta ?? `N/A (${metric.reason})` }}</td>
-                <td>{{ metric.delta_percent === null ? `N/A (${metric.percent_reason})` : `${metric.delta_percent}%` }}</td>
-                <td>{{ metric.status }} · {{ metric.reason ?? '—' }}</td>
+                <td>{{ labels.metric(metric.metric) }} / {{ metric.entity ?? labels.overall }} / {{ metric.resource_series_id ?? '—' }} / {{ labels.unit(metric.unit) }}</td>
+                <td>{{ metric.baseline ?? labels.na }}</td>
+                <td>{{ metric.current ?? labels.na }}</td>
+                <td>{{ metric.delta ?? labels.naReason(metric.reason) }}</td>
+                <td>{{ metric.delta_percent === null ? labels.naReason(metric.percent_reason) : `${metric.delta_percent}%` }}</td>
+                <td>{{ labels.windowStatus(metric.status) }} · {{ labels.reasonOrDash(metric.reason) }}</td>
               </tr>
             </tbody>
           </table>
         </div>
         <details>
-          <summary>Raw window comparison evidence</summary>
+          <summary>{{ labels.rawSummary }}</summary>
           <pre>{{ JSON.stringify(comparison.window_comparison, null, 2) }}</pre>
         </details>
       </section>
     </section>
   </section>
 </template>
+
+<style>
+.baseline-panel[lang='ru'] p { overflow-wrap: anywhere; }
+.baseline-panel[lang='ru'] .notice { flex-wrap: wrap; }
+</style>

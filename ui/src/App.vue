@@ -40,6 +40,7 @@ import {
 import { summarizeVerdict } from './verdictSummary'
 import type { AttentionTarget } from './shell/overview'
 import type { AnalysisResult, AnalysisSummary, Bucket, JobStatus, OpenSearchEvidence, Policy, PolicyError, PostgresContextEvidence, RunSummary, SourceProfile, SourceRequest, Theme } from './types'
+import { COMPARE_LABELS } from './shell/labels.compare'
 
 const theme = ref<Theme>(window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light')
 const shellNew = resolveNewShell(window.location.search, browserStorage())
@@ -974,6 +975,8 @@ function focusPolicy() {
             :selection="selectedReference"
             :filename="currentRun?.original_filename ?? ''"
             :working="working"
+            :labels="shellNew ? COMPARE_LABELS : undefined"
+            :lang="shellNew ? 'ru' : undefined"
           />
 
           <div

@@ -184,10 +184,13 @@ function readout(key: string) {
 .deep-plot { touch-action:pan-y; }
 .deep-track { min-width:0; }
 .deep-track svg { display:block; width:100%; height:80px; background:var(--surface-inset); }
-.deep-track polyline { stroke-width:2; }
-.deep-track.load-rps polyline,.deep-track.load-rps circle { stroke:var(--brand); fill:var(--brand); }
-.deep-track.load-p95 polyline,.deep-track.load-p95 circle { stroke:var(--warn); fill:var(--warn); }
-.deep-track.resource polyline,.deep-track.resource circle { stroke:var(--text); fill:var(--text); }
+.deep-track polyline { stroke-width:2; fill:none; }
+.deep-track.load-rps polyline,.deep-track.load-rps circle { stroke:var(--brand); }
+.deep-track.load-rps circle { fill:var(--brand); }
+.deep-track.load-p95 polyline,.deep-track.load-p95 circle { stroke:var(--warn); }
+.deep-track.load-p95 circle { fill:var(--warn); }
+.deep-track.resource polyline,.deep-track.resource circle { stroke:var(--text); }
+.deep-track.resource circle { fill:var(--text); }
 .axis { stroke:var(--border); }
 .threshold { stroke:var(--fail); stroke-width:1.5; }
 .threshold-text { color:var(--fail); }

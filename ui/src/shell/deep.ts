@@ -1,4 +1,4 @@
-import type { AnalysisResult, Bucket, ResourceSeriesEntry, ResourceSeriesValues } from '../types'
+import type { AnalysisResult, Bucket, BucketPage, ResourceSeriesEntry, ResourceSeriesValues } from '../types'
 import { OVERVIEW_LABELS } from './labels'
 import { formatNumber, loadSeries } from './overview'
 
@@ -61,6 +61,35 @@ export function planResourcePeriod(grid: SnapshotGrid, fromMs: number, toMs: num
 export function chooseLoadRollup(spanMs: number, budget = LOAD_BUCKET_BUDGET): 1 | 10 | 30 | 60 {
   for (const rollup of [1, 10, 30] as const) if (spanMs / (rollup * 1000) <= budget) return rollup
   return 60
+}
+
+export interface RunLoad { buckets: Bucket[]; rollupSeconds: 1 | 10 | 30 | 60; truncated: boolean }
+
+// Весь прогон для «Обзора»: проба на 60 с узнаёт длительность (до 500 интервалов она умещается в одну страницу),
+// затем шаг выбирается так, чтобы интервалов было не больше LOAD_BUCKET_BUDGET, и страницы читаются по next_from_ms.
+// Если прогон длиннее пробы, остаётся 60 с, и проба — первая страница. Предел MAX_LOAD_PAGES страниц.
+export async function fetchRunLoad(fetchPage: (rollupSeconds: 1 | 10 | 30 | 60, fromMs: number | undefined) => Promise<BucketPage>): Promise<RunLoad> {
+  const probe = await fetchPage(60, undefined)
+  let rollupSeconds: 1 | 10 | 30 | 60 = 60
+  let page: BucketPage | null = probe
+  if (probe.next_from_ms === null) {
+    if (!probe.buckets.length) return { buckets: [], rollupSeconds, truncated: false }
+    rollupSeconds = chooseLoadRollup(probe.buckets[probe.buckets.length - 1].bucket_start_ms + 60_000)
+    if (rollupSeconds !== 60) page = null
+  }
+  const buckets: Bucket[] = []
+  let from: number | undefined
+  for (let count = 0; count < MAX_LOAD_PAGES; count += 1) {
+    page ??= await fetchPage(rollupSeconds, from)
+    buckets.push(...page.buckets)
+    const next: number | null = page.next_from_ms
+    if (next === null) return { buckets, rollupSeconds, truncated: false }
+    const last = page.buckets.length ? page.buckets[page.buckets.length - 1].bucket_start_ms : -1
+    if (next <= last || (from !== undefined && next <= from)) return { buckets, rollupSeconds, truncated: true }
+    from = next
+    page = null
+  }
+  return { buckets, rollupSeconds, truncated: true }
 }
 
 export function loadBucketRange(originMs: number, axis: TimeAxis, rollupSeconds: number): { fromMs: number; toMs: number } | null {

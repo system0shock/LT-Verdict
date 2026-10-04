@@ -857,11 +857,11 @@ function focusPolicy() {
           />
 
           <OverviewPanel
-            v-if="shellNew && result && shownIn('overview')"
+            v-if="shellNew && result && selectedAnalysisId && shownIn('overview')"
+            :key="result.run_id + ':' + selectedAnalysisId"
             :result="result"
-            :buckets="buckets"
-            :bucket-rollup="bucketRollup"
-            :has-more-buckets="bucketNextFrom !== null"
+            :run-id="result.run_id"
+            :analysis-id="selectedAnalysisId"
             @navigate="jumpTo"
           />
 

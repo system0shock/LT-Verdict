@@ -54,10 +54,29 @@ const bucket = (start: number, samples: number, errors: number, p95: number) => 
 })
 const buckets = [bucket(0, 100, 0, 200), bucket(1000, 120, 1, 220), bucket(2000, 110, 5, 300), bucket(4000, 90, 7, 900), bucket(5000, 80, 2, 850), bucket(6000, 100, 0, 400)]
 
-async function fixtureApi(page: Page, result: unknown = failing, page500: { buckets: unknown[]; next_from_ms: number | null } = { buckets, next_from_ms: null }) {
-  const paths: string[] = []
+type BucketPage = { buckets: unknown[]; next_from_ms: number | null }
+type BucketSource = BucketPage | ((query: URLSearchParams) => BucketPage)
+
+// Сервер /buckets для прогона заданной длины: учитывает rollup, from_ms, to_ms и предел страницы в 500 интервалов.
+function runOf(totalSeconds: number): (query: URLSearchParams) => BucketPage {
+  return (query) => {
+    const width = Number(query.get('rollup')) * 1000
+    const from = Number(query.get('from_ms') ?? 0)
+    const limit = Number(query.get('limit'))
+    const page: unknown[] = []
+    let start = Math.ceil(from / width) * width
+    for (; start < totalSeconds * 1000 && page.length < limit; start += width) page.push(bucket(start, (width / 1000) * 50, 0, 100 + Math.floor(start / 60_000)))
+    return { buckets: page, next_from_ms: start < totalSeconds * 1000 ? start : null }
+  }
+}
+
+async function fixtureApi(page: Page, result: unknown = failing, page500: BucketSource = { buckets, next_from_ms: null }) {
+  const paths: string[] & { bucketQueries?: string[] } = []
+  const bucketQueries: string[] = []
+  paths.bucketQueries = bucketQueries
   await page.route('**/api/**', async (route) => {
-    const path = new URL(route.request().url()).pathname
+    const url = new URL(route.request().url())
+    const path = url.pathname
     const method = route.request().method()
     paths.push(`${method} ${path}`)
     let body: unknown
@@ -71,14 +90,17 @@ async function fixtureApi(page: Page, result: unknown = failing, page500: { buck
     else if (path === '/api/baseline') body = { baseline: null }
     else if (path.endsWith('/analyses')) body = { analyses: [{ analysis_id: reference.analysis_id, policy_sha256: 'c'.repeat(64), policy_verdict: (result as { policy_verdict: string }).policy_verdict, run_validity: 'VALID' }], next_after: null }
     else if (path.endsWith('/result')) body = result
-    else if (path.endsWith('/buckets')) body = page500
+    else if (path.endsWith('/buckets')) {
+      bucketQueries.push(url.search.slice(1))
+      body = typeof page500 === 'function' ? page500(url.searchParams) : page500
+    }
     else throw new Error(`Unexpected UI request ${path}`)
     await route.fulfill({ json: body })
   })
   return paths
 }
 
-async function openOverview(page: Page, result: unknown = failing, page500?: { buckets: unknown[]; next_from_ms: number | null }) {
+async function openOverview(page: Page, result: unknown = failing, page500?: BucketSource) {
   const paths = await fixtureApi(page, result, page500)
   await page.goto('/?shell=new')
   await page.getByRole('button', { name: 'overview.jtl' }).click()
@@ -267,11 +289,65 @@ test('an empty page shows a plain message instead of a zero line', async ({ page
   await expect(slider(page)).toHaveCount(0)
 })
 
-test('a truncated page says so and does not fetch more', async ({ page }) => {
-  const paths = await openOverview(page, failing, { buckets, next_from_ms: 7000 })
+const overviewQueries = (paths: { bucketQueries?: string[] }) => (paths.bucketQueries ?? []).filter((query) => !query.startsWith('rollup=1&'))
 
-  await expect(page.getByTestId('load-partial')).toHaveText(OVERVIEW_LABELS.loadPartial)
-  expect(paths.filter((entry) => entry.endsWith('/buckets'))).toEqual([`GET /api/runs/${reference.run_id}/analyses/${reference.analysis_id}/buckets`])
+test('a 4 hour run is shown in full at a 10 s step and the caption says so', async ({ page }) => {
+  const paths = await openOverview(page, failing, runOf(4 * 3600))
+
+  await expect(chart(page)).toBeVisible()
+  expect(overviewQueries(paths)).toEqual([
+    'rollup=60&limit=500', 'rollup=10&limit=500', 'rollup=10&limit=500&from_ms=5000000', 'rollup=10&limit=500&from_ms=10000000',
+  ])
+  await expect(page.getByTestId('load-summary')).toHaveText(OVERVIEW_LABELS.loadSummary(1440, 10))
+  await expect(page.getByTestId('load-step')).toHaveText(OVERVIEW_LABELS.loadStep(10))
+  await expect(page.getByTestId('load-partial')).toHaveCount(0)
+  await expect(page.getByTestId('load-gaps')).toHaveCount(0)
+  await expect(page.locator('.shared-chart__axis-labels span').last()).toHaveText('3:59:50')
+  await expect(slider(page)).toHaveAttribute('max', '1439')
+  await slider(page).focus()
+  await page.keyboard.press('End')
+  await expect(page.getByTestId('cursor-time')).toHaveText(OVERVIEW_LABELS.cursorTime('3:59:50'))
+  await expect(page.getByTestId('track-value-p95')).toHaveAttribute('data-value', String(100 + Math.floor(14_390_000 / 60_000)))
+})
+
+test('a short run keeps the 1 s step and shows no step note', async ({ page }) => {
+  const paths = await openOverview(page, failing, runOf(20 * 60))
+
+  await expect(page.getByTestId('load-summary')).toHaveText(OVERVIEW_LABELS.loadSummary(1200, 1))
+  await expect(page.getByTestId('load-step')).toHaveCount(0)
+  expect(overviewQueries(paths)).toEqual(['rollup=60&limit=500'])
+  // Первый запрос шага 1 с делает вкладка «Таблицы» (первая страница), остальные три читает «Обзор».
+  expect(paths.bucketQueries?.filter((query) => query.startsWith('rollup=1&')).sort()).toEqual([
+    'rollup=1&limit=500', 'rollup=1&limit=500', 'rollup=1&limit=500&from_ms=1000000', 'rollup=1&limit=500&from_ms=500000',
+  ])
+})
+
+test('a run longer than the page limit says so and keeps the loaded part', async ({ page }) => {
+  const paths = await openOverview(page, failing, runOf(200 * 3600))
+
+  await expect(chart(page)).toBeVisible()
+  await expect(page.getByTestId('load-partial')).toHaveText(OVERVIEW_LABELS.loadPartial(6000, 60))
+  await expect(page.getByTestId('load-summary')).toHaveText(OVERVIEW_LABELS.loadSummary(6000, 60))
+  expect(overviewQueries(paths)).toHaveLength(12)
+})
+
+test('a failed run does not request the load series', async ({ page }) => {
+  const invalid = { ...base, run_validity: 'INVALID', policy_verdict: 'NO_VERDICT', analysis_coverage: { status: 'INCOMPLETE', reasons: ['MALFORMED_JMETER_CSV'] }, evidence: [] }
+  const paths = await openOverview(page, invalid)
+
+  await expect(page.getByTestId('load-empty')).toHaveText(OVERVIEW_LABELS.loadEmpty)
+  expect(paths.filter((entry) => entry.endsWith('/buckets'))).toEqual([])
+})
+
+test('a failed load request is reported in place of the chart', async ({ page }) => {
+  await fixtureApi(page)
+  await page.route('**/buckets?rollup=60*', (route) => route.fulfill({ status: 500, json: { error: { code: 'X', message: 'Buckets exploded' } } }))
+  await page.goto('/?shell=new')
+  await page.getByRole('button', { name: 'overview.jtl' }).click()
+  await page.locator(`button[title="${reference.analysis_id}"]`).click()
+
+  await expect(page.getByTestId('load-error')).toContainText(OVERVIEW_LABELS.loadFailed('').trim())
+  await expect(chart(page)).toHaveCount(0)
 })
 
 test('the overview asks the server for nothing beyond the existing endpoints', async ({ page }) => {
@@ -281,7 +357,8 @@ test('the overview asks the server for nothing beyond the existing endpoints', a
 
   expect(paths.filter((entry) => entry.startsWith('POST'))).toEqual([])
   expect(paths.filter((entry) => entry.endsWith('/result'))).toHaveLength(1)
-  expect(paths.filter((entry) => entry.endsWith('/buckets'))).toHaveLength(1)
+  expect(overviewQueries(paths)).toEqual(['rollup=60&limit=500'])
+  expect(paths.filter((entry) => entry.endsWith('/buckets'))).toHaveLength(3)
 })
 
 test('old interface has no overview panel and keeps its own charts', async ({ page }) => {

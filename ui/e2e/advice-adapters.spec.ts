@@ -1,7 +1,7 @@
 import { expect, test } from '@playwright/test'
-import type { AdviceDocument, AdviceJob } from '../src/types'
+import type { AdviceDocument, AdviceJob, AnalysisResult } from '../src/types'
 import { ADVICE_LABELS } from '../src/shell/labels.advice'
-import { apiFailureView, jobView, provenanceLines } from '../src/shell/advice'
+import { apiFailureView, evidenceRef, jobView, provenanceLines } from '../src/shell/advice'
 
 // Чистые функции ИИ-разбора: происхождение совета и русские тексты ошибок. Данные на входе, готовые строки на выходе.
 function advice(over: Record<string, unknown>): AdviceDocument {
@@ -106,4 +106,34 @@ test('API errors AI_BUSY and AI_UNAVAILABLE read as words and other codes are no
   expect(apiFailureView('AI_BUSY', 'An AI task is already running')).toMatchObject({ text: ADVICE_LABELS.apiBusy, code: 'AI_BUSY', hint: ADVICE_LABELS.apiBusyHint })
   expect(apiFailureView('AI_UNAVAILABLE', 'AI runner is not configured')).toMatchObject({ text: ADVICE_LABELS.apiUnavailable, code: 'AI_UNAVAILABLE' })
   expect(apiFailureView('CANCEL_FAILED', 'Cancel request failed')).toMatchObject({ text: 'Cancel request failed', code: 'CANCEL_FAILED', hint: null })
+})
+
+// Основания гипотез (срез U6b): подпись evidence словами и цель перехода по якорям вкладки «Таблицы».
+const refResult = {
+  schema_version: 'analysis-result.v1', run_id: 'run-1', analysis_mode: 'standard', run_validity: 'VALID', policy_verdict: 'FAIL',
+  analysis_coverage: { status: 'COMPLETE', reasons: [] }, findings: [],
+  evidence: [
+    { id: 'm-all', type: 'metric_summary', scope: { kind: 'overall' } },
+    { id: 'm-pay', type: 'metric_summary', scope: { kind: 'transaction', group_path: ['Оплата'], label: 'POST /pay', sample_kind: 'JMETER_SAMPLER' } },
+    { id: 'c1', type: 'policy_check', rule_id: 'checkout-p95', metric: 'response_time_p95_ms', operator: 'lte', threshold: 1, status: 'FAIL' },
+    { id: 'rc1', type: 'resource_policy_check', rule_id: 'mem-limit' },
+    { id: 'x1', type: 'brand_new_type' },
+  ],
+} as unknown as AnalysisResult
+
+test('a policy check ref is a rule label that opens its table row', () => {
+  expect(evidenceRef(refResult, 'c1')).toEqual({ label: `${ADVICE_LABELS.evidence.rule} checkout-p95`, target: { tab: 'tables', targetId: 'ev-c1' } })
+})
+
+test('a transaction metric ref opens its row and the overall metric ref opens the summary cards', () => {
+  expect(evidenceRef(refResult, 'm-pay')).toEqual({ label: `${ADVICE_LABELS.evidence.metrics}: Оплата / POST /pay`, target: { tab: 'tables', targetId: 'ev-m-pay' } })
+  expect(evidenceRef(refResult, 'm-all')).toEqual({ label: ADVICE_LABELS.evidence.overall, target: { tab: 'tables', targetId: 'summary-metrics' } })
+})
+
+test('other known evidence is named by type without a link and an unknown id stays a code', () => {
+  expect(evidenceRef(refResult, 'rc1')).toEqual({ label: ADVICE_LABELS.evidence.types.resource_policy_check, target: null })
+  expect(evidenceRef(refResult, 'x1')).toEqual({ label: 'x1', target: null })
+  expect(evidenceRef(refResult, 'zzz')).toEqual({ label: 'zzz', target: null })
+  expect(evidenceRef(null, 'c1')).toEqual({ label: 'c1', target: null })
+  expect(evidenceRef(undefined, '')).toEqual({ label: '', target: null })
 })

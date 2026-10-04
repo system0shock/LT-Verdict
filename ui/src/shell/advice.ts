@@ -1,7 +1,10 @@
-import type { AdviceDocument, AdviceJob } from '../types'
+import type { AdviceDocument, AdviceJob, AnalysisResult } from '../types'
+import { scopeLabel } from '../verdictSummary'
 import { ADVICE_LABELS } from './labels.advice'
+import type { AttentionTarget } from './overview'
 
 export interface ProvenanceLine { label: string; value: string; hint?: string }
+export interface EvidenceRef { label: string; target: AttentionTarget | null }
 export interface FailureView { state: string; text: string; code: string | null; hint: string | null; tone: 'info' | 'warn' | 'fail' }
 
 export function provenanceLines(advice: AdviceDocument): ProvenanceLine[] {
@@ -49,4 +52,18 @@ export function apiFailureView(code: string, message: string): FailureView {
   if (code === 'AI_BUSY') return { state: '', text: ADVICE_LABELS.apiBusy, code, hint: ADVICE_LABELS.apiBusyHint, tone: 'warn' }
   if (code === 'AI_UNAVAILABLE') return { state: '', text: ADVICE_LABELS.apiUnavailable, code, hint: ADVICE_LABELS.apiUnavailableHint, tone: 'warn' }
   return { state: '', text: message, code, hint: null, tone: 'fail' }
+}
+
+// Основание гипотезы: подпись evidence словами и цель перехода (якоря ev-<id> из U3a). Неизвестный id остаётся кодом без цели.
+export function evidenceRef(result: AnalysisResult | null | undefined, id: string): EvidenceRef {
+  const item = result?.evidence.find((candidate) => 'id' in candidate && candidate.id === id)
+  if (!item) return { label: id, target: null }
+  const labels = ADVICE_LABELS.evidence
+  if (item.type === 'policy_check') return { label: `${labels.rule} ${item.rule_id}`, target: { tab: 'tables', targetId: `ev-${id}` } }
+  if (item.type === 'metric_summary') {
+    return item.scope.kind === 'overall'
+      ? { label: labels.overall, target: { tab: 'tables', targetId: 'summary-metrics' } }
+      : { label: `${labels.metrics}: ${scopeLabel(item.scope)}`, target: { tab: 'tables', targetId: `ev-${id}` } }
+  }
+  return { label: Object.hasOwn(labels.types, item.type) ? labels.types[item.type]! : id, target: null }
 }

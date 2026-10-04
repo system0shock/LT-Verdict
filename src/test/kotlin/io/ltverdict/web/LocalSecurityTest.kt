@@ -272,7 +272,7 @@ class LocalSecurityTest {
             val response = request("GET", "/api/bootstrap")
             assertEquals(200, response.statusCode())
             val body = response.json()
-            assertEquals(setOf("csrf_token", "max_upload_bytes"), body.keys)
+            assertEquals(setOf("csrf_token", "max_upload_bytes", "advisory_ai"), body.keys)
             assertEquals(MAX_UPLOAD_BYTES, body.getValue("max_upload_bytes").jsonPrimitive.long)
 
             val csrf = body.getValue("csrf_token").jsonPrimitive.content

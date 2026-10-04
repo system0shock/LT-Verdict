@@ -25,15 +25,20 @@ import java.util.concurrent.Semaphore
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.TimeoutException
 import java.util.concurrent.locks.LockSupport
+import javax.net.ssl.SSLException
+import javax.net.ssl.SSLParameters
 import kotlin.math.ceil
 import kotlin.math.min
 
 internal class SourceHttp(
     profiles: List<SourceProfile>,
+    private val systemProperty: (String) -> String? = System::getProperty,
     private val environment: (String) -> String? = System::getenv,
 ) {
     private val configured: Map<String, ConfiguredProfile>
     private val client: HttpClient
+    private val tlsClients = mutableMapOf<String, Pair<HttpClient, SourceTlsMaterial>>()
+    private val tlsClientsLock = Any()
 
     init {
         if (profiles.map(SourceProfile::id).toSet().size != profiles.size) sourceFailure("SOURCE_PROFILE_INVALID")
@@ -100,6 +105,36 @@ internal class SourceHttp(
         val configuredProfile =
             configured[profile.id]?.takeIf { it.profile == profile }
                 ?: sourceFailure("SOURCE_PROFILE_NOT_CONFIGURED")
+        val requestClient: Pair<HttpClient, SourceTlsMaterial>? =
+            profile.tls?.let { tls ->
+                val holder =
+                    synchronized(tlsClientsLock) {
+                        tlsClients[profile.id] ?: run {
+                            val material = sourceTlsMaterial(tls, environment, systemProperty)
+                            val parameters =
+                                SSLParameters().apply {
+                                    protocols = arrayOf("TLSv1.3", "TLSv1.2")
+                                    endpointIdentificationAlgorithm = "HTTPS"
+                                }
+                            val built =
+                                try {
+                                    HttpClient
+                                        .newBuilder()
+                                        .followRedirects(HttpClient.Redirect.NEVER)
+                                        .sslContext(material.sslContext)
+                                        .sslParameters(parameters)
+                                        .build() to material
+                                } catch (_: Exception) {
+                                    throw SourceHttpFailure("SOURCE_TLS_CONFIG_INVALID")
+                                }
+                            tlsClients[profile.id] = built
+                            built
+                        }
+                    }
+                holder
+            }
+        val tlsMaterial = requestClient?.second
+        val sendClient = requestClient?.first ?: client
         val authorization = authorization(profile.auth, environment)
         val request =
             request(
@@ -116,8 +151,16 @@ internal class SourceHttp(
                 try {
                     configuredProfile.state.acquireToken(budget, checkCancelled)
                     checkCancelled()
+                    tlsMaterial?.checkClientValidity()
                     if (!budget.reserveAttempt(attempt > 0)) sourceFailure("SOURCE_REQUEST_CAP_EXCEEDED")
-                    send(request, configuredProfile.state.settings.timeoutMillis, checkCancelled, responseLimit)
+                    send(
+                        sendClient,
+                        profile.tls != null,
+                        request,
+                        configuredProfile.state.settings.timeoutMillis,
+                        checkCancelled,
+                        responseLimit,
+                    )
                 } catch (failure: AttemptFailure) {
                     if (!failure.retryable || attempt + 1 >= configuredProfile.state.settings.maxAttempts) {
                         sourceFailure(failure.code)
@@ -158,12 +201,14 @@ internal class SourceHttp(
     }
 
     private fun send(
+        requestClient: HttpClient,
+        tlsProfile: Boolean,
         request: HttpRequest,
         timeoutMillis: Long,
         checkCancelled: () -> Unit,
         responseLimit: Int,
     ): HttpResponse<ByteArray> {
-        val future = client.sendAsync(request, BoundedBodyHandler(responseLimit))
+        val future = requestClient.sendAsync(request, BoundedBodyHandler(responseLimit))
         val deadline = saturatedDeadline(System.nanoTime(), TimeUnit.MILLISECONDS.toNanos(timeoutMillis))
         while (true) {
             try {
@@ -186,6 +231,7 @@ internal class SourceHttp(
                 Thread.currentThread().interrupt()
                 throw SourceHttpFailure("SOURCE_CANCELLED")
             } catch (failure: ExecutionException) {
+                if (tlsProfile && hasSslException(failure)) throw AttemptFailure("SOURCE_TLS_HANDSHAKE_FAILED", false)
                 when (unwrap(failure)) {
                     is BodyLimitFailure -> throw AttemptFailure("SOURCE_RESPONSE_TOO_LARGE", false)
                     is HttpTimeoutException -> throw AttemptFailure("SOURCE_TIMEOUT", true)
@@ -554,6 +600,17 @@ private fun unwrap(failure: Throwable): Throwable {
         current = current.cause ?: return current
     }
     return current
+}
+
+private fun hasSslException(failure: Throwable): Boolean {
+    val seen = java.util.Collections.newSetFromMap(java.util.IdentityHashMap<Throwable, Boolean>())
+    var current: Throwable? = failure
+    while (current != null) {
+        if (!seen.add(current)) return false
+        if (current is SSLException) return true
+        current = current.cause
+    }
+    return false
 }
 
 private fun sourceFailure(code: String): Nothing = throw SourceHttpFailure(code)

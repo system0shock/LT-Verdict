@@ -1,0 +1,9 @@
+{
+  "schema_version": "ai-models.v1",
+  "endpoint": {
+    "url": "http://gateway.lan:8080/v1/chat/completions",
+    "allow_insecure_http": true
+  },
+  "default_model": "org/model:v1.2",
+  "models": [{ "id": "org/model:v1.2", "label": "Внутренняя модель" }]
+}

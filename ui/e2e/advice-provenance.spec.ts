@@ -37,6 +37,7 @@ interface Setup {
   postError?: { code: string; message: string }
   perAnalysis?: Record<string, { advice: unknown; job?: unknown }>
   holdFirst?: Promise<void>
+  result?: unknown
 }
 
 async function mockApi(page: Page, setup: Setup) {
@@ -57,7 +58,7 @@ async function mockApi(page: Page, setup: Setup) {
     else if (method === 'GET' && path === '/api/jobs') body = { jobs: [] }
     else if (method === 'GET' && /^\/api\/runs\/[^/]+\/analyses$/.test(path)) {
       body = { analyses: [analysisA, analysisB].map((id) => ({ analysis_id: id, policy_sha256: 'c'.repeat(64), policy_verdict: 'NO_POLICY', run_validity: 'VALID' })), next_after: null }
-    } else if (method === 'GET' && /\/analyses\/[^/]+\/result$/.test(path)) body = result
+    } else if (method === 'GET' && /\/analyses\/[^/]+\/result$/.test(path)) body = setup.result ?? result
     else if (method === 'GET' && /\/analyses\/[^/]+\/buckets$/.test(path)) body = { buckets: [], next_from_ms: null }
     else if (/\/analyses\/[^/]+\/advice$/.test(path)) {
       const analysisId = path.split('/')[5]!
@@ -249,5 +250,67 @@ for (const size of [{ width: 1280, height: 800 }, { width: 375, height: 800 }, {
     await expect(panel.getByTestId('advice-provenance')).toBeVisible()
     const width = await page.evaluate(() => ({ scroll: document.documentElement.scrollWidth, client: document.documentElement.clientWidth }))
     expect(width.scroll).toBeLessThanOrEqual(width.client)
+  })
+}
+
+// Основания гипотез ведут к строкам evidence (срез U6b).
+const evidenceResult = {
+  ...result,
+  policy_verdict: 'FAIL',
+  evidence: [
+    ...result.evidence,
+    { id: 'm-pay', type: 'metric_summary', scope: { kind: 'transaction', group_path: [], label: 'POST /pay', sample_kind: 'JMETER_SAMPLER' }, sample_count: 50, error_count: 0,
+      error_rate_ratio: { numerator: 0, denominator: 50 }, throughput_rps: { numerator: 50000, denominator: 1000 }, latency_ms: { p50: 10, p95: 20, p99: 30, max: 40 } },
+    { id: 'c1', type: 'policy_check', rule_id: 'pay-p95', metric: 'response_time_p95_ms', operator: 'lte', threshold: 15, status: 'FAIL', metric_evidence_id: 'm-pay', observed: 20 },
+  ],
+}
+const groundedAdvice = () => {
+  const base = advice(analysisA, 'm', 'advisory-system.v2')
+  return { ...base, output: { ...(base.output as object), hypotheses: [
+    { rank: 1, observation: 'o', possible_explanation: 'e', recommended_check: 'c', evidence_refs: ['c1', 'm-pay', 'm-overall', 'zzz'] },
+  ] } }
+}
+
+test('grounds name the evidence in words and open the table row or the summary cards', async ({ page }) => {
+  const { panel } = await openAdvice(page, { advice: groundedAdvice(), result: evidenceResult })
+  await panel.getByText('Основания').click()
+  const grounds = panel.locator('details li')
+  await expect(grounds).toHaveCount(4)
+  await expect(grounds.nth(0)).toContainText('c1')
+  await expect(grounds.nth(0)).toContainText(`${ADVICE_LABELS.evidence.rule} pay-p95`)
+  await expect(grounds.nth(3)).toContainText('zzz')
+  await expect(grounds.nth(3).getByRole('button')).toHaveCount(0)
+
+  await grounds.nth(0).getByRole('button', { name: ADVICE_LABELS.evidence.open }).click()
+  await expect(page.locator('#shell-tab-tables')).toHaveAttribute('aria-selected', 'true')
+  await expect(page.locator('tr[data-evidence-id="c1"]')).toBeFocused()
+
+  await page.locator('#shell-tab-advice').click()
+  await grounds.nth(1).getByRole('button', { name: ADVICE_LABELS.evidence.open }).click()
+  await expect(page.locator('tr[data-evidence-id="m-pay"]')).toBeFocused()
+
+  await page.locator('#shell-tab-advice').click()
+  await grounds.nth(2).getByRole('button', { name: ADVICE_LABELS.evidence.open }).click()
+  await expect(page.locator('#shell-tab-tables')).toHaveAttribute('aria-selected', 'true')
+  await expect(page.locator('#summary-metrics')).toBeFocused()
+  await expect(page.locator('#summary-metrics')).toBeInViewport()
+})
+
+test('an advice without a loaded result or in the old interface keeps the codes without links', async ({ page }) => {
+  const { panel } = await openAdvice(page, { advice: groundedAdvice(), result: evidenceResult }, 'old')
+  await panel.getByText('Основания').click()
+  await expect(panel.locator('details li')).toHaveCount(4)
+  await expect(panel.locator('details li code').first()).toHaveText('c1')
+  await expect(panel.locator('details').getByRole('button')).toHaveCount(0)
+})
+
+for (const theme of ['light', 'dark'] as const) {
+  test(`opened grounds with link buttons have no serious axe violations in ${theme}`, async ({ page }) => {
+    await page.emulateMedia({ colorScheme: theme })
+    const { panel } = await openAdvice(page, { advice: groundedAdvice(), result: evidenceResult })
+    await panel.getByText('Основания').click()
+    await expect(panel.getByRole('button', { name: ADVICE_LABELS.evidence.open })).toHaveCount(3)
+    const axe = await new AxeBuilder({ page }).include('section[aria-labelledby="advice-title"]').analyze()
+    expect(axe.violations.filter((item) => item.impact === 'critical' || item.impact === 'serious').map((item) => item.id)).toEqual([])
   })
 }

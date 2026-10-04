@@ -239,6 +239,23 @@ class SourceConfigTest {
     }
 
     @Test
+    fun `profile queries accept interval max and interval min`() {
+        listOf("interval_max", "interval_min").forEach { name ->
+            val config =
+                """{"schema_version":"source-connections.v1","connections":[${minimalConnection("p").replace("interval_rate", name)}]}"""
+
+            val profile = readSourceProfiles(config.byteInputStream()).single()
+
+            assertEquals(
+                name,
+                profile.queries
+                    .single()
+                    .aggregation.wireName,
+            )
+        }
+    }
+
+    @Test
     fun `profile accepts 64 queries`() {
         val queries =
             (1..64).joinToString(",") { index ->

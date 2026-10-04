@@ -1,0 +1,18 @@
+{
+  "schema_version": "resource-snapshot.v1",
+  "load_input_sha256": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+  "start_epoch_ms": 1767225600000,
+  "step_ms": 20000,
+  "point_count": 4,
+  "series": [
+    {
+      "id": "memory-limit-ratio",
+      "metric": "memory_limit_ratio",
+      "unit": "ratio",
+      "entity": "service-a",
+      "role": "system",
+      "aggregation": "instant",
+      "values": [0.61, 0.72, 0.93, 0.7]
+    }
+  ]
+}

@@ -65,6 +65,33 @@ class ResourceSnapshotTest {
     }
 
     @Test
+    fun `interval max and interval min are valid aggregations and enter the semantic hash`() {
+        val mean = valid(snapshot().encodeToByteArray())
+
+        listOf("interval_max", "interval_min").forEach { name ->
+            val changed = valid(snapshot().replace("interval_mean", name).encodeToByteArray())
+
+            assertEquals(listOf(name, name), changed.snapshot.series.map { it.aggregation.wireName })
+            assertNotEquals(mean.semanticSha256, changed.semanticSha256)
+            assertEquals(mean.configSha256, changed.configSha256)
+        }
+    }
+
+    @Test
+    fun `the interval max and min contract example is accepted and the invalid example is not`() {
+        val accepted = valid(Files.readAllBytes(Path.of("docs/contracts/resources/v1/examples/valid/interval-max-min.json")))
+
+        assertEquals(
+            setOf(ResourceAggregation.INTERVAL_MAX, ResourceAggregation.INTERVAL_MIN),
+            accepted.snapshot.series
+                .map { it.aggregation }
+                .toSet(),
+        )
+        val rejected = Files.readString(Path.of("docs/contracts/resources/v1/examples/invalid/unsupported-aggregation.json"))
+        assertInvalid(rejected, "UNSUPPORTED_AGGREGATION", "/series/0/aggregation")
+    }
+
+    @Test
     fun `numeric and collection ceilings fail closed`() {
         val tooPrecise = snapshot().replace("0.7,null,0.9,0.95", "0.1234567890123,null,0.9,0.95")
         val tooManyPoints = snapshot().replace("\"point_count\":4", "\"point_count\":100001")

@@ -686,7 +686,7 @@ Optional `Resource snapshot` — подготовленный локальным
 timestamps и значения своими данными, а thresholds — согласованными SLA.
 
 Series содержит metric, unit, entity, role `system|generator`, aggregation
-`interval_mean|interval_rate` и значения на общей UTC grid. `null` означает gap,
+`interval_mean|interval_rate|interval_max|interval_min` и значения на общей UTC grid. `null` означает gap,
 а не ноль. Raw counters, instant samples и percentile series сначала требуется
 преобразовать в поддерживаемую семантику в адаптере. Credentials и URL в snapshot
 не передавайте. Limits: файл 32 MiB, 1 024 series, 100 000 points на series,

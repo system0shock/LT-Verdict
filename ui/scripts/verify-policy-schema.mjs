@@ -1,5 +1,5 @@
 import Ajv2020 from 'ajv/dist/2020.js'
-import { readFile } from 'node:fs/promises'
+import { readFile, readdir } from 'node:fs/promises'
 import { fileURLToPath } from 'node:url'
 import { resolve } from 'node:path'
 
@@ -74,6 +74,24 @@ for (const [name, path, expected] of [
     throw new Error(`run period schema ${name}: expected schema_valid=${expected}; ${JSON.stringify(validateRunPeriod.errors)}`)
   }
 }
+const aiModelsSchema = await readJson('docs/contracts/advice/v1/ai-models.schema.json')
+const validateAiModels = new Ajv2020({ strict: false }).compile(aiModelsSchema)
+const aiModelsExamples = 'docs/contracts/advice/v1/examples/ai-models'
+for (const [name, expected] of [
+  ['valid', true],
+  ['invalid', false],
+  // JSON Schema cannot express duplicate property names (JSON.parse keeps the last one), unique ids or a
+  // default_model outside the list; AiModelsConfigTest asserts that the Kotlin loader rejects these documents.
+  ['runtime-only', true],
+]) {
+  for (const file of (await readdir(resolve(root, aiModelsExamples, name))).sort()) {
+    const path = `${aiModelsExamples}/${name}/${file}`
+    if (validateAiModels(await readJson(path)) !== expected) {
+      throw new Error(`ai-models schema ${path}: expected schema_valid=${expected}; ${JSON.stringify(validateAiModels.errors)}`)
+    }
+  }
+}
+if (!validateAiModels(aiModelsSchema.examples[0])) throw new Error('ai-models schema example is invalid')
 const manifest = await readJson('fixtures/slice1/manifest.json')
 const schema = await readJson('docs/contracts/policy/v1/policy.schema.json')
 const validate = new Ajv2020({ strict: false }).compile(schema)

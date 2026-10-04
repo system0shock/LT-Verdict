@@ -1,0 +1,6 @@
+{
+  "schema_version": "ai-models.v1",
+  "endpoint": { "url": "http://gateway.lan/v1/chat/completions" },
+  "default_model": "a",
+  "models": [{ "id": "a", "label": "A" }]
+}

@@ -73,9 +73,16 @@ Qwen container работает с read-only root, без capabilities и host p
 read-only доступны только package, evidence, prompt, schema и launcher. User
 home, repository и Docker socket не mounted. Qwen подключён только к internal
 Docker network и обращается к relay по `http://modelstudio-relay:18080/v1`.
-Relay разрешает один запрос к фиксированному ModelStudio endpoint, фиксирует
+Relay пересылает фиксированному ModelStudio endpoint запросы с фиксированной
 model, удаляет token-cap и provider-routing fields и принимает только один
-`structured_output` call. Retries отсутствуют.
+`structured_output` call за запрос. Один совет использует не более двух
+запросов к провайдеру: второй (повтор) relay пересылает только если первый ответ
+нарушил схему на верхнем уровне (`schema_version`, `summary`, `hypotheses`,
+`recommendations`, `caveats`), повтор пришёл в пределах 300 s от начала первого
+запроса и является продолжением первого, а любой третий запрос получает отказ.
+Ошибка схемы глубже верхнего уровня, ошибка провайдера или транспорта повтор не
+запускают. Если повтор не дал валидного ответа, анализ получает состояние
+`FAILED/INVALID_OUTPUT`. Evidence уходит провайдеру максимум дважды за один совет.
 
 Перед отправкой evidence очищается от секретов. Поля с именами `password`,
 `token`, `api_key`, `cookie` и подобными заменяются целиком. В свободном тексте
@@ -122,12 +129,12 @@ Developer preflight использует fake response внутри Docker и н
 credential:
 
 ```powershell
-node tools/test_advisory_ai_runtime_relay.mjs
+node --test tools/test_advisory_ai_runtime_relay.mjs
 powershell.exe -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File tools/test_advisory_ai_runtime.ps1
 ```
 
-Preflight проверяет fixed forwarding policy, single-request guard, pinned
-artifacts, internal network, structured output и cleanup. Он не выполняет live
+Preflight проверяет fixed forwarding policy, предел двух запросов и повтор после
+ошибки схемы, pinned artifacts, internal network, structured output и cleanup. Он не выполняет live
 ModelStudio request и не подтверждает смысловое качество advice.
 
 ## Оставшееся ограничение приёмки

@@ -11,6 +11,8 @@ import RunSetup from './RunSetup.vue'
 import VerdictCard from './VerdictCard.vue'
 import NewAnalysisPanel from './shell/NewAnalysisPanel.vue'
 import OverviewPanel from './shell/OverviewPanel.vue'
+import RuleChecksTable from './shell/RuleChecksTable.vue'
+import TransactionsTable from './shell/TransactionsTable.vue'
 import ShellPanel from './shell/ShellPanel.vue'
 import ShellTabs from './shell/ShellTabs.vue'
 import { JOB_LABELS, SETUP_MESSAGES, SHELL_DEFAULT_TAB, SHELL_LABELS, UPLOAD_LABELS, type ShellTabKey } from './shell/labels'
@@ -1050,9 +1052,14 @@ function focusPolicy() {
             :selection="selectedReference"
           />
 
+          <template v-if="shellNew && result && shownIn('tables')">
+            <RuleChecksTable :result="result" />
+            <TransactionsTable :result="result" />
+          </template>
           <AnalysisView
             v-if="result && shownIn('tables')"
             :result="result"
+            :shell-tables="shellNew"
             :buckets="buckets"
             :markers="chartMarkers"
             :rollup="rollup"

@@ -108,7 +108,7 @@ const sourceEnd = ref('')
 const sourceStep = ref('')
 const sourceMargin = ref('0')
 const sourceMaxIdleGap = ref('60000')
-const aiConsent = ref(false)
+const aiRequested = ref(false)
 const adviceAutoFor = ref<string | null>(null)
 const policy = ref<Policy | null>(null)
 const policyStatus = ref('')
@@ -437,9 +437,9 @@ async function analyze() {
       capacityFile.value,
       trendFile.value,
     )
-    // Согласие на ИИ-разбор относится к этому запуску: запоминаем его и сбрасываем галку.
-    adviceRevision = aiConsent.value ? revision : 0
-    aiConsent.value = false
+    // Запрос ИИ-разбора относится к этому запуску: запоминаем его и сбрасываем переключатель.
+    adviceRevision = aiRequested.value ? revision : 0
+    aiRequested.value = false
     uploadProgress.value = 100
     await pollJob(revision)
   } catch (failure) {
@@ -914,7 +914,7 @@ function focusPolicy() {
             :policy-status="policyStatus"
             :policy-errors="policyErrors"
             :busy="working || (uploadProgress > 0 && !job) || !!postgresCapturePhase"
-            :ai-consent="shellNew ? aiConsent : undefined"
+            :ai-requested="shellNew ? aiRequested : undefined"
             @input="selectInput"
             @resources="selectResources"
             @diagnostics="selectDiagnostics"
@@ -936,7 +936,7 @@ function focusPolicy() {
             @policy-file="selectPolicyFile"
             @update-policy="updatePolicy"
             @open-rules="activeTab = 'rules'"
-            @ai-consent="aiConsent = $event"
+            @ai-requested="aiRequested = $event"
             @analyze="analyze"
           />
 

@@ -14,7 +14,7 @@ const base: ReadinessInput = {
   sourceRequestError: '',
   contextCount: 0,
   postgres: { pre: false, post: false, html: false },
-  aiConsent: false,
+  aiRequested: false,
 }
 const build = (over: Partial<ReadinessInput>) => buildReadiness({ ...base, ...over })
 const item = (readiness: ReturnType<typeof build>, key: ReadinessKey) => readiness.items.find((entry) => entry.key === key)!
@@ -126,8 +126,8 @@ test('contexts and PostgreSQL files are listed by what they are', () => {
   expect(item(build({}), 'postgres')).toMatchObject({ level: 'info', detail: SETUP_LABELS.postgresNoneItem })
 })
 
-test('the AI consent only adds a line to what will happen and never blocks the start', () => {
-  const asked = build({ aiConsent: true })
+test('the AI request only adds a line to what will happen and never blocks the start', () => {
+  const asked = build({ aiRequested: true })
 
   expect(asked.canStart).toBe(true)
   expect(asked.will).toEqual([SETUP_LABELS.willNoVerdict, SETUP_LABELS.willAdvice])

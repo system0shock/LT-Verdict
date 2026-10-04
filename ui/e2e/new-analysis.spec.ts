@@ -343,16 +343,17 @@ test('PostgreSQL capture buttons need a profile and call the existing endpoints'
   await expect.poll(() => calls.captures).toEqual(['pre', 'post'])
 })
 
-test('the ИИ-разбор section asks for consent at the start and sends nothing by itself', async ({ page }) => {
+test('the ИИ-разбор section offers a toggle with no consent wording and sends nothing by itself', async ({ page }) => {
   const calls = await openSetup(page)
   const ai = page.locator('#run-setup section', { has: page.getByRole('heading', { name: SETUP_LABELS.aiTitle }) })
-  const consent = page.locator('#ai-consent')
+  const requested = page.locator('#ai-requested')
 
   await expect(ai).toContainText(SETUP_LABELS.aiText)
-  await expect(consent).toHaveAccessibleName(SETUP_LABELS.aiConsentLabel)
-  await expect(consent).not.toBeChecked()
+  await expect(requested).toHaveAccessibleName(SETUP_LABELS.aiRequestedLabel)
+  await expect(requested).not.toBeChecked()
+  for (const word of ['Разрешаю', 'ModelStudio', 'Singapore']) await expect(ai).not.toContainText(word)
   await expect(page.getByTestId('readiness-will')).not.toContainText(SETUP_LABELS.willAdvice)
-  await consent.check()
+  await requested.check()
   await expect(page.getByTestId('readiness-will')).toContainText(SETUP_LABELS.willAdvice)
   await page.locator('#input-file').setInputFiles(load)
   await expect(start(page)).toBeEnabled()

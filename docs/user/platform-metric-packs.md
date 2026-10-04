@@ -1,0 +1,164 @@
+# Пакеты метрик OpenShift: генератор профилей источника
+
+Профили онлайн-источника для платформенных сигналов (CPU, память, OOM,
+рестарты, троттлинг, недоступные реплики, перекос по подам) не пишутся руками:
+их выпускает генератор `tools/platform_profiles.py` из единого каталога шаблонов
+PromQL `tools/platform_profile_templates.py`. Свёртка pod → сервис выполняется
+запросом на стороне источника. Ядро LT Verdict про OpenShift ничего не знает: оно
+получает по одному ряду на пару (сервис, сигнал), как и для любого другого
+`query_range`.
+
+> **Не проверено на стенде.** Шаблоны проверены на синтетических рядах
+> (`promtool test rules`) и тестовыми HTTP-серверами. Метки экспортёров
+> реального OpenShift могут отличаться (раздел «Что не проверено»): перед
+> первым боевым прогоном сверьте семейства метрик ниже со своим источником.
+
+## Контракт меток
+
+Шаблоны предполагают следующие семейства метрик. Это контракт между профилем и
+источником.
+
+| Семейство | Обязательные метки | Откуда в OpenShift | Используется в сигналах |
+| --- | --- | --- | --- |
+| `namespace_workload_pod:kube_pod_owner:relabel` (значение 1) | `namespace`, `pod`, `workload` | правило платформенного мониторинга | все: отображение pod → сервис |
+| `node_namespace_pod_container:container_cpu_usage_seconds_total:sum_irate` | `namespace`, `pod`, `container` | правило платформенного мониторинга | `cpu_limit_ratio`, `pod_imbalance` |
+| `container_memory_working_set_bytes` | `namespace`, `pod`, `container` | cAdvisor (kubelet) | `memory_limit_ratio`, живость для `oom` |
+| `kube_pod_container_resource_limits` | `namespace`, `pod`, `container`, `resource` (`cpu`, `memory`) | kube-state-metrics v2 | оба отношения к limit |
+| `kube_pod_container_info` | `namespace`, `pod`, `container` | kube-state-metrics v2 | список ожидаемых контейнеров |
+| `container_oom_events_total` | `namespace`, `pod`, `container` | cAdvisor | `oom` |
+| `kube_pod_container_status_restarts_total` | `namespace`, `pod`, `container` | kube-state-metrics | `restarts` |
+| `kube_pod_info` | `namespace`, `pod` | kube-state-metrics | живость для `restarts` |
+| `container_cpu_cfs_throttled_periods_total`, `container_cpu_cfs_periods_total` | `namespace`, `pod`, `container` | cAdvisor | `cpu_throttling` |
+| `kube_deployment_spec_replicas`, `kube_deployment_status_replicas_available` | `namespace`, `deployment` | kube-state-metrics | `unavailable_replicas` |
+
+Имя сервиса: значение метки `workload` равно имени Deployment и равно `entity`
+ряда профиля (и, при использовании платформенных правил политики, имени сервиса
+в каталоге политики). Init-контейнеры и строки cAdvisor с пустым `container` или
+`POD` в сигналы не входят.
+
+## Сигналы
+
+| Ключ в конфигурации | `metric` | `unit` | `aggregation` | Свёртка в сервис | Вариант с пиком |
+| --- | --- | --- | --- | --- | --- |
+| `cpu_limit_ratio` | `openshift_container_cpu_limit_ratio` | `ratio` | `interval_mean` | среднее каждого контейнера за интервал, затем максимум по контейнерам и подам | нет (CPU остаётся средним) |
+| `memory_limit_ratio` | `openshift_container_memory_limit_ratio` | `ratio` | `interval_mean` | то же, пик через `max_over_time` | да, `interval_max` |
+| `oom` | `openshift_oom` | `events/s` | `interval_rate` | сумма по контейнерам и подам | нет |
+| `restarts` | `openshift_restarts` | `events/s` | `interval_rate` | сумма | нет |
+| `cpu_throttling` | `openshift_cpu_throttling` | `ratio` | `interval_mean` | доля троттлинга контейнера, максимум по контейнерам | нет |
+| `unavailable_replicas` | `openshift_unavailable_replicas` | `count` | `interval_mean` | `spec - available` Deployment | да, `interval_max` |
+| `pod_imbalance` | `openshift_pod_imbalance` | `ratio` | `interval_mean` | (max - min) / avg по подам | нет |
+
+Каждая пара (сервис, сигнал) - один запрос с `role: system`,
+`entity` = имя сервиса и `labels: {namespace}`. Выражение заканчивается
+агрегатом `by (namespace)`, поэтому ответ источника - ровно один ряд (иначе
+ядро отклоняет его кодом `AMBIGUOUS_SERIES`).
+
+## Правила шаблонов
+
+- **Полнота контейнеров.** Отношения к limit публикуются, только если число
+  контейнеров с отношением равно числу контейнеров, которое платформа ожидает у
+  сервиса (`kube_pod_container_info`, регулярные контейнеры, включая сайдкары).
+  Потеря ряда использования, потеря limit, потеря самого источника списка
+  контейнеров и контейнер без объявленного limit дают пропуск, а не максимум
+  остальных. Для политики пропуск означает `NO_VERDICT`, а не `PASS`.
+- **События и живость.** OOM и рестарты считаются как `rate` счётчика, а при
+  отсутствии самого счётчика - как ноль, но только пока независимый от счётчика
+  ряд того же источника показывает живые поды сервиса (для `oom` -
+  `container_memory_working_set_bytes`, для `restarts` - `kube_pod_info`).
+  Мёртвый источник счётчика не превращается в выдуманный ноль, а здоровый
+  сервис без единого события не получает `NO_VERDICT`. Если счётчик есть, но
+  `rate` по нему пуст (например, виден один образец), ноль тоже не
+  подставляется: это пропуск.
+- **Метка пика не лжёт.** `max_over_time` выпускается только вместе с
+  `aggregation: interval_max` (режим `peak_aggregation`). По умолчанию
+  генератор выпускает среднее (`avg_over_time`) и метку `interval_mean`.
+  Сигнал, который по определению является максимумом, без режима пика не
+  выпускается (генератор отказывает).
+- **Подзапрос.** `[$__interval:SUB]`, разрешение `subquery_step` (по умолчанию
+  `15s`) должно быть не крупнее интервала опроса источника, иначе подзапрос
+  возвращает одну точку.
+- **Шаг и `rate`.** Сигналы на `rate(...[$__interval])` (`oom`, `restarts`,
+  `cpu_throttling`) требуют шаг запроса не меньше удвоенного интервала опроса
+  источника: при меньшем шаге `rate` не видит двух точек, и ряд превращается в
+  пропуски (не в нули). Стандартный интервал опроса OpenShift - 30 секунд, то
+  есть шаг от 60 секунд.
+- **Версия документа и автошаг.** Генератор выпускает `source-connections.v1`,
+  которая не принимает `scrape_interval_ms`; режим автошага `auto` такому
+  профилю отказывает (`AUTO_STEP_SCRAPE_INTERVAL_REQUIRED`), а выражения с
+  подзапросом `[$__interval:SUB]` не переживают огрубление шага
+  (`AUTO_STEP_QUERY_NOT_INTERVAL_BOUND`). Платформенный анализ запускайте с
+  `step_mode: fixed` и шагом, который укладывается в бюджет 1 500 000 ячеек.
+  Поддержка `scrape_interval_ms` в генераторе - отдельный срез.
+
+## Запуск генератора
+
+```powershell
+python -m tools.platform_profiles --config fixtures/platform/profile-config.example.json --out connections.json
+```
+
+Имена `namespace`, сервисов и `arm` попадают в строковые литералы PromQL,
+поэтому допускаются только символы `A-Z a-z 0-9 . _ -` (до 100 символов, начало
+с буквы или цифры); иначе генератор отказывает.
+
+Поля конфигурации (JSON): `base_url`, `namespace`, `services[]`, `signals[]`;
+необязательные `arm` (в этом срезе влияет только на префикс `id` профилей),
+`transport` (`direct` или `grafana_proxy`), `datasource_uid`, `auth`,
+`allow_insecure_http`, `governor`, `subquery_step`, `peak_aggregation`,
+`legacy_sla_rules[]`. Примеры: [конфигурация](../../fixtures/platform/profile-config.example.json),
+[результат](../contracts/sources/v1/platform-openshift-connections.example.json),
+[результат с пиком](../contracts/sources/v1/platform-openshift-peak-connections.example.json).
+
+Пакеты и пределы:
+
+- один запрос возвращает один ряд, поэтому каждая пара (сервис, сигнал) - один
+  запрос; запросы упаковываются в профили `ocp-1`, `ocp-2`, ... не более чем по
+  64 запроса, профилей не более 16 (1 024 ряда);
+- файл connections не больше 1 MiB; для 20 сервисов и 7 сигналов (140 запросов)
+  получается три профиля и файл около 144 KB, предел достигается примерно на 950
+  запросах, поэтому генератор проверяет оба предела
+  (`PLATFORM_PROFILE_TOO_MANY_QUERIES`, `PLATFORM_PROFILE_TOO_LARGE`);
+- `legacy_sla_rules` добавляет в профиль правила SLA по сигналу (базовый SLA по
+  CPU и памяти путём правил профиля). Профиль с такими правилами несовместим с
+  платформенными правилами политики (`PLATFORM_RULES_CONFLICT`, ADR 0018): для
+  политики с `platform_rules` правила в профиль не добавляются.
+
+## Проверка выражений (`promtool`)
+
+Семантика выражений проверяется на синтетических рядах: каждый сценарий в
+`tools/platform_promql_scenarios.py` подаёт ряды одному шаблону и фиксирует
+точный результат (в том числе «пропуск» для потерянного контейнера, limit или
+источника). Тест `tools/test_platform_promql.py` запускает `promtool test rules`
+и без `promtool` пропускается. Запуск через docker без установки (YAML
+передаётся через stdin, закреплённый тег образа):
+
+```powershell
+$env:LTV_PROMTOOL='docker run --rm -i --entrypoint sh prom/prometheus:v3.5.5 -c "cat > /tmp/t.yml; promtool test rules /tmp/t.yml"'
+$env:LTV_PROMTOOL_STDIN='1'
+python -m unittest discover -s tools -p "test_platform_promql.py" -v
+```
+
+`promtool` - только инструмент проверки; в сборку и зависимости продукта он не
+входит, в CI тест исполнения пропускается.
+
+## Что не проверено
+
+Каждое допущение проверяется при первой возможности на стенде:
+
+- сервис = метка `workload` правила `namespace_workload_pod:kube_pod_owner:relabel`
+  (запрос `count by (workload)` на источнике);
+- kube-state-metrics v2: `kube_pod_container_resource_limits{resource=...}` (на
+  v1 все отношения к limit пусты);
+- `container_oom_events_total` существует; сброс счётчика при пересоздании пода
+  не искажает `rate`;
+- `kube_pod_container_info` отдаёт все регулярные контейнеры (включая внедрённые
+  сайдкары) и не отдаёт init-контейнеры;
+- интервал опроса cAdvisor и kube-state (30 секунд по умолчанию) и стоимость
+  подзапросов `[$__interval:SUB]` для источника при 140 и более запросах на
+  плечо; лимиты `max_requests_per_run` и скорость запросов профиля достаточны;
+- запись владельца пода присутствует для каждого живого пода: потеря записи у
+  одного живого пода не обнаруживается (граница гарантии ADR 0018, раздел 3);
+- виды workload: только Deployment (`unavailable_replicas`).
+
+Результат `promtool` доказывает семантику выражения на синтетике, а не
+соответствие меткам вашего стенда: первые боевые прогоны, скорее всего,
+потребуют правки выражений.

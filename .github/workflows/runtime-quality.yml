@@ -1,3 +1,5 @@
+# Runtime checks run in parallel; browser tests use online and offline shards.
+# Runtime and Performance remain stable required-check names.
 name: Runtime quality
 
 on:
@@ -14,26 +16,19 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  runtime:
-    name: Runtime
+  checks:
+    name: "Runtime: static checks and Python"
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           fetch-depth: 0
-      - name: Set up JDK 21
-        uses: actions/setup-java@dd06d9cba3e5552c54d9f8ea23572deb30010f7c # v5.2.0
-        with:
-          distribution: temurin
-          java-version: "21"
-          cache: gradle
       - name: Set up Node.js 24.14.0
+        # No npm cache here: this job never runs npm ci, so it must not seed the shared npm cache key.
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v6.3.0
         with:
           node-version: 24.14.0
-          cache: npm
-          cache-dependency-path: ui/package-lock.json
       - name: Set up Python 3.14
         uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
@@ -41,11 +36,6 @@ jobs:
       - name: Install Python test dependencies
         # numpy is needed only by the correlation validation tests.
         run: python -m pip install numpy==2.4.2
-      - name: Install frontend dependencies
-        run: npm --prefix ui ci
-      - name: Install Chromium
-        working-directory: ui
-        run: npx playwright install --with-deps chromium
       - name: Verify Slice 0 contracts
         run: python tools/verify_slice0.py
       - name: Run Python tests
@@ -67,8 +57,21 @@ jobs:
           set -e
           if (( status > 1 )); then exit "$status"; fi
           if [[ -n "$matches" ]]; then echo "$matches"; exit 1; fi
-      - name: Check and package runtime
-        run: ./gradlew --no-daemon clean check installDist
+
+  ui:
+    name: "Runtime: UI static checks"
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - name: Set up Node.js 24.14.0
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v6.3.0
+        with:
+          node-version: 24.14.0
+          cache: npm
+          cache-dependency-path: ui/package-lock.json
+      - name: Install frontend dependencies
+        run: npm --prefix ui ci
       - name: Type-check frontend
         run: npm --prefix ui run typecheck
       - name: Lint frontend
@@ -77,19 +80,48 @@ jobs:
         run: npm --prefix ui run test:contracts
       - name: Build frontend
         run: npm --prefix ui run build
-      - name: Run browser tests
-        run: npm --prefix ui run e2e
-      - name: Reinstall frontend dependencies offline
-        run: npm --prefix ui ci --offline
-      - name: Rebuild runtime offline
-        run: ./gradlew -PnpmOffline=true --offline --no-daemon clean check installDist
-      - name: Run browser tests after offline rebuild
-        run: npm --prefix ui run e2e
 
-  performance:
-    name: Performance
-    needs: runtime
+  e2e-online:
+    name: "Runtime: browser tests ${{ matrix.shard }}/2"
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - name: Set up JDK 21
+        uses: actions/setup-java@dd06d9cba3e5552c54d9f8ea23572deb30010f7c # v5.2.0
+        with:
+          distribution: temurin
+          java-version: "21"
+          cache: gradle
+          # Only the full-check shards seed the Gradle cache; this job restores it without saving a partial one.
+          cache-read-only: true
+      - name: Set up Node.js 24.14.0
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v6.3.0
+        with:
+          node-version: 24.14.0
+          cache: npm
+          cache-dependency-path: ui/package-lock.json
+      - name: Install frontend dependencies
+        run: npm --prefix ui ci
+      - name: Install Chromium
+        working-directory: ui
+        run: npx playwright install --with-deps chromium
+      - name: Compile e2e server classes
+        run: ./gradlew --no-daemon testClasses processResources
+      - name: Run browser tests
+        run: npm --prefix ui run e2e -- --shard=${{ matrix.shard }}/2
+
+  e2e-offline:
+    name: "Runtime: Kotlin check and offline browser tests ${{ matrix.shard }}/4"
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4]
     steps:
       - name: Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -107,7 +139,67 @@ jobs:
           cache-dependency-path: ui/package-lock.json
       - name: Install frontend dependencies
         run: npm --prefix ui ci
+      - name: Install Chromium
+        working-directory: ui
+        run: npx playwright install --with-deps chromium
+      # The online build populates local caches needed by the offline rebuild.
+      - name: Check and package runtime
+        run: ./gradlew --no-daemon clean check installDist
+      - name: Reinstall frontend dependencies offline
+        run: npm --prefix ui ci --offline
+      - name: Rebuild runtime offline
+        run: ./gradlew -PnpmOffline=true --offline --no-daemon clean check installDist
+      - name: Run browser tests after offline rebuild
+        run: npm --prefix ui run e2e -- --shard=${{ matrix.shard }}/4
+
+  performance:
+    name: Performance
+    # Builds its own distribution independently of the runtime jobs.
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - name: Set up JDK 21
+        uses: actions/setup-java@dd06d9cba3e5552c54d9f8ea23572deb30010f7c # v5.2.0
+        with:
+          distribution: temurin
+          java-version: "21"
+          cache: gradle
+          # Only the full-check shards seed the Gradle cache; this job restores it without saving a partial one.
+          cache-read-only: true
+      - name: Set up Node.js 24.14.0
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v6.3.0
+        with:
+          node-version: 24.14.0
+          cache: npm
+          cache-dependency-path: ui/package-lock.json
+      - name: Install frontend dependencies
+        run: npm --prefix ui ci
       - name: Build distribution
         run: ./gradlew --no-daemon installDist
       - name: Run bounded JTL probe
         run: bash tools/perf/jtl_probe.sh
+
+  runtime:
+    # This job is the single required status check named Runtime.
+    name: Runtime
+    needs: [checks, ui, e2e-online, e2e-offline]
+    if: ${{ !cancelled() }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require every runtime job to succeed
+        env:
+          RESULTS: ${{ join(needs.*.result, ' ') }}
+        shell: bash
+        run: |
+          echo "Runtime job results: $RESULTS"
+          if [[ -z "$RESULTS" ]]; then
+            echo "Runtime has no job results" >&2
+            exit 1
+          fi
+          for result in $RESULTS; do
+            if [[ "$result" != success ]]; then
+              echo "Runtime requires every job to succeed; got: $RESULTS" >&2
+              exit 1
+            fi
+          done

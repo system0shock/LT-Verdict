@@ -419,6 +419,72 @@ class CommandLineTest {
     }
 
     @Test
+    fun `histogram precision accepts three to five digits only`() {
+        assertEquals(listOf(3, 4, 5), listOf("3", "4", "5").map { histogramSignificantDigits(it) })
+        listOf("2", "6", "1", "0", "-3", "abc", "", "3.5", "99999999999").forEach {
+            assertEquals(null, histogramSignificantDigits(it), it)
+        }
+    }
+
+    @Test
+    fun `histogram precision flag is validated by analyze and ui before any work`() {
+        val input = fixture("jmeter/csv-5.6.3/input.jtl").toString()
+        val dataDir = tempDir.resolve("precision-usage").toString()
+        listOf("2", "6", "abc", "").forEach { value ->
+            assertError(
+                run("analyze", input, "--histogram-significant-digits", value, "--data-dir", dataDir),
+                64,
+                "analyze $value",
+            )
+            assertError(run("ui", "--histogram-significant-digits", value, "--data-dir", dataDir), 64, "ui $value")
+        }
+        assertError(run("analyze", input, "--histogram-significant-digits"), 64, "analyze missing value")
+        assertError(run("ui", "--histogram-significant-digits"), 64, "ui missing value")
+        assertError(
+            run("analyze", input, "--histogram-significant-digits", "4", "--histogram-significant-digits", "4", "--data-dir", dataDir),
+            64,
+            "analyze duplicate",
+        )
+        assertError(
+            run("ui", "--histogram-significant-digits", "4", "--histogram-significant-digits", "4", "--data-dir", dataDir),
+            64,
+            "ui duplicate",
+        )
+        assertTrue(!Files.exists(tempDir.resolve("precision-usage")), "usage failures must not create the data directory")
+    }
+
+    @Test
+    fun `analyze records the histogram precision in the identity and the analysis id`() {
+        val input = fixture("jmeter/csv-5.6.3/input.jtl").toString()
+        val dataDir = tempDir.resolve("precision-data")
+        val runs = mutableMapOf<String, String>()
+        listOf(null, "3", "4", "5").forEach { digits ->
+            val extra = digits?.let { arrayOf("--histogram-significant-digits", it) } ?: emptyArray()
+            val result = run("analyze", input, *extra, "--data-dir", dataDir.toString())
+            assertEquals(0, result.exitCode, result.stderr)
+            runs[digits ?: "default"] = result.stdout.json("run_id")
+        }
+        val runId = runs.getValue("default")
+        val analyses = dataDir.resolve("runs").resolve(runId).resolve("analyses")
+        val byDigits =
+            Files.list(analyses).use { stream ->
+                stream.toList().associate { analysis ->
+                    val identity = Json.parseToJsonElement(Files.readString(analysis.resolve("identity.json"))).jsonObject
+                    identity
+                        .getValue("histogram")
+                        .jsonObject
+                        .getValue("significant_digits")
+                        .jsonPrimitive.content to
+                        analysis.fileName.toString()
+                }
+            }
+
+        assertEquals(setOf("3", "4", "5"), byDigits.keys)
+        assertEquals(3, byDigits.values.toSet().size)
+        assertEquals(3, Files.list(analyses).use { it.count() }.toInt())
+    }
+
+    @Test
     fun `analyze maps pass fail degraded and invalid outcomes to exit codes`() {
         val malformed = tempDir.resolve("malformed.jtl")
         Files.writeString(malformed, Files.readAllLines(fixture("jmeter/csv-5.6.3/input.jtl")).first() + "\nmalformed\n")

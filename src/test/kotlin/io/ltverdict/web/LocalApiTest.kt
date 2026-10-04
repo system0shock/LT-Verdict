@@ -1721,7 +1721,8 @@ class LocalApiTest {
         withServer(uploadLimitBytes = SPIKE_DROP.sizeBytes) { _, api ->
             api.bootstrap()
             val oneOver = SPIKE_DROP.bytes() + 'x'.code.toByte()
-            assertError(api.uploadChunked(SPIKE_DROP.filename, SPIKE_DROP.bytes() + ByteArray(65_536) { 'x'.code.toByte() }), 413, "RESOURCE_LIMIT_EXCEEDED")
+            val farOver = SPIKE_DROP.bytes() + ByteArray(65_536) { 'x'.code.toByte() }
+            assertError(api.uploadChunked(SPIKE_DROP.filename, farOver), 413, "RESOURCE_LIMIT_EXCEEDED")
             assertError(api.uploadChunked(SPIKE_DROP.filename, oneOver), 413, "RESOURCE_LIMIT_EXCEEDED")
             assertError(api.upload(SPIKE_DROP.copy(inlineBytes = oneOver)), 413, "RESOURCE_LIMIT_EXCEEDED")
         }

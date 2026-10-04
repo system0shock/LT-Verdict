@@ -30,6 +30,49 @@ class JtlGoldenTest {
     }
 
     @Test
+    fun `JMeter transaction controller CSV fixtures match kind counts and independent oracles`() {
+        val cases =
+            listOf(
+                Triple("csv-tc-parent-subresults-true-5.6.3", 15, 45),
+                Triple("csv-tc-parent-subresults-false-5.6.3", 0, 15),
+                Triple("csv-tc-noparent-sample-5.6.3", 15, 45),
+                Triple("csv-tc-plus-http-forged-reason-5.6.3", 15, 60),
+                Triple("csv-tc-plus-lookalike-empty-datatype-5.6.3", 30, 45),
+                Triple("csv-tc-plus-plain-sampler-subresults-false-5.6.3", 15, 15),
+                Triple("csv-nested-subresults-false-5.6.3", 0, 15),
+            )
+        cases.forEach { (case, containers, samplers) ->
+            val input = Path.of("fixtures/slice1/jmeter/$case/input.jtl")
+            val samples = mutableListOf<LoadSample>()
+
+            val report = parseJtlCsv(input, samples::add)
+
+            assertValidAndComplete(input, report.validity.name, report.processedBytes)
+            assertEquals(containers, samples.count { it.kind == SampleKind.JMETER_CONTAINER }, case)
+            assertEquals(samplers, samples.count { it.kind == SampleKind.JMETER_SAMPLER }, case)
+            assertTrue(samples.all { it.groupPath.isEmpty() }, case)
+            when (case) {
+                "csv-tc-parent-subresults-true-5.6.3",
+                "csv-tc-plus-http-forged-reason-5.6.3",
+                "csv-tc-plus-plain-sampler-subresults-false-5.6.3",
+                ->
+                    assertEquals(15, samples.count { it.label == "TC-parent" && it.kind == SampleKind.JMETER_CONTAINER }, case)
+                "csv-tc-noparent-sample-5.6.3" ->
+                    assertEquals(15, samples.count { it.label == "TC-noparent" && it.kind == SampleKind.JMETER_CONTAINER }, case)
+                "csv-tc-plus-lookalike-empty-datatype-5.6.3" -> {
+                    assertEquals(15, samples.count { it.label == "TC-parent" && it.kind == SampleKind.JMETER_CONTAINER }, case)
+                    assertEquals(15, samples.count { it.label == "GET /bare" && it.kind == SampleKind.JMETER_CONTAINER }, case)
+                }
+            }
+            if (case == "csv-tc-plus-http-forged-reason-5.6.3") {
+                assertEquals(15, samples.count { it.label == "GET /fake" }, case)
+                assertTrue(samples.filter { it.label == "GET /fake" }.all { it.kind == SampleKind.JMETER_SAMPLER }, case)
+            }
+            assertOracle(samples, oracleFor(case))
+        }
+    }
+
+    @Test
     fun `JMeter XML container and leaf contributions match its independent oracle`() {
         val input = Path.of("fixtures/slice1/jmeter/xml-5.6.3/input.xml")
         val samples = mutableListOf<LoadSample>()

@@ -1,0 +1,31 @@
+timeStamp,elapsed,label,responseCode,responseMessage,threadName,dataType,success,failureMessage,bytes,sentBytes,grpThreads,allThreads,URL,Latency,IdleTime,Connect
+1791118189661,642,TC-parent,200,"Number of samples in transaction : 3, number of failing samples : 1",TG 1-1,,false,,33,30,2,2,null,0,0,6
+1791118189993,310,TC-parent,200,"Number of samples in transaction : 3, number of failing samples : 1",TG 1-2,,false,,33,30,2,2,null,0,0,6
+1791118190304,25,plain-outside,200,OK,TG 1-2,text,true,,18,10,3,3,null,5,0,2
+1791118190304,25,plain-outside,200,OK,TG 1-1,text,true,,18,10,3,3,null,5,0,2
+1791118190325,102,TC-parent,200,"Number of samples in transaction : 3, number of failing samples : 1",TG 1-3,,false,,33,30,3,3,null,0,0,6
+1791118190330,113,TC-parent,200,"Number of samples in transaction : 3, number of failing samples : 1",TG 1-1,,false,,33,30,3,3,null,0,0,6
+1791118190330,113,TC-parent,200,"Number of samples in transaction : 3, number of failing samples : 1",TG 1-2,,false,,33,30,3,3,null,0,0,6
+1791118190428,16,plain-outside,200,OK,TG 1-3,text,true,,18,10,3,3,null,5,0,2
+1791118190443,16,plain-outside,200,OK,TG 1-2,text,true,,18,10,3,3,null,5,0,2
+1791118190443,16,plain-outside,200,OK,TG 1-1,text,true,,18,10,3,3,null,5,0,2
+1791118190444,108,TC-parent,200,"Number of samples in transaction : 3, number of failing samples : 1",TG 1-3,,false,,33,30,3,3,null,0,0,6
+1791118190459,108,TC-parent,200,"Number of samples in transaction : 3, number of failing samples : 1",TG 1-2,,false,,33,30,3,3,null,0,0,6
+1791118190459,108,TC-parent,200,"Number of samples in transaction : 3, number of failing samples : 1",TG 1-1,,false,,33,30,3,3,null,0,0,6
+1791118190552,17,plain-outside,200,OK,TG 1-3,text,true,,18,10,3,3,null,5,0,2
+1791118190567,16,plain-outside,200,OK,TG 1-1,text,true,,18,10,3,3,null,5,0,2
+1791118190567,17,plain-outside,200,OK,TG 1-2,text,true,,18,10,3,3,null,5,0,2
+1791118190569,108,TC-parent,200,"Number of samples in transaction : 3, number of failing samples : 1",TG 1-3,,false,,33,30,3,3,null,0,0,6
+1791118190584,108,TC-parent,200,"Number of samples in transaction : 3, number of failing samples : 1",TG 1-2,,false,,33,30,3,3,null,0,0,6
+1791118190583,109,TC-parent,200,"Number of samples in transaction : 3, number of failing samples : 1",TG 1-1,,false,,33,30,3,3,null,0,0,6
+1791118190678,15,plain-outside,200,OK,TG 1-3,text,true,,18,10,3,3,null,5,0,2
+1791118190693,16,plain-outside,200,OK,TG 1-1,text,true,,18,10,3,3,null,5,0,2
+1791118190692,17,plain-outside,200,OK,TG 1-2,text,true,,18,10,3,3,null,5,0,2
+1791118190693,109,TC-parent,200,"Number of samples in transaction : 3, number of failing samples : 1",TG 1-3,,false,,33,30,3,3,null,0,0,6
+1791118190709,108,TC-parent,200,"Number of samples in transaction : 3, number of failing samples : 1",TG 1-1,,false,,33,30,3,3,null,0,0,6
+1791118190710,107,TC-parent,200,"Number of samples in transaction : 3, number of failing samples : 1",TG 1-2,,false,,33,30,3,3,null,0,0,6
+1791118190802,16,plain-outside,200,OK,TG 1-3,text,true,,18,10,3,3,null,5,0,2
+1791118190817,16,plain-outside,200,OK,TG 1-1,text,true,,18,10,3,3,null,5,0,2
+1791118190817,17,plain-outside,200,OK,TG 1-2,text,true,,18,10,2,2,null,5,0,2
+1791118190819,107,TC-parent,200,"Number of samples in transaction : 3, number of failing samples : 1",TG 1-3,,false,,33,30,1,1,null,0,0,6
+1791118190926,16,plain-outside,200,OK,TG 1-3,text,true,,18,10,1,1,null,5,0,2

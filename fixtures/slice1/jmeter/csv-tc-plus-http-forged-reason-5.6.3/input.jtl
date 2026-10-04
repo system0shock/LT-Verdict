@@ -1,0 +1,76 @@
+timeStamp,elapsed,label,responseCode,responseMessage,threadName,dataType,success,failureMessage,bytes,sentBytes,grpThreads,allThreads,URL,Latency,IdleTime,Connect
+1791118162765,600,TC-parent,200,"Number of samples in transaction : 3, number of failing samples : 1",TG 1-1,,false,,33,30,2,2,null,0,0,6
+1791118163096,269,TC-parent,200,"Number of samples in transaction : 3, number of failing samples : 1",TG 1-2,,false,,33,30,2,2,null,0,0,6
+1791118162765,503,child1,200,OK,TG 1-1,text,true,,11,10,2,2,null,5,0,2
+1791118163096,173,child1,200,OK,TG 1-2,text,true,,11,10,2,2,null,5,0,2
+1791118163269,42,child2,200,OK,TG 1-1,text,false,Test failed: text expected to contain /zzz-not-there/,11,10,2,2,null,5,0,2
+1791118163269,42,child2,200,OK,TG 1-2,text,false,Test failed: text expected to contain /zzz-not-there/,11,10,2,2,null,5,0,2
+1791118163312,53,child3,200,OK,TG 1-1,text,true,,11,10,2,2,null,5,0,2
+1791118163312,53,child3,200,OK,TG 1-2,text,true,,11,10,2,2,null,5,0,2
+1791118163439,21,GET /fake,200,"Number of samples in transaction : 3, number of failing samples : 0",TG 1-1,text,true,,204,121,3,3,http://127.0.0.1:18766/fake,19,0,16
+1791118163439,21,GET /fake,200,"Number of samples in transaction : 3, number of failing samples : 0",TG 1-2,text,true,,204,121,3,3,http://127.0.0.1:18766/fake,19,0,16
+1791118163428,102,TC-parent,200,"Number of samples in transaction : 3, number of failing samples : 1",TG 1-3,,false,,33,30,3,3,null,0,0,6
+1791118163428,22,child1,200,OK,TG 1-3,text,true,,11,10,3,3,null,5,0,2
+1791118163450,31,child2,200,OK,TG 1-3,text,false,Test failed: text expected to contain /zzz-not-there/,11,10,3,3,null,5,0,2
+1791118163482,48,child3,200,OK,TG 1-3,text,true,,11,10,3,3,null,5,0,2
+1791118163531,2,GET /fake,200,"Number of samples in transaction : 3, number of failing samples : 0",TG 1-3,text,true,,204,121,3,3,http://127.0.0.1:18766/fake,2,0,2
+1791118163461,100,TC-parent,200,"Number of samples in transaction : 3, number of failing samples : 1",TG 1-2,,false,,33,30,3,3,null,0,0,6
+1791118163461,23,child1,200,OK,TG 1-2,text,true,,11,10,3,3,null,5,0,2
+1791118163484,31,child2,200,OK,TG 1-2,text,false,Test failed: text expected to contain /zzz-not-there/,11,10,3,3,null,5,0,2
+1791118163515,46,child3,200,OK,TG 1-2,text,true,,11,10,3,3,null,5,0,2
+1791118163460,102,TC-parent,200,"Number of samples in transaction : 3, number of failing samples : 1",TG 1-1,,false,,33,30,3,3,null,0,0,6
+1791118163460,24,child1,200,OK,TG 1-1,text,true,,11,10,3,3,null,5,0,2
+1791118163484,31,child2,200,OK,TG 1-1,text,false,Test failed: text expected to contain /zzz-not-there/,11,10,3,3,null,5,0,2
+1791118163515,47,child3,200,OK,TG 1-1,text,true,,11,10,3,3,null,5,0,2
+1791118163562,2,GET /fake,200,"Number of samples in transaction : 3, number of failing samples : 0",TG 1-1,text,true,,204,121,3,3,http://127.0.0.1:18766/fake,2,0,1
+1791118163562,2,GET /fake,200,"Number of samples in transaction : 3, number of failing samples : 0",TG 1-2,text,true,,204,121,3,3,http://127.0.0.1:18766/fake,2,0,1
+1791118163534,105,TC-parent,200,"Number of samples in transaction : 3, number of failing samples : 1",TG 1-3,,false,,33,30,3,3,null,0,0,6
+1791118163534,27,child1,200,OK,TG 1-3,text,true,,11,10,3,3,null,5,0,2
+1791118163562,30,child2,200,OK,TG 1-3,text,false,Test failed: text expected to contain /zzz-not-there/,11,10,3,3,null,5,0,2
+1791118163593,46,child3,200,OK,TG 1-3,text,true,,11,10,3,3,null,5,0,2
+1791118163640,2,GET /fake,200,"Number of samples in transaction : 3, number of failing samples : 0",TG 1-3,text,true,,204,121,3,3,http://127.0.0.1:18766/fake,1,0,1
+1791118163564,106,TC-parent,200,"Number of samples in transaction : 3, number of failing samples : 1",TG 1-1,,false,,33,30,3,3,null,0,0,6
+1791118163564,106,TC-parent,200,"Number of samples in transaction : 3, number of failing samples : 1",TG 1-2,,false,,33,30,3,3,null,0,0,6
+1791118163564,28,child1,200,OK,TG 1-1,text,true,,11,10,3,3,null,5,0,2
+1791118163565,27,child1,200,OK,TG 1-2,text,true,,11,10,3,3,null,5,0,2
+1791118163593,31,child2,200,OK,TG 1-1,text,false,Test failed: text expected to contain /zzz-not-there/,11,10,3,3,null,5,0,2
+1791118163593,31,child2,200,OK,TG 1-2,text,false,Test failed: text expected to contain /zzz-not-there/,11,10,3,3,null,5,0,2
+1791118163624,46,child3,200,OK,TG 1-1,text,true,,11,10,3,3,null,5,0,2
+1791118163624,46,child3,200,OK,TG 1-2,text,true,,11,10,3,3,null,5,0,2
+1791118163671,2,GET /fake,200,"Number of samples in transaction : 3, number of failing samples : 0",TG 1-1,text,true,,204,121,3,3,http://127.0.0.1:18766/fake,2,0,1
+1791118163671,2,GET /fake,200,"Number of samples in transaction : 3, number of failing samples : 0",TG 1-2,text,true,,204,121,3,3,http://127.0.0.1:18766/fake,2,0,1
+1791118163642,123,TC-parent,200,"Number of samples in transaction : 3, number of failing samples : 1",TG 1-3,,false,,33,30,3,3,null,0,0,6
+1791118163642,28,child1,200,OK,TG 1-3,text,true,,11,10,3,3,null,5,0,2
+1791118163671,46,child2,200,OK,TG 1-3,text,false,Test failed: text expected to contain /zzz-not-there/,11,10,3,3,null,5,0,2
+1791118163717,48,child3,200,OK,TG 1-3,text,true,,11,10,3,3,null,5,0,2
+1791118163765,2,GET /fake,200,"Number of samples in transaction : 3, number of failing samples : 0",TG 1-3,text,true,,204,121,3,3,http://127.0.0.1:18766/fake,2,0,1
+1791118163673,107,TC-parent,200,"Number of samples in transaction : 3, number of failing samples : 1",TG 1-2,,false,,33,30,3,3,null,0,0,6
+1791118163673,28,child1,200,OK,TG 1-2,text,true,,11,10,3,3,null,5,0,2
+1791118163673,107,TC-parent,200,"Number of samples in transaction : 3, number of failing samples : 1",TG 1-1,,false,,33,30,3,3,null,0,0,6
+1791118163673,28,child1,200,OK,TG 1-1,text,true,,11,10,3,3,null,5,0,2
+1791118163701,32,child2,200,OK,TG 1-1,text,false,Test failed: text expected to contain /zzz-not-there/,11,10,3,3,null,5,0,2
+1791118163701,32,child2,200,OK,TG 1-2,text,false,Test failed: text expected to contain /zzz-not-there/,11,10,3,3,null,5,0,2
+1791118163733,47,child3,200,OK,TG 1-1,text,true,,11,10,3,3,null,5,0,2
+1791118163733,47,child3,200,OK,TG 1-2,text,true,,11,10,3,3,null,5,0,2
+1791118163781,2,GET /fake,200,"Number of samples in transaction : 3, number of failing samples : 0",TG 1-2,text,true,,204,121,3,3,http://127.0.0.1:18766/fake,1,0,1
+1791118163781,2,GET /fake,200,"Number of samples in transaction : 3, number of failing samples : 0",TG 1-1,text,true,,204,121,3,3,http://127.0.0.1:18766/fake,2,0,1
+1791118163767,108,TC-parent,200,"Number of samples in transaction : 3, number of failing samples : 1",TG 1-3,,false,,33,30,3,3,null,0,0,6
+1791118163767,29,child1,200,OK,TG 1-3,text,true,,11,10,3,3,null,5,0,2
+1791118163796,31,child2,200,OK,TG 1-3,text,false,Test failed: text expected to contain /zzz-not-there/,11,10,3,3,null,5,0,2
+1791118163827,48,child3,200,OK,TG 1-3,text,true,,11,10,3,3,null,5,0,2
+1791118163875,2,GET /fake,200,"Number of samples in transaction : 3, number of failing samples : 0",TG 1-3,text,true,,204,121,3,3,http://127.0.0.1:18766/fake,2,0,1
+1791118163783,107,TC-parent,200,"Number of samples in transaction : 3, number of failing samples : 1",TG 1-1,,false,,33,30,3,3,null,0,0,6
+1791118163783,28,child1,200,OK,TG 1-1,text,true,,11,10,3,3,null,5,0,2
+1791118163812,31,child2,200,OK,TG 1-1,text,false,Test failed: text expected to contain /zzz-not-there/,11,10,3,3,null,5,0,2
+1791118163843,47,child3,200,OK,TG 1-1,text,true,,11,10,3,3,null,5,0,2
+1791118163783,108,TC-parent,200,"Number of samples in transaction : 3, number of failing samples : 1",TG 1-2,,false,,33,30,3,3,null,0,0,6
+1791118163783,28,child1,200,OK,TG 1-2,text,true,,11,10,3,3,null,5,0,2
+1791118163812,31,child2,200,OK,TG 1-2,text,false,Test failed: text expected to contain /zzz-not-there/,11,10,3,3,null,5,0,2
+1791118163843,48,child3,200,OK,TG 1-2,text,true,,11,10,3,3,null,5,0,2
+1791118163891,1,GET /fake,200,"Number of samples in transaction : 3, number of failing samples : 0",TG 1-1,text,true,,204,121,3,3,http://127.0.0.1:18766/fake,1,0,0
+1791118163891,2,GET /fake,200,"Number of samples in transaction : 3, number of failing samples : 0",TG 1-2,text,true,,204,121,3,3,http://127.0.0.1:18766/fake,1,0,1
+1791118163877,107,TC-parent,200,"Number of samples in transaction : 3, number of failing samples : 1",TG 1-3,,false,,33,30,1,1,null,0,0,6
+1791118163877,29,child1,200,OK,TG 1-3,text,true,,11,10,1,1,null,5,0,2
+1791118163906,31,child2,200,OK,TG 1-3,text,false,Test failed: text expected to contain /zzz-not-there/,11,10,1,1,null,5,0,2
+1791118163937,47,child3,200,OK,TG 1-3,text,true,,11,10,1,1,null,5,0,2
+1791118163984,2,GET /fake,200,"Number of samples in transaction : 3, number of failing samples : 0",TG 1-3,text,true,,204,121,1,1,http://127.0.0.1:18766/fake,2,0,1

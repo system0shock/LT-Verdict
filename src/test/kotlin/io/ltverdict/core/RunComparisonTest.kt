@@ -1,5 +1,8 @@
 package io.ltverdict.core
 
+import io.ltverdict.ingest.SourceType
+import io.ltverdict.storage.AcceptedInput
+import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
@@ -16,8 +19,89 @@ import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
+import java.nio.file.Files
+import java.nio.file.Path
 
 class RunComparisonTest {
+    @Test
+    fun `legacy CSV analysis is excluded from dynamics of the new CSV identity`() {
+        val oldIdentity =
+            Json
+                .parseToJsonElement(
+                    Files.readString(Path.of("fixtures/slice1/identity/legacy-pre-adr-0016.v1.json")),
+                ).jsonObject
+        val input =
+            AcceptedInput(
+                runId = oldIdentity.getValue("run_id").jsonPrimitive.content,
+                sourceType = SourceType.JMETER_CSV,
+                sha256 = oldIdentity.getValue("input_sha256").jsonPrimitive.content,
+                sizeBytes = 1,
+                originalFilename = "input.jtl",
+                path = Path.of("unused"),
+            )
+        val newIdentity = Json.parseToJsonElement(analysisIdentity(input, null, EngineConfig()).decodeToString()).jsonObject
+        val old = saved('a', "2026-09-01T10:00:00Z", 100).copy(identity = oldIdentity)
+        val current = saved('b', "2026-09-02T10:00:00Z", 120).copy(identity = newIdentity)
+
+        val dynamics = buildRunDynamics(current, listOf(old, current), current.reference)
+
+        assertEquals(1, dynamics.getValue("excluded_incompatible_count").jsonPrimitive.int)
+        assertEquals(1, dynamics.getValue("comparable_count").jsonPrimitive.int)
+        assertEquals(listOf(current.reference), dynamics.getValue("rows").jsonArray.map { it.jsonObject.getValue("reference") })
+    }
+
+    @Test
+    fun `diagnostics module version two analysis is excluded from dynamics of version three`() {
+        val base =
+            Json
+                .parseToJsonElement(
+                    Files.readString(Path.of("fixtures/slice1/identity/legacy-pre-adr-0016.v1.json")),
+                ).jsonObject
+        val input =
+            AcceptedInput(
+                runId = base.getValue("run_id").jsonPrimitive.content,
+                sourceType = SourceType.JMETER_CSV,
+                sha256 = base.getValue("input_sha256").jsonPrimitive.content,
+                sizeBytes = 1,
+                originalFilename = "input.jtl",
+                path = Path.of("unused"),
+            )
+        val diagnostics =
+            DiagnosticValidation.Valid(
+                DiagnosticPlanV1("correlation-plan.v1", "0".repeat(64), emptyList(), emptyList()),
+                "d".repeat(64),
+                byteArrayOf(),
+            )
+        val current =
+            Json
+                .parseToJsonElement(
+                    analysisIdentity(input, null, EngineConfig(), diagnostics = diagnostics).decodeToString(),
+                ).jsonObject
+        val old =
+            JsonObject(
+                current + (
+                    "modules" to
+                        JsonArray(
+                            current.getValue("modules").jsonArray.map { module ->
+                                val value = module.jsonObject
+                                if (value.getValue("id").jsonPrimitive.content == "load-resource-diagnostics") {
+                                    JsonObject(value + ("version" to JsonPrimitive("2")))
+                                } else {
+                                    value
+                                }
+                            },
+                        )
+                ),
+            )
+        val previous = saved('a', "2026-09-01T10:00:00Z", 100).copy(identity = old)
+        val newest = saved('b', "2026-09-02T10:00:00Z", 120).copy(identity = current)
+
+        val dynamics = buildRunDynamics(newest, listOf(previous, newest), newest.reference)
+
+        assertEquals(1, dynamics.getValue("excluded_incompatible_count").jsonPrimitive.int)
+        assertEquals(1, dynamics.getValue("comparable_count").jsonPrimitive.int)
+    }
+
     @Test
     fun `dynamics keeps the newest ten exact-compatible local analyses and computes deltas`() {
         val saved =

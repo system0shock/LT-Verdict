@@ -67,6 +67,15 @@ JMeter CSV остаётся flat: он не выводит parent или sampler
 columns. JMeter XML и Gatling сохраняют hierarchy, поэтому containers/groups и
 leaf/request samples не double-count overall metrics.
 
+> Пометка (ADR [0016](0016-metric-semantics-percentile-empty-window-jmeter-parents.md),
+> Accepted, 2026-10-02; реализовано): абзац выше и строка матрицы «Flat JMeter
+> CSV row» для JMeter CSV больше не действуют. CSV перестаёт быть строго flat:
+> parent-строки Transaction Controller распознаются по точному
+> `responseMessage` и пустому `dataType` и, если в файле есть и они, и
+> не-parent строки, получают `JMETER_CONTAINER`; overall считается по
+> остальным строкам. Файл только из parent-строк остаётся `JMETER_SAMPLER`.
+> Иерархия (`groupPath`) по-прежнему не восстанавливается.
+
 ### Run window и sample contribution
 
 Первый streaming pass валидирует input и замораживает одно полное run window по
@@ -82,8 +91,8 @@ Contribution matrix:
 
 | Sample kind | Overall и 1-second buckets | Exact transaction summary |
 | --- | --- | --- |
-| Flat JMeter CSV row / JMeter XML leaf (`JMETER_SAMPLER`) | Да | Да |
-| JMeter XML container (`JMETER_CONTAINER`) | Нет | Да |
+| JMeter CSV row / JMeter XML leaf (`JMETER_SAMPLER`) | Да | Да |
+| JMeter XML container, JMeter CSV parent-строка Transaction Controller при наличии не-parent строк (`JMETER_CONTAINER`; см. ADR 0016) | Нет | Да |
 | Gatling `REQUEST` (`GATLING_REQUEST`) | Да | Да |
 | Gatling `GROUP` (`GATLING_GROUP`) | Нет | Да |
 

@@ -79,6 +79,11 @@ analysis directory и не перезаписывает прежний резу�
 истории динамики считаются несопоставимыми с новыми.
 Версия модуля `load-resource-diagnostics` равна `3` (ADR 0016: пустое окно как
 `null`, было `2`); она входит в identity только при наличии плана диагностики.
+Parser `jmeter-csv` имеет версию `2`, а `input_versions.source` для JMeter CSV -
+`jmeter-jtl-csv.v2` (ADR 0016: parent-строки Transaction Controller; было `1` и
+`v1`); parser XML и Gatling остаются на `1`. Этим срезом ADR 0016 завершён:
+изменения identity всех трёх срезов (`metrics` 2, `load-resource-diagnostics` 3,
+CSV parser 2) выпускаются вместе и требуют одного повторного закрепления baseline.
 Анализ с политикой добавляет в identity объект `verdict_gates` (строковые значения
 `min_samples_floor`, `min_samples_default`, `throughput_exempt`: запасные константы
 проверки минимума выборки бизнес-правил, ADR
@@ -164,9 +169,45 @@ usage error (`64`). Значение входит в identity (`histogram.signif
 ограничено `MetricsConfig`, поэтому до включения значения выше 3 на стенде нужен
 замер кучи и времени по методике ADR [0014](../adr/0014-resource-series-limits-autostep-arm-api.md).
 Статический график отвергает строку гистограммы длиннее `393 216` символов
-(было `262 144`): на модели 1 000 000 равномерных сэмплов по 0–86 с при 5
-цифрах даёт 289 552 символа (измерено тестом); предел длины всей строки rollup остаётся
-`524 288` символов.
+(было `262 144`): на модели 1 000 000 равномерных сэмплов по 0–86 000 000 мс
+(до 86 000 с, как в тесте) при 5 цифрах даёт 289 552 символа (измерено тестом); для
+диапазона 0–86 000 мс (до 86 с) те же сэмплы дают 63 536 символов. Предел длины
+всей строки rollup остаётся `524 288` символов.
+
+### Parent-строки JMeter CSV
+
+Transaction Controller пишет в CSV свою строку рядом со строками дочерних
+сэмплеров (ADR [0016](../adr/0016-metric-semantics-percentile-empty-window-jmeter-parents.md),
+пометка в ADR 0003). Parent-строка — строка, у которой `responseMessage`
+полностью равен `Number of samples in transaction : N, number of failing samples : M`
+(ASCII-цифры, регистр и пробелы значимы) и `dataType` пуст; признак доступен,
+только если в заголовке ровно по одному столбцу `responseMessage` и `dataType`
+(иначе все строки — `JMETER_SAMPLER`, дубль даёт `INVALID_JMETER_CSV_HEADER`).
+Режим один на файл; для его выбора `parseJtlCsv` перед основным проходом делает
+предварительный просмотр (не сообщает прогресс и не даёт diagnostics): сначала
+побайтовая проверка наличия литерала `Number of samples in transaction :` с пробелом
+после двоеточия
+(нет литерала — parent-строк нет, CSV-разбор не нужен), затем CSV-просмотр до
+первой пары «parent и не-parent». Основной проход после этого помечает строки:
+
+| Содержимое файла | Parent-строки | Остальные |
+| --- | --- | --- |
+| Есть parent и не-parent строки | `JMETER_CONTAINER` | `JMETER_SAMPLER` |
+| Только parent-строки (`subresults=false`) | `JMETER_SAMPLER` | нет |
+| Нет parent-строк | нет | `JMETER_SAMPLER` |
+
+`JMETER_CONTAINER` не входит в overall, 1-секундные buckets, rollups и UTC load,
+но образует точную сводку транзакции (как XML-контейнер); общее окно прогона
+по-прежнему строится по всем строкам. Идентичность транзакции включает kind,
+поэтому одинаковый label у контроллера и сэмплера даёт `AMBIGUOUS_TRANSACTION`.
+Известные ограничения (смешанный файл при `subresults=false`, вложенные
+контроллеры, сэмплер с пустым `dataType` и точным сообщением) описаны в
+[пользовательской документации](../user/slice-1-local-analysis.md).
+
+`run-period.json` JMeter CSV записывается с `recognition_method =
+sample-timestamps.v2` (parent-строки не занимают секунды при поиске простоев),
+остальные источники остаются на `sample-timestamps.v1`; сохранённый период CSV
+с `v1` считается отсутствующим и пересчитывается.
 
 ## Executor, admission и terminal retention
 

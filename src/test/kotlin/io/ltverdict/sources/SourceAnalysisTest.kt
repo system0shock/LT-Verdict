@@ -200,7 +200,7 @@ class SourceAnalysisTest {
                         RunPeriodV1(
                             RUN_PERIOD_SCHEMA_VERSION,
                             input.sha256,
-                            RUN_PERIOD_RECOGNITION_METHOD,
+                            "sample-timestamps.v2",
                             1_767_225_605_000L,
                             1_767_225_620_000L,
                             null,
@@ -225,6 +225,76 @@ class SourceAnalysisTest {
                 assertNotEquals(first.analysisId, second.analysisId)
                 // Распознавание не повторялось: байты подменённого артефакта не перезаписаны.
                 assertArrayEquals(bytes, Files.readAllBytes(path))
+            }
+        }
+    }
+
+    @Test
+    fun `stored CSV v1 period is replaced with recognized v2 facts for auto window`() {
+        RecordingPrometheus().use { fixture ->
+            withService { store, service, _ ->
+                val input = accept(store, contiguousCsv(RUN_START, 30), "upgrade.jtl")
+                val old =
+                    runPeriodJson(
+                        RunPeriodV1(
+                            RUN_PERIOD_SCHEMA_VERSION,
+                            input.sha256,
+                            RUN_PERIOD_RECOGNITION_METHOD,
+                            RUN_START + 5_000,
+                            RUN_START + 20_000,
+                            null,
+                            0,
+                            RUN_PERIOD_STATUS_RECOGNIZED,
+                        ),
+                    )
+                store.replaceRunPeriod(input.runId, old)
+
+                val outcome = analyzeWithSources(service, AnalysisRequest(input, null, sourceRequest = GRID_AUTO), fixture.source())
+                val expected = runPeriodJson(recognizeRunPeriod(input.sourceType, input.path, input.sha256, 60_000L))
+                val stored = store.readRunPeriod(input.runId)!!
+
+                assertEquals(expected, stored)
+                assertEquals("sample-timestamps.v2", stored.getValue("recognition_method").jsonPrimitive.content)
+                assertEquals(RUN_START, stored.getValue("first_sample_epoch_millis").jsonPrimitive.long)
+                assertEquals(RUN_END, stored.getValue("last_sample_epoch_millis").jsonPrimitive.long)
+                assertEquals("1767225601", fixture.windows.single().getValue("start"))
+                assertEquals("1767225630", fixture.windows.single().getValue("end"))
+                assertEquals(RUN_START, sourceSummary(outcome).getValue("recognized_start_epoch_ms").jsonPrimitive.long)
+            }
+        }
+    }
+
+    @Test
+    fun `stored Gatling v1 period is reused for auto window`() {
+        RecordingPrometheus().use { fixture ->
+            withService { store, service, _ ->
+                val log =
+                    listOf(
+                        "RUN\tfixture.FixtureSimulation\tfixturesimulation\t1\t \t3.12.0",
+                        "REQUEST\t\tone\t$RUN_START\t${RUN_START + 500}\tOK\t ",
+                        "REQUEST\t\ttwo\t${RUN_START + 30_000}\t${RUN_START + 30_500}\tOK\t ",
+                    ).joinToString("\n", postfix = "\n")
+                val input = accept(store, log, "reuse.log")
+                val stored =
+                    runPeriodJson(
+                        RunPeriodV1(
+                            RUN_PERIOD_SCHEMA_VERSION,
+                            input.sha256,
+                            RUN_PERIOD_RECOGNITION_METHOD,
+                            RUN_START + 5_000,
+                            RUN_START + 20_000,
+                            null,
+                            0,
+                            RUN_PERIOD_STATUS_RECOGNIZED,
+                        ),
+                    )
+                store.replaceRunPeriod(input.runId, stored)
+
+                analyzeWithSources(service, AnalysisRequest(input, null, sourceRequest = GRID_AUTO), fixture.source())
+
+                assertEquals(stored, store.readRunPeriod(input.runId))
+                assertEquals("1767225606", fixture.windows.single().getValue("start"))
+                assertEquals("1767225620", fixture.windows.single().getValue("end"))
             }
         }
     }

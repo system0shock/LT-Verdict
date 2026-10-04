@@ -1,5 +1,8 @@
 package io.ltverdict.core
 
+import io.ltverdict.ingest.SourceType
+import io.ltverdict.storage.AcceptedInput
+import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
@@ -15,6 +18,8 @@ import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertThrows
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
+import java.nio.file.Files
+import java.nio.file.Path
 import java.time.Instant
 
 class BaselineComparisonTest {
@@ -26,6 +31,210 @@ class BaselineComparisonTest {
             compareAnalyses(manualBaselineSelection("release", reference('a')), reference('b'), result(), identity(), result(), withGates)
 
         comparison.getValue("metrics").jsonArray.forEach { assertEquals(JsonNull, it.jsonObject.getValue("reason")) }
+    }
+
+    @Test
+    fun `legacy CSV identity is incompatible with a production CSV identity`() {
+        val (old, current) = realCsvIdentities()
+        val selection = manualBaselineSelection("release", reference('a'))
+        val comparison =
+            compareAnalyses(
+                selection,
+                reference('b'),
+                windowResult("steady", 0, 10_000, 100, 100, 0),
+                old,
+                windowResult("steady", 0, 10_000, 120, 100, 0),
+                current,
+                WindowComparisonRequest("steady", "steady"),
+            )
+        val window = comparison.getValue("window_comparison").jsonObject
+
+        assertEquals("NOT_EVALUATED", window.getValue("status").jsonPrimitive.content)
+        assertTrue("INCOMPATIBLE_METRIC_DEFINITION" in window.reasons())
+        assertTrue(
+            comparison.getValue("metrics").jsonArray.all {
+                it.jsonObject
+                    .getValue("reason")
+                    .jsonPrimitive.content == "INCOMPATIBLE_METRIC_DEFINITION"
+            },
+        )
+        assertTrue(
+            window.getValue("metrics").jsonArray.all {
+                it.jsonObject
+                    .getValue("reason")
+                    .jsonPrimitive.content == "INCOMPATIBLE_METRIC_DEFINITION"
+            },
+        )
+    }
+
+    @Test
+    fun `CSV parser version alone separates slice two from new semantics`() {
+        val (old, current) = realCsvIdentities()
+        val metricsTwo =
+            JsonObject(
+                old + (
+                    "modules" to
+                        JsonArray(
+                            old.getValue("modules").jsonArray.map { module ->
+                                val value = module.jsonObject
+                                if (value.getValue("id").jsonPrimitive.content == "metrics") {
+                                    JsonObject(value + ("version" to JsonPrimitive("2")))
+                                } else {
+                                    value
+                                }
+                            },
+                        )
+                ),
+            )
+        val selection = manualBaselineSelection("release", reference('a'))
+
+        val incompatible = compareAnalyses(selection, reference('b'), result(), metricsTwo, result(), current)
+        val compatible = compareAnalyses(selection, reference('b'), result(), current, result(), current)
+
+        assertEquals(
+            "INCOMPATIBLE_METRIC_DEFINITION",
+            incompatible
+                .getValue("metrics")
+                .jsonArray
+                .first()
+                .jsonObject
+                .getValue("reason")
+                .jsonPrimitive.content,
+        )
+        assertEquals(
+            JsonNull,
+            compatible
+                .getValue("metrics")
+                .jsonArray
+                .first()
+                .jsonObject
+                .getValue("reason"),
+        )
+    }
+
+    @Test
+    fun `real old and new candidate identities are rejected as mixed semantics`() {
+        val (old, current) = realCsvIdentities()
+        val candidates = listOf(candidate('a', identity = old), candidate('b', identity = current), candidate('c', identity = current))
+
+        assertEquals(
+            "BASELINE_MIXED_SEMANTICS",
+            assertThrows(IllegalArgumentException::class.java) {
+                statisticalBaselineSelection("release", candidates.references(), candidates.results(), candidates.identities())
+            }.message,
+        )
+    }
+
+    @Test
+    fun `missing baseline metrics take priority over real identity incompatibility`() {
+        val (old, current) = realCsvIdentities()
+        val comparison =
+            compareAnalyses(
+                manualBaselineSelection("release", reference('a')),
+                reference('b'),
+                result(p95 = null, validity = "INVALID"),
+                old,
+                result(),
+                current,
+            )
+
+        assertEquals(
+            "MISSING_METRIC",
+            comparison
+                .getValue("metrics")
+                .jsonArray
+                .first()
+                .jsonObject
+                .getValue("reason")
+                .jsonPrimitive.content,
+        )
+    }
+
+    @Test
+    fun `diagnostics module version two versus three separates real identities`() {
+        val (_, current) = realCsvIdentities()
+        val diagnostic = diagnosticIdentity(current, "3")
+        val old = diagnosticIdentity(current, "2")
+        val selection = manualBaselineSelection("release", reference('a'))
+
+        val incompatible = compareAnalyses(selection, reference('b'), result(), old, result(), diagnostic)
+        val compatible = compareAnalyses(selection, reference('b'), result(), diagnostic, result(), diagnostic)
+
+        assertEquals(
+            "INCOMPATIBLE_METRIC_DEFINITION",
+            incompatible
+                .getValue("metrics")
+                .jsonArray
+                .first()
+                .jsonObject
+                .getValue("reason")
+                .jsonPrimitive.content,
+        )
+        assertEquals(
+            JsonNull,
+            compatible
+                .getValue("metrics")
+                .jsonArray
+                .first()
+                .jsonObject
+                .getValue("reason"),
+        )
+    }
+
+    private fun diagnosticIdentity(
+        base: JsonObject,
+        version: String,
+    ): JsonObject {
+        val input =
+            AcceptedInput(
+                runId = base.getValue("run_id").jsonPrimitive.content,
+                sourceType = SourceType.JMETER_CSV,
+                sha256 = base.getValue("input_sha256").jsonPrimitive.content,
+                sizeBytes = 1,
+                originalFilename = "input.jtl",
+                path = Path.of("unused"),
+            )
+        val diagnostics =
+            DiagnosticValidation.Valid(
+                DiagnosticPlanV1("correlation-plan.v1", "0".repeat(64), emptyList(), emptyList()),
+                "d".repeat(64),
+                byteArrayOf(),
+            )
+        val identity =
+            Json
+                .parseToJsonElement(
+                    analysisIdentity(input, null, EngineConfig(), diagnostics = diagnostics).decodeToString(),
+                ).jsonObject
+        return JsonObject(
+            identity + (
+                "modules" to
+                    JsonArray(
+                        identity.getValue("modules").jsonArray.map { module ->
+                            val value = module.jsonObject
+                            if (value.getValue("id").jsonPrimitive.content == "load-resource-diagnostics") {
+                                JsonObject(value + ("version" to JsonPrimitive(version)))
+                            } else {
+                                value
+                            }
+                        },
+                    )
+            ),
+        )
+    }
+
+    private fun realCsvIdentities(): Pair<JsonObject, JsonObject> {
+        val old = Json.parseToJsonElement(Files.readString(Path.of("fixtures/slice1/identity/legacy-pre-adr-0016.v1.json"))).jsonObject
+        val input =
+            AcceptedInput(
+                runId = old.getValue("run_id").jsonPrimitive.content,
+                sourceType = SourceType.JMETER_CSV,
+                sha256 = old.getValue("input_sha256").jsonPrimitive.content,
+                sizeBytes = 1,
+                originalFilename = "input.jtl",
+                path = Path.of("unused"),
+            )
+        val current = Json.parseToJsonElement(analysisIdentity(input, null, EngineConfig()).decodeToString()).jsonObject
+        return old to current
     }
 
     @Test

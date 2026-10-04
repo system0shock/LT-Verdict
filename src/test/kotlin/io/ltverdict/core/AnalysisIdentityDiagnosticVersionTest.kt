@@ -43,10 +43,42 @@ class AnalysisIdentityDiagnosticVersionTest {
         assertEquals(MIN_P95_SAMPLES.toString(), limits.getValue("diagnostic_p95_samples_min").jsonPrimitive.content)
     }
 
-    private fun input() =
+    @Test
+    fun `CSV identity advances its parser and source version while other sources remain at one`() {
+        val cases =
+            listOf(
+                Triple(SourceType.JMETER_CSV, "jmeter-csv" to "2", "jmeter-jtl-csv.v2"),
+                Triple(SourceType.JMETER_XML, "jmeter-xml" to "1", "jmeter-jtl-xml.v1"),
+                Triple(SourceType.GATLING_TEXT, "gatling-text" to "1", "gatling-text.v1"),
+                Triple(SourceType.GATLING_BINARY, "gatling-binary" to "1", "gatling-binary.v1"),
+            )
+        cases.forEach { (type, parser, sourceVersion) ->
+            val identity =
+                Json.parseToJsonElement(analysisIdentity(input(type), null, EngineConfig()).decodeToString()).jsonObject
+            val parsers = identity.getValue("parsers").jsonArray.map { it.jsonObject }
+
+            assertEquals(
+                listOf(parser),
+                parsers.map {
+                    it.getValue("id").jsonPrimitive.content to
+                        it.getValue("version").jsonPrimitive.content
+                },
+            )
+            assertEquals(
+                sourceVersion,
+                identity
+                    .getValue("input_versions")
+                    .jsonObject
+                    .getValue("source")
+                    .jsonPrimitive.content,
+            )
+        }
+    }
+
+    private fun input(type: SourceType = SourceType.JMETER_CSV) =
         AcceptedInput(
             runId = "identity",
-            sourceType = SourceType.JMETER_CSV,
+            sourceType = type,
             sha256 = "a".repeat(64),
             sizeBytes = 1,
             originalFilename = "input.jtl",

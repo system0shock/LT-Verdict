@@ -70,7 +70,7 @@ internal fun analysisIdentity(
                     add(
                         buildJsonObject {
                             put("id", input.sourceType.parserId())
-                            put("version", "1")
+                            put("version", if (input.sourceType == SourceType.JMETER_CSV) "2" else "1")
                         },
                     )
                 },
@@ -261,7 +261,7 @@ private fun SourceType.parserId(): String =
 
 private fun SourceType.inputVersion(): String =
     when (this) {
-        SourceType.JMETER_CSV -> "jmeter-jtl-csv.v1"
+        SourceType.JMETER_CSV -> "jmeter-jtl-csv.v2"
         SourceType.JMETER_XML -> "jmeter-jtl-xml.v1"
         SourceType.GATLING_TEXT -> "gatling-text.v1"
         SourceType.GATLING_BINARY -> "gatling-binary.v1"

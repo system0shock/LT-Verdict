@@ -6,6 +6,7 @@ import com.univocity.parsers.csv.CsvParserSettings
 import com.univocity.parsers.csv.UnescapedQuoteHandling
 import java.io.FilterInputStream
 import java.io.IOException
+import java.io.InputStream
 import java.io.InputStreamReader
 import java.io.Reader
 import java.nio.charset.CodingErrorAction
@@ -56,18 +57,22 @@ internal fun parseJtlCsv(
                         if (notify) processedBytes(bytesRead)
                     }
                 }
-            val decoder =
-                StandardCharsets.UTF_8
-                    .newDecoder()
-                    .onMalformedInput(CodingErrorAction.REPORT)
-                    .onUnmappableCharacter(CodingErrorAction.REPORT)
-            val parser = CsvParser(csvSettings())
-
-            parser.beginParsing(RejectUnclosedQuoteReader(InputStreamReader(counted, decoder)))
+            val parser = csvParser(counted)
             try {
                 val header = parser.parseNext() ?: invalidCsv("EMPTY_INPUT")
                 header.forEach(::checkCsvField)
                 val columns = requiredColumns(header)
+                val responseMessage = optionalColumn(header, "responseMessage")
+                val dataType = optionalColumn(header, "dataType")
+                val parentColumns =
+                    if (responseMessage != null &&
+                        dataType != null &&
+                        previewMixedParents(path, header.size, responseMessage, dataType, checkCancelled)
+                    ) {
+                        responseMessage to dataType
+                    } else {
+                        null
+                    }
                 var hasRows = false
 
                 while (true) {
@@ -88,7 +93,12 @@ internal fun parseJtlCsv(
                                 elapsedMillis = elapsed,
                                 label = label,
                                 groupPath = emptyList(),
-                                kind = SampleKind.JMETER_SAMPLER,
+                                kind =
+                                    if (parentColumns != null && isParentRow(row, parentColumns.first, parentColumns.second)) {
+                                        SampleKind.JMETER_CONTAINER
+                                    } else {
+                                        SampleKind.JMETER_SAMPLER
+                                    },
                                 successful = successful,
                             )
                         } catch (_: IllegalArgumentException) {
@@ -111,6 +121,95 @@ internal fun parseJtlCsv(
     }
 }
 
+private fun csvParser(input: InputStream): CsvParser {
+    val decoder =
+        StandardCharsets.UTF_8
+            .newDecoder()
+            .onMalformedInput(CodingErrorAction.REPORT)
+            .onUnmappableCharacter(CodingErrorAction.REPORT)
+    return CsvParser(csvSettings()).also {
+        it.beginParsing(RejectUnclosedQuoteReader(InputStreamReader(input, decoder)))
+    }
+}
+
+private fun previewMixedParents(
+    path: Path,
+    columnCount: Int,
+    responseMessage: Int,
+    dataType: Int,
+    checkCancelled: () -> Unit,
+): Boolean {
+    if (!containsParentPrefix(path, checkCancelled)) return false
+    var sawParent = false
+    var sawOther = false
+    try {
+        Files.newInputStream(path, LinkOption.NOFOLLOW_LINKS).use { input ->
+            val parser = csvParser(input)
+            try {
+                parser.parseNext()
+                while (!sawParent || !sawOther) {
+                    checkCancelled()
+                    val row = parser.parseNext() ?: break
+                    if (row.size != columnCount) continue
+                    if (isParentRow(row, responseMessage, dataType)) sawParent = true else sawOther = true
+                }
+            } finally {
+                parser.stopParsing()
+            }
+        }
+    } catch (_: InvalidCsv) {
+        // The main pass reports the invalid input with its byte offset.
+    } catch (_: TextParsingException) {
+        // The main pass reports the invalid input with its byte offset.
+    }
+    return sawParent && sawOther
+}
+
+private fun containsParentPrefix(
+    path: Path,
+    checkCancelled: () -> Unit,
+): Boolean {
+    val needle = PARENT_PREFIX.toByteArray(StandardCharsets.US_ASCII)
+    val buffer = ByteArray(64 * 1024)
+    var matched = 0
+    Files.newInputStream(path, LinkOption.NOFOLLOW_LINKS).use { input ->
+        while (true) {
+            checkCancelled()
+            val count = input.read(buffer)
+            if (count < 0) return false
+            for (index in 0 until count) {
+                matched =
+                    if (buffer[index] == needle[matched]) {
+                        matched + 1
+                    } else if (buffer[index] == needle[0]) {
+                        1
+                    } else {
+                        0
+                    }
+                if (matched == needle.size) return true
+            }
+        }
+    }
+}
+
+private fun isParentRow(
+    row: Array<String>,
+    responseMessage: Int,
+    dataType: Int,
+): Boolean {
+    if (row[dataType].isNotEmpty()) return false
+    val message = row[responseMessage]
+    if (!message.startsWith(PARENT_PREFIX)) return false
+    var index = PARENT_PREFIX.length
+    val firstDigit = index
+    while (index < message.length && message[index] in '0'..'9') index++
+    if (index == firstDigit || !message.startsWith(PARENT_SEPARATOR, index)) return false
+    index += PARENT_SEPARATOR.length
+    val secondDigit = index
+    while (index < message.length && message[index] in '0'..'9') index++
+    return index > secondDigit && index == message.length
+}
+
 private fun csvSettings() =
     CsvParserSettings().apply {
         isLineSeparatorDetectionEnabled = true
@@ -130,6 +229,15 @@ private fun requiredColumns(header: Array<String>): Map<String, Int> =
         header.indices.filter { header[it] == required }.singleOrNull()
             ?: invalidCsv("INVALID_JMETER_CSV_HEADER")
     }
+
+private fun optionalColumn(
+    header: Array<String>,
+    name: String,
+): Int? {
+    val matches = header.indices.filter { header[it] == name }
+    if (matches.size > 1) invalidCsv("INVALID_JMETER_CSV_HEADER")
+    return matches.singleOrNull()
+}
 
 private fun checkCsvField(value: String) {
     if (value.utf8Size() > MAX_FIELD_BYTES) invalidCsv("RESOURCE_LIMIT_EXCEEDED")
@@ -189,6 +297,8 @@ private class RejectUnclosedQuoteReader(
 }
 
 private val REQUIRED_HEADERS = listOf("timeStamp", "elapsed", "label", "success")
+private const val PARENT_PREFIX = "Number of samples in transaction : "
+private const val PARENT_SEPARATOR = ", number of failing samples : "
 private const val MAX_COLUMNS = 64
 private const val MAX_FIELD_BYTES = 65_536
 private const val MAX_LABEL_BYTES = 4_096

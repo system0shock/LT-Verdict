@@ -1,0 +1,79 @@
+{
+  "overall": {
+    "sample_count": 45,
+    "error_count": 15,
+    "latency_ms": {
+      "p50": 32,
+      "p95": 51,
+      "p99": 447,
+      "max": 447
+    }
+  },
+  "transactions": [
+    {
+      "group_path": [],
+      "label": "GET /bare",
+      "kind": "JMETER_CONTAINER",
+      "sample_count": 15,
+      "error_count": 0,
+      "latency_ms": {
+        "p50": 15,
+        "p95": 30,
+        "p99": 30,
+        "max": 30
+      }
+    },
+    {
+      "group_path": [],
+      "label": "TC-parent",
+      "kind": "JMETER_CONTAINER",
+      "sample_count": 15,
+      "error_count": 15,
+      "latency_ms": {
+        "p50": 111,
+        "p95": 537,
+        "p99": 537,
+        "max": 537
+      }
+    },
+    {
+      "group_path": [],
+      "label": "child1",
+      "kind": "JMETER_SAMPLER",
+      "sample_count": 15,
+      "error_count": 0,
+      "latency_ms": {
+        "p50": 32,
+        "p95": 447,
+        "p99": 447,
+        "max": 447
+      }
+    },
+    {
+      "group_path": [],
+      "label": "child2",
+      "kind": "JMETER_SAMPLER",
+      "sample_count": 15,
+      "error_count": 15,
+      "latency_ms": {
+        "p50": 32,
+        "p95": 39,
+        "p99": 39,
+        "max": 39
+      }
+    },
+    {
+      "group_path": [],
+      "label": "child3",
+      "kind": "JMETER_SAMPLER",
+      "sample_count": 15,
+      "error_count": 0,
+      "latency_ms": {
+        "p50": 47,
+        "p95": 51,
+        "p99": 51,
+        "max": 51
+      }
+    }
+  ]
+}

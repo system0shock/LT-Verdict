@@ -19,6 +19,7 @@ import java.util.TreeSet
 
 internal const val RUN_PERIOD_SCHEMA_VERSION = "run-period.v1"
 internal const val RUN_PERIOD_RECOGNITION_METHOD = "sample-timestamps.v1"
+private const val JMETER_CSV_RECOGNITION_METHOD = "sample-timestamps.v2"
 internal const val RUN_PERIOD_STATUS_RECOGNIZED = "RECOGNIZED"
 internal const val RUN_PERIOD_STATUS_INVALID_INPUT = "UNRECOGNIZED_INVALID_INPUT"
 internal const val RUN_PERIOD_STATUS_NO_SAMPLES = "UNRECOGNIZED_NO_SAMPLES"
@@ -33,6 +34,9 @@ internal data class RunPeriodV1(
     val idleGapCount: Int,
     val status: String,
 )
+
+internal fun recognitionMethod(sourceType: SourceType): String =
+    if (sourceType == SourceType.JMETER_CSV) JMETER_CSV_RECOGNITION_METHOD else RUN_PERIOD_RECOGNITION_METHOD
 
 internal fun recognizeRunPeriod(
     sourceType: SourceType,
@@ -63,8 +67,8 @@ internal fun recognizeRunPeriod(
         val firstSample = first
         val lastSample = last
         when {
-            report.validity == RunValidity.INVALID -> unrecognized(loadInputSha256, RUN_PERIOD_STATUS_INVALID_INPUT)
-            firstSample == null || lastSample == null -> unrecognized(loadInputSha256, RUN_PERIOD_STATUS_NO_SAMPLES)
+            report.validity == RunValidity.INVALID -> unrecognized(sourceType, loadInputSha256, RUN_PERIOD_STATUS_INVALID_INPUT)
+            firstSample == null || lastSample == null -> unrecognized(sourceType, loadInputSha256, RUN_PERIOD_STATUS_NO_SAMPLES)
             else -> {
                 // Факты простоев не зависят от maxIdleGapMillis: артефакт переиспользуется запросами
                 // с разным допуском, поэтому сравнение с допуском выполняется на выводе окна.
@@ -81,7 +85,7 @@ internal fun recognizeRunPeriod(
                 RunPeriodV1(
                     RUN_PERIOD_SCHEMA_VERSION,
                     loadInputSha256,
-                    RUN_PERIOD_RECOGNITION_METHOD,
+                    recognitionMethod(sourceType),
                     firstSample,
                     lastSample,
                     if (idleGapCount == 0) null else longestBuckets * ONE_SECOND_MILLIS,
@@ -91,7 +95,7 @@ internal fun recognizeRunPeriod(
             }
         }
     } catch (_: IllegalArgumentException) {
-        unrecognized(loadInputSha256, RUN_PERIOD_STATUS_INVALID_INPUT)
+        unrecognized(sourceType, loadInputSha256, RUN_PERIOD_STATUS_INVALID_INPUT)
     } catch (_: IOException) {
         // Сбой чтения не является фактом о байтах нагрузки, поэтому артефакт не сохраняется: следующий запуск повторит попытку.
         throw RunPeriodReadFailure()
@@ -130,7 +134,7 @@ internal fun runPeriodFromJson(document: JsonObject): RunPeriodV1 {
 internal fun validateRunPeriod(document: JsonObject): JsonObject {
     if (document.keys != RUN_PERIOD_FIELDS) periodInvalid("period fields differ")
     if (document.periodString("schema_version") != RUN_PERIOD_SCHEMA_VERSION) periodInvalid("schema_version differs")
-    if (document.periodString("recognition_method") != RUN_PERIOD_RECOGNITION_METHOD) periodInvalid("recognition_method differs")
+    if (document.periodString("recognition_method") !in RUN_PERIOD_RECOGNITION_METHODS) periodInvalid("recognition_method differs")
     if (!RUN_PERIOD_SHA256.matches(document.periodString("load_input_sha256"))) periodInvalid("load_input_sha256 is invalid")
     val first = document.periodLong("first_sample_epoch_millis")
     val last = document.periodLong("last_sample_epoch_millis")
@@ -150,9 +154,10 @@ internal fun validateRunPeriod(document: JsonObject): JsonObject {
 }
 
 private fun unrecognized(
+    sourceType: SourceType,
     loadInputSha256: String,
     status: String,
-) = RunPeriodV1(RUN_PERIOD_SCHEMA_VERSION, loadInputSha256, RUN_PERIOD_RECOGNITION_METHOD, 0L, 0L, null, 0, status)
+) = RunPeriodV1(RUN_PERIOD_SCHEMA_VERSION, loadInputSha256, recognitionMethod(sourceType), 0L, 0L, null, 0, status)
 
 private fun JsonObject.periodString(name: String): String {
     val value = this[name] as? JsonPrimitive ?: periodInvalid("$name must be a string")
@@ -189,4 +194,5 @@ private val RUN_PERIOD_FIELDS =
         "status",
     )
 private val RUN_PERIOD_STATUSES = setOf(RUN_PERIOD_STATUS_RECOGNIZED, RUN_PERIOD_STATUS_INVALID_INPUT, RUN_PERIOD_STATUS_NO_SAMPLES)
+private val RUN_PERIOD_RECOGNITION_METHODS = setOf(RUN_PERIOD_RECOGNITION_METHOD, JMETER_CSV_RECOGNITION_METHOD)
 private val RUN_PERIOD_SHA256 = Regex("[0-9a-f]{64}")

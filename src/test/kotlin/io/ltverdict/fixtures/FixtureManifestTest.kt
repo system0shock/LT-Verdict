@@ -104,6 +104,21 @@ class FixtureManifestTest {
                     .jsonPrimitive.content
                     .contains("LT Verdict", ignoreCase = true),
             )
+            if (id in newJmeterCases) {
+                val directory = id.removePrefix("jmeter-")
+                assertEquals("5.6.3", producer.getValue("version").jsonPrimitive.content)
+                assertEquals(
+                    "387fadca903ee0aa30e3f2115fdfedb3898b102e6b9fe7cc3942703094bd2e65b235df2b0c6d0d3248e74c9a7950a36e42625fd74425368342c12e40b0163076",
+                    producer.getValue("distribution_sha512").jsonPrimitive.content,
+                )
+                assertTrue(
+                    producer
+                        .getValue("plugins")
+                        .jsonPrimitive.content
+                        .isNotBlank(),
+                )
+                assertEquals("fixtures/slice1/jmeter/$directory/plan.jmx", producer.getValue("jmx").jsonPrimitive.content)
+            }
 
             val oracle = Json.parseToJsonElement(Files.readString(root.resolve(expectedOracle))).jsonObject
             val expected = case.getValue("expected").jsonObject
@@ -170,6 +185,17 @@ class FixtureManifestTest {
     }
 
     private companion object {
+        val newJmeterCases =
+            listOf(
+                "csv-tc-parent-subresults-true-5.6.3",
+                "csv-tc-parent-subresults-false-5.6.3",
+                "csv-tc-noparent-sample-5.6.3",
+                "csv-tc-plus-http-forged-reason-5.6.3",
+                "csv-tc-plus-lookalike-empty-datatype-5.6.3",
+                "csv-tc-plus-plain-sampler-subresults-false-5.6.3",
+                "csv-nested-subresults-false-5.6.3",
+            ).map { "jmeter-$it" }.toSet()
+
         val policyExamples =
             setOf(
                 "docs/contracts/policy/v1/examples/valid/all-metrics.json",
@@ -184,43 +210,48 @@ class FixtureManifestTest {
             )
 
         val parserCases =
-            mapOf(
-                "jmeter-csv-5.6.3" to
-                    Pair(
-                        "fixtures/slice1/jmeter/csv-5.6.3/input.jtl",
-                        "fixtures/slice1/jmeter/csv-5.6.3/oracle.json",
-                    ),
-                "jmeter-xml-5.6.3" to
-                    Pair(
-                        "fixtures/slice1/jmeter/xml-5.6.3/input.xml",
-                        "fixtures/slice1/jmeter/xml-5.6.3/oracle.json",
-                    ),
-                "gatling-text-3.9.5" to
-                    Pair(
-                        "fixtures/slice1/gatling/text-3.9.5/simulation.log",
-                        "fixtures/slice1/gatling/text-3.9.5/oracle.json",
-                    ),
-                "gatling-text-3.12.0" to
-                    Pair(
-                        "fixtures/slice1/gatling/text-3.12.0/simulation.log",
-                        "fixtures/slice1/gatling/text-3.12.0/oracle.json",
-                    ),
-                "gatling-binary-3.13.5" to
-                    Pair(
-                        "fixtures/slice1/gatling/binary-3.13.5/simulation.log",
-                        "fixtures/slice1/gatling/binary-3.13.5/oracle.json",
-                    ),
-                "gatling-binary-3.15.1" to
-                    Pair(
-                        "fixtures/slice1/gatling/binary-3.15.1/simulation.log",
-                        "fixtures/slice1/gatling/binary-3.15.1/oracle.json",
-                    ),
-            )
+            newJmeterCases.associateWith { id ->
+                val directory = id.removePrefix("jmeter-")
+                Pair("fixtures/slice1/jmeter/$directory/input.jtl", "fixtures/slice1/jmeter/$directory/oracle.json")
+            } +
+                mapOf(
+                    "jmeter-csv-5.6.3" to
+                        Pair(
+                            "fixtures/slice1/jmeter/csv-5.6.3/input.jtl",
+                            "fixtures/slice1/jmeter/csv-5.6.3/oracle.json",
+                        ),
+                    "jmeter-xml-5.6.3" to
+                        Pair(
+                            "fixtures/slice1/jmeter/xml-5.6.3/input.xml",
+                            "fixtures/slice1/jmeter/xml-5.6.3/oracle.json",
+                        ),
+                    "gatling-text-3.9.5" to
+                        Pair(
+                            "fixtures/slice1/gatling/text-3.9.5/simulation.log",
+                            "fixtures/slice1/gatling/text-3.9.5/oracle.json",
+                        ),
+                    "gatling-text-3.12.0" to
+                        Pair(
+                            "fixtures/slice1/gatling/text-3.12.0/simulation.log",
+                            "fixtures/slice1/gatling/text-3.12.0/oracle.json",
+                        ),
+                    "gatling-binary-3.13.5" to
+                        Pair(
+                            "fixtures/slice1/gatling/binary-3.13.5/simulation.log",
+                            "fixtures/slice1/gatling/binary-3.13.5/oracle.json",
+                        ),
+                    "gatling-binary-3.15.1" to
+                        Pair(
+                            "fixtures/slice1/gatling/binary-3.15.1/simulation.log",
+                            "fixtures/slice1/gatling/binary-3.15.1/oracle.json",
+                        ),
+                )
 
         val requiredArtifacts =
             policyExamples +
                 parserCases.values.flatMap { listOf(it.first, it.second) } +
                 setOf(
+                    "fixtures/slice1/identity/legacy-pre-adr-0016.v1.json",
                     "docs/contracts/policy/v1/policy.schema.json",
                     "fixtures/slice1/normalization/spike-drop.jtl",
                     "fixtures/slice1/policies/pass.json",
@@ -235,6 +266,7 @@ class FixtureManifestTest {
                     "fixtures/slice1/identity/analysis-identity.sha256",
                     "fixtures/slice1/identity/analysis-identity-resources.v1.json",
                     "fixtures/slice1/identity/analysis-identity-resources.sha256",
-                )
+                ) +
+                newJmeterCases.map { "fixtures/slice1/jmeter/${it.removePrefix("jmeter-")}/plan.jmx" }
     }
 }

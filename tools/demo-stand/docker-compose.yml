@@ -20,8 +20,12 @@ services:
       - /bin/sh
       - -c
       - |
-        if [ -e /prometheus/.ltv-demo-backfilled ]; then echo "already backfilled"; exit 0; fi
-        promtool tsdb create-blocks-from openmetrics /out/metrics.om /prometheus && touch /prometheus/.ltv-demo-backfilled
+        sum=$$(sha256sum /out/metrics.om | cut -d' ' -f1)
+        if [ -e /prometheus/.ltv-demo-backfilled ]; then
+          if [ "$$(cat /prometheus/.ltv-demo-backfilled)" = "$$sum" ]; then echo "already backfilled"; exit 0; fi
+          echo "metrics.om changed since the last backfill: run docker compose down -v first" >&2; exit 1
+        fi
+        promtool tsdb create-blocks-from openmetrics /out/metrics.om /prometheus && echo "$$sum" > /prometheus/.ltv-demo-backfilled
     depends_on:
       generator:
         condition: service_completed_successfully
@@ -58,6 +62,7 @@ services:
     environment:
       GF_AUTH_ANONYMOUS_ENABLED: "true"
       GF_AUTH_ANONYMOUS_ORG_ROLE: Viewer
+      GF_SECURITY_DISABLE_INITIAL_ADMIN_CREATION: "true"
       GF_USERS_DEFAULT_THEME: light
       GF_ANALYTICS_REPORTING_ENABLED: "false"
       GF_ANALYTICS_CHECK_FOR_UPDATES: "false"

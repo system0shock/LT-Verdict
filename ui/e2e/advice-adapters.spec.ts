@@ -73,9 +73,10 @@ test('every known failure and unavailable reason has words, an unknown one keeps
   for (const failure of ['INPUT_LIMIT', 'OUTPUT_LIMIT', 'INVALID_ANALYSIS', 'INVALID_OUTPUT', 'UNKNOWN_EVIDENCE_REFERENCE', 'TIMEOUT', 'PROCESS_FAILED']) {
     const view = jobView(job({ state: 'FAILED', failure }))
     expect(view.code).toBe(failure)
-    expect(view.text).not.toBe(ADVICE_LABELS.unknownFailure)
-    expect(view.text).not.toBe('')
-    expect(view.hint).not.toBeNull()
+    expect(ADVICE_LABELS.failure[failure]).toBeTruthy()
+    expect(ADVICE_LABELS.failureHint[failure]).toBeTruthy()
+    expect(view.text).toBe(ADVICE_LABELS.failure[failure])
+    expect(view.hint).toBe(ADVICE_LABELS.failureHint[failure])
     expect(view.tone).toBe('fail')
     expect(view.state).toBe(ADVICE_LABELS.states.FAILED)
   }
@@ -84,6 +85,8 @@ test('every known failure and unavailable reason has words, an unknown one keeps
   for (const reason of ['CREDENTIAL_NOT_CONFIGURED', 'DOCKER_UNAVAILABLE', 'RUNTIME_IMAGE_MISSING', 'OS_ISOLATION_NOT_PROVEN', 'RUNNER_ARTIFACT_MISSING', 'RUNNER_ARTIFACT_MISMATCH', 'MODEL_ENDPOINT_UNAVAILABLE']) {
     const view = jobView(job({ state: 'UNAVAILABLE', unavailable_reason: reason }))
     expect(view.code).toBe(reason)
+    expect(ADVICE_LABELS.unavailable[reason]).toBeTruthy()
+    expect(ADVICE_LABELS.unavailableHint[reason]).toBeTruthy()
     expect(view.text).toBe(ADVICE_LABELS.unavailable[reason])
     expect(view.hint).toBe(ADVICE_LABELS.unavailableHint[reason])
     expect(view.tone).toBe('warn')

@@ -13,6 +13,7 @@ const consent = ref(false)
 const sending = ref(false)
 const error = ref('')
 const errorCode = ref('')
+const errorFromServer = ref(false)
 const provenance = computed(() => (advice.value ? provenanceLines(advice.value) : []))
 const jobInfo = computed(() => (job.value ? jobView(job.value) : null))
 const errorInfo = computed(() => (errorCode.value && error.value ? apiFailureView(errorCode.value, error.value) : null))
@@ -24,9 +25,11 @@ function fail(failure: unknown, fallback: string, expected: number) {
   if (expected !== revision) return
   if (failure instanceof ApiError && (failure.code === 'AI_BUSY' || failure.code === 'AI_UNAVAILABLE')) {
     errorCode.value = failure.code
+    errorFromServer.value = true
     error.value = failure.message
   } else {
     errorCode.value = ''
+    errorFromServer.value = failure instanceof ApiError
     error.value = failure instanceof Error ? failure.message : fallback
   }
 }
@@ -170,7 +173,10 @@ onUnmounted(() => { revision++; stopPolling() })
       class="notice notice-fail"
     >
       <span v-if="errorInfo">{{ errorInfo.text }} ({{ ADVICE_LABELS.codeLabel }}: <code>{{ errorInfo.code }}</code>) <span lang="en">{{ error }}</span><template v-if="errorInfo.hint"><br>{{ ADVICE_LABELS.hintLabel }}: {{ errorInfo.hint }}</template></span>
-      <span v-else>{{ error }}</span>
+      <span
+        v-else
+        :lang="errorFromServer ? 'en' : undefined"
+      >{{ error }}</span>
     </p>
     <button
       v-if="error && job"

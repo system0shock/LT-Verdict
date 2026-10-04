@@ -40,7 +40,7 @@ interface Setup {
 }
 
 async function mockApi(page: Page, setup: Setup) {
-  const calls = { posts: 0, postBodies: [] as unknown[], gets: 0 }
+  const calls = { posts: 0, postBodies: [] as unknown[], gets: 0, heldStarted: false, heldDone: false }
   let firstHeld = false
   await page.route('**/api/**', async (route) => {
     const url = new URL(route.request().url())
@@ -48,6 +48,7 @@ async function mockApi(page: Page, setup: Setup) {
     const method = route.request().method()
     let body: unknown
     let status = 200
+    let held = false
     if (path === '/api/bootstrap') body = { csrf_token: 'ui-test', max_upload_bytes: 1000000 }
     else if (method === 'GET' && (path === '/api/jenkins' || path === '/api/grafana')) body = { profiles: [] }
     else if (path === '/api/sources') body = { profiles: [] }
@@ -75,6 +76,8 @@ async function mockApi(page: Page, setup: Setup) {
         const own = setup.perAnalysis?.[analysisId]
         if (setup.holdFirst && !firstHeld && analysisId === analysisA) {
           firstHeld = true
+          held = true
+          calls.heldStarted = true
           await setup.holdFirst
         }
         body = own ? { advice: own.advice, job: own.job ?? null } : { advice: setup.advice ?? null, job: setup.job ?? null }
@@ -84,6 +87,7 @@ async function mockApi(page: Page, setup: Setup) {
       body = { error: { code: 'NOT_FOUND', message: 'not mocked', details: [] } }
     }
     await route.fulfill({ status, json: body })
+    if (held) calls.heldDone = true
   })
   return calls
 }
@@ -196,6 +200,7 @@ test('other API errors keep the raw server message', async ({ page }) => {
   await panel.getByRole('checkbox').check()
   await panel.getByRole('button', { name: 'Получить рекомендации' }).click()
   await expect(panel.getByRole('alert')).toHaveText('Something else failed')
+  await expect(panel.getByRole('alert').locator('[lang="en"]')).toHaveText('Something else failed')
 })
 
 test('model text is rendered as text, never as HTML', async ({ page }) => {
@@ -209,18 +214,20 @@ test('model text is rendered as text, never as HTML', async ({ page }) => {
 test('a stale response after switching the analysis does not overwrite the new panel', async ({ page }) => {
   let release: () => void = () => {}
   const holdFirst = new Promise<void>((resolve) => { release = resolve })
-  const { panel } = await openAdvice(page, {
+  const { calls, panel } = await openAdvice(page, {
     holdFirst,
     perAnalysis: {
       [analysisA]: { advice: advice(analysisA, 'old-model', 'advisory-system.v1') },
       [analysisB]: { advice: advice(analysisB, 'new-model', 'advisory-system.v1') },
     },
   })
+  await expect.poll(() => calls.heldStarted).toBe(true)
   await page.locator('#shell-tab-setup').click()
   await page.locator(`button[title="${analysisB}"]`).click()
   await page.locator('#shell-tab-advice').click()
   await expect(page.getByTestId('advice-provenance')).toContainText('new-model')
   release()
+  await expect.poll(() => calls.heldDone).toBe(true)
   await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))))
   await expect(page.getByTestId('advice-provenance')).toContainText('new-model')
   await expect(page.getByTestId('advice-provenance')).not.toContainText('old-model')

@@ -30,6 +30,54 @@ try {
     $advice = Get-Content -LiteralPath $output -Raw -Encoding UTF8 | ConvertFrom-Json
     if ([string]$advice.schema_version -ne "ai-advice-output.v1") { throw "Runtime output contract differs." }
 
+    if ([int]$runtimeResult.provider_request_count -ne 1) { throw "Normal preflight provider count differs." }
+    $prompt = Join-Path $repoRoot "docs/contracts/advice/v1/system-prompt.md"
+    $expectedPromptHash = (Get-FileHash -LiteralPath $prompt -Algorithm SHA256).Hash.ToLowerInvariant()
+    if ([string]$runtimeResult.prompt_sha256 -cne $expectedPromptHash) { throw "Normal preflight prompt hash differs." }
+
+    function Invoke-Scenario {
+        param([string]$Name, [string]$Scenario, [string]$RunMode = "Preflight")
+        $scenarioOutput = Join-Path $temporary "$Name-advice-output.json"
+        $scenarioResult = Join-Path $temporary "$Name-runtime-result.json"
+        $scenarioCancel = Join-Path $temporary "$Name-cancel"
+        & $runner -Mode $RunMode -PreflightScenario $Scenario -EvidencePath $evidence -OutputPath $scenarioOutput -ResultPath $scenarioResult -CancelPath $scenarioCancel
+        if ($LASTEXITCODE -ne 0) { throw "Runtime scenario $Name exited $LASTEXITCODE" }
+        return [pscustomobject]@{
+            Result = (Get-Content -LiteralPath $scenarioResult -Raw -Encoding UTF8 | ConvertFrom-Json)
+            Output = $scenarioOutput
+        }
+    }
+
+    $wrappedValid = Invoke-Scenario -Name "wrapped-valid" -Scenario "wrapped-then-valid"
+    if ([string]$wrappedValid.Result.status -ne "SUCCESS" -or [int]$wrappedValid.Result.provider_request_count -ne 2) {
+        throw "Wrapped then valid preflight result differs."
+    }
+    if (-not (Test-Path -LiteralPath $wrappedValid.Output -PathType Leaf) -or
+        [string](Get-Content -LiteralPath $wrappedValid.Output -Raw -Encoding UTF8 | ConvertFrom-Json).schema_version -ne "ai-advice-output.v1") {
+        throw "Wrapped then valid advice output differs."
+    }
+
+    $wrappedTwice = Invoke-Scenario -Name "wrapped-twice" -Scenario "wrapped-twice"
+    if ([string]$wrappedTwice.Result.status -ne "FAILED" -or
+        [string]$wrappedTwice.Result.failure_code -ne "INVALID_OUTPUT" -or
+        [int]$wrappedTwice.Result.provider_request_count -ne 2) {
+        throw "Wrapped twice preflight result differs."
+    }
+
+    $deepViolation = Invoke-Scenario -Name "deep-violation" -Scenario "deep-violation"
+    if ([string]$deepViolation.Result.status -ne "FAILED" -or
+        [string]$deepViolation.Result.failure_code -ne "PROCESS_FAILED" -or
+        [int]$deepViolation.Result.provider_request_count -ne 1) {
+        throw "Deep violation preflight result differs."
+    }
+
+    $liveScenario = Invoke-Scenario -Name "live-scenario" -Scenario "wrapped-twice" -RunMode "Live"
+    if ([string]$liveScenario.Result.status -ne "FAILED" -or
+        [string]$liveScenario.Result.failure_code -ne "PROCESS_FAILED" -or
+        [string]$liveScenario.Result.stage -ne "validate_inputs") {
+        throw "Live preflight scenario was not rejected at input validation."
+    }
+
     $fakeBin = Join-Path $temporary "fake-bin"
     [void](New-Item -ItemType Directory -Path $fakeBin)
     $dockerCalls = Join-Path $temporary "docker-calls.txt"

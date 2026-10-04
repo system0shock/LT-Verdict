@@ -26,7 +26,7 @@ if (mode === "preflight" && retryWindowEnv !== undefined &&
 if (mode === "live" && (preflightScenario !== undefined || preflightResponsesEnv !== undefined)) {
   throw new Error("preflight stubs are not allowed in live mode");
 }
-if (preflightScenario !== undefined && !["wrapped-then-valid", "wrapped-twice"].includes(preflightScenario)) {
+if (preflightScenario !== undefined && !["wrapped-then-valid", "wrapped-twice", "deep-violation"].includes(preflightScenario)) {
   throw new Error("invalid preflight scenario");
 }
 let preflightResponses = null;
@@ -198,7 +198,7 @@ const fakeAdvice = {
   caveats: ["This is a transport preflight, not model advice."],
 };
 
-function fakeResponse() {
+function fakeResponse(advice = fakeAdvice) {
   const frame = {
     id: "lt-verdict-preflight",
     model: fixedModel,
@@ -210,7 +210,7 @@ function fakeResponse() {
           index: 0,
           id: "lt-verdict-preflight-call",
           type: "function",
-          function: { name: "structured_output", arguments: JSON.stringify(fakeAdvice) },
+          function: { name: "structured_output", arguments: JSON.stringify(advice) },
         }],
       },
       finish_reason: "tool_calls",
@@ -404,7 +404,8 @@ const server = http.createServer(async (request, response) => {
         : { status: 200, contentType: "text/event-stream",
           body: preflightScenario === "wrapped-twice" ||
             (preflightScenario === "wrapped-then-valid" && forwarded === 1)
-            ? fakeWrappedResponse() : fakeResponse() };
+            ? fakeWrappedResponse() : fakeResponse(preflightScenario === "deep-violation" && forwarded === 1
+              ? { ...fakeAdvice, hypotheses: [{ rank: 1, possible_explanation: "x", recommended_check: "x", evidence_refs: ["analysis-result.json#/run_validity"] }] } : fakeAdvice) };
     } else {
       provider = await callProvider(outgoing);
     }

@@ -251,6 +251,17 @@ test("retry is refused for a valid top level with a deeper violation", async () 
   }, { ADVISORY_RELAY_PREFLIGHT_RESPONSES: JSON.stringify([provider(sse(args))]) });
 });
 
+test("deep-violation preflight scenario refuses continuation", async () => {
+  await withRelay(async (root, port) => {
+    const first = await request(port, firstRequest);
+    assert.equal(first.status, 200);
+    const args = JSON.parse(first.body.split("\n")[0].slice(6)).choices[0].delta.tool_calls[0].function.arguments;
+    assert.equal(Object.hasOwn(JSON.parse(args).hypotheses[0], "observation"), false);
+    assert.equal((await request(port, retryRequest(firstRequest, args, { id: "lt-verdict-preflight-call" }))).status, 409);
+    assertResult(root, { received: 2, forwarded: 1, status: "BLOCKED_ADDITIONAL_REQUEST", outcomes: ["FORWARDED_STRUCTURED_OUTPUT", "BLOCKED_ADDITIONAL_REQUEST"], reason: "RETRY_NOT_TOP_LEVEL_SCHEMA" });
+  }, { ADVISORY_RELAY_PREFLIGHT_SCENARIO: "deep-violation" });
+});
+
 test("retry is refused for mismatched continuation messages", async t => {
   const mutations = {
     "earlier message differs": body => { body.messages[0].content = "changed"; },

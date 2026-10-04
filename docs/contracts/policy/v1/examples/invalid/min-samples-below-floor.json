@@ -1,0 +1,16 @@
+{
+  "schema_version": "policy.v1",
+  "policy_id": "min-samples-below-floor",
+  "rules": [
+    {
+      "id": "latency",
+      "metric": "response_time_p95_ms",
+      "operator": "lte",
+      "threshold": 100,
+      "scope": {
+        "kind": "overall"
+      },
+      "min_samples": 10
+    }
+  ]
+}

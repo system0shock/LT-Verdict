@@ -42,6 +42,50 @@ class PolicyTest {
     }
 
     @Test
+    fun `defaults and rule minimum parse and an old file keeps its shape`() {
+        val old = validatePolicy(ByteArrayInputStream(validPolicy().encodeToByteArray())) as PolicyValidation.Valid
+        assertEquals(null, old.policy.defaults)
+        assertEquals(null, old.policy.rules.single().minSamples)
+
+        val source =
+            """{"schema_version":"policy.v1","policy_id":"p","defaults":{"sample_floor":10,"min_samples":50},"rules":[""" +
+                """{"id":"r","metric":"response_time_p95_ms","operator":"lte","threshold":100,"scope":{"kind":"overall"},"min_samples":200}]}"""
+        val valid = validatePolicy(ByteArrayInputStream(source.encodeToByteArray())) as PolicyValidation.Valid
+
+        assertEquals(PolicyDefaultsV1(sampleFloor = 10, minSamples = 50), valid.policy.defaults)
+        assertEquals(200L, valid.policy.rules.single().minSamples)
+    }
+
+    @Test
+    fun `sample limits fail closed at their exact fields`() {
+        listOf(
+            Case("floor zero", policyJson(defaults = """{"sample_floor":0}"""), "/defaults/sample_floor") to "MIN_SAMPLES_OUT_OF_RANGE",
+            Case("minimum too large", policyJson(defaults = """{"min_samples":1000001}"""), "/defaults/min_samples") to
+                "MIN_SAMPLES_OUT_OF_RANGE",
+            Case("fraction", policyJson(defaults = """{"sample_floor":1.5}"""), "/defaults/sample_floor") to "INVALID_TYPE",
+            Case("unknown defaults field", policyJson(defaults = """{"x":1}"""), "/defaults/x") to "UNKNOWN_FIELD",
+            Case("minimum below explicit floor", policyJson(defaults = """{"sample_floor":50,"min_samples":20}"""), "/defaults/min_samples") to
+                "MIN_SAMPLES_BELOW_FLOOR",
+            Case("floor above the default minimum", policyJson(defaults = """{"sample_floor":150}"""), "/defaults/sample_floor") to
+                "MIN_SAMPLES_BELOW_FLOOR",
+            Case("rule minimum below the default floor", policyJson(ruleExtra = ""","min_samples":10"""), "/rules/0/min_samples") to
+                "MIN_SAMPLES_BELOW_FLOOR",
+            Case(
+                "throughput has no minimum",
+                policyJson(ruleExtra = ""","min_samples":50""", metric = "throughput_rps", operator = "gte"),
+                "/rules/0/min_samples",
+            ) to "FIELD_NOT_APPLICABLE",
+        ).forEach { (case, code) ->
+            assertInvalid(case.source.encodeToByteArray(), code, case.pointer, message = case.name)
+        }
+        assertTrue(
+            validatePolicy(
+                ByteArrayInputStream(policyJson(defaults = """{"sample_floor":1,"min_samples":1}""").encodeToByteArray()),
+            ) is PolicyValidation.Valid,
+        )
+    }
+
+    @Test
     fun `trust boundary rejects oversized input and malformed UTF-8`() {
         val valid = validPolicy().encodeToByteArray()
         assertInvalid(valid, "RESOURCE_LIMIT_EXCEEDED", "", maxBytes = valid.size - 1)
@@ -139,6 +183,17 @@ class PolicyTest {
         policyId: String = "p",
     ) = """{"schema_version":"policy.v1","policy_id":"$policyId","rules":[$rules]}"""
 
+    private fun policyJson(
+        defaults: String? = null,
+        ruleExtra: String = "",
+        metric: String = "response_time_p95_ms",
+        operator: String = "lte",
+    ) = buildString {
+        append("""{"schema_version":"policy.v1","policy_id":"p",""")
+        if (defaults != null) append(""""defaults":$defaults,""")
+        append(""""rules":[{"id":"r","metric":"$metric","operator":"$operator","threshold":1,"scope":{"kind":"overall"}$ruleExtra}]}""")
+    }
+
     private fun rule(
         id: String,
         threshold: String = "100",
@@ -162,7 +217,10 @@ class PolicyTest {
         val contractExamples =
             mapOf(
                 "docs/contracts/policy/v1/examples/valid/all-metrics.json" to Expectation(true, true),
+                "docs/contracts/policy/v1/examples/valid/sample-gate.json" to Expectation(true, true),
                 "docs/contracts/policy/v1/examples/invalid/empty-rules.json" to Expectation(false, false, "EMPTY_RULES", "/rules"),
+                "docs/contracts/policy/v1/examples/invalid/min-samples-below-floor.json" to
+                    Expectation(true, false, "MIN_SAMPLES_BELOW_FLOOR", "/rules/0/min_samples"),
                 "docs/contracts/policy/v1/examples/invalid/duplicate-rule-id.json" to
                     Expectation(true, false, "DUPLICATE_RULE_ID", "/rules/1/id"),
                 "docs/contracts/policy/v1/examples/invalid/unknown-field.json" to

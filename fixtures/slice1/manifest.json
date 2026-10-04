@@ -14,6 +14,10 @@
       "sha256": "c0b7a6ccdd1529e74b49ff7988faa26eb7ef7597c4df2b37fe57f84dfd98157d"
     },
     {
+      "path": "docs/contracts/policy/v1/examples/invalid/min-samples-below-floor.json",
+      "sha256": "ceaf38be0138663f199007c61c7da610b4048c2175ea64471e5e47ec25cba4f9"
+    },
+    {
       "path": "docs/contracts/policy/v1/examples/invalid/unknown-field.json",
       "sha256": "13c02ed5d4efcddcaacb85c1ec61c4eadecb7e7fedb79ca9087a4919ecdd891f"
     },
@@ -30,8 +34,12 @@
       "sha256": "fbd8005334cb1fd2e7216429a1b5e3df1e4c25a66baff31e61f2937c7bc883c4"
     },
     {
+      "path": "docs/contracts/policy/v1/examples/valid/sample-gate.json",
+      "sha256": "7430caf6d2adbc72fcd88978254d3f34f9568479aa2f0adbe884f77c75eace04"
+    },
+    {
       "path": "docs/contracts/policy/v1/policy.schema.json",
-      "sha256": "e0ecc2e109a1278014240dabb2a5998f37824d68cbedf34c8b2dacc9f0960c03"
+      "sha256": "62d1a46e91facc238946be41490d25849efbf454b590829a2e7dbd0d95f26b64"
     },
     {
       "path": "fixtures/slice1/gatling/binary-3.13.5/oracle.json",
@@ -141,6 +149,11 @@
       "runtime_valid": true
     },
     {
+      "path": "docs/contracts/policy/v1/examples/valid/sample-gate.json",
+      "schema_valid": true,
+      "runtime_valid": true
+    },
+    {
       "path": "docs/contracts/policy/v1/examples/invalid/empty-rules.json",
       "schema_valid": false,
       "runtime_valid": false,
@@ -175,6 +188,12 @@
       "schema_valid": false,
       "runtime_valid": false,
       "expected_diagnostic": "THRESHOLD_OUT_OF_RANGE"
+    },
+    {
+      "path": "docs/contracts/policy/v1/examples/invalid/min-samples-below-floor.json",
+      "schema_valid": true,
+      "runtime_valid": false,
+      "expected_diagnostic": "MIN_SAMPLES_BELOW_FLOOR"
     }
   ],
   "parser_cases": [

@@ -33,6 +33,9 @@ private const val MAX_IDENTIFIER_BYTES = 128
 private const val MAX_TRANSACTION_SCOPE_BYTES = 4_096
 private const val MAX_NUMERIC_TOKEN_BYTES = 64
 private const val MAX_ABSOLUTE_EXPONENT = 64
+internal const val MIN_SAMPLES_FLOOR = 20L
+internal const val MIN_SAMPLES_DEFAULT = 100L
+private const val MAX_SAMPLES_BOUND = 1_000_000L
 
 internal enum class PolicyVerdict {
     PASS,
@@ -426,11 +429,14 @@ private fun decodeUtf8(bytes: ByteArray): String =
 
 private fun parsePolicy(element: JsonElement): PolicyV1 {
     val root = element.objectAt("")
-    root.rejectUnknown(setOf("schema_version", "policy_id", "rules"), "")
+    root.rejectUnknown(setOf("schema_version", "policy_id", "rules", "defaults"), "")
     val schemaVersion = root.stringAt("schema_version", "")
     if (schemaVersion != "policy.v1") fail("INVALID_SCHEMA_VERSION", "/schema_version", "expected policy.v1")
     val policyId = root.stringAt("policy_id", "")
     validateIdentifier(policyId, "/policy_id")
+    val defaults = root["defaults"]?.let { parseDefaults(it, "/defaults") }
+    val effectiveFloor = defaults?.sampleFloor ?: MIN_SAMPLES_FLOOR
+    defaults?.let { checkDefaultsOrder(it, effectiveFloor) }
     val rulesElement = root.required("rules", "")
     val rulesArray = rulesElement as? JsonArray ?: fail("INVALID_TYPE", "/rules", "rules must be an array")
     if (rulesArray.isEmpty()) fail("EMPTY_RULES", "/rules", "at least one rule is required")
@@ -441,7 +447,7 @@ private fun parsePolicy(element: JsonElement): PolicyV1 {
         rulesArray.mapIndexed { index, value ->
             val pointer = "/rules/$index"
             val rule = value.objectAt(pointer)
-            rule.rejectUnknown(setOf("id", "metric", "operator", "threshold", "scope"), pointer)
+            rule.rejectUnknown(setOf("id", "metric", "operator", "threshold", "scope", "min_samples"), pointer)
             val id = rule.stringAt("id", pointer)
             validateIdentifier(id, "$pointer/id")
             if (!ids.add(id)) fail("DUPLICATE_RULE_ID", "$pointer/id", "rule id must be unique")
@@ -463,9 +469,59 @@ private fun parsePolicy(element: JsonElement): PolicyV1 {
                 fail("THRESHOLD_OUT_OF_RANGE", "$pointer/threshold", "threshold is outside the metric range")
             }
             val scope = parseScope(rule.required("scope", pointer), "$pointer/scope")
-            PolicyRuleV1(id, metric, operator, threshold, scope)
+            val minSamples = rule.longInRangeAt("min_samples", pointer)
+            if (minSamples != null) {
+                if (metric == PolicyMetric.THROUGHPUT_RPS) {
+                    fail("FIELD_NOT_APPLICABLE", "$pointer/min_samples", "min_samples does not apply to throughput_rps")
+                }
+                if (minSamples < effectiveFloor) {
+                    fail("MIN_SAMPLES_BELOW_FLOOR", "$pointer/min_samples", "min_samples is below the effective sample floor")
+                }
+            }
+            PolicyRuleV1(id, metric, operator, threshold, scope, minSamples)
         }
-    return PolicyV1(schemaVersion, policyId, rules)
+    return PolicyV1(schemaVersion, policyId, rules, defaults)
+}
+
+private fun parseDefaults(
+    element: JsonElement,
+    pointer: String,
+): PolicyDefaultsV1 {
+    val value = element.objectAt(pointer)
+    value.rejectUnknown(setOf("sample_floor", "min_samples"), pointer)
+    return PolicyDefaultsV1(value.longInRangeAt("sample_floor", pointer), value.longInRangeAt("min_samples", pointer))
+}
+
+private fun checkDefaultsOrder(
+    defaults: PolicyDefaultsV1,
+    effectiveFloor: Long,
+) {
+    val minimum = defaults.minSamples ?: MIN_SAMPLES_DEFAULT
+    if (minimum < effectiveFloor) {
+        val field = if (defaults.minSamples != null) "min_samples" else "sample_floor"
+        fail("MIN_SAMPLES_BELOW_FLOOR", "/defaults/$field", "default minimum is below the sample floor")
+    }
+}
+
+private fun JsonObject.longInRangeAt(
+    name: String,
+    pointer: String,
+): Long? {
+    val value = get(name) ?: return null
+    if (value !is JsonPrimitive || value.isString || value === JsonNull || value.content in setOf("true", "false")) {
+        fail("INVALID_TYPE", pointer.child(name), "$name must be an integer")
+    }
+    val number =
+        try {
+            BigDecimal(value.content)
+        } catch (_: NumberFormatException) {
+            fail("INVALID_TYPE", pointer.child(name), "$name must be an integer")
+        }
+    if (number.stripTrailingZeros().scale() > 0) fail("INVALID_TYPE", pointer.child(name), "$name must be an integer")
+    if (number < BigDecimal.ONE || number > BigDecimal.valueOf(MAX_SAMPLES_BOUND)) {
+        fail("MIN_SAMPLES_OUT_OF_RANGE", pointer.child(name), "$name must be between 1 and $MAX_SAMPLES_BOUND")
+    }
+    return number.longValueExact()
 }
 
 private fun parseScope(

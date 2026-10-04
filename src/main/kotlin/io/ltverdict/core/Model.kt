@@ -24,6 +24,12 @@ internal data class PolicyV1(
     val schemaVersion: String,
     val policyId: String,
     val rules: List<PolicyRuleV1>,
+    val defaults: PolicyDefaultsV1? = null,
+)
+
+internal data class PolicyDefaultsV1(
+    val sampleFloor: Long? = null,
+    val minSamples: Long? = null,
 )
 
 internal data class PolicyRuleV1(
@@ -32,6 +38,7 @@ internal data class PolicyRuleV1(
     val operator: PolicyOperator,
     val threshold: BigDecimal,
     val scope: PolicyScope,
+    val minSamples: Long? = null,
 )
 
 internal enum class PolicyMetric(

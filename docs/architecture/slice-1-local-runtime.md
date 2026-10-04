@@ -321,6 +321,11 @@ pipeline нет: rollups и P95 предоставляет существующ�
 
 `ltv report` и private report endpoint используют чистые HTML и AsciiDoc renderers
 над сохранённым result. JSON возвращается исходными bytes. HTML содержит
+русские блоки «Вердикт и причины», «Правила», «Транзакции» и «Ограничения»
+(слова причин берёт из `ReportReasons.kt`; набор кодов совпадает с
+`ui/src/verdictReasons.ts`, `npm --prefix ui run test:contracts` проверяет
+равенство), затем прежние английские разделы с `lang="en"` (корень `lang="ru"`).
+Таблица транзакций ограничена 200 строками. HTML содержит
 escaped acquired text и встроенный CSS с SHA-256 hash в meta CSP; scripts,
 remote assets, forms и acquired markup не исполняются. HTTP export отдаётся
 как attachment с генерируемым именем по analysis id. Renderers не изменяют

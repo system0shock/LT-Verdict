@@ -295,13 +295,18 @@ for (const width of [1280, 375, 320]) {
     await page.setViewportSize({ width, height: 900 })
     await openCompare(page, { warnings: ['BASELINE_IS_CURRENT_RUN'], windowReasons: ['BASELINE_WINDOW_EMPTY'] })
     await compareWindows(page, `window-${'x'.repeat(60)}`, `window-${'y'.repeat(60)}`)
-    const size = await page.evaluate(() => ({
-      scrollWidth: document.documentElement.scrollWidth,
-      innerWidth: window.innerWidth,
-      wide: [...document.querySelectorAll('body *')]
+    // Wider glyphs than any CI font, so the check does not depend on the fonts of the machine.
+    await page.addStyleTag({ content: '* { letter-spacing: 0.15em !important }' })
+    const size = await page.evaluate(() => {
+      const spilling = [...document.querySelectorAll('body *')]
         .filter((element) => element.scrollWidth > element.clientWidth + 1 && element.clientWidth > 0 && element.tagName !== 'INPUT' && !element.closest('.table-wrap'))
-        .slice(0, 6).map((element) => `${element.tagName}#${element.id}.${element.className} ${Math.round(element.getBoundingClientRect().right)}`),
-    }))
+      const deepest = spilling.filter((element) => !spilling.some((other) => other !== element && element.contains(other)))
+      return {
+        scrollWidth: document.documentElement.scrollWidth,
+        innerWidth: window.innerWidth,
+        wide: deepest.slice(0, 6).map((element) => `${element.tagName}#${element.id}.${element.className} ${element.scrollWidth}>${element.clientWidth} ${(element.textContent ?? '').trim().slice(0, 40)}`),
+      }
+    })
     expect(size.scrollWidth, `scrollWidth ${size.scrollWidth}, innerWidth ${size.innerWidth}, wide ${JSON.stringify(size.wide)}`).toBeLessThanOrEqual(size.innerWidth)
   })
 }

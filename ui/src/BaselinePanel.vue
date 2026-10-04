@@ -638,4 +638,5 @@ function warningText(code: string): string {
 
 <style>
 .baseline-panel[lang='ru'] p { overflow-wrap: anywhere; }
+.baseline-panel[lang='ru'] .notice { flex-wrap: wrap; }
 </style>

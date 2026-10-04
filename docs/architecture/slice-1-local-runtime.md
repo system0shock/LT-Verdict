@@ -42,6 +42,7 @@ directory. Конкурирующий CLI/UI process получает `DATA_DIR_
     ├── inputs/source.bin
     └── analyses/<analysis-id>/
         ├── identity.json
+        ├── policy.json              # только если анализ запущен с политикой
         ├── run.json
         ├── analysis-result.json
         ├── normalized-1s.ndjson
@@ -52,7 +53,7 @@ directory. Конкурирующий CLI/UI process получает `DATA_DIR_
 ```
 
 Для recognized, но invalid input analysis содержит только применимые artifacts:
-canonical identity, result и manifest. HTTP upload сначала потоково пишется во
+canonical identity, result, `policy.json` (если задана политика) и manifest. HTTP upload сначала потоково пишется во
 временный OS file, а accepted RunBundle и незавершённые analyses — под
 `.staging`. Каждый published artifact принудительно сбрасывается, после чего
 каталог публикуется same-filesystem `ATOMIC_MOVE`. `manifest.json` записывается
@@ -302,8 +303,16 @@ evidence без повторного вычисления статистик. VM
 
 Private API выдаёт analyses принятого run с cursor pagination по id,
 default limit `25`, maximum `100`. Summary содержит `analysis_id`,
-`policy_sha256`, `policy_verdict` и `run_validity`. Возвращаемые analyses
-проходят существующую manifest validation. UI хранит выбранный analysis
+`policy_sha256`, `policy_id`, `policy_verdict` и `run_validity`. `policy_id`
+(строка или `null`, ключ есть всегда) читается из сохранённой копии политики
+`policy.json` вне замка хранилища: чтение ограничено 1 MiB, содержимое сверяется
+с `policy_sha256` из identity, повторной валидации политики нет; несовпадение
+хэша, размер сверх предела и неразборчивый JSON дают `null`, а не ошибку списка.
+Пропавший `policy.json` или другой размер, чем в manifest, остаются повреждением
+набора, как у любого artifact. `policy.json`
+пишется только новыми analyses (канонические байты, давшие `policy_sha256`),
+`analysis_id` и identity не меняются; прежние analyses остаются с `null`.
+Возвращаемые analyses проходят существующую manifest validation. UI хранит выбранный analysis
 отдельно от transient job state и читает уже опубликованные artifacts.
 
 Vue отображает три SVG над текущей страницей buckets: RPS, errors/bin и

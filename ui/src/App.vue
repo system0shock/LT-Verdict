@@ -142,9 +142,11 @@ let policyRevision = 0
 let adviceRevision = 0
 let uploadAbort: AbortController | null = null
 
-const verdictSummary = computed(() => (result.value
-  ? summarizeVerdict(result.value, { policySha256: analyses.value.find((item) => item.analysis_id === selectedAnalysisId.value)?.policy_sha256 })
-  : null))
+const verdictSummary = computed(() => {
+  if (!result.value) return null
+  const analysis = analyses.value.find((item) => item.analysis_id === selectedAnalysisId.value)
+  return summarizeVerdict(result.value, { policySha256: analysis?.policy_sha256, policyId: analysis?.policy_id })
+})
 watch(result, (value) => { if (shellNew && value) activeTab.value = 'overview' })
 const working = computed(() => job.value?.state === 'QUEUED' || job.value?.state === 'PROCESSING')
 const selectedReference = computed(() => result.value && selectedAnalysisId.value
@@ -786,7 +788,7 @@ function focusPolicy() {
               @click="selectAnalysis(analysis)"
             >
               <span>{{ chrome.analysisItem }} {{ analysis.analysis_id.slice(0, 12) }}</span>
-              <small>{{ analysis.policy_verdict }} · {{ analysis.run_validity }}</small>
+              <small>{{ analysis.policy_verdict }} · {{ analysis.run_validity }}<span v-if="analysis.policy_id"> · {{ analysis.policy_id }}</span></small>
             </button>
           </li>
           <li

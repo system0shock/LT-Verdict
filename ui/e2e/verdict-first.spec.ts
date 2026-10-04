@@ -50,7 +50,7 @@ async function fixtureApi(page: Page, result: unknown) {
     else if (path === '/api/sources') body = { profiles: [] }
     else if (path === '/api/runs') body = { runs: [run], next_after: null }
     else if (path === '/api/baseline') body = { baseline: null }
-    else if (path.endsWith('/analyses')) body = { analyses: [{ analysis_id: reference.analysis_id, policy_sha256: 'c'.repeat(64), policy_verdict: 'FAIL', run_validity: 'VALID' }], next_after: null }
+    else if (path.endsWith('/analyses')) body = { analyses: [{ analysis_id: reference.analysis_id, policy_sha256: 'c'.repeat(64), policy_id: 'checkout-sla', policy_verdict: 'FAIL', run_validity: 'VALID' }], next_after: null }
     else if (path.endsWith('/result')) body = result
     else if (path.endsWith('/buckets')) body = { buckets: [], next_from_ms: null }
     else throw new Error(`Unexpected UI request ${path}`)
@@ -85,7 +85,9 @@ test('puts the verdict above the run form and explains FAIL in words', async ({ 
   const lines = page.getByTestId('verdict-lines')
   await expect(lines).toContainText('Правило checkout-p95 · p95 отклика · POST /checkout')
   await expect(lines).toContainText(/2\s340 мс при пороге ≤ 2\s000 мс/)
+  await expect(page.locator('.verdict-facts div').filter({ hasText: 'Политика (id)' }).locator('dd')).toHaveText('checkout-sla')
   await expect(page.locator('.verdict-facts div').filter({ hasText: 'Политика (хэш)' }).locator('dd')).toHaveText('cccccccccccc')
+  await expect(page.locator(`button[title="${reference.analysis_id}"]`)).toContainText('checkout-sla')
 })
 
 test('keeps a verdict chip in the header while scrolling and jumps back to the card', async ({ page }) => {

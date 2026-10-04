@@ -915,6 +915,7 @@ internal fun Application.installLocalApi(context: LocalApiContext) {
                                     buildJsonObject {
                                         put("analysis_id", analysis.analysisId)
                                         put("policy_sha256", analysis.policySha256)
+                                        put("policy_id", analysis.policyId?.let(::JsonPrimitive) ?: JsonNull)
                                         put("policy_verdict", analysis.policyVerdict)
                                         put("run_validity", analysis.runValidity)
                                     },

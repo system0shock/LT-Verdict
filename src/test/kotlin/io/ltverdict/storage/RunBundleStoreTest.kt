@@ -61,6 +61,25 @@ class RunBundleStoreTest {
         }
 
     @Test
+    fun `analysis list omits policy id when stored policy exceeds the read limit`() =
+        withStore { store, _ ->
+            val input = Files.newInputStream(Path.of(CSV_FIXTURE)).use { store.acceptInput(it, "large-policy.jtl") }
+            val prefix = """{"policy_id":"oversized"}"""
+            val policy = (prefix + " ".repeat(1_048_577 - prefix.length)).encodeToByteArray()
+            val identity = """{"policy_sha256":"${sha256Hex(policy)}","run_id":"${input.runId}"}""".encodeToByteArray()
+            val analysisId = sha256Hex(identity)
+            store.writeAnalysisAtomically(input.runId, analysisId) { staging ->
+                Files.write(staging.resolve("identity.json"), identity)
+                Files.writeString(staging.resolve("analysis-result.json"), """{"policy_verdict":"PASS","run_validity":"VALID"}""")
+                Files.write(staging.resolve("policy.json"), policy)
+            }
+
+            val page = store.listAnalyses(input.runId, null, 10)
+            assertEquals(analysisId, page.analyses.single().analysisId)
+            assertEquals(null, page.analyses.single().policyId)
+        }
+
+    @Test
     fun `accept is streaming content-addressed and idempotent`() =
         withStore { store, root ->
             val bytes = Files.readAllBytes(Path.of(CSV_FIXTURE))

@@ -399,6 +399,7 @@ class ConcurrencyAcceptanceTest {
             setOf(
                 "analysis-result.json",
                 "identity.json",
+                "policy.json",
                 "normalized-1s.ndjson",
                 "rollup-10s.ndjson",
                 "rollup-30s.ndjson",

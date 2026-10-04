@@ -1,6 +1,7 @@
 import AxeBuilder from '@axe-core/playwright'
 import { expect, test, type Page } from '@playwright/test'
 import { fileURLToPath } from 'node:url'
+import { ADVICE_LABELS } from '../src/shell/labels.advice'
 
 const input = fileURLToPath(new URL('../../fixtures/slice1/jmeter/xml-5.6.3/input.xml', import.meta.url))
 const summary = 'Completed advice after cancellation race'
@@ -73,12 +74,12 @@ test('cancelled advice resets the controls and permits a second consented start'
   await expect(start).toBeDisabled()
   await consent.check()
   await start.click()
-  await expect(panel.getByRole('status')).toHaveText('PROCESSING')
+  await expect(panel.getByRole('status')).toHaveText(ADVICE_LABELS.states.PROCESSING)
   await expect(consent).toBeDisabled()
   await panel.getByRole('button', { name: 'Отменить AI' }).click()
 
   await expect.poll(() => calls.cancels).toBe(1)
-  await expect(panel.getByRole('status')).toHaveText('CANCELLED')
+  await expect(panel.getByRole('status')).toHaveText(ADVICE_LABELS.states.CANCELLED)
   await expect(consent).toBeEnabled()
   await expect(start).toBeEnabled()
   const axe = await new AxeBuilder({ page }).include('section[aria-labelledby="advice-title"]').analyze()
@@ -89,7 +90,7 @@ test('cancelled advice resets the controls and permits a second consented start'
   await consent.check()
   await start.click()
   await expect.poll(() => calls.starts).toBe(2)
-  await expect(panel.getByRole('status')).toHaveText('PROCESSING')
+  await expect(panel.getByRole('status')).toHaveText(ADVICE_LABELS.states.PROCESSING)
   await expect(consent).toBeDisabled()
 })
 
@@ -98,7 +99,7 @@ async function cancelRacingWithCompletion(page: Page) {
   const panel = await openAdvice(page)
   await panel.getByRole('checkbox').check()
   await panel.getByRole('button', { name: 'Получить рекомендации' }).click()
-  await expect(panel.getByRole('status')).toHaveText('PROCESSING')
+  await expect(panel.getByRole('status')).toHaveText(ADVICE_LABELS.states.PROCESSING)
   await panel.getByRole('button', { name: 'Отменить AI' }).click()
   await expect.poll(() => calls.cancels).toBe(1)
   return panel
@@ -106,13 +107,13 @@ async function cancelRacingWithCompletion(page: Page) {
 
 test('cancel racing with completion shows the COMPLETE status', async ({ page }) => {
   const panel = await cancelRacingWithCompletion(page)
-  await expect(panel.getByRole('status')).toHaveText('COMPLETE')
-  await expect(panel.getByRole('status')).not.toContainText('CANCELLED')
+  await expect(panel.getByRole('status')).toHaveText(ADVICE_LABELS.states.COMPLETE)
+  await expect(panel.getByRole('status')).not.toContainText(ADVICE_LABELS.states.CANCELLED)
 })
 
 test('cancel racing with completion loads the completed advice', async ({ page }) => {
   const panel = await cancelRacingWithCompletion(page)
-  await expect(panel.getByRole('status')).toHaveText('COMPLETE')
+  await expect(panel.getByRole('status')).toHaveText(ADVICE_LABELS.states.COMPLETE)
   await expect(panel.getByText(summary)).toBeVisible()
 })
 
@@ -121,18 +122,18 @@ test('failed cancel reports an error while the real job can still complete', asy
   const panel = await openAdvice(page)
   await panel.getByRole('checkbox').check()
   await panel.getByRole('button', { name: 'Получить рекомендации' }).click()
-  await expect(panel.getByRole('status')).toHaveText('PROCESSING')
+  await expect(panel.getByRole('status')).toHaveText(ADVICE_LABELS.states.PROCESSING)
   await panel.getByRole('button', { name: 'Отменить AI' }).click()
 
   await expect.poll(() => calls.cancels).toBe(1)
   await expect(panel.getByRole('alert')).toHaveText('Cancel request failed')
-  await expect(panel.getByRole('status')).toHaveText('PROCESSING')
+  await expect(panel.getByRole('status')).toHaveText(ADVICE_LABELS.states.PROCESSING)
   const axe = await new AxeBuilder({ page }).include('section[aria-labelledby="advice-title"]').analyze()
   expect(axe.violations.map((item) => item.id)).toEqual([])
 
   const previousPolls = calls.polls
   calls.completeOnNextPoll()
   await expect.poll(() => calls.polls, { timeout: 15000 }).toBeGreaterThan(previousPolls)
-  await expect(panel.getByRole('status')).toHaveText('COMPLETE')
+  await expect(panel.getByRole('status')).toHaveText(ADVICE_LABELS.states.COMPLETE)
   await expect(panel.getByText(summary)).toBeVisible()
 })

@@ -32,7 +32,7 @@ test('overview numbers equal the old interface on a real server', async ({ page 
   const last = await readAt('End')
   const attention = await page.getByTestId('attention-item').evaluateAll((nodes) => nodes.map((node) => node.getAttribute('data-kind')))
 
-  await page.goto('/')
+  await page.goto('/?shell=old')
   await page.getByRole('button', { name: 'input.xml' }).click()
   await page.locator('section[aria-labelledby="analysis-list-title"] li button').first().click()
   await expect(page.locator('#summary-metrics')).toBeVisible()

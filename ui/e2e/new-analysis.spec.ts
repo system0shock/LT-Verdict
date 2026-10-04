@@ -155,7 +155,7 @@ test('correlation, capacity and trend plans without a snapshot block the start b
 })
 
 test('the old form refuses a correlation plan without a snapshot before any upload, in English', async ({ page }) => {
-  const calls = await openSetup(page, '/')
+  const calls = await openSetup(page, '/?shell=old')
   await page.getByTestId('input-file').setInputFiles(load)
   await page.getByTestId('correlation-plan-file').setInputFiles(json('correlation.json'))
   await page.getByRole('button', { name: 'Analyze run', exact: true }).click()
@@ -281,7 +281,7 @@ test('an explicit source window asks for a period and its errors are Russian her
   await expect(start(page)).toBeEnabled()
 
   await page.unroute('**/api/**')
-  await openSetup(page, '/')
+  await openSetup(page, '/?shell=old')
   await page.locator('#source-profile').selectOption('prod-prometheus')
   await expect(page.getByTestId('source-request-error')).toHaveText('Online source requires step, margin, and max idle gap in milliseconds.')
 })
@@ -316,7 +316,7 @@ test('the window fields are in seconds and an explicit window may hold at most 1
 })
 
 test('the old form checks the number of cells too, in milliseconds and English', async ({ page }) => {
-  await openSetup(page, '/')
+  await openSetup(page, '/?shell=old')
   await page.locator('#source-profile').selectOption('prod-prometheus')
   await page.locator('#source-window-origin').selectOption('explicit')
   await page.locator('#source-start').fill('0')
@@ -356,7 +356,7 @@ test('the ИИ-разбор section asks for consent at the start and sends noth
 })
 
 test('the old interface keeps its own form and never shows the new screen', async ({ page }) => {
-  await openSetup(page, '/')
+  await openSetup(page, '/?shell=old')
 
   await expect(page.getByRole('heading', { name: 'Run setup' })).toBeVisible()
   await expect(page.getByRole('button', { name: 'Analyze run', exact: true })).toBeDisabled()

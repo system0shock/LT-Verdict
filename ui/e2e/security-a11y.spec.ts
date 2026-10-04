@@ -59,12 +59,13 @@ test.describe.serial('local UI security and accessibility', () => {
     expect(remoteRequests).toEqual([])
 
     await page.getByRole('button', { name: /Dark theme|Light theme/ }).click()
+    // The only thing the app may remember is the explicit old-shell choice seeded by the project config.
     expect(
       await page.evaluate(() => ({
-        local: window.localStorage.length,
+        local: Object.entries(window.localStorage),
         session: window.sessionStorage.length,
       })),
-    ).toEqual({ local: 0, session: 0 })
+    ).toEqual({ local: [['ltv.shell', 'old']], session: 0 })
   })
 
   test('serves the shell and API with the exact security headers and no CORS', async ({ request }) => {

@@ -5,5 +5,5 @@ export default defineConfig({
   testMatch: 'diagnostics.spec.ts',
   workers: 1,
   webServer: { command: 'npx vite --host 127.0.0.1 --port 18474', url: 'http://127.0.0.1:18474', cwd: '..' },
-  use: { baseURL: 'http://127.0.0.1:18474' },
+  use: { baseURL: 'http://127.0.0.1:18474', storageState: 'e2e/old-shell.storage.json' },
 })

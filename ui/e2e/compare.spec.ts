@@ -296,7 +296,8 @@ for (const width of [1280, 375, 320]) {
     await openCompare(page, { warnings: ['BASELINE_IS_CURRENT_RUN'], windowReasons: ['BASELINE_WINDOW_EMPTY'] })
     await compareWindows(page, `window-${'x'.repeat(60)}`, `window-${'y'.repeat(60)}`)
     // Wider glyphs than any CI font, so the check does not depend on the fonts of the machine.
-    await page.addStyleTag({ content: '* { letter-spacing: 0.15em !important }' })
+    // Set through the CSSOM: the real server sends a CSP that forbids inline style elements.
+    await page.evaluate(() => document.documentElement.style.setProperty('letter-spacing', '0.15em'))
     const size = await page.evaluate(() => {
       const spilling = [...document.querySelectorAll('body *')]
         .filter((element) => element.scrollWidth > element.clientWidth + 1 && element.clientWidth > 0 && element.tagName !== 'INPUT' && !element.closest('.table-wrap'))

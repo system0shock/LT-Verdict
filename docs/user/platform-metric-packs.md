@@ -71,14 +71,22 @@ PromQL `tools/platform_profile_templates.py`. Свёртка pod → серви�
 | `jvm_non_heap_used` | `jvm_non_heap_used` | `bytes` | `interval_mean` | вне кучи (`area="nonheap"`) | да, `interval_max` |
 | `jvm_thread_count` | `jvm_thread_count` | `count` | `interval_mean` | живые потоки | нет |
 | `jvm_process_cpu` | `jvm_process_cpu` | `ratio` | `interval_mean` | `process_cpu_usage` | нет |
-| `jvm_gc_pause` | `jvm_gc_pause` | `s` | `interval_max` | максимум паузы GC (по определению максимум) | только пиковый режим |
+| `jvm_gc_pause` | `jvm_gc_pause` | `s` | `interval_max` | максимум значений gauge `jvm_gc_pause_seconds_max` за интервал | только пиковый режим |
 | `jvm_gc_time` | `jvm_gc_time` | `ratio` | `interval_rate` | `rate` суммарного времени пауз, худший под | нет |
-| `jvm_pool_saturation` | `jvm_pool_saturation` | `ratio` | `interval_mean` | `active / max` пула соединений, худший под | да, `interval_max` |
+| `jvm_pool_saturation` | `jvm_pool_saturation` | `ratio` | `interval_mean` | `active / max` по каждому пулу, худший пул худшего пода (пул без `max` даёт пропуск) | да, `interval_max` |
 
 `jvm_gc_pause` без `peak_aggregation` генератор не выпускает (отказ
 `needs interval_max`): выдать максимум под меткой среднего нельзя. У сигналов
-JVM нет защиты полноты: потеря ряда у одного пода даёт максимум по остальным
-подам, а не пропуск (защита есть только у отношений к limit). `jvm_gc_time` на
+JVM (кроме пулов соединений) нет защиты полноты: потеря ряда у одного пода даёт
+максимум по остальным подам, а не пропуск (защита есть только у отношений к
+limit и пулов соединений). Суммы по `id` пулов памяти и по сериям GC
+складываются по поду: потеря одной серии даёт заниженную сумму, а несколько
+серий скрейпа одного пода (например, разные `job` или `instance`) удваивают
+значение; ограничивайте источник одним скрейпом приложения, полноту суммы
+профиль не проверяет. `jvm_gc_pause_seconds_max` в Micrometer - затухающий
+gauge: максимум за интервал - это максимум опрошенных значений gauge, а не
+обязательно самая длинная пауза интервала (пауза может перенестись в соседний
+интервал или пройти между опросами). `jvm_gc_time` на
 `rate(...[$__interval])` подчиняется тому же правилу шага, что события
 OpenShift (шаг не меньше удвоенного интервала опроса).
 

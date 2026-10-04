@@ -92,7 +92,7 @@ cd tools\demo-stand
 ..\..\build\install\ltv\bin\ltv.bat ui --data-dir $env:TEMP\ltv-demo-data --connections connections.demo.json
 ```
 
-В браузере откройте адрес с `?shell=new`. На вкладке «Новый анализ» выберите
+В браузере откройте адрес без параметров (новая оболочка по умолчанию; если раньше был выбран прежний интерфейс, откройте `/?shell=new`). На вкладке «Новый анализ» выберите
 `out\sla-fail\load.jtl`, политику `policies\sla-fail.json`, источник `demo-grafana`,
 шаг 10 с, запас 60 с, запустите анализ. Тот же анализ из командной строки:
 

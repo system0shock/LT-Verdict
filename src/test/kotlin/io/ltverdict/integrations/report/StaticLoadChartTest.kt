@@ -81,12 +81,17 @@ class StaticLoadChartTest {
     @Test
     fun `chart p95 is capped at the stored maximum for every histogram precision`() {
         val start = 1_767_225_600_000L
+        val max = 262_144L
         listOf(3, 4, 5).forEach { digits ->
-            val svg = renderLoadChart(listOf(bucket(start, samples = 100, errors = 0, p95Millis = 60_000, digits = digits)), rollup = 60)
+            val raw = PackedHistogram(1, 86_400_000, digits).apply { recordValueWithCount(max, 100) }.getValueAtPercentile(95.0)
+            val svg = renderLoadChart(listOf(bucket(start, samples = 100, errors = 0, p95Millis = max, digits = digits)), rollup = 60)
 
             val text = svg.decodeToString()
-            assertTrue(text.contains("max 60000 ms"), "digits $digits: ${text.substringAfter("P95 latency").take(200)}")
-            assertTrue(!text.contains("60031") && !text.contains("60001"), "digits $digits")
+            val p95Panel = text.substringAfter("<g aria-label=\"P95 latency\">")
+            val match = requireNotNull(Regex("max ([0-9]+) ms").find(p95Panel)) { "digits $digits" }
+            val shown = match.groupValues[1].toLong()
+            assertTrue(raw > max, "digits $digits")
+            assertEquals(minOf(raw, max), shown, "digits $digits")
         }
     }
 

@@ -186,7 +186,22 @@ class PlatformProfilesTest(unittest.TestCase):
     def test_subquery_step_must_not_exceed_scrape_interval(self):
         with self.assertRaisesRegex(ValueError, "^PLATFORM_SUBQUERY_COARSER_THAN_SCRAPE$"):
             build_connections(dict(BASE, scrape_interval_ms=5000, subquery_step="15s"))
+        with self.assertRaisesRegex(ValueError, "^PLATFORM_SUBQUERY_COARSER_THAN_SCRAPE$"):
+            build_connections(dict(BASE, signals=["memory_limit_ratio"], scrape_interval_ms=5000))
         build_connections(dict(BASE, scrape_interval_ms=5000, subquery_step="5s"))
+
+    def test_subquery_step_does_not_restrict_signals_without_subqueries(self):
+        signals = ["oom", "restarts", "cpu_throttling"]
+        if "jvm_gc_time" in SIGNALS:
+            signals.append("jvm_gc_time")
+        for signal in signals:
+            for request_step in (None, 10000):
+                with self.subTest(signal=signal, request_step=request_step):
+                    config = dict(BASE, signals=[signal], scrape_interval_ms=5000)
+                    if request_step is not None:
+                        config["request_step_ms"] = request_step
+                    document = build_connections(config)
+                    self.assertEqual(2, len(document["connections"][0]["queries"]))
 
     def test_rendered_expression_must_fit_parser_limit(self):
         oversized = replace(SIGNALS["oom"], expression="\u00e9" * 32_769)

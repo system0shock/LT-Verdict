@@ -54,7 +54,7 @@ def build_connections(config: dict) -> dict:
         raise ValueError("subquery_step must be between 1s and 60s")
     if not 1 <= int(sub[:-1]) <= 60:
         raise ValueError("subquery_step must be between 1s and 60s")
-    if scrape is not None and int(sub[:-1]) * 1000 > scrape:
+    if scrape is not None and int(sub[:-1]) * 1000 > scrape and any(":@sub@]" in SIGNALS[signal].expression for signal in signals):
         raise ValueError("PLATFORM_SUBQUERY_COARSER_THAN_SCRAPE")
     if request_step is not None:
         too_short = [signal for signal in signals if SIGNALS[signal].uses_rate and scrape * 2 > request_step]

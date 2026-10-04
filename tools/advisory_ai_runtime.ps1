@@ -8,6 +8,11 @@ param(
     [Parameter(Mandatory)] [string]$CancelPath,
     [string]$CredentialEnvFile,
     [string]$QwenPackageRoot,
+    # ADR 0023, D4: the model and the single destination come from the operator's configuration (the Kotlin caller reads
+    # them from the models file, never from a request); they are checked again here and in the relay and the Qwen script.
+    [ValidatePattern('^[A-Za-z0-9][A-Za-z0-9._:/-]{0,127}\z')] [string]$ModelId = "deepseek-v4-flash-0731",
+    [string]$UpstreamUrl = "https://token-plan.ap-southeast-1.maas.aliyuncs.com/compatible-mode/v1/chat/completions",
+    [switch]$AllowInsecureHttp,
     [ValidateSet("", "wrapped-then-valid", "wrapped-twice", "wrapped-then-error", "deep-violation")]
     [string]$PreflightScenario = ""
 )
@@ -42,6 +47,7 @@ $unavailableReason = $null
 $resultExitCode = 1
 $providerRequestCount = $null
 $endpointHost = $null
+$observedModel = $null
 $promptSha256 = $null
 $stage = "initialization"
 $cleanupIncomplete = $false
@@ -75,6 +81,7 @@ function Write-RuntimeResult {
         provider_request_count = $script:providerRequestCount
         prompt_sha256 = $script:promptSha256
         endpoint_host = $script:endpointHost
+        model_id = $script:observedModel
     }
     Write-Utf8File -Path $ResultPath -Content ($value | ConvertTo-Json -Compress)
 }
@@ -286,6 +293,18 @@ function Remove-TemporaryRoot {
 try {
     $stage = "validate_inputs"
     if ($Mode -ne "Preflight" -and $PreflightScenario -ne "") { throw "preflight scenario requires Preflight mode" }
+    # The same rules as the models file loader, the relay and the Qwen script (ADR 0023, D3 and D4).
+    if ($ModelId.Contains("..") -or $ModelId.Contains("//")) { throw "model id is not a valid slug" }
+    if ($UpstreamUrl.Length -gt 512 -or $UpstreamUrl -cnotmatch '^[\x21-\x7E]+\z' -or $UpstreamUrl -cmatch '["\\`^|<>{}]') {
+        throw "upstream url is not valid"
+    }
+    $upstreamMatch = [regex]::Match($UpstreamUrl, '^(?<scheme>https?)://(?<host>\[[0-9A-Fa-f:.]+\]|[A-Za-z0-9.-]+)(?::(?<port>[0-9]{1,5}))?(?<path>/[^?#]*)?\z')
+    if (-not $upstreamMatch.Success) { throw "upstream url is not valid" }
+    $upstreamScheme = $upstreamMatch.Groups["scheme"].Value
+    if ($upstreamScheme -eq "http" -and -not $AllowInsecureHttp) { throw "http upstream requires the explicit permission" }
+    $upstreamPort = if ($upstreamMatch.Groups["port"].Success) { [int]$upstreamMatch.Groups["port"].Value } elseif ($upstreamScheme -eq "https") { 443 } else { 80 }
+    $expectedHost = "$($upstreamMatch.Groups['host'].Value.ToLowerInvariant()):$upstreamPort"
+    if ($expectedHost -cnotmatch $EndpointHostPattern) { throw "upstream host is not valid" }
     if ((Test-Path -LiteralPath $ResultPath -PathType Leaf) -or
         (Test-Path -LiteralPath $OutputPath -PathType Leaf)) {
         throw "runtime outputs already exist"
@@ -351,10 +370,13 @@ try {
         "--tmpfs", "/tmp:rw,nosuid,nodev,size=32m,mode=1777",
         "--env", "ADVISORY_RELAY_MODE=$($Mode.ToLowerInvariant())",
         "--env", "ADVISORY_RELAY_READY_PATH=/out/relay-ready",
+        "--env", "ADVISORY_RELAY_MODEL=$ModelId",
+        "--env", "ADVISORY_RELAY_UPSTREAM=$UpstreamUrl",
         "--mount", "type=bind,src=$RelayPath,dst=/runtime/relay.mjs,readonly",
         "--mount", "type=bind,src=$relayOutput,dst=/out"
     )
     if ($PreflightScenario -ne "") { $relayArguments += @("--env", "ADVISORY_RELAY_PREFLIGHT_SCENARIO=$PreflightScenario") }
+    if ($upstreamScheme -eq "http") { $relayArguments += @("--env", "ADVISORY_RELAY_ALLOW_HTTP=1") }
     if ($Mode -eq "Live") { $relayArguments += @("--env-file", $CredentialEnvFile) }
     $relayArguments += @("--entrypoint", "/usr/local/bin/node", $ImageReference, "/runtime/relay.mjs")
     $relayId = Container-Id (Invoke-Docker -Arguments $relayArguments)
@@ -383,6 +405,7 @@ try {
         "--tmpfs", "/runtime:rw,noexec,nosuid,nodev,size=16m,mode=700,uid=65532,gid=65532",
         "--tmpfs", "/work:rw,noexec,nosuid,nodev,size=16m,mode=700,uid=65532,gid=65532",
         "--tmpfs", "/tmp:rw,nosuid,nodev,size=64m,mode=1777",
+        "--env", "ADVISORY_MODEL=$ModelId",
         "--mount", "type=bind,src=$QwenPackageRoot,dst=/opt/qwen,readonly",
         "--mount", "type=bind,src=$QwenScriptPath,dst=/runtime/run-qwen.sh,readonly",
         "--mount", "type=bind,src=$EvidencePath,dst=/input/evidence.json,readonly",
@@ -447,13 +470,19 @@ try {
     if ($null -eq $hostProperty) { throw "relay result has no upstream_host" }
     $observedHost = $hostProperty.Value
     if ($Mode -eq "Live") {
-        if ($observedHost -isnot [string] -or $observedHost.Length -gt 260 -or $observedHost -cnotmatch $EndpointHostPattern) {
-            throw "relay did not report a valid upstream host"
+        if ($observedHost -isnot [string] -or $observedHost.Length -gt 260 -or $observedHost -cnotmatch $EndpointHostPattern -or
+            $observedHost -cne $expectedHost) {
+            throw "relay did not report the configured upstream host"
         }
         $endpointHost = $observedHost
     } elseif ($null -ne $observedHost) {
         throw "preflight relay reported an upstream host"
     }
+    $modelProperty = $relayResult.PSObject.Properties["model_id"]
+    if ($null -eq $modelProperty -or $modelProperty.Value -isnot [string] -or $modelProperty.Value -cne $ModelId) {
+        throw "relay did not report the configured model"
+    }
+    $observedModel = [string]$modelProperty.Value
     $stage = "parse_qwen_output"
     if (-not (Save-QwenAdvice $qwenStdout)) {
         $failureCode = "INVALID_OUTPUT"

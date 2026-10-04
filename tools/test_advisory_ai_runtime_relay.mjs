@@ -564,3 +564,136 @@ test("shared retry vectors", async t => {
     }, { ADVISORY_RELAY_PREFLIGHT_RESPONSES: JSON.stringify(vector.provider_responses) });
   });
 });
+
+// ADR 0023, D4: the model and the single upstream destination come from the environment of the relay process.
+function writeHttpStub(root) {
+  const stubPath = path.join(root, "http-stub.cjs");
+  fs.writeFileSync(stubPath, [
+    "const fs = require('node:fs'); const { EventEmitter } = require('node:events'); const { Readable } = require('node:stream');",
+    "function install(module, scheme) {",
+    "  module.request = (options, callback) => {",
+    "    fs.appendFileSync(process.env.STUB_CALLS_PATH, JSON.stringify({ scheme, hostname: options.hostname, port: options.port, path: options.path, authorization: options.headers.authorization }) + '\\n');",
+    "    const request = new EventEmitter(); request.destroy = () => {};",
+    "    request.end = () => { const response = Readable.from([Buffer.from(process.env.STUB_SSE)]); response.statusCode = Number(process.env.STUB_STATUS ?? 200); response.headers = { 'content-type': 'text/event-stream', ...(process.env.STUB_STATUS ? { location: 'https://redirect.example/x' } : {}) }; callback(response); };",
+    "    return request;",
+    "  };",
+    "}",
+    "install(require('node:https'), 'https'); install(require('node:http'), 'http');",
+  ].join("\n"));
+  return { stubPath, callsPath: path.join(root, "provider-calls.jsonl") };
+}
+
+async function liveRelay(env, run) {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "ltv-ai-relay-env-"));
+  const { stubPath, callsPath } = writeHttpStub(root);
+  const port = await freePort();
+  const relay = launch(root, port, { ADVISORY_RELAY_MODE: "live", OPENAI_API_KEY: "fake-test-key", STUB_CALLS_PATH: callsPath, ...env }, ["--require", stubPath]);
+  try {
+    await waitReady(relay);
+    await run({ root, port, calls: () => (fs.existsSync(callsPath) ? fs.readFileSync(callsPath, "utf8").trim().split("\n").map(line => JSON.parse(line)) : []) });
+  } finally {
+    await stop(relay);
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+}
+
+async function refusesToStart(env) {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "ltv-ai-relay-startup-"));
+  const relay = launch(root, await freePort(), env);
+  try {
+    const exit = await Promise.race([relay.exited, new Promise(resolve => setTimeout(() => resolve(null), 1500))]);
+    assert.notEqual(exit, null, "relay unexpectedly started");
+    assert.notEqual(exit, 0);
+  } finally {
+    await stop(relay);
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+}
+
+test("the model comes from ADVISORY_RELAY_MODEL and is enforced on the request and the response frames", async t => {
+  const other = "org/qwen3.8-max:latest";
+  const otherRequest = { ...firstRequest, model: "untrusted" };
+  await t.test("preflight runs with the configured model and reports it", async () => {
+    await withRelay(async (root, port) => {
+      assert.equal((await request(port, otherRequest)).status, 200);
+      const wire = JSON.parse(fs.readFileSync(path.join(root, "wire-observation-1.json"), "utf8"));
+      assert.equal(wire.model_after, other);
+      assert.equal(result(root).model_id, other);
+    }, { ADVISORY_RELAY_MODEL: other });
+  });
+  await t.test("the default is the built-in model when the variable is absent", async () => {
+    await withRelay(async (root, port) => {
+      assert.equal((await request(port, firstRequest)).status, 200);
+      assert.equal(result(root).model_id, model);
+    });
+  });
+  await t.test("a response frame naming another model is blocked", async () => {
+    await withRelay(async (root, port) => {
+      assert.equal((await request(port, otherRequest)).status, 502);
+      assert.equal(result(root).status, "BLOCKED_PROVIDER_RESPONSE");
+    }, { ADVISORY_RELAY_MODEL: other, ADVISORY_RELAY_PREFLIGHT_RESPONSES: JSON.stringify([provider(sse(JSON.stringify(advice), { modelId: model }))]) });
+  });
+  await t.test("a response frame naming the configured model is forwarded", async () => {
+    await withRelay(async (root, port) => {
+      assert.equal((await request(port, otherRequest)).status, 200);
+    }, { ADVISORY_RELAY_MODEL: other, ADVISORY_RELAY_PREFLIGHT_RESPONSES: JSON.stringify([provider(sse(JSON.stringify(advice), { modelId: other }))]) });
+  });
+  for (const value of ["", "a;b", "a b", "-x", "a..b", "a//b", "a".repeat(129), "a$(id)", "a\nb", "é", "a`b`"]) {
+    await t.test(`invalid ADVISORY_RELAY_MODEL ${JSON.stringify(value)} stops the relay at start`, async () => {
+      await refusesToStart({ ADVISORY_RELAY_MODEL: value });
+    });
+  }
+});
+
+test("the single upstream destination comes from ADVISORY_RELAY_UPSTREAM", async t => {
+  await t.test("https with a port and a path", async () => {
+    await liveRelay({ ADVISORY_RELAY_UPSTREAM: "https://models.internal.example:8443/v1/chat/completions", ADVISORY_RELAY_MODEL: "qwen3.8-max", STUB_SSE: sse(JSON.stringify(advice), { modelId: "qwen3.8-max" }) }, async ({ root, port, calls }) => {
+      assert.equal((await request(port, firstRequest)).status, 200);
+      assert.deepEqual(calls(), [{ scheme: "https", hostname: "models.internal.example", port: 8443, path: "/v1/chat/completions", authorization: "Bearer fake-test-key" }]);
+      assert.equal(result(root).upstream_host, "models.internal.example:8443");
+      assert.equal(result(root).model_id, "qwen3.8-max");
+    });
+  });
+  await t.test("the default port, an upper case host and a bare path", async () => {
+    await liveRelay({ ADVISORY_RELAY_UPSTREAM: "https://Gateway.Internal.Example", STUB_SSE: sse(JSON.stringify(advice)) }, async ({ root, port, calls }) => {
+      assert.equal((await request(port, firstRequest)).status, 200);
+      assert.deepEqual(calls().map(call => [call.hostname, call.port, call.path]), [["gateway.internal.example", 443, "/"]]);
+      assert.equal(result(root).upstream_host, "gateway.internal.example:443");
+    });
+  });
+  await t.test("http only with the explicit permission, on the http module and port 80 by default", async () => {
+    await liveRelay({ ADVISORY_RELAY_UPSTREAM: "http://gw.internal/v1/chat", ADVISORY_RELAY_ALLOW_HTTP: "1", STUB_SSE: sse(JSON.stringify(advice)) }, async ({ root, port, calls }) => {
+      assert.equal((await request(port, firstRequest)).status, 200);
+      assert.deepEqual(calls().map(call => [call.scheme, call.hostname, call.port, call.path]), [["http", "gw.internal", 80, "/v1/chat"]]);
+      assert.equal(result(root).upstream_host, "gw.internal:80");
+    });
+  });
+  await t.test("an IPv6 literal is reported in brackets and sent without them", async () => {
+    await liveRelay({ ADVISORY_RELAY_UPSTREAM: "https://[::1]:8443/v1", STUB_SSE: sse(JSON.stringify(advice)) }, async ({ root, port, calls }) => {
+      assert.equal((await request(port, firstRequest)).status, 200);
+      assert.deepEqual(calls().map(call => [call.hostname, call.port]), [["::1", 8443]]);
+      assert.equal(result(root).upstream_host, "[::1]:8443");
+    });
+  });
+  await t.test("a provider redirect is not followed and the credential goes nowhere else", async () => {
+    await liveRelay({ ADVISORY_RELAY_UPSTREAM: "https://models.internal.example/v1", STUB_STATUS: "302", STUB_SSE: "" }, async ({ root, port, calls }) => {
+      assert.equal((await request(port, firstRequest)).status, 502);
+      assert.equal(result(root).status, "BLOCKED_PROVIDER_RESPONSE");
+      assert.deepEqual(calls().map(call => call.hostname), ["models.internal.example"]);
+    });
+  });
+  const invalid = [
+    "", "http://gw.internal/v1", "ftp://gw.example/v1", "https://user@gw.example/v1", "https://user:pass@gw.example/", "https://gw.example/v1?x=1",
+    "https://gw.example/v1#f", "https://gw.example/a\"b", "https://gw.example/a b", "https://gw.example/a\\b", "https://gw.example/a`b", "gw.example/v1",
+    "https:///v1", "https://gw.example:0/v1", "https://gw.example:99999/v1", "https://gw_bad.example/v1", "https://gw.example/é",
+    "https://gw.example/" + "a".repeat(500), "https://gw.example/a{b}", "https://gw.example/a|b",
+  ];
+  for (const value of invalid) {
+    await t.test(`invalid ADVISORY_RELAY_UPSTREAM ${JSON.stringify(value.slice(0, 40))} stops the relay at start`, async () => {
+      await refusesToStart({ ADVISORY_RELAY_MODE: "live", OPENAI_API_KEY: "fake-test-key", ADVISORY_RELAY_UPSTREAM: value });
+    });
+  }
+  await t.test("the permission flag accepts only 1", async () => {
+    await refusesToStart({ ADVISORY_RELAY_MODE: "live", OPENAI_API_KEY: "fake-test-key", ADVISORY_RELAY_UPSTREAM: "http://gw.internal/v1", ADVISORY_RELAY_ALLOW_HTTP: "yes" });
+  });
+});

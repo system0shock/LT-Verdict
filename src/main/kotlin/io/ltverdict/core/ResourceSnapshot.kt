@@ -47,6 +47,7 @@ internal data class ResourceSnapshotV1(
     val windows: List<ResourceWindowV1>,
     val rules: List<ResourceRuleV1>,
     val provenance: ResourceProvenanceV1?,
+    val arm: String? = null,
 )
 
 internal data class ResourceSeriesV1(
@@ -265,7 +266,18 @@ private fun parseResourceSnapshot(element: JsonElement): ResourceSnapshotV1 {
     val windows = parseWindows(root.optionalResourceArray("windows", ""), start, step, gridEnd)
     val rules = parseRules(root.optionalResourceArray("rules", ""), series)
     val provenance = root["provenance"]?.let { parseProvenance(it, "/provenance") }
-    return ResourceSnapshotV1(schemaVersion, loadHash, start, step, pointCount, series, windows, rules, provenance)
+    return ResourceSnapshotV1(
+        schemaVersion,
+        loadHash,
+        start,
+        step,
+        pointCount,
+        series,
+        windows,
+        rules,
+        provenance,
+        series.firstOrNull()?.labels?.get(ARM_LABEL),
+    )
 }
 
 private fun parseSeries(
@@ -313,7 +325,19 @@ private fun parseSeries(
                     if (sample === JsonNull) null else sample.resourceDecimal("$pointer/values/$sampleIndex")
                 },
             )
-        }.sortedBy(ResourceSeriesV1::id)
+        }.also(::requireConsistentArm)
+        .sortedBy(ResourceSeriesV1::id)
+}
+
+private fun requireConsistentArm(series: List<ResourceSeriesV1>) {
+    val reference = series.first().labels[ARM_LABEL]
+    series.forEachIndexed { index, item ->
+        val arm = item.labels[ARM_LABEL]
+        if (arm != reference) {
+            val pointer = if (arm != null) "/series/$index/labels/arm" else "/series/$index/labels"
+            resourceFail("INVALID_ARM_LABEL", pointer, "arm label must be present with one value on every series or on none")
+        }
+    }
 }
 
 private fun parseLabels(
@@ -327,6 +351,9 @@ private fun parseLabels(
         val primitive = value as? JsonPrimitive
         if (primitive == null || !primitive.isString) {
             resourceFail("INVALID_TYPE", pointer.resourceChild(key), "label value must be a string")
+        }
+        if (key == ARM_LABEL && primitive.content.toByteArray(StandardCharsets.UTF_8).size > MAX_ARM_BYTES) {
+            resourceFail("INVALID_ARM_LABEL", pointer.resourceChild(key), "arm label is too long")
         }
         validateResourceText(primitive.content, pointer.resourceChild(key), MAX_LABEL_VALUE_BYTES, "label value")
         key to primitive.content
@@ -659,6 +686,8 @@ internal const val MAX_RESOURCE_RULES = 256
 internal const val MAX_LABELS = 16
 internal const val MAX_LABEL_KEY_BYTES = 128
 internal const val MAX_LABEL_VALUE_BYTES = 512
+private const val ARM_LABEL = "arm"
+private const val MAX_ARM_BYTES = 128
 internal const val RESOURCE_JSON_DEPTH_MAX = 12
 internal const val RESOURCE_NUMERIC_TOKEN_BYTES_MAX = 64
 internal const val RESOURCE_NUMERIC_EXPONENT_ABS_MAX = 64

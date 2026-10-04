@@ -71,7 +71,7 @@ internal fun prepareOpenSearchDiagnostics(
                 entity = profile,
                 role = ResourceRole.SYSTEM,
                 aggregation = ResourceAggregation.INTERVAL_RATE,
-                labels = mapOf("profile_id" to profile),
+                labels = mapOf("profile_id" to profile) + (base?.snapshot?.arm?.let { mapOf("arm" to it) } ?: emptyMap()),
                 values = grids.getValue(profile).values,
             )
         }

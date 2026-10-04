@@ -319,6 +319,8 @@ private fun comparisonSemanticKey(
 ): List<JsonElement>? {
     val values = mutableListOf(result["analysis_mode"] ?: return null)
     COMPARISON_SEMANTIC_FIELDS.forEach { field -> values += identity[field] ?: return null }
+    // ADR 0014, часть 5: плечо входит в ключ условно. Отсутствие у обоих анализов равно равенству, отсутствие у одного - несовместимость.
+    values += identity["resource_arm"] ?: JsonNull
     return values
 }
 

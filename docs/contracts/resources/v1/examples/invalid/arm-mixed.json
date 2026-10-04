@@ -1,0 +1,48 @@
+{
+  "schema_version": "resource-snapshot.v1",
+  "load_input_sha256": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+  "start_epoch_ms": 1767225600000,
+  "step_ms": 10000,
+  "point_count": 4,
+  "series": [
+    {
+      "id": "host-a-cpu",
+      "metric": "cpu_used",
+      "unit": "ratio",
+      "entity": "host-a",
+      "role": "system",
+      "aggregation": "interval_mean",
+      "labels": { "zone": "test", "arm": "A" },
+      "values": [0.55, 0.68, 0.84, 0.91]
+    },
+    {
+      "id": "generator-cpu",
+      "metric": "cpu_used",
+      "unit": "ratio",
+      "entity": "load-generator",
+      "role": "generator",
+      "aggregation": "interval_mean",
+      "labels": { "arm": "B" },
+      "values": [0.22, 0.27, 0.31, 0.35]
+    }
+  ],
+  "windows": [
+    { "id": "steady", "from_epoch_ms": 1767225610000, "to_epoch_ms": 1767225640000 }
+  ],
+  "rules": [
+    {
+      "id": "host-cpu-high",
+      "series_id": "host-a-cpu",
+      "unit": "ratio",
+      "operator": "gt",
+      "threshold": 0.8,
+      "min_consecutive_cells": 2,
+      "effect": "sla"
+    }
+  ],
+  "provenance": {
+    "source_kind": "prepared-example",
+    "query_semantics": "interval means aligned to the declared UTC grid",
+    "clock_alignment": "unknown"
+  }
+}

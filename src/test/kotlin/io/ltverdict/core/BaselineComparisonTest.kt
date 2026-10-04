@@ -34,6 +34,30 @@ class BaselineComparisonTest {
     }
 
     @Test
+    fun `analyses of different arms are not comparable and the same arm is`() {
+        val selection = manualBaselineSelection("release", reference('a'))
+
+        fun reasons(
+            baselineArm: String?,
+            currentArm: String?,
+        ) = compareAnalyses(
+            selection,
+            reference('b'),
+            windowResult("steady", 0, 10_000, 100, 100, 0),
+            identity(arm = baselineArm),
+            windowResult("steady", 0, 10_000, 100, 100, 0),
+            identity(arm = currentArm),
+            WindowComparisonRequest("steady", "steady"),
+        ).getValue("window_comparison").jsonObject.reasons()
+
+        assertEquals(listOf("INCOMPATIBLE_METRIC_DEFINITION"), reasons("A", "B"))
+        assertEquals(listOf("INCOMPATIBLE_METRIC_DEFINITION"), reasons("A", null))
+        assertEquals(listOf("INCOMPATIBLE_METRIC_DEFINITION"), reasons(null, "A"))
+        assertFalse("INCOMPATIBLE_METRIC_DEFINITION" in reasons("A", "A"))
+        assertFalse("INCOMPATIBLE_METRIC_DEFINITION" in reasons(null, null))
+    }
+
+    @Test
     fun `legacy CSV identity is incompatible with a production CSV identity`() {
         val (old, current) = realCsvIdentities()
         val selection = manualBaselineSelection("release", reference('a'))
@@ -1231,18 +1255,21 @@ class BaselineComparisonTest {
             else -> error("unsupported test ratio")
         }
 
-    private fun identity(version: String = "same") =
-        buildJsonObject {
-            put("source_type", "jmeter_jtl_csv")
-            put("engine", buildJsonObject { put("version", version) })
-            put("parsers", JsonArray(emptyList()))
-            put("modules", JsonArray(emptyList()))
-            put("input_versions", buildJsonObject {})
-            put("outputs", buildJsonObject {})
-            put("histogram", buildJsonObject {})
-            put("normalization", buildJsonObject {})
-            put("limits", buildJsonObject {})
-        }
+    private fun identity(
+        version: String = "same",
+        arm: String? = null,
+    ) = buildJsonObject {
+        put("source_type", "jmeter_jtl_csv")
+        put("engine", buildJsonObject { put("version", version) })
+        put("parsers", JsonArray(emptyList()))
+        put("modules", JsonArray(emptyList()))
+        put("input_versions", buildJsonObject {})
+        put("outputs", buildJsonObject {})
+        put("histogram", buildJsonObject {})
+        put("normalization", buildJsonObject {})
+        put("limits", buildJsonObject {})
+        arm?.let { put("resource_arm", it) }
+    }
 
     private fun kotlinx.serialization.json.JsonElement.nullableString(): String? = if (this == JsonNull) null else jsonPrimitive.content
 }

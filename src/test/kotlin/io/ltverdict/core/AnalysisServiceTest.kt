@@ -390,7 +390,8 @@ class AnalysisServiceTest {
             val input = accept(store, OUT_OF_ORDER_CSV.encodeToByteArray(), "out-of-order.jtl")
             val progress = mutableListOf<Long>()
 
-            val outcome = service.analyze(AnalysisRequest(input, passPolicy()), progress::add)
+            val policy = passPolicy()
+            val outcome = service.analyze(AnalysisRequest(input, policy), progress::add)
 
             assertEquals(input.runId, outcome.runId)
             assertTrue(Regex("[0-9a-f]{64}").matches(outcome.analysisId))
@@ -422,6 +423,9 @@ class AnalysisServiceTest {
             assertTrue(stored.artifacts.all { it.sizeBytes > 0 && Regex("[0-9a-f]{64}").matches(it.sha256) })
 
             val identity = Json.parseToJsonElement(Files.readString(stored.path.resolve("identity.json"))).jsonObject
+            val policyBytes = Files.readAllBytes(stored.path.resolve("policy.json"))
+            assertArrayEquals(policy.canonicalBytes, policyBytes)
+            assertEquals(identity.getValue("policy_sha256").jsonPrimitive.content, sha256Hex(policyBytes))
             assertEquals(
                 "lt-verdict",
                 identity
@@ -531,8 +535,26 @@ class AnalysisServiceTest {
             assertEquals("NO_VERDICT", result(outcome, "policy_verdict"))
             val stored = store.readAnalysis(input.runId, outcome.analysisId)!!
             assertEquals(setOf("analysis-result.json", "identity.json"), stored.artifacts.map { it.path }.toSet())
+            assertFalse(Files.exists(stored.path.resolve("policy.json")))
             assertFalse(Files.exists(stored.path.resolve("run.json")))
             assertFalse(Files.exists(stored.path.resolve("normalized-1s.ndjson")))
+        }
+
+    @Test
+    fun `invalid input with policy persists canonical policy`() =
+        withService { store, service ->
+            val header = OUT_OF_ORDER_CSV.lineSequence().first()
+            val input = accept(store, "$header\nmalformed\n".encodeToByteArray(), "invalid-policy.jtl")
+            val policy = passPolicy()
+            val outcome = service.analyze(AnalysisRequest(input, policy))
+            val stored = store.readAnalysis(input.runId, outcome.analysisId)!!
+            val policyBytes = Files.readAllBytes(stored.path.resolve("policy.json"))
+            val identity = Json.parseToJsonElement(Files.readString(stored.path.resolve("identity.json"))).jsonObject
+
+            assertEquals("INVALID", result(outcome, "run_validity"))
+            assertEquals(setOf("analysis-result.json", "identity.json", "policy.json"), stored.artifacts.map { it.path }.toSet())
+            assertArrayEquals(policy.canonicalBytes, policyBytes)
+            assertEquals(identity.getValue("policy_sha256").jsonPrimitive.content, sha256Hex(policyBytes))
         }
 
     @Test
@@ -555,7 +577,7 @@ class AnalysisServiceTest {
                     .map { it.jsonPrimitive.content },
             )
             assertEquals(
-                setOf("analysis-result.json", "identity.json"),
+                setOf("analysis-result.json", "identity.json", "policy.json"),
                 store
                     .readAnalysis(input.runId, outcome.analysisId)!!
                     .artifacts
@@ -1179,6 +1201,7 @@ class AnalysisServiceTest {
             setOf(
                 "analysis-result.json",
                 "identity.json",
+                "policy.json",
                 "normalized-1s.ndjson",
                 "rollup-10s.ndjson",
                 "rollup-30s.ndjson",

@@ -60,6 +60,7 @@ internal data class AnalysisSummary(
     val policySha256: String,
     val policyVerdict: String,
     val runValidity: String,
+    val policyId: String? = null,
 )
 
 internal data class AnalysisPage(
@@ -192,53 +193,101 @@ internal class RunBundleStore(
         runId: String,
         afterAnalysisId: String?,
         limit: Int,
-    ): AnalysisPage =
-        synchronized(dataDirectory.operationLock) {
-            dataDirectory.requireOpen()
-            require(limit in 1..100) { "INVALID_PAGE_LIMIT" }
-            if (afterAnalysisId != null) requireAnalysisId(afterAnalysisId)
-            requireInputUnlocked(runId)
-            val analyses = dataDirectory.runs.resolve(runId).resolve("analyses")
-            if (!Files.exists(analyses, LinkOption.NOFOLLOW_LINKS)) return@synchronized AnalysisPage(emptyList(), null)
-            requireOwnedDirectory(analyses)
+    ): AnalysisPage {
+        val (page, policyFiles) =
+            synchronized(dataDirectory.operationLock) {
+                dataDirectory.requireOpen()
+                require(limit in 1..100) { "INVALID_PAGE_LIMIT" }
+                if (afterAnalysisId != null) requireAnalysisId(afterAnalysisId)
+                requireInputUnlocked(runId)
+                val analyses = dataDirectory.runs.resolve(runId).resolve("analyses")
+                if (!Files.exists(analyses, LinkOption.NOFOLLOW_LINKS)) {
+                    return@synchronized AnalysisPage(emptyList(), null) to emptyList<Pair<Path, Long>?>()
+                }
+                requireOwnedDirectory(analyses)
 
-            val names = PriorityQueue<String>(limit + 1, reverseOrder())
-            Files.newDirectoryStream(analyses).use { entries ->
-                entries.forEach { path ->
-                    val name = path.fileName.toString()
-                    if (SHA256.matches(name) &&
-                        (afterAnalysisId == null || name > afterAnalysisId) &&
-                        !Files.isSymbolicLink(path) &&
-                        Files.isDirectory(path, LinkOption.NOFOLLOW_LINKS)
-                    ) {
-                        names.add(name)
-                        if (names.size > limit + 1) names.remove()
+                val names = PriorityQueue<String>(limit + 1, reverseOrder())
+                Files.newDirectoryStream(analyses).use { entries ->
+                    entries.forEach { path ->
+                        val name = path.fileName.toString()
+                        if (SHA256.matches(name) &&
+                            (afterAnalysisId == null || name > afterAnalysisId) &&
+                            !Files.isSymbolicLink(path) &&
+                            Files.isDirectory(path, LinkOption.NOFOLLOW_LINKS)
+                        ) {
+                            names.add(name)
+                            if (names.size > limit + 1) names.remove()
+                        }
                     }
                 }
+                val selected = names.toList().sorted()
+                val returned =
+                    selected.take(limit).map { analysisId ->
+                        val stored =
+                            readAnalysisUnlocked(runId, analysisId)
+                                ?: corrupt("listed analysis disappeared")
+                        val identity =
+                            parseObject(
+                                Files.readAllBytes(requireOwnedFile(stored.path.resolve("identity.json"))),
+                                "analysis identity",
+                            )
+                        val result =
+                            parseObject(
+                                Files.readAllBytes(requireOwnedFile(stored.path.resolve("analysis-result.json"))),
+                                "analysis result",
+                            )
+                        val summary =
+                            AnalysisSummary(
+                                analysisId,
+                                identity.string("policy_sha256"),
+                                result.string("policy_verdict"),
+                                result.string("run_validity"),
+                            )
+                        val policy =
+                            stored.artifacts.find { it.path == POLICY_FILE }?.let { artifact ->
+                                try {
+                                    requireOwnedFile(stored.path.resolve(POLICY_FILE)) to artifact.sizeBytes
+                                } catch (_: IllegalStateException) {
+                                    null
+                                }
+                            }
+                        summary to policy
+                    }
+                AnalysisPage(returned.map { it.first }, if (selected.size > limit) returned.last().first.analysisId else null) to
+                    returned.map { it.second }
             }
-            val selected = names.toList().sorted()
-            val returned =
-                selected.take(limit).map { analysisId ->
-                    val stored = readAnalysisUnlocked(runId, analysisId) ?: corrupt("listed analysis disappeared")
-                    val identity =
-                        parseObject(
-                            Files.readAllBytes(requireOwnedFile(stored.path.resolve("identity.json"))),
-                            "analysis identity",
-                        )
-                    val result =
-                        parseObject(
-                            Files.readAllBytes(requireOwnedFile(stored.path.resolve("analysis-result.json"))),
-                            "analysis result",
-                        )
-                    AnalysisSummary(
-                        analysisId,
-                        identity.string("policy_sha256"),
-                        result.string("policy_verdict"),
-                        result.string("run_validity"),
-                    )
-                }
-            AnalysisPage(returned, if (selected.size > limit) returned.last().analysisId else null)
+        return page.copy(
+            analyses =
+                page.analyses.mapIndexed { index, summary ->
+                    summary.copy(policyId = readPolicyId(policyFiles[index], summary.policySha256))
+                },
+        )
+    }
+
+    private fun readPolicyId(
+        policyFile: Pair<Path, Long>?,
+        policySha256: String,
+    ): String? {
+        if (policyFile == null || policySha256 == "NO_POLICY" || policyFile.second > MAX_POLICY_BYTES) return null
+        return try {
+            val path = requireOwnedFile(policyFile.first)
+            val bytes = Files.newInputStream(path, LinkOption.NOFOLLOW_LINKS).use { it.readNBytes(MAX_POLICY_BYTES + 1) }
+            if (bytes.size > MAX_POLICY_BYTES || bytes.size.toLong() != policyFile.second || sha256Hex(bytes) != policySha256) {
+                return null
+            }
+            val policy = Json.parseToJsonElement(bytes.decodeToString()).jsonObject
+            val id = policy["policy_id"] as? JsonPrimitive
+            id?.takeIf { it.isString && it.content.isNotEmpty() && it.content.encodeToByteArray().size <= 128 }?.content
+        } catch (_: IOException) {
+            null
+        } catch (_: SerializationException) {
+            null
+        } catch (_: IllegalArgumentException) {
+            null
+        } catch (_: IllegalStateException) {
+            null
         }
+    }
 
     fun writeAnalysisAtomically(
         runId: String,
@@ -957,6 +1006,8 @@ private const val BASELINE_CONDITIONS_DIRECTORY = "baseline-conditions"
 private const val RUN_PERIOD_FILE = "run-period.json"
 private const val RESULT_FILE = "analysis-result.json"
 private const val IDENTITY_FILE = "identity.json"
+private const val POLICY_FILE = "policy.json"
+private const val MAX_POLICY_BYTES = 1_048_576
 private const val MAX_BASELINE_BYTES = 32 * 1024
 private const val MAX_BASELINE_CONDITION_BYTES = 4 * 1024
 private const val MAX_RUN_PERIOD_BYTES = 4 * 1024

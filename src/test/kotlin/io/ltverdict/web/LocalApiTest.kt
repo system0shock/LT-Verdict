@@ -1356,9 +1356,10 @@ class LocalApiTest {
                     .jsonArray
                     .single()
                     .jsonObject
-            assertEquals(setOf("analysis_id", "policy_sha256", "policy_verdict", "run_validity"), firstSummary.keys)
+            assertEquals(setOf("analysis_id", "policy_sha256", "policy_id", "policy_verdict", "run_validity"), firstSummary.keys)
             assertEquals(ids.first(), firstSummary.getValue("analysis_id").jsonPrimitive.content)
             assertEquals(policies.getValue(ids.first()), firstSummary.getValue("policy_sha256").jsonPrimitive.content)
+            assertEquals(JsonNull, firstSummary.getValue("policy_id"))
             assertEquals("PASS", firstSummary.getValue("policy_verdict").jsonPrimitive.content)
             assertEquals("VALID", firstSummary.getValue("run_validity").jsonPrimitive.content)
             assertEquals(ids.first(), first.getValue("next_after").jsonPrimitive.content)
@@ -1374,10 +1375,71 @@ class LocalApiTest {
                     .jsonPrimitive.content,
             )
             assertEquals(JsonNull, second.getValue("next_after"))
+            assertEquals(
+                JsonNull,
+                second
+                    .getValue("analyses")
+                    .jsonArray
+                    .single()
+                    .jsonObject
+                    .getValue("policy_id"),
+            )
             assertError(api.get("/api/runs/${input.runId}/analyses?limit=0"), 400, "MALFORMED_REQUEST")
             assertError(api.get("/api/runs/${input.runId}/analyses?after=invalid"), 400, "MALFORMED_REQUEST")
             assertError(api.get("/api/runs/${input.runId}/analyses?after=${ids.first()}&after=${ids.last()}"), 400, "MALFORMED_REQUEST")
             assertError(api.get("/api/runs/jmeter_jtl_csv-${"0".repeat(64)}/analyses"), 404, "NOT_FOUND")
+        }
+
+    @Test
+    fun `analysis list identifies each policy and includes null without policy`() =
+        withServer { store, api ->
+            val input = store.acceptInput(ByteArrayInputStream(SPIKE_DROP.bytes()), SPIKE_DROP.filename)
+            val policy = Files.readString(Path.of(PASS_POLICY))
+            api.bootstrap()
+
+            val first = api.createJob(input.runId, policy.replace("slice1-pass", "xyz-policy").encodeToByteArray()).analysisId(api)
+            val second = api.createJob(input.runId, policy.replace("slice1-pass", "abc-policy").encodeToByteArray()).analysisId(api)
+            val without = api.createJob(input.runId).analysisId(api)
+
+            val response = api.get("/api/runs/${input.runId}/analyses")
+            assertEquals(200, response.statusCode())
+            val summaries =
+                response.jsonObject().getValue("analyses").jsonArray.associate { item ->
+                    val summary = item.jsonObject
+                    summary.getValue("analysis_id").jsonPrimitive.content to summary.getValue("policy_id")
+                }
+            assertEquals(3, summaries.size)
+            assertEquals("xyz-policy", summaries.getValue(first).jsonPrimitive.content)
+            assertEquals("abc-policy", summaries.getValue(second).jsonPrimitive.content)
+            assertEquals(JsonNull, summaries.getValue(without))
+        }
+
+    @Test
+    fun `analysis list ignores a tampered policy artifact`() =
+        withServer { store, api ->
+            val input = store.acceptInput(ByteArrayInputStream(SPIKE_DROP.bytes()), SPIKE_DROP.filename)
+            val policy = Files.readString(Path.of(PASS_POLICY)).replace("slice1-pass", "xyz-policy")
+            api.bootstrap()
+            val id = api.createJob(input.runId, policy.encodeToByteArray()).analysisId(api)
+            val stored = store.readAnalysis(input.runId, id)!!
+            val path = stored.path.resolve("policy.json")
+            val original = Files.readString(path)
+            val changed = original.replace("xyz-policy", "abc-policy")
+            assertEquals(original.encodeToByteArray().size, changed.encodeToByteArray().size)
+            Files.writeString(path, changed)
+
+            val response = api.get("/api/runs/${input.runId}/analyses")
+            assertEquals(200, response.statusCode())
+            assertEquals(
+                JsonNull,
+                response
+                    .jsonObject()
+                    .getValue("analyses")
+                    .jsonArray
+                    .single()
+                    .jsonObject
+                    .getValue("policy_id"),
+            )
         }
 
     @Test

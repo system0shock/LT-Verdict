@@ -203,6 +203,14 @@ internal class AnalysisService(
                     writeAcquisition(staging, request.sourceAcquisition, checkCancelled)
                     postgres?.let { writePostgres(staging, it, requireNotNull(invalidPostgresContext), checkCancelled) }
                     Files.write(staging.resolve(IDENTITY_FILE), identity, StandardOpenOption.CREATE_NEW, StandardOpenOption.WRITE)
+                    request.policy?.let {
+                        Files.write(
+                            staging.resolve(POLICY_FILE),
+                            it.canonicalBytes,
+                            StandardOpenOption.CREATE_NEW,
+                            StandardOpenOption.WRITE,
+                        )
+                    }
                     Files.write(staging.resolve(RESULT_FILE), result, StandardOpenOption.CREATE_NEW, StandardOpenOption.WRITE)
                     resourceBytes?.let {
                         Files.write(staging.resolve(RESOURCE_FILE), it, StandardOpenOption.CREATE_NEW, StandardOpenOption.WRITE)
@@ -498,6 +506,10 @@ internal class AnalysisService(
                     checkCancelled()
                     Files.write(staging.resolve(name), bytes, StandardOpenOption.CREATE_NEW, StandardOpenOption.WRITE)
                 }
+                request.policy?.let {
+                    checkCancelled()
+                    Files.write(staging.resolve(POLICY_FILE), it.canonicalBytes, StandardOpenOption.CREATE_NEW, StandardOpenOption.WRITE)
+                }
                 resourceBytes?.let {
                     checkCancelled()
                     Files.write(staging.resolve(RESOURCE_FILE), it, StandardOpenOption.CREATE_NEW, StandardOpenOption.WRITE)
@@ -732,6 +744,7 @@ private fun writeBuckets(
 
 private val ROLLUPS = listOf(10, 30, 60)
 private const val IDENTITY_FILE = "identity.json"
+private const val POLICY_FILE = "policy.json"
 private const val RUN_FILE = "run.json"
 private const val RESULT_FILE = "analysis-result.json"
 private const val NORMALIZED_FILE = "normalized-1s.ndjson"

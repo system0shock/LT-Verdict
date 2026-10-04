@@ -96,7 +96,24 @@ internal data class SourceProfile(
     val database: String? = null,
     val openSearch: OpenSearchMapping? = null,
     val scrapeIntervalMillis: Long? = null,
+    // Only source-connections.v3: duration rules store minConsecutiveCells = 1 in rules as a stub.
+    // Use rulesAt(stepMillis) to obtain the actual cell count for a snapshot.
+    val ruleSpansMillis: Map<String, Long> = emptyMap(),
 )
+
+internal fun spanToCells(
+    spanMillis: Long,
+    stepMillis: Long,
+): Int = Math.floorDiv(spanMillis + stepMillis - 1, stepMillis).toInt()
+
+internal fun SourceProfile.rulesAt(stepMillis: Long): List<ResourceRuleV1> =
+    if (ruleSpansMillis.isEmpty()) {
+        rules
+    } else {
+        rules.map { rule ->
+            ruleSpansMillis[rule.id]?.let { span -> rule.copy(minConsecutiveCells = spanToCells(span, stepMillis)) } ?: rule
+        }
+    }
 
 internal data class SourceRequest(
     val profileId: String,
@@ -397,7 +414,9 @@ private fun parseProfile(
             null
         }
     val queries = if (openSearch != null) emptyList() else parseQueries(value.sourceArray("queries"), sourceKind)
-    val rules = value.optionalArray("rules")?.let { parseRules(it, queries) }.orEmpty()
+    val (rules, spans) =
+        value.optionalArray("rules")?.let { parseRules(it, queries, allowAutoStep) }
+            ?: (emptyList<ResourceRuleV1>() to emptyMap<String, Long>())
     return SourceProfile(
         id,
         sourceKind,
@@ -412,6 +431,7 @@ private fun parseProfile(
         database,
         openSearch,
         scrapeIntervalMillis,
+        spans,
     )
 }
 
@@ -564,27 +584,44 @@ private fun parseLabels(element: JsonElement): Map<String, String> {
 private fun parseRules(
     values: JsonArray,
     queries: List<SourceQuery>,
-): List<ResourceRuleV1> {
+    allowSpan: Boolean,
+): Pair<List<ResourceRuleV1>, Map<String, Long>> {
     if (values.size > MAX_RESOURCE_RULES) configInvalid()
     val ids = HashSet<String>()
     val queryById = queries.associateBy(SourceQuery::id)
-    return values.map { element ->
-        val value = element.sourceObject()
-        value.rejectUnknown(setOf("id", "series_id", "unit", "operator", "threshold", "min_consecutive_cells", "effect"))
-        val id = value.sourceText("id", MAX_IDENTIFIER_BYTES)
-        if (!ids.add(id)) configInvalid()
-        val seriesId = value.sourceText("series_id", MAX_IDENTIFIER_BYTES)
-        val unit = value.sourceText("unit", MAX_IDENTIFIER_BYTES)
-        if (queryById[seriesId]?.unit != unit) configInvalid()
-        val operator = ResourceOperator.entries.find { it.wireName == value.sourceString("operator") } ?: configInvalid()
-        val threshold = value.sourceDecimal("threshold")
-        if (threshold.precision() > MAX_DECIMAL_PRECISION || maxOf(threshold.scale(), 0) > MAX_DECIMAL_SCALE) configInvalid()
-        if (threshold.abs() > MAX_DECIMAL_MAGNITUDE) configInvalid()
-        val minimum = value.sourceInt("min_consecutive_cells")
-        if (minimum !in 1..MAX_POINTS_PER_SERIES) configInvalid()
-        val effect = ResourceRuleEffect.entries.find { it.wireName == value.sourceString("effect") } ?: configInvalid()
-        ResourceRuleV1(id, seriesId, unit, operator, threshold, minimum, effect)
-    }
+    val spans = linkedMapOf<String, Long>()
+    val rules =
+        values.map { element ->
+            val value = element.sourceObject()
+            value.rejectUnknown(
+                setOf("id", "series_id", "unit", "operator", "threshold", "min_consecutive_cells", "effect") +
+                    if (allowSpan) setOf("min_consecutive_span_ms") else emptySet(),
+            )
+            val id = value.sourceText("id", MAX_IDENTIFIER_BYTES)
+            if (!ids.add(id)) configInvalid()
+            val seriesId = value.sourceText("series_id", MAX_IDENTIFIER_BYTES)
+            val unit = value.sourceText("unit", MAX_IDENTIFIER_BYTES)
+            if (queryById[seriesId]?.unit != unit) configInvalid()
+            val operator = ResourceOperator.entries.find { it.wireName == value.sourceString("operator") } ?: configInvalid()
+            val threshold = value.sourceDecimal("threshold")
+            if (threshold.precision() > MAX_DECIMAL_PRECISION || maxOf(threshold.scale(), 0) > MAX_DECIMAL_SCALE) configInvalid()
+            if (threshold.abs() > MAX_DECIMAL_MAGNITUDE) configInvalid()
+            val hasCells = "min_consecutive_cells" in value
+            if (hasCells == ("min_consecutive_span_ms" in value)) configInvalid()
+            val minimum =
+                if (hasCells) {
+                    value.sourceInt("min_consecutive_cells")
+                } else {
+                    val span = value.sourceLong("min_consecutive_span_ms")
+                    if (span !in 1..MAX_RULE_SPAN_MILLIS) configInvalid()
+                    spans[id] = span
+                    1
+                }
+            if (minimum !in 1..MAX_POINTS_PER_SERIES) configInvalid()
+            val effect = ResourceRuleEffect.entries.find { it.wireName == value.sourceString("effect") } ?: configInvalid()
+            ResourceRuleV1(id, seriesId, unit, operator, threshold, minimum, effect)
+        }
+    return rules to spans
 }
 
 private fun parseRequest(element: JsonElement): SourceRequest =
@@ -894,6 +931,7 @@ private const val MAX_SOURCE_CONFIG_BYTES = 1_048_576
 private const val MAX_SOURCE_REQUEST_BYTES = 16 * 1024
 internal const val MAX_MARGIN_MILLIS = 3_600_000L
 private const val MAX_SCRAPE_INTERVAL_MILLIS = 3_600_000L
+private const val MAX_RULE_SPAN_MILLIS = 86_400_000L
 private const val MAX_SOURCE_PROFILES = 16
 private const val MAX_SOURCE_QUERIES = 64
 private const val MAX_RESOURCE_RULES = 256

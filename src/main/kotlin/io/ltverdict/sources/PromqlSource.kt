@@ -64,7 +64,7 @@ internal class PromqlSource(
                 request,
                 loadInputSha256,
                 profile.queries.map { failedSeries(it, pointCount) },
-                profile.rules,
+                profile.rulesAt(request.stepMillis),
             )
 
         val budget = SourceBudget(profile.governor.maxRequestsPerRun)
@@ -186,7 +186,7 @@ internal class PromqlSource(
 
         val snapshot =
             try {
-                validatedSnapshot(profile, request, loadInputSha256, collected, profile.rules)
+                validatedSnapshot(profile, request, loadInputSha256, collected, profile.rulesAt(request.stepMillis))
             } catch (failure: IllegalArgumentException) {
                 if (failure.message != "RESOURCE_LIMIT_EXCEEDED") throw failure
                 queryEvidence.replaceAll { query ->
@@ -460,6 +460,26 @@ private fun sourceEvidence(
                 }
             },
         )
+        if (profile.ruleSpansMillis.isNotEmpty()) {
+            put(
+                "rule_spans",
+                buildJsonArray {
+                    profile.rules.filter { it.id in profile.ruleSpansMillis }.forEach { rule ->
+                        val span = profile.ruleSpansMillis.getValue(rule.id)
+                        val cells = spanToCells(span, request.stepMillis)
+                        add(
+                            buildJsonObject {
+                                put("rule_id", rule.id)
+                                put("declared_span_ms", span)
+                                put("step_ms", request.stepMillis)
+                                put("cells", cells)
+                                put("effective_span_ms", cells.toLong() * request.stepMillis)
+                            },
+                        )
+                    }
+                },
+            )
+        }
         put("request_count", budget.requestCount)
         put("retries", budget.retries)
         put("throttle_wait_ms", budget.throttleWaitMillis)

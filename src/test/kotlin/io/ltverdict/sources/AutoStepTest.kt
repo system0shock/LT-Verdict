@@ -255,19 +255,70 @@ class AutoStepTest {
     }
 
     @Test
-    fun `coarsening is refused while a selected profile declares any rule`() {
-        val rule = ResourceRuleV1("r", "q1", "ratio", ResourceOperator.GT, BigDecimal("0.8"), 1, ResourceRuleEffect.SLA)
-
-        val refusal =
-            assertThrows(SourcePlanRefusal::class.java) {
-                apply(
-                    listOf(profile(queries = listOf(query("q1", ResourceAggregation.INTERVAL_MAX), query("q2")), rules = listOf(rule))),
-                    cellBudget = 400L,
-                )
+    fun `coarsening needs the peak aggregation of the operator for every threshold rule`() {
+        fun refused(
+            aggregation: ResourceAggregation,
+            operator: ResourceOperator = ResourceOperator.GT,
+            effect: ResourceRuleEffect = ResourceRuleEffect.SLA,
+            cells: Int? = null,
+        ): String? =
+            try {
+                val declared =
+                    profile(
+                        queries = listOf(query("q1", aggregation), query("q2")),
+                        rules = listOf(rule("r", "q1", operator, effect = effect, cells = cells ?: 1)),
+                    )
+                val selected = if (cells == null) declared.copy(ruleSpansMillis = mapOf("r" to 60_000L)) else declared
+                apply(listOf(selected), cellBudget = 400L)
+                null
+            } catch (refusal: SourcePlanRefusal) {
+                refusal.code
             }
 
+        assertEquals(null, refused(ResourceAggregation.INTERVAL_MAX))
+        assertEquals(null, refused(ResourceAggregation.INTERVAL_MIN, ResourceOperator.LT))
+        assertEquals(null, refused(ResourceAggregation.INTERVAL_MAX, effect = ResourceRuleEffect.DIAGNOSTIC))
+        assertEquals(AUTO_STEP_AGGREGATION_MISMATCH, refused(ResourceAggregation.INTERVAL_MEAN))
+        assertEquals(AUTO_STEP_AGGREGATION_MISMATCH, refused(ResourceAggregation.INTERVAL_RATE))
+        assertEquals(AUTO_STEP_AGGREGATION_MISMATCH, refused(ResourceAggregation.INTERVAL_MIN))
+        assertEquals(AUTO_STEP_AGGREGATION_MISMATCH, refused(ResourceAggregation.INTERVAL_MAX, ResourceOperator.LT))
+        assertEquals(AUTO_STEP_AGGREGATION_MISMATCH, refused(ResourceAggregation.INTERVAL_MEAN, effect = ResourceRuleEffect.DIAGNOSTIC))
+        assertEquals(AUTO_STEP_RULE_IN_CELLS, refused(ResourceAggregation.INTERVAL_MAX, cells = 1))
+        assertEquals(AUTO_STEP_RULE_IN_CELLS, refused(ResourceAggregation.INTERVAL_MAX, cells = 2))
+        val fixed = profile(queries = listOf(query("q1"), query("q2")), rules = listOf(rule("r", "q1", ResourceOperator.GT)))
+        assertEquals(15_000L, apply(listOf(fixed)).stepMillis)
+    }
+
+    @Test
+    fun `a series with a gt and an lt rule can satisfy neither and a duration rule is allowed`() {
+        val both =
+            profile(
+                queries = listOf(query("q1", ResourceAggregation.INTERVAL_MAX), query("q2")),
+                rules = listOf(rule("r1", "q1", ResourceOperator.GT), rule("r2", "q1", ResourceOperator.LT)),
+            ).copy(ruleSpansMillis = mapOf("r1" to 60_000L, "r2" to 60_000L))
+        val byDuration =
+            profile(
+                queries = listOf(query("q1", ResourceAggregation.INTERVAL_MAX), query("q2")),
+                rules = listOf(rule("r1", "q1", ResourceOperator.GT)),
+            ).copy(ruleSpansMillis = mapOf("r1" to 60_000L))
+
+        val refusal = assertThrows(SourcePlanRefusal::class.java) { apply(listOf(both), cellBudget = 400L) }
         assertEquals(AUTO_STEP_AGGREGATION_MISMATCH, refusal.code)
-        assertEquals(15_000L, apply(listOf(profile(queries = listOf(query("q1"), query("q2")), rules = listOf(rule)))).stepMillis)
+        assertTrue("r2" in refusal.text)
+        assertEquals(18_000L, apply(listOf(byDuration), cellBudget = 400L).stepMillis)
+    }
+
+    @Test
+    fun `only series without a peak rule are listed as reduced`() {
+        val guarded =
+            profile(
+                queries = listOf(query("q1", ResourceAggregation.INTERVAL_MAX), query("q2")),
+                rules = listOf(rule("r", "q1", ResourceOperator.GT)),
+            ).copy(ruleSpansMillis = mapOf("r" to 60_000L))
+
+        val applied = apply(listOf(guarded), cellBudget = 400L)
+
+        assertEquals(listOf(ReducedSeries("q2", ResourceAggregation.INTERVAL_MEAN)), applied.reduced)
     }
 
     @Test
@@ -279,6 +330,15 @@ class AutoStepTest {
         assertEquals("SOURCE_REQUEST_INVALID", IllegalArgumentException("SOURCE_REQUEST_INVALID").cliMessage())
         assertEquals("INVALID_INPUT", IllegalArgumentException().cliMessage())
     }
+
+    private fun rule(
+        id: String,
+        seriesId: String,
+        operator: ResourceOperator,
+        threshold: BigDecimal = BigDecimal("0.8"),
+        cells: Int = 1,
+        effect: ResourceRuleEffect = ResourceRuleEffect.SLA,
+    ) = ResourceRuleV1(id, seriesId, "ratio", operator, threshold, cells, effect)
 
     private fun apply(
         selected: List<SourceProfile>,

@@ -3,6 +3,8 @@ package io.ltverdict.sources
 import io.ltverdict.core.MAX_POINTS_PER_SERIES
 import io.ltverdict.core.MAX_RESOURCE_SERIES
 import io.ltverdict.core.ResourceAggregation
+import io.ltverdict.core.ResourceOperator
+import io.ltverdict.core.ResourceRuleV1
 import io.ltverdict.core.RunPeriodV1
 import kotlinx.serialization.json.JsonObjectBuilder
 import kotlinx.serialization.json.buildJsonArray
@@ -14,6 +16,7 @@ internal const val AUTO_STEP_SCRAPE_INTERVAL_REQUIRED = "AUTO_STEP_SCRAPE_INTERV
 internal const val AUTO_STEP_BELOW_SCRAPE_INTERVAL = "AUTO_STEP_BELOW_SCRAPE_INTERVAL"
 internal const val AUTO_STEP_QUERY_NOT_INTERVAL_BOUND = "AUTO_STEP_QUERY_NOT_INTERVAL_BOUND"
 internal const val AUTO_STEP_AGGREGATION_MISMATCH = "AUTO_STEP_AGGREGATION_MISMATCH"
+internal const val AUTO_STEP_RULE_IN_CELLS = "AUTO_STEP_RULE_IN_CELLS"
 internal const val RESOLUTION_REDUCED = "RESOLUTION_REDUCED"
 
 // The snapshot grid permits whole-second steps from 1 to 60 seconds.
@@ -123,7 +126,6 @@ internal fun applyAutoStep(
     return AppliedStep(requestedMillis, choice.stepMillis, choice.cellsPerSeries, seriesCount, cellBudget, reduced)
 }
 
-// temporary until slice S3: any rule in a selected profile refuses coarsening.
 private fun checkCoarsening(selected: List<SourceProfile>): List<ReducedSeries> {
     val reduced = mutableListOf<ReducedSeries>()
     val qualify = selected.size > 1
@@ -143,18 +145,37 @@ private fun checkCoarsening(selected: List<SourceProfile>): List<ReducedSeries> 
                 )
             }
         }
-        profile.rules.firstOrNull()?.let {
-            throw SourcePlanRefusal(
-                AUTO_STEP_AGGREGATION_MISMATCH,
-                "Rule ${it.id} of profile ${profile.id} cannot be shown to survive a coarser step",
-            )
-        }
         profile.queries.forEach { query ->
-            reduced += ReducedSeries(if (qualify) qualifiedSeriesId(profile.id, query.id) else query.id, query.aggregation)
+            val rules = profile.rules.filter { it.seriesId == query.id }
+            rules.forEach { rule ->
+                if (rule.id !in profile.ruleSpansMillis) {
+                    throw SourcePlanRefusal(
+                        AUTO_STEP_RULE_IN_CELLS,
+                        "Rule ${rule.id} on series ${query.id} of profile ${profile.id} is declared in cells; " +
+                            "declare min_consecutive_span_ms (source-connections.v3) to use a coarser step",
+                    )
+                }
+                if (query.aggregation !in survivingAggregations(rule)) {
+                    throw SourcePlanRefusal(
+                        AUTO_STEP_AGGREGATION_MISMATCH,
+                        "Rule ${rule.id} on series ${query.id} of profile ${profile.id} needs " +
+                            "${peakAggregation(rule.operator).wireName} to survive a coarser step; " +
+                            "the series uses ${query.aggregation.wireName}",
+                    )
+                }
+            }
+            val peak = rules.isNotEmpty() && rules.all { query.aggregation == peakAggregation(it.operator) }
+            if (!peak) reduced += ReducedSeries(if (qualify) qualifiedSeriesId(profile.id, query.id) else query.id, query.aggregation)
         }
     }
     return reduced
 }
+
+// gt sees a peak in the interval maximum; lt sees a trough in the interval minimum.
+private fun peakAggregation(operator: ResourceOperator): ResourceAggregation =
+    if (operator == ResourceOperator.GT) ResourceAggregation.INTERVAL_MAX else ResourceAggregation.INTERVAL_MIN
+
+private fun survivingAggregations(rule: ResourceRuleV1): Set<ResourceAggregation> = setOf(peakAggregation(rule.operator))
 
 /** Add v4 step selection fields to source_summary. */
 internal fun JsonObjectBuilder.putStepProvenance(applied: AppliedStep?) {

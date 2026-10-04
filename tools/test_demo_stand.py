@@ -166,6 +166,18 @@ class DemoStandTests(unittest.TestCase):
         self.assertIn("downstream_changes", sla)
         self.assertNotIn("cpu_demand_multiplier_schedule", sla)
 
+    def test_default_output_is_unchanged_by_the_soak_scenario(self):
+        # Hashes of the generator output at origin/main before the soak scenario was added.
+        out = self.root / "default"
+        generate.generate(generate.scenario_names("all"), out)
+        manifest = json.loads((out / "manifest.json").read_text(encoding="ascii"))["scenarios"]
+        self.assertEqual({record["name"]: record["jtl_sha256"] for record in manifest}, {
+            "sla-fail": "c9b049d3f6f90509d255f47f46fce1b6bcc53092d3f5604cf44590f2a694be7e",
+            "capacity": "18be8865e58100b738f8486e60a403e4eafb0b5109c4a43e501e574c49b3bd0b",
+            "saturation": "1e4c9315bd45a28d638281b3ee731405a3076c60946083af9e22c1f01d8620f7"})
+        self.assertEqual(hashlib.sha256((out / "metrics.om").read_bytes()).hexdigest(),
+                         "7d1ae53924438e738c62c3eca377f28c4aaa8eb6fbda83deeb5571a1698f99c1")
+
     def test_soak_generation_is_deterministic(self):
         for name in ("soak-first", "soak-second"):
             generate.generate(["soak-4h"], self.root / name, stage_scale=0.02)

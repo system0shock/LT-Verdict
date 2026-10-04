@@ -19,7 +19,7 @@ async function mockAdvice(page: Page, cancelResult: 'CANCELLED' | 'COMPLETE' | '
     const segments = new URL(route.request().url()).pathname.split('/')
     reference = { run_id: segments[3]!, analysis_id: segments[5]! }
     if (route.request().method() === 'POST') {
-      expect(route.request().postDataJSON()).toEqual({ confirm_external_transfer: true })
+      expect(route.request().postDataJSON()).toEqual({})
       starts += 1
       state = 'PROCESSING'
       await route.fulfill({ status: 202, json: job() })
@@ -62,42 +62,35 @@ async function openAdvice(page: Page) {
   await expect(page.getByTestId('overview-panel')).toBeVisible()
   await page.locator('#shell-tab-advice').click()
   const panel = page.locator('section[aria-labelledby="advice-title"]')
-  await expect(panel.getByRole('checkbox')).toBeVisible()
+  await expect(panel.getByRole('button', { name: 'Получить рекомендации' })).toBeEnabled()
   return panel
 }
 
-test('cancelled advice resets the controls and permits a second consented start', async ({ page }) => {
+test('cancelled advice resets the controls and permits a second start', async ({ page }) => {
   const calls = await mockAdvice(page, 'CANCELLED')
   const panel = await openAdvice(page)
-  const consent = panel.getByRole('checkbox')
   const start = panel.getByRole('button', { name: 'Получить рекомендации' })
-  await expect(start).toBeDisabled()
-  await consent.check()
+  await expect(start).toBeEnabled()
   await start.click()
   await expect(panel.getByRole('status')).toHaveText(ADVICE_LABELS.states.PROCESSING)
-  await expect(consent).toBeDisabled()
+  await expect(start).toBeDisabled()
   await panel.getByRole('button', { name: 'Отменить AI' }).click()
 
   await expect.poll(() => calls.cancels).toBe(1)
   await expect(panel.getByRole('status')).toHaveText(ADVICE_LABELS.states.CANCELLED)
-  await expect(consent).toBeEnabled()
   await expect(start).toBeEnabled()
   const axe = await new AxeBuilder({ page }).include('section[aria-labelledby="advice-title"]').analyze()
   expect(axe.violations.map((item) => item.id)).toEqual([])
 
-  await consent.uncheck()
-  await expect(start).toBeDisabled()
-  await consent.check()
   await start.click()
   await expect.poll(() => calls.starts).toBe(2)
   await expect(panel.getByRole('status')).toHaveText(ADVICE_LABELS.states.PROCESSING)
-  await expect(consent).toBeDisabled()
+  await expect(start).toBeDisabled()
 })
 
 async function cancelRacingWithCompletion(page: Page) {
   const calls = await mockAdvice(page, 'COMPLETE')
   const panel = await openAdvice(page)
-  await panel.getByRole('checkbox').check()
   await panel.getByRole('button', { name: 'Получить рекомендации' }).click()
   await expect(panel.getByRole('status')).toHaveText(ADVICE_LABELS.states.PROCESSING)
   await panel.getByRole('button', { name: 'Отменить AI' }).click()
@@ -120,7 +113,6 @@ test('cancel racing with completion loads the completed advice', async ({ page }
 test('failed cancel reports an error while the real job can still complete', async ({ page }) => {
   const calls = await mockAdvice(page, 'ERROR')
   const panel = await openAdvice(page)
-  await panel.getByRole('checkbox').check()
   await panel.getByRole('button', { name: 'Получить рекомендации' }).click()
   await expect(panel.getByRole('status')).toHaveText(ADVICE_LABELS.states.PROCESSING)
   await panel.getByRole('button', { name: 'Отменить AI' }).click()

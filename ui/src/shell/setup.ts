@@ -5,7 +5,7 @@ export type ReadinessLevel = 'ok' | 'info' | 'warn' | 'block'
 
 export interface ReadinessInput {
   busy: boolean
-  aiConsent: boolean
+  aiRequested: boolean
   inputName: string | null
   policyId: string | null
   policyHasErrors: boolean
@@ -89,7 +89,7 @@ export function buildReadiness(input: ReadinessInput): Readiness {
     planNames ? SETUP_LABELS.willPlans(planNames) : null,
     input.contextCount > 0 ? SETUP_LABELS.willContext : null,
     postgresNames ? SETUP_LABELS.willPostgres(postgresNames) : null,
-    input.aiConsent ? SETUP_LABELS.willAdvice : null,
+    input.aiRequested ? SETUP_LABELS.willAdvice : null,
   ].filter((line): line is string => line !== null)
 
   return { items, blockers, canStart: blockers.length === 0, will }

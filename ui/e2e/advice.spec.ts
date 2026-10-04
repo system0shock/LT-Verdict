@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test'
 
-test('AI needs consent and renders stored model text without HTML execution', async ({ page }) => {
+test('AI starts only on click, sends no consent and renders stored model text without HTML execution', async ({ page }) => {
   let submitted = 0
   let complete = false
   let reference = { run_id: '', analysis_id: '' }
@@ -10,7 +10,7 @@ test('AI needs consent and renders stored model text without HTML execution', as
     const segments = new URL(route.request().url()).pathname.split('/')
     reference = { run_id: segments[3]!, analysis_id: segments[5]! }
     if (route.request().method() === 'POST') {
-      expect(route.request().postDataJSON()).toEqual({ confirm_external_transfer: true })
+      expect(route.request().postDataJSON()).toEqual({})
       submitted++
       await route.fulfill({ status: 202, json: status() })
     } else {
@@ -33,9 +33,9 @@ test('AI needs consent and renders stored model text without HTML execution', as
   await page.getByRole('button', { name: 'Analyze run', exact: true }).click()
   await expect(page.locator('#verdict')).toContainText('NO_POLICY')
   const start = page.getByRole('button', { name: 'Получить рекомендации', exact: true })
-  await expect(start).toBeDisabled()
+  await expect(start).toBeEnabled()
+  await expect(page.locator('section[aria-labelledby="advice-title"]').getByRole('checkbox')).toHaveCount(0)
   expect(submitted).toBe(0)
-  await page.getByRole('checkbox', { name: /Разрешаю отправить evidence/ }).check()
   await start.click()
   await expect(page.getByText(malicious, { exact: true })).toBeVisible({ timeout: 15000 })
   await expect(page.locator('img[src=x]')).toHaveCount(0)

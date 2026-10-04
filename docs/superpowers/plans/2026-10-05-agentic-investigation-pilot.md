@@ -8,7 +8,7 @@
 
 **Tech Stack:** Docker Engine 29.2.1 (Docker Desktop 4.62.0, прежняя проба), Qwen Code 0.21.1, Node.js (шлюз, mock relay), Python (харнесс, `unittest`), PowerShell (топология). Новых production-зависимостей нет.
 
-**Spec:** `docs/adr/0024-agentic-investigation-on-qwen-code.md` (Proposed); связанные: `docs/adr/0010-advisory-ai-boundary.md`, `docs/adr/0021-advisory-ai-prompt-v2-and-schema-retry.md`, `docs/adr/0023-advisory-ai-consent-by-endpoint-scope-and-model-choice.md`, план `docs/superpowers/plans/2026-10-04-ai-v2-implementation.md`.
+**Spec:** `docs/adr/0024-agentic-investigation-on-qwen-code.md` (Proposed); связанные: `docs/adr/0010-advisory-ai-boundary.md`, `docs/adr/0021-advisory-ai-prompt-v2-and-schema-retry.md`, `docs/adr/0023-advisory-ai-consent-removal-and-model-config.md`, план `docs/superpowers/plans/2026-10-04-ai-v2-implementation.md`.
 
 Материалы вне git (решение владельца 2026-10-04: материалы эксперимента не коммитятся), ссылки путями в code span: каталог проб `docs/ui-mockup/ai-experiment-2026-09-30/v3/qwen-agent-probe-assets/` (скрипты, mock relay, журналы запусков `runs/`), отчёт пробы `docs/ui-mockup/ai-experiment-2026-09-30/v3/qwen-agent-investigation-probe.md`, прежние `.../v3/qwen-workflow-recon.md` и `.../v3/qwen-container-probe.md`.
 

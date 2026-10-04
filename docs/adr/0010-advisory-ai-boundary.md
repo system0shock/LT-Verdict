@@ -45,14 +45,14 @@ Code 0.21.1 как замену GigaCode с GigaCode naming на уровне wr
   model и одним upstream request; универсальный proxy framework не создаётся.
 - Documentation impact: добавлены contract, prompt, design decision и plan;
   user/API integration выполняется корневым треком.
-- Согласие на внешнюю передачу и выбор модели (ADR
-  [0023](0023-advisory-ai-consent-by-endpoint-scope-and-model-choice.md),
-  Proposed, 2026-10-04): текст этого ADR не меняется. Предложено выводить
-  требование согласия из области endpoint (`external` требует согласия,
-  `internal` нет; ModelStudio всегда `external`), а не из пользователя; в
-  случае принятия п. 5 (единственный runner, модель и endpoint) дополняется
-  ADR он-прем раннера, а п. 4 (один immutable advice на analysis) остаётся
-  в силе и для выбора модели.
+- Согласие на отправку и выбор модели (ADR
+  [0023](0023-advisory-ai-consent-removal-and-model-config.md), Accepted,
+  2026-10-05): текст этого ADR не меняется. Владелец решил убрать согласие
+  полностью и всегда и принял риск отправки evidence на endpoint из
+  конфигурации; п. 5 (единственный runner, exact model и endpoint) дополняется:
+  модель и endpoint задаются файлом конфигурации (по умолчанию прежние), runner
+  остаётся один. П. 4 (один immutable advice на analysis) остаётся в силе и для
+  выбора модели.
 
 ## Поправка production readiness от 2026-09-22
 
@@ -61,5 +61,5 @@ Code 0.21.1 как замену GigaCode с GigaCode naming на уровне wr
 Qwen работает только во внутренней Docker network, а credential получает только
 отдельный relay через env-file. Qwen, argv, advice и provenance credential не
 содержат. Runtime не загружает image или Qwen package автоматически и не
-повторяет model request. Точная установка и fail-soft состояния описаны в
+повторяет model request, кроме одного повтора при ошибке схемы (ADR 0021, Д2). Точная установка и fail-soft состояния описаны в
 `docs/user/advisory-ai.md`.

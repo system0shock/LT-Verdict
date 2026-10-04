@@ -13,9 +13,11 @@
 [0021](0021-advisory-ai-prompt-v2-and-schema-retry.md) (Accepted) не
 переписываются: ниже только список исключений, которые потребуются при принятии
 (раздел «Исключения из принятых правил»). ADR
-[0023](0023-advisory-ai-consent-by-endpoint-scope-and-model-choice.md)
-(Proposed) определяет согласие по области endpoint и выбор модели; этот ADR
-опирается на его область `internal` и не принимает за него решений. План
+[0023](0023-advisory-ai-consent-removal-and-model-config.md)
+(Accepted, 2026-10-05) снял согласие на отправку и ввёл файл конфигурации
+моделей, а область endpoint (`internal` / `external`) отклонил; разделы этого ADR,
+опирающиеся на область endpoint (в частности «Классификация репозитория и область
+endpoint»), с этим решением не согласованы и требуют переработки автором. План
 исполнения и пилота: `docs/superpowers/plans/2026-10-05-agentic-investigation-pilot.md`.
 
 Материалы проб (скрипты, mock relay, журналы запусков, полный отчёт) лежат в

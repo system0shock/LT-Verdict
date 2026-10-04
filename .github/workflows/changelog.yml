@@ -1,0 +1,73 @@
+name: Changelog
+
+# Отдельный workflow: тип `edited` нужен, чтобы правка тела PR перезапускала
+# проверку, но не перезапускала остальные проверки документации.
+on:
+  pull_request:
+    types:
+      - opened
+      - edited
+      - reopened
+      - synchronize
+
+permissions:
+  contents: read
+
+concurrency:
+  group: changelog-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  changelog:
+    name: Changelog
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          fetch-depth: 0
+      - name: Set up Python 3.14
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.14"
+      - name: Validate changelog fragments
+        run: python tools/changelog_assemble.py --check
+      - name: Require a fragment or an explicit documentation waiver
+        shell: bash
+        env:
+          # Тело PR недоверенное: только через env, никогда внутри run.
+          PR_BODY: ${{ github.event.pull_request.body }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          set -euo pipefail
+          changed="$(git diff --name-only --diff-filter=AMDR "$BASE_SHA"...HEAD)"
+
+          # Код и контракты, видимые пользователю. Остальные PR проверку не проходят.
+          if ! grep -Eq '^(src/main/|ui/src/|docs/contracts/|tools/)' <<<"$changed"; then
+            echo "Changelog: no user-visible paths changed, nothing to require."
+            exit 0
+          fi
+
+          # Новый или изменённый фрагмент: <id>.<added|changed|fixed>.md.
+          added="$(git diff --name-only --diff-filter=AM "$BASE_SHA"...HEAD -- changelog.d)"
+          if grep -Eiq '^changelog\.d/[A-Za-z0-9][A-Za-z0-9_-]*\.(added|changed|fixed)\.md$' <<<"$added"; then
+            echo "Changelog: fragment found."
+            exit 0
+          fi
+
+          # Переходный период: прямая правка CHANGELOG.md в PR принимается с предупреждением.
+          if grep -Fxq 'CHANGELOG.md' <<<"$changed"; then
+            echo "::warning::CHANGELOG.md edited directly. New slices must add a fragment to changelog.d/ (see changelog.d/README.md); direct edits are for releases."
+            exit 0
+          fi
+
+          # Явный отказ: строка `Documentation impact: none` вне HTML-комментариев
+          # (комментарий шаблона PR сам содержит эту фразу).
+          stripped="$(perl -0pe 's/<!--.*?-->//gs' <<<"$PR_BODY")"
+          if grep -Eiq '^[[:space:]]*`?Documentation impact: none' <<<"$stripped"; then
+            echo "Changelog: waived by 'Documentation impact: none' in the PR body."
+            exit 0
+          fi
+
+          echo "::error::PR changes src/main, ui/src, docs/contracts or tools without a changelog fragment. Add changelog.d/<id>.<added|changed|fixed>.md or write 'Documentation impact: none' (own line, outside HTML comments) in the PR body."
+          exit 1

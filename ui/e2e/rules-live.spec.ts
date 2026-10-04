@@ -63,3 +63,43 @@ test('live rules template and transaction expansion validate and affect the next
   await page.locator('#shell-tab-tables').click()
   await expect(page.getByTestId('rule-row')).toHaveCount(4)
 })
+
+test('live trial run applies a draft policy to the open run through the core without uploading again', async ({ page }) => {
+  const policyDir = fileURLToPath(new URL('../../fixtures/slice1/policies/', import.meta.url))
+  const inputs: string[] = []
+  page.on('request', (request) => { if (request.method() === 'POST' && request.url().endsWith('/api/inputs')) inputs.push(request.url()) })
+  await page.goto('/?shell=new')
+  const upload = page.waitForResponse((response) => response.url().endsWith('/api/inputs') && response.request().method() === 'POST')
+  await page.getByTestId('input-file').setInputFiles(fileURLToPath(new URL('../../fixtures/slice1/jmeter/xml-5.6.3/input.xml', import.meta.url)))
+  await page.getByRole('button', { name: SETUP_LABELS.startButton }).click()
+  await expect(page.locator('#verdict')).toHaveAttribute('data-verdict', 'NO_POLICY')
+  const runId = ((await (await upload).json()) as { run_id: string }).run_id
+  expect(inputs.length).toBe(1)
+
+  const analysesCount = () => page.evaluate(async (id) => ((await (await fetch(`/api/runs/${id}/analyses?limit=50`)).json()) as { analyses: unknown[] }).analyses.length, runId)
+  await page.locator('#shell-tab-rules').click()
+  const trial = page.getByRole('button', { name: RULES_LABELS.trialButton })
+  await page.getByTestId('rules-policy-file').setInputFiles(`${policyDir}fail.json`)
+  await expect(page.getByLabel(RULES_LABELS.policyId)).toHaveValue('slice1-fail')
+  await trial.click()
+  await expect(page.getByTestId('trial-summary')).toContainText('Прогон не проходит')
+  await expect(page.locator('#shell-tab-rules')).toHaveAttribute('aria-selected', 'true')
+  expect(await analysesCount()).toBe(2)
+
+  await page.getByTestId('rules-policy-file').setInputFiles(`${policyDir}pass.json`)
+  await expect(page.getByLabel(RULES_LABELS.policyId)).toHaveValue('slice1-pass')
+  await trial.click()
+  await expect(page.getByTestId('trial-summary')).toContainText('Прогон проходит')
+  expect(await analysesCount()).toBe(3)
+
+  // Same policy and same input again: the server returns the existing analysis, nothing new is stored.
+  await page.getByTestId('rules-policy-file').setInputFiles(`${policyDir}fail.json`)
+  await expect(page.getByLabel(RULES_LABELS.policyId)).toHaveValue('slice1-fail')
+  await trial.click()
+  await expect(page.getByTestId('trial-summary')).toContainText('Прогон не проходит')
+  expect(await analysesCount()).toBe(3)
+
+  await page.getByRole('button', { name: RULES_LABELS.openOverview }).click()
+  await expect(page.locator('#verdict')).toHaveAttribute('data-verdict', 'FAIL')
+  expect(inputs.length).toBe(1)
+})

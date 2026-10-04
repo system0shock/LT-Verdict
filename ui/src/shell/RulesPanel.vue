@@ -2,6 +2,7 @@
 import { computed, ref, toRaw, watch } from 'vue'
 import PolicyEditor from '../PolicyEditor.vue'
 import type { AnalysisResult, Policy, PolicyError } from '../types'
+import type { VerdictSummary } from '../verdictSummary'
 import { RULES_LABELS } from './labels.rules'
 import { MIN_SAMPLES_FLOOR, POLICY_TEMPLATES, expandPerTransaction, templateById, thresholdHintText, transactionRefs } from './rules'
 
@@ -12,8 +13,11 @@ const props = defineProps<{
   busy: boolean
   result: AnalysisResult | null
   runName: string
+  canTrial: boolean
+  trialBusy: boolean
+  summary: VerdictSummary | null
 }>()
-const emit = defineEmits<{ 'policy-file': [file: File | null]; 'update-policy': [policy: Policy] }>()
+const emit = defineEmits<{ 'policy-file': [file: File | null]; 'update-policy': [policy: Policy]; trial: []; 'open-overview': [] }>()
 const editorLabels = { ...RULES_LABELS, thresholdHint: thresholdHintText }
 const refs = computed(() => transactionRefs(props.result))
 const message = ref('')
@@ -183,6 +187,60 @@ function expand() {
         >
           {{ skippedUnnamed }}
         </p>
+      </div>
+    </section>
+
+    <section
+      class="rules-panel__section"
+      aria-labelledby="rules-trial-title"
+    >
+      <h3 id="rules-trial-title">
+        {{ RULES_LABELS.trialTitle }}
+      </h3>
+      <p>{{ RULES_LABELS.trialLead }}</p>
+      <p v-if="runName">
+        {{ RULES_LABELS.trialTarget(runName) }}
+      </p>
+      <button
+        type="button"
+        class="control button"
+        data-testid="trial-button"
+        :disabled="busy || !canTrial"
+        :aria-describedby="!canTrial ? 'rules-trial-blocked' : undefined"
+        @click="emit('trial')"
+      >
+        {{ RULES_LABELS.trialButton }}
+      </button>
+      <p
+        v-if="!canTrial"
+        id="rules-trial-blocked"
+      >
+        {{ !policy ? RULES_LABELS.trialNoPolicy : policyErrors.length ? RULES_LABELS.trialInvalid : RULES_LABELS.trialNoRun }}
+      </p>
+      <p
+        v-else-if="trialBusy"
+        role="status"
+      >
+        {{ RULES_LABELS.trialRunning }}
+      </p>
+      <div
+        v-if="summary"
+        class="rules-panel__message"
+        data-testid="trial-summary"
+        role="status"
+      >
+        <h4>{{ RULES_LABELS.trialSummaryTitle }}</h4>
+        <p>
+          <strong>{{ summary.headline }}</strong>
+          <span> ({{ summary.chip }})</span>
+        </p>
+        <button
+          type="button"
+          class="control button button-secondary"
+          @click="emit('open-overview')"
+        >
+          {{ RULES_LABELS.openOverview }}
+        </button>
       </div>
     </section>
   </section>

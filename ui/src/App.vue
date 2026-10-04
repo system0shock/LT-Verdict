@@ -119,6 +119,8 @@ const uploadCancelled = ref(false)
 const job = ref<JobStatus | null>(null)
 const pollIssue = ref<'none' | 'retrying' | 'lost'>('none')
 const queueBusy = ref(false)
+const trialBusy = ref(false)
+const trialAnalysisId = ref<string | null>(null)
 const result = ref<AnalysisResult | null>(null)
 const buckets = ref<Bucket[]>([])
 const chartMarkers = ref<Array<{ at_ms: number; service: string; error_type: string; message: string }>>([])
@@ -147,7 +149,7 @@ const verdictSummary = computed(() => {
   const analysis = analyses.value.find((item) => item.analysis_id === selectedAnalysisId.value)
   return summarizeVerdict(result.value, { policySha256: analysis?.policy_sha256, policyId: analysis?.policy_id })
 })
-watch(result, (value) => { if (shellNew && value) activeTab.value = 'overview' })
+watch(result, (value) => { if (shellNew && value && !trialBusy.value) activeTab.value = 'overview' })
 const working = computed(() => job.value?.state === 'QUEUED' || job.value?.state === 'PROCESSING')
 const selectedReference = computed(() => result.value && selectedAnalysisId.value
   ? { run_id: result.value.run_id, analysis_id: selectedAnalysisId.value }
@@ -323,6 +325,7 @@ function downloadBlob(blob: Blob, filename: string) {
 }
 
 async function selectPolicyFile(file: File | null) {
+  trialAnalysisId.value = null
   policyErrors.value = []
   if (!file) {
     policy.value = null
@@ -334,6 +337,7 @@ async function selectPolicyFile(file: File | null) {
 }
 
 function updatePolicy(draft: Policy) {
+  trialAnalysisId.value = null
   policy.value = draft
   void validateDraft(draft)
 }
@@ -449,6 +453,37 @@ async function analyze() {
     uploadProgress.value = 0
     if (failure instanceof ApiError && failure.code === 'BUSY') queueBusy.value = true
     else showError(failure)
+  }
+}
+
+async function trialRun() {
+  const run = currentRun.value
+  const draft = policy.value
+  // Синхронные условия: `working` станет истинным только после ответа createJob, поэтому двойной клик ловит trialBusy.
+  if (trialBusy.value || !run || !draft || policyErrors.value.length || working.value || postgresCapturePhase.value) return
+  trialBusy.value = true
+  trialAnalysisId.value = null
+  adviceAutoFor.value = null
+  queueBusy.value = false
+  errorMessage.value = ''
+  const revision = ++analysisRevision
+  try {
+    const validated = await validateDraft(draft)
+    if (!validated || revision !== analysisRevision) return
+    const accepted = await createJob(run.run_id, validated)
+    if (revision !== analysisRevision) return
+    job.value = accepted
+    await pollJob(revision)
+    // Итог только у завершённого пробного задания: при FAILED, CANCELLED или потере связи `result` ещё прежний.
+    if (revision === analysisRevision && job.value?.state === 'COMPLETE' && job.value.analysis_id && job.value.analysis_id === selectedAnalysisId.value && result.value) {
+      trialAnalysisId.value = job.value.analysis_id
+    }
+  } catch (failure) {
+    if (revision !== analysisRevision) return
+    if (failure instanceof ApiError && failure.code === 'BUSY') queueBusy.value = true
+    else showError(failure)
+  } finally {
+    trialBusy.value = false
   }
 }
 
@@ -1119,11 +1154,16 @@ function focusPolicy() {
             :policy="policy"
             :policy-status="policyStatus"
             :policy-errors="policyErrors"
-            :busy="working || (uploadProgress > 0 && !job) || !!postgresCapturePhase"
+            :busy="working || (uploadProgress > 0 && !job) || !!postgresCapturePhase || trialBusy"
             :result="result"
             :run-name="currentRun?.original_filename ?? ''"
+            :can-trial="!!currentRun && !!policy && !policyErrors.length"
+            :trial-busy="trialBusy"
+            :summary="trialAnalysisId && trialAnalysisId === selectedAnalysisId ? verdictSummary : null"
             @policy-file="selectPolicyFile"
             @update-policy="updatePolicy"
+            @trial="trialRun"
+            @open-overview="showVerdict"
           />
         </ShellPanel>
       </main>

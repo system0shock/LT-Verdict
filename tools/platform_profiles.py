@@ -27,7 +27,7 @@ def build_connections(config: dict) -> dict:
     signals = config["signals"]
     peak = bool(config.get("peak_aggregation", False))
     names = [config["namespace"], *services]
-    if config.get("arm"):
+    if "arm" in config:
         names.append(config["arm"])
     for value in names:
         if not isinstance(value, str) or not NAME.fullmatch(value):

@@ -174,6 +174,17 @@
 - Добавлен local-only Slice 1: Web UI и CLI для потокового анализа JMeter JTL
   CSV/XML и Gatling logs, deterministic metrics/verdict, strict `policy.v1`,
   immutable RunBundle, light/dark themes и offline/runtime quality gates.
+- API рядов ресурсов `resource-series.v1` (ADR 0014, часть 6, срез D0a): маршруты
+  `GET /api/runs/{runId}/analyses/{analysisId}/resource-series` (каталог рядов
+  снимка постранично) и `.../resource-series/values` (значения до 32 рядов с
+  укрупнением шага: среднее для `interval_mean` и `interval_rate`, максимум для
+  `interval_max`, минимум для `interval_min`; число наблюдённых исходных ячеек
+  `observed`, неполные ячейки, страница до 100 000 ячеек с `413` вместо усечения).
+  Чтение сохранённого анализа, без записи; существующий `resource-snapshot`,
+  `analysis-result.v1` и идентичность анализа не менялись. Схема и примеры в
+  `docs/contracts/resources/v1/`, независимый Python-оракул и общие векторы в
+  `fixtures/resource-series/`. Лимиты страницы (100 000 ячеек) и каталога (256 рядов)
+  предварительные до замера D0b.
 
 ### Changed
 

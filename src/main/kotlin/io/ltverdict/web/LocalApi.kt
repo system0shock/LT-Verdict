@@ -106,6 +106,8 @@ import kotlinx.serialization.json.long
 import kotlinx.serialization.json.put
 import org.HdrHistogram.PackedHistogram
 import java.math.BigDecimal
+import java.io.InputStream
+import java.io.OutputStream
 import java.nio.ByteBuffer
 import java.nio.file.Files
 import java.nio.file.Path
@@ -126,6 +128,8 @@ internal data class LocalApiContext(
     val jenkinsWorkflows: Map<String, JenkinsWorkflow> = emptyMap(),
     val jenkinsArtifactRoot: Path? = null,
     val sourceHttp: SourceHttp? = null,
+    // Test seam: production always uses the 4 GiB input limit.
+    val uploadLimitBytes: Long = MAX_UPLOAD_BYTES,
 )
 
 internal fun Application.installLocalApi(context: LocalApiContext) {
@@ -471,8 +475,10 @@ internal fun Application.installLocalApi(context: LocalApiContext) {
         post("/api/inputs") {
             call.requireMultipart()
             val contentLength = call.request.contentLength()
-            if (contentLength != null && contentLength > MAX_UPLOAD_REQUEST_BYTES) tooLarge("Input exceeds 4 GiB")
-            val accepted = receiveInput(call, context.store)
+            if (contentLength != null && contentLength > context.uploadLimitBytes + MAX_MULTIPART_OVERHEAD_BYTES) {
+                tooLarge("Input exceeds 4 GiB")
+            }
+            val accepted = receiveInput(call, context.store, context.uploadLimitBytes)
             call.respondJson(accepted.toJson(), HttpStatusCode.Created)
         }
 
@@ -1093,6 +1099,7 @@ private fun baselineIneligible(code: String): Nothing =
 private suspend fun receiveInput(
     call: ApplicationCall,
     store: RunBundleStore,
+    maxBytes: Long,
 ): AcceptedInput {
     // ponytail: one temp file prevents a rejected multipart tail from publishing a run; remove with store pre-commit validation.
     val temporary = withContext(Dispatchers.IO) { Files.createTempFile("ltv-upload-", ".tmp") }
@@ -1104,13 +1111,14 @@ private suspend fun receiveInput(
                 try {
                     if (part is PartData.FileItem && part.name == "file" && filename == null && !invalidParts) {
                         filename = part.originalFileName ?: malformed("Uploaded file needs a filename")
-                        withContext(Dispatchers.IO) {
-                            part.provider().toInputStream().use { input ->
-                                Files.newOutputStream(temporary).use(input::transferTo)
+                        try {
+                            withContext(Dispatchers.IO) {
+                                part.provider().toInputStream().use { input ->
+                                    Files.newOutputStream(temporary).use { output -> copyBoundedUpload(input, output, maxBytes) }
+                                }
                             }
-                        }
-                        if (withContext(Dispatchers.IO) { Files.size(temporary) } > MAX_UPLOAD_BYTES) {
-                            tooLarge("Input exceeds 4 GiB")
+                        } catch (failure: IllegalArgumentException) {
+                            mapInputFailure(failure)
                         }
                     } else {
                         invalidParts = true
@@ -1122,16 +1130,13 @@ private suspend fun receiveInput(
         } catch (failure: ApiFailure) {
             throw failure
         } catch (_: Exception) {
-            if (withContext(Dispatchers.IO) { Files.size(temporary) } > MAX_UPLOAD_BYTES) {
-                tooLarge("Input exceeds 4 GiB")
-            }
             malformed("Multipart body is malformed")
         }
         if (invalidParts || filename == null) malformed("Multipart body must contain exactly one file part")
         return try {
             withContext(Dispatchers.IO) {
                 Files.newInputStream(temporary).use { input ->
-                    store.acceptInput(input, checkNotNull(filename), MAX_UPLOAD_BYTES)
+                    store.acceptInput(input, checkNotNull(filename), maxBytes)
                 }
             }
         } catch (failure: IllegalArgumentException) {
@@ -1139,6 +1144,24 @@ private suspend fun receiveInput(
         }
     } finally {
         withContext(NonCancellable + Dispatchers.IO) { Files.deleteIfExists(temporary) }
+    }
+}
+
+/** Copies at most [maxBytes]; reads one byte past the limit, then throws without writing it or reading further. */
+internal fun copyBoundedUpload(
+    input: InputStream,
+    output: OutputStream,
+    maxBytes: Long,
+) {
+    val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
+    var total = 0L
+    while (true) {
+        val remaining = maxBytes - total
+        val count = input.read(buffer, 0, if (remaining >= buffer.size) buffer.size else (remaining + 1).toInt())
+        if (count == -1) return
+        if (count > remaining) throw IllegalArgumentException("RESOURCE_LIMIT_EXCEEDED")
+        output.write(buffer, 0, count)
+        total += count
     }
 }
 
@@ -1720,7 +1743,6 @@ private const val SESSION_COOKIE = "ltv_session"
 private const val CSRF_HEADER = "X-LTV-CSRF"
 private const val MAX_UPLOAD_BYTES = 4_294_967_296L
 private const val MAX_MULTIPART_OVERHEAD_BYTES = 65_536L
-private const val MAX_UPLOAD_REQUEST_BYTES = MAX_UPLOAD_BYTES + MAX_MULTIPART_OVERHEAD_BYTES
 private const val MAX_POLICY_BYTES = 1_048_576
 
 // 16 MiB: source_context, PostgreSQL parts and capture. The resource snapshot has its own limit in the core.

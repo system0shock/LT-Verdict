@@ -4,6 +4,7 @@ import contextlib
 import io
 import tempfile
 import unittest
+from unittest import mock
 from pathlib import Path
 
 import changelog_assemble
@@ -60,6 +61,16 @@ class ChangelogAssembleTest(unittest.TestCase):
         self.assertLess(text.index("### Fixed"), text.index("### Security"))
         self.assertIn("### Changed\n\n- changed\n\n", text)
         self.assertIn("### Fixed\n\n- fixed\n\n", text)
+
+    def test_unknown_heading_before_added_keeps_canonical_order(self):
+        self.changelog.write_bytes(b"## [Unreleased]\n\n### Security\n\n- keep\n\n### Added\n\n- old\n\n## [1.0.0]\n")
+        self.fragment("1.changed.md", "- changed\n")
+        self.fragment("2.fixed.md", "- fixed\n")
+        self.assertEqual(0, self.run_cli("--apply")[0])
+        self.assertEqual(
+            b"## [Unreleased]\n\n### Security\n\n- keep\n\n### Added\n\n- old\n\n"
+            b"### Changed\n\n- changed\n\n### Fixed\n\n- fixed\n\n## [1.0.0]\n",
+            self.changelog.read_bytes())
 
     def test_no_subsections_and_no_trailing_newline(self):
         self.changelog.write_bytes(b"## [Unreleased]")
@@ -160,6 +171,21 @@ class ChangelogAssembleTest(unittest.TestCase):
         self.assertTrue(dotfile.exists())
         self.assertEqual((0, "", ""), self.run_cli("--apply"))
         self.assertEqual(after, self.changelog.read_bytes())
+
+    def test_apply_reports_fragment_that_could_not_be_deleted(self):
+        self.fragment("1.added.md", "- new\n")
+        original_unlink = Path.unlink
+
+        def failing_unlink(path, *args, **kwargs):
+            if path.name == "1.added.md":
+                raise OSError("locked")
+            return original_unlink(path, *args, **kwargs)
+
+        with mock.patch.object(Path, "unlink", failing_unlink):
+            code, _, err = self.run_cli("--apply")
+        self.assertEqual(1, code)
+        self.assertIn("changelog: 1.added.md: inserted but not deleted", err)
+        self.assertIn(b"- new", self.changelog.read_bytes())
 
     def test_apply_invalid_fragment_is_all_or_nothing(self):
         good = self.fragment("1.added.md", b"- good\n")

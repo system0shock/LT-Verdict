@@ -112,10 +112,15 @@ def assemble(changelog, grouped):
                 additions.append("")
         else:
             rank = TYPES.index(kind)
-            index = next((i for i, title in headings
-                          if (TYPES.index(title) if title in TYPES else len(TYPES)) > rank), None)
-            if index is None:
-                index = max((i for i in range(start, end) if line_text(lines[i]).strip()), default=start) + 1
+            lower = [i for i, title in headings if title in TYPES and TYPES.index(title) < rank]
+            higher = [i for i, title in headings if title in TYPES and TYPES.index(title) > rank]
+            if higher and not lower:
+                index = min(higher)
+            else:
+                # After the last lower-ranked canonical subsection, otherwise at the block end.
+                first = max(lower) if lower else start
+                stop = next((i for i, _ in headings if i > first), end)
+                index = max((i for i in range(first, stop) if line_text(lines[i]).strip()), default=first) + 1
             additions = ([] if index and not line_text(lines[index - 1]).strip() else [""])
             additions += ["### " + kind, ""] + entry_lines
             if (index < len(lines) and line_text(lines[index]).strip()) or (index == len(lines) and not no_final_newline):
@@ -170,15 +175,22 @@ def main(argv=None):
                 temporary = Path(handle.name)
                 handle.write(assembled)
             os.replace(temporary, changelog_path)
-            for items in grouped.values():
-                for _, path, _ in items:
-                    path.unlink()
         except OSError as exc:
             print(error("CHANGELOG.md", str(exc)), file=sys.stderr)
             return 1
         finally:
             if temporary is not None:
                 temporary.unlink(missing_ok=True)
+        stuck = []
+        for items in grouped.values():
+            for _, path, _ in items:
+                try:
+                    path.unlink()
+                except OSError as exc:
+                    stuck.append(error(path.name, f"inserted but not deleted, remove it by hand: {exc}"))
+        if stuck:
+            print("\n".join(stuck), file=sys.stderr)
+            return 1
         print(f"changelog: inserted {count} fragment(s)")
     elif not args.apply:
         print(preview(grouped), end="")

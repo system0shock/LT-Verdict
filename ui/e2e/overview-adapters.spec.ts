@@ -417,6 +417,18 @@ test.describe('full run load', () => {
     expect([short.rollupSeconds, short.buckets.length, short.truncated]).toEqual([1, 1200, false])
   })
 
+  test('a probe of exactly 500 buckets with a cursor keeps 60 s and reuses the probe as the first page', async () => {
+    const server = serverFor(501 * 60)
+
+    const loaded = await fetchRunLoad(server.fetchPage)
+
+    expect(server.requests).toEqual([{ rollup: 60, from: undefined }, { rollup: 60, from: 30_000_000 }])
+    expect(loaded.rollupSeconds).toBe(60)
+    expect(loaded.truncated).toBe(false)
+    expect(loaded.buckets).toHaveLength(501)
+    expect(loaded.buckets.at(-1)?.bucket_start_ms).toBe(30_000_000)
+  })
+
   test('an empty run costs one request and gives no buckets', async () => {
     const server = serverFor(0)
 
@@ -427,6 +439,7 @@ test.describe('full run load', () => {
     expect(server.requests).toHaveLength(1)
   })
 
+  // Сервер принимает не более 100 000 заполненных секундных интервалов, поэтому это защитный предел клиента.
   test('a run longer than the page limit at 60 s reuses the probe and reports truncation', async () => {
     const server = serverFor(200 * 3600)
 

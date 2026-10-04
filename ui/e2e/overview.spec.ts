@@ -322,6 +322,7 @@ test('a short run keeps the 1 s step and shows no step note', async ({ page }) =
   ])
 })
 
+// Сервер принимает не более 100 000 заполненных секундных интервалов, поэтому это защитный предел клиента.
 test('a run longer than the page limit says so and keeps the loaded part', async ({ page }) => {
   const paths = await openOverview(page, failing, runOf(200 * 3600))
 

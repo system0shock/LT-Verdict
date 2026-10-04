@@ -1,0 +1,4 @@
+# Opt-in soak override: docker compose -f docker-compose.yml -f docker-compose.soak.yml up -d --wait
+services:
+  generator:
+    command: ["python", "generator/generate.py", "--out", "/out", "--scenario", "all-with-soak"]

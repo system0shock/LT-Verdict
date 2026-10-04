@@ -152,6 +152,29 @@ class WindowPolicyEvaluationTest {
         assertEquals(2, resources.findings.size)
     }
 
+    @Test
+    fun `a sparse window blocks the verdict even when the whole run has enough samples`() {
+        val gated = policy("100").copy(defaults = PolicyDefaultsV1(sampleFloor = 5, minSamples = 8))
+        val evaluation =
+            evaluateSharedWindowPolicy(
+                policy = gated,
+                validity = RunValidity.VALID,
+                globalMetrics = metrics(90, count = 20),
+                windowMetrics = mapOf("first" to metrics(90, count = 12), "second" to metrics(200, count = 3)),
+                resource = resource(PolicyVerdict.NO_POLICY, PolicyVerdict.NO_POLICY),
+                windows = WINDOWS,
+            )
+        val modes =
+            evaluation.evidence
+                .filter { it["type"]?.jsonPrimitive?.content == "policy_check" }
+                .associate { it.getValue("window_id").jsonPrimitive.content to it.getValue("sample_mode").jsonPrimitive.content }
+
+        assertEquals(mapOf("first" to "FULL", "second" to "INSUFFICIENT"), modes)
+        assertEquals(PolicyVerdict.NO_VERDICT, evaluation.verdict)
+        assertEquals(listOf("INSUFFICIENT_SAMPLES"), evaluation.coverageReasons)
+        assertEquals(emptyList<Any>(), evaluation.findings)
+    }
+
     private fun policy(threshold: String) =
         PolicyV1(
             "policy.v1",
@@ -165,6 +188,7 @@ class WindowPolicyEvaluationTest {
                     PolicyScope.Overall,
                 ),
             ),
+            PolicyDefaultsV1(sampleFloor = 1, minSamples = 1),
         )
 
     private fun metrics(

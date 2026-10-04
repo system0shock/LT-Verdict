@@ -33,6 +33,9 @@ private const val MAX_IDENTIFIER_BYTES = 128
 private const val MAX_TRANSACTION_SCOPE_BYTES = 4_096
 private const val MAX_NUMERIC_TOKEN_BYTES = 64
 private const val MAX_ABSOLUTE_EXPONENT = 64
+internal const val MIN_SAMPLES_FLOOR = 20L
+internal const val MIN_SAMPLES_DEFAULT = 100L
+private const val MAX_SAMPLES_BOUND = 1_000_000L
 
 internal enum class PolicyVerdict {
     PASS,
@@ -99,19 +102,26 @@ internal fun evaluatePolicy(
     if (policy == null) return PolicyEvaluation(PolicyVerdict.NO_POLICY, reasons.distinct(), findings, evidence)
 
     val checks = mutableListOf<JsonObject>()
+    val informational = mutableListOf<String>()
     var failed = false
     policy.rules.forEach { rule ->
         val binding = bind(rule, metrics, metricEvidence)
         if (binding.reason != null) {
             reasons += binding.reason
-            checks += policyCheck(rule, null, null, binding.reason, windowId, includeMetricEvidence)
+            checks += policyCheck(rule, null, null, binding.reason, windowId, includeMetricEvidence, null)
             return@forEach
         }
         val metric = binding.metric ?: error("metric binding is incomplete")
+        val gate = sampleGate(policy, rule, metric.summary.sampleCount)
+        if (gate.mode == SampleMode.INSUFFICIENT) {
+            reasons += REASON_INSUFFICIENT_SAMPLES
+            checks += policyCheck(rule, metric, null, REASON_INSUFFICIENT_SAMPLES, windowId, includeMetricEvidence, gate)
+            return@forEach
+        }
         val observed = observed(rule, metric.summary)
         if (observed == null) {
             reasons += METRIC_NOT_AVAILABLE
-            checks += policyCheck(rule, metric, null, METRIC_NOT_AVAILABLE, windowId, includeMetricEvidence)
+            checks += policyCheck(rule, metric, null, METRIC_NOT_AVAILABLE, windowId, includeMetricEvidence, gate)
             return@forEach
         }
         val passed =
@@ -119,7 +129,8 @@ internal fun evaluatePolicy(
                 PolicyOperator.LTE -> observed.comparison <= 0
                 PolicyOperator.GTE -> observed.comparison >= 0
             }
-        checks += policyCheck(rule, metric, observed.json, if (passed) null else POLICY_FAILED, windowId, includeMetricEvidence)
+        if (gate.mode == SampleMode.SMALL_SAMPLE) informational += REASON_SMALL_SAMPLE
+        checks += policyCheck(rule, metric, observed.json, if (passed) null else POLICY_FAILED, windowId, includeMetricEvidence, gate)
         if (!passed) {
             failed = true
             findings +=
@@ -140,7 +151,34 @@ internal fun evaluatePolicy(
             failed -> PolicyVerdict.FAIL
             else -> PolicyVerdict.PASS
         }
-    return PolicyEvaluation(verdict, reasons.distinct(), findings, evidence)
+    return PolicyEvaluation(verdict, (reasons + informational).distinct(), findings, evidence)
+}
+
+private enum class SampleMode { FULL, SMALL_SAMPLE, INSUFFICIENT, NOT_GATED }
+
+private data class SampleGate(
+    val mode: SampleMode?,
+    val sampleCount: Long,
+    val floor: Long,
+    val minSamples: Long,
+)
+
+private fun sampleGate(
+    policy: PolicyV1,
+    rule: PolicyRuleV1,
+    sampleCount: Long,
+): SampleGate {
+    val floor = policy.defaults?.sampleFloor ?: MIN_SAMPLES_FLOOR
+    val minimum = rule.minSamples ?: policy.defaults?.minSamples ?: MIN_SAMPLES_DEFAULT
+    val mode =
+        when {
+            sampleCount == 0L -> null
+            rule.metric == PolicyMetric.THROUGHPUT_RPS -> SampleMode.NOT_GATED
+            sampleCount < floor -> SampleMode.INSUFFICIENT
+            sampleCount < minimum -> SampleMode.SMALL_SAMPLE
+            else -> SampleMode.FULL
+        }
+    return SampleGate(mode, sampleCount, floor, minimum)
 }
 
 private data class MetricEvidence(
@@ -237,6 +275,7 @@ private fun policyCheck(
     reason: String?,
     windowId: String?,
     includeMetricReference: Boolean,
+    gate: SampleGate?,
 ): JsonObject =
     buildJsonObject {
         put("id", windowId?.let { stableId("policy-check-window", "$it\u0000${rule.id}") } ?: stableId("policy-check", rule.id))
@@ -260,6 +299,14 @@ private fun policyCheck(
         if (metric != null && includeMetricReference) put("metric_evidence_id", metric.id)
         if (observed != null) put("observed", observed)
         if (reason != null && reason != POLICY_FAILED) put("reason_code", reason)
+        gate?.mode?.let { mode ->
+            put("sample_count", gate.sampleCount)
+            if (mode != SampleMode.NOT_GATED) {
+                put("sample_floor", gate.floor)
+                put("min_samples", gate.minSamples)
+            }
+            put("sample_mode", mode.name)
+        }
     }
 
 private fun PolicyScope.json(): JsonObject =
@@ -391,6 +438,8 @@ private fun compareTransactions(
 private val TRANSACTION_SUMMARY_COMPARATOR = Comparator(::compareTransactions)
 private const val METRIC_NOT_AVAILABLE = "METRIC_NOT_AVAILABLE"
 private const val POLICY_FAILED = "POLICY_FAILED"
+private const val REASON_INSUFFICIENT_SAMPLES = "INSUFFICIENT_SAMPLES"
+private const val REASON_SMALL_SAMPLE = "SMALL_SAMPLE"
 
 private fun readBounded(
     source: InputStream,
@@ -426,11 +475,14 @@ private fun decodeUtf8(bytes: ByteArray): String =
 
 private fun parsePolicy(element: JsonElement): PolicyV1 {
     val root = element.objectAt("")
-    root.rejectUnknown(setOf("schema_version", "policy_id", "rules"), "")
+    root.rejectUnknown(setOf("schema_version", "policy_id", "rules", "defaults"), "")
     val schemaVersion = root.stringAt("schema_version", "")
     if (schemaVersion != "policy.v1") fail("INVALID_SCHEMA_VERSION", "/schema_version", "expected policy.v1")
     val policyId = root.stringAt("policy_id", "")
     validateIdentifier(policyId, "/policy_id")
+    val defaults = root["defaults"]?.let { parseDefaults(it, "/defaults") }
+    val effectiveFloor = defaults?.sampleFloor ?: MIN_SAMPLES_FLOOR
+    defaults?.let { checkDefaultsOrder(it, effectiveFloor) }
     val rulesElement = root.required("rules", "")
     val rulesArray = rulesElement as? JsonArray ?: fail("INVALID_TYPE", "/rules", "rules must be an array")
     if (rulesArray.isEmpty()) fail("EMPTY_RULES", "/rules", "at least one rule is required")
@@ -441,7 +493,7 @@ private fun parsePolicy(element: JsonElement): PolicyV1 {
         rulesArray.mapIndexed { index, value ->
             val pointer = "/rules/$index"
             val rule = value.objectAt(pointer)
-            rule.rejectUnknown(setOf("id", "metric", "operator", "threshold", "scope"), pointer)
+            rule.rejectUnknown(setOf("id", "metric", "operator", "threshold", "scope", "min_samples"), pointer)
             val id = rule.stringAt("id", pointer)
             validateIdentifier(id, "$pointer/id")
             if (!ids.add(id)) fail("DUPLICATE_RULE_ID", "$pointer/id", "rule id must be unique")
@@ -463,9 +515,59 @@ private fun parsePolicy(element: JsonElement): PolicyV1 {
                 fail("THRESHOLD_OUT_OF_RANGE", "$pointer/threshold", "threshold is outside the metric range")
             }
             val scope = parseScope(rule.required("scope", pointer), "$pointer/scope")
-            PolicyRuleV1(id, metric, operator, threshold, scope)
+            val minSamples = rule.longInRangeAt("min_samples", pointer)
+            if (minSamples != null) {
+                if (metric == PolicyMetric.THROUGHPUT_RPS) {
+                    fail("FIELD_NOT_APPLICABLE", "$pointer/min_samples", "min_samples does not apply to throughput_rps")
+                }
+                if (minSamples < effectiveFloor) {
+                    fail("MIN_SAMPLES_BELOW_FLOOR", "$pointer/min_samples", "min_samples is below the effective sample floor")
+                }
+            }
+            PolicyRuleV1(id, metric, operator, threshold, scope, minSamples)
         }
-    return PolicyV1(schemaVersion, policyId, rules)
+    return PolicyV1(schemaVersion, policyId, rules, defaults)
+}
+
+private fun parseDefaults(
+    element: JsonElement,
+    pointer: String,
+): PolicyDefaultsV1 {
+    val value = element.objectAt(pointer)
+    value.rejectUnknown(setOf("sample_floor", "min_samples"), pointer)
+    return PolicyDefaultsV1(value.longInRangeAt("sample_floor", pointer), value.longInRangeAt("min_samples", pointer))
+}
+
+private fun checkDefaultsOrder(
+    defaults: PolicyDefaultsV1,
+    effectiveFloor: Long,
+) {
+    val minimum = defaults.minSamples ?: MIN_SAMPLES_DEFAULT
+    if (minimum < effectiveFloor) {
+        val field = if (defaults.minSamples != null) "min_samples" else "sample_floor"
+        fail("MIN_SAMPLES_BELOW_FLOOR", "/defaults/$field", "default minimum is below the sample floor")
+    }
+}
+
+private fun JsonObject.longInRangeAt(
+    name: String,
+    pointer: String,
+): Long? {
+    val value = get(name) ?: return null
+    if (value !is JsonPrimitive || value.isString || value === JsonNull || value.content in setOf("true", "false")) {
+        fail("INVALID_TYPE", pointer.child(name), "$name must be an integer")
+    }
+    val number =
+        try {
+            BigDecimal(value.content)
+        } catch (_: NumberFormatException) {
+            fail("INVALID_TYPE", pointer.child(name), "$name must be an integer")
+        }
+    if (number.stripTrailingZeros().scale() > 0) fail("INVALID_TYPE", pointer.child(name), "$name must be an integer")
+    if (number < BigDecimal.ONE || number > BigDecimal.valueOf(MAX_SAMPLES_BOUND)) {
+        fail("MIN_SAMPLES_OUT_OF_RANGE", pointer.child(name), "$name must be between 1 and $MAX_SAMPLES_BOUND")
+    }
+    return number.longValueExact()
 }
 
 private fun parseScope(

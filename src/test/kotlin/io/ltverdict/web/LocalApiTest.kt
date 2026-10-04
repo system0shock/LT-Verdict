@@ -2107,7 +2107,7 @@ class LocalApiTest {
 
     private companion object {
         const val PASS_POLICY = "fixtures/slice1/policies/pass.json"
-        const val PASS_POLICY_SHA256 = "22c2036369dcd547643909dee86e2b43f6287fcc5fc21d4e5b113c417c4cf307"
+        const val PASS_POLICY_SHA256 = "f35d1e8a110bca3d1457e780e5e32751fc91467e9a29d0ced7808822c118aa2b"
         const val FAKE_ANALYSIS_ID = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
         const val DUPLICATE_POLICY =
             """{"schema_version":"policy.v1","policy\u005fid":"first","policy_id":"second","rules":[{"id":"p95","metric":"response_time_p95_ms","operator":"lte","threshold":1000,"scope":{"kind":"overall"}}]}"""

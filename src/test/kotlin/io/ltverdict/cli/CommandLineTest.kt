@@ -516,6 +516,86 @@ class CommandLineTest {
     }
 
     @Test
+    fun `small samples keep the pass and fail exit codes and label the result`() {
+        val input = fixture("jmeter/xml-5.6.3/input.xml")
+
+        fun policy(
+            name: String,
+            threshold: String,
+            defaults: String = "",
+        ): Path =
+            tempDir.resolve("$name.json").also {
+                Files.writeString(
+                    it,
+                    """{"schema_version":"policy.v1","policy_id":"$name",$defaults"rules":[""" +
+                        """{"id":"errors","metric":"error_rate_ratio","operator":"lte","threshold":$threshold,"scope":{"kind":"overall"}}]}""",
+                )
+            }
+
+        fun analyze(
+            name: String,
+            policy: Path,
+        ): Pair<Int, kotlinx.serialization.json.JsonObject> {
+            val result =
+                run(
+                    "analyze",
+                    input.toString(),
+                    "--policy",
+                    policy.toString(),
+                    "--data-dir",
+                    tempDir.resolve("data-$name").toString(),
+                )
+            return result.exitCode to Json.parseToJsonElement(result.stdout).jsonObject
+        }
+
+        val small = "\"defaults\":{\"sample_floor\":1,\"min_samples\":5},"
+        val (blockedCode, blocked) = analyze("blocked", policy("blocked", "0.5"))
+        val (passCode, pass) = analyze("pass", policy("pass", "0.5", small))
+        val (failCode, fail) = analyze("fail", policy("fail", "0.1", small))
+        val (fullCode, full) = analyze("full", policy("full", "0.5", "\"defaults\":{\"sample_floor\":1,\"min_samples\":3},"))
+
+        assertEquals(3, blockedCode)
+        assertEquals("NO_VERDICT", blocked.getValue("policy_verdict").jsonPrimitive.content)
+        assertTrue(
+            blocked.getValue("analysis_coverage").jsonObject.getValue("reasons").jsonArray.any {
+                it.jsonPrimitive.content == "INSUFFICIENT_SAMPLES"
+            },
+        )
+        assertEquals(0, passCode)
+        assertEquals("PASS", pass.getValue("policy_verdict").jsonPrimitive.content)
+        assertEquals(
+            listOf("SMALL_SAMPLE"),
+            pass
+                .getValue("analysis_coverage")
+                .jsonObject
+                .getValue("reasons")
+                .jsonArray
+                .map { it.jsonPrimitive.content },
+        )
+        assertEquals(
+            "SMALL_SAMPLE",
+            pass
+                .getValue("evidence")
+                .jsonArray
+                .single { it.jsonObject["type"]?.jsonPrimitive?.content == "policy_check" }
+                .jsonObject
+                .getValue("sample_mode")
+                .jsonPrimitive.content,
+        )
+        assertEquals(2, failCode)
+        assertEquals("FAIL", fail.getValue("policy_verdict").jsonPrimitive.content)
+        assertEquals(0, fullCode)
+        assertEquals(
+            "COMPLETE",
+            full
+                .getValue("analysis_coverage")
+                .jsonObject
+                .getValue("status")
+                .jsonPrimitive.content,
+        )
+    }
+
+    @Test
     fun `policy validation separates normalized output from invalid diagnostics`() {
         val valid = fixture("policies/pass.json")
         val invalid = tempDir.resolve("invalid-policy.json")

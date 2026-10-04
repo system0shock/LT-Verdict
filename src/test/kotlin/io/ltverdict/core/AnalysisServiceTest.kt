@@ -761,7 +761,7 @@ class AnalysisServiceTest {
             val input = accept(store, CROSSING_CSV.encodeToByteArray(), "crossing.jtl")
             val policy =
                 policy(
-                    """{"schema_version":"policy.v1","policy_id":"latency","rules":[{"id":"p95","metric":"response_time_p95_ms","operator":"lte","threshold":400,"scope":{"kind":"overall"}}]}""",
+                    """{"schema_version":"policy.v1","policy_id":"latency","defaults":{"sample_floor":1,"min_samples":1},"rules":[{"id":"p95","metric":"response_time_p95_ms","operator":"lte","threshold":400,"scope":{"kind":"overall"}}]}""",
                 )
             val raw = resourceJson(input.sha256, "crossing", "1.0").encodeToByteArray()
             val outcome = service.analyze(AnalysisRequest(input, policy, resources = resources(raw)))
@@ -797,7 +797,7 @@ class AnalysisServiceTest {
 
     private fun passPolicy(): PolicyValidation.Valid =
         policy(
-            """{"schema_version":"policy.v1","policy_id":"pass","rules":[{"id":"p95","metric":"response_time_p95_ms","operator":"lte","threshold":1000,"scope":{"kind":"overall"}}]}""",
+            """{"schema_version":"policy.v1","policy_id":"pass","defaults":{"sample_floor":1,"min_samples":1},"rules":[{"id":"p95","metric":"response_time_p95_ms","operator":"lte","threshold":1000,"scope":{"kind":"overall"}}]}""",
         )
 
     private fun policyFromFile(path: String): PolicyValidation.Valid =

@@ -55,7 +55,7 @@ class FixtureManifestTest {
         examplesByPath.forEach { (path, example) ->
             val schemaValid = example.getValue("schema_valid").jsonPrimitive.boolean
             val runtimeValid = example.getValue("runtime_valid").jsonPrimitive.boolean
-            if (path.endsWith("valid/all-metrics.json")) {
+            if (path.contains("/examples/valid/")) {
                 assertTrue(schemaValid && runtimeValid, path)
             } else {
                 assertFalse(runtimeValid, path)
@@ -173,7 +173,9 @@ class FixtureManifestTest {
         val policyExamples =
             setOf(
                 "docs/contracts/policy/v1/examples/valid/all-metrics.json",
+                "docs/contracts/policy/v1/examples/valid/sample-gate.json",
                 "docs/contracts/policy/v1/examples/invalid/empty-rules.json",
+                "docs/contracts/policy/v1/examples/invalid/min-samples-below-floor.json",
                 "docs/contracts/policy/v1/examples/invalid/duplicate-rule-id.json",
                 "docs/contracts/policy/v1/examples/invalid/unknown-field.json",
                 "docs/contracts/policy/v1/examples/invalid/unknown-metric.json",

@@ -19,6 +19,16 @@ import java.time.Instant
 
 class BaselineComparisonTest {
     @Test
+    fun `verdict gates do not change the comparability key`() {
+        val withGates = JsonObject(identity() + ("verdict_gates" to buildJsonObject { put("min_samples_floor", "20") }))
+
+        val comparison =
+            compareAnalyses(manualBaselineSelection("release", reference('a')), reference('b'), result(), identity(), result(), withGates)
+
+        comparison.getValue("metrics").jsonArray.forEach { assertEquals(JsonNull, it.jsonObject.getValue("reason")) }
+    }
+
+    @Test
     fun `condition record preserves three states and matches only its exact pair and windows`() {
         val baseline = reference('a')
         val current = reference('b')

@@ -1,19 +1,16 @@
 {
   "schema_version": "policy.v1",
-  "policy_id": "slice1-pass",
-  "defaults": {
-    "sample_floor": 1,
-    "min_samples": 1
-  },
+  "policy_id": "min-samples-below-floor",
   "rules": [
     {
-      "id": "overall-p95",
+      "id": "latency",
       "metric": "response_time_p95_ms",
       "operator": "lte",
       "threshold": 100,
       "scope": {
         "kind": "overall"
-      }
+      },
+      "min_samples": 10
     }
   ]
 }

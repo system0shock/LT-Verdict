@@ -95,11 +95,13 @@ export interface PolicyRule {
   operator: 'lte' | 'gte'
   threshold: string
   scope: PolicyScope
+  min_samples?: number
 }
 
 export interface Policy {
   schema_version: 'policy.v1'
   policy_id: string
+  defaults?: { sample_floor?: number; min_samples?: number }
   rules: PolicyRule[]
 }
 
@@ -159,6 +161,10 @@ export interface PolicyCheckEvidence {
   scope?: MetricScopeOverall | MetricScopeTransaction
   observed?: number | ExactRatio
   reason_code?: string
+  sample_count?: number
+  sample_floor?: number
+  min_samples?: number
+  sample_mode?: 'FULL' | 'SMALL_SAMPLE' | 'INSUFFICIENT' | 'NOT_GATED'
 }
 
 export interface DiagnosticEvidence {

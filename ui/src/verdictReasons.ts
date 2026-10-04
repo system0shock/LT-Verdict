@@ -28,6 +28,8 @@ export const REASONS: Record<string, ReasonEntry> = {
   TRANSACTION_NOT_FOUND: { noVerdict: true, text: 'Транзакция из области правила не найдена в результатах нагрузки.' },
   AMBIGUOUS_TRANSACTION: { noVerdict: true, text: 'Имя транзакции из правила подходит нескольким транзакциям, правило нельзя привязать однозначно.' },
   BUSINESS_OBSERVATIONS_NOT_FOUND: { noVerdict: true, text: 'В окне нет ни одного запроса нагрузки, правила политики в нём не проверены.' },
+  INSUFFICIENT_SAMPLES: { noVerdict: true, text: 'В области правила слишком мало запросов (меньше минимального пола): порог не сравнивался, вердикта по правилу нет.' },
+  SMALL_SAMPLE: { noVerdict: false, text: 'У части правил запросов меньше рекомендуемого минимума: PASS или FAIL рассчитан, но помечен как «малая выборка».' },
   // SLA-правила ресурсов
   RESOURCE_SERIES_NOT_FOUND: { noVerdict: true, text: 'Ряд ресурса из правила отсутствует в снимке ресурсов.' },
   MISSING_RESOURCE_CELLS: { noVerdict: true, text: 'В ряду ресурса есть пропуски в окне оценки. Правило не проверено, даже если нарушение уже видно.' },

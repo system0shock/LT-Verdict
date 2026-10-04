@@ -17,6 +17,17 @@
           "role": "system",
           "aggregation": "interval_max"
         }
+      ],
+      "rules": [
+        {
+          "id": "memory-limit-high",
+          "series_id": "memory-limit-ratio",
+          "unit": "ratio",
+          "operator": "gt",
+          "threshold": 0.8,
+          "min_consecutive_span_ms": 60000,
+          "effect": "sla"
+        }
       ]
     }
   ]

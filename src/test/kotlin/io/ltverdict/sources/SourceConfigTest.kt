@@ -680,10 +680,47 @@ class SourceConfigTest {
     }
 
     @Test
+    fun `connections v3 declare a rule by duration and exactly one of cells or duration`() {
+        val declared =
+            """{"id":"r","series_id":"q","unit":"ratio","operator":"gt",
+            "threshold":0.8,"min_consecutive_span_ms":60000,"effect":"sla"}"""
+
+        val profile = readSourceProfiles(spanConnections(declared, "source-connections.v3").byteInputStream()).single()
+
+        assertEquals(mapOf("r" to 60_000L), profile.ruleSpansMillis)
+        assertEquals(1, profile.rules.single().minConsecutiveCells)
+        val both = declared.replace("\"effect\"", "\"min_consecutive_cells\":2,\"effect\"")
+        val neither = declared.replace("\"min_consecutive_span_ms\":60000,", "")
+        listOf(both, neither, declared.replace("60000", "0"), declared.replace("60000", "86400001")).forEach { rule ->
+            assertThrows(IllegalArgumentException::class.java) {
+                readSourceProfiles(spanConnections(rule, "source-connections.v3").byteInputStream())
+            }
+        }
+        listOf("source-connections.v1", "source-connections.v2").forEach { version ->
+            assertThrows(IllegalArgumentException::class.java) { readSourceProfiles(spanConnections(declared, version).byteInputStream()) }
+        }
+    }
+
+    @Test
+    fun `a duration is converted to whole cells rounding up and never below the declared length`() {
+        assertEquals(3, spanToCells(60_000L, 20_000L))
+        assertEquals(4, spanToCells(61_000L, 20_000L))
+        assertEquals(1, spanToCells(1_000L, 60_000L))
+        val rule =
+            """{"id":"r","series_id":"q","unit":"ratio","operator":"gt",
+            "threshold":0.8,"min_consecutive_span_ms":61000,"effect":"sla"}"""
+        val profile = readSourceProfiles(spanConnections(rule, "source-connections.v3").byteInputStream()).single()
+
+        assertEquals(4, profile.rulesAt(20_000L).single().minConsecutiveCells)
+        assertEquals(61, profile.rulesAt(1_000L).single().minConsecutiveCells)
+    }
+
+    @Test
     fun `the published autostep connections example is accepted`() {
         val profile = readSourceProfiles(example("docs/contracts/sources/v1/autostep-connections.example.json").byteInputStream()).single()
 
         assertEquals(15_000L, profile.scrapeIntervalMillis)
+        assertEquals(mapOf("memory-limit-high" to 60_000L), profile.ruleSpansMillis)
     }
 
     @Test
@@ -727,6 +764,14 @@ class SourceConfigTest {
     private fun v4ExplicitRequest(stepMode: String): String =
         """{"schema_version":"source-request.v4","profile_ids":["metrics"],
         "window":{"origin":"explicit","start_epoch_ms":1767225600000,"end_epoch_ms":1767225660000,"step_ms":1000,"step_mode":"$stepMode"}}"""
+
+    private fun spanConnections(
+        rule: String,
+        version: String,
+    ): String =
+        """{"schema_version":"$version","connections":[{"id":"p","source_kind":"prometheus","transport":"direct",
+        "base_url":"https://example.test","queries":[{"id":"q","expression":"max_over_time(x[${'$'}__interval])",
+        "metric":"x","unit":"ratio","entity":"e","role":"system","aggregation":"interval_max"}],"rules":[$rule]}]}"""
 
     private fun autostepConnections(
         version: String,

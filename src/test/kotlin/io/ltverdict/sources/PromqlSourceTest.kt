@@ -9,6 +9,7 @@ import io.ltverdict.core.ResourceRuleV1
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
+import kotlinx.serialization.json.long
 import org.junit.jupiter.api.Assertions.assertArrayEquals
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
@@ -26,6 +27,52 @@ import java.util.ArrayDeque
 import java.util.concurrent.atomic.AtomicInteger
 
 class PromqlSourceTest {
+    @Test
+    fun `a duration rule is converted at the applied step and published in the summary`() {
+        OnlineSourceFixture().use { fixture ->
+            val base = readSourceProfiles(fixture.profilesJson().byteInputStream()).single()
+            val profile =
+                base.copy(
+                    rules = base.rules.map { it.copy(minConsecutiveCells = 1) },
+                    ruleSpansMillis = mapOf("cpu-high" to 61_000L),
+                )
+            val source = PromqlSource(listOf(profile), SourceHttp(listOf(profile)))
+
+            val acquisition = source.acquire(SourceRequest("local", 1767225600000, 1767225601000, 1000), "a".repeat(64))
+
+            assertEquals(
+                61,
+                requireNotNull(acquisition.snapshot)
+                    .snapshot.rules
+                    .single()
+                    .minConsecutiveCells,
+            )
+            val span =
+                acquisition.evidence
+                    .getValue("rule_spans")
+                    .jsonArray
+                    .single()
+                    .jsonObject
+            assertEquals("cpu-high", span.getValue("rule_id").jsonPrimitive.content)
+            assertEquals(61_000L, span.getValue("declared_span_ms").jsonPrimitive.long)
+            assertEquals(1_000L, span.getValue("step_ms").jsonPrimitive.long)
+            assertEquals(61L, span.getValue("cells").jsonPrimitive.long)
+            assertEquals(61_000L, span.getValue("effective_span_ms").jsonPrimitive.long)
+        }
+    }
+
+    @Test
+    fun `profiles without duration rules keep a summary without rule spans`() {
+        OnlineSourceFixture().use { fixture ->
+            val profile = readSourceProfiles(fixture.profilesJson().byteInputStream()).single()
+            val source = PromqlSource(listOf(profile), SourceHttp(listOf(profile)))
+
+            val acquisition = source.acquire(SourceRequest("local", 1767225600000, 1767225601000, 1000), "a".repeat(64))
+
+            assertFalse(acquisition.evidence.containsKey("rule_spans"))
+        }
+    }
+
     @Test
     fun `mixed metric and error sources retain good facts after an independent failure`() {
         OnlineSourceFixture().use { fixture ->

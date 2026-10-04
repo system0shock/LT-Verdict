@@ -726,7 +726,7 @@ private fun usage(): Nothing =
             "ltv opensearch prepare --context <file> --templates <file> --load-sha256 <hash> --output-dir <new-dir> | " +
             "ltv policy validate <policy.json> | ltv report <run-id> <analysis-id> " +
             "--format json|html|asciidoc|confluence|svg [--data-dir <path>]" + System.lineSeparator() +
-            "--source accepts source-request.v1|v2|v3; a v3 window is explicit or auto",
+            "--source accepts source-request.v1|v2|v3|v4; a v3 or v4 window is explicit or auto",
     )
 
 private class CliFailure(

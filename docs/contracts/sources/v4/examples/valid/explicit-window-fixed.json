@@ -1,0 +1,11 @@
+{
+  "schema_version": "source-request.v4",
+  "profile_ids": ["metrics"],
+  "window": {
+    "origin": "explicit",
+    "start_epoch_ms": 1767225600000,
+    "end_epoch_ms": 1767225660000,
+    "step_ms": 1000,
+    "step_mode": "fixed"
+  }
+}

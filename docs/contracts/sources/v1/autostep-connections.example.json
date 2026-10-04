@@ -1,0 +1,23 @@
+{
+  "schema_version": "source-connections.v3",
+  "connections": [
+    {
+      "id": "prom-main",
+      "source_kind": "prometheus",
+      "transport": "direct",
+      "base_url": "https://prometheus.example.test",
+      "scrape_interval_ms": 15000,
+      "queries": [
+        {
+          "id": "memory-limit-ratio",
+          "expression": "max_over_time(container_memory_working_set_bytes[$__interval]) / on(pod) group_left() kube_pod_container_resource_limits{resource=\"memory\"}",
+          "metric": "memory_limit_ratio",
+          "unit": "ratio",
+          "entity": "service-a",
+          "role": "system",
+          "aggregation": "interval_max"
+        }
+      ]
+    }
+  ]
+}

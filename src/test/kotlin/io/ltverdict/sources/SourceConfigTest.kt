@@ -431,7 +431,7 @@ class SourceConfigTest {
                 auto.replace("\"max_idle_gap_ms\":1800000", "\"max_idle_gap_ms\":14000"),
                 auto.replace("\"step_ms\":15000", "\"step_ms\":61000"),
                 auto.replace("\"step_ms\":15000", "\"step_ms\":1500"),
-                auto.replace("source-request.v3", "source-request.v4"),
+                auto.replace("source-request.v3", "source-request.v5"),
             )
 
         invalid.forEach { json ->
@@ -580,6 +580,159 @@ class SourceConfigTest {
             deriveAutoWindow(period(1_767_225_600_000L, 1_767_325_601_000L), AutoWindow(0L, 60_000L, 1_000L)),
         )
     }
+
+    @Test
+    fun `v4 declares the step mode and relaxes the grid multiples only for auto`() {
+        val auto = readWindowedSourceRequest(v4AutoRequest(stepMode = "auto", margin = 50_000, gap = 50_000).byteInputStream())
+        val fixed = readWindowedSourceRequest(v4AutoRequest(stepMode = "fixed").byteInputStream())
+        val explicit = readWindowedSourceRequest(v4ExplicitRequest("auto").byteInputStream())
+
+        assertEquals("source-request.v4", auto.schemaVersion)
+        assertEquals(AutoWindow(50_000L, 50_000L, 15_000L, stepAuto = true), auto.window)
+        assertEquals(AutoWindow(60_000L, 1_800_000L, 15_000L, stepAuto = false), fixed.window)
+        assertEquals(ExplicitWindow(1_767_225_600_000L, 1_767_225_660_000L, 1_000L, stepAuto = true), explicit.window)
+    }
+
+    @Test
+    fun `v4 requires its step mode and keeps the v3 rules for fixed`() {
+        val invalid =
+            listOf(
+                v4AutoRequest(stepMode = null),
+                v4AutoRequest(stepMode = "adaptive"),
+                v4AutoRequest(stepMode = "fixed", margin = 50_000),
+                v4AutoRequest(stepMode = "fixed", gap = 1_790_000),
+                v4AutoRequest(stepMode = "auto", gap = 14_000),
+                v4AutoRequest(stepMode = "auto", step = 61_000),
+                v4AutoRequest(stepMode = "auto").replace("\"profile_ids\":", "\"url\":\"http://unconfigured\",\"profile_ids\":"),
+                v4ExplicitRequest("auto").replace(",\"step_mode\":\"auto\"", ""),
+                v4ExplicitRequest("auto").replace("\"step_ms\":1000", "\"step_ms\":7000"),
+            )
+
+        invalid.forEach { json ->
+            val failure = assertThrows(IllegalArgumentException::class.java) { readWindowedSourceRequest(json.byteInputStream()) }
+            assertEquals("SOURCE_REQUEST_INVALID", failure.message)
+            assertTrue("unconfigured" !in failure.toString())
+        }
+    }
+
+    @Test
+    fun `v4 explicit auto may exceed 100000 cells at the declared step while fixed may not`() {
+        val thirtyHours = v4ExplicitRequest("auto").replace("1767225660000", "1767333600000")
+
+        val auto = readWindowedSourceRequest(thirtyHours.byteInputStream())
+
+        assertEquals(ExplicitWindow(1_767_225_600_000L, 1_767_333_600_000L, 1_000L, stepAuto = true), auto.window)
+        assertEquals(
+            "SOURCE_REQUEST_INVALID",
+            assertThrows(IllegalArgumentException::class.java) {
+                readWindowedSourceRequest(thirtyHours.replace("\"step_mode\":\"auto\"", "\"step_mode\":\"fixed\"").byteInputStream())
+            }.message,
+        )
+    }
+
+    @Test
+    fun `published v4 examples agree with the reader`() {
+        assertEquals(
+            WindowedSourceRequest(
+                "source-request.v4",
+                listOf("errors", "metrics"),
+                AutoWindow(45_000L, 1_800_000L, 15_000L, stepAuto = true),
+            ),
+            readWindowedSourceRequest(example("docs/contracts/sources/v4/examples/valid/auto-window-auto-step.json").byteInputStream()),
+        )
+        assertEquals(
+            ExplicitWindow(1_767_225_600_000L, 1_767_225_660_000L, 1_000L, stepAuto = false),
+            readWindowedSourceRequest(
+                example("docs/contracts/sources/v4/examples/valid/explicit-window-fixed.json").byteInputStream(),
+            ).window,
+        )
+        listOf(
+            "docs/contracts/sources/v4/examples/invalid/step-mode-missing.json",
+            "docs/contracts/sources/v4/examples/invalid/unknown-field.json",
+        ).forEach { path ->
+            assertThrows(IllegalArgumentException::class.java) { readWindowedSourceRequest(example(path).byteInputStream()) }
+        }
+    }
+
+    @Test
+    fun `connections v3 declare the scrape interval and older versions reject it`() {
+        val v3 = autostepConnections("source-connections.v3", """"scrape_interval_ms":15000,""")
+
+        assertEquals(15_000L, readSourceProfiles(v3.byteInputStream()).single().scrapeIntervalMillis)
+        assertEquals(
+            null,
+            readSourceProfiles(autostepConnections("source-connections.v3", "").byteInputStream()).single().scrapeIntervalMillis,
+        )
+        listOf("source-connections.v1", "source-connections.v2").forEach { version ->
+            val failure =
+                assertThrows(IllegalArgumentException::class.java) {
+                    readSourceProfiles(autostepConnections(version, """"scrape_interval_ms":15000,""").byteInputStream())
+                }
+            assertEquals("SOURCE_CONFIG_INVALID", failure.message)
+        }
+        listOf("500", "1500", "3601000", "\"15\"", "0").forEach { value ->
+            assertThrows(IllegalArgumentException::class.java) {
+                readSourceProfiles(autostepConnections("source-connections.v3", """"scrape_interval_ms":$value,""").byteInputStream())
+            }
+        }
+    }
+
+    @Test
+    fun `the published autostep connections example is accepted`() {
+        val profile = readSourceProfiles(example("docs/contracts/sources/v1/autostep-connections.example.json").byteInputStream()).single()
+
+        assertEquals(15_000L, profile.scrapeIntervalMillis)
+    }
+
+    @Test
+    fun `v3 connections retain PostgreSQL profiles and reject their scrape interval`() {
+        val v3 =
+            example("docs/contracts/sources/v1/postgresql-connections.example.json")
+                .replace("source-connections.v2", "source-connections.v3")
+
+        assertEquals("load-test-db", readSourceConnections(v3.byteInputStream()).postgres.single().sourceDatabaseId)
+        val invalid = v3.replace("\"source_kind\": \"postgresql\",", "\"source_kind\": \"postgresql\", \"scrape_interval_ms\": 15000,")
+        assertEquals(
+            "SOURCE_CONFIG_INVALID",
+            assertThrows(IllegalArgumentException::class.java) { readSourceConnections(invalid.byteInputStream()) }.message,
+        )
+    }
+
+    @Test
+    fun `v3 OpenSearch rejects a scrape interval`() {
+        val v3 =
+            example("docs/contracts/sources/v1/opensearch-connections.example.json")
+                .replace("source-connections.v1", "source-connections.v3")
+                .replace("\"source_kind\": \"opensearch\",", "\"source_kind\": \"opensearch\", \"scrape_interval_ms\": 15000,")
+
+        assertEquals(
+            "SOURCE_CONFIG_INVALID",
+            assertThrows(IllegalArgumentException::class.java) { readSourceProfiles(v3.byteInputStream()) }.message,
+        )
+    }
+
+    private fun v4AutoRequest(
+        stepMode: String? = "auto",
+        step: Long = 15_000,
+        margin: Long = 60_000,
+        gap: Long = 1_800_000,
+    ): String {
+        val mode = stepMode?.let { ",\"step_mode\":\"$it\"" }.orEmpty()
+        return """{"schema_version":"source-request.v4","profile_ids":["metrics","errors"],
+        "window":{"origin":"auto","step_ms":$step$mode,"margin_ms":$margin,"max_idle_gap_ms":$gap}}"""
+    }
+
+    private fun v4ExplicitRequest(stepMode: String): String =
+        """{"schema_version":"source-request.v4","profile_ids":["metrics"],
+        "window":{"origin":"explicit","start_epoch_ms":1767225600000,"end_epoch_ms":1767225660000,"step_ms":1000,"step_mode":"$stepMode"}}"""
+
+    private fun autostepConnections(
+        version: String,
+        profileExtra: String,
+    ): String =
+        """{"schema_version":"$version","connections":[{"id":"p","source_kind":"prometheus","transport":"direct",
+        "base_url":"https://example.test",$profileExtra"queries":[{"id":"q","expression":"rate(x[${'$'}__interval])",
+        "metric":"x","unit":"ratio","entity":"e","role":"system","aggregation":"interval_rate"}]}]}"""
 
     private fun example(path: String): String = Files.readString(Path.of(path))
 

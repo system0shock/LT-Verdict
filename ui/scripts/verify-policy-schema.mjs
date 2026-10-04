@@ -52,6 +52,18 @@ for (const [name, path, expected] of [
     throw new Error(`source request v3 schema ${name}: expected schema_valid=${expected}; ${JSON.stringify(validateSourceV3.errors)}`)
   }
 }
+const sourceV4Schema = await readJson('docs/contracts/sources/v4/source-request.schema.json')
+const validateSourceV4 = new Ajv2020({ strict: false }).compile(sourceV4Schema)
+for (const [name, path, expected] of [
+  ['auto window auto step', 'docs/contracts/sources/v4/examples/valid/auto-window-auto-step.json', true],
+  ['explicit window fixed', 'docs/contracts/sources/v4/examples/valid/explicit-window-fixed.json', true],
+  ['step mode missing', 'docs/contracts/sources/v4/examples/invalid/step-mode-missing.json', false],
+  ['unknown field', 'docs/contracts/sources/v4/examples/invalid/unknown-field.json', false],
+]) {
+  if (validateSourceV4(await readJson(path)) !== expected) {
+    throw new Error(`source request v4 schema ${name}: expected schema_valid=${expected}; ${JSON.stringify(validateSourceV4.errors)}`)
+  }
+}
 const runPeriodSchema = await readJson('docs/contracts/run-period/v1/run-period.schema.json')
 const validateRunPeriod = new Ajv2020({ strict: false }).compile(runPeriodSchema)
 for (const [name, path, expected] of [

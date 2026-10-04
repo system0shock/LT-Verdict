@@ -556,6 +556,31 @@ class AnalysisServiceTest {
         }
 
     @Test
+    fun `a capacity analysis records the stage sample gate even without a policy`() =
+        withService { store, service ->
+            val input = accept(store, capacityCsv().encodeToByteArray(), "capacity-gates.jtl")
+            val resource = resources(capacityResourceJson(input.sha256).encodeToByteArray())
+            val plan =
+                assertInstanceOf(
+                    CapacityPlanValidation.Valid::class.java,
+                    validateCapacityPlan(ByteArrayInputStream(capacityPlanJson(input.sha256, resource.semanticSha256).encodeToByteArray())),
+                )
+
+            val outcome = service.analyze(AnalysisRequest(input, null, resources = resource, capacity = plan))
+            val gates =
+                Json
+                    .parseToJsonElement(Files.readString(outcome.analysisDirectory.resolve("identity.json")))
+                    .jsonObject
+                    .getValue("verdict_gates")
+                    .jsonObject
+
+            assertEquals(
+                mapOf("capacity_stage_sample_gate" to "true", "min_samples_default" to "100"),
+                gates.mapValues { it.value.jsonPrimitive.content },
+            )
+        }
+
+    @Test
     fun `capacity plan is bound and stored with a stable canonical result`() =
         withService { store, service ->
             val input = accept(store, capacityCsv().encodeToByteArray(), "capacity.jtl")
@@ -620,6 +645,22 @@ class AnalysisServiceTest {
                     .parseToJsonElement(Files.readString(outcome.analysisDirectory.resolve("identity.json")))
                     .jsonObject
                     .containsKey("capacity_plan_sha256"),
+            )
+
+            val gates =
+                Json
+                    .parseToJsonElement(Files.readString(outcome.analysisDirectory.resolve("identity.json")))
+                    .jsonObject
+                    .getValue("verdict_gates")
+                    .jsonObject
+            assertEquals(
+                mapOf(
+                    "min_samples_floor" to "20",
+                    "min_samples_default" to "100",
+                    "throughput_exempt" to "true",
+                    "capacity_stage_sample_gate" to "true",
+                ),
+                gates.mapValues { it.value.jsonPrimitive.content },
             )
 
             val repeated = service.analyze(AnalysisRequest(input, passPolicy(), resources = resource, capacity = plan))

@@ -9,6 +9,7 @@ import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.jsonPrimitive
+import kotlinx.serialization.json.longOrNull
 import kotlinx.serialization.json.put
 import java.math.BigDecimal
 import java.math.MathContext
@@ -31,6 +32,7 @@ internal fun evaluateCapacity(
 ): CapacityAnalysis {
     val summaries = windowPolicy.evidence.filter { it.string("type") == "window_policy_summary" }.associateBy { it.string("window_id") }
     val checks = windowPolicy.evidence.filter { it.string("type") == "resource_policy_check" }
+    val businessChecks = windowPolicy.evidence.filter { it.string("type") == "policy_check" }
     val series = resources.series.associateBy(ResourceSeriesV1::id)
     val windows = resources.windows.associateBy(ResourceWindowV1::id)
     val evaluations =
@@ -42,6 +44,7 @@ internal fun evaluateCapacity(
                 windows[stage.evaluationWindowId],
                 summaries[stage.evaluationWindowId],
                 checks,
+                businessChecks,
                 series,
                 resources,
                 utcLoad,
@@ -88,6 +91,7 @@ private fun evaluateStage(
     window: ResourceWindowV1?,
     summary: JsonObject?,
     checks: List<JsonObject>,
+    businessChecks: List<JsonObject>,
     series: Map<String, ResourceSeriesV1>,
     resources: ResourceSnapshotV1,
     utcLoad: UtcLoadMetrics,
@@ -136,6 +140,14 @@ private fun evaluateStage(
     if (achieved != null && achieved < stage.target.multiply(BigDecimal.ONE.subtract(plan.targetToleranceRatio))) {
         reasons += "CAPACITY_TARGET_MISSED"
     }
+    val sampleCount = (summary?.get("sample_count") as? JsonPrimitive)?.longOrNull
+    val minSamples = (summary?.get("min_samples") as? JsonPrimitive)?.longOrNull ?: MIN_SAMPLES_DEFAULT
+    val smallRule =
+        businessChecks.any {
+            it["window_id"]?.jsonPrimitive?.content == stage.evaluationWindowId &&
+                it["sample_mode"]?.jsonPrimitive?.content in setOf("SMALL_SAMPLE", "INSUFFICIENT")
+        }
+    if ((sampleCount != null && sampleCount < minSamples) || smallRule) reasons += "CAPACITY_INSUFFICIENT_SAMPLES"
     val policyStatus = summary?.string("verdict")
     if (policyStatus == "NO_VERDICT") reasons += "CAPACITY_SLA_NO_VERDICT"
     val verdict =

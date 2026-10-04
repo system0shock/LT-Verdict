@@ -50,6 +50,7 @@ export const REASONS: Record<string, ReasonEntry> = {
   CAPACITY_GUARD_MISSING: { noVerdict: true, text: 'Не задана или не найдена проверка генератора нагрузки: нельзя исключить, что предел создал сам генератор.' },
   CAPACITY_GUARD_FAILED: { noVerdict: true, text: 'Проверка генератора нагрузки не пройдена: результат мог быть ограничен самим генератором.' },
   CAPACITY_TARGET_MISSED: { noVerdict: true, text: 'Достигнутая нагрузка ниже цели ступени с учётом допуска.' },
+  CAPACITY_INSUFFICIENT_SAMPLES: { noVerdict: true, text: 'В окне ступени мало запросов (меньше минимума) либо у правила окна малая выборка: ступень не подтверждена.' },
   CAPACITY_SLA_NO_VERDICT: { noVerdict: true, text: 'SLA-правила ступени не дали вердикта.' },
   CAPACITY_STAGE_NOT_VERIFIED: { noVerdict: true, text: 'Хотя бы одна ступень не подтверждена, граница ёмкости не определена.' },
   CAPACITY_NON_MONOTONIC_TARGET: { noVerdict: true, text: 'Цели ступеней идут не по возрастанию.' },

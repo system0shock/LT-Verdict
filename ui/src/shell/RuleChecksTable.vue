@@ -60,6 +60,9 @@ const rows = computed(() => ruleRows(props.result))
             <td>{{ row.condition }} {{ row.threshold }}</td>
             <td>{{ row.observed }}</td>
             <td>{{ row.window ?? TABLES_LABELS.noWindow }}</td>
+            <td data-testid="rule-sample">
+              {{ row.sample }}
+            </td>
             <td>
               <span
                 class="status-text"

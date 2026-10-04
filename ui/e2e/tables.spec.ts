@@ -83,6 +83,19 @@ test('new shell shows Russian rule and transaction tables once', async ({ page }
   await expect(page.getByRole('region', { name: 'Transaction metrics' })).toHaveCount(0)
 })
 
+test('rule sample cells show the mode and legacy fallback', async ({ page }) => {
+  const withSample = {
+    ...failing,
+    evidence: [
+      ...failing.evidence,
+      { ...failing.evidence[3], id: 'c-small', rule_id: 'small-sample', sample_count: 30, sample_floor: 20, min_samples: 50, sample_mode: 'SMALL_SAMPLE' },
+    ],
+  }
+  await openTables(page, withSample)
+  await expect(page.locator('#ev-c-small').getByTestId('rule-sample')).toContainText(TABLES_LABELS.sampleModeText.SMALL_SAMPLE)
+  await expect(page.locator('#ev-c-login').getByTestId('rule-sample')).toHaveText(TABLES_LABELS.noSample)
+})
+
 test('transaction search stays local', async ({ page }) => {
   const paths = await openTables(page)
   const before = paths.length

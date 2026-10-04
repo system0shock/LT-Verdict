@@ -84,8 +84,10 @@ function readout(key: string) {
             v-for="threshold in track.thresholds"
             :key="threshold.ruleId"
             class="threshold-text"
+            :class="{ violated: threshold.violated }"
             :data-testid="'deep-threshold-label-' + threshold.ruleId"
-          >{{ DEEP_LABELS.thresholdLabel(threshold.operator, formatNumber(threshold.value), track.unit) }}</span>
+            :data-violated="threshold.violated"
+          >{{ DEEP_LABELS.thresholdLabel(threshold.operator, formatNumber(threshold.value), track.unit, threshold.violated) }}</span>
         </p>
         <svg
           viewBox="0 0 1000 80"
@@ -124,7 +126,9 @@ function readout(key: string) {
             v-for="threshold in track.thresholds"
             :key="threshold.ruleId"
             class="threshold"
+            :class="{ violated: threshold.violated }"
             :data-testid="'deep-threshold-' + threshold.ruleId"
+            :data-violated="threshold.violated"
             x1="0"
             :y1="valueY(trackScale(track), threshold.value, 80)"
             x2="1000"
@@ -192,8 +196,10 @@ function readout(key: string) {
 .deep-track.resource polyline,.deep-track.resource circle { stroke:var(--text); }
 .deep-track.resource circle { fill:var(--text); }
 .axis { stroke:var(--border); }
-.threshold { stroke:var(--fail); stroke-width:1.5; }
-.threshold-text { color:var(--fail); }
+.threshold { stroke:var(--text-muted); stroke-width:1.5; }
+.threshold.violated { stroke:var(--fail); }
+.threshold-text { color:var(--text-muted); }
+.threshold-text.violated { color:var(--fail); }
 .cursor { stroke:var(--text); stroke-width:1; }
 .deep-head { display:flex; flex-wrap:wrap; gap:4px 12px; margin:0 0 4px; overflow-wrap:anywhere; }
 .track-name { font-weight:600; }

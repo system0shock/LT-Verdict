@@ -135,22 +135,24 @@ test('cursor stops use the finest track and nearest time clamps', () => {
 test('evidence produces finite unique thresholds and failure-first selection', () => {
   const evidence = [
     { type: 'resource_binding', run_from_epoch_ms: 1000 },
-    { type: 'resource_policy_check', series_id: 'b', rule_id: 'r1', operator: 'gt', threshold: '0.5', status: 'FAIL' },
+    { type: 'resource_policy_check', series_id: 'b', rule_id: 'r1', operator: 'gt', threshold: '0.5', status: 'PASS' },
     { type: 'resource_policy_check', series_id: 'b', rule_id: 'r1', operator: 'gt', threshold: '0.6', status: 'FAIL' },
     { type: 'resource_policy_check', series_id: 'a', rule_id: 'r2', operator: 'lt', threshold: 'abc', status: 'NO_VERDICT' },
+    { type: 'resource_policy_check', series_id: 'a', rule_id: 'r4', operator: 'lt', threshold: '2', status: 'NO_VERDICT' },
     { type: 'resource_policy_check', series_id: 'c', rule_id: 'r3', operator: 'lt', threshold: '10', status: 'PASS' },
   ]
   const result = { evidence } as never
   expect(runStartMs(result)).toBe(1000)
   expect(runStartMs({ evidence: [] } as never)).toBeNull()
   expect(runStartMs({ evidence: [{ type: 'resource_binding', run_from_epoch_ms: '1000' }] } as never)).toBeNull()
-  expect(thresholdsFor(result, 'b')).toEqual([{ ruleId: 'r1', operator: 'gt', value: 0.5 }])
-  expect(thresholdsFor(result, 'a')).toEqual([])
+  expect(thresholdsFor(result, 'b')).toEqual([{ ruleId: 'r1', operator: 'gt', value: 0.5, violated: true }])
+  expect(thresholdsFor(result, 'a')).toEqual([{ ruleId: 'r4', operator: 'lt', value: 2, violated: false }])
+  expect(thresholdsFor(result, 'c')).toEqual([{ ruleId: 'r3', operator: 'lt', value: 10, violated: false }])
   expect(defaultSelection('abcdefg'.split('').map(entry), result)).toEqual(['b', 'a', 'c', 'd', 'e', 'f'])
 })
 
 test('scale includes zero and thresholds while paths break at nulls', () => {
-  const track = resourceTrack(entry('cpu'), values('cpu', [2, null, 4], [4, 0, 4]), valueGrid(0, 3), [{ ruleId: 'high', operator: 'gt', value: 8 }])
+  const track = resourceTrack(entry('cpu'), values('cpu', [2, null, 4], [4, 0, 4]), valueGrid(0, 3), [{ ruleId: 'high', operator: 'gt', value: 8, violated: false }])
   expect(trackScale(track)).toEqual({ lo: 0, hi: 8 })
   expect(valueY({ lo: 0, hi: 8 }, 4, 80)).toBe(40)
   expect(trackPath(track, { fromMs: 0, toMs: 180_000 }, 180, 80)).toEqual(['30,58', '150,40'])

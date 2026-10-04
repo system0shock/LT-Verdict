@@ -614,6 +614,17 @@ export interface AdviceDocument {
   advisory: true
   run_id: string
   analysis_id: string
+  // Необязательные поля: схема ai-advice.v1 расширяется аддитивно (ADR 0021, Д4).
+  provenance?: {
+    invocation_id?: string
+    runner_id?: string
+    runner_version?: string
+    model_id?: string
+    prompt_version?: string
+    prompt_sha256?: string
+    duration_ms?: number
+    provider_requests?: number
+  }
   output: {
     summary: string
     hypotheses: Array<{ rank: number; observation: string; possible_explanation: string; recommended_check: string; evidence_refs: string[] }>

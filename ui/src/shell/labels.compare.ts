@@ -199,7 +199,7 @@ const RU_WINDOW_STATUS: Record<string, string> = {
   NOT_EVALUATED: 'не оценивалось',
   DESCRIPTIVE: 'описательно',
   NO_MATERIAL_CHANGE: 'без заметных изменений',
-  CANDIDATE: 'кандидат на регрессию',
+  CANDIDATE: 'существенное изменение (кандидат)',
   INSUFFICIENT_DATA: 'недостаточно данных',
 }
 // Причины сравнения: код остаётся в скобках, чтобы его можно было сверить с ответом сервера.

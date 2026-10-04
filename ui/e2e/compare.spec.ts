@@ -233,6 +233,33 @@ test('the old interface keeps the English panel text and no lang attributes', as
   await expect(page.getByRole('button', { name: EN_COMPARE_LABELS.compare, exact: true })).toBeVisible()
 })
 
+test('the old interface keeps the exact English texts of the interpolated lines', async ({ page }) => {
+  // Literal strings copied from the panel as it was before the labels prop, independent of EN_COMPARE_LABELS.
+  await openCompare(page, { shell: 'old', baselineMode: 'statistical', windowReasons: ['BASELINE_WINDOW_EMPTY'] })
+  const panel = page.locator('#baseline-panel')
+  await expect(page.getByTestId('baseline-selection')).toContainText('statistical')
+  await expect(page.getByTestId('baseline-selection')).toContainText(/median-rank-v1 .+ 3 candidates/)
+  await expect(page.getByTestId('baseline-selection')).toContainText('1.5 (lower is more central)')
+  await expect(page.getByTestId('baseline-condition-status')).toHaveText('No saved decision for this exact pair.')
+  await page.getByLabel('Baseline window ID', { exact: true }).fill('w1')
+  await page.getByLabel('Current window ID', { exact: true }).fill('w2')
+  await page.getByRole('button', { name: 'Compare selected analysis', exact: true }).click()
+  await expect(page.getByTestId('window-comparison')).toBeVisible()
+  await expect(page.getByTestId('baseline-comparison')).toContainText(
+    'Planned conditions: UNCONFIRMED. Deltas alone do not prove a version regression or change the policy verdict.',
+  )
+  await expect(page.getByTestId('comparison-response_time_p95_ms').locator('td').first()).toHaveText('P95 latency / ms')
+  await expect(page.getByTestId('comparison-error_rate_ratio').locator('td').nth(4)).toHaveText('N/A (ZERO_BASELINE)')
+  const windowBlock = page.getByTestId('window-comparison')
+  await expect(windowBlock).toContainText('INSUFFICIENT_DATA')
+  await expect(windowBlock).toContainText('Baseline: 0 samples / N/A ms. Current: N/A samples / 1000 ms.')
+  await expect(windowBlock).toContainText('Uncertainty: NOT_ESTIMATED. These two observations do not establish a reproducible version regression.')
+  await expect(windowBlock.locator('tbody tr').nth(1).locator('td').first()).toHaveText('response_time_p50_ms / Overall / — / ms')
+  await expect(panel.getByRole('region', { name: 'Baseline metric deltas' })).toBeVisible()
+  await expect(panel.getByRole('region', { name: 'Selected-window metric deltas' })).toBeVisible()
+  expect(await panel.locator('[lang]').count()).toBe(0)
+})
+
 test('the comparison chart block is Russian around the English chart internals', async ({ page }) => {
   await openCompare(page, { comparability: 'UNCONFIRMED', buckets: true })
   await page.getByRole('button', { name: COMPARE_LABELS.compare, exact: true }).click()

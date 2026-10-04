@@ -371,31 +371,43 @@ test('ignores a comparison response after selecting another run', async ({ page 
 })
 
 test('the new shell compare tab shows the same numbers in Russian', async ({ page }) => {
-  const filename = 'baseline-newshell.jtl'
-  const { run_id, analysis_id } = await analyze(page, filename, 100, 1767225950000)
+  const baselineFile = 'baseline-newshell-a.jtl'
+  const currentFile = 'baseline-newshell-b.jtl'
+  const baseline = await analyze(page, baselineFile, 100, 1767225950000)
   await page.getByRole('button', { name: 'Set as baseline', exact: true }).click()
+  await expect(page.getByTestId('baseline-selection')).toContainText(baseline.analysis_id)
+  const current = await analyze(page, currentFile, 200, 1767225951000)
   await page.getByRole('button', { name: 'Compare selected analysis', exact: true }).click()
   await expect(page.getByTestId('baseline-comparison')).toContainText('UNCONFIRMED')
-  const oldP95 = (await page.getByTestId('comparison-response_time_p95_ms').locator('td').allInnerTexts()).slice(1, 4)
-  const oldThroughput = (await page.getByTestId('comparison-throughput_rps').locator('td').allInnerTexts()).slice(1, 4)
+  const rowCells = async (metric: string) => page.getByTestId(`comparison-${metric}`).locator('td').allInnerTexts()
+  const oldP95 = (await rowCells('response_time_p95_ms')).slice(1)
+  const oldThroughput = (await rowCells('throughput_rps')).slice(1)
+  expect(oldP95).toEqual(['100', '200', '100', '100%'])
 
   await page.goto('/?shell=new')
-  await page.getByRole('button', { name: filename }).click()
-  await page.locator(`button[title="${analysis_id}"]`).click()
+  await page.getByRole('button', { name: currentFile }).click()
+  await page.locator(`button[title="${current.analysis_id}"]`).click()
+  await expect(page.locator('#verdict')).toBeVisible()
+  await page.locator('#shell-tab-compare').click()
+  await page.getByRole('button', { name: COMPARE_LABELS.compare, exact: true }).click()
+  await expect(page.getByTestId('baseline-comparison')).toContainText(COMPARE_LABELS.statusLine('UNCONFIRMED'))
+  await expect(page.getByTestId('baseline-warnings')).toHaveCount(0)
+  expect((await rowCells('response_time_p95_ms')).slice(1)).toEqual(oldP95)
+  expect((await rowCells('throughput_rps')).slice(1)).toEqual(oldThroughput)
+
+  const response = await page.request.get(`/api/runs/${current.run_id}/analyses/${current.analysis_id}/comparison`)
+  expect(response.ok()).toBeTruthy()
+  const comparison = await response.json() as { metrics: Array<{ metric: string; delta: string | null; delta_percent: string | null }> }
+  const p95 = comparison.metrics.find((metric) => metric.metric === 'response_time_p95_ms')
+  expect([p95?.delta, `${p95?.delta_percent}%`]).toEqual(oldP95.slice(2))
+
+  await page.locator('#shell-tab-setup').click()
+  await page.getByRole('button', { name: baselineFile }).click()
+  await page.locator(`button[title="${baseline.analysis_id}"]`).click()
   await expect(page.locator('#verdict')).toBeVisible()
   await page.locator('#shell-tab-compare').click()
   await page.getByRole('button', { name: COMPARE_LABELS.compare, exact: true }).click()
   await expect(page.getByTestId('baseline-warnings').locator('li')).toHaveText([
     BASELINE_LABELS.warnings.BASELINE_IS_CURRENT_ANALYSIS,
   ])
-  await expect(page.getByTestId('baseline-comparison')).toContainText(COMPARE_LABELS.statusLine('UNCONFIRMED'))
-  const newP95 = (await page.getByTestId('comparison-response_time_p95_ms').locator('td').allInnerTexts()).slice(1, 4)
-  const newThroughput = (await page.getByTestId('comparison-throughput_rps').locator('td').allInnerTexts()).slice(1, 4)
-  expect(newP95).toEqual(oldP95)
-  expect(newThroughput).toEqual(oldThroughput)
-
-  const response = await page.request.get(`/api/runs/${run_id}/analyses/${analysis_id}/comparison`)
-  expect(response.ok()).toBeTruthy()
-  const comparison = await response.json() as { metrics: Array<{ metric: string; delta: string | null }> }
-  expect(comparison.metrics.find((metric) => metric.metric === 'response_time_p95_ms')?.delta).toBe(newP95[2])
 })

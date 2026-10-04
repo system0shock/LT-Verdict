@@ -637,5 +637,5 @@ function warningText(code: string): string {
 </template>
 
 <style>
-.baseline-panel p { overflow-wrap: anywhere; }
+.baseline-panel[lang='ru'] p { overflow-wrap: anywhere; }
 </style>

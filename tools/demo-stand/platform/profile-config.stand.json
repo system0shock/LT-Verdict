@@ -1,0 +1,11 @@
+{
+  "base_url": "http://127.0.0.1:13000",
+  "transport": "grafana_proxy",
+  "datasource_uid": "ltv-demo-prometheus",
+  "namespace": "shop",
+  "services": ["orders-svc"],
+  "signals": ["cpu_limit_ratio", "memory_limit_ratio", "cpu_throttling"],
+  "subquery_step": "5s",
+  "scrape_interval_ms": 5000,
+  "request_step_ms": 10000
+}

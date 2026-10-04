@@ -29,8 +29,8 @@ function expand() {
   skippedAmbiguous.value = ''
   skippedUnnamed.value = ''
   if (plan.refused) { message.value = RULES_LABELS.perTxRefused[plan.refused]; return }
-  if (plan.added) emit('update-policy', plan.policy)
-  message.value = plan.added ? RULES_LABELS.perTxDone(plan.added, props.runName) : RULES_LABELS.perTxNothingNew
+  if (plan.added || plan.removed) emit('update-policy', plan.policy)
+  message.value = plan.added || plan.removed ? RULES_LABELS.perTxDone(plan.added, props.runName, plan.removed) : RULES_LABELS.perTxNothingNew
   const floor = props.policy.defaults?.sample_floor ?? MIN_SAMPLES_FLOOR
   if (plan.skippedSmall.length) skippedSmall.value = RULES_LABELS.perTxSkippedSmall(floor, RULES_LABELS.perTxList(plan.skippedSmall, true))
   if (plan.skippedAmbiguous.length) skippedAmbiguous.value = RULES_LABELS.perTxSkippedAmbiguous(RULES_LABELS.perTxList(plan.skippedAmbiguous, false))

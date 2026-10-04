@@ -72,18 +72,25 @@ export function transactionRefs(result: AnalysisResult | null): TransactionRef[]
 export interface PerTransactionPlan {
   policy: Policy
   added: number
+  removed: number
   skippedSmall: TransactionRef[]
   skippedAmbiguous: TransactionRef[]
   skippedUnnamed: TransactionRef[]
   refused: 'NO_TRANSACTIONS' | 'TOO_MANY_RULES' | 'TOO_LARGE' | 'NO_BASE_RULES' | 'BASE_ID_TOO_LONG' | null
 }
 
+export function isGeneratedRule(rule: PolicyRule): boolean {
+  return rule.scope.kind === 'transaction' && /--tx\d{3,}$/.test(rule.id)
+}
+
 export function expandPerTransaction(policy: Policy, refs: TransactionRef[]): PerTransactionPlan {
   const copy = structuredClone(policy)
+  const previous = copy.rules.filter(isGeneratedRule)
+  copy.rules = copy.rules.filter((rule) => !isGeneratedRule(rule))
   const refuse = (refused: NonNullable<PerTransactionPlan['refused']>): PerTransactionPlan =>
-    ({ policy: copy, added: 0, skippedSmall: [], skippedAmbiguous: [], skippedUnnamed: [], refused })
+    ({ policy: structuredClone(policy), added: 0, removed: 0, skippedSmall: [], skippedAmbiguous: [], skippedUnnamed: [], refused })
   if (!refs.length) return refuse('NO_TRANSACTIONS')
-  const base = policy.rules.filter((rule) => rule.scope.kind === 'overall' && rule.metric !== 'throughput_rps')
+  const base = copy.rules.filter((rule) => rule.scope.kind === 'overall' && rule.metric !== 'throughput_rps')
   if (!base.length) return refuse('NO_BASE_RULES')
   const floor = policy.defaults?.sample_floor ?? MIN_SAMPLES_FLOOR
   const ordered = [...refs].sort((a, b) => a.label < b.label ? -1 : a.label > b.label ? 1 : 0)
@@ -95,7 +102,6 @@ export function expandPerTransaction(policy: Policy, refs: TransactionRef[]): Pe
   if (eligible.length && base.some((rule) => new TextEncoder().encode(rule.id).length > MAX_ID_BYTES - ID_SUFFIX_BYTES)) return refuse('BASE_ID_TOO_LONG')
   const used = new Set(copy.rules.map((rule) => rule.id))
   let counter = 1
-  let added = 0
   for (const item of eligible) {
     for (const rule of base) {
       if (copy.rules.some((existing) => existing.metric === rule.metric && existing.operator === rule.operator &&
@@ -104,11 +110,15 @@ export function expandPerTransaction(policy: Policy, refs: TransactionRef[]): Pe
       while (used.has(id)) { counter++; id = `${rule.id}--tx${String(counter).padStart(3, '0')}` }
       used.add(id)
       copy.rules.push({ ...structuredClone(rule), id, scope: { kind: 'transaction', name: item.label } })
-      added++
     }
     counter++
   }
-  if (copy.rules.length > MAX_POLICY_RULES) return { ...refuse('TOO_MANY_RULES'), policy: structuredClone(policy) }
-  if (new TextEncoder().encode(JSON.stringify(copy)).length > MAX_POLICY_BYTES) return { ...refuse('TOO_LARGE'), policy: structuredClone(policy) }
-  return { policy: copy, added, skippedSmall, skippedAmbiguous, skippedUnnamed, refused: null }
+  if (copy.rules.length > MAX_POLICY_RULES) return refuse('TOO_MANY_RULES')
+  if (new TextEncoder().encode(JSON.stringify(copy)).length > MAX_POLICY_BYTES) return refuse('TOO_LARGE')
+  const generated = copy.rules.filter(isGeneratedRule)
+  const previousKeys = new Set(previous.map((rule) => JSON.stringify(rule)))
+  const generatedKeys = new Set(generated.map((rule) => JSON.stringify(rule)))
+  const added = generated.filter((rule) => !previousKeys.has(JSON.stringify(rule))).length
+  const removed = previous.filter((rule) => !generatedKeys.has(JSON.stringify(rule))).length
+  return { policy: added || removed ? copy : structuredClone(policy), added, removed, skippedSmall, skippedAmbiguous, skippedUnnamed, refused: null }
 }

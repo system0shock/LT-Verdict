@@ -5,7 +5,7 @@ import type { AnalysisResult } from '../src/types'
 import { RULES_LABELS } from '../src/shell/labels.rules'
 import {
   ID_SUFFIX_BYTES, MAX_ID_BYTES, MAX_POLICY_BYTES, MAX_POLICY_RULES, MIN_SAMPLES_FLOOR,
-  POLICY_TEMPLATES, expandPerTransaction, summarizePolicy, templateById,
+  POLICY_TEMPLATES, expandPerTransaction, isGeneratedRule, summarizePolicy, templateById,
   thresholdHint, thresholdHintText, transactionRefs,
 } from '../src/shell/rules'
 
@@ -92,7 +92,7 @@ test('sample floor override and manual rules preserve the draft', () => {
 
 test('ids avoid collisions and refusal leaves an unchanged copy', () => {
   const policy = basic()
-  policy.rules.push({ ...structuredClone(policy.rules[0]), id: 'overall-p95--tx001', scope: { kind: 'transaction', name: 'elsewhere' } })
+  policy.rules.push({ ...structuredClone(policy.rules[0]), id: 'overall-p95--tx001', scope: { kind: 'overall' } })
   const plan = expandPerTransaction(policy, [ref('api')])
   expect(plan.policy.rules.map((rule) => rule.id).filter((id, index, ids) => ids.indexOf(id) === index)).toHaveLength(plan.policy.rules.length)
   expect(plan.policy.rules.some((rule) => rule.id === 'overall-p95--tx002')).toBe(true)
@@ -110,6 +110,62 @@ test('ids avoid collisions and refusal leaves an unchanged copy', () => {
   crowded.rules.push(...Array.from({ length: MAX_POLICY_RULES - 3 }, (_, i) => ({ ...structuredClone(crowded.rules[0]), id: `extra-${i}` })))
   expect(expandPerTransaction(crowded, [ref('api')]).refused).toBe('TOO_MANY_RULES')
   expect(expandPerTransaction(basic(), Array.from({ length: 128 }, (_, i) => ref(`tx-${i}`))).refused).toBe('TOO_MANY_RULES')
+})
+
+test('expanding onto a different run replaces earlier generated rules', () => {
+  const policy = expandPerTransaction(basic(), [ref('a'), ref('b')]).policy
+  policy.rules.push({ ...structuredClone(policy.rules[0]), id: 'manual', metric: 'throughput_rps', operator: 'gte', threshold: '777', scope: { kind: 'transaction', name: 'a' } })
+  policy.rules.push({ ...structuredClone(policy.rules[0]), id: 'manual-overall', metric: 'throughput_rps', operator: 'gte' })
+  const plan = expandPerTransaction(policy, [ref('c')])
+  expect(plan).toMatchObject({ refused: null, added: 2, removed: 4 })
+  expect(plan.policy.rules).toHaveLength(6)
+  expect(plan.policy.rules.filter((rule) => rule.scope.kind === 'overall')).toHaveLength(3)
+  expect(plan.policy.rules.filter((rule) => rule.scope.kind === 'transaction').map((rule) => rule.scope.name)).toEqual(['a', 'c', 'c'])
+  expect(plan.policy.rules.find((rule) => rule.id === 'manual')?.threshold).toBe('777')
+  expect(plan.policy.rules.filter((rule) => rule.scope.kind === 'transaction' && rule.scope.name === 'b')).toEqual([])
+})
+
+test('expanding again on the same refs preserves rule order and policy fields', () => {
+  const policy = expandPerTransaction(basic(), [ref('a'), ref('b')]).policy
+  policy.rules.push({ ...structuredClone(policy.rules[0]), id: 'manual', metric: 'throughput_rps', operator: 'gte', scope: { kind: 'transaction', name: 'a' } })
+  const plan = expandPerTransaction(policy, [ref('a'), ref('b')])
+  expect(plan).toMatchObject({ refused: null, added: 0, removed: 0 })
+  expect(plan.policy).toEqual(policy)
+  expect(plan.policy).not.toBe(policy)
+})
+
+test('generated rules require transaction scope and a padded terminal suffix', () => {
+  const rule = { ...structuredClone(basic().rules[0]), id: 'x--tx001', scope: { kind: 'transaction' as const, name: 'a' } }
+  expect(isGeneratedRule(rule)).toBe(true)
+  expect(isGeneratedRule({ ...rule, id: 'x--tx1000' })).toBe(true)
+  expect(isGeneratedRule({ ...rule, scope: { kind: 'overall' } })).toBe(false)
+  for (const id of ['x--tx01', 'x--tx001-copy', 'manual']) expect(isGeneratedRule({ ...rule, id })).toBe(false)
+})
+
+test('refusal preserves generated rules and the rule limit is checked after removal', () => {
+  const generated = expandPerTransaction(basic(), [ref('a')]).policy
+  const crowded = structuredClone(generated)
+  crowded.rules.push(...Array.from({ length: 253 }, (_, i) => ({
+    ...structuredClone(crowded.rules[0]), id: `throughput-${i}`, metric: 'throughput_rps' as const, operator: 'gte' as const,
+  })))
+  const refused = expandPerTransaction(crowded, [ref('b')])
+  expect(refused).toMatchObject({ refused: 'TOO_MANY_RULES', added: 0, removed: 0 })
+  expect(refused.policy).toEqual(crowded)
+  expect(refused.policy).not.toBe(crowded)
+
+  const full = expandPerTransaction(basic(), Array.from({ length: 127 }, (_, i) => ref(`tx-${i}`))).policy
+  expect(full.rules).toHaveLength(256)
+  const plan = expandPerTransaction(full, [ref('new')])
+  expect(plan).toMatchObject({ refused: null, added: 2, removed: 254 })
+  expect(plan.policy.rules).toHaveLength(4)
+})
+
+test('editing a generated threshold is reset by expansion', () => {
+  const policy = expandPerTransaction(basic(), [ref('a')]).policy
+  policy.rules[2].threshold = '777'
+  const plan = expandPerTransaction(policy, [ref('a')])
+  expect(plan).toMatchObject({ refused: null, added: 1, removed: 1 })
+  expect(plan.policy.rules.find((rule) => rule.id === policy.rules[2].id)?.threshold).toBe('1000')
 })
 
 test('core and UI bounds stay aligned', () => {

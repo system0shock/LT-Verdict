@@ -25,6 +25,13 @@ class PlatformPromqlTest(unittest.TestCase):
         self.assertIn("unless on (namespace, pod, container)", expression)
         self.assertIn("unless on (namespace) (count by (namespace)", expression)
 
+    def test_jvm_pool_ratio_keeps_pool_identity_and_gaps(self):
+        expression = render(SIGNALS["jvm_pool_saturation"], "shop", "orders-svc", "15s", peak=True)
+        self.assertIn("max by (namespace, pod, pool) (hikaricp_connections_active", expression)
+        self.assertIn("/ on (namespace, pod, pool) max by (namespace, pod, pool) (hikaricp_connections_max", expression)
+        self.assertIn("unless on (namespace) (count by (namespace)", expression)
+        self.assertIn("unless on (namespace, pod, pool)", expression)
+
     def test_every_template_has_a_scenario(self):
         covered = {scenario.signal for scenario in SCENARIOS}
         missing = {name for name in SIGNALS if name not in covered}

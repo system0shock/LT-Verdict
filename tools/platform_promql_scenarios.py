@@ -234,6 +234,29 @@ SCENARIOS = (
         0.8,
     ),
     Scenario(
+        "jvm pool: the worst pool of a pod wins over the pod total",
+        "jvm_pool_saturation", True,
+        (
+            ("hikaricp_connections_active", f'namespace="{NS}",pod="a1",pool="main"', "10+0x40"),
+            ("hikaricp_connections_max", f'namespace="{NS}",pod="a1",pool="main"', "10+0x40"),
+            ("hikaricp_connections_active", f'namespace="{NS}",pod="a1",pool="idle"', "0+0x40"),
+            ("hikaricp_connections_max", f'namespace="{NS}",pod="a1",pool="idle"', "90+0x40"),
+            pod_owner("a1"),
+        ),
+        1,
+    ),
+    Scenario(
+        "jvm pool: a pool without a max series is a gap",
+        "jvm_pool_saturation", True,
+        (
+            ("hikaricp_connections_active", f'namespace="{NS}",pod="a1",pool="main"', "8+0x40"),
+            ("hikaricp_connections_max", f'namespace="{NS}",pod="a1",pool="main"', "10+0x40"),
+            ("hikaricp_connections_active", f'namespace="{NS}",pod="a1",pool="idle"', "0+0x40"),
+            pod_owner("a1"),
+        ),
+        None,
+    ),
+    Scenario(
         "jvm threads: the busiest pod has 70 live threads",
         "jvm_thread_count", False,
         (

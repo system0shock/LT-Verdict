@@ -133,11 +133,19 @@ GC_TIME = (
     "max by (namespace) (sum by (namespace, pod) "
     '(rate(jvm_gc_pause_seconds_sum{namespace="@ns@"}[$__interval]) and on (namespace, pod) @owner@))'
 )
+POOL_ACTIVE = (
+    "max by (namespace, pod, pool) "
+    '(hikaricp_connections_active{namespace="@ns@"} and on (namespace, pod) @owner@)'
+)
+POOL_MAX = (
+    "max by (namespace, pod, pool) "
+    '(hikaricp_connections_max{namespace="@ns@"} and on (namespace, pod) @owner@)'
+)
+POOL_RATIO = f"({POOL_ACTIVE} / on (namespace, pod, pool) {POOL_MAX})"
 POOL_SATURATION = (
-    "max by (namespace) (@over@(((sum by (namespace, pod) "
-    '(hikaricp_connections_active{namespace="@ns@"} and on (namespace, pod) @owner@)) '
-    "/ on (namespace, pod) (sum by (namespace, pod) "
-    '(hikaricp_connections_max{namespace="@ns@"} and on (namespace, pod) @owner@)))[$__interval:@sub@]))'
+    f"max by (namespace) (@over@({POOL_RATIO}[$__interval:@sub@])) "
+    f"unless on (namespace) (count by (namespace) "
+    f"({POOL_ACTIVE} unless on (namespace, pod, pool) {POOL_RATIO}))"
 )
 
 SIGNALS.update(

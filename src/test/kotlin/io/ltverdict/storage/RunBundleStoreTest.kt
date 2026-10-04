@@ -652,6 +652,22 @@ class RunBundleStoreTest {
     }
 
     @Test
+    fun `replaceRunPeriod overwrites valid v1 with v2`() =
+        withStore { store, root ->
+            val accepted = store.acceptInput(Files.newInputStream(Path.of(CSV_FIXTURE)), "period.jtl")
+            val old = periodJson(accepted.sha256)
+            val updated = JsonObject(old + ("recognition_method" to JsonPrimitive("sample-timestamps.v2")))
+
+            assertEquals(old, store.replaceRunPeriod(accepted.runId, old))
+            assertEquals(updated, store.replaceRunPeriod(accepted.runId, updated))
+            assertEquals(updated, store.readRunPeriod(accepted.runId))
+            assertArrayEquals(
+                canonicalJson(updated),
+                Files.readAllBytes(root.resolve("runs").resolve(accepted.runId).resolve("run-period.json")),
+            )
+        }
+
+    @Test
     fun `run period write refuses documents bound to other input bytes`() =
         withStore { store, root ->
             val accepted = store.acceptInput(Files.newInputStream(Path.of(CSV_FIXTURE)), "period.jtl")

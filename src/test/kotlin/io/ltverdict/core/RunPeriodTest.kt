@@ -30,6 +30,7 @@ class RunPeriodTest {
         val period = recognizeRunPeriod(SourceType.JMETER_CSV, contiguous, "a".repeat(64), 60_000)
 
         assertEquals(RUN_PERIOD_STATUS_RECOGNIZED, period.status)
+        assertEquals("sample-timestamps.v2", period.recognitionMethod)
         assertEquals(start, period.firstSampleEpochMillis)
         assertEquals(start + 2_500, period.lastSampleEpochMillis)
         assertEquals(null, period.longestIdleGapMillis)
@@ -68,6 +69,7 @@ class RunPeriodTest {
         val period = recognizeRunPeriod(SourceType.GATLING_TEXT, log, "a".repeat(64), 30_000)
 
         assertEquals(RUN_PERIOD_STATUS_RECOGNIZED, period.status)
+        assertEquals("sample-timestamps.v1", period.recognitionMethod)
         assertEquals(start, period.firstSampleEpochMillis)
         assertEquals(start + 60_500, period.lastSampleEpochMillis)
         assertEquals(1, period.idleGapCount)
@@ -135,6 +137,7 @@ class RunPeriodTest {
         val period = recognizeRunPeriod(SourceType.JMETER_CSV, malformed, "a".repeat(64), 60_000)
 
         assertEquals(RUN_PERIOD_STATUS_INVALID_INPUT, period.status)
+        assertEquals("sample-timestamps.v2", period.recognitionMethod)
         assertEquals(0L, period.firstSampleEpochMillis)
         assertEquals(0L, period.lastSampleEpochMillis)
         assertEquals(null, period.longestIdleGapMillis)
@@ -167,10 +170,76 @@ class RunPeriodTest {
     fun `published run period examples match the contract validator`() {
         val valid = example("valid/basic")
         assertEquals(valid, validateRunPeriod(valid))
+        val csv = example("valid/jmeter-csv")
+        assertEquals(csv, validateRunPeriod(csv))
+        assertEquals("sample-timestamps.v2", runPeriodFromJson(csv).recognitionMethod)
+        val unsupported = JsonObject(csv + ("recognition_method" to JsonPrimitive("sample-timestamps.v3")))
+        assertThrows(IllegalArgumentException::class.java) { validateRunPeriod(unsupported) }
+        assertThrows(IllegalArgumentException::class.java) {
+            runPeriodFromJson(unsupported)
+        }
         val invalid = example("invalid/unknown-field")
         assertThrows(IllegalArgumentException::class.java) { validateRunPeriod(invalid) }
         val disagreeing = JsonObject(valid + ("idle_gap_count" to JsonPrimitive(1)))
         assertThrows(IllegalArgumentException::class.java) { validateRunPeriod(disagreeing) }
+    }
+
+    @Test
+    fun `JMeter XML recognition retains method version one`() {
+        val period =
+            recognizeRunPeriod(SourceType.JMETER_XML, Path.of("fixtures/slice1/jmeter/xml-5.6.3/input.xml"), "a".repeat(64), 60_000)
+
+        assertEquals("sample-timestamps.v1", period.recognitionMethod)
+    }
+
+    @Test
+    fun `JMeter CSV parent rows extend bounds but do not occupy idle buckets`() {
+        val start = 1_767_225_600_000L
+        val header =
+            "timeStamp,elapsed,label,responseCode,responseMessage,threadName,dataType,success," +
+                "failureMessage,bytes,sentBytes,grpThreads,allThreads,URL,Latency,IdleTime,Connect"
+
+        fun row(
+            timestamp: Long,
+            label: String,
+            message: String,
+            dataType: String,
+            elapsed: Long,
+        ) = listOf(
+            timestamp.toString(),
+            elapsed.toString(),
+            label,
+            "200",
+            "\"$message\"",
+            "thread",
+            dataType,
+            "true",
+            "",
+            "0",
+            "0",
+            "1",
+            "1",
+            "",
+            "0",
+            "0",
+            "0",
+        ).joinToString(",")
+        val file =
+            csv(
+                header,
+                row(start, "child-one", "OK", "text", 100),
+                row(start + 2_000, "parent", "Number of samples in transaction : 2, number of failing samples : 0", "", 4_000),
+                row(start + 5_000, "child-two", "OK", "text", 100),
+            )
+
+        val period = recognizeRunPeriod(SourceType.JMETER_CSV, file, "a".repeat(64), 60_000)
+
+        assertEquals(RUN_PERIOD_STATUS_RECOGNIZED, period.status)
+        assertEquals("sample-timestamps.v2", period.recognitionMethod)
+        assertEquals(start, period.firstSampleEpochMillis)
+        assertEquals(start + 6_000, period.lastSampleEpochMillis)
+        assertEquals(1, period.idleGapCount)
+        assertEquals(4_000L, period.longestIdleGapMillis)
     }
 
     private fun example(name: String) =

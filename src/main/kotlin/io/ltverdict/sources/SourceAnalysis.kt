@@ -10,6 +10,7 @@ import io.ltverdict.core.ResourceValidation
 import io.ltverdict.core.RunPeriodReadFailure
 import io.ltverdict.core.RunPeriodV1
 import io.ltverdict.core.canonicalJson
+import io.ltverdict.core.recognitionMethod
 import io.ltverdict.core.recognizeRunPeriod
 import io.ltverdict.core.runPeriodFromJson
 import io.ltverdict.core.runPeriodJson
@@ -172,7 +173,11 @@ private fun recognizedPeriod(
     window: AutoWindow,
     checkCancelled: () -> Unit,
 ): JsonObject {
-    service.store.readRunPeriod(request.input.runId)?.let { return it }
+    service.store
+        .readRunPeriod(request.input.runId)
+        ?.takeIf {
+            it.getValue("recognition_method").jsonPrimitive.content == recognitionMethod(request.input.sourceType)
+        }?.let { return it }
     val recognized =
         try {
             recognizeRunPeriod(

@@ -76,7 +76,14 @@ test.describe('resolveNewShell', () => {
     expect(resolveNewShell('?shell=NEW', storage)).toBe(false)
     expect(resolveNewShell('?shell=', storage)).toBe(false)
     expect(storage.getItem(SHELL_PREFERENCE_KEY)).toBe('old')
-    expect(resolveNewShell('?shell=new%20', new FakeStorage())).toBe(true)
+    expect(resolveNewShell('?shell=new%20', storage)).toBe(false)
+    expect(resolveNewShell('?shell=new%26shell=old', storage)).toBe(false)
+    expect(storage.getItem(SHELL_PREFERENCE_KEY)).toBe('old')
+  })
+
+  test('with a repeated shell parameter the first one wins', () => {
+    expect(resolveNewShell('?shell=old&shell=new', new FakeStorage())).toBe(false)
+    expect(resolveNewShell('?shell=new&shell=old', new FakeStorage())).toBe(true)
   })
 
   test('a blocked or missing storage never throws and gives the default', () => {

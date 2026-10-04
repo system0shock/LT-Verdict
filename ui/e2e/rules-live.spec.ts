@@ -66,17 +66,23 @@ test('live rules template and transaction expansion validate and affect the next
 
 test('live trial run applies a draft policy to the open run through the core without uploading again', async ({ page }) => {
   const policyDir = fileURLToPath(new URL('../../fixtures/slice1/policies/', import.meta.url))
+  // A unique input: the e2e server shares one data directory across tests, so analysis counts must not depend on other specs.
+  const unique = Date.now()
+  const rows = Array.from({ length: 30 }, (_, index) =>
+    `${1788211917499 + index * 1000},50,GET /trial-${unique},${index < 6 ? 500 : 200},${index < 6 ? 'Err' : 'OK'},fixture 1-1,text,${index < 6 ? 'false' : 'true'},,0,0,1,1,null,0,0,0`)
+  const trialJtl = Buffer.from([header, ...rows].join('\n') + '\n')
   const inputs: string[] = []
   page.on('request', (request) => { if (request.method() === 'POST' && request.url().endsWith('/api/inputs')) inputs.push(request.url()) })
   await page.goto('/?shell=new')
   const upload = page.waitForResponse((response) => response.url().endsWith('/api/inputs') && response.request().method() === 'POST')
-  await page.getByTestId('input-file').setInputFiles(fileURLToPath(new URL('../../fixtures/slice1/jmeter/xml-5.6.3/input.xml', import.meta.url)))
+  await page.getByTestId('input-file').setInputFiles({ name: 'trial.jtl', mimeType: 'text/csv', buffer: trialJtl })
   await page.getByRole('button', { name: SETUP_LABELS.startButton }).click()
   await expect(page.locator('#verdict')).toHaveAttribute('data-verdict', 'NO_POLICY')
   const runId = ((await (await upload).json()) as { run_id: string }).run_id
   expect(inputs.length).toBe(1)
 
   const analysesCount = () => page.evaluate(async (id) => ((await (await fetch(`/api/runs/${id}/analyses?limit=50`)).json()) as { analyses: unknown[] }).analyses.length, runId)
+  expect(await analysesCount()).toBe(1)
   await page.locator('#shell-tab-rules').click()
   const trial = page.getByRole('button', { name: RULES_LABELS.trialButton })
   await page.getByTestId('rules-policy-file').setInputFiles(`${policyDir}fail.json`)

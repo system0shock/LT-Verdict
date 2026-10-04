@@ -1,6 +1,7 @@
 import AxeBuilder from '@axe-core/playwright'
 import { expect, test, type Page } from '@playwright/test'
 import { RULES_LABELS } from '../src/shell/labels.rules'
+import { SETUP_LABELS } from '../src/shell/labels'
 
 const run = { run_id: 'trial-run', source_type: 'jmeter', sha256: 'b'.repeat(64), size_bytes: 100, original_filename: 'trial.jtl' }
 const otherRun = { ...run, run_id: 'trial-run-other', original_filename: 'trial-other.jtl' }
@@ -159,6 +160,17 @@ test('cancelling the job while the trial is polling does not publish the result 
   expect(api.calls.results).toBe(0)
 })
 
+test('editing the draft while the trial is polling drops the summary of the older draft', async ({ page }) => {
+  const api = await openRules(page, true, { holdJob: true })
+  await trialButton(page).click()
+  await expect.poll(() => api.calls.jobs.length).toBe(1)
+  await page.getByLabel(RULES_LABELS.threshold).first().fill('900')
+  api.releaseJob()
+  await expect(page.locator('#job-status')).toContainText('COMPLETE')
+  await expect(trialButton(page)).toBeEnabled()
+  await expect(page.getByTestId('trial-summary')).toHaveCount(0)
+})
+
 test('a failed trial job does not present the previously open analysis as the trial result', async ({ page }) => {
   const { calls } = await fixtureApi(page, { jobFinal: 'FAILED' })
   await page.goto('/?shell=new')
@@ -175,18 +187,24 @@ test('a failed trial job does not present the previously open analysis as the tr
   expect(calls.jobs.length).toBe(1)
 })
 
-test('a trial does not start for another run after the run was switched during validation', async ({ page }) => {
+test('the run list and the setup form are locked from the click until the trial ends', async ({ page }) => {
   const api = await openRules(page, true)
+  await page.locator('#shell-tab-setup').click()
+  await page.getByTestId('input-file').setInputFiles({ name: 'x.jtl', mimeType: 'text/csv', buffer: Buffer.from('a b') })
+  await expect(page.getByRole('button', { name: SETUP_LABELS.startButton })).toBeEnabled()
+  await page.locator('#shell-tab-rules').click()
   api.calls.holdValidate = true
   await trialButton(page).click()
   await expect.poll(() => api.validateReleased()).toBe(false)
-  await page.locator('#shell-tab-overview').click()
-  await page.getByRole('button', { name: otherRun.original_filename }).click()
+  await expect(page.getByTestId('run-list').getByRole('button', { name: otherRun.original_filename })).toBeDisabled()
+  await page.locator('#shell-tab-setup').click()
+  await expect(page.getByRole('button', { name: SETUP_LABELS.startButton })).toBeDisabled()
   api.releaseValidate()
+  await expect.poll(() => api.calls.jobs.length).toBe(1)
+  await expect(page.getByRole('button', { name: SETUP_LABELS.startButton })).toBeEnabled()
   await page.locator('#shell-tab-rules').click()
-  await expect(trialButton(page)).toBeEnabled()
-  expect(api.calls.jobs.length).toBe(0)
-  await expect(page.getByTestId('trial-summary')).toHaveCount(0)
+  await expect(page.getByTestId('trial-summary')).toBeVisible()
+  await expect(page.getByTestId('run-list').getByRole('button', { name: otherRun.original_filename })).toBeEnabled()
 })
 
 test('BUSY from the queue is shown and does not leave the trial button locked', async ({ page }) => {

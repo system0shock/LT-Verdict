@@ -141,6 +141,7 @@ const rangeEnd = ref('')
 let analysisRevision = 0
 let bucketRevision = 0
 let policyRevision = 0
+let policyEdits = 0
 let adviceRevision = 0
 let uploadAbort: AbortController | null = null
 
@@ -325,6 +326,7 @@ function downloadBlob(blob: Blob, filename: string) {
 }
 
 async function selectPolicyFile(file: File | null) {
+  policyEdits += 1
   trialAnalysisId.value = null
   policyErrors.value = []
   if (!file) {
@@ -337,6 +339,7 @@ async function selectPolicyFile(file: File | null) {
 }
 
 function updatePolicy(draft: Policy) {
+  policyEdits += 1
   trialAnalysisId.value = null
   policy.value = draft
   void validateDraft(draft)
@@ -463,6 +466,7 @@ async function trialRun() {
   if (trialBusy.value || !run || !draft || policyErrors.value.length || working.value || postgresCapturePhase.value) return
   trialBusy.value = true
   trialAnalysisId.value = null
+  const edits = policyEdits
   adviceAutoFor.value = null
   queueBusy.value = false
   errorMessage.value = ''
@@ -475,7 +479,8 @@ async function trialRun() {
     job.value = accepted
     await pollJob(revision)
     // Итог только у завершённого пробного задания: при FAILED, CANCELLED или потере связи `result` ещё прежний.
-    if (revision === analysisRevision && job.value?.state === 'COMPLETE' && job.value.analysis_id && job.value.analysis_id === selectedAnalysisId.value && result.value) {
+    // Правка черновика во время проверки: итог относится к прежней политике и не показывается.
+    if (revision === analysisRevision && edits === policyEdits && job.value?.state === 'COMPLETE' && job.value.analysis_id && job.value.analysis_id === selectedAnalysisId.value && result.value) {
       trialAnalysisId.value = job.value.analysis_id
     }
   } catch (failure) {
@@ -778,7 +783,7 @@ function focusPolicy() {
           >
             <button
               type="button"
-              :disabled="working || (uploadProgress > 0 && !job)"
+              :disabled="working || (uploadProgress > 0 && !job) || trialBusy"
               :aria-pressed="currentRun?.run_id === run.run_id"
               @click="selectRun(run)"
             >
@@ -817,7 +822,7 @@ function focusPolicy() {
           >
             <button
               type="button"
-              :disabled="working || (uploadProgress > 0 && !job)"
+              :disabled="working || (uploadProgress > 0 && !job) || trialBusy"
               :title="analysis.analysis_id"
               :aria-pressed="selectedAnalysisId === analysis.analysis_id"
               @click="selectAnalysis(analysis)"
@@ -950,7 +955,7 @@ function focusPolicy() {
             :policy="policy"
             :policy-status="policyStatus"
             :policy-errors="policyErrors"
-            :busy="working || (uploadProgress > 0 && !job) || !!postgresCapturePhase"
+            :busy="working || (uploadProgress > 0 && !job) || !!postgresCapturePhase || trialBusy"
             :ai-consent="shellNew ? aiConsent : undefined"
             @input="selectInput"
             @resources="selectResources"

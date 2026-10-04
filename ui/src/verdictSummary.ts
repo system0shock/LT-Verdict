@@ -48,7 +48,7 @@ export interface VerdictSummary {
 export const MAX_LINES = 3
 export const MAX_SUBJECTS = 5
 
-const METRIC_LABELS: Record<string, string> = {
+export const METRIC_LABELS: Record<string, string> = {
   response_time_p95_ms: 'p95 отклика',
   response_time_p99_ms: 'p99 отклика',
   error_rate_ratio: 'доля ошибок',
@@ -78,7 +78,7 @@ function ratioValue(value: number | ExactRatio | undefined): number | null {
   return null
 }
 
-function valueText(metric: string, value: number | ExactRatio | undefined, digits = 2): string {
+export function valueText(metric: string, value: number | ExactRatio | undefined, digits = 2): string {
   const number = ratioValue(value)
   if (number === null) return 'нет данных'
   const format = (amount: number) => new Intl.NumberFormat('ru-RU', { maximumFractionDigits: digits }).format(amount)
@@ -87,7 +87,7 @@ function valueText(metric: string, value: number | ExactRatio | undefined, digit
   return `${format(number)} мс`
 }
 
-function scopeLabel(scope: MetricSummaryEvidence['scope'] | undefined): string {
+export function scopeLabel(scope: MetricSummaryEvidence['scope'] | undefined): string {
   if (!scope) return 'область не указана'
   if (scope.kind === 'overall') return 'весь прогон'
   return [...(scope.group_path ?? []), scope.label].join(' / ')

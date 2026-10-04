@@ -294,6 +294,7 @@ function updateRange(name: 'update:range-start' | 'update:range-end', event: Eve
 <template>
   <section
     id="summary-metrics"
+    tabindex="-1"
     aria-labelledby="summary-metrics-title"
   >
     <div class="section-heading">

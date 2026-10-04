@@ -2,11 +2,13 @@
 import { computed, onUnmounted, ref, watch } from 'vue'
 import { ApiError, cancelAdviceJob, getAdvice, getAdviceJob, startAdvice } from './api'
 import { ADVICE_LABELS } from './shell/labels.advice'
-import { apiFailureView, jobView, provenanceLines } from './shell/advice'
-import type { AdviceDocument, AdviceJob, AnalysisReference } from './types'
+import { apiFailureView, evidenceRef, jobView, provenanceLines } from './shell/advice'
+import type { AttentionTarget } from './shell/overview'
+import type { AdviceDocument, AdviceJob, AnalysisReference, AnalysisResult } from './types'
 
-const props = defineProps<{ selection: AnalysisReference; autoStart?: boolean }>()
-const emit = defineEmits<{ 'auto-started': [] }>()
+// linkable: ссылки на строки evidence есть только в новой оболочке (вкладка «Таблицы»).
+const props = defineProps<{ selection: AnalysisReference; autoStart?: boolean; result?: AnalysisResult | null; linkable?: boolean }>()
+const emit = defineEmits<{ 'auto-started': []; navigate: [target: AttentionTarget] }>()
 const advice = ref<AdviceDocument | null>(null)
 const job = ref<AdviceJob | null>(null)
 const sending = ref(false)
@@ -17,6 +19,7 @@ const provenance = computed(() => (advice.value ? provenanceLines(advice.value) 
 const jobInfo = computed(() => (job.value ? jobView(job.value) : null))
 const errorInfo = computed(() => (errorCode.value && error.value ? apiFailureView(errorCode.value, error.value) : null))
 const busy = computed(() => sending.value || job.value?.state === 'QUEUED' || job.value?.state === 'PROCESSING')
+const grounds = (references: string[]) => references.map((id) => ({ id, ...evidenceRef(props.result, id) }))
 let revision = 0
 let timer: ReturnType<typeof setTimeout> | undefined
 
@@ -207,10 +210,21 @@ onUnmounted(() => { revision++; stopPolling() })
         <details>
           <summary>Основания</summary><ul>
             <li
-              v-for="reference in item.evidence_refs"
-              :key="reference"
+              v-for="ground in grounds(item.evidence_refs)"
+              :key="ground.id"
             >
-              <code>{{ reference }}</code>
+              <code>{{ ground.id }}</code>
+              <template v-if="ground.label !== ground.id">
+                &mdash; {{ ground.label }}
+              </template>
+              <button
+                v-if="props.linkable && ground.target"
+                type="button"
+                :aria-label="ADVICE_LABELS.evidence.openFor(ground.label)"
+                @click="emit('navigate', ground.target)"
+              >
+                {{ ADVICE_LABELS.evidence.open }}
+              </button>
             </li>
           </ul>
         </details>

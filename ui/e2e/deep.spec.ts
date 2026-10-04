@@ -1,13 +1,14 @@
 import AxeBuilder from '@axe-core/playwright'
 import { expect, test, type Page } from '@playwright/test'
 import { DEEP_LABELS, SHELL_LABELS, SHELL_TABS } from '../src/shell/labels'
+import { formatNumber } from '../src/shell/overview'
 
 const runId = 'deep-run'
 const analysisId = 'a'.repeat(64)
 const origin = 1_767_225_600_000
 const ids = ['queue', 'cpu', 'memory', 'disk', 'network', 'latency', 'spare']
 const overall = { id: 'overall', type: 'metric_summary', scope: { kind: 'overall' }, sample_count: 180, error_count: 0, error_rate_ratio: { numerator: 0, denominator: 180 }, throughput_rps: { numerator: 180000, denominator: 180000 }, latency_ms: { p50: 100, p95: 100, p99: 100, max: 100 } }
-type Options = { snapshot?: boolean; missingCatalog?: boolean; pointCount?: number; stepMs?: number; startMs?: number; ids?: string[]; catalogPage?: number; valuesPage?: number; invalid?: boolean; mode?: string; loadCount?: number; delayValues?: (call: number) => number; delayDeepBucket?: number; failValuesAt?: number; delayCatalogSecondPage?: number }
+type Options = { snapshot?: boolean; missingCatalog?: boolean; pointCount?: number; stepMs?: number; startMs?: number; ids?: string[]; catalogPage?: number; valuesPage?: number; invalid?: boolean; mode?: string; loadCount?: number; delayValues?: (call: number) => number; delayDeepBucket?: number; failValuesAt?: number; delayCatalogSecondPage?: number; passRule?: boolean }
 
 function fixtureApi(page: Page, options: Options = {}) {
   const names = options.ids ?? ids
@@ -17,7 +18,8 @@ function fixtureApi(page: Page, options: Options = {}) {
   const calls: URL[] = []
   let valuesCalls = 0
   const evidence = [overall, ...(options.snapshot === false ? [] : [{ id: 'binding', type: 'resource_binding', run_from_epoch_ms: origin }]),
-    ...[0, 1].map((n) => ({ id: `rule-${n}`, type: 'resource_policy_check', window_id: `w${n}`, rule_id: 'cpu-high', series_id: 'cpu', unit: '%', operator: 'gt', threshold: '5', effect: 'sla', status: 'FAIL', reason: null }))]
+    ...[0, 1].map((n) => ({ id: `rule-${n}`, type: 'resource_policy_check', window_id: `w${n}`, rule_id: 'cpu-high', series_id: 'cpu', unit: '%', operator: 'gt', threshold: '5', effect: 'sla', status: 'FAIL', reason: null })),
+    ...(options.passRule ? [{ id: 'queue-rule', type: 'resource_policy_check', window_id: 'w0', rule_id: 'queue-ok', series_id: 'queue', unit: '%', operator: 'gt', threshold: '5000', effect: 'sla', status: 'PASS', reason: null }] : [])]
   const result = { schema_version: 'analysis-result.v1', run_id: runId, analysis_mode: options.mode ?? 'standard', run_validity: options.invalid ? 'INVALID' : 'VALID', policy_verdict: 'FAIL', analysis_coverage: { status: 'COMPLETE', reasons: [] }, findings: [], evidence }
   const entry = (id: string) => ({ id, metric: `metric-${id}`, unit: '%', entity: 'node', role: 'system', aggregation: 'interval_mean', reducer: 'mean', labels: {}, observed_cells: id === 'spare' ? 0 : count })
   const sourceValue = (id: string, index: number) => index === 2 || index === 6 ? null : names.indexOf(id) * 1000 + index + 1
@@ -118,6 +120,23 @@ test('failure-first selection, six-series cap, filtering and thresholds', async 
   await page.getByTestId('deep-series-filter').fill('spa')
   await expect(page.getByTestId('deep-series-spare')).toBeVisible()
   await expect(page.getByTestId('deep-series-cpu')).toHaveCount(0)
+})
+
+test('only failed rule thresholds use violation text and color', async ({ page }) => {
+  fixtureApi(page, { passRule: true })
+  await openDeep(page)
+  const failedLabel = page.getByTestId('deep-threshold-label-cpu-high')
+  const passedLabel = page.getByTestId('deep-threshold-label-queue-ok')
+  const failedLine = page.getByTestId('deep-threshold-cpu-high')
+  const passedLine = page.getByTestId('deep-threshold-queue-ok')
+  await expect(failedLabel).toHaveAttribute('data-violated', 'true')
+  await expect(failedLabel).toHaveText(DEEP_LABELS.thresholdLabel('gt', formatNumber(5), '%', true))
+  await expect(passedLabel).toHaveAttribute('data-violated', 'false')
+  await expect(passedLabel).toHaveText(DEEP_LABELS.thresholdLabel('gt', formatNumber(5000), '%', false))
+  await expect(failedLine).toHaveAttribute('data-violated', 'true')
+  await expect(passedLine).toHaveAttribute('data-violated', 'false')
+  expect(await failedLabel.evaluate((element) => getComputedStyle(element).color)).not.toBe(await passedLabel.evaluate((element) => getComputedStyle(element).color))
+  expect(await failedLine.evaluate((element) => getComputedStyle(element).stroke)).not.toBe(await passedLine.evaluate((element) => getComputedStyle(element).stroke))
 })
 
 test('shared cursor reads every track and keyboard navigates stops', async ({ page }) => {

@@ -194,8 +194,8 @@ export const DEEP_LABELS = {
     max: 'максимум за интервал',
     min: 'минимум за интервал',
   },
-  thresholdLabel: (operator: 'gt' | 'lt', value: string, unit: string) =>
-    `${operator === 'gt' ? 'нарушение выше' : 'нарушение ниже'} ${value} ${unit}`,
+  thresholdLabel: (operator: 'gt' | 'lt', value: string, unit: string, violated: boolean) =>
+    `${violated ? 'нарушение' : 'порог правила:'} ${operator === 'gt' ? 'выше' : 'ниже'} ${value} ${unit}`,
 } as const
 
 // Отмена загрузки входного файла (JobStatus.vue): кнопка и сообщение после отмены.

@@ -4,7 +4,7 @@ import { formatNumber, loadSeries } from './overview'
 
 export interface SnapshotGrid { startMs: number; stepMs: number; pointCount: number }
 export interface DeepPoint { startMs: number; value: number | null; observed: number | null }
-export interface DeepThreshold { ruleId: string; operator: 'gt' | 'lt'; value: number }
+export interface DeepThreshold { ruleId: string; operator: 'gt' | 'lt'; value: number; violated: boolean }
 export interface DeepTrack {
   key: string
   label: string
@@ -102,7 +102,8 @@ export function thresholdsFor(result: AnalysisResult, seriesId: string): DeepThr
     const value = Number(item.threshold)
     if (!Number.isFinite(value)) continue
     seen.add(item.rule_id)
-    thresholds.push({ ruleId: item.rule_id, operator: item.operator, value })
+    const violated = result.evidence.some((candidate) => candidate.type === 'resource_policy_check' && candidate.series_id === seriesId && candidate.rule_id === item.rule_id && candidate.status === 'FAIL')
+    thresholds.push({ ruleId: item.rule_id, operator: item.operator, value, violated })
   }
   return thresholds
 }

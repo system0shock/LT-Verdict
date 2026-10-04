@@ -110,8 +110,7 @@ test('cancel racing with completion shows the COMPLETE status', async ({ page })
   await expect(panel.getByRole('status')).not.toContainText('CANCELLED')
 })
 
-test.fixme('cancel racing with completion loads the completed advice', async ({ page }) => {
-  // AdvicePanel.cancel() stores the COMPLETE job and stops polling without calling loadAdvice().
+test('cancel racing with completion loads the completed advice', async ({ page }) => {
   const panel = await cancelRacingWithCompletion(page)
   await expect(panel.getByRole('status')).toHaveText('COMPLETE')
   await expect(panel.getByText(summary)).toBeVisible()

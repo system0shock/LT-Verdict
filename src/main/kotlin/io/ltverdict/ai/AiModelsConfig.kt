@@ -127,6 +127,8 @@ internal fun loadAiModelsConfig(environment: Map<String, String>): AiModelsConfi
             Files.newInputStream(file).use { it.readNBytes(MAX_MODELS_FILE_BYTES + 1) }
         } catch (_: IOException) {
             return invalid("FILE_NOT_READABLE", "")
+        } catch (_: SecurityException) {
+            return invalid("FILE_NOT_READABLE", "")
         }
     val parsed = parseAiModelsConfig(bytes)
     return if (parsed is AiModelsConfigLoad.Loaded) rejectUntilModelSelection(parsed.config) ?: parsed else parsed
@@ -272,12 +274,23 @@ private fun invalid(
     pointer: String,
 ) = AiModelsConfigLoad.Invalid(code, pointer)
 
-/** Keeps only tokens of the closed key set and array indexes; any other token is a file supplied name. */
-private fun safePointer(pointer: String): String =
-    pointer
-        .split('/')
-        .drop(1)
-        .joinToString("") { token -> "/" + if (token in POINTER_TOKENS || token.all(Char::isDigit)) token else "*" }
+/**
+ * Keeps only tokens of the closed key set and, right after `models`, a short array index; any other token is a
+ * file supplied name and is masked.
+ */
+private fun safePointer(pointer: String): String {
+    var previous = ""
+    return pointer.split('/').drop(1).joinToString("") { token ->
+        val safe =
+            when {
+                token in POINTER_TOKENS -> token
+                previous == "models" && token.length <= 2 && token.all(Char::isDigit) -> token
+                else -> "*"
+            }
+        previous = safe
+        "/$safe"
+    }
+}
 
 private fun JsonObject.field(
     name: String,

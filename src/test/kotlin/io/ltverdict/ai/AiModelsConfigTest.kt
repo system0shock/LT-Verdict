@@ -217,6 +217,14 @@ class AiModelsConfigTest {
         assertFalse(invalid.pointer.contains("sk-live"))
         assertFalse(invalid.pointer.contains("inner-secret"))
 
+        val numeric = assertInstanceOf(AiModelsConfigLoad.Invalid::class.java, parse("""{"123456":[1,]}"""))
+        assertEquals("MALFORMED_JSON", numeric.code)
+        assertFalse(numeric.pointer.contains("123456"), numeric.pointer)
+
+        val modelIndex =
+            assertInstanceOf(AiModelsConfigLoad.Invalid::class.java, parse(config(models = """[{"id":"a","label":"A","id":"b"}]""")))
+        assertEquals("/models/0", modelIndex.pointer)
+
         val nested = parse("""{"schema_version":"ai-models.v1","sk-live-123":{"a":1,"a":2}}""")
         val nestedInvalid = assertInstanceOf(AiModelsConfigLoad.Invalid::class.java, nested)
         assertFalse(nestedInvalid.pointer.contains("sk-live"))

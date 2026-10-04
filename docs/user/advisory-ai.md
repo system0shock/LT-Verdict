@@ -152,7 +152,7 @@ $env:LT_VERDICT_AI_MODELS_FILE = 'C:\lt-verdict-config\ai-models.json'
 | `endpoint` | необязательно; без него действует встроенный endpoint ModelStudio и его подпись |
 | `endpoint.url` | адрес chat completions: `https` (`http` только при `allow_insecure_http: true`), непустой host, без userinfo, query и fragment, только печатный ASCII, не более 512 байт |
 | `endpoint.label` | необязательная подпись назначения для интерфейса; без неё подписи нет |
-| `endpoint.allow_insecure_http` | необязательно, по умолчанию `false`; при `true` credential уходит по сети открытым текстом, включайте только для внутренней сети |
+| `endpoint.allow_insecure_http` | необязательно, по умолчанию `false`; при `true` допускается адрес `http`, а по `http` credential идёт по сети открытым текстом: включайте только для внутренней сети (до среза CM4 такой адрес всё равно отвергается, см. ниже) |
 
 Закрытый формат: неизвестные ключи на любом уровне (в том числе `api_key` и
 `measured`) и повторяющиеся имена свойств отвергаются, размер файла не более

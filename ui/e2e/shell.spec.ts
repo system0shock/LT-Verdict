@@ -1,6 +1,7 @@
 import AxeBuilder from '@axe-core/playwright'
 import { expect, test, type Page } from '@playwright/test'
 import { SHELL_DEFAULT_TAB, SHELL_LABELS, SHELL_TABS } from '../src/shell/labels'
+import { RULES_LABELS } from '../src/shell/labels.rules'
 
 const reference = { run_id: 'shell-run', analysis_id: 'a'.repeat(64) }
 const run = { ...reference, source_type: 'jmeter', sha256: 'b'.repeat(64), size_bytes: 100, original_filename: 'shell.jtl' }
@@ -81,7 +82,6 @@ test('the new interface exposes six tabs, New analysis first and selected, with 
   await expect(panel).toHaveAttribute('aria-labelledby', 'shell-tab-setup')
   await expect(tabByKey(page, 'setup')).toHaveAttribute('aria-controls', await panel.getAttribute('id') ?? '')
   await expect(tablist.getByText(SHELL_LABELS.pendingBadge)).toHaveCount(SHELL_TABS.filter((tab) => tab.pending).length)
-  await expect(tabByKey(page, 'rules')).toContainText(SHELL_LABELS.pendingBadge)
 })
 
 test('arrow keys, Home and End move between tabs with a roving tabindex', async ({ page }) => {
@@ -140,13 +140,12 @@ test('tabs show the existing panels and never fake data', async ({ page }) => {
   await expect(page.locator('#run-setup')).toBeHidden()
 
   await tabByKey(page, 'rules').click()
-  await expect(page.getByRole('heading', { name: SHELL_LABELS.rulesPendingTitle })).toBeVisible()
-  await expect(page.getByText(SHELL_LABELS.rulesPendingText)).toBeVisible()
+  await expect(page.getByRole('heading', { name: RULES_LABELS.title, exact: true })).toBeVisible()
   await expect(page.locator('#run-setup')).toBeHidden()
 
   await tabByKey(page, 'compare').click()
   await expect(page.locator('#baseline-panel')).toBeVisible()
-  await expect(page.getByRole('heading', { name: SHELL_LABELS.rulesPendingTitle })).toBeHidden()
+  await expect(page.getByRole('heading', { name: RULES_LABELS.title, exact: true })).toBeHidden()
 })
 
 test('choosing a saved analysis opens the overview and every tab keeps its own content', async ({ page }) => {

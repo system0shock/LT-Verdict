@@ -10,6 +10,7 @@ import JobStatusView from './JobStatus.vue'
 import RunSetup from './RunSetup.vue'
 import VerdictCard from './VerdictCard.vue'
 import NewAnalysisPanel from './shell/NewAnalysisPanel.vue'
+import RulesPanel from './shell/RulesPanel.vue'
 import OverviewPanel from './shell/OverviewPanel.vue'
 import RuleChecksTable from './shell/RuleChecksTable.vue'
 import TransactionsTable from './shell/TransactionsTable.vue'
@@ -914,6 +915,7 @@ function focusPolicy() {
             @source-max-idle-gap="sourceMaxIdleGap = $event"
             @policy-file="selectPolicyFile"
             @update-policy="updatePolicy"
+            @open-rules="activeTab = 'rules'"
             @ai-consent="aiConsent = $event"
             @analyze="analyze"
           />
@@ -1085,17 +1087,18 @@ function focusPolicy() {
               Next bucket page
             </button>
           </p>
-          <section
-            v-if="shellNew && activeTab === 'rules'"
-            class="panel"
-            lang="ru"
-            aria-labelledby="shell-rules-title"
-          >
-            <h2 id="shell-rules-title">
-              {{ SHELL_LABELS.rulesPendingTitle }}
-            </h2>
-            <p>{{ SHELL_LABELS.rulesPendingText }}</p>
-          </section>
+          <RulesPanel
+            v-if="shellNew"
+            v-show="shownIn('rules')"
+            :policy="policy"
+            :policy-status="policyStatus"
+            :policy-errors="policyErrors"
+            :busy="working || (uploadProgress > 0 && !job) || !!postgresCapturePhase"
+            :result="result"
+            :run-name="currentRun?.original_filename ?? ''"
+            @policy-file="selectPolicyFile"
+            @update-policy="updatePolicy"
+          />
         </ShellPanel>
       </main>
     </div>

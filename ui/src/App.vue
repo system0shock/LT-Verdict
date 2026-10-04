@@ -12,6 +12,7 @@ import VerdictCard from './VerdictCard.vue'
 import NewAnalysisPanel from './shell/NewAnalysisPanel.vue'
 import RulesPanel from './shell/RulesPanel.vue'
 import OverviewPanel from './shell/OverviewPanel.vue'
+import DeepAnalysisPanel from './shell/DeepAnalysisPanel.vue'
 import RuleChecksTable from './shell/RuleChecksTable.vue'
 import TransactionsTable from './shell/TransactionsTable.vue'
 import ShellPanel from './shell/ShellPanel.vue'
@@ -859,8 +860,24 @@ function focusPolicy() {
             @navigate="jumpTo"
           />
 
+          <DeepAnalysisPanel
+            v-if="shellNew && result && selectedAnalysisId && shownIn('deep')"
+            :key="result.run_id + ':' + selectedAnalysisId"
+            :result="result"
+            :run-id="result.run_id"
+            :analysis-id="selectedAnalysisId"
+          />
+
           <p
             v-if="shellNew && shownIn('overview') && !result"
+            class="notice notice-info"
+            lang="ru"
+          >
+            {{ SHELL_LABELS.overviewEmpty }}
+          </p>
+
+          <p
+            v-if="shellNew && shownIn('deep') && !result"
             class="notice notice-info"
             lang="ru"
           >

@@ -242,3 +242,18 @@ Superpowers определяет, когда задача допускает и�
 - Срочность не отменяет TDD, проверку, документацию или пользовательское
   разрешение на операции с удалённым репозиторием.
 - Исправления регламента проходят тот же PR-процесс, что и остальные изменения.
+
+## Локальные тяжёлые прогоны
+
+Helper `.worktrees/_tools/ltv-slot.ps1` находится вне Git; подключайте его через dot-source.
+`Invoke-LtvSlot { ... }` допускает до трёх одновременных прогонов: targeted tests,
+lint, typecheck и Vite mock e2e.
+`Invoke-LtvE2E { ... }` занимает один slot, выбирает свободный порт 18480..18499
+под именованным mutex для каждого порта и задаёт `LTV_E2E_PORT`.
+Так до трёх live e2e идут параллельно из разных worktree.
+`Invoke-LtvExclusive { ... }` работает один: только полный `gradlew check`
+и чувствительные ко времени performance tests.
+`LTV_E2E_PORT` читают все Playwright configs, `start-e2e-server.mjs` и `E2eServerMain.kt`.
+Для live e2e умолчание — 18473 (порт CI); каждый прогон имеет свой временный data dir.
+Выбор old shell для текущего порта создаёт `ui/e2e/e2e-env.ts`.
+Из корня worktree: `Invoke-LtvE2E { npm --prefix ui run e2e }`.

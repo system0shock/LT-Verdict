@@ -5,6 +5,13 @@ import { resolve } from 'node:path'
 import { spawn } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
 
+const rawPort = process.env.LTV_E2E_PORT
+const port = rawPort === undefined || rawPort === '' ? 18473 : Number(rawPort)
+if ((rawPort !== undefined && rawPort !== '' && !/^[0-9]+$/.test(rawPort)) ||
+  !Number.isInteger(port) || port < 1024 || port > 65535) {
+  throw new Error(`Invalid LTV_E2E_PORT: ${rawPort}`)
+}
+
 const root = resolve(fileURLToPath(new URL('../..', import.meta.url)))
 const tempPrefix = resolve(os.tmpdir(), 'lt-verdict-e2e-')
 const dataDir = await mkdtemp(tempPrefix)
@@ -31,7 +38,7 @@ process.on('SIGTERM', () => stop('SIGTERM'))
 const ready = () => new Promise((resolveReady, rejectReady) => {
   const deadline = Date.now() + 120_000
   const poll = () => {
-    const request = http.get('http://127.0.0.1:18473/api/bootstrap', (response) => {
+    const request = http.get(`http://127.0.0.1:${port}/api/bootstrap`, (response) => {
       response.resume()
       if (response.statusCode === 200) resolveReady()
       else retry()

@@ -124,6 +124,8 @@ private val PACKS =
                 PackCapability("pod_imbalance", setOf("openshift_pod_imbalance")),
                 PackCapability("network", setOf("openshift_network")),
                 PackCapability("filesystem", setOf("openshift_filesystem")),
+                PackCapability("cpu_limit_ratio", setOf("openshift_container_cpu_limit_ratio")),
+                PackCapability("memory_limit_ratio", setOf("openshift_container_memory_limit_ratio")),
             ),
         ),
     )

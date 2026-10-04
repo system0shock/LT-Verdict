@@ -45,7 +45,12 @@ class PolicyTest {
     fun `defaults and rule minimum parse and an old file keeps its shape`() {
         val old = validatePolicy(ByteArrayInputStream(validPolicy().encodeToByteArray())) as PolicyValidation.Valid
         assertEquals(null, old.policy.defaults)
-        assertEquals(null, old.policy.rules.single().minSamples)
+        assertEquals(
+            null,
+            old.policy.rules
+                .single()
+                .minSamples,
+        )
 
         val source =
             """{"schema_version":"policy.v1","policy_id":"p","defaults":{"sample_floor":10,"min_samples":50},"rules":[""" +
@@ -53,7 +58,12 @@ class PolicyTest {
         val valid = validatePolicy(ByteArrayInputStream(source.encodeToByteArray())) as PolicyValidation.Valid
 
         assertEquals(PolicyDefaultsV1(sampleFloor = 10, minSamples = 50), valid.policy.defaults)
-        assertEquals(200L, valid.policy.rules.single().minSamples)
+        assertEquals(
+            200L,
+            valid.policy.rules
+                .single()
+                .minSamples,
+        )
     }
 
     @Test
@@ -64,7 +74,11 @@ class PolicyTest {
                 "MIN_SAMPLES_OUT_OF_RANGE",
             Case("fraction", policyJson(defaults = """{"sample_floor":1.5}"""), "/defaults/sample_floor") to "INVALID_TYPE",
             Case("unknown defaults field", policyJson(defaults = """{"x":1}"""), "/defaults/x") to "UNKNOWN_FIELD",
-            Case("minimum below explicit floor", policyJson(defaults = """{"sample_floor":50,"min_samples":20}"""), "/defaults/min_samples") to
+            Case(
+                "minimum below explicit floor",
+                policyJson(defaults = """{"sample_floor":50,"min_samples":20}"""),
+                "/defaults/min_samples",
+            ) to
                 "MIN_SAMPLES_BELOW_FLOOR",
             Case("floor above the default minimum", policyJson(defaults = """{"sample_floor":150}"""), "/defaults/sample_floor") to
                 "MIN_SAMPLES_BELOW_FLOOR",

@@ -565,18 +565,34 @@ class CommandLineTest {
         assertEquals("PASS", pass.getValue("policy_verdict").jsonPrimitive.content)
         assertEquals(
             listOf("SMALL_SAMPLE"),
-            pass.getValue("analysis_coverage").jsonObject.getValue("reasons").jsonArray.map { it.jsonPrimitive.content },
+            pass
+                .getValue("analysis_coverage")
+                .jsonObject
+                .getValue("reasons")
+                .jsonArray
+                .map { it.jsonPrimitive.content },
         )
         assertEquals(
             "SMALL_SAMPLE",
-            pass.getValue("evidence").jsonArray
+            pass
+                .getValue("evidence")
+                .jsonArray
                 .single { it.jsonObject["type"]?.jsonPrimitive?.content == "policy_check" }
-                .jsonObject.getValue("sample_mode").jsonPrimitive.content,
+                .jsonObject
+                .getValue("sample_mode")
+                .jsonPrimitive.content,
         )
         assertEquals(2, failCode)
         assertEquals("FAIL", fail.getValue("policy_verdict").jsonPrimitive.content)
         assertEquals(0, fullCode)
-        assertEquals("COMPLETE", full.getValue("analysis_coverage").jsonObject.getValue("status").jsonPrimitive.content)
+        assertEquals(
+            "COMPLETE",
+            full
+                .getValue("analysis_coverage")
+                .jsonObject
+                .getValue("status")
+                .jsonPrimitive.content,
+        )
     }
 
     @Test

@@ -1,0 +1,98 @@
+// Русские строки вкладки «Правила» новой оболочки (срез U4a): шаблоны политики, редактор порогов,
+// правила по каждой транзакции. Компоненты и адаптеры остаются ASCII и ссылаются на эти строки по ключам.
+// Плоский объект также служит подписями PolicyEditor (поля legend ... download).
+
+const METRIC_NAMES: Record<string, string> = {
+  response_time_p95_ms: 'p95 отклика, мс',
+  response_time_p99_ms: 'p99 отклика, мс',
+  error_rate_ratio: 'доля ошибок',
+  throughput_rps: 'пропускная способность, RPS',
+}
+
+const OPERATOR_NAMES: Record<string, string> = {
+  lte: 'не более',
+  gte: 'не менее',
+}
+
+const TEMPLATE_NAMES: Record<string, string> = {
+  'api-basic': 'Базовый API (SLA)',
+  'api-strict': 'Строгий API',
+  'api-throughput': 'API с пропускной способностью',
+}
+
+const TEMPLATE_NOTES: Record<string, string> = {
+  'api-basic': 'SLA владельца: p95 не более 1000 мс (1 с) и доля ошибок не более 0.05 (5 %) в целом. Чтобы то же действовало для каждого эндпоинта, нажмите «Правила по каждой транзакции» после первого анализа.',
+  'api-strict': 'p95 не более 500 мс, p99 не более 1500 мс, доля ошибок не более 0.001 (0.1 %). Стартовые значения, не нормативы: поправьте под ваш SLA.',
+  'api-throughput': 'p95 не более 1000 мс, доля ошибок не более 0.01 (1 %), пропускная способность не менее 100 RPS. Стартовые значения, не нормативы: поправьте под ваш SLA.',
+}
+
+const LIST_LIMIT = 20
+
+export const RULES_LABELS = {
+  title: 'Правила',
+  lead: 'Политика определяет, что считать нарушением. Выберите шаблон или загрузите файл и поправьте пороги: правки сразу проверяются сервером и применяются к следующему запуску на вкладке «Новый анализ». Вердикт уже выполненных анализов не меняется. Выбор шаблона заменяет текущий черновик.',
+  busyNote: 'Идёт анализ: выбор шаблона и файла станет доступен после его завершения.',
+  templatesTitle: 'Шаблоны политики',
+  templateName: (id: string) => TEMPLATE_NAMES[id] ?? id,
+  templateNote: (id: string) => TEMPLATE_NOTES[id] ?? '',
+  fileTitle: 'Файл политики',
+  fileLabel: 'Загрузить файл политики',
+  noPolicy: 'Политика не выбрана. Выберите шаблон или загрузите файл. Без правил вердикт не выдаётся: результат получит статус NO_POLICY.',
+  openRules: 'Править правила',
+  summary: (id: string, rules: number, transactions: number) =>
+    `Политика ${id}: правил ${rules}, из них по отдельным транзакциям ${transactions}.`,
+
+  // Подписи редактора (PolicyEditor)
+  legend: 'Черновик политики',
+  policyId: 'Идентификатор политики',
+  rule: (index: number) => `Правило ${index}`,
+  ruleId: 'Идентификатор правила',
+  metricField: 'Метрика',
+  operatorField: 'Условие',
+  threshold: 'Порог',
+  scopeField: 'Область',
+  scopeOverall: 'Весь прогон',
+  scopeTransaction: 'Транзакция',
+  transactionName: 'Имя транзакции',
+  removeRule: 'Удалить правило',
+  addRule: 'Добавить правило',
+  download: 'Скачать политику',
+  metricName: (code: string) => METRIC_NAMES[code] ?? code,
+  operatorName: (code: string) => OPERATOR_NAMES[code] ?? code,
+  errorLang: 'en',
+
+  // Единицы порога
+  unitMs: 'мс',
+  unitRatio: 'доля',
+  unitRps: 'RPS',
+  hintMs: 'Единица: миллисекунды (мс).',
+  hintRatio: 'Единица: доля от 0 до 1, не проценты.',
+  hintRps: 'Единица: запросов в секунду (RPS).',
+  preview: (percent: string) => `= ${percent}`,
+
+  // Правила по каждой транзакции
+  perTxTitle: 'Правила по каждой транзакции',
+  perTxLead: 'В политике нет правила «для каждой транзакции». Кнопка копирует правила «весь прогон» (p95, p99 и доля ошибок; пропускная способность не копируется) на транзакции открытого прогона.',
+  perTxScopeNote: 'Правила действуют только для набора транзакций этого прогона. Для другого прогона нажмите кнопку заново: имя, которого там нет, даст TRANSACTION_NOT_FOUND и NO_VERDICT, а новая транзакция останется только под правилом «весь прогон».',
+  perTxButton: 'Правила по каждой транзакции',
+  perTxNoResult: 'Список транзакций появится после первого анализа.',
+  perTxNoPolicy: 'Сначала выберите шаблон или загрузите файл политики.',
+  perTxDone: (added: number, runName: string) =>
+    `Добавлено правил: ${added}. Они построены по транзакциям прогона ${runName}; для другого прогона повторите разворот.`,
+  perTxNothingNew: 'Новых правил нет: все подходящие транзакции уже покрыты.',
+  perTxSkippedSmall: (floor: number, list: string) =>
+    `Пропущены транзакции с числом наблюдений меньше ${floor} (правило на них дало бы INSUFFICIENT_SAMPLES и NO_VERDICT всего прогона): ${list}.`,
+  perTxSkippedAmbiguous: (list: string) =>
+    `Пропущены транзакции с одним именем в разных путях или типах (правило дало бы AMBIGUOUS_TRANSACTION и NO_VERDICT): ${list}. Они покрыты только правилом «весь прогон».`,
+  perTxRefused: {
+    NO_TRANSACTIONS: 'Разворот отклонён: в результате нет транзакций.',
+    NO_BASE_RULES: 'Разворот отклонён: в политике нет правил «весь прогон» по времени отклика или ошибкам. Выберите шаблон или добавьте такое правило.',
+    TOO_MANY_RULES: 'Разворот отклонён целиком: получилось бы больше 256 правил. Политика не изменена. Удалите лишние правила или задайте правила вручную.',
+    BASE_ID_TOO_LONG: 'Разворот отклонён: идентификатор правила «весь прогон» длиннее 121 байта, для суффикса номера транзакции нет места. Сократите идентификатор.',
+  } as Record<string, string>,
+  perTxList: (items: ReadonlyArray<{ label: string; sampleCount: number }>, withCounts: boolean) => {
+    const shown = items.slice(0, LIST_LIMIT).map((item) => (withCounts ? `${item.label} (${item.sampleCount})` : item.label)).join(', ')
+    const rest = items.length - LIST_LIMIT
+    return rest > 0 ? `${shown} и ещё ${rest}` : shown
+  },
+}

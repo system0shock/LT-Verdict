@@ -85,6 +85,11 @@ for (const example of manifest.policy_examples) {
   }
 }
 
+for (const name of ['api-basic', 'api-strict', 'api-throughput']) {
+  const path = `ui/src/shell/policy-templates/${name}.json`
+  if (!validate(await readJson(path))) throw new Error(`${path}: ${JSON.stringify(validate.errors)}`)
+}
+
 const resourceSchema = await readJson('docs/contracts/resources/v1/resource-snapshot.schema.json')
 const validateResource = new Ajv2020({ strict: false }).compile(resourceSchema)
 const resourceExample = await readJson('docs/contracts/resources/v1/examples/valid/basic.json')

@@ -1,0 +1,9 @@
+{
+  "schema_version": "policy.v1",
+  "policy_id": "template-api-strict",
+  "rules": [
+    { "id": "overall-p95", "metric": "response_time_p95_ms", "operator": "lte", "threshold": 500, "scope": { "kind": "overall" } },
+    { "id": "overall-p99", "metric": "response_time_p99_ms", "operator": "lte", "threshold": 1500, "scope": { "kind": "overall" } },
+    { "id": "overall-errors", "metric": "error_rate_ratio", "operator": "lte", "threshold": 0.001, "scope": { "kind": "overall" } }
+  ]
+}

@@ -11,7 +11,8 @@
   "links": [
     {"type": "link", "title": "Scenario 1: SLA fail", "url": "/d/ltv-demo/lt-verdict-demo-stand?from=1790841480000&to=1790842860000"},
     {"type": "link", "title": "Scenario 2: capacity", "url": "/d/ltv-demo/lt-verdict-demo-stand?from=1790845080000&to=1790847360000"},
-    {"type": "link", "title": "Scenario 3: saturation", "url": "/d/ltv-demo/lt-verdict-demo-stand?from=1790848680000&to=1790850180000"}
+    {"type": "link", "title": "Scenario 3: saturation", "url": "/d/ltv-demo/lt-verdict-demo-stand?from=1790848680000&to=1790850180000"},
+    {"type": "link", "title": "Scenario 4: soak 4h (only with docker-compose.soak.yml)", "url": "/d/ltv-demo/lt-verdict-demo-stand?from=1790855880000&to=1790870760000"}
   ],
   "panels": [
     {

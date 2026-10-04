@@ -61,6 +61,8 @@ const legacySetupMessages: SetupMessages = {
   explicitNotInteger: 'Source times and step must be safe integer milliseconds.',
   explicitOrder: 'Source end must be after a non-negative start.',
   explicitDivisible: 'Source range must be divisible by its step.',
+  explicitTooManyCells: 'Source range may hold at most 100000 cells (range divided by step): increase the step or shorten the period.',
+  diagnosticNeedsSnapshot: 'Correlation plan requires a matching resource snapshot.',
   capacityNeedsSnapshot: 'Capacity plan requires a matching resource snapshot.',
   trendNeedsSnapshot: 'Trend plan requires a matching resource snapshot.',
   policyValidating: 'Validating policy…',
@@ -69,6 +71,7 @@ const legacySetupMessages: SetupMessages = {
   policyValid: (id) => `Policy is valid — ${id}`,
 }
 const setupMsg: SetupMessages = shellNew ? SETUP_MESSAGES : legacySetupMessages
+const MAX_SOURCE_CELLS = 100_000
 const POLL_FAST_WINDOW_MS = 10_000
 const POLL_FAST_DELAY_MS = 500
 const POLL_NORMAL_DELAY_MS = 1_000
@@ -98,6 +101,8 @@ const sourceEnd = ref('')
 const sourceStep = ref('')
 const sourceMargin = ref('0')
 const sourceMaxIdleGap = ref('60000')
+const aiConsent = ref(false)
+const adviceAutoFor = ref<string | null>(null)
 const policy = ref<Policy | null>(null)
 const policyStatus = ref('')
 const policyErrors = ref<PolicyError[]>([])
@@ -127,6 +132,7 @@ const rangeEnd = ref('')
 let analysisRevision = 0
 let bucketRevision = 0
 let policyRevision = 0
+let adviceRevision = 0
 let uploadAbort: AbortController | null = null
 
 const verdictSummary = computed(() => (result.value ? summarizeVerdict(result.value) : null))
@@ -163,6 +169,7 @@ const sourceRequestState = computed<{ request: SourceRequest | null; error: stri
   if (start < 0 || end <= start) return { request: null, error: setupMsg.explicitOrder }
   if (!wholeSeconds(step)) return { request: null, error: setupMsg.stepWholeSeconds }
   if ((end - start) % step !== 0) return { request: null, error: setupMsg.explicitDivisible }
+  if ((end - start) / step > MAX_SOURCE_CELLS) return { request: null, error: setupMsg.explicitTooManyCells }
   const request: SourceRequest = { schema_version: 'source-request.v3', profile_ids: profileIds, window: { origin: 'explicit', start_epoch_ms: start, end_epoch_ms: end, step_ms: step } }
   return { request, error: '' }
 })
@@ -354,6 +361,10 @@ async function analyze() {
     errorMessage.value = sourceRequestState.value.error
     return
   }
+  if (diagnosticFile.value && !resourceFile.value) {
+    errorMessage.value = setupMsg.diagnosticNeedsSnapshot
+    return
+  }
   if (capacityFile.value && !resourceFile.value) {
     errorMessage.value = setupMsg.capacityNeedsSnapshot
     return
@@ -363,6 +374,7 @@ async function analyze() {
     return
   }
   const revision = ++analysisRevision
+  adviceAutoFor.value = null
   queueBusy.value = false
   errorMessage.value = ''
   result.value = null
@@ -416,6 +428,9 @@ async function analyze() {
       capacityFile.value,
       trendFile.value,
     )
+    // Согласие на ИИ-разбор относится к этому запуску: запоминаем его и сбрасываем галку.
+    adviceRevision = aiConsent.value ? revision : 0
+    aiConsent.value = false
     uploadProgress.value = 100
     await pollJob(revision)
   } catch (failure) {
@@ -465,6 +480,7 @@ async function pollJob(revision: number) {
   selectedAnalysisId.value = job.value.analysis_id
   const loaded = await getResult(job.value.run_id, selectedAnalysisId.value)
   if (revision !== analysisRevision) return
+  if (adviceRevision === revision) adviceAutoFor.value = selectedAnalysisId.value
   result.value = loaded
   completedAt.value = new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'medium' }).format(new Date())
   await refreshAnalyses(job.value.run_id)
@@ -544,6 +560,7 @@ async function refreshSources() {
 
 async function selectRun(run: RunSummary) {
   const revision = ++analysisRevision
+  adviceAutoFor.value = null
   job.value = null
   uploadProgress.value = 0
   queueBusy.value = false
@@ -578,6 +595,7 @@ async function selectAnalysis(analysis: AnalysisSummary) {
   const runId = currentRun.value?.run_id
   if (!runId) return
   const revision = ++analysisRevision
+  adviceAutoFor.value = null
   job.value = null
   uploadProgress.value = 0
   queueBusy.value = false
@@ -869,6 +887,7 @@ function focusPolicy() {
             :policy-status="policyStatus"
             :policy-errors="policyErrors"
             :busy="working || (uploadProgress > 0 && !job) || !!postgresCapturePhase"
+            :ai-consent="shellNew ? aiConsent : undefined"
             @input="selectInput"
             @resources="selectResources"
             @diagnostics="selectDiagnostics"
@@ -889,6 +908,7 @@ function focusPolicy() {
             @source-max-idle-gap="sourceMaxIdleGap = $event"
             @policy-file="selectPolicyFile"
             @update-policy="updatePolicy"
+            @ai-consent="aiConsent = $event"
             @analyze="analyze"
           />
 
@@ -1017,6 +1037,8 @@ function focusPolicy() {
             v-if="selectedReference"
             v-show="shownIn('advice')"
             :selection="selectedReference"
+            :auto-start="adviceAutoFor !== null && adviceAutoFor === selectedAnalysisId"
+            @auto-started="adviceAutoFor = null"
           />
 
           <GrafanaPanel

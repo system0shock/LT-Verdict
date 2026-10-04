@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test'
 import { SETUP_LABELS } from '../src/shell/labels'
-import { buildReadiness, type ReadinessInput, type ReadinessKey } from '../src/shell/setup'
+import { buildReadiness, msToSeconds, secondsToMs, type ReadinessInput, type ReadinessKey } from '../src/shell/setup'
 
 // Чистая функция готовности вкладки «Новый анализ»: состояние формы на входе, условия запуска на выходе.
 const base: ReadinessInput = {
@@ -14,6 +14,7 @@ const base: ReadinessInput = {
   sourceRequestError: '',
   contextCount: 0,
   postgres: { pre: false, post: false, html: false },
+  aiConsent: false,
 }
 const build = (over: Partial<ReadinessInput>) => buildReadiness({ ...base, ...over })
 const item = (readiness: ReturnType<typeof build>, key: ReadinessKey) => readiness.items.find((entry) => entry.key === key)!
@@ -70,13 +71,19 @@ test('capacity and trend plans need a file snapshot, as the existing preflight r
   expect(item(withSnapshot, 'plans').detail).toBe(`${SETUP_LABELS.planNames.capacity}, ${SETUP_LABELS.planNames.trend}`)
 })
 
-test('a correlation plan without a snapshot only warns: the page has no such check today', () => {
+test('a correlation plan without a snapshot blocks the start like the server check does', () => {
   const risky = build({ plans: { diagnostic: true, capacity: false, trend: false } })
+  const all = build({ plans: { diagnostic: true, capacity: true, trend: true } })
+  const withSnapshot = build({ plans: { diagnostic: true, capacity: false, trend: false }, resourceName: 'snapshot.json' })
+  const online = build({ plans: { diagnostic: true, capacity: false, trend: false }, onlineProfileCount: 1 })
 
-  expect(risky.canStart).toBe(true)
-  expect(risky.blockers).toEqual([])
-  expect(item(risky, 'resources')).toMatchObject({ level: 'warn', detail: SETUP_LABELS.resourcesDiagnosticRisk })
-  expect(item(risky, 'resources').detail).toContain('DIAGNOSTIC_RESOURCE_REQUIRED')
+  expect(risky.canStart).toBe(false)
+  expect(risky.blockers).toEqual(['resources'])
+  expect(item(risky, 'resources')).toMatchObject({ level: 'block', detail: SETUP_LABELS.resourcesRequired(SETUP_LABELS.planNames.diagnostic) })
+  expect(item(all, 'resources').detail).toBe(SETUP_LABELS.resourcesRequired(`${SETUP_LABELS.planNames.diagnostic}, ${SETUP_LABELS.planNames.capacity}, ${SETUP_LABELS.planNames.trend}`))
+  expect(withSnapshot.canStart).toBe(true)
+  expect(item(withSnapshot, 'resources').level).toBe('ok')
+  expect(online.canStart).toBe(true)
 })
 
 test('without any plan an absent snapshot is just not chosen', () => {
@@ -117,4 +124,25 @@ test('contexts and PostgreSQL files are listed by what they are', () => {
     SETUP_LABELS.willPostgres(`${SETUP_LABELS.postgresNames.pre}, ${SETUP_LABELS.postgresNames.html}`),
   ])
   expect(item(build({}), 'postgres')).toMatchObject({ level: 'info', detail: SETUP_LABELS.postgresNoneItem })
+})
+
+test('the AI consent only adds a line to what will happen and never blocks the start', () => {
+  const asked = build({ aiConsent: true })
+
+  expect(asked.canStart).toBe(true)
+  expect(asked.will).toEqual([SETUP_LABELS.willNoVerdict, SETUP_LABELS.willAdvice])
+  expect(build({}).will).not.toContain(SETUP_LABELS.willAdvice)
+})
+
+test('source window values are shown in seconds and stored in milliseconds without float artifacts', () => {
+  expect(msToSeconds('')).toBe('')
+  expect(msToSeconds('1000')).toBe('1')
+  expect(msToSeconds('60000')).toBe('60')
+  expect(msToSeconds('1500')).toBe('1.5')
+  expect(secondsToMs('')).toBe('')
+  expect(secondsToMs('1')).toBe('1000')
+  expect(secondsToMs('60')).toBe('60000')
+  expect(secondsToMs('1.001')).toBe('1001')
+  expect(secondsToMs('1.1')).toBe('1100')
+  expect(secondsToMs('0')).toBe('0')
 })

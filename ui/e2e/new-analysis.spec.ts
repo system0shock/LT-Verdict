@@ -123,7 +123,7 @@ test('readiness follows the form and the start button follows readiness', async 
   await expect(readiness(page, 'input')).toHaveAttribute('data-level', 'block')
 })
 
-test('capacity and trend plans without a snapshot block the start before any request, a correlation plan only warns', async ({ page }) => {
+test('correlation, capacity and trend plans without a snapshot block the start before any request', async ({ page }) => {
   const calls = await openSetup(page)
   await page.locator('#input-file').setInputFiles(load)
 
@@ -144,9 +144,24 @@ test('capacity and trend plans without a snapshot block the start before any req
   await page.locator('#capacity-plan-file').setInputFiles([])
   await page.locator('#trend-plan-file').setInputFiles([])
   await page.locator('#correlation-plan-file').setInputFiles(json('correlation.json'))
+  await expect(start(page)).toBeDisabled()
+  await expect(readiness(page, 'resources')).toHaveAttribute('data-level', 'block')
+  await expect(readiness(page, 'resources')).toContainText(SETUP_LABELS.planNames.diagnostic)
+  await expect(page.locator('#readiness-status')).toContainText(SETUP_LABELS.startBlocked)
+  expect(calls.inputs).toBe(0)
+
+  await page.locator('#resource-snapshot-file').setInputFiles(json('snapshot.json'))
   await expect(start(page)).toBeEnabled()
-  await expect(readiness(page, 'resources')).toHaveAttribute('data-level', 'warn')
-  await expect(readiness(page, 'resources')).toContainText('DIAGNOSTIC_RESOURCE_REQUIRED')
+})
+
+test('the old form refuses a correlation plan without a snapshot before any upload, in English', async ({ page }) => {
+  const calls = await openSetup(page, '/')
+  await page.getByTestId('input-file').setInputFiles(load)
+  await page.getByTestId('correlation-plan-file').setInputFiles(json('correlation.json'))
+  await page.getByRole('button', { name: 'Analyze run', exact: true }).click()
+
+  await expect(page.getByRole('alert').filter({ hasText: 'Correlation plan requires a matching resource snapshot.' })).toBeVisible()
+  expect(calls.inputs).toBe(0)
 })
 
 test('an invalid policy draft blocks the start and a rejected policy file does not', async ({ page }) => {
@@ -227,9 +242,12 @@ test('online profiles lock the file inputs and send the same source request as t
       await expect(page.locator(`#${id}`), `${name} ${id}`).toBeDisabled()
     }
     await expect(page.locator('#source-window-origin')).toHaveValue('auto')
-    await page.locator('#source-step').fill('1000')
-    await page.locator('#source-margin').fill('2000')
-    await page.locator('#source-max-idle-gap').fill('60000')
+    // Новый экран принимает секунды, прежняя форма миллисекунды: на сервер уходит одно и то же.
+    const [step, margin, idle] = name === 'new' ? ['1', '2', '60'] : ['1000', '2000', '60000']
+    if (name === 'new') await expect(page.locator('#source-max-idle-gap')).toHaveValue('60')
+    await page.locator('#source-step').fill(step)
+    await page.locator('#source-margin').fill(margin)
+    await page.locator('#source-max-idle-gap').fill(idle)
     await page.getByRole('button', { name: label, exact: true }).click()
     await expect.poll(() => calls.jobs.length).toBe(1)
     expect(partNames(calls.jobs[0])).toEqual(['run_id', 'source_request:source-request.json'])
@@ -250,15 +268,15 @@ test('an explicit source window asks for a period and its errors are Russian her
   await expect(readiness(page, 'sources')).toHaveAttribute('data-level', 'block')
   await expect(readiness(page, 'sources')).toContainText(SETUP_MESSAGES.autoRequired)
   await expect(start(page)).toBeDisabled()
-  await page.locator('#source-step').fill('999')
+  await page.locator('#source-step').fill('61')
   await expect(page.getByTestId('source-request-error')).toHaveText(SETUP_MESSAGES.stepWholeSeconds)
   await page.locator('#source-window-origin').selectOption('explicit')
   await expect(page.locator('#source-start')).toBeVisible()
   await expect(page.locator('#source-end')).toBeVisible()
   await expect(page.locator('#source-margin')).toHaveCount(0)
-  await page.locator('#source-start').fill('1000')
-  await page.locator('#source-end').fill('4000')
-  await page.locator('#source-step').fill('1000')
+  await page.locator('#source-start').fill('1')
+  await page.locator('#source-end').fill('4')
+  await page.locator('#source-step').fill('1')
   await expect(page.getByTestId('source-request-error')).toHaveCount(0)
   await expect(start(page)).toBeEnabled()
 
@@ -266,6 +284,47 @@ test('an explicit source window asks for a period and its errors are Russian her
   await openSetup(page, '/')
   await page.locator('#source-profile').selectOption('prod-prometheus')
   await expect(page.getByTestId('source-request-error')).toHaveText('Online source requires step, margin, and max idle gap in milliseconds.')
+})
+
+test('the window fields are in seconds and an explicit window may hold at most 100000 cells, like the server check', async ({ page }) => {
+  const calls = await openSetup(page)
+  await page.locator('#input-file').setInputFiles(load)
+  await page.locator('#source-profile').selectOption('prod-prometheus')
+  await page.locator('#source-window-origin').selectOption('explicit')
+  for (const [id, label] of [['source-start', SETUP_LABELS.startLabel], ['source-end', SETUP_LABELS.endLabel], ['source-step', SETUP_LABELS.stepLabel]]) {
+    await expect(page.locator('#' + id)).toHaveAccessibleName(label)
+  }
+
+  await page.locator('#source-start').fill('0')
+  await page.locator('#source-end').fill('100000')
+  await page.locator('#source-step').fill('1')
+  await expect(page.getByTestId('source-request-error')).toHaveCount(0)
+  await expect(start(page)).toBeEnabled()
+  await page.locator('#source-end').fill('100001')
+  await expect(page.getByTestId('source-request-error')).toHaveText(SETUP_MESSAGES.explicitTooManyCells)
+  await expect(readiness(page, 'sources')).toContainText(SETUP_MESSAGES.explicitTooManyCells)
+  await expect(start(page)).toBeDisabled()
+  await page.locator('#source-step').fill('2')
+  await expect(page.getByTestId('source-request-error')).toHaveText(SETUP_MESSAGES.explicitDivisible)
+  await page.locator('#source-end').fill('100000')
+  await expect(page.getByTestId('source-request-error')).toHaveCount(0)
+  await page.locator('#source-end').fill('4')
+  await page.locator('#source-step').fill('1')
+  await start(page).click()
+  await expect.poll(() => calls.jobs.length).toBe(1)
+  expect(calls.jobs[0]).toContain('{"schema_version":"source-request.v3","profile_ids":["prod-prometheus"],"window":{"origin":"explicit","start_epoch_ms":0,"end_epoch_ms":4000,"step_ms":1000}}')
+})
+
+test('the old form checks the number of cells too, in milliseconds and English', async ({ page }) => {
+  await openSetup(page, '/')
+  await page.locator('#source-profile').selectOption('prod-prometheus')
+  await page.locator('#source-window-origin').selectOption('explicit')
+  await page.locator('#source-start').fill('0')
+  await page.locator('#source-step').fill('1000')
+  await page.locator('#source-end').fill('100000000')
+  await expect(page.getByTestId('source-request-error')).toHaveCount(0)
+  await page.locator('#source-end').fill('100001000')
+  await expect(page.getByTestId('source-request-error')).toHaveText('Source range may hold at most 100000 cells (range divided by step): increase the step or shorten the period.')
 })
 
 test('PostgreSQL capture buttons need a profile and call the existing endpoints', async ({ page }) => {
@@ -279,12 +338,21 @@ test('PostgreSQL capture buttons need a profile and call the existing endpoints'
   await expect.poll(() => calls.captures).toEqual(['pre', 'post'])
 })
 
-test('ИИ-разбор is only a pointer on the setup screen: no consent control and no request', async ({ page }) => {
-  await openSetup(page)
+test('the ИИ-разбор section asks for consent at the start and sends nothing by itself', async ({ page }) => {
+  const calls = await openSetup(page)
   const ai = page.locator('#run-setup section', { has: page.getByRole('heading', { name: SETUP_LABELS.aiTitle }) })
+  const consent = page.locator('#ai-consent')
 
   await expect(ai).toContainText(SETUP_LABELS.aiText)
-  await expect(ai.locator('input, button, select')).toHaveCount(0)
+  await expect(consent).toHaveAccessibleName(SETUP_LABELS.aiConsentLabel)
+  await expect(consent).not.toBeChecked()
+  await expect(page.getByTestId('readiness-will')).not.toContainText(SETUP_LABELS.willAdvice)
+  await consent.check()
+  await expect(page.getByTestId('readiness-will')).toContainText(SETUP_LABELS.willAdvice)
+  await page.locator('#input-file').setInputFiles(load)
+  await expect(start(page)).toBeEnabled()
+  expect(calls.inputs).toBe(0)
+  await expect(ai.locator('button, select')).toHaveCount(0)
 })
 
 test('the old interface keeps its own form and never shows the new screen', async ({ page }) => {

@@ -5,6 +5,8 @@ import io.ltverdict.ai.AdvisoryAiJobs
 import io.ltverdict.ai.AdvisoryAiService
 import io.ltverdict.ai.AdvisoryRunner
 import io.ltverdict.ai.AiAdviceStore
+import io.ltverdict.ai.AiModel
+import io.ltverdict.ai.AiModelsConfig
 import io.ltverdict.ai.RunnerOutcome
 import io.ltverdict.core.AnalysisOutcome
 import io.ltverdict.core.AnalysisService
@@ -191,6 +193,57 @@ class LocalApiTest {
             )
             assertEquals(original, api.get("$base/result").body())
         }
+
+    @Test
+    fun `bootstrap keeps its fields and reports no advisory AI when none is configured`() =
+        withServer { _, api ->
+            val body = api.bootstrap().jsonObject()
+
+            assertEquals(setOf("csrf_token", "max_upload_bytes", "advisory_ai"), body.keys)
+            assertEquals(JsonNull, body.getValue("advisory_ai"))
+            assertEquals(4_294_967_296L, body.getValue("max_upload_bytes").jsonPrimitive.long)
+        }
+
+    @Test
+    fun `bootstrap exposes the model configuration without the endpoint address`() {
+        val config =
+            AiModelsConfig(
+                endpointUrl = "https://gateway.internal.example/v1/chat/completions",
+                endpointLabel = "Internal gateway",
+                allowInsecureHttp = false,
+                defaultModel = "qwen3.8-max",
+                models = listOf(AiModel("qwen3.8-max", "Qwen 3.8 Max"), AiModel("deepseek-v4-flash-0731", "DeepSeek")),
+            )
+        withServer(aiModels = config) { _, api ->
+            val response = api.bootstrap()
+            val advisory = response.jsonObject().getValue("advisory_ai").jsonObject
+
+            assertEquals("qwen3.8-max", advisory.getValue("default_model_id").jsonPrimitive.content)
+            assertEquals("Internal gateway", advisory.getValue("endpoint_label").jsonPrimitive.content)
+            val models = advisory.getValue("models").jsonArray.map { it.jsonObject }
+            assertEquals(listOf("qwen3.8-max", "deepseek-v4-flash-0731"), models.map { it.getValue("id").jsonPrimitive.content })
+            assertEquals(listOf(false, false), models.map { it.getValue("measured").jsonPrimitive.boolean })
+            assertFalse(response.body().contains("gateway.internal"))
+            assertFalse(response.body().contains("https://"))
+        }
+        withServer(aiModels = AiModelsConfig.BUILT_IN) { _, api ->
+            val models =
+                api
+                    .bootstrap()
+                    .jsonObject()
+                    .getValue("advisory_ai")
+                    .jsonObject
+                    .getValue("models")
+                    .jsonArray
+            assertTrue(
+                models
+                    .single()
+                    .jsonObject
+                    .getValue("measured")
+                    .jsonPrimitive.boolean,
+            )
+        }
+    }
 
     @Test
     fun `unconfigured Jenkins exposes no profiles or triggers`() =
@@ -967,7 +1020,7 @@ class LocalApiTest {
             val bootstrap = api.bootstrap()
             assertEquals(200, bootstrap.statusCode())
             val bootstrapJson = bootstrap.jsonObject()
-            assertEquals(setOf("csrf_token", "max_upload_bytes"), bootstrapJson.keys)
+            assertEquals(setOf("csrf_token", "max_upload_bytes", "advisory_ai"), bootstrapJson.keys)
             assertTrue(
                 bootstrapJson
                     .getValue("csrf_token")
@@ -1870,6 +1923,7 @@ class LocalApiTest {
         sourceProfiles: List<SourceProfile> = emptyList(),
         postgresProfiles: List<PostgresProfile> = emptyList(),
         adviceRunner: AdvisoryRunner? = null,
+        aiModels: AiModelsConfig? = null,
         uploadLimitBytes: Long = 4_294_967_296L,
         block: (RunBundleStore, ApiClient) -> Unit,
     ) {
@@ -1886,6 +1940,7 @@ class LocalApiTest {
                             postgresProfiles,
                             adviceService,
                             adviceJobs,
+                            aiModels = aiModels,
                             uploadLimitBytes = uploadLimitBytes,
                         ),
                         openBrowser = false,

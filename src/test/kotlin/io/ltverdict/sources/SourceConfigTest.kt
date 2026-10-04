@@ -602,6 +602,8 @@ class SourceConfigTest {
                 v4AutoRequest(stepMode = "fixed", margin = 50_000),
                 v4AutoRequest(stepMode = "fixed", gap = 1_790_000),
                 v4AutoRequest(stepMode = "auto", gap = 14_000),
+                v4AutoRequest(stepMode = "auto", gap = 1_800_500),
+                v4AutoRequest(stepMode = "fixed", gap = 1_800_500),
                 v4AutoRequest(stepMode = "auto", step = 61_000),
                 v4AutoRequest(stepMode = "auto").replace("\"profile_ids\":", "\"url\":\"http://unconfigured\",\"profile_ids\":"),
                 v4ExplicitRequest("auto").replace(",\"step_mode\":\"auto\"", ""),

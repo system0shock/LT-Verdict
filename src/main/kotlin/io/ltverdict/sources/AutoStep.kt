@@ -199,12 +199,33 @@ internal fun JsonObjectBuilder.putStepProvenance(applied: AppliedStep?) {
 internal fun IllegalArgumentException.cliMessage(): String =
     (this as? SourcePlanRefusal)?.let { "${it.code}: ${it.text}" } ?: message ?: "INVALID_INPUT"
 
-private val QUOTED_LITERAL = Regex("""\"(?:\\.|[^\"\\])*\"|'(?:\\.|[^'\\])*'|`[^`]*`""")
-private val RANGE_SELECTOR = Regex("""\[([^\]]*)]""")
+/** Replace quoted literals with an empty literal in one linear pass; null when a literal is not terminated (fail-closed). */
+private fun withoutLiterals(expression: String): String? {
+    val bare = StringBuilder(expression.length)
+    var index = 0
+    while (index < expression.length) {
+        val quote = expression[index]
+        if (quote == '"' || quote == '\'' || quote == '`') {
+            index++
+            while (index < expression.length && expression[index] != quote) {
+                index += if (quote != '`' && expression[index] == '\\') 2 else 1
+            }
+            if (index >= expression.length) return null
+            bare.append(quote).append(quote)
+        } else {
+            bare.append(quote)
+        }
+        index++
+    }
+    return bare.toString()
+}
+
+private val RANGE_SELECTOR = Regex("""\[([^\[\]]*)]""")
 
 /** Require every range selector to use the interval after removing literals. */
 internal fun usesOnlyIntervalRanges(expression: String): Boolean {
-    val ranges = RANGE_SELECTOR.findAll(QUOTED_LITERAL.replace(expression, "\"\"")).map { it.groupValues[1].trim() }.toList()
+    val bare = withoutLiterals(expression) ?: return false
+    val ranges = RANGE_SELECTOR.findAll(bare).map { it.groupValues[1].trim() }.toList()
     return ranges.isNotEmpty() && ranges.all { it == "\$__interval" }
 }
 
@@ -213,7 +234,7 @@ private val INFLUX_TIME_GROUPING = Regex("""(?i)\btime\s*\(\s*([^,)\s]*)""")
 
 /** Require one InfluxQL SELECT with interval-bound time groupings. */
 internal fun usesOnlyIntervalGrouping(expression: String): Boolean {
-    val bare = QUOTED_LITERAL.replace(expression, "\"\"")
+    val bare = withoutLiterals(expression) ?: return false
     val groupings = INFLUX_TIME_GROUPING.findAll(bare).map { it.groupValues[1] }.toList()
     return INFLUX_SELECT_KEYWORD.findAll(bare).count() == 1 && groupings.isNotEmpty() && groupings.all { it == "\$__interval" }
 }

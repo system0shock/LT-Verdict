@@ -14,10 +14,12 @@ import io.ltverdict.core.RunPeriodV1
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertThrows
+import org.junit.jupiter.api.Assertions.assertTimeoutPreemptively
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import java.math.BigDecimal
 import java.net.URI
+import java.time.Duration
 
 class AutoStepTest {
     @Test
@@ -230,6 +232,26 @@ class AutoStepTest {
         assertFalse(usesOnlyIntervalRanges("rate(x[1m])"))
         assertFalse(usesOnlyIntervalRanges("rate(x[1m]) + avg_over_time(y[${'$'}__interval])"))
         assertFalse(usesOnlyIntervalRanges("max_over_time(rate(x[1m])[${'$'}__interval:15s])"))
+    }
+
+    @Test
+    fun `range selector detection handles many unmatched opening brackets quickly`() {
+        val expression = "[".repeat(60_000) + "avg_over_time(x[${'$'}__interval])"
+
+        assertTimeoutPreemptively(Duration.ofSeconds(2)) {
+            assertTrue(usesOnlyIntervalRanges(expression))
+        }
+    }
+
+    @Test
+    fun `long string literals and unterminated escapes do not overflow the stack`() {
+        val longLiteral = "x{pod=~\"" + "a".repeat(100_000) + "\"}[${'$'}__interval]"
+        val unterminated = "x{pod=~\"" + "\\\"".repeat(50_000) + "[${'$'}__interval]"
+
+        assertTimeoutPreemptively(Duration.ofSeconds(2)) {
+            assertTrue(usesOnlyIntervalRanges(longLiteral))
+            assertFalse(usesOnlyIntervalRanges(unterminated))
+        }
     }
 
     @Test

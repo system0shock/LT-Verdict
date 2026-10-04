@@ -679,7 +679,7 @@ private fun parseWindowV4(element: JsonElement): RequestWindow {
             val stepAuto = parseStepMode(value)
             val margin = value.sourceLong("margin_ms", ::requestInvalid)
             val maxIdleGap = value.sourceLong("max_idle_gap_ms", ::requestInvalid)
-            if (margin !in 0..MAX_MARGIN_MILLIS || maxIdleGap < step) requestInvalid()
+            if (margin !in 0..MAX_MARGIN_MILLIS || maxIdleGap < step || maxIdleGap % 1_000L != 0L) requestInvalid()
             if (!stepAuto && (margin % step != 0L || maxIdleGap % step != 0L)) requestInvalid()
             AutoWindow(margin, maxIdleGap, step, stepAuto)
         }

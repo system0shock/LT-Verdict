@@ -620,9 +620,9 @@ private const val STYLE =
         "section{border-top:1px solid #ccd3df;margin-top:1rem}dl{display:grid;grid-template-columns:max-content 1fr;gap:.25rem 1rem}" +
         "dt{font-weight:700}dd{margin:0;overflow-wrap:anywhere}" +
         "pre{white-space:pre-wrap;overflow-wrap:anywhere;background:#f3f5f8;padding:1rem}" +
-        "code{overflow-wrap:anywhere}.table-wrap{overflow-x:auto}.table-wrap:focus-visible{outline:2px solid #172033}" +
+        "code,li,h3,p{overflow-wrap:anywhere}.table-wrap{overflow-x:auto}.table-wrap:focus-visible{outline:2px solid #172033}" +
         "table{border-collapse:collapse;width:100%}" +
-        "th,td{border:1px solid #ccd3df;padding:.25rem .5rem;text-align:left;vertical-align:top;overflow-wrap:anywhere}" +
+        "th,td{border:1px solid #ccd3df;padding:.25rem .5rem;text-align:left;vertical-align:top}td:first-child{overflow-wrap:anywhere}" +
         "th{background:#f3f5f8}.st-fail{color:#b00020;font-weight:700}.st-pass{color:#1b6e3a;font-weight:700}" +
         ".st-none{color:#8a5a00;font-weight:700}" +
         "@media print{body{max-width:none;padding:0}pre{font-size:8pt}}"

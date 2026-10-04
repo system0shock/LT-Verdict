@@ -111,11 +111,12 @@ internal fun analyzeWithSources(
     processedBytes: (Long) -> Unit = {},
     checkCancelled: () -> Unit = {},
     beforePublish: () -> Unit = checkCancelled,
+    cellBudget: Long = MAX_RESOURCE_CELLS,
 ): AnalysisOutcome {
     val windowed = request.sourceRequest ?: return service.analyze(request, processedBytes, checkCancelled, beforePublish)
     require(request.resources == null && request.diagnostics == null && request.sourceAcquisition == null) { "SOURCE_INPUT_CONFLICT" }
     val configured = requireNotNull(source) { "SOURCE_NOT_CONFIGURED" }
-    val selection = resolveWindow(service, request, windowed, checkCancelled)
+    val selection = resolveWindow(service, request, windowed, configured.profiles, cellBudget, checkCancelled)
     val acquisition = configured.acquire(selection, request.input.sha256, checkCancelled)
     return service.analyze(
         request.copy(sourceRequest = null, resources = acquisition.snapshot, sourceAcquisition = acquisition),
@@ -129,30 +130,85 @@ private fun resolveWindow(
     service: AnalysisService,
     request: AnalysisRequest,
     windowed: WindowedSourceRequest,
+    profiles: List<SourceProfile>,
+    cellBudget: Long,
     checkCancelled: () -> Unit,
 ): SourceRequest {
     val profileId = windowed.profileIds.first()
     val additional = windowed.profileIds.drop(1)
+    val publishesWindow = windowed.schemaVersion == "source-request.v3" || windowed.schemaVersion == "source-request.v4"
+    val publishesStep = windowed.schemaVersion == "source-request.v4"
+
+    fun selected(): List<SourceProfile> =
+        windowed.profileIds.map { id ->
+            profiles.singleOrNull { it.id == id } ?: throw IllegalArgumentException("SOURCE_PROFILE_NOT_FOUND")
+        }
     return when (val window = windowed.window) {
-        is ExplicitWindow ->
+        is ExplicitWindow -> {
+            val applied =
+                if (window.stepAuto) {
+                    applyAutoStep(
+                        selected(),
+                        window.stepMillis,
+                        MAX_STEP_MILLIS,
+                        cellBudget,
+                        explicitGridCells(window.startMillis, window.endMillis),
+                    )
+                } else {
+                    null
+                }
             SourceRequest(
                 profileId,
                 window.startMillis,
                 window.endMillis,
-                window.stepMillis,
+                applied?.stepMillis ?: window.stepMillis,
                 additional,
                 // Байты v1 и v2 остаются неизменными: provenance окна публикует только v3.
-                if (windowed.schemaVersion == "source-request.v3") buildJsonObject { put("window_origin", "explicit") } else null,
+                // v4 extends window provenance with step selection.
+                if (publishesWindow) {
+                    buildJsonObject {
+                        put("window_origin", "explicit")
+                        if (publishesStep) putStepProvenance(applied)
+                    }
+                } else {
+                    null
+                },
             )
+        }
         is AutoWindow -> {
             val period = runPeriodFromJson(recognizedPeriod(service, request, window, checkCancelled))
+            val applied =
+                if (window.stepAuto) {
+                    applyAutoStep(
+                        selected(),
+                        window.stepMillis,
+                        minOf(MAX_STEP_MILLIS, window.maxIdleGapMillis),
+                        cellBudget,
+                        autoGridCells(period, window),
+                    )
+                } else {
+                    null
+                }
+            val effective = if (applied == null) window else window.copy(stepMillis = applied.stepMillis)
             val derived =
-                when (val outcome = deriveAutoWindow(period, window)) {
+                when (val outcome = deriveAutoWindow(period, effective)) {
                     is AutoWindowOutcome.Derived -> outcome.window
                     // Отказ авто-окна возвращается до внешней выборки: границы теста не угадываются.
                     is AutoWindowOutcome.Refused -> throw IllegalArgumentException(outcome.reasonCode)
                 }
-            val provenance = autoWindowProvenance(period, window, derived)
+            val provenance =
+                autoWindowProvenance(period, window, derived).let { base ->
+                    if (publishesStep) {
+                        JsonObject(
+                            base +
+                                buildJsonObject {
+                                    putStepProvenance(applied)
+                                },
+                        )
+                    } else {
+                        base
+                    }
+                }
             SourceRequest(
                 profileId,
                 derived.startMillis,

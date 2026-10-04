@@ -4,6 +4,10 @@ import io.ltverdict.core.MAX_POINTS_PER_SERIES
 import io.ltverdict.core.MAX_RESOURCE_SERIES
 import io.ltverdict.core.ResourceAggregation
 import io.ltverdict.core.RunPeriodV1
+import kotlinx.serialization.json.JsonObjectBuilder
+import kotlinx.serialization.json.buildJsonArray
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.put
 
 internal const val AUTO_STEP_UNSATISFIABLE = "AUTO_STEP_UNSATISFIABLE"
 internal const val AUTO_STEP_SCRAPE_INTERVAL_REQUIRED = "AUTO_STEP_SCRAPE_INTERVAL_REQUIRED"
@@ -48,7 +52,8 @@ internal fun planStep(
             ?: "no step in the allowed range fits this window"
     throw SourcePlanRefusal(
         AUTO_STEP_UNSATISFIABLE,
-        "No step from ${requestedMillis / 1_000} s to ${ceilingMillis / 1_000} s keeps $seriesCount series within $cellBudget cells; $detail",
+        "No step from ${requestedMillis / 1_000} s to ${ceilingMillis / 1_000} s keeps " +
+            "$seriesCount series within $cellBudget cells; $detail",
     )
 }
 
@@ -133,7 +138,8 @@ private fun checkCoarsening(selected: List<SourceProfile>): List<ReducedSeries> 
             if (!bound) {
                 throw SourcePlanRefusal(
                     AUTO_STEP_QUERY_NOT_INTERVAL_BOUND,
-                    "Query ${query.id} of profile ${profile.id} uses a time window other than \$__interval; a coarser step would change its meaning",
+                    "Query ${query.id} of profile ${profile.id} uses a time window other than \$__interval; " +
+                        "a coarser step would change its meaning",
                 )
             }
         }
@@ -149,6 +155,49 @@ private fun checkCoarsening(selected: List<SourceProfile>): List<ReducedSeries> 
     }
     return reduced
 }
+
+/** Add v4 step selection fields to source_summary. */
+internal fun JsonObjectBuilder.putStepProvenance(applied: AppliedStep?) {
+    if (applied == null) {
+        put("step_origin", "explicit")
+        return
+    }
+    put("step_origin", "auto")
+    put("requested_step_ms", applied.requestedMillis)
+    put("series_count", applied.seriesCount)
+    put("cell_budget", applied.cellBudget)
+    put("cells_per_series", applied.cellsPerSeries)
+    if (applied.reduced.isNotEmpty()) {
+        put(
+            "warnings",
+            buildJsonArray {
+                add(
+                    buildJsonObject {
+                        put("code", RESOLUTION_REDUCED)
+                        put("requested_step_ms", applied.requestedMillis)
+                        put("applied_step_ms", applied.stepMillis)
+                        put(
+                            "series",
+                            buildJsonArray {
+                                applied.reduced.forEach { series ->
+                                    add(
+                                        buildJsonObject {
+                                            put("id", series.id)
+                                            put("aggregation", series.aggregation.wireName)
+                                        },
+                                    )
+                                }
+                            },
+                        )
+                    },
+                )
+            },
+        )
+    }
+}
+
+internal fun IllegalArgumentException.cliMessage(): String =
+    (this as? SourcePlanRefusal)?.let { "${it.code}: ${it.text}" } ?: message ?: "INVALID_INPUT"
 
 private val QUOTED_LITERAL = Regex("""\"(?:\\.|[^\"\\])*\"|'(?:\\.|[^'\\])*'|`[^`]*`""")
 private val RANGE_SELECTOR = Regex("""\[([^\]]*)]""")

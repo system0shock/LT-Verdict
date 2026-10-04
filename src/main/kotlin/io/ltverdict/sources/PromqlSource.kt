@@ -34,7 +34,7 @@ internal data class SourceAcquisition(
 )
 
 internal class PromqlSource(
-    private val profiles: List<SourceProfile>,
+    val profiles: List<SourceProfile>,
     private val http: SourceHttp,
 ) {
     fun acquire(

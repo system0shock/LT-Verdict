@@ -35,6 +35,7 @@ import io.ltverdict.sources.SourceConnections
 import io.ltverdict.sources.SourceHttp
 import io.ltverdict.sources.analyzeWithSources
 import io.ltverdict.sources.capturePostgresPhase
+import io.ltverdict.sources.cliMessage
 import io.ltverdict.sources.readOpenSearchContexts
 import io.ltverdict.sources.readPostgresAnalysisInput
 import io.ltverdict.sources.readSourceConnections
@@ -277,7 +278,7 @@ private fun analyze(
                     source,
                 ).canonicalResult
             } catch (failure: IllegalArgumentException) {
-                throw CliFailure(EXIT_INVALID_INPUT, failure.message ?: "INVALID_INPUT")
+                throw CliFailure(EXIT_INVALID_INPUT, failure.cliMessage())
             }
         }
 

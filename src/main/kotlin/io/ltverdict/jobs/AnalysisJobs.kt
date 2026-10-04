@@ -3,6 +3,7 @@ package io.ltverdict.jobs
 import io.ltverdict.core.AnalysisOutcome
 import io.ltverdict.core.AnalysisRequest
 import io.ltverdict.ingest.Diagnostic
+import io.ltverdict.sources.SourcePlanRefusal
 import java.util.ArrayDeque
 import java.util.UUID
 import java.util.concurrent.ArrayBlockingQueue
@@ -202,6 +203,8 @@ internal class AnalysisJobs(
                             diagnostic =
                                 if (cancelled) {
                                     null
+                                } else if (failure is SourcePlanRefusal) {
+                                    Diagnostic(failure.code, failure.text)
                                 } else {
                                     when (failure.message.takeIf { failure is IllegalArgumentException }) {
                                         "RESOURCE_LOAD_HASH_MISMATCH" ->

@@ -248,6 +248,16 @@ class AutoStepTest {
         assertEquals(15_000L, apply(listOf(profile(queries = listOf(query("q1"), query("q2")), rules = listOf(rule)))).stepMillis)
     }
 
+    @Test
+    fun `the command line shows the code and the detail of a plan refusal and only the message otherwise`() {
+        assertEquals(
+            "AUTO_STEP_UNSATISFIABLE: too many series",
+            SourcePlanRefusal("AUTO_STEP_UNSATISFIABLE", "too many series").cliMessage(),
+        )
+        assertEquals("SOURCE_REQUEST_INVALID", IllegalArgumentException("SOURCE_REQUEST_INVALID").cliMessage())
+        assertEquals("INVALID_INPUT", IllegalArgumentException().cliMessage())
+    }
+
     private fun apply(
         selected: List<SourceProfile>,
         cellBudget: Long = MAX_RESOURCE_CELLS,

@@ -449,6 +449,32 @@ class AnalysisServiceTest {
         }
 
     @Test
+    fun `two policies for one load give separate analyses that stay comparable`() =
+        withService { store, service ->
+            val input = accept(store, OUT_OF_ORDER_CSV.encodeToByteArray(), "two-policies.jtl")
+
+            fun policyFor(threshold: String) =
+                policy(
+                    """{"schema_version":"policy.v1","policy_id":"p-$threshold","defaults":{"sample_floor":1,"min_samples":1},""" +
+                        """"rules":[{"id":"p95","metric":"response_time_p95_ms","operator":"lte","threshold":$threshold,"scope":{"kind":"overall"}}]}""",
+                )
+
+            val lenient = service.analyze(AnalysisRequest(input, policyFor("1000000")))
+            val strict = service.analyze(AnalysisRequest(input, policyFor("0")))
+
+            fun identity(outcome: AnalysisOutcome) =
+                Json.parseToJsonElement(Files.readString(outcome.analysisDirectory.resolve("identity.json"))).jsonObject
+
+            assertNotEquals(lenient.analysisId, strict.analysisId)
+            assertNotEquals(identity(lenient).getValue("policy_sha256"), identity(strict).getValue("policy_sha256"))
+            listOf("source_type", "engine", "parsers", "modules", "input_versions", "outputs", "histogram", "normalization", "limits")
+                .forEach { assertEquals(identity(lenient).getValue(it), identity(strict).getValue(it), it) }
+            assertEquals(result(lenient, "analysis_mode"), result(strict, "analysis_mode"))
+            assertEquals("PASS", result(lenient, "policy_verdict"))
+            assertEquals("FAIL", result(strict, "policy_verdict"))
+        }
+
+    @Test
     fun `identical request is byte stable and a new policy cannot change the old analysis`() =
         withService { store, service ->
             val input = accept(store, OUT_OF_ORDER_CSV.encodeToByteArray(), "input.jtl")

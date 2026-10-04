@@ -1,6 +1,6 @@
 import AxeBuilder from '@axe-core/playwright'
 import { expect, test, type Page } from '@playwright/test'
-import { DEEP_LABELS, SHELL_LABELS, SHELL_TABS } from '../src/shell/labels'
+import { DEEP_LABELS, OVERVIEW_LABELS, SHELL_LABELS, SHELL_TABS } from '../src/shell/labels'
 import { formatNumber } from '../src/shell/overview'
 
 const runId = 'deep-run'
@@ -8,7 +8,7 @@ const analysisId = 'a'.repeat(64)
 const origin = 1_767_225_600_000
 const ids = ['queue', 'cpu', 'memory', 'disk', 'network', 'latency', 'spare']
 const overall = { id: 'overall', type: 'metric_summary', scope: { kind: 'overall' }, sample_count: 180, error_count: 0, error_rate_ratio: { numerator: 0, denominator: 180 }, throughput_rps: { numerator: 180000, denominator: 180000 }, latency_ms: { p50: 100, p95: 100, p99: 100, max: 100 } }
-type Options = { snapshot?: boolean; missingCatalog?: boolean; pointCount?: number; stepMs?: number; startMs?: number; ids?: string[]; catalogPage?: number; valuesPage?: number; invalid?: boolean; mode?: string; loadCount?: number; delayValues?: (call: number) => number; delayDeepBucket?: number; failValuesAt?: number; delayCatalogSecondPage?: number; passRule?: boolean }
+type Options = { snapshot?: boolean; missingCatalog?: boolean; pointCount?: number; stepMs?: number; startMs?: number; ids?: string[]; catalogPage?: number; valuesPage?: number; invalid?: boolean; mode?: string; loadCount?: number; delayValues?: (call: number) => number; delayDeepBucket?: number; failValuesAt?: number; delayCatalogSecondPage?: number; passRule?: boolean; diagnosticFail?: boolean }
 
 function fixtureApi(page: Page, options: Options = {}) {
   const names = options.ids ?? ids
@@ -19,8 +19,10 @@ function fixtureApi(page: Page, options: Options = {}) {
   let valuesCalls = 0
   const evidence = [overall, ...(options.snapshot === false ? [] : [{ id: 'binding', type: 'resource_binding', run_from_epoch_ms: origin }]),
     ...[0, 1].map((n) => ({ id: `rule-${n}`, type: 'resource_policy_check', window_id: `w${n}`, rule_id: 'cpu-high', series_id: 'cpu', unit: '%', operator: 'gt', threshold: '5', effect: 'sla', status: 'FAIL', reason: null })),
-    ...(options.passRule ? [{ id: 'queue-rule', type: 'resource_policy_check', window_id: 'w0', rule_id: 'queue-ok', series_id: 'queue', unit: '%', operator: 'gt', threshold: '5000', effect: 'sla', status: 'PASS', reason: null }] : [])]
-  const result = { schema_version: 'analysis-result.v1', run_id: runId, analysis_mode: options.mode ?? 'standard', run_validity: options.invalid ? 'INVALID' : 'VALID', policy_verdict: 'FAIL', analysis_coverage: { status: 'COMPLETE', reasons: [] }, findings: [], evidence }
+    ...(options.passRule ? [{ id: 'queue-rule', type: 'resource_policy_check', window_id: 'w0', rule_id: 'queue-ok', series_id: 'queue', unit: '%', operator: 'gt', threshold: '5000', effect: 'sla', status: 'PASS', reason: null }] : []),
+    ...(options.diagnosticFail ? [{ id: 'rule-diagnostic', type: 'resource_policy_check', window_id: 'w0', rule_id: 'cpu-high-diag', series_id: 'cpu', unit: '%', operator: 'gt', threshold: '5', effect: 'diagnostic', status: 'FAIL', reason: null }] : [])]
+  const findings = options.diagnosticFail ? [{ type: 'resource_threshold_violation', rule_id: 'cpu-high-diag', window_id: 'w0', entity: 'node', from_epoch_ms: origin, to_epoch_ms: origin + 1000, cell_count: 1, observed_min: '6', observed_max: '6' }] : []
+  const result = { schema_version: 'analysis-result.v1', run_id: runId, analysis_mode: options.mode ?? 'standard', run_validity: options.invalid ? 'INVALID' : 'VALID', policy_verdict: 'FAIL', analysis_coverage: { status: 'COMPLETE', reasons: [] }, findings, evidence }
   const entry = (id: string) => ({ id, metric: `metric-${id}`, unit: '%', entity: 'node', role: 'system', aggregation: 'interval_mean', reducer: 'mean', labels: {}, observed_cells: id === 'spare' ? 0 : count })
   const sourceValue = (id: string, index: number) => index === 2 || index === 6 ? null : names.indexOf(id) * 1000 + index + 1
   page.route('**/api/**', async (route) => {
@@ -86,6 +88,23 @@ async function openDeep(page: Page) {
   await expect(page.getByTestId('deep-panel')).toBeVisible()
   await expect(page.getByTestId('deep-panel').getByRole('status')).toHaveCount(0)
 }
+
+test('a failed resource diagnostic in overview opens and focuses deep analysis', async ({ page }) => {
+  const mock = fixtureApi(page, { diagnosticFail: true })
+  await page.goto('/?shell=new')
+  await page.getByRole('button', { name: 'deep.jtl' }).click()
+  await page.locator(`button[title="${analysisId}"]`).click()
+
+  const diagnostic = page.getByTestId('attention-item').filter({ hasText: 'cpu-high-diag' })
+  await expect(diagnostic).toHaveAttribute('data-kind', 'diagnostic')
+  await expect(diagnostic).toContainText(OVERVIEW_LABELS.diagnosticBadge)
+  await diagnostic.getByTestId('attention-open').click()
+
+  await expect(page.locator('#shell-tab-deep')).toHaveAttribute('aria-selected', 'true')
+  await expect(page.locator('#deep-title')).toBeFocused()
+  await expect.poll(() => mock.calls.some((url) => url.pathname.endsWith('/resource-series'))).toBe(true)
+  await expect.poll(() => mock.calls.some((url) => url.pathname.endsWith('/buckets'))).toBe(true)
+})
 
 test('tab follows overview and no snapshot uses only load, including catalog 404', async ({ page }) => {
   const mock = fixtureApi(page, { snapshot: false })

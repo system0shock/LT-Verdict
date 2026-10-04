@@ -1,6 +1,7 @@
 import { expect, test } from '@playwright/test'
 import type { AnalysisResult, Bucket } from '../src/types'
 import { OVERVIEW_LABELS } from '../src/shell/labels'
+import { failedLinesOf, summarizeVerdict } from '../src/verdictSummary'
 import {
   attentionItems,
   cursorFraction,
@@ -134,14 +135,55 @@ test.describe('attention items', () => {
     expect(items[0].openLabel).toBe(OVERVIEW_LABELS.openSetup)
   })
 
-  test('a diagnostic-effect resource check is never a violation', () => {
+  test('a failed diagnostic-effect resource check appears once as a non-causal diagnostic', () => {
     const result = build({
       policy_verdict: 'PASS',
       evidence: [overall, checkout, p95Rule('ok', 'PASS', 100), resourceCheck('mem-diag', 'FAIL', 'diagnostic')],
       findings: [violation('mem-diag')],
     })
+    const items = attentionItems(result)
+    const diagnostics = items.filter((entry) => entry.kind === 'diagnostic')
+    const slaResult = build({ ...result, evidence: [resourceCheck('mem-diag', 'FAIL', 'sla')] })
 
     expect(kinds(result)).not.toContain('violation')
+    expect(diagnostics).toHaveLength(1)
+    expect(diagnostics[0]).toMatchObject({ diagnostic: true, target: { tab: 'deep', targetId: 'deep-title' }, openLabel: OVERVIEW_LABELS.openDeep })
+    expect(diagnostics[0].key).toMatch(/^diagnostic:resource:/)
+    expect(diagnostics[0].title).toBe(failedLinesOf(slaResult)[0].title)
+    expect(diagnostics[0].detail).toBe(failedLinesOf(slaResult)[0].detail)
+  })
+
+  test('passing and unresolved diagnostic resource checks are omitted, but capacity failures appear', () => {
+    const checks = [resourceCheck('passing', 'PASS', 'diagnostic'), resourceCheck('unknown', 'NO_VERDICT', 'diagnostic')]
+    expect(attentionItems(build({ policy_verdict: 'PASS', evidence: checks, findings: [violation('unknown')] }))).toEqual([])
+
+    const capacity = build({
+      analysis_mode: 'capacity_step', policy_verdict: 'PASS',
+      capacity_summary: {
+        schema_version: 'capacity.v1', load_axis: 'rps', unit: 'rps', stages: [], bound_type: 'LOWER', lower_inclusive: 100, upper_exclusive: null,
+        policy_verdict: 'PASS', reasons: [], capacity_knee: null, knee_reason: 'none',
+      },
+      evidence: [...checks, resourceCheck('capacity-diag', 'FAIL', 'diagnostic')],
+      findings: [violation('capacity-diag')],
+    })
+    expect(attentionItems(capacity).map((entry) => entry.key)).toEqual(['diagnostic:resource:rc-capacity-diag'])
+  })
+
+  test('resource diagnostics lead trends and correlations and do not change verdict counts', () => {
+    const evidence = [overall, checkout, p95Rule('failed', 'FAIL', 2340)]
+    const baseline = build({ policy_verdict: 'FAIL', evidence })
+    const result = build({
+      policy_verdict: 'FAIL',
+      evidence: [...evidence, correlation('p1', 'CANDIDATE'), trend('a', 'TREND_OBSERVED'), resourceCheck('mem-diag', 'FAIL', 'diagnostic')],
+      findings: [violation('mem-diag')],
+    })
+
+    expect(attentionItems(result).map((entry) => entry.key)).toEqual([
+      'violation:check-failed', 'diagnostic:resource:rc-mem-diag', 'diagnostic:trend:t-a', 'diagnostic:correlation:cp-p1',
+    ])
+    expect(summarizeVerdict(result).headline).toBe(summarizeVerdict(baseline).headline)
+    expect(summarizeVerdict(result).chip).toBe(summarizeVerdict(baseline).chip)
+    expect(summarizeVerdict(result).lines).toEqual(summarizeVerdict(baseline).lines)
   })
 
   test('NO_VERDICT lists causes with a target chosen by reason code and keeps found violations', () => {

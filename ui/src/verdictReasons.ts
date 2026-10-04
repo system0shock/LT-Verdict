@@ -65,3 +65,25 @@ export function reasonText(code: string): string {
 export function isNoVerdictReason(code: string): boolean {
   return REASONS[code]?.noVerdict ?? false
 }
+
+// Метки малой выборки (ADR 0018): строки карточки вердикта, логика выбора в verdictSummary.ts.
+const sampleNumbers = new Intl.NumberFormat('ru-RU')
+
+// Форма слова после числа: 1 проверки, 2 проверок; для «для» нужен родительный падеж, остальные слова ниже берут именительный.
+function plural(count: number, one: string, few: string, many: string): string {
+  const tail = count % 100
+  if (tail >= 11 && tail <= 14) return many
+  if (count % 10 === 1) return one
+  if (count % 10 >= 2 && count % 10 <= 4) return few
+  return many
+}
+
+export const SAMPLE_TEXT = {
+  chipSuffix: ' · малая выборка',
+  detail: (count: number, minimum: number): string =>
+    ` · режим малой выборки: ${sampleNumbers.format(count)} ${plural(count, 'сэмпл', 'сэмпла', 'сэмплов')} при минимуме ${sampleNumbers.format(minimum)}`,
+  lead: (checks: number): string =>
+    ` Для ${checks} ${plural(checks, 'проверки', 'проверок', 'проверок')} выборка меньше рекомендуемой: результат рассчитан, но помечен как «малая выборка».`,
+  insufficientSubject: (rule: string, window: string | undefined, count: number, floor: number): string =>
+    `${rule} (${window ? `окно ${window}, ` : ''}сэмплов: ${sampleNumbers.format(count)}, нужно не меньше ${sampleNumbers.format(floor)})`,
+}

@@ -107,6 +107,30 @@ test('transactions keep the statuses of the old table and stay unique by id', ()
   expect(failing.every((row) => !row.key.includes('overall'))).toBe(true)
 })
 
+test('the sample cell says how many requests the rule saw and what that means', () => {
+  const rows = ruleRows(build({
+    evidence: [
+      overall, checkout,
+      check({ id: 'c1', rule_id: 'full', status: 'PASS', sample_count: 1500, sample_floor: 20, min_samples: 50, sample_mode: 'FULL' }),
+      check({ id: 'c2', rule_id: 'small', status: 'PASS', sample_count: 30, sample_floor: 20, min_samples: 50, sample_mode: 'SMALL_SAMPLE' }),
+      check({ id: 'c3', rule_id: 'few', status: 'NO_VERDICT', observed: undefined, reason_code: 'INSUFFICIENT_SAMPLES', sample_count: 12, sample_floor: 20, min_samples: 100, sample_mode: 'INSUFFICIENT' }),
+      check({ id: 'c4', rule_id: 'rps', status: 'PASS', sample_count: 3650, sample_mode: 'NOT_GATED' }),
+      check({ id: 'c5', rule_id: 'legacy', status: 'PASS' }),
+      check({ id: 'c6', rule_id: 'future', status: 'PASS', sample_count: 7, min_samples: 9, sample_mode: 'SOMETHING_NEW' }),
+    ],
+  }))
+
+  expect(rows.map((row) => flat(row.sample))).toEqual([
+    '1 500 из 50 · достаточно',
+    '30 из 50 · малая выборка',
+    '12 из 20 · недостаточно',
+    '3 650 · без порога',
+    TABLES_LABELS.noSample,
+    '7 из 9 · SOMETHING_NEW',
+  ])
+  expect(JSON.stringify(rows)).not.toMatch(/NaN|undefined/)
+})
+
 test('a windowed check without a metric reference still marks its own transaction only', () => {
   const nested = transaction('m-nested', 'POST /checkout', { scope: { kind: 'transaction', group_path: ['flow'], label: 'POST /checkout', sample_kind: 'JMETER_SAMPLER' } })
   const rows = transactionRows(build({

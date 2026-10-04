@@ -109,6 +109,9 @@ const policyRows = computed(() =>
   checks.value.map((check) => {
     const metric = metrics.value.find((item) => item.id === check.metric_evidence_id)
     const checkScope = metric ? scope(metric) : scope(check)
+    const mode = stringAt(check, 'sample_mode')
+    const count = numberAt(check, 'sample_count')
+    const limit = numberAt(check, mode === 'INSUFFICIENT' ? 'sample_floor' : 'min_samples')
     return {
       id: stringAt(check, 'id') ?? stringAt(check, 'rule_id') ?? 'policy-check',
       transaction: metric
@@ -121,6 +124,7 @@ const policyRows = computed(() =>
       observed: formatPolicyValue(check, 'observed'),
       scope: metric || checkScope.kind ? scopeText(checkScope) : 'Not available',
       window: formatOptional(valueAt(check, 'window_id')),
+      sample: mode ? `${count ?? '\u2014'} / ${limit ?? '\u2014'} \u00b7 ${mode}` : '\u2014',
       status: stringAt(check, 'status') ?? 'NO_VERDICT',
     }
   }),
@@ -335,13 +339,13 @@ function updateRange(name: 'update:range-start' | 'update:range-end', event: Eve
       aria-label="Policy results"
     >
       <table>
-        <thead><tr><th>Window</th><th>Transaction</th><th>Metric</th><th>Operator</th><th>Threshold</th><th>Measured</th><th>Scope</th><th>Status</th></tr></thead>
+        <thead><tr><th>Window</th><th>Transaction</th><th>Metric</th><th>Operator</th><th>Threshold</th><th>Measured</th><th>Scope</th><th>Sample</th><th>Status</th></tr></thead>
         <tbody>
           <tr
             v-for="row in policyRows"
             :key="row.id"
           >
-            <td>{{ row.window }}</td><td>{{ row.transaction }}</td><td>{{ row.metric }}</td><td>{{ row.operator }}</td><td>{{ row.threshold }}</td><td>{{ row.observed }}</td><td>{{ row.scope }}</td><td>
+            <td>{{ row.window }}</td><td>{{ row.transaction }}</td><td>{{ row.metric }}</td><td>{{ row.operator }}</td><td>{{ row.threshold }}</td><td>{{ row.observed }}</td><td>{{ row.scope }}</td><td>{{ row.sample }}</td><td>
               <span
                 class="status-text"
                 :data-status="row.status"

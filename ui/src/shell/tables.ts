@@ -14,10 +14,15 @@ export interface RuleRow {
   threshold: string
   observed: string
   window: string | null
+  sample: string
   status: RuleStatus
   reasonCode: string | null
   reasonText: string | null
 }
+
+const sampleFormatter = new Intl.NumberFormat('ru-RU')
+const sampleNumber = (value: number | undefined): string =>
+  typeof value === 'number' && Number.isFinite(value) ? sampleFormatter.format(value) : TABLES_LABELS.noSample
 
 export function ruleRows(result: AnalysisResult): RuleRow[] {
   const metrics = new Map(result.evidence
@@ -37,6 +42,13 @@ export function ruleRows(result: AnalysisResult): RuleRow[] {
       }
       if (check.status === 'FAIL' && observed === threshold) observed += TABLES_LABELS.belowDisplayPrecision
       const reasonCode = check.reason_code ?? null
+      const mode = check.sample_mode
+      const modeText = mode ? (TABLES_LABELS.sampleModeText[mode as keyof typeof TABLES_LABELS.sampleModeText] ?? mode) : null
+      const count = sampleNumber(check.sample_count)
+      const limit = sampleNumber(mode === 'INSUFFICIENT' ? check.sample_floor : check.min_samples)
+      const sample = !mode ? TABLES_LABELS.noSample
+        : mode === 'NOT_GATED' ? `${count} \u00B7 ${modeText}`
+          : `${TABLES_LABELS.sampleOf(count, limit)} \u00B7 ${modeText}`
       return {
         key: check.id,
         ruleId: check.rule_id,
@@ -46,6 +58,7 @@ export function ruleRows(result: AnalysisResult): RuleRow[] {
         threshold,
         observed,
         window: check.window_id ?? null,
+        sample,
         status: check.status,
         reasonCode,
         reasonText: reasonCode ? verdictReasonText(reasonCode) : null,

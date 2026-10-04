@@ -3,6 +3,7 @@ package io.ltverdict.jobs
 import io.ltverdict.core.AnalysisOutcome
 import io.ltverdict.core.AnalysisRequest
 import io.ltverdict.ingest.SourceType
+import io.ltverdict.sources.SourcePlanRefusal
 import io.ltverdict.storage.AcceptedInput
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
@@ -60,6 +61,24 @@ class AnalysisJobsTest {
                 )
                 assertNull(failed.analysisId)
             }
+        }
+    }
+
+    @Test
+    fun `autostep refusals keep their code and an actionable message`() {
+        AnalysisJobs(1) { _, _, _ ->
+            throw SourcePlanRefusal("AUTO_STEP_UNSATISFIABLE", "No step from 15 s to 60 s keeps 1024 series within 1500000 cells")
+        }.use { jobs ->
+            val submitted = accepted(jobs.submit(request(42)))
+            val failed = awaitState(jobs, submitted.status.jobId, JobState.FAILED)
+
+            assertEquals("AUTO_STEP_UNSATISFIABLE", failed.diagnostic?.code)
+            assertTrue(
+                failed.diagnostic
+                    ?.message
+                    .orEmpty()
+                    .contains("1024 series"),
+            )
         }
     }
 

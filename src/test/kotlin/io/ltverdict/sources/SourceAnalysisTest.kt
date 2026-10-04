@@ -370,6 +370,139 @@ class SourceAnalysisTest {
         }
     }
 
+    @Test
+    fun `auto step coarsens an over-budget collection and publishes its provenance`() {
+        RecordingPrometheus().use { fixture ->
+            withService { store, service, _ ->
+                val input = accept(store, contiguousCsv(RUN_START, 3_600), "autostep.jtl")
+                val request = v4Request(auto = true)
+
+                val outcome =
+                    analyzeWithSources(
+                        service,
+                        AnalysisRequest(input, null, sourceRequest = request),
+                        fixture.source(queryCount = 2, scrapeIntervalMillis = 1_000L),
+                        cellBudget = 3_600L,
+                    )
+
+                // Two series need 7,200 cells at 1 s and 3,600 cells at 2 s.
+                assertEquals(2, fixture.requests.get())
+                assertEquals(setOf("2"), fixture.windows.map { it.getValue("step") }.toSet())
+                val summary = sourceSummary(outcome)
+                assertEquals(2_000L, summary.getValue("step_ms").jsonPrimitive.long)
+                assertEquals("auto", summary.getValue("step_origin").jsonPrimitive.content)
+                assertEquals(1_000L, summary.getValue("requested_step_ms").jsonPrimitive.long)
+                assertEquals(2L, summary.getValue("series_count").jsonPrimitive.long)
+                assertEquals(3_600L, summary.getValue("cell_budget").jsonPrimitive.long)
+                assertEquals(1_800L, summary.getValue("cells_per_series").jsonPrimitive.long)
+                val warning =
+                    summary
+                        .getValue("warnings")
+                        .jsonArray
+                        .single()
+                        .jsonObject
+                assertEquals("RESOLUTION_REDUCED", warning.getValue("code").jsonPrimitive.content)
+                assertEquals(1_000L, warning.getValue("requested_step_ms").jsonPrimitive.long)
+                assertEquals(2_000L, warning.getValue("applied_step_ms").jsonPrimitive.long)
+                assertEquals(
+                    listOf("cpu-0", "cpu-1"),
+                    warning.getValue("series").jsonArray.map {
+                        it.jsonObject
+                            .getValue("id")
+                            .jsonPrimitive.content
+                    },
+                )
+                assertEquals("auto", summary.getValue("window_origin").jsonPrimitive.content)
+            }
+        }
+    }
+
+    @Test
+    fun `v3 requests never carry the step fields`() {
+        RecordingPrometheus().use { fixture ->
+            withService { store, service, _ ->
+                val input = accept(store, contiguousCsv(RUN_START, 30), "v3-no-step.jtl")
+
+                val outcome = analyzeWithSources(service, AnalysisRequest(input, null, sourceRequest = GRID_AUTO), fixture.source())
+
+                val stepFields =
+                    setOf(
+                        "step_origin",
+                        "requested_step_ms",
+                        "series_count",
+                        "cell_budget",
+                        "cells_per_series",
+                        "warnings",
+                        "rule_spans",
+                    )
+                assertEquals(emptySet<String>(), sourceSummary(outcome).keys.intersect(stepFields))
+                assertEquals(LEGACY_SUMMARY_FIELDS + WINDOW_PROVENANCE_FIELDS, sourceSummary(outcome).keys)
+            }
+        }
+    }
+
+    @Test
+    fun `auto step keeps the requested step inside the budget and fixed mode never changes it`() {
+        RecordingPrometheus().use { fixture ->
+            withService { store, service, _ ->
+                val input = accept(store, contiguousCsv(RUN_START, 3_600), "within.jtl")
+
+                val within =
+                    analyzeWithSources(
+                        service,
+                        AnalysisRequest(input, null, sourceRequest = v4Request(auto = true)),
+                        fixture.source(queryCount = 2, scrapeIntervalMillis = 1_000L),
+                        cellBudget = 7_200L,
+                    )
+                val fixed =
+                    analyzeWithSources(
+                        service,
+                        AnalysisRequest(input, null, sourceRequest = v4Request(auto = false)),
+                        fixture.source(queryCount = 2),
+                        cellBudget = 10L,
+                    )
+
+                assertEquals(setOf("1"), fixture.windows.map { it.getValue("step") }.toSet())
+                assertEquals("auto", sourceSummary(within).getValue("step_origin").jsonPrimitive.content)
+                assertFalse(sourceSummary(within).containsKey("warnings"))
+                assertEquals("explicit", sourceSummary(fixed).getValue("step_origin").jsonPrimitive.content)
+                assertEquals(LEGACY_SUMMARY_FIELDS + WINDOW_PROVENANCE_FIELDS + "step_origin", sourceSummary(fixed).keys)
+            }
+        }
+    }
+
+    @Test
+    fun `autostep refusals happen before any request and keep their code`() {
+        RecordingPrometheus().use { fixture ->
+            withService { store, service, _ ->
+                val input = accept(store, contiguousCsv(RUN_START, 3_600), "refused.jtl")
+
+                val noInterval =
+                    assertThrows(SourcePlanRefusal::class.java) {
+                        analyzeWithSources(
+                            service,
+                            AnalysisRequest(input, null, sourceRequest = v4Request(auto = true)),
+                            fixture.source(queryCount = 2, scrapeIntervalMillis = null),
+                            cellBudget = 3_600L,
+                        )
+                    }
+                val unsatisfiable =
+                    assertThrows(SourcePlanRefusal::class.java) {
+                        analyzeWithSources(
+                            service,
+                            AnalysisRequest(input, null, sourceRequest = v4Request(auto = true, maxIdleGap = 1_000)),
+                            fixture.source(queryCount = 2, scrapeIntervalMillis = 1_000L),
+                            cellBudget = 3_600L,
+                        )
+                    }
+
+                assertEquals(AUTO_STEP_SCRAPE_INTERVAL_REQUIRED, noInterval.code)
+                assertEquals(AUTO_STEP_UNSATISFIABLE, unsatisfiable.code)
+                assertEquals(0, fixture.requests.get())
+            }
+        }
+    }
+
     private fun withService(block: (RunBundleStore, AnalysisService, Path) -> Unit) {
         val root = tempDir.resolve("data-${System.nanoTime()}")
         DataDirectory.open(root).use { directory ->
@@ -439,7 +572,10 @@ class SourceAnalysisTest {
             server.start()
         }
 
-        fun source(): PromqlSource {
+        fun source(
+            queryCount: Int = 1,
+            scrapeIntervalMillis: Long? = null,
+        ): PromqlSource {
             val profile =
                 SourceProfile(
                     id = "local",
@@ -450,9 +586,9 @@ class SourceAnalysisTest {
                     allowInsecureHttp = true,
                     governor = SourceGovernor(requestsPerSecond = 1_000.0, timeoutMillis = 2_000, maxAttempts = 1),
                     queries =
-                        listOf(
+                        (0 until queryCount).map { index ->
                             SourceQuery(
-                                id = "cpu",
+                                id = if (queryCount == 1) "cpu" else "cpu-$index",
                                 expression = "avg_over_time(cpu[\$__interval])",
                                 metric = "cpu_used",
                                 unit = "ratio",
@@ -460,8 +596,9 @@ class SourceAnalysisTest {
                                 role = ResourceRole.SYSTEM,
                                 aggregation = ResourceAggregation.INTERVAL_MEAN,
                                 labels = mapOf("instance" to "node-a"),
-                            ),
-                        ),
+                            )
+                        },
+                    scrapeIntervalMillis = scrapeIntervalMillis,
                 )
             val profiles = listOf(profile, profile.copy(id = "second"))
             return PromqlSource(profiles, SourceHttp(profiles))
@@ -521,6 +658,16 @@ class SourceAnalysisTest {
                 "recognized_start_epoch_ms",
                 "requested_margin_ms",
                 "window_origin",
+            )
+
+        fun v4Request(
+            auto: Boolean,
+            maxIdleGap: Long = 60_000,
+        ): WindowedSourceRequest =
+            readWindowedSourceRequest(
+                """{"schema_version":"source-request.v4","profile_ids":["local"],
+                "window":{"origin":"auto","step_ms":1000,"step_mode":"${if (auto) "auto" else "fixed"}",
+                "margin_ms":0,"max_idle_gap_ms":$maxIdleGap}}""".byteInputStream(),
             )
 
         fun autoRequest(

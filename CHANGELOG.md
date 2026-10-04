@@ -7,6 +7,22 @@
 
 ### Added
 
+- Автошаг онлайн-сбора (ADR 0014, срез S2): запрос источника `source-request.v4`
+  с обязательным `window.step_mode` (`fixed` или `auto`; `max_idle_gap_ms` целое число секунд) и поле профиля
+  `scrape_interval_ms` в `source-connections.v3`. В режиме `auto` заявленный шаг
+  остаётся, пока `рядов × ячеек <= 1 500 000`, иначе планировщик до первого
+  запроса к источнику выбирает наименьший подходящий целый шаг не выше 60 с.
+  Огрубление отказывает с кодами `AUTO_STEP_UNSATISFIABLE`,
+  `AUTO_STEP_SCRAPE_INTERVAL_REQUIRED`, `AUTO_STEP_BELOW_SCRAPE_INTERVAL`,
+  `AUTO_STEP_QUERY_NOT_INTERVAL_BOUND` и (временно, до правил по длительности)
+  `AUTO_STEP_AGGREGATION_MISMATCH` при любых правилах выбранных профилей.
+  `source_summary` для `v4` публикует `step_origin`, `requested_step_ms`,
+  `series_count`, `cell_budget`, `cells_per_series` и предупреждение
+  `RESOLUTION_REDUCED`; поля входят в `source_acquisition_sha256`. Документы
+  `v1`-`v3` и их сводки не меняются; сборка без `v4` и `scrape_interval_ms`
+  отказывает на таком документе (`SOURCE_REQUEST_INVALID`,
+  `SOURCE_CONFIG_INVALID`). Правила по длительности, исключение для событийных
+  приращений и UI режима шага не входят в срез.
 - Снимок ресурсов `resource-snapshot.v1` принимает агрегации `interval_max` и
   `interval_min` (максимум и минимум за интервал сетки, ADR 0014); профили
   онлайн-источников получают их без правок конфигурации. Изменение аддитивно:

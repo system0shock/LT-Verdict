@@ -1,0 +1,52 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://lt-verdict.local/schemas/sources/v4/source-request.schema.json",
+  "title": "LT Verdict source-request.v4",
+  "description": "Backend additionally checks margin_ms and max_idle_gap_ms divisible by step_ms only for fixed; auto allows nonmultiples. max_idle_gap_ms must be at least step_ms. The declared step of an explicit window must divide the window exactly. 1..100000 cells at the declared step is checked only for fixed. Backend also checks end > start, at most 128 UTF-8 bytes and no ISO control characters per profile identifier, and request file at most 16 KiB. Identifiers are sorted during parsing; the document may list them unsorted. An auto window is derived at acquisition time from the run-period.v1 artifact recognized from the same load bytes; the derivation is refused with AUTO_WINDOW_UNAVAILABLE, AUTO_WINDOW_MULTI_TEST_SUSPECTED or AUTO_WINDOW_SPAN_UNSUPPORTED before any external request, and a refusal requires an explicit window. max_idle_gap_ms is intentionally unbounded above: a large declared tolerance weakens the multi-test refusal, and the declared value is published in provenance.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "profile_ids", "window"],
+  "properties": {
+    "schema_version": { "const": "source-request.v4" },
+    "profile_ids": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 16,
+      "uniqueItems": true,
+      "items": { "type": "string", "minLength": 1, "maxLength": 128 }
+    },
+    "window": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["origin", "start_epoch_ms", "end_epoch_ms", "step_ms", "step_mode"],
+          "properties": {
+            "origin": { "const": "explicit" },
+            "start_epoch_ms": { "type": "integer", "minimum": 0, "maximum": 253402300799998 },
+            "end_epoch_ms": { "type": "integer", "minimum": 1, "maximum": 253402300799999 },
+            "step_ms": { "type": "integer", "minimum": 1000, "maximum": 60000, "multipleOf": 1000 },
+            "step_mode": { "enum": ["fixed", "auto"] }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["origin", "step_ms", "step_mode", "margin_ms", "max_idle_gap_ms"],
+          "properties": {
+            "origin": { "const": "auto" },
+            "step_ms": { "type": "integer", "minimum": 1000, "maximum": 60000, "multipleOf": 1000 },
+            "step_mode": { "enum": ["fixed", "auto"] },
+            "margin_ms": { "type": "integer", "minimum": 0, "maximum": 3600000 },
+            "max_idle_gap_ms": {
+              "type": "integer",
+              "minimum": 1000,
+              "multipleOf": 1000,
+              "description": "max_idle_gap_ms must be at least step_ms and a whole number of seconds."
+            }
+          }
+        }
+      ]
+    }
+  }
+}

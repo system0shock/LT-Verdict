@@ -95,6 +95,7 @@ internal data class SourceProfile(
     val rules: List<ResourceRuleV1> = emptyList(),
     val database: String? = null,
     val openSearch: OpenSearchMapping? = null,
+    val scrapeIntervalMillis: Long? = null,
 )
 
 internal data class SourceRequest(
@@ -117,12 +118,14 @@ internal data class ExplicitWindow(
     val startMillis: Long,
     val endMillis: Long,
     override val stepMillis: Long,
+    val stepAuto: Boolean = false,
 ) : RequestWindow
 
 internal data class AutoWindow(
     val marginMillis: Long,
     val maxIdleGapMillis: Long,
     override val stepMillis: Long,
+    val stepAuto: Boolean = false,
 ) : RequestWindow
 
 internal data class WindowedSourceRequest(
@@ -254,7 +257,7 @@ private fun parseConnections(element: JsonElement): SourceConnections {
     val root = element.sourceObject()
     root.rejectUnknown(setOf("schema_version", "connections"))
     val version = root.sourceString("schema_version")
-    if (version !in setOf("source-connections.v1", "source-connections.v2")) configInvalid()
+    if (version !in setOf("source-connections.v1", "source-connections.v2", "source-connections.v3")) configInvalid()
     val values = root.sourceArray("connections")
     if (values.isEmpty() || values.size > MAX_SOURCE_PROFILES) configInvalid()
     val ids = HashSet<String>()
@@ -262,10 +265,10 @@ private fun parseConnections(element: JsonElement): SourceConnections {
     val postgres = mutableListOf<PostgresProfile>()
     values.forEach { value ->
         if (!ids.add(value.sourceObject().sourceString("id"))) configInvalid()
-        if (version == "source-connections.v2" && value.sourceObject().sourceString("source_kind") == "postgresql") {
+        if (version != "source-connections.v1" && value.sourceObject().sourceString("source_kind") == "postgresql") {
             postgres += parsePostgresProfile(value)
         } else {
-            http += parseProfile(value)
+            http += parseProfile(value, allowAutoStep = version == "source-connections.v3")
         }
     }
     return SourceConnections(http, postgres)
@@ -326,23 +329,31 @@ private fun parsePostgresProfile(element: JsonElement): PostgresProfile {
     ).also(::validatePostgresProfile)
 }
 
-private fun parseProfile(element: JsonElement): SourceProfile {
+private fun parseProfile(
+    element: JsonElement,
+    allowAutoStep: Boolean,
+): SourceProfile {
     val value = element.sourceObject()
     value.rejectUnknown(
-        setOf(
-            "id",
-            "source_kind",
-            "transport",
-            "base_url",
-            "datasource_uid",
-            "database",
-            "opensearch",
-            "auth",
-            "allow_insecure_http",
-            "governor",
-            "queries",
-            "rules",
-        ),
+        buildSet {
+            addAll(
+                setOf(
+                    "id",
+                    "source_kind",
+                    "transport",
+                    "base_url",
+                    "datasource_uid",
+                    "database",
+                    "opensearch",
+                    "auth",
+                    "allow_insecure_http",
+                    "governor",
+                    "queries",
+                    "rules",
+                ),
+            )
+            if (allowAutoStep) add("scrape_interval_ms")
+        },
     )
     val id = value.sourceText("id", MAX_IDENTIFIER_BYTES)
     val sourceKind = SourceKind.entries.find { it.wireName == value.sourceString("source_kind") } ?: configInvalid()
@@ -367,10 +378,16 @@ private fun parseProfile(element: JsonElement): SourceProfile {
     val allowInsecureHttp = value.optionalBoolean("allow_insecure_http") ?: false
     if (baseUrl.scheme == "http" && auth != SourceAuth.None && !allowInsecureHttp) configInvalid()
     val governor = value["governor"]?.let(::parseGovernor) ?: SourceGovernor()
+    val scrapeIntervalMillis = if (allowAutoStep) value.optionalLong("scrape_interval_ms") else null
+    if (scrapeIntervalMillis != null &&
+        (scrapeIntervalMillis !in 1_000..MAX_SCRAPE_INTERVAL_MILLIS || scrapeIntervalMillis % 1_000L != 0L)
+    ) {
+        configInvalid()
+    }
     val openSearch =
         if (sourceKind == SourceKind.OPENSEARCH) {
             if (transport != SourceTransport.DIRECT ||
-                listOf("queries", "rules", "database", "datasource_uid").any { it in value }
+                listOf("queries", "rules", "database", "datasource_uid", "scrape_interval_ms").any { it in value }
             ) {
                 configInvalid()
             }
@@ -394,6 +411,7 @@ private fun parseProfile(element: JsonElement): SourceProfile {
         rules,
         database,
         openSearch,
+        scrapeIntervalMillis,
     )
 }
 
@@ -587,6 +605,10 @@ private fun parseWindowedRequest(element: JsonElement): WindowedSourceRequest =
             value.rejectUnknown(setOf("schema_version", "profile_ids", "window"))
             val window = value["window"]?.let(::parseWindow) ?: requestInvalid()
             WindowedSourceRequest(version, sortedProfileIds(value.sourceArray("profile_ids")), window)
+        } else if (version == "source-request.v4") {
+            value.rejectUnknown(setOf("schema_version", "profile_ids", "window"))
+            val window = value["window"]?.let(::parseWindowV4) ?: requestInvalid()
+            WindowedSourceRequest(version, sortedProfileIds(value.sourceArray("profile_ids")), window)
         } else {
             WindowedSourceRequest(version, parseProfileIds(value, version), parseExplicitWindow(value, strictStep = false))
         }
@@ -642,9 +664,40 @@ private fun parseWindow(element: JsonElement): RequestWindow {
     }
 }
 
+private fun parseWindowV4(element: JsonElement): RequestWindow {
+    val value = element.sourceObject()
+    return when (value.sourceString("origin")) {
+        "explicit" -> {
+            value.rejectUnknown(setOf("origin", "start_epoch_ms", "end_epoch_ms", "step_ms", "step_mode"))
+            val stepAuto = parseStepMode(value)
+            parseExplicitWindow(value, strictStep = true, checkCells = !stepAuto).copy(stepAuto = stepAuto)
+        }
+        "auto" -> {
+            value.rejectUnknown(setOf("origin", "step_ms", "step_mode", "margin_ms", "max_idle_gap_ms"))
+            val step = value.sourceLong("step_ms", ::requestInvalid)
+            validateStepMillis(step, strict = true)
+            val stepAuto = parseStepMode(value)
+            val margin = value.sourceLong("margin_ms", ::requestInvalid)
+            val maxIdleGap = value.sourceLong("max_idle_gap_ms", ::requestInvalid)
+            if (margin !in 0..MAX_MARGIN_MILLIS || maxIdleGap < step || maxIdleGap % 1_000L != 0L) requestInvalid()
+            if (!stepAuto && (margin % step != 0L || maxIdleGap % step != 0L)) requestInvalid()
+            AutoWindow(margin, maxIdleGap, step, stepAuto)
+        }
+        else -> requestInvalid()
+    }
+}
+
+private fun parseStepMode(value: JsonObject): Boolean =
+    when (value.sourceString("step_mode")) {
+        "fixed" -> false
+        "auto" -> true
+        else -> requestInvalid()
+    }
+
 private fun parseExplicitWindow(
     value: JsonObject,
     strictStep: Boolean,
+    checkCells: Boolean = true,
 ): ExplicitWindow {
     val start = value.sourceLong("start_epoch_ms", ::requestInvalid)
     val end = value.sourceLong("end_epoch_ms", ::requestInvalid)
@@ -654,7 +707,7 @@ private fun parseExplicitWindow(
     }
     validateStepMillis(step, strictStep)
     if ((end - start) % step != 0L) requestInvalid()
-    if ((end - start) / step !in 1..MAX_POINTS_PER_SERIES.toLong()) requestInvalid()
+    if (checkCells && (end - start) / step !in 1..MAX_POINTS_PER_SERIES.toLong()) requestInvalid()
     return ExplicitWindow(start, end, step)
 }
 
@@ -840,6 +893,7 @@ private class SourceInputFailure(
 private const val MAX_SOURCE_CONFIG_BYTES = 1_048_576
 private const val MAX_SOURCE_REQUEST_BYTES = 16 * 1024
 internal const val MAX_MARGIN_MILLIS = 3_600_000L
+private const val MAX_SCRAPE_INTERVAL_MILLIS = 3_600_000L
 private const val MAX_SOURCE_PROFILES = 16
 private const val MAX_SOURCE_QUERIES = 64
 private const val MAX_RESOURCE_RULES = 256

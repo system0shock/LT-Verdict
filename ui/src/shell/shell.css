@@ -266,3 +266,8 @@
 .shell .new-analysis__section .form-grid {
   align-items: start;
 }
+
+.shell .new-analysis .field > .control--file {
+  min-width: 0;
+  max-width: 100%;
+}

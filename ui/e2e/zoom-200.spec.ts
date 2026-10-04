@@ -84,8 +84,7 @@ for (const size of [{ width: 640, height: 360 }, { width: 320, height: 568 }]) {
       await page.setViewportSize(size)
       await openScreen(page, screen)
 
-      // Known defect: file inputs force 325px at 320px width, see the fixme test below.
-      if (!(screen === 'setup' && size.width === 320)) await expectNoHorizontalScroll(page)
+      await expectNoHorizontalScroll(page)
       if (screen === 'setup') {
         const input = page.locator('#input-file')
         await expectKeyboardReachable(page, input)
@@ -126,8 +125,7 @@ for (const size of [{ width: 640, height: 360 }, { width: 320, height: 568 }]) {
   })
 }
 
-test.fixme('setup has no horizontal scroll at 320x568 CSS px', async ({ page }) => {
-  // The file inputs keep their intrinsic width (275px) inside a 220px grid track, so the page scrolls 5px sideways.
+test('setup has no horizontal scroll at 320x568 CSS px', async ({ page }) => {
   await page.setViewportSize({ width: 320, height: 568 })
   await openScreen(page, 'setup')
   await expectNoHorizontalScroll(page)

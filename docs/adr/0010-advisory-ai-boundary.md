@@ -53,3 +53,13 @@ Code 0.21.1 как замену GigaCode с GigaCode naming на уровне wr
   модель и endpoint задаются файлом конфигурации (по умолчанию прежние), runner
   остаётся один. П. 4 (один immutable advice на analysis) остаётся в силе и для
   выбора модели.
+
+## Поправка production readiness от 2026-09-22
+
+Разрешённая production topology закрепляет уже проверенный локальный image
+`mcr.microsoft.com/playwright/mcp@sha256:7b82f29c6ef83480a97f612d53ac3fd5f30a32df3fea1e06923d4204d3532bb2`.
+Qwen работает только во внутренней Docker network, а credential получает только
+отдельный relay через env-file. Qwen, argv, advice и provenance credential не
+содержат. Runtime не загружает image или Qwen package автоматически и не
+повторяет model request, кроме одного повтора при ошибке схемы (ADR 0021, Д2). Точная установка и fail-soft состояния описаны в
+`docs/user/advisory-ai.md`.

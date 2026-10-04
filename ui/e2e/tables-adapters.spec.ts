@@ -1,7 +1,8 @@
 import { expect, test } from '@playwright/test'
-import type { AnalysisResult } from '../src/types'
-import { DEFAULT_TX_QUERY, queryTransactions, ruleRows, transactionRows } from '../src/shell/tables'
-import { TABLES_LABELS } from '../src/shell/labels.tables'
+import type { AnalysisResult, CapacitySummary } from '../src/types'
+import { capacityView, DEFAULT_TX_QUERY, queryTransactions, ruleRows, transactionRows, trendView } from '../src/shell/tables'
+import { CAPACITY_LABELS, TABLES_LABELS, TREND_LABELS } from '../src/shell/labels.tables'
+import { reasonText } from '../src/verdictReasons'
 
 // Чистые адаптеры таблиц «Правила» и «Транзакции»: результат анализа на входе, готовые строки на выходе.
 function build(over: Record<string, unknown>): AnalysisResult {
@@ -150,4 +151,76 @@ test('search, status filter and impact order', () => {
   expect(queryTransactions(rows, { ...DEFAULT_TX_QUERY, sort: 'label', dir: -1 }).map((row) => row.label)).toEqual(['POST /login', 'POST /checkout'])
   expect(queryTransactions(rows, { ...DEFAULT_TX_QUERY, sort: 'samples', dir: 1 }).map((row) => row.label)).toEqual(['POST /login', 'POST /checkout'])
   expect(queryTransactions(rows, { ...DEFAULT_TX_QUERY, text: 'nothing like this' })).toEqual([])
+})
+
+const capacitySummary: CapacitySummary = {
+  schema_version: 'capacity.v1', load_axis: 'rps', unit: 'requests/s', bound_type: 'BOUNDED', lower_inclusive: 296, upper_exclusive: 344,
+  policy_verdict: 'NO_VERDICT', reasons: [], capacity_knee: null, knee_reason: 'KNEE_DETECTOR_NOT_IMPLEMENTED',
+  stages: [
+    { id: 'ramp-300', target: 300, achieved: 296, achieved_statistic: 'p05_10s', observed_min: 295, observed_max: 301, complete_bins: 30, expected_bins: 30, target_tolerance_ratio: 0.02, verified_bound_load: 296, verdict: 'PASS', reasons: [], evidence_refs: ['ref-1'] },
+    { id: 'ramp-350', target: 350, achieved: 344, achieved_statistic: 'p05_10s', observed_min: 340, observed_max: 345, complete_bins: 30, expected_bins: 30, target_tolerance_ratio: 0.02, verified_bound_load: 344, verdict: 'FAIL', reasons: ['CAPACITY_INSUFFICIENT_SAMPLES'], evidence_refs: [] },
+    { id: 'ramp-400', target: 400, achieved: null, achieved_statistic: 'p05_10s', observed_min: null, observed_max: null, complete_bins: null, expected_bins: null, target_tolerance_ratio: 0.02, verified_bound_load: null, verdict: 'INDETERMINATE', reasons: ['CAPACITY_TARGET_MISSED'], evidence_refs: [] },
+  ],
+}
+
+test('capacity stages keep verdicts, reason words and missing values', () => {
+  const view = capacityView(build({ analysis_mode: 'capacity_step', capacity_summary: capacitySummary }))!
+  expect(view.stages.map((stage) => stage.verdict)).toEqual(['PASS', 'FAIL', 'INDETERMINATE'])
+  expect(view.stages.map((stage) => stage.verdictText)).toEqual([CAPACITY_LABELS.stageVerdict.PASS, CAPACITY_LABELS.stageVerdict.FAIL, CAPACITY_LABELS.stageVerdict.INDETERMINATE])
+  expect(view.stages[2].reasons[0]).toEqual({ code: 'CAPACITY_TARGET_MISSED', text: reasonText('CAPACITY_TARGET_MISSED') })
+  expect(view.stages[2].verified).toBe(TABLES_LABELS.noData)
+  expect(view.stages[2].observed).toBe(`${TABLES_LABELS.noData} / ${TABLES_LABELS.noData}`)
+  expect(view.stages[1].smallSample).toBe(true)
+  expect(view.stages[0].smallSample).toBe(false)
+  expect(view.smallSample).toBe(true)
+  expect(view.boundText).toBe(CAPACITY_LABELS.boundText('BOUNDED', '296', '344', 'requests/s'))
+  expect(view.kneeText).toBe(CAPACITY_LABELS.kneeNotImplemented)
+  expect(view.verdictText).toBe(TABLES_LABELS.statusText.NO_VERDICT)
+  expect(JSON.stringify(view)).not.toMatch(/null|undefined|NaN|Infinity/)
+  expect(capacityView(build({}))).toBeNull()
+})
+
+test('capacity bound and knee variants retain unknown codes', () => {
+  for (const bound of ['UPPER_BOUND', 'LOWER_BOUND', 'INDETERMINATE', 'SOMETHING_NEW']) {
+    const view = capacityView(build({ capacity_summary: { ...capacitySummary, bound_type: bound, lower_inclusive: '1.25', upper_exclusive: '2.5', stages: [] } }))!
+    expect(view.boundText).toBe(CAPACITY_LABELS.boundText(bound, '1,25', '2,5', 'requests/s'))
+  }
+  const unknown = capacityView(build({ capacity_summary: { ...capacitySummary, reasons: ['UNKNOWN_REASON'], stages: [{ ...capacitySummary.stages[0], verdict: 'WEIRD', reasons: ['UNKNOWN_REASON'] }], capacity_knee: null, knee_reason: 'UNKNOWN_KNEE' } }))!
+  expect(unknown.stages[0].verdictText).toBe('WEIRD')
+  expect(unknown.reasons).toEqual([{ code: 'UNKNOWN_REASON', text: reasonText('UNKNOWN_REASON') }])
+  expect(unknown.kneeText).toBe(CAPACITY_LABELS.kneeNone('UNKNOWN_KNEE'))
+  expect(capacityView(build({ capacity_summary: { ...capacitySummary, capacity_knee: '12.5' } }))?.kneeText).toBe(CAPACITY_LABELS.kneeValue('12,5', 'requests/s'))
+  expect(capacityView(build({ capacity_summary: { ...capacitySummary, reasons: ['CAPACITY_INSUFFICIENT_SAMPLES'], stages: [] } }))?.smallSample).toBe(true)
+  expect(capacityView(build({ capacity_summary: { ...capacitySummary, stages: undefined, reasons: undefined } }))?.stages).toEqual([])
+})
+
+const trendCheck = {
+  id: 'trend-1', type: 'trend_check', check_id: 'cpu-trend', series_id: 'host:cpu', metric: 'cpu', unit: 'percent', entity: 'host',
+  window_id: 'steady', window_from_epoch_ms: null, window_to_epoch_ms: null, declared_direction: 'either', status: 'TREND_OBSERVED',
+  min_cells: 10, expected_cells: 30, observed_cells: 29, missing_cells: 1, longest_gap_cells: 1,
+  median: '41.25', slope_per_second: '0.0135', split_half_shift: '6.40',
+  magnitude_gate: { min_slope_units_per_second: '0.001', min_split_half_shift_pct: '5', required_split_half_shift_units: '2.0625' },
+  observed_direction: 'increase', method: 'slope-materiality.v1', uncertainty: 'NOT_ESTIMATED', reasons: ['TREND_MIN_CELLS_NOT_MET', 'UNKNOWN_REASON'],
+}
+
+test('trend adapter translates status, direction, decimals and reason words', () => {
+  const view = trendView(build({ evidence: [trendCheck] }))!
+  expect(view.summaryText).toBe(TREND_LABELS.summary(1, 1, 0, 0, 0))
+  expect(view.rows[0]).toMatchObject({ key: 'trend-1', check: 'cpu-trend', declared: TREND_LABELS.declaredText.either, status: 'TREND_OBSERVED', statusText: TREND_LABELS.statusText.TREND_OBSERVED, observed: TREND_LABELS.observedText.increase, slope: `0,0135 percent/\u0441`, shift: '6,40 percent', median: '41,25 percent', required: '2,0625 percent', cells: '29 / 30' })
+  expect(view.rows[0].reasons).toEqual([
+    { code: 'TREND_MIN_CELLS_NOT_MET', text: TREND_LABELS.reasonWords.TREND_MIN_CELLS_NOT_MET },
+    { code: 'UNKNOWN_REASON', text: reasonText('UNKNOWN_REASON') },
+  ])
+})
+
+test('trend missing values and summary-only evidence stay readable', () => {
+  const sparse = { ...trendCheck, id: 'trend-2', status: 'INSUFFICIENT_CELLS', declared_direction: 'decrease', observed_direction: null, slope_per_second: null, split_half_shift: null, median: null, magnitude_gate: { ...trendCheck.magnitude_gate, required_split_half_shift_units: null }, unit: null, reasons: ['RESOURCE_GAPS'] }
+  const view = trendView(build({ evidence: [sparse] }))!
+  expect(view.summaryText).toBe(TREND_LABELS.summary(1, 0, 0, 1, 0))
+  expect(view.rows[0]).toMatchObject({ declared: TREND_LABELS.declaredText.decrease, statusText: TREND_LABELS.statusText.INSUFFICIENT_CELLS, observed: TREND_LABELS.noData, slope: TREND_LABELS.noData, shift: TREND_LABELS.noData, median: TREND_LABELS.noData, required: TREND_LABELS.noData })
+  expect(view.rows[0].reasons).toEqual([{ code: 'RESOURCE_GAPS', text: reasonText('RESOURCE_GAPS') }])
+  expect(JSON.stringify(view)).not.toMatch(/null|undefined|NaN|Infinity/)
+  const summary = { id: 'trend-summary', type: 'trend_summary', checks_total: 4, observed: 1, not_material: 1, insufficient: 1, unavailable: 1, method: 'slope-materiality.v1', uncertainty: 'NOT_ESTIMATED' }
+  expect(trendView(build({ evidence: [summary] }))).toEqual({ summaryText: TREND_LABELS.summary(4, 1, 1, 1, 1), rows: [] })
+  expect(trendView(build({}))).toBeNull()
 })

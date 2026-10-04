@@ -205,6 +205,16 @@ test('null cells break paths and coarse partial cells show observed count', asyn
   await expect(page.getByTestId('track-value-cpu')).toHaveText(DEEP_LABELS.gap)
 })
 
+test('deep chart polylines remain unfilled with visible strokes', async ({ page }) => {
+  fixtureApi(page)
+  await openDeep(page)
+  for (const key of ['load-rps', 'load-p95', 'cpu']) {
+    const line = page.getByTestId(`deep-track-${key}`).locator('polyline').first()
+    expect(await line.evaluate((el) => getComputedStyle(el).fill), key).toBe('none')
+    expect(await line.evaluate((el) => getComputedStyle(el).stroke), key).not.toBe('none')
+  }
+})
+
 test('period snaps query bounds, whole run restores, invalid input does not fetch', async ({ page }) => {
   const mock = fixtureApi(page, { pointCount: 3001 })
   await openDeep(page)

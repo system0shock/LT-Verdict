@@ -1,0 +1,11 @@
+{
+  "schema_version": "policy.v1",
+  "policy_id": "demo-sla-fail",
+  "rules": [
+    { "id": "overall-p95", "metric": "response_time_p95_ms", "operator": "lte", "threshold": 250, "scope": { "kind": "overall" } },
+    { "id": "checkout-p95", "metric": "response_time_p95_ms", "operator": "lte", "threshold": 300, "scope": { "kind": "transaction", "name": "POST /api/checkout" } },
+    { "id": "refund-p99", "metric": "response_time_p99_ms", "operator": "lte", "threshold": 500, "scope": { "kind": "transaction", "name": "POST /api/refund" } },
+    { "id": "overall-errors", "metric": "error_rate_ratio", "operator": "lte", "threshold": 0.01, "scope": { "kind": "overall" } },
+    { "id": "overall-throughput", "metric": "throughput_rps", "operator": "gte", "threshold": 50, "scope": { "kind": "overall" } }
+  ]
+}

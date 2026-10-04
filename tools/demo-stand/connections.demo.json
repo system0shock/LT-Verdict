@@ -1,0 +1,156 @@
+{
+  "schema_version": "source-connections.v1",
+  "connections": [
+    {
+      "id": "demo-grafana",
+      "source_kind": "prometheus",
+      "transport": "grafana_proxy",
+      "base_url": "http://127.0.0.1:13000",
+      "datasource_uid": "ltv-demo-prometheus",
+      "auth": {
+        "type": "none"
+      },
+      "governor": {
+        "requests_per_second": 20,
+        "burst": 10,
+        "max_concurrent": 2
+      },
+      "queries": [
+        {
+          "id": "service-cpu-busy",
+          "expression": "round(avg_over_time(demo_service_cpu_busy_ratio{service=\"orders-api\"}[$__interval]), 0.000001)",
+          "metric": "cpu_busy",
+          "unit": "ratio",
+          "entity": "orders-api",
+          "role": "system",
+          "aggregation": "interval_mean",
+          "labels": {
+            "service": "orders-api"
+          }
+        },
+        {
+          "id": "db-busy",
+          "expression": "round(avg_over_time(demo_db_busy_ratio{db=\"orders-db\"}[$__interval]), 0.000001)",
+          "metric": "db_busy",
+          "unit": "ratio",
+          "entity": "orders-db",
+          "role": "system",
+          "aggregation": "interval_mean",
+          "labels": {
+            "db": "orders-db"
+          }
+        },
+        {
+          "id": "cpu-queue",
+          "expression": "round(avg_over_time(demo_cpu_queue_requests{service=\"orders-api\"}[$__interval]), 0.000001)",
+          "metric": "queue_depth",
+          "unit": "requests",
+          "entity": "orders-api",
+          "role": "system",
+          "aggregation": "interval_mean",
+          "labels": {
+            "service": "orders-api"
+          }
+        },
+        {
+          "id": "db-queue",
+          "expression": "round(avg_over_time(demo_db_queue_requests{db=\"orders-db\"}[$__interval]), 0.000001)",
+          "metric": "queue_depth",
+          "unit": "requests",
+          "entity": "orders-db",
+          "role": "system",
+          "aggregation": "interval_mean",
+          "labels": {
+            "db": "orders-db"
+          }
+        },
+        {
+          "id": "admission-queue",
+          "expression": "round(avg_over_time(demo_admission_queue_requests{service=\"orders-api\"}[$__interval]), 0.000001)",
+          "metric": "admission_queue_depth",
+          "unit": "requests",
+          "entity": "orders-api",
+          "role": "system",
+          "aggregation": "interval_mean",
+          "labels": {
+            "service": "orders-api"
+          }
+        },
+        {
+          "id": "downstream-wait",
+          "expression": "round(avg_over_time(demo_downstream_inflight_requests{service=\"orders-api\",dependency=\"payments\"}[$__interval]), 0.000001)",
+          "metric": "in_flight_requests",
+          "unit": "requests",
+          "entity": "payments",
+          "role": "system",
+          "aggregation": "interval_mean",
+          "labels": {
+            "dependency": "payments"
+          }
+        },
+        {
+          "id": "generator-threads",
+          "expression": "round(avg_over_time(demo_generator_active_threads{generator=\"jmeter\"}[$__interval]), 0.000001)",
+          "metric": "active_threads",
+          "unit": "threads",
+          "entity": "jmeter",
+          "role": "generator",
+          "aggregation": "interval_mean",
+          "labels": {
+            "generator": "jmeter"
+          }
+        },
+        {
+          "id": "generator-queue",
+          "expression": "round(avg_over_time(demo_generator_queue_requests{generator=\"jmeter\"}[$__interval]), 0.000001)",
+          "metric": "queue_depth",
+          "unit": "requests",
+          "entity": "jmeter",
+          "role": "generator",
+          "aggregation": "interval_mean",
+          "labels": {
+            "generator": "jmeter"
+          }
+        }
+      ],
+      "rules": [
+        {
+          "id": "service-cpu-saturated",
+          "series_id": "service-cpu-busy",
+          "unit": "ratio",
+          "operator": "gt",
+          "threshold": 0.95,
+          "min_consecutive_cells": 6,
+          "effect": "diagnostic"
+        },
+        {
+          "id": "db-saturated",
+          "series_id": "db-busy",
+          "unit": "ratio",
+          "operator": "gt",
+          "threshold": 0.95,
+          "min_consecutive_cells": 6,
+          "effect": "diagnostic"
+        },
+        {
+          "id": "downstream-slow",
+          "series_id": "downstream-wait",
+          "unit": "requests",
+          "operator": "gt",
+          "threshold": 10,
+          "min_consecutive_cells": 3,
+          "effect": "diagnostic"
+        },
+        {
+          "id": "generator-queue-high",
+          "series_id": "generator-queue",
+          "unit": "requests",
+          "operator": "gt",
+          "threshold": 5,
+          "min_consecutive_cells": 3,
+          "effect": "diagnostic"
+        }
+      ]
+    }
+  ]
+}

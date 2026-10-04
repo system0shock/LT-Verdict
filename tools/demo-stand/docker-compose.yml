@@ -1,0 +1,88 @@
+# Demo stand for LT Verdict: NOT a production dependency, only a local demo environment.
+# Every published port is bound to 127.0.0.1. Image tags are pinned.
+name: ltv-demo-stand
+
+services:
+  generator:
+    # One-shot job: simulates the three demo scenarios and writes ./out (OpenMetrics, JTL, snapshot, capacity plan).
+    image: python:3.14.3-slim
+    working_dir: /repo/tools/demo-stand
+    command: ["python", "generator/generate.py", "--out", "/out"]
+    volumes:
+      - ..:/repo/tools:ro
+      - ./out:/out
+    restart: "no"
+
+  backfill:
+    # One-shot job: writes the generated series into the Prometheus TSDB as historical blocks (once per volume).
+    image: prom/prometheus:v3.5.5
+    entrypoint:
+      - /bin/sh
+      - -c
+      - |
+        sum=$$(sha256sum /out/metrics.om | cut -d' ' -f1)
+        if [ -e /prometheus/.ltv-demo-backfilled ]; then
+          if [ "$$(cat /prometheus/.ltv-demo-backfilled)" = "$$sum" ]; then echo "already backfilled"; exit 0; fi
+          echo "metrics.om changed since the last backfill: run docker compose down -v first" >&2; exit 1
+        fi
+        promtool tsdb create-blocks-from openmetrics /out/metrics.om /prometheus && echo "$$sum" > /prometheus/.ltv-demo-backfilled
+    depends_on:
+      generator:
+        condition: service_completed_successfully
+    volumes:
+      - promdata:/prometheus
+      - ./out:/out:ro
+    restart: "no"
+
+  prometheus:
+    image: prom/prometheus:v3.5.5
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      - --storage.tsdb.retention.time=3650d
+    depends_on:
+      backfill:
+        condition: service_completed_successfully
+    volumes:
+      - promdata:/prometheus
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    ports:
+      - "127.0.0.1:19090:9090"
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:9090/-/ready"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  grafana:
+    image: grafana/grafana:12.4.12
+    depends_on:
+      prometheus:
+        condition: service_healthy
+    environment:
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Viewer
+      GF_SECURITY_DISABLE_INITIAL_ADMIN_CREATION: "true"
+      GF_USERS_DEFAULT_THEME: light
+      GF_ANALYTICS_REPORTING_ENABLED: "false"
+      GF_ANALYTICS_CHECK_FOR_UPDATES: "false"
+      GF_RENDERING_SERVER_URL: http://renderer:8081/render
+      GF_RENDERING_CALLBACK_URL: http://grafana:3000/
+    volumes:
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./grafana/dashboards:/var/lib/grafana/dashboards:ro
+    ports:
+      - "127.0.0.1:13000:3000"
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:3000/api/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+
+  renderer:
+    # Optional: only for the "Render PNG" button. Start with: docker compose --profile render up -d
+    image: grafana/grafana-image-renderer:v5.12.5
+    profiles: ["render"]
+
+volumes:
+  promdata:

@@ -42,6 +42,19 @@ test.describe('verdict summary', () => {
     expect(summarizeVerdict(result, { policySha256: 'NO_POLICY' }).facts.at(-1)).toEqual({ label: 'Политика (хэш)', value: 'не задана' })
   })
 
+  test('the policy id precedes the hash and is omitted when empty', () => {
+    const result = build({ policy_verdict: 'PASS' })
+    const withBoth = summarizeVerdict(result, { policyId: 'my-policy', policySha256: 'ab12'.repeat(16) })
+
+    expect(withBoth.facts.at(-2)).toEqual({ label: 'Политика (id)', value: 'my-policy' })
+    expect(withBoth.facts.at(-1)?.value).toBe('ab12ab12ab12')
+    expect(summarizeVerdict(result, { policyId: 'my-policy' }).facts.at(-1)).toEqual({ label: 'Политика (id)', value: 'my-policy' })
+    for (const policyId of [null, '', undefined]) {
+      expect(summarizeVerdict(result, { policyId }).facts.map((fact) => fact.label)).not.toContain('Политика (id)')
+    }
+    expect(summarizeVerdict(result).facts.map((fact) => fact.label)).not.toContain('Политика (id)')
+  })
+
   test('FAIL names the broken rules with value and threshold', () => {
     const summary = summarizeVerdict(build({ policy_verdict: 'FAIL', evidence: [overall, checkout, p95Rule('checkout-p95', 'FAIL', 2340), errorRule, p95Rule('ok-rule', 'PASS', 100)] }))
 

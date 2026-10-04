@@ -21,6 +21,7 @@ export interface RunPage {
 export interface AnalysisSummary {
   analysis_id: string
   policy_sha256: string
+  policy_id?: string | null
   policy_verdict: AnalysisResult['policy_verdict']
   run_validity: AnalysisResult['run_validity']
 }

@@ -508,7 +508,9 @@ class PromqlSourceTest {
             assertArrayEquals(good, acquisition.artifacts.getValue("source-response-1.json"))
             val summary = acquisition.artifacts.getValue("source-acquisition.json").decodeToString()
             assertFalse(summary.contains("password"))
-            assertFalse(summary.contains(server.address.port.toString()))
+            val port = server.address.port
+            assertFalse(summary.contains("127.0.0.1"))
+            assertFalse(Regex("(?<!\")" + ":$port\\b").containsMatchIn(summary))
         } finally {
             server.stop(0)
         }

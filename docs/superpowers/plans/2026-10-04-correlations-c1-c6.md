@@ -131,6 +131,7 @@ K1 (`3` в `4`: многостадийные планы перестают бы�
 | 8 | Вычислительный бюджет C5 и порядок «замер, заморозка, прогон» | да | H4, H5 |
 | 9 | Запасной вариант при провале гейта на AR(1) | сначала сузить заявление, затем усложнять метод; гейт не ослабляется | H5 |
 | 10 | Демонстрация до C5 с пометками | да | U1 |
+| 11 | Длинные стадии (больше 240 ячеек): правило подокна, объявленное в плане как окно снимка, автошаг (ADR 0014) или повышение предела | правило подокна | K1, демонстрация, H0 |
 
 ## Проверка: оракулы, сценарии, вычислительный бюджет
 
@@ -383,7 +384,7 @@ private fun firstDifferences(points: List<PairPoint>): List<PairPoint> // length
 - Consumes: `generate`, `oracle.wilson_upper`.
 - Produces: `freeze(inventory) -> corpus` (манифест, входы, хэши, `scenario_id`, seeds); `score(corpus, actual) -> report` со статусами `PASS`, `INCOMPLETE`, `CORRECTNESS FAIL`, `USEFULNESS FAIL`; полнота: каждый `scenario_id x seed` присутствует ровно раз, selection есть по каждой паре и окну, ключ по паре и окну, размер семьи не теряет недоступные гипотезы.
 
-- [ ] **Step 1: Failing tests:** `score marks missing report as INCOMPLETE not pass`; `score uses wilson upper bound at 54 of 1000 pass and 55 fail`; `score rejects duplicate pair window key`; `score counts unavailable as missed detection on positive scenario`; `inputs round to four decimals and avoid negative zero` (Review Focus 7).
+- [ ] **Step 1: Failing tests:** `score marks missing report as INCOMPLETE not pass`; `score uses wilson upper bound at 54 of 1000 pass and 55 fail`; `score rejects duplicate pair window key`; `score joins candidate finding with selection by pair and window`; `score rejects a finding without a matching selected evidence`; `score counts unavailable as missed detection on positive scenario`; `inputs round to four decimals and avoid negative zero` (Review Focus 7).
 - [ ] **Step 2:** реализовать; запустить на малом корпусе (20 отчётов `N01`) на текущем `v1`, сверить с оракулом на ручных фикстурах.
 - [ ] **Step 3:** замерить время отчёта внутри процесса и худшей формы (`N08`), записать в протокол как фактический вычислительный бюджет; решить: хватает ли `1000 x 21` в отведённое время.
 - [ ] **Step 4:** commit: `test: add correlation acceptance driver and scorer`.

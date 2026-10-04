@@ -660,7 +660,9 @@ async function showVerdict() {
   if (!shellNew) return
   activeTab.value = 'overview'
   await nextTick()
-  document.getElementById('verdict')?.scrollIntoView()
+  const verdict = document.getElementById('verdict')
+  verdict?.scrollIntoView()
+  verdict?.focus({ preventScroll: true })
 }
 
 async function jumpTo(target: AttentionTarget) {

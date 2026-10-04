@@ -7,6 +7,7 @@ defineProps<{ summary: VerdictSummary }>()
 <template>
   <section
     id="verdict"
+    tabindex="-1"
     class="panel verdict-strip verdict-card"
     :data-verdict="summary.verdict"
     aria-labelledby="verdict-title"

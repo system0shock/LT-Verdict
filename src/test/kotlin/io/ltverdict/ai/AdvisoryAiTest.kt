@@ -19,11 +19,13 @@ import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertInstanceOf
 import org.junit.jupiter.api.Assertions.assertThrows
+import org.junit.jupiter.api.Assertions.assertTimeoutPreemptively
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.io.TempDir
 import java.nio.file.Files
 import java.nio.file.Path
+import java.time.Duration
 
 class AdvisoryAiTest {
     @TempDir
@@ -68,6 +70,104 @@ class AdvisoryAiTest {
                 AdvisoryEvidenceBuilder.build(RUN_ID, ANALYSIS_ID, MANIFEST_SHA, oversized)
             }
         assertEquals(AdviceFailure.INPUT_LIMIT, error.reason)
+    }
+
+    @Test
+    fun `evidence of the baseline fixture keeps its pinned identity`() {
+        val evidence = AdvisoryEvidenceBuilder.build(RUN_ID, ANALYSIS_ID, MANIFEST_SHA, analysisResult(RUN_ID))
+
+        assertEquals("055ffe3179d6b5a1a10ad5294babd056611e5f56d0b6c8a27760251352fe978e", evidence.sha256)
+    }
+
+    @Test
+    fun `evidence redacts secrets embedded in free-text labels and keeps the rest of the label`() {
+        val cases =
+            mapOf(
+                "login password=hunter2" to "login password=[REDACTED]",
+                "login Password: hunter2 retry" to "login Password: [REDACTED] retry",
+                "GET /api?token=abc" to "GET /api?token=[REDACTED]",
+                "GET /api?user=x&access_token=abc&page=2" to "GET /api?user=x&access_token=[REDACTED]&page=2",
+                "POST /v1?api-key=k1&sessionid=s2;JSESSIONID=s3" to
+                    "POST /v1?api-key=[REDACTED]&sessionid=[REDACTED];JSESSIONID=[REDACTED]",
+                "call secret=a1 pwd=b2 passwd=c3" to "call secret=[REDACTED] pwd=[REDACTED] passwd=[REDACTED]",
+                "hdr Authorization: Bearer abc123" to "hdr Authorization: [REDACTED]",
+                "hdr authorization=Basic dXNlcjpwYXNz tail" to "hdr authorization=[REDACTED] tail",
+                "use Bearer abc123xyz9 now" to "use Bearer [REDACTED] now",
+                "hdr Cookie: a=1; b=2" to "hdr Cookie: [REDACTED]",
+                "https://user:pw@host/path" to "https://[REDACTED]@host/path",
+                "jwt " + listOf("eyJhbGciOiJIUzI1NiJ9", "eyJzdWIiOiIxMjM0NTY3ODkwIn0", "c2lnbmF0dXJlMTIz").joinToString(".") + " end" to
+                    "jwt [REDACTED] end",
+                "tok Zm9vYmFyQmF6MTIzNDU2Nzg5MEFCQ0RFRkdISUpL end" to "tok [REDACTED] end",
+                "login password=\"two words\" ok" to "login password=[REDACTED] ok",
+            )
+        cases.forEach { (label, expected) ->
+            val text = evidenceFor(label).bytes.decodeToString()
+            assertTrue(text.contains(expected), "expected <$expected> for <$label> in $text")
+        }
+        val all = cases.keys.joinToString(" | ") { evidenceFor(it).bytes.decodeToString() }
+        listOf(
+            "hunter2",
+            "=abc\"",
+            "=abc&",
+            "=k1",
+            "=s2",
+            "=s3",
+            "abc123",
+            "dXNlcjpwYXNz",
+            "two words",
+            "Zm9vYmFy",
+            "b=2",
+            "user:pw",
+            "c2lnbmF0dXJl",
+        ).forEach {
+            assertFalse(all.contains(it), "leaked <$it>")
+        }
+    }
+
+    @Test
+    fun `evidence leaves benign labels byte-identical`() {
+        val labels =
+            listOf(
+                "Step 1: token refresh",
+                "GET /sessions/list",
+                "GET /api/users?page=2&size=10",
+                "Login page",
+                "password reset form",
+                "a".repeat(8) + "b".repeat(56),
+                "123e4567-e89b-12d3-a456-426614174000",
+                "GET /api/v2/UserAccounts3",
+            )
+        val fixtureMarkers =
+            evidenceFor("plain")
+                .bytes
+                .decodeToString()
+                .split("[REDACTED]")
+                .size
+        labels.forEach { label ->
+            val text = evidenceFor(label).bytes.decodeToString()
+            assertTrue(text.contains(label), "changed <$label> in $text")
+            assertEquals(fixtureMarkers, text.split("[REDACTED]").size, "redacted <$label>")
+        }
+    }
+
+    @Test
+    fun `evidence redaction stays linear on a long label made of keywords`() {
+        assertTimeoutPreemptively(Duration.ofSeconds(10)) {
+            evidenceFor("token".repeat(50_000))
+            evidenceFor("a=".repeat(100_000) + "password")
+        }
+    }
+
+    @Test
+    fun `evidence redaction is deterministic and its hash does not encode the secret`() {
+        val first = evidenceFor("login password=hunter2")
+        val second = evidenceFor("login password=hunter2")
+        val other = evidenceFor("login password=another-value")
+
+        assertArrayEquals(first.bytes, second.bytes)
+        assertEquals(first.sha256, second.sha256)
+        assertArrayEquals(first.bytes, other.bytes)
+        assertEquals(first.sha256, other.sha256)
     }
 
     @Test
@@ -319,6 +419,32 @@ class AdvisoryAiTest {
                 Files.write(staging.resolve("analysis-result.json"), canonicalJson(analysisResult(input.runId)))
             }
         return AnalysisFixture(input.runId, analysisId, path)
+    }
+
+    private fun evidenceFor(label: String): AdvisoryEvidence {
+        val base = analysisResult(RUN_ID)
+        val result =
+            buildJsonObject {
+                base.forEach { (name, value) -> put(name, value) }
+                put(
+                    "findings",
+                    buildJsonArray {
+                        add(
+                            buildJsonObject {
+                                put("message", "p95 exceeded")
+                                put(
+                                    "scope",
+                                    buildJsonObject {
+                                        put("kind", "transaction")
+                                        put("label", label)
+                                    },
+                                )
+                            },
+                        )
+                    },
+                )
+            }
+        return AdvisoryEvidenceBuilder.build(RUN_ID, ANALYSIS_ID, MANIFEST_SHA, result)
     }
 
     private fun analysisResult(runId: String) =

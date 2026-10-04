@@ -389,12 +389,26 @@ private fun sanitize(
 
         is JsonArray -> buildJsonArray { value.forEach { add(sanitize(it, depth + 1)) } }
         is JsonPrimitive ->
-            if (value.isString && SECRET_PATTERNS.any { it.containsMatchIn(value.content) }) {
-                JsonPrimitive(REDACTED)
-            } else {
+            if (!value.isString) {
                 value
+            } else {
+                val masked = redactInline(value.content)
+                when {
+                    SECRET_PATTERNS.any { it.containsMatchIn(masked) } -> JsonPrimitive(REDACTED)
+                    masked == value.content -> value
+                    else -> JsonPrimitive(masked)
+                }
             }
     }
+}
+
+// Free text (sampler labels, URLs, messages) may embed secrets; mask only the secret part so the label stays usable.
+private fun redactInline(text: String): String {
+    var result = text
+    for (pattern in INLINE_SECRET_PATTERNS) {
+        result = pattern.replace(result) { it.groupValues[1] + REDACTED + it.groupValues[2] }
+    }
+    return result
 }
 
 private fun isSecretKey(name: String): Boolean {
@@ -517,8 +531,24 @@ private val SECRET_KEYS =
     )
 private val SECRET_PATTERNS =
     listOf(
-        Regex("(?i)\\bbearer\\s+[A-Za-z0-9._~+/=-]{8,}"),
         Regex("\\b(?:sk|pk)-[A-Za-z0-9_-]{12,}\\b"),
         Regex("-----BEGIN [A-Z ]*PRIVATE KEY-----"),
-        Regex("(?i)https?://[^\\s/:]+:[^\\s/@]+@"),
+    )
+
+// Group 1 is kept, group 2 is the kept tail; the secret value between them becomes REDACTED.
+// Quantifiers around the keywords are bounded so a long free-text value cannot cause quadratic matching.
+private val INLINE_SECRET_PATTERNS =
+    listOf(
+        // Cookie / Set-Cookie: the whole value up to the end of the line.
+        Regex("(?i)(cookie[\\w.-]{0,32}[\"']?\\s{0,8}[=:]\\s{0,8})[^\\r\\n]+()"),
+        // key=value / key: value pairs in headers and query strings (access_token, api-key, JSESSIONID, ...).
+        Regex(
+            "(?i)((?:password|passwd|pwd|secret|token|api[_-]?key|authorization|session)[\\w.-]{0,32}[\"']?\\s{0,8}[=:]\\s{0,8})" +
+                "(?:\"[^\"\\r\\n]*\"|'[^'\\r\\n]*'|(?:(?:bearer|basic|digest|negotiate|token)\\s+)?[^\\s&;,\"']+)()",
+        ),
+        Regex("(?i)(\\bbearer\\s+)[A-Za-z0-9._~+/=-]{8,}()"),
+        Regex("(?i)(https?://)[^\\s/:@]+:[^\\s/@]+(@)"),
+        Regex("()\\beyJ[A-Za-z0-9_-]{8,}\\.[A-Za-z0-9_-]{8,}\\.[A-Za-z0-9_-]*()"),
+        // Long base64-like token mixing lower case, upper case and digits; plain hex ids and UUIDs do not match.
+        Regex("(?<![A-Za-z0-9+_=-])()(?=[A-Za-z0-9+_=-]*[a-z])(?=[A-Za-z0-9+_=-]*[A-Z])(?=[A-Za-z0-9+_=-]*[0-9])[A-Za-z0-9+_=-]{32,}()"),
     )

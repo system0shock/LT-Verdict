@@ -77,6 +77,22 @@ Relay разрешает один запрос к фиксированному M
 model, удаляет token-cap и provider-routing fields и принимает только один
 `structured_output` call. Retries отсутствуют.
 
+Перед отправкой evidence очищается от секретов. Поля с именами `password`,
+`token`, `api_key`, `cookie` и подобными заменяются целиком. В свободном тексте
+(label транзакции или sampler, URL, сообщения) маскируется только значение:
+пары `key=value` и `key: value` с ключами `password`, `passwd`, `pwd`, `secret`,
+`token`, `api_key`, `authorization`, `cookie`, `session` (в том числе параметры
+query-string, например `access_token`, `JSESSIONID`), `Bearer`-значения, пароль
+в `https://user:pass@host`, JWT и длинные base64-подобные токены. Значение
+становится `[REDACTED]`, остальной label сохраняется: `login password=hunter2`
+превращается в `login password=[REDACTED]`. Маскирование эвристическое и не
+ловит секрет без ключа в тексте (например `/reset/hunter2`), короткий токен
+в path, ключи не из списка и значения, разбитые между полями; не помещайте
+секреты в labels тестов. Результат детерминирован, поэтому `evidence_input_sha256`
+не зависит от самого значения секрета. Ранее сохранённый advice, чей evidence
+содержал такие строки, после обновления не проходит проверку
+совпадения evidence и читается как `CORRUPT_AI_ADVICE`.
+
 Лимиты: evidence `262144` bytes, advice `131072` bytes, stderr `16384` bytes,
 provider response `67108864` bytes. Qwen timeout — `600s`, container deadline —
 `605s`, host launcher deadline — `613s`, Kotlin outer timeout — `620s`.

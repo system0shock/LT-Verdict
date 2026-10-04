@@ -8,6 +8,7 @@ import org.junit.jupiter.api.Assertions.assertArrayEquals
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertInstanceOf
 import org.junit.jupiter.api.Assertions.assertNotEquals
+import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertThrows
 import org.junit.jupiter.api.Test
 import java.io.ByteArrayInputStream
@@ -288,6 +289,39 @@ class ResourceSnapshotTest {
         json: ByteArray,
         size: Int,
     ): ByteArray = ByteArray(size) { ' '.code.toByte() }.also { json.copyInto(it) }
+
+    @Test
+    fun `arm label is all or nothing with one short value`() {
+        assertEquals("A", valid(armSnapshot(memory = "A", cpu = "A").encodeToByteArray()).snapshot.arm)
+        assertNull(valid(snapshot().encodeToByteArray()).snapshot.arm)
+        assertInvalid(armSnapshot(memory = "A", cpu = "B"), "INVALID_ARM_LABEL", "/series/1/labels/arm")
+        assertInvalid(armSnapshot(memory = "A", cpu = null), "INVALID_ARM_LABEL", "/series/1/labels")
+        assertInvalid(armSnapshot(memory = null, cpu = "A"), "INVALID_ARM_LABEL", "/series/1/labels/arm")
+        assertInvalid(armSnapshot(memory = "x".repeat(129), cpu = "x".repeat(129)), "INVALID_ARM_LABEL", "/series/0/labels/arm")
+        assertInvalid(armSnapshot(memory = "", cpu = ""), "INVALID_TEXT", "/series/0/labels/arm")
+    }
+
+    @Test
+    fun `arm contract examples are accepted and refused by the runtime validator`() {
+        val ok = Files.readAllBytes(Path.of("docs/contracts/resources/v1/examples/valid/arm.json"))
+        assertEquals("A", valid(ok).snapshot.arm)
+        assertInvalid(
+            Files.readString(Path.of("docs/contracts/resources/v1/examples/invalid/arm-mixed.json")),
+            "INVALID_ARM_LABEL",
+            "/series/1/labels/arm",
+        )
+    }
+
+    private fun armSnapshot(
+        memory: String?,
+        cpu: String?,
+    ): String {
+        val memoryLabels = if (memory == null) """{"zone":"test"}""" else """{"zone":"test","arm":"$memory"}"""
+        val cpuLabels = if (cpu == null) "" else """"labels":{"arm":"$cpu"},"""
+        return snapshot()
+            .replace(""""labels":{"zone":"test"},"values":[10""", """"labels":$memoryLabels,"values":[10""")
+            .replace(""""interval_mean","values":[0.7""", """"interval_mean",$cpuLabels"values":[0.7""")
+    }
 
     private fun valid(bytes: ByteArray): ResourceValidation.Valid =
         assertInstanceOf(

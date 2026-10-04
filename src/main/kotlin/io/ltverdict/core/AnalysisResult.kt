@@ -45,6 +45,7 @@ internal fun analysisIdentity(
             resources?.let {
                 put("resource_snapshot_sha256", it.semanticSha256)
                 put("resource_config_sha256", it.configSha256)
+                it.snapshot.arm?.let { arm -> put("resource_arm", arm) }
             }
             diagnostics?.let { put("diagnostic_plan_sha256", it.sha256) }
             sourceAcquisitionSha256?.let { put("source_acquisition_sha256", it) }

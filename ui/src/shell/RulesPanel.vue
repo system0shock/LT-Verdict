@@ -19,19 +19,22 @@ const refs = computed(() => transactionRefs(props.result))
 const message = ref('')
 const skippedSmall = ref('')
 const skippedAmbiguous = ref('')
-watch(() => props.result?.run_id, () => { message.value = ''; skippedSmall.value = ''; skippedAmbiguous.value = '' })
+const skippedUnnamed = ref('')
+watch(() => props.result?.run_id, () => { message.value = ''; skippedSmall.value = ''; skippedAmbiguous.value = ''; skippedUnnamed.value = '' })
 
 function expand() {
   if (!props.policy) return
   const plan = expandPerTransaction(toRaw(props.policy), refs.value)
   skippedSmall.value = ''
   skippedAmbiguous.value = ''
+  skippedUnnamed.value = ''
   if (plan.refused) { message.value = RULES_LABELS.perTxRefused[plan.refused]; return }
   if (plan.added) emit('update-policy', plan.policy)
   message.value = plan.added ? RULES_LABELS.perTxDone(plan.added, props.runName) : RULES_LABELS.perTxNothingNew
   const floor = props.policy.defaults?.sample_floor ?? MIN_SAMPLES_FLOOR
   if (plan.skippedSmall.length) skippedSmall.value = RULES_LABELS.perTxSkippedSmall(floor, RULES_LABELS.perTxList(plan.skippedSmall, true))
   if (plan.skippedAmbiguous.length) skippedAmbiguous.value = RULES_LABELS.perTxSkippedAmbiguous(RULES_LABELS.perTxList(plan.skippedAmbiguous, false))
+  if (plan.skippedUnnamed.length) skippedUnnamed.value = RULES_LABELS.perTxSkippedUnnamed(plan.skippedUnnamed.length)
 }
 </script>
 
@@ -155,25 +158,32 @@ function expand() {
       >
         {{ RULES_LABELS.perTxNoResult }}
       </p>
-      <p
+      <div
         v-if="message"
-        class="notice notice-warn rules-panel__message"
         role="status"
       >
-        {{ message }}
-      </p>
-      <p
-        v-if="skippedSmall"
-        class="rules-panel__message"
-      >
-        {{ skippedSmall }}
-      </p>
-      <p
-        v-if="skippedAmbiguous"
-        class="rules-panel__message"
-      >
-        {{ skippedAmbiguous }}
-      </p>
+        <p class="notice notice-warn rules-panel__message">
+          {{ message }}
+        </p>
+        <p
+          v-if="skippedSmall"
+          class="rules-panel__message"
+        >
+          {{ skippedSmall }}
+        </p>
+        <p
+          v-if="skippedAmbiguous"
+          class="rules-panel__message"
+        >
+          {{ skippedAmbiguous }}
+        </p>
+        <p
+          v-if="skippedUnnamed"
+          class="rules-panel__message"
+        >
+          {{ skippedUnnamed }}
+        </p>
+      </div>
     </section>
   </section>
 </template>

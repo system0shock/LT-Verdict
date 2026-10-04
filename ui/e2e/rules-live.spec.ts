@@ -35,4 +35,7 @@ test('live rules template and transaction expansion validate and affect the next
   await page.getByRole('button', { name: SETUP_LABELS.startButton }).click()
   await expect(page.getByTestId('overview-panel')).toBeVisible()
   await expect(page.locator('#verdict')).not.toHaveAttribute('data-verdict', 'NO_VERDICT')
+  // The expanded rules really reached the core: 2 overall + 4 transaction rule checks.
+  await page.locator('#shell-tab-tables').click()
+  await expect(page.getByTestId('rule-row')).toHaveCount(6)
 })

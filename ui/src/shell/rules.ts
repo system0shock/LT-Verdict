@@ -7,6 +7,7 @@ import throughput from './policy-templates/api-throughput.json' with { type: 'js
 export const MIN_SAMPLES_FLOOR = 20
 export const MAX_POLICY_RULES = 256
 export const MAX_ID_BYTES = 128
+export const MAX_POLICY_BYTES = 1_048_576
 export const ID_SUFFIX_BYTES = 7
 
 export interface PolicyTemplate { id: string; policy: Policy }
@@ -36,6 +37,9 @@ export function thresholdHint(metric: PolicyRule['metric'], value: string): Thre
       const decimal = shifted.slice(2).replace(/0+$/, '')
       preview = `${whole === '1' ? '100' : `${integer}${decimal ? `.${decimal}` : ''}`} %`
     }
+    // Exponent notation (5e-2) is a valid number too: the float path is display-only and rounded to 12 digits.
+    const number = Number(value)
+    if (!valid && /^\d*\.?\d+e[+-]?\d+$/i.test(value) && number >= 0 && number <= 1) preview = `${Number((number * 100).toPrecision(12))} %`
     return { unit: RULES_LABELS.unitRatio, hint: RULES_LABELS.hintRatio, preview }
   }
   if (metric === 'throughput_rps') return { unit: RULES_LABELS.unitRps, hint: RULES_LABELS.hintRps, preview: null }
@@ -70,21 +74,24 @@ export interface PerTransactionPlan {
   added: number
   skippedSmall: TransactionRef[]
   skippedAmbiguous: TransactionRef[]
-  refused: 'NO_TRANSACTIONS' | 'TOO_MANY_RULES' | 'NO_BASE_RULES' | 'BASE_ID_TOO_LONG' | null
+  skippedUnnamed: TransactionRef[]
+  refused: 'NO_TRANSACTIONS' | 'TOO_MANY_RULES' | 'TOO_LARGE' | 'NO_BASE_RULES' | 'BASE_ID_TOO_LONG' | null
 }
 
 export function expandPerTransaction(policy: Policy, refs: TransactionRef[]): PerTransactionPlan {
   const copy = structuredClone(policy)
   const refuse = (refused: NonNullable<PerTransactionPlan['refused']>): PerTransactionPlan =>
-    ({ policy: copy, added: 0, skippedSmall: [], skippedAmbiguous: [], refused })
+    ({ policy: copy, added: 0, skippedSmall: [], skippedAmbiguous: [], skippedUnnamed: [], refused })
   if (!refs.length) return refuse('NO_TRANSACTIONS')
   const base = policy.rules.filter((rule) => rule.scope.kind === 'overall' && rule.metric !== 'throughput_rps')
   if (!base.length) return refuse('NO_BASE_RULES')
   const floor = policy.defaults?.sample_floor ?? MIN_SAMPLES_FLOOR
   const ordered = [...refs].sort((a, b) => a.label < b.label ? -1 : a.label > b.label ? 1 : 0)
-  const skippedAmbiguous = ordered.filter((item) => item.ambiguous)
-  const skippedSmall = ordered.filter((item) => !item.ambiguous && item.sampleCount < floor)
-  const eligible = ordered.filter((item) => !item.ambiguous && item.sampleCount >= floor)
+  const skippedUnnamed = ordered.filter((item) => item.label === '')
+  const named = ordered.filter((item) => item.label !== '')
+  const skippedAmbiguous = named.filter((item) => item.ambiguous)
+  const skippedSmall = named.filter((item) => !item.ambiguous && item.sampleCount < floor)
+  const eligible = named.filter((item) => !item.ambiguous && item.sampleCount >= floor)
   if (eligible.length && base.some((rule) => new TextEncoder().encode(rule.id).length > MAX_ID_BYTES - ID_SUFFIX_BYTES)) return refuse('BASE_ID_TOO_LONG')
   const used = new Set(copy.rules.map((rule) => rule.id))
   let counter = 1
@@ -101,6 +108,7 @@ export function expandPerTransaction(policy: Policy, refs: TransactionRef[]): Pe
     }
     counter++
   }
-  if (copy.rules.length > MAX_POLICY_RULES) return { policy: structuredClone(policy), added: 0, skippedSmall: [], skippedAmbiguous: [], refused: 'TOO_MANY_RULES' }
-  return { policy: copy, added, skippedSmall, skippedAmbiguous, refused: null }
+  if (copy.rules.length > MAX_POLICY_RULES) return { ...refuse('TOO_MANY_RULES'), policy: structuredClone(policy) }
+  if (new TextEncoder().encode(JSON.stringify(copy)).length > MAX_POLICY_BYTES) return { ...refuse('TOO_LARGE'), policy: structuredClone(policy) }
+  return { policy: copy, added, skippedSmall, skippedAmbiguous, skippedUnnamed, refused: null }
 }

@@ -4,7 +4,7 @@ import { expect, test } from '@playwright/test'
 import type { AnalysisResult } from '../src/types'
 import { RULES_LABELS } from '../src/shell/labels.rules'
 import {
-  ID_SUFFIX_BYTES, MAX_ID_BYTES, MAX_POLICY_RULES, MIN_SAMPLES_FLOOR,
+  ID_SUFFIX_BYTES, MAX_ID_BYTES, MAX_POLICY_BYTES, MAX_POLICY_RULES, MIN_SAMPLES_FLOOR,
   POLICY_TEMPLATES, expandPerTransaction, summarizePolicy, templateById,
   thresholdHint, thresholdHintText, transactionRefs,
 } from '../src/shell/rules'
@@ -39,7 +39,8 @@ test('threshold hints use decimal text for ratio previews', () => {
     expect(thresholdHint('error_rate_ratio', value)).toMatchObject({ unit: RULES_LABELS.unitRatio, hint: RULES_LABELS.hintRatio, preview })
     expect(thresholdHintText('error_rate_ratio', value)).toBe(`${RULES_LABELS.preview(preview)}. ${RULES_LABELS.hintRatio}`)
   }
-  for (const value of ['', 'abc', '1.5', '-1']) expect(thresholdHint('error_rate_ratio', value).preview).toBeNull()
+  for (const [value, preview] of [['5e-2', '5 %'], ['1e-3', '0.1 %'], ['1E0', '100 %']]) expect(thresholdHint('error_rate_ratio', value).preview).toBe(preview)
+  for (const value of ['', 'abc', '1.5', '-1', '2e-0']) expect(thresholdHint('error_rate_ratio', value).preview).toBeNull()
   expect(thresholdHint('response_time_p95_ms', '1000')).toMatchObject({ unit: RULES_LABELS.unitMs, preview: null })
   expect(thresholdHint('throughput_rps', '100')).toMatchObject({ unit: RULES_LABELS.unitRps, preview: null })
 })
@@ -116,6 +117,27 @@ test('core and UI bounds stay aligned', () => {
   expect(core).toContain(`MIN_SAMPLES_FLOOR = ${MIN_SAMPLES_FLOOR}L`)
   expect(core).toContain(`MAX_POLICY_RULES = ${MAX_POLICY_RULES}`)
   expect(core).toContain(`MAX_IDENTIFIER_BYTES = ${MAX_ID_BYTES}`)
+  const api = readFileSync(fileURLToPath(new URL('../../src/main/kotlin/io/ltverdict/web/LocalApi.kt', import.meta.url)), 'utf8')
+  expect(api).toContain(`MAX_POLICY_BYTES = ${String(MAX_POLICY_BYTES).replace(/\B(?=(\d{3})+(?!\d))/g, '_')}`)
   expect(ID_SUFFIX_BYTES).toBe(7)
   expect(new TextEncoder().encode('api').length).toBeLessThan(4096)
+})
+
+test('an empty transaction name is never turned into a rule', () => {
+  const plan = expandPerTransaction(basic(), [ref(''), ref('api')])
+  expect(plan.added).toBe(2)
+  expect(plan.skippedUnnamed).toEqual([ref('')])
+  expect(plan.skippedSmall).toEqual([])
+  expect(plan.policy.rules.every((rule) => rule.scope.kind === 'overall' || rule.scope.name !== '')).toBe(true)
+})
+
+test('an expansion above the server policy size limit is refused as a whole', () => {
+  const refs = Array.from({ length: 127 }, (_, i) => ref(`${String(i).padStart(3, '0')}${'x'.repeat(4090)}`))
+  const plan = expandPerTransaction(basic(), refs)
+  expect(plan.refused).toBe('TOO_LARGE')
+  expect(plan.added).toBe(0)
+  expect(plan.policy.rules).toHaveLength(2)
+  const fits = expandPerTransaction(basic(), refs.slice(0, 100))
+  expect(fits.refused).toBeNull()
+  expect(new TextEncoder().encode(JSON.stringify(fits.policy)).length).toBeLessThanOrEqual(MAX_POLICY_BYTES)
 })

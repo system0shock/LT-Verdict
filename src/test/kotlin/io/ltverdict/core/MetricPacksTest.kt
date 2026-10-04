@@ -79,7 +79,11 @@ class MetricPacksTest {
         )
         assertEquals(
             listOf("cpu-ratio", "mem-ratio"),
-            openshift.getValue("series_ids").jsonArray.map { it.jsonPrimitive.content }.sorted(),
+            openshift
+                .getValue("series_ids")
+                .jsonArray
+                .map { it.jsonPrimitive.content }
+                .sorted(),
         )
     }
 

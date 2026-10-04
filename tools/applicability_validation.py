@@ -25,13 +25,20 @@ def rounded(value):
             Decimal('.000001'), rounding=ROUND_HALF_UP))
 
 
-def latency_percentile(values, percentile):
+def hdr_upper_bound(value, significant_digits=3):
+    """Upper bound of the HDR equivalent range (lowest discernible value 1 ms)."""
+    # sub_bucket_count is 2**ceil(log2(2*10**digits)): 2048, 32768, 262144 for 3, 4, 5 digits.
+    sub_bucket_bits = (2*10**significant_digits-1).bit_length()
+    width_bits = max(0, value.bit_length()-sub_bucket_bits)
+    return value | ((1 << width_bits)-1)
+
+
+def latency_percentile(values, percentile, significant_digits=3):
     if not values:
         return None
     value = sorted(values)[max(0, ceil(len(values)*percentile/100)-1)]
-    # HDR, lowest discernible 1 ms / 3 significant digits: upper bucket boundary.
-    width_bits = max(0, value.bit_length()-11)
-    return value | ((1 << width_bits)-1)
+    # ADR 0016: the HDR upper bound is computed first and then capped by the observed maximum.
+    return min(hdr_upper_bound(value, significant_digits), max(values))
 
 
 def load_facts(requests, start_us, end_us):

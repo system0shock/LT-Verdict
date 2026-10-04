@@ -82,8 +82,31 @@ class TraceOracleTest(unittest.TestCase):
         # HdrHistogram Java 2.2.2 uses ceil, unlike older/C-port rank rounding.
         self.assertEqual(2, study.latency_percentile([1]*29+[2]*2,95))
         self.assertEqual(100, study.latency_percentile([100]*400 + [1000]*20, 95))
-        self.assertEqual(4095, study.latency_percentile([4094], 95))
+        self.assertEqual(4094, study.latency_percentile([4094], 95))
+        self.assertEqual(4096, study.latency_percentile([4096]*100, 95))
         self.assertIsNone(study.latency_percentile([], 95))
+
+    def test_hdr_rounding_is_computed_before_the_maximum_cap(self):
+        # ADR 0016: HDR (2.2.2, 3 digits) returns the upper bound of the equivalent range.
+        for value, upper in [(2047, 2047), (2048, 2049), (4095, 4095), (4096, 4099),
+                             (60000, 60031), (86400000, 86441983)]:
+            self.assertEqual(upper, study.hdr_upper_bound(value), value)
+        self.assertEqual(60001, study.hdr_upper_bound(60000, 4))
+        self.assertEqual(60000, study.hdr_upper_bound(60000, 5))
+        self.assertEqual(60031, study.latency_percentile([60000]*100 + [70000], 95))
+        self.assertEqual(60010, study.latency_percentile([60000]*95 + [60010]*5, 95))
+        self.assertEqual(60001, study.latency_percentile([60000]*100 + [70000], 95, 4))
+
+    def test_percentiles_are_capped_by_the_maximum_at_any_precision(self):
+        for digits in (3, 4, 5):
+            for value in (2047, 2048, 4096, 60000, 86400000):
+                values = [value]*100
+                for percentile in (50, 95, 99):
+                    self.assertEqual(value, study.latency_percentile(values, percentile, digits), (digits, value))
+        values = [1, 2048, 4096, 60000]*25
+        published = [study.latency_percentile(values, p) for p in (50, 95, 99)]
+        self.assertEqual(sorted(published), published)
+        self.assertLessEqual(published[-1], max(values))
 
     def test_request_window_uses_start_not_completion_and_timeout_is_error(self):
         requests = [

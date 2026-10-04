@@ -5,7 +5,8 @@
   применимых бизнес-правил получает бизнес-вердикт `NO_POLICY`, а не пустой
   `PASS`. Id окна, которого нет в снимке (и любое правило с `window_ids` без
   снимка), даёт `NO_VERDICT` с новой причиной `RULE_WINDOW_NOT_FOUND` и evidence
-  `rule_window_check`. Для анализов без `window_ids` результат, identity и
+  `rule_window_check`; в режиме `capacity_step` такой id тоже не даёт итогового
+  `PASS` или `FAIL` по ёмкости. Для анализов без `window_ids` результат, identity и
   `analysis_id` не меняются; файл политики с `window_ids` имеет другой
   `policy_sha256` и потому другой `analysis_id`. Прежняя версия отвергает такой
   файл как `UNKNOWN_FIELD`. Ключ сопоставимости baseline не менялся.

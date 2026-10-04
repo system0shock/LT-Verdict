@@ -127,6 +127,29 @@ class CapacityAnalysisTest {
     }
 
     @Test
+    fun `an unknown rule window id keeps a capacity run from passing or failing`() {
+        val plan =
+            plan(
+                CapacityLoadAxis.RPS,
+                required = BigDecimal("296"),
+                stages = listOf(stage("300", 300, 0), stage("350", 350, 300_000)),
+            )
+        val load = load("300" to List(30) { 296 }, "350" to List(30) { 344 })
+        val clean = policy("300" to "PASS", "350" to "FAIL")
+        val typo = clean.copy(coverageReasons = listOf("RULE_WINDOW_NOT_FOUND"))
+
+        val passing = evaluateCapacity(plan, resources(), load, RunValidity.VALID, clean)
+        val blocked = evaluateCapacity(plan, resources(), load, RunValidity.VALID, typo)
+        val failing = evaluateCapacity(plan.copy(requiredCapacity = BigDecimal("344")), resources(), load, RunValidity.VALID, typo)
+
+        assertEquals(PolicyVerdict.PASS, passing.policyVerdict)
+        assertEquals(PolicyVerdict.NO_VERDICT, blocked.policyVerdict)
+        assertEquals(PolicyVerdict.NO_VERDICT, failing.policyVerdict)
+        assertEquals(true, "RULE_WINDOW_NOT_FOUND" in blocked.coverageReasons)
+        assertEquals(emptyList<String>(), passing.coverageReasons)
+    }
+
+    @Test
     fun `all axes require thirty complete bins and use type 7 p05`() {
         val values = List(30) { BigDecimal.valueOf((it + 1).toLong()) }
         listOf(CapacityLoadAxis.RPS, CapacityLoadAxis.CONCURRENCY, CapacityLoadAxis.USERS).forEach { axis ->

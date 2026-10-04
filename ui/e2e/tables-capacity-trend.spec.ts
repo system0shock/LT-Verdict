@@ -112,6 +112,13 @@ test('overview capacity attention opens and focuses the capacity region', async 
   await expect(page.locator('#capacity-results .table-wrap')).toBeFocused()
 })
 
+test('overview trend attention opens and focuses the trend region', async ({ page }) => {
+  await openNewShellWithResult(page)
+  await page.getByTestId('attention-item').getByRole('button', { name: OVERVIEW_LABELS.openTrends }).first().click()
+  await expect(page.locator('#shell-tab-tables')).toHaveAttribute('aria-selected', 'true')
+  await expect(page.locator('#trend-results .table-wrap')).toBeFocused()
+})
+
 for (const theme of ['light', 'dark'] as const) {
   test(`capacity and trend tables have no serious axe violations in ${theme}`, async ({ page }) => {
     await page.emulateMedia({ colorScheme: theme })

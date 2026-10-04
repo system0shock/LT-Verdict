@@ -211,6 +211,22 @@ class DemoStandTests(unittest.TestCase):
         self.assertNotIn("ports", override)
         self.assertNotIn("image", override)
 
+    def test_mtls_stand_is_separate_and_local(self):
+        stand = TOOLS / "demo-stand"
+        compose = (stand / "docker-compose.mtls.yml").read_text(encoding="ascii")
+        script = (stand / "mtls/generate-certs.sh").read_text(encoding="ascii")
+        self.assertIn("name: ltv-mtls-stand", compose)
+        self.assertIn("name: ltv-demo-stand_default", compose)
+        self.assertIn("external: true", compose)
+        self.assertIn("127.0.0.1:13443:8443", compose)
+        self.assertEqual(re.findall(r"^    image: (.+)$", compose, re.M),
+                         ["alpine/openssl:3.3.2", "nginx:1.27.5-alpine"])
+        self.assertEqual(compose.count("    ports:"), 1)
+        self.assertNotIn("  grafana:", compose)
+        self.assertEqual(script.count("openssl rand -hex 16"), 2)
+        self.assertNotIn("-----BEGIN PRIVATE KEY-----", script)
+        self.assertIn("out/", (stand / ".gitignore").read_text(encoding="ascii"))
+
     def test_soak_policy_matches_api_template(self):
         policy = json.loads((TOOLS / "demo-stand/policies/soak-4h.json").read_text(encoding="ascii"))
         template = json.loads((TOOLS / "../ui/src/shell/policy-templates/api-basic.json").read_text(encoding="ascii"))

@@ -53,6 +53,37 @@ class MetricPacksTest {
     }
 
     @Test
+    fun `limit ratio signals of the platform base profile are recognised capabilities`() {
+        val result =
+            buildJsonObject {
+                put(
+                    "evidence",
+                    buildJsonArray {
+                        add(summary("cpu-ratio", "openshift_container_cpu_limit_ratio"))
+                        add(summary("mem-ratio", "openshift_container_memory_limit_ratio"))
+                    },
+                )
+                put("findings", buildJsonArray {})
+            }
+
+        val openshift =
+            metricPackAnalysis(result)
+                .getValue("packs")
+                .jsonArray
+                .map { it.jsonObject }
+                .first { it.getValue("id").jsonPrimitive.content == "openshift" }
+
+        assertEquals(
+            listOf("cpu_limit_ratio", "memory_limit_ratio"),
+            openshift.getValue("available_capabilities").jsonArray.map { it.jsonPrimitive.content },
+        )
+        assertEquals(
+            listOf("cpu-ratio", "mem-ratio"),
+            openshift.getValue("series_ids").jsonArray.map { it.jsonPrimitive.content }.sorted(),
+        )
+    }
+
+    @Test
     fun `missing packs are skipped and missing observations never become healthy findings`() {
         val absent =
             metricPackAnalysis(

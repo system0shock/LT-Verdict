@@ -51,6 +51,32 @@ class PlatformProfilesTest(unittest.TestCase):
         self.assertEqual("interval_mean", by_metric["openshift_container_cpu_limit_ratio"]["aggregation"])
         self.assertEqual("interval_rate", by_metric["openshift_oom"]["aggregation"])
 
+    def test_a_signal_that_is_a_maximum_by_definition_needs_the_peak_mode(self):
+        config = dict(BASE, signals=["jvm_gc_pause"])
+        with self.assertRaisesRegex(ValueError, "needs interval_max"):
+            build_connections(config)
+        document = build_connections(dict(config, peak_aggregation=True))
+        self.assertEqual("interval_max", document["connections"][0]["queries"][0]["aggregation"])
+
+    def test_jvm_signal_units_aggregations_and_rendering(self):
+        expected = {
+            "jvm_heap_used": ("bytes", "interval_mean"),
+            "jvm_old_gen_used": ("bytes", "interval_mean"),
+            "jvm_non_heap_used": ("bytes", "interval_mean"),
+            "jvm_thread_count": ("count", "interval_mean"),
+            "jvm_process_cpu": ("ratio", "interval_mean"),
+            "jvm_gc_pause": ("s", "interval_max"),
+            "jvm_gc_time": ("ratio", "interval_rate"),
+            "jvm_pool_saturation": ("ratio", "interval_mean"),
+        }
+        self.assertEqual(expected, {name: (spec.unit, spec.aggregation)
+                                    for name, spec in SIGNALS.items() if name.startswith("jvm_")})
+        for name in expected:
+            signal = SIGNALS[name]
+            for peak in (False, True) if signal.peak and not signal.peak_only else (signal.peak_only,):
+                with self.subTest(signal=name, peak=peak):
+                    self.assertNotIn("@", render(signal, "shop", "orders-svc", "15s", peak=peak))
+
     def test_default_mode_never_labels_a_mean_as_a_peak(self):
         document = build_connections(BASE)
         for query in (q for c in document["connections"] for q in c["queries"]):

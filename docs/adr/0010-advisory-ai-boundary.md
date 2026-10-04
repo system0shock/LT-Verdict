@@ -45,6 +45,14 @@ Code 0.21.1 как замену GigaCode с GigaCode naming на уровне wr
   model и одним upstream request; универсальный proxy framework не создаётся.
 - Documentation impact: добавлены contract, prompt, design decision и plan;
   user/API integration выполняется корневым треком.
+- Согласие на внешнюю передачу и выбор модели (ADR
+  [0023](0023-advisory-ai-consent-by-endpoint-scope-and-model-choice.md),
+  Proposed, 2026-10-04): текст этого ADR не меняется. Предложено выводить
+  требование согласия из области endpoint (`external` требует согласия,
+  `internal` нет; ModelStudio всегда `external`), а не из пользователя; в
+  случае принятия п. 5 (единственный runner, модель и endpoint) дополняется
+  ADR он-прем раннера, а п. 4 (один immutable advice на analysis) остаётся
+  в силе и для выбора модели.
 
 ## Поправка production readiness от 2026-09-22
 

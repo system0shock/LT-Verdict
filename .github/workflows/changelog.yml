@@ -40,7 +40,7 @@ jobs:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
         run: |
           set -euo pipefail
-          changed="$(git diff --name-only --diff-filter=AMDR "$BASE_SHA"...HEAD)"
+          changed="$(git -c core.quotepath=off diff --no-renames --name-only --diff-filter=AMD "$BASE_SHA"...HEAD)"
 
           # Код и контракты, видимые пользователю. Остальные PR проверку не проходят.
           if ! grep -Eq '^(src/main/|ui/src/|docs/contracts/|tools/)' <<<"$changed"; then
@@ -48,8 +48,8 @@ jobs:
             exit 0
           fi
 
-          # Новый или изменённый фрагмент: <id>.<added|changed|fixed>.md.
-          added="$(git diff --name-only --diff-filter=AM "$BASE_SHA"...HEAD -- changelog.d)"
+          # Фрагмент, добавленный этим PR: <id>.<added|changed|fixed>.md.
+          added="$(git -c core.quotepath=off diff --no-renames --name-only --diff-filter=A "$BASE_SHA"...HEAD -- changelog.d)"
           if grep -Eiq '^changelog\.d/[A-Za-z0-9][A-Za-z0-9_-]*\.(added|changed|fixed)\.md$' <<<"$added"; then
             echo "Changelog: fragment found."
             exit 0

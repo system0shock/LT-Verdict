@@ -38,7 +38,12 @@ def read_fragments(directory):
     except OSError as exc:
         return grouped, [error("changelog.d", str(exc))]
     for path in children:
-        if path.is_dir() or path.name == "README.md" or path.name.startswith("."):
+        if path.name == "README.md" or path.name.startswith("."):
+            continue
+        if path.is_symlink():
+            errors.append(error(path.name, "symbolic links are not allowed"))
+            continue
+        if path.is_dir():
             continue
         match = NAME.fullmatch(path.name)
         if not match:

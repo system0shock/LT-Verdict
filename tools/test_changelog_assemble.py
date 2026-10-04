@@ -115,6 +115,17 @@ class ChangelogAssembleTest(unittest.TestCase):
         (self.fragments / "nested").mkdir()
         self.assertEqual((0, "changelog: 0 fragment(s) OK\n", ""), self.run_cli("--check"))
 
+    def test_check_rejects_symlink_named_like_a_fragment(self):
+        target = self.root / "target-dir"
+        target.mkdir()
+        try:
+            (self.fragments / "42.added.md").symlink_to(target, target_is_directory=True)
+        except (OSError, NotImplementedError):
+            self.skipTest("symbolic links are not available")
+        code, _, err = self.run_cli("--check")
+        self.assertEqual(1, code)
+        self.assertIn("changelog: 42.added.md: symbolic links are not allowed", err)
+
     def test_check_rejects_invalid_fragments_without_writes(self):
         cases = {
             "bad_name": ("foo.md", b"- entry\n"),

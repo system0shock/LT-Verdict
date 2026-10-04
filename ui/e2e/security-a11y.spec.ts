@@ -1,8 +1,9 @@
 import AxeBuilder from '@axe-core/playwright'
 import { expect, test, type Locator } from '@playwright/test'
 import { fileURLToPath } from 'node:url'
+import { e2ePort } from './e2e-env'
 
-const origin = 'http://127.0.0.1:18473'
+const origin = `http://127.0.0.1:${e2ePort(18473)}`
 const fixture = (path: string) => fileURLToPath(new URL(`../../fixtures/${path}`, import.meta.url))
 const maliciousLabel = '<img src="x" onerror="alert(1)">'
 const gappedJtl = `timeStamp,elapsed,label,success

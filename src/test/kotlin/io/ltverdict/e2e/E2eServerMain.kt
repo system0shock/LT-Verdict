@@ -28,7 +28,15 @@ fun main() {
             if (request.input.originalFilename == BLOCKING_INPUT) blockUntilCancelled()
             analyzeWithSources(service, request, source, processedBytes, checkCancelled)
         }
-    val server = startLocalServer(LocalApiContext(store, jobs, profiles), port = 18_473, openBrowser = false)
+    val rawPort = System.getenv("LTV_E2E_PORT")
+    val port =
+        if (rawPort.isNullOrEmpty()) {
+            18_473
+        } else {
+            rawPort.takeIf { value -> value.all { it in '0'..'9' } }?.toIntOrNull()?.takeIf { it in 1024..65535 }
+                ?: error("Invalid LTV_E2E_PORT: $rawPort (expected integer 1024..65535)")
+        }
+    val server = startLocalServer(LocalApiContext(store, jobs, profiles), port = port, openBrowser = false)
     val stopped = CountDownLatch(1)
     val closed = AtomicBoolean()
     val close = {

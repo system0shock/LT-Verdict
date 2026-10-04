@@ -75,6 +75,7 @@ test('puts the verdict above the run form and explains FAIL in words', async ({ 
   const lines = page.getByTestId('verdict-lines')
   await expect(lines).toContainText('Правило checkout-p95 · p95 отклика · POST /checkout')
   await expect(lines).toContainText(/2\s340 мс при пороге ≤ 2\s000 мс/)
+  await expect(page.locator('.verdict-facts div').filter({ hasText: 'Политика (хэш)' }).locator('dd')).toHaveText('cccccccccccc')
 })
 
 test('keeps a verdict chip in the header while scrolling and jumps back to the card', async ({ page }) => {

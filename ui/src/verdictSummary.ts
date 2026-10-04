@@ -227,7 +227,7 @@ export function failedLinesOf(result: AnalysisResult): FailedLine[] {
   ]
 }
 
-export function summarizeVerdict(result: AnalysisResult): VerdictSummary {
+export function summarizeVerdict(result: AnalysisResult, context: { policySha256?: string } = {}): VerdictSummary {
   const verdict = result.policy_verdict
   const capacity = result.analysis_mode === 'capacity_step' ? result.capacity_summary : undefined
   const { business, resource } = checksOf(result)
@@ -305,6 +305,9 @@ export function summarizeVerdict(result: AnalysisResult): VerdictSummary {
   const overall = overallMetrics(result)
   const denominator = overall?.throughput_rps.denominator
   const errorRate = overall ? ratioValue(overall.error_rate_ratio ?? undefined) : null
+  const policyFact = context.policySha256
+    ? [{ label: 'Политика (хэш)', value: context.policySha256 === 'NO_POLICY' ? 'не задана' : context.policySha256.slice(0, 12) }]
+    : []
   return {
     verdict,
     headline,
@@ -323,6 +326,7 @@ export function summarizeVerdict(result: AnalysisResult): VerdictSummary {
       { label: 'Запросов', value: overall ? numbers.format(overall.sample_count) : '—' },
       { label: 'Доля ошибок', value: errorRate === null ? '—' : `${numbers.format(errorRate * 100)} %` },
       { label: 'Проверок', value: String(total) },
+      ...policyFact,
     ],
   }
 }

@@ -135,7 +135,9 @@ let policyRevision = 0
 let adviceRevision = 0
 let uploadAbort: AbortController | null = null
 
-const verdictSummary = computed(() => (result.value ? summarizeVerdict(result.value) : null))
+const verdictSummary = computed(() => (result.value
+  ? summarizeVerdict(result.value, { policySha256: analyses.value.find((item) => item.analysis_id === selectedAnalysisId.value)?.policy_sha256 })
+  : null))
 watch(result, (value) => { if (shellNew && value) activeTab.value = 'overview' })
 const working = computed(() => job.value?.state === 'QUEUED' || job.value?.state === 'PROCESSING')
 const selectedReference = computed(() => result.value && selectedAnalysisId.value

@@ -34,6 +34,14 @@ const errorRule = { id: 'check-errors', type: 'policy_check', rule_id: 'overall-
 const flat = (text: string) => text.replace(/\s+/g, ' ')
 
 test.describe('verdict summary', () => {
+  test('the policy hash is a fact only when the saved list provides it', () => {
+    const result = build({ policy_verdict: 'PASS' })
+
+    expect(summarizeVerdict(result).facts.map((fact) => fact.label)).not.toContain('Политика (хэш)')
+    expect(summarizeVerdict(result, { policySha256: 'ab12'.repeat(16) }).facts.at(-1)).toEqual({ label: 'Политика (хэш)', value: 'ab12ab12ab12' })
+    expect(summarizeVerdict(result, { policySha256: 'NO_POLICY' }).facts.at(-1)).toEqual({ label: 'Политика (хэш)', value: 'не задана' })
+  })
+
   test('FAIL names the broken rules with value and threshold', () => {
     const summary = summarizeVerdict(build({ policy_verdict: 'FAIL', evidence: [overall, checkout, p95Rule('checkout-p95', 'FAIL', 2340), errorRule, p95Rule('ok-rule', 'PASS', 100)] }))
 

@@ -240,6 +240,77 @@ docker compose -f docker-compose.yml -f docker-compose.soak.yml up -d --wait
 4 часах исход `service-cpu-saturated` тот же, на коротких тестах смысл правила менялся бы.
 Вкладка «Глубокий анализ» подбирает шаг сама (не более 1500 ячеек): на 4 часах это 10 с.
 
+## Слой совместимости с платформенными профилями (необязательно)
+
+Профили OpenShift, которые выпускает `tools/platform_profiles.py` (срез P0 плана
+платформы), читают семейства метрик в форме контракта меток
+([пакеты метрик](../../docs/user/platform-metric-packs.md)). Стенд по умолчанию их
+не отдаёт: Prometheus здесь хранит только синтетические ряды `demo_*`, cAdvisor в нём нет,
+поэтому шаблоны вернули бы пустоту. Каталог `platform/` содержит фрагменты для
+варианта стенда с реальными контейнерами и cAdvisor. В `docker-compose.yml` и
+`prometheus/prometheus.yml` ничего не подключено: стенд по умолчанию и его данные не меняются.
+
+| Файл | Что делает |
+| --- | --- |
+| `platform/prometheus.platform.yml` | полная конфигурация Prometheus (заменяет `prometheus/prometheus.yml`): задание `cadvisor` (цель `cadvisor:8080`), опрос и вычисление правил раз в 5 с, `metric_relabel_configs` |
+| `platform/platform-compat.rules.yml` | recording rules контракта меток |
+| `platform/profile-config.stand.json` | конфигурация генератора для стенда: `grafana_proxy`, `ltv-demo-prometheus`, `scrape_interval_ms` 5000, `request_step_ms` 10000 |
+
+Relabel (из меток cAdvisor Docker): `namespace` = `shop`, `pod` = `name` (имя
+контейнера), `container` = `app`, `workload` = `container_label_com_docker_compose_service`.
+Остаются только контейнеры compose-проекта (непустые `name`, проект и сервис): корневые cgroup и чужие
+контейнеры хоста отбрасываются; чтобы взять один проект, подставьте его имя вместо
+среднего `.+` в регулярном выражении `keep`. Recording rules:
+
+- `namespace_workload_pod:kube_pod_owner:relabel` (значение 1) и `kube_pod_container_info`
+  из `container_last_seen` и `container_start_time_seconds`;
+- `node_namespace_pod_container:container_cpu_usage_seconds_total:sum_irate`:
+  `sum by (...) (irate(container_cpu_usage_seconds_total[1m]))` (окно не меньше двух
+  интервалов опроса);
+- `kube_pod_container_resource_limits{resource="memory"}` из
+  `container_spec_memory_limit_bytes` и `{resource="cpu"}` из
+  `container_spec_cpu_quota / container_spec_cpu_period`, только положительные: у
+  контейнера без `mem_limit` или `cpus` в compose limit не появляется, и отношение к limit
+  даёт пропуск (в политике `NO_VERDICT`), а не ноль. Задайте `mem_limit` и `cpus`
+  сервисам приложения.
+
+Отличия от плана и границы (честно):
+
+- К правилам плана добавлены `sum_irate` и `kube_pod_container_info`: без них
+  `cpu_limit_ratio` и оба отношения к limit пусты.
+- `kube_pod_info` намеренно не записывается: это источник живости сигнала `restarts`, и
+  производная от cAdvisor превратила бы рестарты в выдуманный ноль. Без неё `restarts` остаётся пропуском.
+- Нет kube-state-metrics: `restarts` и `unavailable_replicas` на стенде не воспроизводятся, в
+  `profile-config.stand.json` их нет (подмножество `cpu_limit_ratio`, `memory_limit_ratio`,
+  `cpu_throttling`, `oom`). `oom` нужен `container_oom_events_total`; без счётчика при живом контейнере
+  сигнал даёт 0.
+- Защита полноты слабее боевой: «ожидаемые контейнеры» берутся из того же cAdvisor, поэтому
+  исчезновение контейнера целиком из cAdvisor пропуском не станет.
+- Демо-профиль `connections.demo.json` остаётся прежним: платформенный профиль выпускается отдельно
+  (команда ниже) и применяется к стенду со слоем совместимости.
+
+Профиль выпускается из корня репозитория (имя сервиса в `services` равно имени compose-сервиса приложения;
+шаг запроса не меньше 10 с, чтобы `rate` видел две точки при опросе 5 с):
+
+```powershell
+python -m tools.platform_profiles --config tools\demo-stand\platform\profile-config.stand.json --out connections.platform.json
+```
+
+Проверка: `python -m unittest tools.test_platform_stand -v` из корня репозитория. Без
+`promtool` исполняются только структурные проверки; с `promtool` (или образом:
+`$env:LTV_PROMTOOL_DOCKER_IMAGE='prom/prometheus:v3.5.5'`) добавляются `promtool check
+config/rules` и `promtool test rules`: сценарии P0b повторяются на рядах в форме
+cAdvisor после relabel, плюс красные случаи (нулевой limit памяти, квота 0 и -1,
+`restarts` без `kube_pod_info`).
+
+Что проверено и что нет. Проверено: `promtool` на синтетике; сквозной прогон (relabel, правила и
+шаблоны в настоящем Prometheus v3.5.5) на поддельном экспортёре в форме cAdvisor с корневой cgroup,
+контейнерами двух compose-проектов, контейнерами с limit и без. Не проверено: настоящий cAdvisor.
+Образ `gcr.io/cadvisor/cadvisor:v0.52.1` на Docker Desktop (хранилище образов containerd) не
+распознал контейнеры compose (метка `name` пуста, ошибка «failed to identify the
+read-write layer ID»), поэтому имена `container_spec_cpu_quota`/`period`, `container_oom_events_total`
+и метки `container_label_*` реального cAdvisor на стенде не подтверждены.
+
 ## Известные ограничения
 
 - Значения рядов с более чем 12 знаками после запятой ядро отвергает
@@ -279,7 +350,9 @@ grafana/                     провиженинг источника данн�
 connections.demo.json        профиль источника продукта (grafana_proxy)
 source-request.demo.json     запрос авто-окна
 policies/                    политики трёх сценариев и теста на 4 часа
+platform/                    необязательный слой совместимости с платформенными профилями (relabel, recording rules)
 ```
 
 Генератор проверяется тестом `tools/test_demo_stand.py`
-(`python -m unittest tools.test_demo_stand -v` из корня репозитория).
+(`python -m unittest tools.test_demo_stand -v` из корня репозитория), слой совместимости
+тестом `tools/test_platform_stand.py`.

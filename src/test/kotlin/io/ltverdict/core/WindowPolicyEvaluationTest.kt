@@ -165,6 +165,7 @@ class WindowPolicyEvaluationTest {
                     PolicyScope.Overall,
                 ),
             ),
+            PolicyDefaultsV1(sampleFloor = 1, minSamples = 1),
         )
 
     private fun metrics(

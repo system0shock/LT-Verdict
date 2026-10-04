@@ -3215,7 +3215,7 @@ const coverage = check.expected_cells && check.observed_cells !== undefined && c
 
 **Ветка:** `feat/baseline-candidates-need-gates`. **Размер:** S для кода, M для правки тестов. **Зависит от:** S1; согласовать с ADR 0019 D5a (оба меняют отбор кандидатов и одни и те же тесты); ответы владельца 2026-10-04 на пункты 3 и 7 получены. **Identity и контракты:** identity не меняется; ключ сопоставимости не меняется. Публичное изменение: новая причина 422 `BASELINE_CANDIDATE_GATES_UNKNOWN` в ответе `POST /api/baseline` (режим `statistical`); ручной режим (`manual`) не меняется.
 
-**Что не входит:** правило «baseline только из PASS», предупреждение `BASELINE_SMALL_SAMPLE`, список релизов и кандидатов (ADR 0019); `SMALL_SAMPLE` не исключает кандидата (решение владельца 2026-10-04, п. 3): условие `analysis_coverage = COMPLETE` (`BaselineComparison.kt:101-104`) правится так, чтобы `INCOMPLETE` только из-за причины `SMALL_SAMPLE` не отказывал (вместе с D5a ADR 0019).
+**Что не входит:** правило «baseline только из PASS», предупреждение `BASELINE_SMALL_SAMPLE`, список релизов и кандидатов (ADR 0019); но допуск `SMALL_SAMPLE` (шаг 1.3) и предупреждение `BASELINE_SMALL_SAMPLE` выпускаются вместе в одном релизе с D5a, допуск без предупреждения не включается; `SMALL_SAMPLE` не исключает кандидата (решение владельца 2026-10-04, п. 3): условие `analysis_coverage = COMPLETE` (`BaselineComparison.kt:101-104`) правится так, чтобы `INCOMPLETE` только из-за причины `SMALL_SAMPLE` не отказывал (вместе с D5a ADR 0019).
 
 **Files:**
 

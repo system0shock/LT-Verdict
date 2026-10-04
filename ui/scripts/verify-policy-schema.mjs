@@ -76,8 +76,12 @@ for (const example of manifest.policy_examples) {
 const resourceSchema = await readJson('docs/contracts/resources/v1/resource-snapshot.schema.json')
 const validateResource = new Ajv2020({ strict: false }).compile(resourceSchema)
 const resourceExample = await readJson('docs/contracts/resources/v1/examples/valid/basic.json')
+const intervalExample = await readJson('docs/contracts/resources/v1/examples/valid/interval-max-min.json')
+const unsupportedExample = await readJson('docs/contracts/resources/v1/examples/invalid/unsupported-aggregation.json')
 for (const [name, value, expected] of [
   ['basic resources', resourceExample, true],
+  ['interval max and min', intervalExample, true],
+  ['unsupported aggregation', unsupportedExample, false],
   ['decimal integer grid', { ...resourceExample, ...JSON.parse('{"step_ms":1000.0}') }, true],
   ['exponent integer grid', { ...resourceExample, ...JSON.parse('{"step_ms":1e3}') }, true],
   ['unknown resource field', { ...resourceExample, token: 'not-allowed' }, false],

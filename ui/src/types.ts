@@ -177,7 +177,7 @@ export interface ResourceSummaryEvidence {
   unit: string
   entity: string
   role: 'system' | 'generator'
-  aggregation: 'interval_mean' | 'interval_rate'
+  aggregation: 'interval_mean' | 'interval_rate' | 'interval_max' | 'interval_min'
   window_id: string
   from_epoch_ms: number
   to_epoch_ms: number

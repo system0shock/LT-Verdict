@@ -94,6 +94,8 @@ internal enum class ResourceAggregation(
 ) {
     INTERVAL_MEAN("interval_mean"),
     INTERVAL_RATE("interval_rate"),
+    INTERVAL_MAX("interval_max"),
+    INTERVAL_MIN("interval_min"),
 }
 
 internal enum class ResourceOperator(

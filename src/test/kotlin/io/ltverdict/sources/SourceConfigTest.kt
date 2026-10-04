@@ -783,6 +783,69 @@ class SourceConfigTest {
     }
 
     @Test
+    fun `connections v3 declare the arm of a profile and older versions reject it`() {
+        fun arm(
+            version: String,
+            value: String,
+        ) = autostepConnections(version, """"arm":$value,""")
+
+        assertEquals("A", readSourceProfiles(arm("source-connections.v3", "\"A\"").byteInputStream()).single().arm)
+        assertNull(readSourceProfiles(autostepConnections("source-connections.v3", "").byteInputStream()).single().arm)
+        assertEquals(
+            "a".repeat(128),
+            readSourceProfiles(arm("source-connections.v3", "\"${"a".repeat(128)}\"").byteInputStream()).single().arm,
+        )
+        listOf("source-connections.v1", "source-connections.v2").forEach { version ->
+            assertEquals(
+                "SOURCE_CONFIG_INVALID",
+                assertThrows(IllegalArgumentException::class.java) { readSourceProfiles(arm(version, "\"A\"").byteInputStream()) }.message,
+            )
+        }
+        listOf("\"\"", "\"${"a".repeat(129)}\"", "\"a\nb\"", "1", "null").forEach { value ->
+            assertEquals(
+                "SOURCE_CONFIG_INVALID",
+                assertThrows(IllegalArgumentException::class.java) {
+                    readSourceProfiles(arm("source-connections.v3", value).byteInputStream())
+                }.message,
+            )
+        }
+    }
+
+    @Test
+    fun `an armed profile rejects a query that expects another arm label`() {
+        fun profile(expected: String) =
+            """{"schema_version":"source-connections.v3","connections":[{"id":"p","source_kind":"prometheus","transport":"direct",
+            "base_url":"https://example.test","arm":"A","queries":[{"id":"q","expression":"rate(x[${'$'}__interval])",
+            "metric":"x","unit":"ratio","entity":"e","role":"system","aggregation":"interval_rate","labels":{"arm":"$expected"}}]}]}"""
+
+        readSourceProfiles(profile("A").byteInputStream())
+        assertEquals(
+            "SOURCE_CONFIG_INVALID",
+            assertThrows(IllegalArgumentException::class.java) { readSourceProfiles(profile("B").byteInputStream()) }.message,
+        )
+    }
+
+    @Test
+    fun `v3 OpenSearch rejects an arm`() {
+        val config =
+            example("docs/contracts/sources/v1/opensearch-connections.example.json")
+                .replace("source-connections.v1", "source-connections.v3")
+                .replace("\"source_kind\": \"opensearch\",", "\"source_kind\": \"opensearch\", \"arm\": \"A\",")
+
+        assertEquals(
+            "SOURCE_CONFIG_INVALID",
+            assertThrows(IllegalArgumentException::class.java) { readSourceConnections(config.byteInputStream()) }.message,
+        )
+    }
+
+    @Test
+    fun `the published arm connections example is accepted`() {
+        val profiles = readSourceProfiles(example("docs/contracts/sources/v1/arm-connections.example.json").byteInputStream())
+
+        assertEquals(listOf("A", "B"), profiles.map { it.arm })
+    }
+
+    @Test
     fun `v3 connections retain PostgreSQL profiles and reject their scrape interval`() {
         val v3 =
             example("docs/contracts/sources/v1/postgresql-connections.example.json")

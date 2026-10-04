@@ -134,6 +134,10 @@ internal class PromqlSource(
                                 pointCount,
                             )
                     }
+                // The arm label comes from the profile: a response may repeat it but never contradict it.
+                if (profile.arm != null && decoded != null && decoded.labels[ARM_LABEL]?.let { it != profile.arm } == true) {
+                    fail("LABEL_MISMATCH")
+                }
                 if (rawBytes + body.size > MAX_ACQUISITION_RESPONSE_BYTES) fail("RESOURCE_LIMIT_EXCEEDED")
                 if (query.nonNegativeEvents && decoded != null && decoded.values.any { it != null && it.signum() < 0 }) {
                     fail("NEGATIVE_EVENT_VALUE")
@@ -369,7 +373,13 @@ private fun snapshotBytes(
                                 put("entity", item.query.entity)
                                 put("role", item.query.role.wireName)
                                 put("aggregation", item.query.aggregation.wireName)
-                                put("labels", buildJsonObject { item.labels.forEach { (key, value) -> put(key, value) } })
+                                put(
+                                    "labels",
+                                    buildJsonObject {
+                                        item.labels.forEach { (key, value) -> put(key, value) }
+                                        profile.arm?.let { put(ARM_LABEL, it) }
+                                    },
+                                )
                                 put("values", buildJsonArray { item.values.forEach { add(it?.let(::JsonPrimitive) ?: JsonNull) } })
                             },
                         )
@@ -443,6 +453,8 @@ private fun sourceEvidence(
         put("type", "source_summary")
         put("status", status)
         put("profile_id", profile.id)
+        // Published only for an armed profile, so the summary bytes of a profile without an arm stay unchanged.
+        profile.arm?.let { put("arm", it) }
         put("source_kind", profile.sourceKind.wireName)
         put("transport", profile.transport.wireName)
         put("start_epoch_ms", request.startEpochMillis)
@@ -585,5 +597,6 @@ private fun querySetSha256(
 private fun fail(code: String): Nothing = throw PromqlDecodeFailure(code)
 
 private const val MAX_ACQUISITION_RESPONSE_BYTES = 64L * 1024 * 1024
+private const val ARM_LABEL = "arm"
 private val INFLUX_PLACEHOLDER_PATTERN = Regex("\\${'$'}__[A-Za-z0-9_]+")
 private val NONFINITE_VALUES = setOf("NaN", "+Inf", "-Inf", "Inf")

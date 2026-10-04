@@ -699,6 +699,187 @@ class PromqlSourceTest {
         }
     }
 
+    @Test
+    fun `an armed profile labels every series including empty and failed ones and publishes the arm`() {
+        val responses =
+            ArrayDeque(
+                listOf(
+                    200 to matrix("""{"instance":"node-a"}""", """[[1,"1"],[2,"2"]]"""),
+                    200 to """{"status":"success","data":{"resultType":"matrix","result":[]}}""",
+                    500 to "{}",
+                ),
+            )
+        withMatrixServer(responses) { profile ->
+            val queries =
+                listOf("ok", "empty", "failed").map {
+                    query(it, "x_$it[\$__interval]", "ratio", ResourceAggregation.INTERVAL_MEAN)
+                }
+            val armed = profile.copy(queries = queries, arm = "A")
+
+            val acquisition = PromqlSource(listOf(armed), SourceHttp(listOf(armed))).acquire(SourceRequest("local", 0, 2_000, 1_000), HASH)
+
+            val snapshot = requireNotNull(acquisition.snapshot).snapshot
+            assertEquals("A", snapshot.arm)
+            assertEquals(setOf("ok", "empty", "failed"), snapshot.series.map { it.id }.toSet())
+            assertTrue(snapshot.series.all { it.labels["arm"] == "A" })
+            assertEquals(mapOf("instance" to "node-a", "arm" to "A"), snapshot.series.single { it.id == "ok" }.labels)
+            assertEquals("SUCCESS" to null, acquisition.evidence.queryStatus("ok"))
+            assertEquals("MISSING" to "EMPTY_RESULT", acquisition.evidence.queryStatus("empty"))
+            assertEquals("FAILED", acquisition.evidence.queryStatus("failed").first)
+            assertEquals("A", acquisition.evidence.string("arm"))
+        }
+    }
+
+    @Test
+    fun `a response that reports another arm fails the query while the same arm is accepted`() {
+        val responses =
+            ArrayDeque(
+                listOf(
+                    200 to matrix("""{"instance":"node-a","arm":"B"}""", """[[1,"1"]]"""),
+                    200 to matrix("""{"instance":"node-a","arm":"A"}""", """[[1,"2"]]"""),
+                ),
+            )
+        withMatrixServer(responses) { profile ->
+            val queries = listOf("other", "same").map { query(it, "x_$it[\$__interval]", "ratio", ResourceAggregation.INTERVAL_MEAN) }
+            val armed = profile.copy(queries = queries, arm = "A")
+
+            val acquisition = PromqlSource(listOf(armed), SourceHttp(listOf(armed))).acquire(SourceRequest("local", 0, 1_000, 1_000), HASH)
+
+            val series = requireNotNull(acquisition.snapshot).snapshot.series.associateBy { it.id }
+            assertEquals("FAILED" to "LABEL_MISMATCH", acquisition.evidence.queryStatus("other"))
+            assertEquals(listOf<BigDecimal?>(null), series.getValue("other").values)
+            assertEquals("SUCCESS" to null, acquisition.evidence.queryStatus("same"))
+            assertEquals(listOf<BigDecimal?>(BigDecimal("2")), series.getValue("same").values)
+            assertTrue(series.values.all { it.labels["arm"] == "A" })
+        }
+    }
+
+    @Test
+    fun `a profile without an arm keeps its series labels and summary fields`() {
+        val responses = ArrayDeque(listOf(200 to matrix("""{"instance":"node-a"}""", """[[1,"1"]]""")))
+        withMatrixServer(responses) { profile ->
+            val plain = profile.copy(queries = listOf(query("ok", "x[\$__interval]", "ratio", ResourceAggregation.INTERVAL_MEAN)))
+
+            val acquisition = PromqlSource(listOf(plain), SourceHttp(listOf(plain))).acquire(SourceRequest("local", 0, 1_000, 1_000), HASH)
+
+            val snapshot = requireNotNull(acquisition.snapshot).snapshot
+            assertNull(snapshot.arm)
+            assertEquals(mapOf("instance" to "node-a"), snapshot.series.single().labels)
+            assertEquals(
+                setOf(
+                    "id",
+                    "type",
+                    "status",
+                    "profile_id",
+                    "source_kind",
+                    "transport",
+                    "start_epoch_ms",
+                    "end_epoch_ms",
+                    "step_ms",
+                    "queries",
+                    "request_count",
+                    "retries",
+                    "throttle_wait_ms",
+                    "cap_exceeded",
+                ),
+                acquisition.evidence.keys,
+            )
+        }
+    }
+
+    @Test
+    fun `profiles of different arms or an armed profile with an unarmed one are refused before any request`() {
+        OnlineSourceFixture().use { fixture ->
+            val base = readSourceProfiles(fixture.profilesJson().byteInputStream()).single()
+
+            fun refusal(vararg arms: String?): SourcePlanRefusal {
+                val profiles = arms.mapIndexed { index, arm -> base.copy(id = "p$index", arm = arm) }
+                val source = PromqlSource(profiles, SourceHttp(profiles))
+                val request = SourceRequest("p0", 1767225600000, 1767225601000, 1000, profiles.drop(1).map { it.id })
+                return assertThrows(SourcePlanRefusal::class.java) { source.acquire(request, HASH) }
+            }
+
+            assertEquals("INVALID_ARM_LABEL", refusal("A", "B").code)
+            assertEquals("INVALID_ARM_LABEL", refusal("A", null).code)
+            assertEquals("INVALID_ARM_LABEL", refusal(null, "A").code)
+            assertEquals("INVALID_ARM_LABEL", refusal("A", "A", "B").code)
+            assertEquals(0, fixture.requests.get())
+        }
+    }
+
+    @Test
+    fun `profiles of one arm share it and an error source without series does not take part`() {
+        OnlineSourceFixture().use { fixture ->
+            val metric = readSourceProfiles(fixture.profilesJson().byteInputStream()).single()
+            val errors =
+                SourceProfile(
+                    "errors",
+                    SourceKind.OPENSEARCH,
+                    SourceTransport.DIRECT,
+                    metric.baseUrl,
+                    null,
+                    governor = metric.governor,
+                    queries = emptyList(),
+                    openSearch =
+                        OpenSearchMapping(
+                            listOf("application-errors-*"),
+                            "@timestamp",
+                            "service",
+                            "type",
+                            "message",
+                            samplesPerGroup = 0,
+                        ),
+                )
+            val profiles = listOf(metric.copy(id = "a1", arm = "A"), metric.copy(id = "a2", arm = "A"), errors)
+            val request = SourceRequest("a1", 1767225600000, 1767225601000, 1000, listOf("a2", "errors"))
+
+            val acquisition = PromqlSource(profiles, SourceHttp(profiles)).acquire(request, HASH)
+
+            val snapshot = requireNotNull(acquisition.snapshot).snapshot
+            assertEquals("A", snapshot.arm)
+            assertEquals(listOf("a1/cpu", "a2/cpu"), snapshot.series.map { it.id })
+            assertTrue(snapshot.series.all { it.labels["arm"] == "A" })
+            assertEquals(
+                listOf("A", "A", null),
+                acquisition.evidence
+                    .getValue("profiles")
+                    .jsonArray
+                    .map { it.jsonObject["arm"]?.jsonPrimitive?.content },
+            )
+        }
+    }
+
+    private fun withMatrixServer(
+        responses: ArrayDeque<Pair<Int, String>>,
+        block: (SourceProfile) -> Unit,
+    ) {
+        val server = HttpServer.create(InetSocketAddress("127.0.0.1", 0), 0)
+        server.createContext("/api/v1/query_range") { exchange ->
+            val (status, text) = responses.removeFirst()
+            val body = text.encodeToByteArray()
+            exchange.responseHeaders.add("Content-Type", "application/json")
+            exchange.sendResponseHeaders(status, body.size.toLong())
+            exchange.responseBody.use { it.write(body) }
+        }
+        server.start()
+        try {
+            block(
+                SourceProfile(
+                    id = "local",
+                    sourceKind = SourceKind.PROMETHEUS,
+                    transport = SourceTransport.DIRECT,
+                    baseUrl = URI.create("http://127.0.0.1:${server.address.port}"),
+                    datasourceUid = null,
+                    allowInsecureHttp = true,
+                    governor = SourceGovernor(requestsPerSecond = 1_000.0, timeoutMillis = 2_000, maxAttempts = 1),
+                    queries = emptyList(),
+                ),
+            )
+        } finally {
+            server.stop(0)
+        }
+    }
+
     private fun matrix(
         metric: String,
         values: String,

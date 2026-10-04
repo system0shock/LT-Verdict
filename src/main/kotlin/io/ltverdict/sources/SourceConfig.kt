@@ -101,6 +101,8 @@ internal data class SourceProfile(
     // Only source-connections.v3: duration rules store minConsecutiveCells = 1 in rules as a stub.
     // Use rulesAt(stepMillis) to obtain the actual cell count for a snapshot.
     val ruleSpansMillis: Map<String, Long> = emptyMap(),
+    // Only source-connections.v3: the arm label stamped by collection on every series of this profile's snapshot.
+    val arm: String? = null,
 )
 
 internal fun spanToCells(
@@ -371,7 +373,7 @@ private fun parseProfile(
                     "rules",
                 ),
             )
-            if (allowAutoStep) add("scrape_interval_ms")
+            if (allowAutoStep) addAll(setOf("scrape_interval_ms", "arm"))
         },
     )
     val id = value.sourceText("id", MAX_IDENTIFIER_BYTES)
@@ -406,7 +408,7 @@ private fun parseProfile(
     val openSearch =
         if (sourceKind == SourceKind.OPENSEARCH) {
             if (transport != SourceTransport.DIRECT ||
-                listOf("queries", "rules", "database", "datasource_uid", "scrape_interval_ms").any { it in value }
+                listOf("queries", "rules", "database", "datasource_uid", "scrape_interval_ms", "arm").any { it in value }
             ) {
                 configInvalid()
             }
@@ -416,6 +418,9 @@ private fun parseProfile(
             null
         }
     val queries = if (openSearch != null) emptyList() else parseQueries(value.sourceArray("queries"), sourceKind, allowAutoStep)
+    val arm = if (allowAutoStep && "arm" in value) value.sourceText("arm", MAX_IDENTIFIER_BYTES) else null
+    // The arm comes from the profile, never from a query label: a query that expects another arm contradicts it.
+    if (arm != null && queries.any { (it.labels["arm"] ?: arm) != arm }) configInvalid()
     val (rules, spans) =
         value.optionalArray("rules")?.let { parseRules(it, queries, allowAutoStep) }
             ?: (emptyList<ResourceRuleV1>() to emptyMap<String, Long>())
@@ -447,6 +452,7 @@ private fun parseProfile(
         openSearch,
         scrapeIntervalMillis,
         spans,
+        arm,
     )
 }
 

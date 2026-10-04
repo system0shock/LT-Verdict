@@ -458,6 +458,14 @@ internal fun acquireMultipleSources(
     val ids = (listOf(request.profileId) + request.additionalProfileIds).sorted()
     require(ids.size in 2..16 && ids.distinct().size == ids.size) { "SOURCE_REQUEST_INVALID" }
     val selected = ids.map { id -> profiles.singleOrNull { it.id == id } ?: throw IllegalArgumentException("SOURCE_PROFILE_NOT_FOUND") }
+    // One snapshot is one arm: profiles with series must all declare the same arm or none (OpenSearch profiles carry no series).
+    val arms = selected.filter { it.queries.isNotEmpty() }.mapTo(HashSet()) { it.arm }
+    if (arms.size > 1) {
+        throw SourcePlanRefusal(
+            INVALID_ARM_LABEL,
+            "Profiles selected for one snapshot declare different arms or only some of them declare one; select the profiles of one arm",
+        )
+    }
     // Смешанный набор отказывает до первого HTTP-запроса, а не после выборки opensearch-профиля.
     if (selected.any { it.sourceKind != SourceKind.OPENSEARCH }) requireSnapshotGridStep(request.stepMillis)
     val seriesCount = selected.sumOf { it.queries.size }

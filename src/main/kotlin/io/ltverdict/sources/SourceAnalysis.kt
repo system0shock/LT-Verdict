@@ -409,7 +409,7 @@ internal fun acquireMultipleSources(
     fun qualified(
         profile: String,
         id: String,
-    ): String = (profile.replace("%", "%25").replace("/", "%2F") + "/" + id)
+    ): String = qualifiedSeriesId(profile, id)
     selected.forEach { profile ->
         (profile.queries.map { it.id } + profile.rules.map { it.id }).forEach {
             require(qualified(profile.id, it).encodeToByteArray().size <= 128) { "SOURCE_QUALIFIED_ID_TOO_LONG" }
@@ -630,6 +630,11 @@ internal fun acquireMultipleSources(
     artifacts["source-acquisition.json"] = canonicalJson(summary)
     return SourceAcquisition(snapshot, summary, artifacts, contexts)
 }
+
+internal fun qualifiedSeriesId(
+    profileId: String,
+    id: String,
+): String = profileId.replace("%", "%25").replace("/", "%2F") + "/" + id
 
 private fun withSourceLimit(
     summary: JsonObject,

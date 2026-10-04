@@ -117,8 +117,7 @@ for (const size of [{ width: 640, height: 360 }, { width: 320, height: 568 }]) {
 }
 
 for (const size of [{ width: 640, height: 360 }, { width: 320, height: 568 }]) {
-  test.fixme(`the verdict card itself accepts keyboard focus at ${size.width}px`, async ({ page }) => {
-    // #verdict is a section without tabindex; the header chip scrolls to it but cannot focus it.
+  test(`the verdict card itself accepts keyboard focus at ${size.width}px`, async ({ page }) => {
     await page.setViewportSize(size)
     await openScreen(page, 'overview')
     await page.getByTestId('verdict-chip').focus()

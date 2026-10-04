@@ -1,6 +1,7 @@
 import { expect, test, type Page } from '@playwright/test'
 import AxeBuilder from '@axe-core/playwright'
 import { BASELINE_LABELS } from '../src/shell/labels'
+import { COMPARE_LABELS } from '../src/shell/labels.compare'
 
 async function analyze(page: Page, name: string, elapsed: number, timestamp: number) {
   await page.getByTestId('input-file').setInputFiles({
@@ -367,4 +368,34 @@ test('ignores a comparison response after selecting another run', async ({ page 
   release()
   await expect.poll(() => finished).toBe(true)
   await expect(page.getByTestId('baseline-comparison')).toHaveCount(0)
+})
+
+test('the new shell compare tab shows the same numbers in Russian', async ({ page }) => {
+  const filename = 'baseline-newshell.jtl'
+  const { run_id, analysis_id } = await analyze(page, filename, 100, 1767225950000)
+  await page.getByRole('button', { name: 'Set as baseline', exact: true }).click()
+  await page.getByRole('button', { name: 'Compare selected analysis', exact: true }).click()
+  await expect(page.getByTestId('baseline-comparison')).toContainText('UNCONFIRMED')
+  const oldP95 = (await page.getByTestId('comparison-response_time_p95_ms').locator('td').allInnerTexts()).slice(1, 4)
+  const oldThroughput = (await page.getByTestId('comparison-throughput_rps').locator('td').allInnerTexts()).slice(1, 4)
+
+  await page.goto('/?shell=new')
+  await page.getByRole('button', { name: filename }).click()
+  await page.locator(`button[title="${analysis_id}"]`).click()
+  await expect(page.locator('#verdict')).toBeVisible()
+  await page.locator('#shell-tab-compare').click()
+  await page.getByRole('button', { name: COMPARE_LABELS.compare, exact: true }).click()
+  await expect(page.getByTestId('baseline-warnings').locator('li')).toHaveText([
+    BASELINE_LABELS.warnings.BASELINE_IS_CURRENT_ANALYSIS,
+  ])
+  await expect(page.getByTestId('baseline-comparison')).toContainText(COMPARE_LABELS.statusLine('UNCONFIRMED'))
+  const newP95 = (await page.getByTestId('comparison-response_time_p95_ms').locator('td').allInnerTexts()).slice(1, 4)
+  const newThroughput = (await page.getByTestId('comparison-throughput_rps').locator('td').allInnerTexts()).slice(1, 4)
+  expect(newP95).toEqual(oldP95)
+  expect(newThroughput).toEqual(oldThroughput)
+
+  const response = await page.request.get(`/api/runs/${run_id}/analyses/${analysis_id}/comparison`)
+  expect(response.ok()).toBeTruthy()
+  const comparison = await response.json() as { metrics: Array<{ metric: string; delta: string | null }> }
+  expect(comparison.metrics.find((metric) => metric.metric === 'response_time_p95_ms')?.delta).toBe(newP95[2])
 })

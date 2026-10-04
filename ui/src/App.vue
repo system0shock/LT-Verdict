@@ -16,7 +16,7 @@ import TransactionsTable from './shell/TransactionsTable.vue'
 import ShellPanel from './shell/ShellPanel.vue'
 import ShellTabs from './shell/ShellTabs.vue'
 import { JOB_LABELS, SETUP_MESSAGES, SHELL_DEFAULT_TAB, SHELL_LABELS, UPLOAD_LABELS, type ShellTabKey } from './shell/labels'
-import { isNewShell } from './shell/shell'
+import { browserStorage, resolveNewShell } from './shell/shell'
 import {
   ApiError,
   bootstrap,
@@ -38,12 +38,12 @@ import type { AttentionTarget } from './shell/overview'
 import type { AnalysisResult, AnalysisSummary, Bucket, JobStatus, OpenSearchEvidence, Policy, PolicyError, PostgresContextEvidence, RunSummary, SourceProfile, SourceRequest, Theme } from './types'
 
 const theme = ref<Theme>(window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light')
-const shellNew = isNewShell(window.location.search)
+const shellNew = resolveNewShell(window.location.search, browserStorage())
 const uploadLabels = shellNew
   ? UPLOAD_LABELS
   : { cancel: 'Cancel upload', cancelled: 'Upload cancelled. No analysis was started; choose the file again if needed.' }
 const activeTab = ref<ShellTabKey>(SHELL_DEFAULT_TAB)
-const legacyHref = window.location.pathname
+const legacyHref = window.location.pathname + '?shell=old'
 const chrome = shellNew
   ? { noRun: SHELL_LABELS.noRun, completed: SHELL_LABELS.completed, toDark: SHELL_LABELS.themeToDark, toLight: SHELL_LABELS.themeToLight, runsTitle: SHELL_LABELS.runsTitle, runsEmpty: SHELL_LABELS.runsEmpty, runsMore: SHELL_LABELS.runsMore, analysesTitle: SHELL_LABELS.analysesTitle, analysisItem: SHELL_LABELS.analysisItem, analysesEmpty: SHELL_LABELS.analysesEmpty, analysesMore: SHELL_LABELS.analysesMore }
   : { noRun: 'No run selected', completed: 'Completed', toDark: 'Dark theme', toLight: 'Light theme', runsTitle: 'Accepted runs', runsEmpty: 'No runs yet', runsMore: 'More runs', analysesTitle: 'Saved analyses', analysisItem: 'Analysis', analysesEmpty: 'No saved analyses for this run.', analysesMore: 'More analyses' }

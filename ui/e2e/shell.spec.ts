@@ -60,26 +60,6 @@ async function openNewShellWithResult(page: Page) {
 const tabByKey = (page: Page, key: string) => page.locator(`#shell-tab-${key}`)
 const label = (key: string) => SHELL_TABS.find((tab) => tab.key === key)!.label
 
-test('opens the old interface by default', async ({ page }) => {
-  await fixtureApi(page)
-  await page.goto('/')
-
-  await expect(page.getByRole('navigation', { name: 'Application' })).toBeVisible()
-  await expect(page.getByRole('tablist')).toHaveCount(0)
-  await expect(page.locator('.shell')).toHaveCount(0)
-  await expect(page.getByRole('button', { name: /^(Dark|Light) theme/ })).toBeVisible()
-})
-
-for (const search of ['?shell=old', '?shell=', '?shell=NEW', '?shell=new%20', '?theme=new', '?shell=new%26shell=old']) {
-  test(`keeps the old interface unless the flag is exactly shell=new: ${search}`, async ({ page }) => {
-    await fixtureApi(page)
-    await page.goto(`/${search}`)
-
-    await expect(page.getByRole('navigation', { name: 'Application' })).toBeVisible()
-    await expect(page.getByRole('tablist')).toHaveCount(0)
-  })
-}
-
 test('the new interface exposes six tabs, New analysis first and selected, with a labelled panel', async ({ page }) => {
   await fixtureApi(page)
   await page.goto('/?shell=new')
@@ -216,7 +196,7 @@ test('the header shows the run in Russian and links back to the old interface', 
   await expect(header).toContainText('shell.jtl')
 
   await page.getByRole('link', { name: SHELL_LABELS.legacyLink }).click()
-  await expect(page).not.toHaveURL(/shell=/)
+  await expect(page).toHaveURL(/\?shell=old$/)
   await expect(page.getByRole('navigation', { name: 'Application' })).toBeVisible()
   await expect(page.getByRole('tablist')).toHaveCount(0)
 })
@@ -284,7 +264,7 @@ test('the run lists are in Russian in the new shell and unchanged in the old one
   await expect(page.locator(`button[title="${reference.analysis_id}"]`)).toContainText(SHELL_LABELS.analysisItem)
   await expect(page.getByText('Saved analyses')).toHaveCount(0)
 
-  await page.goto('/')
+  await page.goto('/?shell=old')
   await expect(page.getByRole('heading', { name: 'Accepted runs' })).toBeVisible()
   await page.getByRole('button', { name: 'shell.jtl' }).click()
   await expect(page.getByRole('heading', { name: 'Saved analyses' })).toBeVisible()

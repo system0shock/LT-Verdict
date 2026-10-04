@@ -886,6 +886,8 @@ git commit -m "docs(policy): document sample floor, minimum and the SMALL_SAMPLE
 
 **Ветка:** `feat/ui-small-sample-labels`. **Размер:** M. **Зависит от:** S1 (поля `sample_*` в evidence, коды в `REASONS`). **Identity:** не меняется. **Контракты:** не меняются (читаются поля S1).
 
+**Статус:** выполнен (ветка `feat/ui-small-sample-labels`, после U3a). Отклонения от текста: русские строки карточки лежат в `ui/src/verdictReasons.ts` (`SAMPLE_TEXT`), строки таблицы в `ui/src/shell/labels.tables.ts`; столбец «Выборка» добавлен и в новую таблицу правил (`RuleChecksTable.vue`, по вопросу 10 плана U3-U7), и в английскую таблицу старого интерфейса; браузерный тест карточки и таблицы добавлен в `ui/e2e/verdict-first.spec.ts`.
+
 **Что не входит:** группировка по плечам, редактор политики (U4), строки платформенных правил (S8), любые изменения ядра и API.
 
 **Files:**
@@ -903,7 +905,7 @@ git commit -m "docs(policy): document sample floor, minimum and the SMALL_SAMPLE
 
 ### Task 1: Тексты карточки
 
-- [ ] **Step 1.1: Красные тесты**
+- [x] **Step 1.1: Красные тесты**
 
 В `ui/e2e/verdict-summary.spec.ts` (помощники `build`, `overall`, `checkout`, `p95Rule`, `flat` уже определены) добавить внутрь `test.describe('verdict summary', ...)`:
 
@@ -972,12 +974,12 @@ test('small-sample reasons lead to the policy table', () => {
 })
 ```
 
-- [ ] **Step 1.2: Запустить, убедиться в красном**
+- [x] **Step 1.2: Запустить, убедиться в красном**
 
 Run: `Push-Location ui; npx playwright test --config e2e/verdict-ui.config.ts; Pop-Location` и `Push-Location ui; npx playwright test e2e/overview-adapters.spec.ts; Pop-Location`
 Expected: FAIL (в строках нет текста малой выборки, цели переходов пустые).
 
-- [ ] **Step 1.3: Реализация**
+- [x] **Step 1.3: Реализация**
 
 `ui/src/verdictSummary.ts`. Рядом с `businessLine`:
 
@@ -1015,12 +1017,12 @@ function sampleText(check: PolicyCheckEvidence): string {
 
 в `<thead>` добавить `<th>Sample</th>` перед `<th>Status</th>`, в строке `<td>{{ row.sample }}</td>` перед ячейкой статуса.
 
-- [ ] **Step 1.4: Зелёное**
+- [x] **Step 1.4: Зелёное**
 
 Run: те же два прогона, затем `npm --prefix ui run typecheck` и `npm --prefix ui run lint`.
 Expected: PASS. Проверить `grep -rn "Scope</th><th>Status" ui/e2e` и e2e, считающие столбцы таблицы правил; обновить найденные ожидания.
 
-- [ ] **Step 1.5: Commit**
+- [x] **Step 1.5: Commit**
 
 ```powershell
 git add ui/src/verdictSummary.ts ui/src/shell/overview.ts ui/src/AnalysisView.vue ui/e2e/verdict-summary.spec.ts ui/e2e/overview-adapters.spec.ts
@@ -1029,9 +1031,9 @@ git commit -m "feat(ui): explain small-sample results in the verdict card"
 
 ### Task 2: Документация
 
-- [ ] **Step 2.1:** В `docs/user/slice-1-local-analysis.md` в описание карточки вердикта (около строки 224) добавить строки про малую выборку: что показывает карточка при `PASS`/`FAIL` с меткой, что `INSUFFICIENT_SAMPLES` блокирует вердикт по правилу, что метка не меняет код выхода. В `CHANGELOG.md` (`Added`): «Карточка вердикта и таблица правил показывают режим малой выборки».
+- [x] **Step 2.1:** В `docs/user/slice-1-local-analysis.md` в описание карточки вердикта (около строки 224) добавить строки про малую выборку: что показывает карточка при `PASS`/`FAIL` с меткой, что `INSUFFICIENT_SAMPLES` блокирует вердикт по правилу, что метка не меняет код выхода. В `CHANGELOG.md` (`Added`): «Карточка вердикта и таблица правил показывают режим малой выборки».
 
-- [ ] **Step 2.2:** Run: `npx --yes markdownlint-cli2@0.23.2 "docs/user/slice-1-local-analysis.md" "CHANGELOG.md"`. Commit: `docs(ui): describe the small-sample labels`.
+- [x] **Step 2.2:** Run: `npx --yes markdownlint-cli2@0.23.2 "docs/user/slice-1-local-analysis.md" "CHANGELOG.md"`. Commit: `docs(ui): describe the small-sample labels`.
 
 **Риски S2:** подписи таблицы «Policy results» английские (остальной экран тоже): новый столбец `Sample` оставлен английским ради единообразия; карточка и обзор русские. Различие в Intl-разделителях тысяч: тесты используют `flat`.
 

@@ -324,6 +324,33 @@ class InfluxqlSourceTest {
             )
         }
 
+    @Test
+    fun `an armed influxdb profile labels empty results and rejects a conflicting arm tag`() =
+        withServer { server, baseUrl ->
+            val bodies =
+                java.util.ArrayDeque(
+                    listOf(
+                        """{"results":[{"statement_id":0,"series":[{"name":"host","tags":{"host":"a","arm":"A"},"columns":["time","value"],"values":[[1500,0.8]]}]}]}""",
+                        """{"results":[{"statement_id":0,"series":[{"name":"host","tags":{"host":"a","arm":"B"},"columns":["time","value"],"values":[[1500,0.8]]}]}]}""",
+                        """{"results":[{"statement_id":0}]}""",
+                    ),
+                )
+            server.createContext("/") { exchange -> exchange.respond(200, bodies.removeFirst().encodeToByteArray()) }
+            val profile = profile(baseUrl, queries = listOf(query("same"), query("other"), query("empty"))).copy(arm = "A")
+
+            val acquisition =
+                PromqlSource(listOf(profile), SourceHttp(listOf(profile))).acquire(SourceRequest("influx", 1_500, 2_500, 1_000), HASH)
+
+            val series = requireNotNull(acquisition.snapshot).snapshot.series.associateBy { it.id }
+            assertEquals("SUCCESS" to null, acquisition.evidence.queryStatus("same"))
+            assertEquals("FAILED" to "LABEL_MISMATCH", acquisition.evidence.queryStatus("other"))
+            assertEquals("MISSING" to "EMPTY_RESULT", acquisition.evidence.queryStatus("empty"))
+            assertEquals(listOf(BigDecimal("0.8")), series.getValue("same").values)
+            assertEquals(listOf<BigDecimal?>(null), series.getValue("other").values)
+            assertTrue(series.values.all { it.labels["arm"] == "A" })
+            assertEquals("A", acquisition.evidence.string("arm"))
+        }
+
     private fun profile(
         baseUrl: URI,
         transport: SourceTransport = SourceTransport.DIRECT,

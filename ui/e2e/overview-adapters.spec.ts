@@ -101,6 +101,24 @@ test.describe('attention items', () => {
     ])
   })
 
+  test('INSUFFICIENT_SAMPLES in a capacity result still leads to the policy table, stage reasons to the capacity table', () => {
+    const capacity = build({
+      analysis_mode: 'capacity_step',
+      policy_verdict: 'NO_VERDICT',
+      analysis_coverage: { status: 'INCOMPLETE', reasons: ['INSUFFICIENT_SAMPLES'] },
+      capacity_summary: {
+        schema_version: 'capacity.v1', load_axis: 'rps', unit: 'requests/s', bound_type: 'BOUNDED', lower_inclusive: 100, upper_exclusive: 200,
+        policy_verdict: 'NO_VERDICT', reasons: ['CAPACITY_STAGE_NOT_VERIFIED'], capacity_knee: null, knee_reason: 'KNEE_DETECTOR_NOT_IMPLEMENTED', stages: [],
+      },
+      evidence: [overall],
+    })
+
+    expect(attentionItems(capacity).map((entry) => [entry.key, entry.target?.targetId])).toEqual([
+      ['no_verdict:CAPACITY_STAGE_NOT_VERIFIED|', 'capacity-results'],
+      ['coverage:INSUFFICIENT_SAMPLES', 'policy-results'],
+    ])
+  })
+
   test('PASS and INVALID produce no violation and a plain PASS has nothing to flag', () => {
     expect(attentionItems(build({ policy_verdict: 'PASS', evidence: [overall, checkout, p95Rule('ok', 'PASS', 100)] }))).toEqual([])
     expect(kinds(build({ policy_verdict: 'NO_VERDICT', run_validity: 'INVALID', analysis_coverage: { status: 'INCOMPLETE', reasons: ['MALFORMED_JMETER_CSV'] } })))

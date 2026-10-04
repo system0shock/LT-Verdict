@@ -2,7 +2,7 @@ import { expect, test } from '@playwright/test'
 import { readdirSync, readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import type { AnalysisResult } from '../src/types'
-import { REASONS, isNoVerdictReason, reasonText } from '../src/verdictReasons'
+import { REASONS, SAMPLE_TEXT, isNoVerdictReason, reasonText } from '../src/verdictReasons'
 import { MAX_LINES, MAX_SUBJECTS, summarizeVerdict } from '../src/verdictSummary'
 
 // Собирает результат из произвольных фрагментов; типы доказательств проверяет ядро, а не этот тест.
@@ -312,6 +312,18 @@ test.describe('verdict summary', () => {
     expect(flat(summary.lines[0].detail)).toBe('2 340 мс при пороге ≤ 2 000 мс · режим малой выборки: 30 сэмплов при минимуме 50')
   })
 
+  test('Russian forms of the small-sample words follow the number', () => {
+    const forms = (count: number) => flat(SAMPLE_TEXT.detail(count, 100)).replace(/^ · режим малой выборки: /, '')
+
+    expect([1, 2, 5, 11, 14, 21, 22, 25].map(forms)).toEqual([
+      '1 сэмпл при минимуме 100', '2 сэмпла при минимуме 100', '5 сэмплов при минимуме 100', '11 сэмплов при минимуме 100',
+      '14 сэмплов при минимуме 100', '21 сэмпл при минимуме 100', '22 сэмпла при минимуме 100', '25 сэмплов при минимуме 100',
+    ])
+    expect([1, 2, 5, 11, 21].map((count) => SAMPLE_TEXT.lead(count).slice(0, 18))).toEqual([
+      ' Для 1 проверки вы', ' Для 2 проверок вы', ' Для 5 проверок вы', ' Для 11 проверок в', ' Для 21 проверки в',
+    ])
+  })
+
   test('checks with a full sample or without a gate get no small-sample label', () => {
     const summary = summarizeVerdict(build({
       policy_verdict: 'PASS',
@@ -340,6 +352,9 @@ test.describe('verdict summary', () => {
     }))
 
     expect(summary.linesTitle).toBe('Найденные нарушения')
+    expect(summary.lines.map((line) => flat(`${line.title}: ${line.detail}`))).toEqual([
+      'Правило overall-errors · доля ошибок · весь прогон: 2,4 % при пороге ≤ 1 %',
+    ])
     expect(summary.causes.map((cause) => cause.code)).toEqual(['INSUFFICIENT_SAMPLES'])
     expect(summary.causes[0].subjects).toEqual(['rare-p95 (окно steady-1, сэмплов: 12, нужно не меньше 20)'])
     expect(summary.notes.map((note) => note.code)).toEqual(['SMALL_SAMPLE'])

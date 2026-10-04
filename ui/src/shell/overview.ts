@@ -80,7 +80,7 @@ function noVerdictTarget(result: AnalysisResult, code: string | null): Attention
 }
 
 function noteTarget(code: string | null): AttentionTarget | null {
-  if (code === 'SMALL_SAMPLE') return { tab: 'tables', targetId: 'policy-results' }
+  if (code === 'SMALL_SAMPLE' || code === 'INSUFFICIENT_SAMPLES') return { tab: 'tables', targetId: 'policy-results' }
   if (code?.startsWith('SOURCE_')) return { tab: 'tables', targetId: 'source-acquisition' }
   if (code === 'RESOURCE_GAPS' || code === 'NO_OBSERVATIONS' || code === 'INSUFFICIENT_OBSERVATIONS' || code?.startsWith('RESOURCE_')) {
     return { tab: 'tables', targetId: 'resource-results' }

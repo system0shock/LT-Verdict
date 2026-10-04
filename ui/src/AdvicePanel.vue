@@ -92,7 +92,7 @@ async function cancel() {
   const expected = revision
   try {
     const status = await cancelAdviceJob(job.value.job_id)
-    if (expected === revision) { job.value = status; stopPolling() }
+    if (expected === revision) { job.value = status; stopPolling(); if (status.state === 'COMPLETE') await loadAdvice(expected) }
   } catch (failure) {
     if (expected === revision) error.value = failure instanceof Error ? failure.message : 'Не удалось отменить AI.'
   }

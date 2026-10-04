@@ -104,7 +104,14 @@ internal fun evaluatePolicy(
     val checks = mutableListOf<JsonObject>()
     val informational = mutableListOf<String>()
     var failed = false
-    policy.rules.forEach { rule ->
+    val applicable = if (windowId == null) policy.rules else policy.rules.filter { it.windowIds == null || windowId in it.windowIds }
+    if (applicable.isEmpty()) return PolicyEvaluation(PolicyVerdict.NO_POLICY, reasons.distinct(), findings, evidence)
+    applicable.forEach { rule ->
+        if (windowId == null && rule.windowIds != null) {
+            reasons += REASON_RULE_WINDOW_NOT_FOUND
+            checks += policyCheck(rule, null, null, REASON_RULE_WINDOW_NOT_FOUND, null, includeMetricEvidence, null)
+            return@forEach
+        }
         val binding = bind(rule, metrics, metricEvidence)
         if (binding.reason != null) {
             reasons += binding.reason
@@ -440,6 +447,7 @@ private const val METRIC_NOT_AVAILABLE = "METRIC_NOT_AVAILABLE"
 private const val POLICY_FAILED = "POLICY_FAILED"
 private const val REASON_INSUFFICIENT_SAMPLES = "INSUFFICIENT_SAMPLES"
 private const val REASON_SMALL_SAMPLE = "SMALL_SAMPLE"
+private const val REASON_RULE_WINDOW_NOT_FOUND = "RULE_WINDOW_NOT_FOUND"
 
 private fun readBounded(
     source: InputStream,

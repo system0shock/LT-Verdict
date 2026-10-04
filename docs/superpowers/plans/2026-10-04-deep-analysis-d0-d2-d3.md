@@ -4,7 +4,7 @@
 
 **Goal:** вкладка «Глубокий анализ» новой оболочки показывает график нагрузки и выбранные ресурсные ряды на общей шкале времени с общим курсором; ряды читаются из нового JSON-API по сохранённому анализу вместо скачивания файла снимка; стадии прогона (именованные окна снимка) видны полосой и открывают окно по клику. Числа на экране совпадают с независимым Python-оракулом.
 
-**Architecture:** D0 добавляет два read-only эндпойнта (каталог рядов и значения с укрупнением шага) по контракту ADR 0014 часть 6. Чистая логика (редукторы, сетка укрупнения, страница) живёт в одном новом файле ядра `core/ResourceSeriesView.kt`; маршруты остаются в `LocalApi.kt` (там приватные помощники запросов); разобранный снимок кэшируется в памяти в одном экземпляре под мьютексом (одна расшифровка за раз). D2 и D3 только на стороне UI: чистая модель `deep.ts`, панель `DeepAnalysisPanel.vue` и график с курсором во времени (мс), а не по индексу ряда; существующие `SharedCursorChart.vue` и `overview.ts` не меняются (регрессионная опора обзора), `overview.ts` только читается: `loadSeries`, `formatNumber`, `formatOffset`.
+**Architecture:** D0 добавляет два read-only эндпойнта (каталог рядов и значения с укрупнением шага) по контракту ADR 0014 часть 6. Чистая логика (редукторы, сетка укрупнения, страница) живёт в одном новом файле ядра `core/ResourceSeriesView.kt`; маршруты остаются в `LocalApi.kt` (там приватные помощники запросов); разобранный снимок кэшируется в памяти в одном экземпляре, а расшифровка и построение ответа идут под одним мьютексом (в памяти не больше одного разобранного снимка). D2 и D3 только на стороне UI: чистая модель `deep.ts`, панель `DeepAnalysisPanel.vue` и график с курсором во времени (мс), а не по индексу ряда; существующие `SharedCursorChart.vue` и `overview.ts` не меняются (регрессионная опора обзора), `overview.ts` только читается: `loadSeries`, `formatNumber`, `formatOffset`.
 
 **Tech Stack:** Kotlin 2 (JVM 21), Ktor 3.5 (Netty), kotlinx.serialization, JUnit 5; Vue 3.5, TypeScript 6, Playwright 1.62 с `@axe-core/playwright`; Python 3.14 (`unittest`, `decimal`) для оракула; JSON Schema + Ajv. Новых зависимостей нет.
 
@@ -15,7 +15,7 @@
 1. **ADR-B существует.** Это ADR 0018 (Accepted). Его раздел 4 уже решает: стадия есть именованное окно `snapshot.windows`, правилу добавляется необязательный `window_ids`, автоопределения стадий нет. Реализация этого в ядре запланирована как срез S5 плана ADR 0018 (`feat/policy-window-ids`, после S1). **D3 зависит от S5 и не перепланирует его.** Вердикт по ADR для D3: полоса стадий и показ окон в UI ADR не требуют; объявление именованных стадий при онлайн-сборе требует нового ADR (публичный контракт, меняет хэш снимка), потому что сейчас `PromqlSource` и `SourceAnalysis` пишут в снимок только окно `full` (или не пишут окон при авто-окне; `PromqlSource.kt:376-391`, `SourceAnalysis.kt:524-537`). Рекомендация: отложить за МВП (вопрос 6).
 2. **Контракт D0 уже задан ADR 0014 частью 6.** План его реализует, а не проектирует заново. Расхождение внутри ADR: часть 6 называет редуктор `max` для `interval_max` и среднее для остальных, «Следствия» п. 3 называют `max`, `min`, среднее. План берёт `min` для `interval_min` (вопрос 3 закрыт автошагом, решение (e) 2026-09-30).
 3. **`interval_max` и `interval_min` в `origin/main` ещё нет:** `ResourceAggregation` содержит два значения (`ResourceSnapshot.kt:92-97`), срез S1 автошага не влит. Отображение «агрегация в редуктор» пишется исчерпывающим `when` без `else`: тот из срезов (D0a или S1 автошага), что вливается вторым, обязан добавить ветки, компилятор это заставит. Тесты `max`/`min` на реальных снимках живут в отдельном срезе D0c после S1.
-4. **Часовые базы разные.** Ряды ресурсов и окна идут в эпохе (мс), а `bucket_start_ms` в `/buckets` относителен началу прогона (`Metrics.kt:213-217`: `startedAt - runStart`). Якорь для общей оси: `resource_binding.run_from_epoch_ms` результата (тот же `runStart`, `AnalysisService.kt:277-286`). Core выставляет `clock_alignment: not_verified_by_core`: сдвиг часов генератора и кластера UI не исправляет, а предупреждает.
+4. **Часовые базы разные.** Ряды ресурсов и окна идут в эпохе (мс), а `bucket_start_ms` в `/buckets` относителен началу прогона (`Metrics.kt:213-217`: `startedAt - runStart`). Якорь для общей оси: `resource_binding.run_from_epoch_ms` результата (тот же `runStart`, `AnalysisService.kt:277-286`). Это evidence есть только при снимке (`ResourceSnapshot.kt:186-215`), а начала прогона в `analysis-result.v1` нет: без снимка ресурсных дорожек нет, и нагрузка рисуется на относительной оси (смещение от начала прогона, как в обзоре). Время курсора всегда показывается смещением от начала прогона. Core выставляет `clock_alignment: not_verified_by_core`: сдвиг часов генератора и кластера UI не исправляет, а предупреждает.
 5. **Идентичность не меняется:** D0, D2, D3a, D3b не трогают `fixtures/slice1/identity/*` и `fixtures/slice1/manifest.json` (читают сохранённый анализ). Единственный кандидат в общую очередь identity-срезов: D3c (объявление стадий при онлайн-сборе меняет хэш снимка и `source_summary`), он вне МВП.
 
 ## Global Constraints
@@ -158,12 +158,12 @@ EXPECTED FILES TO CHANGE: перечислены в каждом срезе. О�
 1. **Форма.** Один `schema_version: "resource-series.v1"`, различие по полю `kind` (`catalog` или `values`); схема `oneOf`.
 2. **Каталог:** `GET /api/runs/{runId}/analyses/{analysisId}/resource-series?after=&limit=`; `limit` 1..256, по умолчанию 256; курсор `after` исключительный, `next_after` или `null`; порядок по `id` как в снимке (UTF-16, `ResourceSnapshot.kt:314`). Поля ряда: `id`, `metric`, `unit`, `entity`, `role`, `aggregation`, `reducer`, `labels`, `observed_cells`. Окна каталога: объявленные в снимке (`windows`, возможно пустой массив); разрешённые окна, включая `run-intersection`, клиент берёт из evidence результата.
 3. **Значения:** `GET .../resource-series/values?series_id=...&from_ms=&to_ms=&step_ms=&limit=`. Повторяемый только `series_id`: от 1 до 32 уникальных, порядок рядов в ответе равен порядку в запросе, неизвестный идентификатор даёт `404`, дубликат и 33-й дают `400`.
-4. **Сетка укрупнения** как в ADR 0014: ячейка `k` покрывает `[start + k*step_ms, start + (k+1)*step_ms)`, `step_ms` кратен шагу снимка, `from_ms` и `to_ms` лежат на границах (`to_ms` допускает конец сетки), иначе `400` без округления. Умолчания: `step_ms` = шаг снимка, `from_ms` = начало сетки, `to_ms` = конец сетки.
+4. **Сетка укрупнения** как в ADR 0014: ячейка `k` покрывает `[start + k*step_ms, start + (k+1)*step_ms)`, `step_ms` кратен шагу снимка, `from_ms` и `to_ms` лежат на границах (`to_ms` допускает конец сетки), иначе `400` без округления. Умолчания: `step_ms` = шаг снимка, `from_ms` = начало сетки, `to_ms` = конец сетки. `step_ms` крупнее всей сетки допустим и даёт одну ячейку на всю сетку (`source_cells_per_cell` = `point_count`); границы запроса проверяются до вычитания, чтобы произвольные `Long` не переполняли смещение.
 5. **Страница.** `limit` это число укрупнённых ячеек на ряд, умолчание `min(2 000, 100 000 / число рядов)`; `число рядов * limit > 100 000` даёт `413 RESOURCE_LIMIT_EXCEEDED` (существующий `tooLarge`), а не усечение; `limit` вне 1..100 000 даёт `400`. `next_from_ms` это начало первой не возвращённой ячейки или `null`.
 6. **Редуктор по агрегации:** `interval_mean` и `interval_rate` дают `mean`, `interval_max` даёт `max`, `interval_min` даёт `min` (ветки `max`/`min` добавляет вторым срез D0c или S1).
 7. **Пропуски в укрупнённой ячейке.** Редуктор действует по наблюдённым исходным ячейкам; ноль наблюдённых даёт `null`; число наблюдённых исходных ячеек выдаётся массивом `observed` (опускается при `step_ms` равном шагу снимка). Неполная последняя ячейка сетки: `last_cell_source_cells` меньше `source_cells_per_cell`. Клиент обязан показывать неполные ячейки как неполные (вопрос 3 владельцу).
 8. **Арифметика (закрепляется для оракула).** Среднее: точная сумма `BigDecimal`, деление на число наблюдённых с `MathContext(34, HALF_EVEN)`. Перевод в double: `java.lang.Double.parseDouble(value.toPlainString())` (правильное округление). Максимум и минимум точны (перевод монотонен). Сравнение с оракулом идёт по разобранным double (`==`), а не по тексту JSON (ответ проходит `canonicalJson`, `canonicalDecimal` переписывает запись числа).
-9. **Кэш.** Не более одного разобранного снимка в памяти (ключ путь каталога анализа), расшифровка под общим `Mutex` (одна за раз, остальные ждут и находят попадание). Кэш хранит `ResourceSnapshotV1` и семантический хэш, сырые байты не хранит. Производный артефакт-колонки не вводится, пока замер D0b не провален.
+9. **Кэш.** Не более одного разобранного снимка в памяти (ключ путь каталога анализа). Расшифровка и построение ответа выполняются внутри одного вызова `SnapshotCache.use` под общим `Mutex` (остальные запросы ждут и находят попадание); поэтому ссылка на вытесненный снимок не переживает запрос и граница «один снимок» верна. Кэш хранит `ResourceSnapshotV1` и семантический хэш, сырые байты не хранит. Производный артефакт-колонки не вводится, пока замер D0b не провален.
 
 ### Файлы D0a
 
@@ -204,7 +204,7 @@ internal const val DEFAULT_VALUES_CELLS = 2_000
 ```kotlin
 internal data class DecodedSnapshot(val snapshot: ResourceSnapshotV1, val semanticSha256: String)
 internal class SnapshotCache {
-    suspend fun get(key: String, decode: () -> DecodedSnapshot): DecodedSnapshot
+    suspend fun <T> use(key: String, decode: () -> DecodedSnapshot, block: (DecodedSnapshot) -> T): T
 }
 ```
 
@@ -392,7 +392,7 @@ def values(snapshot, series_ids, step_ms=None, from_ms=None, to_ms=None, limit=N
     }
 ```
 
-- [ ] **Step 3: Генератор векторов** `tools/resource_series_vectors.py`: функция `generate()` возвращает словарь «имя файла: текст». Снимок `snapshot-small.json`: шаг 15000, 50 точек, `start_epoch_ms` 1767225600000; ряды `cpu` (mean; значения `((i * 37) % 1000) / 1000`, пропуск при `i % 7 == 3`), `queue` (rate; значения `1, 1, 2, 1, 1, 2, ...` для непериодической дроби), `tiny` (mean; `0.000000000001` и `1` по очереди, пропуск последних 6 ячеек), `gap` (mean; все `null`), `big` (mean; `100000000000000000`, `99999999999999999.999999999999` по очереди), без `windows` и `rules`. Только детерминированная арифметика, без `random`. `cases.json`: `{"snapshot": "snapshot-small.json", "cases": [...]}`; каждый случай `{name, endpoint: "values"|"catalog", query: {...}, expected: {...}}`, ожидаемое получено вызовом `oracle.values`/`oracle.catalog`; числа пишутся как `repr` double. Случаи: `source-step` (все ряды, `step_ms` 15000), `step-60s-all` (60000, ячеек 13, последняя неполная: `last_cell_source_cells` 2), `subrange` (`step_ms` 60000, `from_ms` = начало сетки + 60000, `to_ms` = начало сетки + 540000: обе границы на сетке укрупнения), `paging-first` (`limit` 5), `paging-next` (`from_ms` из `next_from_ms` предыдущего), `partial-last-cell` (шаг 45000: 50 точек по 3, последняя ячейка 2), `empty-series` (ряд `gap`, ожидается `null`, `observed` 0), `catalog-first-page` (`limit` 2), `catalog-after` (`after` второго ряда). В конец файла: `if __name__ == "__main__"`: записать файлы в `fixtures/resource-series/`.
+- [ ] **Step 3: Генератор векторов** `tools/resource_series_vectors.py`: функция `generate()` возвращает словарь «имя файла: текст». Снимок `snapshot-small.json`: шаг 15000, 50 точек, `start_epoch_ms` 1767225600000; ряды `cpu` (mean; значения `((i * 37) % 1000) / 1000`, пропуск при `i % 7 == 3`), `queue` (rate; значения `1, 1, 2, 1, 1, 2, ...` для непериодической дроби), `tiny` (mean; `0.000000000001` и `1` по очереди, пропуск последних 6 ячеек), `gap` (mean; все `null`), `big` (mean; `100000000000000000`, `99999999999999999.999999999999` по очереди), без `windows` и `rules`. Только детерминированная арифметика, без `random`. `cases.json`: `{"cases": [...]}`; каждый случай `{name, snapshot: "snapshot-small.json", endpoint: "values"|"catalog", query: {...}, expected: {...}}` (поле `snapshot` у каждого случая обязательно, чтобы D0c добавил второй снимок без правки теста), ожидаемое получено вызовом `oracle.values`/`oracle.catalog`; числа пишутся как `repr` double. Случаи: `source-step` (все ряды, `step_ms` 15000), `step-60s-all` (60000, ячеек 13, последняя неполная: `last_cell_source_cells` 2), `subrange` (`step_ms` 60000, `from_ms` = начало сетки + 60000, `to_ms` = начало сетки + 540000: обе границы на сетке укрупнения), `paging-first` (`limit` 5), `paging-next` (`from_ms` из `next_from_ms` предыдущего), `partial-last-cell` (шаг 45000: 50 точек по 3, последняя ячейка 2), `empty-series` (ряд `gap`, ожидается `null`, `observed` 0), `catalog-first-page` (`limit` 2), `catalog-after` (`after` второго ряда). В конец файла: `if __name__ == "__main__"`: записать файлы в `fixtures/resource-series/`.
 
 - [ ] **Step 4:** Run: `python tools/resource_series_vectors.py; python -m unittest tools.test_resource_series_oracle -v`. Expected: PASS.
 - [ ] **Step 5: Commit** `test(tools): add the independent resource-series oracle and shared vectors`.
@@ -451,6 +451,16 @@ class ResourceSeriesViewTest {
     fun `plan accepts the grid end as a boundary and reports the partial last cell`() {
         val plan = planValuesPage(SeriesGrid(0, 15_000, 50), 45_000, 0, 750_000, null, 1)
         assertEquals(ValuesPlan(45_000, 3, 0, 17, null, 3, 2), plan)
+    }
+
+    @Test
+    fun `a step larger than the grid is one partial cell and an overflowing boundary is rejected`() {
+        val grid = SeriesGrid(253_402_300_700_000L, 1_000, 50)
+        assertEquals(ValuesPlan(900_000, 50, 0, 1, null, 50, 50), planValuesPage(grid, 900_000, null, null, null, 1))
+        listOf(Long.MIN_VALUE + 1, -9_223_370_525_796_050_616L, grid.startMs - 1).forEach { to ->
+            assertFalse(assertThrows(SeriesQueryException::class.java) { planValuesPage(grid, null, null, to, null, 1) }.tooLarge)
+        }
+        assertFalse(assertThrows(SeriesQueryException::class.java) { planValuesPage(grid, null, grid.endMs, null, null, 1) }.tooLarge)
     }
 
     @Test
@@ -536,17 +546,21 @@ private fun badQuery(message: String): Nothing = throw SeriesQueryException(fals
 internal fun planValuesPage(grid: SeriesGrid, stepMs: Long?, fromMs: Long?, toMs: Long?, limit: Int?, seriesCount: Int): ValuesPlan {
     val step = stepMs ?: grid.stepMs
     if (step < grid.stepMs || step % grid.stepMs != 0L) badQuery("step_ms must be a multiple of the snapshot step")
-    val ratioLong = step / grid.stepMs
-    if (ratioLong > grid.pointCount) badQuery("step_ms exceeds the snapshot grid")
-    val ratio = ratioLong.toInt()
-    val totalCells = (grid.pointCount + ratio - 1) / ratio
-    val firstOffset = (fromMs ?: grid.startMs) - grid.startMs
-    if (firstOffset < 0 || firstOffset % step != 0L || firstOffset / step >= totalCells) badQuery("from_ms must be the start of a cell")
+    // Шаг крупнее сетки даёт одну ячейку на всю сетку; отношение режется числом точек, чтобы индексы помещались в Int.
+    val ratio = minOf(step / grid.stepMs, grid.pointCount.toLong()).toInt()
+    val totalCells = ((grid.pointCount + ratio - 1) / ratio).toInt()
+    // Границы проверяются до вычитания: произвольные Long из запроса не должны переполнять смещение.
+    val from = fromMs ?: grid.startMs
+    if (from < grid.startMs || from >= grid.endMs) badQuery("from_ms is outside the grid")
+    val firstOffset = from - grid.startMs
+    if (firstOffset % step != 0L) badQuery("from_ms must be the start of a cell")
     val firstCell = (firstOffset / step).toInt()
+    val to = toMs ?: grid.endMs
+    if (to <= from || to > grid.endMs) badQuery("to_ms is outside the grid")
     val endCell =
         when {
-            toMs == null || toMs == grid.endMs -> totalCells
-            (toMs - grid.startMs) % step == 0L && toMs < grid.endMs -> ((toMs - grid.startMs) / step).toInt()
+            to == grid.endMs -> totalCells
+            (to - grid.startMs) % step == 0L -> ((to - grid.startMs) / step).toInt()
             else -> badQuery("to_ms must be the start of a cell or the end of the grid")
         }
     if (endCell <= firstCell) badQuery("the requested range is empty")
@@ -574,13 +588,13 @@ internal fun planValuesPage(grid: SeriesGrid, stepMs: Long?, fromMs: Long?, toMs
 
 - [ ] **Step 1: Красные тесты** `ResourceSeriesApiTest.kt` (по образцу `bucket API caps pages...` в `LocalApiTest`: `withServer`, `store.acceptInput`, `writeAnalysisAtomically`; помощники скопировать, дублирование нескольких строк допустимо). Тесты:
 
-1. `catalog and values equal the oracle vectors`: читает `fixtures/resource-series/cases.json`, записывает `snapshot-small.json` как `resource-snapshot.json` в каталог анализа, для каждого случая строит запрос (повторяемые `series_id` через `URLEncoder.encode`), сравнивает ответ с `expected` по полям `series[].id`, `values`, `observed`, `first_cell_start_ms`, `cell_count`, `source_cells_per_cell`, `last_cell_source_cells`, `next_from_ms`/`next_after`; числа сравниваются как разобранные double точным `==`, `null` с `null`.
+1. `catalog and values equal the oracle vectors`: читает `fixtures/resource-series/cases.json`; для каждого случая записывает файл из его поля `snapshot` как `resource-snapshot.json` в отдельный каталог анализа (кэш при смене ключа вытесняется, это тоже проверка) и строит запрос (повторяемые `series_id` через `URLEncoder.encode`), сравнивает ответ с `expected` по полям `series[].id`, `values`, `observed`, `first_cell_start_ms`, `cell_count`, `source_cells_per_cell`, `last_cell_source_cells`, `next_from_ms`/`next_after`; числа сравниваются как разобранные double точным `==`, `null` с `null`.
 2. `values reject repeated single parameters, duplicates, more than 32 ids and unknown parameters`: `?series_id=cpu&series_id=cpu` 400, 33 разных 400, `&step_ms=15000&step_ms=15000` 400, `&foo=1` 400.
 3. `values answer 404 for an unknown series and 404 for an analysis without a snapshot`.
 4. `values answer 400 for off-grid boundaries and 413 for series times limit above the cap`: пары из `planValuesPage`-теста через HTTP; `limit=3201` при 32 рядах даёт 413 (снимок на 32 ряда создаётся в тесте).
 5. `qualified identifiers with slash percent and non-ascii round-trip`: снимок с рядами `prom/a%b`, `метрика б`, запрос с `URLEncoder`, ответ содержит те же `id`.
 6. `a request line near the Netty limit is accepted and a longer one fails cleanly`: идентификаторы по 128 байт ASCII; запрос из 20 идентификаторов (около 3 300 символов) возвращает 200; тест фиксирует фактический предел и подтверждает константу клиентской разбивки `URL_BUDGET_CHARS` (3 500, D2-min); если Netty по умолчанию принимает 4 096, константа остаётся 3 500.
-7. `two concurrent value requests decode the snapshot once`: подсчёт вызовов расшифровщика через `SnapshotCache` напрямую (вынесенный юнит-тест на кэш: два корутинных `get` с одним ключом вызывают `decode` один раз, смена ключа вытесняет прежний).
+7. `two concurrent value requests decode the snapshot once`: подсчёт вызовов расшифровщика через `SnapshotCache` напрямую (юнит-тест кэша: два корутинных `use` с одним ключом вызывают `decode` один раз; смена ключа вытесняет прежний; `block` второго вызова не начинается, пока не закончился `block` первого, а у вытесняющего вызова прежнее значение уже `null` во время `decode`). Фактическая граница кучи при параллельных запросах и работающей задаче замеряется в D0b.
 
 Run: `.\gradlew.bat test --tests "io.ltverdict.web.ResourceSeriesApiTest"`. Expected: FAIL (404 на маршруте).
 
@@ -594,13 +608,19 @@ internal class SnapshotCache {
     private var key: String? = null
     private var value: DecodedSnapshot? = null
 
-    suspend fun get(key: String, decode: () -> DecodedSnapshot): DecodedSnapshot =
+    // Расшифровка и построение ответа под одним замком: ссылка на снимок не выходит за вызов, пик кучи не складывается.
+    suspend fun <T> use(key: String, decode: () -> DecodedSnapshot, block: (DecodedSnapshot) -> T): T =
         lock.withLock {
             val cached = value
-            if (this.key == key && cached != null) return@withLock cached
-            value = null // освободить прежний снимок до расшифровки нового: пик кучи не складывается
-            this.key = null
-            decode().also { this.key = key; value = it }
+            val decoded =
+                if (this.key == key && cached != null) {
+                    cached
+                } else {
+                    value = null // освободить прежний снимок до расшифровки нового
+                    this.key = null
+                    decode().also { this.key = key; value = it }
+                }
+            block(decoded)
         }
 }
 ```
@@ -615,7 +635,7 @@ private fun ApplicationCall.requireQueries(single: Set<String>, repeatable: Set<
 }
 ```
 
-Маршруты рядом с `/buckets`: каталог (`requireQueries(setOf("after","limit"), emptySet())`, `intQuery("limit", MAX_CATALOG_PAGE, 1..MAX_CATALOG_PAGE)`, `after` через `singleQuery`), значения (`requireQueries(setOf("from_ms","to_ms","step_ms","limit"), setOf("series_id"))`; ids через `request.queryParameters.getAll("series_id")`, пусто, больше `MAX_VALUES_SERIES` или дубликаты дают `malformed`; неизвестный id `notFound("Series was not found")`; `limit` читается `optionalLongQuery`-подобным `optionalIntQuery`; `SeriesQueryException` превращается в `malformed(...)` или `tooLarge(...)` по полю `tooLarge`). Расшифровка: `stored = context.store.requireAnalysis(call)`; нет артефакта `resource-snapshot.json` даёт `notFound("Resource snapshot was not found")`; `cache.get(stored.path.toString()) { decode(stored) }` в `withContext(Dispatchers.IO)`; `decode` вызывает `validateResourceSnapshot(Files.newInputStream(path))`, при `Invalid` бросает `IllegalStateException` (сохранённый снимок уже прошёл проверку; сбой это ошибка сервера). Кэш создаётся один раз на `LocalApiContext`-уровне (`private val seriesCache = SnapshotCache()` в `installLocalApi`). Ответы через существующий `respondJson`.
+Маршруты рядом с `/buckets`: каталог (`requireQueries(setOf("after","limit"), emptySet())`, `intQuery("limit", MAX_CATALOG_PAGE, 1..MAX_CATALOG_PAGE)`, `after` через `singleQuery`), значения (`requireQueries(setOf("from_ms","to_ms","step_ms","limit"), setOf("series_id"))`; ids через `request.queryParameters.getAll("series_id")`, пусто, больше `MAX_VALUES_SERIES` или дубликаты дают `malformed`; неизвестный id `notFound("Series was not found")`; `limit` читается `optionalLongQuery`-подобным `optionalIntQuery`; `SeriesQueryException` превращается в `malformed(...)` или `tooLarge(...)` по полю `tooLarge`). Расшифровка: `stored = context.store.requireAnalysis(call)`; нет артефакта `resource-snapshot.json` даёт `notFound("Resource snapshot was not found")`; `cache.use(stored.path.toString(), { decode(stored) }) { decoded -> ...построение ответа... }` в `withContext(Dispatchers.IO)` (разбор запроса, `planValuesPage` и проверка рядов делаются внутри `block`, чтобы ответ строился под замком); `decode` вызывает `validateResourceSnapshot(Files.newInputStream(path))`, при `Invalid` бросает `IllegalStateException` (сохранённый снимок уже прошёл проверку; сбой это ошибка сервера). Кэш создаётся один раз на `LocalApiContext`-уровне (`private val seriesCache = SnapshotCache()` в `installLocalApi`). Ответы через существующий `respondJson`.
 
 - [ ] **Step 3:** Run: `.\gradlew.bat test --tests "io.ltverdict.web.ResourceSeriesApiTest" --tests "io.ltverdict.web.LocalApiTest"`. Expected: PASS (`LocalApiTest` не должен измениться).
 - [ ] **Step 4: Commit** `feat(api): serve resource series catalog and values from a saved analysis`.
@@ -650,7 +670,7 @@ private fun ApplicationCall.requireQueries(single: Set<String>, repeatable: Set<
 
 - [ ] **Step 1: Красный тест.** В `ResourceSeriesViewTest` добавить `the reducer follows interval max and interval min` (`INTERVAL_MAX` даёт `MAX`, `INTERVAL_MIN` даёт `MIN`); если S1 уже влит раньше D0a, тест и ветки пишутся в D0a. Run: `.\gradlew.bat test --tests "io.ltverdict.core.ResourceSeriesViewTest"`. Expected: FAIL (ошибка компиляции `when`).
 - [ ] **Step 2: Ветки** `ResourceAggregation.INTERVAL_MAX -> SeriesReducer.MAX`, `INTERVAL_MIN -> SeriesReducer.MIN`.
-- [ ] **Step 3: Векторы.** Добавить в `resource_series_vectors.py` снимок `snapshot-peaks.json` (ряды `interval_max` и `interval_min`, пропуски, шаг 20000, 7 точек, укрупнение 60000) и два случая `max-60s`, `min-60s` в `cases.json`; обновить тест покрытия имён в `test_resource_series_oracle.py`; оракул уже поддерживает `max` и `min`. Тест API `catalog and values equal the oracle vectors` читает все случаи, правок кода не требует (каталог файлов векторов читается по `snapshot` каждого случая).
+- [ ] **Step 3: Векторы.** Добавить в `resource_series_vectors.py` снимок `snapshot-peaks.json` (ряды `interval_max` и `interval_min`, пропуски, шаг 20000, 7 точек, укрупнение 60000) и два случая `max-60s`, `min-60s` в `cases.json`; обновить тест покрытия имён в `test_resource_series_oracle.py`; оракул уже поддерживает `max` и `min`. Тест API `catalog and values equal the oracle vectors` читает снимок из поля `snapshot` каждого случая и правок не требует.
 - [ ] **Step 4:** Run: `.\gradlew.bat test --tests "io.ltverdict.core.ResourceSeriesViewTest" --tests "io.ltverdict.web.ResourceSeriesApiTest"; python -m unittest tools.test_resource_series_oracle -v`. Expected: PASS.
 - [ ] **Step 5: Commit** `feat(core): reduce interval max and min series by max and min`.
 
@@ -678,22 +698,22 @@ export interface DeepPoint { startMs: number; value: number | null; observed: nu
 export interface DeepTrack {
   key: string; label: string; unit: string; kind: 'load' | 'resource'
   reducer: 'mean' | 'max' | 'min' | null
-  stepMs: number; sourceCellsPerCell: number; lastCellSourceCells: number
+  stepMs: number; endMs: number; sourceCellsPerCell: number; lastCellSourceCells: number // endMs: конец последней ячейки = её начало + last_cell_source_cells * source_step_ms
   points: DeepPoint[]; segments: number[][]; min: number; max: number
   thresholds: Array<{ ruleId: string; operator: 'gt' | 'lt'; value: number }>
 }
 export interface TimeAxis { fromMs: number; toMs: number }
 export const MAX_SELECTED_SERIES = 6, TARGET_CELLS = 1500, LOAD_BUCKET_BUDGET = 1500
-export const URL_BUDGET_CHARS = 3500, MAX_IDS_PER_REQUEST = 32
+export const URL_BUDGET_CHARS = 3500, MAX_IDS_PER_REQUEST = 32, MAX_LOAD_PAGES = 12
 export function gridEndMs(grid: SnapshotGrid): number
 export function snapPeriod(grid: SnapshotGrid, stepMs: number, fromMs: number, toMs: number): TimeAxis
 export function chooseResourceStep(grid: SnapshotGrid, fromMs: number, toMs: number, target?: number): number
 export function chooseLoadRollup(spanMs: number, budget?: number): 1 | 10 | 30 | 60
-export function batchSeriesIds(ids: string[], queryBase: string, maxChars?: number, maxCount?: number): string[][]
+export function batchSeriesIds(ids: string[], baseLength: number, maxChars?: number, maxCount?: number): string[][]
 export function defaultSelection(catalog: ResourceSeriesEntry[], result: AnalysisResult): string[]
 export function resourceTrack(entry: ResourceSeriesEntry, series: ResourceSeriesValues['series'][number], grid: ResourceSeriesValues['grid'], thresholds: DeepTrack['thresholds']): DeepTrack
 export function mergePages(left: DeepTrack, right: DeepTrack): DeepTrack
-export function loadTracks(buckets: Bucket[], rollupSeconds: number, runStartMs: number): DeepTrack[]
+export function loadTracks(buckets: Bucket[], rollupSeconds: number, originMs: number): DeepTrack[] // originMs = runStartMs(result) ?? 0
 export function thresholdsFor(result: AnalysisResult, seriesId: string): DeepTrack['thresholds']
 export function runStartMs(result: AnalysisResult): number | null
 export function cellAt(track: DeepTrack, timeMs: number): DeepPoint | null
@@ -732,13 +752,19 @@ test('load rollup is the finest of 1, 10, 30, 60 s that fits the bucket budget',
   expect(chooseLoadRollup(72 * 3600 * 1000)).toBe(60)
 })
 
-test('series ids are batched by count and by encoded URL length', () => {
-  const ids = Array.from({ length: 70 }, (_, index) => `prom/a%b/${'x'.repeat(100)}-${index}`)
-  const batches = batchSeriesIds(ids, '/api/x?step_ms=15000')
+test('series ids are batched by count and by the real URLSearchParams length', () => {
+  const ids = [
+    ...Array.from({ length: 70 }, (_, index) => `prom/a%b/${'x'.repeat(100)}-${index}`),
+    ...Array.from({ length: 12 }, (_, index) => `${'~'.repeat(120)}-${index}`), // URLSearchParams кодирует ~ в %7E (3 символа вместо 1)
+  ]
+  const base = '/api/x/resource-series/values?step_ms=15000'
+  const batches = batchSeriesIds(ids, base.length)
   expect(batches.flat()).toEqual(ids)
   for (const batch of batches) {
+    const query = new URLSearchParams({ step_ms: '15000' })
+    for (const id of batch) query.append('series_id', id)
     expect(batch.length).toBeLessThanOrEqual(32)
-    expect(`/api/x?step_ms=15000${batch.map((id) => `&series_id=${encodeURIComponent(id)}`).join('')}`.length).toBeLessThanOrEqual(3500)
+    expect(`/api/x/resource-series/values?${query}`.length).toBeLessThanOrEqual(3500)
   }
 })
 
@@ -750,6 +776,11 @@ test('a resource cell is found by time, a gap stays null and the load axis uses 
   expect(cellAt(track, 60_000)?.value).toBeNull()
   expect(cellAt(track, 120_000)).toBeNull()
   expect(track.segments).toEqual([[0]])
+  // неполная последняя ячейка: 50 исходных по 15 с, укрупнение 45 с, последняя ячейка из 2 исходных, сетка кончается на 750 с
+  const partial = resourceTrack(entry('cpu'), { id: 'cpu', aggregation: 'interval_mean', reducer: 'mean', values: [1], observed: [2] },
+    { start_epoch_ms: 0, source_step_ms: 15_000, step_ms: 45_000, first_cell_start_ms: 720_000, cell_count: 1, source_cells_per_cell: 3, last_cell_source_cells: 2 }, [])
+  expect(cellAt(partial, 749_999)?.value).toBe(1)
+  expect(cellAt(partial, 760_000)).toBeNull()
   expect(runStartMs({ evidence: [{ type: 'resource_binding', run_from_epoch_ms: 1000 }] } as never)).toBe(1000)
   const tracks = loadTracks([{ bucket_start_ms: 0, sample_count: 60, error_count: 1, p95_latency_ms: 90, max_latency_ms: 100, hdr_v2_base64: '' }], 60, 5_000)
   expect(tracks[0].points[0].startMs).toBe(5_000)
@@ -791,12 +822,17 @@ export function chooseLoadRollup(spanMs: number, budget = LOAD_BUCKET_BUDGET): 1
 }
 
 export function cellAt(track: DeepTrack, timeMs: number): DeepPoint | null {
-  for (const point of track.points) if (timeMs >= point.startMs && timeMs < point.startMs + track.stepMs) return point
+  const last = track.points.length - 1
+  for (let index = 0; index <= last; index += 1) {
+    const point = track.points[index]
+    const end = index === last ? track.endMs : point.startMs + track.stepMs
+    if (timeMs >= point.startMs && timeMs < end) return point
+  }
   return null
 }
 ```
 
-Остальное: `batchSeriesIds` (накопление по числу и длине `&series_id=${encodeURIComponent(id)}`), `resourceTrack` (точка на ячейку `startMs = first_cell_start_ms + i*step_ms`, `observed` из массива или `null`, `segments` режутся на `null`, `partial = observed < source_cells_per_cell` (для последней ячейки сравнение с `last_cell_source_cells`)), `loadTracks` (две дорожки RPS и p95 из `loadSeries` обзора со сдвигом `startMs + runStart`; единицы `req/s` и `ms` из `OVERVIEW_LABELS`), `thresholdsFor` (из `resource_policy_check` с `series_id`, `threshold` как `Number`, исключая нечисловые), `runStartMs` (`resource_binding.run_from_epoch_ms`), `defaultSelection` (сначала ряды из `resource_policy_check` со статусом не `PASS`, затем по порядку каталога; не более `MAX_SELECTED_SERIES`), `cursorReadouts` (для каждой дорожки `cellAt`; `text` через `formatNumber`, `raw` как `String(value)`, `partial`).
+Остальное: `batchSeriesIds` (накопление по числу и по длине `1 + new URLSearchParams({ series_id: id }).toString().length`, как строит запрос `resourceSeriesValuesPath`; `encodeURIComponent` не используется, он короче на `~`, `!`, `'`, `(`, `)`, `*`), `resourceTrack` (точка на ячейку `startMs = first_cell_start_ms + i*step_ms`, `endMs = startMs последней ячейки + last_cell_source_cells * source_step_ms`, `observed` из массива или `null`, `segments` режутся на `null`, `partial = observed < source_cells_per_cell` (для последней ячейки сравнение с `last_cell_source_cells`)), `loadTracks` (две дорожки RPS и p95 из `loadSeries` обзора со сдвигом `startMs + runStart`; единицы `req/s` и `ms` из `OVERVIEW_LABELS`), `thresholdsFor` (из `resource_policy_check` с `series_id`, `threshold` как `Number`, исключая нечисловые), `runStartMs` (`resource_binding.run_from_epoch_ms`), `defaultSelection` (сначала ряды из `resource_policy_check` со статусом не `PASS`, затем по порядку каталога; не более `MAX_SELECTED_SERIES`), `cursorReadouts` (для каждой дорожки `cellAt`; `text` через `formatNumber`, `raw` как `String(value)`, `partial`).
 
 - [ ] **Step 3:** Run: `npm --prefix ui run typecheck; npm --prefix ui run e2e -- deep-adapters`. Expected: PASS.
 - [ ] **Step 4: Commit** `feat(ui): add the deep analysis time model`.
@@ -824,7 +860,7 @@ export function getResourceSeriesValues(path: string, signal?: AbortSignal): Pro
 }
 ```
 
-(`request` уже принимает `init: RequestInit`, поэтому `{ signal }` работает без правок; её `JSON.parse` с `exactErrorCounts` числа рядов не меняет). Длину пути для `batchSeriesIds` считать по `resourceSeriesValuesPath` с пустым списком как `queryBase`.
+(`request` уже принимает `init: RequestInit`, поэтому `{ signal }` работает без правок; её `JSON.parse` с `exactErrorCounts` числа рядов не меняет). Базовая длина для `batchSeriesIds` это `resourceSeriesValuesPath(runId, analysisId, [], params).length`.
 
 - [ ] **Step 3:** Run: `npm --prefix ui run typecheck; npm --prefix ui run e2e -- deep`. Expected: PASS.
 - [ ] **Step 4: Commit** `feat(ui): add resource series client calls and types`.
@@ -843,13 +879,13 @@ export function getResourceSeriesValues(path: string, signal?: AbortSignal): Pro
 
 Expected: FAIL.
 
-- [ ] **Step 2: Реализация.** `labels.ts`: `ShellTabKey` += `'deep'`, `SHELL_TABS` вставка `{ key: 'deep', label: 'Глубокий анализ', pending: false }` после `overview`; `DEEP_LABELS` (русские тексты: `title`, `noSnapshot`, `seriesTitle`, `seriesFilter`, `limitReached(max)`, `periodFrom`, `periodTo`, `periodAll`, `periodApply`, `reducerLabels` {mean: «среднее за интервал», max: «максимум за интервал», min: «минимум за интервал»}, `partialCell(observed, total)`, `gap`, `clockNote`, `cursorHint`, `cellStep(seconds)`, `loadRollup(seconds)`, `thresholdLabel(operator, value, unit)`). `DeepCursorChart.vue` повторяет раскладку `SharedCursorChart.vue` (дорожки SVG 1000x80 `preserveAspectRatio="none"`, `role="group"`, ползунок `type="range"` с `aria-valuetext`, подсказка клавиш), но курсор хранит время в мс; ползунок движется по индексу ячейки самой частой дорожки и переводится во время; стили `shared-chart__*` переиспользуются, новые классы `deep-chart__*` в `shell.css`. `DeepAnalysisPanel.vue` (props `result`, `runId`, `analysisId`): загрузка каталога (цикл по `next_after`), выбор рядов (`defaultSelection`), загрузка значений (`chooseResourceStep` по периоду, `snapPeriod`, пакеты, цикл по `next_from_ms`), загрузка нагрузки (`chooseLoadRollup(период)`, `getBuckets` по страницам `next_from_ms` в границах `from - runStart`, `to - runStart`, не более 4 страниц), `AbortController` и токен `revision` на каждый набор запросов. `App.vue`: рядом с `OverviewPanel` `<DeepAnalysisPanel v-if="shellNew && result && selectedAnalysisId && shownIn('deep')" :result :run-id :analysis-id />`.
+- [ ] **Step 2: Реализация.** `labels.ts`: `ShellTabKey` += `'deep'`, `SHELL_TABS` вставка `{ key: 'deep', label: 'Глубокий анализ', pending: false }` после `overview`; `DEEP_LABELS` (русские тексты: `title`, `noSnapshot`, `seriesTitle`, `seriesFilter`, `limitReached(max)`, `periodFrom`, `periodTo`, `periodAll`, `periodApply`, `reducerLabels` {mean: «среднее за интервал», max: «максимум за интервал», min: «минимум за интервал»}, `partialCell(observed, total)`, `gap`, `clockNote`, `cursorHint`, `cellStep(seconds)`, `loadRollup(seconds)`, `thresholdLabel(operator, value, unit)`). `DeepCursorChart.vue` повторяет раскладку `SharedCursorChart.vue` (дорожки SVG 1000x80 `preserveAspectRatio="none"`, `role="group"`, ползунок `type="range"` с `aria-valuetext`, подсказка клавиш), но курсор хранит время в мс; ползунок движется по индексу ячейки самой частой дорожки и переводится во время; стили `shared-chart__*` переиспользуются, новые классы `deep-chart__*` в `shell.css`. `DeepAnalysisPanel.vue` (props `result`, `runId`, `analysisId`): загрузка каталога (цикл по `next_after`), выбор рядов (`defaultSelection`), загрузка значений (`chooseResourceStep` по периоду, `snapPeriod`, пакеты, цикл по `next_from_ms`), загрузка нагрузки (`chooseLoadRollup(период)`, `getBuckets` по страницам `next_from_ms` в границах `from - origin`, `to - origin`, где `origin` = `runStartMs(result) ?? 0`; не более `MAX_LOAD_PAGES` = 12 страниц, то есть 6 000 корзин; при усечении заметка `DEEP_LABELS.loadTruncated`), `AbortController` и токен `revision` на каждый набор запросов. `App.vue`: рядом с `OverviewPanel` `<DeepAnalysisPanel v-if="shellNew && result && selectedAnalysisId && shownIn('deep')" :result="result" :run-id="result.run_id" :analysis-id="selectedAnalysisId" />` (в `App.vue` нет верхнеуровневых `runId` и `analysisId`: есть `result` и `selectedAnalysisId`).
 - [ ] **Step 3:** Run: `npm --prefix ui run typecheck; npm --prefix ui run lint; npm --prefix ui run e2e -- deep shell overview overview-adapters overview-live`. Expected: PASS (обзор не регрессирует).
 - [ ] **Step 4: Commit** `feat(ui): add the deep analysis tab with a shared time cursor`.
 
 ### Task 4: Нагрузка и ресурсы на двух сетках, анализ без снимка, capacity
 
-- [ ] **Step 1: Красные тесты** `deep.spec.ts`: `load and resource tracks align by epoch time` (бакет нагрузки со смещением 60 000 мс при `run_from_epoch_ms` 1000 и ячейка ресурса с `start` 61 000 читаются курсором в одном моменте); `a capacity analysis with a file snapshot of 5 s step opens` (подменённый результат с `analysis_mode: 'capacity_step'`); `an online snapshot with qualified ids and no declared windows opens` (идентификаторы `prom-main/memory-limit-ratio`, `windows: []`); `a load only analysis shows the load tracks and the no-snapshot note`.
+- [ ] **Step 1: Красные тесты** `deep.spec.ts`: `load and resource tracks align by epoch time` (бакет нагрузки со смещением 60 000 мс при `run_from_epoch_ms` 1000 и ячейка ресурса с `start` 61 000 читаются курсором в одном моменте); `a capacity analysis with a file snapshot of 5 s step opens` (подменённый результат с `analysis_mode: 'capacity_step'`); `an online snapshot with qualified ids and no declared windows opens` (идентификаторы `prom-main/memory-limit-ratio`, `windows: []`); `a load only analysis shows the load tracks on a relative axis (no run start in the result) and the no-snapshot note`; `a period longer than the load page cap shows the truncation note instead of silently dropping buckets` (72 ч при rollup 60 даёт 4 320 корзин, 9 страниц, помещается; 200 ч усекается).
 - [ ] **Step 2: Исправить** найденное; единицы нагрузки и ресурса не смешиваются на одной дорожке. Expected: PASS.
 - [ ] **Step 3: Commit** `test(ui): cover deep analysis for online, capacity and load-only analyses`.
 
@@ -883,9 +919,9 @@ Expected: FAIL.
 
 **Ветка:** `feat/ui-deep-stages`. **Размер:** M. **Зависит от:** D2-min. **Не входит:** объявление стадий для онлайн-снимка (D3c), `window_ids` (S5 ADR 0018), автоопределение стадий (ADR 0009 и 0018 его отвергли).
 
-**Что такое стадия в МВП.** Именованное окно, по которому ядро считает вердикт: `window_policy_summary` результата (идентификатор, границы, вердикт) либо `resource_summary` (`window_id`, `from_epoch_ms`, `to_epoch_ms`), если сводок окон нет. Окна из файла снимка с `windows` показываются по именам; неявное окно `run-intersection` и `full` показываются как «весь прогон» без полосы разметки.
+**Что такое стадия в МВП.** Именованное окно оценки, по которому ядро считает вердикт: `window_policy_summary` результата (идентификатор, границы, вердикт) либо `resource_summary` (`window_id`, `from_epoch_ms`, `to_epoch_ms`), если сводок окон нет. Окна из файла снимка с `windows` показываются по именам; неявное окно `run-intersection` и `full` показываются как «весь прогон» без полосы разметки.
 
-- [ ] **Задача 1. Модель стадий (`ui/src/shell/stages.ts`, TDD).** Тесты `deep-adapters.spec.ts`: `stages come from window policy summaries sorted by start with their verdicts`; `a single run-intersection or full window yields no stage strip`; `resource summaries are the fallback when no window summary exists`; `capacity stage windows are shown as windows too` (ступени capacity приходят как окна `window_policy_summary`; тест на результате `capacity_step`). Интерфейс: `export interface Stage { id: string; fromMs: number; toMs: number; verdict: string | null }`, `export function stagesOf(result: AnalysisResult): Stage[]`, `export function stageFraction(stage: Stage, axis: TimeAxis): { left: number; width: number }`.
+- [ ] **Задача 1. Модель стадий (`ui/src/shell/stages.ts`, TDD).** Тесты `deep-adapters.spec.ts`: `stages come from window policy summaries sorted by start with their verdicts`; `a single run-intersection or full window yields no stage strip`; `resource summaries are the fallback when no window summary exists`; `capacity evaluation windows are labelled as evaluation windows, not as stages` (у ступени capacity свои границы шире окна оценки: `CapacityPlan.kt:171-180` требует лишь, чтобы окно лежало внутри ступени, а `capacity_summary.stages` границ не несёт; границы ступеней из артефакта `capacity-plan` в МВП не рисуются, report-only; тест на результате `capacity_step`). Интерфейс: `export interface Stage { id: string; fromMs: number; toMs: number; verdict: string | null }`, `export function stagesOf(result: AnalysisResult): Stage[]`, `export function stageFraction(stage: Stage, axis: TimeAxis): { left: number; width: number }`.
 - [ ] **Задача 2. Полоса и переход.** Тесты `deep.spec.ts`: `the stage strip lists stages as buttons aligned to the time axis and the focused stage is announced`; `clicking a stage sets the period to the stage window snapped to cells`; `the period reset returns to the whole run`; `stages outside the loaded grid are shown disabled` (окно шире сетки снимка). Реализация: `DeepStageStrip.vue` (список кнопок `role="group"`, ширина по `stageFraction`, подпись «идентификатор · вердикт»), подключение в `DeepAnalysisPanel.vue` над графиком; в `DeepCursorChart.vue` необязательный проп `stages` для заливки фона выбранной стадии. Строки в `DEEP_LABELS`.
 - [ ] **Задача 3. Документация, проверка, коммиты.** `slice-1-local-analysis.md`: окна снимка как стадии, как задать (`windows` в файле `resource-snapshot.v1`), чего нет (онлайн-сбор не объявляет стадий). `CHANGELOG.md`. Команды задачи 6 D2-min.
 
@@ -898,7 +934,7 @@ Expected: FAIL.
 **Ветка:** `feat/ui-deep-rule-window`. **Размер:** S. **Зависит от:** D3a, срезы S1 и S5 ADR 0018 (S5 добавляет `window_ids`, S1 `verdict_gates`; обе в очереди identity ADR 0018, но D3b их не меняет).
 
 - [ ] **Step 1: Проверить по факту S5.** Прочитать влитый S5: какие поля evidence несут `window_id` для бизнес-правил (`policy_check`, `rule_window_check`). Если бизнес-правила по окнам в evidence не выдаются, D3b показывает только ресурсные правила (`resource_policy_check` имеет `window_id` уже сейчас), остальное report-only.
-- [ ] **Step 2: Красные тесты** `deep-adapters.spec.ts`: `rules of the selected window list resource checks with status, threshold and reason`; `a rule bound by window ids appears only in its windows`; `an unknown window id shows RULE_WINDOW_NOT_FOUND` (после S5). `deep.spec.ts`: `selecting a stage filters the rules list and the focused rule row opens its series in the chart`.
+- [ ] **Step 2: Красные тесты** `deep-adapters.spec.ts`: `rules of the selected window list resource checks with status, threshold and reason`; `a rule bound by window ids appears only in its windows`; `an unknown window id is listed in a separate notice of unbound rules with RULE_WINDOW_NOT_FOUND, not as a selectable window` (после S5: проверка `rule_window_check` относится к неизвестному идентификатору, выбираемого окна у неё нет). `deep.spec.ts`: `selecting a stage filters the rules list and the focused rule row opens its series in the chart`.
 - [ ] **Step 3: Реализация.** `rulesOfWindow(result, windowId)` в `stages.ts`, блок «Правила окна» в панели (таблица, `tabindex="0"` обёртка, статус словами через `verdictReasons.ts`), кнопка «Открыть ряд» выбирает ряд правила (в рамках лимита 6). Коммит `feat(ui): list the rules of the selected stage in deep analysis`.
 
 ---

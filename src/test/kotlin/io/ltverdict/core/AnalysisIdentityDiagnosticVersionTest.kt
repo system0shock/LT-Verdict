@@ -13,7 +13,7 @@ import java.nio.file.Path
 
 class AnalysisIdentityDiagnosticVersionTest {
     @Test
-    fun `only enabled diagnostic module advances to version three`() {
+    fun `only enabled diagnostic module advances to version four`() {
         assertEquals(
             listOf("normalization" to "1", "metrics" to "2", "policy-evaluation" to "1"),
             modules(analysisIdentity(input(), null, EngineConfig())),
@@ -23,7 +23,7 @@ class AnalysisIdentityDiagnosticVersionTest {
                 "normalization" to "1",
                 "metrics" to "2",
                 "policy-evaluation" to "1",
-                "load-resource-diagnostics" to "3",
+                "load-resource-diagnostics" to "4",
             ),
             modules(analysisIdentity(input(), null, EngineConfig(), diagnostics = diagnostics())),
         )

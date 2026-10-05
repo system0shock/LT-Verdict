@@ -37,6 +37,8 @@ async function fixtureApi(page: Page, validated: Array<Record<string, unknown>> 
     if (path === '/api/policies/validate') {
       const draft = JSON.parse(route.request().postData() ?? '{}') as Record<string, unknown>
       validated.push(draft)
+      const outOfRange = (draft.rules as Array<{ min_samples?: number }>).findIndex((rule) => rule.min_samples !== undefined && (rule.min_samples < 1 || rule.min_samples > 1_000_000))
+      if (outOfRange >= 0) return route.fulfill({ status: 422, json: { valid: false, errors: [{ code: 'MIN_SAMPLES_OUT_OF_RANGE', json_pointer: `/rules/${outOfRange}/min_samples`, message: 'min_samples must be between 1 and 1000000' }] } })
       if (options.error) return route.fulfill({ status: 422, json: { valid: false, errors: [{ code: 'UNKNOWN_FIELD', json_pointer: '/rules/0/foo', message: 'Unknown field foo' }] } })
       return route.fulfill({ json: { valid: true, policy: draft, sha256: 'c'.repeat(64) } })
     }
@@ -96,6 +98,101 @@ test('unknown draft fields survive an editor change', async ({ page }) => {
   expect(validated.at(-1)).toMatchObject({ defaults: { min_samples: 50 }, platform_extra: true })
 })
 
+const throughputRule = { id: 'overall-rps', metric: 'throughput_rps', operator: 'gte', threshold: '100', scope: { kind: 'overall' } }
+const samplePolicy = { ...basicPolicy, rules: [...basicPolicy.rules, throughputRule] }
+const loadPolicy = (page: Page, policy: unknown) => page.getByTestId('rules-policy-file')
+  .setInputFiles({ name: 'policy.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(policy)) })
+
+test('rule minimum is edited per rule, removed when empty, and hidden for throughput_rps', async ({ page }) => {
+  const validated: Array<Record<string, unknown>> = []
+  await fixtureApi(page, validated)
+  await page.goto('/?shell=new')
+  await page.locator('#shell-tab-rules').click()
+  await loadPolicy(page, samplePolicy)
+  await expect(page.getByLabel(RULES_LABELS.samples.ruleMinField)).toHaveCount(2)
+  await expect(page.locator('#rule-min-samples-0')).toBeVisible()
+  await expect(page.locator('#rule-min-samples-2')).toHaveCount(0)
+  await expect(page.locator('#rules-panel')).toContainText('20 и 100 это допущения, не калибровка стенда, и настраиваются')
+  await expect(page.locator('#rule-min-samples-0')).toHaveAttribute('min', '1')
+  await expect(page.locator('#rule-min-samples-0')).toHaveAttribute('max', '1000000')
+  await page.locator('#rule-min-samples-0').fill('50')
+  await expect.poll(() => (validated.at(-1) as typeof samplePolicy & { rules: Array<{ min_samples?: number }> })?.rules[0].min_samples).toBe(50)
+  const sent = validated.at(-1) as { rules: Array<Record<string, unknown>> }
+  expect(sent.rules[1]).not.toHaveProperty('min_samples')
+  expect(sent.rules[2]).not.toHaveProperty('min_samples')
+  await page.locator('#rule-min-samples-0').fill('')
+  await expect.poll(() => 'min_samples' in (validated.at(-1) as { rules: Array<Record<string, unknown>> }).rules[0]).toBe(false)
+})
+
+test('unfinished keyboard entry does not clear the stored minimum', async ({ page }) => {
+  const validated: Array<Record<string, unknown>> = []
+  await fixtureApi(page, validated)
+  await page.goto('/?shell=new')
+  await page.locator('#shell-tab-rules').click()
+  await loadPolicy(page, { ...basicPolicy, rules: [{ ...basicPolicy.rules[0], min_samples: 50 }, basicPolicy.rules[1]] })
+  const field = page.locator('#rule-min-samples-0')
+  await expect(field).toHaveValue('50')
+  const before = validated.length
+  await field.focus()
+  await page.keyboard.press('End')
+  await page.keyboard.type('e')
+  expect(await field.evaluate((input: HTMLInputElement) => input.validity.badInput)).toBe(true)
+  expect(validated.length).toBe(before)
+  await page.keyboard.press('Backspace')
+  await expect(field).toHaveValue('50')
+  await page.keyboard.press('Backspace')
+  await page.keyboard.press('Backspace')
+  await expect.poll(() => 'min_samples' in (validated.at(-1) as { rules: Array<Record<string, unknown>> }).rules[0]).toBe(false)
+})
+
+test('switching a rule to throughput_rps drops its minimum', async ({ page }) => {
+  const validated: Array<Record<string, unknown>> = []
+  await fixtureApi(page, validated)
+  await page.goto('/?shell=new')
+  await page.locator('#shell-tab-rules').click()
+  await loadPolicy(page, { ...basicPolicy, rules: [{ ...basicPolicy.rules[0], min_samples: 50 }] })
+  await expect(page.locator('#rule-min-samples-0')).toHaveValue('50')
+  await page.locator('#rule-metric-0').selectOption('throughput_rps')
+  await expect(page.locator('#rule-min-samples-0')).toHaveCount(0)
+  await expect.poll(() => (validated.at(-1) as { rules: Array<Record<string, unknown>> }).rules[0].metric).toBe('throughput_rps')
+  expect(validated.at(-1)).not.toHaveProperty('rules.0.min_samples')
+})
+
+test('policy defaults are edited, empty defaults disappear, and other defaults survive', async ({ page }) => {
+  const validated: Array<Record<string, unknown>> = []
+  await fixtureApi(page, validated)
+  await page.goto('/?shell=new')
+  await page.locator('#shell-tab-rules').click()
+  await loadPolicy(page, basicPolicy)
+  const last = () => validated.at(-1) as { defaults?: Record<string, unknown> }
+  await expect(page.getByLabel(RULES_LABELS.samples.floorField)).toHaveValue('')
+  await page.getByLabel(RULES_LABELS.samples.defaultMinField).fill('80')
+  await expect.poll(() => last().defaults).toEqual({ min_samples: 80 })
+  await page.getByLabel(RULES_LABELS.samples.floorField).fill('10')
+  await expect.poll(() => last().defaults).toEqual({ min_samples: 80, sample_floor: 10 })
+  await expect(page.locator('#rules-panel')).toContainText(RULES_LABELS.samples.lowFloor)
+  await expect(page.getByLabel(RULES_LABELS.samples.floorField)).toHaveAttribute('aria-describedby', 'policy-floor-warning policy-defaults-hint')
+  await page.getByLabel(RULES_LABELS.samples.floorField).fill('')
+  await page.getByLabel(RULES_LABELS.samples.defaultMinField).fill('')
+  await expect.poll(() => 'defaults' in last()).toBe(false)
+
+  await loadPolicy(page, { ...basicPolicy, defaults: { min_samples: 50, max_missing_fraction: 0.1 } })
+  await expect(page.getByLabel(RULES_LABELS.samples.defaultMinField)).toHaveValue('50')
+  await page.getByLabel(RULES_LABELS.samples.defaultMinField).fill('')
+  await expect.poll(() => last().defaults).toEqual({ max_missing_fraction: 0.1 })
+})
+
+test('an out-of-range minimum shows the server error with its JSON pointer', async ({ page }) => {
+  await fixtureApi(page)
+  await page.goto('/?shell=new')
+  await page.locator('#shell-tab-rules').click()
+  await loadPolicy(page, basicPolicy)
+  await page.locator('#rule-min-samples-1').fill('2000000')
+  const error = page.locator('#rules-panel .field__errors li').filter({ hasText: '/rules/1/min_samples: min_samples must be between 1 and 1000000' })
+  await expect(error).toBeVisible()
+  await expect(error).toHaveAttribute('lang', 'en')
+})
+
 test('server error pointer is marked English inside the rules panel', async ({ page }) => {
   await fixtureApi(page, [], { error: true })
   await page.goto('/?shell=new')
@@ -107,12 +204,18 @@ test('server error pointer is marked English inside the rules panel', async ({ p
 })
 
 test('the old interface keeps the English editor', async ({ page }) => {
-  await fixtureApi(page)
+  const validated: Array<Record<string, unknown>> = []
+  await fixtureApi(page, validated)
   await page.goto('/?shell=old')
-  await page.getByTestId('policy-file').setInputFiles({ name: 'policy.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(basicPolicy)) })
+  await page.getByTestId('policy-file').setInputFiles({ name: 'policy.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify({ ...basicPolicy, rules: [{ ...basicPolicy.rules[0], min_samples: 50 }, basicPolicy.rules[1]] })) })
   await expect(page.getByText('Policy draft')).toBeVisible()
   await expect(page.getByRole('button', { name: 'Add rule' })).toBeVisible()
   await expect(page.locator('[id^="rule-threshold-hint-"]')).toHaveCount(0)
+  await expect(page.locator('#policy-sample-floor, #policy-min-samples, [id^="rule-min-samples-"]')).toHaveCount(0)
+  // Hidden fields are kept untouched: switching the metric and back keeps min_samples in the old editor.
+  await page.locator('#rule-metric-0').selectOption('throughput_rps')
+  await page.locator('#rule-metric-0').selectOption('response_time_p95_ms')
+  await expect.poll(() => (validated.at(-1) as { rules: Array<{ min_samples?: number }> }).rules[0].min_samples).toBe(50)
 })
 
 test('expansion lists skipped labels, posts only new rules, and preserves unique ids', async ({ page }) => {

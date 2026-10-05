@@ -109,3 +109,18 @@ test('the side column keeps its own scroll and a bounded height', async ({ page 
   expect(await scrollY(page)).toBeGreaterThan(100)
   expect(await side.evaluate((element) => Math.round(element.getBoundingClientRect().top))).toBe(0)
 })
+
+test('under 960 px the stacked side column does not hide the verdict after a tab switch', async ({ page }) => {
+  await page.setViewportSize({ width: 800, height: 720 })
+  await fixtureApi(page)
+  await page.goto('/?shell=new')
+  await page.getByRole('button', { name: 'load-0.jtl' }).click()
+  await page.locator(`button[title="${manyAnalyses[0].analysis_id}"]`).click()
+  await expect(page.locator('#verdict')).toBeVisible()
+
+  await page.locator('#shell-tab-tables').dispatchEvent('click')
+  await expect(page.locator('#shell-tab-tables')).toHaveAttribute('aria-selected', 'true')
+  await expect.poll(() => page.locator('.workspace').evaluate((element) => Math.round(element.getBoundingClientRect().top))).toBe(0)
+  await page.locator('#shell-tab-overview').dispatchEvent('click')
+  await expect(page.locator('#verdict-title')).toBeInViewport()
+})

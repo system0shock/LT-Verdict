@@ -51,3 +51,9 @@ const options = computed(() => (props.config ? modelOptions(props.config) : []))
     </p>
   </div>
 </template>
+
+<style scoped>
+/* Подписи моделей приходят из конфигурации и могут быть длинными: список не шире строки, текст переносится. */
+.model-choice select { width: 100%; max-width: 100%; min-width: 0 }
+.model-choice p { overflow-wrap: anywhere }
+</style>

@@ -300,7 +300,7 @@ test('new analysis with one model or without configuration: no selector, the req
 })
 
 for (const theme of ['light', 'dark'] as const) {
-  for (const width of [1280, 375]) {
+  for (const width of [1280, 375, 320]) {
     test(`the selector has no serious axe violations in ${theme} at ${width}px`, async ({ page }) => {
       await page.setViewportSize({ width, height: 900 })
       await page.emulateMedia({ colorScheme: theme })

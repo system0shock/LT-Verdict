@@ -1081,6 +1081,7 @@ class AnalysisServiceTest {
             val base = policy(baseText)
 
             fun analyze(
+                arm: String,
                 cpuOrders: String,
                 services: List<String> = listOf("orders", "payments"),
                 using: PolicyValidation.Valid = base,
@@ -1088,14 +1089,14 @@ class AnalysisServiceTest {
                 AnalysisRequest(
                     input,
                     using,
-                    resources = resources(baseProfileSnapshotJson(input.sha256, cpuOrders, services).encodeToByteArray()),
+                    resources = resources(baseProfileSnapshotJson(input.sha256, arm, cpuOrders, services).encodeToByteArray()),
                 ),
             )
 
-            val first = analyze("0.5")
-            val second = analyze("0.1")
-            val third = analyze("0.1", services = listOf("orders"))
-            val relaxed = analyze("0.5", using = policy(baseText.replace("\"threshold\": 0.4", "\"threshold\": 0.6")))
+            val first = analyze("A", "0.5")
+            val second = analyze("B", "0.1")
+            val third = analyze("C", "0.1", services = listOf("orders"))
+            val relaxed = analyze("A", "0.5", using = policy(baseText.replace("\"threshold\": 0.4", "\"threshold\": 0.6")))
 
             assertEquals(
                 listOf("FAIL", "PASS", "NO_VERDICT", "PASS"),
@@ -1103,19 +1104,17 @@ class AnalysisServiceTest {
             )
             assertTrue("RESOURCE_SERIES_NOT_FOUND" in coverageReasons(third))
             assertEquals(3, listOf(first, second, third).map { it.analysisId }.toSet().size)
-            val policyHashes =
+            val identities =
                 listOf(first, second, third).map {
-                    Json
-                        .parseToJsonElement(
-                            Files.readString(it.analysisDirectory.resolve("identity.json")),
-                        ).jsonObject
-                        .getValue("policy_sha256")
+                    Json.parseToJsonElement(Files.readString(it.analysisDirectory.resolve("identity.json"))).jsonObject
                 }
-            assertEquals(1, policyHashes.toSet().size)
+            assertEquals(listOf("A", "B", "C"), identities.map { it.getValue("resource_arm").jsonPrimitive.content })
+            assertEquals(1, identities.map { it.getValue("policy_sha256") }.toSet().size)
         }
 
     private fun baseProfileSnapshotJson(
         loadHash: String,
+        arm: String,
         cpuOrders: String,
         services: List<String>,
     ): String {
@@ -1127,7 +1126,7 @@ class AnalysisServiceTest {
             aggregation: String,
             value: String,
         ) = """{"id":"$id","metric":"$metric","unit":"$unit","entity":"$entity","role":"system","aggregation":"$aggregation",""" +
-            """"values":[${List(30) { value }.joinToString(",")}]}"""
+            """"labels":{"arm":"$arm"},"values":[${List(30) { value }.joinToString(",")}]}"""
         val all =
             services.flatMap { service ->
                 val cpu = if (service == "orders") cpuOrders else "0.1"

@@ -178,6 +178,24 @@ test.describe('attention items', () => {
     expect(attentionItems(capacity).map((entry) => entry.key)).toEqual(['diagnostic:resource:rc-capacity-diag'])
   })
 
+  test('a failed capacity verdict puts the reason into attention and points to the capacity table', () => {
+    const summary = (verdict: string) => ({
+      schema_version: 'capacity.v1', load_axis: 'rps', unit: 'requests/s', stages: [], bound_type: 'BOUNDED', lower_inclusive: '95.745', upper_exclusive: '103.745',
+      policy_verdict: verdict, reasons: [], capacity_knee: null, knee_reason: 'none',
+    })
+    const failed = attentionItems(build({ analysis_mode: 'capacity_step', policy_verdict: 'FAIL', capacity_summary: summary('FAIL') }))
+
+    expect(failed.map((entry) => [entry.key, entry.kind, entry.diagnostic, entry.target?.tab, entry.target?.targetId])).toEqual([
+      ['violation:capacity', 'violation', false, 'tables', 'capacity-results'],
+    ])
+    expect(failed[0].title).toBe(OVERVIEW_LABELS.capacityFailTitle)
+    expect(failed[0].detail).toContain('95,745')
+    expect(failed[0].detail).toContain('103,745')
+    expect(failed[0].openLabel).toBe(OVERVIEW_LABELS.openCapacity)
+
+    expect(attentionItems(build({ analysis_mode: 'capacity_step', policy_verdict: 'PASS', capacity_summary: summary('PASS') }))).toEqual([])
+  })
+
   test('resource diagnostics lead trends and correlations and do not change verdict counts', () => {
     const evidence = [overall, checkout, p95Rule('failed', 'FAIL', 2340)]
     const baseline = build({ policy_verdict: 'FAIL', evidence })

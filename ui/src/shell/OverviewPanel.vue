@@ -128,6 +128,13 @@ const kindLabels: Record<AttentionKind, string> = {
       <h2 id="overview-metrics-title">
         {{ OVERVIEW_LABELS.metricsTitle }}
       </h2>
+      <p
+        v-if="result.analysis_mode === 'capacity_step'"
+        class="muted"
+        data-testid="metrics-capacity-note"
+      >
+        {{ OVERVIEW_LABELS.metricsCapacityNote }}
+      </p>
       <dl class="overview-metrics">
         <div
           v-for="tile in tiles"

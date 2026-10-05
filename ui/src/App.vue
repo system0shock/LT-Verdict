@@ -151,7 +151,7 @@ let uploadAbort: AbortController | null = null
 const verdictSummary = computed(() => {
   if (!result.value) return null
   const analysis = analyses.value.find((item) => item.analysis_id === selectedAnalysisId.value)
-  return summarizeVerdict(result.value, { policySha256: analysis?.policy_sha256, policyId: analysis?.policy_id })
+  return summarizeVerdict(result.value, { policySha256: analysis?.policy_sha256, policyId: analysis?.policy_id, tabs: shellNew })
 })
 watch(result, (value) => { if (shellNew && value && !trialBusy.value) activeTab.value = 'overview' })
 // Under 960 px the side column stacks above the workspace: scroll to the workspace, not to the page top.

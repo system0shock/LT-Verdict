@@ -240,7 +240,18 @@ function formatValue(value: unknown) {
   return 'Not available'
 }
 
+// New shell only: exact decimals from the server (up to 34 digits) are shown short, the full value stays in the cell title.
+const shortFraction = new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 4 })
+const shortSignificant = new Intl.NumberFormat('ru-RU', { maximumSignificantDigits: 4 })
+function shortDecimal(value: string) {
+  if (!/^-?\d{1,15}\.\d{7,}$/.test(value)) return value
+  const number = Number(value)
+  if (!Number.isFinite(number)) return value
+  return Math.abs(number) >= 1 ? shortFraction.format(number) : shortSignificant.format(number)
+}
+
 function formatOptional(value: unknown) {
+  if (props.shellTables) return value === null || value === undefined ? '—' : String(value)
   return value === null || value === undefined ? 'Not available (null)' : String(value)
 }
 
@@ -248,11 +259,21 @@ function capacityValue(value: number | string | null) {
   return value === null ? '—' : String(value)
 }
 
+function shortStatistic(value: unknown) {
+  return props.shellTables && typeof value === 'string' ? shortDecimal(value) : formatOptional(value)
+}
+
 function statistic(item: Evidence, key: string) {
   const values = valueAt(item, 'statistics')
   return values !== null && typeof values === 'object' && !Array.isArray(values)
-    ? formatOptional(valueAt(values as Evidence, key))
-    : 'Not available (null)'
+    ? shortStatistic(valueAt(values as Evidence, key))
+    : props.shellTables ? '—' : 'Not available (null)'
+}
+
+function statisticTitle(item: Evidence, key: string) {
+  const values = valueAt(item, 'statistics')
+  const value = values !== null && typeof values === 'object' && !Array.isArray(values) ? valueAt(values as Evidence, key) : undefined
+  return props.shellTables && typeof value === 'string' && shortDecimal(value) !== value ? value : undefined
 }
 
 function bindingText(item: Evidence) {
@@ -544,7 +565,33 @@ function updateRange(name: 'update:range-start' | 'update:range-end', event: Eve
             v-for="item in resourceSummaries"
             :key="String(item.id)"
           >
-            <td>{{ formatOptional(item.series_id) }}</td><td>{{ formatOptional(item.metric) }}</td><td>{{ formatOptional(item.unit) }}</td><td>{{ formatOptional(item.entity) }}</td><td>{{ formatOptional(item.role) }}</td><td>{{ formatOptional(item.aggregation) }}</td><td>{{ formatOptional(item.window_id) }}</td><td>{{ formatOptional(item.observed_cells) }} / {{ formatOptional(item.expected_cells) }}</td><td>{{ formatOptional(item.missing_cells) }}</td><td>{{ formatOptional(item.longest_gap_cells) }}</td><td>{{ statistic(item, 'min') }}</td><td>{{ statistic(item, 'max') }}</td><td>{{ statistic(item, 'mean') }}</td><td>{{ statistic(item, 'median') }}</td><td>{{ statistic(item, 'q05') }}</td><td>{{ statistic(item, 'q25') }}</td><td>{{ statistic(item, 'q75') }}</td><td>{{ statistic(item, 'q95') }}</td><td>{{ statistic(item, 'iqr') }}</td><td>{{ statistic(item, 'mad') }}</td><td>{{ statistic(item, 'sample_standard_deviation') }}</td><td>{{ statistic(item, 'slope_per_second') }}</td><td>{{ statistic(item, 'split_half_shift') }}</td><td>{{ arrayAt(item, 'reasons').join(', ') || '—' }}</td>
+            <td>{{ formatOptional(item.series_id) }}</td><td>{{ formatOptional(item.metric) }}</td><td>{{ formatOptional(item.unit) }}</td><td>{{ formatOptional(item.entity) }}</td><td>{{ formatOptional(item.role) }}</td><td>{{ formatOptional(item.aggregation) }}</td><td>{{ formatOptional(item.window_id) }}</td><td>{{ formatOptional(item.observed_cells) }} / {{ formatOptional(item.expected_cells) }}</td><td>{{ formatOptional(item.missing_cells) }}</td><td>{{ formatOptional(item.longest_gap_cells) }}</td><td :title="statisticTitle(item, 'min')">
+              {{ statistic(item, 'min') }}
+            </td><td :title="statisticTitle(item, 'max')">
+              {{ statistic(item, 'max') }}
+            </td><td :title="statisticTitle(item, 'mean')">
+              {{ statistic(item, 'mean') }}
+            </td><td :title="statisticTitle(item, 'median')">
+              {{ statistic(item, 'median') }}
+            </td><td :title="statisticTitle(item, 'q05')">
+              {{ statistic(item, 'q05') }}
+            </td><td :title="statisticTitle(item, 'q25')">
+              {{ statistic(item, 'q25') }}
+            </td><td :title="statisticTitle(item, 'q75')">
+              {{ statistic(item, 'q75') }}
+            </td><td :title="statisticTitle(item, 'q95')">
+              {{ statistic(item, 'q95') }}
+            </td><td :title="statisticTitle(item, 'iqr')">
+              {{ statistic(item, 'iqr') }}
+            </td><td :title="statisticTitle(item, 'mad')">
+              {{ statistic(item, 'mad') }}
+            </td><td :title="statisticTitle(item, 'sample_standard_deviation')">
+              {{ statistic(item, 'sample_standard_deviation') }}
+            </td><td :title="statisticTitle(item, 'slope_per_second')">
+              {{ statistic(item, 'slope_per_second') }}
+            </td><td :title="statisticTitle(item, 'split_half_shift')">
+              {{ statistic(item, 'split_half_shift') }}
+            </td><td>{{ arrayAt(item, 'reasons').join(', ') || '—' }}</td>
           </tr>
         </tbody>
       </table>

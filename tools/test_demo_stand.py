@@ -5,8 +5,10 @@ from decimal import Decimal
 import hashlib
 import importlib.util
 import json
+import math
 from pathlib import Path
 import re
+import statistics
 import sys
 import tempfile
 import unittest
@@ -204,12 +206,125 @@ class DemoStandTests(unittest.TestCase):
         self.assertEqual(int(window["from"][0]), 1790855880000)
         self.assertGreaterEqual(int(window["to"][0]), 1790856000000 + 14_400_000 + 240_000)
 
+    def test_correlation_compose_override(self):
+        override = (TOOLS / "demo-stand/docker-compose.correlation.yml").read_text(encoding="ascii")
+        self.assertIn("all-with-correlation", override)
+        self.assertIn("generator:", override)
+        self.assertNotIn("ports", override)
+        self.assertNotIn("image", override)
+
     def test_soak_compose_override(self):
         override = (TOOLS / "demo-stand/docker-compose.soak.yml").read_text(encoding="ascii")
         self.assertIn("all-with-soak", override)
         self.assertIn("generator:", override)
         self.assertNotIn("ports", override)
         self.assertNotIn("image", override)
+
+    def test_correlation_scenario_selection(self):
+        original = ["sla-fail", "capacity", "saturation"]
+        self.assertEqual(list(generate.SCENARIOS), original)
+        self.assertEqual(list(generate.OPT_IN_SCENARIOS), ["soak-4h"])
+        self.assertEqual(generate.scenario_names("all"), original)
+        self.assertEqual(generate.scenario_names("all-with-soak"), original + ["soak-4h"])
+        self.assertEqual(generate.scenario_names("all-with-correlation"), original + ["corr-stages"])
+        self.assertEqual(generate.scenario_names("corr-stages"), ["corr-stages"])
+        with self.assertRaises(ValueError):
+            generate.parameters_for("corr-stages", 0)
+
+    def test_soak_output_is_unchanged_by_the_correlation_scenario(self):
+        # Hashes of soak-4h at stage_scale 0.02 before the correlation scenario was added.
+        out = self.root / "soak-pin"
+        generate.generate(["soak-4h"], out, stage_scale=0.02)
+        record = json.loads((out / "manifest.json").read_text(encoding="ascii"))["scenarios"][0]
+        self.assertEqual(record["jtl_sha256"], "48dbcf12037c85248b97ed9eedb062a1b73b6ae8d128082905089a358fadbb5f")
+        self.assertEqual(hashlib.sha256((out / "metrics.om").read_bytes()).hexdigest(),
+                         "1e8a52c1bdf9495d4ef805d5a4f48f925e691e1c852d45b718cf74c51a78ade4")
+
+    def test_correlation_parameters(self):
+        parameters, stages = generate.parameters_for("corr-stages", 1.0)
+        self.assertEqual(stages, [("warm", 40, 300_000_000), ("steady", 60, 1_200_000_000),
+                                  ("cool", 40, 300_000_000)])
+        self.assertEqual(parameters["start_epoch_ms"], 1790874000000)
+        self.assertEqual(parameters["stages"], [
+            {"rate_rps": 0, "duration_us": 120_000_000}, {"rate_rps": 40, "duration_us": 300_000_000},
+            {"rate_rps": 60, "duration_us": 1_200_000_000}, {"rate_rps": 40, "duration_us": 300_000_000},
+            {"rate_rps": 0, "duration_us": 120_000_000}])
+        changes = parameters["downstream_changes"]
+        self.assertEqual(len(changes), 180)
+        self.assertEqual(changes[0]["from_us"], 120_000_000)
+        self.assertTrue(all(left["to_us"] == right["from_us"] for left, right in zip(changes, changes[1:])))
+        self.assertEqual(changes[-1]["to_us"], 120_000_000 + 1_800_000_000)
+        self.assertTrue(all(isinstance(change["add_us"], int) and change["add_us"] >= 5000 for change in changes))
+        self.assertEqual(changes, generate.parameters_for("corr-stages", 1.0)[0]["downstream_changes"])
+        self.assertNotIn("cpu_demand_multiplier_schedule", parameters)
+
+    def test_correlation_files(self):
+        out = self.root / "corr"
+        generate.generate(["corr-stages"], out)
+        directory = out / "corr-stages"
+        jtl = (directory / "load.jtl").read_bytes()
+        resources = json.loads((directory / "resources.json").read_text(encoding="ascii"), parse_float=Decimal)
+        plan = json.loads((directory / "correlation-plan.json").read_text(encoding="ascii"))
+        manifest = json.loads((out / "manifest.json").read_text(encoding="ascii"))["scenarios"][0]
+        self.assertEqual(plan["schema_version"], "correlation-plan.v1")
+        self.assertEqual(plan["resource_snapshot_sha256"], stats_validation.snapshot_hash(resources))
+        self.assertEqual(resources["load_input_sha256"], hashlib.sha256(jtl).hexdigest())
+        self.assertEqual(resources["step_ms"], 10000)
+        self.assertEqual(resources["start_epoch_ms"], manifest["start_epoch_ms"])
+        self.assertEqual(resources["windows"], [
+            {"id": stage["id"], "from_epoch_ms": stage["from_epoch_ms"], "to_epoch_ms": stage["to_epoch_ms"]}
+            for stage in manifest["stages"]])
+        self.assertIn("synthetic", resources["provenance"]["source_kind"])
+        self.assertEqual({series["id"] for series in resources["series"]},
+                         {"payments-pool-wait", "service-cpu-busy", "target-rps"})
+        self.assertEqual([pair["id"] for pair in plan["pairs"]], ["pool-wait-p95", "cpu-busy-p95"])
+        for pair in plan["pairs"]:
+            self.assertEqual(pair["window_ids"], ["steady"])
+            self.assertEqual(pair["load_metric"], "response_time_p95_ms")
+            self.assertEqual(pair["controls"], [{"meaning": "target_rps", "series_id": "target-rps"}])
+            self.assertEqual(pair["clock_alignment"], "declared_aligned")
+            self.assertEqual(pair["max_lag_ms"], 30000)
+            self.assertGreaterEqual(pair["min_abs_effect"], 0.3)
+            self.assertIn(pair["resource_series_id"], {series["id"] for series in resources["series"]})
+        steady = next(stage for stage in manifest["stages"] if stage["id"] == "steady")
+        first = (steady["from_epoch_ms"] - resources["start_epoch_ms"]) // 10000
+        last = (steady["to_epoch_ms"] - resources["start_epoch_ms"]) // 10000
+        self.assertEqual(last - first, 120)
+        by_id = {series["id"]: series["values"][first:last] for series in resources["series"]}
+        self.assertEqual(set(by_id["target-rps"]), {Decimal(60)})
+        for series_id in ("payments-pool-wait", "service-cpu-busy"):
+            values = by_id[series_id]
+            self.assertNotIn(None, values)
+            # No plateaus: the family selection aborts on a constant block resample.
+            self.assertGreaterEqual(len(set(values)), 110, series_id)
+
+    def test_correlation_scenario_plants_a_lagged_linear_link(self):
+        out = self.root / "corr-link"
+        generate.generate(["corr-stages"], out)
+        directory = out / "corr-stages"
+        resources = json.loads((directory / "resources.json").read_text(encoding="ascii"))
+        rows = list(csv.DictReader((directory / "load.jtl").read_text(encoding="ascii").splitlines()))
+        by_cell = {}
+        for row in rows:
+            by_cell.setdefault((int(row["timeStamp"]) - resources["start_epoch_ms"]) // 10000, []).append(int(row["elapsed"]))
+        first, last = 12 + 30, 12 + 30 + 120
+        p95 = []
+        for cell in range(first, last):
+            values = sorted(by_cell[cell])
+            p95.append(values[math.ceil(len(values) * 0.95) - 1])
+        # The outcome varies and is not a two-level step.
+        self.assertGreaterEqual(len(set(p95)), 60)
+        self.assertGreaterEqual(max(p95) - min(p95), 20)
+        series = {item["id"]: item["values"] for item in resources["series"]}
+
+        def correlation(name, lag):
+            # Positive lag: the resource leads the outcome by `lag` cells.
+            return statistics.correlation(series[name][first - lag:last - lag], p95)
+
+        planted = {lag: correlation("payments-pool-wait", lag) for lag in range(-3, 4)}
+        self.assertEqual(max(planted, key=planted.get), 2)
+        self.assertGreaterEqual(planted[2], 0.3)  # H3 amplitude floor
+        self.assertLess(abs(correlation("service-cpu-busy", 2)), planted[2] - 0.3)
 
     def test_mtls_stand_is_separate_and_local(self):
         stand = TOOLS / "demo-stand"

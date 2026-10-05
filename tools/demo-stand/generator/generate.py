@@ -7,6 +7,7 @@ import hashlib
 import json
 import math
 from pathlib import Path
+import random
 import sys
 import tempfile
 
@@ -29,6 +30,19 @@ SCENARIOS = {
 OPT_IN_SCENARIOS = {
     "soak-4h": (1790856000000, 1, 10000, 8, 2000, [("steady", 60, 14400)]),
 }
+# Opt-in synthetic input for the correlation hypotheses (N1). A hidden downstream-delay driver
+# moves p95 cell by cell; the resource "payments-pool-wait" is planted as a linear, lagged
+# measurement of that driver. The design values are declared here and are not tuned on any analysis result.
+CORRELATION_SCENARIOS = {
+    "corr-stages": (1790874000000, 1, 10000, 8, 2000,
+                    [("warm", 40, 300), ("steady", 60, 1200), ("cool", 40, 300)]),
+}
+CORR_CELL_US = 10_000_000
+CORR_LAG_CELLS = 2  # the resource leads p95 by 20 s
+CORR_AMPLITUDE = 0.8  # planted correlation; the H3 floor is 0.3, the v1 levels method needs more
+CORR_PHI = 0.8  # AR(1) coefficient of the driver and of the resource noise
+CORR_DRIVER_MEAN_MS, CORR_DRIVER_SD_MS, CORR_DRIVER_MIN_MS = 60, 20, 5
+CORR_POOL_MEAN, CORR_POOL_SD = 6, 2
 METRICS = (
     ("system-cpu-work", "demo_service_cpu_busy_ratio", 'service="orders-api"'),
     ("system-db-work", "demo_db_busy_ratio", 'db="orders-db"'),
@@ -86,11 +100,28 @@ def scenario_names(selection):
         return list(SCENARIOS)
     if selection == "all-with-soak":
         return list(SCENARIOS) + list(OPT_IN_SCENARIOS)
+    if selection == "all-with-correlation":
+        return list(SCENARIOS) + list(CORRELATION_SCENARIOS)
     return [selection]
 
 
+def corr_ar1(stream, count):
+    """Standardized AR(1) values from a sha256-seeded stream (the stand container has no NumPy)."""
+    seed = hashlib.sha256(f"ltv-demo-corr/v1/{stream}".encode("utf-8")).digest()
+    rng = random.Random(int.from_bytes(seed, "big"))
+    scale = math.sqrt(1 - CORR_PHI ** 2)
+    values = [rng.gauss(0, 1)]
+    for _ in range(count - 1):
+        values.append(CORR_PHI * values[-1] + scale * rng.gauss(0, 1))
+    return values
+
+
+def corr_cells(scaled):
+    return math.ceil(sum(duration for _, _, duration in scaled) / CORR_CELL_US)
+
+
 def parameters_for(name, stage_scale):
-    scenarios = {**SCENARIOS, **OPT_IN_SCENARIOS}
+    scenarios = {**SCENARIOS, **OPT_IN_SCENARIOS, **CORRELATION_SCENARIOS}
     if name not in scenarios or stage_scale <= 0:
         raise ValueError("invalid scenario or stage scale")
     epoch, cpu_workers, cpu_demand, db_workers, db_demand, stages = scenarios[name]
@@ -117,6 +148,15 @@ def parameters_for(name, stage_scale):
             {"from_us": 0 if k == 0 else IDLE_US + test_us * k // 24,
              "numerator": 100 + round(66 * k / 23), "denominator": 100}
             for k in range(24)]
+    if name == "corr-stages":
+        test_us = sum(duration for _, _, duration in scaled)
+        driver = corr_ar1("driver", corr_cells(scaled) + CORR_LAG_CELLS)
+        parameters["downstream_changes"] = [
+            {"from_us": IDLE_US + k * CORR_CELL_US,
+             "to_us": IDLE_US + min((k + 1) * CORR_CELL_US, test_us),
+             "add_us": 1000 * max(CORR_DRIVER_MIN_MS,
+                                  round(CORR_DRIVER_MEAN_MS + CORR_DRIVER_SD_MS * driver[k]))}
+            for k in range(corr_cells(scaled))]
     return parameters, scaled
 
 
@@ -182,6 +222,66 @@ def capacity_files(directory, source, stage_list, epoch, jtl_hash):
     write_json(directory / "capacity-plan.json", plan)
 
 
+def correlation_files(directory, source, stage_list, epoch, jtl_hash):
+    """Write the synthetic resource snapshot and the ready correlation plan of corr-stages."""
+    raw_cpu = {series["id"]: series["values"] for series in source["series"]}["system-cpu-work"]
+    cpu = [None if left is None or right is None else float(
+        ((Decimal(str(left)) + Decimal(str(right))) / 2).quantize(Decimal(".000001"), rounding=ROUND_HALF_EVEN))
+           for left, right in zip(raw_cpu[::2], raw_cpu[1::2])]
+    point_count = source["point_count"] // 2
+    cells = math.ceil((stage_list[-1]["to_epoch_ms"] - stage_list[0]["from_epoch_ms"]) * 1000 / CORR_CELL_US)
+    first = IDLE_US // CORR_CELL_US
+    driver = corr_ar1("driver", cells + CORR_LAG_CELLS)
+    noise = corr_ar1("resource-noise", cells)
+    own = math.sqrt(1 - CORR_AMPLITUDE ** 2)
+    pool = [None] * point_count
+    for index in range(cells):
+        pool[first + index] = round(max(0.0, CORR_POOL_MEAN + CORR_POOL_SD * (
+            CORR_AMPLITUDE * driver[index + CORR_LAG_CELLS] + own * noise[index])), 6)
+    target = []
+    for index in range(point_count):
+        moment = epoch + index * 10000
+        target.append(next((float(stage["target_rps"]) for stage in stage_list
+                            if stage["from_epoch_ms"] <= moment < stage["to_epoch_ms"]), 0.0))
+    series = [
+        {"id": "payments-pool-wait", "metric": "queue_depth", "unit": "requests", "entity": "payments-client",
+         "role": "system", "aggregation": "interval_mean", "values": pool},
+        {"id": "service-cpu-busy", "metric": "cpu_busy", "unit": "ratio", "entity": "orders-api",
+         "role": "system", "aggregation": "interval_mean", "values": cpu},
+        {"id": "target-rps", "metric": "target_rps", "unit": "requests_per_second", "entity": "jmeter",
+         "role": "generator", "aggregation": "interval_mean", "values": target},
+    ]
+    resources = {
+        "schema_version": "resource-snapshot.v1", "load_input_sha256": jtl_hash,
+        "start_epoch_ms": epoch, "step_ms": 10000, "point_count": point_count, "series": series,
+        "windows": [{key: stage[key] for key in ("id", "from_epoch_ms", "to_epoch_ms")}
+                    for stage in stage_list],
+        "rules": [],
+        "provenance": {"source_kind": "synthetic-demo",
+                       "query_semantics": "synthetic demo data: payments-pool-wait is generated, not measured; "
+                                          "service-cpu-busy is the 10 s mean of the simulated orders-api CPU",
+                       "clock_alignment": "declared_aligned"},
+    }
+    write_json(directory / "resources.json", resources)
+    parsed = json.loads((directory / "resources.json").read_text(encoding="utf-8"), parse_float=Decimal)
+    pair = {"load_metric": "response_time_p95_ms", "window_ids": ["steady"], "max_lag_ms": 30000,
+            "min_abs_effect": 0.3, "min_load_delta": 20,
+            "controls": [{"meaning": "target_rps", "series_id": "target-rps"}],
+            "clock_alignment": "declared_aligned"}
+    plan = {
+        "schema_version": "correlation-plan.v1", "resource_snapshot_sha256": snapshot_hash(parsed),
+        "pairs": [
+            {"id": "pool-wait-p95", "resource_series_id": "payments-pool-wait", **pair,
+             "expected_sign": "positive", "min_resource_delta": 1,
+             "topology_basis": "synthetic demo data: planted leading indicator of p95, lag 20 s"},
+            {"id": "cpu-busy-p95", "resource_series_id": "service-cpu-busy", **pair,
+             "expected_sign": "either", "min_resource_delta": 0.001,
+             "topology_basis": "synthetic demo data: simulated orders-api CPU, no planted link to p95"},
+        ],
+    }
+    write_json(directory / "correlation-plan.json", plan)
+
+
 def run_scenario(name, out_dir, stage_scale=1.0):
     """Write one scenario and return its manifest record and metric cells."""
     out_dir = Path(out_dir)
@@ -212,6 +312,8 @@ def run_scenario(name, out_dir, stage_scale=1.0):
     stage_list = stage_records(epoch, stages)
     if name == "capacity":
         capacity_files(out_dir, source, stage_list, epoch, jtl_hash)
+    if name == "corr-stages":
+        correlation_files(out_dir, source, stage_list, epoch, jtl_hash)
 
     point_count = source["point_count"]
     completions = [[] for _ in range(point_count)]
@@ -257,7 +359,8 @@ def generate(names, out_dir, stage_scale=1.0):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--out", required=True, type=Path)
-    parser.add_argument("--scenario", choices=(*SCENARIOS, *OPT_IN_SCENARIOS, "all", "all-with-soak"), default="all")
+    parser.add_argument("--scenario", default="all", choices=(
+        *SCENARIOS, *OPT_IN_SCENARIOS, *CORRELATION_SCENARIOS, "all", "all-with-soak", "all-with-correlation"))
     args = parser.parse_args()
     generate(scenario_names(args.scenario), args.out)
 

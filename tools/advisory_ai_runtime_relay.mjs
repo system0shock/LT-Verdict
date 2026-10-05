@@ -7,6 +7,7 @@ const mode = process.env.ADVISORY_RELAY_MODE;
 if (mode !== "preflight" && mode !== "live") throw new Error("invalid relay mode");
 
 const fixedModel = "deepseek-v4-flash-0731";
+const upstream = { hostname: "token-plan.ap-southeast-1.maas.aliyuncs.com", port: 443, path: "/compatible-mode/v1/chat/completions" };
 const requestLimit = 524_288;
 const responseLimit = 67_108_864;
 const outputRoot = process.env.ADVISORY_RELAY_OUTPUT_ROOT ?? "/out";
@@ -48,6 +49,7 @@ let firstBody = null;
 let firstCall = null;
 let firstOk = false;
 let refusedReason = null;
+let upstreamHost = null;
 const outcomes = [];
 
 function sendJson(response, status, type) {
@@ -147,6 +149,7 @@ function writeResult(outcome, ordinal) {
     forwarded_request_count: forwarded,
     outcomes: outcomes.filter(Boolean),
     retry_refused_reason: refusedReason,
+    upstream_host: upstreamHost,
   }));
 }
 
@@ -294,10 +297,10 @@ function inspectProviderResponse(status, contentType, body) {
 function callProvider(body) {
   return new Promise((resolve, reject) => {
     const encoded = Buffer.from(JSON.stringify(body));
+    // The host the request is sent to, lower case with the port; it ends up in provenance (ADR 0023, D4).
+    upstreamHost = `${upstream.hostname}:${upstream.port}`;
     const request = https.request({
-      hostname: "token-plan.ap-southeast-1.maas.aliyuncs.com",
-      port: 443,
-      path: "/compatible-mode/v1/chat/completions",
+      ...upstream,
       method: "POST",
       headers: {
         authorization: `Bearer ${apiKey}`,

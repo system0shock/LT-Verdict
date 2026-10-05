@@ -289,6 +289,195 @@ class AdvisoryAiTest {
     }
 
     @Test
+    fun `new advice records the observed model and endpoint host`() {
+        val document = newAdviceDocument("observed", provenance(modelId = "qwen3.8-max", endpointHost = "models.internal.example:8443"))
+
+        val saved = document.getValue("provenance").jsonObject
+        assertEquals("qwen3.8-max", (saved.getValue("model_id") as JsonPrimitive).content)
+        assertEquals("models.internal.example:8443", (saved.getValue("endpoint_host") as JsonPrimitive).content)
+        assertEquals(document, storeAdvice("observed-store", document).document)
+    }
+
+    @Test
+    fun `legacy advice without endpoint_host is read and reused without a runner call`() {
+        val legacy = newAdviceDocument("legacy-source").withProvenance { it - "endpoint_host" }
+        var calls = 0
+        DataDirectory.open(tempDir.resolve("legacy")).use { directory ->
+            val fixture = prepareAnalysis(directory)
+            val bundles = RunBundleStore(directory)
+            val store = AiAdviceStore(directory, bundles)
+            val manifestSha256 = sha256Hex(Files.readAllBytes(fixture.analysisPath.resolve("manifest.json")))
+            store.write(fixture.runId, fixture.analysisId, manifestSha256, legacy)
+            val service =
+                AdvisoryAiService(
+                    bundles,
+                    store,
+                    AdvisoryRunner {
+                        calls++
+                        RunnerOutcome.Failed(AdviceFailure.PROCESS_FAILED)
+                    },
+                )
+
+            val result = assertInstanceOf(AdviceRunResult.Saved::class.java, service.generate(fixture.runId, fixture.analysisId))
+
+            assertTrue(result.reused)
+            assertEquals(0, calls)
+            assertFalse(
+                result.advice.document
+                    .getValue("provenance")
+                    .jsonObject
+                    .containsKey("endpoint_host"),
+            )
+        }
+    }
+
+    @Test
+    fun `advice of a model outside the current configuration is read`() {
+        val document = newAdviceDocument("foreign-source", provenance(modelId = "org/retired-model:2", endpointHost = "[::1]:8443"))
+
+        assertEquals(document, storeAdvice("foreign", document).document)
+    }
+
+    @Test
+    fun `advice without endpoint_host is read only for the model and prompt of the legacy epoch`() {
+        val noHost: (Map<String, JsonElement>) -> Map<String, JsonElement> = { it - "endpoint_host" }
+        val other = newAdviceDocument("epoch-source", provenance(modelId = "qwen3.8-max"))
+
+        val failure = assertThrows(IllegalStateException::class.java) { storeAdvice("epoch-other", other.withProvenance(noHost)) }
+        assertTrue(failure.message.orEmpty().startsWith("CORRUPT_AI_ADVICE"))
+        val unknownPrompt =
+            other.withProvenance {
+                noHost(it) + ("model_id" to JsonPrimitive(QwenCode0211.MODEL_ID)) +
+                    ("prompt_version" to JsonPrimitive("advisory-system.v2"))
+            }
+        assertThrows(IllegalStateException::class.java) { storeAdvice("epoch-prompt", unknownPrompt) }
+    }
+
+    @Test
+    fun `stored advice with a malformed endpoint_host or model_id or an extra key is corrupt`() {
+        val document = newAdviceDocument("malformed-source")
+        val changes =
+            mapOf<String, (Map<String, JsonElement>) -> Map<String, JsonElement>>(
+                "empty host" to { it + ("endpoint_host" to JsonPrimitive("")) },
+                "no port" to { it + ("endpoint_host" to JsonPrimitive("models.internal.example")) },
+                "path" to { it + ("endpoint_host" to JsonPrimitive("models.internal.example:443/v1")) },
+                "userinfo" to { it + ("endpoint_host" to JsonPrimitive("user@models.internal.example:443")) },
+                "upper case" to { it + ("endpoint_host" to JsonPrimitive("Models.Example:443")) },
+                "port 65536" to { it + ("endpoint_host" to JsonPrimitive("models.example:65536")) },
+                "host is a number" to { it + ("endpoint_host" to JsonPrimitive(443)) },
+                "slug with dots" to { it + ("model_id" to JsonPrimitive("qwen..max")) },
+                "slug with spaces" to { it + ("model_id" to JsonPrimitive("qwen max")) },
+                "slug with shell" to { it + ("model_id" to JsonPrimitive("qwen;rm")) },
+                "slug of 129 characters" to { it + ("model_id" to JsonPrimitive("a".repeat(129))) },
+                "extra key" to { it + ("endpoint_url" to JsonPrimitive("https://models.example/v1")) },
+            )
+        changes.entries.forEachIndexed { index, (name, change) ->
+            val failure =
+                assertThrows(IllegalStateException::class.java, { storeAdvice("malformed-$index", document.withProvenance(change)) }, name)
+            assertTrue(failure.message.orEmpty().startsWith("CORRUPT_AI_ADVICE"), name)
+        }
+    }
+
+    @Test
+    fun `runner provenance with a malformed endpoint host or model id is not saved`() {
+        val bad =
+            listOf(
+                provenance(endpointHost = ""),
+                provenance(endpointHost = "models.example"),
+                provenance(endpointHost = "https://models.example:443"),
+                provenance(endpointHost = "models.example:443/v1"),
+                provenance(modelId = "qwen..max"),
+                provenance(modelId = "qwen max"),
+                provenance(modelId = ""),
+            )
+        bad.forEachIndexed { index, value ->
+            DataDirectory.open(tempDir.resolve("bad-$index")).use { directory ->
+                val fixture = prepareAnalysis(directory)
+                val bundles = RunBundleStore(directory)
+                val store = AiAdviceStore(directory, bundles)
+                val service =
+                    AdvisoryAiService(
+                        bundles,
+                        store,
+                        AdvisoryRunner { RunnerOutcome.Success(canonicalJson(validOutput("analysis-result.json#/evidence/0")), value) },
+                    )
+
+                assertEquals(
+                    AdviceRunResult.Failed(AdviceFailure.INVALID_OUTPUT),
+                    service.generate(fixture.runId, fixture.analysisId),
+                    "$index",
+                )
+                assertEquals(null, store.read(fixture.runId, fixture.analysisId), "$index")
+            }
+        }
+    }
+
+    @Test
+    fun `endpoint host is lower case host and port with the port always present`() {
+        listOf(
+            "token-plan.ap-southeast-1.maas.aliyuncs.com:443",
+            "localhost:1",
+            "10.0.0.5:65535",
+            "[::1]:8443",
+            "a:80",
+            "a-b.c1:9",
+        ).forEach {
+            assertTrue(validEndpointHost(it), it)
+        }
+        listOf(
+            "",
+            ":443",
+            "host",
+            "host:",
+            "host:0",
+            "host:65536",
+            "host:08",
+            "host:+1",
+            "Host:443",
+            "host_name:443",
+            "-host:443",
+            "host-:443",
+            "host..name:443",
+            ".host:443",
+            "host.:443",
+            "host:443/",
+            "host:443?x",
+            "host:443#x",
+            "u@host:443",
+            "http://host:443",
+            "host :443",
+            "host:443\n",
+            "[::1]",
+            "[xyz]:443",
+            "[.:]:443",
+            "[:]:443",
+            "[::]:443",
+            "[]:443",
+            "a".repeat(64) + ":443",
+            "host\u0000:443",
+        ).forEach { assertFalse(validEndpointHost(it), it) }
+    }
+
+    @Test
+    fun `slug and endpoint host patterns of the loader equal the ai-advice schema`() {
+        val provenance =
+            Json
+                .parseToJsonElement(Files.readString(Path.of("docs/contracts/advice/v1/ai-advice.schema.json")))
+                .jsonObject
+                .getValue("properties")
+                .jsonObject
+                .getValue("provenance")
+                .jsonObject
+                .getValue("properties")
+                .jsonObject
+
+        fun pattern(name: String) = (provenance.getValue(name).jsonObject.getValue("pattern") as JsonPrimitive).content
+
+        assertEquals("^" + MODEL_SLUG.pattern + "$", pattern("model_id"))
+        assertEquals("^" + ENDPOINT_HOST.pattern + "$", pattern("endpoint_host"))
+    }
+
+    @Test
     fun `oversized advice manifest is rejected before reading its bytes`() =
         DataDirectory.open(tempDir.resolve("oversized-manifest")).use { directory ->
             val fixture = prepareAnalysis(directory)
@@ -510,17 +699,52 @@ class AdvisoryAiTest {
             put("caveats", buildJsonArray { add(JsonPrimitive("This is advisory, not a causal conclusion.")) })
         }
 
-    private fun provenance() =
-        RunnerProvenance(
-            runnerId = "gigacode-qwen-code",
-            runnerVersion = "0.21.1",
-            runnerArtifactSha256 = QwenCode0211.CLI_ENTRY_SHA256,
-            modelId = QwenCode0211.MODEL_ID,
-            promptVersion = "advisory-system.v1",
-            promptSha256 = "d".repeat(64),
-            durationMillis = 12,
-            exitCode = 0,
-        )
+    private fun provenance(
+        modelId: String = QwenCode0211.MODEL_ID,
+        endpointHost: String = BUILT_IN_HOST,
+    ) = RunnerProvenance(
+        runnerId = "gigacode-qwen-code",
+        runnerVersion = "0.21.1",
+        runnerArtifactSha256 = QwenCode0211.CLI_ENTRY_SHA256,
+        modelId = modelId,
+        endpointHost = endpointHost,
+        promptVersion = "advisory-system.v1",
+        promptSha256 = "d".repeat(64),
+        durationMillis = 12,
+        exitCode = 0,
+    )
+
+    /** Saves one advice through the service and returns its document (the shape a new advice has). */
+    private fun newAdviceDocument(
+        name: String,
+        provenance: RunnerProvenance = provenance(),
+    ): JsonObject =
+        DataDirectory.open(tempDir.resolve(name)).use { directory ->
+            val fixture = prepareAnalysis(directory)
+            val bundles = RunBundleStore(directory)
+            val service =
+                AdvisoryAiService(
+                    bundles,
+                    AiAdviceStore(directory, bundles),
+                    AdvisoryRunner { RunnerOutcome.Success(canonicalJson(validOutput("analysis-result.json#/evidence/0")), provenance) },
+                )
+            assertInstanceOf(AdviceRunResult.Saved::class.java, service.generate(fixture.runId, fixture.analysisId)).advice.document
+        }
+
+    /** Writes [document] into a fresh data directory; the store validates it exactly as it validates a saved advice. */
+    private fun storeAdvice(
+        name: String,
+        document: JsonObject,
+    ): StoredAdvice =
+        DataDirectory.open(tempDir.resolve(name)).use { directory ->
+            val fixture = prepareAnalysis(directory)
+            val bundles = RunBundleStore(directory)
+            val manifestSha256 = sha256Hex(Files.readAllBytes(fixture.analysisPath.resolve("manifest.json")))
+            AiAdviceStore(directory, bundles).write(fixture.runId, fixture.analysisId, manifestSha256, document)
+        }
+
+    private fun JsonObject.withProvenance(change: (Map<String, JsonElement>) -> Map<String, JsonElement>) =
+        JsonObject(this + ("provenance" to JsonObject(change(getValue("provenance").jsonObject))))
 
     private data class AnalysisFixture(
         val runId: String,
@@ -533,5 +757,6 @@ class AdvisoryAiTest {
         const val RUN_ID = "jmeter_jtl_csv-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
         const val ANALYSIS_ID = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
         const val MANIFEST_SHA = "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+        const val BUILT_IN_HOST = "token-plan.ap-southeast-1.maas.aliyuncs.com:443"
     }
 }

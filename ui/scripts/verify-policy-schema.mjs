@@ -92,6 +92,23 @@ for (const [name, expected] of [
   }
 }
 if (!validateAiModels(aiModelsSchema.examples[0])) throw new Error('ai-models schema example is invalid')
+const aiAdviceSchema = await readJson('docs/contracts/advice/v1/ai-advice.schema.json')
+const aiAdviceOutputSchema = await readJson('docs/contracts/advice/v1/ai-advice-output.schema.json')
+const adviceAjv = new Ajv2020({ strict: false, validateFormats: false })
+adviceAjv.addSchema(aiAdviceOutputSchema)
+const validateAiAdvice = adviceAjv.compile(aiAdviceSchema)
+const aiAdviceExamples = 'docs/contracts/advice/v1/examples/ai-advice'
+for (const [name, expected] of [
+  ['valid', true],
+  ['invalid', false],
+]) {
+  for (const file of (await readdir(resolve(root, aiAdviceExamples, name))).sort()) {
+    const path = `${aiAdviceExamples}/${name}/${file}`
+    if (validateAiAdvice(await readJson(path)) !== expected) {
+      throw new Error(`ai-advice schema ${path}: expected schema_valid=${expected}; ${JSON.stringify(validateAiAdvice.errors)}`)
+    }
+  }
+}
 const manifest = await readJson('fixtures/slice1/manifest.json')
 const schema = await readJson('docs/contracts/policy/v1/policy.schema.json')
 const validate = new Ajv2020({ strict: false }).compile(schema)

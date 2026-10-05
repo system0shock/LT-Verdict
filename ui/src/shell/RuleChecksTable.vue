@@ -84,6 +84,7 @@ const rows = computed(() => ruleRows(props.result))
 <style scoped>
 section { min-width: 0; }
 td, th { overflow-wrap: anywhere; }
+.status-text { white-space: nowrap; overflow-wrap: normal; }
 tbody th { background: var(--surface); color: var(--text); }
 code { color: var(--text-muted); }
 </style>

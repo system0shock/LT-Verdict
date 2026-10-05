@@ -52,6 +52,7 @@ internal fun evaluateResources(
             val series = seriesById[rule.seriesId]
             val bindingFailure = platform.bindingFailures[rule.id]
             val windowCells = snapshot.cellIndex(window.toEpochMillis) - snapshot.cellIndex(window.fromEpochMillis)
+            val cells = if (rule.platform != null && series != null) cellStats(snapshot, window, series) else null
             val outcome =
                 when {
                     bindingFailure != null -> RuleOutcome("NO_VERDICT", bindingFailure, emptyList())
@@ -66,9 +67,10 @@ internal fun evaluateResources(
                             checkId,
                             RESOURCE_FINDINGS_MAX - findings.size,
                             checkCancelled,
+                            cells,
                         )
                 }
-            checks += resourceCheck(checkId, window, rule, outcome.status, outcome.reason)
+            checks += resourceCheck(checkId, window, rule, outcome.status, outcome.reason, cells)
             findings += outcome.findings
             outcome.reason?.let(reasons::add)
             if (rule.effect == ResourceRuleEffect.SLA) slaStatuses += outcome.status
@@ -266,8 +268,13 @@ private fun evaluateRule(
     checkId: String,
     findingsLimit: Int,
     checkCancelled: () -> Unit,
+    cells: CellStats? = null,
 ): RuleOutcome {
     if (series == null) return RuleOutcome("NO_VERDICT", "RESOURCE_SERIES_NOT_FOUND", emptyList())
+    val fraction = rule.maxMissingFraction
+    if (cells != null && fraction != null && withinTolerance(cells, fraction, checkNotNull(rule.maxGapCells))) {
+        return evaluateBridged(snapshot, window, rule, series, checkId, findingsLimit, checkCancelled)
+    }
     val fromIndex = snapshot.cellIndex(window.fromEpochMillis)
     val toIndex = snapshot.cellIndex(window.toEpochMillis)
     val findings = mutableListOf<JsonObject>()
@@ -329,12 +336,126 @@ private fun evaluateRule(
     }
 }
 
+private data class CellStats(
+    val expected: Int,
+    val observed: Int,
+    val longestGap: Int,
+) {
+    val missing: Int get() = expected - observed
+}
+
+private fun cellStats(
+    snapshot: ResourceSnapshotV1,
+    window: ResourceWindowV1,
+    series: ResourceSeriesV1,
+): CellStats {
+    val from = snapshot.cellIndex(window.fromEpochMillis)
+    val to = snapshot.cellIndex(window.toEpochMillis)
+    var observed = 0
+    var gap = 0
+    var longest = 0
+    for (index in from until to) {
+        if (series.values[index] == null) {
+            gap++
+            longest = maxOf(longest, gap)
+        } else {
+            gap = 0
+            observed++
+        }
+    }
+    return CellStats(to - from, observed, longest)
+}
+
+private fun withinTolerance(
+    cells: CellStats,
+    maxMissingFraction: BigDecimal,
+    maxGapCells: Int,
+): Boolean =
+    cells.missing > 0 &&
+        cells.observed > 0 &&
+        cells.missing.bd() <= maxMissingFraction.multiply(cells.expected.bd()) &&
+        cells.longestGap <= maxGapCells
+
+private class ViolationRun(
+    val start: Int,
+    var end: Int,
+    var min: BigDecimal,
+    var max: BigDecimal,
+) {
+    val length: Int get() = end + 1 - start
+}
+
+private fun evaluateBridged(
+    snapshot: ResourceSnapshotV1,
+    window: ResourceWindowV1,
+    rule: ResourceRuleV1,
+    series: ResourceSeriesV1,
+    checkId: String,
+    findingsLimit: Int,
+    checkCancelled: () -> Unit,
+): RuleOutcome {
+    val findings = mutableListOf<JsonObject>()
+    var presumed = false
+    val chain = mutableListOf<ViolationRun>()
+
+    fun report(
+        from: Int,
+        to: Int,
+        min: BigDecimal,
+        max: BigDecimal,
+        isPresumed: Boolean,
+    ) {
+        require(findings.size < findingsLimit) { "RESOURCE_FINDINGS_LIMIT_EXCEEDED" }
+        findings += thresholdFinding(snapshot, window, series, rule, checkId, from, to, min, max, isPresumed)
+    }
+
+    fun flush() {
+        val proven = chain.filter { it.length >= rule.minConsecutiveCells }
+        if (proven.isNotEmpty()) {
+            proven.forEach { report(it.start, it.end + 1, it.min, it.max, false) }
+        } else if (chain.isNotEmpty() && chain.last().end + 1 - chain.first().start >= rule.minConsecutiveCells) {
+            presumed = true
+            report(chain.first().start, chain.last().end + 1, chain.minOf { it.min }, chain.maxOf { it.max }, true)
+        }
+        chain.clear()
+    }
+
+    for (index in snapshot.cellIndex(window.fromEpochMillis) until snapshot.cellIndex(window.toEpochMillis)) {
+        checkCancelled()
+        val value = series.values[index] ?: continue
+        val violates =
+            when (rule.operator) {
+                ResourceOperator.GT -> value > rule.threshold
+                ResourceOperator.LT -> value < rule.threshold
+            }
+        if (!violates) {
+            flush()
+            continue
+        }
+        val last = chain.lastOrNull()
+        if (last != null && last.end + 1 == index) {
+            last.end = index
+            last.min = minOf(last.min, value)
+            last.max = maxOf(last.max, value)
+        } else {
+            chain += ViolationRun(index, index, value, value)
+        }
+    }
+    flush()
+    return when {
+        presumed -> RuleOutcome("NO_VERDICT", "MISSING_RESOURCE_CELLS", findings)
+        findings.isNotEmpty() -> RuleOutcome("FAIL", "RESOURCE_GAPS", findings)
+        else -> RuleOutcome("PASS", "RESOURCE_GAPS", findings)
+    }
+}
+
 private fun resourceCheck(
     id: String,
     window: ResourceWindowV1,
     rule: ResourceRuleV1,
     status: String,
     reason: String?,
+    cells: CellStats?,
 ): JsonObject =
     buildJsonObject {
         put("id", id)
@@ -352,6 +473,12 @@ private fun resourceCheck(
             put("platform_rule_id", it.ruleId)
             put("service", it.service)
         }
+        cells?.let {
+            put("expected_cells", it.expected)
+            put("observed_cells", it.observed)
+            put("missing_cells", it.missing)
+            put("longest_gap_cells", it.longestGap)
+        }
     }
 
 private fun thresholdFinding(
@@ -364,6 +491,7 @@ private fun thresholdFinding(
     toIndex: Int,
     observedMin: BigDecimal,
     observedMax: BigDecimal,
+    presumed: Boolean = false,
 ): JsonObject {
     val from = snapshot.cellStart(fromIndex)
     val to = snapshot.cellStart(toIndex)
@@ -380,6 +508,7 @@ private fun thresholdFinding(
         put("cell_count", toIndex - fromIndex)
         put("observed_min", canonicalDecimal(observedMin))
         put("observed_max", canonicalDecimal(observedMax))
+        if (presumed) put("presumed", true)
         put("evidence_id", evidenceId)
     }
 }

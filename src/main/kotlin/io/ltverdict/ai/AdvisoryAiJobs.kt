@@ -1,5 +1,7 @@
 package io.ltverdict.ai
 
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
 import java.util.ArrayDeque
 import java.util.UUID
 import java.util.concurrent.ArrayBlockingQueue
@@ -162,7 +164,13 @@ internal class AdvisoryAiJobs(
                     terminal(
                         jobId,
                         when (result) {
-                            is AdviceRunResult.Saved -> current.copy(state = AdviceJobState.COMPLETE, reused = result.reused)
+                            is AdviceRunResult.Saved ->
+                                // An advice that already existed was produced by its own model, whatever was requested now.
+                                current.copy(
+                                    state = AdviceJobState.COMPLETE,
+                                    reused = result.reused,
+                                    modelId = storedModelId(result.advice) ?: current.modelId,
+                                )
                             is AdviceRunResult.Failed -> current.copy(state = AdviceJobState.FAILED, failure = result.reason)
                             is AdviceRunResult.Unavailable ->
                                 current.copy(state = AdviceJobState.UNAVAILABLE, unavailableReason = result.reason)
@@ -220,6 +228,9 @@ internal class AdvisoryAiJobs(
         const val CLOSE_TIMEOUT_SECONDS = 5L
     }
 }
+
+private fun storedModelId(advice: StoredAdvice): String? =
+    ((advice.document["provenance"] as? JsonObject)?.get("model_id") as? JsonPrimitive)?.takeIf { it.isString }?.content
 
 private fun AdviceJobState.isTerminal(): Boolean =
     this == AdviceJobState.COMPLETE ||

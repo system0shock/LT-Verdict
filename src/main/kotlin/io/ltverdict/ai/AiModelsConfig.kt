@@ -265,6 +265,8 @@ private fun validEndpointUrl(
 ): Boolean {
     if (url.length > MAX_URL_BYTES || url.any { it !in '!'..'~' || it in URL_UNSAFE_CHARACTERS }) return false
     if ('?' in url || '#' in url) return false
+    // The launcher and the relay accept only this form; a file must not pass the loader and then fail at run time.
+    if (!UPSTREAM_FORM.matches(url)) return false
     val uri =
         try {
             URI(url)
@@ -276,7 +278,8 @@ private fun validEndpointUrl(
         authority != null &&
         '@' !in authority &&
         !uri.host.isNullOrEmpty() &&
-        (uri.port == -1 || uri.port in 1..65_535)
+        (uri.port == -1 || uri.port in 1..65_535) &&
+        endpointHostOf(url)?.let(::validEndpointHost) == true
 }
 
 private class ConfigFailure(
@@ -335,6 +338,8 @@ private const val MAX_LABEL_CODE_POINTS = 80
 private const val MAX_URL_BYTES = 512
 
 /** The address travels as a process argument and a container variable; quoting and shell metacharacters are refused. */
+private val UPSTREAM_FORM = Regex("https?://(?:\\[[0-9A-Fa-f:.]+\\]|[A-Za-z0-9.-]+)(?::[0-9]{1,5})?(?:/[^?#]*)?")
+
 internal const val URL_UNSAFE_CHARACTERS = "\"\\`^|<>{}"
 private const val SCAN_DEPTH_MAX = 8
 private const val SCAN_NUMBER_BYTES_MAX = 64

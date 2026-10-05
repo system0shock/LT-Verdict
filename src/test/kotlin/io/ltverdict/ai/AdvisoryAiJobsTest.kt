@@ -1,6 +1,7 @@
 package io.ltverdict.ai
 
 import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.put
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertInstanceOf
@@ -95,6 +96,22 @@ class AdvisoryAiJobsTest {
             val unspecified = accepted(jobs.submit(RUN_ID, "failed")).status
             assertNull(unspecified.modelId)
             assertNull(awaitState(jobs, unspecified.jobId, AdviceJobState.FAILED).modelId)
+        }
+    }
+
+    @Test
+    fun `a reused advice reports the model that produced it`() {
+        val advice =
+            StoredAdvice(
+                Path.of("advice"),
+                buildJsonObject { put("provenance", buildJsonObject { put("model_id", "org/first:1") }) },
+            )
+        AdvisoryAiJobs(generate = { _, _ -> AdviceRunResult.Saved(advice, reused = true) }).use { jobs ->
+            val submitted = accepted(jobs.submit(RUN_ID, ANALYSIS_ID, "org/second:2")).status
+            assertEquals("org/second:2", submitted.modelId)
+            val complete = awaitState(jobs, submitted.jobId, AdviceJobState.COMPLETE)
+            assertEquals(true, complete.reused)
+            assertEquals("org/first:1", complete.modelId)
         }
     }
 

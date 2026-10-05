@@ -7,7 +7,7 @@
     "typecheck": "vue-tsc --noEmit",
     "lint": "eslint .",
     "build": "vue-tsc --noEmit && vite build",
-    "test:contracts": "node scripts/verify-policy-schema.mjs",
+    "test:contracts": "node scripts/verify-policy-schema.mjs && node scripts/verify-report-reasons.mjs",
     "e2e:server": "node scripts/start-e2e-server.mjs",
     "e2e": "playwright test"
   },

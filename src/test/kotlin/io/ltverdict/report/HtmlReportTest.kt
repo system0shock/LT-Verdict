@@ -1,8 +1,13 @@
 package io.ltverdict.report
 
+import kotlinx.serialization.json.JsonPrimitive
+import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
+import org.junit.jupiter.api.Assertions.assertTimeoutPreemptively
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
+import org.junit.jupiter.api.function.ThrowingSupplier
+import java.time.Duration
 
 class HtmlReportTest {
     @Test
@@ -32,7 +37,8 @@ class HtmlReportTest {
             ).decodeToString()
 
         assertTrue(html.startsWith("<!doctype html>"))
-        assertTrue(html.contains("lang=\"en\""))
+        assertTrue(html.contains("<html lang=\"ru\">"))
+        assertTrue(html.contains("<section lang=\"en\"><h2>Overall and transaction metrics</h2>"))
         assertTrue(html.contains("run-1"))
         assertTrue(html.contains("analysis-1"))
         assertTrue(html.contains("INCOMPLETE"))
@@ -94,6 +100,306 @@ class HtmlReportTest {
         assertTrue(html.contains("latency_ms: {&quot;p50&quot;:null,&quot;p95&quot;:null,&quot;p99&quot;:null,&quot;max&quot;:null}"))
         assertTrue(html.contains("latency_ms: {&quot;p50&quot;:0,&quot;p95&quot;:0,&quot;p99&quot;:0,&quot;max&quot;:0}"))
         assertTrue(html.contains("error_rate_ratio: null"))
+    }
+
+    @Test
+    fun `a failing rule shows threshold measured value status and the reason in words`() {
+        val html = page("FAIL", listOf(check("checkout-p95", "FAIL", threshold = "2000", observed = "2340")))
+
+        assertTrue(html.contains("checkout-p95"))
+        assertTrue(Regex("2 000 мс").containsMatchIn(html))
+        assertTrue(Regex("2 340 мс").containsMatchIn(html))
+        assertTrue(html.contains("не более"))
+        assertTrue(html.contains("Нарушение"))
+        assertTrue(html.contains("<th scope=\"col\">Порог"))
+        assertTrue(html.contains("Нарушено правил: 1 из 1"))
+    }
+
+    @Test
+    fun `the verdict block comes before the metrics and names the no-policy limitation`() {
+        val html = page("NO_POLICY")
+
+        assertTrue(html.indexOf("Вердикт") < html.indexOf("Overall and transaction metrics"))
+        assertTrue(html.indexOf("Ограничения") < html.indexOf("Overall and transaction metrics"))
+        assertTrue(html.contains("Правила не заданы"))
+    }
+
+    @Test
+    fun `a rule with no observed value and an unknown reason code stays readable`() {
+        val html = page("NO_VERDICT", listOf(check("r", "NO_VERDICT", observed = null, reason = "FUTURE_CODE")))
+
+        assertTrue(html.contains("FUTURE_CODE"))
+        assertTrue(html.contains("Причина без расшифровки в этой версии отчёта."))
+        assertTrue(html.contains("нет данных"))
+    }
+
+    @Test
+    fun `reason codes of the result and the coverage are explained in words`() {
+        val html =
+            page(
+                "NO_VERDICT",
+                listOf(check("r", "NO_VERDICT", observed = null, reason = "METRIC_NOT_AVAILABLE")),
+                coverageStatus = "INCOMPLETE",
+                coverageReasons = listOf("SOURCE_ACQUISITION_PARTIAL"),
+            )
+
+        assertTrue(html.contains("Онлайн-источник вернул данные не по всем запросам."))
+        assertTrue(html.contains("Для правила нет данных"))
+        assertTrue(html.contains("Покрытие данных неполное"))
+    }
+
+    @Test
+    fun `hostile transaction names and rule ids are escaped and the page stays offline`() {
+        val html =
+            page(
+                "FAIL",
+                listOf(
+                    check(
+                        "<img src=x onerror=alert(2)>",
+                        "FAIL",
+                        scope = """{"kind":"transaction","label":${q("</td><script>alert(1)</script>&\"'")}}""",
+                    ),
+                ),
+                listOf(tx(0, label = "</td><script>alert(1)</script>&\"'")),
+            )
+
+        assertFalse(html.contains("<script"))
+        assertFalse(html.contains("<img"))
+        assertTrue(html.contains("&lt;/td&gt;&lt;script&gt;alert(1)&lt;/script&gt;&amp;&quot;&#39;"))
+        assertTrue(html.contains("default-src 'none'"))
+        assertFalse(html.contains("style=\""))
+    }
+
+    @Test
+    fun `thousands of transactions are cut to the top rows with a remainder line`() {
+        val html = page("NO_POLICY", emptyList(), (0 until 5000).map { tx(it) })
+        val table = html.substringAfter("<h2>Транзакции</h2>").substringBefore("</table>")
+
+        assertTrue(table.contains("и ещё 4800"))
+        assertEquals(200 + 1, Regex("<tr>").findAll(table).count() - 1)
+        assertTrue(html.length < 5_000_000)
+    }
+
+    @Test
+    fun `transactions are ordered by impact and equal labels in different groups stay distinct`() {
+        val html =
+            page(
+                "FAIL",
+                listOf(check("slow", "FAIL", scope = """{"kind":"transaction","label":"pay","group_path":["B"]}""")),
+                listOf(
+                    tx(1, label = "pay", groupPath = listOf("A"), errors = 9),
+                    tx(2, label = "pay", groupPath = listOf("B"), errors = 1),
+                    tx(3, label = "view", errors = 5),
+                ),
+            )
+        val table = html.substringAfter("<h2>Транзакции</h2>").substringBefore("</table>")
+
+        assertTrue(table.indexOf("B / pay") < table.indexOf("A / pay"))
+        assertTrue(table.indexOf("A / pay") < table.indexOf("view"))
+        assertTrue(table.contains("Нарушение"))
+    }
+
+    @Test
+    fun `defensive - a null latency or error rate in a transaction row prints as no data, not as null or NaN`() {
+        val html =
+            page("NO_POLICY", emptyList(), listOf(tx(0, latency = """{"p50":null,"p95":null,"p99":null,"max":null}""", errorRate = "null")))
+        val rows = html.substringAfter("<h2>Транзакции</h2>").substringBefore("</table>")
+
+        assertTrue(rows.contains("нет данных"))
+        assertFalse(rows.contains("NaN"))
+        assertFalse(rows.contains(">null<"))
+    }
+
+    @Test
+    fun `an exact ratio that does not divide evenly and a zero denominator do not break the report`() {
+        val html =
+            page(
+                "PASS",
+                listOf(
+                    check(
+                        "third",
+                        "PASS",
+                        metric = "error_rate_ratio",
+                        threshold = "0.5",
+                        observed = """{"numerator":1,"denominator":3}""",
+                    ),
+                    check(
+                        "zero",
+                        "NO_VERDICT",
+                        metric = "error_rate_ratio",
+                        threshold = "0.5",
+                        observed = """{"numerator":1,"denominator":0}""",
+                    ),
+                    check(
+                        "rps",
+                        "PASS",
+                        metric = "throughput_rps",
+                        threshold = "10",
+                        operator = "gte",
+                        observed = """{"numerator":25000,"denominator":2000}""",
+                    ),
+                ),
+            )
+
+        assertTrue(Regex("33,33 %").containsMatchIn(html))
+        assertTrue(Regex("50 %").containsMatchIn(html))
+        assertTrue(Regex("12,5 RPS").containsMatchIn(html))
+        assertTrue(html.contains("не менее"))
+        assertTrue(html.substringAfter(">zero<").substringBefore("</tr>").contains("нет данных"))
+    }
+
+    @Test
+    fun `the window metric list keeps printing a null latency of an empty window as null as before`() {
+        val html =
+            render(
+                """{"evidence":[{"id":"w","type":"window_metric_summary","window_id":"empty","latency_ms":{"p50":null,"p95":null,"p99":null,"max":null}}],"findings":[]}"""
+                    .encodeToByteArray(),
+                "a",
+            ).decodeToString()
+
+        assertTrue(html.contains("&quot;p95&quot;:null"))
+    }
+
+    @Test
+    fun `rounding does not turn a violation into equality`() {
+        val html = page("FAIL", listOf(check("r", "FAIL", threshold = "2000", observed = "2000.004")))
+        val row = html.substringAfter(">r<").substringBefore("</tr>")
+
+        assertTrue(Regex("2 000,004").containsMatchIn(row))
+    }
+
+    @Test
+    fun `an absurd exponent or a null reason in the result neither hangs nor prints null`() {
+        val html =
+            page(
+                "NO_VERDICT",
+                listOf(check("huge", "NO_VERDICT", threshold = "1e100000000", observed = "1e-100000000")),
+                coverageStatus = "INCOMPLETE",
+                rawCoverageReasons = "null,5",
+            )
+
+        assertTrue(html.substringAfter(">huge<").substringBefore("</tr>").contains("нет данных"))
+        assertFalse(html.contains("<code>null</code>"))
+        assertFalse(html.contains("<code>5</code>"))
+    }
+
+    @Test
+    fun `an unknown metric is printed without an invented unit`() {
+        val html = page("PASS", listOf(check("custom", "PASS", metric = "custom_metric", threshold = "5", observed = "3")))
+        val row = html.substringAfter(">custom<").substringBefore("</tr>")
+
+        assertTrue(row.contains("custom_metric"))
+        assertFalse(row.contains("мс"))
+    }
+
+    @Test
+    fun `many transactions with many windowed checks are matched without a full scan per row`() {
+        val checks =
+            (0 until 3000).map {
+                val scope = """{"kind":"transaction","label":"tx-$it","group_path":[]}"""
+                check("w-$it", if (it == 2999) "FAIL" else "PASS", scope = scope, windowId = "w")
+            }
+        val html =
+            assertTimeoutPreemptively(Duration.ofSeconds(20), ThrowingSupplier { page("FAIL", checks, (0 until 3000).map { tx(it) }) })
+        val table = html.substringAfter("<h2>Транзакции</h2>").substringBefore("</table>")
+
+        assertTrue(table.indexOf("tx-2999") < table.indexOf("tx-0<"))
+    }
+
+    @Test
+    fun `a small sample is marked in the rule row`() {
+        val html =
+            page(
+                "PASS",
+                listOf(
+                    check("r", "PASS", sample = """"sample_count":30,"sample_floor":20,"min_samples":50,"sample_mode":"SMALL_SAMPLE""""),
+                ),
+            )
+
+        assertTrue(html.substringAfter(">r<").substringBefore("</tr>").contains("30 из 50 · малая выборка"))
+    }
+
+    @Test
+    fun `the diagnostics limitation appears only when the result has diagnostic evidence`() {
+        val without = page("NO_POLICY")
+        val with =
+            render(
+                """{"evidence":[{"id":"d","type":"diagnostic_summary"}],"findings":[],"policy_verdict":"PASS","run_validity":"VALID","analysis_coverage":{"status":"COMPLETE","reasons":[]}}"""
+                    .encodeToByteArray(),
+                "a",
+            ).decodeToString()
+
+        assertFalse(without.contains("не доказывает причину"))
+        assertTrue(with.contains("не доказывает причину"))
+    }
+
+    @Test
+    fun `the report keeps its English title while the new blocks are Russian`() {
+        val html = page("NO_POLICY")
+
+        assertTrue(html.contains("<h1 lang=\"en\">LT Verdict report</h1>"))
+        assertTrue(html.contains("<h2>Вердикт и причины</h2>"))
+        assertTrue(html.contains("<h2>Правила</h2>"))
+        assertTrue(html.contains("<section lang=\"en\"><h2>Canonical JSON</h2>"))
+        assertFalse(html.contains("<script"))
+        assertFalse(html.contains("<form"))
+        assertFalse(html.contains("<base"))
+    }
+
+    private fun q(value: String): String = JsonPrimitive(value).toString()
+
+    private fun check(
+        ruleId: String,
+        status: String,
+        metric: String = "response_time_p95_ms",
+        operator: String = "lte",
+        threshold: String = "2000",
+        observed: String? = "2340",
+        reason: String? = null,
+        scope: String? = null,
+        sample: String? = null,
+        windowId: String? = null,
+    ): String =
+        buildString {
+            append(
+                """{"id":${q("check-$ruleId")},"type":"policy_check","rule_id":${q(ruleId)},"metric":"$metric","operator":"$operator",""",
+            )
+            append(""""threshold":$threshold,"status":"$status"""")
+            if (observed != null) append(""","observed":$observed""")
+            if (reason != null) append(""","reason_code":${q(reason)}""")
+            if (scope != null) append(""","scope":$scope""")
+            if (windowId != null) append(""","window_id":${q(windowId)}""")
+            if (sample != null) append(",$sample")
+            append("}")
+        }
+
+    private fun tx(
+        index: Int,
+        label: String = "tx-$index",
+        groupPath: List<String> = emptyList(),
+        errors: Int = 0,
+        latency: String = """{"p50":5,"p95":8,"p99":9,"max":9}""",
+        errorRate: String = """{"numerator":$errors,"denominator":10}""",
+    ): String =
+        """{"id":"m-$index","type":"metric_summary","scope":{"kind":"transaction","label":${q(
+            label,
+        )},"group_path":[${groupPath.joinToString(",") { q(it) }}]},""" +
+            """"sample_count":10,"error_count":$errors,"error_rate_ratio":$errorRate,"throughput_rps":{"numerator":10,"denominator":10},"latency_ms":$latency}"""
+
+    private fun page(
+        verdict: String,
+        checks: List<String> = emptyList(),
+        metrics: List<String> = emptyList(),
+        coverageStatus: String = "COMPLETE",
+        coverageReasons: List<String> = emptyList(),
+        rawCoverageReasons: String = coverageReasons.joinToString(",") { q(it) },
+    ): String {
+        val evidence = (metrics + checks).joinToString(",")
+        val coverage = """{"reasons":[$rawCoverageReasons],"status":"$coverageStatus"}"""
+        val result =
+            """{"analysis_coverage":$coverage,"evidence":[$evidence],"findings":[],"policy_verdict":"$verdict",""" +
+                """"run_id":"run-1","run_validity":"VALID","schema_version":"analysis-result.v1"}"""
+        return render(result.encodeToByteArray(), "analysis-1").decodeToString()
     }
 
     private fun render(

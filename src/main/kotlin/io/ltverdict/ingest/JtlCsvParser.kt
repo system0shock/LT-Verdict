@@ -222,6 +222,9 @@ private fun csvSettings() =
         nullValue = ""
         emptyValue = ""
         unescapedQuoteHandling = UnescapedQuoteHandling.RAISE_ERROR
+        // The loader thread can end the input before it records a read failure, so an unclosed quote or an
+        // over-long line is sometimes returned as a normal end of input. Reading on the caller thread avoids it.
+        readInputOnSeparateThread = false
     }
 
 private fun requiredColumns(header: Array<String>): Map<String, Int> =

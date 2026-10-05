@@ -427,6 +427,18 @@ class PlatformRulesTest {
     }
 
     @Test
+    fun `a check without a series reports every cell as missing`() {
+        val result = evaluate(snapshot(healthy("orders")))
+        val check = result.checks().single { it.str("rule_id") == "cpu/payments" }
+
+        assertEquals("RESOURCE_SERIES_NOT_FOUND", check.str("reason"))
+        assertEquals(
+            listOf("4", "0", "4", "4"),
+            listOf("expected_cells", "observed_cells", "missing_cells", "longest_gap_cells").map { check.str(it) },
+        )
+    }
+
+    @Test
     fun `the tolerance boundaries hold and anything beyond falls back to no verdict`() {
         fun verdict(cpu: List<String?>) =
             evaluate(

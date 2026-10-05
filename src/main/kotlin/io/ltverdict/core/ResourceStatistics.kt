@@ -52,7 +52,14 @@ internal fun evaluateResources(
             val series = seriesById[rule.seriesId]
             val bindingFailure = platform.bindingFailures[rule.id]
             val windowCells = snapshot.cellIndex(window.toEpochMillis) - snapshot.cellIndex(window.fromEpochMillis)
-            val cells = if (rule.platform != null && series != null) cellStats(snapshot, window, series) else null
+            val cells =
+                if (rule.platform ==
+                    null
+                ) {
+                    null
+                } else {
+                    series?.let { cellStats(snapshot, window, it) } ?: CellStats(windowCells, 0, windowCells)
+                }
             val outcome =
                 when {
                     bindingFailure != null -> RuleOutcome("NO_VERDICT", bindingFailure, emptyList())

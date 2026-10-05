@@ -41,6 +41,8 @@ internal data class PlatformRuleV1(
     val minConsecutiveCells: Int,
     val effect: ResourceRuleEffect,
     val windowIds: List<String>? = null,
+    val maxMissingFraction: BigDecimal? = null,
+    val maxGapCells: Int? = null,
 )
 
 internal sealed interface PlatformScope {
@@ -60,6 +62,8 @@ internal data class PlatformCoverageV1(
 internal data class PolicyDefaultsV1(
     val sampleFloor: Long? = null,
     val minSamples: Long? = null,
+    val maxMissingFraction: BigDecimal? = null,
+    val maxGapCells: Int? = null,
 )
 
 internal data class PolicyRuleV1(

@@ -18,6 +18,7 @@ internal const val AUTO_STEP_QUERY_NOT_INTERVAL_BOUND = "AUTO_STEP_QUERY_NOT_INT
 internal const val AUTO_STEP_AGGREGATION_MISMATCH = "AUTO_STEP_AGGREGATION_MISMATCH"
 internal const val AUTO_STEP_RULE_IN_CELLS = "AUTO_STEP_RULE_IN_CELLS"
 internal const val RESOLUTION_REDUCED = "RESOLUTION_REDUCED"
+internal const val INVALID_ARM_LABEL = "INVALID_ARM_LABEL"
 
 // The snapshot grid permits whole-second steps from 1 to 60 seconds.
 internal const val MAX_STEP_MILLIS = 60_000L

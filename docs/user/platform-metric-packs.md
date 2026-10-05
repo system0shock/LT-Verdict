@@ -182,7 +182,9 @@ python -m tools.platform_profiles --config fixtures/platform/profile-config.exam
 (или `direct` с ним), адрес `http://` с авторизацией без `allow_insecure_http`.
 
 Поля конфигурации (JSON): `base_url`, `namespace`, `services[]`, `signals[]`;
-необязательные `arm` (в этом срезе влияет только на префикс `id` профилей),
+необязательные `arm` (префикс `id` профилей и поле `arm` каждого профиля; с ним
+выпускается `source-connections.v3`, см. раздел «Метка плеча» в
+[онлайн-источниках](online-sources.md)),
 `transport` (`direct` или `grafana_proxy`), `datasource_uid`, `auth`,
 `allow_insecure_http`, `governor`, `subquery_step`, `peak_aggregation`,
 `scrape_interval_ms`, `request_step_ms`, `legacy_sla_rules[]`. Примеры:

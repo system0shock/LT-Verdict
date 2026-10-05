@@ -147,6 +147,24 @@ class PlatformProfilesTest(unittest.TestCase):
         self.assertEqual("source-connections.v3", v3["schema_version"])
         self.assertEqual([30000, 30000], [p["scrape_interval_ms"] for p in v3["connections"]])
 
+    def test_arm_selects_v3_and_is_on_every_profile(self):
+        config = dict(BASE, services=[f"svc-{i:02d}" for i in range(25)], signals=list(SIGNALS)[:3])
+        plain = build_connections(config)
+        self.assertEqual("source-connections.v1", plain["schema_version"])
+        self.assertTrue(all("arm" not in p for p in plain["connections"]))
+        armed = build_connections(dict(config, arm="A"))
+        self.assertEqual("source-connections.v3", armed["schema_version"])
+        self.assertEqual(["A", "A"], [p["arm"] for p in armed["connections"]])
+        self.assertTrue(all("scrape_interval_ms" not in p for p in armed["connections"]))
+        both = build_connections(dict(config, arm="A", scrape_interval_ms=30000))
+        self.assertEqual("source-connections.v3", both["schema_version"])
+        self.assertEqual([("A", 30000)] * 2, [(p["arm"], p["scrape_interval_ms"]) for p in both["connections"]])
+
+    def test_an_explicit_arm_must_be_a_valid_name(self):
+        for bad in ("", None, False, 0, "x y"):
+            with self.subTest(arm=bad), self.assertRaisesRegex(ValueError, "invalid namespace/service/arm name:"):
+                build_connections(dict(BASE, arm=bad))
+
     def test_request_step_requires_scrape_interval(self):
         with self.assertRaisesRegex(ValueError, "^request_step_ms requires scrape_interval_ms$"):
             build_connections(dict(BASE, request_step_ms=60000))

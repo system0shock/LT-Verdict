@@ -77,6 +77,7 @@ class CsvDependencySpikeTest {
             maxColumns = 64
             maxCharsPerColumn = 65_536
             unescapedQuoteHandling = UnescapedQuoteHandling.RAISE_ERROR
+            readInputOnSeparateThread = false
         }
 
     private class RejectUnclosedQuoteReader(

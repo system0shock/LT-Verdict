@@ -69,6 +69,18 @@ class JtlCsvParserTest {
     }
 
     @Test
+    fun `input is read on the caller thread so a read failure cannot be missed`() {
+        val file = csv("timeStamp,elapsed,label,success", *Array(200_000) { "$it,2,a-fairly-long-request-label-$it,true" })
+        val readers = mutableSetOf<Thread>()
+
+        val report = parseJtlCsv(file, {}, { readers += Thread.currentThread() })
+
+        assertEquals(RunValidity.VALID, report.validity)
+        assertEquals(Files.size(file), report.processedBytes)
+        assertEquals(setOf(Thread.currentThread()), readers)
+    }
+
+    @Test
     fun `epoch-seconds timestamps are rejected as a unit error`() {
         val report = parseJtlCsv(csv("timeStamp,elapsed,label,success", "1767225600,200,request,true"), {})
 

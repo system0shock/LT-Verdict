@@ -1173,6 +1173,7 @@ function focusPolicy() {
             :busy="working || (uploadProgress > 0 && !job) || !!postgresCapturePhase || trialBusy"
             :result="result"
             :run-name="currentRun?.original_filename ?? ''"
+            :run-hash="currentRun?.sha256.slice(0, 8) ?? ''"
             :can-trial="!!currentRun && !!policy && !policyErrors.length"
             :trial-busy="trialBusy"
             :summary="trialAnalysisId && trialAnalysisId === selectedAnalysisId ? verdictSummary : null"

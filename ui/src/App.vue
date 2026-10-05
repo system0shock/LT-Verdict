@@ -331,6 +331,7 @@ async function selectPolicyFile(file: File | null) {
   trialAnalysisId.value = null
   policyErrors.value = []
   if (!file) {
+    policyRevision += 1
     policy.value = null
     policyStatus.value = ''
     return

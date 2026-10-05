@@ -7,6 +7,43 @@
 - Superpowers owns process workflows; these rules add LT Verdict constraints.
 - Read `docs/development-process.md` for the full policy.
 
+## MINIMAL-CHANGE POLICY
+
+Default to the smallest implementation that satisfies the explicit request.
+
+1. Existing architecture is a constraint, not a problem to solve.
+2. Do not refactor code unless the requested change cannot be implemented
+   correctly without it.
+3. Do not introduce abstractions for hypothetical future use.
+4. One current use case is not sufficient reason for a reusable abstraction.
+5. Do not add interfaces, factories, registries, adapters, services,
+   repositories, configuration layers, or dependencies unless they are required
+   by the task.
+6. Prefer modifying an existing component over creating a new architectural
+   layer.
+7. Duplication of a few lines is preferable to a premature abstraction.
+8. Problems discovered outside the requested scope are REPORT-ONLY.
+9. Never expand scope silently.
+10. If the implementation becomes substantially larger than expected, STOP and
+    explain why before continuing.
+
+For bounded tasks:
+
+- preserve existing patterns, even if a cleaner architecture is possible;
+- touch the minimum number of files;
+- optimize for smallest correct diff, not ideal architecture.
+
+Before implementation state:
+
+```text
+REQUESTED:
+REQUIRED TO ACHIEVE IT:
+NOT REQUIRED:
+EXPECTED FILES TO CHANGE:
+```
+
+Anything outside REQUIRED TO ACHIEVE IT needs explicit user approval.
+
 ## Before changing files
 
 1. Read relevant PRC, specs, ADRs, plans, and the current milestone gate.

@@ -18,6 +18,7 @@ import org.junit.jupiter.api.Assertions.assertArrayEquals
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertInstanceOf
+import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertThrows
 import org.junit.jupiter.api.Assertions.assertTimeoutPreemptively
 import org.junit.jupiter.api.Assertions.assertTrue
@@ -285,6 +286,66 @@ class AdvisoryAiTest {
                 analysisManifestBefore,
                 Files.readAllBytes(bundles.readAnalysis(runId, analysisId)!!.path.resolve("manifest.json")),
             )
+        }
+    }
+
+    @Test
+    fun `the requested model is passed to the runner and an advice of another model is not saved`() {
+        DataDirectory.open(tempDir.resolve("selected")).use { directory ->
+            val fixture = prepareAnalysis(directory)
+            val bundles = RunBundleStore(directory)
+            val store = AiAdviceStore(directory, bundles)
+            val requested = mutableListOf<String?>()
+            var observed = "org/qwen3.8-max:1"
+            val service =
+                AdvisoryAiService(
+                    bundles,
+                    store,
+                    object : AdvisoryRunner {
+                        override fun invoke(evidence: AdvisoryEvidence): RunnerOutcome = invoke(evidence, null)
+
+                        override fun invoke(
+                            evidence: AdvisoryEvidence,
+                            modelId: String?,
+                        ): RunnerOutcome {
+                            requested += modelId
+                            return RunnerOutcome.Success(
+                                canonicalJson(validOutput("analysis-result.json#/evidence/0")),
+                                provenance(modelId = observed),
+                            )
+                        }
+                    },
+                )
+
+            observed = "org/other:2"
+            assertEquals(
+                AdviceRunResult.Failed(AdviceFailure.INVALID_OUTPUT),
+                service.generate(fixture.runId, fixture.analysisId, "org/qwen3.8-max:1"),
+            )
+            assertNull(store.read(fixture.runId, fixture.analysisId))
+
+            observed = "org/qwen3.8-max:1"
+            val saved =
+                assertInstanceOf(
+                    AdviceRunResult.Saved::class.java,
+                    service.generate(fixture.runId, fixture.analysisId, "org/qwen3.8-max:1"),
+                )
+            assertEquals(
+                "org/qwen3.8-max:1",
+                (
+                    saved.advice.document
+                        .getValue("provenance")
+                        .jsonObject
+                        .getValue("model_id") as JsonPrimitive
+                ).content,
+            )
+            assertEquals(listOf<String?>("org/qwen3.8-max:1", "org/qwen3.8-max:1"), requested)
+
+            // An existing advice is returned for any requested model, without a runner call (ADR 0010, item 4).
+            val reused =
+                assertInstanceOf(AdviceRunResult.Saved::class.java, service.generate(fixture.runId, fixture.analysisId, "org/unrelated:9"))
+            assertTrue(reused.reused)
+            assertEquals(2, requested.size)
         }
     }
 

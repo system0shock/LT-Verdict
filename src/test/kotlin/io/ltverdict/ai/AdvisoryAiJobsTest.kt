@@ -66,6 +66,39 @@ class AdvisoryAiJobsTest {
     }
 
     @Test
+    fun `the selected model reaches the work and stays in every terminal status`() {
+        val seen = java.util.concurrent.CopyOnWriteArrayList<String?>()
+        val outcomes =
+            mapOf(
+                "complete" to AdviceRunResult.Saved(StoredAdvice(Path.of("advice"), buildJsonObject {}), reused = false),
+                "failed" to AdviceRunResult.Failed(AdviceFailure.TIMEOUT),
+                "unavailable" to AdviceRunResult.Unavailable(AdviceUnavailableReason.MODEL_ENDPOINT_UNAVAILABLE),
+            )
+        AdvisoryAiJobs(generateWithModel = { _, analysisId, modelId ->
+            seen += modelId
+            outcomes.getValue(analysisId)
+        }).use { jobs ->
+            val states =
+                mapOf(
+                    "complete" to AdviceJobState.COMPLETE,
+                    "failed" to AdviceJobState.FAILED,
+                    "unavailable" to AdviceJobState.UNAVAILABLE,
+                )
+            for ((analysisId, state) in states) {
+                val submitted = accepted(jobs.submit(RUN_ID, analysisId, "org/model:1")).status
+                assertEquals("org/model:1", submitted.modelId)
+                assertEquals("org/model:1", awaitState(jobs, submitted.jobId, state).modelId)
+                assertEquals("org/model:1", jobs.latest(RUN_ID, analysisId)?.modelId)
+            }
+            assertEquals(listOf<String?>("org/model:1", "org/model:1", "org/model:1"), seen.toList())
+
+            val unspecified = accepted(jobs.submit(RUN_ID, "failed")).status
+            assertNull(unspecified.modelId)
+            assertNull(awaitState(jobs, unspecified.jobId, AdviceJobState.FAILED).modelId)
+        }
+    }
+
+    @Test
     fun `cancel interrupts running work and prevents queued work from starting`() {
         val firstStarted = CountDownLatch(1)
         val interrupted = CountDownLatch(1)

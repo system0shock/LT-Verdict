@@ -178,6 +178,12 @@ class AiModelsConfigTest {
                 "https://gw.example/a b",
                 "https://gw.example/é",
                 "https://gw.example\\v1",
+                "https://gw.example/a\"b",
+                "https://gw.example/a`b",
+                "https://gw.example/a^b",
+                "https://gw.example/a|b",
+                "https://gw.example/a<b>",
+                "https://gw.example/a{b}",
                 "https://gw.example:0/v1",
                 "https://gw.example:99999/v1",
                 "https://gw_bad.example/v1",
@@ -298,22 +304,13 @@ class AiModelsConfigTest {
     }
 
     @Test
-    fun `before model selection a different endpoint or slug is refused with its own code after structural checks`() {
-        val adr = write(config())
-        assertInvalid("NOT_YET_SUPPORTED", "/endpoint/url", loadAiModelsConfig(mapOf(MODELS_FILE_ENVIRONMENT to adr.toString())))
+    fun `a file with another endpoint or other slugs takes effect`() {
+        val adr = loaded(loadAiModelsConfig(mapOf(MODELS_FILE_ENVIRONMENT to write(config()).toString())))
+        assertEquals("https://models.internal.example/v1/chat", adr.endpointUrl)
+        assertEquals("qwen3.8-max", adr.defaultModel)
 
         val insecure = write(config(endpoint = """{"url":"http://gw.internal:8080/v1/chat","allow_insecure_http":true}"""))
-        assertInvalid("NOT_YET_SUPPORTED", "/endpoint/url", loadAiModelsConfig(mapOf(MODELS_FILE_ENVIRONMENT to insecure.toString())))
-
-        val novelSlug =
-            write(
-                config(
-                    endpoint = """{"url":"${AiModelsConfig.BUILT_IN.endpointUrl}"}""",
-                    models = """[{"id":"$BUILT_IN_MODEL","label":"D"},{"id":"qwen3.8-max","label":"Q"}]""",
-                    default = BUILT_IN_MODEL,
-                ),
-            )
-        assertInvalid("NOT_YET_SUPPORTED", "/models/1/id", loadAiModelsConfig(mapOf(MODELS_FILE_ENVIRONMENT to novelSlug.toString())))
+        assertTrue(loaded(loadAiModelsConfig(mapOf(MODELS_FILE_ENVIRONMENT to insecure.toString()))).allowInsecureHttp)
 
         val structural = write(config(endpoint = """{"url":"https://user@gw.example/v1"}"""))
         assertInvalid("INVALID_URL", "/endpoint/url", loadAiModelsConfig(mapOf(MODELS_FILE_ENVIRONMENT to structural.toString())))

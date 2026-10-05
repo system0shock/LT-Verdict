@@ -207,6 +207,12 @@ internal data class RunnerProvenance(
 
 internal fun interface AdvisoryRunner {
     fun invoke(evidence: AdvisoryEvidence): RunnerOutcome
+
+    /** [modelId] is a slug the caller resolved from the model configuration; null selects the default model. */
+    fun invoke(
+        evidence: AdvisoryEvidence,
+        modelId: String?,
+    ): RunnerOutcome = invoke(evidence)
 }
 
 internal sealed interface RunnerOutcome {
@@ -252,6 +258,7 @@ internal class AdvisoryAiService(
     fun generate(
         runId: String,
         analysisId: String,
+        modelId: String? = null,
     ): AdviceRunResult {
         adviceStore.read(runId, analysisId)?.let { return AdviceRunResult.Saved(it, reused = true) }
         val analysis = runBundles.readAnalysis(runId, analysisId) ?: throw NoSuchElementException("ANALYSIS_NOT_FOUND")
@@ -266,7 +273,7 @@ internal class AdvisoryAiService(
 
         val outcome =
             try {
-                runner.invoke(evidence)
+                runner.invoke(evidence, modelId)
             } catch (cancelled: CancellationException) {
                 throw cancelled
             } catch (interrupted: InterruptedException) {
@@ -278,7 +285,13 @@ internal class AdvisoryAiService(
         return when (outcome) {
             is RunnerOutcome.Failed -> AdviceRunResult.Failed(outcome.reason)
             is RunnerOutcome.Unavailable -> AdviceRunResult.Unavailable(outcome.reason)
-            is RunnerOutcome.Success -> save(runId, analysisId, analysisManifestSha256, evidence, outcome)
+            is RunnerOutcome.Success ->
+                // The model the runtime reports it ran must be the selected one (ADR 0023, D4).
+                if (modelId != null && outcome.provenance.modelId != modelId) {
+                    AdviceRunResult.Failed(AdviceFailure.INVALID_OUTPUT)
+                } else {
+                    save(runId, analysisId, analysisManifestSha256, evidence, outcome)
+                }
         }
     }
 

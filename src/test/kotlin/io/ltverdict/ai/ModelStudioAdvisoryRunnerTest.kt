@@ -82,12 +82,12 @@ class ModelStudioAdvisoryRunnerTest {
         Files.writeString(
             tools.resolve("advisory_ai_runtime.ps1"),
             """
-            param([string]${'$'}Mode,[string]${'$'}EvidencePath,[string]${'$'}OutputPath,[string]${'$'}ResultPath,[string]${'$'}CancelPath,[string]${'$'}CredentialEnvFile,[string]${'$'}QwenPackageRoot)
+            param([string]${'$'}Mode,[string]${'$'}EvidencePath,[string]${'$'}OutputPath,[string]${'$'}ResultPath,[string]${'$'}CancelPath,[string]${'$'}CredentialEnvFile,[string]${'$'}QwenPackageRoot,[string]${'$'}ModelId,[string]${'$'}UpstreamUrl,[switch]${'$'}AllowInsecureHttp)
             ${'$'}ErrorActionPreference = 'Stop'
             Write-Output ('suppressed-host-output' * 2000)
             [IO.File]::WriteAllText((Join-Path ${'$'}PSScriptRoot 'capture.txt'), ${'$'}CredentialEnvFile + "`n" + ((Get-ChildItem Env: | ForEach-Object { ${'$'}_.Name + '=' + ${'$'}_.Value }) -join "`n"))
             [IO.File]::WriteAllText(${'$'}OutputPath, '{"schema_version":"ai-advice-output.v1","summary":"bounded","hypotheses":[],"recommendations":[],"caveats":[]}')
-            [IO.File]::WriteAllText(${'$'}ResultPath, '{"schema_version":"advisory-ai-runtime-result.v1","status":"SUCCESS","duration_ms":12,"exit_code":0,"endpoint_host":"token-plan.ap-southeast-1.maas.aliyuncs.com:443"}')
+            [IO.File]::WriteAllText(${'$'}ResultPath, '{"schema_version":"advisory-ai-runtime-result.v1","status":"SUCCESS","duration_ms":12,"exit_code":0,"endpoint_host":"token-plan.ap-southeast-1.maas.aliyuncs.com:443","model_id":"deepseek-v4-flash-0731"}')
             exit 0
             """.trimIndent(),
         )
@@ -142,15 +142,99 @@ class ModelStudioAdvisoryRunnerTest {
             Files.writeString(
                 script,
                 """
-                param([string]${'$'}Mode,[string]${'$'}EvidencePath,[string]${'$'}OutputPath,[string]${'$'}ResultPath,[string]${'$'}CancelPath,[string]${'$'}CredentialEnvFile,[string]${'$'}QwenPackageRoot)
+                param([string]${'$'}Mode,[string]${'$'}EvidencePath,[string]${'$'}OutputPath,[string]${'$'}ResultPath,[string]${'$'}CancelPath,[string]${'$'}CredentialEnvFile,[string]${'$'}QwenPackageRoot,[string]${'$'}ModelId,[string]${'$'}UpstreamUrl,[switch]${'$'}AllowInsecureHttp)
                 [IO.File]::WriteAllText(${'$'}OutputPath, '{"schema_version":"ai-advice-output.v1","summary":"bounded","hypotheses":[],"recommendations":[],"caveats":[]}')
-                [IO.File]::WriteAllText(${'$'}ResultPath, '{"schema_version":"advisory-ai-runtime-result.v1","status":"SUCCESS","duration_ms":12,"exit_code":0$member}')
+                [IO.File]::WriteAllText(${'$'}ResultPath, '{"schema_version":"advisory-ai-runtime-result.v1","status":"SUCCESS","duration_ms":12,"exit_code":0,"model_id":"deepseek-v4-flash-0731"$member}')
                 exit 0
                 """.trimIndent(),
             )
 
             assertEquals(RunnerOutcome.Failed(AdviceFailure.PROCESS_FAILED), runner.invoke(EVIDENCE), member)
         }
+    }
+
+    @Test
+    @EnabledOnOs(OS.WINDOWS)
+    fun `the configured model and address reach the launcher as separate parameters and are checked in its result`() {
+        val tools = Files.createDirectories(tempDir.resolve("tools"))
+        Files.writeString(
+            Files.createDirectories(tempDir.resolve("docs/contracts/advice/v1")).resolve("system-prompt.md"),
+            "bounded prompt",
+        )
+        val credential = tempDir.resolve("modelstudio.env")
+        Files.writeString(credential, "OPENAI_API_KEY=probe-secret-value\n")
+        val script = tools.resolve("advisory_ai_runtime.ps1")
+        val capture = tools.resolve("capture.txt")
+        val environment =
+            mapOf(
+                "LT_VERDICT_AI_CREDENTIAL_ENV_FILE" to credential.toString(),
+                "LT_VERDICT_AI_RUNTIME_ROOT" to tempDir.toString(),
+            )
+
+        fun fake(result: String) =
+            Files.writeString(
+                script,
+                """
+                param([string]${'$'}Mode,[string]${'$'}EvidencePath,[string]${'$'}OutputPath,[string]${'$'}ResultPath,[string]${'$'}CancelPath,[string]${'$'}CredentialEnvFile,[string]${'$'}QwenPackageRoot,[string]${'$'}ModelId,[string]${'$'}UpstreamUrl,[switch]${'$'}AllowInsecureHttp)
+                [IO.File]::WriteAllText((Join-Path ${'$'}PSScriptRoot 'capture.txt'), (@(${'$'}ModelId, ${'$'}UpstreamUrl, ${'$'}AllowInsecureHttp.IsPresent) -join ' '))
+                [IO.File]::WriteAllText(${'$'}OutputPath, '{"schema_version":"ai-advice-output.v1","summary":"bounded","hypotheses":[],"recommendations":[],"caveats":[]}')
+                [IO.File]::WriteAllText(${'$'}ResultPath, '{"schema_version":"advisory-ai-runtime-result.v1","status":"SUCCESS","duration_ms":12,"exit_code":0$result}')
+                exit 0
+                """.trimIndent(),
+            )
+
+        fun result(
+            model: String?,
+            host: String?,
+        ) = listOfNotNull(model?.let { ",\"model_id\":\"$it\"" }, host?.let { ",\"endpoint_host\":\"$it\"" }).joinToString("")
+
+        val insecure =
+            AiModelsConfig(
+                endpointUrl = "http://Gw.Internal:8080/v1/chat",
+                endpointLabel = null,
+                allowInsecureHttp = true,
+                defaultModel = "qwen3.8-max",
+                models = listOf(AiModel("qwen3.8-max", "Q"), AiModel("org/other:2", "O")),
+            )
+        val runner = ModelStudioAdvisoryRunner.fromEnvironment(environment, tempDir, insecure)
+
+        fake(result("qwen3.8-max", "gw.internal:8080"))
+        val byDefault = assertInstanceOf(RunnerOutcome.Success::class.java, runner.invoke(EVIDENCE))
+        assertEquals("qwen3.8-max http://Gw.Internal:8080/v1/chat True", Files.readString(capture))
+        assertEquals("qwen3.8-max", byDefault.provenance.modelId)
+        assertEquals("gw.internal:8080", byDefault.provenance.endpointHost)
+
+        fake(result("org/other:2", "gw.internal:8080"))
+        val chosen = assertInstanceOf(RunnerOutcome.Success::class.java, runner.invoke(EVIDENCE, "org/other:2"))
+        assertEquals("org/other:2 http://Gw.Internal:8080/v1/chat True", Files.readString(capture))
+        assertEquals("org/other:2", chosen.provenance.modelId)
+
+        // The model and the host the launcher observed must be the ones that were asked for.
+        for (mismatch in listOf(
+            result("org/other:2", "gw.internal:8080"),
+            result(null, "gw.internal:8080"),
+            result("qwen3.8-max", "other.example:8080"),
+            result("qwen3.8-max", "gw.internal:80"),
+            result("qwen3.8-max", null),
+        )) {
+            fake(mismatch)
+            assertEquals(RunnerOutcome.Failed(AdviceFailure.PROCESS_FAILED), runner.invoke(EVIDENCE, "qwen3.8-max"), mismatch)
+        }
+
+        // A model outside the configuration never reaches the launcher.
+        Files.deleteIfExists(capture)
+        fake(result("org/unknown:1", "gw.internal:8080"))
+        assertEquals(RunnerOutcome.Failed(AdviceFailure.PROCESS_FAILED), runner.invoke(EVIDENCE, "org/unknown:1"))
+        assertFalse(Files.exists(capture))
+
+        // https configuration: no insecure switch; the host defaults to port 443.
+        val secure = insecure.copy(endpointUrl = "https://Models.Internal.Example/v1/chat", allowInsecureHttp = false)
+        fake(result("qwen3.8-max", "models.internal.example:443"))
+        assertInstanceOf(
+            RunnerOutcome.Success::class.java,
+            ModelStudioAdvisoryRunner.fromEnvironment(environment, tempDir, secure).invoke(EVIDENCE),
+        )
+        assertEquals("qwen3.8-max https://Models.Internal.Example/v1/chat False", Files.readString(capture))
     }
 
     @Test
@@ -164,10 +248,10 @@ class ModelStudioAdvisoryRunnerTest {
         Files.writeString(
             tools.resolve("advisory_ai_runtime.ps1"),
             """
-            param([string]${'$'}Mode,[string]${'$'}EvidencePath,[string]${'$'}OutputPath,[string]${'$'}ResultPath,[string]${'$'}CancelPath,[string]${'$'}CredentialEnvFile,[string]${'$'}QwenPackageRoot)
+            param([string]${'$'}Mode,[string]${'$'}EvidencePath,[string]${'$'}OutputPath,[string]${'$'}ResultPath,[string]${'$'}CancelPath,[string]${'$'}CredentialEnvFile,[string]${'$'}QwenPackageRoot,[string]${'$'}ModelId,[string]${'$'}UpstreamUrl,[switch]${'$'}AllowInsecureHttp)
             [IO.File]::WriteAllText((Join-Path ${'$'}PSScriptRoot 'capture.txt'), ((Get-ChildItem Env: | ForEach-Object { ${'$'}_.Name + '=' + ${'$'}_.Value }) -join "`n"))
             [IO.File]::WriteAllText(${'$'}OutputPath, '{"schema_version":"ai-advice-output.v1","summary":"bounded","hypotheses":[],"recommendations":[],"caveats":[]}')
-            [IO.File]::WriteAllText(${'$'}ResultPath, '{"schema_version":"advisory-ai-runtime-result.v1","status":"SUCCESS","duration_ms":12,"exit_code":0,"endpoint_host":"models.internal.example:443"}')
+            [IO.File]::WriteAllText(${'$'}ResultPath, '{"schema_version":"advisory-ai-runtime-result.v1","status":"SUCCESS","duration_ms":12,"exit_code":0,"endpoint_host":"token-plan.ap-southeast-1.maas.aliyuncs.com:443","model_id":"deepseek-v4-flash-0731"}')
             exit 0
             """.trimIndent(),
         )
@@ -198,7 +282,7 @@ class ModelStudioAdvisoryRunnerTest {
         Files.writeString(
             tools.resolve("advisory_ai_runtime.ps1"),
             """
-            param([string]${'$'}Mode,[string]${'$'}EvidencePath,[string]${'$'}OutputPath,[string]${'$'}ResultPath,[string]${'$'}CancelPath,[string]${'$'}CredentialEnvFile,[string]${'$'}QwenPackageRoot)
+            param([string]${'$'}Mode,[string]${'$'}EvidencePath,[string]${'$'}OutputPath,[string]${'$'}ResultPath,[string]${'$'}CancelPath,[string]${'$'}CredentialEnvFile,[string]${'$'}QwenPackageRoot,[string]${'$'}ModelId,[string]${'$'}UpstreamUrl,[switch]${'$'}AllowInsecureHttp)
             ${'$'}child = Start-Process -FilePath (Join-Path ${'$'}PSHOME 'powershell.exe') -ArgumentList ('-NoProfile -File "' + (Join-Path ${'$'}PSScriptRoot 'child.ps1') + '"') -WindowStyle Hidden -PassThru
             [IO.File]::WriteAllText((Join-Path ${'$'}PSScriptRoot 'pids.txt'), "${'$'}PID`n$(${'$'}child.Id)")
             Start-Sleep -Seconds 300

@@ -102,7 +102,7 @@ internal fun advisoryAiSetup(
 ): AdvisoryAiSetup =
     when (val load = loadAiModelsConfig(environment)) {
         is AiModelsConfigLoad.Loaded ->
-            AdvisoryAiSetup(ModelStudioAdvisoryRunner.fromEnvironment(environment, repositoryRoot), load.config)
+            AdvisoryAiSetup(ModelStudioAdvisoryRunner.fromEnvironment(environment, repositoryRoot, load.config), load.config)
 
         is AiModelsConfigLoad.Invalid -> {
             stderr.println("MODEL_CONFIG_INVALID $MODELS_FILE_ENVIRONMENT ${load.code} ${load.pointer.ifEmpty { "/" }}")
@@ -131,7 +131,7 @@ internal fun loadAiModelsConfig(environment: Map<String, String>): AiModelsConfi
             return invalid("FILE_NOT_READABLE", "")
         }
     val parsed = parseAiModelsConfig(bytes)
-    return if (parsed is AiModelsConfigLoad.Loaded) rejectUntilModelSelection(parsed.config) ?: parsed else parsed
+    return parsed
 }
 
 internal fun parseAiModelsConfig(bytes: ByteArray): AiModelsConfigLoad {
@@ -162,20 +162,6 @@ internal fun parseAiModelsConfig(bytes: ByteArray): AiModelsConfigLoad {
     } catch (failure: ConfigFailure) {
         AiModelsConfigLoad.Invalid(failure.code, safePointer(failure.pointer))
     }
-}
-
-/**
- * Until model selection reaches the launcher and relay (ADR 0023, CM4) a file cannot change the destination
- * or the models that actually run, so it must not describe anything else. Delete this check in CM4.
- */
-private fun rejectUntilModelSelection(config: AiModelsConfig): AiModelsConfigLoad.Invalid? {
-    if (config.endpointUrl != AiModelsConfig.BUILT_IN.endpointUrl) return invalid("NOT_YET_SUPPORTED", "/endpoint/url")
-    val builtIn =
-        AiModelsConfig.BUILT_IN.models
-            .map { it.id }
-            .toSet()
-    val index = config.models.indexOfFirst { it.id !in builtIn }
-    return if (index >= 0) invalid("NOT_YET_SUPPORTED", "/models/$index/id") else null
 }
 
 private fun parseRoot(root: JsonElement): AiModelsConfig {
@@ -233,6 +219,27 @@ private fun parseModels(element: JsonElement): List<AiModel> {
 internal fun validModelSlug(value: String): Boolean = MODEL_SLUG.matches(value) && ".." !in value && "//" !in value
 
 /**
+ * The `endpoint_host` the relay reports for [url] (lower case host, port always present): what the runtime result
+ * must equal for the evidence to be recorded as sent to the configured endpoint. Null for an address that is not usable.
+ */
+internal fun endpointHostOf(url: String): String? =
+    try {
+        val uri = URI(url)
+        val host = uri.host?.lowercase()
+        val port =
+            if (uri.port != -1) {
+                uri.port
+            } else if (uri.scheme == "https") {
+                443
+            } else {
+                80
+            }
+        if (host == null) null else "$host:$port"
+    } catch (_: URISyntaxException) {
+        null
+    }
+
+/**
  * `endpoint_host` of provenance (ADR 0023, D4): the host and port the relay sent the evidence to, lower case, the
  * port always present, no scheme, path or credentials. The same pattern is in `ai-advice.schema.json` and in
  * `advisory_ai_runtime.ps1`.
@@ -256,7 +263,8 @@ private fun validEndpointUrl(
     url: String,
     allowInsecureHttp: Boolean,
 ): Boolean {
-    if (url.length > MAX_URL_BYTES || url.any { it !in '!'..'~' } || '?' in url || '#' in url) return false
+    if (url.length > MAX_URL_BYTES || url.any { it !in '!'..'~' || it in URL_UNSAFE_CHARACTERS }) return false
+    if ('?' in url || '#' in url) return false
     val uri =
         try {
             URI(url)
@@ -325,6 +333,9 @@ private const val MAX_MODELS_FILE_BYTES = 65_536
 private const val MAX_MODELS = 32
 private const val MAX_LABEL_CODE_POINTS = 80
 private const val MAX_URL_BYTES = 512
+
+/** The address travels as a process argument and a container variable; quoting and shell metacharacters are refused. */
+internal const val URL_UNSAFE_CHARACTERS = "\"\\`^|<>{}"
 private const val SCAN_DEPTH_MAX = 8
 private const val SCAN_NUMBER_BYTES_MAX = 64
 private const val SCAN_EXPONENT_MAX = 64

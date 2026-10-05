@@ -29,6 +29,7 @@ import io.ltverdict.ai.AdviceSubmitResult
 import io.ltverdict.ai.AdvisoryAiJobs
 import io.ltverdict.ai.AdvisoryAiService
 import io.ltverdict.ai.AiModelsConfig
+import io.ltverdict.ai.validModelSlug
 import io.ltverdict.core.AnalysisRequest
 import io.ltverdict.core.AnalyticsExportFormat
 import io.ltverdict.core.CapacityPlanValidation
@@ -44,6 +45,7 @@ import io.ltverdict.core.ResourceValidation
 import io.ltverdict.core.SavedAnalysisForComparison
 import io.ltverdict.core.SeriesGrid
 import io.ltverdict.core.SeriesQueryException
+import io.ltverdict.core.StrictJsonScanner
 import io.ltverdict.core.TrendPlanValidation
 import io.ltverdict.core.WindowComparisonRequest
 import io.ltverdict.core.baselineConditionConfirmation
@@ -99,6 +101,7 @@ import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.withContext
+import kotlinx.serialization.SerializationException
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
@@ -825,16 +828,22 @@ internal fun Application.installLocalApi(context: LocalApiContext) {
             call.requireJson()
             val bytes = withContext(Dispatchers.IO) { call.receiveChannel().toInputStream().use { it.readNBytes(ADVICE_BODY_MAX + 1) } }
             if (bytes.size > ADVICE_BODY_MAX) malformed("Advice request exceeds $ADVICE_BODY_MAX bytes")
-            // ADR 0023 (CM1): no transfer consent is asked. The body is empty, `{}` or the deprecated
-            // `{"confirm_external_transfer":true}`, which is ignored. The grammar is closed: `false`, other keys and duplicate
-            // keys (a second key cannot match) are rejected without a JSON parser that could resolve the ambiguity.
-            if (!ADVICE_REQUEST_BODY.matches(bytes.decodeToString(throwOnInvalidSequence = false))) {
-                malformed("Advice request body must be empty, {} or {\"confirm_external_transfer\":true}")
-            }
+            // ADR 0023 (CM1, CM4): no transfer consent is asked. The body is empty or a closed object with the deprecated,
+            // ignored `confirm_external_transfer:true` and an optional `model_id`; `false`, other keys and duplicate keys are 400.
+            val requestedModel = parseAdviceRequest(bytes)
             context.store.requireAnalysis(call)
             val jobs =
                 context.adviceJobs ?: throw ApiFailure(HttpStatusCode.ServiceUnavailable, "AI_UNAVAILABLE", "AI runner is not configured")
-            when (val submitted = jobs.submit(call.parameters["runId"].orEmpty(), call.parameters["analysisId"].orEmpty())) {
+            // The slug comes only from the configuration: the request names one of its models or none (the default).
+            val models = context.aiModels
+            if (requestedModel != null && models?.models?.any { it.id == requestedModel } != true) {
+                malformed("model_id is not a model of the configuration")
+            }
+            val selectedModel = requestedModel ?: models?.defaultModel
+            when (
+                val submitted =
+                    jobs.submit(call.parameters["runId"].orEmpty(), call.parameters["analysisId"].orEmpty(), selectedModel)
+            ) {
                 is AdviceSubmitResult.Accepted -> call.respondJson(submitted.status.toJson(), HttpStatusCode.Accepted)
                 AdviceSubmitResult.Busy -> throw ApiFailure(HttpStatusCode.Conflict, "AI_BUSY", "An AI task is already running")
             }
@@ -1765,8 +1774,28 @@ private fun mapInputFailure(failure: IllegalArgumentException): Nothing =
 
 private const val ADVICE_BODY_MAX = 512
 
-private val ADVICE_REQUEST_BODY =
-    Regex("""[ \t\r\n]*(\{[ \t\r\n]*("confirm_external_transfer"[ \t\r\n]*:[ \t\r\n]*true[ \t\r\n]*)?}[ \t\r\n]*)?""")
+/** Closed grammar of the advice request body (ADR 0023, D2); returns the requested `model_id`, if any. */
+private fun parseAdviceRequest(bytes: ByteArray): String? {
+    val text = bytes.decodeToString(throwOnInvalidSequence = false)
+    if (text.all { it == ' ' || it == '\t' || it == '\r' || it == '\n' }) return null
+    val invalid = "Advice request body must be empty or an object with confirm_external_transfer true and model_id"
+    StrictJsonScanner(text, 4, 16, 4, "advice request") { _, _, _ -> malformed(invalid) }.scan()
+    val root =
+        try {
+            Json.parseToJsonElement(text) as? JsonObject ?: malformed(invalid)
+        } catch (_: SerializationException) {
+            malformed(invalid)
+        }
+    if (root.keys.any { it != "confirm_external_transfer" && it != "model_id" }) malformed(invalid)
+    root["confirm_external_transfer"]?.let { confirm ->
+        val flag = confirm as? JsonPrimitive
+        if (flag == null || flag.isString || flag.booleanOrNull != true) malformed(invalid)
+    }
+    val model = root["model_id"] ?: return null
+    val slug = model as? JsonPrimitive
+    if (slug == null || !slug.isString || !validModelSlug(slug.content)) malformed(invalid)
+    return slug.content
+}
 
 private fun malformed(message: String): Nothing = throw ApiFailure(HttpStatusCode.BadRequest, "MALFORMED_REQUEST", message)
 
@@ -1865,6 +1894,7 @@ private fun AdviceJobStatus.toJson(): JsonObject =
         put("reused", reused?.let(::JsonPrimitive) ?: JsonNull)
         put("failure", failure?.name?.let(::JsonPrimitive) ?: JsonNull)
         put("unavailable_reason", unavailableReason?.name?.let(::JsonPrimitive) ?: JsonNull)
+        put("model_id", modelId?.let(::JsonPrimitive) ?: JsonNull)
     }
 
 private fun JenkinsRunState.toJson(): JsonObject =

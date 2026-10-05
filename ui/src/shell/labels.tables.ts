@@ -129,3 +129,24 @@ export const TREND_LABELS = {
   observedText: { increase: 'рост', decrease: 'снижение', flat: 'без изменения' },
   reasonWords: TREND_REASON_WORDS,
 } as const
+
+// Блок «Нормализованные данные» вкладки «Таблицы» новой оболочки (интервалы времени, порциями).
+export const NORMALIZED_LABELS = {
+  eyebrow: 'Исходные факты для проверки',
+  title: 'Нормализованные данные',
+  rollupLabel: 'Шаг',
+  rollupAria: 'Шаг интервалов',
+  rollupOption: (seconds: number): string => `${seconds} с`,
+  startOffset: 'Начало, смещение (мс)',
+  endOffset: 'Конец, смещение (мс)',
+  refresh: 'Обновить данные',
+  region: 'Интервалы времени',
+  heads: ['Интервал', 'RPS', 'Ошибки', 'p95', 'Максимум отклика', 'Данные'],
+  available: 'Есть',
+  missing: 'Нет данных (пропуск)',
+  unit: 'мс',
+  noValue: '—',
+  shown: (shown: number, total: number): string => `Показано ${shown} из ${total} интервалов`,
+  more: (step: number): string => `Показать ещё ${step}`,
+  all: (total: number): string => `Показать все (${total})`,
+} as const

@@ -1,7 +1,8 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, nextTick, ref, watch } from 'vue'
 import LoadCharts from './LoadCharts.vue'
 import { CORRELATION_LABELS } from './shell/labels'
+import { NORMALIZED_LABELS } from './shell/labels.tables'
 import { selectedCorrelations, unavailableFamilies } from './shell/overview'
 import type { AnalysisResult, Bucket, SourceSummaryEvidence, OpenSearchEvidence, PostgresContextEvidence, TrendCheckEvidence, TrendSummaryEvidence } from './types'
 
@@ -79,36 +80,63 @@ const trendSummary = computed(() => props.result.evidence
 
 const verdict = computed(() => props.result.policy_verdict)
 const overallMetrics = computed(() => metricValues(overall.value))
+// New shell: the block is in Russian and the table grows in portions (a 15-minute run has 900 one-second bins).
+const BUCKET_STEP = 50
+const bucketLimit = ref(BUCKET_STEP)
+watch(() => props.buckets, () => { bucketLimit.value = BUCKET_STEP })
 const bucketRows = computed(() => {
   const width = props.bucketRollup * 1_000
-  const rows: Array<{ id: string; time: string; rps: string; errors: string; p95: string; max: string; status: string }> = []
+  const ru = props.shellTables
+  const millis = (value: number | undefined) => ru ? (value === undefined ? NORMALIZED_LABELS.noValue : `${value.toLocaleString('ru-RU')} ${NORMALIZED_LABELS.unit}`) : formatMillis(value)
+  const rows: Array<{ id: string; time: string; rps: string; errors: string; p95: string; max: string; status: string; available: boolean }> = []
   let previousStart: number | undefined
   for (const bucket of [...props.buckets].sort((left, right) => left.bucket_start_ms - right.bucket_start_ms)) {
     const start = bucket.bucket_start_ms
     if (previousStart !== undefined && start > previousStart + width) {
       rows.push({
         id: `missing-${previousStart + width}`,
-        time: `${previousStart + width}–${start} ms`,
+        time: `${previousStart + width}–${start} ${ru ? NORMALIZED_LABELS.unit : 'ms'}`,
         rps: '—',
         errors: '—',
         p95: '—',
         max: '—',
-        status: 'Missing / no samples',
+        status: ru ? NORMALIZED_LABELS.missing : 'Missing / no samples',
+        available: false,
       })
     }
     rows.push({
       id: `bucket-${start}`,
-      time: `${start} ms`,
+      time: `${start} ${ru ? NORMALIZED_LABELS.unit : 'ms'}`,
       rps: (bucket.sample_count / props.bucketRollup).toFixed(2),
       errors: bucket.error_count.toLocaleString(),
-      p95: formatMillis(bucket.p95_latency_ms),
-      max: formatMillis(bucket.max_latency_ms),
-      status: 'Available',
+      p95: millis(bucket.p95_latency_ms),
+      max: millis(bucket.max_latency_ms),
+      status: ru ? NORMALIZED_LABELS.available : 'Available',
+      available: true,
     })
     previousStart = start
   }
   return rows
 })
+const normText = computed(() => props.shellTables
+  ? {
+      eyebrow: NORMALIZED_LABELS.eyebrow, title: NORMALIZED_LABELS.title, rollup: NORMALIZED_LABELS.rollupLabel, rollupAria: NORMALIZED_LABELS.rollupAria,
+      start: NORMALIZED_LABELS.startOffset, end: NORMALIZED_LABELS.endOffset, refresh: NORMALIZED_LABELS.refresh, region: NORMALIZED_LABELS.region,
+      heads: NORMALIZED_LABELS.heads as readonly string[], option: NORMALIZED_LABELS.rollupOption,
+    }
+  : {
+      eyebrow: 'Inspectable source facts', title: 'Normalized data', rollup: 'Rollup', rollupAria: 'Bucket rollup', start: 'Start offset (ms)', end: 'End offset (ms)',
+      refresh: 'Refresh data', region: 'Time bins', heads: ['Time bin', 'RPS', 'Errors', 'P95', 'Max latency', 'Data status'] as readonly string[],
+      option: (seconds: number) => `${seconds} second${seconds === 1 ? '' : 's'}`,
+    })
+const bucketRegion = ref<HTMLElement | null>(null)
+// The pressed button disappears when everything is shown: keep the keyboard focus inside the block.
+async function growBuckets(all: boolean) {
+  bucketLimit.value = all ? bucketRows.value.length : bucketLimit.value + BUCKET_STEP
+  await nextTick()
+  if (!document.activeElement || document.activeElement === document.body) bucketRegion.value?.focus()
+}
+const shownBucketRows = computed(() => props.shellTables ? bucketRows.value.slice(0, bucketLimit.value) : bucketRows.value)
 const policyRows = computed(() =>
   checks.value.map((check) => {
     const metric = metrics.value.find((item) => item.id === check.metric_evidence_id)
@@ -1134,31 +1162,32 @@ function updateRange(name: 'update:range-start' | 'update:range-end', event: Eve
     id="normalized-data"
     class="panel"
     aria-labelledby="normalized-data-title"
+    :lang="shellTables ? 'ru' : undefined"
   >
     <div class="section-heading">
       <p class="eyebrow">
-        Inspectable source facts
+        {{ normText.eyebrow }}
       </p><h2 id="normalized-data-title">
-        Normalized data
+        {{ normText.title }}
       </h2>
     </div>
     <div class="bucket-controls">
-      <label>Rollup <select
+      <label>{{ normText.rollup }} <select
         :value="rollup"
-        aria-label="Bucket rollup"
+        :aria-label="normText.rollupAria"
         @change="updateRollup"
       ><option
         v-for="seconds in [1, 10, 30, 60]"
         :key="seconds"
         :value="seconds"
-      >{{ seconds }} second{{ seconds === 1 ? '' : 's' }}</option></select></label>
-      <label>Start offset (ms) <input
+      >{{ normText.option(seconds) }}</option></select></label>
+      <label>{{ normText.start }} <input
         :value="rangeStart"
         type="number"
         min="0"
         @input="updateRange('update:range-start', $event)"
       ></label>
-      <label>End offset (ms) <input
+      <label>{{ normText.end }} <input
         :value="rangeEnd"
         type="number"
         min="0"
@@ -1168,32 +1197,75 @@ function updateRange(name: 'update:range-start' | 'update:range-end', event: Eve
         type="button"
         @click="emit('refresh-buckets')"
       >
-        Refresh data
+        {{ normText.refresh }}
       </button>
     </div>
-    <LoadCharts
-      :markers="markers"
-      :buckets="buckets"
-      :rollup="bucketRollup"
-    />
+    <div :lang="shellTables ? 'en' : undefined">
+      <LoadCharts
+        :markers="markers"
+        :buckets="buckets"
+        :rollup="bucketRollup"
+      />
+    </div>
     <div
+      ref="bucketRegion"
       class="table-wrap"
       tabindex="0"
       role="region"
-      aria-label="Time bins"
+      :aria-label="normText.region"
     >
       <table>
-        <thead><tr><th>Time bin</th><th>RPS</th><th>Errors</th><th>P95</th><th>Max latency</th><th>Data status</th></tr></thead>
+        <thead>
+          <tr>
+            <th
+              v-for="head in normText.heads"
+              :key="head"
+            >
+              {{ head }}
+            </th>
+          </tr>
+        </thead>
         <tbody>
           <tr
-            v-for="row in bucketRows"
+            v-for="row in shownBucketRows"
             :key="row.id"
-            :data-status="row.status === 'Available' ? 'available' : 'missing'"
+            :data-status="row.available ? 'available' : 'missing'"
           >
             <td>{{ row.time }}</td><td>{{ row.rps }}</td><td>{{ row.errors }}</td><td>{{ row.p95 }}</td><td>{{ row.max }}</td><td>{{ row.status }}</td>
           </tr>
         </tbody>
       </table>
     </div>
+    <div
+      v-if="shellTables && bucketRows.length > BUCKET_STEP"
+      class="bucket-more"
+    >
+      <p
+        role="status"
+        data-testid="bins-shown"
+      >
+        {{ NORMALIZED_LABELS.shown(shownBucketRows.length, bucketRows.length) }}
+      </p>
+      <button
+        v-if="shownBucketRows.length < bucketRows.length"
+        type="button"
+        @click="growBuckets(false)"
+      >
+        {{ NORMALIZED_LABELS.more(Math.min(BUCKET_STEP, bucketRows.length - shownBucketRows.length)) }}
+      </button>
+      <button
+        v-if="bucketRows.length - shownBucketRows.length > BUCKET_STEP"
+        type="button"
+        @click="growBuckets(true)"
+      >
+        {{ NORMALIZED_LABELS.all(bucketRows.length) }}
+      </button>
+    </div>
   </section>
 </template>
+
+<style scoped>
+.bucket-more { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin-top: 12px; }
+.bucket-more p { margin: 0; }
+.bucket-more button { width: auto; min-height: 44px; }
+</style>

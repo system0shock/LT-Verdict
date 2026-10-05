@@ -111,6 +111,20 @@ test.describe('attention items', () => {
     ])
   })
 
+  test('platform reasons lead to the resource and policy tables', () => {
+    const result = build({
+      policy_verdict: 'NO_VERDICT',
+      analysis_coverage: { status: 'INCOMPLETE', reasons: ['PLATFORM_SERIES_AMBIGUOUS', 'RULE_WINDOW_NOT_FOUND', 'RESOURCE_SNAPSHOT_REQUIRED'] },
+      evidence: [overall],
+    })
+
+    expect(attentionItems(result).map((entry) => [entry.key, entry.target?.targetId])).toEqual([
+      ['no_verdict:PLATFORM_SERIES_AMBIGUOUS|', 'resource-results'],
+      ['no_verdict:RULE_WINDOW_NOT_FOUND|', 'policy-results'],
+      ['no_verdict:RESOURCE_SNAPSHOT_REQUIRED|', 'resource-results'],
+    ])
+  })
+
   test('INSUFFICIENT_SAMPLES in a capacity result still leads to the policy table, stage reasons to the capacity table', () => {
     const capacity = build({
       analysis_mode: 'capacity_step',

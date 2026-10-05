@@ -21,6 +21,8 @@ interface PolicyEditorLabels {
   metricName: (code: string) => string
   operatorName: (code: string) => string
   thresholdHint?: (metric: PolicyRule['metric'], value: string) => string | null
+  // Sample minimum fields (U4c). Absent in the old interface, which keeps its editor unchanged.
+  samples?: { floorField: string; defaultMinField: string; ruleMinField: string; defaultsHint: string; ruleHint: string; lowFloor: string }
   errorLang?: string
 }
 
@@ -48,6 +50,37 @@ function update(mutator: (policy: Policy) => void) {
   const policy = structuredClone(toRaw(props.policy))
   mutator(policy)
   emit('update', policy)
+}
+
+function sampleCount(raw: string): number | undefined {
+  return raw.trim() === '' ? undefined : Number(raw)
+}
+
+function setDefault(field: 'sample_floor' | 'min_samples', raw: string) {
+  update((policy) => {
+    const defaults = { ...policy.defaults }
+    const value = sampleCount(raw)
+    if (value === undefined) delete defaults[field]
+    else defaults[field] = value
+    if (Object.keys(defaults).length) policy.defaults = defaults
+    else delete policy.defaults
+  })
+}
+
+function setRuleMinimum(index: number, raw: string) {
+  update((policy) => {
+    const value = sampleCount(raw)
+    if (value === undefined) delete policy.rules[index].min_samples
+    else policy.rules[index].min_samples = value
+  })
+}
+
+function setMetric(index: number, metric: PolicyRule['metric']) {
+  update((policy) => {
+    policy.rules[index].metric = metric
+    // The core rejects min_samples on throughput_rps (FIELD_NOT_APPLICABLE) and the field is hidden there.
+    if (metric === 'throughput_rps') delete policy.rules[index].min_samples
+  })
 }
 
 function addRule() {
@@ -87,6 +120,48 @@ function downloadPolicy() {
         @input="update((draft) => { draft.policy_id = ($event.target as HTMLInputElement).value })"
       >
     </div>
+    <template v-if="labels.samples">
+      <div class="field">
+        <label for="policy-sample-floor">{{ labels.samples.floorField }}</label>
+        <input
+          id="policy-sample-floor"
+          class="control"
+          type="number"
+          min="1"
+          max="1000000"
+          step="1"
+          :value="policy.defaults?.sample_floor"
+          aria-describedby="policy-defaults-hint"
+          @input="setDefault('sample_floor', ($event.target as HTMLInputElement).value)"
+        >
+        <p
+          v-if="policy.defaults?.sample_floor !== undefined && policy.defaults.sample_floor < 20"
+          class="field__hint"
+        >
+          {{ labels.samples.lowFloor }}
+        </p>
+      </div>
+      <div class="field">
+        <label for="policy-min-samples">{{ labels.samples.defaultMinField }}</label>
+        <input
+          id="policy-min-samples"
+          class="control"
+          type="number"
+          min="1"
+          max="1000000"
+          step="1"
+          :value="policy.defaults?.min_samples"
+          aria-describedby="policy-defaults-hint"
+          @input="setDefault('min_samples', ($event.target as HTMLInputElement).value)"
+        >
+        <p
+          id="policy-defaults-hint"
+          class="field__hint"
+        >
+          {{ labels.samples.defaultsHint }}
+        </p>
+      </div>
+    </template>
 
     <div
       v-for="(rule, index) in policy.rules"
@@ -110,7 +185,7 @@ function downloadPolicy() {
             :id="`rule-metric-${index}`"
             class="control"
             :value="rule.metric"
-            @change="update((draft) => { draft.rules[index].metric = ($event.target as HTMLSelectElement).value as typeof rule.metric })"
+            @change="setMetric(index, ($event.target as HTMLSelectElement).value as typeof rule.metric)"
           >
             <option
               v-for="metric in metrics"
@@ -153,6 +228,29 @@ function downloadPolicy() {
             class="field__hint"
           >
             {{ labels.thresholdHint(rule.metric, rule.threshold) }}
+          </p>
+        </div>
+        <div
+          v-if="labels.samples && rule.metric !== 'throughput_rps'"
+          class="field"
+        >
+          <label :for="`rule-min-samples-${index}`">{{ labels.samples.ruleMinField }}</label>
+          <input
+            :id="`rule-min-samples-${index}`"
+            class="control"
+            type="number"
+            min="1"
+            max="1000000"
+            step="1"
+            :value="rule.min_samples"
+            :aria-describedby="`rule-min-samples-hint-${index}`"
+            @input="setRuleMinimum(index, ($event.target as HTMLInputElement).value)"
+          >
+          <p
+            :id="`rule-min-samples-hint-${index}`"
+            class="field__hint"
+          >
+            {{ labels.samples.ruleHint }}
           </p>
         </div>
         <div class="field">

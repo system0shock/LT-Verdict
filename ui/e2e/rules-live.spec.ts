@@ -109,3 +109,42 @@ test('live trial run applies a draft policy to the open run through the core wit
   await expect(page.locator('#verdict')).toHaveAttribute('data-verdict', 'FAIL')
   expect(inputs.length).toBe(1)
 })
+
+test('live server validates the sample minimum fields of the editor', async ({ page }) => {
+  await page.goto('/?shell=new')
+  await page.locator('#shell-tab-rules').click()
+  await page.getByRole('button', { name: RULES_LABELS.templateName('api-throughput') }).click()
+  await expect(page.getByLabel(RULES_LABELS.policyId)).toHaveValue('template-api-throughput')
+  // Match the validation of this very edit: the validation of the template may still be in flight.
+  type Draft = { defaults?: { sample_floor?: number }; rules: Array<{ min_samples?: number }> }
+  const validated = (matches: (draft: Draft) => boolean) => page.waitForResponse((response) =>
+    response.url().endsWith('/api/policies/validate') && response.request().method() === 'POST' && matches(response.request().postDataJSON() as Draft))
+  type Validation = { valid: boolean; policy?: { defaults?: Record<string, number>; rules: Array<{ min_samples?: number }> }; errors?: Array<{ code: string; json_pointer: string }> }
+
+  // The throughput rule (index 2) has no field: the core would answer FIELD_NOT_APPLICABLE.
+  await expect(page.locator('#rule-min-samples-2')).toHaveCount(0)
+  let response = validated((draft) => draft.rules[0].min_samples === 50)
+  await page.locator('#rule-min-samples-0').fill('50')
+  let body = await (await response).json() as Validation
+  expect(body.valid).toBe(true)
+  expect(body.policy?.rules[0].min_samples).toBe(50)
+
+  response = validated((draft) => draft.rules[0].min_samples === 0)
+  await page.locator('#rule-min-samples-0').fill('0')
+  body = await (await response).json() as Validation
+  expect(body.valid).toBe(false)
+  expect(body.errors).toEqual([expect.objectContaining({ code: 'MIN_SAMPLES_OUT_OF_RANGE', json_pointer: '/rules/0/min_samples' })])
+  await expect(page.locator('#rules-panel .field__errors')).toContainText('/rules/0/min_samples')
+
+  response = validated((draft) => draft.rules[0].min_samples === 10)
+  await page.locator('#rule-min-samples-0').fill('10')
+  body = await (await response).json() as Validation
+  expect(body.errors).toEqual([expect.objectContaining({ code: 'MIN_SAMPLES_BELOW_FLOOR', json_pointer: '/rules/0/min_samples' })])
+
+  response = validated((draft) => draft.defaults?.sample_floor === 5)
+  await page.getByLabel(RULES_LABELS.samples.floorField).fill('5')
+  body = await (await response).json() as Validation
+  expect(body.valid).toBe(true)
+  expect(body.policy?.defaults).toEqual({ sample_floor: 5 })
+  expect(body.policy?.rules[0].min_samples).toBe(10)
+})

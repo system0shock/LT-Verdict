@@ -28,13 +28,13 @@
 | окон / resource rules | ≤64 / ≤256 | `ResourceSnapshot.kt` |
 | корреляционных пар | ≤16 | `DiagnosticPlan.kt:743` |
 | правил аномалий / controls на пару / lag | ≤32 / ≤4 / ≤10 ячеек | `DiagnosticPlan.kt:744,746,748` |
-| выводная семья | ≤16 гипотез, одно окно, один outcome, 30–240 непрерывных ячеек | `CorrelationHeadlineSelection.kt:56-95` |
-| расчётный потолок | 150 млн correlation cell-products | `CorrelationHeadlineSelection.kt` |
+| выводная семья | ≤16 гипотез, одна стадия (окно), один outcome, 30–1 920 непрерывных ячеек (ADR 0022, Д9; план делится на семьи по `(window_id, load_metric)`) | `CorrelationHeadlineSelection.kt` |
+| расчётный потолок | 550 105 344 correlation cell-products на семью (ADR 0022, Д9; было 150 млн) | `CorrelationHeadlineSelection.kt` |
 | series на один mapping | ровно одна, иначе `AMBIGUOUS_SERIES` | ADR 0007 |
 
-За пределами этого конверта селектор отказывает целиком
-(`FAMILY_SIZE_UNSUPPORTED`, `MULTI_WINDOW_FAMILY_UNSUPPORTED`,
-`FAMILY_OUTCOME_MISMATCH`, `OBSERVATION_COUNT_UNSUPPORTED`), а находка
+За пределами этого конверта селектор отказывает по семье
+(`FAMILY_SIZE_UNSUPPORTED`, `HOLM_RESOLUTION_INSUFFICIENT`,
+`OBSERVATION_COUNT_UNSUPPORTED`, `COMPUTATION_LIMIT_EXCEEDED`), а находка
 `correlation_candidate` публикуется только при `selected = true`
 (`DiagnosticAnalysis.kt:59-64`). То есть неподдержанная форма плана даёт сырое
 evidence без единой находки.

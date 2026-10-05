@@ -78,8 +78,9 @@ analysis directory и не перезаписывает прежний резу�
 Версия общего модуля `metrics` в identity равна `2` (ADR 0016: перцентили не выше
 максимума); analyses с прежней версией `1` читаются без перезаписи, но для baseline и
 истории динамики считаются несопоставимыми с новыми.
-Версия модуля `load-resource-diagnostics` равна `3` (ADR 0016: пустое окно как
-`null`, было `2`); она входит в identity только при наличии плана диагностики.
+Версия модуля `load-resource-diagnostics` равна `4` (ADR 0022, срез K1: семьи
+по стадиям и предел 1 920 ячеек, было `3`; ADR 0016: пустое окно как `null`,
+было `2`); она входит в identity только при наличии плана диагностики.
 Parser `jmeter-csv` имеет версию `2`, а `input_versions.source` для JMeter CSV -
 `jmeter-jtl-csv.v2` (ADR 0016: parent-строки Transaction Controller; было `1` и
 `v1`); parser XML и Gatling остаются на `1`. Этим срезом ADR 0016 завершён:

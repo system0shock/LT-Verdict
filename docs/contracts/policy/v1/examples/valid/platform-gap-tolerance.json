@@ -47,9 +47,7 @@
       "unit": "count",
       "aggregation": "interval_max",
       "min_consecutive_cells": 1,
-      "effect": "sla",
-      "max_missing_fraction": 0,
-      "max_gap_cells": 0
+      "effect": "sla"
     }
   ]
 }

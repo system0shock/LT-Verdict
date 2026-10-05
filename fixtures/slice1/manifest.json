@@ -55,7 +55,7 @@
     },
     {
       "path": "docs/contracts/policy/v1/examples/valid/platform-gap-tolerance.json",
-      "sha256": "1b200d8a43a50434e7122d2e11cc32da93387ad8203ba119f83917e9ead14d1f"
+      "sha256": "ae116ffd596041fcf0829e92e874f02207bec959d62e8992192b538a311b3cfb"
     },
     {
       "path": "docs/contracts/policy/v1/examples/valid/platform-services.json",

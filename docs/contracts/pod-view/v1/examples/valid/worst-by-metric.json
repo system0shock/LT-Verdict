@@ -1,0 +1,19 @@
+{
+  "schema_version": "pod-view.v1",
+  "load_input_sha256": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+  "resource_snapshot_sha256": "fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210",
+  "start_epoch_ms": 1767225600000,
+  "step_ms": 60000,
+  "column_count": 3,
+  "coverage": {
+    "pods_observed_total": 300, "pods_included": 1, "rows_observed_total": 3600, "rows_included": 2,
+    "selection": { "kind": "WORST_BY_METRIC", "metric": "openshift_container_cpu_limit_ratio", "limit": 1 }
+  },
+  "pods": [
+    { "pod": "payments-5c7f9-x1", "service": "payments", "containers": [{ "name": "app", "role": "app" }] }
+  ],
+  "rows": [
+    { "id": "r1", "pod": "payments-5c7f9-x1", "container": "app", "metric": "openshift_container_cpu_limit_ratio", "unit": "ratio", "aggregation": "interval_max", "values": [0.91, 0.97, null] },
+    { "id": "r2", "pod": "payments-5c7f9-x1", "container": "app", "metric": "openshift_container_restarts", "unit": "count", "aggregation": "interval_rate", "values": [0, 0, 1] }
+  ]
+}

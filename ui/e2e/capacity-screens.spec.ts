@@ -19,7 +19,7 @@ const overall = {
   latency_ms: { p50: 20, p95: 9431, p99: 11000, max: 12000 },
 }
 const resourceSummary = {
-  id: 'rs1', type: 'resource_summary', series_id: 'service-cpu-busy', metric: 'cpu', unit: 'ratio', entity: 'app', role: 'system', aggregation: 'interval_mean', window_id: 'w',
+  id: 'rs1', type: 'resource_summary', series_id: '1.234567890123', metric: 'cpu', unit: 'ratio', entity: 'app', role: 'system', aggregation: 'interval_mean', window_id: 'w',
   from_epoch_ms: 1000, to_epoch_ms: 4000, expected_cells: 3, observed_cells: 3, missing_cells: 0, longest_gap_cells: 0,
   statistics: { min: '0.5', max: longRatio, mean: '0.123456789012345678901234567890', median: null, q05: '0.0000001234567890123', q95: '1234567.8912345678901234' },
 }
@@ -110,6 +110,7 @@ test('new shell: resource statistics are formatted and empty values are a dash',
   const row = page.getByRole('region', { name: 'Resource summaries' }).locator('tbody tr').first()
   await expect(row).not.toContainText('Not available')
   await expect(row).not.toContainText(longRatio)
+  await expect(row).toContainText('1.234567890123')
   await expect(row).toContainText('0,95')
   await expect(row).toContainText('1 234 567,8912')
   await expect(row.locator('td', { hasText: '0,95' }).first()).toHaveAttribute('title', longRatio)

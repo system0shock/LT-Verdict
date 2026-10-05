@@ -244,14 +244,14 @@ function formatValue(value: unknown) {
 const shortFraction = new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 4 })
 const shortSignificant = new Intl.NumberFormat('ru-RU', { maximumSignificantDigits: 4 })
 function shortDecimal(value: string) {
-  if (!/^-?\d+\.\d{7,}$/.test(value)) return value
+  if (!/^-?\d{1,15}\.\d{7,}$/.test(value)) return value
   const number = Number(value)
   if (!Number.isFinite(number)) return value
   return Math.abs(number) >= 1 ? shortFraction.format(number) : shortSignificant.format(number)
 }
 
 function formatOptional(value: unknown) {
-  if (props.shellTables) return value === null || value === undefined ? '—' : shortDecimal(String(value))
+  if (props.shellTables) return value === null || value === undefined ? '—' : String(value)
   return value === null || value === undefined ? 'Not available (null)' : String(value)
 }
 
@@ -259,10 +259,14 @@ function capacityValue(value: number | string | null) {
   return value === null ? '—' : String(value)
 }
 
+function shortStatistic(value: unknown) {
+  return props.shellTables && typeof value === 'string' ? shortDecimal(value) : formatOptional(value)
+}
+
 function statistic(item: Evidence, key: string) {
   const values = valueAt(item, 'statistics')
   return values !== null && typeof values === 'object' && !Array.isArray(values)
-    ? formatOptional(valueAt(values as Evidence, key))
+    ? shortStatistic(valueAt(values as Evidence, key))
     : props.shellTables ? '—' : 'Not available (null)'
 }
 

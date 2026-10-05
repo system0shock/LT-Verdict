@@ -253,6 +253,27 @@ class Sharding(unittest.TestCase):
             self.assertTrue(duplicate["duplicate"])
             self.assertFalse(out.exists())
 
+    def test_incomplete_merge_removes_a_stale_merged_file(self):
+        m = self.manifest(2)
+        with tempfile.TemporaryDirectory() as tmp:
+            path, out = Path(tmp) / "a.jsonl", Path(tmp) / "out.jsonl"
+            ds.run_shard(m, 0, 1, path, process=fake_process)
+            self.assertEqual(ds.merge(m, [path], out)["status"], "COMPLETE")
+            self.assertTrue(out.exists())
+            self.assertEqual(ds.merge(m, [], out)["status"], "INCOMPLETE")
+            self.assertFalse(out.exists())
+
+    def test_run_sharded_refuses_a_used_output_directory(self):
+        m = self.manifest(2)
+        with tempfile.TemporaryDirectory() as tmp:
+            manifest_path = Path(tmp) / "m.json"
+            manifest_path.write_text(ds.canonical(m), encoding="utf-8")
+            outdir = Path(tmp) / "out"
+            outdir.mkdir()
+            (outdir / "shard-0-of-1.jsonl").write_text("{}\n", encoding="utf-8")
+            with self.assertRaises(FileExistsError):
+                ds.run_sharded(manifest_path, 1, outdir)
+
     def test_merge_rejects_a_record_outside_the_manifest(self):
         m = self.manifest(2)
         with tempfile.TemporaryDirectory() as tmp:

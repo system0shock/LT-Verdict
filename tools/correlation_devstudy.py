@@ -212,6 +212,7 @@ def merge(manifest, shard_paths, out_path):
                     found[key] = record
     missing = [list(key) for key in expected if key not in found]
     if missing or duplicate or unexpected:
+        Path(out_path).unlink(missing_ok=True)  # never leave a stale merged file
         return {"status": "INCOMPLETE", "missing": missing,
                 "duplicate": duplicate, "unexpected": unexpected}
     data = "".join(canonical(found[key]) + "\n" for key in expected).encode("utf-8")
@@ -225,6 +226,8 @@ def run_sharded(manifest_path, shards, outdir):
         raise ValueError("shard count exceeds available CPUs")
     outdir = Path(outdir)
     outdir.mkdir(parents=True, exist_ok=True)
+    if any(outdir.glob("shard-*.jsonl")) or (outdir / "merged.jsonl").exists():
+        raise FileExistsError("output directory already holds results; use a new one")
     manifest_path = Path(manifest_path).resolve()
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
     env = os.environ.copy()

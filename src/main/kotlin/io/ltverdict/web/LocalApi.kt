@@ -63,6 +63,7 @@ import io.ltverdict.core.validateCapacityBinding
 import io.ltverdict.core.validateCapacityPlan
 import io.ltverdict.core.validateDiagnosticBinding
 import io.ltverdict.core.validateDiagnosticPlan
+import io.ltverdict.core.validatePlatformBinding
 import io.ltverdict.core.validatePolicy
 import io.ltverdict.core.validateResourceSnapshot
 import io.ltverdict.core.validateTrendBinding
@@ -1487,6 +1488,12 @@ private suspend fun receiveJob(
             )
         val errors = validateTrendBinding(plan, snapshot)
         if (errors.isNotEmpty()) throw InvalidTrend(errors)
+    }
+    policy?.let { valid ->
+        resources?.let { snapshot ->
+            val errors = validatePlatformBinding(valid.policy, snapshot.snapshot)
+            if (errors.isNotEmpty()) throw InvalidPolicy(PolicyValidation.Invalid(errors))
+        }
     }
     val acquisition =
         sourceContexts.takeIf { it.isNotEmpty() }?.let { contexts ->

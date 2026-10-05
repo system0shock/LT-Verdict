@@ -18,6 +18,18 @@
       "sha256": "ceaf38be0138663f199007c61c7da610b4048c2175ea64471e5e47ec25cba4f9"
     },
     {
+      "path": "docs/contracts/policy/v1/examples/invalid/platform-all-services-without-catalog.json",
+      "sha256": "608fbbeaef439a645b9891a1d70fdd5970e13ce81233518c558f8b370b37380a"
+    },
+    {
+      "path": "docs/contracts/policy/v1/examples/invalid/platform-coverage-missing.json",
+      "sha256": "127f0f12f8018de582a69270d72d76463e60311dd2f73a5fc1ae8d86ab3dfdd8"
+    },
+    {
+      "path": "docs/contracts/policy/v1/examples/invalid/platform-except-outside-catalog.json",
+      "sha256": "1586b9b2d6fb4c15cb028b9c1e4a4c482f01f026f9eb05aebd3d1120aea1af72"
+    },
+    {
       "path": "docs/contracts/policy/v1/examples/invalid/unknown-field.json",
       "sha256": "13c02ed5d4efcddcaacb85c1ec61c4eadecb7e7fedb79ca9087a4919ecdd891f"
     },
@@ -38,6 +50,10 @@
       "sha256": "fbd8005334cb1fd2e7216429a1b5e3df1e4c25a66baff31e61f2937c7bc883c4"
     },
     {
+      "path": "docs/contracts/policy/v1/examples/valid/platform-services.json",
+      "sha256": "37330c9eb893b83db458d450d5b2622429fd44588ba8ad98ad07aea692bedad6"
+    },
+    {
       "path": "docs/contracts/policy/v1/examples/valid/sample-gate.json",
       "sha256": "7430caf6d2adbc72fcd88978254d3f34f9568479aa2f0adbe884f77c75eace04"
     },
@@ -47,7 +63,7 @@
     },
     {
       "path": "docs/contracts/policy/v1/policy.schema.json",
-      "sha256": "7041f855e30e4a6b77e2db77bc5e00a07cc2008ee161dc3a58d9853074153535"
+      "sha256": "3732b989b34b90490f111b002e696875847398568ac730a7650b5928a01161d9"
     },
     {
       "path": "fixtures/slice1/gatling/binary-3.13.5/oracle.json",
@@ -301,6 +317,29 @@
       "schema_valid": false,
       "runtime_valid": false,
       "expected_diagnostic": "WINDOW_IDS_INVALID"
+    },
+    {
+      "path": "docs/contracts/policy/v1/examples/valid/platform-services.json",
+      "schema_valid": true,
+      "runtime_valid": true
+    },
+    {
+      "path": "docs/contracts/policy/v1/examples/invalid/platform-except-outside-catalog.json",
+      "schema_valid": true,
+      "runtime_valid": false,
+      "expected_diagnostic": "INVALID_SCOPE"
+    },
+    {
+      "path": "docs/contracts/policy/v1/examples/invalid/platform-all-services-without-catalog.json",
+      "schema_valid": true,
+      "runtime_valid": false,
+      "expected_diagnostic": "INVALID_SCOPE"
+    },
+    {
+      "path": "docs/contracts/policy/v1/examples/invalid/platform-coverage-missing.json",
+      "schema_valid": true,
+      "runtime_valid": false,
+      "expected_diagnostic": "PLATFORM_COVERAGE_MISSING"
     }
   ],
   "parser_cases": [

@@ -83,6 +83,9 @@ internal class AnalysisService(
         }
         request.resources?.let { resources ->
             require(resources.snapshot.loadInputSha256 == request.input.sha256) { "RESOURCE_LOAD_HASH_MISMATCH" }
+            request.policy?.policy?.let { policy ->
+                validatePlatformBinding(policy, resources.snapshot).firstOrNull()?.let { throw IllegalArgumentException(it.code) }
+            }
         }
         request.capacity?.let { capacity ->
             val resources = request.resources ?: throw IllegalArgumentException("CAPACITY_RESOURCE_REQUIRED")
@@ -399,7 +402,12 @@ internal class AnalysisService(
             } else {
                 val windows = checkNotNull(resourceWindows)
                 val resourceEvaluation =
-                    evaluateResources(request.resources.snapshot, windows, checkCancelled).let { evaluated ->
+                    evaluateResources(
+                        request.resources.snapshot,
+                        windows,
+                        checkCancelled,
+                        request.policy?.policy?.let { expandPlatformRules(it, request.resources.snapshot) } ?: PlatformExpansion.EMPTY,
+                    ).let { evaluated ->
                         evaluated.copy(
                             evidence =
                                 listOf(

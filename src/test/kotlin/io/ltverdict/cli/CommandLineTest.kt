@@ -610,6 +610,46 @@ class CommandLineTest {
     }
 
     @Test
+    fun `platform rules with an SLA snapshot rule exit with the invalid input code`() {
+        val input = fixture("jmeter/xml-5.6.3/input.xml")
+        val hash = sha256Hex(Files.readAllBytes(input))
+        val snapshot = tempDir.resolve("platform-snapshot.json")
+        Files.writeString(
+            snapshot,
+            """{"schema_version":"resource-snapshot.v1","load_input_sha256":"$hash","start_epoch_ms":0,"step_ms":1000,"point_count":2,""" +
+                """"series":[{"id":"cpu","metric":"cpu_used","unit":"ratio","entity":"vm","role":"system",""" +
+                """"aggregation":"interval_mean","values":[0.1,0.9]}],""" +
+                """"windows":[{"id":"steady","from_epoch_ms":0,"to_epoch_ms":2000}],""" +
+                """"rules":[{"id":"cpu-high","series_id":"cpu","unit":"ratio","operator":"gt","threshold":0.8,""" +
+                """"min_consecutive_cells":1,"effect":"sla"}]}""",
+        )
+        val policy = tempDir.resolve("platform-policy.json")
+        Files.writeString(
+            policy,
+            """{"schema_version":"policy.v1","policy_id":"conflict","defaults":{"sample_floor":1,"min_samples":1},""" +
+                """"rules":[{"id":"errors","metric":"error_rate_ratio","operator":"lte","threshold":0.5,"scope":{"kind":"overall"}}],""" +
+                """"platform_rules":[{"id":"cpu","signal":"cpu_used","scope":{"kind":"service","services":["vm"]},""" +
+                """"operator":"gt","threshold":0.8,"unit":"ratio","aggregation":"interval_mean",""" +
+                """"min_consecutive_cells":1,"effect":"diagnostic"}]}""",
+        )
+
+        val result =
+            run(
+                "analyze",
+                input.toString(),
+                "--policy",
+                policy.toString(),
+                "--resources",
+                snapshot.toString(),
+                "--data-dir",
+                tempDir.resolve("platform-data").toString(),
+            )
+
+        assertEquals(4, result.exitCode)
+        assertTrue(result.stderr.contains("PLATFORM_RULES_CONFLICT"), result.stderr)
+    }
+
+    @Test
     fun `resources rejects missing malformed and duplicate inputs without analysis output`() {
         val input = fixture("jmeter/csv-5.6.3/input.jtl").toString()
         val snapshot = tempDir.resolve("resources.json")

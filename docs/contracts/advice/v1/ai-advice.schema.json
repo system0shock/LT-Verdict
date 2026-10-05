@@ -22,13 +22,36 @@
         "runner_id": { "const": "gigacode-qwen-code" },
         "runner_version": { "const": "0.21.1" },
         "runner_artifact_sha256": { "const": "1db9709bf1753611ca2fec234cf5adf517376efeb1540fcf9e309da010f9ed38" },
-        "model_id": { "const": "deepseek-v4-flash-0731" },
+        "model_id": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:/-]{0,127}$",
+          "not": { "pattern": "\\.\\.|//" },
+          "description": "Observed model slug. The set of models is defined by the operator (ADR 0023), so it is checked by the slug pattern of ai-models.v1, not against a closed list."
+        },
         "prompt_version": { "const": "advisory-system.v1" },
         "prompt_sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
         "duration_ms": { "type": "integer", "minimum": 0, "maximum": 613000 },
         "exit_code": { "const": 0 },
-        "validation": { "const": "PASSED" }
-      }
+        "validation": { "const": "PASSED" },
+        "endpoint_host": {
+          "type": "string",
+          "maxLength": 260,
+          "pattern": "^(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?){0,126}|\\[(?=[0-9a-f:.]*:[0-9a-f:.]*:)(?=[0-9a-f:.]*[0-9a-f])[0-9a-f:.]{2,45}\\]):(?:[1-9][0-9]{0,3}|[1-5][0-9]{4}|6[0-4][0-9]{3}|65[0-4][0-9]{2}|655[0-2][0-9]|6553[0-5])$",
+          "description": "Host and port the relay actually sent the evidence to, lower case, always with the port, without scheme, path or credentials (ADR 0023, D4). Observed by the relay, not taken from the configuration."
+        }
+      },
+      "allOf": [
+        {
+          "if": { "required": ["endpoint_host"] },
+          "else": {
+            "properties": {
+              "model_id": { "const": "deepseek-v4-flash-0731" },
+              "prompt_version": { "const": "advisory-system.v1" }
+            },
+            "description": "Advice saved before endpoint_host existed: only the built-in ModelStudio endpoint and its model were possible."
+          }
+        }
+      ]
     }
   }
 }

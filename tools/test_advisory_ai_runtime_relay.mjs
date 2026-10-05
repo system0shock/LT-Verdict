@@ -123,8 +123,10 @@ function request(port, body) {
   });
 }
 
-function result(root) {
-  return JSON.parse(fs.readFileSync(path.join(root, "relay-result.json"), "utf8"));
+function result(root, optional = false) {
+  const file = path.join(root, "relay-result.json");
+  if (optional && !fs.existsSync(file)) return null;
+  return JSON.parse(fs.readFileSync(file, "utf8"));
 }
 
 function assertResult(root, { received, forwarded, status, outcomes, reason }) {
@@ -435,6 +437,46 @@ test("top-level constants equal ai-advice-output.schema.json", async t => {
     assert.equal((await request(port, retryRequest(firstRequest, args))).status, 409);
     assert.equal(result(root).retry_refused_reason, "RETRY_NOT_TOP_LEVEL_SCHEMA");
   }, { ADVISORY_RELAY_PREFLIGHT_RESPONSES: JSON.stringify([provider(sse(args))]) });
+});
+
+test("relay-result reports the host the request was sent to (ADR 0023, D4)", async t => {
+  await t.test("preflight sends nothing and reports null", async () => {
+    await withRelay(async (root, port) => {
+      assert.equal((await request(port, firstRequest)).status, 200);
+      assert.equal(result(root).upstream_host, null);
+    });
+  });
+  await t.test("live reports host:port of the provider request and credential goes only there", async () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "ltv-ai-relay-host-"));
+    const stubPath = path.join(root, "https-stub.cjs");
+    const callsPath = path.join(root, "provider-calls.jsonl");
+    fs.writeFileSync(stubPath, [
+      "const https = require('node:https'); const fs = require('node:fs');",
+      "const { EventEmitter } = require('node:events'); const { Readable } = require('node:stream');",
+      "https.request = (options, callback) => {",
+      "  fs.appendFileSync(process.env.STUB_CALLS_PATH, JSON.stringify({ hostname: options.hostname, port: options.port, path: options.path, authorization: options.headers.authorization }) + '\\n');",
+      "  const request = new EventEmitter(); request.destroy = () => {};",
+      "  request.end = () => { const response = Readable.from([Buffer.from(process.env.STUB_SSE)]); response.statusCode = 200; response.headers = { 'content-type': 'text/event-stream' }; callback(response); };",
+      "  return request;",
+      "};",
+    ].join("\n"));
+    const port = await freePort();
+    const relay = launch(root, port, {
+      ADVISORY_RELAY_MODE: "live", OPENAI_API_KEY: "fake-test-key", STUB_CALLS_PATH: callsPath, STUB_SSE: sse(JSON.stringify(advice)),
+    }, ["--require", stubPath]);
+    try {
+      await waitReady(relay);
+      assert.equal(result(root, true), null);
+      assert.equal((await request(port, firstRequest)).status, 200);
+      const calls = fs.readFileSync(callsPath, "utf8").trim().split("\n").map(line => JSON.parse(line));
+      assert.deepEqual(calls, [{ hostname: "token-plan.ap-southeast-1.maas.aliyuncs.com", port: 443, path: "/compatible-mode/v1/chat/completions", authorization: "Bearer fake-test-key" }]);
+      assert.equal(result(root).upstream_host, "token-plan.ap-southeast-1.maas.aliyuncs.com:443");
+      assert.match(result(root).upstream_host, /^[a-z0-9.-]+:[1-9][0-9]{0,4}$/);
+    } finally {
+      await stop(relay);
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  });
 });
 
 test("wire observation is written per request ordinal", async () => {

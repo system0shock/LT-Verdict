@@ -31,6 +31,24 @@ try {
     if ([string]$advice.schema_version -ne "ai-advice-output.v1") { throw "Runtime output contract differs." }
 
     if ([int]$runtimeResult.provider_request_count -ne 1) { throw "Normal preflight provider count differs." }
+    $hostProperty = $runtimeResult.PSObject.Properties["endpoint_host"]
+    if ($null -eq $hostProperty -or $null -ne $hostProperty.Value) { throw "Preflight sends nothing, so endpoint_host must be present and null." }
+    # The launcher validates the host reported by the relay with the same pattern as the schema and Kotlin (ADR 0023, D4).
+    $launcherSource = Get-Content -LiteralPath $runner -Raw -Encoding UTF8
+    $patternMatch = [regex]::Match($launcherSource, "(?m)^\`$EndpointHostPattern = '(?<pattern>[^']+)'\s*$")
+    if (-not $patternMatch.Success) { throw "Launcher endpoint host pattern is missing." }
+    $adviceSchema = Get-Content -LiteralPath (Join-Path $repoRoot "docs/contracts/advice/v1/ai-advice.schema.json") -Raw -Encoding UTF8 | ConvertFrom-Json
+    $schemaPattern = [string]$adviceSchema.properties.provenance.properties.endpoint_host.pattern
+    if ($patternMatch.Groups["pattern"].Value -cne ($schemaPattern.Substring(0, $schemaPattern.Length - 1) + '\z')) {
+        throw "Launcher endpoint host pattern differs from ai-advice.schema.json."
+    }
+    foreach ($valid in @("token-plan.ap-southeast-1.maas.aliyuncs.com:443", "localhost:1", "[::1]:8443", "10.0.0.5:65535")) {
+        if ($valid -cnotmatch $patternMatch.Groups["pattern"].Value) { throw "Launcher rejects a valid endpoint host: $valid" }
+    }
+    foreach ($invalid in @("", "host", "host:0", "host:65536", "Host:443", "host:443/v1", "u@host:443", "https://host:443", "host:443`n", "host_name:443", "[.:]:443", "[:]:443")) {
+        if ($invalid -cmatch $patternMatch.Groups["pattern"].Value) { throw "Launcher accepts an invalid endpoint host: $invalid" }
+    }
+
     $prompt = Join-Path $repoRoot "docs/contracts/advice/v1/system-prompt.md"
     $expectedPromptHash = (Get-FileHash -LiteralPath $prompt -Algorithm SHA256).Hash.ToLowerInvariant()
     if ([string]$runtimeResult.prompt_sha256 -cne $expectedPromptHash) { throw "Normal preflight prompt hash differs." }

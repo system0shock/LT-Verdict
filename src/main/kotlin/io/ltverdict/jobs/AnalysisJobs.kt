@@ -227,9 +227,9 @@ internal class AnalysisJobs(
                                                 "SLA thresholds come from the policy or from the snapshot, not from both",
                                             )
                                         "DUPLICATE_RULE_ID" ->
-                                            Diagnostic("DUPLICATE_RULE_ID", "An expanded platform rule id equals a snapshot rule id")
+                                            Diagnostic("DUPLICATE_RULE_ID", "A rule id is duplicated (platform rule expansion or snapshot)")
                                         "RESOURCE_LIMIT_EXCEEDED" ->
-                                            Diagnostic("RESOURCE_LIMIT_EXCEEDED", "Expanded platform checks and snapshot rules exceed 256")
+                                            Diagnostic("RESOURCE_LIMIT_EXCEEDED", "A resource limit was exceeded (for example 256 checks)")
                                         "DIAGNOSTIC_RESOURCE_REQUIRED" ->
                                             Diagnostic("DIAGNOSTIC_RESOURCE_REQUIRED", "Diagnostic plan requires a resource snapshot")
                                         "DIAGNOSTIC_SNAPSHOT_MISMATCH" ->

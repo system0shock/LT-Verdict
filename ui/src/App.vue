@@ -151,6 +151,7 @@ const verdictSummary = computed(() => {
   return summarizeVerdict(result.value, { policySha256: analysis?.policy_sha256, policyId: analysis?.policy_id })
 })
 watch(result, (value) => { if (shellNew && value && !trialBusy.value) activeTab.value = 'overview' })
+watch([activeTab, selectedAnalysisId], () => { if (shellNew) window.scrollTo(0, 0) })
 const working = computed(() => job.value?.state === 'QUEUED' || job.value?.state === 'PROCESSING')
 const selectedReference = computed(() => result.value && selectedAnalysisId.value
   ? { run_id: result.value.run_id, analysis_id: selectedAnalysisId.value }

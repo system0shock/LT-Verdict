@@ -10,6 +10,9 @@ import kotlinx.serialization.json.jsonObject
 import java.math.BigDecimal
 import java.math.RoundingMode
 import java.security.MessageDigest
+import java.time.Instant
+import java.time.ZoneOffset
+import java.time.format.DateTimeFormatter
 import java.util.Base64
 
 internal fun renderHtmlReport(
@@ -59,7 +62,7 @@ internal fun renderHtmlReport(
         )}</dd><dt>Coverage</dt><dd>${result.objectValue(
             "analysis_coverage",
             "status",
-        )}</dd></dl>${verdictBlock(result, evidence)}${rulesSection(
+        )}</dd></dl>${verdictBlock(result, evidence)}${diagnosticsBlock(result, evidence)}${rulesSection(
             evidence,
         )}${transactionsSection(result, evidence)}${limitationsBlock(
             result,
@@ -189,17 +192,119 @@ private fun verdictBlock(
     }
     business.filter { it.text("status") == "NO_VERDICT" }.forEach { item -> item.text("reason_code")?.let { reasons += it } }
     resource.filter { it.text("status") == "NO_VERDICT" }.forEach { item -> item.text("reason")?.let { reasons += it } }
-    val reasonList =
-        if (reasons.isEmpty()) {
-            "<p>Причины в результате не указаны.</p>"
-        } else {
-            "<ul>${reasons.joinToString("") { "<li><code>${escape(it)}</code>: ${escape(reasonWords(it))}</li>" }}</ul>"
+    val stages = if (capacity) capacityStages(result) else emptyList()
+    if (capacity && verdict == "NO_VERDICT") {
+        result.obj("capacity_summary")?.stringList("reasons")?.let { reasons += it }
+        stages.forEach { reasons += it.stringList("reasons") }
+    }
+    val failures =
+        when {
+            capacity && verdict == "FAIL" -> capacityFailureItems(stages)
+            verdict == "FAIL" -> ruleFailureItems(result, evidence, business.filter { it.text("status") == "FAIL" }, resource)
+            else -> emptyList()
         }
-    val count = if (rules.isEmpty()) "Проверок правил в результате нет." else "Нарушено правил: $failed из ${rules.size}."
+    val items = failures + reasons.map { "<li><code>${escape(it)}</code>: ${escape(reasonWords(it))}</li>" }
+    val reasonList = if (items.isEmpty()) "<p>Причины в результате не указаны.</p>" else "<ul>${items.joinToString("")}</ul>"
+    val count =
+        when {
+            stages.isNotEmpty() -> capacityCount(stages)
+            rules.isEmpty() -> "Проверок правил в результате нет."
+            else -> "Нарушено правил: $failed из ${rules.size}."
+        }
+    val bound = if (capacity) capacityBound(result) else ""
     return "<section><h2>Вердикт и причины</h2><p><strong>${escape(headline)}</strong> <code>${escape(verdict ?: DASH)}</code></p>" +
-        "<p>$count</p><p>Валидность прогона: $validityWords (<code>${escape(validity ?: DASH)}</code>).</p>" +
+        "<p>$count</p>$bound<p>Валидность прогона: $validityWords (<code>${escape(validity ?: DASH)}</code>).</p>" +
         "<p>Покрытие данных: $coverageWords (<code>${escape(coverageStatus ?: DASH)}</code>).</p>" +
         "<h3>Причины</h3>$reasonList</section>"
+}
+
+private fun capacityStages(result: JsonObject): List<JsonObject> =
+    (result.obj("capacity_summary")?.get("stages") as? JsonArray).orEmpty().mapNotNull { it as? JsonObject }
+
+private fun capacityCount(stages: List<JsonObject>): String {
+    val failed = stages.count { it.text("verdict") == "FAIL" }
+    val confirmed = stages.count { it.text("verdict") == "PASS" }
+    return "Нарушено ступеней: $failed из ${stages.size} (подтверждено: $confirmed, не проверено: ${stages.size - failed - confirmed})."
+}
+
+private fun capacityBound(result: JsonObject): String {
+    val summary = result.obj("capacity_summary") ?: return ""
+    val range = "[${summary.text("lower_inclusive") ?: DASH}, ${summary.text("upper_exclusive") ?: DASH})"
+    return "<p>Граница ёмкости: ${escape("${summary.text("bound_type") ?: DASH} $range ${summary.text("unit") ?: ""}".trim())}.</p>"
+}
+
+private fun capacityFailureItems(stages: List<JsonObject>): List<String> {
+    val failed = stages.filter { it.text("verdict") == "FAIL" }.map { "<code>${escape(it.text("id") ?: DASH)}</code>" }
+    return if (failed.isEmpty()) emptyList() else listOf("<li>Ступени, где нарушены SLA-правила: ${failed.joinToString(", ")}.</li>")
+}
+
+private fun ruleFailureItems(
+    result: JsonObject,
+    evidence: List<JsonObject>,
+    business: List<JsonObject>,
+    resource: List<JsonObject>,
+): List<String> {
+    val metricsById = evidence.filter { it.string("type") == "metric_summary" }.associateBy { it.text("id") }
+    val violations = result.array("findings").filter { it.text("type") == "resource_threshold_violation" }
+    return business.map { "<li><code>${escape(it.text("rule_id") ?: DASH)}</code>: ${escape(businessFailureText(it, metricsById))}</li>" } +
+        resource
+            .filter { it.text("status") == "FAIL" }
+            .map { "<li><code>${escape(it.text("rule_id") ?: DASH)}</code>: ${escape(resourceFailureText(it, violations))}</li>" }
+}
+
+private fun businessFailureText(
+    check: JsonObject,
+    metricsById: Map<String?, JsonObject>,
+): String {
+    val metric = check.text("metric")
+    val scope = check.obj("scope") ?: check.text("metric_evidence_id")?.let { metricsById[it] }?.obj("scope")
+    val (threshold, observed) = valuePair(metric, exactValue(check["threshold"]), exactValue(check["observed"]), true)
+    val sign = if (check.text("operator") == "gte") "≥" else "≤"
+    val window = check.text("window_id")?.let { " · окно $it" } ?: ""
+    return "${scopeText(scope)} · ${metric?.let { METRIC_WORDS[it] ?: it } ?: DASH}$window: $observed при пороге $sign $threshold"
+}
+
+// The operator of a resource rule describes the violation (gt: the value is above the threshold), not the passing condition.
+private fun resourceFailureText(
+    check: JsonObject,
+    violations: List<JsonObject>,
+): String {
+    val own = violations.filter { it.text("rule_id") == check.text("rule_id") && it.text("window_id") == check.text("window_id") }
+    val first = own.firstOrNull()
+    val side = if (check.text("operator") == "gt") "выше" else "ниже"
+    val entity = first?.text("entity")?.let { " ($it)" } ?: ""
+    val head = "ряд ${check.text("series_id") ?: DASH}$entity · окно ${check.text("window_id") ?: DASH}"
+    val limit = "${check.text("threshold") ?: DASH} ${check.text("unit") ?: ""}".trim()
+    if (first == null) return "$head: значение $side порога $limit"
+    val low = first.text("observed_min") ?: DASH
+    val high = first.text("observed_max") ?: DASH
+    val range = if (low == high) low else "$low–$high"
+    val episodes = if (own.size > 1) "; интервалов нарушения: ${own.size}" else ""
+    return "$head: значение $side порога $limit: наблюдалось $range; ячеек подряд: ${first.text("cell_count") ?: DASH}; " +
+        "${utcText(first.number("from_epoch_ms"))} – ${utcText(first.number("to_epoch_ms"))}$episodes"
+}
+
+private val UTC_FORMAT: DateTimeFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss").withZone(ZoneOffset.UTC)
+
+private fun utcText(epochMillis: BigDecimal?): String =
+    epochMillis?.let { runCatching { "${UTC_FORMAT.format(Instant.ofEpochMilli(it.toLong()))} UTC" }.getOrNull() } ?: DASH
+
+private fun failedDiagnosticChecks(evidence: List<JsonObject>): List<JsonObject> =
+    evidence.filter { it.string("type") == "resource_policy_check" && it.text("effect") == "diagnostic" && it.text("status") == "FAIL" }
+
+private fun diagnosticsBlock(
+    result: JsonObject,
+    evidence: List<JsonObject>,
+): String {
+    val failed = failedDiagnosticChecks(evidence)
+    if (failed.isEmpty()) return ""
+    val violations = result.array("findings").filter { it.text("type") == "resource_threshold_violation" }
+    val items =
+        failed.joinToString("") {
+            "<li><code>${escape(it.text("rule_id") ?: DASH)}</code>: ${escape(resourceFailureText(it, violations))}</li>"
+        }
+    return "<section><h2>Диагностика ресурсов</h2><p>Сработали диагностические правила ресурсов. " +
+        "Это наблюдения: они не доказывают причину.</p><ul>$items</ul></section>"
 }
 
 private fun rulesSection(evidence: List<JsonObject>): String {
@@ -386,6 +491,9 @@ private fun limitationsBlock(
     }
     if (evidence.any { it.string("type") == "policy_check" && it.text("sample_mode") == "SMALL_SAMPLE" }) {
         items += "Часть правил проверена на малой выборке: результат рассчитан, но запросов меньше рекомендуемого минимума."
+    }
+    if (failedDiagnosticChecks(evidence).isNotEmpty()) {
+        items += "Сработала диагностика ресурсов (блок «Диагностика ресурсов»): она показывает наблюдения и не доказывает причину."
     }
     if (evidence.any { it.string("type") in DIAGNOSTIC_TYPES }) {
         items += "Диагностика (корреляции, аномалии, тренды) показывает наблюдения и не доказывает причину."

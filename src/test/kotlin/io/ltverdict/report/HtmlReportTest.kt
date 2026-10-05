@@ -346,6 +346,123 @@ class HtmlReportTest {
         assertFalse(html.contains("<base"))
     }
 
+    @Test
+    fun `a failed diagnostic resource rule appears in the Russian part and the limitations are not empty`() {
+        val html = render(diagnosticResult("PASS"), "a").decodeToString()
+        val russian = html.substringBefore("<section lang=\"en\"><h2>Overall and transaction metrics</h2>")
+        val diagnostics = russian.substringAfter("<h2>Диагностика ресурсов</h2>").substringBefore("</section>")
+
+        assertTrue(diagnostics.contains("db-saturated"))
+        assertTrue(diagnostics.contains("ряд db-busy (db-1)"))
+        assertTrue(diagnostics.contains("значение выше порога 0.9 ratio: наблюдалось 0.95–0.99"))
+        assertTrue(diagnostics.contains("2026-09-21 14:20:00 UTC – 2026-09-21 14:21:00 UTC"))
+        assertTrue(diagnostics.contains("интервалов нарушения: 2"))
+        assertFalse(diagnostics.contains("fine-rule"))
+        assertFalse(russian.contains("Ограничений, отмеченных в результате, нет"))
+        assertTrue(russian.substringAfter("<h2>Ограничения</h2>").contains("не доказывает причину"))
+    }
+
+    @Test
+    fun `a diagnostic rule that passed adds neither a diagnostics block nor a limitation`() {
+        val html = render(diagnosticResult("PASS", failedStatus = "PASS"), "a").decodeToString()
+
+        assertFalse(html.contains("Диагностика ресурсов"))
+        assertTrue(html.contains("Ограничений, отмеченных в результате, нет"))
+    }
+
+    @Test
+    fun `a failed verdict lists the violated rules as its reasons`() {
+        val html =
+            page(
+                "FAIL",
+                listOf(
+                    check("checkout-p95", "FAIL", threshold = "2000", observed = "2340"),
+                    check("fine", "PASS"),
+                ),
+            )
+        val reasons = html.substringAfter("<h3>Причины</h3>").substringBefore("</section>")
+
+        assertFalse(reasons.contains("Причины в результате не указаны"))
+        assertTrue(reasons.contains("<code>checkout-p95</code>"))
+        assertTrue(Regex("2.340.мс при пороге ≤ 2.000.мс").containsMatchIn(reasons))
+        assertFalse(reasons.contains("fine"))
+    }
+
+    @Test
+    fun `a failed resource sla rule is a reason of the failed verdict`() {
+        val html = render(diagnosticResult("FAIL", effect = "sla"), "a").decodeToString()
+        val reasons = html.substringAfter("<h3>Причины</h3>").substringBefore("</section>")
+
+        assertTrue(reasons.contains("<code>db-saturated</code>"))
+        assertTrue(reasons.contains("ряд db-busy (db-1)"))
+        assertFalse(reasons.contains("Причины в результате не указаны"))
+    }
+
+    @Test
+    fun `a passed capacity result counts stages and does not count failed rules under a confirmed headline`() {
+        val html = render(capacityResult("PASS"), "a").decodeToString()
+        val verdict = html.substringAfter("<h2>Вердикт и причины</h2>").substringBefore("<h3>Причины</h3>")
+
+        assertTrue(verdict.contains("Ёмкость подтверждена"))
+        assertTrue(verdict.contains("Нарушено ступеней: 1 из 3"))
+        assertTrue(verdict.contains("Граница ёмкости: BOUNDED [95.745, 103.745) rps"))
+        assertFalse(verdict.contains("Нарушено правил"))
+    }
+
+    @Test
+    fun `a failed capacity result names the failed stages as its reason`() {
+        val html = render(capacityResult("FAIL"), "a").decodeToString()
+        val reasons = html.substringAfter("<h3>Причины</h3>").substringBefore("</section>")
+
+        assertFalse(reasons.contains("Причины в результате не указаны"))
+        assertTrue(reasons.contains("s3"))
+    }
+
+    @Test
+    fun `an indeterminate capacity result explains its reason codes`() {
+        val html = render(capacityResult("NO_VERDICT", reasons = """["CAPACITY_STAGE_NOT_VERIFIED"]"""), "a").decodeToString()
+        val reasons = html.substringAfter("<h3>Причины</h3>").substringBefore("</section>")
+
+        assertTrue(reasons.contains("<code>CAPACITY_STAGE_NOT_VERIFIED</code>"))
+        assertFalse(reasons.contains("Причины в результате не указаны"))
+    }
+
+    private fun diagnosticResult(
+        verdict: String,
+        effect: String = "diagnostic",
+        failedStatus: String = "FAIL",
+    ): ByteArray {
+        val text =
+            """
+            {"analysis_coverage":{"reasons":[],"status":"COMPLETE"},"evidence":[
+            {"id":"c1","type":"resource_policy_check","effect":"$effect","rule_id":"db-saturated","series_id":"db-busy","unit":"ratio","operator":"gt","threshold":"0.9","window_id":"w","status":"$failedStatus","reason":null},
+            {"id":"c2","type":"resource_policy_check","effect":"diagnostic","rule_id":"fine-rule","series_id":"cpu","unit":"ratio","operator":"gt","threshold":"0.9","window_id":"w","status":"PASS","reason":null}],
+            "findings":[
+            {"id":"f1","type":"resource_threshold_violation","rule_id":"db-saturated","window_id":"w","series_id":"db-busy","entity":"db-1","unit":"ratio","from_epoch_ms":1790000400000,"to_epoch_ms":1790000460000,"cell_count":6,"observed_min":"0.95","observed_max":"0.99","evidence_id":"c1"},
+            {"id":"f2","type":"resource_threshold_violation","rule_id":"db-saturated","window_id":"w","series_id":"db-busy","entity":"db-1","unit":"ratio","from_epoch_ms":1790000700000,"to_epoch_ms":1790000760000,"cell_count":6,"observed_min":"0.95","observed_max":"0.99","evidence_id":"c1"}],
+            "policy_verdict":"$verdict","run_id":"run-1","run_validity":"VALID","schema_version":"analysis-result.v1"}
+            """.trimIndent()
+        return text.encodeToByteArray()
+    }
+
+    private fun capacityResult(
+        verdict: String,
+        reasons: String = "[]",
+    ): ByteArray {
+        val stages =
+            listOf("s1" to "PASS", "s2" to "PASS", "s3" to "FAIL").joinToString(",") { (id, stageVerdict) ->
+                """{"id":"$id","verdict":"$stageVerdict","reasons":[]}"""
+            }
+        val rules = (1..12).joinToString(",") { check("r$it", if (it == 1) "FAIL" else "PASS") }
+        val text =
+            """
+            {"analysis_mode":"capacity_step","analysis_coverage":{"reasons":[],"status":"COMPLETE"},"evidence":[$rules],"findings":[],
+            "capacity_summary":{"stages":[$stages],"bound_type":"BOUNDED","lower_inclusive":95.745,"upper_exclusive":103.745,"unit":"rps","reasons":$reasons},
+            "policy_verdict":"$verdict","run_id":"run-1","run_validity":"VALID","schema_version":"analysis-result.v1"}
+            """.trimIndent()
+        return text.encodeToByteArray()
+    }
+
     private fun q(value: String): String = JsonPrimitive(value).toString()
 
     private fun check(

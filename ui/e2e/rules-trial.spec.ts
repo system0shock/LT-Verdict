@@ -103,7 +103,7 @@ test('trial run posts the existing run id and the draft policy without re-upload
   const { calls } = await openRules(page, true)
   await expect(trialButton(page)).toBeEnabled()
   // Имя файла у разных прогонов может совпадать: рядом с ним показан хэш прогона.
-  await expect(page.locator('#rules-panel')).toContainText(RULES_LABELS.trialTarget(run.original_filename, run.sha256.slice(0, 8)))
+  await expect(page.locator('#rules-panel')).toContainText('Прогон: trial.jtl (bbbbbbbb).')
   await trialButton(page).click()
   await expect.poll(() => calls.jobs.length).toBe(1)
   expect(calls.inputUploads).toBe(0)

@@ -1,0 +1,89 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://lt-verdict.local/contracts/pod-view/v1/pod-view.schema.json",
+  "title": "LT Verdict pod view v1",
+  "description": "Diagnostic projection of pods for one arm (heat map and pod table). Not an input of the verdict. Runtime-only checks that JSON Schema cannot express: the file is at most 12 MiB; identifier limits are in UTF-8 bytes (128, pod 253); a value token in values is at most 12 bytes and has no exponent; integer fields are plain integer tokens; values has exactly column_count items; at most 64 services; pod names are unique; container names are unique inside a pod; row id and (pod, container, metric) are unique; rows reference listed pods and containers; coverage.pods_included and rows_included equal the array lengths, observed totals are not below included ones, and selection ALL means observed equals included.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "load_input_sha256", "resource_snapshot_sha256", "start_epoch_ms", "step_ms", "column_count", "coverage", "pods", "rows"],
+  "properties": {
+    "schema_version": { "const": "pod-view.v1" },
+    "load_input_sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "resource_snapshot_sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "arm": { "$ref": "#/$defs/identifier" },
+    "start_epoch_ms": { "type": "integer", "minimum": 0, "maximum": 253402300799999 },
+    "step_ms": { "type": "integer", "minimum": 1000, "multipleOf": 1000, "description": "Runtime also requires that the end of the grid, start_epoch_ms + step_ms * column_count, is at most 253402300799999." },
+    "column_count": { "type": "integer", "minimum": 1, "maximum": 240 },
+    "coverage": { "$ref": "#/$defs/coverage" },
+    "pods": { "type": "array", "maxItems": 256, "items": { "$ref": "#/$defs/pod" }, "description": "Runtime additionally enforces at most 64 distinct services." },
+    "rows": { "type": "array", "maxItems": 2560, "items": { "$ref": "#/$defs/row" }, "description": "At most 2560 rows and 240 columns keep the file within 614400 cells." }
+  },
+  "$defs": {
+    "identifier": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[^\\u0000-\\u001F\\u007F-\\u009F]+$", "description": "Runtime limit is 128 UTF-8 bytes." },
+    "podName": { "type": "string", "minLength": 1, "maxLength": 253, "pattern": "^[^\\u0000-\\u001F\\u007F-\\u009F]+$", "description": "Runtime limit is 253 UTF-8 bytes." },
+    "coverage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["pods_observed_total", "pods_included", "rows_observed_total", "rows_included", "selection"],
+      "properties": {
+        "pods_observed_total": { "type": "integer", "minimum": 0, "maximum": 1000000 },
+        "pods_included": { "type": "integer", "minimum": 0, "maximum": 256 },
+        "rows_observed_total": { "type": "integer", "minimum": 0, "maximum": 2147483647 },
+        "rows_included": { "type": "integer", "minimum": 0, "maximum": 2560 },
+        "selection": {
+          "oneOf": [
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["kind"],
+              "properties": { "kind": { "const": "ALL" } }
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["kind", "metric", "limit"],
+              "properties": {
+                "kind": { "const": "WORST_BY_METRIC" },
+                "metric": { "$ref": "#/$defs/identifier" },
+                "limit": { "type": "integer", "minimum": 1, "maximum": 256 }
+              }
+            }
+          ]
+        }
+      }
+    },
+    "pod": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["pod", "service", "containers"],
+      "properties": {
+        "pod": { "$ref": "#/$defs/podName" },
+        "service": { "$ref": "#/$defs/identifier" },
+        "containers": { "type": "array", "maxItems": 4, "items": { "$ref": "#/$defs/container" } }
+      }
+    },
+    "container": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "role"],
+      "properties": {
+        "name": { "$ref": "#/$defs/identifier" },
+        "role": { "enum": ["app", "sidecar", "init"] }
+      }
+    },
+    "row": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "pod", "container", "metric", "unit", "aggregation", "values"],
+      "properties": {
+        "id": { "$ref": "#/$defs/identifier" },
+        "pod": { "$ref": "#/$defs/podName" },
+        "container": { "oneOf": [{ "$ref": "#/$defs/identifier" }, { "type": "null" }], "description": "null is a pod-level row." },
+        "metric": { "$ref": "#/$defs/identifier" },
+        "unit": { "$ref": "#/$defs/identifier" },
+        "aggregation": { "enum": ["interval_mean", "interval_rate", "interval_max", "interval_min"] },
+        "values": { "type": "array", "minItems": 1, "maxItems": 240, "items": { "type": ["number", "null"] }, "description": "null is a gap, not zero." }
+      }
+    }
+  }
+}

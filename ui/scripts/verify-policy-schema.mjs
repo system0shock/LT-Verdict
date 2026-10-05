@@ -146,6 +146,24 @@ for (const [name, value, expected] of [
   }
 }
 
+const podViewSchema = await readJson('docs/contracts/pod-view/v1/pod-view.schema.json')
+const validatePodView = new Ajv2020({ strict: false }).compile(podViewSchema)
+const podViewExamples = 'docs/contracts/pod-view/v1/examples'
+for (const file of (await readdir(resolve(root, podViewExamples, 'valid'))).sort()) {
+  if (!validatePodView(await readJson(`${podViewExamples}/valid/${file}`))) {
+    throw new Error(`pod view schema valid/${file}: ${JSON.stringify(validatePodView.errors)}`)
+  }
+}
+// JSON Schema cannot express these rules (value length versus column_count, uniqueness, references between arrays,
+// coverage arithmetic, the 12-byte exponent-free value token); PodViewTest asserts that the Kotlin validator rejects them.
+const podViewRuntimeOnly = new Set(['values-too-short', 'number-exponent', 'duplicate-pod', 'duplicate-row', 'unknown-pod', 'unknown-container', 'coverage-pods-mismatch'])
+for (const file of (await readdir(resolve(root, podViewExamples, 'invalid'))).sort()) {
+  const expected = podViewRuntimeOnly.has(file.replace(/\.json$/, ''))
+  if (validatePodView(await readJson(`${podViewExamples}/invalid/${file}`)) !== expected) {
+    throw new Error(`pod view schema invalid/${file}: expected schema_valid=${expected}; ${JSON.stringify(validatePodView.errors)}`)
+  }
+}
+
 const seriesSchema = await readJson('docs/contracts/resources/v1/resource-series.schema.json')
 const validateSeries = new Ajv2020({ strict: false }).compile(seriesSchema)
 const seriesCatalog = await readJson('docs/contracts/resources/v1/examples/valid/resource-series-catalog.json')

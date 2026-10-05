@@ -1073,6 +1073,70 @@ class AnalysisServiceTest {
         }
         """.trimIndent()
 
+    @Test
+    fun `one base profile policy gives every arm its own independent result`() =
+        withService { store, service ->
+            val input = accept(store, trendCsv().encodeToByteArray(), "arms.jtl")
+            val baseText = Files.readString(Path.of(BASE_PROFILE_PATH))
+            val base = policy(baseText)
+
+            fun analyze(
+                cpuOrders: String,
+                services: List<String> = listOf("orders", "payments"),
+                using: PolicyValidation.Valid = base,
+            ) = service.analyze(
+                AnalysisRequest(
+                    input,
+                    using,
+                    resources = resources(baseProfileSnapshotJson(input.sha256, cpuOrders, services).encodeToByteArray()),
+                ),
+            )
+
+            val first = analyze("0.5")
+            val second = analyze("0.1")
+            val third = analyze("0.1", services = listOf("orders"))
+            val relaxed = analyze("0.5", using = policy(baseText.replace("\"threshold\": 0.4", "\"threshold\": 0.6")))
+
+            assertEquals(listOf("FAIL", "PASS", "NO_VERDICT", "PASS"), listOf(first, second, third, relaxed).map { result(it, "policy_verdict") })
+            assertTrue("RESOURCE_SERIES_NOT_FOUND" in coverageReasons(third))
+            assertEquals(3, listOf(first, second, third).map { it.analysisId }.toSet().size)
+            val policyHashes =
+                listOf(first, second, third).map {
+                    Json.parseToJsonElement(Files.readString(it.analysisDirectory.resolve("identity.json"))).jsonObject.getValue("policy_sha256")
+                }
+            assertEquals(1, policyHashes.toSet().size)
+        }
+
+    private fun baseProfileSnapshotJson(
+        loadHash: String,
+        cpuOrders: String,
+        services: List<String>,
+    ): String {
+        fun series(
+            id: String,
+            metric: String,
+            entity: String,
+            unit: String,
+            aggregation: String,
+            value: String,
+        ) = """{"id":"$id","metric":"$metric","unit":"$unit","entity":"$entity","role":"system","aggregation":"$aggregation",""" +
+            """"values":[${List(30) { value }.joinToString(",")}]}"""
+        val all =
+            services.flatMap { service ->
+                listOf(
+                    series("cpu-$service", "openshift_container_cpu_limit_ratio", service, "ratio", "interval_mean", if (service == "orders") cpuOrders else "0.1"),
+                    series("memory-$service", "openshift_container_memory_limit_ratio", service, "ratio", "interval_max", "0.3"),
+                    series("oom-$service", "openshift_oom", service, "events/s", "interval_rate", "0"),
+                    series("restarts-$service", "openshift_restarts", service, "events/s", "interval_rate", "0"),
+                    series("throttling-$service", "openshift_cpu_throttling", service, "ratio", "interval_mean", "0"),
+                    series("replicas-$service", "openshift_unavailable_replicas", service, "count", "interval_max", "0"),
+                )
+            }
+        return """{"schema_version":"resource-snapshot.v1","load_input_sha256":"$loadHash","start_epoch_ms":1767225600000,"step_ms":1000,""" +
+            """"point_count":30,"series":[${all.joinToString(",")}],"windows":[{"id":"steady","from_epoch_ms":1767225600000,"to_epoch_ms":1767225630000}],""" +
+            """"provenance":{"source_kind":"fixture","query_semantics":"interval","clock_alignment":"arm"}}"""
+    }
+
     private fun withService(
         config: EngineConfig = EngineConfig(),
         block: (RunBundleStore, AnalysisService) -> Unit,
@@ -1295,6 +1359,7 @@ class AnalysisServiceTest {
         const val RESOURCE_FILE = "resource-snapshot.json"
         const val CAPACITY_PLAN_FILE = "capacity-plan.json"
         const val CAPACITY_FILE = "capacity.json"
+        const val BASE_PROFILE_PATH = "docs/contracts/policy/v1/examples/valid/platform-base-profile.json"
 
         val COMPLETE_ARTIFACTS =
             setOf(

@@ -54,6 +54,10 @@
       "sha256": "fbd8005334cb1fd2e7216429a1b5e3df1e4c25a66baff31e61f2937c7bc883c4"
     },
     {
+      "path": "docs/contracts/policy/v1/examples/valid/platform-base-profile.json",
+      "sha256": "061814d99142e0dc3bc25d5713c9285260a358c9770c3b8f63609a400d21021e"
+    },
+    {
       "path": "docs/contracts/policy/v1/examples/valid/platform-gap-tolerance.json",
       "sha256": "ae116ffd596041fcf0829e92e874f02207bec959d62e8992192b538a311b3cfb"
     },
@@ -351,6 +355,11 @@
     },
     {
       "path": "docs/contracts/policy/v1/examples/valid/platform-gap-tolerance.json",
+      "schema_valid": true,
+      "runtime_valid": true
+    },
+    {
+      "path": "docs/contracts/policy/v1/examples/valid/platform-base-profile.json",
       "schema_valid": true,
       "runtime_valid": true
     },

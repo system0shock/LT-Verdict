@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import LoadCharts from './LoadCharts.vue'
+import { CORRELATION_LABELS } from './shell/labels'
+import { selectedCorrelations, unavailableFamilies } from './shell/overview'
 import type { AnalysisResult, Bucket, SourceSummaryEvidence, OpenSearchEvidence, PostgresContextEvidence, TrendCheckEvidence, TrendSummaryEvidence } from './types'
 
 const props = defineProps<{
@@ -63,6 +65,8 @@ const postgresContexts = computed(() => props.result.evidence
   .filter((item): item is PostgresContextEvidence => item.type === 'postgres_context'))
 const diagnosticSummaries = computed(() => props.result.evidence.filter((item) => item.type === 'diagnostic_summary'))
 const correlationPairs = computed(() => props.result.evidence.filter((item) => item.type === 'correlation_pair'))
+const selectedHypotheses = computed(() => selectedCorrelations(props.result))
+const unavailableHypotheses = computed(() => unavailableFamilies(props.result))
 const anomalyChecks = computed(() => props.result.evidence.filter((item) => item.type === 'anomaly_check'))
 const anomalyEpisodes = computed(() => props.result.findings.filter((item) => item.type === 'anomaly_episode'))
 const diagnosticDetails = computed(() => JSON.stringify([...diagnosticSummaries.value, ...correlationPairs.value, ...anomalyChecks.value, ...anomalyEpisodes.value], null, 2))
@@ -847,7 +851,66 @@ function updateRange(name: 'update:range-start' | 'update:range-end', event: Eve
       </p>
     </div>
     <div
-      v-if="correlationPairs.length"
+      v-if="shellTables && correlationPairs.length"
+      data-testid="correlation-hypotheses"
+    >
+      <h3>{{ CORRELATION_LABELS.title }}</h3>
+      <p data-testid="correlation-note">
+        {{ CORRELATION_LABELS.note }}
+      </p>
+      <div
+        v-if="selectedHypotheses.length"
+        class="table-wrap"
+        tabindex="0"
+        role="region"
+        :aria-label="CORRELATION_LABELS.regionAria"
+      >
+        <table>
+          <thead>
+            <tr>
+              <th
+                v-for="head in CORRELATION_LABELS.heads"
+                :key="head"
+                scope="col"
+              >
+                {{ head }}
+              </th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr
+              v-for="hypothesis in selectedHypotheses"
+              :key="hypothesis.key"
+            >
+              <td>{{ hypothesis.windowId }}</td>
+              <td>{{ hypothesis.series }}</td>
+              <td>{{ hypothesis.loadMetric }}</td>
+              <td>{{ hypothesis.lagSeconds }}</td>
+              <td>{{ hypothesis.rho }}</td>
+              <td>{{ hypothesis.adjustedP }}</td>
+              <td>{{ hypothesis.familySize }}</td>
+              <td>{{ hypothesis.note }}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <p v-else>
+        {{ CORRELATION_LABELS.empty }}
+      </p>
+      <ul
+        v-if="unavailableHypotheses.length"
+        data-testid="correlation-unavailable"
+      >
+        <li
+          v-for="family in unavailableHypotheses"
+          :key="family.windowId"
+        >
+          {{ CORRELATION_LABELS.unavailableLine(family.windowId, family.count, family.total, family.reasons) }}
+        </li>
+      </ul>
+    </div>
+    <div
+      v-if="correlationPairs.length && !shellTables"
       class="table-wrap"
       tabindex="0"
       role="region"

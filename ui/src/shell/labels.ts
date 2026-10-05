@@ -68,6 +68,46 @@ export function pluralRu(count: number, one: string, few: string, many: string):
 
 export type TrendDirection = 'increase' | 'decrease' | 'flat'
 
+// Срез U1 корреляций (ADR 0022, Д10): показ отобранных ассоциаций. Слово «причина» допустимо только внутри
+// фиксированной пометки `mark` (решение владельца 2026-10-05); слова «утечка», «из-за», «доказано» не используются.
+const SELECTION_REPRESENTATIONS: Record<string, string> = { levels: 'уровни', first_difference: 'первые разности' }
+
+export const CORRELATION_LABELS = {
+  mark: 'ассоциация, не причина; не откалибровано',
+  advice: 'Это повод для проверки. Метод не откалиброван на реальных данных вашего стенда.',
+  note: 'Ассоциация, не причина; не откалибровано. Это повод для проверки. Метод не откалиброван на реальных данных вашего стенда.',
+  title: 'Гипотезы для проверки',
+  regionAria: 'Гипотезы для проверки',
+  empty: 'Ассоциаций, прошедших отбор, нет. Это не значит, что связей нет: отбор строгий и не откалиброван.',
+  // Порядок столбцов: стадия, ряд ресурса, исход, лаг, ранговая корреляция, скорректированная вероятность, проверено гипотез, метод.
+  heads: ['Стадия', 'Ряд ресурса', 'Исход', 'Лаг, с', 'Ранговая корреляция', 'Скорректированная вероятность', 'Проверено гипотез', 'Метод'],
+  noValue: '—',
+  methodNote: (method: string, representation: string | undefined, stageCount: number | undefined): string => {
+    const version = /\.(v\d+)$/.exec(method)?.[1]
+    const parts = [`метод ${version ?? method}`]
+    if (representation) parts.push(`представление: ${SELECTION_REPRESENTATIONS[representation] ?? representation}`)
+    if (stageCount !== undefined) parts.push(`стадий: ${stageCount}`)
+    if (version === 'v1') parts.push('при дрейфе ряда ненадёжно')
+    return parts.join('; ')
+  },
+  unavailableLine: (windowId: string, count: number, total: number, reasons: readonly string[]): string =>
+    `Стадия «${windowId}»: не удалось проверить гипотез: ${count} из ${total}. Что помешало: ${reasons.join('; ')}.`,
+  // Что помешало проверке семьи (контракт correlation-headline-selection, ADR 0022); неизвестный код выводится как есть.
+  unavailable: {
+    GENUINE_PARTIAL_UNCALIBRATED: 'нагрузка менялась внутри стадии, такая поправка не откалибрована',
+    PAIR_NOT_EVALUABLE: 'для пары нельзя посчитать корреляцию',
+    FAMILY_SIZE_UNSUPPORTED: 'в семье больше 16 гипотез',
+    MULTI_WINDOW_FAMILY_UNSUPPORTED: 'гипотезы относятся к разным стадиям',
+    FAMILY_GRID_MISMATCH: 'сетки времени или пропуски у гипотез различаются',
+    FAMILY_OUTCOME_MISMATCH: 'исходы гипотез различаются',
+    OBSERVATION_COUNT_UNSUPPORTED: 'число ячеек стадии вне допустимого диапазона',
+    LAG_ANCHOR_COUNT_UNSUPPORTED: 'лаг вне допустимого диапазона или слишком мало точек для лага',
+    BOOTSTRAP_REPLICATE_NOT_EVALUABLE: 'перестановка дала вырожденный ряд',
+    COMPUTATION_LIMIT_EXCEEDED: 'превышен предел вычисления',
+    HOLM_RESOLUTION_INSUFFICIENT: 'гипотез слишком много: число перестановок не позволяет подтвердить находку',
+  } as Record<string, string>,
+}
+
 // Срез U1: вкладка «Обзор». Функции получают уже отформатированные строки и числа-счётчики.
 export const OVERVIEW_LABELS = {
   // Требует внимания
@@ -82,7 +122,7 @@ export const OVERVIEW_LABELS = {
   kindCoverage: 'Данные',
   kindDiagnostic: 'Диагностика',
   diagnosticBadge: 'диагностика, не причина',
-  diagnosticNote: 'Тренды, корреляции и срабатывания диагностических правил ресурсов показывают, что значения менялись вместе, в одну сторону или вышли за порог. Это диагностика: она не доказывает причину и не меняет вердикт SLA-правил.',
+  diagnosticNote: 'Тренды, корреляции и срабатывания диагностических правил ресурсов показывают, что значения менялись вместе, в одну сторону или вышли за порог. Это диагностика: она не объясняет, чем вызвано изменение, и не меняет вердикт SLA-правил.',
   noPolicyTitle: 'Политика не задана, пороги не проверялись',
   noPolicyDetail: 'Добавьте правила на вкладке «Новый анализ» и запустите анализ заново.',
   validityDegraded: 'Файл нагрузки разобран не полностью',
@@ -99,9 +139,9 @@ export const OVERVIEW_LABELS = {
     const suffix = unit ? ` ${unit}` : ''
     return `окно ${windowId}: ${word}; сдвиг медианы половин окна ${shift}${suffix}; медиана окна ${median}${suffix}`
   },
-  correlationTitle: (series: string, loadMetric: string) => `Корреляция: ${series} и ${loadMetric}`,
-  correlationDetail: (windowId: string, rho: string, paired: number, expected: number) =>
-    `окно ${windowId}: коэффициент ${rho}; пар ячеек ${paired} из ${expected}`,
+  correlationTitle: (windowId: string, series: string, loadMetric: string) => `Ассоциация в стадии «${windowId}»: ${series} и ${loadMetric}`,
+  correlationDetail: (lag: string, rho: string, adjustedP: string, hypotheses: number, note: string) =>
+    `лаг ${lag} с, ранговая корреляция ${rho}, скорректированная вероятность ${adjustedP}, проверено гипотез: ${hypotheses} (${note}). ${CORRELATION_LABELS.advice}`,
   openRules: 'Открыть таблицу правил',
   openResources: 'Открыть ресурсы',
   openCapacity: 'Открыть ёмкость',

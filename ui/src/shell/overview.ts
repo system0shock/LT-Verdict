@@ -1,5 +1,5 @@
-import type { AnalysisResult, Bucket, MetricSummaryEvidence, ResourcePolicyCheckEvidence, ResourceSummaryEvidence } from '../types'
-import { OVERVIEW_LABELS, type ShellTabKey, type TrendDirection } from './labels'
+import type { AnalysisResult, Bucket, CorrelationPairEvidence, MetricSummaryEvidence, ResourcePolicyCheckEvidence, ResourceSummaryEvidence } from '../types'
+import { CORRELATION_LABELS, OVERVIEW_LABELS, type ShellTabKey, type TrendDirection } from './labels'
 import { diagnosticFailedLinesOf, failedLinesOf, summarizeVerdict } from '../verdictSummary'
 
 export type TrackKey = 'rps' | 'errors' | 'p95'
@@ -17,6 +17,7 @@ export interface AttentionItem {
   title: string
   detail: string
   diagnostic: boolean
+  badge: string | null
   target: AttentionTarget | null
   openLabel: string | null
 }
@@ -68,7 +69,7 @@ export function formatNumber(value: number, maxFractionDigits = 2): string {
 }
 
 function item(key: string, kind: AttentionKind, title: string, detail: string, target: AttentionTarget | null, diagnostic = false): AttentionItem {
-  return { key, kind, title, detail, diagnostic, target, openLabel: target ? openLabels[target.targetId] : null }
+  return { key, kind, title, detail, diagnostic, badge: null, target, openLabel: target ? openLabels[target.targetId] : null }
 }
 
 function noVerdictTarget(result: AnalysisResult, code: string | null): AttentionTarget | null {
@@ -93,6 +94,87 @@ function decimal(value: string | null): string {
   if (value === null || value === '') return ''
   const number = Number(value)
   return Number.isFinite(number) ? formatNumber(number, 2) : value
+}
+
+export interface SelectedCorrelation {
+  key: string
+  windowId: string
+  series: string
+  loadMetric: string
+  lagSeconds: string
+  rho: string
+  adjustedP: string
+  familySize: number
+  note: string
+}
+
+export interface UnavailableFamily {
+  windowId: string
+  count: number
+  total: number
+  reasons: string[]
+}
+
+// Минус всегда обычный дефис: Intl в разных средах пишет то дефис, то U+2212.
+function signed(value: number, maxFractionDigits: number): string {
+  return formatNumber(value, maxFractionDigits).replace(/−/g, '-')
+}
+
+function coefficient(value: string | null): string {
+  const number = Number(value)
+  return value === null || value === '' ? CORRELATION_LABELS.noValue : Number.isFinite(number) ? signed(number, 2) : value
+}
+
+function probability(value: string | null): string {
+  if (value === null || value === '') return CORRELATION_LABELS.noValue
+  const number = Number(value)
+  if (!Number.isFinite(number)) return value
+  return number > 0 && number < 0.0001 ? '< 0,0001' : formatNumber(number, 4)
+}
+
+// Только пары, отобранные методом (selected=true), со строкой пары по (pair_id, window_id): ряд, исход, лаг и коэффициент
+// берутся из correlation_pair (evidence отбора их не содержит). Результат без evidence отбора не даёт ни одной записи.
+export function selectedCorrelations(result: AnalysisResult): SelectedCorrelation[] {
+  // Ключ-кортеж в JSON: идентификаторы пары и окна могут содержать любой разделитель.
+  const pairs = new Map<string, CorrelationPairEvidence>()
+  for (const evidence of result.evidence) {
+    if (evidence.type === 'correlation_pair') pairs.set(JSON.stringify([evidence.pair_id, evidence.window_id]), evidence)
+  }
+  const selected: SelectedCorrelation[] = []
+  for (const evidence of result.evidence) {
+    if (evidence.type !== 'correlation_headline_selection' || evidence.selected !== true) continue
+    const pair = pairs.get(JSON.stringify([evidence.pair_id, evidence.window_id]))
+    if (!pair) continue
+    selected.push({
+      key: pair.id,
+      windowId: evidence.window_id,
+      series: pair.resource_series_id,
+      loadMetric: pair.load_metric,
+      lagSeconds: pair.best_lag_ms === null ? CORRELATION_LABELS.noValue : signed(pair.best_lag_ms / 1000, 3),
+      rho: coefficient(pair.best_lag_rho),
+      adjustedP: probability(evidence.holm_adjusted_p_value),
+      familySize: evidence.family_hypotheses,
+      note: CORRELATION_LABELS.methodNote(evidence.method, evidence.representation, evidence.stage_count),
+    })
+  }
+  return selected
+}
+
+// Семьи, которые не удалось проверить: словами, отдельно от находок.
+export function unavailableFamilies(result: AnalysisResult): UnavailableFamily[] {
+  const families = new Map<string, UnavailableFamily>()
+  for (const evidence of result.evidence) {
+    if (evidence.type !== 'correlation_headline_selection' || evidence.status !== 'UNAVAILABLE') continue
+    const family = families.get(evidence.window_id) ?? { windowId: evidence.window_id, count: 0, total: 0, reasons: [] }
+    family.count += 1
+    family.total = Math.max(family.total, evidence.family_hypotheses)
+    for (const code of evidence.reasons) {
+      const text = CORRELATION_LABELS.unavailable[code] ?? code
+      if (!family.reasons.includes(text)) family.reasons.push(text)
+    }
+    families.set(evidence.window_id, family)
+  }
+  return [...families.values()]
 }
 
 export function attentionItems(result: AnalysisResult): AttentionItem[] {
@@ -151,17 +233,18 @@ export function attentionItems(result: AnalysisResult): AttentionItem[] {
       ))
     }
   }
-  for (const evidence of result.evidence) {
-    if (evidence.type === 'correlation_pair' && evidence.status === 'CANDIDATE' && evidence.raw_rho !== null) {
-      items.push(item(
-        `diagnostic:correlation:${evidence.id}`,
+  for (const correlation of selectedCorrelations(result)) {
+    items.push({
+      ...item(
+        `diagnostic:correlation:${correlation.key}`,
         'diagnostic',
-        OVERVIEW_LABELS.correlationTitle(evidence.resource_series_id, evidence.load_metric),
-        OVERVIEW_LABELS.correlationDetail(evidence.window_id, decimal(evidence.raw_rho), evidence.paired_cells, evidence.expected_cells),
+        OVERVIEW_LABELS.correlationTitle(correlation.windowId, correlation.series, correlation.loadMetric),
+        OVERVIEW_LABELS.correlationDetail(correlation.lagSeconds, correlation.rho, correlation.adjustedP, correlation.familySize, correlation.note),
         { tab: 'tables', targetId: 'diagnostic-results' },
         true,
-      ))
-    }
+      ),
+      badge: CORRELATION_LABELS.mark,
+    })
   }
   return items
 }

@@ -120,3 +120,64 @@ test('compares explicit windows and materiality while preserving unconfirmed and
   await page.getByLabel('Current window ID', { exact: true }).fill('another-window')
   await expect(page.getByTestId('window-comparison')).toHaveCount(0)
 })
+
+const selectionOf = (pairId: string, status: string, extra: Record<string, unknown> = {}) => ({
+  id: `selection-${pairId}`, type: 'correlation_headline_selection', pair_id: pairId, window_id: 'steady', method: 'mbb-lag-max-holm.v1', rng: 'java-random-sha256-seed.v1',
+  status, family_hypotheses: 3, bootstrap_replicates: 999, block_lengths_cells: [10, 20], alpha: '0.05', p_value_b10: '0.001', p_value_b20: '0.002',
+  max_p_value: '0.002', holm_adjusted_p_value: '0.006', selected: status === 'SELECTED', reasons: [], ...extra,
+})
+const pairOf = (pairId: string, series: string, extra: Record<string, unknown> = {}) => ({
+  ...result.evidence[1], id: `pair-${pairId}`, pair_id: pairId, resource_series_id: series, entity: 'server-1', status: 'CANDIDATE', raw_rho: '0.9', best_lag_ms: 5000, best_lag_rho: '0.9', reasons: [], ...extra,
+})
+const withSelection = {
+  ...result,
+  evidence: [
+    result.evidence[0],
+    pairOf('cpu-latency', 'cpu'), pairOf('memory-latency', 'memory'), pairOf('disk-latency', 'disk'),
+    selectionOf('cpu-latency', 'SELECTED'),
+    selectionOf('memory-latency', 'NOT_SELECTED', { selected: false, reasons: ['HOLM_NOT_REJECTED'], holm_adjusted_p_value: '0.4' }),
+    selectionOf('disk-latency', 'UNAVAILABLE', { selected: false, reasons: ['GENUINE_PARTIAL_UNCALIBRATED'], holm_adjusted_p_value: null }),
+  ],
+}
+
+test('the new shell lists only the selected correlation as a hypothesis to check and says what could not be checked', async ({ page }, testInfo) => {
+  await page.route('**/result', (route) => route.fulfill({ json: withSelection }))
+  await page.goto('/?shell=new')
+  await page.getByRole('button', { name: 'diagnostic.jtl' }).click()
+  await page.locator(`button[title="${reference.analysis_id}"]`).click()
+  await page.locator('#shell-tab-tables').click()
+  const diagnostics = page.locator('#diagnostic-results')
+  const table = diagnostics.getByRole('region', { name: 'Гипотезы для проверки' })
+
+  await expect(diagnostics.getByRole('heading', { name: 'Гипотезы для проверки' })).toBeVisible()
+  await expect(table.locator('tbody tr')).toHaveCount(1)
+  await expect(table.locator('tbody tr td')).toHaveText(['steady', 'cpu', 'response_time_p95_ms', '5', '0,9', '0,006', '3', 'метод v1; при дрейфе ряда ненадёжно'])
+  await expect(diagnostics.getByTestId('correlation-hypotheses').getByText('memory')).toHaveCount(0)
+  await expect(diagnostics.getByTestId('correlation-unavailable')).toContainText('Стадия «steady»: не удалось проверить гипотез: 1 из 3')
+  await expect(diagnostics.getByTestId('correlation-unavailable')).toContainText('нагрузка менялась внутри стадии')
+  const note = diagnostics.getByTestId('correlation-note')
+  await expect(note).toContainText('ассоциация, не причина; не откалибровано', { ignoreCase: true })
+  await expect(diagnostics.getByRole('region', { name: 'Observed associations' })).toHaveCount(0)
+  const text = (await diagnostics.getByTestId('correlation-hypotheses').innerText()).toLowerCase()
+  expect(text.replaceAll('ассоциация, не причина; не откалибровано', '')).not.toMatch(/причин|утечк|из-за|доказан/)
+  expect((await new AxeBuilder({ page }).include('#diagnostic-results').analyze()).violations).toEqual([])
+  await page.setViewportSize({ width: 375, height: 900 })
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(375)
+  await diagnostics.screenshot({ path: testInfo.outputPath('correlation-hypotheses-mobile.png') })
+})
+
+test('the new shell says so when no pair was selected, and the old interface still shows every pair in English', async ({ page }) => {
+  await page.route('**/result', (route) => route.fulfill({ json: { ...withSelection, evidence: withSelection.evidence.filter((item) => item.id !== 'selection-cpu-latency') } }))
+  await page.goto('/?shell=new')
+  await page.getByRole('button', { name: 'diagnostic.jtl' }).click()
+  await page.locator(`button[title="${reference.analysis_id}"]`).click()
+  await page.locator('#shell-tab-tables').click()
+
+  await expect(page.getByTestId('correlation-hypotheses')).toContainText('Ассоциаций, прошедших отбор, нет')
+  await expect(page.getByTestId('correlation-hypotheses').getByRole('table')).toHaveCount(0)
+  await page.goto('/?shell=old')
+  await page.getByRole('button', { name: 'diagnostic.jtl' }).click()
+  await page.locator(`button[title="${reference.analysis_id}"]`).click()
+  await expect(page.locator('#diagnostic-results').getByRole('row', { name: /memory-latency/ })).toBeVisible()
+  await expect(page.getByTestId('correlation-hypotheses')).toHaveCount(0)
+})

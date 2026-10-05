@@ -83,7 +83,7 @@ const kindLabels: Record<AttentionKind, string> = {
             <span
               v-if="attention.diagnostic"
               class="overview-badge"
-            >{{ OVERVIEW_LABELS.diagnosticBadge }}</span>
+            >{{ attention.badge ?? OVERVIEW_LABELS.diagnosticBadge }}</span>
             <strong>{{ attention.title }}</strong>
             <span
               v-if="attention.detail"

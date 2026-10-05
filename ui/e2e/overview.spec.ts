@@ -1,6 +1,6 @@
 import AxeBuilder from '@axe-core/playwright'
 import { expect, test, type Page } from '@playwright/test'
-import { OVERVIEW_LABELS, SHELL_LABELS } from '../src/shell/labels'
+import { CORRELATION_LABELS, OVERVIEW_LABELS, SHELL_LABELS } from '../src/shell/labels'
 
 const reference = { run_id: 'overview-run', analysis_id: 'a'.repeat(64) }
 const run = { ...reference, source_type: 'jmeter', sha256: 'b'.repeat(64), size_bytes: 100, original_filename: 'overview.jtl' }
@@ -21,6 +21,12 @@ const base = {
   schema_version: 'analysis-result.v1', run_id: reference.run_id, analysis_mode: 'standard', run_validity: 'VALID',
   analysis_coverage: { status: 'COMPLETE', reasons: [] }, findings: [] as unknown[],
 }
+const selection = (id: string, status: string, extra: Record<string, unknown> = {}) => ({
+  id: `sel-${id}`, type: 'correlation_headline_selection', pair_id: id, window_id: 'Soak', method: 'mbb-lag-max-holm.v1', rng: 'java-random-sha256-seed.v1',
+  status, family_hypotheses: 2, bootstrap_replicates: 999, block_lengths_cells: [10, 20], alpha: '0.05', p_value_b10: '0.001', p_value_b20: '0.002',
+  max_p_value: '0.002', holm_adjusted_p_value: '0.004', selected: status === 'SELECTED', reasons: [], ...extra,
+})
+const forbiddenWords = /причин|утечк|из-за|доказан/i
 const failing = {
   ...base,
   policy_verdict: 'FAIL',
@@ -40,9 +46,16 @@ const failing = {
     },
     {
       id: 'cp-1', type: 'correlation_pair', pair_id: 'p1', window_id: 'Soak', resource_series_id: 'mem-b', load_metric: 'throughput_rps', entity: 'pod-7', resource_unit: '%', load_unit: 'rps',
-      from_epoch_ms: 0, to_epoch_ms: 1, expected_cells: 10, paired_cells: 9, lag_used_cells: 0, raw_rho: '0.83', partial_rho: null, best_lag_ms: null, best_lag_rho: null, lag_profile: [],
+      from_epoch_ms: 0, to_epoch_ms: 1, expected_cells: 10, paired_cells: 9, lag_used_cells: 0, raw_rho: '0.83', partial_rho: null, best_lag_ms: -5000, best_lag_rho: '0.83', lag_profile: [],
       status: 'CANDIDATE', controls_requested: [], controls_used: [], controls_dropped: [], sensitivity_without_achieved_rps: null, uncertainty: 'NOT_ESTIMATED', reasons: [],
     },
+    {
+      id: 'cp-2', type: 'correlation_pair', pair_id: 'p2', window_id: 'Soak', resource_series_id: 'cpu-rejected', load_metric: 'response_time_p95_ms', entity: 'pod-7', resource_unit: '%', load_unit: 'ms',
+      from_epoch_ms: 0, to_epoch_ms: 1, expected_cells: 10, paired_cells: 9, lag_used_cells: 0, raw_rho: '0.41', partial_rho: null, best_lag_ms: 0, best_lag_rho: '0.41', lag_profile: [],
+      status: 'CANDIDATE', controls_requested: [], controls_used: [], controls_dropped: [], sensitivity_without_achieved_rps: null, uncertainty: 'NOT_ESTIMATED', reasons: [],
+    },
+    selection('p1', 'SELECTED'),
+    selection('p2', 'NOT_SELECTED', { selected: false, reasons: ['HOLM_NOT_REJECTED'], holm_adjusted_p_value: '0.4' }),
   ],
 }
 const noPolicy = { ...base, policy_verdict: 'NO_POLICY', evidence: [overall] }
@@ -125,11 +138,37 @@ test('the overview lists attention items in a fixed order and marks diagnostics'
   await expect(items(page).nth(1)).toContainText('mem-limit')
   await expect(items(page).nth(2)).toContainText(OVERVIEW_LABELS.trendTitle('cpu-a'))
   await expect(items(page).nth(2)).toContainText(OVERVIEW_LABELS.diagnosticBadge)
-  await expect(items(page).nth(3)).toContainText(OVERVIEW_LABELS.correlationTitle('mem-b', 'throughput_rps'))
-  await expect(items(page).nth(3)).toContainText(OVERVIEW_LABELS.diagnosticBadge)
+  await expect(items(page).nth(3)).toContainText(OVERVIEW_LABELS.correlationTitle('Soak', 'mem-b', 'throughput_rps'))
+  await expect(items(page).nth(3)).toContainText(CORRELATION_LABELS.mark)
+  await expect(items(page).nth(3)).not.toContainText(OVERVIEW_LABELS.diagnosticBadge)
   await expect(items(page).nth(0)).not.toContainText(OVERVIEW_LABELS.diagnosticBadge)
   await expect(page.getByTestId('diagnostic-note')).toHaveText(OVERVIEW_LABELS.diagnosticNote)
   await expect(page.locator('#verdict')).toHaveCount(1)
+})
+
+test('only the selected correlation pair is listed, with the fixed mark and no forbidden word', async ({ page }) => {
+  await openOverview(page)
+
+  const correlation = items(page).nth(3)
+  await expect(page.getByText('cpu-rejected')).toHaveCount(0)
+  await expect(correlation).toContainText('лаг -5 с')
+  await expect(correlation).toContainText('ранговая корреляция 0,83')
+  await expect(correlation).toContainText('скорректированная вероятность 0,004')
+  await expect(correlation).toContainText('проверено гипотез: 2')
+  await expect(correlation).toContainText('при дрейфе ряда ненадёжно')
+  const text = (await correlation.innerText()).toLowerCase()
+  expect(text).toContain(CORRELATION_LABELS.mark)
+  expect(text.replaceAll(CORRELATION_LABELS.mark, '')).not.toMatch(forbiddenWords)
+  expect(await correlation.locator('.overview-badge').innerText()).toBe(CORRELATION_LABELS.mark)
+  expect(await page.getByTestId('diagnostic-note').innerText()).not.toMatch(forbiddenWords)
+})
+
+test('a result with only unselected candidate pairs lists no correlation', async ({ page }) => {
+  const rejectedOnly = { ...failing, evidence: failing.evidence.filter((evidence) => (evidence as { id: string }).id !== 'sel-p1') }
+  await openOverview(page, rejectedOnly)
+
+  await expect(items(page)).toHaveCount(3)
+  await expect(page.getByText(CORRELATION_LABELS.mark)).toHaveCount(0)
 })
 
 test('a result without policy never invents a violation', async ({ page }) => {
@@ -184,6 +223,7 @@ test('each item opens the matching table on the Tables tab and moves focus into 
   await tab('overview').click()
   await items(page).nth(3).getByTestId('attention-open').click()
   await expect(page.locator('#diagnostic-results')).toBeInViewport()
+  await expect(page.locator('#diagnostic-results [role="region"]')).toBeFocused()
 })
 
 test('the policy hint of a result without policy opens the setup form', async ({ page }) => {

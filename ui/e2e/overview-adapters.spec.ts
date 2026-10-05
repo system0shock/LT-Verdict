@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test'
 import type { AnalysisResult, Bucket, BucketPage } from '../src/types'
-import { OVERVIEW_LABELS } from '../src/shell/labels'
+import { CORRELATION_LABELS, OVERVIEW_LABELS } from '../src/shell/labels'
 import { failedLinesOf, summarizeVerdict } from '../src/verdictSummary'
 import { MAX_LOAD_PAGES, fetchRunLoad } from '../src/shell/deep'
 import {
@@ -11,7 +11,9 @@ import {
   keyMetrics,
   loadSeries,
   nearestIndex,
+  selectedCorrelations,
   trackPoints,
+  unavailableFamilies,
 } from '../src/shell/overview'
 
 // Чистые адаптеры вкладки «Обзор»: результат анализа на входе, готовые данные на выходе.
@@ -65,6 +67,12 @@ const correlation = (id: string, status: string, rawRho: string | null = '0.83')
   partial_rho: null, best_lag_ms: null, best_lag_rho: null, lag_profile: [], status, controls_requested: [], controls_used: [], controls_dropped: [],
   sensitivity_without_achieved_rps: null, uncertainty: 'NOT_ESTIMATED', reasons: [],
 })
+const selection = (id: string, status: string, extra: Record<string, unknown> = {}) => ({
+  id: `sel-${id}`, type: 'correlation_headline_selection', pair_id: id, window_id: 'Soak', method: 'mbb-lag-max-holm.v1', rng: 'java-random-sha256-seed.v1',
+  status, family_hypotheses: 3, bootstrap_replicates: 999, block_lengths_cells: [10, 20], alpha: '0.05', p_value_b10: '0.001', p_value_b20: '0.002',
+  max_p_value: '0.002', holm_adjusted_p_value: '0.006', selected: status === 'SELECTED', reasons: [], ...extra,
+})
+const lagged = (id: string, status: string, bestLagMs: number | null, bestRho: string | null) => ({ ...correlation(id, status), best_lag_ms: bestLagMs, best_lag_rho: bestRho })
 const kinds = (result: AnalysisResult) => attentionItems(result).map((item) => item.kind)
 
 test.describe('attention items', () => {
@@ -175,7 +183,7 @@ test.describe('attention items', () => {
     const baseline = build({ policy_verdict: 'FAIL', evidence })
     const result = build({
       policy_verdict: 'FAIL',
-      evidence: [...evidence, correlation('p1', 'CANDIDATE'), trend('a', 'TREND_OBSERVED'), resourceCheck('mem-diag', 'FAIL', 'diagnostic')],
+      evidence: [...evidence, correlation('p1', 'CANDIDATE'), selection('p1', 'SELECTED'), trend('a', 'TREND_OBSERVED'), resourceCheck('mem-diag', 'FAIL', 'diagnostic')],
       findings: [violation('mem-diag')],
     })
 
@@ -261,13 +269,14 @@ test.describe('attention items', () => {
     expect(series[0].target).toEqual({ tab: 'tables', targetId: 'resource-results' })
   })
 
-  test('only observed trends and candidate correlations are diagnostics, marked as such and counted once', () => {
+  test('only observed trends and selected correlations are diagnostics, marked as such and counted once', () => {
     const items = attentionItems(build({
       policy_verdict: 'PASS',
       evidence: [
         overall, checkout, p95Rule('ok', 'PASS', 100),
         trend('a', 'TREND_OBSERVED'), trend('b', 'NO_MATERIAL_TREND', { observed_direction: 'flat' }), trend('c', 'INSUFFICIENT_CELLS', { observed_direction: null }),
-        correlation('p1', 'CANDIDATE'), correlation('p2', 'DESCRIPTIVE'), correlation('p3', 'CANDIDATE', null),
+        lagged('p1', 'CANDIDATE', -5000, '0.83'), correlation('p2', 'DESCRIPTIVE'), correlation('p3', 'CANDIDATE', null),
+        selection('p1', 'SELECTED'), selection('p2', 'UNAVAILABLE', { selected: false, reasons: ['PAIR_NOT_EVALUABLE'] }),
       ],
       findings: [{ type: 'resource_trend', check_id: 'a', series_id: 'cpu-a', evidence_id: 't-a' }],
     }))
@@ -277,9 +286,95 @@ test.describe('attention items', () => {
     expect(items[0].title).toBe(OVERVIEW_LABELS.trendTitle('cpu-a'))
     expect(items[0].detail).toBe(OVERVIEW_LABELS.trendDetail('Soak', 'increase', '5,4', '69,3', '%'))
     expect(items[0].target).toEqual({ tab: 'tables', targetId: 'trend-results' })
-    expect(items[1].title).toBe(OVERVIEW_LABELS.correlationTitle('mem-b', 'throughput_rps'))
-    expect(items[1].detail).toBe(OVERVIEW_LABELS.correlationDetail('Soak', '0,83', 9, 10))
+    expect(items[0].badge).toBeNull()
+    expect(items[1].title).toBe(OVERVIEW_LABELS.correlationTitle('Soak', 'mem-b', 'throughput_rps'))
+    expect(items[1].detail).toBe(OVERVIEW_LABELS.correlationDetail('-5', '0,83', '0,006', 3, CORRELATION_LABELS.methodNote('mbb-lag-max-holm.v1', undefined, undefined)))
+    expect(items[1].badge).toBe(CORRELATION_LABELS.mark)
     expect(items[1].target).toEqual({ tab: 'tables', targetId: 'diagnostic-results' })
+  })
+
+  test('an unselected, unavailable or selection-less candidate pair never reaches the overview', () => {
+    const items = attentionItems(build({
+      policy_verdict: 'PASS',
+      evidence: [
+        overall, checkout, p95Rule('ok', 'PASS', 100),
+        correlation('chosen', 'CANDIDATE'), selection('chosen', 'SELECTED'),
+        correlation('rejected', 'CANDIDATE'), selection('rejected', 'NOT_SELECTED', { selected: false, reasons: ['HOLM_NOT_REJECTED'] }),
+        correlation('failed', 'CANDIDATE'), selection('failed', 'UNAVAILABLE', { selected: false, reasons: ['GENUINE_PARTIAL_UNCALIBRATED'] }),
+        correlation('old', 'CANDIDATE'),
+        correlation('orphan', 'CANDIDATE'), { ...selection('orphan', 'SELECTED'), pair_id: 'no-such-pair' },
+      ],
+    }))
+
+    expect(items.map((item) => item.key)).toEqual(['diagnostic:correlation:cp-chosen'])
+  })
+
+  test('a pair is joined to its selection by the exact pair and window, even when identifiers contain a separator', () => {
+    const pair = (id: string, window: string, series: string) => ({ ...lagged(id, 'CANDIDATE', 1000, '0.5'), id: `cp-${series}`, window_id: window, resource_series_id: series })
+    const result = build({
+      evidence: [
+        pair('a|b', 'c', 'first'), pair('a', 'b|c', 'second'),
+        { ...selection('a', 'SELECTED'), window_id: 'b|c' }, { ...selection('a|b', 'SELECTED'), window_id: 'c' },
+      ],
+    })
+
+    expect(selectedCorrelations(result).map((item) => item.series)).toEqual(['second', 'first'])
+  })
+
+  test('a selected pair without a lag or lag-max coefficient shows a dash instead of an invented value', () => {
+    const [item] = selectedCorrelations(build({ evidence: [correlation('p1', 'CANDIDATE'), selection('p1', 'SELECTED')] }))
+
+    expect([item.lagSeconds, item.rho]).toEqual([CORRELATION_LABELS.noValue, CORRELATION_LABELS.noValue])
+  })
+
+  test('selected correlations carry the method notes and the fixed mark, and no forbidden word', () => {
+    const result = build({
+      evidence: [
+        lagged('p1', 'CANDIDATE', 10000, '-0.4'), selection('p1', 'SELECTED', { holm_adjusted_p_value: '0.00004', family_hypotheses: 16 }),
+        lagged('p2', 'CANDIDATE', 0, '0.7'), selection('p2', 'SELECTED', {
+          method: 'mbb-lag-max-holm.v2', representation: 'first_difference', stage_count: 2, family_hypotheses: 8, holm_adjusted_p_value: '0.0123456',
+        }),
+      ],
+    })
+    const [first, second] = selectedCorrelations(result)
+
+    expect(CORRELATION_LABELS.mark).toBe('ассоциация, не причина; не откалибровано')
+    expect([first.lagSeconds, first.rho, first.adjustedP, first.familySize]).toEqual(['10', '-0,4', '< 0,0001', 16])
+    expect([second.lagSeconds, second.rho, second.adjustedP, second.familySize]).toEqual(['0', '0,7', '0,0123', 8])
+    expect(first.note).toBe(CORRELATION_LABELS.methodNote('mbb-lag-max-holm.v1', undefined, undefined))
+    expect(first.note).toContain('при дрейфе ряда ненадёжно')
+    expect(second.note).toBe(CORRELATION_LABELS.methodNote('mbb-lag-max-holm.v2', 'first_difference', 2))
+    expect(second.note).not.toContain('при дрейфе')
+    expect(second.note).toContain('первые разности')
+    const forbidden = /причин|утечк|из-за|доказан/i
+    const correlationItems = attentionItems(result).filter((item) => item.key.startsWith('diagnostic:correlation:'))
+    expect(correlationItems).toHaveLength(2)
+    for (const item of correlationItems) {
+      const text = [item.title, item.detail, item.badge].join(' | ')
+      expect(text.replaceAll(CORRELATION_LABELS.mark, '')).not.toMatch(forbidden)
+      expect(text).toContain(CORRELATION_LABELS.mark)
+    }
+    expect(CORRELATION_LABELS.note.toLowerCase()).toContain(CORRELATION_LABELS.mark)
+    expect(CORRELATION_LABELS.note.toLowerCase().replaceAll(CORRELATION_LABELS.mark, '')).not.toMatch(forbidden)
+  })
+
+  test('unavailable families are listed in words with their reasons, unknown codes as is', () => {
+    const result = build({
+      evidence: [
+        correlation('a', 'CANDIDATE'), correlation('b', 'CANDIDATE'), correlation('c', 'CANDIDATE'),
+        selection('a', 'UNAVAILABLE', { selected: false, reasons: ['GENUINE_PARTIAL_UNCALIBRATED'], family_hypotheses: 3 }),
+        selection('b', 'UNAVAILABLE', { selected: false, reasons: ['HOLM_RESOLUTION_INSUFFICIENT', 'NEW_CODE'], family_hypotheses: 3 }),
+        selection('c', 'NOT_SELECTED', { selected: false, reasons: ['HOLM_NOT_REJECTED'], family_hypotheses: 3 }),
+      ],
+    })
+
+    expect(unavailableFamilies(result)).toEqual([{
+      windowId: 'Soak', count: 2, total: 3,
+      reasons: [CORRELATION_LABELS.unavailable.GENUINE_PARTIAL_UNCALIBRATED, CORRELATION_LABELS.unavailable.HOLM_RESOLUTION_INSUFFICIENT, 'NEW_CODE'],
+    }])
+    expect(CORRELATION_LABELS.unavailable.GENUINE_PARTIAL_UNCALIBRATED).toContain('нагрузка менялась внутри стадии')
+    for (const reason of Object.values(CORRELATION_LABELS.unavailable)) expect(reason).not.toMatch(/причин|утечк|из-за|доказан/i)
+    expect(unavailableFamilies(build({ evidence: [] }))).toEqual([])
   })
 
   test('the order is violations, causes, policy, coverage, diagnostics', () => {

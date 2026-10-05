@@ -81,7 +81,12 @@ internal fun validatePlatformBinding(
     if (policy.platformRules.isEmpty()) return emptyList()
     val errors = mutableListOf<PolicyValidationError>()
     if (snapshot.rules.any { it.effect == ResourceRuleEffect.SLA }) {
-        errors += PolicyValidationError("PLATFORM_RULES_CONFLICT", "/platform_rules", "SLA thresholds come from the policy or from the snapshot, not from both")
+        errors +=
+            PolicyValidationError(
+                "PLATFORM_RULES_CONFLICT",
+                "/platform_rules",
+                "SLA thresholds come from the policy or from the snapshot, not from both",
+            )
     }
     val expanded = expandPlatformRules(policy, snapshot).rules
     val taken = snapshot.rules.map(ResourceRuleV1::id).toSet()
@@ -89,7 +94,12 @@ internal fun validatePlatformBinding(
         errors += PolicyValidationError("DUPLICATE_RULE_ID", "/platform_rules", "an expanded platform rule id equals a snapshot rule id")
     }
     if (expanded.size + snapshot.rules.size > MAX_RESOURCE_RULES) {
-        errors += PolicyValidationError("RESOURCE_LIMIT_EXCEEDED", "/platform_rules", "expanded platform checks and snapshot rules exceed $MAX_RESOURCE_RULES")
+        errors +=
+            PolicyValidationError(
+                "RESOURCE_LIMIT_EXCEEDED",
+                "/platform_rules",
+                "expanded platform checks and snapshot rules exceed $MAX_RESOURCE_RULES",
+            )
     }
     return errors
 }

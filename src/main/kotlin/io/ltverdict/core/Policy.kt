@@ -617,7 +617,18 @@ private fun parsePlatformRules(
             val pointer = "/platform_rules/$index"
             val item = value.objectAt(pointer)
             item.rejectUnknown(
-                setOf("id", "signal", "scope", "operator", "threshold", "unit", "aggregation", "min_consecutive_cells", "effect", "window_ids"),
+                setOf(
+                    "id",
+                    "signal",
+                    "scope",
+                    "operator",
+                    "threshold",
+                    "unit",
+                    "aggregation",
+                    "min_consecutive_cells",
+                    "effect",
+                    "window_ids",
+                ),
                 pointer,
             )
             val id = item.stringAt("id", pointer)
@@ -647,7 +658,18 @@ private fun parsePlatformRules(
             val effect =
                 ResourceRuleEffect.entries.find { it.wireName == effectName }
                     ?: fail("UNKNOWN_EFFECT", "$pointer/effect", "unknown effect")
-            PlatformRuleV1(id, signal, scope, operator, threshold, unit, aggregation, minimum.toInt(), effect, item.windowIdsAt(pointer))
+            PlatformRuleV1(
+                id,
+                signal,
+                scope,
+                operator,
+                threshold,
+                unit,
+                aggregation,
+                minimum.toInt(),
+                effect,
+                item.windowIdsAt(pointer),
+            )
         }
     val expanded = HashSet<String>()
     rules.forEachIndexed { index, rule ->

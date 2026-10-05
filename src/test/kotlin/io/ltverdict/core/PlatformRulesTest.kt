@@ -23,15 +23,31 @@ class PlatformRulesTest {
     fun `platform sections fail closed at their exact fields`() {
         listOf(
             Triple(policyJson(catalog = ""), "INVALID_SCOPE", "/platform_rules/0/scope"),
-            Triple(policyJson(cpuScope = """{"kind":"all_services","except":["ghost"]}"""), "INVALID_SCOPE", "/platform_rules/0/scope/except/0"),
+            Triple(
+                policyJson(cpuScope = """{"kind":"all_services","except":["ghost"]}"""),
+                "INVALID_SCOPE",
+                "/platform_rules/0/scope/except/0",
+            ),
             Triple(policyJson(coverage = ""), "MISSING_FIELD", "/platform_coverage"),
-            Triple(policyJson(coverScope = """{"kind":"service","services":["orders"]}"""), "PLATFORM_COVERAGE_MISSING", "/platform_coverage"),
+            Triple(
+                policyJson(coverScope = """{"kind":"service","services":["orders"]}"""),
+                "PLATFORM_COVERAGE_MISSING",
+                "/platform_coverage",
+            ),
             Triple(policyJson(coverMin = 2), "PLATFORM_COVERAGE_MISSING", "/platform_coverage"),
             Triple(policyJson(coverThreshold = "1"), "PLATFORM_COVERAGE_MISSING", "/platform_coverage"),
             Triple(policyJson(coverAggregation = "interval_mean"), "PLATFORM_COVERAGE_MISSING", "/platform_coverage"),
             Triple(policyJson(coverExtra = ""","window_ids":["w1"]"""), "PLATFORM_COVERAGE_MISSING", "/platform_coverage"),
-            Triple(policyJson(cpuScope = """{"kind":"all_services","except":["orders","payments"]}"""), "INVALID_SCOPE", "/platform_rules/0/scope"),
-            Triple(policyJson(cpuThreshold = "0", cpuAggregation = "interval_min"), "PLATFORM_AGGREGATION_OPERATOR_MISMATCH", "/platform_rules/0/aggregation"),
+            Triple(
+                policyJson(cpuScope = """{"kind":"all_services","except":["orders","payments"]}"""),
+                "INVALID_SCOPE",
+                "/platform_rules/0/scope",
+            ),
+            Triple(
+                policyJson(cpuThreshold = "0", cpuAggregation = "interval_min"),
+                "PLATFORM_AGGREGATION_OPERATOR_MISMATCH",
+                "/platform_rules/0/aggregation",
+            ),
             Triple(policyJson(coverId = "p95"), "DUPLICATE_RULE_ID", "/platform_rules/1/id"),
             Triple(policyJson(extraRuleId = "cpu/orders"), "DUPLICATE_RULE_ID", "/platform_rules/0/id"),
             Triple(policyJson(cpuAggregation = "weekly"), "UNKNOWN_AGGREGATION", "/platform_rules/0/aggregation"),
@@ -117,9 +133,18 @@ class PlatformRulesTest {
     fun `a missing duplicate or foreign series never passes silently`() {
         val missing = evaluate(snapshot(healthy("orders")))
         val ambiguous =
-            evaluate(snapshot(healthy("orders") + healthy("payments") + series("cpu-orders-2", "cpu_ratio", "orders", "ratio", List(4) { "0.1" })))
+            evaluate(
+                snapshot(
+                    healthy("orders") + healthy("payments") + series("cpu-orders-2", "cpu_ratio", "orders", "ratio", List(4) { "0.1" }),
+                ),
+            )
         val wrongUnit =
-            evaluate(snapshot(healthy("orders") + listOf(series("cpu-payments", "cpu_ratio", "payments", "percent", List(4) { "10" }), healthy("payments")[1])))
+            evaluate(
+                snapshot(
+                    healthy("orders") +
+                        listOf(series("cpu-payments", "cpu_ratio", "payments", "percent", List(4) { "10" }), healthy("payments")[1]),
+                ),
+            )
         val wrongAggregation =
             evaluate(
                 snapshot(
@@ -159,7 +184,16 @@ class PlatformRulesTest {
         val snapshot =
             snapshot(
                 healthy("orders") +
-                    listOf(series("unavailable-payments", "unavailable", "payments", "count", List(4) { "0" }, ResourceAggregation.INTERVAL_MAX)),
+                    listOf(
+                        series(
+                            "unavailable-payments",
+                            "unavailable",
+                            "payments",
+                            "count",
+                            List(4) { "0" },
+                            ResourceAggregation.INTERVAL_MAX,
+                        ),
+                    ),
             )
 
         val result = evaluate(snapshot, policy)
@@ -175,7 +209,11 @@ class PlatformRulesTest {
         assertEquals(PolicyVerdict.NO_VERDICT, result.windowVerdicts.getValue("steady"))
         assertEquals(
             setOf("cpu/orders", "cpu/payments"),
-            result.checks().filter { it.str("reason") == "RULE_WINDOW_TOO_SHORT" }.map { it.str("rule_id") }.toSet(),
+            result
+                .checks()
+                .filter { it.str("reason") == "RULE_WINDOW_TOO_SHORT" }
+                .map { it.str("rule_id") }
+                .toSet(),
         )
     }
 
@@ -186,7 +224,14 @@ class PlatformRulesTest {
                 healthy("orders") +
                     listOf(
                         series("cpu-payments", "cpu_ratio", "payments", "ratio", List(4) { "0.1" }),
-                        series("unavailable-payments", "unavailable", "payments", "count", listOf("0", "1", "0", "0"), ResourceAggregation.INTERVAL_MAX),
+                        series(
+                            "unavailable-payments",
+                            "unavailable",
+                            "payments",
+                            "count",
+                            listOf("0", "1", "0", "0"),
+                            ResourceAggregation.INTERVAL_MAX,
+                        ),
                     ),
             )
 
@@ -200,7 +245,11 @@ class PlatformRulesTest {
     fun `platform rules without a snapshot block the verdict only when they are SLA rules`() {
         val sla = evaluatePolicy(policy(), RunValidity.VALID, metricsWith(100))
         val diagnostic =
-            evaluatePolicy(policy(policyJson(coverage = "", cpuEffect = "diagnostic", coverEffect = "diagnostic")), RunValidity.VALID, metricsWith(100))
+            evaluatePolicy(
+                policy(policyJson(coverage = "", cpuEffect = "diagnostic", coverEffect = "diagnostic")),
+                RunValidity.VALID,
+                metricsWith(100),
+            )
 
         assertEquals(PolicyVerdict.NO_VERDICT, sla.verdict)
         assertEquals(listOf("RESOURCE_SNAPSHOT_REQUIRED"), sla.coverageReasons)
@@ -214,16 +263,25 @@ class PlatformRulesTest {
         val sla = rule("snapshot-sla", ResourceRuleEffect.SLA)
         val diagnostic = rule("snapshot-diagnostic", ResourceRuleEffect.DIAGNOSTIC)
 
-        assertEquals(listOf("PLATFORM_RULES_CONFLICT"), validatePlatformBinding(policy, snapshot(healthy("orders"), listOf(sla))).map { it.code })
+        assertEquals(
+            listOf("PLATFORM_RULES_CONFLICT"),
+            validatePlatformBinding(policy, snapshot(healthy("orders"), listOf(sla))).map { it.code },
+        )
         assertEquals(emptyList<String>(), validatePlatformBinding(policy, snapshot(healthy("orders"), listOf(diagnostic))).map { it.code })
         assertEquals(
             listOf("DUPLICATE_RULE_ID"),
-            validatePlatformBinding(policy, snapshot(healthy("orders"), listOf(rule("cpu/orders", ResourceRuleEffect.DIAGNOSTIC)))).map { it.code },
+            validatePlatformBinding(
+                policy,
+                snapshot(healthy("orders"), listOf(rule("cpu/orders", ResourceRuleEffect.DIAGNOSTIC))),
+            ).map { it.code },
         )
         val many = List(254) { rule("many-$it", ResourceRuleEffect.DIAGNOSTIC) }
         assertEquals(listOf("RESOURCE_LIMIT_EXCEEDED"), validatePlatformBinding(policy, snapshot(healthy("orders"), many)).map { it.code })
         val withoutPlatform = PolicyV1("policy.v1", "plain", emptyList())
-        assertEquals(emptyList<String>(), validatePlatformBinding(withoutPlatform, snapshot(healthy("orders"), listOf(sla))).map { it.code })
+        assertEquals(
+            emptyList<String>(),
+            validatePlatformBinding(withoutPlatform, snapshot(healthy("orders"), listOf(sla))).map { it.code },
+        )
     }
 
     @Test
@@ -234,7 +292,11 @@ class PlatformRulesTest {
         assertTrue("PLATFORM_SERVICE_NOT_IN_CATALOG" in result.coverageReasons)
         assertEquals(
             setOf("cpu/ghost-svc", "cover/ghost-svc"),
-            result.checks().filter { it.str("reason") == "PLATFORM_SERVICE_NOT_IN_CATALOG" }.map { it.str("rule_id") }.toSet(),
+            result
+                .checks()
+                .filter { it.str("reason") == "PLATFORM_SERVICE_NOT_IN_CATALOG" }
+                .map { it.str("rule_id") }
+                .toSet(),
         )
     }
 
@@ -317,7 +379,8 @@ class PlatformRulesTest {
             emptyMap(),
         )
 
-    private fun policy(json: String = policyJson()) =(validatePolicy(ByteArrayInputStream(json.encodeToByteArray())) as PolicyValidation.Valid).policy
+    private fun policy(json: String = policyJson()) =
+        (validatePolicy(ByteArrayInputStream(json.encodeToByteArray())) as PolicyValidation.Valid).policy
 
     private fun policyJson(
         catalog: String = """"platform_services":["orders","payments"],""",
@@ -339,13 +402,16 @@ class PlatformRulesTest {
         extraRuleId: String? = null,
     ): String {
         val extraRule =
-            extraRuleId?.let {
-                """,{"id":"$it","metric":"error_rate_ratio","operator":"lte","threshold":1,"scope":{"kind":"overall"}}"""
-            }.orEmpty()
+            if (extraRuleId == null) {
+                ""
+            } else {
+                """,{"id":"$extraRuleId","metric":"error_rate_ratio","operator":"lte","threshold":1,"scope":{"kind":"overall"}}"""
+            }
         return """{"schema_version":"policy.v1","policy_id":"platform","defaults":{"sample_floor":1,"min_samples":1},""" +
             catalog +
             coverage +
-            """"rules":[{"id":"p95","metric":"response_time_p95_ms","operator":"lte","threshold":100,"scope":{"kind":"overall"}}$extraRule],""" +
+            """"rules":[{"id":"p95","metric":"response_time_p95_ms","operator":"lte","threshold":100,""" +
+            """"scope":{"kind":"overall"}}$extraRule],""" +
             """"platform_rules":[""" +
             """{"id":"$cpuId","signal":"cpu_ratio","scope":$cpuScope,"operator":"gt","threshold":$cpuThreshold,"unit":"ratio",""" +
             """"aggregation":"$cpuAggregation","min_consecutive_cells":$cpuMinimum,"effect":"$cpuEffect"$cpuExtra},""" +

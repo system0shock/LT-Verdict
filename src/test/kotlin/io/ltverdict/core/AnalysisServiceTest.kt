@@ -978,7 +978,9 @@ class AnalysisServiceTest {
     fun `platform rules and an SLA rule of the snapshot are rejected before an analysis exists`() =
         withService { store, service ->
             val input = accept(store, OUT_OF_ORDER_CSV.encodeToByteArray(), "platform-conflict.jtl")
-            val analyses = input.path.parent.parent.resolve("analyses")
+            val analyses =
+                input.path.parent.parent
+                    .resolve("analyses")
 
             val failure =
                 assertThrows(IllegalArgumentException::class.java) {

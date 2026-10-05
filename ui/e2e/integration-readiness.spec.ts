@@ -14,7 +14,16 @@ test('Grafana render failure keeps a safe source link and the local verdict', as
   await page.getByRole('button', { name: 'Analyze run', exact: true }).click()
   await expect(page.locator('#verdict')).toContainText('NO_POLICY')
   await page.getByText('Grafana evidence', { exact: true }).click()
-  await page.getByLabel('Dashboard UID', { exact: true }).fill('demo')
+  const uid = page.getByLabel('Dashboard UID', { exact: true })
+  await uid.fill('demo-uid_1')
+  // Атрибут pattern должен компилироваться в режиме флага v (дефис в классе экранирован) и реально проверять поле.
+  expect(await uid.evaluate((input: HTMLInputElement) => {
+    try { new RegExp(`^(?:${input.pattern})$`, 'v'); return true } catch { return false }
+  })).toBe(true)
+  expect(await uid.evaluate((input: HTMLInputElement) => input.validity.patternMismatch)).toBe(false)
+  await uid.fill('bad uid!')
+  expect(await uid.evaluate((input: HTMLInputElement) => input.validity.patternMismatch)).toBe(true)
+  await uid.fill('demo')
   await page.getByRole('button', { name: 'Prepare link', exact: true }).click()
   await expect(page.getByRole('link', { name: 'Open source panel' })).toHaveAttribute('rel', 'noopener noreferrer')
   expect(renders).toBe(0)

@@ -56,7 +56,7 @@ async function load(render: boolean) {
         v-model="dashboard"
         required
         maxlength="128"
-        pattern="[A-Za-z0-9_-]+"
+        pattern="[A-Za-z0-9_\-]+"
         :disabled="busy"
       ></label>
       <label>Panel ID <input

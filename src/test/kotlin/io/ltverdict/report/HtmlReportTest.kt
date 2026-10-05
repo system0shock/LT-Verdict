@@ -415,7 +415,37 @@ class HtmlReportTest {
         val reasons = html.substringAfter("<h3>Причины</h3>").substringBefore("</section>")
 
         assertFalse(reasons.contains("Причины в результате не указаны"))
-        assertTrue(reasons.contains("s3"))
+        assertTrue(reasons.contains("<code>s3</code>"))
+        assertTrue(reasons.contains("<code>db-saturated</code>"))
+        assertTrue(reasons.contains("ряд db-busy"))
+        assertFalse(reasons.contains("<code>r2</code>"))
+    }
+
+    @Test
+    fun `a capacity result without stage data keeps a capacity line instead of the rule counter`() {
+        val text =
+            """
+            {"analysis_mode":"capacity_step","analysis_coverage":{"reasons":[],"status":"COMPLETE"},"evidence":[],"findings":[],
+            "capacity_summary":{"bound_type":"INDETERMINATE","unit":"rps","reasons":[]},
+            "policy_verdict":"PASS","run_id":"run-1","run_validity":"VALID","schema_version":"analysis-result.v1"}
+            """.trimIndent()
+        val verdict =
+            render(
+                text.encodeToByteArray(),
+                "a",
+            ).decodeToString().substringAfter("<h2>Вердикт и причины</h2>").substringBefore("<h3>")
+
+        assertTrue(verdict.contains("нет данных по ступеням"))
+        assertFalse(verdict.contains("Нарушено правил"))
+    }
+
+    @Test
+    fun `a finding that points to another check is not shown as the observation of this rule`() {
+        val html = render(diagnosticResult("PASS", findingEvidence = "other-check"), "a").decodeToString()
+        val diagnostics = html.substringAfter("<h2>Диагностика ресурсов</h2>").substringBefore("</section>")
+
+        assertTrue(diagnostics.contains("db-saturated"))
+        assertFalse(diagnostics.contains("наблюдалось"))
     }
 
     @Test
@@ -431,6 +461,7 @@ class HtmlReportTest {
         verdict: String,
         effect: String = "diagnostic",
         failedStatus: String = "FAIL",
+        findingEvidence: String = "c1",
     ): ByteArray {
         val text =
             """
@@ -438,8 +469,8 @@ class HtmlReportTest {
             {"id":"c1","type":"resource_policy_check","effect":"$effect","rule_id":"db-saturated","series_id":"db-busy","unit":"ratio","operator":"gt","threshold":"0.9","window_id":"w","status":"$failedStatus","reason":null},
             {"id":"c2","type":"resource_policy_check","effect":"diagnostic","rule_id":"fine-rule","series_id":"cpu","unit":"ratio","operator":"gt","threshold":"0.9","window_id":"w","status":"PASS","reason":null}],
             "findings":[
-            {"id":"f1","type":"resource_threshold_violation","rule_id":"db-saturated","window_id":"w","series_id":"db-busy","entity":"db-1","unit":"ratio","from_epoch_ms":1790000400000,"to_epoch_ms":1790000460000,"cell_count":6,"observed_min":"0.95","observed_max":"0.99","evidence_id":"c1"},
-            {"id":"f2","type":"resource_threshold_violation","rule_id":"db-saturated","window_id":"w","series_id":"db-busy","entity":"db-1","unit":"ratio","from_epoch_ms":1790000700000,"to_epoch_ms":1790000760000,"cell_count":6,"observed_min":"0.95","observed_max":"0.99","evidence_id":"c1"}],
+            {"id":"f1","type":"resource_threshold_violation","rule_id":"db-saturated","window_id":"w","series_id":"db-busy","entity":"db-1","unit":"ratio","from_epoch_ms":1790000400000,"to_epoch_ms":1790000460000,"cell_count":6,"observed_min":"0.95","observed_max":"0.99","evidence_id":"$findingEvidence"},
+            {"id":"f2","type":"resource_threshold_violation","rule_id":"db-saturated","window_id":"w","series_id":"db-busy","entity":"db-1","unit":"ratio","from_epoch_ms":1790000700000,"to_epoch_ms":1790000760000,"cell_count":6,"observed_min":"0.95","observed_max":"0.99","evidence_id":"$findingEvidence"}],
             "policy_verdict":"$verdict","run_id":"run-1","run_validity":"VALID","schema_version":"analysis-result.v1"}
             """.trimIndent()
         return text.encodeToByteArray()
@@ -451,9 +482,15 @@ class HtmlReportTest {
     ): ByteArray {
         val stages =
             listOf("s1" to "PASS", "s2" to "PASS", "s3" to "FAIL").joinToString(",") { (id, stageVerdict) ->
-                """{"id":"$id","verdict":"$stageVerdict","reasons":[]}"""
+                """{"id":"$id","verdict":"$stageVerdict","reasons":[],"evidence_refs":["ws-$id","rc-$id"]}"""
             }
-        val rules = (1..12).joinToString(",") { check("r$it", if (it == 1) "FAIL" else "PASS") }
+        val stageEvidence =
+            """
+            {"id":"ws-s3","type":"window_policy_summary","window_id":"w3","verdict":"FAIL"},
+            {"id":"rc-s3","type":"resource_policy_check","effect":"sla","rule_id":"db-saturated","series_id":"db-busy","unit":"ratio","operator":"gt","threshold":"0.9","window_id":"w3","status":"FAIL","reason":null},
+            {"id":"rc-s1","type":"resource_policy_check","effect":"sla","rule_id":"s1-ok","series_id":"cpu","unit":"ratio","operator":"gt","threshold":"0.9","window_id":"w1","status":"PASS","reason":null}
+            """.trimIndent()
+        val rules = (1..12).joinToString(",") { check("r$it", if (it == 1) "FAIL" else "PASS") } + "," + stageEvidence
         val text =
             """
             {"analysis_mode":"capacity_step","analysis_coverage":{"reasons":[],"status":"COMPLETE"},"evidence":[$rules],"findings":[],

@@ -199,7 +199,7 @@ private fun verdictBlock(
     }
     val failures =
         when {
-            capacity && verdict == "FAIL" -> capacityFailureItems(stages)
+            capacity && verdict == "FAIL" -> capacityFailureItems(result, evidence, stages)
             verdict == "FAIL" -> ruleFailureItems(result, evidence, business.filter { it.text("status") == "FAIL" }, resource)
             else -> emptyList()
         }
@@ -207,7 +207,8 @@ private fun verdictBlock(
     val reasonList = if (items.isEmpty()) "<p>Причины в результате не указаны.</p>" else "<ul>${items.joinToString("")}</ul>"
     val count =
         when {
-            stages.isNotEmpty() -> capacityCount(stages)
+            capacity && stages.isEmpty() -> "В результате нет данных по ступеням ёмкости."
+            capacity -> capacityCount(stages)
             rules.isEmpty() -> "Проверок правил в результате нет."
             else -> "Нарушено правил: $failed из ${rules.size}."
         }
@@ -233,9 +234,40 @@ private fun capacityBound(result: JsonObject): String {
     return "<p>Граница ёмкости: ${escape("${summary.text("bound_type") ?: DASH} $range ${summary.text("unit") ?: ""}".trim())}.</p>"
 }
 
-private fun capacityFailureItems(stages: List<JsonObject>): List<String> {
-    val failed = stages.filter { it.text("verdict") == "FAIL" }.map { "<code>${escape(it.text("id") ?: DASH)}</code>" }
-    return if (failed.isEmpty()) emptyList() else listOf("<li>Ступени, где нарушены SLA-правила: ${failed.joinToString(", ")}.</li>")
+private fun capacityFailureItems(
+    result: JsonObject,
+    evidence: List<JsonObject>,
+    stages: List<JsonObject>,
+): List<String> {
+    val metricsById = evidence.filter { it.string("type") == "metric_summary" }.associateBy { it.text("id") }
+    val violations = result.array("findings").filter { it.text("type") == "resource_threshold_violation" }
+    val summaries = evidence.filter { it.string("type") == "window_policy_summary" }.associateBy { it.text("id") }
+    return stages.filter { it.text("verdict") == "FAIL" }.map { stage ->
+        val refs = stage.stringList("evidence_refs").toSet()
+        val windows = refs.mapNotNull { summaries[it]?.text("window_id") }.toSet()
+        val failed =
+            evidence
+                .filter { it.text("status") == "FAIL" }
+                .filter {
+                    when (it.string("type")) {
+                        "resource_policy_check" -> it.text("effect") == "sla" && it.text("id") in refs
+                        "policy_check" -> it.text("window_id")?.let { window -> window in windows } == true
+                        else -> false
+                    }
+                }.map {
+                    val words =
+                        if (it.string("type") ==
+                            "policy_check"
+                        ) {
+                            businessFailureText(it, metricsById)
+                        } else {
+                            resourceFailureText(it, violations)
+                        }
+                    "<code>${escape(it.text("rule_id") ?: DASH)}</code>: ${escape(words)}"
+                }
+        "<li>Ступень <code>${escape(stage.text("id") ?: DASH)}</code>: " +
+            (if (failed.isEmpty()) "SLA-правила нарушены." else failed.joinToString("; ")) + "</li>"
+    }
 }
 
 private fun ruleFailureItems(
@@ -269,7 +301,12 @@ private fun resourceFailureText(
     check: JsonObject,
     violations: List<JsonObject>,
 ): String {
-    val own = violations.filter { it.text("rule_id") == check.text("rule_id") && it.text("window_id") == check.text("window_id") }
+    val own =
+        violations.filter {
+            it.text("rule_id") == check.text("rule_id") &&
+                it.text("window_id") == check.text("window_id") &&
+                it.text("evidence_id")?.let { id -> id == check.text("id") } != false
+        }
     val first = own.firstOrNull()
     val side = if (check.text("operator") == "gt") "выше" else "ниже"
     val entity = first?.text("entity")?.let { " ($it)" } ?: ""

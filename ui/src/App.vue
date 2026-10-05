@@ -141,6 +141,7 @@ const rangeEnd = ref('')
 let analysisRevision = 0
 let bucketRevision = 0
 let policyRevision = 0
+let policyFileCheck: Promise<unknown> | null = null
 let policyEdits = 0
 let adviceRevision = 0
 let uploadAbort: AbortController | null = null
@@ -335,7 +336,10 @@ async function selectPolicyFile(file: File | null) {
     return
   }
   policy.value = null
-  await validateDraft(file)
+  const check = validateDraft(file)
+  policyFileCheck = check
+  await check
+  if (policyFileCheck === check) policyFileCheck = null
 }
 
 function updatePolicy(draft: Policy) {
@@ -408,6 +412,8 @@ async function analyze() {
   uploadCancelled.value = false
 
   try {
+    // Файл правил, выбранный мгновенно перед запуском, ещё проверяется: без ожидания запуск уходил без правил.
+    await policyFileCheck
     const activePolicy = policy.value ? await validateDraft(policy.value) : null
     if (policy.value && !activePolicy) {
       uploadProgress.value = 0

@@ -237,6 +237,43 @@ test('sends the same job parts as the old form for a full file selection', async
   ]))
 })
 
+for (const [name, path, label] of [['old', '/?shell=old', 'Analyze run'], ['new', '/?shell=new', SETUP_LABELS.startButton]] as const) {
+  test(`${name} form: a start clicked while the policy file is still being checked sends that policy`, async ({ page }) => {
+    const calls = await openSetup(page, path)
+    let release!: () => void
+    const checked = new Promise<void>((resolve) => (release = resolve))
+    await page.route('**/api/policies/validate', async (route) => {
+      await checked
+      await route.fallback()
+    })
+    await page.locator('#input-file').setInputFiles(load)
+    await page.locator('#policy-file').setInputFiles(policyFile())
+    await page.getByRole('button', { name: label, exact: true }).click()
+    release()
+
+    await expect.poll(() => calls.jobs.length).toBe(1)
+    expect(partNames(calls.jobs[0])).toContain('policy:policy.json')
+  })
+}
+
+test('a policy file cleared while it is still being checked is not sent', async ({ page }) => {
+  const calls = await openSetup(page)
+  let release!: () => void
+  const checked = new Promise<void>((resolve) => (release = resolve))
+  await page.route('**/api/policies/validate', async (route) => {
+    await checked
+    await route.fallback()
+  })
+  await page.locator('#input-file').setInputFiles(load)
+  await page.locator('#policy-file').setInputFiles(policyFile())
+  await page.locator('#policy-file').setInputFiles([])
+  await start(page).click()
+  release()
+
+  await expect.poll(() => calls.jobs.length).toBe(1)
+  expect(partNames(calls.jobs[0])).toEqual(['run_id'])
+})
+
 test('online profiles lock the file inputs and send the same source request as the old form', async ({ page }) => {
   const sent: Record<string, string> = {}
   for (const [name, path, label] of [['old', '/', 'Analyze run'], ['new', '/?shell=new', SETUP_LABELS.startButton]] as const) {

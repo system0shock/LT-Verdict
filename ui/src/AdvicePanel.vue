@@ -14,6 +14,8 @@ const emit = defineEmits<{ 'auto-started': []; navigate: [target: AttentionTarge
 const advice = ref<AdviceDocument | null>(null)
 const job = ref<AdviceJob | null>(null)
 const sending = ref(false)
+// Пока сохранённый совет не прочитан, выбор модели скрыт: совет уже мог быть создан, а выбор запуска не должен меняться.
+const loaded = ref(false)
 const error = ref('')
 const errorCode = ref('')
 const errorFromServer = ref(false)
@@ -81,16 +83,19 @@ watch(() => `${props.selection.run_id}/${props.selection.analysis_id}`, async ()
   advice.value = null
   job.value = null
   sending.value = false
+  loaded.value = false
   error.value = ''
   errorCode.value = ''
   try {
     await loadAdvice(expected)
+    if (expected === revision) loaded.value = true
     // ИИ-разбор запрошен при запуске анализа (новый экран): запрашиваем совет тем же вызовом, что и кнопка.
     if (expected === revision && props.autoStart && !advice.value && !job.value) {
       emit('auto-started')
       await start()
     }
   } catch (failure) {
+    if (expected === revision) loaded.value = true
     fail(failure, 'Не удалось прочитать рекомендации.', expected)
   }
 }, { immediate: true })
@@ -140,6 +145,7 @@ onUnmounted(() => { revision++; stopPolling() })
     </p>
     <template v-if="!advice">
       <ModelChoice
+        v-if="loaded"
         :config="aiConfig"
         :selected="aiModel ?? ''"
         :disabled="busy"

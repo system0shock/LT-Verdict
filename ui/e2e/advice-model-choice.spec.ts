@@ -41,6 +41,7 @@ interface Setup {
   advice?: Record<string, unknown> | null
   job?: Record<string, unknown> | null
   postJob?: Record<string, unknown>
+  holdAdvice?: Promise<void>
 }
 
 async function mockApi(page: Page, setup: Setup) {
@@ -66,6 +67,7 @@ async function mockApi(page: Page, setup: Setup) {
         status = 202
         body = setup.postJob ?? { job_id: 'advice-job', run_id: runId, analysis_id: analysisA, state: 'PROCESSING', reused: false, failure: null, unavailable_reason: null }
       } else {
+        if (setup.holdAdvice) await setup.holdAdvice
         body = { advice: setup.advice ?? null, job: setup.job ?? null }
       }
     } else if (path.startsWith('/api/advice-jobs/')) {
@@ -193,6 +195,22 @@ test('an existing advice hides the selector and says that it is created once; th
   await expect(panel.getByRole('combobox')).toHaveCount(0)
   await expect(panel.getByTestId('model-once')).toHaveText(ADVICE_LABELS.modelChoice.once)
   await expect(page.getByTestId('advice-provenance')).toContainText('qwen3.8-max')
+})
+
+test('the selector waits for the saved advice lookup, so a saved advice never flashes it', async ({ page }) => {
+  let release: () => void = () => {}
+  const holdAdvice = new Promise<void>((resolve) => { release = resolve })
+  const stored = {
+    advisory: true, run_id: runId, analysis_id: analysisA,
+    provenance: { model_id: 'qwen3.8-max', prompt_version: 'advisory-system.v1' },
+    output: { summary: 'Сводка совета', hypotheses: [], recommendations: [], caveats: ['Проверить'] },
+  }
+  const { panel } = await openAdvice(page, { config: two, advice: stored, holdAdvice })
+  await expect(panel.getByRole('button', { name: 'Получить рекомендации' })).toBeVisible()
+  await expect(panel.getByTestId('model-choice')).toHaveCount(0)
+  release()
+  await expect(panel.getByText('Сводка совета')).toBeVisible()
+  await expect(panel.getByTestId('model-choice')).toHaveCount(0)
 })
 
 test('FAILED and UNAVAILABLE show the model of the job; a job without the field prints nothing about it', async ({ page }) => {

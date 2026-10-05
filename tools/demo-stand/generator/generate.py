@@ -248,7 +248,7 @@ def correlation_files(directory, source, stage_list, epoch, jtl_hash):
          "role": "system", "aggregation": "interval_mean", "values": pool},
         {"id": "service-cpu-busy", "metric": "cpu_busy", "unit": "ratio", "entity": "orders-api",
          "role": "system", "aggregation": "interval_mean", "values": cpu},
-        {"id": "target-rps", "metric": "target_rps", "unit": "requests_per_second", "entity": "jmeter",
+        {"id": "target-rps", "metric": "target_rps", "unit": "requests/s", "entity": "jmeter",
          "role": "generator", "aggregation": "interval_mean", "values": target},
     ]
     resources = {

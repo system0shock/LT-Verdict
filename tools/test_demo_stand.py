@@ -292,6 +292,9 @@ class DemoStandTests(unittest.TestCase):
         self.assertEqual(last - first, 120)
         by_id = {series["id"]: series["values"][first:last] for series in resources["series"]}
         self.assertEqual(set(by_id["target-rps"]), {Decimal(60)})
+        # The kernel binds a target_rps control only to a series in requests/s.
+        self.assertEqual([series["unit"] for series in resources["series"] if series["id"] == "target-rps"],
+                         ["requests/s"])
         for series_id in ("payments-pool-wait", "service-cpu-busy"):
             values = by_id[series_id]
             self.assertNotIn(None, values)

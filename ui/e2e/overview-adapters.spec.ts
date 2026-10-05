@@ -183,7 +183,7 @@ test.describe('attention items', () => {
     const baseline = build({ policy_verdict: 'FAIL', evidence })
     const result = build({
       policy_verdict: 'FAIL',
-      evidence: [...evidence, correlation('p1', 'CANDIDATE'), trend('a', 'TREND_OBSERVED'), resourceCheck('mem-diag', 'FAIL', 'diagnostic')],
+      evidence: [...evidence, correlation('p1', 'CANDIDATE'), selection('p1', 'SELECTED'), trend('a', 'TREND_OBSERVED'), resourceCheck('mem-diag', 'FAIL', 'diagnostic')],
       findings: [violation('mem-diag')],
     })
 

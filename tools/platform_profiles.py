@@ -27,7 +27,7 @@ def build_connections(config: dict) -> dict:
     signals = config["signals"]
     peak = bool(config.get("peak_aggregation", False))
     names = [config["namespace"], *services]
-    if config.get("arm"):
+    if "arm" in config:
         names.append(config["arm"])
     for value in names:
         if not isinstance(value, str) or not NAME.fullmatch(value):
@@ -152,10 +152,13 @@ def build_connections(config: dict) -> dict:
             connection["allow_insecure_http"] = True
         if rules:
             connection["rules"] = rules
+        if config.get("arm"):
+            connection["arm"] = config["arm"]
         if scrape is not None:
             connection["scrape_interval_ms"] = scrape
         connections.append(connection)
-    document = {"schema_version": "source-connections.v3" if scrape is not None else SCHEMA_VERSION, "connections": connections}
+    v3 = scrape is not None or bool(config.get("arm"))
+    document = {"schema_version": "source-connections.v3" if v3 else SCHEMA_VERSION, "connections": connections}
     if len(serialize(document).encode()) > MAX_SOURCE_CONFIG_BYTES:
         raise ValueError("PLATFORM_PROFILE_TOO_LARGE")
     return document

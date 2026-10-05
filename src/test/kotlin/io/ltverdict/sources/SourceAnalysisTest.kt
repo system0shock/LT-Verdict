@@ -503,6 +503,35 @@ class SourceAnalysisTest {
         }
     }
 
+    @Test
+    fun `an armed profile records the arm in the identity and the acquisition while an unarmed one keeps both`() {
+        RecordingPrometheus().use { fixture ->
+            withService { store, service, _ ->
+                val input = accept(store, contiguousCsv(RUN_START, 30), "armed.jtl")
+
+                fun analyze(arm: String?) =
+                    analyzeWithSources(service, AnalysisRequest(input, null, sourceRequest = GRID_AUTO), fixture.source(arm = arm))
+
+                fun identity(outcome: AnalysisOutcome) =
+                    Json.parseToJsonElement(Files.readString(outcome.analysisDirectory.resolve("identity.json"))).jsonObject
+
+                val plain = analyze(null)
+                val armed = analyze("A")
+
+                assertNotEquals(plain.analysisId, armed.analysisId)
+                assertEquals("A", identity(armed).getValue("resource_arm").jsonPrimitive.content)
+                assertEquals("A", sourceSummary(armed).getValue("arm").jsonPrimitive.content)
+                assertTrue("source_acquisition_sha256" in identity(armed))
+                assertFalse("resource_arm" in identity(plain))
+                assertFalse("arm" in sourceSummary(plain))
+                assertNotEquals(
+                    identity(plain).getValue("source_acquisition_sha256"),
+                    identity(armed).getValue("source_acquisition_sha256"),
+                )
+            }
+        }
+    }
+
     private fun withService(block: (RunBundleStore, AnalysisService, Path) -> Unit) {
         val root = tempDir.resolve("data-${System.nanoTime()}")
         DataDirectory.open(root).use { directory ->
@@ -575,6 +604,7 @@ class SourceAnalysisTest {
         fun source(
             queryCount: Int = 1,
             scrapeIntervalMillis: Long? = null,
+            arm: String? = null,
         ): PromqlSource {
             val profile =
                 SourceProfile(
@@ -599,6 +629,7 @@ class SourceAnalysisTest {
                             )
                         },
                     scrapeIntervalMillis = scrapeIntervalMillis,
+                    arm = arm,
                 )
             val profiles = listOf(profile, profile.copy(id = "second"))
             return PromqlSource(profiles, SourceHttp(profiles))

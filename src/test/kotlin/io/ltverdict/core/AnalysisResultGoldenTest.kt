@@ -100,6 +100,14 @@ class AnalysisResultGoldenTest {
             mapOf("max_missing_fraction_default" to "0.05", "max_gap_cells_default" to "3"),
             gates("docs/contracts/policy/v1/examples/valid/platform-services.json").filterKeys { it.startsWith("max_") },
         )
+        assertEquals(
+            mapOf("platform_coverage_max_missing_fraction_default" to "0", "platform_coverage_max_gap_cells_default" to "0"),
+            gates("docs/contracts/policy/v1/examples/valid/platform-services.json").filterKeys { it.startsWith("platform_coverage_") },
+        )
+        assertEquals(
+            emptyMap<String, String>(),
+            gates("fixtures/slice1/identity/policy.canonical.json").filterKeys { it.startsWith("platform_coverage_") },
+        )
     }
 
     @Test

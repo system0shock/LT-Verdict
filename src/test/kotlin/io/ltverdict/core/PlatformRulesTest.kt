@@ -483,6 +483,54 @@ class PlatformRulesTest {
     }
 
     @Test
+    fun `the coverage rule is strict by default and only its own fields loosen it`() {
+        val unavailable = List<String?>(20) { if (it == 7) null else "0" }
+        val oneLostPoint =
+            snapshot(
+                listOf(
+                    series("cpu-orders", "cpu_ratio", "orders", "ratio", List(20) { "0.1" }),
+                    series("unavailable-orders", "unavailable", "orders", "count", unavailable, ResourceAggregation.INTERVAL_MAX),
+                ) + healthy("payments", List(20) { "0.1" }),
+                cells = 20,
+            )
+        val wideDefaults = """{"sample_floor":1,"min_samples":1,"max_missing_fraction":0.1,"max_gap_cells":5}"""
+
+        val strict = evaluate(oneLostPoint)
+        val strictCheck = strict.checks().single { it.str("rule_id") == "cover/orders" }
+        assertEquals("NO_VERDICT", strictCheck.str("status"))
+        assertEquals("MISSING_RESOURCE_CELLS", strictCheck.str("reason"))
+        assertEquals(PolicyVerdict.NO_VERDICT, strict.windowVerdicts.getValue("steady"))
+
+        val underDefaults = evaluate(oneLostPoint, policy(policyJson(defaults = wideDefaults)))
+        assertEquals(
+            "MISSING_RESOURCE_CELLS",
+            underDefaults.checks().single { it.str("rule_id") == "cover/orders" }.str("reason"),
+        )
+        assertEquals(PolicyVerdict.NO_VERDICT, underDefaults.windowVerdicts.getValue("steady"))
+
+        val explicit =
+            evaluate(oneLostPoint, policy(policyJson(coverExtra = ""","max_missing_fraction":0.1,"max_gap_cells":5""")))
+        val explicitCheck = explicit.checks().single { it.str("rule_id") == "cover/orders" }
+        assertEquals("PASS", explicitCheck.str("status"))
+        assertEquals("RESOURCE_GAPS", explicitCheck.str("reason"))
+        assertEquals(PolicyVerdict.PASS, explicit.windowVerdicts.getValue("steady"))
+    }
+
+    @Test
+    fun `a non coverage sla rule keeps the tolerance default while the coverage rule is strict`() {
+        val lostCpuPoint =
+            snapshot(
+                healthy("orders", List(20) { if (it == 7) null else "0.1" }) + healthy("payments", List(20) { "0.1" }),
+                cells = 20,
+            )
+
+        val result = evaluate(lostCpuPoint)
+
+        assertEquals("RESOURCE_GAPS", result.checks().single { it.str("rule_id") == "cpu/orders" }.str("reason"))
+        assertEquals(PolicyVerdict.PASS, result.windowVerdicts.getValue("steady"))
+    }
+
+    @Test
     fun `a diagnostic platform rule stays strict and never changes the verdict`() {
         val diagnostic = policy(policyJson(cpuEffect = "diagnostic"))
         val snapshot =

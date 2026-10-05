@@ -42,7 +42,15 @@ internal fun analysisIdentity(
             put("input_sha256", input.sha256)
             put("policy_sha256", policy?.sha256 ?: "NO_POLICY")
             if (policy != null || capacity != null) {
-                put("verdict_gates", verdictGates(policy != null, capacity != null, policy?.policy?.platformRules?.isNotEmpty() == true))
+                put(
+                    "verdict_gates",
+                    verdictGates(
+                        policy != null,
+                        capacity != null,
+                        policy?.policy?.platformRules?.isNotEmpty() == true,
+                        policy?.policy?.platformCoverage != null,
+                    ),
+                )
             }
             resources?.let {
                 put("resource_snapshot_sha256", it.semanticSha256)
@@ -174,6 +182,7 @@ private fun verdictGates(
     hasPolicy: Boolean,
     hasCapacity: Boolean,
     hasPlatformRules: Boolean,
+    hasPlatformCoverage: Boolean,
 ) = buildJsonObject {
     if (hasPolicy) put("min_samples_floor", MIN_SAMPLES_FLOOR.toString())
     put("min_samples_default", MIN_SAMPLES_DEFAULT.toString())
@@ -182,6 +191,10 @@ private fun verdictGates(
     if (hasPlatformRules) {
         put("max_missing_fraction_default", MAX_MISSING_FRACTION_DEFAULT.toPlainString())
         put("max_gap_cells_default", MAX_GAP_CELLS_DEFAULT.toString())
+        if (hasPlatformCoverage) {
+            put("platform_coverage_max_missing_fraction_default", PLATFORM_COVERAGE_MAX_MISSING_FRACTION_DEFAULT.toPlainString())
+            put("platform_coverage_max_gap_cells_default", PLATFORM_COVERAGE_MAX_GAP_CELLS_DEFAULT.toString())
+        }
     }
 }
 

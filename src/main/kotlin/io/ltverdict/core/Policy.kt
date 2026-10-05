@@ -37,6 +37,8 @@ internal const val MIN_SAMPLES_FLOOR = 20L
 internal const val MIN_SAMPLES_DEFAULT = 100L
 internal val MAX_MISSING_FRACTION_DEFAULT = BigDecimal("0.05")
 internal const val MAX_GAP_CELLS_DEFAULT = 3
+internal val PLATFORM_COVERAGE_MAX_MISSING_FRACTION_DEFAULT = BigDecimal.ZERO
+internal const val PLATFORM_COVERAGE_MAX_GAP_CELLS_DEFAULT = 0
 private const val MAX_SAMPLES_BOUND = 1_000_000L
 private const val MAX_GAP_CELLS_BOUND = 100_000L
 

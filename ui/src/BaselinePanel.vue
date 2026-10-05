@@ -47,7 +47,7 @@ const emptyWindowNotes = computed(() => {
     ...(reasons.includes('CURRENT_WINDOW_EMPTY') ? [BASELINE_LABELS.emptyCurrentWindow] : []),
   ]
 })
-const oldRules = computed(() => errorCode.value === 'BASELINE_MIXED_SEMANTICS'
+const incompatible = computed(() => errorCode.value === 'BASELINE_MIXED_SEMANTICS'
   || comparison.value?.metrics.some((metric) => metric.reason === 'INCOMPATIBLE_METRIC_DEFINITION')
   || comparison.value?.window_comparison?.reasons.includes('INCOMPATIBLE_METRIC_DEFINITION'))
 
@@ -160,27 +160,32 @@ async function saveConditions() {
   if (!baseline.value || !props.selection || busy.value || conditionBusy.value || !validWindows.value) return
   const revision = ++conditionRevision
   const stateRevision = baselineRevision
+  // Результат сравнения не сбрасывается: решение меняет только строку условий, поэтому после сохранения
+  // сравнение повторяется само, а до ответа на экране остаётся прежний результат.
+  const refresh = comparison.value !== null || comparing.value
+  let saved = false
   conditionSaving.value = true
   error.value = ''
   errorCode.value = ''
-  invalidateComparison()
   try {
     const response = await setBaselineConditions({ ...props.selection }, conditionDecision.value, selectedConditionWindows())
     if (revision !== conditionRevision || stateRevision !== baselineRevision) return
     conditions.value = response.conditions
     conditionDecision.value = response.conditions.decision
+    saved = true
   } catch (failure) {
     if (revision === conditionRevision && stateRevision === baselineRevision) showError(failure)
   } finally {
     conditionSaving.value = false
   }
+  if (saved && refresh) await compare(true)
 }
 
-async function compare() {
+async function compare(keepResult = false) {
   if (!props.selection || !baseline.value || busy.value || !validWindows.value) return
   const revision = ++comparisonRevision
   const stateRevision = baselineRevision
-  comparison.value = null
+  if (!keepResult) comparison.value = null
   comparing.value = true
   error.value = ''
   errorCode.value = ''
@@ -197,7 +202,10 @@ async function compare() {
     conditions.value = response.conditions
     conditionDecision.value = response.conditions?.decision ?? 'UNKNOWN'
   } catch (failure) {
-    if (revision === comparisonRevision && stateRevision === baselineRevision) showError(failure)
+    if (revision === comparisonRevision && stateRevision === baselineRevision) {
+      comparison.value = null
+      showError(failure)
+    }
   } finally {
     if (revision === comparisonRevision) comparing.value = false
   }
@@ -399,7 +407,7 @@ function warningText(code: string): string {
       <button
         type="button"
         :disabled="busy || conditionSaving || !baseline || !selection || comparing || !validWindows"
-        @click="compare"
+        @click="compare()"
       >
         {{ comparing ? labels.comparing : labels.compare }}
       </button>
@@ -476,12 +484,12 @@ function warningText(code: string): string {
       {{ error }}
     </p>
     <p
-      v-if="oldRules"
-      data-testid="baseline-old-rules"
+      v-if="incompatible"
+      data-testid="baseline-incompatible"
       class="notice notice-info"
       role="status"
     >
-      {{ BASELINE_LABELS.oldRulesHint }}
+      {{ BASELINE_LABELS.incompatibleHint }}
     </p>
 
     <section

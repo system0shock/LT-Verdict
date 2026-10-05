@@ -73,8 +73,10 @@ class JtlCsvParserTest {
         val file = csv("timeStamp,elapsed,label,success", *Array(200_000) { "$it,2,a-fairly-long-request-label-$it,true" })
         val readers = mutableSetOf<Thread>()
 
-        parseJtlCsv(file, {}, { readers += Thread.currentThread() })
+        val report = parseJtlCsv(file, {}, { readers += Thread.currentThread() })
 
+        assertEquals(RunValidity.VALID, report.validity)
+        assertEquals(Files.size(file), report.processedBytes)
         assertEquals(setOf(Thread.currentThread()), readers)
     }
 

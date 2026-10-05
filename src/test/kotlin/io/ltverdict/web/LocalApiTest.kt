@@ -336,7 +336,8 @@ class LocalApiTest {
             val advisory = response.jsonObject().getValue("advisory_ai").jsonObject
 
             assertEquals("qwen3.8-max", advisory.getValue("default_model_id").jsonPrimitive.content)
-            assertEquals("Internal gateway", advisory.getValue("endpoint_label").jsonPrimitive.content)
+            assertEquals(setOf("default_model_id", "models"), advisory.keys)
+            assertFalse(response.body().contains("Internal gateway"))
             val models = advisory.getValue("models").jsonArray.map { it.jsonObject }
             assertEquals(listOf("qwen3.8-max", "deepseek-v4-flash-0731"), models.map { it.getValue("id").jsonPrimitive.content })
             assertEquals(listOf(false, false), models.map { it.getValue("measured").jsonPrimitive.boolean })

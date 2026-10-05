@@ -5,7 +5,6 @@ import kotlinx.serialization.SerializationException
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
-import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonArray
@@ -35,11 +34,13 @@ internal data class AiModelsConfig(
     val defaultModel: String,
     val models: List<AiModel>,
 ) {
-    /** The `advisory_ai` value of `GET /api/bootstrap`: labels only, never the endpoint address. */
+    /**
+     * The `advisory_ai` value of `GET /api/bootstrap`: the model list only, never the endpoint address or its label
+     * (owner decision 2026-10-06: the UI shows no destination line). `endpoint.label` stays a valid, unused file field.
+     */
     fun bootstrapJson(): JsonObject =
         buildJsonObject {
             put("default_model_id", defaultModel)
-            put("endpoint_label", endpointLabel?.let(::JsonPrimitive) ?: JsonNull)
             put(
                 "models",
                 buildJsonArray {
@@ -60,7 +61,7 @@ internal data class AiModelsConfig(
         val BUILT_IN =
             AiModelsConfig(
                 endpointUrl = QwenCode0211.PROVIDER_ENDPOINT,
-                endpointLabel = "Alibaba ModelStudio (Singapore)",
+                endpointLabel = null,
                 allowInsecureHttp = false,
                 defaultModel = QwenCode0211.MODEL_ID,
                 models = listOf(AiModel(QwenCode0211.MODEL_ID, "DeepSeek V4 Flash")),

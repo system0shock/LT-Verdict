@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, nextTick, ref, watch } from 'vue'
 import LoadCharts from './LoadCharts.vue'
 import { CORRELATION_LABELS } from './shell/labels'
 import { NORMALIZED_LABELS } from './shell/labels.tables'
@@ -129,6 +129,13 @@ const normText = computed(() => props.shellTables
       refresh: 'Refresh data', region: 'Time bins', heads: ['Time bin', 'RPS', 'Errors', 'P95', 'Max latency', 'Data status'] as readonly string[],
       option: (seconds: number) => `${seconds} second${seconds === 1 ? '' : 's'}`,
     })
+const bucketRegion = ref<HTMLElement | null>(null)
+// The pressed button disappears when everything is shown: keep the keyboard focus inside the block.
+async function growBuckets(all: boolean) {
+  bucketLimit.value = all ? bucketRows.value.length : bucketLimit.value + BUCKET_STEP
+  await nextTick()
+  if (!document.activeElement || document.activeElement === document.body) bucketRegion.value?.focus()
+}
 const shownBucketRows = computed(() => props.shellTables ? bucketRows.value.slice(0, bucketLimit.value) : bucketRows.value)
 const policyRows = computed(() =>
   checks.value.map((check) => {
@@ -1193,12 +1200,15 @@ function updateRange(name: 'update:range-start' | 'update:range-end', event: Eve
         {{ normText.refresh }}
       </button>
     </div>
-    <LoadCharts
-      :markers="markers"
-      :buckets="buckets"
-      :rollup="bucketRollup"
-    />
+    <div :lang="shellTables ? 'en' : undefined">
+      <LoadCharts
+        :markers="markers"
+        :buckets="buckets"
+        :rollup="bucketRollup"
+      />
+    </div>
     <div
+      ref="bucketRegion"
       class="table-wrap"
       tabindex="0"
       role="region"
@@ -1231,7 +1241,7 @@ function updateRange(name: 'update:range-start' | 'update:range-end', event: Eve
       class="bucket-more"
     >
       <p
-        v-if="shownBucketRows.length < bucketRows.length"
+        role="status"
         data-testid="bins-shown"
       >
         {{ NORMALIZED_LABELS.shown(shownBucketRows.length, bucketRows.length) }}
@@ -1239,14 +1249,14 @@ function updateRange(name: 'update:range-start' | 'update:range-end', event: Eve
       <button
         v-if="shownBucketRows.length < bucketRows.length"
         type="button"
-        @click="bucketLimit += BUCKET_STEP"
+        @click="growBuckets(false)"
       >
         {{ NORMALIZED_LABELS.more(Math.min(BUCKET_STEP, bucketRows.length - shownBucketRows.length)) }}
       </button>
       <button
         v-if="bucketRows.length - shownBucketRows.length > BUCKET_STEP"
         type="button"
-        @click="bucketLimit = bucketRows.length"
+        @click="growBuckets(true)"
       >
         {{ NORMALIZED_LABELS.all(bucketRows.length) }}
       </button>

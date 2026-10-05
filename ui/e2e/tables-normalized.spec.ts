@@ -63,8 +63,9 @@ test('new shell: 900 time bins start collapsed to 50 rows and grow on request', 
   await expect(page.getByTestId('bins-shown')).toHaveText(NORMALIZED_LABELS.shown(100, 900))
   await page.getByRole('button', { name: NORMALIZED_LABELS.all(900) }).click()
   await expect(rows(page)).toHaveCount(900)
-  await expect(page.getByTestId('bins-shown')).toHaveCount(0)
+  await expect(page.getByTestId('bins-shown')).toHaveText(NORMALIZED_LABELS.shown(900, 900))
   await expect(page.getByRole('button', { name: /Показать/ })).toHaveCount(0)
+  await expect(page.locator('#normalized-data').getByRole('region', { name: NORMALIZED_LABELS.region })).toBeFocused()
 })
 
 test('new shell: the block is in Russian', async ({ page }) => {
@@ -81,15 +82,22 @@ test('new shell: the block is in Russian', async ({ page }) => {
   await expect(rows(page).first()).toContainText(NORMALIZED_LABELS.available)
 })
 
-test('new shell: a short list has no show-more controls and a refreshed list starts collapsed again', async ({ page }) => {
-  await open(page, 'new', [30, 120])
+test('new shell: a short list has no show-more controls', async ({ page }) => {
+  await open(page, 'new', [30])
 
   await expect(rows(page)).toHaveCount(30)
   await expect(page.getByRole('button', { name: /Показать/ })).toHaveCount(0)
-  await page.getByRole('button', { name: NORMALIZED_LABELS.refresh }).click()
-  await expect(rows(page)).toHaveCount(50)
+  await expect(page.getByTestId('bins-shown')).toHaveCount(0)
+})
+
+test('new shell: a refreshed list starts collapsed again even after it was expanded', async ({ page }) => {
+  await open(page, 'new', [200, 120])
+
   await page.getByRole('button', { name: NORMALIZED_LABELS.more(50) }).click()
   await expect(rows(page)).toHaveCount(100)
+  await page.getByRole('button', { name: NORMALIZED_LABELS.refresh }).click()
+  await expect(page.getByTestId('bins-shown')).toHaveText(NORMALIZED_LABELS.shown(50, 120))
+  await expect(rows(page)).toHaveCount(50)
 })
 
 test('old interface keeps every row and the English block', async ({ page }) => {

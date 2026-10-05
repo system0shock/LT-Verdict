@@ -77,6 +77,8 @@ internal data class ResourceRuleV1(
     val effect: ResourceRuleEffect,
     val windowIds: List<String>? = null,
     val platform: PlatformRuleRef? = null,
+    val maxMissingFraction: BigDecimal? = null,
+    val maxGapCells: Int? = null,
 )
 
 internal data class PlatformRuleRef(

@@ -41,7 +41,9 @@ internal fun analysisIdentity(
             put("source_type", input.sourceType.wireName)
             put("input_sha256", input.sha256)
             put("policy_sha256", policy?.sha256 ?: "NO_POLICY")
-            if (policy != null || capacity != null) put("verdict_gates", verdictGates(policy != null, capacity != null))
+            if (policy != null || capacity != null) {
+                put("verdict_gates", verdictGates(policy != null, capacity != null, policy?.policy?.platformRules?.isNotEmpty() == true))
+            }
             resources?.let {
                 put("resource_snapshot_sha256", it.semanticSha256)
                 put("resource_config_sha256", it.configSha256)
@@ -171,11 +173,16 @@ internal fun analysisResult(
 private fun verdictGates(
     hasPolicy: Boolean,
     hasCapacity: Boolean,
+    hasPlatformRules: Boolean,
 ) = buildJsonObject {
     if (hasPolicy) put("min_samples_floor", MIN_SAMPLES_FLOOR.toString())
     put("min_samples_default", MIN_SAMPLES_DEFAULT.toString())
     if (hasPolicy) put("throughput_exempt", "true")
     if (hasCapacity) put("capacity_stage_sample_gate", "true")
+    if (hasPlatformRules) {
+        put("max_missing_fraction_default", MAX_MISSING_FRACTION_DEFAULT.toPlainString())
+        put("max_gap_cells_default", MAX_GAP_CELLS_DEFAULT.toString())
+    }
 }
 
 private fun limits(

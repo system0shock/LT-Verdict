@@ -354,7 +354,9 @@ fsync артефактов, манифест и побайтовое сравн�
 
 Закрытый ответ `GET /api/bootstrap` из раздела «Private loopback HTTP contract»
 (`{csrf_token,max_upload_bytes}`) получает аддитивное поле `advisory_ai`:
-`{default_model_id, endpoint_label|null, models:[{id,label,measured}]}` либо
-`null`. Адрес endpoint в ответ не входит. Существующие поля и их смысл не
+`{default_model_id, models:[{id,label,measured}]}` либо `null`. Адрес endpoint
+и его подпись в ответ не входят (поле `endpoint_label`, добавленное срезом CM2,
+убрано срезом CM5 по решению владельца 2026-10-06, ADR 0023, «Поправка
+2026-10-06»). Существующие поля и их смысл не
 менялись. Подробности и правила: `docs/user/advisory-ai.md`, раздел «Файл
 конфигурации моделей».

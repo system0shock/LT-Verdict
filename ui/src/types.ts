@@ -1,8 +1,21 @@
 export type Theme = 'light' | 'dark'
 
+// Конфигурация моделей ИИ-разбора (ADR 0023): адрес и подпись endpoint интерфейс не получает и не показывает.
+export interface AdvisoryAiModel {
+  id: string
+  label: string
+  measured: boolean
+}
+
+export interface AdvisoryAiConfig {
+  default_model_id: string
+  models: AdvisoryAiModel[]
+}
+
 export interface Bootstrap {
   csrf_token: string
   max_upload_bytes: number
+  advisory_ai?: AdvisoryAiConfig | null
 }
 
 export interface RunSummary {
@@ -635,6 +648,7 @@ export interface AdviceJob {
   reused: boolean | null
   failure: string | null
   unavailable_reason: string | null
+  model_id?: string | null
 }
 
 export interface AdviceDocument {

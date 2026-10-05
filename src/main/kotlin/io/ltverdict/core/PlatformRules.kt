@@ -40,7 +40,7 @@ internal fun expandPlatformRules(
                     series.aggregation != rule.aggregation -> "PLATFORM_AGGREGATION_MISMATCH"
                     else -> null
                 }
-            rules += expandedRule(id, series?.id.orEmpty(), rule, service)
+            rules += expandedRule(id, series?.id.orEmpty(), rule, service, policy.defaults)
             failure?.let { failures[id] = it }
         }
         (rule.scope as? PlatformScope.AllServices)?.let { scope ->
@@ -51,7 +51,7 @@ internal fun expandPlatformRules(
                 .distinct()
                 .forEach { entity ->
                     val id = "${rule.id}/$entity"
-                    rules += expandedRule(id, "", rule, entity)
+                    rules += expandedRule(id, "", rule, entity, policy.defaults)
                     failures[id] = "PLATFORM_SERVICE_NOT_IN_CATALOG"
                 }
         }
@@ -64,17 +64,23 @@ private fun expandedRule(
     seriesId: String,
     rule: PlatformRuleV1,
     service: String,
-) = ResourceRuleV1(
-    id,
-    seriesId,
-    rule.unit,
-    rule.operator,
-    rule.threshold,
-    rule.minConsecutiveCells,
-    rule.effect,
-    rule.windowIds,
-    PlatformRuleRef(rule.id, service),
-)
+    defaults: PolicyDefaultsV1?,
+): ResourceRuleV1 {
+    val sla = rule.effect == ResourceRuleEffect.SLA
+    return ResourceRuleV1(
+        id,
+        seriesId,
+        rule.unit,
+        rule.operator,
+        rule.threshold,
+        rule.minConsecutiveCells,
+        rule.effect,
+        rule.windowIds,
+        PlatformRuleRef(rule.id, service),
+        if (sla) rule.maxMissingFraction ?: defaults?.maxMissingFraction ?: MAX_MISSING_FRACTION_DEFAULT else null,
+        if (sla) rule.maxGapCells ?: defaults?.maxGapCells ?: MAX_GAP_CELLS_DEFAULT else null,
+    )
+}
 
 internal fun validatePlatformBinding(
     policy: PolicyV1,

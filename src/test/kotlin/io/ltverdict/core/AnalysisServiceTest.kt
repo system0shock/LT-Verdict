@@ -1097,12 +1097,19 @@ class AnalysisServiceTest {
             val third = analyze("0.1", services = listOf("orders"))
             val relaxed = analyze("0.5", using = policy(baseText.replace("\"threshold\": 0.4", "\"threshold\": 0.6")))
 
-            assertEquals(listOf("FAIL", "PASS", "NO_VERDICT", "PASS"), listOf(first, second, third, relaxed).map { result(it, "policy_verdict") })
+            assertEquals(
+                listOf("FAIL", "PASS", "NO_VERDICT", "PASS"),
+                listOf(first, second, third, relaxed).map { result(it, "policy_verdict") },
+            )
             assertTrue("RESOURCE_SERIES_NOT_FOUND" in coverageReasons(third))
             assertEquals(3, listOf(first, second, third).map { it.analysisId }.toSet().size)
             val policyHashes =
                 listOf(first, second, third).map {
-                    Json.parseToJsonElement(Files.readString(it.analysisDirectory.resolve("identity.json"))).jsonObject.getValue("policy_sha256")
+                    Json
+                        .parseToJsonElement(
+                            Files.readString(it.analysisDirectory.resolve("identity.json")),
+                        ).jsonObject
+                        .getValue("policy_sha256")
                 }
             assertEquals(1, policyHashes.toSet().size)
         }
@@ -1123,8 +1130,9 @@ class AnalysisServiceTest {
             """"values":[${List(30) { value }.joinToString(",")}]}"""
         val all =
             services.flatMap { service ->
+                val cpu = if (service == "orders") cpuOrders else "0.1"
                 listOf(
-                    series("cpu-$service", "openshift_container_cpu_limit_ratio", service, "ratio", "interval_mean", if (service == "orders") cpuOrders else "0.1"),
+                    series("cpu-$service", "openshift_container_cpu_limit_ratio", service, "ratio", "interval_mean", cpu),
                     series("memory-$service", "openshift_container_memory_limit_ratio", service, "ratio", "interval_max", "0.3"),
                     series("oom-$service", "openshift_oom", service, "events/s", "interval_rate", "0"),
                     series("restarts-$service", "openshift_restarts", service, "events/s", "interval_rate", "0"),
@@ -1132,8 +1140,10 @@ class AnalysisServiceTest {
                     series("replicas-$service", "openshift_unavailable_replicas", service, "count", "interval_max", "0"),
                 )
             }
-        return """{"schema_version":"resource-snapshot.v1","load_input_sha256":"$loadHash","start_epoch_ms":1767225600000,"step_ms":1000,""" +
-            """"point_count":30,"series":[${all.joinToString(",")}],"windows":[{"id":"steady","from_epoch_ms":1767225600000,"to_epoch_ms":1767225630000}],""" +
+        val seriesJson = all.joinToString(",")
+        return """{"schema_version":"resource-snapshot.v1","load_input_sha256":"$loadHash",""" +
+            """"start_epoch_ms":1767225600000,"step_ms":1000,"point_count":30,"series":[$seriesJson],""" +
+            """"windows":[{"id":"steady","from_epoch_ms":1767225600000,"to_epoch_ms":1767225630000}],""" +
             """"provenance":{"source_kind":"fixture","query_semantics":"interval","clock_alignment":"arm"}}"""
     }
 

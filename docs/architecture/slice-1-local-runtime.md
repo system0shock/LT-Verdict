@@ -130,6 +130,25 @@ CLI, API и задача онлайн-источника показывают к
 действует платформенное `sla`-правило. Identity, ключ сопоставимости baseline и
 `analysis_id` анализов без `platform_rules` не меняются.
 
+Допуск пропусков платформенных `sla`-правил (ADR 0018, решение D6) разрешается при
+разворачивании: `expandPlatformRules` кладёт в `ResourceRuleV1` значения
+`maxMissingFraction` и `maxGapCells` (правило, затем `defaults`, затем
+`MAX_MISSING_FRACTION_DEFAULT = 0.05` и `MAX_GAP_CELLS_DEFAULT = 3`); у правил снимка,
+профиля и платформенных `diagnostic`-правил они `null`, и вычислитель остаётся
+строгим. `evaluateRule` при непустом допуске считает ячейки окна (`CellStats`) и, если
+пропусков не больше допуска, есть хотя бы одна наблюдённая ячейка и разрыв не длиннее
+`maxGapCells` (точное сравнение `BigDecimal`), передаёт оценку `evaluateBridged`.
+Нарушающие отрезки наблюдённых ячеек по обе стороны пропуска образуют цепочку-гипотезу;
+`FAIL` выдают только отрезки длиной не меньше `min_consecutive_cells`, а цепочка,
+достигающая минимума лишь с пропущенными ячейками, даёт `NO_VERDICT`
+(`MISSING_RESOURCE_CELLS`) и находку с `presumed: true`. Исходы допуска: `PASS` и `FAIL`
+с информационной причиной `RESOURCE_GAPS` (coverage `INCOMPLETE`). Evidence
+`resource_policy_check` платформенных проверок получает `expected_cells`,
+`observed_cells`, `missing_cells`, `longest_gap_cells`. При непустых `platform_rules`
+`verdict_gates` дополняется ключами `max_missing_fraction_default` и
+`max_gap_cells_default`: такой анализ получает новый `analysis_id`; анализы без
+`platform_rules` и ключ сопоставимости baseline не меняются.
+
 Canonical `analysis-result.v1` одинаков для CLI и UI при одинаковых input,
 policy и engine configuration.
 

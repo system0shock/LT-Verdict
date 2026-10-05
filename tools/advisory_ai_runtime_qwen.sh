@@ -1,6 +1,13 @@
 #!/bin/sh
 set -u
 
+# ADR 0023, D4: the model arrives from the launcher in ADVISORY_MODEL and is checked here again (slug pattern of ai-models.v1).
+model="${ADVISORY_MODEL:-}"
+case "$model" in
+  ''|[!A-Za-z0-9]*|*[!A-Za-z0-9._:/-]*|*..*|*//*) echo "invalid model" >&2; exit 90 ;;
+esac
+[ "${#model}" -le 128 ] || { echo "invalid model" >&2; exit 90; }
+
 /usr/bin/timeout --signal=KILL 605s /usr/bin/env -i \
   HOME=/home/qwen \
   QWEN_HOME=/home/qwen \
@@ -16,7 +23,7 @@ set -u
   --bare \
   --safe-mode \
   --auth-type=openai \
-  --model=deepseek-v4-flash-0731 \
+  "--model=$model" \
   --openai-base-url=http://modelstudio-relay:18080/v1 \
   "--system-prompt=$(cat /input/system-prompt.md)" \
   --input-format=text \

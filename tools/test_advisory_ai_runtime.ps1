@@ -96,6 +96,52 @@ try {
         throw "Deep violation preflight result differs."
     }
 
+    # ADR 0023, D4: model and destination are parameters, checked again in the launcher; the chain runs with a model that is not built in.
+    if ([string]$runtimeResult.model_id -cne "deepseek-v4-flash-0731") { throw "Default preflight must report the built-in model." }
+    function Invoke-Parameterized {
+        param([string]$Name, [hashtable]$Parameters)
+        $parameterOutput = Join-Path $temporary "$Name-advice-output.json"
+        $parameterResult = Join-Path $temporary "$Name-runtime-result.json"
+        $parameterCancel = Join-Path $temporary "$Name-cancel"
+        $rejectedByBinding = $false
+        try {
+            & $runner -Mode Preflight -EvidencePath $evidence -OutputPath $parameterOutput -ResultPath $parameterResult -CancelPath $parameterCancel @Parameters
+        } catch { $rejectedByBinding = $true }
+        $value = $null
+        if (Test-Path -LiteralPath $parameterResult -PathType Leaf) {
+            $value = Get-Content -LiteralPath $parameterResult -Raw -Encoding UTF8 | ConvertFrom-Json
+        }
+        return [pscustomobject]@{ Result = $value; Rejected = $rejectedByBinding -or $null -eq $value }
+    }
+    $custom = Invoke-Parameterized -Name "custom-model" -Parameters @{
+        ModelId = "org/qwen3.8-max:latest"; UpstreamUrl = "https://models.internal.example:8443/v1/chat/completions"
+    }
+    if ($custom.Rejected -or [string]$custom.Result.status -ne "SUCCESS" -or [string]$custom.Result.model_id -cne "org/qwen3.8-max:latest" -or
+        $null -ne $custom.Result.endpoint_host) {
+        throw "Preflight with a configured model and endpoint differs: $($custom.Result | ConvertTo-Json -Compress)"
+    }
+    $plainHttp = Invoke-Parameterized -Name "http-allowed" -Parameters @{ UpstreamUrl = "http://gw.internal:8080/v1/chat"; AllowInsecureHttp = $true }
+    if ($plainHttp.Rejected -or [string]$plainHttp.Result.status -ne "SUCCESS") { throw "Preflight with an allowed http endpoint failed." }
+    $badInputs = @(
+        @{ ModelId = "a;b" }, @{ ModelId = "a b" }, @{ ModelId = "-x" }, @{ ModelId = "a..b" }, @{ ModelId = "a//b" },
+        @{ ModelId = ("a" * 129) }, @{ ModelId = "a`nb" }, @{ ModelId = "a`$(id)" },
+        @{ UpstreamUrl = "http://gw.internal/v1" }, @{ UpstreamUrl = "ftp://gw.example/v1" }, @{ UpstreamUrl = "https://user@gw.example/v1" },
+        @{ UpstreamUrl = "https://gw.example/v1?x=1" }, @{ UpstreamUrl = "https://gw.example/v1#f" }, @{ UpstreamUrl = 'https://gw.example/a"b' },
+        @{ UpstreamUrl = "https://gw.example/a b" }, @{ UpstreamUrl = "https:///v1" }, @{ UpstreamUrl = "https://gw.example:0/v1" },
+        @{ UpstreamUrl = "https://gw_bad.example/v1" }, @{ UpstreamUrl = "gw.example/v1" }, @{ UpstreamUrl = ("https://gw.example/" + ("a" * 500)) }
+    )
+    $badIndex = 0
+    foreach ($bad in $badInputs) {
+        $badIndex += 1
+        $rejected = Invoke-Parameterized -Name "bad-$badIndex" -Parameters $bad
+        if (-not $rejected.Rejected -and [string]$rejected.Result.status -eq "SUCCESS") {
+            throw "Launcher accepted an invalid parameter: $($bad | ConvertTo-Json -Compress)"
+        }
+        if (-not $rejected.Rejected -and [string]$rejected.Result.stage -ne "validate_inputs") {
+            throw "Launcher rejected an invalid parameter too late: $($bad | ConvertTo-Json -Compress)"
+        }
+    }
+
     $liveScenario = Invoke-Scenario -Name "live-scenario" -Scenario "wrapped-twice" -RunMode "Live"
     if ([string]$liveScenario.Result.status -ne "FAILED" -or
         [string]$liveScenario.Result.failure_code -ne "PROCESS_FAILED" -or

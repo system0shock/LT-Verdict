@@ -6,8 +6,34 @@ import { isDeepStrictEqual } from "node:util";
 const mode = process.env.ADVISORY_RELAY_MODE;
 if (mode !== "preflight" && mode !== "live") throw new Error("invalid relay mode");
 
-const fixedModel = "deepseek-v4-flash-0731";
-const upstream = { hostname: "token-plan.ap-southeast-1.maas.aliyuncs.com", port: 443, path: "/compatible-mode/v1/chat/completions" };
+// ADR 0023, D4: one model and one destination per process, both fixed by the operator's configuration at start.
+// The launcher passes them in the environment; without them the built-in model and endpoint apply.
+const BUILT_IN_MODEL = "deepseek-v4-flash-0731";
+const BUILT_IN_UPSTREAM = "https://token-plan.ap-southeast-1.maas.aliyuncs.com/compatible-mode/v1/chat/completions";
+const MODEL_SLUG = /^[A-Za-z0-9][A-Za-z0-9._:/-]{0,127}$/;
+const HOST_NAME = /^(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?){0,126}|\[(?=[0-9a-f:.]*:[0-9a-f:.]*:)(?=[0-9a-f:.]*[0-9a-f])[0-9a-f:.]{2,45}\])$/;
+const UPSTREAM_FORM = /^(https?):\/\/(\[[0-9A-Fa-f:.]+\]|[A-Za-z0-9.-]+)(?::([0-9]{1,5}))?(\/[^?#]*)?$/;
+
+function parseModel(text) {
+  if (!MODEL_SLUG.test(text) || text.includes("..") || text.includes("//")) throw new Error("invalid relay model");
+  return text;
+}
+
+function parseUpstream(text, httpAllowed) {
+  // Printable ASCII only, none of the characters that could break quoting; query and fragment are not part of the address.
+  if (text.length > 512 || !/^[\x21-\x7E]+$/.test(text) || /["\\`^|<>{}]/.test(text)) throw new Error("invalid relay upstream");
+  const match = UPSTREAM_FORM.exec(text);
+  if (!match || (match[1] === "http" && !httpAllowed)) throw new Error("invalid relay upstream");
+  const hostname = match[2].toLowerCase();
+  const port = match[3] === undefined ? (match[1] === "https" ? 443 : 80) : Number(match[3]);
+  if (!HOST_NAME.test(hostname) || !Number.isInteger(port) || port < 1 || port > 65_535) throw new Error("invalid relay upstream");
+  return { scheme: match[1], hostname, port, path: match[4] ?? "/" };
+}
+
+const allowHttpEnv = process.env.ADVISORY_RELAY_ALLOW_HTTP;
+if (allowHttpEnv !== undefined && allowHttpEnv !== "1") throw new Error("invalid relay http permission");
+const fixedModel = parseModel(process.env.ADVISORY_RELAY_MODEL ?? BUILT_IN_MODEL);
+const upstream = parseUpstream(process.env.ADVISORY_RELAY_UPSTREAM ?? BUILT_IN_UPSTREAM, allowHttpEnv === "1");
 const requestLimit = 524_288;
 const responseLimit = 67_108_864;
 const outputRoot = process.env.ADVISORY_RELAY_OUTPUT_ROOT ?? "/out";
@@ -150,6 +176,7 @@ function writeResult(outcome, ordinal) {
     outcomes: outcomes.filter(Boolean),
     retry_refused_reason: refusedReason,
     upstream_host: upstreamHost,
+    model_id: fixedModel,
   }));
 }
 
@@ -299,8 +326,11 @@ function callProvider(body) {
     const encoded = Buffer.from(JSON.stringify(body));
     // The host the request is sent to, lower case with the port; it ends up in provenance (ADR 0023, D4).
     upstreamHost = `${upstream.hostname}:${upstream.port}`;
-    const request = https.request({
-      ...upstream,
+    const transport = upstream.scheme === "https" ? https : http;
+    const request = transport.request({
+      hostname: upstream.hostname.replace(/^\[|\]$/g, ""),
+      port: upstream.port,
+      path: upstream.path,
       method: "POST",
       headers: {
         authorization: `Bearer ${apiKey}`,

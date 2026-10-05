@@ -3,6 +3,7 @@ package io.ltverdict.web
 import io.ltverdict.ai.AdviceUnavailableReason
 import io.ltverdict.ai.AdvisoryAiJobs
 import io.ltverdict.ai.AdvisoryAiService
+import io.ltverdict.ai.AdvisoryEvidence
 import io.ltverdict.ai.AdvisoryRunner
 import io.ltverdict.ai.AiAdviceStore
 import io.ltverdict.ai.AiModel
@@ -195,6 +196,122 @@ class LocalApiTest {
         }
 
     @Test
+    fun `advice request chooses a model from the configuration and the job status names it`() {
+        val config =
+            AiModelsConfig(
+                endpointUrl = "https://gateway.internal.example/v1/chat/completions",
+                endpointLabel = "Internal gateway",
+                allowInsecureHttp = false,
+                defaultModel = "qwen3.8-max",
+                models = listOf(AiModel("qwen3.8-max", "Qwen 3.8 Max"), AiModel("org/deepseek:2", "DeepSeek")),
+            )
+        val requested = java.util.concurrent.CopyOnWriteArrayList<String?>()
+        val runner =
+            object : AdvisoryRunner {
+                override fun invoke(evidence: AdvisoryEvidence): RunnerOutcome = invoke(evidence, null)
+
+                override fun invoke(
+                    evidence: AdvisoryEvidence,
+                    modelId: String?,
+                ): RunnerOutcome {
+                    requested += modelId
+                    return RunnerOutcome.Unavailable(AdviceUnavailableReason.OS_ISOLATION_NOT_PROVEN)
+                }
+            }
+        withServer(adviceRunner = runner, aiModels = config) { store, api ->
+            api.bootstrap()
+            val input = store.acceptInput(SPIKE_DROP.bytes().inputStream(), "spike-drop.jtl")
+            val id = api.createJob(input.runId).analysisId(api)
+            val base = "/api/runs/${input.runId}/analyses/$id"
+
+            fun submit(body: String): HttpResponse<String> = api.post("$base/advice", "application/json", body.encodeToByteArray())
+
+            fun awaitUnavailable(response: HttpResponse<String>): JsonObject {
+                val jobId =
+                    response
+                        .jsonObject()
+                        .getValue("job_id")
+                        .jsonPrimitive.content
+                val deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5)
+                var status = api.get("/api/advice-jobs/$jobId").jsonObject()
+                while (status.getValue("state").jsonPrimitive.content in setOf("QUEUED", "PROCESSING") && System.nanoTime() < deadline) {
+                    LockSupport.parkNanos(1_000_000)
+                    status = api.get("/api/advice-jobs/$jobId").jsonObject()
+                }
+                assertEquals("UNAVAILABLE", status.getValue("state").jsonPrimitive.content)
+                return status
+            }
+
+            // No model in the body: the default model of the configuration is the selected one.
+            val byDefault = submit("{}")
+            assertEquals(202, byDefault.statusCode())
+            assertEquals(
+                "qwen3.8-max",
+                byDefault
+                    .jsonObject()
+                    .getValue("model_id")
+                    .jsonPrimitive.content,
+            )
+            val defaultStatus = awaitUnavailable(byDefault)
+            assertEquals("qwen3.8-max", defaultStatus.getValue("model_id").jsonPrimitive.content)
+
+            // A slug of the configuration is accepted and shown in the status of an unavailable job too.
+            val chosen = submit("""{"confirm_external_transfer":true,"model_id":"org/deepseek:2"}""")
+            assertEquals(202, chosen.statusCode())
+            assertEquals(
+                "org/deepseek:2",
+                chosen
+                    .jsonObject()
+                    .getValue("model_id")
+                    .jsonPrimitive.content,
+            )
+            assertEquals("org/deepseek:2", awaitUnavailable(chosen).getValue("model_id").jsonPrimitive.content)
+            assertEquals(
+                "org/deepseek:2",
+                api
+                    .get("$base/advice")
+                    .jsonObject()
+                    .getValue("job")
+                    .jsonObject
+                    .getValue("model_id")
+                    .jsonPrimitive.content,
+            )
+            assertEquals(listOf<String?>("qwen3.8-max", "org/deepseek:2"), requested.toList())
+
+            // A slug outside the configuration, with a well formed shape, is a 400 and never reaches the runner.
+            for (body in listOf(
+                """{"model_id":"org/unknown:1"}""",
+                """{"model_id":"QWEN3.8-MAX"}""",
+                """{"model_id":"qwen3.8-max","confirm_external_transfer":false}""",
+            )) {
+                val rejected = submit(body)
+                assertEquals(400, rejected.statusCode(), body)
+                assertEquals("MALFORMED_REQUEST", rejected.errorCode())
+            }
+            assertEquals(2, requested.size)
+        }
+    }
+
+    @Test
+    fun `advice request with a model is refused when no model configuration is available`() =
+        withServer(
+            adviceRunner = AdvisoryRunner { RunnerOutcome.Unavailable(AdviceUnavailableReason.MODEL_CONFIG_INVALID) },
+        ) { store, api ->
+            api.bootstrap()
+            val input = store.acceptInput(SPIKE_DROP.bytes().inputStream(), "spike-drop.jtl")
+            val id = api.createJob(input.runId).analysisId(api)
+            val base = "/api/runs/${input.runId}/analyses/$id"
+
+            val withModel = api.post("$base/advice", "application/json", """{"model_id":"deepseek-v4-flash-0731"}""".encodeToByteArray())
+            assertEquals(400, withModel.statusCode())
+            assertEquals("MALFORMED_REQUEST", withModel.errorCode())
+
+            val plain = api.post("$base/advice", "application/json", "{}".encodeToByteArray())
+            assertEquals(202, plain.statusCode())
+            assertEquals(JsonNull, plain.jsonObject().getValue("model_id"))
+        }
+
+    @Test
     fun `bootstrap keeps its fields and reports no advisory AI when none is configured`() =
         withServer { _, api ->
             val body = api.bootstrap().jsonObject()
@@ -280,12 +397,26 @@ class LocalApiTest {
                     """{"confirm_external_transfer":1}""",
                     """{"confirm_external_transfer":null}""",
                     """{"x":1}""",
-                    """{"model_id":"deepseek-v4-flash-0731"}""",
+                    """{"model_id":1}""",
+                    """{"model_id":null}""",
+                    """{"model_id":""}""",
+                    """{"model_id":"a;b"}""",
+                    """{"model_id":"a..b"}""",
+                    """{"model_id":"a//b"}""",
+                    """{"model_id":"a b"}""",
+                    """{"model_id":"-a"}""",
+                    """{"model_id":"a${'$'}(id)"}""",
+                    """{"model_id":"${"a".repeat(129)}"}""",
+                    """{"model_id":"a","model_id":"b"}""",
+                    """{"model_id":"a","model_id":"a"}""",
+                    """{"model${92.toChar()}u005fid":"a","model_id":"b"}""",
+                    """{"confirm${92.toChar()}u005fexternal_transfer":true,"confirm_external_transfer":false}""",
+                    """{"model_id":"a","x":1}""",
+                    """{"confirm_external_transfer":true,"model_id":"a","confirm_external_transfer":true}""",
                     """{"confirm_external_transfer":true,"x":1}""",
                     """{"confirm_external_transfer":true,"confirm_external_transfer":true}""",
                     """{"confirm_external_transfer":false,"confirm_external_transfer":true}""",
                     """{"confirm_external_transfer":true,"confirm_external_transfer":false}""",
-                    """{"confirm\u005fexternal_transfer":true}""",
                     "[]",
                     "true",
                     "null",
@@ -312,6 +443,10 @@ class LocalApiTest {
                     "{\r\n}",
                     """{"confirm_external_transfer":true}""",
                     """ { "confirm_external_transfer" : true } """,
+                    """{"model_id":"deepseek-v4-flash-0731"}""",
+                    """{"confirm_external_transfer":true,"model_id":"org/model:1"}""",
+                    """ { "model_id" : "a.b-c_d:e/f" } """,
+                    """{"confirm${92.toChar()}u005fexternal_transfer":true}""",
                     padded(512),
                 )
             for (body in accepted) {

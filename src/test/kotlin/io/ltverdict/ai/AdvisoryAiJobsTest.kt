@@ -1,6 +1,7 @@
 package io.ltverdict.ai
 
 import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.put
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertInstanceOf
@@ -62,6 +63,55 @@ class AdvisoryAiJobsTest {
             val unavailableStatus = awaitState(jobs, unavailable.jobId, AdviceJobState.UNAVAILABLE)
             assertEquals(AdviceUnavailableReason.CREDENTIAL_NOT_CONFIGURED, unavailableStatus.unavailableReason)
             assertNull(unavailableStatus.failure)
+        }
+    }
+
+    @Test
+    fun `the selected model reaches the work and stays in every terminal status`() {
+        val seen = java.util.concurrent.CopyOnWriteArrayList<String?>()
+        val outcomes =
+            mapOf(
+                "complete" to AdviceRunResult.Saved(StoredAdvice(Path.of("advice"), buildJsonObject {}), reused = false),
+                "failed" to AdviceRunResult.Failed(AdviceFailure.TIMEOUT),
+                "unavailable" to AdviceRunResult.Unavailable(AdviceUnavailableReason.MODEL_ENDPOINT_UNAVAILABLE),
+            )
+        AdvisoryAiJobs(generateWithModel = { _, analysisId, modelId ->
+            seen += modelId
+            outcomes.getValue(analysisId)
+        }).use { jobs ->
+            val states =
+                mapOf(
+                    "complete" to AdviceJobState.COMPLETE,
+                    "failed" to AdviceJobState.FAILED,
+                    "unavailable" to AdviceJobState.UNAVAILABLE,
+                )
+            for ((analysisId, state) in states) {
+                val submitted = accepted(jobs.submit(RUN_ID, analysisId, "org/model:1")).status
+                assertEquals("org/model:1", submitted.modelId)
+                assertEquals("org/model:1", awaitState(jobs, submitted.jobId, state).modelId)
+                assertEquals("org/model:1", jobs.latest(RUN_ID, analysisId)?.modelId)
+            }
+            assertEquals(listOf<String?>("org/model:1", "org/model:1", "org/model:1"), seen.toList())
+
+            val unspecified = accepted(jobs.submit(RUN_ID, "failed")).status
+            assertNull(unspecified.modelId)
+            assertNull(awaitState(jobs, unspecified.jobId, AdviceJobState.FAILED).modelId)
+        }
+    }
+
+    @Test
+    fun `a reused advice reports the model that produced it`() {
+        val advice =
+            StoredAdvice(
+                Path.of("advice"),
+                buildJsonObject { put("provenance", buildJsonObject { put("model_id", "org/first:1") }) },
+            )
+        AdvisoryAiJobs(generate = { _, _ -> AdviceRunResult.Saved(advice, reused = true) }).use { jobs ->
+            val submitted = accepted(jobs.submit(RUN_ID, ANALYSIS_ID, "org/second:2")).status
+            assertEquals("org/second:2", submitted.modelId)
+            val complete = awaitState(jobs, submitted.jobId, AdviceJobState.COMPLETE)
+            assertEquals(true, complete.reused)
+            assertEquals("org/first:1", complete.modelId)
         }
     }
 

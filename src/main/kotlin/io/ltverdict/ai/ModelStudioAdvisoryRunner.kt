@@ -21,8 +21,17 @@ internal class ModelStudioAdvisoryRunner private constructor(
     private val qwenPackageRoot: Path,
     private val credentialEnvFile: Path,
     private val hostEnvironment: Map<String, String>,
+    private val config: AiModelsConfig,
 ) : AdvisoryRunner {
-    override fun invoke(evidence: AdvisoryEvidence): RunnerOutcome {
+    override fun invoke(evidence: AdvisoryEvidence): RunnerOutcome = invoke(evidence, null)
+
+    override fun invoke(
+        evidence: AdvisoryEvidence,
+        modelId: String?,
+    ): RunnerOutcome {
+        // The slug and the address come only from the configuration; a slug that is not in it never reaches the launcher.
+        val selected = modelId ?: config.defaultModel
+        if (config.models.none { it.id == selected }) return RunnerOutcome.Failed(AdviceFailure.PROCESS_FAILED)
         val script = repositoryRoot.resolve(RUNTIME_SCRIPT)
         val prompt = repositoryRoot.resolve(PROMPT_FILE)
         if (!Files.isRegularFile(script) || !Files.isRegularFile(prompt)) {
@@ -42,7 +51,7 @@ internal class ModelStudioAdvisoryRunner private constructor(
 
             val process =
                 try {
-                    ProcessBuilder(command(script, evidencePath, outputPath, resultPath, cancelPath))
+                    ProcessBuilder(command(script, evidencePath, outputPath, resultPath, cancelPath, selected))
                         .directory(repositoryRoot.toFile())
                         .redirectOutput(ProcessBuilder.Redirect.DISCARD)
                         .redirectError(ProcessBuilder.Redirect.DISCARD)
@@ -67,7 +76,7 @@ internal class ModelStudioAdvisoryRunner private constructor(
                 requestCancellation(cancelPath, process)
                 return RunnerOutcome.Failed(AdviceFailure.TIMEOUT)
             }
-            return readResult(resultPath, outputPath, prompt, process.exitValue())
+            return readResult(resultPath, outputPath, prompt, process.exitValue(), selected)
         } finally {
             DataDirectory.deleteTree(temporary)
         }
@@ -79,6 +88,7 @@ internal class ModelStudioAdvisoryRunner private constructor(
         output: Path,
         result: Path,
         cancel: Path,
+        modelId: String,
     ) = listOf(
         powershellPath(hostEnvironment),
         "-NoLogo",
@@ -102,13 +112,18 @@ internal class ModelStudioAdvisoryRunner private constructor(
         credentialEnvFile.toString(),
         "-QwenPackageRoot",
         qwenPackageRoot.toString(),
-    )
+        "-ModelId",
+        modelId,
+        "-UpstreamUrl",
+        config.endpointUrl,
+    ) + if (config.allowInsecureHttp) listOf("-AllowInsecureHttp") else emptyList()
 
     private fun readResult(
         resultPath: Path,
         outputPath: Path,
         promptPath: Path,
         processExitCode: Int,
+        selectedModel: String,
     ): RunnerOutcome {
         if (!Files.isRegularFile(resultPath) || Files.size(resultPath) > MAX_RUNTIME_RESULT_BYTES) {
             return RunnerOutcome.Failed(AdviceFailure.PROCESS_FAILED)
@@ -136,6 +151,8 @@ internal class ModelStudioAdvisoryRunner private constructor(
                     duration !in 0..613_000 ||
                     endpointHost == null ||
                     !validEndpointHost(endpointHost) ||
+                    endpointHost != endpointHostOf(config.endpointUrl) ||
+                    result.string("model_id") != selectedModel ||
                     !Files.isRegularFile(outputPath) ||
                     Files.size(outputPath) > MAX_ADVICE_OUTPUT_BYTES
                 ) {
@@ -147,7 +164,7 @@ internal class ModelStudioAdvisoryRunner private constructor(
                             runnerId = QwenCode0211.RUNNER_ID,
                             runnerVersion = QwenCode0211.RUNNER_VERSION,
                             runnerArtifactSha256 = QwenCode0211.CLI_ENTRY_SHA256,
-                            modelId = QwenCode0211.MODEL_ID,
+                            modelId = selectedModel,
                             endpointHost = endpointHost,
                             promptVersion = QwenCode0211.PROMPT_VERSION,
                             promptSha256 = sha256Hex(Files.readAllBytes(promptPath)),
@@ -174,6 +191,7 @@ internal class ModelStudioAdvisoryRunner private constructor(
         fun fromEnvironment(
             environment: Map<String, String> = System.getenv(),
             repositoryRoot: Path? = null,
+            config: AiModelsConfig = AiModelsConfig.BUILT_IN,
         ): AdvisoryRunner {
             val configured = environment[CREDENTIAL_ENVIRONMENT]?.trim()
             if (configured.isNullOrEmpty()) return UnavailableAdvisoryRunner(AdviceUnavailableReason.CREDENTIAL_NOT_CONFIGURED)
@@ -185,7 +203,7 @@ internal class ModelStudioAdvisoryRunner private constructor(
             val qwen =
                 environment[QWEN_ROOT_ENVIRONMENT]?.trim()?.takeIf(String::isNotEmpty)?.pathOrNull()
                     ?: root.resolve(DEFAULT_QWEN_ROOT).normalize()
-            return ModelStudioAdvisoryRunner(root, qwen, credential, environment)
+            return ModelStudioAdvisoryRunner(root, qwen, credential, environment, config)
         }
     }
 }

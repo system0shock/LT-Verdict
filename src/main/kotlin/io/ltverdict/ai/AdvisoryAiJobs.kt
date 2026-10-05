@@ -1,5 +1,7 @@
 package io.ltverdict.ai
 
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
 import java.util.ArrayDeque
 import java.util.UUID
 import java.util.concurrent.ArrayBlockingQueue
@@ -28,6 +30,8 @@ internal data class AdviceJobStatus(
     val reused: Boolean? = null,
     val failure: AdviceFailure? = null,
     val unavailableReason: AdviceUnavailableReason? = null,
+    /** The model selected for the job (ADR 0023, D2); null when the model configuration is unavailable. */
+    val modelId: String? = null,
 )
 
 internal sealed interface AdviceSubmitResult {
@@ -39,10 +43,13 @@ internal sealed interface AdviceSubmitResult {
 }
 
 internal class AdvisoryAiJobs(
-    private val generate: (String, String) -> AdviceRunResult,
+    private val generateWithModel: (String, String, String?) -> AdviceRunResult,
     parallelism: Int = 1,
 ) : AutoCloseable {
     constructor(service: AdvisoryAiService, parallelism: Int = 1) : this(service::generate, parallelism)
+
+    constructor(generate: (String, String) -> AdviceRunResult, parallelism: Int = 1) :
+        this({ runId, analysisId, _ -> generate(runId, analysisId) }, parallelism)
 
     private val lock = Any()
     private val statuses = mutableMapOf<String, AdviceJobStatus>()
@@ -72,6 +79,7 @@ internal class AdvisoryAiJobs(
     fun submit(
         runId: String,
         analysisId: String,
+        modelId: String? = null,
     ): AdviceSubmitResult =
         synchronized(lock) {
             val key = runId to analysisId
@@ -82,8 +90,9 @@ internal class AdvisoryAiJobs(
                     runId = runId,
                     analysisId = analysisId,
                     state = AdviceJobState.QUEUED,
+                    modelId = modelId,
                 )
-            val record = JobRecord(runId, analysisId)
+            val record = JobRecord(runId, analysisId, modelId)
             val task = Runnable { run(status.jobId, record) }
             record.task = task
             statuses[status.jobId] = status
@@ -148,14 +157,20 @@ internal class AdvisoryAiJobs(
             statuses[jobId] = current.copy(state = AdviceJobState.PROCESSING)
         }
         try {
-            val result = generate(record.runId, record.analysisId)
+            val result = generateWithModel(record.runId, record.analysisId, record.modelId)
             synchronized(lock) {
                 val current = statuses[jobId] ?: return@synchronized
                 if (!current.state.isTerminal()) {
                     terminal(
                         jobId,
                         when (result) {
-                            is AdviceRunResult.Saved -> current.copy(state = AdviceJobState.COMPLETE, reused = result.reused)
+                            is AdviceRunResult.Saved ->
+                                // An advice that already existed was produced by its own model, whatever was requested now.
+                                current.copy(
+                                    state = AdviceJobState.COMPLETE,
+                                    reused = result.reused,
+                                    modelId = storedModelId(result.advice) ?: current.modelId,
+                                )
                             is AdviceRunResult.Failed -> current.copy(state = AdviceJobState.FAILED, failure = result.reason)
                             is AdviceRunResult.Unavailable ->
                                 current.copy(state = AdviceJobState.UNAVAILABLE, unavailableReason = result.reason)
@@ -201,6 +216,7 @@ internal class AdvisoryAiJobs(
     private class JobRecord(
         val runId: String,
         val analysisId: String,
+        val modelId: String?,
     ) {
         val cancelled = AtomicBoolean()
         lateinit var task: Runnable
@@ -212,6 +228,9 @@ internal class AdvisoryAiJobs(
         const val CLOSE_TIMEOUT_SECONDS = 5L
     }
 }
+
+private fun storedModelId(advice: StoredAdvice): String? =
+    ((advice.document["provenance"] as? JsonObject)?.get("model_id") as? JsonPrimitive)?.takeIf { it.isString }?.content
 
 private fun AdviceJobState.isTerminal(): Boolean =
     this == AdviceJobState.COMPLETE ||

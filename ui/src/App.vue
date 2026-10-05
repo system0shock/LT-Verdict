@@ -39,7 +39,7 @@ import {
 } from './api'
 import { summarizeVerdict } from './verdictSummary'
 import type { AttentionTarget } from './shell/overview'
-import type { AnalysisResult, AnalysisSummary, Bucket, JobStatus, OpenSearchEvidence, Policy, PolicyError, PostgresContextEvidence, RunSummary, SourceProfile, SourceRequest, Theme } from './types'
+import type { AdvisoryAiConfig, AnalysisResult, AnalysisSummary, Bucket, JobStatus, OpenSearchEvidence, Policy, PolicyError, PostgresContextEvidence, RunSummary, SourceProfile, SourceRequest, Theme } from './types'
 import { COMPARE_LABELS } from './shell/labels.compare'
 
 const theme = ref<Theme>(window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light')
@@ -109,6 +109,8 @@ const sourceStep = ref('')
 const sourceMargin = ref('0')
 const sourceMaxIdleGap = ref('60000')
 const aiRequested = ref(false)
+const aiConfig = ref<AdvisoryAiConfig | null>(null)
+const aiModel = ref('')
 const adviceAutoFor = ref<string | null>(null)
 const policy = ref<Policy | null>(null)
 const policyStatus = ref('')
@@ -205,7 +207,10 @@ watch(
 
 onMounted(async () => {
   try {
-    await bootstrap()
+    const started = await bootstrap()
+    // Список моделей ИИ-разбора (ADR 0023); без поля или с null селектора нет. Выбор живёт только в состоянии страницы.
+    aiConfig.value = started.advisory_ai ?? null
+    aiModel.value = aiConfig.value?.default_model_id ?? ''
     apiReady.value = true
     await refreshRuns()
     try {
@@ -964,6 +969,8 @@ function focusPolicy() {
             :policy-errors="policyErrors"
             :busy="working || (uploadProgress > 0 && !job) || !!postgresCapturePhase || trialBusy"
             :ai-requested="shellNew ? aiRequested : undefined"
+            :ai-config="shellNew ? aiConfig : undefined"
+            :ai-model="shellNew ? aiModel : undefined"
 
             @input="selectInput"
             @resources="selectResources"
@@ -987,6 +994,7 @@ function focusPolicy() {
             @update-policy="updatePolicy"
             @open-rules="activeTab = 'rules'"
             @ai-requested="aiRequested = $event"
+            @ai-model="aiModel = $event"
             @analyze="analyze"
           />
 
@@ -1120,6 +1128,9 @@ function focusPolicy() {
             :auto-start="adviceAutoFor !== null && adviceAutoFor === selectedAnalysisId"
             :result="result"
             :linkable="shellNew"
+            :ai-config="aiConfig"
+            :ai-model="aiModel"
+            @ai-model="aiModel = $event"
             @auto-started="adviceAutoFor = null"
             @navigate="jumpTo"
           />

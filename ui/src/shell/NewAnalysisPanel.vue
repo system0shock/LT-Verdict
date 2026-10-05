@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import type { Policy, PolicyError, SourceProfile } from '../types'
+import type { AdvisoryAiConfig, Policy, PolicyError, SourceProfile } from '../types'
+import ModelChoice from './ModelChoice.vue'
 import { SETUP_LABELS } from './labels'
 import { RULES_LABELS } from './labels.rules'
 import { summarizePolicy } from './rules'
@@ -32,6 +33,8 @@ const props = defineProps<{
   policyErrors: PolicyError[]
   busy: boolean
   aiRequested: boolean
+  aiConfig?: AdvisoryAiConfig | null
+  aiModel?: string
 }>()
 
 const emit = defineEmits<{
@@ -56,6 +59,7 @@ const emit = defineEmits<{
   'policy-file': [file: File | null]
   'open-rules': []
   'ai-requested': [value: boolean]
+  'ai-model': [id: string]
   analyze: []
 }>()
 
@@ -549,6 +553,13 @@ function levelLabel(level: ReadinessLevel) {
               {{ SETUP_LABELS.aiRequestedLabel }}
             </label>
           </div>
+          <ModelChoice
+            v-if="aiRequested"
+            :config="aiConfig"
+            :selected="aiModel ?? ''"
+            :disabled="busy"
+            @select="emit('ai-model', $event)"
+          />
         </section>
       </div>
 

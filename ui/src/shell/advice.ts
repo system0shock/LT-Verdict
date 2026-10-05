@@ -1,4 +1,4 @@
-import type { AdviceDocument, AdviceJob, AnalysisResult } from '../types'
+import type { AdviceDocument, AdviceJob, AdvisoryAiConfig, AnalysisResult } from '../types'
 import { scopeLabel } from '../verdictSummary'
 import { ADVICE_LABELS } from './labels.advice'
 import type { AttentionTarget } from './overview'
@@ -29,6 +29,27 @@ export function provenanceLines(advice: AdviceDocument): ProvenanceLine[] {
   if (runner) lines.push({ label: ADVICE_LABELS.runner, value: runner })
   if (source.invocation_id) lines.push({ label: ADVICE_LABELS.invocation, value: source.invocation_id })
   return lines
+}
+
+const measuredWord = (measured: boolean): string => measured ? ADVICE_LABELS.modelChoice.measured : ADVICE_LABELS.modelChoice.notMeasured
+
+// Строки списка выбора модели: подпись из конфигурации и признак `measured` словами.
+export function modelOptions(config: AdvisoryAiConfig): Array<{ id: string; text: string }> {
+  return config.models.map((model) => ({ id: model.id, text: `${model.label} (${measuredWord(model.measured)})` }))
+}
+
+// Выбранная модель: выбор вне списка и пустой выбор означают модель по умолчанию.
+export function chosenModel(config: AdvisoryAiConfig, selected: string): AdvisoryAiConfig['models'][number] | null {
+  return config.models.find((model) => model.id === selected) ?? config.models.find((model) => model.id === config.default_model_id) ?? config.models[0] ?? null
+}
+
+// `model_id` уходит в запрос только когда есть выбор (моделей больше одной); иначе сервер берёт модель по умолчанию.
+export function requestedModelId(config: AdvisoryAiConfig | null | undefined, selected: string): string | undefined {
+  return config && config.models.length > 1 ? chosenModel(config, selected)?.id : undefined
+}
+
+export function modelCaption(model: AdvisoryAiConfig['models'][number]): string {
+  return `${ADVICE_LABELS.modelChoice.label}: ${model.label} (${measuredWord(model.measured)})`
 }
 
 export function jobView(job: AdviceJob): FailureView {

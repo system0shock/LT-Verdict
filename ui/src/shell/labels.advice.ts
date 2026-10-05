@@ -39,6 +39,15 @@ export const ADVICE_LABELS = {
       trend_summary: 'Сводка трендов',
     } as Record<string, string>,
   },
+  // Выбор модели (срез CM5 ADR 0023). Подписи назначения (endpoint) нет: решение владельца 2026-10-06.
+  modelChoice: {
+    label: 'Модель',
+    measured: 'модель измерена',
+    notMeasured: 'не измерена',
+    unmeasuredNote: 'Модель не входила в эксперимент ADR 0021: качество советов не проверено.',
+    once: 'Совет создаётся один раз на анализ: модель уже выбрана и показана в происхождении совета.',
+    jobModel: 'Модель задания',
+  },
   codeLabel: 'код',
   hintLabel: 'Что делать',
   stateUnknown: 'Неизвестное состояние',
@@ -83,6 +92,7 @@ export const ADVICE_LABELS = {
     RUNNER_ARTIFACT_MISSING: 'Не найдены файлы runtime или пакет Qwen Code.',
     RUNNER_ARTIFACT_MISMATCH: 'Пакет Qwen Code не совпадает с закреплённым.',
     MODEL_ENDPOINT_UNAVAILABLE: 'Сервис модели недоступен.',
+    MODEL_CONFIG_INVALID: 'Файл конфигурации моделей не читается или не проходит проверку.',
   } as Record<string, string>,
   unavailableHint: {
     CREDENTIAL_NOT_CONFIGURED: 'Администратору: задайте LT_VERDICT_AI_CREDENTIAL_ENV_FILE (docs/user/advisory-ai.md).',
@@ -92,5 +102,6 @@ export const ADVICE_LABELS = {
     RUNNER_ARTIFACT_MISSING: 'Администратору: проверьте LT_VERDICT_AI_QWEN_ROOT и состав поставки (docs/user/advisory-ai.md).',
     RUNNER_ARTIFACT_MISMATCH: 'Администратору: установите Qwen Code 0.21.1 (docs/user/advisory-ai.md).',
     MODEL_ENDPOINT_UNAVAILABLE: 'Проверьте доступ сервера к сервису модели и повторите позже.',
+    MODEL_CONFIG_INVALID: 'Администратору: исправьте файл LT_VERDICT_AI_MODELS_FILE и перезапустите LT Verdict; код ошибки записан в stderr процесса (docs/user/advisory-ai.md).',
   } as Record<string, string>,
 }

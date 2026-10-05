@@ -93,6 +93,7 @@ export const CAPACITY_LABELS = {
     INDETERMINATE: 'Не подтверждена',
   },
   noEvidence: 'нет',
+  evidenceSummary: (count: number): string => `Основания (${count})`,
   empty: 'В результате нет сводки по ёмкости.',
 } as const
 

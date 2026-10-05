@@ -303,7 +303,7 @@ test('shows the empty-window hint for the empty side and the incompatibility hin
   scenario = { reasons: ['INCOMPATIBLE_METRIC_DEFINITION'], incompatible: true, windowStatus: 'NOT_EVALUATED', empty: true }
   await compare.click()
   await expect(page.getByTestId('baseline-incompatible')).toContainText(BASELINE_LABELS.incompatibleHint)
-  await expect(page.getByTestId('baseline-incompatible')).toContainText('разным набором данных')
+  await expect(page.getByTestId('baseline-incompatible')).toContainText('разный набор входных данных')
   scenario = { reasons: [], incompatible: false, windowStatus: 'DESCRIPTIVE', empty: false }
   await compare.click()
   await expect(page.getByTestId('baseline-incompatible')).toHaveCount(0)

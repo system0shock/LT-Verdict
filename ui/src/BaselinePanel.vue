@@ -163,6 +163,9 @@ async function saveConditions() {
   // Результат сравнения не сбрасывается: решение меняет только строку условий, поэтому после сохранения
   // сравнение повторяется само, а до ответа на экране остаётся прежний результат.
   const refresh = comparison.value !== null || comparing.value
+  // Ответ сравнения, начатого до сохранения, устарел и не должен затереть выбор решения: его отбрасываем, показанный результат оставляем.
+  comparisonRevision += 1
+  comparing.value = false
   let saved = false
   conditionSaving.value = true
   error.value = ''
@@ -182,7 +185,11 @@ async function saveConditions() {
 }
 
 async function compare(keepResult = false) {
-  if (!props.selection || !baseline.value || busy.value || !validWindows.value) return
+  if (!props.selection || !baseline.value || busy.value || !validWindows.value) {
+    // Повтор после сохранения решения не стартует (например, началась пробная проверка): устаревший результат не оставляем.
+    if (keepResult) comparison.value = null
+    return
+  }
   const revision = ++comparisonRevision
   const stateRevision = baselineRevision
   if (!keepResult) comparison.value = null

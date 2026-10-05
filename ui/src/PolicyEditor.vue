@@ -42,6 +42,8 @@ const props = defineProps<{
 }>()
 const labels = computed(() => props.labels ?? ENGLISH_LABELS)
 
+const lowFloor = computed(() => props.policy.defaults?.sample_floor !== undefined && props.policy.defaults.sample_floor < 20)
+
 const emit = defineEmits<{ update: [policy: Policy] }>()
 
 const metrics = ['response_time_p95_ms', 'response_time_p99_ms', 'error_rate_ratio', 'throughput_rps']
@@ -52,14 +54,17 @@ function update(mutator: (policy: Policy) => void) {
   emit('update', policy)
 }
 
-function sampleCount(raw: string): number | undefined {
-  return raw.trim() === '' ? undefined : Number(raw)
+// An empty number input also means unfinished typing ("1e", "-"): only a really empty field clears the key.
+function sampleCount(input: HTMLInputElement): number | undefined | null {
+  if (input.validity.badInput) return null
+  return input.value.trim() === '' ? undefined : Number(input.value)
 }
 
-function setDefault(field: 'sample_floor' | 'min_samples', raw: string) {
+function setDefault(field: 'sample_floor' | 'min_samples', input: HTMLInputElement) {
+  const value = sampleCount(input)
+  if (value === null) return
   update((policy) => {
     const defaults = { ...policy.defaults }
-    const value = sampleCount(raw)
     if (value === undefined) delete defaults[field]
     else defaults[field] = value
     if (Object.keys(defaults).length) policy.defaults = defaults
@@ -67,9 +72,10 @@ function setDefault(field: 'sample_floor' | 'min_samples', raw: string) {
   })
 }
 
-function setRuleMinimum(index: number, raw: string) {
+function setRuleMinimum(index: number, input: HTMLInputElement) {
+  const value = sampleCount(input)
+  if (value === null) return
   update((policy) => {
-    const value = sampleCount(raw)
     if (value === undefined) delete policy.rules[index].min_samples
     else policy.rules[index].min_samples = value
   })
@@ -79,7 +85,7 @@ function setMetric(index: number, metric: PolicyRule['metric']) {
   update((policy) => {
     policy.rules[index].metric = metric
     // The core rejects min_samples on throughput_rps (FIELD_NOT_APPLICABLE) and the field is hidden there.
-    if (metric === 'throughput_rps') delete policy.rules[index].min_samples
+    if (labels.value.samples && metric === 'throughput_rps') delete policy.rules[index].min_samples
   })
 }
 
@@ -131,11 +137,12 @@ function downloadPolicy() {
           max="1000000"
           step="1"
           :value="policy.defaults?.sample_floor"
-          aria-describedby="policy-defaults-hint"
-          @input="setDefault('sample_floor', ($event.target as HTMLInputElement).value)"
+          :aria-describedby="lowFloor ? 'policy-floor-warning policy-defaults-hint' : 'policy-defaults-hint'"
+          @input="setDefault('sample_floor', $event.target as HTMLInputElement)"
         >
         <p
-          v-if="policy.defaults?.sample_floor !== undefined && policy.defaults.sample_floor < 20"
+          v-if="lowFloor"
+          id="policy-floor-warning"
           class="field__hint"
         >
           {{ labels.samples.lowFloor }}
@@ -152,7 +159,7 @@ function downloadPolicy() {
           step="1"
           :value="policy.defaults?.min_samples"
           aria-describedby="policy-defaults-hint"
-          @input="setDefault('min_samples', ($event.target as HTMLInputElement).value)"
+          @input="setDefault('min_samples', $event.target as HTMLInputElement)"
         >
         <p
           id="policy-defaults-hint"
@@ -244,7 +251,7 @@ function downloadPolicy() {
             step="1"
             :value="rule.min_samples"
             :aria-describedby="`rule-min-samples-hint-${index}`"
-            @input="setRuleMinimum(index, ($event.target as HTMLInputElement).value)"
+            @input="setRuleMinimum(index, $event.target as HTMLInputElement)"
           >
           <p
             :id="`rule-min-samples-hint-${index}`"

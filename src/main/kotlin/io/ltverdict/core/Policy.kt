@@ -713,11 +713,10 @@ private fun parsePlatformCoverage(
         }
     sla.forEach { rule ->
         resolveServices(rule.scope, catalog).forEach { service ->
+            val covering = coverers.filter { service in resolveServices(it.scope, catalog) }
             val covered =
-                coverers.any { cover ->
-                    service in resolveServices(cover.scope, catalog) &&
-                        (cover.windowIds == null || rule.windowIds?.let(cover.windowIds::containsAll) == true)
-                }
+                covering.any { it.windowIds == null } ||
+                    rule.windowIds?.all { window -> covering.any { window in it.windowIds.orEmpty() } } == true
             if (!covered) {
                 fail(
                     "PLATFORM_COVERAGE_MISSING",

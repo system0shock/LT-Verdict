@@ -87,6 +87,50 @@ class PlatformRulesTest {
     }
 
     @Test
+    fun `coverage of one rule may be split over several coverage rules by window`() {
+        val windows = ""","window_ids":["w1","w2"]"""
+        val secondCover =
+            """,{"id":"cover-w2","signal":"unavailable","scope":{"kind":"all_services"},"operator":"gt","threshold":0,""" +
+                """"unit":"count","aggregation":"interval_max","min_consecutive_cells":1,"effect":"sla","window_ids":["w2"]}"""
+        val split = policyJson(cpuExtra = windows, coverExtra = ""","window_ids":["w1"]""", extraPlatformRule = secondCover)
+        val gap = policyJson(cpuExtra = windows, coverExtra = ""","window_ids":["w1"]""")
+
+        assertTrue(validatePolicy(ByteArrayInputStream(split.encodeToByteArray())) is PolicyValidation.Valid)
+        assertEquals(
+            "PLATFORM_COVERAGE_MISSING",
+            (validatePolicy(ByteArrayInputStream(gap.encodeToByteArray())) as PolicyValidation.Invalid).errors.first().code,
+        )
+    }
+
+    @Test
+    fun `an oversized or colliding expanded id of a foreign service is a binding error`() {
+        val longId = policy(policyJson(cpuId = "c".repeat(100)))
+        val foreign = series("cpu-long", "cpu_ratio", "s".repeat(40), "ratio", List(4) { "0.1" })
+        val collision =
+            policy(
+                policyJson(
+                    catalog = """"platform_services":["orders"],""",
+                    coverage = "",
+                    cpuEffect = "diagnostic",
+                    coverEffect = "diagnostic",
+                    extraPlatformRule =
+                        """,{"id":"cpu/x","signal":"cpu_ratio","scope":{"kind":"service","services":["y"]},"operator":"gt",""" +
+                            """"threshold":0.4,"unit":"ratio","aggregation":"interval_mean","min_consecutive_cells":1,"effect":"diagnostic"}""",
+                ),
+            )
+        val crossing = series("cpu-xy", "cpu_ratio", "x/y", "ratio", List(4) { "0.1" })
+
+        assertEquals(
+            listOf("RESOURCE_LIMIT_EXCEEDED"),
+            validatePlatformBinding(longId, snapshot(healthy("orders") + healthy("payments") + foreign)).map { it.code },
+        )
+        assertEquals(
+            listOf("DUPLICATE_RULE_ID"),
+            validatePlatformBinding(collision, snapshot(healthy("orders") + crossing)).map { it.code },
+        )
+    }
+
+    @Test
     fun `diagnostic platform rules need no coverage signal`() {
         val source = policyJson(coverage = "", cpuEffect = "diagnostic", coverEffect = "diagnostic")
 
@@ -400,6 +444,7 @@ class PlatformRulesTest {
         coverAggregation: String = "interval_max",
         coverExtra: String = "",
         extraRuleId: String? = null,
+        extraPlatformRule: String = "",
     ): String {
         val extraRule =
             if (extraRuleId == null) {
@@ -416,6 +461,8 @@ class PlatformRulesTest {
             """{"id":"$cpuId","signal":"cpu_ratio","scope":$cpuScope,"operator":"gt","threshold":$cpuThreshold,"unit":"ratio",""" +
             """"aggregation":"$cpuAggregation","min_consecutive_cells":$cpuMinimum,"effect":"$cpuEffect"$cpuExtra},""" +
             """{"id":"$coverId","signal":"unavailable","scope":$coverScope,"operator":"gt","threshold":$coverThreshold,"unit":"count",""" +
-            """"aggregation":"$coverAggregation","min_consecutive_cells":$coverMin,"effect":"$coverEffect"$coverExtra}]}"""
+            """"aggregation":"$coverAggregation","min_consecutive_cells":$coverMin,"effect":"$coverEffect"$coverExtra}""" +
+            extraPlatformRule +
+            "]}"
     }
 }

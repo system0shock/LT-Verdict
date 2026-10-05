@@ -1,5 +1,7 @@
 package io.ltverdict.core
 
+private const val MAX_RULE_ID_BYTES = 128
+
 internal fun resolveServices(
     scope: PlatformScope,
     catalog: List<String>?,
@@ -90,15 +92,21 @@ internal fun validatePlatformBinding(
     }
     val expanded = expandPlatformRules(policy, snapshot).rules
     val taken = snapshot.rules.map(ResourceRuleV1::id).toSet()
-    if (expanded.any { it.id in taken }) {
-        errors += PolicyValidationError("DUPLICATE_RULE_ID", "/platform_rules", "an expanded platform rule id equals a snapshot rule id")
+    if (expanded.any { it.id in taken } || expanded.map(ResourceRuleV1::id).toSet().size != expanded.size) {
+        errors +=
+            PolicyValidationError(
+                "DUPLICATE_RULE_ID",
+                "/platform_rules",
+                "an expanded platform rule id equals a snapshot rule id or another expanded id",
+            )
     }
-    if (expanded.size + snapshot.rules.size > MAX_RESOURCE_RULES) {
+    val oversized = expanded.any { it.id.encodeToByteArray().size > MAX_RULE_ID_BYTES }
+    if (oversized || expanded.size + snapshot.rules.size > MAX_RESOURCE_RULES) {
         errors +=
             PolicyValidationError(
                 "RESOURCE_LIMIT_EXCEEDED",
                 "/platform_rules",
-                "expanded platform checks and snapshot rules exceed $MAX_RESOURCE_RULES",
+                "an expanded rule id exceeds 128 UTF-8 bytes or expanded checks and snapshot rules exceed $MAX_RESOURCE_RULES",
             )
     }
     return errors

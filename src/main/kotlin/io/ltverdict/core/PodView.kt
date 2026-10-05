@@ -449,9 +449,28 @@ private fun JsonObject.podText(
 ): String {
     val value = podString(name, pointer)
     val child = pointer.podChild(name)
-    if (value.isEmpty() || value.any(Char::isISOControl)) podViewFail(INVALID, child, "$name must be non-empty plain text")
+    if (value.isEmpty() ||
+        value.any(Char::isISOControl) ||
+        hasLoneSurrogate(value)
+    ) {
+        podViewFail(INVALID, child, "$name must be non-empty plain text")
+    }
     if (value.encodeToByteArray().size > maxBytes) podViewFail(LIMIT, child, "$name exceeds $maxBytes bytes")
     return value
+}
+
+private fun hasLoneSurrogate(value: String): Boolean {
+    var index = 0
+    while (index < value.length) {
+        val char = value[index]
+        if (char.isHighSurrogate() && index + 1 < value.length && value[index + 1].isLowSurrogate()) {
+            index += 2
+            continue
+        }
+        if (char.isSurrogate()) return true
+        index++
+    }
+    return false
 }
 
 private fun JsonObject.podLong(

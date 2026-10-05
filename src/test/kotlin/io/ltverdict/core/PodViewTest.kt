@@ -181,6 +181,14 @@ class PodViewTest {
                 ),
                 Case(
                     example().replace(
+                        "\"pod\": \"orders-svc-6b2d8-a1\", \"service\": \"orders-svc\"",
+                        "\"pod\": \"orders\\uD800\", \"service\": \"orders-svc\"",
+                    ),
+                    INVALID,
+                    "/pods/0/pod",
+                ),
+                Case(
+                    example().replace(
                         "\"service\": \"orders-svc\", \"containers\": [{ \"name\": \"app\", \"role\": \"app\" }, ",
                         "\"service\": \"\", \"containers\": [{ \"name\": \"app\", \"role\": \"app\" }, ",
                     ),
@@ -376,6 +384,24 @@ class PodViewTest {
     }
 
     @Test
+    fun `a file close to the byte limit with 12 byte tokens is accepted`() {
+        val text = generated(pods = 256, services = 64, metrics = 10, columns = 240, containers = 4, cellText = "-0.123456789")
+        val bytes = text.encodeToByteArray()
+        assertEquals(true, bytes.size > 7 * 1024 * 1024 && bytes.size < MAX_POD_VIEW_BYTES)
+
+        val valid = valid(bytes)
+
+        assertEquals(2560, valid.view.rows.size)
+        assertEquals(
+            BigDecimal("-0.123456789"),
+            valid.view.rows
+                .last()
+                .values
+                .last(),
+        )
+    }
+
+    @Test
     fun `invalid input reports one error and an unreadable stream is invalid`() {
         val invalid =
             assertInstanceOf(PodViewValidation.Invalid::class.java, validatePodView(ByteArrayInputStream("not json".encodeToByteArray())))
@@ -430,8 +456,9 @@ class PodViewTest {
         metrics: Int,
         columns: Int = 2,
         containers: Int = 1,
+        cellText: String = "0.5",
     ): String {
-        val cells = (1..columns).joinToString(",") { "0.5" }
+        val cells = (1..columns).joinToString(",") { cellText }
         val podText =
             (0 until pods).joinToString(",") { pod ->
                 val names = (0 until containers).joinToString(",") { "{\"name\":\"c$it\",\"role\":\"app\"}" }

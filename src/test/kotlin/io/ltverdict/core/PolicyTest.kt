@@ -261,6 +261,13 @@ class PolicyTest {
                 "docs/contracts/policy/v1/examples/invalid/window-ids-empty.json" to
                     Expectation(false, false, "WINDOW_IDS_INVALID", "/rules/0/window_ids"),
                 "docs/contracts/policy/v1/examples/invalid/empty-rules.json" to Expectation(false, false, "EMPTY_RULES", "/rules"),
+                "docs/contracts/policy/v1/examples/valid/platform-services.json" to Expectation(true, true),
+                "docs/contracts/policy/v1/examples/invalid/platform-except-outside-catalog.json" to
+                    Expectation(true, false, "INVALID_SCOPE", "/platform_rules/0/scope/except/0"),
+                "docs/contracts/policy/v1/examples/invalid/platform-all-services-without-catalog.json" to
+                    Expectation(true, false, "INVALID_SCOPE", "/platform_rules/0/scope"),
+                "docs/contracts/policy/v1/examples/invalid/platform-coverage-missing.json" to
+                    Expectation(true, false, "PLATFORM_COVERAGE_MISSING", "/platform_coverage"),
                 "docs/contracts/policy/v1/examples/invalid/min-samples-below-floor.json" to
                     Expectation(true, false, "MIN_SAMPLES_BELOW_FLOOR", "/rules/0/min_samples"),
                 "docs/contracts/policy/v1/examples/invalid/duplicate-rule-id.json" to

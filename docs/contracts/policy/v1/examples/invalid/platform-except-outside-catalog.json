@@ -1,0 +1,48 @@
+{
+  "schema_version": "policy.v1",
+  "policy_id": "platform-except-outside-catalog",
+  "rules": [
+    {
+      "id": "overall-errors",
+      "metric": "error_rate_ratio",
+      "operator": "lte",
+      "threshold": 0.01,
+      "scope": {
+        "kind": "overall"
+      }
+    }
+  ],
+  "platform_services": ["orders", "payments"],
+  "platform_coverage": {
+    "signal": "openshift_unavailable_replicas"
+  },
+  "platform_rules": [
+    {
+      "id": "cpu-share",
+      "signal": "openshift_container_cpu_limit_ratio",
+      "scope": {
+        "kind": "all_services",
+        "except": ["ghost"]
+      },
+      "operator": "gt",
+      "threshold": 0.4,
+      "unit": "ratio",
+      "aggregation": "interval_mean",
+      "min_consecutive_cells": 2,
+      "effect": "sla"
+    },
+    {
+      "id": "replicas",
+      "signal": "openshift_unavailable_replicas",
+      "scope": {
+        "kind": "all_services"
+      },
+      "operator": "gt",
+      "threshold": 0,
+      "unit": "count",
+      "aggregation": "interval_max",
+      "min_consecutive_cells": 1,
+      "effect": "sla"
+    }
+  ]
+}

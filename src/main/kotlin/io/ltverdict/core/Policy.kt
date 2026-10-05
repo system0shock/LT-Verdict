@@ -483,7 +483,10 @@ private fun decodeUtf8(bytes: ByteArray): String =
 
 private fun parsePolicy(element: JsonElement): PolicyV1 {
     val root = element.objectAt("")
-    root.rejectUnknown(setOf("schema_version", "policy_id", "rules", "defaults"), "")
+    root.rejectUnknown(
+        setOf("schema_version", "policy_id", "rules", "defaults", "platform_services", "platform_rules", "platform_coverage"),
+        "",
+    )
     val schemaVersion = root.stringAt("schema_version", "")
     if (schemaVersion != "policy.v1") fail("INVALID_SCHEMA_VERSION", "/schema_version", "expected policy.v1")
     val policyId = root.stringAt("policy_id", "")
@@ -535,7 +538,166 @@ private fun parsePolicy(element: JsonElement): PolicyV1 {
             val windowIds = rule.windowIdsAt(pointer)
             PolicyRuleV1(id, metric, operator, threshold, scope, minSamples, windowIds)
         }
-    return PolicyV1(schemaVersion, policyId, rules, defaults)
+    val catalog = root["platform_services"]?.let { parseNames(it, "/platform_services") }
+    val platformRules = root["platform_rules"]?.let { parsePlatformRules(it, catalog, ids) }.orEmpty()
+    val coverage = parsePlatformCoverage(root["platform_coverage"], platformRules, catalog)
+    return PolicyV1(schemaVersion, policyId, rules, defaults, catalog, platformRules, coverage)
+}
+
+private const val MAX_PLATFORM_NAMES = 64
+
+private fun parseNames(
+    element: JsonElement,
+    pointer: String,
+): List<String> {
+    val array = element as? JsonArray ?: fail("INVALID_TYPE", pointer, "expected an array of names")
+    if (array.isEmpty() || array.size > MAX_PLATFORM_NAMES) fail("INVALID_SCOPE", pointer, "expected 1..$MAX_PLATFORM_NAMES names")
+    val names =
+        array.mapIndexed { index, value ->
+            val name =
+                (value as? JsonPrimitive)?.takeIf { it.isString }?.content
+                    ?: fail("INVALID_TYPE", pointer.child("$index"), "name must be a string")
+            validateIdentifier(name, pointer.child("$index"))
+            name
+        }
+    if (names.toSet().size != names.size) fail("INVALID_SCOPE", pointer, "names must be unique")
+    return names
+}
+
+private fun parsePlatformScope(
+    element: JsonElement,
+    pointer: String,
+    catalog: List<String>?,
+): PlatformScope {
+    val scope = element.objectAt(pointer)
+    return when (scope.stringAt("kind", pointer)) {
+        "service" -> {
+            scope.rejectUnknown(setOf("kind", "services"), pointer)
+            PlatformScope.Services(parseNames(scope.required("services", pointer), "$pointer/services"))
+        }
+
+        "all_services" -> {
+            scope.rejectUnknown(setOf("kind", "except"), pointer)
+            if (catalog == null) fail("INVALID_SCOPE", pointer, "all_services requires platform_services")
+            val except =
+                scope["except"]
+                    ?.let { raw -> if (raw is JsonArray && raw.isEmpty()) emptyList() else parseNames(raw, "$pointer/except") }
+                    .orEmpty()
+            except.forEachIndexed { index, name ->
+                if (name !in catalog) fail("INVALID_SCOPE", "$pointer/except/$index", "except must name a platform service")
+            }
+            val resolved = PlatformScope.AllServices(except)
+            if (resolveServices(resolved, catalog).isEmpty()) fail("INVALID_SCOPE", pointer, "scope is empty after except")
+            resolved
+        }
+
+        else -> fail("INVALID_SCOPE", "$pointer/kind", "unknown scope kind")
+    }
+}
+
+private fun parsePlatformRules(
+    element: JsonElement,
+    catalog: List<String>?,
+    ids: MutableSet<String>,
+): List<PlatformRuleV1> {
+    val array = element as? JsonArray ?: fail("INVALID_TYPE", "/platform_rules", "platform_rules must be an array")
+    if (array.isEmpty()) fail("EMPTY_RULES", "/platform_rules", "at least one platform rule is required")
+    if (array.size > MAX_POLICY_RULES) fail("RESOURCE_LIMIT_EXCEEDED", "/platform_rules", "too many platform rules")
+    val businessIds = ids.toSet()
+    val rules =
+        array.mapIndexed { index, value ->
+            val pointer = "/platform_rules/$index"
+            val item = value.objectAt(pointer)
+            item.rejectUnknown(
+                setOf("id", "signal", "scope", "operator", "threshold", "unit", "aggregation", "min_consecutive_cells", "effect", "window_ids"),
+                pointer,
+            )
+            val id = item.stringAt("id", pointer)
+            validateIdentifier(id, "$pointer/id")
+            if (!ids.add(id)) fail("DUPLICATE_RULE_ID", "$pointer/id", "rule id must be unique")
+            val signal = item.stringAt("signal", pointer)
+            validateIdentifier(signal, "$pointer/signal")
+            val scope = parsePlatformScope(item.required("scope", pointer), "$pointer/scope", catalog)
+            val operatorName = item.stringAt("operator", pointer)
+            val operator =
+                ResourceOperator.entries.find { it.wireName == operatorName }
+                    ?: fail("UNKNOWN_OPERATOR", "$pointer/operator", "unknown operator")
+            val threshold = item.numberAt("threshold", pointer)
+            val unit = item.stringAt("unit", pointer)
+            validateIdentifier(unit, "$pointer/unit")
+            val aggregationName = item.stringAt("aggregation", pointer)
+            val aggregation =
+                ResourceAggregation.entries.find { it.wireName == aggregationName }
+                    ?: fail("UNKNOWN_AGGREGATION", "$pointer/aggregation", "unknown aggregation")
+            if (operator == ResourceOperator.GT && threshold.signum() == 0 && aggregation == ResourceAggregation.INTERVAL_MIN) {
+                fail("PLATFORM_AGGREGATION_OPERATOR_MISMATCH", "$pointer/aggregation", "gt 0 must not use interval_min")
+            }
+            val minimum =
+                item.longInRangeAt("min_consecutive_cells", pointer, MAX_POINTS_PER_SERIES.toLong(), "INVALID_MINIMUM")
+                    ?: fail("MISSING_FIELD", "$pointer/min_consecutive_cells", "required field is missing")
+            val effectName = item.stringAt("effect", pointer)
+            val effect =
+                ResourceRuleEffect.entries.find { it.wireName == effectName }
+                    ?: fail("UNKNOWN_EFFECT", "$pointer/effect", "unknown effect")
+            PlatformRuleV1(id, signal, scope, operator, threshold, unit, aggregation, minimum.toInt(), effect, item.windowIdsAt(pointer))
+        }
+    val expanded = HashSet<String>()
+    rules.forEachIndexed { index, rule ->
+        resolveServices(rule.scope, catalog).forEach { service ->
+            val expandedId = "${rule.id}/$service"
+            if (expandedId.encodeToByteArray().size > MAX_IDENTIFIER_BYTES) {
+                fail("RESOURCE_LIMIT_EXCEEDED", "/platform_rules/$index/id", "expanded rule id exceeds 128 UTF-8 bytes")
+            }
+            if (expandedId in businessIds || !expanded.add(expandedId)) {
+                fail("DUPLICATE_RULE_ID", "/platform_rules/$index/id", "expanded rule id collides")
+            }
+        }
+    }
+    if (expanded.size > MAX_POLICY_RULES) fail("RESOURCE_LIMIT_EXCEEDED", "/platform_rules", "too many expanded platform checks")
+    return rules
+}
+
+private fun parsePlatformCoverage(
+    element: JsonElement?,
+    rules: List<PlatformRuleV1>,
+    catalog: List<String>?,
+): PlatformCoverageV1? {
+    val coverage =
+        element?.let {
+            val value = it.objectAt("/platform_coverage")
+            value.rejectUnknown(setOf("signal"), "/platform_coverage")
+            val signal = value.stringAt("signal", "/platform_coverage")
+            validateIdentifier(signal, "/platform_coverage/signal")
+            PlatformCoverageV1(signal)
+        }
+    val sla = rules.filter { it.effect == ResourceRuleEffect.SLA }
+    if (sla.isEmpty()) return coverage
+    if (coverage == null) fail("MISSING_FIELD", "/platform_coverage", "platform_coverage is required when an SLA platform rule exists")
+    val coverers =
+        sla.filter {
+            it.signal == coverage.signal &&
+                it.operator == ResourceOperator.GT &&
+                it.threshold.signum() == 0 &&
+                it.minConsecutiveCells == 1 &&
+                it.aggregation == ResourceAggregation.INTERVAL_MAX
+        }
+    sla.forEach { rule ->
+        resolveServices(rule.scope, catalog).forEach { service ->
+            val covered =
+                coverers.any { cover ->
+                    service in resolveServices(cover.scope, catalog) &&
+                        (cover.windowIds == null || rule.windowIds?.let(cover.windowIds::containsAll) == true)
+                }
+            if (!covered) {
+                fail(
+                    "PLATFORM_COVERAGE_MISSING",
+                    "/platform_coverage",
+                    "every service and window of an SLA platform rule needs an SLA coverage rule (gt 0, interval_max, min_consecutive_cells = 1)",
+                )
+            }
+        }
+    }
+    return coverage
 }
 
 private fun parseDefaults(
@@ -561,6 +723,8 @@ private fun checkDefaultsOrder(
 private fun JsonObject.longInRangeAt(
     name: String,
     pointer: String,
+    max: Long = MAX_SAMPLES_BOUND,
+    code: String = "MIN_SAMPLES_OUT_OF_RANGE",
 ): Long? {
     val value = get(name) ?: return null
     if (value !is JsonPrimitive || value.isString || value === JsonNull || value.content in setOf("true", "false")) {
@@ -573,8 +737,8 @@ private fun JsonObject.longInRangeAt(
             fail("INVALID_TYPE", pointer.child(name), "$name must be an integer")
         }
     if (number.stripTrailingZeros().scale() > 0) fail("INVALID_TYPE", pointer.child(name), "$name must be an integer")
-    if (number < BigDecimal.ONE || number > BigDecimal.valueOf(MAX_SAMPLES_BOUND)) {
-        fail("MIN_SAMPLES_OUT_OF_RANGE", pointer.child(name), "$name must be between 1 and $MAX_SAMPLES_BOUND")
+    if (number < BigDecimal.ONE || number > BigDecimal.valueOf(max)) {
+        fail(code, pointer.child(name), "$name must be between 1 and $max")
     }
     return number.longValueExact()
 }

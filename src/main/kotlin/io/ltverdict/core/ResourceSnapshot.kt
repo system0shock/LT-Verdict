@@ -75,6 +75,13 @@ internal data class ResourceRuleV1(
     val threshold: BigDecimal,
     val minConsecutiveCells: Int,
     val effect: ResourceRuleEffect,
+    val windowIds: List<String>? = null,
+    val platform: PlatformRuleRef? = null,
+)
+
+internal data class PlatformRuleRef(
+    val ruleId: String,
+    val service: String,
 )
 
 internal data class ResourceProvenanceV1(

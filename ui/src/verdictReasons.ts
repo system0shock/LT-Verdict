@@ -32,6 +32,12 @@ export const REASONS: Record<string, ReasonEntry> = {
   INSUFFICIENT_SAMPLES: { noVerdict: true, text: 'В области правила слишком мало запросов (меньше минимального пола): порог не сравнивался, вердикта по правилу нет.' },
   SMALL_SAMPLE: { noVerdict: false, text: 'У части правил запросов меньше рекомендуемого минимума: PASS или FAIL рассчитан, но помечен как «малая выборка».' },
   // SLA-правила ресурсов
+  RESOURCE_SNAPSHOT_REQUIRED: { noVerdict: true, text: 'Политика содержит платформенные SLA-правила, а снимок ресурсов не передан: правила не проверены.' },
+  RULE_WINDOW_TOO_SHORT: { noVerdict: true, text: 'Окно короче серии, которую требует платформенное правило (min_consecutive_cells): проверить правило физически нельзя.' },
+  PLATFORM_SERIES_AMBIGUOUS: { noVerdict: true, text: 'Платформенному правилу подходит больше одного ряда сервиса: правило нельзя привязать однозначно.' },
+  PLATFORM_UNIT_MISMATCH: { noVerdict: true, text: 'Единица ряда сервиса не совпадает с единицей платформенного правила, единицы не пересчитываются.' },
+  PLATFORM_AGGREGATION_MISMATCH: { noVerdict: true, text: 'Агрегация ряда сервиса не совпадает с агрегацией, заявленной в платформенном правиле: порог нельзя применить.' },
+  PLATFORM_SERVICE_NOT_IN_CATALOG: { noVerdict: true, text: 'В снимке есть ряд сервиса, которого нет в каталоге platform_services и в исключениях правила: сервис не проверен.' },
   RESOURCE_SERIES_NOT_FOUND: { noVerdict: true, text: 'Ряд ресурса из правила отсутствует в снимке ресурсов.' },
   MISSING_RESOURCE_CELLS: { noVerdict: true, text: 'В ряду ресурса есть пропуски в окне оценки. Правило не проверено, даже если нарушение уже видно.' },
   // Неполное покрытие: на вердикт само по себе не влияет

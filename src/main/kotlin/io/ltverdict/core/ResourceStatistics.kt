@@ -22,6 +22,7 @@ internal fun evaluateResources(
     snapshot: ResourceSnapshotV1,
     windows: List<ResourceWindowV1>,
     checkCancelled: () -> Unit = {},
+    platform: PlatformExpansion = PlatformExpansion.EMPTY,
 ): ResourceEvaluation {
     val summaries = mutableListOf<JsonObject>()
     val checks = mutableListOf<JsonObject>()
@@ -44,20 +45,29 @@ internal fun evaluateResources(
         }
 
         val slaStatuses = mutableListOf<String>()
-        snapshot.rules.forEach { rule ->
+        (snapshot.rules + platform.rules).forEach { rule ->
             checkCancelled()
+            if (rule.windowIds != null && window.id !in rule.windowIds) return@forEach
             val checkId = resourceId("resource-policy-check", window.id, rule.id)
             val series = seriesById[rule.seriesId]
+            val bindingFailure = platform.bindingFailures[rule.id]
+            val windowCells = snapshot.cellIndex(window.toEpochMillis) - snapshot.cellIndex(window.fromEpochMillis)
             val outcome =
-                evaluateRule(
-                    snapshot,
-                    window,
-                    rule,
-                    series,
-                    checkId,
-                    RESOURCE_FINDINGS_MAX - findings.size,
-                    checkCancelled,
-                )
+                when {
+                    bindingFailure != null -> RuleOutcome("NO_VERDICT", bindingFailure, emptyList())
+                    rule.platform != null && windowCells < rule.minConsecutiveCells ->
+                        RuleOutcome("NO_VERDICT", "RULE_WINDOW_TOO_SHORT", emptyList())
+                    else ->
+                        evaluateRule(
+                            snapshot,
+                            window,
+                            rule,
+                            series,
+                            checkId,
+                            RESOURCE_FINDINGS_MAX - findings.size,
+                            checkCancelled,
+                        )
+                }
             checks += resourceCheck(checkId, window, rule, outcome.status, outcome.reason)
             findings += outcome.findings
             outcome.reason?.let(reasons::add)
@@ -338,6 +348,10 @@ private fun resourceCheck(
         put("effect", rule.effect.wireName)
         put("status", status)
         put("reason", reason?.let(::JsonPrimitive) ?: JsonNull)
+        rule.platform?.let {
+            put("platform_rule_id", it.ruleId)
+            put("service", it.service)
+        }
     }
 
 private fun thresholdFinding(

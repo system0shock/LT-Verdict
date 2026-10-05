@@ -51,10 +51,11 @@ internal fun evaluateSharedWindowPolicy(
     }
     val known = windows.map(ResourceWindowV1::id).toSet()
     if (validity == RunValidity.VALID) {
-        for (rule in policy?.rules.orEmpty()) {
-            for (windowId in rule.windowIds.orEmpty()) {
+        val declared = policy?.rules.orEmpty().map { it.id to it.windowIds } + policy?.platformRules.orEmpty().map { it.id to it.windowIds }
+        for ((ruleId, windowIds) in declared) {
+            for (windowId in windowIds.orEmpty()) {
                 if (windowId in known) continue
-                evidence += ruleWindowCheck(rule.id, windowId)
+                evidence += ruleWindowCheck(ruleId, windowId)
                 reasons += RULE_WINDOW_NOT_FOUND
                 windowVerdicts += PolicyVerdict.NO_VERDICT
             }

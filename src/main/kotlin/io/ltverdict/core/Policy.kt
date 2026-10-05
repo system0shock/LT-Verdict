@@ -104,6 +104,13 @@ internal fun evaluatePolicy(
     val checks = mutableListOf<JsonObject>()
     val informational = mutableListOf<String>()
     var failed = false
+    if (windowId == null && policy.platformRules.isNotEmpty()) {
+        if (policy.platformRules.any { it.effect == ResourceRuleEffect.SLA }) {
+            reasons += REASON_RESOURCE_SNAPSHOT_REQUIRED
+        } else {
+            informational += REASON_RESOURCE_SNAPSHOT_REQUIRED
+        }
+    }
     val applicable = if (windowId == null) policy.rules else policy.rules.filter { it.windowIds == null || windowId in it.windowIds }
     if (applicable.isEmpty()) return PolicyEvaluation(PolicyVerdict.NO_POLICY, reasons.distinct(), findings, evidence)
     applicable.forEach { rule ->
@@ -448,6 +455,7 @@ private const val POLICY_FAILED = "POLICY_FAILED"
 private const val REASON_INSUFFICIENT_SAMPLES = "INSUFFICIENT_SAMPLES"
 private const val REASON_SMALL_SAMPLE = "SMALL_SAMPLE"
 private const val REASON_RULE_WINDOW_NOT_FOUND = "RULE_WINDOW_NOT_FOUND"
+private const val REASON_RESOURCE_SNAPSHOT_REQUIRED = "RESOURCE_SNAPSHOT_REQUIRED"
 
 private fun readBounded(
     source: InputStream,

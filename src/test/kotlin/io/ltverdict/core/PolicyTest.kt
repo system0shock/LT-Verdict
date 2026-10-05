@@ -67,6 +67,31 @@ class PolicyTest {
     }
 
     @Test
+    fun `window ids parse and malformed lists fail at the field`() {
+        val valid =
+            validatePolicy(
+                ByteArrayInputStream(policyJson(ruleExtra = ""","window_ids":["steady-1","steady-2"]""").encodeToByteArray()),
+            ) as PolicyValidation.Valid
+        assertEquals(
+            listOf("steady-1", "steady-2"),
+            valid.policy.rules
+                .single()
+                .windowIds,
+        )
+
+        listOf(
+            ",\"window_ids\":[]" to "empty",
+            ",\"window_ids\":[\"a\",\"a\"]" to "duplicate",
+            ",\"window_ids\":[\"\"]" to "empty id",
+            ",\"window_ids\":[1]" to "not a string",
+            ",\"window_ids\":\"a\"" to "not an array",
+            ",\"window_ids\":[\"${"é".repeat(65)}\"]" to "too long",
+        ).forEach { (extra, name) ->
+            assertInvalid(policyJson(ruleExtra = extra).encodeToByteArray(), "WINDOW_IDS_INVALID", "/rules/0/window_ids", message = name)
+        }
+    }
+
+    @Test
     fun `sample limits fail closed at their exact fields`() {
         listOf(
             Case("floor zero", policyJson(defaults = """{"sample_floor":0}"""), "/defaults/sample_floor") to "MIN_SAMPLES_OUT_OF_RANGE",
@@ -232,6 +257,9 @@ class PolicyTest {
             mapOf(
                 "docs/contracts/policy/v1/examples/valid/all-metrics.json" to Expectation(true, true),
                 "docs/contracts/policy/v1/examples/valid/sample-gate.json" to Expectation(true, true),
+                "docs/contracts/policy/v1/examples/valid/window-ids.json" to Expectation(true, true),
+                "docs/contracts/policy/v1/examples/invalid/window-ids-empty.json" to
+                    Expectation(false, false, "WINDOW_IDS_INVALID", "/rules/0/window_ids"),
                 "docs/contracts/policy/v1/examples/invalid/empty-rules.json" to Expectation(false, false, "EMPTY_RULES", "/rules"),
                 "docs/contracts/policy/v1/examples/invalid/min-samples-below-floor.json" to
                     Expectation(true, false, "MIN_SAMPLES_BELOW_FLOOR", "/rules/0/min_samples"),

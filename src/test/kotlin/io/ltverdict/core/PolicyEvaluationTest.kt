@@ -206,6 +206,20 @@ class PolicyEvaluationTest {
         assertEquals(listOf("errors"), blocked.findings.map { it.getValue("rule_id").jsonPrimitive.content })
     }
 
+    @Test
+    fun `without a snapshot a rule bound to windows has no window to run in`() {
+        val bound =
+            policy(rule("p95", PolicyMetric.RESPONSE_TIME_P95_MS, PolicyOperator.LTE, "100").copy(windowIds = listOf("steady")))
+
+        val result = evaluatePolicy(bound, RunValidity.VALID, metricsWith(100))
+        val check = result.evidence.single { it["type"]?.jsonPrimitive?.content == "policy_check" }
+
+        assertEquals(PolicyVerdict.NO_VERDICT, result.verdict)
+        assertEquals(listOf("RULE_WINDOW_NOT_FOUND"), result.coverageReasons)
+        assertEquals("RULE_WINDOW_NOT_FOUND", check.getValue("reason_code").jsonPrimitive.content)
+        assertEquals("NO_VERDICT", check.getValue("status").jsonPrimitive.content)
+    }
+
     private fun policy(vararg rules: PolicyRuleV1) =
         PolicyV1("policy.v1", "test", rules.toList(), PolicyDefaultsV1(sampleFloor = 1, minSamples = 1))
 

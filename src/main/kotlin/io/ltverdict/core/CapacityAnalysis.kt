@@ -53,8 +53,12 @@ internal fun evaluateCapacity(
             )
         }
     val bound = bounds(evaluations, validity)
-    val reasons = (evaluations.flatMap(StageEvaluation::reasons) + bound.reasons).distinct()
-    val policyVerdict = policyVerdict(plan.requiredCapacity, evaluations, bound)
+    val unboundRule = RULE_WINDOW_NOT_FOUND in windowPolicy.coverageReasons
+    val stageReasons = evaluations.flatMap(StageEvaluation::reasons) + bound.reasons
+    val reasons = if (unboundRule) (stageReasons + RULE_WINDOW_NOT_FOUND).distinct() else stageReasons.distinct()
+    val stageVerdict = policyVerdict(plan.requiredCapacity, evaluations, bound)
+    val blocked = unboundRule && (stageVerdict == PolicyVerdict.PASS || stageVerdict == PolicyVerdict.FAIL)
+    val policyVerdict = if (blocked) PolicyVerdict.NO_VERDICT else stageVerdict
     val capacityJson = capacityJson(plan, evaluations, bound, policyVerdict, reasons)
     val summary =
         buildJsonObject {
@@ -359,5 +363,6 @@ private fun JsonObject.string(name: String): String? = this[name]?.jsonPrimitive
 
 private const val CAPACITY_BIN_MILLIS = 10_000L
 private const val CAPACITY_MINIMUM_BINS = 30
+private const val RULE_WINDOW_NOT_FOUND = "RULE_WINDOW_NOT_FOUND"
 private val DECIMAL_CONTEXT = MathContext.DECIMAL128
 private val P05 = BigDecimal("0.05")

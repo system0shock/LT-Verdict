@@ -25,7 +25,8 @@ internal fun evaluateSharedWindowPolicy(
     windows.forEach { window ->
         val metrics = requireNotNull(windowMetrics[window.id]) { "MISSING_WINDOW_METRICS" }
         var business = evaluatePolicy(policy, validity, metrics, windowId = window.id, includeMetricEvidence = false)
-        if (policy != null && validity == RunValidity.VALID && metrics.overall.sampleCount == 0L) {
+        val applies = policy != null && policy.rules.any { it.windowIds == null || window.id in it.windowIds }
+        if (applies && validity == RunValidity.VALID && metrics.overall.sampleCount == 0L) {
             business =
                 business.copy(
                     verdict = PolicyVerdict.NO_VERDICT,
@@ -48,8 +49,32 @@ internal fun evaluateSharedWindowPolicy(
         reasons += business.coverageReasons
         windowVerdicts += verdict
     }
+    val known = windows.map(ResourceWindowV1::id).toSet()
+    if (validity == RunValidity.VALID) {
+        for (rule in policy?.rules.orEmpty()) {
+            for (windowId in rule.windowIds.orEmpty()) {
+                if (windowId in known) continue
+                evidence += ruleWindowCheck(rule.id, windowId)
+                reasons += RULE_WINDOW_NOT_FOUND
+                windowVerdicts += PolicyVerdict.NO_VERDICT
+            }
+        }
+    }
     return PolicyEvaluation(overallVerdict(windowVerdicts), reasons.distinct(), findings, evidence)
 }
+
+internal fun ruleWindowCheck(
+    ruleId: String,
+    windowId: String,
+): JsonObject =
+    buildJsonObject {
+        put("id", "rule-window-check-${sha256Hex("$ruleId\u0000$windowId".encodeToByteArray())}")
+        put("type", "rule_window_check")
+        put("rule_id", ruleId)
+        put("window_id", windowId)
+        put("status", "NO_VERDICT")
+        put("reason_code", RULE_WINDOW_NOT_FOUND)
+    }
 
 private fun jointVerdict(
     business: PolicyVerdict,
@@ -92,3 +117,4 @@ private fun windowPolicySummary(
     }
 
 private const val BUSINESS_OBSERVATIONS_NOT_FOUND = "BUSINESS_OBSERVATIONS_NOT_FOUND"
+private const val RULE_WINDOW_NOT_FOUND = "RULE_WINDOW_NOT_FOUND"

@@ -1,10 +1,13 @@
 package io.ltverdict.core
 
 import io.ltverdict.ingest.RunValidity
+import io.ltverdict.ingest.SampleKind
 import io.ltverdict.metrics.ExactRatio
 import io.ltverdict.metrics.LatencySummary
 import io.ltverdict.metrics.MetricSummary
 import io.ltverdict.metrics.NormalizedMetrics
+import io.ltverdict.metrics.TransactionIdentity
+import io.ltverdict.metrics.TransactionSummary
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import org.junit.jupiter.api.Assertions.assertEquals
@@ -204,6 +207,128 @@ class WindowPolicyEvaluationTest {
         assertEquals(listOf("INSUFFICIENT_SAMPLES"), evaluation.coverageReasons)
         assertEquals(emptyList<Any>(), evaluation.findings)
     }
+
+    @Test
+    fun `a rule bound to named windows is skipped elsewhere and a window without rules has no business policy`() {
+        val bound = boundPolicy("second")
+
+        val evaluation =
+            evaluateSharedWindowPolicy(
+                bound,
+                RunValidity.VALID,
+                metrics(95),
+                mapOf("first" to metrics(500, 0), "second" to metrics(90)),
+                resource(PolicyVerdict.PASS, PolicyVerdict.PASS),
+                WINDOWS,
+            )
+        val summaries = evaluation.evidence.filter { it["type"]?.jsonPrimitive?.content == "window_policy_summary" }
+        val checks = evaluation.evidence.filter { it["type"]?.jsonPrimitive?.content == "policy_check" }
+
+        assertEquals(PolicyVerdict.PASS, evaluation.verdict)
+        assertEquals(emptyList<String>(), evaluation.coverageReasons)
+        assertEquals(listOf("NO_POLICY", "PASS"), summaries.map { it.getValue("business_verdict").jsonPrimitive.content })
+        assertEquals(listOf("second"), checks.map { it.getValue("window_id").jsonPrimitive.content })
+    }
+
+    @Test
+    fun `a transaction rule counts its own samples inside its named window`() {
+        val rule =
+            PolicyRuleV1(
+                "rare-p95",
+                PolicyMetric.RESPONSE_TIME_P95_MS,
+                PolicyOperator.LTE,
+                BigDecimal("100"),
+                PolicyScope.Transaction("rare"),
+                windowIds = listOf("second"),
+            )
+        val bound = PolicyV1("policy.v1", "p", listOf(rule), PolicyDefaultsV1(sampleFloor = 20, minSamples = 100))
+
+        fun modeFor(samples: Long): String {
+            val evaluation =
+                evaluateSharedWindowPolicy(
+                    bound,
+                    RunValidity.VALID,
+                    metrics(95),
+                    mapOf("first" to withRare(500), "second" to withRare(samples)),
+                    resource(PolicyVerdict.PASS, PolicyVerdict.PASS),
+                    WINDOWS,
+                )
+            val checks = evaluation.evidence.filter { it["type"]?.jsonPrimitive?.content == "policy_check" }
+            assertEquals(listOf("second"), checks.map { it.getValue("window_id").jsonPrimitive.content })
+            return checks.single()["sample_mode"]?.jsonPrimitive?.content ?: "NONE"
+        }
+
+        assertEquals(
+            listOf("NONE", "INSUFFICIENT", "SMALL_SAMPLE", "SMALL_SAMPLE", "FULL"),
+            listOf(0L, 19L, 20L, 99L, 100L).map(::modeFor),
+        )
+    }
+
+    @Test
+    fun `an unknown window id blocks the verdict and names the rule and the id`() {
+        val ghost = boundPolicy("second", "ghost")
+
+        val evaluation =
+            evaluateSharedWindowPolicy(
+                ghost,
+                RunValidity.VALID,
+                metrics(95),
+                mapOf("first" to metrics(90), "second" to metrics(90)),
+                resource(PolicyVerdict.PASS, PolicyVerdict.PASS),
+                WINDOWS,
+            )
+        val unbound = evaluation.evidence.filter { it["type"]?.jsonPrimitive?.content == "rule_window_check" }
+
+        assertEquals(PolicyVerdict.NO_VERDICT, evaluation.verdict)
+        assertEquals(listOf("RULE_WINDOW_NOT_FOUND"), evaluation.coverageReasons)
+        assertEquals(listOf("p95"), unbound.map { it.getValue("rule_id").jsonPrimitive.content })
+        assertEquals(listOf("ghost"), unbound.map { it.getValue("window_id").jsonPrimitive.content })
+        val check = unbound.single()
+        assertEquals("NO_VERDICT", check.getValue("status").jsonPrimitive.content)
+        assertEquals("RULE_WINDOW_NOT_FOUND", check.getValue("reason_code").jsonPrimitive.content)
+    }
+
+    @Test
+    fun `a rule bound only to an unknown window never passes silently`() {
+        val ghost = boundPolicy("ghost")
+
+        val evaluation =
+            evaluateSharedWindowPolicy(
+                ghost,
+                RunValidity.VALID,
+                metrics(95),
+                mapOf("first" to metrics(90), "second" to metrics(90)),
+                resource(PolicyVerdict.NO_POLICY, PolicyVerdict.NO_POLICY),
+                WINDOWS,
+            )
+
+        assertEquals(PolicyVerdict.NO_VERDICT, evaluation.verdict)
+        assertEquals(listOf("RULE_WINDOW_NOT_FOUND"), evaluation.coverageReasons)
+    }
+
+    private fun boundPolicy(vararg windowIds: String): PolicyV1 {
+        val base = policy("100")
+        return base.copy(rules = base.rules.map { it.copy(windowIds = windowIds.toList()) })
+    }
+
+    private fun withRare(samples: Long) =
+        NormalizedMetrics(
+            MetricSummary(1_000, 0, ExactRatio(0, 1_000), ExactRatio(1_000, 1_000), LatencySummary(90, 90, 90, 90)),
+            listOf(
+                TransactionSummary(
+                    TransactionIdentity(emptyList(), "rare", SampleKind.GATLING_REQUEST),
+                    MetricSummary(
+                        samples,
+                        0,
+                        if (samples == 0L) null else ExactRatio(0, samples),
+                        ExactRatio(samples * 1_000, 1_000),
+                        LatencySummary(90, 90, 90, 90),
+                    ),
+                ),
+            ),
+            emptyList(),
+            emptyMap(),
+        )
 
     private fun policy(threshold: String) =
         PolicyV1(

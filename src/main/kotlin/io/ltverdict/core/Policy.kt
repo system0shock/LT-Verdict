@@ -104,7 +104,14 @@ internal fun evaluatePolicy(
     val checks = mutableListOf<JsonObject>()
     val informational = mutableListOf<String>()
     var failed = false
-    policy.rules.forEach { rule ->
+    val applicable = if (windowId == null) policy.rules else policy.rules.filter { it.windowIds == null || windowId in it.windowIds }
+    if (applicable.isEmpty()) return PolicyEvaluation(PolicyVerdict.NO_POLICY, reasons.distinct(), findings, evidence)
+    applicable.forEach { rule ->
+        if (windowId == null && rule.windowIds != null) {
+            reasons += REASON_RULE_WINDOW_NOT_FOUND
+            checks += policyCheck(rule, null, null, REASON_RULE_WINDOW_NOT_FOUND, null, includeMetricEvidence, null)
+            return@forEach
+        }
         val binding = bind(rule, metrics, metricEvidence)
         if (binding.reason != null) {
             reasons += binding.reason
@@ -440,6 +447,7 @@ private const val METRIC_NOT_AVAILABLE = "METRIC_NOT_AVAILABLE"
 private const val POLICY_FAILED = "POLICY_FAILED"
 private const val REASON_INSUFFICIENT_SAMPLES = "INSUFFICIENT_SAMPLES"
 private const val REASON_SMALL_SAMPLE = "SMALL_SAMPLE"
+private const val REASON_RULE_WINDOW_NOT_FOUND = "RULE_WINDOW_NOT_FOUND"
 
 private fun readBounded(
     source: InputStream,
@@ -493,7 +501,7 @@ private fun parsePolicy(element: JsonElement): PolicyV1 {
         rulesArray.mapIndexed { index, value ->
             val pointer = "/rules/$index"
             val rule = value.objectAt(pointer)
-            rule.rejectUnknown(setOf("id", "metric", "operator", "threshold", "scope", "min_samples"), pointer)
+            rule.rejectUnknown(setOf("id", "metric", "operator", "threshold", "scope", "min_samples", "window_ids"), pointer)
             val id = rule.stringAt("id", pointer)
             validateIdentifier(id, "$pointer/id")
             if (!ids.add(id)) fail("DUPLICATE_RULE_ID", "$pointer/id", "rule id must be unique")
@@ -524,7 +532,8 @@ private fun parsePolicy(element: JsonElement): PolicyV1 {
                     fail("MIN_SAMPLES_BELOW_FLOOR", "$pointer/min_samples", "min_samples is below the effective sample floor")
                 }
             }
-            PolicyRuleV1(id, metric, operator, threshold, scope, minSamples)
+            val windowIds = rule.windowIdsAt(pointer)
+            PolicyRuleV1(id, metric, operator, threshold, scope, minSamples, windowIds)
         }
     return PolicyV1(schemaVersion, policyId, rules, defaults)
 }
@@ -568,6 +577,21 @@ private fun JsonObject.longInRangeAt(
         fail("MIN_SAMPLES_OUT_OF_RANGE", pointer.child(name), "$name must be between 1 and $MAX_SAMPLES_BOUND")
     }
     return number.longValueExact()
+}
+
+private fun JsonObject.windowIdsAt(pointer: String): List<String>? {
+    val field = pointer.child("window_ids")
+    val value = get("window_ids") ?: return null
+    val array = value as? JsonArray ?: fail("WINDOW_IDS_INVALID", field, "window_ids must be an array")
+    if (array.isEmpty()) fail("WINDOW_IDS_INVALID", field, "window_ids must not be empty")
+    val ids =
+        array.map { item ->
+            (item as? JsonPrimitive)?.takeIf { it.isString }?.content ?: fail("WINDOW_IDS_INVALID", field, "window id must be a string")
+        }
+    if (ids.any { it.isEmpty() || it.encodeToByteArray().size > MAX_IDENTIFIER_BYTES } || ids.toSet().size != ids.size) {
+        fail("WINDOW_IDS_INVALID", field, "window ids must be unique, non-empty and at most 128 UTF-8 bytes")
+    }
+    return ids
 }
 
 private fun parseScope(

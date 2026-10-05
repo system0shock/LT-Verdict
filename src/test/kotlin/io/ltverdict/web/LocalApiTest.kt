@@ -1228,6 +1228,32 @@ class LocalApiTest {
     }
 
     @Test
+    fun `a platform rule policy with an SLA snapshot rule is rejected before a job exists`() {
+        val submissions = AtomicInteger()
+        withServer(jobsFactory = {
+            AnalysisJobs(1) { request, _, _ ->
+                submissions.incrementAndGet()
+                AnalysisOutcome(request.input.runId, FAKE_ANALYSIS_ID, byteArrayOf(), tempDir)
+            }
+        }) { store, api ->
+            val input = store.acceptInput(ByteArrayInputStream(SPIKE_DROP.bytes()), SPIKE_DROP.filename)
+            val resources =
+                """{"schema_version":"resource-snapshot.v1","load_input_sha256":"${input.sha256}","start_epoch_ms":0,"step_ms":1000,"point_count":2,"series":[{"id":"cpu","metric":"cpu_used","unit":"ratio","entity":"vm","role":"system","aggregation":"interval_mean","values":[0.1,0.9]}],"windows":[{"id":"steady","from_epoch_ms":0,"to_epoch_ms":2000}],"rules":[{"id":"cpu-high","series_id":"cpu","unit":"ratio","operator":"gt","threshold":0.8,"min_consecutive_cells":1,"effect":"sla"}]}"""
+                    .encodeToByteArray()
+            val policy =
+                """{"schema_version":"policy.v1","policy_id":"conflict","defaults":{"sample_floor":1,"min_samples":1},"rules":[{"id":"p95","metric":"response_time_p95_ms","operator":"lte","threshold":1000,"scope":{"kind":"overall"}}],"platform_rules":[{"id":"cpu","signal":"cpu_used","scope":{"kind":"service","services":["vm"]},"operator":"gt","threshold":0.8,"unit":"ratio","aggregation":"interval_mean","min_consecutive_cells":1,"effect":"diagnostic"}]}"""
+                    .encodeToByteArray()
+            api.bootstrap()
+
+            val response = api.createJob(input.runId, policy, resources)
+
+            assertEquals(422, response.statusCode())
+            assertTrue(response.body().contains("PLATFORM_RULES_CONFLICT"), response.body())
+            assertEquals(0, submissions.get())
+        }
+    }
+
+    @Test
     fun `capacity plan is bounded and bound before job submission`() {
         val submissions = AtomicInteger()
         withServer(jobsFactory = {

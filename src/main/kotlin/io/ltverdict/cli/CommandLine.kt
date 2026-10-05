@@ -17,6 +17,7 @@ import io.ltverdict.core.validateCapacityBinding
 import io.ltverdict.core.validateCapacityPlan
 import io.ltverdict.core.validateDiagnosticBinding
 import io.ltverdict.core.validateDiagnosticPlan
+import io.ltverdict.core.validatePlatformBinding
 import io.ltverdict.core.validatePolicy
 import io.ltverdict.core.validateResourceSnapshot
 import io.ltverdict.core.validateTrendBinding
@@ -216,6 +217,15 @@ private fun analyze(
     if (trend != null) {
         if (resources == null) throw CliFailure(EXIT_INVALID_INPUT, "TREND_RESOURCE_REQUIRED")
         val errors = validateTrendBinding(trend, resources)
+        if (errors.isNotEmpty()) {
+            throw CliFailure(
+                EXIT_INVALID_INPUT,
+                errors.joinToString("\n") { "${it.code} ${it.jsonPointer}: ${it.message}" },
+            )
+        }
+    }
+    if (policy != null && resources != null) {
+        val errors = validatePlatformBinding(policy.policy, resources.snapshot)
         if (errors.isNotEmpty()) {
             throw CliFailure(
                 EXIT_INVALID_INPUT,

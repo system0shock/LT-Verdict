@@ -221,6 +221,12 @@ internal class AnalysisJobs(
                                                 "RESOURCE_FINDINGS_LIMIT_EXCEEDED",
                                                 "Resource threshold findings exceed 10000; narrow windows or rules",
                                             )
+                                        "PLATFORM_RULES_CONFLICT" ->
+                                            Diagnostic("PLATFORM_RULES_CONFLICT", "SLA thresholds come from the policy or from the snapshot, not from both")
+                                        "DUPLICATE_RULE_ID" ->
+                                            Diagnostic("DUPLICATE_RULE_ID", "An expanded platform rule id equals a snapshot rule id")
+                                        "RESOURCE_LIMIT_EXCEEDED" ->
+                                            Diagnostic("RESOURCE_LIMIT_EXCEEDED", "Expanded platform checks and snapshot rules exceed 256")
                                         "DIAGNOSTIC_RESOURCE_REQUIRED" ->
                                             Diagnostic("DIAGNOSTIC_RESOURCE_REQUIRED", "Diagnostic plan requires a resource snapshot")
                                         "DIAGNOSTIC_SNAPSHOT_MISMATCH" ->

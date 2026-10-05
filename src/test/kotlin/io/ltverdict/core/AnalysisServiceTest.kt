@@ -974,6 +974,103 @@ class AnalysisServiceTest {
             assertEquals("FAIL", result(outcome, "policy_verdict"))
         }
 
+    @Test
+    fun `platform rules and an SLA rule of the snapshot are rejected before an analysis exists`() =
+        withService { store, service ->
+            val input = accept(store, OUT_OF_ORDER_CSV.encodeToByteArray(), "platform-conflict.jtl")
+            val analyses = input.path.parent.parent.resolve("analyses")
+
+            val failure =
+                assertThrows(IllegalArgumentException::class.java) {
+                    service.analyze(
+                        AnalysisRequest(
+                            input,
+                            platformPolicy("diagnostic"),
+                            resources = resources(resourceJson(input.sha256, "conflict", "0.8").encodeToByteArray()),
+                        ),
+                    )
+                }
+
+            assertEquals("PLATFORM_RULES_CONFLICT", failure.message)
+            assertFalse(Files.exists(analyses))
+        }
+
+    @Test
+    fun `platform SLA rules decide the window verdict of an analysis`() =
+        withService { store, service ->
+            val input = accept(store, OUT_OF_ORDER_CSV.encodeToByteArray(), "platform-verdict.jtl")
+            val outcome =
+                service.analyze(
+                    AnalysisRequest(
+                        input,
+                        platformPolicy("sla"),
+                        resources = resources(platformResourceJson(input.sha256, cpu = "0.9").encodeToByteArray()),
+                    ),
+                )
+            val checks =
+                Json
+                    .parseToJsonElement(outcome.canonicalResult.decodeToString())
+                    .jsonObject
+                    .getValue("evidence")
+                    .jsonArray
+                    .map { it.jsonObject }
+                    .filter { it.getValue("type").jsonPrimitive.content == "resource_policy_check" }
+
+            assertEquals("FAIL", result(outcome, "policy_verdict"))
+            assertEquals(
+                listOf("cpu/host" to "FAIL", "cover/host" to "PASS"),
+                checks.map { it.getValue("rule_id").jsonPrimitive.content to it.getValue("status").jsonPrimitive.content },
+            )
+            assertEquals(
+                setOf("cpu", "cover"),
+                checks.map { it.getValue("platform_rule_id").jsonPrimitive.content }.toSet(),
+            )
+
+            val passing =
+                service.analyze(
+                    AnalysisRequest(
+                        input,
+                        platformPolicy("sla"),
+                        resources = resources(platformResourceJson(input.sha256, cpu = "0.1").encodeToByteArray()),
+                    ),
+                )
+            assertEquals("PASS", result(passing, "policy_verdict"))
+            assertNotEquals(outcome.analysisId, passing.analysisId)
+        }
+
+    private fun platformPolicy(effect: String): PolicyValidation.Valid =
+        policy(
+            """{"schema_version":"policy.v1","policy_id":"platform","defaults":{"sample_floor":1,"min_samples":1},""" +
+                """"platform_services":["host"],"platform_coverage":{"signal":"unavailable"},""" +
+                """"rules":[{"id":"p95","metric":"response_time_p95_ms","operator":"lte","threshold":1000,"scope":{"kind":"overall"}}],""" +
+                """"platform_rules":[""" +
+                """{"id":"cpu","signal":"cpu_used","scope":{"kind":"all_services"},"operator":"gt","threshold":0.8,"unit":"ratio",""" +
+                """"aggregation":"interval_mean","min_consecutive_cells":1,"effect":"$effect"},""" +
+                """{"id":"cover","signal":"unavailable","scope":{"kind":"all_services"},"operator":"gt","threshold":0,"unit":"count",""" +
+                """"aggregation":"interval_max","min_consecutive_cells":1,"effect":"$effect"}]}""",
+        )
+
+    private fun platformResourceJson(
+        loadHash: String,
+        cpu: String,
+    ): String =
+        """
+        {
+          "schema_version":"resource-snapshot.v1",
+          "load_input_sha256":"$loadHash",
+          "start_epoch_ms":1767225600000,
+          "step_ms":1000,
+          "point_count":1,
+          "series":[
+            {"id":"cpu","metric":"cpu_used","unit":"ratio","entity":"host","role":"system","aggregation":"interval_mean","values":[$cpu]},
+            {"id":"unavailable","metric":"unavailable","unit":"count","entity":"host","role":"system","aggregation":"interval_max","values":[0]}
+          ],
+          "windows":[{"id":"evaluation","from_epoch_ms":1767225600000,"to_epoch_ms":1767225601000}],
+          "rules":[],
+          "provenance":{"source_kind":"fixture","query_semantics":"interval mean","clock_alignment":"platform"}
+        }
+        """.trimIndent()
+
     private fun withService(
         config: EngineConfig = EngineConfig(),
         block: (RunBundleStore, AnalysisService) -> Unit,

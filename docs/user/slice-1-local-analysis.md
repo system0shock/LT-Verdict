@@ -1073,6 +1073,134 @@ baseline этой проверки не выполняет.
 `WINDOW_IDS_INVALID` с указателем `/rules/<i>/window_ids`. Существование id
 проверяется уже при анализе, не при `ltv policy validate`.
 
+### Правила платформы
+
+Платформенные SLA-пороги (CPU, память, OOM, рестарты, доступность реплик) можно
+хранить в политике рядом с бизнес-правилами (ADR 0018, решения D3 и D4). Один
+элемент `platform_rules[]` задаёт шаблон проверки, а ядро разворачивает его по
+сервисам в обычные ресурсные правила и оценивает тем же вычислителем, что и
+правила снимка. Секции необязательные; политика без них не меняется.
+
+```json
+{
+  "schema_version": "policy.v1",
+  "policy_id": "platform-services",
+  "rules": [
+    {
+      "id": "overall-errors",
+      "metric": "error_rate_ratio",
+      "operator": "lte",
+      "threshold": 0.01,
+      "scope": { "kind": "overall" }
+    }
+  ],
+  "platform_services": ["orders", "payments"],
+  "platform_coverage": { "signal": "openshift_unavailable_replicas" },
+  "platform_rules": [
+    {
+      "id": "cpu-share",
+      "signal": "openshift_container_cpu_limit_ratio",
+      "scope": { "kind": "all_services", "except": ["payments"] },
+      "operator": "gt",
+      "threshold": 0.4,
+      "unit": "ratio",
+      "aggregation": "interval_mean",
+      "min_consecutive_cells": 2,
+      "effect": "sla"
+    },
+    {
+      "id": "replicas",
+      "signal": "openshift_unavailable_replicas",
+      "scope": { "kind": "all_services" },
+      "operator": "gt",
+      "threshold": 0,
+      "unit": "count",
+      "aggregation": "interval_max",
+      "min_consecutive_cells": 1,
+      "effect": "sla"
+    }
+  ]
+}
+```
+
+- Поля правила: `id`, `signal` (точное значение `metric` ряда снимка), `scope`,
+  `operator`, `threshold`, `unit`, `aggregation`, `min_consecutive_cells`
+  (1..100 000), `effect` (`sla` или `diagnostic`) и необязательное `window_ids`
+  (как у бизнес-правил). Правил до 256; всех проверок после разворачивания тоже не
+  больше 256.
+- `operator` здесь `gt` или `lt` и означает **условие нарушения** (как у
+  ресурсных правил снимка), в отличие от `lte` и `gte` у бизнес-правил, где
+  оператор описывает условие прохождения. `min_consecutive_cells` считает соседние
+  нарушающие ячейки сетки снимка, а не секунды.
+- Область `{"kind":"service","services":[...]}` называет **ожидаемые** сервисы
+  явным списком. Область `{"kind":"all_services","except":[...]}` берёт каталог
+  `platform_services` (до 64 уникальных имён) без `except`; каталог обязателен, а
+  каждое имя в `except` обязано входить в каталог, иначе `INVALID_SCOPE` (опечатка
+  не должна молча оставлять сервис без проверки). Область, опустевшая после
+  `except`, тоже `INVALID_SCOPE`. Wildcard и regex не поддерживаются. Если состав
+  сервисов или пороги плеч различаются, используйте отдельный файл политики на
+  плечо: поля плеча в правиле нет.
+- Привязка ряда: для пары «правило × сервис» нужен ровно один ряд снимка с
+  `metric = signal`, `entity` равным имени сервиса и `role = system`; `unit` и
+  `aggregation` ряда должны совпасть с заявленными в правиле, единицы не
+  пересчитываются. Развёрнутая проверка называется `<id правила>/<сервис>`
+  (`cpu-share/orders`), её evidence `resource_policy_check` получает поля
+  `platform_rule_id` и `service`.
+- Покрытие. Если есть хотя бы одно платформенное правило `effect = sla`,
+  обязательна секция `platform_coverage` с `signal` (рекомендуется
+  `openshift_unavailable_replicas`). Для каждой пары «сервис × окно», где
+  действует такое правило, должно быть правило покрытия: тот же сигнал, `gt`,
+  порог `0`, `min_consecutive_cells = 1`, `effect = sla`, агрегация
+  `interval_max`, область которого включает сервис, а `window_ids` включают окно
+  (без `window_ids` правило покрытия действует во всех окнах; у покрываемого
+  правила без `window_ids` покрытие тоже должно быть без `window_ids`). Иначе
+  ошибка `PLATFORM_COVERAGE_MISSING`. Так пропавший под не даёт `PASS` по
+  непрерывному ряду другого сигнала. Граница гарантии: ядро не проверяет, что
+  запрос профиля источника честно считает `desired - available`.
+- Один владелец SLA-порога. Если в политике есть `platform_rules`, снимок и
+  профиль источника не могут одновременно поставлять ресурсные правила
+  `effect = sla` (`diagnostic`-правила снимка допустимы, в том числе проверки
+  генератора для ёмкости). Пороги переносят из снимка или профиля в политику;
+  дальнейшая правка порога меняет `policy_sha256`, а не хэш снимка. Политика без
+  `platform_rules` работает как раньше.
+- Допуск пропусков в этой версии строгий, как у правил снимка: любой пропуск
+  в окне правила даёт `NO_VERDICT` с причиной `MISSING_RESOURCE_CELLS`, найденные
+  нарушения остаются в findings. Настраиваемый допуск добавит отдельный срез.
+
+Причины, блокирующие вердикт (`NO_VERDICT`), у платформенных `sla`-правил:
+
+| Причина | Когда |
+| --- | --- |
+| `RESOURCE_SERIES_NOT_FOUND` | У ожидаемого сервиса нет ряда сигнала, в том числе сервис исчез целиком |
+| `PLATFORM_SERIES_AMBIGUOUS` | Подходит больше одного ряда сервиса, ядро не выбирает первый |
+| `PLATFORM_UNIT_MISMATCH` | Единица ряда отличается от `unit` правила |
+| `PLATFORM_AGGREGATION_MISMATCH` | Агрегация ряда отличается от `aggregation` правила |
+| `PLATFORM_SERVICE_NOT_IN_CATALOG` | Для области `all_services` в снимке есть ряд сигнала у сервиса, которого нет ни в каталоге, ни в `except` |
+| `RULE_WINDOW_TOO_SHORT` | В окне меньше ячеек, чем `min_consecutive_cells`: серию физически нельзя найти |
+| `RULE_WINDOW_NOT_FOUND` | Id из `window_ids` платформенного правила не найден среди окон снимка |
+| `RESOURCE_SNAPSHOT_REQUIRED` | В политике есть платформенное `sla`-правило, а снимок не передан |
+
+У правил `effect = diagnostic` те же ситуации не блокируют вердикт: причина
+попадает в покрытие (`analysis_coverage`), а само правило в вердикт не входит. Без
+снимка политика только с `diagnostic`-правилами получает
+`RESOURCE_SNAPSHOT_REQUIRED` как информационную причину.
+
+Ошибки привязки политики к снимку проверяются до создания анализа: CLI завершается
+кодом 4, API отвечает 422 с телом `{valid:false, errors}`, задача онлайн-источника
+получает диагностику с тем же кодом.
+
+| Код | Причина |
+| --- | --- |
+| `PLATFORM_RULES_CONFLICT` | В политике есть `platform_rules`, а снимок или профиль поставляет ресурсное правило `effect = sla` |
+| `DUPLICATE_RULE_ID` | Развёрнутый id (`<id>/<сервис>`) совпал с id правила снимка |
+| `RESOURCE_LIMIT_EXCEEDED` | Развёрнутых проверок вместе с правилами снимка больше 256 |
+
+Анализ без `platform_rules` не меняется: `identity.json`, ключ сопоставимости
+baseline и `analysis_id` прежние. Файл политики с платформенными секциями имеет
+другой `policy_sha256`, поэтому у такого анализа другой `analysis_id`. Прежняя
+версия отвергает такой файл как `UNKNOWN_FIELD`. Имена сигналов (`openshift_*`) в
+ядро не зашиты: оно сопоставляет только точную строку.
+
 ### Exact transaction matching
 
 Transaction scope имеет ровно форму:
@@ -1111,7 +1239,11 @@ UI и CLI используют один validator. Ошибка содержит
 | `MIN_SAMPLES_BELOW_FLOOR` | Действующий минимум выборки меньше действующего пола |
 | `FIELD_NOT_APPLICABLE` | Поле не применимо к правилу: `min_samples` у `throughput_rps` |
 | `WINDOW_IDS_INVALID` | `window_ids` правила пуст, не массив строк, содержит повтор, пустую строку или id длиннее 128 байт UTF-8 |
-| `INVALID_SCOPE` | Scope не равен exact `overall` или `transaction` form |
+| `INVALID_SCOPE` | Scope не равен exact `overall` или `transaction` form; у платформенного правила: неизвестный `kind`, пустой или повторяющийся список сервисов, `all_services` без каталога `platform_services`, `except` вне каталога, область пуста после `except` |
+| `INVALID_MINIMUM` | `min_consecutive_cells` платформенного правила вне `1..100000` |
+| `UNKNOWN_AGGREGATION`, `UNKNOWN_EFFECT` | Агрегация или effect платформенного правила не поддерживается |
+| `PLATFORM_AGGREGATION_OPERATOR_MISMATCH` | Платформенное правило `gt` с порогом `0` и агрегацией `interval_min` |
+| `PLATFORM_COVERAGE_MISSING` | Нет правила покрытия для пары «сервис × окно» платформенного `sla`-правила |
 | `RESOURCE_LIMIT_EXCEEDED` | Превышен размер, depth, count или lexical numeric limit |
 
 Невалидная policy отклоняется до создания analysis и не превращается в
@@ -1138,6 +1270,8 @@ Scope — только overall или transaction с точным передан
 правила: их указывай только если пользователь назвал значения, не придумывай их.
 Поле window_ids у правила (массив id окон) добавляй только если пользователь
 назвал окна снимка ресурсов: id придумывать нельзя.
+Секции platform_services, platform_coverage и platform_rules добавляй только если
+пользователь назвал сервисы, сигналы, единицы, агрегации и пороги: сам их не составляй.
 Не придумывай thresholds, transaction names, units или SLA. Если хотя бы одно
 значение отсутствует, задай пользователю уточняющий вопрос и не создавай JSON.
 Каждому правилу дай короткий уникальный id. Верни один JSON object без Markdown,
@@ -1292,6 +1426,8 @@ Resource rule задаёт series_id, unit, `gt|lt`, threshold,
 например, `gt` считает превышения. Null разрывает последовательность. Порог
 interval mean не означает превышение в каждый instant. CPU cores, ratio и bytes
 не конвертируются автоматически. Без правил нет автоматического saturation.
+Платформенные SLA-пороги по сервисам хранятся в политике, см. раздел «Правила
+платформы»; вместе с ними снимок не должен содержать правил `effect = sla`.
 
 UI и reports показывают min/max, mean/median, Q05/Q25/Q75/Q95, IQR, unscaled MAD,
 sample standard deviation, slope/sec и split-half median shift, а также

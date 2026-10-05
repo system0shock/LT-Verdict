@@ -111,6 +111,25 @@ id не даёт молчаливого `PASS`. Анализ без снимка
 и `analysis_id` анализов без `window_ids` не меняются; политика с `window_ids` имеет
 другой `policy_sha256` и потому другой `analysis_id`.
 
+Секции `platform_services`, `platform_coverage` и `platform_rules` политики (ADR 0018,
+решения D3 и D4, строгий режим) переносят платформенные SLA-пороги по сервисам в
+политику. `expandPlatformRules` разворачивает правило-шаблон по сервисам области в
+обычные `ResourceRuleV1` с id `<id правила>/<сервис>` и привязывает ряд снимка по
+точным `metric = signal`, `entity = сервис`, `role = system`, одной `unit` и одной
+`aggregation`; результат передаётся в `evaluateResources`, который оценивает развёрнутые
+правила тем же `evaluateRule`, что и правила снимка, и добавляет в evidence
+`resource_policy_check` поля `platform_rule_id` и `service`. Исходы привязки
+(`RESOURCE_SERIES_NOT_FOUND`, `PLATFORM_SERIES_AMBIGUOUS`, `PLATFORM_UNIT_MISMATCH`,
+`PLATFORM_AGGREGATION_MISMATCH`, `PLATFORM_SERVICE_NOT_IN_CATALOG`) и окно короче серии
+(`RULE_WINDOW_TOO_SHORT`) дают `NO_VERDICT` у `sla`-правил; у `diagnostic` причина идёт
+только в покрытие. Один владелец SLA-порога: `validatePlatformBinding` до создания
+анализа отвергает политику с `platform_rules` вместе с `sla`-правилом снимка
+(`PLATFORM_RULES_CONFLICT`), коллизию развёрнутого id и превышение 256 проверок;
+CLI, API и задача онлайн-источника показывают код (CLI 4, API 422). Валидатор политики
+требует правило покрытия `platform_coverage` для каждой пары «сервис × окно», где
+действует платформенное `sla`-правило. Identity, ключ сопоставимости baseline и
+`analysis_id` анализов без `platform_rules` не меняются.
+
 Canonical `analysis-result.v1` одинаков для CLI и UI при одинаковых input,
 policy и engine configuration.
 

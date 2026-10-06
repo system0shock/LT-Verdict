@@ -427,6 +427,9 @@ for (const [name, opts, code] of [
   ['an incomplete analysis', { verdict: 'PASS', coverage: { status: 'INCOMPLETE', reasons: ['MISSING_RESOURCE'] } }, 'BASELINE_CANDIDATE_INCOMPLETE'],
   ['an incomplete analysis next to SMALL_SAMPLE', { verdict: 'PASS', coverage: { status: 'INCOMPLETE', reasons: ['SMALL_SAMPLE', 'MISSING_RESOURCE'] } }, 'BASELINE_CANDIDATE_INCOMPLETE'],
   ['an analysis without a policy', { verdict: 'NO_POLICY' }, 'BASELINE_CANDIDATE_NOT_PASS'],
+  ['an incomplete analysis with an empty reason list', { verdict: 'PASS', coverage: { status: 'INCOMPLETE', reasons: [] } }, 'BASELINE_CANDIDATE_INCOMPLETE'],
+  ['an invalid and failing run (the invalid check goes first)', { validity: 'INVALID', verdict: 'FAIL', coverage: { status: 'INCOMPLETE', reasons: ['X'] } }, 'BASELINE_CANDIDATE_INVALID'],
+  ['an incomplete and failing analysis (the incomplete check goes before the verdict)', { verdict: 'FAIL', coverage: { status: 'INCOMPLETE', reasons: ['X'] } }, 'BASELINE_CANDIDATE_INCOMPLETE'],
 ] as const) {
   test(`the button is blocked for ${name}`, async ({ page }) => {
     await openCompare(page, opts)

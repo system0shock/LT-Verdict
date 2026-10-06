@@ -13,14 +13,22 @@ import io.ltverdict.core.AnalysisOutcome
 import io.ltverdict.core.AnalysisRequest
 import io.ltverdict.core.AnalysisService
 import io.ltverdict.core.EngineConfig
+import io.ltverdict.core.MAX_RELEASE_ANALYSES
+import io.ltverdict.core.MAX_RELEASE_NOTES_BYTES
+import io.ltverdict.core.MAX_RELEASE_TEXT_BYTES
 import io.ltverdict.core.MAX_RESOURCE_SNAPSHOT_BYTES
 import io.ltverdict.core.PodViewValidation
+import io.ltverdict.core.RELEASE_ID
+import io.ltverdict.core.RELEASE_PROFILE_FIELDS
 import io.ltverdict.core.ResourceValidation
 import io.ltverdict.core.analysisIdentity
+import io.ltverdict.core.canonicalJson
 import io.ltverdict.core.manualBaselineSelection
 import io.ltverdict.core.podViewTestJson
+import io.ltverdict.core.releaseId
 import io.ltverdict.core.sha256Hex
 import io.ltverdict.core.validatePodView
+import io.ltverdict.core.validateRelease
 import io.ltverdict.core.validateResourceSnapshot
 import io.ltverdict.jobs.AnalysisJobs
 import io.ltverdict.report.renderAsciiDocReport
@@ -36,17 +44,23 @@ import io.ltverdict.sources.SourceProfile
 import io.ltverdict.sources.analyzeWithSources
 import io.ltverdict.sources.readSourceProfiles
 import io.ltverdict.storage.DataDirectory
+import io.ltverdict.storage.MAX_RELEASES
 import io.ltverdict.storage.MAX_VERIFIED_RESULT_BYTES
 import io.ltverdict.storage.RunBundleStore
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.boolean
+import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.long
+import kotlinx.serialization.json.put
 import org.HdrHistogram.PackedHistogram
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
@@ -1284,6 +1298,802 @@ class LocalApiTest {
             )
         }
 
+    private fun releaseBody(
+        runId: String,
+        analyses: List<String>,
+        series: String = "checkout",
+        label: String = "1.0",
+        profile: JsonElement = JsonNull,
+        notes: JsonElement = JsonNull,
+    ): JsonObject =
+        buildJsonObject {
+            put("series", series)
+            put("label", label)
+            put("run_id", runId)
+            put("analyses", JsonArray(analyses.map { buildJsonObject { put("analysis_id", it) } }))
+            put("profile", profile)
+            put("notes", notes)
+        }
+
+    private fun releasePutBody(
+        label: String,
+        analyses: List<String>,
+        profile: JsonElement = JsonNull,
+        notes: JsonElement = JsonNull,
+    ): JsonObject = JsonObject(releaseBody("unused", analyses, label = label, profile = profile, notes = notes) - setOf("series", "run_id"))
+
+    private fun ApiClient.createRelease(body: JsonObject): HttpResponse<String> =
+        post("/api/releases", "application/json", body.toString().encodeToByteArray())
+
+    private fun ApiClient.replaceRelease(
+        id: String,
+        body: JsonObject,
+    ): HttpResponse<String> = put("/api/releases/$id", "application/json", body.toString().encodeToByteArray())
+
+    private fun HttpResponse<String>.newReleaseId(): String = jsonObject().getValue("release_id").jsonPrimitive.content
+
+    private fun JsonObject.reasons(name: String = "ineligible_reasons"): List<String> =
+        getValue(name).jsonArray.map {
+            it.jsonPrimitive.content
+        }
+
+    private fun HttpResponse<String>.errorLimit(): Int? =
+        jsonObject()
+            .getValue("error")
+            .jsonObject["limit"]
+            ?.jsonPrimitive
+            ?.long
+            ?.toInt()
+
+    /** Writes an analysis document set straight into the store, without the engine, to set up cases the engine never produces. */
+    private fun writeSyntheticAnalysis(
+        store: RunBundleStore,
+        runId: String,
+        tag: String,
+        startedAt: String? = "2026-01-01T00:00:00Z",
+        resultRunId: String = runId,
+        metadataRunId: String = runId,
+        arm: String? = null,
+        verdict: String = "PASS",
+    ): String {
+        val identity =
+            canonicalJson(
+                buildJsonObject {
+                    put("run_id", runId)
+                    put("tag", tag)
+                    put("policy_sha256", "a".repeat(64))
+                    if (arm != null) put("resource_arm", arm)
+                },
+            )
+        val analysisId = sha256Hex(identity)
+        store.writeAnalysisAtomically(runId, analysisId) { staging ->
+            Files.write(staging.resolve("identity.json"), identity)
+            Files.write(
+                staging.resolve("analysis-result.json"),
+                canonicalJson(
+                    buildJsonObject {
+                        put("schema_version", "analysis-result.v1")
+                        put("run_id", resultRunId)
+                        put("run_validity", "VALID")
+                        put("policy_verdict", verdict)
+                        put(
+                            "analysis_coverage",
+                            buildJsonObject {
+                                put("status", "COMPLETE")
+                                put("reasons", JsonArray(emptyList()))
+                            },
+                        )
+                    },
+                ),
+            )
+            if (startedAt != null) {
+                Files.write(
+                    staging.resolve("run.json"),
+                    canonicalJson(
+                        buildJsonObject {
+                            put("run_id", metadataRunId)
+                            put("started_at", startedAt)
+                        },
+                    ),
+                )
+            }
+        }
+        return analysisId
+    }
+
+    private fun syntheticDraft(
+        series: String,
+        label: String,
+        startedAt: String,
+        analysisId: String,
+    ): JsonObject =
+        buildJsonObject {
+            put("schema_version", "local-release.v1")
+            put("series", series)
+            put("label", label)
+            put("run_id", "jmeter_jtl_csv-${"0".repeat(64)}")
+            put("started_at", startedAt)
+            put(
+                "analyses",
+                JsonArray(
+                    listOf(
+                        buildJsonObject {
+                            put("analysis_id", analysisId)
+                            put("arm", JsonNull)
+                            put("coverage_reasons", JsonArray(emptyList()))
+                            put("coverage_status", "COMPLETE")
+                            put("policy_sha256", "a".repeat(64))
+                            put("policy_verdict", "PASS")
+                            put("run_validity", "VALID")
+                        },
+                    ),
+                ),
+            )
+            put("profile", JsonNull)
+            put("notes", JsonNull)
+        }
+
+    private fun seedReleaseFiles(
+        root: Path,
+        count: Int,
+    ) {
+        val directory = Files.createDirectories(root.resolve("releases"))
+        repeat(count) { index ->
+            val millis = 1_767_225_600_000L + index
+            val id = releaseId(millis, "%08x".format(index))
+            val record =
+                buildJsonObject {
+                    put("schema_version", "local-release.v1")
+                    put("release_id", id)
+                    put("series", "seed")
+                    put("label", "seed-$index")
+                    put("run_id", "jmeter_jtl_csv-${"0".repeat(64)}")
+                    put("started_at", Instant.ofEpochMilli(millis).toString())
+                    put(
+                        "analyses",
+                        JsonArray(
+                            listOf(
+                                buildJsonObject {
+                                    put("analysis_id", "%064x".format(index + 1))
+                                    put("arm", JsonNull)
+                                    put("coverage_reasons", JsonArray(emptyList()))
+                                    put("coverage_status", "COMPLETE")
+                                    put("policy_sha256", "a".repeat(64))
+                                    put("policy_verdict", "PASS")
+                                    put("run_validity", "VALID")
+                                },
+                            ),
+                        ),
+                    )
+                    put("profile", JsonNull)
+                    put("notes", JsonNull)
+                    put("created_at", "2026-01-02T00:00:00Z")
+                    put("updated_at", "2026-01-02T00:00:00Z")
+                }
+            Files.write(directory.resolve("$id.json"), canonicalJson(validateRelease(record)))
+        }
+    }
+
+    @Test
+    fun `release is created from verified documents`() =
+        withServer { store, api ->
+            val input = store.acceptInput(ByteArrayInputStream(SPIKE_DROP.bytes()), SPIKE_DROP.filename)
+            api.bootstrap()
+            val analysisId = api.createJob(input.runId, PERMISSIVE_POLICY).analysisId(api)
+            val empty = JsonObject(RELEASE_PROFILE_FIELDS.associateWith { JsonPrimitive("  ") })
+
+            val response = api.createRelease(releaseBody(input.runId, listOf(analysisId), label = "  é ", profile = empty))
+            assertEquals(201, response.statusCode())
+            val release = response.jsonObject()
+            assertTrue(RELEASE_ID.matches(release.getValue("release_id").jsonPrimitive.content))
+            // NFD input is stored composed, and an all-empty profile is stored as null
+            assertEquals("é", release.getValue("label").jsonPrimitive.content)
+            assertEquals(JsonNull, release.getValue("profile"))
+            assertEquals(JsonNull, release.getValue("notes"))
+            assertEquals(
+                store.readVerifiedAnalysis(input.runId, analysisId)!!.run!!.getValue("started_at"),
+                release.getValue("started_at"),
+            )
+            assertTrue(
+                release
+                    .getValue("release_id")
+                    .jsonPrimitive.content
+                    .startsWith("0017672256"),
+            )
+            val analysis =
+                release
+                    .getValue("analyses")
+                    .jsonArray
+                    .single()
+                    .jsonObject
+            assertEquals("PASS", analysis.getValue("policy_verdict").jsonPrimitive.content)
+            assertEquals("OK", analysis.getValue("analysis_state").jsonPrimitive.content)
+            assertTrue(analysis.getValue("baseline_eligible").jsonPrimitive.boolean)
+            assertEquals(emptyList<String>(), analysis.reasons())
+            assertTrue(release.getValue("baseline_eligible").jsonPrimitive.boolean)
+            // the stored record is what the single read returns
+            val read = api.get("/api/releases/${response.newReleaseId()}")
+            assertEquals(200, read.statusCode())
+            assertEquals(release, read.jsonObject())
+        }
+
+    @Test
+    fun `release body is validated field by field before any analysis is read`() =
+        withServer { store, api ->
+            api.bootstrap()
+            val run = "jmeter_jtl_csv-${"1".repeat(64)}"
+            val good = releaseBody(run, listOf("a".repeat(64)))
+            val nineIds = (0..8).map { "%064x".format(it + 1) }
+            val bodies =
+                mapOf(
+                    "extra key" to JsonObject(good + ("extra_field" to JsonNull)),
+                    "missing notes" to JsonObject(good - "notes"),
+                    "empty analyses" to releaseBody(run, emptyList()),
+                    "nine analyses" to releaseBody(run, nineIds),
+                    "duplicate analysis" to releaseBody(run, listOf("a".repeat(64), "a".repeat(64))),
+                    "label over 128 bytes" to releaseBody(run, listOf("a".repeat(64)), label = "x".repeat(129)),
+                    "blank series" to releaseBody(run, listOf("a".repeat(64)), series = "   "),
+                    "control character" to releaseBody(run, listOf("a".repeat(64)), label = "a\u0007b"),
+                    "bad run id" to releaseBody("run", listOf("a".repeat(64))),
+                    "bad analysis id" to releaseBody(run, listOf("A".repeat(64))),
+                    "unknown profile key" to
+                        releaseBody(
+                            run,
+                            listOf("a".repeat(64)),
+                            profile = buildJsonObject { put("extra_field", "x") },
+                        ),
+                    "analysis entry with arm" to
+                        JsonObject(
+                            good +
+                                (
+                                    "analyses" to
+                                        JsonArray(
+                                            listOf(
+                                                buildJsonObject {
+                                                    put("analysis_id", "a".repeat(64))
+                                                    put("arm", "x")
+                                                },
+                                            ),
+                                        )
+                                ),
+                        ),
+                )
+            bodies.forEach { (name, body) ->
+                assertError(api.createRelease(body), 400, "MALFORMED_REQUEST")
+                assertEquals(0, store.listReleases(null, null, 10).releases.size, name)
+            }
+            assertError(api.post("/api/releases", "text/plain", good.toString().encodeToByteArray()), 415, "UNSUPPORTED_MEDIA_TYPE")
+            assertError(
+                api.createRelease(releaseBody(run, listOf("a".repeat(64)), notes = JsonPrimitive("x".repeat(17_000)))),
+                413,
+                "RESOURCE_LIMIT_EXCEEDED",
+            )
+            // an oversize note that fits the body limit is still refused by its own limit
+            assertError(
+                api.createRelease(releaseBody(run, listOf("a".repeat(64)), notes = JsonPrimitive("x".repeat(1025)))),
+                400,
+                "MALFORMED_REQUEST",
+            )
+            assertEquals(0, store.listReleases(null, null, 10).corruptCount)
+        }
+
+    @Test
+    fun `unknown analysis or run is 404 and another run's analysis is not found`() =
+        withServer { store, api ->
+            val input = store.acceptInput(ByteArrayInputStream(SPIKE_DROP.bytes()), SPIKE_DROP.filename)
+            val other = store.acceptInput(ByteArrayInputStream(JMETER_XML.bytes()), JMETER_XML.filename)
+            api.bootstrap()
+            val otherAnalysis = api.createJob(other.runId, PERMISSIVE_POLICY).analysisId(api)
+
+            assertError(api.createRelease(releaseBody(input.runId, listOf("f".repeat(64)))), 404, "NOT_FOUND")
+            assertError(api.createRelease(releaseBody("jmeter_jtl_csv-${"2".repeat(64)}", listOf(otherAnalysis))), 404, "NOT_FOUND")
+            assertError(api.createRelease(releaseBody(input.runId, listOf(otherAnalysis))), 404, "NOT_FOUND")
+            assertEquals(0, store.listReleases(null, null, 10).releases.size)
+        }
+
+    @Test
+    fun `registration refuses analyses without run metadata with different starts or arms in conflict`() =
+        withServer { store, api ->
+            val input = store.acceptInput(ByteArrayInputStream(SPIKE_DROP.bytes()), SPIKE_DROP.filename)
+            api.bootstrap()
+            val real = api.createJob(input.runId, PERMISSIVE_POLICY).analysisId(api)
+            val failing = api.createJob(input.runId, FAILING_POLICY).analysisId(api)
+            val noMeta = writeSyntheticAnalysis(store, input.runId, "no-meta", startedAt = null)
+            val otherStart = writeSyntheticAnalysis(store, input.runId, "other-start", startedAt = "2026-01-01T00:00:01Z")
+            val foreign = writeSyntheticAnalysis(store, input.runId, "foreign", resultRunId = "jmeter_jtl_csv-${"3".repeat(64)}")
+            val foreignMetadata =
+                writeSyntheticAnalysis(store, input.runId, "foreign-metadata", metadataRunId = "jmeter_jtl_csv-${"4".repeat(64)}")
+            val blue1 = writeSyntheticAnalysis(store, input.runId, "blue-1", arm = "blue")
+            val blue2 = writeSyntheticAnalysis(store, input.runId, "blue-2", arm = "blue")
+            val green = writeSyntheticAnalysis(store, input.runId, "green", arm = "green")
+
+            assertError(api.createRelease(releaseBody(input.runId, listOf(noMeta))), 422, "RELEASE_ANALYSIS_NO_RUN_METADATA")
+            assertError(api.createRelease(releaseBody(input.runId, listOf(real, otherStart))), 422, "RELEASE_STARTED_AT_MISMATCH")
+            assertError(api.createRelease(releaseBody(input.runId, listOf(foreign))), 422, "RELEASE_RUN_MISMATCH")
+            assertError(api.createRelease(releaseBody(input.runId, listOf(foreignMetadata))), 422, "RELEASE_RUN_MISMATCH")
+            // two analyses without an arm, a repeated arm and an unmarked analysis next to a marked one
+            assertError(api.createRelease(releaseBody(input.runId, listOf(real, failing))), 422, "RELEASE_ARM_CONFLICT")
+            assertError(api.createRelease(releaseBody(input.runId, listOf(blue1, blue2))), 422, "RELEASE_ARM_CONFLICT")
+            assertError(api.createRelease(releaseBody(input.runId, listOf(blue1, real))), 422, "RELEASE_ARM_CONFLICT")
+            assertEquals(0, store.listReleases(null, null, 10).releases.size)
+
+            val twoArms = api.createRelease(releaseBody(input.runId, listOf(green, blue1)))
+            assertEquals(201, twoArms.statusCode())
+            val arms =
+                twoArms
+                    .jsonObject()
+                    .getValue("analyses")
+                    .jsonArray
+                    .map {
+                        it.jsonObject
+                            .getValue("arm")
+                            .jsonPrimitive.content
+                    }
+            assertEquals(listOf(green to "green", blue1 to "blue").sortedBy { it.first }.map { it.second }, arms)
+        }
+
+    @Test
+    fun `registration refuses a tampered or oversized result`() =
+        withServer { store, api ->
+            val input = store.acceptInput(ByteArrayInputStream(SPIKE_DROP.bytes()), SPIKE_DROP.filename)
+            api.bootstrap()
+            val tampered = api.createJob(input.runId, FAILING_POLICY).analysisId(api)
+            val resultPath = store.readAnalysis(input.runId, tampered)!!.path.resolve("analysis-result.json")
+            val original = Files.readString(resultPath)
+            Files.writeString(resultPath, original.replace("\"policy_verdict\":\"FAIL\"", "\"policy_verdict\":\"PASS\""))
+            assertError(api.createRelease(releaseBody(input.runId, listOf(tampered))), 500, "CORRUPT_RUN_BUNDLE")
+
+            val identity = """{"run_id":"${input.runId}","tag":"too-large"}""".encodeToByteArray()
+            val oversized = sha256Hex(identity)
+            store.writeAnalysisAtomically(input.runId, oversized) { staging ->
+                Files.write(staging.resolve("identity.json"), identity)
+                RandomAccessFile(
+                    staging.resolve("analysis-result.json").toFile(),
+                    "rw",
+                ).use { it.setLength(MAX_VERIFIED_RESULT_BYTES + 1L) }
+            }
+            assertError(api.createRelease(releaseBody(input.runId, listOf(oversized))), 422, "RELEASE_RESULT_TOO_LARGE")
+            assertEquals(0, store.listReleases(null, null, 10).releases.size)
+        }
+
+    @Test
+    fun `one analysis registers once even when two requests race`() =
+        withServer { store, api ->
+            val input = store.acceptInput(ByteArrayInputStream(SPIKE_DROP.bytes()), SPIKE_DROP.filename)
+            api.bootstrap()
+            val analysisId = api.createJob(input.runId, PERMISSIVE_POLICY).analysisId(api)
+            val barrier = java.util.concurrent.CyclicBarrier(2)
+            val executor =
+                java.util.concurrent.Executors
+                    .newFixedThreadPool(2)
+            try {
+                val responses =
+                    (1..2)
+                        .map { worker ->
+                            executor.submit<HttpResponse<String>> {
+                                barrier.await(10, TimeUnit.SECONDS)
+                                api.createRelease(releaseBody(input.runId, listOf(analysisId), label = "w$worker"))
+                            }
+                        }.map { it.get(30, TimeUnit.SECONDS) }
+                assertEquals(listOf(201, 409), responses.map { it.statusCode() }.sorted())
+                val refused = responses.single { it.statusCode() == 409 }
+                assertError(refused, 409, "RELEASE_ANALYSIS_ALREADY_REGISTERED")
+                // after the winner is removed the analysis registers again
+                val winner = responses.single { it.statusCode() == 201 }
+                assertEquals(200, api.delete("/api/releases/${winner.newReleaseId()}").statusCode())
+                assertEquals(201, api.createRelease(releaseBody(input.runId, listOf(analysisId))).statusCode())
+            } finally {
+                executor.shutdownNow()
+            }
+        }
+
+    @Test
+    fun `list is complete newest first and paginated and reports damaged entries`() {
+        val root = tempDir.resolve("release-list")
+        withServer(dataRoot = root) { store, api ->
+            api.bootstrap()
+            val created =
+                (0 until 3).map { n ->
+                    val draft =
+                        syntheticDraft(
+                            series = if (n == 1) "beta" else "alpha",
+                            label = "r$n",
+                            startedAt = "2026-01-0${n + 1}T00:00:00Z",
+                            analysisId = "%064x".format(n + 1),
+                        )
+                    store
+                        .createRelease(draft, Instant.parse("2026-02-01T00:00:00Z"))
+                        .getValue("release_id")
+                        .jsonPrimitive.content
+                }
+            val newestFirst = created.sortedDescending()
+
+            val first = api.get("/api/releases?limit=2").jsonObject()
+            assertEquals(
+                newestFirst.take(2),
+                first.getValue("releases").jsonArray.map {
+                    it.jsonObject
+                        .getValue("release_id")
+                        .jsonPrimitive.content
+                },
+            )
+            assertEquals(newestFirst[1], first.getValue("next_after").jsonPrimitive.content)
+            val second = api.get("/api/releases?limit=2&after=${newestFirst[1]}").jsonObject()
+            assertEquals(
+                newestFirst.drop(2),
+                second.getValue("releases").jsonArray.map {
+                    it.jsonObject
+                        .getValue("release_id")
+                        .jsonPrimitive.content
+                },
+            )
+            assertEquals(JsonNull, second.getValue("next_after"))
+            val summary =
+                first.getValue("series_summary").jsonArray.map {
+                    it.jsonObject
+                        .getValue("series")
+                        .jsonPrimitive.content to
+                        it.jsonObject
+                            .getValue("count")
+                            .jsonPrimitive.long
+                }
+            assertEquals(listOf("alpha" to 2L, "beta" to 1L), summary)
+            val beta = api.get("/api/releases?series=beta&limit=1").jsonObject()
+            assertEquals(1, beta.getValue("releases").jsonArray.size)
+            assertEquals(JsonNull, beta.getValue("next_after"))
+            // the summary counts every record whatever the filter
+            assertEquals(2, beta.getValue("series_summary").jsonArray.size)
+            listOf("?limit=0", "?limit=101", "?limit=x", "?after=garbage", "?other=1", "?limit=1&limit=2", "?series=").forEach {
+                assertError(api.get("/api/releases$it"), 400, "MALFORMED_REQUEST")
+            }
+
+            Files.writeString(root.resolve("releases/stray.txt"), "x")
+            val damaged = api.get("/api/releases").jsonObject()
+            assertEquals(1, damaged.getValue("corrupt_count").jsonPrimitive.long)
+            val entry =
+                damaged
+                    .getValue("corrupt_names")
+                    .jsonArray
+                    .single()
+                    .jsonObject
+            assertEquals("stray.txt", entry.getValue("name").jsonPrimitive.content)
+            assertEquals("UNSAFE_ENTRY", entry.getValue("reason").jsonPrimitive.content)
+            assertEquals(3, damaged.getValue("releases").jsonArray.size)
+        }
+    }
+
+    @Test
+    fun `list reports MISSING cheaply and the single read reports the full state`() =
+        withServer { store, api ->
+            val input = store.acceptInput(ByteArrayInputStream(SPIKE_DROP.bytes()), SPIKE_DROP.filename)
+            api.bootstrap()
+            val vanishing = api.createJob(input.runId, PERMISSIVE_POLICY).analysisId(api)
+            val damaged = api.createJob(input.runId, FAILING_POLICY).analysisId(api)
+            val first = api.createRelease(releaseBody(input.runId, listOf(vanishing), label = "gone")).newReleaseId()
+            val second = api.createRelease(releaseBody(input.runId, listOf(damaged), label = "damaged")).newReleaseId()
+
+            store
+                .readAnalysis(input.runId, vanishing)!!
+                .path
+                .toFile()
+                .deleteRecursively()
+            val resultPath = store.readAnalysis(input.runId, damaged)!!.path.resolve("analysis-result.json")
+            Files.write(resultPath, Files.readAllBytes(resultPath) + byteArrayOf(' '.code.toByte()))
+
+            val listed =
+                api.get("/api/releases").jsonObject().getValue("releases").jsonArray.associate {
+                    it.jsonObject
+                        .getValue("release_id")
+                        .jsonPrimitive.content to it.jsonObject
+                }
+            val gone = listed.getValue(first)
+            assertEquals(
+                "MISSING",
+                gone
+                    .getValue("analyses")
+                    .jsonArray
+                    .single()
+                    .jsonObject
+                    .getValue("analysis_state")
+                    .jsonPrimitive.content,
+            )
+            assertFalse(gone.getValue("baseline_eligible").jsonPrimitive.boolean)
+            assertEquals(listOf("ANALYSIS_MISSING"), gone.reasons())
+            // existence only: the damaged artifact is not noticed in the list
+            assertEquals(
+                "OK",
+                listed
+                    .getValue(second)
+                    .getValue("analyses")
+                    .jsonArray
+                    .single()
+                    .jsonObject
+                    .getValue("analysis_state")
+                    .jsonPrimitive.content,
+            )
+
+            val single = api.get("/api/releases/$first").jsonObject()
+            assertEquals(
+                "MISSING",
+                single
+                    .getValue("analyses")
+                    .jsonArray
+                    .single()
+                    .jsonObject
+                    .getValue("analysis_state")
+                    .jsonPrimitive.content,
+            )
+            val full = api.get("/api/releases/$second").jsonObject()
+            assertEquals(
+                "CORRUPT",
+                full
+                    .getValue("analyses")
+                    .jsonArray
+                    .single()
+                    .jsonObject
+                    .getValue("analysis_state")
+                    .jsonPrimitive.content,
+            )
+            assertEquals(listOf("ANALYSIS_CORRUPT"), full.reasons())
+            assertEquals(
+                listOf("ANALYSIS_CORRUPT"),
+                full
+                    .getValue("analyses")
+                    .jsonArray
+                    .single()
+                    .jsonObject
+                    .reasons(),
+            )
+        }
+
+    @Test
+    fun `eligibility mirrors the baseline rule`() =
+        withServer { store, api ->
+            val input = store.acceptInput(ByteArrayInputStream(SPIKE_DROP.bytes()), SPIKE_DROP.filename)
+            api.bootstrap()
+
+            fun eligibility(policy: ByteArray?): JsonObject {
+                val analysis = api.createJob(input.runId, policy).analysisId(api)
+                val response = api.createRelease(releaseBody(input.runId, listOf(analysis), label = "p${policy?.size}"))
+                assertEquals(201, response.statusCode())
+                return response.jsonObject()
+            }
+            val pass = eligibility(PERMISSIVE_POLICY)
+            assertTrue(pass.getValue("baseline_eligible").jsonPrimitive.boolean)
+            val fail = eligibility(FAILING_POLICY)
+            assertFalse(fail.getValue("baseline_eligible").jsonPrimitive.boolean)
+            assertEquals(listOf("BASELINE_CANDIDATE_NOT_PASS"), fail.reasons())
+            val noPolicy = eligibility(null)
+            assertEquals(listOf("BASELINE_CANDIDATE_NOT_PASS"), noPolicy.reasons())
+            assertEquals(
+                "NO_POLICY",
+                noPolicy
+                    .getValue("analyses")
+                    .jsonArray
+                    .single()
+                    .jsonObject
+                    .getValue("policy_sha256")
+                    .jsonPrimitive.content,
+            )
+            // a small-sample PASS is admitted by the shared rule and keeps its reason as a copied fact
+            val small = eligibility(SMALL_SAMPLE_POLICY)
+            assertTrue(small.getValue("baseline_eligible").jsonPrimitive.boolean)
+            assertEquals(
+                listOf("SMALL_SAMPLE"),
+                small
+                    .getValue("analyses")
+                    .jsonArray
+                    .single()
+                    .jsonObject
+                    .reasons("coverage_reasons"),
+            )
+        }
+
+    @Test
+    fun `replace changes only the editable fields`() {
+        val root = tempDir.resolve("release-replace")
+        withServer(dataRoot = root) { store, api ->
+            val input = store.acceptInput(ByteArrayInputStream(SPIKE_DROP.bytes()), SPIKE_DROP.filename)
+            api.bootstrap()
+            val a = api.createJob(input.runId, PERMISSIVE_POLICY).analysisId(api)
+            val b = api.createJob(input.runId, FAILING_POLICY).analysisId(api)
+            val c = api.createJob(input.runId, SMALL_SAMPLE_POLICY).analysisId(api)
+            val firstId = api.createRelease(releaseBody(input.runId, listOf(a), label = "one")).newReleaseId()
+            val secondId = api.createRelease(releaseBody(input.runId, listOf(b), label = "two")).newReleaseId()
+            val original = api.get("/api/releases/$firstId").jsonObject()
+
+            val profile =
+                buildJsonObject {
+                    RELEASE_PROFILE_FIELDS.forEach { put(it, if (it == "pacing") JsonPrimitive("1 s") else JsonNull) }
+                }
+            val renamed = api.replaceRelease(firstId, releasePutBody("renamed", listOf(a), profile, JsonPrimitive("note\nline")))
+            assertEquals(200, renamed.statusCode())
+            val updated = renamed.jsonObject()
+            assertEquals("renamed", updated.getValue("label").jsonPrimitive.content)
+            assertEquals(profile, updated.getValue("profile"))
+            assertEquals("note\nline", updated.getValue("notes").jsonPrimitive.content)
+            listOf("series", "run_id", "release_id", "started_at", "created_at").forEach {
+                assertEquals(original.getValue(it), updated.getValue(it), it)
+            }
+            assertTrue(updated.getValue("updated_at").jsonPrimitive.content >= original.getValue("updated_at").jsonPrimitive.content)
+
+            // immutable fields are not part of the body
+            val withSeries = JsonObject(releasePutBody("x", listOf(a)) + ("series" to JsonPrimitive("other")))
+            assertError(api.replaceRelease(firstId, withSeries), 400, "MALFORMED_REQUEST")
+            val withRun = JsonObject(releasePutBody("x", listOf(a)) + ("run_id" to JsonPrimitive(input.runId)))
+            assertError(api.replaceRelease(firstId, withRun), 400, "MALFORMED_REQUEST")
+
+            // a re-analysis of the same run (another policy) may replace the reference and keeps the test start
+            val reanalyzed = api.replaceRelease(firstId, releasePutBody("renamed", listOf(c)))
+            assertEquals(200, reanalyzed.statusCode())
+            assertEquals(original.getValue("started_at"), reanalyzed.jsonObject().getValue("started_at"))
+            assertEquals(
+                c,
+                reanalyzed
+                    .jsonObject()
+                    .getValue("analyses")
+                    .jsonArray
+                    .single()
+                    .jsonObject
+                    .getValue("analysis_id")
+                    .jsonPrimitive.content,
+            )
+            // an analysis that belongs to another release is refused; the own analysis passes
+            assertError(api.replaceRelease(firstId, releasePutBody("renamed", listOf(b))), 409, "RELEASE_ANALYSIS_ALREADY_REGISTERED")
+            assertEquals(200, api.replaceRelease(firstId, releasePutBody("again", listOf(c))).statusCode())
+            // another test start is refused
+            val shifted = writeSyntheticAnalysis(store, input.runId, "shifted", startedAt = "2026-01-01T00:00:09Z")
+            assertError(api.replaceRelease(firstId, releasePutBody("x", listOf(shifted))), 422, "RELEASE_STARTED_AT_MISMATCH")
+
+            assertError(api.replaceRelease("999999999999999-ffffffff", releasePutBody("x", listOf(a))), 404, "NOT_FOUND")
+            assertError(api.replaceRelease("garbage", releasePutBody("x", listOf(a))), 400, "MALFORMED_REQUEST")
+            Files.writeString(root.resolve("releases/$secondId.json"), "not json")
+            assertError(api.replaceRelease(secondId, releasePutBody("x", listOf(b))), 500, "CORRUPT_RELEASE")
+        }
+    }
+
+    @Test
+    fun `delete removes only the record`() {
+        val root = tempDir.resolve("release-delete")
+        withServer(dataRoot = root) { store, api ->
+            val input = store.acceptInput(ByteArrayInputStream(SPIKE_DROP.bytes()), SPIKE_DROP.filename)
+            api.bootstrap()
+            val analysisId = api.createJob(input.runId, PERMISSIVE_POLICY).analysisId(api)
+            assertEquals(200, api.selectManual(input.runId, analysisId).statusCode())
+            val baseline = api.get("/api/baseline").jsonObject()
+            val id = api.createRelease(releaseBody(input.runId, listOf(analysisId))).newReleaseId()
+
+            val deleted = api.delete("/api/releases/$id")
+            assertEquals(200, deleted.statusCode())
+            assertEquals(JsonNull, deleted.jsonObject().getValue("release"))
+            assertTrue(store.readAnalysis(input.runId, analysisId) != null)
+            assertEquals(baseline, api.get("/api/baseline").jsonObject())
+            assertError(api.delete("/api/releases/$id"), 404, "NOT_FOUND")
+            assertError(api.delete("/api/releases/999999999999999-ffffffff"), 404, "NOT_FOUND")
+            assertError(api.get("/api/releases/$id"), 404, "NOT_FOUND")
+
+            // a damaged record is removed by its identifier without being parsed
+            val damaged = "001767225600000-0badc0de"
+            Files.createDirectories(root.resolve("releases"))
+            Files.writeString(root.resolve("releases/$damaged.json"), "not json")
+            assertError(api.get("/api/releases/$damaged"), 500, "CORRUPT_RELEASE")
+            assertEquals(200, api.delete("/api/releases/$damaged").statusCode())
+            assertFalse(Files.exists(root.resolve("releases/$damaged.json")))
+        }
+    }
+
+    @Test
+    fun `registry limit and corruption are reported with the limit`() {
+        val root = tempDir.resolve("release-limit")
+        withServer(dataRoot = root) { store, api ->
+            val input = store.acceptInput(ByteArrayInputStream(SPIKE_DROP.bytes()), SPIKE_DROP.filename)
+            api.bootstrap()
+            val analysisId = api.createJob(input.runId, PERMISSIVE_POLICY).analysisId(api)
+            seedReleaseFiles(root, MAX_RELEASES)
+
+            val full = api.createRelease(releaseBody(input.runId, listOf(analysisId)))
+            assertEquals(422, full.statusCode())
+            assertEquals("RELEASE_LIMIT_REACHED", full.errorCode())
+            assertEquals(MAX_RELEASES, full.errorLimit())
+
+            Files.writeString(root.resolve("releases/stray.txt"), "x")
+            assertError(api.get("/api/releases"), 500, "CORRUPT_RELEASE_REGISTRY")
+            assertError(api.createRelease(releaseBody(input.runId, listOf(analysisId))), 500, "CORRUPT_RELEASE_REGISTRY")
+        }
+    }
+
+    @Test
+    fun `a record that overflows 8 KiB after escaping is a clear refusal`() =
+        withServer { store, api ->
+            val input = store.acceptInput(ByteArrayInputStream(SPIKE_DROP.bytes()), SPIKE_DROP.filename)
+            api.bootstrap()
+            val quotes = "\"".repeat(MAX_RELEASE_TEXT_BYTES - 1)
+            val ids = (0 until MAX_RELEASE_ANALYSES).map { writeSyntheticAnalysis(store, input.runId, "arm-$it", arm = "$quotes$it") }
+            val field = JsonPrimitive(quotes + "p")
+            val body =
+                releaseBody(
+                    input.runId,
+                    ids,
+                    series = quotes + "s",
+                    label = quotes + "l",
+                    profile = JsonObject(RELEASE_PROFILE_FIELDS.associateWith { field }),
+                    notes = JsonPrimitive("\"".repeat(MAX_RELEASE_NOTES_BYTES)),
+                )
+            assertError(api.createRelease(body), 422, "RELEASE_TOO_LARGE")
+            // the same eight analyses with short texts register fine
+            assertEquals(201, api.createRelease(releaseBody(input.runId, ids)).statusCode())
+        }
+
+    @Test
+    fun `concurrent replacements leave one valid record`() =
+        withServer { store, api ->
+            val input = store.acceptInput(ByteArrayInputStream(SPIKE_DROP.bytes()), SPIKE_DROP.filename)
+            api.bootstrap()
+            val analysisId = api.createJob(input.runId, PERMISSIVE_POLICY).analysisId(api)
+            val id = api.createRelease(releaseBody(input.runId, listOf(analysisId))).newReleaseId()
+            val barrier = java.util.concurrent.CyclicBarrier(2)
+            val executor =
+                java.util.concurrent.Executors
+                    .newFixedThreadPool(2)
+            try {
+                val labels = listOf("first", "second")
+                val responses =
+                    labels
+                        .map { label ->
+                            executor.submit<HttpResponse<String>> {
+                                barrier.await(10, TimeUnit.SECONDS)
+                                api.replaceRelease(id, releasePutBody(label, listOf(analysisId)))
+                            }
+                        }.map { it.get(30, TimeUnit.SECONDS) }
+                responses.filter { it.statusCode() != 200 }.forEach { assertError(it, 409, "RELEASE_CHANGED") }
+                assertTrue(responses.any { it.statusCode() == 200 })
+                assertTrue(
+                    api
+                        .get("/api/releases/$id")
+                        .jsonObject()
+                        .getValue("label")
+                        .jsonPrimitive.content in labels,
+                )
+            } finally {
+                executor.shutdownNow()
+            }
+        }
+
+    @Test
+    fun `errors do not echo user text`() =
+        withServer { store, api ->
+            val input = store.acceptInput(ByteArrayInputStream(SPIKE_DROP.bytes()), SPIKE_DROP.filename)
+            api.bootstrap()
+            val analysisId = api.createJob(input.runId, PERMISSIVE_POLICY).analysisId(api)
+            assertEquals(201, api.createRelease(releaseBody(input.runId, listOf(analysisId))).statusCode())
+            val marker = "zz-marker-${UUID.randomUUID()}"
+            val profile =
+                buildJsonObject {
+                    RELEASE_PROFILE_FIELDS.forEach {
+                        put(
+                            it,
+                            if (it ==
+                                "pacing"
+                            ) {
+                                JsonPrimitive(marker)
+                            } else {
+                                JsonNull
+                            },
+                        )
+                    }
+                }
+            val responses =
+                listOf(
+                    api.createRelease(
+                        releaseBody(input.runId, listOf(analysisId), label = marker, profile = profile, notes = JsonPrimitive(marker)),
+                    ),
+                    api.createRelease(releaseBody(input.runId, listOf(analysisId), label = "$marker\u0007", profile = profile)),
+                    api.createRelease(releaseBody(input.runId, listOf("f".repeat(64)), series = marker, label = marker, profile = profile)),
+                )
+            assertEquals(listOf(409, 400, 404), responses.map { it.statusCode() })
+            responses.forEach { assertFalse(it.body().contains(marker), it.body()) }
+        }
+
     private fun statisticalRuns(
         store: RunBundleStore,
         api: ApiClient,
@@ -2379,9 +3189,10 @@ class LocalApiTest {
         adviceRunner: AdvisoryRunner? = null,
         aiModels: AiModelsConfig? = null,
         uploadLimitBytes: Long = 4_294_967_296L,
+        dataRoot: Path = tempDir.resolve("data-${System.nanoTime()}"),
         block: (RunBundleStore, ApiClient) -> Unit,
     ) {
-        DataDirectory.open(tempDir.resolve("data-${System.nanoTime()}")).use { directory ->
+        DataDirectory.open(dataRoot).use { directory ->
             val store = RunBundleStore(directory)
             jobsFactory(store).use { jobs ->
                 val adviceService = adviceRunner?.let { AdvisoryAiService(store, AiAdviceStore(directory, store), it) }
@@ -2689,6 +3500,17 @@ class LocalApiTest {
             )
 
         fun delete(path: String): HttpResponse<String> = send(authenticated(request(path)).DELETE())
+
+        fun put(
+            path: String,
+            contentType: String,
+            body: ByteArray,
+        ): HttpResponse<String> =
+            send(
+                authenticated(request(path))
+                    .header("Content-Type", contentType)
+                    .PUT(HttpRequest.BodyPublishers.ofByteArray(body)),
+            )
 
         fun chunkedJob(): HttpResponse<String> =
             send(

@@ -316,7 +316,13 @@ GET    /api/runs/<run-id>/analyses/<analysis-id>/pod-view/values?service=<name>
 GET    /api/runs/<run-id>/analyses/<analysis-id>/report?format=json|html|asciidoc
 ```
 
-Runs выдаются максимум по `100`, buckets — по `500`; bucket range читается
+Runs выдаются максимум по `100`, buckets — по `500`. Список runs упорядочен по
+свежести: сначала `accepted_at` (момент приёма входа, необязательное поле
+`source.json`, в ответе `accepted_at` строка или `null`) по убыванию, затем
+`run_id`; runs без поля идут последними в порядке `run_id`; `after` — `run_id`
+предыдущего элемента в этом порядке, неизвестный `after` даёт `400`
+(ADR [0002](../adr/0002-slice-1-runtime-filesystem-security.md), дополнение
+2026-10-07). Bucket range читается
 потоково. `from_ms` — inclusive offset от начала run, `to_ms` — exclusive;
 доступны rollups `1`, `10`, `30` и `60` seconds. Response дополняет bucket
 вычисленным `p95_latency_ms` (не выше `max_latency_ms` строки). Job state имеет значения `QUEUED`, `PROCESSING`,

@@ -81,8 +81,11 @@ import java.nio.ByteBuffer
 import java.nio.charset.StandardCharsets.UTF_8
 import java.nio.file.Files
 import java.nio.file.Path
+import java.time.Clock
 import java.time.Duration
 import java.time.Instant
+import java.time.ZoneId
+import java.time.ZoneOffset
 import java.util.Base64
 import java.util.UUID
 import java.util.concurrent.CountDownLatch
@@ -2757,7 +2760,7 @@ class LocalApiTest {
 
     @Test
     fun `private API uploads validates analyzes and returns exact result and bucket pages`() =
-        withServer { store, api ->
+        withServer(clock = SteppingClock(Instant.parse("2026-10-07T12:00:00Z"))) { store, api ->
             val bootstrap = api.bootstrap()
             assertEquals(200, bootstrap.statusCode())
             val bootstrapJson = bootstrap.jsonObject()
@@ -2772,25 +2775,31 @@ class LocalApiTest {
 
             val upload = api.upload(SPIKE_DROP)
             assertEquals(201, upload.statusCode())
-            assertRunSummary(upload.jsonObject(), SPIKE_DROP)
-            listOf(GATLING_TEXT, JMETER_XML).forEach { fixture ->
+            assertRunSummary(upload.jsonObject(), SPIKE_DROP, "2026-10-07T12:00:00.000Z")
+            listOf(GATLING_TEXT to "2026-10-07T12:00:01.000Z", JMETER_XML to "2026-10-07T12:00:02.000Z").forEach { (fixture, acceptedAt) ->
                 val response = api.upload(fixture)
                 assertEquals(201, response.statusCode())
-                assertRunSummary(response.jsonObject(), fixture)
+                assertRunSummary(response.jsonObject(), fixture, acceptedAt)
             }
 
-            assertRunPage(api.get("/api/runs?limit=1"), GATLING_TEXT, GATLING_TEXT.runId)
+            // Newest accepted first, whatever the run ids sort like.
+            assertRunPage(api.get("/api/runs?limit=1"), JMETER_XML, "2026-10-07T12:00:02.000Z", JMETER_XML.runId)
+            assertRunPage(
+                api.get("/api/runs?after=${JMETER_XML.runId}&limit=1"),
+                GATLING_TEXT,
+                "2026-10-07T12:00:01.000Z",
+                GATLING_TEXT.runId,
+            )
             assertRunPage(
                 api.get("/api/runs?after=${GATLING_TEXT.runId}&limit=1"),
                 SPIKE_DROP,
-                SPIKE_DROP.runId,
-            )
-            assertRunPage(
-                api.get("/api/runs?after=${SPIKE_DROP.runId}&limit=1"),
-                JMETER_XML,
+                "2026-10-07T12:00:00.000Z",
                 null,
             )
-            assertRunPage(api.get("/api/runs?after=${JMETER_XML.runId}&limit=1"), null, null)
+            assertRunPage(api.get("/api/runs?after=${SPIKE_DROP.runId}&limit=1"), null, null, null)
+            // Uploading the same bytes again neither moves the run nor changes its accepted_at.
+            assertEquals(201, api.upload(SPIKE_DROP).statusCode())
+            assertRunPage(api.get("/api/runs?after=${GATLING_TEXT.runId}&limit=1"), SPIKE_DROP, "2026-10-07T12:00:00.000Z", null)
 
             val policyBytes = Files.readAllBytes(Path.of(PASS_POLICY))
             val validation = api.post("/api/policies/validate", "application/json", policyBytes)
@@ -3894,10 +3903,11 @@ class LocalApiTest {
         aiModels: AiModelsConfig? = null,
         uploadLimitBytes: Long = 4_294_967_296L,
         dataRoot: Path = tempDir.resolve("data-${System.nanoTime()}"),
+        clock: Clock = Clock.systemUTC(),
         block: (RunBundleStore, ApiClient) -> Unit,
     ) {
         DataDirectory.open(dataRoot).use { directory ->
-            val store = RunBundleStore(directory)
+            val store = RunBundleStore(directory, clock)
             jobsFactory(store).use { jobs ->
                 val adviceService = adviceRunner?.let { AdvisoryAiService(store, AiAdviceStore(directory, store), it) }
                 adviceService?.let { AdvisoryAiJobs(it) }.use { adviceJobs ->
@@ -3972,6 +3982,7 @@ class LocalApiTest {
     private fun assertRunPage(
         response: HttpResponse<String>,
         expected: RunFixture?,
+        acceptedAt: String?,
         nextAfter: String?,
     ) {
         assertEquals(200, response.statusCode())
@@ -3981,7 +3992,7 @@ class LocalApiTest {
         if (expected == null) {
             assertTrue(runs.isEmpty())
         } else {
-            assertRunSummary(runs.single().jsonObject, expected)
+            assertRunSummary(runs.single().jsonObject, expected, acceptedAt)
         }
         assertEquals(nextAfter, body.getValue("next_after").jsonPrimitive.contentOrNull)
     }
@@ -3989,8 +4000,10 @@ class LocalApiTest {
     private fun assertRunSummary(
         actual: JsonObject,
         expected: RunFixture,
+        acceptedAt: String?,
     ) {
-        assertEquals(setOf("run_id", "source_type", "sha256", "size_bytes", "original_filename"), actual.keys)
+        assertEquals(setOf("run_id", "source_type", "sha256", "size_bytes", "original_filename", "accepted_at"), actual.keys)
+        assertEquals(acceptedAt, actual.getValue("accepted_at").jsonPrimitive.contentOrNull)
         assertEquals(expected.runId, actual.getValue("run_id").jsonPrimitive.content)
         assertEquals(expected.sourceType, actual.getValue("source_type").jsonPrimitive.content)
         assertEquals(expected.sha256, actual.getValue("sha256").jsonPrimitive.content)
@@ -4085,6 +4098,18 @@ class LocalApiTest {
                 .isNotEmpty(),
         )
         assertEquals(hasDetails, error.getValue("details").jsonArray.isNotEmpty())
+    }
+
+    /** Every reading of the clock is one second later than the previous one, so each accepted input gets its own instant. */
+    private class SteppingClock(
+        private var next: Instant,
+    ) : Clock() {
+        override fun getZone(): ZoneId = ZoneOffset.UTC
+
+        override fun withZone(zone: ZoneId): Clock = this
+
+        @Synchronized
+        override fun instant(): Instant = next.also { next = it.plusSeconds(1) }
     }
 
     private data class RunFixture(

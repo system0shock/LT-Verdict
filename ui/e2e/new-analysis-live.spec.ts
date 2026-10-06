@@ -1,4 +1,6 @@
 import { expect, test, type Page } from '@playwright/test'
+import { createHash } from 'node:crypto'
+import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { SETUP_LABELS } from '../src/shell/labels'
 
@@ -6,16 +8,16 @@ import { SETUP_LABELS } from '../src/shell/labels'
 const fixture = (path: string) => fileURLToPath(new URL(`../../fixtures/${path}`, import.meta.url))
 const input = fixture('slice1/jmeter/xml-5.6.3/input.xml')
 const policy = fixture('slice1/policies/fail.json')
+// The list is newest accepted first and the server's data is shared by the whole suite, so the run is named by its content, not by position.
+const inputRunId = `jmeter_jtl_xml-${createHash('sha256').update(readFileSync(input)).digest('hex')}`
 
 async function storedResults(page: Page) {
-  return page.evaluate(async () => {
-    const { runs } = await fetch('/api/runs').then((response) => response.json())
-    const runId = runs[0].run_id as string
+  return page.evaluate(async (runId) => {
     const { analyses } = await fetch(`/api/runs/${runId}/analyses`).then((response) => response.json())
     const results = await Promise.all((analyses as Array<{ analysis_id: string }>).map((analysis) =>
       fetch(`/api/runs/${runId}/analyses/${analysis.analysis_id}/result`).then((response) => response.json())))
     return { runId, results }
-  })
+  }, inputRunId)
 }
 
 test('the new setup screen runs the same analysis as the old form on a real server', async ({ page }) => {

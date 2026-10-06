@@ -40,7 +40,11 @@ import java.nio.file.Path
 import java.nio.file.StandardCopyOption
 import java.nio.file.StandardOpenOption
 import java.security.MessageDigest
+import java.time.Clock
+import java.time.DateTimeException
 import java.time.Instant
+import java.time.ZoneOffset
+import java.time.format.DateTimeFormatter
 import java.time.temporal.ChronoUnit
 import java.util.HexFormat
 import java.util.PriorityQueue
@@ -53,6 +57,7 @@ internal data class AcceptedInput(
     val sizeBytes: Long,
     val originalFilename: String,
     val path: Path,
+    val acceptedAt: String? = null,
 )
 
 internal data class RunSummary(
@@ -61,6 +66,7 @@ internal data class RunSummary(
     val sha256: String,
     val sizeBytes: Long,
     val originalFilename: String,
+    val acceptedAt: String? = null,
 )
 
 internal data class RunPage(
@@ -147,6 +153,7 @@ internal data class BaselineSlot(
 
 internal class RunBundleStore(
     private val dataDirectory: DataDirectory,
+    private val clock: Clock = Clock.systemUTC(),
 ) {
     fun acceptInput(
         source: InputStream,
@@ -172,7 +179,9 @@ internal class RunBundleStore(
             val sourceType = detectSource(stagedSource)
             val runId = "${sourceType.wireName}-$sha256"
             val target = dataDirectory.runs.resolve(runId)
-            val accepted = AcceptedInput(runId, sourceType, sha256, sizeBytes, originalFilename, target.resolve("inputs/source.bin"))
+            val acceptedAt = ACCEPTED_AT_FORMAT.format(clock.instant())
+            val accepted =
+                AcceptedInput(runId, sourceType, sha256, sizeBytes, originalFilename, target.resolve("inputs/source.bin"), acceptedAt)
             writeForced(staging.resolve("source.json"), sourceMetadata(accepted))
             forceDirectory(inputs)
             forceDirectory(staging)
@@ -210,22 +219,30 @@ internal class RunBundleStore(
             require(limit in 1..100) { "INVALID_PAGE_LIMIT" }
             if (afterRunId != null) requireRunId(afterRunId)
 
-            val names = PriorityQueue<String>(limit + 1, reverseOrder())
+            // Newest accepted first; runs without accepted_at (stored by older versions) follow, in run_id order.
+            val keys = mutableListOf<RunListingKey>()
             Files.newDirectoryStream(dataDirectory.runs).use { entries ->
                 entries.forEach { path ->
                     val name = path.fileName.toString()
                     if (RUN_ID.matches(name) &&
-                        (afterRunId == null || name > afterRunId) &&
                         !Files.isSymbolicLink(path) &&
                         Files.isDirectory(path, LinkOption.NOFOLLOW_LINKS)
                     ) {
-                        names.add(name)
-                        if (names.size > limit + 1) names.remove()
+                        keys += RunListingKey(name, readAcceptedAtForListing(path))
                     }
                 }
             }
-            val selected = names.toList().sorted()
-            val returned = selected.take(limit).map { requireInputUnlocked(it).toSummary() }
+            keys.sortWith(RUN_LISTING_ORDER)
+            val start =
+                if (afterRunId ==
+                    null
+                ) {
+                    0
+                } else {
+                    keys.indexOfFirst { it.runId == afterRunId }.also { require(it >= 0) { "UNKNOWN_CURSOR" } } + 1
+                }
+            val selected = keys.subList(start, minOf(keys.size, start + limit + 1))
+            val returned = selected.take(limit).map { requireInputUnlocked(it.runId).toSummary() }
             RunPage(returned, if (selected.size > limit) returned.last().runId else null)
         }
 
@@ -1366,7 +1383,7 @@ internal class RunBundleStore(
         val metadataPath = requireOwnedFile(run.resolve("source.json"))
         val metadataBytes = Files.readAllBytes(metadataPath)
         val metadata = parseObject(metadataBytes, "source metadata")
-        if (metadata.keys != SOURCE_FIELDS) corrupt("source metadata fields differ")
+        if (metadata.keys != SOURCE_FIELDS && metadata.keys != SOURCE_FIELDS + "accepted_at") corrupt("source metadata fields differ")
 
         val storedRunId = metadata.string("run_id")
         val wireType = metadata.string("source_type")
@@ -1374,12 +1391,14 @@ internal class RunBundleStore(
         val sha256 = metadata.string("sha256")
         val sizeBytes = metadata.long("size_bytes")
         val originalFilename = metadata.string("original_filename")
+        val acceptedAt = metadata.optionalString("accepted_at")
+        if (acceptedAt != null && !isCanonicalAcceptedAt(acceptedAt)) corrupt("accepted_at is invalid")
         if (storedRunId != runId || runId != "${sourceType.wireName}-$sha256") corrupt("run identity differs")
         if (!SHA256.matches(sha256) || sizeBytes < 1 || !isSafeFilename(originalFilename)) corrupt("source metadata is invalid")
         // Trusted local contour: content is hashed once at accept time (run_id); reads check size only.
         if (Files.size(source) != sizeBytes) corrupt("source size differs")
 
-        val accepted = AcceptedInput(runId, sourceType, sha256, sizeBytes, originalFilename, source)
+        val accepted = AcceptedInput(runId, sourceType, sha256, sizeBytes, originalFilename, source, acceptedAt)
         if (!metadataBytes.contentEquals(sourceMetadata(accepted))) corrupt("source metadata is not canonical")
         return accepted
     }
@@ -1492,6 +1511,7 @@ private fun copyInput(
 private fun sourceMetadata(input: AcceptedInput): ByteArray =
     canonicalJson(
         buildJsonObject {
+            input.acceptedAt?.let { put("accepted_at", it) }
             put("original_filename", input.originalFilename)
             put("run_id", input.runId)
             put("sha256", input.sha256)
@@ -1575,7 +1595,46 @@ private fun JsonObject.long(name: String): Long {
     return value.longOrNull ?: corrupt("$name must be an integer")
 }
 
-private fun AcceptedInput.toSummary() = RunSummary(runId, sourceType, sha256, sizeBytes, originalFilename)
+private fun AcceptedInput.toSummary() = RunSummary(runId, sourceType, sha256, sizeBytes, originalFilename, acceptedAt)
+
+private data class RunListingKey(
+    val runId: String,
+    val acceptedAt: String?,
+)
+
+private val RUN_LISTING_ORDER =
+    Comparator<RunListingKey> { a, b ->
+        when {
+            a.acceptedAt == b.acceptedAt -> a.runId.compareTo(b.runId)
+            a.acceptedAt == null -> 1
+            b.acceptedAt == null -> -1
+            else -> b.acceptedAt.compareTo(a.acceptedAt)
+        }
+    }
+
+/** Sort key only: a missing or unreadable value reads as absent here; the page being returned is validated in full. */
+private fun readAcceptedAtForListing(run: Path): String? =
+    try {
+        val file = run.resolve("source.json")
+        if (!Files.isRegularFile(file, LinkOption.NOFOLLOW_LINKS)) {
+            null
+        } else {
+            val value = (Json.parseToJsonElement(Files.readString(file)) as? JsonObject)?.get("accepted_at") as? JsonPrimitive
+            value?.takeIf { it.isString && isCanonicalAcceptedAt(it.content) }?.content
+        }
+    } catch (_: IOException) {
+        null
+    } catch (_: SerializationException) {
+        null
+    }
+
+/** Fixed-width UTC millisecond form, so the stored text orders chronologically and re-serializes to itself. */
+private fun isCanonicalAcceptedAt(value: String): Boolean =
+    try {
+        ACCEPTED_AT_FORMAT.format(Instant.parse(value)) == value
+    } catch (_: DateTimeException) {
+        false
+    }
 
 private fun ensureOwnedDirectory(path: Path): Path {
     if (Files.isSymbolicLink(path)) corrupt("symbolic link at $path")
@@ -1772,6 +1831,7 @@ private val BASELINE_SLOT_FILE = Regex("[0-9a-f]{64}\\.json")
 private val SHA256 = Regex("[0-9a-f]{64}")
 private val RUN_ID = Regex("(?:jmeter_jtl_csv|jmeter_jtl_xml|gatling_text|gatling_binary)-[0-9a-f]{64}")
 private val SOURCE_FIELDS = setOf("original_filename", "run_id", "sha256", "size_bytes", "source_type")
+private val ACCEPTED_AT_FORMAT: DateTimeFormatter = DateTimeFormatter.ofPattern("uuuu-MM-dd'T'HH:mm:ss.SSS'Z'").withZone(ZoneOffset.UTC)
 private val MANIFEST_FIELDS = setOf("artifacts", "schema_version")
 private val ARTIFACT_FIELDS = setOf("path", "sha256", "size_bytes")
 private val RESERVED_NAMES = setOf("CON", "PRN", "AUX", "NUL")

@@ -630,6 +630,8 @@ function cancelUpload() {
   void nextTick(() => document.getElementById('input-file')?.focus())
 }
 
+const acceptedAtFormat = new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' })
+
 async function refreshRuns(after?: string) {
   const page = await listRuns(after)
   runs.value = after ? [...runs.value, ...page.runs] : page.runs
@@ -832,7 +834,7 @@ function focusPolicy() {
               @click="selectRun(run)"
             >
               <span>{{ run.original_filename }}</span>
-              <small>{{ run.source_type }} · {{ run.sha256.slice(0, 8) }}</small>
+              <small>{{ run.source_type }} · {{ run.sha256.slice(0, 8) }}<template v-if="run.accepted_at"> · <time :datetime="run.accepted_at">{{ acceptedAtFormat.format(new Date(run.accepted_at)) }}</time></template></small>
             </button>
           </li>
           <li

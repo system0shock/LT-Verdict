@@ -1,6 +1,5 @@
 package io.ltverdict.ai
 
-import io.ltverdict.core.sha256Hex
 import io.ltverdict.storage.DataDirectory
 import kotlinx.serialization.SerializationException
 import kotlinx.serialization.json.Json
@@ -76,7 +75,7 @@ internal class ModelStudioAdvisoryRunner private constructor(
                 requestCancellation(cancelPath, process)
                 return RunnerOutcome.Failed(AdviceFailure.TIMEOUT)
             }
-            return readResult(resultPath, outputPath, prompt, process.exitValue(), selected)
+            return readResult(resultPath, outputPath, process.exitValue(), selected)
         } finally {
             DataDirectory.deleteTree(temporary)
         }
@@ -121,7 +120,6 @@ internal class ModelStudioAdvisoryRunner private constructor(
     private fun readResult(
         resultPath: Path,
         outputPath: Path,
-        promptPath: Path,
         processExitCode: Int,
         selectedModel: String,
     ): RunnerOutcome {
@@ -146,12 +144,20 @@ internal class ModelStudioAdvisoryRunner private constructor(
             "SUCCESS" -> {
                 // The relay's observation of where the evidence went; without it the advice cannot be saved (ADR 0023, D4).
                 val endpointHost = result.string("endpoint_host")
+                // Requests forwarded to the provider and the hash of the prompt snapshot mounted into the container,
+                // both reported by the launcher (ADR 0021, D1 p. 2, D2): the file is not read again after the run.
+                val providerRequests = result.integer("provider_request_count")
+                val promptSha256 = result.string("prompt_sha256")
                 if (processExitCode != 0 ||
                     exitCode != 0 ||
                     duration !in 0..613_000 ||
                     endpointHost == null ||
                     !validEndpointHost(endpointHost) ||
                     endpointHost != endpointHostOf(config.endpointUrl) ||
+                    providerRequests == null ||
+                    providerRequests !in 1..2 ||
+                    promptSha256 == null ||
+                    !validSha256(promptSha256) ||
                     result.string("model_id") != selectedModel ||
                     !Files.isRegularFile(outputPath) ||
                     Files.size(outputPath) > MAX_ADVICE_OUTPUT_BYTES
@@ -167,7 +173,8 @@ internal class ModelStudioAdvisoryRunner private constructor(
                             modelId = selectedModel,
                             endpointHost = endpointHost,
                             promptVersion = QwenCode0211.PROMPT_VERSION,
-                            promptSha256 = sha256Hex(Files.readAllBytes(promptPath)),
+                            promptSha256 = promptSha256,
+                            providerRequests = providerRequests,
                             durationMillis = duration,
                             exitCode = exitCode,
                         ),

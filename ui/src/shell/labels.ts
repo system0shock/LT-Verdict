@@ -442,6 +442,7 @@ export const SETUP_LABELS = {
   pairNoArm: (number: number, id: string) => `плечо ${number}: профиль ${id} не объявляет плечо (поле arm в конфигурации)`,
   pairMixed: (number: number) => `плечо ${number}: профили объявляют разные плечи`,
   pairSame: (arm: string) => `плечи совпадают: оба объявляют ${arm}`,
+  pairStepAuto: 'пара плеч запускается с общим явным шагом: выберите режим шага «Фиксированный»',
 
   willVerdict: (id: string) => `Вердикт по правилам политики ${id}.`,
   willNoVerdict: 'Метрики без вердикта (NO_POLICY).',

@@ -69,7 +69,11 @@ const emit = defineEmits<{
 // Запуск пары плеч (P1d): профили каждого плеча живут здесь, а в App уходит их объединение, чтобы окно и шаг проверялись как раньше.
 const pairOn = ref(false)
 const pairSlots = ref<string[][]>([[], []])
-const pairBlockers = computed(() => pairLaunchBlockers(pairSlots.value, props.sourceProfiles))
+// Запросы плеч строятся от source-request.v3 (pairSourceRequests), поэтому режим шага «авто» запуск пары не допускает.
+const pairBlockers = computed(() => [
+  ...pairLaunchBlockers(pairSlots.value, props.sourceProfiles),
+  ...(props.sourceStepMode === 'auto' ? [SETUP_LABELS.pairStepAuto] : []),
+])
 const pairArms = computed(() => pairArmLabels(pairSlots.value, props.sourceProfiles))
 
 function emitPairProfiles() {

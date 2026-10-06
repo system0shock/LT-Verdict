@@ -167,6 +167,14 @@ const selectedReference = computed(() => result.value && selectedAnalysisId.valu
   : null)
 watch(selectedReference, () => { chartMarkers.value = [] })
 const baselineSeries = ref<string>()
+const baselineFacts = computed(() => (result.value
+  ? {
+    run_validity: result.value.run_validity,
+    policy_verdict: result.value.policy_verdict,
+    coverage_status: result.value.analysis_coverage?.status ?? '',
+    coverage_reasons: result.value.analysis_coverage?.reasons ?? [],
+  }
+  : null))
 const baselineVersion = ref(0)
 const preferredSeries = ref<string>()
 const httpSourceProfiles = computed(() => sourceProfiles.value.filter((profile) => profile.source_kind !== 'postgresql'))
@@ -1066,6 +1074,7 @@ function focusPolicy() {
             :lang="shellNew ? 'ru' : undefined"
             :version="baselineVersion"
             :preferred-series="preferredSeries"
+            :facts="baselineFacts"
             @active-series="baselineSeries = $event"
           />
 

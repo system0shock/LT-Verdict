@@ -460,6 +460,51 @@ Vue panel хранит transient candidate selection только в page memory
 persisted selection из API и защищает отображение comparison от stale responses.
 Новые зависимости, registry/store interfaces или browser storage не добавлены.
 
+## Release history: хранилище записей релиза
+
+[ADR 0019](../adr/0019-release-history-and-baseline-eligibility.md) вводит
+приватную запись `local-release.v1` (разделы 1-2 и «Поправка реализации»):
+явно созданное имя релиза, которое ссылается на сохранённые анализы одного
+запуска и копирует их факты (`policy_verdict`, `run_validity`,
+`coverage_status`, `coverage_reasons`, `policy_sha256`, `arm`). Метрики в запись
+не копируются, RunBundle и identity анализа не меняются. Схема формата на диске:
+`docs/contracts/release/v1/local-release.schema.json` (примеры
+`valid`/`invalid`, проверка в `npm --prefix ui run test:contracts`); это не
+публичный контракт API.
+
+`RunBundleStore` хранит запись в `<data>/releases/<release_id>.json`, где
+`release_id` = 15-значная миллисекундная метка `started_at` + `-` + 8 случайных
+hex-символов (лексикографический порядок совпадает с хронологией теста).
+Каталог создаётся при первой записи. Запись канонического JSON, staging,
+`ATOMIC_MOVE`, forced write и запрет symlink повторяют `baseline.json`.
+`validateRelease` (`core/LocalRelease.kt`) строго проверяет форму: известные
+ключи, пределы текста в байтах UTF-8 (128 для `series`, `label`, полей
+профиля; 1 024 для `notes`), форму NFC без управляющих символов, различные
+`analysis_id` и плечи, один анализ без плеча либо несколько с плечами. Читатель
+принимает только побайтно каноническую запись, чьё имя файла равно
+`release_id`.
+
+Пределы хранилища (константы, а не формат): `MAX_RELEASES` = 1 000 элементов
+каталога (считаются все, включая повреждённые и посторонние; при 1 001 элементе
+список и создание отвечают `CORRUPT_RELEASE_REGISTRY`, ничего не усекается),
+`MAX_RELEASE_ANALYSES` = 8, `MAX_RELEASE_BYTES` = 8 KiB (превышение даёт
+`RELEASE_TOO_LARGE`). Один `analysis_id` входит не более чем в одну запись;
+проверка уникальности, лимита и публикация идут под `operationLock`, а проверка
+записи, канонические байты и forced write staging — вне замка (дополнение
+ADR 0002 от 2026-10-01). Замена сверяет прочитанные байты записи под замком и
+при расхождении отвечает `RELEASE_CHANGED`. Удаление повреждённой записи по
+безопасному идентификатору идёт без разбора содержимого.
+
+Список читает весь ограниченный каталог (до 1 000 файлов по 8 KiB), сортирует
+по убыванию `release_id` и возвращает страницу, `series_summary` и
+`corrupt_names` (`{name, reason}`, причины `CORRUPT`, `UNSUPPORTED_VERSION`,
+`UNSAFE_ENTRY`, `TOO_LARGE`). `findReleasesByAnalysis` считает анализ,
+оказавшийся в двух корректных записях (ручное копирование), неоднозначным.
+`analysisExists` (дёшево: каталоги и манифест без следования по ссылкам) и
+`analysisState` (`OK`, `MISSING`, `CORRUPT`) готовят состояние ссылок для
+маршрутов. Замер на 1 000 записях: список около 0,3 с, поиск по анализу около
+0,3 с при холодном JIT. HTTP-маршрутов в этом срезе нет.
+
 ## Security boundary
 
 При установке local API процесс создаёт отдельные random 256-bit session и CSRF

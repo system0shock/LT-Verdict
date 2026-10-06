@@ -91,7 +91,8 @@ function noVerdictTarget(result: AnalysisResult, code: string | null): Attention
 function noteTarget(code: string | null): AttentionTarget | null {
   if (code === 'SMALL_SAMPLE' || code === 'INSUFFICIENT_SAMPLES') return { tab: 'tables', targetId: 'policy-results' }
   if (code?.startsWith('SOURCE_')) return { tab: 'tables', targetId: 'source-acquisition' }
-  if (code === 'RESOURCE_GAPS' || code === 'NO_OBSERVATIONS' || code === 'INSUFFICIENT_OBSERVATIONS' || code?.startsWith('RESOURCE_')) {
+  // Reasons of diagnostic platform rules land in the coverage with a PASS verdict and have no other route to the table.
+  if (code === 'RESOURCE_GAPS' || code === 'NO_OBSERVATIONS' || code === 'INSUFFICIENT_OBSERVATIONS' || code === 'RULE_WINDOW_TOO_SHORT' || code?.startsWith('RESOURCE_') || code?.startsWith('PLATFORM_')) {
     return { tab: 'tables', targetId: 'resource-results' }
   }
   return null

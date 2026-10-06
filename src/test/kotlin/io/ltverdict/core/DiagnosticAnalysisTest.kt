@@ -23,11 +23,14 @@ class DiagnosticAnalysisTest {
     fun `rank evidence handles ties monotone direction and a fully explained target`() {
         val increasing = List(40) { BigDecimal.valueOf((it / 2 + 1).toLong()) }
         val decreasing = increasing.reversed()
+        // The correlation layer works on first differences (ADR 0022, D4) and keeps control levels: the steps of
+        // "driver" equal the control levels, so the control explains the target completely.
+        val driver = walk(increasing.drop(1).map { it.toLong() })
         val resources =
             resources(
                 1_000,
                 listOf(window("evaluation", 0, 40_000)),
-                mapOf("cpu" to increasing, "reversed" to decreasing, "driver" to increasing, "target" to increasing),
+                mapOf("cpu" to increasing, "reversed" to decreasing, "driver" to driver, "target" to increasing),
             )
         val plan =
             plan(
@@ -66,7 +69,7 @@ class DiagnosticAnalysisTest {
 
     @Test
     fun `genuine partial candidate remains raw evidence without a calibrated headline`() {
-        val values = List(40) { BigDecimal.valueOf((it + 1).toLong()) }
+        val values = walk(steps(39))
         val resources =
             resources(
                 1_000,
@@ -115,7 +118,7 @@ class DiagnosticAnalysisTest {
     @Test
     fun `two stages are two independent families that share the level`() {
         val windows = listOf(window("w1", 0, 60_000), window("w2", 60_000, 120_000))
-        val rising = List(60) { BigDecimal.valueOf(it + 1L) }
+        val rising = walk(steps(59))
         val random = Random(3)
         val noise = List(60) { BigDecimal.valueOf(random.nextInt(100) + 1L) }
         val resources = resources(1_000, windows, mapOf("cpu" to rising + noise, "target" to List(120) { BigDecimal.ONE }))
@@ -167,7 +170,7 @@ class DiagnosticAnalysisTest {
     @Test
     fun `two outcomes in one window are two families`() {
         val windows = listOf(window("evaluation", 0, 60_000))
-        val rising = List(60) { BigDecimal.valueOf(it + 1L) }
+        val rising = walk(steps(59))
         val resources = resources(1_000, windows, mapOf("cpu" to rising, "target" to List(60) { BigDecimal.ONE }))
         val plan =
             plan(
@@ -213,8 +216,8 @@ class DiagnosticAnalysisTest {
     @Test
     fun `family count is declared by the plan so a short stage does not change the level of the others`() {
         val windows = listOf(window("w1", 0, 60_000), window("short", 60_000, 80_000), window("w3", 80_000, 140_000))
-        val rising = List(60) { BigDecimal.valueOf(it + 1L) }
-        val shortRising = List(20) { BigDecimal.valueOf(it + 1L) }
+        val rising = walk(steps(59))
+        val shortRising = walk(steps(19))
         val resources =
             resources(
                 1_000,
@@ -264,9 +267,170 @@ class DiagnosticAnalysisTest {
     private fun mergedLoad(vararg parts: UtcLoadMetrics) = UtcLoadMetrics(parts.fold(emptyMap()) { merged, part -> merged + part.windows })
 
     @Test
+    fun `rho and lag are computed on first differences and agree with the oracle`() {
+        // tools/correlation_oracle.py (H2): steps d = 17 i mod 41, the outcome steps are d rotated by two cells.
+        val d = steps(41)
+        val rotated = d.takeLast(2) + d.dropLast(2)
+
+        val result = diagnostics(mapOf("cpu" to walk(d)), walk(rotated), "[${pairJson("rotated", maxLagMs = 4_000)}]")
+        val pair = result.pair("rotated")
+        val selection = result.selection("rotated")
+
+        assertEquals(0.15, pair.string("raw_rho").toDouble(), 1e-12)
+        assertEquals("2000", pair.getValue("best_lag_ms").jsonPrimitive.content)
+        assertEquals("1", pair.string("best_lag_rho"))
+        assertEquals("33", pair.getValue("lag_used_cells").jsonPrimitive.content)
+        assertEquals("CANDIDATE", pair.string("status"))
+        assertEquals("mbb-lag-max-holm.v2", selection.string("method"))
+        assertEquals("first_difference", selection.string("representation"))
+        assertEquals("42", selection.string("source_cells"))
+        assertEquals("41", selection.string("analysed_points"))
+    }
+
+    @Test
+    fun `ties after differencing use average ranks`() {
+        val x = List(60) { (it % 3).toLong() }
+        val y = List(60) { (it % 3 + if (it % 5 == 0) 1 else 0).toLong() }
+
+        val pair = diagnostics(mapOf("cpu" to walk(x)), walk(y), "[${pairJson("ties", maxLagMs = 2_000)}]").pair("ties")
+
+        assertEquals(0.9109357395385403, pair.string("raw_rho").toDouble(), 1e-12)
+        assertEquals("0", pair.getValue("best_lag_ms").jsonPrimitive.content)
+        assertEquals(0.9178000303541187, pair.string("best_lag_rho").toDouble(), 1e-12)
+    }
+
+    @Test
+    fun `a gap breaks the series and no difference is taken across it`() {
+        val levels = walk(steps(79))
+        val withGap = levels.mapIndexed { index, value -> if (index == 10) null else value }
+
+        val result = diagnostics(mapOf("cpu" to withGap), levels, "[${pairJson("gap")}]")
+        val selection = result.selection("gap")
+
+        assertTrue(result.pair("gap").strings("reasons").contains("MISSING_CELLS"))
+        assertEquals("79", result.pair("gap").string("paired_cells"))
+        assertEquals("69", selection.string("source_cells"))
+        assertEquals("68", selection.string("analysed_points"))
+        assertEquals("SELECTED", selection.string("status"))
+    }
+
+    @Test
+    fun `a longest run below thirty one cells is unavailable and not filled`() {
+        val levels = walk(steps(60))
+        val withGap = levels.mapIndexed { index, value -> if (index == 30) null else value }
+
+        val result = diagnostics(mapOf("cpu" to withGap), levels, "[${pairJson("short")}]")
+        val selection = result.selection("short")
+
+        assertEquals("INSUFFICIENT_DATA", result.pair("short").string("status"))
+        assertEquals("UNAVAILABLE", selection.string("status"))
+        assertEquals(listOf("PAIR_NOT_EVALUABLE"), selection.strings("reasons"))
+        assertEquals("30", selection.string("source_cells"))
+        assertEquals("29", selection.string("analysed_points"))
+    }
+
+    @Test
+    fun `plateau and counter resources are not evaluable but stay in the family size`() {
+        val signal = walk(steps(60))
+        val counter = List(61) { BigDecimal.valueOf(7L + 3L * it) }
+        val plateau = List(61) { BigDecimal.valueOf(7) }
+        val pairs = "[${pairJson("signal")},${pairJson("counter", "counter")},${pairJson("plateau", "plateau")}]"
+
+        val result = diagnostics(mapOf("cpu" to signal, "counter" to counter, "plateau" to plateau), signal, pairs)
+
+        listOf("counter", "plateau").forEach {
+            assertEquals("INSUFFICIENT_DATA", result.pair(it).string("status"))
+            assertTrue(result.pair(it).strings("reasons").contains("NO_RANK_VARIATION"))
+            assertEquals("UNAVAILABLE", result.selection(it).string("status"))
+            assertEquals(listOf("PAIR_NOT_EVALUABLE"), result.selection(it).strings("reasons"))
+        }
+        val signalSelection = result.selection("signal")
+        assertEquals("3", signalSelection.string("family_hypotheses"))
+        // The two unavailable hypotheses count as p = 1 in the one Holm of the family.
+        assertEquals(
+            3 * signalSelection.string("max_p_value").toDouble(),
+            signalSelection.string("holm_adjusted_p_value").toDouble(),
+            1e-12,
+        )
+    }
+
+    @Test
+    fun `effect threshold follows differences and not levels`() {
+        // Both levels climb monotonically (rank correlation of levels 1), the steps are unrelated (0.0271).
+        val resource = walk(steps(60).map { it + 1 })
+        val outcome = walk(steps(60, 13, 37).map { it + 1 })
+
+        val result = diagnostics(mapOf("cpu" to resource), outcome, "[${pairJson("trend")}]")
+
+        assertEquals("BELOW_EFFECT", result.pair("trend").string("status"))
+        assertEquals(0.027106675234430323, result.pair("trend").string("raw_rho").toDouble(), 1e-9)
+        assertEquals("false", result.selection("trend").string("selected"))
+    }
+
+    @Test
+    fun `range gates stay on levels`() {
+        // The steps of the resource equal the outcome steps, but its levels move by far less than min_resource_delta.
+        val tiny = steps(60).map { BigDecimal.valueOf(it).movePointLeft(5) }
+        val resource = tiny.runningFold(BigDecimal.ONE) { level, step -> level + step }
+
+        val result = diagnostics(mapOf("cpu" to resource), walk(steps(60)), "[${pairJson("tiny")}]")
+
+        assertEquals("BELOW_EFFECT", result.pair("tiny").string("status"))
+        assertEquals("1", result.pair("tiny").string("raw_rho"))
+        assertTrue(result.pair("tiny").strings("reasons").contains("RESOURCE_DELTA_BELOW_MINIMUM"))
+        assertEquals("NOT_SELECTED", result.selection("tiny").string("status"))
+        assertEquals(listOf("MATERIALITY_NOT_MET"), result.selection("tiny").strings("reasons"))
+    }
+
+    @Test
+    fun `a varying control stays unavailable because controls are kept on levels`() {
+        // A linear ramp has constant differences: differencing the control would drop it as constant (ADR 0022, D2).
+        val levels = walk(steps(59))
+        val ramp = List(60) { BigDecimal.valueOf(it + 1L) }
+
+        val result = diagnostics(mapOf("cpu" to levels), levels, "[${pairJson("ramp")}]", target = ramp)
+
+        assertEquals(listOf("GENUINE_PARTIAL_UNCALIBRATED"), result.selection("ramp").strings("reasons"))
+        assertEquals("UNAVAILABLE", result.selection("ramp").string("status"))
+    }
+
+    @Test
+    fun `strong common drift does not select any of sixteen hypotheses`() {
+        // Regression of the family pilot (ADR 0022, section 2): a shared linear drift selected all 16 on levels.
+        fun drifting(seed: Long) = Random(seed).let { random -> List(120) { BigDecimal.valueOf(1_000L + 5L * it + random.nextInt(30)) } }
+        val series = (0 until 16).associate { "r$it" to drifting(it + 1L) }
+        val pairs = (0 until 16).joinToString(",", "[", "]") { pairJson("h$it", "r$it", minAbsEffect = "0.05") }
+
+        val result = diagnostics(series, drifting(99), pairs)
+
+        (0 until 16).forEach {
+            assertEquals("NOT_SELECTED", result.selection("h$it").string("status"))
+            assertEquals("16", result.selection("h$it").string("family_hypotheses"))
+        }
+        assertTrue(result.findings.none { it.string("type") == "correlation_candidate" })
+    }
+
+    @Test
+    fun `upper limit follows differences`() {
+        listOf(1_921, 1_922).forEach { cells ->
+            val levels = walk(steps(cells - 1))
+
+            val selection = diagnostics(mapOf("cpu" to levels), levels, "[${pairJson("long")}]").selection("long")
+
+            assertEquals((cells - 1).toString(), selection.string("analysed_points"))
+            if (cells == 1_921) {
+                assertEquals("SELECTED", selection.string("status"))
+            } else {
+                assertEquals(listOf("OBSERVATION_COUNT_UNSUPPORTED"), selection.strings("reasons"))
+            }
+        }
+    }
+
+    @Test
     fun `all-null lag profile falls back to zero lag and states abstention`() {
-        val values = listOf(BigDecimal.ZERO) + List(30) { BigDecimal.ONE } + listOf(BigDecimal("2"))
-        val windows = listOf(window("evaluation", 0, 32_000))
+        // Steps 1, 30 zeros, 1: the anchors of lag 1 are constant, so every lag of the profile is null.
+        val values = listOf(BigDecimal.ZERO) + List(31) { BigDecimal.ONE } + listOf(BigDecimal("2"))
+        val windows = listOf(window("evaluation", 0, 33_000))
         val resources = resources(1_000, windows, mapOf("cpu" to values))
         val plan =
             plan(
@@ -479,6 +643,52 @@ class DiagnosticAnalysisTest {
                 .any { it is JsonNull },
         )
     }
+
+    private fun steps(
+        count: Int,
+        multiplier: Int = 17,
+        modulus: Int = 41,
+    ): List<Long> = List(count) { ((it * multiplier) % modulus).toLong() }
+
+    // Levels whose first differences are exactly [steps]: the correlation layer works on differences (ADR 0022, D4).
+    private fun walk(
+        steps: List<Long>,
+        start: Long = 1_000,
+    ): List<BigDecimal> = steps.runningFold(start) { level, step -> level + step }.map { BigDecimal.valueOf(it) }
+
+    private fun diagnostics(
+        series: Map<String, List<BigDecimal?>>,
+        outcome: List<BigDecimal>,
+        pairs: String,
+        target: List<BigDecimal> = List(outcome.size) { BigDecimal.ONE },
+    ): DiagnosticEvaluation {
+        val windows = listOf(window("evaluation", 0, outcome.size * 1_000L))
+        val resources = resources(1_000, windows, series + ("target" to target))
+        return evaluateDiagnostics(
+            plan(resources, pairs = pairs),
+            resources,
+            windows,
+            loadMetrics("evaluation", 0, 1_000, outcome),
+            windowMetrics(windows),
+        )
+    }
+
+    private fun pairJson(
+        id: String,
+        resourceId: String = "cpu",
+        maxLagMs: Long = 0,
+        minAbsEffect: String = "0.5",
+    ) =
+        """{"id":"$id","resource_series_id":"$resourceId","load_metric":"response_time_p95_ms","window_ids":["evaluation"],"max_lag_ms":$maxLagMs,"min_abs_effect":$minAbsEffect,"min_resource_delta":1,"min_load_delta":1,"topology_basis":"host","controls":[{"meaning":"target_rps","series_id":"target"}]}"""
+
+    private fun DiagnosticEvaluation.pair(id: String) =
+        evidence.single {
+            it.string("type") == "correlation_pair" &&
+                it.string("pair_id") == id
+        }
+
+    private fun DiagnosticEvaluation.selection(id: String) =
+        evidence.single { it.string("type") == "correlation_headline_selection" && it.string("pair_id") == id }
 
     private fun windowSummaries(
         plan: DiagnosticValidation.Valid,

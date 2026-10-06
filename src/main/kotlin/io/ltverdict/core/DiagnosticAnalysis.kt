@@ -57,7 +57,12 @@ internal fun evaluateDiagnostics(
         families.values
             .flatMap { selectCorrelationHeadlines(it, seedMaterial, checkCancelled, families.size) }
             .associateBy { it.pairId to it.windowId }
-    val headlineSelections = pairResults.map { selectionByPair.getValue(it.hypothesis.pairId to it.hypothesis.windowId) }
+    val headlineEvidence =
+        pairResults.map {
+            selectionByPair
+                .getValue(it.hypothesis.pairId to it.hypothesis.windowId)
+                .evidence(it.sourceCells, it.hypothesis.resource.size)
+        }
     pairResults.forEach { result ->
         if (selectionByPair.getValue(result.hypothesis.pairId to result.hypothesis.windowId).selected) {
             result.finding?.let(findings::add)
@@ -106,7 +111,7 @@ internal fun evaluateDiagnostics(
         )
     return DiagnosticEvaluation(
         findings,
-        windowsEvidence + pairEvidence + headlineSelections.map(CorrelationHeadlineSelection::evidence) + anomalyEvidence + summary,
+        windowsEvidence + pairEvidence + headlineEvidence + anomalyEvidence + summary,
     )
 }
 
@@ -154,6 +159,7 @@ private data class PairResult(
     val finding: JsonObject?,
     val evaluable: Boolean,
     val hypothesis: CorrelationHeadlineHypothesis,
+    val sourceCells: Int,
 )
 
 private fun evaluatePair(
@@ -181,26 +187,28 @@ private fun evaluatePair(
         }
     }
     val controlKeys = pair.controls.map(DiagnosticControlV1::key)
-    val association = association(points, controlKeys, pair.controls.indexOfFirst { it.meaning == DiagnosticControlMeaning.ACHIEVED_RPS })
+    // Method v2 (ADR 0022, D4): association, lag profile, effect threshold and the selector input all use the first
+    // differences of the longest continuous run; the range gates below stay on the levels of all complete cells.
+    val longest = longestContinuous(points, snapshot.stepMillis)
+    val differences = firstDifferences(longest)
+    val achievedIndex = pair.controls.indexOfFirst { it.meaning == DiagnosticControlMeaning.ACHIEVED_RPS }
+    val association = association(differences, controlKeys, achievedIndex)
     val reasons = association.reasons.toMutableList()
     if (points.size < expected) reasons += "MISSING_CELLS"
     if (pair.clockAlignment == DiagnosticClockAlignment.UNKNOWN && pair.maxLagMillis > 0) reasons += "CLOCK_ALIGNMENT_UNKNOWN"
 
-    val longest = longestContinuous(points, snapshot.stepMillis)
     val lagCells = (pair.maxLagMillis / snapshot.stepMillis).toInt()
-    val lagAssociation =
-        association(longest, controlKeys, pair.controls.indexOfFirst { it.meaning == DiagnosticControlMeaning.ACHIEVED_RPS })
-    val anchorCount = longest.size - 2 * lagCells
+    val anchorCount = differences.size - 2 * lagCells
     val lagProfile = mutableListOf<Pair<Long, Double?>>()
     if (anchorCount >= MIN_PAIRED_CELLS &&
-        anchorCount > lagAssociation.controlsUsed.size + 3 &&
-        lagAssociation.finalX != null &&
-        lagAssociation.finalY != null
+        anchorCount > association.controlsUsed.size + 3 &&
+        association.finalX != null &&
+        association.finalY != null
     ) {
         for (lag in -lagCells..lagCells) {
             checkCancelled()
-            val x = DoubleArray(anchorCount) { index -> lagAssociation.finalX[index + lagCells] }
-            val y = DoubleArray(anchorCount) { index -> lagAssociation.finalY[index + lagCells + lag] }
+            val x = DoubleArray(anchorCount) { index -> association.finalX[index + lagCells] }
+            val y = DoubleArray(anchorCount) { index -> association.finalY[index + lagCells + lag] }
             lagProfile += lag * snapshot.stepMillis to pearson(x, y)
         }
     } else {
@@ -297,8 +305,7 @@ private fun evaluatePair(
         }
     val unavailableReason =
         when {
-            association.controlsUsed.isNotEmpty() || lagAssociation.controlsUsed.isNotEmpty() ->
-                "GENUINE_PARTIAL_UNCALIBRATED"
+            association.controlsUsed.isNotEmpty() -> "GENUINE_PARTIAL_UNCALIBRATED"
             coefficient == null || bestRho == null || lagProfile.isEmpty() -> "PAIR_NOT_EVALUABLE"
             else -> null
         }
@@ -306,15 +313,15 @@ private fun evaluatePair(
         CorrelationHeadlineHypothesis(
             pairId = pair.id,
             windowId = window.id,
-            epochs = LongArray(longest.size) { longest[it].epochMillis },
-            resource = DoubleArray(longest.size) { longest[it].resource.toDouble() },
-            outcome = DoubleArray(longest.size) { longest[it].load.toDouble() },
+            epochs = LongArray(differences.size) { differences[it].epochMillis },
+            resource = DoubleArray(differences.size) { differences[it].resource.toDouble() },
+            outcome = DoubleArray(differences.size) { differences[it].load.toDouble() },
             outcomeKey = pair.loadMetric.wireName,
             maxLagCells = lagCells,
             materialCandidate = status == "CANDIDATE",
             unavailableReason = unavailableReason,
         )
-    return PairResult(evidence, finding, coefficient != null, hypothesis)
+    return PairResult(evidence, finding, coefficient != null, hypothesis, longest.size)
 }
 
 private fun association(
@@ -476,6 +483,15 @@ private fun longestContinuous(
     }
     return points.subList(bestStart, bestStart + bestSize)
 }
+
+// A difference takes the epoch and the control levels of the later cell: a control is a gate on the levels of the stage
+// (a ramp would become constant after differencing and be dropped), and the epochs keep the step of the grid.
+private fun firstDifferences(points: List<PairPoint>): List<PairPoint> =
+    List((points.size - 1).coerceAtLeast(0)) { index ->
+        val previous = points[index]
+        val next = points[index + 1]
+        PairPoint(next.epochMillis, next.resource.subtract(previous.resource), next.load.subtract(previous.load), next.controls)
+    }
 
 private fun List<PairPoint>.range(selector: (PairPoint) -> BigDecimal): BigDecimal? =
     takeIf { it.isNotEmpty() }?.let { points ->
@@ -830,7 +846,10 @@ private fun diagnosticSummary(
         put("reasons", strings(reasons))
     }
 
-private fun CorrelationHeadlineSelection.evidence(): JsonObject =
+private fun CorrelationHeadlineSelection.evidence(
+    sourceCells: Int,
+    analysedPoints: Int,
+): JsonObject =
     buildJsonObject {
         put("id", diagnosticId("correlation-headline-selection", pairId, windowId))
         put("type", "correlation_headline_selection")
@@ -841,6 +860,9 @@ private fun CorrelationHeadlineSelection.evidence(): JsonObject =
         put("status", status.name)
         put("family_hypotheses", familyHypotheses)
         put("family_count", familyCount)
+        put("representation", CORRELATION_HEADLINE_REPRESENTATION)
+        put("source_cells", sourceCells)
+        put("analysed_points", analysedPoints)
         put("bootstrap_replicates", CORRELATION_HEADLINE_REPLICATES)
         put(
             "block_lengths_cells",

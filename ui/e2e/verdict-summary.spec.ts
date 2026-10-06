@@ -373,6 +373,55 @@ test.describe('verdict summary', () => {
     expect(summary.notes.map((note) => note.code)).toEqual(['SMALL_SAMPLE'])
   })
 
+  test('a platform check names its service and shows coverage under a tolerated gap', () => {
+    const summary = summarizeVerdict(build({
+      policy_verdict: 'PASS',
+      analysis_coverage: { status: 'INCOMPLETE', reasons: ['RESOURCE_GAPS'] },
+      evidence: [overall, { id: 'r1', type: 'resource_policy_check', window_id: 'steady-1', rule_id: 'cpu-share/orders', series_id: 'cpu-orders', unit: 'ratio', operator: 'gt', threshold: '0.4', effect: 'sla', status: 'PASS', reason: 'RESOURCE_GAPS', platform_rule_id: 'cpu-share', service: 'orders', expected_cells: 20, observed_cells: 19, missing_cells: 1, longest_gap_cells: 1 }],
+    }))
+
+    expect(summary.lines.map((line) => flat(`${line.title}: ${line.detail}`))).toEqual([
+      'Правило cpu-share/orders · сервис orders · ряд cpu-orders · окно steady-1: нарушений нет (нарушение: значение выше 0.4 ratio) · покрытие данных: 95 % (19 из 20 ячеек)',
+    ])
+  })
+
+  test('a snapshot rule without coverage fields or with full coverage keeps its line unchanged', () => {
+    const base = { type: 'resource_policy_check', window_id: 'w', rule_id: 'cpu', series_id: 'cpu-a', unit: '%', operator: 'gt', threshold: '90', effect: 'sla', status: 'PASS', reason: null }
+    const summary = summarizeVerdict(build({
+      policy_verdict: 'PASS',
+      evidence: [overall, { id: 'r1', ...base }, { id: 'r2', ...base, rule_id: 'cpu2', expected_cells: 20, observed_cells: 20, missing_cells: 0, longest_gap_cells: 0 }],
+    }))
+
+    expect(summary.lines.map((line) => flat(`${line.title}: ${line.detail}`))).toEqual([
+      'Правило cpu · ряд cpu-a · окно w: нарушений нет (нарушение: значение выше 90 %)',
+      'Правило cpu2 · ряд cpu-a · окно w: нарушений нет (нарушение: значение выше 90 %)',
+    ])
+  })
+
+  test('a presumed violation is shown as presumed next to the missing cells', () => {
+    const summary = summarizeVerdict(build({
+      policy_verdict: 'NO_VERDICT',
+      analysis_coverage: { status: 'INCOMPLETE', reasons: ['MISSING_RESOURCE_CELLS', 'RESOURCE_GAPS'] },
+      evidence: [{ id: 'r1', type: 'resource_policy_check', window_id: 'w', rule_id: 'cpu-share/orders', series_id: 'cpu-orders', unit: 'ratio', operator: 'gt', threshold: '0.4', effect: 'sla', status: 'NO_VERDICT', reason: 'MISSING_RESOURCE_CELLS', platform_rule_id: 'cpu-share', service: 'orders', expected_cells: 20, observed_cells: 19, missing_cells: 1, longest_gap_cells: 1 }],
+      findings: [{ id: 'f1', type: 'resource_threshold_violation', window_id: 'w', rule_id: 'cpu-share/orders', series_id: 'cpu-orders', entity: 'orders', unit: 'ratio', from_epoch_ms: 1000, to_epoch_ms: 5000, cell_count: 4, observed_min: '0.5', observed_max: '0.5', evidence_id: 'r1' }, { id: 'f2', type: 'resource_threshold_violation', window_id: 'w', rule_id: 'cpu-share/orders', series_id: 'cpu-orders', entity: 'orders', unit: 'ratio', from_epoch_ms: 9000, to_epoch_ms: 12000, cell_count: 3, observed_min: '0.6', observed_max: '0.6', evidence_id: 'r1', presumed: true }],
+    }))
+
+    expect(flat(summary.lines[0].detail)).toContain('предположительное нарушение')
+    expect(flat(summary.lines[0].detail)).toContain('покрытие данных: 95 % (19 из 20 ячеек)')
+    expect(summary.causes.map((cause) => cause.code)).toEqual(['MISSING_RESOURCE_CELLS'])
+  })
+
+  test('an unknown window id of a rule is explained by the rule and the id', () => {
+    const summary = summarizeVerdict(build({
+      policy_verdict: 'NO_VERDICT',
+      analysis_coverage: { status: 'INCOMPLETE', reasons: ['RULE_WINDOW_NOT_FOUND'] },
+      evidence: [overall, { id: 'u1', type: 'rule_window_check', rule_id: 'cpu', window_id: 'ghost', status: 'NO_VERDICT', reason_code: 'RULE_WINDOW_NOT_FOUND' }],
+    }))
+
+    expect(summary.causes.map((cause) => cause.code)).toEqual(['RULE_WINDOW_NOT_FOUND'])
+    expect(summary.causes[0].subjects).toEqual(['cpu (окно ghost)'])
+  })
+
   test('capacity NO_VERDICT with empty reasons explains the bound instead of staying silent', () => {
     const summary = summarizeVerdict(build({
       analysis_mode: 'capacity_step',
@@ -385,6 +434,22 @@ test.describe('verdict summary', () => {
     expect(summary.causes).toHaveLength(1)
     expect(summary.causes[0].code).toBeNull()
     expect(summary.causes[0].text).toContain('не позволяет сравнить её с требуемой ёмкостью')
+  })
+
+  test('capacity outcomes show no empty list heading and point to the tables tab in the new shell', () => {
+    const capacity = (verdict: string, bound: string, lower: number | null, upper: number | null) => build({
+      analysis_mode: 'capacity_step',
+      policy_verdict: verdict,
+      capacity_summary: { schema_version: 'capacity.v1', load_axis: 'rps', unit: 'requests/s', bound_type: bound, lower_inclusive: lower, upper_exclusive: upper, policy_verdict: verdict, reasons: [], capacity_knee: null, knee_reason: 'KNEE_DETECTOR_NOT_IMPLEMENTED', stages: [] },
+    })
+
+    for (const result of [capacity('PASS', 'BOUNDED', 95.745, 103.745), capacity('FAIL', 'BOUNDED', 95.745, 103.745), capacity('NO_VERDICT', 'LOWER_BOUND', 296, null)]) {
+      const summary = summarizeVerdict(result)
+      expect(summary.linesTitle).toBeNull()
+      expect(summary.lines).toEqual([])
+      expect(summary.lead).toContain('в таблице ниже')
+      expect(summarizeVerdict(result, { tabs: true }).lead).toContain('на вкладке «Таблицы»')
+    }
   })
 
   test('capacity reasons come from the summary and its stages', () => {

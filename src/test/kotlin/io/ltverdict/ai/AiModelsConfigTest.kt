@@ -1,6 +1,5 @@
 package io.ltverdict.ai
 
-import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.boolean
 import kotlinx.serialization.json.jsonArray
@@ -34,7 +33,7 @@ class AiModelsConfigTest {
     }
 
     @Test
-    fun `a file without endpoint uses the built in endpoint and its label`() {
+    fun `a file without endpoint uses the built in endpoint and has no label`() {
         val config =
             loaded(parse(config(endpoint = null, models = """[{"id":"$BUILT_IN_MODEL","label":"DeepSeek"}]""", default = BUILT_IN_MODEL)))
 
@@ -261,7 +260,7 @@ class AiModelsConfigTest {
         assertEquals(QwenCode0211.PROVIDER_ENDPOINT, builtIn.endpointUrl)
         assertEquals(QwenCode0211.MODEL_ID, builtIn.defaultModel)
         assertEquals(listOf(QwenCode0211.MODEL_ID), builtIn.models.map { it.id })
-        assertEquals("Alibaba ModelStudio (Singapore)", builtIn.endpointLabel)
+        assertNull(builtIn.endpointLabel)
     }
 
     @Test
@@ -330,7 +329,7 @@ class AiModelsConfigTest {
     }
 
     @Test
-    fun `bootstrap value exposes labels and measured but never the endpoint address`() {
+    fun `bootstrap value exposes model labels and measured but neither the endpoint address nor its label`() {
         val config =
             AiModelsConfig(
                 endpointUrl = "https://gw.internal.example/v1/chat/completions",
@@ -342,15 +341,14 @@ class AiModelsConfigTest {
 
         val json = config.bootstrapJson()
 
-        assertEquals(setOf("default_model_id", "endpoint_label", "models"), json.keys)
+        assertEquals(setOf("default_model_id", "models"), json.keys)
         assertEquals("qwen3.8-max", json.getValue("default_model_id").jsonPrimitive.content)
-        assertEquals("Gateway", json.getValue("endpoint_label").jsonPrimitive.content)
         val models = json.getValue("models").jsonArray.map { it.jsonObject }
         assertEquals(listOf("qwen3.8-max", BUILT_IN_MODEL), models.map { it.getValue("id").jsonPrimitive.content })
         assertEquals(listOf(false, false), models.map { it.getValue("measured").jsonPrimitive.boolean })
         assertEquals(setOf("id", "label", "measured"), models.first().keys)
         assertFalse(json.toString().contains("gw.internal"))
-        assertEquals(JsonNull, config.copy(endpointLabel = null).bootstrapJson().getValue("endpoint_label"))
+        assertFalse(json.toString().contains("Gateway"))
 
         val builtIn = AiModelsConfig.BUILT_IN.bootstrapJson()
         assertTrue(

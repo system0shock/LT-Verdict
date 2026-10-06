@@ -1,0 +1,22 @@
+{
+  "schema_version": "pod-view.v1",
+  "load_input_sha256": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+  "resource_snapshot_sha256": "fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210",
+  "arm": "A",
+  "start_epoch_ms": 10000,
+  "step_ms": 20000,
+  "column_count": 2,
+  "coverage": {
+    "pods_observed_total": 2, "pods_included": 2, "rows_observed_total": 3, "rows_included": 3,
+    "selection": { "kind": "ALL" }
+  },
+  "pods": [
+    { "pod": "orders-svc-6b2d8-a1", "service": "orders-svc", "containers": [{ "name": "app", "role": "app" }, { "name": "istio-proxy", "role": "sidecar" }] },
+    { "pod": "orders-svc-6b2d8-a2", "service": "orders-svc", "containers": [{ "name": "app", "role": "app" }] }
+  ],
+  "rows": [
+    { "id": "r1", "pod": "orders-svc-6b2d8-a1", "container": "app", "metric": "openshift_container_memory_limit_ratio", "unit": "ratio", "aggregation": "interval_mean", "values": [0.62] },
+    { "id": "r2", "pod": "orders-svc-6b2d8-a1", "container": "istio-proxy", "metric": "openshift_container_memory_limit_ratio", "unit": "ratio", "aggregation": "interval_mean", "values": [0.31, 0.33] },
+    { "id": "r3", "pod": "orders-svc-6b2d8-a2", "container": null, "metric": "openshift_pod_imbalance", "unit": "ratio", "aggregation": "interval_mean", "values": [0.05, 0.04] }
+  ]
+}

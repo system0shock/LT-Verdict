@@ -46,6 +46,7 @@ internal data class AnalysisRequest(
     val postgres: PostgresAnalysisInput? = null,
     val capacity: CapacityPlanValidation.Valid? = null,
     val trend: TrendPlanValidation.Valid? = null,
+    val podView: PodViewValidation.Valid? = null,
 )
 
 internal data class AnalysisOutcome(
@@ -101,6 +102,12 @@ internal class AnalysisService(
             val resources = request.resources ?: throw IllegalArgumentException("TREND_RESOURCE_REQUIRED")
             validateTrendBinding(trend, resources).firstOrNull()?.let { throw IllegalArgumentException(it.code) }
         }
+        request.podView?.let { podView ->
+            val resources = request.resources ?: throw IllegalArgumentException("POD_VIEW_RESOURCE_REQUIRED")
+            validatePodViewBinding(podView, request.input.sha256, resources).firstOrNull()?.let {
+                throw IllegalArgumentException(it.code)
+            }
+        }
         val postgres = request.postgres?.let(::revalidatePostgresInput)
 
         val acquisitionHash =
@@ -132,6 +139,7 @@ internal class AnalysisService(
                 postgresHash,
                 request.capacity,
                 request.trend,
+                request.podView,
             )
         val analysisId = sha256Hex(identity)
         store.readAnalysis(request.input.runId, analysisId)?.let { stored ->
@@ -200,6 +208,7 @@ internal class AnalysisService(
             val capacityPlanBytes = request.capacity?.rawBytes()
             val trendBytes = trend?.let { canonicalJson(it.trendJson) }
             val trendPlanBytes = request.trend?.rawBytes()
+            val podViewBytes = request.podView?.canonicalBytes()
             val directory =
                 store.writeAnalysisAtomically(request.input.runId, analysisId, beforePublish) { staging ->
                     checkCancelled()
@@ -232,6 +241,9 @@ internal class AnalysisService(
                     }
                     trendBytes?.let {
                         Files.write(staging.resolve(TREND_FILE), it, StandardOpenOption.CREATE_NEW, StandardOpenOption.WRITE)
+                    }
+                    podViewBytes?.let {
+                        Files.write(staging.resolve(POD_VIEW_FILE), it, StandardOpenOption.CREATE_NEW, StandardOpenOption.WRITE)
                     }
                 }
             return AnalysisOutcome(request.input.runId, analysisId, result, directory)
@@ -489,6 +501,7 @@ internal class AnalysisService(
         val capacityBytes = capacity?.let { canonicalJson(it.capacityJson) }
         val trendPlanBytes = request.trend?.rawBytes()
         val trendBytes = trend?.let { canonicalJson(it.trendJson) }
+        val podViewBytes = request.podView?.canonicalBytes()
         val run =
             runMetadata(
                 request.input,
@@ -500,6 +513,7 @@ internal class AnalysisService(
                 diagnosticBytes?.let(::sha256Hex),
                 capacityPlanBytes?.let(::sha256Hex),
                 trendPlanBytes?.let(::sha256Hex),
+                request.podView?.canonicalSha256,
             )
         checkCancelled()
         val directory =
@@ -541,6 +555,10 @@ internal class AnalysisService(
                 trendBytes?.let {
                     checkCancelled()
                     Files.write(staging.resolve(TREND_FILE), it, StandardOpenOption.CREATE_NEW, StandardOpenOption.WRITE)
+                }
+                podViewBytes?.let {
+                    checkCancelled()
+                    Files.write(staging.resolve(POD_VIEW_FILE), it, StandardOpenOption.CREATE_NEW, StandardOpenOption.WRITE)
                 }
                 writeBuckets(staging.resolve(NORMALIZED_FILE), metrics.oneSecondBuckets, checkCancelled)
                 ROLLUPS.forEach { seconds ->
@@ -676,6 +694,7 @@ private fun runMetadata(
     diagnosticSha256: String? = null,
     capacityPlanSha256: String? = null,
     trendPlanSha256: String? = null,
+    podViewSha256: String? = null,
 ): ByteArray =
     canonicalJson(
         buildJsonObject {
@@ -730,6 +749,15 @@ private fun runMetadata(
                             },
                         )
                     }
+                    podViewSha256?.let { sha256 ->
+                        add(
+                            buildJsonObject {
+                                put("type", "pod_view")
+                                put("path", "analyses/$analysisId/$POD_VIEW_FILE")
+                                put("sha256", sha256)
+                            },
+                        )
+                    }
                 },
             )
         },
@@ -762,6 +790,7 @@ private const val CAPACITY_PLAN_FILE = "capacity-plan.json"
 private const val CAPACITY_FILE = "capacity.json"
 private const val TREND_PLAN_FILE = "trend-plan.json"
 private const val TREND_FILE = "trend.json"
+private const val POD_VIEW_FILE = "pod-view.json"
 private const val POSTGRES_PRE_FILE = "postgres-pre.json"
 private const val POSTGRES_POST_FILE = "postgres-post.json"
 private const val POSTGRES_CONTEXT_FILE = "postgres-context.json"

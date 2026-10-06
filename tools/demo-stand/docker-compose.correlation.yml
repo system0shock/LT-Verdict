@@ -1,0 +1,4 @@
+# Opt-in synthetic correlation input: docker compose -f docker-compose.yml -f docker-compose.correlation.yml up -d --wait
+services:
+  generator:
+    command: ["python", "generator/generate.py", "--out", "/out", "--scenario", "all-with-correlation"]

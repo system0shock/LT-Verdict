@@ -108,6 +108,19 @@
   align-items: center;
 }
 
+.shell .shell-export-link {
+  border: 1px solid var(--control-border);
+  border-radius: 4px;
+  padding: 8px 12px;
+  color: var(--text);
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.shell .shell-export-link:hover {
+  border-color: var(--border-strong);
+}
+
 .shell #verdict {
   scroll-margin-top: 96px;
 }
@@ -118,7 +131,17 @@
   }
 
   .shell .side-navigation {
+    position: sticky;
+    top: 0;
+    align-self: start;
     width: var(--shell-rail-width);
+    height: 100vh;
+    min-height: 0;
+    overflow-y: auto;
+  }
+
+  .shell .run-list {
+    max-height: 30vh;
   }
 }
 

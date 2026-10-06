@@ -40,7 +40,7 @@ internal fun expandPlatformRules(
                     series.aggregation != rule.aggregation -> "PLATFORM_AGGREGATION_MISMATCH"
                     else -> null
                 }
-            rules += expandedRule(id, series?.id.orEmpty(), rule, service)
+            rules += expandedRule(id, series?.id.orEmpty(), rule, service, policy.defaults, policy.platformCoverage?.signal)
             failure?.let { failures[id] = it }
         }
         (rule.scope as? PlatformScope.AllServices)?.let { scope ->
@@ -51,7 +51,7 @@ internal fun expandPlatformRules(
                 .distinct()
                 .forEach { entity ->
                     val id = "${rule.id}/$entity"
-                    rules += expandedRule(id, "", rule, entity)
+                    rules += expandedRule(id, "", rule, entity, policy.defaults, policy.platformCoverage?.signal)
                     failures[id] = "PLATFORM_SERVICE_NOT_IN_CATALOG"
                 }
         }
@@ -64,17 +64,30 @@ private fun expandedRule(
     seriesId: String,
     rule: PlatformRuleV1,
     service: String,
-) = ResourceRuleV1(
-    id,
-    seriesId,
-    rule.unit,
-    rule.operator,
-    rule.threshold,
-    rule.minConsecutiveCells,
-    rule.effect,
-    rule.windowIds,
-    PlatformRuleRef(rule.id, service),
-)
+    defaults: PolicyDefaultsV1?,
+    coverageSignal: String?,
+): ResourceRuleV1 {
+    val sla = rule.effect == ResourceRuleEffect.SLA
+    // The coverage rule is strict by default: only its own fields loosen it, not `defaults`.
+    val coverage = rule.signal == coverageSignal
+    val fallbackFraction =
+        if (coverage) PLATFORM_COVERAGE_MAX_MISSING_FRACTION_DEFAULT else defaults?.maxMissingFraction ?: MAX_MISSING_FRACTION_DEFAULT
+    val fallbackGap =
+        if (coverage) PLATFORM_COVERAGE_MAX_GAP_CELLS_DEFAULT else defaults?.maxGapCells ?: MAX_GAP_CELLS_DEFAULT
+    return ResourceRuleV1(
+        id,
+        seriesId,
+        rule.unit,
+        rule.operator,
+        rule.threshold,
+        rule.minConsecutiveCells,
+        rule.effect,
+        rule.windowIds,
+        PlatformRuleRef(rule.id, service),
+        if (sla) rule.maxMissingFraction ?: fallbackFraction else null,
+        if (sla) rule.maxGapCells ?: fallbackGap else null,
+    )
+}
 
 internal fun validatePlatformBinding(
     policy: PolicyV1,

@@ -39,8 +39,9 @@ import {
 } from './api'
 import { summarizeVerdict } from './verdictSummary'
 import type { AttentionTarget } from './shell/overview'
-import type { AnalysisResult, AnalysisSummary, Bucket, JobStatus, OpenSearchEvidence, Policy, PolicyError, PostgresContextEvidence, RunSummary, SourceProfile, SourceRequest, Theme } from './types'
+import type { AdvisoryAiConfig, AnalysisResult, AnalysisSummary, Bucket, JobStatus, OpenSearchEvidence, Policy, PolicyError, PostgresContextEvidence, RunSummary, SourceProfile, SourceRequest, Theme } from './types'
 import { COMPARE_LABELS } from './shell/labels.compare'
+import { EXPORT_LABELS } from './shell/labels.export'
 
 const theme = ref<Theme>(window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light')
 const shellNew = resolveNewShell(window.location.search, browserStorage())
@@ -109,6 +110,8 @@ const sourceStep = ref('')
 const sourceMargin = ref('0')
 const sourceMaxIdleGap = ref('60000')
 const aiRequested = ref(false)
+const aiConfig = ref<AdvisoryAiConfig | null>(null)
+const aiModel = ref('')
 const adviceAutoFor = ref<string | null>(null)
 const policy = ref<Policy | null>(null)
 const policyStatus = ref('')
@@ -149,9 +152,13 @@ let uploadAbort: AbortController | null = null
 const verdictSummary = computed(() => {
   if (!result.value) return null
   const analysis = analyses.value.find((item) => item.analysis_id === selectedAnalysisId.value)
-  return summarizeVerdict(result.value, { policySha256: analysis?.policy_sha256, policyId: analysis?.policy_id })
+  return summarizeVerdict(result.value, { policySha256: analysis?.policy_sha256, policyId: analysis?.policy_id, tabs: shellNew })
 })
 watch(result, (value) => { if (shellNew && value && !trialBusy.value) activeTab.value = 'overview' })
+// Under 960 px the side column stacks above the workspace: scroll to the workspace, not to the page top.
+watch([activeTab, selectedAnalysisId], () => {
+  if (shellNew) window.scrollTo(0, window.scrollY + (document.querySelector('.workspace')?.getBoundingClientRect().top ?? -window.scrollY))
+})
 const working = computed(() => job.value?.state === 'QUEUED' || job.value?.state === 'PROCESSING')
 const selectedReference = computed(() => result.value && selectedAnalysisId.value
   ? { run_id: result.value.run_id, analysis_id: selectedAnalysisId.value }
@@ -205,7 +212,10 @@ watch(
 
 onMounted(async () => {
   try {
-    await bootstrap()
+    const started = await bootstrap()
+    // Список моделей ИИ-разбора (ADR 0023); без поля или с null селектора нет. Выбор живёт только в состоянии страницы.
+    aiConfig.value = started.advisory_ai ?? null
+    aiModel.value = aiConfig.value?.default_model_id ?? ''
     apiReady.value = true
     await refreshRuns()
     try {
@@ -891,6 +901,12 @@ function focusPolicy() {
           class="shell-legacy-link"
           :href="legacyHref"
         >{{ SHELL_LABELS.legacyLink }}</a>
+        <a
+          v-if="shellNew && result && selectedAnalysisId"
+          class="button-secondary shell-export-link"
+          :href="`/api/runs/${encodeURIComponent(result.run_id)}/analyses/${selectedAnalysisId}/report?format=html`"
+          download
+        >{{ EXPORT_LABELS.html }}</a>
       </header>
 
       <main>
@@ -964,6 +980,8 @@ function focusPolicy() {
             :policy-errors="policyErrors"
             :busy="working || (uploadProgress > 0 && !job) || !!postgresCapturePhase || trialBusy"
             :ai-requested="shellNew ? aiRequested : undefined"
+            :ai-config="shellNew ? aiConfig : undefined"
+            :ai-model="shellNew ? aiModel : undefined"
 
             @input="selectInput"
             @resources="selectResources"
@@ -987,6 +1005,7 @@ function focusPolicy() {
             @update-policy="updatePolicy"
             @open-rules="activeTab = 'rules'"
             @ai-requested="aiRequested = $event"
+            @ai-model="aiModel = $event"
             @analyze="analyze"
           />
 
@@ -1120,6 +1139,9 @@ function focusPolicy() {
             :auto-start="adviceAutoFor !== null && adviceAutoFor === selectedAnalysisId"
             :result="result"
             :linkable="shellNew"
+            :ai-config="aiConfig"
+            :ai-model="aiModel"
+            @ai-model="aiModel = $event"
             @auto-started="adviceAutoFor = null"
             @navigate="jumpTo"
           />
@@ -1173,6 +1195,7 @@ function focusPolicy() {
             :busy="working || (uploadProgress > 0 && !job) || !!postgresCapturePhase || trialBusy"
             :result="result"
             :run-name="currentRun?.original_filename ?? ''"
+            :run-hash="currentRun?.sha256.slice(0, 8) ?? ''"
             :can-trial="!!currentRun && !!policy && !policyErrors.length"
             :trial-busy="trialBusy"
             :summary="trialAnalysisId && trialAnalysisId === selectedAnalysisId ? verdictSummary : null"

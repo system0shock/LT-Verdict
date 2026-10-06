@@ -35,7 +35,12 @@ private const val MAX_NUMERIC_TOKEN_BYTES = 64
 private const val MAX_ABSOLUTE_EXPONENT = 64
 internal const val MIN_SAMPLES_FLOOR = 20L
 internal const val MIN_SAMPLES_DEFAULT = 100L
+internal val MAX_MISSING_FRACTION_DEFAULT = BigDecimal("0.05")
+internal const val MAX_GAP_CELLS_DEFAULT = 3
+internal val PLATFORM_COVERAGE_MAX_MISSING_FRACTION_DEFAULT = BigDecimal.ZERO
+internal const val PLATFORM_COVERAGE_MAX_GAP_CELLS_DEFAULT = 0
 private const val MAX_SAMPLES_BOUND = 1_000_000L
+private const val MAX_GAP_CELLS_BOUND = 100_000L
 
 internal enum class PolicyVerdict {
     PASS,
@@ -628,6 +633,8 @@ private fun parsePlatformRules(
                     "min_consecutive_cells",
                     "effect",
                     "window_ids",
+                    "max_missing_fraction",
+                    "max_gap_cells",
                 ),
                 pointer,
             )
@@ -658,6 +665,16 @@ private fun parsePlatformRules(
             val effect =
                 ResourceRuleEffect.entries.find { it.wireName == effectName }
                     ?: fail("UNKNOWN_EFFECT", "$pointer/effect", "unknown effect")
+            val maxMissingFraction = item.fractionAt("max_missing_fraction", pointer)
+            val maxGapCells = item.gapCellsAt(pointer)
+            if (effect != ResourceRuleEffect.SLA) {
+                if (maxMissingFraction != null) {
+                    fail("FIELD_NOT_APPLICABLE", "$pointer/max_missing_fraction", "tolerance applies to sla platform rules only")
+                }
+                if (maxGapCells != null) {
+                    fail("FIELD_NOT_APPLICABLE", "$pointer/max_gap_cells", "tolerance applies to sla platform rules only")
+                }
+            }
             PlatformRuleV1(
                 id,
                 signal,
@@ -669,6 +686,8 @@ private fun parsePlatformRules(
                 minimum.toInt(),
                 effect,
                 item.windowIdsAt(pointer),
+                maxMissingFraction,
+                maxGapCells,
             )
         }
     val expanded = HashSet<String>()
@@ -734,9 +753,29 @@ private fun parseDefaults(
     pointer: String,
 ): PolicyDefaultsV1 {
     val value = element.objectAt(pointer)
-    value.rejectUnknown(setOf("sample_floor", "min_samples"), pointer)
-    return PolicyDefaultsV1(value.longInRangeAt("sample_floor", pointer), value.longInRangeAt("min_samples", pointer))
+    value.rejectUnknown(setOf("sample_floor", "min_samples", "max_missing_fraction", "max_gap_cells"), pointer)
+    return PolicyDefaultsV1(
+        value.longInRangeAt("sample_floor", pointer),
+        value.longInRangeAt("min_samples", pointer),
+        value.fractionAt("max_missing_fraction", pointer),
+        value.gapCellsAt(pointer),
+    )
 }
+
+private fun JsonObject.fractionAt(
+    name: String,
+    pointer: String,
+): BigDecimal? {
+    if (get(name) == null) return null
+    val value = numberAt(name, pointer)
+    if (value.signum() < 0 || value >= BigDecimal.ONE) {
+        fail("TOLERANCE_OUT_OF_RANGE", pointer.child(name), "$name must be at least 0 and below 1")
+    }
+    return value
+}
+
+private fun JsonObject.gapCellsAt(pointer: String): Int? =
+    longInRangeAt("max_gap_cells", pointer, MAX_GAP_CELLS_BOUND, "TOLERANCE_OUT_OF_RANGE", 0)?.toInt()
 
 private fun checkDefaultsOrder(
     defaults: PolicyDefaultsV1,
@@ -754,6 +793,7 @@ private fun JsonObject.longInRangeAt(
     pointer: String,
     max: Long = MAX_SAMPLES_BOUND,
     code: String = "MIN_SAMPLES_OUT_OF_RANGE",
+    min: Long = 1,
 ): Long? {
     val value = get(name) ?: return null
     if (value !is JsonPrimitive || value.isString || value === JsonNull || value.content in setOf("true", "false")) {
@@ -766,8 +806,8 @@ private fun JsonObject.longInRangeAt(
             fail("INVALID_TYPE", pointer.child(name), "$name must be an integer")
         }
     if (number.stripTrailingZeros().scale() > 0) fail("INVALID_TYPE", pointer.child(name), "$name must be an integer")
-    if (number < BigDecimal.ONE || number > BigDecimal.valueOf(max)) {
-        fail(code, pointer.child(name), "$name must be between 1 and $max")
+    if (number < BigDecimal.valueOf(min) || number > BigDecimal.valueOf(max)) {
+        fail(code, pointer.child(name), "$name must be between $min and $max")
     }
     return number.longValueExact()
 }

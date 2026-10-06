@@ -367,6 +367,223 @@ class PlatformRulesTest {
         )
     }
 
+    @Test
+    fun `tolerance fields parse and fail closed at their exact fields`() {
+        val valid =
+            policy(
+                policyJson(
+                    defaults = """{"sample_floor":1,"min_samples":1,"max_missing_fraction":0.1,"max_gap_cells":5}""",
+                    cpuExtra = ""","max_gap_cells":0""",
+                ),
+            )
+        assertEquals(BigDecimal("0.1"), valid.defaults?.maxMissingFraction)
+        assertEquals(5, valid.defaults?.maxGapCells)
+        assertEquals(0, valid.platformRules[0].maxGapCells)
+        assertEquals(null, valid.platformRules[0].maxMissingFraction)
+
+        listOf(
+            Triple(policyJson(defaults = """{"max_missing_fraction":1}"""), "TOLERANCE_OUT_OF_RANGE", "/defaults/max_missing_fraction"),
+            Triple(policyJson(defaults = """{"max_missing_fraction":-0.1}"""), "TOLERANCE_OUT_OF_RANGE", "/defaults/max_missing_fraction"),
+            Triple(policyJson(defaults = """{"max_gap_cells":-1}"""), "TOLERANCE_OUT_OF_RANGE", "/defaults/max_gap_cells"),
+            Triple(policyJson(defaults = """{"max_gap_cells":100001}"""), "TOLERANCE_OUT_OF_RANGE", "/defaults/max_gap_cells"),
+            Triple(policyJson(defaults = """{"max_gap_cells":1.5}"""), "INVALID_TYPE", "/defaults/max_gap_cells"),
+            Triple(policyJson(defaults = """{"max_missing_fraction":"0.1"}"""), "INVALID_TYPE", "/defaults/max_missing_fraction"),
+            Triple(
+                policyJson(cpuExtra = ""","max_missing_fraction":1.5"""),
+                "TOLERANCE_OUT_OF_RANGE",
+                "/platform_rules/0/max_missing_fraction",
+            ),
+            Triple(
+                policyJson(cpuEffect = "diagnostic", cpuExtra = ""","max_gap_cells":2"""),
+                "FIELD_NOT_APPLICABLE",
+                "/platform_rules/0/max_gap_cells",
+            ),
+            Triple(
+                policyJson(cpuEffect = "diagnostic", cpuExtra = ""","max_missing_fraction":0.1"""),
+                "FIELD_NOT_APPLICABLE",
+                "/platform_rules/0/max_missing_fraction",
+            ),
+        ).forEach { (source, code, pointer) ->
+            val errors = (validatePolicy(ByteArrayInputStream(source.encodeToByteArray())) as PolicyValidation.Invalid).errors
+            assertEquals(code to pointer, errors.first().code to errors.first().jsonPointer, source)
+        }
+    }
+
+    @Test
+    fun `a gap inside the tolerance is judged on the observed cells and says so`() {
+        val cpu = List<String?>(20) { if (it == 7) null else "0.1" }
+
+        val result = evaluate(snapshot(healthy("orders", cpu) + healthy("payments", List(20) { "0.1" }), cells = 20))
+        val check = result.checks().single { it.str("rule_id") == "cpu/orders" }
+        val clean = result.checks().single { it.str("rule_id") == "cpu/payments" }
+        val counters = listOf("expected_cells", "observed_cells", "missing_cells", "longest_gap_cells")
+
+        assertEquals("PASS", check.str("status"))
+        assertEquals("RESOURCE_GAPS", check.str("reason"))
+        assertEquals(listOf("20", "19", "1", "1"), counters.map { check.str(it) })
+        assertEquals(listOf("20", "20", "0", "0"), counters.map { clean.str(it) })
+        assertEquals(PolicyVerdict.PASS, result.windowVerdicts.getValue("steady"))
+        assertTrue("RESOURCE_GAPS" in result.coverageReasons)
+    }
+
+    @Test
+    fun `a check without a series reports every cell as missing`() {
+        val result = evaluate(snapshot(healthy("orders")))
+        val check = result.checks().single { it.str("rule_id") == "cpu/payments" }
+
+        assertEquals("RESOURCE_SERIES_NOT_FOUND", check.str("reason"))
+        assertEquals(
+            listOf("4", "0", "4", "4"),
+            listOf("expected_cells", "observed_cells", "missing_cells", "longest_gap_cells").map { check.str(it) },
+        )
+    }
+
+    @Test
+    fun `the tolerance boundaries hold and anything beyond falls back to no verdict`() {
+        fun verdict(cpu: List<String?>) =
+            evaluate(
+                snapshot(healthy("orders", cpu) + healthy("payments", List(cpu.size) { "0.1" }), cells = cpu.size),
+            ).windowVerdicts.getValue("steady")
+
+        assertEquals(PolicyVerdict.PASS, verdict(List(100) { if (it in 10..12) null else "0.1" }))
+        assertEquals(PolicyVerdict.PASS, verdict(List(100) { if (it % 20 == 3) null else "0.1" }))
+        assertEquals(PolicyVerdict.NO_VERDICT, verdict(List(100) { if (it in 10..13) null else "0.1" }))
+        assertEquals(PolicyVerdict.NO_VERDICT, verdict(List(50) { if (it in setOf(3, 20, 40)) null else "0.1" }))
+        assertEquals(PolicyVerdict.NO_VERDICT, verdict(List(20) { null }))
+    }
+
+    @Test
+    fun `zero tolerance restores the strict behaviour and an all-missing window never passes`() {
+        val strict = policy(policyJson(cpuExtra = ""","max_missing_fraction":0,"max_gap_cells":0"""))
+        val wide =
+            policy(policyJson(defaults = """{"sample_floor":1,"min_samples":1,"max_missing_fraction":0.99,"max_gap_cells":100}"""))
+        val oneGap =
+            snapshot(
+                healthy(
+                    "orders",
+                    List(20) {
+                        if (it ==
+                            7
+                        ) {
+                            null
+                        } else {
+                            "0.1"
+                        }
+                    },
+                ) + healthy("payments", List(20) { "0.1" }),
+                cells = 20,
+            )
+        val allGone = snapshot(healthy("orders", List(20) { null }) + healthy("payments", List(20) { "0.1" }), cells = 20)
+
+        assertEquals(
+            "MISSING_RESOURCE_CELLS",
+            evaluate(oneGap, strict).checks().single { it.str("rule_id") == "cpu/orders" }.str("reason"),
+        )
+        assertEquals(PolicyVerdict.NO_VERDICT, evaluate(allGone, wide).windowVerdicts.getValue("steady"))
+    }
+
+    @Test
+    fun `the coverage rule is strict by default and only its own fields loosen it`() {
+        val unavailable = List<String?>(20) { if (it == 7) null else "0" }
+        val oneLostPoint =
+            snapshot(
+                listOf(
+                    series("cpu-orders", "cpu_ratio", "orders", "ratio", List(20) { "0.1" }),
+                    series("unavailable-orders", "unavailable", "orders", "count", unavailable, ResourceAggregation.INTERVAL_MAX),
+                ) + healthy("payments", List(20) { "0.1" }),
+                cells = 20,
+            )
+        val wideDefaults = """{"sample_floor":1,"min_samples":1,"max_missing_fraction":0.1,"max_gap_cells":5}"""
+
+        val strict = evaluate(oneLostPoint)
+        val strictCheck = strict.checks().single { it.str("rule_id") == "cover/orders" }
+        assertEquals("NO_VERDICT", strictCheck.str("status"))
+        assertEquals("MISSING_RESOURCE_CELLS", strictCheck.str("reason"))
+        assertEquals(PolicyVerdict.NO_VERDICT, strict.windowVerdicts.getValue("steady"))
+
+        val underDefaults = evaluate(oneLostPoint, policy(policyJson(defaults = wideDefaults)))
+        assertEquals(
+            "MISSING_RESOURCE_CELLS",
+            underDefaults.checks().single { it.str("rule_id") == "cover/orders" }.str("reason"),
+        )
+        assertEquals(PolicyVerdict.NO_VERDICT, underDefaults.windowVerdicts.getValue("steady"))
+
+        val explicit =
+            evaluate(oneLostPoint, policy(policyJson(coverExtra = ""","max_missing_fraction":0.1,"max_gap_cells":5""")))
+        val explicitCheck = explicit.checks().single { it.str("rule_id") == "cover/orders" }
+        assertEquals("PASS", explicitCheck.str("status"))
+        assertEquals("RESOURCE_GAPS", explicitCheck.str("reason"))
+        assertEquals(PolicyVerdict.PASS, explicit.windowVerdicts.getValue("steady"))
+    }
+
+    @Test
+    fun `a non coverage sla rule keeps the tolerance default while the coverage rule is strict`() {
+        val lostCpuPoint =
+            snapshot(
+                healthy("orders", List(20) { if (it == 7) null else "0.1" }) + healthy("payments", List(20) { "0.1" }),
+                cells = 20,
+            )
+
+        val result = evaluate(lostCpuPoint)
+
+        assertEquals("RESOURCE_GAPS", result.checks().single { it.str("rule_id") == "cpu/orders" }.str("reason"))
+        assertEquals(PolicyVerdict.PASS, result.windowVerdicts.getValue("steady"))
+    }
+
+    @Test
+    fun `a diagnostic platform rule stays strict and never changes the verdict`() {
+        val diagnostic = policy(policyJson(cpuEffect = "diagnostic"))
+        val snapshot =
+            snapshot(
+                healthy(
+                    "orders",
+                    List(20) {
+                        if (it ==
+                            7
+                        ) {
+                            null
+                        } else {
+                            "0.1"
+                        }
+                    },
+                ) + healthy("payments", List(20) { "0.1" }),
+                cells = 20,
+            )
+
+        val result = evaluate(snapshot, diagnostic)
+
+        assertEquals("MISSING_RESOURCE_CELLS", result.checks().single { it.str("rule_id") == "cpu/orders" }.str("reason"))
+        assertEquals(PolicyVerdict.PASS, result.windowVerdicts.getValue("steady"))
+    }
+
+    @Test
+    fun `a series bridged by a missing cell is a presumption and never a proven failure`() {
+        val tolerant = policy(policyJson(cpuMinimum = "3", cpuExtra = ""","max_missing_fraction":0.2,"max_gap_cells":1"""))
+
+        fun withCpu(cpu: List<String?>) =
+            evaluate(snapshot(healthy("orders", cpu) + healthy("payments", List(6) { "0.1" }), cells = 6), tolerant)
+        val presumed = withCpu(listOf("0.5", "0.5", null, "0.5", "0.1", "0.1"))
+        val proven = withCpu(listOf("0.5", "0.5", "0.5", null, "0.1", "0.1"))
+        val clean = withCpu(listOf("0.1", "0.1", null, "0.1", "0.1", "0.1"))
+        val mixed = withCpu(listOf("0.5", "0.5", "0.5", null, "0.5", "0.1"))
+        val short = withCpu(listOf("0.5", null, "0.1", "0.5", "0.1", "0.1"))
+
+        val presumedCheck = presumed.checks().single { it.str("rule_id") == "cpu/orders" }
+        assertEquals("NO_VERDICT", presumedCheck.str("status"))
+        assertEquals("MISSING_RESOURCE_CELLS", presumedCheck.str("reason"))
+        assertEquals(PolicyVerdict.NO_VERDICT, presumed.windowVerdicts.getValue("steady"))
+        assertEquals(1, presumed.findings.size)
+        assertEquals("true", presumed.findings.single().str("presumed"))
+        assertEquals("4", presumed.findings.single().str("cell_count"))
+        assertEquals(PolicyVerdict.FAIL, proven.windowVerdicts.getValue("steady"))
+        assertEquals(null, proven.findings.single()["presumed"])
+        assertEquals(PolicyVerdict.PASS, clean.windowVerdicts.getValue("steady"))
+        assertEquals(PolicyVerdict.FAIL, mixed.windowVerdicts.getValue("steady"))
+        assertEquals("3", mixed.findings.single().str("cell_count"))
+        assertEquals(null, mixed.findings.single()["presumed"])
+        assertEquals(PolicyVerdict.PASS, short.windowVerdicts.getValue("steady"))
+    }
+
     private fun series(
         id: String,
         signal: String,
@@ -437,6 +654,7 @@ class PlatformRulesTest {
         cpuAggregation: String = "interval_mean",
         cpuThreshold: String = "0.4",
         cpuMinimum: String = "2",
+        defaults: String = """{"sample_floor":1,"min_samples":1}""",
         cpuExtra: String = "",
         cpuEffect: String = "sla",
         coverEffect: String = "sla",
@@ -452,7 +670,7 @@ class PlatformRulesTest {
             } else {
                 """,{"id":"$extraRuleId","metric":"error_rate_ratio","operator":"lte","threshold":1,"scope":{"kind":"overall"}}"""
             }
-        return """{"schema_version":"policy.v1","policy_id":"platform","defaults":{"sample_floor":1,"min_samples":1},""" +
+        return """{"schema_version":"policy.v1","policy_id":"platform","defaults":$defaults,""" +
             catalog +
             coverage +
             """"rules":[{"id":"p95","metric":"response_time_p95_ms","operator":"lte","threshold":100,""" +

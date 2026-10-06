@@ -5,6 +5,7 @@ import { failedLinesOf, summarizeVerdict } from '../src/verdictSummary'
 import { MAX_LOAD_PAGES, fetchRunLoad } from '../src/shell/deep'
 import {
   attentionItems,
+  capacityBlock,
   cursorFraction,
   cursorSummary,
   formatOffset,
@@ -111,6 +112,20 @@ test.describe('attention items', () => {
     ])
   })
 
+  test('platform reasons lead to the resource and policy tables', () => {
+    const result = build({
+      policy_verdict: 'NO_VERDICT',
+      analysis_coverage: { status: 'INCOMPLETE', reasons: ['PLATFORM_SERIES_AMBIGUOUS', 'RULE_WINDOW_NOT_FOUND', 'RESOURCE_SNAPSHOT_REQUIRED'] },
+      evidence: [overall],
+    })
+
+    expect(attentionItems(result).map((entry) => [entry.key, entry.target?.targetId])).toEqual([
+      ['no_verdict:PLATFORM_SERIES_AMBIGUOUS|', 'resource-results'],
+      ['no_verdict:RULE_WINDOW_NOT_FOUND|', 'policy-results'],
+      ['no_verdict:RESOURCE_SNAPSHOT_REQUIRED|', 'resource-results'],
+    ])
+  })
+
   test('INSUFFICIENT_SAMPLES in a capacity result still leads to the policy table, stage reasons to the capacity table', () => {
     const capacity = build({
       analysis_mode: 'capacity_step',
@@ -176,6 +191,24 @@ test.describe('attention items', () => {
       findings: [violation('capacity-diag')],
     })
     expect(attentionItems(capacity).map((entry) => entry.key)).toEqual(['diagnostic:resource:rc-capacity-diag'])
+  })
+
+  test('a failed capacity verdict puts the reason into attention and points to the capacity table', () => {
+    const summary = (verdict: string) => ({
+      schema_version: 'capacity.v1', load_axis: 'rps', unit: 'requests/s', stages: [], bound_type: 'BOUNDED', lower_inclusive: '95.745', upper_exclusive: '103.745',
+      policy_verdict: verdict, reasons: [], capacity_knee: null, knee_reason: 'none',
+    })
+    const failed = attentionItems(build({ analysis_mode: 'capacity_step', policy_verdict: 'FAIL', capacity_summary: summary('FAIL') }))
+
+    expect(failed.map((entry) => [entry.key, entry.kind, entry.diagnostic, entry.target?.tab, entry.target?.targetId])).toEqual([
+      ['violation:capacity', 'violation', false, 'tables', 'capacity-results'],
+    ])
+    expect(failed[0].title).toBe(OVERVIEW_LABELS.capacityFailTitle)
+    expect(failed[0].detail).toContain('95,745')
+    expect(failed[0].detail).toContain('103,745')
+    expect(failed[0].openLabel).toBe(OVERVIEW_LABELS.openCapacity)
+
+    expect(attentionItems(build({ analysis_mode: 'capacity_step', policy_verdict: 'PASS', capacity_summary: summary('PASS') }))).toEqual([])
   })
 
   test('resource diagnostics lead trends and correlations and do not change verdict counts', () => {
@@ -554,5 +587,119 @@ test.describe('full run load', () => {
 
     expect(loaded.truncated).toBe(true)
     expect(loaded.buckets).toHaveLength(1)
+  })
+})
+
+// Блок ёмкости «Обзора»: граница словами, итог без противоречий и ступени для графика (из capacity_summary, без пересчёта).
+test.describe('capacity block adapter', () => {
+  const stage = (id: string, target: number, verdict: string, over: Record<string, unknown> = {}) => ({
+    id, target, achieved: String(target), achieved_statistic: 'p05_10s', observed_min: target, observed_max: target, complete_bins: 30, expected_bins: 30,
+    target_tolerance_ratio: 0.02, verified_bound_load: verdict === 'PASS' || verdict === 'FAIL' ? String(target) : null, verdict, reasons: [], evidence_refs: [], ...over,
+  })
+  const capacity = (verdict: string, bound: string, lower: string | null, upper: string | null, stages: unknown[], reasons: string[] = []) => build({
+    analysis_mode: 'capacity_step',
+    policy_verdict: verdict,
+    capacity_summary: {
+      schema_version: 'capacity.v1', load_axis: 'rps', unit: 'requests/s', bound_type: bound, lower_inclusive: lower, upper_exclusive: upper,
+      policy_verdict: verdict, reasons, capacity_knee: null, knee_reason: 'KNEE_DETECTOR_NOT_IMPLEMENTED', stages,
+    },
+  })
+  const demoStages = [stage('step-40', 40, 'PASS'), stage('step-96', 96, 'PASS', { achieved: '95.745', verified_bound_load: '95.745' }), stage('step-104', 104, 'FAIL', { verified_bound_load: '103.745', achieved: '103.745' })]
+
+  test('there is no block without a capacity summary', () => {
+    expect(capacityBlock(build({ policy_verdict: 'PASS' }))).toBeNull()
+    expect(capacityBlock(build({ analysis_mode: 'capacity_step', policy_verdict: 'PASS' }))).toBeNull()
+  })
+
+  test('PASS: the lower bound covers the requirement and a violated stage above the bound does not change the verdict', () => {
+    const block = capacityBlock(capacity('PASS', 'BOUNDED', '95.745', '103.745', demoStages))!
+
+    expect(block.verdictText).toBe('Ёмкость подтверждена')
+    expect(block.boundText).toContain('От 95,745 до 103,745 requests/s')
+    expect(block.statement).toContain('не выше 95,745 requests/s')
+    expect(block.statement).toContain(OVERVIEW_LABELS.capacityPassFailedAbove)
+    expect(block.counts).toBe('Ступеней: 3; выдержано: 2, нарушено: 1, не подтверждено или без правил: 0.')
+    expect(block.stages.map((entry) => [entry.label, entry.kind, entry.verdictText, entry.status])).toEqual([
+      ['step-40', 'pass', 'Выдержана', 'PASS'],
+      ['step-96', 'pass', 'Выдержана', 'PASS'],
+      ['step-104', 'fail', 'Нарушение', 'FAIL'],
+    ])
+    expect(block.stages.map((entry) => [entry.target, entry.achieved])).toEqual([['40', '40'], ['96', '95,745'], ['104', '103,745']])
+  })
+
+  test('PASS without a violated stage does not mention violated stages', () => {
+    const block = capacityBlock(capacity('PASS', 'LOWER_BOUND', '96', null, [stage('step-96', 96, 'PASS')]))!
+
+    expect(block.statement).toBe(OVERVIEW_LABELS.capacityStatementPass('96', 'requests/s'))
+    expect(block.statement).not.toContain(OVERVIEW_LABELS.capacityPassFailedAbove)
+  })
+
+  test('FAIL: the requirement is not below the upper bound', () => {
+    const block = capacityBlock(capacity('FAIL', 'BOUNDED', '95.745', '103.745', demoStages))!
+
+    expect(block.verdictText).toBe('Ёмкость недостаточна')
+    expect(block.statement).toContain('не ниже 103,745 requests/s')
+  })
+
+  test('NO_VERDICT: every bound type says how the bound sits against the requirement', () => {
+    const noVerdict = (bound: string, lower: string | null, upper: string | null, reasons: string[] = []) =>
+      capacityBlock(capacity('NO_VERDICT', bound, lower, upper, demoStages, reasons))!
+
+    expect(noVerdict('BOUNDED', '95.745', '103.745').statement).toContain('лежит между 95,745 и 103,745 requests/s')
+    expect(noVerdict('LOWER_BOUND', '95.745', null).statement).toContain('Нижняя граница 95,745 requests/s ниже требуемой')
+    expect(noVerdict('UPPER_BOUND', null, '103.745').statement).toContain('Верхняя граница 103,745 requests/s выше требуемой')
+    expect(noVerdict('INDETERMINATE', null, null, ['CAPACITY_STAGE_NOT_VERIFIED']).statement).toBe(OVERVIEW_LABELS.capacityStatementIndeterminate)
+    expect(noVerdict('BOUNDED', '95.745', '103.745').verdictText).toBe('Вердикт по ёмкости не выдан')
+  })
+
+  test('NO_VERDICT blocked by an unknown rule window makes no claim about the bound', () => {
+    const block = capacityBlock(capacity('NO_VERDICT', 'BOUNDED', '95.745', '103.745', demoStages, ['RULE_WINDOW_NOT_FOUND']))!
+
+    expect(block.statement).toBe(OVERVIEW_LABELS.capacityStatementBlocked)
+    expect(block.statement).not.toMatch(/\d/)
+  })
+
+  test('NO_POLICY says that the requirement or the stage rules are missing', () => {
+    const block = capacityBlock(capacity('NO_POLICY', 'BOUNDED', '95.745', '103.745', [stage('step-96', 96, 'NO_POLICY', { reasons: ['CAPACITY_SLA_MISSING'] })]))!
+
+    expect(block.verdictText).toBe('Вердикта по ёмкости нет')
+    expect(block.statement).toBe(OVERVIEW_LABELS.capacityStatementNoPolicy)
+    expect(block.stages[0]).toMatchObject({ kind: 'unverified', status: 'NO_POLICY', verdictText: 'Без правил' })
+  })
+
+  test('a small sample stage is unverified, marked and has no bound lines; a missing achieved load is a dash', () => {
+    const small = stage('step-96', 96, 'INDETERMINATE', { achieved: null, verified_bound_load: null, reasons: ['CAPACITY_INSUFFICIENT_SAMPLES'] })
+    const block = capacityBlock(capacity('NO_VERDICT', 'INDETERMINATE', null, null, [stage('step-40', 40, 'PASS'), small], ['CAPACITY_INSUFFICIENT_SAMPLES', 'CAPACITY_STAGE_NOT_VERIFIED']))!
+
+    expect(block.smallSample).toBe(true)
+    expect(block.lowerX).toBeNull()
+    expect(block.upperX).toBeNull()
+    expect(block.stages[1]).toMatchObject({ kind: 'unverified', status: 'NO_VERDICT', verdictText: 'Не подтверждена', smallSample: true, achieved: 'нет данных', achievedX: null })
+    expect(block.stages[0].smallSample).toBe(false)
+    expect(block.counts).toBe('Ступеней: 2; выдержано: 1, нарушено: 0, не подтверждено или без правил: 1.')
+  })
+
+  test('geometry: bars, achieved marks and bound lines share one scale from 0 to 1000', () => {
+    const block = capacityBlock(capacity('PASS', 'BOUNDED', '95.745', '103.745', demoStages))!
+
+    expect(block.stages.map((entry) => entry.barX)).toEqual([384.62, 923.08, 1000])
+    expect(block.stages[1].achievedX).toBeCloseTo(920.6, 1)
+    expect(block.lowerX).toBeCloseTo(920.6, 1)
+    expect(block.upperX).toBeCloseTo(997.5, 1)
+    for (const entry of block.stages) expect(entry.barX).toBeLessThanOrEqual(1000)
+  })
+
+  test('a zero achieved load keeps its mark at the start of the scale', () => {
+    const block = capacityBlock(capacity('NO_VERDICT', 'INDETERMINATE', null, null, [stage('step-40', 40, 'INDETERMINATE', { achieved: 0 })]))!
+
+    expect(block.stages[0].achieved).toBe('0')
+    expect(block.stages[0].achievedX).toBe(0)
+  })
+
+  test('axis, unit and an unknown stage verdict are shown as the server sent them', () => {
+    const block = capacityBlock(capacity('PASS', 'BOUNDED', '95.745', '103.745', [stage('s', 96, 'WEIRD')]))!
+
+    expect(block.axisText).toBe('rps (requests/s)')
+    expect(block.stages[0]).toMatchObject({ verdictText: 'WEIRD', kind: 'unverified', status: 'NO_VERDICT' })
   })
 })

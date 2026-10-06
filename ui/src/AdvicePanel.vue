@@ -2,16 +2,20 @@
 import { computed, onUnmounted, ref, watch } from 'vue'
 import { ApiError, cancelAdviceJob, getAdvice, getAdviceJob, startAdvice } from './api'
 import { ADVICE_LABELS } from './shell/labels.advice'
-import { apiFailureView, evidenceRef, jobView, provenanceLines } from './shell/advice'
+import { apiFailureView, evidenceRef, jobView, provenanceLines, requestedModelId } from './shell/advice'
+import ModelChoice from './shell/ModelChoice.vue'
 import type { AttentionTarget } from './shell/overview'
-import type { AdviceDocument, AdviceJob, AnalysisReference, AnalysisResult } from './types'
+import type { AdviceDocument, AdviceJob, AdvisoryAiConfig, AnalysisReference, AnalysisResult } from './types'
 
 // linkable: ссылки на строки evidence есть только в новой оболочке (вкладка «Таблицы»).
-const props = defineProps<{ selection: AnalysisReference; autoStart?: boolean; result?: AnalysisResult | null; linkable?: boolean }>()
-const emit = defineEmits<{ 'auto-started': []; navigate: [target: AttentionTarget] }>()
+// aiConfig и aiModel: список моделей из bootstrap и выбор (ADR 0023); выбор живёт в App.vue.
+const props = defineProps<{ selection: AnalysisReference; autoStart?: boolean; result?: AnalysisResult | null; linkable?: boolean; aiConfig?: AdvisoryAiConfig | null; aiModel?: string }>()
+const emit = defineEmits<{ 'auto-started': []; navigate: [target: AttentionTarget]; 'ai-model': [id: string] }>()
 const advice = ref<AdviceDocument | null>(null)
 const job = ref<AdviceJob | null>(null)
 const sending = ref(false)
+// Пока сохранённый совет не прочитан, выбор модели скрыт: совет уже мог быть создан, а выбор запуска не должен меняться.
+const loaded = ref(false)
 const error = ref('')
 const errorCode = ref('')
 const errorFromServer = ref(false)
@@ -19,6 +23,8 @@ const provenance = computed(() => (advice.value ? provenanceLines(advice.value) 
 const jobInfo = computed(() => (job.value ? jobView(job.value) : null))
 const errorInfo = computed(() => (errorCode.value && error.value ? apiFailureView(errorCode.value, error.value) : null))
 const busy = computed(() => sending.value || job.value?.state === 'QUEUED' || job.value?.state === 'PROCESSING')
+// Модель задания видна, пока совета нет (FAILED, UNAVAILABLE и т. д.); у готового совета её показывает происхождение.
+const jobModel = computed(() => (job.value && job.value.state !== 'COMPLETE' && job.value.model_id ? job.value.model_id : ''))
 const grounds = (references: string[]) => references.map((id) => ({ id, ...evidenceRef(props.result, id) }))
 let revision = 0
 let timer: ReturnType<typeof setTimeout> | undefined
@@ -77,16 +83,19 @@ watch(() => `${props.selection.run_id}/${props.selection.analysis_id}`, async ()
   advice.value = null
   job.value = null
   sending.value = false
+  loaded.value = false
   error.value = ''
   errorCode.value = ''
   try {
     await loadAdvice(expected)
+    if (expected === revision) loaded.value = true
     // ИИ-разбор запрошен при запуске анализа (новый экран): запрашиваем совет тем же вызовом, что и кнопка.
     if (expected === revision && props.autoStart && !advice.value && !job.value) {
       emit('auto-started')
       await start()
     }
   } catch (failure) {
+    if (expected === revision) loaded.value = true
     fail(failure, 'Не удалось прочитать рекомендации.', expected)
   }
 }, { immediate: true })
@@ -98,7 +107,7 @@ async function start() {
   error.value = ''
   errorCode.value = ''
   try {
-    const status = await startAdvice(props.selection)
+    const status = await startAdvice(props.selection, { modelId: requestedModelId(props.aiConfig, props.aiModel ?? '') })
     if (expected !== revision) return
     job.value = status
     schedule(expected)
@@ -135,6 +144,13 @@ onUnmounted(() => { revision++; stopPolling() })
       {{ ADVICE_LABELS.intro }}
     </p>
     <template v-if="!advice">
+      <ModelChoice
+        v-if="loaded"
+        :config="aiConfig"
+        :selected="aiModel ?? ''"
+        :disabled="busy"
+        @select="emit('ai-model', $event)"
+      />
       <div class="bucket-controls">
         <button
           type="button"
@@ -157,7 +173,7 @@ onUnmounted(() => { revision++; stopPolling() })
       role="status"
       :class="jobInfo.tone === 'fail' ? 'notice notice-fail' : jobInfo.tone === 'warn' ? 'notice notice-warn' : undefined"
     >
-      <span><strong>{{ jobInfo.state }}</strong><template v-if="jobInfo.text"> &mdash; {{ jobInfo.text }}</template><template v-if="jobInfo.code"> ({{ ADVICE_LABELS.codeLabel }}: <code>{{ jobInfo.code }}</code>)</template><template v-if="jobInfo.hint"><br>{{ ADVICE_LABELS.hintLabel }}: {{ jobInfo.hint }}</template></span>
+      <span><strong>{{ jobInfo.state }}</strong><template v-if="jobInfo.text"> &mdash; {{ jobInfo.text }}</template><template v-if="jobInfo.code"> ({{ ADVICE_LABELS.codeLabel }}: <code>{{ jobInfo.code }}</code>)</template><template v-if="jobInfo.hint"><br>{{ ADVICE_LABELS.hintLabel }}: {{ jobInfo.hint }}</template><template v-if="jobModel"><br>{{ ADVICE_LABELS.modelChoice.jobModel }}: <code>{{ jobModel }}</code></template></span>
     </p>
     <p
       v-if="error"
@@ -178,6 +194,13 @@ onUnmounted(() => { revision++; stopPolling() })
       Обновить статус
     </button>
     <template v-if="advice">
+      <p
+        v-if="aiConfig && aiConfig.models.length > 1"
+        class="muted"
+        data-testid="model-once"
+      >
+        {{ ADVICE_LABELS.modelChoice.once }}
+      </p>
       <p>{{ advice.output.summary }}</p>
       <template v-if="provenance.length">
         <h3>{{ ADVICE_LABELS.provenanceTitle }}</h3>

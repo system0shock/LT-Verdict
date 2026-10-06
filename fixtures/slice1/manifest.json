@@ -30,6 +30,10 @@
       "sha256": "1586b9b2d6fb4c15cb028b9c1e4a4c482f01f026f9eb05aebd3d1120aea1af72"
     },
     {
+      "path": "docs/contracts/policy/v1/examples/invalid/platform-tolerance-diagnostic.json",
+      "sha256": "3a0003486923340ade1a1701b99899d3be76c98db0176046c4c9256bbdef7e7b"
+    },
+    {
       "path": "docs/contracts/policy/v1/examples/invalid/unknown-field.json",
       "sha256": "13c02ed5d4efcddcaacb85c1ec61c4eadecb7e7fedb79ca9087a4919ecdd891f"
     },
@@ -50,6 +54,14 @@
       "sha256": "fbd8005334cb1fd2e7216429a1b5e3df1e4c25a66baff31e61f2937c7bc883c4"
     },
     {
+      "path": "docs/contracts/policy/v1/examples/valid/platform-base-profile.json",
+      "sha256": "061814d99142e0dc3bc25d5713c9285260a358c9770c3b8f63609a400d21021e"
+    },
+    {
+      "path": "docs/contracts/policy/v1/examples/valid/platform-gap-tolerance.json",
+      "sha256": "ae116ffd596041fcf0829e92e874f02207bec959d62e8992192b538a311b3cfb"
+    },
+    {
       "path": "docs/contracts/policy/v1/examples/valid/platform-services.json",
       "sha256": "37330c9eb893b83db458d450d5b2622429fd44588ba8ad98ad07aea692bedad6"
     },
@@ -63,7 +75,7 @@
     },
     {
       "path": "docs/contracts/policy/v1/policy.schema.json",
-      "sha256": "3732b989b34b90490f111b002e696875847398568ac730a7650b5928a01161d9"
+      "sha256": "ed1ee09d0c3724b73cd598ff20357309e51769c909ac09cbda1261234fd547d1"
     },
     {
       "path": "fixtures/slice1/gatling/binary-3.13.5/oracle.json",
@@ -340,6 +352,22 @@
       "schema_valid": true,
       "runtime_valid": false,
       "expected_diagnostic": "PLATFORM_COVERAGE_MISSING"
+    },
+    {
+      "path": "docs/contracts/policy/v1/examples/valid/platform-gap-tolerance.json",
+      "schema_valid": true,
+      "runtime_valid": true
+    },
+    {
+      "path": "docs/contracts/policy/v1/examples/valid/platform-base-profile.json",
+      "schema_valid": true,
+      "runtime_valid": true
+    },
+    {
+      "path": "docs/contracts/policy/v1/examples/invalid/platform-tolerance-diagnostic.json",
+      "schema_valid": true,
+      "runtime_valid": false,
+      "expected_diagnostic": "FIELD_NOT_APPLICABLE"
     }
   ],
   "parser_cases": [

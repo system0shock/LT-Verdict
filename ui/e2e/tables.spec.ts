@@ -96,6 +96,21 @@ test('rule sample cells show the mode and legacy fallback', async ({ page }) => 
   await expect(page.locator('#ev-c-login').getByTestId('rule-sample')).toHaveText(TABLES_LABELS.noSample)
 })
 
+test('the status of a rule stays on one line at 1280px next to a long reason', async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 800 })
+  const withReason = {
+    ...failing,
+    evidence: [
+      ...failing.evidence,
+      { ...failing.evidence[3], id: 'c-reason', rule_id: 'no-data', status: 'NO_VERDICT', reason_code: 'INSUFFICIENT_SAMPLES', sample_count: 3, sample_floor: 20, min_samples: 50, sample_mode: 'INSUFFICIENT' },
+    ],
+  }
+  await openTables(page, withReason)
+  const heights = await page.locator('#policy-results .status-text').evaluateAll((nodes) => nodes.map((node) => node.getBoundingClientRect().height))
+  expect(heights.length).toBeGreaterThan(1)
+  for (const height of heights) expect(height).toBeLessThan(30)
+})
+
 test('transaction search stays local', async ({ page }) => {
   const paths = await openTables(page)
   const before = paths.length

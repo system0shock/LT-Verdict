@@ -10,12 +10,16 @@ import io.ltverdict.ai.AiModel
 import io.ltverdict.ai.AiModelsConfig
 import io.ltverdict.ai.RunnerOutcome
 import io.ltverdict.core.AnalysisOutcome
+import io.ltverdict.core.AnalysisRequest
 import io.ltverdict.core.AnalysisService
 import io.ltverdict.core.EngineConfig
 import io.ltverdict.core.MAX_RESOURCE_SNAPSHOT_BYTES
+import io.ltverdict.core.PodViewValidation
 import io.ltverdict.core.ResourceValidation
 import io.ltverdict.core.analysisIdentity
+import io.ltverdict.core.podViewTestJson
 import io.ltverdict.core.sha256Hex
+import io.ltverdict.core.validatePodView
 import io.ltverdict.core.validateResourceSnapshot
 import io.ltverdict.jobs.AnalysisJobs
 import io.ltverdict.report.renderAsciiDocReport
@@ -336,7 +340,8 @@ class LocalApiTest {
             val advisory = response.jsonObject().getValue("advisory_ai").jsonObject
 
             assertEquals("qwen3.8-max", advisory.getValue("default_model_id").jsonPrimitive.content)
-            assertEquals("Internal gateway", advisory.getValue("endpoint_label").jsonPrimitive.content)
+            assertEquals(setOf("default_model_id", "models"), advisory.keys)
+            assertFalse(response.body().contains("Internal gateway"))
             val models = advisory.getValue("models").jsonArray.map { it.jsonObject }
             assertEquals(listOf("qwen3.8-max", "deepseek-v4-flash-0731"), models.map { it.getValue("id").jsonPrimitive.content })
             assertEquals(listOf(false, false), models.map { it.getValue("measured").jsonPrimitive.boolean })
@@ -1494,6 +1499,108 @@ class LocalApiTest {
     private fun unknownSeriesPlan(plan: ByteArray): ByteArray = plan.decodeToString().replace("\"cpu\"", "\"absent\"").encodeToByteArray()
 
     @Test
+    fun `pod view is validated and bound before job submission and reaches the analysis request`() {
+        val requests = mutableListOf<AnalysisRequest>()
+        withServer(jobsFactory = {
+            AnalysisJobs(1) { request, _, _ ->
+                requests += request
+                AnalysisOutcome(request.input.runId, FAKE_ANALYSIS_ID, byteArrayOf(), tempDir)
+            }
+        }) { store, api ->
+            val input = store.acceptInput(ByteArrayInputStream(SPIKE_DROP.bytes()), SPIKE_DROP.filename)
+            val resources =
+                """{"schema_version":"resource-snapshot.v1","load_input_sha256":"${input.sha256}","start_epoch_ms":0,"step_ms":1000,"point_count":10,"series":[{"id":"cpu","metric":"cpu_used","unit":"ratio","entity":"vm","role":"system","aggregation":"interval_mean","values":[0.1,0.1,0.1,0.1,0.1,0.1,0.1,0.1,0.1,0.1]}],"windows":[{"id":"steady","from_epoch_ms":0,"to_epoch_ms":10000}]}"""
+                    .encodeToByteArray()
+            val hash = (validateResourceSnapshot(resources.inputStream()) as ResourceValidation.Valid).semanticSha256
+
+            fun view(
+                loadHash: String = input.sha256,
+                snapshotHash: String = hash,
+                arm: String? = null,
+                start: Long = 0,
+                step: Long = 5_000,
+                columns: Int = 2,
+            ) = podViewTestJson(loadHash, snapshotHash, arm, start, step, columns).encodeToByteArray()
+
+            fun refused(
+                response: HttpResponse<String>,
+                code: String,
+            ) {
+                assertError(response, 422, "INVALID_POD_VIEW", hasDetails = true)
+                assertTrue(response.body().contains(code), response.body())
+            }
+            api.bootstrap()
+            refused(api.createJob(input.runId, podView = view()), "POD_VIEW_RESOURCE_REQUIRED")
+            refused(api.createJob(input.runId, resources = resources, podView = "{}".encodeToByteArray()), "POD_VIEW_INVALID")
+            refused(api.createJob(input.runId, resources = resources, podView = view(loadHash = "f".repeat(64))), "POD_VIEW_INPUT_MISMATCH")
+            refused(
+                api.createJob(input.runId, resources = resources, podView = view(snapshotHash = "e".repeat(64))),
+                "POD_VIEW_SNAPSHOT_MISMATCH",
+            )
+            refused(api.createJob(input.runId, resources = resources, podView = view(arm = "A")), "POD_VIEW_ARM_MISMATCH")
+            refused(api.createJob(input.runId, resources = resources, podView = view(start = 1_000)), "POD_VIEW_GRID_MISMATCH")
+            refused(api.createJob(input.runId, resources = resources, podView = view(columns = 3)), "POD_VIEW_GRID_MISMATCH")
+            // A limit hit is a 413 like every other oversized part; nothing is truncated.
+            assertError(api.createJob(input.runId, resources = resources, podView = ByteArray(12 * 1024 * 1024 + 1) { 32 }), 413)
+            assertEquals(0, requests.size)
+            assertEquals(0, store.listAnalyses(input.runId, null, 10).analyses.size)
+
+            val exact = ByteArray(12 * 1024 * 1024) { ' '.code.toByte() }.also { view().copyInto(it) }
+            assertEquals(FAKE_ANALYSIS_ID, api.createJob(input.runId, resources = resources, podView = exact).analysisId(api))
+            assertEquals(1, requests.size)
+            val submitted = checkNotNull(requests.single().podView)
+            val expected = validatePodView(view().inputStream()) as PodViewValidation.Valid
+            assertEquals(expected.canonicalSha256, submitted.canonicalSha256)
+            assertEquals(
+                FAKE_ANALYSIS_ID,
+                api.createJob(input.runId, Files.readAllBytes(Path.of(PASS_POLICY)), resources, podView = view()).analysisId(api),
+            )
+            assertError(
+                api.multipart(
+                    "/api/jobs",
+                    listOf(
+                        FormPart("run_id", input.runId.encodeToByteArray()),
+                        FormPart("resource_snapshot", resources, "resources.json", "application/json"),
+                        FormPart("pod_view", view(), "pod-view.json", "application/json"),
+                        FormPart("pod_view", view(), "pod-view.json", "application/json"),
+                    ),
+                ),
+                400,
+                "MALFORMED_REQUEST",
+            )
+            assertEquals(2, requests.size)
+        }
+    }
+
+    @Test
+    fun `pod view cannot be combined with an online source request and a job may have 25 parts`() {
+        withServer { store, api ->
+            val input = store.acceptInput(ByteArrayInputStream(SPIKE_DROP.bytes()), SPIKE_DROP.filename)
+            api.bootstrap()
+
+            fun messageOf(response: HttpResponse<String>) =
+                response
+                    .jsonObject()
+                    .getValue("error")
+                    .jsonObject
+                    .getValue("message")
+                    .jsonPrimitive.content
+
+            val view = podViewTestJson("a".repeat(64), "b".repeat(64), null, 0, 5_000, 2).encodeToByteArray()
+            val online = api.createJob(input.runId, podView = view, source = ONLINE_SOURCE_REQUEST.encodeToByteArray())
+            assertError(online, 400, "MALFORMED_REQUEST")
+            assertEquals("Online acquisition cannot be combined with manual source inputs", messageOf(online))
+
+            fun junkParts(count: Int) =
+                listOf(FormPart("run_id", input.runId.encodeToByteArray())) +
+                    List(count - 1) { FormPart("unknown_$it", ByteArray(1), "x.bin", "application/octet-stream") }
+            // 25 parts pass the counter (the unknown names fail the body at the end); the 26th is one too many.
+            assertEquals("Job multipart body is invalid", messageOf(api.multipart("/api/jobs", junkParts(25))))
+            assertEquals("Job multipart body has too many parts", messageOf(api.multipart("/api/jobs", junkParts(26))))
+        }
+    }
+
+    @Test
     fun `four job parts retain policy resources and diagnostics and reject wrong snapshot`() {
         withServer(jobsFactory = {
             AnalysisJobs(1) { request, _, _ ->
@@ -2361,6 +2468,7 @@ class LocalApiTest {
             pgProfileHtml: ByteArray? = null,
             capacity: ByteArray? = null,
             trend: ByteArray? = null,
+            podView: ByteArray? = null,
         ): HttpResponse<String> =
             multipart(
                 "/api/jobs",
@@ -2377,6 +2485,7 @@ class LocalApiTest {
                     if (pgProfileHtml != null) add(FormPart("pg_profile_html", pgProfileHtml, "report.html", "text/html"))
                     if (capacity != null) add(FormPart("capacity_plan", capacity, "capacity.json", "application/json"))
                     if (trend != null) add(FormPart("trend_plan", trend, "trend.json", "application/json"))
+                    if (podView != null) add(FormPart("pod_view", podView, "pod-view.json", "application/json"))
                 },
             )
 

@@ -3,6 +3,7 @@ import { computed, ref, toRaw, watch } from 'vue'
 import PolicyEditor from '../PolicyEditor.vue'
 import type { AnalysisResult, Policy, PolicyError } from '../types'
 import type { VerdictSummary } from '../verdictSummary'
+import { SAMPLE_TEXT } from '../verdictReasons'
 import { RULES_LABELS } from './labels.rules'
 import { MIN_SAMPLES_FLOOR, POLICY_TEMPLATES, expandPerTransaction, templateById, thresholdHintText, transactionRefs } from './rules'
 
@@ -13,6 +14,7 @@ const props = defineProps<{
   busy: boolean
   result: AnalysisResult | null
   runName: string
+  runHash: string
   canTrial: boolean
   trialBusy: boolean
   summary: VerdictSummary | null
@@ -199,7 +201,7 @@ function expand() {
       </h3>
       <p>{{ RULES_LABELS.trialLead }}</p>
       <p v-if="runName">
-        {{ RULES_LABELS.trialTarget(runName) }}
+        {{ RULES_LABELS.trialTarget(runName, runHash) }}
       </p>
       <button
         type="button"
@@ -231,8 +233,12 @@ function expand() {
       >
         <h4>{{ RULES_LABELS.trialSummaryTitle }}</h4>
         <p>
+          <span
+            class="status-text"
+            :data-status="summary.verdict"
+          >{{ summary.verdict }}</span>
           <strong>{{ summary.headline }}</strong>
-          <span> ({{ summary.chip }})</span>
+          <span v-if="summary.chip.endsWith(SAMPLE_TEXT.chipSuffix)">{{ SAMPLE_TEXT.chipSuffix }}</span>
         </p>
         <button
           type="button"

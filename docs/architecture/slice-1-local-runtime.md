@@ -130,6 +130,31 @@ CLI, API и задача онлайн-источника показывают к
 действует платформенное `sla`-правило. Identity, ключ сопоставимости baseline и
 `analysis_id` анализов без `platform_rules` не меняются.
 
+Допуск пропусков платформенных `sla`-правил (ADR 0018, решение D6) разрешается при
+разворачивании: `expandPlatformRules` кладёт в `ResourceRuleV1` значения
+`maxMissingFraction` и `maxGapCells` (правило, затем `defaults`, затем
+`MAX_MISSING_FRACTION_DEFAULT = 0.05` и `MAX_GAP_CELLS_DEFAULT = 3`; у правила, чей
+`signal` равен `platform_coverage.signal`, после поля правила сразу идут
+`PLATFORM_COVERAGE_MAX_MISSING_FRACTION_DEFAULT = 0` и
+`PLATFORM_COVERAGE_MAX_GAP_CELLS_DEFAULT = 0`, а `defaults` не учитываются); у правил снимка,
+профиля и платформенных `diagnostic`-правил они `null`, и вычислитель остаётся
+строгим. `evaluateRule` при непустом допуске считает ячейки окна (`CellStats`) и, если
+пропусков не больше допуска, есть хотя бы одна наблюдённая ячейка и разрыв не длиннее
+`maxGapCells` (точное сравнение `BigDecimal`), передаёт оценку `evaluateBridged`.
+Нарушающие отрезки наблюдённых ячеек по обе стороны пропуска образуют цепочку-гипотезу;
+`FAIL` выдают только отрезки длиной не меньше `min_consecutive_cells`, а цепочка,
+достигающая минимума лишь с пропущенными ячейками, даёт `NO_VERDICT`
+(`MISSING_RESOURCE_CELLS`) и находку с `presumed: true`. Исходы допуска: `PASS` и `FAIL`
+с информационной причиной `RESOURCE_GAPS` (coverage `INCOMPLETE`). Evidence
+`resource_policy_check` платформенных проверок получает `expected_cells`,
+`observed_cells`, `missing_cells`, `longest_gap_cells`. При непустых `platform_rules`
+`verdict_gates` дополняется ключами `max_missing_fraction_default` и
+`max_gap_cells_default`, а при заданном `platform_coverage` ещё и
+`platform_coverage_max_missing_fraction_default` и
+`platform_coverage_max_gap_cells_default`: такой анализ получает новый
+`analysis_id`; анализы без `platform_rules` и ключ сопоставимости baseline не
+меняются.
+
 Canonical `analysis-result.v1` одинаков для CLI и UI при одинаковых input,
 policy и engine configuration.
 
@@ -318,7 +343,7 @@ validation возвращает отдельный `{valid:false,errors:[...]}`.
 `RESOURCE_FINDINGS_LIMIT_EXCEEDED` до публикации partial analysis.
 
 Snapshot ограничен 32 MiB, 1 024 series и 1 500 000 cells (ADR 0014); multipart
-job содержит не более 24 parts, declared общий body ограничен суммой максимальных
+job содержит не более 25 parts (25-я - `pod_view`, ADR 0020), declared общий body ограничен суммой максимальных
 parts (`MAX_JOB_REQUEST_BYTES`, snapshot 32 MiB) и 64 KiB overhead. Core проверяет depth,
 duplicate/unknown fields, numeric bounds и cardinality до помещения в queue.
 Расчёты используют existing analysis worker и cooperative cancellation.
@@ -354,7 +379,8 @@ pipeline нет: rollups и P95 предоставляет существующ�
 
 `ltv report` и private report endpoint используют чистые HTML и AsciiDoc renderers
 над сохранённым result. JSON возвращается исходными bytes. HTML содержит
-русские блоки «Вердикт и причины», «Правила», «Транзакции» и «Ограничения»
+русские блоки «Вердикт и причины», «Диагностика ресурсов» (если диагностические
+правила ресурсов сработали), «Правила», «Транзакции» и «Ограничения»
 (слова причин берёт из `ReportReasons.kt`; набор кодов совпадает с
 `ui/src/verdictReasons.ts`, `npm --prefix ui run test:contracts` проверяет
 равенство), затем прежние английские разделы с `lang="en"` (корень `lang="ru"`).

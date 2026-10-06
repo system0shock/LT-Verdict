@@ -72,6 +72,45 @@ class AnalysisResultGoldenTest {
     }
 
     @Test
+    fun `tolerance defaults are recorded only for policies with platform rules`() {
+        val inputHash = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+        val input =
+            AcceptedInput(
+                runId = "jmeter_jtl_csv-$inputHash",
+                sourceType = SourceType.JMETER_CSV,
+                sha256 = inputHash,
+                sizeBytes = 1,
+                originalFilename = "input.jtl",
+                path = Path.of("unused"),
+            )
+
+        fun gates(path: String): Map<String, String> {
+            val policy = validatePolicy(ByteArrayInputStream(Files.readAllBytes(Path.of(path)))) as PolicyValidation.Valid
+            return Json
+                .parseToJsonElement(analysisIdentity(input, policy, EngineConfig()).decodeToString())
+                .jsonObject
+                .getValue("verdict_gates")
+                .jsonObject
+                .mapValues { it.value.jsonPrimitive.content }
+        }
+
+        assertEquals(null, gates("fixtures/slice1/identity/policy.canonical.json")["max_missing_fraction_default"])
+        assertEquals(null, gates("fixtures/slice1/identity/policy.canonical.json")["max_gap_cells_default"])
+        assertEquals(
+            mapOf("max_missing_fraction_default" to "0.05", "max_gap_cells_default" to "3"),
+            gates("docs/contracts/policy/v1/examples/valid/platform-services.json").filterKeys { it.startsWith("max_") },
+        )
+        assertEquals(
+            mapOf("platform_coverage_max_missing_fraction_default" to "0", "platform_coverage_max_gap_cells_default" to "0"),
+            gates("docs/contracts/policy/v1/examples/valid/platform-services.json").filterKeys { it.startsWith("platform_coverage_") },
+        )
+        assertEquals(
+            emptyMap<String, String>(),
+            gates("fixtures/slice1/identity/policy.canonical.json").filterKeys { it.startsWith("platform_coverage_") },
+        )
+    }
+
+    @Test
     fun `histogram precision is part of the identity and changes the analysis id`() {
         val inputHash = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
         val input =

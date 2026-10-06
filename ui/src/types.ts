@@ -1,8 +1,21 @@
 export type Theme = 'light' | 'dark'
 
+// Конфигурация моделей ИИ-разбора (ADR 0023): адрес и подпись endpoint интерфейс не получает и не показывает.
+export interface AdvisoryAiModel {
+  id: string
+  label: string
+  measured: boolean
+}
+
+export interface AdvisoryAiConfig {
+  default_model_id: string
+  models: AdvisoryAiModel[]
+}
+
 export interface Bootstrap {
   csrf_token: string
   max_upload_bytes: number
+  advisory_ai?: AdvisoryAiConfig | null
 }
 
 export interface RunSummary {
@@ -219,6 +232,22 @@ export interface ResourcePolicyCheckEvidence {
   effect: 'diagnostic' | 'sla'
   status: 'PASS' | 'FAIL' | 'NO_VERDICT'
   reason: string | null
+  // Только у проверок платформенных правил (ADR 0018): правило-источник, сервис и покрытие ячеек окна.
+  platform_rule_id?: string
+  service?: string
+  expected_cells?: number
+  observed_cells?: number
+  missing_cells?: number
+  longest_gap_cells?: number
+}
+
+export interface RuleWindowCheckEvidence {
+  id: string
+  type: 'rule_window_check'
+  rule_id: string
+  window_id: string
+  status: 'NO_VERDICT'
+  reason_code: string
 }
 
 export interface ResourceBindingEvidence {
@@ -482,7 +511,7 @@ export interface ResourceTrendFinding {
   evidence_id: string
 }
 
-export type AnalysisEvidence = MetricSummaryEvidence | PolicyCheckEvidence | DiagnosticEvidence | ResourceSummaryEvidence | WindowPolicySummaryEvidence | ResourcePolicyCheckEvidence | ResourceBindingEvidence | DiagnosticSummaryEvidence | CorrelationPairEvidence | CorrelationHeadlineSelectionEvidence | AnomalyCheckEvidence | WindowMetricSummaryEvidence | SourceSummaryEvidence | OpenSearchEvidence | PostgresContextEvidence | TrendCheckEvidence | TrendSummaryEvidence
+export type AnalysisEvidence = MetricSummaryEvidence | PolicyCheckEvidence | DiagnosticEvidence | ResourceSummaryEvidence | WindowPolicySummaryEvidence | ResourcePolicyCheckEvidence | RuleWindowCheckEvidence | ResourceBindingEvidence | DiagnosticSummaryEvidence | CorrelationPairEvidence | CorrelationHeadlineSelectionEvidence | AnomalyCheckEvidence | WindowMetricSummaryEvidence | SourceSummaryEvidence | OpenSearchEvidence | PostgresContextEvidence | TrendCheckEvidence | TrendSummaryEvidence
 
 export interface CapacityStage {
   id: string
@@ -635,6 +664,7 @@ export interface AdviceJob {
   reused: boolean | null
   failure: string | null
   unavailable_reason: string | null
+  model_id?: string | null
 }
 
 export interface AdviceDocument {

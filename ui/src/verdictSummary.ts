@@ -7,6 +7,7 @@ import type {
   MetricSummaryEvidence,
   PolicyCheckEvidence,
   ResourcePolicyCheckEvidence,
+  RuleWindowCheckEvidence,
 } from './types'
 import { isNoVerdictReason, reasonText, SAMPLE_TEXT } from './verdictReasons'
 
@@ -66,6 +67,7 @@ interface Violation {
   cell_count: number
   observed_min: string
   observed_max: string
+  presumed?: boolean
 }
 
 function isViolation(finding: Record<string, unknown>): finding is Record<string, unknown> & Violation {
@@ -131,16 +133,22 @@ function businessLine(check: PolicyCheckEvidence, metrics: Map<string, MetricSum
 function resourceLine(check: ResourcePolicyCheckEvidence, violations: Violation[]): RuleLine {
   const side = check.operator === 'gt' ? 'выше' : 'ниже'
   const first = violations[0]
-  const title = `Правило ${check.rule_id} · ряд ${check.series_id}${first ? ` (${first.entity})` : ''} · окно ${check.window_id}`
+  const service = check.service ? ` · сервис ${check.service}` : ''
+  const title = `Правило ${check.rule_id}${service} · ряд ${check.series_id}${first ? ` (${first.entity})` : ''} · окно ${check.window_id}`
+  // Доля покрытия нужна только при пропусках; проверки без счётчиков ячеек (правила снимка) остаются как были.
+  const coverage = check.expected_cells && check.observed_cells !== undefined && check.observed_cells < check.expected_cells
+    ? ` · покрытие данных: ${numbers.format((check.observed_cells / check.expected_cells) * 100)} % (${check.observed_cells} из ${check.expected_cells} ячеек)`
+    : ''
   if (check.status === 'PASS' || !first) {
-    return { key: check.id, title, detail: `нарушений нет (нарушение: значение ${side} ${check.threshold} ${check.unit})` }
+    return { key: check.id, title, detail: `нарушений нет (нарушение: значение ${side} ${check.threshold} ${check.unit})${coverage}` }
   }
   const range = first.observed_min === first.observed_max ? first.observed_min : `${first.observed_min}–${first.observed_max}`
   const episodes = violations.length > 1 ? `; интервалов нарушения: ${violations.length}` : ''
+  const presumed = violations.some((item) => item.presumed) ? ' · предположительное нарушение (серия достигнута только за счёт пропущенных ячеек)' : ''
   return {
     key: check.id,
     title,
-    detail: `значение ${side} порога ${check.threshold} ${check.unit}: наблюдалось ${range}; ячеек подряд: ${first.cell_count}; ${formatUtc(first.from_epoch_ms)} – ${formatUtc(first.to_epoch_ms)}${episodes}`,
+    detail: `значение ${side} порога ${check.threshold} ${check.unit}: наблюдалось ${range}; ячеек подряд: ${first.cell_count}; ${formatUtc(first.from_epoch_ms)} – ${formatUtc(first.to_epoch_ms)}${episodes}${presumed}${coverage}`,
   }
 }
 
@@ -204,6 +212,9 @@ function causesOf(result: AnalysisResult): CauseGroup[] {
   for (const check of resource) {
     if (check.status === 'NO_VERDICT') items.push({ code: check.reason, label: 'Правила', subject: `${check.rule_id} (окно ${check.window_id})` })
   }
+  for (const check of result.evidence.filter((item): item is RuleWindowCheckEvidence => item.type === 'rule_window_check')) {
+    items.push({ code: check.reason_code, label: 'Правила', subject: `${check.rule_id} (окно ${check.window_id})` })
+  }
   if (result.analysis_coverage.reasons.includes('BUSINESS_OBSERVATIONS_NOT_FOUND')) {
     // Пустым окно называем только по правилу на весь прогон: у транзакции нулевой счёт не значит пустое окно.
     const empty = business.filter((check) => check.reason_code === 'METRIC_NOT_AVAILABLE' && check.window_id && check.scope?.kind === 'overall')
@@ -242,7 +253,7 @@ export function failedLinesOf(result: AnalysisResult): FailedLine[] {
   ]
 }
 
-export function summarizeVerdict(result: AnalysisResult, context: { policySha256?: string; policyId?: string | null } = {}): VerdictSummary {
+export function summarizeVerdict(result: AnalysisResult, context: { policySha256?: string; policyId?: string | null; tabs?: boolean } = {}): VerdictSummary {
   const verdict = result.policy_verdict
   const capacity = result.analysis_mode === 'capacity_step' ? result.capacity_summary : undefined
   const { business, resource } = checksOf(result)
@@ -290,7 +301,7 @@ export function summarizeVerdict(result: AnalysisResult, context: { policySha256
       NO_VERDICT: 'Вердикт по ёмкости не выдан — границы недостаточно',
       NO_POLICY: 'Вердикта нет — не задана требуемая ёмкость или SLA-правила',
     }[verdict]
-    lead = `Граница ёмкости: ${bound}. Подробности по ступеням — в таблице ниже.`
+    lead = `Граница ёмкости: ${bound}. Подробности по ступеням — ${context.tabs ? 'в таблице на вкладке «Таблицы»' : 'в таблице ниже'}.`
     chip = 'оценка ёмкости'
   } else if (verdict === 'FAIL') {
     headline = `Прогон не проходит — нарушено проверок: ${failed} из ${total}`
@@ -337,7 +348,7 @@ export function summarizeVerdict(result: AnalysisResult, context: { policySha256
     headline,
     lead,
     chip,
-    linesTitle: verdict === 'FAIL' ? 'Что нарушено' : verdict === 'NO_VERDICT' && failed > 0 ? 'Найденные нарушения' : verdict === 'PASS' ? 'Что проверено' : null,
+    linesTitle: capacity || shownLines.length === 0 ? null : verdict === 'FAIL' ? 'Что нарушено' : verdict === 'NO_VERDICT' && failed > 0 ? 'Найденные нарушения' : verdict === 'PASS' ? 'Что проверено' : null,
     lines: capacity ? [] : shownLines.slice(0, MAX_LINES),
     linesHidden: capacity ? 0 : Math.max(0, shownLines.length - MAX_LINES),
     causes,

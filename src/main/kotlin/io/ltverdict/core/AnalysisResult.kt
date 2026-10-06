@@ -33,6 +33,7 @@ internal fun analysisIdentity(
     postgresInputSha256: String? = null,
     capacity: CapacityPlanValidation.Valid? = null,
     trend: TrendPlanValidation.Valid? = null,
+    podView: PodViewValidation.Valid? = null,
 ): ByteArray =
     canonicalJson(
         buildJsonObject {
@@ -41,7 +42,17 @@ internal fun analysisIdentity(
             put("source_type", input.sourceType.wireName)
             put("input_sha256", input.sha256)
             put("policy_sha256", policy?.sha256 ?: "NO_POLICY")
-            if (policy != null || capacity != null) put("verdict_gates", verdictGates(policy != null, capacity != null))
+            if (policy != null || capacity != null) {
+                put(
+                    "verdict_gates",
+                    verdictGates(
+                        policy != null,
+                        capacity != null,
+                        policy?.policy?.platformRules?.isNotEmpty() == true,
+                        policy?.policy?.platformCoverage != null,
+                    ),
+                )
+            }
             resources?.let {
                 put("resource_snapshot_sha256", it.semanticSha256)
                 put("resource_config_sha256", it.configSha256)
@@ -57,6 +68,12 @@ internal fun analysisIdentity(
             trend?.let {
                 put("trend_plan_sha256", it.semanticSha256)
                 put("trend_plan_version", "trend-plan.v1")
+            }
+            // ADR 0020, section 5: a top-level binding only. pod-view stays out of modules, input_versions and limits,
+            // which are part of the comparability key.
+            podView?.let {
+                put("pod_view_sha256", it.canonicalSha256)
+                put("pod_view_version", "pod-view.v1")
             }
             put(
                 "engine",
@@ -171,11 +188,21 @@ internal fun analysisResult(
 private fun verdictGates(
     hasPolicy: Boolean,
     hasCapacity: Boolean,
+    hasPlatformRules: Boolean,
+    hasPlatformCoverage: Boolean,
 ) = buildJsonObject {
     if (hasPolicy) put("min_samples_floor", MIN_SAMPLES_FLOOR.toString())
     put("min_samples_default", MIN_SAMPLES_DEFAULT.toString())
     if (hasPolicy) put("throughput_exempt", "true")
     if (hasCapacity) put("capacity_stage_sample_gate", "true")
+    if (hasPlatformRules) {
+        put("max_missing_fraction_default", MAX_MISSING_FRACTION_DEFAULT.toPlainString())
+        put("max_gap_cells_default", MAX_GAP_CELLS_DEFAULT.toString())
+        if (hasPlatformCoverage) {
+            put("platform_coverage_max_missing_fraction_default", PLATFORM_COVERAGE_MAX_MISSING_FRACTION_DEFAULT.toPlainString())
+            put("platform_coverage_max_gap_cells_default", PLATFORM_COVERAGE_MAX_GAP_CELLS_DEFAULT.toString())
+        }
+    }
 }
 
 private fun limits(

@@ -283,10 +283,10 @@ export function getAdvice(reference: AnalysisReference): Promise<{ advice: Advic
   return request(`/api/runs/${encodeURIComponent(reference.run_id)}/analyses/${encodeURIComponent(reference.analysis_id)}/advice`)
 }
 
-export function startAdvice(reference: AnalysisReference): Promise<AdviceJob> {
+export function startAdvice(reference: AnalysisReference, options: { modelId?: string } = {}): Promise<AdviceJob> {
   return request(`/api/runs/${encodeURIComponent(reference.run_id)}/analyses/${encodeURIComponent(reference.analysis_id)}/advice`, {
     method: 'POST', headers: mutationHeaders({ 'Content-Type': 'application/json' }),
-    body: JSON.stringify({}),
+    body: JSON.stringify(options.modelId ? { model_id: options.modelId } : {}),
   })
 }
 

@@ -327,14 +327,18 @@ export function capacityBlock(result: AnalysisResult): CapacityBlock | null {
   const summary = result.capacity_summary
   const view = capacityView(result)
   if (!summary || !view) return null
-  const positive = (value: number | string | null | undefined): number | null => {
+  const nonNegative = (value: number | string | null | undefined): number | null => {
     const number = value == null ? NaN : Number(value)
-    return Number.isFinite(number) && number > 0 ? number : null
+    return Number.isFinite(number) && number >= 0 ? number : null
+  }
+  const positive = (value: number | string | null | undefined): number | null => {
+    const number = nonNegative(value)
+    return number !== null && number > 0 ? number : null
   }
   const lowerValue = positive(summary.lower_inclusive)
   const upperValue = positive(summary.upper_exclusive)
   const stages = summary.stages ?? []
-  const maximum = Math.max(1, lowerValue ?? 0, upperValue ?? 0, ...stages.flatMap((stage) => [positive(stage.target) ?? 0, positive(stage.achieved) ?? 0]))
+  const maximum = Math.max(1, lowerValue ?? 0, upperValue ?? 0, ...stages.flatMap((stage) => [positive(stage.target) ?? 0, nonNegative(stage.achieved) ?? 0]))
   const scale = (value: number | null) => value === null ? null : Math.round((value / maximum) * 100000) / 100
   const rows = view.stages.map((row, index): CapacityBlockStage => {
     const [kind, status] = stageKinds[row.verdict] ?? ['unverified', 'NO_VERDICT']
@@ -349,7 +353,7 @@ export function capacityBlock(result: AnalysisResult): CapacityBlock | null {
       mark: OVERVIEW_LABELS.stageMark[kind],
       smallSample: row.smallSample,
       barX: scale(positive(stages[index].target)) ?? 0,
-      achievedX: scale(positive(stages[index].achieved)),
+      achievedX: scale(nonNegative(stages[index].achieved)),
     }
   })
   const lower = lowerValue === null ? null : capacityNumber(summary.lower_inclusive)

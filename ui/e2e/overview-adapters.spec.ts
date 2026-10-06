@@ -675,6 +675,13 @@ test.describe('capacity block adapter', () => {
     for (const entry of block.stages) expect(entry.barX).toBeLessThanOrEqual(1000)
   })
 
+  test('a zero achieved load keeps its mark at the start of the scale', () => {
+    const block = capacityBlock(capacity('NO_VERDICT', 'INDETERMINATE', null, null, [stage('step-40', 40, 'INDETERMINATE', { achieved: 0 })]))!
+
+    expect(block.stages[0].achieved).toBe('0')
+    expect(block.stages[0].achievedX).toBe(0)
+  })
+
   test('axis, unit and an unknown stage verdict are shown as the server sent them', () => {
     const block = capacityBlock(capacity('PASS', 'BOUNDED', '95.745', '103.745', [stage('s', 96, 'WEIRD')]))!
 

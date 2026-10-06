@@ -170,13 +170,13 @@ export const OVERVIEW_LABELS = {
   capacityStatementLower: (lower: string, unit: string) => `Нижняя граница ${lower} ${unit} ниже требуемой ёмкости, верхней границы нет: итог не выдан.`,
   capacityStatementUpper: (upper: string, unit: string) => `Верхняя граница ${upper} ${unit} выше требуемой ёмкости, нижней границы нет: итог не выдан.`,
   capacityStatementIndeterminate: 'Граница ёмкости не определена, сравнить её с требуемой ёмкостью нельзя.',
-  capacityStatementBlocked: 'Итог не выдан: границу нельзя сравнить с требуемой ёмкостью, причины указаны в списке «Требует внимания».',
+  capacityStatementBlocked: 'Итог не выдан: проверка не завершена, и вердикт по границе заблокирован. Причины указаны в списке «Требует внимания».',
   capacityStatementNoPolicy: 'Итог не выдан: в плане не задана требуемая ёмкость или у ступеней нет применимых правил SLA.',
   capacityChartTitle: 'Нагрузка по ступеням',
   capacityCounts: (total: number, passed: number, failed: number, other: number) =>
     `Ступеней: ${total}; выдержано: ${passed}, нарушено: ${failed}, не подтверждено или без правил: ${other}.`,
   capacityChartAria: (counts: string) => `График нагрузки по ступеням. ${counts} Те же данные в таблице под графиком.`,
-  capacityTableRegion: 'Нагрузка по ступеням: таблица и график',
+  capacityTableRegion: 'Нагрузка по ступеням: таблица',
   capacityHeads: ['Ступень', 'Цель', 'Достигнуто (p05 за 10 с)', 'Итог ступени'],
   stageMark: { pass: '✓', fail: '✕', unverified: '?' } as Record<string, string>,
   capacityLegend: (lower: string | null, upper: string | null, unit: string) => {

@@ -1,7 +1,7 @@
 import AxeBuilder from '@axe-core/playwright'
 import { expect, test, type Page } from '@playwright/test'
 import { COMPARE_LABELS, EN_COMPARE_LABELS } from '../src/shell/labels.compare'
-import { BASELINE_LABELS } from '../src/shell/labels'
+import { BASELINE_ERROR_LABELS, BASELINE_LABELS } from '../src/shell/labels'
 import type { BaselineCondition, BaselineSelection } from '../src/types'
 
 const current = { run_id: 'cmp-run', analysis_id: 'a'.repeat(64) }
@@ -9,6 +9,7 @@ const reference = { run_id: 'base-run', analysis_id: 'b'.repeat(64) }
 const candidate = { run_id: 'c2-run', analysis_id: 'c'.repeat(64) }
 const run = { ...current, source_type: 'jmeter', sha256: 'd'.repeat(64), size_bytes: 100, original_filename: 'cmp.jtl' }
 const updatedAt = '2026-10-04T10:00:00Z'
+const preciseTime = '2026-10-05T21:56:29.572852600Z'
 const result = {
   schema_version: 'analysis-result.v1', run_id: current.run_id, analysis_mode: 'standard', run_validity: 'VALID', policy_verdict: 'NO_POLICY',
   analysis_coverage: { status: 'COMPLETE', reasons: [] }, findings: [], evidence: [],
@@ -24,6 +25,13 @@ type CompareOptions = {
   postBaselineFails?: boolean
   buckets?: boolean
   shell?: 'new' | 'old'
+  precise?: boolean
+  slotArm?: string
+  verdict?: string
+  coverage?: { status: string; reasons: string[] }
+  validity?: string
+  profile?: unknown
+  postFails?: { status: number; code: string; message: string; limit?: number }
 }
 
 const metric = (
@@ -34,6 +42,7 @@ const metric = (
 async function openCompare(page: Page, opts: CompareOptions = {}) {
   const paths: string[] = []
   const posts: Array<{ path: string; body: unknown }> = []
+  const deletes: string[] = []
   const baselineReference = opts.warnings?.includes('BASELINE_IS_CURRENT_ANALYSIS') ? current
     : opts.warnings?.includes('BASELINE_IS_CURRENT_RUN') ? { ...reference, run_id: current.run_id } : reference
   let baseline: BaselineSelection | null = opts.noBaseline ? null : {
@@ -57,11 +66,16 @@ async function openCompare(page: Page, opts: CompareOptions = {}) {
     else if (path === '/api/jenkins' || path === '/api/grafana' || path === '/api/sources') body = { profiles: [] }
     else if (path.endsWith('/advice')) body = { advice: null, job: null }
     else if (path === '/api/runs') body = { runs: [run], next_after: null }
-    else if (path === '/api/baseline' && method === 'GET') body = { baseline }
+    else if (path === '/api/baseline' && method === 'GET') {
+      body = { baseline, baselines: baseline ? [{ series: baseline.series, arm: opts.slotArm ?? null, source: 'SLOT', baseline }] : [] }
+    }
     else if (path === '/api/baseline' && method === 'POST') {
-      if (opts.postBaselineFails) {
+      if (opts.postFails) {
+        status = opts.postFails.status
+        body = { error: { code: opts.postFails.code, message: opts.postFails.message, limit: opts.postFails.limit } }
+      } else if (opts.postBaselineFails) {
         status = 422
-        body = { error: { code: 'BASELINE_CANDIDATE_NOT_PASS', message: 'Server says no.' } }
+        body = { error: { code: 'FUTURE_REFUSAL', message: 'Server says no.' } }
       } else {
         baseline = {
           schema_version: 'local-baseline.v1', series: 'S', mode: 'manual', reference: current,
@@ -70,21 +84,29 @@ async function openCompare(page: Page, opts: CompareOptions = {}) {
         body = { baseline }
       }
     } else if (path === '/api/baseline' && method === 'DELETE') {
+      deletes.push(url.search)
       baseline = null
       body = { baseline: null }
     } else if (path.endsWith('/baseline-conditions') && method === 'GET') body = { conditions }
     else if (path.endsWith('/baseline-conditions') && method === 'POST') {
       conditions = {
         schema_version: 'local-baseline-conditions.v1', baseline: baselineReference, current, windows: null,
-        decision: 'CONFIRMED', provenance: 'EXPLICIT_LOCAL_ACTION', updated_at: updatedAt,
+        decision: 'CONFIRMED', provenance: 'EXPLICIT_LOCAL_ACTION', updated_at: opts.precise ? preciseTime : updatedAt,
       }
       body = { conditions }
     } else if (path.endsWith('/comparison')) {
       body = {
-        baseline, current, comparability: opts.comparability ?? 'UNCONFIRMED', warnings: opts.warnings ?? [], conditions,
+        baseline, current, comparability: opts.comparability ?? (conditions ? 'USER_CONFIRMED' : 'UNCONFIRMED'), warnings: opts.warnings ?? [], conditions,
+        ...(opts.profile === undefined ? {} : { profile: opts.profile }),
         metrics: [
-          metric('response_time_p95_ms', 'ms', '100', '200', '100', '100', null, null),
-          metric('error_rate_ratio', 'ratio', '0', '0.1', '0.1', null, null, 'ZERO_BASELINE'),
+          opts.precise
+            ? metric('response_time_p95_ms', 'ms', '451', '3493.123456', '3042.123456', '674.501109', null, null)
+            : metric('response_time_p95_ms', 'ms', '100', '200', '100', '100', null, null),
+          metric('error_rate_ratio', 'ratio', '0', opts.precise ? '0.012345' : '0.1', opts.precise ? '0.012345' : '0.1', null, null, 'ZERO_BASELINE'),
+          ...(opts.precise ? [
+            metric('throughput_rps', 'rps', '59.997667', '60', '0.002333', '0.003888', null, null),
+            metric('response_time_p99_ms', 'ms', '100.001', '100.002', '0.001', '0.001', null, null),
+          ] : []),
         ],
         ...(opts.windowReasons || opts.windowStatus ? {
           window_comparison: {
@@ -106,7 +128,12 @@ async function openCompare(page: Page, opts: CompareOptions = {}) {
         analyses: [{ analysis_id: current.analysis_id, policy_sha256: 'e'.repeat(64), policy_verdict: 'NO_POLICY', run_validity: 'VALID' }],
         next_after: null,
       }
-    } else if (path.endsWith('/result')) body = result
+    } else if (path.endsWith('/result')) {
+      body = {
+        ...result, policy_verdict: opts.verdict ?? 'NO_POLICY', run_validity: opts.validity ?? 'VALID',
+        analysis_coverage: opts.coverage ?? result.analysis_coverage,
+      }
+    }
     else if (path.endsWith('/buckets')) {
       if (opts.buckets) {
         body = {
@@ -129,7 +156,7 @@ async function openCompare(page: Page, opts: CompareOptions = {}) {
   await page.locator(`button[title="${current.analysis_id}"]`).click()
   await expect(page.locator('#verdict')).toBeVisible()
   if (opts.shell !== 'old') await page.locator('#shell-tab-compare').click()
-  return { paths, posts }
+  return { paths, posts, deletes }
 }
 
 async function compareWindows(page: Page, baselineId = 'w1', currentId = 'w2') {
@@ -141,7 +168,11 @@ async function compareWindows(page: Page, baselineId = 'w1', currentId = 'w2') {
 
 test('compare tab is Russian, keeps the server warning order and says the verdict is untouched', async ({ page }) => {
   const requests = await openCompare(page, {
-    warnings: ['BASELINE_IS_CURRENT_RUN', 'CURRENT_IN_CANDIDATE_SET'], comparability: 'UNCONFIRMED',
+    warnings: [
+      'BASELINE_IS_CURRENT_RUN', 'CURRENT_IN_CANDIDATE_SET', 'BASELINE_NOT_PASS', 'BASELINE_SMALL_SAMPLE',
+      'POLICY_DIFFERS', 'PROFILE_MISMATCH',
+    ],
+    comparability: 'UNCONFIRMED',
   })
   await page.getByRole('button', { name: COMPARE_LABELS.compare, exact: true }).click()
   const panel = page.locator('#baseline-panel')
@@ -150,6 +181,10 @@ test('compare tab is Russian, keeps the server warning order and says the verdic
   await expect(page.getByTestId('baseline-warnings').locator('li')).toHaveText([
     BASELINE_LABELS.warnings.BASELINE_IS_CURRENT_RUN,
     BASELINE_LABELS.warnings.CURRENT_IN_CANDIDATE_SET,
+    BASELINE_LABELS.warnings.BASELINE_NOT_PASS,
+    BASELINE_LABELS.warnings.BASELINE_SMALL_SAMPLE,
+    BASELINE_LABELS.warnings.POLICY_DIFFERS,
+    BASELINE_LABELS.warnings.PROFILE_MISMATCH,
   ])
   await expect(page.getByTestId('baseline-warnings')).toContainText(BASELINE_LABELS.warningsTitle)
   await expect(page.getByTestId('baseline-comparison')).toContainText(COMPARE_LABELS.statusLine('UNCONFIRMED'))
@@ -158,6 +193,50 @@ test('compare tab is Russian, keeps the server warning order and says the verdic
   await page.locator('#shell-tab-overview').click()
   await expect(page.locator('#verdict')).toContainText('NO_POLICY')
   expect(requests.paths).not.toContain('POST /api/jobs')
+})
+
+test('numbers and the save time are shown short in Russian, the exact value stays in the cell title', async ({ page }) => {
+  await openCompare(page, { precise: true, baselineMode: 'manual' })
+  await page.getByRole('button', { name: COMPARE_LABELS.compare, exact: true }).click()
+  await page.getByLabel(COMPARE_LABELS.conditionConfirmed, { exact: true }).check()
+  await page.getByRole('button', { name: COMPARE_LABELS.saveCondition, exact: true }).click()
+  const status = page.getByTestId('baseline-condition-status')
+  await expect(status).toContainText('2026-10-05 21:56:29 UTC')
+  await expect(status).not.toContainText('572852600')
+  const p95 = page.getByTestId('comparison-response_time_p95_ms').locator('td')
+  await expect(p95.nth(1)).toHaveText('451')
+  await expect(p95.nth(2)).toHaveText('3 493,12')
+  await expect(p95.nth(2)).toHaveAttribute('title', '3493.123456')
+  await expect(p95.nth(3)).toHaveText('3 042,12')
+  await expect(p95.nth(4)).toHaveText('674,5 %')
+  await expect(p95.nth(4)).toHaveAttribute('title', '674.501109 %')
+  const throughput = page.getByTestId('comparison-throughput_rps').locator('td')
+  // 59.997667 and 60 would both read "60": the pair keeps the digits that tell them apart.
+  await expect(throughput.nth(1)).toHaveText('59,997667')
+  await expect(throughput.nth(2)).toHaveText('60')
+  await expect(throughput.nth(3)).toHaveText('0,00233')
+  await expect(page.getByTestId('comparison-error_rate_ratio').locator('td').nth(2)).toHaveText('0,0123')
+  await expect(page.getByRole('region', { name: COMPARE_LABELS.deltasRegion })).not.toContainText('59.997667')
+  // Rounding must not make two different values look equal: the pair keeps the digits that tell them apart.
+  const p99 = page.getByTestId('comparison-response_time_p99_ms').locator('td')
+  await expect(p99.nth(1)).toHaveText('100,001')
+  await expect(p99.nth(2)).toHaveText('100,002')
+  // The exact values are reachable without a mouse: a focusable block under the table lists them as the server sent them.
+  const exact = page.getByTestId('baseline-comparison').locator('details').filter({ hasText: COMPARE_LABELS.rawMetricsSummary ?? '' })
+  await exact.locator('summary').click()
+  await expect(exact).toContainText('3493.123456')
+  await expect(exact).toContainText('59.997667')
+})
+
+test('the old interface keeps the exact numbers and the raw time', async ({ page }) => {
+  await openCompare(page, { precise: true, baselineMode: 'manual', shell: 'old' })
+  await page.getByRole('button', { name: EN_COMPARE_LABELS.compare, exact: true }).click()
+  await page.getByLabel(EN_COMPARE_LABELS.conditionConfirmed, { exact: true }).check()
+  await page.getByRole('button', { name: EN_COMPARE_LABELS.saveCondition, exact: true }).click()
+  await expect(page.getByTestId('baseline-condition-status')).toContainText(EN_COMPARE_LABELS.conditionSaved('CONFIRMED', preciseTime))
+  await expect(page.getByTestId('comparison-response_time_p95_ms').locator('td').nth(2)).toHaveText('3493.123456')
+  await expect(page.getByTestId('comparison-response_time_p95_ms').locator('td').nth(4)).toHaveText('674.501109%')
+  await expect(page.getByTestId('baseline-comparison').locator('details').filter({ hasText: COMPARE_LABELS.rawMetricsSummary ?? '' })).toHaveCount(0)
 })
 
 test('USER_CONFIRMED shows the confirmed status line', async ({ page }) => {
@@ -214,6 +293,18 @@ test('the condition form saves the explicit decision for the pair in Russian', a
   }])
 })
 
+test('the comparison stays on screen after saving a decision and is refreshed', async ({ page }) => {
+  const requests = await openCompare(page, { baselineMode: 'manual' })
+  await page.getByRole('button', { name: COMPARE_LABELS.compare, exact: true }).click()
+  const shown = page.getByTestId('baseline-comparison')
+  await expect(shown).toContainText(COMPARE_LABELS.statusLine('UNCONFIRMED'))
+  await page.getByLabel(COMPARE_LABELS.conditionConfirmed, { exact: true }).check()
+  await page.getByRole('button', { name: COMPARE_LABELS.saveCondition, exact: true }).click()
+  await expect(page.getByTestId('baseline-condition-status')).toContainText(COMPARE_LABELS.conditionSaved('CONFIRMED', updatedAt))
+  await expect(shown).toContainText(COMPARE_LABELS.statusLine('USER_CONFIRMED'))
+  expect(requests.paths.filter((entry) => entry.startsWith('GET') && entry.endsWith('/comparison'))).toHaveLength(2)
+})
+
 test('no baseline shows the Russian hint', async ({ page }) => {
   await openCompare(page, { noBaseline: true })
   await expect(page.locator('#baseline-panel')).toContainText(COMPARE_LABELS.noBaseline)
@@ -221,7 +312,7 @@ test('no baseline shows the Russian hint', async ({ page }) => {
 })
 
 test('a server error stays as the server text marked as English', async ({ page }) => {
-  await openCompare(page, { postBaselineFails: true })
+  await openCompare(page, { postBaselineFails: true, verdict: 'PASS' })
   await page.getByRole('button', { name: COMPARE_LABELS.setBaseline, exact: true }).click()
   await expect(page.getByRole('alert').filter({ hasText: 'Server says no.' })).toHaveAttribute('lang', 'en')
 })
@@ -295,6 +386,8 @@ for (const width of [1280, 375, 320]) {
     await page.setViewportSize({ width, height: 900 })
     await openCompare(page, { warnings: ['BASELINE_IS_CURRENT_RUN'], windowReasons: ['BASELINE_WINDOW_EMPTY'] })
     await compareWindows(page, `window-${'x'.repeat(60)}`, `window-${'y'.repeat(60)}`)
+    // The exact-values block of the Russian panel is open: its long lines must not widen the page.
+    await page.getByTestId('baseline-comparison').locator('details').filter({ hasText: COMPARE_LABELS.rawMetricsSummary ?? '' }).locator('summary').click()
     // Wider glyphs than any CI font, so the check does not depend on the fonts of the machine.
     // Set through the CSSOM: the real server sends a CSP that forbids inline style elements.
     await page.evaluate(() => document.documentElement.style.setProperty('letter-spacing', '0.15em'))
@@ -309,5 +402,120 @@ for (const width of [1280, 375, 320]) {
       }
     })
     expect(size.scrollWidth, `scrollWidth ${size.scrollWidth}, innerWidth ${size.innerWidth}, wide ${JSON.stringify(size.wide)}`).toBeLessThanOrEqual(size.innerWidth)
+  })
+}
+
+test('the old interface clears the baseline of its series and arm', async ({ page }) => {
+  const { deletes } = await openCompare(page, { shell: 'old', baselineMode: 'manual', slotArm: 'blue' })
+  await page.getByRole('button', { name: 'Clear baseline', exact: true }).click()
+  await expect.poll(() => deletes).toEqual(['?series=S&arm=blue'])
+})
+
+const COMPLETE = { status: 'COMPLETE', reasons: [] as string[] }
+
+test('an analysis that cannot be a baseline blocks the button and names the reason in words', async ({ page }) => {
+  const requests = await openCompare(page, { verdict: 'FAIL' })
+  const button = page.getByRole('button', { name: COMPARE_LABELS.setBaseline, exact: true })
+  await expect(button).toBeDisabled()
+  await expect(button).toHaveAttribute('aria-describedby', 'baseline-ineligible')
+  await expect(page.getByTestId('baseline-ineligible')).toHaveText(COMPARE_LABELS.ineligible!('BASELINE_CANDIDATE_NOT_PASS'))
+  expect(requests.posts.filter((post) => post.path === '/api/baseline')).toEqual([])
+})
+
+for (const [name, opts, code] of [
+  ['an invalid run', { validity: 'INVALID', verdict: 'PASS' }, 'BASELINE_CANDIDATE_INVALID'],
+  ['an incomplete analysis', { verdict: 'PASS', coverage: { status: 'INCOMPLETE', reasons: ['MISSING_RESOURCE'] } }, 'BASELINE_CANDIDATE_INCOMPLETE'],
+  ['an incomplete analysis next to SMALL_SAMPLE', { verdict: 'PASS', coverage: { status: 'INCOMPLETE', reasons: ['SMALL_SAMPLE', 'MISSING_RESOURCE'] } }, 'BASELINE_CANDIDATE_INCOMPLETE'],
+  ['an analysis without a policy', { verdict: 'NO_POLICY' }, 'BASELINE_CANDIDATE_NOT_PASS'],
+  ['an incomplete analysis with an empty reason list', { verdict: 'PASS', coverage: { status: 'INCOMPLETE', reasons: [] } }, 'BASELINE_CANDIDATE_INCOMPLETE'],
+  ['an invalid and failing run (the invalid check goes first)', { validity: 'INVALID', verdict: 'FAIL', coverage: { status: 'INCOMPLETE', reasons: ['X'] } }, 'BASELINE_CANDIDATE_INVALID'],
+  ['an incomplete and failing analysis (the incomplete check goes before the verdict)', { verdict: 'FAIL', coverage: { status: 'INCOMPLETE', reasons: ['X'] } }, 'BASELINE_CANDIDATE_INCOMPLETE'],
+] as const) {
+  test(`the button is blocked for ${name}`, async ({ page }) => {
+    await openCompare(page, opts)
+    await expect(page.getByRole('button', { name: COMPARE_LABELS.setBaseline, exact: true })).toBeDisabled()
+    await expect(page.getByTestId('baseline-ineligible')).toHaveText(COMPARE_LABELS.ineligible!(code))
+  })
+}
+
+for (const [name, opts] of [
+  ['a complete PASS analysis', { verdict: 'PASS', coverage: COMPLETE }],
+  ['a PASS analysis that is incomplete only because of SMALL_SAMPLE', { verdict: 'PASS', coverage: { status: 'INCOMPLETE', reasons: ['SMALL_SAMPLE'] } }],
+] as const) {
+  test(`the button stays available for ${name}`, async ({ page }) => {
+    await openCompare(page, opts)
+    await expect(page.getByRole('button', { name: COMPARE_LABELS.setBaseline, exact: true })).toBeEnabled()
+    await expect(page.getByTestId('baseline-ineligible')).toHaveCount(0)
+  })
+}
+
+test('the old interface leaves the decision to the server: the button is available for FAIL', async ({ page }) => {
+  await openCompare(page, { shell: 'old', verdict: 'FAIL' })
+  await expect(page.getByRole('button', { name: EN_COMPARE_LABELS.setBaseline, exact: true })).toBeEnabled()
+  await expect(page.getByTestId('baseline-ineligible')).toHaveCount(0)
+})
+
+for (const code of ['BASELINE_CANDIDATE_INVALID', 'BASELINE_CANDIDATE_INCOMPLETE', 'BASELINE_CANDIDATE_NOT_PASS', 'BASELINE_CANDIDATE_TOO_LARGE', 'BASELINE_CANDIDATE_GATES_UNKNOWN']) {
+  test(`${code} is a Russian phrase and not marked as English`, async ({ page }) => {
+    await openCompare(page, { verdict: 'PASS', postFails: { status: 422, code, message: 'Baseline candidate is unavailable' } })
+    await page.getByRole('button', { name: COMPARE_LABELS.setBaseline, exact: true }).click()
+    const alert = page.locator('#baseline-panel').getByRole('alert')
+    await expect(alert).toHaveText(BASELINE_ERROR_LABELS[code]!(null))
+    await expect(alert).not.toHaveAttribute('lang', 'en')
+  })
+}
+
+test('the old interface keeps the server text of a candidate refusal', async ({ page }) => {
+  await openCompare(page, { shell: 'old', verdict: 'FAIL', postFails: { status: 422, code: 'BASELINE_CANDIDATE_NOT_PASS', message: 'Baseline candidate is not PASS: FAIL' } })
+  await page.getByRole('button', { name: EN_COMPARE_LABELS.setBaseline, exact: true }).click()
+  await expect(page.locator('#baseline-panel').getByRole('alert')).toHaveText('Baseline candidate is not PASS: FAIL')
+})
+
+const mismatch = { status: 'MISMATCH', differing_fields: ['pacing', 'load_model'], baseline_release_id: 'b', current_release_id: 'c' } as const
+
+test('the profile line names the fields that differ and the warnings stay in the server order', async ({ page }) => {
+  await openCompare(page, { warnings: ['POLICY_DIFFERS', 'PROFILE_MISMATCH'], profile: mismatch })
+  await page.getByRole('button', { name: COMPARE_LABELS.compare, exact: true }).click()
+  await expect(page.getByTestId('baseline-profile')).toHaveText(COMPARE_LABELS.profileLine(mismatch))
+  await expect(page.getByTestId('baseline-profile')).toContainText('паузы (pacing), модель нагрузки')
+  await expect(page.getByTestId('baseline-warnings').locator('li')).toHaveText([BASELINE_LABELS.warnings.POLICY_DIFFERS, BASELINE_LABELS.warnings.PROFILE_MISMATCH])
+})
+
+test('a matching profile is stated', async ({ page }) => {
+  await openCompare(page, { profile: { status: 'MATCH', differing_fields: [], baseline_release_id: 'b', current_release_id: 'c' } })
+  await page.getByRole('button', { name: COMPARE_LABELS.compare, exact: true }).click()
+  await expect(page.getByTestId('baseline-profile')).toHaveText('Профиль условий релизов: совпадает')
+})
+
+test('without release profiles the comparison has no profile line', async ({ page }) => {
+  await openCompare(page, { profile: null })
+  await page.getByRole('button', { name: COMPARE_LABELS.compare, exact: true }).click()
+  await expect(page.getByTestId('baseline-comparison')).toBeVisible()
+  await expect(page.getByTestId('baseline-profile')).toHaveCount(0)
+})
+
+for (const theme of ['light', 'dark'] as const) {
+  test(`the blocked button and the profile line have no serious axe violations, ${theme}`, async ({ page }) => {
+    await page.emulateMedia({ colorScheme: theme })
+    await openCompare(page, { verdict: 'FAIL', profile: mismatch, warnings: ['PROFILE_MISMATCH'] })
+    await page.getByRole('button', { name: COMPARE_LABELS.compare, exact: true }).click()
+    await expect(page.getByTestId('baseline-profile')).toBeVisible()
+    const audit = await new AxeBuilder({ page }).include('#baseline-panel').analyze()
+    expect(audit.violations.filter((item) => item.impact === 'critical' || item.impact === 'serious').map((item) => item.id)).toEqual([])
+  })
+}
+
+for (const width of [1280, 375, 320]) {
+  test(`the blocked button and the profile line do not overflow at ${width}px`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 900 })
+    await openCompare(page, {
+      verdict: 'FAIL',
+      profile: { ...mismatch, differing_fields: ['scenario_mix', 'environment_dataset', 'load_model', 'targets_stages', 'pacing', 'generator_limits'] },
+    })
+    await page.getByRole('button', { name: COMPARE_LABELS.compare, exact: true }).click()
+    await expect(page.getByTestId('baseline-profile')).toBeVisible()
+    await page.evaluate(() => document.documentElement.style.setProperty('letter-spacing', '0.15em'))
+    const size = await page.evaluate(() => ({ scrollWidth: document.documentElement.scrollWidth, innerWidth: window.innerWidth }))
+    expect(size.scrollWidth).toBeLessThanOrEqual(size.innerWidth)
   })
 }

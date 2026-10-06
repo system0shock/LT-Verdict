@@ -10,6 +10,7 @@ import java.io.ByteArrayInputStream
 import java.math.BigDecimal
 import java.nio.file.Files
 import java.nio.file.Path
+import java.util.concurrent.TimeUnit
 
 class PodViewTest {
     @Test
@@ -363,6 +364,35 @@ class PodViewTest {
         assertInvalid(ByteArray(MAX_POD_VIEW_BYTES + 1), LIMIT, "")
         assertInvalid(example().encodeToByteArray(), LIMIT, "", maxBytes = 100)
         assertEquals(12 * 1024 * 1024, MAX_POD_VIEW_BYTES)
+    }
+
+    @Test
+    fun `a value count above what the limits allow is rejected by the scanner before the tree is built`() {
+        // 2 560 rows x 260 columns: every array is short, but the document holds more values than any valid one.
+        assertInvalid(generated(pods = 1, services = 1, metrics = 2560, columns = 260).encodeToByteArray(), LIMIT, "")
+    }
+
+    @Test
+    fun `an oversized value count is rejected on a small heap without an out of memory error`() {
+        val windows = System.getProperty("os.name").startsWith("Windows")
+        val java = Path.of(System.getProperty("java.home"), "bin", if (windows) "java.exe" else "java")
+        for (shape in listOf("one-wide-row", "many-rows")) {
+            val process =
+                ProcessBuilder(
+                    java.toString(),
+                    "-Xmx192m",
+                    "-cp",
+                    System.getProperty("java.class.path"),
+                    PodViewOversizeProbe::class.java.name,
+                    shape,
+                ).redirectErrorStream(true).start()
+            val finished = process.waitFor(60, TimeUnit.SECONDS)
+            if (!finished) process.destroyForcibly()
+            val output = String(process.inputStream.readAllBytes()).trim()
+
+            assertEquals(true, finished, "$shape timed out")
+            assertEquals(LIMIT, output, "$shape: $output")
+        }
     }
 
     @Test

@@ -4,6 +4,7 @@ import io.ltverdict.ingest.SourceType
 import io.ltverdict.storage.AcceptedInput
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
@@ -25,10 +26,17 @@ import java.time.Instant
 class BaselineComparisonTest {
     @Test
     fun `verdict gates do not change the comparability key`() {
-        val withGates = JsonObject(identity() + ("verdict_gates" to buildJsonObject { put("min_samples_floor", "20") }))
+        val withGates = identity()
 
         val comparison =
-            compareAnalyses(manualBaselineSelection("release", reference('a')), reference('b'), result(), identity(), result(), withGates)
+            compareAnalyses(
+                manualBaselineSelection("release", reference('a')),
+                reference('b'),
+                result(),
+                identity(gates = false),
+                result(),
+                withGates,
+            )
 
         comparison.getValue("metrics").jsonArray.forEach { assertEquals(JsonNull, it.jsonObject.getValue("reason")) }
     }
@@ -138,7 +146,7 @@ class BaselineComparisonTest {
 
     @Test
     fun `real old and new candidate identities are rejected as mixed semantics`() {
-        val (old, current) = realCsvIdentities()
+        val (old, current) = realCsvIdentities().let { (old, current) -> withGates(old) to withGates(current) }
         val candidates = listOf(candidate('a', identity = old), candidate('b', identity = current), candidate('c', identity = current))
 
         assertEquals(
@@ -245,6 +253,9 @@ class BaselineComparisonTest {
             ),
         )
     }
+
+    private fun withGates(source: JsonObject) =
+        JsonObject(source + identity().filterKeys { it == "policy_sha256" || it == "verdict_gates" })
 
     private fun realCsvIdentities(): Pair<JsonObject, JsonObject> {
         val old = Json.parseToJsonElement(Files.readString(Path.of("fixtures/slice1/identity/legacy-pre-adr-0016.v1.json"))).jsonObject
@@ -409,7 +420,7 @@ class BaselineComparisonTest {
 
         val comparison = compareAnalyses(selection, reference('b'), result(), identity(), result(), identity())
 
-        assertEquals(setOf("baseline", "current", "comparability", "warnings", "metrics"), comparison.keys)
+        assertEquals(setOf("baseline", "current", "comparability", "warnings", "profile", "metrics"), comparison.keys)
     }
 
     @Test
@@ -691,6 +702,149 @@ class BaselineComparisonTest {
     }
 
     @Test
+    fun `candidate rejection follows one fixed order`() {
+        fun rejection(
+            verdict: String? = "PASS",
+            validity: String? = "VALID",
+            coverage: String? = "COMPLETE",
+        ) = baselineCandidateRejection(verdict, validity, coverage, emptyList())
+
+        assertEquals(null, rejection())
+        assertEquals("BASELINE_CANDIDATE_INVALID", rejection(verdict = "FAIL", validity = "INVALID", coverage = "INCOMPLETE"))
+        assertEquals("BASELINE_CANDIDATE_INVALID", rejection(validity = "DEGRADED"))
+        assertEquals("BASELINE_CANDIDATE_INVALID", rejection(validity = null))
+        assertEquals("BASELINE_CANDIDATE_INCOMPLETE", rejection(verdict = "FAIL", coverage = "INCOMPLETE"))
+        assertEquals("BASELINE_CANDIDATE_INCOMPLETE", rejection(coverage = null))
+        listOf("FAIL", "NO_POLICY", "NO_VERDICT", "pass", null).forEach {
+            assertEquals("BASELINE_CANDIDATE_NOT_PASS", rejection(verdict = it), it)
+        }
+    }
+
+    @Test
+    fun `candidate rejection reads the three fields of a stored result`() {
+        assertEquals(null, baselineCandidateRejection(result()))
+        assertEquals("BASELINE_CANDIDATE_NOT_PASS", baselineCandidateRejection(result(verdict = "FAIL")))
+        assertEquals("BASELINE_CANDIDATE_INCOMPLETE", baselineCandidateRejection(result(coverage = "INCOMPLETE")))
+        assertEquals("BASELINE_CANDIDATE_INVALID", baselineCandidateRejection(result(validity = "INVALID")))
+        assertEquals("BASELINE_CANDIDATE_INVALID", baselineCandidateRejection(JsonObject(emptyMap())))
+    }
+
+    @Test
+    fun `incomplete coverage is admitted only when every reason is a small sample`() {
+        fun rejection(
+            verdict: String = "PASS",
+            status: String = "INCOMPLETE",
+            reasons: List<String>,
+        ) = baselineCandidateRejection(verdict, "VALID", status, reasons)
+
+        assertEquals(null, rejection(reasons = listOf("SMALL_SAMPLE")))
+        assertEquals(null, rejection(reasons = listOf("SMALL_SAMPLE", "SMALL_SAMPLE")))
+        assertEquals("BASELINE_CANDIDATE_INCOMPLETE", rejection(reasons = listOf("SMALL_SAMPLE", "RESOURCE_GAPS")))
+        assertEquals("BASELINE_CANDIDATE_INCOMPLETE", rejection(reasons = listOf("RESOURCE_GAPS")))
+        assertEquals("BASELINE_CANDIDATE_INCOMPLETE", rejection(reasons = emptyList()))
+        assertEquals("BASELINE_CANDIDATE_INCOMPLETE", rejection(status = "PARTIAL", reasons = listOf("SMALL_SAMPLE")))
+        // an insufficient sample gives NO_VERDICT and stays excluded by the PASS rule
+        assertEquals("BASELINE_CANDIDATE_NOT_PASS", rejection(verdict = "NO_VERDICT", reasons = listOf("SMALL_SAMPLE")))
+        assertEquals("BASELINE_CANDIDATE_NOT_PASS", rejection(verdict = "FAIL", reasons = listOf("SMALL_SAMPLE")))
+        assertEquals(null, baselineCandidateRejection("PASS", "VALID", "COMPLETE", emptyList()))
+    }
+
+    @Test
+    fun `stored result with a small sample reason is admitted and a malformed reasons array is not`() {
+        assertEquals(null, baselineCandidateRejection(result(reasons = listOf("SMALL_SAMPLE"))))
+        assertEquals("BASELINE_CANDIDATE_INCOMPLETE", baselineCandidateRejection(result(reasons = listOf("SMALL_SAMPLE", "RESOURCE_GAPS"))))
+        assertEquals("BASELINE_CANDIDATE_INCOMPLETE", baselineCandidateRejection(result(coverage = "INCOMPLETE")))
+
+        fun withReasons(reasons: JsonElement?): JsonObject {
+            val coverage =
+                buildJsonObject {
+                    put("status", "INCOMPLETE")
+                    reasons?.let { put("reasons", it) }
+                }
+            return JsonObject(result() + mapOf<String, JsonElement>("analysis_coverage" to coverage))
+        }
+        // a non-string entry or a non-array value must not be skipped over: the candidate is refused
+        assertEquals(
+            "BASELINE_CANDIDATE_INCOMPLETE",
+            baselineCandidateRejection(
+                withReasons(
+                    buildJsonArray {
+                        add(JsonPrimitive("SMALL_SAMPLE"))
+                        add(JsonPrimitive(5))
+                    },
+                ),
+            ),
+        )
+        assertEquals(
+            "BASELINE_CANDIDATE_INCOMPLETE",
+            baselineCandidateRejection(
+                withReasons(
+                    buildJsonArray {
+                        add(JsonPrimitive("SMALL_SAMPLE"))
+                        add(JsonNull)
+                    },
+                ),
+            ),
+        )
+        assertEquals("BASELINE_CANDIDATE_INCOMPLETE", baselineCandidateRejection(withReasons(JsonPrimitive("SMALL_SAMPLE"))))
+        assertEquals("BASELINE_CANDIDATE_INCOMPLETE", baselineCandidateRejection(withReasons(null)))
+    }
+
+    @Test
+    fun `comparison warns when the baseline analysis is a small sample`() {
+        val selection = manualBaselineSelection("release", reference('a'))
+        val small = result(reasons = listOf("SMALL_SAMPLE"))
+
+        val warned = compareAnalyses(selection, reference('b'), small, identity(), result(), identity())
+        assertEquals(listOf("BASELINE_SMALL_SAMPLE"), warnings(warned))
+        // the mark on the current analysis alone does not warn here (ADR 0018 decides that case)
+        val currentOnly = compareAnalyses(selection, reference('b'), result(), identity(), small, identity())
+        assertEquals(emptyList<String>(), warnings(currentOnly))
+        // metrics, statuses and comparability are not touched by the warning
+        val plain = compareAnalyses(selection, reference('b'), result(), identity(), result(), identity())
+        assertEquals(plain.getValue("metrics"), warned.getValue("metrics"))
+        assertEquals(plain.getValue("comparability"), warned.getValue("comparability"))
+        // position four, after the statistical candidate-set warning (ADR 0019, section 5)
+        val statistical = listOf(candidate('a'), candidate('b'), candidate('c'))
+        val inSet =
+            compareAnalyses(
+                statisticalBaselineSelection("small", statistical.references(), statistical.results(), statistical.identities()),
+                reference('a', 'd'),
+                small,
+                identity(),
+                result(),
+                identity(),
+            )
+        assertEquals(listOf("BASELINE_IS_CURRENT_RUN", "CURRENT_IN_CANDIDATE_SET", "BASELINE_SMALL_SAMPLE"), warnings(inSet))
+    }
+
+    @Test
+    fun `statistical selection admits a small sample candidate`() {
+        val set = listOf(candidate('a'), candidate('b', result(reasons = listOf("SMALL_SAMPLE"))), candidate('c'))
+        val selection = statisticalBaselineSelection("small", set.references(), set.results(), set.identities())
+        assertEquals(3, selection.getValue("candidates").jsonArray.size)
+        val other = listOf(candidate('a'), candidate('b', result(reasons = listOf("SMALL_SAMPLE", "RESOURCE_GAPS"))), candidate('c'))
+        val failure =
+            assertThrows(IllegalArgumentException::class.java) {
+                statisticalBaselineSelection("small", other.references(), other.results(), other.identities())
+            }
+        assertEquals("BASELINE_CANDIDATE_INCOMPLETE", failure.message)
+    }
+
+    @Test
+    fun `statistical selection rejects every verdict other than PASS before looking at metrics`() {
+        val valid = listOf(candidate('a'), candidate('b'), candidate('c'))
+        listOf("FAIL", "NO_POLICY", "NO_VERDICT").forEach { verdict ->
+            val mixed = valid.toMutableList().also { it[1] = candidate('b', result(verdict = verdict, p95 = null)) }
+            val failure =
+                assertThrows(IllegalArgumentException::class.java) {
+                    statisticalBaselineSelection("verdicts", mixed.references(), mixed.results(), mixed.identities())
+                }
+            assertEquals("BASELINE_CANDIDATE_NOT_PASS", failure.message, verdict)
+        }
+    }
+
+    @Test
     fun `statistical selection rejects every ineligible series instead of filtering candidates`() {
         val valid = listOf(candidate('a'), candidate('b'), candidate('c'))
 
@@ -722,6 +876,36 @@ class BaselineComparisonTest {
             val mixed = valid.toMutableList().also { it[1] = candidate('b', identity = identity("other")) }
             statisticalBaselineSelection("mixed", mixed.references(), mixed.results(), mixed.identities())
         }
+    }
+
+    @Test
+    fun `statistical selection rejects a candidate without verdict gates or a policy`() {
+        val valid = listOf(candidate('a'), candidate('b'), candidate('c'))
+
+        fun failure(replacement: JsonObject): String? {
+            val series = valid.toMutableList().also { it[1] = candidate('b', identity = replacement) }
+            return assertThrows(IllegalArgumentException::class.java) {
+                statisticalBaselineSelection("gates", series.references(), series.results(), series.identities())
+            }.message
+        }
+
+        assertEquals("BASELINE_CANDIDATE_GATES_UNKNOWN", failure(identity(gates = false)))
+        assertEquals("BASELINE_CANDIDATE_GATES_UNKNOWN", failure(identity(policy = false)))
+
+        // The gate check runs after the shared admission checks, so an earlier violation keeps its own code.
+        val notPass = valid.toMutableList().also { it[1] = candidate('b', result(verdict = "NO_POLICY"), identity(policy = false)) }
+        assertEquals(
+            "BASELINE_CANDIDATE_NOT_PASS",
+            assertThrows(IllegalArgumentException::class.java) {
+                statisticalBaselineSelection("gates", notPass.references(), notPass.results(), notPass.identities())
+            }.message,
+        )
+        assertEquals(
+            3,
+            statisticalBaselineSelection("gates", valid.references(), valid.results(), valid.identities())
+                .getValue("candidates")
+                .jsonArray.size,
+        )
     }
 
     @Test
@@ -1019,6 +1203,202 @@ class BaselineComparisonTest {
         assertEquals(listOf("CURRENT_WINDOW_NOT_FOUND"), missingWindow.reasons())
     }
 
+    private fun releaseRecord(
+        id: String,
+        series: String,
+        profile: JsonObject?,
+    ) = buildJsonObject {
+        put("release_id", id)
+        put("series", series)
+        put("profile", profile ?: JsonNull)
+    }
+
+    private fun profile(vararg pairs: Pair<String, String?>) =
+        buildJsonObject { RELEASE_PROFILE_FIELDS.forEach { name -> put(name, pairs.toMap()[name]?.let(::JsonPrimitive) ?: JsonNull) } }
+
+    private fun identityWithPolicy(policy: String) = JsonObject(identity() + ("policy_sha256" to JsonPrimitive(policy)))
+
+    @Test
+    fun `warnings keep one fixed order and never change numbers`() {
+        val selection = manualBaselineSelection("blue", reference('a'))
+        val baselineResult = result(verdict = "FAIL", reasons = listOf("SMALL_SAMPLE"))
+        val releases =
+            ReleaseComparisonContext(
+                releaseRecord("000000000000001-aaaaaaaa", "blue", profile("pacing" to "10 s")),
+                releaseRecord("000000000000002-bbbbbbbb", "blue", profile("pacing" to "20 s")),
+            )
+
+        val full =
+            compareAnalyses(
+                selection,
+                reference('a', analysis = 'b'),
+                baselineResult,
+                identityWithPolicy("a".repeat(64)),
+                result(),
+                identityWithPolicy("b".repeat(64)),
+                releases = releases,
+            )
+        assertEquals(
+            listOf(
+                "BASELINE_IS_CURRENT_RUN",
+                "BASELINE_NOT_PASS",
+                "BASELINE_SMALL_SAMPLE",
+                "POLICY_DIFFERS",
+                "PROFILE_MISMATCH",
+            ),
+            warnings(full),
+        )
+        assertEquals(
+            buildJsonObject {
+                put("status", "MISMATCH")
+                put("differing_fields", buildJsonArray { add(JsonPrimitive("pacing")) })
+                put("baseline_release_id", "000000000000001-aaaaaaaa")
+                put("current_release_id", "000000000000002-bbbbbbbb")
+            },
+            full.getValue("profile"),
+        )
+        val bare =
+            compareAnalyses(
+                selection,
+                reference('a', analysis = 'b'),
+                baselineResult,
+                identityWithPolicy("a".repeat(64)),
+                result(),
+                identityWithPolicy("b".repeat(64)),
+            )
+        assertEquals(JsonNull, bare.getValue("profile"))
+        assertEquals(listOf("BASELINE_IS_CURRENT_RUN", "BASELINE_NOT_PASS", "BASELINE_SMALL_SAMPLE", "POLICY_DIFFERS"), warnings(bare))
+        assertEquals(bare.getValue("metrics"), full.getValue("metrics"))
+        assertEquals(bare.getValue("comparability"), full.getValue("comparability"))
+    }
+
+    @Test
+    fun `the candidate set warning keeps its place before the verdict and policy warnings`() {
+        val set = listOf(candidate('a'), candidate('b'), candidate('c'))
+        val selection = statisticalBaselineSelection("blue", set.references(), set.results(), set.identities())
+        val comparison =
+            compareAnalyses(
+                selection,
+                reference('a', 'd'),
+                result(verdict = "NO_VERDICT"),
+                identity(),
+                result(),
+                identityWithPolicy("c".repeat(64)),
+            )
+        assertEquals(
+            listOf("BASELINE_IS_CURRENT_RUN", "CURRENT_IN_CANDIDATE_SET", "BASELINE_NOT_PASS", "POLICY_DIFFERS"),
+            warnings(comparison),
+        )
+    }
+
+    @Test
+    fun `profile is null unless both releases are found and both declare a profile`() {
+        val selection = manualBaselineSelection("blue", reference('a'))
+        val declared = releaseRecord("000000000000001-aaaaaaaa", "blue", profile("load_model" to "open"))
+        val silent = releaseRecord("000000000000002-bbbbbbbb", "blue", null)
+        listOf(
+            ReleaseComparisonContext(declared, null),
+            ReleaseComparisonContext(null, declared),
+            ReleaseComparisonContext(declared, silent),
+            ReleaseComparisonContext(silent, silent),
+        ).forEach { context ->
+            val comparison = compareAnalyses(selection, reference('b'), result(), identity(), result(), identity(), releases = context)
+            assertEquals(JsonNull, comparison.getValue("profile"))
+            assertEquals(emptyList<String>(), warnings(comparison))
+        }
+        val equal =
+            compareAnalyses(
+                selection,
+                reference('b'),
+                result(),
+                identity(),
+                result(),
+                identity(),
+                releases = ReleaseComparisonContext(declared, declared),
+            )
+        assertEquals(
+            "MATCH",
+            equal
+                .getValue("profile")
+                .jsonObject
+                .getValue("status")
+                .jsonPrimitive.content,
+        )
+        assertEquals(emptyList<String>(), warnings(equal))
+        assertEquals(JsonNull, compareAnalyses(selection, reference('b'), result(), identity(), result(), identity()).getValue("profile"))
+    }
+
+    @Test
+    fun `the baseline verdict warning covers every verdict but PASS`() {
+        val selection = manualBaselineSelection("blue", reference('a'))
+
+        fun warningsFor(verdict: String?) =
+            warnings(
+                compareAnalyses(
+                    selection,
+                    reference('b'),
+                    JsonObject(result() - "policy_verdict" + (verdict?.let { mapOf("policy_verdict" to JsonPrimitive(it)) } ?: emptyMap())),
+                    identity(),
+                    result(),
+                    identity(),
+                ),
+            )
+
+        assertEquals(emptyList<String>(), warningsFor("PASS"))
+        listOf("FAIL", "NO_POLICY", "NO_VERDICT", null).forEach { assertEquals(listOf("BASELINE_NOT_PASS"), warningsFor(it), it) }
+    }
+
+    @Test
+    fun `the policy warning compares hashes and treats two missing policies as equal`() {
+        val selection = manualBaselineSelection("blue", reference('a'))
+
+        fun warningsFor(
+            baseline: String,
+            current: String,
+        ) = warnings(
+            compareAnalyses(selection, reference('b'), result(), identityWithPolicy(baseline), result(), identityWithPolicy(current)),
+        )
+
+        assertEquals(emptyList<String>(), warningsFor("a".repeat(64), "a".repeat(64)))
+        assertEquals(emptyList<String>(), warningsFor("NO_POLICY", "NO_POLICY"))
+        assertEquals(listOf("POLICY_DIFFERS"), warningsFor("a".repeat(64), "NO_POLICY"))
+        assertEquals(listOf("POLICY_DIFFERS"), warningsFor("NO_POLICY", "a".repeat(64)))
+        assertEquals(listOf("POLICY_DIFFERS"), warningsFor("a".repeat(64), "b".repeat(64)))
+    }
+
+    @Test
+    fun `the profile verdict does not touch confirmation or window statuses`() {
+        val selection = manualBaselineSelection("blue", reference('a'))
+        val request = WindowComparisonRequest("steady", "steady")
+        val mismatch =
+            ReleaseComparisonContext(
+                releaseRecord("000000000000001-aaaaaaaa", "blue", profile("pacing" to "10 s")),
+                releaseRecord("000000000000002-bbbbbbbb", "blue", profile("pacing" to "20 s")),
+            )
+        val window = windowResult("steady", 0, 10_000, 100, 100, 0)
+
+        fun compare(releases: ReleaseComparisonContext?) =
+            compareAnalyses(
+                selection,
+                reference('b'),
+                window,
+                identity(),
+                window,
+                identity(),
+                request,
+                conditionsConfirmed = true,
+                releases = releases,
+            )
+
+        val plain = compare(null)
+        val withProfile = compare(mismatch)
+        assertEquals(listOf("PROFILE_MISMATCH"), warnings(withProfile))
+        assertEquals("USER_CONFIRMED", withProfile.getValue("comparability").jsonPrimitive.content)
+        assertEquals(plain.getValue("metrics"), withProfile.getValue("metrics"))
+        assertEquals(plain.getValue("window_comparison"), withProfile.getValue("window_comparison"))
+        assertEquals(plain.getValue("comparability"), withProfile.getValue("comparability"))
+    }
+
     private fun warnings(comparison: JsonObject): List<String> = comparison.getValue("warnings").jsonArray.map { it.jsonPrimitive.content }
 
     private fun JsonObject.reasons(): List<String> = getValue("reasons").jsonArray.map { it.jsonPrimitive.content }
@@ -1100,10 +1480,19 @@ class BaselineComparisonTest {
         errors: Any? = 0L,
         validity: String = "VALID",
         coverage: String = "COMPLETE",
+        verdict: String = "PASS",
+        reasons: List<String> = emptyList(),
     ) = buildJsonObject {
         put("analysis_mode", "standard")
         put("run_validity", validity)
-        put("analysis_coverage", buildJsonObject { put("status", coverage) })
+        put("policy_verdict", verdict)
+        put(
+            "analysis_coverage",
+            buildJsonObject {
+                put("status", if (reasons.isNotEmpty() && coverage == "COMPLETE") "INCOMPLETE" else coverage)
+                put("reasons", buildJsonArray { reasons.forEach { add(JsonPrimitive(it)) } })
+            },
+        )
         put(
             "evidence",
             buildJsonArray {
@@ -1258,6 +1647,8 @@ class BaselineComparisonTest {
     private fun identity(
         version: String = "same",
         arm: String? = null,
+        gates: Boolean = true,
+        policy: Boolean = true,
     ) = buildJsonObject {
         put("source_type", "jmeter_jtl_csv")
         put("engine", buildJsonObject { put("version", version) })
@@ -1268,6 +1659,8 @@ class BaselineComparisonTest {
         put("histogram", buildJsonObject {})
         put("normalization", buildJsonObject {})
         put("limits", buildJsonObject {})
+        put("policy_sha256", if (policy) "a".repeat(64) else "NO_POLICY")
+        if (gates) put("verdict_gates", buildJsonObject { put("min_samples_floor", "20") })
         arm?.let { put("resource_arm", it) }
     }
 

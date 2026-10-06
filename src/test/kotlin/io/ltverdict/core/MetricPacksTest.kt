@@ -88,6 +88,41 @@ class MetricPacksTest {
     }
 
     @Test
+    fun `sidecar signals of the platform profiles are recognised capabilities`() {
+        val result =
+            buildJsonObject {
+                put(
+                    "evidence",
+                    buildJsonArray {
+                        add(summary("sidecar-mem", "openshift_sidecar_memory_limit_ratio"))
+                        add(summary("sidecar-throttling", "openshift_sidecar_cpu_throttling"))
+                    },
+                )
+                put("findings", buildJsonArray {})
+            }
+
+        val openshift =
+            metricPackAnalysis(result)
+                .getValue("packs")
+                .jsonArray
+                .map { it.jsonObject }
+                .first { it.getValue("id").jsonPrimitive.content == "openshift" }
+
+        assertEquals(
+            listOf("sidecar_memory_limit_ratio", "sidecar_cpu_throttling"),
+            openshift.getValue("available_capabilities").jsonArray.map { it.jsonPrimitive.content },
+        )
+        assertEquals(
+            listOf("sidecar-mem", "sidecar-throttling"),
+            openshift
+                .getValue("series_ids")
+                .jsonArray
+                .map { it.jsonPrimitive.content }
+                .sorted(),
+        )
+    }
+
+    @Test
     fun `missing packs are skipped and missing observations never become healthy findings`() {
         val absent =
             metricPackAnalysis(

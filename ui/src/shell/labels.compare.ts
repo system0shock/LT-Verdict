@@ -4,7 +4,7 @@
 // и подсказка старых правил остаются в BASELINE_LABELS (labels.ts) и здесь не дублируются.
 // Коды причин и статусов, которых нет в таблицах ниже, выводятся как есть.
 import type { BaselineComparison } from '../types'
-import { pluralRu } from './labels'
+import { BASELINE_ERROR_LABELS, pluralRu } from './labels'
 
 export interface CompareLabels {
   title: string
@@ -14,6 +14,9 @@ export interface CompareLabels {
   seriesDefault: string
   loading: string
   noBaseline: string
+  // Список активных baseline (по одному на серию) и пояснение, когда у выбранной серии baseline нет.
+  slotsLegend: string
+  noBaselineFor: (series: string) => string
   mode: (mode: string) => string
   runWord: string
   analysisWord: string
@@ -48,6 +51,12 @@ export interface CompareLabels {
   candidatesHint: string
   selectStatistically: string
   requestFailed: string
+  // Пояснение рядом с недоступной кнопкой «Назначить baseline» по коду допуска (в прежнем интерфейсе null: кнопка доступна, отказывает сервер).
+  ineligible: ((code: string) => string) | null
+  // Строка о заявленных профилях условий пары релизов (поле comparison.profile); null, если профиля пары нет.
+  profileLine: (profile: NonNullable<BaselineComparison['profile']>) => string
+  // Фраза словаря для кода 422 (`limit` из `error.limit`) или null: тогда показывается сообщение сервера.
+  errorText: (code: string, limit: number | null) => string | null
   metricsTitle: string
   statusLine: (comparability: BaselineComparison['comparability']) => string
   deltasNote: string
@@ -58,6 +67,8 @@ export interface CompareLabels {
   absoluteHead: string
   relativeHead: string
   roundingNote: string
+  // Блок точных значений общих метрик; в старом интерфейсе null: блока нет.
+  rawMetricsSummary: string | null
   windowTitle: string
   windowStatus: (status: string) => string
   windowStats: (side: 'baseline' | 'current', samples: number | null, durationMs: number | null) => string
@@ -71,6 +82,11 @@ export interface CompareLabels {
   unit: (unit: string) => string
   na: string
   naReason: (reason: string | null) => string
+  // Числа сравнения приходят строками с точностью сервера: в русской панели они показаны коротко, точное значение лежит в подсказке ячейки.
+  value: (value: string | null, peer?: string | null) => string
+  deltaValue: (value: string | null, reason: string | null) => string
+  percentValue: (value: string | null, reason: string | null) => string
+  exact: (value: string | null, percent?: boolean) => string | undefined
   reasons: (reasons: string[]) => string
   reasonOrDash: (reason: string | null) => string
   chartsSummary: string
@@ -101,6 +117,8 @@ export const EN_COMPARE_LABELS: CompareLabels = {
   seriesDefault: 'Selected test series',
   loading: 'Loading baseline…',
   noBaseline: 'No baseline selected. Open a saved analysis to assign one.',
+  slotsLegend: 'Active baselines (one per series)',
+  noBaselineFor: (series) => `No baseline for series “${series}”.`,
   mode: (mode) => mode,
   runWord: 'Run',
   analysisWord: 'Analysis',
@@ -142,6 +160,9 @@ export const EN_COMPARE_LABELS: CompareLabels = {
     + 'This confirms the candidate set only; confirm each compared pair in the planned-conditions form.',
   selectStatistically: 'Select statistically',
   requestFailed: 'Baseline request failed.',
+  errorText: () => null,
+  ineligible: null,
+  profileLine: (profile) => (profile.status === 'MATCH' ? 'Release profile: match' : `Release profile: differs: ${profile.differing_fields.join(', ')}`),
   metricsTitle: 'Overall metrics against baseline',
   statusLine: (comparability) => `Planned conditions: ${comparability}`,
   deltasNote: 'Deltas alone do not prove a version regression or change the policy verdict.',
@@ -152,6 +173,7 @@ export const EN_COMPARE_LABELS: CompareLabels = {
   absoluteHead: 'Absolute delta',
   relativeHead: 'Relative delta',
   roundingNote: 'Display rounded to 6 decimal places. Error rate uses ratio units: 0.01 = 1%.',
+  rawMetricsSummary: null,
   windowTitle: 'Selected-window observations',
   windowStatus: (status) => status,
   windowStats: (side, samples, durationMs) =>
@@ -166,6 +188,10 @@ export const EN_COMPARE_LABELS: CompareLabels = {
   unit: (unit) => unit,
   na: 'N/A',
   naReason: (reason) => `N/A (${reason})`,
+  value: (value) => value ?? 'N/A',
+  deltaValue: (value, reason) => value ?? `N/A (${reason})`,
+  percentValue: (value, reason) => (value === null ? `N/A (${reason})` : `${value}%`),
+  exact: () => undefined,
   reasons: (reasons) => reasons.join(', ') || '—',
   reasonOrDash: (reason) => reason ?? '—',
   chartsSummary: 'Baseline/current charts',
@@ -189,6 +215,14 @@ const RU_METRICS: Record<string, string> = {
 }
 const RU_UNITS: Record<string, string> = { ms: 'мс', rps: 'зпр/с', ratio: 'доля' }
 const RU_MODES: Record<string, string> = { manual: 'ручной выбор', statistical: 'статистический выбор' }
+const RU_PROFILE_FIELDS: Record<string, string> = {
+  scenario_mix: 'сценарии и состав запросов',
+  environment_dataset: 'стенд и набор данных',
+  load_model: 'модель нагрузки',
+  targets_stages: 'цели и ступени',
+  pacing: 'паузы (pacing)',
+  generator_limits: 'ограничения генератора',
+}
 const RU_DECISIONS: Record<string, string> = {
   CONFIRMED: 'подтверждено',
   NOT_CONFIRMED: 'не подтверждено',
@@ -219,6 +253,33 @@ const RU_REASONS: Record<string, string> = {
 }
 const ruReason = (code: string): string => (RU_REASONS[code] ? `${RU_REASONS[code]} (${code})` : code)
 
+// Числа сравнения приходят строками с точностью сервера (до шести знаков). Целое и число от 1 показаны с двумя знаками после запятой,
+// малое число (доля ошибок) с тремя значащими цифрами; строка, не похожая на десятичное число, остаётся как есть.
+const RU_DECIMAL = new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 2 })
+const RU_SMALL = new Intl.NumberFormat('ru-RU', { maximumSignificantDigits: 3 })
+const RU_FULL = new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 6 })
+function shortNumber(value: string): string | null {
+  if (!/^-?\d+(\.\d+)?$/.test(value)) return null
+  const number = Number(value)
+  if (!Number.isFinite(number)) return null
+  return Math.abs(number) >= 1 || number === 0 ? RU_DECIMAL.format(number) : RU_SMALL.format(number)
+}
+// Округление не должно делать два разных значения одинаковыми: если пара baseline и текущее совпала бы в показе, берутся все знаки сервера.
+function ruNumber(value: string, peer?: string | null): string {
+  const short = shortNumber(value)
+  if (short === null) return value
+  if (peer != null && peer !== value && shortNumber(peer) === short) return RU_FULL.format(Number(value))
+  return short
+}
+// Метка времени сервера ('2026-10-05T21:56:29.572852600Z') показана до секунды в UTC; иная форма остаётся как есть.
+function ruTime(value: string): string {
+  const match = /^(\d{4}-\d{2}-\d{2})T(\d{2}:\d{2}:\d{2})(?:\.\d+)?Z$/.exec(value)
+  return match ? `${match[1]} ${match[2]} UTC` : value
+}
+const ruNa = (reason: string | null): string => (reason ? `н/д (${ruReason(reason)})` : 'н/д')
+const ruExact = (value: string | null, suffix = ''): string | undefined =>
+  value !== null && ruNumber(value) !== value ? `${value}${suffix}` : undefined
+
 export const COMPARE_LABELS: CompareLabels = {
   title: 'Сравнение с baseline',
   intro: 'Baseline это зафиксированный сохранённый анализ, выбранный вручную или статистически: новые прогоны его не заменяют. '
@@ -229,6 +290,8 @@ export const COMPARE_LABELS: CompareLabels = {
   seriesDefault: 'Выбранная серия тестов',
   loading: 'Загрузка baseline…',
   noBaseline: 'Baseline не выбран. Откройте сохранённый анализ, чтобы назначить его.',
+  slotsLegend: 'Активные baseline (по одному на серию)',
+  noBaselineFor: (series) => `Для серии «${series}» baseline не выбран.`,
   mode: (mode) => RU_MODES[mode] ?? mode,
   runWord: 'Прогон',
   analysisWord: 'Анализ',
@@ -249,7 +312,7 @@ export const COMPARE_LABELS: CompareLabels = {
   conditionsHint: 'Решение сохраняется только для показанных анализов baseline и текущего и, если они введены, для обоих ID окон. '
     + 'Оно меняет трактовку, а не дельты метрик, SLA или вердикт политики.',
   conditionLoading: 'Загрузка сохранённого решения об условиях…',
-  conditionSaved: (decision, updatedAt) => `Сохранено: ${RU_DECISIONS[decision] ?? decision} (${updatedAt})`,
+  conditionSaved: (decision, updatedAt) => `Сохранено: ${RU_DECISIONS[decision] ?? decision} (${ruTime(updatedAt)})`,
   conditionNone: 'Для этой пары решение не сохранено.',
   saveCondition: 'Сохранить решение об условиях',
   savingCondition: 'Сохранение решения…',
@@ -270,6 +333,11 @@ export const COMPARE_LABELS: CompareLabels = {
     + 'Это подтверждает только набор кандидатов; каждую сравниваемую пару подтверждайте в форме плановых условий выше.',
   selectStatistically: 'Выбрать статистически',
   requestFailed: 'Не удалось выполнить запрос baseline.',
+  errorText: (code, limit) => BASELINE_ERROR_LABELS[code]?.(limit) ?? null,
+  ineligible: (code) => BASELINE_ERROR_LABELS[code]?.(null) ?? code,
+  profileLine: (profile) => (profile.status === 'MATCH'
+    ? 'Профиль условий релизов: совпадает'
+    : `Профиль условий релизов: различается: ${profile.differing_fields.map((name) => RU_PROFILE_FIELDS[name] ?? name).join(', ')}`),
   metricsTitle: 'Общие метрики относительно baseline',
   statusLine: (comparability) => (comparability === 'USER_CONFIRMED'
     ? 'Условия подтверждены вами'
@@ -281,7 +349,8 @@ export const COMPARE_LABELS: CompareLabels = {
   currentHead: 'Текущий',
   absoluteHead: 'Абсолютная разница',
   relativeHead: 'Относительная разница',
-  roundingNote: 'Значения округлены до 6 знаков после запятой. Доля ошибок в долях: 0.01 = 1 %.',
+  roundingNote: 'Значения округлены для показа: до 2 знаков после запятой, малые числа до 3 значащих цифр; точное значение видно в подсказке ячейки (при наведении мыши). Доля ошибок в долях: 0.01 = 1 %.',
+  rawMetricsSummary: 'Точные значения общих метрик',
   windowTitle: 'Наблюдения в выбранных окнах',
   windowStatus: (status) => RU_WINDOW_STATUS[status] ?? status,
   windowStats: (side, samples, durationMs) =>
@@ -296,6 +365,10 @@ export const COMPARE_LABELS: CompareLabels = {
   unit: (unit) => RU_UNITS[unit] ?? unit,
   na: 'н/д',
   naReason: (reason) => (reason ? `н/д (${ruReason(reason)})` : 'н/д'),
+  value: (value, peer) => (value === null ? 'н/д' : ruNumber(value, peer)),
+  deltaValue: (value, reason) => (value === null ? ruNa(reason) : ruNumber(value)),
+  percentValue: (value, reason) => (value === null ? ruNa(reason) : `${ruNumber(value)} %`),
+  exact: (value, percent) => ruExact(value, percent ? ' %' : ''),
   reasons: (reasons) => reasons.map(ruReason).join(', ') || '—',
   reasonOrDash: (reason) => (reason === null ? '—' : ruReason(reason)),
   chartsSummary: 'Графики baseline и текущего прогона',

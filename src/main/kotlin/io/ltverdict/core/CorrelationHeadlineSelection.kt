@@ -192,15 +192,17 @@ private fun bootstrapPValues(
     val resourceRandom = seededRandom(seedMaterial, block, "resources")
     val outcomeRandom = seededRandom(seedMaterial, block, "outcome")
     val exceedances = IntArray(hypotheses.size)
+    val outcomeOrder = rankOrder(outcome)
+    val resourceOrders = active.associateWith { rankOrder(hypotheses[it].resource) }
     repeat(CORRELATION_HEADLINE_REPLICATES) {
         checkCancelled()
         val resourceIndices = movingBlockIndices(size, block, resourceRandom)
         val outcomeIndices = movingBlockIndices(size, block, outcomeRandom)
-        val resampledOutcome = DoubleArray(size) { outcome[outcomeIndices[it]] }
+        val resampledOutcomeRanks = resampledRanks(outcome, outcomeOrder, outcomeIndices)
         for (index in active) {
             val hypothesis = hypotheses[index]
-            val resampledResource = DoubleArray(size) { hypothesis.resource[resourceIndices[it]] }
-            val statistic = maxAbsLag(resampledResource, resampledOutcome, hypothesis.maxLagCells) ?: return null
+            val resampledResourceRanks = resampledRanks(hypothesis.resource, resourceOrders.getValue(index), resourceIndices)
+            val statistic = maxAbsLagOfRanks(resampledResourceRanks, resampledOutcomeRanks, hypothesis.maxLagCells) ?: return null
             if (statistic >= observed[index]) exceedances[index]++
         }
     }
@@ -250,9 +252,15 @@ private fun maxAbsLag(
     maxLag: Int,
 ): Double? {
     if (resource.size != outcome.size || resource.size - 2 * maxLag < MIN_HEADLINE_CELLS) return null
-    val x = ranks(resource)
-    val y = ranks(outcome)
-    val anchors = resource.size - 2 * maxLag
+    return maxAbsLagOfRanks(ranks(resource), ranks(outcome), maxLag)
+}
+
+private fun maxAbsLagOfRanks(
+    x: DoubleArray,
+    y: DoubleArray,
+    maxLag: Int,
+): Double? {
+    val anchors = x.size - 2 * maxLag
     var best = 0.0
     for (lag in -maxLag..maxLag) {
         var xMean = 0.0
@@ -282,8 +290,10 @@ private fun maxAbsLag(
     return best
 }
 
+internal fun rankOrder(values: DoubleArray): List<Int> = values.indices.sortedWith(compareBy<Int> { values[it] }.thenBy { it })
+
 private fun ranks(values: DoubleArray): DoubleArray {
-    val order = values.indices.sortedWith(compareBy<Int> { values[it] }.thenBy { it })
+    val order = rankOrder(values)
     val result = DoubleArray(values.size)
     var start = 0
     while (start < order.size) {
@@ -294,6 +304,36 @@ private fun ranks(values: DoubleArray): DoubleArray {
         start = end
     }
     return result
+}
+
+/**
+ * Gives `ranks(DoubleArray(indices.size) { values[indices[it]] })` without sorting the resample again: [order] is
+ * `rankOrder(values)`, and a resample only repeats elements of `values`, so the tie groups and their order are known.
+ * Equal values (compared with `==`, as in [ranks]) get the average of the positions they occupy in the resample.
+ */
+internal fun resampledRanks(
+    values: DoubleArray,
+    order: List<Int>,
+    indices: IntArray,
+): DoubleArray {
+    // NaN != NaN, so a repeated NaN would not form one tie group: keep the general path for it.
+    if (values.any { it.isNaN() }) return ranks(DoubleArray(indices.size) { values[indices[it]] })
+    val picked = IntArray(values.size)
+    for (index in indices) picked[index]++
+    val rankOfSource = DoubleArray(values.size)
+    var seen = 0
+    var start = 0
+    while (start < order.size) {
+        var end = start + 1
+        while (end < order.size && values[order[start]] == values[order[end]]) end++
+        var count = 0
+        for (position in start until end) count += picked[order[position]]
+        val rank = (seen + 1 + seen + count).toDouble() / 2.0
+        for (position in start until end) rankOfSource[order[position]] = rank
+        seen += count
+        start = end
+    }
+    return DoubleArray(indices.size) { rankOfSource[indices[it]] }
 }
 
 private fun holm(

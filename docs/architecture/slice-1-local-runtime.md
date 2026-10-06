@@ -311,6 +311,8 @@ GET    /api/jobs/<job-id>
 DELETE /api/jobs/<job-id>
 GET    /api/runs/<run-id>/analyses/<analysis-id>/result
 GET    /api/runs/<run-id>/analyses/<analysis-id>/buckets
+GET    /api/runs/<run-id>/analyses/<analysis-id>/pod-view
+GET    /api/runs/<run-id>/analyses/<analysis-id>/pod-view/values?service=<name>
 GET    /api/runs/<run-id>/analyses/<analysis-id>/report?format=json|html|asciidoc
 ```
 
@@ -344,7 +346,7 @@ validation возвращает отдельный `{valid:false,errors:[...]}`.
 `RESOURCE_FINDINGS_LIMIT_EXCEEDED` до публикации partial analysis.
 
 Snapshot ограничен 32 MiB, 1 024 series и 1 500 000 cells (ADR 0014); multipart
-job содержит не более 24 parts, declared общий body ограничен суммой максимальных
+job содержит не более 25 parts (25-я - `pod_view`, ADR 0020), declared общий body ограничен суммой максимальных
 parts (`MAX_JOB_REQUEST_BYTES`, snapshot 32 MiB) и 64 KiB overhead. Core проверяет depth,
 duplicate/unknown fields, numeric bounds и cardinality до помещения в queue.
 Расчёты используют existing analysis worker и cooperative cancellation.
@@ -371,6 +373,14 @@ default limit `25`, maximum `100`. Summary содержит `analysis_id`,
 набора, как у любого artifact. `policy.json`
 пишется только новыми analyses (канонические байты, давшие `policy_sha256`),
 `analysis_id` и identity не меняются; прежние analyses остаются с `null`.
+
+Summary дополнительно содержит необязательные `resource_arm` и
+`resource_snapshot_sha256`: значения одноимённых полей identity анализа
+(плечо снимка ресурсов и семантический хэш снимка). Поле отсутствует, если его
+нет в identity (анализ без снимка или снимок без метки `arm`); тогда элемент
+списка побайтно прежний. Значения читаются из `identity.json`, который список и так
+разбирает под замком; результат, снимок и ряды не читаются. Поле identity не
+строкового типа остаётся повреждением набора, как другие поля identity.
 Возвращаемые analyses проходят существующую manifest validation. UI хранит выбранный analysis
 отдельно от transient job state и читает уже опубликованные artifacts.
 
@@ -407,16 +417,57 @@ Private API:
 ```text
 GET    /api/baseline
 POST   /api/baseline
-DELETE /api/baseline
-GET    /api/runs/<run-id>/analyses/<analysis-id>/comparison
+DELETE /api/baseline[?series=<series>[&arm=<arm>]]
+GET    /api/runs/<run-id>/analyses/<analysis-id>/comparison[?series=<series>]
 ```
 
-GET/POST/DELETE baseline возвращают `{baseline: selection|null}`. Manual POST
+POST возвращает `{baseline: selection}`, DELETE `{baseline: null}`, GET добавляет
+список слотов (раздел «Слоты baseline в API»). Manual POST
 содержит `mode`, `series`, `reference`; statistical POST — `mode`, `series`,
 `candidates`, `comparable:true`. Selection закрепляет точный run/analysis,
 режим, алгоритм, candidate set и scores. API ограничивает body 16 KiB/depth 8,
 series 128 UTF-8 bytes и statistical candidates 3..20 разных runs; file cap
 32 KiB. Route mutations проходят обычную Host/Origin/session/CSRF boundary.
+
+Допуск кандидата ([ADR 0019](../adr/0019-release-history-and-baseline-eligibility.md),
+раздел 6) единый для обоих режимов: `baselineCandidateRejection` в
+`BaselineComparison.kt` по сохранённому результату возвращает первый нарушенный
+пункт `BASELINE_CANDIDATE_INVALID` (`run_validity != VALID`),
+`BASELINE_CANDIDATE_INCOMPLETE` (`analysis_coverage.status != COMPLETE`, кроме
+`INCOMPLETE`, все причины которого равны `SMALL_SAMPLE`: решение владельца
+2026-10-04, нестроковая причина отклоняет) или
+`BASELINE_CANDIDATE_NOT_PASS` (`policy_verdict != PASS`) либо `null`. Его
+вызывают `selectBaseline` (оба режима, до расчёта, по кандидатам в порядке
+запроса) и `statisticalBaselineSelection`. Порядок кодов 422: проверки запроса
+(форма, `comparable`, число кандидатов, дубли runs), затем чтение результата
+каждого кандидата (`BASELINE_CANDIDATE_TOO_LARGE`, ошибки целостности как
+`500 CORRUPT_BASELINE`), затем допуск, затем проверки statistical (метрики,
+identity, `BASELINE_MIXED_SEMANTICS`).
+
+`compareAnalyses` дописывает к `BASELINE_IS_CURRENT_*` и `CURRENT_IN_CANDIDATE_SET`
+предупреждения в порядке ADR 0019, раздел 5: `BASELINE_NOT_PASS` (вердикт
+результата анализа-эталона не `PASS`), `BASELINE_SMALL_SAMPLE` (среди причин
+покрытия есть `SMALL_SAMPLE`), `POLICY_DIFFERS` (различаются
+`policy_sha256` двух identity) и `PROFILE_MISMATCH` (оба профиля заявлены и
+различаются). Метрики, статусы окон и `comparability` предупреждения не меняют.
+Параметр `ReleaseComparisonContext(baseline, current)` несёт записи релизов обоих
+анализов; без него (или без записей) поле ответа `profile` равно `null`, а
+`PROFILE_MISMATCH` не возникает. Обработчик
+comparison получает записи одним проходом `findReleasesByAnalysis` по каталогу
+релизов (до 1 001 файла, вне цены чтения результатов); неоднозначный
+`analysis_id` (несколько записей) даёт запись `null`, а `CORRUPT_RELEASE_REGISTRY`
+не превращается в ответ `500`: профиль и серия вспомогательны, поэтому
+сравнение выполняется с пустым контекстом.
+
+Результат кандидата читает `RunBundleStore.readVerifiedAnalysis`: под
+`operationLock` остаётся проверка манифеста, а чтение и SHA-256
+`analysis-result.json` (предел `MAX_VERIFIED_RESULT_BYTES` = 64 MiB, по размеру
+из манифеста до чтения) выполняются вне замка, потому что опубликованные анализы
+неизменяемы и хранилище их не удаляет (дополнение ADR 0002 от 2026-10-01).
+Обычное чтение анализа сверяет только путь и размер, поэтому замена результата
+при сохранённом размере без этой проверки обошла бы допуск. Ранее сохранённый
+`baseline.json` читается без новых запретов; отказ допуска действует только при
+выборе.
 
 `BaselineComparison.kt` вычисляет deterministic rank selection и overall
 deltas. Round-to-6 decimal strings — только presentation; ratio comparison
@@ -429,13 +480,198 @@ Vue panel хранит transient candidate selection только в page memory
 persisted selection из API и защищает отображение comparison от stale responses.
 Новые зависимости, registry/store interfaces или browser storage не добавлены.
 
+## Слоты baseline (хранилище)
+
+[ADR 0019](../adr/0019-release-history-and-baseline-eligibility.md), раздел 7
+(срез B1): активный baseline хранится по паре `(series, arm)`. Срез меняет только
+`RunBundleStore`; маршруты и comparison используют слоты со среза B2 (раздел
+«Слоты baseline в API» ниже).
+
+- Слот: файл `<data>/baselines/<sha256 канонического {arm, series}>.json` с
+  содержимым `local-baseline.v1` (формат не менялся, до 32 KiB). `arm` в ключе
+  строка или `null`; `arm = null` и `arm = "null"` дают разные ключи. Каталог
+  создаётся при первой записи слота.
+- Плечо слота выводится заново из `identity.resource_arm` анализа baseline
+  (отсутствие поля и JSON `null` равны, не строка и не `null` - `CORRUPT_BASELINE`)
+  и сверяется с именем файла; отсутствующий анализ и расхождение дают
+  `CORRUPT_BASELINE`. `RunBundleStore.readAnalysisIdentity` читает только
+  `identity.json` (до 8 MiB, SHA-256 равен `analysis_id`, `run_id` совпадает) и не
+  трогает результат и манифест. Запись слота (`replaceBaselineSlot`) сверяет
+  переданное плечо с identity до записи: слот, который нельзя прочитать обратно,
+  не создаётся.
+- Прежний `<data>/baseline.json` читается без миграции как legacy-слот по своим
+  `series` и плечу. Слот с тем же ключом затеняет legacy-файл: запись слота
+  сначала публикует новый файл атомарно, затем удаляет `baseline.json`; при
+  остановке между шагами выигрывает слот, а legacy-файл исчезает при следующей
+  мутации ключа. Адресное удаление (`clearBaselineSlot`) сначала читает и проверяет
+  каталог записей условий (отказ там ничего не удаляет), затем удаляет legacy-файл
+  того же ключа, затем записи условий, затем файл слота.
+- Пределы: `MAX_BASELINE_SLOTS` = 64 эффективных слота (новый ключ при 64 даёт
+  `IllegalArgumentException("BASELINE_SLOTS_LIMIT_REACHED")`, замена существующего
+  проходит); в `baselines/` не больше 65 элементов, посторонний файл, каталог или
+  ссылка дают `CORRUPT_BASELINE`; `MAX_BASELINE_CONDITION_FILES` = 4 096 записей
+  условий (новый ключ сверх предела даёт `BASELINE_CONDITIONS_LIMIT_REACHED`,
+  замена существующей записи проходит; перечисление при удалении сверх предела
+  даёт `CORRUPT_BASELINE` и ничего не удаляет).
+- Одна операция: `readBaselineSlotWithCondition` выбирает слот, читает его ссылку
+  и запись условий пары под одним `operationLock`; `series == null` читает только
+  legacy-файл, как до слотов. Список слотов, чтение identity (до 65 небольших
+  файлов) и перечисление записей условий выполняются под замком; замер скана 65
+  слотов приведён в описании PR.
+- Записи условий удаляются только если их baseline-ссылка относится к удаляемому
+  выбору и не используется другим эффективным слотом (binding остаётся парой
+  immutable ссылок, ADR 0010). Безадресный `clearBaseline()` удаляет legacy-файл и
+  только такие записи его ссылки; прежнее «удалить все записи условий» заменено:
+  записи условий прежних baseline остаются, пока не будут удалены адресно.
+
+## Слоты baseline в API
+
+[ADR 0019](../adr/0019-release-history-and-baseline-eligibility.md), раздел 7
+(срез B2). Приватный API использует слоты хранилища; изменение аддитивно, формат
+`local-baseline.v1` и записей условий не менялся.
+
+- `GET /api/baseline`: `baseline` хранит содержимое legacy-файла `baseline.json`
+  либо `null` (как раньше); `baselines` - массив эффективных слотов
+  `{series, arm, source, baseline}` в порядке `series`, `arm`; `source` равен
+  `SLOT` или `LEGACY`, `baseline` - выбор `local-baseline.v1`. Затенённый слотом
+  legacy-файл не показывается. Список и поле берутся одним вызовом
+  `listBaselineSlots`, поэтому согласованы.
+- `POST /api/baseline`: тело и проверки прежние, ответ `{baseline: selection}`.
+  `series` нормализуется как серия релиза (`normalizeReleaseText`: NFC, обрезка
+  краёв); пустая серия, управляющие символы и больше 128 байт дают `400` (то же
+  правило, что у `series` в query, чтобы слот можно было назвать снова); слот
+  пишется под ключ
+  `(series, arm)`, плечо берётся из `identity.resource_arm` анализа-победителя
+  (`readAnalysisIdentity`). Запись слота того же ключа, что и legacy-файл,
+  заменяет его (файл удаляется). Новый ключ при 64 слотах даёт
+  `422 BASELINE_SLOTS_LIMIT_REACHED` с `error.limit = 64`.
+- `DELETE /api/baseline`: без параметров очищает legacy-файл и записи условий его
+  ссылки, не используемой слотами (слоты не трогает); `series` (и необязательный
+  `arm`, без него плечо `null`) удаляет слот и затенённый legacy-файл того же ключа
+  (`clearBaselineSlot`). `arm` без `series`, пустое или повторённое значение
+  дают `400`. Слот, которого нет, не ошибка: ответ `200 {baseline: null}`.
+- `GET .../comparison`, `GET|POST .../baseline-conditions` и
+  `GET .../analytics`: необязательный query `series` (нормализуется так же).
+  Серия выбирается так: серия релиза, которому принадлежит текущий анализ (поиск
+  `findReleasesByAnalysis`; анализ в нескольких релизах или нечитаемый реестр
+  релизов считаются «релиза нет», сравнение от повреждённого реестра не ломается);
+  иначе `series` из query; иначе только legacy-файл, как до слотов. Плечо берётся
+  из identity текущего анализа. `series` в query, противоречащая серии релиза,
+  даёт `422 BASELINE_SERIES_CONFLICT`. Слот выбирается точно по `(series, arm)`:
+  анализ другого плеча слота не находит (`404`), а не сравнивается с чужим. Выбор
+  слота, чтение его ссылки и записи условий идёт одной операцией
+  `readBaselineSlotWithCondition` (один `operationLock`). Запись условия
+  (`POST`) читает слот одной операцией и пишет запись второй: параллельное
+  адресное удаление слота между ними оставит запись условий пары удалённого
+  baseline (она не используется ни одним слотом и безвредна; ссылки записи
+  неизменяемы).
+- `GET .../analytics` выбирает baseline для сравнения транзакций и отметки в
+  динамике тем же способом (ранее читался единственный `baseline.json`); запись
+  условий он не читает, поэтому повреждённая запись условий ему не мешает.
+- Ошибки хранилища `BASELINE_CONDITIONS_LIMIT_REACHED` (4 096 записей условий,
+  `error.limit = 4096`) и `BASELINE_ANALYSIS_NOT_FOUND` отображаются кодами
+  `422` и `404`; повреждённый слот даёт `500 CORRUPT_BASELINE` на всех маршрутах
+  baseline, включая адресное удаление (способа починки через API нет, файл слота
+  удаляется вручную).
+- Предупреждение `BASELINE_SERIES_DIFFERS` (R5, ADR 0019 раздел 5) удалено из
+  `compareAnalyses`: слот выбирается по серии релиза текущего анализа, а `series`
+  в query, противоречащая релизу, даёт `422 BASELINE_SERIES_CONFLICT`, поэтому
+  предупреждение недостижимо. Серия релиза читается тем же `releasesOfAnalyses`,
+  что и контекст сравнения (повреждённый реестр и неоднозначный анализ дают
+  «релиза нет»).
+
+## Release history: хранилище записей релиза
+
+[ADR 0019](../adr/0019-release-history-and-baseline-eligibility.md) вводит
+приватную запись `local-release.v1` (разделы 1-2 и «Поправка реализации»):
+явно созданное имя релиза, которое ссылается на сохранённые анализы одного
+запуска и копирует их факты (`policy_verdict`, `run_validity`,
+`coverage_status`, `coverage_reasons`, `policy_sha256`, `arm`). Метрики в запись
+не копируются, RunBundle и identity анализа не меняются. Схема формата на диске:
+`docs/contracts/release/v1/local-release.schema.json` (примеры
+`valid`/`invalid`, проверка в `npm --prefix ui run test:contracts`); это не
+публичный контракт API.
+
+`RunBundleStore` хранит запись в `<data>/releases/<release_id>.json`, где
+`release_id` = 15-значная миллисекундная метка `started_at` + `-` + 8 случайных
+hex-символов (лексикографический порядок совпадает с хронологией теста).
+Каталог создаётся при первой записи. Запись канонического JSON, staging,
+`ATOMIC_MOVE`, forced write и запрет symlink повторяют `baseline.json`.
+`validateRelease` (`core/LocalRelease.kt`) строго проверяет форму: известные
+ключи, пределы текста в байтах UTF-8 (128 для `series`, `label`, полей
+профиля; 1 024 для `notes`), форму NFC без управляющих символов, различные
+`analysis_id` и плечи, один анализ без плеча либо несколько с плечами. Читатель
+принимает только побайтно каноническую запись, чьё имя файла равно
+`release_id`.
+
+Пределы хранилища (константы, а не формат): `MAX_RELEASES` = 1 000 элементов
+каталога (считаются все, включая повреждённые и посторонние; при 1 001 элементе
+список и создание отвечают `CORRUPT_RELEASE_REGISTRY`, ничего не усекается),
+`MAX_RELEASE_ANALYSES` = 8, `MAX_RELEASE_BYTES` = 8 KiB (превышение даёт
+`RELEASE_TOO_LARGE`). Один `analysis_id` входит не более чем в одну запись;
+проверка уникальности, лимита и публикация идут под `operationLock`, а проверка
+записи, канонические байты и forced write staging — вне замка (дополнение
+ADR 0002 от 2026-10-01). Замена сверяет прочитанные байты записи под замком и
+при расхождении отвечает `RELEASE_CHANGED`. Удаление повреждённой записи по
+безопасному идентификатору идёт без разбора содержимого.
+
+Список читает весь ограниченный каталог (до 1 000 файлов по 8 KiB), сортирует
+по убыванию `release_id` и возвращает страницу, `series_summary` и
+`corrupt_names` (`{name, reason}`, причины `CORRUPT`, `UNSUPPORTED_VERSION`,
+`UNSAFE_ENTRY`, `TOO_LARGE`). `findReleasesByAnalysis` считает анализ,
+оказавшийся в двух корректных записях (ручное копирование), неоднозначным.
+`analysisExists` (дёшево: каталоги и манифест без следования по ссылкам) и
+`analysisState` (`OK`, `MISSING`, `CORRUPT`) готовят состояние ссылок для
+маршрутов. Замер на 1 000 записях: список около 0,3 с, поиск по анализу около
+0,3 с при холодном JIT.
+
+Приватные маршруты (`LocalApi.kt`, [ADR 0019](../adr/0019-release-history-and-baseline-eligibility.md),
+раздел 3 и «Поправка реализации»):
+
+```text
+GET    /api/releases?series=&after=&limit=
+GET    /api/releases/<release-id>
+POST   /api/releases
+PUT    /api/releases/<release-id>
+DELETE /api/releases/<release-id>
+```
+
+Тело POST: ровно `series`, `label`, `run_id`, `analyses` (объекты только с
+`analysis_id`), `profile`, `notes`; тело PUT: ровно `label`, `analyses`,
+`profile`, `notes` (`series`, `run_id`, `release_id`, `started_at`,
+`created_at` неизменны). Тело до 16 KiB и глубины 8, как у baseline; тексты
+нормализуются на границе (NFC, `
+`, обрезка), профиль из шести пустых значений
+сохраняется как `null`. Плечо и факты клиент не передаёт: сервер читает каждый
+анализ по одному через `readVerifiedAnalysis` (SHA-256 результата по манифесту,
+предел 64 MiB, вне замка), берёт `started_at` из `run.json` и копии фактов из
+результата и identity. Отказы: `404` (нет запуска или анализа), `422`
+`RELEASE_ANALYSIS_NO_RUN_METADATA`, `RELEASE_STARTED_AT_MISMATCH`,
+`RELEASE_RUN_MISMATCH`, `RELEASE_ARM_CONFLICT`, `RELEASE_RESULT_TOO_LARGE`,
+`RELEASE_TOO_LARGE`, `RELEASE_FACTS_INVALID`, `RELEASE_LIMIT_REACHED`; `409`
+`RELEASE_ANALYSIS_ALREADY_REGISTERED`, `RELEASE_CHANGED`; `500`
+`CORRUPT_RELEASE`, `CORRUPT_RELEASE_REGISTRY`, `CORRUPT_RUN_BUNDLE`. Сообщения
+не содержат пользовательский текст (метку, заметку, профиль). Ответ
+`RELEASE_LIMIT_REACHED` несёт необязательное целое `error.limit`; в прочих
+ошибках поля нет.
+
+К каждому анализу ответа добавлены `analysis_state` и вычисляемые
+`baseline_eligible`, `ineligible_reasons` (первый код общей функции допуска
+`baselineCandidateRejection`, либо `ANALYSIS_MISSING`, `ANALYSIS_CORRUPT`), к
+записи объединение причин. Это подсказка интерфейсу: при выборе baseline сервер
+заново читает настоящий результат. В списке `analysis_state` равен `OK` или
+`MISSING` по существованию манифеста, полная проверка (`OK`, `MISSING`,
+`CORRUPT`) только в `GET` по идентификатору. Список: `releases` (новые первыми),
+`next_after`, `series_summary`, `corrupt_count`, `corrupt_names`.
+`DELETE` отвечает `{release: null}` и удаляет только запись релиза.
+
 ## Security boundary
 
 При установке local API процесс создаёт отдельные random 256-bit session и CSRF
 tokens. Bootstrap передаёт их browser flow: session находится в
 `HttpOnly; SameSite=Strict; Path=/` cookie, CSRF token — только в памяти
 страницы. Каждый request проверяет exact
-`Host: 127.0.0.1:<port>`; каждый `POST`/`DELETE` дополнительно требует exact
+`Host: 127.0.0.1:<port>`; каждый `POST`/`PUT`/`DELETE`/`PATCH` дополнительно требует exact
 Origin, session cookie и `X-LTV-CSRF`. CORS не включается.
 
 Каждый response получает restrictive CSP, `nosniff`, `no-referrer` и

@@ -54,6 +54,23 @@ export const TABLES_LABELS = {
   },
 } as const
 
+// Заголовки таблицы проверок ресурсных правил новой оболочки; порядок совпадает с порядком столбцов,
+// «Сервис» и «Покрытие» показаны только при платформенных правилах (ADR 0018).
+export const RESOURCE_CHECK_LABELS = {
+  heads: {
+    window: 'Окно',
+    rule: 'Правило',
+    service: 'Сервис',
+    series: 'Ряд',
+    operator: 'Оператор',
+    threshold: 'Порог',
+    effect: 'Эффект',
+    status: 'Статус',
+    reason: 'Причина',
+    coverage: 'Покрытие (наблюдено / ожидалось)',
+  },
+} as const
+
 // Русские строки таблиц «Ёмкость» и «Тренды» новой оболочки (срез U3b).
 
 const CAPACITY_BOUND_WORDS = {
@@ -66,11 +83,15 @@ const CAPACITY_BOUND_WORDS = {
   INDETERMINATE: (): string => 'Граница ёмкости не определена',
 } as const
 
+const AXIS_NAMES: Record<string, string> = { rps: 'RPS' }
+const UNIT_NAMES: Record<string, string> = { 'requests/s': 'запросов в секунду' }
+
 export const CAPACITY_LABELS = {
   title: 'Ёмкость: ступени теста максимума',
   region: 'Ступени теста максимума',
   axisLabel: 'Ось нагрузки',
-  axisValue: (axis: string, unit: string): string => `${axis} (${unit})`,
+  // Ось и единицу ядро называет по-английски (rps, requests/s): известные значения показаны по-русски, остальные как есть.
+  axisValue: (axis: string, unit: string): string => `${AXIS_NAMES[axis] ?? axis} (${UNIT_NAMES[unit] ?? unit})`,
   boundLabel: 'Граница ёмкости',
   boundText: (bound: string, lower: string, upper: string, unit: string): string => {
     const words = (CAPACITY_BOUND_WORDS as Record<string, ((lower: string, upper: string, unit: string) => string) | undefined>)[bound]

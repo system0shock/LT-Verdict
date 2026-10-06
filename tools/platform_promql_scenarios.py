@@ -1,4 +1,4 @@
-"""promtool scenarios for the platform PromQL templates (plan P0b/P0c).
+"""promtool scenarios for the platform PromQL templates (plan P0b/P0c/P1c).
 
 Each scenario feeds synthetic series (the label contract of docs/user/platform-metric-packs.md) to one
 rendered template and pins the exact result. Series use a 15 s test interval, evaluation at 5 m, and
@@ -287,11 +287,35 @@ SCENARIOS = (
         ),
         300,
     ),
+    Scenario(
+        "sidecar memory: only the sidecars count, the application container is ignored",
+        "sidecar_memory_limit_ratio", False,
+        (*memory("a1", "app", "900+0x40", "1000+0x40"), *memory("a1", "istio-proxy", "77+0x40", "100+0x40"), pod_owner("a1")),
+        0.77,
+    ),
+    Scenario(
+        "sidecar memory: a sidecar without a limit is a gap even though the application has one",
+        "sidecar_memory_limit_ratio", False,
+        (*memory("a1", "app", "900+0x40", "1000+0x40"), *memory("a1", "istio-proxy", "77+0x40", None), pod_owner("a1")),
+        None,
+    ),
+    Scenario(
+        "sidecar throttling: only the sidecar periods count",
+        "sidecar_cpu_throttling", False,
+        (
+            ("container_cpu_cfs_throttled_periods_total", f'namespace="{NS}",pod="a1",container="app"', "0+135x40"),
+            ("container_cpu_cfs_periods_total", f'namespace="{NS}",pod="a1",container="app"', "0+150x40"),
+            ("container_cpu_cfs_throttled_periods_total", f'namespace="{NS}",pod="a1",container="istio-proxy"', "0+45x40"),
+            ("container_cpu_cfs_periods_total", f'namespace="{NS}",pod="a1",container="istio-proxy"', "0+150x40"),
+            pod_owner("a1"),
+        ),
+        0.3,
+    ),
 )
 
 
 def render_scenario(scenario: Scenario) -> str:
-    expression = render(SIGNALS[scenario.signal], NS, SVC, "15s", peak=scenario.peak).replace("$__interval", "60000ms")
+    expression = render(SIGNALS[scenario.signal], NS, SVC, "15s", peak=scenario.peak, sidecars="istio-proxy|oauth-proxy").replace("$__interval", "60000ms")
     series = "".join(f"      - series: '{name}{{{labels}}}'\n        values: '{values}'\n" for name, labels, values in scenario.series)
     if scenario.expected is None:
         expected = "        exp_samples: []\n"

@@ -21,6 +21,7 @@ import io.ktor.server.response.respondBytes
 import io.ktor.server.routing.delete
 import io.ktor.server.routing.get
 import io.ktor.server.routing.post
+import io.ktor.server.routing.put
 import io.ktor.server.routing.route
 import io.ktor.server.routing.routing
 import io.ktor.utils.io.jvm.javaio.toInputStream
@@ -33,14 +34,27 @@ import io.ltverdict.ai.validModelSlug
 import io.ltverdict.core.AnalysisRequest
 import io.ltverdict.core.AnalyticsExportFormat
 import io.ltverdict.core.CapacityPlanValidation
+import io.ltverdict.core.DEFAULT_POD_VIEW_PAGE_ROWS
 import io.ltverdict.core.DiagnosticValidation
 import io.ltverdict.core.MAX_CAPACITY_PLAN_BYTES
 import io.ltverdict.core.MAX_CATALOG_PAGE
+import io.ltverdict.core.MAX_POD_VIEW_BYTES
+import io.ltverdict.core.MAX_POD_VIEW_PAGE_ROWS
+import io.ltverdict.core.MAX_RELEASE_ANALYSES
+import io.ltverdict.core.MAX_RELEASE_NOTES_BYTES
+import io.ltverdict.core.MAX_RELEASE_TEXT_BYTES
 import io.ltverdict.core.MAX_RESOURCE_SNAPSHOT_BYTES
 import io.ltverdict.core.MAX_TREND_PLAN_BYTES
 import io.ltverdict.core.MAX_VALUES_SERIES
+import io.ltverdict.core.PodViewQueryException
+import io.ltverdict.core.PodViewV1
+import io.ltverdict.core.PodViewValidation
 import io.ltverdict.core.PolicyValidation
 import io.ltverdict.core.PolicyValidationError
+import io.ltverdict.core.RELEASE_ID
+import io.ltverdict.core.RELEASE_PROFILE_FIELDS
+import io.ltverdict.core.RELEASE_SCHEMA
+import io.ltverdict.core.ReleaseComparisonContext
 import io.ltverdict.core.ResourceValidation
 import io.ltverdict.core.SavedAnalysisForComparison
 import io.ltverdict.core.SeriesGrid
@@ -48,6 +62,7 @@ import io.ltverdict.core.SeriesQueryException
 import io.ltverdict.core.StrictJsonScanner
 import io.ltverdict.core.TrendPlanValidation
 import io.ltverdict.core.WindowComparisonRequest
+import io.ltverdict.core.baselineCandidateRejection
 import io.ltverdict.core.baselineConditionConfirmation
 import io.ltverdict.core.baselineConditionRecord
 import io.ltverdict.core.buildRunDynamics
@@ -57,15 +72,24 @@ import io.ltverdict.core.compareAnalyses
 import io.ltverdict.core.compareTransactions
 import io.ltverdict.core.manualBaselineSelection
 import io.ltverdict.core.metricPackAnalysis
+import io.ltverdict.core.normalizeReleaseText
 import io.ltverdict.core.openSearchOverlay
 import io.ltverdict.core.planValuesPage
+import io.ltverdict.core.podViewMetadataJson
+import io.ltverdict.core.podViewValuesJson
+import io.ltverdict.core.releaseAnalysisFacts
+import io.ltverdict.core.releaseProfileSummary
+import io.ltverdict.core.releaseStartedAtMillis
 import io.ltverdict.core.renderRunDynamicsExport
+import io.ltverdict.core.sha256Hex
 import io.ltverdict.core.statisticalBaselineSelection
 import io.ltverdict.core.validateCapacityBinding
 import io.ltverdict.core.validateCapacityPlan
 import io.ltverdict.core.validateDiagnosticBinding
 import io.ltverdict.core.validateDiagnosticPlan
 import io.ltverdict.core.validatePlatformBinding
+import io.ltverdict.core.validatePodView
+import io.ltverdict.core.validatePodViewBinding
 import io.ltverdict.core.validatePolicy
 import io.ltverdict.core.validateResourceSnapshot
 import io.ltverdict.core.validateTrendBinding
@@ -96,11 +120,17 @@ import io.ltverdict.sources.readOpenSearchContexts
 import io.ltverdict.sources.readPostgresAnalysisInput
 import io.ltverdict.sources.readWindowedSourceRequest
 import io.ltverdict.storage.AcceptedInput
+import io.ltverdict.storage.MAX_BASELINE_CONDITION_FILES
+import io.ltverdict.storage.MAX_BASELINE_SLOTS
+import io.ltverdict.storage.MAX_RELEASES
+import io.ltverdict.storage.ReleasePage
 import io.ltverdict.storage.RunBundleStore
+import io.ltverdict.storage.VerifiedAnalysis
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.SerializationException
 import kotlinx.serialization.json.Json
@@ -112,19 +142,23 @@ import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.booleanOrNull
 import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.long
 import kotlinx.serialization.json.put
 import org.HdrHistogram.PackedHistogram
+import java.io.IOException
 import java.io.InputStream
 import java.io.OutputStream
 import java.math.BigDecimal
 import java.nio.ByteBuffer
+import java.nio.file.DirectoryIteratorException
 import java.nio.file.Files
 import java.nio.file.Path
 import java.security.SecureRandom
 import java.time.Instant
+import java.time.temporal.ChronoUnit
 import java.util.Base64
 import java.util.HexFormat
 import java.util.concurrent.Semaphore
@@ -151,6 +185,7 @@ internal fun Application.installLocalApi(context: LocalApiContext) {
     val csrfToken = randomToken()
     val postgresCapturePermit = Semaphore(1)
     val jenkinsPermit = Semaphore(1)
+    val podViewPermit = kotlinx.coroutines.sync.Semaphore(1)
 
     intercept(ApplicationCallPipeline.Plugins) {
         call.addSecurityHeaders()
@@ -160,7 +195,7 @@ internal fun Application.installLocalApi(context: LocalApiContext) {
             finish()
             return@intercept
         }
-        if (call.request.httpMethod == HttpMethod.Post || call.request.httpMethod == HttpMethod.Delete) {
+        if (call.request.httpMethod in MUTATING_METHODS) {
             val allowedOrigin = "http://$authority"
             if (call.request.headers[HttpHeaders.Origin] != allowedOrigin ||
                 call.request.cookies[SESSION_COOKIE] != sessionToken ||
@@ -193,8 +228,11 @@ internal fun Application.installLocalApi(context: LocalApiContext) {
         } catch (failure: InvalidTrend) {
             call.respondError(HttpStatusCode.UnprocessableEntity, "INVALID_TREND_PLAN", "Trend plan is invalid", failure.errors)
             finish()
+        } catch (failure: InvalidPodView) {
+            call.respondError(HttpStatusCode.UnprocessableEntity, "INVALID_POD_VIEW", "Pod view is invalid", failure.errors)
+            finish()
         } catch (failure: ApiFailure) {
-            call.respondError(failure.status, failure.code, failure.message)
+            call.respondError(failure.status, failure.code, failure.message, limit = failure.limit)
             finish()
         }
     }
@@ -398,8 +436,28 @@ internal fun Application.installLocalApi(context: LocalApiContext) {
 
         get("/api/baseline") {
             call.requireOnlyQueries()
-            val baseline = baselineOperation { context.store.readBaseline() }
-            call.respondJson(buildJsonObject { put("baseline", baseline ?: JsonNull) })
+            val slots = baselineOperation { context.store.listBaselineSlots() }
+            call.respondJson(
+                buildJsonObject {
+                    // `baseline` keeps the legacy file as before slots existed; `baselines` lists every effective slot.
+                    put("baseline", slots.firstOrNull { it.legacy }?.selection ?: JsonNull)
+                    put(
+                        "baselines",
+                        buildJsonArray {
+                            slots.forEach { slot ->
+                                add(
+                                    buildJsonObject {
+                                        put("series", slot.series)
+                                        put("arm", slot.arm?.let(::JsonPrimitive) ?: JsonNull)
+                                        put("source", if (slot.legacy) "LEGACY" else "SLOT")
+                                        put("baseline", slot.selection)
+                                    },
+                                )
+                            }
+                        },
+                    )
+                },
+            )
         }
 
         post("/api/baseline") {
@@ -407,34 +465,154 @@ internal fun Application.installLocalApi(context: LocalApiContext) {
             call.requireJson()
             val request = receiveBaselineRequest(call)
             val selected = selectBaseline(request, context.store)
-            val baseline = baselineOperation { context.store.replaceBaseline(selected) }
-            call.respondJson(buildJsonObject { put("baseline", baseline) })
+            val slot =
+                baselineOperation {
+                    val reference = selected.getValue("reference").jsonObject
+                    val identity =
+                        context.store.readAnalysisIdentity(reference.baselineString("run_id"), reference.baselineString("analysis_id"))
+                            ?: notFound("Referenced analysis was not found")
+                    context.store.replaceBaselineSlot(selected, identity.baselineArm())
+                }
+            call.respondJson(buildJsonObject { put("baseline", slot.selection) })
         }
 
         delete("/api/baseline") {
-            call.requireOnlyQueries()
-            baselineOperation { context.store.clearBaseline() }
+            call.requireOnlyQueries("series", "arm")
+            val series = call.baselineSeriesQuery()
+            val arm = call.singleQuery("arm")?.let { releaseTextField(it, "arm", MAX_RELEASE_TEXT_BYTES) ?: malformed("arm is invalid") }
+            if (series == null) {
+                if (arm != null) malformed("arm requires series")
+                baselineOperation { context.store.clearBaseline() }
+            } else {
+                baselineOperation { context.store.clearBaselineSlot(series, arm) }
+            }
             call.respondJson(buildJsonObject { put("baseline", JsonNull) })
         }
 
+        get("/api/releases") {
+            call.requireOnlyQueries("series", "after", "limit")
+            val series =
+                call.singleQuery("series")?.let {
+                    releaseTextField(it, "series", MAX_RELEASE_TEXT_BYTES)
+                        ?: malformed("series is invalid")
+                }
+            val after = call.singleQuery("after")?.also { if (!RELEASE_ID.matches(it)) malformed("after is invalid") }
+            val limit = call.intQuery("limit", DEFAULT_RELEASE_LIMIT, 1..MAX_RELEASE_LIMIT)
+            val page = releaseOperation { context.store.listReleases(series, after, limit) }
+            // Existence only: the full check of a reference belongs to the read by identifier.
+            val states =
+                releaseOperation {
+                    page.releases.flatMap(::releaseStateKeys).toSet().associateWith { (runId, analysisId) ->
+                        if (context.store.analysisExists(runId, analysisId)) "OK" else "MISSING"
+                    }
+                }
+            call.respondJson(releasePageJson(page, states))
+        }
+
+        get("/api/releases/{releaseId}") {
+            call.requireOnlyQueries()
+            val id = call.releaseIdParameter()
+            val record = releaseOperation { context.store.readRelease(id) } ?: notFound("Release was not found")
+            val states =
+                releaseOperation {
+                    releaseStateKeys(record).toSet().associateWith { (runId, analysisId) -> context.store.analysisState(runId, analysisId) }
+                }
+            call.respondJson(releaseView(record, states))
+        }
+
+        post("/api/releases") {
+            call.requireOnlyQueries()
+            call.requireJson()
+            val body = receiveBaselineRequest(call, "Release")
+            if (body.keys != RELEASE_POST_FIELDS) malformed("Release fields are invalid")
+            // Cheap field checks first: a malformed body never triggers the expensive verified reads.
+            val series =
+                releaseTextField(body.baselineString("series"), "series", MAX_RELEASE_TEXT_BYTES) ?: malformed("series is required")
+            val label = releaseTextField(body.baselineString("label"), "label", MAX_RELEASE_TEXT_BYTES) ?: malformed("label is required")
+            val runId = releaseRunId(body)
+            val analysisIds = releaseAnalysisIds(body)
+            val profile = releaseProfile(body["profile"])
+            val notes = releaseNotes(body["notes"])
+            val (startedAt, analyses) = releaseFacts(context.store, runId, analysisIds)
+            val draft =
+                buildJsonObject {
+                    put("schema_version", RELEASE_SCHEMA)
+                    put("series", series)
+                    put("label", label)
+                    put("run_id", runId)
+                    put("started_at", startedAt)
+                    put("analyses", JsonArray(analyses))
+                    put("profile", profile)
+                    put("notes", notes)
+                }
+            val created = releaseOperation { context.store.createRelease(draft, Instant.now()) }
+            call.respondJson(releaseView(created, releaseOkStates(created)), HttpStatusCode.Created)
+        }
+
+        put("/api/releases/{releaseId}") {
+            call.requireOnlyQueries()
+            call.requireJson()
+            val id = call.releaseIdParameter()
+            val body = receiveBaselineRequest(call, "Release")
+            if (body.keys != RELEASE_PUT_FIELDS) malformed("Release fields are invalid")
+            val label = releaseTextField(body.baselineString("label"), "label", MAX_RELEASE_TEXT_BYTES) ?: malformed("label is required")
+            val analysisIds = releaseAnalysisIds(body)
+            val profile = releaseProfile(body["profile"])
+            val notes = releaseNotes(body["notes"])
+            val existing = releaseOperation { context.store.readRelease(id) } ?: notFound("Release was not found")
+            val (startedAt, analyses) = releaseFacts(context.store, existing.releaseField("run_id"), analysisIds)
+            if (startedAt != existing.releaseField("started_at")) {
+                throw ApiFailure(
+                    HttpStatusCode.UnprocessableEntity,
+                    "RELEASE_STARTED_AT_MISMATCH",
+                    "Analyses start at a different time than the release",
+                )
+            }
+            val stamp = JsonPrimitive(Instant.now().truncatedTo(ChronoUnit.MILLIS).toString())
+            val updated =
+                releaseOperation {
+                    context.store.replaceRelease(id) { current ->
+                        JsonObject(
+                            current +
+                                mapOf(
+                                    "label" to JsonPrimitive(label),
+                                    "analyses" to JsonArray(analyses),
+                                    "profile" to profile,
+                                    "notes" to notes,
+                                    "updated_at" to stamp,
+                                ),
+                        )
+                    }
+                }
+            call.respondJson(releaseView(updated, releaseOkStates(updated)))
+        }
+
+        delete("/api/releases/{releaseId}") {
+            call.requireOnlyQueries()
+            val id = call.releaseIdParameter()
+            if (!releaseOperation { context.store.deleteRelease(id) }) notFound("Release was not found")
+            call.respondJson(buildJsonObject { put("release", JsonNull) })
+        }
+
         get("/api/runs/{runId}/analyses/{analysisId}/baseline-conditions") {
-            call.requireOnlyQueries("baseline_window", "current_window")
+            call.requireOnlyQueries("baseline_window", "current_window", "series")
             val windows = call.windowComparisonQuery()
             val current =
                 buildJsonObject {
                     put("run_id", call.parameters["runId"].orEmpty())
                     put("analysis_id", call.parameters["analysisId"].orEmpty())
                 }.baselineReference()
-            val selected = baselineOperation { context.store.readBaseline() } ?: notFound("No baseline is selected")
-            val baselineReference = selected.getValue("reference").jsonObject
-            context.store.baselineDocuments(baselineReference)
+            val scope = resolveBaselineScope(call, context.store, current)
+            val (slot, conditions) =
+                baselineOperation { context.store.readBaselineSlotWithCondition(scope.series, scope.arm, current, windows) }
+            val selected = slot?.selection ?: notFound("No baseline is selected")
+            context.store.baselineDocuments(selected.getValue("reference").jsonObject)
             context.store.baselineDocuments(current)
-            val conditions = baselineOperation { context.store.readBaselineCondition(baselineReference, current, windows) }
             call.respondJson(buildJsonObject { put("conditions", conditions ?: JsonNull) })
         }
 
         post("/api/runs/{runId}/analyses/{analysisId}/baseline-conditions") {
-            call.requireOnlyQueries("baseline_window", "current_window")
+            call.requireOnlyQueries("baseline_window", "current_window", "series")
             call.requireJson()
             val windows = call.windowComparisonQuery()
             val request = receiveBaselineRequest(call)
@@ -446,7 +624,10 @@ internal fun Application.installLocalApi(context: LocalApiContext) {
                     put("run_id", call.parameters["runId"].orEmpty())
                     put("analysis_id", call.parameters["analysisId"].orEmpty())
                 }.baselineReference()
-            val selected = baselineOperation { context.store.readBaseline() } ?: notFound("No baseline is selected")
+            val scope = resolveBaselineScope(call, context.store, current)
+            val (slot, _) =
+                baselineOperation { context.store.readBaselineSlotWithCondition(scope.series, scope.arm, current, windows) }
+            val selected = slot?.selection ?: notFound("No baseline is selected")
             val baselineReference = selected.getValue("reference").jsonObject
             context.store.baselineDocuments(baselineReference)
             context.store.baselineDocuments(current)
@@ -456,18 +637,23 @@ internal fun Application.installLocalApi(context: LocalApiContext) {
         }
 
         get("/api/runs/{runId}/analyses/{analysisId}/comparison") {
-            call.requireOnlyQueries("baseline_window", "current_window", "min_change_percent", "min_error_rate_delta")
+            call.requireOnlyQueries("baseline_window", "current_window", "min_change_percent", "min_error_rate_delta", "series")
             val windows = call.windowComparisonQuery()
             val current =
                 buildJsonObject {
                     put("run_id", call.parameters["runId"].orEmpty())
                     put("analysis_id", call.parameters["analysisId"].orEmpty())
                 }.baselineReference()
-            val selected = baselineOperation { context.store.readBaseline() } ?: notFound("No baseline is selected")
+            val scope = resolveBaselineScope(call, context.store, current)
+            val (slot, conditions) =
+                baselineOperation { context.store.readBaselineSlotWithCondition(scope.series, scope.arm, current, windows) }
+            val selected = slot?.selection ?: notFound("No baseline is selected")
             val baselineReference = selected.getValue("reference").jsonObject
             val (baselineResult, baselineIdentity) = context.store.baselineDocuments(baselineReference)
             val (currentResult, currentIdentity) = context.store.baselineDocuments(current)
-            val conditions = baselineOperation { context.store.readBaselineCondition(baselineReference, current, windows) }
+            val baselineAnalysis = baselineReference.getValue("analysis_id").jsonPrimitive.content
+            val currentAnalysis = current.getValue("analysis_id").jsonPrimitive.content
+            val releases = withContext(Dispatchers.IO) { context.store.releasesOfAnalyses(setOf(baselineAnalysis, currentAnalysis)) }
             val comparison =
                 compareAnalyses(
                     selected,
@@ -478,6 +664,7 @@ internal fun Application.installLocalApi(context: LocalApiContext) {
                     currentIdentity,
                     windows,
                     conditions?.let(::baselineConditionConfirmation),
+                    ReleaseComparisonContext(releases[baselineAnalysis], releases[currentAnalysis]),
                 )
             call.respondJson(
                 buildJsonObject {
@@ -678,7 +865,7 @@ internal fun Application.installLocalApi(context: LocalApiContext) {
 
         get("/api/runs/{runId}/analyses/{analysisId}/analytics") {
             val query = call.request.queryParameters
-            if (query.names().any { it !in setOf("limit", "transaction", "transaction_limit", "format", "exclude") } ||
+            if (query.names().any { it !in setOf("limit", "transaction", "transaction_limit", "format", "exclude", "series") } ||
                 query.names().any { it != "exclude" && query.getAll(it)?.size != 1 }
             ) {
                 malformed("Query parameters are invalid")
@@ -699,12 +886,38 @@ internal fun Application.installLocalApi(context: LocalApiContext) {
             context.store.requireAnalysis(call)
             val runId = call.parameters["runId"].orEmpty()
             val analysisId = call.parameters["analysisId"].orEmpty()
+            val currentReference =
+                buildJsonObject {
+                    put("run_id", runId)
+                    put("analysis_id", analysisId)
+                }
+            val scope = resolveBaselineScope(call, context.store, currentReference)
+            // Only the selection: analytics does not use the condition record, so a damaged record must not fail it. Without a
+            // series the legacy file is read alone, as comparison does, so a damaged slot of another series does not reach it.
+            val baselineSelection =
+                baselineOperation {
+                    if (scope.series == null) {
+                        context.store.readBaseline()
+                    } else {
+                        context.store
+                            .listBaselineSlots()
+                            .firstOrNull { it.series == scope.series && it.arm == scope.arm }
+                            ?.selection
+                    }
+                }
             val response =
                 withContext(Dispatchers.IO) {
                     val current = context.store.readComparisonDocuments(runId, analysisId) ?: notFound("Analysis was not found")
-                    val baseline = context.store.readBaseline()?.get("reference") as? JsonObject
+                    val baseline = baselineSelection?.get("reference") as? JsonObject
                     val candidates = mutableListOf<SavedAnalysisForComparison>()
                     val history = context.store.readComparisonHistory()
+                    // One registry pass for every row: the label and the profile come from the release record (ADR 0019, section 8).
+                    val releases =
+                        context.store.releasesOfAnalyses(
+                            history.entries.map { it.analysisId }.toSet() +
+                                analysisId +
+                                listOfNotNull(baseline?.get("analysis_id")?.jsonPrimitive?.content),
+                        )
                     for (entry in history.entries) {
                         val documents = entry.documents
                         val runDocument = documents.run ?: continue
@@ -717,6 +930,8 @@ internal fun Application.installLocalApi(context: LocalApiContext) {
                                 runDocument,
                                 documents.result,
                                 documents.identity,
+                                applicationVersion = releases[entry.analysisId].releaseLabel(),
+                                loadProfile = releases[entry.analysisId].releaseProfile(),
                             )
                     }
                     val baselineDocuments =
@@ -733,13 +948,10 @@ internal fun Application.installLocalApi(context: LocalApiContext) {
                                 checkNotNull(baselineDocuments.run),
                                 baselineDocuments.result,
                                 baselineDocuments.identity,
+                                applicationVersion = releases[baseline.getValue("analysis_id").jsonPrimitive.content].releaseLabel(),
+                                loadProfile = releases[baseline.getValue("analysis_id").jsonPrimitive.content].releaseProfile(),
                             )
                     }
-                    val currentReference =
-                        buildJsonObject {
-                            put("run_id", runId)
-                            put("analysis_id", analysisId)
-                        }
                     buildJsonObject {
                         put("schema_version", "saved-analytics.v1")
                         put("history_scan_truncated", history.truncated)
@@ -750,7 +962,14 @@ internal fun Application.installLocalApi(context: LocalApiContext) {
                             "dynamics",
                             current.run?.let {
                                 buildRunDynamics(
-                                    SavedAnalysisForComparison(currentReference, it, current.result, current.identity),
+                                    SavedAnalysisForComparison(
+                                        currentReference,
+                                        it,
+                                        current.result,
+                                        current.identity,
+                                        applicationVersion = releases[analysisId].releaseLabel(),
+                                        loadProfile = releases[analysisId].releaseProfile(),
+                                    ),
                                     candidates,
                                     baseline,
                                     limit,
@@ -932,6 +1151,8 @@ internal fun Application.installLocalApi(context: LocalApiContext) {
                                         put("policy_id", analysis.policyId?.let(::JsonPrimitive) ?: JsonNull)
                                         put("policy_verdict", analysis.policyVerdict)
                                         put("run_validity", analysis.runValidity)
+                                        analysis.resourceArm?.let { put("resource_arm", it) }
+                                        analysis.resourceSnapshotSha256?.let { put("resource_snapshot_sha256", it) }
                                     },
                                 )
                             }
@@ -1020,6 +1241,36 @@ internal fun Application.installLocalApi(context: LocalApiContext) {
             call.respondJson(body)
         }
 
+        get("/api/runs/{runId}/analyses/{analysisId}/pod-view") {
+            call.requireOnlyQueries()
+            val (view, sha256) = context.store.requirePodView(call, podViewPermit)
+            call.respondJson(podViewMetadataJson(view, sha256))
+        }
+
+        get("/api/runs/{runId}/analyses/{analysisId}/pod-view/values") {
+            call.requireOnlyQueries("service", "metric", "from_ms", "to_ms", "limit", "after")
+            val service = call.singleQuery("service")?.takeIf(::validSeriesId) ?: malformed("service is required")
+            val metric = call.singleQuery("metric")?.also { if (!validSeriesId(it)) malformed("metric is invalid") }
+            val from = call.optionalLongQuery("from_ms")
+            val to = call.optionalLongQuery("to_ms")
+            val limit = call.intQuery("limit", DEFAULT_POD_VIEW_PAGE_ROWS, 1..MAX_POD_VIEW_PAGE_ROWS)
+            val after = call.singleQuery("after")
+            val (view, sha256) = context.store.requirePodView(call, podViewPermit)
+            val body =
+                try {
+                    podViewValuesJson(view, sha256, service, metric, from, to, limit, after)
+                } catch (failure: PodViewQueryException) {
+                    when (failure.kind) {
+                        PodViewQueryException.Kind.SERVICE_NOT_FOUND ->
+                            throw ApiFailure(HttpStatusCode.NotFound, "POD_VIEW_SERVICE_NOT_FOUND", "Service was not found")
+                        PodViewQueryException.Kind.INVALID_CURSOR ->
+                            throw ApiFailure(HttpStatusCode.BadRequest, "INVALID_CURSOR", "after is not a row of this selection")
+                        PodViewQueryException.Kind.INVALID_QUERY -> malformed(failure.message ?: "Pod view query is invalid")
+                    }
+                }
+            call.respondJson(body)
+        }
+
         route("/api/{...}") {
             handle {
                 notFound("Endpoint was not found")
@@ -1072,15 +1323,18 @@ private suspend fun receivePostgresCapture(
     return (profileId ?: malformed("Profile ID is required")) to pre
 }
 
-private suspend fun receiveBaselineRequest(call: ApplicationCall): JsonObject {
-    if ((call.request.contentLength() ?: 0) > MAX_BASELINE_REQUEST_BYTES) tooLarge("Baseline request exceeds 16 KiB")
+private suspend fun receiveBaselineRequest(
+    call: ApplicationCall,
+    subject: String = "Baseline",
+): JsonObject {
+    if ((call.request.contentLength() ?: 0) > MAX_BASELINE_REQUEST_BYTES) tooLarge("$subject request exceeds 16 KiB")
     val bytes = withContext(Dispatchers.IO) { call.receiveChannel().toInputStream().use { it.readNBytes(MAX_BASELINE_REQUEST_BYTES + 1) } }
-    if (bytes.size > MAX_BASELINE_REQUEST_BYTES) tooLarge("Baseline request exceeds 16 KiB")
+    if (bytes.size > MAX_BASELINE_REQUEST_BYTES) tooLarge("$subject request exceeds 16 KiB")
     val text =
         try {
             bytes.decodeToString(throwOnInvalidSequence = true)
         } catch (_: java.nio.charset.CharacterCodingException) {
-            malformed("Baseline request must be UTF-8 JSON")
+            malformed("$subject request must be UTF-8 JSON")
         }
     var depth = 0
     var quoted = false
@@ -1095,15 +1349,15 @@ private suspend fun receiveBaselineRequest(call: ApplicationCall): JsonObject {
         } else {
             when (character) {
                 '"' -> quoted = true
-                '{', '[' -> if (++depth > 8) tooLarge("Baseline request JSON depth exceeds 8")
+                '{', '[' -> if (++depth > 8) tooLarge("$subject request JSON depth exceeds 8")
                 '}', ']' -> depth -= 1
             }
         }
     }
     return try {
-        Json.parseToJsonElement(text) as? JsonObject ?: malformed("Baseline request must be an object")
+        Json.parseToJsonElement(text) as? JsonObject ?: malformed("$subject request must be an object")
     } catch (_: kotlinx.serialization.SerializationException) {
-        malformed("Baseline JSON is malformed")
+        malformed("$subject JSON is malformed")
     }
 }
 
@@ -1112,13 +1366,15 @@ private suspend fun selectBaseline(
     store: RunBundleStore,
 ): JsonObject {
     val mode = request.baselineString("mode")
-    val series = request.baselineString("series")
-    if (series.isBlank() || series.encodeToByteArray().size > 128) malformed("Comparison series must contain 1–128 UTF-8 bytes")
+    // The same rule as the `series` query, so that every stored slot can be addressed again.
+    val series =
+        releaseTextField(request.baselineString("series"), "series", MAX_RELEASE_TEXT_BYTES)
+            ?: malformed("Comparison series must contain 1–128 UTF-8 bytes")
     return when (mode) {
         "manual" -> {
             if (request.keys != setOf("mode", "series", "reference")) malformed("Manual baseline fields are invalid")
             val reference = (request["reference"] as? JsonObject)?.baselineReference() ?: malformed("Baseline reference is invalid")
-            store.baselineDocuments(reference)
+            requireBaselineEligible(listOf(store.verifiedBaselineDocuments(reference)))
             manualBaselineSelection(series, reference)
         }
         "statistical" -> {
@@ -1131,9 +1387,10 @@ private suspend fun selectBaseline(
             if (values.size !in 3..20) baselineIneligible("BASELINE_CANDIDATE_COUNT")
             val references = values.map { (it as? JsonObject)?.baselineReference() ?: malformed("Candidate reference is invalid") }
             if (references.map { it.getValue("run_id") }.toSet().size != references.size) baselineIneligible("BASELINE_DUPLICATE_RUN")
-            val documents = references.map { store.baselineDocuments(it) }
+            val documents = references.map { store.verifiedBaselineDocuments(it) }
+            requireBaselineEligible(documents)
             try {
-                statisticalBaselineSelection(series, references, documents.map { it.first }, documents.map { it.second })
+                statisticalBaselineSelection(series, references, documents.map { it.result }, documents.map { it.identity })
             } catch (failure: IllegalArgumentException) {
                 baselineIneligible(failure.message ?: "BASELINE_CANDIDATE_INVALID")
             }
@@ -1161,12 +1418,98 @@ private suspend fun RunBundleStore.baselineDocuments(reference: JsonObject): Pai
             ?: notFound("Referenced analysis was not found")
     }
 
+// Reads the stored result with its SHA-256 and the 64 MiB bound checked (ADR 0019, sections 1 and 6).
+private suspend fun RunBundleStore.verifiedBaselineDocuments(reference: JsonObject): VerifiedAnalysis =
+    baselineOperation {
+        try {
+            readVerifiedAnalysis(reference.baselineString("run_id"), reference.baselineString("analysis_id"))
+                ?: notFound("Referenced analysis was not found")
+        } catch (failure: IllegalArgumentException) {
+            if (failure.message == "RESULT_TOO_LARGE") baselineIneligible("BASELINE_CANDIDATE_TOO_LARGE")
+            throw failure
+        }
+    }
+
+// The same rule for both modes, applied in request order before any statistic is computed.
+private fun requireBaselineEligible(documents: List<VerifiedAnalysis>) {
+    documents.forEach { document ->
+        val code = baselineCandidateRejection(document.result) ?: return@forEach
+        baselineIneligible(code, if (code == "BASELINE_CANDIDATE_NOT_PASS") document.result.knownVerdict() else null)
+    }
+}
+
+private fun JsonObject.knownVerdict(): String =
+    (this["policy_verdict"] as? JsonPrimitive)?.takeIf { it.isString }?.content?.takeIf { it in KNOWN_VERDICTS } ?: "UNKNOWN"
+
+private val KNOWN_VERDICTS = setOf("PASS", "FAIL", "NO_POLICY", "NO_VERDICT")
+
+private class BaselineScope(
+    val series: String?,
+    val arm: String?,
+)
+
+// The series of a baseline query, normalized like release series so that slot keys and release series agree.
+private fun ApplicationCall.baselineSeriesQuery(): String? =
+    singleQuery("series")?.let { releaseTextField(it, "series", MAX_RELEASE_TEXT_BYTES) ?: malformed("series is invalid") }
+
+private fun JsonObject.baselineArm(): String? =
+    when (val arm = this["resource_arm"]) {
+        null, JsonNull -> null
+        is JsonPrimitive -> if (arm.isString) arm.content else corruptBaseline()
+        else -> corruptBaseline()
+    }
+
+private fun corruptBaseline(): Nothing =
+    throw ApiFailure(HttpStatusCode.InternalServerError, "CORRUPT_BASELINE", "Baseline or referenced analysis is corrupt")
+
+/**
+ * Picks the baseline slot of an analysis (ADR 0019, section 7): the series of its release, else the `series` query, else the
+ * legacy file; the arm comes from its identity. A query that contradicts the release series is refused. A release registry that
+ * cannot be read counts as "no release", so a damaged registry does not block comparison.
+ */
+private suspend fun resolveBaselineScope(
+    call: ApplicationCall,
+    store: RunBundleStore,
+    current: JsonObject,
+): BaselineScope {
+    val explicit = call.baselineSeriesQuery()
+    val analysisId = current.baselineString("analysis_id")
+    val identity =
+        baselineOperation { store.readAnalysisIdentity(current.baselineString("run_id"), analysisId) }
+            ?: notFound("Referenced analysis was not found")
+    val registered =
+        baselineOperation { (store.releasesOfAnalyses(setOf(analysisId))[analysisId]?.get("series") as? JsonPrimitive)?.contentOrNull }
+    if (explicit != null && registered != null && explicit != registered) {
+        throw ApiFailure(HttpStatusCode.UnprocessableEntity, "BASELINE_SERIES_CONFLICT", "Series differs from the release series")
+    }
+    return BaselineScope(registered ?: explicit, identity.baselineArm())
+}
+
 private suspend fun <T> baselineOperation(action: () -> T): T =
     withContext(Dispatchers.IO) {
         try {
             action()
         } catch (_: NoSuchElementException) {
             notFound("Referenced run or analysis was not found")
+        } catch (failure: IllegalArgumentException) {
+            when (failure.message) {
+                "BASELINE_SLOTS_LIMIT_REACHED" ->
+                    throw ApiFailure(
+                        HttpStatusCode.UnprocessableEntity,
+                        "BASELINE_SLOTS_LIMIT_REACHED",
+                        "Baseline slot limit is reached",
+                        MAX_BASELINE_SLOTS,
+                    )
+                "BASELINE_CONDITIONS_LIMIT_REACHED" ->
+                    throw ApiFailure(
+                        HttpStatusCode.UnprocessableEntity,
+                        "BASELINE_CONDITIONS_LIMIT_REACHED",
+                        "Baseline condition record limit is reached",
+                        MAX_BASELINE_CONDITION_FILES,
+                    )
+                "BASELINE_ANALYSIS_NOT_FOUND" -> notFound("Referenced analysis was not found")
+                else -> throw failure
+            }
         } catch (failure: IllegalStateException) {
             if (failure.message?.startsWith("CORRUPT_BASELINE") == true || failure.message?.startsWith("CORRUPT_RUN_BUNDLE") == true) {
                 throw ApiFailure(HttpStatusCode.InternalServerError, "CORRUPT_BASELINE", "Baseline or referenced analysis is corrupt")
@@ -1175,8 +1518,314 @@ private suspend fun <T> baselineOperation(action: () -> T): T =
         }
     }
 
-private fun baselineIneligible(code: String): Nothing =
-    throw ApiFailure(HttpStatusCode.UnprocessableEntity, code, "Statistical baseline is unavailable: $code")
+private fun baselineIneligible(
+    code: String,
+    verdict: String? = null,
+): Nothing =
+    throw ApiFailure(
+        HttpStatusCode.UnprocessableEntity,
+        code,
+        "Baseline candidate is unavailable: $code" + (verdict?.let { " (policy_verdict=$it)" } ?: ""),
+    )
+
+private val RELEASE_POST_FIELDS = setOf("series", "label", "run_id", "analyses", "profile", "notes")
+private val RELEASE_PUT_FIELDS = setOf("label", "analyses", "profile", "notes")
+private val ANALYSIS_ID = Regex("[0-9a-f]{64}")
+
+// Normalizes at the border (NFC, line feeds, trim) and refuses what the stored form would refuse; empty text is null.
+private fun releaseTextField(
+    raw: String,
+    name: String,
+    maxBytes: Int,
+    multiline: Boolean = false,
+): String? {
+    val value = normalizeReleaseText(raw)
+    if (value.isEmpty()) return null
+    if (value.encodeToByteArray().size > maxBytes || value.any { it.isISOControl() && !(multiline && it == '\n') }) {
+        malformed("$name is invalid")
+    }
+    return value
+}
+
+// An object whose six values are all empty is stored as null, so two empty claims never read as equal profiles.
+private fun releaseProfile(element: JsonElement?): JsonElement {
+    if (element == null) malformed("profile is required")
+    if (element == JsonNull) return JsonNull
+    val fields = element as? JsonObject ?: malformed("profile is invalid")
+    if (fields.keys != RELEASE_PROFILE_FIELDS.toSet()) malformed("profile fields are invalid")
+    val values =
+        RELEASE_PROFILE_FIELDS.map { name ->
+            when (val value = fields.getValue(name)) {
+                JsonNull -> null
+                is JsonPrimitive ->
+                    if (value.isString) releaseTextField(value.content, name, MAX_RELEASE_TEXT_BYTES) else malformed("profile is invalid")
+                else -> malformed("profile is invalid")
+            }
+        }
+    if (values.all { it == null }) return JsonNull
+    return JsonObject(RELEASE_PROFILE_FIELDS.zip(values).associate { (name, value) -> name to (value?.let(::JsonPrimitive) ?: JsonNull) })
+}
+
+private fun releaseNotes(element: JsonElement?): JsonElement =
+    when (element) {
+        null -> malformed("notes is required")
+        JsonNull -> JsonNull
+        is JsonPrimitive ->
+            if (element.isString) {
+                releaseTextField(element.content, "notes", MAX_RELEASE_NOTES_BYTES, multiline = true)?.let(::JsonPrimitive) ?: JsonNull
+            } else {
+                malformed("notes is invalid")
+            }
+        else -> malformed("notes is invalid")
+    }
+
+private fun releaseRunId(body: JsonObject): String =
+    body.baselineString("run_id").takeIf { RUN_ID.matches(it) } ?: malformed("run_id is invalid")
+
+private fun releaseAnalysisIds(body: JsonObject): List<String> {
+    val values = body["analyses"] as? JsonArray ?: malformed("analyses must be an array")
+    if (values.size !in 1..MAX_RELEASE_ANALYSES) malformed("analyses must hold 1-$MAX_RELEASE_ANALYSES items")
+    val ids =
+        values.map { item ->
+            val entry = item as? JsonObject ?: malformed("analysis entry is invalid")
+            if (entry.keys != setOf("analysis_id")) malformed("analysis entry is invalid")
+            entry.baselineString("analysis_id").takeIf { ANALYSIS_ID.matches(it) } ?: malformed("analysis_id is invalid")
+        }
+    if (ids.toSet().size != ids.size) malformed("analysis_id values must differ")
+    return ids
+}
+
+private fun ApplicationCall.releaseIdParameter(): String =
+    parameters["releaseId"]?.takeIf { RELEASE_ID.matches(it) } ?: malformed("Release id is invalid")
+
+private fun JsonObject.releaseField(name: String): String = (getValue(name) as JsonPrimitive).content
+
+// Reads one analysis at a time and drops its parsed tree after the facts are copied: the peak is one result.
+private suspend fun releaseFacts(
+    store: RunBundleStore,
+    runId: String,
+    analysisIds: List<String>,
+): Pair<String, List<JsonObject>> {
+    var startedAt: String? = null
+    val facts = mutableListOf<JsonObject>()
+    for (analysisId in analysisIds) {
+        val verified =
+            releaseOperation {
+                try {
+                    store.readVerifiedAnalysis(runId, analysisId) ?: notFound("Analysis was not found")
+                } catch (failure: IllegalArgumentException) {
+                    if (failure.message == "RESULT_TOO_LARGE") {
+                        throw ApiFailure(
+                            HttpStatusCode.UnprocessableEntity,
+                            "RELEASE_RESULT_TOO_LARGE",
+                            "Analysis result exceeds the verification limit",
+                        )
+                    }
+                    throw failure
+                }
+            }
+        val analysisStart =
+            (verified.run?.get("started_at") as? JsonPrimitive)?.takeIf { it.isString }?.content?.takeIf {
+                try {
+                    releaseStartedAtMillis(it)
+                    true
+                } catch (_: IllegalArgumentException) {
+                    false
+                }
+            }
+                ?: throw ApiFailure(
+                    HttpStatusCode.UnprocessableEntity,
+                    "RELEASE_ANALYSIS_NO_RUN_METADATA",
+                    "Analysis has no usable run metadata",
+                )
+        // Both documents must name the requested run: a run.json of another run would carry a foreign chronology.
+        if ((verified.result["run_id"] as? JsonPrimitive)?.content != runId ||
+            (verified.run?.get("run_id") as? JsonPrimitive)?.content != runId
+        ) {
+            throw ApiFailure(HttpStatusCode.UnprocessableEntity, "RELEASE_RUN_MISMATCH", "Analysis documents belong to another run")
+        }
+        if (startedAt != null && startedAt != analysisStart) {
+            throw ApiFailure(HttpStatusCode.UnprocessableEntity, "RELEASE_STARTED_AT_MISMATCH", "Analyses start at different times")
+        }
+        startedAt = analysisStart
+        facts +=
+            try {
+                releaseAnalysisFacts(analysisId, verified.result, verified.identity)
+            } catch (_: IllegalArgumentException) {
+                throw ApiFailure(HttpStatusCode.UnprocessableEntity, "RELEASE_FACTS_INVALID", "Analysis facts are unavailable")
+            }
+    }
+    val arms = facts.map { it["arm"] }
+    if (facts.size > 1 && (arms.any { it == JsonNull } || arms.toSet().size != arms.size)) {
+        throw ApiFailure(
+            HttpStatusCode.UnprocessableEntity,
+            "RELEASE_ARM_CONFLICT",
+            "Arms must be distinct and present when a release has several analyses",
+        )
+    }
+    return checkNotNull(startedAt) to facts.sortedBy { (it["analysis_id"] as JsonPrimitive).content }
+}
+
+private fun releaseStateKeys(record: JsonObject): List<Pair<String, String>> =
+    (record.getValue("analyses") as JsonArray).map {
+        record.releaseField("run_id") to
+            ((it as JsonObject).getValue("analysis_id") as JsonPrimitive).content
+    }
+
+private fun releaseOkStates(record: JsonObject): Map<Pair<String, String>, String> = releaseStateKeys(record).associateWith { "OK" }
+
+// Convenience for the interface, not a decision: the server decides again from the real result when a baseline is selected.
+private fun releaseIneligibleReasons(
+    analysis: JsonObject,
+    state: String,
+): List<String> =
+    when (state) {
+        "OK" ->
+            listOfNotNull(
+                baselineCandidateRejection(
+                    (analysis["policy_verdict"] as JsonPrimitive).content,
+                    (analysis["run_validity"] as JsonPrimitive).content,
+                    (analysis["coverage_status"] as JsonPrimitive).content,
+                    (analysis["coverage_reasons"] as JsonArray).map { (it as JsonPrimitive).content },
+                ),
+            )
+        "MISSING" -> listOf("ANALYSIS_MISSING")
+        else -> listOf("ANALYSIS_CORRUPT")
+    }
+
+private fun releaseView(
+    record: JsonObject,
+    states: Map<Pair<String, String>, String>,
+): JsonObject {
+    val runId = record.releaseField("run_id")
+    val analyses =
+        (record.getValue("analyses") as JsonArray).map { item ->
+            val analysis = item as JsonObject
+            val state = states.getValue(runId to (analysis.getValue("analysis_id") as JsonPrimitive).content)
+            val reasons = releaseIneligibleReasons(analysis, state)
+            JsonObject(
+                analysis +
+                    mapOf(
+                        "analysis_state" to JsonPrimitive(state),
+                        "baseline_eligible" to JsonPrimitive(reasons.isEmpty()),
+                        "ineligible_reasons" to JsonArray(reasons.map(::JsonPrimitive)),
+                    ),
+            )
+        }
+    val all =
+        analyses
+            .flatMap {
+                (it.getValue("ineligible_reasons") as JsonArray).map { reason ->
+                    (reason as JsonPrimitive).content
+                }
+            }.distinct()
+            .sorted()
+    return JsonObject(
+        record +
+            mapOf(
+                "analyses" to JsonArray(analyses),
+                "baseline_eligible" to JsonPrimitive(all.isEmpty()),
+                "ineligible_reasons" to JsonArray(all.map(::JsonPrimitive)),
+            ),
+    )
+}
+
+private fun releasePageJson(
+    page: ReleasePage,
+    states: Map<Pair<String, String>, String>,
+): JsonObject =
+    buildJsonObject {
+        put("releases", JsonArray(page.releases.map { releaseView(it, states) }))
+        put("next_after", page.nextAfter?.let(::JsonPrimitive) ?: JsonNull)
+        put(
+            "series_summary",
+            buildJsonArray {
+                page.seriesSummary.forEach { (series, count) ->
+                    add(
+                        buildJsonObject {
+                            put("series", series)
+                            put("count", count)
+                        },
+                    )
+                }
+            },
+        )
+        put("corrupt_count", page.corruptCount)
+        put(
+            "corrupt_names",
+            buildJsonArray {
+                page.corruptNames.forEach {
+                    add(
+                        buildJsonObject {
+                            put("name", it.name)
+                            put("reason", it.reason)
+                        },
+                    )
+                }
+            },
+        )
+    }
+
+// Profile and series are auxiliary for comparison and dynamics (ADR 0019, section 5): a registry the store refuses to scan, and
+// an analysis named by several records, leave the release unknown instead of failing the request.
+private fun RunBundleStore.releasesOfAnalyses(analysisIds: Set<String>): Map<String, JsonObject> =
+    try {
+        findReleasesByAnalysis(analysisIds).byAnalysis
+    } catch (failure: IllegalStateException) {
+        if (failure.message.orEmpty().startsWith("CORRUPT_RELEASE_REGISTRY")) emptyMap() else throw failure
+    } catch (_: IOException) {
+        emptyMap()
+    } catch (_: DirectoryIteratorException) {
+        emptyMap()
+    }
+
+private fun JsonObject?.releaseLabel(): String? = (this?.get("label") as? JsonPrimitive)?.content
+
+private fun JsonObject?.releaseProfile(): String? = releaseProfileSummary(this?.get("profile") as? JsonObject)
+
+// Maps store failures to the private API codes; messages never carry user text (label, notes, profile).
+private suspend fun <T> releaseOperation(action: () -> T): T =
+    withContext(Dispatchers.IO) {
+        try {
+            action()
+        } catch (_: NoSuchElementException) {
+            notFound("Release or referenced analysis was not found")
+        } catch (failure: IllegalArgumentException) {
+            when (failure.message) {
+                "RELEASE_LIMIT_REACHED" ->
+                    throw ApiFailure(HttpStatusCode.UnprocessableEntity, "RELEASE_LIMIT_REACHED", "Release limit is reached", MAX_RELEASES)
+                "RELEASE_ANALYSIS_ALREADY_REGISTERED" ->
+                    conflict(
+                        "RELEASE_ANALYSIS_ALREADY_REGISTERED",
+                        "An analysis already belongs to a release",
+                    )
+                "RELEASE_TOO_LARGE" -> throw ApiFailure(
+                    HttpStatusCode.UnprocessableEntity,
+                    "RELEASE_TOO_LARGE",
+                    "Release record exceeds its size limit",
+                )
+                "RELEASE_CHANGED" -> conflict("RELEASE_CHANGED", "Release was changed concurrently; reload and retry")
+                "INVALID_RELEASE" -> throw ApiFailure(
+                    HttpStatusCode.UnprocessableEntity,
+                    "RELEASE_FACTS_INVALID",
+                    "Release record is invalid",
+                )
+                "INVALID_RELEASE_ID", "INVALID_PAGE_LIMIT" -> malformed("Release query is invalid")
+                else -> throw failure
+            }
+        } catch (failure: IllegalStateException) {
+            val message = failure.message.orEmpty()
+            when {
+                message.startsWith("CORRUPT_RELEASE_REGISTRY") ->
+                    throw ApiFailure(HttpStatusCode.InternalServerError, "CORRUPT_RELEASE_REGISTRY", "Release registry is corrupt")
+                message.startsWith("CORRUPT_RELEASE") ->
+                    throw ApiFailure(HttpStatusCode.InternalServerError, "CORRUPT_RELEASE", "Release record is corrupt")
+                message.startsWith("CORRUPT_RUN_BUNDLE") ->
+                    throw ApiFailure(HttpStatusCode.InternalServerError, "CORRUPT_RUN_BUNDLE", "Referenced analysis is corrupt")
+                else -> throw failure
+            }
+        }
+    }
 
 private suspend fun receiveInput(
     call: ApplicationCall,
@@ -1273,6 +1922,7 @@ private suspend fun receiveJob(
     var diagnostics: DiagnosticValidation.Valid? = null
     var capacity: CapacityPlanValidation.Valid? = null
     var trend: TrendPlanValidation.Valid? = null
+    var podView: PodViewValidation.Valid? = null
     var sourceRequest: WindowedSourceRequest? = null
     val sourceContexts = mutableListOf<ByteArray>()
     val postgresFiles = mutableMapOf<String, ByteArray>()
@@ -1281,12 +1931,13 @@ private suspend fun receiveJob(
     var diagnosticsSeen = false
     var capacitySeen = false
     var trendSeen = false
+    var podViewSeen = false
     var parts = 0
     var invalidParts = false
     try {
         call.receiveMultipart(formFieldLimit = (MAX_RESOURCE_SNAPSHOT_BYTES + 1).toLong()).forEachPart { part ->
             try {
-                if (++parts > 24) malformed("Job multipart body has too many parts")
+                if (++parts > MAX_JOB_PARTS) malformed("Job multipart body has too many parts")
                 when {
                     part is PartData.FileItem && part.name in POSTGRES_PART_LIMITS && part.name !in postgresFiles && !invalidParts -> {
                         val name = checkNotNull(part.name)
@@ -1408,6 +2059,23 @@ private suspend fun receiveJob(
                             }
                     }
 
+                    part is PartData.FileItem && part.name == "pod_view" && !podViewSeen && !invalidParts -> {
+                        podViewSeen = true
+                        podView =
+                            when (
+                                val validation =
+                                    withContext(Dispatchers.IO) { validatePodView(part.provider().toInputStream(), MAX_POD_VIEW_BYTES) }
+                            ) {
+                                is PodViewValidation.Valid -> validation
+                                is PodViewValidation.Invalid -> {
+                                    if (validation.errors.any { it.code == "POD_VIEW_LIMIT_EXCEEDED" }) {
+                                        tooLarge("Pod view exceeds its resource limit")
+                                    }
+                                    throw InvalidPodView(validation.errors)
+                                }
+                            }
+                    }
+
                     else -> invalidParts = true
                 }
             } finally {
@@ -1426,6 +2094,8 @@ private suspend fun receiveJob(
         throw failure
     } catch (failure: InvalidTrend) {
         throw failure
+    } catch (failure: InvalidPodView) {
+        throw failure
     } catch (_: Exception) {
         malformed("Multipart body is malformed")
     }
@@ -1435,6 +2105,7 @@ private suspend fun receiveJob(
             diagnosticsSeen ||
             capacitySeen ||
             trendSeen ||
+            podViewSeen ||
             sourceContexts.isNotEmpty()
         ) {
             malformed("Online acquisition cannot be combined with manual source inputs")
@@ -1498,6 +2169,20 @@ private suspend fun receiveJob(
         val errors = validateTrendBinding(plan, snapshot)
         if (errors.isNotEmpty()) throw InvalidTrend(errors)
     }
+    podView?.let { view ->
+        val snapshot =
+            resources ?: throw InvalidPodView(
+                listOf(
+                    PolicyValidationError(
+                        "POD_VIEW_RESOURCE_REQUIRED",
+                        "/resource_snapshot_sha256",
+                        "Pod view requires a resource snapshot",
+                    ),
+                ),
+            )
+        val errors = validatePodViewBinding(view, input.sha256, snapshot)
+        if (errors.isNotEmpty()) throw InvalidPodView(errors)
+    }
     policy?.let { valid ->
         resources?.let { snapshot ->
             val errors = validatePlatformBinding(valid.policy, snapshot.snapshot)
@@ -1535,6 +2220,7 @@ private suspend fun receiveJob(
         diagnostics = diagnostics,
         capacity = capacity,
         trend = trend,
+        podView = podView,
         sourceRequest = sourceRequest,
         sourceAcquisition = acquisition,
         postgres = postgres,
@@ -1668,6 +2354,44 @@ private suspend fun RunBundleStore.requireAnalysis(call: ApplicationCall): io.lt
     }
 }
 
+/**
+ * Reads the stored pod-view with the hash check of RunBundleStore.readPodViewBytes on every call (no cache, so a swapped
+ * file is seen by the next request). The parse is serialized: one 12 MiB document at a time is held in memory.
+ */
+private suspend fun RunBundleStore.requirePodView(
+    call: ApplicationCall,
+    permit: kotlinx.coroutines.sync.Semaphore,
+): Pair<PodViewV1, String> {
+    // Ordinary reads compare artifact sizes, so a deleted or resized pod-view.json already fails requireAnalysis.
+    val corrupt = { failure: IllegalStateException -> failure.message?.startsWith("CORRUPT_RUN_BUNDLE") == true }
+    try {
+        requireAnalysis(call)
+    } catch (failure: IllegalStateException) {
+        if (corrupt(failure)) corruptPodView()
+        throw failure
+    }
+    val runId = checkNotNull(call.parameters["runId"])
+    val analysisId = checkNotNull(call.parameters["analysisId"])
+    return permit.withPermit {
+        withContext(Dispatchers.IO) {
+            val bytes =
+                try {
+                    readPodViewBytes(runId, analysisId)
+                } catch (failure: IllegalStateException) {
+                    if (corrupt(failure)) corruptPodView()
+                    throw failure
+                } ?: throw ApiFailure(HttpStatusCode.NotFound, "POD_VIEW_NOT_FOUND", "Pod view was not found")
+            val valid = validatePodView(bytes.inputStream(), MAX_POD_VIEW_BYTES) as? PodViewValidation.Valid ?: corruptPodView()
+            val sha256 = sha256Hex(bytes)
+            if (valid.canonicalSha256 != sha256) corruptPodView()
+            valid.view to sha256
+        }
+    }
+}
+
+private fun corruptPodView(): Nothing =
+    throw ApiFailure(HttpStatusCode.InternalServerError, "CORRUPT_POD_VIEW", "Stored pod view is invalid")
+
 private fun ApplicationCall.requireOnlyQueries(vararg allowed: String) {
     val parameters = request.queryParameters
     if (parameters.names().any { it !in allowed } || parameters.names().any { parameters.getAll(it)?.size != 1 }) {
@@ -1758,6 +2482,7 @@ private suspend fun ApplicationCall.respondError(
     code: String,
     message: String,
     details: List<PolicyValidationError> = emptyList(),
+    limit: Int? = null,
 ) = respondJson(
     buildJsonObject {
         put(
@@ -1766,6 +2491,7 @@ private suspend fun ApplicationCall.respondError(
                 put("code", code)
                 put("message", message)
                 put("details", JsonArray(details.map { it.toJson() }))
+                limit?.let { put("limit", it) }
             },
         )
     },
@@ -1824,6 +2550,7 @@ private class ApiFailure(
     val status: HttpStatusCode,
     val code: String,
     override val message: String,
+    val limit: Int? = null,
 ) : RuntimeException(message)
 
 private class InvalidPolicy(
@@ -1846,12 +2573,17 @@ private class InvalidTrend(
     val errors: List<PolicyValidationError>,
 ) : RuntimeException()
 
+private class InvalidPodView(
+    val errors: List<PolicyValidationError>,
+) : RuntimeException()
+
 private fun randomToken(): String {
     val bytes = ByteArray(32)
     SecureRandom().nextBytes(bytes)
     return HexFormat.of().formatHex(bytes)
 }
 
+private val MUTATING_METHODS = setOf(HttpMethod.Post, HttpMethod.Put, HttpMethod.Delete, HttpMethod.Patch)
 private const val SESSION_COOKIE = "ltv_session"
 private const val CSRF_HEADER = "X-LTV-CSRF"
 private const val MAX_UPLOAD_BYTES = 4_294_967_296L
@@ -1864,8 +2596,11 @@ private const val MAX_DIAGNOSTIC_BYTES = 1024 * 1024
 private const val MAX_CONTEXT_BYTES = 32L * 1024 * 1024
 private const val MAX_JOB_REQUEST_BYTES =
     MAX_RESOURCE_SNAPSHOT_BYTES + 2 * MAX_RESOURCE_BYTES + MAX_CONTEXT_BYTES + 4 * 1024 * 1024 +
-        MAX_POLICY_BYTES + MAX_DIAGNOSTIC_BYTES + MAX_CAPACITY_PLAN_BYTES + MAX_TREND_PLAN_BYTES +
+        MAX_POLICY_BYTES + MAX_DIAGNOSTIC_BYTES + MAX_CAPACITY_PLAN_BYTES + MAX_TREND_PLAN_BYTES + MAX_POD_VIEW_BYTES +
         MAX_MULTIPART_OVERHEAD_BYTES
+
+// 24 before pod_view; one more part for pod_view (ADR 0020, section 4).
+private const val MAX_JOB_PARTS = 25
 private val POSTGRES_PART_LIMITS =
     mapOf(
         "postgres_pre" to MAX_RESOURCE_BYTES,
@@ -1874,6 +2609,8 @@ private val POSTGRES_PART_LIMITS =
     )
 private const val MAX_RUN_ID_BYTES = 128
 private const val MAX_BASELINE_REQUEST_BYTES = 16_384
+private const val DEFAULT_RELEASE_LIMIT = 50
+private const val MAX_RELEASE_LIMIT = 100
 private const val DEFAULT_RUN_LIMIT = 100
 private const val MAX_RUN_LIMIT = 100
 private const val DEFAULT_ANALYSIS_LIMIT = 25

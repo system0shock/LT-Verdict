@@ -37,6 +37,8 @@ export interface AnalysisSummary {
   policy_id?: string | null
   policy_verdict: AnalysisResult['policy_verdict']
   run_validity: AnalysisResult['run_validity']
+  resource_arm?: string
+  resource_snapshot_sha256?: string
 }
 
 export interface AnalysisPage {
@@ -115,7 +117,7 @@ export interface PolicyRule {
 export interface Policy {
   schema_version: 'policy.v1'
   policy_id: string
-  defaults?: { sample_floor?: number; min_samples?: number }
+  defaults?: { sample_floor?: number; min_samples?: number; max_missing_fraction?: number; max_gap_cells?: number }
   rules: PolicyRule[]
 }
 
@@ -232,6 +234,22 @@ export interface ResourcePolicyCheckEvidence {
   effect: 'diagnostic' | 'sla'
   status: 'PASS' | 'FAIL' | 'NO_VERDICT'
   reason: string | null
+  // Только у проверок платформенных правил (ADR 0018): правило-источник, сервис и покрытие ячеек окна.
+  platform_rule_id?: string
+  service?: string
+  expected_cells?: number
+  observed_cells?: number
+  missing_cells?: number
+  longest_gap_cells?: number
+}
+
+export interface RuleWindowCheckEvidence {
+  id: string
+  type: 'rule_window_check'
+  rule_id: string
+  window_id: string
+  status: 'NO_VERDICT'
+  reason_code: string
 }
 
 export interface ResourceBindingEvidence {
@@ -495,7 +513,7 @@ export interface ResourceTrendFinding {
   evidence_id: string
 }
 
-export type AnalysisEvidence = MetricSummaryEvidence | PolicyCheckEvidence | DiagnosticEvidence | ResourceSummaryEvidence | WindowPolicySummaryEvidence | ResourcePolicyCheckEvidence | ResourceBindingEvidence | DiagnosticSummaryEvidence | CorrelationPairEvidence | CorrelationHeadlineSelectionEvidence | AnomalyCheckEvidence | WindowMetricSummaryEvidence | SourceSummaryEvidence | OpenSearchEvidence | PostgresContextEvidence | TrendCheckEvidence | TrendSummaryEvidence
+export type AnalysisEvidence = MetricSummaryEvidence | PolicyCheckEvidence | DiagnosticEvidence | ResourceSummaryEvidence | WindowPolicySummaryEvidence | ResourcePolicyCheckEvidence | RuleWindowCheckEvidence | ResourceBindingEvidence | DiagnosticSummaryEvidence | CorrelationPairEvidence | CorrelationHeadlineSelectionEvidence | AnomalyCheckEvidence | WindowMetricSummaryEvidence | SourceSummaryEvidence | OpenSearchEvidence | PostgresContextEvidence | TrendCheckEvidence | TrendSummaryEvidence
 
 export interface CapacityStage {
   id: string
@@ -568,6 +586,14 @@ export interface BaselineSelection {
   scores: Array<{ reference: AnalysisReference; score: number }>
 }
 
+// One entry of `GET /api/baseline` `baselines`: the active baseline of a (series, arm) pair.
+export interface BaselineSlotView {
+  series: string
+  arm: string | null
+  source: 'SLOT' | 'LEGACY'
+  baseline: BaselineSelection
+}
+
 export type BaselineRequest =
   | { mode: 'manual'; series: string; reference: AnalysisReference }
   | { mode: 'statistical'; series: string; candidates: AnalysisReference[]; comparable: true }
@@ -593,12 +619,23 @@ export type BaselineComparisonWarning =
   | 'BASELINE_IS_CURRENT_ANALYSIS'
   | 'BASELINE_IS_CURRENT_RUN'
   | 'CURRENT_IN_CANDIDATE_SET'
+  | 'BASELINE_NOT_PASS'
+  | 'BASELINE_SMALL_SAMPLE'
+  | 'POLICY_DIFFERS'
+  | 'PROFILE_MISMATCH'
 
 export interface BaselineComparison {
   baseline: BaselineSelection
   current: AnalysisReference
   comparability: 'UNCONFIRMED' | 'USER_CONFIRMED'
   warnings: BaselineComparisonWarning[]
+  // Заявленные профили условий релизов (ADR 0019); null, если анализы не сопоставлены с релизами или профиль не заявлен.
+  profile?: {
+    status: 'MATCH' | 'MISMATCH'
+    differing_fields: string[]
+    baseline_release_id: string
+    current_release_id: string
+  } | null
   conditions: BaselineCondition | null
   metrics: ComparisonMetric[]
   window_comparison?: {
@@ -737,3 +774,63 @@ export interface ResourceSeriesValues {
   series: ResourceSeriesValuesSeries[]
   next_from_ms: number | null
 }
+
+// Релизы (ADR 0019): приватная запись о релизе протокола с копиями фактов анализов; метрики в записи не хранятся.
+export type ReleaseAnalysisState = 'OK' | 'MISSING' | 'CORRUPT'
+
+export interface ReleaseProfile {
+  scenario_mix: string | null
+  environment_dataset: string | null
+  load_model: string | null
+  targets_stages: string | null
+  pacing: string | null
+  generator_limits: string | null
+}
+
+export interface ReleaseAnalysis {
+  analysis_id: string
+  arm: string | null
+  coverage_reasons: string[]
+  coverage_status: 'COMPLETE' | 'INCOMPLETE'
+  policy_sha256: string
+  policy_verdict: 'PASS' | 'FAIL' | 'NO_POLICY' | 'NO_VERDICT'
+  run_validity: 'VALID' | 'DEGRADED' | 'INVALID'
+  analysis_state: ReleaseAnalysisState
+  baseline_eligible: boolean
+  ineligible_reasons: string[]
+}
+
+export interface Release {
+  schema_version: 'local-release.v1'
+  release_id: string
+  series: string
+  label: string
+  run_id: string
+  started_at: string
+  analyses: ReleaseAnalysis[]
+  profile: ReleaseProfile | null
+  notes: string | null
+  created_at: string
+  updated_at: string
+  baseline_eligible: boolean
+  ineligible_reasons: string[]
+}
+
+export interface ReleaseList {
+  releases: Release[]
+  next_after: string | null
+  series_summary: Array<{ series: string; count: number }>
+  corrupt_count: number
+  corrupt_names: Array<{ name: string; reason: string }>
+}
+
+export interface ReleaseRequest {
+  series: string
+  label: string
+  run_id: string
+  analyses: Array<{ analysis_id: string }>
+  profile: ReleaseProfile | null
+  notes: string | null
+}
+
+export type ReleaseUpdate = Omit<ReleaseRequest, 'series' | 'run_id'>

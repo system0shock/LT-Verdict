@@ -1,3 +1,4 @@
+import AxeBuilder from '@axe-core/playwright'
 import { expect, test, type Page } from '@playwright/test'
 import { OVERVIEW_LABELS } from '../src/shell/labels'
 import { CAPACITY_LABELS } from '../src/shell/labels.tables'
@@ -124,3 +125,135 @@ test('old shell keeps the raw resource values', async ({ page }) => {
   await expect(row).toContainText(longRatio)
   await expect(row).toContainText('Not available (null)')
 })
+
+// Блок ёмкости на «Обзоре»: граница словами, итог, ступени графиком и таблицей.
+const blockStage = (id: string, target: number, verdict: string, over: Record<string, unknown> = {}) => ({
+  id, target, achieved: String(target), achieved_statistic: 'p05_10s', observed_min: target, observed_max: target, complete_bins: 30, expected_bins: 30,
+  target_tolerance_ratio: 0.02, verified_bound_load: verdict === 'PASS' || verdict === 'FAIL' ? String(target) : null, verdict, reasons: [], evidence_refs: [], ...over,
+})
+const blockStages = [blockStage('step-40', 40, 'PASS'), blockStage('step-96', 96, 'PASS', { achieved: '95.745', verified_bound_load: '95.745' }), blockStage('step-104', 104, 'FAIL', { achieved: '103.745', verified_bound_load: '103.745' })]
+const blockResult = (verdict: string, over: Record<string, unknown> = {}, stages: unknown[] = blockStages, reasons: string[] = []) => ({
+  ...result(verdict),
+  capacity_summary: { ...capacity(verdict), stages, reasons, ...over },
+})
+const smallSampleStages = [blockStage('step-40', 40, 'PASS'), blockStage('step-96', 96, 'INDETERMINATE', { achieved: null, reasons: ['CAPACITY_INSUFFICIENT_SAMPLES'] })]
+
+test('capacity PASS: the block gives the bound in words, the verdict and the requirement without contradiction', async ({ page }) => {
+  await open(page, blockResult('PASS'))
+
+  const block = page.getByTestId('capacity-block')
+  await expect(block).toBeVisible()
+  await expect(block.getByTestId('capacity-block-verdict')).toHaveText(OVERVIEW_LABELS.capacityVerdict.PASS)
+  await expect(block.getByTestId('capacity-block-bound')).toContainText('От 95,745 до 103,745 requests/s')
+  await expect(block.getByTestId('capacity-block-statement')).toContainText('Требуемая ёмкость не выше 95,745 requests/s')
+  await expect(block.getByTestId('capacity-block-statement')).toContainText(OVERVIEW_LABELS.capacityPassFailedAbove)
+  await expect(block).not.toContainText(OVERVIEW_LABELS.capacityVerdict.FAIL)
+  const rows = block.getByTestId('capacity-block-stage')
+  await expect(rows).toHaveCount(3)
+  await expect(rows.nth(0)).toContainText('step-40')
+  await expect(rows.nth(1)).toContainText('95,745')
+  await expect(rows.nth(1)).toContainText('Выдержана')
+  await expect(rows.nth(2)).toContainText('Нарушение')
+  await expect(rows.nth(2)).toHaveAttribute('data-kind', 'fail')
+  await expect(block).toContainText('Ступеней: 3; выдержано: 2, нарушено: 1')
+})
+
+test('capacity block: the chart is hidden from assistive tech, the table is its text equivalent and the verdict is not only a colour', async ({ page }) => {
+  await open(page, blockResult('PASS', {}, [...blockStages, blockStage('step-110', 110, 'INDETERMINATE')]))
+
+  const block = page.getByTestId('capacity-block')
+  await expect(block.getByRole('region', { name: OVERVIEW_LABELS.capacityTableRegion })).toBeVisible()
+  await expect(block.getByRole('columnheader')).toHaveText([...OVERVIEW_LABELS.capacityHeads])
+  await expect(block.getByTestId('capacity-block-bar')).toHaveCount(4)
+  await expect(block.getByTestId('capacity-block-chart')).toHaveAttribute('aria-hidden', 'true')
+  await expect(block.getByTestId('capacity-block-table').getByRole('row')).toHaveCount(5)
+  const dashes = (kind: string) => block.locator(`[data-kind="${kind}"] rect`).first().evaluate((node) => getComputedStyle(node).strokeDasharray)
+  expect(await dashes('pass')).toBe('none')
+  expect(await dashes('unverified')).not.toBe('none')
+  await expect(block.locator('[data-kind="unverified"] .status-text')).toContainText('Не подтверждена')
+  await expect(block.locator('[data-kind="unverified"] .status-text')).toContainText('?')
+  const widths = await block.locator('rect').evaluateAll((nodes) => nodes.map((node) => Number(node.getAttribute('width'))))
+  expect(widths).toEqual([...widths].sort((left, right) => left - right))
+  expect(widths[widths.length - 1]).toBe(1000)
+})
+
+test('capacity FAIL: one reason under attention, the block says the requirement is not below the upper bound', async ({ page }) => {
+  await open(page, blockResult('FAIL'))
+
+  await expect(page.getByTestId('attention-item').filter({ hasText: OVERVIEW_LABELS.capacityFailTitle })).toHaveCount(1)
+  const block = page.getByTestId('capacity-block')
+  await expect(block.getByTestId('capacity-block-verdict')).toHaveText(OVERVIEW_LABELS.capacityVerdict.FAIL)
+  await expect(block.getByTestId('capacity-block-statement')).toContainText('Требуемая ёмкость не ниже 103,745 requests/s')
+  await expect(block).not.toContainText(OVERVIEW_LABELS.capacityVerdict.PASS)
+})
+
+test('capacity NO_VERDICT: the bound is words, the requirement sits inside it', async ({ page }) => {
+  await open(page, blockResult('NO_VERDICT'))
+
+  const block = page.getByTestId('capacity-block')
+  await expect(block.getByTestId('capacity-block-verdict')).toHaveText(OVERVIEW_LABELS.capacityVerdict.NO_VERDICT)
+  await expect(block.getByTestId('capacity-block-statement')).toContainText('лежит между 95,745 и 103,745 requests/s')
+})
+
+test('capacity small sample: the stage is unverified and marked, the bound lines are absent', async ({ page }) => {
+  await open(page, blockResult('NO_VERDICT', { bound_type: 'INDETERMINATE', lower_inclusive: null, upper_exclusive: null }, smallSampleStages, ['CAPACITY_INSUFFICIENT_SAMPLES', 'CAPACITY_STAGE_NOT_VERIFIED']))
+
+  const block = page.getByTestId('capacity-block')
+  await expect(block.getByTestId('capacity-block-bound')).toContainText('Граница ёмкости не определена')
+  await expect(block.getByTestId('capacity-block-statement')).toHaveText(OVERVIEW_LABELS.capacityStatementIndeterminate)
+  const row = block.getByTestId('capacity-block-stage').nth(1)
+  await expect(row).toContainText('Не подтверждена')
+  await expect(row.getByTestId('capacity-block-small-sample')).toBeVisible()
+  await expect(row).toContainText('нет данных')
+  await expect(block.getByTestId('capacity-block-small-sample-note')).toBeVisible()
+  await expect(block.locator('.overview-capacity__bound')).toHaveCount(0)
+})
+
+test('capacity block opens the capacity table on the tables tab', async ({ page }) => {
+  await open(page, blockResult('PASS'))
+
+  await page.getByTestId('capacity-block-open').click()
+  await expect(page.locator('#shell-tab-tables')).toHaveAttribute('aria-selected', 'true')
+  await expect(page.locator('#capacity-results')).toBeVisible()
+})
+
+test('a standard result has no capacity block', async ({ page }) => {
+  await open(page, { ...result('PASS'), analysis_mode: 'standard', capacity_summary: undefined })
+
+  await expect(page.getByTestId('metric-tile').first()).toBeVisible()
+  await expect(page.getByTestId('capacity-block')).toHaveCount(0)
+})
+
+test('old interface does not render the capacity block', async ({ page }) => {
+  await open(page, blockResult('PASS'), 'old')
+
+  await expect(page.getByTestId('capacity-block')).toHaveCount(0)
+})
+
+for (const theme of ['light', 'dark'] as const) {
+  test('capacity block has no axe violations: ' + theme, async ({ page }) => {
+    await page.emulateMedia({ colorScheme: theme })
+    await open(page, blockResult('PASS', {}, [...blockStages, blockStage('step-110', 110, 'INDETERMINATE')]))
+    await expect(page.getByTestId('capacity-block')).toBeVisible()
+
+    const axe = await new AxeBuilder({ page }).include('[data-testid="capacity-block"]').analyze()
+    expect(axe.violations.map((item) => item.id)).toEqual([])
+  })
+}
+
+for (const size of [{ width: 1280, height: 800 }, { width: 375, height: 800 }, { width: 320, height: 568 }]) {
+  test('capacity block fits without page scroll and the button is 44px at ' + size.width + 'px', async ({ page }) => {
+    await page.setViewportSize(size)
+    await open(page, blockResult('PASS'))
+
+    const block = page.getByTestId('capacity-block')
+    await expect(block).toBeVisible()
+    const width = await page.evaluate(() => ({ scroll: document.documentElement.scrollWidth, client: document.documentElement.clientWidth }))
+    expect(width.scroll).toBeLessThanOrEqual(width.client)
+    const box = (await block.getByTestId('capacity-block-open').boundingBox())!
+    expect(box.height).toBeGreaterThanOrEqual(44)
+    expect(box.width).toBeGreaterThanOrEqual(44)
+    const clipped = await block.locator('h2, h3, p, button').evaluateAll((nodes) => nodes.filter((node) => node.scrollWidth > node.clientWidth + 1).length)
+    expect(clipped).toBe(0)
+  })
+}

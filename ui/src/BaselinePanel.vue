@@ -2,11 +2,16 @@
 import { computed, onMounted, ref, watch } from 'vue'
 import BaselineCharts from './BaselineCharts.vue'
 import { ApiError, clearBaseline, compareBaseline, getBaseline, getBaselineConditions, setBaseline, setBaselineConditions } from './api'
+import { baselineIneligibility, type BaselineFacts } from './shell/history'
 import { BASELINE_LABELS } from './shell/labels'
 import { EN_COMPARE_LABELS, type CompareLabels } from './shell/labels.compare'
-import type { AnalysisReference, BaselineComparison, BaselineCondition, BaselineConditionDecision, BaselineConditionWindows, BaselineRequest, BaselineSelection } from './types'
+import type { AnalysisReference, BaselineComparison, BaselineCondition, BaselineConditionDecision, BaselineConditionWindows, BaselineRequest, BaselineSelection, BaselineSlotView } from './types'
 
-const props = withDefaults(defineProps<{ selection: AnalysisReference | null; filename: string; working: boolean; labels?: CompareLabels }>(), { labels: () => EN_COMPARE_LABELS })
+// `version` changes when the history tab assigned a baseline; `preferredSeries` is the series of the release opened from the history.
+const props = withDefaults(defineProps<{ selection: AnalysisReference | null; filename: string; working: boolean; labels?: CompareLabels; version?: number; preferredSeries?: string; facts?: BaselineFacts | null }>(), { labels: () => EN_COMPARE_LABELS, version: 0, preferredSeries: undefined, facts: null })
+// The series of the shown baseline: the saved analytics ask the server for the same baseline.
+const emit = defineEmits<{ 'active-series': [series: string | undefined] }>()
+const slots = ref<BaselineSlotView[]>([])
 const baseline = ref<BaselineSelection | null>(null)
 const comparison = ref<BaselineComparison | null>(null)
 const series = ref(props.labels.seriesDefault)
@@ -25,6 +30,7 @@ const minChangePercent = ref('5')
 const minErrorRateDelta = ref('0.001')
 const error = ref('')
 const errorCode = ref('')
+const errorLang = ref<string | undefined>(undefined)
 let baselineRevision = 0
 let comparisonRevision = 0
 let conditionRevision = 0
@@ -32,6 +38,8 @@ let conditionRevision = 0
 const busy = computed(() => loading.value || saving.value || conditionSaving.value || props.working)
 const canAdd = computed(() => props.selection && candidates.value.length < 20
   && !candidates.value.some((candidate) => candidate.reference.run_id === props.selection?.run_id))
+// Why the open analysis cannot become a baseline (new shell only: the old interface leaves the decision to the server).
+const ineligibleCode = computed(() => (props.labels.ineligible && props.facts ? baselineIneligibility(props.facts) : null))
 const validSeries = computed(() => series.value.trim().length > 0 && new TextEncoder().encode(series.value).length <= 128)
 const windowSelection = computed(() => baselineWindow.value.trim() !== '' || currentWindow.value.trim() !== '')
 const validWindows = computed(() => !windowSelection.value || (
@@ -47,7 +55,7 @@ const emptyWindowNotes = computed(() => {
     ...(reasons.includes('CURRENT_WINDOW_EMPTY') ? [BASELINE_LABELS.emptyCurrentWindow] : []),
   ]
 })
-const oldRules = computed(() => errorCode.value === 'BASELINE_MIXED_SEMANTICS'
+const incompatible = computed(() => errorCode.value === 'BASELINE_MIXED_SEMANTICS'
   || comparison.value?.metrics.some((metric) => metric.reason === 'INCOMPATIBLE_METRIC_DEFINITION')
   || comparison.value?.window_comparison?.reasons.includes('INCOMPATIBLE_METRIC_DEFINITION'))
 
@@ -55,7 +63,39 @@ onMounted(loadBaseline)
 watch(() => props.selection, conditionBindingChanged)
 watch([baselineWindow, currentWindow], conditionBindingChanged)
 watch([minChangePercent, minErrorRateDelta], invalidateComparison)
-watch(series, () => { comparable.value = false })
+watch(series, () => {
+  comparable.value = false
+  showSlotOfSeries()
+})
+// A series without a baseline is still the chosen series: the analytics must not fall back to another baseline then.
+watch(() => baseline.value?.series ?? (slots.value.length ? series.value.normalize('NFC').trim() : undefined), (active) => emit('active-series', active), { immediate: true })
+watch(() => [props.version, props.preferredSeries], () => {
+  if (props.preferredSeries) series.value = props.preferredSeries
+  void loadBaseline()
+})
+
+// The server stores series normalized (NFC, trimmed), so the field is compared in that form.
+function slotOfSeries(name: string): BaselineSlotView | undefined {
+  const wanted = name.normalize('NFC').trim()
+  return slots.value.find((slot) => slot.series === wanted)
+}
+
+// Typing a series or choosing a radio shows the baseline of that series; no slot means no baseline for it.
+function showSlotOfSeries() {
+  const next = slotOfSeries(series.value)?.baseline ?? null
+  const same = next === null ? baseline.value === null : baseline.value !== null && next.series === baseline.value.series
+    && next.mode === baseline.value.mode && next.reference.run_id === baseline.value.reference.run_id
+    && next.reference.analysis_id === baseline.value.reference.analysis_id
+  if (same) return
+  baseline.value = next
+  conditionBindingChanged()
+}
+
+function useSlots(response: Awaited<ReturnType<typeof getBaseline>>) {
+  slots.value = response.baselines ?? (response.baseline
+    ? [{ series: response.baseline.series, arm: null, source: 'LEGACY', baseline: response.baseline }]
+    : [])
+}
 
 function invalidateComparison() {
   comparisonRevision += 1
@@ -85,7 +125,7 @@ async function loadConditions() {
   error.value = ''
   errorCode.value = ''
   try {
-    const response = await getBaselineConditions({ ...props.selection }, selectedConditionWindows())
+    const response = await getBaselineConditions({ ...props.selection }, selectedConditionWindows(), baseline.value.series)
     if (revision !== conditionRevision) return
     conditions.value = response.conditions
     conditionDecision.value = response.conditions?.decision ?? 'UNKNOWN'
@@ -104,8 +144,11 @@ async function loadBaseline() {
   try {
     const response = await getBaseline()
     if (revision !== baselineRevision) return
-    baseline.value = response.baseline
-    if (response.baseline) series.value = response.baseline.series
+    useSlots(response)
+    // On opening, a field that names no baseline takes the first one (a single baseline is the usual case).
+    // A series chosen from the history stays even without a baseline: the panel then says so for that series.
+    if (!props.preferredSeries && !slotOfSeries(series.value) && slots.value[0]) series.value = slots.value[0].series
+    baseline.value = slotOfSeries(series.value)?.baseline ?? null
     void loadConditions()
   } catch (failure) {
     if (revision === baselineRevision) showError(failure)
@@ -142,13 +185,22 @@ async function save(request: BaselineRequest | null) {
   errorCode.value = ''
   invalidateComparison()
   try {
-    const response = request ? await setBaseline(request) : await clearBaseline()
+    if (request) {
+      const response = await setBaseline(request)
+      if (revision !== baselineRevision) return
+      series.value = response.baseline.series
+    } else {
+      // The arm of the shown baseline names its slot together with the series.
+      await clearBaseline(baseline.value?.series, slotOfSeries(series.value)?.arm ?? undefined)
+    }
+    const listed = await getBaseline()
     if (revision !== baselineRevision) return
-    baseline.value = response.baseline
+    useSlots(listed)
+    baseline.value = slotOfSeries(series.value)?.baseline ?? null
     conditionRevision += 1
     conditions.value = null
     conditionDecision.value = 'UNKNOWN'
-    if (response.baseline) void loadConditions()
+    if (baseline.value) void loadConditions()
   } catch (failure) {
     if (revision === baselineRevision) showError(failure)
   } finally {
@@ -160,27 +212,39 @@ async function saveConditions() {
   if (!baseline.value || !props.selection || busy.value || conditionBusy.value || !validWindows.value) return
   const revision = ++conditionRevision
   const stateRevision = baselineRevision
+  // Результат сравнения не сбрасывается: решение меняет только строку условий, поэтому после сохранения
+  // сравнение повторяется само, а до ответа на экране остаётся прежний результат.
+  const refresh = comparison.value !== null || comparing.value
+  // Ответ сравнения, начатого до сохранения, устарел и не должен затереть выбор решения: его отбрасываем, показанный результат оставляем.
+  comparisonRevision += 1
+  comparing.value = false
+  let saved = false
   conditionSaving.value = true
   error.value = ''
   errorCode.value = ''
-  invalidateComparison()
   try {
-    const response = await setBaselineConditions({ ...props.selection }, conditionDecision.value, selectedConditionWindows())
+    const response = await setBaselineConditions({ ...props.selection }, conditionDecision.value, selectedConditionWindows(), baseline.value.series)
     if (revision !== conditionRevision || stateRevision !== baselineRevision) return
     conditions.value = response.conditions
     conditionDecision.value = response.conditions.decision
+    saved = true
   } catch (failure) {
     if (revision === conditionRevision && stateRevision === baselineRevision) showError(failure)
   } finally {
     conditionSaving.value = false
   }
+  if (saved && refresh) await compare(true)
 }
 
-async function compare() {
-  if (!props.selection || !baseline.value || busy.value || !validWindows.value) return
+async function compare(keepResult = false) {
+  if (!props.selection || !baseline.value || busy.value || !validWindows.value) {
+    // Повтор после сохранения решения не стартует (например, началась пробная проверка): устаревший результат не оставляем.
+    if (keepResult) comparison.value = null
+    return
+  }
   const revision = ++comparisonRevision
   const stateRevision = baselineRevision
-  comparison.value = null
+  if (!keepResult) comparison.value = null
   comparing.value = true
   error.value = ''
   errorCode.value = ''
@@ -190,22 +254,28 @@ async function compare() {
       current_window: currentWindow.value.trim(),
       min_change_percent: minChangePercent.value,
       min_error_rate_delta: minErrorRateDelta.value,
-    } : undefined)
+    } : undefined, baseline.value.series)
     if (revision !== comparisonRevision || stateRevision !== baselineRevision) return
     comparison.value = response
     baseline.value = response.baseline
     conditions.value = response.conditions
     conditionDecision.value = response.conditions?.decision ?? 'UNKNOWN'
   } catch (failure) {
-    if (revision === comparisonRevision && stateRevision === baselineRevision) showError(failure)
+    if (revision === comparisonRevision && stateRevision === baselineRevision) {
+      comparison.value = null
+      showError(failure)
+    }
   } finally {
     if (revision === comparisonRevision) comparing.value = false
   }
 }
 
 function showError(failure: unknown) {
-  error.value = failure instanceof Error ? failure.message : props.labels.requestFailed
+  // A phrase of the dictionary is in the language of the panel; the server text (and the text of a network failure) is English.
+  const phrase = failure instanceof ApiError ? props.labels.errorText(failure.code, failure.limit) : null
+  error.value = phrase ?? (failure instanceof Error ? failure.message : props.labels.requestFailed)
   errorCode.value = failure instanceof ApiError ? failure.code : ''
+  errorLang.value = phrase !== null || !(failure instanceof Error) ? undefined : props.labels.foreignLang
 }
 
 function warningText(code: string): string {
@@ -242,6 +312,28 @@ function warningText(code: string): string {
       </p>
     </div>
 
+    <fieldset
+      v-if="!loading && slots.length"
+      data-testid="baseline-slots"
+      class="field baseline-slots"
+      :disabled="busy"
+    >
+      <legend>{{ labels.slotsLegend }}</legend>
+      <label
+        v-for="slot in slots"
+        :key="`${slot.series}/${slot.arm ?? ''}`"
+        class="baseline-slot"
+      >
+        <input
+          type="radio"
+          name="baseline-slot"
+          :checked="baseline !== null && slot.series === baseline.series"
+          @change="series = slot.series"
+        >
+        <span><strong>{{ slot.series }}</strong> · {{ labels.mode(slot.baseline.mode) }} · {{ labels.analysisWord }} <span class="mono">{{ slot.baseline.reference.analysis_id.slice(0, 12) }}</span></span>
+      </label>
+    </fieldset>
+
     <p
       v-if="loading"
       role="status"
@@ -274,7 +366,7 @@ function warningText(code: string): string {
       </template>
     </div>
     <p v-else>
-      {{ labels.noBaseline }}
+      {{ slots.length ? labels.noBaselineFor(series.normalize('NFC').trim()) : labels.noBaseline }}
     </p>
 
     <div class="form-grid">
@@ -391,7 +483,8 @@ function warningText(code: string): string {
     <div class="policy-editor__actions">
       <button
         type="button"
-        :disabled="busy || !selection || !validSeries"
+        :disabled="busy || !selection || !validSeries || ineligibleCode !== null"
+        :aria-describedby="ineligibleCode === null ? undefined : 'baseline-ineligible'"
         @click="assignManual"
       >
         {{ labels.setBaseline }}
@@ -399,7 +492,7 @@ function warningText(code: string): string {
       <button
         type="button"
         :disabled="busy || conditionSaving || !baseline || !selection || comparing || !validWindows"
-        @click="compare"
+        @click="compare()"
       >
         {{ comparing ? labels.comparing : labels.compare }}
       </button>
@@ -412,6 +505,16 @@ function warningText(code: string): string {
         {{ labels.clearBaseline }}
       </button>
     </div>
+
+    <p
+      v-if="ineligibleCode !== null && labels.ineligible"
+      id="baseline-ineligible"
+      data-testid="baseline-ineligible"
+      class="field__hint"
+      role="status"
+    >
+      {{ labels.ineligible(ineligibleCode) }}
+    </p>
 
     <details class="baseline-statistics">
       <summary>{{ labels.statSummary }}</summary>
@@ -471,17 +574,17 @@ function warningText(code: string): string {
       v-if="error"
       class="notice notice-fail"
       role="alert"
-      :lang="labels.foreignLang"
+      :lang="errorLang"
     >
       {{ error }}
     </p>
     <p
-      v-if="oldRules"
-      data-testid="baseline-old-rules"
+      v-if="incompatible"
+      data-testid="baseline-incompatible"
       class="notice notice-info"
       role="status"
     >
-      {{ BASELINE_LABELS.oldRulesHint }}
+      {{ BASELINE_LABELS.incompatibleHint }}
     </p>
 
     <section
@@ -546,10 +649,18 @@ function warningText(code: string): string {
               :data-testid="`comparison-${metric.metric}`"
             >
               <td>{{ labels.metric(metric.metric) }} / {{ labels.unit(metric.unit) }}</td>
-              <td>{{ metric.baseline ?? labels.na }}</td>
-              <td>{{ metric.current ?? labels.na }}</td>
-              <td>{{ metric.delta ?? labels.naReason(metric.reason) }}</td>
-              <td>{{ metric.delta_percent === null ? labels.naReason(metric.percent_reason) : `${metric.delta_percent}%` }}</td>
+              <td :title="labels.exact(metric.baseline)">
+                {{ labels.value(metric.baseline, metric.current) }}
+              </td>
+              <td :title="labels.exact(metric.current)">
+                {{ labels.value(metric.current, metric.baseline) }}
+              </td>
+              <td :title="labels.exact(metric.delta)">
+                {{ labels.deltaValue(metric.delta, metric.reason) }}
+              </td>
+              <td :title="labels.exact(metric.delta_percent, true)">
+                {{ labels.percentValue(metric.delta_percent, metric.percent_reason) }}
+              </td>
             </tr>
           </tbody>
         </table>
@@ -557,6 +668,16 @@ function warningText(code: string): string {
       <p class="field__hint">
         {{ labels.roundingNote }}
       </p>
+      <p
+        v-if="comparison.profile"
+        data-testid="baseline-profile"
+      >
+        {{ labels.profileLine(comparison.profile) }}
+      </p>
+      <details v-if="labels.rawMetricsSummary">
+        <summary>{{ labels.rawMetricsSummary }}</summary>
+        <pre>{{ JSON.stringify(comparison.metrics, null, 2) }}</pre>
+      </details>
       <section
         v-if="comparison.window_comparison"
         data-testid="window-comparison"
@@ -618,10 +739,18 @@ function warningText(code: string): string {
                 :key="`${metric.metric}-${metric.entity}-${metric.resource_series_id}-${index}`"
               >
                 <td>{{ labels.metric(metric.metric) }} / {{ metric.entity ?? labels.overall }} / {{ metric.resource_series_id ?? '—' }} / {{ labels.unit(metric.unit) }}</td>
-                <td>{{ metric.baseline ?? labels.na }}</td>
-                <td>{{ metric.current ?? labels.na }}</td>
-                <td>{{ metric.delta ?? labels.naReason(metric.reason) }}</td>
-                <td>{{ metric.delta_percent === null ? labels.naReason(metric.percent_reason) : `${metric.delta_percent}%` }}</td>
+                <td :title="labels.exact(metric.baseline)">
+                  {{ labels.value(metric.baseline, metric.current) }}
+                </td>
+                <td :title="labels.exact(metric.current)">
+                  {{ labels.value(metric.current, metric.baseline) }}
+                </td>
+                <td :title="labels.exact(metric.delta)">
+                  {{ labels.deltaValue(metric.delta, metric.reason) }}
+                </td>
+                <td :title="labels.exact(metric.delta_percent, true)">
+                  {{ labels.percentValue(metric.delta_percent, metric.percent_reason) }}
+                </td>
                 <td>{{ labels.windowStatus(metric.status) }} · {{ labels.reasonOrDash(metric.reason) }}</td>
               </tr>
             </tbody>
@@ -639,4 +768,5 @@ function warningText(code: string): string {
 <style>
 .baseline-panel[lang='ru'] p { overflow-wrap: anywhere; }
 .baseline-panel[lang='ru'] .notice { flex-wrap: wrap; }
+.baseline-panel[lang='ru'] pre { max-width: 100%; overflow-x: auto; }
 </style>

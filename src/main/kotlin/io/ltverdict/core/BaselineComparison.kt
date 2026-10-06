@@ -85,6 +85,42 @@ internal fun manualBaselineSelection(
         scores = emptyList(),
     ).toJson()
 
+// ADR 0019, section 6: one admission rule for both selection modes. The order of the three checks is part of the contract.
+// INCOMPLETE coverage caused only by SMALL_SAMPLE is admitted (owner decision 2026-10-04); compareAnalyses warns about it.
+internal fun baselineCandidateRejection(
+    policyVerdict: String?,
+    runValidity: String?,
+    coverageStatus: String?,
+    coverageReasons: List<String?>,
+): String? =
+    when {
+        runValidity != "VALID" -> "BASELINE_CANDIDATE_INVALID"
+        !coverageAdmitted(coverageStatus, coverageReasons) -> "BASELINE_CANDIDATE_INCOMPLETE"
+        policyVerdict != "PASS" -> "BASELINE_CANDIDATE_NOT_PASS"
+        else -> null
+    }
+
+internal fun baselineCandidateRejection(result: JsonObject): String? =
+    baselineCandidateRejection(
+        result.stringOrNull("policy_verdict"),
+        result.stringOrNull("run_validity"),
+        result.objectOrNull("analysis_coverage")?.stringOrNull("status"),
+        coverageReasons(result),
+    )
+
+private fun coverageAdmitted(
+    status: String?,
+    reasons: List<String?>,
+): Boolean = status == "COMPLETE" || (status == "INCOMPLETE" && reasons.isNotEmpty() && reasons.all { it == SMALL_SAMPLE_REASON })
+
+// A reason that is not a string stays in the list as null, so a malformed array never reads as a lone SMALL_SAMPLE.
+private fun coverageReasons(result: JsonObject): List<String?> =
+    (result.objectOrNull("analysis_coverage")?.get("reasons") as? JsonArray)
+        ?.map { (it as? JsonPrimitive)?.takeIf(JsonPrimitive::isString)?.content }
+        .orEmpty()
+
+private const val SMALL_SAMPLE_REASON = "SMALL_SAMPLE"
+
 internal fun statisticalBaselineSelection(
     series: String,
     references: List<JsonObject>,
@@ -98,10 +134,11 @@ internal fun statisticalBaselineSelection(
         references.indices.map { index ->
             val reference = references[index].toReference()
             val result = results[index]
-            require(result.stringOrNull("run_validity") == "VALID") { "BASELINE_CANDIDATE_INVALID" }
-            require(result.objectOrNull("analysis_coverage")?.stringOrNull("status") == "COMPLETE") {
-                "BASELINE_CANDIDATE_INCOMPLETE"
-            }
+            baselineCandidateRejection(result)?.let { throw IllegalArgumentException(it) }
+            require(
+                identities[index]["verdict_gates"] is JsonObject &&
+                    identities[index].stringOrNull("policy_sha256")?.let { it != "NO_POLICY" } == true,
+            ) { "BASELINE_CANDIDATE_GATES_UNKNOWN" }
             Candidate(
                 reference,
                 listOf(
@@ -140,6 +177,12 @@ internal fun statisticalBaselineSelection(
     ).toJson()
 }
 
+/** Release records (ADR 0019) that hold the baseline and the current analysis; null when none or more than one matches. */
+internal data class ReleaseComparisonContext(
+    val baseline: JsonObject?,
+    val current: JsonObject?,
+)
+
 internal fun compareAnalyses(
     selection: JsonObject,
     currentReference: JsonObject,
@@ -149,10 +192,23 @@ internal fun compareAnalyses(
     currentIdentity: JsonObject,
     windows: WindowComparisonRequest? = null,
     conditionsConfirmed: Boolean? = null,
+    releases: ReleaseComparisonContext? = null,
 ): JsonObject {
     val parsedSelection = selection.toSelection()
     val current = currentReference.toReference()
     val confirmed = conditionsConfirmed == true
+    val profile =
+        releases?.let { context ->
+            val compared =
+                compareReleaseProfiles(context.baseline?.get("profile") as? JsonObject, context.current?.get("profile") as? JsonObject)
+            val baselineId = context.baseline?.get("release_id")
+            val currentId = context.current?.get("release_id")
+            if (compared == null || baselineId == null || currentId == null) {
+                null
+            } else {
+                JsonObject(compared + mapOf("baseline_release_id" to baselineId, "current_release_id" to currentId))
+            }
+        }
     val warnings =
         buildList {
             when {
@@ -162,6 +218,11 @@ internal fun compareAnalyses(
             if (parsedSelection.mode == Mode.STATISTICAL && parsedSelection.candidates.any { it.runId == current.runId }) {
                 add("CURRENT_IN_CANDIDATE_SET")
             }
+            if (baselineResult.stringOrNull("policy_verdict") != "PASS") add("BASELINE_NOT_PASS")
+            if (SMALL_SAMPLE_REASON in coverageReasons(baselineResult)) add("BASELINE_SMALL_SAMPLE")
+            // No series warning: the API selects the baseline slot by the series of the current release (ADR 0019, section 7).
+            if (baselineIdentity["policy_sha256"] != currentIdentity["policy_sha256"]) add("POLICY_DIFFERS")
+            if ((profile?.get("status") as? JsonPrimitive)?.content == "MISMATCH") add("PROFILE_MISMATCH")
         }
     val compatible = semanticKey(baselineResult, baselineIdentity)?.let { it == semanticKey(currentResult, currentIdentity) } == true
     return buildJsonObject {
@@ -176,6 +237,7 @@ internal fun compareAnalyses(
             },
         )
         put("warnings", buildJsonArray { warnings.forEach { add(JsonPrimitive(it)) } })
+        put("profile", profile ?: JsonNull)
         put(
             "metrics",
             buildJsonArray {

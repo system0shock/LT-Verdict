@@ -17,6 +17,7 @@ import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertInstanceOf
 import org.junit.jupiter.api.Assertions.assertNotEquals
+import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertThrows
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
@@ -383,6 +384,99 @@ class AnalysisServiceTest {
             val stored = checkNotNull(store.readAnalysis(input.runId, outcome.analysisId))
             assertArrayEquals(plan.encodeToByteArray(), Files.readAllBytes(stored.path.resolve("trend-plan.json")))
         }
+
+    @Test
+    fun `pod view is bound stored with canonical bytes and leaves the result and the comparability fields alone`() =
+        withService { store, service ->
+            val input = accept(store, trendCsv().encodeToByteArray(), "pod-view.jtl")
+            val resource = resources(trendResourceJson(input.sha256).encodeToByteArray())
+            val podView = validPodView(podViewJson(input.sha256, resource))
+
+            val outcome = service.analyze(AnalysisRequest(input, passPolicy(), resources = resource, podView = podView))
+            val withoutPodView = service.analyze(AnalysisRequest(input, passPolicy(), resources = resource))
+
+            assertNotEquals(withoutPodView.analysisId, outcome.analysisId)
+            assertArrayEquals(withoutPodView.canonicalResult, outcome.canonicalResult)
+            val stored = checkNotNull(store.readAnalysis(input.runId, outcome.analysisId))
+            assertArrayEquals(podView.canonicalBytes(), Files.readAllBytes(stored.path.resolve("pod-view.json")))
+            assertEquals(
+                podView.canonicalSha256,
+                stored.artifacts
+                    .single { it.path == "pod-view.json" }
+                    .sha256,
+            )
+            assertArrayEquals(podView.canonicalBytes(), store.readPodViewBytes(input.runId, outcome.analysisId))
+            assertNull(store.readPodViewBytes(input.runId, withoutPodView.analysisId))
+
+            val identity = identityOf(stored.path)
+            val plainIdentity = identityOf(checkNotNull(store.readAnalysis(input.runId, withoutPodView.analysisId)).path)
+            assertEquals(podView.canonicalSha256, identity.value("pod_view_sha256"))
+            assertEquals("pod-view.v1", identity.value("pod_view_version"))
+            assertEquals(setOf("pod_view_sha256", "pod_view_version"), identity.keys - plainIdentity.keys)
+            listOf("modules", "input_versions", "limits").forEach { assertEquals(plainIdentity[it], identity[it], it) }
+
+            val run = Json.parseToJsonElement(Files.readAllBytes(stored.path.resolve("run.json")).decodeToString()).jsonObject
+            val podViewInput =
+                run
+                    .getValue("inputs")
+                    .jsonArray
+                    .map { it.jsonObject }
+                    .single { it.value("type") == "pod_view" }
+            assertEquals("analyses/${outcome.analysisId}/pod-view.json", podViewInput.value("path"))
+            assertEquals(podView.canonicalSha256, podViewInput.value("sha256"))
+        }
+
+    @Test
+    fun `pod view binding errors stop the analysis before anything is stored`() =
+        withService { store, service ->
+            val input = accept(store, trendCsv().encodeToByteArray(), "pod-view-rejected.jtl")
+            val resource = resources(trendResourceJson(input.sha256).encodeToByteArray())
+
+            fun refusal(
+                view: PodViewValidation.Valid,
+                withResources: Boolean = true,
+            ): String? =
+                assertThrows(IllegalArgumentException::class.java) {
+                    service.analyze(
+                        AnalysisRequest(input, passPolicy(), resources = resource.takeIf { withResources }, podView = view),
+                    )
+                }.message
+
+            assertEquals("POD_VIEW_RESOURCE_REQUIRED", refusal(validPodView(podViewJson(input.sha256, resource)), withResources = false))
+            assertEquals("POD_VIEW_INPUT_MISMATCH", refusal(validPodView(podViewJson("f".repeat(64), resource))))
+            assertEquals(
+                "POD_VIEW_SNAPSHOT_MISMATCH",
+                refusal(validPodView(podViewJson(input.sha256, resource, snapshotHash = "e".repeat(64)))),
+            )
+            assertEquals("POD_VIEW_ARM_MISMATCH", refusal(validPodView(podViewJson(input.sha256, resource, arm = "A"))))
+            assertEquals("POD_VIEW_GRID_MISMATCH", refusal(validPodView(podViewJson(input.sha256, resource, columns = 3))))
+            assertEquals(0, store.listAnalyses(input.runId, null, 10).analyses.size)
+        }
+
+    @Test
+    fun `an invalid load input still stores the pod view`() =
+        withService { store, service ->
+            val input = accept(store, "timeStamp,elapsed,label,success\nnot-a-number,1,request,true\n".encodeToByteArray(), "bad.jtl")
+            val resource = resources(trendResourceJson(input.sha256).encodeToByteArray())
+            val podView = validPodView(podViewJson(input.sha256, resource))
+
+            val outcome = service.analyze(AnalysisRequest(input, passPolicy(), resources = resource, podView = podView))
+
+            assertEquals("INVALID", result(outcome, "run_validity"))
+            assertArrayEquals(podView.canonicalBytes(), store.readPodViewBytes(input.runId, outcome.analysisId))
+            assertEquals(podView.canonicalSha256, identityOf(outcome.analysisDirectory).value("pod_view_sha256"))
+        }
+
+    private fun podViewJson(
+        loadHash: String,
+        resource: ResourceValidation.Valid,
+        snapshotHash: String = resource.semanticSha256,
+        arm: String? = null,
+        columns: Int = 4,
+    ): String = podViewTestJson(loadHash, snapshotHash, arm, 1_767_225_600_000L, 10_000L, columns)
+
+    private fun identityOf(analysis: Path): JsonObject =
+        Json.parseToJsonElement(Files.readAllBytes(analysis.resolve("identity.json")).decodeToString()).jsonObject
 
     @Test
     fun `standard analysis uses the final two-pass window and commits the complete bundle`() =
@@ -1073,6 +1167,79 @@ class AnalysisServiceTest {
         }
         """.trimIndent()
 
+    @Test
+    fun `one base profile policy gives every arm its own independent result`() =
+        withService { store, service ->
+            val input = accept(store, trendCsv().encodeToByteArray(), "arms.jtl")
+            val baseText = Files.readString(Path.of(BASE_PROFILE_PATH))
+            val base = policy(baseText)
+
+            fun analyze(
+                arm: String,
+                cpuOrders: String,
+                services: List<String> = listOf("orders", "payments"),
+                using: PolicyValidation.Valid = base,
+            ) = service.analyze(
+                AnalysisRequest(
+                    input,
+                    using,
+                    resources = resources(baseProfileSnapshotJson(input.sha256, arm, cpuOrders, services).encodeToByteArray()),
+                ),
+            )
+
+            val first = analyze("A", "0.5")
+            val second = analyze("B", "0.1")
+            val third = analyze("C", "0.1", services = listOf("orders"))
+            val relaxed = analyze("A", "0.5", using = policy(baseText.replace("\"threshold\": 0.4", "\"threshold\": 0.6")))
+
+            assertEquals(
+                listOf("FAIL", "PASS", "NO_VERDICT", "PASS"),
+                listOf(first, second, third, relaxed).map { result(it, "policy_verdict") },
+            )
+            assertTrue("RESOURCE_SERIES_NOT_FOUND" in coverageReasons(third))
+            assertEquals(3, listOf(first, second, third).map { it.analysisId }.toSet().size)
+            val identities =
+                listOf(first, second, third).map {
+                    Json.parseToJsonElement(Files.readString(it.analysisDirectory.resolve("identity.json"))).jsonObject
+                }
+            assertEquals(listOf("A", "B", "C"), identities.map { it.getValue("resource_arm").jsonPrimitive.content })
+            assertEquals(1, identities.map { it.getValue("policy_sha256") }.toSet().size)
+        }
+
+    private fun baseProfileSnapshotJson(
+        loadHash: String,
+        arm: String,
+        cpuOrders: String,
+        services: List<String>,
+    ): String {
+        fun series(
+            id: String,
+            metric: String,
+            entity: String,
+            unit: String,
+            aggregation: String,
+            value: String,
+        ) = """{"id":"$id","metric":"$metric","unit":"$unit","entity":"$entity","role":"system","aggregation":"$aggregation",""" +
+            """"labels":{"arm":"$arm"},"values":[${List(30) { value }.joinToString(",")}]}"""
+        val all =
+            services.flatMap { service ->
+                val cpu = if (service == "orders") cpuOrders else "0.1"
+                listOf(
+                    series("cpu-$service", "openshift_container_cpu_limit_ratio", service, "ratio", "interval_mean", cpu),
+                    series("memory-$service", "openshift_container_memory_limit_ratio", service, "ratio", "interval_max", "0.3"),
+                    series("oom-$service", "openshift_oom", service, "events/s", "interval_rate", "0"),
+                    series("restarts-$service", "openshift_restarts", service, "events/s", "interval_rate", "0"),
+                    series("throttling-$service", "openshift_cpu_throttling", service, "ratio", "interval_mean", "0"),
+                    series("replicas-$service", "openshift_unavailable_replicas", service, "count", "interval_max", "0"),
+                )
+            }
+        val seriesJson = all.joinToString(",")
+        return """{"schema_version":"resource-snapshot.v1","load_input_sha256":"$loadHash",""" +
+            """"start_epoch_ms":1767225600000,"step_ms":1000,"point_count":30,"series":[$seriesJson],""" +
+            """"windows":[{"id":"steady","from_epoch_ms":1767225600000,"to_epoch_ms":1767225630000}],""" +
+            """"provenance":{"source_kind":"fixture","query_semantics":"interval","clock_alignment":"arm"}}"""
+    }
+
     private fun withService(
         config: EngineConfig = EngineConfig(),
         block: (RunBundleStore, AnalysisService) -> Unit,
@@ -1295,6 +1462,7 @@ class AnalysisServiceTest {
         const val RESOURCE_FILE = "resource-snapshot.json"
         const val CAPACITY_PLAN_FILE = "capacity-plan.json"
         const val CAPACITY_FILE = "capacity.json"
+        const val BASE_PROFILE_PATH = "docs/contracts/policy/v1/examples/valid/platform-base-profile.json"
 
         val COMPLETE_ARTIFACTS =
             setOf(

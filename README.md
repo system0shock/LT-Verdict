@@ -7,7 +7,10 @@ LT Verdict — платформа детерминированного анал�
 
 Принят local-first baseline v0.6. Slice 0 завершён и отмечен тегом `stage-0`.
 Slice 1 реализован как candidate и готов к review; milestone gate остаётся
-pending до зелёных runtime/performance jobs.
+pending до зелёных runtime/performance jobs. После него в `main` влиты русская
+оболочка интерфейса по умолчанию (`?shell=new`), история релизов с baseline по
+паре «серия, плечо», платформенные правила политики и контракт `pod-view.v1`
+(экранов pod-view пока нет), а ИИ-разбор запрашивается без согласия на отправку.
 
 Первая часть Slices 8–9 добавляет открытие сохранённых analyses, графики
 нагрузки и JSON/HTML export через UI и CLI. Полный MVP остаётся в разработке.
@@ -67,6 +70,7 @@ Linux использует `./gradlew installDist` и
 - [Jenkins, Grafana и Confluence-ready output](docs/user/jenkins-and-reports.md)
 - [Подготовка нагрузочного теста и onboarding skill](docs/user/test-onboarding.md)
 - [Сохранённая аналитика и exports](docs/user/saved-analytics.md)
+- [История релизов и выбор baseline](docs/user/release-history.md)
 - [Opt-in подготовка OpenSearch correlation](docs/user/opensearch-correlation-preparation.md)
 - [Checklist отдельной приёмки MVP](docs/mvp-acceptance-checklist.md)
 - [ADR 0007 — opt-in онлайн-источники](docs/adr/0007-opt-in-online-sources.md)

@@ -75,6 +75,7 @@ let firstBody = null;
 let firstCall = null;
 let firstOk = false;
 let refusedReason = null;
+let firstRefusedReason = null; // Qwen keeps asking after a refusal and refusedReason becomes RETRY_LIMIT_REACHED; this keeps the first one
 let upstreamHost = null;
 const outcomes = [];
 
@@ -166,6 +167,7 @@ function writeObservation(before, after, ordinal) {
 }
 
 function writeResult(outcome, ordinal) {
+  if (refusedReason !== null && firstRefusedReason === null) firstRefusedReason = refusedReason;
   outcomes[ordinal - 1] = outcome;
   const latest = outcomes.at(-1);
   fs.writeFileSync(`${outputRoot}/relay-result.json`, JSON.stringify({
@@ -175,6 +177,7 @@ function writeResult(outcome, ordinal) {
     forwarded_request_count: forwarded,
     outcomes: outcomes.filter(Boolean),
     retry_refused_reason: refusedReason,
+    first_refused_reason: firstRefusedReason,
     upstream_host: upstreamHost,
     model_id: fixedModel,
   }));
@@ -186,6 +189,16 @@ function topLevelInvalid(argsText) {
   return value === null || typeof value !== "object" || Array.isArray(value) ||
     !isDeepStrictEqual(Object.keys(value).sort(), TOP_LEVEL_KEYS) ||
     value.schema_version !== "ai-advice-output.v1";
+}
+
+// ADR 0021, D2, item 3: the provider streams the arguments with its own whitespace and escapes, and Qwen Code sends them back as
+// JSON.stringify(JSON.parse(arguments)). The continuation is the same call if its arguments are the stream text or that compact
+// form: the same parsed value written in the one canonical way. Any other spelling (other key order, whitespace, escapes, number
+// form, duplicate keys) is refused; text that is not JSON can only match as the exact stream text.
+function sameArguments(received, sent) {
+  if (typeof received !== "string") return false;
+  if (received === sent) return true;
+  try { return received === JSON.stringify(JSON.parse(sent)); } catch { return false; }
 }
 
 function isContinuation(first, call, incoming) {
@@ -205,7 +218,7 @@ function isContinuation(first, call, incoming) {
       calls[0].id !== call.id || calls[0].type !== "function" ||
       !calls[0].function || typeof calls[0].function !== "object" ||
       !isDeepStrictEqual(Object.keys(calls[0].function).sort(), ["arguments", "name"]) ||
-      calls[0].function.name !== "structured_output" || calls[0].function.arguments !== call.args) return false;
+      calls[0].function.name !== "structured_output" || !sameArguments(calls[0].function.arguments, call.args)) return false;
   if (!isDeepStrictEqual(Object.keys(tool).sort(), ["content", "role", "tool_call_id"]) ||
       tool.tool_call_id !== call.id || tool.content.length === 0 ||
       Buffer.byteLength(tool.content) > 8192) return false;

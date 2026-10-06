@@ -23,6 +23,8 @@ interface PolicyEditorLabels {
   thresholdHint?: (metric: PolicyRule['metric'], value: string) => string | null
   // Sample minimum fields (U4c). Absent in the old interface, which keeps its editor unchanged.
   samples?: { floorField: string; defaultMinField: string; ruleMinField: string; defaultsHint: string; ruleHint: string; lowFloor: string }
+  // Gap tolerance defaults (ADR 0018, S7). Absent in the old interface, which keeps its editor unchanged.
+  tolerance?: { fractionField: string; gapField: string; hint: string }
   errorLang?: string
 }
 
@@ -60,7 +62,7 @@ function sampleCount(input: HTMLInputElement): number | undefined | null {
   return input.value.trim() === '' ? undefined : Number(input.value)
 }
 
-function setDefault(field: 'sample_floor' | 'min_samples', input: HTMLInputElement) {
+function setDefault(field: 'sample_floor' | 'min_samples' | 'max_missing_fraction' | 'max_gap_cells', input: HTMLInputElement) {
   const value = sampleCount(input)
   if (value === null) return
   update((policy) => {
@@ -166,6 +168,41 @@ function downloadPolicy() {
           class="field__hint"
         >
           {{ labels.samples.defaultsHint }}
+        </p>
+      </div>
+    </template>
+    <template v-if="labels.tolerance">
+      <div class="field">
+        <label for="policy-max-missing-fraction">{{ labels.tolerance.fractionField }}</label>
+        <input
+          id="policy-max-missing-fraction"
+          class="control"
+          type="number"
+          min="0"
+          step="any"
+          :value="policy.defaults?.max_missing_fraction"
+          aria-describedby="policy-tolerance-hint"
+          @input="setDefault('max_missing_fraction', $event.target as HTMLInputElement)"
+        >
+      </div>
+      <div class="field">
+        <label for="policy-max-gap-cells">{{ labels.tolerance.gapField }}</label>
+        <input
+          id="policy-max-gap-cells"
+          class="control"
+          type="number"
+          min="0"
+          max="100000"
+          step="1"
+          :value="policy.defaults?.max_gap_cells"
+          aria-describedby="policy-tolerance-hint"
+          @input="setDefault('max_gap_cells', $event.target as HTMLInputElement)"
+        >
+        <p
+          id="policy-tolerance-hint"
+          class="field__hint"
+        >
+          {{ labels.tolerance.hint }}
         </p>
       </div>
     </template>

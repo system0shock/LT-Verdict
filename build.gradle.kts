@@ -99,7 +99,13 @@ distributions {
             ) {
                 into("tools")
             }
-            from(files("docs/contracts/advice/v1/system-prompt.md", "docs/contracts/advice/v1/ai-advice-output.schema.json")) {
+            from(
+                files(
+                    "docs/contracts/advice/v1/system-prompt.md",
+                    "docs/contracts/advice/v1/system-prompt-v2.md",
+                    "docs/contracts/advice/v1/ai-advice-output.schema.json",
+                ),
+            ) {
                 into("docs/contracts/advice/v1")
             }
             from("skills/lt-verdict-onboard-test") { into("skills/lt-verdict-onboard-test") }

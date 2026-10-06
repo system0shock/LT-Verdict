@@ -1,0 +1,105 @@
+{
+  "schema_version": "policy.v1",
+  "policy_id": "platform-base-profile",
+  "defaults": {
+    "sample_floor": 20,
+    "min_samples": 100,
+    "max_missing_fraction": 0.05,
+    "max_gap_cells": 3
+  },
+  "rules": [
+    {
+      "id": "overall-errors",
+      "metric": "error_rate_ratio",
+      "operator": "lte",
+      "threshold": 0.01,
+      "scope": {
+        "kind": "overall"
+      }
+    }
+  ],
+  "platform_services": ["orders", "payments"],
+  "platform_coverage": {
+    "signal": "openshift_unavailable_replicas"
+  },
+  "platform_rules": [
+    {
+      "id": "cpu-limit",
+      "signal": "openshift_container_cpu_limit_ratio",
+      "scope": {
+        "kind": "all_services"
+      },
+      "operator": "gt",
+      "threshold": 0.4,
+      "unit": "ratio",
+      "aggregation": "interval_mean",
+      "min_consecutive_cells": 3,
+      "effect": "sla"
+    },
+    {
+      "id": "memory-limit",
+      "signal": "openshift_container_memory_limit_ratio",
+      "scope": {
+        "kind": "all_services"
+      },
+      "operator": "gt",
+      "threshold": 0.8,
+      "unit": "ratio",
+      "aggregation": "interval_max",
+      "min_consecutive_cells": 3,
+      "effect": "sla"
+    },
+    {
+      "id": "oom",
+      "signal": "openshift_oom",
+      "scope": {
+        "kind": "all_services"
+      },
+      "operator": "gt",
+      "threshold": 0,
+      "unit": "events/s",
+      "aggregation": "interval_rate",
+      "min_consecutive_cells": 1,
+      "effect": "sla"
+    },
+    {
+      "id": "restarts",
+      "signal": "openshift_restarts",
+      "scope": {
+        "kind": "all_services"
+      },
+      "operator": "gt",
+      "threshold": 0,
+      "unit": "events/s",
+      "aggregation": "interval_rate",
+      "min_consecutive_cells": 1,
+      "effect": "sla"
+    },
+    {
+      "id": "cpu-throttling",
+      "signal": "openshift_cpu_throttling",
+      "scope": {
+        "kind": "all_services"
+      },
+      "operator": "gt",
+      "threshold": 0.25,
+      "unit": "ratio",
+      "aggregation": "interval_mean",
+      "min_consecutive_cells": 3,
+      "effect": "diagnostic"
+    },
+    {
+      "id": "replicas",
+      "signal": "openshift_unavailable_replicas",
+      "scope": {
+        "kind": "all_services"
+      },
+      "operator": "gt",
+      "threshold": 0,
+      "unit": "count",
+      "aggregation": "interval_max",
+      "min_consecutive_cells": 1,
+      "effect": "sla"
+    }
+  ]
+}

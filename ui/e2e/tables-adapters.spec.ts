@@ -79,6 +79,14 @@ test('an unknown reason code keeps the code and gets the neutral text', () => {
   expect(row.reasonText).toBe('Причина без расшифровки в этой версии интерфейса.')
 })
 
+test('an unknown rule window is a NO_VERDICT row with the rule, the window and the reason', () => {
+  const rows = ruleRows(build({ evidence: [overall, check({}), { id: 'u1', type: 'rule_window_check', rule_id: 'cpu', window_id: 'ghost', status: 'NO_VERDICT', reason_code: 'RULE_WINDOW_NOT_FOUND' }] }))
+
+  expect(rows.map((row) => row.key)).toEqual(['c1', 'u1'])
+  expect(rows[1]).toMatchObject({ ruleId: 'cpu', window: 'ghost', status: 'NO_VERDICT', reasonCode: 'RULE_WINDOW_NOT_FOUND', reasonText: reasonText('RULE_WINDOW_NOT_FOUND') })
+  expect(JSON.stringify(rows[1])).not.toMatch(/NaN|undefined|Infinity/)
+})
+
 test('rounding never turns a violation into equality', () => {
   const [row] = ruleRows(build({ evidence: [check({ threshold: 2000, observed: 2000.004, metric_evidence_id: undefined })] }))
   const digits = (value: string) => value.replace(/[^\d,]/g, '')

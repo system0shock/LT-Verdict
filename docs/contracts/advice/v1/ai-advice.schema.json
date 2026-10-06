@@ -28,7 +28,10 @@
           "not": { "pattern": "\\.\\.|//" },
           "description": "Observed model slug. The set of models is defined by the operator (ADR 0023), so it is checked by the slug pattern of ai-models.v1, not against a closed list."
         },
-        "prompt_version": { "const": "advisory-system.v1" },
+        "prompt_version": {
+          "enum": ["advisory-system.v1", "advisory-system.v2"],
+          "description": "Prompt label (ADR 0021, D1). The v1 label covers several editions of its file; the v2 label is bound to one pinned file hash that the reader checks."
+        },
         "prompt_sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
         "duration_ms": { "type": "integer", "minimum": 0, "maximum": 613000 },
         "exit_code": { "const": 0 },
@@ -38,9 +41,19 @@
           "maxLength": 260,
           "pattern": "^(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?){0,126}|\\[(?=[0-9a-f:.]*:[0-9a-f:.]*:)(?=[0-9a-f:.]*[0-9a-f])[0-9a-f:.]{2,45}\\]):(?:[1-9][0-9]{0,3}|[1-5][0-9]{4}|6[0-4][0-9]{3}|65[0-4][0-9]{2}|655[0-2][0-9]|6553[0-5])$",
           "description": "Host and port the relay actually sent the evidence to, lower case, always with the port, without scheme, path or credentials (ADR 0023, D4). Observed by the relay, not taken from the configuration."
+        },
+        "provider_requests": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 2,
+          "description": "Requests the relay forwarded to the provider for this advice: 1, or 2 after the one schema retry (ADR 0021, D2, D4). Absent in advice saved before it existed, which means 1."
         }
       },
       "allOf": [
+        {
+          "if": { "properties": { "prompt_version": { "const": "advisory-system.v2" } }, "required": ["prompt_version"] },
+          "then": { "required": ["provider_requests"] }
+        },
         {
           "if": { "required": ["endpoint_host"] },
           "else": {

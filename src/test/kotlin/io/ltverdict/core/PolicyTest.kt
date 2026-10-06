@@ -263,6 +263,7 @@ class PolicyTest {
                 "docs/contracts/policy/v1/examples/invalid/empty-rules.json" to Expectation(false, false, "EMPTY_RULES", "/rules"),
                 "docs/contracts/policy/v1/examples/valid/platform-services.json" to Expectation(true, true),
                 "docs/contracts/policy/v1/examples/valid/platform-gap-tolerance.json" to Expectation(true, true),
+                "docs/contracts/policy/v1/examples/valid/platform-base-profile.json" to Expectation(true, true),
                 "docs/contracts/policy/v1/examples/invalid/platform-tolerance-diagnostic.json" to
                     Expectation(true, false, "FIELD_NOT_APPLICABLE", "/platform_rules/0/max_gap_cells"),
                 "docs/contracts/policy/v1/examples/invalid/platform-except-outside-catalog.json" to

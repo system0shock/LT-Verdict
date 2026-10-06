@@ -164,6 +164,32 @@ for (const file of (await readdir(resolve(root, podViewExamples, 'invalid'))).so
   }
 }
 
+const releaseSchema = await readJson('docs/contracts/release/v1/local-release.schema.json')
+const validateRelease = new Ajv2020({ strict: false }).compile(releaseSchema)
+const releaseExamples = 'docs/contracts/release/v1/examples'
+for (const file of (await readdir(resolve(root, releaseExamples, 'valid'))).sort()) {
+  if (!validateRelease(await readJson(`${releaseExamples}/valid/${file}`))) {
+    throw new Error(`local release schema valid/${file}: ${JSON.stringify(validateRelease.errors)}`)
+  }
+}
+// JSON Schema cannot express these rules (byte limits of UTF-8 text, NFC form, release_id timestamp against started_at,
+// distinct analysis ids and arms, updated_at against created_at); LocalReleaseTest asserts that the Kotlin validator rejects them.
+const releaseRuntimeOnly = new Set([
+  'release-id-start-mismatch',
+  'updated-before-created',
+  'label-not-normalized',
+  'label-over-128-bytes',
+  'duplicate-analysis-id',
+  'two-analyses-without-arm',
+  'duplicate-arm',
+])
+for (const file of (await readdir(resolve(root, releaseExamples, 'invalid'))).sort()) {
+  const expected = releaseRuntimeOnly.has(file.replace(/\.json$/, ''))
+  if (validateRelease(await readJson(`${releaseExamples}/invalid/${file}`)) !== expected) {
+    throw new Error(`local release schema invalid/${file}: expected schema_valid=${expected}; ${JSON.stringify(validateRelease.errors)}`)
+  }
+}
+
 const seriesSchema = await readJson('docs/contracts/resources/v1/resource-series.schema.json')
 const validateSeries = new Ajv2020({ strict: false }).compile(seriesSchema)
 const seriesCatalog = await readJson('docs/contracts/resources/v1/examples/valid/resource-series-catalog.json')

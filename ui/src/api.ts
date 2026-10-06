@@ -13,6 +13,7 @@ import type {
   BaselineConditionWindows,
   BaselineRequest,
   BaselineSelection,
+  BaselineSlotView,
   Bootstrap,
   BucketPage,
   JobStatus,
@@ -26,6 +27,10 @@ import type {
   SourceRequest,
   SourcesResponse,
   WindowComparisonRequest,
+  Release,
+  ReleaseList,
+  ReleaseRequest,
+  ReleaseUpdate,
 } from './types'
 
 let csrfToken = ''
@@ -40,6 +45,8 @@ export class ApiError extends Error {
     readonly status: number,
     readonly code: string,
     message: string,
+    // `error.limit` of the 422 codes that name a limit (baseline slots, condition records).
+    readonly limit: number | null = null,
   ) {
     super(message)
   }
@@ -147,7 +154,7 @@ export function listSources(): Promise<SourcesResponse> {
   return request('/api/sources')
 }
 
-export function getBaseline(): Promise<{ baseline: BaselineSelection | null }> {
+export function getBaseline(): Promise<{ baseline: BaselineSelection | null; baselines?: BaselineSlotView[] }> {
   return request('/api/baseline')
 }
 
@@ -159,36 +166,39 @@ export function setBaseline(body: BaselineRequest): Promise<{ baseline: Baseline
   })
 }
 
-export function clearBaseline(): Promise<{ baseline: null }> {
-  return request('/api/baseline', { method: 'DELETE', headers: mutationHeaders() })
+export function clearBaseline(series?: string, arm?: string): Promise<{ baseline: null }> {
+  const query = series ? `?${new URLSearchParams({ series, ...(arm ? { arm } : {}) })}` : ''
+  return request(`/api/baseline${query}`, { method: 'DELETE', headers: mutationHeaders() })
 }
 
 export function getBaselineConditions(
   reference: AnalysisReference,
   windows?: BaselineConditionWindows,
+  series?: string,
 ): Promise<{ conditions: BaselineCondition | null }> {
-  return request(baselineConditionsPath(reference, windows))
+  return request(baselineConditionsPath(reference, windows, series))
 }
 
 export function setBaselineConditions(
   reference: AnalysisReference,
   decision: BaselineConditionDecision,
   windows?: BaselineConditionWindows,
+  series?: string,
 ): Promise<{ conditions: BaselineCondition }> {
-  return request(baselineConditionsPath(reference, windows), {
+  return request(baselineConditionsPath(reference, windows, series), {
     method: 'POST',
     headers: mutationHeaders({ 'Content-Type': 'application/json' }),
     body: JSON.stringify({ decision }),
   })
 }
 
-function baselineConditionsPath(reference: AnalysisReference, windows?: BaselineConditionWindows): string {
-  const query = windows ? `?${new URLSearchParams({ ...windows })}` : ''
+function baselineConditionsPath(reference: AnalysisReference, windows?: BaselineConditionWindows, series?: string): string {
+  const query = windows || series ? `?${new URLSearchParams({ ...windows, ...(series ? { series } : {}) })}` : ''
   return `/api/runs/${encodeURIComponent(reference.run_id)}/analyses/${encodeURIComponent(reference.analysis_id)}/baseline-conditions${query}`
 }
 
-export function compareBaseline(reference: AnalysisReference, windows?: WindowComparisonRequest): Promise<BaselineComparison> {
-  const query = windows ? `?${new URLSearchParams({ ...windows })}` : ''
+export function compareBaseline(reference: AnalysisReference, windows?: WindowComparisonRequest, series?: string): Promise<BaselineComparison> {
+  const query = windows || series ? `?${new URLSearchParams({ ...windows, ...(series ? { series } : {}) })}` : ''
   return request(`/api/runs/${encodeURIComponent(reference.run_id)}/analyses/${encodeURIComponent(reference.analysis_id)}/comparison${query}`)
 }
 
@@ -258,8 +268,9 @@ function requireCsrf(): string {
 
 function apiError(status: number, text: string): ApiError {
   try {
-    const body = JSON.parse(text) as { error?: { code?: string; message?: string } }
-    return new ApiError(status, body.error?.code ?? 'REQUEST_FAILED', body.error?.message ?? 'Local request failed')
+    const body = JSON.parse(text) as { error?: { code?: string; message?: string; limit?: unknown } }
+    const limit = typeof body.error?.limit === 'number' ? body.error.limit : null
+    return new ApiError(status, body.error?.code ?? 'REQUEST_FAILED', body.error?.message ?? 'Local request failed', limit)
   } catch {
     return new ApiError(status, 'REQUEST_FAILED', 'Local request failed')
   }
@@ -313,9 +324,10 @@ export function advanceJenkins(profileId: string, attemptId: string, operation: 
   })
 }
 
-export function getSavedAnalytics(reference: AnalysisReference, limit = 10, transaction = '', transactionLimit = 100): Promise<SavedAnalytics> {
+export function getSavedAnalytics(reference: AnalysisReference, limit = 10, transaction = '', transactionLimit = 100, series = ''): Promise<SavedAnalytics> {
   const query = new URLSearchParams({ limit: String(limit), transaction_limit: String(transactionLimit) })
   if (transaction.trim()) query.set('transaction', transaction.trim())
+  if (series) query.set('series', series)
   return request(`/api/runs/${encodeURIComponent(reference.run_id)}/analyses/${encodeURIComponent(reference.analysis_id)}/analytics?${query}`)
 }
 
@@ -328,4 +340,28 @@ export function grafanaPanel(reference: AnalysisReference, profile: string, dash
   return request(`/api/runs/${encodeURIComponent(reference.run_id)}/analyses/${encodeURIComponent(reference.analysis_id)}/grafana-${render ? 'render' : 'link'}?${query}`, render ? {
     method: 'POST', headers: mutationHeaders({ 'Content-Type': 'application/json' }), body: '{}',
   } : undefined)
+}
+
+export function listReleases(query: { series?: string; after?: string; limit?: number } = {}): Promise<ReleaseList> {
+  const params = new URLSearchParams()
+  if (query.series) params.set('series', query.series)
+  if (query.after) params.set('after', query.after)
+  if (query.limit) params.set('limit', String(query.limit))
+  return request(`/api/releases${params.size ? `?${params}` : ''}`)
+}
+
+export function createRelease(body: ReleaseRequest): Promise<Release> {
+  return request('/api/releases', {
+    method: 'POST',
+    headers: mutationHeaders({ 'Content-Type': 'application/json' }),
+    body: JSON.stringify(body),
+  })
+}
+
+export function updateRelease(releaseId: string, body: ReleaseUpdate): Promise<Release> {
+  return request(`/api/releases/${encodeURIComponent(releaseId)}`, {
+    method: 'PUT',
+    headers: mutationHeaders({ 'Content-Type': 'application/json' }),
+    body: JSON.stringify(body),
+  })
 }

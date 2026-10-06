@@ -115,6 +115,32 @@ class LocalSecurityTest {
         }
 
     @Test
+    fun `PUT and PATCH need the same mutation credentials as POST and DELETE`() =
+        withServer { fixture ->
+            val credentials = fixture.bootstrap()
+            val authorized = fixture.auth(credentials)
+            val path = "/api/releases/001767225600000-0123abcd"
+            val body = """{"label":"x","analyses":[{"analysis_id":"${"a".repeat(64)}"}],"profile":null,"notes":null}""".encodeToByteArray()
+            val rejected =
+                listOf(
+                    authorized - "Origin",
+                    authorized + ("Origin" to "http://localhost:${fixture.port}"),
+                    authorized - "Cookie",
+                    authorized - "X-LTV-CSRF",
+                    authorized + ("X-LTV-CSRF" to "0".repeat(64)),
+                )
+            listOf("PUT", "PATCH").forEach { method ->
+                rejected.forEach { headers ->
+                    assertError(fixture.request(method, path, body, headers + ("Content-Type" to "application/json")), 403)
+                }
+            }
+            // With valid credentials the request reaches the handler: the record does not exist.
+            assertError(fixture.request("PUT", path, body, authorized + ("Content-Type" to "application/json")), 404)
+            // PATCH has no route, but it is no longer refused by the credential check.
+            assertTrue(fixture.request("PATCH", path, body, authorized + ("Content-Type" to "application/json")).statusCode() != 403)
+        }
+
+    @Test
     fun `invalid media malformed input and resource overflow use bounded JSON errors`() =
         withServer { fixture ->
             val credentials = fixture.bootstrap()

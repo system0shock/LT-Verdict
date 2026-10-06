@@ -2,7 +2,7 @@
 import { computed, nextTick, ref, watch } from 'vue'
 import LoadCharts from './LoadCharts.vue'
 import { CORRELATION_LABELS } from './shell/labels'
-import { NORMALIZED_LABELS } from './shell/labels.tables'
+import { NORMALIZED_LABELS, RESOURCE_CHECK_LABELS } from './shell/labels.tables'
 import { selectedCorrelations, unavailableFamilies } from './shell/overview'
 import type { AnalysisResult, Bucket, SourceSummaryEvidence, OpenSearchEvidence, PostgresContextEvidence, TrendCheckEvidence, TrendSummaryEvidence } from './types'
 
@@ -32,6 +32,24 @@ const checks = computed(() => evidence.value.filter((item) => item.type === 'pol
 const resourceSummaries = computed(() => evidence.value.filter((item) => item.type === 'resource_summary'))
 const windowPolicySummaries = computed(() => evidence.value.filter((item) => item.type === 'window_policy_summary'))
 const resourceChecks = computed(() => evidence.value.filter((item) => item.type === 'resource_policy_check'))
+// Platform SLA checks (ADR 0018) carry the service and the cell coverage of the window; snapshot rules do not.
+const platformChecks = computed(() => resourceChecks.value.some((item) => item.service !== undefined))
+const presumedCheckIds = computed(() => new Set(props.result.findings
+  .filter((finding) => finding.type === 'resource_threshold_violation' && finding.presumed === true)
+  .map((finding) => finding.evidence_id)))
+function checkCoverage(item: Evidence): string | null {
+  const expected = item.expected_cells
+  const observed = item.observed_cells
+  if (typeof expected !== 'number' || typeof observed !== 'number' || expected <= 0) return null
+  const percent = new Intl.NumberFormat(props.shellTables ? 'ru-RU' : 'en-US', { maximumFractionDigits: 2 }).format((observed / expected) * 100)
+  const gaps = typeof item.missing_cells === 'number' && item.missing_cells > 0
+    ? `; missing cells ${item.missing_cells}, longest gap ${formatOptional(item.longest_gap_cells)}`
+    : ''
+  return `${observed} / ${expected} (${percent} %)${gaps}`
+}
+const checkHeads = computed(() => props.shellTables
+  ? RESOURCE_CHECK_LABELS.heads
+  : { window: 'Window', rule: 'Rule', service: 'Service', series: 'Series', operator: 'Operator', threshold: 'Threshold', effect: 'Effect', status: 'Status', reason: 'Reason', coverage: 'Coverage (observed / expected)' })
 const resourceBindings = computed(() => evidence.value.filter((item) => item.type === 'resource_binding'))
 const sourceSummaries = computed(() => props.result.evidence
   .filter((item): item is SourceSummaryEvidence => item.type === 'source_summary')
@@ -632,18 +650,65 @@ function updateRange(name: 'update:range-start' | 'update:range-end', event: Eve
       aria-label="Resource policy checks"
     >
       <table>
-        <thead><tr><th>Window</th><th>Rule</th><th>Series</th><th>Operator</th><th>Threshold</th><th>Effect</th><th>Status</th><th>Reason</th></tr></thead>
+        <thead :lang="shellTables ? 'ru' : undefined">
+          <tr>
+            <th>
+              {{ checkHeads.window }}
+            </th>
+            <th>
+              {{ checkHeads.rule }}
+            </th>
+            <th v-if="platformChecks">
+              {{ checkHeads.service }}
+            </th>
+            <th>
+              {{ checkHeads.series }}
+            </th>
+            <th>
+              {{ checkHeads.operator }}
+            </th>
+            <th>
+              {{ checkHeads.threshold }}
+            </th>
+            <th>
+              {{ checkHeads.effect }}
+            </th>
+            <th>
+              {{ checkHeads.status }}
+            </th>
+            <th>
+              {{ checkHeads.reason }}
+            </th>
+            <th v-if="platformChecks">
+              {{ checkHeads.coverage }}
+            </th>
+          </tr>
+        </thead>
         <tbody>
           <tr
             v-for="item in resourceChecks"
             :key="String(item.id)"
           >
-            <td>{{ formatOptional(item.window_id) }}</td><td>{{ formatOptional(item.rule_id) }}</td><td>{{ formatOptional(item.series_id) }}</td><td>{{ formatOptional(item.operator) }}</td><td>{{ formatOptional(item.threshold) }} {{ formatOptional(item.unit) }}</td><td>{{ formatOptional(item.effect) }}</td><td>
+            <td>{{ formatOptional(item.window_id) }}</td><td>{{ formatOptional(item.rule_id) }}</td><td
+              v-if="platformChecks"
+              data-testid="resource-check-service"
+            >
+              {{ item.service === undefined ? '—' : formatOptional(item.service) }}<template v-if="item.platform_rule_id !== undefined">
+                (platform rule {{ formatOptional(item.platform_rule_id) }})
+              </template>
+            </td><td>{{ formatOptional(item.series_id) }}</td><td>{{ formatOptional(item.operator) }}</td><td>{{ formatOptional(item.threshold) }} {{ formatOptional(item.unit) }}</td><td>{{ formatOptional(item.effect) }}</td><td>
               <span
                 class="status-text"
                 :data-status="formatOptional(item.status)"
               >{{ formatOptional(item.status) }}</span>
-            </td><td>{{ formatOptional(item.reason) }}</td>
+            </td><td>{{ formatOptional(item.reason) }}</td><td
+              v-if="platformChecks"
+              data-testid="resource-check-coverage"
+            >
+              {{ checkCoverage(item) ?? '—' }}<template v-if="presumedCheckIds.has(item.id)">
+                ; presumed violation (the series is reached only through missing cells)
+              </template>
+            </td>
           </tr>
         </tbody>
       </table>

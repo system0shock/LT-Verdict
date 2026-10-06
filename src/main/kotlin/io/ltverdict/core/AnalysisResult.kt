@@ -33,6 +33,7 @@ internal fun analysisIdentity(
     postgresInputSha256: String? = null,
     capacity: CapacityPlanValidation.Valid? = null,
     trend: TrendPlanValidation.Valid? = null,
+    podView: PodViewValidation.Valid? = null,
 ): ByteArray =
     canonicalJson(
         buildJsonObject {
@@ -67,6 +68,12 @@ internal fun analysisIdentity(
             trend?.let {
                 put("trend_plan_sha256", it.semanticSha256)
                 put("trend_plan_version", "trend-plan.v1")
+            }
+            // ADR 0020, section 5: a top-level binding only. pod-view stays out of modules, input_versions and limits,
+            // which are part of the comparability key.
+            podView?.let {
+                put("pod_view_sha256", it.canonicalSha256)
+                put("pod_view_version", "pod-view.v1")
             }
             put(
                 "engine",

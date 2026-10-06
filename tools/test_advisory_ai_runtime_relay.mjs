@@ -59,6 +59,17 @@ function retryRequest(first, args, { reasoning = "", id = "call_1" } = {}) {
   };
 }
 
+// Arguments the way DeepSeek through ModelStudio streams them: `", "` and `": "` separators (Python json.dumps).
+function spacedJson(value) {
+  if (Array.isArray(value)) return `[${value.map(spacedJson).join(", ")}]`;
+  if (value && typeof value === "object") return `{${Object.entries(value).map(([key, item]) => `${JSON.stringify(key)}: ${spacedJson(item)}`).join(", ")}}`;
+  return JSON.stringify(value);
+}
+
+function asciiEscaped(text) {
+  return text.replace(/[^\x00-\x7f]/g, char => `\\u${char.charCodeAt(0).toString(16).padStart(4, "0")}`);
+}
+
 async function freePort() {
   const server = http.createServer();
   await new Promise(resolve => server.listen(0, "127.0.0.1", resolve));
@@ -170,6 +181,29 @@ test("third request is blocked with 409", async () => {
     assert.equal(third.status, 409);
     assert.equal(JSON.parse(third.body).error.type, "additional_request_blocked");
     assertResult(root, { received: 3, forwarded: 2, status: "BLOCKED_ADDITIONAL_REQUEST", outcomes: ["FORWARDED_STRUCTURED_OUTPUT", "FORWARDED_RETRY", "BLOCKED_ADDITIONAL_REQUEST"], reason: "RETRY_LIMIT_REACHED" });
+  }, { ADVISORY_RELAY_PREFLIGHT_SCENARIO: "wrapped-then-valid" });
+});
+
+test("first_refused_reason keeps the first refusal when Qwen keeps asking (ADR 0021, D7)", async () => {
+  const deepArgs = JSON.stringify({ ...advice, hypotheses: [{ ...advice.hypotheses[0], rank: "bad" }] });
+  await withRelay(async (root, port) => {
+    await request(port, firstRequest);
+    assert.equal((await request(port, retryRequest(firstRequest, deepArgs))).status, 409);
+    assert.equal(result(root).first_refused_reason, "RETRY_NOT_TOP_LEVEL_SCHEMA");
+    assert.equal((await request(port, retryRequest(firstRequest, deepArgs))).status, 409);
+    assertResult(root, { received: 3, forwarded: 1, status: "BLOCKED_ADDITIONAL_REQUEST", outcomes: ["FORWARDED_STRUCTURED_OUTPUT", "BLOCKED_ADDITIONAL_REQUEST", "BLOCKED_ADDITIONAL_REQUEST"], reason: "RETRY_LIMIT_REACHED" });
+    assert.equal(result(root).first_refused_reason, "RETRY_NOT_TOP_LEVEL_SCHEMA");
+  }, { ADVISORY_RELAY_PREFLIGHT_RESPONSES: JSON.stringify([provider(sse(deepArgs))]) });
+});
+
+test("first_refused_reason is null until a request is refused", async () => {
+  await withRelay(async (root, port) => {
+    await request(port, firstRequest);
+    assert.equal(result(root).first_refused_reason, null);
+    await request(port, retryRequest(firstRequest, wrappedArgs));
+    assert.equal(result(root).first_refused_reason, null);
+    await request(port, retryRequest(firstRequest, wrappedArgs));
+    assert.equal(result(root).first_refused_reason, "RETRY_LIMIT_REACHED");
   }, { ADVISORY_RELAY_PREFLIGHT_SCENARIO: "wrapped-then-valid" });
 });
 
@@ -305,6 +339,92 @@ test("retry is forwarded with a non-empty reasoning_content of about 20 KiB", as
     assert.equal((await request(port, retryRequest(firstRequest, wrappedArgs, { reasoning: "r".repeat(20 * 1024) }))).status, 200);
     assert.equal(result(root).forwarded_request_count, 2);
   }, { ADVISORY_RELAY_PREFLIGHT_SCENARIO: "wrapped-then-valid" });
+});
+
+// ADR 0021, D2, item 3: the provider streams the arguments with its own whitespace and escapes, and Qwen Code 0.21.1 sends them back
+// as JSON.stringify(JSON.parse(arguments)). The continuation is the same call if its arguments are the stream text or that compact form.
+const spacedNested = {
+  output: {
+    ...advice,
+    summary: "Сводка проверена, café \u{1F600} / \" \\ end",
+    hypotheses: [advice.hypotheses[0], { ...advice.hypotheses[0], rank: 2, observation: "Second observation" }],
+    caveats: ["first caveat", "second caveat"],
+  },
+};
+const spacedProviderArgs = {
+  "nested object": spacedJson(spacedNested),
+  "nested object with ASCII-escaped non-ASCII": asciiEscaped(spacedJson(spacedNested)),
+  "stringified wrapper": spacedJson({ arguments: spacedJson(advice) }),
+};
+
+test("retry is forwarded when the provider streamed spaced arguments and the continuation carries them re-serialised", async t => {
+  for (const [name, args] of Object.entries(spacedProviderArgs)) await t.test(name, async () => {
+    assert.notEqual(args, JSON.stringify(JSON.parse(args)));
+    await withRelay(async (root, port) => {
+      assert.equal((await request(port, firstRequest)).status, 200);
+      assert.equal((await request(port, retryRequest(firstRequest, JSON.stringify(JSON.parse(args))))).status, 200);
+      assertResult(root, { received: 2, forwarded: 2, status: "FORWARDED_STRUCTURED_OUTPUT", outcomes: ["FORWARDED_STRUCTURED_OUTPUT", "FORWARDED_RETRY"], reason: null });
+    }, { ADVISORY_RELAY_PREFLIGHT_RESPONSES: JSON.stringify([provider(sse(args))]) });
+  });
+  await t.test("the stream text itself is still accepted", async () => {
+    await withRelay(async (root, port) => {
+      await request(port, firstRequest);
+      assert.equal((await request(port, retryRequest(firstRequest, spacedProviderArgs["nested object"]))).status, 200);
+    }, { ADVISORY_RELAY_PREFLIGHT_RESPONSES: JSON.stringify([provider(sse(spacedProviderArgs["nested object"]))]) });
+  });
+});
+
+test("retry is refused when the continuation arguments are not the same value in the compact form", async t => {
+  const sent = spacedProviderArgs["nested object"];
+  const wrapped = spacedProviderArgs["stringified wrapper"];
+  const reparsed = JSON.parse(sent);
+  const changed = mutate => { const value = structuredClone(reparsed); mutate(value); return JSON.stringify(value); };
+  const cases = {
+    "changed nested string": [sent, changed(value => { value.output.hypotheses[1].observation = "Other observation"; })],
+    "changed nested number": [sent, changed(value => { value.output.hypotheses[1].rank = 3; })],
+    "number replaced by its string": [sent, changed(value => { value.output.hypotheses[0].rank = "1"; })],
+    "extra key": [sent, changed(value => { value.output.extra = true; })],
+    "missing key": [sent, changed(value => { delete value.output.caveats; })],
+    "extra array element": [sent, changed(value => { value.output.caveats.push("third"); })],
+    "reordered array": [sent, changed(value => { value.output.caveats.reverse(); })],
+    "reordered nested keys": [sent, changed(value => { const { summary, ...rest } = value.output; value.output = { ...rest, summary }; })],
+    "changed value in the wrapped inner string": [wrapped, JSON.stringify({ arguments: JSON.stringify({ ...advice, summary: "Changed." }) })],
+    "wrapped inner string re-serialised": [wrapped, JSON.stringify({ arguments: JSON.stringify(advice) })],
+    "pretty-printed": [sent, JSON.stringify(reparsed, null, 2)],
+    "other spacing": [sent, sent.replace(/, /g, ",  ")],
+    "escaped non-ASCII": [sent, asciiEscaped(JSON.stringify(reparsed))],
+    "duplicate key with the same final value": [sent, JSON.stringify(reparsed).replace('{"output":', '{"output":{},"output":')],
+    "number written differently": [sent, JSON.stringify(reparsed).replace('"rank":2', '"rank":2.0')],
+    "trailing text": [sent, `${JSON.stringify(reparsed)} `],
+    "truncated": [sent, JSON.stringify(reparsed).slice(0, -1)],
+    "not a string": [sent, reparsed],
+  };
+  for (const [name, [args, continuation]] of Object.entries(cases)) await t.test(name, async () => {
+    if (typeof continuation === "string") assert.notEqual(continuation, JSON.stringify(JSON.parse(args)));
+    await withRelay(async (root, port) => {
+      await request(port, firstRequest);
+      assert.equal((await request(port, retryRequest(firstRequest, continuation))).status, 409);
+      assertResult(root, { received: 2, forwarded: 1, status: "BLOCKED_ADDITIONAL_REQUEST", outcomes: ["FORWARDED_STRUCTURED_OUTPUT", "BLOCKED_ADDITIONAL_REQUEST"], reason: "RETRY_CONTINUATION_MISMATCH" });
+    }, { ADVISORY_RELAY_PREFLIGHT_RESPONSES: JSON.stringify([provider(sse(args))]) });
+  });
+});
+
+test("the continuation arguments are a function of the stream text, lossy parse cases included", async t => {
+  // Qwen Code parses the arguments, so what it sends back is what JSON.parse kept: the last of duplicate keys, null for 1e400.
+  // The relay accepts exactly that text and nothing else, so the continuation cannot carry anything the provider did not stream.
+  const cases = {
+    "duplicate keys": ['{"output": {"a": 1, "a": 2}}', '{"output":{"a":2}}', '{"output":{"a":1}}'],
+    "number out of range": ['{"output": 1e400}', '{"output":null}', '{"output":0}'],
+  };
+  for (const [name, [args, accepted, refused]] of Object.entries(cases)) await t.test(name, async () => {
+    assert.equal(accepted, JSON.stringify(JSON.parse(args)));
+    for (const [continuation, status] of [[accepted, 200], [refused, 409]]) {
+      await withRelay(async (root, port) => {
+        await request(port, firstRequest);
+        assert.equal((await request(port, retryRequest(firstRequest, continuation))).status, status);
+      }, { ADVISORY_RELAY_PREFLIGHT_RESPONSES: JSON.stringify([provider(sse(args))]) });
+    }
+  });
 });
 
 test("deeply nested continuation is refused without crashing the relay", async () => {
@@ -548,7 +668,7 @@ test("existing forwarding and request contract behavior", async t => {
 test("shared retry vectors", async t => {
   const fixture = JSON.parse(fs.readFileSync(vectorsPath, "utf8"));
   assert.equal(fixture.schema_version, "advisory-ai-relay-retry-vectors.v1");
-  assert.ok(fixture.vectors.length >= 8 && fixture.vectors.length <= 10);
+  assert.ok(fixture.vectors.length >= 8 && fixture.vectors.length <= 14);
   for (const vector of fixture.vectors) await t.test(vector.name, async () => {
     await withRelay(async (root, port) => {
       await request(port, vector.first_request);

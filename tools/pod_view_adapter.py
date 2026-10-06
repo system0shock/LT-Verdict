@@ -29,6 +29,8 @@ MAX_FILE_BYTES = 12 * 1024 * 1024
 MAX_RESPONSE_BYTES = 64 * 1024 * 1024
 MAX_IDENTIFIER_BYTES = 128
 MAX_POD_BYTES = 253
+MAX_EPOCH_MS = 253402300799999
+NAME = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]{0,99}")
 CONTROL = re.compile(r"[\x00-\x1f\x7f-\x9f]")
 SELECT = re.compile(r"worst:([^:]+):([1-9][0-9]*)")
 HEX64 = re.compile(r"[0-9a-f]{64}")
@@ -146,8 +148,10 @@ def decode_matrix(body: bytes, start_ms: int, step_ms: int, columns: int) -> lis
         for sample in item["values"]:
             if not isinstance(sample, list) or len(sample) != 2 or not isinstance(sample[1], str):
                 raise AdapterError("MALFORMED_RESPONSE")
+            if not isinstance(sample[0], Decimal) or not sample[0].is_finite():
+                raise AdapterError("MALFORMED_RESPONSE")
             try:
-                timestamp = Decimal(sample[0]) * 1000
+                timestamp = sample[0] * 1000
                 number = Decimal(sample[1])
             except ArithmeticError as error:
                 raise AdapterError("MALFORMED_RESPONSE") from error
@@ -193,6 +197,8 @@ def collect(args) -> list:
                 expression = render(signal, namespace, service, args.subquery_step).replace("$__interval", f"{args.step_ms}ms")
                 body = fetch_range(args.prometheus, expression, args.start_epoch_ms, args.step_ms, args.columns, args.timeout_s)
                 for labels, values in decode_matrix(body, args.start_epoch_ms, args.step_ms, args.columns):
+                    if labels.get("namespace") != namespace:
+                        raise AdapterError(f"{name}: a series of namespace {labels.get('namespace')!r} answered the query of {namespace!r}")
                     pod = labels.get("pod")
                     container = labels.get("container")
                     if not isinstance(pod, str) or not pod:
@@ -344,6 +350,11 @@ def validate_live(args) -> tuple:
         raise AdapterError("--prometheus must start with http:// or https://")
     if args.start_epoch_ms < 0 or args.step_ms < 1000 or args.step_ms % 1000 or not 1 <= args.columns <= MAX_COLUMNS:
         raise AdapterError("grid: step-ms must be whole seconds from 1000, columns from 1 to 240, start non-negative")
+    if args.start_epoch_ms + args.step_ms * args.columns > MAX_EPOCH_MS:
+        raise AdapterError("grid: the end of the grid is beyond the maximum timestamp")
+    for value in (*args.namespace, *args.services):
+        if not NAME.fullmatch(value):
+            raise AdapterError(f"namespace and service names must match {NAME.pattern}: {value!r}")
     for value in (args.load_sha256, args.snapshot_sha256):
         if not HEX64.fullmatch(value):
             raise AdapterError("sha256 values must be 64 lower-case hex characters")

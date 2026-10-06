@@ -20,6 +20,7 @@ LOAD = "a" * 64
 SNAPSHOT = "b" * 64
 MEMORY = "openshift_container_memory_limit_ratio"
 POD_CPU = "openshift_pod_cpu_usage"
+LABELS = {"namespace": "shop", "pod": "p", "container": "app"}
 
 
 def base(*namespaces):
@@ -179,16 +180,21 @@ class AdapterTest(unittest.TestCase):
 
     def test_a_response_that_cannot_be_placed_on_the_grid_is_refused(self):
         bad = {
-            "off-grid": matrix(({"pod": "p", "container": "app"}, [[at(0) + 1, "1"]])),
-            "duplicate": matrix(({"pod": "p", "container": "app"}, [[at(0), "1"], [at(0), "2"]])),
-            "warnings": matrix(self.series("p", "app", (0, "1")), warnings=["partial"]),
+            "off-grid": matrix((LABELS, [[at(0) + 1, "1"]])),
+            "duplicate": matrix((LABELS, [[at(0), "1"], [at(0), "2"]])),
+            "null timestamp": matrix((LABELS, [[None, "1"]])),
+            "boolean timestamp": matrix((LABELS, [[True, "1"]])),
+            "numeric value": matrix((LABELS, [[at(0), 1]])),
+            "another namespace": matrix(({**LABELS, "namespace": "other"}, [[at(0), "1"]])),
+            "no namespace": matrix(({"pod": "p", "container": "app"}, [[at(0), "1"]])),
+            "warnings": matrix((LABELS, [[at(0), "1"]]), warnings=["partial"]),
             "failed": matrix(status="error"),
             "vector": matrix(kind="vector"),
-            "before the first boundary": matrix(({"pod": "p", "container": "app"}, [[START // 1000, "1"]])),
-            "after the last boundary": matrix(({"pod": "p", "container": "app"}, [[at(3), "1"]])),
+            "before the first boundary": matrix((LABELS, [[START // 1000, "1"]])),
+            "after the last boundary": matrix((LABELS, [[at(3), "1"]])),
             "not json": b"{",
-            "no pod label": matrix(({"container": "app"}, [[at(0), "1"]])),
-            "no container label": matrix(({"pod": "p"}, [[at(0), "1"]])),
+            "no pod label": matrix(({"namespace": "shop", "container": "app"}, [[at(0), "1"]])),
+            "no container label": matrix(({"namespace": "shop", "pod": "p"}, [[at(0), "1"]])),
         }
         for name, body in bad.items():
             with self.subTest(name):
@@ -202,7 +208,15 @@ class AdapterTest(unittest.TestCase):
         self.assertIn("SOURCE_HTTP_500", errors)
 
     def test_missing_or_bad_options_are_refused_before_any_request(self):
-        for extra in (["--select", "worst:other:3"], ["--select", f"worst:{MEMORY}:257"], ["--select", "best:x:1"], ["--sidecar-containers", "("]):
+        for extra in (
+            ["--select", "worst:other:3"],
+            ["--select", f"worst:{MEMORY}:257"],
+            ["--select", "best:x:1"],
+            ["--sidecar-containers", "("],
+            ["--start-epoch-ms", "253402300799999"],
+            ["--services", 'orders-svc",pod="x'],
+            ["--namespace", 'shop",pod="x'],
+        ):
             with self.subTest(extra):
                 code, document, _errors, source = self.run_live(lambda _q, _p: (200, matrix()), *extra)
                 self.assertEqual((2, None, []), (code, document, source.requests))

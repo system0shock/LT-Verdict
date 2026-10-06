@@ -15,7 +15,7 @@ from pathlib import Path
 
 from tools import stats_validation
 from tools.perf import generate_jtl
-from tools.pod_view_adapter import MAX_COLUMNS, METRICS, AdapterError, Observation, Raw, assemble, dumps, format_value
+from tools.pod_view_adapter import MAX_COLUMNS, MAX_FILE_BYTES, METRICS, AdapterError, Observation, Raw, assemble, dumps, format_value
 
 MASK = (1 << 64) - 1
 SCENARIOS = ("balanced", "leak-on-arm-b-pod-b2", "throttle-on-one-pod")
@@ -27,14 +27,19 @@ DEFAULTS = {
     "pods_per_service": 3,
     "containers": ["app", "istio-proxy"],
     "sidecar_containers": "istio-proxy",
-    "start_epoch_ms": 1704067200000,  # the first timestamp written by tools/perf/generate_jtl.py
     "snapshot_step_ms": 15000,
     "pod_step_ms": 15000,
     "load_rows": 360000,  # 10 ms per row: one hour
     "load_seed": 1,
     "seed": 1,
 }
+START_EPOCH_MS = 1704067200000  # the first timestamp written by tools/perf/generate_jtl.py; the grids start with the load
 LOAD_ROW_MS = 10
+MAX_PODS = 256
+MAX_ROWS = 2560
+MAX_SNAPSHOT_POINTS = 100000
+MAX_SNAPSHOT_CELLS = 1500000
+MAX_SNAPSHOT_BYTES = 32 * 1024 * 1024
 NAME = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]{0,99}")
 # (permille) base value of the (container index 0 = app, others) of each metric
 BASES = {
@@ -94,12 +99,12 @@ def normalize(spec: dict) -> dict:
         re.compile(full["sidecar_containers"])
     except (re.error, TypeError) as error:
         raise AdapterError(f"sidecar_containers: {error}") from error
-    for key in ("start_epoch_ms", "snapshot_step_ms", "pod_step_ms", "load_rows", "load_seed", "seed"):
+    for key in ("snapshot_step_ms", "pod_step_ms", "load_rows", "load_seed", "seed"):
         if type(full[key]) is not int or full[key] < 0:
             raise AdapterError(f"{key} must be a non-negative integer")
     snap, pod_step = full["snapshot_step_ms"], full["pod_step_ms"]
-    if snap % 1000 or not 1000 <= snap <= 60000 or pod_step % 1000 or pod_step % snap:
-        raise AdapterError("snapshot_step_ms is whole seconds up to 60000 and pod_step_ms is a multiple of it")
+    if snap % 1000 or not 1000 <= snap <= 60000 or pod_step < snap or pod_step % snap:
+        raise AdapterError("snapshot_step_ms is whole seconds up to 60000 and pod_step_ms a positive multiple of it")
     span = full["load_rows"] * LOAD_ROW_MS
     if span == 0 or span % snap:
         raise AdapterError("load_rows * 10 ms must be a positive multiple of snapshot_step_ms")
@@ -108,6 +113,15 @@ def normalize(spec: dict) -> dict:
         raise AdapterError(f"{columns} columns exceed {MAX_COLUMNS}: raise pod_step_ms")
     if not 0 < full["load_seed"] <= MASK:
         raise AdapterError("load_seed must be between 1 and 2^64-1")
+    # The limits of the core, checked before anything is written.
+    pods = sum(per)
+    points = span // snap
+    if pods > MAX_PODS or pods * (3 * len(containers) + 1) > MAX_ROWS:
+        raise AdapterError(f"{pods} pods and {pods * (3 * len(containers) + 1)} rows exceed {MAX_PODS} pods or {MAX_ROWS} rows")
+    if points > MAX_SNAPSHOT_POINTS or len(SERVICE_METRICS) * count * points > MAX_SNAPSHOT_CELLS:
+        raise AdapterError("the snapshot would exceed its point or cell limit: raise snapshot_step_ms or lower load_rows or services")
+    if START_EPOCH_MS + span > 253402300799999:
+        raise AdapterError("the grid is beyond the maximum timestamp")
     return full
 
 
@@ -204,7 +218,7 @@ def generate(spec: dict, out_dir) -> dict:
     snapshot = {
         "schema_version": "resource-snapshot.v1",
         "load_input_sha256": load_sha,
-        "start_epoch_ms": spec["start_epoch_ms"],
+        "start_epoch_ms": START_EPOCH_MS,
         "step_ms": snap,
         "point_count": points,
         "series": [
@@ -230,7 +244,7 @@ def generate(spec: dict, out_dir) -> dict:
         load_sha256=load_sha,
         snapshot_sha256=snapshot_sha,
         arm=spec["arm"],
-        start_ms=spec["start_epoch_ms"],
+        start_ms=START_EPOCH_MS,
         step_ms=pod_step,
         columns=columns,
         sidecar=re.compile(spec["sidecar_containers"]),
@@ -259,7 +273,7 @@ def generate(spec: dict, out_dir) -> dict:
         "load_input_sha256": load_sha,
         "resource_snapshot_sha256": snapshot_sha,
         "grid": {
-            "start_epoch_ms": spec["start_epoch_ms"],
+            "start_epoch_ms": START_EPOCH_MS,
             "step_ms": pod_step,
             "column_count": columns,
             "snapshot_step_ms": snap,
@@ -275,6 +289,8 @@ def generate(spec: dict, out_dir) -> dict:
         "pod-view.json": dumps(document) + "\n",
         "expected.json": dumps(expected) + "\n",
     }
+    if len(files["pod-view.json"].encode()) > MAX_FILE_BYTES or len(snapshot_text.encode()) > MAX_SNAPSHOT_BYTES:
+        raise AdapterError("a generated file is above the size limit of its contract")
     for name, text in files.items():
         (out / name).write_bytes(text.encode("utf-8"))
     return {"load_input_sha256": load_sha, "resource_snapshot_sha256": snapshot_sha}

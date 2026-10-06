@@ -137,6 +137,11 @@ class SyntheticTest(unittest.TestCase):
             {"pod_step_ms": 7500},
             {"load_rows": 360000, "snapshot_step_ms": 1000, "pod_step_ms": 1000},
             {"containers": ["a", "b", "c", "d", "e"]},
+            {"start_epoch_ms": 1704070800000},
+            {"pod_step_ms": 0},
+            {"services": 1, "pods_per_service": 257},
+            {"services": 64, "pods_per_service": 4, "containers": ["a", "b", "c", "d"]},
+            {"services": 20, "pods_per_service": 2, "load_rows": 3_000_000, "snapshot_step_ms": 1000, "pod_step_ms": 150_000},
         ):
             with self.subTest(changes), self.assertRaises(AdapterError):
                 normalize({**SMALL, **changes})

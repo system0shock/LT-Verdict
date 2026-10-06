@@ -54,6 +54,7 @@ import io.ltverdict.core.SeriesQueryException
 import io.ltverdict.core.StrictJsonScanner
 import io.ltverdict.core.TrendPlanValidation
 import io.ltverdict.core.WindowComparisonRequest
+import io.ltverdict.core.baselineCandidateRejection
 import io.ltverdict.core.baselineConditionConfirmation
 import io.ltverdict.core.baselineConditionRecord
 import io.ltverdict.core.buildRunDynamics
@@ -108,6 +109,7 @@ import io.ltverdict.sources.readPostgresAnalysisInput
 import io.ltverdict.sources.readWindowedSourceRequest
 import io.ltverdict.storage.AcceptedInput
 import io.ltverdict.storage.RunBundleStore
+import io.ltverdict.storage.VerifiedAnalysis
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.currentCoroutineContext
@@ -1164,7 +1166,7 @@ private suspend fun selectBaseline(
         "manual" -> {
             if (request.keys != setOf("mode", "series", "reference")) malformed("Manual baseline fields are invalid")
             val reference = (request["reference"] as? JsonObject)?.baselineReference() ?: malformed("Baseline reference is invalid")
-            store.baselineDocuments(reference)
+            requireBaselineEligible(listOf(store.verifiedBaselineDocuments(reference)))
             manualBaselineSelection(series, reference)
         }
         "statistical" -> {
@@ -1177,9 +1179,10 @@ private suspend fun selectBaseline(
             if (values.size !in 3..20) baselineIneligible("BASELINE_CANDIDATE_COUNT")
             val references = values.map { (it as? JsonObject)?.baselineReference() ?: malformed("Candidate reference is invalid") }
             if (references.map { it.getValue("run_id") }.toSet().size != references.size) baselineIneligible("BASELINE_DUPLICATE_RUN")
-            val documents = references.map { store.baselineDocuments(it) }
+            val documents = references.map { store.verifiedBaselineDocuments(it) }
+            requireBaselineEligible(documents)
             try {
-                statisticalBaselineSelection(series, references, documents.map { it.first }, documents.map { it.second })
+                statisticalBaselineSelection(series, references, documents.map { it.result }, documents.map { it.identity })
             } catch (failure: IllegalArgumentException) {
                 baselineIneligible(failure.message ?: "BASELINE_CANDIDATE_INVALID")
             }
@@ -1207,6 +1210,31 @@ private suspend fun RunBundleStore.baselineDocuments(reference: JsonObject): Pai
             ?: notFound("Referenced analysis was not found")
     }
 
+// Reads the stored result with its SHA-256 and the 64 MiB bound checked (ADR 0019, sections 1 and 6).
+private suspend fun RunBundleStore.verifiedBaselineDocuments(reference: JsonObject): VerifiedAnalysis =
+    baselineOperation {
+        try {
+            readVerifiedAnalysis(reference.baselineString("run_id"), reference.baselineString("analysis_id"))
+                ?: notFound("Referenced analysis was not found")
+        } catch (failure: IllegalArgumentException) {
+            if (failure.message == "RESULT_TOO_LARGE") baselineIneligible("BASELINE_CANDIDATE_TOO_LARGE")
+            throw failure
+        }
+    }
+
+// The same rule for both modes, applied in request order before any statistic is computed.
+private fun requireBaselineEligible(documents: List<VerifiedAnalysis>) {
+    documents.forEach { document ->
+        val code = baselineCandidateRejection(document.result) ?: return@forEach
+        baselineIneligible(code, if (code == "BASELINE_CANDIDATE_NOT_PASS") document.result.knownVerdict() else null)
+    }
+}
+
+private fun JsonObject.knownVerdict(): String =
+    (this["policy_verdict"] as? JsonPrimitive)?.takeIf { it.isString }?.content?.takeIf { it in KNOWN_VERDICTS } ?: "UNKNOWN"
+
+private val KNOWN_VERDICTS = setOf("PASS", "FAIL", "NO_POLICY", "NO_VERDICT")
+
 private suspend fun <T> baselineOperation(action: () -> T): T =
     withContext(Dispatchers.IO) {
         try {
@@ -1221,8 +1249,15 @@ private suspend fun <T> baselineOperation(action: () -> T): T =
         }
     }
 
-private fun baselineIneligible(code: String): Nothing =
-    throw ApiFailure(HttpStatusCode.UnprocessableEntity, code, "Statistical baseline is unavailable: $code")
+private fun baselineIneligible(
+    code: String,
+    verdict: String? = null,
+): Nothing =
+    throw ApiFailure(
+        HttpStatusCode.UnprocessableEntity,
+        code,
+        "Baseline candidate is unavailable: $code" + (verdict?.let { " (policy_verdict=$it)" } ?: ""),
+    )
 
 private suspend fun receiveInput(
     call: ApplicationCall,

@@ -36,12 +36,16 @@ async function analyzeDiagnostics(page: Page, extraLatency: number) {
   await page.getByTestId('input-file').setInputFiles({ name: `diagnostics-${extraLatency}.jtl`, mimeType: 'text/csv', buffer: load })
   await page.getByTestId('resource-snapshot-file').setInputFiles({ name: 'resource.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(snapshot)) })
   await page.getByTestId('correlation-plan-file').setInputFiles({ name: 'correlation-plan.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(plan)) })
+  // A baseline must be a PASS analysis (ADR 0019), so the runs are judged by a permissive policy.
+  const policy = { schema_version: 'policy.v1', policy_id: 'permissive', rules: [{ id: 'p95', metric: 'response_time_p95_ms', operator: 'lte', threshold: 100000, scope: { kind: 'overall' } }] }
+  await page.getByTestId('policy-file').setInputFiles({ name: 'policy.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(policy)) })
+  await expect(page.locator('#run-setup')).toContainText('Policy is valid — permissive')
   await page.getByRole('button', { name: 'Analyze run', exact: true }).click()
   await expect(page.locator('#diagnostic-results')).toContainText('COMPLETE')
   await expect(page.locator('#diagnostic-results')).toContainText('NOT_ESTIMATED')
   await expect(page.getByTestId('anomaly-episodes').locator('tbody tr')).toHaveCount(1)
   await expect(page.getByTestId('anomaly-episodes')).toContainText('30.0 s')
-  await expect(page.locator('#verdict')).toContainText('NO_POLICY')
+  await expect(page.locator('#verdict')).toContainText('PASS')
   const analysisId = await page.locator('button[aria-pressed="true"][title]').getAttribute('title')
   expect(analysisId).toMatch(/^[a-f0-9]{64}$/)
   return analysisId!

@@ -85,6 +85,26 @@ internal fun manualBaselineSelection(
         scores = emptyList(),
     ).toJson()
 
+// ADR 0019, section 6: one admission rule for both selection modes. The order of the three checks is part of the contract.
+internal fun baselineCandidateRejection(
+    policyVerdict: String?,
+    runValidity: String?,
+    coverageStatus: String?,
+): String? =
+    when {
+        runValidity != "VALID" -> "BASELINE_CANDIDATE_INVALID"
+        coverageStatus != "COMPLETE" -> "BASELINE_CANDIDATE_INCOMPLETE"
+        policyVerdict != "PASS" -> "BASELINE_CANDIDATE_NOT_PASS"
+        else -> null
+    }
+
+internal fun baselineCandidateRejection(result: JsonObject): String? =
+    baselineCandidateRejection(
+        result.stringOrNull("policy_verdict"),
+        result.stringOrNull("run_validity"),
+        result.objectOrNull("analysis_coverage")?.stringOrNull("status"),
+    )
+
 internal fun statisticalBaselineSelection(
     series: String,
     references: List<JsonObject>,
@@ -98,10 +118,7 @@ internal fun statisticalBaselineSelection(
         references.indices.map { index ->
             val reference = references[index].toReference()
             val result = results[index]
-            require(result.stringOrNull("run_validity") == "VALID") { "BASELINE_CANDIDATE_INVALID" }
-            require(result.objectOrNull("analysis_coverage")?.stringOrNull("status") == "COMPLETE") {
-                "BASELINE_CANDIDATE_INCOMPLETE"
-            }
+            baselineCandidateRejection(result)?.let { throw IllegalArgumentException(it) }
             Candidate(
                 reference,
                 listOf(

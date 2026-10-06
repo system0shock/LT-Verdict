@@ -691,6 +691,47 @@ class BaselineComparisonTest {
     }
 
     @Test
+    fun `candidate rejection follows one fixed order`() {
+        fun rejection(
+            verdict: String? = "PASS",
+            validity: String? = "VALID",
+            coverage: String? = "COMPLETE",
+        ) = baselineCandidateRejection(verdict, validity, coverage)
+
+        assertEquals(null, rejection())
+        assertEquals("BASELINE_CANDIDATE_INVALID", rejection(verdict = "FAIL", validity = "INVALID", coverage = "INCOMPLETE"))
+        assertEquals("BASELINE_CANDIDATE_INVALID", rejection(validity = "DEGRADED"))
+        assertEquals("BASELINE_CANDIDATE_INVALID", rejection(validity = null))
+        assertEquals("BASELINE_CANDIDATE_INCOMPLETE", rejection(verdict = "FAIL", coverage = "INCOMPLETE"))
+        assertEquals("BASELINE_CANDIDATE_INCOMPLETE", rejection(coverage = null))
+        listOf("FAIL", "NO_POLICY", "NO_VERDICT", "pass", null).forEach {
+            assertEquals("BASELINE_CANDIDATE_NOT_PASS", rejection(verdict = it), it)
+        }
+    }
+
+    @Test
+    fun `candidate rejection reads the three fields of a stored result`() {
+        assertEquals(null, baselineCandidateRejection(result()))
+        assertEquals("BASELINE_CANDIDATE_NOT_PASS", baselineCandidateRejection(result(verdict = "FAIL")))
+        assertEquals("BASELINE_CANDIDATE_INCOMPLETE", baselineCandidateRejection(result(coverage = "INCOMPLETE")))
+        assertEquals("BASELINE_CANDIDATE_INVALID", baselineCandidateRejection(result(validity = "INVALID")))
+        assertEquals("BASELINE_CANDIDATE_INVALID", baselineCandidateRejection(JsonObject(emptyMap())))
+    }
+
+    @Test
+    fun `statistical selection rejects every verdict other than PASS before looking at metrics`() {
+        val valid = listOf(candidate('a'), candidate('b'), candidate('c'))
+        listOf("FAIL", "NO_POLICY", "NO_VERDICT").forEach { verdict ->
+            val mixed = valid.toMutableList().also { it[1] = candidate('b', result(verdict = verdict, p95 = null)) }
+            val failure =
+                assertThrows(IllegalArgumentException::class.java) {
+                    statisticalBaselineSelection("verdicts", mixed.references(), mixed.results(), mixed.identities())
+                }
+            assertEquals("BASELINE_CANDIDATE_NOT_PASS", failure.message, verdict)
+        }
+    }
+
+    @Test
     fun `statistical selection rejects every ineligible series instead of filtering candidates`() {
         val valid = listOf(candidate('a'), candidate('b'), candidate('c'))
 
@@ -1100,9 +1141,11 @@ class BaselineComparisonTest {
         errors: Any? = 0L,
         validity: String = "VALID",
         coverage: String = "COMPLETE",
+        verdict: String = "PASS",
     ) = buildJsonObject {
         put("analysis_mode", "standard")
         put("run_validity", validity)
+        put("policy_verdict", verdict)
         put("analysis_coverage", buildJsonObject { put("status", coverage) })
         put(
             "evidence",

@@ -207,7 +207,7 @@ test('does not allow replacing the baseline while a condition decision is being 
   await expect(page.getByRole('button', { name: 'Set as baseline', exact: true })).toBeEnabled()
 })
 
-test('shows the empty-window hint for the empty side and the old-rules hint for an incompatible baseline', async ({ page }) => {
+test('shows the empty-window hint for the empty side and the incompatibility hint for an incompatible baseline', async ({ page }) => {
   await analyze(page, 'baseline-hints-a.jtl', 100, 1767225770000)
   await page.getByRole('button', { name: 'Set as baseline', exact: true }).click()
   const current = await analyze(page, 'baseline-hints-b.jtl', 200, 1767225771000)
@@ -302,13 +302,14 @@ test('shows the empty-window hint for the empty side and the old-rules hint for 
   await expect(page.getByTestId('baseline-empty-window')).toHaveCount(0)
   scenario = { reasons: ['INCOMPATIBLE_METRIC_DEFINITION'], incompatible: true, windowStatus: 'NOT_EVALUATED', empty: true }
   await compare.click()
-  await expect(page.getByTestId('baseline-old-rules')).toContainText(BASELINE_LABELS.oldRulesHint)
+  await expect(page.getByTestId('baseline-incompatible')).toContainText(BASELINE_LABELS.incompatibleHint)
+  await expect(page.getByTestId('baseline-incompatible')).toContainText('разный набор входных данных')
   scenario = { reasons: [], incompatible: false, windowStatus: 'DESCRIPTIVE', empty: false }
   await compare.click()
-  await expect(page.getByTestId('baseline-old-rules')).toHaveCount(0)
+  await expect(page.getByTestId('baseline-incompatible')).toHaveCount(0)
 })
 
-test('explains the old-rules hint when a mixed-semantics candidate set is rejected', async ({ page }) => {
+test('explains the incompatibility hint when a mixed-semantics candidate set is rejected', async ({ page }) => {
   await page.locator('#baseline-panel summary').click()
   await analyze(page, 'mixed-fast.jtl', 100, 1767225790000)
   await page.getByRole('button', { name: 'Add selected candidate', exact: true }).click()
@@ -330,7 +331,7 @@ test('explains the old-rules hint when a mixed-semantics candidate set is reject
   })
   await page.getByRole('button', { name: 'Select statistically', exact: true }).click()
   await expect(page.locator('#baseline-panel [role="alert"]')).toContainText('BASELINE_MIXED_SEMANTICS')
-  await expect(page.getByTestId('baseline-old-rules')).toContainText(BASELINE_LABELS.oldRulesHint)
+  await expect(page.getByTestId('baseline-incompatible')).toContainText(BASELINE_LABELS.incompatibleHint)
 })
 
 test('failed replacement keeps the last confirmed baseline visible', async ({ page }) => {

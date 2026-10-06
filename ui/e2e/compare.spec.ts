@@ -81,7 +81,7 @@ async function openCompare(page: Page, opts: CompareOptions = {}) {
       body = { conditions }
     } else if (path.endsWith('/comparison')) {
       body = {
-        baseline, current, comparability: opts.comparability ?? 'UNCONFIRMED', warnings: opts.warnings ?? [], conditions,
+        baseline, current, comparability: opts.comparability ?? (conditions ? 'USER_CONFIRMED' : 'UNCONFIRMED'), warnings: opts.warnings ?? [], conditions,
         metrics: [
           metric('response_time_p95_ms', 'ms', '100', '200', '100', '100', null, null),
           metric('error_rate_ratio', 'ratio', '0', '0.1', '0.1', null, null, 'ZERO_BASELINE'),
@@ -212,6 +212,18 @@ test('the condition form saves the explicit decision for the pair in Russian', a
     path: `/api/runs/${current.run_id}/analyses/${current.analysis_id}/baseline-conditions`,
     body: { decision: 'CONFIRMED' },
   }])
+})
+
+test('the comparison stays on screen after saving a decision and is refreshed', async ({ page }) => {
+  const requests = await openCompare(page, { baselineMode: 'manual' })
+  await page.getByRole('button', { name: COMPARE_LABELS.compare, exact: true }).click()
+  const shown = page.getByTestId('baseline-comparison')
+  await expect(shown).toContainText(COMPARE_LABELS.statusLine('UNCONFIRMED'))
+  await page.getByLabel(COMPARE_LABELS.conditionConfirmed, { exact: true }).check()
+  await page.getByRole('button', { name: COMPARE_LABELS.saveCondition, exact: true }).click()
+  await expect(page.getByTestId('baseline-condition-status')).toContainText(COMPARE_LABELS.conditionSaved('CONFIRMED', updatedAt))
+  await expect(shown).toContainText(COMPARE_LABELS.statusLine('USER_CONFIRMED'))
+  expect(requests.paths.filter((entry) => entry.startsWith('GET') && entry.endsWith('/comparison'))).toHaveLength(2)
 })
 
 test('no baseline shows the Russian hint', async ({ page }) => {

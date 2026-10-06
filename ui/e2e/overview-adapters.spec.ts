@@ -126,6 +126,21 @@ test.describe('attention items', () => {
     ])
   })
 
+  test('platform and window reasons of diagnostic rules lead to the resource table when the verdict is PASS', () => {
+    const codes = ['PLATFORM_SERIES_AMBIGUOUS', 'PLATFORM_UNIT_MISMATCH', 'PLATFORM_AGGREGATION_MISMATCH', 'PLATFORM_SERVICE_NOT_IN_CATALOG', 'RULE_WINDOW_TOO_SHORT']
+    const result = build({
+      policy_verdict: 'PASS',
+      analysis_coverage: { status: 'INCOMPLETE', reasons: codes },
+      evidence: [overall, checkout, p95Rule('ok', 'PASS', 100)],
+    })
+
+    const notes = attentionItems(result).filter((entry) => entry.kind === 'coverage')
+
+    expect(notes.map((entry) => [entry.key, entry.target?.targetId, entry.openLabel])).toEqual(
+      codes.map((code) => [`coverage:${code}`, 'resource-results', OVERVIEW_LABELS.openResources]),
+    )
+  })
+
   test('INSUFFICIENT_SAMPLES in a capacity result still leads to the policy table, stage reasons to the capacity table', () => {
     const capacity = build({
       analysis_mode: 'capacity_step',

@@ -1,7 +1,7 @@
 import AxeBuilder from '@axe-core/playwright'
 import { expect, test, type Page } from '@playwright/test'
 import { COMPARE_LABELS, EN_COMPARE_LABELS } from '../src/shell/labels.compare'
-import { BASELINE_LABELS } from '../src/shell/labels'
+import { BASELINE_ERROR_LABELS, BASELINE_LABELS } from '../src/shell/labels'
 import type { BaselineCondition, BaselineSelection } from '../src/types'
 
 const current = { run_id: 'cmp-run', analysis_id: 'a'.repeat(64) }
@@ -27,6 +27,11 @@ type CompareOptions = {
   shell?: 'new' | 'old'
   precise?: boolean
   slotArm?: string
+  verdict?: string
+  coverage?: { status: string; reasons: string[] }
+  validity?: string
+  profile?: unknown
+  postFails?: { status: number; code: string; message: string; limit?: number }
 }
 
 const metric = (
@@ -65,9 +70,12 @@ async function openCompare(page: Page, opts: CompareOptions = {}) {
       body = { baseline, baselines: baseline ? [{ series: baseline.series, arm: opts.slotArm ?? null, source: 'SLOT', baseline }] : [] }
     }
     else if (path === '/api/baseline' && method === 'POST') {
-      if (opts.postBaselineFails) {
+      if (opts.postFails) {
+        status = opts.postFails.status
+        body = { error: { code: opts.postFails.code, message: opts.postFails.message, limit: opts.postFails.limit } }
+      } else if (opts.postBaselineFails) {
         status = 422
-        body = { error: { code: 'BASELINE_CANDIDATE_NOT_PASS', message: 'Server says no.' } }
+        body = { error: { code: 'FUTURE_REFUSAL', message: 'Server says no.' } }
       } else {
         baseline = {
           schema_version: 'local-baseline.v1', series: 'S', mode: 'manual', reference: current,
@@ -89,6 +97,7 @@ async function openCompare(page: Page, opts: CompareOptions = {}) {
     } else if (path.endsWith('/comparison')) {
       body = {
         baseline, current, comparability: opts.comparability ?? (conditions ? 'USER_CONFIRMED' : 'UNCONFIRMED'), warnings: opts.warnings ?? [], conditions,
+        ...(opts.profile === undefined ? {} : { profile: opts.profile }),
         metrics: [
           opts.precise
             ? metric('response_time_p95_ms', 'ms', '451', '3493.123456', '3042.123456', '674.501109', null, null)
@@ -119,7 +128,12 @@ async function openCompare(page: Page, opts: CompareOptions = {}) {
         analyses: [{ analysis_id: current.analysis_id, policy_sha256: 'e'.repeat(64), policy_verdict: 'NO_POLICY', run_validity: 'VALID' }],
         next_after: null,
       }
-    } else if (path.endsWith('/result')) body = result
+    } else if (path.endsWith('/result')) {
+      body = {
+        ...result, policy_verdict: opts.verdict ?? 'NO_POLICY', run_validity: opts.validity ?? 'VALID',
+        analysis_coverage: opts.coverage ?? result.analysis_coverage,
+      }
+    }
     else if (path.endsWith('/buckets')) {
       if (opts.buckets) {
         body = {
@@ -298,7 +312,7 @@ test('no baseline shows the Russian hint', async ({ page }) => {
 })
 
 test('a server error stays as the server text marked as English', async ({ page }) => {
-  await openCompare(page, { postBaselineFails: true })
+  await openCompare(page, { postBaselineFails: true, verdict: 'PASS' })
   await page.getByRole('button', { name: COMPARE_LABELS.setBaseline, exact: true }).click()
   await expect(page.getByRole('alert').filter({ hasText: 'Server says no.' })).toHaveAttribute('lang', 'en')
 })
@@ -396,3 +410,109 @@ test('the old interface clears the baseline of its series and arm', async ({ pag
   await page.getByRole('button', { name: 'Clear baseline', exact: true }).click()
   await expect.poll(() => deletes).toEqual(['?series=S&arm=blue'])
 })
+
+const COMPLETE = { status: 'COMPLETE', reasons: [] as string[] }
+
+test('an analysis that cannot be a baseline blocks the button and names the reason in words', async ({ page }) => {
+  const requests = await openCompare(page, { verdict: 'FAIL' })
+  const button = page.getByRole('button', { name: COMPARE_LABELS.setBaseline, exact: true })
+  await expect(button).toBeDisabled()
+  await expect(button).toHaveAttribute('aria-describedby', 'baseline-ineligible')
+  await expect(page.getByTestId('baseline-ineligible')).toHaveText(COMPARE_LABELS.ineligible!('BASELINE_CANDIDATE_NOT_PASS'))
+  expect(requests.posts.filter((post) => post.path === '/api/baseline')).toEqual([])
+})
+
+for (const [name, opts, code] of [
+  ['an invalid run', { validity: 'INVALID', verdict: 'PASS' }, 'BASELINE_CANDIDATE_INVALID'],
+  ['an incomplete analysis', { verdict: 'PASS', coverage: { status: 'INCOMPLETE', reasons: ['MISSING_RESOURCE'] } }, 'BASELINE_CANDIDATE_INCOMPLETE'],
+  ['an incomplete analysis next to SMALL_SAMPLE', { verdict: 'PASS', coverage: { status: 'INCOMPLETE', reasons: ['SMALL_SAMPLE', 'MISSING_RESOURCE'] } }, 'BASELINE_CANDIDATE_INCOMPLETE'],
+  ['an analysis without a policy', { verdict: 'NO_POLICY' }, 'BASELINE_CANDIDATE_NOT_PASS'],
+] as const) {
+  test(`the button is blocked for ${name}`, async ({ page }) => {
+    await openCompare(page, opts)
+    await expect(page.getByRole('button', { name: COMPARE_LABELS.setBaseline, exact: true })).toBeDisabled()
+    await expect(page.getByTestId('baseline-ineligible')).toHaveText(COMPARE_LABELS.ineligible!(code))
+  })
+}
+
+for (const [name, opts] of [
+  ['a complete PASS analysis', { verdict: 'PASS', coverage: COMPLETE }],
+  ['a PASS analysis that is incomplete only because of SMALL_SAMPLE', { verdict: 'PASS', coverage: { status: 'INCOMPLETE', reasons: ['SMALL_SAMPLE'] } }],
+] as const) {
+  test(`the button stays available for ${name}`, async ({ page }) => {
+    await openCompare(page, opts)
+    await expect(page.getByRole('button', { name: COMPARE_LABELS.setBaseline, exact: true })).toBeEnabled()
+    await expect(page.getByTestId('baseline-ineligible')).toHaveCount(0)
+  })
+}
+
+test('the old interface leaves the decision to the server: the button is available for FAIL', async ({ page }) => {
+  await openCompare(page, { shell: 'old', verdict: 'FAIL' })
+  await expect(page.getByRole('button', { name: EN_COMPARE_LABELS.setBaseline, exact: true })).toBeEnabled()
+  await expect(page.getByTestId('baseline-ineligible')).toHaveCount(0)
+})
+
+for (const code of ['BASELINE_CANDIDATE_INVALID', 'BASELINE_CANDIDATE_INCOMPLETE', 'BASELINE_CANDIDATE_NOT_PASS', 'BASELINE_CANDIDATE_TOO_LARGE', 'BASELINE_CANDIDATE_GATES_UNKNOWN']) {
+  test(`${code} is a Russian phrase and not marked as English`, async ({ page }) => {
+    await openCompare(page, { verdict: 'PASS', postFails: { status: 422, code, message: 'Baseline candidate is unavailable' } })
+    await page.getByRole('button', { name: COMPARE_LABELS.setBaseline, exact: true }).click()
+    const alert = page.locator('#baseline-panel').getByRole('alert')
+    await expect(alert).toHaveText(BASELINE_ERROR_LABELS[code]!(null))
+    await expect(alert).not.toHaveAttribute('lang', 'en')
+  })
+}
+
+test('the old interface keeps the server text of a candidate refusal', async ({ page }) => {
+  await openCompare(page, { shell: 'old', verdict: 'FAIL', postFails: { status: 422, code: 'BASELINE_CANDIDATE_NOT_PASS', message: 'Baseline candidate is not PASS: FAIL' } })
+  await page.getByRole('button', { name: EN_COMPARE_LABELS.setBaseline, exact: true }).click()
+  await expect(page.locator('#baseline-panel').getByRole('alert')).toHaveText('Baseline candidate is not PASS: FAIL')
+})
+
+const mismatch = { status: 'MISMATCH', differing_fields: ['pacing', 'load_model'], baseline_release_id: 'b', current_release_id: 'c' } as const
+
+test('the profile line names the fields that differ and the warnings stay in the server order', async ({ page }) => {
+  await openCompare(page, { warnings: ['POLICY_DIFFERS', 'PROFILE_MISMATCH'], profile: mismatch })
+  await page.getByRole('button', { name: COMPARE_LABELS.compare, exact: true }).click()
+  await expect(page.getByTestId('baseline-profile')).toHaveText(COMPARE_LABELS.profileLine(mismatch))
+  await expect(page.getByTestId('baseline-profile')).toContainText('паузы (pacing), модель нагрузки')
+  await expect(page.getByTestId('baseline-warnings').locator('li')).toHaveText([BASELINE_LABELS.warnings.POLICY_DIFFERS, BASELINE_LABELS.warnings.PROFILE_MISMATCH])
+})
+
+test('a matching profile is stated', async ({ page }) => {
+  await openCompare(page, { profile: { status: 'MATCH', differing_fields: [], baseline_release_id: 'b', current_release_id: 'c' } })
+  await page.getByRole('button', { name: COMPARE_LABELS.compare, exact: true }).click()
+  await expect(page.getByTestId('baseline-profile')).toHaveText('Профиль условий релизов: совпадает')
+})
+
+test('without release profiles the comparison has no profile line', async ({ page }) => {
+  await openCompare(page, { profile: null })
+  await page.getByRole('button', { name: COMPARE_LABELS.compare, exact: true }).click()
+  await expect(page.getByTestId('baseline-comparison')).toBeVisible()
+  await expect(page.getByTestId('baseline-profile')).toHaveCount(0)
+})
+
+for (const theme of ['light', 'dark'] as const) {
+  test(`the blocked button and the profile line have no serious axe violations, ${theme}`, async ({ page }) => {
+    await page.emulateMedia({ colorScheme: theme })
+    await openCompare(page, { verdict: 'FAIL', profile: mismatch, warnings: ['PROFILE_MISMATCH'] })
+    await page.getByRole('button', { name: COMPARE_LABELS.compare, exact: true }).click()
+    await expect(page.getByTestId('baseline-profile')).toBeVisible()
+    const audit = await new AxeBuilder({ page }).include('#baseline-panel').analyze()
+    expect(audit.violations.filter((item) => item.impact === 'critical' || item.impact === 'serious').map((item) => item.id)).toEqual([])
+  })
+}
+
+for (const width of [1280, 375, 320]) {
+  test(`the blocked button and the profile line do not overflow at ${width}px`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 900 })
+    await openCompare(page, {
+      verdict: 'FAIL',
+      profile: { ...mismatch, differing_fields: ['scenario_mix', 'environment_dataset', 'load_model', 'targets_stages', 'pacing', 'generator_limits'] },
+    })
+    await page.getByRole('button', { name: COMPARE_LABELS.compare, exact: true }).click()
+    await expect(page.getByTestId('baseline-profile')).toBeVisible()
+    await page.evaluate(() => document.documentElement.style.setProperty('letter-spacing', '0.15em'))
+    const size = await page.evaluate(() => ({ scrollWidth: document.documentElement.scrollWidth, innerWidth: window.innerWidth }))
+    expect(size.scrollWidth).toBeLessThanOrEqual(size.innerWidth)
+  })
+}

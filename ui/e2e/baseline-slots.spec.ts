@@ -71,7 +71,7 @@ async function openCompare(page: Page, opts: Options = {}) {
       body = { analyses: [{ analysis_id: current.analysis_id, policy_sha256: 'e'.repeat(64), policy_verdict: 'NO_POLICY', run_validity: 'VALID' }], next_after: null }
     } else if (path.endsWith('/result')) {
       body = {
-        schema_version: 'analysis-result.v1', run_id: current.run_id, analysis_mode: 'standard', run_validity: 'VALID', policy_verdict: 'NO_POLICY',
+        schema_version: 'analysis-result.v1', run_id: current.run_id, analysis_mode: 'standard', run_validity: 'VALID', policy_verdict: 'PASS',
         analysis_coverage: { status: 'COMPLETE', reasons: [] }, findings: [], evidence: [],
       }
     } else if (path.endsWith('/buckets')) body = { buckets: [], next_from_ms: null }

@@ -486,3 +486,66 @@ test('keeps one baseline per series and clears only the series that was cleared'
   await expect(page.getByTestId('baseline-selection')).toContainText(second.analysis_id)
   await expect(page.getByTestId('baseline-condition-status')).toContainText('Saved CONFIRMED')
 })
+
+async function mutationHeaders(page: Page) {
+  const bootstrap = await (await page.request.get('/api/bootstrap')).json() as { csrf_token: string }
+  return { Origin: new URL(page.url()).origin, 'X-LTV-CSRF': bootstrap.csrf_token }
+}
+
+async function openInNewShell(page: Page, filename: string, analysisId: string) {
+  await page.goto('/?shell=new')
+  await page.getByRole('button', { name: filename }).click()
+  await page.locator(`button[title="${analysisId}"]`).click()
+  await expect(page.locator('#verdict')).toBeVisible()
+  await page.locator('#shell-tab-compare').click()
+}
+
+test('a failing analysis cannot be pinned from the new shell and the server still refuses it', async ({ page }) => {
+  const failing = await analyze(page, 'baseline-r9-fail.jtl', 90, 1767226100000, 'failing')
+  const refused = await page.request.post('/api/baseline', {
+    headers: await mutationHeaders(page),
+    data: { mode: 'manual', series: 'R9 series', reference: failing },
+  })
+  expect(refused.status()).toBe(422)
+  expect((await refused.json() as { error: { code: string } }).error.code).toBe('BASELINE_CANDIDATE_NOT_PASS')
+  await openInNewShell(page, 'baseline-r9-fail.jtl', failing.analysis_id)
+  await expect(page.getByRole('button', { name: COMPARE_LABELS.setBaseline, exact: true })).toBeDisabled()
+  await expect(page.getByTestId('baseline-ineligible')).toHaveText(COMPARE_LABELS.ineligible!('BASELINE_CANDIDATE_NOT_PASS'))
+})
+
+test('different policies of the baseline and the current analysis show the policy warning in words', async ({ page }) => {
+  await analyze(page, 'baseline-r9-policy-a.jtl', 100, 1767226200000)
+  await page.getByRole('button', { name: 'Set as baseline', exact: true }).click()
+  await expect(page.getByTestId('baseline-selection')).toBeVisible()
+  const other = await analyze(page, 'baseline-r9-policy-b.jtl', 120, 1767226201000, 'failing')
+  await openInNewShell(page, 'baseline-r9-policy-b.jtl', other.analysis_id)
+  await page.getByRole('button', { name: COMPARE_LABELS.compare, exact: true }).click()
+  await expect(page.getByTestId('baseline-warnings').locator('li')).toHaveText([BASELINE_LABELS.warnings.POLICY_DIFFERS])
+})
+
+test('releases with different profiles show the profile warning and the profile line', async ({ page }) => {
+  const series = `R9 profile ${Date.now()}`
+  const profile = (pacing: string) => ({ scenario_mix: null, environment_dataset: null, load_model: null, targets_stages: null, pacing, generator_limits: null })
+  const base = await analyze(page, 'baseline-r9-profile-a.jtl', 100, 1767226300000)
+  const current = await analyze(page, 'baseline-r9-profile-b.jtl', 120, 1767226301000)
+  const headers = await mutationHeaders(page)
+  const created: string[] = []
+  try {
+    for (const [reference, label, pacing] of [[base, 'a', '10 s'], [current, 'b', '20 s']] as const) {
+      const response = await page.request.post('/api/releases', {
+        headers,
+        data: { series, label, run_id: reference.run_id, analyses: [{ analysis_id: reference.analysis_id }], profile: profile(pacing), notes: null },
+      })
+      expect(response.status()).toBe(201)
+      created.push((await response.json() as { release_id: string }).release_id)
+    }
+    const pinned = await page.request.post('/api/baseline', { headers, data: { mode: 'manual', series, reference: base } })
+    expect(pinned.status()).toBe(200)
+    await openInNewShell(page, 'baseline-r9-profile-b.jtl', current.analysis_id)
+    await page.getByRole('button', { name: COMPARE_LABELS.compare, exact: true }).click()
+    await expect(page.getByTestId('baseline-warnings').locator('li')).toHaveText([BASELINE_LABELS.warnings.PROFILE_MISMATCH])
+    await expect(page.getByTestId('baseline-profile')).toContainText('паузы (pacing)')
+  } finally {
+    for (const id of created) await page.request.delete(`/api/releases/${id}`, { headers })
+  }
+})

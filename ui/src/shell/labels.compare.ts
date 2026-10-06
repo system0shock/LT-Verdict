@@ -51,6 +51,10 @@ export interface CompareLabels {
   candidatesHint: string
   selectStatistically: string
   requestFailed: string
+  // Пояснение рядом с недоступной кнопкой «Назначить baseline» по коду допуска (в прежнем интерфейсе null: кнопка доступна, отказывает сервер).
+  ineligible: ((code: string) => string) | null
+  // Строка о заявленных профилях условий пары релизов (поле comparison.profile); null, если профиля пары нет.
+  profileLine: (profile: NonNullable<BaselineComparison['profile']>) => string
   // Фраза словаря для кода 422 (`limit` из `error.limit`) или null: тогда показывается сообщение сервера.
   errorText: (code: string, limit: number | null) => string | null
   metricsTitle: string
@@ -157,6 +161,8 @@ export const EN_COMPARE_LABELS: CompareLabels = {
   selectStatistically: 'Select statistically',
   requestFailed: 'Baseline request failed.',
   errorText: () => null,
+  ineligible: null,
+  profileLine: (profile) => (profile.status === 'MATCH' ? 'Release profile: match' : `Release profile: differs: ${profile.differing_fields.join(', ')}`),
   metricsTitle: 'Overall metrics against baseline',
   statusLine: (comparability) => `Planned conditions: ${comparability}`,
   deltasNote: 'Deltas alone do not prove a version regression or change the policy verdict.',
@@ -209,6 +215,14 @@ const RU_METRICS: Record<string, string> = {
 }
 const RU_UNITS: Record<string, string> = { ms: 'мс', rps: 'зпр/с', ratio: 'доля' }
 const RU_MODES: Record<string, string> = { manual: 'ручной выбор', statistical: 'статистический выбор' }
+const RU_PROFILE_FIELDS: Record<string, string> = {
+  scenario_mix: 'сценарии и состав запросов',
+  environment_dataset: 'стенд и набор данных',
+  load_model: 'модель нагрузки',
+  targets_stages: 'цели и ступени',
+  pacing: 'паузы (pacing)',
+  generator_limits: 'ограничения генератора',
+}
 const RU_DECISIONS: Record<string, string> = {
   CONFIRMED: 'подтверждено',
   NOT_CONFIRMED: 'не подтверждено',
@@ -320,6 +334,10 @@ export const COMPARE_LABELS: CompareLabels = {
   selectStatistically: 'Выбрать статистически',
   requestFailed: 'Не удалось выполнить запрос baseline.',
   errorText: (code, limit) => BASELINE_ERROR_LABELS[code]?.(limit) ?? null,
+  ineligible: (code) => BASELINE_ERROR_LABELS[code]?.(null) ?? code,
+  profileLine: (profile) => (profile.status === 'MATCH'
+    ? 'Профиль условий релизов: совпадает'
+    : `Профиль условий релизов: различается: ${profile.differing_fields.map((name) => RU_PROFILE_FIELDS[name] ?? name).join(', ')}`),
   metricsTitle: 'Общие метрики относительно baseline',
   statusLine: (comparability) => (comparability === 'USER_CONFIRMED'
     ? 'Условия подтверждены вами'

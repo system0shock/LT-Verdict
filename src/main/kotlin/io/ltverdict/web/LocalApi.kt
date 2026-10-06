@@ -884,14 +884,23 @@ internal fun Application.installLocalApi(context: LocalApiContext) {
                     put("analysis_id", analysisId)
                 }
             val scope = resolveBaselineScope(call, context.store, currentReference)
-            // Only the slot: analytics does not use the condition record, so a damaged record must not fail it.
-            val baselineSlot =
-                baselineOperation { context.store.listBaselineSlots() }
-                    .firstOrNull { if (scope.series == null) it.legacy else it.series == scope.series && it.arm == scope.arm }
+            // Only the selection: analytics does not use the condition record, so a damaged record must not fail it. Without a
+            // series the legacy file is read alone, as comparison does, so a damaged slot of another series does not reach it.
+            val baselineSelection =
+                baselineOperation {
+                    if (scope.series == null) {
+                        context.store.readBaseline()
+                    } else {
+                        context.store
+                            .listBaselineSlots()
+                            .firstOrNull { it.series == scope.series && it.arm == scope.arm }
+                            ?.selection
+                    }
+                }
             val response =
                 withContext(Dispatchers.IO) {
                     val current = context.store.readComparisonDocuments(runId, analysisId) ?: notFound("Analysis was not found")
-                    val baseline = baselineSlot?.selection?.get("reference") as? JsonObject
+                    val baseline = baselineSelection?.get("reference") as? JsonObject
                     val candidates = mutableListOf<SavedAnalysisForComparison>()
                     val history = context.store.readComparisonHistory()
                     for (entry in history.entries) {

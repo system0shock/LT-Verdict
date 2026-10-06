@@ -2347,6 +2347,10 @@ class LocalApiTest {
 
             assertError(api.get("/api/baseline"), 500, "CORRUPT_BASELINE")
             assertError(api.get(path), 500, "CORRUPT_BASELINE")
+            // without a series only the legacy file is read, so a damaged slot of another series does not reach analytics
+            val analytics = "/api/runs/${runs[1].first}/analyses/${runs[1].second}/analytics"
+            assertEquals(200, api.get(analytics).statusCode())
+            assertError(api.get("$analytics?series=A"), 500, "CORRUPT_BASELINE")
             assertError(api.delete("/api/baseline?series=A"), 500, "CORRUPT_BASELINE")
             assertError(api.selectManual(runs[1].first, runs[1].second, "B"), 500, "CORRUPT_BASELINE")
         }

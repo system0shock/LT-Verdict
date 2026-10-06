@@ -64,7 +64,8 @@ watch(series, () => {
   comparable.value = false
   showSlotOfSeries()
 })
-watch(() => baseline.value?.series, (active) => emit('active-series', active), { immediate: true })
+// A series without a baseline is still the chosen series: the analytics must not fall back to another baseline then.
+watch(() => baseline.value?.series ?? (slots.value.length ? series.value.normalize('NFC').trim() : undefined), (active) => emit('active-series', active), { immediate: true })
 watch(() => [props.version, props.preferredSeries], () => {
   if (props.preferredSeries) series.value = props.preferredSeries
   void loadBaseline()
@@ -142,7 +143,8 @@ async function loadBaseline() {
     if (revision !== baselineRevision) return
     useSlots(response)
     // On opening, a field that names no baseline takes the first one (a single baseline is the usual case).
-    if (!slotOfSeries(series.value) && slots.value[0]) series.value = slots.value[0].series
+    // A series chosen from the history stays even without a baseline: the panel then says so for that series.
+    if (!props.preferredSeries && !slotOfSeries(series.value) && slots.value[0]) series.value = slots.value[0].series
     baseline.value = slotOfSeries(series.value)?.baseline ?? null
     void loadConditions()
   } catch (failure) {

@@ -435,3 +435,27 @@ for (const theme of ['light', 'dark'] as const) {
     expect(audit.violations.filter((item) => item.impact === 'critical' || item.impact === 'serious').map((item) => item.id)).toEqual([])
   })
 }
+test('the compare action keeps the series of the release even when it has no baseline', async ({ page }) => {
+  await openHistory(page, { releases: [release(1), release(2, { series: 'Other' })], baselineRun: 'hist-run-1' })
+  await page.getByTestId('release-row').first().getByRole('button', { name: L.actionAria(L.compare, 'v1.2', null) }).click()
+  await expect(page.locator('#shell-tab-compare')).toHaveAttribute('aria-selected', 'true')
+  await expect(page.getByLabel('Серия сравнения', { exact: true })).toHaveValue('Other')
+  await expect(page.locator('#baseline-panel')).toContainText('Other')
+  await expect(page.getByTestId('baseline-selection')).toHaveCount(0)
+})
+
+test('a failed analytics request and a damaged analysis give their own reasons', async ({ page }) => {
+  await openHistory(page, {
+    releases: [release(1), release(2, {}, { analysis_state: 'CORRUPT', baseline_eligible: false, ineligible_reasons: ['ANALYSIS_CORRUPT'] })],
+    failures: { 'GET /api/runs/hist-run-1/analyses/1111111111111111111111111111111111111111111111111111111111111111/analytics': { status: 500, code: 'X', message: 'boom' } },
+  })
+  await expect(rowsOf(page).first()).toContainText(L.noNumbersCorrupt)
+  await expect(rowsOf(page).nth(1)).toContainText(L.noNumbersFailed)
+})
+
+test('releases with the same label have distinguishable action names', async ({ page }) => {
+  await openHistory(page, { releases: [release(1, { label: 'same' }), release(2, { label: 'same' })] })
+  await expect(rowsOf(page)).toHaveCount(2)
+  const names = await page.getByTestId('release-row').getByRole('button', { name: L.open }).evaluateAll((buttons) => buttons.map((button) => button.getAttribute('aria-label')))
+  expect(new Set(names).size).toBe(2)
+})

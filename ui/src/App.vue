@@ -41,6 +41,7 @@ import { summarizeVerdict } from './verdictSummary'
 import type { AttentionTarget } from './shell/overview'
 import type { AdvisoryAiConfig, AnalysisResult, AnalysisSummary, Bucket, JobStatus, OpenSearchEvidence, Policy, PolicyError, PostgresContextEvidence, RunSummary, SourceProfile, SourceRequest, Theme } from './types'
 import { COMPARE_LABELS } from './shell/labels.compare'
+import { EXPORT_LABELS } from './shell/labels.export'
 
 const theme = ref<Theme>(window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light')
 const shellNew = resolveNewShell(window.location.search, browserStorage())
@@ -900,6 +901,12 @@ function focusPolicy() {
           class="shell-legacy-link"
           :href="legacyHref"
         >{{ SHELL_LABELS.legacyLink }}</a>
+        <a
+          v-if="shellNew && result && selectedAnalysisId"
+          class="button-secondary shell-export-link"
+          :href="`/api/runs/${encodeURIComponent(result.run_id)}/analyses/${selectedAnalysisId}/report?format=html`"
+          download
+        >{{ EXPORT_LABELS.html }}</a>
       </header>
 
       <main>

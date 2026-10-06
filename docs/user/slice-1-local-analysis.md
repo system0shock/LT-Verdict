@@ -207,6 +207,12 @@ buckets; индикатор и переход к следующему интер
 ### Скачать результат
 
 Для открытого analysis доступны `Download JSON`, `Download HTML` и `Download AsciiDoc`.
+В новой оболочке в шапке, рядом с переключателем темы и ссылкой «Старый
+интерфейс», есть ещё ссылка-кнопка «Экспорт HTML»: она видна на любой вкладке,
+пока выбран analysis, и скачивает тот же файл, что `Download HTML` (тот же URL
+`/api/runs/<run>/analyses/<id>/report?format=html`, тот же файл
+`lt-verdict-<id>.html`). Без выбранного analysis кнопки нет; нажатие не создаёт
+новых analyses. Остальные ссылки `Download ...` остаются на вкладке «Обзор».
 JSON совпадает по bytes с сохранённым `analysis-result.json`. HTML открывается
 локально без приложения и сетевого доступа. Он строится на сервере по
 сохранённому результату и начинается с русских блоков, сопоставимых с
@@ -1001,7 +1007,8 @@ validation UI показывает editor для `policy_id`, rules, metric, ope
 threshold и scope. `Add rule`/`Remove rule` меняют только текущий draft;
 `Download policy` сохраняет его как `policy.json`. В новой оболочке то же
 самое делает вкладка «Правила» (с шаблонами и русскими подписями). Это отдельное действие от
-экспорта готового analysis через `Download JSON`/`Download HTML`/`Download AsciiDoc`.
+экспорта готового analysis через `Download JSON`/`Download HTML`/`Download AsciiDoc`
+или кнопку «Экспорт HTML» в шапке новой оболочки.
 
 Перед использованием сохранённого файла выполните:
 

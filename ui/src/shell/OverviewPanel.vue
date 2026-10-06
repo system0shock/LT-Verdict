@@ -3,8 +3,9 @@ import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { getBuckets } from '../api'
 import { fetchRunLoad, type RunLoad } from './deep'
 import { OVERVIEW_LABELS } from './labels'
+import { CAPACITY_LABELS } from './labels.tables'
 import SharedCursorChart from './SharedCursorChart.vue'
-import { attentionItems, keyMetrics, loadSeries, type AttentionKind, type AttentionTarget } from './overview'
+import { attentionItems, capacityBlock, keyMetrics, loadSeries, type AttentionKind, type AttentionTarget } from './overview'
 import type { AnalysisResult } from '../types'
 
 const props = defineProps<{
@@ -18,6 +19,7 @@ const LIMIT = 6
 const expanded = ref(false)
 const items = computed(() => attentionItems(props.result))
 const visibleItems = computed(() => expanded.value ? items.value : items.value.slice(0, LIMIT))
+const capacity = computed(() => props.result.analysis_mode === 'capacity_step' ? capacityBlock(props.result) : null)
 const tiles = computed(() => keyMetrics(props.result))
 const runLoad = ref<RunLoad>({ buckets: [], rollupSeconds: 60, truncated: false })
 const loading = ref(false)
@@ -117,6 +119,167 @@ const kindLabels: Record<AttentionKind, string> = {
       >
         {{ OVERVIEW_LABELS.diagnosticNote }}
       </p>
+    </section>
+
+    <section
+      v-if="capacity"
+      id="overview-capacity"
+      class="panel overview-capacity"
+      data-testid="capacity-block"
+      aria-labelledby="overview-capacity-title"
+    >
+      <h2 id="overview-capacity-title">
+        {{ OVERVIEW_LABELS.capacityTitle }}
+      </h2>
+      <p class="muted">
+        {{ OVERVIEW_LABELS.capacityLead }}
+      </p>
+      <p
+        class="overview-capacity__verdict"
+        data-testid="capacity-block-verdict"
+        :data-verdict="capacity.verdict"
+      >
+        {{ capacity.verdictText }}
+      </p>
+      <p data-testid="capacity-block-bound">
+        {{ CAPACITY_LABELS.boundLabel }}: {{ capacity.boundText }}.
+      </p>
+      <p
+        v-if="capacity.statement"
+        data-testid="capacity-block-statement"
+      >
+        {{ capacity.statement }}
+      </p>
+      <h3>{{ OVERVIEW_LABELS.capacityChartTitle }}</h3>
+      <p class="muted">
+        {{ CAPACITY_LABELS.axisLabel }}: {{ capacity.axisText }}. {{ capacity.counts }}
+      </p>
+      <div
+        class="overview-capacity__chart"
+        aria-hidden="true"
+        data-testid="capacity-block-chart"
+      >
+        <div
+          v-for="stage in capacity.stages"
+          :key="stage.key"
+          class="overview-capacity__row"
+          data-testid="capacity-block-bar-row"
+          :data-kind="stage.kind"
+        >
+          <p class="overview-capacity__label">
+            <strong>{{ stage.label }}</strong>
+            <span>{{ stage.target }}</span>
+            <span>{{ stage.mark }} {{ stage.verdictText }}</span>
+          </p>
+          <svg
+            viewBox="0 0 1000 24"
+            preserveAspectRatio="none"
+            focusable="false"
+            data-testid="capacity-block-bar"
+          >
+            <rect
+              class="overview-capacity__rect"
+              :class="`overview-capacity__rect--${stage.kind}`"
+              x="0"
+              y="5"
+              :width="stage.barX"
+              height="14"
+              vector-effect="non-scaling-stroke"
+            />
+            <line
+              v-if="stage.achievedX !== null"
+              class="overview-capacity__achieved"
+              :x1="stage.achievedX"
+              :x2="stage.achievedX"
+              y1="0"
+              y2="24"
+              vector-effect="non-scaling-stroke"
+            />
+            <line
+              v-if="capacity.lowerX !== null"
+              class="overview-capacity__bound overview-capacity__bound--lower"
+              :x1="capacity.lowerX"
+              :x2="capacity.lowerX"
+              y1="0"
+              y2="24"
+              vector-effect="non-scaling-stroke"
+            />
+            <line
+              v-if="capacity.upperX !== null"
+              class="overview-capacity__bound overview-capacity__bound--upper"
+              :x1="capacity.upperX"
+              :x2="capacity.upperX"
+              y1="0"
+              y2="24"
+              vector-effect="non-scaling-stroke"
+            />
+          </svg>
+        </div>
+      </div>
+      <div
+        class="table-wrap"
+        tabindex="0"
+        role="region"
+        :aria-label="OVERVIEW_LABELS.capacityTableRegion"
+      >
+        <table data-testid="capacity-block-table">
+          <thead>
+            <tr>
+              <th
+                v-for="head in OVERVIEW_LABELS.capacityHeads"
+                :key="head"
+                scope="col"
+              >
+                {{ head }}
+              </th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr
+              v-for="stage in capacity.stages"
+              :key="stage.key"
+              data-testid="capacity-block-stage"
+              :data-kind="stage.kind"
+            >
+              <th scope="row">
+                {{ stage.label }}
+              </th>
+              <td>{{ stage.target }}</td>
+              <td>{{ stage.achieved }}</td>
+              <td>
+                <span
+                  class="status-text"
+                  :data-status="stage.status"
+                ><span aria-hidden="true">{{ stage.mark }}</span>&nbsp;{{ stage.verdictText }}</span>
+                <span
+                  v-if="stage.smallSample"
+                  class="overview-capacity__mark"
+                  data-testid="capacity-block-small-sample"
+                >{{ CAPACITY_LABELS.smallSampleMark }}</span>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="muted">
+        {{ capacity.legend }}
+      </p>
+      <p
+        v-if="capacity.smallSample"
+        class="muted"
+        data-testid="capacity-block-small-sample-note"
+        role="note"
+      >
+        {{ CAPACITY_LABELS.smallSampleNote }}
+      </p>
+      <button
+        type="button"
+        data-testid="capacity-block-open"
+        :aria-label="OVERVIEW_LABELS.capacityOpenAria"
+        @click="emit('navigate', { tab: 'tables', targetId: 'capacity-results' })"
+      >
+        {{ OVERVIEW_LABELS.openCapacity }}
+      </button>
     </section>
 
     <section
@@ -248,6 +411,84 @@ const kindLabels: Record<AttentionKind, string> = {
 
 .overview-attention button,
 [data-testid="attention-more"] {
+  min-width: 44px;
+  min-height: 44px;
+}
+
+.overview-capacity__verdict {
+  margin: 8px 0;
+  font-size: 1.25rem;
+  font-weight: 700;
+}
+
+.overview-capacity {
+  min-width: 0;
+}
+
+.overview-capacity table {
+  min-width: 24rem;
+}
+
+.overview-capacity__chart {
+  display: grid;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.overview-capacity__label {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 12px;
+  margin: 0;
+}
+
+.overview-capacity__row svg {
+  display: block;
+  width: 100%;
+  height: 24px;
+  background: var(--surface-inset);
+}
+
+.overview-capacity__rect--pass {
+  fill: var(--pass);
+}
+
+.overview-capacity__rect--fail {
+  fill: var(--fail);
+}
+
+.overview-capacity__rect--unverified {
+  fill: none;
+  stroke: var(--text-muted);
+  stroke-width: 2;
+  stroke-dasharray: 4 3;
+}
+
+.overview-capacity__achieved {
+  stroke: var(--text);
+  stroke-width: 3;
+}
+
+.overview-capacity__bound {
+  stroke: var(--brand);
+  stroke-width: 2;
+}
+
+.overview-capacity__bound--lower {
+  stroke-dasharray: 6 3;
+}
+
+.overview-capacity__bound--upper {
+  stroke-dasharray: 2 3;
+}
+
+.overview-capacity__mark {
+  margin-inline-start: 0.5em;
+  font-style: italic;
+}
+
+[data-testid="capacity-block-open"] {
+  justify-self: start;
   min-width: 44px;
   min-height: 44px;
 }

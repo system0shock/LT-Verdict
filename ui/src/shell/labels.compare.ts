@@ -58,6 +58,8 @@ export interface CompareLabels {
   absoluteHead: string
   relativeHead: string
   roundingNote: string
+  // Блок точных значений общих метрик; в старом интерфейсе null: блока нет.
+  rawMetricsSummary: string | null
   windowTitle: string
   windowStatus: (status: string) => string
   windowStats: (side: 'baseline' | 'current', samples: number | null, durationMs: number | null) => string
@@ -72,7 +74,7 @@ export interface CompareLabels {
   na: string
   naReason: (reason: string | null) => string
   // Числа сравнения приходят строками с точностью сервера: в русской панели они показаны коротко, точное значение лежит в подсказке ячейки.
-  value: (value: string | null) => string
+  value: (value: string | null, peer?: string | null) => string
   deltaValue: (value: string | null, reason: string | null) => string
   percentValue: (value: string | null, reason: string | null) => string
   exact: (value: string | null, percent?: boolean) => string | undefined
@@ -157,6 +159,7 @@ export const EN_COMPARE_LABELS: CompareLabels = {
   absoluteHead: 'Absolute delta',
   relativeHead: 'Relative delta',
   roundingNote: 'Display rounded to 6 decimal places. Error rate uses ratio units: 0.01 = 1%.',
+  rawMetricsSummary: null,
   windowTitle: 'Selected-window observations',
   windowStatus: (status) => status,
   windowStats: (side, samples, durationMs) =>
@@ -232,11 +235,19 @@ const ruReason = (code: string): string => (RU_REASONS[code] ? `${RU_REASONS[cod
 // малое число (доля ошибок) с тремя значащими цифрами; строка, не похожая на десятичное число, остаётся как есть.
 const RU_DECIMAL = new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 2 })
 const RU_SMALL = new Intl.NumberFormat('ru-RU', { maximumSignificantDigits: 3 })
-function ruNumber(value: string): string {
-  if (!/^-?\d+(\.\d+)?$/.test(value)) return value
+const RU_FULL = new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 6 })
+function shortNumber(value: string): string | null {
+  if (!/^-?\d+(\.\d+)?$/.test(value)) return null
   const number = Number(value)
-  if (!Number.isFinite(number)) return value
+  if (!Number.isFinite(number)) return null
   return Math.abs(number) >= 1 || number === 0 ? RU_DECIMAL.format(number) : RU_SMALL.format(number)
+}
+// Округление не должно делать два разных значения одинаковыми: если пара baseline и текущее совпала бы в показе, берутся все знаки сервера.
+function ruNumber(value: string, peer?: string | null): string {
+  const short = shortNumber(value)
+  if (short === null) return value
+  if (peer != null && peer !== value && shortNumber(peer) === short) return RU_FULL.format(Number(value))
+  return short
 }
 // Метка времени сервера ('2026-10-05T21:56:29.572852600Z') показана до секунды в UTC; иная форма остаётся как есть.
 function ruTime(value: string): string {
@@ -310,6 +321,7 @@ export const COMPARE_LABELS: CompareLabels = {
   absoluteHead: 'Абсолютная разница',
   relativeHead: 'Относительная разница',
   roundingNote: 'Значения округлены для показа: до 2 знаков после запятой, малые числа до 3 значащих цифр; точное значение видно в подсказке ячейки (при наведении мыши). Доля ошибок в долях: 0.01 = 1 %.',
+  rawMetricsSummary: 'Точные значения общих метрик',
   windowTitle: 'Наблюдения в выбранных окнах',
   windowStatus: (status) => RU_WINDOW_STATUS[status] ?? status,
   windowStats: (side, samples, durationMs) =>
@@ -324,7 +336,7 @@ export const COMPARE_LABELS: CompareLabels = {
   unit: (unit) => RU_UNITS[unit] ?? unit,
   na: 'н/д',
   naReason: (reason) => (reason ? `н/д (${ruReason(reason)})` : 'н/д'),
-  value: (value) => (value === null ? 'н/д' : ruNumber(value)),
+  value: (value, peer) => (value === null ? 'н/д' : ruNumber(value, peer)),
   deltaValue: (value, reason) => (value === null ? ruNa(reason) : ruNumber(value)),
   percentValue: (value, reason) => (value === null ? ruNa(reason) : `${ruNumber(value)} %`),
   exact: (value, percent) => ruExact(value, percent ? ' %' : ''),

@@ -562,10 +562,10 @@ function warningText(code: string): string {
             >
               <td>{{ labels.metric(metric.metric) }} / {{ labels.unit(metric.unit) }}</td>
               <td :title="labels.exact(metric.baseline)">
-                {{ labels.value(metric.baseline) }}
+                {{ labels.value(metric.baseline, metric.current) }}
               </td>
               <td :title="labels.exact(metric.current)">
-                {{ labels.value(metric.current) }}
+                {{ labels.value(metric.current, metric.baseline) }}
               </td>
               <td :title="labels.exact(metric.delta)">
                 {{ labels.deltaValue(metric.delta, metric.reason) }}
@@ -580,6 +580,10 @@ function warningText(code: string): string {
       <p class="field__hint">
         {{ labels.roundingNote }}
       </p>
+      <details v-if="labels.rawMetricsSummary">
+        <summary>{{ labels.rawMetricsSummary }}</summary>
+        <pre>{{ JSON.stringify(comparison.metrics, null, 2) }}</pre>
+      </details>
       <section
         v-if="comparison.window_comparison"
         data-testid="window-comparison"
@@ -642,10 +646,10 @@ function warningText(code: string): string {
               >
                 <td>{{ labels.metric(metric.metric) }} / {{ metric.entity ?? labels.overall }} / {{ metric.resource_series_id ?? '—' }} / {{ labels.unit(metric.unit) }}</td>
                 <td :title="labels.exact(metric.baseline)">
-                  {{ labels.value(metric.baseline) }}
+                  {{ labels.value(metric.baseline, metric.current) }}
                 </td>
                 <td :title="labels.exact(metric.current)">
-                  {{ labels.value(metric.current) }}
+                  {{ labels.value(metric.current, metric.baseline) }}
                 </td>
                 <td :title="labels.exact(metric.delta)">
                   {{ labels.deltaValue(metric.delta, metric.reason) }}
@@ -670,4 +674,5 @@ function warningText(code: string): string {
 <style>
 .baseline-panel[lang='ru'] p { overflow-wrap: anywhere; }
 .baseline-panel[lang='ru'] .notice { flex-wrap: wrap; }
+.baseline-panel[lang='ru'] pre { max-width: 100%; overflow-x: auto; }
 </style>

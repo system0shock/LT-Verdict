@@ -89,7 +89,10 @@ async function openCompare(page: Page, opts: CompareOptions = {}) {
             ? metric('response_time_p95_ms', 'ms', '451', '3493.123456', '3042.123456', '674.501109', null, null)
             : metric('response_time_p95_ms', 'ms', '100', '200', '100', '100', null, null),
           metric('error_rate_ratio', 'ratio', '0', opts.precise ? '0.012345' : '0.1', opts.precise ? '0.012345' : '0.1', null, null, 'ZERO_BASELINE'),
-          ...(opts.precise ? [metric('throughput_rps', 'rps', '59.997667', '60', '0.002333', '0.003888', null, null)] : []),
+          ...(opts.precise ? [
+            metric('throughput_rps', 'rps', '59.997667', '60', '0.002333', '0.003888', null, null),
+            metric('response_time_p99_ms', 'ms', '100.001', '100.002', '0.001', '0.001', null, null),
+          ] : []),
         ],
         ...(opts.windowReasons || opts.windowStatus ? {
           window_comparison: {
@@ -182,10 +185,21 @@ test('numbers and the save time are shown short in Russian, the exact value stay
   await expect(p95.nth(4)).toHaveText('674,5 %')
   await expect(p95.nth(4)).toHaveAttribute('title', '674.501109 %')
   const throughput = page.getByTestId('comparison-throughput_rps').locator('td')
-  await expect(throughput.nth(1)).toHaveText('60')
+  // 59.997667 and 60 would both read "60": the pair keeps the digits that tell them apart.
+  await expect(throughput.nth(1)).toHaveText('59,997667')
+  await expect(throughput.nth(2)).toHaveText('60')
   await expect(throughput.nth(3)).toHaveText('0,00233')
   await expect(page.getByTestId('comparison-error_rate_ratio').locator('td').nth(2)).toHaveText('0,0123')
-  await expect(page.getByTestId('baseline-comparison')).not.toContainText('59.997667')
+  await expect(page.getByRole('region', { name: COMPARE_LABELS.deltasRegion })).not.toContainText('59.997667')
+  // Rounding must not make two different values look equal: the pair keeps the digits that tell them apart.
+  const p99 = page.getByTestId('comparison-response_time_p99_ms').locator('td')
+  await expect(p99.nth(1)).toHaveText('100,001')
+  await expect(p99.nth(2)).toHaveText('100,002')
+  // The exact values are reachable without a mouse: a focusable block under the table lists them as the server sent them.
+  const exact = page.getByTestId('baseline-comparison').locator('details').filter({ hasText: COMPARE_LABELS.rawMetricsSummary ?? '' })
+  await exact.locator('summary').click()
+  await expect(exact).toContainText('3493.123456')
+  await expect(exact).toContainText('59.997667')
 })
 
 test('the old interface keeps the exact numbers and the raw time', async ({ page }) => {
@@ -196,6 +210,7 @@ test('the old interface keeps the exact numbers and the raw time', async ({ page
   await expect(page.getByTestId('baseline-condition-status')).toContainText(EN_COMPARE_LABELS.conditionSaved('CONFIRMED', preciseTime))
   await expect(page.getByTestId('comparison-response_time_p95_ms').locator('td').nth(2)).toHaveText('3493.123456')
   await expect(page.getByTestId('comparison-response_time_p95_ms').locator('td').nth(4)).toHaveText('674.501109%')
+  await expect(page.getByTestId('baseline-comparison').locator('details').filter({ hasText: COMPARE_LABELS.rawMetricsSummary ?? '' })).toHaveCount(0)
 })
 
 test('USER_CONFIRMED shows the confirmed status line', async ({ page }) => {
@@ -345,6 +360,8 @@ for (const width of [1280, 375, 320]) {
     await page.setViewportSize({ width, height: 900 })
     await openCompare(page, { warnings: ['BASELINE_IS_CURRENT_RUN'], windowReasons: ['BASELINE_WINDOW_EMPTY'] })
     await compareWindows(page, `window-${'x'.repeat(60)}`, `window-${'y'.repeat(60)}`)
+    // The exact-values block of the Russian panel is open: its long lines must not widen the page.
+    await page.getByTestId('baseline-comparison').locator('details').filter({ hasText: COMPARE_LABELS.rawMetricsSummary ?? '' }).locator('summary').click()
     // Wider glyphs than any CI font, so the check does not depend on the fonts of the machine.
     // Set through the CSSOM: the real server sends a CSP that forbids inline style elements.
     await page.evaluate(() => document.documentElement.style.setProperty('letter-spacing', '0.15em'))

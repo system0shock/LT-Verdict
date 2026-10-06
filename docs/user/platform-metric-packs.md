@@ -22,13 +22,13 @@ PromQL `tools/platform_profile_templates.py`. Свёртка pod → серви�
 | --- | --- | --- | --- |
 | `namespace_workload_pod:kube_pod_owner:relabel` (значение 1) | `namespace`, `pod`, `workload` | правило платформенного мониторинга | все: отображение pod → сервис |
 | `node_namespace_pod_container:container_cpu_usage_seconds_total:sum_irate` | `namespace`, `pod`, `container` | правило платформенного мониторинга | `cpu_limit_ratio`, `pod_imbalance` |
-| `container_memory_working_set_bytes` | `namespace`, `pod`, `container` | cAdvisor (kubelet) | `memory_limit_ratio`, живость для `oom` |
-| `kube_pod_container_resource_limits` | `namespace`, `pod`, `container`, `resource` (`cpu`, `memory`) | kube-state-metrics v2 | оба отношения к limit |
-| `kube_pod_container_info` | `namespace`, `pod`, `container` | kube-state-metrics v2 | список ожидаемых контейнеров |
+| `container_memory_working_set_bytes` | `namespace`, `pod`, `container` | cAdvisor (kubelet) | `memory_limit_ratio`, `sidecar_memory_limit_ratio`, живость для `oom` |
+| `kube_pod_container_resource_limits` | `namespace`, `pod`, `container`, `resource` (`cpu`, `memory`) | kube-state-metrics v2 | отношения к limit (контейнерные и сайдкаров) |
+| `kube_pod_container_info` | `namespace`, `pod`, `container` | kube-state-metrics v2 | список ожидаемых контейнеров (для сайдкаров - с фильтром по `sidecar_containers`) |
 | `container_oom_events_total` | `namespace`, `pod`, `container` | cAdvisor | `oom` |
 | `kube_pod_container_status_restarts_total` | `namespace`, `pod`, `container` | kube-state-metrics | `restarts` |
 | `kube_pod_info` | `namespace`, `pod` | kube-state-metrics | живость для `restarts` |
-| `container_cpu_cfs_throttled_periods_total`, `container_cpu_cfs_periods_total` | `namespace`, `pod`, `container` | cAdvisor | `cpu_throttling` |
+| `container_cpu_cfs_throttled_periods_total`, `container_cpu_cfs_periods_total` | `namespace`, `pod`, `container` | cAdvisor | `cpu_throttling`, `sidecar_cpu_throttling` |
 | `kube_deployment_spec_replicas`, `kube_deployment_status_replicas_available` | `namespace`, `deployment` | kube-state-metrics | `unavailable_replicas` |
 | `jvm_memory_used_bytes`, `jvm_gc_pause_seconds_max`, `jvm_gc_pause_seconds_sum`, `jvm_threads_live_threads`, `process_cpu_usage`, `hikaricp_connections_active`, `hikaricp_connections_max` | `namespace`, `pod` (и `area`, `id`, `pool` по смыслу) | Micrometer с `ServiceMonitor` | сигналы JVM |
 
@@ -48,11 +48,48 @@ PromQL `tools/platform_profile_templates.py`. Свёртка pod → серви�
 | `cpu_throttling` | `openshift_cpu_throttling` | `ratio` | `interval_mean` | доля троттлинга контейнера, максимум по контейнерам | нет |
 | `unavailable_replicas` | `openshift_unavailable_replicas` | `count` | `interval_mean` | `spec - available` Deployment | да, `interval_max` |
 | `pod_imbalance` | `openshift_pod_imbalance` | `ratio` | `interval_mean` | (max - min) / avg по подам | нет |
+| `sidecar_memory_limit_ratio` | `openshift_sidecar_memory_limit_ratio` | `ratio` | `interval_mean` | как `memory_limit_ratio`, но только контейнеры сайдкаров (`sidecar_containers`) | да, `interval_max` |
+| `sidecar_cpu_throttling` | `openshift_sidecar_cpu_throttling` | `ratio` | `interval_mean` | как `cpu_throttling`, но только контейнеры сайдкаров | нет |
 
 Каждая пара (сервис, сигнал) - один запрос с `role: system`,
 `entity` = имя сервиса и `labels: {namespace}`. Выражение заканчивается
 агрегатом `by (namespace)`, поэтому ответ источника - ровно один ряд (иначе
 ядро отклоняет его кодом `AMBIGUOUS_SERIES`).
+
+## Признаки сайдкаров: худший сайдкар
+
+Ряд `memory_limit_ratio` и `cpu_throttling` сервиса - это «худший контейнер»
+пода, и сайдкары (`istio-proxy`, `oauth-proxy`) в него уже входят. Когда такой
+ряд высок, он не говорит, кто нарушает: приложение или сайдкар. Два
+необязательных сигнала считают ту же свёртку только по контейнерам, имя которых
+подходит под регулярное выражение `sidecar_containers`, и показывают худший
+сайдкар сервиса отдельным рядом (в макете: «память сайдкара 77 %»). Это признаки
+для атрибуции, а не замена общего ряда: правила политики по ним не обязательны.
+Рядов на плечо становится на два больше на сервис (20 сервисов - 40 рядов, в
+запасе предела 1 024 рядов на снимок).
+
+- `sidecar_containers` - обязательное поле конфигурации генератора для любого
+  из двух сигналов (без него отказ `sidecar container regular expression`).
+  Значение подставляется в `container=~"..."` целиком (PromQL привязывает
+  выражение к началу и концу имени), допустимы до 256 символов из набора
+  `A-Z a-z 0-9 . _ | ( ) * ? -` и знака плюс; кавычки, обратная косая черта,
+  `@` и фигурные скобки отклоняются, чтобы значение не вышло из строкового
+  литерала PromQL. Пример: `istio-proxy|oauth-proxy`.
+- Защита полноты у `sidecar_memory_limit_ratio` считается по ожидаемым
+  **сайдкарам** (`kube_pod_container_info` с тем же регулярным выражением), а не
+  по всем контейнерам: иначе число отношений сайдкаров не совпало бы с числом
+  всех контейнеров и ряд был бы пуст всегда. Сайдкар без limit, потеря его ряда
+  использования или потеря самого списка контейнеров дают пропуск, как у
+  `memory_limit_ratio`. Если ни один контейнер не подходит под регулярное
+  выражение (у сервиса нет сайдкаров или имена не совпали), ряд пуст:
+  пропуск, а не ноль.
+- У `sidecar_cpu_throttling`, как и у `cpu_throttling`, защиты полноты нет:
+  максимум берётся по оставшимся сайдкарам; шаг и `rate` - по тем же правилам
+  (шаг не меньше удвоенного интервала опроса источника).
+- Имена `openshift_sidecar_memory_limit_ratio` и `openshift_sidecar_cpu_throttling`
+  рабочие, как остальные имена пакета; пакет `openshift` распознаёт обе
+  возможности (`sidecar_memory_limit_ratio`, `sidecar_cpu_throttling`).
+- Имена контейнеров сайдкаров на стенде - допущение (раздел «Что не проверено»).
 
 ## Сигналы JVM
 
@@ -182,7 +219,8 @@ python -m tools.platform_profiles --config fixtures/platform/profile-config.exam
 (или `direct` с ним), адрес `http://` с авторизацией без `allow_insecure_http`.
 
 Поля конфигурации (JSON): `base_url`, `namespace`, `services[]`, `signals[]`;
-необязательные `arm` (префикс `id` профилей и поле `arm` каждого профиля; с ним
+`sidecar_containers` (регулярное выражение имён контейнеров сайдкаров, обязательно для сигналов
+`sidecar_memory_limit_ratio` и `sidecar_cpu_throttling`); необязательные `arm` (префикс `id` профилей и поле `arm` каждого профиля; с ним
 выпускается `source-connections.v3`, см. раздел «Метка плеча» в
 [онлайн-источниках](online-sources.md)),
 `transport` (`direct` или `grafana_proxy`), `datasource_uid`, `auth`,
@@ -254,6 +292,9 @@ kube-state-metrics недоступны (защита полноты слабе�
   плечо; лимиты `max_requests_per_run` и скорость запросов профиля достаточны;
 - запись владельца пода присутствует для каждого живого пода: потеря записи у
   одного живого пода не обнаруживается (граница гарантии ADR 0018, раздел 3);
+- имена контейнеров сайдкаров (`istio-proxy`, `oauth-proxy`) подходят под
+  `sidecar_containers`, а `kube_pod_container_info` отдаёт их как регулярные
+  контейнеры (`kubectl get pod -o jsonpath`); иначе худший сайдкар не находится;
 - виды workload: только Deployment (`unavailable_replicas`);
 - метрики Micrometer (`jvm_memory_used_bytes`, `jvm_gc_pause_seconds_max`,
   `hikaricp_*`) с метками `namespace` и `pod`, а не JMX exporter с другими

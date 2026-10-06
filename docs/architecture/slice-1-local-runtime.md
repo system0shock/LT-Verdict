@@ -343,7 +343,7 @@ validation возвращает отдельный `{valid:false,errors:[...]}`.
 `RESOURCE_FINDINGS_LIMIT_EXCEEDED` до публикации partial analysis.
 
 Snapshot ограничен 32 MiB, 1 024 series и 1 500 000 cells (ADR 0014); multipart
-job содержит не более 24 parts, declared общий body ограничен суммой максимальных
+job содержит не более 25 parts (25-я - `pod_view`, ADR 0020), declared общий body ограничен суммой максимальных
 parts (`MAX_JOB_REQUEST_BYTES`, snapshot 32 MiB) и 64 KiB overhead. Core проверяет depth,
 duplicate/unknown fields, numeric bounds и cardinality до помещения в queue.
 Расчёты используют existing analysis worker и cooperative cancellation.

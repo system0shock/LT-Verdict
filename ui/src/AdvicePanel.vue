@@ -138,7 +138,7 @@ onUnmounted(() => { revision++; stopPolling() })
     aria-labelledby="advice-title"
   >
     <h2 id="advice-title">
-      Рекомендации AI
+      ИИ-разбор
     </h2>
     <p class="muted">
       {{ ADVICE_LABELS.intro }}

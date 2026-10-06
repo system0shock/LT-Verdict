@@ -140,7 +140,7 @@ test('before the request the panel names no model and asks no consent', async ({
   await expect(panel.getByRole('checkbox')).toHaveCount(0)
   for (const word of ['Разрешаю', 'ModelStudio', 'Singapore']) await expect(panel).not.toContainText(word)
   await expect(panel.getByRole('button', { name: 'Получить рекомендации' })).toBeEnabled()
-  await expect(panel.getByRole('heading', { name: 'Рекомендации AI' })).toBeVisible()
+  await expect(panel.getByRole('heading', { name: 'ИИ-разбор', exact: true })).toBeVisible()
 })
 
 test('a failed job shows the Russian reason, the raw code and a hint, and the request stays available', async ({ page }) => {

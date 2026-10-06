@@ -699,7 +699,7 @@ test.describe('capacity block adapter', () => {
   test('axis, unit and an unknown stage verdict are shown as the server sent them', () => {
     const block = capacityBlock(capacity('PASS', 'BOUNDED', '95.745', '103.745', [stage('s', 96, 'WEIRD')]))!
 
-    expect(block.axisText).toBe('rps (requests/s)')
+    expect(block.axisText).toBe('RPS (запросов в секунду)')
     expect(block.stages[0]).toMatchObject({ verdictText: 'WEIRD', kind: 'unverified', status: 'NO_VERDICT' })
   })
 })

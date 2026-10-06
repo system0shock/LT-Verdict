@@ -1667,6 +1667,23 @@ Transaction comparison, графические overlays и N-run history пок�
 в реализованную часть baseline. Подробные правила — в
 [ADR 0004](../adr/0004-local-baseline-selection.md).
 
+## История релизов: приватный API
+
+Релиз ([ADR 0019](../adr/0019-release-history-and-baseline-eligibility.md)) —
+явно созданная запись с именем (`label`), протоколом (`series`) и ссылками на
+сохранённые analyses одного запуска. Интерфейса для неё пока нет, только
+приватный API на loopback (`GET`/`POST /api/releases`,
+`GET`/`PUT`/`DELETE /api/releases/<release-id>`); изменяющие запросы требуют
+тех же Origin, cookie и `X-LTV-CSRF`, что `POST` и `DELETE`. Запись хранится в
+`<data>/releases/`, не меняет analyses и baseline; удаление записи удаляет
+только её. Один analysis входит не более чем в одну запись (иначе
+`409 RELEASE_ANALYSIS_ALREADY_REGISTERED`), в каталоге не больше 1 000 записей
+(иначе `422 RELEASE_LIMIT_REACHED` с полем `error.limit`). Метки времени,
+плечи и вердикты сервер берёт из сохранённых документов, а не из запроса;
+`baseline_eligible` в ответе только подсказка, сервер проверяет допуск заново
+при выборе baseline. Подробности и коды ответов — в
+[архитектуре](../architecture/slice-1-local-runtime.md#release-history-хранилище-записей-релиза).
+
 ## Аппаратные метрики и совместные SLA
 
 Optional `Resource snapshot` — подготовленный локальным адаптером JSON

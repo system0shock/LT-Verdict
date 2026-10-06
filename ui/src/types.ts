@@ -586,6 +586,14 @@ export interface BaselineSelection {
   scores: Array<{ reference: AnalysisReference; score: number }>
 }
 
+// One entry of `GET /api/baseline` `baselines`: the active baseline of a (series, arm) pair.
+export interface BaselineSlotView {
+  series: string
+  arm: string | null
+  source: 'SLOT' | 'LEGACY'
+  baseline: BaselineSelection
+}
+
 export type BaselineRequest =
   | { mode: 'manual'; series: string; reference: AnalysisReference }
   | { mode: 'statistical'; series: string; candidates: AnalysisReference[]; comparable: true }

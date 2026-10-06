@@ -1,4 +1,5 @@
 import type { SavedAnalytics } from './analyticsTypes'
+import type { PodValuesPage, PodViewMeta } from './shell/podView'
 import type {
   AdviceDocument,
   AdviceJob,
@@ -364,4 +365,15 @@ export function updateRelease(releaseId: string, body: ReleaseUpdate): Promise<R
     headers: mutationHeaders({ 'Content-Type': 'application/json' }),
     body: JSON.stringify(body),
   })
+}
+
+// Данные по подам (pod-view.v1): метаданные без значений и страницы строк сервиса; каждый запрос заново читает файл на сервере.
+export function getPodViewMeta(runId: string, analysisId: string, signal?: AbortSignal): Promise<PodViewMeta> {
+  return request(`/api/runs/${encodeURIComponent(runId)}/analyses/${encodeURIComponent(analysisId)}/pod-view`, { signal })
+}
+
+export function getPodViewValues(runId: string, analysisId: string, service: string, after?: string, signal?: AbortSignal): Promise<PodValuesPage> {
+  const query = new URLSearchParams({ service, limit: '256' })
+  if (after) query.set('after', after)
+  return request(`/api/runs/${encodeURIComponent(runId)}/analyses/${encodeURIComponent(analysisId)}/pod-view/values?${query}`, { signal })
 }

@@ -40,7 +40,7 @@ const shortLabel = (label: string) => (label.length > 10 ? `${label.slice(0, 9)}
       class="history-dynamics__plot"
       :viewBox="`0 0 ${WIDTH} ${HEIGHT}`"
       role="img"
-      :aria-label="L.dynamicsAria(points.length)"
+      :aria-label="L.dynamicsAria(points.length, plotted.map((item) => item.title).join('; '))"
     >
       <line
         :x1="LEFT"

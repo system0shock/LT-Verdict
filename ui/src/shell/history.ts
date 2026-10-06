@@ -1,6 +1,8 @@
 import type { AnalysisSummary, Release, ReleaseAnalysis, ReleaseProfile, ReleaseRequest, ReleaseUpdate } from '../types'
 
 export const DEFAULT_VISIBLE_RELEASES = 4
+// The suggestion and the statistical count look at the newest releases of the series (20 is the statistical maximum), the table shows four.
+export const CONSIDERED_RELEASES = 20
 
 export const PROFILE_FIELDS = ['scenario_mix', 'environment_dataset', 'load_model', 'targets_stages', 'pacing', 'generator_limits'] as const
 

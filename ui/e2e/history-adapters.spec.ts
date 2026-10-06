@@ -374,7 +374,7 @@ test('dynamics points carry the verdict as shape and text, the table keeps the s
     p95: { 1: '100', 2: '200', 3: '300' },
   })
   const chart = page.getByTestId('history-dynamics')
-  await expect(chart.getByRole('img')).toHaveAttribute('aria-label', L.dynamicsAria(3))
+  await expect(chart.getByRole('img')).toHaveAttribute('aria-label', L.dynamicsAria(3, [L.dynamicsPoint('v1.1', 'PASS', '100'), L.dynamicsPoint('v1.2', 'FAIL', '200'), L.dynamicsPoint('v1.3', 'NO_POLICY', '300')].join('; ')))
   await expect(chart.locator('circle')).toHaveCount(1)
   await expect(chart.locator('rect')).toHaveCount(1)
   await expect(chart.locator('polygon')).toHaveCount(1)
@@ -458,4 +458,17 @@ test('releases with the same label have distinguishable action names', async ({ 
   await expect(rowsOf(page)).toHaveCount(2)
   const names = await page.getByTestId('release-row').getByRole('button', { name: L.open }).evaluateAll((buttons) => buttons.map((button) => button.getAttribute('aria-label')))
   expect(new Set(names).size).toBe(2)
+})
+
+test('the statistical count and the suggestion look beyond the four shown releases', async ({ page }) => {
+  const notPass = { baseline_eligible: false, ineligible_reasons: ['BASELINE_CANDIDATE_NOT_PASS'], policy_verdict: 'FAIL' as const }
+  await openHistory(page, {
+    releases: [
+      release(1, { profile: profile('10 s') }), release(2, { profile: profile('10 s') }), release(3, { profile: profile('10 s') }, notPass),
+      release(4, { profile: profile('10 s') }, notPass), release(5, { profile: profile('10 s') }, notPass), release(6, { profile: profile('10 s') }),
+    ],
+  })
+  await expect(rowsOf(page)).toHaveCount(DEFAULT_VISIBLE_RELEASES)
+  await expect(page.getByTestId('history-statistical-hint')).toHaveCount(0)
+  await expect(page.getByTestId('history-statistical')).toBeVisible()
 })

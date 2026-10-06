@@ -5,7 +5,7 @@ import type { AnalysisReference, AnalysisSummary, BaselineSlotView, Release, Rel
 import type { SavedAnalytics } from '../analyticsTypes'
 import HistoryDynamics from './HistoryDynamics.vue'
 import {
-  DEFAULT_VISIBLE_RELEASES, PROFILE_FIELDS, dynamicsAnchor, dynamicsPoints, emptyProfileForm, formatStarted, profileFromForm, profileRelation, profileSummary,
+  CONSIDERED_RELEASES, DEFAULT_VISIBLE_RELEASES, PROFILE_FIELDS, dynamicsAnchor, dynamicsPoints, emptyProfileForm, formatStarted, profileFromForm, profileRelation, profileSummary,
   profileToForm, releaseRequest, releaseUpdate, statisticalAvailability, suggestManualBaseline, utf8Length, visibleReleases,
 } from './history'
 import { HISTORY_LABELS, historyErrorText } from './labels.history'
@@ -88,7 +88,7 @@ async function load() {
     if (series.value) {
       let after: string | undefined
       do {
-        const page = await listReleases({ series: series.value, after, limit: showAll.value ? 100 : DEFAULT_VISIBLE_RELEASES })
+        const page = await listReleases({ series: series.value, after, limit: showAll.value ? 100 : CONSIDERED_RELEASES })
         if (current !== revision) return
         loaded.push(...page.releases)
         after = showAll.value ? page.next_after ?? undefined : undefined
@@ -224,9 +224,20 @@ async function startRebind(release: Release) {
   rebindChoice.value = ''
   error.value = ''
   notice.value = ''
-  await loadRebind()
+  // The focus moves to the panel at once: the list of analyses may take a while.
   await nextTick()
   document.getElementById('history-rebind-title')?.focus()
+  await loadRebind()
+}
+
+function seriesEdited() {
+  prefillRevision += 1
+}
+
+// An edit of the profile fields drops the offer and any answer still on its way.
+function profileEdited() {
+  prefilledFrom.value = null
+  prefillRevision += 1
 }
 
 async function closeRebind() {
@@ -669,6 +680,7 @@ async function save() {
             aria-describedby="history-form-series-hint"
             :disabled="busyAny || !selection"
             @change="prefillProfile"
+            @input="seriesEdited"
           >
           <datalist id="history-series-options">
             <option
@@ -725,7 +737,7 @@ async function save() {
             <input
               :id="`history-profile-${name}`"
               v-model="form.profile[name]"
-              @input="prefilledFrom = null"
+              @input="profileEdited"
             >
           </div>
         </div>

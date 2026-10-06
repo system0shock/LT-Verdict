@@ -1,14 +1,22 @@
 package io.ltverdict.storage
 
+import io.ltverdict.core.MAX_RELEASE_ANALYSES
+import io.ltverdict.core.MAX_RELEASE_BYTES
+import io.ltverdict.core.MAX_RELEASE_NOTES_BYTES
+import io.ltverdict.core.MAX_RELEASE_TEXT_BYTES
+import io.ltverdict.core.RELEASE_PROFILE_FIELDS
 import io.ltverdict.core.WindowComparisonRequest
 import io.ltverdict.core.baselineConditionRecord
 import io.ltverdict.core.canonicalJson
 import io.ltverdict.core.manualBaselineSelection
 import io.ltverdict.core.recognizeRunPeriod
+import io.ltverdict.core.releaseId
 import io.ltverdict.core.runPeriodJson
 import io.ltverdict.core.sha256Hex
+import io.ltverdict.core.validateRelease
 import io.ltverdict.ingest.SourceType
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
@@ -18,6 +26,7 @@ import kotlinx.serialization.json.put
 import org.junit.jupiter.api.Assertions.assertArrayEquals
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
+import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertThrows
 import org.junit.jupiter.api.Assertions.assertTrue
@@ -34,6 +43,7 @@ import java.util.concurrent.CountDownLatch
 import java.util.concurrent.CyclicBarrier
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
+import kotlin.random.Random
 
 class RunBundleStoreTest {
     @TempDir
@@ -877,6 +887,568 @@ class RunBundleStoreTest {
             }
         }
 
+    private fun releaseAnalyses(
+        analysisIds: List<String>,
+        arms: List<String?> = analysisIds.map { null },
+    ): JsonArray =
+        JsonArray(
+            analysisIds.mapIndexed { index, id ->
+                buildJsonObject {
+                    put("analysis_id", id)
+                    put("arm", arms[index]?.let(::JsonPrimitive) ?: JsonNull)
+                    put("coverage_reasons", JsonArray(emptyList()))
+                    put("coverage_status", "COMPLETE")
+                    put("policy_sha256", "a".repeat(64))
+                    put("policy_verdict", "PASS")
+                    put("run_validity", "VALID")
+                }
+            },
+        )
+
+    private fun releaseDraft(
+        runId: String,
+        analysisIds: List<String>,
+        series: String = "checkout",
+        label: String = "1.0.0",
+        startedAt: String = "2026-01-01T00:00:00Z",
+        arms: List<String?> = analysisIds.map { null },
+    ): JsonObject =
+        buildJsonObject {
+            put("schema_version", "local-release.v1")
+            put("series", series)
+            put("label", label)
+            put("run_id", runId)
+            put("started_at", startedAt)
+            put("analyses", releaseAnalyses(analysisIds, arms))
+            put("profile", JsonNull)
+            put("notes", JsonNull)
+        }
+
+    private fun field(
+        record: JsonObject,
+        name: String = "release_id",
+    ) = (record[name] as JsonPrimitive).content
+
+    /** Writes valid canonical records straight into the registry directory, bypassing the store. */
+    private fun seedReleases(
+        root: Path,
+        count: Int,
+        firstStamp: Long = 1_767_225_600_000L,
+    ) {
+        val directory = Files.createDirectories(root.resolve("releases"))
+        repeat(count) { index ->
+            val millis = firstStamp + index
+            val id = releaseId(millis, "%08x".format(index))
+            val analysis = "%064x".format(index + 1)
+            val record =
+                JsonObject(
+                    releaseDraft(SEED_RUN_ID, listOf(analysis), startedAt = Instant.ofEpochMilli(millis).toString()) +
+                        mapOf(
+                            "release_id" to JsonPrimitive(id),
+                            "created_at" to JsonPrimitive("2026-01-02T00:00:00Z"),
+                            "updated_at" to JsonPrimitive("2026-01-02T00:00:00Z"),
+                        ),
+                )
+            Files.write(directory.resolve("$id.json"), canonicalJson(validateRelease(record)))
+        }
+    }
+
+    private fun freshAnalysis(n: Int) = "%064x".format(0xf000_0000L + n)
+
+    @Test
+    fun `release create writes one canonical record outside the bundle and survives reopen`() {
+        val root = tempDir.resolve("release-create")
+        val created =
+            DataDirectory.open(root).use { directory ->
+                val store = RunBundleStore(directory)
+                val input = store.acceptInput(Files.newInputStream(Path.of(CSV_FIXTURE)), "r.jtl")
+                val analysisId = saveAnalysis(store, input, "a")
+                val record =
+                    store.createRelease(
+                        releaseDraft(input.runId, listOf(analysisId)),
+                        Instant.parse("2026-01-02T03:04:05.006789Z"),
+                    ) { "0123abcd" }
+
+                assertEquals("001767225600000-0123abcd", field(record))
+                assertEquals("2026-01-02T03:04:05.006Z", field(record, "created_at"))
+                assertEquals("2026-01-02T03:04:05.006Z", field(record, "updated_at"))
+                val path = root.resolve("releases/001767225600000-0123abcd.json")
+                assertArrayEquals(canonicalJson(record), Files.readAllBytes(path))
+                assertStagingEmpty(root)
+                // the analysis bundle is untouched: identity, result, run metadata and the manifest
+                Files.list(root.resolve("runs/${input.runId}/analyses/$analysisId")).use { assertEquals(4L, it.count()) }
+                record
+            }
+        DataDirectory.open(root).use { directory ->
+            assertEquals(created, RunBundleStore(directory).readRelease("001767225600000-0123abcd"))
+        }
+    }
+
+    @Test
+    fun `one analysis belongs to at most one release and a replacement excludes its own record`() =
+        withStore { store, root ->
+            val input = store.acceptInput(Files.newInputStream(Path.of(CSV_FIXTURE)), "u.jtl")
+            val first = saveAnalysis(store, input, "1")
+            val second = saveAnalysis(store, input, "2")
+            val a = store.createRelease(releaseDraft(input.runId, listOf(first)), RELEASE_NOW) { "00000001" }
+            store.createRelease(releaseDraft(input.runId, listOf(second), label = "other"), RELEASE_NOW) { "00000002" }
+            val failure =
+                assertThrows(IllegalArgumentException::class.java) {
+                    store.createRelease(releaseDraft(input.runId, listOf(first), label = "dup"), RELEASE_NOW) { "00000003" }
+                }
+            assertEquals("RELEASE_ANALYSIS_ALREADY_REGISTERED", failure.message)
+            assertEquals(2, store.listReleases(null, null, 100).releases.size)
+
+            // the record's own analysis is excluded from the uniqueness check: renaming passes
+            val id = field(a)
+            store.replaceRelease(id) { JsonObject(it + ("label" to JsonPrimitive("renamed"))) }
+            assertEquals("renamed", field(store.readRelease(id)!!, "label"))
+            // taking the analysis of another release is refused and leaves the file byte-identical
+            val path = root.resolve("releases/$id.json")
+            val before = Files.readAllBytes(path)
+            val refused =
+                assertThrows(IllegalArgumentException::class.java) {
+                    store.replaceRelease(id) { current -> JsonObject(current + ("analyses" to releaseAnalyses(listOf(second)))) }
+                }
+            assertEquals("RELEASE_ANALYSIS_ALREADY_REGISTERED", refused.message)
+            assertArrayEquals(before, Files.readAllBytes(path))
+            assertStagingEmpty(root)
+        }
+
+    @Test
+    @Timeout(60)
+    fun `concurrent creates of the same analysis produce exactly one record`() =
+        withStore { store, root ->
+            repeat(20) { round ->
+                val analysis = freshAnalysis(round)
+                val barrier = CyclicBarrier(2)
+                val executor = Executors.newFixedThreadPool(2)
+                try {
+                    val futures =
+                        (1..2).map { worker ->
+                            executor.submit<String> {
+                                barrier.await(10, TimeUnit.SECONDS)
+                                try {
+                                    store.createRelease(releaseDraft(SEED_RUN_ID, listOf(analysis), label = "w$worker"), RELEASE_NOW) {
+                                        "%08x".format(round * 2 + worker)
+                                    }
+                                    "created"
+                                } catch (failure: IllegalArgumentException) {
+                                    failure.message!!
+                                }
+                            }
+                        }
+                    val outcomes = futures.map { it.get(20, TimeUnit.SECONDS) }
+                    assertEquals(listOf("RELEASE_ANALYSIS_ALREADY_REGISTERED", "created"), outcomes.sorted())
+                } finally {
+                    executor.shutdownNow()
+                }
+            }
+            assertEquals(20, store.listReleases(null, null, 100).releases.size)
+            assertStagingEmpty(root)
+        }
+
+    @Test
+    fun `registry limit counts every directory entry and never truncates`() =
+        withStore { store, root ->
+            seedReleases(root, MAX_RELEASES - 1)
+            val last = store.createRelease(releaseDraft(SEED_RUN_ID, listOf(freshAnalysis(1))), RELEASE_NOW) { "ffffffff" }
+            assertEquals(
+                MAX_RELEASES,
+                store
+                    .listReleases(null, null, 100)
+                    .seriesSummary
+                    .single()
+                    .second,
+            )
+            val full =
+                assertThrows(IllegalArgumentException::class.java) {
+                    store.createRelease(releaseDraft(SEED_RUN_ID, listOf(freshAnalysis(2))), RELEASE_NOW) { "fffffffe" }
+                }
+            assertEquals("RELEASE_LIMIT_REACHED", full.message)
+
+            // a foreign file is an element too: 1 001 entries make the registry corrupt and nothing is cut off
+            Files.writeString(root.resolve("releases/x.txt"), "x")
+            val listing = assertThrows(IllegalStateException::class.java) { store.listReleases(null, null, 100) }
+            assertTrue(listing.message!!.startsWith("CORRUPT_RELEASE_REGISTRY"))
+            val create =
+                assertThrows(IllegalStateException::class.java) {
+                    store.createRelease(releaseDraft(SEED_RUN_ID, listOf(freshAnalysis(3))), RELEASE_NOW) { "fffffffd" }
+                }
+            assertTrue(create.message!!.startsWith("CORRUPT_RELEASE_REGISTRY"))
+            Files.delete(root.resolve("releases/x.txt"))
+            val page = store.listReleases(null, null, 100)
+            assertEquals(MAX_RELEASES, page.seriesSummary.single().second)
+            assertEquals(0, page.corruptCount)
+            assertEquals(last, store.readRelease(field(last)))
+            assertStagingEmpty(root)
+        }
+
+    @Test
+    fun `list is newest first with an exclusive cursor and complete series summary`() =
+        withStore { store, _ ->
+            val ids =
+                (0 until 5).map { n ->
+                    val series = if (n % 2 == 0) "alpha" else "beta"
+                    val draft =
+                        releaseDraft(SEED_RUN_ID, listOf(freshAnalysis(n)), series = series, startedAt = "2026-01-0${n + 1}T00:00:00Z")
+                    field(store.createRelease(draft, RELEASE_NOW) { "0000000$n" })
+                }
+            val newestFirst = ids.sortedDescending()
+            val first = store.listReleases(null, null, 2)
+            assertEquals(newestFirst.take(2), first.releases.map { field(it) })
+            assertEquals(newestFirst[1], first.nextAfter)
+            val second = store.listReleases(null, first.nextAfter, 2)
+            assertEquals(newestFirst.slice(2..3), second.releases.map { field(it) })
+            val third = store.listReleases(null, second.nextAfter, 2)
+            assertEquals(newestFirst.slice(4..4), third.releases.map { field(it) })
+            assertNull(third.nextAfter)
+            assertEquals(listOf("alpha" to 3, "beta" to 2), first.seriesSummary)
+
+            val beta = store.listReleases("beta", null, 1)
+            assertEquals(listOf("alpha" to 3, "beta" to 2), beta.seriesSummary)
+            assertEquals(1, beta.releases.size)
+            assertTrue(beta.releases.all { field(it, "series") == "beta" })
+            assertNotNull(beta.nextAfter)
+            // a cursor that names no record still works by comparison
+            assertEquals(newestFirst, store.listReleases(null, "999999999999999-ffffffff", 100).releases.map { field(it) })
+            assertTrue(store.listReleases(null, "000000000000000-00000000", 100).releases.isEmpty())
+            assertThrows(IllegalArgumentException::class.java) { store.listReleases(null, "garbage", 10) }
+            assertThrows(IllegalArgumentException::class.java) { store.listReleases(null, null, 0) }
+            assertThrows(IllegalArgumentException::class.java) { store.listReleases(null, null, 101) }
+        }
+
+    @Test
+    fun `list reports unreadable entries without hiding the valid ones`() =
+        withStore { store, root ->
+            seedReleases(root, 2)
+            val directory = root.resolve("releases")
+            val good = Files.readAllBytes(Files.list(directory).use { it.toList() }.first())
+            Files.writeString(directory.resolve("000000000000001-00000001.json"), "not json")
+            Files.write(
+                directory.resolve("000000000000002-00000002.json"),
+                good.decodeToString().replace("local-release.v1", "local-release.v2").encodeToByteArray(),
+            )
+            Files.writeString(directory.resolve("notes.txt"), "stray")
+            Files.write(directory.resolve("000000000000003-00000003.json"), ByteArray(MAX_RELEASE_BYTES + 1) { ' '.code.toByte() })
+            // a valid record stored under another record's name is damaged, not accepted
+            Files.write(directory.resolve("000000000000004-00000004.json"), good)
+            var expectedCorrupt = 5
+            try {
+                Files.createSymbolicLink(directory.resolve("000000000000005-00000005.json"), directory.resolve("notes.txt"))
+                expectedCorrupt++
+            } catch (_: IOException) {
+                // symbolic links need a privilege on Windows
+            } catch (_: UnsupportedOperationException) {
+                // and are unavailable on some file systems
+            }
+
+            val page = store.listReleases(null, null, 100)
+            assertEquals(2, page.releases.size)
+            assertEquals(expectedCorrupt, page.corruptCount)
+            val reasons = page.corruptNames.associate { it.name to it.reason }
+            assertEquals("CORRUPT", reasons["000000000000001-00000001.json"])
+            assertEquals("UNSUPPORTED_VERSION", reasons["000000000000002-00000002.json"])
+            assertEquals("UNSAFE_ENTRY", reasons["notes.txt"])
+            assertEquals("TOO_LARGE", reasons["000000000000003-00000003.json"])
+            assertEquals("CORRUPT", reasons["000000000000004-00000004.json"])
+
+            repeat(25) { Files.writeString(directory.resolve("000000000100000-%08x.json".format(it)), "bad") }
+            val many = store.listReleases(null, null, 100)
+            assertEquals(2, many.releases.size)
+            assertEquals(expectedCorrupt + 25, many.corruptCount)
+            assertEquals(20, many.corruptNames.size)
+        }
+
+    @Test
+    fun `an unreadable entry is one damaged element`() =
+        withStore { store, root ->
+            seedReleases(root, 1)
+            // a directory under a record name cannot be read as a file
+            Files.createDirectory(root.resolve("releases/000000000000009-00000009.json"))
+            val page = store.listReleases(null, null, 100)
+            assertEquals(1, page.releases.size)
+            assertEquals(1, page.corruptCount)
+            assertEquals("UNSAFE_ENTRY", page.corruptNames.single().reason)
+            assertThrows(IllegalStateException::class.java) { store.deleteRelease("000000000000009-00000009") }
+        }
+
+    @Test
+    fun `read of a corrupt record fails closed and delete removes it without parsing`() =
+        withStore { store, root ->
+            seedReleases(root, 1)
+            val damaged = root.resolve("releases/000000000000001-00000001.json")
+            Files.writeString(damaged, "not json")
+            val failure = assertThrows(IllegalStateException::class.java) { store.readRelease("000000000000001-00000001") }
+            assertTrue(failure.message!!.startsWith("CORRUPT_RELEASE"))
+            assertNull(store.readRelease("000000000000008-00000008"))
+
+            listOf("../x", "", "0".repeat(15), "000000000000001-0000000G", "000000000000001-00000001.json").forEach {
+                val refused = assertThrows(IllegalArgumentException::class.java) { store.deleteRelease(it) }
+                assertEquals("INVALID_RELEASE_ID", refused.message)
+            }
+            assertTrue(Files.exists(damaged))
+            assertTrue(store.deleteRelease("000000000000001-00000001"))
+            assertFalse(Files.exists(damaged))
+            assertFalse(store.deleteRelease("000000000000001-00000001"))
+            assertFalse(store.deleteRelease("000000000000007-00000007"))
+            assertEquals(1, store.listReleases(null, null, 100).releases.size)
+        }
+
+    @Test
+    fun `replace keeps immutable fields and refuses an oversize record`() =
+        withStore { store, root ->
+            val created = store.createRelease(releaseDraft(SEED_RUN_ID, listOf(freshAnalysis(1))), RELEASE_NOW) { "00000001" }
+            val id = field(created)
+            val path = root.resolve("releases/$id.json")
+            val before = Files.readAllBytes(path)
+            listOf(
+                "series" to JsonPrimitive("other"),
+                "run_id" to JsonPrimitive("gatling_text-${"1".repeat(64)}"),
+                "started_at" to JsonPrimitive("2026-01-01T00:00:01Z"),
+                "created_at" to JsonPrimitive("2026-01-01T00:00:00Z"),
+                "release_id" to JsonPrimitive("001767225600000-00000009"),
+                "schema_version" to JsonPrimitive("local-release.v2"),
+            ).forEach { (name, value) ->
+                val failure =
+                    assertThrows(IllegalArgumentException::class.java) {
+                        store.replaceRelease(id) { current -> JsonObject(current + (name to value)) }
+                    }
+                assertEquals("INVALID_RELEASE", failure.message)
+                assertArrayEquals(before, Files.readAllBytes(path))
+            }
+
+            // quotes are escaped in the canonical form, so a record that passes every field limit can still exceed 8 KiB
+            val quotes = "\"".repeat(MAX_RELEASE_TEXT_BYTES - 1)
+            val arms = (0 until MAX_RELEASE_ANALYSES).map { "$quotes$it" }
+            val big =
+                JsonObject(
+                    created +
+                        mapOf(
+                            "analyses" to releaseAnalyses((0 until MAX_RELEASE_ANALYSES).map { freshAnalysis(100 + it) }, arms),
+                            "profile" to JsonObject(RELEASE_PROFILE_FIELDS.associateWith { JsonPrimitive(quotes + "p") }),
+                            "notes" to JsonPrimitive("\"".repeat(MAX_RELEASE_NOTES_BYTES)),
+                            "label" to JsonPrimitive(quotes + "l"),
+                        ),
+                )
+            assertTrue(canonicalJson(validateRelease(big)).size > MAX_RELEASE_BYTES)
+            val oversize = assertThrows(IllegalArgumentException::class.java) { store.replaceRelease(id) { big } }
+            assertEquals("RELEASE_TOO_LARGE", oversize.message)
+            assertArrayEquals(before, Files.readAllBytes(path))
+            val draft = JsonObject(big - setOf("release_id", "created_at", "updated_at"))
+            val createBig = assertThrows(IllegalArgumentException::class.java) { store.createRelease(draft, RELEASE_NOW) { "00000002" } }
+            assertEquals("RELEASE_TOO_LARGE", createBig.message)
+            assertEquals(1, store.listReleases(null, null, 100).releases.size)
+
+            assertThrows(NoSuchElementException::class.java) { store.replaceRelease("000000000000001-00000001") { it } }
+            assertThrows(IllegalArgumentException::class.java) { store.replaceRelease("garbage") { it } }
+            // an update that throws leaves the file intact
+            assertThrows(IllegalStateException::class.java) { store.replaceRelease(id) { error("boom") } }
+            assertArrayEquals(before, Files.readAllBytes(path))
+            assertStagingEmpty(root)
+        }
+
+    @Test
+    fun `find by analysis resolves unique ids and reports duplicates as ambiguous`() =
+        withStore { store, root ->
+            val one = store.createRelease(releaseDraft(SEED_RUN_ID, listOf(freshAnalysis(1))), RELEASE_NOW) { "00000001" }
+            store.createRelease(releaseDraft(SEED_RUN_ID, listOf(freshAnalysis(2)), label = "two"), RELEASE_NOW) { "00000002" }
+            val found = store.findReleasesByAnalysis(setOf(freshAnalysis(1), freshAnalysis(2), freshAnalysis(3)))
+            assertEquals(setOf(freshAnalysis(1), freshAnalysis(2)), found.byAnalysis.keys)
+            assertEquals(one, found.byAnalysis.getValue(freshAnalysis(1)))
+            assertTrue(found.ambiguous.isEmpty())
+
+            // a hand-copied file puts one analysis into two valid records
+            val copy = canonicalJson(JsonObject(one + ("release_id" to JsonPrimitive("001767225600000-00000009"))))
+            Files.write(root.resolve("releases/001767225600000-00000009.json"), copy)
+            val again = store.findReleasesByAnalysis(setOf(freshAnalysis(1), freshAnalysis(2)))
+            assertEquals(setOf(freshAnalysis(1)), again.ambiguous)
+            assertEquals(setOf(freshAnalysis(2)), again.byAnalysis.keys)
+            assertEquals(3, store.listReleases(null, null, 100).releases.size)
+            val refused =
+                assertThrows(IllegalArgumentException::class.java) {
+                    store.createRelease(releaseDraft(SEED_RUN_ID, listOf(freshAnalysis(1)), label = "again"), RELEASE_NOW) { "00000003" }
+                }
+            assertEquals("RELEASE_ANALYSIS_ALREADY_REGISTERED", refused.message)
+        }
+
+    @Test
+    fun `release id retries the suffix and gives up after eight collisions`() =
+        withStore { store, root ->
+            store.createRelease(releaseDraft(SEED_RUN_ID, listOf(freshAnalysis(1))), RELEASE_NOW) { "00000001" }
+            var calls = 0
+            val failure =
+                assertThrows(IllegalStateException::class.java) {
+                    store.createRelease(releaseDraft(SEED_RUN_ID, listOf(freshAnalysis(2)), label = "x"), RELEASE_NOW) {
+                        calls++
+                        "00000001"
+                    }
+                }
+            assertEquals("RELEASE_ID_COLLISION", failure.message)
+            assertEquals(8, calls)
+            assertStagingEmpty(root)
+
+            val suffixes = ArrayDeque(listOf("00000001", "00000002"))
+            val created =
+                store.createRelease(
+                    releaseDraft(SEED_RUN_ID, listOf(freshAnalysis(2)), label = "x"),
+                    RELEASE_NOW,
+                ) { suffixes.removeFirst() }
+            assertEquals("001767225600000-00000002", field(created))
+        }
+
+    @Test
+    fun `registry scan stays fast for a full directory`() =
+        withStore { store, root ->
+            seedReleases(root, MAX_RELEASES)
+            val listStarted = System.nanoTime()
+            val page = store.listReleases(null, null, 100)
+            val listMillis = (System.nanoTime() - listStarted) / 1_000_000
+            val findStarted = System.nanoTime()
+            val found = store.findReleasesByAnalysis(setOf("%064x".format(1), "%064x".format(MAX_RELEASES)))
+            val findMillis = (System.nanoTime() - findStarted) / 1_000_000
+            println("release registry scan of $MAX_RELEASES records: list $listMillis ms, find $findMillis ms")
+            assertEquals(100, page.releases.size)
+            assertEquals(2, found.byAnalysis.size)
+            assertTrue(listMillis < 5_000 && findMillis < 5_000)
+        }
+
+    @Test
+    fun `model based registry operations agree with an in-memory model`() =
+        withStore { store, _ ->
+            val random = Random(42)
+            val analyses = (0 until 8).map { freshAnalysis(it) }
+            val model = mutableMapOf<String, JsonObject>()
+            var counter = 0
+
+            fun registeredElsewhere(
+                analysis: String,
+                except: String?,
+            ) = model.any { (key, record) ->
+                key != except &&
+                    (record["analyses"] as JsonArray).any { ((it as JsonObject)["analysis_id"] as JsonPrimitive).content == analysis }
+            }
+
+            fun anyKey(unknown: String) =
+                if (model.isEmpty() || random.nextInt(6) == 0) unknown else model.keys.elementAt(random.nextInt(model.size))
+            repeat(200) {
+                when (random.nextInt(4)) {
+                    0 -> {
+                        val analysis = analyses[random.nextInt(analyses.size)]
+                        val startedAt = Instant.ofEpochSecond(1_767_225_600L + random.nextInt(1000)).toString()
+                        val draft = releaseDraft(SEED_RUN_ID, listOf(analysis), series = "s${random.nextInt(3)}", startedAt = startedAt)
+                        if (registeredElsewhere(analysis, null)) {
+                            val failure =
+                                assertThrows(
+                                    IllegalArgumentException::class.java,
+                                ) { store.createRelease(draft, RELEASE_NOW) { "%08x".format(counter++) } }
+                            assertEquals("RELEASE_ANALYSIS_ALREADY_REGISTERED", failure.message)
+                        } else {
+                            val record = store.createRelease(draft, RELEASE_NOW) { "%08x".format(counter++) }
+                            model[field(record)] = record
+                        }
+                    }
+                    1 -> {
+                        val key = anyKey("000000000000001-00000001")
+                        val analysis = analyses[random.nextInt(analyses.size)]
+                        val label = JsonPrimitive("l$counter")
+                        val change = { current: JsonObject ->
+                            JsonObject(
+                                current + ("analyses" to releaseAnalyses(listOf(analysis))) + ("label" to label),
+                            )
+                        }
+                        if (!model.containsKey(key)) {
+                            assertThrows(NoSuchElementException::class.java) { store.replaceRelease(key, change) }
+                        } else if (registeredElsewhere(analysis, key)) {
+                            val failure = assertThrows(IllegalArgumentException::class.java) { store.replaceRelease(key, change) }
+                            assertEquals("RELEASE_ANALYSIS_ALREADY_REGISTERED", failure.message)
+                        } else {
+                            model[key] = store.replaceRelease(key, change)
+                        }
+                    }
+                    2 -> {
+                        val key = anyKey("000000000000002-00000002")
+                        assertEquals(model.remove(key) != null, store.deleteRelease(key))
+                    }
+                    else -> Unit
+                }
+                val expected = model.values.sortedByDescending { field(it) }
+                val collected = mutableListOf<JsonObject>()
+                var after: String? = null
+                do {
+                    val page = store.listReleases(null, after, 3)
+                    collected += page.releases
+                    after = page.nextAfter
+                } while (after != null)
+                assertEquals(expected, collected)
+                val summary =
+                    model.values
+                        .groupingBy { field(it, "series") }
+                        .eachCount()
+                        .toList()
+                        .sortedBy { it.first }
+                assertEquals(summary, store.listReleases(null, null, 1).seriesSummary)
+                assertTrue(collected.size <= MAX_RELEASES)
+                val ids =
+                    collected.flatMap {
+                        (it["analyses"] as JsonArray).map { item ->
+                            ((item as JsonObject)["analysis_id"] as JsonPrimitive).content
+                        }
+                    }
+                assertEquals(ids.size, ids.toSet().size)
+            }
+        }
+
+    @Test
+    @Timeout(30)
+    fun `concurrent replacement is detected`() =
+        withStore { store, root ->
+            val created = store.createRelease(releaseDraft(SEED_RUN_ID, listOf(freshAnalysis(1))), RELEASE_NOW) { "00000001" }
+            val id = field(created)
+            val failure =
+                assertThrows(IllegalArgumentException::class.java) {
+                    store.replaceRelease(id) { current ->
+                        // the nested replacement runs outside the store lock and wins the race
+                        store.replaceRelease(id) { inner -> JsonObject(inner + ("label" to JsonPrimitive("second"))) }
+                        JsonObject(current + ("label" to JsonPrimitive("first")))
+                    }
+                }
+            assertEquals("RELEASE_CHANGED", failure.message)
+            assertEquals("second", field(store.readRelease(id)!!, "label"))
+            assertStagingEmpty(root)
+        }
+
+    @Test
+    fun `analysis state is existence in the list and a full check in the single read`() =
+        withStore { store, root ->
+            val input = store.acceptInput(Files.newInputStream(Path.of(CSV_FIXTURE)), "state.jtl")
+            val analysisId = saveAnalysis(store, input, "s")
+            assertTrue(store.analysisExists(input.runId, analysisId))
+            assertFalse(store.analysisExists(input.runId, "f".repeat(64)))
+            assertFalse(store.analysisExists(SEED_RUN_ID, analysisId))
+            assertEquals("OK", store.analysisState(input.runId, analysisId))
+            assertEquals("MISSING", store.analysisState(input.runId, "f".repeat(64)))
+            assertEquals("MISSING", store.analysisState(SEED_RUN_ID, analysisId))
+
+            val result = root.resolve("runs/${input.runId}/analyses/$analysisId/analysis-result.json")
+            Files.write(result, Files.readAllBytes(result) + byteArrayOf(' '.code.toByte()))
+            assertEquals("CORRUPT", store.analysisState(input.runId, analysisId))
+            // existence is deliberately cheap: it does not read the artifacts
+            assertTrue(store.analysisExists(input.runId, analysisId))
+
+            val analyses = root.resolve("runs/${input.runId}/analyses")
+            val moved = root.resolve("moved-analyses")
+            Files.move(analyses, moved)
+            try {
+                Files.createSymbolicLink(analyses, moved)
+                assertFalse(store.analysisExists(input.runId, analysisId))
+            } catch (_: IOException) {
+                // symbolic links need a privilege on Windows
+            } catch (_: UnsupportedOperationException) {
+                // and are unavailable on some file systems
+            }
+        }
+
     private fun saveAnalysis(
         store: RunBundleStore,
         input: AcceptedInput,
@@ -956,5 +1528,7 @@ class RunBundleStoreTest {
     private companion object {
         const val CSV_FIXTURE = "fixtures/slice1/jmeter/csv-5.6.3/input.jtl"
         const val XML_FIXTURE = "fixtures/slice1/jmeter/xml-5.6.3/input.xml"
+        const val SEED_RUN_ID = "jmeter_jtl_csv-0000000000000000000000000000000000000000000000000000000000000000"
+        val RELEASE_NOW: Instant = Instant.parse("2026-01-02T00:00:00Z")
     }
 }

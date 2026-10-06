@@ -1,0 +1,41 @@
+{
+  "schema_version": "local-release.v1",
+  "release_id": "001767225600500-89abcdef",
+  "series": "checkout",
+  "label": "1.3.0",
+  "run_id": "gatling_text-cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+  "started_at": "2026-01-01T00:00:00.500Z",
+  "analyses": [
+    {
+      "analysis_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "arm": "blue",
+      "coverage_reasons": [
+        "SMALL_SAMPLE"
+      ],
+      "coverage_status": "INCOMPLETE",
+      "policy_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "policy_verdict": "PASS",
+      "run_validity": "VALID"
+    },
+    {
+      "analysis_id": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+      "arm": "green",
+      "coverage_reasons": [],
+      "coverage_status": "COMPLETE",
+      "policy_sha256": "NO_POLICY",
+      "policy_verdict": "NO_POLICY",
+      "run_validity": "VALID"
+    }
+  ],
+  "profile": {
+    "scenario_mix": "70% browse, 30% checkout",
+    "environment_dataset": null,
+    "load_model": "open, 100 rps",
+    "targets_stages": null,
+    "pacing": "1 s",
+    "generator_limits": null
+  },
+  "notes": "Release candidate.\nRetest after the cache fix.",
+  "created_at": "2026-01-02T03:04:05Z",
+  "updated_at": "2026-01-03T00:00:00.100Z"
+}

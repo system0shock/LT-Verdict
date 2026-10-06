@@ -79,6 +79,24 @@ export type SourceWindowV3 =
     max_idle_gap_ms: number
   }
 
+export type SourceStepMode = 'fixed' | 'auto'
+
+export type SourceWindowV4 =
+  | {
+    origin: 'explicit'
+    start_epoch_ms: number
+    end_epoch_ms: number
+    step_ms: number
+    step_mode: SourceStepMode
+  }
+  | {
+    origin: 'auto'
+    step_ms: number
+    step_mode: SourceStepMode
+    margin_ms: number
+    max_idle_gap_ms: number
+  }
+
 export type SourceRequest =
   | {
     schema_version: 'source-request.v1'
@@ -98,6 +116,11 @@ export type SourceRequest =
     schema_version: 'source-request.v3'
     profile_ids: string[]
     window: SourceWindowV3
+  }
+  | {
+    schema_version: 'source-request.v4'
+    profile_ids: string[]
+    window: SourceWindowV4
   }
 
 export interface PolicyError {
@@ -382,6 +405,13 @@ export interface SourceSummaryEvidence {
   detected_idle_gaps?: number
   longest_idle_gap_ms?: number | null
   auto_window_status?: string
+  // Поля source-request.v4 (ADR 0014); applied_step_ms есть только в предупреждении об огрублении.
+  step_origin?: 'auto' | 'explicit'
+  requested_step_ms?: number
+  series_count?: number
+  cell_budget?: number
+  cells_per_series?: number
+  warnings?: Array<{ code: string; requested_step_ms: number; applied_step_ms: number; series: Array<{ id: string; aggregation: string }> }>
   profiles?: SourceSummaryEvidence[]
 }
 

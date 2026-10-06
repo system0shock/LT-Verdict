@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import PolicyEditor from './PolicyEditor.vue'
-import type { Policy, PolicyError, SourceProfile } from './types'
+import type { Policy, PolicyError, SourceProfile, SourceStepMode } from './types'
 
 defineProps<{
   inputFile: File | null
@@ -20,6 +20,7 @@ defineProps<{
   sourceStart: string
   sourceEnd: string
   sourceStep: string
+  sourceStepMode: SourceStepMode
   sourceMargin: string
   sourceMaxIdleGap: string
   sourceRequestError: string
@@ -46,6 +47,7 @@ const emit = defineEmits<{
   'source-start': [value: string]
   'source-end': [value: string]
   'source-step': [value: string]
+  'source-step-mode': [value: SourceStepMode]
   'source-margin': [value: string]
   'source-max-idle-gap': [value: string]
   'policy-file': [file: File | null]
@@ -305,6 +307,29 @@ function selectedWindowOrigin(event: Event) {
             @input="emit('source-step', ($event.target as HTMLInputElement).value)"
           >
         </div>
+        <div class="field">
+          <label for="source-step-mode">Step mode</label>
+          <select
+            id="source-step-mode"
+            :value="sourceStepMode"
+            :disabled="busy"
+            aria-describedby="source-step-mode-hint"
+            @change="emit('source-step-mode', ($event.target as HTMLSelectElement).value === 'auto' ? 'auto' : 'fixed')"
+          >
+            <option value="fixed">
+              Fixed (as entered)
+            </option>
+            <option value="auto">
+              Auto (coarser only above 1 500 000 cells)
+            </option>
+          </select>
+          <p
+            id="source-step-mode-hint"
+            class="field__hint"
+          >
+            Auto keeps the entered step while series × cells fit the limit, otherwise picks the smallest whole-second step up to 60 s. Requires scrape_interval_ms in the profile; a refusal arrives after the start as a job diagnostic.
+          </p>
+        </div>
         <template v-if="sourceWindowOrigin === 'auto'">
           <div class="field">
             <label for="source-margin">Margin (ms)</label>
@@ -322,7 +347,7 @@ function selectedWindowOrigin(event: Event) {
               id="source-margin-hint"
               class="field__hint"
             >
-              Extends the recognized run period on both sides before grid alignment; must be a multiple of the step.
+              {{ sourceStepMode === 'auto' ? 'Extends the recognized run period on both sides before grid alignment; a multiple of the step is not required in auto step mode.' : 'Extends the recognized run period on both sides before grid alignment; must be a multiple of the step.' }}
             </p>
           </div>
           <div class="field">
@@ -341,7 +366,7 @@ function selectedWindowOrigin(event: Event) {
               id="source-max-idle-gap-hint"
               class="field__hint"
             >
-              Refuses the auto window when the load file contains a longer idle gap; at least the step and a multiple of it.
+              {{ sourceStepMode === 'auto' ? 'Refuses the auto window when the load file contains a longer idle gap; at least the step, a multiple of the step is not required.' : 'Refuses the auto window when the load file contains a longer idle gap; at least the step and a multiple of it.' }}
             </p>
           </div>
         </template>

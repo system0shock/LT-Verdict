@@ -43,7 +43,7 @@ import {
 import { pairSourceRequests } from './shell/setup'
 import { summarizeVerdict } from './verdictSummary'
 import type { AttentionTarget } from './shell/overview'
-import type { AdvisoryAiConfig, AnalysisResult, AnalysisSummary, Bucket, JobStatus, OpenSearchEvidence, Policy, PolicyError, PostgresContextEvidence, Release, ReleaseAnalysis, RunSummary, SourceProfile, SourceRequest, Theme } from './types'
+import type { AdvisoryAiConfig, AnalysisResult, AnalysisSummary, Bucket, JobStatus, OpenSearchEvidence, Policy, PolicyError, PostgresContextEvidence, Release, ReleaseAnalysis, RunSummary, SourceProfile, SourceRequest, SourceStepMode, Theme } from './types'
 import { COMPARE_LABELS } from './shell/labels.compare'
 import { EXPORT_LABELS } from './shell/labels.export'
 
@@ -69,6 +69,8 @@ const legacySetupMessages: SetupMessages = {
   stepWholeSeconds: 'Source step must be whole seconds from 1000 to 60000 ms.',
   marginRange: 'Margin must be at most 3 600 000 ms and a multiple of the step.',
   idleGap: 'Max idle gap must be at least the step and a multiple of it.',
+  marginRangeAuto: 'Margin must be at most 3 600 000 ms.',
+  idleGapAuto: 'Max idle gap must be at least the step and a whole number of seconds.',
   explicitRequired: 'Online source requires start, end, and step in UTC epoch milliseconds.',
   explicitNotInteger: 'Source times and step must be safe integer milliseconds.',
   explicitOrder: 'Source end must be after a non-negative start.',
@@ -113,6 +115,7 @@ const sourceEnd = ref('')
 const sourceStep = ref('')
 const sourceMargin = ref('0')
 const sourceMaxIdleGap = ref('60000')
+const sourceStepMode = ref<SourceStepMode>('fixed')
 const aiRequested = ref(false)
 const aiConfig = ref<AdvisoryAiConfig | null>(null)
 const aiModel = ref('')
@@ -186,6 +189,7 @@ const sourceRequestState = computed<{ request: SourceRequest | null; error: stri
   const profileIds = [...sourceProfileIds.value].sort()
   if (!profileIds.length) return { request: null, error: '' }
   if (profileIds.length > 16) return { request: null, error: setupMsg.profilesTooMany }
+  const stepAuto = sourceStepMode.value === 'auto'
   if (sourceWindowOrigin.value === 'auto') {
     if (!sourceStep.value || !sourceMargin.value || !sourceMaxIdleGap.value) return { request: null, error: setupMsg.autoRequired }
     const step = Number(sourceStep.value)
@@ -193,9 +197,12 @@ const sourceRequestState = computed<{ request: SourceRequest | null; error: stri
     const maxIdleGap = Number(sourceMaxIdleGap.value)
     if (![step, margin, maxIdleGap].every(Number.isSafeInteger)) return { request: null, error: setupMsg.autoNotInteger }
     if (!wholeSeconds(step)) return { request: null, error: setupMsg.stepWholeSeconds }
-    if (margin < 0 || margin > 3_600_000 || margin % step !== 0) return { request: null, error: setupMsg.marginRange }
-    if (maxIdleGap < step || maxIdleGap % step !== 0) return { request: null, error: setupMsg.idleGap }
-    const request: SourceRequest = { schema_version: 'source-request.v3', profile_ids: profileIds, window: { origin: 'auto', step_ms: step, margin_ms: margin, max_idle_gap_ms: maxIdleGap } }
+    // ADR 0014: в режиме auto запас и простой не обязаны быть кратны шагу, простой остаётся целым числом секунд.
+    if (margin < 0 || margin > 3_600_000 || (!stepAuto && margin % step !== 0)) return { request: null, error: stepAuto ? setupMsg.marginRangeAuto : setupMsg.marginRange }
+    if (maxIdleGap < step || maxIdleGap % (stepAuto ? 1000 : step) !== 0) return { request: null, error: stepAuto ? setupMsg.idleGapAuto : setupMsg.idleGap }
+    const request: SourceRequest = stepAuto
+      ? { schema_version: 'source-request.v4', profile_ids: profileIds, window: { origin: 'auto', step_ms: step, step_mode: 'auto', margin_ms: margin, max_idle_gap_ms: maxIdleGap } }
+      : { schema_version: 'source-request.v3', profile_ids: profileIds, window: { origin: 'auto', step_ms: step, margin_ms: margin, max_idle_gap_ms: maxIdleGap } }
     return { request, error: '' }
   }
   if (!sourceStart.value || !sourceEnd.value || !sourceStep.value) return { request: null, error: setupMsg.explicitRequired }
@@ -206,8 +213,11 @@ const sourceRequestState = computed<{ request: SourceRequest | null; error: stri
   if (start < 0 || end <= start) return { request: null, error: setupMsg.explicitOrder }
   if (!wholeSeconds(step)) return { request: null, error: setupMsg.stepWholeSeconds }
   if ((end - start) % step !== 0) return { request: null, error: setupMsg.explicitDivisible }
-  if ((end - start) / step > MAX_SOURCE_CELLS) return { request: null, error: setupMsg.explicitTooManyCells }
-  const request: SourceRequest = { schema_version: 'source-request.v3', profile_ids: profileIds, window: { origin: 'explicit', start_epoch_ms: start, end_epoch_ms: end, step_ms: step } }
+  // Сервер не ограничивает число ячеек явного окна при step_mode auto: шаг подберёт планировщик.
+  if (!stepAuto && (end - start) / step > MAX_SOURCE_CELLS) return { request: null, error: setupMsg.explicitTooManyCells }
+  const request: SourceRequest = stepAuto
+    ? { schema_version: 'source-request.v4', profile_ids: profileIds, window: { origin: 'explicit', start_epoch_ms: start, end_epoch_ms: end, step_ms: step, step_mode: 'auto' } }
+    : { schema_version: 'source-request.v3', profile_ids: profileIds, window: { origin: 'explicit', start_epoch_ms: start, end_epoch_ms: end, step_ms: step } }
   return { request, error: '' }
 })
 const downloadableSourceContexts = computed(() => result.value?.evidence
@@ -1019,6 +1029,7 @@ function focusPolicy() {
             :source-start="sourceStart"
             :source-end="sourceEnd"
             :source-step="sourceStep"
+            :source-step-mode="sourceStepMode"
             :source-margin="sourceMargin"
             :source-max-idle-gap="sourceMaxIdleGap"
             :source-request-error="sourceRequestState.error"
@@ -1046,6 +1057,7 @@ function focusPolicy() {
             @source-start="sourceStart = $event"
             @source-end="sourceEnd = $event"
             @source-step="sourceStep = $event"
+            @source-step-mode="sourceStepMode = $event"
             @source-margin="sourceMargin = $event"
             @source-max-idle-gap="sourceMaxIdleGap = $event"
             @policy-file="selectPolicyFile"

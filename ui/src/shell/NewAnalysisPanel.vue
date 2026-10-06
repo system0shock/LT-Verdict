@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
-import type { AdvisoryAiConfig, Policy, PolicyError, SourceProfile } from '../types'
+import type { AdvisoryAiConfig, Policy, PolicyError, SourceProfile, SourceStepMode } from '../types'
 import ModelChoice from './ModelChoice.vue'
 import { SETUP_LABELS } from './labels'
 import { RULES_LABELS } from './labels.rules'
@@ -25,6 +25,7 @@ const props = defineProps<{
   sourceStart: string
   sourceEnd: string
   sourceStep: string
+  sourceStepMode: SourceStepMode
   sourceMargin: string
   sourceMaxIdleGap: string
   sourceRequestError: string
@@ -54,6 +55,7 @@ const emit = defineEmits<{
   'source-start': [value: string]
   'source-end': [value: string]
   'source-step': [value: string]
+  'source-step-mode': [value: SourceStepMode]
   'source-margin': [value: string]
   'source-max-idle-gap': [value: string]
   'policy-file': [file: File | null]
@@ -119,6 +121,10 @@ function selectedValues(event: Event) {
 
 function selectedWindowOrigin(event: Event) {
   return (event.target as HTMLSelectElement).value as 'auto' | 'explicit'
+}
+
+function selectedStepMode(event: Event): SourceStepMode {
+  return (event.target as HTMLSelectElement).value === 'auto' ? 'auto' : 'fixed'
 }
 
 function levelLabel(level: ReadinessLevel) {
@@ -349,6 +355,30 @@ function levelLabel(level: ReadinessLevel) {
                   @input="emit('source-step', secondsToMs(($event.target as HTMLInputElement).value))"
                 >
               </div>
+              <div class="field">
+                <label for="source-step-mode">{{ SETUP_LABELS.stepModeLabel }}</label>
+                <select
+                  id="source-step-mode"
+                  :value="sourceStepMode"
+                  :disabled="busy"
+                  aria-describedby="source-step-mode-hint"
+                  @input="emit('source-step-mode', selectedStepMode($event))"
+                  @change="emit('source-step-mode', selectedStepMode($event))"
+                >
+                  <option value="fixed">
+                    {{ SETUP_LABELS.stepModeFixed }}
+                  </option>
+                  <option value="auto">
+                    {{ SETUP_LABELS.stepModeAuto }}
+                  </option>
+                </select>
+                <p
+                  id="source-step-mode-hint"
+                  class="field__hint"
+                >
+                  {{ SETUP_LABELS.stepModeHint }}
+                </p>
+              </div>
               <template v-if="sourceWindowOrigin === 'auto'">
                 <div class="field">
                   <label for="source-margin">{{ SETUP_LABELS.marginLabel }}</label>
@@ -366,7 +396,7 @@ function levelLabel(level: ReadinessLevel) {
                     id="source-margin-hint"
                     class="field__hint"
                   >
-                    {{ SETUP_LABELS.marginHint }}
+                    {{ sourceStepMode === 'auto' ? SETUP_LABELS.marginHintAuto : SETUP_LABELS.marginHint }}
                   </p>
                 </div>
                 <div class="field">
@@ -385,7 +415,7 @@ function levelLabel(level: ReadinessLevel) {
                     id="source-max-idle-gap-hint"
                     class="field__hint"
                   >
-                    {{ SETUP_LABELS.idleHint }}
+                    {{ sourceStepMode === 'auto' ? SETUP_LABELS.idleHintAuto : SETUP_LABELS.idleHint }}
                   </p>
                 </div>
               </template>

@@ -63,7 +63,8 @@ watch(series, () => {
   comparable.value = false
   showSlotOfSeries()
 })
-watch(() => baseline.value?.series, (active) => emit('active-series', active), { immediate: true })
+// A series without a baseline is still the chosen series: the analytics must not fall back to another baseline then.
+watch(() => baseline.value?.series ?? (slots.value.length ? series.value.normalize('NFC').trim() : undefined), (active) => emit('active-series', active), { immediate: true })
 
 // The server stores series normalized (NFC, trimmed), so the field is compared in that form.
 function slotOfSeries(name: string): BaselineSlotView | undefined {

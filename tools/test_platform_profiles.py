@@ -317,7 +317,7 @@ class PlatformProfilesTest(unittest.TestCase):
         self.assertNotIn("@", query["expression"])
 
     def test_sidecar_regular_expression_cannot_break_out_of_the_promql_string(self):
-        for value in ('istio-proxy"} or vector(1) or {a="', "a\b", "a@ns@", "", "x" * 257, 7):
+        for value in ('istio-proxy"} or vector(1) or {a="', "a\b", "a@ns@", "", "x" * 257, 7, "*", "(istio", "a|(b"):
             with self.subTest(value=value), self.assertRaisesRegex(ValueError, "sidecar_containers"):
                 build_connections(dict(BASE, signals=["sidecar_memory_limit_ratio"], sidecar_containers=value))
 

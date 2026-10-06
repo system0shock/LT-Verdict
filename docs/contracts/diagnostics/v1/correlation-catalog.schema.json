@@ -1,0 +1,78 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://lt-verdict.local/contracts/diagnostics/v1/correlation-catalog.schema.json",
+  "title": "LT Verdict correlation hypothesis catalog v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "families"],
+  "properties": {
+    "schema_version": { "const": "correlation-catalog.v1" },
+    "families": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 16,
+      "items": { "$ref": "#/$defs/family" }
+    },
+    "event_families": {
+      "type": "array",
+      "maxItems": 16,
+      "items": { "$ref": "#/$defs/eventFamily" }
+    }
+  },
+  "$defs": {
+    "identifier": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^[^\\u0000-\\u001F\\u007F-\\u009F]+$"
+    },
+    "family": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "outcome", "min_load_delta", "hypotheses"],
+      "properties": {
+        "id": { "$ref": "#/$defs/identifier" },
+        "outcome": { "enum": ["response_time_p95_ms", "error_rate", "throughput_rps"] },
+        "min_load_delta": { "type": "number", "exclusiveMinimum": 0 },
+        "hypotheses": {
+          "type": "array",
+          "minItems": 2,
+          "maxItems": 16,
+          "items": { "$ref": "#/$defs/hypothesis" },
+          "description": "At least one cause and one control. A downstream hypothesis can expand to one pair per declared edge; the expanded family must still stay within 16 pairs."
+        }
+      }
+    },
+    "hypothesis": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "kind", "scope", "metric", "unit", "expected_sign", "max_lag_cells", "min_abs_effect", "min_resource_delta", "controls"],
+      "properties": {
+        "id": { "$ref": "#/$defs/identifier" },
+        "kind": { "enum": ["cause", "control"], "description": "A control hypothesis must not fire; a family needs at least one." },
+        "scope": { "enum": ["service", "downstream", "load_generator"] },
+        "metric": { "$ref": "#/$defs/identifier" },
+        "unit": { "$ref": "#/$defs/identifier" },
+        "expected_sign": { "enum": ["positive", "negative", "either"] },
+        "max_lag_cells": { "type": "integer", "minimum": 0, "maximum": 4 },
+        "min_abs_effect": { "type": "number", "minimum": 0.3, "maximum": 1 },
+        "min_resource_delta": { "type": "number", "exclusiveMinimum": 0 },
+        "controls": {
+          "type": "array",
+          "maxItems": 4,
+          "uniqueItems": true,
+          "items": { "enum": ["target_rps", "concurrency"] }
+        }
+      }
+    },
+    "eventFamily": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "note"],
+      "properties": {
+        "id": { "$ref": "#/$defs/identifier" },
+        "note": { "type": "string", "minLength": 1, "maxLength": 512 }
+      }
+    }
+  }
+}

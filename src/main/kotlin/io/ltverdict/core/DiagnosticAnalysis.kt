@@ -49,13 +49,15 @@ internal fun evaluateDiagnostics(
             if (result.evaluable) evaluablePairs++
         }
     }
-    val headlineSelections =
-        selectCorrelationHeadlines(
-            pairResults.map(PairResult::hypothesis),
-            "${validation.sha256}/${resources.semanticSha256}",
-            checkCancelled,
-        )
-    val selectionByPair = headlineSelections.associateBy { it.pairId to it.windowId }
+    // Family = stage x outcome (ADR 0022, D2). The family count F comes from the plan, not from the data, and each
+    // family is tested separately at alpha / F (D3).
+    val families = pairResults.map(PairResult::hypothesis).groupBy { it.windowId to it.outcomeKey }
+    val seedMaterial = "${validation.sha256}/${resources.semanticSha256}"
+    val selectionByPair =
+        families.values
+            .flatMap { selectCorrelationHeadlines(it, seedMaterial, checkCancelled, families.size) }
+            .associateBy { it.pairId to it.windowId }
+    val headlineSelections = pairResults.map { selectionByPair.getValue(it.hypothesis.pairId to it.hypothesis.windowId) }
     pairResults.forEach { result ->
         if (selectionByPair.getValue(result.hypothesis.pairId to result.hypothesis.windowId).selected) {
             result.finding?.let(findings::add)
@@ -838,12 +840,13 @@ private fun CorrelationHeadlineSelection.evidence(): JsonObject =
         put("rng", CORRELATION_HEADLINE_RNG)
         put("status", status.name)
         put("family_hypotheses", familyHypotheses)
+        put("family_count", familyCount)
         put("bootstrap_replicates", CORRELATION_HEADLINE_REPLICATES)
         put(
             "block_lengths_cells",
             buildJsonArray { CORRELATION_HEADLINE_BLOCKS.forEach { add(JsonPrimitive(it)) } },
         )
-        put("alpha", "0.05")
+        put("alpha", decimalString(alpha))
         putDecimal("p_value_b10", pValueBlock10)
         putDecimal("p_value_b20", pValueBlock20)
         putDecimal("max_p_value", maxPValue)

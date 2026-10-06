@@ -41,8 +41,11 @@ selection и multiplicity. Worst supported family ограничена 16 hypoth
 240 cells и 150 млн correlation cell-products. Новых dependencies нет.
 Поправка ADR [0022](0022-correlation-stages-increments-calibration.md) (срез K1):
 план делится на семьи по паре «стадия, исход» (каждая на уровне `alpha / F`),
-предел поднят до 1 920 cells, потолок до 550 105 344 cell-products на семью;
-метод остаётся `mbb-lag-max-holm.v1`.
+предел поднят до 1 920 cells, потолок до 550 105 344 cell-products на семью.
+Поправка ADR 0022 (срез K2): метод заменён на `mbb-lag-max-holm.v2`, который
+отбирает по первым разностям рядов (внутри самой длинной непрерывной серии
+стадии); версия метода входит в seed, поэтому p-значения v1 и v2 не сопоставимы.
+Описанный выше метод v1 по уровням сохранён в истории и в сохранённых результатах.
 
 Genuine partial и неподдержанные production shapes могут потерять прежний
 headline, но сохраняют все raw coefficients/status и точную reason. Расширять

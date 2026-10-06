@@ -6,7 +6,8 @@ import java.util.Random
 import kotlin.math.abs
 import kotlin.math.sqrt
 
-internal const val CORRELATION_HEADLINE_METHOD = "mbb-lag-max-holm.v1"
+internal const val CORRELATION_HEADLINE_METHOD = "mbb-lag-max-holm.v2"
+internal const val CORRELATION_HEADLINE_REPRESENTATION = "first_difference"
 internal const val CORRELATION_HEADLINE_RNG = "java-random-sha256-seed.v1"
 internal const val CORRELATION_HEADLINE_REPLICATES = 999
 internal const val CORRELATION_HEADLINE_ALPHA = 0.05

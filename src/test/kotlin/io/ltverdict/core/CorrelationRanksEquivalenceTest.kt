@@ -118,27 +118,28 @@ class CorrelationRanksEquivalenceTest {
     }
 
     private companion object {
-        // Captured from the implementation that sorted every resample (before this change).
+        // Captured from the implementation that sorted every resample, under the seed stream of method v2 (K2 changed the method
+        // string, which is part of the seed; the v1 numbers of the same families were the previous golden).
         val GOLDEN: List<String> =
             listOf(
-                "case0-h0 SELECTED [] p10=0.001 p20=0.01 max=0.01 holm=0.03",
-                "case0-h1 NOT_SELECTED [HOLM_NOT_REJECTED] p10=0.776 p20=0.768 max=0.776 holm=1.0",
-                "case0-h2 NOT_SELECTED [HOLM_NOT_REJECTED] p10=0.721 p20=0.763 max=0.763 holm=1.0",
+                "case0-h0 SELECTED [] p10=0.002 p20=0.01 max=0.01 holm=0.03",
+                "case0-h1 NOT_SELECTED [HOLM_NOT_REJECTED] p10=0.785 p20=0.734 max=0.785 holm=1.0",
+                "case0-h2 NOT_SELECTED [HOLM_NOT_REJECTED] p10=0.733 p20=0.776 max=0.776 holm=1.0",
                 "case1-h0 SELECTED [] p10=0.001 p20=0.001 max=0.001 holm=0.004",
-                "case1-h1 NOT_SELECTED [HOLM_NOT_REJECTED] p10=0.045 p20=0.04 max=0.045 holm=0.135",
-                "case1-h2 NOT_SELECTED [HOLM_NOT_REJECTED] p10=0.971 p20=0.961 max=0.971 holm=0.971",
-                "case1-h3 NOT_SELECTED [HOLM_NOT_REJECTED] p10=0.115 p20=0.077 max=0.115 holm=0.23",
+                "case1-h1 NOT_SELECTED [HOLM_NOT_REJECTED] p10=0.03 p20=0.047 max=0.047 holm=0.14100000000000001",
+                "case1-h2 NOT_SELECTED [HOLM_NOT_REJECTED] p10=0.975 p20=0.969 max=0.975 holm=0.975",
+                "case1-h3 NOT_SELECTED [HOLM_NOT_REJECTED] p10=0.121 p20=0.091 max=0.121 holm=0.242",
                 "case2-h0 SELECTED [] p10=0.001 p20=0.001 max=0.001 holm=0.005",
-                "case2-h1 NOT_SELECTED [HOLM_NOT_REJECTED] p10=0.624 p20=0.574 max=0.624 holm=1.0",
-                "case2-h2 NOT_SELECTED [HOLM_NOT_REJECTED] p10=0.749 p20=0.759 max=0.759 holm=1.0",
+                "case2-h1 NOT_SELECTED [HOLM_NOT_REJECTED] p10=0.636 p20=0.587 max=0.636 holm=1.0",
+                "case2-h2 NOT_SELECTED [HOLM_NOT_REJECTED] p10=0.759 p20=0.78 max=0.78 holm=1.0",
                 "case2-h3 UNAVAILABLE [PAIR_NOT_EVALUABLE] p10=null p20=null max=null holm=null",
-                "case2-h4 NOT_SELECTED [HOLM_NOT_REJECTED] p10=0.439 p20=0.423 max=0.439 holm=1.0",
+                "case2-h4 NOT_SELECTED [HOLM_NOT_REJECTED] p10=0.435 p20=0.452 max=0.452 holm=1.0",
                 "case3-h0 SELECTED [] p10=0.001 p20=0.001 max=0.001 holm=0.003",
-                "case3-h1 NOT_SELECTED [HOLM_NOT_REJECTED] p10=0.995 p20=0.989 max=0.995 holm=0.995",
-                "case3-h2 NOT_SELECTED [HOLM_NOT_REJECTED] p10=0.444 p20=0.474 max=0.474 holm=0.948",
+                "case3-h1 NOT_SELECTED [HOLM_NOT_REJECTED] p10=0.992 p20=0.988 max=0.992 holm=0.992",
+                "case3-h2 NOT_SELECTED [HOLM_NOT_REJECTED] p10=0.425 p20=0.43 max=0.43 holm=0.86",
                 "case4-h0 SELECTED [] p10=0.001 p20=0.005 max=0.005 holm=0.015",
-                "case4-h1 NOT_SELECTED [HOLM_NOT_REJECTED] p10=0.313 p20=0.192 max=0.313 holm=0.626",
-                "case4-h2 NOT_SELECTED [HOLM_NOT_REJECTED] p10=0.313 p20=0.192 max=0.313 holm=0.626",
+                "case4-h1 NOT_SELECTED [HOLM_NOT_REJECTED] p10=0.292 p20=0.191 max=0.292 holm=0.584",
+                "case4-h2 NOT_SELECTED [HOLM_NOT_REJECTED] p10=0.292 p20=0.191 max=0.292 holm=0.584",
             )
     }
 }

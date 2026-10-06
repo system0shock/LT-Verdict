@@ -11,6 +11,8 @@ import java.util.Random
 class CorrelationHeadlineSelectionTest {
     @Test
     fun `fixed Java RNG fixture applies both blocks and one Holm including unavailable hypotheses`() {
+        // The arrays are first differences (method v2, ADR 0022, D4). Expected p-values come from the independent
+        // oracle tools/correlation_oracle.py: select(levels, "fixture-v2", "first_difference") on the cumulative sums.
         val epochs = LongArray(40) { it * 1_000L }
         val outcome = DoubleArray(40) { it / 2 + 1.0 }
         val hypotheses =
@@ -26,21 +28,21 @@ class CorrelationHeadlineSelectionTest {
                 ),
             )
 
-        val first = selectCorrelationHeadlines(hypotheses, "fixture").associateBy { it.pairId }
-        val replay = selectCorrelationHeadlines(hypotheses, "fixture").associateBy { it.pairId }
+        val first = selectCorrelationHeadlines(hypotheses, FIXTURE_SEED).associateBy { it.pairId }
+        val replay = selectCorrelationHeadlines(hypotheses, FIXTURE_SEED).associateBy { it.pairId }
         val strong = first.getValue("strong")
         val noise = first.getValue("noise")
         val partial = first.getValue("partial")
 
         assertEquals(0.001, checkNotNull(strong.pValueBlock10), 1e-12)
-        assertEquals(0.012, checkNotNull(strong.pValueBlock20), 1e-12)
-        assertEquals(0.012, checkNotNull(strong.maxPValue), 1e-12)
-        assertEquals(0.036, checkNotNull(strong.holmAdjustedPValue), 1e-12)
+        assertEquals(0.013, checkNotNull(strong.pValueBlock20), 1e-12)
+        assertEquals(0.013, checkNotNull(strong.maxPValue), 1e-12)
+        assertEquals(0.039, checkNotNull(strong.holmAdjustedPValue), 1e-12)
         assertEquals(CorrelationHeadlineSelectionStatus.SELECTED, strong.status)
         assertTrue(strong.selected)
-        assertEquals(0.614, checkNotNull(noise.pValueBlock10), 1e-12)
-        assertEquals(0.549, checkNotNull(noise.pValueBlock20), 1e-12)
-        assertEquals(0.614, checkNotNull(noise.maxPValue), 1e-12)
+        assertEquals(0.568, checkNotNull(noise.pValueBlock10), 1e-12)
+        assertEquals(0.507, checkNotNull(noise.pValueBlock20), 1e-12)
+        assertEquals(0.568, checkNotNull(noise.maxPValue), 1e-12)
         assertEquals(1.0, checkNotNull(noise.holmAdjustedPValue), 1e-12)
         assertEquals(listOf("HOLM_NOT_REJECTED"), noise.reasons)
         assertEquals(CorrelationHeadlineSelectionStatus.UNAVAILABLE, partial.status)
@@ -72,14 +74,14 @@ class CorrelationHeadlineSelectionTest {
         val outcome = DoubleArray(40) { it / 2 + 1.0 }
         val hypotheses = listOf(hypothesis("strong", epochs, outcome.copyOf(), outcome))
 
-        val single = selectCorrelationHeadlines(hypotheses, "fixture").single()
-        val three = selectCorrelationHeadlines(hypotheses, "fixture", familyCount = 3).single()
-        val five = selectCorrelationHeadlines(hypotheses, "fixture", familyCount = 5).single()
+        val single = selectCorrelationHeadlines(hypotheses, FIXTURE_SEED).single()
+        val three = selectCorrelationHeadlines(hypotheses, FIXTURE_SEED, familyCount = 3).single()
+        val five = selectCorrelationHeadlines(hypotheses, FIXTURE_SEED, familyCount = 5).single()
 
         assertEquals(CorrelationHeadlineSelectionStatus.SELECTED, single.status)
         assertEquals(0.05 / 3, three.alpha, 0.0)
         assertEquals(3, three.familyCount)
-        // Holm-adjusted p of the single strong hypothesis is 0.012: rejected at 0.05 and at 0.05 / 3, not at 0.05 / 5.
+        // Holm-adjusted p of the single strong hypothesis is 0.013: rejected at 0.05 and at 0.05 / 3, not at 0.05 / 5.
         assertEquals(CorrelationHeadlineSelectionStatus.SELECTED, three.status)
         assertEquals(CorrelationHeadlineSelectionStatus.NOT_SELECTED, five.status)
         assertEquals(listOf("HOLM_NOT_REJECTED"), five.reasons)
@@ -166,6 +168,19 @@ class CorrelationHeadlineSelectionTest {
         assertTrue(selectCorrelationHeadlines(tooManyHypotheses, "ceiling").all { it.reasons == listOf("FAMILY_SIZE_UNSUPPORTED") })
     }
 
+    @Test
+    fun `method v2 seeds its own stream and names the representation of the series it is given`() {
+        val epochs = LongArray(40) { it * 1_000L }
+        val outcome = DoubleArray(40) { it / 2 + 1.0 }
+        val hypotheses = listOf(hypothesis("strong", epochs, outcome.copyOf(), outcome))
+
+        val v2 = selectCorrelationHeadlines(hypotheses, "fixture").single()
+
+        // The same input under the seed stream of method v1 gave 0.012 for block 20 (ADR 0022, D7: the method string is part of the seed).
+        assertEquals("mbb-lag-max-holm.v2", CORRELATION_HEADLINE_METHOD)
+        assertEquals(0.02, checkNotNull(v2.pValueBlock20), 1e-12)
+    }
+
     private class BootstrapStarted : RuntimeException()
 
     // The cancellation hook runs only inside the bootstrap, so a throw proves the cost check let the family through.
@@ -215,4 +230,8 @@ class CorrelationHeadlineSelectionTest {
         materialCandidate = true,
         unavailableReason = unavailableReason,
     )
+
+    private companion object {
+        const val FIXTURE_SEED = "fixture-v2"
+    }
 }

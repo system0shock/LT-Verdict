@@ -713,6 +713,7 @@ internal fun Application.installLocalApi(context: LocalApiContext) {
                                         put("id", profile.id)
                                         put("source_kind", profile.sourceKind.wireName)
                                         put("transport", profile.transport.wireName)
+                                        profile.arm?.let { put("arm", it) }
                                     },
                                 )
                             }

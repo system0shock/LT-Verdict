@@ -788,6 +788,29 @@ class LocalApiTest {
     }
 
     @Test
+    fun `sources list exposes the arm of a profile only when it declares one`() {
+        OnlineSourceFixture().use { fixture ->
+            val json = fixture.profilesJson()
+            val profile = readSourceProfiles(json.byteInputStream()).single()
+            withServer(sourceProfiles = listOf(profile.copy(id = "armed", arm = "A"), profile.copy(id = "plain"))) { _, api ->
+                api.bootstrap()
+                val listed =
+                    api
+                        .get("/api/sources")
+                        .jsonObject()
+                        .getValue("profiles")
+                        .jsonArray
+                        .map { it.jsonObject }
+                        .associateBy { it.getValue("id").jsonPrimitive.content }
+                val armed = listed.getValue("armed")
+                assertEquals(JsonPrimitive("A"), armed["arm"])
+                assertEquals(setOf("id", "source_kind", "transport", "arm"), armed.keys)
+                assertEquals(setOf("id", "source_kind", "transport"), listed.getValue("plain").keys)
+            }
+        }
+    }
+
+    @Test
     fun `online job persists evidence and snapshot download replays without network`() {
         OnlineSourceFixture().use { fixture ->
             val profiles = readSourceProfiles(fixture.profilesJson().byteInputStream())

@@ -40,6 +40,7 @@ import {
   uploadInput,
   validatePolicy,
 } from './api'
+import { pairSourceRequests } from './shell/setup'
 import { summarizeVerdict } from './verdictSummary'
 import type { AttentionTarget } from './shell/overview'
 import type { AdvisoryAiConfig, AnalysisResult, AnalysisSummary, Bucket, JobStatus, OpenSearchEvidence, Policy, PolicyError, PostgresContextEvidence, Release, ReleaseAnalysis, RunSummary, SourceProfile, SourceRequest, Theme } from './types'
@@ -402,8 +403,9 @@ async function validateDraft(draft: Policy | File): Promise<Policy | null> {
   }
 }
 
-async function analyze() {
+async function analyze(pairSlots?: string[][]) {
   if (!inputFile.value || working.value || postgresCapturePhase.value) return
+  if (pairSlots && !sourceRequestState.value.request) return
   if (sourceRequestState.value.error) {
     errorMessage.value = sourceRequestState.value.error
     return
@@ -464,24 +466,31 @@ async function analyze() {
     if (revision !== analysisRevision) return
     currentRun.value = accepted
     await refreshRuns()
-    job.value = await createJob(
-      accepted.run_id,
-      activePolicy,
-      resourceFile.value,
-      diagnosticFile.value,
-      sourceRequestState.value.request,
-      sourceContextFiles.value,
-      postgresPreFile.value,
-      postgresPostFile.value,
-      pgProfileHtmlFile.value,
-      capacityFile.value,
-      trendFile.value,
-    )
-    // Запрос ИИ-разбора относится к этому запуску: запоминаем его и сбрасываем переключатель.
-    adviceRevision = aiRequested.value ? revision : 0
-    aiRequested.value = false
-    uploadProgress.value = 100
-    await pollJob(revision)
+    // Пара плеч: тот же загруженный вход, по заданию на плечо, строго по очереди; одиночный запуск - один проход цикла.
+    const requests = pairSlots ? pairSourceRequests(sourceRequestState.value.request!, pairSlots) : [sourceRequestState.value.request]
+    for (const [index, request] of requests.entries()) {
+      job.value = await createJob(
+        accepted.run_id,
+        activePolicy,
+        resourceFile.value,
+        diagnosticFile.value,
+        request,
+        sourceContextFiles.value,
+        postgresPreFile.value,
+        postgresPostFile.value,
+        pgProfileHtmlFile.value,
+        capacityFile.value,
+        trendFile.value,
+      )
+      if (index === 0) {
+        // Запрос ИИ-разбора относится к этому запуску: запоминаем его и сбрасываем переключатель.
+        adviceRevision = aiRequested.value ? revision : 0
+        aiRequested.value = false
+        uploadProgress.value = 100
+      }
+      await pollJob(revision)
+      if (revision !== analysisRevision || job.value?.state !== 'COMPLETE') break
+    }
   } catch (failure) {
     if (revision !== analysisRevision) return
     uploadProgress.value = 0
@@ -1045,6 +1054,7 @@ function focusPolicy() {
             @ai-requested="aiRequested = $event"
             @ai-model="aiModel = $event"
             @analyze="analyze"
+            @analyze-pair="analyze"
           />
 
           <p

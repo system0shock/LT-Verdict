@@ -1,6 +1,7 @@
+import type { SourceProfile, SourceRequest } from '../types'
 import { SETUP_LABELS } from './labels'
 
-export type ReadinessKey = 'input' | 'busy' | 'policy' | 'resources' | 'plans' | 'sources' | 'postgres'
+export type ReadinessKey = 'input' | 'busy' | 'policy' | 'resources' | 'plans' | 'sources' | 'postgres' | 'arms'
 export type ReadinessLevel = 'ok' | 'info' | 'warn' | 'block'
 
 export interface ReadinessInput {
@@ -15,6 +16,8 @@ export interface ReadinessInput {
   sourceRequestError: string
   contextCount: number
   postgres: { pre: boolean; post: boolean; html: boolean }
+  // Только при включённом запуске пары плеч: причины блокировки и метки плеч (пусто, пока плечи не определены).
+  pair?: { blockers: string[]; arms: string[] } | null
 }
 
 export interface ReadinessItem {
@@ -81,6 +84,11 @@ export function buildReadiness(input: ReadinessInput): Readiness {
       ? { key: 'postgres', level: 'ok', title: SETUP_LABELS.itemPostgres, detail: postgresNames }
       : { key: 'postgres', level: 'info', title: SETUP_LABELS.itemPostgres, detail: SETUP_LABELS.postgresNoneItem },
   )
+  if (input.pair) {
+    items.push(input.pair.blockers.length
+      ? { key: 'arms', level: 'block', title: SETUP_LABELS.itemPair, detail: input.pair.blockers.join('; ') }
+      : { key: 'arms', level: 'ok', title: SETUP_LABELS.itemPair, detail: SETUP_LABELS.pairOk(input.pair.arms) })
+  }
 
   const blockers = items.filter((item) => item.level === 'block').map((item) => item.key)
   const will = [
@@ -89,6 +97,7 @@ export function buildReadiness(input: ReadinessInput): Readiness {
     planNames ? SETUP_LABELS.willPlans(planNames) : null,
     input.contextCount > 0 ? SETUP_LABELS.willContext : null,
     postgresNames ? SETUP_LABELS.willPostgres(postgresNames) : null,
+    input.pair?.blockers.length === 0 ? SETUP_LABELS.willPair(input.pair.arms.length) : null,
     input.aiRequested ? SETUP_LABELS.willAdvice : null,
   ].filter((line): line is string => line !== null)
 
@@ -103,4 +112,46 @@ export function secondsToMs(seconds: string): string {
   if (seconds === '') return ''
   const value = Number(seconds)
   return Number.isFinite(value) ? String(Math.round(value * 1000)) : ''
+}
+
+// Профили OpenSearch рядов не дают: плечо у них не объявляется и в метку плеча не входит.
+const hasSeries = (profile: SourceProfile) => profile.source_kind !== 'opensearch'
+
+function slotArms(slot: string[], profiles: SourceProfile[]): string[] {
+  const byId = new Map(profiles.map((profile) => [profile.id, profile]))
+  const declared = slot.flatMap((id) => { const profile = byId.get(id); return profile && hasSeries(profile) && profile.arm ? [profile.arm] : [] })
+  return [...new Set(declared)].sort()
+}
+
+// Плечи слотов по объявленным меткам профилей; слот без единой метки даёт пустую строку.
+export function pairArmLabels(slots: string[][], profiles: SourceProfile[]): string[] {
+  return slots.map((slot) => slotArms(slot, profiles).join(', '))
+}
+
+// Все причины, по которым пару плеч нельзя запускать; пустой список - можно. Шаг и окно общие по построению (один запрос на всех).
+export function pairLaunchBlockers(slots: string[][], profiles: SourceProfile[]): string[] {
+  const byId = new Map(profiles.map((profile) => [profile.id, profile]))
+  const blockers: string[] = []
+  const declared: string[] = []
+  slots.forEach((slot, index) => {
+    const number = index + 1
+    const withSeries = slot.map((id) => byId.get(id)).filter((profile): profile is SourceProfile => !!profile && hasSeries(profile))
+    if (withSeries.length === 0) {
+      blockers.push(SETUP_LABELS.pairArmEmpty(number))
+      return
+    }
+    const unlabeled = withSeries.filter((profile) => !profile.arm)
+    unlabeled.forEach((profile) => blockers.push(SETUP_LABELS.pairNoArm(number, profile.id)))
+    const arms = slotArms(slot, profiles)
+    if (arms.length > 1) blockers.push(SETUP_LABELS.pairMixed(number))
+    else if (arms.length === 1 && unlabeled.length === 0) declared.push(arms[0])
+  })
+  for (const arm of new Set(declared.filter((value, index) => declared.indexOf(value) !== index))) blockers.push(SETUP_LABELS.pairSame(arm))
+  return blockers
+}
+
+// Один запрос на плечо: окно и шаг общие (копия единственного запроса панели), различается только набор профилей.
+export function pairSourceRequests(base: SourceRequest, slots: string[][]): SourceRequest[] {
+  if (base.schema_version !== 'source-request.v3') throw new Error('pair launch needs a source-request.v3 base')
+  return slots.map((slot) => ({ ...base, profile_ids: [...slot].sort() }))
 }

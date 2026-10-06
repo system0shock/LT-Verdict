@@ -973,6 +973,59 @@ class LocalApiTest {
         }
 
     @Test
+    fun `a small sample PASS is admitted as a baseline in both modes and the comparison warns`() =
+        withServer { store, api ->
+            api.bootstrap()
+            val small = statisticalRuns(store, api, listOf(100, 110, 120), SMALL_SAMPLE_POLICY)
+            val (result, _) = store.readAnalysisDocuments(small[0].first, small[0].second)!!
+            // the fixture is a real analysis, not a synthetic document: PASS with exactly one reason
+            assertEquals("PASS", result.getValue("policy_verdict").jsonPrimitive.content)
+            val coverage = result.getValue("analysis_coverage").jsonObject
+            assertEquals("INCOMPLETE", coverage.getValue("status").jsonPrimitive.content)
+            assertEquals(listOf("SMALL_SAMPLE"), coverage.getValue("reasons").jsonArray.map { it.jsonPrimitive.content })
+            val current = statisticalRuns(store, api, listOf(105)).single()
+
+            assertEquals(200, api.selectManual(small[0].first, small[0].second).statusCode())
+            assertEquals(listOf("BASELINE_SMALL_SAMPLE"), api.comparisonOf(current.first, current.second).warnings())
+
+            api.selectStatistical(small)
+            val winner =
+                api
+                    .get("/api/baseline")
+                    .jsonObject()
+                    .getValue("baseline")
+                    .jsonObject
+            assertEquals(3, winner.getValue("candidates").jsonArray.size)
+            assertEquals(listOf("BASELINE_SMALL_SAMPLE"), api.comparisonOf(current.first, current.second).warnings())
+        }
+
+    @Test
+    fun `a small sample reason next to another coverage reason is still refused in both modes`() =
+        withServer { store, api ->
+            val input = store.acceptInput(ByteArrayInputStream(SPIKE_DROP.bytes()), SPIKE_DROP.filename)
+            api.bootstrap()
+            val identity = """{"run_id":"${input.runId}","tag":"small-and-gaps"}""".encodeToByteArray()
+            val analysisId = sha256Hex(identity)
+            val result =
+                """{"schema_version":"analysis-result.v1","run_id":"${input.runId}","analysis_mode":"standard","run_validity":"VALID",""" +
+                    """"policy_verdict":"PASS","analysis_coverage":{"status":"INCOMPLETE","reasons":["SMALL_SAMPLE","RESOURCE_GAPS"]},""" +
+                    """"findings":[],"evidence":[]}"""
+            store.writeAnalysisAtomically(input.runId, analysisId) { staging ->
+                Files.write(staging.resolve("identity.json"), identity)
+                Files.writeString(staging.resolve("analysis-result.json"), result)
+            }
+            val others = statisticalRuns(store, api, listOf(100, 110))
+
+            assertError(api.selectManual(input.runId, analysisId), 422, "BASELINE_CANDIDATE_INCOMPLETE")
+            assertError(
+                api.post("/api/baseline", "application/json", statisticalBody(others + (input.runId to analysisId), true)),
+                422,
+                "BASELINE_CANDIDATE_INCOMPLETE",
+            )
+            assertEquals(JsonNull, api.get("/api/baseline").jsonObject().getValue("baseline"))
+        }
+
+    @Test
     fun `baseline refuses a result larger than the bound`() =
         withServer { store, api ->
             val input = store.acceptInput(ByteArrayInputStream(SPIKE_DROP.bytes()), SPIKE_DROP.filename)
@@ -1235,11 +1288,12 @@ class LocalApiTest {
         store: RunBundleStore,
         api: ApiClient,
         elapsed: List<Int>,
+        policy: ByteArray = PERMISSIVE_POLICY,
     ): List<Pair<String, String>> =
         elapsed.mapIndexed { index, value ->
             val load = "timeStamp,elapsed,label,success\n${1_767_225_600_000L + index * 1_000L},$value,checkout,true\n"
             val input = store.acceptInput(ByteArrayInputStream(load.encodeToByteArray()), "series-$index.jtl")
-            input.runId to api.createJob(input.runId, PERMISSIVE_POLICY).analysisId(api)
+            input.runId to api.createJob(input.runId, policy).analysisId(api)
         }
 
     private fun statisticalBody(
@@ -2700,6 +2754,9 @@ class LocalApiTest {
         // Few samples per run: the floor and minimum are lowered so a run is judged (PASS or FAIL), not marked small-sample.
         val PERMISSIVE_POLICY =
             """{"schema_version":"policy.v1","policy_id":"permissive","defaults":{"sample_floor":1,"min_samples":1},"rules":[{"id":"p95","metric":"response_time_p95_ms","operator":"lte","threshold":100000,"scope":{"kind":"overall"}}]}"""
+                .encodeToByteArray()
+        val SMALL_SAMPLE_POLICY =
+            """{"schema_version":"policy.v1","policy_id":"small-sample","defaults":{"sample_floor":1,"min_samples":1000000},"rules":[{"id":"p95","metric":"response_time_p95_ms","operator":"lte","threshold":100000,"scope":{"kind":"overall"}}]}"""
                 .encodeToByteArray()
         val FAILING_POLICY =
             """{"schema_version":"policy.v1","policy_id":"failing","defaults":{"sample_floor":1,"min_samples":1},"rules":[{"id":"p95","metric":"response_time_p95_ms","operator":"lte","threshold":1,"scope":{"kind":"overall"}}]}"""

@@ -43,6 +43,7 @@ SCENARIO_SPECS = {
     "N10-stages-2": ("ar08", 120, 2, 0, 0),
     "N10-stages-3": ("ar08", 120, 3, 0, 0),
     "N11-activation": ("ar08", 120, 1, 0, 0),
+    "N12-ar08-1920-l4": ("ar08", 1920, 1, 0, 0),
     "P01-lin-lag0": ("linear", 120, 1, 0, 0),
     "P02-lin-lag2": ("linear", 120, 1, 0, 2),
     "P03-lin-neg-lag3": ("linear", 120, 1, 0, 3),
@@ -57,6 +58,9 @@ SCENARIO_SPECS = {
     "B03-gap-degradation-dependent": ("dependent", 120, 1, 0, 0),
 }
 SCENARIO_IDS = tuple(SCENARIO_SPECS)
+# Boundary fixtures: one deterministic null AR(1) trace per cell count (the
+# shape of N02/N12, a generator choice). Expected statuses belong to H4.
+FIXTURE_CELLS = {"FX03b-cells-1920-1921": (1920, 1921)}
 
 
 def stream_seed(scenario_id: str, seed: int) -> int:
@@ -175,7 +179,17 @@ def _stage(rng, scenario_id, spec, number):
 
 def generate(scenario_id: str, seed: int) -> dict:
     """Generate one JSON-ready source trace without rounding its values."""
-    spec = SCENARIO_SPECS[scenario_id]
+    return _generate(scenario_id, seed, SCENARIO_SPECS[scenario_id])
+
+
+def generate_fixture(fixture_id: str, cells: int) -> dict:
+    """Generate the single boundary trace of fixture_id with the given cells."""
+    if cells not in FIXTURE_CELLS[fixture_id]:
+        raise ValueError(f"{fixture_id}: unsupported cell count {cells}")
+    return _generate(f"{fixture_id}/{cells}", 0, ("ar08", cells, 1, 0, 0))
+
+
+def _generate(scenario_id: str, seed: int, spec) -> dict:
     rng = np.random.default_rng(stream_seed(scenario_id, seed))
     stages = []
     for number in range(1, spec[2] + 1):

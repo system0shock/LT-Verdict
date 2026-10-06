@@ -1,4 +1,5 @@
 import json
+from hashlib import sha256
 from pathlib import Path
 import sys
 import unittest
@@ -18,7 +19,7 @@ IDS = (
     "N01-iid", "N02-ar08", "N03-ar095", "N04-t3",
     "N05-drift-strong-ar08", "N06-drift-weak-ar08", "N07-randomwalk",
     "N08-ar08-240-l10", "N09-ar08-gaps", "N10-stages-2",
-    "N10-stages-3", "N11-activation", "P01-lin-lag0",
+    "N10-stages-3", "N11-activation", "N12-ar08-1920-l4", "P01-lin-lag0",
     "P02-lin-lag2", "P03-lin-neg-lag3", "P04-lin-drift",
     "P05-lin-weak-a", "P05-lin-weak-b", "P05-lin-weak-c",
     "P06-level-threshold", "P07-level-saturation", "B01-common-factor",
@@ -42,6 +43,8 @@ class ScenarioProperties(unittest.TestCase):
         self.assertEqual(cs.stream_seed("N02-ar08", 5), 8224200746964369771)
         self.assertEqual(cs.stream_seed("N01-iid", 0), 2896942816554372063)
         self.assertEqual(cs.stream_seed("P02-lin-lag2", 999), 10671333056867032067)
+        self.assertEqual(cs.stream_seed("N12-ar08-1920-l4", 100000), int.from_bytes(
+            sha256(b"ltv-c5/v1/N12-ar08-1920-l4/100000").digest()[:8], "big"))
         for scenario_id in ("N02-ar08", "P02-lin-lag2", "N10-stages-3"):
             self.assertEqual(cs.generate(scenario_id, 5), cs.generate(scenario_id, 5))
             self.assertNotEqual(cs.generate(scenario_id, 5), cs.generate(scenario_id, 6))
@@ -71,7 +74,7 @@ class ScenarioProperties(unittest.TestCase):
                 for number, stage in enumerate(g["stages"], 1):
                     self.assertEqual(set(stage), {"window_id", "source_cells", "resources", "outcome", "target"})
                     self.assertEqual(stage["window_id"], f"stage-{number}")
-                    n = 240 if scenario_id == "N08-ar08-240-l10" else 120
+                    n = {"N08-ar08-240-l10": 240, "N12-ar08-1920-l4": 1920}.get(scenario_id, 120)
                     self.assertEqual(stage["source_cells"], n)
                     self.assertEqual(len(stage["resources"]), 16)
                     for series in [*stage["resources"], stage["outcome"], stage["target"]]:
@@ -83,6 +86,32 @@ class ScenarioProperties(unittest.TestCase):
                     self.assertEqual(g["truth"]["null_hypotheses"], list(range(16)))
         multi = cs.generate("N10-stages-3", 0)["stages"]
         self.assertEqual(len({tuple(stage["outcome"]) for stage in multi}), 3)
+
+    def test_n12_long_stage_shape_and_ar1(self):
+        g = cs.generate("N12-ar08-1920-l4", 100000)
+        self.assertEqual((g["max_lag_cells"], g["hypotheses"], g["step_ms"]), (4, 16, 15000))
+        self.assertEqual((len(g["stages"]), g["source_cells"], len(g["outcome"])), (1, 1920, 1920))
+        self.assertEqual(g["truth"]["null_hypotheses"], list(range(16)))
+        self.assertIsNone(g["activation"])
+        rows = [cs.generate("N12-ar08-1920-l4", seed)["outcome"] for seed in range(20)]
+        self.assertLess(abs(float(np.mean([corr(r[:-1], r[1:]) for r in rows])) - 0.8), 0.03)
+        self.assertLess(max(abs(float(np.mean(r))) for r in rows), 0.5)
+
+    def test_fx03b_boundary_fixture(self):
+        self.assertEqual(cs.FIXTURE_CELLS, {"FX03b-cells-1920-1921": (1920, 1921)})
+        for cells in (1920, 1921):
+            g = cs.generate_fixture("FX03b-cells-1920-1921", cells)
+            self.assertEqual((g["source_cells"], len(g["outcome"]), len(g["target"])), (cells, cells, cells))
+            self.assertEqual((len(g["stages"]), len(g["resources"]), g["max_lag_cells"]), (1, 16, 4))
+            self.assertEqual(g["truth"]["null_hypotheses"], list(range(16)))
+            self.assertEqual(g, cs.generate_fixture("FX03b-cells-1920-1921", cells))
+            json.dumps(g, allow_nan=False)
+        self.assertNotEqual(cs.generate_fixture("FX03b-cells-1920-1921", 1920)["outcome"],
+                            cs.generate("N12-ar08-1920-l4", 0)["outcome"])
+        with self.assertRaises(KeyError):
+            cs.generate_fixture("unknown", 1920)
+        with self.assertRaises(ValueError):
+            cs.generate_fixture("FX03b-cells-1920-1921", 1922)
 
     def test_missing_masks(self):
         missing = 0

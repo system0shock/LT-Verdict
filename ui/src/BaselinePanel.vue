@@ -64,7 +64,8 @@ watch(series, () => {
   comparable.value = false
   showSlotOfSeries()
 })
-watch(() => baseline.value?.series, (active) => emit('active-series', active), { immediate: true })
+// A series without a baseline is still the chosen series: the analytics must not fall back to another baseline then.
+watch(() => baseline.value?.series ?? (slots.value.length ? series.value.normalize('NFC').trim() : undefined), (active) => emit('active-series', active), { immediate: true })
 watch(() => [props.version, props.preferredSeries], () => {
   if (props.preferredSeries) series.value = props.preferredSeries
   void loadBaseline()

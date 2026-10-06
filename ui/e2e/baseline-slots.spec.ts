@@ -212,3 +212,12 @@ for (const width of [1280, 375, 320]) {
     await expect(page.getByTestId('baseline-slots').getByRole('radio')).toHaveCount(2)
   })
 }
+
+test('saved analytics keep the chosen series when it has no baseline', async ({ page }) => {
+  const requests = await openCompare(page)
+  await seriesField(page).fill('C')
+  await expect(page.getByTestId('baseline-selection')).toHaveCount(0)
+  await page.locator('#shell-tab-overview').click()
+  await page.getByRole('button', { name: 'Refresh analytics', exact: true }).click()
+  await expect.poll(() => requests.filter((entry) => entry.path.endsWith('/analytics')).map((entry) => new URLSearchParams(entry.search).get('series'))).toEqual(['C'])
+})

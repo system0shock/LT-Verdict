@@ -393,6 +393,69 @@ class AdvisoryAiTest {
     }
 
     @Test
+    fun `new advice records the provider request count`() {
+        fun recorded(document: JsonObject) = document.getValue("provenance").jsonObject.getValue("provider_requests")
+
+        assertEquals(JsonPrimitive(1), recorded(newAdviceDocument("requests-one")))
+        assertEquals(JsonPrimitive(2), recorded(newAdviceDocument("requests-two", provenance(providerRequests = 2))))
+    }
+
+    @Test
+    fun `legacy v1 advice without provider_requests is read and reused without a runner call`() {
+        val golden = newAdviceDocument("golden-source").withProvenance { it - "provider_requests" }
+
+        assertReusedWithoutRunnerCall("golden", golden)
+        assertFalse(golden.getValue("provenance").jsonObject.containsKey("provider_requests"))
+    }
+
+    @Test
+    fun `v1 advice with provider_requests 2 and v2 advice are read and reused without a runner call`() {
+        assertReusedWithoutRunnerCall("v1-retried", newAdviceDocument("v1-retried-source", provenance(providerRequests = 2)))
+        listOf(1, 2).forEach { requests ->
+            val v2 =
+                provenance(
+                    promptVersion = QwenCode0211.PROMPT_V2_VERSION,
+                    promptSha256 = QwenCode0211.PROMPT_V2_SHA256,
+                    providerRequests = requests,
+                )
+            assertReusedWithoutRunnerCall("v2-$requests", newAdviceDocument("v2-source-$requests", v2))
+        }
+    }
+
+    @Test
+    fun `stored advice with an unknown prompt label or a bad request count or a wrong v2 hash is corrupt`() {
+        val v1 = newAdviceDocument("labels-v1-source")
+        val v2 =
+            newAdviceDocument(
+                "labels-v2-source",
+                provenance(promptVersion = QwenCode0211.PROMPT_V2_VERSION, promptSha256 = QwenCode0211.PROMPT_V2_SHA256),
+            )
+        val cases =
+            mapOf<String, Pair<JsonObject, (Map<String, JsonElement>) -> Map<String, JsonElement>>>(
+                "unknown label" to (v1 to { it + ("prompt_version" to JsonPrimitive("advisory-system.v3")) }),
+                "empty label" to (v1 to { it + ("prompt_version" to JsonPrimitive("")) }),
+                "v1 with a malformed hash" to (v1 to { it + ("prompt_sha256" to JsonPrimitive("not a hash")) }),
+                "v1 with 0 requests" to (v1 to { it + ("provider_requests" to JsonPrimitive(0)) }),
+                "v1 with 3 requests" to (v1 to { it + ("provider_requests" to JsonPrimitive(3)) }),
+                "v1 with requests as text" to (v1 to { it + ("provider_requests" to JsonPrimitive("2")) }),
+                "v1 with a fractional count" to (v1 to { it + ("provider_requests" to JsonPrimitive(1.5)) }),
+                "v1 with a null count" to (v1 to { it + ("provider_requests" to JsonNull) }),
+                "v2 without provider_requests" to (v2 to { it - "provider_requests" }),
+                "v2 with 0 requests" to (v2 to { it + ("provider_requests" to JsonPrimitive(0)) }),
+                "v2 with 3 requests" to (v2 to { it + ("provider_requests" to JsonPrimitive(3)) }),
+                "v2 with another hash" to (v2 to { it + ("prompt_sha256" to JsonPrimitive("d".repeat(64))) }),
+                "v2 without endpoint_host" to (v2 to { it - "endpoint_host" }),
+                "extra key" to (v2 to { it + ("prompt_note" to JsonPrimitive("x")) }),
+            )
+        cases.entries.forEachIndexed { index, (name, case) ->
+            val (document, change) = case
+            val changed = document.withProvenance(change)
+            val failure = assertThrows(IllegalStateException::class.java, { storeAdvice("labels-$index", changed) }, name)
+            assertTrue(failure.message.orEmpty().startsWith("CORRUPT_AI_ADVICE"), name)
+        }
+    }
+
+    @Test
     fun `advice of a model outside the current configuration is read`() {
         val document = newAdviceDocument("foreign-source", provenance(modelId = "org/retired-model:2", endpointHost = "[::1]:8443"))
 
@@ -440,7 +503,7 @@ class AdvisoryAiTest {
     }
 
     @Test
-    fun `runner provenance with a malformed endpoint host or model id is not saved`() {
+    fun `runner provenance with a malformed endpoint host, model id, prompt or request count is not saved`() {
         val bad =
             listOf(
                 provenance(endpointHost = ""),
@@ -450,6 +513,13 @@ class AdvisoryAiTest {
                 provenance(modelId = "qwen..max"),
                 provenance(modelId = "qwen max"),
                 provenance(modelId = ""),
+                provenance(providerRequests = 0),
+                provenance(providerRequests = 3),
+                provenance(promptVersion = "advisory-system.v3"),
+                provenance(promptSha256 = "not a hash"),
+                // The label v2 is bound to the pinned hash: another or differently written hash is not saved.
+                provenance(promptVersion = QwenCode0211.PROMPT_V2_VERSION),
+                provenance(promptVersion = QwenCode0211.PROMPT_V2_VERSION, promptSha256 = QwenCode0211.PROMPT_V2_SHA256.uppercase()),
             )
         bad.forEachIndexed { index, value ->
             DataDirectory.open(tempDir.resolve("bad-$index")).use { directory ->
@@ -536,6 +606,27 @@ class AdvisoryAiTest {
 
         assertEquals("^" + MODEL_SLUG.pattern + "$", pattern("model_id"))
         assertEquals("^" + ENDPOINT_HOST.pattern + "$", pattern("endpoint_host"))
+    }
+
+    @Test
+    fun `prompt v2 file is pinned by hash and keeps the v1 text`() {
+        val v1 = Files.readString(Path.of("docs/contracts/advice/v1/system-prompt.md"))
+        val bytes = Files.readAllBytes(Path.of("docs/contracts/advice/v1/system-prompt-v2.md"))
+        assertEquals("advisory-system.v2", QwenCode0211.PROMPT_V2_VERSION)
+        assertEquals(QwenCode0211.PROMPT_V2_SHA256, sha256Hex(bytes))
+        val v2 = bytes.decodeToString()
+        // The pinned hash is computed over LF bytes: a CRLF checkout would change it (.gitattributes keeps the file on LF).
+        assertFalse(v2.contains('\r'))
+        assertTrue(v2.startsWith(v1.replace("# Advisory system prompt v1", "# Advisory system prompt v2").trimEnd()))
+        assertTrue("\n\n## LT Verdict domain invariants\n" in v2)
+        assertTrue(bytes.size <= 16_384)
+    }
+
+    @Test
+    fun `prompt v1 file stays unchanged next to the v2 file`() {
+        // Stored advice and the preregistration refer to the v1 hash (ADR 0021, D1 p. 1); only the LF form is checked here.
+        val v1 = Files.readAllBytes(Path.of("docs/contracts/advice/v1/system-prompt.md"))
+        assertEquals("69f215a1ad4ae678c82410ba7cf7daf171cd9c7ca0ef4626bba6977db0af4ef7", sha256Hex(v1))
     }
 
     @Test
@@ -763,14 +854,18 @@ class AdvisoryAiTest {
     private fun provenance(
         modelId: String = QwenCode0211.MODEL_ID,
         endpointHost: String = BUILT_IN_HOST,
+        promptVersion: String = QwenCode0211.PROMPT_VERSION,
+        promptSha256: String = "d".repeat(64),
+        providerRequests: Int = 1,
     ) = RunnerProvenance(
         runnerId = "gigacode-qwen-code",
         runnerVersion = "0.21.1",
         runnerArtifactSha256 = QwenCode0211.CLI_ENTRY_SHA256,
         modelId = modelId,
         endpointHost = endpointHost,
-        promptVersion = "advisory-system.v1",
-        promptSha256 = "d".repeat(64),
+        promptVersion = promptVersion,
+        promptSha256 = promptSha256,
+        providerRequests = providerRequests,
         durationMillis = 12,
         exitCode = 0,
     )
@@ -791,6 +886,36 @@ class AdvisoryAiTest {
                 )
             assertInstanceOf(AdviceRunResult.Saved::class.java, service.generate(fixture.runId, fixture.analysisId)).advice.document
         }
+
+    /** Stores [document], then asks the service for the advice: the stored one comes back and the runner is never called. */
+    private fun assertReusedWithoutRunnerCall(
+        name: String,
+        document: JsonObject,
+    ) {
+        var calls = 0
+        DataDirectory.open(tempDir.resolve(name)).use { directory ->
+            val fixture = prepareAnalysis(directory)
+            val bundles = RunBundleStore(directory)
+            val store = AiAdviceStore(directory, bundles)
+            val manifestSha256 = sha256Hex(Files.readAllBytes(fixture.analysisPath.resolve("manifest.json")))
+            store.write(fixture.runId, fixture.analysisId, manifestSha256, document)
+            val service =
+                AdvisoryAiService(
+                    bundles,
+                    store,
+                    AdvisoryRunner {
+                        calls++
+                        RunnerOutcome.Failed(AdviceFailure.PROCESS_FAILED)
+                    },
+                )
+
+            val result = assertInstanceOf(AdviceRunResult.Saved::class.java, service.generate(fixture.runId, fixture.analysisId))
+
+            assertTrue(result.reused, name)
+            assertEquals(0, calls, name)
+            assertEquals(document, result.advice.document, name)
+        }
+    }
 
     /** Writes [document] into a fresh data directory; the store validates it exactly as it validates a saved advice. */
     private fun storeAdvice(

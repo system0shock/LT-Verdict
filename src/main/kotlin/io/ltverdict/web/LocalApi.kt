@@ -36,9 +36,11 @@ import io.ltverdict.core.CapacityPlanValidation
 import io.ltverdict.core.DiagnosticValidation
 import io.ltverdict.core.MAX_CAPACITY_PLAN_BYTES
 import io.ltverdict.core.MAX_CATALOG_PAGE
+import io.ltverdict.core.MAX_POD_VIEW_BYTES
 import io.ltverdict.core.MAX_RESOURCE_SNAPSHOT_BYTES
 import io.ltverdict.core.MAX_TREND_PLAN_BYTES
 import io.ltverdict.core.MAX_VALUES_SERIES
+import io.ltverdict.core.PodViewValidation
 import io.ltverdict.core.PolicyValidation
 import io.ltverdict.core.PolicyValidationError
 import io.ltverdict.core.ResourceValidation
@@ -66,6 +68,8 @@ import io.ltverdict.core.validateCapacityPlan
 import io.ltverdict.core.validateDiagnosticBinding
 import io.ltverdict.core.validateDiagnosticPlan
 import io.ltverdict.core.validatePlatformBinding
+import io.ltverdict.core.validatePodView
+import io.ltverdict.core.validatePodViewBinding
 import io.ltverdict.core.validatePolicy
 import io.ltverdict.core.validateResourceSnapshot
 import io.ltverdict.core.validateTrendBinding
@@ -192,6 +196,9 @@ internal fun Application.installLocalApi(context: LocalApiContext) {
             finish()
         } catch (failure: InvalidTrend) {
             call.respondError(HttpStatusCode.UnprocessableEntity, "INVALID_TREND_PLAN", "Trend plan is invalid", failure.errors)
+            finish()
+        } catch (failure: InvalidPodView) {
+            call.respondError(HttpStatusCode.UnprocessableEntity, "INVALID_POD_VIEW", "Pod view is invalid", failure.errors)
             finish()
         } catch (failure: ApiFailure) {
             call.respondError(failure.status, failure.code, failure.message)
@@ -1273,6 +1280,7 @@ private suspend fun receiveJob(
     var diagnostics: DiagnosticValidation.Valid? = null
     var capacity: CapacityPlanValidation.Valid? = null
     var trend: TrendPlanValidation.Valid? = null
+    var podView: PodViewValidation.Valid? = null
     var sourceRequest: WindowedSourceRequest? = null
     val sourceContexts = mutableListOf<ByteArray>()
     val postgresFiles = mutableMapOf<String, ByteArray>()
@@ -1281,12 +1289,13 @@ private suspend fun receiveJob(
     var diagnosticsSeen = false
     var capacitySeen = false
     var trendSeen = false
+    var podViewSeen = false
     var parts = 0
     var invalidParts = false
     try {
         call.receiveMultipart(formFieldLimit = (MAX_RESOURCE_SNAPSHOT_BYTES + 1).toLong()).forEachPart { part ->
             try {
-                if (++parts > 24) malformed("Job multipart body has too many parts")
+                if (++parts > MAX_JOB_PARTS) malformed("Job multipart body has too many parts")
                 when {
                     part is PartData.FileItem && part.name in POSTGRES_PART_LIMITS && part.name !in postgresFiles && !invalidParts -> {
                         val name = checkNotNull(part.name)
@@ -1408,6 +1417,23 @@ private suspend fun receiveJob(
                             }
                     }
 
+                    part is PartData.FileItem && part.name == "pod_view" && !podViewSeen && !invalidParts -> {
+                        podViewSeen = true
+                        podView =
+                            when (
+                                val validation =
+                                    withContext(Dispatchers.IO) { validatePodView(part.provider().toInputStream(), MAX_POD_VIEW_BYTES) }
+                            ) {
+                                is PodViewValidation.Valid -> validation
+                                is PodViewValidation.Invalid -> {
+                                    if (validation.errors.any { it.code == "POD_VIEW_LIMIT_EXCEEDED" }) {
+                                        tooLarge("Pod view exceeds its resource limit")
+                                    }
+                                    throw InvalidPodView(validation.errors)
+                                }
+                            }
+                    }
+
                     else -> invalidParts = true
                 }
             } finally {
@@ -1426,6 +1452,8 @@ private suspend fun receiveJob(
         throw failure
     } catch (failure: InvalidTrend) {
         throw failure
+    } catch (failure: InvalidPodView) {
+        throw failure
     } catch (_: Exception) {
         malformed("Multipart body is malformed")
     }
@@ -1435,6 +1463,7 @@ private suspend fun receiveJob(
             diagnosticsSeen ||
             capacitySeen ||
             trendSeen ||
+            podViewSeen ||
             sourceContexts.isNotEmpty()
         ) {
             malformed("Online acquisition cannot be combined with manual source inputs")
@@ -1498,6 +1527,20 @@ private suspend fun receiveJob(
         val errors = validateTrendBinding(plan, snapshot)
         if (errors.isNotEmpty()) throw InvalidTrend(errors)
     }
+    podView?.let { view ->
+        val snapshot =
+            resources ?: throw InvalidPodView(
+                listOf(
+                    PolicyValidationError(
+                        "POD_VIEW_RESOURCE_REQUIRED",
+                        "/resource_snapshot_sha256",
+                        "Pod view requires a resource snapshot",
+                    ),
+                ),
+            )
+        val errors = validatePodViewBinding(view, input.sha256, snapshot)
+        if (errors.isNotEmpty()) throw InvalidPodView(errors)
+    }
     policy?.let { valid ->
         resources?.let { snapshot ->
             val errors = validatePlatformBinding(valid.policy, snapshot.snapshot)
@@ -1535,6 +1578,7 @@ private suspend fun receiveJob(
         diagnostics = diagnostics,
         capacity = capacity,
         trend = trend,
+        podView = podView,
         sourceRequest = sourceRequest,
         sourceAcquisition = acquisition,
         postgres = postgres,
@@ -1846,6 +1890,10 @@ private class InvalidTrend(
     val errors: List<PolicyValidationError>,
 ) : RuntimeException()
 
+private class InvalidPodView(
+    val errors: List<PolicyValidationError>,
+) : RuntimeException()
+
 private fun randomToken(): String {
     val bytes = ByteArray(32)
     SecureRandom().nextBytes(bytes)
@@ -1864,8 +1912,11 @@ private const val MAX_DIAGNOSTIC_BYTES = 1024 * 1024
 private const val MAX_CONTEXT_BYTES = 32L * 1024 * 1024
 private const val MAX_JOB_REQUEST_BYTES =
     MAX_RESOURCE_SNAPSHOT_BYTES + 2 * MAX_RESOURCE_BYTES + MAX_CONTEXT_BYTES + 4 * 1024 * 1024 +
-        MAX_POLICY_BYTES + MAX_DIAGNOSTIC_BYTES + MAX_CAPACITY_PLAN_BYTES + MAX_TREND_PLAN_BYTES +
+        MAX_POLICY_BYTES + MAX_DIAGNOSTIC_BYTES + MAX_CAPACITY_PLAN_BYTES + MAX_TREND_PLAN_BYTES + MAX_POD_VIEW_BYTES +
         MAX_MULTIPART_OVERHEAD_BYTES
+
+// 24 before pod_view; one more part for pod_view (ADR 0020, section 4).
+private const val MAX_JOB_PARTS = 25
 private val POSTGRES_PART_LIMITS =
     mapOf(
         "postgres_pre" to MAX_RESOURCE_BYTES,

@@ -1,9 +1,12 @@
 package io.ltverdict.cli
 
 import com.sun.net.httpserver.HttpServer
+import io.ltverdict.core.PodViewValidation
 import io.ltverdict.core.PolicyValidation
 import io.ltverdict.core.ResourceValidation
+import io.ltverdict.core.podViewTestJson
 import io.ltverdict.core.sha256Hex
+import io.ltverdict.core.validatePodView
 import io.ltverdict.core.validatePolicy
 import io.ltverdict.core.validateResourceSnapshot
 import io.ltverdict.sources.ONLINE_LOAD
@@ -950,6 +953,87 @@ class CommandLineTest {
         val replay = run(*args)
         assertEquals(0, replay.exitCode, replay.stderr)
         assertEquals(first.stdout, replay.stdout)
+    }
+
+    @Test
+    fun `pod view rejects malformed missing duplicate resource-less and online-source use`() {
+        val input = fixture("jmeter/csv-5.6.3/input.jtl").toString()
+        val view = tempDir.resolve("pod-view.json")
+        Files.writeString(view, "{}")
+        assertError(run("analyze", input, "--pod-view", view.toString()), 4, "invalid pod view")
+        assertError(run("analyze", input, "--pod-view", tempDir.resolve("missing.json").toString()), 4, "missing pod view")
+        assertError(run("analyze", input, "--pod-view", view.toString(), "--pod-view", view.toString()), 64, "duplicate pod view flag")
+        assertError(run("analyze", input, "--pod-view"), 64, "pod view flag without a value")
+
+        Files.writeString(view, podViewTestJson("a".repeat(64), "b".repeat(64), null, 0, 1000, 1))
+        val resourceLess = run("analyze", input, "--pod-view", view.toString(), "--data-dir", tempDir.resolve("no-resources").toString())
+        assertError(resourceLess, 4, "pod view needs resources")
+        assertTrue(resourceLess.stderr.contains("POD_VIEW_RESOURCE_REQUIRED"), resourceLess.stderr)
+
+        val online =
+            run("analyze", input, "--pod-view", view.toString(), "--connections", "c.json", "--source", "s.json")
+        assertError(online, 4, "pod view with an online source")
+        assertTrue(online.stderr.contains("SOURCE_INPUT_CONFLICT"), online.stderr)
+    }
+
+    @Test
+    fun `pod view binding errors stop the CLI before an analysis is saved`() {
+        val input = tempDir.resolve("pod-view-bad.jtl")
+        Files.writeString(input, trendLoad())
+        val inputHash = sha256Hex(Files.readAllBytes(input))
+        val resources = tempDir.resolve("pod-view-bad-resources.json")
+        Files.writeString(resources, trendResources(inputHash))
+        val snapshotHash = (Files.newInputStream(resources).use(::validateResourceSnapshot) as ResourceValidation.Valid).semanticSha256
+        val dataDir = tempDir.resolve("pod-view-bad-data")
+
+        fun refusal(json: String): CliResult {
+            val view = tempDir.resolve("pod-view-bad.json")
+            Files.writeString(view, json)
+            return run("analyze", input.toString(), "--resources", resources.toString(), "--pod-view", view.toString(), "--data-dir", dataDir.toString())
+        }
+        listOf(
+            "POD_VIEW_INPUT_MISMATCH" to podViewTestJson("f".repeat(64), snapshotHash, null, 1767225600000, 10000, 4),
+            "POD_VIEW_SNAPSHOT_MISMATCH" to podViewTestJson(inputHash, "e".repeat(64), null, 1767225600000, 10000, 4),
+            "POD_VIEW_ARM_MISMATCH" to podViewTestJson(inputHash, snapshotHash, "A", 1767225600000, 10000, 4),
+            "POD_VIEW_GRID_MISMATCH" to podViewTestJson(inputHash, snapshotHash, null, 1767225600000, 10000, 5),
+        ).forEach { (code, json) ->
+            val result = refusal(json)
+            assertError(result, 4, code)
+            assertTrue(result.stderr.contains(code), result.stderr)
+        }
+        assertFalse(Files.exists(dataDir.resolve("runs").resolve("jmeter_jtl_csv-$inputHash").resolve("analyses")))
+    }
+
+    @Test
+    fun `CLI stores the canonical pod view without changing the result and replays byte identically`() {
+        val input = tempDir.resolve("pod-view.jtl")
+        Files.writeString(input, trendLoad())
+        val inputHash = sha256Hex(Files.readAllBytes(input))
+        val resources = tempDir.resolve("pod-view-resources.json")
+        Files.writeString(resources, trendResources(inputHash))
+        val snapshotHash = (Files.newInputStream(resources).use(::validateResourceSnapshot) as ResourceValidation.Valid).semanticSha256
+        val view = tempDir.resolve("pod-view.json")
+        Files.writeString(view, podViewTestJson(inputHash, snapshotHash, null, 1767225600000, 10000, 4))
+        val dataDir = tempDir.resolve("pod-view-data")
+        val base = arrayOf("analyze", input.toString(), "--resources", resources.toString(), "--data-dir", dataDir.toString())
+
+        val plain = run(*base)
+        val withView = run(*base, "--pod-view", view.toString())
+        assertEquals(0, plain.exitCode, plain.stderr)
+        assertEquals(0, withView.exitCode, withView.stderr)
+        assertEquals(plain.stdout, withView.stdout)
+
+        val runId = Json.parseToJsonElement(withView.stdout).jsonObject.getValue("run_id").jsonPrimitive.content
+        val analyses = Files.list(dataDir.resolve("runs").resolve(runId).resolve("analyses")).use { it.toList() }
+        assertEquals(2, analyses.size)
+        val stored = analyses.single { Files.exists(it.resolve("pod-view.json")) }
+        val expected = (validatePodView(Files.newInputStream(view)) as PodViewValidation.Valid).canonicalBytes()
+        assertArrayEquals(expected, Files.readAllBytes(stored.resolve("pod-view.json")))
+
+        val replay = run(*base, "--pod-view", view.toString())
+        assertEquals(0, replay.exitCode, replay.stderr)
+        assertEquals(withView.stdout, replay.stdout)
+        assertEquals(2, Files.list(dataDir.resolve("runs").resolve(runId).resolve("analyses")).use { it.count() }.toInt())
     }
 
     private fun assertError(

@@ -40,6 +40,27 @@ class CanaryTests(unittest.TestCase):
         self.assertEqual('inconclusive', probe.evaluate_canary(no_control, write_target_exists=False)[0])
 
 
+class PolicyBlockTests(unittest.TestCase):
+    def test_policy_rejections_are_counted_in_the_stderr_log(self):
+        line = b'ERROR codex_core::tools::router: error=exec_command failed: rejected: blocked by policy'
+        log = line + b'\nother line\n' + line + b'\n'
+        self.assertEqual(2, probe.count_policy_rejections(log))
+        self.assertEqual(0, probe.count_policy_rejections(b''))
+
+    def test_every_attempt_rejected_without_a_control_is_blocked_not_pass_and_not_violation(self):
+        r = result(needles={'outside': False, 'control': False}, policy_rejections=4)
+        self.assertEqual('blocked_by_policy', probe.evaluate_canary(r, write_target_exists=False, attempts=4)[0])
+
+    def test_fewer_rejections_than_attempts_stay_inconclusive(self):
+        r = result(needles={'outside': False, 'control': False}, policy_rejections=3)
+        self.assertEqual('inconclusive', probe.evaluate_canary(r, write_target_exists=False, attempts=4)[0])
+
+    def test_network_all_rejected_is_blocked_by_policy(self):
+        r = result(policy_rejections=2)
+        self.assertEqual('blocked_by_policy', probe.evaluate_network(r, hits=0, attempts=2)[0])
+        self.assertEqual('violation', probe.evaluate_network(r, hits=1, attempts=2)[0])
+
+
 class NetworkTests(unittest.TestCase):
     def test_a_listener_hit_is_a_violation(self):
         r = result(events={'command_exit_codes': [0]})

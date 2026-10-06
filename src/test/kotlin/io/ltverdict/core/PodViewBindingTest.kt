@@ -103,6 +103,20 @@ class PodViewBindingTest {
         assertEquals(without["resource_arm"], with["resource_arm"])
     }
 
+    @Test
+    fun `the synthetic producer set validates and binds to its own snapshot`() {
+        val dir = "fixtures/platform/pod-view-synthetic"
+        val resources = snapshot("$dir/resource-snapshot.json")
+        val view =
+            assertInstanceOf(
+                PodViewValidation.Valid::class.java,
+                validatePodView(ByteArrayInputStream(Files.readAllBytes(Path.of("$dir/pod-view.json")))),
+            )
+
+        assertEquals("B", resources.snapshot.arm)
+        assertEquals(emptyList<PolicyValidationError>(), bind(view, view.view.loadInputSha256, resources))
+    }
+
     private fun bind(
         view: PodViewValidation.Valid,
         loadInputSha256: String = HASH,

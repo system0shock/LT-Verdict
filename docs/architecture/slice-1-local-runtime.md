@@ -419,6 +419,29 @@ GET/POST/DELETE baseline возвращают `{baseline: selection|null}`. Manu
 series 128 UTF-8 bytes и statistical candidates 3..20 разных runs; file cap
 32 KiB. Route mutations проходят обычную Host/Origin/session/CSRF boundary.
 
+Допуск кандидата ([ADR 0019](../adr/0019-release-history-and-baseline-eligibility.md),
+раздел 6) единый для обоих режимов: `baselineCandidateRejection` в
+`BaselineComparison.kt` по сохранённому результату возвращает первый нарушенный
+пункт `BASELINE_CANDIDATE_INVALID` (`run_validity != VALID`),
+`BASELINE_CANDIDATE_INCOMPLETE` (`analysis_coverage.status != COMPLETE`) или
+`BASELINE_CANDIDATE_NOT_PASS` (`policy_verdict != PASS`) либо `null`. Его
+вызывают `selectBaseline` (оба режима, до расчёта, по кандидатам в порядке
+запроса) и `statisticalBaselineSelection`. Порядок кодов 422: проверки запроса
+(форма, `comparable`, число кандидатов, дубли runs), затем чтение результата
+каждого кандидата (`BASELINE_CANDIDATE_TOO_LARGE`, ошибки целостности как
+`500 CORRUPT_BASELINE`), затем допуск, затем проверки statistical (метрики,
+identity, `BASELINE_MIXED_SEMANTICS`).
+
+Результат кандидата читает `RunBundleStore.readVerifiedAnalysis`: под
+`operationLock` остаётся проверка манифеста, а чтение и SHA-256
+`analysis-result.json` (предел `MAX_VERIFIED_RESULT_BYTES` = 64 MiB, по размеру
+из манифеста до чтения) выполняются вне замка, потому что опубликованные анализы
+неизменяемы и хранилище их не удаляет (дополнение ADR 0002 от 2026-10-01).
+Обычное чтение анализа сверяет только путь и размер, поэтому замена результата
+при сохранённом размере без этой проверки обошла бы допуск. Ранее сохранённый
+`baseline.json` читается без новых запретов; отказ допуска действует только при
+выборе.
+
 `BaselineComparison.kt` вычисляет deterministic rank selection и overall
 deltas. Round-to-6 decimal strings — только presentation; ratio comparison
 точный. Техническая identity semantics и подтверждение пользователем заданных

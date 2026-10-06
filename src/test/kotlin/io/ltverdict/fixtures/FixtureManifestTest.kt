@@ -205,6 +205,7 @@ class FixtureManifestTest {
                 "docs/contracts/policy/v1/examples/invalid/empty-rules.json",
                 "docs/contracts/policy/v1/examples/valid/platform-services.json",
                 "docs/contracts/policy/v1/examples/valid/platform-gap-tolerance.json",
+                "docs/contracts/policy/v1/examples/valid/platform-base-profile.json",
                 "docs/contracts/policy/v1/examples/invalid/platform-tolerance-diagnostic.json",
                 "docs/contracts/policy/v1/examples/invalid/platform-except-outside-catalog.json",
                 "docs/contracts/policy/v1/examples/invalid/platform-all-services-without-catalog.json",

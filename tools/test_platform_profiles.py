@@ -264,6 +264,7 @@ class PlatformProfilesTest(unittest.TestCase):
             ("fixtures/platform/profile-config.example.json", "docs/contracts/sources/v1/platform-openshift-connections.example.json"),
             ("fixtures/platform/profile-config.peak.example.json", "docs/contracts/sources/v1/platform-openshift-peak-connections.example.json"),
             ("fixtures/platform/profile-config.autostep.example.json", "docs/contracts/sources/v1/platform-openshift-autostep-connections.example.json"),
+            ("fixtures/platform/profile-config.load-generator.example.json", "docs/contracts/sources/v1/platform-openshift-load-generator-connections.example.json"),
         )
         for config_path, example_path in pairs:
             config = json.loads(Path(config_path).read_text(encoding="utf-8"))
@@ -336,6 +337,141 @@ class PlatformProfilesTest(unittest.TestCase):
         spec = SIGNALS["sidecar_memory_limit_ratio"]
         self.assertIn('kube_pod_container_info{namespace="@ns@",container=~"@sidecars@"}', spec.expression)
         self.assertNotIn("@cont@", SIGNALS["sidecar_cpu_throttling"].expression)
+
+
+LOAD_EXPRESSIONS = {
+    "target_rps": 'avg_over_time(planned_rps{generator="jmeter"}[$__interval])',
+    "concurrency": 'avg_over_time(planned_threads{generator="jmeter"}[$__interval])',
+}
+LOAD = {"entity": "jmeter", **LOAD_EXPRESSIONS}
+
+
+class LoadGeneratorControlsTest(unittest.TestCase):
+    def test_load_generator_block_adds_one_profile_with_the_catalog_control_series(self):
+        profiles = build_connections(dict(BASE, load_generator=LOAD))["connections"]
+        self.assertEqual(["ocp-1", "ocp-load"], [p["id"] for p in profiles])
+        shared = {k: v for k, v in profiles[0].items() if k not in ("id", "queries", "rules")}
+        self.assertEqual(shared, {k: v for k, v in profiles[1].items() if k not in ("id", "queries", "rules")})
+        self.assertEqual(
+            [
+                {"id": "jmeter.target_rps", "expression": LOAD_EXPRESSIONS["target_rps"], "metric": "target_rps",
+                 "unit": "requests/s", "entity": "jmeter", "role": "generator", "aggregation": "interval_mean"},
+                {"id": "jmeter.concurrency", "expression": LOAD_EXPRESSIONS["concurrency"], "metric": "concurrency",
+                 "unit": "count", "entity": "jmeter", "role": "generator", "aggregation": "interval_mean"},
+            ],
+            profiles[1]["queries"],
+        )
+
+    def test_a_single_control_is_enough_and_the_arm_prefix_applies(self):
+        load = {"entity": "jmeter", "concurrency": LOAD_EXPRESSIONS["concurrency"]}
+        profile = build_connections(dict(BASE, load_generator=load, arm="A"))["connections"][-1]
+        self.assertEqual(("ocp-A-load", "A"), (profile["id"], profile["arm"]))
+        self.assertEqual(["concurrency"], [q["metric"] for q in profile["queries"]])
+
+    def test_config_without_the_block_is_unchanged(self):
+        self.assertEqual(["ocp-1"], [p["id"] for p in build_connections(BASE)["connections"]])
+
+    def test_invalid_load_generator_blocks_are_refused(self):
+        bad = (
+            ("not-an-object", "load_generator"),
+            ({"entity": "jmeter"}, "load_generator"),
+            ({**LOAD, "extra": "x"}, "load_generator"),
+            ({**LOAD, "entity": "bad name"}, "invalid namespace/service/arm name"),
+            ({"target_rps": LOAD["target_rps"]}, "load_generator"),
+            ({**LOAD, "target_rps": ""}, "load_generator"),
+            ({**LOAD, "target_rps": 'planned_rps{generator="jmeter"}'}, r"\$__interval"),
+            ({**LOAD, "concurrency": "x" * 65_537 + "[$__interval]"}, "PLATFORM_PROFILE_EXPRESSION_TOO_LARGE"),
+        )
+        for block, message in bad:
+            with self.subTest(block=block), self.assertRaisesRegex(ValueError, message):
+                build_connections(dict(BASE, load_generator=block))
+
+    def test_the_load_profile_cannot_become_a_seventeenth_profile(self):
+        config = dict(BASE, services=[f"svc-{i:03d}" for i in range(128)], signals=list(SIGNALS)[:8],
+                      sidecar_containers="istio-proxy")
+        with patch("tools.platform_profiles.MAX_SOURCE_CONFIG_BYTES", 10**9):  # the byte limit is covered above
+            self.assertEqual(16, len(build_connections(config)["connections"]))
+            with self.assertRaisesRegex(ValueError, "PLATFORM_PROFILE_TOO_MANY_QUERIES"):
+                build_connections(dict(config, load_generator=LOAD))
+
+    def test_a_rate_expression_follows_the_rate_window_rule(self):
+        load = {"entity": "jmeter", "target_rps": "rate(planned_total[$__interval])"}
+        config = dict(BASE, signals=["cpu_limit_ratio"], load_generator=load, scrape_interval_ms=30000)
+        with self.assertRaisesRegex(ValueError, "PLATFORM_RATE_WINDOW_TOO_SHORT: load_generator"):
+            build_connections(dict(config, request_step_ms=30000))
+        build_connections(dict(config, request_step_ms=60000))
+
+    def test_the_load_profile_is_checked_for_qualified_id_length(self):
+        load = {"entity": "j" * 100, "target_rps": LOAD["target_rps"]}
+        with self.assertRaisesRegex(ValueError, "id too long"):
+            build_connections(dict(BASE, load_generator=load, arm="A" * 20))
+
+
+class CatalogProfileReconciliationTest(unittest.TestCase):
+    # Series the catalog names that no generator here produces: they come from a per-source adapter
+    # (downstream service p95 and error rate, the load generator host CPU), not from the OpenShift/JVM packs.
+    SOURCE_SPECIFIC = {
+        ("service_response_time_p95", "ms", "system"),
+        ("service_error_rate", "ratio", "system"),
+        ("cpu_used", "ratio", "generator"),
+    }
+    WITHOUT_LOAD = dict(
+        BASE, services=["orders-svc"], signals=list(SIGNALS), peak_aggregation=True, sidecar_containers="istio-proxy",
+    )
+    FULL = dict(WITHOUT_LOAD, load_generator=LOAD)
+
+    def setUp(self):
+        from tools import correlation_catalog
+
+        self.module = correlation_catalog
+        self.catalog = correlation_catalog.load_catalog()
+
+    def required(self):
+        needed = set()
+        for family in self.catalog["families"]:
+            for h in family["hypotheses"]:
+                needed.add((h["metric"], h["unit"], "generator" if h["scope"] == "load_generator" else "system"))
+                needed.update((c, self.module.CONTROL_UNITS[c], "generator") for c in h["controls"])
+        return needed
+
+    @staticmethod
+    def generated(config):
+        return [q for c in build_connections(config)["connections"] for q in c["queries"]]
+
+    def test_every_catalog_series_is_generated_or_declared_source_specific(self):
+        produced = {(q["metric"], q["unit"], q["role"]) for q in self.generated(self.FULL)}
+        self.assertEqual(self.SOURCE_SPECIFIC, self.required() - produced)
+
+    def test_catalog_controls_are_generated_only_with_the_load_generator_block(self):
+        produced = {(q["metric"], q["unit"], q["role"]) for q in self.generated(self.WITHOUT_LOAD)}
+        self.assertNotIn(("target_rps", "requests/s", "generator"), produced)
+        self.assertNotIn(("concurrency", "count", "generator"), produced)
+
+    def snapshot(self, config):
+        # With several profiles selected the source assigns the series ids profileId/queryId (online-sources.md).
+        series = [{**{k: q[k] for k in ("metric", "unit", "entity", "role", "aggregation")}, "id": f"{c['id']}/{q['id']}",
+                   "labels": q.get("labels", {}), "values": [0.0, 1.0, 2.0, 3.0]}
+                  for c in build_connections(config)["connections"] for q in c["queries"]]
+        return {"schema_version": "resource-snapshot.v1", "load_input_sha256": "0" * 64, "start_epoch_ms": 1767225600000,
+                "step_ms": 10000, "point_count": 4, "series": series,
+                "windows": [{"id": "stage-1", "from_epoch_ms": 1767225600000, "to_epoch_ms": 1767225640000}],
+                "provenance": {"source_kind": "fixture", "query_semantics": "x", "clock_alignment": "declared_aligned"}}
+
+    def test_generated_series_expand_into_a_plan_with_the_controls_bound_to_them(self):
+        for load_metric in ("response_time_p95_ms", "error_rate", "throughput_rps"):
+            with self.subTest(load_metric=load_metric):
+                plan, _ = self.module.expand(self.catalog, self.snapshot(self.FULL), ["stage-1"],
+                                             {"load_metric": load_metric, "service": "orders-svc"}, [])
+                self.assertIsNotNone(plan)
+                bound = {c["series_id"] for pair in plan["pairs"] for c in pair["controls"]}
+                self.assertTrue(bound)
+                self.assertLessEqual(bound, {"ocp-load/jmeter.target_rps", "ocp-load/jmeter.concurrency"})
+
+    def test_without_the_load_generator_block_the_catalog_gives_no_plan(self):
+        plan, skipped = self.module.expand(self.catalog, self.snapshot(self.WITHOUT_LOAD), ["stage-1"],
+                                           {"load_metric": "response_time_p95_ms", "service": "orders-svc"}, [])
+        self.assertIsNone(plan)
+        self.assertIn("CONTROL_SERIES_MISSING", {item["reason"] for item in skipped})
 
 
 if __name__ == "__main__":

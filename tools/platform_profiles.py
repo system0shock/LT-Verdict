@@ -19,6 +19,9 @@ MAX_SOURCE_CONFIG_BYTES = 1_048_576
 NAME = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]{0,99}")
 SUBQUERY_STEP = re.compile(r"[1-9][0-9]*s")
 SCHEMA_VERSION = "source-connections.v1"
+# Controls the correlation catalog binds by name (docs/contracts/diagnostics/v1/correlation-catalog.v1.json):
+# key of the load_generator block -> (metric, unit). The expression is the profile author's; the names are fixed here.
+LOAD_CONTROLS = {"target_rps": ("target_rps", "requests/s"), "concurrency": ("concurrency", "count")}
 DEFAULT_GOVERNOR = {"requests_per_second": 5, "burst": 5, "timeout_ms": 30000, "max_attempts": 3}
 
 
@@ -29,6 +32,12 @@ def build_connections(config: dict) -> dict:
     names = [config["namespace"], *services]
     if "arm" in config:
         names.append(config["arm"])
+    load = config.get("load_generator")
+    if "load_generator" in config:
+        valid = isinstance(load, dict) and set(load) <= {"entity", *LOAD_CONTROLS} and "entity" in load             and any(key in load for key in LOAD_CONTROLS)
+        if not valid or not all(isinstance(load[key], str) and load[key] for key in load if key != "entity"):
+            raise ValueError("load_generator must be {entity, target_rps and/or concurrency} with non-empty expressions")
+        names.append(load["entity"])
     for value in names:
         if not isinstance(value, str) or not NAME.fullmatch(value):
             raise ValueError(f"invalid namespace/service/arm name: {value}")
@@ -90,6 +99,18 @@ def build_connections(config: dict) -> dict:
     legacy = {rule["signal"]: rule for rule in config.get("legacy_sla_rules", [])}
     if set(legacy) - set(signals):
         raise ValueError("legacy_sla_rules reference a signal that is not generated")
+
+    if load is not None:
+        for key in LOAD_CONTROLS:
+            expression = load.get(key)
+            if expression is None:
+                continue
+            if "$__interval" not in expression:
+                raise ValueError(f"load_generator.{key} must be bound to $__interval")
+            if len(expression.encode()) > MAX_QUERY_BYTES:
+                raise ValueError("PLATFORM_PROFILE_EXPRESSION_TOO_LARGE")
+            if request_step is not None and "rate(" in expression and scrape * 2 > request_step:
+                raise ValueError(f"PLATFORM_RATE_WINDOW_TOO_SHORT: load_generator.{key}")
 
     pairs = [(signal, service) for signal in signals for service in services]
     if len(pairs) > MAX_QUERIES_PER_PROFILE * MAX_PROFILES:
@@ -167,6 +188,32 @@ def build_connections(config: dict) -> dict:
         if scrape is not None:
             connection["scrape_interval_ms"] = scrape
         connections.append(connection)
+    if load is not None:
+        if len(chunks) >= MAX_PROFILES:
+            raise ValueError("PLATFORM_PROFILE_TOO_MANY_QUERIES")
+        load_id = f"{prefix}-load"
+        load_queries = []
+        for key, (metric, unit) in LOAD_CONTROLS.items():
+            if key not in load:
+                continue
+            query_id = f"{load['entity']}.{key}"
+            if len(f"{load_id}/{query_id}".encode()) > MAX_IDENTIFIER_BYTES:
+                raise ValueError(f"qualified id too long: {load_id}/{query_id}")
+            load_queries.append(
+                {
+                    "id": query_id,
+                    "expression": load[key],
+                    "metric": metric,
+                    "unit": unit,
+                    "entity": load["entity"],
+                    "role": "generator",
+                    "aggregation": "interval_mean",
+                }
+            )
+        # Same source settings as the service profiles; only id and queries differ.
+        connections.append(
+            {k: (load_id if k == "id" else load_queries if k == "queries" else v) for k, v in connections[-1].items() if k != "rules"}
+        )
     v3 = scrape is not None or bool(config.get("arm"))
     document = {"schema_version": "source-connections.v3" if v3 else SCHEMA_VERSION, "connections": connections}
     if len(serialize(document).encode()) > MAX_SOURCE_CONFIG_BYTES:

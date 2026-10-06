@@ -1,17 +1,19 @@
 <script setup lang="ts">
 import { computed, nextTick, ref, watch } from 'vue'
-import { ApiError, createRelease, getBaseline, getSavedAnalytics, listReleases, setBaseline } from '../api'
-import type { AnalysisReference, BaselineSlotView, Release, ReleaseAnalysis } from '../types'
+import { ApiError, createRelease, getBaseline, getSavedAnalytics, listAnalyses, listReleases, setBaseline, updateRelease } from '../api'
+import type { AnalysisReference, AnalysisSummary, BaselineSlotView, Release, ReleaseAnalysis } from '../types'
 import type { SavedAnalytics } from '../analyticsTypes'
+import HistoryDynamics from './HistoryDynamics.vue'
 import {
-  DEFAULT_VISIBLE_RELEASES, PROFILE_FIELDS, dynamicsAnchor, emptyProfileForm, formatStarted, profileSummary, releaseRequest, utf8Length, visibleReleases,
+  CONSIDERED_RELEASES, DEFAULT_VISIBLE_RELEASES, PROFILE_FIELDS, dynamicsAnchor, dynamicsPoints, emptyProfileForm, formatStarted, profileFromForm, profileRelation, profileSummary,
+  profileToForm, releaseRequest, releaseUpdate, statisticalAvailability, suggestManualBaseline, utf8Length, visibleReleases,
 } from './history'
 import { HISTORY_LABELS, historyErrorText } from './labels.history'
 
 type RowAction = { release: Release; analysis: ReleaseAnalysis }
 
 const props = defineProps<{ selection: AnalysisReference | null; active: boolean; version: number; working: boolean }>()
-const emit = defineEmits<{ open: [action: RowAction]; compare: [action: RowAction]; 'baseline-changed': [series: string] }>()
+const emit = defineEmits<{ open: [action: RowAction]; compare: [action: RowAction]; 'baseline-changed': [series: string]; statistical: [series: string] }>()
 
 const L = HISTORY_LABELS
 const series = ref('')
@@ -28,7 +30,16 @@ const slots = ref<BaselineSlotView[]>([])
 const dynamics = ref<SavedAnalytics | null>(null)
 const dynamicsFailed = ref(false)
 const form = ref({ series: '', label: '', notes: '', profile: emptyProfileForm() })
+const prefilledFrom = ref<string | null>(null)
+const profileConfirmed = ref(false)
+const rebinding = ref<Release | null>(null)
+const rebindOptions = ref<AnalysisSummary[]>([])
+const rebindNext = ref<string | null>(null)
+const rebindChoice = ref('')
+const rebindLoading = ref(false)
 let revision = 0
+let prefillRevision = 0
+let rebindRevision = 0
 
 const rows = computed(() => visibleReleases(releases.value, showAll.value))
 const total = computed(() => seriesList.value.find((entry) => entry.series === series.value)?.count ?? releases.value.length)
@@ -36,12 +47,26 @@ const canToggle = computed(() => total.value > DEFAULT_VISIBLE_RELEASES)
 const numbers = computed(() => new Map((dynamics.value?.dynamics?.rows ?? []).map((row) => [row.reference.analysis_id, row])))
 const tooLong = computed(() => utf8Length(form.value.series.trim()) > 128 || utf8Length(form.value.label.trim()) > 128
   || utf8Length(form.value.notes) > 1024 || PROFILE_FIELDS.some((name) => utf8Length(form.value.profile[name].trim()) > 128))
-const formValid = computed(() => props.selection !== null && form.value.series.trim() !== '' && form.value.label.trim() !== '' && !tooLong.value)
+const profileFilled = computed(() => profileFromForm(form.value.profile) !== null)
+const formValid = computed(() => props.selection !== null && form.value.series.trim() !== '' && form.value.label.trim() !== '' && !tooLong.value
+  && (!profileFilled.value || profileConfirmed.value))
+// The newest release of the series is the reference of the profile comparison, the suggestion and the statistical availability.
+const newest = computed(() => releases.value[0] ?? null)
+const newestArm = computed(() => newest.value?.analyses[0]?.arm ?? null)
+const suggested = computed(() => (newest.value ? suggestManualBaseline(releases.value, newest.value, newestArm.value) : null))
+const statistical = computed(() => (newest.value ? statisticalAvailability(releases.value, newest.value, newestArm.value) : null))
+const points = computed(() => dynamicsPoints(rows.value, (analysisId) => metricOf(analysisId, 'response_time_p95_ms')))
+const hiddenLabels = computed(() => rows.value.filter((release) => !points.value.some((point) => point.release.release_id === release.release_id)).map((release) => release.label))
 const busyAny = computed(() => loading.value || busy.value || props.working)
 
 watch(() => props.active, (active) => { if (active) void load() }, { immediate: true })
 watch(() => props.version, () => { if (props.active) void load() })
-watch(series, (value) => { if (value && form.value.series === '') form.value.series = value })
+watch(series, (value) => {
+  if (value && form.value.series === '') {
+    form.value.series = value
+    void prefillProfile()
+  }
+})
 
 function showError(failure: unknown) {
   const phrase = failure instanceof ApiError ? historyErrorText(failure.code, failure.limit) : null
@@ -63,7 +88,7 @@ async function load() {
     if (series.value) {
       let after: string | undefined
       do {
-        const page = await listReleases({ series: series.value, after, limit: showAll.value ? 100 : DEFAULT_VISIBLE_RELEASES })
+        const page = await listReleases({ series: series.value, after, limit: showAll.value ? 100 : CONSIDERED_RELEASES })
         if (current !== revision) return
         loaded.push(...page.releases)
         after = showAll.value ? page.next_after ?? undefined : undefined
@@ -152,6 +177,97 @@ async function changeSeries(value: string) {
   await load()
 }
 
+// The profile of the newest release of the series is offered for confirmation, never carried over silently.
+async function prefillProfile() {
+  const name = form.value.series.trim()
+  if (!name || (profileFilled.value && prefilledFrom.value === null)) return
+  const wanted = ++prefillRevision
+  try {
+    const page = await listReleases({ series: name, limit: 1 })
+    if (wanted !== prefillRevision) return
+    const latest = page.releases[0]
+    profileConfirmed.value = false
+    if (latest?.profile) {
+      form.value.profile = profileToForm(latest.profile)
+      prefilledFrom.value = latest.label
+    } else if (prefilledFrom.value !== null) {
+      form.value.profile = emptyProfileForm()
+      prefilledFrom.value = null
+    }
+  } catch {
+    // The form works without the offer.
+  }
+}
+
+async function loadRebind(after?: string) {
+  const target = rebinding.value
+  if (!target) return
+  const current = ++rebindRevision
+  rebindLoading.value = true
+  try {
+    const page = await listAnalyses(target.run_id, after)
+    if (current !== rebindRevision) return
+    const own = target.analyses[0]?.analysis_id
+    rebindOptions.value = [...rebindOptions.value, ...page.analyses.filter((item) => item.analysis_id !== own)]
+    rebindNext.value = page.next_after
+  } catch (failure) {
+    if (current === rebindRevision) showError(failure)
+  } finally {
+    if (current === rebindRevision) rebindLoading.value = false
+  }
+}
+
+async function startRebind(release: Release) {
+  rebinding.value = release
+  rebindOptions.value = []
+  rebindNext.value = null
+  rebindChoice.value = ''
+  error.value = ''
+  notice.value = ''
+  // The focus moves to the panel at once: the list of analyses may take a while.
+  await nextTick()
+  document.getElementById('history-rebind-title')?.focus()
+  await loadRebind()
+}
+
+function seriesEdited() {
+  prefillRevision += 1
+}
+
+// An edit of the profile fields drops the offer and any answer still on its way.
+function profileEdited() {
+  prefilledFrom.value = null
+  prefillRevision += 1
+}
+
+async function closeRebind() {
+  const release = rebinding.value
+  rebinding.value = null
+  rebindRevision += 1
+  await nextTick()
+  if (release) document.getElementById(`rebind-${release.release_id}`)?.focus()
+}
+
+async function applyRebind() {
+  const release = rebinding.value
+  if (!release || !rebindChoice.value || busyAny.value) return
+  busy.value = true
+  error.value = ''
+  try {
+    const updated = await updateRelease(release.release_id, releaseUpdate(release, rebindChoice.value))
+    rebinding.value = null
+    notice.value = L.rebound(updated.label)
+    busy.value = false
+    await load()
+    await nextTick()
+    document.getElementById(`release-${updated.release_id}`)?.focus()
+  } catch (failure) {
+    showError(failure)
+  } finally {
+    busy.value = false
+  }
+}
+
 async function save() {
   if (!formValid.value || busyAny.value || !props.selection) return
   busy.value = true
@@ -161,8 +277,13 @@ async function save() {
     const created = await createRelease(releaseRequest(form.value, props.selection))
     series.value = created.series
     notice.value = L.saved(created.label)
+    form.value.label = ''
+    form.value.notes = ''
+    form.value.profile = emptyProfileForm()
+    prefilledFrom.value = null
+    profileConfirmed.value = false
     busy.value = false
-    await load()
+    await Promise.all([load(), prefillProfile()])
     await nextTick()
     // An older analysis can land outside the shown rows: the table region takes the focus then.
     const target = document.getElementById(`release-${created.release_id}`) ?? document.getElementById('history-table-region')
@@ -254,6 +375,48 @@ async function save() {
       {{ notice }}
     </p>
 
+    <HistoryDynamics
+      v-if="releases.length"
+      :points="points"
+      :hidden="hiddenLabels"
+    />
+
+    <div
+      v-if="newest && statistical"
+      class="history-hints"
+      data-testid="history-hints"
+    >
+      <p
+        v-if="!newest.profile"
+        data-testid="history-needs-profile"
+      >
+        {{ L.suggestionNeedsProfile }}
+      </p>
+      <template v-else>
+        <p
+          v-if="!statistical.available"
+          data-testid="history-statistical-hint"
+        >
+          {{ L.statisticalNeeds(statistical.eligibleRuns) }}
+        </p>
+        <template v-else>
+          <button
+            type="button"
+            data-testid="history-statistical"
+            aria-describedby="history-statistical-note"
+            :disabled="busyAny"
+            @click="emit('statistical', newest.series)"
+          >
+            {{ L.statisticalOpen }}
+          </button>
+          <small
+            id="history-statistical-note"
+            class="field__hint"
+          >{{ L.statisticalOpenNote }}</small>
+        </template>
+      </template>
+    </div>
+
     <div
       v-if="releases.length"
       id="history-table-region"
@@ -313,6 +476,12 @@ async function save() {
                 >
                   {{ analysis.arm === null ? '' : `${analysis.arm}: ` }}{{ analysis.policy_verdict }}
                   <span
+                    v-if="suggested && suggested.release === release && suggested.analysis === analysis"
+                    class="history-badge"
+                    data-testid="baseline-suggestion"
+                    :title="L.suggestionNote"
+                  >{{ L.suggestion }}</span>
+                  <span
                     v-if="isBaseline(release, analysis)"
                     class="history-badge"
                     data-testid="baseline-badge"
@@ -321,7 +490,14 @@ async function save() {
                 </li>
               </ul>
             </td>
-            <td>{{ profileSummary(release) ?? L.noProfile }}</td>
+            <td>
+              {{ profileSummary(release) ?? L.noProfile }}
+              <span
+                v-if="newest && release !== newest && profileRelation(release, newest) === 'mismatch'"
+                class="history-badge"
+                data-testid="profile-differs"
+              >{{ L.profileDiffers(newest.label) }}</span>
+            </td>
             <template v-if="release.analyses[0] && numbers.has(release.analyses[0].analysis_id)">
               <td>{{ shown(metricOf(release.analyses[0].analysis_id, 'response_time_p95_ms')) }}</td>
               <td>{{ shown(metricOf(release.analyses[0].analysis_id, 'error_rate_ratio')) }}</td>
@@ -372,11 +548,99 @@ async function save() {
                   >{{ reasonText(analysis) }}</small>
                 </li>
               </ul>
+              <button
+                :id="`rebind-${release.release_id}`"
+                type="button"
+                data-testid="rebind"
+                :disabled="busyAny || release.analyses.length !== 1 || release.analyses[0]?.analysis_state === 'CORRUPT'"
+                :aria-label="L.rebindAria(release.label, release.release_id.slice(-8))"
+                :aria-describedby="release.analyses.length !== 1 ? `rebind-why-${release.release_id}` : undefined"
+                @click="startRebind(release)"
+              >
+                {{ L.rebind }}
+              </button>
+              <small
+                v-if="release.analyses.length !== 1"
+                :id="`rebind-why-${release.release_id}`"
+                class="field__hint"
+              >{{ L.rebindMulti }}</small>
             </td>
           </tr>
         </tbody>
       </table>
     </div>
+    <section
+      v-if="rebinding"
+      class="history-rebind"
+      data-testid="rebind-panel"
+      aria-labelledby="history-rebind-title"
+    >
+      <h3
+        id="history-rebind-title"
+        tabindex="-1"
+      >
+        {{ L.rebindTitle(rebinding.label) }}
+      </h3>
+      <p>{{ L.rebindHint }}</p>
+      <p
+        v-if="rebindLoading && !rebindOptions.length"
+        role="status"
+      >
+        {{ L.rebindLoading }}
+      </p>
+      <p
+        v-else-if="!rebindOptions.length"
+        role="status"
+      >
+        {{ L.rebindEmpty }}
+      </p>
+      <fieldset
+        v-else
+        class="field history-profile"
+        :disabled="busyAny"
+      >
+        <legend>{{ L.rebindTitle(rebinding.label) }}</legend>
+        <label
+          v-for="option in rebindOptions"
+          :key="option.analysis_id"
+          class="baseline-slot"
+        >
+          <input
+            v-model="rebindChoice"
+            type="radio"
+            name="history-rebind"
+            :value="option.analysis_id"
+          >
+          <span>{{ L.rebindOption(option.analysis_id, option.policy_verdict) }}</span>
+        </label>
+      </fieldset>
+      <div class="policy-editor__actions">
+        <button
+          v-if="rebindNext"
+          type="button"
+          :disabled="busyAny || rebindLoading"
+          @click="loadRebind(rebindNext ?? undefined)"
+        >
+          {{ L.rebindMore }}
+        </button>
+        <button
+          type="button"
+          data-testid="rebind-apply"
+          :disabled="busyAny || !rebindChoice"
+          @click="applyRebind"
+        >
+          {{ L.rebindApply }}
+        </button>
+        <button
+          type="button"
+          :disabled="busyAny"
+          @click="closeRebind"
+        >
+          {{ L.rebindCancel }}
+        </button>
+      </div>
+    </section>
+
     <div v-if="canToggle">
       <button
         type="button"
@@ -415,6 +679,8 @@ async function save() {
             list="history-series-options"
             aria-describedby="history-form-series-hint"
             :disabled="busyAny || !selection"
+            @change="prefillProfile"
+            @input="seriesEdited"
           >
           <datalist id="history-series-options">
             <option
@@ -454,6 +720,13 @@ async function save() {
         <p class="field__hint">
           {{ L.profileHint }}
         </p>
+        <p
+          v-if="prefilledFrom !== null"
+          data-testid="profile-prefilled"
+          role="status"
+        >
+          {{ L.profilePrefilled(prefilledFrom) }}
+        </p>
         <div class="form-grid">
           <div
             v-for="name in PROFILE_FIELDS"
@@ -464,10 +737,31 @@ async function save() {
             <input
               :id="`history-profile-${name}`"
               v-model="form.profile[name]"
+              @input="profileEdited"
             >
           </div>
         </div>
       </fieldset>
+      <label
+        v-if="profileFilled"
+        class="baseline-confirmation"
+      >
+        <input
+          v-model="profileConfirmed"
+          type="checkbox"
+          data-testid="profile-confirm"
+          aria-describedby="history-profile-confirm-hint"
+          :disabled="busyAny || !selection"
+        >
+        {{ L.profileConfirm }}
+      </label>
+      <p
+        v-if="profileFilled"
+        id="history-profile-confirm-hint"
+        class="field__hint"
+      >
+        {{ L.profileConfirmHint }}
+      </p>
       <div class="field">
         <label for="history-form-notes">{{ L.formNotes }}</label>
         <textarea
@@ -502,9 +796,11 @@ async function save() {
 </template>
 
 <style>
+.history-hints { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.history-rebind { display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px; min-width: 0; padding: 16px; border: 1px solid var(--border); }
 .history-panel { display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; }
 .history-panel .panel__header { margin-bottom: 0; }
-.history-panel p, .history-panel li, .history-panel th { overflow-wrap: anywhere; }
+.history-panel p, .history-panel li, .history-panel th, .history-panel h3, .history-panel legend, .history-panel label { overflow-wrap: anywhere; }
 .history-list { display: grid; gap: 8px; margin: 0; padding: 0; list-style: none; }
 .history-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
 .history-badge { display: inline-block; margin-left: 4px; padding: 0 6px; border: 1px solid currentColor; border-radius: 2px; font-size: 12px; }

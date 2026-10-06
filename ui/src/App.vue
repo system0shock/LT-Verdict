@@ -1088,6 +1088,7 @@ function focusPolicy() {
             @open="openReference($event, 'overview')"
             @compare="openReference($event, 'compare')"
             @baseline-changed="showBaselineSeries"
+            @statistical="showBaselineSeries($event); activeTab = 'compare'"
           />
 
           <div

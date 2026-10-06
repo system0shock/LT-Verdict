@@ -832,3 +832,5 @@ export interface ReleaseRequest {
   profile: ReleaseProfile | null
   notes: string | null
 }
+
+export type ReleaseUpdate = Omit<ReleaseRequest, 'series' | 'run_id'>

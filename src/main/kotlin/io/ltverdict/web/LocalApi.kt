@@ -275,6 +275,7 @@ internal fun Application.installLocalApi(context: LocalApiContext) {
                                         put("sha256", run.sha256)
                                         put("size_bytes", run.sizeBytes)
                                         put("original_filename", run.originalFilename)
+                                        put("accepted_at", run.acceptedAt?.let(::JsonPrimitive) ?: JsonNull)
                                     },
                                 )
                             }
@@ -2278,6 +2279,7 @@ private fun AcceptedInput.toJson(): JsonObject =
         put("sha256", sha256)
         put("size_bytes", sizeBytes)
         put("original_filename", originalFilename)
+        put("accepted_at", acceptedAt?.let(::JsonPrimitive) ?: JsonNull)
     }
 
 private fun JobStatus.toJson(): JsonObject =

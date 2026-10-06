@@ -24,6 +24,7 @@ export interface RunSummary {
   sha256: string
   size_bytes: number
   original_filename: string
+  accepted_at?: string | null
 }
 
 export interface RunPage {

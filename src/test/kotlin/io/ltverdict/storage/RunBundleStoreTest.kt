@@ -39,7 +39,10 @@ import java.io.IOException
 import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.StandardOpenOption
+import java.time.Clock
 import java.time.Instant
+import java.time.ZoneId
+import java.time.ZoneOffset
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.CyclicBarrier
 import java.util.concurrent.Executors
@@ -430,24 +433,143 @@ class RunBundleStoreTest {
         }
 
     @Test
-    fun `run listing is sorted cursor stable and validates limits`() =
-        withStore { store, _ ->
-            repeat(5) { index ->
-                val csv = csvWithTimestamp(1_700_000_000_000L + index)
-                store.acceptInput(ByteArrayInputStream(csv), "run-$index.jtl")
-            }
+    fun `run listing is newest first with run id ties, cursor stable and validates limits`() {
+        val clock = SettableClock(Instant.parse("2026-10-07T12:00:00Z"))
+        withStore(clock) { store, _ ->
+            // Four distinct instants plus a tie: runs 3 and 4 are accepted in the same millisecond.
+            val accepted =
+                listOf(0L, 1_000L, 2_000L, 3_000L, 3_000L).mapIndexed { index, offset ->
+                    clock.instant = Instant.parse("2026-10-07T12:00:00Z").plusMillis(offset)
+                    store.acceptInput(ByteArrayInputStream(csvWithTimestamp(1_700_000_000_000L + index)), "load.jtl")
+                }
+            assertEquals(
+                listOf("2026-10-07T12:00:00.000Z", "2026-10-07T12:00:01.000Z", "2026-10-07T12:00:02.000Z"),
+                accepted.take(3).map {
+                    it.acceptedAt
+                },
+            )
+            val expected = accepted.sortedWith(compareByDescending<AcceptedInput> { it.acceptedAt }.thenBy { it.runId }).map { it.runId }
 
             val first = store.listRuns(null, 2)
             val second = store.listRuns(first.nextAfter, 2)
             val third = store.listRuns(second.nextAfter, 2)
             val ids = first.runs + second.runs + third.runs
-            assertEquals(ids.map { it.runId }.sorted(), ids.map { it.runId })
-            assertEquals(5, ids.size)
+            assertEquals(expected, ids.map { it.runId })
+            assertEquals(accepted.associate { it.runId to it.acceptedAt }, ids.associate { it.runId to it.acceptedAt })
             assertTrue(first.nextAfter != null && second.nextAfter != null)
             assertEquals(null, third.nextAfter)
             assertThrows(IllegalArgumentException::class.java) { store.listRuns(null, 0) }
             assertThrows(IllegalArgumentException::class.java) { store.listRuns(null, 101) }
+            // A well-formed cursor that names no stored run cannot be placed in the order.
+            assertThrows(IllegalArgumentException::class.java) { store.listRuns("jmeter_jtl_csv-${"f".repeat(64)}", 2) }
         }
+    }
+
+    @Test
+    fun `runs stored before accepted_at existed stay readable and follow the timestamped ones`() {
+        val clock = SettableClock(Instant.parse("2026-10-07T12:00:00Z"))
+        withStore(clock) { store, root ->
+            val legacy =
+                (0..2).map { index ->
+                    val input = store.acceptInput(ByteArrayInputStream(csvWithTimestamp(1_700_000_000_000L + index)), "legacy-$index.jtl")
+                    // The exact bytes older versions wrote: five keys, no accepted_at.
+                    Files.write(
+                        root.resolve("runs").resolve(input.runId).resolve("source.json"),
+                        canonicalJson(
+                            buildJsonObject {
+                                put("original_filename", input.originalFilename)
+                                put("run_id", input.runId)
+                                put("sha256", input.sha256)
+                                put("size_bytes", input.sizeBytes)
+                                put("source_type", input.sourceType.wireName)
+                            },
+                        ),
+                    )
+                    input.runId
+                }
+            assertTrue(legacy.all { store.requireInput(it).acceptedAt == null })
+            clock.instant = Instant.parse("2026-10-07T12:00:05Z")
+            val fresh = store.acceptInput(ByteArrayInputStream(csvWithTimestamp(1_700_000_000_099L)), "fresh.jtl").runId
+
+            val expected = listOf(fresh) + legacy.sorted()
+            // One run per page crosses the boundary between timestamped and legacy runs.
+            val pages = mutableListOf<String>()
+            var after: String? = null
+            do {
+                val page = store.listRuns(after, 1)
+                pages += page.runs.map { it.runId }
+                after = page.nextAfter
+            } while (after != null)
+            assertEquals(expected, pages)
+            assertEquals(
+                null,
+                store
+                    .listRuns(null, 10)
+                    .runs
+                    .last()
+                    .acceptedAt,
+            )
+            assertEquals(
+                "2026-10-07T12:00:05.000Z",
+                store
+                    .listRuns(null, 10)
+                    .runs
+                    .first()
+                    .acceptedAt,
+            )
+        }
+    }
+
+    @Test
+    fun `accepting the same bytes again keeps the first accepted_at and never changes identity`() {
+        val clock = SettableClock(Instant.parse("2026-10-07T12:00:00Z"))
+        withStore(clock) { store, root ->
+            val bytes = Files.readAllBytes(Path.of(CSV_FIXTURE))
+            val first = store.acceptInput(ByteArrayInputStream(bytes), "load.jtl")
+            val sourceJson = root.resolve("runs").resolve(first.runId).resolve("source.json")
+            val storedBytes = Files.readAllBytes(sourceJson)
+
+            clock.instant = Instant.parse("2026-10-08T08:30:00Z")
+            val again = store.acceptInput(ByteArrayInputStream(bytes), "renamed.jtl")
+
+            assertEquals(first, again)
+            assertEquals("2026-10-07T12:00:00.000Z", again.acceptedAt)
+            assertArrayEquals(storedBytes, Files.readAllBytes(sourceJson))
+            assertEquals(listOf(first.runId), store.listRuns(null, 10).runs.map { it.runId })
+        }
+        // A different acceptance instant, in a separate data directory, yields the same run_id.
+        val otherClock = SettableClock(Instant.parse("2031-01-01T00:00:00Z"))
+        withStore(otherClock) { store, _ ->
+            val elsewhere = store.acceptInput(Files.newInputStream(Path.of(CSV_FIXTURE)), "load.jtl")
+            assertEquals("2031-01-01T00:00:00.000Z", elsewhere.acceptedAt)
+            withStore(clock) { other, _ ->
+                assertEquals(elsewhere.runId, other.acceptInput(Files.newInputStream(Path.of(CSV_FIXTURE)), "load.jtl").runId)
+            }
+        }
+    }
+
+    @Test
+    fun `a malformed accepted_at is reported as corrupt storage`() {
+        val clock = SettableClock(Instant.parse("2026-10-07T12:00:00Z"))
+        withStore(clock) { store, root ->
+            val input = store.acceptInput(Files.newInputStream(Path.of(CSV_FIXTURE)), "load.jtl")
+            val sourceJson = root.resolve("runs").resolve(input.runId).resolve("source.json")
+            val good = Files.readString(sourceJson)
+            listOf(
+                "2026-10-07T12:00:00Z",
+                "2026-10-07T12:00:00.5Z",
+                "yesterday",
+                "2026-10-07 12:00:00.000",
+                "2026-13-40T12:00:00.000Z",
+            ).forEach { bad ->
+                Files.writeString(sourceJson, good.replace("2026-10-07T12:00:00.000Z", bad))
+                assertThrows(IllegalStateException::class.java) { store.requireInput(input.runId) }
+                assertThrows(IllegalStateException::class.java) { store.listRuns(null, 10) }
+            }
+            Files.writeString(sourceJson, good)
+            assertEquals("2026-10-07T12:00:00.000Z", store.requireInput(input.runId).acceptedAt)
+        }
+    }
 
     @Test
     fun `analysis listing is sorted cursor stable and validates published summaries`() =
@@ -1919,6 +2041,24 @@ class RunBundleStoreTest {
     private fun withStore(block: (RunBundleStore, Path) -> Unit) {
         val root = tempDir.resolve("data-${System.nanoTime()}")
         DataDirectory.open(root).use { directory -> block(RunBundleStore(directory), directory.root) }
+    }
+
+    private fun withStore(
+        clock: Clock,
+        block: (RunBundleStore, Path) -> Unit,
+    ) {
+        val root = tempDir.resolve("data-${System.nanoTime()}")
+        DataDirectory.open(root).use { directory -> block(RunBundleStore(directory, clock), directory.root) }
+    }
+
+    private class SettableClock(
+        var instant: Instant,
+    ) : Clock() {
+        override fun getZone(): ZoneId = ZoneOffset.UTC
+
+        override fun withZone(zone: ZoneId): Clock = this
+
+        override fun instant(): Instant = instant
     }
 
     private fun assertStagingEmpty(root: Path) {

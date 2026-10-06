@@ -40,6 +40,20 @@ async function fixtureApi(page: Page) {
 
 const exportLink = (page: Page) => page.getByRole('link', { name: EXPORT_LABELS.html })
 
+// The file itself is covered by the live spec (report-export.spec.ts). Here the activation is recorded and cancelled:
+// the mocked API cannot serve a download, and a missing run on a real server would fail it.
+async function recordActivations(page: Page) {
+  await exportLink(page).evaluate((element) => {
+    const seen: string[] = []
+    ;(window as unknown as { exportClicks: string[] }).exportClicks = seen
+    element.addEventListener('click', (event) => {
+      seen.push((event.currentTarget as HTMLAnchorElement).getAttribute('href') ?? '')
+      event.preventDefault()
+    })
+  })
+  return () => page.evaluate(() => (window as unknown as { exportClicks: string[] }).exportClicks)
+}
+
 async function openRun(page: Page, shell: 'new' | 'old' = 'new') {
   await fixtureApi(page)
   await page.goto(`/?shell=${shell}`)
@@ -73,18 +87,17 @@ test('the export action in the header points to the HTML report of the open anal
   expect((await link.boundingBox())!.height).toBeGreaterThanOrEqual(44)
 })
 
-test('the export downloads the report URL of the open analysis and starts no job', async ({ page }) => {
+test('clicking the export action opens the report URL of the open analysis and starts no job', async ({ page }) => {
   await openAnalysis(page)
   let jobs = 0
   page.on('request', (request) => {
     if (request.method() === 'POST' && new URL(request.url()).pathname === '/api/jobs') jobs += 1
   })
+  const clicks = await recordActivations(page)
 
-  const download = page.waitForEvent('download')
   await exportLink(page).click()
-  const url = new URL((await download).url())
 
-  expect(url.pathname + url.search).toBe(`${reportPath}?format=html`)
+  expect(await clicks()).toEqual([`${reportPath}?format=html`])
   expect(jobs).toBe(0)
 })
 
@@ -96,12 +109,11 @@ test('the export action stays in the header on every tab and works from the keyb
     await expect(exportLink(page), `tab ${tab.label}`).toBeVisible()
   }
 
+  const clicks = await recordActivations(page)
   await exportLink(page).focus()
   await expect(exportLink(page)).toBeFocused()
-  const download = page.waitForEvent('download')
   await page.keyboard.press('Enter')
-  const url = new URL((await download).url())
-  expect(url.pathname + url.search).toBe(`${reportPath}?format=html`)
+  expect(await clicks()).toEqual([`${reportPath}?format=html`])
 })
 
 test('the export action is reachable by Tab', async ({ page }) => {

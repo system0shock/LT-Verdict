@@ -78,6 +78,7 @@ import io.ltverdict.core.planValuesPage
 import io.ltverdict.core.podViewMetadataJson
 import io.ltverdict.core.podViewValuesJson
 import io.ltverdict.core.releaseAnalysisFacts
+import io.ltverdict.core.releaseProfileSummary
 import io.ltverdict.core.releaseStartedAtMillis
 import io.ltverdict.core.renderRunDynamicsExport
 import io.ltverdict.core.sha256Hex
@@ -848,6 +849,13 @@ internal fun Application.installLocalApi(context: LocalApiContext) {
                     val baseline = context.store.readBaseline()?.get("reference") as? JsonObject
                     val candidates = mutableListOf<SavedAnalysisForComparison>()
                     val history = context.store.readComparisonHistory()
+                    // One registry pass for every row: the label and the profile come from the release record (ADR 0019, section 8).
+                    val releases =
+                        context.store.releasesOfAnalyses(
+                            history.entries.map { it.analysisId }.toSet() +
+                                analysisId +
+                                listOfNotNull(baseline?.get("analysis_id")?.jsonPrimitive?.content),
+                        )
                     for (entry in history.entries) {
                         val documents = entry.documents
                         val runDocument = documents.run ?: continue
@@ -860,6 +868,8 @@ internal fun Application.installLocalApi(context: LocalApiContext) {
                                 runDocument,
                                 documents.result,
                                 documents.identity,
+                                applicationVersion = releases[entry.analysisId].releaseLabel(),
+                                loadProfile = releases[entry.analysisId].releaseProfile(),
                             )
                     }
                     val baselineDocuments =
@@ -876,6 +886,8 @@ internal fun Application.installLocalApi(context: LocalApiContext) {
                                 checkNotNull(baselineDocuments.run),
                                 baselineDocuments.result,
                                 baselineDocuments.identity,
+                                applicationVersion = releases[baseline.getValue("analysis_id").jsonPrimitive.content].releaseLabel(),
+                                loadProfile = releases[baseline.getValue("analysis_id").jsonPrimitive.content].releaseProfile(),
                             )
                     }
                     val currentReference =
@@ -893,7 +905,14 @@ internal fun Application.installLocalApi(context: LocalApiContext) {
                             "dynamics",
                             current.run?.let {
                                 buildRunDynamics(
-                                    SavedAnalysisForComparison(currentReference, it, current.result, current.identity),
+                                    SavedAnalysisForComparison(
+                                        currentReference,
+                                        it,
+                                        current.result,
+                                        current.identity,
+                                        applicationVersion = releases[analysisId].releaseLabel(),
+                                        loadProfile = releases[analysisId].releaseProfile(),
+                                    ),
                                     candidates,
                                     baseline,
                                     limit,
@@ -1639,6 +1658,10 @@ private fun RunBundleStore.releasesOfAnalyses(analysisIds: Set<String>): Map<Str
     } catch (_: DirectoryIteratorException) {
         emptyMap()
     }
+
+private fun JsonObject?.releaseLabel(): String? = (this?.get("label") as? JsonPrimitive)?.content
+
+private fun JsonObject?.releaseProfile(): String? = releaseProfileSummary(this?.get("profile") as? JsonObject)
 
 // Maps store failures to the private API codes; messages never carry user text (label, notes, profile).
 private suspend fun <T> releaseOperation(action: () -> T): T =

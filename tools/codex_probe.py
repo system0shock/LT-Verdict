@@ -229,11 +229,15 @@ def codex_home():
     return Path(os.environ.get('CODEX_HOME') or Path.home() / '.codex')
 
 
-def codex_process_count():
+def probe_process_count(root):
+    """Processes whose command line mentions the harness root (Windows only; None elsewhere)."""
     if os.name != 'nt':
         return None
-    out = subprocess.run(['tasklist', '/FO', 'CSV', '/NH'], capture_output=True, text=True, check=False).stdout
-    return sum(1 for line in out.splitlines() if line.lower().startswith('"codex'))
+    script = ("(Get-CimInstance Win32_Process | Where-Object { $_.CommandLine -like '*' + $env:LTV_PROBE_ROOT + '*' "
+              "-and $_.ProcessId -ne $PID }).Count")
+    out = subprocess.run(['powershell', '-NoProfile', '-Command', script], capture_output=True, text=True,
+                         check=False, env={**os.environ, 'LTV_PROBE_ROOT': str(root)}).stdout.strip()
+    return int(out) if out.isdigit() else 0
 
 
 def default_cfg(harness_root, executable):
@@ -343,10 +347,10 @@ def run_probes(cfg, ledger, model, effort, only, home, results):
         r = call('P8', TEMPLATES['P8'].format(nonce=make_nonce()), model='no-such-model-zz')
         results['P8'] = _slim(r)
     if want('P9'):
-        before_count = codex_process_count()
+        before_count = probe_process_count(root)
         r = call('P9', TEMPLATES['P9'].format(nonce=make_nonce()), timeout_s=1)
         time.sleep(2)
-        results['P9'] = _slim(r, codex_processes_before=before_count, codex_processes_after=codex_process_count(),
+        results['P9'] = _slim(r, codex_processes_before=before_count, codex_processes_after=probe_process_count(root),
                               ledger_incomplete=ledger.incomplete())
 
 

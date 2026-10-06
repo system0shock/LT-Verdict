@@ -25,6 +25,7 @@ NAME_RE = re.compile(r'^[A-Za-z0-9._-]+$')
 ENV_ALLOWLIST = (
     'PATH', 'PATHEXT', 'SystemRoot', 'SystemDrive', 'WINDIR', 'COMSPEC', 'USERPROFILE', 'HOME',
     'HOMEDRIVE', 'HOMEPATH', 'APPDATA', 'LOCALAPPDATA', 'CODEX_HOME', 'TEMP', 'TMP', 'TMPDIR',
+    'SSL_CERT_FILE', 'SSL_CERT_DIR',
 )
 MANDATORY_FLAGS = ('--ignore-user-config', '--ignore-rules', '--skip-git-repo-check', '--json')
 VALUE_FLAGS = ('-s', '-m', '-c', '-C', '-o', '--output-schema')

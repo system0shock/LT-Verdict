@@ -233,11 +233,11 @@ class EnvAndWorkdirTests(Base):
     def test_child_env_is_an_allowlist_and_drops_credentials(self):
         parent = {
             'PATH': '/bin', 'SystemRoot': 'C:/Windows', 'USERPROFILE': 'u', 'CODEX_HOME': 'h',
-            'OPENAI_API_KEY': 'dummy', 'OPENAI_BASE_URL': 'http://x', 'DASHSCOPE_API_KEY': 'dummy',
+            'SSL_CERT_FILE': 'bundle.crt', 'OPENAI_API_KEY': 'dummy', 'OPENAI_BASE_URL': 'http://x', 'DASHSCOPE_API_KEY': 'dummy',
             'MODELSTUDIO_API_KEY': 'dummy', 'RANDOM_API_KEY': 'dummy', 'SOMETHING_ELSE': 'v',
         }
         env = cr.child_env(parent)
-        self.assertEqual({'PATH', 'SystemRoot', 'USERPROFILE', 'CODEX_HOME'}, set(env))
+        self.assertEqual({'PATH', 'SystemRoot', 'USERPROFILE', 'CODEX_HOME', 'SSL_CERT_FILE'}, set(env))
         self.assertNotIn('dummy', json.dumps(env))
 
     def test_workdir_must_be_empty_and_outside_forbidden_roots(self):

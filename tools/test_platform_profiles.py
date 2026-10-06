@@ -33,7 +33,7 @@ class PlatformProfilesTest(unittest.TestCase):
         self.assertEqual(["ocp-1", "ocp-2"], [p["id"] for p in profiles])
 
     def test_more_than_1024_queries_are_refused(self):
-        config = dict(BASE, services=[f"svc-{i:03d}" for i in range(147)], signals=list(SIGNALS))
+        config = dict(BASE, services=[f"svc-{i:03d}" for i in range(147)], signals=list(SIGNALS), sidecar_containers="istio-proxy")
         with self.assertRaisesRegex(ValueError, "PLATFORM_PROFILE_TOO_MANY_QUERIES"):
             build_connections(config)
 
@@ -276,7 +276,7 @@ class PlatformProfilesTest(unittest.TestCase):
                 if signal.peak_only and not peak:
                     continue
                 with self.subTest(signal=name, peak=peak):
-                    self.assertNotIn("@", render(signal, "shop", "orders-svc", "15s", peak=peak))
+                    self.assertNotIn("@", render(signal, "shop", "orders-svc", "15s", peak=peak, sidecars="istio-proxy"))
 
     def test_render_refuses_invalid_peak_mode(self):
         from dataclasses import replace
@@ -289,11 +289,11 @@ class PlatformProfilesTest(unittest.TestCase):
             if signal.peak_only:
                 with self.subTest(signal=name, peak=False):
                     with self.assertRaisesRegex(ValueError, "needs interval_max"):
-                        render(signal, "shop", "orders-svc", "15s")
+                        render(signal, "shop", "orders-svc", "15s", sidecars="istio-proxy")
             if not signal.peak:
                 with self.subTest(signal=name, peak=True):
-                    with self.assertRaises(ValueError):
-                        render(signal, "shop", "orders-svc", "15s", peak=True)
+                    with self.assertRaisesRegex(ValueError, "no peak variant"):
+                        render(signal, "shop", "orders-svc", "15s", peak=True, sidecars="istio-proxy")
 
     def test_default_example_expressions_have_balanced_parentheses(self):
         import json
@@ -306,6 +306,36 @@ class PlatformProfilesTest(unittest.TestCase):
             with self.subTest(query=query["id"]):
                 self.assertGreater(expression.count("("), 0)
                 self.assertEqual(expression.count("("), expression.count(")"))
+
+    def test_sidecar_signals_need_the_sidecar_regular_expression(self):
+        config = dict(BASE, signals=["sidecar_memory_limit_ratio"])
+        with self.assertRaisesRegex(ValueError, "sidecar container regular expression"):
+            build_connections(config)
+        query = build_connections(dict(config, sidecar_containers="istio-proxy|oauth-proxy"))["connections"][0]["queries"][0]
+        self.assertEqual("openshift_sidecar_memory_limit_ratio", query["metric"])
+        self.assertIn('container=~"istio-proxy|oauth-proxy"', query["expression"])
+        self.assertNotIn("@", query["expression"])
+
+    def test_sidecar_regular_expression_cannot_break_out_of_the_promql_string(self):
+        for value in ('istio-proxy"} or vector(1) or {a="', "a\b", "a@ns@", "", "x" * 257, 7):
+            with self.subTest(value=value), self.assertRaisesRegex(ValueError, "sidecar_containers"):
+                build_connections(dict(BASE, signals=["sidecar_memory_limit_ratio"], sidecar_containers=value))
+
+    def test_sidecar_signal_units_aggregations_and_peak(self):
+        document = build_connections(
+            dict(BASE, signals=["sidecar_memory_limit_ratio", "sidecar_cpu_throttling"], sidecar_containers="istio-proxy", peak_aggregation=True)
+        )
+        by_metric = {q["metric"]: q for c in document["connections"] for q in c["queries"]}
+        memory = by_metric["openshift_sidecar_memory_limit_ratio"]
+        self.assertEqual(("ratio", "interval_max", "system"), (memory["unit"], memory["aggregation"], memory["role"]))
+        self.assertIn("max_over_time", memory["expression"])
+        throttling = by_metric["openshift_sidecar_cpu_throttling"]
+        self.assertEqual(("ratio", "interval_mean"), (throttling["unit"], throttling["aggregation"]))
+
+    def test_sidecar_completeness_is_checked_against_sidecars_only(self):
+        spec = SIGNALS["sidecar_memory_limit_ratio"]
+        self.assertIn('kube_pod_container_info{namespace="@ns@",container=~"@sidecars@"}', spec.expression)
+        self.assertNotIn("@cont@", SIGNALS["sidecar_cpu_throttling"].expression)
 
 
 if __name__ == "__main__":

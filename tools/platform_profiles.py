@@ -9,7 +9,7 @@ import json
 import re
 import sys
 
-from tools.platform_profile_templates import SIGNALS, render
+from tools.platform_profile_templates import SIDECARS, SIGNALS, render
 
 MAX_QUERIES_PER_PROFILE = 64
 MAX_PROFILES = 16
@@ -39,6 +39,11 @@ def build_connections(config: dict) -> dict:
     unknown = [name for name in signals if name not in SIGNALS]
     if unknown or len(set(signals)) != len(signals):
         raise ValueError(f"unknown or duplicate signals: {unknown}")
+    sidecars = config.get("sidecar_containers")
+    if "sidecar_containers" in config and (not isinstance(sidecars, str) or not SIDECARS.fullmatch(sidecars)):
+        raise ValueError("sidecar_containers must be a regular expression of up to 256 characters from A-Z a-z 0-9 . _ | ( ) * + ? -")
+    if sidecars is None and any(SIGNALS[signal].sidecar for signal in signals):
+        raise ValueError("sidecar signals need the sidecar container regular expression (sidecar_containers)")
     scrape = config.get("scrape_interval_ms")
     if "scrape_interval_ms" in config:
         if type(scrape) is not int or scrape not in range(1000, 3600001, 1000):
@@ -103,7 +108,7 @@ def build_connections(config: dict) -> dict:
             qualified_query_id = f"{profile_id}/{query_id}"
             if len(qualified_query_id.encode()) > MAX_IDENTIFIER_BYTES:
                 raise ValueError(f"qualified id too long: {qualified_query_id}")
-            expression = render(spec, config["namespace"], service, sub, peak=use_peak)
+            expression = render(spec, config["namespace"], service, sub, peak=use_peak, sidecars=sidecars)
             if len(expression.encode()) > MAX_QUERY_BYTES:
                 raise ValueError("PLATFORM_PROFILE_EXPRESSION_TOO_LARGE")
             queries.append(

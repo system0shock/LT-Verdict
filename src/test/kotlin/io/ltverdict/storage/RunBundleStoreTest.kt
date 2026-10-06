@@ -17,6 +17,7 @@ import io.ltverdict.core.validateRelease
 import io.ltverdict.ingest.SourceType
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
@@ -653,6 +654,416 @@ class RunBundleStoreTest {
             assertThrows(IllegalStateException::class.java) { store.readBaselineCondition(baseline, current, null) }
         }
     }
+
+    @Test
+    fun `slot key depends on series and arm and nothing else`() =
+        withStore { store, root ->
+            val input = slotInput(store)
+            val plain = saveAnalysis(store, input, "plain")
+            val other = saveAnalysis(store, input, "other")
+            val blue = saveAnalysis(store, input, "blue", arm = "blue")
+            val literal = saveAnalysis(store, input, "literal", arm = "null")
+            val slots = root.resolve("baselines")
+
+            val first = slotSelection(input, "a", plain)
+            store.replaceBaselineSlot(first, null)
+            store.replaceBaselineSlot(slotSelection(input, "a", blue), "blue")
+            store.replaceBaselineSlot(slotSelection(input, "b", plain), null)
+            assertEquals(
+                setOf(slotKey("a", null), slotKey("a", "blue"), slotKey("b", null)).map { "$it.json" }.toSet(),
+                fileNames(slots),
+            )
+            val path = slots.resolve("${slotKey("a", null)}.json")
+            assertArrayEquals(canonicalJson(first), Files.readAllBytes(path))
+
+            val replacement = slotSelection(input, "a", other)
+            store.replaceBaselineSlot(replacement, null)
+            assertEquals(3, fileNames(slots).size)
+            assertArrayEquals(canonicalJson(replacement), Files.readAllBytes(path))
+            assertTrue(Files.size(path) <= 32 * 1024)
+
+            store.replaceBaselineSlot(slotSelection(input, "a", literal), "null")
+            assertEquals(4, fileNames(slots).size)
+            assertTrue(slotKey("a", null) != slotKey("a", "null"))
+            assertStagingEmpty(root)
+        }
+
+    @Test
+    fun `legacy file is a slot until its key is written`() =
+        withStore { store, root ->
+            val input = slotInput(store)
+            val plain = saveAnalysis(store, input, "plain")
+            val other = saveAnalysis(store, input, "other")
+            val legacy = slotSelection(input, "legacy-series", plain)
+            store.replaceBaseline(legacy)
+            assertEquals(listOf(BaselineSlot("legacy-series", null, legacy, true)), store.listBaselineSlots())
+
+            val unrelated = slotSelection(input, "other-series", other)
+            store.replaceBaselineSlot(unrelated, null)
+            assertTrue(Files.exists(root.resolve("baseline.json")))
+            assertEquals(
+                listOf(
+                    BaselineSlot("legacy-series", null, legacy, true),
+                    BaselineSlot("other-series", null, unrelated, false),
+                ),
+                store.listBaselineSlots(),
+            )
+
+            val winner = slotSelection(input, "legacy-series", other)
+            store.replaceBaselineSlot(winner, null)
+            assertFalse(Files.exists(root.resolve("baseline.json")))
+            assertEquals(
+                listOf(
+                    BaselineSlot("legacy-series", null, winner, false),
+                    BaselineSlot("other-series", null, unrelated, false),
+                ),
+                store.listBaselineSlots(),
+            )
+            assertStagingEmpty(root)
+        }
+
+    @Test
+    fun `a shadowed legacy file loses to the slot of the same key`() =
+        withStore { store, root ->
+            val input = slotInput(store)
+            val plain = saveAnalysis(store, input, "plain")
+            val other = saveAnalysis(store, input, "other")
+            val third = saveAnalysis(store, input, "third")
+            val legacy = slotSelection(input, "s", plain)
+            val slot = slotSelection(input, "s", other)
+            val shadow = {
+                store.replaceBaseline(legacy)
+                Files.createDirectories(root.resolve("baselines"))
+                Files.write(root.resolve("baselines/${slotKey("s", null)}.json"), canonicalJson(slot))
+            }
+            shadow()
+            assertEquals(listOf(BaselineSlot("s", null, slot, false)), store.listBaselineSlots())
+            assertTrue(Files.exists(root.resolve("baseline.json")))
+            // The series-less read stays on the legacy file, exactly as before slots existed.
+            assertEquals(legacy, store.readBaselineSlotWithCondition(null, null, reference('c', 'c'), null).first?.selection)
+
+            store.replaceBaselineSlot(slotSelection(input, "s", third), null)
+            assertFalse(Files.exists(root.resolve("baseline.json")))
+
+            Files.delete(root.resolve("baselines/${slotKey("s", null)}.json"))
+            shadow()
+            assertTrue(store.clearBaselineSlot("s", null))
+            assertFalse(Files.exists(root.resolve("baseline.json")))
+            assertEquals(emptyList<BaselineSlot>(), store.listBaselineSlots())
+            assertFalse(store.clearBaselineSlot("s", null))
+            assertStagingEmpty(root)
+        }
+
+    @Test
+    fun `slot limit counts effective keys`() =
+        withStore { store, root ->
+            val input = slotInput(store)
+            val analyses = (0 until MAX_BASELINE_SLOTS + 2).map { saveAnalysis(store, input, "n$it") }
+            repeat(MAX_BASELINE_SLOTS) { store.replaceBaselineSlot(slotSelection(input, "series-$it", analyses[it]), null) }
+            assertEquals(MAX_BASELINE_SLOTS, store.listBaselineSlots().size)
+
+            val refused =
+                assertThrows(IllegalArgumentException::class.java) {
+                    store.replaceBaselineSlot(slotSelection(input, "extra", analyses[MAX_BASELINE_SLOTS]), null)
+                }
+            assertEquals("BASELINE_SLOTS_LIMIT_REACHED", refused.message)
+            store.replaceBaselineSlot(slotSelection(input, "series-0", analyses[MAX_BASELINE_SLOTS + 1]), null)
+            assertEquals(MAX_BASELINE_SLOTS, store.listBaselineSlots().size)
+
+            // The old writer has no limit: a legacy file of another key is the 65th effective slot.
+            store.replaceBaseline(slotSelection(input, "legacy-extra", analyses[MAX_BASELINE_SLOTS]))
+            assertEquals(MAX_BASELINE_SLOTS + 1, store.listBaselineSlots().size)
+            assertThrows(IllegalArgumentException::class.java) {
+                store.replaceBaselineSlot(slotSelection(input, "extra", analyses[MAX_BASELINE_SLOTS]), null)
+            }
+            store.replaceBaselineSlot(slotSelection(input, "series-1", analyses[MAX_BASELINE_SLOTS + 1]), null)
+
+            // A legacy file shadowed by a slot of the same key adds nothing.
+            store.replaceBaseline(slotSelection(input, "series-2", analyses[MAX_BASELINE_SLOTS]))
+            assertEquals(MAX_BASELINE_SLOTS, store.listBaselineSlots().size)
+            store.replaceBaselineSlot(slotSelection(input, "series-3", analyses[MAX_BASELINE_SLOTS + 1]), null)
+            assertEquals(MAX_BASELINE_SLOTS, fileNames(root.resolve("baselines")).size)
+            assertStagingEmpty(root)
+        }
+
+    @Test
+    fun `the slot directory rejects foreign entries and too many elements`() =
+        withStore { store, root ->
+            val input = slotInput(store)
+            store.replaceBaselineSlot(slotSelection(input, "s", saveAnalysis(store, input, "a")), null)
+            val slots = root.resolve("baselines")
+            val corrupt = {
+                assertTrue(
+                    assertThrows(IllegalStateException::class.java) { store.listBaselineSlots() }.message!!.startsWith("CORRUPT_BASELINE"),
+                )
+            }
+
+            Files.writeString(slots.resolve("notes.txt"), "x")
+            corrupt()
+            Files.delete(slots.resolve("notes.txt"))
+
+            Files.createDirectory(slots.resolve("${"d".repeat(64)}.json"))
+            corrupt()
+            Files.delete(slots.resolve("${"d".repeat(64)}.json"))
+            assertEquals(1, store.listBaselineSlots().size)
+
+            (0 until MAX_BASELINE_SLOTS + 2).forEach { Files.writeString(slots.resolve("%064x.json".format(it + 1)), "{}") }
+            corrupt()
+        }
+
+    @Test
+    fun `slot arm is rederived from the baseline analysis identity`() =
+        withStore { store, root ->
+            val input = slotInput(store)
+            val plain = saveAnalysis(store, input, "plain")
+            val blue = saveAnalysis(store, input, "blue", arm = "blue")
+            val nullArm = saveAnalysis(store, input, "null-arm", extraIdentity = mapOf("resource_arm" to JsonNull))
+            val badArm = saveAnalysis(store, input, "bad-arm", extraIdentity = mapOf("resource_arm" to JsonPrimitive(5)))
+
+            store.replaceBaselineSlot(slotSelection(input, "s", blue), "blue")
+            assertEquals("blue", store.listBaselineSlots().single().arm)
+            // JSON null and an absent field are the same arm.
+            store.replaceBaselineSlot(slotSelection(input, "n", nullArm), null)
+            assertNull(store.listBaselineSlots().single { it.series == "n" }.arm)
+
+            // A write names the arm of the analysis or fails before it touches the directory.
+            assertEquals(
+                "BASELINE_ARM_MISMATCH",
+                assertThrows(
+                    IllegalArgumentException::class.java,
+                ) { store.replaceBaselineSlot(slotSelection(input, "x", blue), null) }.message,
+            )
+            assertThrows(IllegalArgumentException::class.java) { store.replaceBaselineSlot(slotSelection(input, "x", plain), "blue") }
+            assertEquals(
+                "BASELINE_ANALYSIS_NOT_FOUND",
+                assertThrows(IllegalArgumentException::class.java) {
+                    store.replaceBaselineSlot(manualBaselineSelection("x", reference('a', 'a')), null)
+                }.message,
+            )
+            assertTrue(
+                assertThrows(IllegalStateException::class.java) { store.replaceBaselineSlot(slotSelection(input, "x", badArm), null) }
+                    .message!!
+                    .startsWith("CORRUPT_BASELINE"),
+            )
+            assertEquals(2, store.listBaselineSlots().size)
+
+            // A slot file whose name is not the key of (series, arm of the identity) is corrupt, and so is a missing analysis.
+            val slots = root.resolve("baselines")
+            val named = slots.resolve("${slotKey("s", "blue")}.json")
+            val renamed = slots.resolve("${slotKey("s", null)}.json")
+            Files.move(named, renamed)
+            assertTrue(
+                assertThrows(IllegalStateException::class.java) { store.listBaselineSlots() }.message!!.startsWith("CORRUPT_BASELINE"),
+            )
+            Files.move(renamed, named)
+            assertEquals(2, store.listBaselineSlots().size)
+            DataDirectory.deleteTree(root.resolve("runs/${input.runId}/analyses/$blue"))
+            assertTrue(
+                assertThrows(IllegalStateException::class.java) { store.listBaselineSlots() }.message!!.startsWith("CORRUPT_BASELINE"),
+            )
+        }
+
+    @Test
+    fun `identity read is small and verified`() =
+        withStore { store, root ->
+            val input = slotInput(store)
+            val analysisId = saveAnalysis(store, input, "i", arm = "blue")
+            assertEquals("blue", (store.readAnalysisIdentity(input.runId, analysisId)!!["resource_arm"] as JsonPrimitive).content)
+            assertNull(store.readAnalysisIdentity(input.runId, "f".repeat(64)))
+            assertNull(store.readAnalysisIdentity("jmeter_jtl_csv-${"e".repeat(64)}", analysisId))
+            assertThrows(IllegalArgumentException::class.java) { store.readAnalysisIdentity("x", analysisId) }
+            assertThrows(IllegalArgumentException::class.java) { store.readAnalysisIdentity(input.runId, "x") }
+
+            val analysis = root.resolve("runs/${input.runId}/analyses/$analysisId")
+            Files.writeString(analysis.resolve("analysis-result.json"), "not even json")
+            assertNotNull(store.readAnalysisIdentity(input.runId, analysisId))
+
+            val identityPath = analysis.resolve("identity.json")
+            val tampered = Files.readString(identityPath).replace("blue", "teal")
+            Files.writeString(identityPath, tampered)
+            assertTrue(
+                assertThrows(IllegalStateException::class.java) { store.readAnalysisIdentity(input.runId, analysisId) }
+                    .message!!
+                    .startsWith("CORRUPT_RUN_BUNDLE"),
+            )
+        }
+
+    @Test
+    fun `slots survive reopen and writes leave no staging residue`() {
+        val root = tempDir.resolve("slots-reopen")
+        lateinit var first: JsonObject
+        lateinit var second: JsonObject
+        DataDirectory.open(root).use { directory ->
+            val store = RunBundleStore(directory)
+            val input = slotInput(store)
+            first = slotSelection(input, "first", saveAnalysis(store, input, "one"))
+            second = slotSelection(input, "second", saveAnalysis(store, input, "two"))
+            store.replaceBaselineSlot(first, null)
+            store.replaceBaselineSlot(second, null)
+            assertThrows(IllegalArgumentException::class.java) { store.replaceBaselineSlot(JsonObject(second - "series"), null) }
+            assertThrows(IllegalArgumentException::class.java) { store.replaceBaselineSlot(second, "blue") }
+            assertStagingEmpty(root)
+            assertTrue(store.clearBaselineSlot("second", null))
+            assertStagingEmpty(root)
+        }
+        DataDirectory.open(root).use { directory ->
+            assertEquals(listOf(first), RunBundleStore(directory).listBaselineSlots().map { it.selection })
+        }
+    }
+
+    @Test
+    fun `slot read selects by series and arm and carries the condition of the pair`() =
+        withStore { store, _ ->
+            val input = slotInput(store)
+            val plain = saveAnalysis(store, input, "plain")
+            val blue = saveAnalysis(store, input, "blue", arm = "blue")
+            val legacy = saveAnalysis(store, input, "legacy")
+            val current = reference(input, saveAnalysis(store, input, "current"))
+            val plainSelection = slotSelection(input, "S", plain)
+            val blueSelection = slotSelection(input, "S", blue)
+            store.replaceBaselineSlot(plainSelection, null)
+            store.replaceBaselineSlot(blueSelection, "blue")
+            val legacySelection = slotSelection(input, "L", legacy)
+            store.replaceBaseline(legacySelection)
+            val record = baselineConditionRecord(reference(input, plain), current, null, "CONFIRMED", Instant.parse("2026-09-06T10:00:00Z"))
+            store.replaceBaselineCondition(record)
+
+            val (slot, condition) = store.readBaselineSlotWithCondition("S", null, current, null)
+            assertEquals(plainSelection, slot?.selection)
+            assertEquals(record, condition)
+            val (blueSlot, blueCondition) = store.readBaselineSlotWithCondition("S", "blue", current, null)
+            assertEquals(blueSelection, blueSlot?.selection)
+            assertNull(blueCondition)
+            assertEquals(null to null, store.readBaselineSlotWithCondition("missing", null, current, null))
+            assertEquals(null to null, store.readBaselineSlotWithCondition("S", "red", current, null))
+            val (legacySlot, legacyCondition) = store.readBaselineSlotWithCondition(null, null, current, null)
+            assertEquals(BaselineSlot("L", null, legacySelection, true), legacySlot)
+            assertNull(legacyCondition)
+        }
+
+    @Test
+    fun `scoped delete keeps conditions used by another slot`() =
+        withStore { store, _ ->
+            val input = slotInput(store)
+            val shared = saveAnalysis(store, input, "shared")
+            val alone = saveAnalysis(store, input, "alone")
+            val current = reference(input, saveAnalysis(store, input, "current"))
+            store.replaceBaselineSlot(slotSelection(input, "A", shared), null)
+            store.replaceBaselineSlot(slotSelection(input, "B", shared), null)
+            store.replaceBaselineSlot(slotSelection(input, "C", alone), null)
+            val at = Instant.parse("2026-09-06T10:00:00Z")
+            val sharedRecord = baselineConditionRecord(reference(input, shared), current, null, "CONFIRMED", at)
+            val aloneRecord = baselineConditionRecord(reference(input, alone), current, null, "NOT_CONFIRMED", at)
+            store.replaceBaselineCondition(sharedRecord)
+            store.replaceBaselineCondition(aloneRecord)
+
+            assertTrue(store.clearBaselineSlot("A", null))
+            assertEquals(sharedRecord, store.readBaselineCondition(reference(input, shared), current, null))
+            assertEquals(aloneRecord, store.readBaselineCondition(reference(input, alone), current, null))
+            assertTrue(store.clearBaselineSlot("B", null))
+            assertNull(store.readBaselineCondition(reference(input, shared), current, null))
+            assertEquals(aloneRecord, store.readBaselineCondition(reference(input, alone), current, null))
+            assertEquals(listOf("C"), store.listBaselineSlots().map { it.series })
+        }
+
+    @Test
+    fun `condition directory is bounded`() =
+        withStore { store, root ->
+            val input = slotInput(store)
+            val baseline = saveAnalysis(store, input, "baseline")
+            val current = reference(input, saveAnalysis(store, input, "current"))
+            val otherCurrent = reference(input, saveAnalysis(store, input, "other-current"))
+            val at = Instant.parse("2026-09-06T10:00:00Z")
+            val baselineReference = reference(input, baseline)
+            store.replaceBaselineCondition(baselineConditionRecord(baselineReference, current, null, "CONFIRMED", at))
+            val directory = root.resolve("baseline-conditions")
+            (1 until MAX_BASELINE_CONDITION_FILES).forEach { Files.writeString(directory.resolve("%064x.json".format(it)), "{}") }
+            assertEquals(MAX_BASELINE_CONDITION_FILES, fileNames(directory).size)
+
+            val refused =
+                assertThrows(IllegalArgumentException::class.java) {
+                    store.replaceBaselineCondition(baselineConditionRecord(baselineReference, otherCurrent, null, "CONFIRMED", at))
+                }
+            assertEquals("BASELINE_CONDITIONS_LIMIT_REACHED", refused.message)
+            val replacement = baselineConditionRecord(baselineReference, current, null, "NOT_CONFIRMED", at)
+            assertEquals(replacement, store.replaceBaselineCondition(replacement))
+
+            // The scan of a scoped delete is bounded as well and deletes nothing when it gives up.
+            store.replaceBaselineSlot(slotSelection(input, "S", baseline), null)
+            Files.writeString(directory.resolve("%064x.json".format(MAX_BASELINE_CONDITION_FILES + 10)), "{}")
+            assertTrue(
+                assertThrows(
+                    IllegalStateException::class.java,
+                ) { store.clearBaselineSlot("S", null) }.message!!.startsWith("CORRUPT_BASELINE"),
+            )
+            assertEquals(1, store.listBaselineSlots().size)
+            assertEquals(replacement, store.readBaselineCondition(baselineReference, current, null))
+        }
+
+    @Test
+    fun `legacy clear keeps slots and shared conditions`() =
+        withStore { store, root ->
+            val input = slotInput(store)
+            val shared = saveAnalysis(store, input, "shared")
+            val slotOnly = saveAnalysis(store, input, "slot-only")
+            val legacyOnly = saveAnalysis(store, input, "legacy-only")
+            val current = reference(input, saveAnalysis(store, input, "current"))
+            val at = Instant.parse("2026-09-06T10:00:00Z")
+            val sharedRecord = baselineConditionRecord(reference(input, shared), current, null, "CONFIRMED", at)
+            val slotRecord = baselineConditionRecord(reference(input, slotOnly), current, null, "CONFIRMED", at)
+            val legacyRecord = baselineConditionRecord(reference(input, legacyOnly), current, null, "CONFIRMED", at)
+            store.replaceBaselineSlot(slotSelection(input, "slot", shared), null)
+            store.replaceBaselineSlot(slotSelection(input, "other", slotOnly), null)
+            listOf(sharedRecord, slotRecord, legacyRecord).forEach(store::replaceBaselineCondition)
+
+            // The legacy file refers to the analysis a slot also uses: its record stays, the slots stay.
+            store.replaceBaseline(slotSelection(input, "legacy", shared))
+            store.clearBaseline()
+            assertFalse(Files.exists(root.resolve("baseline.json")))
+            assertEquals(2, store.listBaselineSlots().size)
+            assertEquals(sharedRecord, store.readBaselineCondition(reference(input, shared), current, null))
+            assertEquals(slotRecord, store.readBaselineCondition(reference(input, slotOnly), current, null))
+
+            // A legacy file of its own analysis takes only its own record with it.
+            store.replaceBaseline(slotSelection(input, "legacy", legacyOnly))
+            store.clearBaseline()
+            assertNull(store.readBaselineCondition(reference(input, legacyOnly), current, null))
+            assertEquals(sharedRecord, store.readBaselineCondition(reference(input, shared), current, null))
+            assertEquals(slotRecord, store.readBaselineCondition(reference(input, slotOnly), current, null))
+            assertEquals(2, store.listBaselineSlots().size)
+            assertStagingEmpty(root)
+        }
+
+    @Test
+    fun `slot scan stays short`() =
+        withStore { store, _ ->
+            val input = slotInput(store)
+            val analyses = (0..MAX_BASELINE_SLOTS).map { saveAnalysis(store, input, "scan$it") }
+            repeat(MAX_BASELINE_SLOTS) { store.replaceBaselineSlot(slotSelection(input, "series-$it", analyses[it]), null) }
+            store.replaceBaseline(slotSelection(input, "legacy", analyses[MAX_BASELINE_SLOTS]))
+            val started = System.nanoTime()
+            assertEquals(MAX_BASELINE_SLOTS + 1, store.listBaselineSlots().size)
+            val scanMillis = (System.nanoTime() - started) / 1_000_000
+
+            // The scan holds the store lock, so a concurrent read cannot run during it; what matters is how long it waits for it.
+            var slowestRead = 0L
+            val scanner =
+                Thread {
+                    repeat(20) {
+                        store.listBaselineSlots()
+                        Thread.sleep(5)
+                    }
+                }
+            scanner.start()
+            while (scanner.isAlive) {
+                val readStarted = System.nanoTime()
+                store.listRuns(null, 1)
+                slowestRead = maxOf(slowestRead, (System.nanoTime() - readStarted) / 1_000_000)
+            }
+            scanner.join()
+            println("baseline slot scan of ${MAX_BASELINE_SLOTS + 1} slots: $scanMillis ms, slowest listRuns during scans $slowestRead ms")
+            assertTrue(scanMillis < 5_000 && slowestRead < 5_000)
+        }
 
     @Test
     fun `run period round trips canonically and survives reopen`() {
@@ -1455,6 +1866,8 @@ class RunBundleStoreTest {
         tag: String,
         verdict: String = "PASS",
         startedAt: String? = "2026-01-01T00:00:00Z",
+        arm: String? = null,
+        extraIdentity: Map<String, JsonElement> = emptyMap(),
     ): String {
         val identity =
             canonicalJson(
@@ -1462,6 +1875,8 @@ class RunBundleStoreTest {
                     put("run_id", input.runId)
                     put("policy_sha256", "a".repeat(64))
                     put("tag", tag)
+                    arm?.let { put("resource_arm", it) }
+                    extraIdentity.forEach { (name, value) -> put(name, value) }
                 },
             )
         val result =
@@ -1512,6 +1927,45 @@ class RunBundleStoreTest {
         put("run_id", "jmeter_jtl_csv-${run.toString().repeat(64)}")
         put("analysis_id", analysis.toString().repeat(64))
     }
+
+    private fun reference(
+        input: AcceptedInput,
+        analysisId: String,
+    ) = buildJsonObject {
+        put("run_id", input.runId)
+        put("analysis_id", analysisId)
+    }
+
+    private fun slotInput(store: RunBundleStore): AcceptedInput = store.acceptInput(Files.newInputStream(Path.of(CSV_FIXTURE)), "slots.jtl")
+
+    private fun slotSelection(
+        input: AcceptedInput,
+        series: String,
+        analysisId: String,
+    ): JsonObject = manualBaselineSelection(series, reference(input, analysisId))
+
+    // The key is spelled out here on purpose: the test must not share the production function it checks.
+    private fun slotKey(
+        series: String,
+        arm: String?,
+    ): String =
+        sha256Hex(
+            canonicalJson(
+                buildJsonObject {
+                    put("arm", arm?.let(::JsonPrimitive) ?: JsonNull)
+                    put("series", series)
+                },
+            ),
+        )
+
+    private fun fileNames(directory: Path): Set<String> =
+        Files.list(directory).use { entries ->
+            entries
+                .map {
+                    it.fileName.toString()
+                }.toList()
+                .toSet()
+        }
 
     private fun periodJson(sha256: String): JsonObject =
         buildJsonObject {

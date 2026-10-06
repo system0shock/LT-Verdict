@@ -126,6 +126,8 @@ private val PACKS =
                 PackCapability("filesystem", setOf("openshift_filesystem")),
                 PackCapability("cpu_limit_ratio", setOf("openshift_container_cpu_limit_ratio")),
                 PackCapability("memory_limit_ratio", setOf("openshift_container_memory_limit_ratio")),
+                PackCapability("sidecar_memory_limit_ratio", setOf("openshift_sidecar_memory_limit_ratio")),
+                PackCapability("sidecar_cpu_throttling", setOf("openshift_sidecar_cpu_throttling")),
             ),
         ),
     )

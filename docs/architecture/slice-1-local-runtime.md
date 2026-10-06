@@ -503,7 +503,47 @@ ADR 0002 от 2026-10-01). Замена сверяет прочитанные б
 `analysisExists` (дёшево: каталоги и манифест без следования по ссылкам) и
 `analysisState` (`OK`, `MISSING`, `CORRUPT`) готовят состояние ссылок для
 маршрутов. Замер на 1 000 записях: список около 0,3 с, поиск по анализу около
-0,3 с при холодном JIT. HTTP-маршрутов в этом срезе нет.
+0,3 с при холодном JIT.
+
+Приватные маршруты (`LocalApi.kt`, [ADR 0019](../adr/0019-release-history-and-baseline-eligibility.md),
+раздел 3 и «Поправка реализации»):
+
+```text
+GET    /api/releases?series=&after=&limit=
+GET    /api/releases/<release-id>
+POST   /api/releases
+PUT    /api/releases/<release-id>
+DELETE /api/releases/<release-id>
+```
+
+Тело POST: ровно `series`, `label`, `run_id`, `analyses` (объекты только с
+`analysis_id`), `profile`, `notes`; тело PUT: ровно `label`, `analyses`,
+`profile`, `notes` (`series`, `run_id`, `release_id`, `started_at`,
+`created_at` неизменны). Тело до 16 KiB и глубины 8, как у baseline; тексты
+нормализуются на границе (NFC, `
+`, обрезка), профиль из шести пустых значений
+сохраняется как `null`. Плечо и факты клиент не передаёт: сервер читает каждый
+анализ по одному через `readVerifiedAnalysis` (SHA-256 результата по манифесту,
+предел 64 MiB, вне замка), берёт `started_at` из `run.json` и копии фактов из
+результата и identity. Отказы: `404` (нет запуска или анализа), `422`
+`RELEASE_ANALYSIS_NO_RUN_METADATA`, `RELEASE_STARTED_AT_MISMATCH`,
+`RELEASE_RUN_MISMATCH`, `RELEASE_ARM_CONFLICT`, `RELEASE_RESULT_TOO_LARGE`,
+`RELEASE_TOO_LARGE`, `RELEASE_FACTS_INVALID`, `RELEASE_LIMIT_REACHED`; `409`
+`RELEASE_ANALYSIS_ALREADY_REGISTERED`, `RELEASE_CHANGED`; `500`
+`CORRUPT_RELEASE`, `CORRUPT_RELEASE_REGISTRY`, `CORRUPT_RUN_BUNDLE`. Сообщения
+не содержат пользовательский текст (метку, заметку, профиль). Ответ
+`RELEASE_LIMIT_REACHED` несёт необязательное целое `error.limit`; в прочих
+ошибках поля нет.
+
+К каждому анализу ответа добавлены `analysis_state` и вычисляемые
+`baseline_eligible`, `ineligible_reasons` (первый код общей функции допуска
+`baselineCandidateRejection`, либо `ANALYSIS_MISSING`, `ANALYSIS_CORRUPT`), к
+записи объединение причин. Это подсказка интерфейсу: при выборе baseline сервер
+заново читает настоящий результат. В списке `analysis_state` равен `OK` или
+`MISSING` по существованию манифеста, полная проверка (`OK`, `MISSING`,
+`CORRUPT`) только в `GET` по идентификатору. Список: `releases` (новые первыми),
+`next_after`, `series_summary`, `corrupt_count`, `corrupt_names`.
+`DELETE` отвечает `{release: null}` и удаляет только запись релиза.
 
 ## Security boundary
 
@@ -511,7 +551,7 @@ ADR 0002 от 2026-10-01). Замена сверяет прочитанные б
 tokens. Bootstrap передаёт их browser flow: session находится в
 `HttpOnly; SameSite=Strict; Path=/` cookie, CSRF token — только в памяти
 страницы. Каждый request проверяет exact
-`Host: 127.0.0.1:<port>`; каждый `POST`/`DELETE` дополнительно требует exact
+`Host: 127.0.0.1:<port>`; каждый `POST`/`PUT`/`DELETE`/`PATCH` дополнительно требует exact
 Origin, session cookie и `X-LTV-CSRF`. CORS не включается.
 
 Каждый response получает restrictive CSP, `nosniff`, `no-referrer` и

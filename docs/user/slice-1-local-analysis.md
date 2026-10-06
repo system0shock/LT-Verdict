@@ -1866,6 +1866,14 @@ Uncertainty остаётся `NOT_ESTIMATED`; p-values в этом уровне 
 (`trend.v1`); оба доступны для скачивания рядом с capacity-артефактами. Без
 плана результат, identity и verdict не меняются.
 
+## Данные по подам
+
+Optional `pod-view.v1` (диагностическая проекция подов одного плеча, не основание
+вердикта) подаётся вместе с resource snapshot: флаг `--pod-view` команды `analyze`
+и часть `pod_view` запроса `POST /api/jobs`. Анализ с pod-view получает свой
+`analysis_id`; результат, verdict и сопоставимость с анализом без pod-view не
+меняются. Формат, проверки привязки и коды ошибок: [pod-view.md](pod-view.md).
+
 ## Сравнение двух окон
 
 В панели baseline comparison явно задайте id окна baseline и current. Для

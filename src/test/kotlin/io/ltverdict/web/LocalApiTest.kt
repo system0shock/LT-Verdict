@@ -179,6 +179,128 @@ class LocalApiTest {
             assertEquals(404, api.get("$base/grafana-link?profile=missing&dashboard=demo&panel=1").statusCode())
         }
 
+    private fun releaseProfile(vararg pairs: Pair<String, String>): JsonObject =
+        JsonObject(RELEASE_PROFILE_FIELDS.associateWith { name -> pairs.toMap()[name]?.let(::JsonPrimitive) ?: JsonNull })
+
+    private fun analyticsPath(analysis: Pair<String, String>) = "/api/runs/${analysis.first}/analyses/${analysis.second}/analytics"
+
+    private fun JsonObject.dynamicsRow(analysis: Pair<String, String>): JsonObject =
+        getValue("dynamics")
+            .jsonObject
+            .getValue("rows")
+            .jsonArray
+            .map { it.jsonObject }
+            .single {
+                it
+                    .getValue("reference")
+                    .jsonObject
+                    .getValue("analysis_id")
+                    .jsonPrimitive.content == analysis.second
+            }
+
+    @Test
+    fun `dynamics rows carry the release label and profile of registered analyses only`() =
+        withServer { store, api ->
+            api.bootstrap()
+            val runs = statisticalRuns(store, api, listOf(100, 110, 120, 130))
+            val marker = "NOTE-MARKER-4711"
+            val markup = "<img src=x onerror=alert(1)>"
+            val paced = releaseProfile("pacing" to "10 s", "load_model" to "open")
+            val notes = JsonPrimitive(marker)
+            assertEquals(
+                201,
+                api
+                    .createRelease(
+                        releaseBody(runs[0].first, listOf(runs[0].second), label = "2.4.1", profile = paced, notes = notes),
+                    ).statusCode(),
+            )
+            assertEquals(201, api.createRelease(releaseBody(runs[1].first, listOf(runs[1].second), label = markup)).statusCode())
+            assertEquals(
+                201,
+                api.createRelease(releaseBody(runs[2].first, listOf(runs[2].second), label = "a|b", profile = paced)).statusCode(),
+            )
+
+            val body = api.get(analyticsPath(runs[3])).body()
+            val analytics = Json.parseToJsonElement(body).jsonObject
+            val registered = analytics.dynamicsRow(runs[0])
+            assertEquals(JsonPrimitive("2.4.1"), registered.getValue("application_version"))
+            // the six fixed fields in the order of RELEASE_PROFILE_FIELDS, only the declared ones
+            assertEquals(JsonPrimitive("load_model=open; pacing=10 s"), registered.getValue("load_profile"))
+            // a release without a declared profile gives the label and no profile
+            assertEquals(JsonPrimitive(markup), analytics.dynamicsRow(runs[1]).getValue("application_version"))
+            assertEquals(JsonNull, analytics.dynamicsRow(runs[1]).getValue("load_profile"))
+            // an unregistered analysis (here the current one) stays empty
+            assertEquals(JsonNull, analytics.dynamicsRow(runs[3]).getValue("application_version"))
+            assertEquals(JsonNull, analytics.dynamicsRow(runs[3]).getValue("load_profile"))
+            analytics.getValue("dynamics").jsonObject.getValue("rows").jsonArray.forEach {
+                assertEquals(JsonNull, it.jsonObject.getValue("jenkins_build"))
+            }
+            // a registered current analysis carries its own release fields too
+            val own = Json.parseToJsonElement(api.get(analyticsPath(runs[0])).body()).jsonObject.dynamicsRow(runs[0])
+            assertEquals(JsonPrimitive("2.4.1"), own.getValue("application_version"))
+            assertEquals(JsonPrimitive("load_model=open; pacing=10 s"), own.getValue("load_profile"))
+
+            // the notes are never copied; the label is escaped in every export format
+            assertFalse(body.contains(marker))
+            listOf("html", "asciidoc", "confluence").forEach { format ->
+                val export = api.get(analyticsPath(runs[3]) + "?format=$format").body()
+                assertFalse(export.contains(marker), format)
+                // AsciiDoc keeps the text as is inside a specialchars block; the markup formats must not hold it raw
+                if (format != "asciidoc") assertFalse(export.contains("<img"), format)
+                assertTrue(export.contains("load_model=open; pacing=10 s"), format)
+            }
+            assertTrue(api.get(analyticsPath(runs[3]) + "?format=html").body().contains("&lt;img src=x onerror=alert(1)&gt;"))
+            assertTrue(api.get(analyticsPath(runs[3]) + "?format=confluence").body().contains("&lt;img src=x onerror=alert(1)&gt;"))
+            val asciiDoc = api.get(analyticsPath(runs[3]) + "?format=asciidoc").body()
+            assertTrue(asciiDoc.contains("[subs=specialchars]"))
+            assertTrue(asciiDoc.contains("a\\|b"))
+        }
+
+    @Test
+    fun `dynamics ignore an ambiguous release lookup and a corrupt registry`() {
+        val root = tempDir.resolve("analytics-registry")
+        withServer(dataRoot = root) { store, api ->
+            api.bootstrap()
+            val runs = statisticalRuns(store, api, listOf(100, 110))
+            val paced = releaseProfile("pacing" to "10 s")
+            val id = api.createRelease(releaseBody(runs[0].first, listOf(runs[0].second), label = "2.4.1", profile = paced)).newReleaseId()
+
+            fun label(): JsonElement =
+                Json
+                    .parseToJsonElement(
+                        api.get(analyticsPath(runs[1])).body(),
+                    ).jsonObject
+                    .dynamicsRow(runs[0])
+                    .getValue("application_version")
+            assertEquals(JsonPrimitive("2.4.1"), label())
+
+            // a hand-copied record names the same analysis: no label of either file is shown
+            val copyId = releaseId(1_767_225_600_000L, "ffffffff")
+            val stored = Json.parseToJsonElement(Files.readString(root.resolve("releases/$id.json"))).jsonObject
+            Files.write(
+                root.resolve("releases/$copyId.json"),
+                canonicalJson(
+                    validateRelease(
+                        JsonObject(
+                            stored + ("release_id" to JsonPrimitive(copyId)),
+                        ),
+                    ),
+                ),
+            )
+            assertEquals(200, api.get(analyticsPath(runs[1])).statusCode())
+            assertEquals(JsonNull, label())
+            Files.delete(root.resolve("releases/$copyId.json"))
+            assertEquals(JsonPrimitive("2.4.1"), label())
+
+            // a registry the API refuses to list does not break the analytics
+            seedReleaseFiles(root, MAX_RELEASES)
+            Files.writeString(root.resolve("releases/stray.txt"), "x")
+            assertError(api.get("/api/releases"), 500, "CORRUPT_RELEASE_REGISTRY")
+            assertEquals(200, api.get(analyticsPath(runs[1])).statusCode())
+            assertEquals(JsonNull, label())
+        }
+    }
+
     @Test
     fun `advice status is restored by analysis and unavailable runner never changes verdict`() =
         withServer(

@@ -1,6 +1,7 @@
 package io.ltverdict.core
 
 import kotlinx.serialization.json.JsonNull
+import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
@@ -51,9 +52,39 @@ class AnalyticsExportTest {
             assertTrue(it.contains("history scan stopped at configured bounds", ignoreCase = true))
         }
     }
+
+    @Test
+    fun `a release label cannot break out of its cell in any export format`() {
+        fun render(
+            label: String,
+            format: AnalyticsExportFormat,
+        ) = renderRunDynamicsExport(dynamics(applicationVersion = label), format).decodeToString()
+
+        val markup = "<img src=x onerror=alert(1)>"
+        listOf(AnalyticsExportFormat.HTML, AnalyticsExportFormat.CONFLUENCE).forEach { format ->
+            val text = render(markup, format)
+            assertFalse(text.contains("<img"), format.name)
+            assertTrue(text.contains("&lt;img src=x onerror=alert(1)&gt;"), format.name)
+        }
+        val asciiMarkup = render(markup, AnalyticsExportFormat.ASCIIDOC)
+        assertTrue(asciiMarkup.contains("[subs=specialchars]"))
+        assertTrue(asciiMarkup.contains("\"$markup\""))
+
+        // a pipe stays inside the table cell, a run of dashes is fenced by a longer run
+        assertTrue(render("a|b", AnalyticsExportFormat.ASCIIDOC).contains("a\\|b"))
+        assertTrue(render("x----y", AnalyticsExportFormat.ASCIIDOC).contains("-----\n\"x----y\"\n-----\n"))
+        assertTrue(render("a|b", AnalyticsExportFormat.HTML).contains("<td>a|b</td>"))
+
+        // a line feed becomes an escape inside the AsciiDoc cell, so no line of the cell can start a directive
+        val multiline = "first\ninclude::secret[]\n----\nlast"
+        val asciiDoc = render(multiline, AnalyticsExportFormat.ASCIIDOC)
+        assertFalse(asciiDoc.contains(multiline))
+        assertTrue(asciiDoc.contains("first\\ninclude::secret[]\\n----\\nlast"))
+        assertFalse(Regex("(?m)^(?:include|ifdef|endif)::").containsMatchIn(asciiDoc))
+    }
 }
 
-private fun dynamics() =
+private fun dynamics(applicationVersion: String = "1.0"): JsonObject =
     buildJsonObject {
         put("schema_version", "run-dynamics.v1")
         put("comparable_count", 2)
@@ -73,7 +104,7 @@ private fun dynamics() =
                         put("run_date", "2026-09-22T10:00:00Z")
                         put("jenkins_build", "build<unsafe>")
                         put("commit", "safe\ninclude::secret[]")
-                        put("application_version", "1.0")
+                        put("application_version", applicationVersion)
                         put("load_profile", "profile|one")
                         put("verdict", "PASS")
                         put(

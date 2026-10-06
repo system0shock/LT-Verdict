@@ -54,6 +54,7 @@ import io.ltverdict.core.PolicyValidationError
 import io.ltverdict.core.RELEASE_ID
 import io.ltverdict.core.RELEASE_PROFILE_FIELDS
 import io.ltverdict.core.RELEASE_SCHEMA
+import io.ltverdict.core.ReleaseComparisonContext
 import io.ltverdict.core.ResourceValidation
 import io.ltverdict.core.SavedAnalysisForComparison
 import io.ltverdict.core.SeriesGrid
@@ -607,6 +608,9 @@ internal fun Application.installLocalApi(context: LocalApiContext) {
             val (baselineResult, baselineIdentity) = context.store.baselineDocuments(baselineReference)
             val (currentResult, currentIdentity) = context.store.baselineDocuments(current)
             val conditions = baselineOperation { context.store.readBaselineCondition(baselineReference, current, windows) }
+            val baselineAnalysis = baselineReference.getValue("analysis_id").jsonPrimitive.content
+            val currentAnalysis = current.getValue("analysis_id").jsonPrimitive.content
+            val releases = withContext(Dispatchers.IO) { context.store.releasesOfAnalyses(setOf(baselineAnalysis, currentAnalysis)) }
             val comparison =
                 compareAnalyses(
                     selected,
@@ -617,6 +621,7 @@ internal fun Application.installLocalApi(context: LocalApiContext) {
                     currentIdentity,
                     windows,
                     conditions?.let(::baselineConditionConfirmation),
+                    ReleaseComparisonContext(releases[baselineAnalysis], releases[currentAnalysis]),
                 )
             call.respondJson(
                 buildJsonObject {

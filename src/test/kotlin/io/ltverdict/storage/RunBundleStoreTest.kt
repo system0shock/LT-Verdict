@@ -998,6 +998,16 @@ class RunBundleStoreTest {
             )
             assertEquals(1, store.listBaselineSlots().size)
             assertEquals(replacement, store.readBaselineCondition(baselineReference, current, null))
+
+            // The refusal comes before the legacy file of the key is removed, never after.
+            store.replaceBaseline(slotSelection(input, "L", saveAnalysis(store, input, "legacy-only")))
+            assertTrue(
+                assertThrows(
+                    IllegalStateException::class.java,
+                ) { store.clearBaselineSlot("L", null) }.message!!.startsWith("CORRUPT_BASELINE"),
+            )
+            assertTrue(Files.exists(root.resolve("baseline.json")))
+            assertEquals(2, store.listBaselineSlots().size)
         }
 
     @Test

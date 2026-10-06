@@ -478,7 +478,7 @@ internal class RunBundleStore(
                     null
                 }
             if (reference != null && slotFilesUnlocked().none { (_, selection) -> selection.baselineReference() == reference }) {
-                deleteBaselineConditionsUnlocked(setOf(reference))
+                baselineConditionDeletionUnlocked(setOf(reference))()
             }
             Files.delete(target)
             forceDirectory(dataDirectory.root)
@@ -581,11 +581,13 @@ internal class RunBundleStore(
                     .map { it.selection.baselineReference() }
                     .toSet()
             val removed = listOfNotNull(legacy, file).map { it.selection.baselineReference() }.toSet() - usedElsewhere
+            // The condition directory is read and checked first: a refusal there must not leave the legacy file removed.
+            val deleteConditions = baselineConditionDeletionUnlocked(removed)
             if (legacy != null) {
                 Files.delete(dataDirectory.root.resolve(BASELINE_FILE))
                 forceDirectory(dataDirectory.root)
             }
-            deleteBaselineConditionsUnlocked(removed)
+            deleteConditions()
             if (file != null) {
                 Files.delete(dataDirectory.root.resolve(BASELINE_SLOTS_DIRECTORY).resolve("$key.json"))
                 forceDirectory(dataDirectory.root.resolve(BASELINE_SLOTS_DIRECTORY))
@@ -1234,13 +1236,14 @@ internal class RunBundleStore(
     }
 
     /**
-     * Deletes the condition records whose baseline reference is in [references]. The directory is read in full but bounded;
-     * a file that cannot be read as a record of its own key stays where it is. An emptied directory is removed.
+     * Reads the condition directory now and returns the deletion of the records whose baseline reference is in [references].
+     * The directory is read in full but bounded, and a failure of the read happens here, before anything is deleted; a
+     * file that cannot be read as a record of its own key stays where it is. An emptied directory is removed.
      */
-    private fun deleteBaselineConditionsUnlocked(references: Set<JsonObject>) {
-        if (references.isEmpty()) return
+    private fun baselineConditionDeletionUnlocked(references: Set<JsonObject>): () -> Unit {
+        if (references.isEmpty()) return {}
         val directoryTarget = dataDirectory.root.resolve(BASELINE_CONDITIONS_DIRECTORY)
-        if (!Files.exists(directoryTarget, LinkOption.NOFOLLOW_LINKS)) return
+        if (!Files.exists(directoryTarget, LinkOption.NOFOLLOW_LINKS)) return {}
         val directory = requireBaselineConditionsDirectory(directoryTarget)
         val entries = mutableListOf<Path>()
         Files.newDirectoryStream(directory).use { stream ->
@@ -1259,14 +1262,15 @@ internal class RunBundleStore(
                     false
                 }
             }
-        doomed.forEach(Files::delete)
-        if (doomed.isEmpty()) return
-        if (doomed.size == entries.size) {
-            forceDirectory(directory)
-            Files.delete(directory)
-            forceDirectory(dataDirectory.root)
-        } else {
-            forceDirectory(directory)
+        return {
+            doomed.forEach(Files::delete)
+            if (doomed.isNotEmpty()) {
+                forceDirectory(directory)
+                if (doomed.size == entries.size) {
+                    Files.delete(directory)
+                    forceDirectory(dataDirectory.root)
+                }
+            }
         }
     }
 

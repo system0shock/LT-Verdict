@@ -436,6 +436,22 @@ test.describe('verdict summary', () => {
     expect(summary.causes[0].text).toContain('не позволяет сравнить её с требуемой ёмкостью')
   })
 
+  test('capacity outcomes show no empty list heading and point to the tables tab in the new shell', () => {
+    const capacity = (verdict: string, bound: string, lower: number | null, upper: number | null) => build({
+      analysis_mode: 'capacity_step',
+      policy_verdict: verdict,
+      capacity_summary: { schema_version: 'capacity.v1', load_axis: 'rps', unit: 'requests/s', bound_type: bound, lower_inclusive: lower, upper_exclusive: upper, policy_verdict: verdict, reasons: [], capacity_knee: null, knee_reason: 'KNEE_DETECTOR_NOT_IMPLEMENTED', stages: [] },
+    })
+
+    for (const result of [capacity('PASS', 'BOUNDED', 95.745, 103.745), capacity('FAIL', 'BOUNDED', 95.745, 103.745), capacity('NO_VERDICT', 'LOWER_BOUND', 296, null)]) {
+      const summary = summarizeVerdict(result)
+      expect(summary.linesTitle).toBeNull()
+      expect(summary.lines).toEqual([])
+      expect(summary.lead).toContain('в таблице ниже')
+      expect(summarizeVerdict(result, { tabs: true }).lead).toContain('на вкладке «Таблицы»')
+    }
+  })
+
   test('capacity reasons come from the summary and its stages', () => {
     const stage = (id: string, reasons: string[]) => ({ id, target: 1, achieved: null, achieved_statistic: 'p05_10s', observed_min: null, observed_max: null, complete_bins: 0, expected_bins: 30, target_tolerance_ratio: 0.02, verified_bound_load: null, verdict: 'INDETERMINATE', reasons, evidence_refs: [] })
     const summary = summarizeVerdict(build({

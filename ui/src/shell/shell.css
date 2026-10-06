@@ -118,7 +118,17 @@
   }
 
   .shell .side-navigation {
+    position: sticky;
+    top: 0;
+    align-self: start;
     width: var(--shell-rail-width);
+    height: 100vh;
+    min-height: 0;
+    overflow-y: auto;
+  }
+
+  .shell .run-list {
+    max-height: 30vh;
   }
 }
 

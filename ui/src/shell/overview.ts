@@ -1,6 +1,7 @@
 import type { AnalysisResult, Bucket, CorrelationPairEvidence, MetricSummaryEvidence, ResourcePolicyCheckEvidence, ResourceSummaryEvidence } from '../types'
 import { CORRELATION_LABELS, OVERVIEW_LABELS, type ShellTabKey, type TrendDirection } from './labels'
 import { diagnosticFailedLinesOf, failedLinesOf, summarizeVerdict } from '../verdictSummary'
+import { capacityView } from './tables'
 
 export type TrackKey = 'rps' | 'errors' | 'p95'
 
@@ -189,6 +190,9 @@ export function attentionItems(result: AnalysisResult): AttentionItem[] {
     for (const line of failedLinesOf(result)) {
       items.push(item(`violation:${line.key}`, 'violation', line.title, line.detail, { tab: 'tables', targetId: line.source === 'business' ? 'policy-results' : 'resource-results' }))
     }
+  }
+  if (result.analysis_mode === 'capacity_step' && result.policy_verdict === 'FAIL') {
+    items.push(item('violation:capacity', 'violation', OVERVIEW_LABELS.capacityFailTitle, capacityView(result)?.boundText ?? '', { tab: 'tables', targetId: 'capacity-results' }))
   }
   if (result.policy_verdict === 'NO_VERDICT') {
     for (const cause of summary.causes) {

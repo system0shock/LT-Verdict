@@ -253,7 +253,7 @@ export function failedLinesOf(result: AnalysisResult): FailedLine[] {
   ]
 }
 
-export function summarizeVerdict(result: AnalysisResult, context: { policySha256?: string; policyId?: string | null } = {}): VerdictSummary {
+export function summarizeVerdict(result: AnalysisResult, context: { policySha256?: string; policyId?: string | null; tabs?: boolean } = {}): VerdictSummary {
   const verdict = result.policy_verdict
   const capacity = result.analysis_mode === 'capacity_step' ? result.capacity_summary : undefined
   const { business, resource } = checksOf(result)
@@ -301,7 +301,7 @@ export function summarizeVerdict(result: AnalysisResult, context: { policySha256
       NO_VERDICT: 'Вердикт по ёмкости не выдан — границы недостаточно',
       NO_POLICY: 'Вердикта нет — не задана требуемая ёмкость или SLA-правила',
     }[verdict]
-    lead = `Граница ёмкости: ${bound}. Подробности по ступеням — в таблице ниже.`
+    lead = `Граница ёмкости: ${bound}. Подробности по ступеням — ${context.tabs ? 'в таблице на вкладке «Таблицы»' : 'в таблице ниже'}.`
     chip = 'оценка ёмкости'
   } else if (verdict === 'FAIL') {
     headline = `Прогон не проходит — нарушено проверок: ${failed} из ${total}`
@@ -348,7 +348,7 @@ export function summarizeVerdict(result: AnalysisResult, context: { policySha256
     headline,
     lead,
     chip,
-    linesTitle: verdict === 'FAIL' ? 'Что нарушено' : verdict === 'NO_VERDICT' && failed > 0 ? 'Найденные нарушения' : verdict === 'PASS' ? 'Что проверено' : null,
+    linesTitle: capacity || shownLines.length === 0 ? null : verdict === 'FAIL' ? 'Что нарушено' : verdict === 'NO_VERDICT' && failed > 0 ? 'Найденные нарушения' : verdict === 'PASS' ? 'Что проверено' : null,
     lines: capacity ? [] : shownLines.slice(0, MAX_LINES),
     linesHidden: capacity ? 0 : Math.max(0, shownLines.length - MAX_LINES),
     causes,

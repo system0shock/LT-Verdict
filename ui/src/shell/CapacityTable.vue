@@ -105,7 +105,17 @@ const view = computed(() => capacityView(props.result))
               </template>
             </td>
             <td>
-              <code v-if="row.evidence.length">{{ row.evidence.join(', ') }}</code><template v-else>
+              <details v-if="row.evidence.length">
+                <summary>{{ CAPACITY_LABELS.evidenceSummary(row.evidence.length) }}</summary>
+                <ul class="capacity-evidence">
+                  <li
+                    v-for="id in row.evidence"
+                    :key="id"
+                  >
+                    <code>{{ id }}</code>
+                  </li>
+                </ul>
+              </details><template v-else>
                 {{ CAPACITY_LABELS.noEvidence }}
               </template>
             </td>
@@ -126,5 +136,6 @@ td, th, dd { overflow-wrap: anywhere; }
 tbody th { background: var(--surface); color: var(--text); }
 code { color: var(--text-muted); }
 dt { font-weight: 600; }
+.capacity-evidence { margin: 0; padding: 0; list-style: none; }
 .stage-mark { margin-inline-start: 0.5em; font-style: italic; }
 </style>

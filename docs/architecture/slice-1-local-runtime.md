@@ -133,7 +133,10 @@ CLI, API и задача онлайн-источника показывают к
 Допуск пропусков платформенных `sla`-правил (ADR 0018, решение D6) разрешается при
 разворачивании: `expandPlatformRules` кладёт в `ResourceRuleV1` значения
 `maxMissingFraction` и `maxGapCells` (правило, затем `defaults`, затем
-`MAX_MISSING_FRACTION_DEFAULT = 0.05` и `MAX_GAP_CELLS_DEFAULT = 3`); у правил снимка,
+`MAX_MISSING_FRACTION_DEFAULT = 0.05` и `MAX_GAP_CELLS_DEFAULT = 3`; у правила, чей
+`signal` равен `platform_coverage.signal`, после поля правила сразу идут
+`PLATFORM_COVERAGE_MAX_MISSING_FRACTION_DEFAULT = 0` и
+`PLATFORM_COVERAGE_MAX_GAP_CELLS_DEFAULT = 0`, а `defaults` не учитываются); у правил снимка,
 профиля и платформенных `diagnostic`-правил они `null`, и вычислитель остаётся
 строгим. `evaluateRule` при непустом допуске считает ячейки окна (`CellStats`) и, если
 пропусков не больше допуска, есть хотя бы одна наблюдённая ячейка и разрыв не длиннее
@@ -146,8 +149,11 @@ CLI, API и задача онлайн-источника показывают к
 `resource_policy_check` платформенных проверок получает `expected_cells`,
 `observed_cells`, `missing_cells`, `longest_gap_cells`. При непустых `platform_rules`
 `verdict_gates` дополняется ключами `max_missing_fraction_default` и
-`max_gap_cells_default`: такой анализ получает новый `analysis_id`; анализы без
-`platform_rules` и ключ сопоставимости baseline не меняются.
+`max_gap_cells_default`, а при заданном `platform_coverage` ещё и
+`platform_coverage_max_missing_fraction_default` и
+`platform_coverage_max_gap_cells_default`: такой анализ получает новый
+`analysis_id`; анализы без `platform_rules` и ключ сопоставимости baseline не
+меняются.
 
 Canonical `analysis-result.v1` одинаков для CLI и UI при одинаковых input,
 policy и engine configuration.
@@ -373,7 +379,8 @@ pipeline нет: rollups и P95 предоставляет существующ�
 
 `ltv report` и private report endpoint используют чистые HTML и AsciiDoc renderers
 над сохранённым result. JSON возвращается исходными bytes. HTML содержит
-русские блоки «Вердикт и причины», «Правила», «Транзакции» и «Ограничения»
+русские блоки «Вердикт и причины», «Диагностика ресурсов» (если диагностические
+правила ресурсов сработали), «Правила», «Транзакции» и «Ограничения»
 (слова причин берёт из `ReportReasons.kt`; набор кодов совпадает с
 `ui/src/verdictReasons.ts`, `npm --prefix ui run test:contracts` проверяет
 равенство), затем прежние английские разделы с `lang="en"` (корень `lang="ru"`).

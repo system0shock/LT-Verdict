@@ -71,6 +71,11 @@ export interface CompareLabels {
   unit: (unit: string) => string
   na: string
   naReason: (reason: string | null) => string
+  // Числа сравнения приходят строками с точностью сервера: в русской панели они показаны коротко, точное значение лежит в подсказке ячейки.
+  value: (value: string | null) => string
+  deltaValue: (value: string | null, reason: string | null) => string
+  percentValue: (value: string | null, reason: string | null) => string
+  exact: (value: string | null, percent?: boolean) => string | undefined
   reasons: (reasons: string[]) => string
   reasonOrDash: (reason: string | null) => string
   chartsSummary: string
@@ -166,6 +171,10 @@ export const EN_COMPARE_LABELS: CompareLabels = {
   unit: (unit) => unit,
   na: 'N/A',
   naReason: (reason) => `N/A (${reason})`,
+  value: (value) => value ?? 'N/A',
+  deltaValue: (value, reason) => value ?? `N/A (${reason})`,
+  percentValue: (value, reason) => (value === null ? `N/A (${reason})` : `${value}%`),
+  exact: () => undefined,
   reasons: (reasons) => reasons.join(', ') || '—',
   reasonOrDash: (reason) => reason ?? '—',
   chartsSummary: 'Baseline/current charts',
@@ -219,6 +228,25 @@ const RU_REASONS: Record<string, string> = {
 }
 const ruReason = (code: string): string => (RU_REASONS[code] ? `${RU_REASONS[code]} (${code})` : code)
 
+// Числа сравнения приходят строками с точностью сервера (до шести знаков). Целое и число от 1 показаны с двумя знаками после запятой,
+// малое число (доля ошибок) с тремя значащими цифрами; строка, не похожая на десятичное число, остаётся как есть.
+const RU_DECIMAL = new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 2 })
+const RU_SMALL = new Intl.NumberFormat('ru-RU', { maximumSignificantDigits: 3 })
+function ruNumber(value: string): string {
+  if (!/^-?\d+(\.\d+)?$/.test(value)) return value
+  const number = Number(value)
+  if (!Number.isFinite(number)) return value
+  return Math.abs(number) >= 1 || number === 0 ? RU_DECIMAL.format(number) : RU_SMALL.format(number)
+}
+// Метка времени сервера ('2026-10-05T21:56:29.572852600Z') показана до секунды в UTC; иная форма остаётся как есть.
+function ruTime(value: string): string {
+  const match = /^(\d{4}-\d{2}-\d{2})T(\d{2}:\d{2}:\d{2})(?:\.\d+)?Z$/.exec(value)
+  return match ? `${match[1]} ${match[2]} UTC` : value
+}
+const ruNa = (reason: string | null): string => (reason ? `н/д (${ruReason(reason)})` : 'н/д')
+const ruExact = (value: string | null, suffix = ''): string | undefined =>
+  value !== null && ruNumber(value) !== value ? `${value}${suffix}` : undefined
+
 export const COMPARE_LABELS: CompareLabels = {
   title: 'Сравнение с baseline',
   intro: 'Baseline это зафиксированный сохранённый анализ, выбранный вручную или статистически: новые прогоны его не заменяют. '
@@ -249,7 +277,7 @@ export const COMPARE_LABELS: CompareLabels = {
   conditionsHint: 'Решение сохраняется только для показанных анализов baseline и текущего и, если они введены, для обоих ID окон. '
     + 'Оно меняет трактовку, а не дельты метрик, SLA или вердикт политики.',
   conditionLoading: 'Загрузка сохранённого решения об условиях…',
-  conditionSaved: (decision, updatedAt) => `Сохранено: ${RU_DECISIONS[decision] ?? decision} (${updatedAt})`,
+  conditionSaved: (decision, updatedAt) => `Сохранено: ${RU_DECISIONS[decision] ?? decision} (${ruTime(updatedAt)})`,
   conditionNone: 'Для этой пары решение не сохранено.',
   saveCondition: 'Сохранить решение об условиях',
   savingCondition: 'Сохранение решения…',
@@ -281,7 +309,7 @@ export const COMPARE_LABELS: CompareLabels = {
   currentHead: 'Текущий',
   absoluteHead: 'Абсолютная разница',
   relativeHead: 'Относительная разница',
-  roundingNote: 'Значения округлены до 6 знаков после запятой. Доля ошибок в долях: 0.01 = 1 %.',
+  roundingNote: 'Значения округлены для показа: до 2 знаков после запятой, малые числа до 3 значащих цифр; точное значение видно в подсказке ячейки (при наведении мыши). Доля ошибок в долях: 0.01 = 1 %.',
   windowTitle: 'Наблюдения в выбранных окнах',
   windowStatus: (status) => RU_WINDOW_STATUS[status] ?? status,
   windowStats: (side, samples, durationMs) =>
@@ -296,6 +324,10 @@ export const COMPARE_LABELS: CompareLabels = {
   unit: (unit) => RU_UNITS[unit] ?? unit,
   na: 'н/д',
   naReason: (reason) => (reason ? `н/д (${ruReason(reason)})` : 'н/д'),
+  value: (value) => (value === null ? 'н/д' : ruNumber(value)),
+  deltaValue: (value, reason) => (value === null ? ruNa(reason) : ruNumber(value)),
+  percentValue: (value, reason) => (value === null ? ruNa(reason) : `${ruNumber(value)} %`),
+  exact: (value, percent) => ruExact(value, percent ? ' %' : ''),
   reasons: (reasons) => reasons.map(ruReason).join(', ') || '—',
   reasonOrDash: (reason) => (reason === null ? '—' : ruReason(reason)),
   chartsSummary: 'Графики baseline и текущего прогона',

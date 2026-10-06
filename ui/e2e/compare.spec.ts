@@ -9,6 +9,7 @@ const reference = { run_id: 'base-run', analysis_id: 'b'.repeat(64) }
 const candidate = { run_id: 'c2-run', analysis_id: 'c'.repeat(64) }
 const run = { ...current, source_type: 'jmeter', sha256: 'd'.repeat(64), size_bytes: 100, original_filename: 'cmp.jtl' }
 const updatedAt = '2026-10-04T10:00:00Z'
+const preciseTime = '2026-10-05T21:56:29.572852600Z'
 const result = {
   schema_version: 'analysis-result.v1', run_id: current.run_id, analysis_mode: 'standard', run_validity: 'VALID', policy_verdict: 'NO_POLICY',
   analysis_coverage: { status: 'COMPLETE', reasons: [] }, findings: [], evidence: [],
@@ -24,6 +25,7 @@ type CompareOptions = {
   postBaselineFails?: boolean
   buckets?: boolean
   shell?: 'new' | 'old'
+  precise?: boolean
 }
 
 const metric = (
@@ -76,15 +78,18 @@ async function openCompare(page: Page, opts: CompareOptions = {}) {
     else if (path.endsWith('/baseline-conditions') && method === 'POST') {
       conditions = {
         schema_version: 'local-baseline-conditions.v1', baseline: baselineReference, current, windows: null,
-        decision: 'CONFIRMED', provenance: 'EXPLICIT_LOCAL_ACTION', updated_at: updatedAt,
+        decision: 'CONFIRMED', provenance: 'EXPLICIT_LOCAL_ACTION', updated_at: opts.precise ? preciseTime : updatedAt,
       }
       body = { conditions }
     } else if (path.endsWith('/comparison')) {
       body = {
         baseline, current, comparability: opts.comparability ?? (conditions ? 'USER_CONFIRMED' : 'UNCONFIRMED'), warnings: opts.warnings ?? [], conditions,
         metrics: [
-          metric('response_time_p95_ms', 'ms', '100', '200', '100', '100', null, null),
-          metric('error_rate_ratio', 'ratio', '0', '0.1', '0.1', null, null, 'ZERO_BASELINE'),
+          opts.precise
+            ? metric('response_time_p95_ms', 'ms', '451', '3493.123456', '3042.123456', '674.501109', null, null)
+            : metric('response_time_p95_ms', 'ms', '100', '200', '100', '100', null, null),
+          metric('error_rate_ratio', 'ratio', '0', opts.precise ? '0.012345' : '0.1', opts.precise ? '0.012345' : '0.1', null, null, 'ZERO_BASELINE'),
+          ...(opts.precise ? [metric('throughput_rps', 'rps', '59.997667', '60', '0.002333', '0.003888', null, null)] : []),
         ],
         ...(opts.windowReasons || opts.windowStatus ? {
           window_comparison: {
@@ -159,6 +164,38 @@ test('compare tab is Russian, keeps the server warning order and says the verdic
   await page.locator('#shell-tab-overview').click()
   await expect(page.locator('#verdict')).toContainText('NO_POLICY')
   expect(requests.paths).not.toContain('POST /api/jobs')
+})
+
+test('numbers and the save time are shown short in Russian, the exact value stays in the cell title', async ({ page }) => {
+  await openCompare(page, { precise: true, baselineMode: 'manual' })
+  await page.getByRole('button', { name: COMPARE_LABELS.compare, exact: true }).click()
+  await page.getByLabel(COMPARE_LABELS.conditionConfirmed, { exact: true }).check()
+  await page.getByRole('button', { name: COMPARE_LABELS.saveCondition, exact: true }).click()
+  const status = page.getByTestId('baseline-condition-status')
+  await expect(status).toContainText('2026-10-05 21:56:29 UTC')
+  await expect(status).not.toContainText('572852600')
+  const p95 = page.getByTestId('comparison-response_time_p95_ms').locator('td')
+  await expect(p95.nth(1)).toHaveText('451')
+  await expect(p95.nth(2)).toHaveText('3 493,12')
+  await expect(p95.nth(2)).toHaveAttribute('title', '3493.123456')
+  await expect(p95.nth(3)).toHaveText('3 042,12')
+  await expect(p95.nth(4)).toHaveText('674,5 %')
+  await expect(p95.nth(4)).toHaveAttribute('title', '674.501109 %')
+  const throughput = page.getByTestId('comparison-throughput_rps').locator('td')
+  await expect(throughput.nth(1)).toHaveText('60')
+  await expect(throughput.nth(3)).toHaveText('0,00233')
+  await expect(page.getByTestId('comparison-error_rate_ratio').locator('td').nth(2)).toHaveText('0,0123')
+  await expect(page.getByTestId('baseline-comparison')).not.toContainText('59.997667')
+})
+
+test('the old interface keeps the exact numbers and the raw time', async ({ page }) => {
+  await openCompare(page, { precise: true, baselineMode: 'manual', shell: 'old' })
+  await page.getByRole('button', { name: EN_COMPARE_LABELS.compare, exact: true }).click()
+  await page.getByLabel(EN_COMPARE_LABELS.conditionConfirmed, { exact: true }).check()
+  await page.getByRole('button', { name: EN_COMPARE_LABELS.saveCondition, exact: true }).click()
+  await expect(page.getByTestId('baseline-condition-status')).toContainText(EN_COMPARE_LABELS.conditionSaved('CONFIRMED', preciseTime))
+  await expect(page.getByTestId('comparison-response_time_p95_ms').locator('td').nth(2)).toHaveText('3493.123456')
+  await expect(page.getByTestId('comparison-response_time_p95_ms').locator('td').nth(4)).toHaveText('674.501109%')
 })
 
 test('USER_CONFIRMED shows the confirmed status line', async ({ page }) => {

@@ -561,10 +561,18 @@ function warningText(code: string): string {
               :data-testid="`comparison-${metric.metric}`"
             >
               <td>{{ labels.metric(metric.metric) }} / {{ labels.unit(metric.unit) }}</td>
-              <td>{{ metric.baseline ?? labels.na }}</td>
-              <td>{{ metric.current ?? labels.na }}</td>
-              <td>{{ metric.delta ?? labels.naReason(metric.reason) }}</td>
-              <td>{{ metric.delta_percent === null ? labels.naReason(metric.percent_reason) : `${metric.delta_percent}%` }}</td>
+              <td :title="labels.exact(metric.baseline)">
+                {{ labels.value(metric.baseline) }}
+              </td>
+              <td :title="labels.exact(metric.current)">
+                {{ labels.value(metric.current) }}
+              </td>
+              <td :title="labels.exact(metric.delta)">
+                {{ labels.deltaValue(metric.delta, metric.reason) }}
+              </td>
+              <td :title="labels.exact(metric.delta_percent, true)">
+                {{ labels.percentValue(metric.delta_percent, metric.percent_reason) }}
+              </td>
             </tr>
           </tbody>
         </table>
@@ -633,10 +641,18 @@ function warningText(code: string): string {
                 :key="`${metric.metric}-${metric.entity}-${metric.resource_series_id}-${index}`"
               >
                 <td>{{ labels.metric(metric.metric) }} / {{ metric.entity ?? labels.overall }} / {{ metric.resource_series_id ?? '—' }} / {{ labels.unit(metric.unit) }}</td>
-                <td>{{ metric.baseline ?? labels.na }}</td>
-                <td>{{ metric.current ?? labels.na }}</td>
-                <td>{{ metric.delta ?? labels.naReason(metric.reason) }}</td>
-                <td>{{ metric.delta_percent === null ? labels.naReason(metric.percent_reason) : `${metric.delta_percent}%` }}</td>
+                <td :title="labels.exact(metric.baseline)">
+                  {{ labels.value(metric.baseline) }}
+                </td>
+                <td :title="labels.exact(metric.current)">
+                  {{ labels.value(metric.current) }}
+                </td>
+                <td :title="labels.exact(metric.delta)">
+                  {{ labels.deltaValue(metric.delta, metric.reason) }}
+                </td>
+                <td :title="labels.exact(metric.delta_percent, true)">
+                  {{ labels.percentValue(metric.delta_percent, metric.percent_reason) }}
+                </td>
                 <td>{{ labels.windowStatus(metric.status) }} · {{ labels.reasonOrDash(metric.reason) }}</td>
               </tr>
             </tbody>

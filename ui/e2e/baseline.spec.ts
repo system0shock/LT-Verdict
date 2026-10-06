@@ -422,8 +422,11 @@ test('the new shell compare tab shows the same numbers in Russian', async ({ pag
   await page.getByRole('button', { name: COMPARE_LABELS.compare, exact: true }).click()
   await expect(page.getByTestId('baseline-comparison')).toContainText(COMPARE_LABELS.statusLine('UNCONFIRMED'))
   await expect(page.getByTestId('baseline-warnings')).toHaveCount(0)
-  expect((await rowCells('response_time_p95_ms')).slice(1)).toEqual(oldP95)
-  expect((await rowCells('throughput_rps')).slice(1)).toEqual(oldThroughput)
+  // The Russian panel shows the numbers short ("100 %", "3 493,12"): same values, other format.
+  const asNumbers = (cells: string[]) => cells.map((cell) => Number(cell.replace(/[\s%]/g, '').replace(',', '.')))
+  for (const [now, old] of [[await rowCells('response_time_p95_ms'), oldP95], [await rowCells('throughput_rps'), oldThroughput]]) {
+    asNumbers(now.slice(1)).forEach((value, index) => expect(value).toBeCloseTo(asNumbers(old)[index], 1))
+  }
 
   const response = await page.request.get(`/api/runs/${current.run_id}/analyses/${current.analysis_id}/comparison`)
   expect(response.ok()).toBeTruthy()

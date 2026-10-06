@@ -1,6 +1,6 @@
 # Saved-run analytics
 
-Панель **Saved-run analytics** читает только сохранённые локальные RunBundles. Она не повторяет запросы к VictoriaMetrics, Prometheus, OpenSearch или другим внешним источникам.
+В новой оболочке панель называется «Сохранённая аналитика» (заголовок, поля, кнопки и ссылки экспорта по-русски; таблицы внутри остаются английскими), в прежнем интерфейсе **Saved-run analytics**. Панель читает только сохранённые локальные RunBundles. Она не повторяет запросы к VictoriaMetrics, Prometheus, OpenSearch или другим внешним источникам.
 
 N-run dynamics по умолчанию показывает 10 последних найденных analyses с точным comparability key; допустимый предел — 1–100 строк. Локальный history scan ограничен 1000 analyses, 4096 directory entries и 16 MiB проверенных metadata. Если scan остановлен по любому из этих bounds, результат может пропустить сопоставимые прогоны, а latest-N относится только к просмотренной части истории. Для history проверяются canonical manifest и hashes сохранённых `run.json`, result и identity; выбранные current/baseline проходят проверку RunBundle по manifest, путям и размерам файлов, без пересчёта SHA-256 входа и артефактов, кроме identity (см. «Целостность хранилища» в руководстве по локальному анализу).
 

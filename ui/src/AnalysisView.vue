@@ -2,7 +2,7 @@
 import { computed, nextTick, ref, watch } from 'vue'
 import LoadCharts from './LoadCharts.vue'
 import { CORRELATION_LABELS } from './shell/labels'
-import { NORMALIZED_LABELS } from './shell/labels.tables'
+import { NORMALIZED_LABELS, RESOURCE_CHECK_LABELS } from './shell/labels.tables'
 import { selectedCorrelations, unavailableFamilies } from './shell/overview'
 import type { AnalysisResult, Bucket, SourceSummaryEvidence, OpenSearchEvidence, PostgresContextEvidence, TrendCheckEvidence, TrendSummaryEvidence } from './types'
 
@@ -47,6 +47,9 @@ function checkCoverage(item: Evidence): string | null {
     : ''
   return `${observed} / ${expected} (${percent} %)${gaps}`
 }
+const checkHeads = computed(() => props.shellTables
+  ? RESOURCE_CHECK_LABELS.heads
+  : { window: 'Window', rule: 'Rule', service: 'Service', series: 'Series', operator: 'Operator', threshold: 'Threshold', effect: 'Effect', status: 'Status', reason: 'Reason', coverage: 'Coverage (observed / expected)' })
 const resourceBindings = computed(() => evidence.value.filter((item) => item.type === 'resource_binding'))
 const sourceSummaries = computed(() => props.result.evidence
   .filter((item): item is SourceSummaryEvidence => item.type === 'source_summary')
@@ -647,37 +650,37 @@ function updateRange(name: 'update:range-start' | 'update:range-end', event: Eve
       aria-label="Resource policy checks"
     >
       <table>
-        <thead>
+        <thead :lang="shellTables ? 'ru' : undefined">
           <tr>
             <th>
-              Window
+              {{ checkHeads.window }}
             </th>
             <th>
-              Rule
+              {{ checkHeads.rule }}
             </th>
             <th v-if="platformChecks">
-              Service
+              {{ checkHeads.service }}
             </th>
             <th>
-              Series
+              {{ checkHeads.series }}
             </th>
             <th>
-              Operator
+              {{ checkHeads.operator }}
             </th>
             <th>
-              Threshold
+              {{ checkHeads.threshold }}
             </th>
             <th>
-              Effect
+              {{ checkHeads.effect }}
             </th>
             <th>
-              Status
+              {{ checkHeads.status }}
             </th>
             <th>
-              Reason
+              {{ checkHeads.reason }}
             </th>
             <th v-if="platformChecks">
-              Coverage (observed / expected)
+              {{ checkHeads.coverage }}
             </th>
           </tr>
         </thead>

@@ -2101,7 +2101,7 @@ class LocalApiTest {
             assertEquals(setOf("baseline", "baselines"), listed.keys)
             assertEquals(JsonNull, listed.getValue("baseline"))
             val slots = listed.getValue("baselines").jsonArray
-            assertEquals(listOf("A/null", "B/null"), slots.map { it.slotKey() })
+            assertEquals(listOf("A/null", "B/null"), slots.map { it.slotName() })
             assertEquals(setOf("series", "arm", "source", "baseline"), slots[0].jsonObject.keys)
             assertEquals(
                 listOf("SLOT", "SLOT"),
@@ -2194,7 +2194,7 @@ class LocalApiTest {
             // the bare delete clears the legacy file and no slot
             store.replaceBaseline(manualBaselineSelection("old", reference(runs[0].first, runs[0].second)))
             assertEquals(JsonNull, api.delete("/api/baseline").jsonObject().getValue("baseline"))
-            assertEquals(listOf("release/null"), api.slots().map { it.slotKey() })
+            assertEquals(listOf("release/null"), api.slots().map { it.slotName() })
             assertEquals(JsonNull, api.get("/api/baseline").jsonObject().getValue("baseline"))
             assertEquals(JsonNull, api.delete("/api/baseline").jsonObject().getValue("baseline"))
         }
@@ -2222,7 +2222,7 @@ class LocalApiTest {
 
             // A and C share one baseline reference and one pair record: it stays for C
             assertEquals(JsonNull, api.delete("/api/baseline?series=A").jsonObject().getValue("baseline"))
-            assertEquals(listOf("B/null", "C/null"), api.slots().map { it.slotKey() })
+            assertEquals(listOf("B/null", "C/null"), api.slots().map { it.slotName() })
             assertEquals("CONFIRMED", api.conditionDecision("$conditions?series=C"))
             assertEquals("CONFIRMED", api.conditionDecision("$conditions?series=B"))
 
@@ -2235,9 +2235,9 @@ class LocalApiTest {
             // deleting what is not there is not an error, and the arm names a different slot
             assertEquals(200, api.delete("/api/baseline?series=missing").statusCode())
             assertEquals(200, api.delete("/api/baseline?series=B&arm=blue").statusCode())
-            assertEquals(listOf("B/null", "C/null"), api.slots().map { it.slotKey() })
+            assertEquals(listOf("B/null", "C/null"), api.slots().map { it.slotName() })
             assertEquals(200, api.delete("/api/baseline?series=B").statusCode())
-            assertEquals(listOf("C/null"), api.slots().map { it.slotKey() })
+            assertEquals(listOf("C/null"), api.slots().map { it.slotName() })
         }
 
     @Test
@@ -2303,7 +2303,7 @@ class LocalApiTest {
                     .getValue("arm")
                     .jsonPrimitive.content,
             )
-            assertEquals("S/blue", slot.slotKey())
+            assertEquals("S/blue", slot.slotName())
 
             assertEquals(201, api.createRelease(releaseBody(input.runId, listOf(plain), series = "S")).statusCode())
             assertError(api.get("/api/runs/${input.runId}/analyses/$plain/comparison"), 404, "NOT_FOUND")
@@ -2311,9 +2311,9 @@ class LocalApiTest {
 
             // the same series at another arm is another slot, and the arm names the slot to delete
             assertEquals(200, api.selectManual(input.runId, plain, "S").statusCode())
-            assertEquals(listOf("S/blue", "S/null"), api.slots().map { it.slotKey() }.sorted())
+            assertEquals(listOf("S/blue", "S/null"), api.slots().map { it.slotName() }.sorted())
             assertEquals(200, api.delete("/api/baseline?series=S&arm=blue").statusCode())
-            assertEquals(listOf("S/null"), api.slots().map { it.slotKey() })
+            assertEquals(listOf("S/null"), api.slots().map { it.slotName() })
         }
 
     @Test
@@ -2426,7 +2426,7 @@ class LocalApiTest {
             .getValue("decision")
             .jsonPrimitive.content
 
-    private fun JsonElement.slotKey(): String =
+    private fun JsonElement.slotName(): String =
         jsonObject.let { "${it.getValue("series").jsonPrimitive.content}/${it.getValue("arm").jsonPrimitive.contentOrNull}" }
 
     private fun JsonElement.slotReference(): JsonObject =

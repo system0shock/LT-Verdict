@@ -181,6 +181,18 @@ class CorrelationOracleTest(unittest.TestCase):
         with self.assertRaises(ValueError):
             oracle.select([long], "fixture", "x")
 
+    def test_select_accepts_1920_difference_points(self):
+        source = [float(i) for i in range(1921)]
+        row = oracle.select([oracle.Hypothesis("limit", "evaluation", source, source, 0)],
+                            "fixture", "first_difference")[0]
+        self.assertEqual(row.reasons, ["PAIR_NOT_EVALUABLE"])
+
+    def test_select_rejects_1921_difference_points(self):
+        source = [float(i) for i in range(1922)]
+        row = oracle.select([oracle.Hypothesis("over", "evaluation", source, source, 0)],
+                            "fixture", "first_difference")[0]
+        self.assertEqual(row.reasons, ["OBSERVATION_COUNT_UNSUPPORTED"])
+
     def test_select_materiality_and_unavailable_reasons(self):
         outcome = [float(i // 2 + 1) for i in range(40)]
         rows = oracle.select([

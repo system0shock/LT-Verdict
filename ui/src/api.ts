@@ -41,6 +41,8 @@ export class ApiError extends Error {
     readonly status: number,
     readonly code: string,
     message: string,
+    // `error.limit` of the 422 codes that name a limit (baseline slots, condition records).
+    readonly limit: number | null = null,
   ) {
     super(message)
   }
@@ -262,8 +264,9 @@ function requireCsrf(): string {
 
 function apiError(status: number, text: string): ApiError {
   try {
-    const body = JSON.parse(text) as { error?: { code?: string; message?: string } }
-    return new ApiError(status, body.error?.code ?? 'REQUEST_FAILED', body.error?.message ?? 'Local request failed')
+    const body = JSON.parse(text) as { error?: { code?: string; message?: string; limit?: unknown } }
+    const limit = typeof body.error?.limit === 'number' ? body.error.limit : null
+    return new ApiError(status, body.error?.code ?? 'REQUEST_FAILED', body.error?.message ?? 'Local request failed', limit)
   } catch {
     return new ApiError(status, 'REQUEST_FAILED', 'Local request failed')
   }
@@ -317,9 +320,10 @@ export function advanceJenkins(profileId: string, attemptId: string, operation: 
   })
 }
 
-export function getSavedAnalytics(reference: AnalysisReference, limit = 10, transaction = '', transactionLimit = 100): Promise<SavedAnalytics> {
+export function getSavedAnalytics(reference: AnalysisReference, limit = 10, transaction = '', transactionLimit = 100, series = ''): Promise<SavedAnalytics> {
   const query = new URLSearchParams({ limit: String(limit), transaction_limit: String(transactionLimit) })
   if (transaction.trim()) query.set('transaction', transaction.trim())
+  if (series) query.set('series', series)
   return request(`/api/runs/${encodeURIComponent(reference.run_id)}/analyses/${encodeURIComponent(reference.analysis_id)}/analytics?${query}`)
 }
 

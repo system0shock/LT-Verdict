@@ -4,7 +4,7 @@
 // и подсказка старых правил остаются в BASELINE_LABELS (labels.ts) и здесь не дублируются.
 // Коды причин и статусов, которых нет в таблицах ниже, выводятся как есть.
 import type { BaselineComparison } from '../types'
-import { pluralRu } from './labels'
+import { BASELINE_ERROR_LABELS, pluralRu } from './labels'
 
 export interface CompareLabels {
   title: string
@@ -14,6 +14,9 @@ export interface CompareLabels {
   seriesDefault: string
   loading: string
   noBaseline: string
+  // Список активных baseline (по одному на серию) и пояснение, когда у выбранной серии baseline нет.
+  slotsLegend: string
+  noBaselineFor: (series: string) => string
   mode: (mode: string) => string
   runWord: string
   analysisWord: string
@@ -48,6 +51,8 @@ export interface CompareLabels {
   candidatesHint: string
   selectStatistically: string
   requestFailed: string
+  // Фраза словаря для кода 422 (`limit` из `error.limit`) или null: тогда показывается сообщение сервера.
+  errorText: (code: string, limit: number | null) => string | null
   metricsTitle: string
   statusLine: (comparability: BaselineComparison['comparability']) => string
   deltasNote: string
@@ -108,6 +113,8 @@ export const EN_COMPARE_LABELS: CompareLabels = {
   seriesDefault: 'Selected test series',
   loading: 'Loading baseline…',
   noBaseline: 'No baseline selected. Open a saved analysis to assign one.',
+  slotsLegend: 'Active baselines (one per series)',
+  noBaselineFor: (series) => `No baseline for series “${series}”.`,
   mode: (mode) => mode,
   runWord: 'Run',
   analysisWord: 'Analysis',
@@ -149,6 +156,7 @@ export const EN_COMPARE_LABELS: CompareLabels = {
     + 'This confirms the candidate set only; confirm each compared pair in the planned-conditions form.',
   selectStatistically: 'Select statistically',
   requestFailed: 'Baseline request failed.',
+  errorText: () => null,
   metricsTitle: 'Overall metrics against baseline',
   statusLine: (comparability) => `Planned conditions: ${comparability}`,
   deltasNote: 'Deltas alone do not prove a version regression or change the policy verdict.',
@@ -268,6 +276,8 @@ export const COMPARE_LABELS: CompareLabels = {
   seriesDefault: 'Выбранная серия тестов',
   loading: 'Загрузка baseline…',
   noBaseline: 'Baseline не выбран. Откройте сохранённый анализ, чтобы назначить его.',
+  slotsLegend: 'Активные baseline (по одному на серию)',
+  noBaselineFor: (series) => `Для серии «${series}» baseline не выбран.`,
   mode: (mode) => RU_MODES[mode] ?? mode,
   runWord: 'Прогон',
   analysisWord: 'Анализ',
@@ -309,6 +319,7 @@ export const COMPARE_LABELS: CompareLabels = {
     + 'Это подтверждает только набор кандидатов; каждую сравниваемую пару подтверждайте в форме плановых условий выше.',
   selectStatistically: 'Выбрать статистически',
   requestFailed: 'Не удалось выполнить запрос baseline.',
+  errorText: (code, limit) => BASELINE_ERROR_LABELS[code]?.(limit) ?? null,
   metricsTitle: 'Общие метрики относительно baseline',
   statusLine: (comparability) => (comparability === 'USER_CONFIRMED'
     ? 'Условия подтверждены вами'

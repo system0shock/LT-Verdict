@@ -164,6 +164,7 @@ const selectedReference = computed(() => result.value && selectedAnalysisId.valu
   ? { run_id: result.value.run_id, analysis_id: selectedAnalysisId.value }
   : null)
 watch(selectedReference, () => { chartMarkers.value = [] })
+const baselineSeries = ref<string>()
 const httpSourceProfiles = computed(() => sourceProfiles.value.filter((profile) => profile.source_kind !== 'postgresql'))
 const postgresProfiles = computed(() => sourceProfiles.value.filter((profile) => profile.source_kind === 'postgresql' && profile.transport === 'jdbc'))
 const sourceRequestState = computed<{ request: SourceRequest | null; error: string }>(() => {
@@ -1046,6 +1047,7 @@ function focusPolicy() {
             :working="working"
             :labels="shellNew ? COMPARE_LABELS : undefined"
             :lang="shellNew ? 'ru' : undefined"
+            @active-series="baselineSeries = $event"
           />
 
           <div
@@ -1129,6 +1131,7 @@ function focusPolicy() {
             v-show="shownIn('overview')"
             :selection="selectedReference"
             :working="working"
+            :series="baselineSeries"
             @loaded="chartMarkers = $event?.overlay?.markers ?? []"
           />
 

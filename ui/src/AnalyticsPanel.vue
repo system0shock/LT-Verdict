@@ -8,14 +8,15 @@ import OpenSearchOverlay from './OpenSearchOverlay.vue'
 import RunDynamicsTable from './RunDynamicsTable.vue'
 import TransactionComparisonTable from './TransactionComparisonTable.vue'
 
-const props = defineProps<{ selection: AnalysisReference | null; working: boolean }>()
+// `series` is the series of the active baseline (BaselinePanel): the server picks the baseline of the comparison by it.
+const props = defineProps<{ selection: AnalysisReference | null; working: boolean; series?: string }>()
 const emit = defineEmits<{ loaded: [analytics: SavedAnalytics | null] }>()
 const limit = ref(10)
 const transaction = ref('')
 const transactionLimit = ref(100)
 const analytics = ref<SavedAnalytics | null>(null)
 const selectedDynamics = ref<AnalysisReference[]>([])
-const loadedOptions = ref<{ limit: number; transaction: string; transactionLimit: number } | null>(null)
+const loadedOptions = ref<{ limit: number; transaction: string; transactionLimit: number; series: string } | null>(null)
 const loading = ref(false)
 const error = ref('')
 let revision = 0
@@ -25,6 +26,7 @@ const exportHref = computed(() => {
   if (!props.selection || !loadedOptions.value) return ''
   const query = new URLSearchParams({ limit: String(loadedOptions.value.limit), transaction_limit: String(loadedOptions.value.transactionLimit) })
   if (loadedOptions.value.transaction) query.set('transaction', loadedOptions.value.transaction)
+  if (loadedOptions.value.series) query.set('series', loadedOptions.value.series)
   const selected = new Set(selectedDynamics.value.map(referenceKey))
   analytics.value?.dynamics?.rows.forEach((row) => {
     if (!selected.has(referenceKey(row.reference))) query.append('exclude', referenceKey(row.reference))
@@ -32,7 +34,7 @@ const exportHref = computed(() => {
   return `/api/runs/${encodeURIComponent(props.selection.run_id)}/analyses/${encodeURIComponent(props.selection.analysis_id)}/analytics?${query}`
 })
 
-watch(() => props.selection, reset, { immediate: true })
+watch(() => [props.selection, props.series], reset, { immediate: true })
 
 function reset() {
   revision++
@@ -46,7 +48,7 @@ function reset() {
 
 async function load() {
   const selection = props.selection
-  const options = { limit: limit.value, transaction: transaction.value.trim(), transactionLimit: transactionLimit.value }
+  const options = { limit: limit.value, transaction: transaction.value.trim(), transactionLimit: transactionLimit.value, series: props.series ?? '' }
   const requestRevision = ++revision
   const selectionKey = selection ? `${selection.run_id}/${selection.analysis_id}` : null
   analytics.value = null
@@ -57,7 +59,7 @@ async function load() {
   if (!selection) return
   loading.value = true
   try {
-    const response = await getSavedAnalytics({ ...selection }, options.limit, options.transaction, options.transactionLimit)
+    const response = await getSavedAnalytics({ ...selection }, options.limit, options.transaction, options.transactionLimit, options.series)
     const currentKey = props.selection ? `${props.selection.run_id}/${props.selection.analysis_id}` : null
     if (requestRevision === revision && currentKey === selectionKey) {
       analytics.value = response

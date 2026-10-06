@@ -156,7 +156,7 @@ test('compare tab is Russian, keeps the server warning order and says the verdic
   const requests = await openCompare(page, {
     warnings: [
       'BASELINE_IS_CURRENT_RUN', 'CURRENT_IN_CANDIDATE_SET', 'BASELINE_NOT_PASS', 'BASELINE_SMALL_SAMPLE',
-      'BASELINE_SERIES_DIFFERS', 'POLICY_DIFFERS', 'PROFILE_MISMATCH',
+      'POLICY_DIFFERS', 'PROFILE_MISMATCH',
     ],
     comparability: 'UNCONFIRMED',
   })
@@ -169,7 +169,6 @@ test('compare tab is Russian, keeps the server warning order and says the verdic
     BASELINE_LABELS.warnings.CURRENT_IN_CANDIDATE_SET,
     BASELINE_LABELS.warnings.BASELINE_NOT_PASS,
     BASELINE_LABELS.warnings.BASELINE_SMALL_SAMPLE,
-    BASELINE_LABELS.warnings.BASELINE_SERIES_DIFFERS,
     BASELINE_LABELS.warnings.POLICY_DIFFERS,
     BASELINE_LABELS.warnings.PROFILE_MISMATCH,
   ])

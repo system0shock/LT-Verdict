@@ -294,6 +294,11 @@ td:not(:first-child), th:not(:first-child) { font-family: "Cascadia Mono", Conso
 .baseline-panel .panel__header { margin-bottom: 0; }
 .baseline-selection, .baseline-statistics li { overflow-wrap: anywhere; }
 .baseline-statistics > :not(summary) { margin-top: 12px; }
+.baseline-slots { margin: 0; padding: 0; border: 0; }
+.baseline-slots > legend { padding: 0; font-weight: 600; }
+.baseline-slot { display: flex; align-items: center; gap: 8px; min-height: 44px; }
+.baseline-slot input { flex: none; }
+.baseline-slot > span { min-width: 0; overflow-wrap: anywhere; }
 .baseline-panel summary, #diagnostic-results summary { min-height: 44px; padding: 10px 0; cursor: pointer; }
 .baseline-panel summary:focus-visible, #diagnostic-results summary:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
 .baseline-confirmation { display: flex; align-items: center; gap: 8px; min-height: 44px; }

@@ -18,12 +18,13 @@ STUB = textwrap.dedent('''
     import json, pathlib, sys, time
     here = pathlib.Path(__file__).parent
     argv = sys.argv[1:]
+    out_arg = pathlib.Path(argv[argv.index('-o') + 1])
+    ledger_file = out_arg.parent.parent / 'ledger.jsonl'
+    ledger_at_start = ledger_file.read_text(encoding='utf-8') if ledger_file.exists() else ''
     prompt = sys.stdin.buffer.read()
     text = prompt.decode('utf-8', 'replace')
-    record = {'argv': argv, 'stdin_hex_sha': __import__('hashlib').sha256(prompt).hexdigest()}
-    for line in text.splitlines():
-        if line.startswith('LEDGER='):
-            record['ledger_at_spawn'] = pathlib.Path(line[7:]).read_text(encoding='utf-8')
+    record = {'argv': argv, 'stdin_hex_sha': __import__('hashlib').sha256(prompt).hexdigest(),
+              'ledger_at_spawn': ledger_at_start}
     (here / 'record.json').write_text(json.dumps(record), encoding='utf-8')
     out = argv[argv.index('-o') + 1]
     if 'MODE:sleep' in text:
@@ -272,7 +273,7 @@ class EnvAndWorkdirTests(Base):
 
 class RunCallTests(Base):
     def test_reservation_is_on_disk_before_the_process_starts(self):
-        result = self.run_stub(f'LEDGER={self.harness / "ledger.jsonl"}\nsay PONG')
+        result = self.run_stub('say PONG')
         seen = [json.loads(x) for x in self.record()['ledger_at_spawn'].splitlines()]
         self.assertEqual(['reserve'], [e['event'] for e in seen])
         self.assertEqual('ok', result['status'])
@@ -356,6 +357,61 @@ class RunCallTests(Base):
         self.assertEqual('violation', result['status'])
         self.assertIn('workdir_not_empty', result['problems'])
         self.assertEqual(['leak.txt'], cr.workdir_leftovers(result['workdir']))
+
+
+class ReviewFindingsTests(Base):
+    def test_extra_fields_cannot_overwrite_protected_ledger_fields(self):
+        for key in ('event', 'seq', 'runner', 'ts', 'total_cap'):
+            with self.subTest(key=key), self.assertRaises(ValueError):
+                self.ledger.reserve('p', 'probe', 10, 'a', 'm', 'low', **{key: 'x'})
+        self.assertEqual(0, self.ledger.count())
+
+    def test_config_extra_with_a_protected_name_stops_the_call_before_the_spawn(self):
+        self.cfg.extra['event'] = 'finish'
+        with self.assertRaises(ValueError):
+            self.run_stub('say PONG')
+        self.assertFalse((self.root / 'record.json').exists())
+
+    def test_finish_facts_cannot_overwrite_protected_fields(self):
+        entry = self.ledger.reserve('p', 'probe', 10, 'a', 'm', 'low')
+        with self.assertRaises(ValueError):
+            self.ledger.finish(entry['call_id'], 'ok', runner='other')
+
+    def test_needle_names_must_be_plain_names(self):
+        with self.assertRaises(ValueError):
+            self.run_stub('say PONG', needles={'bad name': 'x'})
+        self.assertEqual(0, self.ledger.count())
+
+    def test_seed_files_are_listed_in_the_reservation(self):
+        self.run_stub('say PONG', seed_files={'control.txt': b'x'})
+        self.assertEqual(['control.txt'], self.ledger_events()[0]['seed_files'])
+
+    def test_output_and_schema_paths_must_live_under_the_harness_root(self):
+        outside = self.root / 'elsewhere'
+        argv = cr.build_argv(self.cfg, model='m', effort='low', workdir=self.harness / 'work' / 'w', out_path=outside / 'o')
+        with self.assertRaises(cr.ForbiddenFlag):
+            cr.validate_argv(argv, self.cfg)
+        argv = cr.build_argv(self.cfg, model='m', effort='low', workdir=self.harness / 'work' / 'w',
+                             out_path=self.harness / 'o', schema_path=self.repo / 's.json')
+        with self.assertRaises(cr.ForbiddenFlag):
+            cr.validate_argv(argv, self.cfg)
+
+    def test_the_executable_prefix_must_match_the_configuration(self):
+        argv = self.argv_for_prefix()
+        cr.validate_argv(argv, self.cfg)
+        argv[0] = 'other-binary'
+        with self.assertRaises(cr.ForbiddenFlag):
+            cr.validate_argv(argv, self.cfg)
+
+    def test_repeated_mandatory_flags_are_refused(self):
+        argv = self.argv_for_prefix()
+        argv.insert(len(self.cfg.executable) + 1, '--json')
+        with self.assertRaises(cr.ForbiddenFlag):
+            cr.validate_argv(argv, self.cfg)
+
+    def argv_for_prefix(self):
+        return cr.build_argv(self.cfg, model='m', effort='low', workdir=self.harness / 'work' / 'w',
+                             out_path=self.harness / 'out' / 'o')
 
 
 class ProbeExceptionTests(Base):

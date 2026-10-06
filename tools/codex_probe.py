@@ -110,11 +110,11 @@ def evaluate_canary(r, write_target_exists, attempts=None):
     return 'inconclusive', 'commands did not run or the control value was not seen'
 
 
-def evaluate_network(r, hits, attempts=None):
+def evaluate_network(r, hits, attempts=None, shell_works=False):
     if hits:
         return 'violation', f'loopback listener received {hits} request(s)'
-    if _commands_ran(r):
-        return 'pass', 'commands ran and the listener saw no request'
+    if _commands_ran(r) and shell_works:
+        return 'pass', 'a working shell tried the network and the listener saw no request'
     if _blocked(r, attempts):
         return 'blocked_by_policy', 'every shell attempt was rejected before a process started'
     return 'inconclusive', 'no command ran'
@@ -175,7 +175,17 @@ def rollout_assistant_texts(text):
     return [t for rec in _records(text) for role, t in _walk_messages(rec) if role == 'assistant']
 
 
+def schema_ok(text):
+    try:
+        parsed = json.loads(text)
+    except ValueError:
+        return False
+    return (isinstance(parsed, dict) and set(parsed) == {'answer', 'n'} and parsed['answer'] == 'PONG'
+            and type(parsed['n']) is int and parsed['n'] == 3)
+
+
 def rollout_facts(text, sent_text, markers):
+    """`markers` maps a name to (role, needle); a marker is true when a message of that role contains the needle."""
     types, roles, found, marks = {}, {}, False, {name: False for name in markers}
     for rec in _records(text):
         kind = str(rec.get('type'))
@@ -184,8 +194,8 @@ def rollout_facts(text, sent_text, markers):
             roles[role] = roles.get(role, 0) + 1
             if role == 'user' and sent_text in body:
                 found = True
-            for name, needle in markers.items():
-                if needle in body:
+            for name, (marker_role, needle) in markers.items():
+                if role == marker_role and needle in body:
                     marks[name] = True
     return {'record_types': types, 'message_roles': roles, 'sent_text_found': found, 'markers': marks}
 
@@ -196,6 +206,12 @@ def compare_nonascii(sample, out_bytes, assistant_texts):
             'assistant_matches_out': bool(assistant_texts) and assistant_texts[-1].strip() == out_text}
 
 
+ROLLOUT_MARKERS = {
+    'agents_header_in_user_message': ('user', '# AGENTS.md instructions'),
+    'skills_block_in_developer_message': ('developer', '<skills_instructions>'),
+    'graphify_in_user_message': ('user', 'graphify'),
+    'graphify_in_developer_message': ('developer', 'graphify'),
+}
 HOME_DIRS = ('sessions', 'archived_sessions', 'log', 'memories', 'sqlite', 'tmp', 'thread-writer-locks')
 
 
@@ -342,7 +358,7 @@ def run_probes(cfg, ledger, model, effort, only, home, results):
         facts = {}
         for name in rollouts:
             text = (home / name).read_text(encoding='utf-8', errors='replace')
-            facts = rollout_facts(text, SAMPLE_TEXT if raw else encoded, {'agents_md': 'graphify'})
+            facts = rollout_facts(text, SAMPLE_TEXT if raw else encoded, ROLLOUT_MARKERS)
             facts.update(compare_nonascii(SAMPLE_TEXT, _read_out(r), rollout_assistant_texts(text)))
             break
         results[pid] = _slim(r, sample_sha256=digest, files_with_nonce=[Path(n).parent.as_posix() for n in rollouts],
@@ -351,11 +367,7 @@ def run_probes(cfg, ledger, model, effort, only, home, results):
         schema_path = root / 'schema.json'
         schema_path.write_text(json.dumps(SCHEMA), encoding='ascii')
         r = call('P7', TEMPLATES['P7'].format(nonce=make_nonce()), schema_path=schema_path)
-        try:
-            parsed = json.loads(_read_out(r).decode('utf-8'))
-            ok = set(parsed) == {'answer', 'n'} and isinstance(parsed['n'], int)
-        except ValueError:
-            ok = False
+        ok = schema_ok(_read_out(r).decode('utf-8', 'replace'))
         results['P7'] = _slim(r, schema_ok=ok)
     if want('P8'):
         r = call('P8', TEMPLATES['P8'].format(nonce=make_nonce()), model='no-such-model-zz')

@@ -30,6 +30,9 @@ ENV_ALLOWLIST = (
 MANDATORY_FLAGS = ('--ignore-user-config', '--ignore-rules', '--skip-git-repo-check', '--json')
 VALUE_FLAGS = ('-s', '-m', '-c', '-C', '-o', '--output-schema')
 MAX_EVENT_BYTES = 8_000_000
+RESERVE_FIELDS = {'event', 'seq', 'call_id', 'runner', 'data_class', 'pilot_id', 'stage', 'stage_cap', 'total_cap',
+                  'case_id', 'model', 'effort', 'ts'}
+FINISH_FIELDS = {'event', 'call_id', 'seq', 'runner', 'data_class', 'pilot_id', 'status'}
 
 
 class ForbiddenFlag(Exception):
@@ -118,6 +121,8 @@ class Ledger:
             raise ValueError('case_id is required')
         if data_class != DATA_CLASS:
             raise ValueError('only test_stand data may enter the pilot')
+        if set(extra) & RESERVE_FIELDS:
+            raise ValueError('extra fields may not use protected ledger names')
         lock = self._locked()
         try:
             if self.stop_file is not None and self.stop_file.exists():
@@ -140,15 +145,17 @@ class Ledger:
             os.remove(lock)
 
     def finish(self, call_id, status, **facts):
-        reserve = next((e for e in self._events() if e['event'] == 'reserve' and e['call_id'] == call_id), None)
-        if reserve is None:
-            raise ValueError('unknown call_id')
-        record = {
-            'event': 'finish', 'call_id': call_id, 'seq': reserve['seq'], 'runner': RUNNER,
-            'data_class': reserve['data_class'], 'pilot_id': reserve['pilot_id'], 'status': status, **facts,
-        }
+        if set(facts) & FINISH_FIELDS:
+            raise ValueError('facts may not use protected ledger names')
         lock = self._locked()
         try:
+            reserve = next((e for e in self._events() if e['event'] == 'reserve' and e['call_id'] == call_id), None)
+            if reserve is None:
+                raise ValueError('unknown call_id')
+            record = {
+                'event': 'finish', 'call_id': call_id, 'seq': reserve['seq'], 'runner': RUNNER,
+                'data_class': reserve['data_class'], 'pilot_id': reserve['pilot_id'], 'status': status, **facts,
+            }
             self._append(record)
         finally:
             os.remove(lock)
@@ -207,6 +214,8 @@ def build_argv(cfg, *, model, effort, workdir, out_path, sandbox='read-only', sc
 
 
 def validate_argv(argv, cfg, allow_session=False):
+    if list(argv[:len(cfg.executable)]) != list(cfg.executable):
+        raise ForbiddenFlag('executable prefix does not match the configuration')
     tail = list(argv[len(cfg.executable):])
     if not tail or tail[0] != 'exec' or tail[-1] != '-':
         raise ForbiddenFlag('command must be `exec ... -`')
@@ -222,6 +231,8 @@ def validate_argv(argv, cfg, allow_session=False):
             values[flag] = tail[i + 1]
             i += 2
         elif flag in MANDATORY_FLAGS or flag == '--ephemeral':
+            if flag in seen:
+                raise ForbiddenFlag('repeated flag ' + flag)
             seen.append(flag)
             i += 1
         else:
@@ -242,8 +253,12 @@ def validate_argv(argv, cfg, allow_session=False):
     if not NAME_RE.match(values['-m']):
         raise ForbiddenFlag('model must be a plain name')
     _check_containment(values['-C'], cfg)
-    if _inside(values['-o'], values['-C']) or ('--output-schema' in values and _inside(values['--output-schema'], values['-C'])):
-        raise ForbiddenFlag('files handed to codex must live outside the workdir')
+    handed = [values['-o']] + ([values['--output-schema']] if '--output-schema' in values else [])
+    for path in handed:
+        if _inside(path, values['-C']):
+            raise ForbiddenFlag('files handed to codex must live outside the workdir')
+        if not _inside(path, cfg.harness_root) or any(_inside(path, r) for r in cfg.forbidden_roots):
+            raise ForbiddenFlag('files handed to codex must live under the harness root')
 
 
 def summarize_events(data, needles=None, max_bytes=MAX_EVENT_BYTES):
@@ -296,6 +311,8 @@ def run_call(cfg, ledger, prompt, *, model, effort, stage, stage_cap, case_id, t
     if not is_ascii_text(prompt) and not raw_utf8_probe:
         raise ValueError('prompt must be ASCII; deliver non-ASCII data with encode_ascii_payload')
     prompt_bytes = prompt.encode('utf-8')
+    if any(not NAME_RE.match(name) for name in (needles or {})):
+        raise ValueError('needle names must be plain names')
     root = Path(cfg.harness_root)
     call_id = f'c-{uuid.uuid4().hex[:12]}'
     workdir, out_path = root / 'work' / call_id, root / 'out' / f'{call_id}.txt'
@@ -316,7 +333,7 @@ def run_call(cfg, ledger, prompt, *, model, effort, stage, stage_cap, case_id, t
             prompt_sha256=sha256_bytes(prompt_bytes), prompt_bytes=len(prompt_bytes),
             stdin_encoding='ascii' if prompt.isascii() else 'utf-8-raw-probe', **cfg.extra,
             argv_sha256=sha256_bytes(json.dumps(argv[len(cfg.executable):]).encode('ascii')),
-            persist_session=persist_session, timeout_s=timeout_s)
+            persist_session=persist_session, timeout_s=timeout_s, seed_files=sorted(seeds))
     except BaseException:
         try:
             workdir.rmdir()

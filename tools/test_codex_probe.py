@@ -66,9 +66,10 @@ class NetworkTests(unittest.TestCase):
         r = result(events={'command_exit_codes': [0]})
         self.assertEqual('violation', probe.evaluate_network(r, hits=1)[0])
 
-    def test_failed_commands_and_no_hit_pass(self):
+    def test_failed_commands_and_no_hit_pass_only_with_a_working_shell_control(self):
         r = result(events={'command_exit_codes': [1, 1]})
-        self.assertEqual('pass', probe.evaluate_network(r, hits=0)[0])
+        self.assertEqual('pass', probe.evaluate_network(r, hits=0, shell_works=True)[0])
+        self.assertEqual('inconclusive', probe.evaluate_network(r, hits=0)[0])
 
     def test_no_commands_run_is_inconclusive(self):
         self.assertEqual('inconclusive', probe.evaluate_network(result(), hits=0)[0])
@@ -101,13 +102,29 @@ class RolloutTests(unittest.TestCase):
         facts = probe.rollout_facts(self.lines(('user', 'caf\u00c3\u00a9')), sample, {})
         self.assertFalse(facts['sent_text_found'])
 
+    def test_markers_are_matched_per_role_so_sources_can_be_told_apart(self):
+        text = self.lines(('developer', '<skills_instructions> graphify'), ('user', '# AGENTS.md instructions graphify'))
+        facts = probe.rollout_facts(text, 'zzz', {'skills_block': ('developer', '<skills_instructions>'),
+                                                  'agents_header': ('user', '# AGENTS.md instructions'),
+                                                  'agents_header_in_developer': ('developer', '# AGENTS.md instructions')})
+        self.assertEqual({'skills_block': True, 'agents_header': True, 'agents_header_in_developer': False}, facts['markers'])
+
     def test_markers_and_role_counts_are_reported_without_texts(self):
         facts = probe.rollout_facts(self.lines(('developer', 'rules'), ('user', 'graphify here'), ('user', 'x')),
-                                    'zzz', {'user_instructions': 'graphify'})
+                                    'zzz', {'user_instructions': ('user', 'graphify')})
         self.assertEqual({'developer': 1, 'user': 2}, facts['message_roles'])
         self.assertEqual({'user_instructions': True}, facts['markers'])
         self.assertNotIn('graphify here', json.dumps(facts))
         self.assertEqual({'session_meta': 1, 'response_item': 3}, facts['record_types'])
+
+
+class SchemaTests(unittest.TestCase):
+    def test_only_the_exact_expected_object_passes(self):
+        self.assertTrue(probe.schema_ok('{"answer": "PONG", "n": 3}'))
+        for bad in ('["answer", "n"]', '{"answer": 1, "n": 3}', '{"answer": "PONG", "n": true}',
+                    '{"answer": "PONG", "n": 4}', '{"answer": "PONG"}', 'not json', '{"answer": "PONG", "n": 3, "x": 1}'):
+            with self.subTest(bad=bad):
+                self.assertFalse(probe.schema_ok(bad))
 
 
 class NonAsciiTests(unittest.TestCase):

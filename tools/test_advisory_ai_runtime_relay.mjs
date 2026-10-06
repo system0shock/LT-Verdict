@@ -409,6 +409,24 @@ test("retry is refused when the continuation arguments are not the same value in
   });
 });
 
+test("the continuation arguments are a function of the stream text, lossy parse cases included", async t => {
+  // Qwen Code parses the arguments, so what it sends back is what JSON.parse kept: the last of duplicate keys, null for 1e400.
+  // The relay accepts exactly that text and nothing else, so the continuation cannot carry anything the provider did not stream.
+  const cases = {
+    "duplicate keys": ['{"output": {"a": 1, "a": 2}}', '{"output":{"a":2}}', '{"output":{"a":1}}'],
+    "number out of range": ['{"output": 1e400}', '{"output":null}', '{"output":0}'],
+  };
+  for (const [name, [args, accepted, refused]] of Object.entries(cases)) await t.test(name, async () => {
+    assert.equal(accepted, JSON.stringify(JSON.parse(args)));
+    for (const [continuation, status] of [[accepted, 200], [refused, 409]]) {
+      await withRelay(async (root, port) => {
+        await request(port, firstRequest);
+        assert.equal((await request(port, retryRequest(firstRequest, continuation))).status, status);
+      }, { ADVISORY_RELAY_PREFLIGHT_RESPONSES: JSON.stringify([provider(sse(args))]) });
+    }
+  });
+});
+
 test("deeply nested continuation is refused without crashing the relay", async () => {
   let deep = {};
   for (let index = 0; index < 2000; index += 1) deep = { x: deep };

@@ -416,7 +416,12 @@ class AnalysisServiceTest {
             listOf("modules", "input_versions", "limits").forEach { assertEquals(plainIdentity[it], identity[it], it) }
 
             val run = Json.parseToJsonElement(Files.readAllBytes(stored.path.resolve("run.json")).decodeToString()).jsonObject
-            val podViewInput = run.getValue("inputs").jsonArray.map { it.jsonObject }.single { it.value("type") == "pod_view" }
+            val podViewInput =
+                run
+                    .getValue("inputs")
+                    .jsonArray
+                    .map { it.jsonObject }
+                    .single { it.value("type") == "pod_view" }
             assertEquals("analyses/${outcome.analysisId}/pod-view.json", podViewInput.value("path"))
             assertEquals(podView.canonicalSha256, podViewInput.value("sha256"))
         }
@@ -439,7 +444,10 @@ class AnalysisServiceTest {
 
             assertEquals("POD_VIEW_RESOURCE_REQUIRED", refusal(validPodView(podViewJson(input.sha256, resource)), withResources = false))
             assertEquals("POD_VIEW_INPUT_MISMATCH", refusal(validPodView(podViewJson("f".repeat(64), resource))))
-            assertEquals("POD_VIEW_SNAPSHOT_MISMATCH", refusal(validPodView(podViewJson(input.sha256, resource, snapshotHash = "e".repeat(64)))))
+            assertEquals(
+                "POD_VIEW_SNAPSHOT_MISMATCH",
+                refusal(validPodView(podViewJson(input.sha256, resource, snapshotHash = "e".repeat(64)))),
+            )
             assertEquals("POD_VIEW_ARM_MISMATCH", refusal(validPodView(podViewJson(input.sha256, resource, arm = "A"))))
             assertEquals("POD_VIEW_GRID_MISMATCH", refusal(validPodView(podViewJson(input.sha256, resource, columns = 3))))
             assertEquals(0, store.listAnalyses(input.runId, null, 10).analyses.size)

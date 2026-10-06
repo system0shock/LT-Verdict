@@ -989,7 +989,16 @@ class CommandLineTest {
         fun refusal(json: String): CliResult {
             val view = tempDir.resolve("pod-view-bad.json")
             Files.writeString(view, json)
-            return run("analyze", input.toString(), "--resources", resources.toString(), "--pod-view", view.toString(), "--data-dir", dataDir.toString())
+            return run(
+                "analyze",
+                input.toString(),
+                "--resources",
+                resources.toString(),
+                "--pod-view",
+                view.toString(),
+                "--data-dir",
+                dataDir.toString(),
+            )
         }
         listOf(
             "POD_VIEW_INPUT_MISMATCH" to podViewTestJson("f".repeat(64), snapshotHash, null, 1767225600000, 10000, 4),
@@ -1023,7 +1032,12 @@ class CommandLineTest {
         assertEquals(0, withView.exitCode, withView.stderr)
         assertEquals(plain.stdout, withView.stdout)
 
-        val runId = Json.parseToJsonElement(withView.stdout).jsonObject.getValue("run_id").jsonPrimitive.content
+        val runId =
+            Json
+                .parseToJsonElement(withView.stdout)
+                .jsonObject
+                .getValue("run_id")
+                .jsonPrimitive.content
         val analyses = Files.list(dataDir.resolve("runs").resolve(runId).resolve("analyses")).use { it.toList() }
         assertEquals(2, analyses.size)
         val stored = analyses.single { Files.exists(it.resolve("pod-view.json")) }

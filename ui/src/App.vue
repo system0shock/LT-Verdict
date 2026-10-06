@@ -639,7 +639,19 @@ function cancelUpload() {
   void nextTick(() => document.getElementById('input-file')?.focus())
 }
 
-const acceptedAtFormat = new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' })
+const acceptedAtFormat = new Intl.DateTimeFormat(shellNew ? 'ru-RU' : undefined, { dateStyle: 'medium', timeStyle: shellNew ? 'medium' : 'short' })
+// New shell: a file name repeated by every listed run tells nothing, the acceptance time stands in for it.
+const fileNameTellsRunsApart = computed(() => runs.value.length < 2 || new Set(runs.value.map((run) => run.original_filename)).size > 1)
+const timeInTitle = (run: RunSummary) => shellNew && !fileNameTellsRunsApart.value && !!run.accepted_at
+const runTitle = (run: RunSummary) => timeInTitle(run) ? `${SHELL_LABELS.runAccepted} ${acceptedAtFormat.format(new Date(run.accepted_at!))}` : run.original_filename
+const selectedAnalysis = computed(() => analyses.value.find((item) => item.analysis_id === selectedAnalysisId.value))
+const analysisContext = computed(() => {
+  const analysis = selectedAnalysis.value
+  if (!shellNew || !analysis) return ''
+  const parts = analysis.policy_verdict === 'NO_POLICY' ? [] : [`${SHELL_LABELS.runPolicy} ${analysis.policy_id ?? analysis.policy_sha256.slice(0, 8)}`]
+  if (analysis.resource_arm) parts.push(`${SHELL_LABELS.runArm} ${analysis.resource_arm}`)
+  return parts.join(' · ')
+})
 
 async function refreshRuns(after?: string) {
   const page = await listRuns(after)
@@ -842,8 +854,8 @@ function focusPolicy() {
               :aria-pressed="currentRun?.run_id === run.run_id"
               @click="selectRun(run)"
             >
-              <span>{{ run.original_filename }}</span>
-              <small>{{ run.source_type }} · {{ run.sha256.slice(0, 8) }}<template v-if="run.accepted_at"> · <time :datetime="run.accepted_at">{{ acceptedAtFormat.format(new Date(run.accepted_at)) }}</time></template></small>
+              <span>{{ runTitle(run) }}</span>
+              <small>{{ run.source_type }} · {{ run.sha256.slice(0, 8) }}<template v-if="run.accepted_at && !timeInTitle(run)"> · <time :datetime="run.accepted_at">{{ acceptedAtFormat.format(new Date(run.accepted_at)) }}</time></template></small>
             </button>
           </li>
           <li
@@ -909,11 +921,12 @@ function focusPolicy() {
         :lang="shellNew ? 'ru' : undefined"
       >
         <div class="run-identity">
-          <strong>{{ currentRun?.original_filename ?? chrome.noRun }}</strong>
+          <strong>{{ currentRun ? runTitle(currentRun) : chrome.noRun }}</strong>
           <span
             v-if="currentRun"
             class="mono"
           >{{ currentRun.source_type }} · {{ currentRun.run_id.slice(0, 24) }}…</span>
+          <span v-if="analysisContext">{{ analysisContext }}</span>
           <span v-if="completedAt">{{ chrome.completed }} {{ completedAt }}</span>
         </div>
         <a

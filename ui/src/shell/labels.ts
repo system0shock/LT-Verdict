@@ -40,6 +40,9 @@ export const SHELL_LABELS = {
   analysisItem: 'Анализ',
   analysesEmpty: 'Для этого прогона нет сохранённых анализов.',
   analysesMore: 'Ещё анализы',
+  runAccepted: 'Принят',
+  runPolicy: 'Политика',
+  runArm: 'Плечо',
 } as const
 
 // Строки сравнения с эталоном (ADR 0017): предупреждения и подсказки для BaselinePanel.vue.

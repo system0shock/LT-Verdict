@@ -448,8 +448,10 @@ class CatalogProfileReconciliationTest(unittest.TestCase):
         self.assertNotIn(("concurrency", "count", "generator"), produced)
 
     def snapshot(self, config):
-        series = [{**{k: q[k] for k in ("id", "metric", "unit", "entity", "role", "aggregation")},
-                   "labels": q.get("labels", {}), "values": [0.0, 1.0, 2.0, 3.0]} for q in self.generated(config)]
+        # With several profiles selected the source assigns the series ids profileId/queryId (online-sources.md).
+        series = [{**{k: q[k] for k in ("metric", "unit", "entity", "role", "aggregation")}, "id": f"{c['id']}/{q['id']}",
+                   "labels": q.get("labels", {}), "values": [0.0, 1.0, 2.0, 3.0]}
+                  for c in build_connections(config)["connections"] for q in c["queries"]]
         return {"schema_version": "resource-snapshot.v1", "load_input_sha256": "0" * 64, "start_epoch_ms": 1767225600000,
                 "step_ms": 10000, "point_count": 4, "series": series,
                 "windows": [{"id": "stage-1", "from_epoch_ms": 1767225600000, "to_epoch_ms": 1767225640000}],
@@ -463,7 +465,7 @@ class CatalogProfileReconciliationTest(unittest.TestCase):
                 self.assertIsNotNone(plan)
                 bound = {c["series_id"] for pair in plan["pairs"] for c in pair["controls"]}
                 self.assertTrue(bound)
-                self.assertLessEqual(bound, {"jmeter.target_rps", "jmeter.concurrency"})
+                self.assertLessEqual(bound, {"ocp-load/jmeter.target_rps", "ocp-load/jmeter.concurrency"})
 
     def test_without_the_load_generator_block_the_catalog_gives_no_plan(self):
         plan, skipped = self.module.expand(self.catalog, self.snapshot(self.WITHOUT_LOAD), ["stage-1"],

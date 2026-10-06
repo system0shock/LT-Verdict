@@ -18,7 +18,7 @@
       }
     }
   ],
-  "platform_services": ["orders", "payments"],
+  "platform_services": ["orders-svc", "payments-svc"],
   "platform_coverage": {
     "signal": "openshift_unavailable_replicas"
   },

@@ -1177,7 +1177,7 @@ class AnalysisServiceTest {
             fun analyze(
                 arm: String,
                 cpuOrders: String,
-                services: List<String> = listOf("orders", "payments"),
+                services: List<String> = listOf("orders-svc", "payments-svc"),
                 using: PolicyValidation.Valid = base,
             ) = service.analyze(
                 AnalysisRequest(
@@ -1189,7 +1189,7 @@ class AnalysisServiceTest {
 
             val first = analyze("A", "0.5")
             val second = analyze("B", "0.1")
-            val third = analyze("C", "0.1", services = listOf("orders"))
+            val third = analyze("C", "0.1", services = listOf("orders-svc"))
             val relaxed = analyze("A", "0.5", using = policy(baseText.replace("\"threshold\": 0.4", "\"threshold\": 0.6")))
 
             assertEquals(
@@ -1223,7 +1223,7 @@ class AnalysisServiceTest {
             """"labels":{"arm":"$arm"},"values":[${List(30) { value }.joinToString(",")}]}"""
         val all =
             services.flatMap { service ->
-                val cpu = if (service == "orders") cpuOrders else "0.1"
+                val cpu = if (service == "orders-svc") cpuOrders else "0.1"
                 listOf(
                     series("cpu-$service", "openshift_container_cpu_limit_ratio", service, "ratio", "interval_mean", cpu),
                     series("memory-$service", "openshift_container_memory_limit_ratio", service, "ratio", "interval_max", "0.3"),

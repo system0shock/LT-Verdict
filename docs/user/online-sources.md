@@ -727,7 +727,8 @@ DBRP mapping и token при повторном анализе не нужны.
 `--resources ... --correlation ...`: online acquisition и correlation plan в одном
 запросе не смешиваются, потому что план привязан к конкретному snapshot.
 
-Private API: `GET /api/sources` выдаёт только id/source_kind/transport;
+Private API: `GET /api/sources` выдаёт id/source_kind/transport и, только у профилей,
+объявивших плечо (`arm`, `source-connections.v3`), поле `arm`;
 `POST /api/jobs` принимает optional file part `source_request` вместо
 `resource_snapshot`; `GET /api/runs/{runId}/analyses/{analysisId}/resource-snapshot`
 скачивает существующий проверенный артефакт. Existing Origin/CSRF/size guards действуют.

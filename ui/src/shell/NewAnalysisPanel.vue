@@ -1,11 +1,11 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import type { AdvisoryAiConfig, Policy, PolicyError, SourceProfile } from '../types'
 import ModelChoice from './ModelChoice.vue'
 import { SETUP_LABELS } from './labels'
 import { RULES_LABELS } from './labels.rules'
 import { summarizePolicy } from './rules'
-import { buildReadiness, msToSeconds, secondsToMs, type ReadinessLevel } from './setup'
+import { buildReadiness, msToSeconds, pairArmLabels, pairLaunchBlockers, secondsToMs, type ReadinessLevel } from './setup'
 
 const props = defineProps<{
   inputFile: File | null
@@ -61,7 +61,34 @@ const emit = defineEmits<{
   'ai-requested': [value: boolean]
   'ai-model': [id: string]
   analyze: []
+  'analyze-pair': [slots: string[][]]
 }>()
+
+// Запуск пары плеч (P1d): профили каждого плеча живут здесь, а в App уходит их объединение, чтобы окно и шаг проверялись как раньше.
+const pairOn = ref(false)
+const pairSlots = ref<string[][]>([[], []])
+const pairBlockers = computed(() => pairLaunchBlockers(pairSlots.value, props.sourceProfiles))
+const pairArms = computed(() => pairArmLabels(pairSlots.value, props.sourceProfiles))
+
+function emitPairProfiles() {
+  emit('source-profiles', pairOn.value ? [...new Set(pairSlots.value.flat())] : [])
+}
+
+function setPair(on: boolean) {
+  pairOn.value = on
+  if (on) emit('ai-requested', false)
+  emitPairProfiles()
+}
+
+function setPairSlot(index: number, ids: string[]) {
+  pairSlots.value = pairSlots.value.map((slot, position) => (position === index ? ids : slot))
+  emitPairProfiles()
+}
+
+function start() {
+  if (pairOn.value) emit('analyze-pair', pairSlots.value)
+  else emit('analyze')
+}
 
 const readiness = computed(() => buildReadiness({
   busy: props.busy,
@@ -75,6 +102,7 @@ const readiness = computed(() => buildReadiness({
   sourceRequestError: props.sourceRequestError,
   contextCount: props.sourceContextFiles.length,
   postgres: { pre: !!props.postgresPreFile, post: !!props.postgresPostFile, html: !!props.pgProfileHtmlFile },
+  pair: pairOn.value ? { blockers: pairBlockers.value, arms: pairArms.value } : null,
 }))
 
 function selectedFile(event: Event) {
@@ -236,7 +264,7 @@ function levelLabel(level: ReadinessLevel) {
                 id="source-profile"
                 data-testid="source-profile"
                 multiple
-                :disabled="busy || sourceProfiles.length === 0"
+                :disabled="busy || sourceProfiles.length === 0 || pairOn"
                 @change="emit('source-profiles', selectedValues($event))"
               >
                 <option
@@ -547,7 +575,7 @@ function levelLabel(level: ReadinessLevel) {
                 type="checkbox"
                 role="switch"
                 :checked="aiRequested"
-                :disabled="busy"
+                :disabled="busy || pairOn"
                 @change="emit('ai-requested', ($event.target as HTMLInputElement).checked)"
               >
               {{ SETUP_LABELS.aiRequestedLabel }}
@@ -560,6 +588,65 @@ function levelLabel(level: ReadinessLevel) {
             :disabled="busy"
             @select="emit('ai-model', $event)"
           />
+        </section>
+
+        <section
+          class="new-analysis__section"
+          aria-labelledby="setup-pair-title"
+        >
+          <h3 id="setup-pair-title">
+            {{ SETUP_LABELS.pairTitle }}
+          </h3>
+          <p>{{ SETUP_LABELS.pairLead }}</p>
+          <div class="field">
+            <label for="pair-requested">
+              <input
+                id="pair-requested"
+                data-testid="pair-requested"
+                type="checkbox"
+                role="switch"
+                :checked="pairOn"
+                :disabled="busy || sourceProfiles.length === 0"
+                @change="setPair(($event.target as HTMLInputElement).checked)"
+              >
+              {{ SETUP_LABELS.pairToggleLabel }}
+            </label>
+          </div>
+          <template v-if="pairOn">
+            <div
+              v-for="(slot, index) in pairSlots"
+              :key="index"
+              class="field"
+            >
+              <label :for="`pair-arm-${index + 1}`">{{ SETUP_LABELS.pairArmLabel(index + 1) }}</label>
+              <select
+                :id="`pair-arm-${index + 1}`"
+                :data-testid="`pair-arm-${index + 1}`"
+                multiple
+                :disabled="busy"
+                :aria-describedby="`pair-arm-${index + 1}-hint`"
+                @change="setPairSlot(index, selectedValues($event))"
+              >
+                <option
+                  v-for="profile in sourceProfiles"
+                  :key="profile.id"
+                  :value="profile.id"
+                  :selected="slot.includes(profile.id)"
+                >
+                  {{ profile.id }} - {{ profile.source_kind }} / {{ profile.transport }}{{ profile.arm ? ` / ${SETUP_LABELS.pairOptionArm(profile.arm)}` : '' }}
+                </option>
+              </select>
+              <p
+                :id="`pair-arm-${index + 1}-hint`"
+                class="field__hint"
+              >
+                {{ pairArms[index] ? SETUP_LABELS.pairArmDeclared(pairArms[index]) : '' }}
+              </p>
+            </div>
+            <p class="field__hint">
+              {{ SETUP_LABELS.pairAiHint }}
+            </p>
+          </template>
         </section>
       </div>
 
@@ -615,7 +702,7 @@ function levelLabel(level: ReadinessLevel) {
           data-testid="start-analysis"
           aria-describedby="readiness-status"
           :disabled="!readiness.canStart"
-          @click="emit('analyze')"
+          @click="start"
         >
           {{ SETUP_LABELS.startButton }}
         </button>

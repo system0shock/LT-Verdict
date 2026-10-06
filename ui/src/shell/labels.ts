@@ -388,6 +388,14 @@ export const SETUP_LABELS = {
   aiText: 'ИИ-разбор не входит в анализ и запрашивается только по вашему действию. Включите переключатель, и разбор запросится сам после завершения анализа; без него его можно запросить на вкладке «ИИ-разбор».',
   aiRequestedLabel: 'Запросить ИИ-разбор после анализа',
 
+  pairTitle: '6. Пара плеч',
+  pairLead: 'Запустите анализ сразу для двух плеч: файл нагрузки загружается один раз, на каждое плечо создаётся своё задание с общим окном и общим явным шагом из раздела «Данные о системе». Общего вердикта плеч нет: результаты сравниваются по плечам.',
+  pairToggleLabel: 'Запустить пару плеч',
+  pairArmLabel: (number: number) => `Плечо ${number}: профили источника`,
+  pairArmDeclared: (arm: string) => `Профили объявляют плечо ${arm}.`,
+  pairOptionArm: (arm: string) => `плечо ${arm}`,
+  pairAiHint: 'Для пары плеч ИИ-разбор не запрашивается автоматически: запросите его на вкладке «ИИ-разбор» для нужного анализа.',
+
   readinessTitle: 'Готовность к запуску',
   willTitle: 'Что получится',
   startButton: 'Запустить анализ',
@@ -405,6 +413,7 @@ export const SETUP_LABELS = {
   itemPlans: 'Планы',
   itemSources: 'Источники',
   itemPostgres: 'PostgreSQL',
+  itemPair: 'Пара плеч',
 
   inputMissing: 'выберите файл JMeter JTL или Gatling simulation.log',
   busy: 'идёт загрузка файла, анализ или снимок PostgreSQL: дождитесь завершения',
@@ -422,6 +431,11 @@ export const SETUP_LABELS = {
   sourcesNoneItem: 'только файл нагрузки',
   postgresNames: { pre: 'снимок до', post: 'снимок после', html: 'отчёт pg_profile' },
   postgresNoneItem: 'не используется',
+  pairOk: (arms: string[]) => `${arms.length} ${pluralRu(arms.length, 'задание', 'задания', 'заданий')}, плечи ${arms.join(' и ')}`,
+  pairArmEmpty: (number: number) => `плечо ${number}: выберите профили источника с метриками`,
+  pairNoArm: (number: number, id: string) => `плечо ${number}: профиль ${id} не объявляет плечо (поле arm в конфигурации)`,
+  pairMixed: (number: number) => `плечо ${number}: профили объявляют разные плечи`,
+  pairSame: (arm: string) => `плечи совпадают: оба объявляют ${arm}`,
 
   willVerdict: (id: string) => `Вердикт по правилам политики ${id}.`,
   willNoVerdict: 'Метрики без вердикта (NO_POLICY).',
@@ -430,6 +444,7 @@ export const SETUP_LABELS = {
   willPlans: (plans: string) => `Диагностика по планам: ${plans}.`,
   willContext: 'Контекст ошибок из OpenSearch.',
   willPostgres: (parts: string) => `Контекст PostgreSQL: ${parts}.`,
+  willPair: (count: number) => `Будет запущено ${count} ${pluralRu(count, 'задание', 'задания', 'заданий')}: по одному на плечо, с общим окном и шагом; общего вердикта плеч нет.`,
   willAdvice: 'После завершения анализа сам запросится ИИ-разбор.',
 } as const
 

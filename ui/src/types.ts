@@ -50,6 +50,8 @@ export interface SourceProfile {
   id: string
   source_kind: string
   transport: string
+  // Метка плеча профиля (source-connections.v3); у профилей без неё поля нет.
+  arm?: string
 }
 
 export interface SourcesResponse {

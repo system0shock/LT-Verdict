@@ -66,11 +66,15 @@ const CAPACITY_BOUND_WORDS = {
   INDETERMINATE: (): string => 'Граница ёмкости не определена',
 } as const
 
+const AXIS_NAMES: Record<string, string> = { rps: 'RPS' }
+const UNIT_NAMES: Record<string, string> = { 'requests/s': 'запросов в секунду' }
+
 export const CAPACITY_LABELS = {
   title: 'Ёмкость: ступени теста максимума',
   region: 'Ступени теста максимума',
   axisLabel: 'Ось нагрузки',
-  axisValue: (axis: string, unit: string): string => `${axis} (${unit})`,
+  // Ось и единицу ядро называет по-английски (rps, requests/s): известные значения показаны по-русски, остальные как есть.
+  axisValue: (axis: string, unit: string): string => `${AXIS_NAMES[axis] ?? axis} (${UNIT_NAMES[unit] ?? unit})`,
   boundLabel: 'Граница ёмкости',
   boundText: (bound: string, lower: string, upper: string, unit: string): string => {
     const words = (CAPACITY_BOUND_WORDS as Record<string, ((lower: string, upper: string, unit: string) => string) | undefined>)[bound]

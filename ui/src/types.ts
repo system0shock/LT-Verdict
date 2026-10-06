@@ -115,7 +115,7 @@ export interface PolicyRule {
 export interface Policy {
   schema_version: 'policy.v1'
   policy_id: string
-  defaults?: { sample_floor?: number; min_samples?: number }
+  defaults?: { sample_floor?: number; min_samples?: number; max_missing_fraction?: number; max_gap_cells?: number }
   rules: PolicyRule[]
 }
 

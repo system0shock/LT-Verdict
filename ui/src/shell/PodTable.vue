@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import { POD_LABELS } from './podLabels'
-import { rowLabel, windowStats, type PodRow } from './podView'
+import { windowStats, type PodRow } from './podView'
 
 const props = defineProps<{ rows: PodRow[]; arm: string | null }>()
 const PAGE = 50

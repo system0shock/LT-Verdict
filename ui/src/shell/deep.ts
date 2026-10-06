@@ -143,6 +143,7 @@ export function defaultSelection(catalog: ResourceSeriesEntry[], result: Analysi
   for (const item of result.evidence) {
     if (item.type === 'resource_policy_check' && item.status !== 'PASS' && available.has(item.series_id) && !selected.includes(item.series_id)) selected.push(item.series_id)
   }
+  for (const item of catalog) if (item.role === 'system' && !selected.includes(item.id)) selected.push(item.id)
   for (const item of catalog) if (!selected.includes(item.id)) selected.push(item.id)
   return selected.slice(0, MAX_SELECTED_SERIES)
 }

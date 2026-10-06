@@ -125,11 +125,11 @@ private fun stages(
             result("stages", label, "rep$rep.canonical_bytes_ms", "%.1f".format(canonicalMs))
             result("stages", label, "rep$rep.hash_canonical_ms", "%.1f".format(canonicalHashMs))
             result("stages", label, "rep$rep.metadata_ms", "%.1f".format(metadataMs))
-            result("stages", label, "rep$rep.values_page256_ms", "%.1f".format(pageMs))
+            result("stages", label, "rep$rep.values_first_service_page256_ms", "%.1f".format(pageMs))
             if (rep == 1) {
                 result("stages", label, "canonical_bytes", canonical.size)
                 result("stages", label, "metadata_bytes", metadata.length)
-                result("stages", label, "values_page256_bytes", page.length)
+                result("stages", label, "values_first_service_page256_bytes", page.length)
             }
             if (rep == reps) {
                 val retained = settledUsedMb() - baseline
@@ -179,6 +179,7 @@ private fun server(args: Array<String>) {
                     result("server", label, "submit_response_ms", "%.0f".format(postMs))
                     result("server", label, "job_total_ms", "%.0f".format(postMs + totalMs))
                     result("server", label, "job_state", final.getValue("state").jsonPrimitive.content)
+                    check(final.getValue("state").jsonPrimitive.content == "COMPLETE") { "job did not complete: $final" }
                     result("server", label, "peak_sampled_used_mb", "%.0f".format(peakUsed.get() / MB))
                     result("server", label, "used_after_gc_mb", "%.0f".format(settledUsedMb()))
                     (final["analysis_id"] as? kotlinx.serialization.json.JsonPrimitive)?.contentOrNull()?.let { analyses += it }

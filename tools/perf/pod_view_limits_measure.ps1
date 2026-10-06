@@ -56,7 +56,8 @@ function Invoke-Java([string] $Tag, [string] $Xmx, [string[]] $JavaArgs) {
     $psi.CreateNoWindow = $true
     $sw = [Diagnostics.Stopwatch]::StartNew()
     $p = [Diagnostics.Process]::Start($psi)
-    try { $p.ProcessorAffinity = [IntPtr]$mask } catch {}
+    $affinity = 'not set'
+    try { $p.ProcessorAffinity = [IntPtr]$mask; $affinity = '0x{0:X}' -f [int64]$p.ProcessorAffinity } catch { $affinity = "failed: $($_.Exception.Message)" }
     $stdout = $p.StandardOutput.ReadToEndAsync()
     $stderr = $p.StandardError.ReadToEndAsync()
     $peak = 0
@@ -78,11 +79,11 @@ function Invoke-Java([string] $Tag, [string] $Xmx, [string[]] $JavaArgs) {
             }
         }
     }
-    [pscustomobject]@{ Exit = $p.ExitCode; Wall = $sw.Elapsed.TotalSeconds; PeakWs = $peak / 1MB; GcCount = $count; Before = $before; After = $after; Out = $out; Err = $err }
+    [pscustomobject]@{ Exit = $p.ExitCode; Wall = $sw.Elapsed.TotalSeconds; PeakWs = $peak / 1MB; GcCount = $count; Before = $before; After = $after; Out = $out; Err = $err; Affinity = $affinity }
 }
 
 function Add-Results([string] $Tag, $Run) {
-    Add-Content $results ("# {0} exit={1} wall_s={2:F1} peak_ws_mb={3:F0} gc_count={4} gc_before_max_mb={5} gc_after_max_mb={6}" -f $Tag, $Run.Exit, $Run.Wall, $Run.PeakWs, $Run.GcCount, $Run.Before, $Run.After)
+    Add-Content $results ("# {0} exit={1} wall_s={2:F1} peak_ws_mb={3:F0} gc_count={4} gc_before_max_mb={5} gc_after_max_mb={6} affinity={7}" -f $Tag, $Run.Exit, $Run.Wall, $Run.PeakWs, $Run.GcCount, $Run.Before, $Run.After, $Run.Affinity)
     Get-Content $Run.Out | Where-Object { $_ -like 'RESULT*' } | Add-Content $results
 }
 

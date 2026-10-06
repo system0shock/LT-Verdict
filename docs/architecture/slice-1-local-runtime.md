@@ -468,6 +468,50 @@ Vue panel хранит transient candidate selection только в page memory
 persisted selection из API и защищает отображение comparison от stale responses.
 Новые зависимости, registry/store interfaces или browser storage не добавлены.
 
+## Слоты baseline (хранилище)
+
+[ADR 0019](../adr/0019-release-history-and-baseline-eligibility.md), раздел 7
+(срез B1): активный baseline хранится по паре `(series, arm)`. Срез меняет только
+`RunBundleStore`; маршруты `/api/baseline*` и comparison пока работают с
+`baseline.json` (слоты в API: срез B2).
+
+- Слот: файл `<data>/baselines/<sha256 канонического {arm, series}>.json` с
+  содержимым `local-baseline.v1` (формат не менялся, до 32 KiB). `arm` в ключе
+  строка или `null`; `arm = null` и `arm = "null"` дают разные ключи. Каталог
+  создаётся при первой записи слота.
+- Плечо слота выводится заново из `identity.resource_arm` анализа baseline
+  (отсутствие поля и JSON `null` равны, не строка и не `null` - `CORRUPT_BASELINE`)
+  и сверяется с именем файла; отсутствующий анализ и расхождение дают
+  `CORRUPT_BASELINE`. `RunBundleStore.readAnalysisIdentity` читает только
+  `identity.json` (до 8 MiB, SHA-256 равен `analysis_id`, `run_id` совпадает) и не
+  трогает результат и манифест. Запись слота (`replaceBaselineSlot`) сверяет
+  переданное плечо с identity до записи: слот, который нельзя прочитать обратно,
+  не создаётся.
+- Прежний `<data>/baseline.json` читается без миграции как legacy-слот по своим
+  `series` и плечу. Слот с тем же ключом затеняет legacy-файл: запись слота
+  сначала публикует новый файл атомарно, затем удаляет `baseline.json`; при
+  остановке между шагами выигрывает слот, а legacy-файл исчезает при следующей
+  мутации ключа. Адресное удаление (`clearBaselineSlot`) сначала читает и проверяет
+  каталог записей условий (отказ там ничего не удаляет), затем удаляет legacy-файл
+  того же ключа, затем записи условий, затем файл слота.
+- Пределы: `MAX_BASELINE_SLOTS` = 64 эффективных слота (новый ключ при 64 даёт
+  `IllegalArgumentException("BASELINE_SLOTS_LIMIT_REACHED")`, замена существующего
+  проходит); в `baselines/` не больше 65 элементов, посторонний файл, каталог или
+  ссылка дают `CORRUPT_BASELINE`; `MAX_BASELINE_CONDITION_FILES` = 4 096 записей
+  условий (новый ключ сверх предела даёт `BASELINE_CONDITIONS_LIMIT_REACHED`,
+  замена существующей записи проходит; перечисление при удалении сверх предела
+  даёт `CORRUPT_BASELINE` и ничего не удаляет).
+- Одна операция: `readBaselineSlotWithCondition` выбирает слот, читает его ссылку
+  и запись условий пары под одним `operationLock`; `series == null` читает только
+  legacy-файл, как до слотов. Список слотов, чтение identity (до 65 небольших
+  файлов) и перечисление записей условий выполняются под замком; замер скана 65
+  слотов приведён в описании PR.
+- Записи условий удаляются только если их baseline-ссылка относится к удаляемому
+  выбору и не используется другим эффективным слотом (binding остаётся парой
+  immutable ссылок, ADR 0010). Безадресный `clearBaseline()` удаляет legacy-файл и
+  только такие записи его ссылки; прежнее «удалить все записи условий» заменено:
+  записи условий прежних baseline остаются, пока не будут удалены адресно.
+
 ## Release history: хранилище записей релиза
 
 [ADR 0019](../adr/0019-release-history-and-baseline-eligibility.md) вводит

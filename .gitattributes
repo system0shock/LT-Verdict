@@ -17,3 +17,4 @@ tools/test_demo_stand.py text eol=lf
 docs/contracts/advice/v1/*.md text eol=lf
 tools/*.sh text eol=lf
 tools/advisory_ai_relay_retry_vectors.json text eol=lf
+fixtures/platform/pod-view-synthetic/** text eol=lf

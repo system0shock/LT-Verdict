@@ -144,10 +144,12 @@ import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.long
 import kotlinx.serialization.json.put
 import org.HdrHistogram.PackedHistogram
+import java.io.IOException
 import java.io.InputStream
 import java.io.OutputStream
 import java.math.BigDecimal
 import java.nio.ByteBuffer
+import java.nio.file.DirectoryIteratorException
 import java.nio.file.Files
 import java.nio.file.Path
 import java.security.SecureRandom
@@ -1632,6 +1634,10 @@ private fun RunBundleStore.releasesOfAnalyses(analysisIds: Set<String>): Map<Str
         findReleasesByAnalysis(analysisIds).byAnalysis
     } catch (failure: IllegalStateException) {
         if (failure.message.orEmpty().startsWith("CORRUPT_RELEASE_REGISTRY")) emptyMap() else throw failure
+    } catch (_: IOException) {
+        emptyMap()
+    } catch (_: DirectoryIteratorException) {
+        emptyMap()
     }
 
 // Maps store failures to the private API codes; messages never carry user text (label, notes, profile).

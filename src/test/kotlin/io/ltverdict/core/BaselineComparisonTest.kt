@@ -4,6 +4,7 @@ import io.ltverdict.ingest.SourceType
 import io.ltverdict.storage.AcceptedInput
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
@@ -696,7 +697,7 @@ class BaselineComparisonTest {
             verdict: String? = "PASS",
             validity: String? = "VALID",
             coverage: String? = "COMPLETE",
-        ) = baselineCandidateRejection(verdict, validity, coverage)
+        ) = baselineCandidateRejection(verdict, validity, coverage, emptyList())
 
         assertEquals(null, rejection())
         assertEquals("BASELINE_CANDIDATE_INVALID", rejection(verdict = "FAIL", validity = "INVALID", coverage = "INCOMPLETE"))
@@ -716,6 +717,108 @@ class BaselineComparisonTest {
         assertEquals("BASELINE_CANDIDATE_INCOMPLETE", baselineCandidateRejection(result(coverage = "INCOMPLETE")))
         assertEquals("BASELINE_CANDIDATE_INVALID", baselineCandidateRejection(result(validity = "INVALID")))
         assertEquals("BASELINE_CANDIDATE_INVALID", baselineCandidateRejection(JsonObject(emptyMap())))
+    }
+
+    @Test
+    fun `incomplete coverage is admitted only when every reason is a small sample`() {
+        fun rejection(
+            verdict: String = "PASS",
+            status: String = "INCOMPLETE",
+            reasons: List<String>,
+        ) = baselineCandidateRejection(verdict, "VALID", status, reasons)
+
+        assertEquals(null, rejection(reasons = listOf("SMALL_SAMPLE")))
+        assertEquals(null, rejection(reasons = listOf("SMALL_SAMPLE", "SMALL_SAMPLE")))
+        assertEquals("BASELINE_CANDIDATE_INCOMPLETE", rejection(reasons = listOf("SMALL_SAMPLE", "RESOURCE_GAPS")))
+        assertEquals("BASELINE_CANDIDATE_INCOMPLETE", rejection(reasons = listOf("RESOURCE_GAPS")))
+        assertEquals("BASELINE_CANDIDATE_INCOMPLETE", rejection(reasons = emptyList()))
+        assertEquals("BASELINE_CANDIDATE_INCOMPLETE", rejection(status = "PARTIAL", reasons = listOf("SMALL_SAMPLE")))
+        // an insufficient sample gives NO_VERDICT and stays excluded by the PASS rule
+        assertEquals("BASELINE_CANDIDATE_NOT_PASS", rejection(verdict = "NO_VERDICT", reasons = listOf("SMALL_SAMPLE")))
+        assertEquals("BASELINE_CANDIDATE_NOT_PASS", rejection(verdict = "FAIL", reasons = listOf("SMALL_SAMPLE")))
+        assertEquals(null, baselineCandidateRejection("PASS", "VALID", "COMPLETE", emptyList()))
+    }
+
+    @Test
+    fun `stored result with a small sample reason is admitted and a malformed reasons array is not`() {
+        assertEquals(null, baselineCandidateRejection(result(reasons = listOf("SMALL_SAMPLE"))))
+        assertEquals("BASELINE_CANDIDATE_INCOMPLETE", baselineCandidateRejection(result(reasons = listOf("SMALL_SAMPLE", "RESOURCE_GAPS"))))
+        assertEquals("BASELINE_CANDIDATE_INCOMPLETE", baselineCandidateRejection(result(coverage = "INCOMPLETE")))
+
+        fun withReasons(reasons: JsonElement?): JsonObject {
+            val coverage =
+                buildJsonObject {
+                    put("status", "INCOMPLETE")
+                    reasons?.let { put("reasons", it) }
+                }
+            return JsonObject(result() + mapOf<String, JsonElement>("analysis_coverage" to coverage))
+        }
+        // a non-string entry or a non-array value must not be skipped over: the candidate is refused
+        assertEquals(
+            "BASELINE_CANDIDATE_INCOMPLETE",
+            baselineCandidateRejection(
+                withReasons(
+                    buildJsonArray {
+                        add(JsonPrimitive("SMALL_SAMPLE"))
+                        add(JsonPrimitive(5))
+                    },
+                ),
+            ),
+        )
+        assertEquals(
+            "BASELINE_CANDIDATE_INCOMPLETE",
+            baselineCandidateRejection(
+                withReasons(
+                    buildJsonArray {
+                        add(JsonPrimitive("SMALL_SAMPLE"))
+                        add(JsonNull)
+                    },
+                ),
+            ),
+        )
+        assertEquals("BASELINE_CANDIDATE_INCOMPLETE", baselineCandidateRejection(withReasons(JsonPrimitive("SMALL_SAMPLE"))))
+        assertEquals("BASELINE_CANDIDATE_INCOMPLETE", baselineCandidateRejection(withReasons(null)))
+    }
+
+    @Test
+    fun `comparison warns when the baseline analysis is a small sample`() {
+        val selection = manualBaselineSelection("release", reference('a'))
+        val small = result(reasons = listOf("SMALL_SAMPLE"))
+
+        val warned = compareAnalyses(selection, reference('b'), small, identity(), result(), identity())
+        assertEquals(listOf("BASELINE_SMALL_SAMPLE"), warnings(warned))
+        // the mark on the current analysis alone does not warn here (ADR 0018 decides that case)
+        val currentOnly = compareAnalyses(selection, reference('b'), result(), identity(), small, identity())
+        assertEquals(emptyList<String>(), warnings(currentOnly))
+        // metrics, statuses and comparability are not touched by the warning
+        val plain = compareAnalyses(selection, reference('b'), result(), identity(), result(), identity())
+        assertEquals(plain.getValue("metrics"), warned.getValue("metrics"))
+        assertEquals(plain.getValue("comparability"), warned.getValue("comparability"))
+        // position four, after the statistical candidate-set warning (ADR 0019, section 5)
+        val statistical = listOf(candidate('a'), candidate('b'), candidate('c'))
+        val inSet =
+            compareAnalyses(
+                statisticalBaselineSelection("small", statistical.references(), statistical.results(), statistical.identities()),
+                reference('a', 'd'),
+                small,
+                identity(),
+                result(),
+                identity(),
+            )
+        assertEquals(listOf("BASELINE_IS_CURRENT_RUN", "CURRENT_IN_CANDIDATE_SET", "BASELINE_SMALL_SAMPLE"), warnings(inSet))
+    }
+
+    @Test
+    fun `statistical selection admits a small sample candidate`() {
+        val set = listOf(candidate('a'), candidate('b', result(reasons = listOf("SMALL_SAMPLE"))), candidate('c'))
+        val selection = statisticalBaselineSelection("small", set.references(), set.results(), set.identities())
+        assertEquals(3, selection.getValue("candidates").jsonArray.size)
+        val other = listOf(candidate('a'), candidate('b', result(reasons = listOf("SMALL_SAMPLE", "RESOURCE_GAPS"))), candidate('c'))
+        val failure =
+            assertThrows(IllegalArgumentException::class.java) {
+                statisticalBaselineSelection("small", other.references(), other.results(), other.identities())
+            }
+        assertEquals("BASELINE_CANDIDATE_INCOMPLETE", failure.message)
     }
 
     @Test
@@ -1142,11 +1245,18 @@ class BaselineComparisonTest {
         validity: String = "VALID",
         coverage: String = "COMPLETE",
         verdict: String = "PASS",
+        reasons: List<String> = emptyList(),
     ) = buildJsonObject {
         put("analysis_mode", "standard")
         put("run_validity", validity)
         put("policy_verdict", verdict)
-        put("analysis_coverage", buildJsonObject { put("status", coverage) })
+        put(
+            "analysis_coverage",
+            buildJsonObject {
+                put("status", if (reasons.isNotEmpty() && coverage == "COMPLETE") "INCOMPLETE" else coverage)
+                put("reasons", buildJsonArray { reasons.forEach { add(JsonPrimitive(it)) } })
+            },
+        )
         put(
             "evidence",
             buildJsonArray {

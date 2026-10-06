@@ -609,6 +609,7 @@ export type BaselineComparisonWarning =
   | 'BASELINE_IS_CURRENT_ANALYSIS'
   | 'BASELINE_IS_CURRENT_RUN'
   | 'CURRENT_IN_CANDIDATE_SET'
+  | 'BASELINE_SMALL_SAMPLE'
 
 export interface BaselineComparison {
   baseline: BaselineSelection

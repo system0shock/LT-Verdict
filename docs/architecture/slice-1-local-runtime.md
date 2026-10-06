@@ -423,7 +423,9 @@ series 128 UTF-8 bytes и statistical candidates 3..20 разных runs; file c
 раздел 6) единый для обоих режимов: `baselineCandidateRejection` в
 `BaselineComparison.kt` по сохранённому результату возвращает первый нарушенный
 пункт `BASELINE_CANDIDATE_INVALID` (`run_validity != VALID`),
-`BASELINE_CANDIDATE_INCOMPLETE` (`analysis_coverage.status != COMPLETE`) или
+`BASELINE_CANDIDATE_INCOMPLETE` (`analysis_coverage.status != COMPLETE`, кроме
+`INCOMPLETE`, все причины которого равны `SMALL_SAMPLE`: решение владельца
+2026-10-04, нестроковая причина отклоняет) или
 `BASELINE_CANDIDATE_NOT_PASS` (`policy_verdict != PASS`) либо `null`. Его
 вызывают `selectBaseline` (оба режима, до расчёта, по кандидатам в порядке
 запроса) и `statisticalBaselineSelection`. Порядок кодов 422: проверки запроса
@@ -431,6 +433,11 @@ series 128 UTF-8 bytes и statistical candidates 3..20 разных runs; file c
 каждого кандидата (`BASELINE_CANDIDATE_TOO_LARGE`, ошибки целостности как
 `500 CORRUPT_BASELINE`), затем допуск, затем проверки statistical (метрики,
 identity, `BASELINE_MIXED_SEMANTICS`).
+
+`compareAnalyses` добавляет предупреждение `BASELINE_SMALL_SAMPLE` четвёртой
+позицией порядка ADR 0019 (после `CURRENT_IN_CANDIDATE_SET`), если среди причин
+покрытия результата анализа-эталона есть `SMALL_SAMPLE`; метрики, статусы и
+`comparability` оно не меняет.
 
 Результат кандидата читает `RunBundleStore.readVerifiedAnalysis`: под
 `operationLock` остаётся проверка манифеста, а чтение и SHA-256

@@ -102,6 +102,10 @@ internal fun statisticalBaselineSelection(
             require(result.objectOrNull("analysis_coverage")?.stringOrNull("status") == "COMPLETE") {
                 "BASELINE_CANDIDATE_INCOMPLETE"
             }
+            require(
+                identities[index]["verdict_gates"] is JsonObject &&
+                    identities[index].stringOrNull("policy_sha256")?.let { it != "NO_POLICY" } == true,
+            ) { "BASELINE_CANDIDATE_GATES_UNKNOWN" }
             Candidate(
                 reference,
                 listOf(

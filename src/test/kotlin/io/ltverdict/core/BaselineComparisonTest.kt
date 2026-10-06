@@ -25,10 +25,17 @@ import java.time.Instant
 class BaselineComparisonTest {
     @Test
     fun `verdict gates do not change the comparability key`() {
-        val withGates = JsonObject(identity() + ("verdict_gates" to buildJsonObject { put("min_samples_floor", "20") }))
+        val withGates = identity()
 
         val comparison =
-            compareAnalyses(manualBaselineSelection("release", reference('a')), reference('b'), result(), identity(), result(), withGates)
+            compareAnalyses(
+                manualBaselineSelection("release", reference('a')),
+                reference('b'),
+                result(),
+                identity(gates = false),
+                result(),
+                withGates,
+            )
 
         comparison.getValue("metrics").jsonArray.forEach { assertEquals(JsonNull, it.jsonObject.getValue("reason")) }
     }
@@ -138,7 +145,7 @@ class BaselineComparisonTest {
 
     @Test
     fun `real old and new candidate identities are rejected as mixed semantics`() {
-        val (old, current) = realCsvIdentities()
+        val (old, current) = realCsvIdentities().let { (old, current) -> withGates(old) to withGates(current) }
         val candidates = listOf(candidate('a', identity = old), candidate('b', identity = current), candidate('c', identity = current))
 
         assertEquals(
@@ -245,6 +252,9 @@ class BaselineComparisonTest {
             ),
         )
     }
+
+    private fun withGates(source: JsonObject) =
+        JsonObject(source + identity().filterKeys { it == "policy_sha256" || it == "verdict_gates" })
 
     private fun realCsvIdentities(): Pair<JsonObject, JsonObject> {
         val old = Json.parseToJsonElement(Files.readString(Path.of("fixtures/slice1/identity/legacy-pre-adr-0016.v1.json"))).jsonObject
@@ -722,6 +732,27 @@ class BaselineComparisonTest {
             val mixed = valid.toMutableList().also { it[1] = candidate('b', identity = identity("other")) }
             statisticalBaselineSelection("mixed", mixed.references(), mixed.results(), mixed.identities())
         }
+    }
+
+    @Test
+    fun `statistical selection rejects a candidate without verdict gates or a policy`() {
+        val valid = listOf(candidate('a'), candidate('b'), candidate('c'))
+
+        fun failure(replacement: JsonObject): String? {
+            val series = valid.toMutableList().also { it[1] = candidate('b', identity = replacement) }
+            return assertThrows(IllegalArgumentException::class.java) {
+                statisticalBaselineSelection("gates", series.references(), series.results(), series.identities())
+            }.message
+        }
+
+        assertEquals("BASELINE_CANDIDATE_GATES_UNKNOWN", failure(identity(gates = false)))
+        assertEquals("BASELINE_CANDIDATE_GATES_UNKNOWN", failure(identity(policy = false)))
+        assertEquals(
+            3,
+            statisticalBaselineSelection("gates", valid.references(), valid.results(), valid.identities())
+                .getValue("candidates")
+                .jsonArray.size,
+        )
     }
 
     @Test
@@ -1258,6 +1289,8 @@ class BaselineComparisonTest {
     private fun identity(
         version: String = "same",
         arm: String? = null,
+        gates: Boolean = true,
+        policy: Boolean = true,
     ) = buildJsonObject {
         put("source_type", "jmeter_jtl_csv")
         put("engine", buildJsonObject { put("version", version) })
@@ -1268,6 +1301,8 @@ class BaselineComparisonTest {
         put("histogram", buildJsonObject {})
         put("normalization", buildJsonObject {})
         put("limits", buildJsonObject {})
+        put("policy_sha256", if (policy) "a".repeat(64) else "NO_POLICY")
+        if (gates) put("verdict_gates", buildJsonObject { put("min_samples_floor", "20") })
         arm?.let { put("resource_arm", it) }
     }
 

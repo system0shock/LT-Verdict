@@ -1128,7 +1128,38 @@ class LocalApiTest {
         elapsed.mapIndexed { index, value ->
             val load = "timeStamp,elapsed,label,success\n${1_767_225_600_000L + index * 1_000L},$value,checkout,true\n"
             val input = store.acceptInput(ByteArrayInputStream(load.encodeToByteArray()), "series-$index.jtl")
-            input.runId to api.createJob(input.runId).analysisId(api)
+            input.runId to api.createJob(input.runId, STATISTICAL_POLICY.encodeToByteArray()).analysisId(api)
+        }
+
+    @Test
+    fun `statistical baseline rejects candidates analysed without a policy`() =
+        withServer { store, api ->
+            api.bootstrap()
+            val runs =
+                listOf(100, 110, 1000).mapIndexed { index, value ->
+                    val load = "timeStamp,elapsed,label,success\n${1_767_225_600_000L + index * 1_000L},$value,checkout,true\n"
+                    val input = store.acceptInput(ByteArrayInputStream(load.encodeToByteArray()), "no-policy-$index.jtl")
+                    input.runId to api.createJob(input.runId).analysisId(api)
+                }
+            val references = runs.joinToString(",") { (run, analysis) -> """{"run_id":"$run","analysis_id":"$analysis"}""" }
+
+            val response =
+                api.post(
+                    "/api/baseline",
+                    "application/json",
+                    """{"mode":"statistical","series":"release","candidates":[$references],"comparable":true}""".encodeToByteArray(),
+                )
+
+            assertEquals(422, response.statusCode())
+            assertEquals(
+                "BASELINE_CANDIDATE_GATES_UNKNOWN",
+                response
+                    .jsonObject()
+                    .getValue("error")
+                    .jsonObject
+                    .getValue("code")
+                    .jsonPrimitive.content,
+            )
         }
 
     private fun ApiClient.selectStatistical(candidates: List<Pair<String, String>>): JsonObject {
@@ -2456,6 +2487,8 @@ class LocalApiTest {
 
     private companion object {
         const val PASS_POLICY = "fixtures/slice1/policies/pass.json"
+        const val STATISTICAL_POLICY =
+            """{"schema_version":"policy.v1","policy_id":"statistical","defaults":{"sample_floor":1,"min_samples":1},"rules":[{"id":"p95","metric":"response_time_p95_ms","operator":"lte","threshold":100000,"scope":{"kind":"overall"}}]}"""
         const val PASS_POLICY_SHA256 = "f35d1e8a110bca3d1457e780e5e32751fc91467e9a29d0ced7808822c118aa2b"
         const val FAKE_ANALYSIS_ID = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
         const val DUPLICATE_POLICY =

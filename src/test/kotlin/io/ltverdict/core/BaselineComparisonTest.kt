@@ -1225,7 +1225,7 @@ class BaselineComparisonTest {
         val releases =
             ReleaseComparisonContext(
                 releaseRecord("000000000000001-aaaaaaaa", "blue", profile("pacing" to "10 s")),
-                releaseRecord("000000000000002-bbbbbbbb", "green", profile("pacing" to "20 s")),
+                releaseRecord("000000000000002-bbbbbbbb", "blue", profile("pacing" to "20 s")),
             )
 
         val full =
@@ -1243,7 +1243,6 @@ class BaselineComparisonTest {
                 "BASELINE_IS_CURRENT_RUN",
                 "BASELINE_NOT_PASS",
                 "BASELINE_SMALL_SAMPLE",
-                "BASELINE_SERIES_DIFFERS",
                 "POLICY_DIFFERS",
                 "PROFILE_MISMATCH",
             ),
@@ -1365,51 +1364,6 @@ class BaselineComparisonTest {
         assertEquals(listOf("POLICY_DIFFERS"), warningsFor("a".repeat(64), "NO_POLICY"))
         assertEquals(listOf("POLICY_DIFFERS"), warningsFor("NO_POLICY", "a".repeat(64)))
         assertEquals(listOf("POLICY_DIFFERS"), warningsFor("a".repeat(64), "b".repeat(64)))
-    }
-
-    @Test
-    fun `the series warning needs a registered current analysis of another series`() {
-        val selection = manualBaselineSelection("blue", reference('a'))
-        val declared = releaseRecord("000000000000001-aaaaaaaa", "blue", null)
-
-        fun warningsFor(
-            series: String?,
-            baselineSeries: String = "blue",
-        ): List<String> {
-            val context = series?.let { ReleaseComparisonContext(declared, releaseRecord("000000000000002-bbbbbbbb", it, null)) }
-            return warnings(
-                compareAnalyses(
-                    manualBaselineSelection(baselineSeries, reference('a')),
-                    reference('b'),
-                    result(),
-                    identity(),
-                    result(),
-                    identity(),
-                    releases = context,
-                ),
-            )
-        }
-
-        assertEquals(emptyList<String>(), warningsFor("blue"))
-        assertEquals(emptyList<String>(), warningsFor(null))
-        assertEquals(listOf("BASELINE_SERIES_DIFFERS"), warningsFor("green"))
-        // release series are stored in NFC; a baseline series typed in decomposed form is the same series
-        assertEquals(emptyList<String>(), warningsFor("café", baselineSeries = "café"))
-        // the baseline release alone does not name the current series
-        assertEquals(
-            emptyList<String>(),
-            warnings(
-                compareAnalyses(
-                    selection,
-                    reference('b'),
-                    result(),
-                    identity(),
-                    result(),
-                    identity(),
-                    releases = ReleaseComparisonContext(declared, null),
-                ),
-            ),
-        )
     }
 
     @Test

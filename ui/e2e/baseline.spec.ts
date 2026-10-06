@@ -45,9 +45,14 @@ async function openAnalysis(page: Page, filename: string, analysisId: string) {
 test.beforeEach(async ({ page }) => {
   await page.goto('/')
   const bootstrap = await (await page.request.get('/api/bootstrap')).json() as { csrf_token: string }
-  await page.request.delete('/api/baseline', {
-    headers: { Origin: new URL(page.url()).origin, 'X-LTV-CSRF': bootstrap.csrf_token },
-  })
+  const headers = { Origin: new URL(page.url()).origin, 'X-LTV-CSRF': bootstrap.csrf_token }
+  // Baselines live in slots by series and arm: remove every slot, then the legacy file, so no test sees another test's baseline.
+  const listed = await (await page.request.get('/api/baseline')).json() as { baselines: Array<{ series: string; arm: string | null }> }
+  for (const slot of listed.baselines) {
+    const query = new URLSearchParams({ series: slot.series, ...(slot.arm === null ? {} : { arm: slot.arm }) })
+    await page.request.delete(`/api/baseline?${query}`, { headers })
+  }
+  await page.request.delete('/api/baseline', { headers })
   await page.reload()
 })
 
@@ -210,7 +215,7 @@ test('does not allow replacing the baseline while a condition decision is being 
   let started = false
   let release!: () => void
   const held = new Promise<void>((resolve) => { release = resolve })
-  await page.route('**/baseline-conditions', async (route) => {
+  await page.route(/\/baseline-conditions(\?|$)/, async (route) => {
     if (route.request().method() !== 'POST') return route.continue()
     started = true
     await held
@@ -230,7 +235,7 @@ test('shows the empty-window hint for the empty side and the incompatibility hin
   await analyze(page, 'baseline-hints-a.jtl', 100, 1767225770000)
   await page.getByRole('button', { name: 'Set as baseline', exact: true }).click()
   const current = await analyze(page, 'baseline-hints-b.jtl', 200, 1767225771000)
-  const baseline = (await (await page.request.get('/api/baseline')).json()).baseline
+  const baseline = (await (await page.request.get('/api/baseline')).json()).baselines[0].baseline
   const emptyWindowMetrics = [
     { metric: 'response_time_p50_ms', unit: 'ms' },
     { metric: 'response_time_p95_ms', unit: 'ms' },
@@ -385,7 +390,7 @@ test('ignores a comparison response after selecting another run', async ({ page 
   let finished = false
   let release!: () => void
   const held = new Promise<void>((resolve) => { release = resolve })
-  await page.route('**/comparison', async (route) => {
+  await page.route(/\/comparison(\?|$)/, async (route) => {
     const response = await route.fetch()
     started = true
     await held
@@ -428,7 +433,8 @@ test('the new shell compare tab shows the same numbers in Russian', async ({ pag
     asNumbers(now.slice(1)).forEach((value, index) => expect(value).toBeCloseTo(asNumbers(old)[index], 1))
   }
 
-  const response = await page.request.get(`/api/runs/${current.run_id}/analyses/${current.analysis_id}/comparison`)
+  const slotSeries = (await (await page.request.get('/api/baseline')).json()).baselines[0].series as string
+  const response = await page.request.get(`/api/runs/${current.run_id}/analyses/${current.analysis_id}/comparison?series=${encodeURIComponent(slotSeries)}`)
   expect(response.ok()).toBeTruthy()
   const comparison = await response.json() as { metrics: Array<{ metric: string; delta: string | null; delta_percent: string | null }> }
   const p95 = comparison.metrics.find((metric) => metric.metric === 'response_time_p95_ms')

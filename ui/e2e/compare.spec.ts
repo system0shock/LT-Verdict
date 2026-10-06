@@ -26,6 +26,7 @@ type CompareOptions = {
   buckets?: boolean
   shell?: 'new' | 'old'
   precise?: boolean
+  slotArm?: string
 }
 
 const metric = (
@@ -36,6 +37,7 @@ const metric = (
 async function openCompare(page: Page, opts: CompareOptions = {}) {
   const paths: string[] = []
   const posts: Array<{ path: string; body: unknown }> = []
+  const deletes: string[] = []
   const baselineReference = opts.warnings?.includes('BASELINE_IS_CURRENT_ANALYSIS') ? current
     : opts.warnings?.includes('BASELINE_IS_CURRENT_RUN') ? { ...reference, run_id: current.run_id } : reference
   let baseline: BaselineSelection | null = opts.noBaseline ? null : {
@@ -59,7 +61,9 @@ async function openCompare(page: Page, opts: CompareOptions = {}) {
     else if (path === '/api/jenkins' || path === '/api/grafana' || path === '/api/sources') body = { profiles: [] }
     else if (path.endsWith('/advice')) body = { advice: null, job: null }
     else if (path === '/api/runs') body = { runs: [run], next_after: null }
-    else if (path === '/api/baseline' && method === 'GET') body = { baseline }
+    else if (path === '/api/baseline' && method === 'GET') {
+      body = { baseline, baselines: baseline ? [{ series: baseline.series, arm: opts.slotArm ?? null, source: 'SLOT', baseline }] : [] }
+    }
     else if (path === '/api/baseline' && method === 'POST') {
       if (opts.postBaselineFails) {
         status = 422
@@ -72,6 +76,7 @@ async function openCompare(page: Page, opts: CompareOptions = {}) {
         body = { baseline }
       }
     } else if (path === '/api/baseline' && method === 'DELETE') {
+      deletes.push(url.search)
       baseline = null
       body = { baseline: null }
     } else if (path.endsWith('/baseline-conditions') && method === 'GET') body = { conditions }
@@ -137,7 +142,7 @@ async function openCompare(page: Page, opts: CompareOptions = {}) {
   await page.locator(`button[title="${current.analysis_id}"]`).click()
   await expect(page.locator('#verdict')).toBeVisible()
   if (opts.shell !== 'old') await page.locator('#shell-tab-compare').click()
-  return { paths, posts }
+  return { paths, posts, deletes }
 }
 
 async function compareWindows(page: Page, baselineId = 'w1', currentId = 'w2') {
@@ -386,3 +391,9 @@ for (const width of [1280, 375, 320]) {
     expect(size.scrollWidth, `scrollWidth ${size.scrollWidth}, innerWidth ${size.innerWidth}, wide ${JSON.stringify(size.wide)}`).toBeLessThanOrEqual(size.innerWidth)
   })
 }
+
+test('the old interface clears the baseline of its series and arm', async ({ page }) => {
+  const { deletes } = await openCompare(page, { shell: 'old', baselineMode: 'manual', slotArm: 'blue' })
+  await page.getByRole('button', { name: 'Clear baseline', exact: true }).click()
+  await expect.poll(() => deletes).toEqual(['?series=S&arm=blue'])
+})

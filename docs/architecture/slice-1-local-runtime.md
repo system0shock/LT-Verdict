@@ -416,11 +416,12 @@ Private API:
 ```text
 GET    /api/baseline
 POST   /api/baseline
-DELETE /api/baseline
-GET    /api/runs/<run-id>/analyses/<analysis-id>/comparison
+DELETE /api/baseline[?series=<series>[&arm=<arm>]]
+GET    /api/runs/<run-id>/analyses/<analysis-id>/comparison[?series=<series>]
 ```
 
-GET/POST/DELETE baseline возвращают `{baseline: selection|null}`. Manual POST
+POST возвращает `{baseline: selection}`, DELETE `{baseline: null}`, GET добавляет
+список слотов (раздел «Слоты baseline в API»). Manual POST
 содержит `mode`, `series`, `reference`; statistical POST — `mode`, `series`,
 `candidates`, `comparable:true`. Selection закрепляет точный run/analysis,
 режим, алгоритм, candidate set и scores. API ограничивает body 16 KiB/depth 8,
@@ -445,14 +446,12 @@ identity, `BASELINE_MIXED_SEMANTICS`).
 `compareAnalyses` дописывает к `BASELINE_IS_CURRENT_*` и `CURRENT_IN_CANDIDATE_SET`
 предупреждения в порядке ADR 0019, раздел 5: `BASELINE_NOT_PASS` (вердикт
 результата анализа-эталона не `PASS`), `BASELINE_SMALL_SAMPLE` (среди причин
-покрытия есть `SMALL_SAMPLE`), `BASELINE_SERIES_DIFFERS` (серия релиза текущего
-анализа не равна серии выбора эталона; серия выбора нормализуется
-`normalizeReleaseText`, как серия релиза), `POLICY_DIFFERS` (различаются
+покрытия есть `SMALL_SAMPLE`), `POLICY_DIFFERS` (различаются
 `policy_sha256` двух identity) и `PROFILE_MISMATCH` (оба профиля заявлены и
 различаются). Метрики, статусы окон и `comparability` предупреждения не меняют.
 Параметр `ReleaseComparisonContext(baseline, current)` несёт записи релизов обоих
 анализов; без него (или без записей) поле ответа `profile` равно `null`, а
-`BASELINE_SERIES_DIFFERS` и `PROFILE_MISMATCH` не возникают. Обработчик
+`PROFILE_MISMATCH` не возникает. Обработчик
 comparison получает записи одним проходом `findReleasesByAnalysis` по каталогу
 релизов (до 1 001 файла, вне цены чтения результатов); неоднозначный
 `analysis_id` (несколько записей) даёт запись `null`, а `CORRUPT_RELEASE_REGISTRY`
@@ -484,8 +483,8 @@ persisted selection из API и защищает отображение comparis
 
 [ADR 0019](../adr/0019-release-history-and-baseline-eligibility.md), раздел 7
 (срез B1): активный baseline хранится по паре `(series, arm)`. Срез меняет только
-`RunBundleStore`; маршруты `/api/baseline*` и comparison пока работают с
-`baseline.json` (слоты в API: срез B2).
+`RunBundleStore`; маршруты и comparison используют слоты со среза B2 (раздел
+«Слоты baseline в API» ниже).
 
 - Слот: файл `<data>/baselines/<sha256 канонического {arm, series}>.json` с
   содержимым `local-baseline.v1` (формат не менялся, до 32 KiB). `arm` в ключе
@@ -523,6 +522,62 @@ persisted selection из API и защищает отображение comparis
   immutable ссылок, ADR 0010). Безадресный `clearBaseline()` удаляет legacy-файл и
   только такие записи его ссылки; прежнее «удалить все записи условий» заменено:
   записи условий прежних baseline остаются, пока не будут удалены адресно.
+
+## Слоты baseline в API
+
+[ADR 0019](../adr/0019-release-history-and-baseline-eligibility.md), раздел 7
+(срез B2). Приватный API использует слоты хранилища; изменение аддитивно, формат
+`local-baseline.v1` и записей условий не менялся.
+
+- `GET /api/baseline`: `baseline` хранит содержимое legacy-файла `baseline.json`
+  либо `null` (как раньше); `baselines` - массив эффективных слотов
+  `{series, arm, source, baseline}` в порядке `series`, `arm`; `source` равен
+  `SLOT` или `LEGACY`, `baseline` - выбор `local-baseline.v1`. Затенённый слотом
+  legacy-файл не показывается. Список и поле берутся одним вызовом
+  `listBaselineSlots`, поэтому согласованы.
+- `POST /api/baseline`: тело и проверки прежние, ответ `{baseline: selection}`.
+  `series` нормализуется как серия релиза (`normalizeReleaseText`: NFC, обрезка
+  краёв); пустая серия, управляющие символы и больше 128 байт дают `400` (то же
+  правило, что у `series` в query, чтобы слот можно было назвать снова); слот
+  пишется под ключ
+  `(series, arm)`, плечо берётся из `identity.resource_arm` анализа-победителя
+  (`readAnalysisIdentity`). Запись слота того же ключа, что и legacy-файл,
+  заменяет его (файл удаляется). Новый ключ при 64 слотах даёт
+  `422 BASELINE_SLOTS_LIMIT_REACHED` с `error.limit = 64`.
+- `DELETE /api/baseline`: без параметров очищает legacy-файл и записи условий его
+  ссылки, не используемой слотами (слоты не трогает); `series` (и необязательный
+  `arm`, без него плечо `null`) удаляет слот и затенённый legacy-файл того же ключа
+  (`clearBaselineSlot`). `arm` без `series`, пустое или повторённое значение
+  дают `400`. Слот, которого нет, не ошибка: ответ `200 {baseline: null}`.
+- `GET .../comparison`, `GET|POST .../baseline-conditions` и
+  `GET .../analytics`: необязательный query `series` (нормализуется так же).
+  Серия выбирается так: серия релиза, которому принадлежит текущий анализ (поиск
+  `findReleasesByAnalysis`; анализ в нескольких релизах или нечитаемый реестр
+  релизов считаются «релиза нет», сравнение от повреждённого реестра не ломается);
+  иначе `series` из query; иначе только legacy-файл, как до слотов. Плечо берётся
+  из identity текущего анализа. `series` в query, противоречащая серии релиза,
+  даёт `422 BASELINE_SERIES_CONFLICT`. Слот выбирается точно по `(series, arm)`:
+  анализ другого плеча слота не находит (`404`), а не сравнивается с чужим. Выбор
+  слота, чтение его ссылки и записи условий идёт одной операцией
+  `readBaselineSlotWithCondition` (один `operationLock`). Запись условия
+  (`POST`) читает слот одной операцией и пишет запись второй: параллельное
+  адресное удаление слота между ними оставит запись условий пары удалённого
+  baseline (она не используется ни одним слотом и безвредна; ссылки записи
+  неизменяемы).
+- `GET .../analytics` выбирает baseline для сравнения транзакций и отметки в
+  динамике тем же способом (ранее читался единственный `baseline.json`); запись
+  условий он не читает, поэтому повреждённая запись условий ему не мешает.
+- Ошибки хранилища `BASELINE_CONDITIONS_LIMIT_REACHED` (4 096 записей условий,
+  `error.limit = 4096`) и `BASELINE_ANALYSIS_NOT_FOUND` отображаются кодами
+  `422` и `404`; повреждённый слот даёт `500 CORRUPT_BASELINE` на всех маршрутах
+  baseline, включая адресное удаление (способа починки через API нет, файл слота
+  удаляется вручную).
+- Предупреждение `BASELINE_SERIES_DIFFERS` (R5, ADR 0019 раздел 5) удалено из
+  `compareAnalyses`: слот выбирается по серии релиза текущего анализа, а `series`
+  в query, противоречащая релизу, даёт `422 BASELINE_SERIES_CONFLICT`, поэтому
+  предупреждение недостижимо. Серия релиза читается тем же `releasesOfAnalyses`,
+  что и контекст сравнения (повреждённый реестр и неоднозначный анализ дают
+  «релиза нет»).
 
 ## Release history: хранилище записей релиза
 

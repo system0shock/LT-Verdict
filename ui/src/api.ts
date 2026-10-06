@@ -13,6 +13,7 @@ import type {
   BaselineConditionWindows,
   BaselineRequest,
   BaselineSelection,
+  BaselineSlotView,
   Bootstrap,
   BucketPage,
   JobStatus,
@@ -147,7 +148,7 @@ export function listSources(): Promise<SourcesResponse> {
   return request('/api/sources')
 }
 
-export function getBaseline(): Promise<{ baseline: BaselineSelection | null }> {
+export function getBaseline(): Promise<{ baseline: BaselineSelection | null; baselines?: BaselineSlotView[] }> {
   return request('/api/baseline')
 }
 
@@ -159,36 +160,39 @@ export function setBaseline(body: BaselineRequest): Promise<{ baseline: Baseline
   })
 }
 
-export function clearBaseline(): Promise<{ baseline: null }> {
-  return request('/api/baseline', { method: 'DELETE', headers: mutationHeaders() })
+export function clearBaseline(series?: string, arm?: string): Promise<{ baseline: null }> {
+  const query = series ? `?${new URLSearchParams({ series, ...(arm ? { arm } : {}) })}` : ''
+  return request(`/api/baseline${query}`, { method: 'DELETE', headers: mutationHeaders() })
 }
 
 export function getBaselineConditions(
   reference: AnalysisReference,
   windows?: BaselineConditionWindows,
+  series?: string,
 ): Promise<{ conditions: BaselineCondition | null }> {
-  return request(baselineConditionsPath(reference, windows))
+  return request(baselineConditionsPath(reference, windows, series))
 }
 
 export function setBaselineConditions(
   reference: AnalysisReference,
   decision: BaselineConditionDecision,
   windows?: BaselineConditionWindows,
+  series?: string,
 ): Promise<{ conditions: BaselineCondition }> {
-  return request(baselineConditionsPath(reference, windows), {
+  return request(baselineConditionsPath(reference, windows, series), {
     method: 'POST',
     headers: mutationHeaders({ 'Content-Type': 'application/json' }),
     body: JSON.stringify({ decision }),
   })
 }
 
-function baselineConditionsPath(reference: AnalysisReference, windows?: BaselineConditionWindows): string {
-  const query = windows ? `?${new URLSearchParams({ ...windows })}` : ''
+function baselineConditionsPath(reference: AnalysisReference, windows?: BaselineConditionWindows, series?: string): string {
+  const query = windows || series ? `?${new URLSearchParams({ ...windows, ...(series ? { series } : {}) })}` : ''
   return `/api/runs/${encodeURIComponent(reference.run_id)}/analyses/${encodeURIComponent(reference.analysis_id)}/baseline-conditions${query}`
 }
 
-export function compareBaseline(reference: AnalysisReference, windows?: WindowComparisonRequest): Promise<BaselineComparison> {
-  const query = windows ? `?${new URLSearchParams({ ...windows })}` : ''
+export function compareBaseline(reference: AnalysisReference, windows?: WindowComparisonRequest, series?: string): Promise<BaselineComparison> {
+  const query = windows || series ? `?${new URLSearchParams({ ...windows, ...(series ? { series } : {}) })}` : ''
   return request(`/api/runs/${encodeURIComponent(reference.run_id)}/analyses/${encodeURIComponent(reference.analysis_id)}/comparison${query}`)
 }
 

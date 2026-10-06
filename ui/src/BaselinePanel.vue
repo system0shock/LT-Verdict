@@ -85,7 +85,7 @@ async function loadConditions() {
   error.value = ''
   errorCode.value = ''
   try {
-    const response = await getBaselineConditions({ ...props.selection }, selectedConditionWindows())
+    const response = await getBaselineConditions({ ...props.selection }, selectedConditionWindows(), baseline.value.series)
     if (revision !== conditionRevision) return
     conditions.value = response.conditions
     conditionDecision.value = response.conditions?.decision ?? 'UNKNOWN'
@@ -104,8 +104,10 @@ async function loadBaseline() {
   try {
     const response = await getBaseline()
     if (revision !== baselineRevision) return
-    baseline.value = response.baseline
-    if (response.baseline) series.value = response.baseline.series
+    // The panel shows one baseline: the slot of the series in the field, else the first slot (the full list is B3).
+    baseline.value = (response.baselines ?? []).find((slot) => slot.baseline.series === series.value.trim())?.baseline
+      ?? response.baselines?.[0]?.baseline ?? response.baseline
+    if (baseline.value) series.value = baseline.value.series
     void loadConditions()
   } catch (failure) {
     if (revision === baselineRevision) showError(failure)
@@ -135,6 +137,15 @@ function assignStatistical() {
   void save({ mode: 'statistical', series: series.value.trim(), candidates: candidates.value.map((candidate) => ({ ...candidate.reference })), comparable: true })
 }
 
+// The arm of the shown baseline names its slot: the list of slots is the only place that has it.
+async function shownArm(): Promise<string | undefined> {
+  const shown = baseline.value
+  if (!shown) return undefined
+  const slot = (await getBaseline()).baselines?.find((entry) => entry.series === shown.series
+    && entry.baseline.reference.run_id === shown.reference.run_id && entry.baseline.reference.analysis_id === shown.reference.analysis_id)
+  return slot?.arm ?? undefined
+}
+
 async function save(request: BaselineRequest | null) {
   const revision = ++baselineRevision
   saving.value = true
@@ -142,7 +153,7 @@ async function save(request: BaselineRequest | null) {
   errorCode.value = ''
   invalidateComparison()
   try {
-    const response = request ? await setBaseline(request) : await clearBaseline()
+    const response = request ? await setBaseline(request) : await clearBaseline(baseline.value?.series, await shownArm())
     if (revision !== baselineRevision) return
     baseline.value = response.baseline
     conditionRevision += 1
@@ -171,7 +182,7 @@ async function saveConditions() {
   error.value = ''
   errorCode.value = ''
   try {
-    const response = await setBaselineConditions({ ...props.selection }, conditionDecision.value, selectedConditionWindows())
+    const response = await setBaselineConditions({ ...props.selection }, conditionDecision.value, selectedConditionWindows(), baseline.value.series)
     if (revision !== conditionRevision || stateRevision !== baselineRevision) return
     conditions.value = response.conditions
     conditionDecision.value = response.conditions.decision
@@ -202,7 +213,7 @@ async function compare(keepResult = false) {
       current_window: currentWindow.value.trim(),
       min_change_percent: minChangePercent.value,
       min_error_rate_delta: minErrorRateDelta.value,
-    } : undefined)
+    } : undefined, baseline.value.series)
     if (revision !== comparisonRevision || stateRevision !== baselineRevision) return
     comparison.value = response
     baseline.value = response.baseline

@@ -93,7 +93,7 @@ test('renders diagnostic coverage, abstention and one safe episode with expandab
 test('compares explicit windows and materiality while preserving unconfirmed and zero-baseline reasons', async ({ page }) => {
   await page.route('**/comparison?**', async (route) => {
     const query = new URL(route.request().url()).searchParams
-    expect(Object.fromEntries(query)).toEqual({ baseline_window: 'reference', current_window: 'steady', min_change_percent: '10', min_error_rate_delta: '0.002' })
+    expect(Object.fromEntries(query)).toEqual({ baseline_window: 'reference', current_window: 'steady', min_change_percent: '10', min_error_rate_delta: '0.002', series: 'Checkout' })
     await route.fulfill({ json: {
       baseline, current: reference, comparability: 'UNCONFIRMED', warnings: [], metrics: [],
       window_comparison: { status: 'DESCRIPTIVE', baseline_window: 'reference', current_window: 'steady', baseline_sample_count: 600, current_sample_count: 800, baseline_duration_ms: 30000, current_duration_ms: 40000, min_change_percent: '10', min_error_rate_delta: '0.002', reasons: ['CONDITIONS_UNCONFIRMED'],

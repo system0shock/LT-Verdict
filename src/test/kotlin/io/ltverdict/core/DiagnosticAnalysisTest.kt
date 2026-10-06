@@ -101,8 +101,167 @@ class DiagnosticAnalysisTest {
         assertEquals("UNAVAILABLE", selection.string("status"))
         assertEquals(listOf("GENUINE_PARTIAL_UNCALIBRATED"), selection.strings("reasons"))
         assertEquals(JsonNull, selection["p_value_b10"])
+        assertEquals("0.05", selection.string("alpha"))
+        assertEquals(
+            1,
+            selection
+                .getValue("family_count")
+                .jsonPrimitive.content
+                .toInt(),
+        )
         assertTrue(result.findings.none { it.string("type") == "correlation_candidate" })
     }
+
+    @Test
+    fun `two stages are two independent families that share the level`() {
+        val windows = listOf(window("w1", 0, 60_000), window("w2", 60_000, 120_000))
+        val rising = List(60) { BigDecimal.valueOf(it + 1L) }
+        val random = Random(3)
+        val noise = List(60) { BigDecimal.valueOf(random.nextInt(100) + 1L) }
+        val resources = resources(1_000, windows, mapOf("cpu" to rising + noise, "target" to List(120) { BigDecimal.ONE }))
+        val plan = plan(resources, pairs = stagePairs("w1", "w2"))
+        val noiseOutcome = List(60) { BigDecimal.valueOf(random.nextInt(100) + 1L) }
+        val load = mergedLoad(loadMetrics("w1", 0, 1_000, rising), loadMetrics("w2", 60_000, 1_000, noiseOutcome))
+
+        val result = evaluateDiagnostics(plan, resources, windows, load, windowMetrics(windows))
+        val selections =
+            result.evidence
+                .filter {
+                    it.string(
+                        "type",
+                    ) == "correlation_headline_selection"
+                }.associateBy { it.string("window_id") }
+
+        assertEquals(setOf("w1", "w2"), selections.keys)
+        assertTrue(
+            selections.values.none {
+                it.strings("reasons").any { reason ->
+                    reason.endsWith("_FAMILY_UNSUPPORTED") ||
+                        reason.endsWith("_MISMATCH")
+                }
+            },
+        )
+        assertEquals("SELECTED", selections.getValue("w1").string("status"))
+        assertEquals("NOT_SELECTED", selections.getValue("w2").string("status"))
+        selections.values.forEach {
+            assertEquals("0.025", it.string("alpha"))
+            assertEquals(
+                2,
+                it
+                    .getValue("family_count")
+                    .jsonPrimitive.content
+                    .toInt(),
+            )
+            assertEquals(
+                1,
+                it
+                    .getValue("family_hypotheses")
+                    .jsonPrimitive.content
+                    .toInt(),
+            )
+        }
+        val findings = result.findings.filter { it.string("type") == "correlation_candidate" }
+        assertEquals(listOf("w1"), findings.map { it.string("window_id") })
+    }
+
+    @Test
+    fun `two outcomes in one window are two families`() {
+        val windows = listOf(window("evaluation", 0, 60_000))
+        val rising = List(60) { BigDecimal.valueOf(it + 1L) }
+        val resources = resources(1_000, windows, mapOf("cpu" to rising, "target" to List(60) { BigDecimal.ONE }))
+        val plan =
+            plan(
+                resources,
+                pairs =
+                    """[
+                      {"id":"latency","resource_series_id":"cpu","load_metric":"response_time_p95_ms","window_ids":["evaluation"],"min_abs_effect":0.5,"min_resource_delta":1,"min_load_delta":1,"topology_basis":"host","controls":[{"meaning":"target_rps","series_id":"target"}]},
+                      {"id":"errors","resource_series_id":"cpu","load_metric":"error_rate","window_ids":["evaluation"],"min_abs_effect":0.5,"min_resource_delta":1,"min_load_delta":1,"topology_basis":"host","controls":[{"meaning":"target_rps","series_id":"target"}]}
+                    ]""",
+            )
+
+        val result =
+            evaluateDiagnostics(plan, resources, windows, loadMetrics("evaluation", 0, 1_000, rising), windowMetrics(windows))
+        val selections =
+            result.evidence
+                .filter {
+                    it.string(
+                        "type",
+                    ) == "correlation_headline_selection"
+                }.associateBy { it.string("pair_id") }
+
+        assertEquals("SELECTED", selections.getValue("latency").string("status"))
+        assertEquals(listOf("PAIR_NOT_EVALUABLE"), selections.getValue("errors").strings("reasons"))
+        selections.values.forEach {
+            assertEquals("0.025", it.string("alpha"))
+            assertEquals(
+                2,
+                it
+                    .getValue("family_count")
+                    .jsonPrimitive.content
+                    .toInt(),
+            )
+            assertEquals(
+                1,
+                it
+                    .getValue("family_hypotheses")
+                    .jsonPrimitive.content
+                    .toInt(),
+            )
+        }
+    }
+
+    @Test
+    fun `family count is declared by the plan so a short stage does not change the level of the others`() {
+        val windows = listOf(window("w1", 0, 60_000), window("short", 60_000, 80_000), window("w3", 80_000, 140_000))
+        val rising = List(60) { BigDecimal.valueOf(it + 1L) }
+        val shortRising = List(20) { BigDecimal.valueOf(it + 1L) }
+        val resources =
+            resources(
+                1_000,
+                windows,
+                mapOf("cpu" to rising + shortRising + rising, "target" to List(140) { BigDecimal.ONE }),
+            )
+        val plan = plan(resources, pairs = stagePairs("w1", "short", "w3"))
+        val load =
+            mergedLoad(
+                loadMetrics("w1", 0, 1_000, rising),
+                loadMetrics("short", 60_000, 1_000, shortRising),
+                loadMetrics("w3", 80_000, 1_000, rising),
+            )
+
+        val result = evaluateDiagnostics(plan, resources, windows, load, windowMetrics(windows))
+        val selections =
+            result.evidence
+                .filter {
+                    it.string(
+                        "type",
+                    ) == "correlation_headline_selection"
+                }.associateBy { it.string("window_id") }
+
+        assertEquals("UNAVAILABLE", selections.getValue("short").string("status"))
+        listOf("w1", "w3").forEach {
+            assertEquals("SELECTED", selections.getValue(it).string("status"))
+            assertEquals("0.016666666667", selections.getValue(it).string("alpha"))
+        }
+        selections.values.forEach {
+            assertEquals(
+                3,
+                it
+                    .getValue("family_count")
+                    .jsonPrimitive.content
+                    .toInt(),
+            )
+        }
+    }
+
+    private fun stagePairs(vararg windowIds: String): String =
+        """[{"id":"cpu-latency","resource_series_id":"cpu","load_metric":"response_time_p95_ms","window_ids":[${windowIds.joinToString(
+            ",",
+        ) {
+            "\"$it\""
+        }}],"min_abs_effect":0.5,"min_resource_delta":1,"min_load_delta":1,"topology_basis":"host","controls":[{"meaning":"target_rps","series_id":"target"}]}]"""
+
+    private fun mergedLoad(vararg parts: UtcLoadMetrics) = UtcLoadMetrics(parts.fold(emptyMap()) { merged, part -> merged + part.windows })
 
     @Test
     fun `all-null lag profile falls back to zero lag and states abstention`() {

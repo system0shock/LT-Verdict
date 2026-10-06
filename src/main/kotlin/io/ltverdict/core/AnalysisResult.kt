@@ -109,7 +109,7 @@ internal fun analysisIdentity(
                                     "version",
                                     when (id) {
                                         "metrics" -> "2"
-                                        "load-resource-diagnostics" -> "3"
+                                        "load-resource-diagnostics" -> "4"
                                         else -> "1"
                                     },
                                 )

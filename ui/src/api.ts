@@ -160,8 +160,8 @@ export function setBaseline(body: BaselineRequest): Promise<{ baseline: Baseline
   })
 }
 
-export function clearBaseline(series?: string): Promise<{ baseline: null }> {
-  const query = series ? `?${new URLSearchParams({ series })}` : ''
+export function clearBaseline(series?: string, arm?: string): Promise<{ baseline: null }> {
+  const query = series ? `?${new URLSearchParams({ series, ...(arm ? { arm } : {}) })}` : ''
   return request(`/api/baseline${query}`, { method: 'DELETE', headers: mutationHeaders() })
 }
 

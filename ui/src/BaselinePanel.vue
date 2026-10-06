@@ -137,6 +137,15 @@ function assignStatistical() {
   void save({ mode: 'statistical', series: series.value.trim(), candidates: candidates.value.map((candidate) => ({ ...candidate.reference })), comparable: true })
 }
 
+// The arm of the shown baseline names its slot: the list of slots is the only place that has it.
+async function shownArm(): Promise<string | undefined> {
+  const shown = baseline.value
+  if (!shown) return undefined
+  const slot = (await getBaseline()).baselines?.find((entry) => entry.series === shown.series
+    && entry.baseline.reference.run_id === shown.reference.run_id && entry.baseline.reference.analysis_id === shown.reference.analysis_id)
+  return slot?.arm ?? undefined
+}
+
 async function save(request: BaselineRequest | null) {
   const revision = ++baselineRevision
   saving.value = true
@@ -144,7 +153,7 @@ async function save(request: BaselineRequest | null) {
   errorCode.value = ''
   invalidateComparison()
   try {
-    const response = request ? await setBaseline(request) : await clearBaseline(baseline.value?.series)
+    const response = request ? await setBaseline(request) : await clearBaseline(baseline.value?.series, await shownArm())
     if (revision !== baselineRevision) return
     baseline.value = response.baseline
     conditionRevision += 1

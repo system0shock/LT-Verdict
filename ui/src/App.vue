@@ -951,6 +951,7 @@ function focusPolicy() {
             :result="result"
             :run-id="result.run_id"
             :analysis-id="selectedAnalysisId"
+            :analyses="analyses"
             @navigate="jumpTo"
           />
 

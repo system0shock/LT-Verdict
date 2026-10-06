@@ -4,17 +4,21 @@ import { getBuckets } from '../api'
 import { fetchRunLoad, type RunLoad } from './deep'
 import { OVERVIEW_LABELS } from './labels'
 import { CAPACITY_LABELS } from './labels.tables'
+import PlatformMap from './PlatformMap.vue'
 import SharedCursorChart from './SharedCursorChart.vue'
 import { attentionItems, capacityBlock, keyMetrics, loadSeries, type AttentionKind, type AttentionTarget } from './overview'
-import type { AnalysisResult } from '../types'
+import type { AnalysisResult, AnalysisSummary } from '../types'
 
 const props = defineProps<{
   result: AnalysisResult
   runId: string
   analysisId: string
+  analyses?: AnalysisSummary[]
 }>()
 const emit = defineEmits<{ navigate: [target: AttentionTarget] }>()
 
+// Карта «сервис x плечо» нужна, только если у выбранного анализа есть метка плеча (resource_arm в списке анализов).
+const armed = computed(() => props.analyses?.some((analysis) => analysis.analysis_id === props.analysisId && !!analysis.resource_arm) ?? false)
 const LIMIT = 6
 const expanded = ref(false)
 const items = computed(() => attentionItems(props.result))
@@ -56,6 +60,14 @@ const kindLabels: Record<AttentionKind, string> = {
     data-testid="overview-panel"
     lang="ru"
   >
+    <PlatformMap
+      v-if="armed && analyses"
+      :run-id="runId"
+      :analyses="analyses"
+      :analysis-id="analysisId"
+      :result="result"
+    />
+
     <section
       id="overview-attention"
       class="panel"

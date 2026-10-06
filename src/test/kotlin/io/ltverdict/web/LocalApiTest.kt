@@ -1955,6 +1955,105 @@ class LocalApiTest {
         }
 
     @Test
+    fun `analysis list exposes the resource arm and snapshot hash only when the identity has them`() =
+        withServer { store, api ->
+            val input = store.acceptInput(ByteArrayInputStream(SPIKE_DROP.bytes()), SPIKE_DROP.filename)
+
+            fun publish(
+                suffix: String,
+                extra: String,
+            ): String {
+                val identity =
+                    "{\"policy_sha256\":\"NO_POLICY\",\"run_id\":\"${input.runId}\",\"suffix\":\"$suffix\"$extra}"
+                        .encodeToByteArray()
+                val analysisId = sha256Hex(identity)
+                store.writeAnalysisAtomically(input.runId, analysisId) { staging ->
+                    Files.write(staging.resolve("identity.json"), identity)
+                    Files.writeString(
+                        staging.resolve("analysis-result.json"),
+                        "{\"policy_verdict\":\"PASS\",\"run_validity\":\"VALID\"}",
+                    )
+                }
+                return analysisId
+            }
+            val hashA = "a".repeat(64)
+            val hashB = "b".repeat(64)
+            val armA = publish("1", ",\"resource_arm\":\"A\",\"resource_snapshot_sha256\":\"$hashA\"")
+            val armB = publish("2", ",\"resource_arm\":\"B\",\"resource_snapshot_sha256\":\"$hashB\"")
+            val noArm = publish("3", ",\"resource_snapshot_sha256\":\"$hashA\"")
+            val noResources = publish("4", "")
+            api.bootstrap()
+
+            val items =
+                api
+                    .get("/api/runs/${input.runId}/analyses")
+                    .jsonObject()
+                    .getValue("analyses")
+                    .jsonArray
+                    .associate {
+                        it.jsonObject
+                            .getValue("analysis_id")
+                            .jsonPrimitive.content to it.jsonObject
+                    }
+            assertEquals(4, items.size)
+            assertEquals(
+                "A",
+                items
+                    .getValue(armA)
+                    .getValue("resource_arm")
+                    .jsonPrimitive.content,
+            )
+            assertEquals(
+                hashA,
+                items
+                    .getValue(armA)
+                    .getValue("resource_snapshot_sha256")
+                    .jsonPrimitive.content,
+            )
+            assertEquals(
+                "B",
+                items
+                    .getValue(armB)
+                    .getValue("resource_arm")
+                    .jsonPrimitive.content,
+            )
+            assertEquals(
+                hashB,
+                items
+                    .getValue(armB)
+                    .getValue("resource_snapshot_sha256")
+                    .jsonPrimitive.content,
+            )
+            assertFalse(items.getValue(noArm).containsKey("resource_arm"))
+            assertEquals(
+                hashA,
+                items
+                    .getValue(noArm)
+                    .getValue("resource_snapshot_sha256")
+                    .jsonPrimitive.content,
+            )
+            assertEquals(
+                setOf("analysis_id", "policy_sha256", "policy_id", "policy_verdict", "run_validity"),
+                items.getValue(noResources).keys,
+            )
+        }
+
+    @Test
+    fun `analysis list refuses an identity with a non-string arm`() =
+        withServer { store, api ->
+            val input = store.acceptInput(ByteArrayInputStream(SPIKE_DROP.bytes()), SPIKE_DROP.filename)
+            val identity = "{\"policy_sha256\":\"NO_POLICY\",\"run_id\":\"${input.runId}\",\"resource_arm\":1}".encodeToByteArray()
+            store.writeAnalysisAtomically(input.runId, sha256Hex(identity)) { staging ->
+                Files.write(staging.resolve("identity.json"), identity)
+                Files.writeString(staging.resolve("analysis-result.json"), "{\"policy_verdict\":\"PASS\",\"run_validity\":\"VALID\"}")
+            }
+            api.bootstrap()
+
+            val response = api.get("/api/runs/${input.runId}/analyses")
+            assertEquals(500, response.statusCode())
+        }
+
+    @Test
     fun `analysis list identifies each policy and includes null without policy`() =
         withServer { store, api ->
             val input = store.acceptInput(ByteArrayInputStream(SPIKE_DROP.bytes()), SPIKE_DROP.filename)

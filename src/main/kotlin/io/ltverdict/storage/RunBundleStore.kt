@@ -73,6 +73,8 @@ internal data class AnalysisSummary(
     val policyVerdict: String,
     val runValidity: String,
     val policyId: String? = null,
+    val resourceArm: String? = null,
+    val resourceSnapshotSha256: String? = null,
 )
 
 internal data class AnalysisPage(
@@ -278,6 +280,8 @@ internal class RunBundleStore(
                                 identity.string("policy_sha256"),
                                 result.string("policy_verdict"),
                                 result.string("run_validity"),
+                                resourceArm = identity.optionalString("resource_arm"),
+                                resourceSnapshotSha256 = identity.optionalString("resource_snapshot_sha256"),
                             )
                         val policy =
                             stored.artifacts.find { it.path == POLICY_FILE }?.let { artifact ->
@@ -1297,6 +1301,8 @@ private fun JsonObject.string(name: String): String {
     if (!value.isString) corrupt("$name must be a string")
     return value.content
 }
+
+private fun JsonObject.optionalString(name: String): String? = if (name in this) string(name) else null
 
 private fun JsonObject.long(name: String): Long {
     val value = this[name] as? JsonPrimitive ?: corrupt("$name must be an integer")

@@ -37,6 +37,8 @@ export interface AnalysisSummary {
   policy_id?: string | null
   policy_verdict: AnalysisResult['policy_verdict']
   run_validity: AnalysisResult['run_validity']
+  resource_arm?: string
+  resource_snapshot_sha256?: string
 }
 
 export interface AnalysisPage {

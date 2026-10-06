@@ -120,7 +120,7 @@ internal fun validatePodView(
             POD_VIEW_SCANNER_EXPONENT_ABS_MAX,
             "pod view",
             ::podViewScannerFail,
-        ).scan()
+        ).scan(POD_VIEW_SCANNER_VALUES_MAX)
         val view = parsePodView(Json.parseToJsonElement(text))
         PodViewValidation.Valid(view, sha256Hex(view.canonicalBytes()), raw)
     } catch (failure: PodViewFailure) {
@@ -603,12 +603,16 @@ private fun podViewInvalid(
     message: String,
 ): PodViewValidation.Invalid = PodViewValidation.Invalid(listOf(PolicyValidationError(INVALID, pointer, message)))
 
-// The scanner reports every failure with resource-snapshot codes; only the nesting depth is a limit, the rest is form.
+// The scanner reports every failure with resource-snapshot codes; only the nesting depth and the value count are limits,
+// the rest is form.
 private fun podViewScannerFail(
     code: String,
     pointer: String,
     message: String,
-): Nothing = podViewFail(if (code == "RESOURCE_LIMIT_EXCEEDED" && "depth" in message) LIMIT else INVALID, pointer, message)
+): Nothing {
+    val limit = code == "RESOURCE_LIMIT_EXCEEDED" && ("depth" in message || "value count" in message)
+    podViewFail(if (limit) LIMIT else INVALID, pointer, message)
+}
 
 private const val INVALID = "POD_VIEW_INVALID"
 private const val LIMIT = "POD_VIEW_LIMIT_EXCEEDED"
@@ -629,6 +633,12 @@ private const val POD_VIEW_JSON_DEPTH_MAX = 8
 // The 12-byte limit applies to cells in values; scalar fields such as a 13-digit start_epoch_ms need a wider scanner bound.
 private const val POD_VIEW_SCANNER_TOKEN_BYTES_MAX = 20
 private const val POD_VIEW_SCANNER_EXPONENT_ABS_MAX = 64
+
+// Every JSON value (scalar, object, array) a pod view within the limits can hold: per row an object, six scalar fields, the
+// values array and its cells; per pod an object, two scalars, the containers array and an object with two scalars per
+// container; 32 cover the top level and coverage. A larger count is rejected before the JSON tree is built.
+private const val POD_VIEW_SCANNER_VALUES_MAX =
+    MAX_POD_VIEW_ROWS * (MAX_POD_VIEW_COLUMNS + 8) + MAX_POD_VIEW_PODS * (4 + 3 * MAX_POD_VIEW_CONTAINERS) + 32
 private val SHA256 = Regex("[0-9a-f]{64}")
 private val INTEGER_TOKEN = Regex("-?(0|[1-9][0-9]*)")
 private val DECIMAL_TOKEN = Regex("-?(0|[1-9][0-9]*)(\\.[0-9]+)?")

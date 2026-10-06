@@ -1,0 +1,13 @@
+{
+  "schema_version": "local-release.v1",
+  "release_id": "001767225600000-0123abcd",
+  "series": "checkout",
+  "label": "1.2.3",
+  "run_id": "jmeter_jtl_csv-cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+  "started_at": "2026-01-01T00:00:00Z",
+  "analyses": [],
+  "profile": null,
+  "notes": null,
+  "created_at": "2026-01-02T03:04:05.006Z",
+  "updated_at": "2026-01-02T03:04:05.006Z"
+}

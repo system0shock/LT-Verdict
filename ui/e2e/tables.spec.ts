@@ -1,6 +1,6 @@
 import AxeBuilder from '@axe-core/playwright'
 import { expect, test, type Page } from '@playwright/test'
-import { TABLES_LABELS } from '../src/shell/labels.tables'
+import { RESOURCE_CHECK_LABELS, TABLES_LABELS } from '../src/shell/labels.tables'
 
 const reference = { run_id: 'tables-run', analysis_id: 'a'.repeat(64) }
 const run = { ...reference, source_type: 'jmeter', sha256: 'b'.repeat(64), size_bytes: 100, original_filename: 'tables.jtl' }
@@ -199,8 +199,8 @@ const snapshotOnly = { ...failing, evidence: [...failing.evidence, { ...resource
 test('resource checks show the service and the coverage of platform rules', async ({ page }) => {
   await openTables(page, withPlatformChecks)
   const table = page.locator('#resource-results').getByRole('region', { name: 'Resource policy checks' })
-  await expect(table.getByRole('columnheader', { name: 'Service' })).toBeVisible()
-  await expect(table.getByRole('columnheader', { name: 'Coverage (observed / expected)' })).toBeVisible()
+  await expect(table.getByRole('columnheader')).toHaveText(Object.values(RESOURCE_CHECK_LABELS.heads))
+  await expect(table.getByRole('columnheader', { name: 'Service' })).toHaveCount(0)
   const orders = table.getByRole('row').filter({ hasText: 'cpu-share/orders' })
   await expect(orders.getByTestId('resource-check-service')).toContainText('orders')
   await expect(orders.getByTestId('resource-check-service')).toContainText('cpu-share')
@@ -221,7 +221,7 @@ test('the old interface shows the same service and coverage columns', async ({ p
   await page.goto('/')
   await pickSavedAnalysis(page)
   const table = page.locator('#resource-results').getByRole('region', { name: 'Resource policy checks' })
-  await expect(table.getByRole('columnheader', { name: 'Service' })).toBeVisible()
+  await expect(table.getByRole('columnheader')).toHaveText(['Window', 'Rule', 'Service', 'Series', 'Operator', 'Threshold', 'Effect', 'Status', 'Reason', 'Coverage (observed / expected)'])
   await expect(table.getByRole('row').filter({ hasText: 'cpu-share/orders' }).getByTestId('resource-check-coverage')).toContainText('19 / 20 (95 %)')
 })
 
@@ -229,8 +229,9 @@ test('resource checks of a snapshot without platform rules keep their columns', 
   await openTables(page, snapshotOnly)
   const table = page.locator('#resource-results').getByRole('region', { name: 'Resource policy checks' })
   await expect(table.getByRole('row').filter({ hasText: 'cpu-limit' })).toBeVisible()
-  await expect(table.getByRole('columnheader', { name: 'Service' })).toHaveCount(0)
-  await expect(table.getByRole('columnheader', { name: /Coverage/ })).toHaveCount(0)
+  await expect(table.getByRole('columnheader', { name: RESOURCE_CHECK_LABELS.heads.service })).toHaveCount(0)
+  await expect(table.getByRole('columnheader', { name: RESOURCE_CHECK_LABELS.heads.coverage })).toHaveCount(0)
+  await expect(table.getByRole('columnheader')).toHaveCount(8)
 })
 
 for (const theme of ['light', 'dark'] as const) {

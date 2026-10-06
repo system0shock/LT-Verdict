@@ -71,7 +71,9 @@ export function formatNumber(value: number, maxFractionDigits = 2): string {
 }
 
 function item(key: string, kind: AttentionKind, title: string, detail: string, target: AttentionTarget | null, diagnostic = false): AttentionItem {
-  return { key, kind, title, detail, diagnostic, badge: null, target, openLabel: target ? openLabels[target.targetId] : null }
+  // Targets of the form ev-<evidence id> are rows of the rule table.
+  const openLabel = target ? (target.targetId.startsWith('ev-') ? OVERVIEW_LABELS.openRules : openLabels[target.targetId]) : null
+  return { key, kind, title, detail, diagnostic, badge: null, target, openLabel }
 }
 
 function noVerdictTarget(result: AnalysisResult, code: string | null): AttentionTarget | null {
@@ -79,7 +81,10 @@ function noVerdictTarget(result: AnalysisResult, code: string | null): Attention
   if (code === 'METRIC_NOT_AVAILABLE' || code === 'TRANSACTION_NOT_FOUND' || code === 'AMBIGUOUS_TRANSACTION' || code === 'BUSINESS_OBSERVATIONS_NOT_FOUND' || code === 'INSUFFICIENT_SAMPLES') {
     return { tab: 'tables', targetId: 'policy-results' }
   }
-  if (code === 'RULE_WINDOW_NOT_FOUND') return { tab: 'tables', targetId: 'policy-results' }
+  if (code === 'RULE_WINDOW_NOT_FOUND') {
+    const row = result.evidence.find((evidence) => evidence.type === 'rule_window_check')
+    return { tab: 'tables', targetId: row ? `ev-${row.id}` : 'policy-results' }
+  }
   if (
     code === 'RESOURCE_SERIES_NOT_FOUND' || code === 'MISSING_RESOURCE_CELLS' || code === 'RESOURCE_SNAPSHOT_REQUIRED'
     || code === 'RULE_WINDOW_TOO_SHORT' || code === 'PLATFORM_SERIES_AMBIGUOUS' || code === 'PLATFORM_UNIT_MISMATCH'

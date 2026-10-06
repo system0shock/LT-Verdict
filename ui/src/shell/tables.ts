@@ -1,4 +1,4 @@
-import type { AnalysisResult, CapacityStage, ExactRatio, MetricSummaryEvidence, PolicyCheckEvidence, TrendCheckEvidence, TrendSummaryEvidence } from '../types'
+import type { AnalysisResult, CapacityStage, ExactRatio, MetricSummaryEvidence, PolicyCheckEvidence, RuleWindowCheckEvidence, TrendCheckEvidence, TrendSummaryEvidence } from '../types'
 import { METRIC_LABELS, scopeLabel, valueText } from '../verdictSummary'
 import { reasonText as verdictReasonText } from '../verdictReasons'
 import { CAPACITY_LABELS, TABLES_LABELS, TREND_LABELS } from './labels.tables'
@@ -28,7 +28,7 @@ export function ruleRows(result: AnalysisResult): RuleRow[] {
   const metrics = new Map(result.evidence
     .filter((item): item is MetricSummaryEvidence => item.type === 'metric_summary')
     .map((item) => [item.id, item]))
-  return result.evidence
+  const rows = result.evidence
     .filter((item): item is PolicyCheckEvidence => item.type === 'policy_check')
     .map((check) => {
       const scope = check.scope ?? (check.metric_evidence_id ? metrics.get(check.metric_evidence_id)?.scope : undefined)
@@ -64,6 +64,24 @@ export function ruleRows(result: AnalysisResult): RuleRow[] {
         reasonText: reasonCode ? verdictReasonText(reasonCode) : null,
       }
     })
+  // The rule names a window the snapshot does not have: there is no metric to show, only the rule, the window and the reason.
+  const unknownWindows = result.evidence
+    .filter((item): item is RuleWindowCheckEvidence => item.type === 'rule_window_check')
+    .map((check): RuleRow => ({
+      key: check.id,
+      ruleId: check.rule_id,
+      scope: TABLES_LABELS.noWindow,
+      metric: TABLES_LABELS.noWindow,
+      condition: TABLES_LABELS.noWindow,
+      threshold: '',
+      observed: TABLES_LABELS.noWindow,
+      window: check.window_id,
+      sample: TABLES_LABELS.noSample,
+      status: check.status,
+      reasonCode: check.reason_code,
+      reasonText: verdictReasonText(check.reason_code),
+    }))
+  return [...rows, ...unknownWindows]
 }
 
 export type TxStatus = 'FAIL' | 'NO_VERDICT' | 'PASS' | 'NO_POLICY' | 'NOT_CHECKED'

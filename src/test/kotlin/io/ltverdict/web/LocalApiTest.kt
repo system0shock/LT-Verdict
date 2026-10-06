@@ -857,7 +857,7 @@ class LocalApiTest {
                 ),
                 422,
             )
-            assertEquals(JsonNull, api.get("/api/baseline").jsonObject().getValue("baseline"))
+            assertEquals(JsonNull, api.activeBaseline())
         }
 
     @Test
@@ -868,7 +868,7 @@ class LocalApiTest {
             val baselineId = api.createJob(input.runId, PERMISSIVE_POLICY).analysisId(api)
             val currentId = api.createJob(input.runId, Files.readAllBytes(Path.of(PASS_POLICY))).analysisId(api)
 
-            assertEquals(JsonNull, api.get("/api/baseline").jsonObject().getValue("baseline"))
+            assertEquals(JsonNull, api.activeBaseline())
 
             val selection =
                 api
@@ -890,11 +890,11 @@ class LocalApiTest {
             assertEquals(JsonNull, selection.getValue("algorithm"))
             assertEquals(selection.getValue("reference"), selection.getValue("candidates").jsonArray.single())
             assertTrue(selection.getValue("scores").jsonArray.isEmpty())
-            assertEquals(selection, api.get("/api/baseline").jsonObject().getValue("baseline"))
+            assertEquals(selection, api.activeBaseline())
 
             val comparison =
                 api
-                    .get("/api/runs/${input.runId}/analyses/$currentId/comparison")
+                    .get("/api/runs/${input.runId}/analyses/$currentId/comparison?series=release")
                     .jsonObject()
             assertEquals(setOf("baseline", "current", "comparability", "warnings", "metrics", "conditions"), comparison.keys)
             assertEquals(
@@ -916,8 +916,8 @@ class LocalApiTest {
                     },
             )
 
-            val windowPath = "/api/runs/${input.runId}/analyses/$currentId/comparison"
-            val windows = api.get("$windowPath?baseline_window=before&current_window=after")
+            val windowPath = "/api/runs/${input.runId}/analyses/$currentId/comparison?series=release"
+            val windows = api.get("$windowPath&baseline_window=before&current_window=after")
             assertEquals(200, windows.statusCode())
             assertEquals(
                 "NOT_EVALUATED",
@@ -928,17 +928,17 @@ class LocalApiTest {
                     .getValue("status")
                     .jsonPrimitive.content,
             )
-            assertError(api.get("$windowPath?baseline_window=before"), 400, "MALFORMED_REQUEST")
-            assertError(api.get("$windowPath?baseline_window=before&current_window=after&min_change_percent=0"), 400, "MALFORMED_REQUEST")
+            assertError(api.get("$windowPath&baseline_window=before"), 400, "MALFORMED_REQUEST")
+            assertError(api.get("$windowPath&baseline_window=before&current_window=after&min_change_percent=0"), 400, "MALFORMED_REQUEST")
             assertError(
-                api.get("$windowPath?baseline_window=before&current_window=after&min_error_rate_delta=1e999999"),
+                api.get("$windowPath&baseline_window=before&current_window=after&min_error_rate_delta=1e999999"),
                 400,
                 "MALFORMED_REQUEST",
             )
 
-            assertEquals(JsonNull, api.delete("/api/baseline").jsonObject().getValue("baseline"))
-            assertEquals(JsonNull, api.get("/api/baseline").jsonObject().getValue("baseline"))
-            assertError(api.get("/api/runs/${input.runId}/analyses/$currentId/comparison"), 404, "NOT_FOUND")
+            assertEquals(JsonNull, api.delete("/api/baseline?series=release").jsonObject().getValue("baseline"))
+            assertEquals(JsonNull, api.activeBaseline())
+            assertError(api.get("/api/runs/${input.runId}/analyses/$currentId/comparison?series=release"), 404, "NOT_FOUND")
         }
 
     @Test
@@ -952,7 +952,7 @@ class LocalApiTest {
 
             val accepted = api.selectManual(input.runId, passId)
             assertEquals(200, accepted.statusCode())
-            val selection = api.get("/api/baseline").jsonObject().getValue("baseline")
+            val selection = api.activeBaseline()
             assertEquals(accepted.jsonObject().getValue("baseline"), selection)
 
             val failed = api.selectManual(input.runId, failId)
@@ -962,7 +962,7 @@ class LocalApiTest {
             assertError(unknown, 422, "BASELINE_CANDIDATE_NOT_PASS")
             assertTrue(unknown.errorMessage().contains("policy_verdict=NO_POLICY"), unknown.errorMessage())
             // A refusal writes nothing: the earlier selection is still pinned.
-            assertEquals(selection, api.get("/api/baseline").jsonObject().getValue("baseline"))
+            assertEquals(selection, api.activeBaseline())
         }
 
     @Test
@@ -983,7 +983,7 @@ class LocalApiTest {
                 422,
                 "BASELINE_COMPARABILITY_UNCONFIRMED",
             )
-            assertEquals(JsonNull, api.get("/api/baseline").jsonObject().getValue("baseline"))
+            assertEquals(JsonNull, api.activeBaseline())
         }
 
     @Test
@@ -1003,12 +1003,7 @@ class LocalApiTest {
             assertEquals(listOf("BASELINE_SMALL_SAMPLE"), api.comparisonOf(current.first, current.second).warnings())
 
             api.selectStatistical(small)
-            val winner =
-                api
-                    .get("/api/baseline")
-                    .jsonObject()
-                    .getValue("baseline")
-                    .jsonObject
+            val winner = api.activeBaseline().jsonObject
             assertEquals(3, winner.getValue("candidates").jsonArray.size)
             assertEquals(listOf("BASELINE_SMALL_SAMPLE"), api.comparisonOf(current.first, current.second).warnings())
         }
@@ -1036,7 +1031,7 @@ class LocalApiTest {
                 422,
                 "BASELINE_CANDIDATE_INCOMPLETE",
             )
-            assertEquals(JsonNull, api.get("/api/baseline").jsonObject().getValue("baseline"))
+            assertEquals(JsonNull, api.activeBaseline())
         }
 
     @Test
@@ -1056,7 +1051,7 @@ class LocalApiTest {
             }
 
             assertError(api.selectManual(input.runId, analysisId), 422, "BASELINE_CANDIDATE_TOO_LARGE")
-            assertEquals(JsonNull, api.get("/api/baseline").jsonObject().getValue("baseline"))
+            assertEquals(JsonNull, api.activeBaseline())
         }
 
     @Test
@@ -1073,7 +1068,7 @@ class LocalApiTest {
             Files.writeString(resultPath, tampered)
 
             assertError(api.selectManual(input.runId, analysisId), 500, "CORRUPT_BASELINE")
-            assertEquals(JsonNull, api.get("/api/baseline").jsonObject().getValue("baseline"))
+            assertEquals(JsonNull, api.activeBaseline())
         }
 
     @Test
@@ -1108,7 +1103,7 @@ class LocalApiTest {
             val baselineBody =
                 """{"mode":"manual","series":"release","reference":{"run_id":"${input.runId}","analysis_id":"$baselineId"}}"""
             api.post("/api/baseline", "application/json", baselineBody.encodeToByteArray())
-            val path = "/api/runs/${input.runId}/analyses/$currentId/baseline-conditions"
+            val path = "/api/runs/${input.runId}/analyses/$currentId/baseline-conditions?series=release"
 
             assertEquals(JsonNull, api.get(path).jsonObject().getValue("conditions"))
             assertError(api.postUnauthenticated(path, """{"decision":"CONFIRMED"}""".encodeToByteArray()), 403, "FORBIDDEN")
@@ -1120,9 +1115,9 @@ class LocalApiTest {
             ).forEach { body -> assertError(api.post(path, "application/json", body.encodeToByteArray()), 400, "MALFORMED_REQUEST") }
             assertError(api.post(path, "text/plain", """{"decision":"CONFIRMED"}""".encodeToByteArray()), 415)
             assertError(api.post(path, "application/json", " ".repeat(16_385).encodeToByteArray()), 413)
-            assertError(api.get("$path?extra=1"), 400)
-            assertError(api.get("$path?baseline_window=before"), 400)
-            assertError(api.get("/api/runs/not-a-run/analyses/$currentId/baseline-conditions"), 400)
+            assertError(api.get("$path&extra=1"), 400)
+            assertError(api.get("$path&baseline_window=before"), 400)
+            assertError(api.get("/api/runs/not-a-run/analyses/$currentId/baseline-conditions?series=release"), 400)
 
             val confirmed =
                 api
@@ -1140,10 +1135,10 @@ class LocalApiTest {
             Instant.parse(confirmed.getValue("updated_at").jsonPrimitive.content)
             assertEquals(confirmed, api.get(path).jsonObject().getValue("conditions"))
 
-            val comparison = api.get("/api/runs/${input.runId}/analyses/$currentId/comparison").jsonObject()
+            val comparison = api.get("/api/runs/${input.runId}/analyses/$currentId/comparison?series=release").jsonObject()
             assertEquals("USER_CONFIRMED", comparison.getValue("comparability").jsonPrimitive.content)
             assertEquals(confirmed, comparison.getValue("conditions"))
-            val otherPair = api.get("/api/runs/${input.runId}/analyses/$baselineId/comparison").jsonObject()
+            val otherPair = api.get("/api/runs/${input.runId}/analyses/$baselineId/comparison?series=release").jsonObject()
             assertEquals("UNCONFIRMED", otherPair.getValue("comparability").jsonPrimitive.content)
             assertEquals(JsonNull, otherPair.getValue("conditions"))
 
@@ -1161,7 +1156,7 @@ class LocalApiTest {
             assertEquals(
                 "UNCONFIRMED",
                 api
-                    .get("/api/runs/${input.runId}/analyses/$currentId/comparison")
+                    .get("/api/runs/${input.runId}/analyses/$currentId/comparison?series=release")
                     .jsonObject()
                     .getValue("comparability")
                     .jsonPrimitive.content,
@@ -1180,24 +1175,24 @@ class LocalApiTest {
             )
             assertEquals(unknown, api.get(path).jsonObject().getValue("conditions"))
 
-            val windowPath = "$path?baseline_window=before&current_window=after"
+            val windowPath = "$path&baseline_window=before&current_window=after"
             val windowed =
                 api
                     .post(windowPath, "application/json", """{"decision":"CONFIRMED"}""".encodeToByteArray())
                     .jsonObject()
                     .getValue("conditions")
             assertEquals(windowed, api.get(windowPath).jsonObject().getValue("conditions"))
-            assertEquals(JsonNull, api.get("$path?baseline_window=before&current_window=other").jsonObject().getValue("conditions"))
+            assertEquals(JsonNull, api.get("$path&baseline_window=before&current_window=other").jsonObject().getValue("conditions"))
             assertEquals(
                 windowed,
                 api
                     .get(
-                        "/api/runs/${input.runId}/analyses/$currentId/comparison?baseline_window=before&current_window=after&min_change_percent=10",
+                        "/api/runs/${input.runId}/analyses/$currentId/comparison?series=release&baseline_window=before&current_window=after&min_change_percent=10",
                     ).jsonObject()
                     .getValue("conditions"),
             )
 
-            api.delete("/api/baseline")
+            api.delete("/api/baseline?series=release")
             api.post("/api/baseline", "application/json", baselineBody.encodeToByteArray())
             assertEquals(JsonNull, api.get(path).jsonObject().getValue("conditions"))
             assertEquals(JsonNull, api.get(windowPath).jsonObject().getValue("conditions"))
@@ -1223,7 +1218,7 @@ class LocalApiTest {
             val saved =
                 api
                     .post(
-                        "/api/runs/$testedRun/analyses/$testedAnalysis/baseline-conditions",
+                        "/api/runs/$testedRun/analyses/$testedAnalysis/baseline-conditions?series=release",
                         "application/json",
                         """{"decision":"CONFIRMED"}""".encodeToByteArray(),
                     ).jsonObject()
@@ -1257,7 +1252,7 @@ class LocalApiTest {
             val winner = first.getValue("reference").jsonObject
             val winnerRun = winner.getValue("run_id").jsonPrimitive.content
             val (testedRun, testedAnalysis) = runs[3]
-            val conditionsPath = "/api/runs/$testedRun/analyses/$testedAnalysis/baseline-conditions"
+            val conditionsPath = "/api/runs/$testedRun/analyses/$testedAnalysis/baseline-conditions?series=release"
 
             val manualBody = """{"mode":"manual","series":"release","reference":$winner}"""
             assertEquals(200, api.post("/api/baseline", "application/json", manualBody.encodeToByteArray()).statusCode())
@@ -1286,7 +1281,7 @@ class LocalApiTest {
             assertEquals("USER_CONFIRMED", kept.getValue("comparability").jsonPrimitive.content)
             assertEquals(saved, api.get(conditionsPath).jsonObject().getValue("conditions"))
 
-            assertEquals(JsonNull, api.delete("/api/baseline").jsonObject().getValue("baseline"))
+            assertEquals(JsonNull, api.delete("/api/baseline?series=release").jsonObject().getValue("baseline"))
             api.selectStatistical(runs.take(3))
             assertEquals(JsonNull, api.get(conditionsPath).jsonObject().getValue("conditions"))
             assertEquals(
@@ -2094,6 +2089,282 @@ class LocalApiTest {
             responses.forEach { assertFalse(it.body().contains(marker), it.body()) }
         }
 
+    @Test
+    fun `two series keep independent baseline slots and comparison follows the series`() =
+        withServer { store, api ->
+            api.bootstrap()
+            val runs = statisticalRuns(store, api, listOf(100, 110, 120, 130))
+            assertEquals(200, api.selectManual(runs[0].first, runs[0].second, "A").statusCode())
+            assertEquals(200, api.selectManual(runs[1].first, runs[1].second, "B").statusCode())
+
+            val listed = api.get("/api/baseline").jsonObject()
+            assertEquals(setOf("baseline", "baselines"), listed.keys)
+            assertEquals(JsonNull, listed.getValue("baseline"))
+            val slots = listed.getValue("baselines").jsonArray
+            assertEquals(listOf("A/null", "B/null"), slots.map { it.slotKey() })
+            assertEquals(setOf("series", "arm", "source", "baseline"), slots[0].jsonObject.keys)
+            assertEquals(
+                listOf("SLOT", "SLOT"),
+                slots.map {
+                    it.jsonObject
+                        .getValue("source")
+                        .jsonPrimitive.content
+                },
+            )
+
+            // rewriting one series leaves the other
+            assertEquals(200, api.selectManual(runs[2].first, runs[2].second, "A").statusCode())
+            val rewritten = api.slots()
+            assertEquals(reference(runs[2].first, runs[2].second), rewritten[0].slotReference())
+            assertEquals(reference(runs[1].first, runs[1].second), rewritten[1].slotReference())
+
+            val (currentRun, currentAnalysis) = runs[3]
+            val path = "/api/runs/$currentRun/analyses/$currentAnalysis/comparison"
+            assertEquals(reference(runs[2].first, runs[2].second), api.comparisonReference("$path?series=A"))
+            assertEquals(reference(runs[1].first, runs[1].second), api.comparisonReference("$path?series=B"))
+            // unregistered and no series: only the legacy file is read
+            assertError(api.get(path), 404, "NOT_FOUND")
+            assertError(api.get("$path?series=missing"), 404, "NOT_FOUND")
+            assertError(api.get("$path?series="), 400, "MALFORMED_REQUEST")
+            assertError(api.get("$path?series=A&series=B"), 400, "MALFORMED_REQUEST")
+
+            // the series of the release of the current analysis wins; a contradicting query is refused
+            assertEquals(201, api.createRelease(releaseBody(currentRun, listOf(currentAnalysis), series = "B")).statusCode())
+            assertEquals(reference(runs[1].first, runs[1].second), api.comparisonReference(path))
+            assertEquals(200, api.get("$path?series=B").statusCode())
+            assertError(api.get("$path?series=A"), 422, "BASELINE_SERIES_CONFLICT")
+            val conditions = "/api/runs/$currentRun/analyses/$currentAnalysis/baseline-conditions"
+            assertError(api.get("$conditions?series=A"), 422, "BASELINE_SERIES_CONFLICT")
+            val confirm = """{"decision":"CONFIRMED"}""".encodeToByteArray()
+            assertError(api.post("$conditions?series=A", "application/json", confirm), 422, "BASELINE_SERIES_CONFLICT")
+        }
+
+    @Test
+    fun `a corrupt release registry does not break the comparison`() {
+        val root = tempDir.resolve("baseline-registry")
+        withServer(dataRoot = root) { store, api ->
+            api.bootstrap()
+            val runs = statisticalRuns(store, api, listOf(100, 110))
+            assertEquals(200, api.selectManual(runs[0].first, runs[0].second, "A").statusCode())
+            Files.createDirectories(root.resolve("releases"))
+            Files.writeString(root.resolve("releases/stray.txt"), "x")
+            val path = "/api/runs/${runs[1].first}/analyses/${runs[1].second}/comparison"
+
+            assertEquals(200, api.get("$path?series=A").statusCode())
+            assertError(api.get(path), 404, "NOT_FOUND")
+        }
+    }
+
+    @Test
+    fun `legacy file is a slot until its key is written and the bare delete clears only it`() =
+        withServer { store, api ->
+            api.bootstrap()
+            val runs = statisticalRuns(store, api, listOf(100, 110, 120))
+            val legacy = manualBaselineSelection("release", reference(runs[0].first, runs[0].second))
+            store.replaceBaseline(legacy)
+
+            val listed = api.get("/api/baseline").jsonObject()
+            assertEquals(legacy, listed.getValue("baseline"))
+            assertEquals(
+                listOf("LEGACY"),
+                listed.getValue("baselines").jsonArray.map {
+                    it.jsonObject
+                        .getValue("source")
+                        .jsonPrimitive.content
+                },
+            )
+            val path = "/api/runs/${runs[2].first}/analyses/${runs[2].second}/comparison"
+            assertEquals(200, api.get(path).statusCode())
+            assertEquals(200, api.get("$path?series=release").statusCode())
+
+            // writing the key of the legacy file replaces it: the file is gone
+            assertEquals(200, api.selectManual(runs[1].first, runs[1].second).statusCode())
+            val replaced = api.get("/api/baseline").jsonObject()
+            assertEquals(JsonNull, replaced.getValue("baseline"))
+            assertEquals(
+                listOf("SLOT"),
+                replaced.getValue("baselines").jsonArray.map {
+                    it.jsonObject
+                        .getValue("source")
+                        .jsonPrimitive.content
+                },
+            )
+            assertError(api.get(path), 404, "NOT_FOUND")
+
+            // the bare delete clears the legacy file and no slot
+            store.replaceBaseline(manualBaselineSelection("old", reference(runs[0].first, runs[0].second)))
+            assertEquals(JsonNull, api.delete("/api/baseline").jsonObject().getValue("baseline"))
+            assertEquals(listOf("release/null"), api.slots().map { it.slotKey() })
+            assertEquals(JsonNull, api.get("/api/baseline").jsonObject().getValue("baseline"))
+            assertEquals(JsonNull, api.delete("/api/baseline").jsonObject().getValue("baseline"))
+        }
+
+    @Test
+    fun `an addressed delete removes one slot and keeps conditions another slot uses`() =
+        withServer { store, api ->
+            api.bootstrap()
+            val runs = statisticalRuns(store, api, listOf(100, 110, 120))
+            val (currentRun, currentAnalysis) = runs[2]
+            val conditions = "/api/runs/$currentRun/analyses/$currentAnalysis/baseline-conditions"
+            val confirm = """{"decision":"CONFIRMED"}""".encodeToByteArray()
+            assertEquals(200, api.selectManual(runs[0].first, runs[0].second, "A").statusCode())
+            assertEquals(200, api.selectManual(runs[1].first, runs[1].second, "B").statusCode())
+            assertEquals(200, api.selectManual(runs[0].first, runs[0].second, "C").statusCode())
+            assertEquals(200, api.post("$conditions?series=A", "application/json", confirm).statusCode())
+            assertEquals(200, api.post("$conditions?series=B", "application/json", confirm).statusCode())
+
+            assertError(api.delete("/api/baseline?arm=blue"), 400, "MALFORMED_REQUEST")
+            assertError(api.delete("/api/baseline?series="), 400, "MALFORMED_REQUEST")
+            assertError(api.delete("/api/baseline?series=A&arm="), 400, "MALFORMED_REQUEST")
+            assertError(api.delete("/api/baseline?series=A&series=B"), 400, "MALFORMED_REQUEST")
+            assertError(api.delete("/api/baseline?extra=1"), 400, "MALFORMED_REQUEST")
+            assertEquals(3, api.slots().size)
+
+            // A and C share one baseline reference and one pair record: it stays for C
+            assertEquals(JsonNull, api.delete("/api/baseline?series=A").jsonObject().getValue("baseline"))
+            assertEquals(listOf("B/null", "C/null"), api.slots().map { it.slotKey() })
+            assertEquals("CONFIRMED", api.conditionDecision("$conditions?series=C"))
+            assertEquals("CONFIRMED", api.conditionDecision("$conditions?series=B"))
+
+            // the last user of a reference takes its records along
+            assertEquals(200, api.delete("/api/baseline?series=C").statusCode())
+            assertEquals(200, api.selectManual(runs[0].first, runs[0].second, "C").statusCode())
+            assertEquals(JsonNull, api.get("$conditions?series=C").jsonObject().getValue("conditions"))
+            assertEquals("CONFIRMED", api.conditionDecision("$conditions?series=B"))
+
+            // deleting what is not there is not an error, and the arm names a different slot
+            assertEquals(200, api.delete("/api/baseline?series=missing").statusCode())
+            assertEquals(200, api.delete("/api/baseline?series=B&arm=blue").statusCode())
+            assertEquals(listOf("B/null", "C/null"), api.slots().map { it.slotKey() })
+            assertEquals(200, api.delete("/api/baseline?series=B").statusCode())
+            assertEquals(listOf("C/null"), api.slots().map { it.slotKey() })
+        }
+
+    @Test
+    fun `the slot limit is 64 and replacing a key at the limit still works`() =
+        withServer { store, api ->
+            api.bootstrap()
+            val (run, analysis) = statisticalRuns(store, api, listOf(100)).single()
+            repeat(64) { assertEquals(200, api.selectManual(run, analysis, "series-$it").statusCode()) }
+            assertEquals(64, api.slots().size)
+
+            val refused = api.selectManual(run, analysis, "series-64")
+            assertEquals(422, refused.statusCode())
+            assertEquals("BASELINE_SLOTS_LIMIT_REACHED", refused.errorCode())
+            assertEquals(64, refused.errorLimit())
+            assertEquals(64, api.slots().size)
+            assertEquals(200, api.selectManual(run, analysis, "series-3").statusCode())
+            assertEquals(200, api.delete("/api/baseline?series=series-0").statusCode())
+            assertEquals(200, api.selectManual(run, analysis, "series-64").statusCode())
+        }
+
+    @Test
+    fun `series are normalized so padded and trimmed names are one slot`() =
+        withServer { store, api ->
+            api.bootstrap()
+            val runs = statisticalRuns(store, api, listOf(100, 110, 120))
+            assertEquals(200, api.selectManual(runs[0].first, runs[0].second, " Checkout ").statusCode())
+            assertEquals(200, api.selectManual(runs[1].first, runs[1].second, "Checkout").statusCode())
+            assertEquals(1, api.slots().size)
+            assertEquals(
+                "Checkout",
+                api
+                    .slots()
+                    .single()
+                    .jsonObject
+                    .getValue("series")
+                    .jsonPrimitive.content,
+            )
+            assertEquals(reference(runs[1].first, runs[1].second), api.slots().single().slotReference())
+            assertError(api.selectManual(runs[0].first, runs[0].second, "   "), 400, "MALFORMED_REQUEST")
+            val path = "/api/runs/${runs[2].first}/analyses/${runs[2].second}/comparison"
+            assertEquals(200, api.get("$path?series=%20Checkout%20").statusCode())
+            assertEquals(200, api.delete("/api/baseline?series=%20Checkout").statusCode())
+            assertEquals(0, api.slots().size)
+        }
+
+    @Test
+    fun `the arm of the baseline analysis keys the slot and another arm finds no baseline`() =
+        withServer { store, api ->
+            val input = store.acceptInput(ByteArrayInputStream(SPIKE_DROP.bytes()), SPIKE_DROP.filename)
+            api.bootstrap()
+            val blue = writeSyntheticAnalysis(store, input.runId, "blue", arm = "blue")
+            val plain = writeSyntheticAnalysis(store, input.runId, "plain")
+            val green = writeSyntheticAnalysis(store, input.runId, "other-arm", arm = "green")
+            assertEquals(200, api.selectManual(input.runId, blue, "S").statusCode())
+
+            val slot = api.slots().single()
+            assertEquals(
+                "blue",
+                slot.jsonObject
+                    .getValue("arm")
+                    .jsonPrimitive.content,
+            )
+            assertEquals("S/blue", slot.slotKey())
+
+            assertEquals(201, api.createRelease(releaseBody(input.runId, listOf(plain), series = "S")).statusCode())
+            assertError(api.get("/api/runs/${input.runId}/analyses/$plain/comparison"), 404, "NOT_FOUND")
+            assertError(api.get("/api/runs/${input.runId}/analyses/$green/comparison?series=S"), 404, "NOT_FOUND")
+
+            // the same series at another arm is another slot, and the arm names the slot to delete
+            assertEquals(200, api.selectManual(input.runId, plain, "S").statusCode())
+            assertEquals(listOf("S/blue", "S/null"), api.slots().map { it.slotKey() }.sorted())
+            assertEquals(200, api.delete("/api/baseline?series=S&arm=blue").statusCode())
+            assertEquals(listOf("S/null"), api.slots().map { it.slotKey() })
+        }
+
+    @Test
+    fun `a full condition directory is refused with its limit`() {
+        val root = tempDir.resolve("baseline-conditions-limit")
+        withServer(dataRoot = root) { store, api ->
+            api.bootstrap()
+            val runs = statisticalRuns(store, api, listOf(100, 110))
+            assertEquals(200, api.selectManual(runs[0].first, runs[0].second).statusCode())
+            val directory = Files.createDirectories(root.resolve("baseline-conditions"))
+            repeat(4_096) { Files.writeString(directory.resolve("%064x.json".format(it)), "{}") }
+
+            val path = "/api/runs/${runs[1].first}/analyses/${runs[1].second}/baseline-conditions?series=release"
+            val refused = api.post(path, "application/json", """{"decision":"CONFIRMED"}""".encodeToByteArray())
+            assertEquals(422, refused.statusCode())
+            assertEquals("BASELINE_CONDITIONS_LIMIT_REACHED", refused.errorCode())
+            assertEquals(4_096, refused.errorLimit())
+        }
+    }
+
+    @Test
+    fun `a damaged slot fails closed on every baseline route`() {
+        val root = tempDir.resolve("baseline-damaged-slot")
+        withServer(dataRoot = root) { store, api ->
+            api.bootstrap()
+            val runs = statisticalRuns(store, api, listOf(100, 110))
+            assertEquals(200, api.selectManual(runs[0].first, runs[0].second, "A").statusCode())
+            val file = Files.list(root.resolve("baselines")).use { it.toList().single() }
+            Files.writeString(file, "not json")
+            val path = "/api/runs/${runs[1].first}/analyses/${runs[1].second}/comparison?series=A"
+
+            assertError(api.get("/api/baseline"), 500, "CORRUPT_BASELINE")
+            assertError(api.get(path), 500, "CORRUPT_BASELINE")
+            assertError(api.delete("/api/baseline?series=A"), 500, "CORRUPT_BASELINE")
+            assertError(api.selectManual(runs[1].first, runs[1].second, "B"), 500, "CORRUPT_BASELINE")
+        }
+    }
+
+    @Test
+    fun `saved analytics compares transactions against the slot of the analysis series`() =
+        withServer { store, api ->
+            api.bootstrap()
+            val runs = statisticalRuns(store, api, listOf(100, 110))
+            val path = "/api/runs/${runs[1].first}/analyses/${runs[1].second}/analytics"
+            assertEquals(200, api.selectManual(runs[0].first, runs[0].second, "A").statusCode())
+
+            assertEquals(JsonNull, api.get(path).jsonObject().getValue("transactions"))
+            assertTrue(api.get("$path?series=A").jsonObject().getValue("transactions") !is JsonNull)
+            assertEquals(JsonNull, api.get("$path?series=B").jsonObject().getValue("transactions"))
+            assertEquals(201, api.createRelease(releaseBody(runs[1].first, listOf(runs[1].second), series = "A")).statusCode())
+            assertTrue(api.get(path).jsonObject().getValue("transactions") !is JsonNull)
+            assertError(api.get("$path?series=B"), 422, "BASELINE_SERIES_CONFLICT")
+        }
+
     private fun statisticalRuns(
         store: RunBundleStore,
         api: ApiClient,
@@ -2117,12 +2388,50 @@ class LocalApiTest {
     private fun ApiClient.selectManual(
         run: String,
         analysis: String,
+        series: String = "release",
     ): HttpResponse<String> =
         post(
             "/api/baseline",
             "application/json",
-            """{"mode":"manual","series":"release","reference":{"run_id":"$run","analysis_id":"$analysis"}}""".encodeToByteArray(),
+            """{"mode":"manual","series":"$series","reference":{"run_id":"$run","analysis_id":"$analysis"}}""".encodeToByteArray(),
         )
+
+    private fun ApiClient.slots(): JsonArray = get("/api/baseline").jsonObject().getValue("baselines").jsonArray
+
+    private fun ApiClient.comparisonReference(path: String): JsonObject =
+        get(path)
+            .jsonObject()
+            .getValue("baseline")
+            .jsonObject
+            .getValue("reference")
+            .jsonObject
+
+    private fun ApiClient.conditionDecision(path: String): String =
+        get(path)
+            .jsonObject()
+            .getValue("conditions")
+            .jsonObject
+            .getValue("decision")
+            .jsonPrimitive.content
+
+    private fun JsonElement.slotKey(): String =
+        jsonObject.let { "${it.getValue("series").jsonPrimitive.content}/${it.getValue("arm").jsonPrimitive.contentOrNull}" }
+
+    private fun JsonElement.slotReference(): JsonObject =
+        jsonObject
+            .getValue("baseline")
+            .jsonObject
+            .getValue("reference")
+            .jsonObject
+
+    private fun reference(
+        run: String,
+        analysis: String,
+    ): JsonObject =
+        buildJsonObject {
+            put("run_id", run)
+            put("analysis_id", analysis)
+        }
 
     private fun HttpResponse<String>.errorMessage(): String =
         jsonObject()
@@ -2146,7 +2455,18 @@ class LocalApiTest {
     private fun ApiClient.comparisonOf(
         run: String,
         analysis: String,
-    ): JsonObject = get("/api/runs/$run/analyses/$analysis/comparison").jsonObject()
+        series: String = "release",
+    ): JsonObject = get("/api/runs/$run/analyses/$analysis/comparison?series=$series").jsonObject()
+
+    // The one active baseline of the store, from the slot list; JsonNull when there is none.
+    private fun ApiClient.activeBaseline(): JsonElement =
+        get("/api/baseline")
+            .jsonObject()
+            .getValue("baselines")
+            .jsonArray
+            .singleOrNull()
+            ?.jsonObject
+            ?.getValue("baseline") ?: JsonNull
 
     private fun JsonObject.warnings(): List<String> = getValue("warnings").jsonArray.map { it.jsonPrimitive.content }
 

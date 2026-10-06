@@ -135,6 +135,10 @@ internal fun statisticalBaselineSelection(
             val reference = references[index].toReference()
             val result = results[index]
             baselineCandidateRejection(result)?.let { throw IllegalArgumentException(it) }
+            require(
+                identities[index]["verdict_gates"] is JsonObject &&
+                    identities[index].stringOrNull("policy_sha256")?.let { it != "NO_POLICY" } == true,
+            ) { "BASELINE_CANDIDATE_GATES_UNKNOWN" }
             Candidate(
                 reference,
                 listOf(

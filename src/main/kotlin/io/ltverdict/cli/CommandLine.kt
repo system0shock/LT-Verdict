@@ -9,6 +9,7 @@ import io.ltverdict.core.AnalysisService
 import io.ltverdict.core.CapacityPlanValidation
 import io.ltverdict.core.DiagnosticValidation
 import io.ltverdict.core.EngineConfig
+import io.ltverdict.core.PodViewValidation
 import io.ltverdict.core.PolicyValidation
 import io.ltverdict.core.ResourceValidation
 import io.ltverdict.core.TrendPlanValidation
@@ -18,6 +19,8 @@ import io.ltverdict.core.validateCapacityPlan
 import io.ltverdict.core.validateDiagnosticBinding
 import io.ltverdict.core.validateDiagnosticPlan
 import io.ltverdict.core.validatePlatformBinding
+import io.ltverdict.core.validatePodView
+import io.ltverdict.core.validatePodViewBinding
 import io.ltverdict.core.validatePolicy
 import io.ltverdict.core.validateResourceSnapshot
 import io.ltverdict.core.validateTrendBinding
@@ -104,6 +107,7 @@ private fun analyze(
     var diagnosticsPath: Path? = null
     var capacityPath: Path? = null
     var trendPath: Path? = null
+    var podViewPath: Path? = null
     var connectionsPath: Path? = null
     var sourcePath: Path? = null
     val sourceContextPaths = mutableListOf<Path>()
@@ -138,6 +142,10 @@ private fun analyze(
             "--trend" -> {
                 if (trendPath != null || index + 1 >= args.size) usage()
                 trendPath = path(args[index + 1])
+            }
+            "--pod-view" -> {
+                if (podViewPath != null || index + 1 >= args.size) usage()
+                podViewPath = path(args[index + 1])
             }
             "--connections" -> {
                 if (connectionsPath != null || index + 1 >= args.size) usage()
@@ -186,6 +194,7 @@ private fun analyze(
                 diagnosticsPath != null ||
                 capacityPath != null ||
                 trendPath != null ||
+                podViewPath != null ||
                 sourceContextPaths.isNotEmpty()
         )
     ) {
@@ -202,6 +211,7 @@ private fun analyze(
     val diagnostics = diagnosticsPath?.let(::readDiagnostics)
     val capacity = capacityPath?.let(::readCapacity)
     val trend = trendPath?.let(::readTrend)
+    val podView = podViewPath?.let(::readPodView)
     val postgres = readPostgresFiles(postgresPrePath, postgresPostPath, pgProfileHtmlPath)
     if (diagnostics != null) {
         if (resources == null) throw CliFailure(EXIT_INVALID_INPUT, "DIAGNOSTIC_RESOURCE_REQUIRED")
@@ -224,6 +234,7 @@ private fun analyze(
             )
         }
     }
+    if (podView != null && resources == null) throw CliFailure(EXIT_INVALID_INPUT, "POD_VIEW_RESOURCE_REQUIRED")
     if (policy != null && resources != null) {
         val errors = validatePlatformBinding(policy.policy, resources.snapshot)
         if (errors.isNotEmpty()) {
@@ -256,6 +267,15 @@ private fun analyze(
                         )
                     }
                 }
+                podView?.let {
+                    val errors = validatePodViewBinding(it, accepted.sha256, checkNotNull(resources))
+                    if (errors.isNotEmpty()) {
+                        throw CliFailure(
+                            EXIT_INVALID_INPUT,
+                            errors.joinToString("\n") { error -> "${error.code} ${error.jsonPointer}: ${error.message}" },
+                        )
+                    }
+                }
                 val context =
                     sourceContextPaths.takeIf { it.isNotEmpty() }?.let { paths ->
                         var total = 0L
@@ -281,6 +301,7 @@ private fun analyze(
                         diagnostics = diagnostics,
                         capacity = capacity,
                         trend = trend,
+                        podView = podView,
                         sourceRequest = sourceRequest,
                         sourceAcquisition = context,
                         postgres = postgres,
@@ -705,6 +726,23 @@ private fun readTrend(path: Path): TrendPlanValidation.Valid {
     }
 }
 
+private fun readPodView(path: Path): PodViewValidation.Valid {
+    requireRegularFile(path, EXIT_INVALID_INPUT, "INVALID_POD_VIEW")
+    val validation =
+        try {
+            Files.newInputStream(path, LinkOption.NOFOLLOW_LINKS).use(::validatePodView)
+        } catch (_: IOException) {
+            throw CliFailure(EXIT_INVALID_INPUT, "INVALID_POD_VIEW: read failed")
+        }
+    return when (validation) {
+        is PodViewValidation.Valid -> validation
+        is PodViewValidation.Invalid -> throw CliFailure(
+            EXIT_INVALID_INPUT,
+            validation.errors.joinToString("\n") { "${it.code} ${it.jsonPointer}: ${it.message}" },
+        )
+    }
+}
+
 private fun requireRegularFile(
     path: Path,
     exitCode: Int,
@@ -732,7 +770,7 @@ private fun usage(): Nothing =
         "Usage: ltv ui [--data-dir <path>] [--analysis-parallelism <n>] [--histogram-significant-digits <3..5>] " +
             "[--connections <profiles.json>] [--jenkins-config <jenkins.json>] | " +
             "ltv analyze <input> [--policy <policy.json>] [--resources <snapshot.json>] [--capacity <plan.json>] " +
-            "[--trend <plan.json>] [--correlation <plan.json>] [--source-context <context.json>] " +
+            "[--trend <plan.json>] [--pod-view <pod-view.json>] [--correlation <plan.json>] [--source-context <context.json>] " +
             "[--postgres-pre <pre.json>] [--postgres-post <post.json>] [--pg-profile-html <report.html>] " +
             "[--connections <profiles.json> --source <source.json>] [--histogram-significant-digits <3..5>] [--data-dir <path>] | " +
             "ltv source pre|post --connections <profiles.json> --profile <id> [--pre <pre.json>] [--pg-profile-html <output.html>] | " +

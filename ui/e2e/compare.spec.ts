@@ -81,7 +81,7 @@ async function openCompare(page: Page, opts: CompareOptions = {}) {
       body = { conditions }
     } else if (path.endsWith('/comparison')) {
       body = {
-        baseline, current, comparability: opts.comparability ?? 'UNCONFIRMED', warnings: opts.warnings ?? [], conditions,
+        baseline, current, comparability: opts.comparability ?? (conditions ? 'USER_CONFIRMED' : 'UNCONFIRMED'), warnings: opts.warnings ?? [], conditions,
         metrics: [
           metric('response_time_p95_ms', 'ms', '100', '200', '100', '100', null, null),
           metric('error_rate_ratio', 'ratio', '0', '0.1', '0.1', null, null, 'ZERO_BASELINE'),
@@ -141,7 +141,7 @@ async function compareWindows(page: Page, baselineId = 'w1', currentId = 'w2') {
 
 test('compare tab is Russian, keeps the server warning order and says the verdict is untouched', async ({ page }) => {
   const requests = await openCompare(page, {
-    warnings: ['BASELINE_IS_CURRENT_RUN', 'CURRENT_IN_CANDIDATE_SET'], comparability: 'UNCONFIRMED',
+    warnings: ['BASELINE_IS_CURRENT_RUN', 'CURRENT_IN_CANDIDATE_SET', 'BASELINE_SMALL_SAMPLE'], comparability: 'UNCONFIRMED',
   })
   await page.getByRole('button', { name: COMPARE_LABELS.compare, exact: true }).click()
   const panel = page.locator('#baseline-panel')
@@ -150,6 +150,7 @@ test('compare tab is Russian, keeps the server warning order and says the verdic
   await expect(page.getByTestId('baseline-warnings').locator('li')).toHaveText([
     BASELINE_LABELS.warnings.BASELINE_IS_CURRENT_RUN,
     BASELINE_LABELS.warnings.CURRENT_IN_CANDIDATE_SET,
+    BASELINE_LABELS.warnings.BASELINE_SMALL_SAMPLE,
   ])
   await expect(page.getByTestId('baseline-warnings')).toContainText(BASELINE_LABELS.warningsTitle)
   await expect(page.getByTestId('baseline-comparison')).toContainText(COMPARE_LABELS.statusLine('UNCONFIRMED'))
@@ -212,6 +213,18 @@ test('the condition form saves the explicit decision for the pair in Russian', a
     path: `/api/runs/${current.run_id}/analyses/${current.analysis_id}/baseline-conditions`,
     body: { decision: 'CONFIRMED' },
   }])
+})
+
+test('the comparison stays on screen after saving a decision and is refreshed', async ({ page }) => {
+  const requests = await openCompare(page, { baselineMode: 'manual' })
+  await page.getByRole('button', { name: COMPARE_LABELS.compare, exact: true }).click()
+  const shown = page.getByTestId('baseline-comparison')
+  await expect(shown).toContainText(COMPARE_LABELS.statusLine('UNCONFIRMED'))
+  await page.getByLabel(COMPARE_LABELS.conditionConfirmed, { exact: true }).check()
+  await page.getByRole('button', { name: COMPARE_LABELS.saveCondition, exact: true }).click()
+  await expect(page.getByTestId('baseline-condition-status')).toContainText(COMPARE_LABELS.conditionSaved('CONFIRMED', updatedAt))
+  await expect(shown).toContainText(COMPARE_LABELS.statusLine('USER_CONFIRMED'))
+  expect(requests.paths.filter((entry) => entry.startsWith('GET') && entry.endsWith('/comparison'))).toHaveLength(2)
 })
 
 test('no baseline shows the Russian hint', async ({ page }) => {

@@ -1,5 +1,6 @@
 package io.ltverdict.storage
 
+import io.ltverdict.core.MAX_POD_VIEW_BYTES
 import io.ltverdict.core.WindowComparisonRequest
 import io.ltverdict.core.baselineConditionBinding
 import io.ltverdict.core.canonicalJson
@@ -77,6 +78,12 @@ internal data class StoredArtifact(
 internal data class StoredAnalysis(
     val path: Path,
     val artifacts: List<StoredArtifact>,
+)
+
+internal data class VerifiedAnalysis(
+    val result: JsonObject,
+    val identity: JsonObject,
+    val run: JsonObject?,
 )
 
 internal data class ComparisonDocuments(
@@ -476,6 +483,68 @@ internal class RunBundleStore(
             val result = parseObject(Files.readAllBytes(requireOwnedFile(stored.path.resolve(RESULT_FILE))), "analysis result")
             val identity = parseObject(Files.readAllBytes(requireOwnedFile(stored.path.resolve(IDENTITY_FILE))), "analysis identity")
             result to identity
+        }
+
+    /**
+     * Reads the result, identity and run metadata of an analysis with their SHA-256 checked against the manifest and the
+     * result bounded by [maxResultBytes] (ADR 0019, section 1). Ordinary reads compare paths and sizes only, so a same-size
+     * substitution of the result would pass them. Published analyses are immutable and this store never deletes them
+     * (ADR 0002, addendum 2026-10-01), so only the manifest check runs under the lock; the heavy read and hash run outside it.
+     * [outsideLock] runs after the lock is released and before the heavy read; it exists for the lock test.
+     */
+    fun readVerifiedAnalysis(
+        runId: String,
+        analysisId: String,
+        maxResultBytes: Int = MAX_VERIFIED_RESULT_BYTES,
+        outsideLock: () -> Unit = {},
+    ): VerifiedAnalysis? {
+        require(maxResultBytes in 1..MAX_VERIFIED_RESULT_BYTES)
+        val stored =
+            synchronized(dataDirectory.operationLock) {
+                dataDirectory.requireOpen()
+                readAnalysisUnlocked(runId, analysisId)
+            } ?: return null
+        outsideLock()
+        val result = stored.verifiedBytes(RESULT_FILE, maxResultBytes, tooLarge = true)
+        val identity = stored.verifiedBytes(IDENTITY_FILE, MAX_VERIFIED_DOCUMENT_BYTES, tooLarge = false)
+        val run =
+            if (stored.artifacts.any { it.path == "run.json" }) {
+                stored.verifiedBytes("run.json", MAX_VERIFIED_DOCUMENT_BYTES, tooLarge = false)
+            } else {
+                null
+            }
+        return VerifiedAnalysis(
+            parseObject(result, "analysis result"),
+            parseObject(identity, "analysis identity"),
+            run?.let { parseObject(it, "run metadata") },
+        )
+    }
+
+    /**
+     * Returns the stored pod-view.json (ADR 0020, section 5), or null when the analysis has none. Ordinary reads compare
+     * artifact paths and sizes only, so this read also hashes the file: its SHA-256 must equal both the manifest entry
+     * and the identity's pod_view_sha256, which catches a same-size substitution. A binding without a file, or a file
+     * without a binding, is corruption.
+     */
+    fun readPodViewBytes(
+        runId: String,
+        analysisId: String,
+    ): ByteArray? =
+        synchronized(dataDirectory.operationLock) {
+            dataDirectory.requireOpen()
+            val stored = readAnalysisUnlocked(runId, analysisId) ?: return@synchronized null
+            val identity = parseObject(Files.readAllBytes(requireOwnedFile(stored.path.resolve(IDENTITY_FILE))), "analysis identity")
+            val bound = if (identity.containsKey("pod_view_sha256")) identity.string("pod_view_sha256") else null
+            val artifact = stored.artifacts.find { it.path == POD_VIEW_FILE }
+            if (artifact == null && bound == null) return@synchronized null
+            if (artifact == null || artifact.sha256 != bound) corrupt("pod view differs from the analysis identity")
+            if (artifact.sizeBytes > MAX_POD_VIEW_BYTES) corrupt("pod view exceeds its size limit")
+            val bytes =
+                Files.newInputStream(requireOwnedFile(stored.path.resolve(POD_VIEW_FILE)), LinkOption.NOFOLLOW_LINKS).use {
+                    it.readNBytes(MAX_POD_VIEW_BYTES + 1)
+                }
+            if (bytes.size.toLong() != artifact.sizeBytes || sha256Hex(bytes) != artifact.sha256) corrupt("pod view bytes differ")
+            bytes
         }
 
     fun readComparisonDocuments(
@@ -919,6 +988,23 @@ private fun requireOwnedDirectory(path: Path): Path {
     return path
 }
 
+private fun StoredAnalysis.verifiedBytes(
+    name: String,
+    maximum: Int,
+    tooLarge: Boolean,
+): ByteArray {
+    val artifact = artifacts.singleOrNull { it.path == name } ?: corrupt("analysis artifact $name is missing")
+    if (artifact.sizeBytes > maximum) {
+        if (tooLarge) throw IllegalArgumentException("RESULT_TOO_LARGE")
+        corrupt("analysis artifact $name exceeds $maximum bytes")
+    }
+    val bytes = Files.newInputStream(requireOwnedFile(path.resolve(name))).use { it.readNBytes(artifact.sizeBytes.toInt() + 1) }
+    if (bytes.size.toLong() != artifact.sizeBytes || sha256Hex(bytes) != artifact.sha256) {
+        corrupt("analysis artifact $name differs from its manifest")
+    }
+    return bytes
+}
+
 private fun requireOwnedFile(path: Path): Path {
     if (Files.isSymbolicLink(path) || !Files.isRegularFile(path, LinkOption.NOFOLLOW_LINKS)) corrupt("unsafe file at $path")
     return path
@@ -1006,8 +1092,11 @@ private const val BASELINE_CONDITIONS_DIRECTORY = "baseline-conditions"
 private const val RUN_PERIOD_FILE = "run-period.json"
 private const val RESULT_FILE = "analysis-result.json"
 private const val IDENTITY_FILE = "identity.json"
+private const val POD_VIEW_FILE = "pod-view.json"
 private const val POLICY_FILE = "policy.json"
 private const val MAX_POLICY_BYTES = 1_048_576
+internal const val MAX_VERIFIED_RESULT_BYTES = 64 * 1024 * 1024
+private const val MAX_VERIFIED_DOCUMENT_BYTES = 8 * 1024 * 1024
 private const val MAX_BASELINE_BYTES = 32 * 1024
 private const val MAX_BASELINE_CONDITION_BYTES = 4 * 1024
 private const val MAX_RUN_PERIOD_BYTES = 4 * 1024

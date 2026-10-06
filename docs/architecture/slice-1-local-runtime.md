@@ -310,6 +310,8 @@ GET    /api/jobs/<job-id>
 DELETE /api/jobs/<job-id>
 GET    /api/runs/<run-id>/analyses/<analysis-id>/result
 GET    /api/runs/<run-id>/analyses/<analysis-id>/buckets
+GET    /api/runs/<run-id>/analyses/<analysis-id>/pod-view
+GET    /api/runs/<run-id>/analyses/<analysis-id>/pod-view/values?service=<name>
 GET    /api/runs/<run-id>/analyses/<analysis-id>/report?format=json|html|asciidoc
 ```
 
@@ -343,7 +345,7 @@ validation возвращает отдельный `{valid:false,errors:[...]}`.
 `RESOURCE_FINDINGS_LIMIT_EXCEEDED` до публикации partial analysis.
 
 Snapshot ограничен 32 MiB, 1 024 series и 1 500 000 cells (ADR 0014); multipart
-job содержит не более 24 parts, declared общий body ограничен суммой максимальных
+job содержит не более 25 parts (25-я - `pod_view`, ADR 0020), declared общий body ограничен суммой максимальных
 parts (`MAX_JOB_REQUEST_BYTES`, snapshot 32 MiB) и 64 KiB overhead. Core проверяет depth,
 duplicate/unknown fields, numeric bounds и cardinality до помещения в queue.
 Расчёты используют existing analysis worker и cooperative cancellation.
@@ -416,6 +418,36 @@ GET/POST/DELETE baseline возвращают `{baseline: selection|null}`. Manu
 режим, алгоритм, candidate set и scores. API ограничивает body 16 KiB/depth 8,
 series 128 UTF-8 bytes и statistical candidates 3..20 разных runs; file cap
 32 KiB. Route mutations проходят обычную Host/Origin/session/CSRF boundary.
+
+Допуск кандидата ([ADR 0019](../adr/0019-release-history-and-baseline-eligibility.md),
+раздел 6) единый для обоих режимов: `baselineCandidateRejection` в
+`BaselineComparison.kt` по сохранённому результату возвращает первый нарушенный
+пункт `BASELINE_CANDIDATE_INVALID` (`run_validity != VALID`),
+`BASELINE_CANDIDATE_INCOMPLETE` (`analysis_coverage.status != COMPLETE`, кроме
+`INCOMPLETE`, все причины которого равны `SMALL_SAMPLE`: решение владельца
+2026-10-04, нестроковая причина отклоняет) или
+`BASELINE_CANDIDATE_NOT_PASS` (`policy_verdict != PASS`) либо `null`. Его
+вызывают `selectBaseline` (оба режима, до расчёта, по кандидатам в порядке
+запроса) и `statisticalBaselineSelection`. Порядок кодов 422: проверки запроса
+(форма, `comparable`, число кандидатов, дубли runs), затем чтение результата
+каждого кандидата (`BASELINE_CANDIDATE_TOO_LARGE`, ошибки целостности как
+`500 CORRUPT_BASELINE`), затем допуск, затем проверки statistical (метрики,
+identity, `BASELINE_MIXED_SEMANTICS`).
+
+`compareAnalyses` добавляет предупреждение `BASELINE_SMALL_SAMPLE` четвёртой
+позицией порядка ADR 0019 (после `CURRENT_IN_CANDIDATE_SET`), если среди причин
+покрытия результата анализа-эталона есть `SMALL_SAMPLE`; метрики, статусы и
+`comparability` оно не меняет.
+
+Результат кандидата читает `RunBundleStore.readVerifiedAnalysis`: под
+`operationLock` остаётся проверка манифеста, а чтение и SHA-256
+`analysis-result.json` (предел `MAX_VERIFIED_RESULT_BYTES` = 64 MiB, по размеру
+из манифеста до чтения) выполняются вне замка, потому что опубликованные анализы
+неизменяемы и хранилище их не удаляет (дополнение ADR 0002 от 2026-10-01).
+Обычное чтение анализа сверяет только путь и размер, поэтому замена результата
+при сохранённом размере без этой проверки обошла бы допуск. Ранее сохранённый
+`baseline.json` читается без новых запретов; отказ допуска действует только при
+выборе.
 
 `BaselineComparison.kt` вычисляет deterministic rank selection и overall
 deltas. Round-to-6 decimal strings — только presentation; ratio comparison

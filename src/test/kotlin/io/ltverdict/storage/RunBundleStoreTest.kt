@@ -18,9 +18,11 @@ import kotlinx.serialization.json.put
 import org.junit.jupiter.api.Assertions.assertArrayEquals
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
+import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertThrows
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
+import org.junit.jupiter.api.Timeout
 import org.junit.jupiter.api.io.TempDir
 import java.io.ByteArrayInputStream
 import java.io.IOException
@@ -743,6 +745,179 @@ class RunBundleStoreTest {
             assertEquals(Json.parseToJsonElement(result.decodeToString()).jsonObject, documents.first)
             assertEquals(Json.parseToJsonElement(identity.decodeToString()).jsonObject, documents.second)
         }
+
+    @Test
+    fun `pod view bytes are verified against the manifest and the identity when read`() =
+        withStore { store, _ ->
+            val input = store.acceptInput(Files.newInputStream(Path.of(CSV_FIXTURE)), "input.jtl")
+            val podView = """{"canonical":"pod-view-bytes"}""".encodeToByteArray()
+            val saved = savePodViewAnalysis(store, input.runId, podView, identityHash = sha256Hex(podView))
+            val analysisId = saved.fileName.toString()
+
+            assertArrayEquals(podView, store.readPodViewBytes(input.runId, analysisId))
+            assertTrue(store.readAnalysis(input.runId, analysisId)!!.artifacts.any { it.path == "pod-view.json" })
+
+            // Same size, other bytes: ordinary reads compare sizes only, the pod-view read compares the manifest hash.
+            Files.write(saved.resolve("pod-view.json"), """{"canonical":"pod-view-BYTES"}""".encodeToByteArray())
+            assertEquals(saved, store.readAnalysis(input.runId, analysisId)?.path)
+            val failure = assertThrows(IllegalStateException::class.java) { store.readPodViewBytes(input.runId, analysisId) }
+            assertTrue((failure.message ?: "").startsWith("CORRUPT_RUN_BUNDLE"))
+        }
+
+    @Test
+    fun `pod view read refuses a file that the identity does not bind and an identity binding without a file`() =
+        withStore { store, _ ->
+            val input = store.acceptInput(Files.newInputStream(Path.of(CSV_FIXTURE)), "input.jtl")
+            val podView = """{"canonical":"pod-view-bytes"}""".encodeToByteArray()
+
+            val unbound = savePodViewAnalysis(store, input.runId, podView, identityHash = null)
+            val another = savePodViewAnalysis(store, input.runId, podView, identityHash = "a".repeat(64))
+            val missing = savePodViewAnalysis(store, input.runId, null, identityHash = sha256Hex(podView))
+
+            listOf(unbound, another, missing).forEach { saved ->
+                val failure =
+                    assertThrows(IllegalStateException::class.java) { store.readPodViewBytes(input.runId, saved.fileName.toString()) }
+                assertTrue((failure.message ?: "").startsWith("CORRUPT_RUN_BUNDLE"), saved.toString())
+            }
+        }
+
+    @Test
+    fun `an analysis without a pod view reads as absent`() =
+        withStore { store, _ ->
+            val input = store.acceptInput(Files.newInputStream(Path.of(CSV_FIXTURE)), "input.jtl")
+            val saved = savePodViewAnalysis(store, input.runId, null, identityHash = null)
+
+            assertNull(store.readPodViewBytes(input.runId, saved.fileName.toString()))
+            assertNull(store.readPodViewBytes(input.runId, "b".repeat(64)))
+        }
+
+    private fun savePodViewAnalysis(
+        store: RunBundleStore,
+        runId: String,
+        podView: ByteArray?,
+        identityHash: String?,
+    ): Path {
+        val fields =
+            listOfNotNull(
+                identityHash?.let { """"pod_view_sha256":"$it","pod_view_version":"pod-view.v1"""" },
+                """"run_id":"$runId"""",
+                """"salt":"${System.nanoTime()}"""",
+            ).joinToString(",", "{", "}")
+        val identity = fields.encodeToByteArray()
+        return store.writeAnalysisAtomically(runId, sha256Hex(identity)) { staging ->
+            Files.write(staging.resolve("identity.json"), identity)
+            Files.write(staging.resolve("analysis-result.json"), """{"run_id":"$runId"}""".encodeToByteArray())
+            podView?.let { Files.write(staging.resolve("pod-view.json"), it) }
+        }
+    }
+
+    @Test
+    fun `verified read returns the documents and detects a same-size substitution of the result`() =
+        withStore { store, root ->
+            val input = store.acceptInput(Files.newInputStream(Path.of(CSV_FIXTURE)), "verified.jtl")
+            val analysisId = saveAnalysis(store, input, "x", verdict = "FAIL")
+            val verified = store.readVerifiedAnalysis(input.runId, analysisId) ?: error("missing analysis")
+            assertEquals("FAIL", (verified.result["policy_verdict"] as JsonPrimitive).content)
+            assertEquals("2026-01-01T00:00:00Z", (verified.run?.get("started_at") as JsonPrimitive).content)
+
+            val resultPath = root.resolve("runs/${input.runId}/analyses/$analysisId/analysis-result.json")
+            val tampered = Files.readString(resultPath).replace("\"FAIL\"", "\"PASS\"")
+            assertEquals(Files.size(resultPath), tampered.encodeToByteArray().size.toLong())
+            Files.writeString(resultPath, tampered)
+
+            // The ordinary read checks only path and size and so accepts the substitution; the verified read must not.
+            assertEquals("PASS", (store.readAnalysisDocuments(input.runId, analysisId)!!.first["policy_verdict"] as JsonPrimitive).content)
+            val failure = assertThrows(IllegalStateException::class.java) { store.readVerifiedAnalysis(input.runId, analysisId) }
+            assertTrue(failure.message!!.startsWith("CORRUPT_RUN_BUNDLE"))
+        }
+
+    @Test
+    fun `verified read enforces the result size bound at the exact byte`() =
+        withStore { store, root ->
+            val input = store.acceptInput(Files.newInputStream(Path.of(CSV_FIXTURE)), "bound.jtl")
+            val analysisId = saveAnalysis(store, input, "y")
+            val size = Files.size(root.resolve("runs/${input.runId}/analyses/$analysisId/analysis-result.json")).toInt()
+
+            assertTrue(store.readVerifiedAnalysis(input.runId, analysisId, maxResultBytes = size) != null)
+            val failure =
+                assertThrows(IllegalArgumentException::class.java) {
+                    store.readVerifiedAnalysis(input.runId, analysisId, maxResultBytes = size - 1)
+                }
+            assertEquals("RESULT_TOO_LARGE", failure.message)
+            assertEquals(null, store.readVerifiedAnalysis(input.runId, "f".repeat(64)))
+        }
+
+    @Test
+    @Timeout(30)
+    fun `verified read does not hold the store lock while it reads and hashes`() =
+        withStore { store, _ ->
+            val input = store.acceptInput(Files.newInputStream(Path.of(CSV_FIXTURE)), "lock.jtl")
+            val analysisId = saveAnalysis(store, input, "z")
+            val inside = CountDownLatch(1)
+            val release = CountDownLatch(1)
+            val executor = Executors.newSingleThreadExecutor()
+            try {
+                val reader =
+                    executor.submit {
+                        store.readVerifiedAnalysis(input.runId, analysisId, outsideLock = {
+                            inside.countDown()
+                            check(release.await(10, TimeUnit.SECONDS))
+                        })
+                    }
+                assertTrue(inside.await(10, TimeUnit.SECONDS))
+                // The callback runs after the manifest check and before the heavy read and hash: if the mutex were still held
+                // here, the store operations below would not answer.
+                assertEquals(1, store.listRuns(null, 10).runs.size)
+                assertEquals(1, store.listAnalyses(input.runId, null, 10).analyses.size)
+                release.countDown()
+                reader.get(10, TimeUnit.SECONDS)
+            } finally {
+                release.countDown()
+                executor.shutdownNow()
+            }
+        }
+
+    private fun saveAnalysis(
+        store: RunBundleStore,
+        input: AcceptedInput,
+        tag: String,
+        verdict: String = "PASS",
+        startedAt: String? = "2026-01-01T00:00:00Z",
+    ): String {
+        val identity =
+            canonicalJson(
+                buildJsonObject {
+                    put("run_id", input.runId)
+                    put("policy_sha256", "a".repeat(64))
+                    put("tag", tag)
+                },
+            )
+        val result =
+            canonicalJson(
+                buildJsonObject {
+                    put("run_id", input.runId)
+                    put("run_validity", "VALID")
+                    put("policy_verdict", verdict)
+                },
+            )
+        val analysisId = sha256Hex(identity)
+        store.writeAnalysisAtomically(input.runId, analysisId) { staging ->
+            Files.write(staging.resolve("identity.json"), identity)
+            Files.write(staging.resolve("analysis-result.json"), result)
+            if (startedAt != null) {
+                Files.write(
+                    staging.resolve("run.json"),
+                    canonicalJson(
+                        buildJsonObject {
+                            put("run_id", input.runId)
+                            put("started_at", startedAt)
+                        },
+                    ),
+                )
+            }
+        }
+        return analysisId
+    }
 
     private fun withStore(block: (RunBundleStore, Path) -> Unit) {
         val root = tempDir.resolve("data-${System.nanoTime()}")

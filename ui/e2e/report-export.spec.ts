@@ -1,6 +1,7 @@
 import { expect, test } from '@playwright/test'
 import { readFile } from 'node:fs/promises'
 import { fileURLToPath, pathToFileURL } from 'node:url'
+import { EXPORT_LABELS } from '../src/shell/labels.export'
 
 const fixture = (path: string) => fileURLToPath(new URL(`../../fixtures/${path}`, import.meta.url))
 const number = (text: string) => Number(text.replace(/\s/g, '').replace(',', '.').match(/-?\d+(?:\.\d+)?/)?.[0])
@@ -105,4 +106,28 @@ test('the HTML report shows the failed rule with the same measured value as the 
   expect(reportMeasured).toBeCloseTo(coreMeasured, 2)
   await expect(reportPage.locator('script, img, form, base')).toHaveCount(0)
   expect(network).toEqual([])
+})
+
+test('the header export of the new interface downloads exactly the HTML report of the open analysis', async ({ page, context }) => {
+  await page.goto('/')
+  await page.getByTestId('input-file').setInputFiles(fixture('slice1/jmeter/xml-5.6.3/input.xml'))
+  await page.getByRole('button', { name: 'Analyze run' }).click()
+  await expect(page.locator('#verdict')).toContainText('NO_POLICY')
+  const href = (await page.getByRole('link', { name: 'Download HTML' }).getAttribute('href'))!
+
+  await page.goto('/?shell=new')
+  await expect(page.getByRole('link', { name: EXPORT_LABELS.html })).toHaveCount(0)
+  const [, runId, analysisId] = href.match(/^\/api\/runs\/([^/]+)\/analyses\/([a-f0-9]{64})\/report\?format=html$/)!
+  await page.getByTestId('run-list').locator(`li[title="${runId}"] button`).click()
+  await page.locator(`button[title="${analysisId}"]`).click()
+  const exportLink = page.getByRole('link', { name: EXPORT_LABELS.html })
+  await expect(exportLink).toHaveAttribute('href', href)
+  await expect(exportLink).toHaveAttribute('download', '')
+
+  const expected = await context.request.get(href)
+  const download = page.waitForEvent('download')
+  await exportLink.click()
+  const file = await download
+  expect(file.suggestedFilename()).toMatch(/^lt-verdict-[a-f0-9]{64}\.html$/)
+  expect(await readFile((await file.path())!)).toEqual(await expected.body())
 })

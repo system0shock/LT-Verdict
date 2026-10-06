@@ -1,0 +1,9 @@
+{
+  "scenario": "leak-on-arm-b-pod-b2",
+  "arm": "B",
+  "services": 2,
+  "pods_per_service": [3, 2],
+  "load_rows": 6000,
+  "snapshot_step_ms": 5000,
+  "pod_step_ms": 10000
+}

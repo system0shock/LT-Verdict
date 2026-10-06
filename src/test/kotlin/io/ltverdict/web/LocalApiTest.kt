@@ -10,12 +10,17 @@ import io.ltverdict.ai.AiModel
 import io.ltverdict.ai.AiModelsConfig
 import io.ltverdict.ai.RunnerOutcome
 import io.ltverdict.core.AnalysisOutcome
+import io.ltverdict.core.AnalysisRequest
 import io.ltverdict.core.AnalysisService
 import io.ltverdict.core.EngineConfig
 import io.ltverdict.core.MAX_RESOURCE_SNAPSHOT_BYTES
+import io.ltverdict.core.PodViewValidation
 import io.ltverdict.core.ResourceValidation
 import io.ltverdict.core.analysisIdentity
+import io.ltverdict.core.manualBaselineSelection
+import io.ltverdict.core.podViewTestJson
 import io.ltverdict.core.sha256Hex
+import io.ltverdict.core.validatePodView
 import io.ltverdict.core.validateResourceSnapshot
 import io.ltverdict.jobs.AnalysisJobs
 import io.ltverdict.report.renderAsciiDocReport
@@ -31,6 +36,7 @@ import io.ltverdict.sources.SourceProfile
 import io.ltverdict.sources.analyzeWithSources
 import io.ltverdict.sources.readSourceProfiles
 import io.ltverdict.storage.DataDirectory
+import io.ltverdict.storage.MAX_VERIFIED_RESULT_BYTES
 import io.ltverdict.storage.RunBundleStore
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonNull
@@ -52,6 +58,7 @@ import org.junit.jupiter.api.io.TempDir
 import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
 import java.io.InputStream
+import java.io.RandomAccessFile
 import java.net.URI
 import java.net.http.HttpClient
 import java.net.http.HttpRequest
@@ -844,7 +851,7 @@ class LocalApiTest {
         withServer { store, api ->
             val input = store.acceptInput(ByteArrayInputStream(SPIKE_DROP.bytes()), SPIKE_DROP.filename)
             api.bootstrap()
-            val baselineId = api.createJob(input.runId).analysisId(api)
+            val baselineId = api.createJob(input.runId, PERMISSIVE_POLICY).analysisId(api)
             val currentId = api.createJob(input.runId, Files.readAllBytes(Path.of(PASS_POLICY))).analysisId(api)
 
             assertEquals(JsonNull, api.get("/api/baseline").jsonObject().getValue("baseline"))
@@ -921,11 +928,168 @@ class LocalApiTest {
         }
 
     @Test
+    fun `manual baseline accepts only a PASS analysis`() =
+        withServer { store, api ->
+            val input = store.acceptInput(ByteArrayInputStream(SPIKE_DROP.bytes()), SPIKE_DROP.filename)
+            api.bootstrap()
+            val passId = api.createJob(input.runId, PERMISSIVE_POLICY).analysisId(api)
+            val failId = api.createJob(input.runId, FAILING_POLICY).analysisId(api)
+            val noPolicyId = api.createJob(input.runId).analysisId(api)
+
+            val accepted = api.selectManual(input.runId, passId)
+            assertEquals(200, accepted.statusCode())
+            val selection = api.get("/api/baseline").jsonObject().getValue("baseline")
+            assertEquals(accepted.jsonObject().getValue("baseline"), selection)
+
+            val failed = api.selectManual(input.runId, failId)
+            assertError(failed, 422, "BASELINE_CANDIDATE_NOT_PASS")
+            assertTrue(failed.errorMessage().contains("policy_verdict=FAIL"), failed.errorMessage())
+            val unknown = api.selectManual(input.runId, noPolicyId)
+            assertError(unknown, 422, "BASELINE_CANDIDATE_NOT_PASS")
+            assertTrue(unknown.errorMessage().contains("policy_verdict=NO_POLICY"), unknown.errorMessage())
+            // A refusal writes nothing: the earlier selection is still pinned.
+            assertEquals(selection, api.get("/api/baseline").jsonObject().getValue("baseline"))
+        }
+
+    @Test
+    fun `statistical baseline refuses a FAIL candidate with the same code as manual`() =
+        withServer { store, api ->
+            api.bootstrap()
+            val runs = statisticalRuns(store, api, listOf(100, 110, 120))
+            val failing = store.acceptInput(ByteArrayInputStream(SPIKE_DROP.bytes()), SPIKE_DROP.filename)
+            val failingId = api.createJob(failing.runId, FAILING_POLICY).analysisId(api)
+            val candidates = listOf(runs[0], runs[1], failing.runId to failingId)
+
+            val response = api.post("/api/baseline", "application/json", statisticalBody(candidates, true))
+            assertError(response, 422, "BASELINE_CANDIDATE_NOT_PASS")
+            assertTrue(response.errorMessage().contains("policy_verdict=FAIL"), response.errorMessage())
+            // Request checks come before candidate checks: the unconfirmed flag wins over a failing candidate.
+            assertError(
+                api.post("/api/baseline", "application/json", statisticalBody(candidates, false)),
+                422,
+                "BASELINE_COMPARABILITY_UNCONFIRMED",
+            )
+            assertEquals(JsonNull, api.get("/api/baseline").jsonObject().getValue("baseline"))
+        }
+
+    @Test
+    fun `a small sample PASS is admitted as a baseline in both modes and the comparison warns`() =
+        withServer { store, api ->
+            api.bootstrap()
+            val small = statisticalRuns(store, api, listOf(100, 110, 120), SMALL_SAMPLE_POLICY)
+            val (result, _) = store.readAnalysisDocuments(small[0].first, small[0].second)!!
+            // the fixture is a real analysis, not a synthetic document: PASS with exactly one reason
+            assertEquals("PASS", result.getValue("policy_verdict").jsonPrimitive.content)
+            val coverage = result.getValue("analysis_coverage").jsonObject
+            assertEquals("INCOMPLETE", coverage.getValue("status").jsonPrimitive.content)
+            assertEquals(listOf("SMALL_SAMPLE"), coverage.getValue("reasons").jsonArray.map { it.jsonPrimitive.content })
+            val current = statisticalRuns(store, api, listOf(105)).single()
+
+            assertEquals(200, api.selectManual(small[0].first, small[0].second).statusCode())
+            assertEquals(listOf("BASELINE_SMALL_SAMPLE"), api.comparisonOf(current.first, current.second).warnings())
+
+            api.selectStatistical(small)
+            val winner =
+                api
+                    .get("/api/baseline")
+                    .jsonObject()
+                    .getValue("baseline")
+                    .jsonObject
+            assertEquals(3, winner.getValue("candidates").jsonArray.size)
+            assertEquals(listOf("BASELINE_SMALL_SAMPLE"), api.comparisonOf(current.first, current.second).warnings())
+        }
+
+    @Test
+    fun `a small sample reason next to another coverage reason is still refused in both modes`() =
+        withServer { store, api ->
+            val input = store.acceptInput(ByteArrayInputStream(SPIKE_DROP.bytes()), SPIKE_DROP.filename)
+            api.bootstrap()
+            val identity = """{"run_id":"${input.runId}","tag":"small-and-gaps"}""".encodeToByteArray()
+            val analysisId = sha256Hex(identity)
+            val result =
+                """{"schema_version":"analysis-result.v1","run_id":"${input.runId}","analysis_mode":"standard","run_validity":"VALID",""" +
+                    """"policy_verdict":"PASS","analysis_coverage":{"status":"INCOMPLETE","reasons":["SMALL_SAMPLE","RESOURCE_GAPS"]},""" +
+                    """"findings":[],"evidence":[]}"""
+            store.writeAnalysisAtomically(input.runId, analysisId) { staging ->
+                Files.write(staging.resolve("identity.json"), identity)
+                Files.writeString(staging.resolve("analysis-result.json"), result)
+            }
+            val others = statisticalRuns(store, api, listOf(100, 110))
+
+            assertError(api.selectManual(input.runId, analysisId), 422, "BASELINE_CANDIDATE_INCOMPLETE")
+            assertError(
+                api.post("/api/baseline", "application/json", statisticalBody(others + (input.runId to analysisId), true)),
+                422,
+                "BASELINE_CANDIDATE_INCOMPLETE",
+            )
+            assertEquals(JsonNull, api.get("/api/baseline").jsonObject().getValue("baseline"))
+        }
+
+    @Test
+    fun `baseline refuses a result larger than the bound`() =
+        withServer { store, api ->
+            val input = store.acceptInput(ByteArrayInputStream(SPIKE_DROP.bytes()), SPIKE_DROP.filename)
+            api.bootstrap()
+            val identity = """{"run_id":"${input.runId}","tag":"too-large"}""".encodeToByteArray()
+            val analysisId = sha256Hex(identity)
+            store.writeAnalysisAtomically(input.runId, analysisId) { staging ->
+                Files.write(staging.resolve("identity.json"), identity)
+                // Sparse content that is not JSON: the size check must fire before anything is parsed.
+                RandomAccessFile(
+                    staging.resolve("analysis-result.json").toFile(),
+                    "rw",
+                ).use { it.setLength(MAX_VERIFIED_RESULT_BYTES + 1L) }
+            }
+
+            assertError(api.selectManual(input.runId, analysisId), 422, "BASELINE_CANDIDATE_TOO_LARGE")
+            assertEquals(JsonNull, api.get("/api/baseline").jsonObject().getValue("baseline"))
+        }
+
+    @Test
+    fun `baseline detects a same-size substitution of the stored result`() =
+        withServer { store, api ->
+            val input = store.acceptInput(ByteArrayInputStream(SPIKE_DROP.bytes()), SPIKE_DROP.filename)
+            api.bootstrap()
+            val analysisId = api.createJob(input.runId, FAILING_POLICY).analysisId(api)
+            val resultPath = store.readAnalysis(input.runId, analysisId)!!.path.resolve("analysis-result.json")
+            val original = Files.readString(resultPath)
+            val tampered = original.replace("\"policy_verdict\":\"FAIL\"", "\"policy_verdict\":\"PASS\"")
+            assertEquals(original.length, tampered.length)
+            assertTrue(original != tampered)
+            Files.writeString(resultPath, tampered)
+
+            assertError(api.selectManual(input.runId, analysisId), 500, "CORRUPT_BASELINE")
+            assertEquals(JsonNull, api.get("/api/baseline").jsonObject().getValue("baseline"))
+        }
+
+    @Test
+    fun `a baseline file saved before the PASS rule is still read and used for comparison`() =
+        withServer { store, api ->
+            val input = store.acceptInput(ByteArrayInputStream(SPIKE_DROP.bytes()), SPIKE_DROP.filename)
+            api.bootstrap()
+            val noPolicyId = api.createJob(input.runId).analysisId(api)
+            val currentId = api.createJob(input.runId, Files.readAllBytes(Path.of(PASS_POLICY))).analysisId(api)
+            val reference = Json.parseToJsonElement("""{"run_id":"${input.runId}","analysis_id":"$noPolicyId"}""").jsonObject
+            store.replaceBaseline(manualBaselineSelection("release", reference))
+
+            assertEquals(
+                reference,
+                api
+                    .get("/api/baseline")
+                    .jsonObject()
+                    .getValue("baseline")
+                    .jsonObject
+                    .getValue("reference"),
+            )
+            assertEquals(200, api.get("/api/runs/${input.runId}/analyses/$currentId/comparison").statusCode())
+        }
+
+    @Test
     fun `baseline conditions API persists three states and isolates exact pair and windows`() =
         withServer { store, api ->
             val input = store.acceptInput(ByteArrayInputStream(SPIKE_DROP.bytes()), SPIKE_DROP.filename)
             api.bootstrap()
-            val baselineId = api.createJob(input.runId).analysisId(api)
+            val baselineId = api.createJob(input.runId, PERMISSIVE_POLICY).analysisId(api)
             val currentId = api.createJob(input.runId, Files.readAllBytes(Path.of(PASS_POLICY))).analysisId(api)
             val baselineBody =
                 """{"mode":"manual","series":"release","reference":{"run_id":"${input.runId}","analysis_id":"$baselineId"}}"""
@@ -1124,43 +1288,38 @@ class LocalApiTest {
         store: RunBundleStore,
         api: ApiClient,
         elapsed: List<Int>,
+        policy: ByteArray = PERMISSIVE_POLICY,
     ): List<Pair<String, String>> =
         elapsed.mapIndexed { index, value ->
             val load = "timeStamp,elapsed,label,success\n${1_767_225_600_000L + index * 1_000L},$value,checkout,true\n"
             val input = store.acceptInput(ByteArrayInputStream(load.encodeToByteArray()), "series-$index.jtl")
-            input.runId to api.createJob(input.runId, STATISTICAL_POLICY.encodeToByteArray()).analysisId(api)
+            input.runId to api.createJob(input.runId, policy).analysisId(api)
         }
 
-    @Test
-    fun `statistical baseline rejects candidates analysed without a policy`() =
-        withServer { store, api ->
-            api.bootstrap()
-            val runs =
-                listOf(100, 110, 1000).mapIndexed { index, value ->
-                    val load = "timeStamp,elapsed,label,success\n${1_767_225_600_000L + index * 1_000L},$value,checkout,true\n"
-                    val input = store.acceptInput(ByteArrayInputStream(load.encodeToByteArray()), "no-policy-$index.jtl")
-                    input.runId to api.createJob(input.runId).analysisId(api)
-                }
-            val references = runs.joinToString(",") { (run, analysis) -> """{"run_id":"$run","analysis_id":"$analysis"}""" }
+    private fun statisticalBody(
+        candidates: List<Pair<String, String>>,
+        comparable: Boolean,
+    ): ByteArray {
+        val references = candidates.joinToString(",") { (run, analysis) -> """{"run_id":"$run","analysis_id":"$analysis"}""" }
+        return """{"mode":"statistical","series":"release","candidates":[$references],"comparable":$comparable}""".encodeToByteArray()
+    }
 
-            val response =
-                api.post(
-                    "/api/baseline",
-                    "application/json",
-                    """{"mode":"statistical","series":"release","candidates":[$references],"comparable":true}""".encodeToByteArray(),
-                )
+    private fun ApiClient.selectManual(
+        run: String,
+        analysis: String,
+    ): HttpResponse<String> =
+        post(
+            "/api/baseline",
+            "application/json",
+            """{"mode":"manual","series":"release","reference":{"run_id":"$run","analysis_id":"$analysis"}}""".encodeToByteArray(),
+        )
 
-            assertEquals(422, response.statusCode())
-            assertEquals(
-                "BASELINE_CANDIDATE_GATES_UNKNOWN",
-                response
-                    .jsonObject()
-                    .getValue("error")
-                    .jsonObject
-                    .getValue("code")
-                    .jsonPrimitive.content,
-            )
-        }
+    private fun HttpResponse<String>.errorMessage(): String =
+        jsonObject()
+            .getValue("error")
+            .jsonObject
+            .getValue("message")
+            .jsonPrimitive.content
 
     private fun ApiClient.selectStatistical(candidates: List<Pair<String, String>>): JsonObject {
         val references = candidates.joinToString(",") { (run, analysis) -> """{"run_id":"$run","analysis_id":"$analysis"}""" }
@@ -1524,6 +1683,108 @@ class LocalApiTest {
     }
 
     private fun unknownSeriesPlan(plan: ByteArray): ByteArray = plan.decodeToString().replace("\"cpu\"", "\"absent\"").encodeToByteArray()
+
+    @Test
+    fun `pod view is validated and bound before job submission and reaches the analysis request`() {
+        val requests = mutableListOf<AnalysisRequest>()
+        withServer(jobsFactory = {
+            AnalysisJobs(1) { request, _, _ ->
+                requests += request
+                AnalysisOutcome(request.input.runId, FAKE_ANALYSIS_ID, byteArrayOf(), tempDir)
+            }
+        }) { store, api ->
+            val input = store.acceptInput(ByteArrayInputStream(SPIKE_DROP.bytes()), SPIKE_DROP.filename)
+            val resources =
+                """{"schema_version":"resource-snapshot.v1","load_input_sha256":"${input.sha256}","start_epoch_ms":0,"step_ms":1000,"point_count":10,"series":[{"id":"cpu","metric":"cpu_used","unit":"ratio","entity":"vm","role":"system","aggregation":"interval_mean","values":[0.1,0.1,0.1,0.1,0.1,0.1,0.1,0.1,0.1,0.1]}],"windows":[{"id":"steady","from_epoch_ms":0,"to_epoch_ms":10000}]}"""
+                    .encodeToByteArray()
+            val hash = (validateResourceSnapshot(resources.inputStream()) as ResourceValidation.Valid).semanticSha256
+
+            fun view(
+                loadHash: String = input.sha256,
+                snapshotHash: String = hash,
+                arm: String? = null,
+                start: Long = 0,
+                step: Long = 5_000,
+                columns: Int = 2,
+            ) = podViewTestJson(loadHash, snapshotHash, arm, start, step, columns).encodeToByteArray()
+
+            fun refused(
+                response: HttpResponse<String>,
+                code: String,
+            ) {
+                assertError(response, 422, "INVALID_POD_VIEW", hasDetails = true)
+                assertTrue(response.body().contains(code), response.body())
+            }
+            api.bootstrap()
+            refused(api.createJob(input.runId, podView = view()), "POD_VIEW_RESOURCE_REQUIRED")
+            refused(api.createJob(input.runId, resources = resources, podView = "{}".encodeToByteArray()), "POD_VIEW_INVALID")
+            refused(api.createJob(input.runId, resources = resources, podView = view(loadHash = "f".repeat(64))), "POD_VIEW_INPUT_MISMATCH")
+            refused(
+                api.createJob(input.runId, resources = resources, podView = view(snapshotHash = "e".repeat(64))),
+                "POD_VIEW_SNAPSHOT_MISMATCH",
+            )
+            refused(api.createJob(input.runId, resources = resources, podView = view(arm = "A")), "POD_VIEW_ARM_MISMATCH")
+            refused(api.createJob(input.runId, resources = resources, podView = view(start = 1_000)), "POD_VIEW_GRID_MISMATCH")
+            refused(api.createJob(input.runId, resources = resources, podView = view(columns = 3)), "POD_VIEW_GRID_MISMATCH")
+            // A limit hit is a 413 like every other oversized part; nothing is truncated.
+            assertError(api.createJob(input.runId, resources = resources, podView = ByteArray(12 * 1024 * 1024 + 1) { 32 }), 413)
+            assertEquals(0, requests.size)
+            assertEquals(0, store.listAnalyses(input.runId, null, 10).analyses.size)
+
+            val exact = ByteArray(12 * 1024 * 1024) { ' '.code.toByte() }.also { view().copyInto(it) }
+            assertEquals(FAKE_ANALYSIS_ID, api.createJob(input.runId, resources = resources, podView = exact).analysisId(api))
+            assertEquals(1, requests.size)
+            val submitted = checkNotNull(requests.single().podView)
+            val expected = validatePodView(view().inputStream()) as PodViewValidation.Valid
+            assertEquals(expected.canonicalSha256, submitted.canonicalSha256)
+            assertEquals(
+                FAKE_ANALYSIS_ID,
+                api.createJob(input.runId, Files.readAllBytes(Path.of(PASS_POLICY)), resources, podView = view()).analysisId(api),
+            )
+            assertError(
+                api.multipart(
+                    "/api/jobs",
+                    listOf(
+                        FormPart("run_id", input.runId.encodeToByteArray()),
+                        FormPart("resource_snapshot", resources, "resources.json", "application/json"),
+                        FormPart("pod_view", view(), "pod-view.json", "application/json"),
+                        FormPart("pod_view", view(), "pod-view.json", "application/json"),
+                    ),
+                ),
+                400,
+                "MALFORMED_REQUEST",
+            )
+            assertEquals(2, requests.size)
+        }
+    }
+
+    @Test
+    fun `pod view cannot be combined with an online source request and a job may have 25 parts`() {
+        withServer { store, api ->
+            val input = store.acceptInput(ByteArrayInputStream(SPIKE_DROP.bytes()), SPIKE_DROP.filename)
+            api.bootstrap()
+
+            fun messageOf(response: HttpResponse<String>) =
+                response
+                    .jsonObject()
+                    .getValue("error")
+                    .jsonObject
+                    .getValue("message")
+                    .jsonPrimitive.content
+
+            val view = podViewTestJson("a".repeat(64), "b".repeat(64), null, 0, 5_000, 2).encodeToByteArray()
+            val online = api.createJob(input.runId, podView = view, source = ONLINE_SOURCE_REQUEST.encodeToByteArray())
+            assertError(online, 400, "MALFORMED_REQUEST")
+            assertEquals("Online acquisition cannot be combined with manual source inputs", messageOf(online))
+
+            fun junkParts(count: Int) =
+                listOf(FormPart("run_id", input.runId.encodeToByteArray())) +
+                    List(count - 1) { FormPart("unknown_$it", ByteArray(1), "x.bin", "application/octet-stream") }
+            // 25 parts pass the counter (the unknown names fail the body at the end); the 26th is one too many.
+            assertEquals("Job multipart body is invalid", messageOf(api.multipart("/api/jobs", junkParts(25))))
+            assertEquals("Job multipart body has too many parts", messageOf(api.multipart("/api/jobs", junkParts(26))))
+        }
+    }
 
     @Test
     fun `four job parts retain policy resources and diagnostics and reject wrong snapshot`() {
@@ -2393,6 +2654,7 @@ class LocalApiTest {
             pgProfileHtml: ByteArray? = null,
             capacity: ByteArray? = null,
             trend: ByteArray? = null,
+            podView: ByteArray? = null,
         ): HttpResponse<String> =
             multipart(
                 "/api/jobs",
@@ -2409,6 +2671,7 @@ class LocalApiTest {
                     if (pgProfileHtml != null) add(FormPart("pg_profile_html", pgProfileHtml, "report.html", "text/html"))
                     if (capacity != null) add(FormPart("capacity_plan", capacity, "capacity.json", "application/json"))
                     if (trend != null) add(FormPart("trend_plan", trend, "trend.json", "application/json"))
+                    if (podView != null) add(FormPart("pod_view", podView, "pod-view.json", "application/json"))
                 },
             )
 
@@ -2487,8 +2750,17 @@ class LocalApiTest {
 
     private companion object {
         const val PASS_POLICY = "fixtures/slice1/policies/pass.json"
-        const val STATISTICAL_POLICY =
-            """{"schema_version":"policy.v1","policy_id":"statistical","defaults":{"sample_floor":1,"min_samples":1},"rules":[{"id":"p95","metric":"response_time_p95_ms","operator":"lte","threshold":100000,"scope":{"kind":"overall"}}]}"""
+
+        // Few samples per run: the floor and minimum are lowered so a run is judged (PASS or FAIL), not marked small-sample.
+        val PERMISSIVE_POLICY =
+            """{"schema_version":"policy.v1","policy_id":"permissive","defaults":{"sample_floor":1,"min_samples":1},"rules":[{"id":"p95","metric":"response_time_p95_ms","operator":"lte","threshold":100000,"scope":{"kind":"overall"}}]}"""
+                .encodeToByteArray()
+        val SMALL_SAMPLE_POLICY =
+            """{"schema_version":"policy.v1","policy_id":"small-sample","defaults":{"sample_floor":1,"min_samples":1000000},"rules":[{"id":"p95","metric":"response_time_p95_ms","operator":"lte","threshold":100000,"scope":{"kind":"overall"}}]}"""
+                .encodeToByteArray()
+        val FAILING_POLICY =
+            """{"schema_version":"policy.v1","policy_id":"failing","defaults":{"sample_floor":1,"min_samples":1},"rules":[{"id":"p95","metric":"response_time_p95_ms","operator":"lte","threshold":1,"scope":{"kind":"overall"}}]}"""
+                .encodeToByteArray()
         const val PASS_POLICY_SHA256 = "f35d1e8a110bca3d1457e780e5e32751fc91467e9a29d0ced7808822c118aa2b"
         const val FAKE_ANALYSIS_ID = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
         const val DUPLICATE_POLICY =

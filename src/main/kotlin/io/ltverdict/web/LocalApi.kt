@@ -33,12 +33,18 @@ import io.ltverdict.ai.validModelSlug
 import io.ltverdict.core.AnalysisRequest
 import io.ltverdict.core.AnalyticsExportFormat
 import io.ltverdict.core.CapacityPlanValidation
+import io.ltverdict.core.DEFAULT_POD_VIEW_PAGE_ROWS
 import io.ltverdict.core.DiagnosticValidation
 import io.ltverdict.core.MAX_CAPACITY_PLAN_BYTES
 import io.ltverdict.core.MAX_CATALOG_PAGE
+import io.ltverdict.core.MAX_POD_VIEW_BYTES
+import io.ltverdict.core.MAX_POD_VIEW_PAGE_ROWS
 import io.ltverdict.core.MAX_RESOURCE_SNAPSHOT_BYTES
 import io.ltverdict.core.MAX_TREND_PLAN_BYTES
 import io.ltverdict.core.MAX_VALUES_SERIES
+import io.ltverdict.core.PodViewQueryException
+import io.ltverdict.core.PodViewV1
+import io.ltverdict.core.PodViewValidation
 import io.ltverdict.core.PolicyValidation
 import io.ltverdict.core.PolicyValidationError
 import io.ltverdict.core.ResourceValidation
@@ -48,6 +54,7 @@ import io.ltverdict.core.SeriesQueryException
 import io.ltverdict.core.StrictJsonScanner
 import io.ltverdict.core.TrendPlanValidation
 import io.ltverdict.core.WindowComparisonRequest
+import io.ltverdict.core.baselineCandidateRejection
 import io.ltverdict.core.baselineConditionConfirmation
 import io.ltverdict.core.baselineConditionRecord
 import io.ltverdict.core.buildRunDynamics
@@ -59,13 +66,18 @@ import io.ltverdict.core.manualBaselineSelection
 import io.ltverdict.core.metricPackAnalysis
 import io.ltverdict.core.openSearchOverlay
 import io.ltverdict.core.planValuesPage
+import io.ltverdict.core.podViewMetadataJson
+import io.ltverdict.core.podViewValuesJson
 import io.ltverdict.core.renderRunDynamicsExport
+import io.ltverdict.core.sha256Hex
 import io.ltverdict.core.statisticalBaselineSelection
 import io.ltverdict.core.validateCapacityBinding
 import io.ltverdict.core.validateCapacityPlan
 import io.ltverdict.core.validateDiagnosticBinding
 import io.ltverdict.core.validateDiagnosticPlan
 import io.ltverdict.core.validatePlatformBinding
+import io.ltverdict.core.validatePodView
+import io.ltverdict.core.validatePodViewBinding
 import io.ltverdict.core.validatePolicy
 import io.ltverdict.core.validateResourceSnapshot
 import io.ltverdict.core.validateTrendBinding
@@ -97,10 +109,12 @@ import io.ltverdict.sources.readPostgresAnalysisInput
 import io.ltverdict.sources.readWindowedSourceRequest
 import io.ltverdict.storage.AcceptedInput
 import io.ltverdict.storage.RunBundleStore
+import io.ltverdict.storage.VerifiedAnalysis
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.SerializationException
 import kotlinx.serialization.json.Json
@@ -151,6 +165,7 @@ internal fun Application.installLocalApi(context: LocalApiContext) {
     val csrfToken = randomToken()
     val postgresCapturePermit = Semaphore(1)
     val jenkinsPermit = Semaphore(1)
+    val podViewPermit = kotlinx.coroutines.sync.Semaphore(1)
 
     intercept(ApplicationCallPipeline.Plugins) {
         call.addSecurityHeaders()
@@ -192,6 +207,9 @@ internal fun Application.installLocalApi(context: LocalApiContext) {
             finish()
         } catch (failure: InvalidTrend) {
             call.respondError(HttpStatusCode.UnprocessableEntity, "INVALID_TREND_PLAN", "Trend plan is invalid", failure.errors)
+            finish()
+        } catch (failure: InvalidPodView) {
+            call.respondError(HttpStatusCode.UnprocessableEntity, "INVALID_POD_VIEW", "Pod view is invalid", failure.errors)
             finish()
         } catch (failure: ApiFailure) {
             call.respondError(failure.status, failure.code, failure.message)
@@ -1020,6 +1038,36 @@ internal fun Application.installLocalApi(context: LocalApiContext) {
             call.respondJson(body)
         }
 
+        get("/api/runs/{runId}/analyses/{analysisId}/pod-view") {
+            call.requireOnlyQueries()
+            val (view, sha256) = context.store.requirePodView(call, podViewPermit)
+            call.respondJson(podViewMetadataJson(view, sha256))
+        }
+
+        get("/api/runs/{runId}/analyses/{analysisId}/pod-view/values") {
+            call.requireOnlyQueries("service", "metric", "from_ms", "to_ms", "limit", "after")
+            val service = call.singleQuery("service")?.takeIf(::validSeriesId) ?: malformed("service is required")
+            val metric = call.singleQuery("metric")?.also { if (!validSeriesId(it)) malformed("metric is invalid") }
+            val from = call.optionalLongQuery("from_ms")
+            val to = call.optionalLongQuery("to_ms")
+            val limit = call.intQuery("limit", DEFAULT_POD_VIEW_PAGE_ROWS, 1..MAX_POD_VIEW_PAGE_ROWS)
+            val after = call.singleQuery("after")
+            val (view, sha256) = context.store.requirePodView(call, podViewPermit)
+            val body =
+                try {
+                    podViewValuesJson(view, sha256, service, metric, from, to, limit, after)
+                } catch (failure: PodViewQueryException) {
+                    when (failure.kind) {
+                        PodViewQueryException.Kind.SERVICE_NOT_FOUND ->
+                            throw ApiFailure(HttpStatusCode.NotFound, "POD_VIEW_SERVICE_NOT_FOUND", "Service was not found")
+                        PodViewQueryException.Kind.INVALID_CURSOR ->
+                            throw ApiFailure(HttpStatusCode.BadRequest, "INVALID_CURSOR", "after is not a row of this selection")
+                        PodViewQueryException.Kind.INVALID_QUERY -> malformed(failure.message ?: "Pod view query is invalid")
+                    }
+                }
+            call.respondJson(body)
+        }
+
         route("/api/{...}") {
             handle {
                 notFound("Endpoint was not found")
@@ -1118,7 +1166,7 @@ private suspend fun selectBaseline(
         "manual" -> {
             if (request.keys != setOf("mode", "series", "reference")) malformed("Manual baseline fields are invalid")
             val reference = (request["reference"] as? JsonObject)?.baselineReference() ?: malformed("Baseline reference is invalid")
-            store.baselineDocuments(reference)
+            requireBaselineEligible(listOf(store.verifiedBaselineDocuments(reference)))
             manualBaselineSelection(series, reference)
         }
         "statistical" -> {
@@ -1131,9 +1179,10 @@ private suspend fun selectBaseline(
             if (values.size !in 3..20) baselineIneligible("BASELINE_CANDIDATE_COUNT")
             val references = values.map { (it as? JsonObject)?.baselineReference() ?: malformed("Candidate reference is invalid") }
             if (references.map { it.getValue("run_id") }.toSet().size != references.size) baselineIneligible("BASELINE_DUPLICATE_RUN")
-            val documents = references.map { store.baselineDocuments(it) }
+            val documents = references.map { store.verifiedBaselineDocuments(it) }
+            requireBaselineEligible(documents)
             try {
-                statisticalBaselineSelection(series, references, documents.map { it.first }, documents.map { it.second })
+                statisticalBaselineSelection(series, references, documents.map { it.result }, documents.map { it.identity })
             } catch (failure: IllegalArgumentException) {
                 baselineIneligible(failure.message ?: "BASELINE_CANDIDATE_INVALID")
             }
@@ -1161,6 +1210,31 @@ private suspend fun RunBundleStore.baselineDocuments(reference: JsonObject): Pai
             ?: notFound("Referenced analysis was not found")
     }
 
+// Reads the stored result with its SHA-256 and the 64 MiB bound checked (ADR 0019, sections 1 and 6).
+private suspend fun RunBundleStore.verifiedBaselineDocuments(reference: JsonObject): VerifiedAnalysis =
+    baselineOperation {
+        try {
+            readVerifiedAnalysis(reference.baselineString("run_id"), reference.baselineString("analysis_id"))
+                ?: notFound("Referenced analysis was not found")
+        } catch (failure: IllegalArgumentException) {
+            if (failure.message == "RESULT_TOO_LARGE") baselineIneligible("BASELINE_CANDIDATE_TOO_LARGE")
+            throw failure
+        }
+    }
+
+// The same rule for both modes, applied in request order before any statistic is computed.
+private fun requireBaselineEligible(documents: List<VerifiedAnalysis>) {
+    documents.forEach { document ->
+        val code = baselineCandidateRejection(document.result) ?: return@forEach
+        baselineIneligible(code, if (code == "BASELINE_CANDIDATE_NOT_PASS") document.result.knownVerdict() else null)
+    }
+}
+
+private fun JsonObject.knownVerdict(): String =
+    (this["policy_verdict"] as? JsonPrimitive)?.takeIf { it.isString }?.content?.takeIf { it in KNOWN_VERDICTS } ?: "UNKNOWN"
+
+private val KNOWN_VERDICTS = setOf("PASS", "FAIL", "NO_POLICY", "NO_VERDICT")
+
 private suspend fun <T> baselineOperation(action: () -> T): T =
     withContext(Dispatchers.IO) {
         try {
@@ -1175,8 +1249,15 @@ private suspend fun <T> baselineOperation(action: () -> T): T =
         }
     }
 
-private fun baselineIneligible(code: String): Nothing =
-    throw ApiFailure(HttpStatusCode.UnprocessableEntity, code, "Statistical baseline is unavailable: $code")
+private fun baselineIneligible(
+    code: String,
+    verdict: String? = null,
+): Nothing =
+    throw ApiFailure(
+        HttpStatusCode.UnprocessableEntity,
+        code,
+        "Baseline candidate is unavailable: $code" + (verdict?.let { " (policy_verdict=$it)" } ?: ""),
+    )
 
 private suspend fun receiveInput(
     call: ApplicationCall,
@@ -1273,6 +1354,7 @@ private suspend fun receiveJob(
     var diagnostics: DiagnosticValidation.Valid? = null
     var capacity: CapacityPlanValidation.Valid? = null
     var trend: TrendPlanValidation.Valid? = null
+    var podView: PodViewValidation.Valid? = null
     var sourceRequest: WindowedSourceRequest? = null
     val sourceContexts = mutableListOf<ByteArray>()
     val postgresFiles = mutableMapOf<String, ByteArray>()
@@ -1281,12 +1363,13 @@ private suspend fun receiveJob(
     var diagnosticsSeen = false
     var capacitySeen = false
     var trendSeen = false
+    var podViewSeen = false
     var parts = 0
     var invalidParts = false
     try {
         call.receiveMultipart(formFieldLimit = (MAX_RESOURCE_SNAPSHOT_BYTES + 1).toLong()).forEachPart { part ->
             try {
-                if (++parts > 24) malformed("Job multipart body has too many parts")
+                if (++parts > MAX_JOB_PARTS) malformed("Job multipart body has too many parts")
                 when {
                     part is PartData.FileItem && part.name in POSTGRES_PART_LIMITS && part.name !in postgresFiles && !invalidParts -> {
                         val name = checkNotNull(part.name)
@@ -1408,6 +1491,23 @@ private suspend fun receiveJob(
                             }
                     }
 
+                    part is PartData.FileItem && part.name == "pod_view" && !podViewSeen && !invalidParts -> {
+                        podViewSeen = true
+                        podView =
+                            when (
+                                val validation =
+                                    withContext(Dispatchers.IO) { validatePodView(part.provider().toInputStream(), MAX_POD_VIEW_BYTES) }
+                            ) {
+                                is PodViewValidation.Valid -> validation
+                                is PodViewValidation.Invalid -> {
+                                    if (validation.errors.any { it.code == "POD_VIEW_LIMIT_EXCEEDED" }) {
+                                        tooLarge("Pod view exceeds its resource limit")
+                                    }
+                                    throw InvalidPodView(validation.errors)
+                                }
+                            }
+                    }
+
                     else -> invalidParts = true
                 }
             } finally {
@@ -1426,6 +1526,8 @@ private suspend fun receiveJob(
         throw failure
     } catch (failure: InvalidTrend) {
         throw failure
+    } catch (failure: InvalidPodView) {
+        throw failure
     } catch (_: Exception) {
         malformed("Multipart body is malformed")
     }
@@ -1435,6 +1537,7 @@ private suspend fun receiveJob(
             diagnosticsSeen ||
             capacitySeen ||
             trendSeen ||
+            podViewSeen ||
             sourceContexts.isNotEmpty()
         ) {
             malformed("Online acquisition cannot be combined with manual source inputs")
@@ -1498,6 +1601,20 @@ private suspend fun receiveJob(
         val errors = validateTrendBinding(plan, snapshot)
         if (errors.isNotEmpty()) throw InvalidTrend(errors)
     }
+    podView?.let { view ->
+        val snapshot =
+            resources ?: throw InvalidPodView(
+                listOf(
+                    PolicyValidationError(
+                        "POD_VIEW_RESOURCE_REQUIRED",
+                        "/resource_snapshot_sha256",
+                        "Pod view requires a resource snapshot",
+                    ),
+                ),
+            )
+        val errors = validatePodViewBinding(view, input.sha256, snapshot)
+        if (errors.isNotEmpty()) throw InvalidPodView(errors)
+    }
     policy?.let { valid ->
         resources?.let { snapshot ->
             val errors = validatePlatformBinding(valid.policy, snapshot.snapshot)
@@ -1535,6 +1652,7 @@ private suspend fun receiveJob(
         diagnostics = diagnostics,
         capacity = capacity,
         trend = trend,
+        podView = podView,
         sourceRequest = sourceRequest,
         sourceAcquisition = acquisition,
         postgres = postgres,
@@ -1667,6 +1785,44 @@ private suspend fun RunBundleStore.requireAnalysis(call: ApplicationCall): io.lt
         }
     }
 }
+
+/**
+ * Reads the stored pod-view with the hash check of RunBundleStore.readPodViewBytes on every call (no cache, so a swapped
+ * file is seen by the next request). The parse is serialized: one 12 MiB document at a time is held in memory.
+ */
+private suspend fun RunBundleStore.requirePodView(
+    call: ApplicationCall,
+    permit: kotlinx.coroutines.sync.Semaphore,
+): Pair<PodViewV1, String> {
+    // Ordinary reads compare artifact sizes, so a deleted or resized pod-view.json already fails requireAnalysis.
+    val corrupt = { failure: IllegalStateException -> failure.message?.startsWith("CORRUPT_RUN_BUNDLE") == true }
+    try {
+        requireAnalysis(call)
+    } catch (failure: IllegalStateException) {
+        if (corrupt(failure)) corruptPodView()
+        throw failure
+    }
+    val runId = checkNotNull(call.parameters["runId"])
+    val analysisId = checkNotNull(call.parameters["analysisId"])
+    return permit.withPermit {
+        withContext(Dispatchers.IO) {
+            val bytes =
+                try {
+                    readPodViewBytes(runId, analysisId)
+                } catch (failure: IllegalStateException) {
+                    if (corrupt(failure)) corruptPodView()
+                    throw failure
+                } ?: throw ApiFailure(HttpStatusCode.NotFound, "POD_VIEW_NOT_FOUND", "Pod view was not found")
+            val valid = validatePodView(bytes.inputStream(), MAX_POD_VIEW_BYTES) as? PodViewValidation.Valid ?: corruptPodView()
+            val sha256 = sha256Hex(bytes)
+            if (valid.canonicalSha256 != sha256) corruptPodView()
+            valid.view to sha256
+        }
+    }
+}
+
+private fun corruptPodView(): Nothing =
+    throw ApiFailure(HttpStatusCode.InternalServerError, "CORRUPT_POD_VIEW", "Stored pod view is invalid")
 
 private fun ApplicationCall.requireOnlyQueries(vararg allowed: String) {
     val parameters = request.queryParameters
@@ -1846,6 +2002,10 @@ private class InvalidTrend(
     val errors: List<PolicyValidationError>,
 ) : RuntimeException()
 
+private class InvalidPodView(
+    val errors: List<PolicyValidationError>,
+) : RuntimeException()
+
 private fun randomToken(): String {
     val bytes = ByteArray(32)
     SecureRandom().nextBytes(bytes)
@@ -1864,8 +2024,11 @@ private const val MAX_DIAGNOSTIC_BYTES = 1024 * 1024
 private const val MAX_CONTEXT_BYTES = 32L * 1024 * 1024
 private const val MAX_JOB_REQUEST_BYTES =
     MAX_RESOURCE_SNAPSHOT_BYTES + 2 * MAX_RESOURCE_BYTES + MAX_CONTEXT_BYTES + 4 * 1024 * 1024 +
-        MAX_POLICY_BYTES + MAX_DIAGNOSTIC_BYTES + MAX_CAPACITY_PLAN_BYTES + MAX_TREND_PLAN_BYTES +
+        MAX_POLICY_BYTES + MAX_DIAGNOSTIC_BYTES + MAX_CAPACITY_PLAN_BYTES + MAX_TREND_PLAN_BYTES + MAX_POD_VIEW_BYTES +
         MAX_MULTIPART_OVERHEAD_BYTES
+
+// 24 before pod_view; one more part for pod_view (ADR 0020, section 4).
+private const val MAX_JOB_PARTS = 25
 private val POSTGRES_PART_LIMITS =
     mapOf(
         "postgres_pre" to MAX_RESOURCE_BYTES,

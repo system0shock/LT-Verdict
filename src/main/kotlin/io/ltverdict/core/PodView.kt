@@ -29,6 +29,9 @@ internal sealed interface PodViewValidation {
         private val sourceBytes = rawBytes.copyOf()
 
         fun rawBytes(): ByteArray = sourceBytes.copyOf()
+
+        /** The bytes stored as pod-view.json: [canonicalSha256] is their SHA-256 (ADR 0020, section 5). */
+        fun canonicalBytes(): ByteArray = view.canonicalBytes()
     }
 
     data class Invalid(
@@ -127,6 +130,48 @@ internal fun validatePodView(
     } catch (_: SerializationException) {
         podViewInvalid("", "pod view is not valid JSON")
     }
+}
+
+/**
+ * Binds a valid pod-view to the load input and the resource snapshot of one job (ADR 0020, section 4). All violations are
+ * returned; the column check is skipped when the step itself is wrong, because the expected count is undefined then.
+ */
+internal fun validatePodViewBinding(
+    podView: PodViewValidation.Valid,
+    loadInputSha256: String,
+    resources: ResourceValidation.Valid,
+): List<PolicyValidationError> {
+    val view = podView.view
+    val snapshot = resources.snapshot
+    val errors = mutableListOf<PolicyValidationError>()
+
+    fun mismatch(
+        code: String,
+        pointer: String,
+        message: String,
+    ) {
+        errors += PolicyValidationError(code, pointer, message)
+    }
+    if (view.loadInputSha256 != loadInputSha256) {
+        mismatch("POD_VIEW_INPUT_MISMATCH", "/load_input_sha256", "pod view belongs to another load input")
+    }
+    if (view.resourceSnapshotSha256 != resources.semanticSha256) {
+        mismatch("POD_VIEW_SNAPSHOT_MISMATCH", "/resource_snapshot_sha256", "pod view does not match the resource snapshot")
+    }
+    if (view.arm != snapshot.arm) mismatch("POD_VIEW_ARM_MISMATCH", "/arm", "pod view arm differs from the resource snapshot arm")
+    if (view.startEpochMillis != snapshot.startEpochMillis) {
+        mismatch("POD_VIEW_GRID_MISMATCH", "/start_epoch_ms", "pod view must start with the resource snapshot grid")
+    }
+    if (view.stepMillis % snapshot.stepMillis != 0L) {
+        mismatch("POD_VIEW_GRID_MISMATCH", "/step_ms", "pod view step must be a multiple of the resource snapshot step")
+    } else {
+        val snapshotSpan = snapshot.pointCount.toLong() * snapshot.stepMillis
+        val expectedColumns = (snapshotSpan + view.stepMillis - 1) / view.stepMillis
+        if (view.columnCount.toLong() != expectedColumns) {
+            mismatch("POD_VIEW_GRID_MISMATCH", "/column_count", "pod view must cover the whole resource snapshot grid")
+        }
+    }
+    return errors
 }
 
 private fun parsePodView(element: JsonElement): PodViewV1 {

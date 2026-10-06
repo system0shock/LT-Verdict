@@ -1,5 +1,6 @@
 """PromQL templates for the OpenShift label contract (ADR 0018, section 3; plan P0)."""
 
+import re
 from dataclasses import dataclass
 
 # Tokens are replaced by render(); PromQL braces stay literal.
@@ -90,6 +91,7 @@ class Signal:
     uses_rate: bool
     expression: str
     peak_only: bool = False  # the signal is a maximum by definition; generated only with interval_max
+    sidecar: bool = False  # needs the sidecar container regular expression
 
 
 SIGNALS = {
@@ -110,6 +112,25 @@ SIGNALS = {
     "unavailable_replicas": Signal("openshift_unavailable_replicas", "count", "interval_mean", True, False, UNAVAILABLE),
     "pod_imbalance": Signal("openshift_pod_imbalance", "ratio", "interval_mean", False, False, IMBALANCE),
 }
+
+
+# Sidecar attribution (plan P1c): same folds over the containers that match the sidecar regular expression only,
+# and completeness is checked against the sidecars the platform expects, not against all containers.
+SIDECAR_EXPECTED = 'kube_pod_container_info{namespace="@ns@",container=~"@sidecars@"} and on (namespace, pod) @owner@'
+SIDECAR_MEM_USAGE = MEM_USAGE.replace("@cont@", 'container=~"@sidecars@"')
+SIDECAR_THROTTLING = THROTTLING.replace("@cont@", 'container=~"@sidecars@"')
+
+SIGNALS.update(
+    {
+        "sidecar_memory_limit_ratio": Signal(
+            "openshift_sidecar_memory_limit_ratio", "ratio", "interval_mean", True, False,
+            guarded_ratio(SIDECAR_MEM_USAGE, MEM_LIMIT, "@over@", SIDECAR_EXPECTED), sidecar=True,
+        ),
+        "sidecar_cpu_throttling": Signal(
+            "openshift_sidecar_cpu_throttling", "ratio", "interval_mean", False, True, SIDECAR_THROTTLING, sidecar=True
+        ),
+    }
+)
 
 
 def per_pod_over_time(selector: str) -> str:
@@ -164,11 +185,16 @@ SIGNALS.update(
 )
 
 
-def render(signal: Signal, ns: str, svc: str, sub: str, peak: bool = False) -> str:
+SIDECARS = re.compile(r"[A-Za-z0-9._|()*+?-]{1,256}")
+
+
+def render(signal: Signal, ns: str, svc: str, sub: str, peak: bool = False, sidecars: str | None = None) -> str:
     if signal.peak_only and not peak:
         raise ValueError(f"{signal.metric} needs interval_max aggregation")
     if peak and not signal.peak:
         raise ValueError(f"{signal.metric} has no peak variant")
+    if signal.sidecar and not sidecars:
+        raise ValueError(f"{signal.metric} needs the sidecar container regular expression")
     expression = signal.expression.replace("@owner@", FRAGMENTS["owner"]).replace("@cont@", FRAGMENTS["cont"])
     return (expression.replace("@over@", "max_over_time" if peak else "avg_over_time")
-            .replace("@sub@", sub).replace("@ns@", ns).replace("@svc@", svc))
+            .replace("@sub@", sub).replace("@sidecars@", sidecars or "").replace("@ns@", ns).replace("@svc@", svc))

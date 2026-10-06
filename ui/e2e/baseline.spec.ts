@@ -3,35 +3,43 @@ import AxeBuilder from '@axe-core/playwright'
 import { BASELINE_LABELS } from '../src/shell/labels'
 import { COMPARE_LABELS } from '../src/shell/labels.compare'
 
-// Permissive single-sample policy: statistical candidates need verdict_gates, which only an analysis with a policy has.
-const permissivePolicy = '{"schema_version":"policy.v1","policy_id":"statistical","defaults":{"sample_floor":1,"min_samples":1},"rules":[{"id":"p95","metric":"response_time_p95_ms","operator":"lte","threshold":100000,"scope":{"kind":"overall"}}]}'
+// A baseline must be a PASS analysis, so every run here is analyzed with a policy; few samples need the floor lowered to 1.
+const policyBody = (id: string, threshold: number) => JSON.stringify({
+  schema_version: 'policy.v1',
+  policy_id: id,
+  defaults: { sample_floor: 1, min_samples: 1 },
+  rules: [{ id: 'p95', metric: 'response_time_p95_ms', operator: 'lte', threshold, scope: { kind: 'overall' } }],
+})
+const POLICIES = {
+  permissive: { id: 'permissive', verdict: 'PASS', body: policyBody('permissive', 100000) },
+  failing: { id: 'failing', verdict: 'FAIL', body: policyBody('failing', 1) },
+}
 
-async function analyze(page: Page, name: string, elapsed: number, timestamp: number, withPolicy = false) {
+async function attachPolicy(page: Page, policy: keyof typeof POLICIES) {
+  const { id, body } = POLICIES[policy]
+  await page.getByTestId('policy-file').setInputFiles({ name: 'policy.json', mimeType: 'application/json', buffer: Buffer.from(body) })
+  await expect(page.locator('#run-setup')).toContainText(`Policy is valid — ${id}`)
+}
+
+async function analyze(page: Page, name: string, elapsed: number, timestamp: number, policy: keyof typeof POLICIES = 'permissive') {
   await page.getByTestId('input-file').setInputFiles({
     name,
     mimeType: 'text/csv',
     buffer: Buffer.from(`timeStamp,elapsed,label,success\n${timestamp},${elapsed},baseline-test,true\n`),
   })
-  if (withPolicy) {
-    await page.getByTestId('policy-file').setInputFiles({
-      name: 'policy.json',
-      mimeType: 'application/json',
-      buffer: Buffer.from(permissivePolicy),
-    })
-    await expect(page.locator('#run-setup')).toContainText('Policy is valid')
-  }
+  await attachPolicy(page, policy)
   await page.getByRole('button', { name: 'Analyze run', exact: true }).click()
-  await expect(page.locator('#verdict')).toContainText(withPolicy ? 'PASS' : 'NO_POLICY')
+  await expect(page.locator('#verdict')).toContainText(POLICIES[policy].verdict)
   const href = await page.getByRole('link', { name: 'Download JSON', exact: true }).getAttribute('href')
   const match = href?.match(/^\/api\/runs\/([^/]+)\/analyses\/([a-f0-9]{64})\/report/)
   expect(match).toBeTruthy()
   return { run_id: match![1]!, analysis_id: match![2]! }
 }
 
-async function openAnalysis(page: Page, filename: string, analysisId: string, verdict = 'NO_POLICY') {
+async function openAnalysis(page: Page, filename: string, analysisId: string) {
   await page.getByTestId('run-list').getByRole('button').filter({ hasText: filename }).click()
   await page.getByRole('button', { name: `Analysis ${analysisId.slice(0, 12)}`, exact: false }).click()
-  await expect(page.locator('#verdict')).toContainText(verdict)
+  await expect(page.locator('#verdict')).toContainText('PASS')
 }
 
 test.beforeEach(async ({ page }) => {
@@ -75,7 +83,7 @@ test('pins manual baseline across reload and compares changed achieved load with
   await page.getByRole('button', { name: 'Load comparison charts', exact: true }).click()
   await expect(page.getByTestId('baseline-comparison').getByRole('img', { name: 'P95 latency', exact: true })).toBeVisible()
   await expect(page.getByTestId('baseline-comparison')).toContainText('Solid: current · dashed: baseline')
-  await expect(page.locator('#verdict')).toContainText('NO_POLICY')
+  await expect(page.locator('#verdict')).toContainText('PASS')
   expect(jobs).toBe(0)
 
   await page.reload()
@@ -135,12 +143,12 @@ test('warns when a run is compared with itself', async ({ page }) => {
 
 test('selects the middle real run statistically and confirms a new compared pair', async ({ page }) => {
   await page.locator('#baseline-panel summary').click()
-  await analyze(page, 'stat-fast.jtl', 100, 1767225700000, true)
+  await analyze(page, 'stat-fast.jtl', 100, 1767225700000)
   await page.getByRole('button', { name: 'Add selected candidate', exact: true }).click()
-  const middle = await analyze(page, 'stat-middle.jtl', 110, 1767225701000, true)
+  const middle = await analyze(page, 'stat-middle.jtl', 110, 1767225701000)
   await page.getByRole('button', { name: 'Add selected candidate', exact: true }).click()
   await page.getByLabel('Same planned test conditions', { exact: true }).check()
-  await analyze(page, 'stat-slow.jtl', 1000, 1767225702000, true)
+  await analyze(page, 'stat-slow.jtl', 1000, 1767225702000)
   await page.getByRole('button', { name: 'Add selected candidate', exact: true }).click()
   await expect(page.getByLabel('Same planned test conditions', { exact: true })).not.toBeChecked()
   await expect(page.getByRole('button', { name: 'Select statistically', exact: true })).toBeDisabled()
@@ -155,13 +163,13 @@ test('selects the middle real run statistically and confirms a new compared pair
     BASELINE_LABELS.warnings.CURRENT_IN_CANDIDATE_SET,
   ])
   await expect(page.getByTestId('comparison-response_time_p95_ms').locator('td').nth(3)).toHaveText('890')
-  await openAnalysis(page, 'stat-middle.jtl', middle.analysis_id, 'PASS')
+  await openAnalysis(page, 'stat-middle.jtl', middle.analysis_id)
   await page.getByRole('button', { name: 'Compare selected analysis', exact: true }).click()
   await expect(page.getByTestId('baseline-warnings').locator('li')).toHaveText([
     BASELINE_LABELS.warnings.BASELINE_IS_CURRENT_ANALYSIS,
     BASELINE_LABELS.warnings.CURRENT_IN_CANDIDATE_SET,
   ])
-  await analyze(page, 'stat-new.jtl', 2000, 1767225703000, true)
+  await analyze(page, 'stat-new.jtl', 2000, 1767225703000)
   await expect(page.getByTestId('baseline-selection')).toContainText(middle.analysis_id)
   await expect(page.getByTestId('baseline-comparison')).toHaveCount(0)
   await page.getByRole('button', { name: 'Compare selected analysis', exact: true }).click()
@@ -218,7 +226,7 @@ test('does not allow replacing the baseline while a condition decision is being 
   await expect(page.getByRole('button', { name: 'Set as baseline', exact: true })).toBeEnabled()
 })
 
-test('shows the empty-window hint for the empty side and the old-rules hint for an incompatible baseline', async ({ page }) => {
+test('shows the empty-window hint for the empty side and the incompatibility hint for an incompatible baseline', async ({ page }) => {
   await analyze(page, 'baseline-hints-a.jtl', 100, 1767225770000)
   await page.getByRole('button', { name: 'Set as baseline', exact: true }).click()
   const current = await analyze(page, 'baseline-hints-b.jtl', 200, 1767225771000)
@@ -313,13 +321,14 @@ test('shows the empty-window hint for the empty side and the old-rules hint for 
   await expect(page.getByTestId('baseline-empty-window')).toHaveCount(0)
   scenario = { reasons: ['INCOMPATIBLE_METRIC_DEFINITION'], incompatible: true, windowStatus: 'NOT_EVALUATED', empty: true }
   await compare.click()
-  await expect(page.getByTestId('baseline-old-rules')).toContainText(BASELINE_LABELS.oldRulesHint)
+  await expect(page.getByTestId('baseline-incompatible')).toContainText(BASELINE_LABELS.incompatibleHint)
+  await expect(page.getByTestId('baseline-incompatible')).toContainText('разный набор входных данных')
   scenario = { reasons: [], incompatible: false, windowStatus: 'DESCRIPTIVE', empty: false }
   await compare.click()
-  await expect(page.getByTestId('baseline-old-rules')).toHaveCount(0)
+  await expect(page.getByTestId('baseline-incompatible')).toHaveCount(0)
 })
 
-test('explains the old-rules hint when a mixed-semantics candidate set is rejected', async ({ page }) => {
+test('explains the incompatibility hint when a mixed-semantics candidate set is rejected', async ({ page }) => {
   await page.locator('#baseline-panel summary').click()
   await analyze(page, 'mixed-fast.jtl', 100, 1767225790000)
   await page.getByRole('button', { name: 'Add selected candidate', exact: true }).click()
@@ -334,14 +343,24 @@ test('explains the old-rules hint when a mixed-semantics candidate set is reject
     await route.fulfill({ status: 422, json: {
       error: {
         code: 'BASELINE_MIXED_SEMANTICS',
-        message: 'Statistical baseline is unavailable: BASELINE_MIXED_SEMANTICS',
+        message: 'Baseline candidate is unavailable: BASELINE_MIXED_SEMANTICS',
         details: [],
       },
     } })
   })
   await page.getByRole('button', { name: 'Select statistically', exact: true }).click()
   await expect(page.locator('#baseline-panel [role="alert"]')).toContainText('BASELINE_MIXED_SEMANTICS')
-  await expect(page.getByTestId('baseline-old-rules')).toContainText(BASELINE_LABELS.oldRulesHint)
+  await expect(page.getByTestId('baseline-incompatible')).toContainText(BASELINE_LABELS.incompatibleHint)
+})
+
+test('refuses an analysis that is not PASS as a manual baseline and keeps the pinned one', async ({ page }) => {
+  const kept = await analyze(page, 'baseline-pass.jtl', 80, 1767225780000)
+  await page.getByRole('button', { name: 'Set as baseline', exact: true }).click()
+  await expect(page.getByTestId('baseline-selection')).toContainText(kept.analysis_id)
+  await analyze(page, 'baseline-fail.jtl', 90, 1767225781000, 'failing')
+  await page.getByRole('button', { name: 'Set as baseline', exact: true }).click()
+  await expect(page.locator('#baseline-panel [role="alert"]')).toContainText('BASELINE_CANDIDATE_NOT_PASS')
+  await expect(page.getByTestId('baseline-selection')).toContainText(kept.analysis_id)
 })
 
 test('failed replacement keeps the last confirmed baseline visible', async ({ page }) => {

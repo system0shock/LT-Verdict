@@ -884,8 +884,10 @@ internal fun Application.installLocalApi(context: LocalApiContext) {
                     put("analysis_id", analysisId)
                 }
             val scope = resolveBaselineScope(call, context.store, currentReference)
+            // Only the slot: analytics does not use the condition record, so a damaged record must not fail it.
             val baselineSlot =
-                baselineOperation { context.store.readBaselineSlotWithCondition(scope.series, scope.arm, currentReference, null).first }
+                baselineOperation { context.store.listBaselineSlots() }
+                    .firstOrNull { if (scope.series == null) it.legacy else it.series == scope.series && it.arm == scope.arm }
             val response =
                 withContext(Dispatchers.IO) {
                     val current = context.store.readComparisonDocuments(runId, analysisId) ?: notFound("Analysis was not found")
@@ -1329,8 +1331,10 @@ private suspend fun selectBaseline(
     store: RunBundleStore,
 ): JsonObject {
     val mode = request.baselineString("mode")
-    val series = normalizeReleaseText(request.baselineString("series"))
-    if (series.isBlank() || series.encodeToByteArray().size > 128) malformed("Comparison series must contain 1–128 UTF-8 bytes")
+    // The same rule as the `series` query, so that every stored slot can be addressed again.
+    val series =
+        releaseTextField(request.baselineString("series"), "series", MAX_RELEASE_TEXT_BYTES)
+            ?: malformed("Comparison series must contain 1–128 UTF-8 bytes")
     return when (mode) {
         "manual" -> {
             if (request.keys != setOf("mode", "series", "reference")) malformed("Manual baseline fields are invalid")

@@ -2277,6 +2277,9 @@ class LocalApiTest {
             )
             assertEquals(reference(runs[1].first, runs[1].second), api.slots().single().slotReference())
             assertError(api.selectManual(runs[0].first, runs[0].second, "   "), 400, "MALFORMED_REQUEST")
+            // a series the query could not name again is refused when it is written
+            assertError(api.selectManual(runs[0].first, runs[0].second, "A\\tB"), 400, "MALFORMED_REQUEST")
+            assertError(api.selectManual(runs[0].first, runs[0].second, "x".repeat(129)), 400, "MALFORMED_REQUEST")
             val path = "/api/runs/${runs[2].first}/analyses/${runs[2].second}/comparison"
             assertEquals(200, api.get("$path?series=%20Checkout%20").statusCode())
             assertEquals(200, api.delete("/api/baseline?series=%20Checkout").statusCode())
@@ -2350,8 +2353,9 @@ class LocalApiTest {
     }
 
     @Test
-    fun `saved analytics compares transactions against the slot of the analysis series`() =
-        withServer { store, api ->
+    fun `saved analytics compares transactions against the slot of the analysis series`() {
+        val root = tempDir.resolve("baseline-analytics")
+        withServer(dataRoot = root) { store, api ->
             api.bootstrap()
             val runs = statisticalRuns(store, api, listOf(100, 110))
             val path = "/api/runs/${runs[1].first}/analyses/${runs[1].second}/analytics"
@@ -2363,7 +2367,15 @@ class LocalApiTest {
             assertEquals(201, api.createRelease(releaseBody(runs[1].first, listOf(runs[1].second), series = "A")).statusCode())
             assertTrue(api.get(path).jsonObject().getValue("transactions") !is JsonNull)
             assertError(api.get("$path?series=B"), 422, "BASELINE_SERIES_CONFLICT")
+
+            // analytics does not read the condition record: a damaged one fails the comparison, not the analytics
+            val conditions = "/api/runs/${runs[1].first}/analyses/${runs[1].second}/baseline-conditions?series=A"
+            assertEquals(200, api.post(conditions, "application/json", """{"decision":"CONFIRMED"}""".encodeToByteArray()).statusCode())
+            Files.list(root.resolve("baseline-conditions")).use { it.toList().single() }.let { Files.writeString(it, "not json") }
+            assertError(api.get(conditions), 500, "CORRUPT_BASELINE")
+            assertTrue(api.get(path).jsonObject().getValue("transactions") !is JsonNull)
         }
+    }
 
     private fun statisticalRuns(
         store: RunBundleStore,

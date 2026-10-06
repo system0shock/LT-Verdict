@@ -18,6 +18,7 @@ import kotlinx.serialization.json.put
 import org.junit.jupiter.api.Assertions.assertArrayEquals
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
+import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertThrows
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
@@ -743,6 +744,71 @@ class RunBundleStoreTest {
             assertEquals(Json.parseToJsonElement(result.decodeToString()).jsonObject, documents.first)
             assertEquals(Json.parseToJsonElement(identity.decodeToString()).jsonObject, documents.second)
         }
+
+    @Test
+    fun `pod view bytes are verified against the manifest and the identity when read`() =
+        withStore { store, _ ->
+            val input = store.acceptInput(Files.newInputStream(Path.of(CSV_FIXTURE)), "input.jtl")
+            val podView = """{"canonical":"pod-view-bytes"}""".encodeToByteArray()
+            val saved = savePodViewAnalysis(store, input.runId, podView, identityHash = sha256Hex(podView))
+            val analysisId = saved.fileName.toString()
+
+            assertArrayEquals(podView, store.readPodViewBytes(input.runId, analysisId))
+            assertTrue(store.readAnalysis(input.runId, analysisId)!!.artifacts.any { it.path == "pod-view.json" })
+
+            // Same size, other bytes: ordinary reads compare sizes only, the pod-view read compares the manifest hash.
+            Files.write(saved.resolve("pod-view.json"), """{"canonical":"pod-view-BYTES"}""".encodeToByteArray())
+            assertEquals(saved, store.readAnalysis(input.runId, analysisId)?.path)
+            val failure = assertThrows(IllegalStateException::class.java) { store.readPodViewBytes(input.runId, analysisId) }
+            assertTrue((failure.message ?: "").startsWith("CORRUPT_RUN_BUNDLE"))
+        }
+
+    @Test
+    fun `pod view read refuses a file that the identity does not bind and an identity binding without a file`() =
+        withStore { store, _ ->
+            val input = store.acceptInput(Files.newInputStream(Path.of(CSV_FIXTURE)), "input.jtl")
+            val podView = """{"canonical":"pod-view-bytes"}""".encodeToByteArray()
+
+            val unbound = savePodViewAnalysis(store, input.runId, podView, identityHash = null)
+            val another = savePodViewAnalysis(store, input.runId, podView, identityHash = "a".repeat(64))
+            val missing = savePodViewAnalysis(store, input.runId, null, identityHash = sha256Hex(podView))
+
+            listOf(unbound, another, missing).forEach { saved ->
+                val failure =
+                    assertThrows(IllegalStateException::class.java) { store.readPodViewBytes(input.runId, saved.fileName.toString()) }
+                assertTrue((failure.message ?: "").startsWith("CORRUPT_RUN_BUNDLE"), saved.toString())
+            }
+        }
+
+    @Test
+    fun `an analysis without a pod view reads as absent`() =
+        withStore { store, _ ->
+            val input = store.acceptInput(Files.newInputStream(Path.of(CSV_FIXTURE)), "input.jtl")
+            val saved = savePodViewAnalysis(store, input.runId, null, identityHash = null)
+
+            assertNull(store.readPodViewBytes(input.runId, saved.fileName.toString()))
+            assertNull(store.readPodViewBytes(input.runId, "b".repeat(64)))
+        }
+
+    private fun savePodViewAnalysis(
+        store: RunBundleStore,
+        runId: String,
+        podView: ByteArray?,
+        identityHash: String?,
+    ): Path {
+        val fields =
+            listOfNotNull(
+                identityHash?.let { """"pod_view_sha256":"$it","pod_view_version":"pod-view.v1"""" },
+                """"run_id":"$runId"""",
+                """"salt":"${System.nanoTime()}"""",
+            ).joinToString(",", "{", "}")
+        val identity = fields.encodeToByteArray()
+        return store.writeAnalysisAtomically(runId, sha256Hex(identity)) { staging ->
+            Files.write(staging.resolve("identity.json"), identity)
+            Files.write(staging.resolve("analysis-result.json"), """{"run_id":"$runId"}""".encodeToByteArray())
+            podView?.let { Files.write(staging.resolve("pod-view.json"), it) }
+        }
+    }
 
     private fun withStore(block: (RunBundleStore, Path) -> Unit) {
         val root = tempDir.resolve("data-${System.nanoTime()}")

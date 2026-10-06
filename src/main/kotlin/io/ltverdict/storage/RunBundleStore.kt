@@ -1,5 +1,6 @@
 package io.ltverdict.storage
 
+import io.ltverdict.core.MAX_POD_VIEW_BYTES
 import io.ltverdict.core.WindowComparisonRequest
 import io.ltverdict.core.baselineConditionBinding
 import io.ltverdict.core.canonicalJson
@@ -476,6 +477,33 @@ internal class RunBundleStore(
             val result = parseObject(Files.readAllBytes(requireOwnedFile(stored.path.resolve(RESULT_FILE))), "analysis result")
             val identity = parseObject(Files.readAllBytes(requireOwnedFile(stored.path.resolve(IDENTITY_FILE))), "analysis identity")
             result to identity
+        }
+
+    /**
+     * Returns the stored pod-view.json (ADR 0020, section 5), or null when the analysis has none. Ordinary reads compare
+     * artifact paths and sizes only, so this read also hashes the file: its SHA-256 must equal both the manifest entry
+     * and the identity's pod_view_sha256, which catches a same-size substitution. A binding without a file, or a file
+     * without a binding, is corruption.
+     */
+    fun readPodViewBytes(
+        runId: String,
+        analysisId: String,
+    ): ByteArray? =
+        synchronized(dataDirectory.operationLock) {
+            dataDirectory.requireOpen()
+            val stored = readAnalysisUnlocked(runId, analysisId) ?: return@synchronized null
+            val identity = parseObject(Files.readAllBytes(requireOwnedFile(stored.path.resolve(IDENTITY_FILE))), "analysis identity")
+            val bound = if (identity.containsKey("pod_view_sha256")) identity.string("pod_view_sha256") else null
+            val artifact = stored.artifacts.find { it.path == POD_VIEW_FILE }
+            if (artifact == null && bound == null) return@synchronized null
+            if (artifact == null || artifact.sha256 != bound) corrupt("pod view differs from the analysis identity")
+            if (artifact.sizeBytes > MAX_POD_VIEW_BYTES) corrupt("pod view exceeds its size limit")
+            val bytes =
+                Files.newInputStream(requireOwnedFile(stored.path.resolve(POD_VIEW_FILE)), LinkOption.NOFOLLOW_LINKS).use {
+                    it.readNBytes(MAX_POD_VIEW_BYTES + 1)
+                }
+            if (bytes.size.toLong() != artifact.sizeBytes || sha256Hex(bytes) != artifact.sha256) corrupt("pod view bytes differ")
+            bytes
         }
 
     fun readComparisonDocuments(
@@ -1006,6 +1034,7 @@ private const val BASELINE_CONDITIONS_DIRECTORY = "baseline-conditions"
 private const val RUN_PERIOD_FILE = "run-period.json"
 private const val RESULT_FILE = "analysis-result.json"
 private const val IDENTITY_FILE = "identity.json"
+private const val POD_VIEW_FILE = "pod-view.json"
 private const val POLICY_FILE = "policy.json"
 private const val MAX_POLICY_BYTES = 1_048_576
 private const val MAX_BASELINE_BYTES = 32 * 1024

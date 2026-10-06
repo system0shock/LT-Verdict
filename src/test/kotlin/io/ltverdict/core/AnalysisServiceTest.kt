@@ -17,6 +17,7 @@ import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertInstanceOf
 import org.junit.jupiter.api.Assertions.assertNotEquals
+import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertThrows
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
@@ -383,6 +384,91 @@ class AnalysisServiceTest {
             val stored = checkNotNull(store.readAnalysis(input.runId, outcome.analysisId))
             assertArrayEquals(plan.encodeToByteArray(), Files.readAllBytes(stored.path.resolve("trend-plan.json")))
         }
+
+    @Test
+    fun `pod view is bound stored with canonical bytes and leaves the result and the comparability fields alone`() =
+        withService { store, service ->
+            val input = accept(store, trendCsv().encodeToByteArray(), "pod-view.jtl")
+            val resource = resources(trendResourceJson(input.sha256).encodeToByteArray())
+            val podView = validPodView(podViewJson(input.sha256, resource))
+
+            val outcome = service.analyze(AnalysisRequest(input, passPolicy(), resources = resource, podView = podView))
+            val withoutPodView = service.analyze(AnalysisRequest(input, passPolicy(), resources = resource))
+
+            assertNotEquals(withoutPodView.analysisId, outcome.analysisId)
+            assertArrayEquals(withoutPodView.canonicalResult, outcome.canonicalResult)
+            val stored = checkNotNull(store.readAnalysis(input.runId, outcome.analysisId))
+            assertArrayEquals(podView.canonicalBytes(), Files.readAllBytes(stored.path.resolve("pod-view.json")))
+            assertEquals(
+                podView.canonicalSha256,
+                stored.artifacts
+                    .single { it.path == "pod-view.json" }
+                    .sha256,
+            )
+            assertArrayEquals(podView.canonicalBytes(), store.readPodViewBytes(input.runId, outcome.analysisId))
+            assertNull(store.readPodViewBytes(input.runId, withoutPodView.analysisId))
+
+            val identity = identityOf(stored.path)
+            val plainIdentity = identityOf(checkNotNull(store.readAnalysis(input.runId, withoutPodView.analysisId)).path)
+            assertEquals(podView.canonicalSha256, identity.value("pod_view_sha256"))
+            assertEquals("pod-view.v1", identity.value("pod_view_version"))
+            assertEquals(setOf("pod_view_sha256", "pod_view_version"), identity.keys - plainIdentity.keys)
+            listOf("modules", "input_versions", "limits").forEach { assertEquals(plainIdentity[it], identity[it], it) }
+
+            val run = Json.parseToJsonElement(Files.readAllBytes(stored.path.resolve("run.json")).decodeToString()).jsonObject
+            val podViewInput = run.getValue("inputs").jsonArray.map { it.jsonObject }.single { it.value("type") == "pod_view" }
+            assertEquals("analyses/${outcome.analysisId}/pod-view.json", podViewInput.value("path"))
+            assertEquals(podView.canonicalSha256, podViewInput.value("sha256"))
+        }
+
+    @Test
+    fun `pod view binding errors stop the analysis before anything is stored`() =
+        withService { store, service ->
+            val input = accept(store, trendCsv().encodeToByteArray(), "pod-view-rejected.jtl")
+            val resource = resources(trendResourceJson(input.sha256).encodeToByteArray())
+
+            fun refusal(
+                view: PodViewValidation.Valid,
+                withResources: Boolean = true,
+            ): String? =
+                assertThrows(IllegalArgumentException::class.java) {
+                    service.analyze(
+                        AnalysisRequest(input, passPolicy(), resources = resource.takeIf { withResources }, podView = view),
+                    )
+                }.message
+
+            assertEquals("POD_VIEW_RESOURCE_REQUIRED", refusal(validPodView(podViewJson(input.sha256, resource)), withResources = false))
+            assertEquals("POD_VIEW_INPUT_MISMATCH", refusal(validPodView(podViewJson("f".repeat(64), resource))))
+            assertEquals("POD_VIEW_SNAPSHOT_MISMATCH", refusal(validPodView(podViewJson(input.sha256, resource, snapshotHash = "e".repeat(64)))))
+            assertEquals("POD_VIEW_ARM_MISMATCH", refusal(validPodView(podViewJson(input.sha256, resource, arm = "A"))))
+            assertEquals("POD_VIEW_GRID_MISMATCH", refusal(validPodView(podViewJson(input.sha256, resource, columns = 3))))
+            assertEquals(0, store.listAnalyses(input.runId, null, 10).analyses.size)
+        }
+
+    @Test
+    fun `an invalid load input still stores the pod view`() =
+        withService { store, service ->
+            val input = accept(store, "timeStamp,elapsed,label,success\nnot-a-number,1,request,true\n".encodeToByteArray(), "bad.jtl")
+            val resource = resources(trendResourceJson(input.sha256).encodeToByteArray())
+            val podView = validPodView(podViewJson(input.sha256, resource))
+
+            val outcome = service.analyze(AnalysisRequest(input, passPolicy(), resources = resource, podView = podView))
+
+            assertEquals("INVALID", result(outcome, "run_validity"))
+            assertArrayEquals(podView.canonicalBytes(), store.readPodViewBytes(input.runId, outcome.analysisId))
+            assertEquals(podView.canonicalSha256, identityOf(outcome.analysisDirectory).value("pod_view_sha256"))
+        }
+
+    private fun podViewJson(
+        loadHash: String,
+        resource: ResourceValidation.Valid,
+        snapshotHash: String = resource.semanticSha256,
+        arm: String? = null,
+        columns: Int = 4,
+    ): String = podViewTestJson(loadHash, snapshotHash, arm, 1_767_225_600_000L, 10_000L, columns)
+
+    private fun identityOf(analysis: Path): JsonObject =
+        Json.parseToJsonElement(Files.readAllBytes(analysis.resolve("identity.json")).decodeToString()).jsonObject
 
     @Test
     fun `standard analysis uses the final two-pass window and commits the complete bundle`() =

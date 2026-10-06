@@ -32,6 +32,24 @@ export function utf8Length(text: string): number {
   return new TextEncoder().encode(text).length
 }
 
+export interface BaselineFacts {
+  run_validity: string
+  policy_verdict: string
+  coverage_status: string
+  coverage_reasons: readonly string[]
+}
+
+// Mirror of the server rule baselineCandidateRejection (ADR 0019, section 6), used only to explain a disabled button:
+// the server decides again from the real result. INCOMPLETE coverage caused only by SMALL_SAMPLE is admitted.
+export function baselineIneligibility(facts: BaselineFacts): string | null {
+  if (facts.run_validity !== 'VALID') return 'BASELINE_CANDIDATE_INVALID'
+  const admitted = facts.coverage_status === 'COMPLETE'
+    || (facts.coverage_status === 'INCOMPLETE' && facts.coverage_reasons.length > 0 && facts.coverage_reasons.every((reason) => reason === 'SMALL_SAMPLE'))
+  if (!admitted) return 'BASELINE_CANDIDATE_INCOMPLETE'
+  if (facts.policy_verdict !== 'PASS') return 'BASELINE_CANDIDATE_NOT_PASS'
+  return null
+}
+
 export function releaseRequest(
   form: { series: string; label: string; notes: string; profile: ProfileForm },
   selection: { run_id: string; analysis_id: string },
@@ -80,23 +98,5 @@ export function dynamicsAnchor(releases: readonly Release[]): { run_id: string; 
     const analysis = release.analyses.find((item) => item.analysis_state === 'OK')
     if (analysis) return { run_id: release.run_id, analysis_id: analysis.analysis_id }
   }
-  return null
-}
-
-export interface BaselineFacts {
-  run_validity: string
-  policy_verdict: string
-  coverage_status: string
-  coverage_reasons: readonly string[]
-}
-
-// Mirror of the server rule baselineCandidateRejection (ADR 0019, section 6), used only to explain a disabled button:
-// the server decides again from the real result. INCOMPLETE coverage caused only by SMALL_SAMPLE is admitted.
-export function baselineIneligibility(facts: BaselineFacts): string | null {
-  if (facts.run_validity !== 'VALID') return 'BASELINE_CANDIDATE_INVALID'
-  const admitted = facts.coverage_status === 'COMPLETE'
-    || (facts.coverage_status === 'INCOMPLETE' && facts.coverage_reasons.length > 0 && facts.coverage_reasons.every((reason) => reason === 'SMALL_SAMPLE'))
-  if (!admitted) return 'BASELINE_CANDIDATE_INCOMPLETE'
-  if (facts.policy_verdict !== 'PASS') return 'BASELINE_CANDIDATE_NOT_PASS'
   return null
 }

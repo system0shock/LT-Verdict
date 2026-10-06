@@ -797,10 +797,10 @@ async function save() {
 
 <style>
 .history-hints { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
-.history-rebind { display: grid; gap: 12px; padding: 16px; border: 1px solid var(--border); }
+.history-rebind { display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px; min-width: 0; padding: 16px; border: 1px solid var(--border); }
 .history-panel { display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; }
 .history-panel .panel__header { margin-bottom: 0; }
-.history-panel p, .history-panel li, .history-panel th { overflow-wrap: anywhere; }
+.history-panel p, .history-panel li, .history-panel th, .history-panel h3, .history-panel legend, .history-panel label { overflow-wrap: anywhere; }
 .history-list { display: grid; gap: 8px; margin: 0; padding: 0; list-style: none; }
 .history-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
 .history-badge { display: inline-block; margin-left: 4px; padding: 0 6px; border: 1px solid currentColor; border-radius: 2px; font-size: 12px; }

@@ -20,7 +20,7 @@ const plotted = computed(() => props.points.map((point, index) => ({
   y: TOP + (HEIGHT - TOP - BOTTOM) * (1 - point.value / maxValue.value),
   title: L.dynamicsPoint(point.release.label, point.verdict, formatNumber(point.value)),
 })))
-const shortLabel = (label: string) => (label.length > 10 ? `${label.slice(0, 9)}…` : label)
+const shortLabel = (label: string) => (label.length > 10 ? `${label.slice(0, 9)}...` : label)
 </script>
 
 <template>

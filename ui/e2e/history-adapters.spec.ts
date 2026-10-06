@@ -289,12 +289,24 @@ for (const theme of ['light', 'dark'] as const) {
 for (const width of [1280, 375, 320]) {
   test(`the history tab does not overflow at ${width}px`, async ({ page }) => {
     await page.setViewportSize({ width, height: 900 })
-    await openHistory(page, { releases: [release(1, { label: 'L'.repeat(120), series: SERIES }), release(2)] })
+    await openHistory(page, { releases: [release(1, { label: 'L'.repeat(120), series: SERIES, profile: profile('P'.repeat(120)) }), release(2, { profile: profile('Q') }), release(3, { profile: profile('P'.repeat(120)) })] })
+    // The re-pin panel, the hints and the confirmation of the profile are on the page when the width is measured.
+    await rowsOf(page).nth(2).getByRole('button', { name: L.rebindAria('L'.repeat(120)) }).click()
+    await expect(page.getByTestId('rebind-panel').getByRole('radio')).toHaveCount(1)
+    await page.getByLabel(L.profileFields.pacing, { exact: true }).fill('R'.repeat(120))
+    await expect(page.getByTestId('profile-confirm')).toBeVisible()
     await page.evaluate(() => document.documentElement.style.setProperty('letter-spacing', '0.15em'))
     const size = await page.evaluate(() => {
       const spilling = [...document.querySelectorAll('body *')]
         .filter((element) => element.scrollWidth > element.clientWidth + 1 && element.clientWidth > 0 && element.tagName !== 'INPUT' && !element.closest('.table-wrap'))
-      return { scrollWidth: document.documentElement.scrollWidth, innerWidth: window.innerWidth, wide: spilling.slice(0, 4).map((element) => `${element.tagName}#${element.id}.${element.className}`) }
+      const beyond = [...document.querySelectorAll('body *')]
+        .filter((element) => element.getBoundingClientRect().right > window.innerWidth + 1 && !element.closest('.table-wrap'))
+      const deepest = beyond.filter((element) => !beyond.some((other) => other !== element && element.contains(other)))
+      return {
+        scrollWidth: document.documentElement.scrollWidth,
+        innerWidth: window.innerWidth,
+        wide: [...spilling.slice(0, 2), ...deepest.slice(0, 4)].map((element) => `${element.tagName}#${element.id}.${element.className} ${Math.round(element.getBoundingClientRect().right)}`),
+      }
     })
     expect(size.scrollWidth, JSON.stringify(size)).toBeLessThanOrEqual(size.innerWidth)
   })

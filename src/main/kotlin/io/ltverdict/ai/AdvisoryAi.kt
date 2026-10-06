@@ -201,6 +201,8 @@ internal data class RunnerProvenance(
     val endpointHost: String,
     val promptVersion: String,
     val promptSha256: String,
+    /** Requests the relay forwarded to the provider for this advice: 1, or 2 after the schema retry (ADR 0021, D2). */
+    val providerRequests: Int,
     val durationMillis: Long,
     val exitCode: Int,
 )
@@ -329,6 +331,7 @@ internal class AdvisoryAiService(
                         put("endpoint_host", success.provenance.endpointHost)
                         put("prompt_version", success.provenance.promptVersion)
                         put("prompt_sha256", success.provenance.promptSha256)
+                        put("provider_requests", success.provenance.providerRequests)
                         put("duration_ms", success.provenance.durationMillis)
                         put("exit_code", success.provenance.exitCode)
                         put("validation", "PASSED")
@@ -363,8 +366,9 @@ internal fun validateStoredAdvice(
     val provenance = document.objectValue("provenance")
     // The model is not compared with the current configuration: the operator may change the file, and advice saved
     // earlier must stay readable (ADR 0023, D4). The slug pattern and the closed key set are checked instead.
-    val hasEndpointHost = provenance.keys == PROVENANCE_FIELDS + "endpoint_host"
-    if ((provenance.keys != PROVENANCE_FIELDS && !hasEndpointHost) ||
+    val hasEndpointHost = "endpoint_host" in provenance.keys
+    if (!provenance.keys.containsAll(PROVENANCE_FIELDS) ||
+        !(PROVENANCE_FIELDS + PROVENANCE_OPTIONAL_FIELDS).containsAll(provenance.keys) ||
         provenance.string("runner_id") != QwenCode0211.RUNNER_ID ||
         provenance.string("runner_version") != QwenCode0211.RUNNER_VERSION ||
         provenance.string("runner_artifact_sha256") != QwenCode0211.CLI_ENTRY_SHA256 ||
@@ -372,8 +376,7 @@ internal fun validateStoredAdvice(
         (hasEndpointHost && !validEndpointHost(provenance.string("endpoint_host"))) ||
         // Advice saved before endpoint_host existed could only come from the built-in ModelStudio endpoint and its model.
         (!hasEndpointHost && provenance.string("model_id") != QwenCode0211.MODEL_ID) ||
-        provenance.string("prompt_version") != QwenCode0211.PROMPT_VERSION ||
-        !SHA256.matches(provenance.string("prompt_sha256")) ||
+        !validStoredPrompt(provenance) ||
         provenance.string("validation") != "PASSED" ||
         provenance.long("duration_ms") !in 0..613_000 ||
         provenance.integer("exit_code") != 0
@@ -387,14 +390,35 @@ internal fun validateStoredAdvice(
     }
 }
 
+/**
+ * The closed set of prompt tuples a stored provenance may carry (ADR 0021, D3). The legacy label `advisory-system.v1` covers
+ * several editions of its file, so only the form of the hash is checked and `provider_requests` is optional (absent means 1).
+ * The label `advisory-system.v2` is newer than `endpoint_host` and `provider_requests`: both are required, the hash is pinned.
+ */
+private fun validStoredPrompt(provenance: JsonObject): Boolean {
+    val requests = if ("provider_requests" in provenance.keys) provenance.integer("provider_requests") else null
+    if (requests != null && requests !in 1..MAX_PROVIDER_REQUESTS) return false
+    val sha256 = provenance.string("prompt_sha256")
+    return when (provenance.string("prompt_version")) {
+        QwenCode0211.PROMPT_VERSION -> SHA256.matches(sha256)
+        QwenCode0211.PROMPT_V2_VERSION ->
+            requests != null && "endpoint_host" in provenance.keys && sha256 == QwenCode0211.PROMPT_V2_SHA256
+        else -> false
+    }
+}
+
 private fun validProvenance(value: RunnerProvenance): Boolean =
     value.runnerId == QwenCode0211.RUNNER_ID &&
         value.runnerVersion == QwenCode0211.RUNNER_VERSION &&
         value.runnerArtifactSha256 == QwenCode0211.CLI_ENTRY_SHA256 &&
         validModelSlug(value.modelId) &&
         validEndpointHost(value.endpointHost) &&
-        value.promptVersion == QwenCode0211.PROMPT_VERSION &&
-        SHA256.matches(value.promptSha256) &&
+        value.providerRequests in 1..MAX_PROVIDER_REQUESTS &&
+        when (value.promptVersion) {
+            QwenCode0211.PROMPT_VERSION -> SHA256.matches(value.promptSha256)
+            QwenCode0211.PROMPT_V2_VERSION -> value.promptSha256 == QwenCode0211.PROMPT_V2_SHA256
+            else -> false
+        } &&
         value.durationMillis in 0..613_000 &&
         value.exitCode == 0
 
@@ -496,6 +520,9 @@ private fun invalid(reason: AdviceFailure): Nothing = throw AdviceValidationExce
 
 private const val REDACTED = "[REDACTED]"
 private val SHA256 = Regex("[0-9a-f]{64}")
+
+internal fun validSha256(value: String): Boolean = SHA256.matches(value)
+
 private val ANALYSIS_RESULT_FIELD_SETS =
     setOf(
         setOf("schema_version", "run_id", "analysis_mode", "run_validity", "policy_verdict", "analysis_coverage", "findings", "evidence"),
@@ -538,6 +565,12 @@ private val PROVENANCE_FIELDS =
         "exit_code",
         "validation",
     )
+
+// Present in advice saved after endpoint_host (ADR 0023, CM3) and provider_requests (ADR 0021, D4) appeared.
+private val PROVENANCE_OPTIONAL_FIELDS = setOf("endpoint_host", "provider_requests")
+
+// One request, or one more after the schema retry (ADR 0021, D2).
+private const val MAX_PROVIDER_REQUESTS = 2
 private val SECRET_KEYS =
     setOf(
         "api_key",

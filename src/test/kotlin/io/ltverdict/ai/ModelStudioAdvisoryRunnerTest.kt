@@ -87,7 +87,7 @@ class ModelStudioAdvisoryRunnerTest {
             Write-Output ('suppressed-host-output' * 2000)
             [IO.File]::WriteAllText((Join-Path ${'$'}PSScriptRoot 'capture.txt'), ${'$'}CredentialEnvFile + "`n" + ((Get-ChildItem Env: | ForEach-Object { ${'$'}_.Name + '=' + ${'$'}_.Value }) -join "`n"))
             [IO.File]::WriteAllText(${'$'}OutputPath, '{"schema_version":"ai-advice-output.v1","summary":"bounded","hypotheses":[],"recommendations":[],"caveats":[]}')
-            [IO.File]::WriteAllText(${'$'}ResultPath, '{"schema_version":"advisory-ai-runtime-result.v1","status":"SUCCESS","duration_ms":12,"exit_code":0,"endpoint_host":"token-plan.ap-southeast-1.maas.aliyuncs.com:443","model_id":"deepseek-v4-flash-0731"}')
+            [IO.File]::WriteAllText(${'$'}ResultPath, '{"schema_version":"advisory-ai-runtime-result.v1","status":"SUCCESS","duration_ms":12,"exit_code":0,"provider_request_count":1,"prompt_sha256":"a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1","endpoint_host":"token-plan.ap-southeast-1.maas.aliyuncs.com:443","model_id":"deepseek-v4-flash-0731"}')
             exit 0
             """.trimIndent(),
         )
@@ -109,6 +109,10 @@ class ModelStudioAdvisoryRunnerTest {
         )
         assertEquals(QwenCode0211.MODEL_ID, success.provenance.modelId)
         assertEquals(12, success.provenance.durationMillis)
+        // The request count and the prompt hash come from the launcher's result; the prompt file is not read again.
+        assertEquals(1, success.provenance.providerRequests)
+        assertEquals(PROMPT_SHA256, success.provenance.promptSha256)
+        assertEquals(QwenCode0211.PROMPT_VERSION, success.provenance.promptVersion)
         val capture = Files.readString(tools.resolve("capture.txt"))
         assertFalse(capture.contains("probe-secret-value"))
         assertTrue(capture.contains(credential.toString()))
@@ -144,12 +148,65 @@ class ModelStudioAdvisoryRunnerTest {
                 """
                 param([string]${'$'}Mode,[string]${'$'}EvidencePath,[string]${'$'}OutputPath,[string]${'$'}ResultPath,[string]${'$'}CancelPath,[string]${'$'}CredentialEnvFile,[string]${'$'}QwenPackageRoot,[string]${'$'}ModelId,[string]${'$'}UpstreamUrl,[switch]${'$'}AllowInsecureHttp)
                 [IO.File]::WriteAllText(${'$'}OutputPath, '{"schema_version":"ai-advice-output.v1","summary":"bounded","hypotheses":[],"recommendations":[],"caveats":[]}')
-                [IO.File]::WriteAllText(${'$'}ResultPath, '{"schema_version":"advisory-ai-runtime-result.v1","status":"SUCCESS","duration_ms":12,"exit_code":0,"model_id":"deepseek-v4-flash-0731"$member}')
+                [IO.File]::WriteAllText(${'$'}ResultPath, '{"schema_version":"advisory-ai-runtime-result.v1","status":"SUCCESS","duration_ms":12,"exit_code":0,"provider_request_count":1,"prompt_sha256":"a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1","model_id":"deepseek-v4-flash-0731"$member}')
                 exit 0
                 """.trimIndent(),
             )
 
             assertEquals(RunnerOutcome.Failed(AdviceFailure.PROCESS_FAILED), runner.invoke(EVIDENCE), member)
+        }
+    }
+
+    @Test
+    @EnabledOnOs(OS.WINDOWS)
+    fun `success reports the retry and is a process failure without a valid request count or prompt hash`() {
+        val tools = Files.createDirectories(tempDir.resolve("tools"))
+        Files.writeString(
+            Files.createDirectories(tempDir.resolve("docs/contracts/advice/v1")).resolve("system-prompt.md"),
+            "bounded prompt",
+        )
+        val credential = tempDir.resolve("modelstudio.env")
+        Files.writeString(credential, "OPENAI_API_KEY=fake\n")
+        val script = tools.resolve("advisory_ai_runtime.ps1")
+        val runner =
+            ModelStudioAdvisoryRunner.fromEnvironment(
+                mapOf(
+                    "LT_VERDICT_AI_CREDENTIAL_ENV_FILE" to credential.toString(),
+                    "LT_VERDICT_AI_RUNTIME_ROOT" to tempDir.toString(),
+                ),
+            )
+
+        fun fake(members: String) =
+            Files.writeString(
+                script,
+                """
+                param([string]${'$'}Mode,[string]${'$'}EvidencePath,[string]${'$'}OutputPath,[string]${'$'}ResultPath,[string]${'$'}CancelPath,[string]${'$'}CredentialEnvFile,[string]${'$'}QwenPackageRoot,[string]${'$'}ModelId,[string]${'$'}UpstreamUrl,[switch]${'$'}AllowInsecureHttp)
+                [IO.File]::WriteAllText(${'$'}OutputPath, '{"schema_version":"ai-advice-output.v1","summary":"bounded","hypotheses":[],"recommendations":[],"caveats":[]}')
+                [IO.File]::WriteAllText(${'$'}ResultPath, '{"schema_version":"advisory-ai-runtime-result.v1","status":"SUCCESS","duration_ms":12,"exit_code":0,"endpoint_host":"token-plan.ap-southeast-1.maas.aliyuncs.com:443","model_id":"deepseek-v4-flash-0731"$members}')
+                exit 0
+                """.trimIndent(),
+            )
+
+        fake(",\"provider_request_count\":2,\"prompt_sha256\":\"$PROMPT_SHA256\"")
+        val retried = assertInstanceOf(RunnerOutcome.Success::class.java, runner.invoke(EVIDENCE))
+        assertEquals(2, retried.provenance.providerRequests)
+        assertEquals(PROMPT_SHA256, retried.provenance.promptSha256)
+
+        listOf(
+            "",
+            ",\"prompt_sha256\":\"$PROMPT_SHA256\"",
+            ",\"provider_request_count\":1",
+            ",\"provider_request_count\":0,\"prompt_sha256\":\"$PROMPT_SHA256\"",
+            ",\"provider_request_count\":3,\"prompt_sha256\":\"$PROMPT_SHA256\"",
+            ",\"provider_request_count\":null,\"prompt_sha256\":\"$PROMPT_SHA256\"",
+            ",\"provider_request_count\":\"1\",\"prompt_sha256\":\"$PROMPT_SHA256\"",
+            ",\"provider_request_count\":1,\"prompt_sha256\":null",
+            ",\"provider_request_count\":1,\"prompt_sha256\":\"not a hash\"",
+            ",\"provider_request_count\":1,\"prompt_sha256\":\"${PROMPT_SHA256.uppercase()}\"",
+        ).forEach { members ->
+            fake(members)
+
+            assertEquals(RunnerOutcome.Failed(AdviceFailure.PROCESS_FAILED), runner.invoke(EVIDENCE), members)
         }
     }
 
@@ -178,7 +235,7 @@ class ModelStudioAdvisoryRunnerTest {
                 param([string]${'$'}Mode,[string]${'$'}EvidencePath,[string]${'$'}OutputPath,[string]${'$'}ResultPath,[string]${'$'}CancelPath,[string]${'$'}CredentialEnvFile,[string]${'$'}QwenPackageRoot,[string]${'$'}ModelId,[string]${'$'}UpstreamUrl,[switch]${'$'}AllowInsecureHttp)
                 [IO.File]::WriteAllText((Join-Path ${'$'}PSScriptRoot 'capture.txt'), (@(${'$'}ModelId, ${'$'}UpstreamUrl, ${'$'}AllowInsecureHttp.IsPresent) -join ' '))
                 [IO.File]::WriteAllText(${'$'}OutputPath, '{"schema_version":"ai-advice-output.v1","summary":"bounded","hypotheses":[],"recommendations":[],"caveats":[]}')
-                [IO.File]::WriteAllText(${'$'}ResultPath, '{"schema_version":"advisory-ai-runtime-result.v1","status":"SUCCESS","duration_ms":12,"exit_code":0$result}')
+                [IO.File]::WriteAllText(${'$'}ResultPath, '{"schema_version":"advisory-ai-runtime-result.v1","status":"SUCCESS","duration_ms":12,"exit_code":0,"provider_request_count":1,"prompt_sha256":"a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1"$result}')
                 exit 0
                 """.trimIndent(),
             )
@@ -251,7 +308,7 @@ class ModelStudioAdvisoryRunnerTest {
             param([string]${'$'}Mode,[string]${'$'}EvidencePath,[string]${'$'}OutputPath,[string]${'$'}ResultPath,[string]${'$'}CancelPath,[string]${'$'}CredentialEnvFile,[string]${'$'}QwenPackageRoot,[string]${'$'}ModelId,[string]${'$'}UpstreamUrl,[switch]${'$'}AllowInsecureHttp)
             [IO.File]::WriteAllText((Join-Path ${'$'}PSScriptRoot 'capture.txt'), ((Get-ChildItem Env: | ForEach-Object { ${'$'}_.Name + '=' + ${'$'}_.Value }) -join "`n"))
             [IO.File]::WriteAllText(${'$'}OutputPath, '{"schema_version":"ai-advice-output.v1","summary":"bounded","hypotheses":[],"recommendations":[],"caveats":[]}')
-            [IO.File]::WriteAllText(${'$'}ResultPath, '{"schema_version":"advisory-ai-runtime-result.v1","status":"SUCCESS","duration_ms":12,"exit_code":0,"endpoint_host":"token-plan.ap-southeast-1.maas.aliyuncs.com:443","model_id":"deepseek-v4-flash-0731"}')
+            [IO.File]::WriteAllText(${'$'}ResultPath, '{"schema_version":"advisory-ai-runtime-result.v1","status":"SUCCESS","duration_ms":12,"exit_code":0,"provider_request_count":1,"prompt_sha256":"a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1","endpoint_host":"token-plan.ap-southeast-1.maas.aliyuncs.com:443","model_id":"deepseek-v4-flash-0731"}')
             exit 0
             """.trimIndent(),
         )
@@ -324,6 +381,7 @@ class ModelStudioAdvisoryRunnerTest {
     }
 
     private companion object {
+        const val PROMPT_SHA256 = "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1"
         val EVIDENCE =
             AdvisoryEvidence(
                 """{"schema_version":"ai-evidence.v1"}""".encodeToByteArray(),

@@ -310,6 +310,8 @@ GET    /api/jobs/<job-id>
 DELETE /api/jobs/<job-id>
 GET    /api/runs/<run-id>/analyses/<analysis-id>/result
 GET    /api/runs/<run-id>/analyses/<analysis-id>/buckets
+GET    /api/runs/<run-id>/analyses/<analysis-id>/pod-view
+GET    /api/runs/<run-id>/analyses/<analysis-id>/pod-view/values?service=<name>
 GET    /api/runs/<run-id>/analyses/<analysis-id>/report?format=json|html|asciidoc
 ```
 

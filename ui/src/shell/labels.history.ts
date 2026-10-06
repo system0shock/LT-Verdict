@@ -29,6 +29,8 @@ export const HISTORY_LABELS = {
   noNumbersTruncated: 'Нет чисел: превышен предел сканирования истории',
   noNumbersOldRules: 'Нет чисел: анализ создан по другим правилам',
   noNumbersMissing: 'Нет чисел: анализ не найден',
+  noNumbersCorrupt: 'Нет чисел: анализ повреждён',
+  noNumbersFailed: 'Нет чисел: не удалось получить динамику',
   open: 'Открыть',
   makeBaseline: 'Сделать baseline',
   compare: 'Сравнить',
@@ -37,7 +39,9 @@ export const HISTORY_LABELS = {
   baselineBadge: 'baseline',
   baselineBadgeNote: 'Этот анализ закреплён как baseline своей серии.',
   analysisMissing: 'Анализ не найден',
-  actionAria: (action: string, label: string, arm: string | null) => `${action}: релиз ${label}${arm === null ? '' : `, плечо ${arm}`}`,
+  // Метки релизов могут совпадать: короткий идентификатор делает имена кнопок различимыми.
+  actionAria: (action: string, label: string, arm: string | null, shortId?: string) =>
+    `${action}: релиз ${label}${arm === null ? '' : `, плечо ${arm}`}${shortId === undefined ? '' : ` (${shortId})`}`,
   // Причины, по которым анализ релиза не может стать baseline (поле ineligible_reasons ответа сервера).
   reasons: {
     BASELINE_CANDIDATE_INVALID: 'Прогон разобран не полностью',

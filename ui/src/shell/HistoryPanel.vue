@@ -26,6 +26,7 @@ const errorLang = ref<string | undefined>(undefined)
 const notice = ref('')
 const slots = ref<BaselineSlotView[]>([])
 const dynamics = ref<SavedAnalytics | null>(null)
+const dynamicsFailed = ref(false)
 const form = ref({ series: '', label: '', notes: '', profile: emptyProfileForm() })
 let revision = 0
 
@@ -74,7 +75,12 @@ async function load() {
     slots.value = listed.baselines ?? []
     dynamics.value = saved
   } catch (failure) {
-    if (current === revision) showError(failure)
+    if (current === revision) {
+      // The rows of the previous series must not stay under the newly chosen one.
+      releases.value = []
+      dynamics.value = null
+      showError(failure)
+    }
   } finally {
     if (current === revision) loading.value = false
   }
@@ -83,10 +89,13 @@ async function load() {
 // The numbers come from the saved analytics of the newest readable release; a failure only leaves the rows without numbers.
 async function loadDynamics(list: readonly Release[]): Promise<SavedAnalytics | null> {
   const anchor = dynamicsAnchor(list)
+  dynamicsFailed.value = false
   if (!anchor) return null
   try {
+    dynamicsFailed.value = false
     return await getSavedAnalytics(anchor, 100, '', 1)
   } catch {
+    dynamicsFailed.value = true
     return null
   }
 }
@@ -96,7 +105,9 @@ function metricOf(analysisId: string, metric: string): string | null {
 }
 
 function noNumbers(analysis: ReleaseAnalysis): string {
-  if (analysis.analysis_state !== 'OK') return L.noNumbersMissing
+  if (analysis.analysis_state === 'MISSING') return L.noNumbersMissing
+  if (analysis.analysis_state === 'CORRUPT') return L.noNumbersCorrupt
+  if (dynamicsFailed.value) return L.noNumbersFailed
   return dynamics.value?.history_scan_truncated ? L.noNumbersTruncated : L.noNumbersOldRules
 }
 
@@ -149,12 +160,13 @@ async function save() {
   try {
     const created = await createRelease(releaseRequest(form.value, props.selection))
     series.value = created.series
-    showAll.value = false
     notice.value = L.saved(created.label)
     busy.value = false
     await load()
     await nextTick()
-    document.getElementById(`release-${created.release_id}`)?.focus()
+    // An older analysis can land outside the shown rows: the table region takes the focus then.
+    const target = document.getElementById(`release-${created.release_id}`) ?? document.getElementById('history-table-region')
+    target?.focus()
   } catch (failure) {
     showError(failure)
   } finally {
@@ -244,6 +256,7 @@ async function save() {
 
     <div
       v-if="releases.length"
+      id="history-table-region"
       class="table-wrap"
       tabindex="0"
       role="region"
@@ -330,7 +343,7 @@ async function save() {
                   <button
                     type="button"
                     :disabled="busyAny || analysis.analysis_state !== 'OK'"
-                    :aria-label="L.actionAria(L.open, release.label, analysis.arm)"
+                    :aria-label="L.actionAria(L.open, release.label, analysis.arm, release.release_id.slice(-8))"
                     @click="emit('open', { release, analysis })"
                   >
                     {{ L.open }}
@@ -338,7 +351,7 @@ async function save() {
                   <button
                     type="button"
                     :disabled="busyAny || !analysis.baseline_eligible"
-                    :aria-label="L.actionAria(L.makeBaseline, release.label, analysis.arm)"
+                    :aria-label="L.actionAria(L.makeBaseline, release.label, analysis.arm, release.release_id.slice(-8))"
                     :aria-describedby="analysis.baseline_eligible ? undefined : `why-${release.release_id}-${analysis.analysis_id.slice(0, 12)}`"
                     @click="makeBaseline({ release, analysis })"
                   >
@@ -347,7 +360,7 @@ async function save() {
                   <button
                     type="button"
                     :disabled="busyAny || analysis.analysis_state !== 'OK'"
-                    :aria-label="L.actionAria(L.compare, release.label, analysis.arm)"
+                    :aria-label="L.actionAria(L.compare, release.label, analysis.arm, release.release_id.slice(-8))"
                     @click="emit('compare', { release, analysis })"
                   >
                     {{ L.compare }}

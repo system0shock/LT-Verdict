@@ -142,7 +142,8 @@ async function loadBaseline() {
     if (revision !== baselineRevision) return
     useSlots(response)
     // On opening, a field that names no baseline takes the first one (a single baseline is the usual case).
-    if (!slotOfSeries(series.value) && slots.value[0]) series.value = slots.value[0].series
+    // A series chosen from the history stays even without a baseline: the panel then says so for that series.
+    if (!props.preferredSeries && !slotOfSeries(series.value) && slots.value[0]) series.value = slots.value[0].series
     baseline.value = slotOfSeries(series.value)?.baseline ?? null
     void loadConditions()
   } catch (failure) {

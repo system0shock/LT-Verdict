@@ -126,6 +126,20 @@ test.describe('attention items', () => {
     ])
   })
 
+  test('an unknown rule window leads to its row in the policy table', () => {
+    const result = build({
+      policy_verdict: 'NO_VERDICT',
+      analysis_coverage: { status: 'INCOMPLETE', reasons: ['RULE_WINDOW_NOT_FOUND'] },
+      evidence: [overall, { id: 'u1', type: 'rule_window_check', rule_id: 'cpu', window_id: 'ghost', status: 'NO_VERDICT', reason_code: 'RULE_WINDOW_NOT_FOUND' }],
+    })
+
+    const [entry] = attentionItems(result)
+
+    expect(entry.detail).toContain('cpu (окно ghost)')
+    expect(entry.target).toEqual({ tab: 'tables', targetId: 'ev-u1' })
+    expect(entry.openLabel).toBe(OVERVIEW_LABELS.openRules)
+  })
+
   test('platform and window reasons of diagnostic rules lead to the resource table when the verdict is PASS', () => {
     const codes = ['PLATFORM_SERIES_AMBIGUOUS', 'PLATFORM_UNIT_MISMATCH', 'PLATFORM_AGGREGATION_MISMATCH', 'PLATFORM_SERVICE_NOT_IN_CATALOG', 'RULE_WINDOW_TOO_SHORT']
     const result = build({

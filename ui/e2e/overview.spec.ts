@@ -226,6 +226,20 @@ test('each item opens the matching table on the Tables tab and moves focus into 
   await expect(page.locator('#diagnostic-results [role="region"]')).toBeFocused()
 })
 
+test('an unknown rule window opens its row in the rule table and moves focus to it', async ({ page }) => {
+  const ghost = { ...base, policy_verdict: 'NO_VERDICT', analysis_coverage: { status: 'INCOMPLETE', reasons: ['RULE_WINDOW_NOT_FOUND'] }, evidence: [overall, { id: 'u1', type: 'rule_window_check', rule_id: 'cpu', window_id: 'ghost', status: 'NO_VERDICT', reason_code: 'RULE_WINDOW_NOT_FOUND' }] }
+  await openOverview(page, ghost)
+
+  await expect(items(page).first()).toContainText('cpu (окно ghost)')
+  await items(page).first().getByTestId('attention-open').click()
+
+  await expect(page.locator('#shell-tab-tables')).toHaveAttribute('aria-selected', 'true')
+  await expect(page.locator('#ev-u1')).toBeInViewport()
+  await expect(page.locator('#ev-u1')).toBeFocused()
+  await expect(page.locator('#ev-u1')).toContainText('ghost')
+  await expect(page.locator('#ev-u1')).toContainText('RULE_WINDOW_NOT_FOUND')
+})
+
 test('the policy hint of a result without policy opens the setup form', async ({ page }) => {
   await openOverview(page, noPolicy)
 

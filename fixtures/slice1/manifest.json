@@ -55,7 +55,7 @@
     },
     {
       "path": "docs/contracts/policy/v1/examples/valid/platform-base-profile.json",
-      "sha256": "061814d99142e0dc3bc25d5713c9285260a358c9770c3b8f63609a400d21021e"
+      "sha256": "5540a1f4f5868be3035dc34996e4c0af89d14306bcd58babe1cf9064ed1abce1"
     },
     {
       "path": "docs/contracts/policy/v1/examples/valid/platform-gap-tolerance.json",

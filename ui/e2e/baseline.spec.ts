@@ -3,24 +3,35 @@ import AxeBuilder from '@axe-core/playwright'
 import { BASELINE_LABELS } from '../src/shell/labels'
 import { COMPARE_LABELS } from '../src/shell/labels.compare'
 
-async function analyze(page: Page, name: string, elapsed: number, timestamp: number) {
+// Permissive single-sample policy: statistical candidates need verdict_gates, which only an analysis with a policy has.
+const permissivePolicy = '{"schema_version":"policy.v1","policy_id":"statistical","defaults":{"sample_floor":1,"min_samples":1},"rules":[{"id":"p95","metric":"response_time_p95_ms","operator":"lte","threshold":100000,"scope":{"kind":"overall"}}]}'
+
+async function analyze(page: Page, name: string, elapsed: number, timestamp: number, withPolicy = false) {
   await page.getByTestId('input-file').setInputFiles({
     name,
     mimeType: 'text/csv',
     buffer: Buffer.from(`timeStamp,elapsed,label,success\n${timestamp},${elapsed},baseline-test,true\n`),
   })
+  if (withPolicy) {
+    await page.getByTestId('policy-file').setInputFiles({
+      name: 'policy.json',
+      mimeType: 'application/json',
+      buffer: Buffer.from(permissivePolicy),
+    })
+    await expect(page.locator('#run-setup')).toContainText('Policy is valid')
+  }
   await page.getByRole('button', { name: 'Analyze run', exact: true }).click()
-  await expect(page.locator('#verdict')).toContainText('NO_POLICY')
+  await expect(page.locator('#verdict')).toContainText(withPolicy ? 'PASS' : 'NO_POLICY')
   const href = await page.getByRole('link', { name: 'Download JSON', exact: true }).getAttribute('href')
   const match = href?.match(/^\/api\/runs\/([^/]+)\/analyses\/([a-f0-9]{64})\/report/)
   expect(match).toBeTruthy()
   return { run_id: match![1]!, analysis_id: match![2]! }
 }
 
-async function openAnalysis(page: Page, filename: string, analysisId: string) {
+async function openAnalysis(page: Page, filename: string, analysisId: string, verdict = 'NO_POLICY') {
   await page.getByTestId('run-list').getByRole('button').filter({ hasText: filename }).click()
   await page.getByRole('button', { name: `Analysis ${analysisId.slice(0, 12)}`, exact: false }).click()
-  await expect(page.locator('#verdict')).toContainText('NO_POLICY')
+  await expect(page.locator('#verdict')).toContainText(verdict)
 }
 
 test.beforeEach(async ({ page }) => {
@@ -124,12 +135,12 @@ test('warns when a run is compared with itself', async ({ page }) => {
 
 test('selects the middle real run statistically and confirms a new compared pair', async ({ page }) => {
   await page.locator('#baseline-panel summary').click()
-  await analyze(page, 'stat-fast.jtl', 100, 1767225700000)
+  await analyze(page, 'stat-fast.jtl', 100, 1767225700000, true)
   await page.getByRole('button', { name: 'Add selected candidate', exact: true }).click()
-  const middle = await analyze(page, 'stat-middle.jtl', 110, 1767225701000)
+  const middle = await analyze(page, 'stat-middle.jtl', 110, 1767225701000, true)
   await page.getByRole('button', { name: 'Add selected candidate', exact: true }).click()
   await page.getByLabel('Same planned test conditions', { exact: true }).check()
-  await analyze(page, 'stat-slow.jtl', 1000, 1767225702000)
+  await analyze(page, 'stat-slow.jtl', 1000, 1767225702000, true)
   await page.getByRole('button', { name: 'Add selected candidate', exact: true }).click()
   await expect(page.getByLabel('Same planned test conditions', { exact: true })).not.toBeChecked()
   await expect(page.getByRole('button', { name: 'Select statistically', exact: true })).toBeDisabled()
@@ -144,13 +155,13 @@ test('selects the middle real run statistically and confirms a new compared pair
     BASELINE_LABELS.warnings.CURRENT_IN_CANDIDATE_SET,
   ])
   await expect(page.getByTestId('comparison-response_time_p95_ms').locator('td').nth(3)).toHaveText('890')
-  await openAnalysis(page, 'stat-middle.jtl', middle.analysis_id)
+  await openAnalysis(page, 'stat-middle.jtl', middle.analysis_id, 'PASS')
   await page.getByRole('button', { name: 'Compare selected analysis', exact: true }).click()
   await expect(page.getByTestId('baseline-warnings').locator('li')).toHaveText([
     BASELINE_LABELS.warnings.BASELINE_IS_CURRENT_ANALYSIS,
     BASELINE_LABELS.warnings.CURRENT_IN_CANDIDATE_SET,
   ])
-  await analyze(page, 'stat-new.jtl', 2000, 1767225703000)
+  await analyze(page, 'stat-new.jtl', 2000, 1767225703000, true)
   await expect(page.getByTestId('baseline-selection')).toContainText(middle.analysis_id)
   await expect(page.getByTestId('baseline-comparison')).toHaveCount(0)
   await page.getByRole('button', { name: 'Compare selected analysis', exact: true }).click()

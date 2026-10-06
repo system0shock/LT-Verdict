@@ -78,7 +78,12 @@ function noVerdictTarget(result: AnalysisResult, code: string | null): Attention
   if (code === 'METRIC_NOT_AVAILABLE' || code === 'TRANSACTION_NOT_FOUND' || code === 'AMBIGUOUS_TRANSACTION' || code === 'BUSINESS_OBSERVATIONS_NOT_FOUND' || code === 'INSUFFICIENT_SAMPLES') {
     return { tab: 'tables', targetId: 'policy-results' }
   }
-  if (code === 'RESOURCE_SERIES_NOT_FOUND' || code === 'MISSING_RESOURCE_CELLS') return { tab: 'tables', targetId: 'resource-results' }
+  if (code === 'RULE_WINDOW_NOT_FOUND') return { tab: 'tables', targetId: 'policy-results' }
+  if (
+    code === 'RESOURCE_SERIES_NOT_FOUND' || code === 'MISSING_RESOURCE_CELLS' || code === 'RESOURCE_SNAPSHOT_REQUIRED'
+    || code === 'RULE_WINDOW_TOO_SHORT' || code === 'PLATFORM_SERIES_AMBIGUOUS' || code === 'PLATFORM_UNIT_MISMATCH'
+    || code === 'PLATFORM_AGGREGATION_MISMATCH' || code === 'PLATFORM_SERVICE_NOT_IN_CATALOG'
+  ) return { tab: 'tables', targetId: 'resource-results' }
   return null
 }
 

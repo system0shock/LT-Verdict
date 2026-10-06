@@ -896,9 +896,10 @@ class LocalApiTest {
                 api
                     .get("/api/runs/${input.runId}/analyses/$currentId/comparison")
                     .jsonObject()
-            assertEquals(setOf("baseline", "current", "comparability", "warnings", "metrics", "conditions"), comparison.keys)
+            assertEquals(setOf("baseline", "current", "comparability", "warnings", "profile", "metrics", "conditions"), comparison.keys)
+            assertEquals(JsonNull, comparison.getValue("profile"))
             assertEquals(
-                listOf("BASELINE_IS_CURRENT_RUN"),
+                listOf("BASELINE_IS_CURRENT_RUN", "POLICY_DIFFERS"),
                 comparison.getValue("warnings").jsonArray.map { it.jsonPrimitive.content },
             )
             assertEquals(selection, comparison.getValue("baseline"))
@@ -1000,7 +1001,7 @@ class LocalApiTest {
             val current = statisticalRuns(store, api, listOf(105)).single()
 
             assertEquals(200, api.selectManual(small[0].first, small[0].second).statusCode())
-            assertEquals(listOf("BASELINE_SMALL_SAMPLE"), api.comparisonOf(current.first, current.second).warnings())
+            assertEquals(listOf("BASELINE_SMALL_SAMPLE", "POLICY_DIFFERS"), api.comparisonOf(current.first, current.second).warnings())
 
             api.selectStatistical(small)
             val winner =
@@ -1010,7 +1011,7 @@ class LocalApiTest {
                     .getValue("baseline")
                     .jsonObject
             assertEquals(3, winner.getValue("candidates").jsonArray.size)
-            assertEquals(listOf("BASELINE_SMALL_SAMPLE"), api.comparisonOf(current.first, current.second).warnings())
+            assertEquals(listOf("BASELINE_SMALL_SAMPLE", "POLICY_DIFFERS"), api.comparisonOf(current.first, current.second).warnings())
         }
 
     @Test
@@ -1095,8 +1096,148 @@ class LocalApiTest {
                     .jsonObject
                     .getValue("reference"),
             )
-            assertEquals(200, api.get("/api/runs/${input.runId}/analyses/$currentId/comparison").statusCode())
+            val comparison = api.get("/api/runs/${input.runId}/analyses/$currentId/comparison")
+            assertEquals(200, comparison.statusCode())
+            assertEquals(
+                listOf("BASELINE_IS_CURRENT_RUN", "BASELINE_NOT_PASS", "POLICY_DIFFERS"),
+                comparison.jsonObject().warnings(),
+            )
         }
+
+    @Test
+    fun `comparison warns about the baseline verdict and the policy without blocking`() =
+        withServer { store, api ->
+            api.bootstrap()
+            val failing = statisticalRuns(store, api, listOf(100, 110), FAILING_POLICY)
+            val permissive = statisticalRuns(store, api, listOf(120), PERMISSIVE_POLICY).single()
+            val unpoliced = statisticalRuns(store, api, listOf(130, 140), null)
+
+            // baseline files written before the PASS rule: the API refuses to select such analyses today
+            fun warningsAgainst(
+                baseline: Pair<String, String>,
+                current: Pair<String, String>,
+            ): List<String> {
+                val reference =
+                    buildJsonObject {
+                        put("run_id", baseline.first)
+                        put("analysis_id", baseline.second)
+                    }
+                store.replaceBaseline(manualBaselineSelection("release", reference))
+                return api.comparisonOf(current.first, current.second).warnings()
+            }
+
+            assertEquals(listOf("BASELINE_NOT_PASS"), warningsAgainst(failing[0], failing[1]))
+            assertEquals(listOf("BASELINE_NOT_PASS", "POLICY_DIFFERS"), warningsAgainst(failing[0], permissive))
+            assertEquals(listOf("BASELINE_NOT_PASS", "POLICY_DIFFERS"), warningsAgainst(unpoliced[0], permissive))
+            assertEquals(listOf("BASELINE_NOT_PASS"), warningsAgainst(unpoliced[0], unpoliced[1]))
+            assertEquals(listOf("POLICY_DIFFERS"), warningsAgainst(permissive, unpoliced[0]))
+        }
+
+    private fun profileBody(vararg pairs: Pair<String, String>): JsonObject =
+        JsonObject(RELEASE_PROFILE_FIELDS.associateWith { name -> pairs.toMap()[name]?.let(::JsonPrimitive) ?: JsonNull })
+
+    @Test
+    fun `comparison reports the release profile and the series of the current analysis`() =
+        withServer { store, api ->
+            api.bootstrap()
+            val runs = statisticalRuns(store, api, listOf(100, 110, 120))
+            assertEquals(200, api.selectManual(runs[0].first, runs[0].second).statusCode())
+            assertEquals(JsonNull, api.comparisonOf(runs[1].first, runs[1].second).getValue("profile"))
+
+            val paced = profileBody("pacing" to "10 s")
+            val baselineRelease =
+                api
+                    .createRelease(releaseBody(runs[0].first, listOf(runs[0].second), series = "release", label = "1.0", profile = paced))
+                    .newReleaseId()
+            val currentRelease =
+                api
+                    .createRelease(releaseBody(runs[1].first, listOf(runs[1].second), series = "release", label = "1.1", profile = paced))
+                    .newReleaseId()
+
+            val match = api.comparisonOf(runs[1].first, runs[1].second)
+            assertEquals(emptyList<String>(), match.warnings())
+            assertEquals(
+                buildJsonObject {
+                    put("status", "MATCH")
+                    put("differing_fields", JsonArray(emptyList()))
+                    put("baseline_release_id", baselineRelease)
+                    put("current_release_id", currentRelease)
+                },
+                match.getValue("profile"),
+            )
+
+            val changed = profileBody("pacing" to "20 s", "load_model" to "open")
+            assertEquals(200, api.replaceRelease(currentRelease, releasePutBody("1.1", listOf(runs[1].second), changed)).statusCode())
+            val mismatch = api.comparisonOf(runs[1].first, runs[1].second)
+            assertEquals(listOf("PROFILE_MISMATCH"), mismatch.warnings())
+            assertEquals(
+                listOf("load_model", "pacing"),
+                mismatch
+                    .getValue("profile")
+                    .jsonObject
+                    .getValue("differing_fields")
+                    .jsonArray
+                    .map { it.jsonPrimitive.content },
+            )
+            assertEquals(match.getValue("metrics"), mismatch.getValue("metrics"))
+            assertEquals(match.getValue("comparability"), mismatch.getValue("comparability"))
+
+            // a current release of another series warns; a release without a profile gives profile null
+            val third = api.createRelease(releaseBody(runs[2].first, listOf(runs[2].second), series = "other", label = "2.0"))
+            assertEquals(201, third.statusCode())
+            val elsewhere = api.comparisonOf(runs[2].first, runs[2].second)
+            assertEquals(listOf("BASELINE_SERIES_DIFFERS"), elsewhere.warnings())
+            assertEquals(JsonNull, elsewhere.getValue("profile"))
+            // after the release is deleted the analysis is no longer registered and the warning is gone
+            assertEquals(200, api.delete("/api/releases/${third.newReleaseId()}").statusCode())
+            assertEquals(emptyList<String>(), api.comparisonOf(runs[2].first, runs[2].second).warnings())
+        }
+
+    @Test
+    fun `comparison survives an ambiguous release lookup and a corrupt registry`() {
+        val root = tempDir.resolve("comparison-registry")
+        withServer(dataRoot = root) { store, api ->
+            api.bootstrap()
+            val runs = statisticalRuns(store, api, listOf(100, 110))
+            assertEquals(200, api.selectManual(runs[0].first, runs[0].second).statusCode())
+            val paced = profileBody("pacing" to "10 s")
+            api.createRelease(releaseBody(runs[0].first, listOf(runs[0].second), series = "release", profile = paced))
+            val currentRelease =
+                api.createRelease(releaseBody(runs[1].first, listOf(runs[1].second), series = "release", profile = paced)).newReleaseId()
+            val path = "/api/runs/${runs[1].first}/analyses/${runs[1].second}/comparison"
+            val status = {
+                api
+                    .get(path)
+                    .jsonObject()
+                    .getValue("profile")
+                    .jsonObject
+                    .getValue("status")
+                    .jsonPrimitive.content
+            }
+            assertEquals("MATCH", status())
+
+            // a hand-copied record with the same analysis makes the lookup ambiguous: no profile, no failure
+            val copy = Json.parseToJsonElement(Files.readString(root.resolve("releases/$currentRelease.json"))).jsonObject
+            val copyId = releaseId(1_767_225_600_000L + 1_000L, "ffffffff")
+            val copied = validateRelease(JsonObject(copy + ("release_id" to JsonPrimitive(copyId))))
+            Files.write(root.resolve("releases/$copyId.json"), canonicalJson(copied))
+            val ambiguous = api.get(path)
+            assertEquals(200, ambiguous.statusCode())
+            assertEquals(JsonNull, ambiguous.jsonObject().getValue("profile"))
+            assertEquals(emptyList<String>(), ambiguous.jsonObject().warnings())
+            Files.delete(root.resolve("releases/$copyId.json"))
+            assertEquals("MATCH", status())
+
+            // a registry the API itself refuses to list does not break the comparison either
+            seedReleaseFiles(root, MAX_RELEASES - 1)
+            Files.writeString(root.resolve("releases/stray.txt"), "x")
+            assertError(api.get("/api/releases"), 500, "CORRUPT_RELEASE_REGISTRY")
+            val damaged = api.get(path)
+            assertEquals(200, damaged.statusCode())
+            assertEquals(JsonNull, damaged.jsonObject().getValue("profile"))
+            assertEquals(emptyList<String>(), damaged.jsonObject().warnings())
+        }
+    }
 
     @Test
     fun `baseline conditions API persists three states and isolates exact pair and windows`() =
@@ -1245,7 +1386,8 @@ class LocalApiTest {
 
             val otherId = api.createJob(winnerRun, Files.readAllBytes(Path.of(PASS_POLICY))).analysisId(api)
             val sameRun = api.comparisonOf(winnerRun, otherId)
-            assertEquals(listOf("BASELINE_IS_CURRENT_RUN", "CURRENT_IN_CANDIDATE_SET"), sameRun.warnings())
+            // the second analysis of the run uses another policy file: the verdict was reached under a different policy
+            assertEquals(listOf("BASELINE_IS_CURRENT_RUN", "CURRENT_IN_CANDIDATE_SET", "POLICY_DIFFERS"), sameRun.warnings())
         }
 
     @Test
@@ -2098,7 +2240,7 @@ class LocalApiTest {
         store: RunBundleStore,
         api: ApiClient,
         elapsed: List<Int>,
-        policy: ByteArray = PERMISSIVE_POLICY,
+        policy: ByteArray? = PERMISSIVE_POLICY,
     ): List<Pair<String, String>> =
         elapsed.mapIndexed { index, value ->
             val load = "timeStamp,elapsed,label,success\n${1_767_225_600_000L + index * 1_000L},$value,checkout,true\n"

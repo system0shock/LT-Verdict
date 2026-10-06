@@ -33,13 +33,17 @@ import io.ltverdict.ai.validModelSlug
 import io.ltverdict.core.AnalysisRequest
 import io.ltverdict.core.AnalyticsExportFormat
 import io.ltverdict.core.CapacityPlanValidation
+import io.ltverdict.core.DEFAULT_POD_VIEW_PAGE_ROWS
 import io.ltverdict.core.DiagnosticValidation
 import io.ltverdict.core.MAX_CAPACITY_PLAN_BYTES
 import io.ltverdict.core.MAX_CATALOG_PAGE
 import io.ltverdict.core.MAX_POD_VIEW_BYTES
+import io.ltverdict.core.MAX_POD_VIEW_PAGE_ROWS
 import io.ltverdict.core.MAX_RESOURCE_SNAPSHOT_BYTES
 import io.ltverdict.core.MAX_TREND_PLAN_BYTES
 import io.ltverdict.core.MAX_VALUES_SERIES
+import io.ltverdict.core.PodViewQueryException
+import io.ltverdict.core.PodViewV1
 import io.ltverdict.core.PodViewValidation
 import io.ltverdict.core.PolicyValidation
 import io.ltverdict.core.PolicyValidationError
@@ -61,7 +65,10 @@ import io.ltverdict.core.manualBaselineSelection
 import io.ltverdict.core.metricPackAnalysis
 import io.ltverdict.core.openSearchOverlay
 import io.ltverdict.core.planValuesPage
+import io.ltverdict.core.podViewMetadataJson
+import io.ltverdict.core.podViewValuesJson
 import io.ltverdict.core.renderRunDynamicsExport
+import io.ltverdict.core.sha256Hex
 import io.ltverdict.core.statisticalBaselineSelection
 import io.ltverdict.core.validateCapacityBinding
 import io.ltverdict.core.validateCapacityPlan
@@ -105,6 +112,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.SerializationException
 import kotlinx.serialization.json.Json
@@ -155,6 +163,7 @@ internal fun Application.installLocalApi(context: LocalApiContext) {
     val csrfToken = randomToken()
     val postgresCapturePermit = Semaphore(1)
     val jenkinsPermit = Semaphore(1)
+    val podViewPermit = kotlinx.coroutines.sync.Semaphore(1)
 
     intercept(ApplicationCallPipeline.Plugins) {
         call.addSecurityHeaders()
@@ -1027,6 +1036,36 @@ internal fun Application.installLocalApi(context: LocalApiContext) {
             call.respondJson(body)
         }
 
+        get("/api/runs/{runId}/analyses/{analysisId}/pod-view") {
+            call.requireOnlyQueries()
+            val (view, sha256) = context.store.requirePodView(call, podViewPermit)
+            call.respondJson(podViewMetadataJson(view, sha256))
+        }
+
+        get("/api/runs/{runId}/analyses/{analysisId}/pod-view/values") {
+            call.requireOnlyQueries("service", "metric", "from_ms", "to_ms", "limit", "after")
+            val service = call.singleQuery("service")?.takeIf(::validSeriesId) ?: malformed("service is required")
+            val metric = call.singleQuery("metric")?.also { if (!validSeriesId(it)) malformed("metric is invalid") }
+            val from = call.optionalLongQuery("from_ms")
+            val to = call.optionalLongQuery("to_ms")
+            val limit = call.intQuery("limit", DEFAULT_POD_VIEW_PAGE_ROWS, 1..MAX_POD_VIEW_PAGE_ROWS)
+            val after = call.singleQuery("after")
+            val (view, sha256) = context.store.requirePodView(call, podViewPermit)
+            val body =
+                try {
+                    podViewValuesJson(view, sha256, service, metric, from, to, limit, after)
+                } catch (failure: PodViewQueryException) {
+                    when (failure.kind) {
+                        PodViewQueryException.Kind.SERVICE_NOT_FOUND ->
+                            throw ApiFailure(HttpStatusCode.NotFound, "POD_VIEW_SERVICE_NOT_FOUND", "Service was not found")
+                        PodViewQueryException.Kind.INVALID_CURSOR ->
+                            throw ApiFailure(HttpStatusCode.BadRequest, "INVALID_CURSOR", "after is not a row of this selection")
+                        PodViewQueryException.Kind.INVALID_QUERY -> malformed(failure.message ?: "Pod view query is invalid")
+                    }
+                }
+            call.respondJson(body)
+        }
+
         route("/api/{...}") {
             handle {
                 notFound("Endpoint was not found")
@@ -1711,6 +1750,44 @@ private suspend fun RunBundleStore.requireAnalysis(call: ApplicationCall): io.lt
         }
     }
 }
+
+/**
+ * Reads the stored pod-view with the hash check of RunBundleStore.readPodViewBytes on every call (no cache, so a swapped
+ * file is seen by the next request). The parse is serialized: one 12 MiB document at a time is held in memory.
+ */
+private suspend fun RunBundleStore.requirePodView(
+    call: ApplicationCall,
+    permit: kotlinx.coroutines.sync.Semaphore,
+): Pair<PodViewV1, String> {
+    // Ordinary reads compare artifact sizes, so a deleted or resized pod-view.json already fails requireAnalysis.
+    val corrupt = { failure: IllegalStateException -> failure.message?.startsWith("CORRUPT_RUN_BUNDLE") == true }
+    try {
+        requireAnalysis(call)
+    } catch (failure: IllegalStateException) {
+        if (corrupt(failure)) corruptPodView()
+        throw failure
+    }
+    val runId = checkNotNull(call.parameters["runId"])
+    val analysisId = checkNotNull(call.parameters["analysisId"])
+    return permit.withPermit {
+        withContext(Dispatchers.IO) {
+            val bytes =
+                try {
+                    readPodViewBytes(runId, analysisId)
+                } catch (failure: IllegalStateException) {
+                    if (corrupt(failure)) corruptPodView()
+                    throw failure
+                } ?: throw ApiFailure(HttpStatusCode.NotFound, "POD_VIEW_NOT_FOUND", "Pod view was not found")
+            val valid = validatePodView(bytes.inputStream(), MAX_POD_VIEW_BYTES) as? PodViewValidation.Valid ?: corruptPodView()
+            val sha256 = sha256Hex(bytes)
+            if (valid.canonicalSha256 != sha256) corruptPodView()
+            valid.view to sha256
+        }
+    }
+}
+
+private fun corruptPodView(): Nothing =
+    throw ApiFailure(HttpStatusCode.InternalServerError, "CORRUPT_POD_VIEW", "Stored pod view is invalid")
 
 private fun ApplicationCall.requireOnlyQueries(vararg allowed: String) {
     val parameters = request.queryParameters

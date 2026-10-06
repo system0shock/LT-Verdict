@@ -774,3 +774,61 @@ export interface ResourceSeriesValues {
   series: ResourceSeriesValuesSeries[]
   next_from_ms: number | null
 }
+
+// Релизы (ADR 0019): приватная запись о релизе протокола с копиями фактов анализов; метрики в записи не хранятся.
+export type ReleaseAnalysisState = 'OK' | 'MISSING' | 'CORRUPT'
+
+export interface ReleaseProfile {
+  scenario_mix: string | null
+  environment_dataset: string | null
+  load_model: string | null
+  targets_stages: string | null
+  pacing: string | null
+  generator_limits: string | null
+}
+
+export interface ReleaseAnalysis {
+  analysis_id: string
+  arm: string | null
+  coverage_reasons: string[]
+  coverage_status: 'COMPLETE' | 'INCOMPLETE'
+  policy_sha256: string
+  policy_verdict: 'PASS' | 'FAIL' | 'NO_POLICY' | 'NO_VERDICT'
+  run_validity: 'VALID' | 'DEGRADED' | 'INVALID'
+  analysis_state: ReleaseAnalysisState
+  baseline_eligible: boolean
+  ineligible_reasons: string[]
+}
+
+export interface Release {
+  schema_version: 'local-release.v1'
+  release_id: string
+  series: string
+  label: string
+  run_id: string
+  started_at: string
+  analyses: ReleaseAnalysis[]
+  profile: ReleaseProfile | null
+  notes: string | null
+  created_at: string
+  updated_at: string
+  baseline_eligible: boolean
+  ineligible_reasons: string[]
+}
+
+export interface ReleaseList {
+  releases: Release[]
+  next_after: string | null
+  series_summary: Array<{ series: string; count: number }>
+  corrupt_count: number
+  corrupt_names: Array<{ name: string; reason: string }>
+}
+
+export interface ReleaseRequest {
+  series: string
+  label: string
+  run_id: string
+  analyses: Array<{ analysis_id: string }>
+  profile: ReleaseProfile | null
+  notes: string | null
+}

@@ -27,6 +27,9 @@ import type {
   SourceRequest,
   SourcesResponse,
   WindowComparisonRequest,
+  Release,
+  ReleaseList,
+  ReleaseRequest,
 } from './types'
 
 let csrfToken = ''
@@ -336,4 +339,20 @@ export function grafanaPanel(reference: AnalysisReference, profile: string, dash
   return request(`/api/runs/${encodeURIComponent(reference.run_id)}/analyses/${encodeURIComponent(reference.analysis_id)}/grafana-${render ? 'render' : 'link'}?${query}`, render ? {
     method: 'POST', headers: mutationHeaders({ 'Content-Type': 'application/json' }), body: '{}',
   } : undefined)
+}
+
+export function listReleases(query: { series?: string; after?: string; limit?: number } = {}): Promise<ReleaseList> {
+  const params = new URLSearchParams()
+  if (query.series) params.set('series', query.series)
+  if (query.after) params.set('after', query.after)
+  if (query.limit) params.set('limit', String(query.limit))
+  return request(`/api/releases${params.size ? `?${params}` : ''}`)
+}
+
+export function createRelease(body: ReleaseRequest): Promise<Release> {
+  return request('/api/releases', {
+    method: 'POST',
+    headers: mutationHeaders({ 'Content-Type': 'application/json' }),
+    body: JSON.stringify(body),
+  })
 }

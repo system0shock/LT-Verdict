@@ -539,6 +539,27 @@ class AdvisoryAiTest {
     }
 
     @Test
+    fun `prompt v2 file is pinned by hash and keeps the v1 text`() {
+        val v1 = Files.readString(Path.of("docs/contracts/advice/v1/system-prompt.md"))
+        val bytes = Files.readAllBytes(Path.of("docs/contracts/advice/v1/system-prompt-v2.md"))
+        assertEquals("advisory-system.v2", QwenCode0211.PROMPT_V2_VERSION)
+        assertEquals(QwenCode0211.PROMPT_V2_SHA256, sha256Hex(bytes))
+        val v2 = bytes.decodeToString()
+        // The pinned hash is computed over LF bytes: a CRLF checkout would change it (.gitattributes keeps the file on LF).
+        assertFalse(v2.contains('\r'))
+        assertTrue(v2.startsWith(v1.replace("# Advisory system prompt v1", "# Advisory system prompt v2").trimEnd()))
+        assertTrue("\n\n## LT Verdict domain invariants\n" in v2)
+        assertTrue(bytes.size <= 16_384)
+    }
+
+    @Test
+    fun `prompt v1 file stays unchanged next to the v2 file`() {
+        // Stored advice and the preregistration refer to the v1 hash (ADR 0021, D1 p. 1); only the LF form is checked here.
+        val v1 = Files.readAllBytes(Path.of("docs/contracts/advice/v1/system-prompt.md"))
+        assertEquals("69f215a1ad4ae678c82410ba7cf7daf171cd9c7ca0ef4626bba6977db0af4ef7", sha256Hex(v1))
+    }
+
+    @Test
     fun `oversized advice manifest is rejected before reading its bytes`() =
         DataDirectory.open(tempDir.resolve("oversized-manifest")).use { directory ->
             val fixture = prepareAnalysis(directory)

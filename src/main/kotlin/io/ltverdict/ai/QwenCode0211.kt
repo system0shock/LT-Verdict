@@ -19,6 +19,8 @@ internal object QwenCode0211 {
     const val MODEL_ENDPOINT = "http://modelstudio-relay:18080/v1"
     const val PROVIDER_ENDPOINT = "https://token-plan.ap-southeast-1.maas.aliyuncs.com/compatible-mode/v1/chat/completions"
     const val PROMPT_VERSION = "advisory-system.v1"
+    const val PROMPT_V2_VERSION = "advisory-system.v2"
+    const val PROMPT_V2_SHA256 = "3c0f28bee6517c13c5c854615e7d3d59301893d9723880818e4034a32e9133bf"
 
     fun invocation(
         nodePath: String,

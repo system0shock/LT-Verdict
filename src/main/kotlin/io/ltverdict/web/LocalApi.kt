@@ -1459,13 +1459,7 @@ private suspend fun resolveBaselineScope(
         baselineOperation { store.readAnalysisIdentity(current.baselineString("run_id"), analysisId) }
             ?: notFound("Referenced analysis was not found")
     val registered =
-        baselineOperation {
-            try {
-                (store.findReleasesByAnalysis(setOf(analysisId)).byAnalysis[analysisId]?.get("series") as? JsonPrimitive)?.contentOrNull
-            } catch (failure: IllegalStateException) {
-                if (failure.message?.startsWith("CORRUPT_RELEASE") == true) null else throw failure
-            }
-        }
+        baselineOperation { (store.releasesOfAnalyses(setOf(analysisId))[analysisId]?.get("series") as? JsonPrimitive)?.contentOrNull }
     if (explicit != null && registered != null && explicit != registered) {
         throw ApiFailure(HttpStatusCode.UnprocessableEntity, "BASELINE_SERIES_CONFLICT", "Series differs from the release series")
     }

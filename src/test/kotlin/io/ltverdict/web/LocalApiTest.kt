@@ -1177,15 +1177,20 @@ class LocalApiTest {
             assertEquals(match.getValue("metrics"), mismatch.getValue("metrics"))
             assertEquals(match.getValue("comparability"), mismatch.getValue("comparability"))
 
-            // a current release of another series warns; a release without a profile gives profile null
-            val third = api.createRelease(releaseBody(runs[2].first, listOf(runs[2].second), series = "other", label = "2.0"))
+            // a current release of another series is never compared with this baseline: its series selects another slot
+            // (no baseline there), and a query naming the baseline series contradicts the release
+            val other = api.createRelease(releaseBody(runs[2].first, listOf(runs[2].second), series = "other", label = "2.0"))
+            assertEquals(201, other.statusCode())
+            val otherPath = "/api/runs/${runs[2].first}/analyses/${runs[2].second}/comparison"
+            assertError(api.get(otherPath), 404, "NOT_FOUND")
+            assertError(api.get("$otherPath?series=release"), 422, "BASELINE_SERIES_CONFLICT")
+            assertEquals(200, api.delete("/api/releases/${other.newReleaseId()}").statusCode())
+            // a release without a profile gives profile null
+            val third = api.createRelease(releaseBody(runs[2].first, listOf(runs[2].second), series = "release", label = "2.1"))
             assertEquals(201, third.statusCode())
-            val elsewhere = api.comparisonOf(runs[2].first, runs[2].second)
-            assertEquals(listOf("BASELINE_SERIES_DIFFERS"), elsewhere.warnings())
-            assertEquals(JsonNull, elsewhere.getValue("profile"))
-            // after the release is deleted the analysis is no longer registered and the warning is gone
-            assertEquals(200, api.delete("/api/releases/${third.newReleaseId()}").statusCode())
-            assertEquals(emptyList<String>(), api.comparisonOf(runs[2].first, runs[2].second).warnings())
+            val unprofiled = api.comparisonOf(runs[2].first, runs[2].second)
+            assertEquals(JsonNull, unprofiled.getValue("profile"))
+            assertEquals(emptyList<String>(), unprofiled.warnings())
         }
 
     @Test
@@ -1216,7 +1221,7 @@ class LocalApiTest {
             val copyId = releaseId(1_767_225_600_000L + 1_000L, "ffffffff")
             val copied = validateRelease(JsonObject(copy + ("release_id" to JsonPrimitive(copyId))))
             Files.write(root.resolve("releases/$copyId.json"), canonicalJson(copied))
-            val ambiguous = api.get(path)
+            val ambiguous = api.get("$path?series=release")
             assertEquals(200, ambiguous.statusCode())
             assertEquals(JsonNull, ambiguous.jsonObject().getValue("profile"))
             assertEquals(emptyList<String>(), ambiguous.jsonObject().warnings())
@@ -1227,7 +1232,7 @@ class LocalApiTest {
             seedReleaseFiles(root, MAX_RELEASES - 1)
             Files.writeString(root.resolve("releases/stray.txt"), "x")
             assertError(api.get("/api/releases"), 500, "CORRUPT_RELEASE_REGISTRY")
-            val damaged = api.get(path)
+            val damaged = api.get("$path?series=release")
             assertEquals(200, damaged.statusCode())
             assertEquals(JsonNull, damaged.jsonObject().getValue("profile"))
             assertEquals(emptyList<String>(), damaged.jsonObject().warnings())

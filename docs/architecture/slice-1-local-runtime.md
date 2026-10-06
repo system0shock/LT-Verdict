@@ -446,14 +446,12 @@ identity, `BASELINE_MIXED_SEMANTICS`).
 `compareAnalyses` дописывает к `BASELINE_IS_CURRENT_*` и `CURRENT_IN_CANDIDATE_SET`
 предупреждения в порядке ADR 0019, раздел 5: `BASELINE_NOT_PASS` (вердикт
 результата анализа-эталона не `PASS`), `BASELINE_SMALL_SAMPLE` (среди причин
-покрытия есть `SMALL_SAMPLE`), `BASELINE_SERIES_DIFFERS` (серия релиза текущего
-анализа не равна серии выбора эталона; серия выбора нормализуется
-`normalizeReleaseText`, как серия релиза), `POLICY_DIFFERS` (различаются
+покрытия есть `SMALL_SAMPLE`), `POLICY_DIFFERS` (различаются
 `policy_sha256` двух identity) и `PROFILE_MISMATCH` (оба профиля заявлены и
 различаются). Метрики, статусы окон и `comparability` предупреждения не меняют.
 Параметр `ReleaseComparisonContext(baseline, current)` несёт записи релизов обоих
 анализов; без него (или без записей) поле ответа `profile` равно `null`, а
-`BASELINE_SERIES_DIFFERS` и `PROFILE_MISMATCH` не возникают. Обработчик
+`PROFILE_MISMATCH` не возникает. Обработчик
 comparison получает записи одним проходом `findReleasesByAnalysis` по каталогу
 релизов (до 1 001 файла, вне цены чтения результатов); неоднозначный
 `analysis_id` (несколько записей) даёт запись `null`, а `CORRUPT_RELEASE_REGISTRY`
@@ -574,8 +572,12 @@ persisted selection из API и защищает отображение comparis
   `422` и `404`; повреждённый слот даёт `500 CORRUPT_BASELINE` на всех маршрутах
   baseline, включая адресное удаление (способа починки через API нет, файл слота
   удаляется вручную).
-- Предупреждение `BASELINE_SERIES_DIFFERS` из ADR 0019 (раздел 5) в код не
-  вводилось: срез R5, который его добавлял, не влит; после слотов оно недостижимо.
+- Предупреждение `BASELINE_SERIES_DIFFERS` (R5, ADR 0019 раздел 5) удалено из
+  `compareAnalyses`: слот выбирается по серии релиза текущего анализа, а `series`
+  в query, противоречащая релизу, даёт `422 BASELINE_SERIES_CONFLICT`, поэтому
+  предупреждение недостижимо. Серия релиза читается тем же `releasesOfAnalyses`,
+  что и контекст сравнения (повреждённый реестр и неоднозначный анализ дают
+  «релиза нет»).
 
 ## Release history: хранилище записей релиза
 

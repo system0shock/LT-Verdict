@@ -220,9 +220,7 @@ internal fun compareAnalyses(
             }
             if (baselineResult.stringOrNull("policy_verdict") != "PASS") add("BASELINE_NOT_PASS")
             if (SMALL_SAMPLE_REASON in coverageReasons(baselineResult)) add("BASELINE_SMALL_SAMPLE")
-            // Release series are stored normalized; the selection series is free text from the request.
-            val currentSeries = (releases?.current?.get("series") as? JsonPrimitive)?.content
-            if (currentSeries != null && currentSeries != normalizeReleaseText(parsedSelection.series)) add("BASELINE_SERIES_DIFFERS")
+            // No series warning: the API selects the baseline slot by the series of the current release (ADR 0019, section 7).
             if (baselineIdentity["policy_sha256"] != currentIdentity["policy_sha256"]) add("POLICY_DIFFERS")
             if ((profile?.get("status") as? JsonPrimitive)?.content == "MISMATCH") add("PROFILE_MISMATCH")
         }

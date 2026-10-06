@@ -4,9 +4,12 @@ import BaselineCharts from './BaselineCharts.vue'
 import { ApiError, clearBaseline, compareBaseline, getBaseline, getBaselineConditions, setBaseline, setBaselineConditions } from './api'
 import { BASELINE_LABELS } from './shell/labels'
 import { EN_COMPARE_LABELS, type CompareLabels } from './shell/labels.compare'
-import type { AnalysisReference, BaselineComparison, BaselineCondition, BaselineConditionDecision, BaselineConditionWindows, BaselineRequest, BaselineSelection } from './types'
+import type { AnalysisReference, BaselineComparison, BaselineCondition, BaselineConditionDecision, BaselineConditionWindows, BaselineRequest, BaselineSelection, BaselineSlotView } from './types'
 
 const props = withDefaults(defineProps<{ selection: AnalysisReference | null; filename: string; working: boolean; labels?: CompareLabels }>(), { labels: () => EN_COMPARE_LABELS })
+// The series of the shown baseline: the saved analytics ask the server for the same baseline.
+const emit = defineEmits<{ 'active-series': [series: string | undefined] }>()
+const slots = ref<BaselineSlotView[]>([])
 const baseline = ref<BaselineSelection | null>(null)
 const comparison = ref<BaselineComparison | null>(null)
 const series = ref(props.labels.seriesDefault)
@@ -25,6 +28,7 @@ const minChangePercent = ref('5')
 const minErrorRateDelta = ref('0.001')
 const error = ref('')
 const errorCode = ref('')
+const errorLang = ref<string | undefined>(undefined)
 let baselineRevision = 0
 let comparisonRevision = 0
 let conditionRevision = 0
@@ -55,7 +59,34 @@ onMounted(loadBaseline)
 watch(() => props.selection, conditionBindingChanged)
 watch([baselineWindow, currentWindow], conditionBindingChanged)
 watch([minChangePercent, minErrorRateDelta], invalidateComparison)
-watch(series, () => { comparable.value = false })
+watch(series, () => {
+  comparable.value = false
+  showSlotOfSeries()
+})
+watch(() => baseline.value?.series, (active) => emit('active-series', active), { immediate: true })
+
+// The server stores series normalized (NFC, trimmed), so the field is compared in that form.
+function slotOfSeries(name: string): BaselineSlotView | undefined {
+  const wanted = name.normalize('NFC').trim()
+  return slots.value.find((slot) => slot.series === wanted)
+}
+
+// Typing a series or choosing a radio shows the baseline of that series; no slot means no baseline for it.
+function showSlotOfSeries() {
+  const next = slotOfSeries(series.value)?.baseline ?? null
+  const same = next === null ? baseline.value === null : baseline.value !== null && next.series === baseline.value.series
+    && next.mode === baseline.value.mode && next.reference.run_id === baseline.value.reference.run_id
+    && next.reference.analysis_id === baseline.value.reference.analysis_id
+  if (same) return
+  baseline.value = next
+  conditionBindingChanged()
+}
+
+function useSlots(response: Awaited<ReturnType<typeof getBaseline>>) {
+  slots.value = response.baselines ?? (response.baseline
+    ? [{ series: response.baseline.series, arm: null, source: 'LEGACY', baseline: response.baseline }]
+    : [])
+}
 
 function invalidateComparison() {
   comparisonRevision += 1
@@ -104,10 +135,10 @@ async function loadBaseline() {
   try {
     const response = await getBaseline()
     if (revision !== baselineRevision) return
-    // The panel shows one baseline: the slot of the series in the field, else the first slot (the full list is B3).
-    baseline.value = (response.baselines ?? []).find((slot) => slot.baseline.series === series.value.trim())?.baseline
-      ?? response.baselines?.[0]?.baseline ?? response.baseline
-    if (baseline.value) series.value = baseline.value.series
+    useSlots(response)
+    // On opening, a field that names no baseline takes the first one (a single baseline is the usual case).
+    if (!slotOfSeries(series.value) && slots.value[0]) series.value = slots.value[0].series
+    baseline.value = slotOfSeries(series.value)?.baseline ?? null
     void loadConditions()
   } catch (failure) {
     if (revision === baselineRevision) showError(failure)
@@ -137,15 +168,6 @@ function assignStatistical() {
   void save({ mode: 'statistical', series: series.value.trim(), candidates: candidates.value.map((candidate) => ({ ...candidate.reference })), comparable: true })
 }
 
-// The arm of the shown baseline names its slot: the list of slots is the only place that has it.
-async function shownArm(): Promise<string | undefined> {
-  const shown = baseline.value
-  if (!shown) return undefined
-  const slot = (await getBaseline()).baselines?.find((entry) => entry.series === shown.series
-    && entry.baseline.reference.run_id === shown.reference.run_id && entry.baseline.reference.analysis_id === shown.reference.analysis_id)
-  return slot?.arm ?? undefined
-}
-
 async function save(request: BaselineRequest | null) {
   const revision = ++baselineRevision
   saving.value = true
@@ -153,13 +175,22 @@ async function save(request: BaselineRequest | null) {
   errorCode.value = ''
   invalidateComparison()
   try {
-    const response = request ? await setBaseline(request) : await clearBaseline(baseline.value?.series, await shownArm())
+    if (request) {
+      const response = await setBaseline(request)
+      if (revision !== baselineRevision) return
+      series.value = response.baseline.series
+    } else {
+      // The arm of the shown baseline names its slot together with the series.
+      await clearBaseline(baseline.value?.series, slotOfSeries(series.value)?.arm ?? undefined)
+    }
+    const listed = await getBaseline()
     if (revision !== baselineRevision) return
-    baseline.value = response.baseline
+    useSlots(listed)
+    baseline.value = slotOfSeries(series.value)?.baseline ?? null
     conditionRevision += 1
     conditions.value = null
     conditionDecision.value = 'UNKNOWN'
-    if (response.baseline) void loadConditions()
+    if (baseline.value) void loadConditions()
   } catch (failure) {
     if (revision === baselineRevision) showError(failure)
   } finally {
@@ -230,8 +261,11 @@ async function compare(keepResult = false) {
 }
 
 function showError(failure: unknown) {
-  error.value = failure instanceof Error ? failure.message : props.labels.requestFailed
+  // A phrase of the dictionary is in the language of the panel; the server text (and the text of a network failure) is English.
+  const phrase = failure instanceof ApiError ? props.labels.errorText(failure.code, failure.limit) : null
+  error.value = phrase ?? (failure instanceof Error ? failure.message : props.labels.requestFailed)
   errorCode.value = failure instanceof ApiError ? failure.code : ''
+  errorLang.value = phrase !== null || !(failure instanceof Error) ? undefined : props.labels.foreignLang
 }
 
 function warningText(code: string): string {
@@ -268,6 +302,28 @@ function warningText(code: string): string {
       </p>
     </div>
 
+    <fieldset
+      v-if="!loading && slots.length"
+      data-testid="baseline-slots"
+      class="field baseline-slots"
+      :disabled="busy"
+    >
+      <legend>{{ labels.slotsLegend }}</legend>
+      <label
+        v-for="slot in slots"
+        :key="`${slot.series}/${slot.arm ?? ''}`"
+        class="baseline-slot"
+      >
+        <input
+          type="radio"
+          name="baseline-slot"
+          :checked="baseline !== null && slot.series === baseline.series"
+          @change="series = slot.series"
+        >
+        <span><strong>{{ slot.series }}</strong> · {{ labels.mode(slot.baseline.mode) }} · {{ labels.analysisWord }} <span class="mono">{{ slot.baseline.reference.analysis_id.slice(0, 12) }}</span></span>
+      </label>
+    </fieldset>
+
     <p
       v-if="loading"
       role="status"
@@ -300,7 +356,7 @@ function warningText(code: string): string {
       </template>
     </div>
     <p v-else>
-      {{ labels.noBaseline }}
+      {{ slots.length ? labels.noBaselineFor(series.normalize('NFC').trim()) : labels.noBaseline }}
     </p>
 
     <div class="form-grid">
@@ -497,7 +553,7 @@ function warningText(code: string): string {
       v-if="error"
       class="notice notice-fail"
       role="alert"
-      :lang="labels.foreignLang"
+      :lang="errorLang"
     >
       {{ error }}
     </p>

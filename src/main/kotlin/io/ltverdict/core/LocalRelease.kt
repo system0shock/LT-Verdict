@@ -24,7 +24,7 @@ internal val RELEASE_ID = Regex("[0-9]{15}-[0-9a-f]{8}")
 private val RELEASE_SUFFIX = Regex("[0-9a-f]{8}")
 private val RELEASE_RUN_ID = Regex("(?:jmeter_jtl_csv|jmeter_jtl_xml|gatling_text|gatling_binary)-[0-9a-f]{64}")
 private val RELEASE_SHA256 = Regex("[0-9a-f]{64}")
-private val RELEASE_INSTANT = Regex("[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(?:\\.[0-9]{1,9})?Z")
+private val RELEASE_INSTANT = Regex("[0-9]{4}-[0-9]{2}-[0-9]{2}T(?:[01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9](?:\\.[0-9]{1,9})?Z")
 internal val RELEASE_PROFILE_FIELDS =
     listOf("scenario_mix", "environment_dataset", "load_model", "targets_stages", "pacing", "generator_limits")
 private val RELEASE_FIELDS =

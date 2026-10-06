@@ -668,7 +668,7 @@ internal class RunBundleStore(
             val run = dataDirectory.runs.resolve(runId)
             val analyses = run.resolve("analyses")
             val analysis = analyses.resolve(analysisId)
-            listOf(run, analyses, analysis).all { Files.isDirectory(it, LinkOption.NOFOLLOW_LINKS) } &&
+            listOf(dataDirectory.runs, run, analyses, analysis).all { Files.isDirectory(it, LinkOption.NOFOLLOW_LINKS) } &&
                 Files.isRegularFile(analysis.resolve("manifest.json"), LinkOption.NOFOLLOW_LINKS)
         }
 

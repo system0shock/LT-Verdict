@@ -1068,6 +1068,8 @@ internal fun Application.installLocalApi(context: LocalApiContext) {
                                         put("policy_id", analysis.policyId?.let(::JsonPrimitive) ?: JsonNull)
                                         put("policy_verdict", analysis.policyVerdict)
                                         put("run_validity", analysis.runValidity)
+                                        analysis.resourceArm?.let { put("resource_arm", it) }
+                                        analysis.resourceSnapshotSha256?.let { put("resource_snapshot_sha256", it) }
                                     },
                                 )
                             }

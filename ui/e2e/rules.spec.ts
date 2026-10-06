@@ -41,6 +41,7 @@ async function fixtureApi(page: Page, validated: Array<Record<string, unknown>> 
       if (outOfRange >= 0) return route.fulfill({ status: 422, json: { valid: false, errors: [{ code: 'MIN_SAMPLES_OUT_OF_RANGE', json_pointer: `/rules/${outOfRange}/min_samples`, message: 'min_samples must be between 1 and 1000000' }] } })
       const defaults = (draft.defaults ?? {}) as { max_missing_fraction?: number; max_gap_cells?: number }
       if (defaults.max_missing_fraction !== undefined && (defaults.max_missing_fraction < 0 || defaults.max_missing_fraction >= 1)) return route.fulfill({ status: 422, json: { valid: false, errors: [{ code: 'TOLERANCE_OUT_OF_RANGE', json_pointer: '/defaults/max_missing_fraction', message: 'max_missing_fraction must be at least 0 and below 1' }] } })
+      if (defaults.max_gap_cells !== undefined && !Number.isInteger(defaults.max_gap_cells)) return route.fulfill({ status: 422, json: { valid: false, errors: [{ code: 'INVALID_TYPE', json_pointer: '/defaults/max_gap_cells', message: 'max_gap_cells must be an integer' }] } })
       if (defaults.max_gap_cells !== undefined && (defaults.max_gap_cells < 0 || defaults.max_gap_cells > 100_000)) return route.fulfill({ status: 422, json: { valid: false, errors: [{ code: 'TOLERANCE_OUT_OF_RANGE', json_pointer: '/defaults/max_gap_cells', message: 'max_gap_cells must be between 0 and 100000' }] } })
       if (options.error) return route.fulfill({ status: 422, json: { valid: false, errors: [{ code: 'UNKNOWN_FIELD', json_pointer: '/rules/0/foo', message: 'Unknown field foo' }] } })
       return route.fulfill({ json: { valid: true, policy: draft, sha256: 'c'.repeat(64) } })
@@ -190,11 +191,16 @@ test('gap tolerance defaults are shown, edited, keep zero, and survive other edi
   await fixtureApi(page, validated)
   await page.goto('/?shell=new')
   await page.locator('#shell-tab-rules').click()
-  const platformRules = [{ id: 'replicas', signal: 'openshift_unavailable_replicas', effect: 'sla', max_gap_cells: 0 }]
-  await loadPolicy(page, { ...basicPolicy, defaults: { max_missing_fraction: 0.1, max_gap_cells: 5 }, platform_rules: platformRules })
+  // Mirrors docs/contracts/policy/v1/examples/valid/platform-gap-tolerance.json: rule-level tolerance must survive the edit.
+  const platformRules = [
+    { id: 'cpu-share', signal: 'openshift_container_cpu_limit_ratio', scope: { kind: 'all_services' }, operator: 'gt', threshold: 0.4, unit: 'ratio', aggregation: 'interval_mean', min_consecutive_cells: 3, effect: 'sla', max_missing_fraction: 0.2, max_gap_cells: 2 },
+    { id: 'replicas', signal: 'openshift_unavailable_replicas', scope: { kind: 'all_services' }, operator: 'gt', threshold: 0, unit: 'count', aggregation: 'interval_max', min_consecutive_cells: 1, effect: 'sla' },
+  ]
+  const platformSections = { platform_services: ['orders', 'payments'], platform_coverage: { signal: 'openshift_unavailable_replicas' }, platform_rules: platformRules }
+  await loadPolicy(page, { ...basicPolicy, defaults: { max_missing_fraction: 0.1, max_gap_cells: 5 }, ...platformSections })
   const fraction = page.getByLabel(RULES_LABELS.tolerance.fractionField)
   const gap = page.getByLabel(RULES_LABELS.tolerance.gapField)
-  const last = () => validated.at(-1) as { defaults?: Record<string, unknown>; platform_rules?: unknown }
+  const last = () => validated.at(-1) as { defaults?: Record<string, unknown>; platform_rules?: unknown; platform_services?: unknown; platform_coverage?: unknown }
   await expect(fraction).toHaveValue('0.1')
   await expect(gap).toHaveValue('5')
   await expect(page.locator('#policy-tolerance-hint')).toContainText(RULES_LABELS.tolerance.hint)
@@ -206,12 +212,12 @@ test('gap tolerance defaults are shown, edited, keep zero, and survive other edi
   await expect.poll(() => last().defaults).toEqual({ max_missing_fraction: 0, max_gap_cells: 0 })
   await page.getByLabel(RULES_LABELS.samples.defaultMinField).fill('80')
   await expect.poll(() => last().defaults).toEqual({ max_missing_fraction: 0, max_gap_cells: 0, min_samples: 80 })
-  expect(last().platform_rules).toEqual(platformRules)
+  expect(last()).toMatchObject(platformSections)
   await fraction.fill('')
   await gap.fill('')
   await page.getByLabel(RULES_LABELS.samples.defaultMinField).fill('')
   await expect.poll(() => 'defaults' in last()).toBe(false)
-  expect(last().platform_rules).toEqual(platformRules)
+  expect(last()).toMatchObject(platformSections)
 })
 
 test('an out-of-range gap tolerance shows the server error with its JSON pointer', async ({ page }) => {
@@ -226,6 +232,8 @@ test('an out-of-range gap tolerance shows the server error with its JSON pointer
   await page.getByLabel(RULES_LABELS.tolerance.fractionField).fill('0.2')
   await page.getByLabel(RULES_LABELS.tolerance.gapField).fill('100001')
   await expect(page.locator('#rules-panel .field__errors li').filter({ hasText: '/defaults/max_gap_cells: max_gap_cells must be between 0 and 100000' })).toBeVisible()
+  await page.getByLabel(RULES_LABELS.tolerance.gapField).fill('1.5')
+  await expect(page.locator('#rules-panel .field__errors li').filter({ hasText: '/defaults/max_gap_cells: max_gap_cells must be an integer' })).toBeVisible()
 })
 
 test('an out-of-range minimum shows the server error with its JSON pointer', async ({ page }) => {

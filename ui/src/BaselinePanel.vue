@@ -6,7 +6,8 @@ import { BASELINE_LABELS } from './shell/labels'
 import { EN_COMPARE_LABELS, type CompareLabels } from './shell/labels.compare'
 import type { AnalysisReference, BaselineComparison, BaselineCondition, BaselineConditionDecision, BaselineConditionWindows, BaselineRequest, BaselineSelection, BaselineSlotView } from './types'
 
-const props = withDefaults(defineProps<{ selection: AnalysisReference | null; filename: string; working: boolean; labels?: CompareLabels }>(), { labels: () => EN_COMPARE_LABELS })
+// `version` changes when the history tab assigned a baseline; `preferredSeries` is the series of the release opened from the history.
+const props = withDefaults(defineProps<{ selection: AnalysisReference | null; filename: string; working: boolean; labels?: CompareLabels; version?: number; preferredSeries?: string }>(), { labels: () => EN_COMPARE_LABELS, version: 0, preferredSeries: undefined })
 // The series of the shown baseline: the saved analytics ask the server for the same baseline.
 const emit = defineEmits<{ 'active-series': [series: string | undefined] }>()
 const slots = ref<BaselineSlotView[]>([])
@@ -64,6 +65,10 @@ watch(series, () => {
   showSlotOfSeries()
 })
 watch(() => baseline.value?.series, (active) => emit('active-series', active), { immediate: true })
+watch(() => [props.version, props.preferredSeries], () => {
+  if (props.preferredSeries) series.value = props.preferredSeries
+  void loadBaseline()
+})
 
 // The server stores series normalized (NFC, trimmed), so the field is compared in that form.
 function slotOfSeries(name: string): BaselineSlotView | undefined {

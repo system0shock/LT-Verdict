@@ -1,7 +1,7 @@
 // Все русские строки новой оболочки (срезы U0 и U1) живут только в этом файле.
 // Остальной код оболочки ссылается на них по ключам и остаётся ASCII.
 
-export type ShellTabKey = 'overview' | 'deep' | 'tables' | 'compare' | 'rules' | 'advice' | 'setup'
+export type ShellTabKey = 'overview' | 'deep' | 'tables' | 'compare' | 'history' | 'rules' | 'advice' | 'setup'
 
 export interface ShellTab {
   key: ShellTabKey
@@ -16,6 +16,7 @@ export const SHELL_TABS: readonly ShellTab[] = [
   { key: 'deep', label: 'Глубокий анализ', pending: false },
   { key: 'tables', label: 'Таблицы', pending: false },
   { key: 'compare', label: 'Сравнение', pending: false },
+  { key: 'history', label: 'История', pending: false },
   { key: 'rules', label: 'Правила', pending: false },
   { key: 'advice', label: 'ИИ-разбор', pending: false },
 ]

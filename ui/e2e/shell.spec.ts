@@ -61,7 +61,7 @@ async function openNewShellWithResult(page: Page) {
 const tabByKey = (page: Page, key: string) => page.locator(`#shell-tab-${key}`)
 const label = (key: string) => SHELL_TABS.find((tab) => tab.key === key)!.label
 
-test('the new interface exposes six tabs, New analysis first and selected, with a labelled panel', async ({ page }) => {
+test('the new interface exposes eight tabs, New analysis first and selected, with a labelled panel', async ({ page }) => {
   await fixtureApi(page)
   await page.goto('/?shell=new')
 

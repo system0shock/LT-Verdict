@@ -6,6 +6,8 @@ import JenkinsPanel from './JenkinsPanel.vue'
 import AnalyticsPanel from './AnalyticsPanel.vue'
 import GrafanaPanel from './GrafanaPanel.vue'
 import BaselinePanel from './BaselinePanel.vue'
+import HistoryPanel from './shell/HistoryPanel.vue'
+import { analysisSummary, runSummaryFromId } from './shell/history'
 import JobStatusView from './JobStatus.vue'
 import RunSetup from './RunSetup.vue'
 import VerdictCard from './VerdictCard.vue'
@@ -39,7 +41,7 @@ import {
 } from './api'
 import { summarizeVerdict } from './verdictSummary'
 import type { AttentionTarget } from './shell/overview'
-import type { AdvisoryAiConfig, AnalysisResult, AnalysisSummary, Bucket, JobStatus, OpenSearchEvidence, Policy, PolicyError, PostgresContextEvidence, RunSummary, SourceProfile, SourceRequest, Theme } from './types'
+import type { AdvisoryAiConfig, AnalysisResult, AnalysisSummary, Bucket, JobStatus, OpenSearchEvidence, Policy, PolicyError, PostgresContextEvidence, Release, ReleaseAnalysis, RunSummary, SourceProfile, SourceRequest, Theme } from './types'
 import { COMPARE_LABELS } from './shell/labels.compare'
 import { EXPORT_LABELS } from './shell/labels.export'
 
@@ -165,6 +167,8 @@ const selectedReference = computed(() => result.value && selectedAnalysisId.valu
   : null)
 watch(selectedReference, () => { chartMarkers.value = [] })
 const baselineSeries = ref<string>()
+const baselineVersion = ref(0)
+const preferredSeries = ref<string>()
 const httpSourceProfiles = computed(() => sourceProfiles.value.filter((profile) => profile.source_kind !== 'postgresql'))
 const postgresProfiles = computed(() => sourceProfiles.value.filter((profile) => profile.source_kind === 'postgresql' && profile.transport === 'jdbc'))
 const sourceRequestState = computed<{ request: SourceRequest | null; error: string }>(() => {
@@ -725,6 +729,19 @@ function showError(failure: unknown) {
     failure instanceof ApiError || failure instanceof Error ? failure.message : 'Unexpected local application error.'
 }
 
+// Opens the analysis of a history row; the baseline panel shows the baseline of the release series.
+async function openReference({ release, analysis }: { release: Release; analysis: ReleaseAnalysis }, tab: ShellTabKey) {
+  showBaselineSeries(release.series)
+  await selectRun(runs.value.find((run) => run.run_id === release.run_id) ?? runSummaryFromId(release.run_id))
+  await selectAnalysis(analysisSummary(analysis))
+  activeTab.value = tab
+}
+
+function showBaselineSeries(series: string) {
+  preferredSeries.value = series
+  baselineVersion.value += 1
+}
+
 async function showVerdict() {
   if (!shellNew) return
   activeTab.value = 'overview'
@@ -1047,7 +1064,21 @@ function focusPolicy() {
             :working="working"
             :labels="shellNew ? COMPARE_LABELS : undefined"
             :lang="shellNew ? 'ru' : undefined"
+            :version="baselineVersion"
+            :preferred-series="preferredSeries"
             @active-series="baselineSeries = $event"
+          />
+
+          <HistoryPanel
+            v-if="apiReady && shellNew"
+            v-show="shownIn('history')"
+            :selection="selectedReference"
+            :active="shownIn('history')"
+            :version="baselineVersion"
+            :working="working"
+            @open="openReference($event, 'overview')"
+            @compare="openReference($event, 'compare')"
+            @baseline-changed="showBaselineSeries"
           />
 
           <div

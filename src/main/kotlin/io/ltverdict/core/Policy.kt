@@ -931,8 +931,12 @@ internal class StrictJsonScanner(
     private val failure: (String, String, String) -> Nothing,
 ) {
     private var offset = 0
+    private var valueCount = 0
+    private var maxValues = Int.MAX_VALUE
 
-    fun scan() {
+    /** [maxValues] caps the number of JSON values of the whole document; the default is no cap. */
+    fun scan(maxValues: Int = Int.MAX_VALUE) {
+        this.maxValues = maxValues
         skipWhitespace()
         value("", 0)
         skipWhitespace()
@@ -944,6 +948,7 @@ internal class StrictJsonScanner(
         depth: Int,
     ) {
         if (offset >= source.length) malformed(pointer)
+        if (++valueCount > maxValues) failure("RESOURCE_LIMIT_EXCEEDED", "", "$subject JSON value count exceeds $maxValues")
         when (source[offset]) {
             '{' -> objectValue(pointer, depth + 1)
             '[' -> arrayValue(pointer, depth + 1)

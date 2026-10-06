@@ -1,0 +1,72 @@
+{
+  "schema_version": "source-connections.v1",
+  "connections": [
+    {
+      "id": "ocp-1",
+      "source_kind": "prometheus",
+      "transport": "direct",
+      "base_url": "http://127.0.0.1:19090",
+      "auth": {
+        "type": "none"
+      },
+      "governor": {
+        "requests_per_second": 5,
+        "burst": 5,
+        "timeout_ms": 30000,
+        "max_attempts": 3
+      },
+      "queries": [
+        {
+          "id": "orders-svc.cpu_throttling",
+          "expression": "max by (namespace) (sum by (namespace, pod, container) (rate(container_cpu_cfs_throttled_periods_total{namespace=\"shop\",container!=\"\",container!=\"POD\"}[$__interval]) and on (namespace, pod) namespace_workload_pod:kube_pod_owner:relabel{namespace=\"shop\",workload=\"orders-svc\"}) / sum by (namespace, pod, container) (rate(container_cpu_cfs_periods_total{namespace=\"shop\",container!=\"\",container!=\"POD\"}[$__interval]) and on (namespace, pod) namespace_workload_pod:kube_pod_owner:relabel{namespace=\"shop\",workload=\"orders-svc\"}))",
+          "metric": "openshift_cpu_throttling",
+          "unit": "ratio",
+          "entity": "orders-svc",
+          "role": "system",
+          "aggregation": "interval_mean",
+          "labels": {
+            "namespace": "shop"
+          }
+        },
+        {
+          "id": "orders-svc.jvm_thread_count",
+          "expression": "max by (namespace) (avg_over_time((sum by (namespace, pod) (jvm_threads_live_threads{namespace=\"shop\"} and on (namespace, pod) namespace_workload_pod:kube_pod_owner:relabel{namespace=\"shop\",workload=\"orders-svc\"}))[$__interval:15s]))",
+          "metric": "jvm_thread_count",
+          "unit": "count",
+          "entity": "orders-svc",
+          "role": "system",
+          "aggregation": "interval_mean",
+          "labels": {
+            "namespace": "shop"
+          }
+        }
+      ]
+    },
+    {
+      "id": "ocp-load",
+      "source_kind": "prometheus",
+      "transport": "direct",
+      "base_url": "http://127.0.0.1:19090",
+      "auth": {
+        "type": "none"
+      },
+      "governor": {
+        "requests_per_second": 5,
+        "burst": 5,
+        "timeout_ms": 30000,
+        "max_attempts": 3
+      },
+      "queries": [
+        {
+          "id": "jmeter.target_rps",
+          "expression": "avg_over_time(demo_target_requests_per_second{generator=\"jmeter\"}[$__interval])",
+          "metric": "target_rps",
+          "unit": "requests/s",
+          "entity": "jmeter",
+          "role": "generator",
+          "aggregation": "interval_mean"
+        }
+      ]
+    }
+  ]
+}

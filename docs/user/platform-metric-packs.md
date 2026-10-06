@@ -225,11 +225,13 @@ python -m tools.platform_profiles --config fixtures/platform/profile-config.exam
 [онлайн-источниках](online-sources.md)),
 `transport` (`direct` или `grafana_proxy`), `datasource_uid`, `auth`,
 `allow_insecure_http`, `governor`, `subquery_step`, `peak_aggregation`,
-`scrape_interval_ms`, `request_step_ms`, `legacy_sla_rules[]`. Примеры:
+`scrape_interval_ms`, `request_step_ms`, `legacy_sla_rules[]`, `load_generator` (см. следующий раздел). Примеры:
 [конфигурация](../../fixtures/platform/profile-config.example.json),
 [результат](../contracts/sources/v1/platform-openshift-connections.example.json),
 [результат с пиком](../contracts/sources/v1/platform-openshift-peak-connections.example.json),
-[результат с `scrape_interval_ms` (`source-connections.v3`)](../contracts/sources/v1/platform-openshift-autostep-connections.example.json).
+[результат с `scrape_interval_ms` (`source-connections.v3`)](../contracts/sources/v1/platform-openshift-autostep-connections.example.json),
+[конфигурация](../../fixtures/platform/profile-config.load-generator.example.json) и
+[результат с рядом генератора нагрузки](../contracts/sources/v1/platform-openshift-load-generator-connections.example.json).
 
 Пакеты и пределы:
 
@@ -244,6 +246,81 @@ python -m tools.platform_profiles --config fixtures/platform/profile-config.exam
   CPU и памяти путём правил профиля). Профиль с такими правилами несовместим с
   платформенными правилами политики (`PLATFORM_RULES_CONFLICT`, ADR 0018): для
   политики с `platform_rules` правила в профиль не добавляются.
+
+## Ряды-контроли генератора нагрузки для каталога корреляций
+
+Каталог корреляционных гипотез (`correlation-catalog.v1`, см.
+[каталог](../contracts/diagnostics/v1/correlation-catalog.md)) привязывает
+гипотезы к контролям `target_rps` и `concurrency`: это ряды снимка с метрикой,
+равной названию контроля. Без них в снимке гипотезы с контролем в план не входят,
+а контрольной гипотезы (CPU генератора) для плана недостаточно. Платформенные
+сигналы выше про сервисы; эти два ряда принадлежат генератору нагрузки, поэтому
+их описывает отдельный необязательный блок конфигурации `load_generator`:
+
+```json
+"load_generator": {
+  "entity": "jmeter",
+  "target_rps": "avg_over_time(<ряд запланированной нагрузки>[$__interval])",
+  "concurrency": "avg_over_time(<ряд числа виртуальных пользователей>[$__interval])"
+}
+```
+
+- `entity` - имя генератора (символы как у имени сервиса), хотя бы одно из
+  `target_rps` и `concurrency`; других полей нет. Выражение пишет автор профиля:
+  генератор не знает экспортёр вашего генератора нагрузки и ничего не угадывает.
+- Генератор сам фиксирует то, по чему каталог находит ряд: `target_rps` - метрика
+  `target_rps`, единица `requests/s`; `concurrency` - метрика `concurrency`,
+  единица `count`; обе с `role: generator`, `aggregation: interval_mean`, `id`
+  `<entity>.target_rps` и `<entity>.concurrency`. Метки не задаются: ряд
+  определяется выражением и обязан быть один.
+- Ряды выходят отдельным профилем `<префикс>-load` (`ocp-load`; с `arm`
+  `ocp-A-load` и полем `arm`) с теми же `base_url`, транспортом, `auth`,
+  `governor` и `scrape_interval_ms`, что у профилей сервисов. Профиль входит в
+  предел 16 профилей: при 16 профилях сервисов генератор отказывает
+  (`PLATFORM_PROFILE_TOO_MANY_QUERIES`). Если ряды генератора лежат в другом
+  источнике, подготовьте для него профиль вручную с теми же `metric`, `unit`,
+  `role`, `aggregation` (образец - профиль `ocp-load` в примере).
+- Выражение обязано содержать `$__interval` (иначе автошаг его не примет и метка
+  `interval_mean` была бы ложью); для выражений с `rate(` действует то же правило
+  шага, что и для событий (`PLATFORM_RATE_WINDOW_TOO_SHORT`).
+
+**Каким выражение быть не должно.** Контроль обязан быть постоянным внутри
+стадии, иначе ядро отключает находку пары (`GENUINE_PARTIAL_UNCALIBRATED`).
+Поэтому `target_rps` - запланированная нагрузка, а не достигнутая: `rate()` или
+`increase()` по счётчику выполненных запросов - это `achieved_rps`, который
+каталог запрещает контролем (он меняется внутри стадии). Генератор смысл
+выражения проверить не может. Ряд `concurrency` годится только в закрытой модели
+(число потоков задано и держится постоянным на стадии); в открытой модели
+(поток прибытий, Throughput Shaping Timer, `constant-arrival-rate`) число
+активных потоков меняется внутри стадии, и такой ряд находки не даст.
+
+**Откуда брать значения на боевом стенде (решение владельца).** Генераторы
+нагрузки в Prometheus обычно отдают достигнутые числа (запросы, активные
+потоки), но не запланированную скорость. Варианты:
+
+1. Оркестратор теста публикует ступенчатый gauge запланированной скорости
+   (Pushgateway, textfile или собственный экспортёр), значения берутся из
+   расписания теста (Throughput Shaping Timer, `constant-arrival-rate` и т. п.).
+   Профиль читает его блоком `target_rps`. Рекомендация для боевого стенда:
+   ряд приходит из источника, как остальные, и не меняет путь снимка.
+2. Ряд собирается адаптером из объявленных ступеней (план capacity или окна
+   снимка) при подготовке снимка. Экспортёр не нужен, но ряд не из источника:
+   нужны запись в `provenance` и решение, как это отражается в хэше снимка.
+3. Только `concurrency` в закрытой модели (число потоков из экспортёра
+   генератора) или отказ от контролей: гипотезы с контролем останутся вне плана.
+
+Имена метрик конкретного экспортёра (JMeter, k6, Gatling) в репозитории не
+проверены; сверьте их со своим стендом. На демо-стенде `demo_target_requests_per_second`
+постоянен на стадии (проверено запросом к Prometheus стенда) и взят в пример, а
+`demo_generator_active_threads` меняется внутри стадии и контролем не годится.
+
+Тест `tools/test_platform_profiles.py` сверяет каталог с генератором: каждая
+метрика, единица и роль каталога выпускается генератором (с `load_generator`),
+кроме трёх рядов, которые готовит адаптер источника: `service_response_time_p95`
+и `service_error_rate` нижестоящих сервисов и `cpu_used` с ролью `generator`.
+Список исключений в тесте равен нехватке точно, поэтому устаревшим он не
+останется. Снимок из выпущенных рядов разворачивается каталогом в план; без
+блока `load_generator` плана нет (`CONTROL_SERIES_MISSING`).
 
 ## Как читать карту «сервис x плечо»
 

@@ -54,6 +54,7 @@ import io.ltverdict.core.PolicyValidationError
 import io.ltverdict.core.RELEASE_ID
 import io.ltverdict.core.RELEASE_PROFILE_FIELDS
 import io.ltverdict.core.RELEASE_SCHEMA
+import io.ltverdict.core.ReleaseComparisonContext
 import io.ltverdict.core.ResourceValidation
 import io.ltverdict.core.SavedAnalysisForComparison
 import io.ltverdict.core.SeriesGrid
@@ -143,10 +144,12 @@ import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.long
 import kotlinx.serialization.json.put
 import org.HdrHistogram.PackedHistogram
+import java.io.IOException
 import java.io.InputStream
 import java.io.OutputStream
 import java.math.BigDecimal
 import java.nio.ByteBuffer
+import java.nio.file.DirectoryIteratorException
 import java.nio.file.Files
 import java.nio.file.Path
 import java.security.SecureRandom
@@ -604,6 +607,9 @@ internal fun Application.installLocalApi(context: LocalApiContext) {
             val (baselineResult, baselineIdentity) = context.store.baselineDocuments(baselineReference)
             val (currentResult, currentIdentity) = context.store.baselineDocuments(current)
             val conditions = baselineOperation { context.store.readBaselineCondition(baselineReference, current, windows) }
+            val baselineAnalysis = baselineReference.getValue("analysis_id").jsonPrimitive.content
+            val currentAnalysis = current.getValue("analysis_id").jsonPrimitive.content
+            val releases = withContext(Dispatchers.IO) { context.store.releasesOfAnalyses(setOf(baselineAnalysis, currentAnalysis)) }
             val comparison =
                 compareAnalyses(
                     selected,
@@ -614,6 +620,7 @@ internal fun Application.installLocalApi(context: LocalApiContext) {
                     currentIdentity,
                     windows,
                     conditions?.let(::baselineConditionConfirmation),
+                    ReleaseComparisonContext(releases[baselineAnalysis], releases[currentAnalysis]),
                 )
             call.respondJson(
                 buildJsonObject {
@@ -1618,6 +1625,19 @@ private fun releasePageJson(
                 }
             },
         )
+    }
+
+// Profile and series are auxiliary for comparison and dynamics (ADR 0019, section 5): a registry the store refuses to scan, and
+// an analysis named by several records, leave the release unknown instead of failing the request.
+private fun RunBundleStore.releasesOfAnalyses(analysisIds: Set<String>): Map<String, JsonObject> =
+    try {
+        findReleasesByAnalysis(analysisIds).byAnalysis
+    } catch (failure: IllegalStateException) {
+        if (failure.message.orEmpty().startsWith("CORRUPT_RELEASE_REGISTRY")) emptyMap() else throw failure
+    } catch (_: IOException) {
+        emptyMap()
+    } catch (_: DirectoryIteratorException) {
+        emptyMap()
     }
 
 // Maps store failures to the private API codes; messages never carry user text (label, notes, profile).

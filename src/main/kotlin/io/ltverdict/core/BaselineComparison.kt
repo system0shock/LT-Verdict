@@ -177,6 +177,12 @@ internal fun statisticalBaselineSelection(
     ).toJson()
 }
 
+/** Release records (ADR 0019) that hold the baseline and the current analysis; null when none or more than one matches. */
+internal data class ReleaseComparisonContext(
+    val baseline: JsonObject?,
+    val current: JsonObject?,
+)
+
 internal fun compareAnalyses(
     selection: JsonObject,
     currentReference: JsonObject,
@@ -186,10 +192,23 @@ internal fun compareAnalyses(
     currentIdentity: JsonObject,
     windows: WindowComparisonRequest? = null,
     conditionsConfirmed: Boolean? = null,
+    releases: ReleaseComparisonContext? = null,
 ): JsonObject {
     val parsedSelection = selection.toSelection()
     val current = currentReference.toReference()
     val confirmed = conditionsConfirmed == true
+    val profile =
+        releases?.let { context ->
+            val compared =
+                compareReleaseProfiles(context.baseline?.get("profile") as? JsonObject, context.current?.get("profile") as? JsonObject)
+            val baselineId = context.baseline?.get("release_id")
+            val currentId = context.current?.get("release_id")
+            if (compared == null || baselineId == null || currentId == null) {
+                null
+            } else {
+                JsonObject(compared + mapOf("baseline_release_id" to baselineId, "current_release_id" to currentId))
+            }
+        }
     val warnings =
         buildList {
             when {
@@ -199,7 +218,13 @@ internal fun compareAnalyses(
             if (parsedSelection.mode == Mode.STATISTICAL && parsedSelection.candidates.any { it.runId == current.runId }) {
                 add("CURRENT_IN_CANDIDATE_SET")
             }
+            if (baselineResult.stringOrNull("policy_verdict") != "PASS") add("BASELINE_NOT_PASS")
             if (SMALL_SAMPLE_REASON in coverageReasons(baselineResult)) add("BASELINE_SMALL_SAMPLE")
+            // Release series are stored normalized; the selection series is free text from the request.
+            val currentSeries = (releases?.current?.get("series") as? JsonPrimitive)?.content
+            if (currentSeries != null && currentSeries != normalizeReleaseText(parsedSelection.series)) add("BASELINE_SERIES_DIFFERS")
+            if (baselineIdentity["policy_sha256"] != currentIdentity["policy_sha256"]) add("POLICY_DIFFERS")
+            if ((profile?.get("status") as? JsonPrimitive)?.content == "MISMATCH") add("PROFILE_MISMATCH")
         }
     val compatible = semanticKey(baselineResult, baselineIdentity)?.let { it == semanticKey(currentResult, currentIdentity) } == true
     return buildJsonObject {
@@ -214,6 +239,7 @@ internal fun compareAnalyses(
             },
         )
         put("warnings", buildJsonArray { warnings.forEach { add(JsonPrimitive(it)) } })
+        put("profile", profile ?: JsonNull)
         put(
             "metrics",
             buildJsonArray {

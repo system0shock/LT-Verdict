@@ -420,7 +420,7 @@ class BaselineComparisonTest {
 
         val comparison = compareAnalyses(selection, reference('b'), result(), identity(), result(), identity())
 
-        assertEquals(setOf("baseline", "current", "comparability", "warnings", "metrics"), comparison.keys)
+        assertEquals(setOf("baseline", "current", "comparability", "warnings", "profile", "metrics"), comparison.keys)
     }
 
     @Test
@@ -1201,6 +1201,248 @@ class BaselineComparisonTest {
         val missingWindow = missing.getValue("window_comparison").jsonObject
         assertEquals("NOT_EVALUATED", missingWindow.getValue("status").jsonPrimitive.content)
         assertEquals(listOf("CURRENT_WINDOW_NOT_FOUND"), missingWindow.reasons())
+    }
+
+    private fun releaseRecord(
+        id: String,
+        series: String,
+        profile: JsonObject?,
+    ) = buildJsonObject {
+        put("release_id", id)
+        put("series", series)
+        put("profile", profile ?: JsonNull)
+    }
+
+    private fun profile(vararg pairs: Pair<String, String?>) =
+        buildJsonObject { RELEASE_PROFILE_FIELDS.forEach { name -> put(name, pairs.toMap()[name]?.let(::JsonPrimitive) ?: JsonNull) } }
+
+    private fun identityWithPolicy(policy: String) = JsonObject(identity() + ("policy_sha256" to JsonPrimitive(policy)))
+
+    @Test
+    fun `warnings keep one fixed order and never change numbers`() {
+        val selection = manualBaselineSelection("blue", reference('a'))
+        val baselineResult = result(verdict = "FAIL", reasons = listOf("SMALL_SAMPLE"))
+        val releases =
+            ReleaseComparisonContext(
+                releaseRecord("000000000000001-aaaaaaaa", "blue", profile("pacing" to "10 s")),
+                releaseRecord("000000000000002-bbbbbbbb", "green", profile("pacing" to "20 s")),
+            )
+
+        val full =
+            compareAnalyses(
+                selection,
+                reference('a', analysis = 'b'),
+                baselineResult,
+                identityWithPolicy("a".repeat(64)),
+                result(),
+                identityWithPolicy("b".repeat(64)),
+                releases = releases,
+            )
+        assertEquals(
+            listOf(
+                "BASELINE_IS_CURRENT_RUN",
+                "BASELINE_NOT_PASS",
+                "BASELINE_SMALL_SAMPLE",
+                "BASELINE_SERIES_DIFFERS",
+                "POLICY_DIFFERS",
+                "PROFILE_MISMATCH",
+            ),
+            warnings(full),
+        )
+        assertEquals(
+            buildJsonObject {
+                put("status", "MISMATCH")
+                put("differing_fields", buildJsonArray { add(JsonPrimitive("pacing")) })
+                put("baseline_release_id", "000000000000001-aaaaaaaa")
+                put("current_release_id", "000000000000002-bbbbbbbb")
+            },
+            full.getValue("profile"),
+        )
+        val bare =
+            compareAnalyses(
+                selection,
+                reference('a', analysis = 'b'),
+                baselineResult,
+                identityWithPolicy("a".repeat(64)),
+                result(),
+                identityWithPolicy("b".repeat(64)),
+            )
+        assertEquals(JsonNull, bare.getValue("profile"))
+        assertEquals(listOf("BASELINE_IS_CURRENT_RUN", "BASELINE_NOT_PASS", "BASELINE_SMALL_SAMPLE", "POLICY_DIFFERS"), warnings(bare))
+        assertEquals(bare.getValue("metrics"), full.getValue("metrics"))
+        assertEquals(bare.getValue("comparability"), full.getValue("comparability"))
+    }
+
+    @Test
+    fun `the candidate set warning keeps its place before the verdict and policy warnings`() {
+        val set = listOf(candidate('a'), candidate('b'), candidate('c'))
+        val selection = statisticalBaselineSelection("blue", set.references(), set.results(), set.identities())
+        val comparison =
+            compareAnalyses(
+                selection,
+                reference('a', 'd'),
+                result(verdict = "NO_VERDICT"),
+                identity(),
+                result(),
+                identityWithPolicy("c".repeat(64)),
+            )
+        assertEquals(
+            listOf("BASELINE_IS_CURRENT_RUN", "CURRENT_IN_CANDIDATE_SET", "BASELINE_NOT_PASS", "POLICY_DIFFERS"),
+            warnings(comparison),
+        )
+    }
+
+    @Test
+    fun `profile is null unless both releases are found and both declare a profile`() {
+        val selection = manualBaselineSelection("blue", reference('a'))
+        val declared = releaseRecord("000000000000001-aaaaaaaa", "blue", profile("load_model" to "open"))
+        val silent = releaseRecord("000000000000002-bbbbbbbb", "blue", null)
+        listOf(
+            ReleaseComparisonContext(declared, null),
+            ReleaseComparisonContext(null, declared),
+            ReleaseComparisonContext(declared, silent),
+            ReleaseComparisonContext(silent, silent),
+        ).forEach { context ->
+            val comparison = compareAnalyses(selection, reference('b'), result(), identity(), result(), identity(), releases = context)
+            assertEquals(JsonNull, comparison.getValue("profile"))
+            assertEquals(emptyList<String>(), warnings(comparison))
+        }
+        val equal =
+            compareAnalyses(
+                selection,
+                reference('b'),
+                result(),
+                identity(),
+                result(),
+                identity(),
+                releases = ReleaseComparisonContext(declared, declared),
+            )
+        assertEquals(
+            "MATCH",
+            equal
+                .getValue("profile")
+                .jsonObject
+                .getValue("status")
+                .jsonPrimitive.content,
+        )
+        assertEquals(emptyList<String>(), warnings(equal))
+        assertEquals(JsonNull, compareAnalyses(selection, reference('b'), result(), identity(), result(), identity()).getValue("profile"))
+    }
+
+    @Test
+    fun `the baseline verdict warning covers every verdict but PASS`() {
+        val selection = manualBaselineSelection("blue", reference('a'))
+
+        fun warningsFor(verdict: String?) =
+            warnings(
+                compareAnalyses(
+                    selection,
+                    reference('b'),
+                    JsonObject(result() - "policy_verdict" + (verdict?.let { mapOf("policy_verdict" to JsonPrimitive(it)) } ?: emptyMap())),
+                    identity(),
+                    result(),
+                    identity(),
+                ),
+            )
+
+        assertEquals(emptyList<String>(), warningsFor("PASS"))
+        listOf("FAIL", "NO_POLICY", "NO_VERDICT", null).forEach { assertEquals(listOf("BASELINE_NOT_PASS"), warningsFor(it), it) }
+    }
+
+    @Test
+    fun `the policy warning compares hashes and treats two missing policies as equal`() {
+        val selection = manualBaselineSelection("blue", reference('a'))
+
+        fun warningsFor(
+            baseline: String,
+            current: String,
+        ) = warnings(
+            compareAnalyses(selection, reference('b'), result(), identityWithPolicy(baseline), result(), identityWithPolicy(current)),
+        )
+
+        assertEquals(emptyList<String>(), warningsFor("a".repeat(64), "a".repeat(64)))
+        assertEquals(emptyList<String>(), warningsFor("NO_POLICY", "NO_POLICY"))
+        assertEquals(listOf("POLICY_DIFFERS"), warningsFor("a".repeat(64), "NO_POLICY"))
+        assertEquals(listOf("POLICY_DIFFERS"), warningsFor("NO_POLICY", "a".repeat(64)))
+        assertEquals(listOf("POLICY_DIFFERS"), warningsFor("a".repeat(64), "b".repeat(64)))
+    }
+
+    @Test
+    fun `the series warning needs a registered current analysis of another series`() {
+        val selection = manualBaselineSelection("blue", reference('a'))
+        val declared = releaseRecord("000000000000001-aaaaaaaa", "blue", null)
+
+        fun warningsFor(
+            series: String?,
+            baselineSeries: String = "blue",
+        ): List<String> {
+            val context = series?.let { ReleaseComparisonContext(declared, releaseRecord("000000000000002-bbbbbbbb", it, null)) }
+            return warnings(
+                compareAnalyses(
+                    manualBaselineSelection(baselineSeries, reference('a')),
+                    reference('b'),
+                    result(),
+                    identity(),
+                    result(),
+                    identity(),
+                    releases = context,
+                ),
+            )
+        }
+
+        assertEquals(emptyList<String>(), warningsFor("blue"))
+        assertEquals(emptyList<String>(), warningsFor(null))
+        assertEquals(listOf("BASELINE_SERIES_DIFFERS"), warningsFor("green"))
+        // release series are stored in NFC; a baseline series typed in decomposed form is the same series
+        assertEquals(emptyList<String>(), warningsFor("café", baselineSeries = "café"))
+        // the baseline release alone does not name the current series
+        assertEquals(
+            emptyList<String>(),
+            warnings(
+                compareAnalyses(
+                    selection,
+                    reference('b'),
+                    result(),
+                    identity(),
+                    result(),
+                    identity(),
+                    releases = ReleaseComparisonContext(declared, null),
+                ),
+            ),
+        )
+    }
+
+    @Test
+    fun `the profile verdict does not touch confirmation or window statuses`() {
+        val selection = manualBaselineSelection("blue", reference('a'))
+        val request = WindowComparisonRequest("steady", "steady")
+        val mismatch =
+            ReleaseComparisonContext(
+                releaseRecord("000000000000001-aaaaaaaa", "blue", profile("pacing" to "10 s")),
+                releaseRecord("000000000000002-bbbbbbbb", "blue", profile("pacing" to "20 s")),
+            )
+        val window = windowResult("steady", 0, 10_000, 100, 100, 0)
+
+        fun compare(releases: ReleaseComparisonContext?) =
+            compareAnalyses(
+                selection,
+                reference('b'),
+                window,
+                identity(),
+                window,
+                identity(),
+                request,
+                conditionsConfirmed = true,
+                releases = releases,
+            )
+
+        val plain = compare(null)
+        val withProfile = compare(mismatch)
+        assertEquals(listOf("PROFILE_MISMATCH"), warnings(withProfile))
+        assertEquals("USER_CONFIRMED", withProfile.getValue("comparability").jsonPrimitive.content)
+        assertEquals(plain.getValue("metrics"), withProfile.getValue("metrics"))
+        assertEquals(plain.getValue("window_comparison"), withProfile.getValue("window_comparison"))
+        assertEquals(plain.getValue("comparability"), withProfile.getValue("comparability"))
     }
 
     private fun warnings(comparison: JsonObject): List<String> = comparison.getValue("warnings").jsonArray.map { it.jsonPrimitive.content }

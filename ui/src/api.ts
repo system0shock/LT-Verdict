@@ -30,6 +30,7 @@ import type {
   Release,
   ReleaseList,
   ReleaseRequest,
+  ReleaseUpdate,
 } from './types'
 
 let csrfToken = ''
@@ -352,6 +353,14 @@ export function listReleases(query: { series?: string; after?: string; limit?: n
 export function createRelease(body: ReleaseRequest): Promise<Release> {
   return request('/api/releases', {
     method: 'POST',
+    headers: mutationHeaders({ 'Content-Type': 'application/json' }),
+    body: JSON.stringify(body),
+  })
+}
+
+export function updateRelease(releaseId: string, body: ReleaseUpdate): Promise<Release> {
+  return request(`/api/releases/${encodeURIComponent(releaseId)}`, {
+    method: 'PUT',
     headers: mutationHeaders({ 'Content-Type': 'application/json' }),
     body: JSON.stringify(body),
   })

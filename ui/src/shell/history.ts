@@ -1,4 +1,4 @@
-import type { AnalysisSummary, Release, ReleaseAnalysis, ReleaseProfile, ReleaseRequest } from '../types'
+import type { AnalysisSummary, Release, ReleaseAnalysis, ReleaseProfile, ReleaseRequest, ReleaseUpdate } from '../types'
 
 export const DEFAULT_VISIBLE_RELEASES = 4
 
@@ -81,4 +81,66 @@ export function dynamicsAnchor(releases: readonly Release[]): { run_id: string; 
     if (analysis) return { run_id: release.run_id, analysis_id: analysis.analysis_id }
   }
   return null
+}
+
+export type ProfileRelation = 'match' | 'mismatch' | 'unknown'
+
+// Same rule as the server (compareReleaseProfiles): unknown unless both releases declare a profile.
+export function profileRelation(a: Release, b: Release): ProfileRelation {
+  if (!a.profile || !b.profile) return 'unknown'
+  const left = a.profile
+  const right = b.profile
+  return PROFILE_FIELDS.every((name) => left[name] === right[name]) ? 'match' : 'mismatch'
+}
+
+export function profileToForm(profile: ReleaseProfile | null): ProfileForm {
+  const form = emptyProfileForm()
+  if (profile) for (const name of PROFILE_FIELDS) form[name] = profile[name] ?? ''
+  return form
+}
+
+export interface BaselineChoice { release: Release; analysis: ReleaseAnalysis }
+
+// The newest release older than the opened one of the same series with a MATCHING declared profile and an eligible analysis of the same arm.
+// Two releases without a declared profile are not a match (ADR 0019, section 4): no suggestion until a profile is declared.
+export function suggestManualBaseline(releases: readonly Release[], opened: Release, arm: string | null): BaselineChoice | null {
+  for (const release of releases) {
+    if (release.release_id >= opened.release_id || release.series !== opened.series) continue
+    if (profileRelation(release, opened) !== 'match') continue
+    const analysis = release.analyses.find((item) => item.arm === arm && item.baseline_eligible)
+    if (analysis) return { release, analysis }
+  }
+  return null
+}
+
+export const STATISTICAL_MINIMUM = 3
+
+export interface StatisticalAvailability { available: boolean; eligibleRuns: number; needed: number }
+
+// Statistical selection needs 3..20 eligible releases of one DECLARED profile and arm from distinct runs; the opened release declares it too.
+export function statisticalAvailability(releases: readonly Release[], opened: Release, arm: string | null): StatisticalAvailability {
+  const runs = new Set<string>()
+  for (const release of releases) {
+    if (release.series !== opened.series || profileRelation(release, opened) !== 'match') continue
+    if (release.analyses.some((item) => item.arm === arm && item.baseline_eligible)) runs.add(release.run_id)
+  }
+  return { available: runs.size >= STATISTICAL_MINIMUM, eligibleRuns: runs.size, needed: STATISTICAL_MINIMUM }
+}
+
+export interface DynamicsPoint { release: Release; verdict: ReleaseAnalysis['policy_verdict']; value: number }
+
+// Points of the p95 chart in ascending time order; a release without a number is not drawn.
+export function dynamicsPoints(releases: readonly Release[], valueOf: (analysisId: string) => string | null): DynamicsPoint[] {
+  const points: DynamicsPoint[] = []
+  for (const release of releases) {
+    const analysis = release.analyses[0]
+    const raw = analysis ? valueOf(analysis.analysis_id) : null
+    const value = raw === null ? Number.NaN : Number(raw)
+    if (analysis && Number.isFinite(value)) points.push({ release, verdict: analysis.policy_verdict, value })
+  }
+  return points.sort((a, b) => (a.release.started_at < b.release.started_at ? -1 : a.release.started_at > b.release.started_at ? 1 : 0))
+}
+
+export function releaseUpdate(release: Release, analysisId: string): ReleaseUpdate {
+  return { label: release.label, analyses: [{ analysis_id: analysisId }], profile: release.profile, notes: release.notes }
 }

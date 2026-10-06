@@ -3,13 +3,16 @@ import { expect, test, type Page } from '@playwright/test'
 import { BASELINE_ERROR_LABELS } from '../src/shell/labels'
 import { HISTORY_LABELS } from '../src/shell/labels.history'
 import { DEFAULT_VISIBLE_RELEASES } from '../src/shell/history'
-import type { Release, ReleaseAnalysis } from '../src/types'
+import type { Release, ReleaseAnalysis, ReleaseProfile } from '../src/types'
 
 // The tab against a mocked server: table, expansion, numbers and their absence, the form payload, error phrases, accessibility.
 const L = HISTORY_LABELS
 const current = { run_id: 'hist-run-0', analysis_id: 'a'.repeat(64) }
 const run = { ...current, source_type: 'jmeter', sha256: 'd'.repeat(64), size_bytes: 100, original_filename: 'hist.jtl' }
 const SERIES = 'Checkout'
+const profile = (pacing: string | null, over: Partial<ReleaseProfile> = {}): ReleaseProfile => ({
+  scenario_mix: null, environment_dataset: null, load_model: null, targets_stages: null, pacing, generator_limits: null, ...over,
+})
 
 const analysis = (n: number, over: Partial<ReleaseAnalysis> = {}): ReleaseAnalysis => ({
   analysis_id: String(n).repeat(64).slice(0, 64), arm: null, coverage_reasons: [], coverage_status: 'COMPLETE', policy_sha256: 'e'.repeat(64),
@@ -23,7 +26,7 @@ const release = (n: number, over: Partial<Release> = {}, analysisOver: Partial<R
   baseline_eligible: (analysisOver.baseline_eligible ?? true), ineligible_reasons: analysisOver.ineligible_reasons ?? [], ...over,
 })
 
-type Options = { releases?: Release[]; corrupt?: number; truncated?: boolean; baselineRun?: string; failures?: Record<string, { status: number; code: string; message: string; limit?: number }>; noSelection?: boolean }
+type Options = { p95?: Record<number, string>; releases?: Release[]; corrupt?: number; truncated?: boolean; baselineRun?: string; failures?: Record<string, { status: number; code: string; message: string; limit?: number }>; noSelection?: boolean }
 
 async function openHistory(page: Page, opts: Options = {}) {
   const requests: Array<{ method: string; path: string; search: string; body?: unknown }> = []
@@ -33,7 +36,7 @@ async function openHistory(page: Page, opts: Options = {}) {
     const url = new URL(route.request().url())
     const path = url.pathname
     const method = route.request().method()
-    requests.push({ method, path, search: url.search, body: method === 'POST' ? route.request().postDataJSON() as unknown : undefined })
+    requests.push({ method, path, search: url.search, body: method === 'POST' || method === 'PUT' ? route.request().postDataJSON() as unknown : undefined })
     const failure = opts.failures?.[`${method} ${path}`]
     if (failure) {
       await route.fulfill({ status: failure.status, json: { error: { code: failure.code, message: failure.message, limit: failure.limit } } })
@@ -77,11 +80,11 @@ async function openHistory(page: Page, opts: Options = {}) {
         history_integrity: 'SAVED_DOCUMENT_HASHES', transactions: null, overlay: null, metric_packs: { schema_version: 'metric-packs.v1', packs: [] },
         dynamics: opts.truncated ? null : {
           schema_version: 'run-dynamics.v1', limit: 100, comparable_count: 2, excluded_incompatible_count: 0, baseline: null,
-          rows: store.slice(1).map((item) => ({
+          rows: store.filter((item) => item.analyses[0]!.analysis_state === 'OK').map((item) => ({
             reference: { run_id: item.run_id, analysis_id: item.analyses[0]!.analysis_id }, run_date: item.started_at, jenkins_build: null, commit: null,
-            application_version: item.label, load_profile: null, verdict: 'PASS',
+            application_version: item.label, load_profile: null, verdict: item.analyses[0]!.policy_verdict,
             metrics: [
-              { metric: 'response_time_p95_ms', unit: 'ms', value: '451.5', delta_previous: null, delta_previous_percent: null, previous_reason: null, delta_baseline: null, delta_baseline_percent: null, baseline_reason: null },
+              { metric: 'response_time_p95_ms', unit: 'ms', value: opts.p95?.[Number(item.run_id.split('-').pop())] ?? '451.5', delta_previous: null, delta_previous_percent: null, previous_reason: null, delta_baseline: null, delta_baseline_percent: null, baseline_reason: null },
               { metric: 'error_rate_ratio', unit: 'ratio', value: '0.0123', delta_previous: null, delta_previous_percent: null, previous_reason: null, delta_baseline: null, delta_baseline_percent: null, baseline_reason: null },
               { metric: 'throughput_rps', unit: 'rps', value: '60', delta_previous: null, delta_previous_percent: null, previous_reason: null, delta_baseline: null, delta_baseline_percent: null, baseline_reason: null },
             ],
@@ -89,14 +92,26 @@ async function openHistory(page: Page, opts: Options = {}) {
         },
       }
     } else if (path.endsWith('/analyses')) {
-      body = { analyses: [{ analysis_id: current.analysis_id, policy_sha256: 'e'.repeat(64), policy_verdict: 'NO_POLICY', run_validity: 'VALID' }], next_after: null }
+      const own = store.find((item) => path.includes(`/${item.run_id}/`))
+      body = {
+        analyses: own
+          ? [own.analyses[0]!, { ...own.analyses[0]!, analysis_id: 'f'.repeat(64), policy_verdict: 'FAIL' }].map((item) => ({
+            analysis_id: item.analysis_id, policy_sha256: item.policy_sha256, policy_verdict: item.policy_verdict, run_validity: 'VALID',
+          }))
+          : [{ analysis_id: current.analysis_id, policy_sha256: 'e'.repeat(64), policy_verdict: 'NO_POLICY', run_validity: 'VALID' }],
+        next_after: null,
+      }
     } else if (path.endsWith('/result')) {
       body = {
         schema_version: 'analysis-result.v1', run_id: path.split('/')[3], analysis_mode: 'standard', run_validity: 'VALID', policy_verdict: 'PASS',
         analysis_coverage: { status: 'COMPLETE', reasons: [] }, findings: [], evidence: [],
       }
     } else if (path.endsWith('/buckets')) body = { buckets: [], next_from_ms: null }
-    else if (path.endsWith('/baseline-conditions')) body = { conditions: null }
+    else if (path.startsWith('/api/releases/') && method === 'PUT') {
+      const put = route.request().postDataJSON() as { label: string; analyses: Array<{ analysis_id: string }> }
+      const target = store.find((item) => path.endsWith(item.release_id))!
+      body = { ...target, label: put.label, analyses: [{ ...target.analyses[0]!, analysis_id: put.analyses[0]!.analysis_id }] }
+    } else if (path.endsWith('/baseline-conditions')) body = { conditions: null }
     else throw new Error(`Unexpected UI request ${method} ${path}`)
     await route.fulfill({ status, json: body })
   })
@@ -207,6 +222,8 @@ test('a filled profile and a note go to the server in the fixed field order', as
   await page.getByLabel(L.formLabel, { exact: true }).fill('v2.1')
   await page.getByLabel(L.profileFields.pacing, { exact: true }).fill(' 10 s ')
   await page.getByLabel(L.formNotes, { exact: true }).fill('note')
+  await expect(page.getByRole('button', { name: L.save, exact: true })).toBeDisabled()
+  await page.getByTestId('profile-confirm').check()
   await page.getByRole('button', { name: L.save, exact: true }).click()
   await expect.poll(() => requests.filter((entry) => entry.method === 'POST' && entry.path === '/api/releases').length).toBe(1)
   const posted = requests.find((entry) => entry.method === 'POST' && entry.path === '/api/releases')!.body as { profile: unknown; notes: unknown }
@@ -280,5 +297,141 @@ for (const width of [1280, 375, 320]) {
       return { scrollWidth: document.documentElement.scrollWidth, innerWidth: window.innerWidth, wide: spilling.slice(0, 4).map((element) => `${element.tagName}#${element.id}.${element.className}`) }
     })
     expect(size.scrollWidth, JSON.stringify(size)).toBeLessThanOrEqual(size.innerWidth)
+  })
+}
+
+test('the profile of the newest release is offered for confirmation, never carried silently', async ({ page }) => {
+  const requests = await openHistory(page, { releases: [release(1, { profile: profile('10 s') }), release(2, { profile: profile('10 s', { load_model: 'open' }) })] })
+  await expect(page.getByLabel(L.profileFields.pacing, { exact: true })).toHaveValue('10 s')
+  await expect(page.getByLabel(L.profileFields.load_model, { exact: true })).toHaveValue('open')
+  await expect(page.getByTestId('profile-prefilled')).toHaveText(L.profilePrefilled('v1.2'))
+  await page.getByLabel(L.formLabel, { exact: true }).fill('v3')
+  const save = page.getByRole('button', { name: L.save, exact: true })
+  await expect(save).toBeDisabled()
+  await page.getByLabel(L.profileFields.pacing, { exact: true }).fill('20 s')
+  await expect(page.getByTestId('profile-prefilled')).toHaveCount(0)
+  await expect(save).toBeDisabled()
+  await page.getByTestId('profile-confirm').check()
+  await expect(save).toBeEnabled()
+  await save.click()
+  await expect.poll(() => requests.filter((entry) => entry.method === 'POST' && entry.path === '/api/releases').length).toBe(1)
+  const posted = requests.find((entry) => entry.method === 'POST' && entry.path === '/api/releases')!.body as { profile: Record<string, string | null> }
+  expect(posted.profile.pacing).toBe('20 s')
+  expect(posted.profile.load_model).toBe('open')
+})
+
+test('an emptied profile is saved as null without the confirmation', async ({ page }) => {
+  const requests = await openHistory(page, { releases: [release(1, { profile: profile('10 s') })] })
+  await expect(page.getByLabel(L.profileFields.pacing, { exact: true })).toHaveValue('10 s')
+  await page.getByLabel(L.profileFields.pacing, { exact: true }).fill('')
+  await expect(page.getByTestId('profile-confirm')).toHaveCount(0)
+  await page.getByLabel(L.formLabel, { exact: true }).fill('v2')
+  await page.getByRole('button', { name: L.save, exact: true }).click()
+  await expect.poll(() => requests.filter((entry) => entry.method === 'POST' && entry.path === '/api/releases').map((entry) => (entry.body as { profile: unknown }).profile)).toEqual([null])
+})
+
+test('a different profile is flagged against the newest release, an undeclared one is not', async ({ page }) => {
+  await openHistory(page, { releases: [release(1, { profile: profile('20 s') }), release(2, { profile: null }), release(3, { profile: profile('10 s') })] })
+  await expect(rowsOf(page).first().getByTestId('profile-differs')).toHaveCount(0)
+  await expect(rowsOf(page).nth(1)).toContainText(L.noProfile)
+  await expect(rowsOf(page).nth(1).getByTestId('profile-differs')).toHaveCount(0)
+  await expect(rowsOf(page).nth(2).getByTestId('profile-differs')).toHaveText(L.profileDiffers('v1.3'))
+})
+
+test('statistical selection explains why it is unavailable', async ({ page }) => {
+  await openHistory(page, { releases: [2, 3].map((n) => release(n, { profile: profile('10 s') })) })
+  await expect(page.getByTestId('history-statistical-hint')).toHaveText(L.statisticalNeeds(2))
+  await expect(page.getByTestId('history-statistical')).toHaveCount(0)
+})
+
+test('statistical selection becomes available with three releases of one profile and opens the compare tab', async ({ page }) => {
+  await openHistory(page, { releases: [1, 2, 3].map((n) => release(n, { profile: profile('10 s') })) })
+  await expect(page.getByTestId('history-statistical-hint')).toHaveCount(0)
+  await page.getByTestId('history-statistical').click()
+  await expect(page.locator('#shell-tab-compare')).toHaveAttribute('aria-selected', 'true')
+})
+
+test('suggestions need a declared profile and are never applied automatically', async ({ page }) => {
+  const requests = await openHistory(page, { releases: [release(1), release(2), release(3)] })
+  await expect(page.getByTestId('history-needs-profile')).toHaveText(L.suggestionNeedsProfile)
+  await expect(page.getByTestId('baseline-suggestion')).toHaveCount(0)
+  await expect(page.getByTestId('history-statistical')).toHaveCount(0)
+  expect(requests.filter((entry) => entry.method === 'POST' && entry.path === '/api/baseline')).toHaveLength(0)
+})
+
+test('the previous release with the same profile is suggested as the baseline', async ({ page }) => {
+  const requests = await openHistory(page, { releases: [release(1, { profile: profile('10 s') }), release(2, { profile: profile('20 s') }), release(3, { profile: profile('10 s') })] })
+  await expect(page.getByTestId('baseline-suggestion')).toHaveCount(1)
+  await expect(rowsOf(page).nth(2).getByTestId('baseline-suggestion')).toHaveText(L.suggestion)
+  await expect(page.getByTestId('history-needs-profile')).toHaveCount(0)
+  expect(requests.filter((entry) => entry.method === 'POST' && entry.path === '/api/baseline')).toHaveLength(0)
+})
+
+test('dynamics points carry the verdict as shape and text, the table keeps the same numbers', async ({ page }) => {
+  const notPass = { baseline_eligible: false, ineligible_reasons: ['BASELINE_CANDIDATE_NOT_PASS'] }
+  await openHistory(page, {
+    releases: [release(1, {}, { policy_verdict: 'PASS' }), release(2, {}, { policy_verdict: 'FAIL', ...notPass }), release(3, {}, { policy_verdict: 'NO_POLICY', ...notPass })],
+    p95: { 1: '100', 2: '200', 3: '300' },
+  })
+  const chart = page.getByTestId('history-dynamics')
+  await expect(chart.getByRole('img')).toHaveAttribute('aria-label', L.dynamicsAria(3))
+  await expect(chart.locator('circle')).toHaveCount(1)
+  await expect(chart.locator('rect')).toHaveCount(1)
+  await expect(chart.locator('polygon')).toHaveCount(1)
+  await expect(chart).toContainText(L.dynamicsLegend)
+  await expect(chart.locator('title').first()).toHaveText(L.dynamicsPoint('v1.1', 'PASS', '100'))
+  await expect(rowsOf(page).nth(0).locator('td').nth(3)).toHaveText('300')
+})
+
+test('without numbers the chart says so instead of drawing zeros', async ({ page }) => {
+  await openHistory(page, { truncated: true })
+  await expect(page.getByTestId('history-dynamics')).toContainText(L.dynamicsEmpty)
+  await expect(page.getByTestId('history-dynamics').locator('circle, rect, polygon')).toHaveCount(0)
+})
+
+test('re-pin replaces the analysis of the release with another analysis of the same run', async ({ page }) => {
+  const requests = await openHistory(page)
+  await rowsOf(page).nth(1).getByRole('button', { name: L.rebindAria('v1.2') }).click()
+  const panel = page.getByTestId('rebind-panel')
+  await expect(panel.getByRole('radio')).toHaveCount(1)
+  await expect(page.getByRole('heading', { name: L.rebindTitle('v1.2') })).toBeFocused()
+  await panel.getByRole('radio').check()
+  await page.getByTestId('rebind-apply').click()
+  await expect.poll(() => requests.filter((entry) => entry.method === 'PUT').map((entry) => entry.body)).toEqual([
+    { label: 'v1.2', analyses: [{ analysis_id: 'f'.repeat(64) }], profile: null, notes: null },
+  ])
+  await expect(page.getByRole('status').filter({ hasText: L.rebound('v1.2') })).toBeVisible()
+  await expect(page.getByTestId('rebind-panel')).toHaveCount(0)
+})
+
+test('re-pin cancel returns the focus to its button and a refusal is a Russian phrase', async ({ page }) => {
+  await openHistory(page, {
+    failures: { 'PUT /api/releases/20260101000002-22222222': { status: 409, code: 'RELEASE_ANALYSIS_ALREADY_REGISTERED', message: 'An analysis already belongs to a release' } },
+  })
+  const button = rowsOf(page).nth(1).getByRole('button', { name: L.rebindAria('v1.2') })
+  await button.click()
+  await page.getByRole('button', { name: L.rebindCancel, exact: true }).click()
+  await expect(button).toBeFocused()
+  await button.click()
+  await page.getByTestId('rebind-panel').getByRole('radio').check()
+  await page.getByTestId('rebind-apply').click()
+  await expect(page.getByRole('alert')).toHaveText(L.errors.RELEASE_ANALYSIS_ALREADY_REGISTERED!(null))
+})
+
+test('a release with several analyses cannot be re-pinned and says why', async ({ page }) => {
+  await openHistory(page, { releases: [release(1, { analyses: [analysis(1, { arm: 'blue' }), analysis(2, { arm: 'green' })] })] })
+  const button = rowsOf(page).first().getByTestId('rebind')
+  await expect(button).toBeDisabled()
+  await expect(page.locator(`#${await button.getAttribute('aria-describedby')}`)).toHaveText(L.rebindMulti)
+})
+
+for (const theme of ['light', 'dark'] as const) {
+  test(`the chart, hints and the re-pin panel have no serious axe violations, ${theme}`, async ({ page }) => {
+    await page.emulateMedia({ colorScheme: theme })
+    await openHistory(page, { releases: [1, 2, 3].map((n) => release(n, { profile: profile(n === 2 ? '20 s' : '10 s') })), p95: { 1: '100', 2: '200', 3: '300' } })
+    await rowsOf(page).first().getByRole('button', { name: L.rebindAria('v1.3') }).click()
+    await expect(page.getByTestId('rebind-panel').getByRole('radio')).toHaveCount(1)
+    const audit = await new AxeBuilder({ page }).include('#history-panel').analyze()
+    expect(audit.violations.filter((item) => item.impact === 'critical' || item.impact === 'serious').map((item) => item.id)).toEqual([])
   })
 }

@@ -1,7 +1,8 @@
 import type { AnalysisResult, Bucket, CorrelationPairEvidence, MetricSummaryEvidence, ResourcePolicyCheckEvidence, ResourceSummaryEvidence } from '../types'
 import { CORRELATION_LABELS, OVERVIEW_LABELS, type ShellTabKey, type TrendDirection } from './labels'
 import { diagnosticFailedLinesOf, failedLinesOf, summarizeVerdict } from '../verdictSummary'
-import { capacityView } from './tables'
+import { CAPACITY_LABELS } from './labels.tables'
+import { capacityNumber, capacityView, type CapacityView } from './tables'
 
 export type TrackKey = 'rps' | 'errors' | 'p95'
 
@@ -269,6 +270,104 @@ export function keyMetrics(result: AnalysisResult): MetricTile[] {
     tiles.push({ key, label, raw: String(value), value: `${formatNumber(value, 2)} ${OVERVIEW_LABELS.unitMs}` })
   }
   return tiles
+}
+
+export type CapacityStageKind = 'pass' | 'fail' | 'unverified'
+
+export interface CapacityBlockStage {
+  key: string
+  label: string
+  target: string
+  achieved: string
+  verdictText: string
+  kind: CapacityStageKind
+  status: string
+  mark: string
+  smallSample: boolean
+  barX: number
+  achievedX: number | null
+}
+
+export interface CapacityBlock {
+  verdict: string
+  verdictText: string
+  boundText: string
+  statement: string
+  axisText: string
+  counts: string
+  legend: string
+  smallSample: boolean
+  lowerX: number | null
+  upperX: number | null
+  stages: CapacityBlockStage[]
+}
+
+const stageKinds: Record<string, [CapacityStageKind, string]> = { PASS: ['pass', 'PASS'], FAIL: ['fail', 'FAIL'], NO_POLICY: ['unverified', 'NO_POLICY'] }
+
+// Требуемой ёмкости в capacity_summary нет, поэтому её связь с границей выводится из вердикта по правилу ядра:
+// PASS - нижняя граница не меньше требуемой, FAIL - верхняя не больше, NO_VERDICT - границы недостаточно.
+function capacityStatement(view: CapacityView, lower: string | null, upper: string | null, blocked: boolean): string {
+  const unit = view.unit
+  if (view.verdict === 'PASS' && lower !== null) {
+    const base = OVERVIEW_LABELS.capacityStatementPass(lower, unit)
+    return view.stages.some((stage) => stage.verdict === 'FAIL') ? `${base} ${OVERVIEW_LABELS.capacityPassFailedAbove}` : base
+  }
+  if (view.verdict === 'FAIL' && upper !== null) return OVERVIEW_LABELS.capacityStatementFail(upper, unit)
+  if (view.verdict === 'NO_POLICY') return OVERVIEW_LABELS.capacityStatementNoPolicy
+  if (view.verdict !== 'NO_VERDICT') return ''
+  if (blocked) return OVERVIEW_LABELS.capacityStatementBlocked
+  if (view.bound === 'BOUNDED' && lower !== null && upper !== null) return OVERVIEW_LABELS.capacityStatementBounded(lower, upper, unit)
+  if (view.bound === 'LOWER_BOUND' && lower !== null) return OVERVIEW_LABELS.capacityStatementLower(lower, unit)
+  if (view.bound === 'UPPER_BOUND' && upper !== null) return OVERVIEW_LABELS.capacityStatementUpper(upper, unit)
+  return OVERVIEW_LABELS.capacityStatementIndeterminate
+}
+
+// Блок ёмкости «Обзора»: границы и ступени из capacity_summary. Все значения для графика лежат на одной шкале 0..1000.
+export function capacityBlock(result: AnalysisResult): CapacityBlock | null {
+  const summary = result.capacity_summary
+  const view = capacityView(result)
+  if (!summary || !view) return null
+  const positive = (value: number | string | null | undefined): number | null => {
+    const number = value == null ? NaN : Number(value)
+    return Number.isFinite(number) && number > 0 ? number : null
+  }
+  const lowerValue = positive(summary.lower_inclusive)
+  const upperValue = positive(summary.upper_exclusive)
+  const stages = summary.stages ?? []
+  const maximum = Math.max(1, lowerValue ?? 0, upperValue ?? 0, ...stages.flatMap((stage) => [positive(stage.target) ?? 0, positive(stage.achieved) ?? 0]))
+  const scale = (value: number | null) => value === null ? null : Math.round((value / maximum) * 100000) / 100
+  const rows = view.stages.map((row, index): CapacityBlockStage => {
+    const [kind, status] = stageKinds[row.verdict] ?? ['unverified', 'NO_VERDICT']
+    return {
+      key: row.key,
+      label: row.stage,
+      target: row.target,
+      achieved: row.achieved,
+      verdictText: row.verdictText,
+      kind,
+      status,
+      mark: OVERVIEW_LABELS.stageMark[kind],
+      smallSample: row.smallSample,
+      barX: scale(positive(stages[index].target)) ?? 0,
+      achievedX: scale(positive(stages[index].achieved)),
+    }
+  })
+  const lower = lowerValue === null ? null : capacityNumber(summary.lower_inclusive)
+  const upper = upperValue === null ? null : capacityNumber(summary.upper_exclusive)
+  const count = (kind: CapacityStageKind) => rows.filter((row) => row.kind === kind).length
+  return {
+    verdict: view.verdict,
+    verdictText: OVERVIEW_LABELS.capacityVerdict[view.verdict] ?? view.verdictText,
+    boundText: view.boundText,
+    statement: capacityStatement(view, lower, upper, view.reasons.some((reason) => reason.code === 'RULE_WINDOW_NOT_FOUND')),
+    axisText: CAPACITY_LABELS.axisValue(view.axis, view.unit),
+    counts: OVERVIEW_LABELS.capacityCounts(rows.length, count('pass'), count('fail'), count('unverified')),
+    legend: OVERVIEW_LABELS.capacityLegend(lower, upper, view.unit),
+    smallSample: view.smallSample,
+    lowerX: scale(lowerValue),
+    upperX: scale(upperValue),
+    stages: rows,
+  }
 }
 
 export function loadSeries(buckets: Bucket[], rollupSeconds: number): LoadSeries {

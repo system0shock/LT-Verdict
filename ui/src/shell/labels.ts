@@ -152,6 +152,42 @@ export const OVERVIEW_LABELS = {
   openSources: 'Открыть источники',
   openSetup: 'Открыть «Новый анализ»',
 
+  // Ёмкость по ступеням (тест максимума)
+  capacityTitle: 'Ёмкость по ступеням',
+  capacityLead: 'Граница ёмкости и нагрузка по ступеням теста максимума. Всё взято из готового результата, ничего не пересчитывается; причины и основания по ступеням в таблице на вкладке «Таблицы».',
+  capacityVerdict: {
+    PASS: 'Ёмкость подтверждена',
+    FAIL: 'Ёмкость недостаточна',
+    NO_VERDICT: 'Вердикт по ёмкости не выдан',
+    NO_POLICY: 'Вердикта по ёмкости нет',
+  } as Record<string, string>,
+  // Требуемая ёмкость в результате не хранится, поэтому говорим о ней через вердикт: так считает ядро (PASS: нижняя граница не меньше требуемой, FAIL: верхняя не больше).
+  capacityStatementPass: (lower: string, unit: string) => `Требуемая ёмкость не выше ${lower} ${unit}: нижняя граница её покрывает.`,
+  capacityPassFailedAbove: 'Нарушенные ступени выше границы вердикт не меняют: для итога нужна только нижняя граница.',
+  capacityStatementFail: (upper: string, unit: string) => `Требуемая ёмкость не ниже ${upper} ${unit}: на этой нагрузке требования нарушены.`,
+  capacityStatementBounded: (lower: string, upper: string, unit: string) =>
+    `Требуемая ёмкость лежит между ${lower} и ${upper} ${unit}: границы недостаточно, чтобы сравнить её с требованием.`,
+  capacityStatementLower: (lower: string, unit: string) => `Нижняя граница ${lower} ${unit} ниже требуемой ёмкости, верхней границы нет: итог не выдан.`,
+  capacityStatementUpper: (upper: string, unit: string) => `Верхняя граница ${upper} ${unit} выше требуемой ёмкости, нижней границы нет: итог не выдан.`,
+  capacityStatementIndeterminate: 'Граница ёмкости не определена, сравнить её с требуемой ёмкостью нельзя.',
+  capacityStatementBlocked: 'Итог не выдан: границу нельзя сравнить с требуемой ёмкостью, причины указаны в списке «Требует внимания».',
+  capacityStatementNoPolicy: 'Итог не выдан: в плане не задана требуемая ёмкость или у ступеней нет применимых правил SLA.',
+  capacityChartTitle: 'Нагрузка по ступеням',
+  capacityCounts: (total: number, passed: number, failed: number, other: number) =>
+    `Ступеней: ${total}; выдержано: ${passed}, нарушено: ${failed}, не подтверждено или без правил: ${other}.`,
+  capacityChartAria: (counts: string) => `График нагрузки по ступеням. ${counts} Те же данные в таблице под графиком.`,
+  capacityTableRegion: 'Нагрузка по ступеням: таблица и график',
+  capacityHeads: ['Ступень', 'Цель', 'Достигнуто (p05 за 10 с)', 'Итог ступени'],
+  stageMark: { pass: '✓', fail: '✕', unverified: '?' } as Record<string, string>,
+  capacityLegend: (lower: string | null, upper: string | null, unit: string) => {
+    const parts = ['Полоса под строкой ступени: цель ступени. Вертикальная черта на полосе: достигнутая нагрузка.']
+    if (lower !== null) parts.push(`Штриховая линия: нижняя граница ${lower} ${unit}.`)
+    if (upper !== null) parts.push(`Точечная линия: верхняя граница ${upper} ${unit} (не включается).`)
+    parts.push('Значок в столбце «Итог ступени» и слово дублируют цвет.')
+    return parts.join(' ')
+  },
+  capacityOpenAria: 'Открыть ёмкость: таблица ступеней, причины и основания',
+
   // Ключевые метрики
   metricsTitle: 'Ключевые метрики прогона',
   metricsCapacityNote: 'Значения посчитаны по всему прогону, включая ступени нагрузки выше границы ёмкости, поэтому p95 и максимум могут быть высокими при подтверждённой ёмкости. Вердикт по ёмкости определяют ступени теста: они в таблице на вкладке «Таблицы».',

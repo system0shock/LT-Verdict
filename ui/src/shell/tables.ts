@@ -200,7 +200,7 @@ export interface CapacityView {
 
 const capacityGroups = new Intl.NumberFormat('ru-RU')
 // Capacity values are exact decimals: the digits are kept as the server sent them (no rounding), only grouped and with a decimal comma.
-function capacityNumber(value: number | string | null | undefined): string {
+export function capacityNumber(value: number | string | null | undefined): string {
   if (value == null) return TABLES_LABELS.noData
   const text = String(value)
   const match = /^(-?)(\d+)(?:\.(\d+))?$/.exec(text)

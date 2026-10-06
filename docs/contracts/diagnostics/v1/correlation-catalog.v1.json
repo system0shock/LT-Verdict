@@ -1,0 +1,296 @@
+{
+  "schema_version": "correlation-catalog.v1",
+  "families": [
+    {
+      "id": "p95",
+      "outcome": "response_time_p95_ms",
+      "min_load_delta": 5,
+      "hypotheses": [
+        {
+          "id": "cpu-throttling",
+          "kind": "cause",
+          "scope": "service",
+          "metric": "openshift_cpu_throttling",
+          "unit": "ratio",
+          "expected_sign": "positive",
+          "max_lag_cells": 2,
+          "min_abs_effect": 0.3,
+          "min_resource_delta": 0.05,
+          "controls": ["target_rps"]
+        },
+        {
+          "id": "gc-pause",
+          "kind": "cause",
+          "scope": "service",
+          "metric": "jvm_gc_pause",
+          "unit": "s",
+          "expected_sign": "positive",
+          "max_lag_cells": 1,
+          "min_abs_effect": 0.3,
+          "min_resource_delta": 0.01,
+          "controls": ["target_rps"]
+        },
+        {
+          "id": "pool-saturation",
+          "kind": "cause",
+          "scope": "service",
+          "metric": "jvm_pool_saturation",
+          "unit": "ratio",
+          "expected_sign": "positive",
+          "max_lag_cells": 2,
+          "min_abs_effect": 0.3,
+          "min_resource_delta": 0.05,
+          "controls": ["concurrency"]
+        },
+        {
+          "id": "thread-count",
+          "kind": "cause",
+          "scope": "service",
+          "metric": "jvm_thread_count",
+          "unit": "count",
+          "expected_sign": "positive",
+          "max_lag_cells": 4,
+          "min_abs_effect": 0.3,
+          "min_resource_delta": 5,
+          "controls": ["concurrency"]
+        },
+        {
+          "id": "pod-imbalance",
+          "kind": "cause",
+          "scope": "service",
+          "metric": "openshift_pod_imbalance",
+          "unit": "ratio",
+          "expected_sign": "positive",
+          "max_lag_cells": 2,
+          "min_abs_effect": 0.3,
+          "min_resource_delta": 0.05,
+          "controls": ["target_rps"]
+        },
+        {
+          "id": "unavailable-replicas",
+          "kind": "cause",
+          "scope": "service",
+          "metric": "openshift_unavailable_replicas",
+          "unit": "count",
+          "expected_sign": "positive",
+          "max_lag_cells": 1,
+          "min_abs_effect": 0.3,
+          "min_resource_delta": 1,
+          "controls": ["target_rps"]
+        },
+        {
+          "id": "downstream-p95",
+          "kind": "cause",
+          "scope": "downstream",
+          "metric": "service_response_time_p95",
+          "unit": "ms",
+          "expected_sign": "positive",
+          "max_lag_cells": 1,
+          "min_abs_effect": 0.3,
+          "min_resource_delta": 5,
+          "controls": ["target_rps"]
+        },
+        {
+          "id": "sidecar-memory",
+          "kind": "cause",
+          "scope": "service",
+          "metric": "openshift_sidecar_memory_limit_ratio",
+          "unit": "ratio",
+          "expected_sign": "positive",
+          "max_lag_cells": 2,
+          "min_abs_effect": 0.3,
+          "min_resource_delta": 0.05,
+          "controls": ["target_rps"]
+        },
+        {
+          "id": "sidecar-throttling",
+          "kind": "cause",
+          "scope": "service",
+          "metric": "openshift_sidecar_cpu_throttling",
+          "unit": "ratio",
+          "expected_sign": "positive",
+          "max_lag_cells": 2,
+          "min_abs_effect": 0.3,
+          "min_resource_delta": 0.05,
+          "controls": ["target_rps"]
+        },
+        {
+          "id": "generator-cpu",
+          "kind": "control",
+          "scope": "load_generator",
+          "metric": "cpu_used",
+          "unit": "ratio",
+          "expected_sign": "positive",
+          "max_lag_cells": 1,
+          "min_abs_effect": 0.3,
+          "min_resource_delta": 0.05,
+          "controls": []
+        }
+      ]
+    },
+    {
+      "id": "errors",
+      "outcome": "error_rate",
+      "min_load_delta": 0.005,
+      "hypotheses": [
+        {
+          "id": "restarts",
+          "kind": "cause",
+          "scope": "service",
+          "metric": "openshift_restarts",
+          "unit": "events/s",
+          "expected_sign": "positive",
+          "max_lag_cells": 1,
+          "min_abs_effect": 0.3,
+          "min_resource_delta": 0.001,
+          "controls": ["target_rps"]
+        },
+        {
+          "id": "oom",
+          "kind": "cause",
+          "scope": "service",
+          "metric": "openshift_oom",
+          "unit": "events/s",
+          "expected_sign": "positive",
+          "max_lag_cells": 1,
+          "min_abs_effect": 0.3,
+          "min_resource_delta": 0.001,
+          "controls": ["target_rps"]
+        },
+        {
+          "id": "unavailable-replicas",
+          "kind": "cause",
+          "scope": "service",
+          "metric": "openshift_unavailable_replicas",
+          "unit": "count",
+          "expected_sign": "positive",
+          "max_lag_cells": 1,
+          "min_abs_effect": 0.3,
+          "min_resource_delta": 1,
+          "controls": ["target_rps"]
+        },
+        {
+          "id": "pool-saturation",
+          "kind": "cause",
+          "scope": "service",
+          "metric": "jvm_pool_saturation",
+          "unit": "ratio",
+          "expected_sign": "positive",
+          "max_lag_cells": 2,
+          "min_abs_effect": 0.3,
+          "min_resource_delta": 0.05,
+          "controls": ["concurrency"]
+        },
+        {
+          "id": "downstream-error-rate",
+          "kind": "cause",
+          "scope": "downstream",
+          "metric": "service_error_rate",
+          "unit": "ratio",
+          "expected_sign": "positive",
+          "max_lag_cells": 1,
+          "min_abs_effect": 0.3,
+          "min_resource_delta": 0.005,
+          "controls": ["target_rps"]
+        },
+        {
+          "id": "cpu-throttling",
+          "kind": "cause",
+          "scope": "service",
+          "metric": "openshift_cpu_throttling",
+          "unit": "ratio",
+          "expected_sign": "positive",
+          "max_lag_cells": 2,
+          "min_abs_effect": 0.3,
+          "min_resource_delta": 0.05,
+          "controls": ["target_rps"]
+        },
+        {
+          "id": "gc-pause",
+          "kind": "cause",
+          "scope": "service",
+          "metric": "jvm_gc_pause",
+          "unit": "s",
+          "expected_sign": "positive",
+          "max_lag_cells": 1,
+          "min_abs_effect": 0.3,
+          "min_resource_delta": 0.01,
+          "controls": ["target_rps"]
+        },
+        {
+          "id": "generator-cpu",
+          "kind": "control",
+          "scope": "load_generator",
+          "metric": "cpu_used",
+          "unit": "ratio",
+          "expected_sign": "positive",
+          "max_lag_cells": 1,
+          "min_abs_effect": 0.3,
+          "min_resource_delta": 0.05,
+          "controls": []
+        }
+      ]
+    },
+    {
+      "id": "throughput",
+      "outcome": "throughput_rps",
+      "min_load_delta": 1,
+      "hypotheses": [
+        {
+          "id": "pool-saturation",
+          "kind": "cause",
+          "scope": "service",
+          "metric": "jvm_pool_saturation",
+          "unit": "ratio",
+          "expected_sign": "negative",
+          "max_lag_cells": 2,
+          "min_abs_effect": 0.3,
+          "min_resource_delta": 0.05,
+          "controls": ["target_rps"]
+        },
+        {
+          "id": "cpu-throttling",
+          "kind": "cause",
+          "scope": "service",
+          "metric": "openshift_cpu_throttling",
+          "unit": "ratio",
+          "expected_sign": "negative",
+          "max_lag_cells": 2,
+          "min_abs_effect": 0.3,
+          "min_resource_delta": 0.05,
+          "controls": ["target_rps"]
+        },
+        {
+          "id": "unavailable-replicas",
+          "kind": "cause",
+          "scope": "service",
+          "metric": "openshift_unavailable_replicas",
+          "unit": "count",
+          "expected_sign": "negative",
+          "max_lag_cells": 1,
+          "min_abs_effect": 0.3,
+          "min_resource_delta": 1,
+          "controls": ["target_rps"]
+        },
+        {
+          "id": "generator-cpu",
+          "kind": "control",
+          "scope": "load_generator",
+          "metric": "cpu_used",
+          "unit": "ratio",
+          "expected_sign": "negative",
+          "max_lag_cells": 1,
+          "min_abs_effect": 0.3,
+          "min_resource_delta": 0.05,
+          "controls": []
+        }
+      ]
+    }
+  ],
+  "event_families": [
+    {
+      "id": "oom-restarts",
+      "note": "События, а не ряд: корреляция неприменима, пар нет. Используются порядок эпизодов и тренды."
+    }
+  ]
+}

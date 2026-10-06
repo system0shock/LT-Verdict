@@ -1,6 +1,7 @@
 // Данные по подам (pod-view.v1, платформа P4c): типы ответов API и чистые функции показа.
 // Это диагностическая проекция: она вердикт не определяет, а значения `null` - пропуски, а не нули.
 import type { AnalysisSummary } from '../types'
+import { pickArmAnalysis } from './platformMap'
 
 export interface PodViewGrid {
   start_epoch_ms: number
@@ -102,7 +103,8 @@ export interface PodViewGroup {
 }
 
 // Где искать pod-view: анализы с тем же плечом и тем же хэшем снимка (проход 2 лежит в другом анализе, чем онлайн-вердикт).
-// Выбранный анализ идёт первым. Без хэша снимка pod-view привязать не к чему: групп нет и запросов нет.
+// Выбранный анализ идёт первым; якорь плеча - по общему правилу pickArmAnalysis (выбранный, иначе первый с хэшем).
+// Без хэша снимка pod-view привязать не к чему: групп нет и запросов нет.
 export function podViewGroups(analyses: AnalysisSummary[], selectedAnalysisId: string): PodViewGroup[] {
   const selected = analyses.find((item) => item.analysis_id === selectedAnalysisId)
   if (!selected?.resource_snapshot_sha256) return []
@@ -115,7 +117,7 @@ export function podViewGroups(analyses: AnalysisSummary[], selectedAnalysisId: s
   const groups: PodViewGroup[] = []
   for (const [arm, items] of [...arms.entries()].sort(([left], [right]) => compare(left ?? '', right ?? ''))) {
     if ((arm === null) !== (selectedArm === null)) continue
-    const anchor = arm === selectedArm ? selected : items.find((item) => item.resource_snapshot_sha256)
+    const anchor = pickArmAnalysis(items, selectedAnalysisId, (item) => Boolean(item.resource_snapshot_sha256))
     const hash = anchor?.resource_snapshot_sha256
     if (!anchor || !hash) continue
     const sameSnapshot = items.filter((item) => item.resource_snapshot_sha256 === hash && item.analysis_id !== anchor.analysis_id)

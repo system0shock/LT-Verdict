@@ -54,7 +54,17 @@ export function problemServices(map: ServiceArmMap): string[] {
     map.cells.some((cell) => cell.service === service && (cell.state === 'FAIL' || cell.state === 'NO_VERDICT')))
 }
 
-// Один анализ на плечо: выбранный, если он этого плеча, иначе первый в списке. Анализы без плеча в карту не входят.
+// Правило выбора анализа внутри одного плеча (общее для карты платформы и pod-view): выбранный, если он среди пригодных,
+// иначе первый пригодный в списке. Пригодность (`usable`) задаёт вызывающий: карте подходит любой, pod-view нужен хэш снимка.
+export function pickArmAnalysis(
+  items: AnalysisSummary[],
+  selectedAnalysisId: string,
+  usable: (item: AnalysisSummary) => boolean = () => true,
+): AnalysisSummary | undefined {
+  return items.find((item) => item.analysis_id === selectedAnalysisId && usable(item)) ?? items.find(usable)
+}
+
+// Один анализ на плечо: см. pickArmAnalysis. Анализы без плеча в карту не входят.
 export function armAnalyses(analyses: AnalysisSummary[], selectedAnalysisId: string): ArmAnalysis[] {
   const byArm = new Map<string, AnalysisSummary[]>()
   for (const analysis of analyses) {
@@ -63,7 +73,7 @@ export function armAnalyses(analyses: AnalysisSummary[], selectedAnalysisId: str
   }
   return [...byArm.entries()].sort(([left], [right]) => compare(left, right)).map(([arm, items]) => ({
     arm,
-    analysisId: (items.find((item) => item.analysis_id === selectedAnalysisId) ?? items[0]).analysis_id,
+    analysisId: pickArmAnalysis(items, selectedAnalysisId)!.analysis_id,
     analysesOfArm: items.length,
   }))
 }

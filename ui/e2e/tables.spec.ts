@@ -216,6 +216,15 @@ test('resource checks show the service and the coverage of platform rules', asyn
   await expect(snapshot.getByTestId('resource-check-coverage')).toHaveText('—')
 })
 
+test('the old interface shows the same service and coverage columns', async ({ page }) => {
+  await fixtureApi(page, withPlatformChecks)
+  await page.goto('/')
+  await pickSavedAnalysis(page)
+  const table = page.locator('#resource-results').getByRole('region', { name: 'Resource policy checks' })
+  await expect(table.getByRole('columnheader', { name: 'Service' })).toBeVisible()
+  await expect(table.getByRole('row').filter({ hasText: 'cpu-share/orders' }).getByTestId('resource-check-coverage')).toContainText('19 / 20 (95 %)')
+})
+
 test('resource checks of a snapshot without platform rules keep their columns', async ({ page }) => {
   await openTables(page, snapshotOnly)
   const table = page.locator('#resource-results').getByRole('region', { name: 'Resource policy checks' })

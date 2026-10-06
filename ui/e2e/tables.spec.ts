@@ -181,3 +181,64 @@ for (const size of [{ width: 1280, height: 800 }, { width: 375, height: 800 }]) 
     expect(width.scroll).toBeLessThanOrEqual(width.client)
   })
 }
+
+// Platform SLA checks (ADR 0018): the resource checks table adds the service and the cell coverage of the window.
+const resourceCheck = { type: 'resource_policy_check', window_id: 'steady-1', unit: 'ratio', operator: 'gt', threshold: '0.4', effect: 'sla' }
+const withPlatformChecks = {
+  ...failing,
+  findings: [{ id: 'f1', type: 'resource_threshold_violation', window_id: 'steady-1', rule_id: 'cpu-share/payments', series_id: 'cpu-payments', entity: 'payments', unit: 'ratio', from_epoch_ms: 1000, to_epoch_ms: 5000, cell_count: 4, observed_min: '0.5', observed_max: '0.5', evidence_id: 'r-payments', presumed: true }],
+  evidence: [
+    ...failing.evidence,
+    { ...resourceCheck, id: 'r-orders', rule_id: 'cpu-share/orders', series_id: 'cpu-orders', status: 'PASS', reason: 'RESOURCE_GAPS', platform_rule_id: 'cpu-share', service: 'orders', expected_cells: 20, observed_cells: 19, missing_cells: 1, longest_gap_cells: 1 },
+    { ...resourceCheck, id: 'r-payments', rule_id: 'cpu-share/payments', series_id: 'cpu-payments', status: 'NO_VERDICT', reason: 'MISSING_RESOURCE_CELLS', platform_rule_id: 'cpu-share', service: 'payments', expected_cells: 20, observed_cells: 17, missing_cells: 3, longest_gap_cells: 2 },
+    { ...resourceCheck, id: 'r-snapshot', rule_id: 'cpu-limit', series_id: 'cpu', status: 'PASS', reason: null },
+  ],
+}
+const snapshotOnly = { ...failing, evidence: [...failing.evidence, { ...resourceCheck, id: 'r-snapshot', rule_id: 'cpu-limit', series_id: 'cpu', status: 'PASS', reason: null }] }
+
+test('resource checks show the service and the coverage of platform rules', async ({ page }) => {
+  await openTables(page, withPlatformChecks)
+  const table = page.locator('#resource-results').getByRole('region', { name: 'Resource policy checks' })
+  await expect(table.getByRole('columnheader', { name: 'Service' })).toBeVisible()
+  await expect(table.getByRole('columnheader', { name: 'Coverage (observed / expected)' })).toBeVisible()
+  const orders = table.getByRole('row').filter({ hasText: 'cpu-share/orders' })
+  await expect(orders.getByTestId('resource-check-service')).toContainText('orders')
+  await expect(orders.getByTestId('resource-check-service')).toContainText('cpu-share')
+  await expect(orders.getByTestId('resource-check-coverage')).toContainText('19 / 20 (95 %)')
+  await expect(orders.getByTestId('resource-check-coverage')).toContainText('missing cells 1, longest gap 1')
+  await expect(orders.getByTestId('resource-check-coverage')).not.toContainText('presumed')
+  const payments = table.getByRole('row').filter({ hasText: 'cpu-share/payments' })
+  await expect(payments.getByTestId('resource-check-coverage')).toContainText('17 / 20 (85 %)')
+  await expect(payments.getByTestId('resource-check-coverage')).toContainText('missing cells 3, longest gap 2')
+  await expect(payments.getByTestId('resource-check-coverage')).toContainText('presumed violation')
+  const snapshot = table.getByRole('row').filter({ hasText: 'cpu-limit' })
+  await expect(snapshot.getByTestId('resource-check-service')).toHaveText('—')
+  await expect(snapshot.getByTestId('resource-check-coverage')).toHaveText('—')
+})
+
+test('resource checks of a snapshot without platform rules keep their columns', async ({ page }) => {
+  await openTables(page, snapshotOnly)
+  const table = page.locator('#resource-results').getByRole('region', { name: 'Resource policy checks' })
+  await expect(table.getByRole('row').filter({ hasText: 'cpu-limit' })).toBeVisible()
+  await expect(table.getByRole('columnheader', { name: 'Service' })).toHaveCount(0)
+  await expect(table.getByRole('columnheader', { name: /Coverage/ })).toHaveCount(0)
+})
+
+for (const theme of ['light', 'dark'] as const) {
+  test(`platform resource checks have no serious axe violations in ${theme}`, async ({ page }) => {
+    await page.emulateMedia({ colorScheme: theme })
+    await openTables(page, withPlatformChecks)
+    const axe = await new AxeBuilder({ page }).include('#resource-results').analyze()
+    expect(axe.violations.filter((item) => item.impact === 'critical' || item.impact === 'serious').map((item) => item.id)).toEqual([])
+  })
+}
+
+for (const width of [1280, 375, 320]) {
+  test(`platform resource checks have no horizontal page scroll at ${width}px`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 800 })
+    await openTables(page, withPlatformChecks)
+    await expect(page.locator('#resource-results').getByRole('region', { name: 'Resource policy checks' })).toBeVisible()
+    const size = await page.evaluate(() => ({ scroll: document.documentElement.scrollWidth, client: document.documentElement.clientWidth }))
+    expect(size.scroll).toBeLessThanOrEqual(size.client)
+  })
+}

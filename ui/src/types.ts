@@ -619,13 +619,24 @@ export type BaselineComparisonWarning =
   | 'BASELINE_IS_CURRENT_ANALYSIS'
   | 'BASELINE_IS_CURRENT_RUN'
   | 'CURRENT_IN_CANDIDATE_SET'
+  | 'BASELINE_NOT_PASS'
   | 'BASELINE_SMALL_SAMPLE'
+  | 'BASELINE_SERIES_DIFFERS'
+  | 'POLICY_DIFFERS'
+  | 'PROFILE_MISMATCH'
 
 export interface BaselineComparison {
   baseline: BaselineSelection
   current: AnalysisReference
   comparability: 'UNCONFIRMED' | 'USER_CONFIRMED'
   warnings: BaselineComparisonWarning[]
+  // Заявленные профили условий релизов (ADR 0019); null, если анализы не сопоставлены с релизами или профиль не заявлен.
+  profile?: {
+    status: 'MATCH' | 'MISMATCH'
+    differing_fields: string[]
+    baseline_release_id: string
+    current_release_id: string
+  } | null
   conditions: BaselineCondition | null
   metrics: ComparisonMetric[]
   window_comparison?: {

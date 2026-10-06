@@ -443,10 +443,22 @@ series 128 UTF-8 bytes и statistical candidates 3..20 разных runs; file c
 `500 CORRUPT_BASELINE`), затем допуск, затем проверки statistical (метрики,
 identity, `BASELINE_MIXED_SEMANTICS`).
 
-`compareAnalyses` добавляет предупреждение `BASELINE_SMALL_SAMPLE` четвёртой
-позицией порядка ADR 0019 (после `CURRENT_IN_CANDIDATE_SET`), если среди причин
-покрытия результата анализа-эталона есть `SMALL_SAMPLE`; метрики, статусы и
-`comparability` оно не меняет.
+`compareAnalyses` дописывает к `BASELINE_IS_CURRENT_*` и `CURRENT_IN_CANDIDATE_SET`
+предупреждения в порядке ADR 0019, раздел 5: `BASELINE_NOT_PASS` (вердикт
+результата анализа-эталона не `PASS`), `BASELINE_SMALL_SAMPLE` (среди причин
+покрытия есть `SMALL_SAMPLE`), `BASELINE_SERIES_DIFFERS` (серия релиза текущего
+анализа не равна серии выбора эталона; серия выбора нормализуется
+`normalizeReleaseText`, как серия релиза), `POLICY_DIFFERS` (различаются
+`policy_sha256` двух identity) и `PROFILE_MISMATCH` (оба профиля заявлены и
+различаются). Метрики, статусы окон и `comparability` предупреждения не меняют.
+Параметр `ReleaseComparisonContext(baseline, current)` несёт записи релизов обоих
+анализов; без него (или без записей) поле ответа `profile` равно `null`, а
+`BASELINE_SERIES_DIFFERS` и `PROFILE_MISMATCH` не возникают. Обработчик
+comparison получает записи одним проходом `findReleasesByAnalysis` по каталогу
+релизов (до 1 001 файла, вне цены чтения результатов); неоднозначный
+`analysis_id` (несколько записей) даёт запись `null`, а `CORRUPT_RELEASE_REGISTRY`
+не превращается в ответ `500`: профиль и серия вспомогательны, поэтому
+сравнение выполняется с пустым контекстом.
 
 Результат кандидата читает `RunBundleStore.readVerifiedAnalysis`: под
 `operationLock` остаётся проверка манифеста, а чтение и SHA-256

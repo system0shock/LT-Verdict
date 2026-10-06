@@ -154,7 +154,11 @@ async function compareWindows(page: Page, baselineId = 'w1', currentId = 'w2') {
 
 test('compare tab is Russian, keeps the server warning order and says the verdict is untouched', async ({ page }) => {
   const requests = await openCompare(page, {
-    warnings: ['BASELINE_IS_CURRENT_RUN', 'CURRENT_IN_CANDIDATE_SET', 'BASELINE_SMALL_SAMPLE'], comparability: 'UNCONFIRMED',
+    warnings: [
+      'BASELINE_IS_CURRENT_RUN', 'CURRENT_IN_CANDIDATE_SET', 'BASELINE_NOT_PASS', 'BASELINE_SMALL_SAMPLE',
+      'BASELINE_SERIES_DIFFERS', 'POLICY_DIFFERS', 'PROFILE_MISMATCH',
+    ],
+    comparability: 'UNCONFIRMED',
   })
   await page.getByRole('button', { name: COMPARE_LABELS.compare, exact: true }).click()
   const panel = page.locator('#baseline-panel')
@@ -163,7 +167,11 @@ test('compare tab is Russian, keeps the server warning order and says the verdic
   await expect(page.getByTestId('baseline-warnings').locator('li')).toHaveText([
     BASELINE_LABELS.warnings.BASELINE_IS_CURRENT_RUN,
     BASELINE_LABELS.warnings.CURRENT_IN_CANDIDATE_SET,
+    BASELINE_LABELS.warnings.BASELINE_NOT_PASS,
     BASELINE_LABELS.warnings.BASELINE_SMALL_SAMPLE,
+    BASELINE_LABELS.warnings.BASELINE_SERIES_DIFFERS,
+    BASELINE_LABELS.warnings.POLICY_DIFFERS,
+    BASELINE_LABELS.warnings.PROFILE_MISMATCH,
   ])
   await expect(page.getByTestId('baseline-warnings')).toContainText(BASELINE_LABELS.warningsTitle)
   await expect(page.getByTestId('baseline-comparison')).toContainText(COMPARE_LABELS.statusLine('UNCONFIRMED'))

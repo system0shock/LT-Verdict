@@ -856,6 +856,410 @@
         ],
         "retry_refused_reason": null
       }
+    },
+    {
+      "name": "spaced-nested-then-valid",
+      "first_request": {
+        "model": "deepseek-v4-flash-0731",
+        "messages": [
+          {
+            "role": "system",
+            "content": "Return structured advice."
+          },
+          {
+            "role": "user",
+            "content": "bounded evidence"
+          }
+        ],
+        "temperature": 0,
+        "max_tokens": 64000,
+        "stream": true,
+        "stream_options": {
+          "include_usage": true
+        },
+        "tools": [
+          {
+            "type": "function",
+            "function": {
+              "name": "structured_output",
+              "parameters": {
+                "type": "object"
+              }
+            }
+          }
+        ]
+      },
+      "provider_responses": [
+        {
+          "status": 200,
+          "content_type": "text/event-stream",
+          "body": "data: {\"model\":\"deepseek-v4-flash-0731\",\"choices\":[{\"index\":0,\"delta\":{\"tool_calls\":[{\"index\":0,\"id\":\"call_1\",\"function\":{\"name\":\"structured_output\",\"arguments\":\"{\\\"output\\\": {\\\"schema_version\\\": \\\"ai-advice-output.v1\\\", \\\"summary\\\": \\\"\\\\u041f\\\\u0440\\\\u043e\\\\u0432\\\\u0435\\\\u0440\\\\u043a\\\\u0430 \\\\u0442\\\\u0440\\\\u0430\\\\u043d\\\\u0441\\\\u043f\\\\u043e\\\\u0440\\\\u0442\\\\u0430: \\\\u0432\\\\u0435\\\\u0440\\\\u0434\\\\u0438\\\\u043a\\\\u0442 \\\\u0441\\\\u043e\\\\u0445\\\\u0440\\\\u0430\\\\u043d\\\\u0451\\\\u043d.\\\", \\\"hypotheses\\\": [{\\\"rank\\\": 1, \\\"observation\\\": \\\"Observed\\\", \\\"possible_expla\"}}]}}]}\n\ndata: {\"model\":\"deepseek-v4-flash-0731\",\"choices\":[{\"index\":0,\"delta\":{\"tool_calls\":[{\"index\":0,\"function\":{\"arguments\":\"nation\\\": \\\"Unknown\\\", \\\"recommended_check\\\": \\\"Check\\\", \\\"evidence_refs\\\": [\\\"analysis-result.json#/run_validity\\\"]}, {\\\"rank\\\": 2, \\\"observation\\\": \\\"Second\\\", \\\"possible_explanation\\\": \\\"Unknown\\\", \\\"recommended_check\\\": \\\"Check\\\", \\\"evidence_refs\\\": [\\\"analysis-result.json#/run_validity\\\"]}], \\\"recommendations\\\": [], \\\"caveats\\\": [\\\"Preflight only\\\", \\\"Second caveat\\\"]}}\"}}]}}]}\n\ndata: {\"model\":\"deepseek-v4-flash-0731\",\"choices\":[{\"index\":0,\"delta\":{},\"finish_reason\":\"tool_calls\"}]}\n\ndata: [DONE]\n\n"
+        }
+      ],
+      "second_request": {
+        "model": "deepseek-v4-flash-0731",
+        "messages": [
+          {
+            "role": "system",
+            "content": "Return structured advice."
+          },
+          {
+            "role": "user",
+            "content": "bounded evidence"
+          },
+          {
+            "role": "assistant",
+            "content": null,
+            "reasoning_content": "",
+            "tool_calls": [
+              {
+                "id": "call_1",
+                "type": "function",
+                "function": {
+                  "name": "structured_output",
+                  "arguments": "{\"output\":{\"schema_version\":\"ai-advice-output.v1\",\"summary\":\"Проверка транспорта: вердикт сохранён.\",\"hypotheses\":[{\"rank\":1,\"observation\":\"Observed\",\"possible_explanation\":\"Unknown\",\"recommended_check\":\"Check\",\"evidence_refs\":[\"analysis-result.json#/run_validity\"]},{\"rank\":2,\"observation\":\"Second\",\"possible_explanation\":\"Unknown\",\"recommended_check\":\"Check\",\"evidence_refs\":[\"analysis-result.json#/run_validity\"]}],\"recommendations\":[],\"caveats\":[\"Preflight only\",\"Second caveat\"]}}"
+                }
+              }
+            ]
+          },
+          {
+            "role": "tool",
+            "tool_call_id": "call_1",
+            "content": "params must have required property 'schema_version'"
+          }
+        ],
+        "temperature": 0,
+        "max_tokens": 64000,
+        "stream": true,
+        "stream_options": {
+          "include_usage": true
+        },
+        "tools": [
+          {
+            "type": "function",
+            "function": {
+              "name": "structured_output",
+              "parameters": {
+                "type": "object"
+              }
+            }
+          }
+        ]
+      },
+      "expected": {
+        "second_http_status": 200,
+        "received_request_count": 2,
+        "forwarded_request_count": 2,
+        "status": "FORWARDED_STRUCTURED_OUTPUT",
+        "outcomes": [
+          "FORWARDED_STRUCTURED_OUTPUT",
+          "FORWARDED_RETRY"
+        ],
+        "retry_refused_reason": null
+      }
+    },
+    {
+      "name": "spaced-wrapped-string-then-valid",
+      "first_request": {
+        "model": "deepseek-v4-flash-0731",
+        "messages": [
+          {
+            "role": "system",
+            "content": "Return structured advice."
+          },
+          {
+            "role": "user",
+            "content": "bounded evidence"
+          }
+        ],
+        "temperature": 0,
+        "max_tokens": 64000,
+        "stream": true,
+        "stream_options": {
+          "include_usage": true
+        },
+        "tools": [
+          {
+            "type": "function",
+            "function": {
+              "name": "structured_output",
+              "parameters": {
+                "type": "object"
+              }
+            }
+          }
+        ]
+      },
+      "provider_responses": [
+        {
+          "status": 200,
+          "content_type": "text/event-stream",
+          "body": "data: {\"model\":\"deepseek-v4-flash-0731\",\"choices\":[{\"index\":0,\"delta\":{\"tool_calls\":[{\"index\":0,\"id\":\"call_1\",\"function\":{\"name\":\"structured_output\",\"arguments\":\"{\\\"arguments\\\": \\\"{\\\\\\\"schema_version\\\\\\\": \\\\\\\"ai-advice-output.v1\\\\\\\", \\\\\\\"summary\\\\\\\": \\\\\\\"\\\\\\\\u041f\\\\\\\\u0440\\\\\\\\u043e\\\\\\\\u0432\\\\\\\\u0435\\\\\\\\u0440\\\\\\\\u043a\\\\\\\\u0430 \\\\\\\\u0442\\\\\\\\u0440\\\\\\\\u0430\\\\\\\\u043d\\\\\\\\u0441\\\\\\\\u043f\\\\\\\\u043e\\\\\\\\u0440\\\\\\\\u0442\\\\\\\\u0430: \\\\\\\\u0432\\\\\\\\u0435\\\\\\\\u0440\\\\\\\\u0434\\\\\\\\u0438\\\\\\\\u043a\\\\\\\\u0442 \\\\\\\\u0441\\\\\\\\u043e\\\\\\\\u0445\\\\\\\\u0440\\\\\\\\u0430\\\\\\\\u043d\\\\\\\\u0451\\\\\\\\u043d.\\\\\\\", \\\\\\\"hypotheses\\\\\\\": [{\\\\\\\"rank\\\\\\\": 1, \\\\\\\"observation\\\\\\\": \\\\\\\"Observed\\\\\\\", \\\\\\\"possib\"}}]}}]}\n\ndata: {\"model\":\"deepseek-v4-flash-0731\",\"choices\":[{\"index\":0,\"delta\":{\"tool_calls\":[{\"index\":0,\"function\":{\"arguments\":\"le_explanation\\\\\\\": \\\\\\\"Unknown\\\\\\\", \\\\\\\"recommended_check\\\\\\\": \\\\\\\"Check\\\\\\\", \\\\\\\"evidence_refs\\\\\\\": [\\\\\\\"analysis-result.json#/run_validity\\\\\\\"]}, {\\\\\\\"rank\\\\\\\": 2, \\\\\\\"observation\\\\\\\": \\\\\\\"Second\\\\\\\", \\\\\\\"possible_explanation\\\\\\\": \\\\\\\"Unknown\\\\\\\", \\\\\\\"recommended_check\\\\\\\": \\\\\\\"Check\\\\\\\", \\\\\\\"evidence_refs\\\\\\\": [\\\\\\\"analysis-result.json#/run_validity\\\\\\\"]}], \\\\\\\"recommendations\\\\\\\": [], \\\\\\\"caveats\\\\\\\": [\\\\\\\"Preflight only\\\\\\\", \\\\\\\"Second caveat\\\\\\\"]}\\\"}\"}}]}}]}\n\ndata: {\"model\":\"deepseek-v4-flash-0731\",\"choices\":[{\"index\":0,\"delta\":{},\"finish_reason\":\"tool_calls\"}]}\n\ndata: [DONE]\n\n"
+        }
+      ],
+      "second_request": {
+        "model": "deepseek-v4-flash-0731",
+        "messages": [
+          {
+            "role": "system",
+            "content": "Return structured advice."
+          },
+          {
+            "role": "user",
+            "content": "bounded evidence"
+          },
+          {
+            "role": "assistant",
+            "content": null,
+            "reasoning_content": "",
+            "tool_calls": [
+              {
+                "id": "call_1",
+                "type": "function",
+                "function": {
+                  "name": "structured_output",
+                  "arguments": "{\"arguments\":\"{\\\"schema_version\\\": \\\"ai-advice-output.v1\\\", \\\"summary\\\": \\\"\\\\u041f\\\\u0440\\\\u043e\\\\u0432\\\\u0435\\\\u0440\\\\u043a\\\\u0430 \\\\u0442\\\\u0440\\\\u0430\\\\u043d\\\\u0441\\\\u043f\\\\u043e\\\\u0440\\\\u0442\\\\u0430: \\\\u0432\\\\u0435\\\\u0440\\\\u0434\\\\u0438\\\\u043a\\\\u0442 \\\\u0441\\\\u043e\\\\u0445\\\\u0440\\\\u0430\\\\u043d\\\\u0451\\\\u043d.\\\", \\\"hypotheses\\\": [{\\\"rank\\\": 1, \\\"observation\\\": \\\"Observed\\\", \\\"possible_explanation\\\": \\\"Unknown\\\", \\\"recommended_check\\\": \\\"Check\\\", \\\"evidence_refs\\\": [\\\"analysis-result.json#/run_validity\\\"]}, {\\\"rank\\\": 2, \\\"observation\\\": \\\"Second\\\", \\\"possible_explanation\\\": \\\"Unknown\\\", \\\"recommended_check\\\": \\\"Check\\\", \\\"evidence_refs\\\": [\\\"analysis-result.json#/run_validity\\\"]}], \\\"recommendations\\\": [], \\\"caveats\\\": [\\\"Preflight only\\\", \\\"Second caveat\\\"]}\"}"
+                }
+              }
+            ]
+          },
+          {
+            "role": "tool",
+            "tool_call_id": "call_1",
+            "content": "params must have required property 'schema_version'"
+          }
+        ],
+        "temperature": 0,
+        "max_tokens": 64000,
+        "stream": true,
+        "stream_options": {
+          "include_usage": true
+        },
+        "tools": [
+          {
+            "type": "function",
+            "function": {
+              "name": "structured_output",
+              "parameters": {
+                "type": "object"
+              }
+            }
+          }
+        ]
+      },
+      "expected": {
+        "second_http_status": 200,
+        "received_request_count": 2,
+        "forwarded_request_count": 2,
+        "status": "FORWARDED_STRUCTURED_OUTPUT",
+        "outcomes": [
+          "FORWARDED_STRUCTURED_OUTPUT",
+          "FORWARDED_RETRY"
+        ],
+        "retry_refused_reason": null
+      }
+    },
+    {
+      "name": "spaced-nested-changed-value-refused",
+      "first_request": {
+        "model": "deepseek-v4-flash-0731",
+        "messages": [
+          {
+            "role": "system",
+            "content": "Return structured advice."
+          },
+          {
+            "role": "user",
+            "content": "bounded evidence"
+          }
+        ],
+        "temperature": 0,
+        "max_tokens": 64000,
+        "stream": true,
+        "stream_options": {
+          "include_usage": true
+        },
+        "tools": [
+          {
+            "type": "function",
+            "function": {
+              "name": "structured_output",
+              "parameters": {
+                "type": "object"
+              }
+            }
+          }
+        ]
+      },
+      "provider_responses": [
+        {
+          "status": 200,
+          "content_type": "text/event-stream",
+          "body": "data: {\"model\":\"deepseek-v4-flash-0731\",\"choices\":[{\"index\":0,\"delta\":{\"tool_calls\":[{\"index\":0,\"id\":\"call_1\",\"function\":{\"name\":\"structured_output\",\"arguments\":\"{\\\"output\\\": {\\\"schema_version\\\": \\\"ai-advice-output.v1\\\", \\\"summary\\\": \\\"\\\\u041f\\\\u0440\\\\u043e\\\\u0432\\\\u0435\\\\u0440\\\\u043a\\\\u0430 \\\\u0442\\\\u0440\\\\u0430\\\\u043d\\\\u0441\\\\u043f\\\\u043e\\\\u0440\\\\u0442\\\\u0430: \\\\u0432\\\\u0435\\\\u0440\\\\u0434\\\\u0438\\\\u043a\\\\u0442 \\\\u0441\\\\u043e\\\\u0445\\\\u0440\\\\u0430\\\\u043d\\\\u0451\\\\u043d.\\\", \\\"hypotheses\\\": [{\\\"rank\\\": 1, \\\"observation\\\": \\\"Observed\\\", \\\"possible_expla\"}}]}}]}\n\ndata: {\"model\":\"deepseek-v4-flash-0731\",\"choices\":[{\"index\":0,\"delta\":{\"tool_calls\":[{\"index\":0,\"function\":{\"arguments\":\"nation\\\": \\\"Unknown\\\", \\\"recommended_check\\\": \\\"Check\\\", \\\"evidence_refs\\\": [\\\"analysis-result.json#/run_validity\\\"]}, {\\\"rank\\\": 2, \\\"observation\\\": \\\"Second\\\", \\\"possible_explanation\\\": \\\"Unknown\\\", \\\"recommended_check\\\": \\\"Check\\\", \\\"evidence_refs\\\": [\\\"analysis-result.json#/run_validity\\\"]}], \\\"recommendations\\\": [], \\\"caveats\\\": [\\\"Preflight only\\\", \\\"Second caveat\\\"]}}\"}}]}}]}\n\ndata: {\"model\":\"deepseek-v4-flash-0731\",\"choices\":[{\"index\":0,\"delta\":{},\"finish_reason\":\"tool_calls\"}]}\n\ndata: [DONE]\n\n"
+        }
+      ],
+      "second_request": {
+        "model": "deepseek-v4-flash-0731",
+        "messages": [
+          {
+            "role": "system",
+            "content": "Return structured advice."
+          },
+          {
+            "role": "user",
+            "content": "bounded evidence"
+          },
+          {
+            "role": "assistant",
+            "content": null,
+            "reasoning_content": "",
+            "tool_calls": [
+              {
+                "id": "call_1",
+                "type": "function",
+                "function": {
+                  "name": "structured_output",
+                  "arguments": "{\"output\":{\"schema_version\":\"ai-advice-output.v1\",\"summary\":\"Проверка транспорта: вердикт сохранён.\",\"hypotheses\":[{\"rank\":1,\"observation\":\"Observed\",\"possible_explanation\":\"Unknown\",\"recommended_check\":\"Check\",\"evidence_refs\":[\"analysis-result.json#/run_validity\"]},{\"rank\":2,\"observation\":\"Other\",\"possible_explanation\":\"Unknown\",\"recommended_check\":\"Check\",\"evidence_refs\":[\"analysis-result.json#/run_validity\"]}],\"recommendations\":[],\"caveats\":[\"Preflight only\",\"Second caveat\"]}}"
+                }
+              }
+            ]
+          },
+          {
+            "role": "tool",
+            "tool_call_id": "call_1",
+            "content": "params must have required property 'schema_version'"
+          }
+        ],
+        "temperature": 0,
+        "max_tokens": 64000,
+        "stream": true,
+        "stream_options": {
+          "include_usage": true
+        },
+        "tools": [
+          {
+            "type": "function",
+            "function": {
+              "name": "structured_output",
+              "parameters": {
+                "type": "object"
+              }
+            }
+          }
+        ]
+      },
+      "expected": {
+        "second_http_status": 409,
+        "received_request_count": 2,
+        "forwarded_request_count": 1,
+        "status": "BLOCKED_ADDITIONAL_REQUEST",
+        "outcomes": [
+          "FORWARDED_STRUCTURED_OUTPUT",
+          "BLOCKED_ADDITIONAL_REQUEST"
+        ],
+        "retry_refused_reason": "RETRY_CONTINUATION_MISMATCH"
+      }
+    },
+    {
+      "name": "spaced-nested-reordered-keys-refused",
+      "first_request": {
+        "model": "deepseek-v4-flash-0731",
+        "messages": [
+          {
+            "role": "system",
+            "content": "Return structured advice."
+          },
+          {
+            "role": "user",
+            "content": "bounded evidence"
+          }
+        ],
+        "temperature": 0,
+        "max_tokens": 64000,
+        "stream": true,
+        "stream_options": {
+          "include_usage": true
+        },
+        "tools": [
+          {
+            "type": "function",
+            "function": {
+              "name": "structured_output",
+              "parameters": {
+                "type": "object"
+              }
+            }
+          }
+        ]
+      },
+      "provider_responses": [
+        {
+          "status": 200,
+          "content_type": "text/event-stream",
+          "body": "data: {\"model\":\"deepseek-v4-flash-0731\",\"choices\":[{\"index\":0,\"delta\":{\"tool_calls\":[{\"index\":0,\"id\":\"call_1\",\"function\":{\"name\":\"structured_output\",\"arguments\":\"{\\\"output\\\": {\\\"schema_version\\\": \\\"ai-advice-output.v1\\\", \\\"summary\\\": \\\"\\\\u041f\\\\u0440\\\\u043e\\\\u0432\\\\u0435\\\\u0440\\\\u043a\\\\u0430 \\\\u0442\\\\u0440\\\\u0430\\\\u043d\\\\u0441\\\\u043f\\\\u043e\\\\u0440\\\\u0442\\\\u0430: \\\\u0432\\\\u0435\\\\u0440\\\\u0434\\\\u0438\\\\u043a\\\\u0442 \\\\u0441\\\\u043e\\\\u0445\\\\u0440\\\\u0430\\\\u043d\\\\u0451\\\\u043d.\\\", \\\"hypotheses\\\": [{\\\"rank\\\": 1, \\\"observation\\\": \\\"Observed\\\", \\\"possible_expla\"}}]}}]}\n\ndata: {\"model\":\"deepseek-v4-flash-0731\",\"choices\":[{\"index\":0,\"delta\":{\"tool_calls\":[{\"index\":0,\"function\":{\"arguments\":\"nation\\\": \\\"Unknown\\\", \\\"recommended_check\\\": \\\"Check\\\", \\\"evidence_refs\\\": [\\\"analysis-result.json#/run_validity\\\"]}, {\\\"rank\\\": 2, \\\"observation\\\": \\\"Second\\\", \\\"possible_explanation\\\": \\\"Unknown\\\", \\\"recommended_check\\\": \\\"Check\\\", \\\"evidence_refs\\\": [\\\"analysis-result.json#/run_validity\\\"]}], \\\"recommendations\\\": [], \\\"caveats\\\": [\\\"Preflight only\\\", \\\"Second caveat\\\"]}}\"}}]}}]}\n\ndata: {\"model\":\"deepseek-v4-flash-0731\",\"choices\":[{\"index\":0,\"delta\":{},\"finish_reason\":\"tool_calls\"}]}\n\ndata: [DONE]\n\n"
+        }
+      ],
+      "second_request": {
+        "model": "deepseek-v4-flash-0731",
+        "messages": [
+          {
+            "role": "system",
+            "content": "Return structured advice."
+          },
+          {
+            "role": "user",
+            "content": "bounded evidence"
+          },
+          {
+            "role": "assistant",
+            "content": null,
+            "reasoning_content": "",
+            "tool_calls": [
+              {
+                "id": "call_1",
+                "type": "function",
+                "function": {
+                  "name": "structured_output",
+                  "arguments": "{\"output\":{\"schema_version\":\"ai-advice-output.v1\",\"summary\":\"Проверка транспорта: вердикт сохранён.\",\"hypotheses\":[{\"rank\":1,\"observation\":\"Observed\",\"possible_explanation\":\"Unknown\",\"recommended_check\":\"Check\",\"evidence_refs\":[\"analysis-result.json#/run_validity\"]},{\"evidence_refs\":[\"analysis-result.json#/run_validity\"],\"recommended_check\":\"Check\",\"possible_explanation\":\"Unknown\",\"observation\":\"Second\",\"rank\":2}],\"recommendations\":[],\"caveats\":[\"Preflight only\",\"Second caveat\"]}}"
+                }
+              }
+            ]
+          },
+          {
+            "role": "tool",
+            "tool_call_id": "call_1",
+            "content": "params must have required property 'schema_version'"
+          }
+        ],
+        "temperature": 0,
+        "max_tokens": 64000,
+        "stream": true,
+        "stream_options": {
+          "include_usage": true
+        },
+        "tools": [
+          {
+            "type": "function",
+            "function": {
+              "name": "structured_output",
+              "parameters": {
+                "type": "object"
+              }
+            }
+          }
+        ]
+      },
+      "expected": {
+        "second_http_status": 409,
+        "received_request_count": 2,
+        "forwarded_request_count": 1,
+        "status": "BLOCKED_ADDITIONAL_REQUEST",
+        "outcomes": [
+          "FORWARDED_STRUCTURED_OUTPUT",
+          "BLOCKED_ADDITIONAL_REQUEST"
+        ],
+        "retry_refused_reason": "RETRY_CONTINUATION_MISMATCH"
+      }
     }
   ]
 }

@@ -1,0 +1,41 @@
+{
+  "schema_version": "ai-advice.v1",
+  "advisory": true,
+  "run_id": "jmeter_jtl_csv-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "analysis_id": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+  "analysis_manifest_sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+  "evidence_input_sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+  "output": {
+    "schema_version": "ai-advice-output.v1",
+    "summary": "Inspect the bounded evidence before changing the test.",
+    "hypotheses": [
+      {
+        "rank": 1,
+        "observation": "The deterministic finding is present.",
+        "possible_explanation": "A latency constraint may have been reached.",
+        "recommended_check": "Repeat the same stage and compare p95.",
+        "evidence_refs": [
+          "analysis-result.json#/findings/0"
+        ]
+      }
+    ],
+    "recommendations": [],
+    "caveats": [
+      "This is advisory, not a causal conclusion."
+    ]
+  },
+  "provenance": {
+    "invocation_id": "5f0b5f0e-8f0e-4b0e-9a3a-0d1a2b3c4d5e",
+    "runner_id": "gigacode-qwen-code",
+    "runner_version": "0.21.1",
+    "runner_artifact_sha256": "1db9709bf1753611ca2fec234cf5adf517376efeb1540fcf9e309da010f9ed38",
+    "model_id": "deepseek-v4-flash-0731",
+    "prompt_version": "advisory-system.v1",
+    "prompt_sha256": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+    "duration_ms": 12345,
+    "exit_code": 0,
+    "validation": "PASSED",
+    "endpoint_host": "token-plan.ap-southeast-1.maas.aliyuncs.com:443",
+    "provider_requests": 0
+  }
+}

@@ -75,6 +75,14 @@ const windowProvenanceRows = computed(() => {
   const longestIdleGap = provenance.longest_idle_gap_ms
   if (longestIdleGap !== undefined) rows.push({ label: 'Longest idle gap', value: longestIdleGap === null ? '—' : formatMillis(longestIdleGap) })
   if (provenance.auto_window_status !== undefined) rows.push({ label: 'Auto window status', value: provenance.auto_window_status })
+  if (provenance.step_origin !== undefined) rows.push({ label: 'Step origin', value: provenance.step_origin })
+  if (provenance.requested_step_ms !== undefined) rows.push({ label: 'Requested step', value: formatMillis(provenance.requested_step_ms) })
+  // The applied step is published only inside the RESOLUTION_REDUCED warning; without a warning it is not stated.
+  const reduced = provenance.warnings?.[0]
+  if (reduced !== undefined) rows.push({ label: 'Applied step', value: formatMillis(reduced.applied_step_ms) })
+  if (provenance.series_count !== undefined && provenance.cells_per_series !== undefined) {
+    rows.push({ label: 'Series × cells', value: `${provenance.series_count} × ${provenance.cells_per_series} of ${provenance.cell_budget ?? '—'}` })
+  }
   return rows
 })
 const errorContexts = computed(() => props.result.evidence
@@ -772,6 +780,26 @@ function updateRange(name: 'update:range-start' | 'update:range-end', event: Eve
           </tr>
         </tbody>
       </table>
+    </div>
+    <div
+      v-for="warning in windowProvenance?.warnings ?? []"
+      :key="warning.code"
+      data-testid="resolution-reduced"
+      class="notice notice-warn"
+      role="note"
+    >
+      <p>
+        {{ warning.code }}: the step was raised from {{ formatMillis(warning.requested_step_ms) }} to {{ formatMillis(warning.applied_step_ms) }}.
+        Short spikes inside a coarser interval are averaged out for these series:
+      </p>
+      <ul>
+        <li
+          v-for="series in warning.series"
+          :key="series.id"
+        >
+          {{ series.id }} ({{ series.aggregation }})
+        </li>
+      </ul>
     </div>
   </section>
 

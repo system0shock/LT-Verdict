@@ -367,3 +367,92 @@ test('captures exact PostgreSQL phases and attaches them without rendering the r
   await expect(page.getByRole('link', { name: 'Download pg_profile report' })).toHaveAttribute('href', `${base}/pg-profile`)
   await expect(page.getByText('Unsafe report')).toHaveCount(0)
 })
+
+test('submits source-request.v4 when the step mode is auto and allows a margin that is not a multiple of the step', async ({ page }) => {
+  await fixtureApi(page)
+  await page.goto('/')
+  await page.getByTestId('input-file').setInputFiles({ name: 'step.jtl', mimeType: 'text/csv', buffer: Buffer.from('load') })
+  await page.getByLabel('Online source profile').selectOption('prod-prometheus')
+  await page.getByLabel('Source step (ms)').fill('15000')
+  await page.getByLabel('Margin (ms)').fill('50000')
+  await expect(page.getByTestId('source-request-error')).toContainText('multiple of the step')
+  await page.getByLabel('Step mode').selectOption('auto')
+  await expect(page.getByTestId('source-request-error')).toHaveCount(0)
+  const request = page.waitForRequest((value) => value.method() === 'POST' && new URL(value.url()).pathname === '/api/jobs')
+  await page.getByRole('button', { name: 'Analyze run', exact: true }).click()
+  const submitted = (await request).postDataBuffer()!.toString()
+  expect(submitted).toContain('{"schema_version":"source-request.v4","profile_ids":["prod-prometheus"],"window":{"origin":"auto","step_ms":15000,"step_mode":"auto","margin_ms":50000,"max_idle_gap_ms":60000}}')
+})
+
+test('keeps source-request.v3 while the step mode is fixed', async ({ page }) => {
+  await fixtureApi(page)
+  await page.goto('/')
+  await page.getByTestId('input-file').setInputFiles({ name: 'fixed.jtl', mimeType: 'text/csv', buffer: Buffer.from('load') })
+  await page.getByLabel('Online source profile').selectOption('prod-prometheus')
+  await expect(page.getByLabel('Step mode')).toHaveValue('fixed')
+  await page.getByLabel('Source step (ms)').fill('1000')
+  await page.getByLabel('Margin (ms)').fill('2000')
+  const request = page.waitForRequest((value) => value.method() === 'POST' && new URL(value.url()).pathname === '/api/jobs')
+  await page.getByRole('button', { name: 'Analyze run', exact: true }).click()
+  expect((await request).postDataBuffer()!.toString()).toContain('"schema_version":"source-request.v3"')
+})
+
+test('an explicit window in auto step mode may hold more than 100000 cells but must still divide by the step', async ({ page }) => {
+  await fixtureApi(page)
+  await page.goto('/')
+  await page.getByTestId('input-file').setInputFiles({ name: 'long.jtl', mimeType: 'text/csv', buffer: Buffer.from('load') })
+  await page.getByLabel('Online source profile').selectOption('prod-prometheus')
+  await page.getByLabel('Source window').selectOption('explicit')
+  await page.getByLabel('Source start (UTC epoch ms)').fill('0')
+  await page.getByLabel('Source end (UTC epoch ms)').fill('200001000')
+  await page.getByLabel('Source step (ms)').fill('1000')
+  await expect(page.getByTestId('source-request-error')).toContainText('at most 100000 cells')
+  await page.getByLabel('Step mode').selectOption('auto')
+  await expect(page.getByTestId('source-request-error')).toHaveCount(0)
+  await page.getByLabel('Source step (ms)').fill('7000')
+  await expect(page.getByTestId('source-request-error')).toContainText('divisible by its step')
+  await page.getByLabel('Source step (ms)').fill('1000')
+  const request = page.waitForRequest((value) => value.method() === 'POST' && new URL(value.url()).pathname === '/api/jobs')
+  await page.getByRole('button', { name: 'Analyze run', exact: true }).click()
+  expect((await request).postDataBuffer()!.toString()).toContain('{"schema_version":"source-request.v4","profile_ids":["prod-prometheus"],"window":{"origin":"explicit","start_epoch_ms":0,"end_epoch_ms":200001000,"step_ms":1000,"step_mode":"auto"}}')
+})
+
+test('renders the chosen step and the resolution warning', async ({ page }) => {
+  await fixtureApi(page)
+  const reduced = {
+    ...result,
+    evidence: [{
+      ...result.evidence[0], step_origin: 'auto', requested_step_ms: 15000, series_count: 1024, cell_budget: 1500000, cells_per_series: 1440,
+      warnings: [{ code: 'RESOLUTION_REDUCED', requested_step_ms: 15000, applied_step_ms: 20000, series: [{ id: 'cpu', aggregation: 'interval_mean' }] }],
+    }, result.evidence[1]],
+  }
+  await page.route((url) => url.pathname.endsWith('/result'), (route) => route.fulfill({ json: reduced }))
+  await page.goto('/')
+  await page.getByTestId('input-file').setInputFiles({ name: 'reduced.jtl', mimeType: 'text/csv', buffer: Buffer.from('load') })
+  await page.getByLabel('Online source profile').selectOption('prod-prometheus')
+  await page.getByLabel('Source step (ms)').fill('15000')
+  await page.getByRole('button', { name: 'Analyze run', exact: true }).click()
+  const provenance = page.getByTestId('window-provenance')
+  await expect(provenance.getByRole('row', { name: 'Step origin auto' })).toBeVisible()
+  await expect(provenance.getByRole('row', { name: 'Requested step 15,000 ms' })).toBeVisible()
+  await expect(provenance.getByRole('row', { name: 'Applied step 20,000 ms' })).toBeVisible()
+  await expect(provenance.getByRole('row', { name: 'Series × cells 1024 × 1440 of 1500000' })).toBeVisible()
+  await expect(page.getByTestId('resolution-reduced')).toContainText('cpu')
+  await expect(page.getByTestId('resolution-reduced')).toContainText('interval_mean')
+  await expect(page.getByTestId('resolution-reduced')).toContainText('20,000 ms')
+})
+
+test('shows the requested step without an applied step or a warning when the step was not reduced', async ({ page }) => {
+  await fixtureApi(page)
+  const kept = { ...result, evidence: [{ ...result.evidence[0], step_origin: 'auto', requested_step_ms: 15000, series_count: 2, cell_budget: 1500000, cells_per_series: 240 }, result.evidence[1]] }
+  await page.route((url) => url.pathname.endsWith('/result'), (route) => route.fulfill({ json: kept }))
+  await page.goto('/')
+  await page.getByTestId('input-file').setInputFiles({ name: 'kept.jtl', mimeType: 'text/csv', buffer: Buffer.from('load') })
+  await page.getByLabel('Online source profile').selectOption('prod-prometheus')
+  await page.getByLabel('Source step (ms)').fill('15000')
+  await page.getByRole('button', { name: 'Analyze run', exact: true }).click()
+  const provenance = page.getByTestId('window-provenance')
+  await expect(provenance.getByRole('row', { name: 'Requested step 15,000 ms' })).toBeVisible()
+  await expect(provenance.getByRole('row', { name: /^Applied step/ })).toHaveCount(0)
+  await expect(page.getByTestId('resolution-reduced')).toHaveCount(0)
+})

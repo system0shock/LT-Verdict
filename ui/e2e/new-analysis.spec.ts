@@ -357,6 +357,23 @@ test('the window fields are in seconds and an explicit window may hold at most 1
   expect(calls.jobs[0]).toContain('{"schema_version":"source-request.v3","profile_ids":["prod-prometheus"],"window":{"origin":"explicit","start_epoch_ms":0,"end_epoch_ms":4000,"step_ms":1000}}')
 })
 
+test('the step mode is fixed by default and auto sends source-request.v4 with a margin that is not a multiple of the step', async ({ page }) => {
+  const calls = await openSetup(page)
+  await page.locator('#input-file').setInputFiles(load)
+  await page.locator('#source-profile').selectOption('prod-prometheus')
+  await expect(page.locator('#source-step-mode')).toHaveValue('fixed')
+  await expect(page.locator('#source-step-mode')).toHaveAccessibleName(SETUP_LABELS.stepModeLabel)
+  await page.locator('#source-step').fill('15')
+  await page.locator('#source-margin').fill('50')
+  await expect(page.getByTestId('source-request-error')).toHaveText(SETUP_MESSAGES.marginRange)
+  await page.locator('#source-step-mode').selectOption('auto')
+  await expect(page.getByTestId('source-request-error')).toHaveCount(0)
+  await expect(start(page)).toBeEnabled()
+  await start(page).click()
+  await expect.poll(() => calls.jobs.length).toBe(1)
+  expect(calls.jobs[0]).toContain('{"schema_version":"source-request.v4","profile_ids":["prod-prometheus"],"window":{"origin":"auto","step_ms":15000,"step_mode":"auto","margin_ms":50000,"max_idle_gap_ms":60000}}')
+})
+
 test('the old form checks the number of cells too, in milliseconds and English', async ({ page }) => {
   await openSetup(page, '/?shell=old')
   await page.locator('#source-profile').selectOption('prod-prometheus')

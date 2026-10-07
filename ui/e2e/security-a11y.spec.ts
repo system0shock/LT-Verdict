@@ -104,6 +104,7 @@ test.describe.serial('local UI security and accessibility', () => {
     const sourceProfile = page.getByTestId('source-profile')
     const sourceWindowOrigin = page.locator('#source-window-origin')
     const sourceStep = page.locator('#source-step')
+    const sourceStepMode = page.locator('#source-step-mode')
     const sourceMargin = page.locator('#source-margin')
     const sourceMaxIdleGap = page.locator('#source-max-idle-gap')
     const postgresPre = page.getByLabel('PostgreSQL pre capture')
@@ -152,12 +153,12 @@ test.describe.serial('local UI security and accessibility', () => {
     await expect(page.locator('p#source-margin-hint')).toBeVisible()
     await expect(page.locator('p#source-max-idle-gap-hint')).toBeVisible()
     await sourceProfile.focus()
-    for (const target of [sourceWindowOrigin, sourceStep, sourceMargin, sourceMaxIdleGap, postgresPre]) {
+    for (const target of [sourceWindowOrigin, sourceStep, sourceStepMode, sourceMargin, sourceMaxIdleGap, postgresPre]) {
       await page.keyboard.press('Tab')
       await expectVisibleKeyboardFocus(target)
     }
 
-    for (const labelledInput of [input, policy, resources, diagnostics, capacity, trend, sourceContext, sourceProfile, sourceWindowOrigin, sourceStep, sourceMargin, sourceMaxIdleGap, postgresPre, postgresPost, pgProfileHtml]) {
+    for (const labelledInput of [input, policy, resources, diagnostics, capacity, trend, sourceContext, sourceProfile, sourceWindowOrigin, sourceStep, sourceStepMode, sourceMargin, sourceMaxIdleGap, postgresPre, postgresPost, pgProfileHtml]) {
       const labels = await labelledInput.evaluate((element) =>
         [...((element as HTMLInputElement).labels ?? [])].map((label) => {
           const style = getComputedStyle(label)

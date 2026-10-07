@@ -146,6 +146,22 @@ test('blocks the start until the shared step is set explicitly', async ({ page }
   await expect(start(page)).toBeEnabled()
 })
 
+test('blocks the pair while the step mode is auto and releases it when the mode is fixed again', async ({ page }) => {
+  const calls = await openPair(page)
+  await armSelect(page, 1).selectOption(['prom-a1'])
+  await armSelect(page, 2).selectOption(['prom-b'])
+  await fillStep(page)
+  await expect(start(page)).toBeEnabled()
+  await page.locator('#source-step-mode').selectOption('auto')
+  await expect(readiness(page, 'arms')).toHaveAttribute('data-level', 'block')
+  await expect(readiness(page, 'arms')).toContainText(SETUP_LABELS.pairStepAuto)
+  await expect(start(page)).toBeDisabled()
+  expect(calls.jobs).toEqual([])
+  await page.locator('#source-step-mode').selectOption('fixed')
+  await expect(readiness(page, 'arms')).toHaveAttribute('data-level', 'ok')
+  await expect(start(page)).toBeEnabled()
+})
+
 test('leaves the single launch alone when the pair switch is off', async ({ page }) => {
   const calls = await fixtureApi(page)
   await page.goto('/?shell=new')

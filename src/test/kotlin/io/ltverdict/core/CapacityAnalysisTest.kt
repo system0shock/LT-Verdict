@@ -2,8 +2,12 @@ package io.ltverdict.core
 
 import io.ltverdict.ingest.RunValidity
 import io.ltverdict.metrics.ExactRatio
+import io.ltverdict.metrics.LatencySummary
+import io.ltverdict.metrics.MetricSummary
+import io.ltverdict.metrics.NormalizedMetrics
 import io.ltverdict.metrics.UtcLoadCell
 import io.ltverdict.metrics.UtcLoadMetrics
+import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.contentOrNull
@@ -407,6 +411,71 @@ class CapacityAnalysisTest {
             }
         }
         assertEquals(2, checks)
+    }
+
+    @Test
+    fun `the knee diagnostic is a separate evidence item and changes nothing else`() {
+        val loads = listOf(40, 60, 80, 90, 96, 104)
+        val ids = loads.indices.map { "k${it + 1}" }
+        val resources =
+            resources(values = List(180) { BigDecimal.ONE }).let { base ->
+                base.copy(windows = ids.mapIndexed { index, id -> stageWindow(id, index * 300_000L) })
+            }
+        val plan = plan(CapacityLoadAxis.RPS, BigDecimal("90"), ids.mapIndexed { index, id -> stage(id, loads[index], index * 300_000L) })
+        val load =
+            UtcLoadMetrics(
+                ids
+                    .mapIndexed { index, id ->
+                        id to
+                            List(30) { bin ->
+                                UtcLoadCell(
+                                    index * 300_000L + bin * 10_000L,
+                                    index * 300_000L + (bin + 1) * 10_000L,
+                                    loads[index] * 10L,
+                                    0,
+                                    null,
+                                    ExactRatio(loads[index] * 10_000L, 10_000),
+                                    null,
+                                )
+                            }
+                    }.toMap(),
+            )
+        val policy = policy(*ids.map { it to "PASS" }.toTypedArray())
+        val p95 = listOf(52L, 52L, 52L, 53L, 56L, 11_536L)
+        val metrics =
+            ids
+                .mapIndexed { index, id ->
+                    id to
+                        NormalizedMetrics(
+                            MetricSummary(1000, 0, null, ExactRatio(1, 1), LatencySummary(50, p95[index], p95[index], p95[index])),
+                            emptyList(),
+                            emptyList(),
+                            emptyMap(),
+                        )
+                }.toMap()
+
+        val without = evaluateCapacity(plan, resources, load, RunValidity.VALID, policy)
+        val with = evaluateCapacity(plan, resources, load, RunValidity.VALID, policy, metrics)
+
+        assertEquals(1, without.evidence.size)
+        assertEquals(listOf("capacity_summary", "capacity_knee_diagnostic"), with.evidence.map { it.string("type") })
+        assertEquals(without.evidence.single(), with.evidence.first())
+        assertEquals(without.capacityJson, with.capacityJson)
+        assertEquals(without.policyVerdict, with.policyVerdict)
+        assertEquals(without.coverageReasons, with.coverageReasons)
+        assertEquals(JsonNull, with.capacityJson["capacity_knee"])
+        assertEquals("KNEE_DETECTOR_NOT_IMPLEMENTED", with.capacityJson.string("knee_reason"))
+        val knee = with.evidence.last()
+        assertEquals("DETECTED", knee.string("status"))
+        assertEquals("k5", knee.string("last_stable_stage_id"))
+        assertEquals("k6", knee.string("first_degraded_stage_id"))
+        assertEquals("96", knee.string("last_stable_load"))
+
+        val notValid = evaluateCapacity(plan, resources, load, RunValidity.INVALID, policy, metrics).evidence.last()
+        assertEquals(listOf("KNEE_RUN_NOT_VALID"), notValid.getValue("reasons").jsonArray.map { it.jsonPrimitive.content })
+        val missing = evaluateCapacity(plan, resources, load, RunValidity.VALID, policy, metrics - "k3").evidence.last()
+        assertEquals(listOf("KNEE_STAGE_DATA_MISSING"), missing.getValue("reasons").jsonArray.map { it.jsonPrimitive.content })
+        assertEquals("NOT_DETECTED", missing.string("status"))
     }
 
     private fun plan(

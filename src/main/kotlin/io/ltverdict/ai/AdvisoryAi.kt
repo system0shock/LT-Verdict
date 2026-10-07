@@ -118,6 +118,12 @@ internal object AdvisoryEvidenceBuilder {
                     "evidence",
                     buildJsonArray {
                         sourceEvidence.forEachIndexed { index, value ->
+                            // ADR 0026: the capacity knee is an uncalibrated diagnostic; the frozen prompt says the knee is always null.
+                            if ((value as? JsonObject)?.get("type")?.let { it is JsonPrimitive && it.content == KNEE_EVIDENCE_TYPE } ==
+                                true
+                            ) {
+                                return@forEachIndexed
+                            }
                             add(record("analysis-result.json#/evidence/$index", value))
                         }
                     },
@@ -518,6 +524,7 @@ private fun invalidAnalysis(): Nothing = invalid(AdviceFailure.INVALID_ANALYSIS)
 
 private fun invalid(reason: AdviceFailure): Nothing = throw AdviceValidationException(reason)
 
+private const val KNEE_EVIDENCE_TYPE = "capacity_knee_diagnostic"
 private const val REDACTED = "[REDACTED]"
 private val SHA256 = Regex("[0-9a-f]{64}")
 

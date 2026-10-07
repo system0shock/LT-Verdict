@@ -9,6 +9,7 @@ import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Test
+import java.math.BigDecimal
 import java.nio.file.Path
 
 class AnalysisIdentityDiagnosticVersionTest {
@@ -26,6 +27,30 @@ class AnalysisIdentityDiagnosticVersionTest {
                 "load-resource-diagnostics" to "5",
             ),
             modules(analysisIdentity(input(), null, EngineConfig(), diagnostics = diagnostics())),
+        )
+    }
+
+    @Test
+    fun `the knee diagnostic binds the identity at the top level without touching the comparability key`() {
+        val capacity =
+            CapacityPlanValidation.Valid(
+                CapacityPlanV1("a", "b", CapacityLoadAxis.RPS, null, BigDecimal("0.05"), null, listOf("guard"), emptyList()),
+                "c".repeat(64),
+                byteArrayOf(),
+            )
+
+        val identity =
+            Json
+                .parseToJsonElement(
+                    analysisIdentity(input(), null, EngineConfig(), capacity = capacity).decodeToString(),
+                ).jsonObject
+        val plain = Json.parseToJsonElement(analysisIdentity(input(), null, EngineConfig()).decodeToString()).jsonObject
+
+        assertEquals("piecewise-hinge-ln-p95.v1", identity.getValue("capacity_knee_method").jsonPrimitive.content)
+        assertEquals(false, plain.containsKey("capacity_knee_method"))
+        assertEquals(
+            listOf("normalization" to "1", "metrics" to "2", "policy-evaluation" to "1", "capacity-stage-evaluation" to "1"),
+            modules(analysisIdentity(input(), null, EngineConfig(), capacity = capacity)),
         )
     }
 

@@ -74,6 +74,41 @@ class AdvisoryAiTest {
     }
 
     @Test
+    fun `the capacity knee diagnostic never reaches the advisory evidence`() {
+        val base = analysisResult(RUN_ID)
+        val knee =
+            buildJsonObject {
+                put("id", "capacity-knee-diagnostic")
+                put("type", "capacity_knee_diagnostic")
+                put("status", "DETECTED")
+            }
+
+        fun withKnee(position: Int) =
+            buildJsonObject {
+                base.forEach { (name, value) -> put(name, value) }
+                put(
+                    "evidence",
+                    buildJsonArray {
+                        val items = base.getValue("evidence").jsonArray.toMutableList()
+                        items.add(position, knee)
+                        items.forEach { add(it) }
+                    },
+                )
+            }
+
+        val plain = AdvisoryEvidenceBuilder.build(RUN_ID, ANALYSIS_ID, MANIFEST_SHA, base)
+        val appended = AdvisoryEvidenceBuilder.build(RUN_ID, ANALYSIS_ID, MANIFEST_SHA, withKnee(1))
+
+        assertEquals(plain.sha256, appended.sha256)
+        assertEquals(plain.references, appended.references)
+        assertFalse(appended.bytes.decodeToString().contains("knee"))
+        // A skipped item keeps the references of the items after it.
+        val before = AdvisoryEvidenceBuilder.build(RUN_ID, ANALYSIS_ID, MANIFEST_SHA, withKnee(0))
+        assertTrue("analysis-result.json#/evidence/1" in before.references)
+        assertFalse("analysis-result.json#/evidence/0" in before.references)
+    }
+
+    @Test
     fun `evidence of the baseline fixture keeps its pinned identity`() {
         val evidence = AdvisoryEvidenceBuilder.build(RUN_ID, ANALYSIS_ID, MANIFEST_SHA, analysisResult(RUN_ID))
 

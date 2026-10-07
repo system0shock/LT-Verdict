@@ -191,7 +191,7 @@ internal class AnalysisService(
                         io.ltverdict.metrics.UtcLoadMetrics(emptyMap()),
                         RunValidity.INVALID,
                         evaluation,
-                        checkCancelled,
+                        checkCancelled = checkCancelled,
                     )
                 }
             capacity?.let {
@@ -484,6 +484,7 @@ internal class AnalysisService(
                     checkNotNull(capacityAccumulator).finish(checkCancelled),
                     first.validity,
                     evaluation,
+                    finishedWindowMetrics,
                     checkCancelled,
                 )
             }

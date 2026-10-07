@@ -44,8 +44,14 @@ internal fun capacityKneeEvidence(
         put("last_stable_load", stable?.let { JsonPrimitive(BigDecimal(canonicalDecimal(it.load))) } ?: JsonNull)
         put("first_degraded_stage_id", degraded?.stageId?.let(::JsonPrimitive) ?: JsonNull)
         put("first_degraded_load", degraded?.let { JsonPrimitive(BigDecimal(canonicalDecimal(it.load))) } ?: JsonNull)
-        put("sse_ratio", outcome.sseRatio?.let { JsonPrimitive(it.setScale(6, RoundingMode.HALF_EVEN)) } ?: JsonNull)
-        put("excess_factor", outcome.excessFactor?.let { JsonPrimitive(it.setScale(2, RoundingMode.HALF_EVEN)) } ?: JsonNull)
+        put(
+            "sse_ratio",
+            outcome.sseRatio?.let { JsonPrimitive(BigDecimal(canonicalDecimal(it.setScale(6, RoundingMode.HALF_EVEN)))) } ?: JsonNull,
+        )
+        put(
+            "excess_factor",
+            outcome.excessFactor?.let { JsonPrimitive(BigDecimal(canonicalDecimal(it.setScale(2, RoundingMode.HALF_EVEN)))) } ?: JsonNull,
+        )
         put("reasons", buildJsonArray { outcome.reason?.let { add(JsonPrimitive(it)) } })
         put(
             "points",

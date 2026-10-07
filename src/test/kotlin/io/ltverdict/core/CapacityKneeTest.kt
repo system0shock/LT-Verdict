@@ -40,6 +40,18 @@ class CapacityKneeTest {
     }
 
     @Test
+    fun `exactly flat data before the jump is detected and serialises canonically`() {
+        val knee = detect(listOf(40.0 to 52L, 60.0 to 52L, 80.0 to 52L, 90.0 to 52L, 96.0 to 52L, 104.0 to 11_536L))
+
+        assertEquals("DETECTED", knee.string("status"))
+        assertEquals("stage-4", knee.string("last_stable_stage_id"))
+        assertEquals("0", knee.string("sse_ratio"))
+        val text = canonicalJson(knee).decodeToString()
+        assertTrue(!text.contains("0.000000") && !text.contains("E-"), text)
+        assertTrue(knee.string("excess_factor").let { !it.endsWith("0") || !it.contains('.') }, knee.string("excess_factor"))
+    }
+
+    @Test
     fun `smooth data is refused rather than guessed`() {
         fun refusal(values: List<Long>) = reasons(detect(listOf(40.0, 60.0, 80.0, 90.0, 96.0, 104.0).zip(values)))
 

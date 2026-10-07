@@ -1,4 +1,4 @@
-import type { AnalysisResult, CapacityStage, ExactRatio, MetricSummaryEvidence, PolicyCheckEvidence, RuleWindowCheckEvidence, TrendCheckEvidence, TrendSummaryEvidence } from '../types'
+import type { AnalysisResult, CapacityKneeDiagnosticEvidence, CapacityStage, ExactRatio, MetricSummaryEvidence, PolicyCheckEvidence, RuleWindowCheckEvidence, TrendCheckEvidence, TrendSummaryEvidence } from '../types'
 import { METRIC_LABELS, scopeLabel, valueText } from '../verdictSummary'
 import { reasonText as verdictReasonText } from '../verdictReasons'
 import { CAPACITY_LABELS, TABLES_LABELS, TREND_LABELS } from './labels.tables'
@@ -212,6 +212,7 @@ export interface CapacityView {
   verdictText: string
   reasons: Array<{ code: string; text: string }>
   kneeText: string
+  kneeDiagnosticText?: string
   smallSample: boolean
   stages: CapacityStageRow[]
 }
@@ -245,6 +246,7 @@ export function capacityView(result: AnalysisResult): CapacityView | null {
     reasons: capacityReasons(stage.reasons),
     evidence: stage.evidence_refs ?? [],
   }))
+  const knee = result.evidence.find((item): item is CapacityKneeDiagnosticEvidence => item.type === 'capacity_knee_diagnostic')
   return {
     axis: summary.load_axis,
     unit: summary.unit,
@@ -256,6 +258,11 @@ export function capacityView(result: AnalysisResult): CapacityView | null {
     kneeText: summary.capacity_knee == null
       ? summary.knee_reason === 'KNEE_DETECTOR_NOT_IMPLEMENTED' ? CAPACITY_LABELS.kneeNotImplemented : CAPACITY_LABELS.kneeNone(summary.knee_reason)
       : CAPACITY_LABELS.kneeValue(capacityNumber(summary.capacity_knee), summary.unit),
+    kneeDiagnosticText: knee == null
+      ? undefined
+      : knee.status === 'DETECTED'
+        ? CAPACITY_LABELS.kneeDiagnosticDetected(capacityNumber(knee.last_stable_load), capacityNumber(knee.first_degraded_load), summary.unit, knee.last_stable_stage_id ?? '', knee.first_degraded_stage_id ?? '')
+        : CAPACITY_LABELS.kneeDiagnosticNone(knee.reasons ?? []),
     smallSample: stages.some((stage) => stage.smallSample) || (summary.reasons ?? []).includes('CAPACITY_INSUFFICIENT_SAMPLES'),
     stages,
   }

@@ -29,6 +29,12 @@ const view = computed(() => capacityView(props.result))
       <dd>{{ view.verdictText }}</dd>
       <dt>{{ CAPACITY_LABELS.kneeLabel }}</dt>
       <dd>{{ view.kneeText }}</dd>
+      <template v-if="view.kneeDiagnosticText">
+        <dt>{{ CAPACITY_LABELS.kneeDiagnosticLabel }}</dt>
+        <dd data-testid="capacity-knee-diagnostic">
+          {{ view.kneeDiagnosticText }}
+        </dd>
+      </template>
       <dt>{{ CAPACITY_LABELS.reasonsLabel }}</dt>
       <dd>
         <template v-if="view.reasons.length">

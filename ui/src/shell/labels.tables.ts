@@ -83,8 +83,20 @@ const CAPACITY_BOUND_WORDS = {
   INDETERMINATE: (): string => 'Граница ёмкости не определена',
 } as const
 
+const KNEE_REASON_WORDS: Record<string, string> = {
+  KNEE_TOO_FEW_STAGES: 'ступеней меньше пяти',
+  KNEE_STAGE_DATA_MISSING: 'по части ступеней нет достаточных данных',
+  KNEE_RUN_NOT_VALID: 'прогон не признан пригодным',
+  KNEE_LOAD_NOT_INCREASING: 'достигнутая нагрузка не растёт от ступени к ступени',
+  KNEE_NO_BREAK: 'излома в кривой p95 не видно',
+  KNEE_BREAK_NOT_MATERIAL: 'рост p95 за изломом слишком мал',
+  KNEE_BREAK_WITHIN_NOISE: 'рост p95 за изломом не превышает шум',
+}
+
 const AXIS_NAMES: Record<string, string> = { rps: 'RPS' }
 const UNIT_NAMES: Record<string, string> = { 'requests/s': 'запросов в секунду' }
+
+const CAPACITY_KNEE_METHOD = 'метод: кусочно-линейная регрессия ln(p95) по достигнутой нагрузке'
 
 export const CAPACITY_LABELS = {
   title: 'Ёмкость: ступени теста максимума',
@@ -102,6 +114,11 @@ export const CAPACITY_LABELS = {
   kneeNotImplemented: 'Точка перегиба в этой версии не определяется',
   kneeNone: (reason: string): string => `Точка перегиба не найдена (${reason})`,
   kneeValue: (value: string, unit: string): string => `${value} ${unit}`,
+  kneeDiagnosticLabel: 'Колено (диагностика)',
+  kneeDiagnosticDetected: (lower: string, upper: string, unit: string, lowerStage: string, upperStage: string): string =>
+    `между ${lower} и ${upper} ${unit}: излом после ступени ${lowerStage}, деградация со ступени ${upperStage}; не откалибровано, не влияет на границу ёмкости и вердикт; ${CAPACITY_KNEE_METHOD}`,
+  kneeDiagnosticNone: (reasons: string[]): string =>
+    `не определено (${reasons.map((code) => KNEE_REASON_WORDS[code] ?? code).join('; ') || 'причина не указана'}); диагностика, не откалибровано; ${CAPACITY_KNEE_METHOD}`,
   reasonsLabel: 'Причины',
   noReasons: 'нет',
   smallSampleNote: 'Малая выборка: у ступеней с этой пометкой запросов в окне меньше минимума или у правила окна малая выборка. Такая ступень не подтверждена и не определяет границу ёмкости. Сама метка не означает нарушения SLA, а результат SLA в этом окне для границы не используется.',

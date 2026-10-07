@@ -77,6 +77,30 @@ test('new shell shows capacity stages in Russian with sample notes', async ({ pa
   await expect(page.getByRole('region', { name: 'Capacity stages' })).toHaveCount(0)
 })
 
+const kneeDiagnostic = {
+  id: 'capacity-knee-diagnostic', type: 'capacity_knee_diagnostic', method: 'piecewise-hinge-ln-p95.v1', status: 'DETECTED', confidence: 'UNCALIBRATED', calibrated: false,
+  last_stable_stage_id: 'ramp-300', last_stable_load: '296', first_degraded_stage_id: 'ramp-350', first_degraded_load: '344', reasons: [],
+}
+
+test('new shell shows the capacity knee diagnostic as uncalibrated and apart from the bound', async ({ page }) => {
+  await openTables(page, { ...result, evidence: [...result.evidence, kneeDiagnostic] })
+  const knee = page.getByTestId('capacity-knee-diagnostic')
+  await expect(knee).toHaveText(CAPACITY_LABELS.kneeDiagnosticDetected('296', '344', 'requests/s', 'ramp-300', 'ramp-350'))
+  await expect(knee).toContainText('не откалибровано')
+  await expect(page.locator('#capacity-results')).toContainText(CAPACITY_LABELS.kneeNotImplemented)
+})
+
+test('new shell explains why the capacity knee diagnostic is refused', async ({ page }) => {
+  await openTables(page, { ...result, evidence: [...result.evidence, { ...kneeDiagnostic, status: 'NOT_DETECTED', last_stable_stage_id: null, last_stable_load: null, first_degraded_stage_id: null, first_degraded_load: null, reasons: ['KNEE_TOO_FEW_STAGES'] }] })
+  await expect(page.getByTestId('capacity-knee-diagnostic')).toHaveText(CAPACITY_LABELS.kneeDiagnosticNone(['KNEE_TOO_FEW_STAGES']))
+  await expect(page.getByTestId('capacity-knee-diagnostic')).toContainText('ступеней меньше пяти')
+})
+
+test('new shell shows no knee diagnostic row without the evidence item', async ({ page }) => {
+  await openTables(page)
+  await expect(page.getByTestId('capacity-knee-diagnostic')).toHaveCount(0)
+})
+
 test('unknown capacity bound and reason still render', async ({ page }) => {
   await openTables(page, { ...result, capacity_summary: { ...capacity, bound_type: 'UNKNOWN_BOUND', lower_inclusive: 296, upper_exclusive: 344, reasons: ['UNKNOWN_REASON'], stages: [{ ...capacity.stages[0], reasons: ['UNKNOWN_REASON'] }] } })
   await expect(page.locator('#capacity-results')).toContainText(CAPACITY_LABELS.boundText('UNKNOWN_BOUND', '296', '344', 'requests/s'))

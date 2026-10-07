@@ -45,7 +45,7 @@ import { summarizeVerdict } from './verdictSummary'
 import type { AttentionTarget } from './shell/overview'
 import type { AdvisoryAiConfig, AnalysisResult, AnalysisSummary, Bucket, JobStatus, OpenSearchEvidence, Policy, PolicyError, PostgresContextEvidence, Release, ReleaseAnalysis, RunSummary, SourceProfile, SourceRequest, SourceStepMode, Theme } from './types'
 import { COMPARE_LABELS } from './shell/labels.compare'
-import { EXPORT_LABELS } from './shell/labels.export'
+import { ANALYTICS_LABELS, DOWNLOAD_LABELS, EN_ANALYTICS_LABELS, EN_DOWNLOAD_LABELS, EXPORT_LABELS } from './shell/labels.export'
 
 const theme = ref<Theme>(window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light')
 const shellNew = resolveNewShell(window.location.search, browserStorage())
@@ -59,7 +59,13 @@ const chrome = shellNew
   : { noRun: 'No run selected', completed: 'Completed', toDark: 'Dark theme', toLight: 'Light theme', runsTitle: 'Accepted runs', runsEmpty: 'No runs yet', runsMore: 'More runs', analysesTitle: 'Saved analyses', analysisItem: 'Analysis', analysesEmpty: 'No saved analyses for this run.', analysesMore: 'More analyses' }
 const jobLabels = shellNew
   ? JOB_LABELS
-  : { retrying: 'Connection problem. Retrying the job status request...', lost: 'Connection lost. The job status is no longer updating, but the job may still be running on the server.', retry: 'Retry' }
+  : {
+      retrying: 'Connection problem. Retrying the job status request...', lost: 'Connection lost. The job status is no longer updating, but the job may still be running on the server.', retry: 'Retry',
+      states: {}, uploading: 'UPLOADING', uploaded: (percent: number) => `${percent}% uploaded`, bytes: (processed: string, total: string) => `${processed} / ${total} bytes`,
+      busyTitle: '⚠ BUSY', busyText: 'The local analysis queue is full. Cancel a queued job or wait, then try again.', cancel: 'Cancel analysis',
+    }
+const downloadLabels = shellNew ? DOWNLOAD_LABELS : EN_DOWNLOAD_LABELS
+const analyticsLabels = shellNew ? ANALYTICS_LABELS : EN_ANALYTICS_LABELS
 type SetupMessages = { [K in keyof typeof SETUP_MESSAGES]: (typeof SETUP_MESSAGES)[K] extends string ? string : (id: string) => string }
 const legacySetupMessages: SetupMessages = {
   contextTooMany: 'OpenSearch context accepts at most 16 files.',
@@ -649,7 +655,19 @@ function cancelUpload() {
   void nextTick(() => document.getElementById('input-file')?.focus())
 }
 
-const acceptedAtFormat = new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' })
+const acceptedAtFormat = new Intl.DateTimeFormat(shellNew ? 'ru-RU' : undefined, { dateStyle: 'medium', timeStyle: shellNew ? 'medium' : 'short' })
+// New shell: a file name repeated by every listed run tells nothing, the acceptance time stands in for it.
+const fileNameTellsRunsApart = computed(() => runs.value.length < 2 || new Set(runs.value.map((run) => run.original_filename)).size > 1)
+const timeInTitle = (run: RunSummary) => shellNew && !fileNameTellsRunsApart.value && !!run.accepted_at
+const runTitle = (run: RunSummary) => timeInTitle(run) ? `${SHELL_LABELS.runAccepted} ${acceptedAtFormat.format(new Date(run.accepted_at!))}` : run.original_filename
+const selectedAnalysis = computed(() => analyses.value.find((item) => item.analysis_id === selectedAnalysisId.value))
+const analysisContext = computed(() => {
+  const analysis = selectedAnalysis.value
+  if (!shellNew || !analysis) return ''
+  const parts = analysis.policy_verdict === 'NO_POLICY' ? [] : [`${SHELL_LABELS.runPolicy} ${analysis.policy_id ?? analysis.policy_sha256.slice(0, 8)}`]
+  if (analysis.resource_arm) parts.push(`${SHELL_LABELS.runArm} ${analysis.resource_arm}`)
+  return parts.join(' · ')
+})
 
 async function refreshRuns(after?: string) {
   const page = await listRuns(after)
@@ -852,8 +870,8 @@ function focusPolicy() {
               :aria-pressed="currentRun?.run_id === run.run_id"
               @click="selectRun(run)"
             >
-              <span>{{ run.original_filename }}</span>
-              <small>{{ run.source_type }} · {{ run.sha256.slice(0, 8) }}<template v-if="run.accepted_at"> · <time :datetime="run.accepted_at">{{ acceptedAtFormat.format(new Date(run.accepted_at)) }}</time></template></small>
+              <span>{{ runTitle(run) }}</span>
+              <small>{{ run.source_type }} · {{ run.sha256.slice(0, 8) }}<template v-if="run.accepted_at && !timeInTitle(run)"> · <time :datetime="run.accepted_at">{{ acceptedAtFormat.format(new Date(run.accepted_at)) }}</time></template></small>
             </button>
           </li>
           <li
@@ -919,11 +937,12 @@ function focusPolicy() {
         :lang="shellNew ? 'ru' : undefined"
       >
         <div class="run-identity">
-          <strong>{{ currentRun?.original_filename ?? chrome.noRun }}</strong>
+          <strong>{{ currentRun ? runTitle(currentRun) : chrome.noRun }}</strong>
           <span
             v-if="currentRun"
             class="mono"
           >{{ currentRun.source_type }} · {{ currentRun.run_id.slice(0, 24) }}…</span>
+          <span v-if="analysisContext">{{ analysisContext }}</span>
           <span v-if="completedAt">{{ chrome.completed }} {{ completedAt }}</span>
         </div>
         <a
@@ -1129,7 +1148,8 @@ function focusPolicy() {
             v-if="result && selectedAnalysisId"
             v-show="shownIn('overview')"
             class="bucket-controls"
-            aria-label="Analysis downloads"
+            :aria-label="downloadLabels.group"
+            :lang="shellNew ? 'ru' : undefined"
           >
             <a
               v-for="format in ['json', 'html', 'asciidoc', 'confluence', 'svg']"
@@ -1137,68 +1157,68 @@ function focusPolicy() {
               class="button-secondary"
               :href="`/api/runs/${encodeURIComponent(result.run_id)}/analyses/${selectedAnalysisId}/report?format=${format}`"
               download
-            >Download {{ format === 'asciidoc' ? 'AsciiDoc' : format.toUpperCase() }}</a>
+            >{{ downloadLabels.format(format) }}</a>
             <a
               v-if="result.evidence.some(item => item.type === 'resource_binding')"
               class="button-secondary"
               :href="`/api/runs/${encodeURIComponent(result.run_id)}/analyses/${selectedAnalysisId}/resource-snapshot`"
               download
-            >Download resource snapshot</a>
+            >{{ downloadLabels.resourceSnapshot }}</a>
             <a
               v-if="result.capacity_summary"
               class="button-secondary"
               :href="`/api/runs/${encodeURIComponent(result.run_id)}/analyses/${selectedAnalysisId}/capacity-plan`"
               download
-            >Download capacity plan</a>
+            >{{ downloadLabels.capacityPlan }}</a>
             <a
               v-if="result.capacity_summary"
               class="button-secondary"
               :href="`/api/runs/${encodeURIComponent(result.run_id)}/analyses/${selectedAnalysisId}/capacity`"
               download
-            >Download capacity result</a>
+            >{{ downloadLabels.capacityResult }}</a>
             <a
               v-if="result.evidence.some(item => item.type === 'trend_summary')"
               class="button-secondary"
               :href="`/api/runs/${encodeURIComponent(result.run_id)}/analyses/${selectedAnalysisId}/trend-plan`"
               download
-            >Download trend plan</a>
+            >{{ downloadLabels.trendPlan }}</a>
             <a
               v-if="result.evidence.some(item => item.type === 'trend_summary')"
               class="button-secondary"
               :href="`/api/runs/${encodeURIComponent(result.run_id)}/analyses/${selectedAnalysisId}/trend`"
               download
-            >Download trend result</a>
+            >{{ downloadLabels.trendResult }}</a>
             <a
               v-for="(context, index) in downloadableSourceContexts"
               :key="context.profile_id"
               class="button-secondary"
               :href="`/api/runs/${encodeURIComponent(result.run_id)}/analyses/${selectedAnalysisId}/source-context${downloadableSourceContexts.length === 1 ? '' : `/${index + 1}`}`"
               download
-            >Download OpenSearch context{{ downloadableSourceContexts.length === 1 ? '' : ` — ${context.profile_id}` }}</a>
+            >{{ downloadLabels.openSearchContext(downloadableSourceContexts.length === 1 ? null : context.profile_id) }}</a>
             <a
               v-if="postgresContext?.pre_sha256"
               class="button-secondary"
               :href="`/api/runs/${encodeURIComponent(result.run_id)}/analyses/${selectedAnalysisId}/postgres-pre`"
               download
-            >Download PostgreSQL pre capture</a>
+            >{{ downloadLabels.postgresPre }}</a>
             <a
               v-if="postgresContext?.post_sha256"
               class="button-secondary"
               :href="`/api/runs/${encodeURIComponent(result.run_id)}/analyses/${selectedAnalysisId}/postgres-post`"
               download
-            >Download PostgreSQL post capture</a>
+            >{{ downloadLabels.postgresPost }}</a>
             <a
               v-if="postgresContext"
               class="button-secondary"
               :href="`/api/runs/${encodeURIComponent(result.run_id)}/analyses/${selectedAnalysisId}/postgres-context`"
               download
-            >Download PostgreSQL context</a>
+            >{{ downloadLabels.postgresContext }}</a>
             <a
               v-if="postgresContext?.pg_profile_html_sha256"
               class="button-secondary"
               :href="`/api/runs/${encodeURIComponent(result.run_id)}/analyses/${selectedAnalysisId}/pg-profile`"
               download
-            >Download pg_profile report</a>
+            >{{ downloadLabels.pgProfile }}</a>
           </div>
 
           <AnalyticsPanel
@@ -1207,6 +1227,8 @@ function focusPolicy() {
             :selection="selectedReference"
             :working="working"
             :series="baselineSeries"
+            :labels="analyticsLabels"
+            :lang="shellNew ? 'ru' : undefined"
             @loaded="chartMarkers = $event?.overlay?.markers ?? []"
           />
 

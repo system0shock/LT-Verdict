@@ -2,7 +2,7 @@ import AxeBuilder from '@axe-core/playwright'
 import { expect, test, type Page } from '@playwright/test'
 import type { AnalysisResult, AnalysisSummary } from '../src/types'
 import { PLATFORM_MAP_LABELS as LABELS } from '../src/shell/platformLabels'
-import { armAnalyses, buildServiceArmMap, problemServices } from '../src/shell/platformMap'
+import { armAnalyses, buildServiceArmMap, pickArmAnalysis, problemServices } from '../src/shell/platformMap'
 
 // Карта «сервис x плечо» (платформа, P4b): чистые функции без сервера и страница на подставных ответах API.
 function result(evidence: unknown[]): AnalysisResult {
@@ -112,6 +112,18 @@ test('one analysis per arm: the selected one wins, analyses without an arm are l
     { arm: 'A', analysisId: 'a1', analysesOfArm: 1 },
     { arm: 'B', analysisId: 'b2', analysesOfArm: 2 },
   ])
+})
+
+test('the arm pick rule shared with the pod view: selected first, else the first usable one', () => {
+  const summary = (id: string, hash?: string): AnalysisSummary => ({ analysis_id: id, policy_sha256: 'p', policy_verdict: 'PASS', run_validity: 'VALID', resource_arm: 'B', ...(hash ? { resource_snapshot_sha256: hash } : {}) })
+  const items = [summary('b1'), summary('b2', 'h'), summary('b3', 'h')]
+  const hasHash = (item: AnalysisSummary) => Boolean(item.resource_snapshot_sha256)
+
+  expect(pickArmAnalysis(items, 'b3')?.analysis_id).toBe('b3')
+  expect(pickArmAnalysis(items, 'other')?.analysis_id).toBe('b1')
+  expect(pickArmAnalysis(items, 'b3', hasHash)?.analysis_id).toBe('b3')
+  expect(pickArmAnalysis(items, 'b1', hasHash)?.analysis_id).toBe('b2')
+  expect(pickArmAnalysis([summary('b1')], 'b1', hasHash)).toBeUndefined()
 })
 
 const run = { run_id: 'map-run', source_type: 'jmeter', sha256: 'b'.repeat(64), size_bytes: 100, original_filename: 'map.jtl' }

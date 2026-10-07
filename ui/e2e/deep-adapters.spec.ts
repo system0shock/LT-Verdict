@@ -151,6 +151,19 @@ test('evidence produces finite unique thresholds and failure-first selection', (
   expect(defaultSelection('abcdefg'.split('').map(entry), result)).toEqual(['b', 'a', 'c', 'd', 'e', 'f'])
 })
 
+test('default selection takes failed series first, then system series before generator series', () => {
+  const generators = new Set(['generator-queue', 'generator-threads'])
+  const catalog = ['admission-queue', 'cpu-queue', 'db-busy', 'db-queue', 'downstream-wait', 'generator-queue', 'generator-threads', 'service-cpu-busy']
+    .map((id) => ({ ...entry(id), role: generators.has(id) ? 'generator' : 'system' }) as ResourceSeriesEntry)
+  const check = (seriesId: string, status: string) => ({ type: 'resource_policy_check', series_id: seriesId, rule_id: `${seriesId}-rule`, operator: 'gt', threshold: '1', status })
+  const pass = ['service-cpu-busy', 'downstream-wait', 'generator-queue'].map((id) => check(id, 'PASS'))
+  const saturation = { evidence: [...pass, check('db-busy', 'FAIL')] } as never
+  expect(defaultSelection(catalog, saturation)).toEqual(['db-busy', 'admission-queue', 'cpu-queue', 'db-queue', 'downstream-wait', 'service-cpu-busy'])
+  const slow = { evidence: [check('downstream-wait', 'FAIL'), ...pass] } as never
+  expect(defaultSelection(catalog, slow)).toEqual(['downstream-wait', 'admission-queue', 'cpu-queue', 'db-busy', 'db-queue', 'service-cpu-busy'])
+  expect(defaultSelection(catalog, { evidence: [] } as never)).toEqual(['admission-queue', 'cpu-queue', 'db-busy', 'db-queue', 'downstream-wait', 'service-cpu-busy'])
+})
+
 test('scale includes zero and thresholds while paths break at nulls', () => {
   const track = resourceTrack(entry('cpu'), values('cpu', [2, null, 4], [4, 0, 4]), valueGrid(0, 3), [{ ruleId: 'high', operator: 'gt', value: 8, violated: false }])
   expect(trackScale(track)).toEqual({ lo: 0, hi: 8 })

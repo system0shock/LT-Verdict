@@ -1,7 +1,7 @@
 import AxeBuilder from '@axe-core/playwright'
 import { expect, test, type Page } from '@playwright/test'
 import { RULES_LABELS } from '../src/shell/labels.rules'
-import { SETUP_LABELS } from '../src/shell/labels'
+import { JOB_LABELS, SETUP_LABELS } from '../src/shell/labels'
 
 const run = { run_id: 'trial-run', source_type: 'jmeter', sha256: 'b'.repeat(64), size_bytes: 100, original_filename: 'trial.jtl' }
 const otherRun = { ...run, run_id: 'trial-run-other', original_filename: 'trial-other.jtl' }
@@ -158,8 +158,8 @@ test('cancelling the job while the trial is polling does not publish the result 
   await trialButton(page).click()
   await expect.poll(() => api.calls.jobs.length).toBe(1)
   await expect(page.getByTestId('run-list').getByRole('button', { name: otherRun.original_filename })).toBeDisabled()
-  await page.getByRole('button', { name: 'Cancel analysis' }).click()
-  await expect(page.locator('#job-status')).toContainText('CANCELLED')
+  await page.getByRole('button', { name: JOB_LABELS.cancel }).click()
+  await expect(page.locator('#job-status')).toContainText(JOB_LABELS.states.CANCELLED)
   api.releaseJob()
   await expect(trialButton(page)).toBeEnabled()
   await expect(page.getByTestId('trial-summary')).toHaveCount(0)
@@ -173,7 +173,7 @@ test('editing the draft while the trial is polling drops the summary of the olde
   await expect.poll(() => api.calls.jobs.length).toBe(1)
   await page.getByLabel(RULES_LABELS.threshold).first().fill('900')
   api.releaseJob()
-  await expect(page.locator('#job-status')).toContainText('COMPLETE')
+  await expect(page.locator('#job-status')).toContainText(JOB_LABELS.states.COMPLETE)
   await expect(trialButton(page)).toBeEnabled()
   await expect(page.getByTestId('trial-summary')).toHaveCount(0)
 })
@@ -188,7 +188,7 @@ test('a failed trial job does not present the previously open analysis as the tr
   await page.getByRole('button', { name: RULES_LABELS.templateName('api-basic') }).click()
   await expect(page.getByLabel(RULES_LABELS.policyId)).toHaveValue('template-api-basic')
   await trialButton(page).click()
-  await expect(page.locator('#job-status')).toContainText('FAILED')
+  await expect(page.locator('#job-status')).toContainText(JOB_LABELS.states.FAILED)
   await expect(trialButton(page)).toBeEnabled()
   await expect(page.getByTestId('trial-summary')).toHaveCount(0)
   expect(calls.jobs.length).toBe(1)

@@ -6,6 +6,7 @@ import io.ltverdict.storage.RunBundleStore
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.booleanOrNull
@@ -16,13 +17,18 @@ import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertThrows
+import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Assumptions.assumeTrue
 import org.junit.jupiter.api.Test
 import java.io.ByteArrayInputStream
+import java.lang.management.ManagementFactory
+import java.lang.management.MemoryType
 import java.nio.charset.StandardCharsets.UTF_8
 import java.nio.file.Files
 import java.nio.file.LinkOption.NOFOLLOW_LINKS
 import java.nio.file.Path
+import java.nio.file.StandardOpenOption.APPEND
+import java.nio.file.StandardOpenOption.CREATE
 import java.nio.file.StandardOpenOption.CREATE_NEW
 import java.nio.file.StandardOpenOption.WRITE
 
@@ -129,6 +135,116 @@ class StatisticalValidationTest {
         )
         StatisticalValidationRunner.run(requireNotNull(paths))
     }
+
+    @Test
+    fun `correlation acceptance corpus runner is opt in`() {
+        val corpus = System.getenv("LTV_C5_CORPUS")
+        val actual = System.getenv("LTV_C5_ACTUAL")
+        assumeTrue(corpus != null && actual != null, "set LTV_C5_CORPUS and LTV_C5_ACTUAL to run the C5 corpus in one process")
+        StatisticalValidationRunner.runAcceptanceShard(Path.of(requireNotNull(corpus)), 0, 1, Path.of(requireNotNull(actual)))
+    }
+
+    @Test
+    fun `DEBUG acceptance shards write the same reports as a single process and resume without repeats`() {
+        val root = Files.createTempDirectory("ltv-c5-test-")
+        try {
+            val corpus = acceptanceCorpus(root.resolve("corpus"), 4)
+            val runs =
+                listOf(1, 2, 3).map { shards ->
+                    (0 until shards)
+                        .map { shard ->
+                            root.resolve("out-$shards-$shard.jsonl").also {
+                                StatisticalValidationRunner.runAcceptanceShard(corpus, shard, shards, it)
+                            }
+                        }.flatMap { Files.readAllLines(it) }
+                        .sorted()
+                }
+            assertEquals(4, runs[0].size)
+            assertEquals(runs[0], runs[1])
+            assertEquals(runs[0], runs[2])
+            val record = Json.parseToJsonElement(runs[0].first()).jsonObject
+            assertTrue(!record.containsKey("error"), runs[0].first())
+            assertEquals(2, record.getValue("selections").jsonArray.size)
+            assertEquals(2, record.getValue("pairs").jsonArray.size)
+            assertEquals(
+                64 + 1 + 64,
+                record
+                    .getValue("seed_material")
+                    .jsonPrimitive.content.length,
+            )
+            val first = root.resolve("out-2-0.jsonl")
+            val before = Files.readAllBytes(first)
+            StatisticalValidationRunner.runAcceptanceShard(corpus, 0, 2, first)
+            assertEquals(before.toList(), Files.readAllBytes(first).toList())
+        } finally {
+            DataDirectory.deleteTree(root)
+        }
+    }
+
+    private fun acceptanceCorpus(
+        directory: Path,
+        reports: Int,
+    ): Path {
+        val inputs = Files.createDirectories(directory.resolve("inputs"))
+        val cases =
+            (0 until reports).map { index ->
+                val file = inputs.resolve("case-$index.json")
+                val bytes = acceptanceInput(index.toLong()).toByteArray(UTF_8)
+                Files.write(file, bytes)
+                """{"id":"case-$index","path":"inputs/case-$index.json","sha256":"${sha256Hex(bytes)}"}"""
+            }
+        Files.writeString(
+            directory.resolve("manifest.json"),
+            """{"schema_version":"c5-corpus.v1","cases":[${cases.joinToString(",")}]}""",
+        )
+        return directory
+    }
+
+    private fun acceptanceInput(seed: Long): String {
+        val random = java.util.Random(seed)
+        val cells = 70
+        val load =
+            buildString {
+                append("timeStamp,elapsed,label,success\n")
+                repeat(cells) { cell ->
+                    val elapsed = 200 + random.nextInt(300)
+                    repeat(20) { request -> append("${cell * 1000L + request * 999L / 19},$elapsed,request,true\n") }
+                }
+            }
+        val series =
+            (0 until 2).joinToString(",") { index ->
+                """{"id":"resource-$index","metric":"cpu","unit":"ratio","entity":"debug","role":"system",
+                "aggregation":"interval_mean","values":[${(0 until cells).joinToString(",") { random.nextInt(1000).toString() }}]}"""
+            }
+        val target =
+            """{"id":"target","metric":"rps","unit":"requests/s","entity":"debug","role":"system",
+            "aggregation":"interval_mean","values":[${List(cells) { "100" }.joinToString(",")}]}"""
+        val snapshot =
+            """{"schema_version":"resource-snapshot.v1","load_input_sha256":"${sha256Hex(load.encodeToByteArray())}",
+            "start_epoch_ms":0,"step_ms":1000,"point_count":$cells,"series":[$series,$target],
+            "windows":[{"id":"stage-1","from_epoch_ms":0,"to_epoch_ms":${cells * 1000}}]}"""
+        val validated = validateResourceSnapshot(canonicalJson(Json.parseToJsonElement(snapshot)).inputStream()) as ResourceValidation.Valid
+        val pairs =
+            (0 until 2).joinToString(",") { index ->
+                """{"id":"h0$index","resource_series_id":"resource-$index","load_metric":"response_time_p95_ms",
+                "window_ids":["stage-1"],"expected_sign":"either","max_lag_ms":2000,"min_abs_effect":0.3,
+                "min_resource_delta":0.1,"min_load_delta":20,"controls":[{"meaning":"target_rps","series_id":"target"}],
+                "topology_basis":"synthetic","clock_alignment":"declared_aligned"}"""
+            }
+        return """{"operation":"analysis","run":{"load_jtl":${JsonPrimitive(load)},"resources":$snapshot,
+            "diagnostics":{"schema_version":"correlation-plan.v1","resource_snapshot_sha256":"${validated.semanticSha256}",
+            "pairs":[$pairs],"anomalies":[]}}}"""
+    }
+}
+
+class CorrelationAcceptanceShard {
+    companion object {
+        @JvmStatic
+        fun main(args: Array<String>) {
+            require(args.size == 4) { "usage: <corpus> <shard> <shards> <output>" }
+            StatisticalValidationRunner.runAcceptanceShard(Path.of(args[0]), args[1].toInt(), args[2].toInt(), Path.of(args[3]))
+        }
+    }
 }
 
 internal object StatisticalValidationRunner {
@@ -193,6 +309,99 @@ internal object StatisticalValidationRunner {
     }
 
     fun resource(input: String): JsonObject = execute(Json.parseToJsonElement(input).jsonObject)
+
+    /**
+     * C5 acceptance (correlation H4): runs the shard `shard` of `shards` of a `c5-corpus.v1` corpus, one analysis per
+     * report, one canonical JSON line per report. A shard takes the manifest positions `shard, shard + shards, ...`
+     * (the split depends on the manifest only), appends to `output` and skips reports that are already there, so a
+     * repeated call resumes. Time and heap per report go to `output.timing`, which is not part of the result.
+     */
+    fun runAcceptanceShard(
+        corpus: Path,
+        shard: Int,
+        shards: Int,
+        output: Path,
+    ) {
+        require(shards >= 1 && shard in 0 until shards) { "INVALID_SHARD" }
+        val manifest = Json.parseToJsonElement(Files.readString(contained(corpus, "manifest.json"))).jsonObject
+        require(manifest["schema_version"]?.jsonPrimitive?.content == "c5-corpus.v1") { "INVALID_C5_MANIFEST" }
+        val done =
+            if (Files.exists(output)) {
+                Files
+                    .readAllLines(
+                        output,
+                        UTF_8,
+                    ).filter { it.isNotBlank() }
+                    .map { Json.parseToJsonElement(it).jsonObject.string("id") }
+                    .toSet()
+            } else {
+                emptySet()
+            }
+        val heap = ManagementFactory.getMemoryPoolMXBeans().filter { it.type == MemoryType.HEAP }
+        Files.newBufferedWriter(output, UTF_8, CREATE, APPEND).use { writer ->
+            Files.newBufferedWriter(Path.of("$output.timing"), UTF_8, CREATE, APPEND).use { timing ->
+                manifest.getValue("cases").jsonArray.forEachIndexed { index, element ->
+                    val entry = element.jsonObject
+                    val path = entry["path"]?.takeIf { it !is JsonNull }?.jsonPrimitive?.content
+                    val id = entry.string("id")
+                    if (index % shards != shard || path == null || id in done) return@forEachIndexed
+                    heap.forEach { it.resetPeakUsage() }
+                    val started = System.nanoTime()
+                    val record =
+                        try {
+                            val input = contained(corpus, path)
+                            val bytes = Files.readAllBytes(input)
+                            require(sha256Hex(bytes) == entry.string("sha256")) { "INPUT_SHA256_MISMATCH:$id" }
+                            acceptanceRecord(id, Json.parseToJsonElement(bytes.decodeToString()).jsonObject, output.toAbsolutePath().parent)
+                        } catch (failure: Throwable) {
+                            buildJsonObject {
+                                put("id", id)
+                                put("error", failure.message ?: failure::class.qualifiedName.orEmpty())
+                            }
+                        }
+                    writer.write(canonicalJson(record).decodeToString())
+                    writer.newLine()
+                    writer.flush()
+                    val millis = (System.nanoTime() - started) / 1_000_000
+                    val heapMb = heap.sumOf { it.peakUsage.used } / (1024 * 1024)
+                    timing.write("""{"id":"$id","ms":$millis,"heap_mb":$heapMb}""")
+                    timing.newLine()
+                    timing.flush()
+                }
+            }
+        }
+    }
+
+    private fun acceptanceRecord(
+        id: String,
+        input: JsonObject,
+        scratch: Path,
+    ): JsonObject {
+        val run = input.getValue("run").jsonObject
+        val load =
+            run
+                .getValue("load_jtl")
+                .jsonPrimitive.content
+                .encodeToByteArray()
+        val resources = validatedResource(run.getValue("resources"))
+        val diagnostics = validatedDiagnostics(run.getValue("diagnostics"))
+        val root = Files.createTempDirectory(scratch, "ltv-c5-")
+        try {
+            val result = analyze(root, load, resources, diagnostics, null).result
+            val evidence = result.getValue("evidence").jsonArray.map(JsonElement::jsonObject)
+            val findings = result.getValue("findings").jsonArray
+            return buildJsonObject {
+                put("id", id)
+                put("seed_material", "${diagnostics.sha256}/${resources.semanticSha256}")
+                put("selections", JsonArray(evidence.filter { it.string("type") == "correlation_headline_selection" }))
+                put("pairs", JsonArray(evidence.filter { it.string("type") == "correlation_pair" }))
+                put("findings", JsonArray(findings.map(JsonElement::jsonObject).filter { it.string("type") == "correlation_candidate" }))
+                evidence.singleOrNull { it.string("type") == "diagnostic_summary" }?.let { put("summary", it) }
+            }
+        } finally {
+            DataDirectory.deleteTree(root)
+        }
+    }
 
     private data class Case(
         val id: String,

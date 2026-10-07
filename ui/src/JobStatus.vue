@@ -10,7 +10,11 @@ const props = defineProps<{
   uploadLabels: { cancel: string; cancelled: string }
   uploadLang?: string
   pollIssue: 'none' | 'retrying' | 'lost'
-  labels: { retrying: string; lost: string; retry: string }
+  labels: {
+    retrying: string; lost: string; retry: string
+    states: Record<string, string>; uploading: string; uploaded: (percent: number) => string
+    bytes: (processed: string, total: string) => string; busyTitle: string; busyText: string; cancel: string
+  }
   noticeLang?: string
 }>()
 
@@ -34,8 +38,8 @@ const total = () => props.job?.total_bytes ?? 100
       data-testid="busy-notice"
       role="status"
     >
-      <strong>⚠ BUSY</strong>
-      <span>The local analysis queue is full. Cancel a queued job or wait, then try again.</span>
+      <strong :lang="noticeLang">{{ labels.busyTitle }}</strong>
+      <span :lang="noticeLang">{{ labels.busyText }}</span>
     </div>
     <template v-else-if="uploadCancelled && !job && uploadProgress === 0">
       <p
@@ -49,9 +53,15 @@ const total = () => props.job?.total_bytes ?? 100
     </template>
     <template v-else>
       <div class="job-copy">
-        <strong>{{ job?.state ?? 'UPLOADING' }}</strong>
-        <span v-if="job">{{ job.processed_bytes.toLocaleString() }} / {{ job.total_bytes.toLocaleString() }} bytes</span>
-        <span v-else>{{ uploadProgress }}% uploaded</span>
+        <strong :lang="uploadLang">{{ job ? (labels.states[job.state] ?? job.state) : labels.uploading }}</strong>
+        <span
+          v-if="job"
+          :lang="uploadLang"
+        >{{ labels.bytes(job.processed_bytes.toLocaleString(), job.total_bytes.toLocaleString()) }}</span>
+        <span
+          v-else
+          :lang="uploadLang"
+        >{{ labels.uploaded(uploadProgress) }}</span>
       </div>
       <progress
         data-testid="job-progress"
@@ -64,9 +74,10 @@ const total = () => props.job?.total_bytes ?? 100
         v-if="active()"
         type="button"
         class="button-secondary"
+        :lang="uploadLang"
         @click="$emit('cancel')"
       >
-        Cancel analysis
+        {{ labels.cancel }}
       </button>
       <button
         v-if="uploading"

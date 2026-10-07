@@ -239,7 +239,7 @@ def select(hypotheses, seed_material, representation="levels") -> list[Selection
             resource, outcome = np.diff(resource), np.diff(outcome)
         n = len(outcome)
         reason = h.unavailable_reason
-        if reason is None and not 30 <= n <= 240:
+        if reason is None and not 30 <= n <= 1920:
             reason = "OBSERVATION_COUNT_UNSUPPORTED"
         if reason is None and (not 0 <= h.max_lag <= 10 or n - 2 * h.max_lag < 30):
             reason = "LAG_ANCHOR_COUNT_UNSUPPORTED"

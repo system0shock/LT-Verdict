@@ -3,13 +3,16 @@ import { computed, ref, watch } from 'vue'
 import { getSavedAnalytics } from './api'
 import type { AnalysisReference } from './types'
 import type { SavedAnalytics } from './analyticsTypes'
+import { EN_ANALYTICS_LABELS, type AnalyticsLabels } from './shell/labels.export'
 import MetricPackSummary from './MetricPackSummary.vue'
 import OpenSearchOverlay from './OpenSearchOverlay.vue'
 import RunDynamicsTable from './RunDynamicsTable.vue'
 import TransactionComparisonTable from './TransactionComparisonTable.vue'
 
 // `series` is the series of the active baseline (BaselinePanel): the server picks the baseline of the comparison by it.
-const props = defineProps<{ selection: AnalysisReference | null; working: boolean; series?: string }>()
+// `labels` and `lang` switch the panel texts to Russian in the new shell; the tables below stay English and are marked as such.
+const props = withDefaults(defineProps<{ selection: AnalysisReference | null; working: boolean; series?: string; labels?: AnalyticsLabels; lang?: string }>(), { series: undefined, labels: () => EN_ANALYTICS_LABELS, lang: undefined })
+const foreignLang = computed(() => (props.lang ? 'en' : undefined))
 const emit = defineEmits<{ loaded: [analytics: SavedAnalytics | null] }>()
 const limit = ref(10)
 const transaction = ref('')
@@ -68,7 +71,7 @@ async function load() {
       emit('loaded', response)
     }
   } catch (failure) {
-    if (requestRevision === revision) error.value = failure instanceof Error ? failure.message : 'Saved analytics request failed.'
+    if (requestRevision === revision) error.value = failure instanceof Error ? failure.message : props.labels.failed
   } finally {
     if (requestRevision === revision) loading.value = false
   }
@@ -83,17 +86,18 @@ function referenceKey(reference: AnalysisReference) {
   <section
     id="saved-analytics-panel"
     class="panel"
+    :lang="lang"
     aria-labelledby="saved-analytics-title"
   >
     <header class="panel__header">
       <h2 id="saved-analytics-title">
-        Saved-run analytics
+        {{ labels.title }}
       </h2>
-      <p>Dynamics and comparisons use saved local bundles only. Refreshing this view does not query external sources.</p>
+      <p>{{ labels.lead }}</p>
     </header>
     <div class="form-grid">
       <div class="field">
-        <label for="analytics-run-limit">Comparable runs</label>
+        <label for="analytics-run-limit">{{ labels.comparableRuns }}</label>
         <input
           id="analytics-run-limit"
           v-model.number="limit"
@@ -104,7 +108,7 @@ function referenceKey(reference: AnalysisReference) {
         >
       </div>
       <div class="field">
-        <label for="analytics-transaction">Transaction filter</label>
+        <label for="analytics-transaction">{{ labels.transactionFilter }}</label>
         <input
           id="analytics-transaction"
           v-model="transaction"
@@ -113,7 +117,7 @@ function referenceKey(reference: AnalysisReference) {
         >
       </div>
       <div class="field">
-        <label for="analytics-transaction-limit">Transaction rows</label>
+        <label for="analytics-transaction-limit">{{ labels.transactionRows }}</label>
         <input
           id="analytics-transaction-limit"
           v-model.number="transactionLimit"
@@ -130,34 +134,34 @@ function referenceKey(reference: AnalysisReference) {
         :disabled="disabled"
         @click="load"
       >
-        {{ loading ? 'Loading analytics…' : 'Refresh analytics' }}
+        {{ loading ? labels.refreshing : labels.refresh }}
       </button>
       <a
         v-if="analytics && exportHref"
         :href="exportHref"
         download="saved-analytics.json"
-      >Export analytics JSON</a>
+      >{{ labels.exportJson }}</a>
       <a
         v-if="analytics && exportHref"
         :href="`${exportHref}&format=html`"
         download="run-dynamics.html"
-      >Export dynamics HTML</a>
+      >{{ labels.exportHtml }}</a>
       <a
         v-if="analytics && exportHref"
         :href="`${exportHref}&format=asciidoc`"
         download="run-dynamics.adoc"
-      >Export dynamics AsciiDoc</a>
+      >{{ labels.exportAsciidoc }}</a>
       <a
         v-if="analytics && exportHref"
         :href="`${exportHref}&format=confluence`"
         download="run-dynamics.xhtml"
-      >Export dynamics Confluence</a>
+      >{{ labels.exportConfluence }}</a>
     </div>
     <p
       v-if="loading"
       role="status"
     >
-      Loading saved analytics…
+      {{ labels.loading }}
     </p>
     <p
       v-if="error"
@@ -172,41 +176,47 @@ function referenceKey(reference: AnalysisReference) {
         class="notice notice-fail"
         role="status"
       >
-        Local history scan stopped at configured bounds (up to {{ analytics.history_scan_limit }} analyses or {{ analytics.history_metadata_byte_limit.toLocaleString() }} metadata bytes).
-        It may omit comparable runs, so latest-N is limited to the scanned history.
+        {{ labels.scanTruncated(analytics.history_scan_limit, analytics.history_metadata_byte_limit.toLocaleString()) }}
+        {{ labels.scanTruncatedNote }}
       </p>
       <RunDynamicsTable
         v-if="analytics.dynamics"
         :dynamics="analytics.dynamics"
+        :lang="foreignLang"
         @selection="selectedDynamics = $event"
       />
       <p
         v-else
         class="field__hint"
       >
-        N-run dynamics are unavailable because this analysis has no valid run metadata.
+        {{ labels.noDynamics }}
       </p>
       <TransactionComparisonTable
         v-if="analytics.transactions"
         :comparison="analytics.transactions"
+        :lang="foreignLang"
       />
       <p
         v-else
         class="field__hint"
       >
-        Select a saved baseline to compare transactions.
+        {{ labels.noBaseline }}
       </p>
       <OpenSearchOverlay
         v-if="analytics.overlay"
         :overlay="analytics.overlay"
+        :lang="foreignLang"
       />
       <p
         v-else
         class="field__hint"
       >
-        OpenSearch overlay is unavailable because this analysis has no valid run metadata.
+        {{ labels.noOverlay }}
       </p>
-      <MetricPackSummary :analysis="analytics.metric_packs" />
+      <MetricPackSummary
+        :analysis="analytics.metric_packs"
+        :lang="foreignLang"
+      />
     </template>
   </section>
 </template>

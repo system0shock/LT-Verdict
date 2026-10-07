@@ -25,6 +25,17 @@ class PlatformProfileExampleTest {
     private val autoStepExample = Path.of("docs/contracts/sources/v1/platform-openshift-autostep-connections.example.json")
 
     @Test
+    fun `the load generator example carries the catalog control as a generator series`() {
+        val loadExample = Path.of("docs/contracts/sources/v1/platform-openshift-load-generator-connections.example.json")
+        val queries = Files.newInputStream(loadExample).use(::readSourceProfiles).flatMap { it.queries }
+        val controls = queries.filter { it.role == ResourceRole.GENERATOR }
+
+        assertEquals(listOf(Triple("target_rps", "requests/s", "jmeter")), controls.map { Triple(it.metric, it.unit, it.entity) })
+        assertTrue(controls.all { it.aggregation == ResourceAggregation.INTERVAL_MEAN && "\$__interval" in it.expression })
+        assertEquals(queries.size, queries.map { Triple(it.metric, it.entity, it.role) }.toSet().size)
+    }
+
+    @Test
     fun `the autostep example parses with a scrape interval on every profile`() {
         val profiles = Files.newInputStream(autoStepExample).use(::readSourceProfiles)
 

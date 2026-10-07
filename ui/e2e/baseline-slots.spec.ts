@@ -2,6 +2,7 @@ import AxeBuilder from '@axe-core/playwright'
 import { expect, test, type Page } from '@playwright/test'
 import { BASELINE_ERROR_LABELS } from '../src/shell/labels'
 import { COMPARE_LABELS, EN_COMPARE_LABELS } from '../src/shell/labels.compare'
+import { ANALYTICS_LABELS } from '../src/shell/labels.export'
 import type { BaselineSelection, BaselineSlotView } from '../src/types'
 
 const current = { run_id: 'slot-cur', analysis_id: 'a'.repeat(64) }
@@ -180,9 +181,9 @@ test('saved analytics ask for the series of the active baseline', async ({ page 
   await slotRadio(page, 'B').check()
   await expect(page.getByTestId('baseline-selection')).toContainText(references.B.analysis_id)
   await page.locator('#shell-tab-overview').click()
-  await page.getByRole('button', { name: 'Refresh analytics', exact: true }).click()
+  await page.getByRole('button', { name: ANALYTICS_LABELS.refresh, exact: true }).click()
   await expect.poll(() => requests.filter((entry) => entry.path.endsWith('/analytics')).map((entry) => new URLSearchParams(entry.search).get('series'))).toEqual(['B'])
-  await expect(page.getByRole('link', { name: 'Export analytics JSON' })).toHaveAttribute('href', /[?&]series=B(&|$)/)
+  await expect(page.getByRole('link', { name: ANALYTICS_LABELS.exportJson })).toHaveAttribute('href', /[?&]series=B(&|$)/)
 })
 
 for (const theme of ['light', 'dark'] as const) {
@@ -218,6 +219,6 @@ test('saved analytics keep the chosen series when it has no baseline', async ({ 
   await seriesField(page).fill('C')
   await expect(page.getByTestId('baseline-selection')).toHaveCount(0)
   await page.locator('#shell-tab-overview').click()
-  await page.getByRole('button', { name: 'Refresh analytics', exact: true }).click()
+  await page.getByRole('button', { name: ANALYTICS_LABELS.refresh, exact: true }).click()
   await expect.poll(() => requests.filter((entry) => entry.path.endsWith('/analytics')).map((entry) => new URLSearchParams(entry.search).get('series'))).toEqual(['C'])
 })

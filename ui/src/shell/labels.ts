@@ -40,6 +40,9 @@ export const SHELL_LABELS = {
   analysisItem: 'Анализ',
   analysesEmpty: 'Для этого прогона нет сохранённых анализов.',
   analysesMore: 'Ещё анализы',
+  runAccepted: 'Принят',
+  runPolicy: 'Политика',
+  runArm: 'Плечо',
 } as const
 
 // Строки сравнения с эталоном (ADR 0017): предупреждения и подсказки для BaselinePanel.vue.
@@ -321,6 +324,20 @@ export const JOB_LABELS = {
   retrying: 'Проблема со связью. Повторяем запрос статуса задачи…',
   lost: 'Связь потеряна. Статус задачи не обновляется, но сама задача на сервере могла продолжиться.',
   retry: 'Повторить',
+  states: {
+    QUEUED: 'В очереди',
+    PROCESSING: 'Анализ идёт',
+    COMPLETE: 'Готово',
+    FAILED: 'Ошибка',
+    UNAVAILABLE: 'Недоступно',
+    CANCELLED: 'Отменено',
+  },
+  uploading: 'Загрузка файла',
+  uploaded: (percent: number) => `загружено ${percent}%`,
+  bytes: (processed: string, total: string) => `${processed} из ${total} байт`,
+  busyTitle: '⚠ Очередь занята',
+  busyText: 'Локальная очередь анализа заполнена. Отмените задачу в очереди или подождите и повторите.',
+  cancel: 'Отменить анализ',
 } as const
 
 // Срез U2: вкладка «Новый анализ». Подписи полей, состояние готовности и сообщения проверок.

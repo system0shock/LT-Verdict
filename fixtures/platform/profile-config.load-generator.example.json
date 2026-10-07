@@ -1,0 +1,11 @@
+{
+  "base_url": "http://127.0.0.1:19090",
+  "namespace": "shop",
+  "services": ["orders-svc"],
+  "signals": ["cpu_throttling", "jvm_thread_count"],
+  "subquery_step": "15s",
+  "load_generator": {
+    "entity": "jmeter",
+    "target_rps": "avg_over_time(demo_target_requests_per_second{generator=\"jmeter\"}[$__interval])"
+  }
+}

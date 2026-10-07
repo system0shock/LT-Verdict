@@ -313,7 +313,10 @@ ltv ui
 временный), `LT_VERDICT_AI_LOCAL_AUTH_TYPE` (`--auth-type`; в Qwen Code `openai`, `qwen-oauth` и
 др., допустимое значение определяет сам CLI; в примере выше он обязателен для Qwen Code
 с `--bare`),
-`LT_VERDICT_AI_LOCAL_BARE=0` (убирает `--bare`), `LT_VERDICT_AI_LOCAL_NODE` (путь
+`LT_VERDICT_AI_LOCAL_OMIT_BARE=1` (убирает `--bare`, остальные флаги остаются),
+`LT_VERDICT_AI_LOCAL_EXTRA_ARGS` (дополнительные аргументы CLI через пробел, только
+простые токены `A-Za-z0-9._:/=@,+-`, без кавычек и оболочки; добавляются в конец),
+`LT_VERDICT_AI_LOCAL_NODE` (путь
 к Node для `.js`), `LT_VERDICT_AI_LOCAL_BASH` (путь к `bash`, нужен на Windows с Git
 Bash). `LT_VERDICT_AI_CREDENTIAL_ENV_FILE` и `LT_VERDICT_AI_QWEN_ROOT` в этом
 режиме не используются. Значение `LT_VERDICT_AI_RUNNER_MODE`, отличное от `local`,
@@ -336,7 +339,11 @@ SHA-256 CLI, запускает его процессом без relay с тем
 из-за `--bare` (пустые настройки пользователя; Qwen Code 0.21.1 с `--bare` без
 `--auth-type` не стартует вообще), задайте
 `LT_VERDICT_AI_LOCAL_AUTH_TYPE` способом, которым вошли, а затем при
-необходимости `LT_VERDICT_AI_LOCAL_BARE=0`. Ошибки: `RUNNER_ARTIFACT_MISSING` (файл
+необходимости `LT_VERDICT_AI_LOCAL_OMIT_BARE=1` (CLI читает профиль пользователя;
+`--safe-mode` остаётся, но без `--bare` Qwen Code регистрирует все встроенные
+инструменты, поэтому проверка `init` в этом режиме требует только `structured_output`
+и пустой `mcp_servers`, а вызовы инструментов запрещены `--max-tool-calls=0`). Это переключатели «если вход CLI не
+подхватывается»; правка кода на месте не нужна. Ошибки: `RUNNER_ARTIFACT_MISSING` (файл
 CLI, Node для `.js` или `bash` не найдены), `RUNNER_ARTIFACT_MISMATCH` (SHA-256 не
 совпал; в интерфейсе сообщение говорит о Qwen Code), `MODEL_CONFIG_INVALID` (нет
 файла моделей), `TIMEOUT`, `INVALID_OUTPUT`, `PROCESS_FAILED`.

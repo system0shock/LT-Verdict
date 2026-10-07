@@ -7,12 +7,12 @@
 set -u
 set -m
 
-evidence="" output="" result="" cancel="" cmd="" sha256="" node_cmd="" cwd="" passthrough="" auth_type="" bare="1" model="" deadline_arg=""
+evidence="" output="" result="" cancel="" cmd="" sha256="" node_cmd="" cwd="" passthrough="" auth_type="" omit_bare="0" extra_args="" model="" deadline_arg=""
 while [ $# -ge 2 ]; do
   case "$1" in
     --evidence-path) evidence="$2" ;; --output-path) output="$2" ;; --result-path) result="$2" ;; --cancel-path) cancel="$2" ;;
     --cmd) cmd="$2" ;; --sha256) sha256="$2" ;; --node) node_cmd="$2" ;; --cwd) cwd="$2" ;;
-    --passthrough) passthrough="$2" ;; --deadline) deadline_arg="$2" ;; --auth-type) auth_type="$2" ;; --bare) bare="$2" ;; --model) model="$2" ;;
+    --passthrough) passthrough="$2" ;; --deadline) deadline_arg="$2" ;; --auth-type) auth_type="$2" ;; --omit-bare) omit_bare="$2" ;; --extra-args) extra_args="$2" ;; --model) model="$2" ;;
     *) ;;
   esac
   shift 2
@@ -79,7 +79,16 @@ run() {
   [ ! -e "$output" ] || return 0
   [[ -z "$model" || ( "$model" =~ ^[A-Za-z0-9][A-Za-z0-9._:/-]{0,127}$ && "$model" != *..* && "$model" != *//* ) ]] || return 0
   [[ -z "$auth_type" || "$auth_type" =~ ^[a-z][a-z0-9-]{0,31}$ ]] || return 0
-  case "$bare" in 0|1) ;; *) return 0 ;; esac
+  case "$omit_bare" in 0|1) ;; *) return 0 ;; esac
+  # Extra CLI arguments: space separated plain tokens, split without eval or globbing.
+  local extra=() token
+  if [ -n "$extra_args" ]; then
+    IFS=' ' read -r -a extra <<<"$extra_args"
+    [ "${#extra[@]}" -le 32 ] || return 0
+    for token in "${extra[@]}"; do
+      [[ "$token" =~ ^[A-Za-z0-9._:/=@,+-]{1,200}$ ]] || return 0
+    done
+  fi
   [[ "$sha256" =~ ^[0-9a-fA-F]{64}$ ]] || return 0
   sha256="$(printf '%s' "$sha256" | tr 'A-F' 'a-f')"
   local names=() name
@@ -135,13 +144,14 @@ run() {
 
   # Same arguments as advisory_ai_runtime_qwen.sh; the model and the base URL are the CLI's own unless the operator named a model.
   local cli=(--safe-mode)
-  [ "$bare" = 1 ] && cli+=(--bare)
+  [ "$omit_bare" = 0 ] && cli+=(--bare)
   [ -n "$auth_type" ] && cli+=("--auth-type=$auth_type")
   [ -n "$model" ] && cli+=("--model=$model")
   cli+=("--system-prompt=$(cat "$root/system-prompt.md")"
     --input-format=text --output-format=json "--json-schema=@$(native_path "$schema")"
     --exclude-tools=read_file,edit,notebook_edit,run_shell_command --max-tool-calls=0 --max-wall-time=600s
     --approval-mode=default --chat-recording=false --openai-logging=false --telemetry=false)
+  [ "${#extra[@]}" -eq 0 ] || cli+=("${extra[@]}")
 
   stage=run_cli
   local stdout="$root/cli.stdout" stderr="$root/cli.stderr"

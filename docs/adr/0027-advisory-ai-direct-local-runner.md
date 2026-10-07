@@ -54,8 +54,9 @@ CLI получает аргументы контейнерного пути (`to
 --max-tool-calls=0 --max-wall-time=600s --approval-mode=default
 --chat-recording=false --openai-logging=false --telemetry=false`; evidence в
 stdin. Отличия: нет `--openai-base-url`; `--auth-type` не передаётся, пока оператор
-не задал `LT_VERDICT_AI_LOCAL_AUTH_TYPE`; `--bare` можно отключить
-`LT_VERDICT_AI_LOCAL_BARE=0` (см. «Открытый вопрос»).
+не задал `LT_VERDICT_AI_LOCAL_AUTH_TYPE`; `--bare` можно убрать
+`LT_VERDICT_AI_LOCAL_OMIT_BARE=1`, а `LT_VERDICT_AI_LOCAL_EXTRA_ARGS` добавляет
+аргументы CLI в конец команды (см. «Открытый вопрос»).
 
 | Переменная | Назначение |
 | --- | --- |
@@ -65,7 +66,8 @@ stdin. Отличия: нет `--openai-base-url`; `--auth-type` не перед
 | `LT_VERDICT_AI_LOCAL_CWD` | рабочий каталог CLI (по умолчанию пустой временный) |
 | `LT_VERDICT_AI_LOCAL_NODE` | путь к Node для `.js` (по умолчанию `node`) |
 | `LT_VERDICT_AI_LOCAL_AUTH_TYPE` | значение `--auth-type` (строчные буквы, цифры, дефис; допустимые значения определяет сам CLI): в Qwen Code `openai`, `qwen-oauth` и др. |
-| `LT_VERDICT_AI_LOCAL_BARE` | `0` убирает `--bare` |
+| `LT_VERDICT_AI_LOCAL_OMIT_BARE` | `1` убирает `--bare` (остальные флаги остаются) |
+| `LT_VERDICT_AI_LOCAL_EXTRA_ARGS` | дополнительные аргументы CLI через пробел: простые токены `[A-Za-z0-9._:/=@,+-]`, до 32, без оболочки и `eval`, добавляются в конец (могут переопределять флаги: решение оператора) |
 | `LT_VERDICT_AI_LOCAL_BASH` | путь к `bash` |
 
 Аргументы-префиксы к команде не поддерживаются: нужный префикс оператор
@@ -147,8 +149,15 @@ GigaCode после ручной авторизации держит выбор 
 `--auth-type` CLI завершается с ошибкой даже при заданных `OPENAI_*`
 (`PROCESS_FAILED`), с `LT_VERDICT_AI_LOCAL_AUTH_TYPE=openai` работает. Что пробовать по порядку: `LT_VERDICT_AI_LOCAL_AUTH_TYPE`
 со способом, которым вошли (в Qwen Code это `qwen-oauth`); затем
-`LT_VERDICT_AI_LOCAL_BARE=0` (CLI читает настройки пользователя, включая хуки, MCP и
-расширения; `--safe-mode` и проверка `init` остаются). Решение за владельцем; на
+`LT_VERDICT_AI_LOCAL_OMIT_BARE=1` (CLI читает профиль пользователя; `--safe-mode`
+отключает хуки, расширения, навыки, MCP и `QWEN.md`). Измерено на Qwen Code 0.21.1: без
+`--bare` CLI регистрирует весь набор встроенных инструментов (53, среди них `web_fetch`,
+`agent`, `computer_use__*`) даже с `--safe-mode`, поэтому проверка `init` в этом
+режиме требует только наличия `structured_output` и пустого `mcp_servers`, а вызовы
+инструментов остановлены `--max-tool-calls=0`; при необходимости
+`LT_VERDICT_AI_LOCAL_EXTRA_ARGS=--exclude-tools=...` расширяет список исключённых.
+`LT_VERDICT_AI_LOCAL_EXTRA_ARGS` позволяет передать CLI недостающий флаг без правки
+кода. Решение за владельцем; на
 боевой машине это проверяется одним кликом «Получить рекомендации».
 
 ## Как включать

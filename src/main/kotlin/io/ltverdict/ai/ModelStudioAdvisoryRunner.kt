@@ -124,7 +124,8 @@ internal class ModelStudioAdvisoryRunner private constructor(
             addAll(listOf("--result-path", result.toString(), "--cancel-path", cancel.toString()))
             addAll(listOf("--cmd", settings.command, "--sha256", settings.sha256))
             settings.authType?.let { addAll(listOf("--auth-type", it)) }
-            if (!settings.bare) addAll(listOf("--bare", "0"))
+            if (settings.omitBare) addAll(listOf("--omit-bare", "1"))
+            if (settings.extraArguments.isNotEmpty()) addAll(listOf("--extra-args", settings.extraArguments.joinToString(" ")))
             addAll(listOf("--model", modelId))
             settings.node?.let { addAll(listOf("--node", it)) }
             settings.cwd?.let { addAll(listOf("--cwd", it)) }
@@ -267,7 +268,9 @@ internal class ModelStudioAdvisoryRunner private constructor(
         ) {
             return RunnerOutcome.Failed(AdviceFailure.PROCESS_FAILED)
         }
-        val parsed = parseDirectCliOutput(Files.readString(outputPath)) ?: return RunnerOutcome.Failed(AdviceFailure.INVALID_OUTPUT)
+        val parsed =
+            parseDirectCliOutput(Files.readString(outputPath), settings.omitBare)
+                ?: return RunnerOutcome.Failed(AdviceFailure.INVALID_OUTPUT)
         return RunnerOutcome.Success(
             parsed.advice,
             RunnerProvenance(
@@ -422,7 +425,8 @@ internal class DirectRunnerSettings(
     val cwd: String?,
     val passthrough: List<String>,
     val authType: String?,
-    val bare: Boolean,
+    val omitBare: Boolean,
+    val extraArguments: List<String>,
     val bash: String,
 ) {
     /** Variables of the host environment that reach the launcher and the CLI beyond the common allowlist. */
@@ -438,8 +442,11 @@ internal class DirectRunnerSettings(
             if (names.any { !it.matches(Regex("[A-Za-z_][A-Za-z0-9_]{0,63}")) }) return null
             val authType = value("LT_VERDICT_AI_LOCAL_AUTH_TYPE")
             if (authType != null && !authType.matches(Regex("[a-z][a-z0-9-]{0,31}"))) return null
-            val bare = value("LT_VERDICT_AI_LOCAL_BARE")
-            if (bare != null && bare !in setOf("0", "1")) return null
+            val omitBare = value("LT_VERDICT_AI_LOCAL_OMIT_BARE")
+            if (omitBare != null && omitBare !in setOf("0", "1")) return null
+            // Extra CLI arguments, separated by spaces and never interpreted by a shell: plain tokens only.
+            val extra = value("LT_VERDICT_AI_LOCAL_EXTRA_ARGS")?.split(Regex("\\s+")).orEmpty()
+            if (extra.size > 32 || extra.any { !it.matches(Regex("[A-Za-z0-9._:/=@,+-]{1,200}")) }) return null
             return DirectRunnerSettings(
                 command,
                 sha256,
@@ -447,7 +454,8 @@ internal class DirectRunnerSettings(
                 value("LT_VERDICT_AI_LOCAL_CWD"),
                 names,
                 authType,
-                bare != "0",
+                omitBare == "1",
+                extra,
                 value("LT_VERDICT_AI_LOCAL_BASH") ?: "bash",
             )
         }
@@ -491,7 +499,10 @@ internal class DirectCliOutput(
  * launcher asked for (only `structured_output`, no MCP servers) and a version of a plausible form; the advice is the event
  * that is the advice itself or the `result` member (object or JSON text) of an event. The check is made after the request.
  */
-internal fun parseDirectCliOutput(text: String): DirectCliOutput? {
+internal fun parseDirectCliOutput(
+    text: String,
+    relaxedTools: Boolean = false,
+): DirectCliOutput? {
     val root =
         try {
             Json.parseToJsonElement(text)
@@ -508,7 +519,10 @@ internal fun parseDirectCliOutput(text: String): DirectCliOutput? {
     val servers = init["mcp_servers"] as? JsonArray
     // A fork may not report its version; the pinned hash is what identifies the artifact.
     val version = if ("qwen_code_version" in init.keys) init.string("qwen_code_version") else "unknown"
-    if (tools != listOf("structured_output") ||
+    // Without --bare the CLI registers its whole built-in tool set (53 tools in Qwen Code 0.21.1, even with --safe-mode): then only
+    // structured_output must be present and calls are stopped by --max-tool-calls=0 and --exclude-tools (ADR 0027, D4).
+    val toolsAllowed = if (relaxedTools) tools != null && "structured_output" in tools else tools == listOf("structured_output")
+    if (!toolsAllowed ||
         servers == null ||
         servers.isNotEmpty() ||
         version == null ||

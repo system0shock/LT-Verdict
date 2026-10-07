@@ -81,6 +81,15 @@ class DirectRunnerIntegrationTest {
             assertEquals(DIRECT_ENDPOINT_HOST, success.provenance.endpointHost)
             assertNull(success.provenance.providerRequests)
             assertTrue(String(success.output).contains("\"summary\":\"fake\""))
+
+            // The escape hatches: without --bare the CLI reads the user's profile, --safe-mode still keeps the tool set closed;
+            // an extra argument reaches the CLI.
+            val relaxed =
+                environment + ("LT_VERDICT_AI_LOCAL_OMIT_BARE" to "1") +
+                    ("LT_VERDICT_AI_LOCAL_EXTRA_ARGS" to "--fallback-model=fake-local-stub")
+            val second = ModelStudioAdvisoryRunner.fromEnvironment(relaxed, root, config).invoke(evidence)
+            assertInstanceOf(RunnerOutcome.Success::class.java, second)
+            assertEquals(2, requests)
         } finally {
             server.stop(0)
         }

@@ -92,7 +92,8 @@ class ModelStudioAdvisoryRunnerTest {
             )!!
         assertEquals(listOf("OPENAI_API_KEY", "GIGA_TOKEN"), settings.passthrough)
         assertNull(settings.authType)
-        assertTrue(settings.bare)
+        assertFalse(settings.omitBare)
+        assertEquals(emptyList<String>(), settings.extraArguments)
         assertEquals("bash", settings.bash)
         assertEquals(sha, settings.sha256)
         for (broken in listOf(
@@ -103,7 +104,9 @@ class ModelStudioAdvisoryRunnerTest {
             base + ("LT_VERDICT_AI_LOCAL_PASSTHROUGH_ENV" to "A B"),
             base + ("LT_VERDICT_AI_LOCAL_PASSTHROUGH_ENV" to "OK,1BAD"),
             base + ("LT_VERDICT_AI_LOCAL_AUTH_TYPE" to "Other Value"),
-            base + ("LT_VERDICT_AI_LOCAL_BARE" to "2"),
+            base + ("LT_VERDICT_AI_LOCAL_OMIT_BARE" to "2"),
+            base + ("LT_VERDICT_AI_LOCAL_EXTRA_ARGS" to "--ok ${'$'}(id)"),
+            base + ("LT_VERDICT_AI_LOCAL_EXTRA_ARGS" to "--ok;rm"),
         )) {
             assertNull(DirectRunnerSettings.fromEnvironment(broken), broken.toString())
             assertEquals(
@@ -254,6 +257,19 @@ class ModelStudioAdvisoryRunnerTest {
     }
 
     @Test
+    fun `the init check is strict with bare and keeps only the tool requirement without it`() {
+        val many = cliOutput(tools = """["structured_output","web_fetch","agent"]""")
+        assertNull(parseDirectCliOutput(many))
+        assertEquals("gigacode-0.21.1", parseDirectCliOutput(many, relaxedTools = true)!!.version)
+        assertNull(parseDirectCliOutput(cliOutput(tools = """["web_fetch"]"""), relaxedTools = true))
+        assertNull(parseDirectCliOutput(cliOutput(servers = """["x"]"""), relaxedTools = true))
+        // Fields the check does not know are not refused, and a CLI without a version key gets "unknown".
+        val init = """{"type":"system","subtype":"init","tools":["structured_output"],"mcp_servers":[],"agents":[1],"new_field":true}"""
+        val extra = "[$init,$ADVICE_JSON]"
+        assertEquals("unknown", parseDirectCliOutput(extra)!!.version)
+    }
+
+    @Test
     fun `optional direct settings reach the launcher`() {
         val bash = bashOrSkip()
         val root = tempDir.resolve("root2")
@@ -270,13 +286,29 @@ class ModelStudioAdvisoryRunnerTest {
                     "LT_VERDICT_AI_LOCAL_QWEN_SHA256" to "cd".repeat(32),
                     "LT_VERDICT_AI_LOCAL_BASH" to bash,
                     "LT_VERDICT_AI_LOCAL_AUTH_TYPE" to "qwen-oauth",
-                    "LT_VERDICT_AI_LOCAL_BARE" to "0",
+                    "LT_VERDICT_AI_LOCAL_OMIT_BARE" to "1",
+                    "LT_VERDICT_AI_LOCAL_EXTRA_ARGS" to "--fallback-model=x  --flag y",
                     "LT_VERDICT_AI_LOCAL_NODE" to "/usr/bin/node",
                     "LT_VERDICT_AI_LOCAL_CWD" to "/work",
                 )
         ModelStudioAdvisoryRunner.fromEnvironment(environment, root, directConfig()).invoke(EVIDENCE)
         val arguments = Files.readAllLines(Path.of("$capture.args"))
-        assertTrue(arguments.containsAll(listOf("--auth-type", "qwen-oauth", "--bare", "0", "--node", "/usr/bin/node", "--cwd", "/work")))
+        assertTrue(
+            arguments.containsAll(
+                listOf(
+                    "--auth-type",
+                    "qwen-oauth",
+                    "--omit-bare",
+                    "1",
+                    "--extra-args",
+                    "--fallback-model=x --flag y",
+                    "--node",
+                    "/usr/bin/node",
+                    "--cwd",
+                    "/work",
+                ),
+            ),
+        )
     }
 
     private fun cliOutput(

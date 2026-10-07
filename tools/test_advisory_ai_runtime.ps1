@@ -38,7 +38,7 @@ try {
     $patternMatch = [regex]::Match($launcherSource, "(?m)^\`$EndpointHostPattern = '(?<pattern>[^']+)'\s*$")
     if (-not $patternMatch.Success) { throw "Launcher endpoint host pattern is missing." }
     $adviceSchema = Get-Content -LiteralPath (Join-Path $repoRoot "docs/contracts/advice/v1/ai-advice.schema.json") -Raw -Encoding UTF8 | ConvertFrom-Json
-    $schemaPattern = [string]$adviceSchema.properties.provenance.properties.endpoint_host.pattern
+    $schemaPattern = [string]$adviceSchema.properties.provenance.properties.endpoint_host.anyOf[0].pattern
     if ($patternMatch.Groups["pattern"].Value -cne ($schemaPattern.Substring(0, $schemaPattern.Length - 1) + '\z')) {
         throw "Launcher endpoint host pattern differs from ai-advice.schema.json."
     }

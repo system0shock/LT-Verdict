@@ -4,7 +4,9 @@ import org.junit.jupiter.api.Assertions.assertArrayEquals
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertInstanceOf
+import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertTrue
+import org.junit.jupiter.api.Assumptions.assumeTrue
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.condition.EnabledOnOs
 import org.junit.jupiter.api.condition.OS
@@ -69,6 +71,148 @@ class ModelStudioAdvisoryRunnerTest {
             mapOf("PATH" to "p"),
             hostEnvironmentForChild(mapOf("LTV_GRAFANA_MTLS_PASSWORD" to "x", "PATH" to "p"), windows = false),
         )
+    }
+
+    @Test
+    fun `the direct runner is selected only by the explicit mode and its settings are validated`() {
+        val sha = "ab".repeat(32)
+        val base =
+            mapOf(
+                "LT_VERDICT_AI_RUNNER_MODE" to "local",
+                "LT_VERDICT_AI_LOCAL_QWEN_CMD" to tempDir.resolve("cli.js").toString(),
+                "LT_VERDICT_AI_LOCAL_QWEN_SHA256" to sha,
+            )
+
+        assertFalse(directRunnerRequested(emptyMap()))
+        assertFalse(directRunnerRequested(mapOf("LT_VERDICT_AI_RUNNER_MODE" to "docker")))
+        assertTrue(directRunnerRequested(base))
+        val settings = DirectRunnerSettings.fromEnvironment(base + ("LT_VERDICT_AI_LOCAL_PASSTHROUGH_ENV" to "OPENAI_API_KEY, GIGA_TOKEN"))!!
+        assertEquals(listOf("OPENAI_API_KEY", "GIGA_TOKEN"), settings.passthrough)
+        assertEquals("openai", settings.authType)
+        assertEquals("bash", settings.bash)
+        assertEquals(sha, settings.sha256)
+        for (broken in listOf(
+            base - "LT_VERDICT_AI_LOCAL_QWEN_CMD",
+            base + ("LT_VERDICT_AI_LOCAL_QWEN_CMD" to "cli.js"),
+            base - "LT_VERDICT_AI_LOCAL_QWEN_SHA256",
+            base + ("LT_VERDICT_AI_LOCAL_QWEN_SHA256" to "abc"),
+            base + ("LT_VERDICT_AI_LOCAL_PASSTHROUGH_ENV" to "A B"),
+            base + ("LT_VERDICT_AI_LOCAL_PASSTHROUGH_ENV" to "OK,1BAD"),
+            base + ("LT_VERDICT_AI_LOCAL_AUTH_TYPE" to "other"),
+        )) {
+            assertNull(DirectRunnerSettings.fromEnvironment(broken), broken.toString())
+            assertEquals(
+                RunnerOutcome.Unavailable(AdviceUnavailableReason.RUNNER_ARTIFACT_MISSING),
+                ModelStudioAdvisoryRunner.fromEnvironment(broken, tempDir).invoke(EVIDENCE),
+            )
+        }
+        // An unknown mode fails closed instead of falling back to the container runner.
+        assertEquals(
+            RunnerOutcome.Unavailable(AdviceUnavailableReason.RUNNER_ARTIFACT_MISSING),
+            ModelStudioAdvisoryRunner.fromEnvironment(mapOf("LT_VERDICT_AI_RUNNER_MODE" to "Local "), tempDir).invoke(EVIDENCE),
+        )
+    }
+
+    @Test
+    fun `passed through variable names reach the child and the rest of the host environment does not`() {
+        val host = mapOf("PATH" to "p", "HOME" to "/home/op", "OPENAI_API_KEY" to "k", "HTTPS_PROXY" to "x", "OTHER_TOKEN" to "t")
+        assertEquals(
+            mapOf("PATH" to "p", "HOME" to "/home/op", "OPENAI_API_KEY" to "k"),
+            hostEnvironmentForChild(host, windows = false, extraNames = setOf("HOME", "OPENAI_API_KEY")),
+        )
+    }
+
+    @Test
+    fun `the direct runner passes named arguments, needs no credential and records honest provenance`() {
+        val bash = bashOrSkip()
+        val root = tempDir.resolve("root")
+        Files.createDirectories(root.resolve("tools"))
+        Files.writeString(Files.createDirectories(root.resolve("docs/contracts/advice/v1")).resolve("system-prompt.md"), "bounded prompt")
+        val capture = tempDir.resolve("capture").toString().replace('\\', '/')
+        val sha = "cd".repeat(32)
+
+        fun launcher(result: String) =
+            Files.writeString(
+                root.resolve("tools/advisory_ai_runtime_local.sh"),
+                listOf(
+                    "#!/bin/bash",
+                    "printf '%s\\n' \"\$@\" > '$capture.args'",
+                    "env > '$capture.env'",
+                    "while [ \$# -ge 2 ]; do case \"\$1\" in --output-path) out=\"\$2\";; --result-path) res=\"\$2\";; esac; shift 2; done",
+                    "printf '%s' '{\"schema_version\":\"ai-advice-output.v1\",\"summary\":\"bounded\",\"hypotheses\":[],\"recommendations\":[],\"caveats\":[]}' > \"\$out\"",
+                    "printf '%s' '$result' > \"\$res\"",
+                    "exit 0",
+                ).joinToString("\n", postfix = "\n"),
+            )
+
+        fun result(
+            sha256: String = sha,
+            host: String = "cli-builtin",
+            model: String = "gigacode-large",
+        ) = """{"schema_version":"advisory-ai-runtime-result.v1","status":"SUCCESS","duration_ms":12,"exit_code":0,"provider_request_count":null,"prompt_sha256":"$PROMPT_SHA256","endpoint_host":"$host","model_id":"$model","runner_version":"gigacode-0.21.1","runner_artifact_sha256":"$sha256"}"""
+        val environment =
+            System.getenv() +
+                mapOf(
+                    "LT_VERDICT_AI_RUNNER_MODE" to "local",
+                    "LT_VERDICT_AI_RUNTIME_ROOT" to root.toString(),
+                    "LT_VERDICT_AI_LOCAL_QWEN_CMD" to tempDir.resolve("cli.js").toString(),
+                    "LT_VERDICT_AI_LOCAL_QWEN_SHA256" to sha,
+                    "LT_VERDICT_AI_LOCAL_BASH" to bash,
+                    "LT_VERDICT_AI_LOCAL_PASSTHROUGH_ENV" to "LTV_TEST_PASSED",
+                    "LTV_TEST_PASSED" to "listed-value",
+                    "LTV_TEST_UNLISTED" to "unlisted-value",
+                    "HTTPS_PROXY" to "http://proxy.invalid:3128",
+                )
+        val runner = ModelStudioAdvisoryRunner.fromEnvironment(environment, root, directConfig())
+
+        launcher(result())
+        val success = assertInstanceOf(RunnerOutcome.Success::class.java, runner.invoke(EVIDENCE))
+        assertEquals("gigacode-large", success.provenance.modelId)
+        assertEquals("gigacode-0.21.1", success.provenance.runnerVersion)
+        assertEquals(sha, success.provenance.runnerArtifactSha256)
+        assertEquals("cli-builtin", success.provenance.endpointHost)
+        assertNull(success.provenance.providerRequests)
+        assertEquals(PROMPT_SHA256, success.provenance.promptSha256)
+        val arguments = Files.readAllLines(Path.of("$capture.args"))
+        assertTrue(arguments.containsAll(listOf("--cmd", tempDir.resolve("cli.js").toString(), "--sha256", sha, "--auth-type", "openai")))
+        // The default model of the CLI is the CLI's own: no --model is passed for it.
+        assertFalse(arguments.contains("--model"))
+        val childEnvironment = Files.readString(Path.of("$capture.env"))
+        assertTrue(childEnvironment.contains("LTV_TEST_PASSED=listed-value"))
+        assertFalse(childEnvironment.contains("LTV_TEST_UNLISTED"))
+        assertFalse(childEnvironment.contains("HTTPS_PROXY"))
+
+        // A named model is passed to the CLI.
+        runner.invoke(EVIDENCE, "gigacode-large")
+        assertTrue(Files.readAllLines(Path.of("$capture.args")).containsAll(listOf("--model", "gigacode-large")))
+
+        // The hash the launcher measured must be the operator's pin, the marker must be the direct one, nothing is invented.
+        for (bad in listOf(result(sha256 = "ef".repeat(32)), result(host = "gw.internal:443"), result(model = "bad model"))) {
+            launcher(bad)
+            assertEquals(RunnerOutcome.Failed(AdviceFailure.PROCESS_FAILED), runner.invoke(EVIDENCE), bad)
+        }
+        launcher(
+            """{"schema_version":"advisory-ai-runtime-result.v1","status":"UNAVAILABLE","duration_ms":1,"exit_code":1,"unavailable_reason":"RUNNER_ARTIFACT_MISMATCH"}""",
+        )
+        assertEquals(RunnerOutcome.Unavailable(AdviceUnavailableReason.RUNNER_ARTIFACT_MISMATCH), runner.invoke(EVIDENCE))
+        launcher("""{"schema_version":"advisory-ai-runtime-result.v1","status":"FAILED","duration_ms":1,"exit_code":1,"failure_code":"TIMEOUT"}""")
+        assertEquals(RunnerOutcome.Failed(AdviceFailure.TIMEOUT), runner.invoke(EVIDENCE))
+    }
+
+    private fun directConfig() =
+        AiModelsConfig(
+            endpointUrl = DIRECT_ENDPOINT_HOST,
+            endpointLabel = null,
+            allowInsecureHttp = false,
+            defaultModel = CLI_DEFAULT_MODEL,
+            models = listOf(AiModel(CLI_DEFAULT_MODEL, "CLI"), AiModel("gigacode-large", "GigaCode")),
+        )
+
+    private fun bashOrSkip(): String {
+        val windows = System.getProperty("os.name").startsWith("Windows", ignoreCase = true)
+        val bash = if (windows) "C:\\Program Files\\Git\\bin\\bash.exe".takeIf { Files.exists(Path.of(it)) } else "bash"
+        assumeTrue(bash != null, "bash is required")
+        return bash!!
     }
 
     @Test

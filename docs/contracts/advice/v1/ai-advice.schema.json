@@ -20,8 +20,16 @@
       "properties": {
         "invocation_id": { "type": "string", "format": "uuid" },
         "runner_id": { "const": "gigacode-qwen-code" },
-        "runner_version": { "const": "0.21.1" },
-        "runner_artifact_sha256": { "const": "1db9709bf1753611ca2fec234cf5adf517376efeb1540fcf9e309da010f9ed38" },
+        "runner_version": {
+          "type": "string",
+          "pattern": "^[0-9A-Za-z][0-9A-Za-z._+-]{0,63}$",
+          "description": "Version the CLI reported. The container runner is pinned to 0.21.1 (see allOf); the direct runner takes the operator's CLI (ADR 0027)."
+        },
+        "runner_artifact_sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$",
+          "description": "SHA-256 of the CLI entry file. The container runner is pinned to the Qwen Code 0.21.1 hash (see allOf); the direct runner uses the operator's pin (ADR 0027)."
+        },
         "model_id": {
           "type": "string",
           "pattern": "^[A-Za-z0-9][A-Za-z0-9._:/-]{0,127}$",
@@ -39,17 +47,32 @@
         "endpoint_host": {
           "type": "string",
           "maxLength": 260,
-          "pattern": "^(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?){0,126}|\\[(?=[0-9a-f:.]*:[0-9a-f:.]*:)(?=[0-9a-f:.]*[0-9a-f])[0-9a-f:.]{2,45}\\]):(?:[1-9][0-9]{0,3}|[1-5][0-9]{4}|6[0-4][0-9]{3}|65[0-4][0-9]{2}|655[0-2][0-9]|6553[0-5])$",
-          "description": "Host and port the relay actually sent the evidence to, lower case, always with the port, without scheme, path or credentials (ADR 0023, D4). Observed by the relay, not taken from the configuration."
+          "anyOf": [
+            {
+              "pattern": "^(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?){0,126}|\\[(?=[0-9a-f:.]*:[0-9a-f:.]*:)(?=[0-9a-f:.]*[0-9a-f])[0-9a-f:.]{2,45}\\]):(?:[1-9][0-9]{0,3}|[1-5][0-9]{4}|6[0-4][0-9]{3}|65[0-4][0-9]{2}|655[0-2][0-9]|6553[0-5])$"
+            },
+            { "const": "cli-builtin" }
+          ],
+          "description": "Host and port the relay actually sent the evidence to, lower case, always with the port, without scheme, path or credentials (ADR 0023, D4). Observed by the relay, not taken from the configuration. The value cli-builtin marks the direct runner, which has no relay: the CLI reached the model through its own channel, so no host is observed (ADR 0027)."
         },
         "provider_requests": {
           "type": "integer",
           "minimum": 1,
           "maximum": 2,
-          "description": "Requests the relay forwarded to the provider for this advice: 1, or 2 after the one schema retry (ADR 0021, D2, D4). Absent in advice saved before it existed, which means 1."
+          "description": "Requests the relay forwarded to the provider for this advice: 1, or 2 after the one schema retry (ADR 0021, D2, D4). Absent in advice saved before it existed, which means 1. Absent and not countable in advice of the direct runner (ADR 0027)."
         }
       },
       "allOf": [
+        {
+          "if": { "required": ["endpoint_host"], "properties": { "endpoint_host": { "const": "cli-builtin" } } },
+          "then": { "not": { "required": ["provider_requests"] } },
+          "else": {
+            "properties": {
+              "runner_version": { "const": "0.21.1" },
+              "runner_artifact_sha256": { "const": "1db9709bf1753611ca2fec234cf5adf517376efeb1540fcf9e309da010f9ed38" }
+            }
+          }
+        },
         {
           "if": { "properties": { "prompt_version": { "const": "advisory-system.v2" } }, "required": ["prompt_version"] },
           "then": { "required": ["provider_requests"] }

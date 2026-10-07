@@ -201,8 +201,8 @@ internal data class RunnerProvenance(
     val endpointHost: String,
     val promptVersion: String,
     val promptSha256: String,
-    /** Requests the relay forwarded to the provider for this advice: 1, or 2 after the schema retry (ADR 0021, D2). */
-    val providerRequests: Int,
+    /** Requests the relay forwarded to the provider: 1, or 2 after the schema retry (ADR 0021, D2). Null in the direct mode (ADR 0027). */
+    val providerRequests: Int?,
     val durationMillis: Long,
     val exitCode: Int,
 )
@@ -331,7 +331,7 @@ internal class AdvisoryAiService(
                         put("endpoint_host", success.provenance.endpointHost)
                         put("prompt_version", success.provenance.promptVersion)
                         put("prompt_sha256", success.provenance.promptSha256)
-                        put("provider_requests", success.provenance.providerRequests)
+                        success.provenance.providerRequests?.let { put("provider_requests", it) }
                         put("duration_ms", success.provenance.durationMillis)
                         put("exit_code", success.provenance.exitCode)
                         put("validation", "PASSED")
@@ -370,10 +370,14 @@ internal fun validateStoredAdvice(
     if (!provenance.keys.containsAll(PROVENANCE_FIELDS) ||
         !(PROVENANCE_FIELDS + PROVENANCE_OPTIONAL_FIELDS).containsAll(provenance.keys) ||
         provenance.string("runner_id") != QwenCode0211.RUNNER_ID ||
-        provenance.string("runner_version") != QwenCode0211.RUNNER_VERSION ||
-        provenance.string("runner_artifact_sha256") != QwenCode0211.CLI_ENTRY_SHA256 ||
+        !validRunnerArtifact(
+            "endpoint_host" in provenance.keys && provenance.string("endpoint_host") == DIRECT_ENDPOINT_HOST,
+            provenance.string("runner_version"),
+            provenance.string("runner_artifact_sha256"),
+            "provider_requests" in provenance.keys,
+        ) ||
         !validModelSlug(provenance.string("model_id")) ||
-        (hasEndpointHost && !validEndpointHost(provenance.string("endpoint_host"))) ||
+        (hasEndpointHost && !validProvenanceEndpoint(provenance.string("endpoint_host"))) ||
         // Advice saved before endpoint_host existed could only come from the built-in ModelStudio endpoint and its model.
         (!hasEndpointHost && provenance.string("model_id") != QwenCode0211.MODEL_ID) ||
         !validStoredPrompt(provenance) ||
@@ -407,13 +411,36 @@ private fun validStoredPrompt(provenance: JsonObject): Boolean {
     }
 }
 
+/**
+ * ADR 0027: the container runner is pinned to Qwen Code 0.21.1; the direct runner (endpoint_host is the marker) runs the
+ * operator's CLI, so its version is a pattern, its hash is the operator's pin and there is no request count.
+ */
+private fun validRunnerArtifact(
+    direct: Boolean,
+    version: String,
+    sha256: String,
+    hasRequestCount: Boolean,
+): Boolean =
+    if (direct) {
+        RUNNER_VERSION_PATTERN.matches(version) && SHA256.matches(sha256) && !hasRequestCount
+    } else {
+        version == QwenCode0211.RUNNER_VERSION && sha256 == QwenCode0211.CLI_ENTRY_SHA256
+    }
+
+private fun validProvenanceEndpoint(value: String): Boolean = value == DIRECT_ENDPOINT_HOST || validEndpointHost(value)
+
 private fun validProvenance(value: RunnerProvenance): Boolean =
     value.runnerId == QwenCode0211.RUNNER_ID &&
-        value.runnerVersion == QwenCode0211.RUNNER_VERSION &&
-        value.runnerArtifactSha256 == QwenCode0211.CLI_ENTRY_SHA256 &&
+        validRunnerArtifact(
+            value.endpointHost == DIRECT_ENDPOINT_HOST,
+            value.runnerVersion,
+            value.runnerArtifactSha256,
+            value.providerRequests != null,
+        ) &&
         validModelSlug(value.modelId) &&
-        validEndpointHost(value.endpointHost) &&
-        value.providerRequests in 1..MAX_PROVIDER_REQUESTS &&
+        validProvenanceEndpoint(value.endpointHost) &&
+        // Only the direct runner has no relay to count the requests.
+        (if (value.providerRequests == null) value.endpointHost == DIRECT_ENDPOINT_HOST else value.providerRequests in 1..MAX_PROVIDER_REQUESTS) &&
         when (value.promptVersion) {
             QwenCode0211.PROMPT_VERSION -> SHA256.matches(value.promptSha256)
             QwenCode0211.PROMPT_V2_VERSION -> value.promptSha256 == QwenCode0211.PROMPT_V2_SHA256
@@ -568,6 +595,10 @@ private val PROVENANCE_FIELDS =
 
 // Present in advice saved after endpoint_host (ADR 0023, CM3) and provider_requests (ADR 0021, D4) appeared.
 private val PROVENANCE_OPTIONAL_FIELDS = setOf("endpoint_host", "provider_requests")
+
+/** `endpoint_host` of advice made by the direct runner: the CLI uses its own channel, so no host is observed (ADR 0027). */
+internal const val DIRECT_ENDPOINT_HOST = "cli-builtin"
+private val RUNNER_VERSION_PATTERN = Regex("^[0-9A-Za-z][0-9A-Za-z._+-]{0,63}$")
 
 // One request, or one more after the schema retry (ADR 0021, D2).
 private const val MAX_PROVIDER_REQUESTS = 2

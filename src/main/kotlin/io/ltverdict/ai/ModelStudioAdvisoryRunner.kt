@@ -437,7 +437,7 @@ internal class DirectRunnerSettings(
             val names = value("LT_VERDICT_AI_LOCAL_PASSTHROUGH_ENV")?.split(',')?.map(String::trim).orEmpty()
             if (names.any { !it.matches(Regex("[A-Za-z_][A-Za-z0-9_]{0,63}")) }) return null
             val authType = value("LT_VERDICT_AI_LOCAL_AUTH_TYPE")
-            if (authType != null && authType !in setOf("openai", "qwen-oauth", "anthropic", "gemini", "vertex-ai")) return null
+            if (authType != null && !authType.matches(Regex("[a-z][a-z0-9-]{0,31}"))) return null
             val bare = value("LT_VERDICT_AI_LOCAL_BARE")
             if (bare != null && bare !in setOf("0", "1")) return null
             return DirectRunnerSettings(
@@ -506,7 +506,8 @@ internal fun parseDirectCliOutput(text: String): DirectCliOutput? {
             ?: return null
     val tools = (init["tools"] as? JsonArray)?.map { (it as? JsonPrimitive)?.contentOrNull }
     val servers = init["mcp_servers"] as? JsonArray
-    val version = init.string("qwen_code_version")
+    // A fork may not report its version; the pinned hash is what identifies the artifact.
+    val version = if ("qwen_code_version" in init.keys) init.string("qwen_code_version") else "unknown"
     if (tools != listOf("structured_output") ||
         servers == null ||
         servers.isNotEmpty() ||

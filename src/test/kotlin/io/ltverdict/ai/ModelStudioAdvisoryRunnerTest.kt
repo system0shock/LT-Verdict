@@ -102,7 +102,7 @@ class ModelStudioAdvisoryRunnerTest {
             base + ("LT_VERDICT_AI_LOCAL_QWEN_SHA256" to "abc"),
             base + ("LT_VERDICT_AI_LOCAL_PASSTHROUGH_ENV" to "A B"),
             base + ("LT_VERDICT_AI_LOCAL_PASSTHROUGH_ENV" to "OK,1BAD"),
-            base + ("LT_VERDICT_AI_LOCAL_AUTH_TYPE" to "other"),
+            base + ("LT_VERDICT_AI_LOCAL_AUTH_TYPE" to "Other Value"),
             base + ("LT_VERDICT_AI_LOCAL_BARE" to "2"),
         )) {
             assertNull(DirectRunnerSettings.fromEnvironment(broken), broken.toString())
@@ -236,9 +236,13 @@ class ModelStudioAdvisoryRunnerTest {
         // The advice may be an event itself.
         launcher(
             result(),
-            """[{"type":"system","subtype":"init","tools":["structured_output"],"mcp_servers":[],"qwen_code_version":"1.2"},$ADVICE_JSON]""",
+            """[{"type":"system","subtype":"init","tools":["structured_output"],"mcp_servers":[]},$ADVICE_JSON]""",
         )
-        assertInstanceOf(RunnerOutcome.Success::class.java, runner.invoke(EVIDENCE))
+        // A fork that reports no version is accepted: the pinned hash identifies the artifact.
+        assertEquals(
+            "unknown",
+            assertInstanceOf(RunnerOutcome.Success::class.java, runner.invoke(EVIDENCE)).provenance.runnerVersion,
+        )
         launcher(
             """{"schema_version":"advisory-ai-runtime-result.v1","status":"UNAVAILABLE","duration_ms":1,"exit_code":1,"unavailable_reason":"RUNNER_ARTIFACT_MISMATCH"}""",
         )

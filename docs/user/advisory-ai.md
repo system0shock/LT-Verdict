@@ -298,6 +298,7 @@ CLI формата Qwen Code (например, форк GigaCode) со свое
 export LT_VERDICT_AI_RUNNER_MODE=local
 export LT_VERDICT_AI_LOCAL_QWEN_CMD=/opt/gigacode/gigacode          # абсолютный путь к исполняемому файлу CLI
 export LT_VERDICT_AI_LOCAL_QWEN_SHA256=<sha256 этого файла>        # обязательно; считается один раз на проверенном экземпляре
+export LT_VERDICT_AI_LOCAL_AUTH_TYPE=qwen-oauth                    # способ входа CLI; без него Qwen Code с --bare не стартует
 export LT_VERDICT_AI_MODELS_FILE=/etc/lt-verdict/ai-models.json    # обязателен: слаг модели CLI
 ltv ui
 ```
@@ -309,8 +310,9 @@ ltv ui
 Необязательные переменные: `LT_VERDICT_AI_LOCAL_PASSTHROUGH_ENV` (имена переменных
 окружения через запятую, которые нужны самому CLI и копируются ему; по умолчанию
 ни одной), `LT_VERDICT_AI_LOCAL_CWD` (рабочий каталог CLI, по умолчанию пустой
-временный), `LT_VERDICT_AI_LOCAL_AUTH_TYPE` (`--auth-type`: `openai`, `qwen-oauth`,
-`anthropic`, `gemini`, `vertex-ai`; по умолчанию не передаётся),
+временный), `LT_VERDICT_AI_LOCAL_AUTH_TYPE` (`--auth-type`; в Qwen Code `openai`, `qwen-oauth` и
+др., допустимое значение определяет сам CLI; в примере выше он обязателен для Qwen Code
+с `--bare`),
 `LT_VERDICT_AI_LOCAL_BARE=0` (убирает `--bare`), `LT_VERDICT_AI_LOCAL_NODE` (путь
 к Node для `.js`), `LT_VERDICT_AI_LOCAL_BASH` (путь к `bash`, нужен на Windows с Git
 Bash). `LT_VERDICT_AI_CREDENTIAL_ENV_FILE` и `LT_VERDICT_AI_QWEN_ROOT` в этом
@@ -338,6 +340,22 @@ SHA-256 CLI, запускает его процессом без relay с тем
 CLI, Node для `.js` или `bash` не найдены), `RUNNER_ARTIFACT_MISMATCH` (SHA-256 не
 совпал; в интерфейсе сообщение говорит о Qwen Code), `MODEL_CONFIG_INVALID` (нет
 файла моделей), `TIMEOUT`, `INVALID_OUTPUT`, `PROCESS_FAILED`.
+
+Проверка CLI вручную до демо (из корня дистрибутива, под тем же пользователем;
+запрос уйдёт модели CLI). Так видны собственные ошибки CLI, которые продукт не
+показывает: события `init` и `result` в stdout, ошибки в stderr.
+
+```bash
+echo '{"schema_version":"ai-evidence.v1","facts":[],"findings":[],"evidence":[]}' | \
+  /opt/gigacode/gigacode --bare --safe-mode --auth-type=qwen-oauth --model=<слаг> \
+  --system-prompt="$(cat docs/contracts/advice/v1/system-prompt.md)" --input-format=text --output-format=json \
+  --json-schema=@docs/contracts/advice/v1/ai-advice-output.schema.json \
+  --exclude-tools=read_file,edit,notebook_edit,run_shell_command --max-tool-calls=0 --max-wall-time=600s \
+  --approval-mode=default --chat-recording=false --openai-logging=false --telemetry=false
+```
+
+Браузерный вход CLI при `NO_BROWSER=1` сам не обновится: если срок входа истёк,
+запрос зависнет или завершится ошибкой; перед показом выполните команду выше.
 
 ## Изоляция и ограничения
 

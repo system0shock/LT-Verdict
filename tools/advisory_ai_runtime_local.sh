@@ -78,7 +78,7 @@ run() {
   [ -n "$evidence" ] && [ -n "$output" ] && [ -n "$result" ] && [ -n "$cancel" ] || return 0
   [ ! -e "$output" ] || return 0
   [[ -z "$model" || ( "$model" =~ ^[A-Za-z0-9][A-Za-z0-9._:/-]{0,127}$ && "$model" != *..* && "$model" != *//* ) ]] || return 0
-  case "$auth_type" in ''|openai|qwen-oauth|anthropic|gemini|vertex-ai) ;; *) return 0 ;; esac
+  [[ -z "$auth_type" || "$auth_type" =~ ^[a-z][a-z0-9-]{0,31}$ ]] || return 0
   case "$bare" in 0|1) ;; *) return 0 ;; esac
   [[ "$sha256" =~ ^[0-9a-fA-F]{64}$ ]] || return 0
   sha256="$(printf '%s' "$sha256" | tr 'A-F' 'a-f')"

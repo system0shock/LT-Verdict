@@ -64,7 +64,7 @@ stdin. Отличия: нет `--openai-base-url`; `--auth-type` не перед
 | `LT_VERDICT_AI_LOCAL_PASSTHROUGH_ENV` | имена переменных окружения через запятую, которые копируются в окружение CLI (по умолчанию ни одной) |
 | `LT_VERDICT_AI_LOCAL_CWD` | рабочий каталог CLI (по умолчанию пустой временный) |
 | `LT_VERDICT_AI_LOCAL_NODE` | путь к Node для `.js` (по умолчанию `node`) |
-| `LT_VERDICT_AI_LOCAL_AUTH_TYPE` | значение `--auth-type`: `openai`, `qwen-oauth`, `anthropic`, `gemini`, `vertex-ai` |
+| `LT_VERDICT_AI_LOCAL_AUTH_TYPE` | значение `--auth-type` (строчные буквы, цифры, дефис; допустимые значения определяет сам CLI): в Qwen Code `openai`, `qwen-oauth` и др. |
 | `LT_VERDICT_AI_LOCAL_BARE` | `0` убирает `--bare` |
 | `LT_VERDICT_AI_LOCAL_BASH` | путь к `bash` |
 
@@ -89,7 +89,8 @@ Launcher сверяет SHA-256 файла CLI с закреплённым оп�
 `UNAVAILABLE/RUNNER_ARTIFACT_MISMATCH` до запуска). Версия не закреплена. После
 запуска Kotlin проверяет событие `init` из stdout: `tools == ["structured_output"]`,
 `mcp_servers == []`, `qwen_code_version` в форме
-`^[0-9A-Za-z][0-9A-Za-z._+-]{0,63}$` (имя форка допустимо); нарушение даёт
+`^[0-9A-Za-z][0-9A-Za-z._+-]{0,63}$` (имя форка допустимо; если ключа нет, версия
+`unknown`); нарушение даёт
 `FAILED/INVALID_OUTPUT`. Проверка апостериорная: `--output-format=json` печатает
 события в конце, запрос к этому моменту уже ушёл; она не даёт сохранить совет, но
 не предотвращает отправку.
@@ -156,6 +157,7 @@ GigaCode после ручной авторизации держит выбор 
 export LT_VERDICT_AI_RUNNER_MODE=local
 export LT_VERDICT_AI_LOCAL_QWEN_CMD=/opt/gigacode/gigacode
 export LT_VERDICT_AI_LOCAL_QWEN_SHA256=<64 hex-символа, вычислены один раз: sha256sum /opt/gigacode/gigacode>
+export LT_VERDICT_AI_LOCAL_AUTH_TYPE=qwen-oauth                   # способ входа CLI; без него Qwen Code с --bare не стартует
 export LT_VERDICT_AI_MODELS_FILE=/etc/lt-verdict/ai-models.json   # слаг модели обязателен
 ltv ui
 ```

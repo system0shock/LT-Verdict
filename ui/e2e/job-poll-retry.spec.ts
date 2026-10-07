@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test'
+import { JOB_LABELS } from '../src/shell/labels'
 
 const run = { run_id: `jmeter_jtl_csv-${'a'.repeat(64)}`, source_type: 'jmeter_jtl_csv', sha256: 'a'.repeat(64), size_bytes: 100, original_filename: 'poll.jtl' }
 const processing = { job_id: 'job-1', state: 'PROCESSING', processed_bytes: 10, total_bytes: 100, run_id: run.run_id, analysis_id: null, diagnostic: null }
@@ -102,8 +103,8 @@ test('treats a hung job poll as a failed attempt and polls again', async ({ page
 })
 
 for (const scenario of [
-  { name: 'legacy', path: '/', lost: 'Connection lost', retry: 'Retry', cancel: 'Cancel analysis' },
-  { name: 'new shell', path: '/?shell=new', lost: 'Связь потеряна', retry: 'Повторить', cancel: 'Cancel analysis' },
+  { name: 'legacy', path: '/', lost: 'Connection lost', retry: 'Retry', cancel: 'Cancel analysis', processing: 'PROCESSING', failed: 'FAILED' },
+  { name: 'new shell', path: '/?shell=new', lost: 'Связь потеряна', retry: 'Повторить', cancel: JOB_LABELS.cancel, processing: JOB_LABELS.states.PROCESSING, failed: JOB_LABELS.states.FAILED },
 ]) {
   test(`stops after a long outage and offers Retry (${scenario.name})`, async ({ page }) => {
     await page.clock.install()
@@ -117,7 +118,7 @@ for (const scenario of [
       return lost.count()
     }, { timeout: 30_000 }).toBe(1)
     await expect(lost).toContainText(scenario.lost)
-    await expect(page.locator('#job-status')).toContainText('PROCESSING')
+    await expect(page.locator('#job-status')).toContainText(scenario.processing)
     await expect(page.getByRole('button', { name: scenario.cancel })).toBeVisible()
     const callsWhenLost = api.polls.length
     expect(callsWhenLost).toBe(10)
@@ -130,7 +131,7 @@ for (const scenario of [
     await expect.poll(async () => {
       await page.clock.runFor(1_000)
       return page.locator('#job-status').innerText()
-    }, { timeout: 30_000 }).toContain('FAILED')
+    }, { timeout: 30_000 }).toContain(scenario.failed)
     await expect(lost).toHaveCount(0)
     await expect(page.getByRole('button', { name: scenario.retry })).toHaveCount(0)
     expect(api.polls).toHaveLength(callsWhenLost + 1)

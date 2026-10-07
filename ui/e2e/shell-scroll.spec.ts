@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test'
-import { SHELL_TABS } from '../src/shell/labels'
+import { JOB_LABELS, SHELL_TABS } from '../src/shell/labels'
 
 const analysisId = 'a'.repeat(64)
 const manyRuns = Array.from({ length: 40 }, (_, index) => {
@@ -76,7 +76,7 @@ test('a finished analysis opens with the verdict on the first screen', async ({ 
   })
   await fixtureApi(page, { job })
   await page.goto('/?shell=new')
-  await expect(page.locator('#job-status')).toContainText('PROCESSING')
+  await expect(page.locator('#job-status')).toContainText(JOB_LABELS.states.PROCESSING)
 
   await page.evaluate(() => window.scrollTo(0, 400))
   expect(await scrollY(page)).toBeGreaterThan(100)

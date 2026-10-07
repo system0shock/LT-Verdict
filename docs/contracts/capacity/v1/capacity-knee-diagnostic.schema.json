@@ -1,0 +1,33 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://lt-verdict.local/contracts/capacity/v1/capacity-knee-diagnostic.schema.json",
+  "title": "LT Verdict capacity knee diagnostic (evidence item of analysis-result.v1, ADR 0026)",
+  "description": "Optional, additive evidence item in capacity_step results. Diagnostic only: it never changes the capacity bound or any verdict, and it is not part of the advisory AI evidence.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["id", "type", "method", "metric", "load_axis", "unit", "status", "confidence", "calibrated", "diagnostic_only", "last_stable_stage_id", "last_stable_load", "first_degraded_stage_id", "first_degraded_load", "sse_ratio", "excess_factor", "reasons", "points", "parameters"],
+  "properties": {
+    "id": {"const": "capacity-knee-diagnostic"},
+    "type": {"const": "capacity_knee_diagnostic"},
+    "method": {"const": "piecewise-hinge-ln-p95.v1"},
+    "metric": {"const": "response_time_p95_ms"},
+    "load_axis": {"enum": ["rps", "concurrency", "users"]},
+    "unit": {"type": "string"},
+    "status": {"enum": ["DETECTED", "NOT_DETECTED"]},
+    "confidence": {"const": "UNCALIBRATED"},
+    "calibrated": {"const": false},
+    "diagnostic_only": {"const": true},
+    "last_stable_stage_id": {"type": ["string", "null"]},
+    "last_stable_load": {"type": ["number", "null"]},
+    "first_degraded_stage_id": {"type": ["string", "null"]},
+    "first_degraded_load": {"type": ["number", "null"]},
+    "sse_ratio": {"type": ["number", "null"], "description": "SSE of the piecewise fit divided by SSE of one straight line, scale 6."},
+    "excess_factor": {"type": ["number", "null"], "description": "How many times the p95 beyond the knee exceeds the extrapolated stable branch, scale 2."},
+    "reasons": {"type": "array", "maxItems": 1, "items": {"enum": ["KNEE_RUN_NOT_VALID", "KNEE_STAGE_DATA_MISSING", "KNEE_TOO_FEW_STAGES", "KNEE_LOAD_NOT_INCREASING", "KNEE_NO_BREAK", "KNEE_BREAK_NOT_MATERIAL", "KNEE_BREAK_WITHIN_NOISE"]}},
+    "points": {"type": "array", "items": {"type": "object", "additionalProperties": false, "required": ["stage_id", "load", "value"], "properties": {"stage_id": {"type": "string"}, "load": {"type": "number"}, "value": {"type": "integer", "minimum": 0}}}},
+    "parameters": {"type": "object", "additionalProperties": false, "required": ["min_stages", "min_points_before_knee", "max_sse_ratio", "min_excess_factor", "noise_multiplier"], "properties": {"min_stages": {"type": "integer"}, "min_points_before_knee": {"type": "integer"}, "max_sse_ratio": {"type": "string"}, "min_excess_factor": {"type": "string"}, "noise_multiplier": {"type": "integer"}}}
+  },
+  "allOf": [
+    {"if": {"properties": {"status": {"const": "DETECTED"}}}, "then": {"properties": {"reasons": {"maxItems": 0}, "last_stable_stage_id": {"type": "string"}, "first_degraded_stage_id": {"type": "string"}}}, "else": {"properties": {"reasons": {"minItems": 1}}}}
+  ]
+}

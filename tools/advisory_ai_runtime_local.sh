@@ -2,16 +2,17 @@
 # ADR 0027: the direct (local) launcher of the advisory AI runner. It starts the operator's CLI (Qwen Code 0.21.x or its fork) as a
 # local process with the arguments of tools/advisory_ai_runtime_qwen.sh, without Docker and without the relay: the CLI reaches the
 # model through its own configuration and authorization. Same result file as advisory_ai_runtime.ps1 (advisory-ai-runtime-result.v1).
+# On success the raw stdout of the CLI is left in --output-path for the caller to parse.
 # The launcher always writes the result file and exits 0; the caller reads the status from the file.
 set -u
 set -m
 
-evidence="" output="" result="" cancel="" cmd="" sha256="" node_cmd="" cwd="" passthrough="" auth_type="openai" model="" deadline_arg=""
+evidence="" output="" result="" cancel="" cmd="" sha256="" node_cmd="" cwd="" passthrough="" auth_type="" bare="1" model="" deadline_arg=""
 while [ $# -ge 2 ]; do
   case "$1" in
     --evidence-path) evidence="$2" ;; --output-path) output="$2" ;; --result-path) result="$2" ;; --cancel-path) cancel="$2" ;;
     --cmd) cmd="$2" ;; --sha256) sha256="$2" ;; --node) node_cmd="$2" ;; --cwd) cwd="$2" ;;
-    --passthrough) passthrough="$2" ;; --deadline) deadline_arg="$2" ;; --auth-type) auth_type="$2" ;; --model) model="$2" ;;
+    --passthrough) passthrough="$2" ;; --deadline) deadline_arg="$2" ;; --auth-type) auth_type="$2" ;; --bare) bare="$2" ;; --model) model="$2" ;;
     *) ;;
   esac
   shift 2
@@ -29,7 +30,6 @@ here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 repo="$(cd "$here/.." && pwd)"
 prompt="$repo/docs/contracts/advice/v1/system-prompt.md"
 schema="$repo/docs/contracts/advice/v1/ai-advice-output.schema.json"
-helper="$here/advisory_ai_runtime_local_parse.mjs"
 evidence_limit=262144
 output_limit=131072
 stderr_limit=16384
@@ -38,7 +38,7 @@ cli_deadline=605
 
 started=$(now_ms)
 status=FAILED failure_code=PROCESS_FAILED unavailable_reason="" stage=initialization
-prompt_sha="" observed_model="" observed_version="" cleanup_incomplete=false
+prompt_sha="" cleanup_incomplete=false
 root="" pid=""
 trap '[ -z "$pid" ] || kill_tree "$pid"; [ -z "$root" ] || rm -rf "$root"; exit 143' TERM INT
 
@@ -55,7 +55,8 @@ unavailable() { status=UNAVAILABLE; unavailable_reason="$1"; }
 
 sha256_of() {
   if command -v sha256sum >/dev/null 2>&1; then sha256sum "$1" | cut -d' ' -f1
-  else "${node_cmd:-node}" "$(native_path "$helper")" hash "$(native_path "$1")"; fi
+  elif command -v shasum >/dev/null 2>&1; then shasum -a 256 "$1" | cut -d' ' -f1
+  else openssl dgst -sha256 "$1" | sed 's/^.*= //'; fi
 }
 
 write_result() {
@@ -67,9 +68,7 @@ write_result() {
   local exit_code=1; [ "$success" = true ] && exit_code=0
   local prompt_json="null"; [ -n "$prompt_sha" ] && prompt_json="\"$prompt_sha\""
   local extra=""
-  if [ "$success" = true ]; then
-    extra=",\"endpoint_host\":\"cli-builtin\",\"model_id\":\"$observed_model\",\"runner_version\":\"$observed_version\",\"runner_artifact_sha256\":\"$sha256\""
-  fi
+  [ "$success" = true ] && extra=",\"endpoint_host\":\"cli-builtin\""
   printf '{"schema_version":"advisory-ai-runtime-result.v1","status":"%s","duration_ms":%s,"exit_code":%s,"failure_code":%s,"unavailable_reason":%s,"cleanup_incomplete":%s,"stage":"%s","provider_request_count":null,"prompt_sha256":%s%s}' \
     "$status" "$duration" "$exit_code" "$failure" "$unavailable_json" "$cleanup_incomplete" "$stage" "$prompt_json" "$extra" >"$result"
 }
@@ -79,7 +78,8 @@ run() {
   [ -n "$evidence" ] && [ -n "$output" ] && [ -n "$result" ] && [ -n "$cancel" ] || return 0
   [ ! -e "$output" ] || return 0
   [[ -z "$model" || ( "$model" =~ ^[A-Za-z0-9][A-Za-z0-9._:/-]{0,127}$ && "$model" != *..* && "$model" != *//* ) ]] || return 0
-  case "$auth_type" in openai|qwen-oauth|anthropic|gemini|vertex-ai) ;; *) return 0 ;; esac
+  case "$auth_type" in ''|openai|qwen-oauth|anthropic|gemini|vertex-ai) ;; *) return 0 ;; esac
+  case "$bare" in 0|1) ;; *) return 0 ;; esac
   [[ "$sha256" =~ ^[0-9a-fA-F]{64}$ ]] || return 0
   sha256="$(printf '%s' "$sha256" | tr 'A-F' 'a-f')"
   local names=() name
@@ -95,7 +95,7 @@ run() {
   stage=validate_artifacts
   [ -f "$evidence" ] || { unavailable RUNNER_ARTIFACT_MISSING; return 0; }
   if [ "$(wc -c <"$evidence")" -gt "$evidence_limit" ]; then failure_code=INPUT_LIMIT; return 0; fi
-  [ -f "$prompt" ] && [ -f "$schema" ] && [ -f "$helper" ] || { unavailable RUNNER_ARTIFACT_MISSING; return 0; }
+  [ -f "$prompt" ] && [ -f "$schema" ] || { unavailable RUNNER_ARTIFACT_MISSING; return 0; }
   [ -f "$cmd" ] || { unavailable RUNNER_ARTIFACT_MISSING; return 0; }
   # The operator pins the artifact by its SHA-256 (ADR 0027); the version is not pinned, the init event is checked afterwards.
   [ "$(sha256_of "$cmd")" = "$sha256" ] || { unavailable RUNNER_ARTIFACT_MISMATCH; return 0; }
@@ -108,7 +108,6 @@ run() {
       [ -x "$cmd" ] || { unavailable RUNNER_ARTIFACT_MISSING; return 0; }
       runner=("$cmd") ;;
   esac
-  command -v "${node_cmd:-node}" >/dev/null 2>&1 || { unavailable RUNNER_ARTIFACT_MISSING; return 0; }
 
   root="$(mktemp -d "$(dirname "$result")/ltv-ai-local.XXXXXX")" || return 0
   mkdir -p "$root/work" "$root/tmp"
@@ -135,7 +134,9 @@ run() {
     QWEN_CODE_API_TIMEOUT_MS=600000 QWEN_TELEMETRY_ENABLED=0 QWEN_USAGE_STATISTICS_ENABLED=0 NO_BROWSER=1)
 
   # Same arguments as advisory_ai_runtime_qwen.sh; the model and the base URL are the CLI's own unless the operator named a model.
-  local cli=(--bare --safe-mode "--auth-type=$auth_type")
+  local cli=(--safe-mode)
+  [ "$bare" = 1 ] && cli+=(--bare)
+  [ -n "$auth_type" ] && cli+=("--auth-type=$auth_type")
   [ -n "$model" ] && cli+=("--model=$model")
   cli+=("--system-prompt=$(cat "$root/system-prompt.md")"
     --input-format=text --output-format=json "--json-schema=@$(native_path "$schema")"
@@ -163,16 +164,8 @@ run() {
   [ "$code" -eq 0 ] || return 0
   [ "$(wc -c <"$stderr")" -le "$stderr_limit" ] || return 0
 
-  stage=parse_cli_output
-  local parsed
-  parsed="$("${node_cmd:-node}" "$(native_path "$helper")" result "$(native_path "$stdout")" "$(native_path "$output")")"
-  if [[ "$parsed" =~ ^OK\ ([0-9A-Za-z._+-]+)\ ([A-Za-z0-9._:/-]+)$ ]]; then
-    observed_version="${BASH_REMATCH[1]}" observed_model="${BASH_REMATCH[2]}"
-    [ "$observed_model" != "-" ] || observed_model="${model:-cli-default}"
-  else
-    failure_code=INVALID_OUTPUT
-    return 0
-  fi
+  # The caller parses the CLI output (the init event and the advice); the launcher only hands it over.
+  cp "$stdout" "$output" || return 0
   status=SUCCESS stage=complete failure_code=""
 }
 

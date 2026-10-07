@@ -69,16 +69,6 @@ internal data class AiModelsConfig(
     }
 }
 
-/** Slug of the model the CLI itself is configured with: the direct runner passes no `--model` for it (ADR 0027). */
-internal const val CLI_DEFAULT_MODEL = "cli-default"
-
-private fun AiModelsConfig.forDirectRunner(fromFile: Boolean): AiModelsConfig =
-    if (fromFile) {
-        copy(endpointUrl = DIRECT_ENDPOINT_HOST, endpointLabel = null, allowInsecureHttp = false)
-    } else {
-        AiModelsConfig(DIRECT_ENDPOINT_HOST, null, false, CLI_DEFAULT_MODEL, listOf(AiModel(CLI_DEFAULT_MODEL, "Модель CLI по умолчанию")))
-    }
-
 internal sealed interface AiModelsConfigLoad {
     data class Loaded(
         val config: AiModelsConfig,
@@ -112,12 +102,19 @@ internal fun advisoryAiSetup(
     stderr: PrintStream = System.err,
 ): AdvisoryAiSetup =
     when (val load = loadAiModelsConfig(environment)) {
-        is AiModelsConfigLoad.Loaded -> {
-            // ADR 0027: the direct runner has no endpoint of its own, so the endpoint block is ignored and no model is "measured".
-            val config =
-                if (directRunnerRequested(environment)) load.config.forDirectRunner(MODELS_FILE_ENVIRONMENT in environment) else load.config
-            AdvisoryAiSetup(ModelStudioAdvisoryRunner.fromEnvironment(environment, repositoryRoot, config), config)
-        }
+        is AiModelsConfigLoad.Loaded ->
+            if (directRunnerRequested(environment)) {
+                // ADR 0027: the CLI cannot report its model, so the slug must come from the file; the endpoint block is ignored.
+                if (MODELS_FILE_ENVIRONMENT !in environment) {
+                    stderr.println("MODEL_CONFIG_INVALID $MODELS_FILE_ENVIRONMENT FILE_REQUIRED_IN_DIRECT_MODE /")
+                    AdvisoryAiSetup(UnavailableAdvisoryRunner(AdviceUnavailableReason.MODEL_CONFIG_INVALID), null)
+                } else {
+                    val config = load.config.copy(endpointUrl = DIRECT_ENDPOINT_HOST, endpointLabel = null, allowInsecureHttp = false)
+                    AdvisoryAiSetup(ModelStudioAdvisoryRunner.fromEnvironment(environment, repositoryRoot, config), config)
+                }
+            } else {
+                AdvisoryAiSetup(ModelStudioAdvisoryRunner.fromEnvironment(environment, repositoryRoot, load.config), load.config)
+            }
 
         is AiModelsConfigLoad.Invalid -> {
             stderr.println("MODEL_CONFIG_INVALID $MODELS_FILE_ENVIRONMENT ${load.code} ${load.pointer.ifEmpty { "/" }}")

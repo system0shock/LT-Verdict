@@ -534,7 +534,11 @@ class AdvisoryAiTest {
                         AiAdviceStore(directory, bundles),
                         AdvisoryRunner { RunnerOutcome.Success(canonicalJson(validOutput("analysis-result.json#/evidence/0")), value) },
                     )
-                assertEquals(AdviceRunResult.Failed(AdviceFailure.INVALID_OUTPUT), service.generate(fixture.runId, fixture.analysisId), "$index")
+                assertEquals(
+                    AdviceRunResult.Failed(AdviceFailure.INVALID_OUTPUT),
+                    service.generate(fixture.runId, fixture.analysisId),
+                    "$index",
+                )
             }
         }
     }
@@ -642,7 +646,13 @@ class AdvisoryAiTest {
         fun pattern(name: String) = (provenance.getValue(name).jsonObject.getValue("pattern") as JsonPrimitive).content
 
         assertEquals("^" + MODEL_SLUG.pattern + "$", pattern("model_id"))
-        val hostBranch = provenance.getValue("endpoint_host").jsonObject.getValue("anyOf").jsonArray[0].jsonObject
+        val hostBranch =
+            provenance
+                .getValue("endpoint_host")
+                .jsonObject
+                .getValue("anyOf")
+                .jsonArray[0]
+                .jsonObject
         assertEquals("^" + ENDPOINT_HOST.pattern + "$", (hostBranch.getValue("pattern") as JsonPrimitive).content)
     }
 

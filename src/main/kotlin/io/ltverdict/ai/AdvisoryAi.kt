@@ -440,7 +440,15 @@ private fun validProvenance(value: RunnerProvenance): Boolean =
         validModelSlug(value.modelId) &&
         validProvenanceEndpoint(value.endpointHost) &&
         // Only the direct runner has no relay to count the requests.
-        (if (value.providerRequests == null) value.endpointHost == DIRECT_ENDPOINT_HOST else value.providerRequests in 1..MAX_PROVIDER_REQUESTS) &&
+        (
+            if (value.providerRequests ==
+                null
+            ) {
+                value.endpointHost == DIRECT_ENDPOINT_HOST
+            } else {
+                value.providerRequests in 1..MAX_PROVIDER_REQUESTS
+            }
+        ) &&
         when (value.promptVersion) {
             QwenCode0211.PROMPT_VERSION -> SHA256.matches(value.promptSha256)
             QwenCode0211.PROMPT_V2_VERSION -> value.promptSha256 == QwenCode0211.PROMPT_V2_SHA256
@@ -598,7 +606,7 @@ private val PROVENANCE_OPTIONAL_FIELDS = setOf("endpoint_host", "provider_reques
 
 /** `endpoint_host` of advice made by the direct runner: the CLI uses its own channel, so no host is observed (ADR 0027). */
 internal const val DIRECT_ENDPOINT_HOST = "cli-builtin"
-private val RUNNER_VERSION_PATTERN = Regex("^[0-9A-Za-z][0-9A-Za-z._+-]{0,63}$")
+internal val RUNNER_VERSION_PATTERN = Regex("^[0-9A-Za-z][0-9A-Za-z._+-]{0,63}$")
 
 // One request, or one more after the schema retry (ADR 0021, D2).
 private const val MAX_PROVIDER_REQUESTS = 2

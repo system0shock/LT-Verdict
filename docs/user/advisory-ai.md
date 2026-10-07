@@ -285,6 +285,60 @@ ModelStudio).
 `endpoint_host` записываются наблюдённые (их сообщает relay через launcher), и
 Kotlin сверяет их с моделью и адресом, выбранными из конфигурации.
 
+## Локальный режим без Docker (ADR 0027, Proposed)
+
+Режим для машины, где нет Docker и PowerShell, а есть Linux, Java 21 и свой headless
+CLI формата Qwen Code (например, форк GigaCode) со своей авторизацией и своим
+каналом к модели. По умолчанию действует путь Docker, описанный выше; режим direct
+включается явно и ничего в нём не меняет. Нужен `bash` в `PATH`; Node нужен, только
+если CLI запускается как `.js`. Авторизацию в CLI оператор выполняет сам (например,
+вручную через браузер) под тем же пользователем, под которым работает `ltv`.
+
+```bash
+export LT_VERDICT_AI_RUNNER_MODE=local
+export LT_VERDICT_AI_LOCAL_QWEN_CMD=/opt/gigacode/gigacode          # абсолютный путь к исполняемому файлу CLI
+export LT_VERDICT_AI_LOCAL_QWEN_SHA256=<sha256 этого файла>        # обязательно; считается один раз на проверенном экземпляре
+export LT_VERDICT_AI_MODELS_FILE=/etc/lt-verdict/ai-models.json    # обязателен: слаг модели CLI
+ltv ui
+```
+
+Файл конфигурации моделей (раздел ниже) нужен, потому что CLI не умеет сообщить свою
+модель: выбранный слаг передаётся как `--model=<слаг>`. Блок `endpoint` в файле в
+этом режиме игнорируется, признак «модель измерена» не показывается.
+
+Необязательные переменные: `LT_VERDICT_AI_LOCAL_PASSTHROUGH_ENV` (имена переменных
+окружения через запятую, которые нужны самому CLI и копируются ему; по умолчанию
+ни одной), `LT_VERDICT_AI_LOCAL_CWD` (рабочий каталог CLI, по умолчанию пустой
+временный), `LT_VERDICT_AI_LOCAL_AUTH_TYPE` (`--auth-type`: `openai`, `qwen-oauth`,
+`anthropic`, `gemini`, `vertex-ai`; по умолчанию не передаётся),
+`LT_VERDICT_AI_LOCAL_BARE=0` (убирает `--bare`), `LT_VERDICT_AI_LOCAL_NODE` (путь
+к Node для `.js`), `LT_VERDICT_AI_LOCAL_BASH` (путь к `bash`, нужен на Windows с Git
+Bash). `LT_VERDICT_AI_CREDENTIAL_ENV_FILE` и `LT_VERDICT_AI_QWEN_ROOT` в этом
+режиме не используются. Значение `LT_VERDICT_AI_RUNNER_MODE`, отличное от `local`,
+даёт `UNAVAILABLE` (`RUNNER_ARTIFACT_MISSING`), а не запуск через Docker.
+
+Как это работает. Продукт запускает `tools/advisory_ai_runtime_local.sh`: он проверяет
+SHA-256 CLI, запускает его процессом без relay с теми же аргументами, что в
+контейнере (`--bare --safe-mode --max-tool-calls=0 --exclude-tools=...
+--json-schema=@...`), передаёт evidence в stdin и ждёт не дольше 605 с. Затем продукт
+проверяет событие `init` (`tools` только `structured_output`, `mcp_servers` пусты,
+версия любая допустимой формы) и сохраняет совет. Окружение CLI очищено: `PATH`,
+настоящий `HOME` (профиль и авторизация CLI живут там), системные переменные и
+только названные вами переменные; прокси и чужие токены не передаются. Продукт
+значений ключей не читает.
+
+Чем отличается от Docker (подробно в ADR 0027): нет сетевой изоляции CLI и relay;
+нет подсчёта запросов и повтора по схеме (невалидный вывод даёт `INVALID_OUTPUT`,
+повторный клик делает новый запрос); в провенансе `endpoint_host` равен
+`cli-builtin`, а числа запросов нет. Если после ручной авторизации CLI не видит её
+из-за `--bare` (пустые настройки пользователя; Qwen Code 0.21.1 с `--bare` без
+`--auth-type` не стартует вообще), задайте
+`LT_VERDICT_AI_LOCAL_AUTH_TYPE` способом, которым вошли, а затем при
+необходимости `LT_VERDICT_AI_LOCAL_BARE=0`. Ошибки: `RUNNER_ARTIFACT_MISSING` (файл
+CLI, Node для `.js` или `bash` не найдены), `RUNNER_ARTIFACT_MISMATCH` (SHA-256 не
+совпал; в интерфейсе сообщение говорит о Qwen Code), `MODEL_CONFIG_INVALID` (нет
+файла моделей), `TIMEOUT`, `INVALID_OUTPUT`, `PROCESS_FAILED`.
+
 ## Изоляция и ограничения
 
 Qwen container работает с read-only root, без capabilities и host ports. Ему

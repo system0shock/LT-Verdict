@@ -1,8 +1,11 @@
 package io.ltverdict.ai
 
+import io.ltverdict.core.canonicalJson
 import io.ltverdict.storage.DataDirectory
 import kotlinx.serialization.SerializationException
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.contentOrNull
@@ -61,7 +64,9 @@ internal class ModelStudioAdvisoryRunner private constructor(
                         .also { builder ->
                             builder.environment().clear()
                             val windows = System.getProperty("os.name").startsWith("Windows", ignoreCase = true)
-                            builder.environment().putAll(hostEnvironmentForChild(hostEnvironment, windows, direct?.environmentNames.orEmpty()))
+                            builder.environment().putAll(
+                                hostEnvironmentForChild(hostEnvironment, windows, direct?.environmentNames.orEmpty()),
+                            )
                         }.start()
                 } catch (_: IOException) {
                     return RunnerOutcome.Unavailable(
@@ -95,7 +100,13 @@ internal class ModelStudioAdvisoryRunner private constructor(
         cancel: Path,
         modelId: String,
     ): List<String> =
-        if (direct != null) directCommand(direct, script, evidence, output, result, cancel, modelId) else dockerCommand(script, evidence, output, result, cancel, modelId)
+        if (direct !=
+            null
+        ) {
+            directCommand(direct, script, evidence, output, result, cancel, modelId)
+        } else {
+            dockerCommand(script, evidence, output, result, cancel, modelId)
+        }
 
     private fun directCommand(
         settings: DirectRunnerSettings,
@@ -111,8 +122,10 @@ internal class ModelStudioAdvisoryRunner private constructor(
             add(script.toString())
             addAll(listOf("--evidence-path", evidence.toString(), "--output-path", output.toString()))
             addAll(listOf("--result-path", result.toString(), "--cancel-path", cancel.toString()))
-            addAll(listOf("--cmd", settings.command, "--sha256", settings.sha256, "--auth-type", settings.authType))
-            if (modelId != CLI_DEFAULT_MODEL) addAll(listOf("--model", modelId))
+            addAll(listOf("--cmd", settings.command, "--sha256", settings.sha256))
+            settings.authType?.let { addAll(listOf("--auth-type", it)) }
+            if (!settings.bare) addAll(listOf("--bare", "0"))
+            addAll(listOf("--model", modelId))
             settings.node?.let { addAll(listOf("--node", it)) }
             settings.cwd?.let { addAll(listOf("--cwd", it)) }
             if (settings.passthrough.isNotEmpty()) addAll(listOf("--passthrough", settings.passthrough.joinToString(",")))
@@ -179,7 +192,7 @@ internal class ModelStudioAdvisoryRunner private constructor(
         val exitCode = result.integer("exit_code") ?: return RunnerOutcome.Failed(AdviceFailure.PROCESS_FAILED)
         return when (result.string("status")) {
             "SUCCESS" -> {
-                if (direct != null) return directSuccess(result, outputPath, processExitCode, duration, exitCode, direct)
+                if (direct != null) return directSuccess(result, outputPath, processExitCode, duration, exitCode, direct, selectedModel)
                 // The relay's observation of where the evidence went; without it the advice cannot be saved (ADR 0023, D4).
                 val endpointHost = result.string("endpoint_host")
                 // Requests forwarded to the provider and the hash of the prompt snapshot mounted into the container,
@@ -232,7 +245,7 @@ internal class ModelStudioAdvisoryRunner private constructor(
         }
     }
 
-    /** ADR 0027: no relay, so no endpoint and no request count; the artifact hash is the operator's pin, the model is what the CLI reported. */
+    /** ADR 0027: no relay, so no endpoint and no request count; the CLI output is parsed here, the artifact hash is the operator's pin. */
     private fun directSuccess(
         result: JsonObject,
         outputPath: Path,
@@ -240,32 +253,29 @@ internal class ModelStudioAdvisoryRunner private constructor(
         duration: Long,
         exitCode: Int,
         settings: DirectRunnerSettings,
+        selectedModel: String,
     ): RunnerOutcome {
         val promptSha256 = result.string("prompt_sha256")
-        val model = result.string("model_id")
-        val version = result.string("runner_version")
         if (processExitCode != 0 ||
             exitCode != 0 ||
             duration !in 0..613_000 ||
             result.string("endpoint_host") != DIRECT_ENDPOINT_HOST ||
             promptSha256 == null ||
             !validSha256(promptSha256) ||
-            model == null ||
-            !validModelSlug(model) ||
-            version == null ||
-            result.string("runner_artifact_sha256") != settings.sha256 ||
             !Files.isRegularFile(outputPath) ||
             Files.size(outputPath) > MAX_ADVICE_OUTPUT_BYTES
         ) {
             return RunnerOutcome.Failed(AdviceFailure.PROCESS_FAILED)
         }
+        val parsed = parseDirectCliOutput(Files.readString(outputPath)) ?: return RunnerOutcome.Failed(AdviceFailure.INVALID_OUTPUT)
         return RunnerOutcome.Success(
-            Files.readAllBytes(outputPath),
+            parsed.advice,
             RunnerProvenance(
                 runnerId = QwenCode0211.RUNNER_ID,
-                runnerVersion = version,
+                runnerVersion = parsed.version,
                 runnerArtifactSha256 = settings.sha256,
-                modelId = model,
+                // The slug was passed to the CLI with --model; the CLI's own report of its model is not compared (ADR 0027, D5).
+                modelId = selectedModel,
                 endpointHost = DIRECT_ENDPOINT_HOST,
                 promptVersion = QwenCode0211.PROMPT_VERSION,
                 promptSha256 = promptSha256,
@@ -289,9 +299,10 @@ internal class ModelStudioAdvisoryRunner private constructor(
                 val settings =
                     DirectRunnerSettings.fromEnvironment(environment)
                         ?: return UnavailableAdvisoryRunner(AdviceUnavailableReason.RUNNER_ARTIFACT_MISSING)
-                val root = environment[RUNTIME_ROOT_ENVIRONMENT]?.trim()?.takeIf(String::isNotEmpty)?.pathOrNull()
-                    ?: repositoryRoot?.toAbsolutePath()?.normalize()
-                    ?: defaultRuntimeRoot()
+                val root =
+                    environment[RUNTIME_ROOT_ENVIRONMENT]?.trim()?.takeIf(String::isNotEmpty)?.pathOrNull()
+                        ?: repositoryRoot?.toAbsolutePath()?.normalize()
+                        ?: defaultRuntimeRoot()
                 return ModelStudioAdvisoryRunner(root, root, root, environment, config, settings)
             }
             val configured = environment[CREDENTIAL_ENVIRONMENT]?.trim()
@@ -410,7 +421,8 @@ internal class DirectRunnerSettings(
     val node: String?,
     val cwd: String?,
     val passthrough: List<String>,
-    val authType: String,
+    val authType: String?,
+    val bare: Boolean,
     val bash: String,
 ) {
     /** Variables of the host environment that reach the launcher and the CLI beyond the common allowlist. */
@@ -419,12 +431,15 @@ internal class DirectRunnerSettings(
     companion object {
         fun fromEnvironment(environment: Map<String, String>): DirectRunnerSettings? {
             fun value(name: String) = environment[name]?.trim()?.takeIf(String::isNotEmpty)
-            val command = value("LT_VERDICT_AI_LOCAL_QWEN_CMD")?.takeIf { runCatching { Path.of(it).isAbsolute }.getOrDefault(false) } ?: return null
+            val command =
+                value("LT_VERDICT_AI_LOCAL_QWEN_CMD")?.takeIf { runCatching { Path.of(it).isAbsolute }.getOrDefault(false) } ?: return null
             val sha256 = value("LT_VERDICT_AI_LOCAL_QWEN_SHA256")?.lowercase()?.takeIf { it.matches(Regex("[0-9a-f]{64}")) } ?: return null
             val names = value("LT_VERDICT_AI_LOCAL_PASSTHROUGH_ENV")?.split(',')?.map(String::trim).orEmpty()
             if (names.any { !it.matches(Regex("[A-Za-z_][A-Za-z0-9_]{0,63}")) }) return null
-            val authType = value("LT_VERDICT_AI_LOCAL_AUTH_TYPE") ?: "openai"
-            if (authType !in setOf("openai", "qwen-oauth", "anthropic", "gemini", "vertex-ai")) return null
+            val authType = value("LT_VERDICT_AI_LOCAL_AUTH_TYPE")
+            if (authType != null && authType !in setOf("openai", "qwen-oauth", "anthropic", "gemini", "vertex-ai")) return null
+            val bare = value("LT_VERDICT_AI_LOCAL_BARE")
+            if (bare != null && bare !in setOf("0", "1")) return null
             return DirectRunnerSettings(
                 command,
                 sha256,
@@ -432,6 +447,7 @@ internal class DirectRunnerSettings(
                 value("LT_VERDICT_AI_LOCAL_CWD"),
                 names,
                 authType,
+                bare != "0",
                 value("LT_VERDICT_AI_LOCAL_BASH") ?: "bash",
             )
         }
@@ -464,3 +480,59 @@ private val HOST_ENVIRONMENT_ALLOWLIST =
         "TMP",
         "ComSpec",
     )
+
+internal class DirectCliOutput(
+    val advice: ByteArray,
+    val version: String,
+)
+
+/**
+ * ADR 0027: the stdout of the CLI (`--output-format=json`) is an array of events. The `init` event must show the tool set the
+ * launcher asked for (only `structured_output`, no MCP servers) and a version of a plausible form; the advice is the event
+ * that is the advice itself or the `result` member (object or JSON text) of an event. The check is made after the request.
+ */
+internal fun parseDirectCliOutput(text: String): DirectCliOutput? {
+    val root =
+        try {
+            Json.parseToJsonElement(text)
+        } catch (_: SerializationException) {
+            return null
+        } catch (_: IllegalArgumentException) {
+            return null
+        }
+    val events = (root as? JsonArray)?.toList() ?: listOf(root)
+    val init =
+        events.filterIsInstance<JsonObject>().firstOrNull { it.string("type") == "system" && it.string("subtype") == "init" }
+            ?: return null
+    val tools = (init["tools"] as? JsonArray)?.map { (it as? JsonPrimitive)?.contentOrNull }
+    val servers = init["mcp_servers"] as? JsonArray
+    val version = init.string("qwen_code_version")
+    if (tools != listOf("structured_output") ||
+        servers == null ||
+        servers.isNotEmpty() ||
+        version == null ||
+        !RUNNER_VERSION_PATTERN.matches(version)
+    ) {
+        return null
+    }
+    val advice = events.firstNotNullOfOrNull(::adviceOf) ?: return null
+    val bytes = canonicalJson(advice)
+    return if (bytes.size <= MAX_ADVICE_OUTPUT_BYTES) DirectCliOutput(bytes, version) else null
+}
+
+private fun adviceOf(event: JsonElement): JsonObject? {
+    val candidate = event as? JsonObject ?: return null
+    if (candidate.string("schema_version") == "ai-advice-output.v1") return candidate
+    var nested = candidate["result"] ?: return null
+    if (nested is JsonPrimitive && nested.isString) {
+        nested =
+            try {
+                Json.parseToJsonElement(nested.content)
+            } catch (_: SerializationException) {
+                return null
+            } catch (_: IllegalArgumentException) {
+                return null
+            }
+    }
+    return (nested as? JsonObject)?.takeIf { it.string("schema_version") == "ai-advice-output.v1" }
+}

@@ -92,6 +92,7 @@ distributions {
             from(
                 files(
                     "tools/advisory_ai_runtime.ps1",
+                    "tools/advisory_ai_runtime_local.sh",
                     "tools/advisory_ai_runtime_qwen.sh",
                     "tools/advisory_ai_runtime_relay.mjs",
                     "tools/onboard_test.py",

@@ -86,9 +86,13 @@ class ModelStudioAdvisoryRunnerTest {
         assertFalse(directRunnerRequested(emptyMap()))
         assertFalse(directRunnerRequested(mapOf("LT_VERDICT_AI_RUNNER_MODE" to "docker")))
         assertTrue(directRunnerRequested(base))
-        val settings = DirectRunnerSettings.fromEnvironment(base + ("LT_VERDICT_AI_LOCAL_PASSTHROUGH_ENV" to "OPENAI_API_KEY, GIGA_TOKEN"))!!
+        val settings =
+            DirectRunnerSettings.fromEnvironment(
+                base + ("LT_VERDICT_AI_LOCAL_PASSTHROUGH_ENV" to "OPENAI_API_KEY, GIGA_TOKEN"),
+            )!!
         assertEquals(listOf("OPENAI_API_KEY", "GIGA_TOKEN"), settings.passthrough)
-        assertEquals("openai", settings.authType)
+        assertNull(settings.authType)
+        assertTrue(settings.bare)
         assertEquals("bash", settings.bash)
         assertEquals(sha, settings.sha256)
         for (broken in listOf(
@@ -99,6 +103,7 @@ class ModelStudioAdvisoryRunnerTest {
             base + ("LT_VERDICT_AI_LOCAL_PASSTHROUGH_ENV" to "A B"),
             base + ("LT_VERDICT_AI_LOCAL_PASSTHROUGH_ENV" to "OK,1BAD"),
             base + ("LT_VERDICT_AI_LOCAL_AUTH_TYPE" to "other"),
+            base + ("LT_VERDICT_AI_LOCAL_BARE" to "2"),
         )) {
             assertNull(DirectRunnerSettings.fromEnvironment(broken), broken.toString())
             assertEquals(
@@ -111,6 +116,32 @@ class ModelStudioAdvisoryRunnerTest {
             RunnerOutcome.Unavailable(AdviceUnavailableReason.RUNNER_ARTIFACT_MISSING),
             ModelStudioAdvisoryRunner.fromEnvironment(mapOf("LT_VERDICT_AI_RUNNER_MODE" to "Local "), tempDir).invoke(EVIDENCE),
         )
+    }
+
+    @Test
+    fun `the direct runner needs the models file because the CLI cannot report its model`() {
+        val environment =
+            mapOf(
+                "LT_VERDICT_AI_RUNNER_MODE" to "local",
+                "LT_VERDICT_AI_LOCAL_QWEN_CMD" to tempDir.resolve("cli").toString(),
+                "LT_VERDICT_AI_LOCAL_QWEN_SHA256" to "ab".repeat(32),
+            )
+        val stderr = java.io.ByteArrayOutputStream()
+        val setup = advisoryAiSetup(environment, tempDir, java.io.PrintStream(stderr))
+
+        assertNull(setup.models)
+        assertEquals(RunnerOutcome.Unavailable(AdviceUnavailableReason.MODEL_CONFIG_INVALID), setup.runner.invoke(EVIDENCE))
+        assertTrue(stderr.toString().startsWith("MODEL_CONFIG_INVALID LT_VERDICT_AI_MODELS_FILE"))
+
+        val file = tempDir.resolve("ai-models.json")
+        Files.writeString(
+            file,
+            """{"schema_version":"ai-models.v1","default_model":"gigacode-large","models":[{"id":"gigacode-large","label":"GigaCode"}]}""",
+        )
+        val configured = advisoryAiSetup(environment + ("LT_VERDICT_AI_MODELS_FILE" to file.toString()), tempDir)
+        // The endpoint of the file is not used and no model is "measured" in the direct mode.
+        assertEquals(DIRECT_ENDPOINT_HOST, configured.models!!.endpointUrl)
+        assertFalse(configured.models.models.any { aiModelMeasured(it.id, configured.models.endpointUrl) })
     }
 
     @Test
@@ -131,7 +162,12 @@ class ModelStudioAdvisoryRunnerTest {
         val capture = tempDir.resolve("capture").toString().replace('\\', '/')
         val sha = "cd".repeat(32)
 
-        fun launcher(result: String) =
+        // The fake launcher records its arguments and environment and leaves the given CLI output in --output-path.
+        fun launcher(
+            result: String,
+            cliOutput: String = cliOutput(),
+        ) {
+            Files.writeString(Path.of("$capture.cli"), cliOutput)
             Files.writeString(
                 root.resolve("tools/advisory_ai_runtime_local.sh"),
                 listOf(
@@ -139,17 +175,15 @@ class ModelStudioAdvisoryRunnerTest {
                     "printf '%s\\n' \"\$@\" > '$capture.args'",
                     "env > '$capture.env'",
                     "while [ \$# -ge 2 ]; do case \"\$1\" in --output-path) out=\"\$2\";; --result-path) res=\"\$2\";; esac; shift 2; done",
-                    "printf '%s' '{\"schema_version\":\"ai-advice-output.v1\",\"summary\":\"bounded\",\"hypotheses\":[],\"recommendations\":[],\"caveats\":[]}' > \"\$out\"",
+                    "cp '$capture.cli' \"\$out\"",
                     "printf '%s' '$result' > \"\$res\"",
                     "exit 0",
                 ).joinToString("\n", postfix = "\n"),
             )
+        }
 
-        fun result(
-            sha256: String = sha,
-            host: String = "cli-builtin",
-            model: String = "gigacode-large",
-        ) = """{"schema_version":"advisory-ai-runtime-result.v1","status":"SUCCESS","duration_ms":12,"exit_code":0,"provider_request_count":null,"prompt_sha256":"$PROMPT_SHA256","endpoint_host":"$host","model_id":"$model","runner_version":"gigacode-0.21.1","runner_artifact_sha256":"$sha256"}"""
+        fun result(host: String = "cli-builtin") =
+            """{"schema_version":"advisory-ai-runtime-result.v1","status":"SUCCESS","duration_ms":12,"exit_code":0,"provider_request_count":null,"prompt_sha256":"$PROMPT_SHA256","endpoint_host":"$host"}"""
         val environment =
             System.getenv() +
                 mapOf(
@@ -173,30 +207,84 @@ class ModelStudioAdvisoryRunnerTest {
         assertEquals("cli-builtin", success.provenance.endpointHost)
         assertNull(success.provenance.providerRequests)
         assertEquals(PROMPT_SHA256, success.provenance.promptSha256)
+        assertTrue(String(success.output).contains("\"summary\":\"bounded\""))
         val arguments = Files.readAllLines(Path.of("$capture.args"))
-        assertTrue(arguments.containsAll(listOf("--cmd", tempDir.resolve("cli.js").toString(), "--sha256", sha, "--auth-type", "openai")))
-        // The default model of the CLI is the CLI's own: no --model is passed for it.
-        assertFalse(arguments.contains("--model"))
+        assertTrue(arguments.containsAll(listOf("--cmd", tempDir.resolve("cli.js").toString(), "--sha256", sha)))
+        // The slug comes from the configuration; nothing else is forced on the CLI: its own authorization type, bare mode stays on.
+        assertTrue(arguments.containsAll(listOf("--model", "gigacode-large")))
+        assertFalse(arguments.contains("--auth-type"))
+        assertFalse(arguments.contains("--bare"))
         val childEnvironment = Files.readString(Path.of("$capture.env"))
         assertTrue(childEnvironment.contains("LTV_TEST_PASSED=listed-value"))
         assertFalse(childEnvironment.contains("LTV_TEST_UNLISTED"))
         assertFalse(childEnvironment.contains("HTTPS_PROXY"))
 
-        // A named model is passed to the CLI.
-        runner.invoke(EVIDENCE, "gigacode-large")
-        assertTrue(Files.readAllLines(Path.of("$capture.args")).containsAll(listOf("--model", "gigacode-large")))
-
-        // The hash the launcher measured must be the operator's pin, the marker must be the direct one, nothing is invented.
-        for (bad in listOf(result(sha256 = "ef".repeat(32)), result(host = "gw.internal:443"), result(model = "bad model"))) {
-            launcher(bad)
-            assertEquals(RunnerOutcome.Failed(AdviceFailure.PROCESS_FAILED), runner.invoke(EVIDENCE), bad)
+        // The marker must be the direct one, and the CLI output must show the requested tool set and carry the advice.
+        launcher(result(host = "gw.internal:443"))
+        assertEquals(RunnerOutcome.Failed(AdviceFailure.PROCESS_FAILED), runner.invoke(EVIDENCE))
+        for (bad in listOf(
+            cliOutput(tools = """["structured_output","read_file"]"""),
+            cliOutput(servers = """["x"]"""),
+            cliOutput(version = "bad version"),
+            cliOutput(withInit = false),
+            """[{"type":"system","subtype":"init","tools":["structured_output"],"mcp_servers":[],"qwen_code_version":"1"}]""",
+            "not json",
+        )) {
+            launcher(result(), bad)
+            assertEquals(RunnerOutcome.Failed(AdviceFailure.INVALID_OUTPUT), runner.invoke(EVIDENCE), bad)
         }
+        // The advice may be an event itself.
+        launcher(
+            result(),
+            """[{"type":"system","subtype":"init","tools":["structured_output"],"mcp_servers":[],"qwen_code_version":"1.2"},$ADVICE_JSON]""",
+        )
+        assertInstanceOf(RunnerOutcome.Success::class.java, runner.invoke(EVIDENCE))
         launcher(
             """{"schema_version":"advisory-ai-runtime-result.v1","status":"UNAVAILABLE","duration_ms":1,"exit_code":1,"unavailable_reason":"RUNNER_ARTIFACT_MISMATCH"}""",
         )
         assertEquals(RunnerOutcome.Unavailable(AdviceUnavailableReason.RUNNER_ARTIFACT_MISMATCH), runner.invoke(EVIDENCE))
-        launcher("""{"schema_version":"advisory-ai-runtime-result.v1","status":"FAILED","duration_ms":1,"exit_code":1,"failure_code":"TIMEOUT"}""")
+        launcher(
+            """{"schema_version":"advisory-ai-runtime-result.v1","status":"FAILED","duration_ms":1,"exit_code":1,"failure_code":"TIMEOUT"}""",
+        )
         assertEquals(RunnerOutcome.Failed(AdviceFailure.TIMEOUT), runner.invoke(EVIDENCE))
+    }
+
+    @Test
+    fun `optional direct settings reach the launcher`() {
+        val bash = bashOrSkip()
+        val root = tempDir.resolve("root2")
+        Files.createDirectories(root.resolve("tools"))
+        Files.writeString(Files.createDirectories(root.resolve("docs/contracts/advice/v1")).resolve("system-prompt.md"), "bounded prompt")
+        val capture = tempDir.resolve("capture2").toString().replace('\\', '/')
+        Files.writeString(root.resolve("tools/advisory_ai_runtime_local.sh"), "#!/bin/bash\nprintf '%s\\n' \"\$@\" > '$capture.args'\n")
+        val environment =
+            System.getenv() +
+                mapOf(
+                    "LT_VERDICT_AI_RUNNER_MODE" to "local",
+                    "LT_VERDICT_AI_RUNTIME_ROOT" to root.toString(),
+                    "LT_VERDICT_AI_LOCAL_QWEN_CMD" to tempDir.resolve("cli").toString(),
+                    "LT_VERDICT_AI_LOCAL_QWEN_SHA256" to "cd".repeat(32),
+                    "LT_VERDICT_AI_LOCAL_BASH" to bash,
+                    "LT_VERDICT_AI_LOCAL_AUTH_TYPE" to "qwen-oauth",
+                    "LT_VERDICT_AI_LOCAL_BARE" to "0",
+                    "LT_VERDICT_AI_LOCAL_NODE" to "/usr/bin/node",
+                    "LT_VERDICT_AI_LOCAL_CWD" to "/work",
+                )
+        ModelStudioAdvisoryRunner.fromEnvironment(environment, root, directConfig()).invoke(EVIDENCE)
+        val arguments = Files.readAllLines(Path.of("$capture.args"))
+        assertTrue(arguments.containsAll(listOf("--auth-type", "qwen-oauth", "--bare", "0", "--node", "/usr/bin/node", "--cwd", "/work")))
+    }
+
+    private fun cliOutput(
+        tools: String = """["structured_output"]""",
+        servers: String = "[]",
+        version: String = "gigacode-0.21.1",
+        withInit: Boolean = true,
+    ): String {
+        val init =
+            """{"type":"system","subtype":"init","tools":$tools,"mcp_servers":$servers,"model":"gigacode-large","qwen_code_version":"$version"},"""
+        val result = ADVICE_JSON.replace("\\", "\\\\").replace("\"", "\\\"")
+        return "[" + (if (withInit) init else "") + """{"type":"result","subtype":"success","is_error":false,"result":"$result"}]"""
     }
 
     private fun directConfig() =
@@ -204,8 +292,8 @@ class ModelStudioAdvisoryRunnerTest {
             endpointUrl = DIRECT_ENDPOINT_HOST,
             endpointLabel = null,
             allowInsecureHttp = false,
-            defaultModel = CLI_DEFAULT_MODEL,
-            models = listOf(AiModel(CLI_DEFAULT_MODEL, "CLI"), AiModel("gigacode-large", "GigaCode")),
+            defaultModel = "gigacode-large",
+            models = listOf(AiModel("gigacode-large", "GigaCode")),
         )
 
     private fun bashOrSkip(): String {
@@ -525,6 +613,8 @@ class ModelStudioAdvisoryRunnerTest {
     }
 
     private companion object {
+        const val ADVICE_JSON =
+            """{"schema_version":"ai-advice-output.v1","summary":"bounded","hypotheses":[],"recommendations":[],"caveats":[]}"""
         const val PROMPT_SHA256 = "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1"
         val EVIDENCE =
             AdvisoryEvidence(

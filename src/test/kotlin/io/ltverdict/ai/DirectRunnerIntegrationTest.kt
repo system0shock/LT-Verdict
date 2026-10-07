@@ -62,6 +62,7 @@ class DirectRunnerIntegrationTest {
                         "LT_VERDICT_AI_LOCAL_QWEN_CMD" to entry,
                         "LT_VERDICT_AI_LOCAL_QWEN_SHA256" to sha,
                         "LT_VERDICT_AI_LOCAL_BASH" to bash!!,
+                        "LT_VERDICT_AI_LOCAL_AUTH_TYPE" to "openai",
                         "LT_VERDICT_AI_LOCAL_PASSTHROUGH_ENV" to "OPENAI_BASE_URL,OPENAI_API_KEY",
                         "OPENAI_BASE_URL" to "http://127.0.0.1:${server.address.port}/v1",
                         "OPENAI_API_KEY" to "fake-not-a-key",

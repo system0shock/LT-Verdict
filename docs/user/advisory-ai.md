@@ -2,8 +2,23 @@
 
 Advisory AI запускается только по явному запросу пользователя для уже
 сохранённого deterministic analysis. Он создаёт отдельный advice artifact и не
-меняет verdict или файлы analysis. Для live-запуска нужны Docker Desktop,
-локально доступный pinned image, Qwen Code 0.21.1 и ModelStudio credential.
+меняет verdict или файлы analysis.
+
+Боевой путь запуска (решение владельца D3, ADR
+[0027](../adr/0027-advisory-ai-direct-local-runner.md), Accepted) это
+direct-runner: продукт запускает на той же машине локальный headless CLI формата
+Qwen Code (например, форк GigaCode) без Docker и relay. Для live-запуска нужны
+`bash` в `PATH`, Java 21, установленный и авторизованный вручную CLI и файл
+конфигурации моделей. Порядок включения (`LT_VERDICT_AI_RUNNER_MODE=local`) описан в
+разделе «Локальный режим без Docker: боевой путь direct» ниже; сначала прочитайте
+«Что и куда отправляется» и «Файл конфигурации моделей». С настоящим GigaCode на
+Linux direct-runner ещё не проверялся.
+
+Пока `LT_VERDICT_AI_RUNNER_MODE=local` не задана, код идёт путём Docker и relay.
+Это харнесс для экспериментов и приёмок, а не боевой путь: ему нужны Docker
+Desktop, локально доступный pinned image, Qwen Code 0.21.1 и ModelStudio
+credential (разделы «Runtime prerequisites», «Credential и environment»,
+«Изоляция и ограничения»).
 
 ## Что и куда отправляется
 
@@ -29,7 +44,10 @@ Advisory AI запускается только по явному запросу
   пределы вашей сети уходят. Документация не утверждает, что данные
   остаются внутри периметра: продукт не отличает внутренний endpoint от внешнего,
   адрес и credential задаёт развёртывание, а фактический host записывается в
-  `provenance.endpoint_host` совета.
+  `provenance.endpoint_host` совета. Это описание пути харнесса (Docker и relay).
+  В боевом режиме direct адрес не задаётся: запрос уходит по собственному каналу
+  CLI, а `endpoint_host` равен `cli-builtin`; продукт не знает, куда CLI отправляет
+  данные.
 - **Необратимость.** Совет неизменяем: один совет на анализ, отправка evidence не
   отзывается.
 - **Явный запуск без ответа.** Если ИИ не настроен или занят, анализ и его
@@ -65,6 +83,8 @@ Advisory AI запускается только по явному запросу
 
 ## Runtime prerequisites
 
+Раздел относится к харнессу (Docker и relay), а не к боевому пути direct (см. выше).
+
 Runtime принимает только следующие закреплённые artifacts:
 
 - image
@@ -95,6 +115,9 @@ Launcher сам проверяет version и SHA-256 entrypoint; другое �
 `RUNNER_ARTIFACT_MISMATCH` без model request.
 
 ## Credential и environment
+
+Раздел относится к харнессу (Docker и relay); в режиме direct
+`LT_VERDICT_AI_CREDENTIAL_ENV_FILE` и `LT_VERDICT_AI_QWEN_ROOT` не используются.
 
 Создайте вне repository и data directory файл размером не более 8192 bytes с
 ровно одной строкой:
@@ -291,12 +314,13 @@ ModelStudio).
 `endpoint_host` записываются наблюдённые (их сообщает relay через launcher), и
 Kotlin сверяет их с моделью и адресом, выбранными из конфигурации.
 
-## Локальный режим без Docker (ADR 0027, Proposed)
+## Локальный режим без Docker: боевой путь direct (ADR 0027, Accepted)
 
-Режим для машины, где нет Docker и PowerShell, а есть Linux, Java 21 и свой headless
-CLI формата Qwen Code (например, форк GigaCode) со своей авторизацией и своим
-каналом к модели. По умолчанию действует путь Docker, описанный выше; режим direct
-включается явно и ничего в нём не меняет. Нужен `bash` в `PATH`; Node нужен, только
+Боевой путь по решению владельца D3, для машины, где нет Docker и PowerShell, а есть
+Linux, Java 21 и свой headless CLI формата Qwen Code (например, форк GigaCode) со
+своей авторизацией и своим каналом к модели. Режим включается явно переменной
+`LT_VERDICT_AI_RUNNER_MODE=local`; без неё код идёт путём харнесса (Docker и relay,
+разделы выше). Проверка с настоящим GigaCode на Linux ещё не выполнена. Нужен `bash` в `PATH`; Node нужен, только
 если CLI запускается как `.js`. Авторизацию в CLI оператор выполняет сам (например,
 вручную через браузер) под тем же пользователем, под которым работает `ltv`.
 
@@ -384,6 +408,9 @@ echo '{"schema_version":"ai-evidence.v1","facts":[],"findings":[],"evidence":[]}
 запрос зависнет или завершится ошибкой; перед показом выполните команду выше.
 
 ## Изоляция и ограничения
+
+Раздел описывает изоляцию харнесса (Docker и relay); в режиме direct изоляции
+контейнера и relay нет (отличия перечислены в разделе про режим direct).
 
 Qwen container работает с read-only root, без capabilities и host ports. Ему
 read-only доступны только package, evidence, prompt, schema и launcher. User

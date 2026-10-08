@@ -10,6 +10,13 @@ endpoint (вариант Б); владелец её отклонил и выбр
 контракты, схемы и пользовательские документы этим ADR не меняются; срезы CM1-CM5
 описаны ниже.
 
+Обновлено решением D3 / ADR [0027](0027-advisory-ai-direct-local-runner.md)
+(2026-10-08): формулировки «единственный раннер» ниже описывают состояние на
+2026-10-05 (Docker и relay). Боевым путём теперь стал direct-runner без relay, а
+Docker и relay остались харнессом для экспериментов и приёмок; текст ADR не
+переписывался. Файл конфигурации моделей действует в обоих режимах, блок `endpoint`
+в режиме direct игнорируется.
+
 Связь. ADR [0010](0010-advisory-ai-boundary.md) и ADR
 [0021](0021-advisory-ai-prompt-v2-and-schema-retry.md) не переписываются:
 в них добавлены ссылки и поправки в разделах «Последствия» и «Следствия», а
@@ -53,7 +60,7 @@ git; ссылка дана путём, а не гиперссылкой). Пря
 | --- | --- |
 | API `POST /api/runs/{run}/analyses/{analysis}/advice` принимает ровно `{"confirm_external_transfer":true}` (regex, не более 256 байт), иначе 400 `MALFORMED_REQUEST` | `src/main/kotlin/io/ltverdict/web/LocalApi.kt:827` |
 | UI: чекбокс согласия на вкладке «ИИ-разбор» и галка `#ai-consent` на экране «Новый анализ» (PR #40), которая одновременно даёт согласие и включает автозапуск совета; `startAdvice` всегда шлёт `confirm_external_transfer: true`; текст про «Alibaba ModelStudio (Singapore)» зашит в `AdvicePanel.vue`, `labels.ts` (`aiText`, `aiConsentLabel`, `willAdvice`), `labels.advice.ts` (`intro`) | `ui/src/AdvicePanel.vue`, `ui/src/App.vue` (`aiConsent`), `ui/src/shell/NewAnalysisPanel.vue`, `ui/src/shell/labels.ts`, `ui/src/shell/labels.advice.ts`, `ui/src/api.ts:289` |
-| Единственный раннер идёт через relay во внешний сервис: hostname `token-plan.ap-southeast-1.maas.aliyuncs.com` и модель `deepseek-v4-flash-0731` зашиты в relay, endpoint и модель закреплены ADR 0010, п. 5 | `tools/advisory_ai_runtime_relay.mjs`, ADR 0010 |
+| Единственный (на 2026-10-05; обновлено решением D3 / ADR 0027) раннер идёт через relay во внешний сервис: hostname `token-plan.ap-southeast-1.maas.aliyuncs.com` и модель `deepseek-v4-flash-0731` зашиты в relay, endpoint и модель закреплены ADR 0010, п. 5 | `tools/advisory_ai_runtime_relay.mjs`, ADR 0010 |
 | Qwen Code в этом раннере уже headless (`--bare --safe-mode`, внешний sandbox, `--max-tool-calls=0`); внешним является только инференс за relay | ADR 0010, п. 6 |
 | Модель закреплена в пяти местах: `QwenCode0211.MODEL_ID`, `--model=` в `advisory_ai_runtime_qwen.sh`, `fixedModel` в relay, `const` в схеме `ai-advice.v1`, подпись в UI | ADR 0021, Контекст, п. 4 |
 | Чтение сохранённого совета сравнивает `model_id` с константой | `src/main/kotlin/io/ltverdict/ai/AdvisoryAi.kt` (`validateStoredAdvice`) |
@@ -88,7 +95,7 @@ Credential по-прежнему не попадает в Qwen, argv, advice и 
 документация предупреждает об этом, а relay не следует редиректам провайдера
 (иначе заголовок ушёл бы на третий адрес).
 
-**Куда.** Сегодня единственный раннер идёт во внешнего провайдера
+**Куда.** Сегодня (на 2026-10-05; обновлено решением D3 / ADR 0027) единственный раннер идёт во внешнего провайдера
 (ModelStudio, Сингапур). Владелец заявил, что в боевой системе инференс он-прем,
 а адрес endpoint задаёт конфигурация. Репозиторий не может ни подтвердить это,
 ни проверить: продукт не отличает внутренний endpoint от внешнего. Если

@@ -127,6 +127,29 @@ workflow, сохранённую аналитику, Grafana evidence и Conflue
 Локальная реализация и проверки не означают завершённую сквозную приёмку.
 Порядок проверки и ограничения: [checklist](docs/mvp-acceptance-checklist.md).
 
+### Установка из архива
+
+Сборка не нужна: Gradle и Node.js не требуются, UI уже внутри архива. Нужна только
+Java 21 или новее (JRE достаточно, JDK не обязателен; работа проверена на JDK 21
+Temurin и на урезанном runtime без инструментов JDK).
+
+1. Скачайте `ltv-<версия>.zip` и `ltv-<версия>.zip.sha256` со страницы GitHub Release
+   (репозиторий приватный, нужен доступ), например
+   `gh release download v0.1.0 -R system0shock/LT-Verdict`.
+2. Проверьте сумму: `sha256sum -c ltv-0.1.0.zip.sha256` (Linux) или
+   `(Get-FileHash ltv-0.1.0.zip).Hash` в PowerShell и сравните с содержимым `.sha256`.
+3. Распакуйте архив в любой каталог, например `C:\ltv` или `~/ltv`.
+4. Проверьте установку и запустите UI:
+
+```powershell
+.\ltv-0.1.0\bin\ltv.bat --version
+.\ltv-0.1.0\bin\ltv.bat ui
+```
+
+В Linux те же команды: `./ltv-0.1.0/bin/ltv --version` и `./ltv-0.1.0/bin/ltv ui`.
+
+### Сборка из исходников
+
 Нужны JDK 21 и Node.js 24.14.0.
 
 ```powershell

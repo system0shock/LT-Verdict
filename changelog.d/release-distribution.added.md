@@ -1,0 +1,7 @@
+- Релиз: zip-дистрибутив `ltv-<версия>.zip` (`./gradlew -PltvVersion=<версия> distZip`)
+  ставится без сборки: Gradle и Node.js не нужны, UI собран внутри архива, для запуска
+  нужна Java 21 или новее. Workflow `release.yml` на push тега `vX.Y.Z` собирает архив,
+  проверяет `ltv --version` и `ltv analyze` из распакованного архива и создаёт draft
+  GitHub Release с zip и SHA256; ручной запуск делает пробную сборку без публикации.
+  README описывает установку из архива, `docs/development-process.md` - выпуск версии.
+  Код продукта, CLI, API и схемы не менялись.

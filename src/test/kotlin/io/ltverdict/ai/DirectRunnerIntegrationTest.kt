@@ -90,6 +90,25 @@ class DirectRunnerIntegrationTest {
             val second = ModelStudioAdvisoryRunner.fromEnvironment(relaxed, root, config).invoke(evidence)
             assertInstanceOf(RunnerOutcome.Success::class.java, second)
             assertEquals(2, requests)
+
+            // The CLI by command name through PATH, no pin (ADR 0027, amendment): a wrapper named qwen that starts the real entry file.
+            val bin = Files.createDirectories(tempDir.resolve("bin"))
+            val wrapper = bin.resolve("qwen")
+            Files.writeString(wrapper, "#!/bin/bash\nexec node \"${entry.replace('\\', '/')}\" \"\$@\"\n")
+            wrapper.toFile().setExecutable(true)
+            val byName =
+                (environment - "LT_VERDICT_AI_LOCAL_QWEN_SHA256") +
+                    mapOf(
+                        "LT_VERDICT_AI_LOCAL_QWEN_CMD" to "qwen",
+                        "PATH" to bin.toString() + java.io.File.pathSeparator + System.getenv("PATH"),
+                    )
+            val wrapperSha = MessageDigest.getInstance("SHA-256").digest(Files.readAllBytes(wrapper)).joinToString("") { "%02x".format(it) }
+            for (settings in listOf(emptyMap(), mapOf("LT_VERDICT_AI_LOCAL_OMIT_BARE" to "1"))) {
+                val outcome = ModelStudioAdvisoryRunner.fromEnvironment(byName + settings, root, config).invoke(evidence)
+                // The hash reported is that of the file found on PATH, here the wrapper.
+                assertEquals(wrapperSha, assertInstanceOf(RunnerOutcome.Success::class.java, outcome).provenance.runnerArtifactSha256)
+            }
+            assertEquals(4, requests)
         } finally {
             server.stop(0)
         }

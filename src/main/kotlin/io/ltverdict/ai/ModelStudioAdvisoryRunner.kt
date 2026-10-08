@@ -122,7 +122,9 @@ internal class ModelStudioAdvisoryRunner private constructor(
             add(script.toString())
             addAll(listOf("--evidence-path", evidence.toString(), "--output-path", output.toString()))
             addAll(listOf("--result-path", result.toString(), "--cancel-path", cancel.toString()))
-            addAll(listOf("--cmd", settings.command, "--sha256", settings.sha256))
+            addAll(listOf("--cmd", settings.command))
+            settings.sha256?.let { addAll(listOf("--sha256", it)) }
+            if (settings.prefixArguments.isNotEmpty()) addAll(listOf("--prefix-args", settings.prefixArguments.joinToString(" ")))
             settings.authType?.let { addAll(listOf("--auth-type", it)) }
             if (settings.omitBare) addAll(listOf("--omit-bare", "1"))
             if (settings.extraArguments.isNotEmpty()) addAll(listOf("--extra-args", settings.extraArguments.joinToString(" ")))
@@ -257,12 +259,17 @@ internal class ModelStudioAdvisoryRunner private constructor(
         selectedModel: String,
     ): RunnerOutcome {
         val promptSha256 = result.string("prompt_sha256")
+        // The hash of the file the launcher actually started: equal to the pin when there is one.
+        val artifactSha256 = result.string("runner_artifact_sha256")
         if (processExitCode != 0 ||
             exitCode != 0 ||
             duration !in 0..613_000 ||
             result.string("endpoint_host") != DIRECT_ENDPOINT_HOST ||
             promptSha256 == null ||
             !validSha256(promptSha256) ||
+            artifactSha256 == null ||
+            !validSha256(artifactSha256) ||
+            (settings.sha256 != null && artifactSha256 != settings.sha256) ||
             !Files.isRegularFile(outputPath) ||
             Files.size(outputPath) > MAX_ADVICE_OUTPUT_BYTES
         ) {
@@ -276,7 +283,7 @@ internal class ModelStudioAdvisoryRunner private constructor(
             RunnerProvenance(
                 runnerId = QwenCode0211.RUNNER_ID,
                 runnerVersion = parsed.version,
-                runnerArtifactSha256 = settings.sha256,
+                runnerArtifactSha256 = artifactSha256,
                 // The slug was passed to the CLI with --model; the CLI's own report of its model is not compared (ADR 0027, D5).
                 modelId = selectedModel,
                 endpointHost = DIRECT_ENDPOINT_HOST,
@@ -420,13 +427,14 @@ internal fun directRunnerRequested(environment: Map<String, String>): Boolean = 
  */
 internal class DirectRunnerSettings(
     val command: String,
-    val sha256: String,
+    val sha256: String?,
     val node: String?,
     val cwd: String?,
     val passthrough: List<String>,
     val authType: String?,
     val omitBare: Boolean,
     val extraArguments: List<String>,
+    val prefixArguments: List<String>,
     val bash: String,
 ) {
     /** Variables of the host environment that reach the launcher and the CLI beyond the common allowlist. */
@@ -435,9 +443,14 @@ internal class DirectRunnerSettings(
     companion object {
         fun fromEnvironment(environment: Map<String, String>): DirectRunnerSettings? {
             fun value(name: String) = environment[name]?.trim()?.takeIf(String::isNotEmpty)
+            // An absolute path, or a bare command name that the launcher resolves through the operator's PATH (ADR 0027, amendment).
             val command =
-                value("LT_VERDICT_AI_LOCAL_QWEN_CMD")?.takeIf { runCatching { Path.of(it).isAbsolute }.getOrDefault(false) } ?: return null
-            val sha256 = value("LT_VERDICT_AI_LOCAL_QWEN_SHA256")?.lowercase()?.takeIf { it.matches(Regex("[0-9a-f]{64}")) } ?: return null
+                value("LT_VERDICT_AI_LOCAL_QWEN_CMD")?.takeIf {
+                    it.matches(Regex("[A-Za-z0-9][A-Za-z0-9._+-]{0,63}")) || runCatching { Path.of(it).isAbsolute }.getOrDefault(false)
+                } ?: return null
+            // The pin is optional; a malformed one is an error, not a silent "no pin".
+            val sha256 = value("LT_VERDICT_AI_LOCAL_QWEN_SHA256")?.lowercase()
+            if (sha256 != null && !sha256.matches(Regex("[0-9a-f]{64}"))) return null
             val names = value("LT_VERDICT_AI_LOCAL_PASSTHROUGH_ENV")?.split(',')?.map(String::trim).orEmpty()
             if (names.any { !it.matches(Regex("[A-Za-z_][A-Za-z0-9_]{0,63}")) }) return null
             val authType = value("LT_VERDICT_AI_LOCAL_AUTH_TYPE")
@@ -447,6 +460,8 @@ internal class DirectRunnerSettings(
             // Extra CLI arguments, separated by spaces and never interpreted by a shell: plain tokens only.
             val extra = value("LT_VERDICT_AI_LOCAL_EXTRA_ARGS")?.split(Regex("\\s+")).orEmpty()
             if (extra.size > 32 || extra.any { !it.matches(Regex("[A-Za-z0-9._:/=@,+-]{1,200}")) }) return null
+            val prefix = value("LT_VERDICT_AI_LOCAL_QWEN_PREFIX_ARGS")?.split(Regex("\\s+")).orEmpty()
+            if (prefix.size > 16 || prefix.any { !it.matches(Regex("[A-Za-z0-9._:/=@,+-]{1,200}")) }) return null
             return DirectRunnerSettings(
                 command,
                 sha256,
@@ -456,6 +471,7 @@ internal class DirectRunnerSettings(
                 authType,
                 omitBare == "1",
                 extra,
+                prefix,
                 value("LT_VERDICT_AI_LOCAL_BASH") ?: "bash",
             )
         }

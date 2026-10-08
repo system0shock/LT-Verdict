@@ -296,8 +296,8 @@ CLI формата Qwen Code (например, форк GigaCode) со свое
 
 ```bash
 export LT_VERDICT_AI_RUNNER_MODE=local
-export LT_VERDICT_AI_LOCAL_QWEN_CMD=/opt/gigacode/gigacode          # абсолютный путь к исполняемому файлу CLI
-export LT_VERDICT_AI_LOCAL_QWEN_SHA256=<sha256 этого файла>        # обязательно; считается один раз на проверенном экземпляре
+export LT_VERDICT_AI_LOCAL_QWEN_CMD=gigacode                        # имя команды из PATH (gigacode, qwen) или абсолютный путь
+# export LT_VERDICT_AI_LOCAL_QWEN_SHA256=<sha256 файла>           # необязательно: если задан, должен совпасть с найденным файлом
 export LT_VERDICT_AI_LOCAL_AUTH_TYPE=qwen-oauth                    # способ входа CLI; без него Qwen Code с --bare не стартует
 export LT_VERDICT_AI_MODELS_FILE=/etc/lt-verdict/ai-models.json    # обязателен: слаг модели CLI
 ltv ui
@@ -306,6 +306,16 @@ ltv ui
 Файл конфигурации моделей (раздел ниже) нужен, потому что CLI не умеет сообщить свою
 модель: выбранный слаг передаётся как `--model=<слаг>`. Блок `endpoint` в файле в
 этом режиме игнорируется, признак «модель измерена» не показывается.
+
+Команду по имени `ltv` разрешает через `PATH` пользователя, под которым запущен
+(`command -v`), и запускает найденный файл; не найдена: `RUNNER_ARTIFACT_MISSING`.
+Если SHA-256 не задан, продукт не сверяет файл, а записывает в провенанс его
+фактический хэш. Для запуска через обёртку-менеджер задайте
+`LT_VERDICT_AI_LOCAL_QWEN_PREFIX_ARGS`: токены через пробел (до 16, те же правила,
+что у `EXTRA_ARGS`) ставятся перед флагами CLI, например `QWEN_CMD=npx` и
+`PREFIX_ARGS=--no-install gigacode` или `QWEN_CMD=gigacode` и `PREFIX_ARGS=qwen`; хэшируется
+первый файл (`npx`, `gigacode`), а не пакет за ним. Shim с `#!/usr/bin/env node`
+работает: `PATH` передаётся CLI.
 
 Необязательные переменные: `LT_VERDICT_AI_LOCAL_PASSTHROUGH_ENV` (имена переменных
 окружения через запятую, которые нужны самому CLI и копируются ему; по умолчанию

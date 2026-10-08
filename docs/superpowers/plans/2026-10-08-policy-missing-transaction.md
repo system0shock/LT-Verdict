@@ -128,7 +128,7 @@ EXPECTED FILES TO CHANGE:
 . F:\Coding\LT-Verdict\.worktrees\_tools\ltv-slot.ps1
 Invoke-LtvSlot ... gradlew test --tests "io.ltverdict.core.PolicyEvaluationTest" --tests "io.ltverdict.core.PolicyTest" --tests "io.ltverdict.cli.CommandLineTest"
 Invoke-LtvExclusive ... gradlew check   (полный check: тесты, ktlint, документация, контракты)
-cd ui && npm run verify:policy-schema (если скрипт есть) ; changelog.d --check (CI Changelog)
+npm --prefix ui run test:contracts ; python tools/changelog_assemble.py --check ; python tools/verify_slice0.py
 git diff --stat ; секреты: git diff | grep -i "api[_-]key\|secret"
 ```
 

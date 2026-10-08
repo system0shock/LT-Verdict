@@ -16,7 +16,7 @@ Approval методики не означает успешную приёмку.
 Spearman/partial ranks, lag profile, оконные business/resource SLA и сравнение
 двух прогонов. Основание — принятая поправка в
 [correlation spec](superpowers/specs/2026-09-05-load-resource-correlation-design.md),
-[точный контракт](superpowers/plans/2026-09-05-load-resource-correlation.md) и
+[точный контракт](superpowers/plans/archive/2026-09-05-load-resource-correlation.md) и
 [resource spec](superpowers/specs/2026-09-05-resource-statistics-design.md).
 Отложенные p-values, bootstrap, Holm и change-point algorithms не тестируем
 как будто они реализованы. Capacity получает собственные fixtures после

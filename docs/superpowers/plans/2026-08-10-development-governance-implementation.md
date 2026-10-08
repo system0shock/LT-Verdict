@@ -15,7 +15,7 @@
 - Утверждённый источник требований: `docs/superpowers/specs/2026-08-10-project-development-governance-design.md`.
 - Не создавать project skills в этом rollout: проектные соглашения принадлежат `AGENTS.md`, механические проверки — CI.
 - Не создавать файлы в `scripts/` и не добавлять локальные Git hooks.
-- Не изменять и не добавлять в индекс существующие пользовательские untracked-файлы: `docs/stage-1-spec.md`, `docs/superpowers/plans/2026-08-10-development-plan.md`, `k3-prc-review.md`, `prc-lt-verdict-v0.5.md`.
+- Не изменять и не добавлять в индекс существующие пользовательские untracked-файлы: `docs/stage-1-spec.md`, `docs/superpowers/plans/archive/2026-08-10-development-plan.md`, `k3-prc-review.md`, `prc-lt-verdict-v0.5.md`.
 - Использовать только явный `git add -- <paths>`; не использовать `git add .` и `git add -A`.
 - Любое изменение поведения процесса должно обновлять `AGENTS.md` и `docs/development-process.md` в одном PR.
 - GitHub Actions закрепляются полным commit SHA с комментарием исходной версии.

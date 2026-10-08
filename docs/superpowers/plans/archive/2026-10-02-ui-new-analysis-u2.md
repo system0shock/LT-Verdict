@@ -57,7 +57,7 @@ EXPECTED FILES TO CHANGE:
   modify ui/e2e/upload-cancel.spec.ts (кнопка нового экрана в сценарии new shell)
   modify docs/user/slice-1-local-analysis.md
   modify CHANGELOG.md
-  create docs/superpowers/plans/2026-10-02-ui-new-analysis-u2.md
+  create docs/superpowers/plans/archive/2026-10-02-ui-new-analysis-u2.md
 ```
 
 Оценка размера: `NewAnalysisPanel.vue` около 430 строк (раскладка и 22 свойства и события, как у `RunSetup.vue`), `setup.ts` около 110, `shell.css` около 100, `App.vue` около +40/-20 строк, тесты около 600, `labels.ts` 131 (готово). Если для подключения понадобятся правки логики `App.vue` сверх выбора компонента и подмены строк, а также правки `RunSetup.vue`, `api.ts` или `types.ts`, остановиться и объяснить (AGENTS.md, п. 10). ADR не нужен: контракты, схемы, API и зависимости не меняются; экран живёт за временным флагом оболочки.
@@ -248,7 +248,7 @@ if (sourceContextFiles.value.length > 16) return { request: null, error: setupMs
 
 - [ ] **Step 5: Проверка diff** (оркестратор): только EXPECTED FILES; нет не-ASCII в файлах Codex; дифф `App.vue` порядка десятков строк, без изменения условий; окончания строк неизменны; `git diff --check`.
 
-- [ ] **Step 6: Commit.** `git add ui/src/shell ui/src/App.vue ui/e2e/new-analysis-readiness.spec.ts ui/e2e/new-analysis.spec.ts ui/e2e/new-analysis-live.spec.ts ui/e2e/overview-live.spec.ts ui/e2e/upload-cancel.spec.ts docs/superpowers/plans/2026-10-02-ui-new-analysis-u2.md`; сообщение `feat(ui): add the new analysis screen with a launch readiness block`.
+- [ ] **Step 6: Commit.** `git add ui/src/shell ui/src/App.vue ui/e2e/new-analysis-readiness.spec.ts ui/e2e/new-analysis.spec.ts ui/e2e/new-analysis-live.spec.ts ui/e2e/overview-live.spec.ts ui/e2e/upload-cancel.spec.ts docs/superpowers/plans/archive/2026-10-02-ui-new-analysis-u2.md`; сообщение `feat(ui): add the new analysis screen with a launch readiness block`.
 
 ## Task 3: Полный набор, сверка на реальном сервере, снимки
 
@@ -263,7 +263,7 @@ if (sourceContextFiles.value.length > 16) return { request: null, error: setupMs
 
 - [ ] **Step 1:** в разделе про новый интерфейс описать экран «Новый анализ»: разделы и поля, блок готовности (что блокирует кнопку, что только предупреждает), взаимоисключение онлайн-источников и файлов, что остаётся английским.
 - [ ] **Step 2:** `CHANGELOG.md`, `### Added`: запись про экран «Новый анализ».
-- [ ] **Step 3:** `npx markdownlint-cli2@0.23.2 docs/user/slice-1-local-analysis.md CHANGELOG.md docs/superpowers/plans/2026-10-02-ui-new-analysis-u2.md`; `git diff --check origin/main...HEAD`.
+- [ ] **Step 3:** `npx markdownlint-cli2@0.23.2 docs/user/slice-1-local-analysis.md CHANGELOG.md docs/superpowers/plans/archive/2026-10-02-ui-new-analysis-u2.md`; `git diff --check origin/main...HEAD`.
 - [ ] **Step 4: Commit** `docs: describe the new analysis screen of the new shell`.
 
 ## Task 5: Независимое ревью

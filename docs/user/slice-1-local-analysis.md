@@ -2092,7 +2092,7 @@ Optional `correlation-plan.v1` включает только явно переч
 Его можно взять из `resource_snapshot_sha256` сохранённого `identity.json`
 предварительного анализа с тем же snapshot без плана; файл лежит в
 `data/runs/<run-id>/analyses/<analysis-id>/identity.json`. Адаптер может
-подготовить план по [контракту](../superpowers/plans/2026-09-05-load-resource-correlation.md).
+подготовить план по [контракту](../superpowers/plans/archive/2026-09-05-load-resource-correlation.md).
 Исходный `correlation-plan.json` сохраняется рядом и защищён manifest.
 
 Правило аномалии выбирает signal, непересекающиеся reference/evaluation windows,

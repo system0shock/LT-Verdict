@@ -34,7 +34,7 @@ Slice 0 публикует два versioned-контракта до появле
 Решение реализуется по
 [`local-first MVP delta design`](../superpowers/specs/2026-08-26-v06-local-mvp-delta-design.md)
 и
-[`плану Slice 0`](../superpowers/plans/2026-08-26-v06-slice-0-contracts-evidence.md).
+[`плану Slice 0`](../superpowers/plans/archive/2026-08-26-v06-slice-0-contracts-evidence.md).
 
 ## Альтернативы
 

@@ -3,7 +3,7 @@
 Дата: 2026-09-27. Ветка: `fix/input-unit-fill-coverage`.
 
 Границы и статистическое обоснование — в
-[docs/analytics-trend-detection.md](../../analytics-trend-detection.md). Этот
+[docs/analytics-trend-detection.md](../../../analytics-trend-detection.md). Этот
 план фиксирует контракт и состав работ до реализации.
 
 ## Цель

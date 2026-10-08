@@ -2025,12 +2025,89 @@ bundle. Семантически одинаковые данные с други
 
 ```text
 ltv ui [--data-dir <path>] [--analysis-parallelism <n>] [--histogram-significant-digits <3..5>]
-ltv analyze <input> [--policy <policy.json>] [--resources <snapshot.json>] [--histogram-significant-digits <3..5>] [--data-dir <path>]
-ltv policy validate <policy.json>
+ltv analyze <input> [--policy <policy.json>|-] [--resources <snapshot.json>] [--histogram-significant-digits <3..5>] [--data-dir <path>] [--out-dir <dir>]
+ltv policy validate <policy.json>|-
 ltv report <run-id> <analysis-id> --format json|html|asciidoc [--data-dir <path>]
+ltv summary <run-id> <analysis-id> [--data-dir <path>]
+ltv --help
+ltv --version
 ```
 
-`ltv analyze` печатает canonical `analysis-result.v1` в stdout.
+`ltv analyze` печатает canonical `analysis-result.v1` в stdout, а идентификаторы
+сохранённого анализа одной строкой в stderr:
+
+```text
+analysis_id=<64 hex> run_id=<id>
+```
+
+Эти значения подставляются в `ltv report` и `ltv summary`; искать каталог анализа
+вручную не нужно. stdout не меняется (байты результата те же, что у
+`ltv report --format json`), поэтому `ltv analyze ... > result.json` работает как
+раньше; скрипт, который считает любой вывод в stderr ошибкой, надо поправить.
+
+`ltv --help` (также `-h`, `help`, `ltv <команда> --help`) печатает справку в stdout
+с кодом `0`; `ltv --version` печатает `ltv <версия>` (версия сборки, например
+`0.1.0-SNAPSHOT`; для запуска не из сборки `unknown`). Версию релизной сборки задаёт
+`-PltvVersion=<x.y.z>` у Gradle.
+
+**Policy из stdin.** Значение `-` у `--policy` и у `ltv policy validate` читает
+policy из stdin (до 1 MiB, как файл): `cat policy.json | ltv analyze run.jtl --policy -`.
+Файл с именем `-` в текущем каталоге задаётся как `./-`. Хэш policy считается по
+байтам, поэтому `analysis_id` тот же, что при запуске из файла с таким же содержимым.
+В Windows PowerShell 5.1 конвейер перекодирует текст; используйте `cmd /c "... < policy.json"`
+или PowerShell 7.4+.
+
+**Артефакты для CI: `--out-dir <dir>`.** Один вызов `ltv analyze` записывает в каталог
+(создаётся при необходимости) пять файлов с фиксированными именами; существующие
+файлы с этими именами перезаписываются:
+
+| Файл | Содержимое |
+| --- | --- |
+| `result.json` | canonical `analysis-result.v1`, байты как в stdout |
+| `report.html` | HTML-отчёт, как `ltv report --format html` |
+| `chart.svg` | график нагрузки, как `ltv report --format svg` |
+| `summary.txt` | краткий итог для лога сборки: идентификаторы, `run_validity`, `policy_verdict`, `exit_code`, выборка, p95 и p99, число правил и строки непройденных правил |
+| `junit.xml` | один `testsuite` на прогон |
+
+Код выхода определяется вердиктом, как без `--out-dir` (таблица ниже). Каталог и каждый из
+пяти файлов проверяются до анализа: симлинк, не обычный файл и файл, совпадающий со
+входным, дают код `4` и `OUT_DIR_INVALID`, ничего не записывается. Если файл записать не
+удалось, код `4`, `OUT_DIR_WRITE_FAILED`, stdout пуст; анализ при этом уже сохранён,
+идентификаторы напечатаны, часть файлов могла быть записана.
+
+`junit.xml`: случай `gate` (`classname="lt-verdict.gate"`) отражает итог гейта и совпадает
+с кодом выхода (проходит только при `run_validity` `VALID` и `PASS` или `NO_POLICY`;
+`FAIL` это `failure`, `NO_VERDICT`, `DEGRADED` и `INVALID` это `error`). Далее по одному
+случаю на каждую проверку правила: `lt-verdict.policy` (имя `<rule_id>`, для оконных
+проверок `<rule_id> @ <window_id>`) и `lt-verdict.resource-sla` (`<rule_id> @ <window_id>`
+для SLA-правил ресурсов). Диагностические ресурсные проверки в файл не попадают. Публиковать
+отчёт нужно шагом CI, который выполняется и после ненулевого кода выхода: Jenkins `junit`
+в `post { always { ... } }`, GitLab `artifacts: reports: junit` с `when: always`, GitHub Actions
+шаг стороннего JUnit-репортёра с `if: always()`. Код выхода `ltv` по-прежнему проваливает
+шаг, отчёт JUnit его не заменяет.
+
+**`ltv summary <run-id> <analysis-id>`** читает сохранённый анализ и печатает в stdout один
+компактный canonical JSON `cli-summary.v1` (ключи по алфавиту, без пробелов и перевода строки;
+для сохранения перенаправьте stdout). Код `0` при успешном чтении независимо от вердикта;
+отсутствующий анализ даёт `4`, занятый data dir `6`, повреждение `70` (как `ltv report`).
+Эквивалентно `ltv report <run-id> <analysis-id> --format summary`.
+
+```json
+{"analysis_id":"...","overall":{"error_rate":0.333333,"errors":1,"max":26,"p50":1,"p95":26,"p99":26,"rps":34.883721,"samples":3},
+ "policy_verdict":"FAIL","run_id":"...","run_validity":"VALID","schema_version":"cli-summary.v1",
+ "rules":[{"metric":"error_rate_ratio","observed":0.333333,"operator":"lte","rule_id":"overall-errors","status":"FAIL","threshold":0.1}],
+ "transactions":[{"error_rate":1,"errors":1,"group_path":["Checkout scenario"],"kind":"JMETER_SAMPLER","label":"POST /order",
+                  "max":0,"p50":0,"p95":0,"p99":0,"rps":11.627907,"samples":1}]}
+```
+
+- `overall` и `transactions` берутся из метрик без окна; `error_rate` и `rps` вычислены как
+  частное числителя и знаменателя с шестью знаками (`null`, если данных нет); перцентили
+  и счётчики копируются из результата. Порядок `transactions` как в `analysis-result.json`.
+- `rules`: по одному элементу на проверку правила политики и SLA-правила ресурсов
+  (`rule_id`, `status`, `operator`, `threshold`, `window_id` и `reason` при наличии; у
+  правил нагрузки ещё `metric` и `observed`, у ресурсных `series_id` и `unit`). Оператор
+  ресурсного правила описывает нарушение (`gt`: значение выше порога). Итоговый вердикт
+  анализа лежит в `policy_verdict`.
 
 **Точность перцентилей.** Перцентили p50, p95 и p99 считаются по гистограмме
 HdrHistogram и не бывают выше максимума отклика. Значения до 2047 мс точны. Выше

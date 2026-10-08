@@ -45,7 +45,7 @@ REQUIRED TO ACHIEVE IT (этот PR, срез 1):
       InputVersionsDocument, OutputsDocument, HistogramDocument, NormalizationDocument; limits и
       verdict_gates как Map<String, String>
     - SUPPORTED_ANALYSIS_RESULT_VERSIONS (набор поддерживаемых версий) и
-      isSupportedAnalysisResultShape(JsonObject): ключи документа это все обязательные поля модели плюс
+      hasSupportedAnalysisResultKeys(JsonObject): ключи документа это все обязательные поля модели плюс
       любое подмножество необязательных (имена берутся из SerialDescriptor модели, а не из рукописного списка)
     - ANALYSIS_DOCUMENT_JSON: один экземпляр Json (explicitNulls=false, encodeDefaults=true) только для
       кодирования; декодирование в production-коде не используется
@@ -56,7 +56,7 @@ REQUIRED TO ACHIEVE IT (этот PR, срез 1):
   ingest/LoadSample.kt (RunValidity) и core/Policy.kt (PolicyVerdict): добавляется @Serializable к enum;
     core/AnalysisResult.kt (AnalysisMode): @Serializable и @SerialName на значениях.
   ai/AdvisoryAi.kt: строки 65 и 568. ANALYSIS_RESULT_FIELD_SETS и сравнение == "analysis-result.v1"
-    заменяются на isSupportedAnalysisResultShape и SUPPORTED_ANALYSIS_RESULT_VERSIONS. Значения полей
+    заменяются на hasSupportedAnalysisResultKeys и SUPPORTED_ANALYSIS_RESULT_VERSIONS. Значения полей
     проверяются теми же вспомогательными функциями, что и сейчас (те же коды INVALID_OUTPUT/INVALID_ANALYSIS);
     ai-evidence строится из исходного JsonObject (его байты входят в evidence_input_sha256).
   Генератор TypeScript в тестовых исходниках (без production-зависимостей): обход SerialDescriptor,
@@ -74,7 +74,7 @@ REQUIRED TO ACHIEVE IT (этот PR, срез 1):
     - AdvisoryAnalysisResultGateTest: дифференциальный тест старого предиката (копия: два набора ключей и
       сравнение версии) и нового на матрице документов (все подмножества ключей, лишний ключ, чужая версия,
       явный null в capacity_summary, неверные типы значений), с одинаковым исходом: принят, либо тот же
-      AdviceFailure; плюс одинаковые байты и хэш ai-evidence на принятых документах. Набор ключей, который
+      AdviceFailure; принятый документ строится без ошибок (код после ворот не менялся; байты ai-evidence и evidence_input_sha256 отдельным тестом не закреплены, так как код их построения этим PR не затронут). Набор ключей, который
       новый код выводит из модели, закреплён тестом (8 обязательных + capacity_summary).
     - Fixture bundle текущей версии: fixtures/typed-boundary/bundle-v1 (каталог анализа целиком в реальной
       раскладке хранилища: manifest.json, analysis-result.json, identity.json, run.json и прочие артефакты
@@ -212,7 +212,7 @@ EXPECTED FILES TO CHANGE:
 
 - Формат `analysis-result.v1` и `analysis-identity.v1`: не меняется ни один байт.
 - CLI (вывод, коды выхода), HTTP (маршруты, тела), схемы в `docs/contracts`: не меняются.
-- Новый внутренний контракт: `SUPPORTED_ANALYSIS_RESULT_VERSIONS` и `decodeAnalysisResult` (internal).
+- Новый внутренний контракт: `SUPPORTED_ANALYSIS_RESULT_VERSIONS`, `hasSupportedAnalysisResultKeys`, `encodeAnalysisResult`, `encodeAnalysisIdentity`, `ANALYSIS_DOCUMENT_JSON` (все internal; декодирование в production не используется).
 
 ## Критерии приёмки
 

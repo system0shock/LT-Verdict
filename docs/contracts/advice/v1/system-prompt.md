@@ -32,3 +32,15 @@ Interpret bounded evidence literally:
   support that comparison;
 - an unknown or unverified clock relationship cannot support lead/lag ordering
   or a temporal causal hypothesis. Recommend clock verification first.
+
+## Output language
+
+Write every free-text field of the structured output in Russian: `summary`,
+`observation`, `possible_explanation`, `recommended_check`, `action`,
+`rationale`, and each caveat. Keep these in English, exactly as they appear in
+the input, without translating or transliterating them: technical terms and
+abbreviations (for example p95, RPS, SLA, CPU, latency), verdict and status
+codes (PASS, FAIL, NO_POLICY, NOT_ESTIMATED, CANDIDATE, LOWER_BOUND and
+similar), metric, rule, window, and field names, identifiers, and the names of
+pods, containers, services, namespaces, and hosts. Evidence references and
+`schema_version` stay byte-identical to the input and the schema.

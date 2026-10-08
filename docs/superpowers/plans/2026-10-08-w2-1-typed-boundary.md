@@ -60,16 +60,15 @@ REQUIRED TO ACHIEVE IT (этот PR, срез 1):
     проверяются теми же вспомогательными функциями, что и сейчас (те же коды INVALID_OUTPUT/INVALID_ANALYSIS);
     ai-evidence строится из исходного JsonObject (его байты входят в evidence_input_sha256).
   Генератор TypeScript в тестовых исходниках (без production-зависимостей): обход SerialDescriptor,
-    вывод в ui/src/types.generated.ts; ui/src/types.ts импортирует и реэкспортирует сгенерированные типы
-    верхнего уровня. Рукописный AnalysisResult НЕ переписывается: в types.ts добавляется только
-    compile-time проверка (тот же набор ключей, совместимость скалярных полей) рукописного интерфейса и
-    сгенерированного.
+    вывод в ui/src/types.generated.ts. ui/src/types.ts НЕ меняется (уточнение при реализации): соответствие
+    рукописного AnalysisResult сгенерированному (те же ключи, значения enum принимаются) проверяет скрипт
+    ui/scripts/verify-generated-types.mjs на виртуальном файле, без кода в бандле UI.
   Тесты (только новые файлы):
     - AnalysisDocumentsEquivalenceTest: эталон прежних билдеров (дословная копия старого кода в тестовых
       исходниках) против новых функций, байты равны на матрице входов; золотые файлы
       fixtures/slice1/identity/* читаются через строгое декодирование и кодируются обратно в те же байты
       (в том числе legacy-pre-adr-0016.v1.json).
-    - AnalysisResultGoldenBytesTest: фикстуры fixtures/typed-boundary/* (analysis-result.json и
+    - TypedBoundaryGoldenBytesTest (пакет cli, запускает CLI): фикстуры fixtures/typed-boundary/golden/* (analysis-result.json и
       analysis-identity.json, снятые ДО рефакторинга по CLI-прогонам fixtures/slice1/*) равны байтам новых
       функций.
     - AdvisoryAnalysisResultGateTest: дифференциальный тест старого предиката (копия: два набора ключей и
@@ -98,7 +97,7 @@ NOT REQUIRED (остаётся в W2.1, вне этого PR; отчёт орк�
     следующим PR; типизация ответов до него даст гарантированный конфликт слияния.
   - Saved-analytics (run-dynamics.v1, transaction-comparison.v1 в RunComparison.kt), baseline, release,
     manifest, run.json, pod-view, source-request: остаются JsonObject.
-  - Замена рукописных 884 строк ui/src/types.ts: заменяется только AnalysisResult-обвязка.
+  - Замена рукописных 884 строк ui/src/types.ts: файл не меняется.
   - Поле incidents, схема incident.v1, любой новый функционал (заморозка ширины D1).
   - Изменение поведения валидации AdvisoryAi: ни приём, ни коды отказа не меняются (Ruling R3).
   - Новые зависимости Gradle/npm, правка build.gradle.kts, eslint-конфигурации.
@@ -110,14 +109,15 @@ EXPECTED FILES TO CHANGE:
   src/main/kotlin/io/ltverdict/ingest/LoadSample.kt (одна аннотация)
   src/main/kotlin/io/ltverdict/ai/AdvisoryAi.kt
   src/test/kotlin/io/ltverdict/core/AnalysisDocumentsEquivalenceTest.kt (новый)
-  src/test/kotlin/io/ltverdict/core/AnalysisResultGoldenBytesTest.kt (новый)
+  src/test/kotlin/io/ltverdict/cli/TypedBoundaryGoldenBytesTest.kt (новый)
+  src/test/kotlin/io/ltverdict/core/TypeScriptGenerator.kt (новый, генератор TS из SerialDescriptor)
+  .gitattributes (одна строка: fixtures/typed-boundary/** -text, байты фикстур не нормализуются)
   src/test/kotlin/io/ltverdict/ai/AdvisoryAnalysisResultGateTest.kt (новый)
   src/test/kotlin/io/ltverdict/core/TypedBoundaryBundleTest.kt (новый)
   src/test/kotlin/io/ltverdict/core/LegacyAnalysisDocuments.kt (новый, замороженная копия прежних билдеров для эталона)
-  src/test/kotlin/io/ltverdict/core/TypeScriptGeneratorTest.kt (новый; генератор в нём же или рядом)
-  fixtures/typed-boundary/** (новые)
+  src/test/kotlin/io/ltverdict/core/TypeScriptGeneratorTest.kt (новый)
+  fixtures/typed-boundary/** (новые: golden/<случай>/, bundle-v1/ в плоской раскладке)
   ui/src/types.generated.ts (новый, генерируемый)
-  ui/src/types.ts (только compile-time проверка соответствия, AnalysisResult не меняется)
   ui/scripts/verify-generated-types.mjs (новый), ui/package.json (скрипт test:contracts)
   changelog.d/w2-1-typed-boundary.changed.md (новый)
   docs/superpowers/plans/2026-10-08-w2-1-typed-boundary.md (этот план)
@@ -193,6 +193,18 @@ EXPECTED FILES TO CHANGE:
   не `any`. Рукописный `AnalysisResult` не переписывается: добавляется проверка ключей и скалярных полей.
   Цена ошибки: сгенерированные типы расходятся с рукописным UI; ловят `vue-tsc`, проверка соответствия и
   `verify-generated-types.mjs`.
+- **R7. Полезная находка реализации: полезная нагрузка не идёт через сериализатор.** Тест эквивалентности со
+  старым построителем показал, что kotlinx пишет число `JsonElement` через Long/Double: `12345678901234567890.5`
+  превращалось в `12345678901234567000`, а `1e400` дало бы бесконечность. Поэтому `findings`, `evidence` и
+  `capacity_summary` вклеиваются в закодированное дерево после сериализации модели (`encodeAnalysisResult`).
+  Цена ошибки без этого: молчаливый сдвиг байтов результата и `evidence_input_sha256`. Любое будущее
+  поле-нагрузка (`incidents`) надо вклеивать так же; широкие числа есть в каждой нагрузке эталонного теста.
+- **R8. Фикстура bundle в плоской раскладке.** Путь `runs/<run_id>/analyses/<analysis_id>/…` (около 270
+  символов) не помещается в лимит пути Windows при `git add`; фикстура хранится как `source.json`, `inputs/`,
+  `analysis/`, а тест раскладывает её в формат хранилища. Старые bundle: тестом читаются документы старых форм
+  (identity `legacy-pre-adr-0016.v1.json` без `verdict_gates` и с 24 лимитами; результаты без
+  `capacity_summary`) через строгие модели; целого старого bundle с историческим manifest в репозитории нет,
+  это предел проверки.
 - **R6. Золотые файлы снимаются до рефакторинга.** Первым коммитом идут `fixtures/typed-boundary/*` и
   тест, зелёные на коде `origin/main`; затем рефакторинг при зелёном тесте.
 

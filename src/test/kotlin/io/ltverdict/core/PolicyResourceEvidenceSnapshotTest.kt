@@ -83,7 +83,9 @@ class PolicyResourceEvidenceSnapshotTest {
                 }
             }
         }
-        evaluatePolicy(null, RunValidity.VALID, metricVariants[2]).let { record("policy.none", it.findings, it.evidence, it.verdict, it.coverageReasons) }
+        evaluatePolicy(null, RunValidity.VALID, metricVariants[2]).let {
+            record("policy.none", it.findings, it.evidence, it.verdict, it.coverageReasons)
+        }
 
         // evaluateResources and evaluateSharedWindowPolicy over snapshots x policies
         resourceCases().forEachIndexed { index, case ->
@@ -307,7 +309,15 @@ class PolicyResourceEvidenceSnapshotTest {
                     windowIds = listOf("steady", "unknown-window"),
                 ),
                 ResourceRuleV1("no-series", "absent", "ratio", ResourceOperator.GT, BigDecimal("1E+3"), 1, ResourceRuleEffect.SLA),
-                ResourceRuleV1("wide", "cpu", "ratio", ResourceOperator.GT, BigDecimal("12345678901234567890.123456789"), 1, ResourceRuleEffect.SLA),
+                ResourceRuleV1(
+                    "wide",
+                    "cpu",
+                    "ratio",
+                    ResourceOperator.GT,
+                    BigDecimal("12345678901234567890.123456789"),
+                    1,
+                    ResourceRuleEffect.SLA,
+                ),
             )
         val plain =
             patterns.map { pattern ->
@@ -326,16 +336,16 @@ class PolicyResourceEvidenceSnapshotTest {
             }
         val platformPolicy =
             policy(
-                """{"schema_version":"policy.v1","policy_id":"platform","defaults":{"sample_floor":1,"min_samples":1},""" +
-                    """"platform_services":["orders","payments"],"platform_coverage":{"signal":"unavailable"},""" +
-                    """"rules":[{"id":"p95","metric":"response_time_p95_ms","operator":"lte","threshold":100,"scope":{"kind":"overall"}}],""" +
-                    """"platform_rules":[""" +
-                    """{"id":"cpu","signal":"cpu_ratio","scope":{"kind":"all_services"},"operator":"gt","threshold":0.4,"unit":"ratio",""" +
-                    """"aggregation":"interval_mean","min_consecutive_cells":3,"effect":"sla","max_missing_fraction":0.2,"max_gap_cells":1},""" +
-                    """{"id":"cover","signal":"unavailable","scope":{"kind":"all_services"},"operator":"gt","threshold":0,"unit":"count",""" +
-                    """"aggregation":"interval_max","min_consecutive_cells":1,"effect":"sla"},""" +
-                    """{"id":"diag","signal":"cpu_ratio","scope":{"kind":"service","services":["orders"]},"operator":"gt","threshold":0.7,""" +
-                    """"unit":"ratio","aggregation":"interval_mean","min_consecutive_cells":1,"effect":"diagnostic","window_ids":["steady"]}]}""",
+                """{"schema_version":"policy.v1","policy_id":"platform","defaults":{"sample_floor":1,"min_samples":1},
+                "platform_services":["orders","payments"],"platform_coverage":{"signal":"unavailable"},
+                "rules":[{"id":"p95","metric":"response_time_p95_ms","operator":"lte","threshold":100,"scope":{"kind":"overall"}}],
+                "platform_rules":[
+                {"id":"cpu","signal":"cpu_ratio","scope":{"kind":"all_services"},"operator":"gt","threshold":0.4,"unit":"ratio",
+                "aggregation":"interval_mean","min_consecutive_cells":3,"effect":"sla","max_missing_fraction":0.2,"max_gap_cells":1},
+                {"id":"cover","signal":"unavailable","scope":{"kind":"all_services"},"operator":"gt","threshold":0,"unit":"count",
+                "aggregation":"interval_max","min_consecutive_cells":1,"effect":"sla"},
+                {"id":"diag","signal":"cpu_ratio","scope":{"kind":"service","services":["orders"]},"operator":"gt","threshold":0.7,
+                "unit":"ratio","aggregation":"interval_mean","min_consecutive_cells":1,"effect":"diagnostic","window_ids":["steady"]}]}""",
             )
         val platformPatterns =
             listOf(
@@ -353,7 +363,14 @@ class PolicyResourceEvidenceSnapshotTest {
                         listOf(
                             series("cpu-orders", "cpu_ratio", "ratio", "orders", pattern),
                             series("cpu-payments", "cpu_ratio", "ratio", "payments", List(8) { "0.1" }),
-                            series("unavailable-orders", "unavailable", "count", "orders", List(8) { "0" }, ResourceAggregation.INTERVAL_MAX),
+                            series(
+                                "unavailable-orders",
+                                "unavailable",
+                                "count",
+                                "orders",
+                                List(8) { "0" },
+                                ResourceAggregation.INTERVAL_MAX,
+                            ),
                             series("cpu-stray", "cpu_ratio", "ratio", "stray", List(8) { "0.9" }),
                         ),
                         windows,

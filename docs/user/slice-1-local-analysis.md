@@ -2107,7 +2107,12 @@ policy из stdin (до 1 MiB, как файл): `cat policy.json | ltv analyze 
 `FAIL` это `failure`, `NO_VERDICT`, `DEGRADED` и `INVALID` это `error`). Далее по одному
 случаю на каждую проверку правила: `lt-verdict.policy` (имя `<rule_id>`, для оконных
 проверок `<rule_id> @ <window_id>`) и `lt-verdict.resource-sla` (`<rule_id> @ <window_id>`
-для SLA-правил ресурсов). Диагностические ресурсные проверки в файл не попадают. Публиковать
+для SLA-правил ресурсов). Диагностические ресурсные проверки в файл не попадают. Проверка со
+статусом `NO_VERDICT` (например, пропавшая транзакция при `missing_transaction: warn`) при
+решённом гейте (`VALID` и `PASS` или `FAIL`) пишется как `<skipped message="не вычислено:
+причина"/>`, счётчик `skipped` в шапке `testsuite` считается по факту, и такой прогон не
+краснеет; при гейте `NO_VERDICT`, `DEGRADED` или `INVALID` те же проверки остаются `error`.
+Красное в JUnit бывает только при ненулевом коде выхода. Публиковать
 отчёт нужно шагом CI, который выполняется и после ненулевого кода выхода: Jenkins `junit`
 в `post { always { ... } }`, GitLab `artifacts: reports: junit` с `when: always`, GitHub Actions
 шаг стороннего JUnit-репортёра с `if: always()`. Код выхода `ltv` по-прежнему проваливает

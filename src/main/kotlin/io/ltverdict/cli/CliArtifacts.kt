@@ -107,6 +107,8 @@ internal fun junitXml(result: ByteArray): ByteArray {
     val verdict = root.text("policy_verdict")
     val reasons = ((root["analysis_coverage"] as? JsonObject)?.get("reasons") as? JsonArray).orEmpty().joinToString(",") { valueText(it) }
     val gateMessage = "policy_verdict=$verdict run_validity=$validity reasons=$reasons"
+    // A decided gate (exit 0 or 2) stays green for checks that were not evaluated (missing_transaction=warn): they are skipped.
+    val decided = validity == "VALID" && (verdict == "PASS" || verdict == "FAIL")
     val cases =
         buildList {
             add(
@@ -128,7 +130,12 @@ internal fun junitXml(result: ByteArray): ByteArray {
                         checkName(check),
                         when (check.text("status")) {
                             "FAIL" -> "failure" to description(check)
-                            "NO_VERDICT" -> "error" to (reasonOf(check) ?: description(check))
+                            "NO_VERDICT" ->
+                                if (decided) {
+                                    "skipped" to "не вычислено: ${reasonOf(check) ?: description(check)}"
+                                } else {
+                                    "error" to (reasonOf(check) ?: description(check))
+                                }
                             else -> null
                         },
                     ),
@@ -140,13 +147,15 @@ internal fun junitXml(result: ByteArray): ByteArray {
             append("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n")
             append(
                 "<testsuite name=\"lt-verdict\" tests=\"${cases.size}\" failures=\"${cases.count { it.problem?.first == "failure" }}\" " +
-                    "errors=\"${cases.count { it.problem?.first == "error" }}\" skipped=\"0\" time=\"0\">\n",
+                    "errors=\"${cases.count { it.problem?.first == "error" }}\" skipped=\"${cases.count { it.problem?.first == "skipped" }}\" time=\"0\">\n",
             )
             cases.forEach { case ->
                 val head = "<testcase classname=\"${xml(case.classname)}\" name=\"${xml(case.name)}\" time=\"0\""
                 val problem = case.problem
                 if (problem == null) {
                     append("  $head/>\n")
+                } else if (problem.first == "skipped") {
+                    append("  $head><skipped message=\"${xml(problem.second)}\"/></testcase>\n")
                 } else {
                     val message = xml(problem.second)
                     append("  $head><${problem.first} message=\"$message\">$message</${problem.first}></testcase>\n")

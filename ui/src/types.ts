@@ -182,6 +182,7 @@ export interface MetricScopeTransaction {
 export interface MetricSummaryEvidence {
   id: string
   type: 'metric_summary'
+  window_id?: string
   scope: MetricScopeOverall | MetricScopeTransaction
   sample_count: number
   error_count: number
@@ -246,6 +247,9 @@ export interface WindowPolicySummaryEvidence {
   business_verdict: AnalysisResult['policy_verdict']
   resource_verdict: AnalysisResult['policy_verdict']
   verdict: AnalysisResult['policy_verdict']
+  // The engine writes both now (min_samples only when the policy sets a default); stored results of older engines lack them.
+  sample_count?: number
+  min_samples?: number
 }
 
 export interface ResourcePolicyCheckEvidence {

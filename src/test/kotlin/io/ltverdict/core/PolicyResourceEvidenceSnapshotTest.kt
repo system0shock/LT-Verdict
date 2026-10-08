@@ -28,12 +28,14 @@ import java.nio.file.Path
  */
 class PolicyResourceEvidenceSnapshotTest {
     private val snapshotFile = Path.of("fixtures/typed-evidence/policy-resource.sha256")
+    private val samplesFile = Path.of("fixtures/typed-evidence/samples.ndjson")
 
     @Test
     fun `policy, window policy and resource findings and evidence equal the pre-typing snapshot`() {
         val groups = linkedMapOf<String, StringBuilder>()
         val seenTypes = sortedSetOf<String>()
         val seenKeys = sortedSetOf<String>()
+        val samples = sortedMapOf<String, JsonObject>()
 
         fun record(
             group: String,
@@ -46,6 +48,7 @@ class PolicyResourceEvidenceSnapshotTest {
             (findings + evidence).forEach { item ->
                 seenTypes += item.getValue("type").jsonPrimitive.content
                 item.keys.forEach { seenKeys += "${item.getValue("type").jsonPrimitive.content}.$it" }
+                samples.putIfAbsent("${item.getValue("type").jsonPrimitive.content}:${item.keys.sorted()}", item)
             }
             val bytes =
                 canonicalJson(
@@ -153,6 +156,11 @@ class PolicyResourceEvidenceSnapshotTest {
             Files.writeString(snapshotFile, actual)
         }
         assertEquals(Files.readString(snapshotFile).replace("\r\n", "\n"), actual)
+
+        // One real item per type and key set: ui/scripts/verify-generated-types.mjs checks them against the generated TypeScript.
+        val sampleLines = samples.values.joinToString("") { canonicalJson(it).decodeToString() + "\n" }
+        if (System.getenv("LTV_UPDATE_TYPED_EVIDENCE") == "1") Files.writeString(samplesFile, sampleLines)
+        assertEquals(Files.readString(samplesFile).replace("\r\n", "\n"), sampleLines)
     }
 
     private fun policy(json: String): PolicyV1 {

@@ -503,6 +503,47 @@ class AdvisoryAiTest {
     }
 
     @Test
+    fun `advice of the direct runner records the CLI version and hash, no request count and no host`() {
+        val direct =
+            provenance(modelId = "gigacode-large", endpointHost = DIRECT_ENDPOINT_HOST, providerRequests = null)
+                .copy(runnerVersion = "gigacode-0.21.1", runnerArtifactSha256 = "e".repeat(64))
+        val document = newAdviceDocument("direct", direct)
+
+        val saved = document.getValue("provenance").jsonObject
+        assertEquals("gigacode-0.21.1", (saved.getValue("runner_version") as JsonPrimitive).content)
+        assertEquals("cli-builtin", (saved.getValue("endpoint_host") as JsonPrimitive).content)
+        assertFalse("provider_requests" in saved.keys)
+        assertEquals(document, storeAdvice("direct-store", document).document)
+
+        // The direct markers and the container ones cannot be mixed.
+        val bad =
+            listOf(
+                direct.copy(providerRequests = 1),
+                direct.copy(runnerVersion = "not a version"),
+                direct.copy(runnerArtifactSha256 = "E".repeat(64)),
+                provenance().copy(runnerVersion = "gigacode-0.21.1"),
+                provenance(providerRequests = null),
+            )
+        bad.forEachIndexed { index, value ->
+            DataDirectory.open(tempDir.resolve("direct-bad-$index")).use { directory ->
+                val fixture = prepareAnalysis(directory)
+                val bundles = RunBundleStore(directory)
+                val service =
+                    AdvisoryAiService(
+                        bundles,
+                        AiAdviceStore(directory, bundles),
+                        AdvisoryRunner { RunnerOutcome.Success(canonicalJson(validOutput("analysis-result.json#/evidence/0")), value) },
+                    )
+                assertEquals(
+                    AdviceRunResult.Failed(AdviceFailure.INVALID_OUTPUT),
+                    service.generate(fixture.runId, fixture.analysisId),
+                    "$index",
+                )
+            }
+        }
+    }
+
+    @Test
     fun `runner provenance with a malformed endpoint host, model id, prompt or request count is not saved`() {
         val bad =
             listOf(
@@ -605,7 +646,14 @@ class AdvisoryAiTest {
         fun pattern(name: String) = (provenance.getValue(name).jsonObject.getValue("pattern") as JsonPrimitive).content
 
         assertEquals("^" + MODEL_SLUG.pattern + "$", pattern("model_id"))
-        assertEquals("^" + ENDPOINT_HOST.pattern + "$", pattern("endpoint_host"))
+        val hostBranch =
+            provenance
+                .getValue("endpoint_host")
+                .jsonObject
+                .getValue("anyOf")
+                .jsonArray[0]
+                .jsonObject
+        assertEquals("^" + ENDPOINT_HOST.pattern + "$", (hostBranch.getValue("pattern") as JsonPrimitive).content)
     }
 
     @Test
@@ -856,7 +904,7 @@ class AdvisoryAiTest {
         endpointHost: String = BUILT_IN_HOST,
         promptVersion: String = QwenCode0211.PROMPT_VERSION,
         promptSha256: String = "d".repeat(64),
-        providerRequests: Int = 1,
+        providerRequests: Int? = 1,
     ) = RunnerProvenance(
         runnerId = "gigacode-qwen-code",
         runnerVersion = "0.21.1",

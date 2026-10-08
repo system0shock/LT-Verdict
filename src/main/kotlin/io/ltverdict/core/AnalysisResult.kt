@@ -5,15 +5,17 @@ import io.ltverdict.ingest.SourceType
 import io.ltverdict.ingest.TIMESTAMP_UNIT_SUSPECT_RANGE
 import io.ltverdict.metrics.MetricsConfig
 import io.ltverdict.storage.AcceptedInput
-import kotlinx.serialization.json.JsonPrimitive
-import kotlinx.serialization.json.buildJsonArray
-import kotlinx.serialization.json.buildJsonObject
-import kotlinx.serialization.json.put
+import kotlinx.serialization.SerialName
+import kotlinx.serialization.Serializable
 
+@Serializable
 internal enum class AnalysisMode(
     val wireName: String,
 ) {
+    @SerialName("standard")
     STANDARD("standard"),
+
+    @SerialName("capacity_step")
     CAPACITY_STEP("capacity_step"),
 }
 
@@ -34,132 +36,89 @@ internal fun analysisIdentity(
     capacity: CapacityPlanValidation.Valid? = null,
     trend: TrendPlanValidation.Valid? = null,
     podView: PodViewValidation.Valid? = null,
-): ByteArray =
-    canonicalJson(
-        buildJsonObject {
-            put("schema_version", "analysis-identity.v1")
-            put("run_id", input.runId)
-            put("source_type", input.sourceType.wireName)
-            put("input_sha256", input.sha256)
-            put("policy_sha256", policy?.sha256 ?: "NO_POLICY")
-            if (policy != null || capacity != null) {
-                put(
-                    "verdict_gates",
+): ByteArray {
+    val modules = mutableListOf("normalization", "metrics", "policy-evaluation")
+    if (resources != null) modules += listOf("resource-statistics", "window-policy-evaluation")
+    if (diagnostics != null) modules += "load-resource-diagnostics"
+    if (capacity != null) modules += "capacity-stage-evaluation"
+    if (trend != null) modules += "resource-trend-evaluation"
+    return encodeAnalysisIdentity(
+        AnalysisIdentityDocument(
+            schemaVersion = "analysis-identity.v1",
+            runId = input.runId,
+            sourceType = input.sourceType.wireName,
+            inputSha256 = input.sha256,
+            policySha256 = policy?.sha256 ?: "NO_POLICY",
+            verdictGates =
+                if (policy != null || capacity != null) {
                     verdictGates(
                         policy != null,
                         capacity != null,
                         policy?.policy?.platformRules?.isNotEmpty() == true,
                         policy?.policy?.platformCoverage != null,
-                    ),
-                )
-            }
-            resources?.let {
-                put("resource_snapshot_sha256", it.semanticSha256)
-                put("resource_config_sha256", it.configSha256)
-                it.snapshot.arm?.let { arm -> put("resource_arm", arm) }
-            }
-            diagnostics?.let { put("diagnostic_plan_sha256", it.sha256) }
-            sourceAcquisitionSha256?.let { put("source_acquisition_sha256", it) }
-            postgresInputSha256?.let { put("postgres_input_sha256", it) }
-            capacity?.let {
-                put("capacity_plan_sha256", it.semanticSha256)
-                put("capacity_plan_version", "capacity-plan.v1")
-                // ADR 0026: a top-level binding only, like pod_view: the diagnostic evidence item changes the result bytes, but not
-                // modules, input_versions or limits, which are part of the comparability key.
-                put("capacity_knee_method", "piecewise-hinge-ln-p95.v1")
-            }
-            trend?.let {
-                put("trend_plan_sha256", it.semanticSha256)
-                put("trend_plan_version", "trend-plan.v1")
-            }
+                    )
+                } else {
+                    null
+                },
+            resourceSnapshotSha256 = resources?.semanticSha256,
+            resourceConfigSha256 = resources?.configSha256,
+            resourceArm = resources?.snapshot?.arm,
+            diagnosticPlanSha256 = diagnostics?.sha256,
+            sourceAcquisitionSha256 = sourceAcquisitionSha256,
+            postgresInputSha256 = postgresInputSha256,
+            capacityPlanSha256 = capacity?.semanticSha256,
+            capacityPlanVersion = capacity?.let { "capacity-plan.v1" },
+            // ADR 0026: a top-level binding only, like pod_view: the diagnostic evidence item changes the result bytes, but not
+            // modules, input_versions or limits, which are part of the comparability key.
+            capacityKneeMethod = capacity?.let { "piecewise-hinge-ln-p95.v1" },
+            trendPlanSha256 = trend?.semanticSha256,
+            trendPlanVersion = trend?.let { "trend-plan.v1" },
             // ADR 0020, section 5: a top-level binding only. pod-view stays out of modules, input_versions and limits,
             // which are part of the comparability key.
-            podView?.let {
-                put("pod_view_sha256", it.canonicalSha256)
-                put("pod_view_version", "pod-view.v1")
-            }
-            put(
-                "engine",
-                buildJsonObject {
-                    put("id", config.engineId)
-                    put("version", config.engineVersion)
-                },
-            )
-            put(
-                "parsers",
-                buildJsonArray {
-                    add(
-                        buildJsonObject {
-                            put("id", input.sourceType.parserId())
-                            put("version", if (input.sourceType == SourceType.JMETER_CSV) "2" else "1")
+            podViewSha256 = podView?.canonicalSha256,
+            podViewVersion = podView?.let { "pod-view.v1" },
+            engine = ComponentRef(config.engineId, config.engineVersion),
+            parsers =
+                listOf(ComponentRef(input.sourceType.parserId(), if (input.sourceType == SourceType.JMETER_CSV) "2" else "1")),
+            modules =
+                modules.map { id ->
+                    ComponentRef(
+                        id,
+                        when (id) {
+                            "metrics" -> "2"
+                            "load-resource-diagnostics" -> "5"
+                            else -> "1"
                         },
                     )
                 },
-            )
-            put(
-                "modules",
-                buildJsonArray {
-                    val modules = mutableListOf("normalization", "metrics", "policy-evaluation")
-                    if (resources != null) modules += listOf("resource-statistics", "window-policy-evaluation")
-                    if (diagnostics != null) modules += "load-resource-diagnostics"
-                    if (capacity != null) modules += "capacity-stage-evaluation"
-                    if (trend != null) modules += "resource-trend-evaluation"
-                    modules.forEach { id ->
-                        add(
-                            buildJsonObject {
-                                put("id", id)
-                                put(
-                                    "version",
-                                    when (id) {
-                                        "metrics" -> "2"
-                                        "load-resource-diagnostics" -> "5"
-                                        else -> "1"
-                                    },
-                                )
-                            },
-                        )
-                    }
-                },
-            )
-            put(
-                "input_versions",
-                buildJsonObject {
-                    put("source", input.sourceType.inputVersion())
-                    put("policy", "policy.v1")
-                    if (resources != null) put("resources", "resource-snapshot.v1")
-                    if (diagnostics != null) put("diagnostics", "correlation-plan.v1")
-                    if (capacity != null) put("capacity", "capacity-plan.v1")
-                    if (trend != null) put("trend", "trend-plan.v1")
-                },
-            )
-            put(
-                "outputs",
-                buildJsonObject {
-                    put("run_schema", "run.v1")
-                    put("analysis_result_schema", "analysis-result.v1")
-                    put("normalized_encoding", "normalized-ndjson.v1")
-                    put("rollup_encoding", "rollup-ndjson.v1")
-                    put("histogram_encoding", "hdr-compressed-v2")
-                },
-            )
-            put(
-                "histogram",
-                buildJsonObject {
-                    put("lowest_discernible_value_ms", config.metrics.lowestDiscernibleValueMillis.toString())
-                    put("highest_trackable_value_ms", config.metrics.highestTrackableValueMillis.toString())
-                    put("significant_digits", config.metrics.significantDigits.toString())
-                },
-            )
-            put(
-                "normalization",
-                buildJsonObject {
-                    put("bucket_millis", "1000")
-                    put("rollup_seconds", buildJsonArray { listOf("10", "30", "60").forEach { add(JsonPrimitive(it)) } })
-                },
-            )
-            put("limits", limits(config.metrics, resources != null, diagnostics != null, capacity != null, trend != null))
-        },
+            inputVersions =
+                InputVersionsDocument(
+                    source = input.sourceType.inputVersion(),
+                    policy = "policy.v1",
+                    resources = if (resources != null) "resource-snapshot.v1" else null,
+                    diagnostics = if (diagnostics != null) "correlation-plan.v1" else null,
+                    capacity = if (capacity != null) "capacity-plan.v1" else null,
+                    trend = if (trend != null) "trend-plan.v1" else null,
+                ),
+            outputs =
+                OutputsDocument(
+                    runSchema = "run.v1",
+                    analysisResultSchema = "analysis-result.v1",
+                    normalizedEncoding = "normalized-ndjson.v1",
+                    rollupEncoding = "rollup-ndjson.v1",
+                    histogramEncoding = "hdr-compressed-v2",
+                ),
+            histogram =
+                HistogramDocument(
+                    lowestDiscernibleValueMs = config.metrics.lowestDiscernibleValueMillis.toString(),
+                    highestTrackableValueMs = config.metrics.highestTrackableValueMillis.toString(),
+                    significantDigits = config.metrics.significantDigits.toString(),
+                ),
+            normalization = NormalizationDocument(bucketMillis = "1000", rollupSeconds = listOf("10", "30", "60")),
+            limits = limits(config.metrics, resources != null, diagnostics != null, capacity != null, trend != null),
+        ),
     )
+}
 
 internal fun analysisResult(
     runId: String,
@@ -168,24 +127,23 @@ internal fun analysisResult(
     mode: AnalysisMode = AnalysisMode.STANDARD,
     capacity: CapacityAnalysis? = null,
 ): ByteArray =
-    canonicalJson(
-        buildJsonObject {
-            put("schema_version", "analysis-result.v1")
-            put("run_id", runId)
-            put("analysis_mode", mode.wireName)
-            put("run_validity", validity.name)
-            put("policy_verdict", (capacity?.policyVerdict ?: evaluation.verdict).name)
-            put(
-                "analysis_coverage",
-                buildJsonObject {
-                    put("status", if (evaluation.coverageReasons.isEmpty()) "COMPLETE" else "INCOMPLETE")
-                    put("reasons", buildJsonArray { evaluation.coverageReasons.forEach { add(JsonPrimitive(it)) } })
-                },
-            )
-            put("findings", buildJsonArray { evaluation.findings.forEach(::add) })
-            put("evidence", buildJsonArray { evaluation.evidence.forEach(::add) })
-            capacity?.let { put("capacity_summary", it.capacityJson) }
-        },
+    encodeAnalysisResult(
+        AnalysisResultDocument(
+            schemaVersion = "analysis-result.v1",
+            runId = runId,
+            analysisMode = mode,
+            runValidity = validity,
+            policyVerdict = capacity?.policyVerdict ?: evaluation.verdict,
+            analysisCoverage =
+                AnalysisCoverageDocument(
+                    status =
+                        if (evaluation.coverageReasons.isEmpty()) AnalysisCoverageStatus.COMPLETE else AnalysisCoverageStatus.INCOMPLETE,
+                    reasons = evaluation.coverageReasons,
+                ),
+            findings = evaluation.findings,
+            evidence = evaluation.evidence,
+            capacitySummary = capacity?.capacityJson,
+        ),
     )
 
 private fun verdictGates(
@@ -193,20 +151,21 @@ private fun verdictGates(
     hasCapacity: Boolean,
     hasPlatformRules: Boolean,
     hasPlatformCoverage: Boolean,
-) = buildJsonObject {
-    if (hasPolicy) put("min_samples_floor", MIN_SAMPLES_FLOOR.toString())
-    put("min_samples_default", MIN_SAMPLES_DEFAULT.toString())
-    if (hasPolicy) put("throughput_exempt", "true")
-    if (hasCapacity) put("capacity_stage_sample_gate", "true")
-    if (hasPlatformRules) {
-        put("max_missing_fraction_default", MAX_MISSING_FRACTION_DEFAULT.toPlainString())
-        put("max_gap_cells_default", MAX_GAP_CELLS_DEFAULT.toString())
-        if (hasPlatformCoverage) {
-            put("platform_coverage_max_missing_fraction_default", PLATFORM_COVERAGE_MAX_MISSING_FRACTION_DEFAULT.toPlainString())
-            put("platform_coverage_max_gap_cells_default", PLATFORM_COVERAGE_MAX_GAP_CELLS_DEFAULT.toString())
+): Map<String, String> =
+    buildMap {
+        if (hasPolicy) put("min_samples_floor", MIN_SAMPLES_FLOOR.toString())
+        put("min_samples_default", MIN_SAMPLES_DEFAULT.toString())
+        if (hasPolicy) put("throughput_exempt", "true")
+        if (hasCapacity) put("capacity_stage_sample_gate", "true")
+        if (hasPlatformRules) {
+            put("max_missing_fraction_default", MAX_MISSING_FRACTION_DEFAULT.toPlainString())
+            put("max_gap_cells_default", MAX_GAP_CELLS_DEFAULT.toString())
+            if (hasPlatformCoverage) {
+                put("platform_coverage_max_missing_fraction_default", PLATFORM_COVERAGE_MAX_MISSING_FRACTION_DEFAULT.toPlainString())
+                put("platform_coverage_max_gap_cells_default", PLATFORM_COVERAGE_MAX_GAP_CELLS_DEFAULT.toString())
+            }
         }
     }
-}
 
 private fun limits(
     metrics: MetricsConfig,
@@ -214,76 +173,77 @@ private fun limits(
     includeDiagnostics: Boolean,
     includeCapacity: Boolean,
     includeTrend: Boolean,
-) = buildJsonObject {
-    put("input_bytes_max", "4294967296")
-    put("policy_bytes_max", "1048576")
-    put("filename_bytes_max", "255")
-    put("csv_columns_max", "64")
-    put("text_field_bytes_max", "65536")
-    put("text_line_or_binary_blob_bytes_max", "1048576")
-    put("label_bytes_max", "4096")
-    put("hierarchy_or_xml_depth_max", "64")
-    put("transaction_identity_bytes_max", metrics.maxTransactionIdentityBytes.toString())
-    put("transaction_identities_max", metrics.maxTransactions.toString())
-    put("transaction_identity_total_bytes_max", metrics.maxTotalTransactionIdentityBytes.toString())
-    put("non_empty_buckets_max", metrics.maxOneSecondBuckets.toString())
-    put("gatling_cache_entries_max", "65536")
-    put("gatling_cache_strings_bytes_max", "67108864")
-    put("policy_json_depth_max", "16")
-    put("policy_rules_max", "256")
-    put("policy_identifier_bytes_max", "128")
-    put("policy_transaction_scope_bytes_max", "4096")
-    put("policy_numeric_token_bytes_max", "64")
-    put("policy_numeric_exponent_abs_max", "64")
-    put("policy_canonical_decimal_bytes_max", "128")
-    put("timestamp_epoch_millis_max", "253402300799999")
-    put("timestamp_epoch_millis_unit_suspect_min", TIMESTAMP_UNIT_SUSPECT_RANGE.first.toString())
-    put("timestamp_epoch_millis_unit_suspect_max", TIMESTAMP_UNIT_SUSPECT_RANGE.last.toString())
-    if (includeResources) {
-        put("resource_snapshot_bytes_max", MAX_RESOURCE_SNAPSHOT_BYTES.toString())
-        put("resource_json_depth_max", RESOURCE_JSON_DEPTH_MAX.toString())
-        put("resource_series_max", MAX_RESOURCE_SERIES.toString())
-        put("resource_points_per_series_max", MAX_POINTS_PER_SERIES.toString())
-        put("resource_cells_total_max", MAX_RESOURCE_CELLS.toString())
-        put("resource_windows_max", MAX_RESOURCE_WINDOWS.toString())
-        put("resource_rules_max", MAX_RESOURCE_RULES.toString())
-        put("resource_findings_max", RESOURCE_FINDINGS_MAX.toString())
-        put("resource_window_histograms_max", metrics.maxWindowHistograms.toString())
-        put("resource_identifier_bytes_max", "128")
-        put("resource_labels_max", MAX_LABELS.toString())
-        put("resource_label_key_bytes_max", MAX_LABEL_KEY_BYTES.toString())
-        put("resource_label_value_bytes_max", MAX_LABEL_VALUE_BYTES.toString())
-        put("resource_numeric_token_bytes_max", RESOURCE_NUMERIC_TOKEN_BYTES_MAX.toString())
-        put("resource_numeric_exponent_abs_max", RESOURCE_NUMERIC_EXPONENT_ABS_MAX.toString())
-        put("resource_numeric_magnitude_max", "1000000000000000000")
-        put("resource_significant_digits_max", RESOURCE_SIGNIFICANT_DIGITS_MAX.toString())
-        put("resource_fractional_digits_max", RESOURCE_FRACTIONAL_DIGITS_MAX.toString())
+): Map<String, String> =
+    buildMap {
+        put("input_bytes_max", "4294967296")
+        put("policy_bytes_max", "1048576")
+        put("filename_bytes_max", "255")
+        put("csv_columns_max", "64")
+        put("text_field_bytes_max", "65536")
+        put("text_line_or_binary_blob_bytes_max", "1048576")
+        put("label_bytes_max", "4096")
+        put("hierarchy_or_xml_depth_max", "64")
+        put("transaction_identity_bytes_max", metrics.maxTransactionIdentityBytes.toString())
+        put("transaction_identities_max", metrics.maxTransactions.toString())
+        put("transaction_identity_total_bytes_max", metrics.maxTotalTransactionIdentityBytes.toString())
+        put("non_empty_buckets_max", metrics.maxOneSecondBuckets.toString())
+        put("gatling_cache_entries_max", "65536")
+        put("gatling_cache_strings_bytes_max", "67108864")
+        put("policy_json_depth_max", "16")
+        put("policy_rules_max", "256")
+        put("policy_identifier_bytes_max", "128")
+        put("policy_transaction_scope_bytes_max", "4096")
+        put("policy_numeric_token_bytes_max", "64")
+        put("policy_numeric_exponent_abs_max", "64")
+        put("policy_canonical_decimal_bytes_max", "128")
+        put("timestamp_epoch_millis_max", "253402300799999")
+        put("timestamp_epoch_millis_unit_suspect_min", TIMESTAMP_UNIT_SUSPECT_RANGE.first.toString())
+        put("timestamp_epoch_millis_unit_suspect_max", TIMESTAMP_UNIT_SUSPECT_RANGE.last.toString())
+        if (includeResources) {
+            put("resource_snapshot_bytes_max", MAX_RESOURCE_SNAPSHOT_BYTES.toString())
+            put("resource_json_depth_max", RESOURCE_JSON_DEPTH_MAX.toString())
+            put("resource_series_max", MAX_RESOURCE_SERIES.toString())
+            put("resource_points_per_series_max", MAX_POINTS_PER_SERIES.toString())
+            put("resource_cells_total_max", MAX_RESOURCE_CELLS.toString())
+            put("resource_windows_max", MAX_RESOURCE_WINDOWS.toString())
+            put("resource_rules_max", MAX_RESOURCE_RULES.toString())
+            put("resource_findings_max", RESOURCE_FINDINGS_MAX.toString())
+            put("resource_window_histograms_max", metrics.maxWindowHistograms.toString())
+            put("resource_identifier_bytes_max", "128")
+            put("resource_labels_max", MAX_LABELS.toString())
+            put("resource_label_key_bytes_max", MAX_LABEL_KEY_BYTES.toString())
+            put("resource_label_value_bytes_max", MAX_LABEL_VALUE_BYTES.toString())
+            put("resource_numeric_token_bytes_max", RESOURCE_NUMERIC_TOKEN_BYTES_MAX.toString())
+            put("resource_numeric_exponent_abs_max", RESOURCE_NUMERIC_EXPONENT_ABS_MAX.toString())
+            put("resource_numeric_magnitude_max", "1000000000000000000")
+            put("resource_significant_digits_max", RESOURCE_SIGNIFICANT_DIGITS_MAX.toString())
+            put("resource_fractional_digits_max", RESOURCE_FRACTIONAL_DIGITS_MAX.toString())
+        }
+        if (includeDiagnostics) {
+            put("diagnostic_plan_bytes_max", MAX_DIAGNOSTIC_PLAN_BYTES.toString())
+            put("diagnostic_json_depth_max", DIAGNOSTIC_JSON_DEPTH_MAX.toString())
+            put("diagnostic_pairs_max", MAX_DIAGNOSTIC_PAIRS.toString())
+            put("diagnostic_anomalies_max", MAX_DIAGNOSTIC_ANOMALIES.toString())
+            put("diagnostic_pair_windows_max", MAX_DIAGNOSTIC_PAIR_WINDOWS.toString())
+            put("diagnostic_episodes_max", MAX_DIAGNOSTIC_EPISODES.toString())
+            put("diagnostic_p95_samples_min", MIN_DIAGNOSTIC_P95_SAMPLES.toString())
+        }
+        if (includeCapacity) {
+            put("capacity_plan_bytes_max", MAX_CAPACITY_PLAN_BYTES.toString())
+            put("capacity_json_depth_max", CAPACITY_JSON_DEPTH_MAX.toString())
+            put("capacity_stages_max", MAX_CAPACITY_STAGES.toString())
+            put("capacity_guards_max", MAX_CAPACITY_GUARDS.toString())
+            put("capacity_bin_millis", "10000")
+            put("capacity_minimum_bins", "30")
+        }
+        if (includeTrend) {
+            put("trend_plan_bytes_max", MAX_TREND_PLAN_BYTES.toString())
+            put("trend_json_depth_max", TREND_JSON_DEPTH_MAX.toString())
+            put("trend_checks_max", MAX_TREND_CHECKS.toString())
+            put("trend_min_cells_floor", TREND_MIN_CELLS_FLOOR.toString())
+            put("trend_method", "slope-materiality.v1")
+        }
     }
-    if (includeDiagnostics) {
-        put("diagnostic_plan_bytes_max", MAX_DIAGNOSTIC_PLAN_BYTES.toString())
-        put("diagnostic_json_depth_max", DIAGNOSTIC_JSON_DEPTH_MAX.toString())
-        put("diagnostic_pairs_max", MAX_DIAGNOSTIC_PAIRS.toString())
-        put("diagnostic_anomalies_max", MAX_DIAGNOSTIC_ANOMALIES.toString())
-        put("diagnostic_pair_windows_max", MAX_DIAGNOSTIC_PAIR_WINDOWS.toString())
-        put("diagnostic_episodes_max", MAX_DIAGNOSTIC_EPISODES.toString())
-        put("diagnostic_p95_samples_min", MIN_DIAGNOSTIC_P95_SAMPLES.toString())
-    }
-    if (includeCapacity) {
-        put("capacity_plan_bytes_max", MAX_CAPACITY_PLAN_BYTES.toString())
-        put("capacity_json_depth_max", CAPACITY_JSON_DEPTH_MAX.toString())
-        put("capacity_stages_max", MAX_CAPACITY_STAGES.toString())
-        put("capacity_guards_max", MAX_CAPACITY_GUARDS.toString())
-        put("capacity_bin_millis", "10000")
-        put("capacity_minimum_bins", "30")
-    }
-    if (includeTrend) {
-        put("trend_plan_bytes_max", MAX_TREND_PLAN_BYTES.toString())
-        put("trend_json_depth_max", TREND_JSON_DEPTH_MAX.toString())
-        put("trend_checks_max", MAX_TREND_CHECKS.toString())
-        put("trend_min_cells_floor", TREND_MIN_CELLS_FLOOR.toString())
-        put("trend_method", "slope-materiality.v1")
-    }
-}
 
 private fun SourceType.parserId(): String =
     when (this) {

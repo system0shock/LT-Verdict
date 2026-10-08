@@ -1,5 +1,7 @@
 package io.ltverdict.ingest
 
+import kotlinx.serialization.Serializable
+
 internal enum class SampleKind {
     JMETER_SAMPLER,
     JMETER_CONTAINER,
@@ -7,6 +9,7 @@ internal enum class SampleKind {
     GATLING_GROUP,
 }
 
+@Serializable
 internal enum class RunValidity {
     VALID,
     DEGRADED,

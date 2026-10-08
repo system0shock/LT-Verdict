@@ -1,8 +1,8 @@
 # Stage 0 Closure and Stage 1 Contract Implementation Plan
 
 > **Superseded:** текущий baseline и roadmap находятся в
-> [`local-first MVP delta design`](../specs/2026-08-26-v06-local-mvp-delta-design.md)
-> и [`плане разработки v0.6`](../../development-plan-v0.6.md).
+> [`local-first MVP delta design`](../../specs/2026-08-26-v06-local-mvp-delta-design.md)
+> и [`плане разработки v0.6`](../../../development-plan-v0.6.md).
 >
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
@@ -568,7 +568,7 @@ git commit -m "test: freeze JTL benchmark methodology"
 **Files:**
 
 - Modify: `prc-lt-verdict-v0.5.md`
-- Modify: `docs/superpowers/plans/2026-08-10-development-plan.md`
+- Modify: `docs/superpowers/plans/archive/2026-08-10-development-plan.md`
 - Modify: `README.md`
 - Modify: `CHANGELOG.md`
 
@@ -602,7 +602,7 @@ stage-1-spec, contracts, golden fixtures and milestone report. CHANGELOG
 - [ ] **Step 4: Run consistency searches**
 
 ```powershell
-rg -n -i "5.?10|3\.15\.x|3\.13\+|одноразов|первый finalize|уточнить|t[b]d|t[o]do" prc-lt-verdict-v0.5.md docs/stage-1-spec.md docs/superpowers/plans/2026-08-10-development-plan.md README.md
+rg -n -i "5.?10|3\.15\.x|3\.13\+|одноразов|первый finalize|уточнить|t[b]d|t[o]do" prc-lt-verdict-v0.5.md docs/stage-1-spec.md docs/superpowers/plans/archive/2026-08-10-development-plan.md README.md
 ```
 
 Expected: no ambiguous active requirements; historical text is explicitly
@@ -611,8 +611,8 @@ labelled and links to the amendment.
 - [ ] **Step 5: Lint and commit**
 
 ```powershell
-npx --yes markdownlint-cli2 prc-lt-verdict-v0.5.md docs/superpowers/plans/2026-08-10-development-plan.md README.md CHANGELOG.md
-git add -- prc-lt-verdict-v0.5.md docs/superpowers/plans/2026-08-10-development-plan.md README.md CHANGELOG.md
+npx --yes markdownlint-cli2 prc-lt-verdict-v0.5.md docs/superpowers/plans/archive/2026-08-10-development-plan.md README.md CHANGELOG.md
+git add -- prc-lt-verdict-v0.5.md docs/superpowers/plans/archive/2026-08-10-development-plan.md README.md CHANGELOG.md
 git commit -m "docs: mark stage 0 contracts complete"
 ```
 

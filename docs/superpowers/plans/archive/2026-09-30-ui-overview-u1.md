@@ -48,7 +48,7 @@ EXPECTED FILES TO CHANGE:
   create ui/e2e/overview-live.spec.ts
   modify docs/user/slice-1-local-analysis.md
   modify CHANGELOG.md
-  create docs/superpowers/plans/2026-09-30-ui-overview-u1.md
+  create docs/superpowers/plans/archive/2026-09-30-ui-overview-u1.md
 ```
 
 Если реализация становится заметно больше ожидаемого (например, нужны правки `AnalysisView.vue`, `LoadCharts.vue` или `types.ts`), остановиться и объяснить (AGENTS.md, п. 10). ADR не нужен: контракты, схемы, API и зависимости не меняются; вкладка живёт за временным флагом оболочки.
@@ -276,7 +276,7 @@ const gap = start > previousStart + rollupSeconds * 1000
 
 - [ ] **Step 1:** в разделе про новый интерфейс описать состав «Обзора»: как читать «Требует внимания» (порядок, что попадает и что нет, пометка «диагностика, не причина», переходы к таблицам), ключевые метрики, график нагрузки и общий курсор (клавиатура, мышь), что показана одна страница `/buckets` и где менять диапазон.
 - [ ] **Step 2:** `CHANGELOG.md`, `### Added`: запись про вкладку «Обзор».
-- [ ] **Step 3:** `npx markdownlint-cli2@0.23.2 docs/user/slice-1-local-analysis.md CHANGELOG.md docs/superpowers/plans/2026-09-30-ui-overview-u1.md`; `git diff --check origin/main...HEAD`.
+- [ ] **Step 3:** `npx markdownlint-cli2@0.23.2 docs/user/slice-1-local-analysis.md CHANGELOG.md docs/superpowers/plans/archive/2026-09-30-ui-overview-u1.md`; `git diff --check origin/main...HEAD`.
 - [ ] **Step 4: Commit** `docs: describe the overview tab of the new shell`.
 
 ## Task 5: Независимое ревью

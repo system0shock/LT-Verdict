@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** реализовать принятый [ADR 0017](../../adr/0017-baseline-candidates-and-confirmation.md): `USER_CONFIRMED` только по явному решению для пары (в том числе для statistical baseline), массив `warnings` в ответе `comparison`, пустое окно как `INSUFFICIENT_DATA` с причиной `EMPTY_WINDOW` (нагрузочные и ресурсные строки), подсказки интерфейса.
+**Goal:** реализовать принятый [ADR 0017](../../../adr/0017-baseline-candidates-and-confirmation.md): `USER_CONFIRMED` только по явному решению для пары (в том числе для statistical baseline), массив `warnings` в ответе `comparison`, пустое окно как `INSUFFICIENT_DATA` с причиной `EMPTY_WINDOW` (нагрузочные и ресурсные строки), подсказки интерфейса.
 
 **Источник истины:** ADR 0017 (Accepted владельцем 2026-09-30). Этот план заменяет по существу черновой план `2026-09-30-baseline-candidates-and-confirmation.md` (он писался по `b086b3a` и до правок ADR по ревью). Где они расходятся, действует ADR; расхождения перечислены ниже.
 
@@ -39,7 +39,7 @@ REQUIRED TO ACHIEVE IT:
 - Тесты ядра и API (перечень в ADR, раздел «Тесты и golden»).
 - UI: BaselinePanel.vue (форма условий для обоих режимов, warnings, две подсказки),
   labels.ts (русские строки), types.ts, e2e.
-- Документация: user-doc, development-plan-v0.6, CHANGELOG, статусные строки ADR 0004 и 0010.
+- Документация: user-doc, development-plan-v0.6, CHANGELOG, статусные строки ADR 0004 и 0028.
 
 NOT REQUIRED (report-only):
 - Менять POST /api/baseline, statisticalBaselineSelection, local-baseline.v1,
@@ -57,7 +57,7 @@ EXPECTED FILES TO CHANGE:
 - UI: ui/src/BaselinePanel.vue, ui/src/types.ts, ui/src/shell/labels.ts,
   ui/e2e/baseline.spec.ts, ui/e2e/diagnostics.spec.ts
 - Docs: docs/user/slice-1-local-analysis.md, docs/development-plan-v0.6.md, CHANGELOG.md,
-  docs/adr/0004-local-baseline-selection.md, docs/adr/0010-baseline-conditions-confirmation.md,
+  docs/adr/0004-local-baseline-selection.md, docs/adr/0028-baseline-conditions-confirmation.md,
   этот план
 ```
 
@@ -133,7 +133,7 @@ EXPECTED FILES TO CHANGE:
 
 - [ ] `docs/user/slice-1-local-analysis.md` (~413-443): правило `USER_CONFIRMED` только по явному решению, warnings, пустое окно, подсказки.
 - [ ] `docs/development-plan-v0.6.md` (~310-315).
-- [ ] `CHANGELOG.md` (Changed, Added); статусные строки ADR 0004 и 0010 со ссылкой на ADR 0017.
+- [ ] `CHANGELOG.md` (Changed, Added); статусные строки ADR 0004 и 0028 со ссылкой на ADR 0017.
 - [ ] `npx --yes markdownlint-cli2@0.23.2 "**/*.md"`, `git diff --check`.
 - [ ] Commits: `feat(ui): ...`, `docs: ...` (явные пути).
 

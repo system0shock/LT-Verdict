@@ -19,8 +19,8 @@
 
 ## Результат подготовки 2026-09-22
 
-Выполнено в границе локальной подготовки: [отчёт](../../mvp-readiness-2026-09-22.md),
-[чеклист отдельной приёмки](../../mvp-acceptance-checklist.md).
+Выполнено в границе локальной подготовки: [отчёт](../../../mvp-readiness-2026-09-22.md),
+[чеклист отдельной приёмки](../../../mvp-acceptance-checklist.md).
 381 JVM tests (0 failures/errors, 9 skipped), 47 browser scenarios, Python9,
 Node relay, sanitized WindowsPowerShell5/Docker fake preflight и installDist прошли.
 

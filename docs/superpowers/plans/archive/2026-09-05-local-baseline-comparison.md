@@ -12,7 +12,7 @@
 
 **Tech Stack:** Kotlin/JDK 21, kotlinx.serialization, Vue 3, JUnit, Playwright.
 
-**Spec:** [ADR 0004](../../adr/0004-local-baseline-selection.md), пользовательские
+**Spec:** [ADR 0004](../../../adr/0004-local-baseline-selection.md), пользовательские
 решения 2026-09-05 и delta design §18.3.
 
 ## Global Constraints

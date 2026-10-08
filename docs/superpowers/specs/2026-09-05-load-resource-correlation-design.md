@@ -32,7 +32,7 @@ Matching windows не доказывает одинаковые условия, 
 UNCONFIRMED/USER_CONFIRMED из existing selection. Нет population regression claim.
 
 Точный контракт и тестовые literals — в
-[implementation plan](../plans/2026-09-05-load-resource-correlation.md).
+[implementation plan](../plans/archive/2026-09-05-load-resource-correlation.md).
 Отложенные методы и условия включения — в
 [методической очереди](../../statistical-method-roadmap.md).
 

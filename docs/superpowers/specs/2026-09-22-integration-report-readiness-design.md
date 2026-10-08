@@ -1,7 +1,7 @@
 # Integration and report readiness design
 
 **Статус:** scoped design для плана
-[`2026-09-21-mvp-acceptance-readiness.md`](../plans/2026-09-21-mvp-acceptance-readiness.md).
+[`2026-09-21-mvp-acceptance-readiness.md`](../plans/archive/2026-09-21-mvp-acceptance-readiness.md).
 
 ## Граница
 

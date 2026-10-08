@@ -240,6 +240,6 @@ rollup display, устаревших completion/bucket responses и очистк
 компонентах; regression tests проходят. Новых dependencies и public schemas нет.
 
 Linux performance gate prerequisite прошёл три 10M-row runs с одинаковым SHA-256;
-цифры и ограничения среды записаны в [Stage 1 report](../../milestones/stage-1.md).
+цифры и ограничения среды записаны в [Stage 1 report](../../../milestones/stage-1.md).
 Это локальное доказательство, не GitHub CI. Ветки не опубликованы, Stage 1
 остаётся `GATE_PENDING`, пользовательская приёмка и полный MVP не объявлены.

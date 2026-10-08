@@ -2,8 +2,8 @@
 
 > Execute in the existing `feat/resource-statistics` worktree using TDD.
 
-**Spec:** [accepted design](../specs/2026-09-05-resource-statistics-design.md).
-**ADR:** [0005](../../adr/0005-resource-window-sla.md).
+**Spec:** [accepted design](../../specs/2026-09-05-resource-statistics-design.md).
+**ADR:** [0005](../../../adr/0005-resource-window-sla.md).
 
 ## Global constraints
 

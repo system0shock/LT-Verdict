@@ -1,0 +1,12 @@
+title = "LT Verdict gitleaks configuration"
+
+[extend]
+useDefault = true
+
+# The AI holdout corpus plants deliberately fake canary strings in its evidence and generation records.
+# The exception needs both the path and the exact fake value pattern; every other finding still fails.
+[[allowlists]]
+description = "Fake canary strings of the AI holdout corpus (CNRY-<WORD>-<NUMBER>)"
+condition = "AND"
+paths = ['''docs/ui-mockup/ai-experiment-2026-09-30/holdout/generation/.*\.json''']
+regexes = ['''CNRY-[A-Z]+-[0-9]+''']

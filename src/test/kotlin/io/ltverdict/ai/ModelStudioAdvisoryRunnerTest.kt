@@ -96,10 +96,28 @@ class ModelStudioAdvisoryRunnerTest {
         assertEquals(emptyList<String>(), settings.extraArguments)
         assertEquals("bash", settings.bash)
         assertEquals(sha, settings.sha256)
+        assertEquals(emptyList<String>(), settings.prefixArguments)
+        // A bare command name is accepted; the pin is optional.
+        val byName =
+            DirectRunnerSettings.fromEnvironment(
+                base + ("LT_VERDICT_AI_LOCAL_QWEN_CMD" to "gigacode") - "LT_VERDICT_AI_LOCAL_QWEN_SHA256",
+            )!!
+        assertEquals("gigacode", byName.command)
+        assertNull(byName.sha256)
+        assertEquals(
+            listOf("--no-install", "gigacode"),
+            DirectRunnerSettings
+                .fromEnvironment(
+                    base + ("LT_VERDICT_AI_LOCAL_QWEN_CMD" to "npx") + ("LT_VERDICT_AI_LOCAL_QWEN_PREFIX_ARGS" to "--no-install  gigacode"),
+                )!!
+                .prefixArguments,
+        )
         for (broken in listOf(
             base - "LT_VERDICT_AI_LOCAL_QWEN_CMD",
-            base + ("LT_VERDICT_AI_LOCAL_QWEN_CMD" to "cli.js"),
-            base - "LT_VERDICT_AI_LOCAL_QWEN_SHA256",
+            base + ("LT_VERDICT_AI_LOCAL_QWEN_CMD" to "rel/cli.js"),
+            base + ("LT_VERDICT_AI_LOCAL_QWEN_CMD" to "gigacode ${'$'}(id)"),
+            base + ("LT_VERDICT_AI_LOCAL_QWEN_PREFIX_ARGS" to "a;b"),
+            base + ("LT_VERDICT_AI_LOCAL_QWEN_PREFIX_ARGS" to (1..17).joinToString(" ") { "a$it" }),
             base + ("LT_VERDICT_AI_LOCAL_QWEN_SHA256" to "abc"),
             base + ("LT_VERDICT_AI_LOCAL_PASSTHROUGH_ENV" to "A B"),
             base + ("LT_VERDICT_AI_LOCAL_PASSTHROUGH_ENV" to "OK,1BAD"),
@@ -185,8 +203,11 @@ class ModelStudioAdvisoryRunnerTest {
             )
         }
 
-        fun result(host: String = "cli-builtin") =
-            """{"schema_version":"advisory-ai-runtime-result.v1","status":"SUCCESS","duration_ms":12,"exit_code":0,"provider_request_count":null,"prompt_sha256":"$PROMPT_SHA256","endpoint_host":"$host"}"""
+        fun result(
+            host: String = "cli-builtin",
+            artifact: String = sha,
+        ) =
+            """{"schema_version":"advisory-ai-runtime-result.v1","status":"SUCCESS","duration_ms":12,"exit_code":0,"provider_request_count":null,"prompt_sha256":"$PROMPT_SHA256","endpoint_host":"$host","runner_artifact_sha256":"$artifact"}"""
         val environment =
             System.getenv() +
                 mapOf(
@@ -224,6 +245,11 @@ class ModelStudioAdvisoryRunnerTest {
 
         // The marker must be the direct one, and the CLI output must show the requested tool set and carry the advice.
         launcher(result(host = "gw.internal:443"))
+        assertEquals(RunnerOutcome.Failed(AdviceFailure.PROCESS_FAILED), runner.invoke(EVIDENCE))
+        // The hash the launcher measured must be the pin when there is one; it is missing or malformed otherwise.
+        launcher(result(artifact = "ef".repeat(32)))
+        assertEquals(RunnerOutcome.Failed(AdviceFailure.PROCESS_FAILED), runner.invoke(EVIDENCE))
+        launcher(result(artifact = "nothash"))
         assertEquals(RunnerOutcome.Failed(AdviceFailure.PROCESS_FAILED), runner.invoke(EVIDENCE))
         for (bad in listOf(
             cliOutput(tools = """["structured_output","read_file"]"""),

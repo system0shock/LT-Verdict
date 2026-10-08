@@ -60,8 +60,9 @@ stdin. Отличия: нет `--openai-base-url`; `--auth-type` не перед
 
 | Переменная | Назначение |
 | --- | --- |
-| `LT_VERDICT_AI_LOCAL_QWEN_CMD` | обязательна: абсолютный путь к исполняемому файлу CLI (`.js`, `.mjs`, `.cjs` запускаются через Node) |
-| `LT_VERDICT_AI_LOCAL_QWEN_SHA256` | обязательна: SHA-256 этого файла, закреплённый оператором |
+| `LT_VERDICT_AI_LOCAL_QWEN_CMD` | обязательна: абсолютный путь к исполняемому файлу CLI (`.js`, `.mjs`, `.cjs` запускаются через Node) или имя команды без `/` (поправка 2026-10-08) |
+| `LT_VERDICT_AI_LOCAL_QWEN_SHA256` | необязательна (поправка 2026-10-08): SHA-256 запускаемого файла; если задана, должна совпасть |
+| `LT_VERDICT_AI_LOCAL_QWEN_PREFIX_ARGS` | необязательна (поправка 2026-10-08): токены через пробел (правила `EXTRA_ARGS`, до 16), ставятся перед флагами CLI: `--no-install gigacode` для `npx` |
 | `LT_VERDICT_AI_LOCAL_PASSTHROUGH_ENV` | имена переменных окружения через запятую, которые копируются в окружение CLI (по умолчанию ни одной) |
 | `LT_VERDICT_AI_LOCAL_CWD` | рабочий каталог CLI (по умолчанию пустой временный) |
 | `LT_VERDICT_AI_LOCAL_NODE` | путь к Node для `.js` (по умолчанию `node`) |
@@ -122,6 +123,33 @@ Launcher сверяет SHA-256 файла CLI с закреплённым оп�
 `invalid/direct-with-provider-requests.json`,
 `invalid/container-with-other-runner-version.json`.
 
+### Поправка 2026-10-08: команда по имени, пин необязателен
+
+Владелец 2026-10-08: бинарник на боевом стенде запускать вряд ли получится, лучше
+запускать через команду `qwen` или `gigacode`. Изменения (аддитивные, контракт
+`ai-advice.v1` не менялся):
+
+- `LT_VERDICT_AI_LOCAL_QWEN_CMD` принимает либо абсолютный путь, либо имя команды
+  `^[A-Za-z0-9][A-Za-z0-9._+-]{0,63}$` (`gigacode`, `qwen`, `npx`). Имя launcher
+  разрешает через `command -v` по `PATH` оператора до `env -i`; найденный файл
+  хэшируется и запускается по найденному пути (симлинки разворачиваются при
+  чтении). Не найдено: `UNAVAILABLE/RUNNER_ARTIFACT_MISSING`. `PATH` уходит в CLI,
+  поэтому shim с `#!/usr/bin/env node` работает.
+- `LT_VERDICT_AI_LOCAL_QWEN_SHA256` необязателен. Если задан, проверяется, как
+  раньше (`RUNNER_ARTIFACT_MISMATCH`). Если нет, launcher считает SHA-256
+  запускаемого файла и возвращает его в результате; Kotlin пишет это значение в
+  `runner_artifact_sha256`, то есть поле остаётся честным значением фактически
+  запущенного файла, но с пином не сверяется.
+- `LT_VERDICT_AI_LOCAL_QWEN_PREFIX_ARGS`: токены перед флагами CLI, чтобы
+  запускать `npx --no-install gigacode` или `gigacode qwen` без обёртки. Хэшируется
+  первый файл (`npx`, `gigacode`), а не пакет за ним.
+
+Почему отсутствие пина приемлемо: контур он-прем без внешней сети, команда берётся
+из `PATH` пользователя, который сам запускает `ltv`, и тот же пользователь и так
+мог подменить файл между запусками; пин защищал только от подмены файла при
+неизменном пути, а имя команды само зависит от `PATH`. Прозрачность сохранена
+фактическим хэшем в провенансе. Пин остаётся рекомендованным там, где он возможен.
+
 ## Что теряется относительно ADR 0010, 0021, 0023
 
 - Сетевая изоляция Qwen (внутренняя сеть Docker, read-only root, лимиты): CLI
@@ -164,7 +192,8 @@ GigaCode после ручной авторизации держит выбор 
 
 ```bash
 export LT_VERDICT_AI_RUNNER_MODE=local
-export LT_VERDICT_AI_LOCAL_QWEN_CMD=/opt/gigacode/gigacode
+export LT_VERDICT_AI_LOCAL_QWEN_CMD=gigacode                          # имя команды из PATH или абсолютный путь
+# необязательно (рекомендуется, где возможно):
 export LT_VERDICT_AI_LOCAL_QWEN_SHA256=<64 hex-символа, вычислены один раз: sha256sum /opt/gigacode/gigacode>
 export LT_VERDICT_AI_LOCAL_AUTH_TYPE=qwen-oauth                   # способ входа CLI; без него Qwen Code с --bare не стартует
 export LT_VERDICT_AI_MODELS_FILE=/etc/lt-verdict/ai-models.json   # слаг модели обязателен

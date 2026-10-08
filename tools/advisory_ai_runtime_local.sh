@@ -7,12 +7,12 @@
 set -u
 set -m
 
-evidence="" output="" result="" cancel="" cmd="" sha256="" node_cmd="" cwd="" passthrough="" auth_type="" omit_bare="0" extra_args="" model="" deadline_arg=""
+evidence="" output="" result="" cancel="" cmd="" sha256="" node_cmd="" cwd="" passthrough="" auth_type="" omit_bare="0" extra_args="" prefix_args="" actual_sha="" model="" deadline_arg=""
 while [ $# -ge 2 ]; do
   case "$1" in
     --evidence-path) evidence="$2" ;; --output-path) output="$2" ;; --result-path) result="$2" ;; --cancel-path) cancel="$2" ;;
     --cmd) cmd="$2" ;; --sha256) sha256="$2" ;; --node) node_cmd="$2" ;; --cwd) cwd="$2" ;;
-    --passthrough) passthrough="$2" ;; --deadline) deadline_arg="$2" ;; --auth-type) auth_type="$2" ;; --omit-bare) omit_bare="$2" ;; --extra-args) extra_args="$2" ;; --model) model="$2" ;;
+    --passthrough) passthrough="$2" ;; --deadline) deadline_arg="$2" ;; --auth-type) auth_type="$2" ;; --omit-bare) omit_bare="$2" ;; --extra-args) extra_args="$2" ;; --prefix-args) prefix_args="$2" ;; --model) model="$2" ;;
     *) ;;
   esac
   shift 2
@@ -68,7 +68,7 @@ write_result() {
   local exit_code=1; [ "$success" = true ] && exit_code=0
   local prompt_json="null"; [ -n "$prompt_sha" ] && prompt_json="\"$prompt_sha\""
   local extra=""
-  [ "$success" = true ] && extra=",\"endpoint_host\":\"cli-builtin\""
+  [ "$success" = true ] && extra=",\"endpoint_host\":\"cli-builtin\",\"runner_artifact_sha256\":\"$actual_sha\""
   printf '{"schema_version":"advisory-ai-runtime-result.v1","status":"%s","duration_ms":%s,"exit_code":%s,"failure_code":%s,"unavailable_reason":%s,"cleanup_incomplete":%s,"stage":"%s","provider_request_count":null,"prompt_sha256":%s%s}' \
     "$status" "$duration" "$exit_code" "$failure" "$unavailable_json" "$cleanup_incomplete" "$stage" "$prompt_json" "$extra" >"$result"
 }
@@ -89,8 +89,19 @@ run() {
       [[ "$token" =~ ^[A-Za-z0-9._:/=@,+-]{1,200}$ ]] || return 0
     done
   fi
-  [[ "$sha256" =~ ^[0-9a-fA-F]{64}$ ]] || return 0
-  sha256="$(printf '%s' "$sha256" | tr 'A-F' 'a-f')"
+  # The pin is optional (ADR 0027, amendment): when it is given it must match, otherwise the hash of the file actually started is reported.
+  if [ -n "$sha256" ]; then
+    [[ "$sha256" =~ ^[0-9a-fA-F]{64}$ ]] || return 0
+    sha256="$(printf '%s' "$sha256" | tr 'A-F' 'a-f')"
+  fi
+  local prefix=()
+  if [ -n "$prefix_args" ]; then
+    IFS=' ' read -r -a prefix <<<"$prefix_args"
+    [ "${#prefix[@]}" -le 16 ] || return 0
+    for token in "${prefix[@]}"; do
+      [[ "$token" =~ ^[A-Za-z0-9._:/=@,+-]{1,200}$ ]] || return 0
+    done
+  fi
   local names=() name
   if [ -n "$passthrough" ]; then
     IFS=',' read -r -a names <<<"$passthrough"
@@ -99,6 +110,11 @@ run() {
     done
   fi
   [ -n "$cmd" ] || { unavailable RUNNER_ARTIFACT_MISSING; return 0; }
+  # A bare command name is resolved here, before env -i, through the PATH of the operator; the file found is what is hashed and started.
+  if [[ "$cmd" =~ ^[A-Za-z0-9][A-Za-z0-9._+-]{0,63}$ ]]; then
+    cmd="$(command -v -- "$cmd" 2>/dev/null)" || { unavailable RUNNER_ARTIFACT_MISSING; return 0; }
+    [ -f "$cmd" ] || { unavailable RUNNER_ARTIFACT_MISSING; return 0; }
+  fi
   cmd="$(unix_path "$cmd")"
 
   stage=validate_artifacts
@@ -107,7 +123,8 @@ run() {
   [ -f "$prompt" ] && [ -f "$schema" ] || { unavailable RUNNER_ARTIFACT_MISSING; return 0; }
   [ -f "$cmd" ] || { unavailable RUNNER_ARTIFACT_MISSING; return 0; }
   # The operator pins the artifact by its SHA-256 (ADR 0027); the version is not pinned, the init event is checked afterwards.
-  [ "$(sha256_of "$cmd")" = "$sha256" ] || { unavailable RUNNER_ARTIFACT_MISMATCH; return 0; }
+  actual_sha="$(sha256_of "$cmd")"
+  [ -z "$sha256" ] || [ "$actual_sha" = "$sha256" ] || { unavailable RUNNER_ARTIFACT_MISMATCH; return 0; }
   local runner=()
   case "$cmd" in
     *.js|*.mjs|*.cjs)
@@ -117,6 +134,7 @@ run() {
       [ -x "$cmd" ] || { unavailable RUNNER_ARTIFACT_MISSING; return 0; }
       runner=("$cmd") ;;
   esac
+  [ "${#prefix[@]}" -eq 0 ] || runner+=("${prefix[@]}")
 
   root="$(mktemp -d "$(dirname "$result")/ltv-ai-local.XXXXXX")" || return 0
   mkdir -p "$root/work" "$root/tmp"

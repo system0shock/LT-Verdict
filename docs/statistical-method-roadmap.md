@@ -22,7 +22,7 @@
 | Pearson | Нужна оценка именно линейной зависимости/модели в исходных единицах | Не дополнительный голос за Spearman; чувствительность к выбросам и общему тренду |
 | Kendall tau-b | Нужна проверка ранговой согласованности, особенно при ties | Добавлять при конкретном отличии пользы; не включать три коэффициента в сводку |
 | PELT / change-point segmentation | Ручных ступеней недостаточно; нужны границы режимов | Penalty/minimum segment length, автокорреляция и null-калибровка; худший случай O(n²) |
-| Кусочная load-response regression | Где начинается knee, как меняется отклик на заданную нагрузку | Диагностический knee не заменяет verified SLA capacity |
+| Кусочная load-response regression | Где начинается knee, как меняется отклик на заданную нагрузку | Диагностический knee не заменяет verified SLA capacity. Первая версия `piecewise-hinge-ln-p95.v1` (ADR 0026, Proposed, не откалибровано): ломаная по ln(p95) и нагрузке ступеней, интервал между ступенями или отказ; доля ошибок и калибровка остаются кандидатами |
 | Block bootstrap effect intervals | Нужна временная неопределённость эффекта в сохранённых рядах | Не оценивает межпрогонную изменчивость по двум runs; нужны block-size sensitivity и calibration |
 | Block permutation + Holm | Нужны обоснованные inferential claims для выбранных pairs/lags | Fitted residuals и nonstationarity; Holm не исправляет неправильный null; учитывать весь поиск лагов |
 | TTS | Нужен тест stationary unconditional dependence | Гарантии нельзя переносить на conditional fitted residuals автоматически |

@@ -64,6 +64,9 @@ internal fun analysisIdentity(
             capacity?.let {
                 put("capacity_plan_sha256", it.semanticSha256)
                 put("capacity_plan_version", "capacity-plan.v1")
+                // ADR 0026: a top-level binding only, like pod_view: the diagnostic evidence item changes the result bytes, but not
+                // modules, input_versions or limits, which are part of the comparability key.
+                put("capacity_knee_method", "piecewise-hinge-ln-p95.v1")
             }
             trend?.let {
                 put("trend_plan_sha256", it.semanticSha256)

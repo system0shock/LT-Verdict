@@ -1,6 +1,7 @@
 package io.ltverdict.core
 
 import io.ltverdict.ingest.RunValidity
+import io.ltverdict.metrics.NormalizedMetrics
 import io.ltverdict.metrics.UtcLoadCell
 import io.ltverdict.metrics.UtcLoadMetrics
 import kotlinx.serialization.json.JsonNull
@@ -28,6 +29,7 @@ internal fun evaluateCapacity(
     utcLoad: UtcLoadMetrics,
     validity: RunValidity,
     windowPolicy: PolicyEvaluation,
+    windowMetrics: Map<String, NormalizedMetrics>? = null,
     checkCancelled: () -> Unit = {},
 ): CapacityAnalysis {
     val summaries = windowPolicy.evidence.filter { it.string("type") == "window_policy_summary" }.associateBy { it.string("window_id") }
@@ -66,7 +68,37 @@ internal fun evaluateCapacity(
             put("type", "capacity_summary")
             capacityJson.forEach { (name, value) -> put(name, value) }
         }
-    return CapacityAnalysis(policyVerdict, capacityJson, listOf(summary), reasons)
+    // ADR 0026: a diagnostic evidence item after the summary; it does not touch the bounds, the verdict or capacity_summary.
+    val knee = windowMetrics?.let { capacityKnee(plan, evaluations, validity, it) }
+    return CapacityAnalysis(policyVerdict, capacityJson, listOfNotNull(summary, knee), reasons)
+}
+
+private fun capacityKnee(
+    plan: CapacityPlanV1,
+    evaluations: List<StageEvaluation>,
+    validity: RunValidity,
+    windowMetrics: Map<String, NormalizedMetrics>,
+): JsonObject {
+    val points =
+        evaluations.map { evaluation ->
+            val metrics = windowMetrics[evaluation.stage.evaluationWindowId]?.overall
+            if (evaluation.achieved == null ||
+                metrics == null ||
+                metrics.sampleCount == 0L ||
+                "CAPACITY_INSUFFICIENT_SAMPLES" in evaluation.reasons
+            ) {
+                null
+            } else {
+                KneePoint(evaluation.stage.id, evaluation.achieved, metrics.latency.p95Millis)
+            }
+        }
+    val refusal =
+        when {
+            validity != RunValidity.VALID -> "KNEE_RUN_NOT_VALID"
+            points.any { it == null } -> "KNEE_STAGE_DATA_MISSING"
+            else -> null
+        }
+    return capacityKneeEvidence(plan.loadAxis, points.filterNotNull(), refusal)
 }
 
 private data class StageEvaluation(

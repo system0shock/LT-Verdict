@@ -1,0 +1,221 @@
+{
+ "stage": "A",
+ "mode": "live",
+ "model": "deepseek-v4-flash-0731",
+ "tag": {
+  "phase": "holdout",
+  "attempt_id": "case-023-1-A-t1",
+  "arm": "A",
+  "stage": null,
+  "case": "case-023",
+  "rep": 1,
+  "try": 1
+ },
+ "retry_policy": "d2",
+ "qwen_exit": 0,
+ "wall_ms": 108903,
+ "relay": {
+  "schema_version": "advisory-ai-runtime-relay.v1",
+  "status": "FORWARDED_STRUCTURED_OUTPUT",
+  "received_request_count": 1,
+  "forwarded_request_count": 1,
+  "outcomes": [
+   "FORWARDED_STRUCTURED_OUTPUT"
+  ],
+  "retry_refused_reason": null,
+  "first_refused_reason": null,
+  "model_id": "deepseek-v4-flash-0731",
+  "retry_policy": "d2",
+  "requests": [
+   {
+    "ordinal": 1,
+    "forwarded": true,
+    "outcome": "FORWARDED_STRUCTURED_OUTPUT",
+    "provider_status": 200,
+    "latency_ms": 107579,
+    "usage": {
+     "prompt_tokens": 27541,
+     "total_tokens": 39108,
+     "completion_tokens": 11567,
+     "prompt_tokens_details": {
+      "cached_tokens": 1024
+     },
+     "completion_tokens_details": {
+      "reasoning_tokens": 8806
+     }
+    },
+    "model_returned": "deepseek-v4-flash-0731"
+   }
+  ],
+  "usage": {
+   "prompt_tokens": 27541,
+   "completion_tokens": 11567,
+   "total_tokens": 39108
+  },
+  "latency_ms": 107579
+ },
+ "relay_status": "FORWARDED_STRUCTURED_OUTPUT",
+ "usage": {
+  "prompt_tokens": 27541,
+  "completion_tokens": 11567,
+  "total_tokens": 39108
+ },
+ "latency_ms": 107579,
+ "retried": false,
+ "retry_refused_reason": null,
+ "status": "OK",
+ "note": null,
+ "output": {
+  "schema_version": "ai-advice-output.v1",
+  "summary": "The deterministic verdict is preserved: run validity VALID, analysis coverage COMPLETE, and policy_verdict NO_POLICY — no SLO was configured, so no PASS/FAIL assessment was produced; NO_POLICY is not a pass. The run was executed at a constant target of 20 requests/s (min=max=mean=median=20, sample_standard_deviation 0 in both windows). Overall the analysis shows 7200 samples, error_count 0, and latency p50/p95/p99 ≈ 203/236/239 ms (window p50: 201 ms reference vs 204 ms evaluation). Sixteen resource-vs-p95-latency correlation pairs were tested; 15 were BELOW_EFFECT and 4 were CANDIDATE, but only pair-14 (resource-14) was SELECTED by the Holm-adjusted bootstrap (holm_adjusted_p_value 0.016, max_p_value 0.001; best_lag_rho -0.487172887046 at best_lag_ms -10000; uncertainty NOT_ESTIMATED). The best lag sits at the boundary of the scanned range and clock_alignment is not_verified_by_core, so no lead/lag or causal interpretation is supported. The diagnostic summary reports anomalies_tested 0 and episodes_reported 0, which does not prove stability.",
+  "hypotheses": [
+   {
+    "rank": 1,
+    "observation": "Headline selection SELECTED pair-14 (resource-14 vs p95 latency) with holm_adjusted_p_value 0.016, max_p_value 0.001, status SELECTED; the pair record shows status CANDIDATE, best_lag_ms -10000 (edge of the scanned -10000..10000 range), best_lag_rho -0.487172887046, partial_rho -0.105232474746, raw_rho -0.105232474746, and uncertainty NOT_ESTIMATED; the correlation-candidate finding references this pair.",
+    "possible_explanation": "There may be a genuine negative association between resource-14 ratio and p95 latency, but the peak occurring at the boundary of the scanned lags, the unverified clock relationship, and the small difference between window latency aggregates (reference p50 201 ms vs evaluation p50 204 ms) make it plausible this is a truncated or aliased correlation rather than a proven time-shifted causal effect.",
+    "recommended_check": "Verify clock alignment/synchronization first, then rerun the correlation with lags extending beyond ±10000 ms and a longer evaluation window, inspecting the raw resource-14 series and adding uncertainty/confidence estimation since uncertainty is currently NOT_ESTIMATED.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/55",
+     "analysis-result.json#/evidence/71",
+     "analysis-result.json#/findings/0",
+     "analysis-result.json#/evidence/39",
+     "analysis-result.json#/evidence/40"
+    ]
+   },
+   {
+    "rank": 2,
+    "observation": "Pairs pair-04, pair-11, and pair-12 have status CANDIDATE with best_lag_rho values -0.342830910072, -0.322225144351, and 0.330827674706 respectively; their unadjusted max_p_value values are 0.049, 0.054, and 0.034, but Holm-adjusted p-values are 0.686, 0.702, and 0.51, so none was SELECTED.",
+    "possible_explanation": "These near-threshold correlations could be family-wise noise across the 16 hypothesis tests, or they could reflect one shared driver that moves several resource series together; none of them demonstrates a proven effect on p95 latency.",
+    "recommended_check": "Plot resource-04, resource-11, and resource-12 together with p95 latency, check for a common pattern or shared host effect, and run confirmatory tests with more data or a reduced hypothesis family.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/45",
+     "analysis-result.json#/evidence/52",
+     "analysis-result.json#/evidence/53",
+     "analysis-result.json#/evidence/61",
+     "analysis-result.json#/evidence/68",
+     "analysis-result.json#/evidence/69"
+    ]
+   },
+   {
+    "rank": 3,
+    "observation": "The target load series is constant at 20 requests/s in both windows (min=max=mean=median=20, sample_standard_deviation 0), and every correlation pair lists reasons CONSTANT_CONTROL with controls_requested ['target'] but controls_used [].",
+    "possible_explanation": "Because load did not vary, its influence on latency cannot be estimated or controlled; observed correlations between resource ratios and latency could instead reflect internal scheduling, co-located workloads, or noise rather than load-driven effects.",
+    "recommended_check": "Rerun with stepped or randomized request rates so the target is non-constant and usable as a control, and capture co-located workload/process data for the service host.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/19",
+     "analysis-result.json#/evidence/36",
+     "analysis-result.json#/evidence/41"
+    ]
+   },
+   {
+    "rank": 4,
+    "observation": "Both window policy summaries (reference and evaluation) report verdict NO_POLICY with business_verdict NO_POLICY and resource_verdict NO_POLICY, and the analysis policy_verdict is NO_POLICY even though run validity is VALID and coverage is COMPLETE.",
+    "possible_explanation": "No SLO/policy was configured, so the pipeline could not assess compliance; NO_POLICY should not be interpreted as proof that the service met any performance or resource target.",
+    "recommended_check": "Introduce explicit policies (e.g., latency percentile thresholds, error-rate caps, resource utilization limits) with defined evaluation windows and rerun so outputs can be PASS/FAIL.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/37",
+     "analysis-result.json#/evidence/38",
+     "analysis-result.json#/policy_verdict"
+    ]
+   },
+   {
+    "rank": 5,
+    "observation": "The diagnostic summary reports anomalies_tested 0, episodes_reported 0, pairs_evaluable 16, pairs_tested 16, status COMPLETE, and uncertainty NOT_ESTIMATED.",
+    "possible_explanation": "Zero tested anomalies and zero reported episodes may reflect the detection configuration or anomaly candidate generation rather than a verified stable, healthy system; absence of findings is not evidence of stability, spare capacity, or low load.",
+    "recommended_check": "Review anomaly detection thresholds and sub-minute raw series, and require uncertainty or confidence estimates before drawing stability conclusions.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/73"
+    ]
+   },
+   {
+    "rank": 6,
+    "observation": "The overall summary shows sample_count 7200, error_count 0, latency_ms p50 203 / p95 236 / p99 239 / max 239, throughput_rps reported with numerator 7200000 and denominator 360233, all at a constant 20 requests/s target.",
+    "possible_explanation": "At this single constant load level the service shows no errors and tight latency, but this does not establish spare capacity or behavior under higher, bursty, or sustained load.",
+    "recommended_check": "Run stepped-load and soak tests across higher rates while monitoring aggregate and per-resource utilization with sub-second alignment.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0",
+     "analysis-result.json#/evidence/19",
+     "analysis-result.json#/evidence/36"
+    ]
+   }
+  ],
+  "recommendations": [
+   {
+    "rank": 1,
+    "action": "Verify and document clock alignment/synchronization across the load generator, application, and metric collection before interpreting any lag-shifted correlations.",
+    "rationale": "The resource-binding record states clock_alignment not_verified_by_core; without verified clocks, pair-14's best_lag_ms of -10000 cannot support a lead/lag or temporal causal relationship.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/2",
+     "analysis-result.json#/evidence/55",
+     "analysis-result.json#/evidence/71"
+    ]
+   },
+   {
+    "rank": 2,
+    "action": "Deep-dive pair-14: widen the lag scan beyond ±10000 ms, lengthen the window, inspect the raw resource-14 series, and produce uncertainty/confidence bounds instead of NOT_ESTIMATED.",
+    "rationale": "Pair-14 is the only SELECTED headline (Holm-adjusted p 0.016) but its peak rho occurs at the boundary of the scanned range, its status is CANDIDATE, and its uncertainty is NOT_ESTIMATED, so the association is not yet established.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/55",
+     "analysis-result.json#/evidence/71",
+     "analysis-result.json#/findings/0"
+    ]
+   },
+   {
+    "rank": 3,
+    "action": "Define and attach explicit performance/resource policies to the run so future verdicts can be PASS or FAIL rather than NO_POLICY.",
+    "rationale": "Both window policy summaries report NO_POLICY; a missing policy is not a pass and prevents any compliance assessment even though the run is VALID with COMPLETE coverage.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/37",
+     "analysis-result.json#/evidence/38",
+     "analysis-result.json#/policy_verdict"
+    ]
+   },
+   {
+    "rank": 4,
+    "action": "In future runs, vary the request rate (stepped or randomized) so the target series is non-constant and can be used as a control in partial correlations.",
+    "rationale": "The constant 20 requests/s target was dropped from all pairs as CONSTANT_CONTROL, leaving controls_used [] and the resource-latency correlations uncontrolled for load.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/19",
+     "analysis-result.json#/evidence/36",
+     "analysis-result.json#/evidence/41"
+    ]
+   },
+   {
+    "rank": 5,
+    "action": "Enable anomaly detection over sub-minute data and require uncertainty estimates rather than NOT_ESTIMATED before concluding stability.",
+    "rationale": "The diagnostic summary reports anomalies_tested 0 and episodes_reported 0 with uncertainty NOT_ESTIMATED; such an absence does not prove stability or spare capacity.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/73"
+    ]
+   },
+   {
+    "rank": 6,
+    "action": "Run load tests at higher and bursty rates while capturing latency and resource data with 1-second (or finer) alignment.",
+    "rationale": "The observed results (0 errors, p99 ≈ 239 ms) were obtained only at a constant 20 requests/s target over one 360 s span, so they do not establish headroom or saturation behavior.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0",
+     "analysis-result.json#/evidence/39",
+     "analysis-result.json#/evidence/40"
+    ]
+   }
+  ],
+  "caveats": [
+   "policy_verdict is NO_POLICY; a missing policy is not a pass, and no PASS/FAIL statement exists in this analysis.",
+   "clock_alignment is not_verified_by_core; lag values (e.g., pair-14 best_lag_ms -10000) cannot be used to infer temporal ordering or causality until clock relationships are verified.",
+   "Pair-14's best lag sits at the boundary of the scanned [-10000, 10000] ms range, so the true peak may lie outside the scanned range; its status is CANDIDATE with uncertainty NOT_ESTIMATED.",
+   "All correlation pairs report uncertainty NOT_ESTIMATED, sensitivity_without_achieved_rps null, and controls_used [] (the requested target control was dropped as CONSTANT_CONTROL); there are no confidence intervals and no partial control for load.",
+   "anomalies_tested 0 and episodes_reported 0 do not prove stability, spare capacity, low load, or absence of a problem.",
+   "Observations cover a single constant load of 20 requests/s over a total 360 s analysis (120 s reference window, 240 s evaluation window); results may not generalize to higher, bursty, or sustained load.",
+   "Raw from/to epoch_ms values are timestamps, not durations; the windows themselves are 120 s and 240 s as defined by the resource summaries (120 and 240 one-second cells).",
+   "The single headline-selected pair (pair-14) should be treated as a candidate correlation, not a proven cause of latency, given family-wise testing and the boundary lag."
+  ]
+ },
+ "schema": "ai-experiment-run.holdout.v1",
+ "case": "case-023",
+ "rep": 1,
+ "arm": "A",
+ "try": 1,
+ "attempt_id": "case-023-1-A-t1",
+ "model_id": "deepseek-v4-flash-0731",
+ "prompt_sha256": "69f215a1ad4ae678c82410ba7cf7daf171cd9c7ca0ef4626bba6977db0af4ef7"
+}

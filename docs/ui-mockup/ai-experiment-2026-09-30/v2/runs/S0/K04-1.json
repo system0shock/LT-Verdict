@@ -1,0 +1,125 @@
+{
+ "stage": "S0",
+ "mode": "live",
+ "model": "deepseek-v4-flash-0731",
+ "tag": {
+  "phase": "v2-pilot",
+  "stage": "S0",
+  "case": "K04",
+  "rep": 1,
+  "attempt": 1
+ },
+ "qwen_exit": 0,
+ "wall_ms": 47913,
+ "relay": {
+  "schema_version": "advisory-ai-runtime-relay.v1",
+  "status": "FORWARDED_STRUCTURED_OUTPUT",
+  "request_count": 1,
+  "usage": {
+   "prompt_tokens": 3052,
+   "total_tokens": 7502,
+   "completion_tokens": 4450,
+   "prompt_tokens_details": {
+    "cached_tokens": 1024
+   },
+   "completion_tokens_details": {
+    "reasoning_tokens": 3045
+   }
+  },
+  "latency_ms": 46642,
+  "model_returned": "deepseek-v4-flash-0731"
+ },
+ "relay_status": "FORWARDED_STRUCTURED_OUTPUT",
+ "usage": {
+  "prompt_tokens": 3052,
+  "total_tokens": 7502,
+  "completion_tokens": 4450,
+  "prompt_tokens_details": {
+   "cached_tokens": 1024
+  },
+  "completion_tokens_details": {
+   "reasoning_tokens": 3045
+  }
+ },
+ "latency_ms": 46642,
+ "status": "OK",
+ "note": null,
+ "output": {
+  "schema_version": "ai-advice-output.v1",
+  "summary": "The referenced JMeter JTL CSV analysis is VALID with COMPLETE analysis coverage (reasons empty) and a deterministic policy_verdict of PASS. Overall, 2623 samples are reported with 0 errors, an error rate of 0/2623, and latency p50 11ms, p95 46ms, p99 77ms, max 904ms. The only policy check in the evidence (overall error rate <= 0.01) reports status PASS with observed numerator 0, denominator 2623. Per-transaction summaries cover 437-438 samples each (add product to cart, cart, checkout, home, product, reset cart), all with 0 errors; the home transaction reports the highest p50 (27ms) and a max of 904ms that matches the overall maximum. No findings are listed. This advisory interprets the evidence literally, does not change the PASS verdict, and does not treat the absence of errors or the aggregate latency values as proof of stability or capacity.",
+  "hypotheses": [
+   {
+    "rank": 1,
+    "observation": "The overall metric summary reports 0 errors out of 2623 samples (error_rate_ratio 0/2623), and the policy check for overall-errors reports status PASS for observed error_rate_ratio <= threshold 0.01.",
+    "possible_explanation": "All sampled requests completed without a recorded application-level error during the sampled window, so the error-rate gate was satisfied.",
+    "recommended_check": "Confirm that the 2623 sampled requests cover the intended ramp/steady-state phases of the run, and inspect whether retries, client-side timeouts, or dropped samples could mask errors before relying on the zero-error result.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0",
+     "analysis-result.json#/evidence/7"
+    ]
+   },
+   {
+    "rank": 2,
+    "observation": "The home transaction metric summary reports p50 27ms and max 904ms, while the overall summary reports max 904ms; other transactions report lower maxes (75-444ms) and lower p50 values (3-13ms).",
+    "possible_explanation": "The home transaction may perform more server-side work than the other endpoints, or the 904ms value may be a single outlier/spike rather than representative behavior.",
+    "recommended_check": "Extract per-sample latencies for the home label from the JTL, inspect the distribution and timing around the 904ms sample, and check whether a similar maximum recurs across repeated runs.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0",
+     "analysis-result.json#/evidence/4"
+    ]
+   },
+   {
+    "rank": 3,
+    "observation": "The analyzed evidence contains one policy check (overall error rate <= 0.01) and no policy checks on latency or throughput, while the overall latency max is 904ms.",
+    "possible_explanation": "The run can satisfy the current error-rate gate even if latency targets are not enforced, because only the error-rate rule appears to have been evaluated.",
+    "recommended_check": "If latency or throughput SLOs exist, add explicit policy checks (e.g., p95/p99/max latency thresholds) to the analysis manifest and re-run to see whether the verdict changes.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0",
+     "analysis-result.json#/evidence/7"
+    ]
+   }
+  ],
+  "recommendations": [
+   {
+    "rank": 1,
+    "action": "Report the deterministic verdict exactly as PASS, citing the policy check observed error rate 0/2623 against threshold 0.01 and run validity VALID; do not alter the verdict based on this advice.",
+    "rationale": "The references state policy_verdict PASS, run_validity VALID, and policy check status PASS; advisory interpretation must preserve, not change, these outputs.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/7",
+     "analysis-result.json#/policy_verdict",
+     "analysis-result.json#/run_validity"
+    ]
+   },
+   {
+    "rank": 2,
+    "action": "Investigate the 904ms maximum latency observed in the home transaction before using this run for capacity or performance claims.",
+    "rationale": "The highest p50 (27ms) and the overall maximum (904ms) both come from the home label, and aggregate percentiles (overall p99 77ms) can mask a single outlier.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0",
+     "analysis-result.json#/evidence/4"
+    ]
+   },
+   {
+    "rank": 3,
+    "action": "Add latency and throughput policy checks to the analysis manifest if corresponding SLOs exist, since the evidence contains only the error-rate policy check.",
+    "rationale": "The current gate reports PASS based on errors alone; latency values up to 904ms are not enforced by any policy present in the evidence, so absence of such a check must not be read as a latency pass.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0",
+     "analysis-result.json#/evidence/7"
+    ]
+   }
+  ],
+  "caveats": [
+   "The PASS verdict and error-rate observations cover only the 2623 sampled requests in the provided JTL; behavior outside this sample, under higher load, longer runs, or different environments is not evidenced.",
+   "Zero errors in the sample does not prove stability, spare capacity, low load, or absence of defects; it only reflects the sampled requests.",
+   "Latency values are aggregate summaries (p50/p95/p99/max); the evidence contains no per-sample time series or timestamps, so spike timing, correlation with load phases, and any lead/lag or temporal causal ordering cannot be assessed from this evidence.",
+   "Only one policy check (overall error rate <= 0.01) is present in the evidence; the absence of latency/throughput checks is not a pass on those dimensions - missing policy is distinct from PASS.",
+   "analysis_coverage status COMPLETE refers to coverage of the analyzed run (reasons empty); it is not evidence of production coverage or of unmeasured endpoints.",
+   "Throughput values (throughput_rps) are present with a shared denominator (44986) across summaries, but their encoding was not reinterpreted here because no throughput policy check was evaluated."
+  ]
+ },
+ "schema": "ai-experiment-run.v2",
+ "phase": "pilot",
+ "case": "K04",
+ "rep": 1
+}

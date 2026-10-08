@@ -1,0 +1,73 @@
+[
+  {
+    "id": "R007",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T3",
+        "field": "#/hypotheses/4",
+        "quote": "with a large share of samples at the cap",
+        "why": "The evidence has only aggregate percentiles and no count of samples at a maximum or timeout cap."
+      }
+    ],
+    "required_facts_preserved": false,
+    "missing_facts": [
+      "run_validity is VALID"
+    ],
+    "usefulness": 3,
+    "notes": "Useful diagnostic actions, but it overstates latency-sample multiplicity and omits run validity."
+  },
+  {
+    "id": "R049",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T8",
+        "field": "#/hypotheses/6",
+        "quote": "The reference window had zero variance in db-queue",
+        "why": "The reference db-queue summary reports a minimum of 14.7 and a nonzero standard deviation, so it was not zero-variance."
+      },
+      {
+        "type": "T2",
+        "field": "#/caveats/3",
+        "quote": "overall sample counts (24000) equal the sums of the window samples, so samples in the final ~60 s are not reflected in the window summaries",
+        "why": "Whole-run and window counts have different scopes, so their coincident arithmetic totals cannot establish what happened in the unevaluated trailing run interval."
+      }
+    ],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 2,
+    "notes": "It contains several sound actions, but the false zero-variance claim and cross-scope count conclusion are misleading."
+  },
+  {
+    "id": "R057",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T8",
+        "field": "#/hypotheses/5",
+        "quote": "the reference db-queue series is constant",
+        "why": "The reference db-queue data has a 14.7 minimum and nonzero standard deviation despite its zero MAD."
+      },
+      {
+        "type": "T8",
+        "field": "#/recommendations/6",
+        "quote": "constant reference series such as db-queue",
+        "why": "db-queue is not constant in the reference window, so this recommendation is based on a false characterization."
+      }
+    ],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 3,
+    "notes": "The verdicts and operator checks are mostly accurate, but it incorrectly characterizes db-queue as constant."
+  },
+  {
+    "id": "R099",
+    "hard_defect": false,
+    "defects": [],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 5,
+    "notes": "Accurately preserves verdict, validity, coverage, key values, uncertainty, and actionable next checks."
+  }
+]

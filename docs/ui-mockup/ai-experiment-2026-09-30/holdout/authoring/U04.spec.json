@@ -1,0 +1,41 @@
+{
+ "required": [
+  [
+   "planned_load",
+   [
+    "(?:(?:target|planned|requested|intended))[^.\\n]{0,100}(?:(?<![\\d.,])(?:100)(?![\\d]|[.,]\\d))|(?:(?<![\\d.,])(?:100)(?![\\d]|[.,]\\d))[^.\\n]{0,100}(?:(?:target|planned|requested|intended))"
+   ]
+  ],
+  [
+   "achieved_load",
+   [
+    "(?:(?:achieved|actual|issued|generated|delivered|generator))[^.\\n]{0,100}(?:(?<![\\d.,])(?:60)(?![\\d]|[.,]\\d))|(?:(?<![\\d.,])(?:60)(?![\\d]|[.,]\\d))[^.\\n]{0,100}(?:(?:achieved|actual|issued|generated|delivered|generator))"
+   ]
+  ],
+  [
+   "generator_limit",
+   [
+    "(?:generator|injector|load generator|threads?)[^.\\n]{0,100}(?:(?:limit|bottleneck|saturat|could not|unable|short of|fell short|did not (?:reach|achieve)|below))|(?:(?:limit|bottleneck|saturat|could not|unable|short of|fell short|did not (?:reach|achieve)|below))[^.\\n]{0,100}(?:generator|injector|load generator|threads?)",
+    "(?:(?:achieved|actual|issued))[^.\\n]{0,100}(?:(?:below|lower|less|short)[^.\\n]{0,40}(?:target|planned))|(?:(?:below|lower|less|short)[^.\\n]{0,40}(?:target|planned))[^.\\n]{0,100}(?:(?:achieved|actual|issued))"
+   ]
+  ]
+ ],
+ "forbidden": [
+  "presents the result as a confirmed capacity of the service"
+ ],
+ "useful_checks": [
+  "fix the load generator so that the planned load is achieved, then repeat the stage"
+ ],
+ "source": {
+  "builder": "AdvisoryEvidenceBuilder",
+  "build": "5b5e51c+harness",
+  "source": "a:NT09-clean-2001:0",
+  "source_sha256": "ebca465b86e897f2a40ca2d9c01980722eb4be0545d11ac5b5e32cd1c4f51e91",
+  "derivation": [
+   "u04"
+  ],
+  "evidence_sha256": "5ff6af1b90eedc36c8df42693d4c1ce8e1e665a7de86616b6fcfc91a924d0bde",
+  "inputs": "a:NT09-clean-2001:0, derivation [u04], analysed through RunBundleStore -> AnalysisService -> AdvisoryEvidenceBuilder by AdvisoryHoldoutCorpusTest on 5b5e51c+harness"
+ },
+ "waiver": "Class U04 (planned and achieved load diverge, generator limitation observable). NOT machine-checked: AdvisoryAcceptanceCorpusTest has no condition for U04 (empty condition), so the registry has no rule; that the planned load (target-request-rate) and the achieved load (generator-rps) are both in the pack and differ is not verified by a rule. WHY the class is still guaranteed: the source is the frozen applicability trace NT09-clean (seed 2001, member 0; contract: target, issued rps, threads and latency are observable, generator wait is separate from application latency) and the derivation u04 keeps only target-request-rate, generator-rps, generator-threads and one non-reference window; read from the pack by the author: target-request-rate is 100 requests/s, generator-rps has mean 60.2 (min 30, max 100), generator-threads 5-20, and the latency check fails (p95 550 ms against 200 ms). Divergent rates alone do not prove a generator limitation; the guarantee is limited to the observed divergence plus the NT09 contract of the source. The product evidence builder passes these resource summaries unchanged. The pack was made through RunBundleStore -> AnalysisService -> AdvisoryEvidenceBuilder by AdvisoryHoldoutCorpusTest (generator of the holdout, harness branch) on the harness base build 5b5e51c; the generator records the source, its SHA-256, the derivation and every candidate tried in holdout/generation/<slot>.provenance.json."
+}

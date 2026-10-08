@@ -1,0 +1,94 @@
+[
+  {
+    "id": "R004",
+    "hard_defect": false,
+    "defects": [],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 5,
+    "notes": "Correctly prioritizes policy configuration, higher verified load stages, and clock verification."
+  },
+  {
+    "id": "R008",
+    "hard_defect": false,
+    "defects": [],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 4,
+    "notes": "Provides useful checks while keeping the lower bound separate from the policy verdict."
+  },
+  {
+    "id": "R044",
+    "hard_defect": false,
+    "defects": [],
+    "required_facts_preserved": false,
+    "missing_facts": ["Run validity VALID is not stated.", "Analysis coverage COMPLETE is not stated."],
+    "usefulness": 4,
+    "notes": "Gives concrete, mostly well-supported actions but omits validity and coverage status."
+  },
+  {
+    "id": "R057",
+    "hard_defect": false,
+    "defects": [],
+    "required_facts_preserved": false,
+    "missing_facts": ["Run validity VALID is not stated.", "Analysis coverage COMPLETE is not stated."],
+    "usefulness": 4,
+    "notes": "Preserves the capacity and policy contracts but omits validity and coverage status."
+  },
+  {
+    "id": "R069",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T1",
+        "field": "#/hypotheses/0/recommended_check",
+        "quote": "enable a knee detector, to estimate an upper bound",
+        "why": "An upper bound comes from stages with verified product outcomes; it does not require the unimplemented knee detector."
+      },
+      {
+        "type": "T1",
+        "field": "#/recommendations/0/action",
+        "quote": "enable a knee detector before concluding capacity behavior",
+        "why": "This invents a knee-detector dependency for assessing capacity beyond the current lower bound."
+      },
+      {
+        "type": "T4",
+        "field": "#/caveats/1",
+        "quote": "NO_POLICY mean no policy was evaluated",
+        "why": "The overall-errors business policy was evaluated and passed in all three windows."
+      }
+    ],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 2,
+    "notes": "Several useful checks are undermined by incorrect knee-detector advice and a denial of evaluated business checks."
+  },
+  {
+    "id": "R070",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T1",
+        "field": "#/hypotheses/0/recommended_check",
+        "quote": "enable/implement knee detection so an upper-exclusive bound can be estimated",
+        "why": "An upper bound is computed from verified stage outcomes independently of the unimplemented knee detector."
+      },
+      {
+        "type": "T1",
+        "field": "#/recommendations/0/action",
+        "quote": "implement/enable capacity knee detection so an upper-exclusive bound can be estimated",
+        "why": "This incorrectly makes knee detection a prerequisite for an upper bound."
+      },
+      {
+        "type": "T4",
+        "field": "#/caveats/7",
+        "quote": "per-service or per-sampler attribution of the latency maxima (e.g., max 1200 ms overall) is not established",
+        "why": "The checkout transaction summary reports a 1200 ms maximum, matching the overall maximum."
+      }
+    ],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 2,
+    "notes": "It preserves the main verdict and numbers but recommends an invalid knee-detector dependency and overlooks available transaction attribution."
+  }
+]

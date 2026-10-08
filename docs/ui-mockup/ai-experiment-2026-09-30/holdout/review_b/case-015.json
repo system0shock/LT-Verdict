@@ -1,0 +1,102 @@
+[
+  {
+    "id": "R003",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T7",
+        "field": "#/summary",
+        "quote": "Because no policy is configured, the verdict is NO_POLICY",
+        "why": "NO_POLICY proves only that no applicable rule was evaluated, not that no policy was configured."
+      },
+      {
+        "type": "T7",
+        "field": "#/hypotheses/4/possible_explanation",
+        "quote": "No SLO/threshold policy appears to be configured",
+        "why": "The evidence cannot establish whether policies exist but are inapplicable versus are absent."
+      },
+      {
+        "type": "T4",
+        "field": "#/caveats/4",
+        "quote": "no data before/after the window is present",
+        "why": "The evidence includes whole-run metrics and states that the run extends 230 ms beyond the evaluation window."
+      }
+    ],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 3,
+    "notes": "The verdict and measurements are reported accurately, but it overstates the cause of NO_POLICY."
+  },
+  {
+    "id": "R029",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T7",
+        "field": "#/summary",
+        "quote": "no resource or business policy existed",
+        "why": "NO_POLICY establishes no applicable evaluated rule, not that no policies existed."
+      },
+      {
+        "type": "T2",
+        "field": "#/hypotheses/2/possible_explanation",
+        "quote": "the 'target' series appears to represent a configured/synthetic load level or a different signal rather than the measured achieved throughput",
+        "why": "A resource-series mean and a transaction-throughput aggregate have no defined direct equivalence, so their differing values cannot establish this relationship."
+      },
+      {
+        "type": "T7",
+        "field": "#/recommendations/0/rationale",
+        "quote": "No policy existed",
+        "why": "The evidence does not distinguish absent policies from configured but inapplicable policies."
+      },
+      {
+        "type": "T7",
+        "field": "#/hypotheses/5/possible_explanation",
+        "quote": "no policy threshold existed",
+        "why": "NO_POLICY does not identify the absence of a threshold as its established cause."
+      }
+    ],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 3,
+    "notes": "It preserves the principal measurements and useful checks but makes unsupported claims about policy configuration and metric equivalence."
+  },
+  {
+    "id": "R111",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T8",
+        "field": "#/recommendations/1/rationale",
+        "quote": "a flat series cannot support a calibrated correlation estimate",
+        "why": "The reported value resource series is not flat: it has min 3, max 21, mean 12, and a positive slope; the evidence reports absent residual variation, not absent raw variation."
+      }
+    ],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 4,
+    "notes": "This is otherwise a well-scoped and evidence-based response, with one misleading characterization of the resource series."
+  },
+  {
+    "id": "R123",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T2",
+        "field": "#/hypotheses/1/observation",
+        "quote": "Metric summaries (overall and for the 'request' transaction) report ... over 700 samples in the evaluation window",
+        "why": "The overall and transaction metric summaries are whole-run scopes, not evaluation-window summaries, even though a separate window summary has matching counts."
+      },
+      {
+        "type": "T8",
+        "field": "#/hypotheses/3/possible_explanation",
+        "quote": "With a flat p95 latency series ... and non-varying resource values",
+        "why": "The evidence provides only aggregate latency percentiles and reports resource values varying from 3 to 21, so neither asserted time-series behavior is supported."
+      }
+    ],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 3,
+    "notes": "The core verdict guidance is sound, but it misstates metric scope and invents unsupported series behavior."
+  }
+]

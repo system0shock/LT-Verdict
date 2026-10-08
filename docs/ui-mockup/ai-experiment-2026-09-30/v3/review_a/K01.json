@@ -1,0 +1,109 @@
+[
+  {
+    "id": "R010",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T8",
+        "field": "#/hypotheses/1/observation",
+        "quote": "trimming 1 leading cell ... and 1 trailing cell ... from the snapshot window",
+        "why": "Those trimmed intervals are at the run boundaries; the snapshot extends 75,000 ms beyond each end of the evaluation window."
+      }
+    ],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 3,
+    "notes": "The actions are mostly useful, but the window description could misdirect coverage checks."
+  },
+  {
+    "id": "R019",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T7",
+        "field": "#/hypotheses/0/recommended_check",
+        "quote": "Only the first outcome would let coverage move off SOURCE_ACQUISITION_PARTIAL.",
+        "why": "A successful query returning error documents would also resolve the acquisition gap."
+      },
+      {
+        "type": "T2",
+        "field": "#/recommendations/6/rationale",
+        "quote": "The two low-median labels dominate the pooled p50 of 17 ms",
+        "why": "Their 12,448 samples cannot alone account for the median of 37,349 samples, and the pooled relationship is unverified."
+      },
+      {
+        "type": "T8",
+        "field": "#/recommendations/11/rationale",
+        "quote": "un-driven intervals may be included",
+        "why": "The resource evaluation window lies wholly inside the run, excluding the pre-run and post-run snapshot margins."
+      }
+    ],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 2,
+    "notes": "Detailed checks are undermined by incorrect coverage and window guidance."
+  },
+  {
+    "id": "R026",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T1",
+        "field": "#/caveats/0",
+        "quote": "only a configured policy can yield a resource PASS or FAIL",
+        "why": "The domain contract also allows required capacity to determine whether NO_POLICY applies."
+      }
+    ],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 3,
+    "notes": "The case analysis is useful, but its exclusive policy requirement could mislead configuration work."
+  },
+  {
+    "id": "R036",
+    "hard_defect": false,
+    "defects": [],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 5,
+    "notes": "It preserves the verdict and scopes while prioritizing supported, verifiable actions."
+  },
+  {
+    "id": "R040",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T3",
+        "field": "#/hypotheses/9/possible_explanation",
+        "quote": "a single 1092 ms sample",
+        "why": "The aggregates do not reveal how many samples reached the reported maximum."
+      },
+      {
+        "type": "T5",
+        "field": "#/caveats/9",
+        "quote": "Other components of the system ... are unobserved in this run.",
+        "why": "The evidence lists three resource entities but provides no system topology establishing other components."
+      }
+    ],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 3,
+    "notes": "Most checks are grounded, but the sample count and system structure are overstated."
+  },
+  {
+    "id": "R066",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T8",
+        "field": "#/hypotheses/5/recommended_check",
+        "quote": "If the whole run must be judged, set an explicit window or widen the margin and rerun.",
+        "why": "The snapshot already covers the whole run; widening its margin does not recover the run-edge intervals excluded from the evaluation window."
+      }
+    ],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 3,
+    "notes": "The evidence review is thorough, but one proposed window remedy would not address the stated gap."
+  }
+]

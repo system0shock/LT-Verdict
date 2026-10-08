@@ -1,0 +1,136 @@
+{
+ "stage": "S1",
+ "mode": "live",
+ "model": "deepseek-v4-flash-0731",
+ "tag": {
+  "phase": "v2-pilot",
+  "stage": "S1",
+  "case": "K10",
+  "rep": 1,
+  "attempt": 1
+ },
+ "qwen_exit": 0,
+ "wall_ms": 58715,
+ "relay": {
+  "schema_version": "advisory-ai-runtime-relay.v1",
+  "status": "FORWARDED_STRUCTURED_OUTPUT",
+  "request_count": 1,
+  "usage": {
+   "prompt_tokens": 3301,
+   "total_tokens": 9240,
+   "completion_tokens": 5939,
+   "prompt_tokens_details": {
+    "cached_tokens": 1024
+   },
+   "completion_tokens_details": {
+    "reasoning_tokens": 4365
+   }
+  },
+  "latency_ms": 57448,
+  "model_returned": "deepseek-v4-flash-0731"
+ },
+ "relay_status": "FORWARDED_STRUCTURED_OUTPUT",
+ "usage": {
+  "prompt_tokens": 3301,
+  "total_tokens": 9240,
+  "completion_tokens": 5939,
+  "prompt_tokens_details": {
+   "cached_tokens": 1024
+  },
+  "completion_tokens_details": {
+   "reasoning_tokens": 4365
+  }
+ },
+ "latency_ms": 57448,
+ "status": "OK",
+ "note": null,
+ "output": {
+  "schema_version": "ai-advice-output.v1",
+  "summary": "The analysis is VALID with COMPLETE coverage and returns a deterministic NO_POLICY verdict with no findings. Captured metrics show 0 errors across the overall run and all 7 JMeter transactions; overall p99 latency is 77 ms with a 904 ms max, and per-transaction p99s range from 7 ms (reset cart) to 96 ms (home). NO_POLICY means no capacity policy or required capacity was configured, so this run neither passes nor fails any capacity requirement, and this advice does not change that verdict. The observations below are hypotheses to test, not confirmed causes.",
+  "hypotheses": [
+   {
+    "rank": 1,
+    "observation": "analysis-result.json#/policy_verdict reports NO_POLICY while run validity is VALID and analysis coverage is COMPLETE; the findings array is empty.",
+    "possible_explanation": "No capacity policy (required capacity or bounds) was configured for this run, so the analysis had no policy requirement to evaluate. The absence of findings reflects the missing policy, not proof that the system is healthy or has spare capacity.",
+    "recommended_check": "Confirm whether a capacity policy with required capacity (for example latency percentile or throughput bounds) was intended for this test; if so, configure that policy and re-run so the product can emit PASS or FAIL. Do not treat the current run as a pass.",
+    "evidence_refs": [
+     "analysis-result.json#/policy_verdict",
+     "analysis-result.json#/run_validity",
+     "analysis-result.json#/analysis_coverage"
+    ]
+   },
+   {
+    "rank": 2,
+    "observation": "The overall latency max is 904 ms (p99 77 ms); the home transaction has the same 904 ms max with p99 96 ms, while other transactions max out between 75 and 444 ms.",
+    "possible_explanation": "A single or recurring tail-latency event during home requests, or a sampling artifact, could explain the 904 ms max, but the evidence does not establish its cause or recurrence, and with NO_POLICY there is no threshold to classify it as a problem.",
+    "recommended_check": "Inspect the raw JTL CSV for the samples at the 904 ms latency, check their timestamps against the load profile, and count how many samples exceed 100 ms to determine whether this is a single outlier or a persistent tail.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0",
+     "analysis-result.json#/evidence/4"
+    ]
+   },
+   {
+    "rank": 3,
+    "observation": "error_count is 0 and the error_rate_ratio numerator is 0 for the overall run and for every transaction metric summary.",
+    "possible_explanation": "All captured requests may have completed without application-level errors, or the load during the captured window stayed low enough that errors did not occur; zero errors in the captured samples does not by itself prove the absence of errors outside the sample or excess capacity.",
+    "recommended_check": "Compare the captured window against the full load profile (threads/concurrency and ramp) and confirm the load generator was not saturated so the sample window is representative.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0",
+     "analysis-result.json#/evidence/1"
+    ]
+   },
+   {
+    "rank": 4,
+    "observation": "The overall scope reports sample_count 2623, while per-transaction scopes report 437 or 438 samples; throughput_rps numerators (e.g., 2623000 overall) scale with those sample counts (sample_count x 1000) and share denominator 44986.",
+    "possible_explanation": "The overall and per-transaction metrics are separate scopes, so their counts are not directly comparable and their difference does not imply an inconsistency; scope or window definitions in how the JTL CSV was summarized may account for it.",
+    "recommended_check": "Review the scope and window definitions for overall versus per-transaction summaries in the analysis configuration before comparing counts or deriving rates.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0",
+     "analysis-result.json#/evidence/1"
+    ]
+   }
+  ],
+  "recommendations": [
+   {
+    "rank": 1,
+    "action": "Configure a capacity policy (with required capacity or bounds) if a PASS or FAIL product verdict is desired, then re-run the test so the policy can be evaluated. Keep the current NO_POLICY verdict unchanged until then.",
+    "rationale": "NO_POLICY is the deterministic verdict for a missing policy; per product rules, only a configured policy or required capacity can yield PASS or FAIL, and healthy-looking metrics do not convert NO_POLICY into PASS.",
+    "evidence_refs": [
+     "analysis-result.json#/policy_verdict",
+     "analysis-result.json#/run_validity"
+    ]
+   },
+   {
+    "rank": 2,
+    "action": "Inspect the tail of the latency distribution in the raw JTL CSV, focusing on the home transaction's 904 ms max and any samples above 100 ms.",
+    "rationale": "The overall and home maxima (904 ms) stand out against per-transaction p99s of 47-96 ms; determining whether this is one outlier or a persistent tail requires raw sample detail, which the aggregate summaries do not provide.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0",
+     "analysis-result.json#/evidence/4"
+    ]
+   },
+   {
+    "rank": 3,
+    "action": "Verify the scope and window definitions (overall versus per-transaction) and the clock/timestamp basis of the captured samples before drawing temporal, ordering, or rate conclusions from the metric summaries.",
+    "rationale": "The evidence mixes scopes with different sample counts and provides no clock verification, so lead/lag, ordering, or cross-scope rate comparisons would not be supported by this data.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0",
+     "analysis-result.json#/evidence/1",
+     "analysis-result.json#/analysis_coverage"
+    ]
+   }
+  ],
+  "caveats": [
+   "The verdict is NO_POLICY; this evidence contains no configured capacity policy or required capacity, so no capacity bound was evaluated. Missing policy is not a pass, and NO_POLICY cannot be turned into PASS by healthy-looking metrics.",
+   "Zero error_count applies only to the captured samples in each scope; it does not prove the absence of errors outside the captured window, nor does it prove stability or spare capacity.",
+   "Sample counts differ across scopes (overall 2623 versus per-transaction 437/438) and throughput_rps numerators/denominators appear to span different scopes; counts are only comparable within the same scope and window.",
+   "No findings were emitted and analysis coverage is COMPLETE over the available data; this does not by itself evidence that the system is healthy or that load was low.",
+   "Clock relationships were not verified in this evidence, so no lead/lag or temporal causal claim is supported; verify clocks before any such interpretation.",
+   "The throughput_rps metric is reported but its exact definition (for example what denominator 44986 represents) is not described in this evidence; treat any derived rates cautiously."
+  ]
+ },
+ "schema": "ai-experiment-run.v2",
+ "phase": "pilot",
+ "case": "K10",
+ "rep": 1
+}

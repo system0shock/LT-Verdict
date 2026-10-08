@@ -1,0 +1,244 @@
+{
+ "stage": "B",
+ "mode": "live",
+ "model": "deepseek-v4-flash-0731",
+ "tag": {
+  "phase": "holdout",
+  "attempt_id": "case-005-2-B-t1",
+  "arm": "B",
+  "stage": null,
+  "case": "case-005",
+  "rep": 2,
+  "try": 1
+ },
+ "retry_policy": "d2",
+ "qwen_exit": 0,
+ "wall_ms": 162326,
+ "relay": {
+  "schema_version": "advisory-ai-runtime-relay.v1",
+  "status": "FORWARDED_STRUCTURED_OUTPUT",
+  "received_request_count": 1,
+  "forwarded_request_count": 1,
+  "outcomes": [
+   "FORWARDED_STRUCTURED_OUTPUT"
+  ],
+  "retry_refused_reason": null,
+  "first_refused_reason": null,
+  "model_id": "deepseek-v4-flash-0731",
+  "retry_policy": "d2",
+  "requests": [
+   {
+    "ordinal": 1,
+    "forwarded": true,
+    "outcome": "FORWARDED_STRUCTURED_OUTPUT",
+    "provider_status": 200,
+    "latency_ms": 160811,
+    "usage": {
+     "prompt_tokens": 6616,
+     "total_tokens": 23274,
+     "completion_tokens": 16658,
+     "prompt_tokens_details": {
+      "cached_tokens": 1024
+     },
+     "completion_tokens_details": {
+      "reasoning_tokens": 13506
+     }
+    },
+    "model_returned": "deepseek-v4-flash-0731"
+   }
+  ],
+  "usage": {
+   "prompt_tokens": 6616,
+   "completion_tokens": 16658,
+   "total_tokens": 23274
+  },
+  "latency_ms": 160811
+ },
+ "relay_status": "FORWARDED_STRUCTURED_OUTPUT",
+ "usage": {
+  "prompt_tokens": 6616,
+  "completion_tokens": 16658,
+  "total_tokens": 23274
+ },
+ "latency_ms": 160811,
+ "retried": false,
+ "retry_refused_reason": null,
+ "status": "OK",
+ "note": null,
+ "output": {
+  "schema_version": "ai-advice-output.v1",
+  "summary": "The run is VALID, analysis coverage is COMPLETE, the overall policy_verdict is PASS, and no findings were flagged. The capacity summary reports a LOWER_BOUND of 297 users (load_axis users, unit count) with lower_inclusive 297 and upper_exclusive null; capacity_knee is null with knee_reason KNEE_DETECTOR_NOT_IMPLEMENTED. Three verified stages (targets 100/200/300 users, 5% tolerance) achieved p05_10s loads of 97/197/297 and each passed the business response_time_p95_ms <= 250 rule (observed 140 in every stage). The generator diagnostic CPU guard passed in all three stages. Each window summary shows business_verdict PASS and resource_verdict NO_POLICY, so the PASS is driven by the latency (business) rule, not by any resource SLA rule. Zero errors were recorded, but the analysis establishes only that capacity is at least 297 users; no upper capacity or knee estimate exists, and no required-capacity comparison is present in the input. Clock alignment is reported as not verified by core, which limits temporal interpretation.",
+  "hypotheses": [
+   {
+    "rank": 1,
+    "observation": "Across the three stage windows, the response_time_p95_ms policy checks each observed 140 against a 250 threshold and returned PASS, while the overall latency summary reports p50 130, p95 140, p99 140, max 1500 and error_count 0. The capacity summary records a LOWER_BOUND of 297 users with upper_exclusive null and capacity_knee null.",
+    "possible_explanation": "The identical p95 latency at achievable loads of roughly 100, 200, and 300 users is consistent with the system still being inside the latency SLA at 297 users, but it does not show where the limit lies. Because no stage above 300 users exists and the product provides no knee/upper estimate, the result supports only that capacity is at least 297 users, not a maximum.",
+    "recommended_check": "If an upper capacity figure is needed, run additional verified stages above 300 users under the same response_time_p95_ms rule and compare their observed p95 per step; otherwise record the result strictly as 'at least 297 users'.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/12",
+     "analysis-result.json#/evidence/14",
+     "analysis-result.json#/evidence/16",
+     "analysis-result.json#/evidence/0",
+     "analysis-result.json#/capacity_summary"
+    ]
+   },
+   {
+    "rank": 2,
+    "observation": "For each stage window, the load-generator active_users interval-mean series stayed within 3 units of its target (stage-1: min 97 max 100 vs target 100; stage-2: min 197 max 200 vs 200; stage-3: min 297 max 300 vs 300), with 30 observed cells and 0 missing cells in each; the capacity summary lists verified bound loads 97, 197, 297.",
+    "possible_explanation": "The generator appears to have delivered the requested load in every stage, so the LOWER_BOUND of 297 reflects load levels that were actually present on the system rather than nominal targets that were not reached.",
+    "recommended_check": "Cross-check JMeter JTL sample timestamps and per-bin sample counts against each active_users series (10-second bins) to confirm delivered load matches the generator series used for the bound.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/3",
+     "analysis-result.json#/evidence/5",
+     "analysis-result.json#/evidence/7",
+     "analysis-result.json#/capacity_summary"
+    ]
+   },
+   {
+    "rank": 3,
+    "observation": "The generator-cpu-guard diagnostic checks report PASS in all three stages with operator gt and threshold 0.85, while the generator cpu_used ratio series in those windows ranges 0.41-0.45 (min 0.41, mean 0.43, max 0.45).",
+    "possible_explanation": "The evidence does not state how PASS was determined for a gt 0.85 check against a series that never exceeds 0.85; the rule's comparison direction, metric, or unit may be defined differently than a literal 'cpu_used > 0.85' reading, or the stored threshold may represent a guard/alert condition whose healthy state is being below it.",
+    "recommended_check": "Inspect the generator-cpu-guard rule definition and the generator CPU series to confirm the intended semantics and unit; keep the rule's effect as diagnostic by contract.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/4",
+     "analysis-result.json#/evidence/9",
+     "analysis-result.json#/evidence/10",
+     "analysis-result.json#/evidence/11"
+    ]
+   },
+   {
+    "rank": 4,
+    "observation": "The resource binding reports clock_alignment 'not_verified_by_core' for the evaluation window from_epoch_ms 1767225600000 to_epoch_ms 1767226500000.",
+    "possible_explanation": "Without verified clock alignment between the load generator and any server-side or aggregation side of the telemetry, apparent timing relationships between load levels and latency cannot be ordered reliably in time.",
+    "recommended_check": "Verify clock alignment/skew between the generator host, the system under test, and the collection pipeline before using these windows for any lead/lag or temporal inference.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/2"
+    ]
+   },
+   {
+    "rank": 5,
+    "observation": "The overall and checkout transaction latency summaries both report max 1500 ms, p99 140 ms, p95 140 ms, p50 130 ms, error_count 0, and sample_count 3601.",
+    "possible_explanation": "There is at least one sample with latency far above the p99 (1500 ms vs 140 ms); its count and timing are not reported by these summaries, and it does not affect the p95-based policy verdicts, so its cause and location are unknown.",
+    "recommended_check": "Inspect the raw JTL output for samples near 1500 ms, note their timestamps and stage membership, and verify that the p95 aggregation/binning matches the stage policy windows.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0",
+     "analysis-result.json#/evidence/1"
+    ]
+   },
+   {
+    "rank": 6,
+    "observation": "The overall metric summary and the checkout transaction summary report identical sample_count (3601), latency percentiles (p50 130, p95 140, p99 140, max 1500), error_count (0), and throughput ratio (numerator 3601000, denominator 900500).",
+    "possible_explanation": "Checkout may be the only JMeter sampler contributing to this run, which would make overall and per-transaction summaries coincide; alternatively, other samplers exist but are not represented in this analysis.",
+    "recommended_check": "Confirm whether the JMeter test plan/JTL contains a single sampler, or obtain per-transaction summaries for every present label to interpret the overall and checkout summaries correctly.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0",
+     "analysis-result.json#/evidence/1"
+    ]
+   },
+   {
+    "rank": 7,
+    "observation": "All three window-policy summaries report business_verdict PASS and resource_verdict NO_POLICY; the policy checks present are the response_time_p95_ms latency rules and the diagnostic generator-cpu-guard checks.",
+    "possible_explanation": "No resource rule with effect sla applied to these windows, so the evaluated PASS is driven by the business latency rule; the LOWER_BOUND is therefore a latency-bound capacity value and does not encode any resource-side (e.g., CPU or memory) capacity constraint for the tested stages.",
+    "recommended_check": "If 'capacity' for this run should include resource constraints, configure an applicable resource rule with effect sla for the relevant stage windows and rerun; otherwise document that the bound is latency-defined only.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/13",
+     "analysis-result.json#/evidence/15",
+     "analysis-result.json#/evidence/17",
+     "analysis-result.json#/evidence/12",
+     "analysis-result.json#/evidence/9"
+    ]
+   }
+  ],
+  "recommendations": [
+   {
+    "rank": 1,
+    "action": "Document the capacity result as a lower bound: at least 297 users (LOWER_BOUND, lower_inclusive 297, unit count, load_axis users) met the evaluated latency policy.",
+    "rationale": "The verified stages (achieved p05_10s loads 97/197/297) all passed the response_time_p95_ms <= 250 rule, and no upper bound was computed (upper_exclusive null, knee not implemented); presenting 297 as a maximum would overstate the evidence.",
+    "evidence_refs": [
+     "analysis-result.json#/capacity_summary",
+     "analysis-result.json#/evidence/18",
+     "analysis-result.json#/evidence/12"
+    ]
+   },
+   {
+    "rank": 2,
+    "action": "If an upper capacity estimate is required, extend the test with additional verified load steps above 300 users under the same latency SLA rule, then re-read the bound.",
+    "rationale": "No data exists above 300 users, so the analysis cannot indicate how much higher capacity could go; only additional tested stages can extend the bound. Keep the generator diagnostic guard in effect and do not change its effect.",
+    "evidence_refs": [
+     "analysis-result.json#/capacity_summary",
+     "analysis-result.json#/evidence/7",
+     "analysis-result.json#/evidence/17"
+    ]
+   },
+   {
+    "rank": 3,
+    "action": "Verify clock alignment between the load generator host, the system under test, and the aggregation pipeline before interpreting any timing relationships in this run.",
+    "rationale": "The resource binding states clock_alignment 'not_verified_by_core'; without verified clocks, temporal or lead/lag conclusions are unsupported.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/2"
+    ]
+   },
+   {
+    "rank": 4,
+    "action": "Inspect the generator CPU series and the generator-cpu-guard rule definition to confirm what a PASS means for a gt 0.85 threshold, and keep the guard's effect diagnostic.",
+    "rationale": "The recorded cpu_used ratio (0.41-0.45) never exceeds 0.85 while the check status is PASS; the semantics/unit of the comparison should be confirmed before relying on the guard as a health signal, and a diagnostic guard is never an SLA or an upper bound.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/4",
+     "analysis-result.json#/evidence/9",
+     "analysis-result.json#/evidence/10",
+     "analysis-result.json#/evidence/11"
+    ]
+   },
+   {
+    "rank": 5,
+    "action": "Inspect the raw JTL for samples near the 1500 ms maximum latency and verify their stage membership and the p95 binning used by the policy checks.",
+    "rationale": "The summaries report max 1500 ms against p99 140 ms with zero errors; knowing where such samples fall (inside or outside evaluated windows) clarifies whether the p95-based PASS is robust.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0",
+     "analysis-result.json#/evidence/1",
+     "analysis-result.json#/evidence/12",
+     "analysis-result.json#/evidence/14",
+     "analysis-result.json#/evidence/16"
+    ]
+   },
+   {
+    "rank": 6,
+    "action": "Confirm whether the JMeter run contained only the checkout sampler, or collect per-transaction summaries for all labels.",
+    "rationale": "The overall and checkout summaries are identical (sample_count 3601, same percentiles), which is consistent with a single-sampler run but is not confirmed by the evidence.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0",
+     "analysis-result.json#/evidence/1"
+    ]
+   },
+   {
+    "rank": 7,
+    "action": "If capacity should be defined by resource constraints, add an applicable resource rule with effect sla for the stage windows and rerun; otherwise record that the bound is latency-defined only.",
+    "rationale": "Every window summary reports resource_verdict NO_POLICY, so no resource SLA rule contributed to the PASS; NO_POLICY is distinct from PASS and a healthy run does not convert it.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/13",
+     "analysis-result.json#/evidence/15",
+     "analysis-result.json#/evidence/17"
+    ]
+   }
+  ],
+  "caveats": [
+   "Clock alignment is 'not_verified_by_core' for the whole evaluation window, so this advisory makes no temporal, lead/lag, or causal inferences; verify clocks before any such analysis.",
+   "capacity_knee is null with knee_reason KNEE_DETECTOR_NOT_IMPLEMENTED. This is a fixed product limitation, not a defect of this run; no knee or upper capacity estimate is available, and no operator step can enable one.",
+   "All three stage windows report resource_verdict NO_POLICY; no resource rule with effect sla was evaluated. NO_POLICY is not PASS, and the reported window PASS derives from the business_verdict (response_time_p95_ms <= 250) rule.",
+   "The generator-cpu-guard checks are diagnostic by contract. PASS is a health note, not an SLA; per product rules a guard never creates an upper capacity bound and its effect should stay diagnostic.",
+   "The analysis contains no required-capacity value, so there is no comparison of required capacity against the 297 lower bound in this data.",
+   "The run window extends 500 ms beyond the evaluated window (run_to_epoch_ms 1767226500500 vs evaluation_to_epoch_ms 1767226500000) while the binding reports 0 dropped trailing cells/millis; the disposition of that 500 ms slice is not described.",
+   "The overall and checkout summaries are identical (sample_count 3601); whether other JMeter samplers existed is not shown, so single-sampler coverage is unverified.",
+   "Zero errors and an empty findings list do not prove stability, spare capacity, or absence of problems above the tested range; loads above 300 users were not exercised.",
+   "The latency summaries report max 1500 ms against p99 140 ms; the number, cause, and location of the high-latency samples are not reported."
+  ]
+ },
+ "schema": "ai-experiment-run.holdout.v1",
+ "case": "case-005",
+ "rep": 2,
+ "arm": "B",
+ "try": 1,
+ "attempt_id": "case-005-2-B-t1",
+ "model_id": "deepseek-v4-flash-0731",
+ "prompt_sha256": "3c0f28bee6517c13c5c854615e7d3d59301893d9723880818e4034a32e9133bf"
+}

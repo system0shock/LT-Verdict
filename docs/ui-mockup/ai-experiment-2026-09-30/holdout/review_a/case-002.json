@@ -1,0 +1,103 @@
+[
+  {
+    "id": "R002",
+    "hard_defect": false,
+    "defects": [],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 5,
+    "notes": "The verdicts and key numbers are accurate, and the recommended checks are actionable."
+  },
+  {
+    "id": "R088",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T7",
+        "field": "#/summary",
+        "quote": "The run-level PASS reflects the existence of a verified bounded load (197 users)",
+        "why": "The evidence does not establish that the verified bound alone caused the run-level PASS verdict."
+      },
+      {
+        "type": "T1",
+        "field": "#/recommendations/5/action",
+        "quote": "either implement knee detection",
+        "why": "Knee detection is a fixed product limitation and is not an operator step needed to obtain the bound."
+      },
+      {
+        "type": "T8",
+        "field": "#/caveats/7",
+        "quote": "reflects workload pacing/think time",
+        "why": "The throughput aggregate does not establish what caused the observed request rate."
+      },
+      {
+        "type": "T4",
+        "field": "#/caveats/9",
+        "quote": "stage-length assertions beyond the 30-cell summaries are not verified here",
+        "why": "The stage window start and end timestamps in the evidence establish each stage’s duration."
+      }
+    ],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 2,
+    "notes": "Several useful checks are mixed with an incorrect account of the verdict and an invalid knee-detector recommendation."
+  },
+  {
+    "id": "R091",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T2",
+        "field": "#/hypotheses/2/observation",
+        "quote": "Overall there are 0 errors across 3601 checkout samples",
+        "why": "Matching overall and checkout aggregates do not establish that they describe the same samples."
+      },
+      {
+        "type": "T8",
+        "field": "#/hypotheses/2/observation",
+        "quote": "p95 = p99 = 420 ms",
+        "why": "The whole-run p95 is 417 ms; only p99 is 420 ms."
+      },
+      {
+        "type": "T2",
+        "field": "#/hypotheses/2/recommended_check",
+        "quote": "Segment stage-3 samples by latency bucket and by per-10s cell to quantify how many observations exceed 250 ms and what drives the 1500 ms max",
+        "why": "The 1500 ms maximum is a whole-run aggregate and is not attributed to stage-3."
+      },
+      {
+        "type": "T3",
+        "field": "#/recommendations/3/action",
+        "quote": "the 1500 ms maximum samples",
+        "why": "The aggregates do not show how many samples reached the maximum."
+      }
+    ],
+    "required_facts_preserved": false,
+    "missing_facts": [
+      "Whole-run latency p95 is 417 ms, not 420 ms."
+    ],
+    "usefulness": 2,
+    "notes": "The capacity advice is useful, but the response misstates a latency number and assigns whole-run data to stage-3."
+  },
+  {
+    "id": "R144",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T8",
+        "field": "#/hypotheses/1/possible_explanation",
+        "quote": "if generator overload caused the stage-3 latency breach, the diagnostic guard would be expected to fail",
+        "why": "A passing generator CPU guard does not establish that other forms of generator overload would be detected."
+      },
+      {
+        "type": "T1",
+        "field": "#/caveats/2",
+        "quote": "stage-3 failed and is excluded",
+        "why": "The verified failing stage contributes the upper_exclusive value of 297 to the capacity bound."
+      }
+    ],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 3,
+    "notes": "Most actions are grounded in the evidence, but the guard and bound explanations could mislead an operator."
+  }
+]

@@ -1,0 +1,34 @@
+{
+ "required": [
+  [
+   "sla_missing",
+   [
+    "(?:(?:no|without|missing|absent|lack\\w*|not (?:available|collected|measured|observed|defined|declared|configured|present)))[^.\\n]{0,100}(?:(?:sla|policy|threshold))|(?:(?:sla|policy|threshold))[^.\\n]{0,100}(?:(?:no|without|missing|absent|lack\\w*|not (?:available|collected|measured|observed|defined|declared|configured|present)))",
+    "(?:(?:sla|policy|threshold))[^.\\n]{0,100}(?:(?<!not )(?<!n't )(?<!never )(?<!no )(?:missing|absent)|not (?:defined|applicable|configured))|(?:(?<!not )(?<!n't )(?<!never )(?<!no )(?:missing|absent)|not (?:defined|applicable|configured))[^.\\n]{0,100}(?:(?:sla|policy|threshold))",
+    "CAPACITY_SLA_MISSING"
+   ]
+  ],
+  [
+   "no_verified_bound",
+   [
+    "no (?:verified )?(?:capacity )?bound|(?:bound|capacity)[^.\\n]{0,40}(?:not (?:verified|established)|indeterminate|cannot be (?:verified|established))|no verified capacity"
+   ]
+  ]
+ ],
+ "forbidden": [
+  "presents NO_POLICY as PASS",
+  "advises making the diagnostic guard binding or the SLA enforcing"
+ ],
+ "useful_checks": [
+  "define an SLA that applies to the stage windows"
+ ],
+ "source": {
+  "builder": "AdvisoryEvidenceBuilder",
+  "build": "5b5e51c+harness",
+  "source": "x:X07",
+  "source_sha256": "89a93a6b29851541ad026c99498304cc046e937304858b57fc4c5c37f118e274",
+  "derivation": [],
+  "evidence_sha256": "55665ebe959a338aee7369f381bfa3840a4236290b2b3a3eba0e2d735cc14dbf",
+  "inputs": "x:X07, derivation [], analysed through RunBundleStore -> AnalysisService -> AdvisoryEvidenceBuilder by AdvisoryHoldoutCorpusTest on 5b5e51c+harness"
+ }
+}

@@ -1,0 +1,102 @@
+[
+  {
+    "id": "R001",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T7",
+        "field": "#/caveats/5",
+        "quote": "70,000 ms gaps ... excluded from evaluation",
+        "why": "The two gaps are inside the stated 1,040,000 ms evaluation interval, although outside the three stage windows."
+      }
+    ],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 3,
+    "notes": "Otherwise preserves the verdict, bound, guard contract, and key measurements accurately."
+  },
+  {
+    "id": "R026",
+    "hard_defect": false,
+    "defects": [],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 5,
+    "notes": "Accurate, bounded advice with correct treatment of NO_POLICY, scopes, bounds, and the diagnostic guard."
+  },
+  {
+    "id": "R029",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T1",
+        "field": "#/recommendations/0/action",
+        "quote": "apply knee detection once implemented",
+        "why": "KNEE_DETECTOR_NOT_IMPLEMENTED is a fixed product limitation, so advising implementation or enablement is invalid and a bound does not depend on it."
+      }
+    ],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 3,
+    "notes": "Most observations and safeguards are sound, but the knee-detector recommendation is a material contract error."
+  },
+  {
+    "id": "R038",
+    "hard_defect": false,
+    "defects": [],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 5,
+    "notes": "It accurately preserves all deterministic facts and gives appropriately bounded, evidence-led actions."
+  },
+  {
+    "id": "R051",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T8",
+        "field": "#/hypotheses/7/possible_explanation",
+        "quote": "samples and resource cells from those periods contribute",
+        "why": "The aggregate evidence does not locate samples or resource cells in either inter-stage gap."
+      },
+      {
+        "type": "T4",
+        "field": "#/caveats/14",
+        "quote": "not proof that the largest sample belongs to that transaction",
+        "why": "The cart aggregate maximum equals the overall maximum, which establishes that at least one global-maximum sample is in the cart scope, though not that it is unique."
+      }
+    ],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 3,
+    "notes": "The response is largely useful but makes unsupported gap attribution and incorrectly disclaims supported cart-max attribution."
+  },
+  {
+    "id": "R061",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T1",
+        "field": "#/hypotheses/0/recommended_check",
+        "quote": "with knee detection implemented",
+        "why": "The knee detector is a fixed unimplemented product limitation and is not required for capacity bounds."
+      },
+      {
+        "type": "T1",
+        "field": "#/recommendations/2/action",
+        "quote": "decide explicitly whether diagnostic-effect rules ... should contribute",
+        "why": "A generator diagnostic guard is diagnostic by contract and cannot be made a contributor to the resource verdict."
+      },
+      {
+        "type": "T3",
+        "field": "#/recommendations/9/action",
+        "quote": "Isolate the largest latency sample",
+        "why": "Only aggregate maxima are provided, with no individual sample or count of samples at the maximum, so singularity is unsupported."
+      }
+    ],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 1,
+    "notes": "Its prominent recommendations violate the knee and diagnostic-guard contracts despite otherwise reporting many key facts correctly."
+  }
+]

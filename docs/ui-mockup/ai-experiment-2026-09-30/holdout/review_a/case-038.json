@@ -1,0 +1,57 @@
+[
+  {
+    "id": "R017",
+    "hard_defect": false,
+    "defects": [],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 5,
+    "notes": "Preserves the verdict and key measurements while giving specific checks without asserting a root cause."
+  },
+  {
+    "id": "R027",
+    "hard_defect": false,
+    "defects": [],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 4,
+    "notes": "Gives useful operator checks and keeps the candidate correlation and latency-tail timing appropriately qualified."
+  },
+  {
+    "id": "R129",
+    "hard_defect": false,
+    "defects": [],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 4,
+    "notes": "Preserves the evidence and offers verifiable actions, though the capacity-related recommendation is less focused."
+  },
+  {
+    "id": "R152",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T8",
+        "field": "#/hypotheses/2/observation",
+        "quote": "generator active_threads is capped at max 20 with a bimodal profile",
+        "why": "An observed maximum and quantiles do not establish a configured cap or a bimodal distribution."
+      },
+      {
+        "type": "T7",
+        "field": "#/recommendations/4/rationale",
+        "quote": "a missing resource policy",
+        "why": "NO_POLICY establishes that no applicable resource SLA rule was evaluated for the window, not that no resource policy was configured."
+      },
+      {
+        "type": "T2",
+        "field": "#/caveats/5",
+        "quote": "about 31,081 samples fall outside the evaluated window",
+        "why": "The whole-run count and window count cannot be subtracted to establish a count of samples outside the window."
+      }
+    ],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 2,
+    "notes": "Several checks are useful, but the invented cap, policy-status inference, and count subtraction could mislead an operator."
+  }
+]

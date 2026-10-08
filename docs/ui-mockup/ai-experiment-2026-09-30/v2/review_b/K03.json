@@ -1,0 +1,123 @@
+[
+  {
+    "id": "R004",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T1",
+        "field": "#/hypotheses/0/recommended_check",
+        "quote": "with a usable knee-detection rule",
+        "why": "Knee detection is a fixed unimplemented product limitation and is neither required for nor able to determine a capacity bound."
+      },
+      {
+        "type": "T1",
+        "field": "#/recommendations/1/action",
+        "quote": "with a working knee detector",
+        "why": "It wrongly recommends enabling a detector that the product design says cannot be enabled or implemented by the operator."
+      },
+      {
+        "type": "T5",
+        "field": "#/hypotheses/3/possible_explanation",
+        "quote": "even at 20 users",
+        "why": "The latency aggregates are whole-run metrics and cannot be attributed to the 20-user stage."
+      }
+    ],
+    "required_facts_preserved": false,
+    "missing_facts": [
+      "Run validity is VALID.",
+      "Analysis coverage is COMPLETE."
+    ],
+    "usefulness": 2,
+    "notes": "It preserves much of the numerical context but gives invalid knee-detector advice."
+  },
+  {
+    "id": "R005",
+    "hard_defect": false,
+    "defects": [],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 5,
+    "notes": "Accurately distinguishes the verified lower bound, NO_POLICY verdict, diagnostic guard, and aggregate-only limits."
+  },
+  {
+    "id": "R025",
+    "hard_defect": false,
+    "defects": [],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 5,
+    "notes": "Correct, evidence-grounded, and operationally useful without overclaiming causes or capacity."
+  },
+  {
+    "id": "R029",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T7",
+        "field": "#/summary",
+        "quote": "No product policy is configured",
+        "why": "The evidence contains passing business error-rate policy checks; NO_POLICY concerns capacity applicability or required capacity, not the absence of every product policy."
+      },
+      {
+        "type": "T1",
+        "field": "#/hypotheses/0/recommended_check",
+        "quote": "the business policy or generator guard no longer passes",
+        "why": "A failed diagnostic generator guard makes a stage unusable and cannot establish an upper capacity bound."
+      }
+    ],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 3,
+    "notes": "The main verdict and bounds are correct, but its policy framing and guard-bound advice could mislead."
+  },
+  {
+    "id": "R034",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T1",
+        "field": "#/hypotheses/0/recommended_check",
+        "quote": "enable/implement the knee detector",
+        "why": "KNEE_DETECTOR_NOT_IMPLEMENTED is a fixed product limitation and knee detection is not an operator remediation."
+      },
+      {
+        "type": "T1",
+        "field": "#/recommendations/0/action",
+        "quote": "enable or implement the knee detector",
+        "why": "It recommends an unavailable product change and incorrectly treats the knee as necessary to assess capacity."
+      },
+      {
+        "type": "T2",
+        "field": "#/caveats/0",
+        "quote": "stage PASS verdicts reflect only the business error-rate rule ... observed 0/132623 overall",
+        "why": "The stage business checks use window denominators, whereas 132623 is the whole-run denominator."
+      }
+    ],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 2,
+    "notes": "Despite good caveats, it recommends an invalid knee-detector remedy and conflates window and whole-run counts."
+  },
+  {
+    "id": "R037",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T8",
+        "field": "#/hypotheses/2/possible_explanation",
+        "quote": "The load generator was not saturated",
+        "why": "Passing a diagnostic throttle threshold does not prove that the generator was unsaturated."
+      },
+      {
+        "type": "T8",
+        "field": "#/recommendations/1/rationale",
+        "quote": "further stages should not be limited by the load generator",
+        "why": "The aggregate diagnostic result cannot guarantee that a future higher-load stage will not be generator-limited."
+      }
+    ],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 3,
+    "notes": "It correctly handles the verdict, knee, and guard contract but overstates what a passing diagnostic proves about generator health."
+  }
+]

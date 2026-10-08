@@ -1,0 +1,50 @@
+[
+  {
+    "id": "R003",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T2",
+        "field": "#/hypotheses/2/possible_explanation",
+        "quote": "The 1,315-sample difference plus dropped leading/trailing cells is consistent with partial acquisition",
+        "why": "The policy-window denominator and whole-run sample count are different scoped quantities, so their difference cannot diagnose partial acquisition."
+      },
+      {
+        "type": "T3",
+        "field": "#/caveats/4",
+        "quote": "Maximum latencies are single observations",
+        "why": "The evidence reports maxima but provides no count of samples that attained each maximum."
+      }
+    ],
+    "required_facts_preserved": true,
+    "missing_facts": [
+      "No capacity_summary is present, so no capacity bound or capacity verdict is reported."
+    ],
+    "usefulness": 3,
+    "notes": "Useful, evidence-based operator actions are weakened by an invalid count comparison and an unsupported claim about maxima."
+  },
+  {
+    "id": "R006",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T7",
+        "field": "#/hypotheses/2/possible_explanation",
+        "quote": "NO_POLICY because no resource policy or required capacity is configured",
+        "why": "NO_POLICY does not establish that either a policy or required capacity was unconfigured; the evidence does not identify its cause."
+      },
+      {
+        "type": "T7",
+        "field": "#/recommendations/2/rationale",
+        "quote": "only a configured policy or required capacity yields PASS or FAIL for resources",
+        "why": "A required capacity alone does not yield PASS or FAIL, and NO_POLICY can persist unless an applicable evaluated rule and other relevant conditions exist."
+      }
+    ],
+    "required_facts_preserved": true,
+    "missing_facts": [
+      "No capacity_summary is present, so no capacity bound or capacity verdict is reported."
+    ],
+    "usefulness": 2,
+    "notes": "Most coverage and policy-window guidance is sound, but the explanation of NO_POLICY and capacity-verdict conditions is materially misleading."
+  }
+]

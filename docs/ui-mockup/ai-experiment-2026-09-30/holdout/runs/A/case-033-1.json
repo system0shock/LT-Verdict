@@ -1,0 +1,196 @@
+{
+ "stage": "A",
+ "mode": "live",
+ "model": "deepseek-v4-flash-0731",
+ "tag": {
+  "phase": "holdout",
+  "attempt_id": "case-033-1-A-t1",
+  "arm": "A",
+  "stage": null,
+  "case": "case-033",
+  "rep": 1,
+  "try": 1
+ },
+ "retry_policy": "d2",
+ "qwen_exit": 0,
+ "wall_ms": 95695,
+ "relay": {
+  "schema_version": "advisory-ai-runtime-relay.v1",
+  "status": "FORWARDED_STRUCTURED_OUTPUT",
+  "received_request_count": 1,
+  "forwarded_request_count": 1,
+  "outcomes": [
+   "FORWARDED_STRUCTURED_OUTPUT"
+  ],
+  "retry_refused_reason": null,
+  "first_refused_reason": null,
+  "model_id": "deepseek-v4-flash-0731",
+  "retry_policy": "d2",
+  "requests": [
+   {
+    "ordinal": 1,
+    "forwarded": true,
+    "outcome": "FORWARDED_STRUCTURED_OUTPUT",
+    "provider_status": 200,
+    "latency_ms": 94331,
+    "usage": {
+     "prompt_tokens": 5148,
+     "total_tokens": 15058,
+     "completion_tokens": 9910,
+     "prompt_tokens_details": {
+      "cached_tokens": 1024
+     },
+     "completion_tokens_details": {
+      "reasoning_tokens": 7361
+     }
+    },
+    "model_returned": "deepseek-v4-flash-0731"
+   }
+  ],
+  "usage": {
+   "prompt_tokens": 5148,
+   "completion_tokens": 9910,
+   "total_tokens": 15058
+  },
+  "latency_ms": 94331
+ },
+ "relay_status": "FORWARDED_STRUCTURED_OUTPUT",
+ "usage": {
+  "prompt_tokens": 5148,
+  "completion_tokens": 9910,
+  "total_tokens": 15058
+ },
+ "latency_ms": 94331,
+ "retried": false,
+ "retry_refused_reason": null,
+ "status": "OK",
+ "note": null,
+ "output": {
+  "schema_version": "ai-advice-output.v1",
+  "summary": "Deterministic verdict FAIL. The run is VALID with COMPLETE coverage (analysis-result.json#/run_validity, analysis-result.json#/analysis_coverage). Both windows fail the latency rule: observed response_time_p95_ms 420 vs threshold 250 (lte) in stage-1 (evidence/9) and stage-2 (evidence/11), producing findings policy-failure-window for both windows. Error count is 0 and error_rate_ratio is 0/2401 (evidence/0), so the failure is latency-policy based, not error based. The capacity summary reports an UPPER_BOUND with upper_exclusive 147 users; step-1 verified_bound_load 147 (target 150, tolerance 0.05) and step-2 verified_bound_load 247 (target 250) both FAIL, while capacity_knee is null and knee_reason is KNEE_DETECTOR_NOT_IMPLEMENTED. Load-generator CPU is far below the 0.85 guard (mean 0.43, max 0.45) in both stages and both generator-cpu-guard checks PASS, so generator CPU saturation does not explain the 420ms p95. Advice hypotheses focus on target-side causes, a flat ~420ms latency floor across tested loads, a 1500ms max tail sample, and the correct interpretation of the 147-user bound: it is a policy-failure bound, not a measured saturation knee.",
+  "hypotheses": [
+   {
+    "rank": 1,
+    "observation": "response_time_p95_ms is 420 in both stage-1 and stage-2, exceeding the lte 250 threshold (evidence/9 and evidence/11), while load-generator CPU mean is 0.43 (max 0.45) against the 0.85 generator-cpu-guard threshold, with both resource-policy checks PASS (evidence/7, evidence/8).",
+    "possible_explanation": "The latency failure is not explained by load-generator CPU saturation, since the generator had headroom (0.43 vs 0.85). The cause is more plausibly in the target application or shared infrastructure (e.g., backend service, database, network), which is not covered by the resource evidence present in this analysis. This is a hypothesis, not a proven cause.",
+    "recommended_check": "Instrument and collect target-side resource and tracing metrics for the checkout transaction during a rerun of both stages, and verify whether server CPU/memory, database, or network show saturation or spikes coincident with the ~420ms p95 latency.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/9",
+     "analysis-result.json#/evidence/11",
+     "analysis-result.json#/evidence/7",
+     "analysis-result.json#/evidence/8"
+    ]
+   },
+   {
+    "rank": 2,
+    "observation": "Overall and checkout latency summaries are identical (p50 410, p95 420, p99 420, max 1500; evidence/0, evidence/1), and the failing p95 remains 420ms at both tested load levels: ~147 achieved users in step-1 (evidence/9) and ~247 achieved users in step-2 (evidence/11).",
+    "possible_explanation": "The flat ~420ms p95 across a ~100-user increase suggests a large fixed-cost latency component (e.g., fixed service time, cold or misconfigured path, or baseline overhead) dominates within the tested range, rather than load-dependent queueing. This is consistent with the p50/p95/p99 being nearly identical.",
+    "recommended_check": "Measure single-request latency in isolation and decompose the checkout end-to-end time into segments (network, middleware, application, database) to locate the fixed-cost stage and to observe whether it changes with concurrency.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0",
+     "analysis-result.json#/evidence/1",
+     "analysis-result.json#/evidence/9",
+     "analysis-result.json#/evidence/11"
+    ]
+   },
+   {
+    "rank": 3,
+    "observation": "The latency distribution is tight (p50 410ms, p95 420ms, p99 420ms) but the max is 1500ms (evidence/0).",
+    "possible_explanation": "There is at least one tail/outlier sample far above the p99. Possible explanations include a transient pause (e.g., GC, scheduling, network retransmit) or a single slow backend response, but the sample lacks a timestamp in this evidence, so its timing cannot be attributed.",
+    "recommended_check": "Query per-sample latency records and traces for samples near the 1500ms max, including their timestamps, and correlate with backend or infrastructure events before attributing any cause to that tail.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0"
+    ]
+   },
+   {
+    "rank": 4,
+    "observation": "The capacity summary reports UPPER_BOUND with upper_exclusive 147; step-1 achieved p05_10s 147 (observed range 147-150) against target 150 and FAIL, step-2 achieved p05_10s 247 (observed range 247-250) against target 250 and FAIL; capacity_knee is null and knee_reason is KNEE_DETECTOR_NOT_IMPLEMENTED (evidence/13).",
+    "possible_explanation": "The 147-user bound is where the latency policy already fails at the lowest achieved load in this run; with no knee detector implemented, the bound should not be read as a measured saturation knee or maximum sustainable load, and a failure at the lowest tested step prevents locating the actual crossing point.",
+    "recommended_check": "Run additional lower-load steps (e.g., ~25/50/100 active users) under the same latency rule to find the load at which p95 crosses 250ms, and implement a knee detector so a true capacity point can be estimated.",
+    "evidence_refs": [
+     "analysis-result.json#/capacity_summary",
+     "analysis-result.json#/evidence/13",
+     "analysis-result.json#/evidence/9"
+    ]
+   },
+   {
+    "rank": 5,
+    "observation": "Overall throughput_rps is reported as numerator 2401000 over denominator 600500 (~4 rps) with 2401 samples over the 600000ms evaluation window, while p50 latency is 410ms (evidence/0, evidence/1).",
+    "possible_explanation": "At roughly 147-250 active users, ~4 rps aggregate throughput with ~410ms p50 implies very low per-user request rate; a plausible explanation is that each checkout transaction takes a long service time or the backend serializes requests. However, this summary alone cannot prove concurrency or backend behavior.",
+    "recommended_check": "Confirm per-request service time and concurrency on the target side (thread pool, connection pool, database query time), and validate throughput with server-side request counters rather than load-generator samples alone.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0",
+     "analysis-result.json#/evidence/1"
+    ]
+   }
+  ],
+  "recommendations": [
+   {
+    "rank": 1,
+    "action": "Verify clock alignment between the load generator and any target instrumentation before drawing timing conclusions.",
+    "rationale": "The resource-binding evidence records clock_alignment 'not_verified_by_core' (evidence/2); without a verified clock relationship, no temporal lead/lag or ordering-based causal hypothesis can be supported.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/2"
+    ]
+   },
+   {
+    "rank": 2,
+    "action": "Add target-side observability (server CPU/memory, database, network, application traces) and rerun both load stages.",
+    "rationale": "Only load-generator CPU is summarized in this evidence, and it shows headroom (mean 0.43 vs 0.85 guard, PASS in both stages); the cause of the 420ms p95 must be located outside the load generator, but no target-side data is present to confirm it.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/4",
+     "analysis-result.json#/evidence/6",
+     "analysis-result.json#/evidence/7",
+     "analysis-result.json#/evidence/8",
+     "analysis-result.json#/evidence/9"
+    ]
+   },
+   {
+    "rank": 3,
+    "action": "Run lower-load steps (e.g., ~25/50/100 active users) to locate where p95 crosses the 250ms threshold.",
+    "rationale": "Both tested stages already fail at the lowest achieved load (147 users, verified_bound_load), and capacity_knee is null with knee_reason KNEE_DETECTOR_NOT_IMPLEMENTED, so the current test cannot locate a crossing or a saturation knee.",
+    "evidence_refs": [
+     "analysis-result.json#/capacity_summary",
+     "analysis-result.json#/evidence/11",
+     "analysis-result.json#/evidence/13"
+    ]
+   },
+   {
+    "rank": 4,
+    "action": "Profile a single checkout request and decompose end-to-end latency by segment.",
+    "rationale": "p95 is flat at 420ms from ~147 to ~247 users with p50/p95/p99 nearly identical (410/420/420ms), suggesting a fixed-cost component rather than load-dependent queueing; segment profiling would identify where that fixed cost lives.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0",
+     "analysis-result.json#/evidence/1"
+    ]
+   },
+   {
+    "rank": 5,
+    "action": "Investigate tail samples around the 1500ms max latency.",
+    "rationale": "p99 is 420ms but max is 1500ms; understanding the tail requires per-sample timestamps and traces, which are not present in this evidence set.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0"
+    ]
+   }
+  ],
+  "caveats": [
+   "clock_alignment is 'not_verified_by_core' (evidence/2); no verified clock relationship exists, so no temporal lead/lag or ordering-based causal conclusion is supported.",
+   "capacity_knee is null and knee_reason is KNEE_DETECTOR_NOT_IMPLEMENTED (evidence/13); the UPPER_BOUND upper_exclusive 147 reflects policy failure at the lowest tested load, not a measured saturation knee.",
+   "Window summaries list resource_verdict NO_POLICY (evidence/10, evidence/12); NO_POLICY is not a PASS, and the PASS generator-cpu-guard checks are diagnostic resource checks on the load generator only.",
+   "Only load-generator resource summaries are present in this evidence; there is no target-system resource data, so target-side causes remain hypotheses rather than proven findings.",
+   "Latency and throughput are aggregate summaries (p50/p95/p99/max and numerator/denominator ratios); no per-sample series, timestamps, or duration context for the 1500ms max are present in this evidence set.",
+   "throughput_rps is a raw numerator/denominator ratio (2401000/600500); deriving ~4 rps is an interpretation, not a stated value in the evidence.",
+   "The achieved bound uses statistic p05_10s (verified_bound_load 147 and 247) with observed instantaneous ranges 147-150 and 247-250; all 30 expected cells per window are complete with no missing cells or gaps.",
+   "Only one transaction label ('checkout') is present and its summary is identical to the overall summary (evidence/1 vs evidence/0); conclusions do not generalize to other transaction types.",
+   "error_count 0 and error_rate_ratio 0/2401 mean the failure is latency-policy based only; zero errors do not by themselves prove target health, stability, or spare capacity."
+  ]
+ },
+ "schema": "ai-experiment-run.holdout.v1",
+ "case": "case-033",
+ "rep": 1,
+ "arm": "A",
+ "try": 1,
+ "attempt_id": "case-033-1-A-t1",
+ "model_id": "deepseek-v4-flash-0731",
+ "prompt_sha256": "69f215a1ad4ae678c82410ba7cf7daf171cd9c7ca0ef4626bba6977db0af4ef7"
+}

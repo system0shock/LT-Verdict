@@ -1,0 +1,107 @@
+[
+  {
+    "id": "R003",
+    "hard_defect": false,
+    "defects": [],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 5,
+    "notes": "It preserves the verdicts and numbers and gives prioritized, verifiable actions consistent with the domain contracts."
+  },
+  {
+    "id": "R021",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T1",
+        "field": "#/summary",
+        "quote": "The INDETERMINATE stems from the failed guard and missing knee detection",
+        "why": "The missing knee detector is a fixed limitation and does not determine whether a capacity bound can be derived."
+      },
+      {
+        "type": "T1",
+        "field": "#/hypotheses/5/possible_explanation",
+        "quote": "no knee or bound can be identified even if the guard passed",
+        "why": "A verified stage can support a capacity bound without a knee or additional load levels."
+      },
+      {
+        "type": "T1",
+        "field": "#/recommendations/3/action",
+        "quote": "with knee detection implemented so a verified bound load can be established",
+        "why": "Implementing knee detection is not a prerequisite for establishing a bound."
+      }
+    ],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 2,
+    "notes": "The generator advice is useful, but the repeated knee dependency would send an operator toward an invalid remedy."
+  },
+  {
+    "id": "R024",
+    "hard_defect": false,
+    "defects": [
+      {
+        "type": "T8",
+        "field": "#/hypotheses/6/recommended_check",
+        "quote": "no policy action is indicated because this transaction recorded 0 errors",
+        "why": "Zero errors alone do not settle whether the transaction needs a latency policy."
+      }
+    ],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 4,
+    "notes": "It gives sound capacity and generator guidance, with one overreassuring statement about the reset cart policy."
+  },
+  {
+    "id": "R042",
+    "hard_defect": false,
+    "defects": [],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 5,
+    "notes": "It reports the deterministic outcome accurately and prioritizes a clean generator rerun and policy configuration."
+  },
+  {
+    "id": "R046",
+    "hard_defect": false,
+    "defects": [],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 5,
+    "notes": "Its claims and operator checks stay within the evidence and preserve the diagnostic guard contract."
+  },
+  {
+    "id": "R058",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T4",
+        "field": "#/hypotheses/5/possible_explanation",
+        "quote": "samples outside that window are unjudged rather than proven error-free",
+        "why": "The whole-run overall summary records zero errors across all 47,396 samples, including samples outside the policy window."
+      },
+      {
+        "type": "T4",
+        "field": "#/hypotheses/6/possible_explanation",
+        "quote": "The overall p99 and max coincide numerically with the `home` label",
+        "why": "Only the maxima coincide: overall p99 is 600 ms and home p99 is 806 ms."
+      },
+      {
+        "type": "T1",
+        "field": "#/hypotheses/8/possible_explanation",
+        "quote": "With a single load level and no implemented knee detector, neither a lower-inclusive verified capacity bound nor an upper-exclusive saturation bound can be derived",
+        "why": "Bounds depend on verified stage outcomes independently of knee detection, and a single verified stage can support a lower bound."
+      },
+      {
+        "type": "T1",
+        "field": "#/caveats/3",
+        "quote": "Knee detection is unavailable ... so no knee location or capacity bound can be inferred",
+        "why": "An unavailable knee prevents a knee estimate, not a capacity bound."
+      }
+    ],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 2,
+    "notes": "Several practical checks are useful, but false claims about knee dependence, error coverage, and p99 weaken the advice."
+  }
+]

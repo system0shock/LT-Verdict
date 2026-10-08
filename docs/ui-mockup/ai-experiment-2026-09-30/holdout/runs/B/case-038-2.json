@@ -1,0 +1,194 @@
+{
+ "stage": "B",
+ "mode": "live",
+ "model": "deepseek-v4-flash-0731",
+ "tag": {
+  "phase": "holdout",
+  "attempt_id": "case-038-2-B-t1",
+  "arm": "B",
+  "stage": null,
+  "case": "case-038",
+  "rep": 2,
+  "try": 1
+ },
+ "retry_policy": "d2",
+ "qwen_exit": 0,
+ "wall_ms": 75551,
+ "relay": {
+  "schema_version": "advisory-ai-runtime-relay.v1",
+  "status": "FORWARDED_STRUCTURED_OUTPUT",
+  "received_request_count": 1,
+  "forwarded_request_count": 1,
+  "outcomes": [
+   "FORWARDED_STRUCTURED_OUTPUT"
+  ],
+  "retry_refused_reason": null,
+  "first_refused_reason": null,
+  "model_id": "deepseek-v4-flash-0731",
+  "retry_policy": "d2",
+  "requests": [
+   {
+    "ordinal": 1,
+    "forwarded": true,
+    "outcome": "FORWARDED_STRUCTURED_OUTPUT",
+    "provider_status": 200,
+    "latency_ms": 74147,
+    "usage": {
+     "prompt_tokens": 5059,
+     "total_tokens": 12069,
+     "completion_tokens": 7010,
+     "prompt_tokens_details": {
+      "cached_tokens": 1024
+     },
+     "completion_tokens_details": {
+      "reasoning_tokens": 4978
+     }
+    },
+    "model_returned": "deepseek-v4-flash-0731"
+   }
+  ],
+  "usage": {
+   "prompt_tokens": 5059,
+   "completion_tokens": 7010,
+   "total_tokens": 12069
+  },
+  "latency_ms": 74147
+ },
+ "relay_status": "FORWARDED_STRUCTURED_OUTPUT",
+ "usage": {
+  "prompt_tokens": 5059,
+  "completion_tokens": 7010,
+  "total_tokens": 12069
+ },
+ "latency_ms": 74147,
+ "retried": false,
+ "retry_refused_reason": null,
+ "status": "OK",
+ "note": null,
+ "output": {
+  "schema_version": "ai-advice-output.v1",
+  "summary": "Deterministic verdict for window workload-01 is FAIL: policy check rule `latency` (response_time_p95_ms <= 200ms) evaluated observed 550ms with status FAIL; window summary shows business FAIL and resource NO_POLICY (no resource rule with effect `sla`), overall policy verdict FAIL. Zero errors were recorded among samples, but error_count 0, anomalies_tested 0, and episodes_reported 0 do not prove stability or absence of a problem. One correlation candidate (generator active_threads vs p95 latency, best_lag_ms -1000, rho 0.99934, CANDIDATE, uncertainty NOT_ESTIMATED) cannot support lead/lag or causality because clock alignment is not verified by core and the headline significance selection is UNAVAILABLE (OBSERVATION_COUNT_UNSUPPORTED). The generator target rate was constant 100 requests/s while observed request_starts averaged ~60.25 requests/s, which is worth inspecting. All advice below is limited to checks a test operator can perform and does not alter the FAIL verdict.",
+  "hypotheses": [
+   {
+    "rank": 1,
+    "observation": "Policy check `latency` for window workload-01 reports observed response_time_p95_ms 550ms against threshold 200ms with operator lte and status FAIL; window summary is verdict FAIL (business_verdict FAIL, resource_verdict NO_POLICY).",
+    "possible_explanation": "Response time exceeded the applicable latency SLA during the evaluation window; the evidence identifies the violation but not its cause.",
+    "recommended_check": "Inspect time-bucketed latency for the window and server-side telemetry for the same period (evaluation_from_epoch_ms 1704067320000 to evaluation_to_epoch_ms 1704067800000), and rerun to see whether the violation reproduces.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/6",
+     "analysis-result.json#/evidence/7",
+     "analysis-result.json#/evidence/8",
+     "analysis-result.json#/evidence/0"
+    ]
+   },
+   {
+    "rank": 2,
+    "observation": "Correlation pair association-09 between generator active_threads and response_time_p95_ms reports best_lag_ms -1000 with rho 0.999342586275 at that lag, status CANDIDATE and uncertainty NOT_ESTIMATED; resource binding reports clock_alignment not_verified_by_core.",
+    "possible_explanation": "Latency and generator thread count may co-vary with an apparent ~1s offset, possibly reflecting load shape, but the clock relationship is not verified, so the offset cannot be read as lead/lag or causality.",
+    "recommended_check": "Verify clock alignment between the load generator and the system under test before interpreting any offset, then inspect the paired active_threads and p95 latency series over the window.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/9",
+     "analysis-result.json#/evidence/2",
+     "analysis-result.json#/evidence/8"
+    ]
+   },
+   {
+    "rank": 3,
+    "observation": "In window workload-01 the generator request_starts series has mean 60.2479166667, min 30, max 100 requests/s over 480 cells, while target-request-rate is constant 100 requests/s (mean, median, min, max all 100; sample_standard_deviation 0); the target-rate series was dropped as a control with reason CONSTANT_CONTROL.",
+    "possible_explanation": "The generator may not have achieved the requested 100 requests/s for a large part of the window, so measured load may be below target; the evidence does not state why.",
+    "recommended_check": "Inspect the generator's resource series and logs for throttling or inability to sustain the target rate, and rerun with a healthy generator.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/3",
+     "analysis-result.json#/evidence/5",
+     "analysis-result.json#/evidence/9"
+    ]
+   },
+   {
+    "rank": 4,
+    "observation": "Latency summaries report p50 50ms with p95, p99, and max all 550ms (overall evidence 0 and transaction `request` evidence 1; window summary evidence 8 shows the same 550ms tail).",
+    "possible_explanation": "Most samples are fast but a consistent tail reaches 550ms, which could come from a specific time sub-range or component; the aggregate summary alone cannot localize the tail.",
+    "recommended_check": "Bucket latencies in time and by sampler label to find when and where the 550ms samples occur before attributing impact.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0",
+     "analysis-result.json#/evidence/1",
+     "analysis-result.json#/evidence/8"
+    ]
+   }
+  ],
+  "recommendations": [
+   {
+    "rank": 1,
+    "action": "Treat the run as FAIL based on the latency policy violation (p95 550ms > 200ms) and investigate its root cause; do not reclassify the outcome.",
+    "rationale": "The deterministic policy verdict is FAIL and window summary is FAIL; advisory checks do not change that verdict.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/6",
+     "analysis-result.json#/evidence/7",
+     "analysis-result.json#/policy_verdict"
+    ]
+   },
+   {
+    "rank": 2,
+    "action": "Verify clock alignment between the load generator and the system under test before using any lag from the correlation pair.",
+    "rationale": "resource binding states clock_alignment not_verified_by_core, so the best_lag_ms -1000 cannot support lead/lag ordering or a temporal causal hypothesis until alignment is confirmed.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/2",
+     "analysis-result.json#/evidence/9"
+    ]
+   },
+   {
+    "rank": 3,
+    "action": "Rerun with a healthy, verified load generator and compare observed request_starts (mean ~60.25 requests/s) against the constant target of 100 requests/s.",
+    "rationale": "The gap between achieved rate and target rate may mean the intended load was not applied, which would affect any load-related latency interpretation.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/3",
+     "analysis-result.json#/evidence/5"
+    ]
+   },
+   {
+    "rank": 4,
+    "action": "If a resource verdict or capacity assessment is needed, add an applicable resource rule with effect `sla` for the evaluation window.",
+    "rationale": "The window reports resource_verdict NO_POLICY, which stays NO_POLICY without such a rule; a healthy window does not convert NO_POLICY into PASS.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/7"
+    ]
+   },
+   {
+    "rank": 5,
+    "action": "If a statistically supported association test is wanted, rerun with a configuration providing enough observations for the mbb-lag-max-holm procedure.",
+    "rationale": "The headline selection for association-09 is UNAVAILABLE with reason OBSERVATION_COUNT_UNSUPPORTED, and the pair uncertainty is NOT_ESTIMATED, so the CANDIDATE correlation is not significance-tested.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/10",
+     "analysis-result.json#/evidence/11",
+     "analysis-result.json#/evidence/9"
+    ]
+   },
+   {
+    "rank": 6,
+    "action": "Collect time-binned latency data for the evaluation window to locate the 550ms tail.",
+    "rationale": "Aggregates show p50 50ms while p95/p99/max are 550ms; localizing the tail in time and by sampler would constrain the investigation of the latency failure.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/8",
+     "analysis-result.json#/evidence/0"
+    ]
+   }
+  ],
+  "caveats": [
+   "resource_verdict NO_POLICY means no applicable resource rule with effect `sla` was evaluated for the window; missing policy is not a pass and cannot be turned into PASS by reruns or healthy load.",
+   "The correlation pair association-09 is status CANDIDATE with uncertainty NOT_ESTIMATED and its headline significance selection is UNAVAILABLE (OBSERVATION_COUNT_UNSUPPORTED); partial/raw rho values are not a proven measure of effect.",
+   "clock_alignment not_verified_by_core prevents any lead/lag or temporal causal interpretation of best_lag_ms -1000.",
+   "anomalies_tested 0 and episodes_reported 0 do not prove stability, spare capacity, or absence of a problem.",
+   "error_count 0 covers recorded samples only; the evidence does not address dropped or unrecorded requests.",
+   "Overall sample_count 60000 and window sample_count 28919 (and their throughput denominators) are different scopes/windows and are not inconsistent with each other.",
+   "The correlation control target-request-rate was dropped with reason CONSTANT_CONTROL, so association-09 is not adjusted for that control.",
+   "analysis_coverage is COMPLETE and run_validity is VALID, but the evidence contains no capacity verdict, capacity bound, or knee information; capacity is not addressed here."
+  ]
+ },
+ "schema": "ai-experiment-run.holdout.v1",
+ "case": "case-038",
+ "rep": 2,
+ "arm": "B",
+ "try": 1,
+ "attempt_id": "case-038-2-B-t1",
+ "model_id": "deepseek-v4-flash-0731",
+ "prompt_sha256": "3c0f28bee6517c13c5c854615e7d3d59301893d9723880818e4034a32e9133bf"
+}

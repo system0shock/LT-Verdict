@@ -1,0 +1,197 @@
+{
+ "stage": "A",
+ "mode": "live",
+ "model": "deepseek-v4-flash-0731",
+ "tag": {
+  "phase": "holdout",
+  "attempt_id": "case-013-1-A-t1",
+  "arm": "A",
+  "stage": null,
+  "case": "case-013",
+  "rep": 1,
+  "try": 1
+ },
+ "retry_policy": "d2",
+ "qwen_exit": 0,
+ "wall_ms": 59343,
+ "relay": {
+  "schema_version": "advisory-ai-runtime-relay.v1",
+  "status": "FORWARDED_STRUCTURED_OUTPUT",
+  "received_request_count": 1,
+  "forwarded_request_count": 1,
+  "outcomes": [
+   "FORWARDED_STRUCTURED_OUTPUT"
+  ],
+  "retry_refused_reason": null,
+  "first_refused_reason": null,
+  "model_id": "deepseek-v4-flash-0731",
+  "retry_policy": "d2",
+  "requests": [
+   {
+    "ordinal": 1,
+    "forwarded": true,
+    "outcome": "FORWARDED_STRUCTURED_OUTPUT",
+    "provider_status": 200,
+    "latency_ms": 58001,
+    "usage": {
+     "prompt_tokens": 3426,
+     "total_tokens": 9488,
+     "completion_tokens": 6062,
+     "prompt_tokens_details": {
+      "cached_tokens": 1024
+     },
+     "completion_tokens_details": {
+      "reasoning_tokens": 3769
+     }
+    },
+    "model_returned": "deepseek-v4-flash-0731"
+   }
+  ],
+  "usage": {
+   "prompt_tokens": 3426,
+   "completion_tokens": 6062,
+   "total_tokens": 9488
+  },
+  "latency_ms": 58001
+ },
+ "relay_status": "FORWARDED_STRUCTURED_OUTPUT",
+ "usage": {
+  "prompt_tokens": 3426,
+  "completion_tokens": 6062,
+  "total_tokens": 9488
+ },
+ "latency_ms": 58001,
+ "retried": false,
+ "retry_refused_reason": null,
+ "status": "OK",
+ "note": null,
+ "output": {
+  "schema_version": "ai-advice-output.v1",
+  "summary": "The deterministic verdict is NO_POLICY: the run is VALID, analysis coverage is COMPLETE, and no findings were produced, but no business or resource policy was configured for the 30-second evaluation window (epoch delta 1767225600000 ms to 1767225630000 ms), so the observed metrics were not compared to any threshold. NO_POLICY is not a pass. The load summary (overall, request transaction, and window summaries) reports 570 samples, 0 errors, p50 300 ms, p95/p99/max 500 ms, and throughput_rps 570000/30000 (~19 rps) for the window. The only load-resource correlation pair is INSUFFICIENT_DATA with paired_cells 0, best_lag_ms 0, raw_rho and partial_rho null, uncertainty NOT_ESTIMATED, citing reasons including LAG_NOT_EVALUABLE, RESOURCE_DELTA_BELOW_MINIMUM, and LOAD_DELTA_BELOW_MINIMUM; the headline selection is UNAVAILABLE and the diagnostics tested 0 anomalies. Because clock_alignment is not_verified_by_core and the pair was not evaluable, no load-versus-resource relationship can be asserted or refuted, and no stability or health conclusion follows from the zero error count or zero anomaly counts.",
+  "hypotheses": [
+   {
+    "rank": 1,
+    "observation": "The correlation pair is INSUFFICIENT_DATA with paired_cells 0, best_lag_ms 0, raw_rho null, partial_rho null, uncertainty NOT_ESTIMATED, and reasons including RESOURCE_DELTA_BELOW_MINIMUM and LOAD_DELTA_BELOW_MINIMUM; the resource series for the same window has all 30 cells present (missing_cells 0), values min 1 to max 5, iqr 2, mad 1, slope_per_second 0.0267.",
+    "possible_explanation": "The resource series varied only within a small range during the window and the load series may not have exceeded configured minimum deltas, so the load-resource relationship could not be estimated rather than being shown absent.",
+    "recommended_check": "Review the configured minimum-delta and pairing thresholds for the correlation analysis, and confirm how the synthetic_unit resource series is aligned with response_time_p95_ms before rerunning the pair analysis.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/6",
+     "analysis-result.json#/evidence/3",
+     "analysis-result.json#/evidence/5"
+    ]
+   },
+   {
+    "rank": 2,
+    "observation": "Latency summaries for overall, transaction 'request', and the evaluation window all report p50 300 ms, p95 500 ms, p99 500 ms, max 500 ms across 570 samples with 0 errors.",
+    "possible_explanation": "The identical p95/p99/max value of 500 ms could reflect rounding or an upper bound in JMETER_SAMPLER aggregation rather than a true latency ceiling; this is a hypothesis, not a confirmed cause.",
+    "recommended_check": "Inspect the raw JTL per-sample latency values for clustering at 500 ms and confirm the rounding/aggregation configuration used to produce these quantiles.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0",
+     "analysis-result.json#/evidence/1",
+     "analysis-result.json#/evidence/5"
+    ]
+   },
+   {
+    "rank": 3,
+    "observation": "The diagnostic summary is COMPLETE with pairs_tested 1, pairs_evaluable 0, anomalies_tested 0, episodes_reported 0, and uncertainty NOT_ESTIMATED, while the correlation pair is INSUFFICIENT_DATA and the headline selection is UNAVAILABLE.",
+    "possible_explanation": "Because the only correlation pair was not evaluable, no anomaly episodes were tested; the zero counts indicate no tests occurred, and they do not by themselves demonstrate stability or the absence of a problem.",
+    "recommended_check": "After restoring pair evaluability, rerun diagnostics and verify that anomalies_tested reflects the pair state rather than an inability to form paired cells.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/8",
+     "analysis-result.json#/evidence/6",
+     "analysis-result.json#/evidence/7"
+    ]
+   },
+   {
+    "rank": 4,
+    "observation": "policy_verdict is NO_POLICY and the window-policy-summary reports business_verdict NO_POLICY, resource_verdict NO_POLICY, and verdict NO_POLICY for the evaluation window.",
+    "possible_explanation": "No business or resource policy thresholds were configured for the evaluation window, so the observed 500 ms latency quantiles and ~19 rps throughput were not compared against any limit; NO_POLICY is not a PASS or FAIL.",
+    "recommended_check": "Define explicit business and/or resource policy thresholds, then re-run the analysis on the same evaluation window if a pass/fail determination is required.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/4",
+     "analysis-result.json#/policy_verdict",
+     "analysis-result.json#/evidence/5"
+    ]
+   },
+   {
+    "rank": 5,
+    "observation": "resource-binding reports clock_alignment 'not_verified_by_core' with best_lag_ms 0 and lag_used_cells 0 on the correlation pair; run_to_epoch_ms is 1767225630399 while evaluation_to_epoch_ms is 1767225630000.",
+    "possible_explanation": "Without verified clock alignment between the load generator and resource collector, the 0 ms best_lag value cannot be interpreted as simultaneous movement or as evidence of cause and effect between load and the synthetic resource series.",
+    "recommended_check": "Verify clock alignment between the load and resource time sources first; only after that can any lag or lead/lag ordering be evaluated.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/2",
+     "analysis-result.json#/evidence/6"
+    ]
+   }
+  ],
+  "recommendations": [
+   {
+    "rank": 1,
+    "action": "Verify clock alignment between the load generator and the resource collector before any temporal interpretation.",
+    "rationale": "clock_alignment is 'not_verified_by_core' and best_lag_ms 0 with lag_used_cells 0 cannot support lead/lag ordering or a temporal causal hypothesis until clocks are verified.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/2",
+     "analysis-result.json#/evidence/6"
+    ]
+   },
+   {
+    "rank": 2,
+    "action": "Define explicit business and resource policy thresholds for the evaluation window if a pass/fail determination is needed.",
+    "rationale": "The verdict is NO_POLICY for business and resource; missing policy is not a pass, and the observed latency/throughput values were never compared to a limit.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/4",
+     "analysis-result.json#/policy_verdict",
+     "analysis-result.json#/evidence/5"
+    ]
+   },
+   {
+    "rank": 3,
+    "action": "Investigate why the correlation pair is INSUFFICIENT_DATA by reviewing the reasons RESOURCE_DELTA_BELOW_MINIMUM, LOAD_DELTA_BELOW_MINIMUM, LAG_NOT_EVALUABLE, and CONTROL_CONTEXT_MISSING, and enable paired cells to form.",
+    "rationale": "paired_cells 0 and raw_rho/partial_rho null mean no correlation estimate exists; the reasons, not the metric values, define what configuration must change before a relationship can be assessed.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/6",
+     "analysis-result.json#/evidence/7",
+     "analysis-result.json#/evidence/3"
+    ]
+   },
+   {
+    "rank": 4,
+    "action": "Inspect the raw JTL sampler data to determine whether the flat p95/p99/max of 500 ms is a rounding/clamping artifact or a real latency distribution.",
+    "rationale": "All three latency summaries report identical 500 ms upper quantiles; the raw per-sample distribution was not included in this evidence set, so the cause is unknown.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0",
+     "analysis-result.json#/evidence/1",
+     "analysis-result.json#/evidence/5"
+    ]
+   },
+   {
+    "rank": 5,
+    "action": "After addressing pair evaluability, rerun the diagnostics and treat anomalies_tested 0 as 'no tests performed', not as proof of stability.",
+    "rationale": "Diagnostic status is COMPLETE but was computed with pairs_evaluable 0 and an UNAVAILABLE headline selection; zero anomaly counts do not evidence an absence of problems.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/8",
+     "analysis-result.json#/evidence/6"
+    ]
+   }
+  ],
+  "caveats": [
+   "The deterministic verdict is NO_POLICY, not PASS or FAIL; a missing policy is not a pass and no threshold comparison was made for the evaluation window.",
+   "The correlation pair status is INSUFFICIENT_DATA with uncertainty NOT_ESTIMATED and raw_rho/partial_rho null; an absent correlation estimate does not prove the absence of a load-resource relationship.",
+   "anomalies_tested 0 and episodes_reported 0 only mean no anomaly tests occurred; they do not prove stability, spare capacity, or low load.",
+   "Zero errors (0/570 samples) is an observed count, not evidence of reliability or absence of a problem beyond the sampled window.",
+   "clock_alignment is 'not_verified_by_core'; no lead/lag ordering or temporal causal claims can be supported from best_lag_ms 0.",
+   "The resource metric is in synthetic_unit, whose physical meaning is not defined in this evidence; its values limit interpretation.",
+   "Latency quantiles (p50 300 ms, p95/p99/max 500 ms) may reflect sampler rounding or aggregation; the raw per-sample distribution was not part of this evidence.",
+   "Coverage applies only to the evaluation window (1767225600000 ms to 1767225630000 ms, a 30-second delta); observations outside this window are not covered.",
+   "The run window extends to run_to_epoch_ms 1767225630399 while evaluation_to_epoch_ms is 1767225630000; the meaning of that ~399 ms tail is not defined in the evidence."
+  ]
+ },
+ "schema": "ai-experiment-run.holdout.v1",
+ "case": "case-013",
+ "rep": 1,
+ "arm": "A",
+ "try": 1,
+ "attempt_id": "case-013-1-A-t1",
+ "model_id": "deepseek-v4-flash-0731",
+ "prompt_sha256": "69f215a1ad4ae678c82410ba7cf7daf171cd9c7ca0ef4626bba6977db0af4ef7"
+}

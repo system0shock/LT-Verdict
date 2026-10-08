@@ -1,0 +1,251 @@
+{
+ "stage": "A",
+ "mode": "live",
+ "model": "deepseek-v4-flash-0731",
+ "tag": {
+  "phase": "holdout",
+  "attempt_id": "case-011-1-A-t1",
+  "arm": "A",
+  "stage": null,
+  "case": "case-011",
+  "rep": 1,
+  "try": 1
+ },
+ "retry_policy": "d2",
+ "qwen_exit": 0,
+ "wall_ms": 106141,
+ "relay": {
+  "schema_version": "advisory-ai-runtime-relay.v1",
+  "status": "FORWARDED_STRUCTURED_OUTPUT",
+  "received_request_count": 1,
+  "forwarded_request_count": 1,
+  "outcomes": [
+   "FORWARDED_STRUCTURED_OUTPUT"
+  ],
+  "retry_refused_reason": null,
+  "first_refused_reason": null,
+  "model_id": "deepseek-v4-flash-0731",
+  "retry_policy": "d2",
+  "requests": [
+   {
+    "ordinal": 1,
+    "forwarded": true,
+    "outcome": "FORWARDED_STRUCTURED_OUTPUT",
+    "provider_status": 200,
+    "latency_ms": 104679,
+    "usage": {
+     "prompt_tokens": 12375,
+     "total_tokens": 23504,
+     "completion_tokens": 11129,
+     "prompt_tokens_details": {
+      "cached_tokens": 1024
+     },
+     "completion_tokens_details": {
+      "reasoning_tokens": 7750
+     }
+    },
+    "model_returned": "deepseek-v4-flash-0731"
+   }
+  ],
+  "usage": {
+   "prompt_tokens": 12375,
+   "completion_tokens": 11129,
+   "total_tokens": 23504
+  },
+  "latency_ms": 104679
+ },
+ "relay_status": "FORWARDED_STRUCTURED_OUTPUT",
+ "usage": {
+  "prompt_tokens": 12375,
+  "completion_tokens": 11129,
+  "total_tokens": 23504
+ },
+ "latency_ms": 104679,
+ "retried": false,
+ "retry_refused_reason": null,
+ "status": "OK",
+ "note": null,
+ "output": {
+  "schema_version": "ai-advice-output.v1",
+  "summary": "The run is VALID but the overall policy verdict is NO_VERDICT and analysis coverage is INCOMPLETE (RESOURCE_GAPS, MISSING_RESOURCE_CELLS). Workload-03 (target 90 rps) passed latency (p95 53ms vs 200ms threshold) but FAILed compute-limit (cpu_work mean 0.9004095233 > 0.9 threshold) and database-limit was NO_VERDICT because one db_work cell is missing, so the window verdict is NO_VERDICT. Workload-04 (target 110 rps) shows a severe regression: cpu_work near 1.0 across all 300 cells (mean 0.99997633, max 1), compute-limit FAIL, and latency p95 28815ms against the 200ms threshold (latency FAIL), so the window verdict is FAIL. db_work stayed low (~0.02496 mean, max 0.026069) and its 0.9-limit PASSed in workload-04. Recorded error_count is 0 in both windows. The correlation analysis did not establish a CPU-to-latency link (statuses BELOW_EFFECT/INSUFFICIENT_DATA, uncertainty NOT_ESTIMATED for every pair, headline selection UNAVAILABLE for all four pairs), anomalies_tested is 0, and clock alignment is not_verified_by_core, so the coincident CPU saturation and latency regression are hypotheses to test, not proven causes.",
+  "hypotheses": [
+   {
+    "rank": 1,
+    "observation": "In workload-04 (1704068100000–1704068400000, target 110 rps) cpu_work averaged 0.99997633 with max 1.0 and min 0.992899, the compute-limit check (threshold 0.9) is FAIL with a single finding covering all 300 cells, and response_time_p95 was 28815ms against the 200ms threshold (latency FAIL). In workload-03 (target 90 rps) cpu_work averaged 0.9004095233 and p95 latency was 53ms with latency PASS.",
+    "possible_explanation": "The increase from ~90 rps to ~110 rps coincides with CPU utilization pinned near 1.0 and multi-second latencies, suggesting the system is at or beyond CPU capacity at the higher load and requests queue instead of failing.",
+    "recommended_check": "Verify clock alignment, then re-run with a gradual load ramp while recording CPU saturation and queueing telemetry (thread pool depth, run queue, time-in-queue vs service time) to test whether throughput near CPU capacity drives the latency increase.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/6",
+     "analysis-result.json#/evidence/11",
+     "analysis-result.json#/evidence/15",
+     "analysis-result.json#/evidence/16",
+     "analysis-result.json#/evidence/18",
+     "analysis-result.json#/evidence/3",
+     "analysis-result.json#/evidence/13",
+     "analysis-result.json#/evidence/17",
+     "analysis-result.json#/evidence/8"
+    ]
+   },
+   {
+    "rank": 2,
+    "observation": "In workload-04, error_count is 0 and error_rate_ratio is 0/33000 while p50 latency was 15231ms, p95 28815ms and max 30323ms; the recorded throughput is 33000000/300000 = 110 rps, equal to the 110 rps target rate.",
+    "possible_explanation": "Requests appear to eventually complete (recorded throughput matches target) but with very high latency, consistent with deep queuing or head-of-line blocking under saturation rather than immediate failures.",
+    "recommended_check": "Confirm whether timed-out or discarded requests are excluded from error_count, and measure in-flight concurrency and queue depth during a repeat of the 110 rps step to test the queuing hypothesis.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/18",
+     "analysis-result.json#/evidence/8",
+     "analysis-result.json#/evidence/15",
+     "analysis-result.json#/evidence/1",
+     "analysis-result.json#/evidence/0"
+    ]
+   },
+   {
+    "rank": 3,
+    "observation": "In workload-04, db_work averaged 0.02496306 with max 0.026069, the database-limit check (threshold 0.9) is PASS, and the db_work-to-latency correlation status is BELOW_EFFECT; in workload-03 db_work averaged 0.0224960769.",
+    "possible_explanation": "Database utilization is far below the 0.9 limit in both windows, so the database is unlikely to be the primary bottleneck in the observed latency regression; however db_work may not capture every aspect of database pressure.",
+    "recommended_check": "Verify what the db_work metric measures (engine utilization vs connection/wait/queue pools) and inspect database-side wait and pool metrics during a repeat run before excluding the database from the regression.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/7",
+     "analysis-result.json#/evidence/12",
+     "analysis-result.json#/evidence/22",
+     "analysis-result.json#/evidence/4",
+     "analysis-result.json#/evidence/21"
+    ]
+   },
+   {
+    "rank": 4,
+    "observation": "In workload-03, db_work has missing_cells=1 with reason RESOURCE_GAPS, the database-limit check returned NO_VERDICT with reason MISSING_RESOURCE_CELLS, and analysis coverage is INCOMPLETE (RESOURCE_GAPS, MISSING_RESOURCE_CELLS).",
+    "possible_explanation": "A single missing db_work cell prevented a database-limit verdict in workload-03; the gap may be a collection artifact rather than a service event, but that cannot be assumed from the data present.",
+    "recommended_check": "Locate and explain the missing db_work cell in workload-03 (or re-collect/re-run that window) so the database-limit policy can be evaluated and full coverage restored.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/4",
+     "analysis-result.json#/evidence/10",
+     "analysis-result.json#/evidence/14",
+     "analysis-result.json#/evidence/27",
+     "analysis-result.json#/analysis_coverage"
+    ]
+   },
+   {
+    "rank": 5,
+    "observation": "The CPU-to-latency association was not established: workload-03 association-01 has status BELOW_EFFECT (raw_rho 0.446860229552, control target-request-rate dropped as CONSTANT_CONTROL, uncertainty NOT_ESTIMATED), workload-04 association-01 has status INSUFFICIENT_DATA (NO_RESIDUAL_VARIATION, LAG_NOT_EVALUABLE), and headline selection is UNAVAILABLE for all four pairs (MULTI_WINDOW_FAMILY_UNSUPPORTED, with GENUINE_PARTIAL_UNCALIBRATED on the workload-04 pairs).",
+    "possible_explanation": "The current analysis cannot statistically link CPU usage to the latency regression: associations are below effect or unevaluable, no p-values exist, and the partial correlation is uncalibrated, so CPU saturation is unproven as the cause.",
+    "recommended_check": "Re-run the correlation with a supported method for the multi-window family that calibrates the partial correlation and yields p-values, and with a non-constant load control, before accepting a CPU-saturation explanation.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/19",
+     "analysis-result.json#/evidence/20",
+     "analysis-result.json#/evidence/23",
+     "analysis-result.json#/evidence/24",
+     "analysis-result.json#/evidence/25",
+     "analysis-result.json#/evidence/26",
+     "analysis-result.json#/evidence/27"
+    ]
+   },
+   {
+    "rank": 6,
+    "observation": "resource-binding reports clock_alignment 'not_verified_by_core'; the workload-04 correlation pairs have no usable lag profile (best_lag_ms 0 with LAG_NOT_EVALUABLE and empty lag_profile) and the workload-03 pairs report best_lag_ms 0.",
+    "possible_explanation": "Without verified clock alignment between the generator, load metric, and resource series, any lead/lag or temporal ordering is unverifiable, so a 'CPU saturates first, latency follows' causal chain cannot be inferred from these series.",
+    "recommended_check": "Verify and document clock synchronization across generator, sampler, and resource collectors, then re-assess lag-based ordering only after alignment is confirmed.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/2",
+     "analysis-result.json#/evidence/19",
+     "analysis-result.json#/evidence/20",
+     "analysis-result.json#/evidence/21",
+     "analysis-result.json#/evidence/22"
+    ]
+   },
+   {
+    "rank": 7,
+    "observation": "In workload-03, cpu_work mean 0.9004095233 is just above the 0.9 threshold (q95 0.92012845, max 0.931338) and the compute-limit FAIL is backed by short threshold findings with observed_max 0.900034–0.931338, while response_time_p95 passed at 53ms.",
+    "possible_explanation": "CPU ran marginally above the 0.9 policy threshold at 90 rps without violating the latency SLO in this window, so the compute-limit FAIL may reflect a tight threshold or brief spikes rather than a user-visible latency problem.",
+    "recommended_check": "Review the compute-limit threshold policy and the interval-mean sampling/aggregation semantics, and assess whether sustained vs marginal exceedances (~0.900–0.931 ratio) are intended to fail the SLA.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/3",
+     "analysis-result.json#/evidence/9",
+     "analysis-result.json#/evidence/13",
+     "analysis-result.json#/evidence/17",
+     "analysis-result.json#/findings/0",
+     "analysis-result.json#/findings/17"
+    ]
+   }
+  ],
+  "recommendations": [
+   {
+    "rank": 1,
+    "action": "Verify clock alignment across generator, sampler, and resource collectors before making any timing-based interpretation.",
+    "rationale": "clock_alignment is not_verified_by_core and the workload-04 lag profile is LAG_NOT_EVALUABLE, so lead/lag or causal ordering cannot be supported until alignment is confirmed.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/2",
+     "analysis-result.json#/evidence/19",
+     "analysis-result.json#/evidence/20"
+    ]
+   },
+   {
+    "rank": 2,
+    "action": "Investigate the workload-04 CPU saturation and latency regression with a controlled repeat run (load ramp from 90 to 110 rps) that captures CPU saturation and queueing telemetry.",
+    "rationale": "cpu_work at ~1.0 across all 300 cells coincided with p95 latency 28815ms, but the recorded correlations are BELOW_EFFECT/INSUFFICIENT_DATA with uncertainty NOT_ESTIMATED, so the causal link is unproven and needs a targeted experiment.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/6",
+     "analysis-result.json#/evidence/11",
+     "analysis-result.json#/evidence/15",
+     "analysis-result.json#/evidence/16",
+     "analysis-result.json#/evidence/18",
+     "analysis-result.json#/evidence/27"
+    ]
+   },
+   {
+    "rank": 3,
+    "action": "Repair or explain the missing db_work cell in workload-03 and re-evaluate the database-limit policy to restore complete coverage.",
+    "rationale": "One missing cell caused database-limit to be NO_VERDICT and overall coverage INCOMPLETE (RESOURCE_GAPS, MISSING_RESOURCE_CELLS); db_work appears low in workload-04, but the workload-03 gap means DB utilization there is undecided.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/4",
+     "analysis-result.json#/evidence/10",
+     "analysis-result.json#/evidence/12",
+     "analysis-result.json#/evidence/7",
+     "analysis-result.json#/analysis_coverage"
+    ]
+   },
+   {
+    "rank": 4,
+    "action": "Confirm error and timeout accounting for workload-04, including whether timed-out or discarded requests are excluded from error_count and from the latency percentiles.",
+    "rationale": "error_count is 0 while p95 latency was 28815ms and max 30323ms; recorded throughput matched the 110 rps target, but unrecorded timeouts could change the interpretation.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/18",
+     "analysis-result.json#/evidence/15",
+     "analysis-result.json#/evidence/1",
+     "analysis-result.json#/evidence/0"
+    ]
+   },
+   {
+    "rank": 5,
+    "action": "Re-run the correlation analysis with a supported multi-window family method and a non-constant load control so the partial correlation can be calibrated and p-values reported.",
+    "rationale": "All four headline selections are UNAVAILABLE (MULTI_WINDOW_FAMILY_UNSUPPORTED, GENUINE_PARTIAL_UNCALIBRATED) and uncertainty is NOT_ESTIMATED, so no statistically supported association is currently available.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/19",
+     "analysis-result.json#/evidence/20",
+     "analysis-result.json#/evidence/23",
+     "analysis-result.json#/evidence/24",
+     "analysis-result.json#/evidence/25",
+     "analysis-result.json#/evidence/26"
+    ]
+   }
+  ],
+  "caveats": [
+   "Deterministic verdict preserved: the overall policy verdict is NO_VERDICT (not FAIL), although workload-04 is FAIL and workload-03 is NO_VERDICT, and analysis coverage is INCOMPLETE. This advice does not change that verdict.",
+   "No causal claim is supported: every correlation pair has uncertainty NOT_ESTIMATED, status BELOW_EFFECT or INSUFFICIENT_DATA, no p-values, and headline selection UNAVAILABLE; CPU saturation is a hypothesis, not a proven cause of the latency regression.",
+   "error_count = 0 in both windows does not prove the absence of errors; timeouts or discarded requests could be excluded from the recorded counts, and this was not demonstrated by the data.",
+   "Overall metrics (evidence/0 and evidence/1) span the full run from 1704067200000, which includes time before the evaluation window (from 1704067800000) and after it (run ends at 1704068430312); window-level metrics should be preferred for per-step conclusions.",
+   "The single missing db_work cell in workload-03 means database utilization there was NOT_ESTIMATED for policy purposes; a stored gap is not evidence of either low or high database load.",
+   "Anomaly analysis tested 0 anomalies and reported 0 episodes, so it provides no support for or against attributing the regression to a specific event or anomaly.",
+   "Throughput equal to the 110 rps target in workload-04 is an observed aggregate; it does not prove requests met the latency SLO or that the latency distribution is stable within the window.",
+   "cpu_work ratio near 1.0 is interpreted as saturation only as a hypothesis; the exact semantics of the metric (e.g., cores, cgroups/quota) were not provided in the evidence."
+  ]
+ },
+ "schema": "ai-experiment-run.holdout.v1",
+ "case": "case-011",
+ "rep": 1,
+ "arm": "A",
+ "try": 1,
+ "attempt_id": "case-011-1-A-t1",
+ "model_id": "deepseek-v4-flash-0731",
+ "prompt_sha256": "69f215a1ad4ae678c82410ba7cf7daf171cd9c7ca0ef4626bba6977db0af4ef7"
+}

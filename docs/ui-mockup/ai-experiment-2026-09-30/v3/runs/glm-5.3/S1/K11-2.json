@@ -1,0 +1,160 @@
+{
+ "stage": "S1",
+ "mode": "live",
+ "model": "glm-5.3",
+ "tag": {
+  "phase": "v3",
+  "model_tag": "glm-5.3",
+  "stage": "S1",
+  "case": "K11",
+  "rep": 2,
+  "attempt": 1
+ },
+ "qwen_exit": 0,
+ "wall_ms": 83120,
+ "relay": {
+  "schema_version": "advisory-ai-runtime-relay.v1",
+  "status": "FORWARDED_STRUCTURED_OUTPUT",
+  "request_count": 1,
+  "usage": {
+   "prompt_tokens": 2031,
+   "total_tokens": 9182,
+   "completion_tokens": 7151,
+   "prompt_tokens_details": {
+    "cached_tokens": 1536
+   },
+   "completion_tokens_details": {
+    "reasoning_tokens": 5614
+   }
+  },
+  "latency_ms": 81771,
+  "model_returned": "glm-5.3"
+ },
+ "relay_status": "FORWARDED_STRUCTURED_OUTPUT",
+ "usage": {
+  "prompt_tokens": 2031,
+  "total_tokens": 9182,
+  "completion_tokens": 7151,
+  "prompt_tokens_details": {
+   "cached_tokens": 1536
+  },
+  "completion_tokens_details": {
+   "reasoning_tokens": 5614
+  }
+ },
+ "latency_ms": 81771,
+ "status": "OK",
+ "note": null,
+ "output": {
+  "caveats": [
+   "The deterministic policy_verdict NO_POLICY is preserved; this advisory cannot and does not change it. Only a configured policy or required capacity can yield PASS or FAIL.",
+   "Analysis coverage is INCOMPLETE due to RESOURCE_GAPS; no conclusions about resource utilization, saturation, capacity, or load level are supported by this evidence.",
+   "Only one overall-scope metric summary is present; there are no per-transaction, per-policy-window, or per-stage counts, so counts from different scopes must not be compared.",
+   "The findings list is empty; absence of findings does not prove stability, spare capacity, low load, or absence of a problem.",
+   "Zero errors (0 of 2623 samples) applies only to the overall scope of the recorded run; it does not rule out issues in scopes or windows not covered by this evidence.",
+   "The throughput_rps denominator's unit is not defined in the evidence; no run duration or absolute rate beyond the recorded ratio is supported.",
+   "The latency percentiles and the 904 ms maximum are recorded only at overall scope; the transactions or moments responsible for the tail are not identified by this evidence.",
+   "No capacity bounds are present in this analysis, and none should be inferred from the latency or throughput values."
+  ],
+  "hypotheses": [
+   {
+    "evidence_refs": [
+     "analysis-result.json#/policy_verdict",
+     "analysis-result.json#/run_validity"
+    ],
+    "observation": "The policy verdict is NO_POLICY while run_validity is VALID.",
+    "possible_explanation": "No policy or required capacity was configured for this run, so the deterministic verdict could not evaluate to PASS or FAIL; the validity of the run data does not change that.",
+    "recommended_check": "Configure a policy (for example latency and error-rate thresholds) or a required capacity, then rerun the analysis to obtain a PASS or FAIL verdict.",
+    "rank": 1
+   },
+   {
+    "evidence_refs": [
+     "analysis-result.json#/analysis_coverage"
+    ],
+    "observation": "analysis_coverage is INCOMPLETE with reasons [\"RESOURCE_GAPS\"].",
+    "possible_explanation": "Resource-side data for the test window was missing or could not be joined into the analysis, so the resource portion of the analysis could not be completed.",
+    "recommended_check": "Rerun the test with resource collection enabled (or supply the missing resource data) and rerun the analysis; check whether coverage status becomes complete.",
+    "rank": 2
+   },
+   {
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0"
+    ],
+    "observation": "The overall latency summary records max 904 ms against p99 77 ms (p50 11 ms, p95 46 ms).",
+    "possible_explanation": "A small number of slow samples in the tail (for example warm-up, connection setup, or a transient stall) could produce a maximum well above p99; this is unverified and no cause is established.",
+    "recommended_check": "Inspect the raw JTL records for the slowest samples (timestamps, transaction labels, response codes) and count how many exceed the recorded p99; do not infer a cause from the summary alone.",
+    "rank": 3
+   },
+   {
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0"
+    ],
+    "observation": "The throughput_rps field is recorded as a ratio with numerator 2623000 and denominator 44986.",
+    "possible_explanation": "The denominator may encode the measurement window in an unstated unit with the numerator scaled from the sample count, but the evidence does not define the units, so any duration derived from it is unverified.",
+    "recommended_check": "Verify the unit definition of the throughput fields and, if needed, recompute the window from raw timestamps in the source data before treating any value as a duration.",
+    "rank": 4
+   },
+   {
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0"
+    ],
+    "observation": "The overall metric summary records error_count 0 with error_rate_ratio 0/2623 across sample_count 2623.",
+    "possible_explanation": "All recorded samples in the overall scope completed without sampled errors; per-transaction and narrower-window behavior is not covered by this evidence, so this does not establish absence of problems elsewhere.",
+    "recommended_check": "Inspect the raw JTL data for per-transaction (label-level) error counts if finer-grained verification is required.",
+    "rank": 5
+   }
+  ],
+  "recommendations": [
+   {
+    "action": "Configure a policy or required capacity (for example latency and error-rate thresholds) and rerun the analysis.",
+    "evidence_refs": [
+     "analysis-result.json#/policy_verdict",
+     "analysis-result.json#/run_validity",
+     "analysis-result.json#/evidence/0"
+    ],
+    "rationale": "The verdict is NO_POLICY; only a configured policy or required capacity can yield PASS or FAIL. A valid run and zero sampled errors do not turn NO_POLICY into PASS.",
+    "rank": 1
+   },
+   {
+    "action": "Rerun the test with resource monitoring enabled (or attach the missing resource data) and rerun the analysis.",
+    "evidence_refs": [
+     "analysis-result.json#/analysis_coverage"
+    ],
+    "rationale": "Coverage is INCOMPLETE due to RESOURCE_GAPS; without resource data, nothing about utilization, saturation, or capacity behavior is supported.",
+    "rank": 2
+   },
+   {
+    "action": "Inspect the raw JTL records for the slowest samples — the recorded max is 904 ms versus p99 77 ms — reviewing timestamps, labels, and response codes.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0"
+    ],
+    "rationale": "The summary alone shows a tail maximum well above p99; raw records are needed to see how many samples are affected and when before interpreting the tail.",
+    "rank": 3
+   },
+   {
+    "action": "Inspect the raw JTL for per-transaction (label-level) summaries, since the only metric summary present is at overall scope.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0"
+    ],
+    "rationale": "Overall-scope counts cannot be compared with per-transaction or policy-window quantities; finer-scope data is needed for scope-specific statements.",
+    "rank": 4
+   },
+   {
+    "action": "Verify the time base of the source data (clock alignment and the unit of the throughput denominator) before making any window-duration or temporal-ordering claims.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0"
+    ],
+    "rationale": "The evidence does not define the throughput denominator's unit, and an unverified clock relationship cannot support temporal conclusions.",
+    "rank": 5
+   }
+  ],
+  "schema_version": "ai-advice-output.v1",
+  "summary": "This LT Verdict analysis (run jmeter_jtl_csv-b87363cf..., analysis ff2a9752...) reports run_validity VALID, policy_verdict NO_POLICY, and analysis_coverage INCOMPLETE with reason RESOURCE_GAPS. The single metric summary is at overall scope: 2,623 samples, 0 errors (error_rate_ratio 0/2623), latency p50 11 ms, p95 46 ms, p99 77 ms, max 904 ms, and a throughput_rps ratio recorded as 2623000/44986. No findings are reported. Because no policy or required capacity was configured, no PASS/FAIL determination exists; because resource data is missing, resource and capacity conclusions are unsupported. All recorded numbers describe only the overall scope of the run."
+ },
+ "schema": "ai-experiment-run.v3",
+ "case": "K11",
+ "rep": 2,
+ "model_id": "glm-5.3",
+ "net_retries": 0,
+ "infra_retries": 0
+}

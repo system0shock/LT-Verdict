@@ -1,0 +1,175 @@
+{
+ "stage": "B",
+ "mode": "live",
+ "model": "deepseek-v4-flash-0731",
+ "tag": {
+  "phase": "holdout",
+  "attempt_id": "case-013-2-B-t1",
+  "arm": "B",
+  "stage": null,
+  "case": "case-013",
+  "rep": 2,
+  "try": 1
+ },
+ "retry_policy": "d2",
+ "qwen_exit": 0,
+ "wall_ms": 64501,
+ "relay": {
+  "schema_version": "advisory-ai-runtime-relay.v1",
+  "status": "FORWARDED_STRUCTURED_OUTPUT",
+  "received_request_count": 1,
+  "forwarded_request_count": 1,
+  "outcomes": [
+   "FORWARDED_STRUCTURED_OUTPUT"
+  ],
+  "retry_refused_reason": null,
+  "first_refused_reason": null,
+  "model_id": "deepseek-v4-flash-0731",
+  "retry_policy": "d2",
+  "requests": [
+   {
+    "ordinal": 1,
+    "forwarded": true,
+    "outcome": "FORWARDED_STRUCTURED_OUTPUT",
+    "provider_status": 200,
+    "latency_ms": 63216,
+    "usage": {
+     "prompt_tokens": 3901,
+     "total_tokens": 10385,
+     "completion_tokens": 6484,
+     "prompt_tokens_details": {
+      "cached_tokens": 1024
+     },
+     "completion_tokens_details": {
+      "reasoning_tokens": 4501
+     }
+    },
+    "model_returned": "deepseek-v4-flash-0731"
+   }
+  ],
+  "usage": {
+   "prompt_tokens": 3901,
+   "completion_tokens": 6484,
+   "total_tokens": 10385
+  },
+  "latency_ms": 63216
+ },
+ "relay_status": "FORWARDED_STRUCTURED_OUTPUT",
+ "usage": {
+  "prompt_tokens": 3901,
+  "completion_tokens": 6484,
+  "total_tokens": 10385
+ },
+ "latency_ms": 63216,
+ "retried": false,
+ "retry_refused_reason": null,
+ "status": "OK",
+ "note": null,
+ "output": {
+  "schema_version": "ai-advice-output.v1",
+  "summary": "The LT Verdict analysis for run jmeter_jtl_csv (analysis-id a535f166...) is VALID, analysis coverage is COMPLETE, and the findings list is empty. The deterministic verdict is NO_POLICY: no business policy rule and no resource rule with effect: sla applied to the 30,000 ms evaluation window (from_epoch_ms 1767225600000 to_epoch_ms 1767225630000), so the product had no rule to evaluate. Window and overall metric summaries both report error_count=0 and latency p50=300 ms, p95=500 ms, p99=500 ms, max=500 ms over 570 samples. The resource series for entity 'service' shows 30/30 observed cells (mean 3, median 3, min 1, max 5, unit synthetic_unit, slope_per_second ~0.0267), but the resource-versus-load correlation pair has paired_cells=0, raw_rho=null, partial_rho=null, status INSUFFICIENT_DATA, and uncertainty NOT_ESTIMATED, so no correlation can be inferred. Clock alignment is not_verified_by_core. Advice therefore focuses on adding applicable policy rules, supplying matched resource/load telemetry for the same window, and verifying clock alignment; none of these change the NO_POLICY verdict.",
+  "hypotheses": [
+   {
+    "rank": 1,
+    "observation": "window-policy-summary reports verdict NO_POLICY with business_verdict NO_POLICY and resource_verdict NO_POLICY for the evaluation window, while run_validity is VALID and analysis_coverage is COMPLETE with an empty findings list.",
+    "possible_explanation": "No business policy rule and no resource rule with effect: sla applied to the evaluation window, so the product had no rule to evaluate; NO_POLICY is the expected product output for such a window rather than a defect of the run.",
+    "recommended_check": "List the business policy rules and resource rules with effect: sla applicable to the evaluation window; if none exist, add such a rule covering the window and rerun so the product can emit PASS or FAIL.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/4",
+     "analysis-result.json#/run_validity",
+     "analysis-result.json#/analysis_coverage"
+    ]
+   },
+   {
+    "rank": 2,
+    "observation": "The correlation pair for entity 'service' has status INSUFFICIENT_DATA with paired_cells=0, lag_used_cells=0, raw_rho=null, partial_rho=null, and reasons INSUFFICIENT_PAIRED_CELLS, MISSING_CELLS, LAG_NOT_EVALUABLE, RESOURCE_DELTA_BELOW_MINIMUM, LOAD_DELTA_BELOW_MINIMUM, even though the resource summary observed 30/30 cells with missing_cells=0.",
+    "possible_explanation": "The load metric series (response_time_p95_ms, unit ms) may not supply cells aligned with the resource series in the evaluation window, or the within-window variation of the resource and/or load values fell below the minimum delta required, so no paired cells could be formed.",
+    "recommended_check": "Inspect the resource series (entity 'service', metric 'value') and the load series (response_time_p95_ms) for the evaluation window to confirm both exist with matching time cells and sufficient variation; then rerun to obtain a correlation estimate.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/6",
+     "analysis-result.json#/evidence/3",
+     "analysis-result.json#/evidence/8"
+    ]
+   },
+   {
+    "rank": 3,
+    "observation": "resource-binding reports clock_alignment 'not_verified_by_core', and the correlation pair lists LAG_NOT_EVALUABLE with an empty lag_profile and lag_used_cells=0.",
+    "possible_explanation": "Without a verified clock relationship between the resource collector and the JMeter/load telemetry, lead/lag ordering between the resource and load series cannot be interpreted at all.",
+    "recommended_check": "Verify clock alignment between resource collection and load generation before interpreting any temporal relationship; if misalignment is possible, correct the clocks and rerun.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/2",
+     "analysis-result.json#/evidence/6"
+    ]
+   },
+   {
+    "rank": 4,
+    "observation": "diagnostic-summary reports anomalies_tested=0, episodes_reported=0, pairs_evaluable=0, pairs_tested=1, status COMPLETE, uncertainty NOT_ESTIMATED, and the findings list is empty.",
+    "possible_explanation": "Zero anomaly candidates were tested because no correlation pair was evaluable in this window (paired_cells=0); the pipeline completed but had nothing to evaluate, which is not by itself evidence that no anomaly or bottleneck existed.",
+    "recommended_check": "After adding policy coverage and filling the telemetry gaps, rerun and compare whether anomalies_tested becomes greater than zero before drawing any stability or health conclusion.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/8",
+     "analysis-result.json#/evidence/6",
+     "analysis-result.json#/findings"
+    ]
+   }
+  ],
+  "recommendations": [
+   {
+    "rank": 1,
+    "action": "Add applicable rules for the evaluation window — a business policy rule or a resource rule with effect: sla — and rerun the analysis.",
+    "rationale": "The verdict is NO_POLICY because no applicable rule was evaluated; a healthy window or rerun does not turn NO_POLICY into PASS. Only a rule that the product evaluates can yield PASS or FAIL.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/4",
+     "analysis-result.json#/run_validity"
+    ]
+   },
+   {
+    "rank": 2,
+    "action": "Ensure both the resource series (entity 'service', metric 'value', unit synthetic_unit) and the load series (response_time_p95_ms) cover the same evaluation window with matched cells and sufficient variation, then rerun.",
+    "rationale": "The correlation pair currently has paired_cells=0 and status INSUFFICIENT_DATA with uncertainty NOT_ESTIMATED, so no resource-load relationship can be estimated until matched cells exist for the window.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/6",
+     "analysis-result.json#/evidence/3",
+     "analysis-result.json#/evidence/5"
+    ]
+   },
+   {
+    "rank": 3,
+    "action": "Verify clock alignment between the resource collector and the JMeter load collection before interpreting any lag or lead relationship between the series.",
+    "rationale": "clock_alignment is 'not_verified_by_core' and LAG_NOT_EVALUABLE is listed for the pair; without a verified clock relationship, lead/lag ordering and temporal hypotheses are unsupported.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/2",
+     "analysis-result.json#/evidence/6"
+    ]
+   },
+   {
+    "rank": 4,
+    "action": "Inspect the raw resource and load telemetry for the 30,000 ms evaluation window rather than relying on the absence of findings.",
+    "rationale": "anomalies_tested=0 and an empty findings list mean no anomaly candidate was evaluated, which does not prove stability, spare capacity, low load, or absence of a problem.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/8",
+     "analysis-result.json#/evidence/0",
+     "analysis-result.json#/evidence/5"
+    ]
+   }
+  ],
+  "caveats": [
+   "The NO_POLICY verdict is deterministic and is not changed by this advice; a rerun, healthy-looking metrics, or a healthy load generator will not turn NO_POLICY into PASS without an applicable rule that the product evaluates.",
+   "Throughput denominators differ by scope: 30399 for the overall run versus 30000 for the evaluation window; these are separate scopes and are not comparable as the same quantity.",
+   "error_count=0, the observed resource variation, anomalies_tested=0, and the empty findings list do not prove stability, spare capacity, low load, or absence of a problem.",
+   "The correlation pair has uncertainty NOT_ESTIMATED with raw_rho=null and partial_rho=null; no correlation magnitude, direction, or causal relationship should be inferred.",
+   "clock_alignment is 'not_verified_by_core'; any lead/lag ordering or temporal causal hypothesis is unsupported until clock verification is performed.",
+   "The resource series unit is synthetic_unit (min 1, max 5, mean 3); these values should not be interpreted as real capacity or load units.",
+   "This advice covers only the evaluation window recorded in the evidence; overall-run and per-window observations are distinct scopes.",
+   "The correlation reasons include MISSING_CELLS and delta-below-minimum for both resource and load; the referenced evidence does not indicate which series was missing or which side had insufficient delta, so no cause is claimed here."
+  ]
+ },
+ "schema": "ai-experiment-run.holdout.v1",
+ "case": "case-013",
+ "rep": 2,
+ "arm": "B",
+ "try": 1,
+ "attempt_id": "case-013-2-B-t1",
+ "model_id": "deepseek-v4-flash-0731",
+ "prompt_sha256": "3c0f28bee6517c13c5c854615e7d3d59301893d9723880818e4034a32e9133bf"
+}

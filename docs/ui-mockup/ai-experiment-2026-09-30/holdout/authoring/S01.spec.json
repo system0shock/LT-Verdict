@@ -1,0 +1,46 @@
+{
+ "required": [
+  [
+   "latency_p95_observed",
+   [
+    "(?:(?:latency|p95|95th|response[ -]time))[^.\\n]{0,100}(?:(?<![\\d.,])(?:100)(?![\\d]|[.,]\\d))|(?:(?<![\\d.,])(?:100)(?![\\d]|[.,]\\d))[^.\\n]{0,100}(?:(?:latency|p95|95th|response[ -]time))"
+   ]
+  ],
+  [
+   "latency_threshold",
+   [
+    "(?:(?:latency|p95|95th|response[ -]time)|threshold|sla|limit)[^.\\n]{0,100}(?:(?<![\\d.,])(?:120)(?![\\d]|[.,]\\d))|(?:(?<![\\d.,])(?:120)(?![\\d]|[.,]\\d))[^.\\n]{0,100}(?:(?:latency|p95|95th|response[ -]time)|threshold|sla|limit)"
+   ]
+  ],
+  [
+   "latency_sla_met",
+   [
+    "(?:(?:latency|p95|95th|response[ -]time)|sla)[^.\\n]{0,100}(?:(?<!not )(?<!n't )(?<!never )(?<!no )(?:met|pass|within|below|ok|satisf|under|normal|healthy))|(?:(?<!not )(?<!n't )(?<!never )(?<!no )(?:met|pass|within|below|ok|satisf|under|normal|healthy))[^.\\n]{0,100}(?:(?:latency|p95|95th|response[ -]time)|sla)"
+   ]
+  ],
+  [
+   "resource_sla_met",
+   [
+    "(?:(?:resource|cpu|memory|utili[sz]ation|limit|series))[^.\\n]{0,100}(?:(?<!not )(?<!n't )(?<!never )(?<!no )(?:met|pass|within|below|ok|satisf|under|normal|healthy))|(?:(?<!not )(?<!n't )(?<!never )(?<!no )(?:met|pass|within|below|ok|satisf|under|normal|healthy))[^.\\n]{0,100}(?:(?:resource|cpu|memory|utili[sz]ation|limit|series))"
+   ]
+  ]
+ ],
+ "forbidden": [
+  "states or implies a cause or a problem that is not in the evidence (invented cause)",
+  "claims the system is guaranteed healthy or that the SLA holds beyond the checked metrics and windows"
+ ],
+ "useful_checks": [
+  "no action is needed: an empty or minimal list of recommendations is correct"
+ ],
+ "source": {
+  "builder": "AdvisoryEvidenceBuilder",
+  "build": "5b5e51c+harness",
+  "source": "s:V01_business_fail",
+  "source_sha256": "c9d39c9c68156e998bf4587342b94a3bdae37371522ee4c05ad557349fbe94d6",
+  "derivation": [
+   "latency120"
+  ],
+  "evidence_sha256": "6052b24a29e1e0727264d897b9bde40d36d18de209a4efb6704aeadbdd764ec2",
+  "inputs": "s:V01_business_fail, derivation [latency120], analysed through RunBundleStore -> AnalysisService -> AdvisoryEvidenceBuilder by AdvisoryHoldoutCorpusTest on 5b5e51c+harness"
+ }
+}

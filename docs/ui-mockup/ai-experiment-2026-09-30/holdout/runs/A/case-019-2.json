@@ -1,0 +1,227 @@
+{
+ "stage": "A",
+ "mode": "live",
+ "model": "deepseek-v4-flash-0731",
+ "tag": {
+  "phase": "holdout",
+  "attempt_id": "case-019-2-A-t1",
+  "arm": "A",
+  "stage": null,
+  "case": "case-019",
+  "rep": 2,
+  "try": 1
+ },
+ "retry_policy": "d2",
+ "qwen_exit": 0,
+ "wall_ms": 115984,
+ "relay": {
+  "schema_version": "advisory-ai-runtime-relay.v1",
+  "status": "FORWARDED_STRUCTURED_OUTPUT",
+  "received_request_count": 1,
+  "forwarded_request_count": 1,
+  "outcomes": [
+   "FORWARDED_STRUCTURED_OUTPUT"
+  ],
+  "retry_refused_reason": null,
+  "first_refused_reason": null,
+  "model_id": "deepseek-v4-flash-0731",
+  "retry_policy": "d2",
+  "requests": [
+   {
+    "ordinal": 1,
+    "forwarded": true,
+    "outcome": "FORWARDED_STRUCTURED_OUTPUT",
+    "provider_status": 200,
+    "latency_ms": 114657,
+    "usage": {
+     "prompt_tokens": 4230,
+     "total_tokens": 14942,
+     "completion_tokens": 10712,
+     "prompt_tokens_details": {
+      "cached_tokens": 1024
+     },
+     "completion_tokens_details": {
+      "reasoning_tokens": 7674
+     }
+    },
+    "model_returned": "deepseek-v4-flash-0731"
+   }
+  ],
+  "usage": {
+   "prompt_tokens": 4230,
+   "completion_tokens": 10712,
+   "total_tokens": 14942
+  },
+  "latency_ms": 114657
+ },
+ "relay_status": "FORWARDED_STRUCTURED_OUTPUT",
+ "usage": {
+  "prompt_tokens": 4230,
+  "completion_tokens": 10712,
+  "total_tokens": 14942
+ },
+ "latency_ms": 114657,
+ "retried": false,
+ "retry_refused_reason": null,
+ "status": "OK",
+ "note": null,
+ "output": {
+  "schema_version": "ai-advice-output.v1",
+  "summary": "The deterministic verdict for window workload-04 is FAIL (policy_verdict FAIL), preserved unchanged by this advice. Resource policy FAIL: system cpu_work is constant at ratio 1.0 across all 300 cells and exceeds the compute-limit threshold of 0.9 (operator gt), reported as a resource_threshold_violation. Business policy FAIL: observed response_time_p95_ms is 28559 ms against a latency threshold of 200 ms (operator lte). Recorded error_count is 0 in both overall and window summaries. The association between cpu_work and response_time_p95_ms was NOT_ESTIMATED / INSUFFICIENT_DATA (raw_rho and partial_rho are null, controls_requested target-request-rate was dropped as constant), and clock_alignment is not_verified_by_core, so no causal, lead/lag, or temporal-ordering claim is asserted. Analysis coverage is COMPLETE and run validity is VALID. The advice below proposes only bounded checks.",
+  "hypotheses": [
+   {
+    "rank": 1,
+    "observation": "system cpu_work is constant at ratio 1.0 for all 300 cells (min=mean=median=max=1, sample_standard_deviation=0, slope_per_second=0), the same window's p95 latency is 28559 ms (p50 15055, p99 29759, max 30050), and resource policy check compute-limit (gt 0.9) is FAIL.",
+    "possible_explanation": "Sustained compute saturation (cpu_work pinned at ratio 1.0) during the evaluation window may have contributed to the extreme latency through queuing or delayed processing, but this is a hypothesis: the correlation estimate was not available and clock alignment is not verified, so co-occurrence does not prove causation.",
+    "recommended_check": "After verifying clock alignment, export per-second (or per-interval) cpu_work and latency series for the window and check whether the onset of saturation and the rise of p95/p50 align; then test whether latency falls when CPU has headroom.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/3",
+     "analysis-result.json#/evidence/5",
+     "analysis-result.json#/evidence/6",
+     "analysis-result.json#/evidence/8"
+    ]
+   },
+   {
+    "rank": 2,
+    "observation": "target request rate is constant at 110 requests/s across all 300 cells (min=max=mean=median=110, sample_standard_deviation=0) while cpu_work is pinned at ratio 1.0 and the compute-limit rule (gt 0.9) reports FAIL.",
+    "possible_explanation": "The system may lack spare compute capacity at the flat load of 110 requests/s, spending the entire window at its CPU cap; because the load is constant, the data does not reveal the load level at which saturation begins or a cap where latency would degrade.",
+    "recommended_check": "Run controlled trials at several fixed and step target rates under the same measurement setup, recording cpu_work and p95 latency at each level, to locate the rate where CPU reaches ~1.0 and latency crosses the 200 ms threshold.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/3",
+     "analysis-result.json#/evidence/4",
+     "analysis-result.json#/evidence/5",
+     "analysis-result.json#/evidence/8"
+    ]
+   },
+   {
+    "rank": 3,
+    "observation": "The overall summary shows p50 latency 50 ms over 93000 samples, while the evaluation-window summary shows p50 latency 15055 ms over 33000 samples; both share max 30050 ms; clock_alignment is not_verified_by_core.",
+    "possible_explanation": "The high-latency samples appear concentrated inside the evaluation window rather than across the whole run, which could indicate the degradation began at or shortly before the window; however, without verified clock alignment or a per-interval series, the exact onset and ordering relative to resource events cannot be established.",
+    "recommended_check": "Verify clock alignment, then plot latency percentiles against time across the entire run (run_from_epoch_ms 1704067200000 to run_to_epoch_ms 1704068430040) to locate when p95 first exceeded 200 ms and whether it is bounded to the evaluation window.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0",
+     "analysis-result.json#/evidence/2",
+     "analysis-result.json#/evidence/8"
+    ]
+   },
+   {
+    "rank": 4,
+    "observation": "Correlation pair association-01 returned status INSUFFICIENT_DATA with raw_rho null, partial_rho null, best_lag_rho null, uncertainty NOT_ESTIMATED, and reasons including CONSTANT_CONTROL, NO_RANK_VARIATION, NO_RESIDUAL_VARIATION, LAG_NOT_EVALUABLE, RESOURCE_DELTA_BELOW_MINIMUM; target-request-rate was requested as a control but dropped.",
+    "possible_explanation": "With both the target rate and cpu_work constant across the window, there is no variation from which to estimate an association between CPU and latency; this NOT_ESTIMATED result indicates the analysis could not evaluate the relationship, not that no relationship exists.",
+    "recommended_check": "Re-run the workload with step or ramp target-rate changes so that target-request-rate, cpu_work, and latency all vary, then re-run the correlation pair and the mbb-lag-max-Holm bootstrap headline selection to obtain an estimable association.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/4",
+     "analysis-result.json#/evidence/9",
+     "analysis-result.json#/evidence/10"
+    ]
+   },
+   {
+    "rank": 5,
+    "observation": "error_count is 0 in both overall and window summaries, while max latency is 30050 ms (approximately 30 s) for both, and the run endpoint 1704068430040 is approximately 30.04 s after the evaluation window endpoint 1704068400000.",
+    "possible_explanation": "If the system or client applies a timeout near ~30 s, the cluster of max latency near 30050 ms could reflect time-bounded waits or effectively timed-out requests rather than responses that naturally completed after ~30 s; a recorded error_count of 0 does not distinguish these cases.",
+    "recommended_check": "Inspect server-side access logs and client/JMeter timeout configuration for requests in the window and the run tail to confirm whether the ~30 s max-latency samples completed naturally or were terminated near a timeout boundary.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0",
+     "analysis-result.json#/evidence/2",
+     "analysis-result.json#/evidence/8"
+    ]
+   },
+   {
+    "rank": 6,
+    "observation": "Overall throughput_rps is 93000000/1230040 (approximately 75.6 rps) while window throughput_rps is 33000000/300000 (110 rps) and target rate is constant 110 requests/s; overall p50 is 50 ms versus window p50 15055 ms.",
+    "possible_explanation": "The pre-window portion of the run may be a warm-up or ramp phase with lower achieved throughput and low latency, which dilutes the overall percentiles; the evaluation window itself runs at full 110 rps with much higher latency, which may be why the window summary reflects the SLA failure.",
+    "recommended_check": "Chart achieved throughput and latency against time for the full run to confirm where achieved rate fell below the 110 rps target and where latency rose, then decide whether the evaluation window alone should drive capacity conclusions.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0",
+     "analysis-result.json#/evidence/2",
+     "analysis-result.json#/evidence/4",
+     "analysis-result.json#/evidence/8"
+    ]
+   }
+  ],
+  "recommendations": [
+   {
+    "rank": 1,
+    "action": "Verify clock alignment between the load generator, system telemetry, and the analysis time base before drawing any temporal conclusions.",
+    "rationale": "resource-binding reports clock_alignment not_verified_by_core; without verified alignment, no lead/lag ordering or temporal causal hypothesis about cpu_work vs latency is supported, and the correlation pair itself could not be evaluated.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/2",
+     "analysis-result.json#/evidence/9"
+    ]
+   },
+   {
+    "rank": 2,
+    "action": "Drill into per-interval latency (p50/p95/p99/max) and cpu_work series for window workload-04 and the full run to locate where latency first exceeded 200 ms and confirm cpu_work stayed at ratio 1.0.",
+    "rationale": "Aggregates show cpu_work constant at 1.0 (all 300 cells) and a large gap between overall p50 (50 ms) and window p50 (15055 ms), but only time-resolved series can reveal the shape, onset, and duration of the degradation.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0",
+     "analysis-result.json#/evidence/3",
+     "analysis-result.json#/evidence/6",
+     "analysis-result.json#/evidence/8"
+    ]
+   },
+   {
+    "rank": 3,
+    "action": "Investigate what consumes CPU while cpu_work is pinned at ratio 1.0 (thread dumps, profiling, process-level usage) and whether the compute-limit violation reflects application work, contention, or measurement artifacts.",
+    "rationale": "cpu_work being at ratio 1.0 across all 300 cells with compute-limit (gt 0.9) FAIL indicates the system spent the entire window at its cap; understanding the consumption source is required before changing capacity or load.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/3",
+     "analysis-result.json#/evidence/5",
+     "analysis-result.json#/evidence/7",
+     "analysis-result.json#/findings/0"
+    ]
+   },
+   {
+    "rank": 4,
+    "action": "Re-run the load test with step or ramp target-rate profiles and multiple rate levels so cpu_work and latency vary, enabling the correlation analysis to be re-evaluated.",
+    "rationale": "The association between cpu_work and response_time_p95_ms is NOT_ESTIMATED / INSUFFICIENT_DATA (constant control, no rank/residual variation, resource delta below minimum); variation is required before any association can be estimated or tested.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/4",
+     "analysis-result.json#/evidence/9",
+     "analysis-result.json#/evidence/10",
+     "analysis-result.json#/evidence/11"
+    ]
+   },
+   {
+    "rank": 5,
+    "action": "Validate response-time measurement semantics and timeout behavior for the ~30 s ceiling observed in max latency (30050 ms).",
+    "rationale": "0 recorded errors with a max latency near ~30 s is consistent with either naturally slow completions or time-bounded waits/timeouts; server-side logs and client timeout configuration will distinguish these and inform tuning.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0",
+     "analysis-result.json#/evidence/2",
+     "analysis-result.json#/evidence/8"
+    ]
+   },
+   {
+    "rank": 6,
+    "action": "Review whether the evaluation window alone, containing the latency/CPU failures, is the correct basis for capacity and SLA decisions given the full-run aggregates.",
+    "rationale": "Overall throughput (93000000/1230040, approximately 75.6 rps) is below the constant 110 rps target while the window runs at exactly 110 rps (33000000/300000), and overall p50 (50 ms) is far below window p50 (15055 ms), suggesting pre-window phases behave differently.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0",
+     "analysis-result.json#/evidence/2",
+     "analysis-result.json#/evidence/4",
+     "analysis-result.json#/evidence/8"
+    ]
+   }
+  ],
+  "caveats": [
+   "The deterministic policy verdict is FAIL (policy_verdict FAIL) and this advice does not change, weaken, or re-grade it.",
+   "clock_alignment is not_verified_by_core (evidence 2); therefore no lead/lag ordering, temporal-causal, or onset-relative-to-resource claim is asserted.",
+   "The correlation between cpu_work and response_time_p95_ms is NOT_ESTIMATED / INSUFFICIENT_DATA with raw_rho and partial_rho null (evidence 9, 10); an unavailable estimate does not prove absence of a relationship.",
+   "error_count 0 means no errors were recorded by the JMeter-based analysis (evidence 0, 1, 8); it does not prove the absence of application-level failures, timeouts, or slow completions.",
+   "anomalies_tested is 0 and episodes_reported is 0 (evidence 11); no anomaly episodes were evaluated/reported, which is not evidence of stability or health.",
+   "The cpu_work resource summary uses interval_mean at 1-second aggregation (evidence 3); sub-second CPU variation and the exact distribution of cpu_work within cells are not represented.",
+   "Overall versus evaluation-window latency percentiles are based on different sample counts (93000 vs 33000) and different time spans (evidence 0, 8); direct percentile comparison is limited.",
+   "This advice focuses on the explicit evaluation window workload-04 (1704068100000 to 1704068400000); the run and snapshot span wider bounds (1704067200000 to 1704068430040), and behavior outside the window is not separately verified (evidence 2).",
+   "An analysis_coverage status of COMPLETE and run_validity VALID indicate the pipeline processed the data as scoped; they do not validate the correctness of clock, generator, or system measurements (evidence 2, facts run_validity and analysis_coverage)."
+  ]
+ },
+ "schema": "ai-experiment-run.holdout.v1",
+ "case": "case-019",
+ "rep": 2,
+ "arm": "A",
+ "try": 1,
+ "attempt_id": "case-019-2-A-t1",
+ "model_id": "deepseek-v4-flash-0731",
+ "prompt_sha256": "69f215a1ad4ae678c82410ba7cf7daf171cd9c7ca0ef4626bba6977db0af4ef7"
+}

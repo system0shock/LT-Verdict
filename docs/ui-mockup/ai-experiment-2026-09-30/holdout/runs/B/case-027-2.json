@@ -1,0 +1,184 @@
+{
+ "stage": "B",
+ "mode": "live",
+ "model": "deepseek-v4-flash-0731",
+ "tag": {
+  "phase": "holdout",
+  "attempt_id": "case-027-2-B-t1",
+  "arm": "B",
+  "stage": null,
+  "case": "case-027",
+  "rep": 2,
+  "try": 1
+ },
+ "retry_policy": "d2",
+ "qwen_exit": 0,
+ "wall_ms": 79766,
+ "relay": {
+  "schema_version": "advisory-ai-runtime-relay.v1",
+  "status": "FORWARDED_STRUCTURED_OUTPUT",
+  "received_request_count": 1,
+  "forwarded_request_count": 1,
+  "outcomes": [
+   "FORWARDED_STRUCTURED_OUTPUT"
+  ],
+  "retry_refused_reason": null,
+  "first_refused_reason": null,
+  "model_id": "deepseek-v4-flash-0731",
+  "retry_policy": "d2",
+  "requests": [
+   {
+    "ordinal": 1,
+    "forwarded": true,
+    "outcome": "FORWARDED_STRUCTURED_OUTPUT",
+    "provider_status": 200,
+    "latency_ms": 78489,
+    "usage": {
+     "prompt_tokens": 5446,
+     "total_tokens": 13636,
+     "completion_tokens": 8190,
+     "prompt_tokens_details": {
+      "cached_tokens": 1024
+     },
+     "completion_tokens_details": {
+      "reasoning_tokens": 6067
+     }
+    },
+    "model_returned": "deepseek-v4-flash-0731"
+   }
+  ],
+  "usage": {
+   "prompt_tokens": 5446,
+   "completion_tokens": 8190,
+   "total_tokens": 13636
+  },
+  "latency_ms": 78489
+ },
+ "relay_status": "FORWARDED_STRUCTURED_OUTPUT",
+ "usage": {
+  "prompt_tokens": 5446,
+  "completion_tokens": 8190,
+  "total_tokens": 13636
+ },
+ "latency_ms": 78489,
+ "retried": false,
+ "retry_refused_reason": null,
+ "status": "OK",
+ "note": null,
+ "output": {
+  "schema_version": "ai-advice-output.v1",
+  "summary": "The run is VALID, but the capacity analysis is INCOMPLETE: the capacity summary reports bound_type INDETERMINATE, policy_verdict NO_VERDICT, no bound (lower_inclusive null, upper_exclusive null), with reasons CAPACITY_GUARD_MISSING and CAPACITY_STAGE_NOT_VERIFIED. Both stage windows show business PASS (p95 latency 140 ms vs 250 ms threshold, error_count 0) and resource_verdict NO_POLICY, and both generator-cpu-guard diagnostic checks PASS, yet neither stage is verified for a capacity bound. The deterministic product results must be preserved exactly: policy_verdict NO_VERDICT and capacity INDETERMINATE are not turned into PASS by healthy windows, zero errors, or low generator CPU. Capacity_knee is null with KNEE_DETECTOR_NOT_IMPLEMENTED, a fixed product limitation, not a run defect. Recommended next steps are to inspect the missing generator guard and rerun with a healthy generator, check whether an applicable resource rule with effect sla covers the stage windows (NO_POLICY means none was evaluated), and verify clock alignment before any temporal interpretation.",
+  "hypotheses": [
+   {
+    "rank": 1,
+    "observation": "capacity_summary reports bound_type INDETERMINATE, policy_verdict NO_VERDICT, and reasons CAPACITY_GUARD_MISSING and CAPACITY_STAGE_NOT_VERIFIED; the two generator-cpu-guard diagnostic checks (effect diagnostic, operator gt, threshold 0.85) both show status PASS for stage-1 and stage-2.",
+    "possible_explanation": "A required generator guard is missing from the product evaluation even though the recorded diagnostic CPU guard checks passed; the evidence does not state why the guard is missing, so this is a hypothesis to test.",
+    "recommended_check": "Inspect the load generator's resource series and the configured guard rules for both windows, then rerun with a healthy generator and the required guard in place.",
+    "evidence_refs": [
+     "analysis-result.json#/capacity_summary",
+     "analysis-result.json#/evidence/7",
+     "analysis-result.json#/evidence/8",
+     "analysis-result.json#/analysis_coverage"
+    ]
+   },
+   {
+    "rank": 2,
+    "observation": "Both window-policy-summary records report business_verdict PASS, resource_verdict NO_POLICY, and overall verdict PASS (response_time_p95_ms observed 140 vs threshold 250 in both windows), while the capacity summary policy_verdict is NO_VERDICT.",
+    "possible_explanation": "Per product rules, resource_verdict NO_POLICY indicates no applicable resource rule with effect sla was evaluated for these windows; without an applicable SLA the stages cannot be verified for a capacity bound.",
+    "recommended_check": "List the applicable resource rules with effect sla for each stage window; if none exist, configure one and rerun the capacity evaluation.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/10",
+     "analysis-result.json#/evidence/12",
+     "analysis-result.json#/evidence/9",
+     "analysis-result.json#/evidence/11",
+     "analysis-result.json#/capacity_summary"
+    ]
+   },
+   {
+    "rank": 3,
+    "observation": "The active_users series for stage-1 (min 97, max 100, mean 98.57, 30 observed cells, 0 missing cells) and stage-2 (min 197, max 200, mean 198.5) are stable and near the stage targets (100 and 200), yet both stages are reported INDETERMINATE with CAPACITY_GUARD_MISSING.",
+    "possible_explanation": "The INDETERMINATE status may stem from the missing guard or unverified stage condition rather than from load instability, since the recorded load series appear close to target and without gaps.",
+    "recommended_check": "Compare the load series against the stage targets and tolerance and rerun with the guard and SLA conditions in place to see whether the stages become verified.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/3",
+     "analysis-result.json#/evidence/5",
+     "analysis-result.json#/capacity_summary"
+    ]
+   },
+   {
+    "rank": 4,
+    "observation": "resource-binding reports clock_alignment 'not_verified_by_core' for the explicit evaluation windows spanning epoch 1767225600000 to 1767226200000, with run_to_epoch_ms 1767226200500.",
+    "possible_explanation": "An unverified clock relationship between load generation and metric capture could undermine any temporal ordering or lead/lag conclusion drawn from these windows; the evidence itself makes no such claim.",
+    "recommended_check": "Verify clock alignment between the load generator and metric capture before performing any temporal interpretation of the window data.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/2"
+    ]
+   }
+  ],
+  "recommendations": [
+   {
+    "rank": 1,
+    "action": "Preserve the deterministic results exactly: policy_verdict NO_VERDICT, capacity bound_type INDETERMINATE with lower_inclusive and upper_exclusive null, and analysis coverage INCOMPLETE; do not treat window-level PASS, zero errors, or low generator CPU as a verified capacity pass or bound.",
+    "rationale": "The capacity stages are not verified (CAPACITY_STAGE_NOT_VERIFIED) and the guard is missing (CAPACITY_GUARD_MISSING); NO_POLICY resource verdicts are not a pass for capacity, so only a re-evaluated product rule can change the verdict.",
+    "evidence_refs": [
+     "analysis-result.json#/capacity_summary",
+     "analysis-result.json#/policy_verdict",
+     "analysis-result.json#/analysis_coverage",
+     "analysis-result.json#/evidence/0"
+    ]
+   },
+   {
+    "rank": 2,
+    "action": "Investigate the missing generator guard: both stages list CAPACITY_GUARD_MISSING even though the generator-cpu-guard diagnostic checks report PASS; inspect the generator resource series and the guard configuration, then rerun with a healthy generator and the required guard present. Do not change the diagnostic guard's effect to binding, SLA, or enforcing.",
+    "rationale": "A missing or failed generator guard makes its stage unusable for a product bound and never creates an upper bound; the evidence does not say why the guard is missing, so inspection and a healthy rerun are the appropriate next steps.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/7",
+     "analysis-result.json#/evidence/8",
+     "analysis-result.json#/capacity_summary"
+    ]
+   },
+   {
+    "rank": 3,
+    "action": "Check whether an applicable resource rule with effect sla covers each stage window; both windows report resource_verdict NO_POLICY. If no such rule exists, configure one and rerun so the product can evaluate and verify the stage outcome.",
+    "rationale": "A capacity bound is derived from stages with a verified product outcome, and each such stage needs an applicable SLA; NO_POLICY means no applicable resource rule was evaluated, so no stage can currently be verified.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/10",
+     "analysis-result.json#/evidence/12",
+     "analysis-result.json#/capacity_summary"
+    ]
+   },
+   {
+    "rank": 4,
+    "action": "Verify clock alignment between load generation and metric capture before using the window epoch deltas for any temporal comparison.",
+    "rationale": "The resource binding reports clock_alignment 'not_verified_by_core'; an unknown or unverified clock relationship cannot support lead/lag ordering or a temporal causal hypothesis.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/2"
+    ]
+   },
+   {
+    "rank": 5,
+    "action": "Do not treat capacity_knee null with knee_reason KNEE_DETECTOR_NOT_IMPLEMENTED as a run defect or as a prerequisite for a capacity bound; a capacity bound is produced only when stages are verified. Re-run the capacity evaluation after the guard and SLA conditions are addressed.",
+    "rationale": "A capacity bound is derived from stages with a verified product outcome independently of any knee, and capacity_knee is always null with KNEE_DETECTOR_NOT_IMPLEMENTED, which is a fixed product limitation, not an operator action.",
+    "evidence_refs": [
+     "analysis-result.json#/capacity_summary"
+    ]
+   }
+  ],
+  "caveats": [
+   "Capacity verdict INDETERMINATE with policy_verdict NO_VERDICT and analysis coverage INCOMPLETE are deterministic product results; window-level PASS and generator CPU about 0.41-0.45 ratio (vs 0.85 threshold) do not prove spare capacity or a capacity bound.",
+   "The evidence reports CAPACITY_GUARD_MISSING while the generator-cpu-guard records show PASS, but it does not explain why the guard is missing; the missing guard may be a different guard or rule not present in this evidence set.",
+   "resource_verdict NO_POLICY means no applicable resource rule with effect sla was evaluated for those windows; it is not a pass, and configuring and rerunning is how such a rule could be evaluated.",
+   "Clock alignment was not verified by core (clock_alignment 'not_verified_by_core'), so epoch values alone do not establish temporal ordering between components.",
+   "Counts in the evidence have different scopes and windows: overall/per-transaction metric summaries (sample_count 2401, throughput ratio numerator 2401000 / denominator 600500) versus per-window policy summaries; they are not directly comparable.",
+   "No findings are present in the analysis; absence of findings does not prove stability, spare capacity, or absence of a problem."
+  ]
+ },
+ "schema": "ai-experiment-run.holdout.v1",
+ "case": "case-027",
+ "rep": 2,
+ "arm": "B",
+ "try": 1,
+ "attempt_id": "case-027-2-B-t1",
+ "model_id": "deepseek-v4-flash-0731",
+ "prompt_sha256": "3c0f28bee6517c13c5c854615e7d3d59301893d9723880818e4034a32e9133bf"
+}

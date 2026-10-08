@@ -1,0 +1,155 @@
+{
+ "stage": "S0",
+ "mode": "live",
+ "model": "deepseek-v4-flash-0731",
+ "tag": {
+  "phase": "v2-pilot",
+  "stage": "S0",
+  "case": "K10",
+  "rep": 2,
+  "attempt": 1
+ },
+ "qwen_exit": 0,
+ "wall_ms": 60356,
+ "relay": {
+  "schema_version": "advisory-ai-runtime-relay.v1",
+  "status": "FORWARDED_STRUCTURED_OUTPUT",
+  "request_count": 1,
+  "usage": {
+   "prompt_tokens": 2931,
+   "total_tokens": 9037,
+   "completion_tokens": 6106,
+   "prompt_tokens_details": {
+    "cached_tokens": 1024
+   },
+   "completion_tokens_details": {
+    "reasoning_tokens": 4107
+   }
+  },
+  "latency_ms": 59132,
+  "model_returned": "deepseek-v4-flash-0731"
+ },
+ "relay_status": "FORWARDED_STRUCTURED_OUTPUT",
+ "usage": {
+  "prompt_tokens": 2931,
+  "total_tokens": 9037,
+  "completion_tokens": 6106,
+  "prompt_tokens_details": {
+   "cached_tokens": 1024
+  },
+  "completion_tokens_details": {
+   "reasoning_tokens": 4107
+  }
+ },
+ "latency_ms": 59132,
+ "status": "OK",
+ "note": null,
+ "output": {
+  "schema_version": "ai-advice-output.v1",
+  "summary": "Deterministic verdict for run jmeter_jtl_csv-b87363cf1d89c0789e174268c6d25cd65abd36f7b623d4ea84fe253ceaabf1e7: run_validity is VALID, policy_verdict is NO_POLICY, analysis_coverage is COMPLETE, and the findings array is empty. The evidence contains aggregate JMeter metric summaries: overall (2623 samples, error_count 0, latency_ms p50 11 / p95 46 / p99 77 / max 904) and per-transaction summaries (add product to cart, cart, checkout, home, product, reset cart), each with ~437 samples and 0 errors. Because the verdict is NO_POLICY, the zero-error/empty-findings result is not a PASS and does not demonstrate stability or capacity. Notable gaps between p99 and max latency for home (p99 96 ms vs max 904 ms) and checkout (p99 85 ms vs max 444 ms) are consistent with isolated tail events, but aggregate percentiles alone cannot confirm outlier counts or timing. Advice is limited to bounded hypotheses and verification checks; the verdict itself is unchanged.",
+  "hypotheses": [
+   {
+    "rank": 1,
+    "observation": "The home transaction summary (analysis-result.json#/evidence/4) reports latency_ms max 904, p50 27, p95 61, p99 96 with sample_count 438 and error_count 0; the overall summary (analysis-result.json#/evidence/0) also shows max 904 ms with p99 77 ms across 2623 samples.",
+    "possible_explanation": "A max of 904 ms far above p99 96 ms is consistent with one or a few isolated slow samples (a tail event) on the home endpoint rather than a uniform slowdown; this is a hypothesis only, since aggregate percentiles do not reveal how many samples were slow or when they occurred.",
+    "recommended_check": "Inspect the raw per-sample JTL rows for the home sampler, locate the sample(s) near 904 ms with their timestamps, and compare them against server-side logs, GC pauses, or resource metrics at the same moment.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/4",
+     "analysis-result.json#/evidence/0"
+    ]
+   },
+   {
+    "rank": 2,
+    "observation": "The checkout transaction summary (analysis-result.json#/evidence/3) reports latency_ms max 444 while p50 13, p95 45, p99 85, with sample_count 437 and error_count 0.",
+    "possible_explanation": "A max of 444 ms well above the p99 85 ms could be explained by a single or few slow checkout samples, e.g., contention or a transient backend condition; no causal claim is supported by the aggregate data alone.",
+    "recommended_check": "Examine the raw checkout samples for the 444 ms outlier and check whether any other transaction shows a correlated tail at the same point in the run before attributing cause.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/3",
+     "analysis-result.json#/evidence/0"
+    ]
+   },
+   {
+    "rank": 3,
+    "observation": "Overall summary (analysis-result.json#/evidence/0) reports error_count 0, error_rate_ratio 0/2623, latency_ms p50 11 / p95 46 / p99 77 / max 904, sample_count 2623, while the fact analysis-result.json#/policy_verdict is NO_POLICY.",
+    "possible_explanation": "Zero recorded errors and low p50/p95 latencies could indicate no observed failures at this load, but with NO_POLICY there is no defined target, so this cannot be converted into a pass, stability, or capacity claim.",
+    "recommended_check": "Attach or define an explicit policy (latency thresholds, error budget, throughput floor) and re-evaluate the same evidence against it to obtain a meaningful pass/fail interpretation.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0",
+     "analysis-result.json#/policy_verdict"
+    ]
+   },
+   {
+    "rank": 4,
+    "observation": "Per-transaction summaries report 437 samples each for add product to cart, cart, checkout, product, and reset cart (analysis-result.json#/evidence/1, /evidence/2, /evidence/3, /evidence/5, /evidence/6) and 438 samples for home (analysis-result.json#/evidence/4), while the overall summary reports 2623 samples (analysis-result.json#/evidence/0).",
+    "possible_explanation": "The near-even sample counts are consistent with an evenly distributed test flow and may reflect the JMeter test plan's thread/loop configuration rather than any observed runtime behavior.",
+    "recommended_check": "Verify the JMeter test plan (thread groups, ramp-up, loop counts) matches the reported per-transaction distribution before drawing any conclusion from the counts.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/1",
+     "analysis-result.json#/evidence/2",
+     "analysis-result.json#/evidence/4"
+    ]
+   },
+   {
+    "rank": 5,
+    "observation": "The facts report run_validity VALID, analysis_coverage COMPLETE with an empty reasons array, policy_verdict NO_POLICY, and the findings array is empty.",
+    "possible_explanation": "A VALID run with COMPLETE coverage means the analysis finished over the submitted evidence; an empty findings array under NO_POLICY means no checks were defined or evaluated, not that the system is proven healthy.",
+    "recommended_check": "Confirm the submitted inputs (JTL source and any policy configuration) are the intended ones and that no policy was accidentally omitted before interpreting the empty findings.",
+    "evidence_refs": [
+     "analysis-result.json#/run_validity",
+     "analysis-result.json#/policy_verdict",
+     "analysis-result.json#/analysis_coverage"
+    ]
+   }
+  ],
+  "recommendations": [
+   {
+    "rank": 1,
+    "action": "Define and attach an explicit evaluation policy with concrete latency, error-rate, and throughput thresholds, then re-evaluate this run against that policy.",
+    "rationale": "policy_verdict is NO_POLICY, so the zero-error aggregate and empty findings cannot be read as a PASS; without defined thresholds there is no supported pass/fail interpretation.",
+    "evidence_refs": [
+     "analysis-result.json#/policy_verdict",
+     "analysis-result.json#/evidence/0"
+    ]
+   },
+   {
+    "rank": 2,
+    "action": "Investigate the home transaction tail latency using raw per-sample data and correlated server/APM metrics rather than percentiles alone.",
+    "rationale": "Home reports max 904 ms versus p99 96 ms with no errors, a gap consistent with an isolated tail sample, but the cause is unverified until the raw samples and timing are examined.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/4",
+     "analysis-result.json#/evidence/0"
+    ]
+   },
+   {
+    "rank": 3,
+    "action": "Investigate checkout tail latency (max 444 ms vs p99 85 ms) with raw samples to determine whether it coincides with the home tail event or with concurrent load.",
+    "rationale": "Checkout shows a similarly large p99-to-max gap; correlating the outliers requires raw samples and is not supported by the aggregate summaries alone.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/3"
+    ]
+   },
+   {
+    "rank": 4,
+    "action": "Verify timestamp/clock consistency between the JMeter JTL samples and any server or APM logs before attempting any temporal correlation of tail samples.",
+    "rationale": "The evidence contains no clock-relationship or timestamp information; without verified clocks, lead/lag ordering or temporal causal hypotheses are unsupported.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0",
+     "analysis-result.json#/evidence/4"
+    ]
+   }
+  ],
+  "caveats": [
+   "policy_verdict is NO_POLICY: the zero-error and empty-findings result is not a PASS, and missing policy must not be treated as a pass.",
+   "Only aggregate percentile summaries are present; there is no raw per-sample series, so outlier counts, exact outlier times, and distribution shape are unknown.",
+   "error_count 0 means no recorded sampler errors in the evidence; it does not prove spare capacity, low load, or absence of latent problems.",
+   "analysis_coverage COMPLETE refers to completeness of the provided analysis over the submitted evidence, not to coverage of all system behavior.",
+   "throughput_rps is reported as numerator 2623000 over denominator 44986 without a unit definition in the evidence; no throughput claim should be derived from it until the field semantics are confirmed.",
+   "No clock/timestamp relationship exists in the evidence, so no temporal ordering or lead/lag causal hypothesis is supported.",
+   "The p99-to-max gaps for home and checkout are observations; attributing them to specific events would require supporting counts and raw timing data that are not present."
+  ]
+ },
+ "schema": "ai-experiment-run.v2",
+ "phase": "pilot",
+ "case": "K10",
+ "rep": 2
+}

@@ -1,0 +1,174 @@
+{
+ "stage": "S2",
+ "mode": "live",
+ "model": "deepseek-v4-flash-0731",
+ "tag": {
+  "phase": "v2-pilot",
+  "stage": "S2",
+  "case": "K06",
+  "rep": 1,
+  "attempt": 1
+ },
+ "qwen_exit": 0,
+ "wall_ms": 61345,
+ "relay": {
+  "schema_version": "advisory-ai-runtime-relay.v1",
+  "status": "FORWARDED_STRUCTURED_OUTPUT",
+  "request_count": 1,
+  "usage": {
+   "prompt_tokens": 10312,
+   "total_tokens": 15872,
+   "completion_tokens": 5560,
+   "prompt_tokens_details": {
+    "cached_tokens": 1024
+   },
+   "completion_tokens_details": {
+    "reasoning_tokens": 3413
+   }
+  },
+  "latency_ms": 59993,
+  "model_returned": "deepseek-v4-flash-0731"
+ },
+ "relay_status": "FORWARDED_STRUCTURED_OUTPUT",
+ "usage": {
+  "prompt_tokens": 10312,
+  "total_tokens": 15872,
+  "completion_tokens": 5560,
+  "prompt_tokens_details": {
+   "cached_tokens": 1024
+  },
+  "completion_tokens_details": {
+   "reasoning_tokens": 3413
+  }
+ },
+ "latency_ms": 59993,
+ "status": "OK",
+ "note": null,
+ "output": {
+  "schema_version": "ai-advice-output.v1",
+  "summary": "Deterministic verdict: FAIL for window run-intersection. The policy check rule overall-errors (operator lte, threshold 0.01) observed 3688/73813 errors and returned FAIL; the window policy summary confirms business verdict FAIL and overall verdict FAIL, with resource_verdict NO_POLICY (no resource policy configured; this is not PASS). Run validity is VALID, but analysis coverage is INCOMPLETE due to RESOURCE_GAPS in paymentservice resource series (CPU 5/47 missing, memory 6/47 missing). All 3688 load-scope errors are on the checkout transaction; the OpenSearch error profile labels the same count of errors as frontend.request_error appearing in periodic bursts. A descriptive correlation between error rate and achieved load has high rho (raw 0.974, partial 0.972) but status DESCRIPTIVE with uncertainty NOT_ESTIMATED and headline selection UNAVAILABLE (p-value null). Clock alignment is not_verified_by_core, so event ordering and lead/lag interpretation are not supported until clocks are verified.",
+  "hypotheses": [
+   {
+    "rank": 1,
+    "observation": "The policy check for rule overall-errors is FAIL with observed 3688/73813 in window run-intersection, and the checkout transaction metric summary carries error_count 3688 while every other transaction scope shows error_count 0.",
+    "possible_explanation": "Checkout requests are the source of essentially all load-generator errors that drive the FAIL verdict, although the underlying cause (timeout, backend rejection, or frontend request-error) is not proven here.",
+    "recommended_check": "Inspect checkout sampler response codes and failure messages, then correlate with frontend request-error entries to determine why only the checkout flow fails.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/15",
+     "analysis-result.json#/evidence/3",
+     "analysis-result.json#/evidence/17",
+     "analysis-result.json#/evidence/22"
+    ]
+   },
+   {
+    "rank": 2,
+    "observation": "The OpenSearch error timeline shows non-zero error counts only in repeated bursts (for example 218-308 counts per 15s near timestamp 1790628855000-1790628930000, a shorter burst near 1790629095000-1790629170000, and another near 1790629335000-1790629425000) with zero-count periods in between.",
+    "possible_explanation": "Errors recur in separated bursts rather than as one continuous fault; this could reflect a repeating load pattern, stage transitions, or recurring timeout windows, but no cause can be inferred from counts alone.",
+    "recommended_check": "After verifying clock alignment, overlay the error burst intervals with load stage transitions and checkout throughput to see whether bursts coincide with stage boundaries.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/22",
+     "analysis-result.json#/evidence/7",
+     "analysis-result.json#/evidence/3"
+    ]
+   },
+   {
+    "rank": 3,
+    "observation": "The correlation pair for errors vs load reports raw_rho 0.974383916991, partial_rho 0.972200295291 and status DESCRIPTIVE, with uncertainty NOT_ESTIMATED, and the headline selection is UNAVAILABLE with null p-values.",
+    "possible_explanation": "Within this window the error rate tends to move with achieved load, but because the correlation is descriptive and uncalibrated it does not establish that load causes errors or supports lead/lag ordering.",
+    "recommended_check": "Treat the rho values as descriptive only; if calibrated significance is needed, rerun with defined load stages and control context so uncertainty and headline selection can be produced.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/18",
+     "analysis-result.json#/evidence/19",
+     "analysis-result.json#/evidence/20"
+    ]
+   },
+   {
+    "rank": 4,
+    "observation": "paymentservice resource summaries have missing cells (CPU missing 5 of 47 with RESOURCE_GAPS and longest_gap_cells 2; memory missing 6 of 47), and analysis coverage is INCOMPLETE with reason RESOURCE_GAPS.",
+    "possible_explanation": "Missing paymentservice metric samples could hide a resource condition coincident with the error bursts, but the gaps prevent any conclusion about paymentservice from these series.",
+    "recommended_check": "Restore or verify metric collection for paymentservice, then rerun so resource series have full observed_cells and coverage can become complete.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/12",
+     "analysis-result.json#/evidence/13",
+     "analysis-result.json#/analysis_coverage"
+    ]
+   },
+   {
+    "rank": 5,
+    "observation": "Overall latency shows max 10008 ms against p99 157 ms (window p99 158 ms), and the same 10008 ms max appears on the checkout transaction.",
+    "possible_explanation": "A small number of extreme tail samples on checkout could coincide with the error bursts (for example near-timeout requests), but the count of samples at max latency is unknown, so no impact share can be asserted.",
+    "recommended_check": "Inspect individual checkout samples near the 10008 ms max and compare their timestamps with the error burst timeline after clock alignment is verified.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0",
+     "analysis-result.json#/evidence/17",
+     "analysis-result.json#/evidence/3",
+     "analysis-result.json#/evidence/22"
+    ]
+   }
+  ],
+  "recommendations": [
+   {
+    "rank": 1,
+    "action": "Investigate the source of frontend.request_error entries and checkout sampler failures (timeout vs explicit error) using application and access logs beyond the two sampled messages, then rerun to confirm the fix.",
+    "rationale": "The FAIL is driven by rule overall-errors (3688/73813 in run-intersection), all load-scope errors are on checkout, and the error profile labels all sampled entries as frontend.request_error.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/15",
+     "analysis-result.json#/evidence/3",
+     "analysis-result.json#/evidence/22",
+     "analysis-result.json#/policy_verdict"
+    ]
+   },
+   {
+    "rank": 2,
+    "action": "If a resource dimension verdict is required, configure a resource/capacity policy; leave resource_verdict NO_POLICY unchanged otherwise.",
+    "rationale": "The window policy summary reports resource_verdict NO_POLICY, and under the product rules NO_POLICY remains NO_POLICY: it is not PASS and cannot be converted to PASS by a rerun or window.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/16",
+     "analysis-result.json#/evidence/15"
+    ]
+   },
+   {
+    "rank": 3,
+    "action": "Fix paymentservice metric collection gaps and rerun before using resource series for conclusions.",
+    "rationale": "CPU missing 5/47 and memory missing 6/47 cells cause RESOURCE_GAPS and make analysis coverage INCOMPLETE, so paymentservice resource behavior cannot be assessed from this run.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/12",
+     "analysis-result.json#/evidence/13",
+     "analysis-result.json#/analysis_coverage"
+    ]
+   },
+   {
+    "rank": 4,
+    "action": "Verify clock alignment across load generator, application, and OpenSearch before any temporal statement about which event preceded another.",
+    "rationale": "The resource binding reports clock_alignment not_verified_by_core, so raw epoch deltas cannot support lead/lag or causal ordering.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/7"
+    ]
+   },
+   {
+    "rank": 5,
+    "action": "Do not use the high rho values as proof of a load-dependence failure; if significance or uncertainty is needed, rerun with defined load stages and control context.",
+    "rationale": "The correlation is DESCRIPTIVE with uncertainty NOT_ESTIMATED and headline selection UNAVAILABLE (null p-values); the diagnostic also reports anomalies_tested 0, which does not prove a stable or healthy system.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/18",
+     "analysis-result.json#/evidence/19",
+     "analysis-result.json#/evidence/20"
+    ]
+   }
+  ],
+  "caveats": [
+   "The deterministic verdict FAIL is unchanged by this advice; resource_verdict is NO_POLICY (missing resource policy), which is not a pass and cannot become PASS without configured policy.",
+   "Clock alignment is not_verified_by_core; raw epoch timestamps are not durations and event ordering or lead/lag claims are unsupported until clocks are verified.",
+   "The OpenSearch error profile total (3688 over the full snapshot span, step 15 s) and the policy window denominator (73813 in run-intersection) are different scopes/windows; they are not inconsistent quantities.",
+   "The correlation pair is DESCRIPTIVE with uncertainty NOT_ESTIMATED and headline p-values null; its rho values are not calibrated evidence and do not imply causation.",
+   "anomalies_tested 0, a flat series, or low resource means do not prove stability, spare capacity, or absence of a problem.",
+   "Analysis coverage is INCOMPLETE (RESOURCE_GAPS) because paymentservice CPU and memory series are missing cells; conclusions about paymentservice are limited.",
+   "The two sampled OpenSearch messages are examples, not full log bodies; no individual load samples, traces, call graph, topology, or release/configuration data are present, and the number of samples hitting the 10008 ms max is unknown.",
+   "Counts from different sources (JMeter sampler scopes vs OpenSearch error profile) are compared only for context and should not be treated as the same measurement stream."
+  ]
+ },
+ "schema": "ai-experiment-run.v2",
+ "phase": "pilot",
+ "case": "K06",
+ "rep": 1
+}

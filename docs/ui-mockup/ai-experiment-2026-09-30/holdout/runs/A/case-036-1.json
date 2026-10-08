@@ -1,0 +1,198 @@
+{
+ "stage": "A",
+ "mode": "live",
+ "model": "deepseek-v4-flash-0731",
+ "tag": {
+  "phase": "holdout",
+  "attempt_id": "case-036-1-A-t1",
+  "arm": "A",
+  "stage": null,
+  "case": "case-036",
+  "rep": 1,
+  "try": 1
+ },
+ "retry_policy": "d2",
+ "qwen_exit": 0,
+ "wall_ms": 61612,
+ "relay": {
+  "schema_version": "advisory-ai-runtime-relay.v1",
+  "status": "FORWARDED_STRUCTURED_OUTPUT",
+  "received_request_count": 1,
+  "forwarded_request_count": 1,
+  "outcomes": [
+   "FORWARDED_STRUCTURED_OUTPUT"
+  ],
+  "retry_refused_reason": null,
+  "first_refused_reason": null,
+  "model_id": "deepseek-v4-flash-0731",
+  "retry_policy": "d2",
+  "requests": [
+   {
+    "ordinal": 1,
+    "forwarded": true,
+    "outcome": "FORWARDED_STRUCTURED_OUTPUT",
+    "provider_status": 200,
+    "latency_ms": 60205,
+    "usage": {
+     "prompt_tokens": 22066,
+     "total_tokens": 28018,
+     "completion_tokens": 5952,
+     "prompt_tokens_details": {
+      "cached_tokens": 1024
+     },
+     "completion_tokens_details": {
+      "reasoning_tokens": 3584
+     }
+    },
+    "model_returned": "deepseek-v4-flash-0731"
+   }
+  ],
+  "usage": {
+   "prompt_tokens": 22066,
+   "completion_tokens": 5952,
+   "total_tokens": 28018
+  },
+  "latency_ms": 60205
+ },
+ "relay_status": "FORWARDED_STRUCTURED_OUTPUT",
+ "usage": {
+  "prompt_tokens": 22066,
+  "completion_tokens": 5952,
+  "total_tokens": 28018
+ },
+ "latency_ms": 60205,
+ "retried": false,
+ "retry_refused_reason": null,
+ "status": "OK",
+ "note": null,
+ "output": {
+  "schema_version": "ai-advice-output.v1",
+  "summary": "The run is VALID with COMPLETE coverage, and the deterministic policy verdict is NO_POLICY: neither the reference (1767225600000–1767225720000 ms) nor evaluation (1767225720000–1767225960000 ms) window had a business or resource policy defined, so no PASS/FAIL determination was made (NO_POLICY is not a PASS). JMeter sampling shows 7200 samples overall with error_count 0 and overall p50/p95/p99/max latency 201/237/239/240 ms; achieved throughput is 20 requests/s in both windows and the target series is constant at 20 requests/s. One correlation candidate was selected in the evaluation window: resource-00 (ratio) vs response_time_p95_ms, rho 0.965154108981 at best_lag_ms 0, Holm-adjusted p 0.016 across 16 family hypotheses (status SELECTED/CANDIDATE). All 15 other resource pairs were BELOW_EFFECT or NOT_SELECTED. Interpretation limits: the requested target control was constant and dropped (CONSTANT_CONTROL); correlation uncertainty is NOT_ESTIMATED for every pair; clock_alignment is not_verified_by_core so no lead/lag ordering is established; anomalies_tested=0 and episodes_reported=0 in the diagnostic summary; sensitivity_without_achieved_rps is null. The high correlation is a hypothesis to test, not a proven cause.",
+  "hypotheses": [
+   {
+    "rank": 1,
+    "observation": "In the evaluation window, correlation pair-00 reports resource-00 (ratio) with response_time_p95_ms at best_lag_ms 0: raw_rho = partial_rho = 0.965154108981, status CANDIDATE, and it is the only pair selected after Holm adjustment (holm_adjusted_p_value 0.016, max_p_value 0.001, alpha 0.05, family_hypotheses 16).",
+    "possible_explanation": "resource-00 utilization and p95 response latency rise and fall together in the evaluation window, which could indicate a shared driver such as service saturation or contention; the evidence is a stored correlation, not proof that one causes the other.",
+    "recommended_check": "Verify clock alignment between the JMeter sampler timestamps and resource series (clock_alignment is not_verified_by_core), then plot resource-00 against the p95 latency series over the evaluation window, inspect the lag profile beyond lag 0, and confirm whether the association persists when load is varied instead of constant.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/41",
+     "analysis-result.json#/evidence/57",
+     "analysis-result.json#/evidence/3",
+     "analysis-result.json#/evidence/40",
+     "analysis-result.json#/evidence/2"
+    ]
+   },
+   {
+    "rank": 2,
+    "observation": "For every correlation pair, controls_requested contains 'target' and controls_dropped contains 'target', with reason CONSTANT_CONTROL and controls_used empty; the target series is constant at 20 requests/s in both reference and evaluation windows.",
+    "possible_explanation": "Because the target load metric was constant at 20 requests/s, it could not be used as a control, so the candidate correlation between resource-00 and p95 latency is not adjusted for load or any other unmeasured time-varying factor and may be confounded.",
+    "recommended_check": "Re-run with non-constant load levels (e.g., step or ramp profiles) so the target control can actually be used, or add additional candidate controls, and re-estimate the correlation with uncertainty.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/41",
+     "analysis-result.json#/evidence/19",
+     "analysis-result.json#/evidence/36"
+    ]
+   },
+   {
+    "rank": 3,
+    "observation": "Both window-policy-summary entries report business_verdict NO_POLICY, resource_verdict NO_POLICY, and verdict NO_POLICY, and the run-level policy_verdict fact is NO_POLICY.",
+    "possible_explanation": "No business or resource policy thresholds were defined, so the analysis could not produce a PASS or FAIL decision for either window; missing policy is not a pass and the selected correlation candidate does not itself constitute a violation.",
+    "recommended_check": "Define explicit business and resource policy thresholds (SLOs) for latency and resource utilization, then re-run the analysis so windows can receive a PASS/FAIL verdict instead of NO_POLICY.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/37",
+     "analysis-result.json#/evidence/38",
+     "analysis-result.json#/policy_verdict"
+    ]
+   },
+   {
+    "rank": 4,
+    "observation": "Reference window latency is p50 211 / p95 238 / p99 240 / max 240 ms with sample_count 2400, while evaluation window latency is p50 193 / p95 236 / p99 239 / max 239 ms with sample_count 4800; both windows achieved 20 requests/s and the target metric is constant at 20 requests/s.",
+    "possible_explanation": "Latency levels differ slightly between the windows while achieved throughput stayed constant at 20 requests/s, so a non-load factor (for example scheduling, resource contention, or environmental noise) may explain the change rather than load alone.",
+    "recommended_check": "Inspect the cell-level latency and resource time series across both windows, confirm timestamp alignment first, and test whether the latency distribution shift is reproducible under a controlled variable-load design.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/39",
+     "analysis-result.json#/evidence/40",
+     "analysis-result.json#/evidence/19",
+     "analysis-result.json#/evidence/36"
+    ]
+   },
+   {
+    "rank": 5,
+    "observation": "The diagnostic summary reports anomalies_tested 0 and episodes_reported 0, pairs_evaluable 16 and pairs_tested 16, with status COMPLETE and uncertainty NOT_ESTIMATED.",
+    "possible_explanation": "No anomaly episodes were tested or reported in this diagnostic, so the empty anomaly result cannot be interpreted as evidence that the system is stable or free of problems; it only means no anomaly testing was performed.",
+    "recommended_check": "Enable anomaly episode testing on the resource and latency series (or document why it was skipped) before drawing any conclusion about stability or the absence of anomalies.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/73"
+    ]
+   }
+  ],
+  "recommendations": [
+   {
+    "rank": 1,
+    "action": "Verify and, if necessary, instrument clock alignment between JMeter sampler timestamps and resource-series timestamps before interpreting the pair-00 correlation or any lag ordering.",
+    "rationale": "resource-binding reports clock_alignment not_verified_by_core, and best_lag_ms is 0 with only a single lag profile entry; without verified timestamps no temporal lead/lag or causal reading is justified.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/2",
+     "analysis-result.json#/evidence/41"
+    ]
+   },
+   {
+    "rank": 2,
+    "action": "Investigate the resource-00 vs p95 latency candidate (rho 0.965154108981, Holm-adjusted p 0.016): plot the series, review lag profiles beyond 0 ms, and re-run with variable load before treating it as a real bottleneck signal.",
+    "rationale": "The pair is only a CANDIDATE with NOT_ESTIMATED uncertainty, the target control was dropped as CONSTANT_CONTROL, and correlation does not imply causation.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/41",
+     "analysis-result.json#/evidence/57",
+     "analysis-result.json#/evidence/19"
+    ]
+   },
+   {
+    "rank": 3,
+    "action": "Define explicit business and resource SLO thresholds so that windows can be evaluated as PASS or FAIL rather than NO_POLICY.",
+    "rationale": "Both window-policy-summary entries and the run-level policy_verdict are NO_POLICY, which is not a pass; without thresholds the analysis cannot judge whether the observed latency/resource behavior is acceptable.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/37",
+     "analysis-result.json#/evidence/38",
+     "analysis-result.json#/policy_verdict"
+    ]
+   },
+   {
+    "rank": 4,
+    "action": "Repeat the load test with non-constant achieved load (step or ramp profiles) so the target control is usable, and add uncertainty estimation to the correlation pairs.",
+    "rationale": "The constant 20 requests/s target caused the requested control to be dropped (CONSTANT_CONTROL) and all uncertainty fields are NOT_ESTIMATED, so confounders and statistical uncertainty remain unaddressed.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/41",
+     "analysis-result.json#/evidence/19",
+     "analysis-result.json#/evidence/36",
+     "analysis-result.json#/evidence/57"
+    ]
+   },
+   {
+    "rank": 5,
+    "action": "Enable anomaly episode testing on the resource and latency series for the next run, and record the reason if it remains disabled.",
+    "rationale": "The diagnostic summary reports anomalies_tested 0 and episodes_reported 0, so the absence of reported episodes cannot be used as evidence of stability.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/73"
+    ]
+   }
+  ],
+  "caveats": [
+   "The deterministic verdict is NO_POLICY for both windows and at run level; this is not a PASS and no SLO thresholds were defined.",
+   "Clock alignment between JMeter samples and resource series is not_verified_by_core, so no lead/lag or temporal causal ordering is established; best_lag_ms 0 is not a verified duration relationship.",
+   "All correlation pairs report uncertainty NOT_ESTIMATED and sensitivity_without_achieved_rps is null.",
+   "The target control was constant at 20 requests/s and dropped (CONSTANT_CONTROL), so the pair-00 correlation is not adjusted for load or other unmeasured time-varying factors.",
+   "error_count 0 across 7200 samples does not prove stability, spare capacity, or absence of a problem.",
+   "anomalies_tested 0 and episodes_reported 0 mean no anomaly testing was performed; the empty anomaly result is not evidence of absence of anomalies.",
+   "Only pair-00 was selected after Holm adjustment across 16 hypotheses (alpha 0.05); the other 15 pairs were BELOW_EFFECT or NOT_SELECTED, so findings are limited to resource-00.",
+   "The out-of-window run margin (run_to_epoch_ms 1767225960169 vs snapshot_to_epoch_ms 1767225960000) and aggregate throughput fields were not further validated in this advice."
+  ]
+ },
+ "schema": "ai-experiment-run.holdout.v1",
+ "case": "case-036",
+ "rep": 1,
+ "arm": "A",
+ "try": 1,
+ "attempt_id": "case-036-1-A-t1",
+ "model_id": "deepseek-v4-flash-0731",
+ "prompt_sha256": "69f215a1ad4ae678c82410ba7cf7daf171cd9c7ca0ef4626bba6977db0af4ef7"
+}

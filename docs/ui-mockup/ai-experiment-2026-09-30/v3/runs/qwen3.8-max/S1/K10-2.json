@@ -1,0 +1,258 @@
+{
+ "stage": "S1",
+ "mode": "live",
+ "model": "qwen3.8-max",
+ "tag": {
+  "phase": "v3",
+  "model_tag": "qwen3.8-max",
+  "stage": "S1",
+  "case": "K10",
+  "rep": 2,
+  "attempt": 1
+ },
+ "qwen_exit": 0,
+ "wall_ms": 168694,
+ "relay": {
+  "schema_version": "advisory-ai-runtime-relay.v1",
+  "status": "FORWARDED_STRUCTURED_OUTPUT",
+  "request_count": 1,
+  "usage": {
+   "prompt_tokens": 3402,
+   "total_tokens": 11653,
+   "completion_tokens": 8251,
+   "prompt_tokens_details": {
+    "cached_tokens": 1024,
+    "text_tokens": 3402
+   },
+   "completion_tokens_details": {
+    "reasoning_tokens": 4078,
+    "text_tokens": 8251
+   }
+  },
+  "latency_ms": 167406,
+  "model_returned": "qwen3.8-max"
+ },
+ "relay_status": "FORWARDED_STRUCTURED_OUTPUT",
+ "usage": {
+  "prompt_tokens": 3402,
+  "total_tokens": 11653,
+  "completion_tokens": 8251,
+  "prompt_tokens_details": {
+   "cached_tokens": 1024,
+   "text_tokens": 3402
+  },
+  "completion_tokens_details": {
+   "reasoning_tokens": 4078,
+   "text_tokens": 8251
+  }
+ },
+ "latency_ms": 167406,
+ "status": "OK",
+ "note": null,
+ "output": {
+  "schema_version": "ai-advice-output.v1",
+  "summary": "Deterministic verdict preserved exactly: run_validity = VALID, policy_verdict = NO_POLICY, analysis_coverage = COMPLETE with an empty reasons list. The evidence set contains seven items, all of type metric_summary: one overall scope and six transaction scopes (add product to cart, cart, checkout, home, product, reset cart), each with sample_kind JMETER_SAMPLER and an empty group_path. Overall scope: sample_count 2623, error_count 0, error_rate_ratio 0/2623, latency_ms p50 11, p95 46, p99 77, max 904, throughput_rps numerator 2623000 over denominator 44986. Each transaction scope reports 437 samples except home with 438 (these six counts sum arithmetically to the overall 2623), error_count 0 with error_rate_ratio numerator 0, and a throughput_rps denominator of 44986 in every scope. Reported latency_ms by scope: add product to cart p50 3 / p95 30 / p99 72 / max 78; cart p50 9 / p95 42 / p99 49 / max 187; checkout p50 13 / p95 45 / p99 85 / max 444; home p50 27 / p95 61 / p99 96 / max 904; product p50 10 / p95 46 / p99 83 / max 108; reset cart p50 3 / p95 7 / p99 47 / max 75. The findings list is empty. NO_POLICY means no configured policy or required capacity was available to evaluate; it is not a PASS and cannot be converted into PASS or FAIL by a healthy business window, a rerun, or a fixed load generator — only by configuring a policy or required capacity and re-analysing. No capacity bound evidence (LOWER_BOUND, UPPER_BOUND, BOUNDED), no stage outcome evidence, no generator-resource or guard evidence, and no clock-relationship evidence are present, so no capacity, generator-side, or temporal-ordering conclusion is supportable from this analysis. The advice below is interpretive only and does not alter the deterministic verdict.",
+  "hypotheses": [
+   {
+    "rank": 1,
+    "observation": "policy_verdict is NO_POLICY while run_validity is VALID and analysis_coverage is COMPLETE with an empty reasons list; all seven evidence items are of type metric_summary and none is a policy, stage-outcome, or capacity item.",
+    "possible_explanation": "No latency/error/throughput policy or required capacity appears to have been configured for this run, so the analysis had no threshold against which to render PASS or FAIL. NO_POLICY is a distinct outcome and is not a pass.",
+    "recommended_check": "Inspect the policy configuration attached to run jmeter_jtl_csv-b87363cf1d89c0789e174268c6d25cd65abd36f7b623d4ea84fe253ceaabf1e7 and confirm whether any policy or required capacity is defined; if none is, define one and re-run the analysis (not necessarily the load test) to obtain a PASS or FAIL verdict.",
+    "evidence_refs": [
+     "analysis-result.json#/policy_verdict",
+     "analysis-result.json#/run_validity",
+     "analysis-result.json#/analysis_coverage",
+     "analysis-result.json#/evidence/0"
+    ]
+   },
+   {
+    "rank": 2,
+    "observation": "error_count is 0 and error_rate_ratio numerator is 0 in the overall scope (0/2623) and in all six transaction scopes (0/437, and 0/438 for home), with each ratio denominator equal to that scope's sample_count.",
+    "possible_explanation": "Either no sampled request failed under the analysis's error definition, or the error definition derived from the JTL columns does not capture what the operator treats as a failure (for example non-success response codes recorded as successful, or assertions absent from the file). Zero counted errors is not proof that no failure mode was exercised.",
+    "recommended_check": "Inspect a bounded sample of JTL rows for the success and response-code columns and confirm which columns the analysis maps to error_count; specifically look for any non-2xx codes or success=false rows that were not counted.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0",
+     "analysis-result.json#/evidence/1",
+     "analysis-result.json#/evidence/2",
+     "analysis-result.json#/evidence/3",
+     "analysis-result.json#/evidence/4",
+     "analysis-result.json#/evidence/5",
+     "analysis-result.json#/evidence/6"
+    ]
+   },
+   {
+    "rank": 3,
+    "observation": "The overall latency_ms max of 904 is numerically identical to the latency_ms max reported for the home transaction scope, whose own p50 is 27, p95 is 61 and p99 is 96.",
+    "possible_explanation": "The single slowest sample in the run falls inside the home scope and sits far above that scope's p99. A cause is not established by this evidence; candidate explanations that remain unproven include a cold-start or first-hit sample, a cache miss, or a heavier payload for that sampler.",
+    "recommended_check": "Sort the home-scope samples by elapsed time and inspect the top few rows together with their timestamps, labels and response codes, and note where in the run window they occur (start versus steady state). Do not infer ordering relative to other systems until clock synchronization is verified.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0",
+     "analysis-result.json#/evidence/4"
+    ]
+   },
+   {
+    "rank": 4,
+    "observation": "Every transaction scope reports 437 samples (home reports 438), and in every scope the max exceeds the p99: add product to cart 72 versus 78, cart 49 versus 187, checkout 85 versus 444, home 96 versus 904, product 83 versus 108, reset cart 47 versus 75.",
+    "possible_explanation": "With roughly 437 observations per scope, a p99 is estimated from very few samples and the max is a single observation, so large max-to-p99 gaps may reflect small-sample variability rather than a systematic tail. This is a limitation of the sample size, not a demonstrated performance defect.",
+    "recommended_check": "Rerun the same test with a longer duration or more iterations so each scope accumulates materially more samples, then re-analyse and compare whether p95/p99 and the max-to-p99 gap remain similar or converge.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/1",
+     "analysis-result.json#/evidence/2",
+     "analysis-result.json#/evidence/3",
+     "analysis-result.json#/evidence/4",
+     "analysis-result.json#/evidence/5",
+     "analysis-result.json#/evidence/6"
+    ]
+   },
+   {
+    "rank": 5,
+    "observation": "All six transaction scopes carry sample_kind JMETER_SAMPLER with an empty group_path, and are labelled add product to cart, cart, checkout, home, product and reset cart; their sample counts sum to the overall sample_count of 2623.",
+    "possible_explanation": "Each reported transaction may be an individual JMeter sampler rather than a controller-level business transaction aggregate. If an intended business flow spans several of these samplers, the per-scope latency figures would describe individual steps and would understate end-to-end business-transaction time.",
+    "recommended_check": "Inspect the test plan and the JTL label column to confirm how these six labels map to the intended business transactions, and whether any controller-level aggregation or non-empty group_path was expected in the analysis output.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0",
+     "analysis-result.json#/evidence/1",
+     "analysis-result.json#/evidence/2",
+     "analysis-result.json#/evidence/3",
+     "analysis-result.json#/evidence/4",
+     "analysis-result.json#/evidence/5",
+     "analysis-result.json#/evidence/6"
+    ]
+   },
+   {
+    "rank": 6,
+    "observation": "throughput_rps is reported as numerator 2623000 over denominator 44986 for the overall scope, and as numerator 437000 (438000 for home) over the same denominator 44986 for every transaction scope.",
+    "possible_explanation": "The identical denominator across scopes suggests a single shared window measure rather than a per-scope window. Because the units and definition of the numerator and denominator are not stated in this evidence, these ratios should not be read as rates that are comparable across scopes, and the per-scope values are not additive.",
+    "recommended_check": "Confirm the definition and units of the throughput_rps numerator and denominator in the analysis configuration before quoting any rate, and restrict any rate comparison to a single scope and a single window.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0",
+     "analysis-result.json#/evidence/1",
+     "analysis-result.json#/evidence/4"
+    ]
+   },
+   {
+    "rank": 7,
+    "observation": "analysis_coverage status is COMPLETE with an empty reasons list, yet the evidence contains only metric_summary items: no capacity bound (LOWER_BOUND, UPPER_BOUND, BOUNDED), no stage product-outcome item, and no generator-resource or guard item.",
+    "possible_explanation": "Coverage being COMPLETE indicates the analysis processed the data it was given; it does not indicate that capacity or generator-side evidence was in scope. Capacity bounds are derived from stages with a verified product outcome, and no such stage evidence appears here, so this run supports metric description only.",
+    "recommended_check": "Inspect the run's stage and analysis configuration to confirm whether a capacity or bound analysis was requested; if capacity conclusions are needed, configure the required capacity and the relevant stages, then rerun and re-analyse.",
+    "evidence_refs": [
+     "analysis-result.json#/analysis_coverage",
+     "analysis-result.json#/evidence/0"
+    ]
+   }
+  ],
+  "recommendations": [
+   {
+    "rank": 1,
+    "action": "Configure a policy or required capacity for this run (for example latency percentile thresholds, an error-rate limit, and/or a throughput requirement) and re-run the analysis to obtain a PASS or FAIL verdict.",
+    "rationale": "policy_verdict is NO_POLICY, which is a distinct outcome from PASS. Per the fixed product rules, NO_POLICY remains NO_POLICY regardless of how healthy the observed metrics look, and only a configured policy or required capacity can yield PASS or FAIL; a rerun, a healthy business window, or a repaired load generator will not change it.",
+    "evidence_refs": [
+     "analysis-result.json#/policy_verdict",
+     "analysis-result.json#/run_validity",
+     "analysis-result.json#/analysis_coverage"
+    ]
+   },
+   {
+    "rank": 2,
+    "action": "Inspect the JTL success and response-code columns for a bounded set of rows and confirm which fields feed error_count before relying on the zero-error result.",
+    "rationale": "error_count is 0 in the overall scope (0/2623) and in every transaction scope, but the evidence does not show how errors are detected. Verifying the mapping distinguishes a genuinely clean run from an error definition that does not capture the failures the operator cares about.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0",
+     "analysis-result.json#/evidence/1",
+     "analysis-result.json#/evidence/4"
+    ]
+   },
+   {
+    "rank": 3,
+    "action": "Inspect the highest-elapsed samples in the home scope (max 904 ms against p99 96 ms) together with their timestamps and labels to see whether they cluster at the start of the run window or are scattered.",
+    "rationale": "The overall maximum equals the home maximum, so the slowest sample in the run sits in that scope. Examining those specific rows is a bounded way to characterise the tail without asserting a cause; no causal conclusion is drawn here.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0",
+     "analysis-result.json#/evidence/4"
+    ]
+   },
+   {
+    "rank": 4,
+    "action": "Rerun the test with a longer duration or more iterations so each transaction scope accumulates materially more than the current 437-438 samples, then re-analyse and compare percentiles.",
+    "rationale": "Percentiles estimated from a few hundred samples per scope carry wide uncertainty, and every scope shows a max well above its p99. More samples would show whether the tail is stable or an artefact of sample size before any threshold is set against it.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/1",
+     "analysis-result.json#/evidence/3",
+     "analysis-result.json#/evidence/4",
+     "analysis-result.json#/evidence/6"
+    ]
+   },
+   {
+    "rank": 5,
+    "action": "Verify clock synchronization between the load generator and the system under test before performing any timeline, lead/lag, or correlation analysis on this or a future run.",
+    "rationale": "No clock-relationship evidence is present in this analysis. Without a verified clock relationship, no temporal ordering or time-based causal hypothesis can be supported, including for the 904 ms outlier sample.",
+    "evidence_refs": [
+     "analysis-result.json#/analysis_coverage",
+     "analysis-result.json#/evidence/4"
+    ]
+   },
+   {
+    "rank": 6,
+    "action": "Collect load-generator resource measurements during the next rerun so generator-side saturation can be assessed explicitly.",
+    "rationale": "This analysis contains no generator-resource or guard evidence, so generator saturation can be neither confirmed nor excluded. A saturated generator would make its stage unusable for a product bound; the appropriate remedy in that case is a rerun with a generator that is not saturated.",
+    "evidence_refs": [
+     "analysis-result.json#/analysis_coverage",
+     "analysis-result.json#/evidence/0"
+    ]
+   },
+   {
+    "rank": 7,
+    "action": "Confirm the definition and units of the throughput_rps numerator and denominator, and quote throughput only within a single scope and window.",
+    "rationale": "The denominator 44986 is identical across the overall scope and all six transaction scopes while numerators differ, and no unit definition is given. Overall counts, per-transaction counts and policy-window denominators are different quantities, so cross-scope rate comparisons would be unsound.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0",
+     "analysis-result.json#/evidence/1",
+     "analysis-result.json#/evidence/2",
+     "analysis-result.json#/evidence/4"
+    ]
+   },
+   {
+    "rank": 8,
+    "action": "Inspect the test plan and JTL labels to confirm that the six JMETER_SAMPLER scopes correspond to the intended business transactions, adding controller-level grouping if end-to-end flows are the target.",
+    "rationale": "All six scopes have sample_kind JMETER_SAMPLER and an empty group_path. If the intended measurement unit is a multi-step business flow, the current per-scope latencies describe individual steps only and would understate end-to-end response time.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/1",
+     "analysis-result.json#/evidence/2",
+     "analysis-result.json#/evidence/3",
+     "analysis-result.json#/evidence/5"
+    ]
+   },
+   {
+    "rank": 9,
+    "action": "If capacity conclusions are required, configure the relevant stages with the required capacity and rerun the analysis, treating metric summaries alone as insufficient for a bound.",
+    "rationale": "No capacity bound or stage product-outcome evidence appears in this analysis even though coverage is COMPLETE. Bounds are derived from stages with a verified product outcome, so a capacity statement cannot be produced from the present metric-only evidence.",
+    "evidence_refs": [
+     "analysis-result.json#/analysis_coverage",
+     "analysis-result.json#/evidence/0"
+    ]
+   }
+  ],
+  "caveats": [
+   "The deterministic verdict is preserved unchanged: run_validity VALID, policy_verdict NO_POLICY, analysis_coverage COMPLETE. This advice is interpretive only and does not alter any of those values.",
+   "NO_POLICY is not a pass and is not a fail. It indicates no policy or required capacity was available to evaluate. Only configuring a policy or required capacity and re-analysing can produce PASS or FAIL; a healthy-looking window, a rerun, or a fixed load generator cannot.",
+   "The findings list is empty. Absent findings, missing samples, and a flat or clean-looking series do not prove stability, spare capacity, low load, or the absence of a problem.",
+   "No capacity bound evidence (LOWER_BOUND, UPPER_BOUND, BOUNDED) and no stage product-outcome evidence are present, so nothing can be concluded about capacity or headroom in either direction.",
+   "No load-generator resource or generator-guard evidence is present. Generator saturation is therefore unverified — it is neither confirmed nor ruled out — and the observed latencies cannot be attributed to the system under test alone.",
+   "No clock-synchronization or clock-relationship evidence is present. No lead/lag ordering, timeline correlation, or temporal causal hypothesis is supportable; clock verification must come first.",
+   "No causal claims are made anywhere in this output. Each possible_explanation is a hypothesis to be tested by the paired recommended_check, not a proven cause.",
+   "throughput_rps is reported only as raw numerator and denominator values (overall 2623000/44986; per transaction 437000 or 438000 over the same 44986). The units and the definition of the denominator are not stated in the evidence, so no derived rate is asserted here.",
+   "Latency figures are in milliseconds as given by the latency_ms field. No raw epoch or timestamp value appears in this evidence, and none has been reinterpreted as a duration.",
+   "Counts are comparable only within the same scope and the same window. Overall counts, per-transaction counts, and any policy-window denominators are different quantities; the arithmetic fact that the six per-scope sample counts sum to the overall 2623 is a consistency observation only and does not validate the load profile.",
+   "Percentiles are computed from roughly 437-438 samples per transaction scope, so p95 and p99 carry substantial small-sample uncertainty and the max is a single observation.",
+   "run_validity VALID and analysis_coverage COMPLETE with empty reasons mean the analysis processed the supplied data completely; they do not attest to the representativeness, intensity, or correctness of the load profile itself.",
+   "Only one analysis is present (analysis_id ff2a9752b81138f897422b4167ef5a67f5769e579320a62903676f78ea671ef9). There is no baseline, control, or repeat run in this evidence, so no comparison to prior behaviour is possible.",
+   "No confidence percentages, error-impact attributions, or quantitative predictions are provided, because the referenced evidence does not contain the inputs such statements would require."
+  ]
+ },
+ "schema": "ai-experiment-run.v3",
+ "case": "K10",
+ "rep": 2,
+ "model_id": "qwen3.8-max",
+ "net_retries": 0,
+ "infra_retries": 0
+}

@@ -1,0 +1,127 @@
+{
+ "stage": "S1",
+ "mode": "live",
+ "model": "deepseek-v4-flash-0731",
+ "tag": {
+  "phase": "v2-pilot",
+  "stage": "S1",
+  "case": "K11",
+  "rep": 1,
+  "attempt": 1
+ },
+ "qwen_exit": 0,
+ "wall_ms": 39965,
+ "relay": {
+  "schema_version": "advisory-ai-runtime-relay.v1",
+  "status": "FORWARDED_STRUCTURED_OUTPUT",
+  "request_count": 1,
+  "usage": {
+   "prompt_tokens": 2323,
+   "total_tokens": 5941,
+   "completion_tokens": 3618,
+   "prompt_tokens_details": {
+    "cached_tokens": 1024
+   },
+   "completion_tokens_details": {
+    "reasoning_tokens": 2143
+   }
+  },
+  "latency_ms": 38652,
+  "model_returned": "deepseek-v4-flash-0731"
+ },
+ "relay_status": "FORWARDED_STRUCTURED_OUTPUT",
+ "usage": {
+  "prompt_tokens": 2323,
+  "total_tokens": 5941,
+  "completion_tokens": 3618,
+  "prompt_tokens_details": {
+   "cached_tokens": 1024
+  },
+  "completion_tokens_details": {
+   "reasoning_tokens": 2143
+  }
+ },
+ "latency_ms": 38652,
+ "status": "OK",
+ "note": null,
+ "output": {
+  "schema_version": "ai-advice-output.v1",
+  "summary": "The run is VALID overall, but the policy verdict is NO_POLICY and the analysis coverage is INCOMPLETE with reason RESOURCE_GAPS; the findings list is empty. The only stored evidence is an overall metric summary: 2623 samples, 0 errors (error_rate_ratio numerator 0 / denominator 2623), latency p50 11 ms, p95 46 ms, p99 77 ms, max 904 ms, and raw throughput_rps numerator/denominator 2623000/44986. NO_POLICY must remain NO_POLICY: it is not a pass, and it means no configured policy or verifiable required capacity produced a PASS/FAIL determination. Because resource data has gaps, coverage is incomplete and no capacity-bound conclusion should be drawn from this data; the operator next step is to close the resource gaps, configure a policy with required capacity, and rerun.",
+  "hypotheses": [
+   {
+    "rank": 1,
+    "observation": "The policy verdict is NO_POLICY and the analysis coverage is INCOMPLETE with reason RESOURCE_GAPS; the findings list is empty.",
+    "possible_explanation": "No policy (required capacity or bounds) was configured for this run, or the required capacity could not be verified because resource data has gaps, so no PASS/FAIL determination was made by the product.",
+    "recommended_check": "Verify whether a policy with required capacity (LOWER_BOUND, UPPER_BOUND, or BOUNDED) was configured for this run; if not, configure one, then rerun so a PASS/FAIL verdict can be produced.",
+    "evidence_refs": [
+     "analysis-result.json#/policy_verdict",
+     "analysis-result.json#/analysis_coverage"
+    ]
+   },
+   {
+    "rank": 2,
+    "observation": "Analysis coverage is INCOMPLETE specifically because of RESOURCE_GAPS, while the findings list is empty.",
+    "possible_explanation": "One or more resource metric series needed to evaluate required capacity (for example load-generator or system-under-test metrics) are missing or have gaps, which is consistent with the product being unable to derive a capacity bound and therefore issuing NO_POLICY.",
+    "recommended_check": "Inspect the recorded resource metric series for missing intervals or incomplete capture on the load generator and system under test, fix the data capture, and rerun to obtain complete coverage.",
+    "evidence_refs": [
+     "analysis-result.json#/analysis_coverage"
+    ]
+   },
+   {
+    "rank": 3,
+    "observation": "The overall metric summary reports 2623 samples with 0 errors (0/2623), latency p50 11 ms, p95 46 ms, p99 77 ms, and max 904 ms.",
+    "possible_explanation": "The max latency of 904 ms is much higher than the p99 of 77 ms; this could indicate a rare tail-latency event, a startup/warm-up artifact, or an outlier sample, but the empty findings list means no anomaly has been asserted and no cause is established.",
+    "recommended_check": "Inspect the per-sample latency time series around the sample with the 904 ms max, confirm that sample count and time-window coverage match the overall scope, and decide whether a latency policy is needed for future runs.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0"
+    ]
+   }
+  ],
+  "recommendations": [
+   {
+    "rank": 1,
+    "action": "Configure a policy with required capacity bounds (LOWER_BOUND, UPPER_BOUND, or BOUNDED) and rerun the test.",
+    "rationale": "The verdict is deterministically NO_POLICY, which is only replaced by PASS or FAIL when a configured policy or required capacity is present; a rerun alone or a healthy-looking metric summary cannot change NO_POLICY.",
+    "evidence_refs": [
+     "analysis-result.json#/policy_verdict"
+    ]
+   },
+   {
+    "rank": 2,
+    "action": "Investigate and close the RESOURCE_GAPS so analysis coverage becomes complete, then rerun.",
+    "rationale": "Coverage is INCOMPLETE because of RESOURCE_GAPS, so any required-capacity determination is currently unsupported by the available data; closing the gaps is a prerequisite for a meaningful policy verdict.",
+    "evidence_refs": [
+     "analysis-result.json#/analysis_coverage"
+    ]
+   },
+   {
+    "rank": 3,
+    "action": "Inspect the overall latency data, especially the 904 ms max versus the 77 ms p99, without treating it as a proven failure.",
+    "rationale": "The stored summary shows a wide gap between max and p99 with 0 errors, but the empty findings list means no anomaly was asserted; review the raw sample series before deciding whether latency targets should be part of a policy.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0"
+    ]
+   },
+   {
+    "rank": 4,
+    "action": "Do not reinterpret NO_POLICY as PASS and do not change the stored verdict; treat any decision as advisory only.",
+    "rationale": "NO_POLICY is a distinct verdict from PASS and FAIL, and missing policy or missing required capacity is not a pass; advice cannot change the deterministic verdict.",
+    "evidence_refs": [
+     "analysis-result.json#/policy_verdict"
+    ]
+   }
+  ],
+  "caveats": [
+   "The NO_POLICY verdict is deterministic and must be preserved: a rerun, a healthy business window, or fixing the load generator does not turn it into PASS; only a configured policy or required capacity yields PASS or FAIL.",
+   "Analysis coverage is INCOMPLETE due to RESOURCE_GAPS; no capacity bound or required-capacity conclusion can be drawn from this data, and the empty findings list does not prove stability, spare capacity, low load, or absence of a problem.",
+   "The error_count of 0 and error_rate_ratio of 0/2623 apply only to the 2623 samples captured in the overall metric; they do not prove absence of errors outside that sample set or in the gapped resource data.",
+   "The throughput_rps raw numerator/denominator (2623000/44986) is preserved as stored; no throughput rate or comparison is asserted here, and it is a different quantity from any future policy-window denominator.",
+   "Counts are comparable only within the same scope and the same window; the overall run metric is not directly comparable to per-transaction or policy-window denominators.",
+   "The 904 ms max versus 77 ms p99 is only an observation; no causal explanation is established, and any temporal or lead/lag interpretation would require verified clock relationships that are not available in this data."
+  ]
+ },
+ "schema": "ai-experiment-run.v2",
+ "phase": "pilot",
+ "case": "K11",
+ "rep": 1
+}

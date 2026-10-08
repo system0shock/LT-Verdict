@@ -1,0 +1,24 @@
+[
+  {
+    "id": "R006",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T2",
+        "field": "#/summary",
+        "quote": "All 2312 recorded errors are in the checkout transaction scope, and the error profile groups them as frontend.request_error",
+        "why": "Matching transaction and OpenSearch aggregate counts do not establish that they describe the same events."
+      },
+      {
+        "type": "T2",
+        "field": "#/hypotheses/0/observation",
+        "quote": "All 2312 errors in the transaction scope are attributed to the checkout transaction ... and the error profile groups them as frontend.request_error",
+        "why": "This again identifies errors from two sources as the same events without event-level evidence."
+      }
+    ],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 2,
+    "notes": "The verdicts and operator checks are largely sound, but the repeated cross-source identification could misdirect the investigation."
+  }
+]

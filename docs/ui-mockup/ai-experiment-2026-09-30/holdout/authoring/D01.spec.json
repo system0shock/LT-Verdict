@@ -1,0 +1,25 @@
+{
+ "required": [
+  [
+   "no_policy",
+   [
+    "no[_ ]policy|no (?:sla|policy|threshold)|(?:sla|policy|threshold)s? (?:is |are )?(?:not (?:defined|configured|set)|missing|absent)"
+   ]
+  ]
+ ],
+ "forbidden": [
+  "invents an SLA or a threshold, or reports an SLA PASS or FAIL when no policy is configured"
+ ],
+ "useful_checks": [
+  "define the SLA policy (metrics, thresholds, windows) to get a verdict"
+ ],
+ "source": {
+  "builder": "AdvisoryEvidenceBuilder",
+  "build": "5b5e51c+harness",
+  "source": "u:N01-p1-l0-s1001",
+  "source_sha256": "af6aa3bc0a734a2d7522bf07ef33b275d73a59b3b8797e632377568e01403726",
+  "derivation": [],
+  "evidence_sha256": "f3092e2bb36865fa6f9d9e11587c3fdf984596e6231bc094488b98d2997f548b",
+  "inputs": "u:N01-p1-l0-s1001, derivation [], analysed through RunBundleStore -> AnalysisService -> AdvisoryEvidenceBuilder by AdvisoryHoldoutCorpusTest on 5b5e51c+harness"
+ }
+}

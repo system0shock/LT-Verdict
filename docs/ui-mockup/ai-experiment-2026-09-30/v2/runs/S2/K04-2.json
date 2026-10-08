@@ -1,0 +1,151 @@
+{
+ "stage": "S2",
+ "mode": "live",
+ "model": "deepseek-v4-flash-0731",
+ "tag": {
+  "phase": "v2-pilot",
+  "stage": "S2",
+  "case": "K04",
+  "rep": 2,
+  "attempt": 1
+ },
+ "qwen_exit": 0,
+ "wall_ms": 57757,
+ "relay": {
+  "schema_version": "advisory-ai-runtime-relay.v1",
+  "status": "FORWARDED_STRUCTURED_OUTPUT",
+  "request_count": 1,
+  "usage": {
+   "prompt_tokens": 3845,
+   "total_tokens": 9356,
+   "completion_tokens": 5511,
+   "prompt_tokens_details": {
+    "cached_tokens": 1024
+   },
+   "completion_tokens_details": {
+    "reasoning_tokens": 3716
+   }
+  },
+  "latency_ms": 56541,
+  "model_returned": "deepseek-v4-flash-0731"
+ },
+ "relay_status": "FORWARDED_STRUCTURED_OUTPUT",
+ "usage": {
+  "prompt_tokens": 3845,
+  "total_tokens": 9356,
+  "completion_tokens": 5511,
+  "prompt_tokens_details": {
+   "cached_tokens": 1024
+  },
+  "completion_tokens_details": {
+   "reasoning_tokens": 3716
+  }
+ },
+ "latency_ms": 56541,
+ "status": "OK",
+ "note": null,
+ "output": {
+  "schema_version": "ai-advice-output.v1",
+  "summary": "Deterministic verdict: PASS. The only evaluated policy is rule overall-errors (policy_check, analysis-result.json#/evidence/7): error_rate_ratio observed 0/2623 with operator lte and threshold 0.01, status PASS, run_validity VALID, analysis coverage COMPLETE with no reasons, and no findings. All six transaction scopes plus the overall scope report error_count 0 across 2623 sampled requests (whole-run scope; no policy window is referenced). Latency evidence is present but not governed by any policy: overall latency_ms max 904, p50 11, p95 46, p99 77; the 'home' transaction shows max 904 with p99 96, the largest max-to-p99 gap in the input. No capacity_summary or capacity stages are present, so no capacity bound was derived and capacity is not covered by this PASS. The advice below does not change the PASS verdict.",
+  "hypotheses": [
+   {
+    "rank": 1,
+    "observation": "The overall metric summary reports latency_ms max=904 with p99=77 (analysis-result.json#/evidence/0), and the 'home' transaction reports max=904 with p99=96 (analysis-result.json#/evidence/4), giving max-to-p99 gaps of approximately 827 ms and 808 ms respectively.",
+    "possible_explanation": "A small number of outlier requests could account for the gap between max and p99 (for example a cold start, GC pause, or a single slow response), but this is an unverified hypothesis: the number of samples reaching the max and their timing are not present in the input.",
+    "recommended_check": "Inspect the raw JTL samples (not included in this evidence) to determine how many samples reached approximately 904 ms and at which timestamps; if temporal ordering is inferred, first verify clock relationships because none are stated in the evidence.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0",
+     "analysis-result.json#/evidence/4"
+    ]
+   },
+   {
+    "rank": 2,
+    "observation": "policy_check rule=overall-errors reports status=PASS for error_rate_ratio observed 0/2623 with operator lte and threshold 0.01, and run_validity is VALID with analysis coverage COMPLETE (analysis-result.json#/evidence/7).",
+    "possible_explanation": "The sampler-level error count was zero across the whole run; however, this metric reflects JMeter sampler outcomes only, so application-level or business failures that do not surface as sampler errors would not appear in this count.",
+    "recommended_check": "Cross-check server-side logs or traces for 5xx responses, exceptions, or business errors that would not be reflected in the JMeter sampler error count.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/7"
+    ]
+   },
+   {
+    "rank": 3,
+    "observation": "All six transaction scopes (add product to cart, cart, checkout, home, product, reset cart) report error_count=0 with p50 latencies between 3 and 27 ms (analysis-result.json#/evidence/1 through analysis-result.json#/evidence/6).",
+    "possible_explanation": "Zero errors could indicate the run did not stress the system enough to produce errors, but no resource series or load-generator saturation metrics are present to verify utilization or load; therefore spare capacity or low load cannot be concluded.",
+    "recommended_check": "On a rerun, capture resource series (CPU, memory, GC, app-side metrics) and load-generator saturation data so that an error-free result can be interpreted against a known load level.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/1",
+     "analysis-result.json#/evidence/2",
+     "analysis-result.json#/evidence/3",
+     "analysis-result.json#/evidence/4",
+     "analysis-result.json#/evidence/5",
+     "analysis-result.json#/evidence/6"
+    ]
+   },
+   {
+    "rank": 4,
+    "observation": "No capacity_summary is present in the input; the only policy_check is the overall-errors error-rate rule (analysis-result.json#/evidence/7), while the overall latency evidence includes max=904 and p99=77 (analysis-result.json#/evidence/0).",
+    "possible_explanation": "Capacity was not part of this analysis scope, so observed latency values were not evaluated against any capacity bound; the PASS applies only to the error-rate rule and says nothing about capacity.",
+    "recommended_check": "If a capacity bound is required for this workload, configure a capacity policy with the required capacity; this is a configuration step and cannot change the existing PASS verdict for the error-rate rule.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0",
+     "analysis-result.json#/evidence/7"
+    ]
+   }
+  ],
+  "recommendations": [
+   {
+    "rank": 1,
+    "action": "Accept the delivered PASS verdict as-is; no rerun is required for the overall-errors policy.",
+    "rationale": "The only evaluated policy passed (observed 0/2623 <= 0.01), run_validity is VALID, and analysis coverage is COMPLETE with no findings.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/7"
+    ]
+   },
+   {
+    "rank": 2,
+    "action": "Before treating latency as a problem, investigate the 904 ms max samples using raw JTL data or server-side timing data.",
+    "rationale": "The overall and 'home' max (904 ms) sit far above their p99 values (77 ms and 96 ms), but the input does not contain individual samples or the count of samples at the max, so the outlier cannot be characterized from this evidence.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0",
+     "analysis-result.json#/evidence/4"
+    ]
+   },
+   {
+    "rank": 3,
+    "action": "If tail latency is part of the SLO, add a latency policy (e.g., p99 or max bound) for the relevant transaction or overall scope.",
+    "rationale": "Latency metrics are observed in this run, but no latency policy is present, so latency is not currently a pass/fail criterion and the PASS verdict does not cover it.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0",
+     "analysis-result.json#/evidence/1",
+     "analysis-result.json#/evidence/2",
+     "analysis-result.json#/evidence/3",
+     "analysis-result.json#/evidence/4",
+     "analysis-result.json#/evidence/5",
+     "analysis-result.json#/evidence/6"
+    ]
+   },
+   {
+    "rank": 4,
+    "action": "On future reruns, capture resource series and load-generator saturation metrics alongside the sampler metrics.",
+    "rationale": "No resource series or saturation data is present in this input, so the zero-error result cannot be tied to load or capacity; without such data, stability or spare capacity cannot be asserted.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0",
+     "analysis-result.json#/evidence/7"
+    ]
+   }
+  ],
+  "caveats": [
+   "The PASS is limited to the overall-errors error_rate_ratio policy (observed 0/2623 <= 0.01); it is not a PASS for latency, capacity, stability, or spare capacity.",
+   "No capacity_summary or load-stage definitions exist in the input, so no capacity bound was derived and capacity is not covered by this verdict.",
+   "Individual samples, the count of samples reaching the reported max latency, log bodies, traces, an OpenSearch error profile, and resource series are not present; the tail-latency hypothesis therefore cannot be confirmed from this evidence.",
+   "All counts are whole-run scope; no policy window is referenced, so no time-bounded interpretation was possible.",
+   "Zero errors and the observed latency percentiles do not prove stability, low load, or spare capacity; load level and generator saturation are unverified.",
+   "The deterministic verdict is PASS and none of the recommended actions can alter that verdict.",
+   "Latency values are in milliseconds and throughput numerators/denominators are separate quantities; no relationship between them is asserted."
+  ]
+ },
+ "schema": "ai-experiment-run.v2",
+ "phase": "pilot",
+ "case": "K04",
+ "rep": 2
+}

@@ -1,0 +1,156 @@
+[
+  {
+    "id": "R036",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T2",
+        "field": "#/summary",
+        "quote": "Within that window: error_count is 0 across 600 samples; the overall p95 latency check",
+        "why": "The 600-sample metrics and overall latency summary are whole-run aggregates, not evaluation-window measurements."
+      },
+      {
+        "type": "T8",
+        "field": "#/summary",
+        "quote": "resource policy check for series value passes at 50 vs threshold 80",
+        "why": "The resource policy check does not report its compared value, so it cannot be stated to have evaluated the summary value 50."
+      },
+      {
+        "type": "T2",
+        "field": "#/hypotheses/3/observation",
+        "quote": "error_count is 0 ... across 600 samples in a 30,000 ms window",
+        "why": "This assigns whole-run metric-summary counts to the shorter evaluation window."
+      },
+      {
+        "type": "T7",
+        "field": "#/caveats/1",
+        "quote": "COMPLETE coverage applies only to that window",
+        "why": "The evidence reports analysis coverage at the analysis level and does not state that COMPLETE is limited to the evaluation window."
+      }
+    ],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 3,
+    "notes": "The verification actions are mostly useful, but it repeatedly mis-scopes whole-run aggregates."
+  },
+  {
+    "id": "R091",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T2",
+        "field": "#/summary",
+        "quote": "In the single 30,000 ms evaluation window ... summaries both show 600 samples, 0 errors",
+        "why": "The metric summaries are whole-run aggregates rather than counts for the evaluation window."
+      },
+      {
+        "type": "T2",
+        "field": "#/hypotheses/3/possible_explanation",
+        "quote": "different quantities within the same window",
+        "why": "It incorrectly treats the whole-run metric-summary quantities as evaluation-window quantities."
+      },
+      {
+        "type": "T2",
+        "field": "#/hypotheses/5/possible_explanation",
+        "quote": "The sampler produced no failed responses in this window",
+        "why": "The zero error counts belong to whole-run metric summaries, not a window-scoped sampler result."
+      },
+      {
+        "type": "T2",
+        "field": "#/caveats/2",
+        "quote": "window-scoped sample count 600 and error denominator 600",
+        "why": "The sample count and error denominator are whole-run metrics, so this comparison invents their window scope."
+      }
+    ],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 3,
+    "notes": "It preserves the verdict and proposes sensible checks, but repeatedly misattributes aggregate metrics to the evaluation window."
+  },
+  {
+    "id": "R109",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T2",
+        "field": "#/summary",
+        "quote": "Evidence within the 30-second evaluation window ... 600 samples",
+        "why": "The reported sample counts and latency statistics are whole-run aggregates, not evidence confined to that window."
+      },
+      {
+        "type": "T2",
+        "field": "#/caveats/2",
+        "quote": "error_count=0 and error_rate_ratio=0/600 cover the 600-sample policy window",
+        "why": "It assigns whole-run error aggregates to a policy window and invents a differing window denominator."
+      },
+      {
+        "type": "T7",
+        "field": "#/caveats/5",
+        "quote": "this reflects only the evaluated window and policies",
+        "why": "Analysis coverage is reported as COMPLETE for the analysis, not as a result restricted to the evaluation window."
+      },
+      {
+        "type": "T8",
+        "field": "#/recommendations/4/rationale",
+        "quote": "synthetic_unit ... cannot be interpreted as real physical resource usage",
+        "why": "The string value of the unit does not establish that the series is not a physical measurement."
+      },
+      {
+        "type": "T8",
+        "field": "#/caveats/4",
+        "quote": "they are not a physical measurement",
+        "why": "The evidence does not establish that values labelled synthetic_unit are non-physical measurements."
+      }
+    ],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 3,
+    "notes": "The core verdict is correct and the actions are practical, but several scope and telemetry-meaning claims exceed the evidence."
+  },
+  {
+    "id": "R144",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T2",
+        "field": "#/hypotheses/2/possible_explanation",
+        "quote": "600000/30099 ~ 19.93",
+        "why": "The evidence does not define the numerator and denominator semantics sufficiently to derive a throughput rate from their ratio."
+      },
+      {
+        "type": "T2",
+        "field": "#/hypotheses/4/observation",
+        "quote": "a single 30,000 ms evaluation window covering 600 samples",
+        "why": "The 600-sample count is a whole-run aggregate, not a count reported for the evaluation window."
+      },
+      {
+        "type": "T8",
+        "field": "#/recommendations/2/rationale",
+        "quote": "the PASS comparison (50 not > 80) is trivially satisfied",
+        "why": "The policy-check evidence does not state that it compared the resource-summary value 50 or define that comparison's PASS semantics."
+      },
+      {
+        "type": "T2",
+        "field": "#/recommendations/3/rationale",
+        "quote": "600,000/30,099 ~ 19.93 rps",
+        "why": "This derives a rate from a numerator and denominator whose meaning is not defined by the evidence."
+      },
+      {
+        "type": "T2",
+        "field": "#/caveats/4",
+        "quote": "approximate ~19.9 rps read",
+        "why": "The reported throughput ratio cannot be interpreted as that rate without its documented numerator and denominator semantics."
+      },
+      {
+        "type": "T8",
+        "field": "#/caveats/6",
+        "quote": "Resource policy PASS (value 50, operator gt, threshold 80)",
+        "why": "The resource policy check records no compared value, so presenting 50 as its literal policy comparison is unsupported."
+      }
+    ],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 3,
+    "notes": "It correctly preserves the deterministic outcome, but unsupported throughput calculations and resource-policy comparisons could mislead an operator."
+  }
+]

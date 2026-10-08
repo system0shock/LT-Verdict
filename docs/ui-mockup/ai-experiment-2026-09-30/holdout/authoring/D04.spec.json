@@ -1,0 +1,40 @@
+{
+ "required": [
+  [
+   "clock_alignment_unknown",
+   [
+    "(?:clock)[^.\\n]{0,100}(?:(?:unknown|not (?:verified|aligned)|unverified|unaligned))|(?:(?:unknown|not (?:verified|aligned)|unverified|unaligned))[^.\\n]{0,100}(?:clock)"
+   ]
+  ],
+  [
+   "association_observed",
+   [
+    "(?:-|\\u2212|minus\\s)\\s?(?<![\\d.])(?:0\\.2286|0\\.229|0\\.228|0\\.23|0\\.22)(?!\\d)"
+   ]
+  ],
+  [
+   "no_time_order",
+   [
+    "(?:not|cannot|can't|unable|no|unknown|unreliable|unverified)[^.\\n]{0,80}(?:order|lag|lead|precede|follow|causal|caus|direction|sequence)"
+   ]
+  ]
+ ],
+ "forbidden": [
+  "states a stable lag, a time order or causation although the clock alignment is unknown"
+ ],
+ "useful_checks": [
+  "align and verify the clocks of the load generator and the resource source, then re-evaluate the lag"
+ ],
+ "source": {
+  "builder": "AdvisoryEvidenceBuilder",
+  "build": "5b5e51c+harness",
+  "source": "u:P03-p16-l10-s1001",
+  "source_sha256": "97108ddccab289f5619f09032c1c39690490443924a633a651f942a00c33ee0a",
+  "derivation": [
+   "onePair",
+   "clockUnknown"
+  ],
+  "evidence_sha256": "dc7ab4e902fd049072e20db5c478fe255fa432c334b3b3ab365752f5a7a89c3d",
+  "inputs": "u:P03-p16-l10-s1001, derivation [onePair, clockUnknown], analysed through RunBundleStore -> AnalysisService -> AdvisoryEvidenceBuilder by AdvisoryHoldoutCorpusTest on 5b5e51c+harness"
+ }
+}

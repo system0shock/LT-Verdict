@@ -1,0 +1,167 @@
+{
+ "stage": "S2",
+ "mode": "live",
+ "model": "deepseek-v4-flash-0731",
+ "tag": {
+  "phase": "v2-pilot",
+  "stage": "S2",
+  "case": "K08",
+  "rep": 1,
+  "attempt": 1
+ },
+ "qwen_exit": 0,
+ "wall_ms": 87146,
+ "relay": {
+  "schema_version": "advisory-ai-runtime-relay.v1",
+  "status": "FORWARDED_STRUCTURED_OUTPUT",
+  "request_count": 1,
+  "usage": {
+   "prompt_tokens": 10107,
+   "total_tokens": 18264,
+   "completion_tokens": 8157,
+   "prompt_tokens_details": {
+    "cached_tokens": 1024
+   },
+   "completion_tokens_details": {
+    "reasoning_tokens": 5510
+   }
+  },
+  "latency_ms": 85810,
+  "model_returned": "deepseek-v4-flash-0731"
+ },
+ "relay_status": "FORWARDED_STRUCTURED_OUTPUT",
+ "usage": {
+  "prompt_tokens": 10107,
+  "total_tokens": 18264,
+  "completion_tokens": 8157,
+  "prompt_tokens_details": {
+   "cached_tokens": 1024
+  },
+  "completion_tokens_details": {
+   "reasoning_tokens": 5510
+  }
+ },
+ "latency_ms": 85810,
+ "status": "OK",
+ "note": null,
+ "output": {
+  "schema_version": "ai-advice-output.v1",
+  "summary": "Run validity is VALID. The deterministic policy verdict is NO_VERDICT: the overall-errors business rule FAILed inside the run-intersection window (observed 2312 of 37841 samples, threshold 0.01, operator lte, evidence/16; window_policy_summary shows business_verdict FAIL), but the paymentservice cpu-throttle-ratio SLA rule returned NO_VERDICT with reason MISSING_RESOURCE_CELLS because 4 of 23 metric cells are missing (evidence/15), so the combined verdict remains NO_VERDICT rather than PASS or FAIL. Analysis coverage is INCOMPLETE (RESOURCE_GAPS, MISSING_RESOURCE_CELLS, SOURCE_ACQUISITION_PARTIAL). All 2312 errors are frontend.request_error in a burst from 1790632254832 to 1790632369669 (evidence/19); observed paymentservice cpu-throttle spikes (max 0.56896) overlap the tail of that burst, but clock_alignment is not_verified_by_core, so no causal or lead/lag claim is made. No capacity_summary is present in the input. Recommendations focus on completing paymentservice metric collection, inspecting the sampled error documents, and verifying clocks before any rerun or temporal correlation.",
+  "hypotheses": [
+   {
+    "rank": 1,
+    "observation": "The policy check for rule overall-errors observed 2312 errors in 37841 samples in the run-intersection window against a threshold of 0.01 (operator lte) and returned FAIL (evidence/16); the overall metric summary reports 2312 errors in 39099 samples (evidence/0); the transaction-scope summary for checkout reports error_count 2312 of 6515 samples (evidence/3).",
+    "possible_explanation": "The configured error-rate policy was violated in the evaluation window (2312/37841 is above the 0.01 threshold), and the errors are concentrated in the checkout transaction, but the metric summaries alone do not identify why the requests failed.",
+    "recommended_check": "Inspect the sampled error documents and any frontend/checkout logs for the failing interval (1790632245000-1790632380000) to classify the 2312 request errors (e.g., timeouts, connection failures, 5xx) before attributing a root cause.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/16",
+     "analysis-result.json#/evidence/0",
+     "analysis-result.json#/evidence/3",
+     "analysis-result.json#/evidence/19"
+    ]
+   },
+   {
+    "rank": 2,
+    "observation": "The error timeline shows errors beginning at 1790632254832, reaching about 1300 per minute (325 in one 15-second cell), and ending at 1790632369669 (evidence/19); a resource threshold finding records paymentservice cpu_throttle_ratio observed_max 0.56896 and observed_min 0.39468 between 1790632350000 and 1790632380000 (analysis-result.json#/findings/0), with the overall throttle-ratio summary showing mean 0.05613 and q95 0.41210 over 19 observed cells (evidence/13).",
+    "possible_explanation": "The error burst and the observed CPU throttle-ratio spike on paymentservice overlap in time around 1790632350000-1790632380000, which could indicate a temporal association; however, no causal relationship is established and clock alignment is not verified.",
+    "recommended_check": "Verify clock alignment between Prometheus metric timestamps and error timestamps (clock_alignment=not_verified_by_core, evidence/7), then compare per-cell throttle-ratio and per-window error counts over the overlap before drawing any conclusion.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/19",
+     "analysis-result.json#/findings/0",
+     "analysis-result.json#/evidence/13",
+     "analysis-result.json#/evidence/7"
+    ]
+   },
+   {
+    "rank": 3,
+    "observation": "The paymentservice cpu-throttle-ratio SLA rule (effect sla, operator gt, threshold 0.2) returned NO_VERDICT with reason MISSING_RESOURCE_CELLS (evidence/15); the paymentservice resource summaries for cpu_cores, cpu_throttle_ratio, and memory_bytes each report 4 missing cells of 23 expected (evidence/12, evidence/13, evidence/14); the source summary reports status PARTIAL with MISSING_SAMPLES for the three paymentservice queries (evidence/18).",
+    "possible_explanation": "Missing metric cells from the Prometheus source mean the resource SLA rule could not be evaluated; the NO_VERDICT reflects incomplete data rather than a pass or a proven throttling result, and the observed cells do not prove the rule held or failed across the whole window.",
+    "recommended_check": "Re-run metric acquisition (or re-run the test) so the paymentservice series are complete, then re-evaluate the resource policy check; also investigate why four 15-second cells were missing from the three paymentservice series.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/15",
+     "analysis-result.json#/evidence/13",
+     "analysis-result.json#/evidence/12",
+     "analysis-result.json#/evidence/14",
+     "analysis-result.json#/evidence/18"
+    ]
+   },
+   {
+    "rank": 4,
+    "observation": "All 2312 indexed errors are of type frontend.request_error attributed to service frontend with sampled documents containing only the message 'request error' (evidence/19); frontend CPU interval means are 0.1846 cores on average with max 0.1961 cores (evidence/10), and checkoutservice CPU averages 0.0417 cores with max 0.0499 cores (evidence/8).",
+    "possible_explanation": "Errors surface at the frontend service while frontend CPU appears low in interval means, so the failure may originate downstream or from transient request conditions rather than frontend CPU saturation; however, the provided data do not include a call graph or per-request traces to confirm this.",
+    "recommended_check": "Use traces or frontend logs to identify which downstream call failed during the burst (1790632245000-1790632380000) instead of inferring a cause from CPU interval means.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/19",
+     "analysis-result.json#/evidence/10",
+     "analysis-result.json#/evidence/8"
+    ]
+   },
+   {
+    "rank": 5,
+    "observation": "The paymentservice memory summary over 19 observed cells ranges from 2,523,136 bytes to 32,993,280 bytes with median 31,954,944 bytes and a positive slope of 10885.95 bytes/second (evidence/14), while the memory summaries for checkoutservice and frontend are comparatively stable (evidence/9, evidence/11).",
+    "possible_explanation": "The wide dispersion and rising slope in the paymentservice memory series could reflect unstable sampling or process-level churn during the window; this is a hypothesis only and is not confirmed by the provided data.",
+    "recommended_check": "Inspect Prometheus scrape records and paymentservice pod lifecycle/restart events for the run-intersection window to determine whether the memory dispersion is measurement-related or process-related.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/14",
+     "analysis-result.json#/evidence/9",
+     "analysis-result.json#/evidence/11"
+    ]
+   }
+  ],
+  "recommendations": [
+   {
+    "rank": 1,
+    "action": "Treat the run as producing NO_VERDICT, not FAIL: keep the overall-errors policy configured and record the window business_verdict FAIL, but do not report a final PASS/FAIL until the paymentservice cpu-throttle-ratio rule can be evaluated with complete data.",
+    "rationale": "The window policy summary shows business_verdict FAIL with resource_verdict NO_VERDICT and verdict NO_VERDICT (evidence/17); the resource rule is NO_VERDICT solely because of MISSING_RESOURCE_CELLS (evidence/15), so the deterministic verdict must remain NO_VERDICT.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/17",
+     "analysis-result.json#/evidence/15",
+     "analysis-result.json#/evidence/16"
+    ]
+   },
+   {
+    "rank": 2,
+    "action": "Pull the indexed error documents and frontend/checkout logs covering 1790632245000-1790632380000 and classify the 2312 frontend.request_error entries before any rerun.",
+    "rationale": "All 2312 errors are frontend.request_error occurring in a distinct burst (evidence/19), and the checkout transaction summary carries all 2312 transaction-scope errors (evidence/3), but the sampled messages contain no error detail beyond 'request error'.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/19",
+     "analysis-result.json#/evidence/3"
+    ]
+   },
+   {
+    "rank": 3,
+    "action": "Verify clock alignment between Prometheus metric ingestion and the OpenSearch error index before correlating the paymentservice throttle spike with the error burst.",
+    "rationale": "The resource binding reports clock_alignment=not_verified_by_core (evidence/7), so the apparent temporal overlap between throttle-ratio cells and error cells (evidence/19, analysis-result.json#/findings/0) cannot support lead/lag or causal ordering until alignment is confirmed.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/7",
+     "analysis-result.json#/findings/0",
+     "analysis-result.json#/evidence/19"
+    ]
+   },
+   {
+    "rank": 4,
+    "action": "If a rerun is performed, first resolve the incomplete paymentservice metric acquisition (source status PARTIAL, MISSING_SAMPLES for paymentservice-cpu, paymentservice-memory, and paymentservice-cpu-throttle-ratio) so all 23 expected cells are present.",
+    "rationale": "Missing paymentservice cells (4 of 23 for each series, evidence/12, evidence/13, evidence/14) caused the resource SLA rule to be unevaluated (evidence/15) and contributed to analysis_coverage INCOMPLETE with RESOURCE_GAPS, MISSING_RESOURCE_CELLS, and SOURCE_ACQUISITION_PARTIAL.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/18",
+     "analysis-result.json#/evidence/12",
+     "analysis-result.json#/evidence/14",
+     "analysis-result.json#/evidence/15"
+    ]
+   }
+  ],
+  "caveats": [
+   "The deterministic policy verdict is NO_VERDICT even though the overall-errors business rule FAILed in the window; the resource SLA rule stayed NO_VERDICT due to missing cells, so the run cannot be recorded as PASS or FAIL.",
+   "Analysis coverage is INCOMPLETE with reasons RESOURCE_GAPS, MISSING_RESOURCE_CELLS, and SOURCE_ACQUISITION_PARTIAL.",
+   "The run-intersection window covers 345000 ms of the 360014 ms run (95.8%); whole-run counts (denominator 39099) and policy-window counts (denominator 37841) are different scopes and are not inconsistent with each other.",
+   "clock_alignment is not_verified_by_core (evidence/7); no lead/lag or temporal causal conclusion is drawn from the overlap between the error burst and the paymentservice throttle-ratio spike.",
+   "Paymentservice resource statistics cover only 19 of 23 expected cells; missing samples or cells do not prove the throttle ratio was below threshold during the missing intervals, only that those intervals were unevaluated.",
+   "The OpenSearch error profile contains 2312 indexed errors with sampled documents limited to the message 'request error'; it is not a full log, and no traces, call graph, topology, release, or configuration data are present in the input.",
+   "No capacity_summary or capacity bound is present in the input; nothing in this advice claims spare capacity or a healthy business window."
+  ]
+ },
+ "schema": "ai-experiment-run.v2",
+ "phase": "pilot",
+ "case": "K08",
+ "rep": 1
+}

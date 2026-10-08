@@ -1,0 +1,231 @@
+{
+ "stage": "A",
+ "mode": "live",
+ "model": "deepseek-v4-flash-0731",
+ "tag": {
+  "phase": "holdout",
+  "attempt_id": "case-005-2-A-t1",
+  "arm": "A",
+  "stage": null,
+  "case": "case-005",
+  "rep": 2,
+  "try": 1
+ },
+ "retry_policy": "d2",
+ "qwen_exit": 0,
+ "wall_ms": 123179,
+ "relay": {
+  "schema_version": "advisory-ai-runtime-relay.v1",
+  "status": "FORWARDED_STRUCTURED_OUTPUT",
+  "received_request_count": 1,
+  "forwarded_request_count": 1,
+  "outcomes": [
+   "FORWARDED_STRUCTURED_OUTPUT"
+  ],
+  "retry_refused_reason": null,
+  "first_refused_reason": null,
+  "model_id": "deepseek-v4-flash-0731",
+  "retry_policy": "d2",
+  "requests": [
+   {
+    "ordinal": 1,
+    "forwarded": true,
+    "outcome": "FORWARDED_STRUCTURED_OUTPUT",
+    "provider_status": 200,
+    "latency_ms": 121784,
+    "usage": {
+     "prompt_tokens": 6145,
+     "total_tokens": 18229,
+     "completion_tokens": 12084,
+     "prompt_tokens_details": {
+      "cached_tokens": 1024
+     },
+     "completion_tokens_details": {
+      "reasoning_tokens": 9130
+     }
+    },
+    "model_returned": "deepseek-v4-flash-0731"
+   }
+  ],
+  "usage": {
+   "prompt_tokens": 6145,
+   "completion_tokens": 12084,
+   "total_tokens": 18229
+  },
+  "latency_ms": 121784
+ },
+ "relay_status": "FORWARDED_STRUCTURED_OUTPUT",
+ "usage": {
+  "prompt_tokens": 6145,
+  "completion_tokens": 12084,
+  "total_tokens": 18229
+ },
+ "latency_ms": 121784,
+ "retried": false,
+ "retry_refused_reason": null,
+ "status": "OK",
+ "note": null,
+ "output": {
+  "schema_version": "ai-advice-output.v1",
+  "summary": "Deterministic verdict: PASS. The capacity summary (analysis-result.json#/capacity_summary, evidence/18) establishes a LOWER_BOUND of 297 concurrent users on load_axis 'users' (policy_verdict PASS, run_validity VALID, analysis_coverage COMPLETE with no reasons). Each stage was verified via the p05_10s active-user statistic (97/197/297 against targets 100/200/300 within 5% tolerance), all three latency policy checks observed response_time_p95_ms 140 vs threshold 250 (PASS), and overall/checkout summaries report error_count 0 across 3601 samples. Important limits: this is a verified lower bound only — upper_exclusive is null and capacity_knee is null because knee_reason is 'KNEE_DETECTOR_NOT_IMPLEMENTED', so no saturation point was measured or ruled out; every window has resource_verdict NO_POLICY (only diagnostic load-generator CPU guards at threshold 0.85 were checked and passed); the stored throughput ratio (3601000/900500) corresponds to roughly 4 samples/s for the sampled run, so '297 users' is a concurrency bound, not a request-rate capacity; clock_alignment is 'not_verified_by_core', so no temporal ordering is supportable; the aggregate latency summary shows a 1500 ms max not attributed to any stage or cause.",
+  "hypotheses": [
+   {
+    "rank": 1,
+    "observation": "The capacity summary reports bound_type LOWER_BOUND with lower_inclusive 297, upper_exclusive null, capacity_knee null, and knee_reason 'KNEE_DETECTOR_NOT_IMPLEMENTED'.",
+    "possible_explanation": "Because no knee detector was implemented, the analysis does not establish a saturation point; true capacity may be higher than the 297-user verified lower bound, or a degradation point may exist above the tested 300-user target and simply was not detected.",
+    "recommended_check": "Run load stages above 300 users (e.g., 350/400/500) and record where latency or error policies start failing; enable or implement a knee detector with a documented definition so the bound can be converted into an upper range.",
+    "evidence_refs": [
+     "analysis-result.json#/capacity_summary",
+     "analysis-result.json#/evidence/18"
+    ]
+   },
+   {
+    "rank": 2,
+    "observation": "Latency policy checks for all three stages observe response_time_p95_ms 140 vs threshold 250 (PASS) while active_users rises from ~100 to ~300 across stages; the overall metric summary has sample_count 3601, error_count 0, and throughput_rps ratio numerator 3601000 / denominator 900500.",
+    "possible_explanation": "If thread pacing or think times dominate the test, the per-user request rate stays low (approximately 4 samples/s derived from the throughput ratio over the run), so a higher user count may not translate into proportionally higher server demand, which would keep p95 latency flat.",
+    "recommended_check": "Compute per-stage request rate (samples per user per second) and per-10s-bin throughput, and confirm the JMeter pacing/think-time configuration; add server-side request-queue and CPU metrics to see actual demand per stage.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0",
+     "analysis-result.json#/evidence/3",
+     "analysis-result.json#/evidence/5",
+     "analysis-result.json#/evidence/7",
+     "analysis-result.json#/evidence/12",
+     "analysis-result.json#/evidence/14",
+     "analysis-result.json#/evidence/16"
+    ]
+   },
+   {
+    "rank": 3,
+    "observation": "Generator CPU summaries are identical across all three stages (min 0.41, mean 0.43, max 0.45, unit ratio), and generator-cpu-guard checks (operator gt, threshold 0.85) all report PASS.",
+    "possible_explanation": "The load generator's CPU stayed well below its guard threshold across all stages, so the generator may not be the limiting factor in this configuration; this does not characterize the server under test because the window summaries report resource_verdict NO_POLICY (no SUT resource policy was evaluated).",
+    "recommended_check": "Validate that the generator can push heavier load (higher concurrency or reduced pacing) without itself becoming a bottleneck, and collect SUT-side resource metrics to locate the actual constraint.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/4",
+     "analysis-result.json#/evidence/6",
+     "analysis-result.json#/evidence/8",
+     "analysis-result.json#/evidence/9",
+     "analysis-result.json#/evidence/10",
+     "analysis-result.json#/evidence/11",
+     "analysis-result.json#/evidence/13"
+    ]
+   },
+   {
+    "rank": 4,
+    "observation": "The overall and checkout metric summaries report latency_ms max 1500 with p50 130, p95 140, p99 140, and error_count 0.",
+    "possible_explanation": "One or a few outlier samples (e.g., warm-up, garbage collection, or a transient) may dominate the max while the percentiles stay flat; the tail above p99 is not characterized and its timing within the run is unknown from the aggregate summary.",
+    "recommended_check": "Inspect per-10s latency bins or per-sampler traces to determine when the 1500 ms sample(s) occurred relative to the three stages and whether a single sample dominates the max.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0",
+     "analysis-result.json#/evidence/1"
+    ]
+   },
+   {
+    "rank": 5,
+    "observation": "metric-summary-overall and the metric summary scoped to transaction label 'checkout' report identical values: sample_count 3601, latency p50/p95/p99 130/140/140, max 1500, error_count 0, and the same throughput_rps ratio.",
+    "possible_explanation": "The test plan may contain only the checkout sampler (or only checkout samples were recorded), so the overall and checkout aggregates coincide; the run may therefore not cover other business transactions.",
+    "recommended_check": "Verify the JMeter test plan sampler set and confirm whether any non-checkout transactions were executed or excluded from the analysis scope.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0",
+     "analysis-result.json#/evidence/1"
+    ]
+   },
+   {
+    "rank": 6,
+    "observation": "Overall and checkout metric summaries report error_count 0 out of 3601 samples.",
+    "possible_explanation": "Under the configured load and 30-cell windows per stage, no errors were observed; this is consistent with the PASS verdict but does not establish that higher load or longer duration would remain error-free.",
+    "recommended_check": "Extend the test to higher target loads and longer duration, and check error_count and error_rate per 10-second cell across each stage rather than relying on the run-level aggregate.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0",
+     "analysis-result.json#/capacity_summary"
+    ]
+   },
+   {
+    "rank": 7,
+    "observation": "The resource binding reports clock_alignment 'not_verified_by_core' for the run window (evaluation from_epoch_ms 1767225600000 to to_epoch_ms 1767226500000).",
+    "possible_explanation": "If load-generator and SUT clocks are not aligned, ordering latency samples or resource series across agents could be misleading, so no lead/lag or temporal causal conclusion is supportable from this evidence.",
+    "recommended_check": "Verify clock synchronization (NTP/offset) between load generator, SUT, and any monitoring agents and record the measured offset before performing any temporal analysis.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/2"
+    ]
+   }
+  ],
+  "recommendations": [
+   {
+    "rank": 1,
+    "action": "Verify clock alignment/synchronization between the load generator, SUT, and monitoring agents before drawing any time-series or cause/effect conclusions.",
+    "rationale": "The resource binding explicitly reports clock_alignment 'not_verified_by_core', so temporal ordering and lead/lag claims are not supportable until clocks are known aligned.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/2"
+    ]
+   },
+   {
+    "rank": 2,
+    "action": "Extend the load profile above 300 users and enable/implement knee detection so the LOWER_BOUND of 297 users can be bounded above.",
+    "rationale": "upper_exclusive is null and capacity_knee is null with knee_reason 'KNEE_DETECTOR_NOT_IMPLEMENTED', so the current verdict leaves the true saturation point unmeasured and unruled-out.",
+    "evidence_refs": [
+     "analysis-result.json#/capacity_summary",
+     "analysis-result.json#/evidence/18"
+    ]
+   },
+   {
+    "rank": 3,
+    "action": "Add SUT-side resource policies and metrics (CPU, memory, request queue, connection pool) and rerun the capacity evaluation with them.",
+    "rationale": "Every window summary reports resource_verdict NO_POLICY and the only resource checks are diagnostic generator-cpu-guard checks on the load generator; the verdict currently rests on latency policy and generator CPU only, not server resources.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/9",
+     "analysis-result.json#/evidence/13",
+     "analysis-result.json#/evidence/15",
+     "analysis-result.json#/evidence/17"
+    ]
+   },
+   {
+    "rank": 4,
+    "action": "Add per-stage throughput, request rate per user, and per-10s-bin latency/error summaries, and record JMeter pacing/think-time settings.",
+    "rationale": "The aggregate throughput ratio (3601000/900500) implies roughly 4 samples/s over the sampled run, and p95 latency is flat across stages; interpreting the 297-user lower bound in request-rate terms requires per-stage rate data.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0",
+     "analysis-result.json#/evidence/12",
+     "analysis-result.json#/evidence/14",
+     "analysis-result.json#/evidence/16"
+    ]
+   },
+   {
+    "rank": 5,
+    "action": "Trace the 1500 ms latency outlier(s) via per-10s bins or per-sampler logs to attribute their timing and cause.",
+    "rationale": "The aggregate summary shows max 1500 ms while p50/p95/p99 are 130/140/140, so the tail is uncharacterized and its source/stage is unknown.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0",
+     "analysis-result.json#/evidence/1"
+    ]
+   },
+   {
+    "rank": 6,
+    "action": "Confirm the JMeter test plan sampler coverage and record which transactions were intended versus executed.",
+    "rationale": "The overall scope and the checkout transaction scope report identical sample_count 3601, latency, error, and throughput values, suggesting the run may contain only the checkout sampler.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0",
+     "analysis-result.json#/evidence/1"
+    ]
+   }
+  ],
+  "caveats": [
+   "The verdict is a LOWER_BOUND of 297 concurrent users (PASS), not an estimate of maximum capacity: upper_exclusive is null and capacity_knee is null with knee_reason 'KNEE_DETECTOR_NOT_IMPLEMENTED', so no degradation point was measured or ruled out.",
+   "The stored overall throughput ratio (numerator 3601000 / denominator 900500 in evidence 0 and 1) corresponds to roughly 4 samples/s over the sampled run (sample_count 3601, evaluation window 1767225600000 to 1767226500000 ms); this does not by itself support stating service capacity in requests per second without per-stage rate data.",
+   "Every window summary reports resource_verdict NO_POLICY; the only resource checks are diagnostic generator-cpu-guard checks (operator gt, threshold 0.85) on the load generator. The absence of a server resource policy is not a PASS for server resources.",
+   "clock_alignment is 'not_verified_by_core', so no lead/lag, ordering, or temporal causal conclusion between generator, SUT, or monitoring series should be drawn until clock alignment is verified.",
+   "Latency statistics are aggregate over the whole run (evidence 0 and 1); per-window latency distributions beyond the PASS policy checks are not provided, and the 1500 ms max is not attributed to any stage or cause.",
+   "The overall scope and the single checkout transaction scope show identical counts and statistics (sample_count 3601, latency p50/p95/p99 130/140/140, max 1500, error_count 0, same throughput ratio), so the analysis provides no evidence of other transactions or broader business coverage.",
+   "error_count 0 across 3601 samples is an absence-of-errors observation, not proof of stability, spare capacity, low load at the server, or robustness at higher loads or longer durations, and the findings array is empty, which does not prove absence of problems.",
+   "The verified active-user statistics are p05_10s values (97/197/297), i.e., the 5th percentile over 10-second cells, so the verified bound reflects the low end of observed concurrency rather than the nominal targets (100/200/300).",
+   "run_validity VALID and analysis_coverage COMPLETE (no reasons) describe analysis completeness, not the physical validity of the generated load or the correctness of the SUT environment."
+  ]
+ },
+ "schema": "ai-experiment-run.holdout.v1",
+ "case": "case-005",
+ "rep": 2,
+ "arm": "A",
+ "try": 1,
+ "attempt_id": "case-005-2-A-t1",
+ "model_id": "deepseek-v4-flash-0731",
+ "prompt_sha256": "69f215a1ad4ae678c82410ba7cf7daf171cd9c7ca0ef4626bba6977db0af4ef7"
+}

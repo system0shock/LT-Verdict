@@ -1,0 +1,275 @@
+{
+ "stage": "A",
+ "mode": "live",
+ "model": "deepseek-v4-flash-0731",
+ "tag": {
+  "phase": "holdout",
+  "attempt_id": "case-011-2-A-t1",
+  "arm": "A",
+  "stage": null,
+  "case": "case-011",
+  "rep": 2,
+  "try": 1
+ },
+ "retry_policy": "d2",
+ "qwen_exit": 0,
+ "wall_ms": 141761,
+ "relay": {
+  "schema_version": "advisory-ai-runtime-relay.v1",
+  "status": "FORWARDED_STRUCTURED_OUTPUT",
+  "received_request_count": 1,
+  "forwarded_request_count": 1,
+  "outcomes": [
+   "FORWARDED_STRUCTURED_OUTPUT"
+  ],
+  "retry_refused_reason": null,
+  "first_refused_reason": null,
+  "model_id": "deepseek-v4-flash-0731",
+  "retry_policy": "d2",
+  "requests": [
+   {
+    "ordinal": 1,
+    "forwarded": true,
+    "outcome": "FORWARDED_STRUCTURED_OUTPUT",
+    "provider_status": 200,
+    "latency_ms": 140373,
+    "usage": {
+     "prompt_tokens": 12371,
+     "total_tokens": 27654,
+     "completion_tokens": 15283,
+     "prompt_tokens_details": {
+      "cached_tokens": 1024
+     },
+     "completion_tokens_details": {
+      "reasoning_tokens": 11354
+     }
+    },
+    "model_returned": "deepseek-v4-flash-0731"
+   }
+  ],
+  "usage": {
+   "prompt_tokens": 12371,
+   "completion_tokens": 15283,
+   "total_tokens": 27654
+  },
+  "latency_ms": 140373
+ },
+ "relay_status": "FORWARDED_STRUCTURED_OUTPUT",
+ "usage": {
+  "prompt_tokens": 12371,
+  "completion_tokens": 15283,
+  "total_tokens": 27654
+ },
+ "latency_ms": 140373,
+ "retried": false,
+ "retry_refused_reason": null,
+ "status": "OK",
+ "note": null,
+ "output": {
+  "schema_version": "ai-advice-output.v1",
+  "summary": "The LT Verdict run is VALID but has INCOMPLETE coverage (reasons: RESOURCE_GAPS, MISSING_RESOURCE_CELLS). Deterministic policy verdict: NO_VERDICT. Two 300s windows were evaluated: workload-03 (constant target 90 requests/s) PASSed latency (observed p95 53 ms <= 200) but its compute-limit check (cpu_work > 0.9) FAILed with intermittent excursions just above 0.9, and its database-limit check returned NO_VERDICT due to one missing db_work cell, making the window NO_VERDICT; workload-04 (target ~110 requests/s) FAILed latency (observed p95 28815 ms > 200) with cpu_work sustained near 1.0 (all 300 cells above 0.9) and database-limit PASSing. Correlation evidence is non-conclusive: pairs are BELOW_EFFECT or INSUFFICIENT_DATA, uncertainty is NOT_ESTIMATED, and headline p-values are UNAVAILABLE; the diagnostic tested 0 anomaly episodes. Advice: do not treat NO_VERDICT as a pass; prioritize investigating workload-04 CPU saturation/latency failure, fill the db_work resource gap to get a definitive database-limit verdict, and verify clock alignment before any temporal/causal interpretation.",
+  "hypotheses": [
+   {
+    "rank": 1,
+    "observation": "In workload-04, cpu_work interval means are at or near saturation (min 0.992899, mean 0.99997633, max 1.0 over 300 cells) and the latency policy check FAILs with observed response_time_p95_ms 28815 > 200; in workload-03 cpu_work mean is 0.9004095 and the latency check PASSes with observed response_time_p95_ms 53.",
+    "possible_explanation": "Sustained ~100% cpu_work during workload-04 may have caused queuing and scheduling delays expressed as multi-second p95 latency. This is a hypothesis only: the stored correlation pair for workload-04 is INSUFFICIENT_DATA (NO_RESIDUAL_VARIATION), so CPU saturation is not statistically confirmed as the cause.",
+    "recommended_check": "Run a stepped load test (for example 90, 95, 100, 105, 110 requests/s) holding each step long enough to record cpu_work and per-window p95 latency, and identify the rate at which cpu_work approaches 1.0 simultaneously with latency degradation.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/6",
+     "analysis-result.json#/evidence/15",
+     "analysis-result.json#/evidence/3",
+     "analysis-result.json#/evidence/13",
+     "analysis-result.json#/evidence/18",
+     "analysis-result.json#/evidence/16"
+    ]
+   },
+   {
+    "rank": 2,
+    "observation": "target-request-rate is constant 90 requests/s in workload-03 (min=max=90, standard deviation 0) and ~110 requests/s in workload-04 (mean 109.9966, min 108.98844, max 110); workload-04 also shows cpu_work near 1.0 and latency FAIL, while workload-03 passes latency.",
+    "possible_explanation": "The applied load step from 90 to ~110 requests/s is the main controlled difference between the two windows and may be the trigger for the workload-04 degradation.",
+    "recommended_check": "Confirm from the JMeter test plan and ramp profile that only the target rate changed between the two windows, then run intermediate rates to locate the load-dependent knee.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/5",
+     "analysis-result.json#/evidence/8",
+     "analysis-result.json#/evidence/18",
+     "analysis-result.json#/evidence/17"
+    ]
+   },
+   {
+    "rank": 3,
+    "observation": "db_work in workload-03 has missing_cells 1 with reasons RESOURCE_GAPS; the database-limit policy check reports status NO_VERDICT with reason MISSING_RESOURCE_CELLS; the workload-03 window policy summary verdict is NO_VERDICT even though its business verdict is PASS.",
+    "possible_explanation": "The single missing db_work cell prevents the database-limit check from reaching a verdict; this missing-data state is a direct reason the window (and overall) verdict is NO_VERDICT rather than evidence of database compliance.",
+    "recommended_check": "Inspect the db_work series gap in window workload-03 (from_epoch_ms 1704067800000 to 1704068100000), fix the collection issue, and re-run the analysis to obtain a definitive database-limit verdict.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/4",
+     "analysis-result.json#/evidence/10",
+     "analysis-result.json#/evidence/14",
+     "analysis-result.json#/policy_verdict"
+    ]
+   },
+   {
+    "rank": 4,
+    "observation": "In workload-03, cpu_work mean is 0.9004095, the compute-limit check (threshold 0.9, operator gt) is FAIL, and multiple brief findings are recorded (e.g., finding with cell_count 8 and observed_max 0.931338 from epoch 1704067887000); the same window's latency check PASSes (observed 53 ms, threshold 200).",
+    "possible_explanation": "cpu_work sits just above the 0.9 threshold in short episodes while measured latency remains low; this may indicate the interval-mean aggregation or the 0.9 threshold is too sensitive relative to user-visible latency in workload-03.",
+    "recommended_check": "Compare interval-mean cpu_work against raw per-interval samples and OS-level CPU counters for the windows of each finding, and evaluate whether the 0.9 compute-limit should apply to interval means.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/3",
+     "analysis-result.json#/evidence/9",
+     "analysis-result.json#/findings/3",
+     "analysis-result.json#/evidence/13"
+    ]
+   },
+   {
+    "rank": 5,
+    "observation": "db_work stays far below the 0.9 limit in both windows: workload-03 mean 0.02249608 and workload-04 mean 0.02496306 with max 0.026069; the database-limit check is PASS in workload-04; association-02 partial rho is 0.105728 (workload-03) and -0.003645 (workload-04), both status BELOW_EFFECT.",
+    "possible_explanation": "At roughly 2-3% of the 0.9 limit, database utilization is not implicated as the main driver of the workload-04 latency failure; however, because the correlation headline is UNAVAILABLE and uncertainty is NOT_ESTIMATED, low db_work alone does not prove database-side health.",
+    "recommended_check": "Validate that the db_work metric reflects the load-bearing database rather than a proxy, and separately measure database query/service latency to rule out database-side effects not visible in utilization.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/4",
+     "analysis-result.json#/evidence/7",
+     "analysis-result.json#/evidence/12",
+     "analysis-result.json#/evidence/21",
+     "analysis-result.json#/evidence/22"
+    ]
+   },
+   {
+    "rank": 6,
+    "observation": "association-01 workload-03 reports raw_rho 0.446860 and partial_rho 0.446860 with status BELOW_EFFECT and reasons CONSTANT_CONTROL, RESOURCE_DELTA_BELOW_MINIMUM, LOAD_DELTA_BELOW_MINIMUM; workload-04 reports status INSUFFICIENT_DATA with NO_RESIDUAL_VARIATION and best_lag_rho null; correlation headline selection status is UNAVAILABLE (MULTI_WINDOW_FAMILY_UNSUPPORTED; GENUINE_PARTIAL_UNCALIBRATED for workload-04) and uncertainty is NOT_ESTIMATED.",
+    "possible_explanation": "The series lack the variation needed for a calibrated association (constant control rate, near-constant resource series, resource/load deltas below minimum), so neither the positive raw rho nor the absence of correlation can currently support a causal CPU-latency claim.",
+    "recommended_check": "Design an experiment with variable injected rates and measurable resource deltas across multiple windows, and re-run the correlation using a family method the runner supports so p-values and calibration can be produced.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/19",
+     "analysis-result.json#/evidence/20",
+     "analysis-result.json#/evidence/23",
+     "analysis-result.json#/evidence/24",
+     "analysis-result.json#/evidence/27"
+    ]
+   },
+   {
+    "rank": 7,
+    "observation": "resource-binding reports clock_alignment 'not_verified_by_core', while correlation pairs report best_lag_ms values (for example -6000) and lag profiles for cpu_work and db_work.",
+    "possible_explanation": "Without verified clock alignment between the load generator, monitored hosts, and JMeter, lag values cannot be interpreted as the resource leading or lagging latency; any temporal ordering derived from these lags is not supported.",
+    "recommended_check": "Verify NTP/clock synchronization for all telemetry sources, then re-run the correlation analysis before using best_lag_ms or lag profiles for temporal interpretations.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/2",
+     "analysis-result.json#/evidence/21",
+     "analysis-result.json#/evidence/19"
+    ]
+   },
+   {
+    "rank": 8,
+    "observation": "workload-04 reports error_count 0 and error_rate_ratio numerator 0 over 33000 samples while latency_max_ms is 30323 and p95 is 28815.",
+    "possible_explanation": "Captured samplers report no errors, but with responses reaching ~30 s, some near-timeout behavior may exist that the JMeter error capture does not surface unless timeouts/assertions are configured; zero captured errors does not by itself prove the absence of error behavior.",
+    "recommended_check": "Review the JMeter timeout and assertion configuration and compare against application/server logs to confirm whether aborted or timed-out requests would be counted as errors.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/18",
+     "analysis-result.json#/evidence/0"
+    ]
+   }
+  ],
+  "recommendations": [
+   {
+    "rank": 1,
+    "action": "Treat the deterministic verdict NO_VERDICT as inconclusive rather than a pass, and separately act on the workload-04 FAIL (latency observed p95 28815 > 200 with resource verdict FAIL).",
+    "rationale": "policy_verdict is NO_VERDICT because workload-03 is NO_VERDICT (its resource verdict is NO_VERDICT due to missing db_work cells), while workload-04 independently FAILs on both latency and compute-limit; the FAIL cannot be ignored even though the overall verdict is NO_VERDICT.",
+    "evidence_refs": [
+     "analysis-result.json#/policy_verdict",
+     "analysis-result.json#/evidence/14",
+     "analysis-result.json#/evidence/16",
+     "analysis-result.json#/evidence/15"
+    ]
+   },
+   {
+    "rank": 2,
+    "action": "Run a stepped load test between 90 and ~110 requests/s to find the rate at which p95 latency degrades and cpu_work saturates, recording per-window summaries for each step.",
+    "rationale": "Only two load points were measured (constant 90 requests/s and ~110 requests/s), and the degradation appears only in workload-04 where cpu_work is near 1.0; an intermediate-point test would locate the knee and test whether CPU saturation is load-driven.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/5",
+     "analysis-result.json#/evidence/8",
+     "analysis-result.json#/evidence/6",
+     "analysis-result.json#/evidence/18"
+    ]
+   },
+   {
+    "rank": 3,
+    "action": "Fix the db_work collection gap that caused MISSING_RESOURCE_CELLS and re-run the analysis so the database-limit check yields PASS or FAIL instead of NO_VERDICT.",
+    "rationale": "The single missing db_work cell in workload-03 caused the database-limit check to be NO_VERDICT, which propagates to the window verdict; analysis coverage is marked INCOMPLETE with RESOURCE_GAPS and MISSING_RESOURCE_CELLS.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/4",
+     "analysis-result.json#/evidence/10",
+     "analysis-result.json#/analysis_coverage"
+    ]
+   },
+   {
+    "rank": 4,
+    "action": "Verify clock synchronization across the generator, monitored hosts, and JMeter before drawing any temporal or causal conclusions from best_lag_ms values.",
+    "rationale": "resource-binding reports clock_alignment 'not_verified_by_core'; without verified alignment, lag profiles (e.g., best_lag_ms -6000) cannot support lead/lag ordering or a temporal causal hypothesis.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/2",
+     "analysis-result.json#/evidence/21"
+    ]
+   },
+   {
+    "rank": 5,
+    "action": "Validate the cpu_work aggregation and the 0.9 compute-limit threshold, given workload-03 FAILs on compute while its measured latency is PASS.",
+    "rationale": "workload-03 cpu_work mean 0.9004095 produces several brief findings just above 0.9 with no corresponding latency impact; check whether interval-mean aggregation or threshold choice is appropriate for the compute-limit rule.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/3",
+     "analysis-result.json#/evidence/9",
+     "analysis-result.json#/evidence/13"
+    ]
+   },
+   {
+    "rank": 6,
+    "action": "Improve the analysis design so correlation can be calibrated: inject variable load, keep resources below saturation so deltas exceed minimums, and run multiple windows within a supported family method.",
+    "rationale": "All association pairs are BELOW_EFFECT or INSUFFICIENT_DATA (reasons CONSTANT_CONTROL, RESOURCE_DELTA_BELOW_MINIMUM, LOAD_DELTA_BELOW_MINIMUM, NO_RESIDUAL_VARIATION), uncertainty is NOT_ESTIMATED, and headline p-values are UNAVAILABLE, so the analysis cannot currently establish either presence or absence of association.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/19",
+     "analysis-result.json#/evidence/20",
+     "analysis-result.json#/evidence/23",
+     "analysis-result.json#/evidence/27"
+    ]
+   },
+   {
+    "rank": 7,
+    "action": "Confirm how JMeter counts errors and timeouts; given latency_max 30323 and error_count 0, verify that aborted or timed-out requests would be captured as errors.",
+    "rationale": "Zero captured errors with ~30 s maximum latency could mask client- or server-side timeout behavior if assertions/timeouts are not configured; absence of captured errors is not proof of absence of problems.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/18",
+     "analysis-result.json#/evidence/0"
+    ]
+   },
+   {
+    "rank": 8,
+    "action": "Base verdict interpretation on the per-window summaries (workload-03 and workload-04) rather than the overall metric summary, and document excluded pre/post-evaluation samples.",
+    "rationale": "The overall metric-summary sample_count 93000 does not equal the window sums 27000+33000=60000, and the run spans 1704067200000-1704068430312 while evaluation is 1704067800000-1704068400000; the overall p95/p99 (26111/29439) mixes samples outside the evaluated windows.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0",
+     "analysis-result.json#/evidence/17",
+     "analysis-result.json#/evidence/18",
+     "analysis-result.json#/evidence/2"
+    ]
+   }
+  ],
+  "caveats": [
+   "Clock alignment is reported as not_verified_by_core; no lead/lag or temporal causal ordering is supported by this analysis.",
+   "Analysis coverage is INCOMPLETE with reasons RESOURCE_GAPS and MISSING_RESOURCE_CELLS; the database-limit verdict for workload-03 is NO_VERDICT, which is not a PASS.",
+   "Correlation uncertainty is NOT_ESTIMATED for all pairs and all correlation headline selections are UNAVAILABLE (MULTI_WINDOW_FAMILY_UNSUPPORTED; for workload-04 also GENUINE_PARTIAL_UNCALIBRATED); no p-values or Holm-adjusted significance were produced.",
+   "anomalies_tested is 0 and episodes_reported is 0 in the diagnostic summary; this does not prove the absence of anomalies or spare capacity, it only shows that no anomaly episodes were tested.",
+   "error_count 0 in the JMeter samplers does not prove error-free behavior; timeout/assertion capture was not verified.",
+   "Only two load points were measured (constant 90 requests/s and ~110 requests/s); behavior at intermediate rates is unknown.",
+   "The overall metric summary (sample_count 93000) includes samples outside the two evaluation windows (27000+33000=60000); overall p95/p99 values are not specific to a single policy window.",
+   "cpu_work in workload-04 is near-constant (mean 0.99997633, IQR 0, standard deviation 0.00040998), which is why the CPU-latency association is INSUFFICIENT_DATA; the observed coincidence does not establish causation.",
+   "The run extends beyond the evaluation windows (run_to_epoch_ms 1704068430312 vs evaluation_to_epoch_ms 1704068400000); trailing and leading samples were not part of the policy windows.",
+   "The deterministic verdict NO_VERDICT is preserved; this advisory interpretation does not change the verdict."
+  ]
+ },
+ "schema": "ai-experiment-run.holdout.v1",
+ "case": "case-011",
+ "rep": 2,
+ "arm": "A",
+ "try": 1,
+ "attempt_id": "case-011-2-A-t1",
+ "model_id": "deepseek-v4-flash-0731",
+ "prompt_sha256": "69f215a1ad4ae678c82410ba7cf7daf171cd9c7ca0ef4626bba6977db0af4ef7"
+}

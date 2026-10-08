@@ -1,0 +1,193 @@
+{
+ "stage": "B",
+ "mode": "live",
+ "model": "deepseek-v4-flash-0731",
+ "tag": {
+  "phase": "holdout",
+  "attempt_id": "case-031-2-B-t1",
+  "arm": "B",
+  "stage": null,
+  "case": "case-031",
+  "rep": 2,
+  "try": 1
+ },
+ "retry_policy": "d2",
+ "qwen_exit": 0,
+ "wall_ms": 79506,
+ "relay": {
+  "schema_version": "advisory-ai-runtime-relay.v1",
+  "status": "FORWARDED_STRUCTURED_OUTPUT",
+  "received_request_count": 1,
+  "forwarded_request_count": 1,
+  "outcomes": [
+   "FORWARDED_STRUCTURED_OUTPUT"
+  ],
+  "retry_refused_reason": null,
+  "first_refused_reason": null,
+  "model_id": "deepseek-v4-flash-0731",
+  "retry_policy": "d2",
+  "requests": [
+   {
+    "ordinal": 1,
+    "forwarded": true,
+    "outcome": "FORWARDED_STRUCTURED_OUTPUT",
+    "provider_status": 200,
+    "latency_ms": 78219,
+    "usage": {
+     "prompt_tokens": 3449,
+     "total_tokens": 10789,
+     "completion_tokens": 7340,
+     "prompt_tokens_details": {
+      "cached_tokens": 1024
+     },
+     "completion_tokens_details": {
+      "reasoning_tokens": 5137
+     }
+    },
+    "model_returned": "deepseek-v4-flash-0731"
+   }
+  ],
+  "usage": {
+   "prompt_tokens": 3449,
+   "completion_tokens": 7340,
+   "total_tokens": 10789
+  },
+  "latency_ms": 78219
+ },
+ "relay_status": "FORWARDED_STRUCTURED_OUTPUT",
+ "usage": {
+  "prompt_tokens": 3449,
+  "completion_tokens": 7340,
+  "total_tokens": 10789
+ },
+ "latency_ms": 78219,
+ "retried": false,
+ "retry_refused_reason": null,
+ "status": "OK",
+ "note": null,
+ "output": {
+  "schema_version": "ai-advice-output.v1",
+  "summary": "Deterministic verdict preserved: FAIL. The run is VALID and analysis coverage is COMPLETE (no reasons). The FAIL is driven entirely by the resource verdict: the service resource series \"value\" (unit synthetic_unit, aggregation interval_mean) is constant at 90 across all 30 evaluation cells (min/max/mean/median/q05/q25/q75/q95 = 90, iqr 0, mad 0, sample_standard_deviation 0, slope_per_second 0), and the SLA resource policy \"limit\" (operator gt, threshold 80, effect sla) reports FAIL with a finding of observed_min 90 / observed_max 90. The business side passed: response_time_p95_ms = 100 (≤ 120, PASS) and error_count = 0 over 600 samples in both overall and transaction scopes; the window summary reports business_verdict PASS and resource_verdict FAIL. Clock alignment is not_verified_by_core, so the temporal binding of the resource cells to the explicit 30,000 ms evaluation window is unverified; clock verification is recommended before acting on the FAIL.",
+  "hypotheses": [
+   {
+    "rank": 1,
+    "observation": "The resource policy check for rule_id \"limit\" (operator gt, threshold 80, effect sla, unit synthetic_unit) has status FAIL, and the corresponding threshold finding reports observed_min 90 and observed_max 90 across 30 cells in the evaluation window; window-policy-summary reports resource_verdict FAIL and overall verdict FAIL.",
+    "possible_explanation": "The service's \"value\" metric genuinely exceeded the configured SLA threshold (90 > 80) throughout the evaluation window, so the FAIL reflects a sustained breach of the resource policy.",
+    "recommended_check": "Inspect the raw resource telemetry behind the resource summary to confirm the constant 90 reading is a genuine measurement (not a default or placeholder), then rerun the evaluation window.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/4",
+     "analysis-result.json#/findings/0",
+     "analysis-result.json#/evidence/6"
+    ]
+   },
+   {
+    "rank": 2,
+    "observation": "The resource summary for series \"value\" reports every statistic equal to 90 (min/max/mean/median/q05/q25/q75/q95), with iqr 0, mad 0, sample_standard_deviation 0, slope_per_second 0, aggregation \"interval_mean\", observed_cells 30, expected_cells 30, missing_cells 0, longest_gap_cells 0.",
+    "possible_explanation": "The perfectly flat series may reflect coarse aggregation or a synthetic/placeholder value rather than a varying physical measurement, in which case the policy FAIL could be a data artifact rather than real resource load.",
+    "recommended_check": "Examine the raw telemetry and the definition of series_id \"value\" and unit \"synthetic_unit\" to determine what was actually sampled and whether a constant 90 reading is credible.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/3",
+     "analysis-result.json#/evidence/4"
+    ]
+   },
+   {
+    "rank": 3,
+    "observation": "resource-binding reports clock_alignment \"not_verified_by_core\", mode \"explicit_windows\", evaluation window from 1767225600000 to 1767225630000 (30,000 ms), and dropped leading/trailing cells 0; the resource summary covers the same evaluation window.",
+    "possible_explanation": "Because clock alignment is not verified, the 30 resource cells may not be temporally bound to the evaluation window, so the attribution of the constant 90 reading to this window is unconfirmed.",
+    "recommended_check": "Verify clock synchronization among the load generator, service, and telemetry snapshot before attributing the resource FAIL to this specific window, then rerun.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/2",
+     "analysis-result.json#/evidence/3"
+    ]
+   },
+   {
+    "rank": 4,
+    "observation": "The only resource policy shown in the analysis is rule_id \"limit\" with operator \"gt\", threshold \"80\", effect \"sla\", status FAIL; the analysis contains no statement of what limit the service was expected to sustain.",
+    "possible_explanation": "The configured threshold/operator may be tighter than the intended SLA limit for the service, so the FAIL could stem from policy configuration rather than an actual breach of the intended limit.",
+    "recommended_check": "Review the configured SLA resource rule (rule_id \"limit\", effect sla, operator gt, threshold 80) against the intended service limit and confirm or adjust the configuration.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/4",
+     "analysis-result.json#/findings/0"
+    ]
+   },
+   {
+    "rank": 5,
+    "observation": "The latency policy check passes (response_time_p95_ms 100 ≤ 120, status PASS), both metric summaries report error_count 0 and sample_count 600, and the window summary reports business_verdict PASS plus resource_verdict FAIL; the resource and business metrics are separate scopes (service resource vs overall/transaction).",
+    "possible_explanation": "The business-side results and the service resource metric are independent scopes, and the analysis does not establish whether the resource value affected the business metrics in either direction.",
+    "recommended_check": "Follow only the business and resource verdicts as separate policy outcomes; if a relationship is suspected, collect and correlate aligned telemetry for the same window rather than assuming causality from these summaries.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0",
+     "analysis-result.json#/evidence/1",
+     "analysis-result.json#/evidence/5",
+     "analysis-result.json#/evidence/6"
+    ]
+   }
+  ],
+  "recommendations": [
+   {
+    "rank": 1,
+    "action": "Verify clock synchronization among the load generator, service, and telemetry snapshot, then rerun the evaluation window.",
+    "rationale": "clock_alignment is \"not_verified_by_core\", so the temporal binding of the resource cells to the 30,000 ms evaluation window is unverified; the FAIL should be reproduced with aligned clocks before acting on it.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/2"
+    ]
+   },
+   {
+    "rank": 2,
+    "action": "Inspect the raw resource telemetry underlying series \"value\" (unit synthetic_unit) to confirm the flat 90 reading is genuine and correctly attributed to the service.",
+    "rationale": "All 30 cells are constant at 90 with zero variance (iqr 0, mad 0, sample_standard_deviation 0, slope_per_second 0), so the threshold finding should be confirmed against raw data before treating it as an operational issue.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/3",
+     "analysis-result.json#/evidence/4",
+     "analysis-result.json#/findings/0"
+    ]
+   },
+   {
+    "rank": 3,
+    "action": "Review the SLA resource rule \"limit\" (effect sla, operator gt, threshold 80) against the service's intended limit and confirm the configuration is correct.",
+    "rationale": "The policy FAIL is driven by observed 90 > threshold 80, but the analysis does not state the intended service limit, so the policy's correctness should be verified without changing the deterministic FAIL verdict.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/4",
+     "analysis-result.json#/findings/0"
+    ]
+   },
+   {
+    "rank": 4,
+    "action": "Report the business and resource verdicts separately (business_verdict PASS, resource_verdict FAIL) and preserve the overall verdict FAIL exactly.",
+    "rationale": "The business policies (latency p95 100 ≤ 120, 0 errors) passed while the resource policy failed; conflating them would misrepresent the evidence, and advice must not alter the deterministic FAIL verdict.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/5",
+     "analysis-result.json#/evidence/6",
+     "analysis-result.json#/policy_verdict"
+    ]
+   },
+   {
+    "rank": 5,
+    "action": "Re-check resource snapshot completeness and rerun validity on the rerun, confirming observed_cells 30, expected_cells 30, missing_cells 0, and longest_gap_cells 0.",
+    "rationale": "The run is currently VALID with complete coverage, and confirming the same snapshot properties after clock verification supports a like-for-like comparison of the resource FAIL.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/3",
+     "analysis-result.json#/run_validity",
+     "analysis-result.json#/analysis_coverage"
+    ]
+   }
+  ],
+  "caveats": [
+   "clock_alignment is reported as \"not_verified_by_core\", so the association of the 30 resource cells with the explicit evaluation window is unverified; no lead/lag or temporal causal claim is supported.",
+   "The resource series is expressed only in \"synthetic_unit\"; the evidence does not define what physical resource or metric it represents, so the operational severity of the FAIL cannot be inferred.",
+   "The resource series is perfectly flat (all 30 cells = 90, zero variance). A flat series, zero missing cells, and zero gaps do not by themselves prove genuine sustained load or correctness of the measurement.",
+   "The business summaries show 0 errors and a flat 100 ms latency across 600 samples; this does not prove stability, spare capacity, or absence of a resource problem.",
+   "throughput_rps (numerator 600000, denominator 30099) is preserved as reported and its interpretation is not evaluated here; no throughput or rate conclusion is drawn.",
+   "Only a single 30-second evaluation window is covered by this analysis; results do not generalize to the whole run or other windows, and counts remain comparable only within the same scope and window.",
+   "The analysis is VALID and coverage is COMPLETE, but a valid run does not establish causality; only test-operator actions (inspect, verify clocks, rerun, review policy configuration) are recommended."
+  ]
+ },
+ "schema": "ai-experiment-run.holdout.v1",
+ "case": "case-031",
+ "rep": 2,
+ "arm": "B",
+ "try": 1,
+ "attempt_id": "case-031-2-B-t1",
+ "model_id": "deepseek-v4-flash-0731",
+ "prompt_sha256": "3c0f28bee6517c13c5c854615e7d3d59301893d9723880818e4034a32e9133bf"
+}

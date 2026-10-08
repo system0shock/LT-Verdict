@@ -1,0 +1,83 @@
+[
+  {
+    "id": "R042",
+    "hard_defect": false,
+    "defects": [],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 5,
+    "notes": "Accurately preserves the verdicts, bound, guard contract, and uncertainty while giving verifiable actions."
+  },
+  {
+    "id": "R074",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T8",
+        "field": "#/hypotheses/2/observation",
+        "quote": "p95 = p99 = 420 ms",
+        "why": "The whole-run metric summary reports p95 417 ms and p99 420 ms, not equal values."
+      },
+      {
+        "type": "T2",
+        "field": "#/recommendations/3/action",
+        "quote": "stage-3: examine per-10s-cell p95/max and the 1500 ms maximum samples",
+        "why": "The 1500 ms maximum is a whole-run aggregate and the evidence does not assign it or its samples to stage-3."
+      }
+    ],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 3,
+    "notes": "Mostly useful, but it misreports a key aggregate and assigns the whole-run maximum to a window."
+  },
+  {
+    "id": "R085",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T3",
+        "field": "#/hypotheses/5/possible_explanation",
+        "quote": "A small number of very slow responses",
+        "why": "The aggregates provide no count of samples at the 1500 ms maximum or otherwise establish that the slow responses are few."
+      },
+      {
+        "type": "T1",
+        "field": "#/recommendations/5/action",
+        "quote": "either implement knee detection",
+        "why": "KNEE_DETECTOR_NOT_IMPLEMENTED is a fixed product limitation, and the capacity bound neither needs nor can be remedied by an operator implementing a knee detector."
+      },
+      {
+        "type": "T8",
+        "field": "#/caveats/7",
+        "quote": "reflects workload pacing/think time",
+        "why": "The throughput ratio alone does not establish workload pacing or think time."
+      }
+    ],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 2,
+    "notes": "It preserves the main results but gives prohibited knee-detector advice and adds unsupported interpretations."
+  },
+  {
+    "id": "R093",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T8",
+        "field": "#/hypotheses/2/possible_explanation",
+        "quote": "not attributable to generator CPU saturation",
+        "why": "A passing diagnostic generator guard does not prove that generator CPU saturation cannot have caused the latency result."
+      },
+      {
+        "type": "T8",
+        "field": "#/recommendations/2/rationale",
+        "quote": "capacity analysis should therefore focus on the system under test",
+        "why": "The passing diagnostic guard cannot justify excluding generator-side causes or directing analysis away from them."
+      }
+    ],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 4,
+    "notes": "Strongly preserves the product contract and evidence, but overstates what a passing diagnostic guard establishes."
+  }
+]

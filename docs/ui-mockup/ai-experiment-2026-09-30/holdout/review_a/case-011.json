@@ -1,0 +1,78 @@
+[
+  {
+    "id": "R020",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T8",
+        "field": "#/hypotheses/5/observation",
+        "quote": "the workload-04 correlation pairs have no usable lag profile (best_lag_ms 0 with LAG_NOT_EVALUABLE and empty lag_profile) and the workload-03 pairs report best_lag_ms 0",
+        "why": "The db_work pair has a nonempty lag profile and best_lag_ms -10000 in workload-04, and best_lag_ms -6000 in workload-03."
+      }
+    ],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 4,
+    "notes": "The operator actions are useful, but the lag summary misstates two recorded results."
+  },
+  {
+    "id": "R028",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T8",
+        "field": "#/hypotheses/2/observation",
+        "quote": "Correlation pairs for cpu_work and db_work vs response_time_p95_ms are BELOW_EFFECT in workload-03 ... or INSUFFICIENT_DATA in workload-04",
+        "why": "The workload-04 db_work pair is BELOW_EFFECT; only the cpu_work pair is INSUFFICIENT_DATA."
+      }
+    ],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 4,
+    "notes": "The recommendations are actionable, though one correlation status is misstated."
+  },
+  {
+    "id": "R097",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T5",
+        "field": "#/recommendations/1/rationale",
+        "quote": "Only two load points were measured",
+        "why": "The evidence reports target rates for two evaluation windows but does not establish how many load points were measured across the full run."
+      }
+    ],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 4,
+    "notes": "The proposed checks are useful, but the claimed total number of measured load points is unsupported."
+  },
+  {
+    "id": "R119",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T8",
+        "field": "#/summary",
+        "quote": "17 threshold findings",
+        "why": "The evidence lists 18 compute-limit threshold findings for workload-03."
+      },
+      {
+        "type": "T7",
+        "field": "#/summary",
+        "quote": "The failure evidence is confined to workload-04",
+        "why": "The compute-limit resource check also FAILs in workload-03, with recorded threshold violations."
+      },
+      {
+        "type": "T8",
+        "field": "#/caveats/5",
+        "quote": "Zero errors ... show no error-driven latency inflation",
+        "why": "Aggregate error counts cannot establish what contributed to the latency distribution or exclude unrecorded error behavior."
+      }
+    ],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 3,
+    "notes": "It gives useful checks but miscounts findings and overstates what the failure and error evidence establish."
+  }
+]

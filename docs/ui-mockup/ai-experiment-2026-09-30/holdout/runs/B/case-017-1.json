@@ -1,0 +1,219 @@
+{
+ "stage": "B",
+ "mode": "live",
+ "model": "deepseek-v4-flash-0731",
+ "tag": {
+  "phase": "holdout",
+  "attempt_id": "case-017-1-B-t1",
+  "arm": "B",
+  "stage": null,
+  "case": "case-017",
+  "rep": 1,
+  "try": 1
+ },
+ "retry_policy": "d2",
+ "qwen_exit": 0,
+ "wall_ms": 100306,
+ "relay": {
+  "schema_version": "advisory-ai-runtime-relay.v1",
+  "status": "FORWARDED_STRUCTURED_OUTPUT",
+  "received_request_count": 1,
+  "forwarded_request_count": 1,
+  "outcomes": [
+   "FORWARDED_STRUCTURED_OUTPUT"
+  ],
+  "retry_refused_reason": null,
+  "first_refused_reason": null,
+  "model_id": "deepseek-v4-flash-0731",
+  "retry_policy": "d2",
+  "requests": [
+   {
+    "ordinal": 1,
+    "forwarded": true,
+    "outcome": "FORWARDED_STRUCTURED_OUTPUT",
+    "provider_status": 200,
+    "latency_ms": 98973,
+    "usage": {
+     "prompt_tokens": 5259,
+     "total_tokens": 15562,
+     "completion_tokens": 10303,
+     "prompt_tokens_details": {
+      "cached_tokens": 1024
+     },
+     "completion_tokens_details": {
+      "reasoning_tokens": 7776
+     }
+    },
+    "model_returned": "deepseek-v4-flash-0731"
+   }
+  ],
+  "usage": {
+   "prompt_tokens": 5259,
+   "completion_tokens": 10303,
+   "total_tokens": 15562
+  },
+  "latency_ms": 98973
+ },
+ "relay_status": "FORWARDED_STRUCTURED_OUTPUT",
+ "usage": {
+  "prompt_tokens": 5259,
+  "completion_tokens": 10303,
+  "total_tokens": 15562
+ },
+ "latency_ms": 98973,
+ "retried": false,
+ "retry_refused_reason": null,
+ "status": "OK",
+ "note": null,
+ "output": {
+  "schema_version": "ai-advice-output.v1",
+  "summary": "The run is VALID, but the capacity analysis is INDETERMINATE and the policy verdict is NO_POLICY. Both stage windows (step-1 ~100 users, step-2 ~200 users) had complete resource bins, passing diagnostic generator-CPU guards, and NO_POLICY window summaries because no business policy rule and no resource rule with effect: sla was applicable (CAPACITY_SLA_MISSING). Because no stage had an applicable SLA, no stage outcome was verified (CAPACITY_STAGE_NOT_VERIFIED), so no capacity bound was produced (lower_inclusive null, upper_exclusive null) and the observed achieved values 97 and 197 are not product-verified bounds. capacity_knee is null only because KNEE_DETECTOR_NOT_IMPLEMENTED is a fixed product limitation, separate from the missing-SLA cause. To obtain PASS/FAIL and a bound, configure an applicable SLA rule for each stage and rerun. Keep NO_POLICY distinct from PASS, verify clocks before any temporal interpretation, and do not treat zero recorded errors, empty findings, or complete bins as proof of stability or spare capacity.",
+  "hypotheses": [
+   {
+    "rank": 1,
+    "observation": "Window policy summaries for stage-1 and stage-2 both report verdict NO_POLICY for business and resource verdicts, the overall policy_verdict is NO_POLICY, and the capacity summary lists reason CAPACITY_SLA_MISSING.",
+    "possible_explanation": "The product found no applicable rule to evaluate in those windows: no business policy rule and no resource rule with effect: sla. NO_POLICY means no rule was evaluated, not that the stage passed; healthy-looking numbers do not turn it into PASS.",
+    "recommended_check": "Inspect the policy set and the test definition to confirm whether an SLA rule (business policy rule or resource rule with effect: sla) is configured to cover each stage window; if not, configure one for the missing scope and rerun.",
+    "evidence_refs": [
+     "analysis-result.json#/policy_verdict",
+     "analysis-result.json#/evidence/9",
+     "analysis-result.json#/evidence/10",
+     "analysis-result.json#/evidence/11"
+    ]
+   },
+   {
+    "rank": 2,
+    "observation": "The capacity summary has bound_type INDETERMINATE with lower_inclusive and upper_exclusive null; each stage has verdict NO_POLICY and verified_bound_load null, and capacity reasons include CAPACITY_SLA_MISSING and CAPACITY_STAGE_NOT_VERIFIED.",
+    "possible_explanation": "Because no stage had an applicable SLA, the product could not verify a product outcome for any stage, so no capacity bound could be derived from verified stages; the achieved p05 values (97 and 197) are observed load statistics, not product-verified bounds.",
+    "recommended_check": "Add an applicable SLA rule for each stage and rerun, then confirm each stage has a verified product outcome and that a bounded capacity value is reported by the capacity summary.",
+    "evidence_refs": [
+     "analysis-result.json#/capacity_summary",
+     "analysis-result.json#/evidence/9",
+     "analysis-result.json#/evidence/10",
+     "analysis-result.json#/evidence/11"
+    ]
+   },
+   {
+    "rank": 3,
+    "observation": "capacity_knee is null with knee_reason KNEE_DETECTOR_NOT_IMPLEMENTED, while the bound-relevant reasons are CAPACITY_SLA_MISSING and CAPACITY_STAGE_NOT_VERIFIED.",
+    "possible_explanation": "The knee detector is a fixed, not-implemented product capability, so capacity_knee is always null in this product version; it is not a defect of this run and is not the cause of the indeterminate bound, which is explained by the missing SLA and unverified stages.",
+    "recommended_check": "Do not try to implement or enable a knee detector. Focus on configuring an applicable SLA for each stage so stages can be verified; on rerun expect capacity_knee to remain null.",
+    "evidence_refs": [
+     "analysis-result.json#/capacity_summary",
+     "analysis-result.json#/evidence/11"
+    ]
+   },
+   {
+    "rank": 4,
+    "observation": "The diagnostic generator-cpu-guard (rule_id generator-cpu-guard, effect diagnostic, threshold 0.85, operator gt) reports status PASS for both stage-1 and stage-2, and generator CPU series are in the 0.41 to 0.45 ratio range with 30/30 cells present.",
+    "possible_explanation": "The generator guard is diagnostic by contract: its PASS indicates the guard condition held but it does not create an upper capacity bound and cannot convert NO_POLICY into PASS. Generator health is therefore not the reason the bound is indeterminate.",
+    "recommended_check": "If generator health must be investigated further, inspect the generator resource series (active_users, cpu_used) directly; a rerun with a healthy generator is an acceptable check but will not change NO_POLICY unless an SLA rule is configured.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/3",
+     "analysis-result.json#/evidence/4",
+     "analysis-result.json#/evidence/7",
+     "analysis-result.json#/evidence/8"
+    ]
+   },
+   {
+    "rank": 5,
+    "observation": "The resource binding reports clock_alignment 'not_verified_by_core' for the explicit windows used to evaluate the run.",
+    "possible_explanation": "Because the core did not verify clock alignment between the sources contributing to the result and resource series, any lead/lag ordering or time-based causal claim derived from these series is unsupported.",
+    "recommended_check": "Verify clock synchronization/alignment across telemetry sources before interpreting any temporal relationship between the result and resource series.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/2"
+    ]
+   },
+   {
+    "rank": 6,
+    "observation": "Overall and checkout metric summaries report max latency 1500 ms while p95 is 140 ms and p99 is 140 ms, with error_count 0 over 2401 samples.",
+    "possible_explanation": "The max latency is an apparent outlier relative to the reported p99; a small number of samples may have experienced elevated latency, but the referenced summaries do not give per-bin timing or event context, so no cause or impact can be attributed.",
+    "recommended_check": "Inspect the per-bin latency series and the surrounding samples around the maximum to determine whether the outlier is isolated before drawing any conclusion.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0",
+     "analysis-result.json#/evidence/1"
+    ]
+   }
+  ],
+  "recommendations": [
+   {
+    "rank": 1,
+    "action": "Configure an applicable SLA rule (a business policy rule or a resource rule with effect: sla) covering each stage window, then rerun.",
+    "rationale": "The window summaries and capacity summary are NO_POLICY because CAPACITY_SLA_MISSING; the product only yields PASS/FAIL and a capacity bound when such a rule exists for the window.",
+    "evidence_refs": [
+     "analysis-result.json#/capacity_summary",
+     "analysis-result.json#/policy_verdict",
+     "analysis-result.json#/evidence/9",
+     "analysis-result.json#/evidence/10",
+     "analysis-result.json#/evidence/11"
+    ]
+   },
+   {
+    "rank": 2,
+    "action": "After configuring the SLA, rerun and confirm stage outcomes are verified and that a bounded capacity value is reported; keep the observed achieved values (97 and 197) distinct from product-verified bounds.",
+    "rationale": "Currently verified_bound_load is null and the bound is INDETERMINATE with CAPACITY_STAGE_NOT_VERIFIED; a capacity bound can only be derived from stages with a verified product outcome.",
+    "evidence_refs": [
+     "analysis-result.json#/capacity_summary",
+     "analysis-result.json#/evidence/11"
+    ]
+   },
+   {
+    "rank": 3,
+    "action": "Before any temporal interpretation, verify clock alignment across telemetry sources.",
+    "rationale": "The resource binding reports clock_alignment not_verified_by_core, so lead/lag ordering or temporal causal hypotheses are unsupported until clocks are verified.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/2"
+    ]
+   },
+   {
+    "rank": 4,
+    "action": "Inspect per-bin latency and throughput data around the 1500 ms maximum latency sample.",
+    "rationale": "p99 latency is 140 ms and error_count is 0, so the maximum may be an isolated outlier; only per-bin evidence can support how many samples were affected.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0",
+     "analysis-result.json#/evidence/1"
+    ]
+   },
+   {
+    "rank": 5,
+    "action": "Do not treat NO_POLICY, empty findings, or zero recorded errors as evidence of stability or spare capacity; treat the capacity verdict as indeterminate.",
+    "rationale": "The product reports NO_POLICY when no applicable rule exists, findings is empty, and run-scope counts are not policy-window denominators; absence of recorded findings does not prove absence of a problem.",
+    "evidence_refs": [
+     "analysis-result.json#/analysis_coverage",
+     "analysis-result.json#/policy_verdict",
+     "analysis-result.json#/evidence/0",
+     "analysis-result.json#/evidence/11"
+    ]
+   },
+   {
+    "rank": 6,
+    "action": "If generator health needs further assurance, inspect the active_users and cpu_used generator series and rerun with a healthy generator; leave the generator guard's diagnostic effect unchanged.",
+    "rationale": "The generator-cpu-guard is diagnostic by contract; it passed, but a passing diagnostic guard does not create a capacity bound or change NO_POLICY.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/3",
+     "analysis-result.json#/evidence/4",
+     "analysis-result.json#/evidence/7",
+     "analysis-result.json#/evidence/8"
+    ]
+   }
+  ],
+  "caveats": [
+   "NO_POLICY is not PASS: the product reports NO_POLICY because no business policy rule and no resource rule with effect: sla applied to the windows; a healthy-looking window or a rerun does not turn it into PASS.",
+   "The capacity bound is INDETERMINATE (lower_inclusive null, upper_exclusive null) with analysis_coverage INCOMPLETE (CAPACITY_SLA_MISSING, CAPACITY_STAGE_NOT_VERIFIED); no capacity conclusion can be drawn from this run.",
+   "The achieved values 97 and 197 (p05_10s, load axis users) are observed load statistics for the target loads of 100 and 200; they are not product-verified capacity bounds because stage verdicts are NO_POLICY and verified_bound_load is null.",
+   "capacity_knee is null because KNEE_DETECTOR_NOT_IMPLEMENTED is a fixed product limitation, not a defect of this run and not something a test operator can enable or fix.",
+   "clock_alignment is not_verified_by_core for the resource binding; timing-based ordering or causal claims are unsupported until clocks are verified.",
+   "The generator CPU guard is diagnostic by contract (effect diagnostic); its PASS does not create an upper bound and its effect should not be changed to binding, SLA, or enforcing.",
+   "Overall-run totals (sample_count 2401, error_rate 0/2401) are run-scope quantities and differ from policy-window denominators; zero recorded errors and absent findings do not prove stability, spare capacity, or the absence of a problem.",
+   "run_validity VALID refers to run mechanics and does not imply that policies were complete or applicable."
+  ]
+ },
+ "schema": "ai-experiment-run.holdout.v1",
+ "case": "case-017",
+ "rep": 1,
+ "arm": "B",
+ "try": 1,
+ "attempt_id": "case-017-1-B-t1",
+ "model_id": "deepseek-v4-flash-0731",
+ "prompt_sha256": "3c0f28bee6517c13c5c854615e7d3d59301893d9723880818e4034a32e9133bf"
+}

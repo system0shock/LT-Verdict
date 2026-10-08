@@ -1,0 +1,70 @@
+[
+  {
+    "id": "R020",
+    "hard_defect": false,
+    "defects": [],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 5,
+    "notes": "Accurate, well-scoped advice with verifiable operator actions."
+  },
+  {
+    "id": "R045",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T7",
+        "field": "#/summary",
+        "quote": "neither the reference ... nor evaluation ... window had a business or resource policy defined",
+        "why": "NO_POLICY does not prove that no policy was configured; it establishes only that no applicable rule produced a policy result."
+      },
+      {
+        "type": "T7",
+        "field": "#/hypotheses/2/possible_explanation",
+        "quote": "No business or resource policy thresholds were defined",
+        "why": "The evidence and NO_POLICY verdict do not establish that policy thresholds were not configured."
+      },
+      {
+        "type": "T8",
+        "field": "#/hypotheses/0/recommended_check",
+        "quote": "inspect the lag profile beyond lag 0",
+        "why": "The evidence reports only a lag-0 profile entry, so it provides no lag profile beyond 0 to inspect."
+      },
+      {
+        "type": "T7",
+        "field": "#/caveats/0",
+        "quote": "no SLO thresholds were defined",
+        "why": "NO_POLICY does not establish the absence of configured thresholds or policies."
+      }
+    ],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 2,
+    "notes": "It preserves most key facts but repeatedly misstates what NO_POLICY establishes."
+  },
+  {
+    "id": "R100",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T8",
+        "field": "#/recommendations/4",
+        "quote": "p95 latency difference between the windows (evaluation 193 ms vs reference 211 ms)",
+        "why": "193 ms and 211 ms are the evaluation and reference p50 values, not p95 values."
+      }
+    ],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 4,
+    "notes": "Otherwise accurate and actionable, but it directs investigation using incorrectly labelled latency percentiles."
+  },
+  {
+    "id": "R118",
+    "hard_defect": false,
+    "defects": [],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 5,
+    "notes": "Accurate, cautious analysis that keeps correlation and policy conclusions appropriately bounded."
+  }
+]

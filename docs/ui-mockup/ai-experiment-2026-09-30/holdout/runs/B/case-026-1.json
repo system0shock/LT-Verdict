@@ -1,0 +1,246 @@
+{
+ "stage": "B",
+ "mode": "live",
+ "model": "deepseek-v4-flash-0731",
+ "tag": {
+  "phase": "holdout",
+  "attempt_id": "case-026-1-B-t1",
+  "arm": "B",
+  "stage": null,
+  "case": "case-026",
+  "rep": 1,
+  "try": 1
+ },
+ "retry_policy": "d2",
+ "qwen_exit": 0,
+ "wall_ms": 109007,
+ "relay": {
+  "schema_version": "advisory-ai-runtime-relay.v1",
+  "status": "FORWARDED_STRUCTURED_OUTPUT",
+  "received_request_count": 1,
+  "forwarded_request_count": 1,
+  "outcomes": [
+   "FORWARDED_STRUCTURED_OUTPUT"
+  ],
+  "retry_refused_reason": null,
+  "first_refused_reason": null,
+  "model_id": "deepseek-v4-flash-0731",
+  "retry_policy": "d2",
+  "requests": [
+   {
+    "ordinal": 1,
+    "forwarded": true,
+    "outcome": "FORWARDED_STRUCTURED_OUTPUT",
+    "provider_status": 200,
+    "latency_ms": 107519,
+    "usage": {
+     "prompt_tokens": 18352,
+     "total_tokens": 29361,
+     "completion_tokens": 11009,
+     "prompt_tokens_details": {
+      "cached_tokens": 1024
+     },
+     "completion_tokens_details": {
+      "reasoning_tokens": 8150
+     }
+    },
+    "model_returned": "deepseek-v4-flash-0731"
+   }
+  ],
+  "usage": {
+   "prompt_tokens": 18352,
+   "completion_tokens": 11009,
+   "total_tokens": 29361
+  },
+  "latency_ms": 107519
+ },
+ "relay_status": "FORWARDED_STRUCTURED_OUTPUT",
+ "usage": {
+  "prompt_tokens": 18352,
+  "completion_tokens": 11009,
+  "total_tokens": 29361
+ },
+ "latency_ms": 107519,
+ "retried": false,
+ "retry_refused_reason": null,
+ "status": "OK",
+ "note": null,
+ "output": {
+  "schema_version": "ai-advice-output.v1",
+  "summary": "Deterministic verdict: FAIL (analysis-result.json#/policy_verdict). Both evaluated windows — reference (1704067200000–1704067320000) and workload-01 (1704067320000–1704067800000) — fail the latency policy: response_time_p95_ms observed 227 exceeds threshold 200 (operator lte), with matching policy_failure findings. error_count is 0 in the overall and both window summaries, and both windows have resource_verdict PASS, but the business verdict is FAIL for each window. Clock alignment is not_verified_by_core, so candidate lag values (e.g., association-04 best_lag 2000ms rho 0.588, association-08 best_lag 4000ms rho 0.657, association-09 best_lag 3000ms rho 0.584) cannot be read as temporal order; all correlation headline selections are UNAVAILABLE with uncertainty NOT_ESTIMATED, and no p-values were produced. Anomaly checks report NO_MATERIAL_CHANGE for all four series, with 30 suppressed short episodes for the response series. Recommended next steps: verify clocks first, inspect raw latency/downstream series, and rerun with varied, stepped load before drawing any causal hypothesis. This advice is interpretive and does not change the FAIL verdict.",
+  "hypotheses": [
+   {
+    "rank": 1,
+    "observation": "Policy checks for both windows report response_time_p95_ms observed 227, operator lte, threshold 200, status FAIL; findings list a latency policy_failure for each window, and both window summaries give business_verdict FAIL with resource_verdict PASS.",
+    "possible_explanation": "The measured p95 tail latency violates the 200ms threshold in both windows; the zero error counts and PASS resource verdicts do not offset this business-level failure.",
+    "recommended_check": "Inspect the per-interval response_time_p95_ms series and confirm the 227ms value is computed from the same samples as the policy check (window summaries report sample_count 7200 for reference and 28800 for workload-01).",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/33",
+     "analysis-result.json#/evidence/35",
+     "analysis-result.json#/evidence/34",
+     "analysis-result.json#/evidence/36",
+     "analysis-result.json#/evidence/37",
+     "analysis-result.json#/evidence/38",
+     "analysis-result.json#/findings/0",
+     "analysis-result.json#/findings/1",
+     "analysis-result.json#/policy_verdict"
+    ]
+   },
+   {
+    "rank": 2,
+    "observation": "resource-binding reports clock_alignment not_verified_by_core; every correlation headline selection is UNAVAILABLE with uncertainty NOT_ESTIMATED and reasons OBSERVATION_COUNT_UNSUPPORTED or PAIR_NOT_EVALUABLE.",
+    "possible_explanation": "Without verified clock alignment between generator, service, and telemetry sources, the best_lag_ms values reported by candidate correlation pairs cannot be interpreted as lead/lag or temporal cause of the latency failure.",
+    "recommended_check": "Verify clock synchronization across the load generator, service, and telemetry sources before assigning any temporal meaning to reported lag values.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/2",
+     "analysis-result.json#/evidence/47",
+     "analysis-result.json#/evidence/49",
+     "analysis-result.json#/evidence/50",
+     "analysis-result.json#/evidence/53",
+     "analysis-result.json#/evidence/54",
+     "analysis-result.json#/evidence/59"
+    ]
+   },
+   {
+    "rank": 3,
+    "observation": "generator request_starts and target_rate are constant at 60 req/s (min, mean, max all 60) in both the reference and workload-01 windows, and response p95=227 and p99=248 are identical in the two window summaries.",
+    "possible_explanation": "The run sustained a flat load of 60 req/s and the tail latency metrics are identical in both windows, so the latency failure cannot be attributed to a load step between windows based on this evidence.",
+    "recommended_check": "Compare against a prior baseline run and examine the time series of response_time_p95_ms rather than relying only on window aggregates.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/9",
+     "analysis-result.json#/evidence/15",
+     "analysis-result.json#/evidence/22",
+     "analysis-result.json#/evidence/28",
+     "analysis-result.json#/evidence/37",
+     "analysis-result.json#/evidence/38"
+    ]
+   },
+   {
+    "rank": 4,
+    "observation": "association-04 (cpu-queue) reports status CANDIDATE best_lag 2000ms best_lag_rho 0.588; association-08 (downstream-wait) reports CANDIDATE best_lag 4000ms best_lag_rho 0.657; association-09 (generator-threads) reports CANDIDATE best_lag 3000ms best_lag_rho 0.584; association-01 and association-02 are BELOW_EFFECT; all report controls_used [] and include reason CONSTANT_CONTROL.",
+    "possible_explanation": "These stored rank correlations suggest candidate associations between resource series and response_time_p95_ms, but they remain hypotheses: requested control target-request-rate was dropped (CONSTANT_CONTROL), no p-values are available, and clock alignment is unverified.",
+    "recommended_check": "After clock verification, inspect the raw cpu-queue, downstream-wait, and generator-threads series against response_time_p95_ms and run a load-varying experiment to test each candidate association.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/42",
+     "analysis-result.json#/evidence/45",
+     "analysis-result.json#/evidence/46",
+     "analysis-result.json#/evidence/39",
+     "analysis-result.json#/evidence/40"
+    ]
+   },
+   {
+    "rank": 5,
+    "observation": "anomaly check workload-01-response reports NO_MATERIAL_CHANGE with reference_median 227, reference_mad 0, reason ZERO_MAD, and suppressed_short_episodes 30; the diagnostic summary reports episodes_reported 0, anomalies_tested 4, pairs_evaluable 5, pairs_tested 8, status COMPLETE.",
+    "possible_explanation": "The response series is flat around 227ms with zero MAD in the reference window, so the anomaly check found no material change; the 30 suppressed short episodes are not reported as material.",
+    "recommended_check": "Examine the raw response-time series and the suppressed short episodes to see whether brief p95 deviations recur and whether they align with any candidate association (after clock verification).",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/58",
+     "analysis-result.json#/evidence/59"
+    ]
+   },
+   {
+    "rank": 6,
+    "observation": "resource policy checks for system-cpu-work and system-db-work are PASS in both windows; cpu_work has mean 0.15 and max 0.16, db_work has mean 0.015, and both window summaries give resource_verdict PASS.",
+    "possible_explanation": "The resource rules evaluated as PASS while the latency rule fails; this does not prove spare capacity and does not rule out a resource-related contributor to the 227ms p95.",
+    "recommended_check": "Collect additional telemetry not covered here (runtime heap, GC, network, and downstream dependency stats) and inspect them for contributors to the observed tail latency.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/29",
+     "analysis-result.json#/evidence/30",
+     "analysis-result.json#/evidence/31",
+     "analysis-result.json#/evidence/32",
+     "analysis-result.json#/evidence/34",
+     "analysis-result.json#/evidence/36",
+     "analysis-result.json#/evidence/13",
+     "analysis-result.json#/evidence/26"
+    ]
+   }
+  ],
+  "recommendations": [
+   {
+    "rank": 1,
+    "action": "Verify clock synchronization across the load generator, service, and telemetry sources before interpreting any best_lag_ms values.",
+    "rationale": "resource-binding reports clock_alignment not_verified_by_core, so the candidate lags (1000–4000ms) have no temporal meaning without verified clocks.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/2",
+     "analysis-result.json#/evidence/39",
+     "analysis-result.json#/evidence/42",
+     "analysis-result.json#/evidence/45",
+     "analysis-result.json#/evidence/46"
+    ]
+   },
+   {
+    "rank": 2,
+    "action": "Inspect the per-interval response_time_p95_ms series and review the 30 suppressed short episodes for the response anomaly check.",
+    "rationale": "p95=227 exceeds the 200ms threshold in both windows; knowing whether the exceedance is sustained or episodic guides the next experiment.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/33",
+     "analysis-result.json#/evidence/35",
+     "analysis-result.json#/evidence/58",
+     "analysis-result.json#/evidence/59"
+    ]
+   },
+   {
+    "rank": 3,
+    "action": "Rerun the test with multiple stepped target rates while keeping other conditions identical, after verifying clocks.",
+    "rationale": "The run kept target_rate and request_starts constant at 60 req/s in both windows, so the relationship between load and tail latency cannot be established from this run.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/15",
+     "analysis-result.json#/evidence/28",
+     "analysis-result.json#/evidence/9",
+     "analysis-result.json#/evidence/22"
+    ]
+   },
+   {
+    "rank": 4,
+    "action": "Collect per-transaction latency and downstream dependency traces to test the downstream-wait candidate association.",
+    "rationale": "association-08 reports status CANDIDATE (best_lag 4000ms, best_lag_rho 0.657) but with CONSTANT_CONTROL, no p-value, and unverified clocks, so it remains an untested hypothesis.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/45",
+     "analysis-result.json#/evidence/1",
+     "analysis-result.json#/evidence/59"
+    ]
+   },
+   {
+    "rank": 5,
+    "action": "Review the latency policy threshold (200ms on p95) and confirm it matches the intended SLO; if intended, retain it and treat the run as a genuine FAIL.",
+    "rationale": "The product verdict is FAIL because observed 227 exceeds 200 in both windows; this is a policy configuration decision available to the operator and does not change the recorded verdict.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/33",
+     "analysis-result.json#/evidence/35",
+     "analysis-result.json#/evidence/34",
+     "analysis-result.json#/evidence/36",
+     "analysis-result.json#/policy_verdict"
+    ]
+   },
+   {
+    "rank": 6,
+    "action": "After clock verification, rerun or extend the test so that the correlation analysis can produce headline selections instead of UNAVAILABLE.",
+    "rationale": "All headline selections were UNAVAILABLE (OBSERVATION_COUNT_UNSUPPORTED or PAIR_NOT_EVALUABLE) with uncertainty NOT_ESTIMATED, so no statistically supported association can be reported from this run.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/47",
+     "analysis-result.json#/evidence/50",
+     "analysis-result.json#/evidence/53",
+     "analysis-result.json#/evidence/54",
+     "analysis-result.json#/evidence/59"
+    ]
+   }
+  ],
+  "caveats": [
+   "Clock alignment is not_verified_by_core; any best_lag_ms values (e.g., 1000–4000ms) must not be read as lead/lag or causal ordering until clocks are verified.",
+   "Correlation uncertainty is NOT_ESTIMATED and all headline selections are UNAVAILABLE; BELOW_EFFECT, CANDIDATE, and INSUFFICIENT_DATA are product states, not proof of cause or of absence of cause.",
+   "Counts appear at different scopes and are not directly comparable: overall sample_count 36000, reference window 7200, workload-01 window 28800; throughput denominators also differ (600033, 120000, 480000), and these are not inconsistent because they measure different scopes.",
+   "error_count 0 and resource_verdict PASS do not prove absence of a problem or spare capacity, and they do not offset the FAIL business verdict.",
+   "Anomaly checks returned NO_MATERIAL_CHANGE partly due to ZERO_MAD and suppressed 30 short episodes; a flat series does not prove stable response behavior, and only 4 anomalies were tested.",
+   "The reference window already recorded p95=227, so the workload-01 window did not introduce the FAIL; this run alone cannot identify the cause of the tail latency.",
+   "The verdict remains FAIL regardless of advisory recommendations; this output is an interpretation only and does not modify the recorded verdict."
+  ]
+ },
+ "schema": "ai-experiment-run.holdout.v1",
+ "case": "case-026",
+ "rep": 1,
+ "arm": "B",
+ "try": 1,
+ "attempt_id": "case-026-1-B-t1",
+ "model_id": "deepseek-v4-flash-0731",
+ "prompt_sha256": "3c0f28bee6517c13c5c854615e7d3d59301893d9723880818e4034a32e9133bf"
+}

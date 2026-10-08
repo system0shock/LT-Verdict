@@ -1,0 +1,90 @@
+[
+  {
+    "id": "R001",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T2",
+        "field": "#/summary",
+        "quote": "All 2,471 recorded errors are attributed to the \"checkout\" sampler ... and appear in the error store",
+        "why": "The equal JMeter checkout and OpenSearch counts are from different scopes and do not establish record-level attribution."
+      },
+      {
+        "type": "T5",
+        "field": "#/caveats/4",
+        "quote": "other services in the checkout call path are unobserved",
+        "why": "The evidence contains no call graph or topology establishing a checkout call path or its services."
+      }
+    ],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 4,
+    "notes": "The verdict, policy failures, and diagnostic cautions are otherwise accurately presented."
+  },
+  {
+    "id": "R027",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T2",
+        "field": "#/hypotheses/1/possible_explanation",
+        "quote": "The failed requests originated from the checkout portion of the workload",
+        "why": "Matching aggregate counts between the checkout transaction and the OpenSearch profile do not prove that those records represent the same requests."
+      }
+    ],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 4,
+    "notes": "It correctly preserves the deterministic FAIL and gives useful, verifiable next checks."
+  },
+  {
+    "id": "R030",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T5",
+        "field": "#/hypotheses/0/possible_explanation",
+        "quote": "because paymentservice participates in checkout transactions",
+        "why": "No topology, call graph, or transaction composition establishing that relationship is present in the evidence."
+      }
+    ],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 4,
+    "notes": "The unsupported topology is confined to a labeled hypothesis; the remaining verdict and policy analysis is sound."
+  },
+  {
+    "id": "R032",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T5",
+        "field": "#/hypotheses/0/possible_explanation",
+        "quote": "Paymentservice is part of the checkout path",
+        "why": "The input provides no call graph or topology proving that paymentservice is on the checkout path."
+      }
+    ],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 4,
+    "notes": "It otherwise correctly distinguishes aggregate scope counts and treats causality as unproven."
+  },
+  {
+    "id": "R046",
+    "hard_defect": false,
+    "defects": [],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 5,
+    "notes": "It accurately states the FAIL result, preserves scope caveats, and proposes bounded diagnostic actions."
+  },
+  {
+    "id": "R047",
+    "hard_defect": false,
+    "defects": [],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 5,
+    "notes": "It is evidence-grounded, explicitly preserves count-scope limitations, and keeps causal claims hypothetical."
+  }
+]

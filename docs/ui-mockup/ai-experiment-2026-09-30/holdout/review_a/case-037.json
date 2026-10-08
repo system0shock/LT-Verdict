@@ -1,0 +1,64 @@
+[
+  {
+    "id": "R029",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T2",
+        "field": "#/recommendations/4/action",
+        "quote": "Reconcile the anomaly episode timing with the window-level summary",
+        "why": "A p95 aggregate for the full workload window does not conflict with a candidate episode that begins partway through it."
+      }
+    ],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 2,
+    "notes": "Most actions are grounded in the evidence, but the proposed timing discrepancy could send an operator after a nonexistent inconsistency."
+  },
+  {
+    "id": "R062",
+    "hard_defect": false,
+    "defects": [],
+    "required_facts_preserved": false,
+    "missing_facts": [
+      "The whole-run count of 36,000 samples is not stated.",
+      "The candidate episode duration of 300,000 ms is not stated."
+    ],
+    "usefulness": 4,
+    "notes": "The verdict and main findings are accurate, with useful checks; the suggestion to lengthen the window assumes an observation shortage the evidence does not establish."
+  },
+  {
+    "id": "R090",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T8",
+        "field": "#/hypotheses/3/recommended_check",
+        "quote": "increase observation counts beyond the supported range, in order to obtain evaluable p-values and uncertainty",
+        "why": "Moving beyond a supported observation range cannot make the reported significance method evaluable."
+      }
+    ],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 2,
+    "notes": "The analysis is mostly accurate, but one rerun recommendation gives the operator a counterproductive direction."
+  },
+  {
+    "id": "R134",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T2",
+        "field": "#/recommendations/3/action",
+        "quote": "Treat downstream-wait and generator-threads as a single signal",
+        "why": "Identical correlation profiles do not establish that in-flight requests and generator threads are one signal."
+      }
+    ],
+    "required_facts_preserved": false,
+    "missing_facts": [
+      "The whole-run count of 36,000 samples is not stated."
+    ],
+    "usefulness": 2,
+    "notes": "The verdict and most checks are sound, but collapsing two distinct measurements could misdirect the investigation."
+  }
+]

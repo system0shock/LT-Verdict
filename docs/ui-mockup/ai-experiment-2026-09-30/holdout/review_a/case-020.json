@@ -1,0 +1,62 @@
+[
+  {
+    "id": "R060",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T2",
+        "field": "#/caveats/5",
+        "quote": "the overall 24000 samples partition into 9600 (reference) and 14400 (workload-01)",
+        "why": "The matching totals do not establish that the whole-run count is an exact partition of the two window counts."
+      }
+    ],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 3,
+    "notes": "The operator actions are useful, but the sample-partition claim invents a relation between scopes."
+  },
+  {
+    "id": "R075",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T7",
+        "field": "#/hypotheses/5/possible_explanation",
+        "quote": "the service met the latency and error business checks",
+        "why": "The evidence reports a latency policy check and zero observed errors, but no error business policy check."
+      }
+    ],
+    "required_facts_preserved": false,
+    "missing_facts": [
+      "run_validity VALID",
+      "24,000 whole-run samples"
+    ],
+    "usefulness": 3,
+    "notes": "The main diagnosis is useful, but it invents a passed error check and omits two required facts."
+  },
+  {
+    "id": "R133",
+    "hard_defect": false,
+    "defects": [],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 5,
+    "notes": "It preserves the verdict and key measurements and prioritizes verifiable operator actions."
+  },
+  {
+    "id": "R148",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T7",
+        "field": "#/hypotheses/4/possible_explanation",
+        "quote": "latency and error checks pass",
+        "why": "Only a latency business policy check is reported; zero observed errors are not a passed error policy check."
+      }
+    ],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 4,
+    "notes": "The diagnosis and actions are strong, but it overstates the policy checks that passed."
+  }
+]

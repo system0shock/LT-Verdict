@@ -1,0 +1,25 @@
+{
+ "required": [
+  [
+   "no_headline",
+   [
+    "no (?:selected |reported )?(?:headline|headlines|findings?)|none (?:was|were) selected|nothing (?:was )?selected|no .{0,30}(?:was|were) selected|not selected"
+   ]
+  ]
+ ],
+ "forbidden": [
+  "invents a bottleneck or a driver from background fluctuations"
+ ],
+ "useful_checks": [
+  "no action is needed: an empty or minimal list of recommendations is correct"
+ ],
+ "source": {
+  "builder": "AdvisoryEvidenceBuilder",
+  "build": "5b5e51c+harness",
+  "source": "u:N01-p1-l0-s1011",
+  "source_sha256": "b27cdee2ad6b0d3360dbbb41cf0efe0a165f72423c7b265112fdb661497fd7c0",
+  "derivation": [],
+  "evidence_sha256": "e19739a884f1df4cccb0d4d89ad345710544bf53f68600b54fe5641f611b79a3",
+  "inputs": "u:N01-p1-l0-s1011, derivation [], analysed through RunBundleStore -> AnalysisService -> AdvisoryEvidenceBuilder by AdvisoryHoldoutCorpusTest on 5b5e51c+harness"
+ }
+}

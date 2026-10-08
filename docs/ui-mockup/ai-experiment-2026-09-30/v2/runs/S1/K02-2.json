@@ -1,0 +1,162 @@
+{
+ "stage": "S1",
+ "mode": "live",
+ "model": "deepseek-v4-flash-0731",
+ "tag": {
+  "phase": "v2-pilot",
+  "stage": "S1",
+  "case": "K02",
+  "rep": 2,
+  "attempt": 1
+ },
+ "qwen_exit": 0,
+ "wall_ms": 102384,
+ "relay": {
+  "schema_version": "advisory-ai-runtime-relay.v1",
+  "status": "FORWARDED_STRUCTURED_OUTPUT",
+  "request_count": 1,
+  "usage": {
+   "prompt_tokens": 7067,
+   "total_tokens": 18020,
+   "completion_tokens": 10953,
+   "prompt_tokens_details": {
+    "cached_tokens": 0
+   },
+   "completion_tokens_details": {
+    "reasoning_tokens": 8640
+   }
+  },
+  "latency_ms": 100957,
+  "model_returned": "deepseek-v4-flash-0731"
+ },
+ "relay_status": "FORWARDED_STRUCTURED_OUTPUT",
+ "usage": {
+  "prompt_tokens": 7067,
+  "total_tokens": 18020,
+  "completion_tokens": 10953,
+  "prompt_tokens_details": {
+   "cached_tokens": 0
+  },
+  "completion_tokens_details": {
+   "reasoning_tokens": 8640
+  }
+ },
+ "latency_ms": 100957,
+ "status": "OK",
+ "note": null,
+ "output": {
+  "schema_version": "ai-advice-output.v1",
+  "summary": "This run is VALID but capacity coverage is INCOMPLETE: the capacity summary is INDETERMINATE with policy_verdict NO_POLICY and no lower_inclusive/upper_exclusive bound, because the single stage 'd16-cpu-limited-20users' (target 20 users, 30/30 bins complete) hit a failed diagnostic generator guard ('generator-cpu-throttle-ratio' > 0.2 → FAIL; series mean 0.861, median 1.0, max 1.0; 27-cell violation) and the stage is therefore not verified for a product bound. The business window reports PASS (overall-errors 0/38842 ≤ 0.01; overall run has 0 errors in 47396 samples), but under product rules a healthy window does not turn NO_POLICY into PASS and missing required capacity keeps NO_POLICY. capacity_knee is null because KNEE_DETECTOR_NOT_IMPLEMENTED is a fixed product limitation, not a user action. The actionable path is to rerun the stage with a load generator that is not CPU-saturated (keeping the guard diagnostic), verify clock alignment, and then re-read the capacity summary; only a configured policy or required capacity yields a future PASS/FAIL verdict.",
+  "hypotheses": [
+   {
+    "rank": 1,
+    "observation": "Resource evidence shows FAIL on the diagnostic guard 'generator-cpu-throttle-ratio' (operator gt, threshold 0.2, effect diagnostic), and the generator series shows cfs_throttled_period_ratio mean 0.861, median 1.0, max 1.0 over 30 observed cells, with a 27-cell violation finding (observed_min 0.395833333333, observed_max 1).",
+    "possible_explanation": "The JMeter generator host was CPU-throttled for most of the stage window, so the intended 20-user load may not have been applied as intended; the guard failure prevents treating this stage as a verified load point.",
+    "recommended_check": "Rerun the same stage on a generator with sufficient CPU headroom (or fewer generator tasks per host) and confirm the diagnostic guard no longer reports FAIL before reading capacity results.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/12",
+     "analysis-result.json#/evidence/16",
+     "analysis-result.json#/findings/0"
+    ]
+   },
+   {
+    "rank": 2,
+    "observation": "capacity_summary / capacity-summary report bound_type INDETERMINATE, policy_verdict NO_POLICY, reasons CAPACITY_GUARD_FAILED and CAPACITY_STAGE_NOT_VERIFIED, lower_inclusive and upper_exclusive null, and the only stage has verdict INDETERMINATE with verified_bound_load null despite 30/30 complete bins.",
+    "possible_explanation": "By product rules, a failed generator diagnostic guard makes its stage unusable for a product bound, so the missing bound here is a consequence of the guard failure rather than a measurement of application behavior.",
+    "recommended_check": "After a rerun with a non-saturated generator, re-inspect capacity_summary for a non-null verified_bound_load and bound_type; expect capacity_knee to remain null since KNEE_DETECTOR_NOT_IMPLEMENTED is fixed.",
+    "evidence_refs": [
+     "analysis-result.json#/capacity_summary",
+     "analysis-result.json#/evidence/19",
+     "analysis-result.json#/evidence/18"
+    ]
+   },
+   {
+    "rank": 3,
+    "observation": "Overall metric summary reports error_count 0 over 47396 samples; the policy-window check overall-errors passes (0/38842 ≤ 0.01); window-policy-summary verdict is PASS; yet facts list policy_verdict NO_POLICY and analysis_coverage INCOMPLETE.",
+    "possible_explanation": "The PASS reflects only the business window and does not establish capacity; missing required capacity keeps NO_POLICY under product rules, and the simultaneous generator throttling limits what the zero-error window can show.",
+    "recommended_check": "Treat the run as coverage-incomplete; rerun with a generator that is not saturated and, if a capacity verdict is desired, ensure a required-capacity policy is configured, then re-read the verdict.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0",
+     "analysis-result.json#/evidence/17",
+     "analysis-result.json#/evidence/18",
+     "analysis-result.json#/policy_verdict",
+     "analysis-result.json#/analysis_coverage"
+    ]
+   },
+   {
+    "rank": 4,
+    "observation": "resource-binding reports clock_alignment 'not_verified_by_core' with evaluation window 1790627160000–1790627460000 inside run window 1790627156282–1790627514513 and zero dropped leading/trailing cells.",
+    "possible_explanation": "Without verified clock alignment between generator and system under test, lead/lag ordering or temporal causal hypotheses are unsupported even though window boundaries look clean.",
+    "recommended_check": "Verify clock alignment (e.g., clock sync between generator and SUT hosts) before interpreting any time-ordered relationship between metrics.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/7"
+    ]
+   },
+   {
+    "rank": 5,
+    "observation": "SUT CPU series have 0 missing cells over 30 observed cells with low means: checkoutservice 0.05138416666666666666666666666666667 cores, frontend 0.1560793333333333333333333333333333 cores, paymentservice 0.0119975 cores.",
+    "possible_explanation": "Resource usage appeared low and stable at 20 users, but because the generator was throttled for most of the window (guard FAIL), this does not demonstrate spare capacity or low load.",
+    "recommended_check": "Capture the same SUT series during a rerun with a non-saturated generator to see whether application resource usage changes when load is actually applied.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/8",
+     "analysis-result.json#/evidence/10",
+     "analysis-result.json#/evidence/14"
+    ]
+   }
+  ],
+  "recommendations": [
+   {
+    "rank": 1,
+    "action": "Rerun stage 'd16-cpu-limited-20users' with a JMeter generator that is not CPU-saturated (add CPU headroom, reduce generator concurrency per host, or add generator instances), keeping the guard's effect diagnostic, then re-read the capacity summary.",
+    "rationale": "The only blocking reason is CAPACITY_GUARD_FAILED: the diagnostic guard generator-cpu-throttle-ratio exceeded 0.2 across 27 of 30 cells (series mean 0.861, median and max 1.0). A failed diagnostic guard makes the stage unusable for a product bound; the remedy is a rerun with a generator that is not saturated, never changing the guard effect.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/12",
+     "analysis-result.json#/evidence/16",
+     "analysis-result.json#/findings/0",
+     "analysis-result.json#/capacity_summary"
+    ]
+   },
+   {
+    "rank": 2,
+    "action": "Do not read capacity from this run: capacity_summary reports INDETERMINATE with lower_inclusive and upper_exclusive null; after the rerun, check capacity_summary for verified_bound_load and bound_type, and expect capacity_knee to remain null.",
+    "rationale": "capacity_summary is INDETERMINATE with reasons CAPACITY_GUARD_FAILED and CAPACITY_STAGE_NOT_VERIFIED; the knee is null because KNEE_DETECTOR_NOT_IMPLEMENTED is a fixed product limitation and is not a step to implement or enable.",
+    "evidence_refs": [
+     "analysis-result.json#/capacity_summary",
+     "analysis-result.json#/evidence/19"
+    ]
+   },
+   {
+    "rank": 3,
+    "action": "Verify clock alignment between the load generator and the SUT before drawing any timing or ordering conclusions.",
+    "rationale": "resource-binding reports clock_alignment 'not_verified_by_core'; an unknown clock relationship cannot support lead/lag ordering or a temporal causal hypothesis.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/7"
+    ]
+   },
+   {
+    "rank": 4,
+    "action": "If a PASS/FAIL capacity verdict is required, configure a required-capacity policy for the users load axis; otherwise keep the expectation that NO_POLICY remains until required capacity is configured.",
+    "rationale": "policy_verdict is NO_POLICY and a healthy business window (0 errors in the window, PASS window summary) does not turn NO_POLICY into PASS; only a configured policy or required capacity yields PASS/FAIL per product rules.",
+    "evidence_refs": [
+     "analysis-result.json#/policy_verdict",
+     "analysis-result.json#/evidence/17",
+     "analysis-result.json#/evidence/18",
+     "analysis-result.json#/analysis_coverage"
+    ]
+   }
+  ],
+  "caveats": [
+   "Capacity coverage is INCOMPLETE (CAPACITY_GUARD_FAILED, CAPACITY_STAGE_NOT_VERIFIED); the stage verdict is INDETERMINATE and no bound is estimated. The deterministic verdict NO_POLICY stands and this advice does not change it.",
+   "The generator guard is diagnostic by contract; do not change its effect to binding, SLA, or enforcing. The only remedy is a rerun with a generator that is not saturated.",
+   "capacity_knee is null with knee_reason KNEE_DETECTOR_NOT_IMPLEMENTED: a fixed product limitation, not a run defect and not a step to implement or enable.",
+   "Zero error counts (0/47396 overall, 0/38842 in the window) and stable-looking SUT resource series do not prove stability, spare capacity, low load, or absence of problems, especially while the generator was throttled in 27/30 cells.",
+   "clock_alignment is 'not_verified_by_core'; no temporal ordering or causal support exists in this analysis.",
+   "Counts have different scopes: overall 47396 samples, policy-window denominator 38842, per-transaction sample counts around 7900 each, throughput denominator 358231; they are not the same quantity and should not be called inconsistent.",
+   "The evidence window covers only part of the run (run 1790627156282–1790627514513; evaluation 1790627160000–1790627460000), so results describe the stage window, not the whole run."
+  ]
+ },
+ "schema": "ai-experiment-run.v2",
+ "phase": "pilot",
+ "case": "K02",
+ "rep": 2
+}

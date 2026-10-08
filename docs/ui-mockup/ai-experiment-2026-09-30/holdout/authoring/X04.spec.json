@@ -1,0 +1,32 @@
+{
+ "required": [
+  [
+   "upper_bound",
+   [
+    "upper[ _]bound|below|less than|at most|fewer than|<|exclusive"
+   ]
+  ],
+  [
+   "upper_value",
+   [
+    "(?:(?:upper|exclusive|below|under|less than|fewer than|fail|<))[^.\\n]{0,100}(?:(?<![\\d.,])(?:147)(?![\\d]|[.,]\\d))|(?:(?<![\\d.,])(?:147)(?![\\d]|[.,]\\d))[^.\\n]{0,100}(?:(?:upper|exclusive|below|under|less than|fewer than|fail|<))"
+   ]
+  ]
+ ],
+ "forbidden": [
+  "says that the upper bound requires a knee detector, or advises implementing or enabling one",
+  "reports a verified safe load"
+ ],
+ "useful_checks": [
+  "add lower stages to find the highest load that still meets the SLA"
+ ],
+ "source": {
+  "builder": "AdvisoryEvidenceBuilder",
+  "build": "5b5e51c+harness",
+  "source": "x:X04",
+  "source_sha256": "6aa68e4aca12a7cd41546ff00396e800bc0e181a5783070c971ae8c0fdfbf6a6",
+  "derivation": [],
+  "evidence_sha256": "5498b19e7e97e86aee0db6dfab0273cc18e95fb1f3bddb4267a89b53f01b40da",
+  "inputs": "x:X04, derivation [], analysed through RunBundleStore -> AnalysisService -> AdvisoryEvidenceBuilder by AdvisoryHoldoutCorpusTest on 5b5e51c+harness"
+ }
+}

@@ -1,0 +1,82 @@
+[
+  {
+    "id": "R018",
+    "hard_defect": false,
+    "defects": [],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 5,
+    "notes": "Correctly preserves the deterministic FAIL and proposes evidence-seeking follow-up without attributing cause."
+  },
+  {
+    "id": "R019",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T2",
+        "field": "#/recommendations/2/rationale",
+        "quote": "the checkout scope accounts for all counted samples",
+        "why": "Equal aggregate counts from overall and transaction scopes do not establish that checkout covers all overall samples."
+      }
+    ],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 3,
+    "notes": "Most advice is sound, but it makes an unsupported cross-scope coverage claim."
+  },
+  {
+    "id": "R040",
+    "hard_defect": false,
+    "defects": [],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 5,
+    "notes": "Correctly separates aggregate observations from unproven failure attribution and gives verifiable actions."
+  },
+  {
+    "id": "R044",
+    "hard_defect": false,
+    "defects": [],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 5,
+    "notes": "Accurately reports the whole-run failure and avoids unsupported scope, capacity, and causal conclusions."
+  },
+  {
+    "id": "R053",
+    "hard_defect": false,
+    "defects": [],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 5,
+    "notes": "The statistical and checkout explanations remain explicitly hypothetical while preserving the current deterministic FAIL."
+  },
+  {
+    "id": "R067",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T8",
+        "field": "#/summary",
+        "quote": "Run e6e35fc727e04aa9db11ef027782b853ae64f2c559e105ed1c6953a4bdc2dc2f",
+        "why": "This value is the analysis_id, not the evidence's run_id, and could send an operator to the wrong artifact."
+      },
+      {
+        "type": "T5",
+        "field": "#/hypotheses/0/possible_explanation",
+        "quote": "during the policy window",
+        "why": "No policy window is referenced; the policy check is explicitly whole-run."
+      },
+      {
+        "type": "T5",
+        "field": "#/caveats/3",
+        "quote": "one run and its policy window",
+        "why": "The evidence contains no policy window, so this invents a measurement structure not present in the case."
+      }
+    ],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 3,
+    "notes": "It preserves the central verdict but repeatedly invents a policy-window structure and misidentifies the run identifier."
+  }
+]

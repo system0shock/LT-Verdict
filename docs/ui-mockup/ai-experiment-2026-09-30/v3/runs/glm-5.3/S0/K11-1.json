@@ -1,0 +1,180 @@
+{
+ "stage": "S0",
+ "mode": "live",
+ "model": "glm-5.3",
+ "tag": {
+  "phase": "v3",
+  "model_tag": "glm-5.3",
+  "stage": "S0",
+  "case": "K11",
+  "rep": 1,
+  "attempt": 1
+ },
+ "qwen_exit": 0,
+ "wall_ms": 110374,
+ "relay": {
+  "schema_version": "advisory-ai-runtime-relay.v1",
+  "status": "FORWARDED_STRUCTURED_OUTPUT",
+  "request_count": 1,
+  "usage": {
+   "prompt_tokens": 1681,
+   "total_tokens": 11761,
+   "completion_tokens": 10080,
+   "prompt_tokens_details": {
+    "cached_tokens": 1024
+   },
+   "completion_tokens_details": {
+    "reasoning_tokens": 7878
+   }
+  },
+  "latency_ms": 108961,
+  "model_returned": "glm-5.3"
+ },
+ "relay_status": "FORWARDED_STRUCTURED_OUTPUT",
+ "usage": {
+  "prompt_tokens": 1681,
+  "total_tokens": 11761,
+  "completion_tokens": 10080,
+  "prompt_tokens_details": {
+   "cached_tokens": 1024
+  },
+  "completion_tokens_details": {
+   "reasoning_tokens": 7878
+  }
+ },
+ "latency_ms": 108961,
+ "status": "OK",
+ "note": null,
+ "output": {
+  "caveats": [
+   "The deterministic verdict is NO_POLICY: no policy thresholds were applied, and it must not be read as PASS or as FAIL; this advisory cannot and does not change that verdict.",
+   "analysis_coverage is INCOMPLETE (reason: RESOURCE_GAPS); the empty findings list does not prove stability, low load, spare capacity, or absence of problems.",
+   "Only one overall-scope metric summary is present in the referenced evidence; no per-label breakdown, sample-level records, timestamps, or resource-utilization metrics are included, so nothing can be said about host saturation or per-endpoint behavior.",
+   "The throughput_rps denominator's unit, and whether it is a duration or an epoch-derived delta, is not defined in the referenced evidence; any derived rate is an assumption until verified.",
+   "The referenced evidence contains no timestamps or clock-relationship information, so no temporal ordering, lead/lag, or event attribution is supportable.",
+   "The error classification method is not described in the referenced evidence; zero recorded errors does not by itself verify functional correctness of responses.",
+   "All latency figures are as reported in milliseconds; the referenced evidence does not state how the percentiles were computed (e.g., whether from all 2623 samples).",
+   "No NOT_ESTIMATED or CANDIDATE items appear in this input; nothing in this advisory confirms or clears such statuses.",
+   "This advisory interprets a single run (run_id jmeter_jtl_csv-b87363cf1d89c0789e174268c6d25cd65abd36f7b623d4ea84fe253ceaabf1e7); conclusions do not generalize to other loads, durations, or environments."
+  ],
+  "hypotheses": [
+   {
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0"
+    ],
+    "observation": "The overall metric summary reports latency_ms p50=11, p95=46, p99=77, and max=904, alongside error_count=0 for sample_count=2623.",
+    "possible_explanation": "A small number of outlier samples may account for the 904 ms maximum while leaving the percentiles low and errors at zero (for example, occasional connection setup, periodic background activity, or a rarely exercised slow path). This is unproven: the referenced evidence contains only aggregate percentiles, not per-sample records.",
+    "recommended_check": "In the source run data (run_id jmeter_jtl_csv-b87363cf1d89c0789e174268c6d25cd65abd36f7b623d4ea84fe253ceaabf1e7), enumerate samples whose latency exceeds 77 ms, count them against the 2623 total, and check whether they cluster in time or by request label.",
+    "rank": 1
+   },
+   {
+    "evidence_refs": [
+     "analysis-result.json#/policy_verdict",
+     "analysis-result.json#/evidence/0"
+    ],
+    "observation": "policy_verdict is NO_POLICY, and the referenced evidence contains only raw metrics with no thresholds or evaluation results.",
+    "possible_explanation": "No performance policy/SLO was attached to this analysis, so the recorded metrics were never compared against acceptance criteria and the run could not receive PASS or FAIL.",
+    "recommended_check": "Confirm whether a policy was intended for this run; if so, attach it and re-run the deterministic evaluation. Until then the verdict remains NO_POLICY.",
+    "rank": 2
+   },
+   {
+    "evidence_refs": [
+     "analysis-result.json#/analysis_coverage",
+     "analysis-result.json#/run_validity"
+    ],
+    "observation": "analysis_coverage is INCOMPLETE with reason RESOURCE_GAPS, the findings array is empty, and run_validity is VALID.",
+    "possible_explanation": "One or more resources needed by the analysis may have been unavailable, leaving some checks unexecuted; the empty findings list may reflect checks that did not run rather than a genuinely clean result. Alternatively, executed checks found nothing to report; the referenced evidence does not distinguish these cases.",
+    "recommended_check": "Identify which expected resources were missing (for example, compare the run inputs against the analysis manifest) and re-run once the gaps are closed, or obtain a record of which checks actually executed.",
+    "rank": 3
+   },
+   {
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0"
+    ],
+    "observation": "throughput_rps is stored as a raw ratio with numerator 2623000 and denominator 44986; no computed value, unit, or time-window definition for the denominator appears in the referenced evidence.",
+    "possible_explanation": "The numerator equals sample_count (2623) times 1000, which is consistent with a 'samples x 1000 / elapsed milliseconds' calculation implying roughly 58 requests per second; however, the referenced evidence does not state the denominator's unit or that it is a duration, so this derivation is an assumption.",
+    "recommended_check": "Verify the denominator's unit and measurement window in the source run data before using this figure for any load or capacity statement.",
+    "rank": 4
+   },
+   {
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0",
+     "analysis-result.json#/run_validity"
+    ],
+    "observation": "error_count is 0 and error_rate_ratio is 0/2623 for the overall scope, and run_validity is VALID.",
+    "possible_explanation": "The workload may have completed without errors under the tested conditions; alternatively, the error classification used by the source run may capture only some failure modes (for example, transport or protocol errors) and not others (for example, failed assertions or unexpected response content).",
+    "recommended_check": "Confirm how errors were classified in the source run (for example, whether non-success statuses and assertion failures count as errors) and spot-check responses classified as successful.",
+    "rank": 5
+   },
+   {
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0"
+    ],
+    "observation": "The only metric summary in the referenced evidence has scope kind 'overall'; no per-label, per-endpoint, or per-time-interval summaries are present.",
+    "possible_explanation": "The analysis may have aggregated all request labels together, which can hide a slow or problematic endpoint inside an overall summary; alternatively, the input itself contained only aggregated data.",
+    "recommended_check": "If the source data contains labels and timestamps, re-run or extend the analysis with per-label grouping and compare label-level latency and error counts.",
+    "rank": 6
+   }
+  ],
+  "recommendations": [
+   {
+    "action": "Attach a performance policy (latency and error-rate thresholds) and re-run the deterministic evaluation for this run.",
+    "evidence_refs": [
+     "analysis-result.json#/policy_verdict",
+     "analysis-result.json#/evidence/0"
+    ],
+    "rationale": "policy_verdict is NO_POLICY, so the recorded p50/p95/p99/max latencies and 0/2623 error rate have not been judged against any criteria; the run is neither a pass nor a fail, and this advisory does not change that verdict.",
+    "rank": 1
+   },
+   {
+    "action": "Resolve the RESOURCE_GAPS that left analysis_coverage INCOMPLETE and re-run the analysis before drawing behavioral conclusions.",
+    "evidence_refs": [
+     "analysis-result.json#/analysis_coverage"
+    ],
+    "rationale": "With INCOMPLETE coverage, the empty findings list cannot be read as evidence of stability, low load, or absence of problems; some checks may not have executed.",
+    "rank": 2
+   },
+   {
+    "action": "Inspect the latency tail at sample level: enumerate samples above 77 ms, count them, and examine their timing and labels.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0"
+    ],
+    "rationale": "The maximum (904 ms) is roughly an order of magnitude above the p99 (77 ms) while errors are zero; sample-level inspection can show whether the tail is systematic or incidental. Absent a policy, this remains an observation, not a failure.",
+    "rank": 3
+   },
+   {
+    "action": "Verify the unit and measurement window of the stored throughput ratio (numerator 2623000, denominator 44986) in the source data before using it for capacity or load claims.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0"
+    ],
+    "rationale": "The referenced evidence stores only the raw ratio and does not define the denominator's unit or whether it is a duration; any derived rate would be an assumption, not a measurement.",
+    "rank": 4
+   },
+   {
+    "action": "Obtain a per-label or per-endpoint breakdown of latency and errors if the source run data supports it.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0"
+    ],
+    "rationale": "Only an overall-scope summary is present; label-level comparison could reveal variation hidden by the aggregate.",
+    "rank": 5
+   },
+   {
+    "action": "Confirm the error-classification rules used by the source run and spot-check responses counted as successful before relying on the zero-error result.",
+    "evidence_refs": [
+     "analysis-result.json#/run_validity",
+     "analysis-result.json#/evidence/0"
+    ],
+    "rationale": "run_validity is VALID and error_count is 0 over 2623 samples, but the classification method is not described in the referenced evidence; a zero count does not by itself verify response correctness.",
+    "rank": 6
+   }
+  ],
+  "schema_version": "ai-advice-output.v1",
+  "summary": "The run (run_id jmeter_jtl_csv-b87363cf1d89c0789e174268c6d25cd65abd36f7b623d4ea84fe253ceaabf1e7) is VALID, but the deterministic policy verdict is NO_POLICY: no thresholds were applied, so this is neither a pass nor a fail, and this advisory does not change that. Analysis coverage is INCOMPLETE (reason: RESOURCE_GAPS) and the findings list is empty, so the absence of findings must not be read as evidence of a clean result. The single overall-scope metric summary records 2623 samples with 0 errors (error_rate_ratio 0/2623) and latencies of p50=11 ms, p95=46 ms, p99=77 ms, and max=904 ms; throughput is stored only as a raw ratio (numerator 2623000, denominator 44986) with no stated unit or window for the denominator. Advisory focus: attach a policy so a real verdict can be produced, close the coverage gaps, inspect the latency tail (max is far above p99), and verify the throughput ratio's units before using it."
+ },
+ "schema": "ai-experiment-run.v3",
+ "case": "K11",
+ "rep": 1,
+ "model_id": "glm-5.3",
+ "net_retries": 0,
+ "infra_retries": 0
+}

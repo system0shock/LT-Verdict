@@ -1,0 +1,72 @@
+[
+  {
+    "id": "R021",
+    "hard_defect": false,
+    "defects": [],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 5,
+    "notes": "Accurately separates the PASS policy result, NO_POLICY resource status, incomplete coverage, and unsupported causal claims."
+  },
+  {
+    "id": "R033",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T2",
+        "field": "#/hypotheses/2/possible_explanation",
+        "quote": "The 1,315-sample difference plus dropped leading/trailing cells is consistent with partial acquisition",
+        "why": "The 37,349 whole-run count and 36,034 policy-window denominator are expected different-window quantities, not evidence relating the count difference to acquisition failure."
+      },
+      {
+        "type": "T3",
+        "field": "#/caveats/4",
+        "quote": "Maximum latencies are single observations",
+        "why": "The evidence reports aggregate maxima but does not state how many samples reached any maximum."
+      }
+    ],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 3,
+    "notes": "It contains useful checks but misleadingly connects the expected window-count difference to partial acquisition."
+  },
+  {
+    "id": "R052",
+    "hard_defect": false,
+    "defects": [],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 5,
+    "notes": "Correctly preserves all verdict, validity, coverage, scope, and NO_POLICY constraints with actionable follow-up."
+  },
+  {
+    "id": "R056",
+    "hard_defect": false,
+    "defects": [],
+    "required_facts_preserved": false,
+    "missing_facts": [
+      "run_validity=VALID",
+      "The whole-run metric total of 37,349 samples with zero errors"
+    ],
+    "usefulness": 4,
+    "notes": "The advice is otherwise cautious and useful, but it omits the run-validity fact and whole-run count."
+  },
+  {
+    "id": "R063",
+    "hard_defect": false,
+    "defects": [],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 5,
+    "notes": "A well-supported review that explicitly keeps NO_POLICY distinct from PASS and preserves scope limitations."
+  },
+  {
+    "id": "R069",
+    "hard_defect": false,
+    "defects": [],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 5,
+    "notes": "Correct, prioritized, and appropriately bounded by incomplete coverage and unverified clock alignment."
+  }
+]

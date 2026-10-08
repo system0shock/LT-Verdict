@@ -1,0 +1,113 @@
+[
+  {
+    "id": "R010",
+    "hard_defect": false,
+    "defects": [],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 5,
+    "notes": "The verdict and key measurements are accurate, with useful checks that preserve the limits of the evidence."
+  },
+  {
+    "id": "R081",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T8",
+        "field": "#/hypotheses/4/possible_explanation",
+        "quote": "The diagnostic pipeline found no candidate episodes to test",
+        "why": "Zero anomaly tests do not establish that the pipeline found no candidates."
+      },
+      {
+        "type": "T8",
+        "field": "#/caveats/6",
+        "quote": "Latency and resource statistics are window-level aggregates (interval means)",
+        "why": "The latency statistics are window percentiles and maxima, not interval means."
+      }
+    ],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 4,
+    "notes": "The operator advice is useful, but it overstates what the diagnostic count reveals."
+  },
+  {
+    "id": "R106",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T8",
+        "field": "#/hypotheses/4/possible_explanation",
+        "quote": "without verified clock alignment any temporal ordering or trend interpretation is unsupported",
+        "why": "Cross-source clock alignment is unnecessary to interpret a trend within the resource series itself."
+      },
+      {
+        "type": "T7",
+        "field": "#/hypotheses/5/possible_explanation",
+        "quote": "No explicit resource or business policy was configured for either window",
+        "why": "NO_POLICY establishes that no applicable rule was evaluated, not whether policies were configured."
+      },
+      {
+        "type": "T2",
+        "field": "#/caveats/5",
+        "quote": "one pair was tested (pair-00) involving one resource metric (resource-00) and one transaction label ('request')",
+        "why": "The correlation pair does not identify a transaction label, so its attribution to 'request' is unsupported."
+      },
+      {
+        "type": "T7",
+        "field": "#/caveats/7",
+        "quote": "Resource-binding evidence/2 spans the full 360 s run",
+        "why": "The binding ends at 1767225960000, while the run ends 212 ms later."
+      }
+    ],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 2,
+    "notes": "It retains the main verdict and measurements but makes misleading claims about configuration, correlation scope, and time coverage."
+  },
+  {
+    "id": "R139",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T7",
+        "field": "#/hypotheses/1/possible_explanation",
+        "quote": "the empty findings reflect that no policy evaluation was configured",
+        "why": "The evidence establishes no applicable evaluated rule, not that policy evaluation was unconfigured."
+      },
+      {
+        "type": "T8",
+        "field": "#/hypotheses/3/possible_explanation",
+        "quote": "a fairly steady ~50% utilization ratio under a constant 20 requests/s load with no detected episodes, which indicates stable observed behavior",
+        "why": "The resource metric is an unspecified ratio, varies substantially, and had zero anomaly tests, so this stability conclusion is unsupported."
+      },
+      {
+        "type": "T7",
+        "field": "#/recommendations/1/rationale",
+        "quote": "findings are empty because policy evaluation was not configured",
+        "why": "The evidence does not establish that policy evaluation was unconfigured or that this caused the empty findings."
+      },
+      {
+        "type": "T8",
+        "field": "#/recommendations/5/rationale",
+        "quote": "this observed stability",
+        "why": "The aggregates and zero anomaly tests do not establish stable behavior."
+      },
+      {
+        "type": "T7",
+        "field": "#/caveats/6",
+        "quote": "Zero errors were observed, but only within a 6-minute window",
+        "why": "Zero errors are also reported for the whole run, which extends beyond the 6-minute windows."
+      },
+      {
+        "type": "T8",
+        "field": "#/caveats/8",
+        "quote": "a complete flat series at ~0.5 ratio",
+        "why": "The resource series is complete but not flat: its reported values range from about 0.30 to 0.70."
+      }
+    ],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 2,
+    "notes": "Its main figures are correct, but it repeatedly treats unsupported configuration and stability interpretations as facts."
+  }
+]

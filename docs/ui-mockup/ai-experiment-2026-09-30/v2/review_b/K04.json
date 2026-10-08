@@ -1,0 +1,77 @@
+[
+  {
+    "id": "R003",
+    "hard_defect": false,
+    "defects": [],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 5,
+    "notes": "Correctly scopes the PASS to the sole whole-run error-rate policy and gives bounded follow-ups."
+  },
+  {
+    "id": "R013",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T7",
+        "field": "#/hypotheses/0/possible_explanation",
+        "quote": "overall window",
+        "why": "The policy check is explicitly whole-run with no window id, so describing 0/2623 as a separate overall window misstates its coverage."
+      }
+    ],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 3,
+    "notes": "The main verdict and numbers are correct, but the invented window premise can prompt an unnecessary coverage correction or rerun."
+  },
+  {
+    "id": "R015",
+    "hard_defect": false,
+    "defects": [],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 4,
+    "notes": "Accurately preserves the valid, complete PASS and appropriately limits conclusions to the configured error-rate policy."
+  },
+  {
+    "id": "R024",
+    "hard_defect": false,
+    "defects": [],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 4,
+    "notes": "Correctly reports the policy scope and numbers, with useful but somewhat generic follow-up suggestions."
+  },
+  {
+    "id": "R031",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T5",
+        "field": "#/hypotheses/2/possible_explanation",
+        "quote": "suggesting roughly 437 iterations per sampler",
+        "why": "Aggregate transaction counts do not establish the test-script iteration structure or the number of iterations per sampler."
+      }
+    ],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 3,
+    "notes": "Most observations are properly bounded, but it invents a load-script structure from aggregate counts."
+  },
+  {
+    "id": "R039",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T3",
+        "field": "#/summary",
+        "quote": "the largest max-to-p99 gap in the input",
+        "why": "The overall scope has a larger gap (904-77=827 ms) than home (904-96=808 ms), so home is not uniquely largest in the input."
+      }
+    ],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 3,
+    "notes": "It correctly scopes PASS and capacity absence, but the false uniqueness claim can misprioritize the latency investigation."
+  }
+]

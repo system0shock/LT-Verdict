@@ -1,0 +1,198 @@
+{
+ "stage": "A",
+ "mode": "live",
+ "model": "deepseek-v4-flash-0731",
+ "tag": {
+  "phase": "holdout",
+  "attempt_id": "case-019-1-A-t1",
+  "arm": "A",
+  "stage": null,
+  "case": "case-019",
+  "rep": 1,
+  "try": 1
+ },
+ "retry_policy": "d2",
+ "qwen_exit": 0,
+ "wall_ms": 97725,
+ "relay": {
+  "schema_version": "advisory-ai-runtime-relay.v1",
+  "status": "FORWARDED_STRUCTURED_OUTPUT",
+  "received_request_count": 1,
+  "forwarded_request_count": 1,
+  "outcomes": [
+   "FORWARDED_STRUCTURED_OUTPUT"
+  ],
+  "retry_refused_reason": null,
+  "first_refused_reason": null,
+  "model_id": "deepseek-v4-flash-0731",
+  "retry_policy": "d2",
+  "requests": [
+   {
+    "ordinal": 1,
+    "forwarded": true,
+    "outcome": "FORWARDED_STRUCTURED_OUTPUT",
+    "provider_status": 200,
+    "latency_ms": 96390,
+    "usage": {
+     "prompt_tokens": 4230,
+     "total_tokens": 14667,
+     "completion_tokens": 10437,
+     "prompt_tokens_details": {
+      "cached_tokens": 1024
+     },
+     "completion_tokens_details": {
+      "reasoning_tokens": 7989
+     }
+    },
+    "model_returned": "deepseek-v4-flash-0731"
+   }
+  ],
+  "usage": {
+   "prompt_tokens": 4230,
+   "completion_tokens": 10437,
+   "total_tokens": 14667
+  },
+  "latency_ms": 96390
+ },
+ "relay_status": "FORWARDED_STRUCTURED_OUTPUT",
+ "usage": {
+  "prompt_tokens": 4230,
+  "completion_tokens": 10437,
+  "total_tokens": 14667
+ },
+ "latency_ms": 96390,
+ "retried": false,
+ "retry_refused_reason": null,
+ "status": "OK",
+ "note": null,
+ "output": {
+  "schema_version": "ai-advice-output.v1",
+  "summary": "Verdict for window workload-04 (evaluation 1704068100000–1704068400000) is FAIL (business_verdict FAIL, resource_verdict FAIL). Latency policy failed: observed P95 response time 28559 ms exceeds the 200 ms threshold. Compute-limit resource policy failed: system CPU work ratio was 1.0 for all 300 observed cells (> 0.9 threshold). The window had complete coverage (missing_cells 0, no dropped cells), 0 errors across 33,000 samples, and achieved throughput of 110 rps matching the constant 110 requests/s target. The CPU–latency association could not be estimated: correlation pair association-01 returned INSUFFICIENT_DATA with NOT_ESTIMATED uncertainty and null raw/partial rho, because both CPU (constant 1.0) and the target-rate control (constant 110 rps) have no variation. The deterministic FAIL verdict is preserved; this advice adds no new measurements and proposes only testable hypotheses.",
+  "hypotheses": [
+   {
+    "rank": 1,
+    "observation": "In window workload-04, system-cpu-work ratio was 1.0 for all 300 observed cells (min = max = mean = median = 1, sample_standard_deviation 0), which failed the compute-limit resource policy check (threshold 0.9, operator gt); the same window's P95 response time was 28559 ms against the 200 ms latency threshold.",
+    "possible_explanation": "CPU saturation at the full ratio across the entire window could leave the server unable to complete requests promptly, with queued work pushing P95 to about 28.6 s while the generator continued sending at the 110 rps target. This is a hypothesis, not a proven cause, because no server-side queueing metrics are present in this evidence and the correlation between CPU and latency was NOT_ESTIMATED.",
+    "recommended_check": "Confirm that the 'system' metric source measures the server under test (not the generator or another host), then collect server-side evidence (per-process CPU, GC, thread pool, queue depth) over the same 300 s window, and establish whether CPU was already at 1.0 before evaluation_from_epoch_ms given run_from_epoch_ms is 1704067200000.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/3",
+     "analysis-result.json#/evidence/5",
+     "analysis-result.json#/evidence/6",
+     "analysis-result.json#/evidence/8"
+    ]
+   },
+   {
+    "rank": 2,
+    "observation": "The workload-04 window metric summary shows error_count 0 and throughput_rps 110, matching the constant target rate of 110 requests/s, while latency p50 = 15055 ms, p95 = 28559 ms, p99 = 29759 ms, max = 30050 ms.",
+    "possible_explanation": "Requests completed without recorded errors and at the target send rate, so the latency failure appears tied to time-to-completion (server processing or queueing) rather than to dropped, failed, or under-sent traffic.",
+    "recommended_check": "Break down the JMETER_SAMPLER timings (connect vs response vs latency components) if such per-request fields exist, and confirm error_count = 0 across the whole run in the overall summary and in every window, not only workload-04.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/8",
+     "analysis-result.json#/evidence/4",
+     "analysis-result.json#/evidence/0"
+    ]
+   },
+   {
+    "rank": 3,
+    "observation": "Correlation pair association-01 returned status INSUFFICIENT_DATA with reasons NO_RANK_VARIATION, NO_RESIDUAL_VARIATION, CONSTANT_CONTROL, LAG_NOT_EVALUABLE, RESOURCE_DELTA_BELOW_MINIMUM; raw_rho and partial_rho are null, uncertainty is NOT_ESTIMATED, and the headline selection was UNAVAILABLE because the CPU series (all 1.0) and the control target rate (all 110 rps) are constant.",
+    "possible_explanation": "With no variation in load or CPU across the window, the evidence cannot quantify whether CPU saturation causes the latency failure, whether some other saturated resource under constant load causes both, or whether the co-occurrence is coincidental.",
+    "recommended_check": "Re-run with a stepped or varying target rate so CPU and latency exhibit non-constant series, and keep at least one window with CPU below 1.0 to allow rank/residual variation; otherwise treat any CPU–latency association as unquantified.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/9",
+     "analysis-result.json#/evidence/10",
+     "analysis-result.json#/evidence/3",
+     "analysis-result.json#/evidence/4"
+    ]
+   },
+   {
+    "rank": 4,
+    "observation": "resource-binding reports clock_alignment not_verified_by_core for the explicit_windows binding, and the correlation pair also lists LAG_NOT_EVALUABLE with empty lag_profile and best_lag_rho null.",
+    "possible_explanation": "If generator, system, and analyzer clocks are not aligned, the co-occurrence of CPU saturation and high latency inside the same window cannot be treated as a time-ordered or causal relationship; it could be an artifact of windowing or sampling.",
+    "recommended_check": "Verify clock synchronization (NTP/PTP and timestamp traces) across generator, system metrics, and analysis host before drawing any lead/lag or ordering conclusion.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/2",
+     "analysis-result.json#/evidence/9"
+    ]
+   },
+   {
+    "rank": 5,
+    "observation": "diagnostic-summary reports anomalies_tested 0, episodes_reported 0, and pairs_evaluable 0 with uncertainty NOT_ESTIMATED, while the CPU work series has slope_per_second 0 and is pinned at 1.0 for 300 cells.",
+    "possible_explanation": "The absence of detected anomaly episodes is a consequence of the unevaluable correlation pipeline on constant series, not evidence that the system was stable or that load was not excessive; CPU saturation may be a persistent condition covering the whole window rather than an episodic spike.",
+    "recommended_check": "Inspect the full run span (run_from_epoch_ms 1704067200000 to run_to_epoch_ms 1704068430040) for earlier and later windows to determine when CPU reached 1.0 and when latency exceeded thresholds, since only workload-04's window summary is present in this evidence.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/11",
+     "analysis-result.json#/evidence/9",
+     "analysis-result.json#/evidence/2",
+     "analysis-result.json#/evidence/3"
+    ]
+   }
+  ],
+  "recommendations": [
+   {
+    "rank": 1,
+    "action": "Verify clock alignment between the generator, the system metric source, and the analysis pipeline; resource-binding records clock_alignment not_verified_by_core.",
+    "rationale": "No temporal or causal ordering between CPU saturation and the latency failure is supported until alignment is confirmed; the correlation pipeline also recorded LAG_NOT_EVALUABLE.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/2",
+     "analysis-result.json#/evidence/9"
+    ]
+   },
+   {
+    "rank": 2,
+    "action": "Determine what kept system CPU work at exactly 1.0 (ratio) for all 300 cells and whether the 'system' entity is the server under test; capture per-process CPU and server-side resource metrics over the same window.",
+    "rationale": "The compute-limit policy failure (1.0 > 0.9) is deterministic, but the evidence does not say which host or process consumed all CPU, which is required for remediation.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/3",
+     "analysis-result.json#/evidence/5",
+     "analysis-result.json#/evidence/7"
+    ]
+   },
+   {
+    "rank": 3,
+    "action": "Re-run with varied load (e.g., stepped target rates) so CPU and latency series have variation, enabling correlation estimation instead of NOT_ESTIMATED / INSUFFICIENT_DATA.",
+    "rationale": "A constant 110 rps target and constant CPU 1.0 prevent the association test from producing any estimate; the current run cannot attribute the latency failure to CPU.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/9",
+     "analysis-result.json#/evidence/10",
+     "analysis-result.json#/evidence/4"
+    ]
+   },
+   {
+    "rank": 4,
+    "action": "Add server-side latency evidence (queue depth, thread pool, GC, network) and a sampler timing breakdown for the failing window.",
+    "rationale": "error_count = 0 and throughput matched the 110 rps target, so the multi-second P95 is a processing / time-to-completion issue; no server-side data exists in this evidence to test that.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/8",
+     "analysis-result.json#/evidence/0"
+    ]
+   },
+   {
+    "rank": 5,
+    "action": "Confirm aggregation semantics between the overall summary (P50 50 ms, P95 25823 ms, 93000 samples over run span ~1230040 ms) and the window summary (P50 15055 ms, 33000 samples), and obtain summaries for the other windows in the run.",
+    "rationale": "The evidence contains only workload-04's window summary; without the other windows, the large P50 difference cannot be interpreted and the full-run behavior cannot be reconstructed.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0",
+     "analysis-result.json#/evidence/8",
+     "analysis-result.json#/evidence/2"
+    ]
+   }
+  ],
+  "caveats": [
+   "Clock alignment is not_verified_by_core; no lead/lag or temporal-causal conclusions are supported until clocks are verified.",
+   "The CPU–latency correlation is NOT_ESTIMATED (INSUFFICIENT_DATA); raw_rho and partial_rho are null, so no quantitative association or attribution is claimed.",
+   "anomalies_tested = 0 and episodes_reported = 0 do not prove stability, spare capacity, or the absence of a problem; they reflect an unevaluable correlation pipeline on constant series.",
+   "The 'system' entity for CPU work is not defined relative to the server under test; CPU could have been measured on a different or shared host than the endpoint responding to requests.",
+   "Only window workload-04 is present in the evidence; overall (93,000 samples) and window (33,000 samples) p50 values differ (50 ms vs 15055 ms) and cannot be reconciled without per-window evidence for the rest of the run.",
+   "No server-side metrics (GC, queue depth, thread pool, network) are present; latency-failure explanations and remediation targets are therefore limited.",
+   "Throughput of 110 rps corresponds to the send/sample rate; without server-side completion timestamps it does not demonstrate spare capacity or end-to-end success speed beyond error_count = 0."
+  ]
+ },
+ "schema": "ai-experiment-run.holdout.v1",
+ "case": "case-019",
+ "rep": 1,
+ "arm": "A",
+ "try": 1,
+ "attempt_id": "case-019-1-A-t1",
+ "model_id": "deepseek-v4-flash-0731",
+ "prompt_sha256": "69f215a1ad4ae678c82410ba7cf7daf171cd9c7ca0ef4626bba6977db0af4ef7"
+}

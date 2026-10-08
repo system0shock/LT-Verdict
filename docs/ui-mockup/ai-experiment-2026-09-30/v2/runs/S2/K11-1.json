@@ -1,0 +1,132 @@
+{
+ "stage": "S2",
+ "mode": "live",
+ "model": "deepseek-v4-flash-0731",
+ "tag": {
+  "phase": "v2-pilot",
+  "stage": "S2",
+  "case": "K11",
+  "rep": 1,
+  "attempt": 1
+ },
+ "qwen_exit": 0,
+ "wall_ms": 64762,
+ "relay": {
+  "schema_version": "advisory-ai-runtime-relay.v1",
+  "status": "FORWARDED_STRUCTURED_OUTPUT",
+  "request_count": 1,
+  "usage": {
+   "prompt_tokens": 2671,
+   "total_tokens": 9074,
+   "completion_tokens": 6403,
+   "prompt_tokens_details": {
+    "cached_tokens": 1024
+   },
+   "completion_tokens_details": {
+    "reasoning_tokens": 4780
+   }
+  },
+  "latency_ms": 63524,
+  "model_returned": "deepseek-v4-flash-0731"
+ },
+ "relay_status": "FORWARDED_STRUCTURED_OUTPUT",
+ "usage": {
+  "prompt_tokens": 2671,
+  "total_tokens": 9074,
+  "completion_tokens": 6403,
+  "prompt_tokens_details": {
+   "cached_tokens": 1024
+  },
+  "completion_tokens_details": {
+   "reasoning_tokens": 4780
+  }
+ },
+ "latency_ms": 63524,
+ "status": "OK",
+ "note": null,
+ "output": {
+  "schema_version": "ai-advice-output.v1",
+  "summary": "The run is VALID and yielded one overall metric summary (2623 samples, 0 errors, latency p50=11 ms, p95=46 ms, p99=77 ms, max=904 ms), but the deterministic policy verdict is NO_POLICY and analysis coverage is INCOMPLETE with reason RESOURCE_GAPS. The input contains no capacity_summary, no resource series, no load-stage capacity definitions, no windows, no transaction-scope summaries, and no per-sample data. Because no configured policy or required capacity is present, no PASS/FAIL can be produced; the numeric summary is informational and does not constitute a pass or proof of health or spare capacity.",
+  "hypotheses": [
+   {
+    "rank": 1,
+    "observation": "The facts report policy_verdict = NO_POLICY and analysis_coverage status = INCOMPLETE with reason RESOURCE_GAPS, and the input contains no capacity_summary and no resource series.",
+    "possible_explanation": "This is consistent with no acceptance policy (thresholds or required capacity) being configured or captured for this run, so the analysis cannot derive PASS or FAIL; the resource gaps may reflect missing instrumentation or supplied data rather than load behavior.",
+    "recommended_check": "Confirm whether a policy or required capacity should have been attached to this run. If acceptance criteria are expected, configure the policy and rerun or adjudicate; do not treat the numeric summary as a verdict.",
+    "evidence_refs": [
+     "analysis-result.json#/policy_verdict",
+     "analysis-result.json#/analysis_coverage",
+     "analysis-result.json#/evidence/0"
+    ]
+   },
+   {
+    "rank": 2,
+    "observation": "The overall metric summary reports error_count = 0 and error_rate_ratio numerator = 0 over sample_count = 2623 (scope: overall), and the inventory lists no transaction-scope summaries, no windows, and no OpenSearch error profile.",
+    "possible_explanation": "The zero-error count is asserted only for the overall scope captured in this summary; errors in scopes or resources not captured would not appear here, so the zero does not by itself prove the whole run or every transaction was error-free.",
+    "recommended_check": "Inspect the raw JTL/CSV source for error flags and verify the 2623-sample overall count matches the source file; if per-transaction accuracy is required, add transaction-scope summaries and rerun or re-analyze the same data.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0"
+    ]
+   },
+   {
+    "rank": 3,
+    "observation": "The overall latency summary lists max = 904 ms alongside p50 = 11 ms, p95 = 46 ms, and p99 = 77 ms; the input does not include individual samples, so the number of samples near 904 ms is unknown.",
+    "possible_explanation": "At least one response may have experienced much higher latency than the bulk of requests (for example, a transient spike or a single slow response), but the summary alone cannot establish how many samples were in the tail or which transaction produced it.",
+    "recommended_check": "Query the raw source samples above the reported p99 and locate the max = 904 ms sample in time; before any temporal lead/lag interpretation, verify clock alignment because the input does not establish a clock relationship or time windows.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0"
+    ]
+   },
+   {
+    "rank": 4,
+    "observation": "The input contains no capacity_summary, no resource series entities, and no load-stage capacity definitions, while analysis_coverage is INCOMPLETE with reason RESOURCE_GAPS.",
+    "possible_explanation": "Missing resource and capacity data prevents any conclusion about saturation or headroom; the gap may be due to data not being captured or supplied for this run rather than the absence of a real capacity condition.",
+    "recommended_check": "Collect resource series (CPU, memory, network, and similar) for both the load generator and the system under test in a rerun so capacity can be compared with the observed throughput and latency; do not infer spare capacity from the lack of data.",
+    "evidence_refs": [
+     "analysis-result.json#/analysis_coverage",
+     "analysis-result.json#/evidence/0"
+    ]
+   }
+  ],
+  "recommendations": [
+   {
+    "rank": 1,
+    "action": "Configure or attach an acceptance policy (latency/throughput thresholds and/or required capacity) for this test, then rerun or adjudicate with that policy present. Do not attempt to reclassify the run as PASS by rerunning or fixing the load generator alone.",
+    "rationale": "The deterministic verdict is NO_POLICY and no capacity_summary is present; only a configured policy or required capacity can yield PASS or FAIL, and NO_POLICY cannot be turned into PASS by a healthy-looking summary.",
+    "evidence_refs": [
+     "analysis-result.json#/policy_verdict",
+     "analysis-result.json#/analysis_coverage",
+     "analysis-result.json#/evidence/0"
+    ]
+   },
+   {
+    "rank": 2,
+    "action": "Close the RESOURCE_GAPS by supplying resource series and load-stage capacity definitions for the run, or instrument the test to capture them, then re-analyze.",
+    "rationale": "Analysis coverage is INCOMPLETE with reason RESOURCE_GAPS and no resource series or capacity_summary appear in the input, so capacity, saturation, and headroom conclusions are not currently supported.",
+    "evidence_refs": [
+     "analysis-result.json#/analysis_coverage"
+    ]
+   },
+   {
+    "rank": 3,
+    "action": "Inspect the raw JTL/CSV data to characterize the latency tail: count samples above the p99, identify which transactions produced the 904 ms max, and verify clock alignment before any temporal correlation.",
+    "rationale": "Individual samples are not in the input, so the reported max alone cannot be used to attribute impact or infer a causal ordering; the summary is bounded to the overall scope.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0"
+    ]
+   }
+  ],
+  "caveats": [
+   "The deterministic verdict is NO_POLICY; this advice does not change it. A summary showing zero errors and low percentiles is not a PASS, and a missing policy is not a pass.",
+   "Analysis coverage is INCOMPLETE with reason RESOURCE_GAPS: no capacity_summary, resource series, or load-stage capacity definitions are present, so capacity, saturation, and spare capacity cannot be assessed. findings=[] does not prove stability or absence of a problem.",
+   "The metric summary covers only the overall scope: there are no transaction-scope summaries, no windows, and no per-sample data in the input. Counts from different scopes are not comparable, and a window would cover only part of the run.",
+   "The max latency of 904 ms is a summary statistic; the number of samples that hit or approached it is unknown, so it cannot be used to attribute impact.",
+   "Throughput is reported as separate numerator/denominator fields (2623000/44986 in the overall summary) without the derived facts asserting a relation between them; treat reported values with their stated units and do not interpret raw values as durations unless the referenced field defines them as such.",
+   "The referenced evidence does not establish a clock relationship or time windows, so no lead/lag or temporal ordering should be inferred."
+  ]
+ },
+ "schema": "ai-experiment-run.v2",
+ "phase": "pilot",
+ "case": "K11",
+ "rep": 1
+}

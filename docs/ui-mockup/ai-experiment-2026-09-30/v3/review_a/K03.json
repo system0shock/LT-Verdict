@@ -1,0 +1,108 @@
+[
+  {
+    "id": "R005",
+    "hard_defect": false,
+    "defects": [],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 4,
+    "notes": "Accurate, verifiable advice, though longer than needed."
+  },
+  {
+    "id": "R011",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T1",
+        "field": "#/hypotheses/0/recommended_check",
+        "quote": "with knee detection implemented",
+        "why": "The capacity bound is computed independently of the knee, whose absent detector is a fixed product limitation."
+      },
+      {
+        "type": "T1",
+        "field": "#/recommendations/2/action",
+        "quote": "decide explicitly whether diagnostic-effect rules ... should contribute to resource_verdict",
+        "why": "The generator guard is diagnostic by contract and cannot be made binding."
+      },
+      {
+        "type": "T3",
+        "field": "#/recommendations/9/rationale",
+        "quote": "a single tail event drives the run's worst-case latency",
+        "why": "The aggregates do not reveal how many samples reached the 2406 ms maximum."
+      }
+    ],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 2,
+    "notes": "It preserves the results but gives invalid knee and diagnostic-rule advice."
+  },
+  {
+    "id": "R012",
+    "hard_defect": false,
+    "defects": [],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 5,
+    "notes": "Correct, focused actions follow from the recorded verdict, stages, and measurements."
+  },
+  {
+    "id": "R017",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T4",
+        "field": "#/hypotheses/7/possible_explanation",
+        "quote": "does not demonstrate error-free behavior ... outside the evaluation windows",
+        "why": "The whole-run summary records zero errors across all 132623 samples, including samples outside those windows."
+      }
+    ],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 2,
+    "notes": "Most actions are useful, but the claim about errors outside the windows misstates recorded coverage."
+  },
+  {
+    "id": "R020",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T4",
+        "field": "#/caveats/5",
+        "quote": "per-stage latency and error behaviour ... is unobserved",
+        "why": "Each stage has a window error-rate check reporting zero errors and PASS."
+      },
+      {
+        "type": "T3",
+        "field": "#/hypotheses/5/possible_explanation",
+        "quote": "The single largest sample in the run",
+        "why": "The aggregates do not establish that only one sample reached the maximum."
+      },
+      {
+        "type": "T4",
+        "field": "#/caveats/14",
+        "quote": "not proof that the largest sample belongs to that transaction",
+        "why": "The cart transaction's reported maximum of 2406 ms establishes that at least one cart sample reached the overall maximum."
+      }
+    ],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 2,
+    "notes": "Detailed advice is undermined by false claims about window errors and maximum-latency attribution."
+  },
+  {
+    "id": "R061",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T1",
+        "field": "#/recommendations/0/action",
+        "quote": "or apply knee detection once implemented",
+        "why": "A capacity ceiling must come from verified stage outcomes; knee detection is a fixed product limitation and is not an operator remedy."
+      }
+    ],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 2,
+    "notes": "It preserves the main results but places invalid knee-detection advice in its top recommendation."
+  }
+]

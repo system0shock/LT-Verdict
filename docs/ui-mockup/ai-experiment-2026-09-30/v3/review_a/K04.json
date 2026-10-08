@@ -1,0 +1,95 @@
+[
+  {
+    "id": "R014",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T5",
+        "field": "#/caveats/9",
+        "quote": "a single run at a single load level",
+        "why": "The evidence identifies one run but contains no load-stage definitions, so its load level cannot be determined."
+      }
+    ],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 3,
+    "notes": "The policy interpretation and checks are useful, but the asserted load level could mislead capacity planning."
+  },
+  {
+    "id": "R043",
+    "hard_defect": false,
+    "defects": [],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 5,
+    "notes": "It preserves the verdict, scopes the PASS correctly, and gives focused checks for the latency tails."
+  },
+  {
+    "id": "R057",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T4",
+        "field": "#/summary",
+        "quote": "load-generator conditions are therefore reported but unevaluated",
+        "why": "No generator guard or resource series reports load-generator conditions in this evidence."
+      },
+      {
+        "type": "T2",
+        "field": "#/caveats/6",
+        "quote": "arithmetic within one shared window denominator",
+        "why": "A shared throughput denominator does not establish that the overall and transaction counts cover an identical window."
+      },
+      {
+        "type": "T5",
+        "field": "#/caveats/7",
+        "quote": "Single run, single load level",
+        "why": "The evidence identifies one run but provides no load-stage definitions from which to establish one load level."
+      },
+      {
+        "type": "T1",
+        "field": "#/recommendations/5/rationale",
+        "quote": "a rerun with a generator that is not saturated would be required before stage results could support a product bound",
+        "why": "A product bound depends on stages with verified product outcomes; the evidence does not establish this additional prerequisite."
+      }
+    ],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 2,
+    "notes": "Several sound checks are mixed with unsupported claims about the run window, load level, and capacity prerequisites."
+  },
+  {
+    "id": "R059",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T4",
+        "field": "#/caveats/1",
+        "quote": "The evidence consists of aggregate metric summaries only",
+        "why": "The evidence also contains a policy_check, so this inventory statement is false despite the response discussing that check elsewhere."
+      }
+    ],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 3,
+    "notes": "The proposed checks are useful, but its incorrect evidence inventory could confuse an operator."
+  },
+  {
+    "id": "R060",
+    "hard_defect": false,
+    "defects": [],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 4,
+    "notes": "It keeps causes hypothetical and gives verifiable actions, with substantial repetition."
+  },
+  {
+    "id": "R063",
+    "hard_defect": false,
+    "defects": [],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 4,
+    "notes": "It accurately scopes the PASS and suggests practical checks, though the extra home sample is framed more concretely than the counts establish."
+  }
+]

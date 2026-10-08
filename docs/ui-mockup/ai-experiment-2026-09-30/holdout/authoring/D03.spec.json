@@ -1,0 +1,34 @@
+{
+ "required": [
+  [
+   "gaps_named",
+   [
+    "(?:(?<![\\d.,])(?:10)(?![\\d]|[.,]\\d))[^.\\n]{0,100}(?:(?:missing|gap|cells?))|(?:(?:missing|gap|cells?))[^.\\n]{0,100}(?:(?<![\\d.,])(?:10)(?![\\d]|[.,]\\d))",
+    "(?:(?:missing|gaps?))[^.\\n]{0,100}(?:(?:cells?|db|database|resource))|(?:(?:cells?|db|database|resource))[^.\\n]{0,100}(?:(?:missing|gaps?))"
+   ]
+  ],
+  [
+   "conclusion_scoped",
+   [
+    "(?:not|cannot|can't|does not|do not|no)[^.\\n]{0,60}(?:extend|generali[sz]|conclu|claim|infer|assume|judge|sufficient)",
+    "only (?:for|within|the|in)[^.\\n]{0,60}(?:observed|available|covered|window|cells)",
+    "not covered|uncovered"
+   ]
+  ]
+ ],
+ "forbidden": [
+  "hides or glues the gaps, or extends a conclusion to the unobserved interval"
+ ],
+ "useful_checks": [
+  "restore the missing resource cells of the window and re-run the analysis"
+ ],
+ "source": {
+  "builder": "AdvisoryEvidenceBuilder",
+  "build": "5b5e51c+harness",
+  "source": "a:NT03-missing_db_290s_320s-2000:1",
+  "source_sha256": "63d8f3fe470f3a3c832c5c18787b8ac5716d12304455e97df422153f62f3d748",
+  "derivation": [],
+  "evidence_sha256": "ce3fba86393f43521dea98e26d2f76135acb8eb5afd3821ad65511d46df33b55",
+  "inputs": "a:NT03-missing_db_290s_320s-2000:1, derivation [], analysed through RunBundleStore -> AnalysisService -> AdvisoryEvidenceBuilder by AdvisoryHoldoutCorpusTest on 5b5e51c+harness"
+ }
+}

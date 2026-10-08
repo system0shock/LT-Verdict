@@ -1,0 +1,221 @@
+{
+ "stage": "A",
+ "mode": "live",
+ "model": "deepseek-v4-flash-0731",
+ "tag": {
+  "phase": "holdout",
+  "attempt_id": "case-013-2-A-t1",
+  "arm": "A",
+  "stage": null,
+  "case": "case-013",
+  "rep": 2,
+  "try": 1
+ },
+ "retry_policy": "d2",
+ "qwen_exit": 0,
+ "wall_ms": 77784,
+ "relay": {
+  "schema_version": "advisory-ai-runtime-relay.v1",
+  "status": "FORWARDED_STRUCTURED_OUTPUT",
+  "received_request_count": 1,
+  "forwarded_request_count": 1,
+  "outcomes": [
+   "FORWARDED_STRUCTURED_OUTPUT"
+  ],
+  "retry_refused_reason": null,
+  "first_refused_reason": null,
+  "model_id": "deepseek-v4-flash-0731",
+  "retry_policy": "d2",
+  "requests": [
+   {
+    "ordinal": 1,
+    "forwarded": true,
+    "outcome": "FORWARDED_STRUCTURED_OUTPUT",
+    "provider_status": 200,
+    "latency_ms": 76468,
+    "usage": {
+     "prompt_tokens": 3430,
+     "total_tokens": 11353,
+     "completion_tokens": 7923,
+     "prompt_tokens_details": {
+      "cached_tokens": 1024
+     },
+     "completion_tokens_details": {
+      "reasoning_tokens": 5061
+     }
+    },
+    "model_returned": "deepseek-v4-flash-0731"
+   }
+  ],
+  "usage": {
+   "prompt_tokens": 3430,
+   "completion_tokens": 7923,
+   "total_tokens": 11353
+  },
+  "latency_ms": 76468
+ },
+ "relay_status": "FORWARDED_STRUCTURED_OUTPUT",
+ "usage": {
+  "prompt_tokens": 3430,
+  "completion_tokens": 7923,
+  "total_tokens": 11353
+ },
+ "latency_ms": 76468,
+ "retried": false,
+ "retry_refused_reason": null,
+ "status": "OK",
+ "note": null,
+ "output": {
+  "schema_version": "ai-advice-output.v1",
+  "summary": "Deterministic verdict: NO_POLICY. The run is VALID with COMPLETE analysis coverage, evaluation window 1767225600000-1767225630000 (30 s) under explicit_windows. Evidence covers 570 JMeter samples for transaction label 'request' (0 errors; latency p50=300 ms, p95=500 ms, p99=500 ms, max=500 ms; throughput 570000/30000 = 19 rps over the window, 570000/30399 over the run). Service resource series 'value' (synthetic_unit) has 30/30 cells, min=1, median=3, mean=3, max=5, slope_per_second≈0.0267. Both business and resource policy verdicts are NO_POLICY, so no pass/fail determination exists and no findings were produced. The load-resource correlation is NOT_ESTIMATED (status INSUFFICIENT_DATA; paired_cells=0; controls_requested/used empty; clock_alignment not_verified_by_core; headline selection UNAVAILABLE with null p-values). Diagnostic states anomalies_tested=0, episodes_reported=0, pairs_evaluable=0 — absence of reported anomalies does not prove stability. No causal claim is supported by this evidence.",
+  "hypotheses": [
+   {
+    "rank": 1,
+    "observation": "Correlation pair status INSUFFICIENT_DATA: paired_cells=0, lag_used_cells=0, best_lag_ms=0, raw_rho/partial_rho null, uncertainty NOT_ESTIMATED; reasons include INSUFFICIENT_PAIRED_CELLS, MISSING_CELLS, LAG_NOT_EVALUABLE, CONTROL_CONTEXT_MISSING, RESOURCE_DELTA_BELOW_MINIMUM, LOAD_DELTA_BELOW_MINIMUM. Headline selection is UNAVAILABLE with p_value_b10/b20 null and selected=false.",
+    "possible_explanation": "The load-resource relationship could not be evaluated because prerequisites were not met: no paired cells, no control context (controls_used empty), resource and load deltas below configured minimums, and clock alignment not verified by the core. This is a data/prerequisite state and is not evidence for or against a relationship.",
+    "recommended_check": "Verify clock alignment between JMeter and resource timestamps; supply an explicit control context; confirm resource and load deltas exceed configured minima; then re-run the correlation and headline selection.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/6",
+     "analysis-result.json#/evidence/2",
+     "analysis-result.json#/evidence/7"
+    ]
+   },
+   {
+    "rank": 2,
+    "observation": "Window policy summary reports verdict NO_POLICY with business_verdict NO_POLICY and resource_verdict NO_POLICY; policy_verdict fact is NO_POLICY; findings list is empty.",
+    "possible_explanation": "No threshold or policy was configured or applicable for the window, so the analysis could not produce a pass/fail determination for business or resource metrics. Missing policy is not a pass and does not imply compliance or absence of problems.",
+    "recommended_check": "Confirm whether a business or resource policy was intended for this window; if one was intended, correct the configuration and rerun; if not, document NO_POLICY as the expected outcome and define explicit thresholds for future runs.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/4",
+     "analysis-result.json#/policy_verdict",
+     "analysis-result.json#/findings"
+    ]
+   },
+   {
+    "rank": 3,
+    "observation": "Latency summaries are identical at overall and window scope: latency_ms p50=300, p95=500, p99=500, max=500 over 570 samples, with error_rate_ratio 0/570; throughput_rps 570000/30399 (overall) and 570000/30000 (window).",
+    "possible_explanation": "The clustering of p95, p99, and max at exactly 500 ms could reflect a measurement plateau, rounding, or a constant sampler response rather than a genuinely flat distribution; the summary alone cannot distinguish a true observed 500 ms from an aggregation cap or artifact.",
+    "recommended_check": "Inspect raw per-sample JMeter latency values and the sampler configuration to confirm whether 500 ms is a captured observation or a cap/rounding artifact; obtain a latency distribution beyond the reported quantiles.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0",
+     "analysis-result.json#/evidence/5",
+     "analysis-result.json#/evidence/1"
+    ]
+   },
+   {
+    "rank": 4,
+    "observation": "diagnostic_summary: anomalies_tested=0, episodes_reported=0, pairs_evaluable=0, pairs_tested=1, status COMPLETE, uncertainty NOT_ESTIMATED; correlation pair had paired_cells=0.",
+    "possible_explanation": "Because the underlying pair was not evaluable (paired_cells=0), the diagnostic could test no anomaly hypotheses; zero reported episodes reflects insufficient data, not proven stability or absence of problems.",
+    "recommended_check": "Satisfy correlation prerequisites (clock verification, controls, deltas above minimum), re-run the diagnostic, and then interpret any anomalies_tested>0 results separately from this data-limited window.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/8",
+     "analysis-result.json#/evidence/6"
+    ]
+   },
+   {
+    "rank": 5,
+    "observation": "Resource series 'value' (synthetic_unit, entity service) has observed_cells=30/30, missing_cells=0, min=1, q25=2, median=3, mean=3, q75=4, max=5, sample_standard_deviation≈1.44, slope_per_second≈0.0267, split_half_shift=0.",
+    "possible_explanation": "The series is confined to a narrow numeric range and relatively flat (slope≈0.0267/s, split_half_shift=0), which may relate to RESOURCE_DELTA_BELOW_MINIMUM in the correlation pair; however, a narrow synthetic-unit range does not establish spare capacity, and near-flat usage does not prove the absence of load sensitivity.",
+    "recommended_check": "Confirm what the synthetic_unit maps to (e.g., CPU, memory), compare values against capacity boundaries, and verify whether the narrow observed range reflects real usage or a measurement-scale artifact.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/3",
+     "analysis-result.json#/evidence/6"
+    ]
+   },
+   {
+    "rank": 6,
+    "observation": "Only one transaction label 'request' (sample_kind JMETER_SAMPLER) is summarized with 570 samples; throughput_rps 570000/30000 over the window and 570000/30399 over the run; resource_bindings list one service series.",
+    "possible_explanation": "The evidence covers a single sampler label and a limited sample count (~19 rps over the window), so reported latency and throughput are specific to this load profile and do not generalize to other endpoints, loads, or durations.",
+    "recommended_check": "Confirm the JMeter test plan exercised all intended endpoints and durations; compare with the expected load profile; if broader coverage was intended, expand the run and re-analyze.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/1",
+     "analysis-result.json#/evidence/0",
+     "analysis-result.json#/evidence/5"
+    ]
+   }
+  ],
+  "recommendations": [
+   {
+    "rank": 1,
+    "action": "Verify clock alignment between JMeter sampler timestamps and the service resource series before any temporal, lag, or lead/lag interpretation.",
+    "rationale": "resource-binding reports clock_alignment=not_verified_by_core; without a verified clock relationship, temporal ordering and lag-based hypotheses are unsupported.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/2",
+     "analysis-result.json#/evidence/6"
+    ]
+   },
+   {
+    "rank": 2,
+    "action": "Re-run the load-resource correlation with explicit control context, verified time pairing, and settings that allow resource and load deltas above the configured minimum.",
+    "rationale": "The pair was INSUFFICIENT_DATA with paired_cells=0 and reasons CONTROL_CONTEXT_MISSING, LAG_NOT_EVALUABLE, RESOURCE_DELTA_BELOW_MINIMUM, LOAD_DELTA_BELOW_MINIMUM; without these prerequisites no correlation, partial_rho, or p-value can be estimated (uncertainty NOT_ESTIMATED).",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/6",
+     "analysis-result.json#/evidence/7"
+    ]
+   },
+   {
+    "rank": 3,
+    "action": "Confirm whether a business or resource policy was intended for this window; if so, configure thresholds and rerun, and otherwise document NO_POLICY as the expected outcome.",
+    "rationale": "Window policy summary and policy_verdict both report NO_POLICY; NO_POLICY must not be interpreted as PASS or FAIL, and no findings were produced.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/4",
+     "analysis-result.json#/policy_verdict"
+    ]
+   },
+   {
+    "rank": 4,
+    "action": "Collect and inspect raw JMeter per-sample latencies and sampler configuration to determine whether the 500 ms p95/p99/max values are exact observations or an aggregation cap/rounding artifact.",
+    "rationale": "Latency statistics cluster at exactly 500 ms across overall and window scope with 0 errors over 570 samples; the summary cannot distinguish a real constant response from a measurement plateau.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0",
+     "analysis-result.json#/evidence/5",
+     "analysis-result.json#/evidence/1"
+    ]
+   },
+   {
+    "rank": 5,
+    "action": "Determine what the synthetic_unit resource series 'value' maps to in the real system and compare the observed 1-5 range against capacity limits.",
+    "rationale": "The series has 30/30 cells, median=3, mean=3, min=1, max=5 in synthetic_unit; a narrow, flat range does not by itself prove spare capacity or absence of load effects.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/3"
+    ]
+   },
+   {
+    "rank": 6,
+    "action": "Confirm the JMeter run covered all intended transaction labels, durations, and load levels before relying on the single-label 570-sample summary.",
+    "rationale": "Coverage reflects only transaction 'request' with 570 samples over a ~30 s window; no other endpoint or load coverage is evidenced, and throughput differs slightly across window (570000/30000) vs run (570000/30399) denominators.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/1",
+     "analysis-result.json#/evidence/0",
+     "analysis-result.json#/evidence/5"
+    ]
+   },
+   {
+    "rank": 7,
+    "action": "After correlation prerequisites are met, re-run the anomaly diagnostic and treat any anomalies_tested=0 result as data-limited rather than as proof of stability.",
+    "rationale": "diagnostic_summary reports anomalies_tested=0, episodes_reported=0, and pairs_evaluable=0; absent findings do not prove stability, spare capacity, low load, or absence of a problem.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/8",
+     "analysis-result.json#/evidence/6"
+    ]
+   }
+  ],
+  "caveats": [
+   "Clock alignment is not verified by the core (clock_alignment=not_verified_by_core); any temporal ordering or lead/lag interpretation is unsupported until clock relationship is verified.",
+   "Correlation uncertainty is NOT_ESTIMATED; raw_rho, partial_rho, and all p-values are null; no statistical significance can be claimed for any load-resource relationship in this window.",
+   "No control context was requested or used (controls_requested and controls_used empty); RESOURCE_DELTA_BELOW_MINIMUM and LOAD_DELTA_BELOW_MINIMUM appear among reasons for INSUFFICIENT_DATA.",
+   "The deterministic verdict is NO_POLICY for both business and resource; this is not a PASS or FAIL outcome, and the analysis produced no findings.",
+   "anomalies_tested=0 with episodes_reported=0 and pairs_evaluable=0 reflect a data-limited diagnostic, not proof of stability, spare capacity, low load, or absence of a problem.",
+   "Latency and throughput figures cover 570 samples of a single JMeter sampler label 'request' over the ~30 s evaluation window; throughput is reported as 570000/30000 (window) and 570000/30399 (run), where the run denominator includes time beyond the evaluation window.",
+   "The resource series uses unit synthetic_unit; statistics (min=1, max=5, mean=3) are not tied in the evidence to a mapped real-world capacity metric, so capacity conclusions cannot be drawn."
+  ]
+ },
+ "schema": "ai-experiment-run.holdout.v1",
+ "case": "case-013",
+ "rep": 2,
+ "arm": "A",
+ "try": 1,
+ "attempt_id": "case-013-2-A-t1",
+ "model_id": "deepseek-v4-flash-0731",
+ "prompt_sha256": "69f215a1ad4ae678c82410ba7cf7daf171cd9c7ca0ef4626bba6977db0af4ef7"
+}

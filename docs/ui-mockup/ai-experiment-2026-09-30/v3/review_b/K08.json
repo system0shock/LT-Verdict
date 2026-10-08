@@ -1,0 +1,101 @@
+[
+  {
+    "id": "R008",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T2",
+        "field": "#/summary",
+        "quote": "exactly match the 2,312 'frontend.request_error' events",
+        "why": "Equal counts from transaction summaries and the OpenSearch error source do not establish that they are the same events."
+      },
+      {
+        "type": "T8",
+        "field": "#/summary",
+        "quote": "39,099 samples (~108.6 rps)",
+        "why": "The throughput numerator/denominator scaling is not defined in the evidence, so a converted requests-per-second value is unsupported."
+      },
+      {
+        "type": "T5",
+        "field": "#/hypotheses/6/possible_explanation",
+        "quote": "the failure origin may lie elsewhere (e.g., a downstream dependency such as payment)",
+        "why": "The evidence contains no call graph or topology establishing a downstream payment dependency for checkout."
+      }
+    ],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 2,
+    "notes": "It preserves the verdict and coverage but makes unsupported event-correlation and throughput claims."
+  },
+  {
+    "id": "R012",
+    "hard_defect": false,
+    "defects": [],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 5,
+    "notes": "The response accurately preserves verdicts, scope distinctions, coverage limits, and actionable next checks."
+  },
+  {
+    "id": "R019",
+    "hard_defect": false,
+    "defects": [],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 5,
+    "notes": "The response is evidence-bounded, clearly separates hypotheses from findings, and gives verifiable actions."
+  },
+  {
+    "id": "R034",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T2",
+        "field": "#/recommendations/1/rationale",
+        "quote": "All 2312 errors are checkout-scoped client-side and logged server-side as frontend.request_error",
+        "why": "Matching aggregate counts from the JMeter transaction and OpenSearch source do not prove that the same errors were logged server-side."
+      },
+      {
+        "type": "T8",
+        "field": "#/hypotheses/5/possible_explanation",
+        "quote": "The run may be tagged as a memory-resource scenario",
+        "why": "This infers scenario intent and a target from an untrusted index-name label rather than supported run metadata."
+      }
+    ],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 3,
+    "notes": "Most operational guidance is sound, but it conflates separately scoped aggregates and relies on label semantics."
+  },
+  {
+    "id": "R054",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T2",
+        "field": "#/recommendations/0/rationale",
+        "quote": "All 2312 errors sit in a single group",
+        "why": "The OpenSearch group count and the load-test and policy counts are differently scoped quantities, so this asserts an unsupported identity."
+      },
+      {
+        "type": "T8",
+        "field": "#/hypotheses/7/possible_explanation",
+        "quote": "The index name may encode a scenario, dataset or fault-injection label",
+        "why": "The evidence does not define index-name semantics, and treating its text as scenario evidence is unsupported."
+      }
+    ],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 3,
+    "notes": "It contains many useful bounded checks but introduces unsupported group correspondence and label-based scenario inference."
+  },
+  {
+    "id": "R063",
+    "hard_defect": false,
+    "defects": [],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 5,
+    "notes": "The response correctly maintains the verdict, incomplete coverage, scope boundaries, and uncertainty constraints."
+  }
+]

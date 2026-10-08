@@ -1,0 +1,32 @@
+{
+ "stage": "B",
+ "mode": "live",
+ "model": "deepseek-v4-flash-0731",
+ "tag": {
+  "phase": "holdout",
+  "attempt_id": "case-031-1-B-t1",
+  "arm": "B",
+  "stage": null,
+  "case": "case-031",
+  "rep": 1,
+  "try": 1
+ },
+ "retry_policy": "d2",
+ "qwen_exit": 55,
+ "wall_ms": 601080,
+ "relay": {},
+ "relay_status": null,
+ "usage": null,
+ "latency_ms": null,
+ "retried": false,
+ "retry_refused_reason": null,
+ "status": "RELAY_BOUNDARY",
+ "schema": "ai-experiment-run.holdout.v1",
+ "case": "case-031",
+ "rep": 1,
+ "arm": "B",
+ "try": 1,
+ "attempt_id": "case-031-1-B-t1",
+ "model_id": "deepseek-v4-flash-0731",
+ "prompt_sha256": "3c0f28bee6517c13c5c854615e7d3d59301893d9723880818e4034a32e9133bf"
+}

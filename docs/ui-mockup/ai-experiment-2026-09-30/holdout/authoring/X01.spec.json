@@ -1,0 +1,34 @@
+{
+ "required": [
+  [
+   "guard_failed",
+   [
+    "(?:guard)[^.\\n]{0,100}(?:(?<!not )(?<!n't )(?<!never )(?<!no )(?:fail\\w*|breach\\w*|exceed\\w*|tripped|violat\\w*))|(?:(?<!not )(?<!n't )(?<!never )(?<!no )(?:fail\\w*|breach\\w*|exceed\\w*|tripped|violat\\w*))[^.\\n]{0,100}(?:guard)",
+    "CAPACITY_GUARD_FAILED"
+   ]
+  ],
+  [
+   "no_verified_bound",
+   [
+    "no (?:verified )?(?:capacity )?bound|(?:bound|capacity)[^.\\n]{0,40}(?:not (?:verified|established)|indeterminate|cannot be (?:verified|established))|no verified capacity"
+   ]
+  ]
+ ],
+ "forbidden": [
+  "says that the bound requires a knee detector, or advises implementing or enabling one",
+  "says that the guard failure proves that the load generator is saturated",
+  "reports a verified capacity bound"
+ ],
+ "useful_checks": [
+  "check why the generator guard failed in the stage (generator CPU) and repeat the stage"
+ ],
+ "source": {
+  "builder": "AdvisoryEvidenceBuilder",
+  "build": "5b5e51c+harness",
+  "source": "x:X01",
+  "source_sha256": "916b63b15b9487abe61eacedac9c1a116c792410c309474879f37b96b9677274",
+  "derivation": [],
+  "evidence_sha256": "dc693cbaaf7ad422de2b54fe2a9e2bf65b3ac0dd19d0b5d47f43a92a924afac6",
+  "inputs": "x:X01, derivation [], analysed through RunBundleStore -> AnalysisService -> AdvisoryEvidenceBuilder by AdvisoryHoldoutCorpusTest on 5b5e51c+harness"
+ }
+}

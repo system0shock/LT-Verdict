@@ -1,0 +1,47 @@
+[
+  {
+    "id": "R071",
+    "hard_defect": false,
+    "defects": [],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 5,
+    "notes": "Accurately preserves the verdicts, coverage, key measurements, and uncertainty while proposing verifiable follow-up actions."
+  },
+  {
+    "id": "R120",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T2",
+        "field": "#/hypotheses/2/possible_explanation",
+        "quote": "needed active threads is approximately throughput times latency",
+        "why": "It treats target/request rate, a p95 latency aggregate, and generator active-thread measurements as a Little's-law identity even though the evidence does not define that relationship."
+      }
+    ],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 2,
+    "notes": "It preserves the deterministic results but bases a central interpretation on an unsupported relation between incomparable aggregates."
+  },
+  {
+    "id": "R133",
+    "hard_defect": false,
+    "defects": [],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 5,
+    "notes": "The response is evidence-grounded, clearly separates hypotheses from conclusions, and gives appropriate operator actions."
+  },
+  {
+    "id": "R151",
+    "hard_defect": false,
+    "defects": [],
+    "required_facts_preserved": false,
+    "missing_facts": [
+      "analysis_coverage=COMPLETE"
+    ],
+    "usefulness": 4,
+    "notes": "The verdicts and measurements are correct and the actions are useful, but it omits the required analysis coverage status."
+  }
+]

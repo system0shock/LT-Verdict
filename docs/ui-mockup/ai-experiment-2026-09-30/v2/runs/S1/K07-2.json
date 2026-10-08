@@ -1,0 +1,177 @@
+{
+ "stage": "S1",
+ "mode": "live",
+ "model": "deepseek-v4-flash-0731",
+ "tag": {
+  "phase": "v2-pilot",
+  "stage": "S1",
+  "case": "K07",
+  "rep": 2,
+  "attempt": 1
+ },
+ "qwen_exit": 0,
+ "wall_ms": 126144,
+ "relay": {
+  "schema_version": "advisory-ai-runtime-relay.v1",
+  "status": "FORWARDED_STRUCTURED_OUTPUT",
+  "request_count": 1,
+  "usage": {
+   "prompt_tokens": 9344,
+   "total_tokens": 22359,
+   "completion_tokens": 13015,
+   "prompt_tokens_details": {
+    "cached_tokens": 1024
+   },
+   "completion_tokens_details": {
+    "reasoning_tokens": 10201
+   }
+  },
+  "latency_ms": 124633,
+  "model_returned": "deepseek-v4-flash-0731"
+ },
+ "relay_status": "FORWARDED_STRUCTURED_OUTPUT",
+ "usage": {
+  "prompt_tokens": 9344,
+  "total_tokens": 22359,
+  "completion_tokens": 13015,
+  "prompt_tokens_details": {
+   "cached_tokens": 1024
+  },
+  "completion_tokens_details": {
+   "reasoning_tokens": 10201
+  }
+ },
+ "latency_ms": 124633,
+ "status": "OK",
+ "note": null,
+ "output": {
+  "schema_version": "ai-advice-output.v1",
+  "summary": "Deterministic verdict: FAIL (analysis-result.json#/policy_verdict; window-policy-summary evidence/17: verdict FAIL, business_verdict FAIL, resource_verdict FAIL). The overall error-rate policy (rule overall-errors, operator lte, threshold 0.01) failed in the run-intersection window with 2471/38628 observed (evidence/16), and the paymentservice cpu_throttle_ratio policy (operator gt, threshold 0.2, effect sla) failed (evidence/15); findings/0 records 7 cells from 1790630565000 to 1790630670000 with observed_min 0.522390289979 and observed_max 1. The OpenSearch error timeline shows 2471 frontend.request_error events, first at 1790630540673 and last at 1790630663409, peaking at 318 per 15s around 1790630625000-1790630640000, with zero counts before and after the burst (evidence/19). Among transaction summaries, only checkout reports any errors (2471); add product to cart, cart, home, product, and reset cart each report 0 (evidence/1, evidence/2, evidence/3, evidence/4, evidence/5, evidence/6). Resource summaries show low paymentservice CPU (mean 0.0108 cores, max 0.016313) with an intermittently high throttle ratio (mean 0.286, q75 0.735, max 1) (evidence/12, evidence/13), frontend CPU mean 0.188 cores (evidence/10), checkoutservice CPU mean 0.0436 cores (evidence/8). Overall latency p50 39ms, p95 98ms, p99 134ms, max 989ms (evidence/0). Clock alignment is not_verified_by_core (evidence/7), so the numeric overlap between the error burst and the throttle violation must be corroborated with verified clocks before any causal reading.",
+  "hypotheses": [
+   {
+    "rank": 1,
+    "observation": "The resource policy check on paymentservice cpu_throttle_ratio (operator gt, threshold 0.2, effect sla) has status FAIL, and the resource-threshold finding spans 7 cells from 1790630565000 to 1790630670000 with observed_max 1 (evidence/15, findings/0). The OpenSearch error timeline shows 2471 frontend.request_error events with first_epoch_ms 1790630540673 and last_epoch_ms 1790630663409 (evidence/19), and the checkout transaction summary is the only transaction summary with errors (2471) (evidence/3).",
+    "possible_explanation": "Paymentservice is part of the checkout path, so intermittent CPU throttling of paymentservice during an overlapping window could have caused checkout requests to fail as frontend.request_error events. This is a hypothesis only, not a proven cause; the clocks are not verified.",
+    "recommended_check": "Verify clock alignment first (resource-binding reports clock_alignment not_verified_by_core). Then compare the 15-second paymentservice cpu_throttle_ratio timeline cell-by-cell with the checkout error timeline across 1790630535000-1790630670000, and inspect paymentservice CPU quota/limit configuration.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/15",
+     "analysis-result.json#/evidence/13",
+     "analysis-result.json#/evidence/19",
+     "analysis-result.json#/evidence/3",
+     "analysis-result.json#/evidence/7",
+     "analysis-result.json#/findings/0"
+    ]
+   },
+   {
+    "rank": 2,
+    "observation": "paymentservice CPU usage is low (mean 0.0108 cores, max 0.016313) while the cpu_throttle_ratio series shows high intermittent values (mean 0.286, median 0.0037, q75 0.735, max 1) (evidence/12, evidence/13), and the policy on that ratio failed (evidence/15).",
+    "possible_explanation": "Throttling may be caused by a low CPU quota or cgroup limit that throttles even at low measured utilization, rather than by high CPU demand. This is a configuration-level hypothesis, not established by the metrics alone.",
+    "recommended_check": "Inspect the paymentservice deployment CPU requests/limits and cgroup throttling counters; confirm whether a non-throttled rerun changes the throttle ratio before attributing the failures to paymentservice.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/12",
+     "analysis-result.json#/evidence/13",
+     "analysis-result.json#/evidence/15"
+    ]
+   },
+   {
+    "rank": 3,
+    "observation": "The error timeline counts are zero before the cell starting 1790630535000 and zero after the cell ending 1790630670000, with within-burst counts up to 318 per 15s (1790630625000-1790630640000), total_errors 2471, and error_rate_per_minute 299.5 (evidence/19).",
+    "possible_explanation": "A transient condition confined to roughly first error 1790630540673 to last error 1790630663409, such as a throttling episode or dependency degradation, is more consistent with the data than steady-state overload, but the cause is not established.",
+    "recommended_check": "Inspect deployment, scaling, and dependency events plus metric snapshots inside the burst window approximately 1790630535000-1790630670000, and rerun to see whether the burst reproduces and whether it aligns with paymentservice throttling once clocks are verified.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/19",
+     "analysis-result.json#/evidence/7",
+     "analysis-result.json#/evidence/15"
+    ]
+   },
+   {
+    "rank": 4,
+    "observation": "Among the six transaction summaries, only checkout reports any errors (error_count 2471); add product to cart, cart, home, product, and reset cart each report 0 errors (evidence/1, evidence/2, evidence/3, evidence/4, evidence/5, evidence/6). The overall summary reports the same total error_count 2471 (evidence/0).",
+    "possible_explanation": "The failing requests may be confined to the checkout flow, but count equality across scopes is not per-sample attribution and does not by itself prove all 2471 overall errors belong to checkout.",
+    "recommended_check": "Inspect the indexed error documents and checkout sampler response codes to attribute errors per scope, and confirm whether any errors occurred outside the checkout transaction.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/3",
+     "analysis-result.json#/evidence/0",
+     "analysis-result.json#/evidence/19"
+    ]
+   },
+   {
+    "rank": 5,
+    "observation": "Overall latency is p50 39ms, p95 98ms, p99 134ms, max 989ms; per-transaction maxima range up to 989ms (product) and checkout max is 869ms; the transaction and overall summaries aggregate over the whole run (evidence/0, evidence/3, evidence/5).",
+    "possible_explanation": "The error burst window may contain slower or erroring requests that lift the latency maxima, but the summarized totals do not isolate that window, so this remains untested.",
+    "recommended_check": "Break the raw jmeter_jtl_csv samples by the burst window approximately 1790630535000-1790630670000 and compare latency and error counts inside vs outside that window.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0",
+     "analysis-result.json#/evidence/3",
+     "analysis-result.json#/evidence/19"
+    ]
+   }
+  ],
+  "recommendations": [
+   {
+    "rank": 1,
+    "action": "Verify clock alignment/synchronization between the JMeter run timestamps, Prometheus metrics snapshots, and OpenSearch error timestamps before treating the error-burst/throttle overlap as meaningful.",
+    "rationale": "resource-binding reports clock_alignment not_verified_by_core; the error burst (first 1790630540673 to last 1790630663409) and the throttle finding (1790630565000-1790630670000) overlap numerically, but lead/lag or causality cannot be supported until clocks are verified.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/7",
+     "analysis-result.json#/evidence/19",
+     "analysis-result.json#/evidence/15"
+    ]
+   },
+   {
+    "rank": 2,
+    "action": "Inspect paymentservice CPU requests/limits and cgroup throttling counters, and review the cpu_throttle_ratio series across the 7-cell violation window at 15s resolution.",
+    "rationale": "The resource policy failed with observed_max 1 while measured mean CPU was 0.0108 cores, consistent with a quota/limit configuration issue rather than high utilization; this is a check, not a conclusion.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/15",
+     "analysis-result.json#/evidence/13",
+     "analysis-result.json#/evidence/12"
+    ]
+   },
+   {
+    "rank": 3,
+    "action": "Inspect the OpenSearch error documents (service frontend, message 'request error') and checkout sampler response details, expanding beyond the 2 sample documents per group, to attribute errors and identify the failure cause.",
+    "rationale": "Only checkout reports errors among the transaction summaries, but per-sample status/reason data is not present in the evidence, so attribution and root cause are unconfirmed.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/19",
+     "analysis-result.json#/evidence/3",
+     "analysis-result.json#/evidence/0"
+    ]
+   },
+   {
+    "rank": 4,
+    "action": "After any paymentservice configuration change is confirmed, rerun the test with verified clocks as a control to see whether the error burst reproduces; keep the error-rate and throttle-ratio policies unchanged while investigating.",
+    "rationale": "A rerun distinguishes a reproducible throttle-induced failure from a one-off transient; the FAIL verdict comes from the overall-errors and paymentservice throttle-ratio policies, and this advice does not alter that deterministic verdict.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/16",
+     "analysis-result.json#/evidence/15",
+     "analysis-result.json#/evidence/17"
+    ]
+   },
+   {
+    "rank": 5,
+    "action": "If the intent is to evaluate the full run rather than the run-intersection window, review the auto-derived window settings (window_origin auto, applied_margin_ms 61528, dropped leading/trailing cells reported in resource-binding) and reconfigure the policy window accordingly.",
+    "rationale": "The policy-window denominator (38628) differs from the overall sample_count (40306) because the evaluation window covers only part of the run; counts are comparable only within the same scope and window.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/18",
+     "analysis-result.json#/evidence/16",
+     "analysis-result.json#/evidence/7"
+    ]
+   }
+  ],
+  "caveats": [
+   "Clock alignment is not_verified_by_core (evidence/7); the temporal overlap between the error burst (evidence/19) and the paymentservice throttle finding (findings/0 from evidence/15) cannot support lead/lag or causal claims until clocks are verified.",
+   "The overall sample_count (40306) and the policy-window denominator (38628) measure different scopes/windows (whole run vs run-intersection 1790630475000-1790630820000, excluding dropped leading/trailing segments); the difference is expected, not an inconsistency.",
+   "Error evidence includes only per-15s aggregate counts and 2 sample documents per group (message 'request error'); response codes and the remaining 2469 error documents were not individually inspected.",
+   "Resource summaries are interval means over 23 cells of 15s within the run-intersection window; they do not show sub-minute behavior, and zero missing/gap counts describe only the sampled grid.",
+   "Error count equality between overall and checkout (2471) is an observation, not proof that all errors originate in checkout; per-sample attribution is required.",
+   "Zero error counts after 1790630670000 and CPU means below 1 core for all measured services do not prove spare capacity or stability; they describe only the measured window.",
+   "This analysis contains no capacity bound or knee results; verdict FAIL is driven only by the error-rate policy (overall-errors) and the paymentservice cpu_throttle_ratio resource policy.",
+   "run_validity VALID and analysis_coverage COMPLETE confirm the data was accepted and retrieved; they do not cover all error causes or guarantee that the 2 sampled documents are representative (samples_per_group_limit 2)."
+  ]
+ },
+ "schema": "ai-experiment-run.v2",
+ "phase": "pilot",
+ "case": "K07",
+ "rep": 2
+}

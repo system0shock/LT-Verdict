@@ -1,0 +1,107 @@
+[
+  {
+    "id": "R073",
+    "hard_defect": false,
+    "defects": [],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 4,
+    "notes": "The verdict and key measurements are preserved, with useful checks for clock alignment, policy applicability, and the selected correlation."
+  },
+  {
+    "id": "R108",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T7",
+        "field": "#/summary",
+        "quote": "no SLO was configured",
+        "why": "NO_POLICY establishes that no rule applied to the windows, not that no SLO was configured."
+      },
+      {
+        "type": "T8",
+        "field": "#/summary",
+        "quote": "15 were BELOW_EFFECT and 4 were CANDIDATE",
+        "why": "The 16 pair records contain 12 BELOW_EFFECT and 4 CANDIDATE statuses."
+      },
+      {
+        "type": "T2",
+        "field": "#/hypotheses/0/possible_explanation",
+        "quote": "the small difference between window latency aggregates (reference p50 201 ms vs evaluation p50 204 ms) make it plausible this is a truncated or aliased correlation",
+        "why": "The difference between window p50 aggregates does not establish anything about the evaluation-window lagged p95 correlation."
+      },
+      {
+        "type": "T7",
+        "field": "#/hypotheses/3/possible_explanation",
+        "quote": "No SLO/policy was configured",
+        "why": "The evidence does not establish whether policies were configured but inapplicable."
+      }
+    ],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 2,
+    "notes": "Several operator checks are useful, but the policy cause, pair count, and cross-window inference could mislead."
+  },
+  {
+    "id": "R115",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T2",
+        "field": "#/summary",
+        "quote": "Transaction metrics show error_count 0, p50 latency 201-204 ms, p95 235-239 ms",
+        "why": "Those latency ranges combine window aggregates with the separate transaction-scope metric."
+      },
+      {
+        "type": "T8",
+        "field": "#/summary",
+        "quote": "15 are BELOW_EFFECT / NOT_SELECTED",
+        "why": "Fifteen headlines were NOT_SELECTED, but only 12 pair records are BELOW_EFFECT."
+      },
+      {
+        "type": "T8",
+        "field": "#/hypotheses/0/observation",
+        "quote": "the other 15 pairs are BELOW_EFFECT / NOT_SELECTED",
+        "why": "Three of the non-selected pairs are CANDIDATE, not BELOW_EFFECT."
+      }
+    ],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 2,
+    "notes": "The main verdict and selected candidate are correct, but the response misstates pair statuses and mixes metric scopes."
+  },
+  {
+    "id": "R121",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T7",
+        "field": "#/summary",
+        "quote": "no business or resource policy was configured for either window",
+        "why": "NO_POLICY does not prove that no policy was configured."
+      },
+      {
+        "type": "T8",
+        "field": "#/hypotheses/2/possible_explanation",
+        "quote": "Because achieved load never varied",
+        "why": "The evidence shows a constant target, but does not show that achieved load never varied."
+      },
+      {
+        "type": "T7",
+        "field": "#/hypotheses/3/possible_explanation",
+        "quote": "No policy was configured",
+        "why": "The evidence establishes no applicable rule for the windows, not the absence of configured policies."
+      },
+      {
+        "type": "T7",
+        "field": "#/caveats/4",
+        "quote": "because no business or resource policy was configured",
+        "why": "That specific cause of NO_POLICY is not established by the evidence."
+      }
+    ],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 2,
+    "notes": "The correlation checks are specific and useful, but the response repeatedly overstates what NO_POLICY and the constant target establish."
+  }
+]

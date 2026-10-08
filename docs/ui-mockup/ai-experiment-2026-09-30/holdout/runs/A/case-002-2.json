@@ -1,0 +1,212 @@
+{
+ "stage": "A",
+ "mode": "live",
+ "model": "deepseek-v4-flash-0731",
+ "tag": {
+  "phase": "holdout",
+  "attempt_id": "case-002-2-A-t1",
+  "arm": "A",
+  "stage": null,
+  "case": "case-002",
+  "rep": 2,
+  "try": 1
+ },
+ "retry_policy": "d2",
+ "qwen_exit": 0,
+ "wall_ms": 95304,
+ "relay": {
+  "schema_version": "advisory-ai-runtime-relay.v1",
+  "status": "FORWARDED_STRUCTURED_OUTPUT",
+  "received_request_count": 1,
+  "forwarded_request_count": 1,
+  "outcomes": [
+   "FORWARDED_STRUCTURED_OUTPUT"
+  ],
+  "retry_refused_reason": null,
+  "first_refused_reason": null,
+  "model_id": "deepseek-v4-flash-0731",
+  "retry_policy": "d2",
+  "requests": [
+   {
+    "ordinal": 1,
+    "forwarded": true,
+    "outcome": "FORWARDED_STRUCTURED_OUTPUT",
+    "provider_status": 200,
+    "latency_ms": 93965,
+    "usage": {
+     "prompt_tokens": 6224,
+     "total_tokens": 15292,
+     "completion_tokens": 9068,
+     "prompt_tokens_details": {
+      "cached_tokens": 1024
+     },
+     "completion_tokens_details": {
+      "reasoning_tokens": 6247
+     }
+    },
+    "model_returned": "deepseek-v4-flash-0731"
+   }
+  ],
+  "usage": {
+   "prompt_tokens": 6224,
+   "completion_tokens": 9068,
+   "total_tokens": 15292
+  },
+  "latency_ms": 93965
+ },
+ "relay_status": "FORWARDED_STRUCTURED_OUTPUT",
+ "usage": {
+  "prompt_tokens": 6224,
+  "completion_tokens": 9068,
+  "total_tokens": 15292
+ },
+ "latency_ms": 93965,
+ "retried": false,
+ "retry_refused_reason": null,
+ "status": "OK",
+ "note": null,
+ "output": {
+  "schema_version": "ai-advice-output.v1",
+  "summary": "Deterministic verdict: run_validity VALID, policy_verdict PASS, analysis_coverage COMPLETE, capacity bound_type BOUNDED with lower_inclusive 197, upper_exclusive 297, verified_bound_load 197, and capacity_knee null (KNEE_DETECTOR_NOT_IMPLEMENTED). Stages 1 (target 100, achieved 97) and 2 (target 200, achieved 197) PASS with window-level p95 latency 140 ms (threshold 250); stage 3 (target 300, achieved 297) FAILS latency policy with p95 420 ms (observed 420 > 250). Overall summary shows 0 errors (0/3601), p50 136 ms, p95 417 ms, p99 420 ms, max 1500 ms, sample_count 3601, throughput ratio 3601000/900500. generator-cpu guard PASSes all stages (0.41-0.45 ratio vs 0.85 threshold), but the per-window CPU statistics are identical across all three stages while active users rose 97->197->297. clock_alignment is \"not_verified_by_core\" for the explicit window binding. The run-level PASS reflects the existence of a verified bounded load (197 users) and does not certify the 300-user step, which is the only failing data point (single finding: latency policy failure in stage-3). Advice: treat stage-3 at ~300 users as a genuine latency degradation (p95 about tripled, 140->420 ms, with no errors) but confirm it with target-side metrics and clock verification before causal claims; the exact knee position inside [197, 297) is unknown because intermediate loads were not tested and no knee detector ran.",
+  "hypotheses": [
+   {
+    "rank": 1,
+    "observation": "Latency policy passes at 140 ms p95 in stage-1 and stage-2 (threshold 250), then fails in stage-3 at 420 ms p95; overall error_count is 0 (error_rate_ratio 0/3601).",
+    "possible_explanation": "At ~300 active users (stage-3 mean 298.43, min 297) the system-under-test may have crossed a queueing/contention knee that is not visible in the provided evidence, because only generator-side CPU is captured. The exact cause is a hypothesis: no server-side resource series exists in this run.",
+    "recommended_check": "Repeat the 300-user step while capturing target-side metrics (server CPU, JVM GC/heap, thread-pool depth, DB connection pool, middleware queues) and per-window latency percentiles to corroborate a resource or contention knee.",
+    "evidence_refs": [
+     "policy-check-window-63bb93571531d7f7d566147f01553f9024c9fe7c0000555aacffdf52053d5072",
+     "analysis-result.json#/evidence/0",
+     "analysis-result.json#/evidence/7",
+     "analysis-result.json#/evidence/17"
+    ]
+   },
+   {
+    "rank": 2,
+    "observation": "capacity_summary reports bound_type BOUNDED, lower_inclusive 197, upper_exclusive 297, capacity_knee null, and knee_reason KNEE_DETECTOR_NOT_IMPLEMENTED; only the 300-user step (achieved 297) failed.",
+    "possible_explanation": "Verified capacity lies somewhere in the interval [197, 297), but the exact transition point is unknown because no knee detector ran and no load steps between 200 and 300 users were tested.",
+    "recommended_check": "Add intermediate load steps inside the bounded interval (e.g., 220, 250, 280 users) with the same latency policy and complete window counts to localize the actual knee.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/18"
+    ]
+   },
+   {
+    "rank": 3,
+    "observation": "resource-binding reports clock_alignment 'not_verified_by_core' for the explicit windows covering epoch 1767225600000 to 1767226500000.",
+    "possible_explanation": "If the load generator clock and the analysis window clock are not truly aligned, samples near stage boundaries could be attributed to the wrong window, affecting which step is blamed for the 420 ms p95. This is untested by the evidence.",
+    "recommended_check": "Verify time synchronization (e.g., NTP offset) between the load generator and the analysis host, and confirm window boundary timestamps, before treating stage-3 as the sole locus of the latency failure.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/2"
+    ]
+   },
+   {
+    "rank": 4,
+    "observation": "Generator CPU statistics are identical across stage-1, stage-2, and stage-3 (min 0.41, max 0.45, mean 0.43, sample_standard_deviation 0.01438...) while active_users rose from 97 to 197 to 297.",
+    "possible_explanation": "Bit-identical per-window generator CPU statistics across different load levels more likely reflect a duplicated, cached, or mis-windowed metric series than genuinely constant CPU; generator CPU conclusions should not be drawn until this is verified.",
+    "recommended_check": "Re-export the raw per-window generator CPU time series, confirm each series' timestamps match its stage boundaries, and confirm the metric source updates between stages.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/4",
+     "analysis-result.json#/evidence/6",
+     "analysis-result.json#/evidence/8"
+    ]
+   },
+   {
+    "rank": 5,
+    "observation": "Overall error_count is 0 (error_rate_ratio 0/3601) while p95 latency rises from 140 ms (stages 1-2) to 420 ms (stage-3).",
+    "possible_explanation": "The failure is latency-only with no failed requests, consistent with added queueing or waiting time at ~300 users rather than request-level failures or dropped traffic.",
+    "recommended_check": "Break down stage-3 latencies by timing components and endpoints and correlate with server-side queue depth to confirm the waiting component underlying the p95 increase.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0",
+     "policy-check-window-63bb93571531d7f7d566147f01553f9024c9fe7c0000555aacffdf52053d5072",
+     "analysis-result.json#/evidence/17"
+    ]
+   },
+   {
+    "rank": 6,
+    "observation": "Overall latency summary shows p95 417 ms, p99 420 ms, and max 1500 ms across sample_count 3601; the run-wide p95 (417) is close to the stage-3 window p95 (420).",
+    "possible_explanation": "A small number of very slow responses (up to 1500 ms) sit beyond a compressed p95-p99 tail (417-420 ms); these could be sparse stall events rather than uniform slowdown, but the evidence does not attribute the 1500 ms max to any specific window.",
+    "recommended_check": "Inspect stage-3 sample-level latencies above 250 ms, including timestamps and endpoints of the slowest requests, to distinguish uniform degradation from sparse stalls.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0",
+     "policy-check-window-63bb93571531d7f7d566147f01553f9024c9fe7c0000555aacffdf52053d5072"
+    ]
+   }
+  ],
+  "recommendations": [
+   {
+    "rank": 1,
+    "action": "Verify clock alignment between the load generator and the analysis window clock before further temporal or causal interpretation.",
+    "rationale": "resource-binding states clock_alignment 'not_verified_by_core'; an unverified clock relationship cannot support window attribution or lead/lag conclusions.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/2"
+    ]
+   },
+   {
+    "rank": 2,
+    "action": "Re-run the 300-user step while collecting target-side resource and queue metrics (server CPU, JVM GC/heap, thread pools, DB connection pool, middleware queues) alongside per-window latency percentiles.",
+    "rationale": "The provided evidence only contains generator CPU (0.41-0.45 ratio, PASS at 0.85); the stage-3 p95 degradation from 140 to 420 ms has no server-side series to corroborate the cause.",
+    "evidence_refs": [
+     "policy-check-window-63bb93571531d7f7d566147f01553f9024c9fe7c0000555aacffdf52053d5072",
+     "analysis-result.json#/evidence/4",
+     "analysis-result.json#/evidence/18"
+    ]
+   },
+   {
+    "rank": 3,
+    "action": "Add intermediate load steps inside (197, 297) users, e.g., 220, 250, 280, with the same latency policy and 30 complete bins per window.",
+    "rationale": "capacity_knee is null with knee_reason KNEE_DETECTOR_NOT_IMPLEMENTED, and only 100, 200, and 300-user steps were tested; the current bound [197, 297) coarsely brackets the transition point.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/18"
+    ]
+   },
+   {
+    "rank": 4,
+    "action": "Audit the generator CPU per-window series to rule out a data artifact before using it as evidence of generator load.",
+    "rationale": "The stage-1/2/3 generator CPU statistics are identical (min 0.41, max 0.45, mean 0.43, std 0.01438...) despite active users rising 97->197->297, suggesting possible duplication or mis-windowing.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/4",
+     "analysis-result.json#/evidence/6",
+     "analysis-result.json#/evidence/8"
+    ]
+   },
+   {
+    "rank": 5,
+    "action": "Perform sample-level latency analysis of the stage-3 window: count and distribution of samples above 250 ms, timestamps, endpoints, and the slowest requests.",
+    "rationale": "Overall p95/p99 are 417/420 ms with max 1500 ms and 0 errors; characterizing the tail distinguishes uniform degradation from sparse stalls and supports the stage-3 finding.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0",
+     "policy-check-window-63bb93571531d7f7d566147f01553f9024c9fe7c0000555aacffdf52053d5072",
+     "analysis-result.json#/findings/0"
+    ]
+   },
+   {
+    "rank": 6,
+    "action": "For future capacity runs, either implement knee detection or explicitly document that the bound is step-based only.",
+    "rationale": "knee_reason KNEE_DETECTOR_NOT_IMPLEMENTED means the upper_exclusive 297 is derived from policy pass/fail of the tested steps, not from an estimated saturation knee.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/18"
+    ]
+   }
+  ],
+  "caveats": [
+   "The run-level policy_verdict is PASS while the stage-3 window verdict is FAIL; PASS reflects the bounded-capacity result with verified bound 197 (upper_exclusive 297), and it does not certify 300-user performance.",
+   "Only generator-side CPU is present as a resource series; there are no server-side, JVM, database, or network metrics, so saturation causes are hypotheses only.",
+   "capacity knee is not estimated (KNEE_DETECTOR_NOT_IMPLEMENTED); the [197, 297) interval is bounded only by the tested 100/200/300-user steps.",
+   "clock_alignment is 'not_verified_by_core', so sample-to-window attribution assumes synchronized clocks.",
+   "The generator CPU statistics are identical across all three stages, which may be a data artifact; do not infer generator stability or overhead from them until verified.",
+   "error_count is 0 throughout (0/3601); no error-rate evidence supports failure attribution at any stage.",
+   "The overall metric summary aggregates the whole run; per-window latency data beyond the p95 policy checks (e.g., per-window p99, max, p50) is not in evidence.",
+   "The overall throughput ratio 3601000/900500 with sample_count 3601 reflects workload pacing/think time and is not by itself evidence of application capacity.",
+   "Only one transaction type (checkout sampler) is included; the evidence does not cover a mixed workload or other endpoints.",
+   "A raw epoch range (1767225600000-1767226500000, 900000 ms) is provided; the evidence does not separately report per-stage duration fields, so stage-length assertions beyond the 30-cell summaries are not verified here."
+  ]
+ },
+ "schema": "ai-experiment-run.holdout.v1",
+ "case": "case-002",
+ "rep": 2,
+ "arm": "A",
+ "try": 1,
+ "attempt_id": "case-002-2-A-t1",
+ "model_id": "deepseek-v4-flash-0731",
+ "prompt_sha256": "69f215a1ad4ae678c82410ba7cf7daf171cd9c7ca0ef4626bba6977db0af4ef7"
+}

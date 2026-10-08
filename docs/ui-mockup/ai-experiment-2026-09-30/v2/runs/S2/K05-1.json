@@ -1,0 +1,125 @@
+{
+ "stage": "S2",
+ "mode": "live",
+ "model": "deepseek-v4-flash-0731",
+ "tag": {
+  "phase": "v2-pilot",
+  "stage": "S2",
+  "case": "K05",
+  "rep": 1,
+  "attempt": 1
+ },
+ "qwen_exit": 0,
+ "wall_ms": 63467,
+ "relay": {
+  "schema_version": "advisory-ai-runtime-relay.v1",
+  "status": "FORWARDED_STRUCTURED_OUTPUT",
+  "request_count": 1,
+  "usage": {
+   "prompt_tokens": 3127,
+   "total_tokens": 9218,
+   "completion_tokens": 6091,
+   "prompt_tokens_details": {
+    "cached_tokens": 1024
+   },
+   "completion_tokens_details": {
+    "reasoning_tokens": 4548
+   }
+  },
+  "latency_ms": 62203,
+  "model_returned": "deepseek-v4-flash-0731"
+ },
+ "relay_status": "FORWARDED_STRUCTURED_OUTPUT",
+ "usage": {
+  "prompt_tokens": 3127,
+  "total_tokens": 9218,
+  "completion_tokens": 6091,
+  "prompt_tokens_details": {
+   "cached_tokens": 1024
+  },
+  "completion_tokens_details": {
+   "reasoning_tokens": 4548
+  }
+ },
+ "latency_ms": 62203,
+ "status": "OK",
+ "note": null,
+ "output": {
+  "schema_version": "ai-advice-output.v1",
+  "summary": "The analysis is VALID with COMPLETE coverage, and the deterministic policy verdict is FAIL. Rule error-limit evaluated the whole-run error_rate_ratio as observed 2/100 (2%) against threshold 0.01 with operator lte, so 2% exceeded the 1% limit. Both the overall scope and the checkout transaction scope report identical aggregates (sample_count=100, error_count=2, same latency percentiles), and the input contains no per-sample records, log bodies, traces, error profile, or capacity data. The two errors therefore cannot be attributed to specific requests or causes from this evidence. Recommended operator actions: inspect the raw JTL/CSV artifacts to identify the two failing samples (and whether they are in the checkout label), then fix and rerun under the same policy, or explicitly update the policy if its intent differs; verify clocks before any timing-based attribution. No capacity or resource claim can be made because no capacity_summary or resource series is present.",
+  "hypotheses": [
+   {
+    "rank": 1,
+    "observation": "The policy rule error-limit evaluated the whole-run error_rate_ratio as 2/100 (numerator=2, denominator=100) against threshold 0.01 with operator lte and returned status FAIL (analysis-result.json#/evidence/2).",
+    "possible_explanation": "The configured error-rate limit was exceeded; whether the two counted errors represent genuine application failures or sampling/measurement artifacts cannot be established from the aggregate summary alone.",
+    "recommended_check": "Inspect the run's raw JTL/CSV records in the overall scope for the two error entries and read their status codes and any assertions to confirm they are real failures.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/2",
+     "analysis-result.json#/evidence/0"
+    ]
+   },
+   {
+    "rank": 2,
+    "observation": "The checkout transaction scope reports error_count=2 with sample_count=100, identical to the overall scope (analysis-result.json#/evidence/1, analysis-result.json#/evidence/0); derived facts list no other transaction scopes and no window ids.",
+    "possible_explanation": "Both failing samples might belong to the checkout label, but overall and per-transaction counts are separate quantities, so the same two failures are not proven to be the checkout errors without per-sample data.",
+    "recommended_check": "Compare the per-sample records under the checkout label with the overall set in the run artifacts to confirm which labels generated the errors.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/1",
+     "analysis-result.json#/evidence/0"
+    ]
+   },
+   {
+    "rank": 3,
+    "observation": "The evidence contains only aggregate metric summaries and one policy check; no per-sample records, log bodies, traces, or error profile are present (analysis-result.json#/evidence/0, analysis-result.json#/evidence/1, analysis-result.json#/evidence/2).",
+    "possible_explanation": "Because finer-grained artifacts are absent, the cause of the two errors (for example timeout, assertion failure, or server response) cannot be inferred from this evidence.",
+    "recommended_check": "Pull the original run artifacts (JTL/CSV samples and any validator logs) and search for the two failed records that the summaries counted.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0",
+     "analysis-result.json#/evidence/2"
+    ]
+   }
+  ],
+  "recommendations": [
+   {
+    "rank": 1,
+    "action": "Inspect the raw JTL/CSV samples for run jmeter_jtl_csv-eedea044d69544ae672ae0c6c571167c3f4aed00edbba2b49611acb0a880c076 and identify the two samples counted as errors in the overall scope; confirm whether they fall in the checkout label and record their status codes and assertions.",
+    "rationale": "The deterministic FAIL is grounded in observed 2/100 vs threshold 0.01 (analysis-result.json#/evidence/2); only per-sample inspection can distinguish real failures from artifacts, since only aggregates are in the input.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/2",
+     "analysis-result.json#/evidence/0",
+     "analysis-result.json#/evidence/1"
+    ]
+   },
+   {
+    "rank": 2,
+    "action": "If the two errors are genuine, fix the underlying cause and rerun the load test under the same error-limit policy to confirm the observed error rate drops to <= 0.01; if the configured policy intent differs from the intended SLO, update the policy explicitly and re-analyze.",
+    "rationale": "The policy verdict for this analysis remains FAIL regardless of advice (analysis-result.json#/evidence/2); progress comes only from an operator action such as a corrected application/load environment or an explicitly configured policy with the intended limit.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/2",
+     "analysis-result.json#/evidence/0"
+    ]
+   },
+   {
+    "rank": 3,
+    "action": "If a timing-based explanation is suspected for the two errors, first verify the clocks and timestamps of the load generator and the system under test before attempting any lead/lag or temporal attribution.",
+    "rationale": "No window ids or clock relationship evidence are present in the input, so timing-based ordering or temporal causation cannot be supported yet.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0",
+     "analysis-result.json#/evidence/1"
+    ]
+   }
+  ],
+  "caveats": [
+   "The input is aggregate-only: no individual samples, log bodies, traces, or error profile are present, so the two errors cannot be attributed to specific requests, status codes, or causes; the error count itself does not prove an application defect or which transaction is responsible.",
+   "Overall (2/100) and checkout (2/100) counts are separate scope quantities; equality in the summaries does not prove these are the same two failures, and no window ids were referenced, so the policy check is whole-run only.",
+   "No capacity_summary and no resource series are present; no statement about spare capacity, resource saturation, or the number of samples reaching the reported max latency (100 ms) can be made from this evidence.",
+   "run_validity=VALID and analysis_coverage=COMPLETE mean the missing detail is an input limitation rather than a coverage or validity defect; however, an absence of further findings would not by itself prove stability or absence of a problem.",
+   "The verdict FAIL is deterministic for this analysis (observed 2/100 exceeds the configured rule error-limit threshold 0.01); this advice does not and cannot change that verdict, and NO_POLICY or PASS distinctions do not apply to this run.",
+   "Latency p50/p95/p99/max and throughput are aggregate values in the input; they were not checked by the policy in this analysis and should not be read as SLO results."
+  ]
+ },
+ "schema": "ai-experiment-run.v2",
+ "phase": "pilot",
+ "case": "K05",
+ "rep": 1
+}

@@ -1,0 +1,204 @@
+{
+ "stage": "B",
+ "mode": "live",
+ "model": "deepseek-v4-flash-0731",
+ "tag": {
+  "phase": "holdout",
+  "attempt_id": "case-016-1-B-t1",
+  "arm": "B",
+  "stage": null,
+  "case": "case-016",
+  "rep": 1,
+  "try": 1
+ },
+ "retry_policy": "d2",
+ "qwen_exit": 0,
+ "wall_ms": 91526,
+ "relay": {
+  "schema_version": "advisory-ai-runtime-relay.v1",
+  "status": "FORWARDED_STRUCTURED_OUTPUT",
+  "received_request_count": 1,
+  "forwarded_request_count": 1,
+  "outcomes": [
+   "FORWARDED_STRUCTURED_OUTPUT"
+  ],
+  "retry_refused_reason": null,
+  "first_refused_reason": null,
+  "model_id": "deepseek-v4-flash-0731",
+  "retry_policy": "d2",
+  "requests": [
+   {
+    "ordinal": 1,
+    "forwarded": true,
+    "outcome": "FORWARDED_STRUCTURED_OUTPUT",
+    "provider_status": 200,
+    "latency_ms": 90237,
+    "usage": {
+     "prompt_tokens": 15700,
+     "total_tokens": 24849,
+     "completion_tokens": 9149,
+     "prompt_tokens_details": {
+      "cached_tokens": 1024
+     },
+     "completion_tokens_details": {
+      "reasoning_tokens": 6872
+     }
+    },
+    "model_returned": "deepseek-v4-flash-0731"
+   }
+  ],
+  "usage": {
+   "prompt_tokens": 15700,
+   "completion_tokens": 9149,
+   "total_tokens": 24849
+  },
+  "latency_ms": 90237
+ },
+ "relay_status": "FORWARDED_STRUCTURED_OUTPUT",
+ "usage": {
+  "prompt_tokens": 15700,
+  "completion_tokens": 9149,
+  "total_tokens": 24849
+ },
+ "latency_ms": 90237,
+ "retried": false,
+ "retry_refused_reason": null,
+ "status": "OK",
+ "note": null,
+ "output": {
+  "schema_version": "ai-advice-output.v1",
+  "summary": "The run is VALID with COMPLETE analysis coverage, and the deterministic verdict is NO_POLICY for both the reference and evaluation windows: no business policy rule and no resource rule with effect 'sla' was applicable, so the product evaluated no compliance rule. The observed metrics show 0 errors, p95 latency 236–238 ms (max 239 ms) at a constant 20 requests/s load. Diagnostics identified one CANDIDATE correlation pair (resource-00 vs response_time_p95, best_lag_ms=-3000, best_lag_rho=-0.9622) but with uncertainty NOT_ESTIMATED, the intended 'target' control dropped as constant (CONSTANT_CONTROL), zero anomaly episodes tested, and clock alignment not verified by core. Advice: verify clocks before reading any lag; if a PASS/FAIL result is wanted, configure applicable policy/SLA rules and rerun; rerun with varying load to enable control-based correlation; and do not treat NO_POLICY or the healthy metrics as a pass.",
+  "hypotheses": [
+   {
+    "rank": 1,
+    "observation": "resource-binding reports clock_alignment='not_verified_by_core', while correlation pair-00 reports best_lag_ms=-3000 and best_lag_rho=-0.9622 for resource-00 vs response_time_p95_ms in the evaluation window.",
+    "possible_explanation": "The apparent 3000 ms lag between resource-00 and response-time p95 may be an artifact of unverified clock skew between the JMeter load-generator timestamps and the resource telemetry clock rather than a genuine lead/lag relationship.",
+    "recommended_check": "Verify and align the clocks of the load-generator timestamp source and the resource telemetry source, then re-compute the lag correlation on corrected timestamps.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/2",
+     "analysis-result.json#/evidence/41"
+    ]
+   },
+   {
+    "rank": 2,
+    "observation": "Correlation pair-00 has status 'CANDIDATE', uncertainty 'NOT_ESTIMATED', raw_rho/partial_rho of -0.228630594043, and a lag profile whose strongest value is best_lag_rho=-0.9622 at best_lag_ms=-3000; the headline selection reports holm_adjusted_p_value=0.001 with selected=true.",
+    "possible_explanation": "The strong correlation may be concentrated at one specific lag or reflect coincidental alignment of the two series; because uncertainty is NOT_ESTIMATED, the selection p-value does not quantify magnitude or confirm a consistent relationship.",
+    "recommended_check": "Inspect the paired raw resource-00 and response-time series around the -3000 ms lag and rerun the analysis to see whether the best-lag correlation reproduces at the same lag.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/41",
+     "analysis-result.json#/evidence/42",
+     "analysis-result.json#/findings/0"
+    ]
+   },
+   {
+    "rank": 3,
+    "observation": "The 'target' resource series is constant at 20 requests/s in both windows (min=max=mean=median=20, sample_standard_deviation=0), and correlation pair-00 reports controls_dropped=['target'] with reason 'CONSTANT_CONTROL' and controls_used=[].",
+    "possible_explanation": "Because the applied load did not vary, the target series could not serve as a control, so no load-to-response correlation could be measured and the diagnostic control path was disabled.",
+    "recommended_check": "Rerun with a deliberately varying load profile (e.g., ramp or step) so the target series is non-constant and can act as a control.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/19",
+     "analysis-result.json#/evidence/36",
+     "analysis-result.json#/evidence/41"
+    ]
+   },
+   {
+    "rank": 4,
+    "observation": "diagnostic-summary reports pairs_evaluable=1, pairs_tested=1, anomalies_tested=0, episodes_reported=0, status 'COMPLETE', and uncertainty 'NOT_ESTIMATED'.",
+    "possible_explanation": "The absence of reported anomaly episodes reflects that only one pair was evaluated and no anomaly episodes were tested; it does not establish that no problems exist.",
+    "recommended_check": "Review the raw sampler and resource series directly, and rerun with load variation so that more pairs and potential anomaly episodes can be evaluated.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/43",
+     "analysis-result.json#/evidence/41"
+    ]
+   },
+   {
+    "rank": 5,
+    "observation": "window-policy-summary for the reference and evaluation windows both report verdict 'NO_POLICY' (business_verdict 'NO_POLICY', resource_verdict 'NO_POLICY'), facts.policy_verdict is 'NO_POLICY', while the same windows show error_count=0 and stable p95 latency (236–238 ms).",
+    "possible_explanation": "No business policy rule and no resource rule with effect 'sla' were applicable to the windows, so the product evaluated no rule; zero errors and stable latency are metrics, not evidence of compliance.",
+    "recommended_check": "If a PASS/FAIL outcome is desired, configure applicable business policy rules (e.g., latency/error-rate SLO) and resource rules with effect 'sla' for the window, then rerun; otherwise keep the verdict as NO_POLICY.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/37",
+     "analysis-result.json#/evidence/38",
+     "analysis-result.json#/policy_verdict"
+    ]
+   }
+  ],
+  "recommendations": [
+   {
+    "rank": 1,
+    "action": "Verify and synchronize the clocks of the load-generator/JMeter timestamp source and the resource-telemetry source; correct any skew and re-run the correlation analysis.",
+    "rationale": "clock_alignment is 'not_verified_by_core' and the candidate -3000 ms lag depends on relative timing between the two clocks, so the lag cannot be interpreted as lead/lag without verified clocks.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/2",
+     "analysis-result.json#/evidence/41"
+    ]
+   },
+   {
+    "rank": 2,
+    "action": "Configure an applicable business policy rule (e.g., latency or error-rate SLO) and any desired resource rules with effect 'sla' covering the window, then rerun the evaluation.",
+    "rationale": "The deterministic verdict is NO_POLICY because no applicable rule was evaluated; only rules the product evaluates can yield PASS or FAIL.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/37",
+     "analysis-result.json#/evidence/38",
+     "analysis-result.json#/policy_verdict"
+    ]
+   },
+   {
+    "rank": 3,
+    "action": "Rerun the load test with a variable load profile so the 'target' series is not constant.",
+    "rationale": "The target control was constant at 20 requests/s and was dropped with reason CONSTANT_CONTROL, which prevents load-correlation and limits diagnostic testing.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/19",
+     "analysis-result.json#/evidence/36",
+     "analysis-result.json#/evidence/41"
+    ]
+   },
+   {
+    "rank": 4,
+    "action": "Inspect the raw resource-00 and response-time series around the -3000 ms lag and treat the pair strictly as a CANDIDATE, not a confirmed relationship.",
+    "rationale": "The pair status is CANDIDATE with uncertainty NOT_ESTIMATED and zero anomaly episodes tested, so it should not be reported as a verified relationship or driver of latency.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/41",
+     "analysis-result.json#/evidence/43",
+     "analysis-result.json#/findings/0"
+    ]
+   },
+   {
+    "rank": 5,
+    "action": "Report the outcome as NO_POLICY (not a pass) and do not infer compliance from zero errors or stable latency.",
+    "rationale": "A healthy window and rerunning do not turn NO_POLICY into PASS; only an applicable evaluated rule yields PASS or FAIL.",
+    "evidence_refs": [
+     "analysis-result.json#/policy_verdict",
+     "analysis-result.json#/evidence/40",
+     "analysis-result.json#/evidence/38"
+    ]
+   },
+   {
+    "rank": 6,
+    "action": "If a capacity verdict is required, provide the required capacity for the relevant stages and ensure each stage has an applicable SLA rule before rerunning.",
+    "rationale": "Both windows report resource_verdict NO_POLICY, which the product reports when no applicable resource SLA rule exists for the window; providing required capacity and applicable SLA rules is a prerequisite for a capacity verdict.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/37",
+     "analysis-result.json#/evidence/38"
+    ]
+   }
+  ],
+  "caveats": [
+   "Clock alignment is not verified by core (clock_alignment='not_verified_by_core'); the -3000 ms best lag of pair-00 must not be read as a lead/lag or causal ordering until clocks are verified.",
+   "The correlation pair is status CANDIDATE with uncertainty NOT_ESTIMATED; the selected-headline p-value of 0.001 is a selection statistic and does not quantify effect size or establish a causal relationship.",
+   "The 'target' control was constant at 20 requests/s and dropped (CONSTANT_CONTROL); no load-based control was available for correlation.",
+   "anomalies_tested=0 and episodes_reported=0 cannot prove stability, spare capacity, or the absence of a problem.",
+   "NO_POLICY means no applicable business rule and no resource rule with effect 'sla' was evaluated; zero errors and stable latency are metrics, not a compliance finding.",
+   "The windows (120 s reference + 240 s evaluation) cover 360 s of the reported 360.232 s run (run_to_epoch_ms 1767225960232 vs evaluation_to_epoch_ms 1767225960000); overall throughput denominators (360232) and window denominators (120000/240000) measure different scopes/windows and are not inconsistent.",
+   "Only one correlation pair was evaluated (pairs_evaluable=1); conclusions about other metrics or resources are not covered by this analysis."
+  ]
+ },
+ "schema": "ai-experiment-run.holdout.v1",
+ "case": "case-016",
+ "rep": 1,
+ "arm": "B",
+ "try": 1,
+ "attempt_id": "case-016-1-B-t1",
+ "model_id": "deepseek-v4-flash-0731",
+ "prompt_sha256": "3c0f28bee6517c13c5c854615e7d3d59301893d9723880818e4034a32e9133bf"
+}

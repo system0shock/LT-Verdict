@@ -1,0 +1,77 @@
+[
+  {
+    "id": "R002",
+    "hard_defect": false,
+    "defects": [],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 5,
+    "notes": "It preserves the verdict and key metrics and gives verifiable next steps without claiming a cause."
+  },
+  {
+    "id": "R030",
+    "hard_defect": false,
+    "defects": [],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 4,
+    "notes": "The advice is accurate and actionable, with some speculative checks clearly framed as hypotheses."
+  },
+  {
+    "id": "R042",
+    "hard_defect": false,
+    "defects": [],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 4,
+    "notes": "It correctly prioritizes configuring a policy and keeps capacity and latency conclusions within the evidence."
+  },
+  {
+    "id": "R043",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T7",
+        "field": "#/hypotheses/3/possible_explanation",
+        "quote": "The analysis found no threshold violations within the sampled JMeter window",
+        "why": "With NO_POLICY, no policy thresholds were evaluated, so the empty findings list cannot establish an absence of violations."
+      }
+    ],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 2,
+    "notes": "Most actions are useful, but the threshold-violation claim could mislead an operator."
+  },
+  {
+    "id": "R067",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T5",
+        "field": "#/recommendations/3/rationale",
+        "quote": "a single short measurement window",
+        "why": "The evidence supplies aggregate throughput ratios but does not establish that the run had one short measurement window."
+      }
+    ],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 2,
+    "notes": "Its main checks are useful, but it bases a run-length recommendation on an unsupported window description."
+  },
+  {
+    "id": "R068",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T3",
+        "field": "#/hypotheses/0/possible_explanation",
+        "quote": "One or a small number of outlier samples ... produced a latency far above the 99th percentile",
+        "why": "The aggregates do not reveal how many samples reached the maximum, so the stated multiplicity is unsupported."
+      }
+    ],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 2,
+    "notes": "It preserves the verdict and offers useful checks, but asserts an unknown outlier count."
+  }
+]

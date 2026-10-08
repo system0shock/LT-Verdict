@@ -1,0 +1,83 @@
+[
+  {
+    "id": "R023",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T2",
+        "field": "#/caveats/6",
+        "quote": "within one shared window denominator (44986)",
+        "why": "A shared denominator does not establish that overall and per-transaction counts use the same window or represent comparable scopes."
+      }
+    ],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 4,
+    "notes": "Detailed and mostly sound, but it incorrectly infers a shared window from the denominator."
+  },
+  {
+    "id": "R030",
+    "hard_defect": false,
+    "defects": [],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 5,
+    "notes": "Accurate, well-scoped advice with hypotheses clearly separated from facts."
+  },
+  {
+    "id": "R044",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T4",
+        "field": "#/caveats/1",
+        "quote": "The evidence consists of aggregate metric summaries only",
+        "why": "The evidence also contains a policy_check and recorded verdict facts."
+      },
+      {
+        "type": "T8",
+        "field": "#/caveats/2",
+        "quote": "no anomalies were flagged by this analysis",
+        "why": "No anomaly-detector result is present, so an empty findings array cannot establish that anomaly analysis ran or flagged nothing."
+      }
+    ],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 3,
+    "notes": "Useful follow-up checks, but it overstates what empty findings establish."
+  },
+  {
+    "id": "R053",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T5",
+        "field": "#/caveats/9",
+        "quote": "single run at a single load level",
+        "why": "The evidence provides no load-level or stage definition, so calling it a single load level invents unavailable structure."
+      }
+    ],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 4,
+    "notes": "Otherwise carefully scoped and contract-aware, but it invents a load-level characterization."
+  },
+  {
+    "id": "R057",
+    "hard_defect": false,
+    "defects": [],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 5,
+    "notes": "Correctly preserves the verdict and keeps aggregate-based explanations explicitly hypothetical."
+  },
+  {
+    "id": "R060",
+    "hard_defect": false,
+    "defects": [],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 5,
+    "notes": "Concise, evidence-bounded, and operationally useful."
+  }
+]

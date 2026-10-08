@@ -1,0 +1,138 @@
+{
+ "stage": "S1",
+ "mode": "live",
+ "model": "deepseek-v4-flash-0731",
+ "tag": {
+  "phase": "v2-pilot",
+  "stage": "S1",
+  "case": "K11",
+  "rep": 2,
+  "attempt": 1
+ },
+ "qwen_exit": 0,
+ "wall_ms": 77148,
+ "relay": {
+  "schema_version": "advisory-ai-runtime-relay.v1",
+  "status": "FORWARDED_STRUCTURED_OUTPUT",
+  "request_count": 1,
+  "usage": {
+   "prompt_tokens": 2325,
+   "total_tokens": 9671,
+   "completion_tokens": 7346,
+   "prompt_tokens_details": {
+    "cached_tokens": 1024
+   },
+   "completion_tokens_details": {
+    "reasoning_tokens": 5870
+   }
+  },
+  "latency_ms": 75746,
+  "model_returned": "deepseek-v4-flash-0731"
+ },
+ "relay_status": "FORWARDED_STRUCTURED_OUTPUT",
+ "usage": {
+  "prompt_tokens": 2325,
+  "total_tokens": 9671,
+  "completion_tokens": 7346,
+  "prompt_tokens_details": {
+   "cached_tokens": 1024
+  },
+  "completion_tokens_details": {
+   "reasoning_tokens": 5870
+  }
+ },
+ "latency_ms": 75746,
+ "status": "OK",
+ "note": null,
+ "output": {
+  "schema_version": "ai-advice-output.v1",
+  "summary": "The deterministic verdict is NO_POLICY and stays NO_POLICY: no policy thresholds are present, so no PASS/FAIL result can be produced. The run is marked VALID, but analysis coverage is INCOMPLETE (RESOURCE_GAPS). The only metric evidence in scope is an overall summary (2623 samples, 0 errors, error_rate_ratio 0/2623, latency_ms p50 11, p95 46, p99 77, max 904, throughput_rps numerator 2623000 / denominator 44986). The empty findings list and the zero error count at this overall scope do not prove health, stability, spare capacity, or absence of a problem, and the INCOMPLETE coverage further limits interpretation.",
+  "hypotheses": [
+   {
+    "rank": 1,
+    "observation": "analysis-result.json#/policy_verdict reports NO_POLICY and no policy thresholds are present in the evidence.",
+    "possible_explanation": "No load-test policy with thresholds has been configured, so the product cannot evaluate PASS/FAIL and returns NO_POLICY; this is a missing-policy state, not a pass.",
+    "recommended_check": "Review whether a policy defining acceptable thresholds (for example latency or error rate over the monitored window) should be configured; if none is intended, NO_POLICY is the expected deterministic outcome.",
+    "evidence_refs": [
+     "analysis-result.json#/policy_verdict"
+    ]
+   },
+   {
+    "rank": 2,
+    "observation": "analysis-result.json#/analysis_coverage reports status INCOMPLETE with reasons [RESOURCE_GAPS].",
+    "possible_explanation": "Resource-related signals are missing or incomplete, so the run is only partially characterized and resource-related issues could be hidden from the observed metrics.",
+    "recommended_check": "Identify which resource metrics are missing, then rerun or restore resource monitoring so coverage becomes complete before relying on the summary metrics.",
+    "evidence_refs": [
+     "analysis-result.json#/analysis_coverage"
+    ]
+   },
+   {
+    "rank": 3,
+    "observation": "analysis-result.json#/evidence/0 reports an overall metric summary: sample_count 2623, error_count 0, error_rate_ratio 0/2623, latency_ms p50 11, p95 46, p99 77, max 904.",
+    "possible_explanation": "The overall scope looks healthy on average, but the spread from p99 (77 ms) to max (904 ms) suggests tail behavior, and zero errors in an overall aggregate does not prove stability or the absence of a problem.",
+    "recommended_check": "Inspect per-transaction and per-window breakdowns in the raw JTL/CSV data, especially the samples around the max latency, to test whether tail latency or isolated errors occur outside the overall summary.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0"
+    ]
+   },
+   {
+    "rank": 4,
+    "observation": "analysis-result.json#/evidence/0 reports throughput_rps with numerator 2623000 and denominator 44986.",
+    "possible_explanation": "If the denominator represents the time basis, the ratio implies roughly 58 requests per second; however, the evidence does not explicitly define the window or units, so this figure should not be compared with other scopes or treated as an established rate.",
+    "recommended_check": "Verify the time window and units that produced the numerator/denominator in the raw JTL/CSV before using the throughput figure for any assessment.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0"
+    ]
+   }
+  ],
+  "recommendations": [
+   {
+    "rank": 1,
+    "action": "Keep the NO_POLICY verdict unchanged; treat the outcome as a missing-policy state, not as PASS or FAIL.",
+    "rationale": "Only a configured policy (or required capacity) yields PASS or FAIL; a missing policy is not a pass.",
+    "evidence_refs": [
+     "analysis-result.json#/policy_verdict"
+    ]
+   },
+   {
+    "rank": 2,
+    "action": "Close the RESOURCE_GAPS so analysis coverage is complete, for example by restoring missing resource metrics and rerunning.",
+    "rationale": "The current coverage is INCOMPLETE (RESOURCE_GAPS), so any resource-related interpretation is unsupported by the evidence.",
+    "evidence_refs": [
+     "analysis-result.json#/analysis_coverage"
+    ]
+   },
+   {
+    "rank": 3,
+    "action": "If a PASS/FAIL verdict is required, configure a policy with explicit thresholds and rerun; NO_POLICY will persist until a policy is configured.",
+    "rationale": "The product cannot emit PASS/FAIL while the verdict is NO_POLICY; only a configured policy yields PASS or FAIL.",
+    "evidence_refs": [
+     "analysis-result.json#/policy_verdict"
+    ]
+   },
+   {
+    "rank": 4,
+    "action": "Inspect the raw JTL/CSV for per-transaction and per-window detail, particularly the tail (samples near max latency 904 ms) and the error distribution, before claiming the run is healthy.",
+    "rationale": "The only metric evidence is an overall summary; zero errors and low percentiles there do not establish stability, spare capacity, or absence of a problem, and the p99-to-max spread is large.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0"
+    ]
+   }
+  ],
+  "caveats": [
+   "The deterministic verdict is NO_POLICY; advisory output never changes it.",
+   "Analysis coverage is INCOMPLETE because of RESOURCE_GAPS; missing resource data limits any resource-related conclusion.",
+   "Zero errors over 2623 samples and the low p50/p95/p99 values are bounded to the overall scope and do not prove stability, spare capacity, low load, or absence of a problem.",
+   "The findings list is empty, but absence of findings is not evidence of absence of a problem.",
+   "Only overall-scope counts are present (sample_count 2623, error denominator 2623, throughput numerator 2623000); these are different quantities from policy-window or per-transaction denominators that are not in the evidence.",
+   "The evidence does not define policy thresholds, so the latency percentiles and max of 904 ms carry no PASS/FAIL meaning.",
+   "throughput_rps implies roughly 58 rps only if the denominator is the time basis; the evidence does not explicitly define that window or its units.",
+   "No clock or timing relationship is provided; temporal or lead/lag conclusions cannot be drawn from this evidence.",
+   "run_validity VALID is reported, but a valid run does not compensate for INCOMPLETE coverage or for missing policy configuration."
+  ]
+ },
+ "schema": "ai-experiment-run.v2",
+ "phase": "pilot",
+ "case": "K11",
+ "rep": 2
+}

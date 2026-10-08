@@ -1,0 +1,68 @@
+[
+  {
+    "id": "R025",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T7",
+        "field": "#/caveats/1",
+        "quote": "the PASS verdict applies to that criterion and its window only",
+        "why": "The policy check covers the whole run and has no policy window, so this incorrectly narrows its coverage."
+      }
+    ],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 2,
+    "notes": "Most actions are verifiable, but the repeated window framing could mislead an operator about what PASS covers."
+  },
+  {
+    "id": "R027",
+    "hard_defect": false,
+    "defects": [],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 4,
+    "notes": "It preserves the verdict and key numbers and gives useful checks, though some hypotheses and actions add padding."
+  },
+  {
+    "id": "R032",
+    "hard_defect": false,
+    "defects": [],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 5,
+    "notes": "It gives prioritized, verifiable actions while keeping the injected label and aggregate latency limits in context."
+  },
+  {
+    "id": "R041",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T5",
+        "field": "#/hypotheses/5/observation",
+        "quote": "All seven items carry scope kinds of \"transaction\" or \"overall\" with empty group_path.",
+        "why": "The overall item has no group_path field, so the response invents a scope property an operator could rely on when inspecting grouping."
+      }
+    ],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 3,
+    "notes": "The main verdict and recommendations are sound, but the scope description is false and the advice is lengthy."
+  },
+  {
+    "id": "R054",
+    "hard_defect": false,
+    "defects": [
+      {
+        "type": "T5",
+        "field": "#/recommendations/7/rationale",
+        "quote": "suggest a short, evenly sequenced execution",
+        "why": "Near-equal transaction counts do not establish run duration or execution order; the claim is hedged but weakens the rerun rationale."
+      }
+    ],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 3,
+    "notes": "It preserves the result and offers useful checks, but several speculative explanations and a long action list dilute the priorities."
+  }
+]

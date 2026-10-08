@@ -1,0 +1,104 @@
+[
+  {
+    "id": "R005",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T5",
+        "field": "#/hypotheses/4/observation",
+        "quote": "frontend max latency is 989 ms",
+        "why": "The 989 ms maximum belongs to the overall sample summary; the evidence provides no frontend latency metric."
+      }
+    ],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 4,
+    "notes": "The actions are specific and mostly supported, but the invented frontend latency could misdirect investigation."
+  },
+  {
+    "id": "R025",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T2",
+        "field": "#/caveats/2",
+        "quote": "this is the same error set cross-referenced by the pipeline",
+        "why": "Matching aggregate counts across transaction, policy-window, and OpenSearch scopes do not establish that they contain the same individual errors."
+      }
+    ],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 4,
+    "notes": "The checks are useful, but the response overstates what matching counts prove."
+  },
+  {
+    "id": "R032",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T4",
+        "field": "#/hypotheses/3/observation",
+        "quote": "zero in 28 of 33 buckets",
+        "why": "The timeline has 24 zero buckets and nine nonzero buckets."
+      },
+      {
+        "type": "T8",
+        "field": "#/recommendations/4/rationale",
+        "quote": "Memory increased from 2666496 to 37756928 bytes during the window",
+        "why": "The evidence reports a minimum and maximum without their timestamps, so their order is unknown."
+      }
+    ],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 3,
+    "notes": "The main failure checks are useful, but the timeline count and claimed memory progression are unsupported."
+  },
+  {
+    "id": "R046",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T2",
+        "field": "#/recommendations/1/rationale",
+        "quote": "All 2471 errors are from the checkout transaction as frontend.request_error",
+        "why": "The checkout and OpenSearch aggregates have matching counts, but the evidence does not join error documents to transaction samples."
+      }
+    ],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 4,
+    "notes": "The investigation steps are sound, but one rationale presents an unverified cross-source attribution as fact."
+  },
+  {
+    "id": "R048",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T2",
+        "field": "#/summary",
+        "quote": "All 2471 recorded errors belong to the checkout transaction metric (error_type frontend.request_error, service frontend)",
+        "why": "The evidence reports matching aggregates but does not link individual OpenSearch events to checkout samples."
+      }
+    ],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 4,
+    "notes": "The response gives practical checks and later acknowledges the missing join, but its summary still asserts that join."
+  },
+  {
+    "id": "R066",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T4",
+        "field": "#/caveats/2",
+        "quote": "sampled messages truncated to 4096 bytes",
+        "why": "4096 bytes is the configured maximum, and both sampled documents explicitly report message_truncated=false."
+      }
+    ],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 3,
+    "notes": "The core verdict and checks are useful, but the response misstates the sampled-message evidence."
+  }
+]

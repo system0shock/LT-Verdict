@@ -1,0 +1,228 @@
+{
+ "stage": "A",
+ "mode": "live",
+ "model": "deepseek-v4-flash-0731",
+ "tag": {
+  "phase": "holdout",
+  "attempt_id": "case-026-1-A-t1",
+  "arm": "A",
+  "stage": null,
+  "case": "case-026",
+  "rep": 1,
+  "try": 1
+ },
+ "retry_policy": "d2",
+ "qwen_exit": 0,
+ "wall_ms": 159936,
+ "relay": {
+  "schema_version": "advisory-ai-runtime-relay.v1",
+  "status": "FORWARDED_STRUCTURED_OUTPUT",
+  "received_request_count": 1,
+  "forwarded_request_count": 1,
+  "outcomes": [
+   "FORWARDED_STRUCTURED_OUTPUT"
+  ],
+  "retry_refused_reason": null,
+  "first_refused_reason": null,
+  "model_id": "deepseek-v4-flash-0731",
+  "retry_policy": "d2",
+  "requests": [
+   {
+    "ordinal": 1,
+    "forwarded": true,
+    "outcome": "FORWARDED_STRUCTURED_OUTPUT",
+    "provider_status": 200,
+    "latency_ms": 158366,
+    "usage": {
+     "prompt_tokens": 17879,
+     "total_tokens": 34329,
+     "completion_tokens": 16450,
+     "prompt_tokens_details": {
+      "cached_tokens": 1024
+     },
+     "completion_tokens_details": {
+      "reasoning_tokens": 13293
+     }
+    },
+    "model_returned": "deepseek-v4-flash-0731"
+   }
+  ],
+  "usage": {
+   "prompt_tokens": 17879,
+   "completion_tokens": 16450,
+   "total_tokens": 34329
+  },
+  "latency_ms": 158366
+ },
+ "relay_status": "FORWARDED_STRUCTURED_OUTPUT",
+ "usage": {
+  "prompt_tokens": 17879,
+  "completion_tokens": 16450,
+  "total_tokens": 34329
+ },
+ "latency_ms": 158366,
+ "retried": false,
+ "retry_refused_reason": null,
+ "status": "OK",
+ "note": null,
+ "output": {
+  "schema_version": "ai-advice-output.v1",
+  "summary": "The deterministic verdict is FAIL. Both windows fail the latency rule: response_time_p95_ms observed 227ms against a 200ms threshold in the reference window (window-policy-summary 52367a66...: verdict FAIL, business_verdict FAIL, resource_verdict PASS) and in workload-01 (window-policy-summary 32c4c0c3...: verdict FAIL, business_verdict FAIL, resource_verdict PASS). All resource checks PASS (system-cpu-work ~0.15 vs compute-limit threshold 0.9; system-db-work ~0.015 vs database-limit threshold 0.9), and error_count is 0 in every window at a constant 60 rps (target and achieved). No material anomalies were reported (episodes_reported 0, anomalies_tested 4). Correlation analysis is not confirmatory: three CANDIDATE associations (cpu-queue, downstream-wait, generator-threads), two BELOW_EFFECT (system-cpu-work, system-db-work), three INSUFFICIENT_DATA, all headline selections UNAVAILABLE, uncertainty NOT_ESTIMATED, and clock alignment not verified by core. Advice: verify time bases first, locate the ~227ms tail population (p50 50ms, p99/max 248ms), investigate the downstream dependency and CPU-quota state, and re-run with load variation before attributing cause.",
+  "hypotheses": [
+   {
+    "rank": 1,
+    "observation": "In both windows response_time_p95_ms is 227 (lag threshold 200, operator lte) and both window-policy summaries report verdict FAIL with resource_verdict PASS; overall metrics show p50 50ms, p99 248ms, max 248ms, and error_count 0. The downstream-wait series (in_flight_requests) has a non-zero mean of ~2.28 in both windows, and association-08 (downstream-wait vs p95) is CANDIDATE with best_lag_ms 4000, best_lag_rho 0.6569, and partial_rho -0.4730.",
+    "possible_explanation": "A 227ms p95 with a 50ms p50 suggests a subset of requests experiences much higher latency. Because local CPU and database work are low and error_count is 0, the tail may come from time spent on the downstream dependency, the only non-zero in-flight series in the evidence; this is a hypothesis, not a proven cause, and the CANDIDATE correlation is not significance-tested.",
+    "recommended_check": "Verify clock alignment first (resource-binding reports clock_alignment not_verified_by_core); then inspect per-sample JTL latencies above ~200ms together with downstream dependency call start/duration (or add tracing) to see whether the tail coincides with dependency waits.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0",
+     "analysis-result.json#/evidence/7",
+     "analysis-result.json#/evidence/33",
+     "analysis-result.json#/evidence/35",
+     "analysis-result.json#/evidence/36",
+     "analysis-result.json#/evidence/45"
+    ]
+   },
+   {
+    "rank": 2,
+    "observation": "cpu-service-quota quota_fraction is constant 1.0 in the reference and workload-01 windows; cpu-queue queue_depth mean is ~1.28 (median 1.37) with no missing cells; system-cpu-work is ~0.15 and the compute-limit policy check (system-cpu-work > 0.9) is PASS in both windows. Association-04 (cpu-queue vs p95) is CANDIDATE with best_lag_ms 2000, best_lag_rho 0.5879, and partial_rho 0.1660.",
+    "possible_explanation": "At 100% of its CPU quota with a small non-zero queue (~1.3 requests), the service could be throttling requests even though whole-system CPU work is low (0.15 ratio); per-request queueing could push the p95 tail to 227ms while p50 stays at 50ms. The association is only CANDIDATE with uncertainty NOT_ESTIMATED.",
+    "recommended_check": "Check container/replica CPU throttle and quota counters around the latency tail; then run a controlled A/B comparison with an increased CPU quota at the same 60 rps and re-check response_time_p95_ms.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/5",
+     "analysis-result.json#/evidence/17",
+     "analysis-result.json#/evidence/29",
+     "analysis-result.json#/evidence/42"
+    ]
+   },
+   {
+    "rank": 3,
+    "observation": "Generator target_request_rate and request_starts are constant 60 requests/s in both windows; service worker_count is constant 4; response_time_p95_ms is identical (227) in both windows; associations of system-cpu-work and system-db-work with p95 are BELOW_EFFECT with reasons CONSTANT_CONTROL and RESOURCE_DELTA_BELOW_MINIMUM; anomaly checks report episodes_reported 0.",
+    "possible_explanation": "The flat 60 rps load and constant resource/latency series mean the analysis cannot attribute the p95 value to load variation; the sustained 227ms p95 may be a structural baseline of the transaction or environment, but the evidence does not establish which component produces it.",
+    "recommended_check": "Re-run with a stepped or ramped load (and/or a mixed request mix) so latency and resource series have variation, then re-run correlation and headline significance tests (currently UNAVAILABLE) to see whether p95 moves with load.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/9",
+     "analysis-result.json#/evidence/15",
+     "analysis-result.json#/evidence/28",
+     "analysis-result.json#/evidence/33",
+     "analysis-result.json#/evidence/39",
+     "analysis-result.json#/evidence/40",
+     "analysis-result.json#/evidence/56",
+     "analysis-result.json#/evidence/59"
+    ]
+   },
+   {
+    "rank": 4,
+    "observation": "generator active_threads has dips (min 2.950001, mean ~4.81 in reference; min 4.251333 and mean ~4.82 in workload-01) while request_starts stays at exactly 60 rps with error_count 0; association-09 (generator-threads vs p95) is CANDIDATE with best_lag_ms 3000, best_lag_rho 0.5839, and raw_rho 0.1210.",
+    "possible_explanation": "Generator thread-pool dips could alter request timing or burstiness and coincide with p95 spikes; since error_count is 0 and the generator is not the service under test, this is a lower-priority hypothesis and no causal claim is warranted.",
+    "recommended_check": "Inspect raw JTL sample timestamps around the thread-count dips for gaps or bursts, verify the generator clock, and check whether samples above 200ms cluster at those times.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/10",
+     "analysis-result.json#/evidence/23",
+     "analysis-result.json#/evidence/46"
+    ]
+   },
+   {
+    "rank": 5,
+    "observation": "runtime-heap used_bytes mean is ~98.7MB (98,725,527.79 bytes) with slope_per_second +670.84 bytes/s in the reference window; service worker_count is constant 4; no GC metrics are present in the evidence.",
+    "possible_explanation": "Allocation pressure or garbage-collection pauses could add to tail latency even at low CPU utilization, but this is speculative because no GC or JVM pause evidence is present in the input.",
+    "recommended_check": "Collect GC pause and JVM memory metrics over the same windows and check whether tail samples coincide with GC events; also trend heap over a longer run to see whether the +670.84 bytes/s slope persists.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/11",
+     "analysis-result.json#/evidence/12"
+    ]
+   }
+  ],
+  "recommendations": [
+   {
+    "rank": 1,
+    "action": "Verify clock alignment across the load generator, service, and telemetry before interpreting any lag-based correlation.",
+    "rationale": "resource-binding reports clock_alignment not_verified_by_core; the candidate associations rely on best_lag_ms of 1000-4000ms and an unverified clock relationship cannot support lead/lag ordering or a temporal causal hypothesis.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/2",
+     "analysis-result.json#/evidence/39",
+     "analysis-result.json#/evidence/42",
+     "analysis-result.json#/evidence/45",
+     "analysis-result.json#/evidence/46"
+    ]
+   },
+   {
+    "rank": 2,
+    "action": "Disaggregate the tail: pull the raw JTL samples above ~200ms (or latency histograms) and examine them by time, thread, request label, and phase.",
+    "rationale": "The deterministic failure is tail latency - p95 227ms vs 200ms threshold with p50 50ms and p99/max 248ms - and aggregate percentiles alone cannot identify which requests form the tail.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0",
+     "analysis-result.json#/evidence/33",
+     "analysis-result.json#/evidence/35",
+     "analysis-result.json#/evidence/37",
+     "analysis-result.json#/evidence/38",
+     "analysis-result.json#/findings/0",
+     "analysis-result.json#/findings/1"
+    ]
+   },
+   {
+    "rank": 3,
+    "action": "Instrument the downstream dependency: measure per-call duration and concurrency, and compare it with the latency sample distribution.",
+    "rationale": "downstream-wait in_flight is the only non-zero in-flight series (mean ~2.28) and its association (association-08) is CANDIDATE; dependency latency could explain the ~177ms gap between p50 (50ms) and p95 (227ms), but this needs direct per-call measurement.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/7",
+     "analysis-result.json#/evidence/20",
+     "analysis-result.json#/evidence/45"
+    ]
+   },
+   {
+    "rank": 4,
+    "action": "Check for CPU-quota throttling of service replicas and run a controlled quota A/B if throttling is observed.",
+    "rationale": "quota_fraction is constant 1.0 (100% of quota) while cpu-queue is ~1.28-1.37 and association-04 is CANDIDATE; although system-cpu-work is low (0.15) and the compute-limit check PASSes, quota-throttle delays could still contribute to the tail.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/5",
+     "analysis-result.json#/evidence/17",
+     "analysis-result.json#/evidence/29",
+     "analysis-result.json#/evidence/42"
+    ]
+   },
+   {
+    "rank": 5,
+    "action": "Re-run with load variation (ramp/step or mixed request mix) and sufficient samples per window, then re-run correlation and significance tests.",
+    "rationale": "This run is constant-rate with constant resource series; CONSTANT_CONTROL / RESOURCE_DELTA_BELOW_MINIMUM caused BELOW_EFFECT and INSUFFICIENT_DATA pairs, and headline significances are UNAVAILABLE with uncertainty NOT_ESTIMATED, so the current CANDIDATE associations are unverified.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/39",
+     "analysis-result.json#/evidence/41",
+     "analysis-result.json#/evidence/44",
+     "analysis-result.json#/evidence/47",
+     "analysis-result.json#/evidence/59"
+    ]
+   },
+   {
+    "rank": 6,
+    "action": "After any remediation, re-run the exact same windows and confirm response_time_p95_ms <= 200 (latency rule) in both windows while keeping the resource checks PASS.",
+    "rationale": "The deterministic verdict is FAIL solely from the latency rule in both windows (findings reference the two latency policy failures); remediation must be validated against that exact rule, and this advice never changes the verdict.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/33",
+     "analysis-result.json#/evidence/35",
+     "analysis-result.json#/evidence/36",
+     "analysis-result.json#/findings/0",
+     "analysis-result.json#/findings/1"
+    ]
+   }
+  ],
+  "caveats": [
+   "The deterministic verdict is FAIL (latency rule) in both windows; resource verdicts are PASS. This advisory does not alter that verdict.",
+   "Clock alignment is not verified by core; best_lag_ms values (1000-4000ms) in the candidate associations cannot support lead/lag ordering or temporal causality until clocks are verified.",
+   "All correlation headline selections are UNAVAILABLE (OBSERVATION_COUNT_UNSUPPORTED or PAIR_NOT_EVALUABLE), uncertainty is NOT_ESTIMATED, and there are no p-values or Holm-adjusted p-values; CANDIDATE status does not imply a confirmed or statistically significant association.",
+   "Several series had no rank variation (admission-queue, db-queue, cpu-service-quota -> INSUFFICIENT_DATA) and system-cpu-work/system-db-work were BELOW_EFFECT (CONSTANT_CONTROL, RESOURCE_DELTA_BELOW_MINIMUM), so no resource-effect claims are supported for them.",
+   "error_count 0, episodes_reported 0, anomalies_tested 4, and suppressed_short_episodes 30 do not prove stability, spare capacity, or absence of a latency problem; ZERO_MAD references limit dispersion-based detection and missing checks or findings do not constitute proof of absence.",
+   "The evidence is aggregate: window-level latency percentiles and resource summaries only; no per-sample JTL records, traces, or GC metrics are present, so the tail population and any dependency or GC attribution are unverified.",
+   "The test ran at a constant 60 rps with a constant target rate, so the analysis could not observe behavior under load variation; results may not generalize to other request rates.",
+   "Coverage limits: 8 family hypotheses, pairs_tested 8, pairs_evaluable 5, anomalies_tested 4; analysis_coverage status COMPLETE refers to processing completion, not proof of system correctness."
+  ]
+ },
+ "schema": "ai-experiment-run.holdout.v1",
+ "case": "case-026",
+ "rep": 1,
+ "arm": "A",
+ "try": 1,
+ "attempt_id": "case-026-1-A-t1",
+ "model_id": "deepseek-v4-flash-0731",
+ "prompt_sha256": "69f215a1ad4ae678c82410ba7cf7daf171cd9c7ca0ef4626bba6977db0af4ef7"
+}

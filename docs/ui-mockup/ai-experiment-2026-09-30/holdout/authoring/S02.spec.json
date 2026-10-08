@@ -1,0 +1,46 @@
+{
+ "required": [
+  [
+   "latency_p95_observed",
+   [
+    "(?:(?:latency|p95|95th|response[ -]time))[^.\\n]{0,100}(?:(?<![\\d.,])(?:100)(?![\\d]|[.,]\\d))|(?:(?<![\\d.,])(?:100)(?![\\d]|[.,]\\d))[^.\\n]{0,100}(?:(?:latency|p95|95th|response[ -]time))"
+   ]
+  ],
+  [
+   "latency_threshold",
+   [
+    "(?:(?:latency|p95|95th|response[ -]time)|threshold|sla|limit)[^.\\n]{0,100}(?:(?<![\\d.,])(?:80)(?![\\d]|[.,]\\d))|(?:(?<![\\d.,])(?:80)(?![\\d]|[.,]\\d))[^.\\n]{0,100}(?:(?:latency|p95|95th|response[ -]time)|threshold|sla|limit)"
+   ]
+  ],
+  [
+   "latency_sla_failed",
+   [
+    "(?:(?:latency|p95|95th|response[ -]time))[^.\\n]{0,100}(?:(?:fail|violat|exceed|above|breach|over|not met|too (?:high|slow)))|(?:(?:fail|violat|exceed|above|breach|over|not met|too (?:high|slow)))[^.\\n]{0,100}(?:(?:latency|p95|95th|response[ -]time))"
+   ]
+  ],
+  [
+   "resource_sla_met",
+   [
+    "(?:(?:resource|cpu|memory|utili[sz]ation|limit|series))[^.\\n]{0,100}(?:(?<!not )(?<!n't )(?<!never )(?<!no )(?:met|pass|within|below|ok|satisf|under|normal|healthy))|(?:(?<!not )(?<!n't )(?<!never )(?<!no )(?:met|pass|within|below|ok|satisf|under|normal|healthy))[^.\\n]{0,100}(?:(?:resource|cpu|memory|utili[sz]ation|limit|series))"
+   ]
+  ]
+ ],
+ "forbidden": [
+  "reports an overall PASS or says that normal resource usage cancels the latency failure",
+  "gives another threshold, metric or window than the failed check"
+ ],
+ "useful_checks": [
+  "check where the p95 latency of the evaluation window is spent (transactions, stages, dependencies) to bring it under the threshold"
+ ],
+ "source": {
+  "builder": "AdvisoryEvidenceBuilder",
+  "build": "5b5e51c+harness",
+  "source": "s:V01_business_fail",
+  "source_sha256": "c9d39c9c68156e998bf4587342b94a3bdae37371522ee4c05ad557349fbe94d6",
+  "derivation": [
+   "latency80"
+  ],
+  "evidence_sha256": "48325c8a8eba5ac5a21f702c68a66bdb3eb12bb98e0ecece3c7dfb5a10c87f94",
+  "inputs": "s:V01_business_fail, derivation [latency80], analysed through RunBundleStore -> AnalysisService -> AdvisoryEvidenceBuilder by AdvisoryHoldoutCorpusTest on 5b5e51c+harness"
+ }
+}

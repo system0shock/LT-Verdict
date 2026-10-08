@@ -1,0 +1,365 @@
+{
+ "seed": 10367191307462,
+ "key": {
+  "R001": {
+   "stage": "S0",
+   "case": "K07",
+   "rep": 1
+  },
+  "R002": {
+   "stage": "S0",
+   "case": "K02",
+   "rep": 1
+  },
+  "R003": {
+   "stage": "S2",
+   "case": "K04",
+   "rep": 1
+  },
+  "R004": {
+   "stage": "S0",
+   "case": "K03",
+   "rep": 2
+  },
+  "R005": {
+   "stage": "S2",
+   "case": "K03",
+   "rep": 1
+  },
+  "R006": {
+   "stage": "S0",
+   "case": "K12",
+   "rep": 1
+  },
+  "R007": {
+   "stage": "S1",
+   "case": "K02",
+   "rep": 2
+  },
+  "R008": {
+   "stage": "S0",
+   "case": "K10",
+   "rep": 2
+  },
+  "R009": {
+   "stage": "S0",
+   "case": "K11",
+   "rep": 2
+  },
+  "R010": {
+   "stage": "S2",
+   "case": "K12",
+   "rep": 2
+  },
+  "R011": {
+   "stage": "S0",
+   "case": "K08",
+   "rep": 1
+  },
+  "R012": {
+   "stage": "S1",
+   "case": "K06",
+   "rep": 1
+  },
+  "R013": {
+   "stage": "S1",
+   "case": "K04",
+   "rep": 1
+  },
+  "R014": {
+   "stage": "S2",
+   "case": "K10",
+   "rep": 2
+  },
+  "R015": {
+   "stage": "S1",
+   "case": "K04",
+   "rep": 2
+  },
+  "R016": {
+   "stage": "S1",
+   "case": "K12",
+   "rep": 2
+  },
+  "R017": {
+   "stage": "S0",
+   "case": "K10",
+   "rep": 1
+  },
+  "R018": {
+   "stage": "S1",
+   "case": "K05",
+   "rep": 2
+  },
+  "R019": {
+   "stage": "S2",
+   "case": "K05",
+   "rep": 2
+  },
+  "R020": {
+   "stage": "S0",
+   "case": "K02",
+   "rep": 2
+  },
+  "R021": {
+   "stage": "S2",
+   "case": "K01",
+   "rep": 2
+  },
+  "R022": {
+   "stage": "S0",
+   "case": "K08",
+   "rep": 2
+  },
+  "R023": {
+   "stage": "S0",
+   "case": "K09",
+   "rep": 1
+  },
+  "R024": {
+   "stage": "S0",
+   "case": "K04",
+   "rep": 1
+  },
+  "R025": {
+   "stage": "S1",
+   "case": "K03",
+   "rep": 2
+  },
+  "R026": {
+   "stage": "S2",
+   "case": "K08",
+   "rep": 2
+  },
+  "R027": {
+   "stage": "S1",
+   "case": "K07",
+   "rep": 1
+  },
+  "R028": {
+   "stage": "S1",
+   "case": "K10",
+   "rep": 2
+  },
+  "R029": {
+   "stage": "S2",
+   "case": "K03",
+   "rep": 2
+  },
+  "R030": {
+   "stage": "S2",
+   "case": "K07",
+   "rep": 1
+  },
+  "R031": {
+   "stage": "S0",
+   "case": "K04",
+   "rep": 2
+  },
+  "R032": {
+   "stage": "S1",
+   "case": "K07",
+   "rep": 2
+  },
+  "R033": {
+   "stage": "S0",
+   "case": "K01",
+   "rep": 1
+  },
+  "R034": {
+   "stage": "S0",
+   "case": "K03",
+   "rep": 1
+  },
+  "R035": {
+   "stage": "S1",
+   "case": "K10",
+   "rep": 1
+  },
+  "R036": {
+   "stage": "S0",
+   "case": "K12",
+   "rep": 2
+  },
+  "R037": {
+   "stage": "S1",
+   "case": "K03",
+   "rep": 1
+  },
+  "R038": {
+   "stage": "S2",
+   "case": "K06",
+   "rep": 2
+  },
+  "R039": {
+   "stage": "S2",
+   "case": "K04",
+   "rep": 2
+  },
+  "R040": {
+   "stage": "S0",
+   "case": "K05",
+   "rep": 2
+  },
+  "R041": {
+   "stage": "S1",
+   "case": "K02",
+   "rep": 1
+  },
+  "R042": {
+   "stage": "S2",
+   "case": "K09",
+   "rep": 1
+  },
+  "R043": {
+   "stage": "S1",
+   "case": "K11",
+   "rep": 1
+  },
+  "R044": {
+   "stage": "S2",
+   "case": "K05",
+   "rep": 1
+  },
+  "R045": {
+   "stage": "S2",
+   "case": "K08",
+   "rep": 1
+  },
+  "R046": {
+   "stage": "S0",
+   "case": "K07",
+   "rep": 2
+  },
+  "R047": {
+   "stage": "S2",
+   "case": "K07",
+   "rep": 2
+  },
+  "R048": {
+   "stage": "S1",
+   "case": "K06",
+   "rep": 2
+  },
+  "R049": {
+   "stage": "S1",
+   "case": "K08",
+   "rep": 2
+  },
+  "R050": {
+   "stage": "S2",
+   "case": "K02",
+   "rep": 2
+  },
+  "R051": {
+   "stage": "S2",
+   "case": "K11",
+   "rep": 2
+  },
+  "R052": {
+   "stage": "S1",
+   "case": "K01",
+   "rep": 2
+  },
+  "R053": {
+   "stage": "S0",
+   "case": "K05",
+   "rep": 1
+  },
+  "R054": {
+   "stage": "S2",
+   "case": "K12",
+   "rep": 1
+  },
+  "R055": {
+   "stage": "S0",
+   "case": "K11",
+   "rep": 1
+  },
+  "R056": {
+   "stage": "S0",
+   "case": "K01",
+   "rep": 2
+  },
+  "R057": {
+   "stage": "S2",
+   "case": "K11",
+   "rep": 1
+  },
+  "R058": {
+   "stage": "S2",
+   "case": "K02",
+   "rep": 1
+  },
+  "R059": {
+   "stage": "S1",
+   "case": "K09",
+   "rep": 1
+  },
+  "R060": {
+   "stage": "S0",
+   "case": "K06",
+   "rep": 1
+  },
+  "R061": {
+   "stage": "S2",
+   "case": "K06",
+   "rep": 1
+  },
+  "R062": {
+   "stage": "S2",
+   "case": "K10",
+   "rep": 1
+  },
+  "R063": {
+   "stage": "S1",
+   "case": "K01",
+   "rep": 1
+  },
+  "R064": {
+   "stage": "S0",
+   "case": "K09",
+   "rep": 2
+  },
+  "R065": {
+   "stage": "S0",
+   "case": "K06",
+   "rep": 2
+  },
+  "R066": {
+   "stage": "S1",
+   "case": "K12",
+   "rep": 1
+  },
+  "R067": {
+   "stage": "S1",
+   "case": "K05",
+   "rep": 1
+  },
+  "R068": {
+   "stage": "S1",
+   "case": "K08",
+   "rep": 1
+  },
+  "R069": {
+   "stage": "S2",
+   "case": "K01",
+   "rep": 1
+  },
+  "R070": {
+   "stage": "S1",
+   "case": "K09",
+   "rep": 2
+  },
+  "R071": {
+   "stage": "S1",
+   "case": "K11",
+   "rep": 2
+  },
+  "R072": {
+   "stage": "S2",
+   "case": "K09",
+   "rep": 2
+  }
+ }
+}

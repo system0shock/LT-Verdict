@@ -1,0 +1,33 @@
+{
+ "required": [
+  [
+   "injected_pair_reported",
+   [
+    "(?<![\\d.])(?:0\\.9746|0\\.974|0\\.975|0\\.97)(?!\\d)",
+    "resource\\-00"
+   ]
+  ],
+  [
+   "extra_finding_reported",
+   [
+    "resource\\-06",
+    "(?<![\\d.])(?:0\\.3769|0\\.377|0\\.376|0\\.37|0\\.38)(?!\\d)"
+   ]
+  ]
+ ],
+ "forbidden": [
+  "declares every candidate a proven cause, or treats the extra finding as causal"
+ ],
+ "useful_checks": [
+  "verify the extra finding separately from the injected effect"
+ ],
+ "source": {
+  "builder": "AdvisoryEvidenceBuilder",
+  "build": "5b5e51c+harness",
+  "source": "u:P01-p16-l0-s1159",
+  "source_sha256": "78adca44692c2166d2c37f6b8ac89edadc78376f2ea10502d80d17f2e2438fbd",
+  "derivation": [],
+  "evidence_sha256": "b9c30a9f5673bd771e64fb372420389428e6d5780b8e15cb990f64520a495800",
+  "inputs": "u:P01-p16-l0-s1159, derivation [], analysed through RunBundleStore -> AnalysisService -> AdvisoryEvidenceBuilder by AdvisoryHoldoutCorpusTest on 5b5e51c+harness"
+ }
+}

@@ -1,0 +1,263 @@
+{
+ "stage": "S0",
+ "mode": "live",
+ "model": "glm-5.3",
+ "tag": {
+  "phase": "v3",
+  "model_tag": "glm-5.3",
+  "stage": "S0",
+  "case": "K08",
+  "rep": 1,
+  "attempt": 1
+ },
+ "qwen_exit": 0,
+ "wall_ms": 257790,
+ "relay": {
+  "schema_version": "advisory-ai-runtime-relay.v1",
+  "status": "FORWARDED_STRUCTURED_OUTPUT",
+  "request_count": 1,
+  "usage": {
+   "prompt_tokens": 8926,
+   "total_tokens": 33167,
+   "completion_tokens": 24241,
+   "prompt_tokens_details": {
+    "cached_tokens": 1024
+   },
+   "completion_tokens_details": {
+    "reasoning_tokens": 19366
+   }
+  },
+  "latency_ms": 256147,
+  "model_returned": "glm-5.3"
+ },
+ "relay_status": "FORWARDED_STRUCTURED_OUTPUT",
+ "usage": {
+  "prompt_tokens": 8926,
+  "total_tokens": 33167,
+  "completion_tokens": 24241,
+  "prompt_tokens_details": {
+   "cached_tokens": 1024
+  },
+  "completion_tokens_details": {
+   "reasoning_tokens": 19366
+  }
+ },
+ "latency_ms": 256147,
+ "status": "OK",
+ "note": null,
+ "output": {
+  "caveats": [
+   "Coverage is INCOMPLETE (RESOURCE_GAPS, MISSING_RESOURCE_CELLS, SOURCE_ACQUISITION_PARTIAL): paymentservice statistics rest on 19 of 23 cells, and the positions of the 4 missing cells are not reported, so whether the paymentservice series were observed during the error peak (1790632260000-1790632335000) is unknown.",
+   "clock_alignment is 'not_verified_by_core'; epoch values across the JMeter run, the Prometheus snapshot, and the OpenSearch index cannot support lead/lag ordering or any temporal causal hypothesis until clocks are verified.",
+   "The deterministic verdict is NO_VERDICT (business_verdict FAIL, resource_verdict NO_VERDICT; policy_verdict NO_VERDICT). NO_VERDICT on the resource side is not a pass - it reflects missing data. This advisory does not change any verdict.",
+   "Zero errors after 1790632380000 in the error timeline do not prove stability or recovery: per-interval JMeter sample counts are not reported, so continued load after the burst is assumed, not shown.",
+   "Metric summaries cover the full run (39,099 samples; 2,312/39,099) while the policy check uses the run-intersection window (37,841 samples; 2,312/37,841); the two denominators measure different scopes and should not be conflated.",
+   "A resource_threshold_violation on 2 observed cells coexists with a NO_VERDICT policy check (reason MISSING_RESOURCE_CELLS); the stored violation covers observed cells only and the policy could not be evaluated over the full window.",
+   "Error evidence is bounded: one error group, samples_per_group_limit 2, generic 'request error' messages (message_truncated false, 4096-byte message cap); no root-cause message text is available in the evidence.",
+   "Latency percentiles are aggregates over all samples; the latency distribution of the 2,312 failing checkout samples specifically is not reported.",
+   "Resource metrics are interval means over 15 s cells (aggregation 'interval_mean'), so short spikes within a cell can be smoothed; only frontend, checkoutservice, and paymentservice are covered - absence of other services' data is not evidence of their health.",
+   "The error index name 'ltv-errors-20260928-214736-resource-memory-c51c58' embeds 'resource-memory' and a timestamp; index naming is provenance metadata, not evidence of a memory fault.",
+   "The run-intersection binding dropped 1 leading cell (12,250 ms) and 1 trailing cell (2,764 ms); the evaluation window (1790632200000-1790632545000, 345 s) is narrower than the run (360,014 ms), and 3,9099-37,841 = 1,258 samples fall outside the policy window.",
+   "Paymentservice statistics (19 cells) and frontend/checkoutservice statistics (23 cells) are computed over different support; cross-service comparisons of these statistics carry unequal evidence weight."
+  ],
+  "hypotheses": [
+   {
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0",
+     "analysis-result.json#/evidence/1",
+     "analysis-result.json#/evidence/2",
+     "analysis-result.json#/evidence/3",
+     "analysis-result.json#/evidence/4",
+     "analysis-result.json#/evidence/5",
+     "analysis-result.json#/evidence/6",
+     "analysis-result.json#/evidence/19"
+    ],
+    "observation": "The 'checkout' sampler is the only transaction with errors: error_count 2312 of 6515 samples, while 'add product to cart', 'cart', 'home', 'product', and 'reset cart' each report 0 errors. The OpenSearch error query independently reports total_errors 2312, all in a single group: error_type 'frontend.request_error', service 'frontend', first_epoch_ms 1790632254832, last_epoch_ms 1790632369669.",
+    "possible_explanation": "The JMeter checkout failures and the frontend request_error events may be the same 2312 failed requests (e.g., the frontend returning errors while handling checkout), since the counts match exactly and both fall inside the run window. This is a hypothesis of correspondence, not a proven identity.",
+    "rank": 1,
+    "recommended_check": "Join per-request JMeter JTL checkout failure timestamps and response codes against the OpenSearch error timestamps (2312 each) to confirm one-to-one correspondence, and retrieve full error documents beyond the 2 stored samples, whose messages are only the generic 'request error'."
+   },
+   {
+    "evidence_refs": [
+     "analysis-result.json#/findings/0",
+     "analysis-result.json#/evidence/13",
+     "analysis-result.json#/evidence/15",
+     "analysis-result.json#/evidence/19",
+     "analysis-result.json#/evidence/7"
+    ],
+    "observation": "paymentservice cpu_throttle_ratio exceeded its 0.2 sla threshold in 2 cells between 1790632350000 and 1790632380000 (observed max 0.56895862409, min 0.39467548476), while the error timeline's last interval 1790632365000-1790632380000 still contains 78 errors. The series is missing 4 of 23 cells and its policy check status is NO_VERDICT with reason MISSING_RESOURCE_CELLS; series statistics otherwise show median 0.002481389578 and q95 0.412103798693.",
+    "possible_explanation": "Paymentservice CPU throttling during that interval may have degraded payment processing and contributed to checkout failures. However, the observed violation overlaps only the tail of the ~115 s error burst (peak 325 errors in 1790632260000-1790632275000), the 4 missing cells could hide earlier or different behavior, and clock_alignment is 'not_verified_by_core', so neither temporal ordering nor causation is established.",
+    "rank": 2,
+    "recommended_check": "First verify clock alignment across the JMeter run clock, the Prometheus snapshot, and the OpenSearch error index. Then identify which 4 paymentservice cells are missing, plot per-cell cpu_throttle_ratio against the per-interval error timeline, and inspect cgroup/container CPU-throttle statistics for paymentservice over 1790632200000-1790632380000."
+   },
+   {
+    "evidence_refs": [
+     "analysis-result.json#/evidence/12",
+     "analysis-result.json#/evidence/13",
+     "analysis-result.json#/evidence/14",
+     "analysis-result.json#/evidence/8",
+     "analysis-result.json#/evidence/10",
+     "analysis-result.json#/evidence/18"
+    ],
+    "observation": "paymentservice memory_bytes ranges from 2,523,136 to 32,993,280 bytes (median 31,954,944, sample standard deviation ~7,952,839). Each of the three paymentservice series (cpu, memory, cpu_throttle_ratio) reports 4 missing cells of 23 expected with longest_gap_cells 4 and reason RESOURCE_GAPS, while frontend and checkoutservice series are complete (23/23 observed, no reasons). The metrics-direct prometheus profile is PARTIAL with MISSING_SAMPLES on exactly the three paymentservice queries.",
+    "possible_explanation": "A paymentservice restart or scrape outage during part of the window could produce a contiguous gap across all three series together with a very low memory cell (fresh process) alongside otherwise ~30 MB usage. Alternatively, the low cells could reflect a different measurement condition. This is not established by the data; exact positions of the missing cells are not reported.",
+    "rank": 3,
+    "recommended_check": "Check container/pod restart counts, process start time, and any OOM-kill or eviction events for paymentservice in 1790632125000-1790632620000, and inspect Prometheus scrape health/'up' status for the same series to locate the 4 missing cells in time."
+   },
+   {
+    "evidence_refs": [
+     "analysis-result.json#/evidence/19",
+     "analysis-result.json#/evidence/7",
+     "analysis-result.json#/evidence/18"
+    ],
+    "observation": "The error timeline reports 0 errors in every interval before 1790632245000 and after 1790632380000 within the snapshot window 1790632125000-1790632620000. The burst spans first error 1790632254832 to last error 1790632369669 (~115 s), peaking at 325 errors (1300/min) in 1790632260000-1790632275000, while the run itself continues to 1790632547764.",
+    "possible_explanation": "A transient condition (e.g., a dependency recovering, a throttling episode ending, or a service restart completing) may have produced a bounded failure window rather than a sustained degradation. The zero-error tail does not by itself prove recovery or stability, because per-interval sample counts are not reported.",
+    "rank": 4,
+    "recommended_check": "Compute per-interval (15 s) JMeter sample counts and per-sampler error rates across the whole run to confirm load continued after 1790632380000, and to see whether checkout failures stopped abruptly (e.g., coincident with a restart) or tapered gradually."
+   },
+   {
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0",
+     "analysis-result.json#/evidence/3",
+     "analysis-result.json#/evidence/4",
+     "analysis-result.json#/evidence/19"
+    ],
+    "observation": "Despite 2312 errors, overall latency is modest (p50 13 ms, p95 98 ms, p99 179 ms, max 1006 ms) and the failing checkout sampler itself shows p50 16 ms, p95 97 ms, p99 100 ms, max 965 ms; non-failing samplers show similar or higher percentiles (e.g., 'home' p99 191 ms).",
+    "possible_explanation": "The failures may be immediate rejections (errors returned quickly) rather than timeout-driven slow requests, in which case latency percentiles alone would not reveal the failure mode. The aggregates do not separate the latencies of the 2312 failing samples.",
+    "rank": 5,
+    "recommended_check": "Inspect JTL response codes, response messages, and per-failure latency for the 2312 checkout samples, plus frontend logs around 1790632254832-1790632369669, to classify the failure mode (fast error vs timeout)."
+   },
+   {
+    "evidence_refs": [
+     "analysis-result.json#/evidence/15",
+     "analysis-result.json#/evidence/17",
+     "analysis-result.json#/evidence/18",
+     "analysis-result.json#/findings/0",
+     "analysis-result.json#/analysis_coverage",
+     "analysis-result.json#/policy_verdict"
+    ],
+    "observation": "The resource policy check for metrics-direct/paymentservice-cpu-throttle-ratio (operator gt, threshold 0.2) returned status NO_VERDICT with reason MISSING_RESOURCE_CELLS, even though a resource_threshold_violation was recorded on 2 observed cells. window_policy_summary shows business_verdict FAIL, resource_verdict NO_VERDICT, verdict NO_VERDICT; analysis_coverage is INCOMPLETE (RESOURCE_GAPS, MISSING_RESOURCE_CELLS, SOURCE_ACQUISITION_PARTIAL) because the prometheus metrics-direct profile is PARTIAL with MISSING_SAMPLES on all three paymentservice queries.",
+    "possible_explanation": "The deterministic NO_VERDICT reflects an inability to evaluate the resource policy over the full window (4 missing cells), not a resource pass and not the absence of violations; with complete data the resource verdict could differ.",
+    "rank": 6,
+    "recommended_check": "Re-acquire the three paymentservice series for 1790632125000-1790632620000 (fix scrape availability or extend lookback) and re-run the analysis so the resource side can be evaluated. The current NO_VERDICT and business FAIL must be preserved until a re-run."
+   },
+   {
+    "evidence_refs": [
+     "analysis-result.json#/evidence/8",
+     "analysis-result.json#/evidence/9",
+     "analysis-result.json#/evidence/10",
+     "analysis-result.json#/evidence/11",
+     "analysis-result.json#/evidence/3"
+    ],
+    "observation": "frontend cpu_cores mean is 0.1845995652 (max 0.196114) and memory mean ~12,159,154 bytes (max 12,812,288) with 23/23 cells; checkoutservice cpu mean is 0.0417071 (max 0.049933) and memory mean ~9,393,553 bytes (max 10,014,720) with 23/23 cells; both services' series show no gaps and small slopes.",
+    "possible_explanation": "Frontend and checkoutservice do not appear resource-saturated in the observed window, so the failure origin may lie elsewhere (e.g., a downstream dependency such as payment). This is a hypothesis consistent with, not proven by, the flat and complete series.",
+    "rank": 7,
+    "recommended_check": "Pull distributed traces or frontend/checkoutservice logs for failing checkout requests to identify which downstream call (e.g., payment) returned errors during 1790632254832-1790632369669."
+   },
+   {
+    "evidence_refs": [
+     "analysis-result.json#/evidence/14",
+     "analysis-result.json#/evidence/13"
+    ],
+    "observation": "paymentservice memory_bytes q95 is 32,930,611.2 bytes and max is 32,993,280 bytes, with min 2,523,136 bytes and median 31,954,944 bytes. No memory limit for paymentservice is stated anywhere in the evidence.",
+    "possible_explanation": "If the paymentservice container has a memory limit near the observed ~32-33 MB maximum, the series could indicate pressure up to that limit; without the configured limit value, this cannot be judged from the evidence alone.",
+    "rank": 8,
+    "recommended_check": "Compare the observed paymentservice memory series against the container's configured memory limit and any OOM-kill or memory-pressure events during 1790632125000-1790632620000."
+   }
+  ],
+  "recommendations": [
+   {
+    "action": "Verify clock alignment across the JMeter run clock, the Prometheus snapshot, and the OpenSearch error index before interpreting any temporal relationship between the error burst and the resource series.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/7",
+     "analysis-result.json#/evidence/18",
+     "analysis-result.json#/evidence/19"
+    ],
+    "rank": 1,
+    "rationale": "The resource binding reports clock_alignment 'not_verified_by_core'. With an unverified clock relationship, no lead/lag ordering or temporal causal hypothesis linking the burst (1790632254832-1790632369669) to paymentservice throttle/memory behavior can be supported."
+   },
+   {
+    "action": "Recover the 4 missing paymentservice cells (cpu, memory, cpu_throttle_ratio) for the evaluation window, e.g., by re-querying Prometheus with adjusted lookback or fixing scrape availability, then re-run the analysis to obtain a resource verdict.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/12",
+     "analysis-result.json#/evidence/13",
+     "analysis-result.json#/evidence/14",
+     "analysis-result.json#/evidence/15",
+     "analysis-result.json#/evidence/18",
+     "analysis-result.json#/analysis_coverage"
+    ],
+    "rank": 2,
+    "rationale": "All three paymentservice series report 4 missing cells of 23 (RESOURCE_GAPS), the metrics-direct prometheus profile is PARTIAL with MISSING_SAMPLES, the throttle-ratio policy check is NO_VERDICT (MISSING_RESOURCE_CELLS), and coverage is INCOMPLETE. Completing the data is the only way for the resource side to be evaluated; it may change resource_verdict from NO_VERDICT."
+   },
+   {
+    "action": "Join the 2,312 JMeter checkout failures (timestamps and response codes) against the 2,312 frontend.request_error documents to confirm they are the same events, and retrieve full error documents beyond the two stored samples.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/3",
+     "analysis-result.json#/evidence/19"
+    ],
+    "rank": 3,
+    "rationale": "The counts match exactly (checkout error_count 2312; total_errors 2312 with error_type frontend.request_error, service frontend), which suggests but does not prove correspondence, and the stored sample messages are only the generic 'request error'."
+   },
+   {
+    "action": "Investigate paymentservice for restart, OOM-kill, and CPU-throttle events over 1790632125000-1790632620000: container restart counts, process start time, cgroup throttling, memory-limit configuration, and service logs.",
+    "evidence_refs": [
+     "analysis-result.json#/findings/0",
+     "analysis-result.json#/evidence/12",
+     "analysis-result.json#/evidence/13",
+     "analysis-result.json#/evidence/14"
+    ],
+    "rank": 4,
+    "rationale": "Observed paymentservice data includes 2 cells with cpu_throttle_ratio above the 0.2 sla threshold (max 0.56895862409) at 1790632350000-1790632380000, memory spanning 2,523,136-32,993,280 bytes, and 4 missing cells shared across all three series - a pattern a restart or resource-pressure event could produce, though this is not proven."
+   },
+   {
+    "action": "Classify the 2,312 checkout failures by inspecting JTL response codes, response messages, and per-failure latencies, plus frontend logs during the burst window.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/3",
+     "analysis-result.json#/evidence/0",
+     "analysis-result.json#/evidence/4",
+     "analysis-result.json#/evidence/19"
+    ],
+    "rank": 5,
+    "rationale": "Checkout's own latency percentiles (p99 100 ms, max 965 ms) are comparable to non-failing samplers such as 'home' (p99 191 ms), which is consistent with fast failures rather than timeout-driven slowness; the failure mode is not identifiable from the aggregates alone."
+   },
+   {
+    "action": "Compute per-interval (15 s) JMeter sample counts and per-sampler error rates across the full run to confirm that load continued after 1790632380000 before treating the zero-error tail as recovery.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/19",
+     "analysis-result.json#/evidence/7"
+    ],
+    "rank": 6,
+    "rationale": "The error timeline shows 0 errors after 1790632380000 while the run continued to 1790632547764, but per-interval sample counts are not reported, so the zero-error tail by itself does not demonstrate stability or recovery."
+   },
+   {
+    "action": "Trace failing checkout requests end-to-end (frontend, checkoutservice, paymentservice) to identify which component returned the error, and review paymentservice logs during the burst.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/19",
+     "analysis-result.json#/evidence/10",
+     "analysis-result.json#/evidence/8",
+     "analysis-result.json#/evidence/3"
+    ],
+    "rank": 7,
+    "rationale": "All errors are frontend.request_error attributed to service 'frontend', while frontend and checkoutservice resource series are complete and low (frontend cpu max 0.196114 cores; checkoutservice cpu max 0.049933 cores); the failing component may be downstream, which traces would reveal."
+   },
+   {
+    "action": "Preserve the deterministic verdicts unchanged (overall NO_VERDICT; business FAIL; resource NO_VERDICT), remediate the checkout failure cause, and re-run the load test and analysis afterwards.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/16",
+     "analysis-result.json#/evidence/17",
+     "analysis-result.json#/evidence/3"
+    ],
+    "rank": 8,
+    "rationale": "The policy check on rule 'overall-errors' is FAIL (observed 2312/37841, operator lte, threshold 0.01) and window_policy_summary records business_verdict FAIL with overall verdict NO_VERDICT; advisory interpretation cannot change these, and a re-run after remediation can confirm whether the windowed error rate returns below threshold."
+   }
+  ],
+  "schema_version": "ai-advice-output.v1",
+  "summary": "Run jmeter_jtl_csv-0f9b9ad09038b68eeede81f4d766c176a764f5bcd23509fa49188b313412c2bd (run_validity VALID) lasted 360,014 ms with 39,099 samples (~108.6 rps); overall latency p50=13 ms, p95=98 ms, p99=179 ms, max=1,006 ms. All 2,312 errors sit on the 'checkout' sampler (2,312/6,515, ~35.5%) and exactly match the 2,312 'frontend.request_error' events (service 'frontend') in the error index; those events form a bounded burst from 1790632254832 to 1790632369669 (~115 s) with zero timeline errors before 1790632245000 and after 1790632380000. The business verdict is FAIL (rule 'overall-errors': observed 2,312/37,841, ~6.1%, against a lte 0.01 threshold), but the resource verdict is NO_VERDICT because each paymentservice series is missing 4 of 23 cells (RESOURCE_GAPS, MISSING_RESOURCE_CELLS, SOURCE_ACQUISITION_PARTIAL; analysis_coverage INCOMPLETE), so the deterministic overall verdict remains NO_VERDICT. On observed cells, paymentservice cpu_throttle_ratio exceeded its 0.2 sla threshold in 2 cells (max 0.56895862409) at 1790632350000-1790632380000 and paymentservice memory ranged 2,523,136-32,993,280 bytes, while frontend and checkoutservice series are complete, flat, and low. clock_alignment is 'not_verified_by_core', so no lead/lag or causal ordering between the error burst and resource behavior is supported. This advisory never changes the NO_VERDICT."
+ },
+ "schema": "ai-experiment-run.v3",
+ "case": "K08",
+ "rep": 1,
+ "model_id": "glm-5.3",
+ "net_retries": 0,
+ "infra_retries": 0
+}

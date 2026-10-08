@@ -1,0 +1,354 @@
+{
+ "stage": "S1",
+ "mode": "live",
+ "model": "qwen3.8-max",
+ "tag": {
+  "phase": "v3",
+  "model_tag": "qwen3.8-max",
+  "stage": "S1",
+  "case": "K06",
+  "rep": 1,
+  "attempt": 1
+ },
+ "qwen_exit": 0,
+ "wall_ms": 411565,
+ "relay": {
+  "schema_version": "advisory-ai-runtime-relay.v1",
+  "status": "FORWARDED_STRUCTURED_OUTPUT",
+  "request_count": 1,
+  "usage": {
+   "prompt_tokens": 11836,
+   "total_tokens": 34040,
+   "completion_tokens": 22204,
+   "prompt_tokens_details": {
+    "cached_tokens": 1024,
+    "text_tokens": 11836
+   },
+   "completion_tokens_details": {
+    "reasoning_tokens": 14360,
+    "text_tokens": 22204
+   }
+  },
+  "latency_ms": 410246,
+  "model_returned": "qwen3.8-max"
+ },
+ "relay_status": "FORWARDED_STRUCTURED_OUTPUT",
+ "usage": {
+  "prompt_tokens": 11836,
+  "total_tokens": 34040,
+  "completion_tokens": 22204,
+  "prompt_tokens_details": {
+   "cached_tokens": 1024,
+   "text_tokens": 11836
+  },
+  "completion_tokens_details": {
+   "reasoning_tokens": 14360,
+   "text_tokens": 22204
+  }
+ },
+ "latency_ms": 410246,
+ "status": "OK",
+ "note": null,
+ "output": {
+  "schema_version": "ai-advice-output.v1",
+  "summary": "Deterministic result (unchanged by this advice): run_validity VALID, policy_verdict FAIL, analysis_coverage INCOMPLETE with reason RESOURCE_GAPS. The single finding is a policy_failure for rule `overall-errors` in window `run-intersection`: metric error_rate_ratio, operator lte, threshold 0.01, observed numerator 3688 / denominator 73813 (about 0.05, i.e. roughly five times the threshold, computed from the referenced fields). The window policy summary records business_verdict FAIL, resource_verdict NO_POLICY, verdict FAIL — NO_POLICY means no resource policy/required capacity is configured; it is not a pass.\n\nError concentration: the overall run reports 3688 errors of 75411 samples; the JMeter transaction `checkout` carries all 3688 of its 12567 samples, while `add product to cart`, `cart`, `home`, `product` and `reset cart` each report 0 errors. The error store reports one group only — error_type `frontend.request_error`, service `frontend`, count 3688 — with coverage COMPLETE, returned_groups 1, sum_other_doc_count 0, and the generic message \"request error\" in the two stored samples (samples_per_group_limit 2).\n\nTiming pattern: the 15000 ms timeline has non-zero cells only in three bursts beginning at epochs 1790628855000, 1790629095000 and 1790629335000 — exactly 240000 ms apart — and 0 elsewhere; first error document 1790628856826, last 1790629414273. The bound series mean 313.87 errors/minute over 47 cells equals 3688 x 4 / 47, so all 3688 errors fall inside the evaluation window 1790628795000–1790629500000.\n\nLatency shape: `checkout` p50 62 ms, p95 97 ms, p99 112 ms, max 10008 ms. With ~29.3% of checkout samples errored but at most ~1% above 112 ms, most failures must have completed quickly; the 10008 ms value is a small tail, not the dominant failure mode (pending row-level confirmation).\n\nResources: NO_POLICY, and no capacity bound appears in this evidence. CPU/memory summaries exist for checkoutservice, frontend and paymentservice, but no limits or requests are referenced, so the observed cores/bytes cannot be judged high, low, or spare. Coverage is INCOMPLETE for RESOURCE_GAPS: paymentservice cpu observed 42 of 47 expected cells (5 missing) and memory 41 of 47 (6 missing), longest gap 2 cells; paymentservice memory spans min 3268608 to max 33370112 bytes with slope_per_second -3695.44 and split_half_shift -2465792.\n\nCorrelation and diagnostics: the single pair (errors vs load error_rate) stores partial_rho 0.9722 at best_lag_ms 0 with a lag profile containing only lag 0, status DESCRIPTIVE, uncertainty NOT_ESTIMATED, reasons STAGE_UNSPECIFIED / CONTROL_CONTEXT_MISSING / ACHIEVED_LOAD_ONLY; headline selection is UNAVAILABLE, selected false, reason GENUINE_PARTIAL_UNCALIBRATED, with all p-values null. clock_alignment is not_verified_by_core, so no lead/lag ordering can be inferred. The diagnostic summary reports pairs_tested 1 and status COMPLETE but anomalies_tested 0 and episodes_reported 0 — not evidence of stability. The error source is COMPLETE with cap_exceeded false, transport \"manual\", request_count 0 and query `import` SUCCESS. No load-generator resource series is among the seven bound series, so generator-side saturation can be neither confirmed nor excluded.",
+  "hypotheses": [
+   {
+    "rank": 1,
+    "observation": "The policy check for rule `overall-errors` (metric error_rate_ratio, operator lte, threshold 0.01) reports observed numerator 3688 / denominator 73813 and status FAIL in window `run-intersection`; the window policy summary records business_verdict FAIL, resource_verdict NO_POLICY, verdict FAIL; the only finding is that policy_failure; facts record run_validity VALID and policy_verdict FAIL.",
+    "possible_explanation": "The FAIL verdict may be fully accounted for by this one configured overall error-rate rule being exceeded (about 0.05 observed against a 0.01 threshold, computed from the referenced fields); no other policy check appears in the evidence, and the resource side contributed NO_POLICY rather than a second failure.",
+    "recommended_check": "Re-read the rule definition for `overall-errors` (scope `overall`, window `run-intersection`) with the policy owner and confirm that 3688/73813 is the intended quantity and threshold before acting on the verdict; do not restate NO_POLICY as PASS.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/15",
+     "analysis-result.json#/evidence/16",
+     "analysis-result.json#/findings/0",
+     "analysis-result.json#/policy_verdict",
+     "analysis-result.json#/run_validity"
+    ]
+   },
+   {
+    "rank": 2,
+    "observation": "Overall error_count is 3688 of 75411 samples; the `checkout` transaction reports error_count 3688 of 12567 samples while the other five transactions report 0 errors; the error store reports total_errors 3688 in a single group with error_type `frontend.request_error` and service `frontend`.",
+    "possible_explanation": "One failure mode on the checkout path may account for every recorded error in this run. The store tagging (`frontend`) and the JMeter sampler label (`checkout`) are different scopes, so the differing labels are not by themselves an inconsistency.",
+    "recommended_check": "Take a bounded sample of failed `checkout` rows from the JTL and match their timestamps against documents in index `ltv-errors-20260928-204948-correlation-6b792f` to test whether the two counts refer to the same events.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0",
+     "analysis-result.json#/evidence/3",
+     "analysis-result.json#/evidence/1",
+     "analysis-result.json#/evidence/22"
+    ]
+   },
+   {
+    "rank": 3,
+    "observation": "The 15000 ms error timeline is 0 except for three runs of non-zero cells starting at epochs 1790628855000, 1790629095000 and 1790629335000 — each exactly 240000 ms after the previous — with per-cell counts 218/263/308/286/288, 5/153/306/280/65 and 250/287/311/300/297/71; first document epoch 1790628856826, last 1790629414273.",
+    "possible_explanation": "The exact 240000 ms spacing may indicate a repeating trigger (a scheduled job, cache/token/session expiry, a retry cycle, periodic dependency maintenance, or a cycling test-plan element) rather than a single one-off fault. Periodicity in the referenced timestamps alone does not identify the trigger.",
+    "recommended_check": "List the non-zero cells and compare their epoch boundaries against test-plan timers/scheduler settings and against dependency or infrastructure change/maintenance logs; independently bucket the failed JTL `checkout` rows into 15000 ms cells to see whether they align with the same three bursts.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/22",
+     "analysis-result.json#/evidence/14"
+    ]
+   },
+   {
+    "rank": 4,
+    "observation": "`checkout` latency_ms is p50 62, p95 97, p99 112, max 10008 with sample_count 12567 and error_count 3688; the overall summary reports the same max 10008 while every other transaction's max is between 980 and 1071 ms.",
+    "possible_explanation": "Because about 29.3% of checkout samples errored (3688/12567) yet p99 is 112 ms — so at most roughly 1% of samples can exceed 112 ms — most errored samples likely completed quickly (immediate error responses), with the single ~10 s value a small tail such as an isolated client-side timeout. This assumes failed samples are included in the reported percentiles, which the evidence does not state.",
+    "recommended_check": "Filter JTL rows with label `checkout` and success=false, tabulate `elapsed` together with responseCode/responseMessage/failureMessage, and count rows with elapsed >= 10000 ms; confirm whether failures are included in the latency percentiles.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/3",
+     "analysis-result.json#/evidence/0"
+    ]
+   },
+   {
+    "rank": 5,
+    "observation": "The only correlation pair is `errors-vs-load-error-rate` with load_metric error_rate (unit ratio) against resource series `opensearch-error-rate-be4bd56772770471b639574d` (unit errors/minute); it stores partial_rho 0.972200295291, raw_rho 0.974383916991, best_lag_ms 0, status DESCRIPTIVE, uncertainty NOT_ESTIMATED, reasons STAGE_UNSPECIFIED / CONTROL_CONTEXT_MISSING / ACHIEVED_LOAD_ONLY; headline selection is UNAVAILABLE, selected false, reason GENUINE_PARTIAL_UNCALIBRATED, with p_value_b10, p_value_b20, max_p_value and holm_adjusted_p_value all null.",
+    "possible_explanation": "The near-1.0 stored rho may largely reflect two measurements of the same error events (client-side error ratio and error-store error rate) rather than a relationship between load and a resource; in any case it is descriptive, uncalibrated, and no headline was selected, so it cannot support a significance or causal claim.",
+    "recommended_check": "Recompute per-interval error counts from the JTL and compare them cell-by-cell with the stored timeline counts; if a resource relationship is wanted, configure a pair against a CPU or memory series with stage context and planned/offered-load controls, then rerun.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/18",
+     "analysis-result.json#/evidence/19",
+     "analysis-result.json#/evidence/22"
+    ]
+   },
+   {
+    "rank": 6,
+    "observation": "The resource binding reports clock_alignment `not_verified_by_core`, mode `run_intersection`, run 1790628790768–1790629510768, snapshot 1790628720000–1790629575000, evaluation 1790628795000–1790629500000, with 1 leading cell (4232 ms) and 1 trailing cell (10768 ms) dropped; the correlation pair's lag_profile contains only lag_ms 0.",
+    "possible_explanation": "With the clock relationship unverified and only a zero-lag profile evaluated, the relative timing of the error-store bursts, the JMeter failures and the resource series is unknown; no lead/lag ordering can be supported by this evidence.",
+    "recommended_check": "Verify time synchronization (NTP offsets) between the load generator host, the SUT hosts, the metrics collector and the error store, record the offsets, and rerun the analysis before interpreting any ordering; enable a multi-lag profile only after clocks are verified.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/7",
+     "analysis-result.json#/evidence/18"
+    ]
+   },
+   {
+    "rank": 7,
+    "observation": "analysis_coverage is INCOMPLETE with reasons [RESOURCE_GAPS]; paymentservice cpu_cores observed 42 of 47 expected cells with 5 missing and longest_gap_cells 2, and paymentservice memory_bytes observed 41 of 47 with 6 missing and longest_gap_cells 2, both flagged RESOURCE_GAPS; checkoutservice and frontend series report 0 missing cells.",
+    "possible_explanation": "The paymentservice series may have collection/scrape gaps, or the measured instance may have been absent or replaced during those intervals; the summary alone cannot distinguish missing telemetry from a real change in the measured entity.",
+    "recommended_check": "Inspect the raw paymentservice series timestamps and values around the missing cells, compare them with the collector/exporter logs and any container restart or reschedule events, and confirm the series labels identify one instance throughout.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/12",
+     "analysis-result.json#/evidence/13",
+     "analysis-result.json#/analysis_coverage"
+    ]
+   },
+   {
+    "rank": 8,
+    "observation": "paymentservice memory_bytes statistics over 41 observed cells are min 3268608, q05 3661824, q25 25022464, median 30746624, mean 26416152.98, max 33370112, sample_standard_deviation 9445923.11, slope_per_second -3695.44, split_half_shift -2465792.",
+    "possible_explanation": "The wide spread between the low quantiles and the median may indicate the measured value sitting at a much lower level for part of the window (for example a newly started process or a different instance being sampled); with 6 missing cells and no configured limit or request in the evidence, no cause can be attributed and no capacity judgement is possible.",
+    "recommended_check": "Plot or list the per-cell memory values with timestamps, locate the low-value cells, and check whether they coincide with the missing cells, with any restart event, or with the three error bursts; confirm the container/instance identity recorded for the series.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/13",
+     "analysis-result.json#/evidence/22"
+    ]
+   },
+   {
+    "rank": 9,
+    "observation": "resource_verdict is NO_POLICY while seven series are bound (checkoutservice, frontend and paymentservice cpu_cores and memory_bytes plus the error-rate series); reported means include frontend cpu 0.179432 cores (max 0.198298), checkoutservice cpu 0.042884 cores (max 0.052615), paymentservice cpu 0.011647 cores (max 0.020107), and memory means of 12423342.30, 9624045.85 and 26416152.98 bytes; no limit, request or required capacity appears in the evidence.",
+    "possible_explanation": "No resource policy or required capacity is configured for this run, so no resource PASS/FAIL and no capacity bound can be produced; without configured limits the observed cores and bytes cannot be classified as high, low, or spare capacity.",
+    "recommended_check": "Configure resource policies (and any required capacity) for the bound CPU and memory series with explicit limits, then rerun; until then record the resource side as NO_POLICY and not as a pass.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/16",
+     "analysis-result.json#/evidence/17",
+     "analysis-result.json#/evidence/10",
+     "analysis-result.json#/evidence/8",
+     "analysis-result.json#/evidence/12"
+    ]
+   },
+   {
+    "rank": 10,
+    "observation": "The seven resource bindings in the window metric summary cover checkoutservice, frontend and paymentservice (role `system`) plus the error-rate series (entity `errors`, role `system`); none is a load-generator resource rule, and no generator guard appears in the evidence.",
+    "possible_explanation": "Generator-side resource state was not collected for this run, so a load-generator contribution to the checkout errors (for example generator saturation during the bursts) can be neither confirmed nor excluded from this analysis.",
+    "recommended_check": "Rerun with load-generator CPU/memory/network series bound and inspect the JMeter-side logs for the burst intervals; if a generator guard is present and fails, keep its effect diagnostic and rerun with a generator that is not saturated.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/17",
+     "analysis-result.json#/evidence/7"
+    ]
+   },
+   {
+    "rank": 11,
+    "observation": "The diagnostic summary reports pairs_evaluable 1, pairs_tested 1, anomalies_tested 0, episodes_reported 0, suppressed_short_episodes 0, status COMPLETE, reasons [] and uncertainty NOT_ESTIMATED, while the error-rate series itself has median 0, q75 742 and max 1244 errors/minute.",
+    "possible_explanation": "Anomaly-episode evaluation may not have been applicable or enabled for this pair, so the visible burstiness is not characterized by the diagnostic path; a COMPLETE status with zero anomalies tested and zero episodes is not evidence that the series is stable or that no anomaly exists.",
+    "recommended_check": "Inspect the diagnostic configuration and eligibility rules for this pair plus the diagnostic run logs; if episode detection is expected, configure it and rerun, and in the meantime read the burst structure directly from the stored timeline.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/20",
+     "analysis-result.json#/evidence/14",
+     "analysis-result.json#/evidence/22"
+    ]
+   },
+   {
+    "rank": 12,
+    "observation": "The source summary reports source_kind opensearch, status COMPLETE, cap_exceeded false, request_count 0, retries 0, throttle_wait_ms 0, transport `manual`, and one query `import` with status SUCCESS; the error group carries load_input_sha256 dcc40905ef8a0238612b1c0869b275ea374c80770fb6d845ad1c7e8ac39b7b78 and index `ltv-errors-20260928-204948-correlation-6b792f`.",
+    "possible_explanation": "The error data may come from a pre-imported artifact rather than a live query, so completeness depends on that import; request_count 0 means no live retrieval behaviour was exercised, and the timeline coverage cannot be validated from query telemetry.",
+    "recommended_check": "Confirm the provenance and time coverage of the imported artifact against the snapshot window 1790628720000–1790629575000 and the run window 1790628790768–1790629510768, and verify the index holds all 3688 documents.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/21",
+     "analysis-result.json#/evidence/22",
+     "analysis-result.json#/evidence/7"
+    ]
+   },
+   {
+    "rank": 13,
+    "observation": "The overall summary reports sample_count 75411 with error_rate denominator 75411 and throughput numerator 75411000 / denominator 720000; the window summary reports sample_count 73813, denominator 73813 and throughput numerator 73813000 / denominator 705000; overall latency p99 is 157 ms and window p99 is 158 ms; error_count is 3688 in both.",
+    "possible_explanation": "These are different scopes and windows — the full run (720000 ms, computed as run_to minus run_from) versus the evaluation window (705000 ms after dropping one leading cell of 4232 ms and one trailing cell of 10768 ms) — so the differing denominators and the 1 ms p99 difference are expected and are not evidence of inconsistent data.",
+    "recommended_check": "Recompute each ratio inside its own scope and window (3688/75411 and 3688/73813) before comparing any counts, and state the window id alongside every quoted figure.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0",
+     "analysis-result.json#/evidence/17",
+     "analysis-result.json#/evidence/7",
+     "analysis-result.json#/evidence/15"
+    ]
+   }
+  ],
+  "recommendations": [
+   {
+    "rank": 1,
+    "action": "Report the deterministic outcome exactly as stored: run_validity VALID, policy_verdict FAIL for window `run-intersection` on rule `overall-errors` (error_rate_ratio observed 3688/73813 against operator lte threshold 0.01), business_verdict FAIL, resource_verdict NO_POLICY, analysis_coverage INCOMPLETE (RESOURCE_GAPS).",
+    "rationale": "A single policy_failure finding drives the verdict and advice cannot change it; keeping NO_POLICY separate from FAIL prevents a missing resource policy from being read as a pass.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/15",
+     "analysis-result.json#/evidence/16",
+     "analysis-result.json#/findings/0",
+     "analysis-result.json#/policy_verdict",
+     "analysis-result.json#/analysis_coverage"
+    ]
+   },
+   {
+    "rank": 2,
+    "action": "Inspect the failed `checkout` rows in the JTL: tabulate responseCode, responseMessage/failureMessage and `elapsed` for success=false rows, count rows with elapsed >= 10000 ms, and bucket those rows into 15000 ms cells for comparison with the stored error timeline.",
+    "rationale": "This separates fast error responses from the single 10008 ms tail value and tests whether the JMeter failures fall in the same three bursts as the stored `frontend.request_error` documents.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/3",
+     "analysis-result.json#/evidence/22",
+     "analysis-result.json#/evidence/0"
+    ]
+   },
+   {
+    "rank": 3,
+    "action": "Open the two referenced error documents (index `ltv-errors-20260928-204948-correlation-6b792f`, document ids 13055876-AAB9-927C-7B92-0D9D7A3A43BF and 7EF660D7-E1C9-B481-E970-AAE3DDFF4282) and query the same index for additional fields such as status code, trace id, upstream or host.",
+    "rationale": "The stored samples carry only the generic message \"request error\" with message_truncated false, and samples_per_group_limit 2 with sample_message_bytes_max 4096 caps message-level detail, so root cause is currently unsupported by the stored messages.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/22"
+    ]
+   },
+   {
+    "rank": 4,
+    "action": "Compare the three burst starts (epochs 1790628855000, 1790629095000, 1790629335000, each 240000 ms apart) with test-plan timers, scheduler or cron entries, certificate/token/session lifetimes, retry intervals, and any dependency or infrastructure maintenance windows active between 1790628856826 and 1790629414273.",
+    "rationale": "The exact 240000 ms spacing is a testable regularity; enumerating candidate periodic triggers is an inspection step that can confirm or discard the hypothesis without asserting a cause.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/22",
+     "analysis-result.json#/evidence/14"
+    ]
+   },
+   {
+    "rank": 5,
+    "action": "Verify clock synchronization and record the offsets between the load generator host, the SUT hosts, the metrics collector and the error store, then rerun the analysis so clock_alignment is verified before any lag or ordering is interpreted.",
+    "rationale": "clock_alignment is `not_verified_by_core` and the correlation lag profile contains only lag_ms 0, so an unknown clock relationship cannot support lead/lag or temporal causal reasoning.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/7",
+     "analysis-result.json#/evidence/18"
+    ]
+   },
+   {
+    "rank": 6,
+    "action": "Configure resource policies (and any required capacity) with explicit limits for the bound checkoutservice, frontend and paymentservice cpu_cores and memory_bytes series, then rerun.",
+    "rationale": "resource_verdict is NO_POLICY, which only a configured policy or required capacity can turn into PASS or FAIL; healthy-looking business numbers or a rerun with the same configuration cannot. No limit or request is present in the evidence, so the observed cores and bytes must not be read as spare capacity.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/16",
+     "analysis-result.json#/evidence/17",
+     "analysis-result.json#/evidence/10",
+     "analysis-result.json#/evidence/8"
+    ]
+   },
+   {
+    "rank": 7,
+    "action": "Remedy the paymentservice telemetry gaps (verify scrape/exporter configuration and instance identity for `metrics-direct/paymentservice-cpu` and `metrics-direct/paymentservice-memory`) and rerun so coverage is no longer INCOMPLETE for RESOURCE_GAPS.",
+    "rationale": "paymentservice cpu observed 42 of 47 expected cells (5 missing) and memory 41 of 47 (6 missing) with longest_gap_cells 2, so statistics for that entity are computed over partial data and coverage remains limited.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/12",
+     "analysis-result.json#/evidence/13",
+     "analysis-result.json#/analysis_coverage"
+    ]
+   },
+   {
+    "rank": 8,
+    "action": "List the raw per-cell paymentservice memory values with timestamps, identify the cells near the min of 3268608 bytes and q05 of 3661824 bytes, and check whether they coincide with the missing cells, any restart/reschedule event, or the three error bursts.",
+    "rationale": "slope_per_second -3695.44 and split_half_shift -2465792 indicate a downward shift in the stored series, but with gaps and no configured limit the cause cannot be attributed from the summary alone.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/13",
+     "analysis-result.json#/evidence/22"
+    ]
+   },
+   {
+    "rank": 9,
+    "action": "Rerun with load-generator resource series (CPU, memory, network) bound alongside the system series, and inspect the JMeter logs for the three burst intervals.",
+    "rationale": "None of the seven bound series is a generator series, so generator-side saturation cannot be confirmed or excluded; if a generator guard is present and fails it stays diagnostic, and the remedy is a rerun with a generator that is not saturated.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/17",
+     "analysis-result.json#/evidence/7"
+    ]
+   },
+   {
+    "rank": 10,
+    "action": "If a load-versus-resource relationship is intended, configure the correlation with stage context and planned/offered-load controls (the stored reasons are STAGE_UNSPECIFIED, CONTROL_CONTEXT_MISSING, ACHIEVED_LOAD_ONLY) and pair a CPU or memory series against load, then rerun; continue to quote the stored partial_rho 0.9722 as DESCRIPTIVE with uncertainty NOT_ESTIMATED and no selected headline.",
+    "rationale": "The stored pair compares the JMeter error ratio with the error-store error rate, i.e. two measurements of errors, and its headline selection is UNAVAILABLE with reason GENUINE_PARTIAL_UNCALIBRATED and all p-values null, so it cannot carry a significance or causal claim.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/18",
+     "analysis-result.json#/evidence/19"
+    ]
+   },
+   {
+    "rank": 11,
+    "action": "Re-run the diagnostic path with anomaly-episode testing configured for the evaluable pair if episodes are expected; until then read the burst structure directly from the stored 15000 ms timeline.",
+    "rationale": "The diagnostic summary reports status COMPLETE with pairs_tested 1 but anomalies_tested 0 and episodes_reported 0, which means episodes were not evaluated — not that the series is stable or free of anomalies.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/20",
+     "analysis-result.json#/evidence/22"
+    ]
+   },
+   {
+    "rank": 12,
+    "action": "Validate the imported error artifact: confirm that transport `manual` with request_count 0 and query `import` SUCCESS covers the snapshot window 1790628720000–1790629575000 and the run window 1790628790768–1790629510768, and that the index contains all 3688 documents.",
+    "rationale": "The source reports COMPLETE with cap_exceeded false but no live requests, so timeline completeness depends entirely on the imported data rather than on query telemetry.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/21",
+     "analysis-result.json#/evidence/22",
+     "analysis-result.json#/evidence/7"
+    ]
+   },
+   {
+    "rank": 13,
+    "action": "When quoting counts, keep scope and window explicit: recompute 3688/75411 (overall, throughput denominator 720000) and 3688/73813 (window `run-intersection`, throughput denominator 705000) separately, and note the dropped leading cell (4232 ms) and trailing cell (10768 ms).",
+    "rationale": "Overall run counts and policy-window denominators are different quantities covering different spans; presenting them side by side without the window id invites a false inconsistency claim.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0",
+     "analysis-result.json#/evidence/17",
+     "analysis-result.json#/evidence/15",
+     "analysis-result.json#/evidence/7"
+    ]
+   }
+  ],
+  "caveats": [
+   "This is advisory interpretation only. The deterministic verdict is preserved exactly: run_validity VALID, policy_verdict FAIL, window `run-intersection` verdict FAIL with business_verdict FAIL and resource_verdict NO_POLICY, analysis_coverage INCOMPLETE (RESOURCE_GAPS).",
+   "resource_verdict NO_POLICY reflects a missing resource policy or required capacity. It is not PASS, and neither a healthy business window nor a rerun with the same configuration can turn it into PASS.",
+   "No capacity bound (LOWER_BOUND, UPPER_BOUND or BOUNDED) appears in this evidence, so no statement about capacity headroom is possible. Knee detection is not implemented in the product (a fixed product limitation, not a defect of this run) and is not a step for the operator.",
+   "Correlation uncertainty is NOT_ESTIMATED and the headline selection is UNAVAILABLE (selected false, reason GENUINE_PARTIAL_UNCALIBRATED) with p_value_b10, p_value_b20, max_p_value and holm_adjusted_p_value all null; the stored partial_rho 0.9722 / raw_rho 0.9744 is descriptive only and supports no significance or causal claim.",
+   "clock_alignment is `not_verified_by_core` and the lag_profile contains only lag_ms 0, so no lead/lag ordering or temporal causal hypothesis is supported; clock verification must come first.",
+   "anomalies_tested 0 with episodes_reported 0 and status COMPLETE means anomaly episodes were not evaluated; this does not prove stability, absence of anomalies, or low load.",
+   "No limit, request or required capacity is referenced for any CPU or memory series, so observed values (for example frontend cpu mean 0.179432 cores, checkoutservice cpu mean 0.042884 cores, paymentservice memory mean 26416152.98 bytes) cannot be characterized as high, low, or spare capacity.",
+   "Coverage is INCOMPLETE for RESOURCE_GAPS: paymentservice cpu_cores has 5 missing cells (42 of 47 observed) and memory_bytes 6 missing (41 of 47), each with longest_gap_cells 2, so that entity's statistics rest on partial data.",
+   "Error-store message detail is capped: samples_per_group_limit 2, sample_message_bytes_max 4096, and the stored message is the generic \"request error\"; returned_groups 1 with sum_other_doc_count 0 and coverage COMPLETE means only that one error_type group was present in the store for that window, not that no other failure detail exists elsewhere.",
+   "The error source used transport `manual` with request_count 0, retries 0 and query `import` SUCCESS, so live-query behaviour was not exercised and timeline completeness depends on the imported artifact.",
+   "No load-generator resource series or generator guard is present among the seven bound series, so generator-side saturation can be neither confirmed nor excluded.",
+   "Counts and denominators differ by scope and window (overall 75411 samples / throughput denominator 720000 versus window 73813 / 705000); these measure different spans and are not evidence of inconsistent data.",
+   "All epoch values quoted are absolute millisecond timestamps from the evidence; the durations and spacings mentioned here (for example the 720000 ms run span, the 705000 ms evaluation span, the 240000 ms burst spacing, and the 4232 ms / 10768 ms dropped cells) are differences computed from those fields, not durations reported by a single field.",
+   "throughput_rps is given only as numerator/denominator pairs (75411000/720000 overall, 73813000/705000 in window) without an explicit unit statement in the evidence, so the ratio should be quoted as stored rather than converted.",
+   "The percentile-based inference about fast failures assumes failed samples are included in the reported latency percentiles; the evidence does not state this, so it remains a hypothesis pending row-level JTL inspection.",
+   "Only operator-performable actions are recommended (rerun, inspect data, configure a policy, verify clocks). No causal conclusion is asserted, and the equality of the counts 3688 across overall, checkout and error-store scopes has not been verified as the same underlying events."
+  ]
+ },
+ "schema": "ai-experiment-run.v3",
+ "case": "K06",
+ "rep": 1,
+ "model_id": "qwen3.8-max",
+ "net_retries": 0,
+ "infra_retries": 0
+}

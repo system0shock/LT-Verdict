@@ -1,0 +1,41 @@
+{
+ "required": [
+  [
+   "reference_p95",
+   [
+    "(?:(?:latency|p95|95th|response[ -]time)|reference|baseline)[^.\\n]{0,100}(?:(?<![\\d.,])(?:50)(?![\\d]|[.,]\\d))|(?:(?<![\\d.,])(?:50)(?![\\d]|[.,]\\d))[^.\\n]{0,100}(?:(?:latency|p95|95th|response[ -]time)|reference|baseline)"
+   ]
+  ],
+  [
+   "degraded_p95",
+   [
+    "(?:(?:latency|p95|95th|response[ -]time)|workload|load)[^.\\n]{0,100}(?:(?<![\\d.,])(?:100)(?![\\d]|[.,]\\d))|(?:(?<![\\d.,])(?:100)(?![\\d]|[.,]\\d))[^.\\n]{0,100}(?:(?:latency|p95|95th|response[ -]time)|workload|load)"
+   ]
+  ],
+  [
+   "no_headline",
+   [
+    "no (?:selected |reported )?(?:headline|association|finding)",
+    "(?:headline|selector|selection|association)[^.\\n]{0,100}(?:(?:unavailable|not selected|not (?:evaluable|computed)))|(?:(?:unavailable|not selected|not (?:evaluable|computed)))[^.\\n]{0,100}(?:headline|selector|selection|association)"
+   ]
+  ]
+ ],
+ "forbidden": [
+  "claims a hidden cause as proven",
+  "says there is no problem because no headline was selected"
+ ],
+ "useful_checks": [
+  "add telemetry that can separate the explanations of the observed latency increase"
+ ],
+ "source": {
+  "builder": "AdvisoryEvidenceBuilder",
+  "build": "5b5e51c+harness",
+  "source": "a:NT07-clean-2001:0",
+  "source_sha256": "1fc624d2aa40138c95671fa83c7e16218368af7e4ffc7cf6a183c35dc9c74692",
+  "derivation": [
+   "clockUnknown"
+  ],
+  "evidence_sha256": "74385d363d1f0481897184cd9f65783230843403ec60845e29982d6ca25d9c9f",
+  "inputs": "a:NT07-clean-2001:0, derivation [clockUnknown], analysed through RunBundleStore -> AnalysisService -> AdvisoryEvidenceBuilder by AdvisoryHoldoutCorpusTest on 5b5e51c+harness"
+ }
+}

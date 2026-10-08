@@ -1,0 +1,88 @@
+[
+  {
+    "id": "R016",
+    "hard_defect": false,
+    "defects": [],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 5,
+    "notes": "Accurately preserves the verdict, validity, coverage, metrics, and uncertainty while giving bounded operator actions."
+  },
+  {
+    "id": "R017",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T7",
+        "field": "#/summary",
+        "quote": "no business or resource policy was bound to the evaluation window",
+        "why": "NO_POLICY establishes that no applicable rule was evaluated, not that no policy was configured or bound."
+      },
+      {
+        "type": "T2",
+        "field": "#/summary",
+        "quote": "Within the 36 s evaluation window ... the JMeter \"request\" transaction produced 720 samples",
+        "why": "The transaction summary is whole-run scope, so its count cannot be assigned to the shorter evaluation window."
+      },
+      {
+        "type": "T2",
+        "field": "#/summary",
+        "quote": "720000/36000 (i.e., 20 samples/s)",
+        "why": "The evidence does not define the numerator and denominator semantics sufficiently to derive that rate."
+      },
+      {
+        "type": "T7",
+        "field": "#/recommendations/0/rationale",
+        "quote": "NO_POLICY because no policy was attached to the window",
+        "why": "The evidence cannot establish that no policy was attached; it establishes only that no applicable rule was evaluated."
+      }
+    ],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 3,
+    "notes": "Most diagnostic cautions are useful, but unsupported policy-configuration and scope claims could mislead an operator."
+  },
+  {
+    "id": "R060",
+    "hard_defect": false,
+    "defects": [],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 5,
+    "notes": "A correct, well-prioritized interpretation that keeps hypotheses conditional and preserves scope limits."
+  },
+  {
+    "id": "R113",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T7",
+        "field": "#/summary",
+        "quote": "no policy is attached to the window",
+        "why": "NO_POLICY does not prove that no policy was configured or attached, only that no applicable rule was evaluated."
+      },
+      {
+        "type": "T8",
+        "field": "#/summary",
+        "quote": "rose from 10 to 60",
+        "why": "The evidence provides aggregate minimum, maximum, and slope values but no individual samples showing that temporal path."
+      },
+      {
+        "type": "T8",
+        "field": "#/hypotheses/0/possible_explanation",
+        "quote": "The series rises steadily across the window",
+        "why": "A positive aggregate slope does not establish a steady monotonic progression across unprovided individual samples."
+      },
+      {
+        "type": "T7",
+        "field": "#/hypotheses/5/possible_explanation",
+        "quote": "No policy/SLO is attached to the window",
+        "why": "The NO_POLICY result cannot establish absence of an attached or configured policy/SLO."
+      }
+    ],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 3,
+    "notes": "It correctly reports most evidence and uncertainty, but it overstates both the cause of NO_POLICY and the aggregate resource trajectory."
+  }
+]

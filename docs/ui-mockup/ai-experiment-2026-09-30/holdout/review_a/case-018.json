@@ -1,0 +1,108 @@
+[
+  {
+    "id": "R024",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T1",
+        "field": "#/recommendations/4/action",
+        "quote": "verify that the stage has an applicable resource rule with effect: sla",
+        "why": "The stage already has an applicable business latency SLA; a resource SLA is not additionally required for a capacity bound."
+      }
+    ],
+    "required_facts_preserved": false,
+    "missing_facts": ["The overall sample_count is 1201."],
+    "usefulness": 3,
+    "notes": "The generator and clock checks are useful, but the resource-rule advice could send the operator toward an unnecessary configuration change."
+  },
+  {
+    "id": "R037",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T2",
+        "field": "#/summary",
+        "quote": "The business latency policy passed in the window (p95 140 ms <= 250 ms, 0 errors, business verdict PASS)",
+        "why": "The zero-error aggregate is reported for the whole run, while the policy verdict covers the shorter window."
+      },
+      {
+        "type": "T7",
+        "field": "#/caveats/5",
+        "quote": "Metric summaries cover only overall and one 'checkout' transaction scope in stage window stage-1, not the whole run",
+        "why": "Both metric summaries are whole-run results, not stage-window summaries."
+      }
+    ],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 2,
+    "notes": "The operator actions are sound, but the response misstates the scope of the reported metrics."
+  },
+  {
+    "id": "R058",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T7",
+        "field": "#/recommendations/0/rationale",
+        "quote": "the capacity verdict is INDETERMINATE/NO_VERDICT",
+        "why": "INDETERMINATE is the bound type and stage verdict; NO_VERDICT is the capacity policy verdict."
+      },
+      {
+        "type": "T7",
+        "field": "#/caveats/2",
+        "quote": "reconciling that split requires the analysis policy definitions",
+        "why": "The stated diagnostic effect already explains why a failed generator guard can coexist with a window resource verdict of NO_POLICY."
+      }
+    ],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 3,
+    "notes": "Most checks are actionable, but the response blurs distinct capacity results and treats an explained verdict combination as unresolved."
+  },
+  {
+    "id": "R095",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T2",
+        "field": "#/summary",
+        "quote": "For the single 200-user stage (30 10-second cells over the 300,000 ms evaluation window), business metrics show 0 errors over 1201 samples",
+        "why": "The 0-of-1201 sample aggregate covers the whole run, not specifically the stage evaluation window."
+      },
+      {
+        "type": "T2",
+        "field": "#/recommendations/2/action",
+        "quote": "Extract the raw JMeter JTL samples for the evaluation window, identify the sample(s) near the 1500 ms latency max",
+        "why": "The 1500 ms maximum comes from a whole-run summary and is not shown to have occurred inside the evaluation window."
+      },
+      {
+        "type": "T1",
+        "field": "#/recommendations/3/action",
+        "quote": "Enable or implement the capacity knee detector",
+        "why": "KNEE_DETECTOR_NOT_IMPLEMENTED is a fixed product limitation, not an operator action needed to obtain a bound."
+      },
+      {
+        "type": "T1",
+        "field": "#/recommendations/3/rationale",
+        "quote": "a knee and upper bound cannot be located without multi-level load and a working detector",
+        "why": "A product capacity bound is computed from verified stage outcomes independently of the knee detector."
+      },
+      {
+        "type": "T1",
+        "field": "#/recommendations/4/action",
+        "quote": "Decide whether generator-cpu-guard is diagnostic or enforcing and align the configuration",
+        "why": "The generator guard is diagnostic by contract and must not be made enforcing."
+      },
+      {
+        "type": "T1",
+        "field": "#/caveats/6",
+        "quote": "no multi-level ramp was run, so no knee or capacity upper bound (upper_exclusive null) can be derived",
+        "why": "The absent upper bound follows from the unverified stage; an upper bound does not require a knee or a multi-level ramp."
+      }
+    ],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 1,
+    "notes": "The verdict and main measurements are preserved, but several recommendations contradict the capacity and generator-guard contracts."
+  }
+]

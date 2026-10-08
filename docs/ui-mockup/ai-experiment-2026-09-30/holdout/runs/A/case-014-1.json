@@ -1,0 +1,216 @@
+{
+ "stage": "A",
+ "mode": "live",
+ "model": "deepseek-v4-flash-0731",
+ "tag": {
+  "phase": "holdout",
+  "attempt_id": "case-014-1-A-t1",
+  "arm": "A",
+  "stage": null,
+  "case": "case-014",
+  "rep": 1,
+  "try": 1
+ },
+ "retry_policy": "d2",
+ "qwen_exit": 0,
+ "wall_ms": 98176,
+ "relay": {
+  "schema_version": "advisory-ai-runtime-relay.v1",
+  "status": "FORWARDED_STRUCTURED_OUTPUT",
+  "received_request_count": 1,
+  "forwarded_request_count": 1,
+  "outcomes": [
+   "FORWARDED_STRUCTURED_OUTPUT"
+  ],
+  "retry_refused_reason": null,
+  "first_refused_reason": null,
+  "model_id": "deepseek-v4-flash-0731",
+  "retry_policy": "d2",
+  "requests": [
+   {
+    "ordinal": 1,
+    "forwarded": true,
+    "outcome": "FORWARDED_STRUCTURED_OUTPUT",
+    "provider_status": 200,
+    "latency_ms": 96800,
+    "usage": {
+     "prompt_tokens": 5087,
+     "total_tokens": 15126,
+     "completion_tokens": 10039,
+     "prompt_tokens_details": {
+      "cached_tokens": 1024
+     },
+     "completion_tokens_details": {
+      "reasoning_tokens": 7573
+     }
+    },
+    "model_returned": "deepseek-v4-flash-0731"
+   }
+  ],
+  "usage": {
+   "prompt_tokens": 5087,
+   "completion_tokens": 10039,
+   "total_tokens": 15126
+  },
+  "latency_ms": 96800
+ },
+ "relay_status": "FORWARDED_STRUCTURED_OUTPUT",
+ "usage": {
+  "prompt_tokens": 5087,
+  "completion_tokens": 10039,
+  "total_tokens": 15126
+ },
+ "latency_ms": 96800,
+ "retried": false,
+ "retry_refused_reason": null,
+ "status": "OK",
+ "note": null,
+ "output": {
+  "schema_version": "ai-advice-output.v1",
+  "summary": "The LT Verdict analysis is VALID with COMPLETE coverage, but the overall verdict is NO_POLICY because no business or resource policy thresholds are configured — this is not a PASS. The run had 7,200 JMeter samples with error_count 0 and measured throughput of 20 rps, exactly matching the constant target (20 requests/s) in both windows. Latency was mostly flat: reference p50 188 ms / p95 238 ms / p99 240 ms / max 240 ms; evaluation p50 199 ms / p95 236 ms / p99 239 ms / max 240 ms. Resource-00 (ratio utilization) rose from reference mean 0.480 to evaluation mean 0.529 while the load stayed constant. One correlation candidate (pair-00) was selected: a negative association between resource-00 and response_time_p95_ms with best lag +1000 ms (best_lag_rho -0.472; raw/partial rho -0.381), but the target control was dropped as CONSTANT_CONTROL, uncertainty is NOT_ESTIMATED, status is CANDIDATE, clock_alignment is not_verified_by_core, and anomalies_tested = 0. No causal or stability claims are supported by the referenced evidence.",
+  "hypotheses": [
+   {
+    "rank": 1,
+    "observation": "In the evaluation window, the selected correlation pair reports raw_rho = partial_rho = -0.3807 between resource-00 and response_time_p95_ms, with best_lag_rho -0.4720 at best_lag_ms +1000; p95 latency is nearly flat (236-238 ms in both windows) while resource-00 spans roughly 0.30-0.70.",
+    "possible_explanation": "The negative sign could reflect a genuine inverse coupling, but because the resource series varies widely while p95 latency is nearly constant, it may instead be driven by unrelated short-term fluctuations or a spurious alignment; it should not be read as 'higher utilization reduces latency'.",
+    "recommended_check": "Plot per-cell resource-00 against p95 latency, test correlation stability across sub-windows, and recompute on de-meaned or detrended series to see whether the negative sign persists.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/5",
+     "analysis-result.json#/evidence/11",
+     "analysis-result.json#/evidence/10"
+    ]
+   },
+   {
+    "rank": 2,
+    "observation": "The correlation pipeline selected best_lag_ms = 1000, while resource-binding reports clock_alignment = 'not_verified_by_core'.",
+    "possible_explanation": "The +1000 ms lag may suggest resource-00 leads latency by about one second, but with the clock relationship unverified the ordering is not established and cannot support a temporal causal claim; the improvement over lag 0 (rho -0.4656 vs -0.4720 at +1000 ms) is small.",
+    "recommended_check": "Verify clock alignment between load generation and resource telemetry first, then re-run the correlation analysis after clock verification before interpreting any lag.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/2",
+     "analysis-result.json#/evidence/11"
+    ]
+   },
+   {
+    "rank": 3,
+    "observation": "The only requested control (target, requests/s) was dropped with reason CONSTANT_CONTROL (iqr = mad = sample_standard_deviation = 0 in both windows), so controls_used = [] and partial_rho equals raw_rho (-0.3807).",
+    "possible_explanation": "Because no control was applied, the correlation is unadjusted and may be confounded by unmeasured variables; with constant 20 rps there is no load variation to distinguish load-driven effects from other drivers.",
+    "recommended_check": "Re-run the load test with a time-varying request profile (ramp or step) so the target series is not constant, enabling controls_used and a load-adjusted partial correlation.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/4",
+     "analysis-result.json#/evidence/6",
+     "analysis-result.json#/evidence/11"
+    ]
+   },
+   {
+    "rank": 4,
+    "observation": "resource-00 mean rose from 0.4803 (reference) to 0.5290 (evaluation) under identical constant 20 rps target, with no missing cells and error_count 0 in both window metric summaries; both window policy summaries are NO_POLICY.",
+    "possible_explanation": "The increased utilization could come from background activity, drift, or internal state changes, but with no policy thresholds the change has no defined pass/fail meaning.",
+    "recommended_check": "Define a resource utilization SLO with an explicit threshold and monitor subsequent windows for excursions; establish a repeated-run baseline before attributing the rise to any cause.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/3",
+     "analysis-result.json#/evidence/5",
+     "analysis-result.json#/evidence/7",
+     "analysis-result.json#/evidence/8"
+    ]
+   },
+   {
+    "rank": 5,
+    "observation": "p50 latency increased from 188 ms (reference) to 199 ms (evaluation) while p95 (238 to 236), p99 (240 to 239) and max (240 to 240) stayed essentially flat and error_count remained 0.",
+    "possible_explanation": "A small shift in the mid-latency distribution could reflect modest service behavior or scheduling changes, but the referenced summaries alone do not identify a cause.",
+    "recommended_check": "Inspect the full per-sample latency histogram and the per-cell p50 series across both windows to confirm and locate the distributional shift.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/9",
+     "analysis-result.json#/evidence/10",
+     "analysis-result.json#/evidence/0"
+    ]
+   },
+   {
+    "rank": 6,
+    "observation": "The diagnostic summary reports anomalies_tested = 0 and episodes_reported = 0, with status COMPLETE and uncertainty NOT_ESTIMATED.",
+    "possible_explanation": "No anomaly episodes were reported because none were tested for; this does not establish that the system is stable, has spare capacity, or is problem-free.",
+    "recommended_check": "Enable an explicit anomaly-detection policy/algorithm with defined thresholds and re-evaluate both windows so anomalies are actually tested.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/13"
+    ]
+   }
+  ],
+  "recommendations": [
+   {
+    "rank": 1,
+    "action": "Configure explicit business and resource policy thresholds (latency, throughput, resource-00 utilization) so future runs produce PASS/FAIL instead of NO_POLICY.",
+    "rationale": "policy_verdict is NO_POLICY and both window policy summaries are NO_POLICY; a missing policy is not a pass and provides no boundary for interpreting latency, throughput, or utilization.",
+    "evidence_refs": [
+     "analysis-result.json#/policy_verdict",
+     "analysis-result.json#/evidence/7",
+     "analysis-result.json#/evidence/8"
+    ]
+   },
+   {
+    "rank": 2,
+    "action": "Verify that clocks and epoch timestamps of the load generator and resource telemetry are aligned before any lag-based inference.",
+    "rationale": "resource-binding reports clock_alignment = 'not_verified_by_core'; an unverified clock relationship cannot support the +1000 ms best lag or a temporal causal hypothesis.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/2",
+     "analysis-result.json#/evidence/11"
+    ]
+   },
+   {
+    "rank": 3,
+    "action": "Quantify uncertainty for the pair-00 correlation (currently NOT_ESTIMATED) by computing confidence intervals and validating with more bootstrap replicates and additional block lengths.",
+    "rationale": "The pair status is CANDIDATE with uncertainty NOT_ESTIMATED even though the headline selection reported holm-adjusted p = 0.001; uncertainty and causation are not established.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/11",
+     "analysis-result.json#/evidence/12",
+     "analysis-result.json#/evidence/13"
+    ]
+   },
+   {
+    "rank": 4,
+    "action": "Repeat the load test with a time-varying request rate so the target series is not constant, allowing the requested control to be used and a load-adjusted partial correlation to be estimated.",
+    "rationale": "The target series was constant (iqr/mad/sd = 0) and dropped as CONSTANT_CONTROL, so controls_used = [] and partial_rho equals raw_rho (-0.3807).",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/4",
+     "analysis-result.json#/evidence/6",
+     "analysis-result.json#/evidence/11"
+    ]
+   },
+   {
+    "rank": 5,
+    "action": "Configure anomaly/episode detection with explicit thresholds so future evaluations test anomalies rather than reporting anomalies_tested = 0.",
+    "rationale": "anomalies_tested = 0 and episodes_reported = 0 cannot demonstrate stability or absence of a problem.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/13"
+    ]
+   },
+   {
+    "rank": 6,
+    "action": "Track p50 latency and resource-00 utilization over time, then re-run after thresholds are defined to see whether the p50 shift (188 to 199 ms) and utilization rise (mean 0.480 to 0.529) persist.",
+    "rationale": "Both metrics changed across windows while error_count stayed 0 and target load was constant; no policy currently exists to classify the change as acceptable or not.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/3",
+     "analysis-result.json#/evidence/5",
+     "analysis-result.json#/evidence/9",
+     "analysis-result.json#/evidence/10"
+    ]
+   }
+  ],
+  "caveats": [
+   "The overall verdict is NO_POLICY for the analysis and for each window (business and resource); this is not a PASS, and missing policy must not be treated as approval.",
+   "clock_alignment = 'not_verified_by_core' means the +1000 ms best lag and any lead/lag or temporal causal interpretation are unverified.",
+   "Pair-00 status is CANDIDATE with uncertainty NOT_ESTIMATED; the selected holm_adjusted_p_value = 0.001 comes from a bootstrap selection procedure and does not prove causation.",
+   "The target control was constant and dropped as CONSTANT_CONTROL; partial_rho equals raw_rho (-0.3807) with no controls used, and sensitivity_without_achieved_rps is null.",
+   "anomalies_tested = 0 and episodes_reported = 0; absence of reported episodes does not prove stability, spare capacity, low load, or absence of a problem.",
+   "Coverage is COMPLETE with no dropped/missing cells and error_count 0 in all summaries; these are data-quality facts only, not evidence of good performance or headroom.",
+   "resource-00 is a ratio whose observed values (about 0.30-0.70 in these windows) have no intrinsic pass/fail meaning without a configured policy threshold.",
+   "The measured throughput exactly matched the constant 20 rps target; conclusions about behavior under higher or varying load cannot be drawn from this run."
+  ]
+ },
+ "schema": "ai-experiment-run.holdout.v1",
+ "case": "case-014",
+ "rep": 1,
+ "arm": "A",
+ "try": 1,
+ "attempt_id": "case-014-1-A-t1",
+ "model_id": "deepseek-v4-flash-0731",
+ "prompt_sha256": "69f215a1ad4ae678c82410ba7cf7daf171cd9c7ca0ef4626bba6977db0af4ef7"
+}

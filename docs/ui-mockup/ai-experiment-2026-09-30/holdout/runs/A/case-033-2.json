@@ -1,0 +1,246 @@
+{
+ "stage": "A",
+ "mode": "live",
+ "model": "deepseek-v4-flash-0731",
+ "tag": {
+  "phase": "holdout",
+  "attempt_id": "case-033-2-A-t1",
+  "arm": "A",
+  "stage": null,
+  "case": "case-033",
+  "rep": 2,
+  "try": 1
+ },
+ "retry_policy": "d2",
+ "qwen_exit": 0,
+ "wall_ms": 139083,
+ "relay": {
+  "schema_version": "advisory-ai-runtime-relay.v1",
+  "status": "FORWARDED_STRUCTURED_OUTPUT",
+  "received_request_count": 1,
+  "forwarded_request_count": 1,
+  "outcomes": [
+   "FORWARDED_STRUCTURED_OUTPUT"
+  ],
+  "retry_refused_reason": null,
+  "first_refused_reason": null,
+  "model_id": "deepseek-v4-flash-0731",
+  "retry_policy": "d2",
+  "requests": [
+   {
+    "ordinal": 1,
+    "forwarded": true,
+    "outcome": "FORWARDED_STRUCTURED_OUTPUT",
+    "provider_status": 200,
+    "latency_ms": 137699,
+    "usage": {
+     "prompt_tokens": 5144,
+     "total_tokens": 18883,
+     "completion_tokens": 13739,
+     "prompt_tokens_details": {
+      "cached_tokens": 1024
+     },
+     "completion_tokens_details": {
+      "reasoning_tokens": 10742
+     }
+    },
+    "model_returned": "deepseek-v4-flash-0731"
+   }
+  ],
+  "usage": {
+   "prompt_tokens": 5144,
+   "completion_tokens": 13739,
+   "total_tokens": 18883
+  },
+  "latency_ms": 137699
+ },
+ "relay_status": "FORWARDED_STRUCTURED_OUTPUT",
+ "usage": {
+  "prompt_tokens": 5144,
+  "completion_tokens": 13739,
+  "total_tokens": 18883
+ },
+ "latency_ms": 137699,
+ "retried": false,
+ "retry_refused_reason": null,
+ "status": "OK",
+ "note": null,
+ "output": {
+  "schema_version": "ai-advice-output.v1",
+  "summary": "Deterministic verdict preserved: policy_verdict = FAIL, run_validity = VALID, analysis_coverage = COMPLETE. Both windows failed the latency policy: response_time_p95_ms = 420 vs threshold 250 (operator lte), recorded by findings 0 (stage-1) and 1 (stage-2). The overall/checkout metric summary stores p50=410 ms, p95=420 ms, p99=420 ms, max=1500 ms, error_count=0 with 2401 samples. The capacity_summary is also FAIL, reports upper_exclusive=147 (unit count, load_axis users), and capacity_knee=null because knee_reason=KNEE_DETECTOR_NOT_IMPLEMENTED; since the 147-user stage itself failed latency, no tested load level satisfied the SLO. Load-generator CPU stayed ~0.41-0.45 (mean 0.43) against the 0.85 generator-cpu-guard threshold (PASS in both stages), so generator saturation is not indicated. Both window summaries report resource_verdict NO_POLICY, and resource-binding marks clock_alignment=not_verified_by_core, limiting SUT-side temporal attribution. Advisory hypotheses below are unproven explanations; they do not change the deterministic FAIL verdict.",
+  "hypotheses": [
+   {
+    "rank": 1,
+    "observation": "Stage-1, the lower stress step (target 150 users, verified_bound_load 147), still recorded response_time_p95_ms = 420 ms against a 250 ms threshold (operator lte), producing policy_failure finding 0 and window verdict FAIL; the same p95 appears in the overall metric summary.",
+    "possible_explanation": "The latency SLO may already be violated at the lowest tested load, suggesting a high baseline response time for the checkout transaction (or an SLO threshold below the achievable baseline) rather than load-induced degradation.",
+    "recommended_check": "Run a minimal-load baseline (e.g., 1-10 users) using the same checkout transaction and compare p95 against 250 ms; if still >= 250 ms, evaluate whether the threshold is realistic or the baseline needs optimization.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/9",
+     "analysis-result.json#/evidence/10",
+     "analysis-result.json#/evidence/13",
+     "analysis-result.json#/findings/0",
+     "analysis-result.json#/evidence/0"
+    ]
+   },
+   {
+    "rank": 2,
+    "observation": "The stored latency aggregates are nearly identical across stages: p50=410, p95=420, p99=420, max=1500 in stage-1 and stage-2 policy checks, while active users rose from ~148 (stage-1) to ~248 (stage-2).",
+    "possible_explanation": "Measured p95 does not change when load nearly doubles in the tested range, which may indicate a fixed dominant component of response time (e.g., checkout processing, client-side timing, or an external dependency) rather than load-sensitive behavior.",
+    "recommended_check": "Measure per-request server-side processing time separately from client-observed duration and test intermediate load steps (e.g., 50, 100, 200) to see whether p95 remains 420 ms at lower loads.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/9",
+     "analysis-result.json#/evidence/11",
+     "analysis-result.json#/evidence/3",
+     "analysis-result.json#/evidence/5",
+     "analysis-result.json#/evidence/0"
+    ]
+   },
+   {
+    "rank": 3,
+    "observation": "Response-time shape in the stored summary is tightly clustered (p50=410, p95=420, p99=420) with a single max=1500 ms and error_count=0.",
+    "possible_explanation": "The bulk of responses may have nearly constant duration with a small tail at 1500 ms (e.g., periodic slow samples), which the p95/p99 aggregates alone do not reveal.",
+    "recommended_check": "Extract the raw JTL histogram and count samples near/at 1500 ms; correlate the tail with server logs, GC pauses, or external call timeouts before attributing it.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0",
+     "analysis-result.json#/evidence/1"
+    ]
+   },
+   {
+    "rank": 4,
+    "observation": "capacity_summary reports policy_verdict FAIL, upper_exclusive=147, capacity_knee=null with knee_reason KNEE_DETECTOR_NOT_IMPLEMENTED, and both tested stages (verified 147 and 247) FAIL without recorded reasons.",
+    "possible_explanation": "Because every tested load already violated the latency policy, no passing capacity bound was verified; upper_exclusive=147 describes the tested range rather than a measured capacity limit.",
+    "recommended_check": "Run additional stair-step loads below 147 (e.g., 25, 50, 100) with per-window latency checks to find any passing bound, and implement knee detection before reporting a capacity value.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/13",
+     "analysis-result.json#/evidence/9",
+     "analysis-result.json#/evidence/11",
+     "analysis-result.json#/capacity_summary"
+    ]
+   },
+   {
+    "rank": 5,
+    "observation": "The only resource policy in the evidence is the load-generator CPU guard: mean CPU ~0.43 (range 0.41-0.45) versus threshold 0.85, status PASS in both stages; both window summaries report resource_verdict NO_POLICY.",
+    "possible_explanation": "The failure is not explained by load-generator saturation, but no SUT-side resource evidence exists, so SUT CPU/memory/network exhaustion cannot be ruled in or out.",
+    "recommended_check": "Capture SUT-host CPU, memory, and network metrics during a repeat run and add a SUT-side resource policy so the resource verdict is not NO_POLICY.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/7",
+     "analysis-result.json#/evidence/8",
+     "analysis-result.json#/evidence/4",
+     "analysis-result.json#/evidence/10",
+     "analysis-result.json#/evidence/12"
+    ]
+   },
+   {
+    "rank": 6,
+    "observation": "Stored throughput ratio is 2401000/600500 (~4) with sample_count=2401, and active users around 148-248 across the two stages.",
+    "possible_explanation": "Aggregate request rate is low relative to the number of active users, which could reflect client-side think time/delays in the JMeter script or heavy serialization, meaning measured latency may not be driven by user concurrency as expected.",
+    "recommended_check": "Audit JMeter timers, loop counts, and pacing; verify whether each user generates requests continuously and recalculate per-user request rate from the raw JTL timestamps.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0",
+     "analysis-result.json#/evidence/3",
+     "analysis-result.json#/evidence/5"
+    ]
+   },
+   {
+    "rank": 7,
+    "observation": "resource-binding reports clock_alignment=not_verified_by_core, mode=explicit_windows, and run/snapshot epoch bounds aligned at 1767225600000-1767226200000.",
+    "possible_explanation": "Until clock alignment between the load generator and any SUT-side observability is verified, temporal ordering or lead/lag attribution of the 410-420 ms latency to server-side causes is not supportable.",
+    "recommended_check": "Verify clock alignment (e.g., NTP) between the JMeter host and SUT, and add server-side timing instrumentation before testing any time-ordered causal hypothesis.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/2"
+    ]
+   }
+  ],
+  "recommendations": [
+   {
+    "rank": 1,
+    "action": "Run a baseline test at minimal load (e.g., 1-10 users) with the same checkout transaction and compare p95 against the 250 ms threshold.",
+    "rationale": "Both tested stages, including the 147-user stage, already fail latency at 420 ms; a baseline distinguishes an unachievable SLO from load-driven degradation.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/9",
+     "analysis-result.json#/evidence/11",
+     "analysis-result.json#/evidence/0",
+     "analysis-result.json#/evidence/13"
+    ]
+   },
+   {
+    "rank": 2,
+    "action": "Verify clock alignment between the load generator and the SUT and add server-side timing (application, database, external calls) before attempting temporal attribution.",
+    "rationale": "resource-binding marks clock_alignment as not_verified_by_core, so time-ordered or lead/lag causal hypotheses are not supported by current evidence.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/2"
+    ]
+   },
+   {
+    "rank": 3,
+    "action": "Inspect the raw JTL distribution: count samples at/near max=1500 ms, confirm the p95/p99 values, and identify any timeout or delayed-response patterns.",
+    "rationale": "p50/p95/p99 are nearly equal (410/420/420) with max=1500 ms; aggregates do not reveal whether the tail is an outlier artifact or a real boundary.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0",
+     "analysis-result.json#/evidence/1"
+    ]
+   },
+   {
+    "rank": 4,
+    "action": "Extend capacity testing below 147 users (e.g., 25, 50, 100) and implement knee detection, which is currently KNEE_DETECTOR_NOT_IMPLEMENTED.",
+    "rationale": "No passing load level was verified; upper_exclusive=147 is only the tested-range bound because the 147-user stage itself failed the latency policy.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/13",
+     "analysis-result.json#/capacity_summary",
+     "analysis-result.json#/findings/0"
+    ]
+   },
+   {
+    "rank": 5,
+    "action": "Add SUT-side resource monitoring and a SUT resource policy; currently both window summaries show resource_verdict NO_POLICY and only the generator CPU guard exists.",
+    "rationale": "Without SUT resource evidence, resource exhaustion on the application/database/network cannot be confirmed or excluded as a contributor to the latency FAIL.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/10",
+     "analysis-result.json#/evidence/12",
+     "analysis-result.json#/evidence/7",
+     "analysis-result.json#/evidence/8"
+    ]
+   },
+   {
+    "rank": 6,
+    "action": "Audit the JMeter script for think times, timers, and pacing; verify request generation rate against the stored throughput ratio 2401000/600500.",
+    "rationale": "The stored ratio (~4) with 148-248 active users suggests the per-user request rate is very low, which may mean pacing rather than SUT capacity drives the test.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0",
+     "analysis-result.json#/evidence/3",
+     "analysis-result.json#/evidence/5"
+    ]
+   },
+   {
+    "rank": 7,
+    "action": "After any remediation, re-run the same two-stage verification (targets 150 and 250 users) and confirm the latency check and capacity_summary verdict change before relying on new capacity numbers.",
+    "rationale": "The deterministic verdict is FAIL and all tested loads failed the latency SLO; only a repeat run with the latency policy in scope can confirm improvement.",
+    "evidence_refs": [
+     "analysis-result.json#/policy_verdict",
+     "analysis-result.json#/findings/0",
+     "analysis-result.json#/findings/1"
+    ]
+   }
+  ],
+  "caveats": [
+   "clock_alignment is not_verified_by_core (resource-binding), so any temporal correlation between load-side and SUT-side data requires clock verification first; current evidence does not support lead/lag or time-ordered causal claims.",
+   "Only load-generator CPU resource series are present; both windows report resource_verdict NO_POLICY. SUT CPU/memory/network utilization is not measured, so SUT-side resource exhaustion is not covered by this evidence.",
+   "capacity_knee is null because knee_reason=KNEE_DETECTOR_NOT_IMPLEMENTED, and upper_exclusive=147 should not be read as a verified passing capacity: the 147-user stage itself failed the latency policy (p95=420 ms > 250 ms).",
+   "The run tested only two load levels (targets 150 and 250 users); no loads below 147 were tested, so no passing load level was observed and interpolation to lower loads is not warranted.",
+   "error_count=0 and error_rate_ratio 0/2401 do not imply stability, spare capacity, or absence of problems; the latency policy FAIL is the determining verdict.",
+   "Latency statistics in evidence are window-level aggregates (p50/p95/p99/max); raw per-sample histograms and exact outlier counts are not in this evidence set.",
+   "Only the 'checkout' transaction summary is present (identical values to overall) with sample_kind JMETER_SAMPLER; other samplers or transaction types are not represented in the evidence.",
+   "The stored throughput ratio (numerator 2401000, denominator 600500) is presented as-is; converting it to requests per second depends on the unspecified units of the denominator.",
+   "analysis_coverage COMPLETE and run_validity VALID describe the analysis pipeline state, not the health or behavior of the system under test.",
+   "The deterministic policy_verdict is FAIL; this advisory does not change the verdict, and its hypotheses are unproven explanations, not proven causes."
+  ]
+ },
+ "schema": "ai-experiment-run.holdout.v1",
+ "case": "case-033",
+ "rep": 2,
+ "arm": "A",
+ "try": 1,
+ "attempt_id": "case-033-2-A-t1",
+ "model_id": "deepseek-v4-flash-0731",
+ "prompt_sha256": "69f215a1ad4ae678c82410ba7cf7daf171cd9c7ca0ef4626bba6977db0af4ef7"
+}

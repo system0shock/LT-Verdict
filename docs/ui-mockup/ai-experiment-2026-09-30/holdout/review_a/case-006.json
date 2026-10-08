@@ -1,0 +1,68 @@
+[
+  {
+    "id": "R040",
+    "hard_defect": false,
+    "defects": [],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 4,
+    "notes": "The advice preserves the verdict and key measurements and gives verifiable checks, though it is repetitive."
+  },
+  {
+    "id": "R076",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T2",
+        "field": "#/caveats/5",
+        "quote": "anomalies_tested=0 with status COMPLETE means no episodes were available to test",
+        "why": "Zero tested anomalies does not establish how many episodes were available."
+      }
+    ],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 3,
+    "notes": "Most actions are useful, but the anomaly count is turned into an unsupported conclusion about episodes."
+  },
+  {
+    "id": "R105",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T2",
+        "field": "#/summary",
+        "quote": "7200 JMeter samples across both windows show error_count 0, latency p50 198 ms, p95 237 ms, p99 239 ms, max 240 ms",
+        "why": "These are whole-run aggregates; matching window counts do not establish that the combined windows have the whole-run latency distribution."
+      },
+      {
+        "type": "T7",
+        "field": "#/hypotheses/3/possible_explanation",
+        "quote": "No thresholds/policies were configured",
+        "why": "NO_POLICY establishes that no rule applied to these windows, not that no policies or thresholds were configured."
+      }
+    ],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 2,
+    "notes": "The operational checks are useful, but the response misstates both the scope of aggregates and what NO_POLICY reveals."
+  },
+  {
+    "id": "R151",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T5",
+        "field": "#/hypotheses/1/recommended_check",
+        "quote": "disaggregate the evaluation window by sub-intervals and by load step",
+        "why": "The target stayed constant and the evidence provides no load steps within this evaluation window."
+      }
+    ],
+    "required_facts_preserved": false,
+    "missing_facts": [
+      "Zero errors across 7,200 overall samples and the window error counts.",
+      "Overall and window p95 latencies of 237, 233, and 238 ms."
+    ],
+    "usefulness": 3,
+    "notes": "The correlation checks are mostly sound, but one check assumes absent load steps and the response omits key run metrics."
+  }
+]

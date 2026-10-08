@@ -1,0 +1,198 @@
+{
+ "stage": "B",
+ "mode": "live",
+ "model": "deepseek-v4-flash-0731",
+ "tag": {
+  "phase": "holdout",
+  "attempt_id": "case-009-2-B-t1",
+  "arm": "B",
+  "stage": null,
+  "case": "case-009",
+  "rep": 2,
+  "try": 1
+ },
+ "retry_policy": "d2",
+ "qwen_exit": 0,
+ "wall_ms": 83208,
+ "relay": {
+  "schema_version": "advisory-ai-runtime-relay.v1",
+  "status": "FORWARDED_STRUCTURED_OUTPUT",
+  "received_request_count": 1,
+  "forwarded_request_count": 1,
+  "outcomes": [
+   "FORWARDED_STRUCTURED_OUTPUT"
+  ],
+  "retry_refused_reason": null,
+  "first_refused_reason": null,
+  "model_id": "deepseek-v4-flash-0731",
+  "retry_policy": "d2",
+  "requests": [
+   {
+    "ordinal": 1,
+    "forwarded": true,
+    "outcome": "FORWARDED_STRUCTURED_OUTPUT",
+    "provider_status": 200,
+    "latency_ms": 81653,
+    "usage": {
+     "prompt_tokens": 6742,
+     "total_tokens": 15798,
+     "completion_tokens": 9056,
+     "prompt_tokens_details": {
+      "cached_tokens": 1024
+     },
+     "completion_tokens_details": {
+      "reasoning_tokens": 6681
+     }
+    },
+    "model_returned": "deepseek-v4-flash-0731"
+   }
+  ],
+  "usage": {
+   "prompt_tokens": 6742,
+   "completion_tokens": 9056,
+   "total_tokens": 15798
+  },
+  "latency_ms": 81653
+ },
+ "relay_status": "FORWARDED_STRUCTURED_OUTPUT",
+ "usage": {
+  "prompt_tokens": 6742,
+  "completion_tokens": 9056,
+  "total_tokens": 15798
+ },
+ "latency_ms": 81653,
+ "retried": false,
+ "retry_refused_reason": null,
+ "status": "OK",
+ "note": null,
+ "output": {
+  "schema_version": "ai-advice-output.v1",
+  "summary": "The run is VALID with COMPLETE coverage. The capacity analysis is BOUNDED: sustained policy-compliant load is at least 197 users (lower_inclusive, from stage-2 verified at p05_10s 197) and below 297 users (upper_exclusive, from stage-3 verified at p05_10s 297). Stage-3 (target 300 users) FAILED the latency policy: response_time_p95_ms observed 420 vs threshold 250 (lte). Per-window checks observed p95 140 ms in stage-1 and stage-2 and 420 ms in stage-3; run-wide p95 is 417 ms with max 1500 ms and error_count 0. Overall policy_verdict is NO_VERDICT (the capacity product's verdict, not a run failure). capacity_knee is null because KNEE_DETECTOR_NOT_IMPLEMENTED is a fixed product limitation; the BOUNDED result derives from verified stage outcomes, not a knee. Clock alignment is not_verified_by_core. Generator cpu_used statistics are identical across all three stages (mean 0.43, min 0.41, max 0.45) despite active users rising from ~98.5 to ~198.6 to ~298.5.",
+  "hypotheses": [
+   {
+    "rank": 1,
+    "observation": "Stage-3 (target 300 users) failed the latency policy: response_time_p95_ms observed 420 vs threshold 250 (operator lte), and the capacity summary records stage-3 as FAIL with verified_bound_load 297 and upper_exclusive 297.",
+    "possible_explanation": "At about 300 concurrent users the service's p95 latency rose above the SLO, which the product uses to mark the upper edge of the capacity range; this may indicate a latency degradation point somewhere between 197 and 297 users.",
+    "recommended_check": "Rerun a load profile with a step between 200 and 300 users (e.g., 250) under the same latency rule to locate where p95 crosses 250 ms, and collect SUT-side resource series for the failing stage.",
+    "evidence_refs": [
+     "analysis-result.json#/capacity_summary",
+     "analysis-result.json#/evidence/16",
+     "analysis-result.json#/evidence/17",
+     "analysis-result.json#/evidence/7"
+    ]
+   },
+   {
+    "rank": 2,
+    "observation": "The load-generator cpu_used resource summaries for stage-1, stage-2, and stage-3 have identical statistics (mean 0.43, min 0.41, max 0.45, same standard deviation and slope_per_second) while active_users rose from ~98.5 to ~198.6 to ~298.5.",
+    "possible_explanation": "The generator CPU series may not have been captured distinctly per window, or the same underlying series was reused; the evidence does not explain why CPU statistics would be identical across tripled load.",
+    "recommended_check": "Inspect the generator's raw resource export and confirm each window_id maps to its own observed series; if any series is duplicated or missing, re-export or re-collect per-window generator telemetry.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/4",
+     "analysis-result.json#/evidence/6",
+     "analysis-result.json#/evidence/8"
+    ]
+   },
+   {
+    "rank": 3,
+    "observation": "Run-wide metrics show latency max 1500 ms, p95 417 ms, and error_count 0; per-window latency checks observed p95 140 ms in stage-1 and stage-2 but 420 ms in stage-3.",
+    "possible_explanation": "The run-wide p95 likely reflects stage-3's elevated latency rather than a uniform increase, and the 1500 ms max may have occurred during the high-load window; the evidence does not include full per-window latency distributions to confirm this attribution.",
+    "recommended_check": "Pull per-window latency distributions (p50/p95/p99/max) per stage to verify that only stage-3 drives the run-wide p95 and to see where the 1500 ms outliers occurred.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0",
+     "analysis-result.json#/evidence/16",
+     "analysis-result.json#/evidence/14",
+     "analysis-result.json#/evidence/12"
+    ]
+   },
+   {
+    "rank": 4,
+    "observation": "The resource binding records clock_alignment 'not_verified_by_core' for the explicit evaluation windows 1767225600000-1767226500000 ms.",
+    "possible_explanation": "Without verified clock alignment across the load generator, scheduler, and SUT, timestamps cannot be used to establish lead/lag or causal ordering between load steps and latency changes.",
+    "recommended_check": "Verify clock alignment (e.g., NTP/PTP check) across the generator, scheduler, and SUT before interpreting any temporal ordering between load and latency.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/2"
+    ]
+   },
+   {
+    "rank": 5,
+    "observation": "Each window policy summary reports resource_verdict NO_POLICY while the business verdict is PASS (stage-1, stage-2) and FAIL (stage-3); overall policy_verdict is NO_VERDICT.",
+    "possible_explanation": "No resource rule with effect 'sla' applied to the windows, so the capacity bound is derived only from stages with verified business outcomes; NO_POLICY is not evidence about resource capacity and NO_VERDICT is the capacity product's verdict rather than a run defect.",
+    "recommended_check": "If an independent resource-capacity evaluation is wanted, add an applicable resource rule with effect 'sla' for the stage windows and rerun; otherwise treat the bound as business-policy based only.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/13",
+     "analysis-result.json#/evidence/15",
+     "analysis-result.json#/evidence/17",
+     "analysis-result.json#/policy_verdict"
+    ]
+   }
+  ],
+  "recommendations": [
+   {
+    "rank": 1,
+    "action": "Rerun a focused load profile with load steps between 200 and 300 users (e.g., 250) under the same latency rule to locate and confirm the boundary at which p95 crosses 250 ms.",
+    "rationale": "The current bound is a wide range (197 users inclusive to 297 users exclusive); the stage-3 failure at verified p05_10s 297 sets the upper edge, and a finer step can identify the actual load at which the latency SLO is exceeded.",
+    "evidence_refs": [
+     "analysis-result.json#/capacity_summary",
+     "analysis-result.json#/evidence/16",
+     "analysis-result.json#/evidence/17"
+    ]
+   },
+   {
+    "rank": 2,
+    "action": "Collect and inspect SUT-side resource telemetry (CPU, memory, queue depth, database, GC) for the stage-3 window 1767226200000-1767226500000 ms.",
+    "rationale": "The cause of p95 420 ms vs threshold 250 ms cannot be identified from the load-generator evidence alone; server-side series are the natural place to find the contended resource during the failing stage.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/16",
+     "analysis-result.json#/evidence/0"
+    ]
+   },
+   {
+    "rank": 3,
+    "action": "Verify the provenance of the generator-cpu series: confirm each stage's window_id corresponds to separately observed CPU data, and re-export or re-collect generator telemetry if the identical statistics are due to reuse or a missing series.",
+    "rationale": "Identical CPU statistics across stages with tripled active users are not explained by the evidence; without distinct per-window generator health data, generator-side behavior at higher loads is unverified.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/4",
+     "analysis-result.json#/evidence/6",
+     "analysis-result.json#/evidence/8"
+    ]
+   },
+   {
+    "rank": 4,
+    "action": "Run clock-alignment verification across the load generator, scheduler, and SUT before using timestamps for any ordering or lead/lag analysis.",
+    "rationale": "The resource binding reports clock_alignment 'not_verified_by_core', so temporal ordering between load steps and latency changes is currently unsupported by the evidence.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/2"
+    ]
+   },
+   {
+    "rank": 5,
+    "action": "If resource capacity is of interest independently of the business latency rule, add an applicable resource rule with effect 'sla' for the stage windows and rerun; otherwise keep treating the bound as business-policy based.",
+    "rationale": "Resource verdicts are NO_POLICY for all windows, so no resource SLA rule was evaluated; NO_POLICY is neither PASS nor FAIL, and the product requires an applicable SLA per stage to derive an independent resource bound.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/13",
+     "analysis-result.json#/evidence/15",
+     "analysis-result.json#/evidence/17"
+    ]
+   }
+  ],
+  "caveats": [
+   "capacity_knee is null with knee_reason KNEE_DETECTOR_NOT_IMPLEMENTED; this is a fixed product limitation, not a defect of this run, and the BOUNDED result is derived from verified stage outcomes without a knee point.",
+   "Overall policy_verdict is NO_VERDICT while run validity is VALID and coverage is COMPLETE; NO_VERDICT is the capacity product's verdict and is not a failure of the run.",
+   "Per-window resource verdicts are NO_POLICY for all stages; missing resource SLA rules are not PASS or FAIL and say nothing about actual resource capacity.",
+   "Run-wide metric_summary aggregates the whole run; the 417 ms p95 and 1500 ms max are not proven to belong to stage-3 without per-window latency distributions, although the stage-3 policy check observed 420 ms.",
+   "error_count 0 and error_rate 0 do not prove absence of capacity pressure; the failing criterion in this analysis is the latency SLO, not errors.",
+   "clock_alignment is 'not_verified_by_core', so no lead/lag or temporal causal ordering between load and latency is supported by the evidence.",
+   "Identical generator CPU statistics across stages may indicate a data capture or reuse issue, but this is a hypothesis; the evidence does not prove duplication.",
+   "The generator guard checks (effect 'diagnostic', status PASS) are diagnostic by contract; a passing guard does not establish resource capacity or create an upper bound.",
+   "The capacity range 197 (inclusive) to 297 (exclusive) users is a boundary derived from verified stage outcomes; the actual threshold inside the range is not directly measured."
+  ]
+ },
+ "schema": "ai-experiment-run.holdout.v1",
+ "case": "case-009",
+ "rep": 2,
+ "arm": "B",
+ "try": 1,
+ "attempt_id": "case-009-2-B-t1",
+ "model_id": "deepseek-v4-flash-0731",
+ "prompt_sha256": "3c0f28bee6517c13c5c854615e7d3d59301893d9723880818e4034a32e9133bf"
+}

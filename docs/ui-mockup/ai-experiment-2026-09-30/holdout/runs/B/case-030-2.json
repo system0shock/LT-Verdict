@@ -1,0 +1,201 @@
+{
+ "stage": "B",
+ "mode": "live",
+ "model": "deepseek-v4-flash-0731",
+ "tag": {
+  "phase": "holdout",
+  "attempt_id": "case-030-2-B-t1",
+  "arm": "B",
+  "stage": null,
+  "case": "case-030",
+  "rep": 2,
+  "try": 1
+ },
+ "retry_policy": "d2",
+ "qwen_exit": 0,
+ "wall_ms": 97731,
+ "relay": {
+  "schema_version": "advisory-ai-runtime-relay.v1",
+  "status": "FORWARDED_STRUCTURED_OUTPUT",
+  "received_request_count": 1,
+  "forwarded_request_count": 1,
+  "outcomes": [
+   "FORWARDED_STRUCTURED_OUTPUT"
+  ],
+  "retry_refused_reason": null,
+  "first_refused_reason": null,
+  "model_id": "deepseek-v4-flash-0731",
+  "retry_policy": "d2",
+  "requests": [
+   {
+    "ordinal": 1,
+    "forwarded": true,
+    "outcome": "FORWARDED_STRUCTURED_OUTPUT",
+    "provider_status": 200,
+    "latency_ms": 96418,
+    "usage": {
+     "prompt_tokens": 3275,
+     "total_tokens": 12434,
+     "completion_tokens": 9159,
+     "prompt_tokens_details": {
+      "cached_tokens": 1024
+     },
+     "completion_tokens_details": {
+      "reasoning_tokens": 6832
+     }
+    },
+    "model_returned": "deepseek-v4-flash-0731"
+   }
+  ],
+  "usage": {
+   "prompt_tokens": 3275,
+   "completion_tokens": 9159,
+   "total_tokens": 12434
+  },
+  "latency_ms": 96418
+ },
+ "relay_status": "FORWARDED_STRUCTURED_OUTPUT",
+ "usage": {
+  "prompt_tokens": 3275,
+  "completion_tokens": 9159,
+  "total_tokens": 12434
+ },
+ "latency_ms": 96418,
+ "retried": false,
+ "retry_refused_reason": null,
+ "status": "OK",
+ "note": null,
+ "output": {
+  "schema_version": "ai-advice-output.v1",
+  "summary": "The referenced analysis declares run VALID, policy verdict PASS, and analysis coverage COMPLETE with no findings and no stored hypotheses. In the single 30,000 ms evaluation window (epoch ms 1767225600000 to 1767225630000), the overall and the 'request' JMeter transaction summaries both show 600 samples, 0 errors, all latency percentiles at 100 ms, and throughput_rps numerator/denominator 600000/30099; the business policy check (response_time_p95_ms 100 <= 120) and the SLA resource policy check (rule 'limit', effect sla, operator gt, threshold 80) both report PASS; the resource series is constant at 50 across all 30 cells with zero variance and zero gaps. The deterministic verdict is PASS and this advice does not alter it. Interpretation is limited by unverified resource clock alignment, a window that ends 99 ms before the run end, and the fact that throughput and sample counts are different quantities; no causal or capacity claim is supported by the evidence.",
+  "hypotheses": [
+   {
+    "rank": 1,
+    "observation": "resource-summary shows all 30 interval cells with value 50 and zero spread (min=max=mean=median=q05=q95=50; iqr, mad, sample_standard_deviation, slope_per_second, split_half_shift all 0) with missing_cells 0, longest_gap_cells 0, aggregation interval_mean, unit synthetic_unit.",
+    "possible_explanation": "The 'service'/'system' resource series may be a synthetic or injected constant telemetry stream, or the metric genuinely remained constant across the window; the summary evidence cannot distinguish a real flat measurement from a placeholder signal.",
+    "recommended_check": "Inspect the raw per-interval samples feeding series_id 'value' and the telemetry source/configuration that produced the interval_mean aggregation to confirm the constant 50 reflects a real measurement.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/3",
+     "analysis-result.json#/evidence/2"
+    ]
+   },
+   {
+    "rank": 2,
+    "observation": "resource-policy-check for rule_id 'limit' (effect sla, operator gt, threshold 80) reports status PASS, while the resource summary statistics for the same evaluation window show a constant value of 50.",
+    "possible_explanation": "The product's operator semantics may mean PASS when the bound is satisfied (e.g., the value staying below 80), or the check may evaluate a different aggregation than the summary; the evidence does not define the meaning of 'gt' for this effect, so the recorded PASS must be preserved.",
+    "recommended_check": "Review the rule configuration and product documentation for effect 'sla' with operator 'gt' and threshold 80, and optionally run controlled windows with the series above and below 80 to confirm the check's behavior, leaving the deterministic PASS unchanged.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/4",
+     "analysis-result.json#/evidence/3"
+    ]
+   },
+   {
+    "rank": 3,
+    "observation": "Both overall and transaction ('request', JMETER_SAMPLER) metric summaries report identical latency values (p50=p95=p99=max=100 ms), and the business policy check observed response_time_p95_ms 100 with operator lte and threshold 120, status PASS.",
+    "possible_explanation": "Per-sample response times may be effectively uniform (e.g., a fixed virtual or synthetic delay) rather than a distributed spread; quantile summaries alone cannot show the underlying per-sample distribution.",
+    "recommended_check": "Inspect per-sample response times from the JTL/CSV source (histogram, unique value counts, full distribution) to confirm uniformity before interpreting the 100 ms value.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0",
+     "analysis-result.json#/evidence/1",
+     "analysis-result.json#/evidence/5"
+    ]
+   },
+   {
+    "rank": 4,
+    "observation": "Both metric summaries report sample_count 600 and error_rate ratio denominator 600, while throughput_rps has numerator 600000 and denominator 30099; the evaluation window is 30000 ms while run_to (1767225630099) extends 99 ms beyond snapshot_to/evaluation_to (1767225630000).",
+    "possible_explanation": "throughput_rps numerator/denominator and sample/error counts may be defined on different bases (aggregate request accounting vs sampled window cells); the differing values are not necessarily inconsistent because they are different quantities within the same window.",
+    "recommended_check": "Confirm in the analysis manifest or product documentation what throughput_rps numerator (600000) and denominator (30099) represent relative to sample_count 600 and the error denominator 600 before deriving any rate.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0",
+     "analysis-result.json#/evidence/1",
+     "analysis-result.json#/evidence/2"
+    ]
+   },
+   {
+    "rank": 5,
+    "observation": "resource-binding reports clock_alignment 'not_verified_by_core', with run_from_epoch_ms, snapshot_from_epoch_ms, and evaluation_from_epoch_ms all equal at 1767225600000, and dropped leading/trailing cells and milliseconds all 0.",
+    "possible_explanation": "The window boundaries may align in practice, but because clock alignment is not verified by core, any temporal ordering or lead/lag relationship between run activity and resource snapshots is not established by this evidence.",
+    "recommended_check": "Verify clock synchronization between the load generator, the system under test, and the telemetry snapshot source before drawing time-ordered or causal conclusions.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/2"
+    ]
+   },
+   {
+    "rank": 6,
+    "observation": "error_count is 0 in both the overall and transaction metric summaries for the window, and the findings array is empty.",
+    "possible_explanation": "The sampler produced no failed responses in this window, which may reflect the workload exercised (no failure path covered) rather than a proven absence of errors; zero errors and no findings are not evidence of stability outside the evaluated window.",
+    "recommended_check": "Inspect raw response codes and assertions in the JTL/CSV and verify whether the test plan exercises failure scenarios before concluding anything about error behavior.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0",
+     "analysis-result.json#/evidence/1"
+    ]
+   }
+  ],
+  "recommendations": [
+   {
+    "rank": 1,
+    "action": "Verify clock alignment between the load generator, system under test, and resource snapshot source before using any temporal relationships.",
+    "rationale": "The evidence states clock_alignment 'not_verified_by_core'; unverified alignment cannot support lead/lag ordering or a temporal causal hypothesis.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/2"
+    ]
+   },
+   {
+    "rank": 2,
+    "action": "Confirm the semantics of resource policy rule 'limit' (effect sla, operator gt, threshold 80) from the rule configuration and product documentation, and preserve the recorded PASS.",
+    "rationale": "The check reports PASS while the summary shows a constant value of 50 with an operator of 'gt' and threshold 80; the evidence does not define the operator semantics, so the deterministic PASS should not be reinterpreted or changed.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/4",
+     "analysis-result.json#/evidence/3",
+     "analysis-result.json#/policy_verdict"
+    ]
+   },
+   {
+    "rank": 3,
+    "action": "Inspect the raw per-interval resource telemetry behind series_id 'value' to confirm the constant 50 series is a real measurement and not a synthetic placeholder.",
+    "rationale": "A flat series with zero variance across 30 cells does not prove stability, spare capacity, or low load; verifying the raw samples is a bounded check before any capacity-related interpretation.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/3"
+    ]
+   },
+   {
+    "rank": 4,
+    "action": "Inspect the raw JTL/CSV response times and response codes to verify the uniform 100 ms latency and zero error counts, and check whether failure scenarios were exercised.",
+    "rationale": "All latency percentiles equal 100 and error_count is 0 in both summaries; confirming the underlying per-sample distribution avoids overclaiming stability and clarifies coverage of tested behavior.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0",
+     "analysis-result.json#/evidence/1",
+     "analysis-result.json#/evidence/5"
+    ]
+   },
+   {
+    "rank": 5,
+    "action": "Review the definitions of throughput_rps numerator (600000) and denominator (30099) relative to sample_count 600 and error denominator 600 before using any throughput figure.",
+    "rationale": "The throughput numerator/denominator is a different quantity from window-scoped sample and error counts; the evidence does not say they describe the same measure, so they should not be conflated or called inconsistent.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0",
+     "analysis-result.json#/evidence/1",
+     "analysis-result.json#/evidence/2"
+    ]
+   }
+  ],
+  "caveats": [
+   "The deterministic verdict is PASS (analysis-result.json#/policy_verdict) and run validity is VALID; this advisory is interpretive only and does not change the verdict.",
+   "Resource clock alignment is 'not_verified_by_core'; any temporal ordering between run activity and resource snapshots is unverified and cannot support causal claims.",
+   "Only one evaluation window (30,000 ms, ending 99 ms before run_to_epoch_ms 1767225630099) is presented; run-wide quantities such as throughput_rps numerator 600000 are different in kind from window-scoped sample count 600 and error denominator 600.",
+   "A constant resource series (value 50) and uniformly 100 ms latencies could indicate genuine steady conditions or synthetic/uniform telemetry; the evidence alone does not prove stability, spare capacity, or low load.",
+   "Zero error counts, an empty findings list, and PASS statuses are not proof of absence of problems outside the evaluated window or of unexercised failure modes.",
+   "The operator semantics of the resource policy check (gt, threshold 80) are not defined in the evidence; the recorded PASS is preserved as-is.",
+   "No capacity bound, generator guard, or NO_POLICY artifacts were present in the evidence, so no capacity or policy-gap conclusions should be drawn from this input.",
+   "analysis_coverage reports COMPLETE with no reasons; this refers to analysis coverage and does not by itself establish telemetry fidelity or measurement accuracy."
+  ]
+ },
+ "schema": "ai-experiment-run.holdout.v1",
+ "case": "case-030",
+ "rep": 2,
+ "arm": "B",
+ "try": 1,
+ "attempt_id": "case-030-2-B-t1",
+ "model_id": "deepseek-v4-flash-0731",
+ "prompt_sha256": "3c0f28bee6517c13c5c854615e7d3d59301893d9723880818e4034a32e9133bf"
+}

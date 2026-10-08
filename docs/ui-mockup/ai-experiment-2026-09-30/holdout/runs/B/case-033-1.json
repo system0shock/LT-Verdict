@@ -1,0 +1,204 @@
+{
+ "stage": "B",
+ "mode": "live",
+ "model": "deepseek-v4-flash-0731",
+ "tag": {
+  "phase": "holdout",
+  "attempt_id": "case-033-1-B-t1",
+  "arm": "B",
+  "stage": null,
+  "case": "case-033",
+  "rep": 1,
+  "try": 1
+ },
+ "retry_policy": "d2",
+ "qwen_exit": 0,
+ "wall_ms": 102988,
+ "relay": {
+  "schema_version": "advisory-ai-runtime-relay.v1",
+  "status": "FORWARDED_STRUCTURED_OUTPUT",
+  "received_request_count": 1,
+  "forwarded_request_count": 1,
+  "outcomes": [
+   "FORWARDED_STRUCTURED_OUTPUT"
+  ],
+  "retry_refused_reason": null,
+  "first_refused_reason": null,
+  "model_id": "deepseek-v4-flash-0731",
+  "retry_policy": "d2",
+  "requests": [
+   {
+    "ordinal": 1,
+    "forwarded": true,
+    "outcome": "FORWARDED_STRUCTURED_OUTPUT",
+    "provider_status": 200,
+    "latency_ms": 101564,
+    "usage": {
+     "prompt_tokens": 5617,
+     "total_tokens": 16306,
+     "completion_tokens": 10689,
+     "prompt_tokens_details": {
+      "cached_tokens": 1024
+     },
+     "completion_tokens_details": {
+      "reasoning_tokens": 8112
+     }
+    },
+    "model_returned": "deepseek-v4-flash-0731"
+   }
+  ],
+  "usage": {
+   "prompt_tokens": 5617,
+   "completion_tokens": 10689,
+   "total_tokens": 16306
+  },
+  "latency_ms": 101564
+ },
+ "relay_status": "FORWARDED_STRUCTURED_OUTPUT",
+ "usage": {
+  "prompt_tokens": 5617,
+  "completion_tokens": 10689,
+  "total_tokens": 16306
+ },
+ "latency_ms": 101564,
+ "retried": false,
+ "retry_refused_reason": null,
+ "status": "OK",
+ "note": null,
+ "output": {
+  "schema_version": "ai-advice-output.v1",
+  "summary": "Deterministic verdict preserved: policy_verdict FAIL, capacity bound_type UPPER_BOUND with upper_exclusive = 147 users (unit count), capacity_knee = null because KNEE_DETECTOR_NOT_IMPLEMENTED (a fixed product limitation). Run validity is VALID and analysis coverage is COMPLETE. Both tested stages failed the latency rule: p95 response time 420ms vs threshold 250ms at approximately 147-150 and 247-250 active users, and window summaries report verdict FAIL for both stages. Resource verdicts in both windows are NO_POLICY (no resource rule with effect 'sla' applied); the only resource rule present is the diagnostic generator-cpu-guard, which passed (generator CPU mean 0.43 vs threshold 0.85). Overall and checkout metric summaries show 0 errors across 2401 samples, p50=410ms, p95=420ms, p99=420ms, max=1500ms. The evidence does not prove system health, spare capacity, or stability; it only shows a latency policy violation at every tested load, so no compliant load above 147 users was verified by this run.",
+  "hypotheses": [
+   {
+    "rank": 1,
+    "observation": "Both windows report FAIL because the latency policy check observed response_time_p95_ms = 420 against threshold 250 (analysis-result.json#/evidence/9, analysis-result.json#/evidence/11), and window summaries record verdict FAIL for stage-1 and stage-2 (analysis-result.json#/evidence/10, analysis-result.json#/evidence/12).",
+    "possible_explanation": "The p95 latency exceeds the policy at both tested load levels (approximately 147-150 and 247-250 users) and shows the same 420ms value, so the violation is present even at the lowest tested load and does not appear to scale with load across these two stages; an effect outside the tested load range (SUT behavior, environment, or a baseline condition) may keep latency elevated. Because clock alignment is not verified by the core, temporal ordering between load and latency cannot be assumed.",
+    "recommended_check": "Rerun with stages below 147 users (for example 50, 100, and 125 users) to find the load at which p95 latency stays at or below 250ms, and verify clock alignment between the load generator and the system under test beforehand.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/9",
+     "analysis-result.json#/evidence/11",
+     "analysis-result.json#/evidence/10",
+     "analysis-result.json#/evidence/12",
+     "analysis-result.json#/evidence/2"
+    ]
+   },
+   {
+    "rank": 2,
+    "observation": "Overall and checkout metric summaries show p50=410ms, p95=420ms, p99=420ms, and max=1500ms with 0 errors out of 2401 samples (analysis-result.json#/evidence/0, analysis-result.json#/evidence/1).",
+    "possible_explanation": "The gap between p99 (420ms) and max (1500ms) indicates a tail of much slower samples beyond the p99; sporadic outliers (for example scheduling, GC, or network contention) may exist even though the p95-based policy check and the error counts do not reflect them.",
+    "recommended_check": "Inspect the full latency distribution and the slowest samples (up to about 1500ms) against server-side telemetry (GC, network, queue depth) collected during the window to see whether the tail corresponds to a specific interval or component.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0",
+     "analysis-result.json#/evidence/1"
+    ]
+   },
+   {
+    "rank": 3,
+    "observation": "Load-generator CPU was 0.41-0.45 (mean 0.43) in both stages and the diagnostic generator-cpu-guard (operator gt, threshold 0.85) passed in both windows (analysis-result.json#/evidence/4, analysis-result.json#/evidence/6, analysis-result.json#/evidence/7, analysis-result.json#/evidence/8), while the latency policy still failed (analysis-result.json#/evidence/9, analysis-result.json#/evidence/11).",
+    "possible_explanation": "The load generator does not appear saturated during either window, so generator-side CPU saturation is an unlikely cause of the latency violation; the evidence contains no resource series for the system under test, so the cause may lie outside the load generator but is not confirmed.",
+    "recommended_check": "Collect and inspect resource series for the system under test (CPU, memory, queues) for the same windows, and inspect the load-generator resource series before rerunning with a healthy generator.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/4",
+     "analysis-result.json#/evidence/6",
+     "analysis-result.json#/evidence/7",
+     "analysis-result.json#/evidence/8"
+    ]
+   },
+   {
+    "rank": 4,
+    "observation": "The capacity summary reports bound_type UPPER_BOUND, policy_verdict FAIL, upper_exclusive = 147 users, capacity_knee = null with knee_reason KNEE_DETECTOR_NOT_IMPLEMENTED (analysis-result.json#/evidence/13 and analysis-result.json#/capacity_summary).",
+    "possible_explanation": "Because both tested stages failed the latency policy, the product reports an exclusive upper bound at 147 users (the lower stage's verified bound load); no tested load above that level is policy-compliant. The null capacity_knee is a fixed product limitation (KNEE_DETECTOR_NOT_IMPLEMENTED), not a defect of this run.",
+    "recommended_check": "Use 147 users as an exclusive upper bound from this run; rerun additional stages below 147 users to confirm a compliant load level, and do not attempt to enable or implement a knee detector (it is a fixed product limitation).",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/13",
+     "analysis-result.json#/capacity_summary"
+    ]
+   },
+   {
+    "rank": 5,
+    "observation": "Both window summaries report resource_verdict NO_POLICY and business_verdict FAIL (analysis-result.json#/evidence/10, analysis-result.json#/evidence/12); the only resource rule present is the diagnostic generator-cpu-guard (analysis-result.json#/evidence/7, analysis-result.json#/evidence/8).",
+    "possible_explanation": "NO_POLICY means no resource rule with effect 'sla' applies to these windows, so no resource-based SLA verdict or resource bound is produced for them; missing policy is not a pass and does not by itself explain the latency violation.",
+    "recommended_check": "If a resource-level SLA is needed, add a resource rule with effect 'sla' scoped to the system under test for this window and rerun; keep the diagnostic generator guard unchanged.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/10",
+     "analysis-result.json#/evidence/12",
+     "analysis-result.json#/evidence/7",
+     "analysis-result.json#/evidence/8"
+    ]
+   }
+  ],
+  "recommendations": [
+   {
+    "rank": 1,
+    "action": "Rerun with load stages below the reported 147-user exclusive upper bound (for example 50, 100, and 125 users) to locate the highest load at which p95 latency stays at or below 250ms.",
+    "rationale": "Both tested stages failed the latency policy, so no compliant load was verified by this run; the product reports upper_exclusive = 147 users.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/13",
+     "analysis-result.json#/evidence/9"
+    ]
+   },
+   {
+    "rank": 2,
+    "action": "Verify clock synchronization between the load generator and the system under test before relying on any timing comparison across series.",
+    "rationale": "The resource binding reports clock_alignment = not_verified_by_core, so lead/lag ordering and temporal causal hypotheses are unsupported without clock verification.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/2"
+    ]
+   },
+   {
+    "rank": 3,
+    "action": "Collect and inspect system-under-test telemetry (CPU, memory, GC, network, queues) for the same evaluation windows.",
+    "rationale": "The available resource series cover only the load generator, and the generator CPU guard passed; SUT saturation or contention cannot be assessed from current evidence.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/4",
+     "analysis-result.json#/evidence/6"
+    ]
+   },
+   {
+    "rank": 4,
+    "action": "Inspect the tail latency samples near the 1500ms maximum versus the p99 of 420ms and associate them with the telemetry collected during the window.",
+    "rationale": "A max of 1500ms with p99=420ms indicates outliers beyond the p99 that are not captured by the p95 policy check or the zero error count.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0",
+     "analysis-result.json#/evidence/1"
+    ]
+   },
+   {
+    "rank": 5,
+    "action": "Keep the generator-cpu-guard diagnostic; do not change its effect. If the load-generator series shows anomalies on rerun, inspect it and rerun with a healthy generator.",
+    "rationale": "The generator guard is diagnostic by contract and passed here (CPU mean 0.43 vs threshold 0.85); it is not evidence about SUT-side causes and must not be turned into an SLA/enforcing rule.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/7",
+     "analysis-result.json#/evidence/8"
+    ]
+   },
+   {
+    "rank": 6,
+    "action": "If resource-level SLA reporting is desired, configure an applicable resource rule with effect 'sla' for the window and rerun; do not treat the current NO_POLICY resource verdict as a pass.",
+    "rationale": "Both windows have resource_verdict NO_POLICY because no resource SLA rule applies, which is distinct from PASS and different from the FAIL produced by the latency rule.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/10",
+     "analysis-result.json#/evidence/12"
+    ]
+   }
+  ],
+  "caveats": [
+   "Clock alignment is not_verified_by_core (analysis-result.json#/evidence/2); lead/lag or temporal causal interpretation between signals is unsupported until clocks are verified.",
+   "Evidence contains resource series only for the load generator (analysis-result.json#/evidence/3 through analysis-result.json#/evidence/6); no system-under-test resource telemetry is present, so SUT saturation cannot be assessed.",
+   "capacity_knee is null because KNEE_DETECTOR_NOT_IMPLEMENTED, a fixed product limitation (analysis-result.json#/evidence/13); this is not a run defect and no knee-detector implementation step should be pursued.",
+   "resource_verdict NO_POLICY in both windows means no resource rule with effect 'sla' was applicable; missing policy is not a pass (analysis-result.json#/evidence/10, analysis-result.json#/evidence/12).",
+   "The policy checks cover only p95 response time; p99=420ms and max=1500ms imply tail behavior beyond what the policy check evaluates (analysis-result.json#/evidence/0).",
+   "Zero errors across 2401 samples and a passing diagnostic generator guard do not establish system health, spare capacity, or absence of a problem.",
+   "The 147-user exclusive upper bound is derived from the verified stage outcomes of this run; it is not a measured breaking point, and loads between about 151 and 246 users were not tested.",
+   "Run validity VALID and analysis coverage COMPLETE confirm analysis processing, not policy compliance."
+  ]
+ },
+ "schema": "ai-experiment-run.holdout.v1",
+ "case": "case-033",
+ "rep": 1,
+ "arm": "B",
+ "try": 1,
+ "attempt_id": "case-033-1-B-t1",
+ "model_id": "deepseek-v4-flash-0731",
+ "prompt_sha256": "3c0f28bee6517c13c5c854615e7d3d59301893d9723880818e4034a32e9133bf"
+}

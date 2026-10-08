@@ -1,0 +1,86 @@
+[
+  {
+    "id": "R002",
+    "hard_defect": false,
+    "defects": [],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 4,
+    "notes": "It preserves the FAIL verdict and gives verifiable next steps, though the latency provenance discussion adds weak speculation."
+  },
+  {
+    "id": "R008",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T4",
+        "field": "#/hypotheses/3/observation",
+        "quote": "nothing defines the ratio as requests per second",
+        "why": "The evidence names the field throughput_rps and supplies the ratio 100000/99100, approximately 1.009 requests per second."
+      },
+      {
+        "type": "T2",
+        "field": "#/summary",
+        "quote": "its numerator (100000) does not match sample_count (100)",
+        "why": "The numerator of a throughput ratio and a sample count are different quantities, so their mismatch is not an interpretation problem."
+      }
+    ],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 2,
+    "notes": "The error investigation is useful, but the throughput discussion could mislead an operator."
+  },
+  {
+    "id": "R037",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T3",
+        "field": "#/summary",
+        "quote": "So the two failing samples lie inside the checkout label",
+        "why": "Matching overall and transaction aggregates do not establish that the same two individual samples failed."
+      },
+      {
+        "type": "T3",
+        "field": "#/recommendations/5/rationale",
+        "quote": "identical, indicating a single-label run",
+        "why": "The evidence has one transaction summary, but identical aggregates do not prove the run had only one label."
+      },
+      {
+        "type": "T4",
+        "field": "#/recommendations/7/rationale",
+        "quote": "Neither supports a derived rate",
+        "why": "The reported throughput_rps ratio supports a rate of approximately 1.009 requests per second."
+      }
+    ],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 2,
+    "notes": "It states the verdict correctly but overstates what the checkout aggregate proves."
+  },
+  {
+    "id": "R044",
+    "hard_defect": false,
+    "defects": [],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 4,
+    "notes": "It gives practical checks and keeps the single-sampler explanation explicitly unconfirmed."
+  },
+  {
+    "id": "R051",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T4",
+        "field": "#/hypotheses/4/possible_explanation",
+        "quote": "Any rate value inferred here would be invented",
+        "why": "The evidence reports throughput_rps as 100000/99100, which yields approximately 1.009 requests per second."
+      }
+    ],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 2,
+    "notes": "Most actions are verifiable, but it incorrectly tells operators to disregard the reported throughput rate."
+  }
+]

@@ -1,0 +1,105 @@
+[
+  {
+    "id": "R003",
+    "hard_defect": false,
+    "defects": [
+      {
+        "type": "T8",
+        "field": "#/hypotheses/2/possible_explanation",
+        "quote": "The load generator was not saturated in the tested windows",
+        "why": "A passing CPU-throttle guard alone does not establish that the generator had no other bottleneck."
+      }
+    ],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 4,
+    "notes": "The advice preserves the verdict and gives verifiable next steps, with one overconfident generator inference."
+  },
+  {
+    "id": "R014",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T1",
+        "field": "#/hypotheses/0/recommended_check",
+        "quote": "enable/implement knee detection",
+        "why": "Knee detection is a fixed product limitation, and the upper capacity bound does not depend on enabling it."
+      },
+      {
+        "type": "T1",
+        "field": "#/recommendations/1/action",
+        "quote": "Enable or implement knee detection",
+        "why": "This repeats an invalid operator action for the fixed KNEE_DETECTOR_NOT_IMPLEMENTED limitation."
+      }
+    ],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 2,
+    "notes": "Several checks are useful, but a prominent recommendation incorrectly makes knee detection part of the capacity plan."
+  },
+  {
+    "id": "R036",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T7",
+        "field": "#/summary",
+        "quote": "The deterministic capacity verdict for this run is LOWER_BOUND",
+        "why": "LOWER_BOUND is the bound type; the deterministic policy verdict is NO_POLICY."
+      }
+    ],
+    "required_facts_preserved": false,
+    "missing_facts": [
+      "Run validity is VALID.",
+      "Analysis coverage is COMPLETE."
+    ],
+    "usefulness": 3,
+    "notes": "The later policy explanation and actions are sound, but the opening mislabels the verdict and omits validity and coverage."
+  },
+  {
+    "id": "R052",
+    "hard_defect": false,
+    "defects": [],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 4,
+    "notes": "The response gives practical policy, load-ladder, and generator checks while preserving the case facts."
+  },
+  {
+    "id": "R054",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T1",
+        "field": "#/hypotheses/3/recommended_check",
+        "quote": "implement a knee detector so an upper capacity bound and knee point can be estimated",
+        "why": "An upper bound comes from verified stage outcomes independently of the unavailable knee detector."
+      },
+      {
+        "type": "T1",
+        "field": "#/recommendations/1/action",
+        "quote": "enable a knee detector to estimate an upper capacity bound",
+        "why": "This advises enabling a fixed product limitation and incorrectly links it to computing an upper bound."
+      },
+      {
+        "type": "T3",
+        "field": "#/hypotheses/4/possible_explanation",
+        "quote": "The single slowest sampled request",
+        "why": "The aggregates do not state how many samples shared the reported maximum."
+      }
+    ],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 2,
+    "notes": "The response has useful investigations, but its knee-detector advice and assumed unique maximum could misdirect an operator."
+  },
+  {
+    "id": "R061",
+    "hard_defect": false,
+    "defects": [],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 5,
+    "notes": "The response preserves the verdict and limits, then prioritizes actions supported by the evidence."
+  }
+]

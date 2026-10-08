@@ -1,0 +1,100 @@
+[
+  {
+    "id": "R003",
+    "hard_defect": false,
+    "defects": [],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 5,
+    "notes": "Correctly preserves the verdicts and gives contract-compliant, evidence-based actions."
+  },
+  {
+    "id": "R006",
+    "hard_defect": false,
+    "defects": [],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 4,
+    "notes": "Accurate and actionable, though substantially more detailed than necessary."
+  },
+  {
+    "id": "R007",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T1",
+        "field": "#/hypotheses/5/possible_explanation",
+        "quote": "no knee or bound can be identified even if the guard passed",
+        "why": "A verified stage can establish a capacity bound independently of a knee detector."
+      },
+      {
+        "type": "T1",
+        "field": "#/hypotheses/5/recommended_check",
+        "quote": "with knee detection implemented",
+        "why": "Implementing or enabling knee detection is not a valid prerequisite for deriving a capacity bound."
+      },
+      {
+        "type": "T1",
+        "field": "#/recommendations/3/action",
+        "quote": "with knee detection implemented so a verified bound load can be established",
+        "why": "This incorrectly makes bound establishment depend on the fixed-unavailable knee detector."
+      },
+      {
+        "type": "T1",
+        "field": "#/summary",
+        "quote": "INDETERMINATE stems from the failed guard and missing knee detection",
+        "why": "The unavailable knee detector does not cause the indeterminate bound; unverified stage outcomes do."
+      }
+    ],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 2,
+    "notes": "It preserves the current verdict but gives materially wrong knee-detector advice."
+  },
+  {
+    "id": "R016",
+    "hard_defect": false,
+    "defects": [],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 4,
+    "notes": "Correct, contract-aware analysis with useful next steps but considerable padding."
+  },
+  {
+    "id": "R036",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T1",
+        "field": "#/hypotheses/8/possible_explanation",
+        "quote": "no implemented knee detector, neither a lower-inclusive verified capacity bound nor an upper-exclusive saturation bound can be derived",
+        "why": "Capacity bounds are derived from verified stage outcomes independently of knee detection."
+      },
+      {
+        "type": "T1",
+        "field": "#/recommendations/8/rationale",
+        "quote": "knee_reason is KNEE_DETECTOR_NOT_IMPLEMENTED, so no lower-inclusive or upper-exclusive bound can be produced",
+        "why": "The absent knee detector is not a prerequisite for capacity bounds."
+      },
+      {
+        "type": "T1",
+        "field": "#/caveats/3",
+        "quote": "Knee detection is unavailable ... so no knee location or capacity bound can be inferred",
+        "why": "While no knee can be inferred, a verified stage can still yield a bound without knee detection."
+      }
+    ],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 2,
+    "notes": "Much of the analysis is careful, but it materially misstates the capacity-bound contract."
+  },
+  {
+    "id": "R045",
+    "hard_defect": false,
+    "defects": [],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 5,
+    "notes": "Concise, evidence-supported advice that preserves all relevant deterministic results."
+  }
+]

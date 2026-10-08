@@ -1,0 +1,219 @@
+{
+ "stage": "B",
+ "mode": "live",
+ "model": "deepseek-v4-flash-0731",
+ "tag": {
+  "phase": "holdout",
+  "attempt_id": "case-011-1-B-t1",
+  "arm": "B",
+  "stage": null,
+  "case": "case-011",
+  "rep": 1,
+  "try": 1
+ },
+ "retry_policy": "d2",
+ "qwen_exit": 0,
+ "wall_ms": 82981,
+ "relay": {
+  "schema_version": "advisory-ai-runtime-relay.v1",
+  "status": "FORWARDED_STRUCTURED_OUTPUT",
+  "received_request_count": 1,
+  "forwarded_request_count": 1,
+  "outcomes": [
+   "FORWARDED_STRUCTURED_OUTPUT"
+  ],
+  "retry_refused_reason": null,
+  "first_refused_reason": null,
+  "model_id": "deepseek-v4-flash-0731",
+  "retry_policy": "d2",
+  "requests": [
+   {
+    "ordinal": 1,
+    "forwarded": true,
+    "outcome": "FORWARDED_STRUCTURED_OUTPUT",
+    "provider_status": 200,
+    "latency_ms": 81606,
+    "usage": {
+     "prompt_tokens": 12842,
+     "total_tokens": 21268,
+     "completion_tokens": 8426,
+     "prompt_tokens_details": {
+      "cached_tokens": 1024
+     },
+     "completion_tokens_details": {
+      "reasoning_tokens": 5573
+     }
+    },
+    "model_returned": "deepseek-v4-flash-0731"
+   }
+  ],
+  "usage": {
+   "prompt_tokens": 12842,
+   "completion_tokens": 8426,
+   "total_tokens": 21268
+  },
+  "latency_ms": 81606
+ },
+ "relay_status": "FORWARDED_STRUCTURED_OUTPUT",
+ "usage": {
+  "prompt_tokens": 12842,
+  "completion_tokens": 8426,
+  "total_tokens": 21268
+ },
+ "latency_ms": 81606,
+ "retried": false,
+ "retry_refused_reason": null,
+ "status": "OK",
+ "note": null,
+ "output": {
+  "schema_version": "ai-advice-output.v1",
+  "summary": "Deterministic verdict is NO_VERDICT (run_validity VALID, analysis_coverage INCOMPLETE with reasons RESOURCE_GAPS and MISSING_RESOURCE_CELLS). Window workload-03 (1704067800000-1704068100000): business latency PASS (p95 53 ms <= 200 ms) and zero errors, but compute-limit resource check FAIL (cpu_work mean 0.9004, threshold 0.9, 17 threshold findings); the window resource_verdict and overall verdict stay NO_VERDICT because database-limit is NO_VERDICT (reason MISSING_RESOURCE_CELLS, 1 of 300 db_work cells missing). Window workload-04 (1704068100000-1704068400000): latency FAIL (p95 28815 ms > 200 ms), compute-limit FAIL across all 300 cells (cpu_work min 0.992899, max 1.0), target rate stepped from a constant 90 requests/s to ~110 requests/s, zero errors, window verdict FAIL. Correlation analysis produced no selected association: all four pairs BELOW_EFFECT or INSUFFICIENT_DATA with uncertainty NOT_ESTIMATED, every headline selection UNAVAILABLE, and diagnostic anomalies_tested 0. Clock alignment is not_verified_by_core, so lag-based associations must not be used for lead/lag ordering until clocks are verified. The failure evidence is confined to workload-04; the overall deterministic verdict remains NO_VERDICT, not PASS and not FAIL.",
+  "hypotheses": [
+   {
+    "rank": 1,
+    "observation": "In workload-04 the target rate was ~110 requests/s (mean 109.9966, min 108.98844, max 110) while cpu_work averaged 0.99998 (min 0.992899, max 1.0) and the response_time_p95_ms check failed with observed 28815 ms vs threshold 200 ms; the window summary shows latency p95 28815 ms, max 30323 ms, and the window verdict is FAIL.",
+    "possible_explanation": "The step from ~90 to ~110 requests/s may have saturated compute capacity, causing queueing and the large latency increase; this is a hypothesis to test, not a proven causal chain.",
+    "recommended_check": "Inspect per-interval cpu_work and latency series around the rate step at 1704068100000, then rerun at a lower offered load or with additional compute to test whether latency recovers.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/8",
+     "analysis-result.json#/evidence/6",
+     "analysis-result.json#/evidence/11",
+     "analysis-result.json#/evidence/15",
+     "analysis-result.json#/evidence/16",
+     "analysis-result.json#/evidence/18"
+    ]
+   },
+   {
+    "rank": 2,
+    "observation": "In workload-03 the compute-limit check FAILed with cpu_work mean 0.9004 (q95 0.9201, max 0.9313) and 17 separate threshold findings, while the latency check PASSed with response_time_p95_ms observed 53 ms.",
+    "possible_explanation": "CPU utilization was at or slightly above the 0.9 threshold at 90 requests/s while latency remained acceptable, suggesting either that compute headroom existed in that window or that a different resource becomes the constraint at higher load, such as the load seen in workload-04.",
+    "recommended_check": "Plot the cpu_work violations vs latency on the same timeline and rerun workload-03 to confirm whether the pattern is stable before drawing conclusions.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/3",
+     "analysis-result.json#/evidence/9",
+     "analysis-result.json#/evidence/13",
+     "analysis-result.json#/findings/0",
+     "analysis-result.json#/findings/17"
+    ]
+   },
+   {
+    "rank": 3,
+    "observation": "system-db-work in workload-03 has 1 missing cell (299 of 300 observed, reason RESOURCE_GAPS), the database-limit resource policy check is NO_VERDICT with reason MISSING_RESOURCE_CELLS, the window resource_verdict and overall verict are NO_VERDICT, and analysis_coverage is INCOMPLETE.",
+    "possible_explanation": "The single missing telemetry cell prevented evaluation of database-limit for workload-03, leaving that window and the overall verdict unresolved rather than PASS; the gap is a coverage limitation, not evidence of absence of a problem.",
+    "recommended_check": "Rerun (or collect complete db_work telemetry for 1704067800000-1704068100000) so the database-limit rule can be evaluated, then re-examine the resulting window verdict.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/4",
+     "analysis-result.json#/evidence/10",
+     "analysis-result.json#/evidence/14",
+     "analysis-result.json#/analysis_coverage",
+     "analysis-result.json#/policy_verdict"
+    ]
+   },
+   {
+    "rank": 4,
+    "observation": "All four correlation pairs are BELOW_EFFECT or INSUFFICIENT_DATA with uncertainty NOT_ESTIMATED; workload-04 cpu association-01 is INSUFFICIENT_DATA with reasons NO_RESIDUAL_VARIATION, LAG_NOT_EVALUABLE, RESOURCE_DELTA_BELOW_MINIMUM; every correlation headline selection is UNAVAILABLE; the diagnostic summary reports anomalies_tested 0.",
+    "possible_explanation": "Constant or near-constant load/controls and a saturated or near-constant resource series left no exploitable variation, so the association analysis could not estimate an effect; this does not prove absence of a relationship between load, CPU, and latency.",
+    "recommended_check": "Design a rerun with ramped/varied load, complete telemetry, and verified clocks so that resource and load deltas exceed the minimums required for association estimation.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/19",
+     "analysis-result.json#/evidence/20",
+     "analysis-result.json#/evidence/22",
+     "analysis-result.json#/evidence/24",
+     "analysis-result.json#/evidence/27"
+    ]
+   },
+   {
+    "rank": 5,
+    "observation": "The resource binding reports clock_alignment not_verified_by_core, run_from_epoch_ms 1704067200000 and run_to_epoch_ms 1704068430312 differ from the evaluation window 1704067800000-1704068400000, and correlation pairs report best_lag_ms of -6000 and -10000 with non-empty lag profiles.",
+    "possible_explanation": "Without verified clock alignment between generator and system collection, negative lags cannot be interpreted as a resource leading load or response time; an unknown clock offset could produce spurious lag relationships.",
+    "recommended_check": "Verify clock synchronization between generator and system sources (e.g., NTP) and re-run correlation checks before drawing any lead/lag conclusions.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/2",
+     "analysis-result.json#/evidence/20",
+     "analysis-result.json#/evidence/21",
+     "analysis-result.json#/evidence/22"
+    ]
+   }
+  ],
+  "recommendations": [
+   {
+    "rank": 1,
+    "action": "Verify clock alignment between the generator and system collectors before interpreting any lag-based association results.",
+    "rationale": "clock_alignment is not_verified_by_core and the correlation pairs report best_lag_ms of -6000 and -10000; a verified clock relationship is a precondition for any lead/lag or temporal ordering claim.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/2",
+     "analysis-result.json#/evidence/20",
+     "analysis-result.json#/evidence/21",
+     "analysis-result.json#/evidence/22"
+    ]
+   },
+   {
+    "rank": 2,
+    "action": "Rerun with complete db_work telemetry for workload-03 so the database-limit rule can produce a verdict instead of NO_VERDICT.",
+    "rationale": "One missing db_work cell caused database-limit to be NO_VERDICT (MISSING_RESOURCE_CELLS), making the window resource_verdict and the overall policy verdict NO_VERDICT; filling the telemetry gap is the only path to a full evaluation of that window.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/4",
+     "analysis-result.json#/evidence/10",
+     "analysis-result.json#/evidence/14",
+     "analysis-result.json#/analysis_coverage",
+     "analysis-result.json#/policy_verdict"
+    ]
+   },
+   {
+    "rank": 3,
+    "action": "Investigate the workload-04 failure by inspecting cpu_work saturation and response-time series during the ~110 requests/s window, and run a controlled rerun at a lower load or with more capacity to test the saturation hypothesis.",
+    "rationale": "The latency FAIL (p95 28815 ms) coincides with cpu_work at min 0.992899 / max 1.0 over all 300 cells and a target rate near 110 requests/s, while no errors were recorded; a controlled load test is needed to test whether the capacity was the differentiator.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/6",
+     "analysis-result.json#/evidence/8",
+     "analysis-result.json#/evidence/11",
+     "analysis-result.json#/evidence/15",
+     "analysis-result.json#/evidence/16",
+     "analysis-result.json#/evidence/18"
+    ]
+   },
+   {
+    "rank": 4,
+    "action": "Configure and rerun the test with varied load and complete resource coverage so association analysis has exploitable variation, and treat the current NOT_ESTIMATED / anomalies_tested 0 outcome as inconclusive rather than proof of stability.",
+    "rationale": "All correlation pairs were BELOW_EFFECT or INSUFFICIENT_DATA, all headline selections UNAVAILABLE, and anomalies_tested 0; those outcomes do not demonstrate spare capacity, stability, or absence of a problem.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/19",
+     "analysis-result.json#/evidence/20",
+     "analysis-result.json#/evidence/21",
+     "analysis-result.json#/evidence/22",
+     "analysis-result.json#/evidence/24",
+     "analysis-result.json#/evidence/27"
+    ]
+   },
+   {
+    "rank": 5,
+    "action": "Preserve the deterministic NO_VERDICT verdict and report it alongside the workload-04 window-level FAIL rather than reclassifying the run as PASS or FAIL.",
+    "rationale": "The overall policy_verdict is NO_VERDICT due to incomplete coverage (RESOURCE_GAPS, MISSING_RESOURCE_CELLS); only re-evaluation with complete data and applicable rules can yield PASS or FAIL, and advice must not change the product verdict.",
+    "evidence_refs": [
+     "analysis-result.json#/run_validity",
+     "analysis-result.json#/analysis_coverage",
+     "analysis-result.json#/policy_verdict",
+     "analysis-result.json#/evidence/14",
+     "analysis-result.json#/evidence/16"
+    ]
+   }
+  ],
+  "caveats": [
+   "The deterministic product verdict is NO_VERDICT; only the workload-04 window itself has verdict FAIL, and workload-03 remains NO_VERDICT because database-limit is NO_VERDICT (MISSING_RESOURCE_CELLS). Advice does not change this verdict.",
+   "analysis_coverage is INCOMPLETE (RESOURCE_GAPS, MISSING_RESOURCE_CELLS): system-db-work missed 1 of 300 cells in workload-03, so DB-related conclusions for that window are unsupported.",
+   "clock_alignment is not_verified_by_core; without verified clocks, lag values and any lead/lag interpretation, including best_lag_ms of -6000 and -10000, are not reliable.",
+   "Correlation uncertainty is NOT_ESTIMATED and all headline selections are UNAVAILABLE (MULTI_WINDOW_FAMILY_UNSUPPORTED, GENUINE_PARTIAL_UNCALIBRATED); raw/partial rho values are stored but not calibrated selections. anomalies_tested = 0 and episodes_reported = 0 do not prove stability or absence of problems.",
+   "Counts span different scopes: the overall summaries cover the full run (run_from_epoch_ms 1704067200000 to run_to_epoch_ms 1704068430312, 93000 samples) while the two policy windows cover only 1704067800000-1704068400000 (27000 + 33000 samples); these are different quantities and are not inconsistent.",
+   "Zero errors (0/93000 overall, 0/27000 and 0/33000 per window) show no error-driven latency inflation, but they do not by themselves explain or rule out capacity or saturation causes.",
+   "No generator guard (resource rule with effect diagnostic) evidence appears in this analysis; nothing in the referenced data explains why the generator produced its observed target-rate series."
+  ]
+ },
+ "schema": "ai-experiment-run.holdout.v1",
+ "case": "case-011",
+ "rep": 1,
+ "arm": "B",
+ "try": 1,
+ "attempt_id": "case-011-1-B-t1",
+ "model_id": "deepseek-v4-flash-0731",
+ "prompt_sha256": "3c0f28bee6517c13c5c854615e7d3d59301893d9723880818e4034a32e9133bf"
+}

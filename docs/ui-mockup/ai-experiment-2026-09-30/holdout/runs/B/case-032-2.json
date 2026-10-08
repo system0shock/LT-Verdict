@@ -1,0 +1,183 @@
+{
+ "stage": "B",
+ "mode": "live",
+ "model": "deepseek-v4-flash-0731",
+ "tag": {
+  "phase": "holdout",
+  "attempt_id": "case-032-2-B-t1",
+  "arm": "B",
+  "stage": null,
+  "case": "case-032",
+  "rep": 2,
+  "try": 1
+ },
+ "retry_policy": "d2",
+ "qwen_exit": 0,
+ "wall_ms": 74399,
+ "relay": {
+  "schema_version": "advisory-ai-runtime-relay.v1",
+  "status": "FORWARDED_STRUCTURED_OUTPUT",
+  "received_request_count": 1,
+  "forwarded_request_count": 1,
+  "outcomes": [
+   "FORWARDED_STRUCTURED_OUTPUT"
+  ],
+  "retry_refused_reason": null,
+  "first_refused_reason": null,
+  "model_id": "deepseek-v4-flash-0731",
+  "retry_policy": "d2",
+  "requests": [
+   {
+    "ordinal": 1,
+    "forwarded": true,
+    "outcome": "FORWARDED_STRUCTURED_OUTPUT",
+    "provider_status": 200,
+    "latency_ms": 73095,
+    "usage": {
+     "prompt_tokens": 3877,
+     "total_tokens": 11580,
+     "completion_tokens": 7703,
+     "prompt_tokens_details": {
+      "cached_tokens": 1024
+     },
+     "completion_tokens_details": {
+      "reasoning_tokens": 5673
+     }
+    },
+    "model_returned": "deepseek-v4-flash-0731"
+   }
+  ],
+  "usage": {
+   "prompt_tokens": 3877,
+   "completion_tokens": 7703,
+   "total_tokens": 11580
+  },
+  "latency_ms": 73095
+ },
+ "relay_status": "FORWARDED_STRUCTURED_OUTPUT",
+ "usage": {
+  "prompt_tokens": 3877,
+  "completion_tokens": 7703,
+  "total_tokens": 11580
+ },
+ "latency_ms": 73095,
+ "retried": false,
+ "retry_refused_reason": null,
+ "status": "OK",
+ "note": null,
+ "output": {
+  "schema_version": "ai-advice-output.v1",
+  "summary": "The run is VALID with COMPLETE analysis coverage and no findings. The deterministic policy verdict is NO_POLICY: the evaluation window (from_epoch_ms 1767225600000 to 1767225636000) reports business_verdict NO_POLICY and resource_verdict NO_POLICY, meaning no applicable business policy rule and no resource rule with effect 'sla' was evaluated for the window; this is not a PASS and not a negative result. Load telemetry shows 720 samples with 0 errors and p50 150 ms with p95/p99/max 300 ms overall and for the 'request' transaction. The single correlation pair is BELOW_EFFECT with reasons CONTROL_CONTEXT_MISSING and LOAD_DELTA_BELOW_MINIMUM, the headline pair is NOT_SELECTED with MATERIALITY_NOT_MET and uncertainty NOT_ESTIMATED, and the diagnostic summary is COMPLETE with anomalies_tested 0 and episodes_reported 0. Clock alignment is not verified by core, so no timing or causal ordering can be inferred. Advice focuses on configuring the missing policy, verifying clocks, inspecting the load/resource series, and treating absent findings conservatively; the verdict remains NO_POLICY.",
+  "hypotheses": [
+   {
+    "rank": 1,
+    "observation": "The policy_verdict fact and the evaluation window summary both report NO_POLICY for the evaluation window 1767225600000–1767225636000, with business_verdict NO_POLICY and resource_verdict NO_POLICY; the run also reports 0 errors out of 720 samples overall.",
+    "possible_explanation": "No business policy rule and no resource rule with effect 'sla' were applicable to this window, so the product could not evaluate a pass/fail outcome; a healthy-looking load summary does not by itself create a policy verdict.",
+    "recommended_check": "Confirm whether the intended business policy and an applicable SLA resource rule are configured for this run's scope and window; if missing, configure them and rerun so the product can evaluate a PASS/FAIL verdict.",
+    "evidence_refs": [
+     "analysis-result.json#/policy_verdict",
+     "analysis-result.json#/evidence/4",
+     "analysis-result.json#/evidence/0"
+    ]
+   },
+   {
+    "rank": 2,
+    "observation": "The correlation pair reports raw_rho '1' at best_lag_ms 0 but status BELOW_EFFECT with reasons CONTROL_CONTEXT_MISSING and LOAD_DELTA_BELOW_MINIMUM; the headline selection is NOT_SELECTED with MATERIALITY_NOT_MET and the pair uncertainty is NOT_ESTIMATED.",
+    "possible_explanation": "The load series may not have varied enough over the window and the control context was missing, so no load–resource sensitivity could be established regardless of the raw rho value.",
+    "recommended_check": "First verify clock alignment because clock_alignment is 'not_verified_by_core', then inspect the response_time_p95_ms load series and the 'value' resource series for variation and available controls; rerun with adequate load variation and an explicit control context.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/6",
+     "analysis-result.json#/evidence/7",
+     "analysis-result.json#/evidence/2",
+     "analysis-result.json#/evidence/5"
+    ]
+   },
+   {
+    "rank": 3,
+    "observation": "The diagnostic summary is COMPLETE with pairs_evaluable 1 and pairs_tested 1, but anomalies_tested 0 and episodes_reported 0, with uncertainty NOT_ESTIMATED.",
+    "possible_explanation": "No episodes were available or tested in this window, possibly because the correlation pair was below effect; this does not demonstrate that load-related episodes or problems are absent.",
+    "recommended_check": "Inspect the actual resource and load series for excursions and rerun data collection if needed; do not treat 0 anomalies tested or 0 episodes reported as proof of stability or spare capacity.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/8",
+     "analysis-result.json#/evidence/6"
+    ]
+   },
+   {
+    "rank": 4,
+    "observation": "The overall and per-transaction metric summaries both report latency p95, p99, and max all equal to 300 ms (p50 150 ms), with sample_count 720 and error_count 0; the window metric summary shows the same latency values.",
+    "possible_explanation": "Sampling or reporting granularity or capping in the source JTL data, or a tight high-load latency pattern, could produce a plateau where p95 = p99 = max at 300 ms.",
+    "recommended_check": "Inspect the raw JMeter sample latencies in the JTL to characterize the distribution at and above 300 ms and check whether any values were truncated, rounded, or aggregated in the summary.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0",
+     "analysis-result.json#/evidence/1",
+     "analysis-result.json#/evidence/5"
+    ]
+   }
+  ],
+  "recommendations": [
+   {
+    "rank": 1,
+    "action": "Confirm and, if missing, configure a business policy rule and a resource rule with effect 'sla' covering the evaluation window, then rerun the test so the product can produce a PASS/FAIL policy verdict.",
+    "rationale": "The product reports NO_POLICY when no applicable rule exists; a healthy window or rerun does not turn NO_POLICY into PASS.",
+    "evidence_refs": [
+     "analysis-result.json#/policy_verdict",
+     "analysis-result.json#/evidence/4"
+    ]
+   },
+   {
+    "rank": 2,
+    "action": "Verify clock alignment between the run, snapshot, and resource series before any timing-based interpretation; the core reports clock_alignment 'not_verified_by_core'.",
+    "rationale": "Without verified clocks, the correlation pair's best_lag_ms 0 cannot support lead/lag ordering or any temporal causal hypothesis.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/2",
+     "analysis-result.json#/evidence/6"
+    ]
+   },
+   {
+    "rank": 3,
+    "action": "Inspect the response_time_p95_ms and 'value' resource series, investigate the CONTROL_CONTEXT_MISSING and LOAD_DELTA_BELOW_MINIMUM reasons, and rerun with sufficient load variation and an explicit control context.",
+    "rationale": "The correlation pair could not establish load–resource effect (status BELOW_EFFECT, headline NOT_SELECTED with MATERIALITY_NOT_MET), so sensitivity remains unverified.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/6",
+     "analysis-result.json#/evidence/7",
+     "analysis-result.json#/evidence/5"
+    ]
+   },
+   {
+    "rank": 4,
+    "action": "Inspect the raw jmeter_jtl_csv samples to characterize the latency distribution at and above 300 ms before concluding anything from p95 = p99 = max = 300 ms.",
+    "rationale": "Equal p95, p99, and max values can indicate capping, quantization, or coarse reporting rather than a real tail distribution.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0",
+     "analysis-result.json#/evidence/1"
+    ]
+   },
+   {
+    "rank": 5,
+    "action": "Track this run as NO_POLICY (unverdictable by rule evaluation) until an applicable policy is configured and evaluated; do not treat 0 errors, 0 anomalies tested, or 0 episodes reported as proof of stability or sufficient capacity.",
+    "rationale": "Missing policy is not a pass, and absent findings do not prove stability, spare capacity, low load, or absence of a problem.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/4",
+     "analysis-result.json#/evidence/8"
+    ]
+   }
+  ],
+  "caveats": [
+   "Clock alignment is not verified by the core (clock_alignment 'not_verified_by_core'); no lead/lag ordering or temporal causal hypothesis is supported by the correlation pair.",
+   "NO_POLICY means no applicable business policy rule and no resource rule with effect 'sla' were evaluated for the window; it is neither a PASS nor evidence of a healthy outcome.",
+   "The correlation pair is BELOW_EFFECT with reasons CONTROL_CONTEXT_MISSING and LOAD_DELTA_BELOW_MINIMUM, partial_rho is null, uncertainty is NOT_ESTIMATED, and the headline pair is NOT_SELECTED with MATERIALITY_NOT_MET; no load–resource sensitivity was established.",
+   "anomalies_tested is 0 and episodes_reported is 0 in the diagnostic summary; this does not establish stability, spare capacity, or the absence of load-related issues.",
+   "The run ends at run_to_epoch_ms 1767225636250 while the evaluation window and snapshot end at 1767225636000; the trailing 250 ms of the run is outside the covered window.",
+   "Overall and evaluation-window throughput denominators differ (36250 vs 36000); counts are comparable only within the same scope and the same window.",
+   "The attached resource metric is in 'synthetic_unit', not a production capacity unit; resource statistics and correlation refer only to this synthetic series."
+  ]
+ },
+ "schema": "ai-experiment-run.holdout.v1",
+ "case": "case-032",
+ "rep": 2,
+ "arm": "B",
+ "try": 1,
+ "attempt_id": "case-032-2-B-t1",
+ "model_id": "deepseek-v4-flash-0731",
+ "prompt_sha256": "3c0f28bee6517c13c5c854615e7d3d59301893d9723880818e4034a32e9133bf"
+}

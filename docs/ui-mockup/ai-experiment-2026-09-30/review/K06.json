@@ -1,0 +1,112 @@
+[
+  {
+    "id": "R001",
+    "hard_defect": false,
+    "defects": [
+      {
+        "type": "T4",
+        "field": "#/hypotheses/4/recommended_check",
+        "quote": "truncated 'request error' samples",
+        "why": "The two sampled messages are marked message_truncated=false; the sampling limit is the relevant constraint."
+      }
+    ],
+    "required_facts_preserved": false,
+    "missing_facts": ["Run validity is VALID."],
+    "usefulness": 4,
+    "notes": "The advice gives useful checks and keeps the verdict, coverage, and counts straight."
+  },
+  {
+    "id": "R020",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T3",
+        "field": "#/recommendations/0/action",
+        "quote": "Inspect the 3,688 frontend.request_error samples",
+        "why": "The evidence reports 3,688 aggregated events but includes only two individual sampled documents."
+      },
+      {
+        "type": "T2",
+        "field": "#/summary",
+        "quote": "All 3,688 run- and window-level errors are reported on the checkout transaction and grouped as frontend.request_error",
+        "why": "Matching aggregate counts do not establish that JMeter checkout errors and OpenSearch events are the same individual records."
+      }
+    ],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 2,
+    "notes": "Most operator checks are useful, but the response overstates access to individual errors and links separate aggregates."
+  },
+  {
+    "id": "R028",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T1",
+        "field": "#/hypotheses/5/possible_explanation",
+        "quote": "Because no resource/capacity policy was configured",
+        "why": "NO_POLICY can also mean no applicable policy or no required capacity, so configuration absence is not established."
+      }
+    ],
+    "required_facts_preserved": false,
+    "missing_facts": ["Run validity is VALID."],
+    "usefulness": 3,
+    "notes": "The investigation steps are useful, but the explanation of NO_POLICY could send an operator toward the wrong configuration change."
+  },
+  {
+    "id": "R039",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T3",
+        "field": "#/hypotheses/0/possible_explanation",
+        "quote": "A defect or failure mode exclusive to the checkout request path generated all 3,688 errors",
+        "why": "The aggregates localize reported sampler errors but do not prove an exclusive root cause."
+      },
+      {
+        "type": "T5",
+        "field": "#/hypotheses/3/possible_explanation",
+        "quote": "At least some failing checkout requests exhausted a ~10 s timeout boundary, likely because a downstream call never completed",
+        "why": "The evidence does not pair failed samples with maximum latency or identify a timeout boundary or downstream call."
+      },
+      {
+        "type": "T1",
+        "field": "#/caveats/4",
+        "quote": "Resource verdict NO_POLICY is the absence of a resource policy",
+        "why": "NO_POLICY does not establish that a policy is absent; no applicable policy or no required capacity are also possible."
+      }
+    ],
+    "required_facts_preserved": false,
+    "missing_facts": ["Run validity is VALID."],
+    "usefulness": 2,
+    "notes": "The response preserves major numbers but presents unsupported failure mechanics as findings."
+  },
+  {
+    "id": "R050",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T1",
+        "field": "#/summary",
+        "quote": "NO_POLICY (no capacity policy configured)",
+        "why": "NO_POLICY does not prove that no capacity policy was configured."
+      },
+      {
+        "type": "T5",
+        "field": "#/recommendations/2/rationale",
+        "quote": "the service most likely involved in the failing checkout flow",
+        "why": "The evidence contains no call graph or topology supporting paymentservice as the most likely service involved."
+      },
+      {
+        "type": "T3",
+        "field": "#/recommendations/1/rationale",
+        "quote": "All 3688 errors are attributed to the checkout transaction and recorded as frontend.request_error with message 'request error'",
+        "why": "Only two OpenSearch messages are sampled, and the evidence does not establish individual identity with the checkout errors."
+      }
+    ],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 2,
+    "notes": "The response reports the main results correctly but adds unsupported configuration, topology, and record-level claims."
+  }
+]

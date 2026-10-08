@@ -1,0 +1,196 @@
+{
+ "stage": "B",
+ "mode": "live",
+ "model": "deepseek-v4-flash-0731",
+ "tag": {
+  "phase": "holdout",
+  "attempt_id": "case-032-1-B-t1",
+  "arm": "B",
+  "stage": null,
+  "case": "case-032",
+  "rep": 1,
+  "try": 1
+ },
+ "retry_policy": "d2",
+ "qwen_exit": 0,
+ "wall_ms": 107717,
+ "relay": {
+  "schema_version": "advisory-ai-runtime-relay.v1",
+  "status": "FORWARDED_STRUCTURED_OUTPUT",
+  "received_request_count": 1,
+  "forwarded_request_count": 1,
+  "outcomes": [
+   "FORWARDED_STRUCTURED_OUTPUT"
+  ],
+  "retry_refused_reason": null,
+  "first_refused_reason": null,
+  "model_id": "deepseek-v4-flash-0731",
+  "retry_policy": "d2",
+  "requests": [
+   {
+    "ordinal": 1,
+    "forwarded": true,
+    "outcome": "FORWARDED_STRUCTURED_OUTPUT",
+    "provider_status": 200,
+    "latency_ms": 106251,
+    "usage": {
+     "prompt_tokens": 3875,
+     "total_tokens": 15110,
+     "completion_tokens": 11235,
+     "prompt_tokens_details": {
+      "cached_tokens": 1024
+     },
+     "completion_tokens_details": {
+      "reasoning_tokens": 8922
+     }
+    },
+    "model_returned": "deepseek-v4-flash-0731"
+   }
+  ],
+  "usage": {
+   "prompt_tokens": 3875,
+   "completion_tokens": 11235,
+   "total_tokens": 15110
+  },
+  "latency_ms": 106251
+ },
+ "relay_status": "FORWARDED_STRUCTURED_OUTPUT",
+ "usage": {
+  "prompt_tokens": 3875,
+  "completion_tokens": 11235,
+  "total_tokens": 15110
+ },
+ "latency_ms": 106251,
+ "retried": false,
+ "retry_refused_reason": null,
+ "status": "OK",
+ "note": null,
+ "output": {
+  "schema_version": "ai-advice-output.v1",
+  "summary": "The deterministic verdict is NO_POLICY: the window_policy_summary reports business_verdict NO_POLICY and resource_verdict NO_POLICY, and the fact policy_verdict is NO_POLICY. The run is VALID and analysis coverage is COMPLETE. Metrics are descriptive only: 720 samples with 0 errors; latency p50 150 ms, p95 300 ms, p99 300 ms, max 300 ms, identical in overall and transaction scopes. A system resource series (unit synthetic_unit) has 36 observed cells (mean 35, min 10, max 60, std ~17.3, slope_per_second ~0.27). The only correlation pair is BELOW_EFFECT (raw rho 1 at best_lag 0 over 36 paired cells; reasons LOAD_DELTA_BELOW_MINIMUM and CONTROL_CONTEXT_MISSING; uncertainty NOT_ESTIMATED), and the headline correlation selection is NOT_SELECTED with MATERIALITY_NOT_MET. No anomaly episodes were reported (anomalies_tested 0). Because no applicable rule was evaluated, the window yields no PASS/FAIL; a healthy-looking profile does not turn NO_POLICY into PASS. Advice focuses on configuring an applicable policy to obtain a real verdict, verifying clock alignment before any temporal reading, generating a larger load delta (and a control series) so materiality can be evaluated, and inspecting raw series before making stability or capacity claims.",
+  "hypotheses": [
+   {
+    "rank": 1,
+    "observation": "The window policy summary reports verdict NO_POLICY with business_verdict NO_POLICY and resource_verdict NO_POLICY for window 'evaluation', and the fact policy_verdict is NO_POLICY, even though run validity is VALID and analysis coverage is COMPLETE.",
+    "possible_explanation": "No business policy rule and no resource rule with effect 'sla' applied to the evaluation window, so the product evaluated no pass/fail condition; a valid run with clean metrics does not by itself create a policy verdict.",
+    "recommended_check": "List the business policy rules and resource rules configured and scoped to window 'evaluation'; if a PASS/FAIL verdict is required, add an applicable business policy rule or a resource rule with effect 'sla' for that window and rerun.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/4",
+     "analysis-result.json#/policy_verdict",
+     "analysis-result.json#/run_validity",
+     "analysis-result.json#/analysis_coverage"
+    ]
+   },
+   {
+    "rank": 2,
+    "observation": "Both the overall and the transaction summaries report latency max, p95, and p99 all equal to 300 ms, with p50 150 ms, over 720 samples and 0 errors.",
+    "possible_explanation": "The response time tail may be flat because of a cap, timeout, or limited load/sample variation, but the evidence does not state the reason.",
+    "recommended_check": "Inspect the raw latency time series and distribution around 300 ms together with the load profile over the window to see whether 300 ms is a ceiling value; verify clock alignment before aligning it with resource series.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0",
+     "analysis-result.json#/evidence/1",
+     "analysis-result.json#/evidence/2"
+    ]
+   },
+   {
+    "rank": 3,
+    "observation": "The correlation pair is BELOW_EFFECT with raw_rho '1' at best_lag_ms 0 over 36 paired cells and reasons CONTROL_CONTEXT_MISSING and LOAD_DELTA_BELOW_MINIMUM; the headline selection is NOT_SELECTED with reason MATERIALITY_NOT_MET and uncertainty NOT_ESTIMATED.",
+    "possible_explanation": "The load metric (response_time_p95_ms) may not have varied enough across the window to estimate sensitivity, and no control series was supplied, so the apparent strong raw correlation was not accepted as an effect.",
+    "recommended_check": "Rerun with a load profile that produces a larger delta in response time; if possible attach a control (unrelated) series, then re-evaluate the correlation materiality gate.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/6",
+     "analysis-result.json#/evidence/7"
+    ]
+   },
+   {
+    "rank": 4,
+    "observation": "The resource summary for the system 'value' series reports 36 observed cells with slope_per_second 0.270270..., mean 35, min 10, max 60, and sample_standard_deviation ~17.32 over the evaluation window, with 0 missing cells.",
+    "possible_explanation": "Resource usage may have increased across the window, but the cause is unknown because the analysis did not establish a temporal link to load (correlation BELOW_EFFECT and clock alignment not verified by core).",
+    "recommended_check": "Plot the per-interval resource series against workload epochs and the latency series to see whether the increase aligns with load changes; verify clock alignment first.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/3",
+     "analysis-result.json#/evidence/6",
+     "analysis-result.json#/evidence/2"
+    ]
+   },
+   {
+    "rank": 5,
+    "observation": "The diagnostic summary is COMPLETE with pairs_tested 1, anomalies_tested 0, episodes_reported 0, and suppressed_short_episodes 0; the findings list is empty.",
+    "possible_explanation": "No anomaly episodes were reported; this could reflect detector thresholds or limited load variation rather than proven stability, and the correlation materiality gate was not met for interpretation.",
+    "recommended_check": "Do not treat zero reported episodes as proof that no problem exists; if anomaly coverage is in question, confirm the detector input data and window, and consider a rerun with a wider load profile.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/8",
+     "analysis-result.json#/evidence/6",
+     "analysis-result.json#/evidence/7"
+    ]
+   }
+  ],
+  "recommendations": [
+   {
+    "rank": 1,
+    "action": "Configure an applicable policy for the evaluation window — a business policy rule or a resource rule with effect 'sla' — if a PASS/FAIL or capacity verdict is needed, then rerun.",
+    "rationale": "The verdict is fixed at NO_POLICY because no applicable rule was evaluated; missing policy is not a pass, and only a rule the product evaluates yields PASS/FAIL.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/4",
+     "analysis-result.json#/policy_verdict",
+     "analysis-result.json#/run_validity"
+    ]
+   },
+   {
+    "rank": 2,
+    "action": "Verify clock alignment/synchronization between the load generator, system resource telemetry, and the analysis snapshot before interpreting any temporal relationship.",
+    "rationale": "The resource binding reports clock_alignment 'not_verified_by_core', so lead/lag or temporal causal ordering is unsupported until clocks are verified.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/2",
+     "analysis-result.json#/evidence/6"
+    ]
+   },
+   {
+    "rank": 3,
+    "action": "Rerun with a load profile that creates a larger delta in response time, and consider attaching a control series, so the correlation materiality gate can be evaluated.",
+    "rationale": "The only correlation pair is BELOW_EFFECT with reasons LOAD_DELTA_BELOW_MINIMUM and CONTROL_CONTEXT_MISSING, and the headline selection is NOT_SELECTED with MATERIALITY_NOT_MET.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/6",
+     "analysis-result.json#/evidence/7"
+    ]
+   },
+   {
+    "rank": 4,
+    "action": "Inspect the raw per-interval resource series and the latency series before drawing conclusions about resource behavior or the flat 300 ms latency tail.",
+    "rationale": "Summary statistics show a positive slope_per_second (~0.27) and a flat tail, but the analysis established no temporal link (BELOW_EFFECT, uncertainty NOT_ESTIMATED), so these are hypotheses to check, not proven effects.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/3",
+     "analysis-result.json#/evidence/0",
+     "analysis-result.json#/evidence/6"
+    ]
+   },
+   {
+    "rank": 5,
+    "action": "Treat the current output as descriptive only: do not report the window as passed, stable, or under-capacity based on 0 errors, 720 samples, or zero reported anomalies.",
+    "rationale": "NO_POLICY stays NO_POLICY until an applicable rule is evaluated; clean metrics and zero reported episodes do not prove stability or spare capacity.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/4",
+     "analysis-result.json#/evidence/8",
+     "analysis-result.json#/evidence/0"
+    ]
+   }
+  ],
+  "caveats": [
+   "Clock alignment is reported as 'not_verified_by_core' (evidence/2); any temporal, lag, or lead/lag interpretation of the correlation is unsupported until clocks are verified.",
+   "The correlation pair reports uncertainty NOT_ESTIMATED, partial_rho null, sensitivity_without_achieved_rps null, and status BELOW_EFFECT (evidence/6); raw_rho 1 is not a proven relationship.",
+   "The headline correlation selection is NOT_SELECTED with reason MATERIALITY_NOT_MET (evidence/7); the reported p-values (p_value_b10 0.001, p_value_b20 0.029, holm_adjusted_p_value 0.029) do not by themselves establish an effect because the materiality gate was not met.",
+   "The diagnostic summary reports anomalies_tested 0 and episodes_reported 0 (evidence/8); the absence of reported episodes is not proof of stability or of the absence of a problem.",
+   "throughput_rps is reported as numerator/denominator pairs with different denominators for the overall scope (36250) and the window scope (36000) (evidence/0, evidence/5); these are different scopes and are not directly comparable, and the field's exact measuring basis is not defined in the evidence.",
+   "The resource series is expressed in synthetic_unit (evidence/3); magnitude-based claims about the resource are limited without knowing the real unit.",
+   "The window policy summary shows NO_POLICY for both business and resource verdicts (evidence/4); a healthy-looking metric profile does not make the window PASS (policy_verdict fact)."
+  ]
+ },
+ "schema": "ai-experiment-run.holdout.v1",
+ "case": "case-032",
+ "rep": 1,
+ "arm": "B",
+ "try": 1,
+ "attempt_id": "case-032-1-B-t1",
+ "model_id": "deepseek-v4-flash-0731",
+ "prompt_sha256": "3c0f28bee6517c13c5c854615e7d3d59301893d9723880818e4034a32e9133bf"
+}

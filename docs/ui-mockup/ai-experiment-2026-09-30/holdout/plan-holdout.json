@@ -1,0 +1,1262 @@
+{
+ "schema": "ai-holdout-plan.v1",
+ "seed": 20261007,
+ "case_ids": [
+  "case-001",
+  "case-002",
+  "case-003",
+  "case-004",
+  "case-005",
+  "case-006",
+  "case-007",
+  "case-008",
+  "case-009",
+  "case-010",
+  "case-011",
+  "case-012",
+  "case-013",
+  "case-014",
+  "case-015",
+  "case-016",
+  "case-017",
+  "case-018",
+  "case-019",
+  "case-020",
+  "case-021",
+  "case-022",
+  "case-023",
+  "case-024",
+  "case-025",
+  "case-026",
+  "case-027",
+  "case-028",
+  "case-029",
+  "case-030",
+  "case-031",
+  "case-032",
+  "case-033",
+  "case-034",
+  "case-035",
+  "case-036",
+  "case-037",
+  "case-038"
+ ],
+ "attempts": [
+  {
+   "index": 0,
+   "case": "case-001",
+   "rep": 1,
+   "arm": "A",
+   "position": 0,
+   "attempt_id": "case-001-1-A"
+  },
+  {
+   "index": 1,
+   "case": "case-001",
+   "rep": 1,
+   "arm": "B",
+   "position": 1,
+   "attempt_id": "case-001-1-B"
+  },
+  {
+   "index": 2,
+   "case": "case-002",
+   "rep": 1,
+   "arm": "B",
+   "position": 0,
+   "attempt_id": "case-002-1-B"
+  },
+  {
+   "index": 3,
+   "case": "case-002",
+   "rep": 1,
+   "arm": "A",
+   "position": 1,
+   "attempt_id": "case-002-1-A"
+  },
+  {
+   "index": 4,
+   "case": "case-003",
+   "rep": 1,
+   "arm": "A",
+   "position": 0,
+   "attempt_id": "case-003-1-A"
+  },
+  {
+   "index": 5,
+   "case": "case-003",
+   "rep": 1,
+   "arm": "B",
+   "position": 1,
+   "attempt_id": "case-003-1-B"
+  },
+  {
+   "index": 6,
+   "case": "case-004",
+   "rep": 1,
+   "arm": "B",
+   "position": 0,
+   "attempt_id": "case-004-1-B"
+  },
+  {
+   "index": 7,
+   "case": "case-004",
+   "rep": 1,
+   "arm": "A",
+   "position": 1,
+   "attempt_id": "case-004-1-A"
+  },
+  {
+   "index": 8,
+   "case": "case-005",
+   "rep": 1,
+   "arm": "B",
+   "position": 0,
+   "attempt_id": "case-005-1-B"
+  },
+  {
+   "index": 9,
+   "case": "case-005",
+   "rep": 1,
+   "arm": "A",
+   "position": 1,
+   "attempt_id": "case-005-1-A"
+  },
+  {
+   "index": 10,
+   "case": "case-006",
+   "rep": 1,
+   "arm": "B",
+   "position": 0,
+   "attempt_id": "case-006-1-B"
+  },
+  {
+   "index": 11,
+   "case": "case-006",
+   "rep": 1,
+   "arm": "A",
+   "position": 1,
+   "attempt_id": "case-006-1-A"
+  },
+  {
+   "index": 12,
+   "case": "case-007",
+   "rep": 1,
+   "arm": "A",
+   "position": 0,
+   "attempt_id": "case-007-1-A"
+  },
+  {
+   "index": 13,
+   "case": "case-007",
+   "rep": 1,
+   "arm": "B",
+   "position": 1,
+   "attempt_id": "case-007-1-B"
+  },
+  {
+   "index": 14,
+   "case": "case-008",
+   "rep": 1,
+   "arm": "B",
+   "position": 0,
+   "attempt_id": "case-008-1-B"
+  },
+  {
+   "index": 15,
+   "case": "case-008",
+   "rep": 1,
+   "arm": "A",
+   "position": 1,
+   "attempt_id": "case-008-1-A"
+  },
+  {
+   "index": 16,
+   "case": "case-009",
+   "rep": 1,
+   "arm": "A",
+   "position": 0,
+   "attempt_id": "case-009-1-A"
+  },
+  {
+   "index": 17,
+   "case": "case-009",
+   "rep": 1,
+   "arm": "B",
+   "position": 1,
+   "attempt_id": "case-009-1-B"
+  },
+  {
+   "index": 18,
+   "case": "case-010",
+   "rep": 1,
+   "arm": "B",
+   "position": 0,
+   "attempt_id": "case-010-1-B"
+  },
+  {
+   "index": 19,
+   "case": "case-010",
+   "rep": 1,
+   "arm": "A",
+   "position": 1,
+   "attempt_id": "case-010-1-A"
+  },
+  {
+   "index": 20,
+   "case": "case-011",
+   "rep": 1,
+   "arm": "B",
+   "position": 0,
+   "attempt_id": "case-011-1-B"
+  },
+  {
+   "index": 21,
+   "case": "case-011",
+   "rep": 1,
+   "arm": "A",
+   "position": 1,
+   "attempt_id": "case-011-1-A"
+  },
+  {
+   "index": 22,
+   "case": "case-012",
+   "rep": 1,
+   "arm": "B",
+   "position": 0,
+   "attempt_id": "case-012-1-B"
+  },
+  {
+   "index": 23,
+   "case": "case-012",
+   "rep": 1,
+   "arm": "A",
+   "position": 1,
+   "attempt_id": "case-012-1-A"
+  },
+  {
+   "index": 24,
+   "case": "case-013",
+   "rep": 1,
+   "arm": "A",
+   "position": 0,
+   "attempt_id": "case-013-1-A"
+  },
+  {
+   "index": 25,
+   "case": "case-013",
+   "rep": 1,
+   "arm": "B",
+   "position": 1,
+   "attempt_id": "case-013-1-B"
+  },
+  {
+   "index": 26,
+   "case": "case-014",
+   "rep": 1,
+   "arm": "B",
+   "position": 0,
+   "attempt_id": "case-014-1-B"
+  },
+  {
+   "index": 27,
+   "case": "case-014",
+   "rep": 1,
+   "arm": "A",
+   "position": 1,
+   "attempt_id": "case-014-1-A"
+  },
+  {
+   "index": 28,
+   "case": "case-015",
+   "rep": 1,
+   "arm": "B",
+   "position": 0,
+   "attempt_id": "case-015-1-B"
+  },
+  {
+   "index": 29,
+   "case": "case-015",
+   "rep": 1,
+   "arm": "A",
+   "position": 1,
+   "attempt_id": "case-015-1-A"
+  },
+  {
+   "index": 30,
+   "case": "case-016",
+   "rep": 1,
+   "arm": "B",
+   "position": 0,
+   "attempt_id": "case-016-1-B"
+  },
+  {
+   "index": 31,
+   "case": "case-016",
+   "rep": 1,
+   "arm": "A",
+   "position": 1,
+   "attempt_id": "case-016-1-A"
+  },
+  {
+   "index": 32,
+   "case": "case-017",
+   "rep": 1,
+   "arm": "A",
+   "position": 0,
+   "attempt_id": "case-017-1-A"
+  },
+  {
+   "index": 33,
+   "case": "case-017",
+   "rep": 1,
+   "arm": "B",
+   "position": 1,
+   "attempt_id": "case-017-1-B"
+  },
+  {
+   "index": 34,
+   "case": "case-018",
+   "rep": 1,
+   "arm": "B",
+   "position": 0,
+   "attempt_id": "case-018-1-B"
+  },
+  {
+   "index": 35,
+   "case": "case-018",
+   "rep": 1,
+   "arm": "A",
+   "position": 1,
+   "attempt_id": "case-018-1-A"
+  },
+  {
+   "index": 36,
+   "case": "case-019",
+   "rep": 1,
+   "arm": "A",
+   "position": 0,
+   "attempt_id": "case-019-1-A"
+  },
+  {
+   "index": 37,
+   "case": "case-019",
+   "rep": 1,
+   "arm": "B",
+   "position": 1,
+   "attempt_id": "case-019-1-B"
+  },
+  {
+   "index": 38,
+   "case": "case-020",
+   "rep": 1,
+   "arm": "A",
+   "position": 0,
+   "attempt_id": "case-020-1-A"
+  },
+  {
+   "index": 39,
+   "case": "case-020",
+   "rep": 1,
+   "arm": "B",
+   "position": 1,
+   "attempt_id": "case-020-1-B"
+  },
+  {
+   "index": 40,
+   "case": "case-021",
+   "rep": 1,
+   "arm": "B",
+   "position": 0,
+   "attempt_id": "case-021-1-B"
+  },
+  {
+   "index": 41,
+   "case": "case-021",
+   "rep": 1,
+   "arm": "A",
+   "position": 1,
+   "attempt_id": "case-021-1-A"
+  },
+  {
+   "index": 42,
+   "case": "case-022",
+   "rep": 1,
+   "arm": "B",
+   "position": 0,
+   "attempt_id": "case-022-1-B"
+  },
+  {
+   "index": 43,
+   "case": "case-022",
+   "rep": 1,
+   "arm": "A",
+   "position": 1,
+   "attempt_id": "case-022-1-A"
+  },
+  {
+   "index": 44,
+   "case": "case-023",
+   "rep": 1,
+   "arm": "B",
+   "position": 0,
+   "attempt_id": "case-023-1-B"
+  },
+  {
+   "index": 45,
+   "case": "case-023",
+   "rep": 1,
+   "arm": "A",
+   "position": 1,
+   "attempt_id": "case-023-1-A"
+  },
+  {
+   "index": 46,
+   "case": "case-024",
+   "rep": 1,
+   "arm": "B",
+   "position": 0,
+   "attempt_id": "case-024-1-B"
+  },
+  {
+   "index": 47,
+   "case": "case-024",
+   "rep": 1,
+   "arm": "A",
+   "position": 1,
+   "attempt_id": "case-024-1-A"
+  },
+  {
+   "index": 48,
+   "case": "case-025",
+   "rep": 1,
+   "arm": "A",
+   "position": 0,
+   "attempt_id": "case-025-1-A"
+  },
+  {
+   "index": 49,
+   "case": "case-025",
+   "rep": 1,
+   "arm": "B",
+   "position": 1,
+   "attempt_id": "case-025-1-B"
+  },
+  {
+   "index": 50,
+   "case": "case-026",
+   "rep": 1,
+   "arm": "A",
+   "position": 0,
+   "attempt_id": "case-026-1-A"
+  },
+  {
+   "index": 51,
+   "case": "case-026",
+   "rep": 1,
+   "arm": "B",
+   "position": 1,
+   "attempt_id": "case-026-1-B"
+  },
+  {
+   "index": 52,
+   "case": "case-027",
+   "rep": 1,
+   "arm": "B",
+   "position": 0,
+   "attempt_id": "case-027-1-B"
+  },
+  {
+   "index": 53,
+   "case": "case-027",
+   "rep": 1,
+   "arm": "A",
+   "position": 1,
+   "attempt_id": "case-027-1-A"
+  },
+  {
+   "index": 54,
+   "case": "case-028",
+   "rep": 1,
+   "arm": "B",
+   "position": 0,
+   "attempt_id": "case-028-1-B"
+  },
+  {
+   "index": 55,
+   "case": "case-028",
+   "rep": 1,
+   "arm": "A",
+   "position": 1,
+   "attempt_id": "case-028-1-A"
+  },
+  {
+   "index": 56,
+   "case": "case-029",
+   "rep": 1,
+   "arm": "A",
+   "position": 0,
+   "attempt_id": "case-029-1-A"
+  },
+  {
+   "index": 57,
+   "case": "case-029",
+   "rep": 1,
+   "arm": "B",
+   "position": 1,
+   "attempt_id": "case-029-1-B"
+  },
+  {
+   "index": 58,
+   "case": "case-030",
+   "rep": 1,
+   "arm": "A",
+   "position": 0,
+   "attempt_id": "case-030-1-A"
+  },
+  {
+   "index": 59,
+   "case": "case-030",
+   "rep": 1,
+   "arm": "B",
+   "position": 1,
+   "attempt_id": "case-030-1-B"
+  },
+  {
+   "index": 60,
+   "case": "case-031",
+   "rep": 1,
+   "arm": "B",
+   "position": 0,
+   "attempt_id": "case-031-1-B"
+  },
+  {
+   "index": 61,
+   "case": "case-031",
+   "rep": 1,
+   "arm": "A",
+   "position": 1,
+   "attempt_id": "case-031-1-A"
+  },
+  {
+   "index": 62,
+   "case": "case-032",
+   "rep": 1,
+   "arm": "A",
+   "position": 0,
+   "attempt_id": "case-032-1-A"
+  },
+  {
+   "index": 63,
+   "case": "case-032",
+   "rep": 1,
+   "arm": "B",
+   "position": 1,
+   "attempt_id": "case-032-1-B"
+  },
+  {
+   "index": 64,
+   "case": "case-033",
+   "rep": 1,
+   "arm": "B",
+   "position": 0,
+   "attempt_id": "case-033-1-B"
+  },
+  {
+   "index": 65,
+   "case": "case-033",
+   "rep": 1,
+   "arm": "A",
+   "position": 1,
+   "attempt_id": "case-033-1-A"
+  },
+  {
+   "index": 66,
+   "case": "case-034",
+   "rep": 1,
+   "arm": "B",
+   "position": 0,
+   "attempt_id": "case-034-1-B"
+  },
+  {
+   "index": 67,
+   "case": "case-034",
+   "rep": 1,
+   "arm": "A",
+   "position": 1,
+   "attempt_id": "case-034-1-A"
+  },
+  {
+   "index": 68,
+   "case": "case-035",
+   "rep": 1,
+   "arm": "B",
+   "position": 0,
+   "attempt_id": "case-035-1-B"
+  },
+  {
+   "index": 69,
+   "case": "case-035",
+   "rep": 1,
+   "arm": "A",
+   "position": 1,
+   "attempt_id": "case-035-1-A"
+  },
+  {
+   "index": 70,
+   "case": "case-036",
+   "rep": 1,
+   "arm": "A",
+   "position": 0,
+   "attempt_id": "case-036-1-A"
+  },
+  {
+   "index": 71,
+   "case": "case-036",
+   "rep": 1,
+   "arm": "B",
+   "position": 1,
+   "attempt_id": "case-036-1-B"
+  },
+  {
+   "index": 72,
+   "case": "case-037",
+   "rep": 1,
+   "arm": "B",
+   "position": 0,
+   "attempt_id": "case-037-1-B"
+  },
+  {
+   "index": 73,
+   "case": "case-037",
+   "rep": 1,
+   "arm": "A",
+   "position": 1,
+   "attempt_id": "case-037-1-A"
+  },
+  {
+   "index": 74,
+   "case": "case-038",
+   "rep": 1,
+   "arm": "A",
+   "position": 0,
+   "attempt_id": "case-038-1-A"
+  },
+  {
+   "index": 75,
+   "case": "case-038",
+   "rep": 1,
+   "arm": "B",
+   "position": 1,
+   "attempt_id": "case-038-1-B"
+  },
+  {
+   "index": 76,
+   "case": "case-038",
+   "rep": 2,
+   "arm": "B",
+   "position": 0,
+   "attempt_id": "case-038-2-B"
+  },
+  {
+   "index": 77,
+   "case": "case-038",
+   "rep": 2,
+   "arm": "A",
+   "position": 1,
+   "attempt_id": "case-038-2-A"
+  },
+  {
+   "index": 78,
+   "case": "case-037",
+   "rep": 2,
+   "arm": "B",
+   "position": 0,
+   "attempt_id": "case-037-2-B"
+  },
+  {
+   "index": 79,
+   "case": "case-037",
+   "rep": 2,
+   "arm": "A",
+   "position": 1,
+   "attempt_id": "case-037-2-A"
+  },
+  {
+   "index": 80,
+   "case": "case-036",
+   "rep": 2,
+   "arm": "A",
+   "position": 0,
+   "attempt_id": "case-036-2-A"
+  },
+  {
+   "index": 81,
+   "case": "case-036",
+   "rep": 2,
+   "arm": "B",
+   "position": 1,
+   "attempt_id": "case-036-2-B"
+  },
+  {
+   "index": 82,
+   "case": "case-035",
+   "rep": 2,
+   "arm": "A",
+   "position": 0,
+   "attempt_id": "case-035-2-A"
+  },
+  {
+   "index": 83,
+   "case": "case-035",
+   "rep": 2,
+   "arm": "B",
+   "position": 1,
+   "attempt_id": "case-035-2-B"
+  },
+  {
+   "index": 84,
+   "case": "case-034",
+   "rep": 2,
+   "arm": "B",
+   "position": 0,
+   "attempt_id": "case-034-2-B"
+  },
+  {
+   "index": 85,
+   "case": "case-034",
+   "rep": 2,
+   "arm": "A",
+   "position": 1,
+   "attempt_id": "case-034-2-A"
+  },
+  {
+   "index": 86,
+   "case": "case-033",
+   "rep": 2,
+   "arm": "A",
+   "position": 0,
+   "attempt_id": "case-033-2-A"
+  },
+  {
+   "index": 87,
+   "case": "case-033",
+   "rep": 2,
+   "arm": "B",
+   "position": 1,
+   "attempt_id": "case-033-2-B"
+  },
+  {
+   "index": 88,
+   "case": "case-032",
+   "rep": 2,
+   "arm": "B",
+   "position": 0,
+   "attempt_id": "case-032-2-B"
+  },
+  {
+   "index": 89,
+   "case": "case-032",
+   "rep": 2,
+   "arm": "A",
+   "position": 1,
+   "attempt_id": "case-032-2-A"
+  },
+  {
+   "index": 90,
+   "case": "case-031",
+   "rep": 2,
+   "arm": "A",
+   "position": 0,
+   "attempt_id": "case-031-2-A"
+  },
+  {
+   "index": 91,
+   "case": "case-031",
+   "rep": 2,
+   "arm": "B",
+   "position": 1,
+   "attempt_id": "case-031-2-B"
+  },
+  {
+   "index": 92,
+   "case": "case-030",
+   "rep": 2,
+   "arm": "A",
+   "position": 0,
+   "attempt_id": "case-030-2-A"
+  },
+  {
+   "index": 93,
+   "case": "case-030",
+   "rep": 2,
+   "arm": "B",
+   "position": 1,
+   "attempt_id": "case-030-2-B"
+  },
+  {
+   "index": 94,
+   "case": "case-029",
+   "rep": 2,
+   "arm": "B",
+   "position": 0,
+   "attempt_id": "case-029-2-B"
+  },
+  {
+   "index": 95,
+   "case": "case-029",
+   "rep": 2,
+   "arm": "A",
+   "position": 1,
+   "attempt_id": "case-029-2-A"
+  },
+  {
+   "index": 96,
+   "case": "case-028",
+   "rep": 2,
+   "arm": "B",
+   "position": 0,
+   "attempt_id": "case-028-2-B"
+  },
+  {
+   "index": 97,
+   "case": "case-028",
+   "rep": 2,
+   "arm": "A",
+   "position": 1,
+   "attempt_id": "case-028-2-A"
+  },
+  {
+   "index": 98,
+   "case": "case-027",
+   "rep": 2,
+   "arm": "B",
+   "position": 0,
+   "attempt_id": "case-027-2-B"
+  },
+  {
+   "index": 99,
+   "case": "case-027",
+   "rep": 2,
+   "arm": "A",
+   "position": 1,
+   "attempt_id": "case-027-2-A"
+  },
+  {
+   "index": 100,
+   "case": "case-026",
+   "rep": 2,
+   "arm": "A",
+   "position": 0,
+   "attempt_id": "case-026-2-A"
+  },
+  {
+   "index": 101,
+   "case": "case-026",
+   "rep": 2,
+   "arm": "B",
+   "position": 1,
+   "attempt_id": "case-026-2-B"
+  },
+  {
+   "index": 102,
+   "case": "case-025",
+   "rep": 2,
+   "arm": "A",
+   "position": 0,
+   "attempt_id": "case-025-2-A"
+  },
+  {
+   "index": 103,
+   "case": "case-025",
+   "rep": 2,
+   "arm": "B",
+   "position": 1,
+   "attempt_id": "case-025-2-B"
+  },
+  {
+   "index": 104,
+   "case": "case-024",
+   "rep": 2,
+   "arm": "B",
+   "position": 0,
+   "attempt_id": "case-024-2-B"
+  },
+  {
+   "index": 105,
+   "case": "case-024",
+   "rep": 2,
+   "arm": "A",
+   "position": 1,
+   "attempt_id": "case-024-2-A"
+  },
+  {
+   "index": 106,
+   "case": "case-023",
+   "rep": 2,
+   "arm": "A",
+   "position": 0,
+   "attempt_id": "case-023-2-A"
+  },
+  {
+   "index": 107,
+   "case": "case-023",
+   "rep": 2,
+   "arm": "B",
+   "position": 1,
+   "attempt_id": "case-023-2-B"
+  },
+  {
+   "index": 108,
+   "case": "case-022",
+   "rep": 2,
+   "arm": "B",
+   "position": 0,
+   "attempt_id": "case-022-2-B"
+  },
+  {
+   "index": 109,
+   "case": "case-022",
+   "rep": 2,
+   "arm": "A",
+   "position": 1,
+   "attempt_id": "case-022-2-A"
+  },
+  {
+   "index": 110,
+   "case": "case-021",
+   "rep": 2,
+   "arm": "A",
+   "position": 0,
+   "attempt_id": "case-021-2-A"
+  },
+  {
+   "index": 111,
+   "case": "case-021",
+   "rep": 2,
+   "arm": "B",
+   "position": 1,
+   "attempt_id": "case-021-2-B"
+  },
+  {
+   "index": 112,
+   "case": "case-020",
+   "rep": 2,
+   "arm": "A",
+   "position": 0,
+   "attempt_id": "case-020-2-A"
+  },
+  {
+   "index": 113,
+   "case": "case-020",
+   "rep": 2,
+   "arm": "B",
+   "position": 1,
+   "attempt_id": "case-020-2-B"
+  },
+  {
+   "index": 114,
+   "case": "case-019",
+   "rep": 2,
+   "arm": "B",
+   "position": 0,
+   "attempt_id": "case-019-2-B"
+  },
+  {
+   "index": 115,
+   "case": "case-019",
+   "rep": 2,
+   "arm": "A",
+   "position": 1,
+   "attempt_id": "case-019-2-A"
+  },
+  {
+   "index": 116,
+   "case": "case-018",
+   "rep": 2,
+   "arm": "B",
+   "position": 0,
+   "attempt_id": "case-018-2-B"
+  },
+  {
+   "index": 117,
+   "case": "case-018",
+   "rep": 2,
+   "arm": "A",
+   "position": 1,
+   "attempt_id": "case-018-2-A"
+  },
+  {
+   "index": 118,
+   "case": "case-017",
+   "rep": 2,
+   "arm": "A",
+   "position": 0,
+   "attempt_id": "case-017-2-A"
+  },
+  {
+   "index": 119,
+   "case": "case-017",
+   "rep": 2,
+   "arm": "B",
+   "position": 1,
+   "attempt_id": "case-017-2-B"
+  },
+  {
+   "index": 120,
+   "case": "case-016",
+   "rep": 2,
+   "arm": "B",
+   "position": 0,
+   "attempt_id": "case-016-2-B"
+  },
+  {
+   "index": 121,
+   "case": "case-016",
+   "rep": 2,
+   "arm": "A",
+   "position": 1,
+   "attempt_id": "case-016-2-A"
+  },
+  {
+   "index": 122,
+   "case": "case-015",
+   "rep": 2,
+   "arm": "B",
+   "position": 0,
+   "attempt_id": "case-015-2-B"
+  },
+  {
+   "index": 123,
+   "case": "case-015",
+   "rep": 2,
+   "arm": "A",
+   "position": 1,
+   "attempt_id": "case-015-2-A"
+  },
+  {
+   "index": 124,
+   "case": "case-014",
+   "rep": 2,
+   "arm": "A",
+   "position": 0,
+   "attempt_id": "case-014-2-A"
+  },
+  {
+   "index": 125,
+   "case": "case-014",
+   "rep": 2,
+   "arm": "B",
+   "position": 1,
+   "attempt_id": "case-014-2-B"
+  },
+  {
+   "index": 126,
+   "case": "case-013",
+   "rep": 2,
+   "arm": "A",
+   "position": 0,
+   "attempt_id": "case-013-2-A"
+  },
+  {
+   "index": 127,
+   "case": "case-013",
+   "rep": 2,
+   "arm": "B",
+   "position": 1,
+   "attempt_id": "case-013-2-B"
+  },
+  {
+   "index": 128,
+   "case": "case-012",
+   "rep": 2,
+   "arm": "B",
+   "position": 0,
+   "attempt_id": "case-012-2-B"
+  },
+  {
+   "index": 129,
+   "case": "case-012",
+   "rep": 2,
+   "arm": "A",
+   "position": 1,
+   "attempt_id": "case-012-2-A"
+  },
+  {
+   "index": 130,
+   "case": "case-011",
+   "rep": 2,
+   "arm": "A",
+   "position": 0,
+   "attempt_id": "case-011-2-A"
+  },
+  {
+   "index": 131,
+   "case": "case-011",
+   "rep": 2,
+   "arm": "B",
+   "position": 1,
+   "attempt_id": "case-011-2-B"
+  },
+  {
+   "index": 132,
+   "case": "case-010",
+   "rep": 2,
+   "arm": "B",
+   "position": 0,
+   "attempt_id": "case-010-2-B"
+  },
+  {
+   "index": 133,
+   "case": "case-010",
+   "rep": 2,
+   "arm": "A",
+   "position": 1,
+   "attempt_id": "case-010-2-A"
+  },
+  {
+   "index": 134,
+   "case": "case-009",
+   "rep": 2,
+   "arm": "B",
+   "position": 0,
+   "attempt_id": "case-009-2-B"
+  },
+  {
+   "index": 135,
+   "case": "case-009",
+   "rep": 2,
+   "arm": "A",
+   "position": 1,
+   "attempt_id": "case-009-2-A"
+  },
+  {
+   "index": 136,
+   "case": "case-008",
+   "rep": 2,
+   "arm": "A",
+   "position": 0,
+   "attempt_id": "case-008-2-A"
+  },
+  {
+   "index": 137,
+   "case": "case-008",
+   "rep": 2,
+   "arm": "B",
+   "position": 1,
+   "attempt_id": "case-008-2-B"
+  },
+  {
+   "index": 138,
+   "case": "case-007",
+   "rep": 2,
+   "arm": "A",
+   "position": 0,
+   "attempt_id": "case-007-2-A"
+  },
+  {
+   "index": 139,
+   "case": "case-007",
+   "rep": 2,
+   "arm": "B",
+   "position": 1,
+   "attempt_id": "case-007-2-B"
+  },
+  {
+   "index": 140,
+   "case": "case-006",
+   "rep": 2,
+   "arm": "B",
+   "position": 0,
+   "attempt_id": "case-006-2-B"
+  },
+  {
+   "index": 141,
+   "case": "case-006",
+   "rep": 2,
+   "arm": "A",
+   "position": 1,
+   "attempt_id": "case-006-2-A"
+  },
+  {
+   "index": 142,
+   "case": "case-005",
+   "rep": 2,
+   "arm": "A",
+   "position": 0,
+   "attempt_id": "case-005-2-A"
+  },
+  {
+   "index": 143,
+   "case": "case-005",
+   "rep": 2,
+   "arm": "B",
+   "position": 1,
+   "attempt_id": "case-005-2-B"
+  },
+  {
+   "index": 144,
+   "case": "case-004",
+   "rep": 2,
+   "arm": "B",
+   "position": 0,
+   "attempt_id": "case-004-2-B"
+  },
+  {
+   "index": 145,
+   "case": "case-004",
+   "rep": 2,
+   "arm": "A",
+   "position": 1,
+   "attempt_id": "case-004-2-A"
+  },
+  {
+   "index": 146,
+   "case": "case-003",
+   "rep": 2,
+   "arm": "A",
+   "position": 0,
+   "attempt_id": "case-003-2-A"
+  },
+  {
+   "index": 147,
+   "case": "case-003",
+   "rep": 2,
+   "arm": "B",
+   "position": 1,
+   "attempt_id": "case-003-2-B"
+  },
+  {
+   "index": 148,
+   "case": "case-002",
+   "rep": 2,
+   "arm": "B",
+   "position": 0,
+   "attempt_id": "case-002-2-B"
+  },
+  {
+   "index": 149,
+   "case": "case-002",
+   "rep": 2,
+   "arm": "A",
+   "position": 1,
+   "attempt_id": "case-002-2-A"
+  },
+  {
+   "index": 150,
+   "case": "case-001",
+   "rep": 2,
+   "arm": "A",
+   "position": 0,
+   "attempt_id": "case-001-2-A"
+  },
+  {
+   "index": 151,
+   "case": "case-001",
+   "rep": 2,
+   "arm": "B",
+   "position": 1,
+   "attempt_id": "case-001-2-B"
+  }
+ ]
+}

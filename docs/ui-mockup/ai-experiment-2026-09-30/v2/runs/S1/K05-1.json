@@ -1,0 +1,129 @@
+{
+ "stage": "S1",
+ "mode": "live",
+ "model": "deepseek-v4-flash-0731",
+ "tag": {
+  "phase": "v2-pilot",
+  "stage": "S1",
+  "case": "K05",
+  "rep": 1,
+  "attempt": 1
+ },
+ "qwen_exit": 0,
+ "wall_ms": 52960,
+ "relay": {
+  "schema_version": "advisory-ai-runtime-relay.v1",
+  "status": "FORWARDED_STRUCTURED_OUTPUT",
+  "request_count": 1,
+  "usage": {
+   "prompt_tokens": 2710,
+   "total_tokens": 7398,
+   "completion_tokens": 4688,
+   "prompt_tokens_details": {
+    "cached_tokens": 1024
+   },
+   "completion_tokens_details": {
+    "reasoning_tokens": 3239
+   }
+  },
+  "latency_ms": 51728,
+  "model_returned": "deepseek-v4-flash-0731"
+ },
+ "relay_status": "FORWARDED_STRUCTURED_OUTPUT",
+ "usage": {
+  "prompt_tokens": 2710,
+  "total_tokens": 7398,
+  "completion_tokens": 4688,
+  "prompt_tokens_details": {
+   "cached_tokens": 1024
+  },
+  "completion_tokens_details": {
+   "reasoning_tokens": 3239
+  }
+ },
+ "latency_ms": 51728,
+ "status": "OK",
+ "note": null,
+ "output": {
+  "schema_version": "ai-advice-output.v1",
+  "summary": "Run e6e35fc727e04aa9db11ef027782b853ae64f2c559e105ed1c6953a4bdc2dc2f is VALID with COMPLETE analysis coverage. The deterministic policy verdict is FAIL: policy check error-limit (operator lte, threshold 0.01) observed error_rate_ratio 2/100 (0.02) on the overall metric summary and failed. The overall summary reports 2 errors among 100 samples; the checkout transaction summary reports identical values to the overall summary (100 samples, 2 errors, same latency percentiles and throughput), but per-transaction attribution of the errors is not established by this evidence. The evidence does not identify why the two errors occurred, so no causal conclusion is drawn.",
+  "hypotheses": [
+   {
+    "rank": 1,
+    "observation": "policy-check-46c9e1aa8655ab3b8b5ace57a23769760d86acc00f1aeae5aeaaee259202d0c8 evaluated metric error_rate_ratio from metric-summary-overall with observed 2/100, operator lte, threshold 0.01, status FAIL; run_validity is VALID and policy_verdict is FAIL.",
+    "possible_explanation": "The observed error rate of 2% (2/100) exceeded the configured 1% upper limit during the policy window, so the verdict is deterministically FAIL; the underlying cause of the two errors is not identified by this aggregate evidence.",
+    "recommended_check": "Open the JTL CSV and inspect the sampler rows that are not successful (labels, timestamps, response codes/messages) to determine which requests failed and why.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0",
+     "analysis-result.json#/evidence/2",
+     "analysis-result.json#/policy_verdict",
+     "analysis-result.json#/run_validity"
+    ]
+   },
+   {
+    "rank": 2,
+    "observation": "The transaction-scope summary for label checkout (analysis-result.json#/evidence/1) reports exactly the same values as the overall summary (sample_count 100, error_count 2, error_rate_ratio 2/100, identical latency percentiles and throughput_rps).",
+    "possible_explanation": "The sampled policy window may have consisted mostly or entirely of checkout requests, so the two errors could be attributable to checkout; alternatively the identical values could reflect scoping or sampling behavior. Attribution is a hypothesis, not proven by this evidence.",
+    "recommended_check": "Enumerate sampler records by label and timestamp in the JTL CSV to confirm the composition of the policy window and which labels contain the two errors before attributing them.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/1",
+     "analysis-result.json#/evidence/0"
+    ]
+   },
+   {
+    "rank": 3,
+    "observation": "analysis_coverage is COMPLETE with an empty reasons list, and run_validity is VALID; the only finding is the policy_failure for rule error-limit.",
+    "possible_explanation": "The FAIL result is not an artifact of invalid data or missing analysis coverage; the policy check reflects the observed metric summary as reported.",
+    "recommended_check": "Confirm that the metric window underlying metric-summary-overall matches the intended load-test window before acting on the failure; no data-validity remediation is indicated.",
+    "evidence_refs": [
+     "analysis-result.json#/analysis_coverage",
+     "analysis-result.json#/run_validity",
+     "analysis-result.json#/findings/0"
+    ]
+   }
+  ],
+  "recommendations": [
+   {
+    "rank": 1,
+    "action": "Inspect the JTL CSV records for the two failing samples (labels, timestamps, response codes and messages) and correlate them with any server-side or load-generator logs before rerunning.",
+    "rationale": "The policy evidence exposes only aggregated counts (2 errors out of 100 samples in overall scope); it does not identify which requests failed or why, so root-cause investigation must use the raw data.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0",
+     "analysis-result.json#/evidence/2"
+    ]
+   },
+   {
+    "rank": 2,
+    "action": "After identifying and remediating the cause of the errors, rerun the same load test and re-evaluate the same error-limit policy (operator lte, threshold 0.01).",
+    "rationale": "The verdict FAIL is deterministic for the observed 2/100 error rate against a 0.01 threshold; only a run whose observed rate is at or below the threshold can yield PASS. Changing the policy to mask the failure is not a valid remedy.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/2",
+     "analysis-result.json#/policy_verdict",
+     "analysis-result.json#/evidence/1"
+    ]
+   },
+   {
+    "rank": 3,
+    "action": "Before drawing per-transaction conclusions, verify which labels and time ranges the policy window actually covered and whether the checkout summary truly reflects the failing samples.",
+    "rationale": "The policy check references the overall summary only, while the checkout summary coincidentally matches it; per-transaction attribution is unverified and could change how the failure is triaged.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/1",
+     "analysis-result.json#/evidence/2",
+     "analysis-result.json#/evidence/0"
+    ]
+   }
+  ],
+  "caveats": [
+   "The FAIL is deterministic even though only 2 of 100 samples errored; the small error count does not prove the system is otherwise healthy or stable.",
+   "The policy check uses overall scope (metric-summary-overall). The checkout summary reports identical numbers, but that does not prove the two errors belonged to checkout; per-transaction attribution is not established.",
+   "sample_count (100) and throughput_rps numerator (100000) are different quantities (sample count vs throughput computation) and should not be compared as inconsistent counts.",
+   "The analysis covers one run and its policy window; it does not establish behavior under other loads, durations, or configurations.",
+   "Latency percentiles (p50 50ms, p95 95ms, p99 99ms, max 100ms) are reported but no latency policy is part of this verdict; no latency acceptance conclusion is warranted.",
+   "The verdict is FAIL, not NO_POLICY: a configured policy (error-limit) exists and evaluated to FAIL; this distinction is preserved."
+  ]
+ },
+ "schema": "ai-experiment-run.v2",
+ "phase": "pilot",
+ "case": "K05",
+ "rep": 1
+}

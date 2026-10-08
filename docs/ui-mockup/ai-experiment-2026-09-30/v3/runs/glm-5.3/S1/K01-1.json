@@ -1,0 +1,216 @@
+{
+ "stage": "S1",
+ "mode": "live",
+ "model": "glm-5.3",
+ "tag": {
+  "phase": "v3",
+  "model_tag": "glm-5.3",
+  "stage": "S1",
+  "case": "K01",
+  "rep": 1,
+  "attempt": 1
+ },
+ "qwen_exit": 0,
+ "wall_ms": 127204,
+ "relay": {
+  "schema_version": "advisory-ai-runtime-relay.v1",
+  "status": "FORWARDED_STRUCTURED_OUTPUT",
+  "request_count": 1,
+  "usage": {
+   "prompt_tokens": 6561,
+   "total_tokens": 17806,
+   "completion_tokens": 11245,
+   "prompt_tokens_details": {
+    "cached_tokens": 0
+   },
+   "completion_tokens_details": {
+    "reasoning_tokens": 8246
+   }
+  },
+  "latency_ms": 125812,
+  "model_returned": "glm-5.3"
+ },
+ "relay_status": "FORWARDED_STRUCTURED_OUTPUT",
+ "usage": {
+  "prompt_tokens": 6561,
+  "total_tokens": 17806,
+  "completion_tokens": 11245,
+  "prompt_tokens_details": {
+   "cached_tokens": 0
+  },
+  "completion_tokens_details": {
+   "reasoning_tokens": 8246
+  }
+ },
+ "latency_ms": 125812,
+ "status": "OK",
+ "note": null,
+ "output": {
+  "caveats": [
+   "The deterministic verdict is PASS (run_validity VALID, policy_verdict PASS); this advice interprets evidence and does not modify that verdict.",
+   "resource_verdict is NO_POLICY: a missing resource policy is not a pass. Only a configured resource policy or required capacity can yield a resource PASS or FAIL; a healthy business window, a rerun, or fixing the failed source does not change NO_POLICY.",
+   "Analysis coverage is INCOMPLETE due to SOURCE_ACQUISITION_PARTIAL: the OpenSearch errors query FAILED with SOURCE_HTTP_ERROR, so server-side error-event evidence is missing from this analysis.",
+   "The zero-error counts come from JMeter sampler outcomes (overall and per-transaction); they do not establish absence of server-side errors, because the error-event source failed to acquire.",
+   "clock_alignment is 'not_verified_by_core': no lead/lag ordering or temporal causal interpretation between the resource series and run events is supported; verify clocks before any such reasoning.",
+   "The policy check denominator (36,034) and the overall sample count (37,349) cover different scopes (run-intersection window vs whole run); counts are comparable only within the same scope and window, and the run-intersection window covers only part of the run.",
+   "The measured CPU and memory levels (23/23 observed cells per series, no gaps) do not prove spare capacity, stability, low load, or absence of saturation: no resource limits, capacity bounds, or anomaly-test results appear in this evidence.",
+   "The findings list is empty; absent findings are not evidence of absence of problems.",
+   "No latency policy is configured; the PASS applies to the error-rate policy only, and the observed latency percentiles (overall p99 176 ms, max 1092 ms) do not affect the verdict.",
+   "detected_idle_gaps is 0 and cap_exceeded is false in the source summary; this alone does not prove steady load throughout the run or complete coverage of the run period."
+  ],
+  "hypotheses": [
+   {
+    "evidence_refs": [
+     "analysis-result.json#/evidence/16",
+     "analysis-result.json#/analysis_coverage"
+    ],
+    "observation": "The source summary has status PARTIAL: the 'errors' profile (source_kind opensearch) reports its query with status FAILED and reason SOURCE_HTTP_ERROR, with request_count 3 and retries 2; analysis_coverage is INCOMPLETE with reason SOURCE_ACQUISITION_PARTIAL. The 'metrics-direct' profile (prometheus) is COMPLETE with all 6 queries SUCCESS.",
+    "possible_explanation": "The error-event source endpoint may have been unreachable, misconfigured, or returning an HTTP error during acquisition, so server-side error events could not be collected for this analysis.",
+    "rank": 1,
+    "recommended_check": "Inspect the OpenSearch errors source configuration (endpoint URL, credentials, network reachability) and rerun the analysis; confirm the errors query returns SUCCESS before treating error-event coverage as complete."
+   },
+   {
+    "evidence_refs": [
+     "analysis-result.json#/evidence/15",
+     "analysis-result.json#/evidence/8",
+     "analysis-result.json#/evidence/9",
+     "analysis-result.json#/evidence/10",
+     "analysis-result.json#/evidence/11",
+     "analysis-result.json#/evidence/12",
+     "analysis-result.json#/evidence/13",
+     "analysis-result.json#/policy_verdict"
+    ],
+    "observation": "The window_policy_summary for run-intersection reports business_verdict PASS and resource_verdict NO_POLICY, even though six resource summaries (CPU and memory for checkoutservice, frontend, paymentservice) were successfully collected with 23/23 observed cells and no missing cells.",
+    "possible_explanation": "No resource policy or required capacity was configured for these metrics, so the resource side could not be evaluated; NO_POLICY reflects a missing policy, not a resource pass.",
+    "rank": 2,
+    "recommended_check": "If a resource verdict is wanted, configure a resource policy or required capacity for the observed metrics and rerun; until such a policy exists, the resource verdict remains NO_POLICY."
+   },
+   {
+    "evidence_refs": [
+     "analysis-result.json#/evidence/7"
+    ],
+    "observation": "The resource binding reports clock_alignment 'not_verified_by_core', mode run_intersection, with dropped_leading_cells 1 (dropped_leading_millis 10309) and dropped_trailing_cells 1 (dropped_trailing_millis 4660); the evaluation window is 1790619855000-1790620200000 while the run window is 1790619844691-1790620204660.",
+    "possible_explanation": "The clocks of the metrics snapshot source and the run host may not be aligned, so the placement of the resource series relative to the run window is unverified.",
+    "rank": 3,
+    "recommended_check": "Verify clock synchronization (e.g., NTP status or measured offset) between the metrics source and the run host before using these series for any temporal interpretation."
+   },
+   {
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0",
+     "analysis-result.json#/evidence/1",
+     "analysis-result.json#/evidence/2",
+     "analysis-result.json#/evidence/3",
+     "analysis-result.json#/evidence/4",
+     "analysis-result.json#/evidence/5",
+     "analysis-result.json#/evidence/6",
+     "analysis-result.json#/evidence/14",
+     "analysis-result.json#/evidence/16"
+    ],
+    "observation": "JMeter reports error_count 0 for the overall scope (0/37349) and for all six transactions (0 errors each), and the policy check observed 0/36034; meanwhile the OpenSearch errors source query FAILED with SOURCE_HTTP_ERROR.",
+    "possible_explanation": "Client-side (JMeter sampler) outcomes show no failed samples, but server-side error events were not acquired, so error visibility in this analysis is limited to what JMeter recorded.",
+    "rank": 4,
+    "recommended_check": "After the errors source succeeds, rerun the analysis and compare the acquired server-side error events with the JMeter error counts; until then, treat the zero-error result as JMeter-scope only."
+   },
+   {
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0",
+     "analysis-result.json#/evidence/7",
+     "analysis-result.json#/evidence/14"
+    ],
+    "observation": "The policy check denominator is 36034 while the overall metric summary sample_count is 37349; the evaluation window (1790619855000-1790620200000) is shorter than the run window (1790619844691-1790620204660) by the dropped leading and trailing margins. The six per-transaction sample counts (6224, 6224, 6223, 6227, 6227, 6224) sum to 37349, matching the overall run count.",
+    "possible_explanation": "The 36034 and 37349 counts measure different scopes: the policy check counts samples inside the run-intersection window only, while the overall summary counts the whole run; the difference is expected, not an inconsistency.",
+    "rank": 5,
+    "recommended_check": "When comparing counts, restrict both to the same scope and window; if full-run policy coverage matters, inspect the raw JMeter JTL samples in the dropped leading (10309 ms) and trailing (4660 ms) margins."
+   },
+   {
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0",
+     "analysis-result.json#/evidence/3",
+     "analysis-result.json#/evidence/4",
+     "analysis-result.json#/evidence/14",
+     "analysis-result.json#/evidence/15"
+    ],
+    "observation": "Overall latency is p50 17 ms, p95 98 ms, p99 176 ms, max 1092 ms; home shows p99 197 ms and checkout max 1092 ms; the only policy check present is on error_rate_ratio (threshold 0.01), with no latency policy in the evidence.",
+    "possible_explanation": "Tail latency in some samples reaches about one second, but with no latency threshold configured this does not affect the PASS verdict.",
+    "rank": 6,
+    "recommended_check": "If tail latency matters for the business, configure a latency policy for the metrics of interest and rerun; the current PASS reflects the error-rate policy only."
+   },
+   {
+    "evidence_refs": [
+     "analysis-result.json#/evidence/8",
+     "analysis-result.json#/evidence/9",
+     "analysis-result.json#/evidence/10",
+     "analysis-result.json#/evidence/11",
+     "analysis-result.json#/evidence/12",
+     "analysis-result.json#/evidence/13"
+    ],
+    "observation": "In the run-intersection window, interval-mean CPU was about 0.0469 cores (checkoutservice), 0.1803 cores (frontend), and 0.0112 cores (paymentservice); interval-mean memory was about 9282456 bytes, 12059871 bytes, and 33023347 bytes respectively; every series reports expected_cells 23, observed_cells 23, missing_cells 0, longest_gap_cells 0, and empty reasons.",
+    "possible_explanation": "Measured utilization in this window was at these levels, which may or may not indicate headroom; no resource limits, thresholds, or capacity data appear in the evidence, so no capacity conclusion is supported.",
+    "rank": 7,
+    "recommended_check": "Compare these measured levels against known service resource limits, or configure a resource policy/required capacity and rerun, so the measurements can be evaluated against explicit thresholds."
+   }
+  ],
+  "recommendations": [
+   {
+    "action": "Inspect the OpenSearch 'errors' source configuration (endpoint, credentials, network reachability) and rerun the analysis once the query can succeed, to resolve the INCOMPLETE coverage.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/16",
+     "analysis-result.json#/analysis_coverage"
+    ],
+    "rationale": "The errors query FAILED with SOURCE_HTTP_ERROR after 3 requests and 2 retries, leaving analysis coverage INCOMPLETE (SOURCE_ACQUISITION_PARTIAL); the deterministic PASS verdict is unchanged by this, and a successful rerun would only restore the missing server-side error-event evidence.",
+    "rank": 1
+   },
+   {
+    "action": "If a resource verdict is desired, configure a resource policy or required capacity for the six observed resource series (CPU and memory for checkoutservice, frontend, paymentservice) and rerun.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/15",
+     "analysis-result.json#/evidence/8",
+     "analysis-result.json#/evidence/9",
+     "analysis-result.json#/evidence/10",
+     "analysis-result.json#/evidence/11",
+     "analysis-result.json#/evidence/12",
+     "analysis-result.json#/evidence/13"
+    ],
+    "rationale": "resource_verdict is NO_POLICY: a missing policy is not a pass, and only a configured policy or required capacity can produce a resource PASS or FAIL.",
+    "rank": 2
+   },
+   {
+    "action": "Verify clock synchronization between the metrics source and the run host before drawing any temporal relationship between the resource series and run events.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/7"
+    ],
+    "rationale": "clock_alignment is 'not_verified_by_core'; the run-intersection alignment of the resource series to the run rests on unverified clocks, so no lead/lag or temporal causal interpretation is currently supported.",
+    "rank": 3
+   },
+   {
+    "action": "Inspect the raw JMeter JTL data for the samples in the dropped leading (10309 ms) and trailing (4660 ms) margins if full-run error accounting matters.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/7",
+     "analysis-result.json#/evidence/0",
+     "analysis-result.json#/evidence/14"
+    ],
+    "rationale": "The policy window (run-intersection) covers only part of the run: 36034 samples were evaluated versus 37349 in the whole run; the counts are different scopes, not an inconsistency.",
+    "rank": 4
+   },
+   {
+    "action": "If tail latency matters, configure a latency policy (for example on p99) for the metrics of interest and rerun.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0",
+     "analysis-result.json#/evidence/3",
+     "analysis-result.json#/evidence/4",
+     "analysis-result.json#/evidence/15"
+    ],
+    "rationale": "Observed latencies include overall p99 176 ms and max 1092 ms, and home p99 197 ms; no latency policy is configured, so these values do not affect the current error-rate-only PASS.",
+    "rank": 5
+   }
+  ],
+  "schema_version": "ai-advice-output.v1",
+  "summary": "Verdict context: run_validity VALID, policy_verdict PASS, analysis coverage INCOMPLETE (SOURCE_ACQUISITION_PARTIAL). This is a JMeter jtl/csv run of 37,349 samples over a 359,969 ms run window with zero JMeter-reported errors overall and for all six transactions (add product to cart, cart, checkout, home, product, reset cart; per-transaction counts sum to the overall count). One policy is configured: overall error_rate_ratio <= 0.01 over the run-intersection window; it observed 0/36,034 and PASSED, giving business_verdict PASS and resource_verdict NO_POLICY (no resource policy configured; missing policy is not a pass). Six Prometheus resource series (CPU and memory for checkoutservice, frontend, paymentservice) were fully observed in the evaluation window 1790619855000-1790620200000 (23/23 cells, no missing cells, no gaps). The OpenSearch 'errors' source query FAILED with SOURCE_HTTP_ERROR (3 requests, 2 retries), which is why source acquisition is PARTIAL and coverage is INCOMPLETE. The resource binding uses run_intersection mode, dropped 1 leading cell (10,309 ms) and 1 trailing cell (4,660 ms), and reports clock_alignment 'not_verified_by_core'. Latency observations include overall p50 17 ms / p95 98 ms / p99 176 ms / max 1092 ms. No findings were recorded. This advice does not change the deterministic verdict."
+ },
+ "schema": "ai-experiment-run.v3",
+ "case": "K01",
+ "rep": 1,
+ "model_id": "glm-5.3",
+ "net_retries": 0,
+ "infra_retries": 0
+}

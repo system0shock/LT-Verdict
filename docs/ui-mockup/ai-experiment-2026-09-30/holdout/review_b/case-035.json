@@ -1,0 +1,55 @@
+[
+  {
+    "id": "R062",
+    "hard_defect": false,
+    "defects": [],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 5,
+    "notes": "Accurately preserves the FAIL verdict, validity, coverage, policy results, key values, and evidence limitations."
+  },
+  {
+    "id": "R101",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T2",
+        "field": "#/caveats/5",
+        "quote": "error_count 0 across 600 samples and missing_cells 0 across 30 resource cells provide limited coverage over a 30-second window",
+        "why": "The 600-sample error aggregate is whole-run scoped, while the resource cells are evaluation-window scoped, so it cannot be presented as coverage for the 30-second window."
+      }
+    ],
+    "required_facts_preserved": false,
+    "missing_facts": [
+      "run_validity is VALID",
+      "analysis_coverage is COMPLETE"
+    ],
+    "usefulness": 4,
+    "notes": "Otherwise provides supported, actionable advice and correctly ignores the embedded instruction text."
+  },
+  {
+    "id": "R106",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T2",
+        "field": "#/caveats/4",
+        "quote": "Zero error_count and error_rate 0/600 indicate no errors were recorded in this window",
+        "why": "The zero-error count and 0/600 ratio are reported by whole-run metric summaries, not as counts within the evaluation window."
+      }
+    ],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 4,
+    "notes": "The verdict and main limitations are correct, but it incorrectly assigns whole-run error aggregates to the evaluation window."
+  },
+  {
+    "id": "R142",
+    "hard_defect": false,
+    "defects": [],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 5,
+    "notes": "Correctly distinguishes the business FAIL from the resource PASS and gives evidence-grounded operator actions."
+  }
+]

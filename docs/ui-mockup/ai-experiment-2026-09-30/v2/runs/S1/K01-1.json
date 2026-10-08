@@ -1,0 +1,159 @@
+{
+ "stage": "S1",
+ "mode": "live",
+ "model": "deepseek-v4-flash-0731",
+ "tag": {
+  "phase": "v2-pilot",
+  "stage": "S1",
+  "case": "K01",
+  "rep": 1,
+  "attempt": 1
+ },
+ "qwen_exit": 0,
+ "wall_ms": 83428,
+ "relay": {
+  "schema_version": "advisory-ai-runtime-relay.v1",
+  "status": "FORWARDED_STRUCTURED_OUTPUT",
+  "request_count": 1,
+  "usage": {
+   "prompt_tokens": 6779,
+   "total_tokens": 15538,
+   "completion_tokens": 8759,
+   "prompt_tokens_details": {
+    "cached_tokens": 1024
+   },
+   "completion_tokens_details": {
+    "reasoning_tokens": 6582
+   }
+  },
+  "latency_ms": 82141,
+  "model_returned": "deepseek-v4-flash-0731"
+ },
+ "relay_status": "FORWARDED_STRUCTURED_OUTPUT",
+ "usage": {
+  "prompt_tokens": 6779,
+  "total_tokens": 15538,
+  "completion_tokens": 8759,
+  "prompt_tokens_details": {
+   "cached_tokens": 1024
+  },
+  "completion_tokens_details": {
+   "reasoning_tokens": 6582
+  }
+ },
+ "latency_ms": 82141,
+ "status": "OK",
+ "note": null,
+ "output": {
+  "schema_version": "ai-advice-output.v1",
+  "summary": "The LT Verdict is deterministically PASS for the configured overall error-rate policy: the policy check on error_rate_ratio reports observed 0/36034 (operator lte, threshold 0.01) in window run-intersection, and the window-policy-summary verdict is PASS (business_verdict PASS). resource_verdict is NO_POLICY, meaning no resource bound was evaluated and that absence is not a resource pass. Run validity is VALID, but analysis coverage is INCOMPLETE (SOURCE_ACQUISITION_PARTIAL): the OpenSearch 'errors' profile query failed with SOURCE_HTTP_ERROR (3 requests, 2 retries) while the Prometheus metrics-direct profile completed. All overall and per-transaction JTL summaries report 0 errors, with p99 latencies 85–197 ms and max latencies 752–1092 ms; these are observations only because no latency policy is present in the evidence. Resource summaries have 23/23 cells with no gaps in the run-intersection window, but clock_alignment is 'not_verified_by_core', so no temporal ordering or causal relationship should be inferred. No findings were recorded.",
+  "hypotheses": [
+   {
+    "rank": 1,
+    "observation": "source-summary status is PARTIAL: the 'errors' profile (opensearch) is FAILED with reason SOURCE_HTTP_ERROR after 3 requests and 2 retries, while metrics-direct (prometheus) is COMPLETE; analysis_coverage is INCOMPLETE with reason SOURCE_ACQUISITION_PARTIAL.",
+    "possible_explanation": "The OpenSearch error source could not be queried during acquisition (for example a transient HTTP failure, connectivity issue, or authorization problem), so error information from that source is absent from the analysis; the error-rate policy still reports observed 0/36034 from the available data.",
+    "recommended_check": "Inspect the acquisition/source logs for the errors/errors expression, verify OpenSearch availability and credentials, then re-run or re-acquire the analysis once the errors source succeeds; compare the error-rate policy result after full coverage is restored.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/16",
+     "analysis-result.json#/analysis_coverage",
+     "analysis-result.json#/evidence/14"
+    ]
+   },
+   {
+    "rank": 2,
+    "observation": "window-policy-summary reports resource_verdict NO_POLICY while business_verdict and overall verdict are PASS; no policy-check result for a resource metric (e.g., a cpu or memory bound) is present.",
+    "possible_explanation": "No resource policy or required capacity was configured for this run, so no resource bound was evaluated; NO_POLICY means absence of a policy, not that resources passed.",
+    "recommended_check": "Confirm whether a resource policy was intended for this run; if so, configure the policy (and any required capacity) and re-run; if not, record NO_POLICY as an explicit non-evaluation rather than a resource pass.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/15",
+     "analysis-result.json#/policy_verdict",
+     "analysis-result.json#/evidence/14"
+    ]
+   },
+   {
+    "rank": 3,
+    "observation": "resource-binding reports clock_alignment 'not_verified_by_core' and uses mode 'run_intersection' with 1 dropped leading cell (10309 ms) and 1 dropped trailing cell (4660 ms).",
+    "possible_explanation": "The clock relationship between the load run and the resource/metric snapshots was not verified, so the run-intersection window boundaries and any lead/lag between load and resource series cannot be treated as temporally ordered.",
+    "recommended_check": "Verify clock synchronization (e.g., NTP) across the load generator and the Prometheus/OpenSearch metric sources before interpreting any temporal or causal ordering involving run and resource windows.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/7"
+    ]
+   },
+   {
+    "rank": 4,
+    "observation": "Overall latency is p50 17 ms, p95 98 ms, p99 176 ms, max 1092 ms; per-transaction p99 values range 85–197 ms (home p99 197 and max 1009; checkout max 1092 and p99 142) and all transaction summaries report 0 errors.",
+    "possible_explanation": "The max latency values are much higher than the p99s, which could indicate isolated straggler requests or a brief transient; however, without a latency policy and without per-sample timestamps in this evidence, no systemic degradation or impact attribution can be concluded.",
+    "recommended_check": "Inspect the latency time series (per-second or per-sample) to locate the timestamps of the max observations and determine whether they are isolated spikes; if latency targets exist, add an explicit latency policy so results can be judged.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0",
+     "analysis-result.json#/evidence/4",
+     "analysis-result.json#/evidence/3"
+    ]
+   },
+   {
+    "rank": 5,
+    "observation": "Resource summaries for the run-intersection window report 23/23 observed cells with no missing cells and no gaps: frontend cpu mean 0.180 cores (max 0.199), checkoutservice cpu mean 0.047 cores (max 0.052), paymentservice cpu mean 0.011 cores (max 0.013); no resource policy is present to bound these values.",
+    "possible_explanation": "Resource utilization levels are low (fractions of a core), but this is an observation only; without a configured resource policy or required capacity, the figures do not prove spare capacity or absence of saturation.",
+    "recommended_check": "If capacity expectations exist, define a resource policy with required capacity and re-run; otherwise treat these series as descriptive only and do not infer spare capacity from low values.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/10",
+     "analysis-result.json#/evidence/8",
+     "analysis-result.json#/evidence/12",
+     "analysis-result.json#/evidence/15"
+    ]
+   }
+  ],
+  "recommendations": [
+   {
+    "rank": 1,
+    "action": "Recover the failed OpenSearch 'errors' source and re-run or re-acquire the analysis before relying on full coverage.",
+    "rationale": "analysis_coverage is INCOMPLETE (SOURCE_ACQUISITION_PARTIAL) and the errors/errors query FAILED with SOURCE_HTTP_ERROR after 3 requests and 2 retries, even though the configured error-rate policy passed on the available data (observed 0/36034).",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/16",
+     "analysis-result.json#/analysis_coverage",
+     "analysis-result.json#/evidence/14"
+    ]
+   },
+   {
+    "rank": 2,
+    "action": "Configure a resource policy with required capacity if resource bounds were intended; otherwise explicitly record that resource_verdict NO_POLICY is an absence of policy.",
+    "rationale": "The window-policy-summary shows resource_verdict NO_POLICY while the overall verdict is PASS; NO_POLICY is not a resource PASS or FAIL and only a configured policy would yield a resource verdict.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/15",
+     "analysis-result.json#/policy_verdict"
+    ]
+   },
+   {
+    "rank": 3,
+    "action": "Verify clock synchronization between the load generator and metric sources before drawing any temporal or causal conclusions from run and resource windows.",
+    "rationale": "resource-binding reports clock_alignment 'not_verified_by_core'; until clocks are verified, epoch deltas and run-intersection trimming cannot support lead/lag ordering.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/7"
+    ]
+   },
+   {
+    "rank": 4,
+    "action": "Add an explicit latency policy and/or inspect the latency time series around the max observations (752–1092 ms) to distinguish isolated outliers from a sustained tail.",
+    "rationale": "Observed p99 latencies (85–197 ms) and max latencies (752–1092 ms) are descriptive only; no latency policy is present in the evidence, so these values do not constitute a pass or fail and cannot by themselves support impact attribution.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0",
+     "analysis-result.json#/evidence/4",
+     "analysis-result.json#/evidence/3"
+    ]
+   }
+  ],
+  "caveats": [
+   "Coverage is INCOMPLETE: the OpenSearch 'errors' source query failed with SOURCE_HTTP_ERROR; the error-rate policy PASS is based on the available data (observed 0/36034) and the failed source contributed no error data.",
+   "resource_verdict NO_POLICY means no resource policy was evaluated; it is not a resource PASS or FAIL, and NO_POLICY cannot be converted to PASS by any rerun or healthy data.",
+   "clock_alignment is 'not_verified_by_core', so no temporal ordering or causal relationship between load and resource metrics should be inferred before clock verification.",
+   "The policy window (run-intersection) covers only part of the run (dropped leading 10309 ms and trailing 4660 ms); overall sample counts (37349) and policy-window denominators (36034) measure different scopes/windows and should not be compared as inconsistent.",
+   "Latency and resource figures are descriptive observations: there is no latency policy in the evidence, and low resource mean values (fractions of a core, 23/23 cells) do not prove spare capacity or absence of saturation.",
+   "Run validity VALID reflects validity of the run, not completeness of data acquisition; the deterministic verdict PASS is preserved and this advice does not alter it.",
+   "No findings were recorded in this analysis, so absent findings should not be read as proof of stability or absence of problems."
+  ]
+ },
+ "schema": "ai-experiment-run.v2",
+ "phase": "pilot",
+ "case": "K01",
+ "rep": 1
+}

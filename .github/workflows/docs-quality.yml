@@ -50,6 +50,8 @@ jobs:
           args: >-
             --verbose
             --no-progress
+            --exclude-path docs/ui-mockup/ai-experiment-2026-09-30
+            --exclude-path docs/ui-mockup/ai-defects-analysis-2026-09-30.md
             --max-retries 3
             './**/*.md'
             './**/*.html'

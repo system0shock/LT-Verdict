@@ -1,0 +1,26 @@
+[
+  {
+    "id": "R002",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T2",
+        "field": "#/recommendations/0/action",
+        "quote": "they account for all 3688 errors in the window",
+        "why": "The checkout error count is a whole-run transaction aggregate and cannot be assigned to the shorter policy window from these aggregates."
+      },
+      {
+        "type": "T3",
+        "field": "#/caveats/7",
+        "quote": "Max latency values (10008 ms) are single extremes",
+        "why": "The aggregates do not show how many samples reached the maximum latency."
+      }
+    ],
+    "required_facts_preserved": false,
+    "missing_facts": [
+      "Run validity is VALID."
+    ],
+    "usefulness": 3,
+    "notes": "The advice offers useful checks but overstates what the aggregates establish about window attribution and maximum latency."
+  }
+]

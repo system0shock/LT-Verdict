@@ -1,0 +1,96 @@
+[
+  {
+    "id": "R033",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T7",
+        "field": "#/summary",
+        "quote": "no resource or business policy existed",
+        "why": "NO_POLICY establishes that no rule applied to the window, not that no policy was configured."
+      },
+      {
+        "type": "T7",
+        "field": "#/recommendations/0/rationale",
+        "quote": "No policy existed",
+        "why": "The evidence does not establish whether a policy was configured but inapplicable."
+      }
+    ],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 3,
+    "notes": "The checks are useful, but the explanation repeatedly overstates what NO_POLICY reveals about configuration."
+  },
+  {
+    "id": "R054",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T7",
+        "field": "#/summary",
+        "quote": "Because no policy is configured",
+        "why": "NO_POLICY does not establish that no policy was configured."
+      },
+      {
+        "type": "T8",
+        "field": "#/caveats/1",
+        "quote": "the stored raw_rho '1' is a partial/candidate value",
+        "why": "The evidence identifies raw_rho as raw and reports partial_rho as null."
+      },
+      {
+        "type": "T7",
+        "field": "#/caveats/2",
+        "quote": "error_count 0 across 700 samples covers only the 35 s evaluation window",
+        "why": "The evidence also reports zero errors across 700 samples for the whole run."
+      },
+      {
+        "type": "T2",
+        "field": "#/caveats/3",
+        "quote": "their differing units and identical values",
+        "why": "Identical summary statistics do not establish identical cell values in the two series."
+      }
+    ],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 2,
+    "notes": "Several sound checks are weakened by incorrect claims about policy configuration, scope, and the stored correlation."
+  },
+  {
+    "id": "R057",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T8",
+        "field": "#/hypotheses/3/possible_explanation",
+        "quote": "so load was not constant over time",
+        "why": "A positive slope in the resource summaries does not establish the achieved load trajectory."
+      }
+    ],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 3,
+    "notes": "Most actions are verifiable, but the response treats a resource trend as a proven change in load."
+  },
+  {
+    "id": "R142",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T2",
+        "field": "#/hypotheses/1/observation",
+        "quote": "Metric summaries (overall and for the 'request' transaction) report ... over 700 samples in the evaluation window",
+        "why": "Those metric summaries have whole-run scopes; a separate window summary reports the matching window values."
+      },
+      {
+        "type": "T8",
+        "field": "#/hypotheses/3/possible_explanation",
+        "quote": "With a flat p95 latency series (280 ms at p95, p99, and max) and non-varying resource values",
+        "why": "Aggregate latency percentiles do not show a flat time series, and the resource summaries report values from 3 to 21."
+      }
+    ],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 2,
+    "notes": "The policy advice is sound, but the correlation explanation relies on false claims about variation and scope."
+  }
+]

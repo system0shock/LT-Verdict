@@ -1,0 +1,18 @@
+{
+ "reviewers": {
+  "A": {
+   "runner": "codex",
+   "model": "gpt-6-sol",
+   "reasoning_effort": "xhigh"
+  },
+  "B": {
+   "runner": "codex",
+   "model": "gpt-5.6-terra",
+   "reasoning_effort": "high"
+  }
+ },
+ "rubric_file": "reviewer_rubric_holdout.txt",
+ "rubric_sha256": "9649fb356144d7148a455c5476747f9a3ed7a4570ca94cb4577a197be07658a8",
+ "task_template_sha256": "8b4f841b987741b475368de5eff19eb66aba14f488707db3633080b2f16c07f9",
+ "config_sha256": "ef92cb7f87233293226ec68fcfaf2ae3d3638df6564220853e340532da06118c"
+}

@@ -1,0 +1,41 @@
+{
+ "required": [
+  [
+   "lower_bound",
+   [
+    "lower[ _]bound|at least|not less than|>="
+   ]
+  ],
+  [
+   "lower_value",
+   [
+    "(?<![\\d.,])(?:297)(?![\\d]|[.,]\\d)"
+   ]
+  ],
+  [
+   "knee_not_computed",
+   [
+    "(?:knee)[^.\\n]{0,100}(?:(?:null|not (?:computed|implemented|available|detected|determined)|absent|unavailable|none|no ))|(?:(?:null|not (?:computed|implemented|available|detected|determined)|absent|unavailable|none|no ))[^.\\n]{0,100}(?:knee)",
+    "no knee|KNEE_DETECTOR_NOT_IMPLEMENTED",
+    "(?:does not|doesn't|not)[^.\\n]{0,40}(?:require|need|depend)[^.\\n]{0,40}knee"
+   ]
+  ]
+ ],
+ "forbidden": [
+  "says that the lower bound requires a knee detector, or advises implementing or enabling one",
+  "says that a lower bound requires a required capacity",
+  "states the capacity equals the lower bound"
+ ],
+ "useful_checks": [
+  "raise the load in further stages to find where the SLA fails"
+ ],
+ "source": {
+  "builder": "AdvisoryEvidenceBuilder",
+  "build": "5b5e51c+harness",
+  "source": "x:X03",
+  "source_sha256": "cc8c7263b026b2c9e7604afdda1a5e8ac674d9ca291fddef5f22988a84fb66cd",
+  "derivation": [],
+  "evidence_sha256": "43abb65f74c53dcc6ff6123fd77edfde69be91db3b0e32c0ce8cc692a21773b1",
+  "inputs": "x:X03, derivation [], analysed through RunBundleStore -> AnalysisService -> AdvisoryEvidenceBuilder by AdvisoryHoldoutCorpusTest on 5b5e51c+harness"
+ }
+}

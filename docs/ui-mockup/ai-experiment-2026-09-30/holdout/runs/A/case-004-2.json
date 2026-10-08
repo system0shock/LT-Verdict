@@ -1,0 +1,221 @@
+{
+ "stage": "A",
+ "mode": "live",
+ "model": "deepseek-v4-flash-0731",
+ "tag": {
+  "phase": "holdout",
+  "attempt_id": "case-004-2-A-t1",
+  "arm": "A",
+  "stage": null,
+  "case": "case-004",
+  "rep": 2,
+  "try": 1
+ },
+ "retry_policy": "d2",
+ "qwen_exit": 0,
+ "wall_ms": 74870,
+ "relay": {
+  "schema_version": "advisory-ai-runtime-relay.v1",
+  "status": "FORWARDED_STRUCTURED_OUTPUT",
+  "received_request_count": 1,
+  "forwarded_request_count": 1,
+  "outcomes": [
+   "FORWARDED_STRUCTURED_OUTPUT"
+  ],
+  "retry_refused_reason": null,
+  "first_refused_reason": null,
+  "model_id": "deepseek-v4-flash-0731",
+  "retry_policy": "d2",
+  "requests": [
+   {
+    "ordinal": 1,
+    "forwarded": true,
+    "outcome": "FORWARDED_STRUCTURED_OUTPUT",
+    "provider_status": 200,
+    "latency_ms": 73557,
+    "usage": {
+     "prompt_tokens": 4635,
+     "total_tokens": 12548,
+     "completion_tokens": 7913,
+     "prompt_tokens_details": {
+      "cached_tokens": 1024
+     },
+     "completion_tokens_details": {
+      "reasoning_tokens": 5325
+     }
+    },
+    "model_returned": "deepseek-v4-flash-0731"
+   }
+  ],
+  "usage": {
+   "prompt_tokens": 4635,
+   "completion_tokens": 7913,
+   "total_tokens": 12548
+  },
+  "latency_ms": 73557
+ },
+ "relay_status": "FORWARDED_STRUCTURED_OUTPUT",
+ "usage": {
+  "prompt_tokens": 4635,
+  "completion_tokens": 7913,
+  "total_tokens": 12548
+ },
+ "latency_ms": 73557,
+ "retried": false,
+ "retry_refused_reason": null,
+ "status": "OK",
+ "note": null,
+ "output": {
+  "schema_version": "ai-advice-output.v1",
+  "summary": "The referenced run is VALID with analysis coverage COMPLETE and a deterministic policy verdict of NO_POLICY: both the reference and evaluation windows report business_verdict and resource_verdict NO_POLICY, so no PASS/FAIL conformance decision was produced. Under a constant synthetic load of 20 requests/s (7200 samples total, 0 errors; p50 ~196-203 ms, p95 236 ms, p99 238 ms, max 240 ms), resource-00 stayed near mean 0.502 (reference) and 0.518 (evaluation) ratio with max ~0.699 and near-zero slope. The only evaluated correlation (resource-00 vs response_time_p95_ms) was BELOW_EFFECT with Holm-adjusted p=0.465 and NOT_SELECTED; its uncertainty is NOT_ESTIMATED and its requested control \"target\" was dropped as a constant series. anomalies_tested is 0, episodes_reported is 0, uncertainty is NOT_ESTIMATED, and clock_alignment is not_verified_by_core. This advice is advisory only and does not change the NO_POLICY verdict.",
+  "hypotheses": [
+   {
+    "rank": 1,
+    "observation": "In the evaluation window, the paired correlation between resource-00 and response_time_p95_ms had raw/partial rho 0.049679535425 at best_lag_ms 0, Holm-adjusted p 0.465, status BELOW_EFFECT and NOT_SELECTED; the requested control \"target\" was dropped with reason CONSTANT_CONTROL, and uncertainty is NOT_ESTIMATED.",
+    "possible_explanation": "The stored result indicates no detectable lag-0 linear relationship between the resource-00 ratio and p95 latency in that window, but because target load was a constant 20 requests/s in both windows, the analysis had no load contrast and cannot rule out load-sensitive latency behavior.",
+    "recommended_check": "Re-run the load test with a stepped or varied target throughput (for example 10/20/30/40 requests/s) so the correlation and headline selection can be evaluated against a non-constant control.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/11",
+     "analysis-result.json#/evidence/12",
+     "analysis-result.json#/evidence/4",
+     "analysis-result.json#/evidence/6"
+    ]
+   },
+   {
+    "rank": 2,
+    "observation": "Both windows carry verdict NO_POLICY with business_verdict NO_POLICY and resource_verdict NO_POLICY, the run-level policy verdict is NO_POLICY, and the findings list is empty.",
+    "possible_explanation": "No policy or thresholds appear to have been configured for this run, so the NO_POLICY verdict conveys the absence of a conformance decision rather than a PASS; the empty findings reflect that no policy evaluation was configured, not that no issues exist.",
+    "recommended_check": "Review the policy and threshold configuration (SLO, capacity, or latency bounds) and re-run the analysis to obtain an actual PASS or FAIL decision for the reference and evaluation windows.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/7",
+     "analysis-result.json#/evidence/8",
+     "analysis-result.json#/policy_verdict"
+    ]
+   },
+   {
+    "rank": 3,
+    "observation": "Overall latency shows p50 198 ms, p95 236 ms, p99 238 ms, max 240 ms over 7200 samples with 0 errors; the same top-percentile pattern repeats in both windows (reference p95 236/p99 238/max 240; evaluation p95 236/p99 238/max 239) while p50 differs (203 vs 196 ms).",
+    "possible_explanation": "The clustering of p95/p99/max near 240 ms could reflect a timer, pacing, or sampling/aggregation ceiling on the JMeter sampler rather than load-driven latency growth; the near-identical tails across windows with different p50 values is consistent with such a ceiling.",
+    "recommended_check": "Inspect the full latency histogram and percentile profile and confirm whether 240 ms corresponds to a configured timeout, thread pacing, or sampling boundary before attributing the tail to service behavior.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0",
+     "analysis-result.json#/evidence/1",
+     "analysis-result.json#/evidence/9",
+     "analysis-result.json#/evidence/10"
+    ]
+   },
+   {
+    "rank": 4,
+    "observation": "resource-00 stayed near mean 0.502 (reference) and 0.518 (evaluation) with max 0.699/0.698, near-zero slopes (-0.000137 and +0.000144 per second), while target remained constant at 20 requests/s; the diagnostic reported episodes_reported 0.",
+    "possible_explanation": "The service held a fairly steady ~50% utilization ratio under a constant 20 requests/s load with no detected episodes, which indicates stable observed behavior but is not evidence of spare capacity or absence of degradation at other loads.",
+    "recommended_check": "Exercise the service at higher constant and burst loads while measuring whether resource-00 and latency remain flat before drawing capacity conclusions.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/3",
+     "analysis-result.json#/evidence/5",
+     "analysis-result.json#/evidence/4",
+     "analysis-result.json#/evidence/6",
+     "analysis-result.json#/evidence/13"
+    ]
+   },
+   {
+    "rank": 5,
+    "observation": "The diagnostic summary reports anomalies_tested 0, episodes_reported 0, pairs_tested 1, status COMPLETE, and uncertainty NOT_ESTIMATED.",
+    "possible_explanation": "The diagnostic ran its configured scope (one pair tested) but evaluated zero anomaly hypotheses, so the absence of reported episodes does not reflect anomaly detection that was actually exercised on this run.",
+    "recommended_check": "Verify that anomaly detection is enabled and configured for the relevant series, review why anomalies_tested is 0, and validate the detection path on a dataset with known anomalies.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/13",
+     "analysis-result.json#/evidence/11"
+    ]
+   },
+   {
+    "rank": 6,
+    "observation": "The resource binding reports clock_alignment not_verified_by_core, and the correlation pair's best_lag_ms is 0 with the only evaluated lag being lag_ms 0.",
+    "possible_explanation": "Without verified clock alignment between the JMeter timestamps and the resource-00 metric series, temporal ordering or lead/lag interpretation is unsupported, and even the simultaneous lag-0 correlation could be affected by clock skew.",
+    "recommended_check": "Verify clock synchronization between the load generator and the metric source, then re-run the correlation with an expanded lag profile if timing relationships matter for the decision.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/2",
+     "analysis-result.json#/evidence/11"
+    ]
+   }
+  ],
+  "recommendations": [
+   {
+    "rank": 1,
+    "action": "Verify clock alignment between the load generator timestamps and the resource-00 metric series before drawing any temporal or causal conclusions.",
+    "rationale": "clock_alignment is not_verified_by_core and only lag_ms 0 was evaluated; an unverified clock relationship cannot support lead/lag ordering or a temporal causal hypothesis.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/2",
+     "analysis-result.json#/evidence/11"
+    ]
+   },
+   {
+    "rank": 2,
+    "action": "Configure explicit policy thresholds (latency, capacity, or error SLOs) and re-run the analysis.",
+    "rationale": "Both windows and the run-level verdict are NO_POLICY, so there is currently no PASS/FAIL conformance decision; NO_POLICY is not a pass and findings are empty because policy evaluation was not configured.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/7",
+     "analysis-result.json#/evidence/8",
+     "analysis-result.json#/policy_verdict"
+    ]
+   },
+   {
+    "rank": 3,
+    "action": "Re-run the load test with a variable or stepped target throughput profile.",
+    "rationale": "The target control was constant at 20 requests/s in both windows and was dropped with reason CONSTANT_CONTROL, so the correlation test had no load contrast and cannot establish whether latency responds to load.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/4",
+     "analysis-result.json#/evidence/6",
+     "analysis-result.json#/evidence/11"
+    ]
+   },
+   {
+    "rank": 4,
+    "action": "Investigate the concentration of p95/p99/max latency near 236-240 ms (max 240 ms) with 0 errors.",
+    "rationale": "The identical top-percentile pattern across windows while p50 shifts (203 to 196 ms) suggests a possible timer, pacing, or sampling ceiling rather than load-driven latency growth.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0",
+     "analysis-result.json#/evidence/1",
+     "analysis-result.json#/evidence/9",
+     "analysis-result.json#/evidence/10"
+    ]
+   },
+   {
+    "rank": 5,
+    "action": "Confirm whether anomaly detection is configured and why anomalies_tested is 0, then validate it on data with known anomalies.",
+    "rationale": "episodes_reported 0 with anomalies_tested 0 and uncertainty NOT_ESTIMATED means the absence of episodes does not demonstrate stability or absence of a problem.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/13"
+    ]
+   },
+   {
+    "rank": 6,
+    "action": "Exercise the service at higher constant and burst load levels to test capacity behavior.",
+    "rationale": "resource-00 remained around 0.50-0.52 with max ~0.70 under a constant 20 requests/s load; this observed stability does not prove spare capacity or absence of degradation at higher load.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/3",
+     "analysis-result.json#/evidence/5"
+    ]
+   }
+  ],
+  "caveats": [
+   "The deterministic verdict is NO_POLICY for the run and for both windows; this advisory interpretation does not change that verdict, and NO_POLICY is not equivalent to PASS.",
+   "clock_alignment is not_verified_by_core, so timing relationships between JMeter samples and resource-00 are not established.",
+   "The correlation result carries uncertainty NOT_ESTIMATED, and only lag_ms 0 was evaluated (best_lag_ms 0) with no lead/lag profile.",
+   "Only one correlation pair was produced (response_time_p95_ms vs resource-00); other latency percentiles, error rate, and other resource series were not correlation-tested.",
+   "Target load was constant at 20 requests/s in both windows and was dropped as a control with reason CONSTANT_CONTROL, limiting load-sensitivity conclusions.",
+   "anomalies_tested is 0 and episodes_reported is 0 with uncertainty NOT_ESTIMATED; absence of reported episodes is not evidence of stability or of an absent problem.",
+   "Zero errors were observed, but only within a 6-minute window at a constant 20 requests/s load; error-free behavior at this load does not prove robustness under other loads.",
+   "Coverage COMPLETE refers to the configured analysis scope (one pair tested); it does not imply that all potential issues were evaluated, and the findings list is empty.",
+   "The resource-00 series has no missing cells or gaps (missing_cells 0, longest_gap_cells 0), but a complete flat series at ~0.5 ratio with no load contrast does not prove spare capacity.",
+   "The run window extends to run_to_epoch_ms 1767225960212 while the snapshot ends at 1767225960000; the extra ~212 ms of run time is not part of the sampled windows."
+  ]
+ },
+ "schema": "ai-experiment-run.holdout.v1",
+ "case": "case-004",
+ "rep": 2,
+ "arm": "A",
+ "try": 1,
+ "attempt_id": "case-004-2-A-t1",
+ "model_id": "deepseek-v4-flash-0731",
+ "prompt_sha256": "69f215a1ad4ae678c82410ba7cf7daf171cd9c7ca0ef4626bba6977db0af4ef7"
+}

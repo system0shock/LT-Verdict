@@ -1,0 +1,94 @@
+[
+  {
+    "id": "R034",
+    "hard_defect": false,
+    "defects": [],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 5,
+    "notes": "Accurately preserves the verdicts, capacity bound, coverage, and scope limitations with actionable operator checks."
+  },
+  {
+    "id": "R087",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T8",
+        "field": "#/recommendations/1/rationale",
+        "quote": "the cause of the 420ms p95 must be located outside the load generator",
+        "why": "A passing diagnostic generator guard does not prove generator health or exclude generator effects on latency."
+      },
+      {
+        "type": "T1",
+        "field": "#/hypotheses/3/recommended_check",
+        "quote": "implement a knee detector so a true capacity point can be estimated",
+        "why": "The capacity bound is computed independently of the knee detector, which is a fixed product limitation rather than an operator action."
+      },
+      {
+        "type": "T2",
+        "field": "#/hypotheses/4/observation",
+        "quote": "numerator 2401000 over denominator 600500 (~4 rps) with 2401 samples over the 600000ms evaluation window",
+        "why": "It derives an rps value from an undefined ratio and assigns whole-run aggregates to the shorter evaluation window."
+      },
+      {
+        "type": "T2",
+        "field": "#/hypotheses/4/possible_explanation",
+        "quote": "At roughly 147-250 active users, ~4 rps aggregate throughput implies very low per-user request rate",
+        "why": "It relates a whole-run throughput aggregate to per-stage active-user values to infer a per-user rate."
+      }
+    ],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 2,
+    "notes": "It preserves the main facts but includes misleading causal and capacity guidance."
+  },
+  {
+    "id": "R089",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T2",
+        "field": "#/hypotheses/1/observation",
+        "quote": "p50=410, p95=420, p99=420, max=1500 in stage-1 and stage-2 policy checks",
+        "why": "Only the p95 value is reported for the policy windows; the other latency aggregates are whole-run or transaction-scope values."
+      },
+      {
+        "type": "T1",
+        "field": "#/hypotheses/3/recommended_check",
+        "quote": "implement knee detection before reporting a capacity value",
+        "why": "The reported UPPER_BOUND does not depend on knee detection, and the detector is a fixed product limitation."
+      },
+      {
+        "type": "T2",
+        "field": "#/hypotheses/5/possible_explanation",
+        "quote": "Aggregate request rate is low relative to the number of active users",
+        "why": "It compares an inferred whole-run throughput rate with active-user measurements from separate stage windows."
+      },
+      {
+        "type": "T2",
+        "field": "#/recommendations/5/rationale",
+        "quote": "The stored ratio (~4) with 148-248 active users suggests the per-user request rate is very low",
+        "why": "The evidence does not define the ratio units and does not support deriving a per-user rate from whole-run and per-window quantities."
+      },
+      {
+        "type": "T7",
+        "field": "#/caveats/5",
+        "quote": "Latency statistics in evidence are window-level aggregates",
+        "why": "The listed p50, p95, p99, and max statistics are reported in overall and transaction metric summaries, not as window-level latency aggregates."
+      }
+    ],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 2,
+    "notes": "The central verdict is accurate, but multiple scope errors and invalid knee-detector advice could mislead an operator."
+  },
+  {
+    "id": "R140",
+    "hard_defect": false,
+    "defects": [],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 5,
+    "notes": "Correctly distinguishes the upper bound, diagnostic guard, NO_POLICY state, and unproven causal hypotheses."
+  }
+]

@@ -1,0 +1,18 @@
+[
+  {
+    "id": "R003",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T3",
+        "field": "#/hypotheses/2/possible_explanation",
+        "quote": "The single overall max-latency sample",
+        "why": "The aggregates do not show how many samples reached the reported 904 ms maximum."
+      }
+    ],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 4,
+    "notes": "The response preserves the verdict and key figures and offers useful checks, but it asserts an unsupported single sample at the maximum."
+  }
+]

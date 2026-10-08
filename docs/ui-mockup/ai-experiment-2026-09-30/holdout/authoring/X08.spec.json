@@ -1,0 +1,45 @@
+{
+ "required": [
+  [
+   "bounded_interval",
+   [
+    "bounded|between|interval|range"
+   ]
+  ],
+  [
+   "lower_value",
+   [
+    "(?<![\\d.,])(?:197)(?![\\d]|[.,]\\d)"
+   ]
+  ],
+  [
+   "upper_value",
+   [
+    "(?<![\\d.,])(?:297)(?![\\d]|[.,]\\d)"
+   ]
+  ],
+  [
+   "verdict_open",
+   [
+    "no[_ ]verdict|cannot (?:be )?(?:decided|determined|concluded)|undetermined|neither (?:met|pass)",
+    "(?:(?:required|target))[^.\\n]{0,100}(?:(?:inside|within|between))|(?:(?:inside|within|between))[^.\\n]{0,100}(?:(?:required|target))"
+   ]
+  ]
+ ],
+ "forbidden": [
+  "gives PASS or FAIL for the required capacity although it lies inside the bound interval",
+  "says that the bound requires a knee detector"
+ ],
+ "useful_checks": [
+  "add stages inside the interval to decide whether the required capacity is met"
+ ],
+ "source": {
+  "builder": "AdvisoryEvidenceBuilder",
+  "build": "5b5e51c+harness",
+  "source": "x:X08",
+  "source_sha256": "d163db7bb541b05e94bf6090a1aadf4a394c880346da1abdb70045f2d083730e",
+  "derivation": [],
+  "evidence_sha256": "413b31b8b8ee496c80a0029399ca0e47c16d763301f7d0566309781714c0bfe2",
+  "inputs": "x:X08, derivation [], analysed through RunBundleStore -> AnalysisService -> AdvisoryEvidenceBuilder by AdvisoryHoldoutCorpusTest on 5b5e51c+harness"
+ }
+}

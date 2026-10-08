@@ -1,0 +1,162 @@
+{
+ "stage": "S0",
+ "mode": "live",
+ "model": "deepseek-v4-flash-0731",
+ "tag": {
+  "phase": "v2-pilot",
+  "stage": "S0",
+  "case": "K10",
+  "rep": 1,
+  "attempt": 1
+ },
+ "qwen_exit": 0,
+ "wall_ms": 55756,
+ "relay": {
+  "schema_version": "advisory-ai-runtime-relay.v1",
+  "status": "FORWARDED_STRUCTURED_OUTPUT",
+  "request_count": 1,
+  "usage": {
+   "prompt_tokens": 2931,
+   "total_tokens": 8001,
+   "completion_tokens": 5070,
+   "prompt_tokens_details": {
+    "cached_tokens": 1024
+   },
+   "completion_tokens_details": {
+    "reasoning_tokens": 3183
+   }
+  },
+  "latency_ms": 54491,
+  "model_returned": "deepseek-v4-flash-0731"
+ },
+ "relay_status": "FORWARDED_STRUCTURED_OUTPUT",
+ "usage": {
+  "prompt_tokens": 2931,
+  "total_tokens": 8001,
+  "completion_tokens": 5070,
+  "prompt_tokens_details": {
+   "cached_tokens": 1024
+  },
+  "completion_tokens_details": {
+   "reasoning_tokens": 3183
+  }
+ },
+ "latency_ms": 54491,
+ "status": "OK",
+ "note": null,
+ "output": {
+  "schema_version": "ai-advice-output.v1",
+  "summary": "The JMeter JTL CSV analysis is VALID and its coverage is COMPLETE, but the policy verdict is NO_POLICY, so no pass/fail determination exists for this run. Summary metrics across 2,623 samples show zero recorded errors (0/2623 overall and 0 for each of the six transaction summaries) and low median latencies (overall p50 11ms, p95 46ms, p99 77ms, max 904ms; per-transaction p50s range 3-27ms). The worst latency figures belong to the \"home\" transaction (p50 27ms, p95 61ms, p99 96ms, max 904ms), which is also the overall run max. No findings or anomalies were produced. Interpretation stops at what the summaries state: zero JMeter sampler errors and no flagged anomalies do not prove stability, and the 904ms max cannot be attributed to any cause from summary-only evidence.",
+  "hypotheses": [
+   {
+    "rank": 1,
+    "observation": "The 'home' transaction has the highest summary latencies of all transactions (p50 27ms, p95 61ms, p99 96ms, max 904ms across 438 samples) and the overall run max equals 904ms while overall p50 is 11ms.",
+    "possible_explanation": "The home endpoint may involve a heavier request path (more backend calls or rendering), or the 904ms value may be a transient outlier (cold start, GC pause, or contention). Summary-only evidence does not establish which, if either, is true.",
+    "recommended_check": "Plot the per-sample latency series from the JTL around the 904ms sample and correlate its timestamp with server-side traces/APM before attributing any cause.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/4",
+     "analysis-result.json#/evidence/0"
+    ]
+   },
+   {
+    "rank": 2,
+    "observation": "Overall latency summary shows p99 77ms but max 904ms, several times larger than the p99 value; error_count is 0.",
+    "possible_explanation": "The distribution appears right-skewed with a small tail of high-latency samples that raise max without affecting p99, but the percentile summary alone cannot show how many samples are in that tail or when they occurred.",
+    "recommended_check": "Inspect the raw JTL samples above the p99 threshold for count, timestamps, and any shared characteristics (endpoint, concurrency, time window).",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0"
+    ]
+   },
+   {
+    "rank": 3,
+    "observation": "error_count is 0 and error_rate_ratio is 0/2623 overall (and 0 per transaction) across all summaries.",
+    "possible_explanation": "JMeter sampler-level results recorded no errors; however, this only reflects sampler/assertion outcomes and does not rule out server-side failures (e.g., 5xx handled at application level, timeouts not marked as errors, or responses failing assertions that are not configured).",
+    "recommended_check": "Confirm JMeter assertion configuration covers the relevant status/field checks and compare against application/APM logs for 5xx, timeouts, and exceptions during the run window.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0",
+     "analysis-result.json#/evidence/3"
+    ]
+   },
+   {
+    "rank": 4,
+    "observation": "run_validity is VALID and policy_verdict is NO_POLICY; no findings are present in the result.",
+    "possible_explanation": "The run executed validly but no policy was configured to evaluate it, so no pass/fail or enforcement verdict exists; NO_POLICY is distinct from PASS and should not be read as approval.",
+    "recommended_check": "Define explicit thresholds (latency and error rate per transaction), attach a policy, and re-run so a deterministic verdict can be produced.",
+    "evidence_refs": [
+     "analysis-result.json#/run_validity",
+     "analysis-result.json#/policy_verdict"
+    ]
+   },
+   {
+    "rank": 5,
+    "observation": "Each of the six transactions reports 437 or 438 samples (total 2,623), and per-transaction throughput_rps ratios equal 437000/44986 or 438000/44986 with the same denominator 44986.",
+    "possible_explanation": "Load appears evenly distributed across the six transactions, which may reflect test-design intent, but no thread/ramp configuration is included in the evidence to confirm this was intended or expected.",
+    "recommended_check": "Compare the observed sample distribution against the JMeter thread group and ramp-up configuration to verify it matches test design.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/1",
+     "analysis-result.json#/evidence/4",
+     "analysis-result.json#/evidence/0"
+    ]
+   }
+  ],
+  "recommendations": [
+   {
+    "rank": 1,
+    "action": "Define a policy with explicit per-transaction latency and error-rate thresholds and re-run the analysis to obtain a PASS/FAIL verdict.",
+    "rationale": "The current verdict is NO_POLICY, so no pass/fail determination exists despite the run being VALID; a policy is required before the results can be judged against requirements.",
+    "evidence_refs": [
+     "analysis-result.json#/run_validity",
+     "analysis-result.json#/policy_verdict"
+    ]
+   },
+   {
+    "rank": 2,
+    "action": "Investigate the 'home' transaction's 904ms max by correlating the JTL sample timestamp with server-side traces/APM spans.",
+    "rationale": "The home transaction carries the highest p50 (27ms) and overall max (904ms); summary metrics alone cannot explain the max, so deeper observability is needed.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/4",
+     "analysis-result.json#/evidence/0"
+    ]
+   },
+   {
+    "rank": 3,
+    "action": "Verify JMeter assertion coverage and check application/APM logs for server-side errors before treating error_count 0 as evidence of a clean run.",
+    "rationale": "Zero errors in the summaries reflect sampler-level outcomes only and do not prove the application had no failures.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0",
+     "analysis-result.json#/evidence/1"
+    ]
+   },
+   {
+    "rank": 4,
+    "action": "Examine the raw JTL tail samples above the p99 threshold to characterize the gap between p99 (77ms) and max (904ms).",
+    "rationale": "The large max-to-p99 gap indicates possible outliers, but only sample-level inspection can show how many samples, when, and under what conditions they occurred.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0"
+    ]
+   },
+   {
+    "rank": 5,
+    "action": "Verify clock synchronization between the load generator and any monitored application endpoints before performing any temporal or lead/lag correlation.",
+    "rationale": "No clock-relationship or timestamp evidence is present in the summaries; unverified clock alignment cannot support temporal ordering or causal hypotheses.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/4",
+     "analysis-result.json#/evidence/0"
+    ]
+   }
+  ],
+  "caveats": [
+   "policy_verdict is NO_POLICY: this is not a PASS, FAIL, or any enforcement decision; no conclusion about requirement compliance can be drawn from this run.",
+   "The findings list is empty. Absence of flagged anomalies in covered metrics does not prove stability, spare capacity, low load, or absence of a problem.",
+   "error_count 0 covers JMeter sampler/assertion results only; server-side errors, handled 5xx responses, or issues outside configured assertions are not evidenced.",
+   "Evidence contains summary statistics only (sample_count, latency percentiles, max, error ratios, throughput ratios); no per-sample timestamps, run duration, ramp, concurrency, or environment details are present.",
+   "The 904ms max latency cannot be attributed to any event or cause from this evidence; no temporal ordering, lead/lag, or causal analysis is supported, especially without verified clock relationships.",
+   "Throughput and error values are encoded as ratios (e.g., 0/2623, 2623000/44986, 437000/44986); the semantic definition of numerator/denominator should be confirmed against the source measurement before quoting derived rates.",
+   "analysis_coverage status COMPLETE covers the summarized JMeter metrics; it does not imply coverage of server-side, infrastructure, or other non-JMeter data."
+  ]
+ },
+ "schema": "ai-experiment-run.v2",
+ "phase": "pilot",
+ "case": "K10",
+ "rep": 1
+}

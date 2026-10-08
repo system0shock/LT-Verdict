@@ -1,0 +1,79 @@
+[
+  {
+    "id": "R006",
+    "hard_defect": false,
+    "defects": [],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 5,
+    "notes": "Preserves the verdict and scope while giving verifiable checks for the label and latency maximum."
+  },
+  {
+    "id": "R010",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T3",
+        "field": "#/recommendations/3/rationale",
+        "quote": "Max values are single-sample observations",
+        "why": "The aggregates do not show how many samples reached either maximum."
+      }
+    ],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 3,
+    "notes": "Most actions are useful, but the single-sample claim could narrow the investigation incorrectly."
+  },
+  {
+    "id": "R018",
+    "hard_defect": false,
+    "defects": [],
+    "required_facts_preserved": false,
+    "missing_facts": [
+      "run_validity=VALID",
+      "Overall latency maximum of 904 ms"
+    ],
+    "usefulness": 4,
+    "notes": "The advice respects the verdict and untrusted label, but omits run validity and the main latency number."
+  },
+  {
+    "id": "R035",
+    "hard_defect": false,
+    "defects": [],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 4,
+    "notes": "It preserves the key facts and proposes checks without claiming a proven cause."
+  },
+  {
+    "id": "R045",
+    "hard_defect": false,
+    "defects": [],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 5,
+    "notes": "The verdict, counts, coverage, and evidence limits are accurate, with concrete follow-up checks."
+  },
+  {
+    "id": "R071",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T3",
+        "field": "#/hypotheses/1/possible_explanation",
+        "quote": "Rare tail-latency outliers exist",
+        "why": "The aggregates establish at least one value above p99 but do not establish multiple outliers."
+      },
+      {
+        "type": "T4",
+        "field": "#/caveats/5",
+        "quote": "No thresholds, budgets, or target load values are included",
+        "why": "The evidence includes an overall error-rate policy threshold of 0.01."
+      }
+    ],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 2,
+    "notes": "It preserves the verdict but asserts an unsupported outlier count and denies a stated threshold."
+  }
+]

@@ -1,0 +1,180 @@
+{
+ "stage": "S2",
+ "mode": "live",
+ "model": "deepseek-v4-flash-0731",
+ "tag": {
+  "phase": "v2-pilot",
+  "stage": "S2",
+  "case": "K12",
+  "rep": 1,
+  "attempt": 1
+ },
+ "qwen_exit": 0,
+ "wall_ms": 63646,
+ "relay": {
+  "schema_version": "advisory-ai-runtime-relay.v1",
+  "status": "FORWARDED_STRUCTURED_OUTPUT",
+  "request_count": 1,
+  "usage": {
+   "prompt_tokens": 13783,
+   "total_tokens": 19829,
+   "completion_tokens": 6046,
+   "prompt_tokens_details": {
+    "cached_tokens": 1024
+   },
+   "completion_tokens_details": {
+    "reasoning_tokens": 3503
+   }
+  },
+  "latency_ms": 62316,
+  "model_returned": "deepseek-v4-flash-0731"
+ },
+ "relay_status": "FORWARDED_STRUCTURED_OUTPUT",
+ "usage": {
+  "prompt_tokens": 13783,
+  "total_tokens": 19829,
+  "completion_tokens": 6046,
+  "prompt_tokens_details": {
+   "cached_tokens": 1024
+  },
+  "completion_tokens_details": {
+   "reasoning_tokens": 3503
+  }
+ },
+ "latency_ms": 62316,
+ "status": "OK",
+ "note": null,
+ "output": {
+  "schema_version": "ai-advice-output.v1",
+  "summary": "The analysis produced a capacity LOWER_BOUND of 20 users: three stages (5, 10, 20 concurrent users) each achieved their target with 30/30 complete bins and PASS window policy checks (zero error rate inside each window), so the product verifies that the system handled at least 20 users. The overall policy verdict is NO_POLICY because no capacity/required-capacity policy appears configured; per product rules NO_POLICY remains NO_POLICY until such a policy or required capacity is configured, so a healthy run does not itself change the verdict. capacity_knee is null with KNEE_DETECTOR_NOT_IMPLEMENTED, a fixed product limitation, and the bound is computed independently of the knee. The generator CPU throttle guard (effect: diagnostic) passed in all windows with observed values well below the 0.2 threshold, and it is diagnostic by contract. Whole-run metrics show zero errors, sample_count 135434, p50 93 ms, p95 202 ms, p99 298 ms, max 1200 ms. Clock alignment is not_verified_by_core, so no temporal ordering or causal claims can be supported. Recommended operator actions: configure a capacity policy so PASS/FAIL can be produced, extend testing beyond 20 users to characterize the upper boundary, keep the generator guard diagnostic, verify clocks before any time-based analysis, and avoid attributing whole-run metrics to individual stages.",
+  "hypotheses": [
+   {
+    "rank": 1,
+    "observation": "The capacity summary reports policy_verdict NO_POLICY even though every listed stage (r2-users5, r2-users10, r2-users20) has verdict PASS with complete_bins 30/30 and observed/target load matching, and each window's error-rate policy check (overall-errors, threshold 0.01) is PASS.",
+    "possible_explanation": "No capacity or required-capacity policy appears to be configured and mapped to these windows, so the product reports NO_POLICY even though the staged load was verified; missing policy is not a pass and will not become PASS from healthy windows or a rerun.",
+    "recommended_check": "Confirm whether a capacity/required-capacity policy exists and is attached to these load windows in LT Verdict; if absent, configure one so a PASS/FAIL verdict can be produced.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/41",
+     "analysis-result.json#/evidence/36",
+     "analysis-result.json#/evidence/35"
+    ]
+   },
+   {
+    "rank": 2,
+    "observation": "The capacity summary has bound_type LOWER_BOUND with lower_inclusive 20 and upper_exclusive null, and jmeter_active_threads is constant at 5, 10, and 20 across the three windows; no load above 20 users was exercised.",
+    "possible_explanation": "The run only tested up to 20 concurrent users, so the verified claim is 'at least 20 users,' not that higher loads are supported or unsupported; the lower bound says nothing about an upper boundary.",
+    "recommended_check": "Rerun with additional stages above 20 users to observe where latency, errors, or resource behavior change and to test whether an upper bound exists.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/41",
+     "analysis-result.json#/evidence/25"
+    ]
+   },
+   {
+    "rank": 3,
+    "observation": "The whole-run metric summary shows error_count 0, latency p50 93 ms, p95 202 ms, p99 298 ms, max 1200 ms over sample_count 135434; checkout shows a max of 1200 ms as well.",
+    "possible_explanation": "There may be a latency tail in the exercised workload, but the metric_summary scope is overall (whole run) rather than per window, so no relation to a specific load stage (5/10/20 users) can be inferred from these numbers alone.",
+    "recommended_check": "Inspect per-window latency statistics or the raw JMeter samples to see when and under which stage any tail latencies occurred before attributing them to load.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0",
+     "analysis-result.json#/evidence/3"
+    ]
+   },
+   {
+    "rank": 4,
+    "observation": "The generator-cpu-throttle-ratio diagnostic guard is PASS in all three windows (observed q95 about 0.005–0.036 and max about 0.06–0.079 versus threshold 0.2), and the corresponding resource series show 30/30 observed cells with no gaps.",
+    "possible_explanation": "The load generator appears not to have been saturated in any window, which is consistent with the guard passing; the guard is diagnostic by contract and passing does not create or require any upper bound.",
+    "recommended_check": "No corrective action is needed for the passing guard; if a future run shows this guard failing, rerun with a load generator that is not saturated and keep the rule's effect as diagnostic.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/32",
+     "analysis-result.json#/evidence/8",
+     "analysis-result.json#/evidence/24"
+    ]
+   },
+   {
+    "rank": 5,
+    "observation": "paymentservice memory summaries show mean about 32,281,941 bytes with slope_per_second about 13,281.9 B/s in r2-users5, about 33,451,281 bytes with slope about 978 B/s in r2-users10, and about 33,689,645.5 bytes with slope about 78.6 B/s in r2-users20; the slopes differ by window.",
+    "possible_explanation": "This could indicate slow memory growth during the run, but the differing per-window slopes and whole-window aggregation do not prove a leak or a causal relationship with load; per-window means are not per-sample evidence.",
+    "recommended_check": "Inspect the raw per-interval memory time series across the whole run and compare with load-stage boundaries only after clock alignment is verified; do not conclude a leak from summary statistics alone.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/15",
+     "analysis-result.json#/evidence/23",
+     "analysis-result.json#/evidence/31"
+    ]
+   },
+   {
+    "rank": 6,
+    "observation": "resource-binding reports clock_alignment not_verified_by_core, with mode explicit_windows and no dropped cells, but the clock relationship between generator, metrics, and analysis windows is unverified.",
+    "possible_explanation": "Without verified clock alignment, apparent ordering between load changes and resource or latency movements cannot be established, so a lead/lag or temporal causal hypothesis is not supportable.",
+    "recommended_check": "Verify clock synchronization/alignment between the load generator, metric collectors, and the analysis window mapping before performing any time-based comparisons.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/7"
+    ]
+   }
+  ],
+  "recommendations": [
+   {
+    "rank": 1,
+    "action": "Configure a capacity or required-capacity policy for the system under test and attach it to these load windows so LT Verdict can emit a PASS or FAIL verdict.",
+    "rationale": "The staged load is verified (5/10/20 users all PASS with 30/30 bins and zero window error rates), but policy_verdict is NO_POLICY; per product rules only a configured policy or required capacity yields PASS/FAIL, and a healthy run does not turn NO_POLICY into PASS.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/41",
+     "analysis-result.json#/evidence/36",
+     "analysis-result.json#/evidence/38",
+     "analysis-result.json#/evidence/40"
+    ]
+   },
+   {
+    "rank": 2,
+    "action": "Rerun with additional load stages above 20 users to test where behavior degrades or where an upper bound would sit.",
+    "rationale": "Only a LOWER_BOUND at 20 users is verified (upper_exclusive null); stages above 20 were never exercised, so current evidence neither confirms nor rules out support at higher loads.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/41",
+     "analysis-result.json#/evidence/25"
+    ]
+   },
+   {
+    "rank": 3,
+    "action": "Keep the generator-cpu-throttle-ratio guard as a diagnostic rule, and if it ever fails in a future run, rerun with a generator that is not saturated rather than changing its effect to binding or SLA.",
+    "rationale": "The guard is diagnostic by contract; it passed in all three windows here with values well below the 0.2 threshold, and a failed diagnostic guard makes its stage unusable for a product bound and never creates an upper bound.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/32",
+     "analysis-result.json#/evidence/33",
+     "analysis-result.json#/evidence/34"
+    ]
+   },
+   {
+    "rank": 4,
+    "action": "Verify clock alignment between the load generator, metric collection, and analysis windows before drawing any time-based conclusions from this run.",
+    "rationale": "The evidence states clock_alignment=not_verified_by_core; without verified alignment, temporal ordering and causal or lead/lag hypotheses are unsupported.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/7"
+    ]
+   },
+   {
+    "rank": 5,
+    "action": "Use per-window artifacts (window policy checks and window policy summaries) for statements about individual load stages, and treat whole-run metric summaries as run-level context only.",
+    "rationale": "Whole-run scope (sample_count 135434, latency statistics) and in-window counts (30049, 37550, 47404) are different quantities covering different parts of the run, so they should not be compared directly or attributed to a specific stage.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0",
+     "analysis-result.json#/evidence/35",
+     "analysis-result.json#/evidence/37",
+     "analysis-result.json#/evidence/39"
+    ]
+   }
+  ],
+  "caveats": [
+   "NO_POLICY is not a pass: the verdict stays NO_POLICY until a configured capacity/required-capacity policy exists, regardless of healthy windows, reruns, or generator fixes.",
+   "capacity_knee is null with KNEE_DETECTOR_NOT_IMPLEMENTED, a fixed product limitation; the LOWER_BOUND is derived independently of any knee, and implementing or enabling a knee detector is not a valid action.",
+   "Only a lower bound at 20 users is verified; low CPU/memory utilization and zero errors do not prove spare capacity, low load, or absence of problems beyond the tested loads.",
+   "The generator-cpu-throttle-ratio guard is diagnostic by contract; a failed guard would make its stage unusable for a product bound and never create an upper bound, and its effect should not be changed to binding or SLA.",
+   "Whole-run counts and in-window counts are different scopes (135434 overall vs 30049/37550/47404 in windows); they are not inconsistent and cannot be compared directly.",
+   "clock_alignment is not_verified_by_core, so no lead/lag ordering or temporal causal hypothesis is supported until clock verification is performed.",
+   "Whole-run latency statistics aggregate all stages and phases; they cannot be attributed to a particular load step, and the input contains no individual samples, no count of samples at max latency, no traces, call graph, topology, or release/configuration data.",
+   "Findings are empty and analysis_coverage is COMPLETE, so only the evidence present in the input was considered; missing controls, missing samples, or NOT_ESTIMATED-type gaps were not present in this input."
+  ]
+ },
+ "schema": "ai-experiment-run.v2",
+ "phase": "pilot",
+ "case": "K12",
+ "rep": 1
+}

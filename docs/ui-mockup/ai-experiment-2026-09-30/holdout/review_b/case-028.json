@@ -1,0 +1,41 @@
+[
+  {
+    "id": "R032",
+    "hard_defect": false,
+    "defects": [],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 5,
+    "notes": "Accurately preserves verdicts, scopes, diagnostic uncertainty, and actionable verification steps."
+  },
+  {
+    "id": "R063",
+    "hard_defect": false,
+    "defects": [],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 5,
+    "notes": "Correctly separates advisory diagnostics from the deterministic PASS verdict and gives verifiable actions."
+  },
+  {
+    "id": "R090",
+    "hard_defect": false,
+    "defects": [],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 5,
+    "notes": "The response is evidence-grounded, appropriately hedges hypotheses, and provides useful operator checks."
+  },
+  {
+    "id": "R102",
+    "hard_defect": false,
+    "defects": [],
+    "required_facts_preserved": false,
+    "missing_facts": [
+      "run_validity is VALID",
+      "analysis_coverage is COMPLETE"
+    ],
+    "usefulness": 4,
+    "notes": "The analysis is otherwise useful and evidence-grounded, but it omits the required validity and coverage statuses."
+  }
+]

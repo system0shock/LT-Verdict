@@ -1,0 +1,77 @@
+[
+  {
+    "id": "R033",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T8",
+        "field": "#/caveats/5",
+        "quote": "Zero errors ... show no error-driven latency inflation",
+        "why": "Zero recorded sampler errors cannot prove that errors or timeout behavior did not contribute to latency."
+      }
+    ],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 4,
+    "notes": "Otherwise accurately preserves the verdicts, coverage, window metrics, and uncertainty."
+  },
+  {
+    "id": "R047",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T2",
+        "field": "#/hypotheses/1/possible_explanation",
+        "quote": "Requests appear to eventually complete (recorded throughput matches target)",
+        "why": "Matching target-rate and throughput aggregates from different sources does not establish that the targeted requests completed."
+      },
+      {
+        "type": "T8",
+        "field": "#/hypotheses/5/observation",
+        "quote": "the workload-03 pairs report best_lag_ms 0",
+        "why": "The workload-03 db_work correlation reports best_lag_ms -6000, not 0."
+      }
+    ],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 3,
+    "notes": "The response is broadly useful but makes an unsupported aggregate inference and misstates a lag result."
+  },
+  {
+    "id": "R095",
+    "hard_defect": false,
+    "defects": [],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 5,
+    "notes": "It accurately separates deterministic results from hypotheses and gives verifiable operator actions."
+  },
+  {
+    "id": "R148",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T5",
+        "field": "#/hypotheses/1/possible_explanation",
+        "quote": "The applied load step ... is the main controlled difference",
+        "why": "The evidence provides aggregate rates for two windows but no stage definition or configuration evidence establishing that this was the controlled difference."
+      },
+      {
+        "type": "T2",
+        "field": "#/hypotheses/3/possible_explanation",
+        "quote": "with no corresponding latency impact",
+        "why": "A window-level latency aggregate cannot establish the latency behavior during the brief CPU-threshold findings."
+      },
+      {
+        "type": "T5",
+        "field": "#/caveats/5",
+        "quote": "Only two load points were measured",
+        "why": "The input contains window aggregates, not load-stage definitions establishing that these were the only measured load points."
+      }
+    ],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 3,
+    "notes": "It preserves the central results but overstates unprovided load-stage and within-window relationships."
+  }
+]

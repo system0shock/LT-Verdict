@@ -1,0 +1,44 @@
+{
+ "required": [
+  [
+   "control_control0",
+   [
+    "control0"
+   ]
+  ],
+  [
+   "control_control1",
+   [
+    "control1"
+   ]
+  ],
+  [
+   "selector_unavailable_uncalibrated",
+   [
+    "uncalibrated|not calibrated|unavailable|GENUINE_PARTIAL"
+   ]
+  ],
+  [
+   "association_value",
+   [
+    "(?<![\\d.])(?:0\\.7714|0\\.771|0\\.77)(?!\\d)",
+    "(?<![\\d.])(?:0\\.8626|0\\.8627|0\\.863|0\\.862|0\\.86)(?!\\d)"
+   ]
+  ]
+ ],
+ "forbidden": [
+  "claims significance or a calibrated headline, or that confounding is eliminated by the controls"
+ ],
+ "useful_checks": [
+  "treat the partial association as descriptive and confirm it with a controlled experiment"
+ ],
+ "source": {
+  "builder": "AdvisoryEvidenceBuilder",
+  "build": "5b5e51c+harness",
+  "source": "i:C02_two_controls",
+  "source_sha256": "34c5a364bb297c6f7b185f5efabeffebdfb42031782bd03ed89f05d9a3d3ab3f",
+  "derivation": [],
+  "evidence_sha256": "30419a926722cffa485c4be747bfe5f02a96b3f21d615d837b2c913f9693116d",
+  "inputs": "i:C02_two_controls, derivation [], analysed through RunBundleStore -> AnalysisService -> AdvisoryEvidenceBuilder by AdvisoryHoldoutCorpusTest on 5b5e51c+harness"
+ }
+}

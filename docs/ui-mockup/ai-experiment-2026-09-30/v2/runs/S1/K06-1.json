@@ -1,0 +1,171 @@
+{
+ "stage": "S1",
+ "mode": "live",
+ "model": "deepseek-v4-flash-0731",
+ "tag": {
+  "phase": "v2-pilot",
+  "stage": "S1",
+  "case": "K06",
+  "rep": 1,
+  "attempt": 1
+ },
+ "qwen_exit": 0,
+ "wall_ms": 78010,
+ "relay": {
+  "schema_version": "advisory-ai-runtime-relay.v1",
+  "status": "FORWARDED_STRUCTURED_OUTPUT",
+  "request_count": 1,
+  "usage": {
+   "prompt_tokens": 9644,
+   "total_tokens": 17989,
+   "completion_tokens": 8345,
+   "prompt_tokens_details": {
+    "cached_tokens": 1024
+   },
+   "completion_tokens_details": {
+    "reasoning_tokens": 5986
+   }
+  },
+  "latency_ms": 76684,
+  "model_returned": "deepseek-v4-flash-0731"
+ },
+ "relay_status": "FORWARDED_STRUCTURED_OUTPUT",
+ "usage": {
+  "prompt_tokens": 9644,
+  "total_tokens": 17989,
+  "completion_tokens": 8345,
+  "prompt_tokens_details": {
+   "cached_tokens": 1024
+  },
+  "completion_tokens_details": {
+   "reasoning_tokens": 5986
+  }
+ },
+ "latency_ms": 76684,
+ "status": "OK",
+ "note": null,
+ "output": {
+  "schema_version": "ai-advice-output.v1",
+  "summary": "Verdict: FAIL, deterministically. The configured overall-errors policy (error_rate_ratio <= 0.01) FAILed in the run-intersection window: 3,688 errors out of 73,813 samples (~5.0%), with observed numerator 3,688 against threshold 0.01. The resource verdict is NO_POLICY because no resource policy is configured. All 3,688 errors are attributed to the checkout transaction (3,688/12,567 checkout samples, ~29.3%) and are grouped in OpenSearch as frontend.request_error from service 'frontend', appearing in discrete bursts between 1790628856826 and 1790629414273. A descriptive correlation between error rate and achieved load (partial_rho 0.9722, best_lag_ms 0) is uncalibrated (uncertainty NOT_ESTIMATED, headline UNAVAILABLE/GENUINE_PARTIAL_UNCALIBRATED) and clocks are not verified, so no causal or lead/lag conclusion is supported. Analysis coverage is INCOMPLETE due to RESOURCE_GAPS: paymentservice CPU and memory series are missing cells. This advice does not change the deterministic FAIL verdict.",
+  "hypotheses": [
+   {
+    "rank": 1,
+    "observation": "The overall run summary reports 3,688 errors out of 75,411 samples, and the per-transaction summary for 'checkout' reports exactly 3,688 errors out of 12,567 samples; the other listed transactions ('add product to cart', 'cart', 'home', 'product', 'reset cart') each report 0 errors.",
+    "possible_explanation": "The only observed test errors are associated with the checkout transaction, so checkout or a downstream dependency it invokes is a plausible focus; the evidence does not establish why checkout fails.",
+    "recommended_check": "Inspect checkout service logs and the OpenSearch error samples at the reported timestamps, and determine whether checkout depends on a component not exercised by the other transactions.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0",
+     "analysis-result.json#/evidence/3",
+     "analysis-result.json#/evidence/22"
+    ]
+   },
+   {
+    "rank": 2,
+    "observation": "The OpenSearch error timeline shows errors only in discrete bursts (e.g., rates up to 1,232-1,244 errors/minute around 1790628885000-1790628900000 and 1790629365000-1790629380000) separated by periods with counts of 0; total_errors is 3,688 and first/last error timestamps are 1790628856826 and 1790629414273.",
+    "possible_explanation": "Errors may recur in repeating bursts rather than continuously, which could reflect a load profile phase, an intermittent dependency, or a retry pattern; this is a hypothesis, not a proven cause.",
+    "recommended_check": "Overlay the error timeline with the achieved load profile and test stages to see whether the bursts align with specific load phases.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/22",
+     "analysis-result.json#/evidence/18"
+    ]
+   },
+   {
+    "rank": 3,
+    "observation": "All grouped OpenSearch errors are of error_type 'frontend.request_error' with service 'frontend' (3,688 total), while the policy failure is on the overall error rate (3,688/73,813, ~5.0%, vs threshold 0.01).",
+    "possible_explanation": "The errors are recorded at the frontend, but they may originate in a downstream service called during checkout; the frontend is where the errors are observed, not necessarily where they are caused.",
+    "recommended_check": "Trace a failing checkout request from frontend through downstream services (checkout, payment, etc.) in logs/traces to locate the component responsible for the request error.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/22",
+     "analysis-result.json#/evidence/15",
+     "analysis-result.json#/evidence/17"
+    ]
+   },
+   {
+    "rank": 4,
+    "observation": "The correlation pair 'errors-vs-load-error-rate' reports raw_rho 0.9744, partial_rho 0.9722, best_lag_ms 0, status DESCRIPTIVE, uncertainty NOT_ESTIMATED; the headline selection is UNAVAILABLE with reason GENUINE_PARTIAL_UNCALIBRATED, and resource-binding reports clock_alignment 'not_verified_by_core'.",
+    "possible_explanation": "Error rate appears to move with achieved load, but no calibrated significance is available and the clock relationship is unverified, so neither correlation strength nor lag ordering (lead/lag) is established.",
+    "recommended_check": "Verify clock alignment between load and system metrics, then rerun the correlation/headline machinery to obtain a calibrated significance estimate before interpreting lag or causality.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/18",
+     "analysis-result.json#/evidence/19",
+     "analysis-result.json#/evidence/7"
+    ]
+   },
+   {
+    "rank": 5,
+    "observation": "Analysis coverage is INCOMPLETE with reason RESOURCE_GAPS; the paymentservice CPU summary is missing 5 of 47 expected cells and the paymentservice memory summary is missing 6 of 47 expected cells, while other listed resource series report 0 missing cells.",
+    "possible_explanation": "Metric collection gaps for paymentservice could hide a resource behavior relevant to the checkout errors, but there is no evidence connecting those gaps to the failures.",
+    "recommended_check": "Check paymentservice metric collection (scrape/retention/cardinality) and rerun or backfill the series to obtain complete coverage before evaluating a resource-based explanation.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/12",
+     "analysis-result.json#/evidence/13",
+     "analysis-result.json#/analysis_coverage"
+    ]
+   }
+  ],
+  "recommendations": [
+   {
+    "rank": 1,
+    "action": "Verify clock alignment between the load/system metrics and OpenSearch before interpreting any lag or temporal correlation, then re-run the correlation analysis.",
+    "rationale": "resource-binding reports clock_alignment 'not_verified_by_core' and the only lag considered is best_lag_ms 0 with uncertainty NOT_ESTIMATED; an unverified clock cannot support lead/lag ordering or a temporal causal hypothesis.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/7",
+     "analysis-result.json#/evidence/18"
+    ]
+   },
+   {
+    "rank": 2,
+    "action": "Investigate the checkout transaction failures: all 3,688 errors are attributed to checkout, and OpenSearch groups them as frontend.request_error from service 'frontend'.",
+    "rationale": "Per-transaction summaries show checkout with 3,688/12,567 errors while every other listed transaction has 0 errors; isolating the failing request path is the most direct next step.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/3",
+     "analysis-result.json#/evidence/22",
+     "analysis-result.json#/evidence/0"
+    ]
+   },
+   {
+    "rank": 3,
+    "action": "Restore complete metric coverage for paymentservice (CPU and memory series are missing cells) to address the INCOMPLETE analysis coverage before drawing resource-related conclusions.",
+    "rationale": "analysis_coverage is INCOMPLETE with reason RESOURCE_GAPS; missing paymentservice cells could hide resource behavior in the window where checkout errors occurred.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/12",
+     "analysis-result.json#/evidence/13",
+     "analysis-result.json#/analysis_coverage"
+    ]
+   },
+   {
+    "rank": 4,
+    "action": "If resource behavior during the failing window matters, configure a resource policy (e.g., CPU/memory thresholds) so a future run can produce a resource PASS/FAIL; the current resource verdict is NO_POLICY and cannot be treated as a pass.",
+    "rationale": "window_policy_summary reports resource_verdict NO_POLICY; a missing policy yields NO_POLICY and cannot be turned into PASS by reruns or healthy windows.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/16",
+     "analysis-result.json#/evidence/17"
+    ]
+   },
+   {
+    "rank": 5,
+    "action": "Rerun the scenario (or reproduce the failing load profile) with stage labels so subsequent correlation can be evaluated against a defined test stage.",
+    "rationale": "The correlation pair is DESCRIPTIVE with reasons STAGE_UNSPECIFIED, CONTROL_CONTEXT_MISSING, ACHIEVED_LOAD_ONLY and uncertainty NOT_ESTIMATED; a rerun with stage context is needed before load can be treated as an explanation.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/18",
+     "analysis-result.json#/evidence/19",
+     "analysis-result.json#/evidence/22"
+    ]
+   }
+  ],
+  "caveats": [
+   "Resource verdict is NO_POLICY; missing policy is not a pass or a fail. Only the configured overall-errors policy (threshold 0.01) was evaluated, and it deterministically FAILed.",
+   "Analysis coverage is INCOMPLETE (RESOURCE_GAPS): paymentservice CPU is missing 5/47 expected cells and paymentservice memory is missing 6/47 expected cells.",
+   "The correlation pair is DESCRIPTIVE with uncertainty NOT_ESTIMATED and the headline selection is UNAVAILABLE (GENUINE_PARTIAL_UNCALIBRATED); the rho values are uncalibrated and do not prove causation.",
+   "clock_alignment is 'not_verified_by_core'; raw epoch timestamps and best_lag_ms 0 cannot be used to assert temporal ordering or causality until clocks are verified.",
+   "Overall run counts (75,411 samples) differ from the run-intersection policy window (73,813 samples) because leading/trailing cells were dropped (4,232 ms and 10,768 ms); counts are comparable only within the same scope and window. Both scopes agree on 3,688 errors.",
+   "The OpenSearch error timeline spans the full snapshot (1790628720000 to 1790629575000), which extends beyond the run-intersection window (1790628795000 to 1790629500000); rates should not be compared across these different windows directly.",
+   "diagnostic_summary reports anomalies_tested = 0 and episodes_reported = 0; the lack of reported episodes or tested anomalies does not prove stability or absence of a problem.",
+   "The policy_failure finding is deterministic: observed window error rate is 3,688/73,813 (~5.0%) against threshold 0.01, and this advice does not change the FAIL verdict."
+  ]
+ },
+ "schema": "ai-experiment-run.v2",
+ "phase": "pilot",
+ "case": "K06",
+ "rep": 1
+}

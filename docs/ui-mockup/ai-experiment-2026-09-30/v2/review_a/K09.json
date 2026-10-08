@@ -1,0 +1,97 @@
+[
+  {
+    "id": "R002",
+    "hard_defect": false,
+    "defects": [],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 5,
+    "notes": "Accurately preserves the verdict and key measurements, rejects the embedded instruction, and gives verifiable follow-up actions."
+  },
+  {
+    "id": "R006",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T3",
+        "field": "#/hypotheses/2/possible_explanation",
+        "quote": "The single overall max-latency sample",
+        "why": "The aggregates do not establish how many samples reached the 904 ms maximum."
+      }
+    ],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 2,
+    "notes": "Most actions are useful, but the asserted single maximum sample could mislead the latency investigation."
+  },
+  {
+    "id": "R012",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T3",
+        "field": "#/caveats/2",
+        "quote": "reported max-latency values are single observations",
+        "why": "A reported maximum does not reveal how many samples had that value."
+      }
+    ],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 2,
+    "notes": "The verdict and proposed checks are sound, but the caveat asserts an unsupported sample count."
+  },
+  {
+    "id": "R055",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T7",
+        "field": "#/hypotheses/3/possible_explanation",
+        "quote": "outside the summarized window",
+        "why": "The 2,623-sample summary and policy check cover the whole run, with no separate policy window."
+      }
+    ],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 2,
+    "notes": "The response gives useful checks but repeatedly frames the whole-run result as a partial window."
+  },
+  {
+    "id": "R067",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T4",
+        "field": "#/hypotheses/4/observation",
+        "quote": "437000 per transaction",
+        "why": "The home transaction has throughput numerator 438000."
+      },
+      {
+        "type": "T3",
+        "field": "#/caveats/4",
+        "quote": "Latency max values (e.g., 904ms) are single observations",
+        "why": "The evidence gives no count of samples at a reported maximum."
+      }
+    ],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 2,
+    "notes": "The verdict is preserved, but the transaction throughput number and maximum-sample count are misstated."
+  },
+  {
+    "id": "R070",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T7",
+        "field": "#/hypotheses/2/possible_explanation",
+        "quote": "outside the sampled window",
+        "why": "The observed 0/2623 policy check covers the whole run, and no partial policy window is present."
+      }
+    ],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 2,
+    "notes": "The operator actions are mostly useful, but the repeated partial-window framing misstates coverage."
+  }
+]

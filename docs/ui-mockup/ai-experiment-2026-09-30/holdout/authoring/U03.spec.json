@@ -1,0 +1,49 @@
+{
+ "required": [
+  [
+   "latency_p95_observed",
+   [
+    "(?:(?:latency|p95|95th|response[ -]time))[^.\\n]{0,100}(?:(?<![\\d.,])(?:227)(?![\\d]|[.,]\\d))|(?:(?<![\\d.,])(?:227)(?![\\d]|[.,]\\d))[^.\\n]{0,100}(?:(?:latency|p95|95th|response[ -]time))"
+   ]
+  ],
+  [
+   "latency_threshold",
+   [
+    "(?:threshold|sla|limit)[^.\\n]{0,100}(?:(?<![\\d.,])(?:200)(?![\\d]|[.,]\\d))|(?:(?<![\\d.,])(?:200)(?![\\d]|[.,]\\d))[^.\\n]{0,100}(?:threshold|sla|limit)"
+   ]
+  ],
+  [
+   "episodes_vs_means",
+   [
+    "(?:(?:episode|spike|burst|brief|transient|short))[^.\\n]{0,100}(?:(?:mean|averag|smooth|hid|mask|granular))|(?:(?:mean|averag|smooth|hid|mask|granular))[^.\\n]{0,100}(?:(?:episode|spike|burst|brief|transient|short))"
+   ]
+  ],
+  [
+   "no_gc_io_telemetry",
+   [
+    "(?:(?:no|without|missing|absent|lack\\w*|not (?:available|collected|measured|observed|defined|declared|configured|present)))[^.\\n]{0,100}(?:(?:gc|garbage|\\bio\\b|disk|pause))|(?:(?:gc|garbage|\\bio\\b|disk|pause))[^.\\n]{0,100}(?:(?:no|without|missing|absent|lack\\w*|not (?:available|collected|measured|observed|defined|declared|configured|present)))",
+    "(?:(?:gc|garbage|\\bio\\b|disk|pause))[^.\\n]{0,100}(?:(?:not (?:measured|available|observed|collected)|absent|missing|no telemetry))|(?:(?:not (?:measured|available|observed|collected)|absent|missing|no telemetry))[^.\\n]{0,100}(?:(?:gc|garbage|\\bio\\b|disk|pause))",
+    "(?:(?:add|collect|measure|enable|capture|record))[^.\\n]{0,100}(?:(?:gc|garbage|\\bio\\b|disk|pause)[^.\\n]{0,40}(?:telemetry|metric|event|pause|log))|(?:(?:gc|garbage|\\bio\\b|disk|pause)[^.\\n]{0,40}(?:telemetry|metric|event|pause|log))[^.\\n]{0,100}(?:(?:add|collect|measure|enable|capture|record))"
+   ]
+  ]
+ ],
+ "forbidden": [
+  "invents GC or IO events without matching telemetry",
+  "concludes from the resource means that nothing short happened"
+ ],
+ "useful_checks": [
+  "add telemetry with the granularity of the episodes (GC pauses, IO waits) for the failing windows"
+ ],
+ "source": {
+  "builder": "AdvisoryEvidenceBuilder",
+  "build": "5b5e51c+harness",
+  "source": "a:NT06-clean-2001:0",
+  "source_sha256": "d35910da590e83850de9c6c3f0d492e68be715a61b0942540eeba1c5629e4bab",
+  "derivation": [
+   "dropGc"
+  ],
+  "evidence_sha256": "6384a229d158a60b2cc22a7f739ff829b0d4c4f576500a4baa81cf82d99208ce",
+  "inputs": "a:NT06-clean-2001:0, derivation [dropGc], analysed through RunBundleStore -> AnalysisService -> AdvisoryEvidenceBuilder by AdvisoryHoldoutCorpusTest on 5b5e51c+harness"
+ },
+ "waiver": "Class U03 (short latency episodes smoothed by resource means). NOT machine-checked: AdvisoryAcceptanceCorpusTest has no condition for U03 (its empty condition accepts any pack), so the registry has no rule; that the pack shows high latency together with resource series whose window means stay flat is not verified by a rule, and that the episodes are short is not verified at all (the guarantee is limited to these observable aggregates). WHY the class is still guaranteed: the source is the frozen applicability trace NT06-clean (seed 2001, member 0; contract: heap, GC pause and latency are observable, short non-monotonic GC spikes need not form an episode) and the derivation dropGc removes the runtime-gc-pause series, which leaves the observable aggregates of the class: the latency check fails in both windows (p95 227 ms against the 200 ms threshold, read from the pack by the author), the resource means stay near constant (system-cpu-work mean 0.15, min 0.126667, max 0.16) and there is no GC series (the dropGc derivation removes only that series; the full series inventory is the resource_summary list of the pack itself). The pack was made through RunBundleStore -> AnalysisService -> AdvisoryEvidenceBuilder by AdvisoryHoldoutCorpusTest (generator of the holdout, harness branch) on the harness base build 5b5e51c; the generator records the source, its SHA-256, the derivation and every candidate tried in holdout/generation/<slot>.provenance.json."
+}

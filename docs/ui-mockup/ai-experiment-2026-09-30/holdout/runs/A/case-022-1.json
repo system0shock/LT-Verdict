@@ -1,0 +1,199 @@
+{
+ "stage": "A",
+ "mode": "live",
+ "model": "deepseek-v4-flash-0731",
+ "tag": {
+  "phase": "holdout",
+  "attempt_id": "case-022-1-A-t1",
+  "arm": "A",
+  "stage": null,
+  "case": "case-022",
+  "rep": 1,
+  "try": 1
+ },
+ "retry_policy": "d2",
+ "qwen_exit": 0,
+ "wall_ms": 106691,
+ "relay": {
+  "schema_version": "advisory-ai-runtime-relay.v1",
+  "status": "FORWARDED_STRUCTURED_OUTPUT",
+  "received_request_count": 1,
+  "forwarded_request_count": 1,
+  "outcomes": [
+   "FORWARDED_STRUCTURED_OUTPUT"
+  ],
+  "retry_refused_reason": null,
+  "first_refused_reason": null,
+  "model_id": "deepseek-v4-flash-0731",
+  "retry_policy": "d2",
+  "requests": [
+   {
+    "ordinal": 1,
+    "forwarded": true,
+    "outcome": "FORWARDED_STRUCTURED_OUTPUT",
+    "provider_status": 200,
+    "latency_ms": 105338,
+    "usage": {
+     "prompt_tokens": 15588,
+     "total_tokens": 27257,
+     "completion_tokens": 11669,
+     "prompt_tokens_details": {
+      "cached_tokens": 1024
+     },
+     "completion_tokens_details": {
+      "reasoning_tokens": 9069
+     }
+    },
+    "model_returned": "deepseek-v4-flash-0731"
+   }
+  ],
+  "usage": {
+   "prompt_tokens": 15588,
+   "completion_tokens": 11669,
+   "total_tokens": 27257
+  },
+  "latency_ms": 105338
+ },
+ "relay_status": "FORWARDED_STRUCTURED_OUTPUT",
+ "usage": {
+  "prompt_tokens": 15588,
+  "completion_tokens": 11669,
+  "total_tokens": 27257
+ },
+ "latency_ms": 105338,
+ "retried": false,
+ "retry_refused_reason": null,
+ "status": "OK",
+ "note": null,
+ "output": {
+  "schema_version": "ai-advice-output.v1",
+  "summary": "The run is VALID with policy_verdict PASS in both windows. Latency p95 was 50 ms (reference) and 100 ms (workload-01), both under the 200 ms threshold, and compute-limit/database-limit checks passed (system-cpu-work 0.15, system-db-work 0.015 vs 0.9 threshold). The notable signals are advisory only: (1) a candidate anomaly episode in which overall response_time_p95_ms increased by 50 ms (50->100 ms) during the last 300 s of workload-01 (finding 0, from_epoch_ms 1704067500000 to 1704067800000, duration_ms 300000, ZERO_MAD reference); (2) a CANDIDATE correlation between generator active_threads (min 3, max 6, split_half_shift 3) and p95 latency (best_lag_ms -1000, best_lag_rho 0.999342586275) whose headline selection was UNAVAILABLE (OBSERVATION_COUNT_UNSUPPORTED) with uncertainty NOT_ESTIMATED and clock_alignment not_verified_by_core; and (3) all other seven resource pairs were INSUFFICIENT_DATA because their series were constant. The PASS verdict is preserved; this advice does not change it.",
+  "hypotheses": [
+   {
+    "rank": 1,
+    "observation": "In workload-01, window-metric-summary reports latency_ms p95/p99 of 100 ms (policy check observed 100 <= 200 PASS) versus 50 ms p95 in the reference window (PASS); finding 0 reports an anomaly episode for response_time_p95_ms with direction increase, max_abs_delta 50, from_epoch_ms 1704067500000 to 1704067800000 (duration_ms 300000), and generator active_threads in workload-01 span min 3, max 6, split_half_shift 3, slope ~0.0088 threads/s versus mean ~3.0 in the reference.",
+    "possible_explanation": "The p95 latency step from 50 to 100 ms coincides with an increase in generator active_threads from ~3 to ~6 while target and achieved request rate stayed at 60 requests/s; this may reflect a generator-side concurrency/pacing change rather than backend saturation, since backend queues and cpu/db work were flat. This is a hypothesis; co-occurrence does not prove causation.",
+    "recommended_check": "Determine the exact epoch at which active_threads moved from 3 to 6 (and the epoch at which p95 moved from 50 to 100 ms), confirm whether both changes start at the same boundary, and inspect the JMeter thread-group ramp-up/pacing configuration for that period.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/36",
+     "analysis-result.json#/evidence/35",
+     "analysis-result.json#/evidence/21",
+     "analysis-result.json#/evidence/9",
+     "analysis-result.json#/evidence/56",
+     "analysis-result.json#/findings/0"
+    ]
+   },
+   {
+    "rank": 2,
+    "observation": "Correlation pair association-09 (generator-threads vs response_time_p95_ms) is CANDIDATE with best_lag_ms -1000, best_lag_rho 0.999342586275, partial_rho 0.998274154046, raw_rho 0.998274154046 over 480 paired cells (lag_used_cells 460), but its headline selection is UNAVAILABLE with reason OBSERVATION_COUNT_UNSUPPORTED, and resource-binding reports clock_alignment not_verified_by_core.",
+    "possible_explanation": "If clocks were aligned, the -1000 ms best lag would suggest active_threads leads p95 latency by roughly one second; however, lead/lag and temporal-causal ordering cannot be established while clock alignment is unverified and the bootstrap-based selection has not run.",
+    "recommended_check": "Verify clock alignment across the load generator, backend, and telemetry collectors; then extend or rebucket the series and rerun the mbb-lag-max-holm.v1 selection so association-09 yields an estimate instead of UNAVAILABLE.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/44",
+     "analysis-result.json#/evidence/52",
+     "analysis-result.json#/evidence/2",
+     "analysis-result.json#/evidence/58"
+    ]
+   },
+   {
+    "rank": 3,
+    "observation": "Seven correlation pairs (association-01 through association-07) are INSUFFICIENT_DATA with reasons NO_RANK_VARIATION, NO_RESIDUAL_VARIATION, CONSTANT_CONTROL, LAG_NOT_EVALUABLE, RESOURCE_DELTA_BELOW_MINIMUM; for example system-cpu-work is constant 0.15 and admission/cpu/db queues are constant 0 in both windows, and diagnostic-summary reports pairs_evaluable 1 of pairs_tested 8.",
+    "possible_explanation": "The inability to estimate these associations is caused by the absence of variation in the monitored series during this run, not by evidence that those resources are unrelated to latency or that spare capacity exists.",
+    "recommended_check": "Rerun with a load profile that varies target request rate and/or concurrency so the cpu, db, and queue series exhibit rank variation, allowing these pairs to be re-evaluated.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/37",
+     "analysis-result.json#/evidence/12",
+     "analysis-result.json#/evidence/24",
+     "analysis-result.json#/evidence/3",
+     "analysis-result.json#/evidence/15",
+     "analysis-result.json#/evidence/58"
+    ]
+   },
+   {
+    "rank": 4,
+    "observation": "Both window summaries report error_count 0 and constant generation: generator-rps and target-request-rate have mean/min/max 60 in reference and workload-01, and the overall metric-summary reports sample_count 36000 with throughput ratio numerator 36000000 / denominator 600083 and error_count 0.",
+    "possible_explanation": "The run exercises a single constant load point, so the observed latency and thread behavior is only characterized at 60 requests/s; the zero error counts and flat constants do not prove stability, spare capacity, or absence of problems at other loads or concurrency levels.",
+    "recommended_check": "Add staged load levels (higher and variable rates, varied active threads) and capture protocol-level failures such as timeouts/retries to extend coverage beyond the 60 requests/s point.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/8",
+     "analysis-result.json#/evidence/14",
+     "analysis-result.json#/evidence/20",
+     "analysis-result.json#/evidence/26",
+     "analysis-result.json#/evidence/0",
+     "analysis-result.json#/evidence/35",
+     "analysis-result.json#/evidence/36"
+    ]
+   }
+  ],
+  "recommendations": [
+   {
+    "rank": 1,
+    "action": "Verify and document clock synchronization among the load generator, backend service, and telemetry collectors; correct any skew and re-run the correlation analysis if misalignment is found.",
+    "rationale": "resource-binding reports clock_alignment not_verified_by_core, and the only CANDIDATE association (association-09) reports best_lag_ms -1000; lead/lag or temporal-causal interpretation is not supportable until clocks are verified.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/2",
+     "analysis-result.json#/evidence/44"
+    ]
+   },
+   {
+    "rank": 2,
+    "action": "Extend the observation window or use finer granularity so association-09 can be evaluated by the mbb-lag-max-holm.v1 headline selector instead of returning UNAVAILABLE (OBSERVATION_COUNT_UNSUPPORTED).",
+    "rationale": "The headline selection for association-09 is UNAVAILABLE with uncertainty NOT_ESTIMATED; a rho around 0.998-0.999 remains a CANDIDATE, not a confirmed association.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/44",
+     "analysis-result.json#/evidence/52",
+     "analysis-result.json#/evidence/58"
+    ]
+   },
+   {
+    "rank": 3,
+    "action": "Run controlled experiments varying active threads independently of target request rate (and vice versa), recording per-second p95 latency, to determine whether latency tracks concurrency rather than arrival rate.",
+    "rationale": "active_threads rose from ~3 to ~6 while target and achieved rate stayed at 60 requests/s and p95 doubled from 50 to 100 ms; backend resources stayed flat, so the driver of the latency step is not yet identified.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/21",
+     "analysis-result.json#/evidence/9",
+     "analysis-result.json#/evidence/20",
+     "analysis-result.json#/evidence/26",
+     "analysis-result.json#/evidence/36"
+    ]
+   },
+   {
+    "rank": 4,
+    "action": "Although the p95 latency check PASSes at <= 200 ms, review per-transaction and per-percentile latency distributions and any business SLO to decide whether the 50->100 ms step warrants action.",
+    "rationale": "The verdict is PASS and is preserved; the candidate anomaly and latency increase are advisory signals below the current policy threshold.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/31",
+     "analysis-result.json#/evidence/33",
+     "analysis-result.json#/evidence/56",
+     "analysis-result.json#/findings/0"
+    ]
+   },
+   {
+    "rank": 5,
+    "action": "Add variable-load stages to future runs so the seven INSUFFICIENT_DATA resource pairs can be evaluated, and document that constant flat series do not confirm spare capacity.",
+    "rationale": "All system/cpu/db/queue series were constant, which blocks estimation of correlations and leaves capacity behavior uncharacterized at other loads.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/37",
+     "analysis-result.json#/evidence/13",
+     "analysis-result.json#/evidence/58"
+    ]
+   }
+  ],
+  "caveats": [
+   "policy_verdict PASS is preserved verbatim: latency p95 50 ms (reference) and 100 ms (workload-01) are both <= 200 ms, and compute-limit/database-limit checks are PASS in both windows; this advice does not change that verdict.",
+   "The response-time finding and the +50 ms delta (max_abs_delta 50) are computed against a ZERO_MAD reference (reference_mad 0, reference_median 50); with zero reference variance the episode classification is coarse, and observed_min equals observed_max (100 ms).",
+   "Seven of eight correlation pairs are INSUFFICIENT_DATA with NOT_ESTIMATED uncertainty due to constant series; flat queues and constant utilization do not prove spare capacity, low load, or absence of a problem.",
+   "Association-09 (rho ~0.99, best_lag_ms -1000) is CANDIDATE only: its headline selection is UNAVAILABLE (OBSERVATION_COUNT_UNSUPPORTED), uncertainty is NOT_ESTIMATED, and clock_alignment is not_verified_by_core, so no lead/lag or causal ordering should be inferred.",
+   "The run only characterizes a constant 60 requests/s load point (36,000 samples; throughput ratio denominators 120000, 480000, 600083); error_count 0 reflects captured JMeter sampler error counts and does not prove protocol-level success, timeouts, retries, or behavior at higher loads.",
+   "analysis_coverage reports status COMPLETE with no reasons, which describes analysis pipeline coverage; it does not extend the run's empirical load coverage beyond the measured windows."
+  ]
+ },
+ "schema": "ai-experiment-run.holdout.v1",
+ "case": "case-022",
+ "rep": 1,
+ "arm": "A",
+ "try": 1,
+ "attempt_id": "case-022-1-A-t1",
+ "model_id": "deepseek-v4-flash-0731",
+ "prompt_sha256": "69f215a1ad4ae678c82410ba7cf7daf171cd9c7ca0ef4626bba6977db0af4ef7"
+}

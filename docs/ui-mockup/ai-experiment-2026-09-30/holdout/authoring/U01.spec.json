@@ -1,0 +1,40 @@
+{
+ "required": [
+  [
+   "cpu_plateau",
+   [
+    "(?:cpu)[^.\\n]{0,100}(?:(?:100\\s?%|1\\.0\\b|saturat|plateau|pegged|maxed|fully (?:used|utili[sz]ed|busy)))|(?:(?:100\\s?%|1\\.0\\b|saturat|plateau|pegged|maxed|fully (?:used|utili[sz]ed|busy)))[^.\\n]{0,100}(?:cpu)"
+   ]
+  ],
+  [
+   "latency_p95_observed",
+   [
+    "(?:(?:latency|p95|95th|response[ -]time))[^.\\n]{0,100}(?:(?<![\\d.,])(?:28,559|28\u202f559|28\\ 559|28559)(?![\\d]|[.,]\\d))|(?:(?<![\\d.,])(?:28,559|28\u202f559|28\\ 559|28559)(?![\\d]|[.,]\\d))[^.\\n]{0,100}(?:(?:latency|p95|95th|response[ -]time))"
+   ]
+  ],
+  [
+   "window_named",
+   [
+    "workload\\-04",
+    "(?:fourth|4th|4) (?:workload )?(?:stage|window)|stage 4"
+   ]
+  ]
+ ],
+ "forbidden": [
+  "rejects a possible CPU bottleneck only because the correlation is weak or the CPU series is flat"
+ ],
+ "useful_checks": [
+  "inspect queueing at the saturated CPU (run queue, throttling, workers) to tell saturation from other explanations"
+ ],
+ "source": {
+  "builder": "AdvisoryEvidenceBuilder",
+  "build": "5b5e51c+harness",
+  "source": "a:NT01-clean-2001:0",
+  "source_sha256": "25f11b42eace9044ca5dc9176fe0b83c22fae34b3f1f2d397b17663363b09277",
+  "derivation": [
+   "u01"
+  ],
+  "evidence_sha256": "96924447c5203fe27799acc16354fc1cd91af1b6b1c23de695c4c8f80d87afd3",
+  "inputs": "a:NT01-clean-2001:0, derivation [u01], analysed through RunBundleStore -> AnalysisService -> AdvisoryEvidenceBuilder by AdvisoryHoldoutCorpusTest on 5b5e51c+harness"
+ }
+}

@@ -1,0 +1,188 @@
+{
+ "stage": "A",
+ "mode": "live",
+ "model": "deepseek-v4-flash-0731",
+ "tag": {
+  "phase": "holdout",
+  "attempt_id": "case-029-2-A-t1",
+  "arm": "A",
+  "stage": null,
+  "case": "case-029",
+  "rep": 2,
+  "try": 1
+ },
+ "retry_policy": "d2",
+ "qwen_exit": 0,
+ "wall_ms": 82018,
+ "relay": {
+  "schema_version": "advisory-ai-runtime-relay.v1",
+  "status": "FORWARDED_STRUCTURED_OUTPUT",
+  "received_request_count": 1,
+  "forwarded_request_count": 1,
+  "outcomes": [
+   "FORWARDED_STRUCTURED_OUTPUT"
+  ],
+  "retry_refused_reason": null,
+  "first_refused_reason": null,
+  "model_id": "deepseek-v4-flash-0731",
+  "retry_policy": "d2",
+  "requests": [
+   {
+    "ordinal": 1,
+    "forwarded": true,
+    "outcome": "FORWARDED_STRUCTURED_OUTPUT",
+    "provider_status": 200,
+    "latency_ms": 80735,
+    "usage": {
+     "prompt_tokens": 2927,
+     "total_tokens": 11045,
+     "completion_tokens": 8118,
+     "prompt_tokens_details": {
+      "cached_tokens": 1024
+     },
+     "completion_tokens_details": {
+      "reasoning_tokens": 6071
+     }
+    },
+    "model_returned": "deepseek-v4-flash-0731"
+   }
+  ],
+  "usage": {
+   "prompt_tokens": 2927,
+   "completion_tokens": 8118,
+   "total_tokens": 11045
+  },
+  "latency_ms": 80735
+ },
+ "relay_status": "FORWARDED_STRUCTURED_OUTPUT",
+ "usage": {
+  "prompt_tokens": 2927,
+  "completion_tokens": 8118,
+  "total_tokens": 11045
+ },
+ "latency_ms": 80735,
+ "retried": false,
+ "retry_refused_reason": null,
+ "status": "OK",
+ "note": null,
+ "output": {
+  "schema_version": "ai-advice-output.v1",
+  "summary": "The run is VALID with COMPLETE coverage and a deterministic policy_verdict of FAIL. The failure is caused solely by the latency policy check: response_time_p95_ms observed 100 with operator lte and threshold 80 returned FAIL; the window summary records business_verdict FAIL, resource_verdict PASS, and overall verdict FAIL. The resource policy (series value gt 80) PASSED on a flat series that is constant at 50 synthetic_unit with zero variance. All reported latency percentiles and the maximum are exactly 100 ms across 600 samples, which is unusual and may indicate a constant delay, coarse measurement, or truncation. Clock alignment between the load generator and resource collector is reported as not_verified_by_core, so temporal correlations between request metrics and the resource series are unsupported. The verdict is not changed by this advice.",
+  "hypotheses": [
+   {
+    "rank": 1,
+    "observation": "The window policy summary records verdict FAIL, business_verdict FAIL, and resource_verdict PASS; the failing policy check is response_time_p95_ms observed 100 with operator lte and threshold 80, status FAIL.",
+    "possible_explanation": "The deterministic FAIL is attributable to the response-time policy alone: p95 latency exceeded the 80 ms ceiling in the evaluation window, while the resource policy passed.",
+    "recommended_check": "Re-run the same load window and profile the samples that make up the top 5% of the 600 JMeter samples to confirm the p95 excess is reproducible and to locate its source in the service under test rather than the load tooling.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/5",
+     "analysis-result.json#/evidence/6",
+     "analysis-result.json#/evidence/0"
+    ]
+   },
+   {
+    "rank": 2,
+    "observation": "The overall and transaction metric summaries both report latency_ms max=100, p50=100, p95=100, p99=100 for 600 samples with error_count 0.",
+    "possible_explanation": "All latency percentiles equal the maximum at exactly 100 ms, which is consistent either with a constant service time (fixed delay or timer) or with measurement capped/quantized at 100 ms; if capped, the true p95 could be 100 ms or higher.",
+    "recommended_check": "Inspect the raw JMeter per-sample latency values for a flat distribution, truncation at 100 ms, or coarse bucketing, and review the load profile for fixed delays or timers.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0",
+     "analysis-result.json#/evidence/1"
+    ]
+   },
+   {
+    "rank": 3,
+    "observation": "The resource summary shows a constant series: observed_cells 30, missing_cells 0, mean/median/min/max all 50 synthetic_unit, sample_standard_deviation 0, slope_per_second 0; the limit policy (operator gt, threshold 80) reports PASS.",
+    "possible_explanation": "The flat resource series may be a synthetic or placeholder metric, or a system that happens to be stable; the PASS only shows the value (50) did not exceed 80 and does not demonstrate spare capacity or absence of resource contention.",
+    "recommended_check": "Confirm which underlying resource the synthetic_unit series represents and collect complementary resource telemetry (CPU, memory, GC, I/O) aligned to the same evaluation window before concluding capacity is adequate.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/3",
+     "analysis-result.json#/evidence/4"
+    ]
+   },
+   {
+    "rank": 4,
+    "observation": "The resource binding reports clock_alignment 'not_verified_by_core', with evaluation from/to 1767225600000..1767225630000 ms and the run ending at 1767225630099 ms (99 ms past the evaluation end).",
+    "possible_explanation": "Because clock alignment between the load generator and the resource collector is unverified, temporal ordering or correlation between request latency and the resource series cannot be established; the 99 ms run offset may or may not be meaningful.",
+    "recommended_check": "Verify clock synchronization (e.g., NTP/time service) between the JMeter load host and the resource collector before interpreting any lead/lag or correlation across these evidence sources.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/2",
+     "analysis-result.json#/evidence/3"
+    ]
+   },
+   {
+    "rank": 5,
+    "observation": "The evaluation window covers 30 seconds with 600 samples, throughput_rps reported as a ratio 600000/30099 (~20 rps), error_count 0, and analysis coverage COMPLETE with no reasons.",
+    "possible_explanation": "Zero errors and complete coverage over a single short window do not prove stability; the p95 = 100 ms result could persist or differ under longer or higher load, and the FAIL is not explained by errors or the resource policy.",
+    "recommended_check": "Run additional windows with longer duration and varied load, capturing raw per-sample latency, to confirm the p95 = 100 ms result and the FAIL verdict are stable.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0",
+     "analysis-result.json#/evidence/5"
+    ]
+   }
+  ],
+  "recommendations": [
+   {
+    "rank": 1,
+    "action": "Investigate the response time p95 = 100 ms against the 80 ms threshold: trace the tail samples and determine whether the excess originates in the service under test or in the load/test tooling.",
+    "rationale": "This is the only policy that failed (business_verdict FAIL, resource_verdict PASS); addressing it is required for any future run to differ from the current deterministic FAIL.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/5",
+     "analysis-result.json#/evidence/6",
+     "analysis-result.json#/evidence/1"
+    ]
+   },
+   {
+    "rank": 2,
+    "action": "Verify clock alignment and the timing relationship between the load generator and the resource collector, since clock_alignment is 'not_verified_by_core'.",
+    "rationale": "No lead/lag ordering or causal correlation between request metrics and the resource series can be supported until clock alignment is verified.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/2"
+    ]
+   },
+   {
+    "rank": 3,
+    "action": "Validate the latency measurement chain, including how response_time_p95_ms is computed from the 600 JMeter samples, and check for a cap/truncation at 100 ms or coarse quantization.",
+    "rationale": "The uniform p50=p95=p99=max=100 could mask true latency above 100 ms or reflect a fixed artificial delay; the FAIL direction is consistent either way, but the exact latency values need confirmation.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0",
+     "analysis-result.json#/evidence/1"
+    ]
+   },
+   {
+    "rank": 4,
+    "action": "Confirm what the constant 'synthetic_unit' resource series represents and add complementary resource metrics before using resource_verdict PASS to claim spare capacity.",
+    "rationale": "A zero-variance series at 50 below an 80 limit only shows the defined limit was not exceeded; it does not prove adequate capacity or a healthy runtime.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/3",
+     "analysis-result.json#/evidence/4"
+    ]
+   },
+   {
+    "rank": 5,
+    "action": "Re-run the evaluation over a longer window and/or higher sample volume, capturing raw per-sample latency, to confirm the p95 = 100 ms result and the FAIL verdict are stable.",
+    "rationale": "The current verdict is based on a single 30-second, 600-sample window; broader evidence is needed to distinguish a consistent policy violation from a short-window artifact.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/2",
+     "analysis-result.json#/evidence/5"
+    ]
+   }
+  ],
+  "caveats": [
+   "The deterministic verdict is FAIL (policy_verdict FAIL, business_verdict FAIL) and this advice does not and cannot change it; the only failing policy is the latency check, while the resource policy passed.",
+   "clock_alignment is reported as 'not_verified_by_core' for the resource binding, so any temporal or causal correlation between the request latency metrics and the resource series is unsupported until clocks are verified.",
+   "All reported latency percentiles equal the maximum (100 ms); this may indicate truncation or quantization at 100 ms (in which case true p95 could be 100 ms or higher) or a fixed artificial delay, and neither is confirmed by the available evidence.",
+   "The resource series is constant at 50 synthetic_unit with zero variance over all 30 cells; resource_verdict PASS on the gt-80 limit does not establish spare capacity, absence of contention, or absence of a resource problem.",
+   "The window is 30 seconds with 600 samples (~20 rps); error_count 0 and analysis coverage COMPLETE do not prove stability, low load, or absence of a problem outside this single window, and no baseline window is provided for comparison.",
+   "No evidence describes how response_time_p95_ms is derived from the JMeter samples or whether the 600 samples map 1:1 to the evaluation epoch; confirm this mapping before drawing conclusions from the latency values."
+  ]
+ },
+ "schema": "ai-experiment-run.holdout.v1",
+ "case": "case-029",
+ "rep": 2,
+ "arm": "A",
+ "try": 1,
+ "attempt_id": "case-029-2-A-t1",
+ "model_id": "deepseek-v4-flash-0731",
+ "prompt_sha256": "69f215a1ad4ae678c82410ba7cf7daf171cd9c7ca0ef4626bba6977db0af4ef7"
+}

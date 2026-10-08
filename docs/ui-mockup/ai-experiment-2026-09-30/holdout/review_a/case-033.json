@@ -1,0 +1,119 @@
+[
+  {
+    "id": "R025",
+    "hard_defect": false,
+    "defects": [],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 5,
+    "notes": "The advice preserves the verdict and capacity bound and gives supported, verifiable operator actions."
+  },
+  {
+    "id": "R046",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T1",
+        "field": "#/hypotheses/3/recommended_check",
+        "quote": "implement a knee detector so a true capacity point can be estimated",
+        "why": "The knee detector is a fixed product limitation and is not needed to compute a capacity bound."
+      },
+      {
+        "type": "T2",
+        "field": "#/hypotheses/4/observation",
+        "quote": "2401 samples over the 600000ms evaluation window",
+        "why": "The 2401 samples are a whole-run count, while the evaluation window covers only part of the run."
+      },
+      {
+        "type": "T2",
+        "field": "#/hypotheses/4/possible_explanation",
+        "quote": "~4 rps aggregate throughput with ~410ms p50 implies very low per-user request rate",
+        "why": "Whole-run throughput and latency aggregates cannot establish a per-user rate for the two stage windows."
+      },
+      {
+        "type": "T4",
+        "field": "#/recommendations/1/rationale",
+        "quote": "Only load-generator CPU is summarized in this evidence",
+        "why": "The evidence also contains load-generator active-users resource summaries."
+      }
+    ],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 2,
+    "notes": "Useful latency checks are mixed with an invalid knee-detector action and misleading scope claims."
+  },
+  {
+    "id": "R049",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T2",
+        "field": "#/hypotheses/1/observation",
+        "quote": "p50=410, p95=420, p99=420, max=1500 in stage-1 and stage-2 policy checks",
+        "why": "The stage policy checks report only p95; p50, p99 and max come from whole-run metric summaries."
+      },
+      {
+        "type": "T1",
+        "field": "#/hypotheses/3/recommended_check",
+        "quote": "implement knee detection before reporting a capacity value",
+        "why": "The reported upper bound is computed independently of the unimplemented knee detector."
+      },
+      {
+        "type": "T2",
+        "field": "#/hypotheses/5/possible_explanation",
+        "quote": "Aggregate request rate is low relative to the number of active users",
+        "why": "This compares a whole-run throughput aggregate with active-user measurements from separate stage windows."
+      },
+      {
+        "type": "T2",
+        "field": "#/hypotheses/6/observation",
+        "quote": "run/snapshot epoch bounds aligned at 1767225600000-1767226200000",
+        "why": "The run ends at 1767226200500, 500 ms after the snapshot and evaluation window."
+      },
+      {
+        "type": "T1",
+        "field": "#/recommendations/3/action",
+        "quote": "implement knee detection",
+        "why": "Implementing a knee detector is not an operator action needed to obtain a product capacity bound."
+      },
+      {
+        "type": "T2",
+        "field": "#/recommendations/5/rationale",
+        "quote": "The stored ratio (~4) with 148-248 active users suggests the per-user request rate is very low",
+        "why": "The whole-run throughput ratio does not establish a per-user request rate within either stage."
+      },
+      {
+        "type": "T7",
+        "field": "#/caveats/5",
+        "quote": "Latency statistics in evidence are window-level aggregates (p50/p95/p99/max)",
+        "why": "Those latency statistics are whole-run metric summaries, while the window checks report p95."
+      },
+      {
+        "type": "T4",
+        "field": "#/caveats/1",
+        "quote": "Only load-generator CPU resource series are present",
+        "why": "Active-users resource series are also present for both stages."
+      }
+    ],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 2,
+    "notes": "The verdict is preserved, but repeated scope errors and knee-detector advice undermine the recommendations."
+  },
+  {
+    "id": "R096",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T2",
+        "field": "#/recommendations/1/rationale",
+        "quote": "Both windows report p95 = 420 ms with zero errors",
+        "why": "The p95 checks are window-scoped, while the zero-error count is reported for the whole run and transaction."
+      }
+    ],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 4,
+    "notes": "The operator plan is useful and mostly accurate, with one misleading assignment of whole-run errors to the windows."
+  }
+]

@@ -1,0 +1,86 @@
+[
+  {
+    "id": "R009",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T7",
+        "field": "#/summary",
+        "quote": "neither the reference ... nor evaluation ... window had a business or resource policy defined",
+        "why": "NO_POLICY shows that no applicable rule was evaluated, not that no policy was defined."
+      },
+      {
+        "type": "T7",
+        "field": "#/hypotheses/2/possible_explanation",
+        "quote": "No business or resource policy thresholds were defined",
+        "why": "The evidence does not establish that thresholds were never configured."
+      },
+      {
+        "type": "T7",
+        "field": "#/caveats/0",
+        "quote": "no SLO thresholds were defined",
+        "why": "NO_POLICY does not prove that no thresholds were defined."
+      }
+    ],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 2,
+    "notes": "The correlation and operator checks are useful, but the advice repeatedly treats NO_POLICY as proof of missing configuration."
+  },
+  {
+    "id": "R011",
+    "hard_defect": false,
+    "defects": [],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 5,
+    "notes": "It preserves the verdict and key measurements while giving prioritized checks without claiming a cause."
+  },
+  {
+    "id": "R050",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T2",
+        "field": "#/hypotheses/0/possible_explanation",
+        "quote": "achieved load was constant at 20 requests/s",
+        "why": "The constant target and aggregate throughput do not establish that achieved load was constant throughout the window."
+      },
+      {
+        "type": "T8",
+        "field": "#/hypotheses/2/possible_explanation",
+        "quote": "could be run-to-run ... variation",
+        "why": "The compared reference and evaluation windows are within the same run."
+      },
+      {
+        "type": "T8",
+        "field": "#/recommendations/4/action",
+        "quote": "p95 latency difference between the windows (evaluation 193 ms vs reference 211 ms)",
+        "why": "193 ms and 211 ms are the window p50 values; their p95 values are 236 ms and 238 ms."
+      }
+    ],
+    "required_facts_preserved": false,
+    "missing_facts": [
+      "The overall sample count of 7200 and overall latency percentiles are omitted.",
+      "The recommendation misstates the window p95 values."
+    ],
+    "usefulness": 2,
+    "notes": "Several checks are actionable, but the load claim and mislabeled latency comparison could misdirect an operator."
+  },
+  {
+    "id": "R147",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T2",
+        "field": "#/hypotheses/1/possible_explanation",
+        "quote": "Because achieved RPS never varied",
+        "why": "The evidence shows a constant target series, but does not show that achieved RPS never varied."
+      }
+    ],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 2,
+    "notes": "The advice is detailed and largely verifiable, but it treats the constant target as proof of constant achieved load."
+  }
+]

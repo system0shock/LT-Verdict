@@ -1,0 +1,70 @@
+[
+  {
+    "id": "R013",
+    "hard_defect": false,
+    "defects": [],
+    "required_facts_preserved": false,
+    "missing_facts": ["run_validity=VALID"],
+    "usefulness": 4,
+    "notes": "The advice gives useful, testable checks and keeps causal explanations as hypotheses."
+  },
+  {
+    "id": "R066",
+    "hard_defect": false,
+    "defects": [],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 5,
+    "notes": "The verdicts, scopes, limitations, and operator checks are well supported."
+  },
+  {
+    "id": "R101",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T3",
+        "field": "#/hypotheses/4/possible_explanation",
+        "quote": "the cluster of max latency near 30050 ms",
+        "why": "The aggregates report a maximum but give no count of samples at or near it."
+      },
+      {
+        "type": "T2",
+        "field": "#/hypotheses/5/recommended_check",
+        "quote": "confirm where achieved rate fell below the 110 rps target",
+        "why": "The 110 requests/s target is reported for the evaluation window, so the evidence does not establish that this target applied elsewhere in the run."
+      },
+      {
+        "type": "T2",
+        "field": "#/recommendations/5/rationale",
+        "quote": "Overall throughput (93000000/1230040, approximately 75.6 rps) is below the constant 110 rps target",
+        "why": "This compares whole-run throughput with a target measured only in the shorter evaluation window."
+      }
+    ],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 2,
+    "notes": "Several checks are useful, but the inferred latency cluster and cross-window target comparison could misdirect the operator."
+  },
+  {
+    "id": "R150",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T8",
+        "field": "#/summary",
+        "quote": "because both the CPU series and the generator target-rate series were constant and the clock alignment was not verified by core",
+        "why": "The evidence supports constant series as reasons for the unestimated association but does not establish unverified clock alignment as a cause."
+      },
+      {
+        "type": "T2",
+        "field": "#/hypotheses/2/possible_explanation",
+        "quote": "most slow samples were inside workload-04",
+        "why": "The whole-run and window percentiles do not establish where most slow samples occurred."
+      }
+    ],
+    "required_facts_preserved": false,
+    "missing_facts": ["analysis_coverage.status=COMPLETE"],
+    "usefulness": 3,
+    "notes": "The operator checks are mostly sound, but two explanations draw conclusions the aggregates do not support."
+  }
+]

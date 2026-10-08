@@ -1,0 +1,151 @@
+{
+ "stage": "S2",
+ "mode": "live",
+ "model": "deepseek-v4-flash-0731",
+ "tag": {
+  "phase": "v2-pilot",
+  "stage": "S2",
+  "case": "K10",
+  "rep": 1,
+  "attempt": 1
+ },
+ "qwen_exit": 0,
+ "wall_ms": 56411,
+ "relay": {
+  "schema_version": "advisory-ai-runtime-relay.v1",
+  "status": "FORWARDED_STRUCTURED_OUTPUT",
+  "request_count": 1,
+  "usage": {
+   "prompt_tokens": 3690,
+   "total_tokens": 8887,
+   "completion_tokens": 5197,
+   "prompt_tokens_details": {
+    "cached_tokens": 1024
+   },
+   "completion_tokens_details": {
+    "reasoning_tokens": 3469
+   }
+  },
+  "latency_ms": 55186,
+  "model_returned": "deepseek-v4-flash-0731"
+ },
+ "relay_status": "FORWARDED_STRUCTURED_OUTPUT",
+ "usage": {
+  "prompt_tokens": 3690,
+  "total_tokens": 8887,
+  "completion_tokens": 5197,
+  "prompt_tokens_details": {
+   "cached_tokens": 1024
+  },
+  "completion_tokens_details": {
+   "reasoning_tokens": 3469
+  }
+ },
+ "latency_ms": 55186,
+ "status": "OK",
+ "note": null,
+ "output": {
+  "schema_version": "ai-advice-output.v1",
+  "summary": "This is a VALID, COMPLETE analysis of a JMeter JTL CSV run with 2,623 whole-run samples across one overall scope and six transaction scopes, reporting 0 errors and modest latency percentiles (overall p50=11ms, p95=46ms, p99=77ms, max=904ms; home shows max=904ms with p50=27ms). The deterministic verdict is NO_POLICY: no policy or required capacity is configured and the input contains no capacity_summary or windows, so no pass/fail evaluation, no capacity bound, and no knee-based conclusion is being claimed. Latency/error summaries look healthy, but that is not evidence of spare capacity, low load, or stability, and the advice does not change the NO_POLICY verdict.",
+  "hypotheses": [
+   {
+    "rank": 1,
+    "observation": "The policy verdict is NO_POLICY even though the run is VALID and analysis coverage is COMPLETE, and the findings list is empty; the input contains no capacity_summary, no windows, and no load stages.",
+    "possible_explanation": "No latency/error/capacity policy or required capacity was configured for this run, so metrics were summarized but never evaluated against a bound; the absence of findings reflects the lack of evaluation, not a pass.",
+    "recommended_check": "Check the policy configuration attached to this run; define explicit thresholds (e.g., latency percentiles or error rate at overall or per-transaction scope) and rerun so a deterministic PASS/FAIL verdict can be produced.",
+    "evidence_refs": [
+     "analysis-result.json#/policy_verdict",
+     "analysis-result.json#/run_validity",
+     "analysis-result.json#/analysis_coverage"
+    ]
+   },
+   {
+    "rank": 2,
+    "observation": "Overall metrics show max latency 904ms (p50=11ms, p95=46ms, p99=77ms), and the home transaction also reports max 904ms with p50=27ms; per-transaction maxes otherwise range 75-444ms.",
+    "possible_explanation": "One or more tail samples, likely from the home transaction, dominate the overall max latency; without sample-level data we cannot tell how many samples exceeded typical percentiles or whether the tail is concentrated.",
+    "recommended_check": "Inspect the raw sampler records for the overall/home scopes above a chosen threshold (e.g., 500ms) to count tail samples, and verify clock synchronization between load generator and system under test before treating tail latency as a time-ordered effect.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0",
+     "analysis-result.json#/evidence/4"
+    ]
+   },
+   {
+    "rank": 3,
+    "observation": "All seven metric summaries (overall and six transactions) report error_count=0, and latency percentiles are low (transaction p50 3-27ms, p95 7-61ms); no findings are recorded.",
+    "possible_explanation": "The run looks healthy, but this is equally consistent with a low load level or load-generation behavior; zero errors and low percentiles alone do not demonstrate spare capacity, target-load attainment, or stability.",
+    "recommended_check": "Verify the intended load level was actually applied (samples over time, generator not saturated, target concurrency reached) and compare observed throughput against the intended target before drawing any capacity or stability conclusion.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0",
+     "analysis-result.json#/evidence/1",
+     "analysis-result.json#/evidence/6"
+    ]
+   },
+   {
+    "rank": 4,
+    "observation": "The derived facts show the overall sample_count (2623) equals the sum of the six transaction-scope sample counts (2623), and no transaction scope reports errors.",
+    "possible_explanation": "The overall summary is likely the aggregate of the six JMeter samplers, with count consistency across whole-run scopes; this does not prove the load covered every intended endpoint.",
+    "recommended_check": "Confirm the six JMeter sampler labels match the intended transaction set and that no additional samplers or non-sampler activity contributed traffic before relying on per-transaction comparisons.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0",
+     "analysis-result.json#/evidence/1",
+     "analysis-result.json#/evidence/2",
+     "analysis-result.json#/evidence/3",
+     "analysis-result.json#/evidence/4",
+     "analysis-result.json#/evidence/5",
+     "analysis-result.json#/evidence/6"
+    ]
+   }
+  ],
+  "recommendations": [
+   {
+    "rank": 1,
+    "action": "Configure an explicit latency and/or error-rate policy at the desired scope (overall or per transaction) and rerun the load test.",
+    "rationale": "The deterministic verdict is NO_POLICY: without a configured policy or required capacity there is no PASS/FAIL evaluation, so summarizing metrics alone cannot produce a meaningful verdict.",
+    "evidence_refs": [
+     "analysis-result.json#/policy_verdict",
+     "analysis-result.json#/evidence/0"
+    ]
+   },
+   {
+    "rank": 2,
+    "action": "Verify clock synchronization and time definitions across the load generator and the system under test before interpreting the max-latency values (e.g., overall and home 904ms) as a temporal pattern.",
+    "rationale": "No timing/clock relationship is verified in this input; without it, no lead/lag ordering or temporal cause can be supported, and a raw max value is not a duration or an event claim.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0",
+     "analysis-result.json#/evidence/4"
+    ]
+   },
+   {
+    "rank": 3,
+    "action": "If a capacity conclusion is needed, add capacity stages with verified product outcomes or an explicit required-capacity definition and rerun; expect a capacity_summary to be produced from those stages.",
+    "rationale": "The input contains no capacity_summary and no load stages, so no capacity bound exists for this run; capacity knee detection is a fixed product limitation and is not a user-enableable step.",
+    "evidence_refs": [
+     "analysis-result.json#/policy_verdict",
+     "analysis-result.json#/run_validity"
+    ]
+   },
+   {
+    "rank": 4,
+    "action": "Inspect the raw JMeter samples and load configuration to confirm the intended transaction set, load level, and that the load generator was not saturated, before using the zero-error/low-latency summaries in any report.",
+    "rationale": "Zero errors and modest percentiles do not prove target load was reached, spare capacity exists, or the system is stable; those claims require sample-level and generator-level information not present in this input.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0",
+     "analysis-result.json#/evidence/1",
+     "analysis-result.json#/evidence/4"
+    ]
+   }
+  ],
+  "caveats": [
+   "policy_verdict is NO_POLICY: no policy or required capacity is configured. This is not a pass, not a health statement, and the advice does not change the verdict.",
+   "No capacity_summary, load stages, or resource series exist in the input; no capacity bound can be derived from this run.",
+   "No windows are referenced: all counts are whole-run scopes, and a window would only cover part of the run.",
+   "The input lacks individual samples, the number of samples hitting a reported max latency, call graph/topology, log bodies, traces, release/configuration data, and an OpenSearch error profile.",
+   "error_count=0 and low latency percentiles do not prove stability, spare capacity, low load, or absence of a problem; they also do not verify that the intended load was applied.",
+   "Latency max values are observations only; without verified clocks, no temporal or causal ordering among them is supported."
+  ]
+ },
+ "schema": "ai-experiment-run.v2",
+ "phase": "pilot",
+ "case": "K10",
+ "rep": 1
+}

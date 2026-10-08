@@ -1,0 +1,196 @@
+{
+ "stage": "S0",
+ "mode": "live",
+ "model": "deepseek-v4-flash-0731",
+ "tag": {
+  "phase": "v2-pilot",
+  "stage": "S0",
+  "case": "K03",
+  "rep": 1,
+  "attempt": 1
+ },
+ "qwen_exit": 0,
+ "wall_ms": 86087,
+ "relay": {
+  "schema_version": "advisory-ai-runtime-relay.v1",
+  "status": "FORWARDED_STRUCTURED_OUTPUT",
+  "request_count": 1,
+  "usage": {
+   "prompt_tokens": 12462,
+   "total_tokens": 21182,
+   "completion_tokens": 8720,
+   "prompt_tokens_details": {
+    "cached_tokens": 1024
+   },
+   "completion_tokens_details": {
+    "reasoning_tokens": 5855
+   }
+  },
+  "latency_ms": 84821,
+  "model_returned": "deepseek-v4-flash-0731"
+ },
+ "relay_status": "FORWARDED_STRUCTURED_OUTPUT",
+ "usage": {
+  "prompt_tokens": 12462,
+  "total_tokens": 21182,
+  "completion_tokens": 8720,
+  "prompt_tokens_details": {
+   "cached_tokens": 1024
+  },
+  "completion_tokens_details": {
+   "reasoning_tokens": 5855
+  }
+ },
+ "latency_ms": 84821,
+ "status": "OK",
+ "note": null,
+ "output": {
+  "schema_version": "ai-advice-output.v1",
+  "summary": "The run is VALID with COMPLETE analysis coverage, and the three load steps (5, 10, 20 users) each PASS their window verdict: error_count 0 and error_rate_ratio 0/132623 overall, generator CPU throttle ratio stayed under the 0.2 diagnostic threshold, and each stage shows 30 complete bins with observed load matching target exactly (achieved_statistic p05_10s). The capacity summary therefore records a verified LOWER_BOUND at lower_inclusive=20. However, capacity policy_verdict is NO_POLICY and each window's resource_verdict is NO_POLICY, so NO_POLICY must not be read as a pass; no capacity policy was defined. capacity_knee is null (knee_reason=KNEE_DETECTOR_NOT_IMPLEMENTED) and upper_exclusive is null, so the maximum sustainable load was not established. Latency is error-free but has a notable tail: overall p50 94 ms, p95 202 ms, p99 298 ms, max 2406 ms (matching the 'cart' transaction max); 'product' p99 is 665 ms and 'home' p99 is 462 ms. Resource binding reports clock_alignment='not_verified_by_core', so time-ordered or causal interpretations require clock verification first.",
+  "hypotheses": [
+   {
+    "rank": 1,
+    "observation": "capacity_summary reports bound_type=LOWER_BOUND, lower_inclusive=20, capacity_knee=null, knee_reason=KNEE_DETECTOR_NOT_IMPLEMENTED, upper_exclusive=null; stages r1-users5, r1-users10, r1-users20 each report verdict PASS with 30/30 complete bins, and overall error_rate_ratio is 0/132623.",
+    "possible_explanation": "The test verified that at least 20 concurrent users satisfy the configured business error-rate policy and the generator throttle diagnostic, but no load above 20 users was exercised and no knee was estimated, so the result is a minimum verified load rather than a capacity limit.",
+    "recommended_check": "Run additional staged load steps above 20 users (e.g., 40/80/160) with the same policies and enable/implement the knee detector so the point where a policy starts failing can be located.",
+    "evidence_refs": [
+     "analysis-result.json#/capacity_summary",
+     "analysis-result.json#/evidence/0",
+     "analysis-result.json#/evidence/35",
+     "analysis-result.json#/evidence/37",
+     "analysis-result.json#/evidence/39"
+    ]
+   },
+   {
+    "rank": 2,
+    "observation": "Overall latency shows max 2406 ms with p50 94 ms, p95 202 ms, p99 298 ms; the 'cart' transaction has max 2406 ms, 'home' p99 462 ms, and 'product' p99 665 ms, while error_count is 0 in every summary.",
+    "possible_explanation": "A small subset of requests experienced long tail latency even though all windows passed the error-rate policy; this could reflect transient contention, GC, or a slow backend call, but the evidence does not connect the maxima to a specific window or cause.",
+    "recommended_check": "Extract timestamps of the max-latency samples and cross-reference them with per-window CPU, memory, and generator throttle series; only after clock alignment is verified (currently not_verified_by_core) attempt any ordering or causal interpretation.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0",
+     "analysis-result.json#/evidence/2",
+     "analysis-result.json#/evidence/4",
+     "analysis-result.json#/evidence/5",
+     "analysis-result.json#/evidence/7"
+    ]
+   },
+   {
+    "rank": 3,
+    "observation": "generator cfs_throttled_period_ratio maxima reached ~0.1485 in r1-users10 and 0.13 in r1-users20 with means ~0.0064 and ~0.0057 and q95 ~0.022 and ~0.022, while the three generator-cpu-throttle-ratio policy checks still report PASS against threshold 0.2.",
+    "possible_explanation": "The load generator experienced intermittent CPU throttling in some bins; although below the configured 0.2 PASS threshold, such spikes could affect request pacing independently of the system under test.",
+    "recommended_check": "Inspect the throttled bins against active-thread counts and latency, and consider adding generator CPU headroom or tightening the throttle check so generator-side contention cannot skew results.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/8",
+     "analysis-result.json#/evidence/16",
+     "analysis-result.json#/evidence/24",
+     "analysis-result.json#/evidence/32",
+     "analysis-result.json#/evidence/33",
+     "analysis-result.json#/evidence/34"
+    ]
+   },
+   {
+    "rank": 4,
+    "observation": "frontend memory_bytes mean rose across stages (≈12,072,710 B at r1-users5, ≈12,869,495 B at r1-users10, ≈14,338,480 B at r1-users20) with positive within-window slopes (≈1775, ≈1935, ≈657 B/s) and sample standard deviations ≈341K–352K; every window's resource_verdict is NO_POLICY.",
+    "possible_explanation": "Frontend memory appears to increase with load and within windows; the magnitudes are small (MB range), which may reflect normal caching or GC behavior, but a leak-like growth pattern remains a candidate explanation.",
+    "recommended_check": "Run a sustained soak at 20 users (or higher) and measure the memory growth rate over a longer horizon, adding heap/GC profiling before concluding leak versus expected caching.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/13",
+     "analysis-result.json#/evidence/21",
+     "analysis-result.json#/evidence/29",
+     "analysis-result.json#/evidence/36",
+     "analysis-result.json#/evidence/38",
+     "analysis-result.json#/evidence/40"
+    ]
+   },
+   {
+    "rank": 5,
+    "observation": "checkoutservice, frontend, and paymentservice CPU usage stayed below ≈0.2 cores in all windows (e.g., frontend max 0.199842 at r1-users10), but each window_policy_summary reports resource_verdict NO_POLICY and the capacity policy_verdict is NO_POLICY.",
+    "possible_explanation": "App-side CPU appears far from saturation within the tested range, but because no resource or capacity policy was defined, these observations are neither a PASS nor a FAIL; NO_POLICY should not be interpreted as proof of spare capacity.",
+    "recommended_check": "Define explicit resource and capacity policies (CPU, memory, generator throttle, latency percentiles) so future runs produce enforceable verdicts, and continue staged load tests to find where resources actually become limiting.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/12",
+     "analysis-result.json#/evidence/20",
+     "analysis-result.json#/evidence/28",
+     "analysis-result.json#/evidence/36",
+     "analysis-result.json#/policy_verdict"
+    ]
+   },
+   {
+    "rank": 6,
+    "observation": "resource-binding reports clock_alignment='not_verified_by_core' with evaluation windows from 1790634210000 to 1790635250000 ms and run from 1790634168783 to 1790635269885 ms.",
+    "possible_explanation": "Any lead/lag or cause-effect reading of the metric series (e.g., latency spikes preceding or following resource changes) is unsupported until clock alignment between the involved systems is established.",
+    "recommended_check": "Verify clock synchronization (e.g., NTP) across the load generator and service hosts, then re-examine event ordering only if temporal claims are needed.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/7"
+    ]
+   }
+  ],
+  "recommendations": [
+   {
+    "rank": 1,
+    "action": "Extend staged load testing beyond 20 users (e.g., 40/80/160) under the same policies and enable or implement the knee detector to estimate the capacity knee.",
+    "rationale": "The capacity summary is a LOWER_BOUND at lower_inclusive=20 with capacity_knee=null (KNEE_DETECTOR_NOT_IMPLEMENTED) and upper_exclusive=null, so the maximum sustainable load is not established by the current evidence.",
+    "evidence_refs": [
+     "analysis-result.json#/capacity_summary",
+     "analysis-result.json#/evidence/41"
+    ]
+   },
+   {
+    "rank": 2,
+    "action": "Verify clock alignment across load generator and services before performing any time-based correlation of latency, throttle, or resource series.",
+    "rationale": "resource-binding reports clock_alignment='not_verified_by_core'; without verified clocks, lead/lag ordering and temporal causal hypotheses are unsupported.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/7"
+    ]
+   },
+   {
+    "rank": 3,
+    "action": "Profile and soak-test frontend memory behavior at sustained 20-user (or higher) load, using heap/GC analysis to decide between a leak and expected caching growth.",
+    "rationale": "frontend memory mean increased across stages (≈12.07MB → ≈12.87MB → ≈14.34MB) with positive within-window slopes, making growth-at-load a candidate concern without confirming a cause.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/13",
+     "analysis-result.json#/evidence/21",
+     "analysis-result.json#/evidence/29"
+    ]
+   },
+   {
+    "rank": 4,
+    "action": "Investigate the latency tail (overall and 'cart' max 2406 ms, 'home' p99 462 ms, 'product' p99 665 ms) by locating the offending samples in time and correlating them with generator throttle and service resource series after clock alignment is verified.",
+    "rationale": "Latency is error-free with low p50/p95, but the maximum tail is an unexplained outlier not linked to a window or cause in the supplied evidence, and generator throttle shows intermittent spikes below the 0.2 threshold.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0",
+     "analysis-result.json#/evidence/2",
+     "analysis-result.json#/evidence/4",
+     "analysis-result.json#/evidence/5",
+     "analysis-result.json#/evidence/16",
+     "analysis-result.json#/evidence/24"
+    ]
+   },
+   {
+    "rank": 5,
+    "action": "Define explicit resource and capacity policies (e.g., CPU, memory, generator throttle, latency percentiles with thresholds) and wire them into the run configuration.",
+    "rationale": "Capacity policy_verdict is NO_POLICY and every window resource_verdict is NO_POLICY; the current PASS verdicts derive only from the business error-rate rule and the generator throttle diagnostic, so enforceable capacity/resource verdicts are absent.",
+    "evidence_refs": [
+     "analysis-result.json#/policy_verdict",
+     "analysis-result.json#/evidence/36",
+     "analysis-result.json#/evidence/38",
+     "analysis-result.json#/evidence/40"
+    ]
+   }
+  ],
+  "caveats": [
+   "Capacity policy_verdict is NO_POLICY, not PASS: stage PASS verdicts reflect only the business error-rate rule (error_rate_ratio <= 0.01, observed 0/132623 overall) and the generator-cpu-throttle-ratio diagnostic (<= 0.2); every window also reports resource_verdict NO_POLICY, so missing policy must not be read as a pass.",
+   "lower_inclusive=20 is a verified lower bound only: capacity_knee is null with knee_reason=KNEE_DETECTOR_NOT_IMPLEMENTED and upper_exclusive is null, so no maximum sustainable load can be inferred from this run.",
+   "clock_alignment = not_verified_by_core; temporal ordering, lead/lag relationships, and any temporal causal hypothesis require clock verification first.",
+   "Resource evidence covers only jmeter-generator, checkoutservice, frontend, and paymentservice; other services and infrastructure are not evidenced in the supplied analysis even though analysis_coverage status is COMPLETE for what was analyzed and run_validity is VALID.",
+   "The findings list is empty; absence of detected anomalies does not prove stability, spare capacity, low load, or absence of a problem.",
+   "Latency maxima (overall and 'cart' 2406 ms, 'product' p99 665 ms, 'home' p99 462 ms) are not linked in the evidence to specific windows or causes.",
+   "Generator throttle ratio is an interval mean with occasional spikes (max ≈0.1485 at r1-users10, ≈0.13 at r1-users20) that stayed under the 0.2 PASS threshold; these spikes are not shown to have affected request pacing or results.",
+   "Load verification used achieved_statistic p05_10s with 30 complete bins per stage; observed_min and observed_max equaled the target at every stage, indicating the intended load was held steadily during each window."
+  ]
+ },
+ "schema": "ai-experiment-run.v2",
+ "phase": "pilot",
+ "case": "K03",
+ "rep": 1
+}

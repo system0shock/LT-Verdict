@@ -1,0 +1,59 @@
+[
+  {
+    "id": "R034",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T8",
+        "field": "#/caveats/2",
+        "quote": "The correlation effect size/uncertainty is NOT_ESTIMATED",
+        "why": "Uncertainty is not estimated, but the response itself reports the estimated correlation coefficient."
+      }
+    ],
+    "required_facts_preserved": false,
+    "missing_facts": ["The run has 7,200 samples: 2,400 in the reference window and 4,800 in the evaluation window."],
+    "usefulness": 4,
+    "notes": "The policy and clock advice is useful, but it conflates the reported correlation with its unestimated uncertainty."
+  },
+  {
+    "id": "R083",
+    "hard_defect": false,
+    "defects": [],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 4,
+    "notes": "It preserves the verdict and key measurements and gives useful checks, though several actions are speculative."
+  },
+  {
+    "id": "R092",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T7",
+        "field": "#/caveats/9",
+        "quote": "No policy thresholds exist for resource utilization",
+        "why": "NO_POLICY establishes that no applicable rule was evaluated for these windows, not that no thresholds were configured."
+      }
+    ],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 2,
+    "notes": "The measurements are largely accurate, but its categorical claim about absent thresholds could send an operator to fix the wrong configuration issue."
+  },
+  {
+    "id": "R098",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T7",
+        "field": "#/recommendations/3/rationale",
+        "quote": "No applicable SLA rules exist for either window, so resource_verdict is NO_POLICY and no bound-vs-capacity comparison can occur for this run.",
+        "why": "The window resource verdict does not establish the cause of the missing capacity comparison; capacity bounds depend on SLA-verified stages, which are not listed."
+      }
+    ],
+    "required_facts_preserved": false,
+    "missing_facts": ["Overall latency p50/p95/p99/max of 205/238/239/240 ms and the 2,400/4,800 window sample counts."],
+    "usefulness": 3,
+    "notes": "Its main policy and correlation advice is sound, but the capacity rationale joins results whose relationship is not established."
+  }
+]

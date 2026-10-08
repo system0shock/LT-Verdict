@@ -1,0 +1,157 @@
+S0 all defects {'T3': 4, 'T1': 12, 'T7': 2, 'T2': 3, 'T8': 5, 'T4': 5, 'T5': 2} | in hard responses {'T3': 4, 'T1': 12, 'T7': 2, 'T2': 3, 'T8': 4, 'T4': 5, 'T5': 2}
+S1 all defects {'T8': 4, 'T2': 5, 'T1': 3, 'T3': 4, 'T5': 2, 'T7': 1} | in hard responses {'T8': 3, 'T2': 5, 'T1': 3, 'T3': 4, 'T5': 2, 'T7': 1}
+S2 all defects {'T2': 9, 'T3': 2, 'T7': 5, 'T5': 2, 'T1': 3, 'T4': 4, 'T8': 2} | in hard responses {'T2': 9, 'T3': 2, 'T7': 5, 'T5': 2, 'T1': 3, 'T4': 3, 'T8': 2}
+
+===== S0
+-- K01-1 hard=True useful=2 facts_ok=False missing=['run_validity VALID', 'whole-run sample_count 37,349']
+   T3 #/hypotheses/1/possible_explanation | A small number of samples exhibit tail latency well above the p99 | The aggregates do not give the number of samples substantially above p99.
+-- K01-2 hard=False useful=4 facts_ok=False missing=['run_validity VALID', 'whole-run sample_count 37,349']
+-- K02-1 hard=True useful=2 facts_ok=True missing=[]
+   T1 #/hypotheses/1/recommended_check | Configure or implement a knee detector ... so a knee and verified bound load can be estimated | A verified capacity bound does not depend on the unimplemented knee detector.
+   T1 #/recommendations/1/action | Implement or configure knee detection ... before estimating capacity | This recommends changing a fixed product limitation as a prerequisite for a bound.
+-- K02-2 hard=True useful=1 facts_ok=True missing=[]
+   T7 #/summary | the capacity verdict is NO_POLICY | NO_POLICY is the policy verdict; the capacity summary and stage are INDETERMINATE.
+   T2 #/summary | metrics ... in window ... 0 errors across 47,396 samples | 47,396 is the whole-run sample count, while the window policy denominator is 38,842.
+   T1 #/recommendations/2/action | estimate a capacity knee with a functioning knee detector | The absent knee is a fixed product limitation and does not block a bound from verified stages.
+   T8 #/hypotheses/2/possible_explanation | the application services were not CPU-saturated | CPU usage aggregates without service CPU limits do not establish whether a service was saturated.
+-- K03-1 hard=True useful=2 facts_ok=True missing=[]
+   T1 #/hypotheses/3/recommended_check | implement a knee detector so an upper capacity bound and knee point can be estimated | An upper bound comes from verified stage outcomes independently of the unavailable knee detector.
+   T1 #/recommendations/1/action | enable a knee detector to estimate an upper capacity bound | This advises enabling a fixed product limitation and incorrectly links it to computing an upper bound.
+   T3 #/hypotheses/4/possible_explanation | The single slowest sampled request | The aggregates do not state how many samples shared the reported maximum.
+-- K03-2 hard=True useful=2 facts_ok=True missing=[]
+   T1 #/hypotheses/0/recommended_check | enable/implement knee detection | Knee detection is a fixed product limitation, and the upper capacity bound does not depend on enabling it.
+   T1 #/recommendations/1/action | Enable or implement knee detection | This repeats an invalid operator action for the fixed KNEE_DETECTOR_NOT_IMPLEMENTED limitation.
+-- K04-1 hard=True useful=2 facts_ok=True missing=[]
+   T4 #/hypotheses/1/observation | 437,000/44,986 for each transaction | The home transaction reports 438,000/44,986.
+-- K04-2 hard=False useful=4 facts_ok=True missing=[]
+-- K05-1 hard=True useful=3 facts_ok=True missing=[]
+   T2 #/summary | the two recorded errors are the entire error population in these scopes | Matching aggregate counts do not establish that the overall and checkout scopes contain the same two error samples.
+-- K05-2 hard=False useful=5 facts_ok=True missing=[]
+-- K06-1 hard=True useful=2 facts_ok=False missing=['Run validity is VALID.']
+   T3 #/hypotheses/0/possible_explanation | A defect or failure mode exclusive to the checkout request path generated all 3,688 errors | The aggregates localize reported sampler errors but do not prove an exclusive root cause.
+   T5 #/hypotheses/3/possible_explanation | At least some failing checkout requests exhausted a ~10 s timeout boundary, likely because a downstream call never completed | The evidence does not pair failed samples with maximum latency or identify a timeout boundary or downstream call.
+   T1 #/caveats/4 | Resource verdict NO_POLICY is the absence of a resource policy | NO_POLICY does not establish that a policy is absent; no applicable policy or no required capacity are also possible.
+-- K07-1 hard=True useful=3 facts_ok=True missing=[]
+   T4 #/hypotheses/3/observation | zero in 28 of 33 buckets | The timeline has 24 zero buckets and nine nonzero buckets.
+   T8 #/recommendations/4/rationale | Memory increased from 2666496 to 37756928 bytes during the window | The evidence reports a minimum and maximum without their timestamps, so their order is unknown.
+-- K07-2 hard=True useful=4 facts_ok=True missing=[]
+   T2 #/summary | All 2471 recorded errors belong to the checkout transaction metric (error_type frontend.request_error, service frontend) | The evidence reports matching aggregates but does not link individual OpenSearch events to checkout samples.
+-- K08-1 hard=True useful=2 facts_ok=False missing=['Run validity is VALID.']
+   T8 #/hypotheses/3/observation | reaches up to 0.56895862409 in the last observed cells | The aggregate and finding do not identify those cells as the last observed cells.
+   T8 #/recommendations/4/rationale | A large memory drop combined with missing metric cells | Minimum and maximum memory aggregates do not establish a drop or its timing.
+-- K08-2 hard=False useful=5 facts_ok=True missing=[]
+-- K09-1 hard=False useful=4 facts_ok=True missing=[]
+-- K09-2 hard=True useful=2 facts_ok=True missing=[]
+   T3 #/hypotheses/1/possible_explanation | Rare tail-latency outliers exist | The aggregates establish at least one value above p99 but do not establish multiple outliers.
+   T4 #/caveats/5 | No thresholds, budgets, or target load values are included | The evidence includes an overall error-rate policy threshold of 0.01.
+-- K10-1 hard=False useful=4 facts_ok=True missing=[]
+-- K10-2 hard=True useful=2 facts_ok=True missing=[]
+   T5 #/recommendations/3/rationale | a single short measurement window | The evidence supplies aggregate throughput ratios but does not establish that the run had one short measurement window.
+-- K11-1 hard=True useful=3 facts_ok=True missing=[]
+   T7 #/caveats/7 | run_validity is VALID only for the collected data | The evidence states run_validity is VALID; resource coverage is a separate status and does not qualify that verdict.
+-- K11-2 hard=False useful=3 facts_ok=True missing=[]
+   T8 #/caveats/3 | The 904 ms maximum with p99 77 ms is an outlier | The aggregate values show a high maximum but do not establish an outlier classification.
+-- K12-1 hard=True useful=2 facts_ok=True missing=[]
+   T1 #/hypotheses/0/recommended_check | enable/implement knee detection so an upper-exclusive bound can be estimated | An upper bound is computed from verified stage outcomes independently of the unimplemented knee detector.
+   T1 #/recommendations/0/action | implement/enable capacity knee detection so an upper-exclusive bound can be estimated | This incorrectly makes knee detection a prerequisite for an upper bound.
+   T4 #/caveats/7 | per-service or per-sampler attribution of the latency maxima (e.g., max 1200 ms overall) is not established | The checkout transaction summary reports a 1200 ms maximum, matching the overall maximum.
+-- K12-2 hard=True useful=2 facts_ok=True missing=[]
+   T1 #/hypotheses/0/recommended_check | enable a knee detector, to estimate an upper bound | An upper bound comes from stages with verified product outcomes; it does not require the unimplemented knee detector.
+   T1 #/recommendations/0/action | enable a knee detector before concluding capacity behavior | This invents a knee-detector dependency for assessing capacity beyond the current lower bound.
+   T4 #/caveats/1 | NO_POLICY mean no policy was evaluated | The overall-errors business policy was evaluated and passed in all three windows.
+===== S1
+-- K01-1 hard=True useful=2 facts_ok=True missing=[]
+   T8 #/recommendations/0/rationale | whose completeness depends on that error feed | The evidence does not establish that the policy-window error-rate ratio depends on the failed OpenSearch feed.
+-- K01-2 hard=False useful=4 facts_ok=True missing=[]
+-- K02-1 hard=True useful=2 facts_ok=True missing=[]
+   T2 #/hypotheses/4/observation | Business metrics in the window ... overall summary 0 errors out of 47396 samples | The 47,396-sample summary covers the whole run, not just the evaluation window.
+   T1 #/recommendations/1/rationale | no capacity bound can be asserted until a policy or required capacity exists | A bound depends on verified product-outcome stages, while required capacity governs the policy verdict.
+-- K02-2 hard=True useful=2 facts_ok=False missing=['The whole-run count of 0 errors in 47,396 samples is omitted.']
+   T1 #/recommendations/2/rationale | no lower_inclusive/upper_exclusive bound is derived without a configured policy | Bounds come from verified stages with product outcomes; a required capacity is needed for a policy verdict, not for the bound itself.
+-- K03-1 hard=False useful=4 facts_ok=True missing=[]
+-- K03-2 hard=False useful=4 facts_ok=True missing=[]
+   T8 #/hypotheses/2/possible_explanation | The load generator was not saturated in the tested windows | A passing CPU-throttle guard alone does not establish that the generator had no other bottleneck.
+-- K04-1 hard=False useful=5 facts_ok=True missing=[]
+-- K04-2 hard=True useful=2 facts_ok=True missing=[]
+   T3 #/summary | All 7 transaction-level summaries | The evidence contains six transaction summaries; the seventh metric summary is overall.
+-- K05-1 hard=True useful=3 facts_ok=True missing=[]
+   T8 #/hypotheses/2/possible_explanation | remediation is needed on the error source rather than on the run infrastructure | VALID run status and COMPLETE coverage do not rule out a load or test infrastructure cause for the errors.
+   T8 #/recommendations/0/rationale | removing the error source is the only path to a PASS on a subsequent run | A subsequent run could pass through variation or an intentional policy correction without a proven error source being removed.
+-- K05-2 hard=False useful=4 facts_ok=True missing=[]
+-- K06-1 hard=True useful=2 facts_ok=True missing=[]
+   T3 #/recommendations/0/action | Inspect the 3,688 frontend.request_error samples | The evidence reports 3,688 aggregated events but includes only two individual sampled documents.
+   T2 #/summary | All 3,688 run- and window-level errors are reported on the checkout transaction and grouped as frontend.request_error | Matching aggregate counts do not establish that JMeter checkout errors and OpenSearch events are the same individual records.
+-- K06-2 hard=True useful=2 facts_ok=True missing=[]
+   T1 #/summary | NO_POLICY (no capacity policy configured) | NO_POLICY does not prove that no capacity policy was configured.
+   T5 #/recommendations/2/rationale | the service most likely involved in the failing checkout flow | The evidence contains no call graph or topology supporting paymentservice as the most likely service involved.
+   T3 #/recommendations/1/rationale | All 3688 errors are attributed to the checkout transaction and recorded as frontend.request_error with message 'request error' | Only two OpenSearch messages are sampled, and the evidence does not establish individual identity with the checkout errors.
+-- K07-1 hard=True useful=4 facts_ok=True missing=[]
+   T5 #/hypotheses/4/observation | frontend max latency is 989 ms | The 989 ms maximum belongs to the overall sample summary; the evidence provides no frontend latency metric.
+-- K07-2 hard=True useful=4 facts_ok=True missing=[]
+   T2 #/caveats/2 | this is the same error set cross-referenced by the pipeline | Matching aggregate counts across transaction, policy-window, and OpenSearch scopes do not establish that they contain the same individual errors.
+-- K08-1 hard=True useful=2 facts_ok=False missing=['Run validity is VALID.']
+   T2 #/hypotheses/0/observation | the check is attributed to the checkout transaction | The failed policy check has overall scope in a window; the checkout count is a separate whole-run transaction summary.
+-- K08-2 hard=True useful=2 facts_ok=False missing=['Run validity is VALID.']
+   T2 #/recommendations/0/rationale | All recorded errors belong to the checkout transaction ... and are emitted by the frontend service | Matching JMeter and OpenSearch counts do not establish that they record the same events.
+-- K09-1 hard=False useful=4 facts_ok=False missing=['run_validity=VALID', 'Overall latency maximum of 904 ms']
+-- K09-2 hard=True useful=3 facts_ok=True missing=[]
+   T3 #/recommendations/3/rationale | Max values are single-sample observations | The aggregates do not show how many samples reached either maximum.
+-- K10-1 hard=True useful=2 facts_ok=True missing=[]
+   T7 #/hypotheses/3/possible_explanation | The analysis found no threshold violations within the sampled JMeter window | With NO_POLICY, no policy thresholds were evaluated, so the empty findings list cannot establish an absence of violations.
+-- K10-2 hard=False useful=5 facts_ok=True missing=[]
+-- K11-1 hard=False useful=4 facts_ok=True missing=[]
+-- K11-2 hard=False useful=5 facts_ok=True missing=[]
+-- K12-1 hard=False useful=4 facts_ok=False missing=['Run validity VALID is not stated.', 'Analysis coverage COMPLETE is not stated.']
+-- K12-2 hard=False useful=4 facts_ok=True missing=[]
+===== S2
+-- K01-1 hard=True useful=2 facts_ok=False missing=['run_validity VALID']
+   T2 #/recommendations/3/rationale | 1315 samples fall outside the window | The whole-run count and policy-window denominator cannot be subtracted to establish an outside-window sample count.
+   T3 #/hypotheses/2/possible_explanation | Rare tail-latency spikes exist | Aggregate percentiles and maxima establish neither the number nor the timing of latency spikes.
+-- K01-2 hard=True useful=2 facts_ok=True missing=[]
+   T2 #/hypotheses/1/possible_explanation | the 1315 samples outside the window | Subtracting a policy-window denominator from a whole-run count does not establish how many samples fell outside the window.
+-- K02-1 hard=True useful=2 facts_ok=False missing=['Run validity VALID is omitted.', 'Analysis coverage INCOMPLETE is omitted.']
+   T7 #/summary | policy_verdict NO_POLICY because the diagnostic generator CPU throttle guard FAILed | The failed guard makes the stage unusable; it does not cause the NO_POLICY verdict.
+   T5 #/hypotheses/0/possible_explanation | The load-generator container was CPU-throttled | The evidence identifies a throttled generator but provides no container topology.
+   T1 #/hypotheses/1/recommended_check | configure one so a bound can be produced | A capacity policy is not a prerequisite for a bound from verified product-outcome stages.
+-- K02-2 hard=True useful=2 facts_ok=True missing=[]
+   T2 #/hypotheses/2/observation | Whole-run latencies ... all measured during the window | Whole-run aggregate latencies cannot be assigned entirely to the shorter policy window.
+   T7 #/recommendations/2/action | Configure the required capacity policy/rules before the next run so the window can yield PASS or FAIL | The evidence already reports a PASS for the window business policy.
+   T2 #/caveats/0 | 8,554 whole-run samples fall outside the window | Subtracting the policy-window denominator from the whole-run aggregate does not establish an exact outside-window sample count.
+-- K03-1 hard=True useful=3 facts_ok=False missing=['Run validity is VALID.', 'Analysis coverage is COMPLETE.']
+   T7 #/summary | The deterministic capacity verdict for this run is LOWER_BOUND | LOWER_BOUND is the bound type; the deterministic policy verdict is NO_POLICY.
+-- K03-2 hard=False useful=5 facts_ok=True missing=[]
+-- K04-1 hard=True useful=2 facts_ok=True missing=[]
+   T4 #/caveats/4 | All counts are whole-run scope | The evidence also reports counts for six transaction scopes.
+-- K04-2 hard=True useful=2 facts_ok=True missing=[]
+   T5 #/hypotheses/2/observation | derived facts section 3 lists no capacity_summary | The supplied evidence has no derived-facts section, so this invents a source for the claim.
+-- K05-1 hard=True useful=2 facts_ok=False missing=['run_validity is VALID', 'analysis_coverage is COMPLETE']
+   T2 #/hypotheses/1/possible_explanation | both recorded errors correspond to the checkout transaction | Equal aggregate counts across different scopes do not establish that the same samples produced the errors.
+   T4 #/caveats/1 | All error counts and the policy check are whole-run values | The evidence also contains a transaction-scoped checkout error count.
+-- K05-2 hard=True useful=3 facts_ok=True missing=[]
+   T2 #/hypotheses/0/observation | derived facts confirm the transaction sample counts (100) sum to the overall count (100) | The input has no derived facts, and matching totals across overall and transaction scopes do not establish a shared sample population.
+   T8 #/hypotheses/1/observation | removing or adding a single errored sample changes the pass/fail outcome | Adding an errored sample leaves the rate above 1%, and removing one from both the error count and denominator also leaves it above 1%.
+-- K06-1 hard=True useful=3 facts_ok=False missing=['Run validity is VALID.']
+   T1 #/hypotheses/5/possible_explanation | Because no resource/capacity policy was configured | NO_POLICY can also mean no applicable policy or no required capacity, so configuration absence is not established.
+-- K06-2 hard=False useful=4 facts_ok=False missing=['Run validity is VALID.']
+   T4 #/hypotheses/4/recommended_check | truncated 'request error' samples | The two sampled messages are marked message_truncated=false; the sampling limit is the relevant constraint.
+-- K07-1 hard=True useful=4 facts_ok=True missing=[]
+   T2 #/recommendations/1/rationale | All 2471 errors are from the checkout transaction as frontend.request_error | The checkout and OpenSearch aggregates have matching counts, but the evidence does not join error documents to transaction samples.
+-- K07-2 hard=True useful=3 facts_ok=True missing=[]
+   T4 #/caveats/2 | sampled messages truncated to 4096 bytes | 4096 bytes is the configured maximum, and both sampled documents explicitly report message_truncated=false.
+-- K08-1 hard=True useful=3 facts_ok=True missing=[]
+   T2 #/summary | All 2,312 whole-run errors are attributable to a single transaction ... and to a single error group ... that appears only between | The separate JMeter and OpenSearch aggregates do not prove event identity or place checkout failures in the OpenSearch interval.
+-- K08-2 hard=True useful=3 facts_ok=True missing=[]
+   T2 #/summary | All 2,312 errors are checkout-transaction samples and are reported by the frontend service | The evidence does not link the checkout samples to the OpenSearch frontend error documents as the same events.
+-- K09-1 hard=False useful=5 facts_ok=True missing=[]
+-- K09-2 hard=False useful=5 facts_ok=True missing=[]
+-- K10-1 hard=False useful=4 facts_ok=True missing=[]
+-- K10-2 hard=True useful=2 facts_ok=True missing=[]
+   T3 #/hypotheses/0/possible_explanation | One or a small number of outlier samples ... produced a latency far above the 99th percentile | The aggregates do not reveal how many samples reached the maximum, so the stated multiplicity is unsupported.
+-- K11-1 hard=True useful=2 facts_ok=False missing=['throughput_rps ratio 2623000/44986']
+   T7 #/summary | no policy or required capacity was configured | NO_POLICY does not establish that no policy was configured; a configured policy may have been inapplicable.
+   T1 #/hypotheses/2/recommended_check | Rerun with resource-series capture enabled ... so a capacity evaluation becomes possible | A capacity bound requires stages with verified product outcomes, which resource-series capture alone does not supply.
+-- K11-2 hard=True useful=2 facts_ok=False missing=['throughput_rps ratio 2623000/44986']
+   T7 #/summary | no load-testing policy or required capacity was configured | NO_POLICY establishes that no policy was applicable or no required capacity existed, not that none was configured.
+   T8 #/recommendations/1/action | fill the RESOURCE_GAPS ... including ... the OpenSearch error profile | The evidence does not establish that an OpenSearch error profile is required to resolve RESOURCE_GAPS.
+-- K12-1 hard=False useful=4 facts_ok=False missing=['Run validity VALID is not stated.', 'Analysis coverage COMPLETE is not stated.']
+-- K12-2 hard=False useful=5 facts_ok=True missing=[]

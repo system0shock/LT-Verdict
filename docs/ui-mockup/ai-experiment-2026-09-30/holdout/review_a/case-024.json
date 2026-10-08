@@ -1,0 +1,102 @@
+[
+  {
+    "id": "R047",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T7",
+        "field": "#/output/caveats/5",
+        "quote": "Analysis covers the evaluation window ... only",
+        "why": "The evidence also contains whole-run metric summaries, so the analysis is not limited to the evaluation window."
+      }
+    ],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 3,
+    "notes": "The operator checks are useful, but the coverage caveat misstates the scope of the evidence."
+  },
+  {
+    "id": "R052",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T7",
+        "field": "#/output/hypotheses/3/possible_explanation",
+        "quote": "No SLO/policy appears to have been attached to this run",
+        "why": "NO_POLICY establishes that no rule was applicable to the window, not that none was configured or attached to the run."
+      },
+      {
+        "type": "T7",
+        "field": "#/output/recommendations/5/rationale",
+        "quote": "the diagnostic is COMPLETE only in the sense that it reported nothing to test",
+        "why": "The diagnostic reports one correlation pair tested and evaluable."
+      },
+      {
+        "type": "T7",
+        "field": "#/output/caveats/6",
+        "quote": "Coverage is limited to the 42-second evaluation window",
+        "why": "The evidence includes whole-run metric summaries as well as evaluation-window results."
+      }
+    ],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 2,
+    "notes": "Several useful checks are weakened by unsupported claims about policy configuration and analysis coverage."
+  },
+  {
+    "id": "R061",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T8",
+        "field": "#/output/hypotheses/3/observation",
+        "quote": "resource_series_id 'value' with resource_unit synthetic_unit as the load metric",
+        "why": "The evidence identifies 'value' as the resource series and response_time_p95_ms as the load metric."
+      }
+    ],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 4,
+    "notes": "The advice is mostly accurate and actionable, but it reverses the correlation pair’s metric roles once."
+  },
+  {
+    "id": "R071",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T7",
+        "field": "#/output/summary",
+        "quote": "no policy was configured",
+        "why": "NO_POLICY does not establish whether a policy was configured; it establishes that no rule was applicable to the window."
+      },
+      {
+        "type": "T7",
+        "field": "#/output/hypotheses/5/possible_explanation",
+        "quote": "Because no policy is configured",
+        "why": "The evidence does not establish the run’s policy configuration."
+      },
+      {
+        "type": "T7",
+        "field": "#/output/caveats/0",
+        "quote": "NO_POLICY means no policy was configured",
+        "why": "That interpretation contradicts the product’s NO_POLICY semantics."
+      },
+      {
+        "type": "T7",
+        "field": "#/output/caveats/6",
+        "quote": "No latency or throughput target was defined in this run",
+        "why": "The evidence shows no applicable rule for the window, but does not establish that no targets were defined."
+      },
+      {
+        "type": "T8",
+        "field": "#/output/hypotheses/4/recommended_check",
+        "quote": "so tested anomalies and episodes are produced",
+        "why": "Enabling anomaly testing could produce tested results, but it cannot guarantee that anomaly episodes will occur."
+      }
+    ],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 2,
+    "notes": "The response preserves the reported results but repeatedly treats NO_POLICY as proof of absent configuration."
+  }
+]

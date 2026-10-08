@@ -1,0 +1,210 @@
+{
+ "stage": "B",
+ "mode": "live",
+ "model": "deepseek-v4-flash-0731",
+ "tag": {
+  "phase": "holdout",
+  "attempt_id": "case-023-1-B-t1",
+  "arm": "B",
+  "stage": null,
+  "case": "case-023",
+  "rep": 1,
+  "try": 1
+ },
+ "retry_policy": "d2",
+ "qwen_exit": 0,
+ "wall_ms": 60391,
+ "relay": {
+  "schema_version": "advisory-ai-runtime-relay.v1",
+  "status": "FORWARDED_STRUCTURED_OUTPUT",
+  "received_request_count": 1,
+  "forwarded_request_count": 1,
+  "outcomes": [
+   "FORWARDED_STRUCTURED_OUTPUT"
+  ],
+  "retry_refused_reason": null,
+  "first_refused_reason": null,
+  "model_id": "deepseek-v4-flash-0731",
+  "retry_policy": "d2",
+  "requests": [
+   {
+    "ordinal": 1,
+    "forwarded": true,
+    "outcome": "FORWARDED_STRUCTURED_OUTPUT",
+    "provider_status": 200,
+    "latency_ms": 59156,
+    "usage": {
+     "prompt_tokens": 28012,
+     "total_tokens": 34116,
+     "completion_tokens": 6104,
+     "prompt_tokens_details": {
+      "cached_tokens": 1024
+     },
+     "completion_tokens_details": {
+      "reasoning_tokens": 3561
+     }
+    },
+    "model_returned": "deepseek-v4-flash-0731"
+   }
+  ],
+  "usage": {
+   "prompt_tokens": 28012,
+   "completion_tokens": 6104,
+   "total_tokens": 34116
+  },
+  "latency_ms": 59156
+ },
+ "relay_status": "FORWARDED_STRUCTURED_OUTPUT",
+ "usage": {
+  "prompt_tokens": 28012,
+  "completion_tokens": 6104,
+  "total_tokens": 34116
+ },
+ "latency_ms": 59156,
+ "retried": false,
+ "retry_refused_reason": null,
+ "status": "OK",
+ "note": null,
+ "output": {
+  "schema_version": "ai-advice-output.v1",
+  "summary": "The referenced LT Verdict analysis is VALID with COMPLETE coverage and a deterministic policy verdict of NO_POLICY. Both the reference window (epoch 1767225600000–1767225720000) and the evaluation window (epoch 1767225720000–1767225960000) report NO_POLICY for business and resource verdicts, meaning no applicable policy rule was evaluated; healthy-looking metrics (0 sampled errors, p95 latency ~236 ms on 7200 overall samples) do not convert NO_POLICY into PASS. Sixteen resource-to-p95-latency correlation pairs were tested in the evaluation window; all dropped the constant 20 requests/s target control (CONSTANT_CONTROL), all report uncertainty NOT_ESTIMATED, and only pair-14 (resource-14) passed Holm-adjusted selection (adjusted p 0.016) as a correlation candidate with best_lag_ms -10000 and best_lag_rho -0.4872. Clock alignment is not verified by core, and the anomaly diagnostic tested 0 episodes, so lead/lag ordering, load dependence, and stability should not be inferred. Advice preserves the NO_POLICY verdict and recommends clock verification, policy configuration, and load-varying reruns before drawing causal conclusions.",
+  "hypotheses": [
+   {
+    "rank": 1,
+    "observation": "Both the reference and evaluation window policy summaries report business_verdict NO_POLICY, resource_verdict NO_POLICY, and overall verdict NO_POLICY, and the deterministic policy_verdict is NO_POLICY.",
+    "possible_explanation": "The product reports NO_POLICY when no applicable rule exists for the window (no business policy rule and no resource rule with effect: sla); a healthy window or zero sampled errors does not turn NO_POLICY into PASS.",
+    "recommended_check": "Confirm which business policy rules and resource rules with effect: sla were configured for these windows; if none apply, configure an applicable SLA policy and rerun so the product can evaluate PASS or FAIL.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/37",
+     "analysis-result.json#/evidence/38",
+     "analysis-result.json#/policy_verdict"
+    ]
+   },
+   {
+    "rank": 2,
+    "observation": "pair-14 (resource-14 vs response_time_p95_ms) is the only selected correlation headline after Holm correction at alpha 0.05 (holm_adjusted_p_value 0.016, max_p_value 0.001, status SELECTED), with best_lag_ms -10000, best_lag_rho -0.487172887046, raw_rho -0.105232474746, partial_rho -0.105232474746, and is reported as a correlation_candidate finding.",
+    "possible_explanation": "A lagged association between resource-14 and p95 response time in the evaluation window appears strong relative to the 16-hypothesis family; however, the best lag sits at the edge of the tested lag range and its direction cannot be interpreted as causal timing without verified clocks or load variation.",
+    "recommended_check": "Verify clock alignment between metric and resource telemetry first, then inspect the resource-14 series around the evaluation window (mean 0.485131525, slope_per_second 0.0005006 in that window) and rerun with variable load to test whether the association reproduces.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/55",
+     "analysis-result.json#/evidence/71",
+     "analysis-result.json#/findings/0"
+    ]
+   },
+   {
+    "rank": 3,
+    "observation": "All 16 correlation pairs list controls_requested [\"target\"], controls_dropped [\"target\"], controls_used [], and reason CONSTANT_CONTROL; the target series is constant at 20 requests/s with sample_standard_deviation 0 in both windows, and sensitivity_without_achieved_rps is null for every pair.",
+    "possible_explanation": "Because the load target was a constant 20 requests/s through the window, the load control could not be used, so partial correlations were computed without controlling for achieved load and no load-sensitivity estimate could be produced.",
+    "recommended_check": "Rerun with stepped or otherwise varied load so the target control is usable, controls_used is non-empty, and sensitivity_without_achieved_rps can be estimated.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/41",
+     "analysis-result.json#/evidence/19",
+     "analysis-result.json#/evidence/36"
+    ]
+   },
+   {
+    "rank": 4,
+    "observation": "Pair-04, pair-11, and pair-12 carry status CANDIDATE with best_lag_rho values of -0.342830910072, -0.322225144351, and 0.330827674706 respectively, but their Holm-adjusted p-values are 0.686, 0.702, and 0.51 with reason HOLM_NOT_REJECTED.",
+    "possible_explanation": "Within a family of 16 simultaneous hypotheses, these non-selected candidates are consistent with chance-level fluctuation and were not rejected at the family level.",
+    "recommended_check": "Do not treat these candidates as load effects; keep them only as leads and re-examine their series if a subsequent load-varying run reproduces them.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/45",
+     "analysis-result.json#/evidence/52",
+     "analysis-result.json#/evidence/53",
+     "analysis-result.json#/evidence/61",
+     "analysis-result.json#/evidence/68",
+     "analysis-result.json#/evidence/69"
+    ]
+   },
+   {
+    "rank": 5,
+    "observation": "The resource binding reports clock_alignment \"not_verified_by_core\", and correlation pairs report best lags up to ±10000 ms (pair-14 best_lag_ms -10000).",
+    "possible_explanation": "Without verified clock alignment between the metric and resource telemetry feeds, an optimal lag value cannot support a lead/lag ordering or a temporal causal hypothesis.",
+    "recommended_check": "Verify clock synchronization/alignment of the telemetry feeds before interpreting any best_lag_ms value as a timing relationship.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/2",
+     "analysis-result.json#/evidence/55"
+    ]
+   },
+   {
+    "rank": 6,
+    "observation": "The diagnostic summary reports anomalies_tested 0, episodes_reported 0, pairs_evaluable 16, pairs_tested 16, status COMPLETE, and uncertainty NOT_ESTIMATED.",
+    "possible_explanation": "Zero anomalies tested and zero episodes reported reflect the diagnostic method run in this analysis, not proof that no resource-to-response relationship exists or that the service has spare capacity.",
+    "recommended_check": "Base capacity reasoning on the selected candidate and on new load-varying runs rather than on the absence of reported episodes.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/73"
+    ]
+   }
+  ],
+  "recommendations": [
+   {
+    "rank": 1,
+    "action": "Verify clock alignment between the JMeter metric telemetry and the service resource telemetry before interpreting any lagged correlation.",
+    "rationale": "The resource binding states clock_alignment \"not_verified_by_core\"; an unverified clock relationship cannot support lead/lag ordering or temporal causation, and several pairs, including the selected pair-14, have best lags at ±10000 ms.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/2",
+     "analysis-result.json#/evidence/55"
+    ]
+   },
+   {
+    "rank": 2,
+    "action": "Configure an applicable business policy rule and/or a resource rule with effect: sla for the window, then rerun so the product can evaluate PASS or FAIL.",
+    "rationale": "Both windows report NO_POLICY for business and resource verdicts, and the deterministic verdict stays NO_POLICY until an applicable rule is evaluated; healthy metrics alone never turn NO_POLICY into PASS.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/37",
+     "analysis-result.json#/evidence/38",
+     "analysis-result.json#/policy_verdict"
+    ]
+   },
+   {
+    "rank": 3,
+    "action": "Inspect the resource-14 series (and its neighbors in the same service group, e.g. resource-15) across the evaluation window and rerun to see whether the pair-14 negative lagged association reproduces.",
+    "rationale": "pair-14 is the only headline selected after Holm correction (adjusted p 0.016) and is reported as a correlation_candidate, but its uncertainty is NOT_ESTIMATED and its best lag is at the tested range boundary.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/55",
+     "analysis-result.json#/evidence/71",
+     "analysis-result.json#/findings/0",
+     "analysis-result.json#/evidence/56"
+    ]
+   },
+   {
+    "rank": 4,
+    "action": "Rerun the test with stepped or otherwise varied load instead of a constant 20 requests/s target.",
+    "rationale": "The target series is constant with 0 standard deviation, so every correlation pair dropped the target control (CONSTANT_CONTROL), leaving no load control, no controls_used, and sensitivity_without_achieved_rps null.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/19",
+     "analysis-result.json#/evidence/36",
+     "analysis-result.json#/evidence/41"
+    ]
+   },
+   {
+    "rank": 5,
+    "action": "Report the run outcome as NO_POLICY without interpreting zero errors, low latency, zero anomalies, or the absence of selected correlations as a pass or as proof of stability or spare capacity.",
+    "rationale": "NO_POLICY is deterministic and independent of how healthy the run looks; the anomaly diagnostic tested 0 episodes and all correlation uncertainty is NOT_ESTIMATED, so those absences have no evidentiary weight for stability or capacity.",
+    "evidence_refs": [
+     "analysis-result.json#/policy_verdict",
+     "analysis-result.json#/evidence/73",
+     "analysis-result.json#/evidence/0"
+    ]
+   }
+  ],
+  "caveats": [
+   "The deterministic verdict NO_POLICY is preserved exactly; this advice does not change it and a rerun only yields PASS/FAIL if an applicable rule is evaluated.",
+   "Correlation pairs cover only the evaluation window (from_epoch_ms 1767225720000 to 1767225960000, 240 cells); the reference window and parts of the run outside these windows are not covered by correlation analysis.",
+   "Every correlation pair reports uncertainty NOT_ESTIMATED, controls dropped due to CONSTANT_CONTROL (constant 20 requests/s target), and null sensitivity_without_achieved_rps, so the statistical evidence is limited even for the selected pair-14.",
+   "Clock alignment between telemetry feeds is not verified by core, so best_lag_ms values cannot support lead/lag ordering or temporal causation.",
+   "The anomaly diagnostic reported anomalies_tested 0 and episodes_reported 0; this does not prove stability, spare capacity, low load, or absence of a problem.",
+   "Metric summaries are scoped to the overall run and one transaction label 'request' within sampled windows (7200 samples overall, 2400 reference, 4800 evaluation); counts are not comparable across scopes.",
+   "No capacity bound, capacity knee, or generator guard data is present in the referenced evidence; capacity limits and generator health were not assessed.",
+   "The current date context (October 7, 2026) is unrelated to the analysis timestamps (epochs around 1767225600000); no temporal relationship between them is asserted."
+  ]
+ },
+ "schema": "ai-experiment-run.holdout.v1",
+ "case": "case-023",
+ "rep": 1,
+ "arm": "B",
+ "try": 1,
+ "attempt_id": "case-023-1-B-t1",
+ "model_id": "deepseek-v4-flash-0731",
+ "prompt_sha256": "3c0f28bee6517c13c5c854615e7d3d59301893d9723880818e4034a32e9133bf"
+}

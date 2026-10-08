@@ -1,0 +1,120 @@
+[
+  {
+    "id": "R024",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T7",
+        "field": "#/summary",
+        "quote": "because no capacity/business SLA is configured",
+        "why": "NO_POLICY establishes that no applicable rule was evaluated, not that no policy was configured."
+      },
+      {
+        "type": "T7",
+        "field": "#/hypotheses/0/possible_explanation",
+        "quote": "No capacity or business SLA ... was configured",
+        "why": "The evidence cannot establish whether rules were unconfigured rather than configured but inapplicable."
+      },
+      {
+        "type": "T1",
+        "field": "#/hypotheses/1/possible_explanation",
+        "quote": "so no capacity knee or load bound was produced",
+        "why": "A capacity bound is computed independently of knee detection and instead requires verified stage outcomes."
+      },
+      {
+        "type": "T1",
+        "field": "#/hypotheses/1/recommended_check",
+        "quote": "Run or implement a knee detector",
+        "why": "KNEE_DETECTOR_NOT_IMPLEMENTED is a fixed product limitation and implementing or enabling it is not an operator action required for a bound."
+      },
+      {
+        "type": "T1",
+        "field": "#/recommendations/1/action",
+        "quote": "Add or invoke knee detection",
+        "why": "This incorrectly recommends knee detection as a way to resolve the capacity result."
+      },
+      {
+        "type": "T7",
+        "field": "#/hypotheses/5/possible_explanation",
+        "quote": "has not been independently verified against the intended execution plan",
+        "why": "The evidence attributes the unverified stage outcome to missing applicable SLA evaluation, not to unverified JMX or execution-plan structure."
+      }
+    ],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 2,
+    "notes": "It preserves the reported results but gives materially wrong knee-detector advice and overstates the cause of NO_POLICY."
+  },
+  {
+    "id": "R030",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T3",
+        "field": "#/hypotheses/0/recommended_check",
+        "quote": "locate the 1500 ms sample",
+        "why": "The aggregate maximum does not establish that exactly one sample had 1500 ms latency."
+      },
+      {
+        "type": "T1",
+        "field": "#/hypotheses/2/recommended_check",
+        "quote": "Implement knee detection",
+        "why": "Knee detection is a fixed unimplemented product capability and is not required to compute a capacity bound."
+      },
+      {
+        "type": "T1",
+        "field": "#/recommendations/2/action",
+        "quote": "Implement knee detection",
+        "why": "This wrongly presents knee detection as an operator remedy for determining capacity."
+      },
+      {
+        "type": "T8",
+        "field": "#/recommendations/3/rationale",
+        "quote": "The 3x gap between max and p99",
+        "why": "1500 ms is approximately 10.7 times 140 ms, not three times."
+      },
+      {
+        "type": "T2",
+        "field": "#/caveats/6",
+        "quote": "Sample count (2401) ... describe only the observed 10-minute windows",
+        "why": "The 2401 sample count is a whole-run metric-summary quantity, whereas the explicit evaluation window is shorter than the run."
+      }
+    ],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 2,
+    "notes": "Several useful cautions are present, but the knee-detector recommendation and unsupported singular maximum are misleading."
+  },
+  {
+    "id": "R119",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T2",
+        "field": "#/caveats/7",
+        "quote": "Metric summaries are scoped to the sampled window",
+        "why": "The metric summaries are whole-run overall and transaction scopes, not the shorter evaluation-window scope."
+      }
+    ],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 4,
+    "notes": "The advice is otherwise accurate and appropriately distinguishes diagnostic guards, NO_POLICY, and the knee limitation."
+  },
+  {
+    "id": "R125",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T3",
+        "field": "#/recommendations/3/action",
+        "quote": "the 1500 ms maximum latency sample",
+        "why": "The maximum aggregate does not show that there was only one sample at 1500 ms."
+      }
+    ],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 4,
+    "notes": "The response accurately explains the verdict and operator actions aside from treating the maximum as a unique sample."
+  }
+]

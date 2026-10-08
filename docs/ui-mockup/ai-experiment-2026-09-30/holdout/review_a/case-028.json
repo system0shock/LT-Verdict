@@ -1,0 +1,58 @@
+[
+  {
+    "id": "R015",
+    "hard_defect": false,
+    "defects": [],
+    "required_facts_preserved": false,
+    "missing_facts": ["The response omits the reported 0 errors and 36,000 whole-run samples."],
+    "usefulness": 4,
+    "notes": "The advice preserves the verdict and gives useful, verifiable checks for the candidate signals."
+  },
+  {
+    "id": "R103",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T7",
+        "field": "#/caveats/4",
+        "quote": "no data after 1704067800000 is analyzed",
+        "why": "The evidence also contains a whole-run summary, and the 83 ms difference between run and evaluation intervals does not establish that data was unanalyzed."
+      }
+    ],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 3,
+    "notes": "Most checks are useful, but the coverage caveat misstates what the analysis includes."
+  },
+  {
+    "id": "R143",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T2",
+        "field": "#/hypotheses/0/observation",
+        "quote": "workload-01 p95 is a flat 100 ms",
+        "why": "A 100 ms window aggregate and a 300-second episode do not establish a flat p95 series throughout the 480-second window."
+      },
+      {
+        "type": "T7",
+        "field": "#/caveats/7",
+        "quote": "overall/transaction-scoped latency policy checks present in the evidence",
+        "why": "The latency policy checks have overall scope; the transaction entry is a metric summary, not a policy check."
+      }
+    ],
+    "required_facts_preserved": false,
+    "missing_facts": ["Run validity VALID and analysis coverage COMPLETE are not stated."],
+    "usefulness": 2,
+    "notes": "Several checks are actionable, but the response overstates the latency series and policy-check coverage."
+  },
+  {
+    "id": "R145",
+    "hard_defect": false,
+    "defects": [],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 5,
+    "notes": "It preserves the key results and keeps the correlation, anomaly, and possible causes appropriately qualified."
+  }
+]

@@ -1,0 +1,167 @@
+{
+ "stage": "S2",
+ "mode": "live",
+ "model": "deepseek-v4-flash-0731",
+ "tag": {
+  "phase": "v2-pilot",
+  "stage": "S2",
+  "case": "K02",
+  "rep": 2,
+  "attempt": 1
+ },
+ "qwen_exit": 0,
+ "wall_ms": 79756,
+ "relay": {
+  "schema_version": "advisory-ai-runtime-relay.v1",
+  "status": "FORWARDED_STRUCTURED_OUTPUT",
+  "request_count": 1,
+  "usage": {
+   "prompt_tokens": 7793,
+   "total_tokens": 15829,
+   "completion_tokens": 8036,
+   "prompt_tokens_details": {
+    "cached_tokens": 1024
+   },
+   "completion_tokens_details": {
+    "reasoning_tokens": 5808
+   }
+  },
+  "latency_ms": 78401,
+  "model_returned": "deepseek-v4-flash-0731"
+ },
+ "relay_status": "FORWARDED_STRUCTURED_OUTPUT",
+ "usage": {
+  "prompt_tokens": 7793,
+  "total_tokens": 15829,
+  "completion_tokens": 8036,
+  "prompt_tokens_details": {
+   "cached_tokens": 1024
+  },
+  "completion_tokens_details": {
+   "reasoning_tokens": 5808
+  }
+ },
+ "latency_ms": 78401,
+ "status": "OK",
+ "note": null,
+ "output": {
+  "schema_version": "ai-advice-output.v1",
+  "summary": "Deterministic verdict for this run is NO_POLICY with an INDETERMINATE capacity bound (lower_inclusive=null, upper_exclusive=null) and INCOMPLETE coverage, caused by CAPACITY_GUARD_FAILED and CAPACITY_STAGE_NOT_VERIFIED. The evaluation window was complete (30/30 bins, 0 dropped cells) and the business error-rate window PASSed (0 errors / 38,842 samples), but the diagnostic load-generator guard generator-cpu-throttle-ratio (threshold 0.2) FAILed: the generator's CFS throttled-period ratio averaged 0.861 with a median and q95 of 1.0, and 27 of 30 cells exceeded the threshold. Per product contract, a failed diagnostic guard on the load generator makes stage d16-cpu-limited-20users unusable for a product bound; it never creates an upper bound, and the remedy is a rerun with a generator that is not CPU-saturated. Because no capacity/required-capacity policy appears configured, NO_POLICY (not PASS/FAIL) is the correct verdict; a healthy business window or a future clean rerun does not by itself turn this into PASS. No capacity bound exists in this run, and this should not be read as either SUT failure or proven spare capacity.",
+  "hypotheses": [
+   {
+    "rank": 1,
+    "observation": "Stage d16-cpu-limited-20users achieved 20/20 users with 30/30 complete bins but is marked INDETERMINATE with reason CAPACITY_GUARD_FAILED (capacity summary), and the diagnostic guard on generator-cpu-throttle-ratio (threshold >0.2) has status FAIL; the series shows mean 0.861, median 1.0, max 1.0.",
+    "possible_explanation": "Per product contract, a failed diagnostic guard on the load generator makes the stage unusable for a capacity bound; the generator appears to have been CPU-throttled for most of the window, so the stage cannot be verified as delivering load without throttling.",
+    "recommended_check": "Rerun the stage with a load generator that is not CPU-saturated, then confirm generator-cfs_throttled_period_ratio stays at or below 0.2 in every cell of the window.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/12",
+     "analysis-result.json#/evidence/16",
+     "analysis-result.json#/evidence/19"
+    ]
+   },
+   {
+    "rank": 2,
+    "observation": "The capacity summary reports policy_verdict NO_POLICY with reasons CAPACITY_GUARD_FAILED and CAPACITY_STAGE_NOT_VERIFIED, and the window policy summary reports resource_verdict NO_POLICY while business_verdict is PASS.",
+    "possible_explanation": "No required-capacity policy appears configured for this run; a missing policy is a distinct state from pass or fail, so the product correctly reports NO_POLICY rather than PASS/FAIL.",
+    "recommended_check": "Confirm whether a required-capacity policy was specified for this run; if a capacity verdict is desired, configure such a policy and rerun.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/18",
+     "analysis-result.json#/evidence/19"
+    ]
+   },
+   {
+    "rank": 3,
+    "observation": "The generator throttle-ratio series sits at its ceiling for most of the window (median 1.0, q75 1.0, q95 1.0) and the violation finding reports 27 cells with observed values between 0.395833333 and 1.0; active threads were constant at 20.",
+    "possible_explanation": "The load generator host appears CPU-limited for nearly the whole evaluation window, which may have impaired the consistency of load generation even though 20 threads were active.",
+    "recommended_check": "Inspect the load generator host's CPU quota/cores to confirm whether the throttling is environmental, and rerun on a generator with sufficient CPU headroom.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/12",
+     "analysis-result.json#/evidence/13",
+     "analysis-result.json#/findings/0"
+    ]
+   },
+   {
+    "rank": 4,
+    "observation": "The resource binding for the evaluation window has clock_alignment=not_verified_by_core.",
+    "possible_explanation": "Without verified clock alignment, the timing relationships between generator throttling, SUT resource metrics, and latency cannot be ordered reliably, so any lead/lag reading would be unsupported.",
+    "recommended_check": "Verify clock synchronization between the load generator and the SUT metric sources before interpreting any temporal pattern in this run.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/7"
+    ]
+   },
+   {
+    "rank": 5,
+    "observation": "Overall and per-transaction summaries show 0 errors across 47,396 samples, while SUT CPU means are low (checkoutservice 0.051 cores, frontend 0.156 cores, paymentservice 0.012 cores); meanwhile the generator throttle ratio is high.",
+    "possible_explanation": "Low SUT utilization alongside sustained generator throttling could be consistent with impaired load delivery, but this is not proven and cannot be used to conclude spare capacity or SUT health.",
+    "recommended_check": "After rerunning without throttling, compare SUT utilization and latency metrics at 20 users against this run to see whether the patterns change.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0",
+     "analysis-result.json#/evidence/8",
+     "analysis-result.json#/evidence/10",
+     "analysis-result.json#/evidence/12",
+     "analysis-result.json#/evidence/14"
+    ]
+   }
+  ],
+  "recommendations": [
+   {
+    "rank": 1,
+    "action": "Rerun the 20-user capacity stage with a load generator that is not CPU-saturated, keeping the same target (20 users) and evaluation window.",
+    "rationale": "The stage's INDETERMINATE status is caused solely by CAPACITY_GUARD_FAILED; per product contract a failed diagnostic generator guard makes the stage unusable for a product bound, and the remedy is a rerun with a generator that is not saturated, not a change to the guard.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/12",
+     "analysis-result.json#/evidence/16",
+     "analysis-result.json#/evidence/19"
+    ]
+   },
+   {
+    "rank": 2,
+    "action": "Configure a capacity policy (required capacity or bound) for the run so that a PASS/FAIL policy verdict can be produced.",
+    "rationale": "The current policy verdict is NO_POLICY with no configured required capacity; missing policy is not a pass, and only a configured policy or required capacity yields PASS or FAIL.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/18",
+     "analysis-result.json#/evidence/19"
+    ]
+   },
+   {
+    "rank": 3,
+    "action": "Verify and confirm clock alignment between the load generator and SUT metric collection before the rerun.",
+    "rationale": "The run reports clock_alignment=not_verified_by_core, so temporal ordering between generator throttling and SUT behavior cannot be reliably supported until clocks are verified.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/7"
+    ]
+   },
+   {
+    "rank": 4,
+    "action": "Inspect the load generator host's CPU resources (quota/cores) and provision sufficient capacity so the cfs throttled-period ratio stays within the 0.2 threshold.",
+    "rationale": "The throttle ratio was at the 1.0 ceiling for the median cell and violated the 0.2 threshold in 27 of 30 cells, indicating sustained CPU throttling on the generator host.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/12",
+     "analysis-result.json#/findings/0"
+    ]
+   },
+   {
+    "rank": 5,
+    "action": "After the rerun, re-read the capacity summary and confirm the stage verdict changes from INDETERMINATE before treating any bound as valid.",
+    "rationale": "This run produces no lower or upper bound (both null); a capacity bound is derived only from stages with a verified product outcome.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/19"
+    ]
+   }
+  ],
+  "caveats": [
+   "The verdict for this run is NO_POLICY, not PASS or FAIL. The window's business verdict of PASS does not make capacity PASS/FAIL and cannot be treated as a capacity bound.",
+   "The failed generator guard (generator-cpu-throttle-ratio, effect=diagnostic) is diagnostic by contract: it never creates an upper bound, and its effect must not be changed to binding, SLA, or enforcing; the remedy is a rerun with a generator that is not saturated.",
+   "capacity_knee is null because the product's knee detector is not implemented (KNEE_DETECTOR_NOT_IMPLEMENTED); this is a fixed limitation of the product, not a defect of this run, and capacity bounds are computed independently of the knee.",
+   "Clock alignment is not_verified_by_core, so no lead/lag ordering or temporal causality between generator throttling and SUT behavior can be inferred until clocks are verified.",
+   "Whole-run counts (47,396 samples) and window-based counts (e.g., 38,842 samples in the overall-errors policy check) are different quantities from different scopes/windows; the error-rate PASS covers only the evaluation window.",
+   "Missing errors and the low-magnitude or flat SUT resource series do not prove stability, spare capacity, or the absence of a capacity problem, because load delivery itself was impaired by generator throttling.",
+   "Analysis coverage is INCOMPLETE with reasons CAPACITY_GUARD_FAILED and CAPACITY_STAGE_NOT_VERIFIED; capacity conclusions should wait for a compliant rerun.",
+   "The input contains no individual samples, no per-sample latency distribution details (e.g., how many samples reached the reported maxima), and no traces or logs; latency maxima such as 1299 ms cannot be attributed to the throttling or to the SUT without those data."
+  ]
+ },
+ "schema": "ai-experiment-run.v2",
+ "phase": "pilot",
+ "case": "K02",
+ "rep": 2
+}

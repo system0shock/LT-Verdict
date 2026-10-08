@@ -1,0 +1,190 @@
+{
+ "stage": "B",
+ "mode": "live",
+ "model": "deepseek-v4-flash-0731",
+ "tag": {
+  "phase": "holdout",
+  "attempt_id": "case-019-1-B-t1",
+  "arm": "B",
+  "stage": null,
+  "case": "case-019",
+  "rep": 1,
+  "try": 1
+ },
+ "retry_policy": "d2",
+ "qwen_exit": 0,
+ "wall_ms": 97516,
+ "relay": {
+  "schema_version": "advisory-ai-runtime-relay.v1",
+  "status": "FORWARDED_STRUCTURED_OUTPUT",
+  "received_request_count": 1,
+  "forwarded_request_count": 1,
+  "outcomes": [
+   "FORWARDED_STRUCTURED_OUTPUT"
+  ],
+  "retry_refused_reason": null,
+  "first_refused_reason": null,
+  "model_id": "deepseek-v4-flash-0731",
+  "retry_policy": "d2",
+  "requests": [
+   {
+    "ordinal": 1,
+    "forwarded": true,
+    "outcome": "FORWARDED_STRUCTURED_OUTPUT",
+    "provider_status": 200,
+    "latency_ms": 96216,
+    "usage": {
+     "prompt_tokens": 4699,
+     "total_tokens": 14488,
+     "completion_tokens": 9789,
+     "prompt_tokens_details": {
+      "cached_tokens": 1024
+     },
+     "completion_tokens_details": {
+      "reasoning_tokens": 7691
+     }
+    },
+    "model_returned": "deepseek-v4-flash-0731"
+   }
+  ],
+  "usage": {
+   "prompt_tokens": 4699,
+   "completion_tokens": 9789,
+   "total_tokens": 14488
+  },
+  "latency_ms": 96216
+ },
+ "relay_status": "FORWARDED_STRUCTURED_OUTPUT",
+ "usage": {
+  "prompt_tokens": 4699,
+  "completion_tokens": 9789,
+  "total_tokens": 14488
+ },
+ "latency_ms": 96216,
+ "retried": false,
+ "retry_refused_reason": null,
+ "status": "OK",
+ "note": null,
+ "output": {
+  "schema_version": "ai-advice-output.v1",
+  "summary": "The run is VALID and the deterministic policy verdict is FAIL. In window workload-04 both evaluated policies failed: the latency rule (response_time_p95_ms observed 28559 ms > threshold 200 ms, FAIL) and the resource rule compute-limit (system cpu_work ratio constant at 1.0 > threshold 0.9, FAIL). The association analysis could not estimate a resource/latency relationship: correlation pair association-01 is INSUFFICIENT_DATA with raw_rho and partial_rho null and uncertainty NOT_ESTIMATED, because both the CPU series and the generator target-rate series were constant and the clock alignment was not verified by core. No series cells were missing or dropped and error_count is 0 in the collected JTL samples. Advice is advisory only and does not change the FAIL verdict.",
+  "hypotheses": [
+   {
+    "rank": 1,
+    "observation": "In workload-04, system cpu_work ratio was constant at 1.0 (min=max=mean=median=1, standard deviation 0, slope 0) across all 300 observed cells, the compute-limit resource rule (operator gt, threshold 0.9) FAILed, and in the same window the latency rule FAILed with response_time_p95_ms observed 28559 ms against a 200 ms threshold.",
+    "possible_explanation": "The system may have been at sustained maximum CPU use throughout the evaluation window, which could be associated with the very high observed tail latencies; however, causality is not established and the correlation analysis did not estimate this relationship.",
+    "recommended_check": "Inspect the CPU telemetry source to confirm a constant 1.0 ratio reflects real sustained saturation rather than a capped or mis-aggregated instrument, and rerun the window while collecting finer-grained resource data.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/3",
+     "analysis-result.json#/evidence/5",
+     "analysis-result.json#/evidence/6",
+     "analysis-result.json#/findings/0",
+     "analysis-result.json#/findings/1"
+    ]
+   },
+   {
+    "rank": 2,
+    "observation": "Correlation pair association-01 is INSUFFICIENT_DATA with reasons NO_RANK_VARIATION, NO_RESIDUAL_VARIATION, CONSTANT_CONTROL, LAG_NOT_EVALUABLE and RESOURCE_DELTA_BELOW_MINIMUM; raw_rho and partial_rho are null, uncertainty is NOT_ESTIMATED, the headline selection is UNAVAILABLE, and diagnostic pairs_evaluable is 0.",
+    "possible_explanation": "Because the CPU series (constant 1.0) and the generator target-rate series (constant 110 requests/s) were flat throughout the window, there was no rank or residual variation from which to estimate an association or lead/lag; the absent estimate does not prove the metrics are unrelated.",
+    "recommended_check": "Rerun with load variation (ramps or steps) and confirm the resource series vary before expecting a correlation output; verify clock alignment first so any lag would be interpretable.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/9",
+     "analysis-result.json#/evidence/10",
+     "analysis-result.json#/evidence/11",
+     "analysis-result.json#/evidence/4",
+     "analysis-result.json#/evidence/3"
+    ]
+   },
+   {
+    "rank": 3,
+    "observation": "The window metric summary for workload-04 reports p50 15055 ms, p95 28559 ms and max 30050 ms over 33000 samples, while the overall run summary reports p50 50 ms and p95 25823 ms over 93000 samples; both scopes report error_count 0.",
+    "possible_explanation": "The difference suggests most slow samples were inside workload-04 while earlier run phases appear much faster, but the overall and window summaries cover different scopes and phases, so this does not identify a cause and does not rule out issues elsewhere in the run.",
+    "recommended_check": "Inspect the per-interval latency series across the whole run to determine when latency rose, and check run phases/ramp configuration; keep overall and window scopes separate when comparing counts or throughput.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/8",
+     "analysis-result.json#/evidence/0",
+     "analysis-result.json#/evidence/7",
+     "analysis-result.json#/evidence/1"
+    ]
+   },
+   {
+    "rank": 4,
+    "observation": "The resource binding reports clock_alignment 'not_verified_by_core', the correlation lag_profile is empty, lag_used_cells is 0, and LAG_NOT_EVALUABLE is listed among the correlation reasons.",
+    "possible_explanation": "Without verified clock alignment between the load generator and system telemetry, any observed ordering between CPU and latency is not trustworthy, which may limit the association analysis; it could also indicate telemetry timestamps are not aligned.",
+    "recommended_check": "Verify clock synchronization between all telemetry sources before rerunning the correlation/lag analysis.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/2",
+     "analysis-result.json#/evidence/9",
+     "analysis-result.json#/evidence/10"
+    ]
+   }
+  ],
+  "recommendations": [
+   {
+    "rank": 1,
+    "action": "Verify clock alignment between the load generator and system telemetry sources and resolve any drift before the next analysis or rerun.",
+    "rationale": "The core reported clock_alignment 'not_verified_by_core' and the lag analysis was not evaluable; no lead/lag or temporal ordering can be interpreted until clocks are verified.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/2",
+     "analysis-result.json#/evidence/9"
+    ]
+   },
+   {
+    "rank": 2,
+    "action": "Rerun the test with a healthy load generator and varying target rate (ramps or steps) so the resource series are not constant, while keeping the same policy rules evaluated.",
+    "rationale": "cpu_work (constant 1.0) and target_rate (constant 110 requests/s) produced NO_RANK_VARIATION and CONSTANT_CONTROL, making correlation estimation impossible; varying load would allow the association analysis to be evaluated.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/3",
+     "analysis-result.json#/evidence/4",
+     "analysis-result.json#/evidence/9"
+    ]
+   },
+   {
+    "rank": 3,
+    "action": "Inspect how cpu_work is measured and aggregated; confirm a constant 1.0 ratio reflects genuine saturation rather than capping or an aggregation artifact, and collect higher-resolution resource data.",
+    "rationale": "The compute-limit FAIL and the resource threshold finding both depend on a cpu_work series that is exactly 1.0 for all 300 cells; verifying the instrument is needed before attributing the failure to real CPU saturation.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/3",
+     "analysis-result.json#/evidence/5",
+     "analysis-result.json#/findings/0"
+    ]
+   },
+   {
+    "rank": 4,
+    "action": "Review the latency rule and the JMETER JTL data around workload-04: check thresholds, sampler timing, timeouts, and long-running transactions even though error_count is 0.",
+    "rationale": "The observed p95 of 28559 ms exceeds the 200 ms threshold by a wide margin and the window p50 is 15055 ms; error_count 0 does not by itself explain or rule out slow samplers, so the raw JTL series should be inspected.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/6",
+     "analysis-result.json#/evidence/8",
+     "analysis-result.json#/evidence/0"
+    ]
+   },
+   {
+    "rank": 5,
+    "action": "After the checks and any configuration/telemetry fixes, rerun and confirm that business_verdict and resource_verdict for the target window both become PASS; this run's FAIL verdict is unchanged.",
+    "rationale": "The window policy summary reports business_verdict FAIL and resource_verdict FAIL, driven by the latency and compute-limit rules; only re-evaluation of those rules can change the outcome.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/7",
+     "analysis-result.json#/evidence/5",
+     "analysis-result.json#/evidence/6"
+    ]
+   }
+  ],
+  "caveats": [
+   "clock_alignment is 'not_verified_by_core', so no lead/lag ordering or temporal causal hypothesis should be inferred; verify clocks first.",
+   "Association and diagnostic outputs are NOT_ESTIMATED / INSUFFICIENT_DATA with raw_rho and partial_rho null, and anomalies_tested = 0 with episodes_reported = 0 do not prove stability or the absence of a problem.",
+   "Overall-run summaries and the workload-04 window summary use different scopes and windows (93000 vs 33000 samples) and the run extends past the evaluation window (run_to_epoch_ms 1704068430040 > evaluation_to_epoch_ms 1704068400000); counts and throughput values are not directly comparable across scopes.",
+   "error_count = 0 refers to collected JTL samples only and does not prove the absence of timeouts, dropped requests, or load-generator problems.",
+   "The constant cpu_work ratio of 1.0 may be an instrumentation artifact or capping rather than proven real utilization; additional telemetry is required to distinguish.",
+   "This advice is advisory; the deterministic verdict for this run remains FAIL and is not changed by any recommendation."
+  ]
+ },
+ "schema": "ai-experiment-run.holdout.v1",
+ "case": "case-019",
+ "rep": 1,
+ "arm": "B",
+ "try": 1,
+ "attempt_id": "case-019-1-B-t1",
+ "model_id": "deepseek-v4-flash-0731",
+ "prompt_sha256": "3c0f28bee6517c13c5c854615e7d3d59301893d9723880818e4034a32e9133bf"
+}

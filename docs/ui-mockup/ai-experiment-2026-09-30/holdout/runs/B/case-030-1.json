@@ -1,0 +1,187 @@
+{
+ "stage": "B",
+ "mode": "live",
+ "model": "deepseek-v4-flash-0731",
+ "tag": {
+  "phase": "holdout",
+  "attempt_id": "case-030-1-B-t1",
+  "arm": "B",
+  "stage": null,
+  "case": "case-030",
+  "rep": 1,
+  "try": 1
+ },
+ "retry_policy": "d2",
+ "qwen_exit": 0,
+ "wall_ms": 91496,
+ "relay": {
+  "schema_version": "advisory-ai-runtime-relay.v1",
+  "status": "FORWARDED_STRUCTURED_OUTPUT",
+  "received_request_count": 1,
+  "forwarded_request_count": 1,
+  "outcomes": [
+   "FORWARDED_STRUCTURED_OUTPUT"
+  ],
+  "retry_refused_reason": null,
+  "first_refused_reason": null,
+  "model_id": "deepseek-v4-flash-0731",
+  "retry_policy": "d2",
+  "requests": [
+   {
+    "ordinal": 1,
+    "forwarded": true,
+    "outcome": "FORWARDED_STRUCTURED_OUTPUT",
+    "provider_status": 200,
+    "latency_ms": 90189,
+    "usage": {
+     "prompt_tokens": 3279,
+     "total_tokens": 11849,
+     "completion_tokens": 8570,
+     "prompt_tokens_details": {
+      "cached_tokens": 1024
+     },
+     "completion_tokens_details": {
+      "reasoning_tokens": 6641
+     }
+    },
+    "model_returned": "deepseek-v4-flash-0731"
+   }
+  ],
+  "usage": {
+   "prompt_tokens": 3279,
+   "completion_tokens": 8570,
+   "total_tokens": 11849
+  },
+  "latency_ms": 90189
+ },
+ "relay_status": "FORWARDED_STRUCTURED_OUTPUT",
+ "usage": {
+  "prompt_tokens": 3279,
+  "completion_tokens": 8570,
+  "total_tokens": 11849
+ },
+ "latency_ms": 90189,
+ "retried": false,
+ "retry_refused_reason": null,
+ "status": "OK",
+ "note": null,
+ "output": {
+  "schema_version": "ai-advice-output.v1",
+  "summary": "The deterministic verdict is PASS: run_validity=VALID, policy_verdict=PASS, and the evaluation-window summary (window-policy-summary-efe77b201dc216c0edf435a227df2b2898d3f6ea1ff16e5d4d0d4ec0cf593271) reports business_verdict=PASS and resource_verdict=PASS, with COMPLETE analysis coverage and no findings. Evidence within the 30-second evaluation window (1767225600000-1767225630000) shows: 600 samples for the overall scope and the single transaction label \"request\"; error_count=0 (0/600); latency p50=p95=p99=max=100 ms; throughput_rps ratio 600000/30099; a constant resource series (mean/median/min/max=50 synthetic_unit, sample_standard_deviation=0, slope_per_second=0, 0 missing cells); latency policy PASS (response_time_p95_ms 100 <= 120); and resource SLA policy PASS (operator gt, threshold 80). This advice does not alter the verdict. Interpretation limits are flagged: clock alignment is not_verified_by_core, all latency percentiles are identical, the resource-check PASS margin is not quantified in the check evidence, the resource unit is synthetic, and conclusions are scoped to the evaluation window.",
+  "hypotheses": [
+   {
+    "rank": 1,
+    "observation": "Overall and per-transaction latency summaries both report p50=p95=p99=max=100 ms across 600 samples.",
+    "possible_explanation": "Identical percentiles could reflect load-generator fixed pacing or a constant per-request delay rather than the service's natural response-time distribution; this is a hypothesis, not a proven cause.",
+    "recommended_check": "Collect request-level latency timestamps/histogram from the load generator and service logs, and rerun under varied pacing to test whether the flat percentiles persist.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0",
+     "analysis-result.json#/evidence/1"
+    ]
+   },
+   {
+    "rank": 2,
+    "observation": "The resource summary shows a constant series: mean/median/min/max=50 synthetic_unit, sample_standard_deviation=0, slope_per_second=0, and 0 missing cells.",
+    "possible_explanation": "A perfectly constant series with zero variance and zero slope may be synthetic, interpolated, or from a system at very steady state; it does not by itself prove stability or spare capacity.",
+    "recommended_check": "Inspect the raw resource series and the metric's collection definition for the evaluation window to confirm what produced the constant value.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/3"
+    ]
+   },
+   {
+    "rank": 3,
+    "observation": "The resource policy check reports status PASS with operator 'gt' and threshold 80, while the resource summary shows a constant value of 50.",
+    "possible_explanation": "The check evidence does not state the value it compared, so how 'gt' with threshold 80 produced PASS (e.g., operator defines the violation condition that value must not exceed, or a different aggregation was used) cannot be confirmed from these references.",
+    "recommended_check": "Review the resource policy evaluation log/raw series to determine exactly which value was compared with 80 and how the operator maps to a PASS result.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/3",
+     "analysis-result.json#/evidence/4"
+    ]
+   },
+   {
+    "rank": 4,
+    "observation": "resource-binding reports clock_alignment='not_verified_by_core' with cell-level alignment (dropped leading/trailing cells=0, dropped leading/trailing millis=0).",
+    "possible_explanation": "Without verified core clock alignment, any temporal ordering or lead/lag between the run and the resource series is unconfirmed; an unknown clock relationship cannot support a timing hypothesis.",
+    "recommended_check": "Verify clock synchronization across the load generator, system-under-test, and telemetry before interpreting any timing relationship.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/2"
+    ]
+   },
+   {
+    "rank": 5,
+    "observation": "Both scopes in the evidence are the overall scope and a single JMETER_SAMPLER transaction labeled 'request', with identical sample counts (600) and latency values.",
+    "possible_explanation": "The run may contain only one transaction type, or other samplers were not captured, so per-transaction diversity cannot be assessed from this evidence.",
+    "recommended_check": "Confirm the JMeter test plan and sampler capture configuration; if multiple transactions are expected, rerun with per-transaction labeling.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0",
+     "analysis-result.json#/evidence/1"
+    ]
+   }
+  ],
+  "recommendations": [
+   {
+    "rank": 1,
+    "action": "Verify clock alignment across the load generator, system-under-test, and telemetry collection before drawing any timing conclusions.",
+    "rationale": "clock_alignment is not_verified_by_core, so no lead/lag, timing, or temporal causality interpretation is supported until clocks are verified.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/2"
+    ]
+   },
+   {
+    "rank": 2,
+    "action": "Rerun under varied load (or collect per-request latency timestamps) and compare the latency distribution with the observed flat p50=p95=p99=max=100 ms.",
+    "rationale": "A perfectly flat latency series and a zero-variance resource series do not prove stability or absence of problems; a varied-load rerun tests whether the flatness is a load-generator artifact.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0",
+     "analysis-result.json#/evidence/1",
+     "analysis-result.json#/evidence/3"
+    ]
+   },
+   {
+    "rank": 3,
+    "action": "Inspect the raw resource series and the resource policy evaluation log for the evaluation window to confirm the value behind status=PASS (operator gt, threshold 80).",
+    "rationale": "The resource summary shows a constant 50 while the check reports PASS against threshold 80 without stating the compared value in the check evidence, so the PASS margin is unknown.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/3",
+     "analysis-result.json#/evidence/4"
+    ]
+   },
+   {
+    "rank": 4,
+    "action": "Confirm the JMeter test plan and sampler capture so that all intended transactions are captured and labeled.",
+    "rationale": "Only one transaction label ('request') is present and the overall and per-transaction summaries are identical, limiting scope-level comparison.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/1",
+     "analysis-result.json#/evidence/0"
+    ]
+   },
+   {
+    "rank": 5,
+    "action": "If real-world capacity interpretation is needed, add or verify a non-synthetic resource metric source; otherwise document that the resource verdict is in synthetic units.",
+    "rationale": "The resource series uses unit 'synthetic_unit', so its constant value of 50 cannot be interpreted as real physical resource usage or headroom against the threshold of 80.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/3",
+     "analysis-result.json#/evidence/4"
+    ]
+   }
+  ],
+  "caveats": [
+   "Clock alignment is not_verified_by_core (analysis-result.json#/evidence/2); no temporal lead/lag or causal ordering should be inferred from run/snapshot alignment until clocks are verified.",
+   "All reported latency percentiles are identical (p50=p95=p99=max=100 ms) and the resource series has zero variance; flatness does not prove stability, spare capacity, low load, or the absence of a problem.",
+   "error_count=0 and error_rate_ratio=0/600 cover the 600-sample policy window; they are not a run-wide error guarantee, since window denominators differ from overall run counts.",
+   "The resource SLA policy check PASS (operator gt, threshold 80) is reported without the compared value in the check evidence, so the PASS margin cannot be quantified from these references.",
+   "Resource values are in unit 'synthetic_unit'; they are not a physical measurement and cannot be interpreted as real resource usage without additional context.",
+   "Analysis coverage is COMPLETE with no findings, but this reflects only the evaluated window and policies; it is not proof of absence of issues elsewhere.",
+   "The evaluation window spans 30 seconds (1767225600000-1767225630000) while the run ends at 1767225630099; conclusions are scoped to that window.",
+   "The PASS verdict (policy_verdict=PASS, window_policy_summary verdict PASS) is preserved exactly; nothing in this advice changes it."
+  ]
+ },
+ "schema": "ai-experiment-run.holdout.v1",
+ "case": "case-030",
+ "rep": 1,
+ "arm": "B",
+ "try": 1,
+ "attempt_id": "case-030-1-B-t1",
+ "model_id": "deepseek-v4-flash-0731",
+ "prompt_sha256": "3c0f28bee6517c13c5c854615e7d3d59301893d9723880818e4034a32e9133bf"
+}

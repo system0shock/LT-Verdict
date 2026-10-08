@@ -1,0 +1,65 @@
+[
+  {
+    "id": "R055",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T7",
+        "field": "#/caveats/4",
+        "quote": "that tail and anything outside the window are not analyzed",
+        "why": "The evidence includes whole-run metric summaries, so analysis is not limited to the evaluation window."
+      }
+    ],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 4,
+    "notes": "The operator checks are specific and useful, but the caveat understates the analysis scope."
+  },
+  {
+    "id": "R122",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T3",
+        "field": "#/caveats/3",
+        "quote": "flat 100 ms latency across 600 samples",
+        "why": "The reported percentiles and maximum do not establish that every sample had 100 ms latency."
+      },
+      {
+        "type": "T7",
+        "field": "#/caveats/5",
+        "quote": "Only a single 30-second evaluation window is covered by this analysis",
+        "why": "The evidence also contains metric summaries for the whole run."
+      }
+    ],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 2,
+    "notes": "The checks are actionable, but two caveats overstate what the aggregates and window coverage establish."
+  },
+  {
+    "id": "R135",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T3",
+        "field": "#/summary",
+        "quote": "uniform 100 ms latencies",
+        "why": "Equal reported percentiles and maximum do not show that all individual latencies were 100 ms."
+      }
+    ],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 3,
+    "notes": "The recommended checks are verifiable, though the advice leans heavily on an unconfirmed fixture-data hypothesis."
+  },
+  {
+    "id": "R149",
+    "hard_defect": false,
+    "defects": [],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 5,
+    "notes": "It preserves the verdict and key numbers while keeping possible causes tentative and recommending concrete checks."
+  }
+]

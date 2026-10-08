@@ -1,0 +1,179 @@
+{
+ "stage": "B",
+ "mode": "live",
+ "model": "deepseek-v4-flash-0731",
+ "tag": {
+  "phase": "holdout",
+  "attempt_id": "case-029-1-B-t1",
+  "arm": "B",
+  "stage": null,
+  "case": "case-029",
+  "rep": 1,
+  "try": 1
+ },
+ "retry_policy": "d2",
+ "qwen_exit": 0,
+ "wall_ms": 51593,
+ "relay": {
+  "schema_version": "advisory-ai-runtime-relay.v1",
+  "status": "FORWARDED_STRUCTURED_OUTPUT",
+  "received_request_count": 1,
+  "forwarded_request_count": 1,
+  "outcomes": [
+   "FORWARDED_STRUCTURED_OUTPUT"
+  ],
+  "retry_refused_reason": null,
+  "first_refused_reason": null,
+  "model_id": "deepseek-v4-flash-0731",
+  "retry_policy": "d2",
+  "requests": [
+   {
+    "ordinal": 1,
+    "forwarded": true,
+    "outcome": "FORWARDED_STRUCTURED_OUTPUT",
+    "provider_status": 200,
+    "latency_ms": 50362,
+    "usage": {
+     "prompt_tokens": 3400,
+     "total_tokens": 7986,
+     "completion_tokens": 4586,
+     "prompt_tokens_details": {
+      "cached_tokens": 1024
+     },
+     "completion_tokens_details": {
+      "reasoning_tokens": 2793
+     }
+    },
+    "model_returned": "deepseek-v4-flash-0731"
+   }
+  ],
+  "usage": {
+   "prompt_tokens": 3400,
+   "completion_tokens": 4586,
+   "total_tokens": 7986
+  },
+  "latency_ms": 50362
+ },
+ "relay_status": "FORWARDED_STRUCTURED_OUTPUT",
+ "usage": {
+  "prompt_tokens": 3400,
+  "completion_tokens": 4586,
+  "total_tokens": 7986
+ },
+ "latency_ms": 50362,
+ "retried": false,
+ "retry_refused_reason": null,
+ "status": "OK",
+ "note": null,
+ "output": {
+  "schema_version": "ai-advice-output.v1",
+  "summary": "The run is VALID and analysis coverage is COMPLETE. The deterministic policy verdict is FAIL, driven by the latency rule violation: in the evaluation window (1767225600000–1767225630000 ms), observed response_time_p95_ms = 100 exceeds the configured threshold of 80 (operator lte), so the window policy check and window summary both report FAIL. The resource verdict is PASS (resource policy check status PASS). Error count is 0 across 600 samples, and latency percentiles are flat at 100 ms. Advice does not change the verdict; it focuses on inspecting raw latency data, confirming rule semantics (including an apparently ambiguous resource PASS for a greater-than threshold while the series max is 50), and verifying clock alignment before any timing-based interpretation.",
+  "hypotheses": [
+   {
+    "rank": 1,
+    "observation": "policy-check-window reports observed response_time_p95_ms = 100, threshold = 80, operator lte, status FAIL for window 'evaluation'; the window policy summary confirms verdict FAIL with business_verdict FAIL.",
+    "possible_explanation": "The measured p95 response time in the 30-second evaluation window exceeded the configured 80 ms latency target. The evidence states the violation but does not say why response time was 100 ms.",
+    "recommended_check": "Open the raw per-request latency data (JMETER_SAMPLER samples) for the evaluation window and confirm which samples push p95 to 100 ms against the 80 ms rule; then review whether the threshold or the observed latency is intended.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/5",
+     "analysis-result.json#/evidence/6",
+     "analysis-result.json#/evidence/1"
+    ]
+   },
+   {
+    "rank": 2,
+    "observation": "Both the overall and the 'request' transaction metrics show latency flat at 100 ms for p50, p95, p99, and max, with error_count 0 and sample_count 600.",
+    "possible_explanation": "A completely flat distribution across percentiles suggests a constant per-request latency (for example a fixed serialization/processing step or coarse timestamp resolution) rather than load-induced variability, though the evidence does not prove any specific cause.",
+    "recommended_check": "Inspect the raw latency histogram and sampler timestamps for quantization or a constant offset; if timestamps are coarse, consider higher-resolution timing instrumentation and rerun.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0",
+     "analysis-result.json#/evidence/1"
+    ]
+   },
+   {
+    "rank": 3,
+    "observation": "The resource summary shows a perfectly flat series: min = max = mean = 50 for all 30 cells, with iqr = 0, mad = 0, sample_standard_deviation = 0, slope_per_second = 0, and 0 missing cells, in unit 'synthetic_unit'.",
+    "possible_explanation": "The evaluated resource metric exhibits no variation during the window, so it cannot reveal contention or explain the latency violation; the flat value may reflect the metric source or test fixture.",
+    "recommended_check": "Verify the source and semantics of the synthetic_unit resource metric and confirm it genuinely reflects service capacity/usage; collect additional telemetry if the series is expected to vary under load.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/3",
+     "analysis-result.json#/evidence/4"
+    ]
+   },
+   {
+    "rank": 4,
+    "observation": "The resource policy check reports status PASS for operator 'gt' with threshold 80, while the resource series max is 50 for the same window and series_id 'value'.",
+    "possible_explanation": "The literal reading (values greater than 80 satisfying the check) is inconsistent with a maximum of 50; the recorded semantics may be an upper-limit direction or a different aggregation of the same series, so the PASS should be taken literally until rule semantics are confirmed.",
+    "recommended_check": "Inspect the resource rule definition for rule_id 'limit' to confirm operator direction, aggregation, and series_id; do not reinterpret the PASS as a failure or vice versa.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/3",
+     "analysis-result.json#/evidence/4"
+    ]
+   },
+   {
+    "rank": 5,
+    "observation": "The resource binding records clock_alignment = 'not_verified_by_core' for the evaluation window.",
+    "possible_explanation": "Without verified clock alignment, timing relationships between the resource series and request metrics cannot be ordered, so any lead/lag or temporal-causal hypothesis is unsupported by this evidence.",
+    "recommended_check": "Verify clock synchronization across the load generator, service under test, and metric collection pipeline before pursuing any time-based comparison.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/2"
+    ]
+   }
+  ],
+  "recommendations": [
+   {
+    "rank": 1,
+    "action": "Keep the deterministic verdict FAIL and investigate the latency rule failure using raw sampler (JTL) data for the evaluation window 1767225600000–1767225630000 ms, confirming which samples produce p95 = 100 ms versus the 80 ms threshold.",
+    "rationale": "The verdict is FAIL because the evaluated latency rule (response_time_p95_ms <= 80) observed 100 ms; raw data will show the underlying distribution without changing the verdict.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/5",
+     "analysis-result.json#/evidence/6",
+     "analysis-result.json#/evidence/0"
+    ]
+   },
+   {
+    "rank": 2,
+    "action": "Verify clock alignment between the load generator, service, and metric/telemetry pipeline before drawing any timing or ordering conclusions.",
+    "rationale": "The resource binding reports clock_alignment 'not_verified_by_core', so temporal ordering between resource and request metrics is not supported by the evidence.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/2"
+    ]
+   },
+   {
+    "rank": 3,
+    "action": "Confirm the intended semantics of the resource rule 'limit' (operator 'gt', threshold 80, status PASS) against the flat series with max 50 in synthetic_unit.",
+    "rationale": "A PASS on a greater-than-80 check while the series max is 50 reads ambiguously; confirming direction, aggregation, and series_id prevents misreading the PASS as evidence of capacity or of failure.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/3",
+     "analysis-result.json#/evidence/4"
+    ]
+   },
+   {
+    "rank": 4,
+    "action": "Inspect the raw latency distribution and, if justified, rerun the scenario with higher-resolution timing or a different load profile to see whether the flat 100 ms latency varies.",
+    "rationale": "All reported percentiles equal exactly 100 ms with zero errors, so the evidence alone cannot distinguish constant real latency from measurement quantization; a bounded rerun/inspection can clarify without altering the current verdict.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0",
+     "analysis-result.json#/evidence/1",
+     "analysis-result.json#/evidence/5"
+    ]
+   }
+  ],
+  "caveats": [
+   "The latency percentiles p50, p95, p99, and max are all exactly 100 ms; the evidence does not explain whether this is true constant latency or measurement quantization.",
+   "error_count = 0 over 600 samples does not prove stability, spare capacity, or absence of a problem.",
+   "The flat resource series (all 30 cells = 50, zero variance) does not prove spare capacity; it only shows no variation in the evaluated metric.",
+   "clock_alignment is 'not_verified_by_core', so no lead/lag ordering or temporal-causal claim between resource and request metrics is supported; clock verification should come first.",
+   "The throughput fields numerator=600000 and denominator=30099 have undefined units in the evidence and must not be converted into a duration or rate claim beyond what is reported.",
+   "The resource policy PASS for operator 'gt' with threshold 80 while the series max is 50 is ambiguous; it is preserved literally here and needs rule-definition confirmation, not reinterpretation."
+  ]
+ },
+ "schema": "ai-experiment-run.holdout.v1",
+ "case": "case-029",
+ "rep": 1,
+ "arm": "B",
+ "try": 1,
+ "attempt_id": "case-029-1-B-t1",
+ "model_id": "deepseek-v4-flash-0731",
+ "prompt_sha256": "3c0f28bee6517c13c5c854615e7d3d59301893d9723880818e4034a32e9133bf"
+}

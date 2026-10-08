@@ -1,0 +1,154 @@
+{
+ "stage": "S2",
+ "mode": "live",
+ "model": "deepseek-v4-flash-0731",
+ "tag": {
+  "phase": "v2-pilot",
+  "stage": "S2",
+  "case": "K05",
+  "rep": 2,
+  "attempt": 1
+ },
+ "qwen_exit": 0,
+ "wall_ms": 68650,
+ "relay": {
+  "schema_version": "advisory-ai-runtime-relay.v1",
+  "status": "FORWARDED_STRUCTURED_OUTPUT",
+  "request_count": 1,
+  "usage": {
+   "prompt_tokens": 3125,
+   "total_tokens": 9614,
+   "completion_tokens": 6489,
+   "prompt_tokens_details": {
+    "cached_tokens": 1024
+   },
+   "completion_tokens_details": {
+    "reasoning_tokens": 4849
+   }
+  },
+  "latency_ms": 67411,
+  "model_returned": "deepseek-v4-flash-0731"
+ },
+ "relay_status": "FORWARDED_STRUCTURED_OUTPUT",
+ "usage": {
+  "prompt_tokens": 3125,
+  "total_tokens": 9614,
+  "completion_tokens": 6489,
+  "prompt_tokens_details": {
+   "cached_tokens": 1024
+  },
+  "completion_tokens_details": {
+   "reasoning_tokens": 4849
+  }
+ },
+ "latency_ms": 67411,
+ "status": "OK",
+ "note": null,
+ "output": {
+  "schema_version": "ai-advice-output.v1",
+  "summary": "LT Verdict is FAIL (deterministic). Policy check 'error-limit' (analysis-result.json#/evidence/2) requires error_rate_ratio <= 0.01 and observed 2/100 (2%), so it fails. Run validity is VALID and analysis coverage is COMPLETE. The input contains two metric_summary entries (overall run and the checkout transaction scope), both reporting 100 samples and 2 errors, plus one policy_check; there is no capacity_summary, no window references, no individual samples, no error profile, no traces, and no log bodies. Recommended next steps: inspect the two error samples in the JMeter JTL CSV, rerun the same scenario to gauge reproducibility, verify the sampler-label mapping, and add resource/capacity collection to test saturation. This advisory does not alter the verdict.",
+  "hypotheses": [
+   {
+    "rank": 1,
+    "observation": "Policy check 'error-limit' (evidence/2) reports status FAIL with observed error_rate_ratio 2/100 and threshold 0.01 under operator lte.",
+    "possible_explanation": "The observed error count (2 of 100 samples, evidence/0) exceeds the configured 1% error-rate limit, so the policy fails under the lte operator.",
+    "recommended_check": "Inspect the jmeter_jtl_csv entries for the two failing samples (status code, response message, timestamp) to determine what caused each error before acting.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/2",
+     "analysis-result.json#/evidence/0"
+    ]
+   },
+   {
+    "rank": 2,
+    "observation": "The overall scope and the checkout transaction scope both report sample_count=100 and error_count=2, with identical latency and throughput values (evidence/0, evidence/1).",
+    "possible_explanation": "All 100 samples in this input appear to fall under the checkout sampler, so both errors may be attributable to checkout; no other transaction scope is present to compare against.",
+    "recommended_check": "Check the sampler label distribution in the JTL CSV to confirm whether any non-checkout samples exist and which sampler(s) produced the errors.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0",
+     "analysis-result.json#/evidence/1"
+    ]
+   },
+   {
+    "rank": 3,
+    "observation": "The run is VALID and contains a single policy_check that is FAIL (facts; evidence/2), with 2 errors out of 100 samples (evidence/0).",
+    "possible_explanation": "The 2/100 error count could be transient or scenario-dependent rather than systematic, since only one run is present in the input.",
+    "recommended_check": "Rerun the same load scenario and compare the error count to see whether 2/100 reproduces or varies.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/2",
+     "analysis-result.json#/evidence/0"
+    ]
+   },
+   {
+    "rank": 4,
+    "observation": "The input has no capacity_summary and no resource series, while the run reports 100 samples with 2 errors (evidence/0, evidence/1).",
+    "possible_explanation": "Saturation of the load generator or system under test cannot be ruled out as a contributor to the failed samples, but nothing in this input tests that hypothesis.",
+    "recommended_check": "If saturation is suspected, rerun while collecting resource/capacity metrics from the generator and SUT so the hypothesis can be checked.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0",
+     "analysis-result.json#/evidence/1"
+    ]
+   },
+   {
+    "rank": 5,
+    "observation": "The same scope reports error_count=2 alongside latency metrics max=100ms, p99=99ms, p95=95ms, p50=50ms (evidence/0, evidence/1).",
+    "possible_explanation": "The errored samples might coincide with the higher-latency tail, but no sample-level latency/error association is present in this input.",
+    "recommended_check": "Join per-sample latency and error status from the original jmeter_jtl_csv to test whether the failing samples align with elevated latency.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0",
+     "analysis-result.json#/evidence/1"
+    ]
+   }
+  ],
+  "recommendations": [
+   {
+    "rank": 1,
+    "action": "Drill into the JMeter JTL CSV and extract the two error samples (status code, response message, timestamp) that drove the error-rate failure.",
+    "rationale": "The error-limit policy FAIL (evidence/2) is caused by 2 of 100 samples (evidence/0, evidence/1); without sample-level details the root cause of the errors cannot be identified.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/2",
+     "analysis-result.json#/evidence/0",
+     "analysis-result.json#/evidence/1"
+    ]
+   },
+   {
+    "rank": 2,
+    "action": "Rerun the identical scenario and compare the resulting error count to the observed 2/100.",
+    "rationale": "A single VALID run (facts) cannot distinguish a systematic defect from one-off or transient errors; repeatability indicates whether the FAIL is expected to persist.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0",
+     "analysis-result.json#/evidence/2"
+    ]
+   },
+   {
+    "rank": 3,
+    "action": "Confirm the sampler label mapping so the checkout scope covers exactly the samples it claims to cover.",
+    "rationale": "The overall scope and the checkout scope report identical totals (100 samples, 2 errors; evidence/0, evidence/1), so the checkout scope accounts for all counted samples in this input; verifying the mapping avoids misattributing the errors.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0",
+     "analysis-result.json#/evidence/1"
+    ]
+   },
+   {
+    "rank": 4,
+    "action": "Collect resource/capacity data (load generator and system under test) during the rerun.",
+    "rationale": "No capacity_summary or resource series is present in the input, so load or saturation explanations cannot be tested; adding such data enables a saturation hypothesis check.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0",
+     "analysis-result.json#/evidence/1"
+    ]
+   }
+  ],
+  "caveats": [
+   "The input contains no individual samples, status codes, log bodies, traces, or error profile; the root cause of the two errors cannot be determined from this evidence.",
+   "The overall scope and the checkout transaction scope report identical sample and error counts, so per-transaction attribution beyond checkout is not possible from this input.",
+   "Latency metrics (p50/p95/p99/max) are not tied to any policy in this input, and the number of samples that hit the reported max latency is unknown; no latency-based pass/fail or impact claim is made.",
+   "No capacity_summary or resource series exists in the input, so saturation-related explanations are untested hypotheses, not findings.",
+   "The policy check was evaluated over the whole run; no windows are referenced, so per-window error behavior was not assessed.",
+   "The FAIL verdict is deterministic and this advisory does not change it. throughput_rps is reported as a numerator/denominator ratio in evidence/0 and evidence/1 and is not interpreted here as a load or utilization claim."
+  ]
+ },
+ "schema": "ai-experiment-run.v2",
+ "phase": "pilot",
+ "case": "K05",
+ "rep": 2
+}

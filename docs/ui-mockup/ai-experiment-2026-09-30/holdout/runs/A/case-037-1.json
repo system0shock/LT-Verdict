@@ -1,0 +1,223 @@
+{
+ "stage": "A",
+ "mode": "live",
+ "model": "deepseek-v4-flash-0731",
+ "tag": {
+  "phase": "holdout",
+  "attempt_id": "case-037-1-A-t1",
+  "arm": "A",
+  "stage": null,
+  "case": "case-037",
+  "rep": 1,
+  "try": 1
+ },
+ "retry_policy": "d2",
+ "qwen_exit": 0,
+ "wall_ms": 109997,
+ "relay": {
+  "schema_version": "advisory-ai-runtime-relay.v1",
+  "status": "FORWARDED_STRUCTURED_OUTPUT",
+  "received_request_count": 1,
+  "forwarded_request_count": 1,
+  "outcomes": [
+   "FORWARDED_STRUCTURED_OUTPUT"
+  ],
+  "retry_refused_reason": null,
+  "first_refused_reason": null,
+  "model_id": "deepseek-v4-flash-0731",
+  "retry_policy": "d2",
+  "requests": [
+   {
+    "ordinal": 1,
+    "forwarded": true,
+    "outcome": "FORWARDED_STRUCTURED_OUTPUT",
+    "provider_status": 200,
+    "latency_ms": 108507,
+    "usage": {
+     "prompt_tokens": 17132,
+     "total_tokens": 28497,
+     "completion_tokens": 11365,
+     "prompt_tokens_details": {
+      "cached_tokens": 1024
+     },
+     "completion_tokens_details": {
+      "reasoning_tokens": 7810
+     }
+    },
+    "model_returned": "deepseek-v4-flash-0731"
+   }
+  ],
+  "usage": {
+   "prompt_tokens": 17132,
+   "completion_tokens": 11365,
+   "total_tokens": 28497
+  },
+  "latency_ms": 108507
+ },
+ "relay_status": "FORWARDED_STRUCTURED_OUTPUT",
+ "usage": {
+  "prompt_tokens": 17132,
+  "completion_tokens": 11365,
+  "total_tokens": 28497
+ },
+ "latency_ms": 108507,
+ "retried": false,
+ "retry_refused_reason": null,
+ "status": "OK",
+ "note": null,
+ "output": {
+  "schema_version": "ai-advice-output.v1",
+  "summary": "Run is VALID with analysis coverage COMPLETE, and the deterministic policy verdict is PASS: both windows (reference and workload-01) report business_verdict PASS and resource_verdict PASS, 0 errors across 36,000 samples (0/36000), and all latency/resource policy checks PASS at a constant 60 rps. Although the verdict is PASS, the evidence records a candidate response-time episode: response_time_p95_ms observed 50 ms in the reference window and 100 ms in workload-01 (anomaly finding: direction increase, max_abs_delta 50, duration 300000 ms, status CANDIDATE due to ZERO_MAD reference), while downstream in-flight requests (downstream-wait) rose from ~2.28 to up to 5.28 and generator threads from ~3 to up to 6, yet server-side cpu_work (0.15), db_work (0.015), queues (0), GC pause (0), and replicas (4) stayed flat. Two correlation pairs (downstream-wait, generator-threads) are CANDIDATE with best-lag rho ~0.999 at -1000 ms, but their headline selection is UNAVAILABLE (OBSERVATION_COUNT_UNSUPPORTED), uncertainty is NOT_ESTIMATED, and clock alignment is not verified, so no causal or lead/lag claim is supported. Advice focuses on verifying clock alignment, obtaining real downstream latency data, and re-running with variation so associations, sensitivity, and uncertainty can be statistically evaluated.",
+  "hypotheses": [
+   {
+    "rank": 1,
+    "observation": "response_time_p95_ms increased from 50 ms in the reference window to 100 ms in workload-01 (anomaly finding: direction increase, max_abs_delta 50, duration 300000 ms), while downstream in-flight requests (downstream-wait) rose from a reference mean of ~2.28 (max 2.28) to a workload mean of ~4.15 with max 5.28; the downstream-wait correlation pair is CANDIDATE with best_lag_rho 0.999342586275 at best_lag_ms -1000 and partial/raw rho 0.998274154046.",
+    "possible_explanation": "The p95 latency increase may be driven by increased time waiting on the downstream dependency rather than local capacity, because local CPU/DB/queue metrics were flat (cpu_work 0.15, db_work 0.015, all queues 0). This is a hypothesis only: uncertainty is NOT_ESTIMATED, the headline selection for this pair was UNAVAILABLE (OBSERVATION_COUNT_UNSUPPORTED), and clock alignment is not verified, so none of the rho values or the -1000 ms lag prove causation or ordering.",
+    "recommended_check": "Verify clock alignment across generator, service, and downstream metric sources, then collect a direct per-request downstream latency series (or spans/traces) across the same time cells and compare its change with the response_time_p95_ms shift from 50 to 100 ms to test whether downstream wait explains the increase.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/46",
+     "analysis-result.json#/evidence/20",
+     "analysis-result.json#/evidence/7",
+     "analysis-result.json#/findings/0",
+     "analysis-result.json#/evidence/2"
+    ]
+   },
+   {
+    "rank": 2,
+    "observation": "Generator active threads rose from a constant ~3 in the reference window (mean 2.9996, max 3) to median 6 in workload-01 (mean 4.87, max 6, split_half_shift 3), while achieved request rate stayed at 60 rps in both windows; the generator-threads correlation pair is CANDIDATE with best_lag_rho 0.999342586275 at best_lag_ms -1000.",
+    "possible_explanation": "The latency increase may be associated with client-side concurrency changes (more generator threads issuing the same 60 rps, e.g., pacing or slower samples) rather than server capacity, since server-side utilization was flat. Lead/lag cannot be concluded because clock alignment is not verified and the headline selection for this pair was UNAVAILABLE (OBSERVATION_COUNT_UNSUPPORTED).",
+    "recommended_check": "Confirm whether the thread increase was part of the intended test plan (thread ramp, pacing, or think-time changes), inspect JMeter per-sample timestamps against the recorded latency episode, and verify clock alignment before interpreting the -1000 ms best lag as ordering.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/47",
+     "analysis-result.json#/evidence/23",
+     "analysis-result.json#/evidence/10",
+     "analysis-result.json#/evidence/2",
+     "analysis-result.json#/evidence/56"
+    ]
+   },
+   {
+    "rank": 3,
+    "observation": "Server-side resources were constant and close to or below their policy limits in both windows: cpu_work 0.15, db_work 0.015, cpu-service-quota 1, admission/compute/db/generator queues 0, runtime-gc-pause 0, service replicas 4; correlation pairs for cpu_work, db_work, admission-queue, cpu-queue, db-queue, gc-pause, and cpu-service-quota are all INSUFFICIENT_DATA with reasons including NO_RANK_VARIATION, CONSTANT_CONTROL, and RESOURCE_DELTA_BELOW_MINIMUM, and the CPU/DB limit policy checks PASS in both windows (0.9 threshold).",
+    "possible_explanation": "The doubled p95 latency (50 to 100 ms) appears not to be explained by local server saturation in the captured metrics because none of those series vary; it may still be explained by downstream wait, client-side behavior, or measurement artifacts. The flat metrics do not prove spare capacity or absence of a problem beyond what was measured.",
+    "recommended_check": "Add instrumentation that produces measurable variation (e.g., staged load steps, finer sampling, or per-component latency breakdown) so the association analysis can be evaluated, and capture server time vs downstream time vs client time across the same window before attributing the latency change to any component.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/13",
+     "analysis-result.json#/evidence/26",
+     "analysis-result.json#/evidence/39",
+     "analysis-result.json#/evidence/45",
+     "analysis-result.json#/evidence/31"
+    ]
+   },
+   {
+    "rank": 4,
+    "observation": "The response-time anomaly check used a zero-variance reference baseline (reference_mad 0, reference_median 50, reason ZERO_MAD) and reported 1 episode as CANDIDATE with observed_max 100; the finding records max_abs_delta 50 and duration 300000 ms, while the workload-01 window summary reports p95=100 ms across the entire window.",
+    "possible_explanation": "Because the reference baseline has zero MAD, any deviation is flagged and the reported delta of 50 ms is computed against a degenerate baseline; the shift could be a real step change or partly an artifact of the constant reference, and the finding alone does not quantify severity or exact onset, especially since the episode start (1704067500000) differs from the workload-01 window start (1704067320000) while the window summary shows p95=100 throughout.",
+    "recommended_check": "Inspect raw JMeter samples and the cell-level response-time series in both windows to confirm the 50-to-100 ms p95 shift, characterize the actual distribution and percentiles, and reconcile the episode timing with the window summary before treating the episode onset as exact.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/60",
+     "analysis-result.json#/findings/0",
+     "analysis-result.json#/evidence/37",
+     "analysis-result.json#/evidence/38"
+    ]
+   },
+   {
+    "rank": 5,
+    "observation": "Headline correlation selection was UNAVAILABLE for both CANDIDATE pairs (association-08 downstream-wait and association-09 generator-threads) with reason OBSERVATION_COUNT_UNSUPPORTED, and UNAVAILABLE for the other seven pairs with PAIR_NOT_EVALUABLE; the diagnostic summary reports anomalies_tested 5, episodes_reported 1, pairs_evaluable 2, pairs_tested 9, and uncertainty NOT_ESTIMATED.",
+    "possible_explanation": "The test design (constant target rate, constant resource series, and an observation count the mbb-lag-max-holm.v1 method could not support) prevented statistically selected associations, so the strong raw/partial rho values (~0.998) for the CANDIDATE pairs are not confirmed by the significance procedure and should not be treated as established.",
+    "recommended_check": "Re-run the workload with a non-constant control (varied load or target rate) and sufficient observation count/duration for the bootstrap-lag-max method, then re-evaluate headline selection, p-values, and uncertainty before drawing conclusions about resource-load association.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/55",
+     "analysis-result.json#/evidence/56",
+     "analysis-result.json#/evidence/62",
+     "analysis-result.json#/evidence/46",
+     "analysis-result.json#/evidence/39"
+    ]
+   }
+  ],
+  "recommendations": [
+   {
+    "rank": 1,
+    "action": "Verify clock alignment across generator, service, and downstream metric sources before drawing any temporal or lead/lag conclusion from this run.",
+    "rationale": "resource-binding records clock_alignment not_verified_by_core, and both CANDIDATE correlation pairs cite CLOCK_ALIGNMENT_UNKNOWN; the -1000 ms best lag and rho ~0.999 cannot support ordering or causal claims while clock relationship is unverified.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/2",
+     "analysis-result.json#/evidence/46",
+     "analysis-result.json#/evidence/47"
+    ]
+   },
+   {
+    "rank": 2,
+    "action": "Investigate the candidate response-time episode (response_time_p95_ms increase from 50 ms to 100 ms over 300000 ms) even though the latency policy check PASSes at the 200 ms threshold, focusing on downstream wait as the primary direction to test.",
+    "rationale": "A documented 2x p95 increase in a PASSing run may indicate a trend or dependency issue; downstream in-flight requests rose from ~2.28 to up to 5.28 while local CPU/DB/queues stayed flat, making downstream wait the most evidence-supported direction to check.",
+    "evidence_refs": [
+     "analysis-result.json#/findings/0",
+     "analysis-result.json#/evidence/20",
+     "analysis-result.json#/evidence/38",
+     "analysis-result.json#/evidence/7"
+    ]
+   },
+   {
+    "rank": 3,
+    "action": "Add direct downstream latency instrumentation or per-request span/trace data during load tests, because only in_flight_requests (downstream-wait series) is available and it is a proxy that cannot distinguish wait time from other latency contributors.",
+    "rationale": "The CANDIDATE downstream-wait association (~0.999 rho) is based on a proxy metric; without actual downstream latency the downstream-wait hypothesis remains untestable from this data.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/46",
+     "analysis-result.json#/evidence/20"
+    ]
+   },
+   {
+    "rank": 4,
+    "action": "Re-run with varied load steps or a non-constant control and higher observation count so associations can actually be evaluated; the current series are constant (target rate 60 rps throughout, cpu_work 0.15, db_work 0.015, queues 0), causing 7 of 9 pairs to be INSUFFICIENT_DATA and the two CANDIDATE pairs to have UNAVAILABLE headline selection.",
+    "rationale": "Without variation in the series and a supported selection procedure, sensitivity and uncertainty (currently NOT_ESTIMATED) cannot be computed; the diagnostic summary shows only 2 evaluable pairs out of 9 tested.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/39",
+     "analysis-result.json#/evidence/62",
+     "analysis-result.json#/evidence/15",
+     "analysis-result.json#/evidence/28"
+    ]
+   },
+   {
+    "rank": 5,
+    "action": "Reconcile the anomaly episode timing with the window-level summary: the episode runs 1704067500000 to 1704067800000 while the workload-01 window starts at 1704067320000, yet the window metric summary reports p95=100 ms across the entire window; confirm the cell-level series and raw samples before using the episode start time.",
+    "rationale": "The discrepancy may reflect detector warmup/exclusion or aggregation behavior, and could change how the reported 300000 ms episode is interpreted.",
+    "evidence_refs": [
+     "analysis-result.json#/findings/0",
+     "analysis-result.json#/evidence/38",
+     "analysis-result.json#/evidence/60"
+    ]
+   },
+   {
+    "rank": 6,
+    "action": "Clarify the meaning and normalization of the cpu-service-quota quota_fraction series, which is constant at 1.0 in both windows, and confirm whether it represents the service being pinned at its full quota or an artifact of how the ratio is computed.",
+    "rationale": "A constant quota_fraction of 1.0 at 60 rps may matter for capacity planning even though cpu_work (0.15) and db_work (0.015) are low and the resource policy checks PASS; the meaning of the series is not documented in the evidence.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/5",
+     "analysis-result.json#/evidence/18",
+     "analysis-result.json#/evidence/45"
+    ]
+   }
+  ],
+  "caveats": [
+   "The deterministic policy verdict is PASS (both windows, business and resource) and run validity is VALID with coverage COMPLETE; this advisory does not change that verdict.",
+   "Clock alignment is recorded as not_verified_by_core, and both CANDIDATE correlation pairs cite CLOCK_ALIGNMENT_UNKNOWN; no lead/lag ordering or temporal causal hypothesis is supported until clocks are verified.",
+   "The two CANDIDATE correlation pairs (downstream-wait, generator-threads) have uncertainty NOT_ESTIMATED and their headline selection was UNAVAILABLE (OBSERVATION_COUNT_UNSUPPORTED); the rho values shown are not confirmed by the significance procedure.",
+   "Seven of nine correlation pairs are INSUFFICIENT_DATA because the series are constant; absence of detectable correlation or anomaly is not proof of stability, spare capacity, low load, or absence of a problem.",
+   "The response-time anomaly was computed against a ZERO_MAD reference (reference_mad 0); with zero baseline variance the detection is degenerate and the episode should be treated as CANDIDATE, not confirmed severity.",
+   "No errors were observed (0/36000), but this does not prove error-free behavior under other conditions, other load levels, or other time periods.",
+   "Only aggregated metric summaries were provided; raw JMeter samples (JTL), per-request spans, and downstream latency data were not examined, so attribution of the latency change remains limited.",
+   "downstream-wait (in_flight_requests) is a proxy metric for downstream activity; it is not a direct latency measurement and cannot separate wait time from other latency contributors.",
+   "The anomaly episode start (1704067500000) differs from the workload-01 window start (1704067320000) while the window summary reports p95=100 ms across the whole window; this timing discrepancy is unresolved in the evidence.",
+   "The target-request-rate control was constant and dropped from all correlation analyses, so sensitivity_without_achieved_rps and load-response sensitivity could not be estimated.",
+   "The meaning of cpu-service-quota quota_fraction constant at 1.0 is not defined in the evidence; it is unclear whether this indicates full quota utilization or a normalization artifact.",
+   "A raw epoch value is used only as a timestamp reference, not a duration; durations are taken only from fields explicitly defined as durations (e.g., finding duration_ms 300000)."
+  ]
+ },
+ "schema": "ai-experiment-run.holdout.v1",
+ "case": "case-037",
+ "rep": 1,
+ "arm": "A",
+ "try": 1,
+ "attempt_id": "case-037-1-A-t1",
+ "model_id": "deepseek-v4-flash-0731",
+ "prompt_sha256": "69f215a1ad4ae678c82410ba7cf7daf171cd9c7ca0ef4626bba6977db0af4ef7"
+}

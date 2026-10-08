@@ -1,0 +1,214 @@
+{
+ "stage": "S1",
+ "mode": "live",
+ "model": "deepseek-v4-flash-0731",
+ "tag": {
+  "phase": "v2-pilot",
+  "stage": "S1",
+  "case": "K12",
+  "rep": 2,
+  "attempt": 1
+ },
+ "qwen_exit": 0,
+ "wall_ms": 106858,
+ "relay": {
+  "schema_version": "advisory-ai-runtime-relay.v1",
+  "status": "FORWARDED_STRUCTURED_OUTPUT",
+  "request_count": 1,
+  "usage": {
+   "prompt_tokens": 12865,
+   "total_tokens": 23258,
+   "completion_tokens": 10393,
+   "prompt_tokens_details": {
+    "cached_tokens": 1024
+   },
+   "completion_tokens_details": {
+    "reasoning_tokens": 7799
+   }
+  },
+  "latency_ms": 105454,
+  "model_returned": "deepseek-v4-flash-0731"
+ },
+ "relay_status": "FORWARDED_STRUCTURED_OUTPUT",
+ "usage": {
+  "prompt_tokens": 12865,
+  "total_tokens": 23258,
+  "completion_tokens": 10393,
+  "prompt_tokens_details": {
+   "cached_tokens": 1024
+  },
+  "completion_tokens_details": {
+   "reasoning_tokens": 7799
+  }
+ },
+ "latency_ms": 105454,
+ "status": "OK",
+ "note": null,
+ "output": {
+  "schema_version": "ai-advice-output.v1",
+  "summary": "The deterministic verdict is NO_POLICY: no configured capacity policy or required capacity is present, so no PASS/FAIL is issued even though the evaluated stage windows look healthy. The capacity summary reports a LOWER_BOUND derived from three verified stages (5, 10, and 20 users) with lower_inclusive 20 and no upper bound; capacity_knee is null with knee_reason KNEE_DETECTOR_NOT_IMPLEMENTED, which is a fixed product limitation rather than a defect of this run. All business error-rate policy checks passed (0 errors in each window) and the generator CPU-throttle diagnostic checks passed, but those checks are diagnostic by contract and do not create an upper bound. Clock alignment is not_verified_by_core, so no temporal/causal ordering is supported. Recommended operator actions: configure a capacity policy if a PASS/FAIL verdict is desired, verify clock alignment, keep the generator guard diagnostic, and only extend staged testing above 20 users if a higher verified load or an upper bound is required.",
+  "hypotheses": [
+   {
+    "rank": 1,
+    "observation": "policy_verdict and the capacity summary both report NO_POLICY, while all three stage windows (r2-users5, r2-users10, r2-users20) show business_verdict PASS and the capacity summary lists lower_inclusive 20.",
+    "possible_explanation": "No capacity policy or required-capacity threshold appears to be configured, so the analysis cannot emit PASS/FAIL; NO_POLICY is not a pass and healthy windows do not change it.",
+    "recommended_check": "Inspect the policy configuration to confirm whether a capacity/required-capacity policy exists for load axis 'users'; if a specific target is intended, configure it and rerun.",
+    "evidence_refs": [
+     "analysis-result.json#/policy_verdict",
+     "analysis-result.json#/capacity_summary",
+     "analysis-result.json#/evidence/36",
+     "analysis-result.json#/evidence/38",
+     "analysis-result.json#/evidence/40"
+    ]
+   },
+   {
+    "rank": 2,
+    "observation": "capacity_summary reports bound_type LOWER_BOUND with lower_inclusive 20, upper_exclusive null, and capacity_knee null with knee_reason KNEE_DETECTOR_NOT_IMPLEMENTED.",
+    "possible_explanation": "Knee detection is not implemented in the product, so no knee point (and therefore no upper bound) is estimated; the lower bound comes from the three verified stages, not from a knee.",
+    "recommended_check": "If a higher verified load or an upper bound is required, run additional staged loads above 20 users (e.g., 40, 80) with a non-saturated generator and passing business checks; expect capacity_knee to remain null because knee detection is a fixed, unimplemented product feature.",
+    "evidence_refs": [
+     "analysis-result.json#/capacity_summary",
+     "analysis-result.json#/evidence/41",
+     "analysis-result.json#/evidence/8",
+     "analysis-result.json#/evidence/16",
+     "analysis-result.json#/evidence/24"
+    ]
+   },
+   {
+    "rank": 3,
+    "observation": "Each window-policy-summary shows business_verdict PASS and resource_verdict NO_POLICY, and the only per-window policy checks shown are overall-errors with status PASS and numerator 0.",
+    "possible_explanation": "Only a business error-rate policy appears to be evaluated for these windows; no latency, resource, or required-capacity policy is configured, so resource_verdict stays NO_POLICY by design.",
+    "recommended_check": "Review the configured policies per window; if resource or latency SLOs are intended, configure them and rerun to obtain PASS/FAIL on those dimensions.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/35",
+     "analysis-result.json#/evidence/36",
+     "analysis-result.json#/evidence/37",
+     "analysis-result.json#/evidence/38",
+     "analysis-result.json#/evidence/39",
+     "analysis-result.json#/evidence/40"
+    ]
+   },
+   {
+    "rank": 4,
+    "observation": "The generator-cpu-throttle-ratio checks (threshold 0.2, effect diagnostic) are PASS in all three windows, and the max observed throttle ratios are about 0.069-0.079 with means about 0.003-0.004.",
+    "possible_explanation": "The load generator appears not CPU-saturated in the evaluated windows, so the windows can be used toward the bound; these checks are diagnostic by contract and do not act as binding capacity rules.",
+    "recommended_check": "Keep the generator guard diagnostic; before broader capacity conclusions, confirm the generator retains CPU headroom in any new staged runs and rerun on a non-saturated generator if saturation is suspected.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/8",
+     "analysis-result.json#/evidence/16",
+     "analysis-result.json#/evidence/24",
+     "analysis-result.json#/evidence/32",
+     "analysis-result.json#/evidence/33",
+     "analysis-result.json#/evidence/34"
+    ]
+   },
+   {
+    "rank": 5,
+    "observation": "resource-binding reports clock_alignment 'not_verified_by_core' for the evaluation windows.",
+    "possible_explanation": "Without verified clock alignment, lead/lag ordering or a temporal causal relationship between generator load and service metrics cannot be supported.",
+    "recommended_check": "Verify clock alignment between the load generator and monitored services before using any time-based reasoning about this run.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/7"
+    ]
+   },
+   {
+    "rank": 6,
+    "observation": "metric-summary-overall reports 0 errors over 135,434 samples with overall latency_ms p50 93, p95 202, p99 298, max 1200.",
+    "possible_explanation": "The sampled overall metrics are error-free and latencies fall in observed ranges, but no latency policy is configured, so these raw values do not drive the NO_POLICY verdict.",
+    "recommended_check": "If a latency SLO matters, configure a latency policy and rerun rather than inferring conformance from raw percentile values.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0",
+     "analysis-result.json#/evidence/35",
+     "analysis-result.json#/evidence/39"
+    ]
+   },
+   {
+    "rank": 7,
+    "observation": "jmeter_active_threads is exactly flat at 5, 10, and 20 in the respective windows, and resource summaries at 20 users show low CPU usage (e.g., frontend mean about 0.188 cores, checkoutservice mean about 0.068 cores).",
+    "possible_explanation": "At the tested loads services appear lightly utilized; however, flat series and low utilization at tested loads do not prove spare capacity or stability at higher loads.",
+    "recommended_check": "Run additional higher-load staged experiments rather than extrapolating; inspect the underlying series before drawing headroom conclusions.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/9",
+     "analysis-result.json#/evidence/12",
+     "analysis-result.json#/evidence/25",
+     "analysis-result.json#/evidence/26",
+     "analysis-result.json#/evidence/28"
+    ]
+   }
+  ],
+  "recommendations": [
+   {
+    "rank": 1,
+    "action": "Configure a capacity policy or required-capacity threshold for the load axis 'users' if a PASS/FAIL capacity verdict is desired, then rerun; NO_POLICY cannot be converted to PASS through healthy windows alone.",
+    "rationale": "The deterministic verdict is NO_POLICY and per product rules only a configured policy or required capacity yields PASS or FAIL.",
+    "evidence_refs": [
+     "analysis-result.json#/policy_verdict",
+     "analysis-result.json#/capacity_summary",
+     "analysis-result.json#/evidence/41"
+    ]
+   },
+   {
+    "rank": 2,
+    "action": "Verify clock alignment between the load generator and monitored services before any time-based interpretation of the run.",
+    "rationale": "resource-binding states clock_alignment 'not_verified_by_core', so temporal ordering or causal hypotheses are unsupported until clocks are verified.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/7"
+    ]
+   },
+   {
+    "rank": 3,
+    "action": "If a higher verified load or an upper bound is needed, run additional staged loads above 20 users with a non-saturated generator and passing business checks; treat capacity_knee null as a fixed product limitation and do not attempt any knee-detector action.",
+    "rationale": "The current LOWER_BOUND reflects only the three verified stages; bounds are derived from stages with verified product outcomes, and KNEE_DETECTOR_NOT_IMPLEMENTED means no knee estimate is produced.",
+    "evidence_refs": [
+     "analysis-result.json#/capacity_summary",
+     "analysis-result.json#/evidence/41",
+     "analysis-result.json#/evidence/32"
+    ]
+   },
+   {
+    "rank": 4,
+    "action": "Keep the generator CPU-throttle guard diagnostic (effect: diagnostic) unchanged; use its PASS only as confirmation that the generator was not saturated in the evaluated windows.",
+    "rationale": "The guard is diagnostic by contract: it never creates an upper bound, and changing its effect to binding/SLA/enforcing is not an allowed remedy.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/32",
+     "analysis-result.json#/evidence/33",
+     "analysis-result.json#/evidence/34"
+    ]
+   },
+   {
+    "rank": 5,
+    "action": "If SLOs beyond error rate (e.g., latency or resource thresholds) matter, configure policies for them and rerun instead of interpreting raw values as conformance.",
+    "rationale": "The observed window PASS results come from the business error-rate policy only; overall latency observations (p99 298ms, max 1200ms) are not evaluated by any configured latency policy.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0",
+     "analysis-result.json#/evidence/35",
+     "analysis-result.json#/evidence/39"
+    ]
+   },
+   {
+    "rank": 6,
+    "action": "Inspect the underlying resource series (all windows show complete 30/30 cells) and only run additional stages to evaluate headroom; do not infer spare capacity from low or flat CPU/memory values at the tested loads.",
+    "rationale": "Absent findings, flat series, and low utilization at tested loads do not prove stability, spare capacity, or behavior at higher load.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/8",
+     "analysis-result.json#/evidence/12",
+     "analysis-result.json#/evidence/28"
+    ]
+   }
+  ],
+  "caveats": [
+   "The deterministic verdict is NO_POLICY and this advice does not change it; healthy stage windows do not constitute a pass of a capacity policy.",
+   "capacity_knee is null with KNEE_DETECTOR_NOT_IMPLEMENTED: this is a fixed product limitation, not a defect of this run, and no knee-related action is available or recommended.",
+   "Clock alignment is not_verified_by_core; temporal ordering and causal hypotheses are unsupported until clocks are verified.",
+   "Only load levels 5, 10, and 20 users were evaluated; there is no evidence for loads above 20 users or for an upper bound.",
+   "The generator throttle checks are diagnostic by contract (effect: diagnostic); their PASS does not create an upper bound, and a future failure would make a stage unusable for a product bound.",
+   "Per-window denominators (30049, 37550, 47404) differ from the overall sample count (135434); these are different scopes and windows and are not directly comparable.",
+   "Zero errors and complete 30/30 cells describe the sampled windows only; they do not prove stability, spare capacity, or absence of problems elsewhere.",
+   "Resource usage was low at the tested levels, but flat/low series do not prove headroom at higher load."
+  ]
+ },
+ "schema": "ai-experiment-run.v2",
+ "phase": "pilot",
+ "case": "K12",
+ "rep": 2
+}

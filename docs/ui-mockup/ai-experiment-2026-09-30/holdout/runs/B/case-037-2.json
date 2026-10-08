@@ -1,0 +1,198 @@
+{
+ "stage": "B",
+ "mode": "live",
+ "model": "deepseek-v4-flash-0731",
+ "tag": {
+  "phase": "holdout",
+  "attempt_id": "case-037-2-B-t1",
+  "arm": "B",
+  "stage": null,
+  "case": "case-037",
+  "rep": 2,
+  "try": 1
+ },
+ "retry_policy": "d2",
+ "qwen_exit": 0,
+ "wall_ms": 116191,
+ "relay": {
+  "schema_version": "advisory-ai-runtime-relay.v1",
+  "status": "FORWARDED_STRUCTURED_OUTPUT",
+  "received_request_count": 1,
+  "forwarded_request_count": 1,
+  "outcomes": [
+   "FORWARDED_STRUCTURED_OUTPUT"
+  ],
+  "retry_refused_reason": null,
+  "first_refused_reason": null,
+  "model_id": "deepseek-v4-flash-0731",
+  "retry_policy": "d2",
+  "requests": [
+   {
+    "ordinal": 1,
+    "forwarded": true,
+    "outcome": "FORWARDED_STRUCTURED_OUTPUT",
+    "provider_status": 200,
+    "latency_ms": 114827,
+    "usage": {
+     "prompt_tokens": 17605,
+     "total_tokens": 28750,
+     "completion_tokens": 11145,
+     "prompt_tokens_details": {
+      "cached_tokens": 1024
+     },
+     "completion_tokens_details": {
+      "reasoning_tokens": 8252
+     }
+    },
+    "model_returned": "deepseek-v4-flash-0731"
+   }
+  ],
+  "usage": {
+   "prompt_tokens": 17605,
+   "completion_tokens": 11145,
+   "total_tokens": 28750
+  },
+  "latency_ms": 114827
+ },
+ "relay_status": "FORWARDED_STRUCTURED_OUTPUT",
+ "usage": {
+  "prompt_tokens": 17605,
+  "completion_tokens": 11145,
+  "total_tokens": 28750
+ },
+ "latency_ms": 114827,
+ "retried": false,
+ "retry_refused_reason": null,
+ "status": "OK",
+ "note": null,
+ "output": {
+  "schema_version": "ai-advice-output.v1",
+  "summary": "The run is VALID with policy verdict PASS and COMPLETE analysis coverage. Both evaluation windows (reference 1704067200000–1704067320000, workload-01 1704067320000–1704067800000) PASS their business and resource policy checks; the latency rule p95 <= 200ms PASSes at observed 50ms (reference) and 100ms (workload-01), and error_count is 0 for all 36000 samples. A candidate anomaly episode reports response_time_p95 stepping from a constant 50ms to a constant 100ms for duration_ms 300000 (from 1704067500000 to 1704067800000), still below the 200ms policy threshold. Two correlation pairs (downstream-wait in_flight_requests and generator active_threads) are CANDIDATE with best_lag_rho ~0.999 and partial_rho ~0.998 against response_time_p95, but uncertainty is NOT_ESTIMATED for all pairs, the bootstrap headline selection is UNAVAILABLE (OBSERVATION_COUNT_UNSUPPORTED for the candidate pairs), the requested control target-request-rate was constant at 60 requests/s and dropped in every pair, and clock_alignment is not_verified_by_core. Resource series are constant across windows (cpu_work 0.15, db_work 0.015, queue depths 0, quota_fraction 1) and all compute/database SLA checks PASS. No capacity bound, capacity_knee, or generator diagnostic guard evidence is present in this set, so no capacity verdict is reported.",
+  "hypotheses": [
+   {
+    "rank": 1,
+    "observation": "A candidate anomaly episode (workload-01-response) reports response_time_p95 rising from a constant 50ms to a constant 100ms for duration_ms 300000 beginning at from_epoch_ms 1704067500000, while the workload-01 window shows p50/p95/p99/max all 100ms. In the same period, generator active_threads and downstream-wait in_flight_requests rise (reference means ~3 threads / ~2.28 in-flight vs workload-01 means ~4.87 threads / ~4.15 in-flight, max 6 and 5.28), and association-08/association-09 are CANDIDATE with best_lag_ms -1000 and partial_rho ~0.998 against response_time_p95.",
+    "possible_explanation": "The latency step co-occurs with an increase in concurrency and downstream in-flight requests; a scenario/thread-ramp change or downstream slowdown beginning around 1704067500000 is consistent with the evidence. This is a co-occurrence hypothesis, not a proven cause: clock_alignment is not_verified_by_core and uncertainty is NOT_ESTIMATED.",
+    "recommended_check": "Verify clock alignment among load generator, dependency, and metric telemetry first; then inspect per-second active_threads, in_flight_requests, request_starts, and response_time_p95 around 1704067500000 and compare them with the configured thread/ramp schedule.",
+    "evidence_refs": [
+     "analysis-result.json#/findings/0",
+     "analysis-result.json#/evidence/46",
+     "analysis-result.json#/evidence/47",
+     "analysis-result.json#/evidence/20",
+     "analysis-result.json#/evidence/23",
+     "analysis-result.json#/evidence/38",
+     "analysis-result.json#/evidence/2"
+    ]
+   },
+   {
+    "rank": 2,
+    "observation": "system-cpu-work is constant at 0.15 and system-db-work constant at 0.015 across both windows; queue depths for admission, cpu, db, and generator are 0; cpu-service-quota is 1; resource SLA checks compute-limit (threshold 0.9) and database-limit (threshold 0.9) PASS in both windows; error_count is 0 in all summaries.",
+    "possible_explanation": "The p95 step to 100ms is not explained by compute or database saturation in this evidence: the tracked CPU/db series are far below the 0.9 SLA thresholds, so the step more plausibly reflects workload/downstream changes than exhaustion of these specific series. Absence of a signal in these series does not by itself rule out other causes.",
+    "recommended_check": "Inspect downstream dependency health and the workload definition (thread profile and any step near run_from_epoch_ms 1704067200000 + 300000ms); confirm whether any service or scenario change occurred at that time; collect per-second CPU/db/quota telemetry if finer granularity is needed.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/13",
+     "analysis-result.json#/evidence/14",
+     "analysis-result.json#/evidence/29",
+     "analysis-result.json#/evidence/30",
+     "analysis-result.json#/evidence/31",
+     "analysis-result.json#/evidence/32",
+     "analysis-result.json#/evidence/38",
+     "analysis-result.json#/evidence/0"
+    ]
+   },
+   {
+    "rank": 3,
+    "observation": "The anomaly check workload-01-response is CANDIDATE with reasons ZERO_MAD: the reference window's response_time_p95 was a constant 50ms with reference_mad 0 and reference_median 50; the policy check for the same metric still PASSes (observed 100 <= threshold 200) and window verdicts are PASS in both windows.",
+    "possible_explanation": "The 50ms step is flagged as material by the anomaly detector because the reference distribution has zero variance (ZERO_MAD), not because any policy was violated. The doubling to 100ms remains within the evaluated 200ms threshold; this is an anomaly-detector observation, not evidence of an SLA breach.",
+    "recommended_check": "Confirm the intended acceptance criterion: the existing latency policy is PASS, so decide whether the 100ms p95 is acceptable to the operator; if a stricter target is desired, configure/update a business policy rule with that target and rerun, then read PASS/FAIL from the product-evaluated rule.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/60",
+     "analysis-result.json#/findings/0",
+     "analysis-result.json#/evidence/33",
+     "analysis-result.json#/evidence/35",
+     "analysis-result.json#/evidence/36"
+    ]
+   },
+   {
+    "rank": 4,
+    "observation": "Correlation pairs association-01 through 07 are INSUFFICIENT_DATA (reasons include NO_RANK_VARIATION, NO_RESIDUAL_VARIATION, CONSTANT_CONTROL, CLOCK_ALIGNMENT_UNKNOWN, RESOURCE_DELTA_BELOW_MINIMUM); association-08/09 are CANDIDATE but their headline selections are UNAVAILABLE with OBSERVATION_COUNT_UNSUPPORTED and holm_adjusted_p_value null; all pairs report uncertainty NOT_ESTIMATED; the requested control target-request-rate was constant at 60 requests/s and dropped in every pair.",
+    "possible_explanation": "The analysis cannot separate load-driven effects from resource/dependency effects because the control series had no variation during the windows, and the high rho (~0.998) for the candidate pairs is not supported by an evaluable bootstrap p-value or uncertainty estimate.",
+    "recommended_check": "Rerun the analysis with a non-constant target rate and verified clock alignment, or increase observation counts beyond the supported range, in order to obtain evaluable p-values and uncertainty; treat the -1000ms best lag strictly as associational until then.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/46",
+     "analysis-result.json#/evidence/47",
+     "analysis-result.json#/evidence/39",
+     "analysis-result.json#/evidence/55",
+     "analysis-result.json#/evidence/56",
+     "analysis-result.json#/evidence/15",
+     "analysis-result.json#/evidence/28"
+    ]
+   }
+  ],
+  "recommendations": [
+   {
+    "rank": 1,
+    "action": "Verify clock alignment among load generator, dependency, and metric telemetry before interpreting any lead/lag from the candidate correlations.",
+    "rationale": "resource-binding reports clock_alignment 'not_verified_by_core', and association-08/09 carry reason CLOCK_ALIGNMENT_UNKNOWN while reporting best_lag_ms -1000; without verified clocks, that lag cannot support temporal ordering.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/2",
+     "analysis-result.json#/evidence/46",
+     "analysis-result.json#/evidence/47"
+    ]
+   },
+   {
+    "rank": 2,
+    "action": "Inspect telemetry and configuration around from_epoch_ms 1704067500000 (the anomaly episode start): thread ramp, downstream in-flight requests, request starts, and the workload scenario definition.",
+    "rationale": "Throughput stayed at 60 requests/s with 0 errors while p95 doubled from 50 to 100ms as a step; the candidate episodes and CANDIDATE correlations are co-occurrence evidence, so understanding the step requires scenario and dependency data at that time.",
+    "evidence_refs": [
+     "analysis-result.json#/findings/0",
+     "analysis-result.json#/evidence/20",
+     "analysis-result.json#/evidence/23",
+     "analysis-result.json#/evidence/9",
+     "analysis-result.json#/evidence/22"
+    ]
+   },
+   {
+    "rank": 3,
+    "action": "Decide whether the 100ms p95 is acceptable for the operator's SLO; if not, configure or update a business policy rule with the stricter target and rerun so the product evaluates it.",
+    "rationale": "The existing latency rule (p95 <= 200ms) PASSes at 100ms, and there is no NO_POLICY situation here because a rule was evaluated; a healthy-looking PASS does not by itself establish that the doubled latency is acceptable, and only a product-evaluated rule changes PASS/FAIL.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/33",
+     "analysis-result.json#/evidence/35",
+     "analysis-result.json#/evidence/36",
+     "analysis-result.json#/evidence/60"
+    ]
+   },
+   {
+    "rank": 4,
+    "action": "Rerun the analysis with a varied (non-constant) load control and verified clocks so that correlation statistics can be evaluated; until then keep the candidate associations separate from conclusions.",
+    "rationale": "All pairs report uncertainty NOT_ESTIMATED, the candidate headline selections were UNAVAILABLE (OBSERVATION_COUNT_UNSUPPORTED), and the requested control target-request-rate was dropped as constant in every pair, leaving rho ~0.998 without p-value or uncertainty support.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/39",
+     "analysis-result.json#/evidence/55",
+     "analysis-result.json#/evidence/56",
+     "analysis-result.json#/evidence/62"
+    ]
+   }
+  ],
+  "caveats": [
+   "The two CANDIDATE correlations (association-08 downstream-wait, association-09 generator-threads) are reported with uncertainty NOT_ESTIMATED and no bootstrap p-value or Holm-adjusted result (headline selection UNAVAILABLE with OBSERVATION_COUNT_UNSUPPORTED), so they are not established associations.",
+   "Clock alignment is not_verified_by_core; the -1000ms best_lag must not be read as proof that downstream wait leads response time.",
+   "The requested control target-request-rate was constant at 60 requests/s in both windows and was dropped in all correlation pairs; several series had no rank variation (NO_RANK_VARIATION / RESOURCE_DELTA_BELOW_MINIMUM), yielding INSUFFICIENT_DATA for association-01 through 07.",
+   "Flat or zero resource series (cpu_work 0.15, db_work 0.015, queue depths 0, quota_fraction 1) and NO_MATERIAL_CHANGE anomaly results with reason ZERO_MAD do not prove spare capacity or absence of a problem; the reference series had zero MAD, so anomaly materiality is degenerate.",
+   "The anomaly episode and correlation candidates describe time-window co-occurrence, not causation; the episode is a step starting at 1704067500000 and the summary values for each window are aggregates, so within-window timing of resource changes is not directly visible except through slope/split-half summaries.",
+   "The episode duration of 300000ms is taken from the finding's duration_ms field; raw epoch values are not durations. Window boundaries are reference 1704067200000-1704067320000 and workload-01 1704067320000-1704067800000.",
+   "This evidence set contains no capacity bound, capacity_knee, or generator diagnostic guard entries, so no capacity verdict or guard-failure interpretation is offered.",
+   "Zero errors, zero missing cells, and observed_cells equal to expected_cells do not prove stability, low load, or absence of business impact; they only describe what was measured.",
+   "Counts with different scopes (overall sample_count 36000 vs window sample_counts 7200+28800; throughput denominators 600083 vs 120000 vs 480000) are different quantities and are not compared directly here."
+  ]
+ },
+ "schema": "ai-experiment-run.holdout.v1",
+ "case": "case-037",
+ "rep": 2,
+ "arm": "B",
+ "try": 1,
+ "attempt_id": "case-037-2-B-t1",
+ "model_id": "deepseek-v4-flash-0731",
+ "prompt_sha256": "3c0f28bee6517c13c5c854615e7d3d59301893d9723880818e4034a32e9133bf"
+}

@@ -1,0 +1,75 @@
+[
+  {
+    "id": "R045",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T2",
+        "field": "#/hypotheses/0/possible_explanation",
+        "quote": "produced by the workload or application independently of latency, since latency is flat",
+        "why": "Aggregate error and latency values do not establish that the errors are independent of latency."
+      },
+      {
+        "type": "T7",
+        "field": "#/hypotheses/2/possible_explanation",
+        "quote": "or required capacity/SLA) exists for the stage, so the product reports NO_POLICY",
+        "why": "The reported resource NO_POLICY does not establish missing required capacity or identify a capacity stage as its cause."
+      },
+      {
+        "type": "T7",
+        "field": "#/recommendations/3/action",
+        "quote": "or provide the required capacity/SLA) for the stage",
+        "why": "Providing required capacity alone cannot change a window's resource NO_POLICY verdict; an applicable resource SLA rule must be evaluated."
+      }
+    ],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 3,
+    "notes": "The error investigation and clock checks are useful, but the advice conflates the resource verdict with capacity requirements."
+  },
+  {
+    "id": "R084",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T7",
+        "field": "#/hypotheses/4/possible_explanation",
+        "quote": "no resource-based bound or verdict exists",
+        "why": "Both window summaries explicitly contain a resource verdict of NO_POLICY, even though no resource rule produced PASS or FAIL."
+      }
+    ],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 4,
+    "notes": "The response gives well-prioritized operator checks and otherwise handles the verdicts and counts correctly."
+  },
+  {
+    "id": "R086",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T4",
+        "field": "#/caveats/5",
+        "quote": "no per-error-type, per-sampler, or per-message breakdown",
+        "why": "The transaction-scoped metric summary attributes 5,320 errors to the sampler labeled \"request\"."
+      }
+    ],
+    "required_facts_preserved": false,
+    "missing_facts": [
+      "Whole-run totals of 52,000 samples and 5,320 errors."
+    ],
+    "usefulness": 3,
+    "notes": "The actions are mostly verifiable, but the response denies sampler attribution that the evidence provides."
+  },
+  {
+    "id": "R113",
+    "hard_defect": false,
+    "defects": [],
+    "required_facts_preserved": false,
+    "missing_facts": [
+      "Whole-run totals of 52,000 samples and 5,320 errors."
+    ],
+    "usefulness": 4,
+    "notes": "The response preserves the verdict and window findings and offers useful checks, though it omits the whole-run totals."
+  }
+]

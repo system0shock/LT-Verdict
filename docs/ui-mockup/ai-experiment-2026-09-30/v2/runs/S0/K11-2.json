@@ -1,0 +1,122 @@
+{
+ "stage": "S0",
+ "mode": "live",
+ "model": "deepseek-v4-flash-0731",
+ "tag": {
+  "phase": "v2-pilot",
+  "stage": "S0",
+  "case": "K11",
+  "rep": 2,
+  "attempt": 1
+ },
+ "qwen_exit": 0,
+ "wall_ms": 40077,
+ "relay": {
+  "schema_version": "advisory-ai-runtime-relay.v1",
+  "status": "FORWARDED_STRUCTURED_OUTPUT",
+  "request_count": 1,
+  "usage": {
+   "prompt_tokens": 1963,
+   "total_tokens": 5519,
+   "completion_tokens": 3556,
+   "prompt_tokens_details": {
+    "cached_tokens": 1024
+   },
+   "completion_tokens_details": {
+    "reasoning_tokens": 2245
+   }
+  },
+  "latency_ms": 38891,
+  "model_returned": "deepseek-v4-flash-0731"
+ },
+ "relay_status": "FORWARDED_STRUCTURED_OUTPUT",
+ "usage": {
+  "prompt_tokens": 1963,
+  "total_tokens": 5519,
+  "completion_tokens": 3556,
+  "prompt_tokens_details": {
+   "cached_tokens": 1024
+  },
+  "completion_tokens_details": {
+   "reasoning_tokens": 2245
+  }
+ },
+ "latency_ms": 38891,
+ "status": "OK",
+ "note": null,
+ "output": {
+  "schema_version": "ai-advice-output.v1",
+  "summary": "The run is marked VALID, but the policy verdict is NO_POLICY and analysis coverage is INCOMPLETE (RESOURCE_GAPS), with an empty findings list. The only referenced evidence is a single overall metric summary over 2623 samples: error_count 0 (error_rate_ratio numerator 0, denominator 2623), latency_ms p50 11, p95 46, p99 77, max 904, and throughput_rps reported as numerator 2623000 / denominator 44986. Per the advisory rules, NO_POLICY is not a pass, empty findings and zero recorded errors do not prove stability or absence of problems, and coverage gaps limit conclusions. The advisory below offers bounded hypotheses and checks, none of which assert proven causes.",
+  "hypotheses": [
+   {
+    "rank": 1,
+    "observation": "The overall metric summary reports latency_ms p50 11, p95 46, p99 77, max 904 across 2623 samples.",
+    "possible_explanation": "The wide gap between the p99 (77 ms) and the maximum (904 ms) suggests occasional outlier requests far slower than the typical request; this could stem from intermittent queueing, resource contention, or a slower operation, but the aggregate summary alone does not identify any cause.",
+    "recommended_check": "Inspect time-bucketed or per-request latency values above 77 ms, and any per-endpoint or per-scope latency breakdown, to locate when and where the 904 ms max occurs before attributing it to a specific cause.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0"
+    ]
+   },
+   {
+    "rank": 2,
+    "observation": "The overall summary records error_count 0 and error_rate_ratio numerator 0 / denominator 2623, while analysis coverage is INCOMPLETE with reason RESOURCE_GAPS.",
+    "possible_explanation": "Zero recorded errors in this sample could mean no client-visible errors occurred during the sampled window, or it could reflect that the sample and incomplete coverage did not capture failing conditions; the summary alone cannot distinguish these possibilities.",
+    "recommended_check": "Correlate error_count with peak-load periods and with the missing RESOURCE_GAPS data, or compare a larger or fully covered run, before concluding the behavior is error-free.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0",
+     "analysis-result.json#/analysis_coverage"
+    ]
+   },
+   {
+    "rank": 3,
+    "observation": "throughput_rps is reported as numerator 2623000 / denominator 44986, and policy_verdict is NO_POLICY.",
+    "possible_explanation": "Without explicit semantics for the throughput numerator/denominator and without a defined policy, the reported throughput cannot be judged against any expectation, so no pass/fail interpretation is available from this evidence.",
+    "recommended_check": "Confirm the definition of the throughput_rps numerator and denominator (or export a direct requests-per-second value) and define an explicit throughput policy threshold before assessing capacity or performance targets.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0",
+     "analysis-result.json#/policy_verdict"
+    ]
+   }
+  ],
+  "recommendations": [
+   {
+    "rank": 1,
+    "action": "Define an explicit policy (e.g., latency, error-rate, and throughput SLO thresholds) and re-run the analysis against it before making any pass/fail determination.",
+    "rationale": "The policy verdict is NO_POLICY, and a missing policy must not be interpreted as a pass; the current evidence only summarizes metrics with no defined acceptance criteria.",
+    "evidence_refs": [
+     "analysis-result.json#/policy_verdict",
+     "analysis-result.json#/evidence/0"
+    ]
+   },
+   {
+    "rank": 2,
+    "action": "Resolve the RESOURCE_GAPS that made analysis coverage INCOMPLETE (e.g., provide missing resource or supplementary data) and re-run so the verdict is based on complete coverage.",
+    "rationale": "The evidence states coverage is INCOMPLETE, so conclusions drawn from this analysis are limited and cannot be treated as a full assessment of stability, capacity, or absence of problems.",
+    "evidence_refs": [
+     "analysis-result.json#/analysis_coverage"
+    ]
+   },
+   {
+    "rank": 3,
+    "action": "Investigate the latency tail by collecting finer-grained latency data (time window, endpoint, or sample-level) around the 904 ms max versus the 77 ms p99.",
+    "rationale": "The single overall summary shows a large spread between the p99 and maximum latency, and isolating the outliers is the bounded way to test whether the tail reflects a real operational issue.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0"
+    ]
+   }
+  ],
+  "caveats": [
+   "policy_verdict is NO_POLICY; this is not a PASS and must not be read as one.",
+   "analysis_coverage is INCOMPLETE with reason RESOURCE_GAPS, so the analysis did not fully cover the system under review.",
+   "The findings list is empty; empty findings, and error_count 0 over the observed samples, do not prove stability, spare capacity, low load, or the absence of a problem.",
+   "The only metric evidence is a single overall scope summary (2623 samples); no per-endpoint, time-series, or resource data is present in the input.",
+   "latency_ms values are reported in milliseconds as labeled; throughput_rps is given only as numerator 2623000 / denominator 44986 with no defined semantics, and no derived rate or comparison is asserted here.",
+   "No clock or time-series context is present in the evidence, so temporal ordering or causal lead/lag relationships cannot be established.",
+   "run_validity VALID affirms the mechanics of the run, but it does not compensate for missing policy, incomplete coverage, or the limits of aggregate metrics."
+  ]
+ },
+ "schema": "ai-experiment-run.v2",
+ "phase": "pilot",
+ "case": "K11",
+ "rep": 2
+}

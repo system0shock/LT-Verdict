@@ -1,0 +1,223 @@
+{
+ "stage": "A",
+ "mode": "live",
+ "model": "deepseek-v4-flash-0731",
+ "tag": {
+  "phase": "holdout",
+  "attempt_id": "case-021-2-A-t1",
+  "arm": "A",
+  "stage": null,
+  "case": "case-021",
+  "rep": 2,
+  "try": 1
+ },
+ "retry_policy": "d2",
+ "qwen_exit": 0,
+ "wall_ms": 108409,
+ "relay": {
+  "schema_version": "advisory-ai-runtime-relay.v1",
+  "status": "FORWARDED_STRUCTURED_OUTPUT",
+  "received_request_count": 1,
+  "forwarded_request_count": 1,
+  "outcomes": [
+   "FORWARDED_STRUCTURED_OUTPUT"
+  ],
+  "retry_refused_reason": null,
+  "first_refused_reason": null,
+  "model_id": "deepseek-v4-flash-0731",
+  "retry_policy": "d2",
+  "requests": [
+   {
+    "ordinal": 1,
+    "forwarded": true,
+    "outcome": "FORWARDED_STRUCTURED_OUTPUT",
+    "provider_status": 200,
+    "latency_ms": 107104,
+    "usage": {
+     "prompt_tokens": 6270,
+     "total_tokens": 17052,
+     "completion_tokens": 10782,
+     "prompt_tokens_details": {
+      "cached_tokens": 1024
+     },
+     "completion_tokens_details": {
+      "reasoning_tokens": 7860
+     }
+    },
+    "model_returned": "deepseek-v4-flash-0731"
+   }
+  ],
+  "usage": {
+   "prompt_tokens": 6270,
+   "completion_tokens": 10782,
+   "total_tokens": 17052
+  },
+  "latency_ms": 107104
+ },
+ "relay_status": "FORWARDED_STRUCTURED_OUTPUT",
+ "usage": {
+  "prompt_tokens": 6270,
+  "completion_tokens": 10782,
+  "total_tokens": 17052
+ },
+ "latency_ms": 107104,
+ "retried": false,
+ "retry_refused_reason": null,
+ "status": "OK",
+ "note": null,
+ "output": {
+  "schema_version": "ai-advice-output.v1",
+  "summary": "LT Verdict analysis (run_id jmeter_jtl_csv-8584091639c7db2f9cd347b05faf8519d138ccfc61c4b29e38d6cfb1f50467d1) reports run_validity VALID and analysis_coverage COMPLETE. The capacity search is BOUNDED with lower_inclusive 237 and upper_exclusive 357 users (load_axis users); capacity_knee is null because knee_reason is KNEE_DETECTOR_NOT_IMPLEMENTED, and policy_verdict is NO_POLICY. Stages 1 (target 120, verified 117) and 2 (target 240, verified 237) PASS with windowed p95 response time observed 140 ms <= threshold 250 ms. Stage 3 (target 360, verified_bound_load 357 via p05_10s) FAIL: windowed p95 observed 420 ms > 250 ms. Overall error_count is 0 and error_rate is 0/3601; overall latency aggregate is p50 136 ms, p95 417 ms, p99 420 ms, max 1500 ms. Generator CPU is stable (interval_mean ~0.43, max 0.45) and the generator-cpu-guard (threshold 0.85) PASSes in every window. resource_binding reports clock_alignment not_verified_by_core. Interpretation: the latency policy failure appears between the last verified pass (237 users) and the first verified fail (357 users), but clock alignment is unverified, no knee was estimated, the capacity policy is NO_POLICY (not a pass), and no SUT-side resource metrics are present, so causal claims remain hypotheses.",
+  "hypotheses": [
+   {
+    "rank": 1,
+    "observation": "capacity_summary is BOUNDED with lower_inclusive 237 and upper_exclusive 357; step-1 PASS (target 120, verified_bound_load 117), step-2 PASS (target 240, verified_bound_load 237), step-3 FAIL (target 360, verified_bound_load 357) with windowed policy check response_time_p95_ms observed 420 > threshold 250.",
+    "possible_explanation": "The first latency policy failure occurs at the highest user count, consistent with the system losing the ability to hold p95 latency at or below 250 ms somewhere between the last verified-passing load (237 users) and the verified-failing load (357 users).",
+    "recommended_check": "Run additional load steps inside (237, 357), e.g., 260/280/300/320 users, with the same 250 ms p95 rule to locate the transition point, and enable a knee detector to replace knee_reason KNEE_DETECTOR_NOT_IMPLEMENTED.",
+    "evidence_refs": [
+     "analysis-result.json#/capacity_summary",
+     "analysis-result.json#/evidence/12",
+     "analysis-result.json#/evidence/14",
+     "analysis-result.json#/evidence/16",
+     "analysis-result.json#/evidence/17",
+     "analysis-result.json#/evidence/18"
+    ]
+   },
+   {
+    "rank": 2,
+    "observation": "Overall metric summaries (overall and checkout JMETER_SAMPLER) report max 1500 ms, p99 420 ms, p95 417 ms, p50 136 ms, with error_count 0 and error_rate 0/3601; the stage-3 window p95 is 420 ms.",
+    "possible_explanation": "The degradation is concentrated in the latency tail (p95/p99 ≈ 420 ms) while the overall p50 is 136 ms and a small number of samples reach 1500 ms, suggesting queueing, GC, or transient contention on a minority of requests rather than a uniform slowdown.",
+    "recommended_check": "Extract per-sample latency and per-10s-bin p95 for stage-3 and correlate the slowest samples with server-side GC/queue/CPU evidence before attributing the failure to sustained saturation.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0",
+     "analysis-result.json#/evidence/1",
+     "analysis-result.json#/evidence/16",
+     "analysis-result.json#/findings/0"
+    ]
+   },
+   {
+    "rank": 3,
+    "observation": "generator-cpu_used has interval_mean ~0.43 (min 0.41, max 0.45) in every stage with no missing cells, and the generator-cpu-guard check (threshold 0.85) status is PASS in stages 1, 2, and 3; active_users series are complete (30 cells each).",
+    "possible_explanation": "The load generator was not CPU-bound in any window, so generator CPU saturation is an unlikely cause of the stage-3 latency failure; however, only generator CPU is evidenced, leaving generator memory/threads/network and all SUT-side resources unmeasured.",
+    "recommended_check": "Collect generator memory/thread/network metrics plus SUT-side CPU, memory, I/O, and DB/queue depth during stage-3 to rule out non-CPU bottlenecks before narrowing the cause to the system under test.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/3",
+     "analysis-result.json#/evidence/4",
+     "analysis-result.json#/evidence/6",
+     "analysis-result.json#/evidence/8",
+     "analysis-result.json#/evidence/9",
+     "analysis-result.json#/evidence/10",
+     "analysis-result.json#/evidence/11"
+    ]
+   },
+   {
+    "rank": 4,
+    "observation": "resource_binding reports clock_alignment 'not_verified_by_core' over the run/evaluation window from_epoch_ms 1767225600000 to 1767226500500.",
+    "possible_explanation": "If clocks differ between the load generator, system under test, and analysis host, the windowed latency and load/resource aggregations may be misaligned, so the stage-3 latency failure cannot be causally ordered against load or resource changes without verification.",
+    "recommended_check": "Verify clock synchronization (e.g., NTP offset) across the load generator, SUT, and analysis host, then re-check window alignment before any lead/lag or temporal causal interpretation.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/2"
+    ]
+   },
+   {
+    "rank": 5,
+    "observation": "Facts report policy_verdict NO_POLICY; capacity_summary reports capacity_knee null with knee_reason KNEE_DETECTOR_NOT_IMPLEMENTED; window_policy_summary entries report resource_verdict NO_POLICY for every stage.",
+    "possible_explanation": "The BOUNDED bounds (lower_inclusive 237, upper_exclusive 357) are search bounds from load stepping, not a policy outcome; with no defined capacity policy there is no pass/fail verdict for capacity itself, and NO_POLICY should not be read as a pass.",
+    "recommended_check": "Define the capacity policy (metric, statistic, threshold, tolerance) and rerun so the capacity search returns a policy verdict and a knee estimate instead of NO_POLICY and null knee.",
+    "evidence_refs": [
+     "analysis-result.json#/policy_verdict",
+     "analysis-result.json#/capacity_summary",
+     "analysis-result.json#/evidence/13",
+     "analysis-result.json#/evidence/15",
+     "analysis-result.json#/evidence/17"
+    ]
+   }
+  ],
+  "recommendations": [
+   {
+    "rank": 1,
+    "action": "Verify clock alignment across the load generator, system under test, and analysis host before drawing temporal conclusions from the windowed results.",
+    "rationale": "resource_binding states clock_alignment 'not_verified_by_core', so the ordering of load steps and the stage-3 latency failure cannot be confirmed as causal without clock verification.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/2"
+    ]
+   },
+   {
+    "rank": 2,
+    "action": "Narrow the capacity boundary by running intermediate load steps between 237 and 357 users (e.g., 260, 280, 300, 320) using the same 250 ms p95 latency rule.",
+    "rationale": "Stages 1-2 PASS at verified loads 117 and 237 while stage-3 FAILS at verified load 357 (p95 420 ms), so the transition point inside BOUNDED lower_inclusive 237 / upper_exclusive 357 is currently unknown.",
+    "evidence_refs": [
+     "analysis-result.json#/capacity_summary",
+     "analysis-result.json#/evidence/5",
+     "analysis-result.json#/evidence/7",
+     "analysis-result.json#/evidence/16",
+     "analysis-result.json#/evidence/17"
+    ]
+   },
+   {
+    "rank": 3,
+    "action": "Deep-dive the stage-3 latency tail: pull raw per-sample latencies and per-10s-bin p95, and correlate the slowest samples with server-side GC, queue, and resource data.",
+    "rationale": "The overall aggregate shows p50 136 ms but p95/p99 ≈ 420 ms with a max of 1500 ms, and the stage-3 window p95 is 420 ms; understanding the tail is needed before attributing the failure to sustained saturation.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0",
+     "analysis-result.json#/evidence/1",
+     "analysis-result.json#/evidence/16",
+     "analysis-result.json#/findings/0"
+    ]
+   },
+   {
+    "rank": 4,
+    "action": "Implement or enable knee detection and rerun the capacity estimate so a meaningful knee can replace the null capacity_knee.",
+    "rationale": "capacity_summary reports capacity_knee null because knee_reason is KNEE_DETECTOR_NOT_IMPLEMENTED, so the BOUNDED result currently provides only search bounds, not a knee location.",
+    "evidence_refs": [
+     "analysis-result.json#/capacity_summary"
+    ]
+   },
+   {
+    "rank": 5,
+    "action": "Define an explicit capacity policy (metric, statistic, threshold, tolerance) and rerun so the analysis returns a policy verdict rather than NO_POLICY.",
+    "rationale": "policy_verdict is NO_POLICY and every window_policy_summary shows resource_verdict NO_POLICY; a missing policy is not a pass and leaves capacity without a verdict.",
+    "evidence_refs": [
+     "analysis-result.json#/policy_verdict",
+     "analysis-result.json#/capacity_summary",
+     "analysis-result.json#/evidence/13",
+     "analysis-result.json#/evidence/15",
+     "analysis-result.json#/evidence/17"
+    ]
+   },
+   {
+    "rank": 6,
+    "action": "Add SUT-side resource monitoring (CPU, memory, I/O, DB/queue) alongside the generator CPU guard for future runs, especially at the failing stage-3 load.",
+    "rationale": "Only generator CPU is evidenced and it stayed near 0.43 (guard 0.85 PASS in all windows); low generator CPU does not prove the SUT has spare capacity or that no non-CPU resource is the bottleneck.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/4",
+     "analysis-result.json#/evidence/6",
+     "analysis-result.json#/evidence/8",
+     "analysis-result.json#/evidence/9",
+     "analysis-result.json#/evidence/10",
+     "analysis-result.json#/evidence/11"
+    ]
+   }
+  ],
+  "caveats": [
+   "capacity_knee is null with knee_reason KNEE_DETECTOR_NOT_IMPLEMENTED, so no precise knee location was estimated from this run.",
+   "policy_verdict is NO_POLICY; the BOUNDED bounds (lower_inclusive 237, upper_exclusive 357) are search bounds, not a policy pass, and NO_POLICY is not a PASS.",
+   "clock_alignment is 'not_verified_by_core' (evidence/2), so temporal ordering and causal attribution of the stage-3 latency failure are unverified.",
+   "Only the load-generator CPU is covered by policy checks (generator-cpu-guard, threshold 0.85); no SUT-side resource metrics are present, and the stable ~0.43 generator CPU does not prove the SUT has spare capacity.",
+   "error_count 0 and error_rate 0/3601 reflect the sampled aggregate only; they do not prove the absence of errors in unobserved intervals or conditions.",
+   "The overall latency summary (evidence/0, evidence/1) is a single aggregate across all stages (p50 136 ms, p95 417 ms, p99 420 ms, max 1500 ms); per-window checks differ (140/140/420 ms).",
+   "The capacity bound only establishes last verified PASS at 237 users and first verified FAIL at 357 users; the transition point within (237, 357) is not pin-pointed.",
+   "Each stage reports complete_bins 30 with achieved statistic p05_10s and 5% tolerance, and only active_users and generator_cpu series are present in the evidenced resource summaries.",
+   "Throughput ≈ 4.0 rps (3601000/900500) and sample_count 3601 are aggregates; raw per-sample latency data is not present in the evidence and would be needed to analyze the tail beyond p95/p99/max.",
+   "run_validity VALID and analysis_coverage COMPLETE describe run/analysis integrity; they do not confirm any of the hypotheses above."
+  ]
+ },
+ "schema": "ai-experiment-run.holdout.v1",
+ "case": "case-021",
+ "rep": 2,
+ "arm": "A",
+ "try": 1,
+ "attempt_id": "case-021-2-A-t1",
+ "model_id": "deepseek-v4-flash-0731",
+ "prompt_sha256": "69f215a1ad4ae678c82410ba7cf7daf171cd9c7ca0ef4626bba6977db0af4ef7"
+}

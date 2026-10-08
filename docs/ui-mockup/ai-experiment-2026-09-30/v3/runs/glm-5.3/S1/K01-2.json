@@ -1,0 +1,206 @@
+{
+ "stage": "S1",
+ "mode": "live",
+ "model": "glm-5.3",
+ "tag": {
+  "phase": "v3",
+  "model_tag": "glm-5.3",
+  "stage": "S1",
+  "case": "K01",
+  "rep": 2,
+  "attempt": 1
+ },
+ "qwen_exit": 0,
+ "wall_ms": 178851,
+ "relay": {
+  "schema_version": "advisory-ai-runtime-relay.v1",
+  "status": "FORWARDED_STRUCTURED_OUTPUT",
+  "request_count": 1,
+  "usage": {
+   "prompt_tokens": 6561,
+   "total_tokens": 23224,
+   "completion_tokens": 16663,
+   "prompt_tokens_details": {
+    "cached_tokens": 0
+   },
+   "completion_tokens_details": {
+    "reasoning_tokens": 13477
+   }
+  },
+  "latency_ms": 177334,
+  "model_returned": "glm-5.3"
+ },
+ "relay_status": "FORWARDED_STRUCTURED_OUTPUT",
+ "usage": {
+  "prompt_tokens": 6561,
+  "total_tokens": 23224,
+  "completion_tokens": 16663,
+  "prompt_tokens_details": {
+   "cached_tokens": 0
+  },
+  "completion_tokens_details": {
+   "reasoning_tokens": 13477
+  }
+ },
+ "latency_ms": 177334,
+ "status": "OK",
+ "note": null,
+ "output": {
+  "caveats": [
+   "The deterministic outcomes are preserved and unchanged by this advice: run_validity VALID, policy_verdict PASS, resource_verdict NO_POLICY, analysis_coverage INCOMPLETE (SOURCE_ACQUISITION_PARTIAL). A missing resource policy is not a pass; only a configured policy can yield a resource PASS or FAIL.",
+   "The OpenSearch 'errors' profile query failed (SOURCE_HTTP_ERROR), so error evidence from that source is absent; the zero-error figures come from the JMeter sample summaries and the policy check in their own scopes.",
+   "Counting scopes differ: the metric summaries cover the whole run (37,349 samples) while the policy check denominator (36,034) covers only the run-intersection window; these are different quantities measuring different scopes and windows, not an inconsistency.",
+   "Clock alignment is 'not_verified_by_core', so no lead/lag ordering or temporal causal claims are supported; verify clocks before any time-based correlation.",
+   "Resource coverage is limited to three system-role services (frontend, checkoutservice, paymentservice) over 23 interval cells in the intersection window; no load-generator resource data is present, and complete cells plus an empty findings list do not demonstrate stability, spare capacity, low load, or absence of problems.",
+   "No capacity bound or saturation point is established by this evidence; resource readings alone do not support headroom claims, and no resource policy defines materiality.",
+   "Resource statistics are interval means at a 15-second step (aggregation 'interval_mean', step_ms 15000), so sub-interval peaks are averaged out and not visible in the reported maxima; CPU is in cores and memory in bytes.",
+   "The business PASS applies to the run-intersection evaluation window (1790619855000 to 1790620200000), which excludes the trimmed leading (10,309 ms) and trailing (4,660 ms) portions of the run; whole-run metrics and window counts are different quantities."
+  ],
+  "hypotheses": [
+   {
+    "evidence_refs": [
+     "analysis-result.json#/analysis_coverage",
+     "analysis-result.json#/evidence/16"
+    ],
+    "observation": "The analysis coverage fact is INCOMPLETE with reason SOURCE_ACQUISITION_PARTIAL, and the source summary reports overall status PARTIAL: the 'errors' profile (source_kind opensearch) FAILED with query reason SOURCE_HTTP_ERROR after 2 retries and 3 requests, while the metrics-direct profile (prometheus) is COMPLETE with all 6 queries SUCCESS.",
+    "possible_explanation": "The OpenSearch error source may have been unreachable or returned an HTTP error during acquisition, so error evidence from that source could not be collected even though the Prometheus resource queries succeeded.",
+    "recommended_check": "Inspect the OpenSearch endpoint and the failed query (id 'errors') for connectivity or HTTP-level failures, then rerun the analysis to see whether the errors query completes and coverage can be re-evaluated.",
+    "rank": 1
+   },
+   {
+    "evidence_refs": [
+     "analysis-result.json#/evidence/15",
+     "analysis-result.json#/evidence/14",
+     "analysis-result.json#/policy_verdict"
+    ],
+    "observation": "The window policy summary reports resource_verdict NO_POLICY alongside business_verdict PASS and verdict PASS for window run-intersection; the only policy check present is 'overall-errors' (error_rate_ratio, operator lte, threshold 0.01, status PASS, observed 0/36034).",
+    "possible_explanation": "No resource policy (for example thresholds on cpu_cores or memory_bytes) appears to be configured for the monitored entities, so resources were never evaluated against a threshold; the overall PASS reflects only the business policy.",
+    "recommended_check": "Review the run's policy configuration; if a resource verdict is desired, configure a resource policy for the monitored series and rerun the analysis. Until a policy is configured, resource_verdict stays NO_POLICY regardless of the healthy business results.",
+    "rank": 2
+   },
+   {
+    "evidence_refs": [
+     "analysis-result.json#/evidence/7"
+    ],
+    "observation": "The resource binding reports clock_alignment 'not_verified_by_core' and mode run_intersection: the evaluation window (1790619855000 to 1790620200000) is the intersection of the run window (1790619844691 to 1790620204660) and the snapshot window (1790619780000 to 1790620275000), dropping 1 leading cell (10309 ms) and 1 trailing cell (4660 ms).",
+    "possible_explanation": "The relationship between the load-run clock and the metrics-snapshot clock has not been verified, so any apparent time ordering between load samples and resource cells cannot support lead/lag or temporal reasoning; the trimming is consistent with intersection mode.",
+    "recommended_check": "Verify clock synchronization (for example offset or NTP status) between the load generator and the metrics host before attempting any time-based correlation between latency, load, and resource usage.",
+    "rank": 3
+   },
+   {
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0",
+     "analysis-result.json#/evidence/1",
+     "analysis-result.json#/evidence/3",
+     "analysis-result.json#/evidence/4",
+     "analysis-result.json#/evidence/6"
+    ],
+    "observation": "Latency summaries show a wide median-to-tail spread with zero recorded errors: overall p50 17 ms / p95 98 ms / p99 176 ms / max 1092 ms; 'home' has the highest tail (p95 168 ms, p99 197 ms, max 1009 ms); 'checkout' max equals the overall max (1092 ms); 'add product to cart' and 'reset cart' have p50 of 3 ms and 2 ms but p95 of 80 ms and 77 ms.",
+    "possible_explanation": "A comparatively small number of slow samples may account for the ~1 s maxima and the elevated tails relative to medians, possibly including a bimodal pattern on the two low-median transactions; the cause is not identified in this evidence and no errors were recorded.",
+    "recommended_check": "Inspect the JTL records with the highest response times (timestamps, labels, and surrounding concurrency) to characterize when and where the slow samples occurred, without attributing them to any resource or event.",
+    "rank": 4
+   },
+   {
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0",
+     "analysis-result.json#/evidence/1",
+     "analysis-result.json#/evidence/2",
+     "analysis-result.json#/evidence/3",
+     "analysis-result.json#/evidence/4",
+     "analysis-result.json#/evidence/5",
+     "analysis-result.json#/evidence/6",
+     "analysis-result.json#/evidence/7",
+     "analysis-result.json#/evidence/14"
+    ],
+    "observation": "The overall metric summary counts 37,349 samples with error_rate_ratio 0/37349, while the 'overall-errors' policy check in window run-intersection reports an observed denominator of 36,034; the six per-transaction sample counts (6224, 6224, 6223, 6227, 6227, 6224) sum to 37,349.",
+    "possible_explanation": "The policy check may count only samples inside the run-intersection evaluation window, which excludes the trimmed leading (10309 ms) and trailing (4660 ms) portions of the run, whereas the metric summaries cover the whole run; these would be different scopes and windows rather than contradictory counts.",
+    "recommended_check": "If reconciliation matters, recompute or compare counts restricted to the same window; no corrective action is required for the verdict because both report 0 errors against a threshold of 0.01.",
+    "rank": 5
+   },
+   {
+    "evidence_refs": [
+     "analysis-result.json#/evidence/8",
+     "analysis-result.json#/evidence/10",
+     "analysis-result.json#/evidence/12",
+     "analysis-result.json#/evidence/9",
+     "analysis-result.json#/evidence/11",
+     "analysis-result.json#/evidence/13",
+     "analysis-result.json#/evidence/15"
+    ],
+    "observation": "Resource summaries for the three monitored services are complete (23/23 observed cells, 0 missing cells, longest gap 0 cells) with CPU maxima of 0.199107 cores (frontend), 0.051577 cores (checkoutservice), and 0.013102 cores (paymentservice), and memory means of 12059870.61, 9282456.13, and 33023347 bytes respectively.",
+    "possible_explanation": "On these reported interval-mean metrics the three services may have been lightly utilized during the intersection window; however, with resource_verdict NO_POLICY no threshold defines adequacy, only three services are covered, and no capacity or headroom conclusion is supported.",
+    "recommended_check": "If resource adequacy matters, configure a resource policy with thresholds appropriate to each service's deployment limits and rerun; separately confirm whether other services were expected to be monitored and add their series to the metrics profile.",
+    "rank": 6
+   },
+   {
+    "evidence_refs": [
+     "analysis-result.json#/evidence/9",
+     "analysis-result.json#/evidence/11",
+     "analysis-result.json#/evidence/13"
+    ],
+    "observation": "All three memory series show positive slope_per_second and positive split_half_shift values: checkoutservice +1883.449275362318840579710144927536 bytes/s with split_half_shift 300032 bytes, frontend +2239.443478260869565217391304347826 bytes/s with split_half_shift 355328 bytes, and paymentservice +4658.277931488801054018445322793149 bytes/s with split_half_shift 610304 bytes.",
+    "possible_explanation": "Memory usage may have drifted upward during the evaluation window (the from/to epoch fields of the resource summaries span 1790619855000 to 1790620200000), with paymentservice showing the largest drift; the magnitude is small relative to the reported means and the cause is unknown.",
+    "recommended_check": "If memory growth matters, inspect the per-service memory series over a longer observation window or configure a memory policy with limits and rerun; the current evidence covers only 23 interval cells.",
+    "rank": 7
+   }
+  ],
+  "recommendations": [
+   {
+    "action": "Inspect the OpenSearch 'errors' source for the HTTP failure (query reason SOURCE_HTTP_ERROR, 2 retries), fix connectivity or the query, and rerun the analysis acquisition.",
+    "evidence_refs": [
+     "analysis-result.json#/analysis_coverage",
+     "analysis-result.json#/evidence/16",
+     "analysis-result.json#/policy_verdict"
+    ],
+    "rationale": "Coverage is INCOMPLETE solely because of this failed query while all six Prometheus queries succeeded; completing it on a rerun would let coverage be re-evaluated, though the deterministic PASS verdict itself is unaffected.",
+    "rank": 1
+   },
+   {
+    "action": "If a resource PASS/FAIL is required, configure a resource policy (thresholds on the monitored cpu_cores and/or memory_bytes series) and rerun the analysis.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/15",
+     "analysis-result.json#/evidence/14"
+    ],
+    "rationale": "resource_verdict is NO_POLICY; a healthy business window cannot turn it into PASS, and only a configured resource policy can produce PASS or FAIL.",
+    "rank": 2
+   },
+   {
+    "action": "Verify clock alignment between the load generator and the metrics host (offset or NTP status) before attempting any time-ordered correlation of latency or load with resource usage.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/7"
+    ],
+    "rationale": "The resource binding reports clock_alignment 'not_verified_by_core', so lead/lag ordering or temporal causal reasoning is not supported by this evidence.",
+    "rank": 3
+   },
+   {
+    "action": "Inspect the slowest JTL samples (overall max 1092 ms; 'home' p95 168 ms and p99 197 ms; 'checkout' max 1092 ms) and record when they occurred, without attributing cause.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0",
+     "analysis-result.json#/evidence/4",
+     "analysis-result.json#/evidence/3"
+    ],
+    "rationale": "Tails are far above medians while all summaries report 0 errors; characterizing the slow samples is a bounded inspection that can inform any later correlation work.",
+    "rank": 4
+   },
+   {
+    "action": "If services beyond frontend, checkoutservice, and paymentservice should be evaluated, add their metric series to the metrics-direct profile and rerun.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/16",
+     "analysis-result.json#/evidence/8",
+     "analysis-result.json#/evidence/10",
+     "analysis-result.json#/evidence/12"
+    ],
+    "rationale": "Resource coverage is limited to three system-role entities; statements about the rest of the deployment or about overall headroom are unsupported by this evidence.",
+    "rank": 5
+   }
+  ],
+  "schema_version": "ai-advice-output.v1",
+  "summary": "This analysis (run_id jmeter_jtl_csv-84494c2d57162ad38ec68518c3fd5cb9cc6685c189b1db71c16748b4475b7d8d) reports run_validity VALID, policy_verdict PASS, and analysis_coverage INCOMPLETE (SOURCE_ACQUISITION_PARTIAL); the window policy summary gives business_verdict PASS and resource_verdict NO_POLICY for window run-intersection. The single business policy check ('overall-errors', error_rate_ratio lte 0.01) PASSED with 0 errors over 36,034 window samples. Whole-run metrics: 37,349 samples, 0 errors, latency p50 17 ms / p95 98 ms / p99 176 ms / max 1092 ms, throughput_rps 37,349,000/359,969 (about 103.7 rps); six JMeter sampler transactions contribute 6,223-6,227 samples each with 0 errors, with 'home' showing the highest tail (p95 168 ms, p99 197 ms). Resource summaries for frontend, checkoutservice, and paymentservice are complete (23/23 cells, no gaps), with CPU maxima 0.199107 / 0.051577 / 0.013102 cores and memory means of 12059870.61 / 9282456.13 / 33023347 bytes; no resource policy is present, so no resource PASS/FAIL exists and no capacity conclusion is supported. Coverage is incomplete because the OpenSearch 'errors' profile query FAILED (SOURCE_HTTP_ERROR, 2 retries) while all six Prometheus queries succeeded. Clock alignment between the run and the metrics snapshot is 'not_verified_by_core', so time-ordered correlation is unsupported. The findings list is empty, which does not demonstrate absence of problems."
+ },
+ "schema": "ai-experiment-run.v3",
+ "case": "K01",
+ "rep": 2,
+ "model_id": "glm-5.3",
+ "net_retries": 0,
+ "infra_retries": 0
+}

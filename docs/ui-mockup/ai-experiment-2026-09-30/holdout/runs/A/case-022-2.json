@@ -1,0 +1,211 @@
+{
+ "stage": "A",
+ "mode": "live",
+ "model": "deepseek-v4-flash-0731",
+ "tag": {
+  "phase": "holdout",
+  "attempt_id": "case-022-2-A-t1",
+  "arm": "A",
+  "stage": null,
+  "case": "case-022",
+  "rep": 2,
+  "try": 1
+ },
+ "retry_policy": "d2",
+ "qwen_exit": 0,
+ "wall_ms": 148676,
+ "relay": {
+  "schema_version": "advisory-ai-runtime-relay.v1",
+  "status": "FORWARDED_STRUCTURED_OUTPUT",
+  "received_request_count": 1,
+  "forwarded_request_count": 1,
+  "outcomes": [
+   "FORWARDED_STRUCTURED_OUTPUT"
+  ],
+  "retry_refused_reason": null,
+  "first_refused_reason": null,
+  "model_id": "deepseek-v4-flash-0731",
+  "retry_policy": "d2",
+  "requests": [
+   {
+    "ordinal": 1,
+    "forwarded": true,
+    "outcome": "FORWARDED_STRUCTURED_OUTPUT",
+    "provider_status": 200,
+    "latency_ms": 147282,
+    "usage": {
+     "prompt_tokens": 15588,
+     "total_tokens": 30353,
+     "completion_tokens": 14765,
+     "prompt_tokens_details": {
+      "cached_tokens": 1024
+     },
+     "completion_tokens_details": {
+      "reasoning_tokens": 11732
+     }
+    },
+    "model_returned": "deepseek-v4-flash-0731"
+   }
+  ],
+  "usage": {
+   "prompt_tokens": 15588,
+   "completion_tokens": 14765,
+   "total_tokens": 30353
+  },
+  "latency_ms": 147282
+ },
+ "relay_status": "FORWARDED_STRUCTURED_OUTPUT",
+ "usage": {
+  "prompt_tokens": 15588,
+  "completion_tokens": 14765,
+  "total_tokens": 30353
+ },
+ "latency_ms": 147282,
+ "retried": false,
+ "retry_refused_reason": null,
+ "status": "OK",
+ "note": null,
+ "output": {
+  "schema_version": "ai-advice-output.v1",
+  "summary": "Verdict preserved: policy_verdict=PASS, run_validity=VALID, analysis_coverage=COMPLETE. In the 120 s reference window p50/p95/p99/max latency is 50 ms with 0 errors at ~60 rps; in the 480 s workload-01 window p50/p95/p99/max latency is 100 ms with 0 errors at ~60 rps (overall 36000 samples, 0 errors). The only positive anomaly signal is a CANDIDATE episode on workload-01-response: p95 observed_min=observed_max=100 ms vs reference median 50 ms (max_abs_delta 50), duration_ms 300000, reasons ZERO_MAD, and diagnostic uncertainty NOT_ESTIMATED. All measured resource series are constant: cpu_work 0.15, db_work 0.015, service replicas 4, all queue depths 0, runtime-gc-pause 0; cpu-service-quota quota_fraction is constant at 1 in both windows. Correlation pairs 01-07 are INSUFFICIENT_DATA (CONSTANT_CONTROL, NO_RANK_VARIATION, etc.); association-09 (generator-threads vs p95) is CANDIDATE with rho ~0.998 at best_lag_ms -1000, but its headline selection is UNAVAILABLE (OBSERVATION_COUNT_UNSUPPORTED). clock_alignment = not_verified_by_core, so no lead/lag ordering is supported. This advice is advisory only and does not change the PASS verdict.",
+  "hypotheses": [
+   {
+    "rank": 1,
+    "observation": "The reference window reports latency p50=p95=p99=max=50 ms over 7200 samples at ~60 rps, while workload-01 reports p50=p95=p99=max=100 ms over 28800 samples at ~60 rps; the anomaly episode states p95 observed_min=observed_max=100 ms with max_abs_delta 50 against reference_median 50 (analysis-result.json#/evidence/35, #/evidence/36, #/findings/0).",
+    "possible_explanation": "A uniform 50 ms uplift across every percentile and the max is more consistent with an additive, systematic per-request delay (for example an added middleware, gateway hop, throttle tick, or configuration change) than with load-induced tail degradation, which would typically widen p95/p99/max more than p50.",
+    "recommended_check": "Extract the per-sample JTL latency distributions for both windows and confirm whether the delta is a constant offset across all quantiles; then correlate the shift with service/config/deploy changes around 1704067320000 and 1704067500000.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/35",
+     "analysis-result.json#/evidence/36",
+     "analysis-result.json#/findings/0",
+     "analysis-result.json#/evidence/56"
+    ]
+   },
+   {
+    "rank": 2,
+    "observation": "cpu-service-quota quota_fraction is constant at 1 in both the reference and workload-01 windows, while cpu_work stays constant at 0.15 and db_work at 0.015; the compute-limit/database-limit policy checks (threshold 0.9) are PASS (analysis-result.json#/evidence/5, #/evidence/17, #/evidence/12, #/evidence/29, #/evidence/30).",
+    "possible_explanation": "The service may be running up against its full CPU quota (quota_fraction=1) in both windows; a quota-capped service can absorb latency increases when concurrency rises (active_threads rose to 6) even though the reported cpu_work stays at 0.15. This is only a candidate because the quota series does not change between windows.",
+    "recommended_check": "Collect container/cgroup CPU throttling and quota-capping counters across workload-01 and check whether throttling activity coincides with the p95 step at ~1704067500000.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/5",
+     "analysis-result.json#/evidence/17",
+     "analysis-result.json#/evidence/12",
+     "analysis-result.json#/evidence/29",
+     "analysis-result.json#/evidence/21"
+    ]
+   },
+   {
+    "rank": 3,
+    "observation": "active_threads in workload-01 grows to max 6, mean 4.8746, with positive slope and split_half_shift 3 (reference mean 2.9996), while generator request_starts and target_rate stay constant at 60 rps; association-09 (generator-threads vs p95) is CANDIDATE with raw_rho 0.9983 and best_lag_ms -1000, but its headline selection is UNAVAILABLE with reason OBSERVATION_COUNT_UNSUPPORTED (analysis-result.json#/evidence/21, #/evidence/9, #/evidence/20, #/evidence/44, #/evidence/52).",
+    "possible_explanation": "Under a fixed target rate, needed active threads is approximately throughput times latency (about 3 threads at 50 ms and 6 at 100 ms at 60 rps), so the very high rho may reflect this Little's-law accounting identity rather than threads driving latency; the -1000 ms best lag cannot support lead/lag ordering because clock_alignment is not_verified_by_core.",
+    "recommended_check": "Verify clock alignment first, then recompute the generator-threads to p95 association using separately sourced timestamps and a run with enough data to support the MBB-Holm test; treat association-09 as descriptive only until it is statistically supported.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/21",
+     "analysis-result.json#/evidence/9",
+     "analysis-result.json#/evidence/20",
+     "analysis-result.json#/evidence/44",
+     "analysis-result.json#/evidence/52",
+     "analysis-result.json#/evidence/2"
+    ]
+   },
+   {
+    "rank": 4,
+    "observation": "The workload-01 window summary reports p95=100 ms across the whole 480 s window, while the response anomaly episode spans 1704067500000 to 1704067800000 (duration_ms 300000); queue_depth series for admission/cpu/db/generator and runtime-gc-pause all report 0 with zero slope (analysis-result.json#/evidence/36, #/findings/0, #/evidence/56, #/evidence/15, #/evidence/16, #/evidence/22).",
+    "possible_explanation": "The latency increase looks like a step (constant p95 values) rather than progressive resource-driven degradation, because no measured queue, CPU, DB, or GC series shows a gradient inside workload-01; the step could originate at window start 1704067320000 or at the episode start, which the aggregated evidence cannot distinguish.",
+    "recommended_check": "Rebuild per-cell (or per-minute) response_time p95 within workload-01 to locate the exact transition point and compare service behavior at 1704067320000 and 1704067500000.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/36",
+     "analysis-result.json#/findings/0",
+     "analysis-result.json#/evidence/56",
+     "analysis-result.json#/evidence/15",
+     "analysis-result.json#/evidence/16",
+     "analysis-result.json#/evidence/22"
+    ]
+   },
+   {
+    "rank": 5,
+    "observation": "The reported latency percentiles are exactly 50 ms (reference) and 100 ms (workload-01) with no spread across p50/p95/p99/max, and resource-binding records clock_alignment = not_verified_by_core (analysis-result.json#/evidence/35, #/evidence/36, #/evidence/2).",
+    "possible_explanation": "Timer resolution or clock offset could quantize measured latencies to these round values; if the generator and service clocks are not aligned, the constant offset and the -1000 ms best lag from association-09 could be artifacts rather than service behavior.",
+    "recommended_check": "Verify clock alignment between generator and service and the timer resolution used for JTL timestamps; cross-check with an independent latency source (for example network RTT or trace spans) before attributing the +50 ms to the service.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/2",
+     "analysis-result.json#/evidence/35",
+     "analysis-result.json#/evidence/36",
+     "analysis-result.json#/evidence/44"
+    ]
+   }
+  ],
+  "recommendations": [
+   {
+    "rank": 1,
+    "action": "Verify clock alignment between generator and service and confirm timer resolution for JTL timestamps before interpreting exact latency values or any lag value.",
+    "rationale": "resource-binding reports clock_alignment = not_verified_by_core, and association-09 uses best_lag_ms -1000; without verified clocks, neither the constant +50 ms shift nor the best lag supports a causal ordering.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/2",
+     "analysis-result.json#/evidence/44"
+    ]
+   },
+   {
+    "rank": 2,
+    "action": "Extract per-sample latency from the JTL for reference and workload-01 and produce quantiles plus a per-cell p95 series around 1704067320000 and 1704067500000.",
+    "rationale": "Window summaries compress latency to equal p50/p95/p99/max values (50 vs 100 ms); only raw samples can show whether the delta is a constant additive offset and when the transition actually begins.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/35",
+     "analysis-result.json#/evidence/36",
+     "analysis-result.json#/findings/0"
+    ]
+   },
+   {
+    "rank": 3,
+    "action": "Review deployment, configuration, middleware, and network-path changes between the reference and workload-01 windows (and at approximately 1704067500000).",
+    "rationale": "Throughput (~60 rps), error_count (0), cpu_work (0.15), db_work (0.015), and all queue depths are constant across windows, so the measured load and resources provide no gradient that explains an exact 50 ms per-request increase.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0",
+     "analysis-result.json#/evidence/35",
+     "analysis-result.json#/evidence/36",
+     "analysis-result.json#/evidence/24",
+     "analysis-result.json#/evidence/26"
+    ]
+   },
+   {
+    "rank": 4,
+    "action": "Document association-09 as a CANDIDATE with uncertainty NOT_ESTIMATED; do not report it as a confirmed latency driver until a significance-supported correlation (MBB-Holm) with verified clocks is available from a longer run.",
+    "rationale": "Headline selection is UNAVAILABLE (OBSERVATION_COUNT_UNSUPPORTED) for association-09 and UNAVAILABLE/PAIR_NOT_EVALUABLE for all other pairs; diagnostic summary reports uncertainty NOT_ESTIMATED, so no p-value or confidence exists for any association.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/44",
+     "analysis-result.json#/evidence/52",
+     "analysis-result.json#/evidence/58",
+     "analysis-result.json#/evidence/45"
+    ]
+   },
+   {
+    "rank": 5,
+    "action": "Pull CPU quota and cgroup throttling counters for the service across workload-01 and correlate throttling events with the p95 increase.",
+    "rationale": "quota_fraction is constant at 1 in both windows (full quota used) even though cpu_work is only 0.15; CPU capping could add latency under higher concurrency without being visible in the cpu_work series.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/5",
+     "analysis-result.json#/evidence/17",
+     "analysis-result.json#/evidence/21",
+     "analysis-result.json#/evidence/29"
+    ]
+   }
+  ],
+  "caveats": [
+   "Deterministic verdict is preserved: policy_verdict=PASS, run_validity=VALID, analysis_coverage=COMPLETE; the p95 latency increase (50 to 100 ms) remains below the 200 ms SLA threshold and does not change the PASS verdict.",
+   "The response-time anomaly is only a CANDIDATE: it was flagged with reasons ZERO_MAD (reference MAD = 0), diagnostic uncertainty is NOT_ESTIMATED, and the episode runs to the end of the recorded window, so duration_ms 300000 may be truncated and its true peak unknown.",
+   "No correlation pair has statistical support: pairs 01-07 are INSUFFICIENT_DATA / PAIR_NOT_EVALUABLE and association-09 is CANDIDATE but UNAVAILABLE at headline selection; no rho confidence, p-value, or sensitivity is estimated.",
+   "clock_alignment = not_verified_by_core, so no lead/lag ordering or temporal causal hypothesis is supported by this run, including the best_lag_ms -1000 of association-09.",
+   "Constant or zero-valued resource series (queue_depth 0, cpu_work 0.15, db_work 0.015, quota_fraction 1) and NO_MATERIAL_CHANGE anomaly results do not prove the absence of a latency-relevant change; they only indicate no measured variation in those series.",
+   "No raw per-sample latency data, config/deploy logs, container throttle counters, or generator-side logs were part of the ingested evidence, so the exact mechanism of the +50 ms step is not established.",
+   "Generator target and achieved rates are flat at ~60 rps and sensitivity_without_achieved_rps is null, so the run cannot estimate how latency would respond if the target rate changed."
+  ]
+ },
+ "schema": "ai-experiment-run.holdout.v1",
+ "case": "case-022",
+ "rep": 2,
+ "arm": "A",
+ "try": 1,
+ "attempt_id": "case-022-2-A-t1",
+ "model_id": "deepseek-v4-flash-0731",
+ "prompt_sha256": "69f215a1ad4ae678c82410ba7cf7daf171cd9c7ca0ef4626bba6977db0af4ef7"
+}

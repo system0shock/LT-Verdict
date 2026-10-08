@@ -1,0 +1,114 @@
+[
+  {
+    "id": "R114",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T2",
+        "field": "#/summary",
+        "quote": "evaluation resource mean ... is slightly higher than the reference mean",
+        "why": "It asserts a comparative relationship between resource aggregates from different windows."
+      },
+      {
+        "type": "T2",
+        "field": "#/hypotheses/2/observation",
+        "quote": "mean 0.10545 and max 0.16 vs reference mean 0.1 and max 0.101",
+        "why": "It relates aggregates from distinct windows as though they were directly comparable."
+      },
+      {
+        "type": "T8",
+        "field": "#/hypotheses/2/possible_explanation",
+        "quote": "contains a brief spike ... classified as either not material or a suppressed short episode",
+        "why": "The aggregate maximum and one suppressed episode do not establish that the maximum was brief or that it was the suppressed episode."
+      }
+    ],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 3,
+    "notes": "It preserves the verdict and offers useful checks, but overinterprets cross-window resource aggregates."
+  },
+  {
+    "id": "R117",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T8",
+        "field": "#/hypotheses/0/possible_explanation",
+        "quote": "is produced by the workload or application independently of latency",
+        "why": "This asserts an unproven root-cause characterization rather than keeping it as a hypothesis."
+      },
+      {
+        "type": "T2",
+        "field": "#/hypotheses/1/observation",
+        "quote": "the evaluation error ratio ... is also slightly higher",
+        "why": "It compares error quantities from different policy windows as a direct increase."
+      },
+      {
+        "type": "T7",
+        "field": "#/hypotheses/2/possible_explanation",
+        "quote": "No applicable resource rule with effect sla (or required capacity/SLA) exists",
+        "why": "NO_POLICY does not establish which precondition is absent, and required capacity is not an explanation for the reported resource verdict."
+      }
+    ],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 2,
+    "notes": "The central verdict facts are correct, but it makes unsupported causal and NO_POLICY claims."
+  },
+  {
+    "id": "R126",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T2",
+        "field": "#/summary",
+        "quote": "max 0.16 vs reference max 0.101",
+        "why": "It presents resource aggregates from distinct windows as a comparative excursion."
+      },
+      {
+        "type": "T2",
+        "field": "#/hypotheses/1/observation",
+        "quote": "a rise from 10% to about 10.5%",
+        "why": "It derives a trend by directly comparing ratios from different windows."
+      },
+      {
+        "type": "T5",
+        "field": "#/hypotheses/1/possible_explanation",
+        "quote": "request types, or load phase",
+        "why": "The evidence provides no load-phase structure."
+      },
+      {
+        "type": "T8",
+        "field": "#/hypotheses/2/possible_explanation",
+        "quote": "A short-lived resource excursion occurred ... but was suppressed",
+        "why": "The evidence does not show that the reported maximum was short-lived or that it was the suppressed episode."
+      }
+    ],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 2,
+    "notes": "It correctly reports the policy failure but repeatedly overinterprets aggregates and unavailable structure."
+  },
+  {
+    "id": "R141",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T2",
+        "field": "#/hypotheses/1/possible_explanation",
+        "quote": "roughly constant error rate under constant throughput",
+        "why": "It asserts a relationship between rate and throughput aggregates from different windows."
+      },
+      {
+        "type": "T4",
+        "field": "#/caveats/5",
+        "quote": "no per-error-type, per-sampler, or per-message breakdown",
+        "why": "The evidence contains a transaction-scope JMETER_SAMPLER entry for the request sampler with its own sample and error counts."
+      }
+    ],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 3,
+    "notes": "The verdict and primary operator actions are useful, but it denies the available sampler attribution and infers a cross-window relation."
+  }
+]

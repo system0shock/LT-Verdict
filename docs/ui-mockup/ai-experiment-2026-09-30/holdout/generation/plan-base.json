@@ -1,0 +1,437 @@
+{
+ "schema_version": "ai-holdout-plan.v1",
+ "slots": [
+  {
+   "slot": "S01",
+   "flags": [
+    "latency120"
+   ],
+   "verdict": "PASS",
+   "condition": "",
+   "candidates": [
+    "s:V01_business_fail",
+    "s:V01_combined_pass",
+    "i:V01_diagnostic_only",
+    "s:V01_resource_business_fail"
+   ]
+  },
+  {
+   "slot": "S02",
+   "flags": [
+    "latency80"
+   ],
+   "verdict": "FAIL",
+   "condition": "",
+   "candidates": [
+    "s:V01_business_fail",
+    "s:V01_combined_pass",
+    "i:V01_diagnostic_only",
+    "s:V01_resource_business_fail"
+   ]
+  },
+  {
+   "slot": "S03",
+   "flags": [
+    "error"
+   ],
+   "verdict": "FAIL",
+   "condition": "",
+   "candidates": [
+    "i:A02_short_error_rate",
+    "i:A02_signs_error_rate",
+    "i:A03_abs_equal_error_rate",
+    "i:A03_ref29_error_rate",
+    "i:A03_zero_error_rate"
+   ]
+  },
+  {
+   "slot": "S04",
+   "flags": [
+    "latency120"
+   ],
+   "verdict": "FAIL",
+   "condition": "",
+   "candidates": [
+    "s:V01_business_fail",
+    "s:V01_combined_pass",
+    "i:V01_diagnostic_only",
+    "s:V01_resource_business_fail"
+   ]
+  },
+  {
+   "slot": "S05",
+   "flags": [],
+   "verdict": "NO_VERDICT",
+   "condition": "",
+   "candidates": [
+    "s:V02_diagnostics_disabled",
+    "s:V02_diagnostics_enabled",
+    "a:NT03-missing_db_290s_320s-2000:0"
+   ]
+  },
+  {
+   "slot": "D01",
+   "flags": [],
+   "verdict": "NO_POLICY",
+   "condition": "",
+   "candidates": [
+    "u:N01-p1-l0-s1001",
+    "u:N01-p1-l0-s1002",
+    "u:N01-p1-l0-s1003",
+    "u:N01-p1-l0-s1004",
+    "u:N01-p1-l0-s1005",
+    "u:N01-p1-l0-s1006",
+    "u:N01-p1-l0-s1007",
+    "u:N01-p1-l0-s1008",
+    "u:N01-p1-l0-s1009",
+    "u:N01-p1-l0-s1010"
+   ]
+  },
+  {
+   "slot": "D02",
+   "flags": [],
+   "verdict": null,
+   "condition": "unavailable",
+   "candidates": [
+    "s:W04_support_19",
+    "s:W04_support_20",
+    "s:C04_clock_unknown",
+    "s:C04_longest_not_strongest",
+    "s:C04_windows_not_joined"
+   ]
+  },
+  {
+   "slot": "D03",
+   "flags": [],
+   "verdict": "NO_VERDICT",
+   "condition": "",
+   "candidates": [
+    "a:NT03-missing_db_290s_320s-2000:1"
+   ]
+  },
+  {
+   "slot": "D04",
+   "flags": [
+    "onePair",
+    "clockUnknown"
+   ],
+   "verdict": null,
+   "condition": "selectedUnknownClock",
+   "candidates": [
+    "u:P03-p16-l10-s1001",
+    "u:P03-p16-l10-s1002",
+    "u:P03-p16-l10-s1003",
+    "u:P03-p16-l10-s1004",
+    "u:P03-p16-l10-s1005",
+    "u:P03-p16-l10-s1006",
+    "u:P03-p16-l10-s1007",
+    "u:P03-p16-l10-s1008",
+    "u:P03-p16-l10-s1009",
+    "u:P03-p16-l10-s1010"
+   ]
+  },
+  {
+   "slot": "D05",
+   "flags": [
+    "d05"
+   ],
+   "verdict": null,
+   "condition": "computeCapUnavailable",
+   "candidates": [
+    "a:NT01-clean-2001:0",
+    "a:NT01-clean-2002:0",
+    "a:NT01-clean-2003:0",
+    "a:NT01-clean-2004:0",
+    "a:NT01-clean-2005:0"
+   ]
+  },
+  {
+   "slot": "C01",
+   "flags": [],
+   "verdict": null,
+   "condition": "selected",
+   "candidates": [
+    "u:P01-p16-l0-s1001",
+    "u:P01-p16-l0-s1002",
+    "u:P01-p16-l0-s1003",
+    "u:P01-p16-l0-s1004",
+    "u:P01-p16-l0-s1005",
+    "u:P01-p16-l0-s1006",
+    "u:P01-p16-l0-s1007",
+    "u:P01-p16-l0-s1008",
+    "u:P01-p16-l0-s1009",
+    "u:P01-p16-l0-s1010"
+   ]
+  },
+  {
+   "slot": "C02",
+   "flags": [],
+   "verdict": null,
+   "condition": "submaterial",
+   "candidates": [
+    "s:C05_wrong_sign",
+    "s:C06_achieved_sensitivity",
+    "s:C06_effect_above",
+    "s:C06_effect_below",
+    "s:C06_effect_equal",
+    "x:C02"
+   ]
+  },
+  {
+   "slot": "C03",
+   "flags": [],
+   "verdict": null,
+   "condition": "partial",
+   "candidates": [
+    "i:C02_two_controls",
+    "s:C02_redundant_control",
+    "s:C02_constant_control"
+   ]
+  },
+  {
+   "slot": "C05",
+   "flags": [],
+   "verdict": null,
+   "condition": "zeroResidualPartial",
+   "candidates": [
+    "s:C02_constant_control",
+    "s:C02_redundant_control",
+    "i:C02_two_controls",
+    "x:C05"
+   ]
+  },
+  {
+   "slot": "N01",
+   "flags": [],
+   "verdict": null,
+   "condition": "none",
+   "candidates": [
+    "u:N01-p1-l0-s1011",
+    "u:N01-p1-l0-s1012",
+    "u:N01-p1-l0-s1013",
+    "u:N01-p1-l0-s1014",
+    "u:N01-p1-l0-s1015",
+    "u:N01-p1-l0-s1016",
+    "u:N01-p1-l0-s1017",
+    "u:N01-p1-l0-s1018",
+    "u:N01-p1-l0-s1019",
+    "u:N01-p1-l0-s1020"
+   ]
+  },
+  {
+   "slot": "N02",
+   "flags": [],
+   "verdict": null,
+   "condition": "selected",
+   "candidates": [
+    "u:N02-p1-l10-s1127",
+    "u:N02-p1-l10-s1129",
+    "u:N02-p1-l10-s1172",
+    "u:N02-p1-l10-s1184",
+    "u:N02-p1-l10-s1218",
+    "u:N02-p1-l10-s1219",
+    "u:N02-p1-l10-s1241",
+    "u:N02-p1-l10-s1250",
+    "u:N02-p1-l10-s1252",
+    "u:N02-p1-l10-s1259"
+   ],
+   "deadline_s": 120
+  },
+  {
+   "slot": "N03",
+   "flags": [],
+   "verdict": null,
+   "condition": "selected",
+   "candidates": [
+    "u:N02-p16-l10-s1007",
+    "u:N02-p16-l10-s1037",
+    "u:N02-p16-l10-s1045",
+    "u:N02-p16-l10-s1063",
+    "u:N02-p16-l10-s1066"
+   ],
+   "deadline_s": 120
+  },
+  {
+   "slot": "N04",
+   "flags": [],
+   "verdict": null,
+   "condition": "injectedExtra",
+   "candidates": [
+    "u:P01-p16-l0-s1159",
+    "u:P01-p16-l0-s1194",
+    "u:P01-p16-l0-s1210",
+    "u:P01-p16-l0-s1224",
+    "u:P01-p16-l0-s1251",
+    "u:P01-p16-l0-s1252",
+    "u:P01-p16-l0-s1274",
+    "u:P01-p16-l0-s1276",
+    "u:P01-p16-l0-s1290",
+    "u:P01-p16-l0-s1293"
+   ],
+   "deadline_s": 120
+  },
+  {
+   "slot": "N05",
+   "flags": [
+    "clockUnknown"
+   ],
+   "verdict": null,
+   "condition": "unknownClockDegradationUnavailable",
+   "candidates": [
+    "a:NT07-clean-2001:0",
+    "a:NT07-clean-2002:0",
+    "a:NT07-clean-2003:0",
+    "a:NT07-clean-2004:0",
+    "a:NT07-clean-2005:0"
+   ]
+  },
+  {
+   "slot": "U01",
+   "flags": [
+    "u01"
+   ],
+   "verdict": null,
+   "condition": "saturatedSlaFailure",
+   "candidates": [
+    "a:NT01-clean-2001:0",
+    "a:NT01-clean-2002:0",
+    "a:NT01-clean-2003:0",
+    "a:NT01-clean-2004:0",
+    "a:NT01-clean-2005:0",
+    "a:NT01-noisy-2001:0",
+    "a:NT01-noisy-2002:0",
+    "a:NT01-noisy-2003:0",
+    "a:NT01-noisy-2004:0",
+    "a:NT01-noisy-2005:0"
+   ]
+  },
+  {
+   "slot": "U02",
+   "flags": [
+    "dropDownstream"
+   ],
+   "verdict": null,
+   "condition": "degradationWithoutDownstream",
+   "candidates": [
+    "a:NT07-clean-2001:0",
+    "a:NT07-clean-2002:0",
+    "a:NT07-clean-2003:0",
+    "a:NT07-clean-2004:0",
+    "a:NT07-clean-2005:0"
+   ]
+  },
+  {
+   "slot": "U03",
+   "flags": [
+    "dropGc"
+   ],
+   "verdict": null,
+   "condition": "",
+   "candidates": [
+    "a:NT06-clean-2001:0",
+    "a:NT06-clean-2002:0",
+    "a:NT06-clean-2003:0"
+   ]
+  },
+  {
+   "slot": "U04",
+   "flags": [
+    "u04"
+   ],
+   "verdict": null,
+   "condition": "",
+   "candidates": [
+    "a:NT09-clean-2001:0",
+    "a:NT09-clean-2002:0",
+    "a:NT09-clean-2003:0"
+   ]
+  },
+  {
+   "slot": "U05",
+   "flags": [
+    "dense"
+   ],
+   "verdict": null,
+   "condition": "denseUnavailable",
+   "candidates": [
+    "a:NT01-noisy-2001:0",
+    "a:NT01-noisy-2002:0",
+    "a:NT01-noisy-2003:0",
+    "a:NT01-noisy-2004:0",
+    "a:NT01-noisy-2005:0"
+   ]
+  },
+  {
+   "slot": "X01",
+   "flags": [],
+   "verdict": null,
+   "condition": "",
+   "candidates": [
+    "x:X01"
+   ]
+  },
+  {
+   "slot": "X02",
+   "flags": [],
+   "verdict": null,
+   "condition": "",
+   "candidates": [
+    "x:X02"
+   ]
+  },
+  {
+   "slot": "X03",
+   "flags": [],
+   "verdict": null,
+   "condition": "",
+   "candidates": [
+    "x:X03"
+   ]
+  },
+  {
+   "slot": "X04",
+   "flags": [],
+   "verdict": null,
+   "condition": "",
+   "candidates": [
+    "x:X04"
+   ]
+  },
+  {
+   "slot": "X05",
+   "flags": [],
+   "verdict": null,
+   "condition": "",
+   "candidates": [
+    "x:X05"
+   ]
+  },
+  {
+   "slot": "X06",
+   "flags": [],
+   "verdict": null,
+   "condition": "",
+   "candidates": [
+    "x:X06"
+   ]
+  },
+  {
+   "slot": "X07",
+   "flags": [],
+   "verdict": null,
+   "condition": "",
+   "candidates": [
+    "x:X07"
+   ]
+  },
+  {
+   "slot": "X08",
+   "flags": [],
+   "verdict": null,
+   "condition": "",
+   "candidates": [
+    "x:X08"
+   ]
+  }
+ ]
+}

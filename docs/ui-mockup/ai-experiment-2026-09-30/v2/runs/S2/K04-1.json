@@ -1,0 +1,171 @@
+{
+ "stage": "S2",
+ "mode": "live",
+ "model": "deepseek-v4-flash-0731",
+ "tag": {
+  "phase": "v2-pilot",
+  "stage": "S2",
+  "case": "K04",
+  "rep": 1,
+  "attempt": 1
+ },
+ "qwen_exit": 0,
+ "wall_ms": 87081,
+ "relay": {
+  "schema_version": "advisory-ai-runtime-relay.v1",
+  "status": "FORWARDED_STRUCTURED_OUTPUT",
+  "request_count": 1,
+  "usage": {
+   "prompt_tokens": 3847,
+   "total_tokens": 12055,
+   "completion_tokens": 8208,
+   "prompt_tokens_details": {
+    "cached_tokens": 1024
+   },
+   "completion_tokens_details": {
+    "reasoning_tokens": 6047
+   }
+  },
+  "latency_ms": 85696,
+  "model_returned": "deepseek-v4-flash-0731"
+ },
+ "relay_status": "FORWARDED_STRUCTURED_OUTPUT",
+ "usage": {
+  "prompt_tokens": 3847,
+  "total_tokens": 12055,
+  "completion_tokens": 8208,
+  "prompt_tokens_details": {
+   "cached_tokens": 1024
+  },
+  "completion_tokens_details": {
+   "reasoning_tokens": 6047
+  }
+ },
+ "latency_ms": 85696,
+ "status": "OK",
+ "note": null,
+ "output": {
+  "schema_version": "ai-advice-output.v1",
+  "summary": "Deterministic verdict: PASS. This comes from policy_check overall-errors (evidence/7): observed error_rate_ratio 0/2623, operator lte, threshold 0.01, status PASS, evaluated over the whole run with no window id; the run is VALID and coverage is COMPLETE. This advice does not change that verdict. The PASS is narrow: it reflects only the single whole-run error-rate policy present in the input. The input contains seven metric summaries (overall plus six transaction scopes, all with error_count 0) and no capacity_summary, resource series, OpenSearch error profile, latency policy, policy windows, or per-sample data. Any follow-up should therefore be bounded: inspect raw sampler data to characterize the 904 ms overall max, consider adding latency and/or capacity policies if those goals exist, and define policy windows if sustained-load intervals matter.",
+  "hypotheses": [
+   {
+    "rank": 1,
+    "observation": "policy_check overall-errors (analysis-result.json#/evidence/7) reports status PASS with observed error_rate_ratio numerator 0, denominator 2623, operator lte, threshold 0.01, evaluated against metric evidence metric-summary-overall over the whole run.",
+    "possible_explanation": "The deterministic PASS verdict follows directly from this configured error-rate rule; it reflects only the error-rate policy present in the input and is not a statement about latency, capacity, stability, or absence of defects.",
+    "recommended_check": "Confirm that the overall-errors rule (error_rate_ratio <= 0.01) is the only policy intended for this run; the input contains no other policy check, so no additional verdict component exists to validate.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/7"
+    ]
+   },
+   {
+    "rank": 2,
+    "observation": "The overall latency summary (analysis-result.json#/evidence/0) reports max 904 ms while p99 is 77 ms, p95 is 46 ms, and p50 is 11 ms across 2623 samples with 0 errors.",
+    "possible_explanation": "The 904 ms maximum may be a rare outlier sample or a short-lived contention spike, but the input does not include individual samples or the number of samples near the max, so its frequency cannot be determined.",
+    "recommended_check": "Inspect the underlying JTL/CSV sampler data or a histogram/percentile breakdown outside this input and count samples above a chosen threshold (for example >500 ms) before treating the max as a meaningful tail indicator.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0"
+    ]
+   },
+   {
+    "rank": 3,
+    "observation": "The home transaction summary (analysis-result.json#/evidence/4) shows the highest max latency in the input (904 ms) with p50 27 ms and p99 96 ms, while the overall p99 is 77 ms (analysis-result.json#/evidence/0).",
+    "possible_explanation": "The home transaction may exhibit occasional higher-tail responses relative to other transactions, or a single outlier sample may dominate its max; the summaries alone do not support any causal attribution.",
+    "recommended_check": "Compare per-transaction percentile distributions across the six transaction scopes and, if data permits, inspect the home sampler timing over time to see whether the tail is scattered or clustered in one interval.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/4",
+     "analysis-result.json#/evidence/0"
+    ]
+   },
+   {
+    "rank": 4,
+    "observation": "The six transaction summaries (analysis-result.json#/evidence/1 through evidence/6) report sample counts 437, 437, 437, 438, 437, 437, summing to 2623, which matches the overall sample_count (analysis-result.json#/evidence/0); every scope reports error_count 0.",
+    "possible_explanation": "Whole-run and per-transaction counts are internally consistent and every summarized scope reports zero errors; this is a count-consistency observation and does not by itself indicate stability, low load, or spare capacity.",
+    "recommended_check": "If independent confirmation is needed, compare the exported JTL/CSV sample count to 2623 and the per-transaction counts; no further check is required solely on the basis of these consistent counts.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/1",
+     "analysis-result.json#/evidence/2",
+     "analysis-result.json#/evidence/3",
+     "analysis-result.json#/evidence/4",
+     "analysis-result.json#/evidence/5",
+     "analysis-result.json#/evidence/6",
+     "analysis-result.json#/evidence/0"
+    ]
+   },
+   {
+    "rank": 5,
+    "observation": "The input inventory contains only metric_summary x7 and policy_check x1; there is no capacity_summary, no resource series, no OpenSearch error profile, and the findings list is empty.",
+    "possible_explanation": "This run was evaluated only for the error-rate policy; no capacity bound, resource-behavior analysis, or deeper error-profile analysis is represented in this input.",
+    "recommended_check": "If capacity limits or resource behavior are required, configure a capacity policy/stage with a verified product outcome and rerun so the derived bound can be evaluated; do not infer capacity from this error-rate-only result.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/7",
+     "analysis-result.json#/evidence/0"
+    ]
+   },
+   {
+    "rank": 6,
+    "observation": "policy_check overall-errors (analysis-result.json#/evidence/7) is evaluated on the whole run (observed 0/2623) and references no window id.",
+    "possible_explanation": "The check does not represent any specific sustained-load sub-interval; if the test intended to evaluate a particular window, that evaluation is not present in the input.",
+    "recommended_check": "If sustained-window behavior is the objective, define policy windows for future runs so the rule is evaluated against the intended interval rather than only the whole run.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/7"
+    ]
+   }
+  ],
+  "recommendations": [
+   {
+    "rank": 1,
+    "action": "Accept and preserve the deterministic PASS for the overall-errors policy; do not reinterpret or upgrade it to a broader health or capacity statement.",
+    "rationale": "policy_check overall-errors (analysis-result.json#/evidence/7) shows observed error_rate_ratio 0/2623, which satisfies operator lte against threshold 0.01 with status PASS; the verdict is fixed and advice cannot change it.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/7"
+    ]
+   },
+   {
+    "rank": 2,
+    "action": "If latency performance is a goal, add and verify latency percentile policies (for example p95 or p99) on overall and transaction scopes, or review existing latency SLOs separately.",
+    "rationale": "The input contains latency summaries (p50/p95/p99/max) but no latency policy; the PASS covers only error rate and says nothing about latency acceptability.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0",
+     "analysis-result.json#/evidence/4"
+    ]
+   },
+   {
+    "rank": 3,
+    "action": "Inspect raw per-sample latency data or a histogram outside this input to characterize the 904 ms overall max before taking any action based on it.",
+    "rationale": "Individual samples and counts of samples near the max are not in the input, so it cannot be determined whether the max is a one-off outlier or a recurring tail.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0"
+    ]
+   },
+   {
+    "rank": 4,
+    "action": "If capacity coverage is desired, configure a capacity policy/stage with a verified product outcome and rerun so a bound can be derived; do not interpret the error-rate PASS as spare capacity.",
+    "rationale": "The input has no capacity_summary and no resource series, so no capacity bound can be derived from this analysis and no stability or headroom claim is supported.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/7",
+     "analysis-result.json#/evidence/0"
+    ]
+   },
+   {
+    "rank": 5,
+    "action": "Define policy windows if the intent is to assess specific sustained-load intervals, so future runs can be checked on the relevant window instead of the whole run.",
+    "rationale": "The only policy check present is evaluated over the whole run (0/2623) with no window id, so no interval-specific behavior is represented in this input.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/7"
+    ]
+   }
+  ],
+  "caveats": [
+   "The deterministic PASS covers only the whole-run error-rate policy (0/2623 samples, threshold 0.01); it is not a statement about latency, stability, spare capacity, or absence of defects.",
+   "The input has no capacity_summary, no resource series, no OpenSearch error profile, and an empty findings list; no capacity bound can be derived and deeper load/resource profiling is unavailable.",
+   "Individual samples, the number of samples at or near the max latency, call graph or topology, traces, log bodies, and release/config data are not in the input, so tail-latency and root-cause questions cannot be answered from this analysis.",
+   "The run is characterized only by 2623 summarized samples with no referenced policy windows; run duration, load profile, and sustained periods are not represented, and the absence of errors or findings does not prove the system was stable or lightly loaded.",
+   "No causal or lead/lag conclusions are supported; any timing-based attribution would require clock-verified data, which is not present.",
+   "A PASS at a 1% error-rate threshold is a policy-threshold result and should not be read as an endorsement of end-user experience, even though all summarized samples report error_count 0."
+  ]
+ },
+ "schema": "ai-experiment-run.v2",
+ "phase": "pilot",
+ "case": "K04",
+ "rep": 1
+}

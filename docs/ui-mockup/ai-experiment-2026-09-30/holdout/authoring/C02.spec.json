@@ -1,0 +1,39 @@
+{
+ "required": [
+  [
+   "raw_rho",
+   [
+    "(?:rho|correlat)[^.\\n]{0,100}(?:(?<![\\d.])1(?:\\.0+)?(?![\\d.]))|(?:(?<![\\d.])1(?:\\.0+)?(?![\\d.]))[^.\\n]{0,100}(?:rho|correlat)",
+    "perfect(?:ly)? (?:rank )?(?:correlat|monoton)"
+   ]
+  ],
+  [
+   "below_effect",
+   [
+    "(?:(?:load|latency|response|effect|change))[^.\\n]{0,100}(?:(?:below|minimum|small|submaterial|negligible|not material))|(?:(?:below|minimum|small|submaterial|negligible|not material))[^.\\n]{0,100}(?:(?:load|latency|response|effect|change))",
+    "BELOW_EFFECT|MATERIALITY_NOT_MET|LOAD_DELTA_BELOW_MINIMUM"
+   ]
+  ],
+  [
+   "not_selected",
+   [
+    "not selected|NOT_SELECTED|no (?:material |selected )?(?:headline|finding)|does not (?:qualify|meet)|did not (?:qualify|meet)"
+   ]
+  ]
+ ],
+ "forbidden": [
+  "presents the high raw rho as a selected material problem"
+ ],
+ "useful_checks": [
+  "look for a signal with a material change in the load or the resource"
+ ],
+ "source": {
+  "builder": "AdvisoryEvidenceBuilder",
+  "build": "5b5e51c+harness",
+  "source": "x:C02",
+  "source_sha256": "be79ce1930f2a5cc9166e8dccf1c3e85d55a99310e0a38977a1f385ddbac2fb3",
+  "derivation": [],
+  "evidence_sha256": "079d044a52a2ddf29539eab255d1c161cf8acb76a60648822ce7de1d540315b4",
+  "inputs": "x:C02, derivation [], analysed through RunBundleStore -> AnalysisService -> AdvisoryEvidenceBuilder by AdvisoryHoldoutCorpusTest on 5b5e51c+harness"
+ }
+}

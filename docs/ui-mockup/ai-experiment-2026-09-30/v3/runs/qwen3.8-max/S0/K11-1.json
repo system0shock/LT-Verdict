@@ -1,0 +1,250 @@
+{
+ "stage": "S0",
+ "mode": "live",
+ "model": "qwen3.8-max",
+ "tag": {
+  "phase": "v3",
+  "model_tag": "qwen3.8-max",
+  "stage": "S0",
+  "case": "K11",
+  "rep": 1,
+  "attempt": 1
+ },
+ "qwen_exit": 0,
+ "wall_ms": 139861,
+ "relay": {
+  "schema_version": "advisory-ai-runtime-relay.v1",
+  "status": "FORWARDED_STRUCTURED_OUTPUT",
+  "request_count": 1,
+  "usage": {
+   "prompt_tokens": 1933,
+   "total_tokens": 8454,
+   "completion_tokens": 6521,
+   "prompt_tokens_details": {
+    "cached_tokens": 1024,
+    "text_tokens": 1933
+   },
+   "completion_tokens_details": {
+    "reasoning_tokens": 2325,
+    "text_tokens": 6521
+   }
+  },
+  "latency_ms": 138702,
+  "model_returned": "qwen3.8-max"
+ },
+ "relay_status": "FORWARDED_STRUCTURED_OUTPUT",
+ "usage": {
+  "prompt_tokens": 1933,
+  "total_tokens": 8454,
+  "completion_tokens": 6521,
+  "prompt_tokens_details": {
+   "cached_tokens": 1024,
+   "text_tokens": 1933
+  },
+  "completion_tokens_details": {
+   "reasoning_tokens": 2325,
+   "text_tokens": 6521
+  }
+ },
+ "latency_ms": 138702,
+ "status": "OK",
+ "note": null,
+ "output": {
+  "schema_version": "ai-advice-output.v1",
+  "summary": "Interpretation of one immutable LT Verdict analysis (analysis_id ff2a9752…71ef9, run_id jmeter_jtl_csv-b87363cf…bf1e7). The deterministic result is preserved exactly and is not altered by this advice: run_validity = VALID, policy_verdict = NO_POLICY, analysis_coverage status = INCOMPLETE with reason RESOURCE_GAPS, and an empty findings list.\n\nThe only evidence item supplied is one metric_summary of scope kind \"overall\" (ref analysis-result.json#/evidence/0): sample_count 2623; error_count 0 with error_rate_ratio numerator 0 over denominator 2623; latency_ms p50 11, p95 46, p99 77, max 904; throughput_rps numerator 2623000 over denominator 44986 (arithmetic quotient ≈ 58.31; the units of these two fields are not stated in the evidence).\n\nWhat this supports: an overall, aggregate picture of a run that parsed as VALID, in which no sampled request was recorded as an error and in which the observed maximum latency (904 ms) sits far above the reported p99 (77 ms). What it does not support: any PASS/FAIL statement, because policy_verdict is NO_POLICY — a missing policy is not a pass; any conclusion about server capacity, saturation, or resource pressure, because coverage is INCOMPLETE for RESOURCE_GAPS and no resource-side measurement appears in the evidence; any per-endpoint attribution, because the sole scope reported is \"overall\"; and any temporal, lead/lag, or causal claim, because no timestamps, clock relationship, or per-interval series are present. The absence of findings and the zero observed error count bound only what was measured here; they do not prove stability or the absence of a problem. The hypotheses below are candidate explanations with bounded checks, not proven causes.",
+  "hypotheses": [
+   {
+    "rank": 1,
+    "observation": "policy_verdict is reported as the literal value \"NO_POLICY\" (ref analysis-result.json#/policy_verdict), while run_validity is \"VALID\" (ref analysis-result.json#/run_validity). No threshold or policy result appears anywhere in the supplied evidence.",
+    "possible_explanation": "CANDIDATE: no latency/error/throughput policy was attached or matched for this run, so the verdict engine had nothing to evaluate. A valid run with NO_POLICY is an unevaluated outcome, not a favourable one; the observed latency and error figures were never compared against acceptance thresholds.",
+    "recommended_check": "Confirm whether a policy definition exists for this run/scenario and whether it was bound at evaluation time; if it was intended, re-run the verdict step with the policy attached and compare p50/p95/p99, max, error_rate_ratio and throughput against the declared thresholds. Record the outcome as PASS, FAIL, or NO_POLICY without collapsing the three.",
+    "evidence_refs": [
+     "analysis-result.json#/policy_verdict",
+     "analysis-result.json#/run_validity",
+     "analysis-result.json#/evidence/0"
+    ]
+   },
+   {
+    "rank": 2,
+    "observation": "analysis_coverage has status \"INCOMPLETE\" with reasons [\"RESOURCE_GAPS\"] (ref analysis-result.json#/analysis_coverage). No CPU, memory, disk, network, container, or host metric appears in the evidence.",
+    "possible_explanation": "CANDIDATE: resource-side collectors were absent, misconfigured, or produced gaps for part of the window, so the analysis could not evaluate resource behaviour. Consequences: the 904 ms maximum latency and the throughput figure cannot be attributed to (or cleared of) resource pressure, and no statement about spare capacity or headroom is supportable from this evidence.",
+    "recommended_check": "Identify which resources were expected versus received and the size/position of the gaps (from the coverage report or collector logs), restore collection, and re-run so coverage status can move off INCOMPLETE. Only then assess resource utilisation alongside the latency tail.",
+    "evidence_refs": [
+     "analysis-result.json#/analysis_coverage",
+     "analysis-result.json#/evidence/0"
+    ]
+   },
+   {
+    "rank": 3,
+    "observation": "Within the single overall metric_summary, latency_ms is p50 11, p95 46, p99 77 and max 904 (ref analysis-result.json#/evidence/0). The reported maximum is roughly an order of magnitude above p99, while sample_count is 2623 and error_count is 0.",
+    "possible_explanation": "CANDIDATE: a very small number of samples carry an extreme tail that the percentiles do not represent — for example warm-up/first-request connection setup, a stop-the-world pause, pool or connection acquisition waiting, a cold cache path, client-side load-generator contention, or an outlier sampler with different cost. It is equally possible this is a measurement artefact of the JTL source (e.g. a sampler that includes setup or a non-request event). None of these can be distinguished from an aggregate scope.",
+    "recommended_check": "Request the per-label latency percentiles plus the ordered list of the slowest N samples with their labels and timestamps, and check whether the 904 ms sample is a first/ramp-up sample or belongs to one specific label. Confirm the JTL elapsed-time column semantics (what is included in the measured interval) before treating the tail as server-side latency.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0"
+    ]
+   },
+   {
+    "rank": 4,
+    "observation": "error_count is 0 and error_rate_ratio is numerator 0 over denominator 2623, matching sample_count 2623 (ref analysis-result.json#/evidence/0). No error classification, error-code breakdown, or failure-injection detail is present.",
+    "possible_explanation": "CANDIDATE: the executed scenario simply did not reach failure conditions at this load level and duration, or failures occurred outside the recorded sampler scope (connection resets, client-side timeouts, load-balancer or gateway rejections, assertions not enabled) and were therefore not counted. Zero observed errors across 2623 samples constrains only what was measured; it does not establish a zero error rate or prove that error paths work.",
+    "recommended_check": "Verify how success/failure is determined in the JTL (success flag and assertion configuration), cross-check the same window against server and gateway access logs for non-2xx/5xx or dropped connections, and run a scenario that deliberately exercises timeout, retry, and error branches to confirm the counter can increment.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0",
+     "analysis-result.json#/run_validity"
+    ]
+   },
+   {
+    "rank": 5,
+    "observation": "The only evidence item has scope.kind = \"overall\" (ref analysis-result.json#/evidence/0). No per-label, per-endpoint, per-thread-group, or per-transaction metric summary is supplied.",
+    "possible_explanation": "CANDIDATE: aggregate-only reporting can mask opposing per-endpoint behaviour — one slow or degraded endpoint can be diluted by many fast ones, so the overall p95/p99 may understate a localised regression while the overall max is driven by a single label.",
+    "recommended_check": "Obtain the same metric_summary at per-label scope (sample_count, error_rate_ratio, latency percentiles, max, throughput per label) and compare each label against the overall figures to see whether the tail and error-free result are uniform or concentrated.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0"
+    ]
+   },
+   {
+    "rank": 6,
+    "observation": "throughput_rps is given as a single ratio, numerator 2623000 over denominator 44986 (ref analysis-result.json#/evidence/0). The evidence states no units for these two fields, no test duration, no ramp-up or think-time configuration, and no per-interval series.",
+    "possible_explanation": "CANDIDATE: an aggregate mean computed over a window that may include ramp-up, warm-up, or cool-down is not representative of steady-state throughput; the arithmetic quotient (≈ 58.31) should not be read as a sustained rate until the window composition and field units are known. Flatness, saturation, or drift cannot be assessed from one number.",
+    "recommended_check": "Confirm the unit definitions of the throughput numerator and denominator from the analysis contract, then request per-interval throughput and concurrency (active thread) series together with the load-profile configuration, and check whether the rate was still rising, flat, or oscillating at the end of the run.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0"
+    ]
+   },
+   {
+    "rank": 7,
+    "observation": "The findings list in the supplied input contains no entries, while analysis_coverage status is \"INCOMPLETE\" for RESOURCE_GAPS and run_validity is \"VALID\" (refs analysis-result.json#/analysis_coverage, analysis-result.json#/run_validity). No count of anomalies tested is provided.",
+    "possible_explanation": "CANDIDATE: no finding was emitted either because nothing crossed a detector threshold, or because the detectors that would cover resource behaviour and time-series anomalies had insufficient or gapped input. An empty findings list is therefore not evidence that the run is free of problems, and it is a distinct state from an explicit evaluated-and-clean result.",
+    "recommended_check": "Review which detectors ran, how many anomaly tests were actually executed, and whether any were skipped due to the coverage gaps; re-run after RESOURCE_GAPS is resolved and compare the findings list before and after. Treat the current empty list as \"not established\" rather than \"clean\".",
+    "evidence_refs": [
+     "analysis-result.json#/analysis_coverage",
+     "analysis-result.json#/run_validity",
+     "analysis-result.json#/evidence/0"
+    ]
+   },
+   {
+    "rank": 8,
+    "observation": "No timestamps, time base, or clock-synchronisation information appear anywhere in the evidence; the single metric_summary is scope \"overall\" for run jmeter_jtl_csv-b87363cf…bf1e7 (ref analysis-result.json#/evidence/0).",
+    "possible_explanation": "CANDIDATE: because the relationship between the load-generator clock and any server or resource clock is unknown and unverified here, no ordering of events can be established. Any statement that one thing preceded or caused another in this run would be unsupported by the referenced evidence.",
+    "recommended_check": "Before attempting any temporal correlation, verify clock sources and offsets for the load generator, application host, and resource collectors (NTP status, timezone, epoch units), and confirm the sample timestamp range actually covers the analysis window.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0",
+     "analysis-result.json#/run_validity"
+    ]
+   }
+  ],
+  "recommendations": [
+   {
+    "rank": 1,
+    "action": "Report this result as NO_POLICY / coverage INCOMPLETE. Do not present it as a pass, a green run, or an SLO-compliant run in any downstream summary or dashboard.",
+    "rationale": "policy_verdict is the literal value NO_POLICY and analysis_coverage status is INCOMPLETE with reason RESOURCE_GAPS. Missing policy is not a pass, and incomplete coverage is not a clean result; conflating them would misstate the deterministic verdict.",
+    "evidence_refs": [
+     "analysis-result.json#/policy_verdict",
+     "analysis-result.json#/analysis_coverage",
+     "analysis-result.json#/run_validity"
+    ]
+   },
+   {
+    "rank": 2,
+    "action": "Bind the intended latency/error/throughput policy to this scenario and re-evaluate, recording the outcome as PASS, FAIL, or NO_POLICY as distinct states.",
+    "rationale": "The observed figures (p50 11 ms, p95 46 ms, p99 77 ms, max 904 ms, error_rate_ratio 0/2623) were never compared to thresholds, so no acceptance judgement exists yet. Attaching a policy is the only way to convert an unevaluated run into a verdict.",
+    "evidence_refs": [
+     "analysis-result.json#/policy_verdict",
+     "analysis-result.json#/evidence/0"
+    ]
+   },
+   {
+    "rank": 3,
+    "action": "Resolve RESOURCE_GAPS before drawing any conclusion about capacity, headroom, or resource-induced latency: identify the expected versus received resource series and the gap extent, restore collection, and re-run.",
+    "rationale": "Coverage is INCOMPLETE specifically for RESOURCE_GAPS and no resource measurement appears in the evidence. Without it, neither saturation nor spare capacity can be asserted, and the 904 ms maximum cannot be explained or ruled out as resource-related.",
+    "evidence_refs": [
+     "analysis-result.json#/analysis_coverage",
+     "analysis-result.json#/evidence/0"
+    ]
+   },
+   {
+    "rank": 4,
+    "action": "Drill into the latency tail: obtain per-label percentiles and the ordered slowest-sample list (label, timestamp, elapsed time), and confirm what the JTL elapsed-time field includes.",
+    "rationale": "The maximum of 904 ms sits far above the reported p99 of 77 ms in an overall-only summary of 2623 samples, so the tail is real in the data but unattributed. Per-label and per-sample detail is the bounded way to separate a warm-up or single-endpoint effect from broad server behaviour.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0"
+    ]
+   },
+   {
+    "rank": 5,
+    "action": "Validate the zero-error result independently: check the JTL success/assertion semantics for this run and cross-check the same window against server and gateway logs for non-success responses, resets, or client-side timeouts.",
+    "rationale": "error_count 0 with denominator 2623 shows only that no sampled request was recorded as failed. Failures outside sampler scope, or disabled assertions, would not appear, so the counter itself needs verification before zero errors is treated as a reliability result.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0"
+    ]
+   },
+   {
+    "rank": 6,
+    "action": "Request per-interval time series (throughput, latency, active threads/errors) plus the load-profile configuration (duration, ramp-up, think time, target concurrency) instead of relying on aggregate means.",
+    "rationale": "The evidence contains one aggregate throughput ratio and one set of percentiles with no series and no load profile, so steady state, ramp effects, drift, and saturation are all unassessable from what is referenced.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0",
+     "analysis-result.json#/analysis_coverage"
+    ]
+   },
+   {
+    "rank": 7,
+    "action": "Add per-label/per-endpoint scope to the evidence set and compare each label against the overall summary.",
+    "rationale": "The only supplied scope kind is \"overall\". Aggregate values can hide a degraded endpoint, so per-label breakdowns are required before any component-level statement is made.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0"
+    ]
+   },
+   {
+    "rank": 8,
+    "action": "Verify clock sources, offsets, timezone, and epoch units for the load generator, application host, and resource collectors before attempting any temporal or lead/lag correlation.",
+    "rationale": "No timestamp or clock-relationship evidence is present, so an unverified clock cannot support event ordering or a temporal causal hypothesis. Clock verification must come first.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0",
+     "analysis-result.json#/run_validity"
+    ]
+   },
+   {
+    "rank": 9,
+    "action": "Confirm the unit definitions of the throughput_rps numerator (2623000) and denominator (44986) from the analysis contract before quoting any rate, and label any derived quotient as arithmetic rather than measured.",
+    "rationale": "The evidence supplies a bare numerator/denominator pair with no stated units; the quotient ≈ 58.31 is not a measurement in the referenced data and must not be published as one.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0"
+    ]
+   },
+   {
+    "rank": 10,
+    "action": "Re-run the analysis once policy binding, resource collection, and per-label/per-interval reporting are in place, and treat the empty findings list in this run as NOT_ESTIMATED rather than clean.",
+    "rationale": "Findings were produced under INCOMPLETE coverage with no reported count of anomalies tested, so absence of findings here does not demonstrate absence of problems; a re-run under complete coverage is the bounded way to obtain an evaluated result.",
+    "evidence_refs": [
+     "analysis-result.json#/analysis_coverage",
+     "analysis-result.json#/run_validity",
+     "analysis-result.json#/policy_verdict"
+    ]
+   }
+  ],
+  "caveats": [
+   "This is advisory interpretation only. It does not change, override, or re-score the deterministic verdict: run_validity VALID, policy_verdict NO_POLICY, analysis_coverage INCOMPLETE (RESOURCE_GAPS).",
+   "NO_POLICY is not a pass. No threshold was evaluated, so no latency, error-rate, or throughput acceptance judgement exists for this run.",
+   "Coverage is INCOMPLETE with reason RESOURCE_GAPS. Nothing in the evidence measures CPU, memory, disk, network, or container behaviour, so saturation, spare capacity, headroom, and resource-induced latency are all unassessable here.",
+   "Only one evidence item was supplied: a single metric_summary at scope kind \"overall\". No per-label, per-endpoint, per-thread-group, or per-interval breakdown is available.",
+   "No time series is present, so stability, drift, ramp behaviour, and flatness cannot be inferred; a single aggregate throughput ratio is not evidence of a steady rate.",
+   "No timestamps, clock source, or clock-offset information is present. No lead/lag ordering or temporal causal claim can be supported until clocks are verified.",
+   "The throughput_rps field is given only as numerator 2623000 over denominator 44986 with no stated units; the quotient ≈ 58.31 is arithmetic on referenced values, not a measured quantity in the evidence.",
+   "Latency values are as referenced: p50 11 ms, p95 46 ms, p99 77 ms, max 904 ms. The 904 ms value is a maximum, not a percentile, and is not evidence of sustained behaviour.",
+   "error_count 0 over denominator 2623 bounds only what was recorded as failed in this sample set. It does not prove a zero error rate, that error paths function, or that failures outside sampler scope did not occur.",
+   "The findings list is empty and carries no evidence reference in the input. Absence of findings is not proof of stability or of an absence of problems, and it is distinct from an evaluated-and-clean result.",
+   "No count of anomalies tested is provided, so it is unknown whether detectors ran, were skipped, or lacked sufficient input because of the coverage gaps.",
+   "No load-profile information (duration, ramp-up, think time, target concurrency, thread count) is present, so aggregate means may include warm-up or cool-down effects.",
+   "sample_count 2623 is a modest sample; rare failure modes and infrequent slow paths may not be represented, and no confidence percentages or severity estimates are given in the evidence (none are invented here).",
+   "Run validity VALID applies to the run/parsing of the jmeter_jtl_csv source; it does not imply analytical completeness, policy evaluation, or result quality.",
+   "All explanations above are CANDIDATE hypotheses, not proven causes; each requires its stated bounded check before being acted on as a root cause."
+  ]
+ },
+ "schema": "ai-experiment-run.v3",
+ "case": "K11",
+ "rep": 1,
+ "model_id": "qwen3.8-max",
+ "net_retries": 0,
+ "infra_retries": 0
+}

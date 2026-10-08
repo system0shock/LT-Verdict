@@ -19,3 +19,6 @@ tools/*.sh text eol=lf
 tools/advisory_ai_relay_retry_vectors.json text eol=lf
 fixtures/platform/pod-view-synthetic/** text eol=lf
 tools/advisory_ai_runtime_local.sh text eol=lf
+docs/ui-mockup/ai-experiment-2026-09-30/** -text whitespace=-trailing-space,-space-before-tab,cr-at-eol
+docs/ui-mockup/ai-defects-analysis-2026-09-30.md -text whitespace=-trailing-space,-space-before-tab,cr-at-eol
+docs/ai-experiment/harness-264a340/** -text whitespace=-trailing-space,-space-before-tab,cr-at-eol

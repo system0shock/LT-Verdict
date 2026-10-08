@@ -1,0 +1,157 @@
+{
+ "stage": "S1",
+ "mode": "live",
+ "model": "deepseek-v4-flash-0731",
+ "tag": {
+  "phase": "v2-pilot",
+  "stage": "S1",
+  "case": "K04",
+  "rep": 2,
+  "attempt": 1
+ },
+ "qwen_exit": 0,
+ "wall_ms": 76521,
+ "relay": {
+  "schema_version": "advisory-ai-runtime-relay.v1",
+  "status": "FORWARDED_STRUCTURED_OUTPUT",
+  "request_count": 1,
+  "usage": {
+   "prompt_tokens": 3414,
+   "total_tokens": 10554,
+   "completion_tokens": 7140,
+   "prompt_tokens_details": {
+    "cached_tokens": 1024
+   },
+   "completion_tokens_details": {
+    "reasoning_tokens": 5329
+   }
+  },
+  "latency_ms": 75237,
+  "model_returned": "deepseek-v4-flash-0731"
+ },
+ "relay_status": "FORWARDED_STRUCTURED_OUTPUT",
+ "usage": {
+  "prompt_tokens": 3414,
+  "total_tokens": 10554,
+  "completion_tokens": 7140,
+  "prompt_tokens_details": {
+   "cached_tokens": 1024
+  },
+  "completion_tokens_details": {
+   "reasoning_tokens": 5329
+  }
+ },
+ "latency_ms": 75237,
+ "status": "OK",
+ "note": null,
+ "output": {
+  "schema_version": "ai-advice-output.v1",
+  "summary": "Deterministic verdict: PASS. The run is VALID, analysis coverage is COMPLETE, and there are zero findings. The only policy check evaluated, rule_id \"overall-errors\" (error_rate_ratio <= 0.01 on the overall scope), observed 0 errors out of 2623 samples (0%), so it passes. All six per-transaction summaries also report 0 errors each, with sample counts (437, 437, 437, 438, 437, 437) summing to the overall 2623. Latency figures (overall p50 11 ms, p95 46 ms, p99 77 ms, max 904 ms; checkout max 444 ms) and throughput figures are reported but are not covered by any policy in this analysis; PASS therefore endorses only the configured error-rate threshold, not latency or capacity.",
+  "hypotheses": [
+   {
+    "rank": 1,
+    "observation": "The overall metric summary (metric-summary-overall) reports error_count 0 over 2623 samples (error_rate_ratio numerator 0, denominator 2623), and the 'overall-errors' policy check (operator lte, threshold 0.01) records status PASS for that observed ratio.",
+    "possible_explanation": "The load run produced no recorded failed samples in the analyzed window, so the observed rate (0/2623) is below the 0.01 threshold. This is a hypothesis; the evidence does not prove that errors never occurred outside the recorded samples or that all failure types were classified into error_count.",
+    "recommended_check": "Inspect the JMeter JTL extraction and assertion configuration to confirm that failed or assertion-failed samplers would be reflected in error_count, and confirm the recorded samples cover the intended run window.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0",
+     "analysis-result.json#/evidence/7",
+     "analysis-result.json#/run_validity"
+    ]
+   },
+   {
+    "rank": 2,
+    "observation": "Each of the six per-transaction summaries (add product to cart, cart, checkout, home, product, reset cart) reports error_count 0, with sample counts 437, 437, 437, 438, 437, 437 that sum to the overall sample_count of 2623.",
+    "possible_explanation": "The transactions appear to have executed without recorded failures in the window, and the per-transaction counts are arithmetically consistent with the overall total. Alternatively, the export pipeline may have excluded or failed to classify certain samplers as errors, which the data alone cannot rule out.",
+    "recommended_check": "Verify that no sampler filtering or classification threshold excluded failed samples from the per-transaction summaries (e.g., compare JMeter log sampler totals to 2623 and confirm assertions are represented in error_count).",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/1",
+     "analysis-result.json#/evidence/2",
+     "analysis-result.json#/evidence/3",
+     "analysis-result.json#/evidence/4",
+     "analysis-result.json#/evidence/5",
+     "analysis-result.json#/evidence/6",
+     "analysis-result.json#/evidence/0"
+    ]
+   },
+   {
+    "rank": 3,
+    "observation": "Latency metrics are reported (overall p50 11 ms, p95 46 ms, p99 77 ms, max 904 ms; checkout max 444 ms; home max 904 ms), but no policy check in the analysis references latency.",
+    "possible_explanation": "The reported latency values are purely observational; high tail or per-transaction latencies would not affect the PASS verdict and could exist even though the error-rate policy passed.",
+    "recommended_check": "If latency is a requirement, add an explicit latency policy (e.g., a percentile or max bound) and rerun the analysis rather than inferring acceptability from the reported metrics.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0",
+     "analysis-result.json#/evidence/3",
+     "analysis-result.json#/evidence/4"
+    ]
+   },
+   {
+    "rank": 4,
+    "observation": "throughput_rps values are reported for the overall run and each transaction (e.g., overall numerator 2623000, denominator 44986), but no capacity or throughput policy appears in the evidence.",
+    "possible_explanation": "No capacity bound or throughput policy was configured or evaluated, so the evidence cannot support statements about spare capacity or a capacity ceiling.",
+    "recommended_check": "If capacity is a goal, run a dedicated capacity analysis with a configured capacity policy; do not infer capacity from throughput metrics alone.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0",
+     "analysis-result.json#/policy_verdict"
+    ]
+   }
+  ],
+  "recommendations": [
+   {
+    "rank": 1,
+    "action": "Keep the deterministic verdict PASS and treat it as scoped strictly to the configured error-rate policy (overall-errors, error_rate_ratio <= 0.01).",
+    "rationale": "The policy check is the only governed check in the evidence and it passed with observed 0/2623; the verdict is derived deterministically and should not be reclassified.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/7",
+     "analysis-result.json#/policy_verdict",
+     "analysis-result.json#/run_validity"
+    ]
+   },
+   {
+    "rank": 2,
+    "action": "Before relying on the 0% error rate, verify sampling completeness: confirm the JTL input includes all JMeter samples and that no failures were filtered, skipped, or miscounted.",
+    "rationale": "The PASS conclusion rests on error_count 0 over the recorded 2623 samples; that is only meaningful if the recorded samples faithfully represent the run, and the evidence does not describe the export/filter pipeline.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0",
+     "analysis-result.json#/evidence/1",
+     "analysis-result.json#/evidence/2",
+     "analysis-result.json#/evidence/3",
+     "analysis-result.json#/evidence/4",
+     "analysis-result.json#/evidence/5",
+     "analysis-result.json#/evidence/6"
+    ]
+   },
+   {
+    "rank": 3,
+    "action": "Configure an explicit latency policy if latency is a requirement (e.g., a percentile or max bound on latency_ms) before treating latency as acceptable.",
+    "rationale": "Latency percentiles and maxima are reported but ungoverned by any policy; PASS does not assert latency fitness.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0",
+     "analysis-result.json#/evidence/3",
+     "analysis-result.json#/evidence/4"
+    ]
+   },
+   {
+    "rank": 4,
+    "action": "If capacity is a goal, run a dedicated capacity/soak evaluation with a configured capacity policy; otherwise treat throughput figures as observational only.",
+    "rationale": "No capacity bound or capacity policy is present in the evidence, so no capacity conclusion is supported.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0",
+     "analysis-result.json#/policy_verdict"
+    ]
+   }
+  ],
+  "caveats": [
+   "PASS covers only the single configured policy: error_rate_ratio <= 0.01 on the overall scope. It does not cover latency, throughput, per-transaction error rates, or capacity.",
+   "Recorded coverage is 2623 overall samples (437, 437, 437, 438, 437, 437 per transaction). Behavior outside these recorded samples or outside the analyzed window is not evidenced.",
+   "The analysis produced no findings (findings: []); absence of findings does not prove stability, low load, spare capacity, or absence of underlying problems.",
+   "Run validity is VALID and coverage is COMPLETE per the evidence, but these do not establish that the load generator workload is representative of production traffic.",
+   "throughput_rps values are presented with numerator/denominator fields whose semantics are not defined in the evidence; do not convert, compare across scopes, or draw capacity conclusions from them.",
+   "Overall-run and per-transaction quantities are different scope measures; the arithmetic consistency of the sample counts does not imply equivalence of other metrics across scopes."
+  ]
+ },
+ "schema": "ai-experiment-run.v2",
+ "phase": "pilot",
+ "case": "K04",
+ "rep": 2
+}

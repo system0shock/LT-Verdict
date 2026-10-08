@@ -1,0 +1,101 @@
+[
+  {
+    "id": "R046",
+    "hard_defect": false,
+    "defects": [],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 5,
+    "notes": "Correctly distinguishes NO_POLICY from a health outcome and gives supported, operator-actionable next steps."
+  },
+  {
+    "id": "R069",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T7",
+        "field": "#/hypotheses/0/possible_explanation",
+        "quote": "No pass/fail thresholds were configured for latency, errors, or resource utilization",
+        "why": "NO_POLICY does not establish which policy configuration condition caused the verdict."
+      },
+      {
+        "type": "T2",
+        "field": "#/summary",
+        "quote": "throughput_rps ratios ... evaluate to about 20 requests/s, consistent with the constant target",
+        "why": "It derives and equates a rate from numerator/denominator fields whose semantics are not defined by the evidence."
+      },
+      {
+        "type": "T2",
+        "field": "#/hypotheses/7/possible_explanation",
+        "quote": "The ratios evaluate to about 20 requests/s, which is consistent with the constant 20 requests/s target series",
+        "why": "It again treats undefined ratio components and the target series as a comparable achieved-throughput rate."
+      },
+      {
+        "type": "T7",
+        "field": "#/caveats/9",
+        "quote": "No policy thresholds exist for resource utilization",
+        "why": "The evidence does not prove that resource thresholds were not configured; it only reports NO_POLICY."
+      }
+    ],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 2,
+    "notes": "Contains useful observations but makes unsupported policy-configuration and throughput claims."
+  },
+  {
+    "id": "R084",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T2",
+        "field": "#/summary",
+        "quote": "throughput around 20 requests/s matching the constant target",
+        "why": "It equates an inferred throughput rate with the target series despite undefined throughput ratio semantics."
+      },
+      {
+        "type": "T7",
+        "field": "#/hypotheses/0/possible_explanation",
+        "quote": "no applicable business policy rule and no resource rule with effect sla was configured",
+        "why": "NO_POLICY does not prove that those rules were not configured, only that no applicable rule was evaluated."
+      }
+    ],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 3,
+    "notes": "Mostly careful and actionable, but it overstates the cause of NO_POLICY and relates unsupported throughput quantities."
+  },
+  {
+    "id": "R098",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T2",
+        "field": "#/summary",
+        "quote": "The workload sustained ~20 requests/s (7,200 samples)",
+        "why": "It infers an achieved workload rate from aggregates and treats it as comparable with the target without defined ratio semantics."
+      },
+      {
+        "type": "T8",
+        "field": "#/hypotheses/0/possible_explanation",
+        "quote": "may be run-to-run or environmental noise",
+        "why": "The reference and evaluation measurements are windows within the same run, so run-to-run variation cannot explain their difference."
+      },
+      {
+        "type": "T7",
+        "field": "#/hypotheses/3/possible_explanation",
+        "quote": "reflects missing or unimplemented policy definitions",
+        "why": "The evidence does not establish a particular configuration cause for NO_POLICY."
+      },
+      {
+        "type": "T7",
+        "field": "#/recommendations/1/rationale",
+        "quote": "missing policy is not a pass",
+        "why": "This presents missing policy as the established cause of NO_POLICY rather than an unverified possibility."
+      }
+    ],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 2,
+    "notes": "It contains several sound cautions, but unsupported verdict-cause and rate claims make it partly misleading."
+  }
+]

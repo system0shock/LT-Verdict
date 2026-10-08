@@ -1,0 +1,73 @@
+[
+  {
+    "id": "R015",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T1",
+        "field": "#/hypotheses/2/recommended_check",
+        "quote": "promote the generator throttle rule from diagnostic to enforcing",
+        "why": "The generator guard is diagnostic by contract and must not be made enforcing."
+      },
+      {
+        "type": "T1",
+        "field": "#/hypotheses/0/possible_explanation",
+        "quote": "the null upper_exclusive is a capability gap",
+        "why": "An upper bound depends on verified stage outcomes, not knee detection."
+      },
+      {
+        "type": "T3",
+        "field": "#/recommendations/7/action",
+        "quote": "Examine the bimodal latency",
+        "why": "Aggregate percentiles do not establish that the latency distribution has two modes."
+      }
+    ],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 2,
+    "notes": "The detailed measurements are useful, but the guard and knee advice could lead to invalid operator actions."
+  },
+  {
+    "id": "R033",
+    "hard_defect": false,
+    "defects": [],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 5,
+    "notes": "It preserves the verdict and limits while giving prioritized checks tied to the evidence."
+  },
+  {
+    "id": "R035",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T1",
+        "field": "#/recommendations/1/action",
+        "quote": "implement/enable knee detection to derive an upper bound",
+        "why": "Capacity bounds are computed from verified stage outcomes independently of the unavailable knee detector."
+      }
+    ],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 2,
+    "notes": "Most observations are useful, but a prominent recommendation gives the wrong prerequisite for an upper bound."
+  },
+  {
+    "id": "R053",
+    "hard_defect": false,
+    "defects": [],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 4,
+    "notes": "The actions are supported and verifiable, though the response is longer than the case requires."
+  },
+  {
+    "id": "R056",
+    "hard_defect": false,
+    "defects": [],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 4,
+    "notes": "It preserves the deterministic result and offers useful checks while keeping causal explanations hypothetical."
+  }
+]

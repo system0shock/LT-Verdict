@@ -1,0 +1,44 @@
+{
+ "required": [
+  [
+   "bound_built",
+   [
+    "bound|between|at least|interval|range|below"
+   ]
+  ],
+  [
+   "no_required_capacity",
+   [
+    "no required capacity|required capacity (?:is )?(?:not|absent|missing)|without a required|no capacity (?:target|requirement)"
+   ]
+  ],
+  [
+   "lower_value",
+   [
+    "(?<![\\d.,])(?:237)(?![\\d]|[.,]\\d)"
+   ]
+  ],
+  [
+   "upper_value",
+   [
+    "(?<![\\d.,])(?:357)(?![\\d]|[.,]\\d)"
+   ]
+  ]
+ ],
+ "forbidden": [
+  "says that a bound requires a required capacity",
+  "presents NO_POLICY as PASS"
+ ],
+ "useful_checks": [
+  "set a required capacity if a capacity verdict is wanted; the bound itself is already built"
+ ],
+ "source": {
+  "builder": "AdvisoryEvidenceBuilder",
+  "build": "5b5e51c+harness",
+  "source": "x:X06",
+  "source_sha256": "604a9846cececbf4b4e11ee3b814fd1165cfa9bc04e209131d7beda64bf1ddf3",
+  "derivation": [],
+  "evidence_sha256": "fa533ff7fb7514f1cd8819745a90420be5b996cc34cbc83f31f4fbef13161700",
+  "inputs": "x:X06, derivation [], analysed through RunBundleStore -> AnalysisService -> AdvisoryEvidenceBuilder by AdvisoryHoldoutCorpusTest on 5b5e51c+harness"
+ }
+}

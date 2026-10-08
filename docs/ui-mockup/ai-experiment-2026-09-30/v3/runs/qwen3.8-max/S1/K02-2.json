@@ -1,0 +1,297 @@
+{
+ "stage": "S1",
+ "mode": "live",
+ "model": "qwen3.8-max",
+ "tag": {
+  "phase": "v3",
+  "model_tag": "qwen3.8-max",
+  "stage": "S1",
+  "case": "K02",
+  "rep": 2,
+  "attempt": 1
+ },
+ "qwen_exit": 0,
+ "wall_ms": 241618,
+ "relay": {
+  "schema_version": "advisory-ai-runtime-relay.v1",
+  "status": "FORWARDED_STRUCTURED_OUTPUT",
+  "request_count": 1,
+  "usage": {
+   "prompt_tokens": 8347,
+   "total_tokens": 21416,
+   "completion_tokens": 13069,
+   "prompt_tokens_details": {
+    "cached_tokens": 1024,
+    "text_tokens": 8347
+   },
+   "completion_tokens_details": {
+    "reasoning_tokens": 6284,
+    "text_tokens": 13069
+   }
+  },
+  "latency_ms": 240395,
+  "model_returned": "qwen3.8-max"
+ },
+ "relay_status": "FORWARDED_STRUCTURED_OUTPUT",
+ "usage": {
+  "prompt_tokens": 8347,
+  "total_tokens": 21416,
+  "completion_tokens": 13069,
+  "prompt_tokens_details": {
+   "cached_tokens": 1024,
+   "text_tokens": 8347
+  },
+  "completion_tokens_details": {
+   "reasoning_tokens": 6284,
+   "text_tokens": 13069
+  }
+ },
+ "latency_ms": 240395,
+ "status": "OK",
+ "note": null,
+ "output": {
+  "schema_version": "ai-advice-output.v1",
+  "summary": "Deterministic verdict (unchanged by this advice): run_validity = VALID; policy_verdict = NO_POLICY; analysis_coverage = INCOMPLETE with reasons CAPACITY_GUARD_FAILED and CAPACITY_STAGE_NOT_VERIFIED; capacity bound_type = INDETERMINATE with lower_inclusive = null, upper_exclusive = null, capacity_knee = null (KNEE_DETECTOR_NOT_IMPLEMENTED).\n\nThe run contains a single capacity stage on the \"users\" load axis: d16-cpu-limited-20users, target 20, achieved 20 (achieved_statistic p05_10s), observed_min = observed_max = 20, complete_bins 30 of 30 expected, verdict INDETERMINATE, verified_bound_load = null, reason CAPACITY_GUARD_FAILED. The reason is a generator guard: a resource rule on generator-cpu-throttle-ratio with operator gt, threshold 0.2, effect \"diagnostic\", status FAIL. The supporting series reports mean ≈0.861, median 1, max 1, min 0.05 over 30 of 30 cells, and one resource_threshold_violation finding covering 27 cells with observed_min ≈0.3958 and observed_max 1. By contract this guard is diagnostic: its failure makes the stage unusable for a product bound and never creates an upper bound. The remedy available to an operator is a rerun with a generator that is not saturated, not a change to the guard's effect.\n\nThe window policy summary for the same window reports business_verdict PASS, resource_verdict NO_POLICY, verdict PASS. The PASS rests on exactly one policy check in the evidence: overall-errors, error_rate_ratio lte 0.01, observed numerator 0 over denominator 38842, status PASS. No latency rule and no resource rule for frontend, checkoutservice, or paymentservice appears in the evidence, so the reported latencies (overall p50 103 ms, p95 299 ms, p99 600 ms, max 1299 ms; home p95 390 ms, p99 806 ms) and the low observed CPU/memory values are unjudged rather than acceptable — missing policy is not a pass.\n\nresource_binding records clock_alignment = \"not_verified_by_core\", so no lead/lag ordering or temporal causal relationship between generator throttling and request latency can be supported from this analysis; clock verification is the prerequisite for any such claim.\n\nHighest-value next steps: (1) rerun the same scenario with an unsaturated generator and confirm generator-cpu-throttle-ratio stays at or below 0.2 across the window; (2) configure a capacity policy/required capacity on the users axis plus resource rules for the system entities, since NO_POLICY becomes PASS or FAIL only through configuration; (3) add latency policy rules; (4) verify clock alignment. Nothing in this advice alters the deterministic verdict.",
+  "hypotheses": [
+   {
+    "rank": 1,
+    "observation": "The only capacity stage (d16-cpu-limited-20users) is INDETERMINATE with reason CAPACITY_GUARD_FAILED and verified_bound_load = null. The referenced guard is resource-policy-check-2aeb6a16f55b03562a138032c145fea7d8f91645845ac9913e09fe71da528735: rule_id generator-cpu-throttle-ratio, operator gt, threshold 0.2, status FAIL, effect \"diagnostic\", unit ratio. The referenced generator series reports mean ≈0.861, median 1, q25 ≈0.955, max 1, min 0.05 over observed_cells 30 of expected_cells 30, missing_cells 0. The referenced finding records cell_count 27, observed_min ≈0.395833333333, observed_max 1, unit ratio.",
+    "possible_explanation": "Hypothesis only, not an established cause: the JMeter generator container may have been exhausting its CPU quota for most of the window (CFS throttled-period ratio at or near 1), so the generator itself — rather than the system under test — may have constrained the offered load and the measured latencies. Because the guard is diagnostic by contract, its failure renders the stage unusable for a product bound; it does not itself prove any product-side limit was reached.",
+    "recommended_check": "Rerun the identical scenario with a generator that is not saturated (raise the generator CPU quota/limit, reduce threads per generator instance, or spread threads across additional generator instances), then inspect the generator-cpu-throttle-ratio series for the new window and confirm every cell is at or below the 0.2 threshold before reading any capacity result. Do not change the guard's effect from diagnostic.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/16",
+     "analysis-result.json#/evidence/12",
+     "analysis-result.json#/findings/0",
+     "analysis-result.json#/capacity_summary",
+     "analysis-result.json#/analysis_coverage"
+    ]
+   },
+   {
+    "rank": 2,
+    "observation": "capacity_summary reports policy_verdict NO_POLICY, bound_type INDETERMINATE, lower_inclusive null, upper_exclusive null, load_axis \"users\", unit \"count\", with reasons CAPACITY_GUARD_FAILED and CAPACITY_STAGE_NOT_VERIFIED. The window_policy_summary for the same window reports resource_verdict NO_POLICY alongside business_verdict PASS. Only one stage exists in the run.",
+    "possible_explanation": "Hypothesis: no capacity policy or required capacity is configured for this run, and the single stage could not be verified because of the failed diagnostic guard, so no bound is derivable. The PASS business window does not and cannot convert NO_POLICY into PASS; NO_POLICY persists until a policy or required capacity is configured.",
+    "recommended_check": "Configure a capacity policy (a required capacity value on the users load axis) and resource rules for frontend, checkoutservice, and paymentservice, then rerun. Confirm in the new analysis that capacity_summary.policy_verdict is PASS or FAIL and that the stage verdict is no longer INDETERMINATE.",
+    "evidence_refs": [
+     "analysis-result.json#/capacity_summary",
+     "analysis-result.json#/policy_verdict",
+     "analysis-result.json#/evidence/18",
+     "analysis-result.json#/evidence/19"
+    ]
+   },
+   {
+    "rank": 3,
+    "observation": "Exactly one policy_check appears in the evidence: id policy-check-window-788a4c21f98bc0aca34830ff3a94b064703041293a2cea7354253689d6aacba6, metric error_rate_ratio, operator lte, threshold 0.01, observed numerator 0 over denominator 38842, scope kind overall, status PASS, window d16-cpu-limited-20users. Reported latencies in the same evidence set include overall p50 103 ms, p95 299 ms, p99 600 ms, max 1299 ms, and per transaction home p50 199 ms / p95 390 ms / p99 806 ms, checkout p99 695 ms, product p99 642 ms, reset cart p99 541 ms.",
+    "possible_explanation": "Hypothesis: the business PASS reflects only zero observed errors against a 1% error-rate threshold. No latency or SLO rule is configured, so the reported latency tails are unevaluated rather than compliant; absence of a latency finding does not indicate acceptable response times.",
+    "recommended_check": "Add latency policy rules (for example p95 and/or p99 thresholds, overall and per transaction label) to the policy configuration and rerun, then read the business verdict against both the error-rate and latency rules together.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/17",
+     "analysis-result.json#/evidence/18",
+     "analysis-result.json#/evidence/0",
+     "analysis-result.json#/evidence/4",
+     "analysis-result.json#/evidence/3"
+    ]
+   },
+   {
+    "rank": 4,
+    "observation": "resource_binding reports clock_alignment = \"not_verified_by_core\", mode explicit_windows, dropped_leading_cells 0, dropped_leading_millis 0, dropped_trailing_cells 0, dropped_trailing_millis 0, run_from_epoch_ms 1790627156282, run_to_epoch_ms 1790627514513, evaluation_from_epoch_ms 1790627160000, evaluation_to_epoch_ms 1790627460000, snapshot_from_epoch_ms 1790627090000, snapshot_to_epoch_ms 1790627580000.",
+    "possible_explanation": "Hypothesis: resource snapshots and JMeter samples may originate from hosts whose clock relationship has not been verified, so the alignment in time between the throttle-violation interval and the request-latency samples is not established. Any statement that throttling preceded, coincided with, or caused latency behaviour would be unsupported by this analysis.",
+    "recommended_check": "Verify clock synchronization and offset between the load-generator host, the resource-collection host, and the analysis core (for example compare a common time source or NTP offset), then re-derive the window alignment and re-inspect. Only after clock_alignment is verified should any ordering across the two data sources be examined.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/7",
+     "analysis-result.json#/findings/0",
+     "analysis-result.json#/evidence/0"
+    ]
+   },
+   {
+    "rank": 5,
+    "observation": "System-entity resource summaries for the window report, in cores: frontend cpu_cores mean ≈0.156, max ≈0.194; checkoutservice cpu_cores mean ≈0.051, max ≈0.067; paymentservice cpu_cores mean ≈0.012, max ≈0.016. In bytes: frontend memory_bytes mean ≈1.37e7, max 14700544; checkoutservice memory_bytes mean ≈9.63e6, max 9877504; paymentservice memory_bytes mean ≈3.39e7, max 34244608. All three entities show observed_cells 30 of expected_cells 30, missing_cells 0, longest_gap_cells 0, reasons []. No resource_policy_check for these entities appears in the evidence and the window resource_verdict is NO_POLICY.",
+    "possible_explanation": "Hypothesis: these values cannot be read as spare capacity or headroom, because no CPU or memory limit, request, or required capacity for these entities is present in the evidence to compare against, and the resource verdict is NO_POLICY. Additionally, if the generator was throttled, the applied load may have been lower than the scenario intended, so the observed system usage may under-represent demand at 20 users.",
+    "recommended_check": "Record the configured CPU/memory limits, requests, and any container quotas for frontend, checkoutservice, and paymentservice; add them as resource rules or required capacity in the policy configuration; then rerun with an unsaturated generator and compare observed usage against the configured limits.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/10",
+     "analysis-result.json#/evidence/8",
+     "analysis-result.json#/evidence/14",
+     "analysis-result.json#/evidence/11",
+     "analysis-result.json#/evidence/9",
+     "analysis-result.json#/evidence/15",
+     "analysis-result.json#/evidence/18"
+    ]
+   },
+   {
+    "rank": 6,
+    "observation": "jmeter_active_threads for entity jmeter-generator reports min = max = median = mean = q05 = q95 = 20, sample_standard_deviation 0, slope_per_second 0, split_half_shift 0, observed_cells 30 of expected_cells 30. The capacity stage reports target 20, achieved 20, achieved_statistic p05_10s, target_tolerance_ratio 0.1, observed_min 20, observed_max 20, complete_bins 30 of 30.",
+    "possible_explanation": "Hypothesis: the configured thread count was held at 20 for the whole window, so the load axis target was met on a thread-count basis. A flat thread count does not by itself show that each thread issued requests at the intended rate; combined with a throttle ratio near 1, threads may have been stalled between samples, so \"20 users achieved\" may not equal the intended offered load.",
+    "recommended_check": "Inspect generator-side detail for the same window — JMeter logs for stalls or thread starvation, per-thread iteration counts, and the per-cell request rate — and compare the achieved request rate against the scenario's intended rate before treating achieved = 20 users as the delivered load.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/13",
+     "analysis-result.json#/evidence/19",
+     "analysis-result.json#/evidence/12"
+    ]
+   },
+   {
+    "rank": 7,
+    "observation": "The resource_threshold_violation finding reports from_epoch_ms 1790627160000, to_epoch_ms 1790627430000, cell_count 27, observed_min ≈0.395833333333, observed_max 1, while the enclosing window d16-cpu-limited-20users spans evaluation_from_epoch_ms 1790627160000 to evaluation_to_epoch_ms 1790627460000 with expected_cells 30. The generator throttle-ratio series summary for the same window reports min 0.05 and q05 ≈0.100040828825.",
+    "possible_explanation": "Hypothesis: the recorded violation interval covers 27 cells and its end epoch precedes the window end epoch, and the series minimum of 0.05 is below the 0.2 threshold, so at least some cells in the window were not in violation. The throttling may therefore have been intermittent rather than continuous across the whole window; the evidence does not state which cells those were.",
+    "recommended_check": "Inspect the per-cell generator-cpu-throttle-ratio series for window d16-cpu-limited-20users and list the cells below 0.2 versus at or above 0.2, to determine whether the violation was continuous or clustered, before describing the generator as saturated for the entire window.",
+    "evidence_refs": [
+     "analysis-result.json#/findings/0",
+     "analysis-result.json#/evidence/12",
+     "analysis-result.json#/evidence/7"
+    ]
+   },
+   {
+    "rank": 8,
+    "observation": "The overall metric summary (scope kind overall) reports sample_count 47396 and error_rate_ratio numerator 0 over denominator 47396. The policy check inside window d16-cpu-limited-20users reports error_rate_ratio numerator 0 over denominator 38842. The run spans run_from_epoch_ms 1790627156282 to run_to_epoch_ms 1790627514513 while the evaluation window spans 1790627160000 to 1790627460000.",
+    "possible_explanation": "These are different quantities, not an inconsistency: the overall figures describe the whole run scope while the policy-check denominator describes only the part of the run covered by the evaluation window. Both report zero errors within their own scope and window. The evidence also reports throughput_rps only as numerator/denominator pairs (overall: numerator 47396000, denominator 358231) without resolving a scalar rate.",
+    "recommended_check": "When quoting error rates or throughput from this analysis, state the scope (overall versus window) and the window epoch range explicitly. If a full-run error assessment is required, configure the policy over the intended window and rerun rather than comparing the two denominators.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0",
+     "analysis-result.json#/evidence/17",
+     "analysis-result.json#/evidence/7"
+    ]
+   },
+   {
+    "rank": 9,
+    "observation": "Per-transaction metric summaries report error_count 0 for all six labels, with sample_counts of 7897 (add product to cart), 7896 (cart), 7894 (checkout), 7908 (home), 7903 (product), and 7898 (reset cart), all with sample_kind JMETER_SAMPLER and empty group_path. Reported p50 latency is 78 ms, 113 ms, 192 ms, 199 ms, 104 ms, and 4 ms respectively; reset cart max is 1062 ms and p99 is 541 ms.",
+    "possible_explanation": "Hypothesis: the sample counts are evenly distributed, so no single transaction dominates the run and the zero-error PASS is not driven by one label. The much lower p50 for reset cart (4 ms) alongside a max of 1062 ms could indicate a lighter or partly cached operation, a sampler that does not exercise the intended server path, or a broad spread within that label; the evidence does not distinguish these.",
+    "recommended_check": "Inspect the JTL rows for the reset cart label (response codes, response sizes, elapsed versus latency columns) and the corresponding sampler definition in the test plan to confirm it measures the intended operation, and review its per-cell distribution rather than only the summary percentiles.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/6",
+     "analysis-result.json#/evidence/1",
+     "analysis-result.json#/evidence/2",
+     "analysis-result.json#/evidence/3",
+     "analysis-result.json#/evidence/4",
+     "analysis-result.json#/evidence/5"
+    ]
+   }
+  ],
+  "recommendations": [
+   {
+    "rank": 1,
+    "action": "Rerun the identical scenario with a load generator that is not CPU-saturated — raise the generator container's CPU quota/limit, reduce threads per generator instance, or distribute the 20 threads across additional generator instances — and confirm that generator-cpu-throttle-ratio stays at or below the 0.2 threshold in every cell of the new window before interpreting any capacity result. Leave the guard's effect as \"diagnostic\".",
+    "rationale": "The single stage is INDETERMINATE with reason CAPACITY_GUARD_FAILED and verified_bound_load null, and the referenced diagnostic guard on generator-cpu-throttle-ratio (operator gt, threshold 0.2) reports FAIL with a series mean ≈0.861 and median 1. A failed generator guard makes its stage unusable for a product bound, and the only operator-side remedy is a rerun with an unsaturated generator; changing the guard's effect to binding or SLA is not a remedy and would not create a bound.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/16",
+     "analysis-result.json#/evidence/12",
+     "analysis-result.json#/findings/0",
+     "analysis-result.json#/capacity_summary"
+    ]
+   },
+   {
+    "rank": 2,
+    "action": "Configure a capacity policy — a required capacity value on the users load axis — together with resource rules for frontend, checkoutservice, and paymentservice, then rerun.",
+    "rationale": "capacity_summary.policy_verdict is NO_POLICY with bound_type INDETERMINATE and both bounds null, and the window resource_verdict is NO_POLICY. NO_POLICY becomes PASS or FAIL only through a configured policy or required capacity; a healthy business window, a rerun, or fixing the load generator does not change it on its own.",
+    "evidence_refs": [
+     "analysis-result.json#/capacity_summary",
+     "analysis-result.json#/policy_verdict",
+     "analysis-result.json#/evidence/18",
+     "analysis-result.json#/evidence/19"
+    ]
+   },
+   {
+    "rank": 3,
+    "action": "Add latency policy rules (for example p95 and/or p99 thresholds, overall and per transaction label) to the policy configuration and rerun, then evaluate the business verdict against error-rate and latency rules together.",
+    "rationale": "Only one policy check exists in the evidence — overall-errors, error_rate_ratio lte 0.01, observed 0 over 38842, PASS. Reported latencies (overall p95 299 ms, p99 600 ms, max 1299 ms; home p95 390 ms, p99 806 ms) are therefore unjudged. A missing policy is not a pass, and the current PASS should not be read as a latency approval.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/17",
+     "analysis-result.json#/evidence/0",
+     "analysis-result.json#/evidence/4",
+     "analysis-result.json#/evidence/18"
+    ]
+   },
+   {
+    "rank": 4,
+    "action": "Verify clock synchronization and offset between the load-generator host, the resource-collection host, and the analysis core, then re-derive the window alignment before making any statement about the ordering of throttle events relative to request latency.",
+    "rationale": "resource_binding records clock_alignment = \"not_verified_by_core\". With an unverified clock relationship, no lead/lag ordering or temporal causal hypothesis between the generator throttle violation and the observed request timings can be supported; clock verification is the prerequisite step.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/7",
+     "analysis-result.json#/findings/0"
+    ]
+   },
+   {
+    "rank": 5,
+    "action": "Record and supply the configured CPU and memory limits, requests, and container quotas for frontend, checkoutservice, and paymentservice, and encode them as resource rules or required capacity before the next run.",
+    "rationale": "Observed usage for these entities is low in absolute terms (frontend cpu_cores mean ≈0.156, max ≈0.194; checkoutservice mean ≈0.051; paymentservice mean ≈0.012) with 30 of 30 cells and no gaps, but no limit is present in the evidence and the resource verdict is NO_POLICY. Low observed values without a configured bound do not establish headroom, and a complete series with no findings does not prove spare capacity.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/10",
+     "analysis-result.json#/evidence/8",
+     "analysis-result.json#/evidence/14",
+     "analysis-result.json#/evidence/18"
+    ]
+   },
+   {
+    "rank": 6,
+    "action": "Inspect the per-cell generator-cpu-throttle-ratio series for window d16-cpu-limited-20users, plus the JMeter log and per-thread iteration counts, to determine whether throttling was continuous or intermittent and whether threads were stalled between samples.",
+    "rationale": "The finding covers cell_count 27 with observed_min ≈0.3958 and observed_max 1 and ends at epoch 1790627430000, while the window ends at 1790627460000 with expected_cells 30; the series summary also reports min 0.05 and q05 ≈0.100. Meanwhile jmeter_active_threads is flat at 20 with standard deviation 0, so thread count alone does not show the delivered request rate.",
+    "evidence_refs": [
+     "analysis-result.json#/findings/0",
+     "analysis-result.json#/evidence/12",
+     "analysis-result.json#/evidence/13",
+     "analysis-result.json#/evidence/7"
+    ]
+   },
+   {
+    "rank": 7,
+    "action": "Extend the test plan with additional load stages on the users axis, each with a configured policy and a passing generator guard, so that any bound is derived from stages with a verified product outcome.",
+    "rationale": "The evidence contains only one stage (target 20, achieved 20) whose verdict is INDETERMINATE with verified_bound_load null, and lower_inclusive and upper_exclusive are both null. A capacity bound is derived from stages with a verified product outcome; with no verified stage there is nothing to bound, and a failed generator guard never creates an upper bound.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/19",
+     "analysis-result.json#/capacity_summary",
+     "analysis-result.json#/evidence/16"
+    ]
+   },
+   {
+    "rank": 8,
+    "action": "When reporting results from this analysis, quote the scope and window explicitly for every count and rate: overall run figures (sample_count 47396, errors 0 over 47396) separately from window policy figures (errors 0 over 38842, window 1790627160000–1790627460000).",
+    "rationale": "Counts are comparable only within the same scope and the same window; the evaluation window covers only part of the run (run 1790627156282–1790627514513). Presenting the two denominators side by side as if they measured the same thing would misstate the evidence, and throughput_rps is reported only as numerator/denominator pairs.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0",
+     "analysis-result.json#/evidence/17",
+     "analysis-result.json#/evidence/7"
+    ]
+   },
+   {
+    "rank": 9,
+    "action": "Inspect the reset cart sampler definition and its JTL rows (response codes, sizes, elapsed versus latency columns) to confirm it exercises the intended server path, before including it in any latency conclusion.",
+    "rationale": "reset cart reports p50 4 ms against 78–199 ms p50 for the other five labels, yet a max of 1062 ms and p99 541 ms, with 7898 samples and zero errors. The evidence does not distinguish a genuinely light operation from a sampler that is not measuring the intended path.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/6",
+     "analysis-result.json#/evidence/1",
+     "analysis-result.json#/evidence/4"
+    ]
+   },
+   {
+    "rank": 10,
+    "action": "Treat this run's capacity result as unresolved and re-execute the full sequence — verify clocks, configure capacity and latency policies, supply resource limits, then rerun with an unsaturated generator — rather than drawing a capacity conclusion from the current analysis.",
+    "rationale": "analysis_coverage is INCOMPLETE with reasons CAPACITY_GUARD_FAILED and CAPACITY_STAGE_NOT_VERIFIED while run_validity is VALID; these are distinct statements. The bound_type is INDETERMINATE with both bounds null and capacity_knee null, so no lower or upper capacity figure can be quoted from this analysis.",
+    "evidence_refs": [
+     "analysis-result.json#/analysis_coverage",
+     "analysis-result.json#/run_validity",
+     "analysis-result.json#/capacity_summary"
+    ]
+   }
+  ],
+  "caveats": [
+   "This advice is advisory only and does not modify the deterministic verdict: run_validity VALID, policy_verdict NO_POLICY, analysis_coverage INCOMPLETE (CAPACITY_GUARD_FAILED, CAPACITY_STAGE_NOT_VERIFIED), capacity bound_type INDETERMINATE with lower_inclusive null and upper_exclusive null.",
+   "capacity_knee is null with knee_reason KNEE_DETECTOR_NOT_IMPLEMENTED. This is a fixed limitation of the product, not a defect of this run and not a step an operator can take; no bound in this analysis is contingent on a knee, and none of the recommendations above involve implementing or enabling one.",
+   "The generator guard on generator-cpu-throttle-ratio has effect \"diagnostic\" and status FAIL. By contract it is diagnostic: it makes its stage unusable for a product bound and never creates an upper bound. Its effect must not be changed to binding, SLA, or enforcing; the remedy is a rerun with a generator that is not saturated.",
+   "NO_POLICY stays NO_POLICY. A healthy business window (business_verdict PASS), a rerun, or a repaired load generator does not turn it into PASS; only a configured policy or required capacity yields PASS or FAIL.",
+   "No latency policy check and no resource policy check for frontend, checkoutservice, or paymentservice appears in the evidence. Their absence is not a pass and not evidence of acceptable latency or of spare capacity.",
+   "Zero error_count and a 0-numerator error_rate_ratio in the overall and per-transaction summaries do not prove the absence of a problem; they state only that no errors were recorded in those scopes and windows.",
+   "resource_binding records clock_alignment = \"not_verified_by_core\". No lead/lag ordering, coincidence, or temporal causal relationship between the generator throttle violation and the observed request latencies can be supported; clock verification must come first.",
+   "No causal claim is made or supported here. Generator throttling is offered as a hypothesis for why the stage is unverified, not as an established cause of any observed latency, throughput, or error value.",
+   "The overall run denominator (47396) and the policy-window denominator (38842) measure different scopes and different windows and are not comparable; the window 1790627160000–1790627460000 covers only part of the run 1790627156282–1790627514513.",
+   "throughput_rps is reported only as numerator/denominator pairs (for example overall numerator 47396000, denominator 358231). No scalar rate has been derived here, and the epoch values quoted are absolute timestamps, not durations.",
+   "Resource summaries use aggregation interval_mean over 30 cells; behaviour shorter than the cell interval, including brief peaks or stalls, is not visible in these statistics.",
+   "The recorded violation covers cell_count 27 and ends at epoch 1790627430000, earlier than the window end 1790627460000, and the same series reports min 0.05 (below the 0.2 threshold), so the generator should not be described as throttled for the entire window without per-cell inspection.",
+   "Only one load stage (target 20 users) exists in the evidence, so no comparison across load levels is possible and no trend across the users axis can be inferred.",
+   "The flat jmeter_active_threads series (constant 20, standard deviation 0) shows the configured thread count was held; it does not prove the intended request rate or offered load was delivered."
+  ]
+ },
+ "schema": "ai-experiment-run.v3",
+ "case": "K02",
+ "rep": 2,
+ "model_id": "qwen3.8-max",
+ "net_retries": 0,
+ "infra_retries": 0
+}

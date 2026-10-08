@@ -1,0 +1,94 @@
+[
+  {
+    "id": "R002",
+    "hard_defect": false,
+    "defects": [],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 5,
+    "notes": "Accurate, bounded, and operationally actionable."
+  },
+  {
+    "id": "R022",
+    "hard_defect": false,
+    "defects": [],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 5,
+    "notes": "Correctly preserves verdict scope and gives useful verification actions."
+  },
+  {
+    "id": "R035",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T2",
+        "field": "#/hypotheses/3/possible_explanation",
+        "quote": "For a pooled median of 17 ms, roughly half of all 37,349 samples would have to be at or below 17 ms",
+        "why": "This treats separately reported overall and transaction scopes as a proven pooled sample set, despite the evidence containing only aggregates and not establishing that percentile relationship."
+      }
+    ],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 4,
+    "notes": "Otherwise thorough and well-scoped, but it invents a cross-scope percentile relationship."
+  },
+  {
+    "id": "R046",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T7",
+        "field": "#/hypotheses/0/recommended_check",
+        "quote": "Only the first outcome would let coverage move off SOURCE_ACQUISITION_PARTIAL",
+        "why": "A successful errors query returning error documents would also repair the acquisition failure and permit coverage to be re-evaluated."
+      },
+      {
+        "type": "T3",
+        "field": "#/recommendations/5/rationale",
+        "quote": "indicating a very small outlier set",
+        "why": "The aggregates provide no count of samples at the reported maxima or above the proposed threshold."
+      },
+      {
+        "type": "T2",
+        "field": "#/recommendations/6/rationale",
+        "quote": "The two low-median labels dominate the pooled p50 of 17 ms",
+        "why": "The evidence does not establish that the overall percentile is a pooled percentile over the transaction-scope measurements."
+      },
+      {
+        "type": "T8",
+        "field": "#/recommendations/3/rationale",
+        "quote": "Early-run behaviour is exactly where the outlier maxima would be expected to appear",
+        "why": "No sample timestamps or load-stage information supports placing the latency maxima in the early run."
+      },
+      {
+        "type": "T7",
+        "field": "#/recommendations/11/rationale",
+        "quote": "un-driven intervals may be included",
+        "why": "The reported resource summaries are explicitly bounded to the run-intersection evaluation window, not the pre- and post-run snapshot margins."
+      }
+    ],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 2,
+    "notes": "It preserves key facts but adds several unsupported or false interpretations."
+  },
+  {
+    "id": "R049",
+    "hard_defect": false,
+    "defects": [],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 5,
+    "notes": "Accurate, concise, and appropriately cautious about scope and causality."
+  },
+  {
+    "id": "R055",
+    "hard_defect": false,
+    "defects": [],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 5,
+    "notes": "Accurately states the verdict limits and provides supported operator actions."
+  }
+]

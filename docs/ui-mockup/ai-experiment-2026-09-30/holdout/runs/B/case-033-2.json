@@ -1,0 +1,213 @@
+{
+ "stage": "B",
+ "mode": "live",
+ "model": "deepseek-v4-flash-0731",
+ "tag": {
+  "phase": "holdout",
+  "attempt_id": "case-033-2-B-t1",
+  "arm": "B",
+  "stage": null,
+  "case": "case-033",
+  "rep": 2,
+  "try": 1
+ },
+ "retry_policy": "d2",
+ "qwen_exit": 0,
+ "wall_ms": 124811,
+ "relay": {
+  "schema_version": "advisory-ai-runtime-relay.v1",
+  "status": "FORWARDED_STRUCTURED_OUTPUT",
+  "received_request_count": 1,
+  "forwarded_request_count": 1,
+  "outcomes": [
+   "FORWARDED_STRUCTURED_OUTPUT"
+  ],
+  "retry_refused_reason": null,
+  "first_refused_reason": null,
+  "model_id": "deepseek-v4-flash-0731",
+  "retry_policy": "d2",
+  "requests": [
+   {
+    "ordinal": 1,
+    "forwarded": true,
+    "outcome": "FORWARDED_STRUCTURED_OUTPUT",
+    "provider_status": 200,
+    "latency_ms": 123420,
+    "usage": {
+     "prompt_tokens": 5619,
+     "total_tokens": 18108,
+     "completion_tokens": 12489,
+     "prompt_tokens_details": {
+      "cached_tokens": 1024
+     },
+     "completion_tokens_details": {
+      "reasoning_tokens": 10098
+     }
+    },
+    "model_returned": "deepseek-v4-flash-0731"
+   }
+  ],
+  "usage": {
+   "prompt_tokens": 5619,
+   "completion_tokens": 12489,
+   "total_tokens": 18108
+  },
+  "latency_ms": 123420
+ },
+ "relay_status": "FORWARDED_STRUCTURED_OUTPUT",
+ "usage": {
+  "prompt_tokens": 5619,
+  "completion_tokens": 12489,
+  "total_tokens": 18108
+ },
+ "latency_ms": 123420,
+ "retried": false,
+ "retry_refused_reason": null,
+ "status": "OK",
+ "note": null,
+ "output": {
+  "schema_version": "ai-advice-output.v1",
+  "summary": "Run e1067dc8012f5ab6… is VALID with COMPLETE coverage. The deterministic verdict is FAIL: the latency rule (response_time_p95_ms <= 250) observed 420 ms in both load-stage windows (targets 150 and 250 users), so both window-policy summaries are FAIL. Resource verdicts are NO_POLICY in both windows; the only resource rule present, generator-cpu-guard (effect diagnostic), PASSED in both stages. The capacity summary reports an UPPER_BOUND with upper_exclusive = 147 users derived from the two FAILed stages (verified_bound_load 147 and 247); it is a fail-derived bound, not a verified passing capacity. capacity_knee is null due to KNEE_DETECTOR_NOT_IMPLEMENTED, a fixed product limitation requiring no operator action. Recommended: validate the latency SLO and root-cause the ~420 ms p95 (zero errors observed), then rerun with load steps that pass the rule to obtain a verified capacity bound; verify clock alignment before interpreting window comparisons.",
+  "hypotheses": [
+   {
+    "rank": 1,
+    "observation": "The latency rule (metric response_time_p95_ms, operator lte, threshold 250) evaluated as FAIL in both load-stage windows with observed p95 = 420 ms; both window-policy summaries report business_verdict = FAIL and overall verdict = FAIL.",
+    "possible_explanation": "The tested load levels did not satisfy the configured response-time SLO, and this latency-rule failure is what drives the FAIL verdict. The current evidence does not indicate where in the request path the p95 latency is incurred.",
+    "recommended_check": "Confirm the 250 ms p95 threshold matches the intended SLO; then collect and inspect backend/application latency telemetry and the JMeter sample distribution, and rerun the same load steps to see whether p95 still exceeds the threshold.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/9",
+     "analysis-result.json#/evidence/10",
+     "analysis-result.json#/evidence/11",
+     "analysis-result.json#/evidence/12"
+    ]
+   },
+   {
+    "rank": 2,
+    "observation": "The capacity summary reports bound_type UPPER_BOUND with upper_exclusive = 147 users and both stages marked FAIL (verified_bound_load 147 and 247; targets 150 and 250).",
+    "possible_explanation": "Because both tested stages failed the latency rule, no load level in this run was verified to satisfy the policy, so the product emits only a fail-derived upper bound rather than a verified passing capacity.",
+    "recommended_check": "Rerun with a low-load probe first and then include load steps that keep p95 <= 250 ms for at least one stage; if the rule fails even at very low load, focus on the SLO/environment before attempting to bracket capacity.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/13",
+     "analysis-result.json#/evidence/9",
+     "analysis-result.json#/evidence/11"
+    ]
+   },
+   {
+    "rank": 3,
+    "observation": "Both policy checks report the same observed p95 = 420 ms (metric summaries also report p95 = p99 = 420 ms with max = 1500 ms) even though the two stages targeted 150 and 250 users and achieved 147 and 247 users respectively.",
+    "possible_explanation": "The p95 latency appears flat across the two load levels, which is consistent with a load-independent latency contributor (e.g., a baseline/backend delay) rather than load scaling; this is a hypothesis only, and the overall metric-summary scope differs from the per-window policy window.",
+    "recommended_check": "Compare per-window latency distributions and sample counts, then inspect backend telemetry across both windows and at a low-load probe to test whether p95 depends on load or is constant.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0",
+     "analysis-result.json#/evidence/1",
+     "analysis-result.json#/evidence/9",
+     "analysis-result.json#/evidence/11"
+    ]
+   },
+   {
+    "rank": 4,
+    "observation": "The generator CPU guard (generator-cpu-guard, effect diagnostic, threshold 0.85) PASSED in both stages; generator CPU means are 0.43 with max 0.45 in both windows, and active-users series tracked targets (stage-1 min 147 max 150; stage-2 min 247 max 250) with no missing cells.",
+    "possible_explanation": "The load generator did not violate its diagnostic CPU guard in either window, so generator-side CPU exhaustion is not indicated by this evidence; however the guard is diagnostic by contract and does not by itself prove the generator is healthy or that latency is unaffected.",
+    "recommended_check": "Inspect the full generator CPU and active-users series for transient spikes or gaps, and rerun with generator-side monitoring if generator health remains a concern.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/3",
+     "analysis-result.json#/evidence/4",
+     "analysis-result.json#/evidence/5",
+     "analysis-result.json#/evidence/6",
+     "analysis-result.json#/evidence/7",
+     "analysis-result.json#/evidence/8"
+    ]
+   },
+   {
+    "rank": 5,
+    "observation": "resource-binding reports clock_alignment = not_verified_by_core, with evaluation/snapshot windows spanning 1767225600000 to 1767226200000 ms and the run end at 1767226200500 ms.",
+    "possible_explanation": "If clocks across the load generator and telemetry collection are not synchronized, window-to-window comparisons of load and latency could be offset; no lead/lag or temporal causal relationship is supported by the current evidence.",
+    "recommended_check": "Verify clock synchronization (e.g., NTP) across generator, test host, and telemetry sinks before interpreting comparisons between load stages and latency windows.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/2"
+    ]
+   },
+   {
+    "rank": 6,
+    "observation": "Both window-policy summaries report resource_verdict = NO_POLICY while the only resource rule present (generator-cpu-guard) has effect diagnostic and PASSED.",
+    "possible_explanation": "No applicable resource rule with effect sla matched these windows, so no resource-based pass/fail contributed to the verdict; the FAIL comes from the latency business rule. NO_POLICY is a product state, not a pass.",
+    "recommended_check": "If resource SLA checking is desired, configure applicable resource rules with effect sla and rerun; otherwise treat the verdict as reflecting only the latency business rule.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/7",
+     "analysis-result.json#/evidence/8",
+     "analysis-result.json#/evidence/10",
+     "analysis-result.json#/evidence/12"
+    ]
+   }
+  ],
+  "recommendations": [
+   {
+    "rank": 1,
+    "action": "Validate the latency SLO configuration: confirm the 250 ms p95 threshold is the intended response-time requirement; if it is stale or misconfigured, update the rule and rerun.",
+    "rationale": "Both windows FAIL on this rule (observed 420 ms vs threshold 250 ms), and it is the only rule driving the FAIL verdict.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/9",
+     "analysis-result.json#/evidence/10",
+     "analysis-result.json#/evidence/11",
+     "analysis-result.json#/evidence/12"
+    ]
+   },
+   {
+    "rank": 2,
+    "action": "Root-cause the p95 latency: collect backend/application telemetry and the JMeter sample distribution, and investigate the outlier max of 1500 ms.",
+    "rationale": "Both windows report p95 = 420 ms with zero errors, so the failure is latency-based rather than error-based; p95/p99 = 420 ms with max = 1500 ms indicate outliers that need inspection.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0",
+     "analysis-result.json#/evidence/1",
+     "analysis-result.json#/evidence/9",
+     "analysis-result.json#/evidence/11"
+    ]
+   },
+   {
+    "rank": 3,
+    "action": "Rerun with a load profile that produces at least one stage passing the latency rule (start with a low-load probe, then increase) so the product can emit a verified lower/bounded capacity instead of only the fail-derived upper_exclusive = 147 users.",
+    "rationale": "The current upper bound comes from two FAILed stages (verified_bound_load 147 and 247) and does not represent a verified passing capacity.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/13",
+     "analysis-result.json#/evidence/9",
+     "analysis-result.json#/evidence/11"
+    ]
+   },
+   {
+    "rank": 4,
+    "action": "Verify clock synchronization (e.g., NTP) across generator, host, and telemetry sinks before further window-to-window interpretation.",
+    "rationale": "resource-binding reports clock_alignment = not_verified_by_core; temporal alignment of load and latency windows is therefore unverified.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/2"
+    ]
+   },
+   {
+    "rank": 5,
+    "action": "Keep the generator-cpu-guard as diagnostic (do not change its effect to binding, SLA, or enforcing). If generator health is a concern, inspect its resource series and rerun with a healthy generator.",
+    "rationale": "The guard is diagnostic by contract; it PASSED in both stages, and a failed or missing guard would only make a stage unusable, never create an upper bound.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/4",
+     "analysis-result.json#/evidence/6",
+     "analysis-result.json#/evidence/7",
+     "analysis-result.json#/evidence/8"
+    ]
+   }
+  ],
+  "caveats": [
+   "The overall and checkout metric summaries (sample_count 2401, latency percentiles, throughput) are run/transaction-scoped and are not policy-window denominators; the per-window policy checks and window summaries are the authoritative basis for the FAIL verdict.",
+   "Clock alignment is not verified by core, so temporal ordering or lead/lag relationships between load and latency are not established.",
+   "resource_verdict NO_POLICY in both windows is not a pass; no resource rule with effect sla was evaluated.",
+   "upper_exclusive = 147 users is derived from failed stages, not a verified passing capacity; capacity_knee is null because of KNEE_DETECTOR_NOT_IMPLEMENTED, a fixed product limitation with no operator action.",
+   "Zero error count, zero missing cells, and flat-looking series do not by themselves prove stability, spare capacity, or absence of a problem; the latency rule still failed in both windows.",
+   "The analysis evaluated p95 against the threshold; max latency 1500 ms indicates outliers exist, but the full latency distribution beyond reported percentiles was not examined."
+  ]
+ },
+ "schema": "ai-experiment-run.holdout.v1",
+ "case": "case-033",
+ "rep": 2,
+ "arm": "B",
+ "try": 1,
+ "attempt_id": "case-033-2-B-t1",
+ "model_id": "deepseek-v4-flash-0731",
+ "prompt_sha256": "3c0f28bee6517c13c5c854615e7d3d59301893d9723880818e4034a32e9133bf"
+}

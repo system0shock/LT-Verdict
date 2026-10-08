@@ -71,9 +71,9 @@ PRC v0.6 пока обозначен как предлагаемая целев�
 Одновременно:
 
 - основной development plan явно основан на v0.5:
-  `docs/superpowers/plans/2026-08-10-development-plan.md:1-9`;
+  `docs/superpowers/plans/archive/2026-08-10-development-plan.md:1-9`;
 - план фиксирует MVP на PRC v0.5:
-  `docs/superpowers/plans/2026-08-10-development-plan.md:18-21`;
+  `docs/superpowers/plans/archive/2026-08-10-development-plan.md:18-21`;
 - Stage 1 spec основан на PRC v0.5:
   `docs/stage-1-spec.md:3-5`;
 - Stage 1 Definition of Done проверяет критерий v0.5:
@@ -176,7 +176,7 @@ HDR-нормализация, фиксированная точность, де�
 bounded concurrency остаются полезными:
 
 - `docs/stage-1-spec.md:222-238`;
-- `docs/superpowers/plans/2026-08-10-development-plan.md:13-15`.
+- `docs/superpowers/plans/archive/2026-08-10-development-plan.md:13-15`.
 
 Нужно сохранить идею canonical normalized events и histograms, но убрать
 жёсткую привязку к заранее зарегистрированной `steady`-фазе.
@@ -225,8 +225,8 @@ Evidence:
 
 Evidence:
 
-- `docs/superpowers/plans/2026-08-10-development-plan.md:18-19`;
-- `docs/superpowers/plans/2026-08-10-development-plan.md:137-157`;
+- `docs/superpowers/plans/archive/2026-08-10-development-plan.md:18-19`;
+- `docs/superpowers/plans/archive/2026-08-10-development-plan.md:137-157`;
 - `lt-verdict-prc-prd-v0.6.md:136-146`;
 - `lt-verdict-prc-prd-v0.6.md:759-769`.
 
@@ -375,7 +375,7 @@ analysis_coverage: capability map + module statuses
 Evidence:
 
 - `docs/stage-1-spec.md:9-35`;
-- `docs/superpowers/plans/2026-08-10-development-plan.md:56-76`.
+- `docs/superpowers/plans/archive/2026-08-10-development-plan.md:56-76`.
 
 Новая граница Stage 1 должна быть portable local foundation:
 
@@ -438,7 +438,7 @@ Evidence:
 Критический конфликт:
 
 - старый план: отключение любого источника даёт `NO_VERDICT`:
-  `docs/superpowers/plans/2026-08-10-development-plan.md:124-133`;
+  `docs/superpowers/plans/archive/2026-08-10-development-plan.md:124-133`;
 - v0.6: optional module failure не ломает core и снижает coverage:
   `lt-verdict-prc-prd-v0.6.md:174-177`;
 - acceptance: отсутствие VM/Influx/APM не мешает load-only analysis:
@@ -457,7 +457,7 @@ Evidence:
 ### 6.5. Canonical outputs
 
 Старый план помещает deterministic findings в `verdict.json`:
-`docs/superpowers/plans/2026-08-10-development-plan.md:116-133`.
+`docs/superpowers/plans/archive/2026-08-10-development-plan.md:116-133`.
 
 В v0.6:
 
@@ -473,7 +473,7 @@ tests вокруг этого разделения.
 ### 6.6. Incident-first UX
 
 Старый plan ведёт к большой SPA с live view, AI chat, SLA editor и Confluence
-publishing: `docs/superpowers/plans/2026-08-10-development-plan.md:137-157`.
+publishing: `docs/superpowers/plans/archive/2026-08-10-development-plan.md:137-157`.
 
 Первый UX v0.6 должен быть существенно меньше:
 
@@ -499,7 +499,7 @@ Evidence:
 server ingest -> VM -> APM -> verdict -> GUI/AI -> distribution
 ```
 
-Evidence: `docs/superpowers/plans/2026-08-10-development-plan.md:200-208`.
+Evidence: `docs/superpowers/plans/archive/2026-08-10-development-plan.md:200-208`.
 
 Целевой порядок v0.6:
 
@@ -920,9 +920,9 @@ PRC v0.6 менее конкретен по форматам, чем Stage 0/1. 
 1. `lt-verdict-prc-prd-v0.6.md`;
 2. `docs/development-process.md`;
 3. `docs/stage-1-spec.md`;
-4. `docs/superpowers/plans/2026-08-10-development-plan.md`;
+4. `docs/superpowers/plans/archive/2026-08-10-development-plan.md`;
 5. `docs/superpowers/specs/2026-08-10-stage-0-closure-stage-1-contract-design.md`;
-6. `docs/superpowers/plans/2026-08-10-stage-0-closure-stage-1-contract.md`;
+6. `docs/superpowers/plans/archive/2026-08-10-stage-0-closure-stage-1-contract.md`;
 7. `docs/decisions-2026-07-20.md`;
 8. `docs/admin-questionnaire.md`;
 9. этот анализ.

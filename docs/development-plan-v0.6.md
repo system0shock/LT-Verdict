@@ -33,7 +33,7 @@ MVP — локально запускаемое приложение с обяз
 
 ## Подготовка к приёмке, 2026-09-22
 
-По решению пользователя сквозной путь будет проверяться отдельно. Текущие результаты [плана подготовки](superpowers/plans/2026-09-21-mvp-acceptance-readiness.md) собраны в [отчёте готовности](mvp-readiness-2026-09-22.md): AI product integration, оставшиеся analytics/UI и integration/report функции, локальные проверки и [пакет приёмки](mvp-acceptance-checklist.md).
+По решению пользователя сквозной путь будет проверяться отдельно. Текущие результаты [плана подготовки](superpowers/plans/archive/2026-09-21-mvp-acceptance-readiness.md) собраны в [отчёте готовности](mvp-readiness-2026-09-22.md): AI product integration, оставшиеся analytics/UI и integration/report функции, локальные проверки и [пакет приёмки](mvp-acceptance-checklist.md).
 
 Уточнение к исторической очереди ниже: correlation selector уже интегрирован; baseline conditions имеют API/UI и сохранение, focused проверки пройдены. Их не реализовывать повторно. AI evidence/validator/store и production runtime/API/UI подключены; semantic acceptance остаётся открытой. Пилот ModelStudio остановлен пользователем после 20 запросов; новые запросы и массовая калибровка в подготовку не входят. Jenkins возвращён в очередь утверждённым планом подготовки полного MVP.
 
@@ -64,7 +64,7 @@ partial или two-run T02/T03 и не означает готовность pro
    методов и порогов. Существующие SLA/verdict и raw evidence сохраняются.
    Это необходимая интеграция, а не отложенная оптимизация.
 3. **Завершить ручной comparison workflow.** `BASELINE-CONDITIONS-01`
-   реализован: ADR 0010, three-state `CONFIRMED`/`NOT_CONFIRMED`/`UNKNOWN` в
+   реализован: ADR 0028, three-state `CONFIRMED`/`NOT_CONFIRMED`/`UNKNOWN` в
    `local-baseline-conditions.v1`, `GET` и `POST
    /api/runs/{runId}/analyses/{analysisId}/baseline-conditions`, сохранение и
    reload решения. Остаётся сквозная приёмка сценария на настоящих runs.
@@ -96,28 +96,35 @@ correlation noise и повторные массовые эксперимент�
 
 2026-09-05 пользователь согласовал параллельную разработку локального просмотра
 с графиками и JSON/HTML export перед источниками. Первая поставка реализует
-часть Slices 8–9 по [короткому плану](superpowers/plans/2026-09-05-local-review-pilot.md).
+часть Slices 8–9 по [короткому плану](superpowers/plans/archive/2026-09-05-local-review-pilot.md).
 Она не закрывает gate Slice 1 и не заменяет остальные требования MVP.
 
 Следующее согласованное расширение — ручной и статистический выбор фиксированного
 baseline по [ADR 0004](adr/0004-local-baseline-selection.md) и
-[плану реализации](superpowers/plans/2026-09-05-local-baseline-comparison.md).
+[плану реализации](superpowers/plans/archive/2026-09-05-local-baseline-comparison.md).
 Оно добавляет overall metric comparison; N-run history, chart overlays,
 transaction comparison и comparison exports остаются отдельными шагами Slice 8.
 
 | Slice | Статус | Результат | Exit gate |
 | --- | --- | --- | --- |
 | 0. Minimal foundation | **COMPLETE** | Нормативный v0.6, два контракта, JTL/`simulation.log` examples, один offline verifier | `python tools/verify_slice0.py` проходит без dependencies |
-| 1. Local usable shell | **READY FOR REVIEW** | Одна команда запуска, loopback backend, Web UI/CLI, ручная загрузка JMeter JTL и Gatling logs, deterministic metrics/verdict и strict `policy.v1`; [дизайн](superpowers/specs/2026-08-31-slice-1-local-usable-shell-design.md), [план](superpowers/plans/2026-08-31-slice-1-local-usable-shell.md), [candidate report](milestones/stage-1.md) | Локальные gates проходят; green runtime/performance CI обязателен до приёмки |
-| 2. Primary online sources | IN PROGRESS | Реализованы VictoriaMetrics, Prometheus, InfluxDB и PostgreSQL pre/post, `pg_stat_statements`, supplementary `pg_profile`, multi-source и offline replay; PostgreSQL 16.15 / pg_profile 4.8 проверены на синтетике, внешний CI открыт | Каждый источник даёт raw snapshot; отказ одного не ломает load-only result; ручной fallback эквивалентен |
-| 3. Jenkins workflow | PLANNED | REST skeleton для существующих jobs, trigger, queue/build tracking, изоляция credentials | Из UI запускается настроенная job и определяется её build без повторного POST при неизвестном outcome |
-| 4. Artifact collection | PLANNED | Автоматическое скачивание архивированного JTL/`simulation.log` из Jenkins; ручная загрузка любого файла | Artifact проверяется по size/SHA-256; отсутствие переводит run в ожидание, не создаёт ложный verdict |
-| 5. Capacity analysis | IMPLEMENTED / LOCALLY VERIFIED | CLI/API/UI, отдельный `capacity_step` режим, таблица ступеней и консервативные bounds реализованы; формальный milestone не закрыт | Результат различает bounded/lower/upper/indeterminate и не принимает насыщение генератора за предел продукта |
-| 6. JVM and OpenShift | PLANNED | JVM и OpenShift metric packs | Findings строятся только по доступным capabilities и ссылаются на raw evidence |
-| 7. OpenSearch | IN PROGRESS | Bounded error context и offline replay реализованы; overlay на прочие графики и correlation opt-in остаются | Error report и overlay работают с governor; correlation failure не меняет verdict |
-| 8. Charts and comparison | IN PROGRESS | Сохранённые analyses и SVG load charts в первой поставке; далее static renderer, Grafana links, baseline comparison и N-run dynamics | Сравнение использует сохранённые RunBundles и не повторяет external queries |
-| 9. Reports and publishing | IN PROGRESS | JSON, self-contained HTML и local AsciiDoc в первой поставке; далее Confluence-ready output и fail-soft Confluence REST skeleton | Все форматы строятся из одного result; transport failure не меняет analysis |
-| 10. Advisory add-ons | PLANNED | Grafana rendered evidence, рекомендательный analysis через headless GigaCode (fork Qwen Code 0.21.1) и GigaCode Skill для audit/patch адаптации НТ-скриптов | AI output явно advisory; Skill проверяет platform tags/invariants и не применяет patch без подтверждения |
+| 1. Local usable shell | **READY FOR REVIEW** | Одна команда запуска, loopback backend, Web UI/CLI, ручная загрузка JMeter JTL и Gatling logs, deterministic metrics/verdict и strict `policy.v1`; [дизайн](superpowers/specs/2026-08-31-slice-1-local-usable-shell-design.md), [план](superpowers/plans/archive/2026-08-31-slice-1-local-usable-shell.md), [candidate report](milestones/stage-1.md) | Локальные gates проходят; green runtime/performance CI обязателен до приёмки |
+| 2. Primary online sources | IMPLEMENTED / LOCALLY VERIFIED | Реализованы VictoriaMetrics, Prometheus, InfluxDB и PostgreSQL pre/post, `pg_stat_statements`, supplementary `pg_profile`, multi-source и offline replay, авто-окно ([ADR 0012](adr/0012-auto-window-recognized-period.md)), автошаг ([ADR 0014](adr/0014-resource-series-limits-autostep-arm-api.md)), профиль с клиентским сертификатом ([ADR 0025](adr/0025-mtls-on-source-connector.md), Proposed); PostgreSQL 16.15 / pg_profile 4.8 проверены на синтетике, PostgreSQL 15, TLS, реальный стенд и внешний CI открыты | Каждый источник даёт raw snapshot; отказ одного не ломает load-only result; ручной fallback эквивалентен |
+| 3. Jenkins workflow | IMPLEMENTED / NOT LIVE-VERIFIED | REST skeleton для существующих jobs, trigger, queue/build tracking, изоляция credentials (`integrations/jenkins/`, `/api/jenkins*`, [руководство](user/jenkins-and-reports.md)); живая job не запускалась | Из UI запускается настроенная job и определяется её build без повторного POST при неизвестном outcome |
+| 4. Artifact collection | IMPLEMENTED / NOT LIVE-VERIFIED | Автоматическое скачивание архивированного JTL/`simulation.log` из Jenkins; ручная загрузка любого файла; проверка размера и SHA-256 в коде, на живом Jenkins не проверялась | Artifact проверяется по size/SHA-256; отсутствие переводит run в ожидание, не создаёт ложный verdict |
+| 5. Capacity analysis | IMPLEMENTED / LOCALLY VERIFIED | CLI/API/UI, отдельный `capacity_step` режим, таблица ступеней и консервативные bounds реализованы; рядом диагностика колена по p95 ступеней (не откалибровано, [ADR 0026](adr/0026-capacity-knee-diagnostic.md), Proposed); формальный milestone не закрыт | Результат различает bounded/lower/upper/indeterminate и не принимает насыщение генератора за предел продукта |
+| 6. JVM and OpenShift | IMPLEMENTED / NOT VERIFIED ON REAL STAND | JVM и OpenShift metric packs (`core/MetricPacks.kt`, `tools/platform_profiles.py`, [руководство](user/platform-metric-packs.md)); имена и единицы метрик реального стенда не проверялись | Findings строятся только по доступным capabilities и ссылаются на raw evidence |
+| 7. OpenSearch | IMPLEMENTED / LOCALLY VERIFIED | Bounded error context, offline replay, overlay на графики и opt-in подготовка корреляции (offline `ltv opensearch`, отдельного действия в UI нет) | Error report и overlay работают с governor; correlation failure не меняет verdict |
+| 8. Charts and comparison | IMPLEMENTED / LOCALLY VERIFIED | Сохранённые analyses, SVG load charts, Grafana links и render, baseline comparison, N-run dynamics, история релизов ([ADR 0019](adr/0019-release-history-and-baseline-eligibility.md)); baseline в CLI и отчётах нет | Сравнение использует сохранённые RunBundles и не повторяет external queries |
+| 9. Reports and publishing | IN PROGRESS | JSON, self-contained HTML, local AsciiDoc и Confluence-ready XHTML реализованы; Confluence REST skeleton (`ConfluencePublisher.kt`) не подключён к приложению; JUnit и email нет | Все форматы строятся из одного result; transport failure не меняет analysis |
+| 10. Advisory add-ons | IMPLEMENTED / ACCEPTANCE OPEN | Grafana rendered evidence, рекомендательный analysis через headless GigaCode (fork Qwen Code 0.21.1; боевой путь direct-runner, [ADR 0027](adr/0027-advisory-ai-direct-local-runner.md); Docker и relay харнесс) и onboarding skill `skills/lt-verdict-onboard-test` (manifest-only, без правки кода НТ); семантическая приёмка ИИ не пройдена, отгружается промпт v1 | AI output явно advisory; Skill проверяет platform tags/invariants и не применяет patch без подтверждения |
+
+**Синхронизация с кодом, 2026-10-08** (`origin/main` `9e81e32`). Статусы срезов
+2–10 в таблице приведены в соответствие с кодом. Разделы ниже («Подготовка к
+приёмке», «Актуальное решение и бэклог», очереди) исторические: OPEN и PLANNED в
+них описывают состояние на даты разделов и не обновляются; источник истины это
+таблица выше и код. Выполненные планы реализации лежат в
+`docs/superpowers/plans/archive/`.
 
 Каждый следующий slice получает собственные короткие spec и implementation
 plan. Он не обязан ждать не связанных с ним optional add-ons, но не дублирует
@@ -157,7 +164,7 @@ PostgreSQL и OpenSearch независимыми поставками. Метр
 не объединяются искусственно в один формат. Первая поставка описана в
 [дизайне online sources](superpowers/specs/2026-09-05-online-sources-design.md).
 Первая поставка локально проверена на `feat/online-sources` по
-[implementation plan](superpowers/plans/2026-09-05-online-sources.md): CLI/UI,
+[implementation plan](superpowers/plans/archive/2026-09-05-online-sources.md): CLI/UI,
 Prometheus/VM direct и Grafana proxy, общий governor и offline replay.
 Проверки: 215 JVM passed + 2 прежних skips; 34 browser tests passed.
 Продолжение на `feat/remaining-sources`: InfluxQL, OpenSearch, PostgreSQL pre/post,
@@ -174,12 +181,12 @@ PostgreSQL 15, TLS и внешний CI остаются непроверенн�
 [дизайне оставшихся источников](superpowers/specs/2026-09-05-remaining-sources-design.md):
 несколько источников на анализ, отдельный PostgreSQL pre/post, ручной импорт
 и offline replay. Реализация описана в планах
-[InfluxQL](superpowers/plans/2026-09-05-influxdb-source.md),
-[PostgreSQL](superpowers/plans/2026-09-05-postgresql-source.md) и
-[multiple sources](superpowers/plans/2026-09-05-multiple-sources.md).
+[InfluxQL](superpowers/plans/archive/2026-09-05-influxdb-source.md),
+[PostgreSQL](superpowers/plans/archive/2026-09-05-postgresql-source.md) и
+[multiple sources](superpowers/plans/archive/2026-09-05-multiple-sources.md).
 Авто-окно выборки источника реализовано на ветке `feat/source-auto-window` по
 [ADR 0012](adr/0012-auto-window-recognized-period.md) и
-[плану](superpowers/plans/2026-09-27-source-auto-window.md): `source-request.v3`
+[плану](superpowers/plans/archive/2026-09-27-source-auto-window.md): `source-request.v3`
 с `window.origin` `auto`, распознавание периода отдельным timestamps-only
 проходом и run-артефакт `run-period.v1`, три fail-closed отказа до внешних
 запросов, provenance окна в `source_summary`, опубликованная схема `v2` и
@@ -237,7 +244,7 @@ snapshot contract фиксируется вместе с первой испол
   порогами практической значимости. Не искать «всё со всем».
 - Порядок change points и inferential tests для raw-оценок и сравнений
   отложены; p-values и Holm применяются только в отборе главных корреляционных
-  находок (`mbb-lag-max-holm.v1`), неопределённость raw-оценок — `NOT_ESTIMATED`.
+  находок (`mbb-lag-max-holm.v1`; в коде метод v2, [ADR 0022](adr/0022-correlation-stages-increments-calibration.md)), неопределённость raw-оценок — `NOT_ESTIMATED`.
   Pearson, Kendall и условия включения следующих методов сохранены в
   [roadmap методов](statistical-method-roadmap.md); границы первого среза —
   [ADR 0006](adr/0006-bounded-load-resource-correlation.md).
@@ -303,7 +310,7 @@ advisory-функции остаются в полном MVP, но не блок
 
 ## MVP gap: подтверждение условий ручной пары — закрыт реализацией
 
-`BASELINE-CONDITIONS-01`, статус CLOSED по реализации (ADR 0010,
+`BASELINE-CONDITIONS-01`, статус CLOSED по реализации (ADR 0028,
 `local-baseline-conditions.v1`, endpoints `baseline-conditions`, three-state
 решение и reload). Сквозная приёмка сценария на настоящих runs остаётся
 отдельной задачей. Ниже сохранено исходное описание gap; утверждение «Сейчас
@@ -335,7 +342,8 @@ DESCRIPTIVE; обязательный confirmed two-run сценарий Applica
 вычислительного пути применяется явный контекст одного сравнения, заданный
 в frozen manifest по условиям генерации. Он не сохраняется в baseline и
 не переносится между вызовами. Статистический gate и end-to-end продуктовый
-workflow оцениваются раздельно; статус продуктового gap остаётся OPEN.
+workflow оцениваются раздельно; продуктовый gap закрыт реализацией (см. начало
+раздела), сквозная приёмка на настоящих runs открыта.
 
 ## Post-MVP
 

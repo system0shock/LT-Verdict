@@ -2,8 +2,9 @@
 
 **Статус:** implemented candidate
 
-Этот документ описывает фактически реализованный local-only runtime Slice 1.
-Нормативные решения находятся в [ADR 0002](../adr/0002-slice-1-runtime-filesystem-security.md)
+Этот документ описывает фактически реализованный local-only runtime Slice 1 и
+дополнения к нему, влитые в `main` позже. Сверка с кодом: 2026-10-08 (`origin/main`
+`9e81e32`). Нормативные решения находятся в [ADR 0002](../adr/0002-slice-1-runtime-filesystem-security.md)
 и [ADR 0003](../adr/0003-policy-v1-metrics-evidence.md).
 
 ## Один процесс и один analytical core
@@ -17,14 +18,22 @@ CLI ─────────────────────────�
                                          immutable input · atomic analysis
 ```
 
-`ltv ui`, `ltv analyze` и `ltv policy validate` запускаются из одной JVM
-distribution. CLI вызывает application core напрямую; Web UI обращается к тому
+`ltv ui`, `ltv analyze`, `ltv report`, `ltv policy validate`, `ltv source` и
+`ltv opensearch` запускаются из одной JVM distribution (`CommandLine.kt`,
+`runCli`). CLI вызывает application core напрямую; Web UI обращается к тому
 же core через private loopback API. HTTP/session state не входит в parsers,
 metrics или canonical result.
 
-Runtime не содержит database, broker, outbound HTTP/DNS client или server-mode
-bind. Сервер слушает выбранный OS port только на `127.0.0.1` и либо открывает
-его в браузере, либо печатает URL, если browser integration недоступна.
+Runtime не содержит собственной database, broker или server-mode bind. Сервер
+слушает выбранный OS port только на `127.0.0.1` и либо открывает его в браузере,
+либо печатает URL, если browser integration недоступна. Исходящие вызовы
+выполняются только по явному запросу пользователя и профилю из локального файла
+(ADR [0007](../adr/0007-opt-in-online-sources.md)): коннекторы источников
+(`sources/`: Prometheus/VictoriaMetrics/Grafana proxy, InfluxQL, OpenSearch,
+PostgreSQL по JDBC), Jenkins и Grafana (`integrations/`), запуск ИИ-раннера
+(`ai/`, ADR [0027](../adr/0027-advisory-ai-direct-local-runner.md): direct-runner
+боевой путь, Docker и relay харнесс). Разбор и вердикт этих вызовов не требуют:
+load-only анализ работает без сети.
 
 ## Data directory и RunBundle
 
@@ -40,6 +49,7 @@ directory. Конкурирующий CLI/UI process получает `DATA_DIR_
 └── runs/<run-id>/
     ├── source.json
     ├── inputs/source.bin
+    ├── advice/<analysis-id>/        # ИИ-совет: ai-advice.json и manifest.json
     └── analyses/<analysis-id>/
         ├── identity.json
         ├── policy.json              # только если анализ запущен с политикой
@@ -49,8 +59,16 @@ directory. Конкурирующий CLI/UI process получает `DATA_DIR_
         ├── rollup-10s.ndjson
         ├── rollup-30s.ndjson
         ├── rollup-60s.ndjson
+        ├── resource-snapshot.json   # и другие необязательные входы анализа:
+        │                            # correlation-plan, capacity(-plan), trend(-plan),
+        │                            # pod-view, postgres-*.json, pg-profile.html
         └── manifest.json
 ```
+
+Вне `runs/` в каталоге данных лежат приватные записи, не входящие в RunBundle:
+`baseline.json` (прежний единственный baseline), `baselines/` (слоты по паре
+«серия, плечо»), `baseline-conditions/` (решения о сопоставимости пары) и
+`releases/` (записи истории релизов); см. разделы ниже.
 
 Для recognized, но invalid input analysis содержит только применимые artifacts:
 canonical identity, result, `policy.json` (если задана политика) и manifest. HTTP upload сначала потоково пишется во
@@ -72,8 +90,13 @@ Filename остаётся metadata; internal paths генерирует прил
 `analysis_id` — lowercase SHA-256 canonical `analysis-identity.v1`. Identity
 включает `run_id`, input hash/type, canonical policy hash либо `NO_POLICY`,
 версии engine/parsers/modules/contracts, normalization и histogram settings, а
-также result-affecting ceilings. Время создания, transport provenance и UI state
-в identity не входят. Изменение policy или любой result-affecting настройки создаёт новый
+также result-affecting ceilings. Время создания и UI state в identity не входят.
+Необязательные входы добавляют свои хэши (`resource_snapshot_sha256`,
+`resource_config_sha256`, `diagnostic_plan_sha256`, `capacity_plan_sha256`,
+`postgres_input_sha256` и др.), а для анализа с онлайн-источником identity несёт
+`source_acquisition_sha256`: хэш evidence сбора (профиль, транспорт, запросы, окно,
+артефакты), поэтому тот же вход, полученный через другой профиль или транспорт,
+получает другой `analysis_id`. Изменение policy или любой result-affecting настройки создаёт новый
 analysis directory и не перезаписывает прежний результат.
 Версия общего модуля `metrics` в identity равна `2` (ADR 0016: перцентили не выше
 максимума); analyses с прежней версией `1` читаются без перезаписи, но для baseline и
@@ -157,7 +180,8 @@ CLI, API и задача онлайн-источника показывают к
 меняются.
 
 Canonical `analysis-result.v1` одинаков для CLI и UI при одинаковых input,
-policy и engine configuration.
+policy, необязательных входах (снимок ресурсов, планы, онлайн-сбор) и engine
+configuration.
 
 ## Двухпроходная нормализация
 
@@ -296,8 +320,10 @@ server scaling остаётся отдельной будущей задачей
 
 ## Private loopback API
 
-API является внутренним контрактом Slice 1 и не обещает remote/server
-compatibility.
+API является внутренним контрактом и не обещает remote/server compatibility.
+Список ниже это ядро Slice 1; полный перечень маршрутов (baseline, releases,
+advice, sources, Jenkins, Grafana, analytics, resource-series и др.) задаёт
+`installLocalApi` в `LocalApi.kt`, часть из них описана в разделах ниже.
 
 ```text
 GET    /api/bootstrap
@@ -364,7 +390,9 @@ transport-only provenance исключён из semantic hash. Raw snapshot со
 Бизнес-policy проверяется на тех же half-open windows, что resource SLA;
 resource diagnostics не участвуют в общем verdict. Новые typed evidence
 используют existing `analysis-result.v1` object slots. UI и reports читают эти
-evidence без повторного вычисления статистик. VM/Grafana transport отсутствует.
+evidence без повторного вычисления статистик. Сам снимок можно передать файлом
+либо получить онлайн-коннектором (`sources/`, ADR 0007); расчёты принимают
+одинаковый `resource-snapshot.v1` в обоих случаях.
 
 ## Просмотр и экспорт сохранённого analysis
 
@@ -526,7 +554,7 @@ persisted selection из API и защищает отображение comparis
   слотов приведён в описании PR.
 - Записи условий удаляются только если их baseline-ссылка относится к удаляемому
   выбору и не используется другим эффективным слотом (binding остаётся парой
-  immutable ссылок, ADR 0010). Безадресный `clearBaseline()` удаляет legacy-файл и
+  immutable ссылок, ADR 0028). Безадресный `clearBaseline()` удаляет legacy-файл и
   только такие записи его ссылки; прежнее «удалить все записи условий» заменено:
   записи условий прежних baseline остаются, пока не будут удалены адресно.
 
@@ -681,8 +709,9 @@ tokens. Bootstrap передаёт их browser flow: session находится
 Origin, session cookie и `X-LTV-CSRF`. CORS не включается.
 
 Каждый response получает restrictive CSP, `nosniff`, `no-referrer` и
-`no-store`. UI не использует `v-html`, `localStorage`, `sessionStorage`, CDN или
-outbound resources. JMeter XML разбирается JDK StAX с отключёнными DTD,
+`no-store`. UI не использует `v-html`, `sessionStorage`, CDN или
+outbound resources; единственное применение `localStorage` это явный выбор прежней
+оболочки (`?shell=old`, `ui/src/shell/shell.ts`). JMeter XML разбирается JDK StAX с отключёнными DTD,
 external entities и filesystem/network resolution.
 
 ## Optional diagnostic analysis
@@ -698,8 +727,9 @@ policy1MiB, plan1MiB и остальные) плюс envelope.
 Schema string lengths дополняются runtime-пределами 128/512 UTF-8 bytes.
 
 UTC load cells собираются в существующем втором parser pass, без пересчёта
-run-relative bins и без усреднения percentiles. Existing window + diagnostic
-cell histogram budget<=10000. Бюджет пар/окон<=128, lag points<=2688, эпизоды
+run-relative bins и без усреднения percentiles. Общий бюджет гистограмм
+<=10000 включает оконные гистограммы, 10-секундные ячейки окон ёмкости и ячейки
+диагностики. Бюджет пар/окон<=128, lag points<=2688, эпизоды
 <=1000. Optional module limit/недостаток наблюдений не меняет SLA coverage/verdict.
 Диагностика не делает outbound requests и не добавляет production dependencies.
 

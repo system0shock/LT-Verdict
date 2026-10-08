@@ -1,0 +1,9 @@
+{
+  "schema_version": "incident.v1",
+  "method": "incident-synthesis.v1",
+  "status": "NOT_EVALUATED",
+  "overview_limit": 7,
+  "total_count": 0,
+  "omitted_count": 0,
+  "items": []
+}

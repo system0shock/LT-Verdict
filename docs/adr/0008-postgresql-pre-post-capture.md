@@ -51,6 +51,6 @@ Capture требует действий до нагрузки; без pre отч
 integration gate. Поддержка pg_profile report signatures и sample coverage
 проверяется отдельно и может быть явно DEGRADED.
 
-[План и точные limits](../superpowers/plans/2026-09-05-postgresql-source.md),
+[План и точные limits](../superpowers/plans/archive/2026-09-05-postgresql-source.md),
 [pgJDBC version](https://jdbc.postgresql.org/download/),
 [PostgreSQL statement statistics](https://www.postgresql.org/docs/15/pgstatstatements.html).

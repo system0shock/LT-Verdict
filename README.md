@@ -3,14 +3,91 @@
 LT Verdict — платформа детерминированного анализа результатов нагрузочного
 тестирования и формирования проверяемого вердикта.
 
+## Что умеет сегодня
+
+Сегодня это воспроизводимый SLA-гейт для результатов JMeter (JTL, CSV и XML) и
+Gatling (`simulation.log`, текстовый и бинарный). «Проверяемый вердикт» означает
+воспроизводимость из байтов входа и политики, а не статистическую обоснованность.
+
+Умеет (код в `main`; проверено на синтетике и в тестах, реальных прогонов и
+пользователей кроме владельца пока нет):
+
+- вердикт `PASS`, `FAIL` или `NO_VERDICT` по явной политике `policy.v1`
+  (задержки, ошибки, throughput по транзакциям, окнам и сервисам платформы);
+  валидность прогона отдельна от вердикта, нехватка данных даёт `NO_VERDICT`, а не `PASS`;
+- снимок ресурсов (CPU, память и др.), оконные SLA ресурсов, эпизоды, L0-тренд,
+  корреляции по явному плану и ёмкость по ступеням с диагностикой колена;
+- источники: Prometheus, VictoriaMetrics (в том числе через Grafana proxy),
+  InfluxQL, OpenSearch и PostgreSQL pre/post, ручной импорт и offline replay;
+  запуск и сбор артефактов через Jenkins реализованы, живая job не проверялась;
+- сравнение с baseline по серии релизов и плечу, история релизов, динамика
+  нескольких прогонов, тепловая карта подов;
+- отчёты: JSON, HTML, AsciiDoc, Confluence-ready XHTML и SVG-график;
+- локальный Web UI (русская оболочка, `?shell=new`) и CLI на одном ядре;
+- совет ИИ: отдельный артефакт, вердикт не меняет. Боевой путь по решению владельца
+  direct-runner ([ADR 0027](docs/adr/0027-advisory-ai-direct-local-runner.md)); он
+  включается только `LT_VERDICT_AI_RUNNER_MODE=local`, без переменной код по-прежнему
+  идёт путём Docker и relay (харнесс для экспериментов). С настоящим GigaCode на Linux
+  direct-runner не проверялся. Отгружается промпт v1, измеренный v2 не включён.
+
+Чего нет:
+
+- синтеза инцидентов («3–7 инцидентов вместо графиков»): «Обзор» показывает плоский
+  список; детерминированный инцидент v0 запланирован;
+- статистической обоснованности выводов: сравнение двух прогонов использует
+  фиксированные 5 % (на автокоррелированном нуле 36,8 % ложных `CANDIDATE`);
+  статистическая приёмка корреляций v1 не пройдена;
+- вердикта по окну устойчивого состояния: без окон ресурсов вердикт считается по
+  всему прогону, включая разгон;
+- baseline в CLI (только в UI) и `analysis_id` в выводе `ltv analyze`;
+- многопользовательского и серверного режима: один процесс на каталог данных,
+  сервер слушает только `127.0.0.1`;
+- выпущенной версии: нет тега, версии в сборке и готового дистрибутива, запуск
+  только из сборки (нужны JDK и Node.js).
+
+Подробности границ: [alignment review v0.6](docs/prc-v0.6-alignment-review.md) и
+[нормативный PRC/PRD v0.6](lt-verdict-prc-prd-v0.6.md).
+
+## Быстрый старт: analyze, затем report
+
+После сборки (см. «Быстрый запуск» ниже). Сохраните политику в `policy.json`:
+
+```json
+{
+  "schema_version": "policy.v1",
+  "policy_id": "quickstart",
+  "defaults": { "sample_floor": 1, "min_samples": 1 },
+  "rules": [
+    { "id": "overall-p95", "metric": "response_time_p95_ms", "operator": "lte",
+      "threshold": 500, "scope": { "kind": "overall" } }
+  ]
+}
+```
+
+Анализ и HTML-отчёт. `ltv` здесь это `./build/install/ltv/bin/ltv` (Windows:
+`.\build\install\ltv\bin\ltv.bat` и `Get-ChildItem` вместо `ls`):
+
+```bash
+ltv analyze results.jtl --policy policy.json --data-dir data > result.json
+echo $?        # 0 PASS, 2 FAIL, 3 NO_VERDICT, 4 неверный вход, 5 неверная политика
+RUN=$(ls data/runs); ANALYSIS=$(ls data/runs/$RUN/analyses)   # в чистом data/ один запуск и один анализ
+ltv report "$RUN" "$ANALYSIS" --format html --data-dir data > report.html
+```
+
+`result.json` содержит `analysis-result.v1` (вердикт, причины, evidence).
+`--format` принимает `json`, `html`, `asciidoc`, `confluence`, `svg`. Без
+`--policy` вердикт `NO_POLICY`, метрики считаются. Пример входа:
+`fixtures/slice1/jmeter/csv-5.6.3/input.jtl`.
+
 ## Статус
 
 Принят local-first baseline v0.6. Slice 0 завершён и отмечен тегом `stage-0`.
 Slice 1 реализован как candidate и готов к review; milestone gate остаётся
 pending до зелёных runtime/performance jobs. После него в `main` влиты русская
 оболочка интерфейса по умолчанию (`?shell=new`), история релизов с baseline по
-паре «серия, плечо», платформенные правила политики и контракт `pod-view.v1`
-(экранов pod-view пока нет), а ИИ-разбор запрашивается без согласия на отправку.
+паре «серия, плечо», платформенные правила политики, контракт `pod-view.v1` и
+тепловая карта подов на вкладке «Глубокий анализ», а ИИ-разбор запрашивается без
+согласия на отправку.
 
 Первая часть Slices 8–9 добавляет открытие сохранённых analyses, графики
 нагрузки и JSON/HTML export через UI и CLI. Полный MVP остаётся в разработке.
@@ -116,8 +193,8 @@ Linux использует `./gradlew installDist` и
 - [Границы трендового детектора](docs/analytics-trend-detection.md)
 - [Границы масштабирования аналитики](docs/analytics-scale-triage.md)
 - [Утверждённый дизайн Slice 1](docs/superpowers/specs/2026-08-31-slice-1-local-usable-shell-design.md)
-- [План реализации Slice 1](docs/superpowers/plans/2026-08-31-slice-1-local-usable-shell.md)
-- [План локального просмотра и экспорта](docs/superpowers/plans/2026-09-05-local-review-pilot.md)
+- [План реализации Slice 1](docs/superpowers/plans/archive/2026-08-31-slice-1-local-usable-shell.md)
+- [План локального просмотра и экспорта](docs/superpowers/plans/archive/2026-09-05-local-review-pilot.md)
 - [Уточнения local-first MVP](docs/superpowers/specs/2026-08-26-v06-local-mvp-delta-design.md)
 - [Alignment review v0.6](docs/prc-v0.6-alignment-review.md)
 - [Исторический PRC v0.5](prc-lt-verdict-v0.5.md)

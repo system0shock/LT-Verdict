@@ -1606,6 +1606,32 @@ distinct `(group path, label, kind)`, coverage получает
 `AMBIGUOUS_TRANSACTION`. Оба случая дают всей policy `NO_VERDICT`, даже если
 другое rule уже нарушено.
 
+#### Режим «пропавшая транзакция»
+
+По умолчанию (`defaults.missing_transaction` не задано или `"no_verdict"`)
+`TRANSACTION_NOT_FOUND` блокирует вердикт, как описано выше. Опечатка в имени
+транзакции или переименованный label скрывают найденное нарушение другого
+правила: p95 339 при пороге 300 даёт `NO_VERDICT` и код выхода 3.
+
+Режим `"defaults": { "missing_transaction": "warn" }` делает `TRANSACTION_NOT_FOUND`
+предупреждением:
+
+- пропавшее правило не проверяется; его `policy_check` остаётся со статусом
+  `NO_VERDICT` и `reason_code = TRANSACTION_NOT_FOUND`, а причина попадает в
+  `analysis_coverage.reasons` (покрытие `INCOMPLETE`);
+- нарушение любого другого правила даёт `FAIL` и код выхода 2;
+- если нарушений нет, итог `PASS` (код 0) вместе с предупреждением покрытия;
+  такой анализ не принимается как baseline и не подтверждает ступень ёмкости
+  (`CAPACITY_SLA_NO_VERDICT`);
+- если не решено ни одно правило (все применимые правила пропали), вердикт
+  остаётся `NO_VERDICT`;
+- `AMBIGUOUS_TRANSACTION`, `INSUFFICIENT_SAMPLES`, `METRIC_NOT_AVAILABLE`,
+  `RULE_WINDOW_NOT_FOUND` и невалидный вход режим не смягчает.
+
+Пример: `docs/contracts/policy/v1/examples/valid/missing-transaction-warn.json`.
+Включайте режим осознанно: опечатка в имени транзакции при отсутствии других
+нарушений даст `PASS` с предупреждением, а не отказ.
+
 ### Ошибки validation
 
 UI и CLI используют один validator. Ошибка содержит stable `code`, JSON Pointer
@@ -1619,7 +1645,8 @@ UI и CLI используют один validator. Ошибка содержит
 | `INVALID_SCHEMA_VERSION` | `schema_version` не равен `policy.v1` |
 | `EMPTY_IDENTIFIER` | Пустой `policy_id`, rule id или transaction name |
 | `EMPTY_RULES`, `DUPLICATE_RULE_ID` | Нет rules или rule ids не уникальны |
-| `UNKNOWN_METRIC`, `UNKNOWN_OPERATOR` | Metric/operator не поддерживается |
+| `UNKNOWN_METRIC`, `UNKNOWN_OPERATOR` | Metric/operator не поддерживается; сообщение перечисляет допустимые значения (`allowed: ...`) |
+| `UNKNOWN_MISSING_TRANSACTION_MODE` | `defaults.missing_transaction` не равно `no_verdict` или `warn` |
 | `METRIC_OPERATOR_MISMATCH` | Operator не соответствует metric |
 | `THRESHOLD_OUT_OF_RANGE` | Threshold отрицателен или ratio не входит в `0..1` |
 | `MIN_SAMPLES_OUT_OF_RANGE` | `sample_floor` или `min_samples` вне `1..1000000` |
@@ -1629,7 +1656,7 @@ UI и CLI используют один validator. Ошибка содержит
 | `WINDOW_IDS_INVALID` | `window_ids` правила пуст, не массив строк, содержит повтор, пустую строку или id длиннее 128 байт UTF-8 |
 | `INVALID_SCOPE` | Scope не равен exact `overall` или `transaction` form; у платформенного правила: неизвестный `kind`, пустой или повторяющийся список сервисов, `all_services` без каталога `platform_services`, `except` вне каталога, область пуста после `except` |
 | `INVALID_MINIMUM` | `min_consecutive_cells` платформенного правила вне `1..100000` |
-| `UNKNOWN_AGGREGATION`, `UNKNOWN_EFFECT` | Агрегация или effect платформенного правила не поддерживается |
+| `UNKNOWN_AGGREGATION`, `UNKNOWN_EFFECT` | Агрегация или effect платформенного правила не поддерживается; сообщение перечисляет допустимые значения |
 | `PLATFORM_AGGREGATION_OPERATOR_MISMATCH` | Платформенное правило `gt` с порогом `0` и агрегацией `interval_min` |
 | `PLATFORM_COVERAGE_MISSING` | Нет правила покрытия для пары «сервис × окно» платформенного `sla`-правила |
 | `RESOURCE_LIMIT_EXCEEDED` | Превышен размер, depth, count или lexical numeric limit |
@@ -2168,7 +2195,7 @@ Optional `correlation-plan.v1` включает только явно переч
 Его можно взять из `resource_snapshot_sha256` сохранённого `identity.json`
 предварительного анализа с тем же snapshot без плана; файл лежит в
 `data/runs/<run-id>/analyses/<analysis-id>/identity.json`. Адаптер может
-подготовить план по [контракту](../superpowers/plans/2026-09-05-load-resource-correlation.md).
+подготовить план по [контракту](../superpowers/plans/archive/2026-09-05-load-resource-correlation.md).
 Исходный `correlation-plan.json` сохраняется рядом и защищён manifest.
 
 Правило аномалии выбирает signal, непересекающиеся reference/evaluation windows,

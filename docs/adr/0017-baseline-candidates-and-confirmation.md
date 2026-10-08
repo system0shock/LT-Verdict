@@ -5,7 +5,7 @@
 **Статус:** Accepted, 2026-09-30 (принят владельцем). Решения Q1-Q6 и два решения по
 пустому окну и повторному закреплению baseline приняты владельцем 2026-09-30 и
 зафиксированы ниже; реализация идёт отдельным срезом. Частично отменяет ADR 0004 (раздел «Сравнение и
-интерпретация») и ADR 0010 (ограничение «только manual baseline»).
+интерпретация») и ADR 0028 (ограничение «только manual baseline»).
 
 Материалы ADR (аудит `docs/ui-mockup/audit-2026-09-29.md`, план
 `docs/superpowers/plans/2026-09-30-baseline-candidates-and-confirmation.md`,
@@ -32,7 +32,7 @@
    `conditionsConfirmed ?: (mode == STATISTICAL && current in candidates)`
    (`BaselineComparison.kt:155`), а `LocalApi.kt:450-455` для statistical всегда
    передаёт `null`; `BASELINE_MANUAL_REQUIRED` (`LocalApi.kt:1074-1075`,
-   `:1102-1103`) запрещает явное решение. Для manual это уже исправлено ADR 0010:
+   `:1102-1103`) запрещает явное решение. Для manual это уже исправлено ADR 0028:
    `null` даёт `UNCONFIRMED`.
 3. Самосравнение не сопровождается предупреждением: `compareAnalyses`
    (`BaselineComparison.kt:143-189`) не сверяет `parsedSelection.reference` с
@@ -72,10 +72,10 @@ baseline, ответ `comparison` содержит предупреждение
 `GET|POST /api/runs/{runId}/analyses/{analysisId}/baseline-conditions`
 работают для обоих режимов. Для statistical binding строится по
 `selection.reference` (выбранный победитель) и текущему analysis, при наличии
-окон и по паре окон, ровно как для manual (ADR 0010: binding = точные
+окон и по паре окон, ровно как для manual (ADR 0028: binding = точные
 `baseline` и `current` ссылки и либо `null`, либо `baseline_window +
 current_window`). Ответ `comparison` читает `conditions` из хранилища для
-любого режима. Ограничение «только для active manual baseline» (ADR 0010,
+любого режима. Ограничение «только для active manual baseline» (ADR 0028,
 раздел «Решение») отменяется; код ошибки `BASELINE_MANUAL_REQUIRED` больше не
 возвращается.
 
@@ -257,11 +257,11 @@ window_comparison
 - Записи `baseline-conditions/<sha256>.json` ключуются только парой ссылок и
   окнами; режим в ключ не входит. Уже сохранённая manual-запись для той же
   пары применяется к statistical baseline с тем же победителем. Это
-  согласуется с ADR 0010 («безопасно недоступны для другого binding и снова
+  согласуется с ADR 0028 («безопасно недоступны для другого binding и снова
   применимы при явном возврате к той же immutable паре»). Решение относится к
   паре analyses, а не к составу серии: смена набора кандидатов при том же
   победителе старое решение не аннулирует.
-- `DELETE /api/baseline` по-прежнему удаляет все записи условий (ADR 0010),
+- `DELETE /api/baseline` по-прежнему удаляет все записи условий (ADR 0028),
   теперь и для statistical.
 
 ## Граница с планом «числа ядра»
@@ -431,7 +431,7 @@ Python-оракулы `tools/stats_validation.py`, `tools/applicability_validati
    BASELINE_MANUAL_REQUIRED" src ui/src docs/user` пуст.
 5. Документация в том же PR: `docs/user/slice-1-local-analysis.md`
    (~строки 356-386), `docs/development-plan-v0.6.md` (~310-314),
-   `CHANGELOG.md` (Changed), строки статуса ADR 0004 и 0010 со ссылкой на этот
+   `CHANGELOG.md` (Changed), строки статуса ADR 0004 и 0028 со ссылкой на этот
    ADR.
 
 ## Что не входит

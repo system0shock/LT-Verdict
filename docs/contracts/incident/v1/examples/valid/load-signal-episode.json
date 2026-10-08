@@ -17,7 +17,7 @@
         "first_epoch_ms": 1767225610000
       },
       "title": "Сигналы нагрузки в окне steady",
-      "summary": "На интервале совпали по времени находки по общей нагрузке: 1.",
+      "summary": "На интервале по общей нагрузке найдено находок: 1; их интервалы перекрываются или соприкасаются.",
       "scope": {
         "kind": "entity",
         "entity": "overall"
@@ -45,10 +45,10 @@
         "anomaly_episode"
       ],
       "finding_ids": [
-        "resource-threshold-finding-81ccb2f86183c46d"
+        "anomaly_episode-d1a965910d9d4eb6"
       ],
       "evidence_ids": [
-        "resource-policy-check-a077d5dd1dce8e12"
+        "resource-policy-check-55f72219dc643144"
       ],
       "refs_truncated": false,
       "negative_evidence": [],
@@ -57,7 +57,7 @@
           "check": "OPEN_RESOURCE_SERIES",
           "text": "Открыть ряды нагрузки за интервал находок.",
           "evidence_ids": [
-            "resource-policy-check-a077d5dd1dce8e12"
+            "resource-policy-check-55f72219dc643144"
           ]
         }
       ],

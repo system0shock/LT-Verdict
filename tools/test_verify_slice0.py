@@ -118,28 +118,40 @@ class IncidentContractTests(unittest.TestCase):
     EXPECTED_REJECTION = {
         "causal-next-check-english": "causal wording",
         "causal-title": "causal wording",
-        "coincident-with-unknown-incident": "coincident_with",
+        "coincident-with-missing": "coincident_with must be",
+        "coincident-with-unknown-incident": "coincident_with must be",
+        "duplicate-negative-check": "unique and follow the fixed order",
+        "empty-next-checks": r"next_checks: item count",
         "evaluated-with-reason-code": "forbidden alternative",
+        "finding-type-outside-family": "finding_types must be sorted and belong",
         "first-epoch-differs-from-interval-start": "first_epoch_ms must equal",
         "id-is-not-grouping-key-hash": "SHA-256",
         "in-overview-beyond-limit": "in_overview",
         "missing-evidence-ids": r"evidence_ids: item count",
         "negative-evidence-without-outcome": "missing outcome",
+        "negative-evidence-wrong-outcome": "wrong outcome",
+        "next-checks-do-not-match-derivation": "next_checks must be",
         "not-confirmed-without-evidence": r"evidence_ids: item count",
         "not-evaluated-with-incidents": "must equal 0",
         "not-evaluated-without-reason": "missing reason_code",
         "not-evaluated-without-reason-code": "missing reason_code",
+        "omitted-count-below-storage-limit": r"min\(total_count, 64\)",
         "overview-limit-not-7": "overview_limit",
+        "policy-not-evaluated-wrong-reason": "wrong reason_code",
         "priority-does-not-match-tier": "priority does not match tier",
         "ranks-not-contiguous": "rank must be",
         "refs-truncated-flag-wrong": "refs_truncated",
-        "resource-family-with-overall-scope": "RESOURCE needs",
+        "resource-family-with-overall-scope": "RESOURCE needs an entity scope",
+        "resource-with-window-basis": "RESOURCE needs interval_basis FINDINGS",
         "too-many-next-checks": r"next_checks: item count",
-        "total-count-mismatch": "total_count",
+        "total-count-mismatch": r"min\(total_count, 64\)",
+        "transaction-link-with-interval-overlap": "coincident_with must be",
         "unknown-field-candidate-subsystem": "unknown field candidate_subsystem",
         "unknown-field-confidence": "unknown field confidence",
         "unknown-interval-with-values": "interval_basis UNKNOWN",
+        "unknown-sample-kind": "exactly one alternative",
         "unsorted-by-priority": "ordered by priority_key",
+        "unsorted-evidence-ids": "sorted by UTF-8",
         "wrong-schema-version": "schema_version",
     }
 
@@ -147,7 +159,7 @@ class IncidentContractTests(unittest.TestCase):
         schema = self.load(self.directory / "incident.schema.json")
         valid = self.examples("valid")
         invalid = self.examples("invalid")
-        self.assertGreaterEqual(len(valid), 7)
+        self.assertGreaterEqual(len(valid), 8)
         self.assertEqual(set(self.EXPECTED_REJECTION), {path.stem for path in invalid})
         for path in valid:
             with self.subTest(valid=path.name):
@@ -194,6 +206,21 @@ class IncidentContractTests(unittest.TestCase):
     def test_schema_checker_refuses_keywords_it_does_not_implement(self) -> None:
         with self.assertRaisesRegex(ValueError, "unsupported"):
             verify_slice0.schema_errors({}, {"type": "object", "patternProperties": {}}, {})
+
+    def test_schema_checker_walks_unused_branches_and_refuses_ref_siblings(self) -> None:
+        for schema in (
+            {"type": "object", "properties": {"unused": {"patternProperties": {}}}},
+            {"type": "object", "$defs": {"unused": {"format": "date"}}},
+            {"type": "object", "properties": {"a": {"$ref": "#/$defs/x", "maxLength": 1}}, "$defs": {"x": {"type": "string"}}},
+        ):
+            with self.subTest(schema=schema):
+                with self.assertRaisesRegex(ValueError, "unsupported"):
+                    verify_slice0.schema_errors({}, schema, schema)
+
+    def test_causal_wording_covers_forms_missed_by_the_first_pattern(self) -> None:
+        for text in ("привел к задержке", "triggering timeouts", "causality", "resulting from CPU saturation"):
+            with self.subTest(text=text):
+                self.assertIsNotNone(verify_slice0.CAUSAL_WORDING.search(text))
 
 
 if __name__ == "__main__":

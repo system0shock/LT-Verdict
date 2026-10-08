@@ -89,27 +89,13 @@
           ]
         }
       ],
-      "next_checks": [
-        {
-          "check": "COMPARE_WITH_BASELINE",
-          "text": "Сравнить метрики транзакции create-payment с baseline.",
-          "evidence_ids": [
-            "policy-check-window-446f2b9d79ab058a"
-          ]
-        },
-        {
-          "check": "OPEN_SAME_WINDOW_SIGNALS",
-          "text": "Открыть сигналы окна steady, совпавшие по времени: 1.",
-          "evidence_ids": []
-        }
-      ],
+      "next_checks": [],
       "coincident_with": [
         {
           "incident_id": "incident-28d0feb239c90079d1e31e29aceaa2c2e89cf52b6f63c87e6423e27e4833038b",
           "basis": "SAME_WINDOW"
         }
-      ],
-      "confidence": "medium"
+      ]
     },
     {
       "id": "incident-28d0feb239c90079d1e31e29aceaa2c2e89cf52b6f63c87e6423e27e4833038b",

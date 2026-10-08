@@ -35,10 +35,13 @@ incidents, критерий 7 требует evidence reference у каждог�
   неизменяемый каталог до всяких вычислений
   (`src/main/kotlin/io/ltverdict/core/AnalysisService.kt:144`). Новое поле
   результата без привязки в identity вернуло бы из хранилища старый результат.
-- Ключ сопоставимости прогонов строится из `source_type`, `engine`, `parsers`,
-  `modules`, `input_versions`, `outputs`, `histogram`, `normalization`, `limits`
-  (`src/main/kotlin/io/ltverdict/core/BaselineComparison.kt:1007`,
-  `src/main/kotlin/io/ltverdict/core/RunComparison.kt:427`).
+- Ключ сопоставимости прогонов строится из полей identity `source_type`, `engine`,
+  `parsers`, `modules`, `input_versions`, `outputs`, `histogram`, `normalization`,
+  `limits`, а также из `analysis_mode` результата и `resource_arm` identity
+  (`src/main/kotlin/io/ltverdict/core/BaselineComparison.kt:665`, `:1007`,
+  `src/main/kotlin/io/ltverdict/core/RunComparison.kt:316`, `:427`). Верхнеуровневые
+  поля identity вне этого списка (`pod_view_*`, `capacity_knee_method`) на ключ не
+  влияют; `incident_method` будет таким же.
 - Модуль советника ИИ принимает результат только с одним из двух наборов
   верхнеуровневых полей (`src/main/kotlin/io/ltverdict/ai/AdvisoryAi.kt:568`).
 - Прецеденты: `capacity_summary` добавлен в `analysis-result.v1` как необязательное
@@ -93,13 +96,17 @@ incidents, критерий 7 требует evidence reference у каждог�
 интервала, `id`. Ранжирование по влиянию (дельты к baseline) это v1.
 
 **R7. Не включены `confidence`, `candidate_subsystem` и `impact` из PRC 10.4.**
-Первое и второе это гипотеза о причине, третье требует baseline. Таблица
+`confidence` в PRC означает качество и согласованность evidence, но калиброванной
+меры такого качества нет, и число стало бы якорем для читателя;
+`candidate_subsystem` это гипотеза о причине; `impact` требует baseline. Таблица
 отличий от PRC ниже.
 
 **R8. Лимиты:** `overview_limit` ровно 7; в результате хранится не более 64
-инцидентов; остальное считается в `omitted_count`; на инцидент не более 16
-`finding_ids`, 24 `evidence_ids`, 8 записей `negative_evidence`, 5 `next_checks`,
-5 связей.
+инцидентов (`items` содержит `min(total_count, 64)` инцидентов, `omitted_count`
+это остаток сверх 64); на инцидент не более 16 `finding_ids`, 24 `evidence_ids`,
+8 записей `negative_evidence`, 5 `next_checks`, 5 связей. Инциденты с 8-го по 64-й
+не пропадают: они в `items` с `in_overview: false` и доступны в деталях, HTML и
+MCP; «пропадают» (только счётчик) лишь инциденты сверх 64.
 
 **R9. Заморозка ширины D1 соблюдена:** новых источников, статистических методов,
 режимов ИИ нет. Инцидент это перегруппировка уже вычисленных находок.
@@ -145,17 +152,28 @@ TRANSACTION-инцидентов нет, а ресурсная сторона в
 
 | Тип находки | Источник | Семейство | Tier | Область | Окно | Интервал | Evidence |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| `policy_failure` | `Policy.kt:412` | TRANSACTION | 1 | `scope` из `policy_check` (в режиме окон), иначе `scope` из `metric_summary` по `metric_evidence_id` | `window_id` или нет | границы окна из `window_policy_summary` (`WindowPolicy.kt:109`); без окна нет | `evidence_id` (`policy_check`), `metric_evidence_id` |
+| `policy_failure` | `Policy.kt:412` | TRANSACTION | 1 | находка → `policy_check` по `evidence_id`; в режиме окон берётся `scope` этого `policy_check`; без окон `policy_check` содержит `metric_evidence_id`, по нему берётся `scope` из `metric_summary` | `window_id` находки или нет | границы окна из `window_policy_summary` (`WindowPolicy.kt:109`); без окна нет | `evidence_id` (`policy_check`); `metric_evidence_id`, если он есть у `policy_check` (в режиме окон его нет, `WindowPolicy.kt:27`) |
 | `resource_threshold_violation` | `ResourceStatistics.kt:507` | RESOURCE | 2, если у `resource_policy_check` `effect` = `sla`, а находка не `presumed`; иначе 3 | `entity` | `window_id` | `from_epoch_ms`, `to_epoch_ms` находки | `evidence_id` (`resource_policy_check`) |
 | `anomaly_episode` | `DiagnosticAnalysis.kt:670` | RESOURCE | 4 | `entity` | `window_id` (оцениваемое окно) | `from_epoch_ms`, `to_epoch_ms` эпизода | `evidence_id` (`anomaly_check`) |
 | `resource_trend` | `TrendAnalysis.kt:224` | RESOURCE | 5 | `entity` | `window_id` | `from_epoch_ms`, `to_epoch_ms` | `evidence_id` (`trend_check`) |
 
-Evidence, используемое для отрицательных свидетельств и контекста:
-`policy_check` (`status`), `metric_summary` (`scope`), `resource_policy_check`
-(`status`, `window_id`, `series_id`), `resource_summary` (`role`: `system` или
-`generator`), `anomaly_check` (`status`), `trend_check` (`status`),
-`window_policy_summary` (границы окна), `resource_binding` (признак того, что
-снимок ресурсов был передан).
+Evidence, используемое для отрицательных свидетельств и контекста, и поля, из
+которых берутся статус и код (закрытый список, других типов v0 не читает):
+
+| Тип evidence | Чистый исход | Исход «не выполнено» | Код причины |
+| --- | --- | --- | --- |
+| `policy_check` | `status` = `PASS` | `NO_VERDICT` | `reason_code` |
+| `resource_policy_check` | `PASS` | `NO_VERDICT` | `reason` (может быть `null`) |
+| `anomaly_check` | `NO_MATERIAL_CHANGE` | `INSUFFICIENT_DATA` | `reasons[]` |
+| `trend_check` | `NO_MATERIAL_TREND` | `INSUFFICIENT_CELLS`, `UNAVAILABLE` | `reasons[]` |
+| `rule_window_check` | нет | `NO_VERDICT` | `reason_code` |
+
+Остальные: `metric_summary` (`scope`), `resource_summary` (`role`: `system` или
+`generator`, по паре `window_id`, `series_id`), `window_policy_summary` (границы
+окна), `resource_binding` (признак того, что снимок ресурсов передан). Код причины
+для `CHECKS_NOT_EVALUATED`: наименьший по байтам UTF-8 среди кодов всех не
+выполненных проверок окна; у проверки без кода берётся её `status`.
+Корреляционные типы (`correlation_pair` и другие) не читаются.
 
 Не используется в v0: `correlation_candidate`, `correlation_pair` (v1, после
 пилота и приёмки C5), `diagnostic` (качество прогона), `capacity_*` и
@@ -165,14 +183,16 @@ Evidence, используемое для отрицательных свиде�
 Ошибки. Сегодня ядро знает ошибки только как `policy_failure` по
 `error_rate_ratio` и счётчики `error_count`, `error_rate_ratio` в `metric_summary`;
 разбивки по коду ответа и сообщению нет. Она появится в W2.6 (`responseCode`,
-`failureMessage` в `LoadSample`). Что ждёт W2.6: новый тип evidence с группами
-ошибок. Строка таблицы для него добавляется поправкой к этому ADR до начала кода
-ERROR-части W3.7 и должна удовлетворять условиям: у группы есть `id`, область
-transaction (`label`, `group_path`, `sample_kind`), `window_id` либо
-`from_epoch_ms`/`to_epoch_ms`, и ссылка на evidence. Группы ошибок входят в
-семейство TRANSACTION по тому же ключу; схема `incident.v1` для этого не
-меняется (`finding_types` и `evidence_ids` не перечисляют типы). Если W2.6 не
-влита, W3.7 поставляется без групп ошибок.
+`failureMessage` в `LoadSample`). Что ждёт W2.6: новый тип находки или evidence с
+группами ошибок. Строка таблицы для него и допустимое значение `finding_types`
+добавляются поправкой к этому ADR (с обновлением семантической проверки
+`_FINDING_TYPES` в `tools/verify_slice0.py`) до начала кода этой части W3.7.
+Условия к форме: у группы есть `id`, область transaction (`label`, `group_path`,
+`sample_kind`), `window_id` либо `from_epoch_ms`/`to_epoch_ms` и ссылка на
+evidence. Группы ошибок входят в семейство TRANSACTION по тому же ключу; сама
+схема `incident.v1` не перечисляет типы находок и не меняется. Утверждённый план
+(W3.7) требует W2.1 и W2.6; ослабление этой зависимости (поставка W3.7 без групп
+ошибок) возможно только решением владельца.
 
 ### Группировка
 
@@ -193,11 +213,15 @@ transaction (`label`, `group_path`, `sample_kind`), `window_id` либо
    (`from_epoch_ms`, `to_epoch_ms`, `finding_id` по байтам UTF-8) и сворачиваются
    в кластеры: атом входит в текущий кластер, если его `from_epoch_ms` не больше
    `to_epoch_ms` кластера (касание и перекрытие объединяют; `to_epoch_ms`
-   исключающая граница). Иначе начинается новый кластер. Разные метрики одной
-   сущности (процессор и память) на перекрывающихся интервалах это один инцидент.
-   Интервал: от минимального `from_epoch_ms` до максимального `to_epoch_ms` атомов
-   (`FINDINGS`). Допуск по лагу между неперекрывающимися находками в v0 равен
-   нулю: лаг это временной порядок, он требует калибровки (v1).
+   исключающая граница). Иначе начинается новый кластер. Это цепочка: интервалы
+   `[0,10)`, `[10,20)`, `[20,30)` дают один кластер, хотя первый и третий не
+   пересекаются, поэтому кластер означает «интервалы перекрываются или
+   соприкасаются цепочкой», а не «все находки шли одновременно» (тексты шаблонов
+   это не утверждают). Разные метрики одной сущности (процессор и память) в одном
+   кластере это один инцидент. Интервал: от минимального `from_epoch_ms` до
+   максимального `to_epoch_ms` атомов (`FINDINGS`). Допуск по лагу между
+   неперекрывающимися находками в v0 равен нулю: лаг это временной порядок, он
+   требует калибровки (v1).
 5. Ключ группировки `grouping.key` = `{family, window_id, scope,
    cluster_from_epoch_ms}`. У TRANSACTION `cluster_from_epoch_ms` равно `null`, у
    RESOURCE это начало кластера.
@@ -209,15 +233,29 @@ transaction (`label`, `group_path`, `sample_kind`), `window_id` либо
    каждый RESOURCE-инцидент того же окна W связаны основанием `SAME_WINDOW`
    (совпали в одном окне оценки; более точного утверждения нет). Два
    RESOURCE-инцидента одного окна с разными сущностями связаны основанием
-   `INTERVAL_OVERLAP`, если `a.from < b.to` и `b.from < a.to`. Окна нет: связей
-   нет. Связи сортируются по рангу связанного инцидента, не более 5, только на
-   сохранённые инциденты, не на себя.
+   `INTERVAL_OVERLAP`, если `a.from < b.to` и `b.from < a.to`. Два
+   TRANSACTION-инцидента не связываются. Окна нет: связей нет. Связи это первые 5
+   подходящих инцидентов по рангу; ссылаются только на сохранённые инциденты и не
+   на себя. Из-за предела 5 связь не обязательно симметрична, и полнота связей не
+   гарантируется.
+
+Стабильность идентификатора. `id` определён ключом группировки, поэтому он
+стабилен только внутри неизменяемого анализа: добавление раннего атома меняет
+`cluster_from_epoch_ms`, а находка-мост объединяет два кластера в один (один `id`
+исчезает). Это не нарушает детерминизм повторного синтеза одного результата, но
+внешние ссылки на инцидент (отчёт, MCP, заметки) обязаны быть парой
+`(analysis_id, incident_id)`: тот же `id` в другом анализе означает тот же ключ,
+не тот же инцидент.
 
 Счёт находок инцидента `finding_count` это число атомов. `finding_ids`: первые 16
-по (`from_epoch_ms`, `finding_id`), `refs_truncated` истинно, когда
-`finding_count` больше числа `finding_ids`. `evidence_ids`: объединение
-`evidence_id` атомов (и `metric_evidence_id` для TRANSACTION), по алфавиту UTF-8,
-не более 24. У каждого инцидента не меньше одной находки и одного evidence.
+по (`from_epoch_ms`, `finding_id` по байтам UTF-8; у TRANSACTION по `finding_id`).
+`finding_types`: различные типы находок, по алфавиту. `evidence_ids`: объединение
+`evidence_id` атомов (и `metric_evidence_id` для TRANSACTION, если он есть), без
+повторов, по алфавиту UTF-8, первые 24. `refs_truncated` истинно, когда
+`finding_count` больше числа `finding_ids` или в `evidence_ids` ровно 24 записи
+(список мог быть обрезан), и только тогда. У каждого инцидента не меньше одной
+находки и одного evidence. Все списки идентификаторов внутри `negative_evidence` и
+`next_checks` тоже отсортированы по байтам UTF-8.
 
 ### Приоритет и обзор
 
@@ -230,12 +268,13 @@ transaction (`label`, `group_path`, `sample_kind`), `window_id` либо
 
 Сохраняются первые 64 инцидента. `rank` это позиция с 1; `in_overview` истинно
 ровно для `rank` не больше `overview_limit` (7). «Обзор» показывает инциденты с
-`in_overview` и строку «ещё N» (`total_count` минус 7); остальные доступны в
-деталях, HTML-отчёте и MCP. Квот разнообразия нет: если семь транзакций
-нарушены одновременно, ресурсные инциденты не попадают в карточки обзора, но видны
-через `coincident_with`. Если инцидентов меньше трёх, показывается столько, сколько
-есть: нижней границы нет. `omitted_count` это `total_count` минус число
-сохранённых.
+`in_overview` и строку «ещё N», только если N = `total_count` минус 7 больше
+нуля; инциденты с 8-го по 64-й доступны в деталях, HTML-отчёте и MCP, а сверх 64
+доступен лишь счётчик `omitted_count`. Квот разнообразия нет: если семь
+транзакций нарушены одновременно, ресурсные инциденты не попадают в карточки
+обзора, но видны через `coincident_with`, пока попадают в первые пять связей.
+Если инцидентов меньше трёх, показывается столько, сколько есть: нижней границы
+нет.
 
 Состояние: `status` = `EVALUATED`, если `run_validity` равен `VALID` или
 `DEGRADED` (для `DEGRADED` см. R10); для `INVALID` `status` = `NOT_EVALUATED`,
@@ -264,18 +303,37 @@ transaction (`label`, `group_path`, `sample_kind`), `window_id` либо
 | `OTHER_POLICY_CHECKS_PASSED` | `NOT_CONFIRMED` | в TRANSACTION-инциденте: `policy_check` со `status` `PASS` в том же окне, не входящие в его evidence |
 | `RESOURCE_RULES_WITHIN_LIMITS` | `NOT_CONFIRMED` | `resource_policy_check` со `status` `PASS` в окне; роль ряда не `generator`; в RESOURCE-инциденте без собственной сущности |
 | `GENERATOR_RESOURCES_WITHIN_LIMITS` | `NOT_CONFIRMED` | `resource_policy_check` `PASS` в окне, роль ряда `generator` (роль берётся из `resource_summary` по паре `window_id`, `series_id`) |
-| `NO_ANOMALY_EPISODES` | `NOT_CONFIRMED` | `anomaly_check` со `status` `NO_MATERIAL_CHANGE` в окне |
+| `NO_ANOMALY_EPISODES` | `NOT_CONFIRMED` | `anomaly_check` со `status` `NO_MATERIAL_CHANGE` в окне; вывод оконный, `anomaly_check` не содержит сущности и сигнала, поэтому запись не относится к сущности инцидента |
 | `NO_MATERIAL_TREND` | `NOT_CONFIRMED` | `trend_check` со `status` `NO_MATERIAL_TREND` в окне |
 | `RESOURCE_DATA_NOT_PROVIDED` | `NOT_EVALUATED` | в результате нет `resource_binding`; `reason_code` = `RESOURCE_SNAPSHOT_NOT_PROVIDED`; `evidence_ids` пуст |
 | `CHECKS_NOT_EVALUATED` | `NOT_EVALUATED` | в окне есть проверки без вердикта (`NO_VERDICT`, `INSUFFICIENT_*`, `UNAVAILABLE`); `reason_code` минимальный по байтам UTF-8 среди их кодов |
 
-`evidence_ids` записи: первые 8 по алфавиту. Правила одинаковы для любых входов, ни
-одна запись не зависит от порядка массивов.
+Исход и `reason_code` каждого вида фиксированы (`POLICY_NOT_EVALUATED`,
+`RESOURCE_DATA_NOT_PROVIDED`, `CHECKS_NOT_EVALUATED` это `NOT_EVALUATED`, остальные
+`NOT_CONFIRMED`). `evidence_ids` записи: первые 8 подходящих проверок по алфавиту
+UTF-8. Ни одна запись не зависит от порядка массивов результата.
+
+Шаблоны текстов записей (`{n}` число подходящих проверок, `{window_id}` окно):
+
+| `check` | Шаблон |
+| --- | --- |
+| `POLICY_NOT_EVALUATED` | `Правила policy по транзакциям не проверялись: файл нагрузки разобран не полностью.` |
+| `OTHER_POLICY_CHECKS_PASSED` | `Остальные проверки policy в окне {window_id} выполнены: {n}.` (без окна: `Остальные проверки policy выполнены: {n}.`) |
+| `RESOURCE_RULES_WITHIN_LIMITS` | `Правила ресурсов в окне {window_id} не нарушены: проверок {n}.` |
+| `GENERATOR_RESOURCES_WITHIN_LIMITS` | `Правила ресурсов нагрузочного генератора в окне {window_id} не нарушены: проверок {n}.` |
+| `NO_ANOMALY_EPISODES` | `Проверки отклонений в окне {window_id} не нашли эпизодов: {n}.` |
+| `NO_MATERIAL_TREND` | `Проверки трендов в окне {window_id} не нашли существенного тренда: {n}.` |
+| `RESOURCE_DATA_NOT_PROVIDED` | `Снимок ресурсов не передан: ресурсные проверки не выполнялись.` |
+| `CHECKS_NOT_EVALUATED` | `Часть проверок в окне {window_id} не выполнена: {n}; код: {reason_code}.` |
 
 ### Следующие проверки
 
 `next_checks` это короткие проверки для человека и агента. Каждая имеет код
-`check`, который инструмент MCP может сопоставить с действием.
+`check`, который инструмент MCP может сопоставить с действием. Список целиком
+определён полями инцидента: порядок как в таблице, каждая проверка не более раза,
+условия ниже; `evidence_ids` проверки: первый (по алфавиту) `evidence_id` инцидента
+для `COMPARE_WITH_BASELINE` и `OPEN_RESOURCE_SERIES`, evidence не выполненных
+проверок (первые 8) для `COMPLETE_NOT_EVALUATED_CHECKS`, пусто для остальных.
 
 | `check` | Когда | Шаблон текста |
 | --- | --- | --- |
@@ -291,12 +349,18 @@ transaction (`label`, `group_path`, `sample_kind`), `window_id` либо
 | --- | --- | --- |
 | TRANSACTION, окно есть | `Нарушение SLA: {область} в окне {window_id}` | `В окне {window_id} нарушено правил policy: {n}. Область: {область}.` |
 | TRANSACTION, окна нет | `Нарушение SLA: {область}` | `За весь прогон нарушено правил policy: {n}. Область: {область}. Время нарушения не определено.` |
-| RESOURCE | `Сигналы ресурса: {entity} в окне {window_id}` | `На интервале совпали по времени находки по сущности {entity}: {n}.` |
-| RESOURCE, `entity` равно `overall` | `Сигналы нагрузки в окне {window_id}` | `На интервале совпали по времени находки по общей нагрузке: {n}.` |
+| RESOURCE | `Сигналы ресурса: {entity} в окне {window_id}` | `На интервале по сущности {entity} найдено находок: {n}; их интервалы перекрываются или соприкасаются.` |
+| RESOURCE, `entity` равно `overall` | `Сигналы нагрузки в окне {window_id}` | `На интервале по общей нагрузке найдено находок: {n}; их интервалы перекрываются или соприкасаются.` |
 
 `{область}` это `весь прогон` для `overall` и `транзакция {label}` для
 `transaction`. Подстановки данных (имена транзакций и сущностей) задаёт
 пользователь: ограничение по словам относится к тексту шаблонов, не к данным.
+Отображаемое имя в тексте: каждый управляющий символ (U+0000-U+001F,
+U+007F-U+009F) заменяется пробелом, затем строка сокращается до 64 кодовых точек
+Unicode (если длиннее: первые 63 и `…` U+2026). Полное имя остаётся в `scope` и
+`grouping.key`; длина `title` и текстов считается в кодовых точках, не в единицах
+UTF-16. Худший `title` (128 + 128 кодовых точек подстановок и текст шаблона) не
+превышает 400 кодовых точек схемы.
 
 ### Контракт `incident.v1`
 
@@ -364,16 +428,22 @@ transaction (`label`, `group_path`, `sample_kind`), `window_id` либо
   анализы через ядро, находятся поиском в W3.7 и перегенерируются; статические
   bundle не меняются.
 - Советник ИИ: `incidents` не передаётся модели и не меняет ни frozen prompt v2,
-  ни хэши доказательств (как с `capacity_knee_diagnostic`, ADR 0026). Белый список
-  полей `AdvisoryAi.kt:568` расширяется.
+  ни отбор фактов (как с `capacity_knee_diagnostic`, ADR 0026). Сам документ
+  доказательств включает `analysis_id` и хэш манифеста (`AdvisoryAi.kt:94-98`,
+  `:137`), которые у нового анализа другие, поэтому равенство хэшей доказательств
+  проверяется только при одинаковых параметрах привязки. Белый список полей
+  `AdvisoryAi.kt:568` расширяется до четырёх сочетаний наличия `capacity_summary`
+  и `incidents`, старые результаты остаются допустимыми.
 - Старые анализы не пересчитываются и поля `incidents` не получают. Читатели
   (UI, отчёты, MCP) трактуют отсутствие поля как «синтез не выполнялся» и
   показывают прежний список; пересчёт на лету не делается, чтобы у анализа была
   одна версия правды.
-- Размер: не более 64 инцидентов с не более чем 40 идентификаторами по 256 байт и
-  текстами по 400 символов даёт порядка сотен килобайт при допустимых 64 МиБ
-  результата (`RunBundleStore.kt:1824`); точное измерение на крупном золотом
-  результате входит в тесты W3.7.
+- Размер: идентификатор транзакции в ядре ограничен 65 536 байтами
+  (`maxTransactionIdentityBytes`), `scope` хранится дважды (в `scope` и в
+  `grouping.key`), поэтому худший случай 64 инцидента по 2 × 64 КиБ даёт порядка
+  8 МиБ (без учёта экранирования JSON) при допустимых 64 МиБ результата
+  (`RunBundleStore.kt:1824`); типичный результат это сотни килобайт. Точное
+  измерение на крупном золотом результате входит в тесты W3.7.
 
 ### Зависимости от других работ
 
@@ -381,9 +451,14 @@ transaction (`label`, `group_path`, `sample_kind`), `window_id` либо
   включает `incidents`; проверка `schema_version == "analysis-result.v1"` и белый
   список полей в `AdvisoryAi.kt` заменяются набором версий и полей. Если W3.7
   начинается раньше, она вносит минимальное расширение белого списка сама.
-- **W2.6 (отчёт для людей).** Группы ошибок по коду ответа и сообщению (см. выше).
-  Без W2.6 инциденты строятся по таблице входов, ошибки видны через
-  `policy_failure` по `error_rate_ratio`.
+- **W2.6 (отчёт для людей).** Группы ошибок по коду ответа и сообщению (см. выше):
+  требуются планом W3.7; ADR фиксирует форму входа и порядок поправки.
+- **W2.5 (окно устойчивого состояния).** Окна для бизнес-политики без снимка
+  ресурсов дадут `window_id` и `window_policy_summary` и без `resource_binding`;
+  правила выше опираются на типы evidence, а не на наличие снимка, поэтому
+  TRANSACTION-инциденты получат интервал `WINDOW` без изменения контракта.
+  `RESOURCE_DATA_NOT_PROVIDED` по-прежнему определяется отсутствием
+  `resource_binding`.
 - **W3.2 (MCP).** Инструмент `list_incidents` возвращает `items` и
   `negative_evidence`, `next_checks`; агент расследует «почему» сам.
 
@@ -406,10 +481,13 @@ transaction (`label`, `group_path`, `sample_kind`), `window_id` либо
 Тесты пишутся до кода (RED), фикстуры лежат в репозитории.
 
 1. **Воспроизводимость.** По золотому результату (со снимком ресурсов, с окнами,
-   с эпизодами и трендами, без снимка, с непригодным прогоном): убрать
-   `incidents`, пересчитать, байты равны сохранённым. Пересчёт 2 раза подряд даёт
-   одинаковые байты. Перестановка массивов `findings` и `evidence` входа не
-   меняет вывод.
+   с эпизодами и трендами, без снимка, с `DEGRADED`, с непригодным прогоном):
+   убрать `incidents`, пересчитать, байты равны сохранённым. Пересчёт 2 раза
+   подряд даёт одинаковые байты. Перестановка массивов `findings` и `evidence`
+   входа не меняет вывод. Ожидаемые байты `incidents` каждой фикстуры лежат в
+   репозитории как золотые файлы, а не вычисляются тем же кодом; хотя бы один
+   золотой результат с инцидентами создаётся самим ядром, чтобы ссылки на `id`
+   проверялись по настоящему результату (примеры контракта написаны вручную).
 2. **Лимит.** Фикстура с не менее чем 20 группами даёт ровно 7 инцидентов с
    `in_overview`, ранги `1..n` подряд, не более 64 сохранённых, верный
    `omitted_count` (фикстура с более чем 64 группами). Результат без инцидентов
@@ -437,14 +515,25 @@ transaction (`label`, `group_path`, `sample_kind`), `window_id` либо
    до изменения (золотые файлы); `policy_verdict`, `run_validity`,
    `analysis_coverage` не зависят от инцидентов.
 7. **Identity.** Золотой identity содержит `incident_method`; ключ сопоставимости
-   (`BaselineComparison.kt:1007`) старого и нового identity равен; `analysis_id`
-   различается; `legacy-pre-adr-0016.v1.json` не меняется.
-8. **Советник ИИ.** `AdvisoryEvidenceBuilder` принимает результат с `incidents`;
-   JSON и SHA-256 доказательств совпадают с доказательствами без `incidents`.
+   в обоих путях сравнения (`BaselineComparison.kt:665`, `RunComparison.kt:316`)
+   старого и нового анализа равен при прочих равных составляющих (включая
+   `analysis_mode` и `resource_arm`); `analysis_id` различается;
+   `legacy-pre-adr-0016.v1.json` не меняется.
+8. **Советник ИИ.** `AdvisoryEvidenceBuilder` принимает результат с `incidents`
+   во всех четырёх сочетаниях с `capacity_summary`; набор фактов, findings и
+   evidence в доказательствах не меняется, а JSON и SHA-256 доказательств
+   совпадают с доказательствами без `incidents` при одинаковых `analysis_id` и
+   хэше манифеста.
 9. **Непригодный прогон.** `NOT_EVALUATED`, `RUN_NOT_VALID`, пустой `items`.
-10. **Порядок.** Ничья по `tier`, `finding_count`, `first_epoch_ms` разрешается по
-    `id`; сущности с не-ASCII именами упорядочены по байтам UTF-8, а не по
-    единицам UTF-16.
+10. **Порядок и кластеры.** Ничья по `tier`, `finding_count`, `first_epoch_ms`
+    разрешается по `id`; сущности с не-ASCII именами и символами вне BMP
+    упорядочены по байтам UTF-8, а не по единицам UTF-16. Кластеры RESOURCE:
+    касание объединяет, перекрытие объединяет, вложение объединяет, разрыв
+    разделяет, цепочка из трёх объединяется; находка-мост объединяет два кластера.
+    Режим окна: `policy_failure` и `resource_threshold_violation` в разных окнах
+    не объединяются. Длинные имена (более 64 кодовых точек, управляющие символы,
+    символы вне BMP) дают текст по правилу отображаемого имени и полное имя в
+    `scope`.
 11. **Отрицательные свидетельства.** Отдельно проверяются `NOT_CONFIRMED` и
     `NOT_EVALUATED`; при отсутствии `resource_binding` появляется
     `RESOURCE_DATA_NOT_PROVIDED`; пустое `evidence_ids` у `NOT_CONFIRMED`
@@ -510,4 +599,10 @@ transaction (`label`, `group_path`, `sample_kind`), `window_id` либо
    сильно» и «какая подсистема вероятна».
 4. Порядок tier (нарушение SLA транзакции, нарушение SLA ресурса, диагностическое
    нарушение ресурса, эпизод, тренд) и отсутствие квот разнообразия в обзоре.
-5. Оставить группы ошибок до W2.6 и поправки к этому ADR.
+5. Группы ошибок: утверждённый план требует W2.1 и W2.6 для W3.7; ADR оставляет
+   форму входа для ошибок поправкой после W2.6. Если владелец захочет поставить
+   W3.7 без групп ошибок, это отдельное решение.
+6. Атомы v0 берутся только из `policy_failure`, `resource_threshold_violation`,
+   `anomaly_episode`, `resource_trend` (корреляционные находки не используются), а
+   непригодный прогон даёт `NOT_EVALUATED`, `DEGRADED` даёт ресурсные инциденты с
+   пометкой `POLICY_NOT_EVALUATED`.

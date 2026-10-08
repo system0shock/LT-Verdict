@@ -104,10 +104,10 @@ _KEYWORDS = {
 }
 # ADR 0029: incident texts state what coincided in time, never a cause.
 CAUSAL_WORDING = re.compile(
-    r"из-за|вследствие|в результате|потому|поэтому|причин|виновн|вызва|вызыв|прив[её]л|привод|привед|привест|обусловл|корнев|"
-    r"следстви|благодаря|ответственн|влия|так как|ввиду|в связи с|"
-    r"\bbecause\b|\bcaus(?:e|es|ed|ing|al)\b|\bdue to\b|\bowing to\b|\broot cause\b|\bleads? to\b|\bled to\b|"
-    r"\bresult(?:s|ed)? (?:of|in|from)\b|\bresponsible\b|\bculprit\b|\bblame\b|\btriggers?\b|\btriggered\b",
+    r"из-за|вследствие|в результате|потому|поэтому|причин|виновн|вызва|вызыв|прив[её]л|привод|привед|привест|"
+    r"обусловл|корнев|следстви|благодаря|ответственн|влия|так как|ввиду|в связи с|объясн|"
+    r"\bbecause\b|\bcaus\w*|\bdue to\b|\bowing to\b|\broot cause\b|\bleads? to\b|\bled to\b|"
+    r"\bresult(?:s|ed|ing)? (?:of|in|from)\b|\bresponsib\w*|\bculprit\b|\bblame\b|\btrigger\w*|\bexplain\w*",
     re.IGNORECASE,
 )
 _PRIORITY_BY_TIER = {1: "HIGH", 2: "HIGH", 3: "MEDIUM", 4: "MEDIUM", 5: "LOW"}
@@ -133,7 +133,27 @@ def _same(left: object, right: object) -> bool:
     return type(left) is type(right) and left == right
 
 
+def check_schema_keywords(schema: dict) -> None:
+    """Refuses every keyword the checker does not implement, in the whole schema (also in unused branches)."""
+    unknown = set(schema) - _KEYWORDS - _ANNOTATIONS
+    if unknown:
+        raise ValueError(f"unsupported schema keyword: {', '.join(sorted(unknown))}")
+    if "$ref" in schema and set(schema) - {"$ref"} - _ANNOTATIONS:
+        raise ValueError("unsupported schema keyword: $ref with sibling constraints")
+    for name in ("properties", "$defs"):
+        for child in schema.get(name, {}).values():
+            check_schema_keywords(child)
+    for name in ("items", "not", "if", "then", "else"):
+        if isinstance(schema.get(name), dict):
+            check_schema_keywords(schema[name])
+    for name in ("oneOf", "allOf"):
+        for child in schema.get(name, []):
+            check_schema_keywords(child)
+
+
 def schema_errors(value: object, schema: dict, root: dict, path: str = "$") -> list[str]:
+    if path == "$":
+        check_schema_keywords(root)
     unknown = set(schema) - _KEYWORDS - _ANNOTATIONS
     if unknown:
         raise ValueError(f"unsupported schema keyword: {', '.join(sorted(unknown))}")
@@ -203,17 +223,66 @@ def _priority_order(item: dict) -> tuple:
     return key["tier"], -key["finding_count"], (1, 0) if first is None else (0, first), item["id"].encode("utf-8")
 
 
+_NEGATIVE_ORDER = (
+    "POLICY_NOT_EVALUATED",
+    "OTHER_POLICY_CHECKS_PASSED",
+    "RESOURCE_RULES_WITHIN_LIMITS",
+    "GENERATOR_RESOURCES_WITHIN_LIMITS",
+    "NO_ANOMALY_EPISODES",
+    "NO_MATERIAL_TREND",
+    "RESOURCE_DATA_NOT_PROVIDED",
+    "CHECKS_NOT_EVALUATED",
+)
+_NOT_EVALUATED_REASON = {
+    "POLICY_NOT_EVALUATED": "RUN_DEGRADED",
+    "RESOURCE_DATA_NOT_PROVIDED": "RESOURCE_SNAPSHOT_NOT_PROVIDED",
+    "CHECKS_NOT_EVALUATED": None,
+}
+_FINDING_TYPES = {
+    "TRANSACTION": {"policy_failure"},
+    "RESOURCE": {"anomaly_episode", "resource_threshold_violation", "resource_trend"},
+}
+_MAX_STORED = 64
+
+
+def _utf8_sorted(values: list[str]) -> bool:
+    return [v.encode("utf-8") for v in values] == sorted(v.encode("utf-8") for v in values)
+
+
+def _eligible_links(item: dict, items: list[dict]) -> list[dict]:
+    """Links the ADR rules prescribe for item, before the limit of five."""
+    key = item["grouping"]["key"]
+    links = []
+    for other in items:
+        other_key = other["grouping"]["key"]
+        if other is item or key["window_id"] is None or key["window_id"] != other_key["window_id"]:
+            continue
+        if key["family"] != other_key["family"]:
+            basis = "SAME_WINDOW"
+        elif key["family"] == "RESOURCE" and key["scope"] != other_key["scope"]:
+            a, b = item["interval"], other["interval"]
+            if not (a["from_epoch_ms"] < b["to_epoch_ms"] and b["from_epoch_ms"] < a["to_epoch_ms"]):
+                continue
+            basis = "INTERVAL_OVERLAP"
+        else:
+            continue
+        links.append({"incident_id": other["id"], "basis": basis})
+    return links
+
+
 def verify_incident_semantics(document: dict) -> None:
     """Checks of incident.v1 that JSON Schema cannot express (see the schema description)."""
     items = document["items"]
-    if document["total_count"] != len(items) + document["omitted_count"]:
-        raise ValueError("incident total_count must equal items plus omitted_count")
+    if len(items) != min(document["total_count"], _MAX_STORED) or document["omitted_count"] != document["total_count"] - len(items):
+        raise ValueError("incident items must hold min(total_count, 64) incidents and omitted_count the rest")
     ids = [item["id"] for item in items]
     if len(set(ids)) != len(ids):
         raise ValueError("incident ids must be unique")
+    rank_of = {item["id"]: index for index, item in enumerate(items)}
     for index, item in enumerate(items):
         name = f"incident {item['id']}"
         key = item["grouping"]["key"]
+        family = key["family"]
         if item["id"] != "incident-" + hashlib.sha256(_canonical(key)).hexdigest():
             raise ValueError(f"{name}: id must be the SHA-256 of the canonical grouping key")
         if item["scope"] != key["scope"] or item["window_id"] != key["window_id"]:
@@ -235,18 +304,59 @@ def verify_incident_semantics(document: dict) -> None:
             raise ValueError(f"{name}: interval_basis UNKNOWN exactly when interval is null")
         if interval is not None and interval["from_epoch_ms"] >= interval["to_epoch_ms"]:
             raise ValueError(f"{name}: interval must have from < to")
-        if key["family"] == "RESOURCE":
+        if family == "RESOURCE":
             if key["scope"]["kind"] != "entity" or interval is None or key["cluster_from_epoch_ms"] != interval["from_epoch_ms"]:
                 raise ValueError(f"{name}: RESOURCE needs an entity scope and cluster_from equal to interval start")
-        elif key["scope"]["kind"] == "entity" or key["cluster_from_epoch_ms"] is not None:
-            raise ValueError(f"{name}: TRANSACTION needs an overall or transaction scope and no cluster_from")
-        if item["refs_truncated"] != (item["finding_count"] > len(item["finding_ids"])):
-            raise ValueError(f"{name}: refs_truncated must be true exactly when finding_ids are cut")
+            if item["interval_basis"] != "FINDINGS" or item["window_id"] is None:
+                raise ValueError(f"{name}: RESOURCE needs interval_basis FINDINGS and a window_id")
+        else:
+            if key["scope"]["kind"] == "entity" or key["cluster_from_epoch_ms"] is not None:
+                raise ValueError(f"{name}: TRANSACTION needs an overall or transaction scope and no cluster_from")
+            if item["interval_basis"] != ("WINDOW" if item["window_id"] is not None else "UNKNOWN"):
+                raise ValueError(f"{name}: TRANSACTION interval_basis is WINDOW with a window_id, otherwise UNKNOWN")
+        if not set(item["finding_types"]) <= _FINDING_TYPES[family] or not _utf8_sorted(item["finding_types"]):
+            raise ValueError(f"{name}: finding_types must be sorted and belong to the family")
         if len(item["finding_ids"]) > item["finding_count"]:
             raise ValueError(f"{name}: finding_ids exceed finding_count")
-        for link in item["coincident_with"]:
-            if link["incident_id"] == item["id"] or link["incident_id"] not in ids:
-                raise ValueError(f"{name}: coincident_with must refer to another stored incident")
+        cut = item["finding_count"] > len(item["finding_ids"]) or len(item["evidence_ids"]) == 24
+        if item["finding_count"] > len(item["finding_ids"]) and not item["refs_truncated"]:
+            raise ValueError(f"{name}: refs_truncated must be true when finding_ids are cut")
+        if item["refs_truncated"] and not cut:
+            raise ValueError(f"{name}: refs_truncated without a cut list")
+        if not _utf8_sorted(item["evidence_ids"]):
+            raise ValueError(f"{name}: evidence_ids must be sorted by UTF-8 bytes")
+        checks = [entry["check"] for entry in item["negative_evidence"]]
+        positions = [_NEGATIVE_ORDER.index(c) for c in checks]
+        if positions != sorted(set(positions)):
+            raise ValueError(f"{name}: negative_evidence must be unique and follow the fixed order")
+        for entry in item["negative_evidence"]:
+            if not _utf8_sorted(entry["evidence_ids"]):
+                raise ValueError(f"{name}: negative_evidence evidence_ids must be sorted")
+            expected_outcome = "NOT_EVALUATED" if entry["check"] in _NOT_EVALUATED_REASON else "NOT_CONFIRMED"
+            if entry["outcome"] != expected_outcome:
+                raise ValueError(f"{name}: {entry['check']} has the wrong outcome")
+            fixed_reason = _NOT_EVALUATED_REASON.get(entry["check"])
+            if fixed_reason is not None and entry.get("reason_code") != fixed_reason:
+                raise ValueError(f"{name}: {entry['check']} has the wrong reason_code")
+        if "POLICY_NOT_EVALUATED" in checks and family != "RESOURCE":
+            raise ValueError(f"{name}: POLICY_NOT_EVALUATED belongs to RESOURCE incidents")
+        if "OTHER_POLICY_CHECKS_PASSED" in checks and family != "TRANSACTION":
+            raise ValueError(f"{name}: OTHER_POLICY_CHECKS_PASSED belongs to TRANSACTION incidents")
+        expected_next = ["COMPARE_WITH_BASELINE" if family == "TRANSACTION" else "OPEN_RESOURCE_SERIES"]
+        if item["coincident_with"]:
+            expected_next.append("OPEN_SAME_WINDOW_SIGNALS")
+        if "RESOURCE_DATA_NOT_PROVIDED" in checks:
+            expected_next.append("PROVIDE_RESOURCE_SNAPSHOT")
+        if "CHECKS_NOT_EVALUATED" in checks:
+            expected_next.append("COMPLETE_NOT_EVALUATED_CHECKS")
+        if [entry["check"] for entry in item["next_checks"]] != expected_next:
+            raise ValueError(f"{name}: next_checks must be {expected_next}")
+        for entry in item["next_checks"]:
+            if not _utf8_sorted(entry["evidence_ids"]):
+                raise ValueError(f"{name}: next_checks evidence_ids must be sorted")
+        expected_links = sorted(_eligible_links(item, items), key=lambda link: rank_of[link["incident_id"]])[:5]
+        if item["coincident_with"] != expected_links:
+            raise ValueError(f"{name}: coincident_with must be the first five eligible incidents by rank")
         texts = [item["title"], item["summary"]]
         texts += [entry["text"] for entry in item["negative_evidence"] + item["next_checks"]]
         for text in texts:

@@ -7,22 +7,24 @@
   "omitted_count": 0,
   "items": [
     {
-      "id": "incident-4ddb53c85200ae716597a047b6a5295b39e0b48d37ac4a5b86d886fa62d58c7d",
+      "id": "incident-f7d5e56598d1f8413453a9fb617bf63f90a9171ce1dd469d953691a092088652",
       "rank": 1,
       "in_overview": true,
       "priority": "HIGH",
       "priority_key": {
         "tier": 1,
-        "finding_count": 2,
+        "finding_count": 1,
         "first_epoch_ms": 1767225610000
       },
       "title": "Нарушение SLA: транзакция create-payment в окне steady",
-      "summary": "В окне steady нарушено правил policy: 2. Область: транзакция create-payment.",
+      "summary": "В окне steady нарушено правил policy: 1. Область: транзакция create-payment.",
       "scope": {
         "kind": "transaction",
         "label": "create-payment",
-        "group_path": [],
-        "sample_kind": "TRANSACTION"
+        "group_path": [
+          "checkout"
+        ],
+        "sample_kind": "JMETER_SAMPLER"
       },
       "window_id": "steady",
       "interval_basis": "WINDOW",
@@ -38,23 +40,23 @@
           "scope": {
             "kind": "transaction",
             "label": "create-payment",
-            "group_path": [],
-            "sample_kind": "TRANSACTION"
+            "group_path": [
+              "checkout"
+            ],
+            "sample_kind": "JMETER_SAMPLER"
           },
           "cluster_from_epoch_ms": null
         }
       },
-      "finding_count": 2,
+      "finding_count": 1,
       "finding_types": [
         "policy_failure"
       ],
       "finding_ids": [
-        "policy-failure-window-5f2b17ded2f56baf",
-        "policy-failure-window-48a98ddb993c4985"
+        "policy-failure-window-5f2b17ded2f56baf"
       ],
       "evidence_ids": [
-        "policy-check-window-8a0f1b2251bb182e",
-        "policy-check-window-446f2b9d79ab058a"
+        "policy-check-window-8a0f1b2251bb182e"
       ],
       "refs_truncated": false,
       "negative_evidence": [
@@ -63,9 +65,25 @@
           "outcome": "NOT_CONFIRMED",
           "text": "Остальные проверки policy в окне steady выполнены: 3.",
           "evidence_ids": [
-            "policy-check-window-a02b3b7657e2c3ab",
             "policy-check-window-6dd6192276016562",
+            "policy-check-window-a02b3b7657e2c3ab",
             "policy-check-window-c2f8920d2ae4a8aa"
+          ]
+        },
+        {
+          "check": "GENERATOR_RESOURCES_WITHIN_LIMITS",
+          "outcome": "NOT_CONFIRMED",
+          "text": "Правила ресурсов нагрузочного генератора в окне steady не нарушены: проверок 1.",
+          "evidence_ids": [
+            "resource-policy-check-c9de125c60d7f70a"
+          ]
+        },
+        {
+          "check": "NO_ANOMALY_EPISODES",
+          "outcome": "NOT_CONFIRMED",
+          "text": "Проверки отклонений в окне steady не нашли эпизодов: 1.",
+          "evidence_ids": [
+            "anomaly-check-8426f2ef8e17ca8c"
           ]
         }
       ],
@@ -76,21 +94,9 @@
           "evidence_ids": [
             "policy-check-window-8a0f1b2251bb182e"
           ]
-        },
-        {
-          "check": "OPEN_SAME_WINDOW_SIGNALS",
-          "text": "Открыть сигналы окна steady, совпавшие по времени: 1.",
-          "evidence_ids": [
-            "resource-policy-check-a077d5dd1dce8e12"
-          ]
         }
       ],
-      "coincident_with": [
-        {
-          "incident_id": "incident-28d0feb239c90079d1e31e29aceaa2c2e89cf52b6f63c87e6423e27e4833038b",
-          "basis": "SAME_WINDOW"
-        }
-      ]
+      "coincident_with": []
     }
   ],
   "reason_code": "RUN_NOT_VALID"

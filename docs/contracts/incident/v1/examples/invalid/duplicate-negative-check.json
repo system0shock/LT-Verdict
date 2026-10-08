@@ -73,6 +73,16 @@
           ]
         },
         {
+          "check": "OTHER_POLICY_CHECKS_PASSED",
+          "outcome": "NOT_CONFIRMED",
+          "text": "Остальные проверки policy в окне steady выполнены: 3.",
+          "evidence_ids": [
+            "policy-check-window-6dd6192276016562",
+            "policy-check-window-a02b3b7657e2c3ab",
+            "policy-check-window-c2f8920d2ae4a8aa"
+          ]
+        },
+        {
           "check": "GENERATOR_RESOURCES_WITHIN_LIMITS",
           "outcome": "NOT_CONFIRMED",
           "text": "Правила ресурсов нагрузочного генератора в окне steady не нарушены: проверок 1.",
@@ -108,8 +118,7 @@
           "incident_id": "incident-28d0feb239c90079d1e31e29aceaa2c2e89cf52b6f63c87e6423e27e4833038b",
           "basis": "SAME_WINDOW"
         }
-      ],
-      "confidence": "medium"
+      ]
     },
     {
       "id": "incident-28d0feb239c90079d1e31e29aceaa2c2e89cf52b6f63c87e6423e27e4833038b",

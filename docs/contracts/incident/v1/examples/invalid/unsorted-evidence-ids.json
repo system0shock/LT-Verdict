@@ -57,8 +57,8 @@
         "policy-failure-window-5f2b17ded2f56baf"
       ],
       "evidence_ids": [
-        "policy-check-window-446f2b9d79ab058a",
-        "policy-check-window-8a0f1b2251bb182e"
+        "policy-check-window-8a0f1b2251bb182e",
+        "policy-check-window-446f2b9d79ab058a"
       ],
       "refs_truncated": false,
       "negative_evidence": [
@@ -108,8 +108,7 @@
           "incident_id": "incident-28d0feb239c90079d1e31e29aceaa2c2e89cf52b6f63c87e6423e27e4833038b",
           "basis": "SAME_WINDOW"
         }
-      ],
-      "confidence": "medium"
+      ]
     },
     {
       "id": "incident-28d0feb239c90079d1e31e29aceaa2c2e89cf52b6f63c87e6423e27e4833038b",

@@ -40,23 +40,39 @@
         "policy_failure"
       ],
       "finding_ids": [
-        "policy-failure-1d3c4efc53ccbd06"
+        "policy-failure-window-69262186fe735dee"
       ],
       "evidence_ids": [
-        "policy-check-4f227c8d9db9c0f7",
-        "metric-summary-overall"
+        "metric-summary-overall",
+        "policy-check-window-8c86022b8f05d374"
       ],
       "refs_truncated": false,
       "negative_evidence": [
         {
+          "check": "OTHER_POLICY_CHECKS_PASSED",
+          "outcome": "NOT_CONFIRMED",
+          "text": "Остальные проверки policy выполнены: 2.",
+          "evidence_ids": [
+            "policy-check-2c53ad68a63670dc",
+            "policy-check-ce7affb79a700128"
+          ]
+        },
+        {
           "check": "RESOURCE_DATA_NOT_PROVIDED",
           "outcome": "NOT_EVALUATED",
-          "reason_code": "RESOURCE_SNAPSHOT_NOT_PROVIDED",
           "text": "Снимок ресурсов не передан: ресурсные проверки не выполнялись.",
-          "evidence_ids": []
+          "evidence_ids": [],
+          "reason_code": "RESOURCE_SNAPSHOT_NOT_PROVIDED"
         }
       ],
       "next_checks": [
+        {
+          "check": "COMPARE_WITH_BASELINE",
+          "text": "Сравнить метрики всего прогона с baseline.",
+          "evidence_ids": [
+            "metric-summary-overall"
+          ]
+        },
         {
           "check": "PROVIDE_RESOURCE_SNAPSHOT",
           "text": "Передать снимок ресурсов, чтобы проверить ресурсные сигналы на том же интервале.",

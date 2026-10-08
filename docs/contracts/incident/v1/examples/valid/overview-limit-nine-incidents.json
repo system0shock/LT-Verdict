@@ -464,7 +464,7 @@
     {
       "id": "incident-d91ca07c05ee96e1bc970416481da00827b134991f403822f69b7bcc9bc9d01e",
       "rank": 8,
-      "in_overview": true,
+      "in_overview": false,
       "priority": "HIGH",
       "priority_key": {
         "tier": 1,
@@ -529,7 +529,7 @@
     {
       "id": "incident-f04e3399bd3b735d94159bb773b65761629510c6b4b6e6527086105a49e653e3",
       "rank": 9,
-      "in_overview": true,
+      "in_overview": false,
       "priority": "HIGH",
       "priority_key": {
         "tier": 1,

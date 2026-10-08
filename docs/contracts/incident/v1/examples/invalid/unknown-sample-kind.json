@@ -24,7 +24,7 @@
         "group_path": [
           "checkout"
         ],
-        "sample_kind": "JMETER_SAMPLER"
+        "sample_kind": "TRANSACTION"
       },
       "window_id": "steady",
       "interval_basis": "WINDOW",
@@ -43,7 +43,7 @@
             "group_path": [
               "checkout"
             ],
-            "sample_kind": "JMETER_SAMPLER"
+            "sample_kind": "TRANSACTION"
           },
           "cluster_from_epoch_ms": null
         }
@@ -108,8 +108,7 @@
           "incident_id": "incident-28d0feb239c90079d1e31e29aceaa2c2e89cf52b6f63c87e6423e27e4833038b",
           "basis": "SAME_WINDOW"
         }
-      ],
-      "confidence": "medium"
+      ]
     },
     {
       "id": "incident-28d0feb239c90079d1e31e29aceaa2c2e89cf52b6f63c87e6423e27e4833038b",

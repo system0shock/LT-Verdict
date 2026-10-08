@@ -106,10 +106,9 @@
       "coincident_with": [
         {
           "incident_id": "incident-28d0feb239c90079d1e31e29aceaa2c2e89cf52b6f63c87e6423e27e4833038b",
-          "basis": "SAME_WINDOW"
+          "basis": "INTERVAL_OVERLAP"
         }
-      ],
-      "confidence": "medium"
+      ]
     },
     {
       "id": "incident-28d0feb239c90079d1e31e29aceaa2c2e89cf52b6f63c87e6423e27e4833038b",

@@ -57,7 +57,7 @@
           "outcome": "NOT_EVALUATED",
           "text": "Правила policy по транзакциям не проверялись: файл нагрузки разобран не полностью.",
           "evidence_ids": [],
-          "reason_code": "RUN_DEGRADED"
+          "reason_code": "RUN_NOT_VALID"
         }
       ],
       "next_checks": [

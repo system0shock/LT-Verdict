@@ -331,7 +331,8 @@ class CliArtifactsTest {
         val suite = document.documentElement
         assertEquals("5", suite.getAttribute("tests"))
         assertEquals("3", suite.getAttribute("failures"))
-        assertEquals("2", suite.getAttribute("errors"))
+        assertEquals("0", suite.getAttribute("errors"))
+        assertEquals("2", suite.getAttribute("skipped"))
         val names =
             (
                 0 until
@@ -357,6 +358,70 @@ class CliArtifactsTest {
                 .getValue("rules")
                 .jsonArray
         assertEquals(4, rules.size)
+    }
+
+    @Test
+    fun `junit marks not evaluated checks skipped when the gate is decided and keeps them errors otherwise`() {
+        val warn =
+            """{"id":"b","type":"policy_check","rule_id":"a<&>\"b","metric":"error_rate_ratio","operator":"lte",""" +
+                """"threshold":0.1,"status":"NO_VERDICT","reason_code":"TRANSACTION_NOT_FOUND"}"""
+        val gap =
+            """{"id":"e","type":"resource_policy_check","window_id":"steady","rule_id":"gap","series_id":"disk","unit":"percent",""" +
+                """"operator":"gt","threshold":"70","effect":"sla","status":"NO_VERDICT","reason":"MISSING_RESOURCE_CELLS"}"""
+        val ok =
+            """{"id":"p","type":"policy_check","rule_id":"ok","metric":"error_rate_ratio","operator":"lte",""" +
+                """"threshold":0.1,"status":"PASS","observed":0}"""
+        val bad =
+            """{"id":"f","type":"policy_check","rule_id":"bad","metric":"response_time_p95_ms","operator":"lte",""" +
+                """"threshold":300,"status":"FAIL","observed":339}"""
+
+        fun suite(
+            validity: String,
+            verdict: String,
+            vararg checks: String,
+        ): Element {
+            val result =
+                (
+                    """{"schema_version":"analysis-result.v1","run_id":"r","analysis_mode":"standard","run_validity":"$validity",""" +
+                        """"policy_verdict":"$verdict","analysis_coverage":{"status":"COMPLETE","reasons":[]},"findings":[],""" +
+                        """"evidence":[${checks.joinToString(",")}]}"""
+                ).toByteArray()
+            return parse(junitXml(result)).documentElement
+        }
+
+        fun count(
+            suite: Element,
+            tag: String,
+        ) = suite.getElementsByTagName(tag).length
+
+        val warnPass = suite("VALID", "PASS", ok, warn, gap)
+        assertEquals("4", warnPass.getAttribute("tests"))
+        assertEquals("0", warnPass.getAttribute("failures"))
+        assertEquals("0", warnPass.getAttribute("errors"))
+        assertEquals("2", warnPass.getAttribute("skipped"))
+        assertEquals(0, count(warnPass, "error") + count(warnPass, "failure"))
+        val skipped = warnPass.getElementsByTagName("skipped")
+        assertEquals(2, skipped.length)
+        assertEquals("не вычислено: TRANSACTION_NOT_FOUND", (skipped.item(0) as Element).getAttribute("message"))
+        assertEquals("не вычислено: MISSING_RESOURCE_CELLS", (skipped.item(1) as Element).getAttribute("message"))
+        assertEquals("", skipped.item(0).textContent)
+
+        val warnFail = suite("VALID", "FAIL", bad, warn)
+        assertEquals("2", warnFail.getAttribute("failures"))
+        assertEquals("0", warnFail.getAttribute("errors"))
+        assertEquals("1", warnFail.getAttribute("skipped"))
+
+        val noVerdict = suite("DEGRADED", "NO_VERDICT", ok, warn)
+        assertEquals("0", noVerdict.getAttribute("failures"))
+        assertEquals("2", noVerdict.getAttribute("errors"))
+        assertEquals("0", noVerdict.getAttribute("skipped"))
+        assertEquals(0, count(noVerdict, "skipped"))
+
+        val reason =
+            """{"id":"x","type":"policy_check","rule_id":"r","metric":"m","operator":"lte",""" +
+                """"threshold":1,"status":"NO_VERDICT","reason_code":"a<&>\"b"}"""
+        val escaped = suite("VALID", "PASS", reason)
+        assertEquals("не вычислено: a<&>\"b", (escaped.getElementsByTagName("skipped").item(0) as Element).getAttribute("message"))
     }
 
     private fun input(): Path = fixture("jmeter/xml-5.6.3/input.xml")

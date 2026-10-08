@@ -513,7 +513,7 @@ class CommandLineTest {
                 )
 
             assertEquals(case.exitCode, result.exitCode, case.input.toString())
-            assertTrue(result.stderr.isEmpty(), result.stderr)
+            assertTrue(Regex("analysis_id=[0-9a-f]{64} run_id=\\S+\\R").matches(result.stderr), result.stderr)
             assertEquals(case.policyVerdict, result.stdout.json("policy_verdict"))
         }
     }

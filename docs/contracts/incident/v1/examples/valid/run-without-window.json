@@ -1,0 +1,69 @@
+{
+  "schema_version": "incident.v1",
+  "method": "incident-synthesis.v1",
+  "status": "EVALUATED",
+  "overview_limit": 7,
+  "total_count": 1,
+  "omitted_count": 0,
+  "items": [
+    {
+      "id": "incident-e758b2773bea88cc70cd4b0bdfd79c9868a75be0b068734a4a05ee44dc58c81c",
+      "rank": 1,
+      "in_overview": true,
+      "priority": "HIGH",
+      "priority_key": {
+        "tier": 1,
+        "finding_count": 1,
+        "first_epoch_ms": null
+      },
+      "title": "Нарушение SLA: весь прогон",
+      "summary": "За весь прогон нарушено правил policy: 1. Область: весь прогон. Время нарушения не определено.",
+      "scope": {
+        "kind": "overall"
+      },
+      "window_id": null,
+      "interval_basis": "UNKNOWN",
+      "interval": null,
+      "grouping": {
+        "rule": "incident-grouping.v1",
+        "key": {
+          "family": "TRANSACTION",
+          "window_id": null,
+          "scope": {
+            "kind": "overall"
+          },
+          "cluster_from_epoch_ms": null
+        }
+      },
+      "finding_count": 1,
+      "finding_types": [
+        "policy_failure"
+      ],
+      "finding_ids": [
+        "policy-failure-1d3c4efc53ccbd06"
+      ],
+      "evidence_ids": [
+        "policy-check-4f227c8d9db9c0f7",
+        "metric-summary-overall"
+      ],
+      "refs_truncated": false,
+      "negative_evidence": [
+        {
+          "check": "RESOURCE_DATA_NOT_PROVIDED",
+          "outcome": "NOT_EVALUATED",
+          "reason_code": "RESOURCE_SNAPSHOT_NOT_PROVIDED",
+          "text": "Снимок ресурсов не передан: ресурсные проверки не выполнялись.",
+          "evidence_ids": []
+        }
+      ],
+      "next_checks": [
+        {
+          "check": "PROVIDE_RESOURCE_SNAPSHOT",
+          "text": "Передать снимок ресурсов, чтобы проверить ресурсные сигналы на том же интервале.",
+          "evidence_ids": []
+        }
+      ],
+      "coincident_with": []
+    }
+  ]
+}

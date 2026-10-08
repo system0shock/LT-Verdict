@@ -1,6 +1,7 @@
 """Regression checks for the Slice 0 verifier."""
 
 import contextlib
+import hashlib
 import io
 import json
 import re
@@ -99,6 +100,69 @@ class DateTimeTests(unittest.TestCase):
                     field, "2026-01-01t23:59:59.1+23:59"
                 )
                 self.assertEqual(0, result)
+
+
+class IncidentContractTests(unittest.TestCase):
+    directory = ROOT / "docs/contracts/incident/v1"
+
+    def examples(self, kind: str) -> list[Path]:
+        return sorted((self.directory / "examples" / kind).glob("*.json"))
+
+    def load(self, path: Path) -> object:
+        return json.loads(path.read_text(encoding="utf-8"))
+
+    def test_contract_directory_verifies(self) -> None:
+        verify_slice0.verify_incident_contract()
+
+    def test_every_valid_example_passes_and_every_invalid_one_is_rejected(self) -> None:
+        schema = self.load(self.directory / "incident.schema.json")
+        valid = self.examples("valid")
+        invalid = self.examples("invalid")
+        self.assertGreaterEqual(len(valid), 5)
+        self.assertGreaterEqual(len(invalid), 20)
+        for path in valid:
+            with self.subTest(valid=path.name):
+                verify_slice0.verify_incident_document(self.load(path), schema)
+        for path in invalid:
+            with self.subTest(invalid=path.name):
+                with self.assertRaises(ValueError):
+                    verify_slice0.verify_incident_document(self.load(path), schema)
+
+    def test_incident_id_is_the_hash_of_the_canonical_grouping_key(self) -> None:
+        schema = self.load(self.directory / "incident.schema.json")
+        document = self.load(self.directory / "examples/valid/transaction-and-resource-in-window.json")
+        key = document["items"][0]["grouping"]["key"]
+        canonical = json.dumps(key, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+        self.assertEqual(
+            document["items"][0]["id"],
+            "incident-" + hashlib.sha256(canonical.encode("utf-8")).hexdigest(),
+        )
+        document["items"][0]["grouping"]["key"]["window_id"] = "other"
+        with self.assertRaisesRegex(ValueError, "id"):
+            verify_slice0.verify_incident_document(document, schema)
+
+    def test_causal_wording_is_refused_and_coincidence_wording_is_accepted(self) -> None:
+        for text in (
+            "Нарушение из-за нехватки CPU",
+            "Вызвано насыщением пула",
+            "Первопричина: GC",
+            "This is the root cause",
+            "Latency rose because CPU rose",
+            "Leads to timeouts",
+        ):
+            with self.subTest(text=text):
+                self.assertIsNotNone(verify_slice0.CAUSAL_WORDING.search(text))
+        for text in (
+            "На интервале совпали по времени находки по сущности host-a: 3.",
+            "Открыть сигналы окна steady, совпавшие по времени: 1.",
+            "Остальные проверки policy в окне steady выполнены: 3.",
+        ):
+            with self.subTest(text=text):
+                self.assertIsNone(verify_slice0.CAUSAL_WORDING.search(text))
+
+    def test_schema_checker_refuses_keywords_it_does_not_implement(self) -> None:
+        with self.assertRaisesRegex(ValueError, "unsupported"):
+            verify_slice0.schema_errors({}, {"type": "object", "patternProperties": {}}, {})
 
 
 if __name__ == "__main__":

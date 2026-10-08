@@ -1,0 +1,170 @@
+{
+  "schema_version": "incident.v1",
+  "method": "incident-synthesis.v1",
+  "status": "EVALUATED",
+  "overview_limit": 7,
+  "total_count": 2,
+  "omitted_count": 0,
+  "items": [
+    {
+      "id": "incident-4ddb53c85200ae716597a047b6a5295b39e0b48d37ac4a5b86d886fa62d58c7d",
+      "rank": 1,
+      "in_overview": true,
+      "priority": "HIGH",
+      "priority_key": {
+        "tier": 1,
+        "finding_count": 2,
+        "first_epoch_ms": 1767225610000
+      },
+      "title": "Нарушение SLA из-за нехватки CPU на host-a",
+      "summary": "В окне steady нарушено правил policy: 2. Область: транзакция create-payment.",
+      "scope": {
+        "kind": "transaction",
+        "label": "create-payment",
+        "group_path": [],
+        "sample_kind": "TRANSACTION"
+      },
+      "window_id": "steady",
+      "interval_basis": "WINDOW",
+      "interval": {
+        "from_epoch_ms": 1767225610000,
+        "to_epoch_ms": 1767225640000
+      },
+      "grouping": {
+        "rule": "incident-grouping.v1",
+        "key": {
+          "family": "TRANSACTION",
+          "window_id": "steady",
+          "scope": {
+            "kind": "transaction",
+            "label": "create-payment",
+            "group_path": [],
+            "sample_kind": "TRANSACTION"
+          },
+          "cluster_from_epoch_ms": null
+        }
+      },
+      "finding_count": 2,
+      "finding_types": [
+        "policy_failure"
+      ],
+      "finding_ids": [
+        "policy-failure-window-5f2b17ded2f56baf",
+        "policy-failure-window-48a98ddb993c4985"
+      ],
+      "evidence_ids": [
+        "policy-check-window-8a0f1b2251bb182e",
+        "policy-check-window-446f2b9d79ab058a"
+      ],
+      "refs_truncated": false,
+      "negative_evidence": [
+        {
+          "check": "OTHER_POLICY_CHECKS_PASSED",
+          "outcome": "NOT_CONFIRMED",
+          "text": "Остальные проверки policy в окне steady выполнены: 3.",
+          "evidence_ids": [
+            "policy-check-window-a02b3b7657e2c3ab",
+            "policy-check-window-6dd6192276016562",
+            "policy-check-window-c2f8920d2ae4a8aa"
+          ]
+        }
+      ],
+      "next_checks": [
+        {
+          "check": "COMPARE_WITH_BASELINE",
+          "text": "Сравнить метрики транзакции create-payment с baseline.",
+          "evidence_ids": [
+            "policy-check-window-8a0f1b2251bb182e"
+          ]
+        },
+        {
+          "check": "OPEN_SAME_WINDOW_SIGNALS",
+          "text": "Открыть сигналы окна steady, совпавшие по времени: 1.",
+          "evidence_ids": [
+            "resource-policy-check-a077d5dd1dce8e12"
+          ]
+        }
+      ],
+      "coincident_with": [
+        {
+          "incident_id": "incident-28d0feb239c90079d1e31e29aceaa2c2e89cf52b6f63c87e6423e27e4833038b",
+          "basis": "SAME_WINDOW"
+        }
+      ]
+    },
+    {
+      "id": "incident-28d0feb239c90079d1e31e29aceaa2c2e89cf52b6f63c87e6423e27e4833038b",
+      "rank": 2,
+      "in_overview": true,
+      "priority": "HIGH",
+      "priority_key": {
+        "tier": 2,
+        "finding_count": 3,
+        "first_epoch_ms": 1767225620000
+      },
+      "title": "Сигналы ресурса: host-a в окне steady",
+      "summary": "На интервале совпали по времени находки по сущности host-a: 3.",
+      "scope": {
+        "kind": "entity",
+        "entity": "host-a"
+      },
+      "window_id": "steady",
+      "interval_basis": "FINDINGS",
+      "interval": {
+        "from_epoch_ms": 1767225620000,
+        "to_epoch_ms": 1767225640000
+      },
+      "grouping": {
+        "rule": "incident-grouping.v1",
+        "key": {
+          "family": "RESOURCE",
+          "window_id": "steady",
+          "scope": {
+            "kind": "entity",
+            "entity": "host-a"
+          },
+          "cluster_from_epoch_ms": 1767225620000
+        }
+      },
+      "finding_count": 3,
+      "finding_types": [
+        "resource_threshold_violation"
+      ],
+      "finding_ids": [
+        "resource-threshold-finding-81ccb2f86183c46d",
+        "resource-threshold-finding-62bdfaae24715cd1",
+        "resource-threshold-finding-50cd3e121ef1f2b5"
+      ],
+      "evidence_ids": [
+        "resource-policy-check-a077d5dd1dce8e12",
+        "resource-policy-check-0038b22240772073"
+      ],
+      "refs_truncated": false,
+      "negative_evidence": [
+        {
+          "check": "NO_ANOMALY_EPISODES",
+          "outcome": "NOT_CONFIRMED",
+          "text": "Эпизоды отклонения от reference-окна по сущности host-a не найдены.",
+          "evidence_ids": [
+            "anomaly-check-ae8ba35e096aa844"
+          ]
+        }
+      ],
+      "next_checks": [
+        {
+          "check": "OPEN_RESOURCE_SERIES",
+          "text": "Открыть ряды сущности host-a за интервал находок.",
+          "evidence_ids": [
+            "resource-policy-check-a077d5dd1dce8e12"
+          ]
+        }
+      ],
+      "coincident_with": [
+        {
+          "incident_id": "incident-4ddb53c85200ae716597a047b6a5295b39e0b48d37ac4a5b86d886fa62d58c7d",
+          "basis": "SAME_WINDOW"
+        }
+      ]
+    }
+  ]
+}

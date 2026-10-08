@@ -1,0 +1,215 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://lt-verdict.local/contracts/incident/v1/incident.schema.json",
+  "title": "LT Verdict incident v1",
+  "description": "Deterministic grouping of findings and evidence of ONE analysis by window, time and scope (ADR 0029). An incident states what coincided in time and where; it never states a cause. This is the value of the optional top-level field incidents of analysis-result.v1 (added with the implementation, not by this contract). Checks that JSON Schema cannot express and that the validator must enforce: items are ordered by priority_key (tier ascending, finding_count descending, first_epoch_ms ascending with null last, then id by UTF-8 bytes); rank is 1..n without gaps; in_overview is true exactly for rank <= overview_limit; total_count equals the number of items plus omitted_count; id equals incident- plus the lowercase SHA-256 of the canonical JSON (sorted keys, no whitespace, UTF-8) of grouping.key; scope and window_id equal grouping.key.scope and grouping.key.window_id; priority matches tier (1-2 HIGH, 3-4 MEDIUM, 5 LOW); interval_basis UNKNOWN exactly when interval is null; from_epoch_ms is less than to_epoch_ms (to is exclusive); finding_ids and evidence_ids resolve to ids in findings and evidence of the same analysis-result; refs_truncated is true exactly when finding_count exceeds the number of finding_ids; coincident_with refers to other stored items; title, summary and every text are produced from fixed templates and contain no causal wording (ADR 0029, section Tests).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "method", "status", "overview_limit", "total_count", "omitted_count", "items"],
+  "properties": {
+    "schema_version": { "const": "incident.v1" },
+    "method": { "const": "incident-synthesis.v1" },
+    "status": { "enum": ["EVALUATED", "NOT_EVALUATED"] },
+    "reason_code": { "const": "RUN_NOT_VALID" },
+    "overview_limit": { "const": 7 },
+    "total_count": { "type": "integer", "minimum": 0, "maximum": 1000000 },
+    "omitted_count": { "type": "integer", "minimum": 0, "maximum": 1000000 },
+    "items": { "type": "array", "maxItems": 64, "items": { "$ref": "#/$defs/incident" } }
+  },
+  "allOf": [
+    {
+      "if": { "properties": { "status": { "const": "NOT_EVALUATED" } }, "required": ["status"] },
+      "then": {
+        "required": ["reason_code"],
+        "properties": {
+          "total_count": { "const": 0 },
+          "omitted_count": { "const": 0 },
+          "items": { "maxItems": 0 }
+        }
+      },
+      "else": { "not": { "required": ["reason_code"] } }
+    }
+  ],
+  "$defs": {
+    "text": { "type": "string", "minLength": 1, "maxLength": 400, "pattern": "^[^\\u0000-\\u001F\\u007F-\\u009F]+$" },
+    "identifier": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[^\\u0000-\\u001F\\u007F-\\u009F]+$" },
+    "referenceId": { "type": "string", "minLength": 1, "maxLength": 256, "pattern": "^[^\\u0000-\\u001F\\u007F-\\u009F]+$" },
+    "epochMs": { "type": "integer", "minimum": 0, "maximum": 253402300799999 },
+    "scope": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind"],
+          "properties": { "kind": { "const": "overall" } }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "label"],
+          "properties": {
+            "kind": { "const": "transaction" },
+            "label": { "type": "string", "minLength": 1, "maxLength": 4096, "pattern": "^[^\\u0000-\\u001F\\u007F-\\u009F]+$" },
+            "group_path": { "type": "array", "maxItems": 64, "items": { "type": "string", "maxLength": 4096 } },
+            "sample_kind": { "type": "string", "pattern": "^[A-Z_]+$", "maxLength": 32 }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "entity"],
+          "properties": {
+            "kind": { "const": "entity" },
+            "entity": { "$ref": "#/$defs/identifier" }
+          }
+        }
+      ]
+    },
+    "idList": { "type": "array", "maxItems": 8, "uniqueItems": true, "items": { "$ref": "#/$defs/referenceId" } },
+    "incident": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id", "rank", "in_overview", "priority", "priority_key", "title", "summary", "scope", "window_id",
+        "interval_basis", "interval", "grouping", "finding_count", "finding_types", "finding_ids", "evidence_ids",
+        "refs_truncated", "negative_evidence", "next_checks", "coincident_with"
+      ],
+      "properties": {
+        "id": { "type": "string", "pattern": "^incident-[0-9a-f]{64}$" },
+        "rank": { "type": "integer", "minimum": 1, "maximum": 64 },
+        "in_overview": { "type": "boolean" },
+        "priority": { "enum": ["HIGH", "MEDIUM", "LOW"] },
+        "priority_key": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["tier", "finding_count", "first_epoch_ms"],
+          "properties": {
+            "tier": { "type": "integer", "minimum": 1, "maximum": 5 },
+            "finding_count": { "type": "integer", "minimum": 1, "maximum": 1000000 },
+            "first_epoch_ms": { "oneOf": [{ "$ref": "#/$defs/epochMs" }, { "type": "null" }] }
+          }
+        },
+        "title": { "type": "string", "minLength": 1, "maxLength": 200, "pattern": "^[^\\u0000-\\u001F\\u007F-\\u009F]+$" },
+        "summary": { "$ref": "#/$defs/text" },
+        "scope": { "$ref": "#/$defs/scope" },
+        "window_id": { "oneOf": [{ "$ref": "#/$defs/identifier" }, { "type": "null" }] },
+        "interval_basis": { "enum": ["FINDINGS", "WINDOW", "UNKNOWN"] },
+        "interval": {
+          "oneOf": [
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["from_epoch_ms", "to_epoch_ms"],
+              "properties": {
+                "from_epoch_ms": { "$ref": "#/$defs/epochMs" },
+                "to_epoch_ms": { "$ref": "#/$defs/epochMs" }
+              }
+            },
+            { "type": "null" }
+          ]
+        },
+        "grouping": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["rule", "key"],
+          "properties": {
+            "rule": { "const": "incident-grouping.v1" },
+            "key": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["family", "window_id", "scope", "cluster_from_epoch_ms"],
+              "properties": {
+                "family": { "enum": ["TRANSACTION", "RESOURCE"] },
+                "window_id": { "oneOf": [{ "$ref": "#/$defs/identifier" }, { "type": "null" }] },
+                "scope": { "$ref": "#/$defs/scope" },
+                "cluster_from_epoch_ms": { "oneOf": [{ "$ref": "#/$defs/epochMs" }, { "type": "null" }] }
+              }
+            }
+          }
+        },
+        "finding_count": { "type": "integer", "minimum": 1, "maximum": 1000000 },
+        "finding_types": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 8,
+          "uniqueItems": true,
+          "items": { "type": "string", "pattern": "^[a-z][a-z_]{0,63}$" }
+        },
+        "finding_ids": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 16,
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/referenceId" }
+        },
+        "evidence_ids": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 24,
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/referenceId" }
+        },
+        "refs_truncated": { "type": "boolean" },
+        "negative_evidence": { "type": "array", "maxItems": 8, "items": { "$ref": "#/$defs/negativeEvidence" } },
+        "next_checks": { "type": "array", "maxItems": 5, "items": { "$ref": "#/$defs/nextCheck" } },
+        "coincident_with": { "type": "array", "maxItems": 5, "items": { "$ref": "#/$defs/coincidence" } }
+      }
+    },
+    "negativeEvidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["check", "outcome", "text", "evidence_ids"],
+      "properties": {
+        "check": {
+          "enum": [
+            "OTHER_POLICY_CHECKS_PASSED",
+            "RESOURCE_RULES_WITHIN_LIMITS",
+            "GENERATOR_RESOURCES_WITHIN_LIMITS",
+            "NO_ANOMALY_EPISODES",
+            "NO_MATERIAL_TREND",
+            "RESOURCE_DATA_NOT_PROVIDED",
+            "CHECKS_NOT_EVALUATED"
+          ]
+        },
+        "outcome": { "enum": ["NOT_CONFIRMED", "NOT_EVALUATED"] },
+        "reason_code": { "type": "string", "pattern": "^[A-Z][A-Z0-9_]{0,63}$" },
+        "text": { "$ref": "#/$defs/text" },
+        "evidence_ids": { "$ref": "#/$defs/idList" }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "outcome": { "const": "NOT_EVALUATED" } }, "required": ["outcome"] },
+          "then": { "required": ["reason_code"] },
+          "else": { "not": { "required": ["reason_code"] }, "properties": { "evidence_ids": { "minItems": 1 } } }
+        }
+      ]
+    },
+    "nextCheck": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["check", "text", "evidence_ids"],
+      "properties": {
+        "check": {
+          "enum": [
+            "COMPARE_WITH_BASELINE",
+            "OPEN_RESOURCE_SERIES",
+            "OPEN_SAME_WINDOW_SIGNALS",
+            "PROVIDE_RESOURCE_SNAPSHOT",
+            "COMPLETE_NOT_EVALUATED_CHECKS"
+          ]
+        },
+        "text": { "$ref": "#/$defs/text" },
+        "evidence_ids": { "$ref": "#/$defs/idList" }
+      }
+    },
+    "coincidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["incident_id", "basis"],
+      "properties": {
+        "incident_id": { "type": "string", "pattern": "^incident-[0-9a-f]{64}$" },
+        "basis": { "enum": ["SAME_WINDOW", "INTERVAL_OVERLAP"] }
+      }
+    }
+  }
+}

@@ -1,0 +1,203 @@
+{
+ "stage": "S2",
+ "mode": "live",
+ "model": "deepseek-v4-flash-0731",
+ "tag": {
+  "phase": "v2-pilot",
+  "stage": "S2",
+  "case": "K07",
+  "rep": 2,
+  "attempt": 1
+ },
+ "qwen_exit": 0,
+ "wall_ms": 112211,
+ "relay": {
+  "schema_version": "advisory-ai-runtime-relay.v1",
+  "status": "FORWARDED_STRUCTURED_OUTPUT",
+  "request_count": 1,
+  "usage": {
+   "prompt_tokens": 9956,
+   "total_tokens": 21166,
+   "completion_tokens": 11210,
+   "prompt_tokens_details": {
+    "cached_tokens": 1024
+   },
+   "completion_tokens_details": {
+    "reasoning_tokens": 8326
+   }
+  },
+  "latency_ms": 110809,
+  "model_returned": "deepseek-v4-flash-0731"
+ },
+ "relay_status": "FORWARDED_STRUCTURED_OUTPUT",
+ "usage": {
+  "prompt_tokens": 9956,
+  "total_tokens": 21166,
+  "completion_tokens": 11210,
+  "prompt_tokens_details": {
+   "cached_tokens": 1024
+  },
+  "completion_tokens_details": {
+   "reasoning_tokens": 8326
+  }
+ },
+ "latency_ms": 110809,
+ "status": "OK",
+ "note": null,
+ "output": {
+  "schema_version": "ai-advice-output.v1",
+  "summary": "Deterministic LT Verdict is FAIL (policy_verdict FAIL; run VALID; coverage COMPLETE). Two policy checks failed in window `run-intersection`: business rule `overall-errors` observed 2471/38628 vs 0.01 (FAIL, evidence/16) and resource SLA rule on `paymentservice-cpu-throttle-ratio` > 0.2 (FAIL, evidence/15). In the JMeter transaction scope, all 2471 errors appear on the 'checkout' sampler; the other five transactions show 0 errors. The OpenSearch error profile reports 2471 `frontend.request_error` documents from service `frontend`, with a burst from 1790630535000 to 1790630670000 (peak 1272/min) returning to 0 afterward; the paymentservice throttle-ratio finding covers 1790630565000–1790630670000 with observed_max 1.0 (findings/0). Because clock_alignment=not_verified_by_core (evidence/7), the overlap is a hypothesis, not an established ordering. No capacity_summary is present, so no capacity-bound statement is possible. Advice: verify clocks, inspect checkout error bodies, investigate paymentservice throttling configuration, and rerun after checks.",
+  "hypotheses": [
+   {
+    "rank": 1,
+    "observation": "The overall metric summary reports error_count 2471 (of 40306), and across the six transaction scopes only 'checkout' has error_count 2471; the other five transactions ('add product to cart', 'cart', 'home', 'product', 'reset cart') each report error_count 0.",
+    "possible_explanation": "The failures in this run may be specific to the checkout flow (for example, a downstream dependency or an assertion peculiar to that sampler). Without individual samples or response codes, this is a hypothesis only, not a confirmed cause.",
+    "recommended_check": "Fetch the checkout sampler's response codes and messages and the full error documents behind the OpenSearch error profile; confirm whether every failing record maps to the checkout transaction and identify the error type/status code.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0",
+     "analysis-result.json#/evidence/3",
+     "analysis-result.json#/evidence/1",
+     "analysis-result.json#/evidence/2",
+     "analysis-result.json#/evidence/4",
+     "analysis-result.json#/evidence/5",
+     "analysis-result.json#/evidence/6",
+     "analysis-result.json#/evidence/19"
+    ]
+   },
+   {
+    "rank": 2,
+    "observation": "The OpenSearch error profile shows an error burst from 1790630535000 to 1790630670000 (first doc 1790630540673, last doc 1790630663409; peak 1272/min), and the resource-threshold finding lists 7 cells for paymentservice cpu_throttle_ratio from 1790630565000 to 1790630670000 with observed_max 1.0; the resource_policy_check for that series is FAIL.",
+    "possible_explanation": "Paymentservice CPU throttling may have coincided with, or contributed to, the checkout error burst (for example, reduced processing capacity during the throttled cells). This is a temporal-overlap hypothesis; clock_alignment is not_verified_by_core so ordering is not established.",
+    "recommended_check": "Verify clock alignment among JMeter, OpenSearch, and Prometheus timestamps, then overlay the per-15s error timeline against the paymentservice throttle-ratio series over the window to test whether the overlap holds when timestamps are aligned.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/19",
+     "analysis-result.json#/findings/0",
+     "analysis-result.json#/evidence/15",
+     "analysis-result.json#/evidence/13",
+     "analysis-result.json#/evidence/7"
+    ]
+   },
+   {
+    "rank": 3,
+    "observation": "The paymentservice memory_bytes summary in the run-intersection window shows min 2666496, median 29720576, max 37756928, IQR 8343210.5, sample_standard_deviation 8486780, and slope_per_second 19241.26, with no missing cells.",
+    "possible_explanation": "Memory usage shows a wide spread and an apparent upward trend, which could coincide with the throttled/error period (for example, queued, retried, or accumulated work). This is unconfirmed because per-interval alignment with the throttle/error window is not in the input.",
+    "recommended_check": "Inspect the per-15s paymentservice memory series against the throttle-violation cells and container memory limits, and observe over a full-length run to test whether the upward trend is sustained or an artifact of the burst window.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/14",
+     "analysis-result.json#/findings/0"
+    ]
+   },
+   {
+    "rank": 4,
+    "observation": "The paymentservice cpu_cores summary has mean 0.0108 and max 0.0163 cores, while its cpu_throttle_ratio summary has q75 0.7354, q95 1.0, max 1.0, and the SLA policy on the ratio (>0.2) fails.",
+    "possible_explanation": "The throttle ratio can approach 1 while absolute core usage is tiny, suggesting the throttling may be imposed by CPU quota/limit or scheduling configuration rather than by high CPU demand. This is a configuration hypothesis; actual limits are not present in the input.",
+    "recommended_check": "Compare the service's configured CPU limit/quota with reported usage and inspect Prometheus throttling metadata; if limits are misconfigured, adjust them and rerun the scenario.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/12",
+     "analysis-result.json#/evidence/13",
+     "analysis-result.json#/evidence/15"
+    ]
+   },
+   {
+    "rank": 5,
+    "observation": "The OpenSearch error timeline is 0 before 1790630535000 and 0 after 1790630670000, and both the error documents and the paymentservice throttle-ratio violation finding are confined to a sub-window of the evaluation window (1790630475000–1790630820000).",
+    "possible_explanation": "A transient condition starting mid-run (for example, a deployment, configuration change, dependency hiccup, or load-profile change) could explain the time-bounded burst. Release/configuration history is not in the input, so this is unconfirmed.",
+    "recommended_check": "Correlate the burst timestamps with deployment/config/load-profile metadata available to the test operator and inspect logs around 1790630535000–1790630670000; verify clock alignment before drawing any ordering.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/19",
+     "analysis-result.json#/findings/0",
+     "analysis-result.json#/evidence/7"
+    ]
+   },
+   {
+    "rank": 6,
+    "observation": "All transaction metric summaries report p99 between 83 and 191 ms while max latency ranges 730–989 ms, and the overall summary reports max 989 ms; the aggregate data do not record how many samples reached those maxima.",
+    "possible_explanation": "Sparse high-latency outliers could reflect GC pauses, cold starts, or one-off network stalls, and may or may not overlap the error burst; the aggregate summaries cannot confirm either way.",
+    "recommended_check": "Query the raw sampler records for counts of samples above the p99 thresholds and their timestamps, then compare those timestamps with the error and throttle windows.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0",
+     "analysis-result.json#/evidence/1",
+     "analysis-result.json#/evidence/2",
+     "analysis-result.json#/evidence/3",
+     "analysis-result.json#/evidence/4",
+     "analysis-result.json#/evidence/5",
+     "analysis-result.json#/evidence/6"
+    ]
+   }
+  ],
+  "recommendations": [
+   {
+    "rank": 1,
+    "action": "Confirm clock alignment between JMeter sample timestamps, OpenSearch error timestamps, and Prometheus metric timestamps; document any offsets before using lead/lag or overlap reasoning.",
+    "rationale": "clock_alignment=not_verified_by_core (evidence/7), and the leading hypotheses (error burst vs paymentservice throttle finding) depend on overlap between independently timestamped sources.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/7",
+     "analysis-result.json#/evidence/19",
+     "analysis-result.json#/findings/0"
+    ]
+   },
+   {
+    "rank": 2,
+    "action": "Pull full error bodies and JMeter response codes for the checkout sampler and determine the error type and upstream service involved.",
+    "rationale": "All 2471 JMeter-scope errors appear on the 'checkout' transaction, and the OpenSearch profile labels the group frontend.request_error from service 'frontend'; the input contains only 2 sampled documents, not full error bodies.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/3",
+     "analysis-result.json#/evidence/19"
+    ]
+   },
+   {
+    "rank": 3,
+    "action": "Review paymentservice CPU limits/quota and container scheduling; reproduce the 7-cell violation (1790630565000–1790630670000) and adjust limits only if misconfigured, then rerun.",
+    "rationale": "The throttle-ratio SLA check is FAIL with observed_max 1.0 while absolute cpu_cores max is only 0.0163, so the resource failure may stem from quota/limit configuration rather than demand.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/15",
+     "analysis-result.json#/evidence/12",
+     "analysis-result.json#/evidence/13",
+     "analysis-result.json#/findings/0"
+    ]
+   },
+   {
+    "rank": 4,
+    "action": "After investigation, rerun the same scenario with the same policies so the operator can test whether the error burst and throttle violation reproduce and whether the overall-errors check changes.",
+    "rationale": "The window verdict FAIL depends on both observed 2471/38628 vs 0.01 (business) and throttle ratio > 0.2 (resource); a fresh, comparably configured run is the only test of reproducibility available to the operator.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/16",
+     "analysis-result.json#/evidence/17"
+    ]
+   },
+   {
+    "rank": 5,
+    "action": "If the 1% overall error-rate threshold or the 0.2 throttle-ratio threshold does not reflect the intended SLO, reconfigure the policy deliberately; do not treat reconfiguration as passing this run.",
+    "rationale": "Reconfiguring a policy changes future evaluations only; it does not change the observed 2471 errors or the deterministic FAIL verdict for the current run.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/16",
+     "analysis-result.json#/evidence/15",
+     "analysis-result.json#/evidence/17"
+    ]
+   },
+   {
+    "rank": 6,
+    "action": "Track paymentservice memory over a longer or repeated run and check container memory limits.",
+    "rationale": "The memory summary shows a wide spread (min 2666496 to max 37756928 bytes) with a positive slope_per_second of about 19241 bytes/s, but the current run-intersection window covers only part of the run.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/14"
+    ]
+   }
+  ],
+  "caveats": [
+   "Deterministic verdict is FAIL and stays FAIL; this advisory does not alter it.",
+   "No capacity_summary is present in the input, so no capacity bound (LOWER_BOUND/UPPER_BOUND/BOUNDED) can be stated and no capacity-related NO_POLICY state applies.",
+   "clock_alignment=not_verified_by_core: any overlap or ordering between JMeter errors, OpenSearch timestamps, and Prometheus resource series is a hypothesis until clocks are verified.",
+   "Counts live in different scopes: overall 2471/40306, policy-window 2471/38628, checkout-scope 2471/6717, and OpenSearch profile 2471 frontend.request_error documents; the shared number 2471 does not by itself prove identity of records across sources or scopes.",
+   "The error profile supplies only 2 sampled documents (samples_per_group_limit 2) with message 'request error'; full log bodies, response codes, traces, and JMeter response details are not in the input.",
+   "Resource summaries cover only frontend, checkoutservice, and paymentservice over the run_intersection window (345000 ms of a 360008 ms run; 1536 ms leading and 13472 ms trailing dropped).",
+   "Metric summaries are aggregates; the number of samples that hit the reported max latencies (730–989 ms) and the tail distribution are not available.",
+   "run_validity VALID and analysis_coverage COMPLETE indicate the analysis inputs were covered and valid; they do not prove the absence of an underlying defect.",
+   "No release, deployment, configuration, or load-profile history is present, so transient-event causes cannot be confirmed."
+  ]
+ },
+ "schema": "ai-experiment-run.v2",
+ "phase": "pilot",
+ "case": "K07",
+ "rep": 2
+}

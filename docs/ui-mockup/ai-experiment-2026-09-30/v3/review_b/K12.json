@@ -1,0 +1,97 @@
+[
+  {
+    "id": "R013",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T1",
+        "field": "#/recommendations/1/action",
+        "quote": "implement/enable knee detection to derive an upper bound",
+        "why": "Capacity bounds derive from verified stage outcomes independently of the fixed, unimplemented knee detector."
+      },
+      {
+        "type": "T2",
+        "field": "#/caveats/4",
+        "quote": "20431 of 135434 samples fall outside the evaluation windows",
+        "why": "It infers a sample relationship from whole-run and policy-window quantities that are explicitly different scopes."
+      }
+    ],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 3,
+    "notes": "Mostly evidence-grounded advice, but its knee-detector instruction and scope comparison are misleading."
+  },
+  {
+    "id": "R020",
+    "hard_defect": false,
+    "defects": [],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 5,
+    "notes": "Correctly preserves the verdict and provides prioritized, bounded follow-up checks."
+  },
+  {
+    "id": "R028",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T1",
+        "field": "#/hypotheses/0/recommended_check",
+        "quote": "locate the knee by hand ... until a knee detector is available",
+        "why": "The knee detector is a fixed product limitation and is not needed to compute a capacity bound."
+      },
+      {
+        "type": "T1",
+        "field": "#/hypotheses/2/recommended_check",
+        "quote": "promote the generator throttle rule from diagnostic to enforcing",
+        "why": "The generator guard is diagnostic by contract and must not be made binding or enforcing."
+      },
+      {
+        "type": "T1",
+        "field": "#/recommendations/1/action",
+        "quote": "promote the generator throttle rule from diagnostic to enforcing",
+        "why": "This recommends a contract-violating change to the generator guard."
+      },
+      {
+        "type": "T1",
+        "field": "#/recommendations/2/action",
+        "quote": "identify the knee manually",
+        "why": "It incorrectly makes knee identification part of obtaining capacity information despite bounds being independent of a knee."
+      },
+      {
+        "type": "T2",
+        "field": "#/summary",
+        "quote": "20431 of the 135434 overall samples fall outside the evaluated stage windows",
+        "why": "It treats the difference between whole-run and policy-window denominators as a sample allocation despite their different scopes."
+      },
+      {
+        "type": "T2",
+        "field": "#/caveats/9",
+        "quote": "20431 samples from the two 70000 ms inter-stage gaps",
+        "why": "The evidence does not support assigning the whole-run/window-count difference to particular intervals."
+      }
+    ],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 2,
+    "notes": "It preserves the deterministic result but contains multiple invalid operator recommendations and count-scope inferences."
+  },
+  {
+    "id": "R040",
+    "hard_defect": false,
+    "defects": [],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 5,
+    "notes": "Accurately distinguishes policy coverage, stage-derived bounds, diagnostic guards, and scope limitations."
+  },
+  {
+    "id": "R041",
+    "hard_defect": false,
+    "defects": [],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 5,
+    "notes": "Correct, well-prioritized advice that retains the fixed contract constraints and evidence limits."
+  }
+]

@@ -1,0 +1,122 @@
+[
+  {
+    "id": "R009",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T3",
+        "field": "#/hypotheses/0/possible_explanation",
+        "quote": "the single 10s max latency",
+        "why": "The aggregate maximum does not establish how many samples reached 10,008 ms."
+      },
+      {
+        "type": "T8",
+        "field": "#/recommendations/4/rationale",
+        "quote": "the correlation over the window rest on incomplete data",
+        "why": "The paymentservice gaps do not affect the reported errors-versus-load correlation pair, which has 47 paired cells."
+      }
+    ],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 3,
+    "notes": "The checkout investigation is useful, but the response overstates what the latency maximum and resource gaps show."
+  },
+  {
+    "id": "R025",
+    "hard_defect": false,
+    "defects": [
+      {
+        "type": "T1",
+        "field": "#/summary",
+        "quote": "NO_POLICY (no resource policy configured",
+        "why": "NO_POLICY can also mean no required capacity, so the configuration cause is not established."
+      }
+    ],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 4,
+    "notes": "It gives useful checks and preserves the verdict, with one unsupported explanation for NO_POLICY."
+  },
+  {
+    "id": "R034",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T2",
+        "field": "#/summary",
+        "quote": "OpenSearch groups them as frontend.request_error",
+        "why": "The evidence does not join the JMeter checkout errors to the OpenSearch group, despite their matching totals."
+      }
+    ],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 3,
+    "notes": "The checks are detailed, but the summary asserts an event mapping that its own caveat says is unverified."
+  },
+  {
+    "id": "R043",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T3",
+        "field": "#/caveats/7",
+        "quote": "Max latency values (10008 ms) are single extremes",
+        "why": "The aggregate maxima do not reveal whether one or multiple samples reached 10,008 ms."
+      }
+    ],
+    "required_facts_preserved": false,
+    "missing_facts": [
+      "Run validity is VALID."
+    ],
+    "usefulness": 3,
+    "notes": "Its investigation steps are useful, but it implies a count at the latency maximum that the evidence cannot supply."
+  },
+  {
+    "id": "R049",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T2",
+        "field": "#/summary",
+        "quote": "All 3,688 errors are attributed to the checkout transaction ... and are grouped in OpenSearch",
+        "why": "Matching totals across JMeter and OpenSearch do not establish that they are the same events."
+      },
+      {
+        "type": "T1",
+        "field": "#/summary",
+        "quote": "NO_POLICY because no resource policy is configured",
+        "why": "NO_POLICY also permits no required capacity, so the stated cause is not established."
+      }
+    ],
+    "required_facts_preserved": false,
+    "missing_facts": [
+      "Run validity is VALID."
+    ],
+    "usefulness": 3,
+    "notes": "The proposed checks are actionable, but the summary conflates two error sources."
+  },
+  {
+    "id": "R058",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T2",
+        "field": "#/recommendations/0/action",
+        "quote": "the 'checkout' sampler error_type 'frontend.request_error'",
+        "why": "frontend.request_error is an OpenSearch group label and is not established as a JMeter checkout sampler error type."
+      },
+      {
+        "type": "T3",
+        "field": "#/hypotheses/2/possible_explanation",
+        "quote": "A subset of checkout requests experienced a very long-tail response time (~10 s)",
+        "why": "The maximum establishes at least one such sample, but the evidence gives no count of samples near 10 seconds."
+      }
+    ],
+    "required_facts_preserved": false,
+    "missing_facts": [
+      "Run validity is VALID."
+    ],
+    "usefulness": 3,
+    "notes": "It identifies sensible follow-up data, but assumes an unverified error-type mapping and multiple slow samples."
+  }
+]

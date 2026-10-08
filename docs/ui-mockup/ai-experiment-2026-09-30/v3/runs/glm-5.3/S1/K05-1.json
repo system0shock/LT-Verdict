@@ -1,0 +1,160 @@
+{
+ "stage": "S1",
+ "mode": "live",
+ "model": "glm-5.3",
+ "tag": {
+  "phase": "v3",
+  "model_tag": "glm-5.3",
+  "stage": "S1",
+  "case": "K05",
+  "rep": 1,
+  "attempt": 1
+ },
+ "qwen_exit": 0,
+ "wall_ms": 94631,
+ "relay": {
+  "schema_version": "advisory-ai-runtime-relay.v1",
+  "status": "FORWARDED_STRUCTURED_OUTPUT",
+  "request_count": 1,
+  "usage": {
+   "prompt_tokens": 2408,
+   "total_tokens": 10548,
+   "completion_tokens": 8140,
+   "prompt_tokens_details": {
+    "cached_tokens": 1536
+   },
+   "completion_tokens_details": {
+    "reasoning_tokens": 6121
+   }
+  },
+  "latency_ms": 93345,
+  "model_returned": "glm-5.3"
+ },
+ "relay_status": "FORWARDED_STRUCTURED_OUTPUT",
+ "usage": {
+  "prompt_tokens": 2408,
+  "total_tokens": 10548,
+  "completion_tokens": 8140,
+  "prompt_tokens_details": {
+   "cached_tokens": 1536
+  },
+  "completion_tokens_details": {
+   "reasoning_tokens": 6121
+  }
+ },
+ "latency_ms": 93345,
+ "status": "OK",
+ "note": null,
+ "output": {
+  "caveats": [
+   "The verdict is deterministic: the error-limit policy check observed 2/100 = 0.02 against operator lte with threshold 0.01 and returned FAIL; nothing in this advisory alters that verdict, the VALID run validity, or the COMPLETE coverage status.",
+   "The metric summaries contain no error details (response codes, messages, or timestamps), so the failure mode and timing of the 2 errors are unknown; no attribution of the errors to any specific cause is supported by the evidence.",
+   "Overall-scope and per-transaction counts are different scopes; the identical counts and latency percentiles in the overall and checkout summaries do not by themselves prove the run contained only the checkout transaction.",
+   "Only one policy check (error_rate_ratio on the overall scope) appears in the evidence; latency and throughput values are reported but were not evaluated against any policy in this analysis, so no pass/fail judgment on those metrics is implied.",
+   "With a denominator of 100, the error-rate granularity is 0.01 per error, equal to the entire threshold; this limits precision, and no statistical confidence or margin of error is claimed.",
+   "The evidence contains no timestamps or epoch values, so no temporal ordering, run duration, or clock-relationship conclusions can be drawn; throughput is reported only as the ratio 100000/99100 (~1.009 requests per second).",
+   "The latency percentile pattern (p50 = 50 ms, p95 = 95 ms, p99 = 99 ms, max = 100 ms) is unverified and may indicate synthetic or placeholder data; this does not affect the deterministic verdict.",
+   "This analysis contains no generator-guard or capacity-bound evidence, so no conclusions about capacity, saturation, or spare headroom are drawn."
+  ],
+  "hypotheses": [
+   {
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0",
+     "analysis-result.json#/evidence/1"
+    ],
+    "observation": "The overall metric summary and the checkout transaction summary report identical counts: error_count 2, sample_count 100, error_rate_ratio 2/100, the same latency percentiles (p50 50 ms, p95 95 ms, p99 99 ms, max 100 ms), and the same throughput ratio (100000/99100).",
+    "possible_explanation": "The run may have consisted of a single transaction (label 'checkout', sample_kind JMETER_SAMPLER), so the overall scope and the checkout transaction cover the same 100 samples and the same 2 errors.",
+    "recommended_check": "Inspect the source JTL/CSV data to enumerate the distinct transaction labels and sample kinds present, and confirm whether any samples outside 'checkout' exist.",
+    "rank": 1
+   },
+   {
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0",
+     "analysis-result.json#/evidence/1",
+     "analysis-result.json#/evidence/2",
+     "analysis-result.json#/findings/0"
+    ],
+    "observation": "The policy check 'error-limit' evaluated error_rate_ratio on metric-summary-overall: observed 2/100 (0.02) against operator 'lte' with threshold 0.01, returning status FAIL, recorded as a policy_failure finding.",
+    "possible_explanation": "The system under test (or the checkout sampler) genuinely failed approximately 2% of the 100 requests in this run, exceeding the configured 1% error limit.",
+    "recommended_check": "Inspect the two error samples in the raw JTL/CSV run data (response/error codes, messages, and timestamps) to classify the failure mode before any remediation.",
+    "rank": 2
+   },
+   {
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0",
+     "analysis-result.json#/evidence/2"
+    ],
+    "observation": "At the observed denominator of 100 samples, each error shifts the error rate by 0.01, which equals the entire policy threshold; the observed 2 errors produce 0.02 against the lte 0.01 limit, so an observed count of 1 (0.01) would have satisfied the rule.",
+    "possible_explanation": "The sample count may be too small to estimate the error rate finely near the 1% threshold; the outcome turns on a single error and may be sensitive to run-to-run variation.",
+    "recommended_check": "Rerun the load test (optionally with a larger sample count or longer window) and compare the newly observed error rate against the same lte 0.01 threshold to see whether the rate stays above it.",
+    "rank": 3
+   },
+   {
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0",
+     "analysis-result.json#/evidence/1"
+    ],
+    "observation": "The reported latency percentiles equal their percentile ranks: p50 = 50 ms, p95 = 95 ms, p99 = 99 ms, and max = 100 ms, identically in both the overall and checkout summaries.",
+    "possible_explanation": "The latency values may be synthetic, placeholder, or uniformly distributed measurements rather than organic request timings; this is a data-quality hypothesis, not a conclusion.",
+    "recommended_check": "Inspect the elapsed-time values of the 100 samples in the raw JTL/CSV data to verify that the latency distribution reflects real measurements.",
+    "rank": 4
+   }
+  ],
+  "recommendations": [
+   {
+    "action": "Inspect the two failing samples in the raw run data (JTL/CSV), including their response codes, error messages, and timestamps, to identify the failure mode behind the FAIL.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0",
+     "analysis-result.json#/evidence/1",
+     "analysis-result.json#/evidence/2",
+     "analysis-result.json#/findings/0"
+    ],
+    "rationale": "The FAIL verdict follows from error_count 2 of sample_count 100 (0.02 vs lte 0.01), but the summaries carry no error detail, so the cause of the 2 errors is unknown.",
+    "rank": 1
+   },
+   {
+    "action": "Inspect the source data to enumerate the transaction labels and sample kinds and confirm whether 'checkout' is the only transaction and where the 2 errors occurred.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0",
+     "analysis-result.json#/evidence/1"
+    ],
+    "rationale": "The overall and checkout summaries report identical counts and latency percentiles; confirming the transaction composition clarifies whether the errors are concentrated in checkout.",
+    "rank": 2
+   },
+   {
+    "action": "Rerun the load test, optionally with a larger sample count, and compare the observed error rate against the same lte 0.01 threshold.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0",
+     "analysis-result.json#/evidence/2"
+    ],
+    "rationale": "At a denominator of 100, one error changes the rate by 0.01, the full threshold margin; a rerun with more samples yields a finer-grained estimate of the error rate. The stored FAIL verdict for this run stands regardless of any rerun outcome.",
+    "rank": 3
+   },
+   {
+    "action": "If a 1% overall error limit is not the intended target, configure the error-limit policy (threshold and/or evaluated scope) for subsequent runs.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/2"
+    ],
+    "rationale": "The policy check applied lte 0.01 to the overall error rate (metric_evidence_id metric-summary-overall); a policy configuration change affects future analyses only and does not alter the stored FAIL verdict for this run.",
+    "rank": 4
+   },
+   {
+    "action": "Verify the latency data quality by inspecting the raw elapsed-time column for the 100 samples.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0",
+     "analysis-result.json#/evidence/1"
+    ],
+    "rationale": "Percentiles equal to their ranks (p50 = 50, p95 = 95, p99 = 99, max = 100 ms) are consistent with uniform or placeholder data; verifying this protects any later interpretation of latency behavior.",
+    "rank": 5
+   }
+  ],
+  "schema_version": "ai-advice-output.v1",
+  "summary": "Run jmeter_jtl_csv-eedea044d69544ae672ae0c6c571167c3f4aed00edbba2b49611acb0a880c076 is VALID with COMPLETE analysis coverage, and the deterministic policy verdict is FAIL: the 'error-limit' policy check (metric error_rate_ratio, operator lte, threshold 0.01) observed 2 errors in 100 samples (2/100 = 0.02) on the overall scope, recorded as a policy_failure finding. The checkout transaction summary reports identical counts (2 errors / 100 samples, same latency percentiles p50=50 ms, p95=95 ms, p99=99 ms, max=100 ms, and the same throughput ratio 100000/99100, approximately 1.009 requests per second), which suggests it may cover the entire run, though overall and per-transaction scopes are not strictly comparable. At a denominator of 100, the margin between the observed rate and the threshold is a single error. The evidence includes no error details, timestamps, or per-sample data, so the failure mode behind the 2 errors is unknown. Advised next steps are operator actions only: inspect the two failing samples and the transaction composition in the raw data, rerun (optionally with more samples) to check whether the error rate stays above 0.01, and configure the policy if the 1% threshold is not the intended target. None of these actions changes the stored FAIL verdict."
+ },
+ "schema": "ai-experiment-run.v3",
+ "case": "K05",
+ "rep": 1,
+ "model_id": "glm-5.3",
+ "net_retries": 0,
+ "infra_retries": 0
+}

@@ -1,0 +1,177 @@
+{
+ "stage": "S1",
+ "mode": "live",
+ "model": "glm-5.3",
+ "tag": {
+  "phase": "v3",
+  "model_tag": "glm-5.3",
+  "stage": "S1",
+  "case": "K10",
+  "rep": 1,
+  "attempt": 1
+ },
+ "qwen_exit": 0,
+ "wall_ms": 107489,
+ "relay": {
+  "schema_version": "advisory-ai-runtime-relay.v1",
+  "status": "FORWARDED_STRUCTURED_OUTPUT",
+  "request_count": 1,
+  "usage": {
+   "prompt_tokens": 2977,
+   "total_tokens": 12359,
+   "completion_tokens": 9382,
+   "prompt_tokens_details": {
+    "cached_tokens": 1536
+   },
+   "completion_tokens_details": {
+    "reasoning_tokens": 7171
+   }
+  },
+  "latency_ms": 106174,
+  "model_returned": "glm-5.3"
+ },
+ "relay_status": "FORWARDED_STRUCTURED_OUTPUT",
+ "usage": {
+  "prompt_tokens": 2977,
+  "total_tokens": 12359,
+  "completion_tokens": 9382,
+  "prompt_tokens_details": {
+   "cached_tokens": 1536
+  },
+  "completion_tokens_details": {
+   "reasoning_tokens": 7171
+  }
+ },
+ "latency_ms": 106174,
+ "status": "OK",
+ "note": null,
+ "output": {
+  "caveats": [
+   "The deterministic verdict for this run is NO_POLICY. Zero errors and low latencies do not convert it to PASS, and this advice cannot change the verdict; only a configured policy or required capacity can yield PASS or FAIL on a subsequent run or re-analysis.",
+   "The evidence contains aggregate metric summaries only: no time series, no anomaly-test counts, no capacity-bound or load-generator-guard data. Nothing here supports conclusions about capacity, spare headroom, saturation, or load-generator health.",
+   "analysis_coverage is COMPLETE with no reasons and no findings were produced; the absence of findings does not prove stability or the absence of problems.",
+   "Throughput is reported as numerator/denominator ratios; the implied ≈58.3 rps overall and ≈9.7 rps per sampler are arithmetic on those ratios, and the denominator's unit (e.g., window duration) is not explicitly defined in the evidence.",
+   "Error counts are JMeter-reported successes; assertion coverage is not evidenced, so 0 errors does not by itself establish functional correctness of the responses.",
+   "No clock or timestamp relationship is evidenced; any sample-level ordering (e.g., locating the extra home sample) should be preceded by verifying the timestamp source in the raw JTL.",
+   "Overall and per-transaction counts are different scopes; they sum consistently here (437+437+437+438+437+437 = 2,623, matching the overall sample_count), but they are not interchangeable quantities."
+  ],
+  "hypotheses": [
+   {
+    "evidence_refs": [
+     "analysis-result.json#/policy_verdict",
+     "analysis-result.json#/run_validity",
+     "analysis-result.json#/evidence/0"
+    ],
+    "observation": "policy_verdict is NO_POLICY even though every reported scope shows an error_rate_ratio of 0 (0/2623 overall; 0/437–0/438 per sampler), overall latency p95 is 46 ms, and run_validity is VALID.",
+    "possible_explanation": "No latency/error policy (or required capacity) was attached to this analysis, so no thresholds exist against which PASS or FAIL could be decided; the health of the metrics is not what the verdict depends on.",
+    "recommended_check": "Inspect the run/analysis configuration for a defined policy or required capacity. If one was expected, confirm it was attached to run_id jmeter_jtl_csv-b87363cf1d89c0789e174268c6d25cd65abd36f7b623d4ea84fe253ceaabf1e7 and correct the configuration before the next run.",
+    "rank": 1
+   },
+   {
+    "evidence_refs": [
+     "analysis-result.json#/evidence/4",
+     "analysis-result.json#/evidence/0",
+     "analysis-result.json#/evidence/3"
+    ],
+    "observation": "The home sampler reports max latency 904 ms while its p99 is 96 ms; the overall max is also 904 ms, and no other sampler exceeds 444 ms (checkout).",
+    "possible_explanation": "A small number of very slow home responses may inflate the maximum without materially moving the 99th percentile — for example occasional slow backend responses, cold-cache effects, or connection setup on some iterations. This is unproven; the aggregates do not show how many such samples exist.",
+    "recommended_check": "Filter the raw JTL for home samples with latency above a chosen threshold (e.g., 200 ms), count them, and list their timestamps to determine how many tail samples exist and when they occurred.",
+    "rank": 2
+   },
+   {
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0",
+     "analysis-result.json#/evidence/1",
+     "analysis-result.json#/evidence/2",
+     "analysis-result.json#/evidence/3",
+     "analysis-result.json#/evidence/4",
+     "analysis-result.json#/evidence/5",
+     "analysis-result.json#/evidence/6"
+    ],
+    "observation": "Each of the six samplers reports 437 samples except home (438); the per-transaction counts sum to 2,623, exactly matching the overall sample_count of 2,623.",
+    "possible_explanation": "The script may execute all six samplers once per iteration (roughly 437 iterations), with one extra home sample — possibly an initial/warm-up request before the loop or a partially completed final iteration.",
+    "recommended_check": "Inspect the first and last raw JTL records to locate the extra home sample, and compare the observed counts with the thread-group and loop settings in the JMeter test plan.",
+    "rank": 3
+   },
+   {
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0",
+     "analysis-result.json#/evidence/1",
+     "analysis-result.json#/evidence/2",
+     "analysis-result.json#/evidence/3",
+     "analysis-result.json#/evidence/4",
+     "analysis-result.json#/evidence/5",
+     "analysis-result.json#/evidence/6"
+    ],
+    "observation": "error_count is 0 and the error_rate_ratio numerator is 0 in all seven scopes (overall plus all six samplers).",
+    "possible_explanation": "All responses passed JMeter's success criteria (HTTP status and any configured assertions). If the plan contains no content or business assertions, functional failures could still be present but uncounted by this metric.",
+    "recommended_check": "Confirm the test plan includes response assertions, and inspect a sample of raw JTL success flags/response data to verify that the 0-error result reflects functional correctness rather than transport success alone.",
+    "rank": 4
+   },
+   {
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0",
+     "analysis-result.json#/evidence/1",
+     "analysis-result.json#/evidence/2",
+     "analysis-result.json#/evidence/3",
+     "analysis-result.json#/evidence/4",
+     "analysis-result.json#/evidence/5",
+     "analysis-result.json#/evidence/6"
+    ],
+    "observation": "Throughput appears only as aggregate ratios: 2,623,000/44,986 overall and 437,000–438,000/44,986 per sampler; no per-time data is included in the evidence.",
+    "possible_explanation": "The load may have been roughly steady over the run window (implied ≈58.3 rps overall and ≈9.7 rps per sampler from the reported ratios), but aggregate summaries alone cannot show whether throughput or latency ramped, drifted, or degraded during the run.",
+    "recommended_check": "Bucket the raw JTL samples into equal time slices (e.g., 5-second buckets across the implied ≈45-second window) and compare per-slice sample counts and latency percentiles; confirm the actual window length from raw timestamps since the denominator's unit is not explicitly defined in the evidence.",
+    "rank": 5
+   }
+  ],
+  "recommendations": [
+   {
+    "action": "Configure a latency/error policy (and required capacity, if applicable) for this test target, then rerun the test or re-run the analysis so that a PASS or FAIL verdict can be produced.",
+    "evidence_refs": [
+     "analysis-result.json#/policy_verdict",
+     "analysis-result.json#/evidence/0"
+    ],
+    "rationale": "policy_verdict is NO_POLICY; by the product's rules only a configured policy or required capacity yields PASS or FAIL, and this run's clean metrics cannot change that verdict.",
+    "rank": 1
+   },
+   {
+    "action": "Inspect the raw JTL for home-sampler tail samples (e.g., latency above 200 ms), counting them and noting their timestamps, before drawing any conclusion about tail latency.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/4",
+     "analysis-result.json#/evidence/0",
+     "analysis-result.json#/evidence/3"
+    ],
+    "rationale": "home's max (904 ms) is far above its p99 (96 ms) and above every other sampler's max (checkout 444 ms is next); the aggregates do not reveal how many such slow samples exist.",
+    "rank": 2
+   },
+   {
+    "action": "Verify the JMeter test plan's thread-group/loop settings and its response assertions, to explain the 437/438 per-sampler sample mix and to confirm what the 0 error counts actually measure.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0",
+     "analysis-result.json#/evidence/1",
+     "analysis-result.json#/evidence/4",
+     "analysis-result.json#/evidence/6"
+    ],
+    "rationale": "Per-transaction counts are nearly identical and sum to the overall 2,623, suggesting a uniform iteration structure; error semantics depend on which assertions are configured.",
+    "rank": 3
+   },
+   {
+    "action": "If sustained performance matters, inspect time-bucketed latency and throughput computed from the raw JTL for this run.",
+    "evidence_refs": [
+     "analysis-result.json#/analysis_coverage",
+     "analysis-result.json#/evidence/0"
+    ],
+    "rationale": "The included evidence is aggregate-only; COMPLETE coverage and the absence of findings do not demonstrate that performance was stable across the run window.",
+    "rank": 4
+   }
+  ],
+  "schema_version": "ai-advice-output.v1",
+  "summary": "The run (run_id jmeter_jtl_csv-b87363cf...) is VALID with analysis_coverage COMPLETE, but the policy verdict is NO_POLICY: no latency/error policy or required capacity was configured, so no PASS/FAIL determination exists for this run. The evidence consists of seven aggregate metric summaries: 2,623 samples overall with 0 errors (error_rate_ratio 0/2623), overall latency p50=11 ms, p95=46 ms, p99=77 ms, max=904 ms, and a throughput ratio of 2,623,000/44,986 (implied ~58.3 rps by arithmetic on the reported ratio). Six JMeter samplers (add product to cart, cart, checkout, home, product, reset cart) each contributed 437 samples (home 438), summing exactly to the overall 2,623, all with 0 errors. Home is the slowest sampler (p50=27, p95=61, p99=96, max=904 ms), followed by checkout (p99=85, max=444 ms); add product to cart and reset cart are fastest (p50=3 ms). No findings were produced. These healthy aggregates do not change the NO_POLICY verdict; producing a verdict requires configuring a policy or required capacity and re-running or re-analyzing."
+ },
+ "schema": "ai-experiment-run.v3",
+ "case": "K10",
+ "rep": 1,
+ "model_id": "glm-5.3",
+ "net_retries": 0,
+ "infra_retries": 0
+}

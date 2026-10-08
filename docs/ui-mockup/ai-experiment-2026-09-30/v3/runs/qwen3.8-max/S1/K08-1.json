@@ -1,0 +1,306 @@
+{
+ "stage": "S1",
+ "mode": "live",
+ "model": "qwen3.8-max",
+ "tag": {
+  "phase": "v3",
+  "model_tag": "qwen3.8-max",
+  "stage": "S1",
+  "case": "K08",
+  "rep": 1,
+  "attempt": 1
+ },
+ "qwen_exit": 0,
+ "wall_ms": 295843,
+ "relay": {
+  "schema_version": "advisory-ai-runtime-relay.v1",
+  "status": "FORWARDED_STRUCTURED_OUTPUT",
+  "request_count": 1,
+  "usage": {
+   "prompt_tokens": 11525,
+   "total_tokens": 28676,
+   "completion_tokens": 17151,
+   "prompt_tokens_details": {
+    "cached_tokens": 1024,
+    "text_tokens": 11525
+   },
+   "completion_tokens_details": {
+    "reasoning_tokens": 8571,
+    "text_tokens": 17151
+   }
+  },
+  "latency_ms": 294603,
+  "model_returned": "qwen3.8-max"
+ },
+ "relay_status": "FORWARDED_STRUCTURED_OUTPUT",
+ "usage": {
+  "prompt_tokens": 11525,
+  "total_tokens": 28676,
+  "completion_tokens": 17151,
+  "prompt_tokens_details": {
+   "cached_tokens": 1024,
+   "text_tokens": 11525
+  },
+  "completion_tokens_details": {
+   "reasoning_tokens": 8571,
+   "text_tokens": 17151
+  }
+ },
+ "latency_ms": 294603,
+ "status": "OK",
+ "note": null,
+ "output": {
+  "schema_version": "ai-advice-output.v1",
+  "summary": "Run jmeter_jtl_csv-0f9b9ad09038b68eeede81f4d766c176a764f5bcd23509fa49188b313412c2bd is recorded as run_validity VALID with a deterministic policy_verdict of NO_VERDICT, and nothing in this advice changes that. The window policy summary for window run-intersection separates the legs: business_verdict FAIL and resource_verdict NO_VERDICT, combining to verdict NO_VERDICT. The business FAIL comes from rule overall-errors (operator lte, threshold 0.01) with observed error_rate_ratio numerator 2312 / denominator 37841 in scope overall. The resource leg is a resource_policy_check on metrics-direct/paymentservice-cpu-throttle-ratio (effect sla, operator gt, threshold 0.2) whose status is NO_VERDICT with reason MISSING_RESOURCE_CELLS — that is neither a pass nor a fail. A separate resource_threshold_violation finding records 2 cells from 1790632350000 to 1790632380000 with observed_min 0.39467548476 and observed_max 0.56895862409 ratio; the finding and the NO_VERDICT check status are distinct facts and must not be merged.\n\nCoverage is INCOMPLETE with reasons RESOURCE_GAPS, MISSING_RESOURCE_CELLS and SOURCE_ACQUISITION_PARTIAL. The source summary shows the metrics-direct (prometheus) profile PARTIAL: all three paymentservice queries (cpu, memory, cpu-throttle-ratio) returned PARTIAL with reason MISSING_SAMPLES, while the four frontend and checkoutservice queries and the opensearch errors query returned SUCCESS. Correspondingly, each paymentservice resource summary observed 19 of 23 expected cells with missing_cells 4 and longest_gap_cells 4, while frontend and checkoutservice series show 23 of 23 cells, missing_cells 0 and longest_gap_cells 0.\n\nError attribution in the evidence: overall scope records error_count 2312 of sample_count 39099; the checkout transaction records the same 2312 of 6515 samples; the other five transactions (add product to cart, cart, home, product, reset cart) each record error_count 0. The opensearch errors evidence returns one group with count 2312, service frontend, error_type frontend.request_error, message \"request error\", and coverage status COMPLETE with returned_groups 1, sum_other_doc_count 0 and doc_count_error_upper_bound 0. Its timeline has 9 non-zero buckets out of 33 (first_epoch_ms 1790632254832, last_epoch_ms 1790632369669, peak 325 per 15 s / 1300 per minute) with zero counts before and after.\n\nWindows and scopes differ and are not interchangeable: the run window is 1790632187750 to 1790632547764 (360014 ms), the policy evaluation window is 1790632200000 to 1790632545000 (345000 ms, 23 cells at step_ms 15000) after dropping 1 leading cell (12250 ms) and 1 trailing cell (2764 ms), and the errors profile spans 1790632125000 to 1790632620000 (495000 ms), which is why its error_rate_per_minute is 280.242424. The overall-run denominator 39099 and the policy-window denominator 37841 measure different windows.\n\nCritically, resource_binding records clock_alignment \"not_verified_by_core\". The error timestamps come from opensearch and the metric cells from prometheus, so no lead/lag ordering or causal link between the error burst and the paymentservice throttle finding window is supported by this evidence. No capacity bound, stage outcome, or knee evidence appears in the input. Operator actions available here are limited to verifying clocks, restoring complete paymentservice metric coverage and rerunning, configuring missing policies, and inspecting the referenced error documents and per-cell series values.",
+  "hypotheses": [
+   {
+    "rank": 1,
+    "observation": "Overall scope records error_count 2312 with sample_count 39099 (error_rate_ratio 2312/39099). The checkout transaction records error_count 2312 with sample_count 6515 (error_rate_ratio 2312/6515). The other five transactions — add product to cart (6516), cart (6516), home (6518), product (6518), reset cart (6516) — each record error_count 0. The opensearch errors evidence returns exactly one group with count 2312, service frontend, error_type frontend.request_error, message \"request error\", and its coverage block reports status COMPLETE, returned_groups 1, sum_other_doc_count 0, doc_count_error_upper_bound 0. Policy check overall-errors (lte 0.01) has status FAIL with observed numerator 2312 / denominator 37841.",
+    "possible_explanation": "The recorded failures may be concentrated in a single transaction path (checkout) and surfaced under one error type on the frontend service, with no other transaction recording errors in this run. Because the retained sample message is the generic string \"request error\", the specific failure reason behind those 2312 records is not established by this evidence. Equal counts across three different scopes is an observation only; the scopes and windows differ, so this does not by itself prove one shared cause.",
+    "recommended_check": "Open two or three of the referenced error documents (document_id 9B0BD71E-973F-F870-94A2-3718A82D340F / B2EC5652-CB1A-50CF-94F4-3572E0B17065 via the source_url values, index ltv-errors-20260928-214736-resource-memory-c51c58) and read the full stored fields to identify the recorded failure reason. Then inspect the checkout samples flagged as errors in the load input (load_input_sha256 0f9b9ad09038b68eeede81f4d766c176a764f5bcd23509fa49188b313412c2bd) and compare their response codes/messages with those documents.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0",
+     "analysis-result.json#/evidence/3",
+     "analysis-result.json#/evidence/1",
+     "analysis-result.json#/evidence/16",
+     "analysis-result.json#/evidence/19",
+     "analysis-result.json#/findings/1"
+    ]
+   },
+   {
+    "rank": 2,
+    "observation": "The resource_policy_check on metrics-direct/paymentservice-cpu-throttle-ratio has effect sla, operator gt, threshold 0.2 and status NO_VERDICT with reason MISSING_RESOURCE_CELLS. Separately, a resource_threshold_violation finding on the same series records cell_count 2, from_epoch_ms 1790632350000, to_epoch_ms 1790632380000, observed_min 0.39467548476 and observed_max 0.56895862409, unit ratio. The series summary shows observed_cells 19 of expected_cells 23, missing_cells 4, longest_gap_cells 4, reasons [\"RESOURCE_GAPS\"].",
+    "possible_explanation": "Two recorded cells exceed the 0.2 threshold, yet the policy check could not produce a verdict because required cells are absent from the series. The NO_VERDICT status reflects incomplete input, not a determination that throttling was acceptable, and the finding does not convert the check into a FAIL. Which cells are missing, and whether any missing cell also exceeded the threshold, is unknown from this evidence.",
+    "recommended_check": "Retrieve the raw per-cell values of series metrics-direct/paymentservice-cpu-throttle-ratio at step_ms 15000 across 1790632200000–1790632545000 and list the 4 absent cell timestamps plus the location of the longest 4-cell gap relative to the finding window 1790632350000–1790632380000. Then rerun collection after confirming the series is complete so the check can return PASS or FAIL.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/15",
+     "analysis-result.json#/findings/0",
+     "analysis-result.json#/evidence/13"
+    ]
+   },
+   {
+    "rank": 3,
+    "observation": "The source summary reports profile metrics-direct (source_kind prometheus, transport direct) with status PARTIAL: queries paymentservice-cpu, paymentservice-memory and paymentservice-cpu-throttle-ratio are each PARTIAL with reason MISSING_SAMPLES, while frontend-cpu, frontend-memory, checkoutservice-cpu, checkoutservice-memory and the opensearch errors query are SUCCESS. The three paymentservice resource summaries each show observed_cells 19, missing_cells 4, longest_gap_cells 4 and reasons [\"RESOURCE_GAPS\"]; the frontend and checkoutservice summaries each show observed_cells 23, missing_cells 0, longest_gap_cells 4 = 0 and empty reasons. request_count is 8 with retries 0 and total throttle_wait_ms 16007. analysis_coverage is INCOMPLETE with reasons RESOURCE_GAPS, MISSING_RESOURCE_CELLS, SOURCE_ACQUISITION_PARTIAL.",
+    "possible_explanation": "Acquisition for the paymentservice entity may have been interrupted or intermittently unavailable for part of the window (for example an exporter or scrape-target problem), or the underlying series may contain genuine gaps at the source. The evidence records the gap but does not distinguish these possibilities, and the four frontend/checkoutservice series being complete indicates the gap is specific to the paymentservice queries rather than to the whole acquisition.",
+    "recommended_check": "Confirm that the paymentservice metrics target was continuously up and scraped across the snapshot window 1790632125000–1790632620000 (target health / availability series for that entity), then rerun the analysis with confirmed scrape coverage and verify that the metrics-direct profile returns COMPLETE and observed_cells equals expected_cells 23.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/18",
+     "analysis-result.json#/evidence/12",
+     "analysis-result.json#/evidence/13",
+     "analysis-result.json#/evidence/14",
+     "analysis-result.json#/evidence/10",
+     "analysis-result.json#/evidence/8",
+     "analysis-result.json#/analysis_coverage"
+    ]
+   },
+   {
+    "rank": 4,
+    "observation": "resource_binding records clock_alignment \"not_verified_by_core\" with mode run_intersection. The errors evidence (opensearch) reports first_epoch_ms 1790632254832 and last_epoch_ms 1790632369669; the resource_threshold_violation finding (prometheus-derived) reports from_epoch_ms 1790632350000 to to_epoch_ms 1790632380000. The index name for the error documents contains the token \"resource-memory\".",
+    "possible_explanation": "The two intervals overlap when their recorded epoch values are compared numerically, which might suggest a relationship between the paymentservice throttle exceedance and the frontend request errors. However, the two data sets originate from different systems whose clock relationship core has not verified, so no ordering, lead/lag, or causal statement is supported. The index-name token is a label and is not evidence of the run's configured intent.",
+    "recommended_check": "Verify clock synchronization between the host(s) writing to the error index and the host(s) serving the prometheus series (for example measured NTP offset for each) before making any temporal claim. Only after that verification, re-derive the interval alignment and re-test whether the two windows overlap.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/7",
+     "analysis-result.json#/evidence/19",
+     "analysis-result.json#/findings/0"
+    ]
+   },
+   {
+    "rank": 5,
+    "observation": "Within the single opensearch errors source, the timeline has 33 buckets of 15000 ms spanning 1790632125000–1790632620000. Counts are 0 for the first 8 buckets, then 109, 325, 298, 273, 301, 309, 318, 301, 78 across 9 consecutive buckets (1790632245000–1790632380000), then 0 for the remaining 16 buckets. total_errors is 2312 and the window-level error_rate_per_minute is 280.242424, with a peak bucket rate of 1300 per minute.",
+    "possible_explanation": "The recorded errors may be confined to one contiguous sub-interval of the collection window rather than spread across it, with the rate rising from 436 to a peak of 1300 per minute and then falling to 312 before returning to zero. The window-level rate of 280.242424 per minute is an average over the full 495000 ms errors window and understates the peak interval; it is not comparable to the policy-window error_rate_ratio, which uses a different window and denominator.",
+    "recommended_check": "Recompute the per-bucket rates directly from the timeline in the errors evidence and compare them only against other quantities measured over the same 1790632125000–1790632620000 window. To relate the burst to load or resource behaviour, first complete the clock verification in rank 4, then align the burst buckets with the load and metric cells.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/19",
+     "analysis-result.json#/evidence/16",
+     "analysis-result.json#/evidence/7"
+    ]
+   },
+   {
+    "rank": 6,
+    "observation": "The paymentservice memory_bytes summary (aggregation interval_mean, unit bytes) reports min 2523136, q05 11757568, q25 27047936, median 31954944, mean 28113650.52631578947368421052631579, max 32993280, sample_standard_deviation 7952839.1, slope_per_second 10885.95, observed_cells 19 of expected 23, missing_cells 4.",
+    "possible_explanation": "The minimum is roughly an order of magnitude below the median, which may indicate a process or container restart, a cell that averaged over a partially covered 15000 ms interval, or a scrape/collection artifact. Under interval_mean aggregation a cell with few underlying samples can produce an unrepresentative value. This evidence does not distinguish among those possibilities, and the positive slope_per_second is a fitted rate over the observed cells, not a proven trend.",
+    "recommended_check": "List the per-cell memory_bytes values together with the number of underlying samples per cell to see whether the minimum cell covers a full 15000 ms interval, and check paymentservice restart or uptime records inside 1790632200000–1790632545000.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/14",
+     "analysis-result.json#/evidence/18"
+    ]
+   },
+   {
+    "rank": 7,
+    "observation": "The paymentservice cpu_throttle_ratio summary reports min 0, q05 0, q25 0, median 0.002481389578, mean 0.05613383944652631578947368421052632, q75 0.004322133536, q95 0.412103798693, max 0.56895862409, iqr 0.004322133536, mad 0.002481389578, sample_standard_deviation 0.1535727379985620802569455755235113, slope_per_second -0.00008830522029240253248917027657447517, observed_cells 19 of 23. The paymentservice cpu_cores summary for the same entity reports mean 0.01082768421052631578947368421052632 and max 0.016162 cores over the same 19 observed cells.",
+    "possible_explanation": "The distribution is strongly skewed, with a median near zero and a q95 above the 0.2 threshold, which is consistent with elevated throttling confined to a small number of cells rather than sustained across the window. The negative slope_per_second is a fitted value over the observed cells only and, with 4 cells missing, does not describe the whole window. Low recorded cpu_cores values do not establish that the entity had spare CPU, since no capacity limit or required capacity is present in the evidence.",
+    "recommended_check": "Plot or tabulate the 19 observed cpu_throttle_ratio cells in time order alongside the corresponding cpu_cores cells to see whether the high-ratio cells are contiguous and whether they coincide with the 2-cell finding window; treat the 4 missing cells as unknown rather than as zero.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/13",
+     "analysis-result.json#/evidence/12",
+     "analysis-result.json#/findings/0"
+    ]
+   },
+   {
+    "rank": 8,
+    "observation": "metric-summary-overall reports sample_count 39099 and error_rate_ratio denominator 39099, and throughput_rps denominator 360014. The policy check for rule overall-errors reports observed numerator 2312 / denominator 37841 in the same overall scope but for window_id run-intersection. resource_binding shows run_from_epoch_ms 1790632187750 to run_to_epoch_ms 1790632547764 (360014 ms) and evaluation_from_epoch_ms 1790632200000 to evaluation_to_epoch_ms 1790632545000 (345000 ms), with dropped_leading_cells 1 (12250 ms) and dropped_trailing_cells 1 (2764 ms). source_summary reports window_origin auto, auto_window_status DERIVED, requested_margin_ms 60000 and applied_margin_ms 62750.",
+    "possible_explanation": "The evaluation window covers only part of the run (345000 ms of 360014 ms) after margin trimming, so the policy-window denominator 37841 legitimately differs from the overall-run sample_count 39099. The two figures measure different windows and are not inconsistent. The applied margin exceeded the requested margin by 2750 ms, which is recorded as DERIVED from an auto window origin.",
+    "recommended_check": "If the intent is for the policy to cover the full run, adjust the window/margin configuration away from the auto origin (or widen the margin beyond 60000 ms) and rerun; otherwise compare error counts and rates only within a single named window_id and scope. Confirm from the binding record which samples fall outside 1790632200000–1790632545000.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0",
+     "analysis-result.json#/evidence/16",
+     "analysis-result.json#/evidence/7",
+     "analysis-result.json#/evidence/18"
+    ]
+   },
+   {
+    "rank": 9,
+    "observation": "frontend cpu_cores reports mean 0.1845995652173913043478260869565217, max 0.196114 cores with 23 of 23 cells; frontend memory_bytes reports mean 12159154.0869565217391304347826087, max 12812288 bytes; checkoutservice cpu_cores reports mean 0.04170713043478260869565217391304348, max 0.049933 cores with 23 of 23 cells; checkoutservice memory_bytes reports mean 9393552.695652173913043478260869565, max 10014720 bytes. Only two policy checks appear in the evidence: overall-errors (error_rate_ratio) and the paymentservice throttle resource check. No capacity bound, stage, or knee evidence is present in the input.",
+    "possible_explanation": "These are recorded utilization levels for two entities over complete series; with no configured capacity policy, required capacity, or stage outcomes in the evidence there is no bound against which to judge them. Low recorded utilization therefore does not demonstrate spare capacity or headroom, and the absence of a latency or capacity check is not a pass. Knee-based inference is unavailable as a fixed product limitation, so no bound can be read from a knee here.",
+    "recommended_check": "If a capacity or latency conclusion is required, configure the corresponding policy (for example a latency rule and a capacity/required-capacity setting) and rerun so that stages produce verified product outcomes; until then report latency and utilization as unmeasured-against-policy values only.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/10",
+     "analysis-result.json#/evidence/11",
+     "analysis-result.json#/evidence/8",
+     "analysis-result.json#/evidence/9",
+     "analysis-result.json#/evidence/16",
+     "analysis-result.json#/evidence/15"
+    ]
+   },
+   {
+    "rank": 10,
+    "observation": "Overall latency_ms reports p50 13, p95 98, p99 179, max 1006. Per transaction: home p50 95, p95 123, p99 191, max 997; cart p50 87, p95 95, p99 97, max 994; product p50 82, p95 93, p99 96, max 1006; checkout p50 16, p95 97, p99 100, max 965; add product to cart p50 3, p95 85, p99 89, max 904; reset cart p50 2, p95 81, p99 86, max 995. The checkout transaction is also the only transaction with a non-zero error_count (2312 of 6515).",
+    "possible_explanation": "The checkout transaction combines a low p50 (16 ms) with a p99 of 100 ms and the highest error count, which may indicate that a subset of checkout samples terminated early or differently from the rest. Latency percentiles are reported without any latency policy in the evidence, so no latency judgement is available; the pattern is descriptive only and cannot be attributed to a cause from these summaries.",
+    "recommended_check": "Inspect the per-sample latency distribution for checkout in the load input, separating samples recorded as errors from those recorded as successful, and compare the two subsets before drawing any conclusion about checkout latency behaviour.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0",
+     "analysis-result.json#/evidence/3",
+     "analysis-result.json#/evidence/4",
+     "analysis-result.json#/evidence/2",
+     "analysis-result.json#/evidence/5",
+     "analysis-result.json#/evidence/1",
+     "analysis-result.json#/evidence/6"
+    ]
+   }
+  ],
+  "recommendations": [
+   {
+    "rank": 1,
+    "action": "Verify clock synchronization between the host(s) writing the error index (ltv-errors-20260928-214736-resource-memory-c51c58) and the host(s) serving the prometheus series metrics-direct/paymentservice-*, metrics-direct/frontend-* and metrics-direct/checkoutservice-*, recording the measured offset for each, before making any statement about which event came first.",
+    "rationale": "resource_binding records clock_alignment \"not_verified_by_core\". The error burst (first_epoch_ms 1790632254832, last_epoch_ms 1790632369669) and the throttle finding window (1790632350000–1790632380000) come from different sources, so their apparent overlap cannot support lead/lag ordering or a temporal causal hypothesis until the clock relationship is verified.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/7",
+     "analysis-result.json#/evidence/19",
+     "analysis-result.json#/findings/0"
+    ]
+   },
+   {
+    "rank": 2,
+    "action": "Restore complete paymentservice metric coverage — confirm the paymentservice scrape target was continuously available across 1790632125000–1790632620000 — and then rerun so the metrics-direct profile returns COMPLETE and the three paymentservice series reach observed_cells 23 of expected_cells 23.",
+    "rationale": "All three paymentservice queries returned PARTIAL with reason MISSING_SAMPLES, each series shows missing_cells 4 and longest_gap_cells 4, and these gaps drive the recorded reasons RESOURCE_GAPS, MISSING_RESOURCE_CELLS and SOURCE_ACQUISITION_PARTIAL behind the INCOMPLETE coverage status.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/18",
+     "analysis-result.json#/evidence/12",
+     "analysis-result.json#/evidence/13",
+     "analysis-result.json#/evidence/14",
+     "analysis-result.json#/analysis_coverage"
+    ]
+   },
+   {
+    "rank": 3,
+    "action": "Inspect the referenced error documents directly (document_id 9B0BD71E-973F-F870-94A2-3718A82D340F and B2EC5652-CB1A-50CF-94F4-3572E0B17065 via their source_url values) and the checkout samples recorded as errors in the load input, to establish the stored failure reason behind the 2312 records.",
+    "rationale": "The only retained sample message is the generic string \"request error\" with samples_per_group_limit 2, while the single error group holds all 2312 records (coverage COMPLETE, sum_other_doc_count 0). The specific reason for the business FAIL is therefore not visible in this evidence and must be read from the source documents.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/19",
+     "analysis-result.json#/evidence/3",
+     "analysis-result.json#/evidence/16"
+    ]
+   },
+   {
+    "rank": 4,
+    "action": "Treat the deterministic outcome as recorded and unchanged: policy_verdict NO_VERDICT, business_verdict FAIL for rule overall-errors (error_rate_ratio 2312/37841 against threshold 0.01, operator lte), resource_verdict NO_VERDICT for the paymentservice throttle check (reason MISSING_RESOURCE_CELLS). Rerun only after the error source and the metric coverage have been addressed.",
+    "rationale": "The two legs are independent: a rerun that fixes paymentservice metric gaps can allow the resource leg to return PASS or FAIL, but it does not retroactively alter the recorded business FAIL for this analysis, and NO_VERDICT on the resource leg is not a pass.",
+    "evidence_refs": [
+     "analysis-result.json#/policy_verdict",
+     "analysis-result.json#/evidence/17",
+     "analysis-result.json#/evidence/16",
+     "analysis-result.json#/evidence/15",
+     "analysis-result.json#/run_validity"
+    ]
+   },
+   {
+    "rank": 5,
+    "action": "Retrieve the per-cell values of metrics-direct/paymentservice-cpu-throttle-ratio and metrics-direct/paymentservice-memory at step_ms 15000 over 1790632200000–1790632545000, listing the 4 absent cells, the position of the longest 4-cell gap, and the underlying sample count per cell.",
+    "rationale": "The threshold finding covers only 2 cells (1790632350000–1790632380000, observed_min 0.39467548476, observed_max 0.56895862409) while the series summary shows a heavily skewed distribution (median 0.002481389578 vs q95 0.412103798693) and memory shows min 2523136 against median 31954944. Locating the missing cells and per-cell sample counts is required before interpreting either series, and missing cells must be treated as unknown rather than zero.",
+    "evidence_refs": [
+     "analysis-result.json#/findings/0",
+     "analysis-result.json#/evidence/13",
+     "analysis-result.json#/evidence/14",
+     "analysis-result.json#/evidence/18"
+    ]
+   },
+   {
+    "rank": 6,
+    "action": "If latency or capacity conclusions are needed, configure the corresponding policies (a latency rule, and a capacity / required-capacity setting) and rerun; do not read the absence of such checks as a pass.",
+    "rationale": "Only two policy checks appear in the evidence — overall-errors and the paymentservice throttle resource check. Latency percentiles (overall p50 13, p95 98, p99 179, max 1006 ms) and low utilization figures (frontend cpu mean 0.1846, max 0.196114 cores; checkoutservice cpu mean 0.0417, max 0.049933 cores) are recorded without any bound to judge them against, and no capacity bound or stage outcome is present.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0",
+     "analysis-result.json#/evidence/16",
+     "analysis-result.json#/evidence/15",
+     "analysis-result.json#/evidence/10",
+     "analysis-result.json#/evidence/8"
+    ]
+   },
+   {
+    "rank": 7,
+    "action": "Compare counts only within a single scope and window_id. When reviewing this run, keep the overall-run figures (sample_count 39099, error_rate_ratio denominator 39099) separate from the run-intersection policy figures (numerator 2312 / denominator 37841) and from the errors-profile rate (280.242424 per minute over 1790632125000–1790632620000).",
+    "rationale": "The evaluation window covers 345000 ms of a 360014 ms run after dropping 1 leading cell (12250 ms) and 1 trailing cell (2764 ms), and the errors profile spans a wider 495000 ms window. These are different quantities measured over different windows, so a numeric difference between them is expected and is not an inconsistency.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0",
+     "analysis-result.json#/evidence/16",
+     "analysis-result.json#/evidence/19",
+     "analysis-result.json#/evidence/7"
+    ]
+   },
+   {
+    "rank": 8,
+    "action": "If full-run policy coverage is intended, change the window configuration away from the auto origin (window_origin auto, auto_window_status DERIVED, requested_margin_ms 60000, applied_margin_ms 62750) and rerun; otherwise document that the policy evaluates only the derived run-intersection window.",
+    "rationale": "The applied margin exceeded the requested margin and the derived window excluded 1258 samples relative to the overall run scope (39099 vs 37841). Making the window choice explicit keeps the FAIL attributable to a defined window.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/18",
+     "analysis-result.json#/evidence/7",
+     "analysis-result.json#/evidence/16",
+     "analysis-result.json#/evidence/0"
+    ]
+   },
+   {
+    "rank": 9,
+    "action": "Confirm the intended scenario and any fault configuration for this run from the run's own configuration rather than from labels, and record that confirmation alongside the analysis before the paymentservice findings are interpreted.",
+    "rationale": "The error index name contains the token \"resource-memory\" and the paymentservice series show gaps plus a throttle exceedance, but a name is a label only. Establishing the configured intent is a bounded inspection step that avoids inferring scenario design from identifiers.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/19",
+     "analysis-result.json#/evidence/13",
+     "analysis-result.json#/evidence/14",
+     "analysis-result.json#/findings/0"
+    ]
+   }
+  ],
+  "caveats": [
+   "The deterministic verdict is preserved exactly and is not altered by this advice: policy_verdict NO_VERDICT, with business_verdict FAIL and resource_verdict NO_VERDICT for window run-intersection; run_validity is VALID.",
+   "analysis_coverage is INCOMPLETE with reasons RESOURCE_GAPS, MISSING_RESOURCE_CELLS and SOURCE_ACQUISITION_PARTIAL. Conclusions drawn from the paymentservice series are therefore partial.",
+   "resource_binding records clock_alignment \"not_verified_by_core\". No lead/lag ordering, temporal sequence, or causal relationship between the opensearch error records and the prometheus metric cells is supported, even where recorded epoch intervals overlap numerically.",
+   "The resource_policy_check status NO_VERDICT (reason MISSING_RESOURCE_CELLS) is distinct from PASS and from FAIL. A missing policy or missing required cells is not a pass, and the separate resource_threshold_violation finding does not convert that check into a FAIL.",
+   "Each paymentservice series observed 19 of 23 expected cells with 4 missing and a longest gap of 4 cells. Missing cells are unknown values, not zeros, and do not prove the absence of throttling, memory pressure, or any other condition.",
+   "Complete series and modest recorded utilization (frontend cpu max 0.196114 cores, checkoutservice cpu max 0.049933 cores) do not demonstrate spare capacity or headroom; no capacity bound, required capacity, or stage outcome appears in this evidence.",
+   "No capacity bound or knee evidence is present. capacity_knee is null with KNEE_DETECTOR_NOT_IMPLEMENTED as a fixed limitation of the product; this is not a defect of this run and not an operator action item.",
+   "Counts and rates are comparable only within the same scope and the same window. sample_count 39099 (overall run), policy denominator 37841 (run-intersection), per-transaction denominators (6515–6518) and the errors-profile rate 280.242424 per minute (495000 ms window) measure different quantities; the differences are not inconsistencies.",
+   "The equality of error_count 2312 across overall scope, the checkout transaction scope, and the single frontend.request_error group is an observation across different scopes and windows, not proof of a single shared cause.",
+   "Summary statistics use aggregation interval_mean over step_ms 15000 cells, so individual cell values may differ materially from the reported mean, median and percentiles; slope_per_second and split_half_shift are fitted descriptions of observed cells only.",
+   "Only 2 sample error messages were retained (samples_per_group_limit 2) and both read \"request error\"; the underlying failure reason for the 2312 errors is not established by this evidence.",
+   "The reported latency percentiles have no configured latency policy in this analysis, so no latency judgement, pass, or fail is available.",
+   "Evidence is bounded to the recorded window 1790632125000–1790632620000 for sources and 1790632200000–1790632545000 for policy evaluation; conditions outside these windows are not covered. detected_idle_gaps is 0 and longest_idle_gap_ms is null, which does not by itself prove continuous load.",
+   "Operator-actionable steps are limited to verifying clocks, inspecting recorded data, configuring policies, and rerunning. No causal attribution or remediation of an application defect can be asserted from this evidence."
+  ]
+ },
+ "schema": "ai-experiment-run.v3",
+ "case": "K08",
+ "rep": 1,
+ "model_id": "qwen3.8-max",
+ "net_retries": 0,
+ "infra_retries": 0
+}

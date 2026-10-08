@@ -1,0 +1,89 @@
+[
+  {
+    "id": "R002",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T1",
+        "field": "#/recommendations/3",
+        "quote": "obtain a capacity estimate via a knee-detection",
+        "why": "Capacity bounds are computed from verified product outcomes independently of the knee detector, which is a fixed unavailable feature."
+      },
+      {
+        "type": "T3",
+        "field": "#/caveats/6",
+        "quote": "are single-sample maxima",
+        "why": "The evidence reports aggregate maxima but does not state how many samples attained each maximum."
+      }
+    ],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 3,
+    "notes": "The verdict and generator-guard guidance are otherwise well supported, but the knee-detector recommendation is materially wrong."
+  },
+  {
+    "id": "R007",
+    "hard_defect": false,
+    "defects": [],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 5,
+    "notes": "Correctly separates the valid run and business PASS from incomplete capacity coverage and NO_POLICY."
+  },
+  {
+    "id": "R020",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T1",
+        "field": "#/hypotheses/1",
+        "quote": "Implement or enable a knee detector",
+        "why": "KNEE_DETECTOR_NOT_IMPLEMENTED is a fixed product limitation, and a capacity bound does not depend on knee detection."
+      },
+      {
+        "type": "T1",
+        "field": "#/recommendations/2",
+        "quote": "Implement or enable the knee detector ... to establish a verified capacity bound",
+        "why": "This recommends an unavailable product change and incorrectly makes a verified bound dependent on a knee detector."
+      }
+    ],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 2,
+    "notes": "It reports the current state accurately but gives a contract-invalid remediation path."
+  },
+  {
+    "id": "R041",
+    "hard_defect": false,
+    "defects": [],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 5,
+    "notes": "The response is evidence-grounded and preserves the diagnostic-only guard and fixed knee-detector limitation."
+  },
+  {
+    "id": "R050",
+    "hard_defect": false,
+    "defects": [],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 5,
+    "notes": "It gives prioritized, supported operator actions without treating the diagnostic guard as binding or relying on a knee."
+  },
+  {
+    "id": "R058",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T7",
+        "field": "#/summary",
+        "quote": "NO_POLICY means no capacity policy is configured",
+        "why": "NO_POLICY can mean either no applicable policy or no required capacity, so the evidence does not establish that no capacity policy is configured."
+      }
+    ],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 4,
+    "notes": "The operational guidance is otherwise sound, but it overstates the reason for NO_POLICY."
+  }
+]

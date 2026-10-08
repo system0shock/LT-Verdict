@@ -1,0 +1,63 @@
+[
+  {
+    "id": "R048",
+    "hard_defect": false,
+    "defects": [],
+    "required_facts_preserved": false,
+    "missing_facts": ["analysis_coverage=COMPLETE"],
+    "usefulness": 4,
+    "notes": "The advice is grounded in the evidence and gives useful checks, but omits the coverage status."
+  },
+  {
+    "id": "R059",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T8",
+        "field": "#/summary",
+        "quote": "All measured resource series are constant",
+        "why": "The generator active_threads series varies from 3 to 6 in workload-01."
+      },
+      {
+        "type": "T8",
+        "field": "#/recommendations/4/rationale",
+        "quote": "quota_fraction is constant at 1 in both windows (full quota used)",
+        "why": "A quota_fraction of 1 does not establish that the service used its full CPU quota."
+      },
+      {
+        "type": "T2",
+        "field": "#/hypotheses/2/possible_explanation",
+        "quote": "needed active threads is approximately throughput times latency",
+        "why": "The evidence does not establish this relationship, and the reported p95 is not mean request latency."
+      },
+      {
+        "type": "T3",
+        "field": "#/recommendations/2/rationale",
+        "quote": "an exact 50 ms per-request increase",
+        "why": "Differences between window percentiles do not show that individual requests each gained 50 ms."
+      }
+    ],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 2,
+    "notes": "Several useful checks are mixed with unsupported claims about CPU quota use, generator concurrency, and individual request latency."
+  },
+  {
+    "id": "R116",
+    "hard_defect": false,
+    "defects": [],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 4,
+    "notes": "The response preserves the verdict and limits causal claims while proposing concrete checks and controlled reruns."
+  },
+  {
+    "id": "R140",
+    "hard_defect": false,
+    "defects": [],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 4,
+    "notes": "The response accurately separates the passing policy checks from candidate diagnostics and gives verifiable operator actions."
+  }
+]

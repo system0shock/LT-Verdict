@@ -1,0 +1,113 @@
+[
+  {
+    "id": "R030",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T7",
+        "field": "#/caveats/6",
+        "quote": "No required capacity value is present in the input, so no capacity PASS/FAIL comparison against the 237-357 bound was produced",
+        "why": "The evidence does not establish which condition caused the capacity NO_POLICY verdict."
+      }
+    ],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 4,
+    "notes": "The advice is largely accurate and actionable, but it assigns an unproven cause to NO_POLICY."
+  },
+  {
+    "id": "R078",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T1",
+        "field": "#/hypotheses/0/recommended_check",
+        "quote": "enable a knee detector to replace knee_reason KNEE_DETECTOR_NOT_IMPLEMENTED",
+        "why": "The absent knee is a fixed product limitation, not a detector the operator can enable."
+      },
+      {
+        "type": "T3",
+        "field": "#/hypotheses/1/possible_explanation",
+        "quote": "a small number of samples reach 1500 ms",
+        "why": "The aggregates do not reveal how many samples reached the maximum."
+      },
+      {
+        "type": "T7",
+        "field": "#/hypotheses/4/possible_explanation",
+        "quote": "with no defined capacity policy",
+        "why": "NO_POLICY does not establish that no capacity policy was configured."
+      },
+      {
+        "type": "T1",
+        "field": "#/hypotheses/4/recommended_check",
+        "quote": "rerun so the capacity search returns a policy verdict and a knee estimate",
+        "why": "Configuring policy cannot produce a knee while knee detection is unimplemented."
+      },
+      {
+        "type": "T1",
+        "field": "#/recommendations/3/action",
+        "quote": "Implement or enable knee detection and rerun",
+        "why": "Implementing or enabling the product's knee detector is not a test operator action."
+      },
+      {
+        "type": "T7",
+        "field": "#/recommendations/4/action",
+        "quote": "Define an explicit capacity policy (metric, statistic, threshold, tolerance) and rerun so the analysis returns a policy verdict rather than NO_POLICY",
+        "why": "That step alone does not ensure a capacity verdict; required capacity and an applicable stage SLA must also be satisfied."
+      },
+      {
+        "type": "T7",
+        "field": "#/recommendations/4/rationale",
+        "quote": "a missing policy is not a pass and leaves capacity without a verdict",
+        "why": "The response presents a missing policy as the established cause of NO_POLICY."
+      }
+    ],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 2,
+    "notes": "It preserves the reported results but gives several misleading explanations and actions."
+  },
+  {
+    "id": "R110",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T7",
+        "field": "#/summary",
+        "quote": "there is no capacity-level policy",
+        "why": "The NO_POLICY verdict does not prove that no capacity policy was configured."
+      },
+      {
+        "type": "T1",
+        "field": "#/hypotheses/4/recommended_check",
+        "quote": "Implement knee detection",
+        "why": "Knee detection is a fixed product limitation, not an operator action."
+      },
+      {
+        "type": "T7",
+        "field": "#/recommendations/4/action",
+        "quote": "Define an explicit capacity policy (load threshold and criterion) so future runs can emit a capacity-level verdict instead of NO_POLICY",
+        "why": "This configuration step alone does not ensure a verdict when another required capacity or stage SLA condition remains unmet."
+      },
+      {
+        "type": "T7",
+        "field": "#/recommendations/4/rationale",
+        "quote": "no capacity policy exists",
+        "why": "The evidence does not establish that no capacity policy was configured."
+      }
+    ],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 3,
+    "notes": "Its load ladder and telemetry checks are useful, but the policy claims and knee advice mislead."
+  },
+  {
+    "id": "R111",
+    "hard_defect": false,
+    "defects": [],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 5,
+    "notes": "It preserves the verdicts and key numbers while giving supported, verifiable operator actions."
+  }
+]

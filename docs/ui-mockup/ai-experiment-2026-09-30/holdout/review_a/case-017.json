@@ -1,0 +1,149 @@
+[
+  {
+    "id": "R003",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T7",
+        "field": "#/caveats/7",
+        "quote": "Metric summaries are scoped to the sampled window",
+        "why": "The metric summaries contain whole-run counts, while the evaluation window is shorter than the run."
+      }
+    ],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 4,
+    "notes": "The policy and capacity advice is useful, but the final caveat misstates the metric scope."
+  },
+  {
+    "id": "R004",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T7",
+        "field": "#/summary",
+        "quote": "because no capacity/business SLA is configured",
+        "why": "NO_POLICY establishes that no applicable SLA was evaluated, not that none was configured."
+      },
+      {
+        "type": "T8",
+        "field": "#/summary",
+        "quote": "The load generator scorecard is clean on the provided summaries: 0 errors across 2401 samples, latency p50/p95/p99 = 130/140/140 ms",
+        "why": "Those error and latency figures are overall and checkout transaction metrics, not load-generator metrics."
+      },
+      {
+        "type": "T7",
+        "field": "#/hypotheses/0/possible_explanation",
+        "quote": "No capacity or business SLA ... was configured",
+        "why": "The evidence shows no applicable SLA for these windows but does not establish whether one was configured elsewhere."
+      },
+      {
+        "type": "T1",
+        "field": "#/hypotheses/1/possible_explanation",
+        "quote": "does not implement knee detection, so no capacity knee or load bound was produced",
+        "why": "The product computes capacity bounds independently of knee detection."
+      },
+      {
+        "type": "T1",
+        "field": "#/hypotheses/1/recommended_check",
+        "quote": "Run or implement a knee detector",
+        "why": "Knee detection is a fixed product limitation and is not an operator step needed for a bound."
+      },
+      {
+        "type": "T7",
+        "field": "#/hypotheses/5/possible_explanation",
+        "quote": "has not been independently verified against the intended execution plan",
+        "why": "CAPACITY_STAGE_NOT_VERIFIED refers here to the lack of a verified product outcome caused by missing applicable SLAs, not plan verification."
+      },
+      {
+        "type": "T1",
+        "field": "#/recommendations/1/action",
+        "quote": "Add or invoke knee detection",
+        "why": "Implementing or enabling a knee detector is not a valid operator recommendation for obtaining a capacity bound."
+      },
+      {
+        "type": "T7",
+        "field": "#/caveats/1",
+        "quote": "no intermediate or higher loads were tested, so an upper capacity bound cannot be inferred",
+        "why": "A verified failure at one of the listed stages could establish an upper bound without intermediate or higher loads."
+      }
+    ],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 2,
+    "notes": "Useful checks are mixed with false claims about policy configuration, stage verification, and knee detection."
+  },
+  {
+    "id": "R053",
+    "hard_defect": false,
+    "defects": [],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 5,
+    "notes": "It preserves the verdicts and key figures and prioritizes applicable SLA rules and verifiable follow-up checks."
+  },
+  {
+    "id": "R099",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T7",
+        "field": "#/summary",
+        "quote": "stage attainment was not verified",
+        "why": "The unverified stage status concerns product outcomes without applicable SLAs, while achieved load statistics are reported."
+      },
+      {
+        "type": "T7",
+        "field": "#/hypotheses/0/recommended_check",
+        "quote": "within the run window (1767225600000-1767226200000)",
+        "why": "That interval is the evaluation window; the run ends at 1767226200500."
+      },
+      {
+        "type": "T1",
+        "field": "#/hypotheses/2/recommended_check",
+        "quote": "Implement knee detection ... to estimate capacity_knee and establish upper bounds",
+        "why": "Knee detection is a fixed product limitation and is not required to establish a capacity bound."
+      },
+      {
+        "type": "T1",
+        "field": "#/recommendations/0/action",
+        "quote": "and knee criteria",
+        "why": "Knee criteria are not needed for the product to compute a capacity bound from verified stages."
+      },
+      {
+        "type": "T7",
+        "field": "#/recommendations/0/rationale",
+        "quote": "capacity bound_type is INDETERMINATE solely because CAPACITY_SLA_MISSING",
+        "why": "The capacity summary also reports CAPACITY_STAGE_NOT_VERIFIED."
+      },
+      {
+        "type": "T7",
+        "field": "#/recommendations/1/action",
+        "quote": "Complete stage attainment verification ... to resolve CAPACITY_STAGE_NOT_VERIFIED",
+        "why": "The missing applicable SLA prevents a verified product outcome; checking load attainment alone does not resolve that status."
+      },
+      {
+        "type": "T1",
+        "field": "#/recommendations/2/action",
+        "quote": "Implement knee detection ... to estimate capacity_knee and an upper bound",
+        "why": "The operator cannot enable the fixed knee limitation, and an upper bound does not depend on a knee."
+      },
+      {
+        "type": "T8",
+        "field": "#/recommendations/3/rationale",
+        "quote": "The 3x gap between max and p99",
+        "why": "1500 ms is about 10.7 times 140 ms, not three times."
+      },
+      {
+        "type": "T2",
+        "field": "#/caveats/6",
+        "quote": "Sample count (2401), zero error_count, and zero dropped cells describe only the observed 10-minute windows",
+        "why": "The sample and error counts are whole-run metrics, whereas the evaluation window is shorter."
+      }
+    ],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 2,
+    "notes": "Several sound checks are undermined by incorrect knee advice, stage-status explanations, and window attribution."
+  }
+]

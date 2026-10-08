@@ -1,0 +1,72 @@
+[
+  {
+    "id": "R005",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T7",
+        "field": "#/caveats/6",
+        "quote": "Latency and error figures (p95 68ms, 0 errors) cover only the sampled windows; they are not a statement about the entire run",
+        "why": "The evidence also reports p95 68 ms and 0 errors for the whole run."
+      }
+    ],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 4,
+    "notes": "The actions are specific and supported, apart from the incorrect limit placed on the whole-run metrics."
+  },
+  {
+    "id": "R094",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T2",
+        "field": "#/hypotheses/1/observation",
+        "quote": "Both windows report ... error_count 0 with error rate 0/24000",
+        "why": "The 24,000 denominator is for the whole run; the reference and workload windows have denominators of 9,600 and 14,400."
+      }
+    ],
+    "required_facts_preserved": false,
+    "missing_facts": [
+      "Reference-window sample count: 9,600.",
+      "Workload-window sample count: 14,400."
+    ],
+    "usefulness": 4,
+    "notes": "The operator actions are useful, but one observation assigns a whole-run denominator to both windows."
+  },
+  {
+    "id": "R112",
+    "hard_defect": false,
+    "defects": [],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 5,
+    "notes": "It preserves the verdict and scope distinctions and gives prioritized, verifiable actions."
+  },
+  {
+    "id": "R123",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T8",
+        "field": "#/recommendations/2/rationale",
+        "quote": "load variation is required for meaningful policy, anomaly, and association evaluation",
+        "why": "The reference-window policy checks already produced meaningful PASS results at constant load; the workload resource check is unevaluated because cells are missing."
+      },
+      {
+        "type": "T8",
+        "field": "#/caveats/5",
+        "quote": "epoch values are raw timestamps and should not be used to derive durations ... until clocks are verified",
+        "why": "The run and evaluation durations are directly derivable from their stated start and end timestamps; unverified clock alignment limits cross-source timing conclusions."
+      }
+    ],
+    "required_facts_preserved": false,
+    "missing_facts": [
+      "Whole-run sample count: 24,000.",
+      "Reference-window sample count: 9,600.",
+      "Workload-window sample count: 14,400."
+    ],
+    "usefulness": 3,
+    "notes": "Most actions are practical, but it incorrectly makes load variation a condition for policy evaluation and overstates the clock limitation."
+  }
+]

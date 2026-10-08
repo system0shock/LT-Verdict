@@ -1,0 +1,109 @@
+[
+  {
+    "id": "R001",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T8",
+        "field": "#/hypotheses/0/possible_explanation",
+        "quote": "the failures are rare enough",
+        "why": "Checkout reports 3688 errors in 12567 samples, about 29%, so calling the failures rare misstates their prevalence."
+      },
+      {
+        "type": "T3",
+        "field": "#/hypotheses/5/possible_explanation",
+        "quote": "wide, bimodal distribution",
+        "why": "Aggregate statistics do not establish that the memory values have two modes."
+      },
+      {
+        "type": "T5",
+        "field": "#/recommendations/4/rationale",
+        "quote": "the paymentservice memory series shows a restart-like step",
+        "why": "The aggregates provide no per-cell sequence from which a step can be observed."
+      }
+    ],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 2,
+    "notes": "The verdict and investigation priorities are sound, but the asserted memory pattern and failure frequency could misdirect the investigation."
+  },
+  {
+    "id": "R007",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T3",
+        "field": "#/summary",
+        "quote": "paymentservice memory_bytes is bimodal",
+        "why": "The reported quantiles and range do not establish two modes in the underlying values."
+      }
+    ],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 3,
+    "notes": "The operator checks are detailed and mostly supported, but the asserted distribution shape overstates the aggregate evidence."
+  },
+  {
+    "id": "R022",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T8",
+        "field": "#/summary",
+        "quote": "the other five samplers report 0 errors and their sample counts sum to the overall 75411",
+        "why": "The other five sample counts sum to 62844; all six transaction counts sum to 75411."
+      }
+    ],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 4,
+    "notes": "The prominent count-sum error is isolated; the remaining actions are specific and well supported."
+  },
+  {
+    "id": "R028",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T3",
+        "field": "#/recommendations/1/rationale",
+        "quote": "the single 10008 ms tail value",
+        "why": "A reported maximum does not reveal how many samples had that latency."
+      }
+    ],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 4,
+    "notes": "The review offers useful checks but overstates the number of samples at the maximum latency."
+  },
+  {
+    "id": "R039",
+    "hard_defect": false,
+    "defects": [],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 4,
+    "notes": "The advice preserves the verdict and limits its hypotheses, though it is more detailed than operators need."
+  },
+  {
+    "id": "R050",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T8",
+        "field": "#/hypotheses/3/possible_explanation",
+        "quote": "The errors are not explained by CPU or memory saturation of the three monitored services",
+        "why": "Without resource limits or finer measurements, the reported interval means cannot exclude saturation."
+      },
+      {
+        "type": "T1",
+        "field": "#/hypotheses/6/possible_explanation",
+        "quote": "No resource bound is derivable for this run because no resource policy is configured",
+        "why": "Capacity bounds depend on verified product outcomes at stages, independently of a resource policy."
+      }
+    ],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 2,
+    "notes": "The proposed inspections are useful, but the resource conclusion and capacity dependency could mislead an operator."
+  }
+]

@@ -1,0 +1,38 @@
+{
+ "required": [
+  [
+   "violation_observed",
+   [
+    "(?:(?:latency|p95|95th|response[ -]time))[^.\\n]{0,100}(?:(?<![\\d.,])(?:60\u202f031|60,031|60\\ 031|60031)(?![\\d]|[.,]\\d))|(?:(?<![\\d.,])(?:60\u202f031|60,031|60\\ 031|60031)(?![\\d]|[.,]\\d))[^.\\n]{0,100}(?:(?:latency|p95|95th|response[ -]time))"
+   ]
+  ],
+  [
+   "violation_named",
+   [
+    "(?:(?:latency|p95|95th|response[ -]time)|error)[^.\\n]{0,100}(?:(?:fail|violat|exceed|above|breach|over|not met|too (?:high|slow)))|(?:(?:fail|violat|exceed|above|breach|over|not met|too (?:high|slow)))[^.\\n]{0,100}(?:(?:latency|p95|95th|response[ -]time)|error)"
+   ]
+  ],
+  [
+   "mandatory_check_unavailable",
+   [
+    "(?:(?:missing|gap|unavailable|not evaluable|incomplete))[^.\\n]{0,100}(?:(?:cell|resource|database|db|check|series|mandatory))|(?:(?:cell|resource|database|db|check|series|mandatory))[^.\\n]{0,100}(?:(?:missing|gap|unavailable|not evaluable|incomplete))"
+   ]
+  ]
+ ],
+ "forbidden": [
+  "replaces the canonical NO_VERDICT by a PASS or FAIL verdict",
+  "mentions only the violation or only the unavailable check"
+ ],
+ "useful_checks": [
+  "restore the unavailable mandatory evidence (the missing resource cells) and re-run the analysis"
+ ],
+ "source": {
+  "builder": "AdvisoryEvidenceBuilder",
+  "build": "5b5e51c+harness",
+  "source": "a:NT03-missing_db_290s_320s-2000:0",
+  "source_sha256": "c41748048dac7e79b33d6c1a22fb72ba76a075974612218f6914d24e0fee6065",
+  "derivation": [],
+  "evidence_sha256": "6a9dd6b8bcec4841753378038e3a4579bb8b76fadf46e9f6de64196eb1d834bf",
+  "inputs": "a:NT03-missing_db_290s_320s-2000:0, derivation [], analysed through RunBundleStore -> AnalysisService -> AdvisoryEvidenceBuilder by AdvisoryHoldoutCorpusTest on 5b5e51c+harness"
+ }
+}

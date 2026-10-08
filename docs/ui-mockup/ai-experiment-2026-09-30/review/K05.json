@@ -1,0 +1,105 @@
+[
+  {
+    "id": "R012",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T2",
+        "field": "#/hypotheses/0/observation",
+        "quote": "derived facts confirm the transaction sample counts (100) sum to the overall count (100)",
+        "why": "The input has no derived facts, and matching totals across overall and transaction scopes do not establish a shared sample population."
+      },
+      {
+        "type": "T8",
+        "field": "#/hypotheses/1/observation",
+        "quote": "removing or adding a single errored sample changes the pass/fail outcome",
+        "why": "Adding an errored sample leaves the rate above 1%, and removing one from both the error count and denominator also leaves it above 1%."
+      }
+    ],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 3,
+    "notes": "The verdict and investigation steps are useful, but the scope claim and arithmetic could mislead an operator."
+  },
+  {
+    "id": "R022",
+    "hard_defect": false,
+    "defects": [],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 5,
+    "notes": "It preserves the verdict and key numbers while prioritizing checks that can be verified from source records."
+  },
+  {
+    "id": "R026",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T2",
+        "field": "#/hypotheses/1/possible_explanation",
+        "quote": "both recorded errors correspond to the checkout transaction",
+        "why": "Equal aggregate counts across different scopes do not establish that the same samples produced the errors."
+      },
+      {
+        "type": "T4",
+        "field": "#/caveats/1",
+        "quote": "All error counts and the policy check are whole-run values",
+        "why": "The evidence also contains a transaction-scoped checkout error count."
+      }
+    ],
+    "required_facts_preserved": false,
+    "missing_facts": [
+      "run_validity is VALID",
+      "analysis_coverage is COMPLETE"
+    ],
+    "usefulness": 2,
+    "notes": "It gives useful source-record checks but asserts unsupported checkout attribution and omits validity and coverage."
+  },
+  {
+    "id": "R047",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T8",
+        "field": "#/hypotheses/2/possible_explanation",
+        "quote": "remediation is needed on the error source rather than on the run infrastructure",
+        "why": "VALID run status and COMPLETE coverage do not rule out a load or test infrastructure cause for the errors."
+      },
+      {
+        "type": "T8",
+        "field": "#/recommendations/0/rationale",
+        "quote": "removing the error source is the only path to a PASS on a subsequent run",
+        "why": "A subsequent run could pass through variation or an intentional policy correction without a proven error source being removed."
+      }
+    ],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 3,
+    "notes": "The core verdict and sample inspection advice are sound, but its remediation claims are too certain."
+  },
+  {
+    "id": "R062",
+    "hard_defect": false,
+    "defects": [],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 4,
+    "notes": "It preserves the verdict and scope limits and offers practical checks, though a single rerun provides limited evidence about flakiness."
+  },
+  {
+    "id": "R063",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T2",
+        "field": "#/summary",
+        "quote": "the two recorded errors are the entire error population in these scopes",
+        "why": "Matching aggregate counts do not establish that the overall and checkout scopes contain the same two error samples."
+      }
+    ],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 3,
+    "notes": "Its later caveats recognize the scope ambiguity, but the summary makes an unsupported cross-scope identity claim."
+  }
+]

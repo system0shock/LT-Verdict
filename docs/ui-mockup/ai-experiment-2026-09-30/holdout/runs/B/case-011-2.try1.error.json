@@ -1,0 +1,54 @@
+{
+ "stage": "B",
+ "mode": "live",
+ "model": "deepseek-v4-flash-0731",
+ "tag": {
+  "phase": "holdout",
+  "attempt_id": "case-011-2-B-t1",
+  "arm": "B",
+  "stage": null,
+  "case": "case-011",
+  "rep": 2,
+  "try": 1
+ },
+ "retry_policy": "d2",
+ "qwen_exit": 124,
+ "wall_ms": 17789578,
+ "relay": {
+  "schema_version": "advisory-ai-runtime-relay.v1",
+  "status": "BLOCKED_PROVIDER_TRANSPORT",
+  "received_request_count": 1,
+  "forwarded_request_count": 1,
+  "outcomes": [
+   "BLOCKED_PROVIDER_TRANSPORT"
+  ],
+  "retry_refused_reason": null,
+  "first_refused_reason": null,
+  "model_id": "deepseek-v4-flash-0731",
+  "retry_policy": "d2",
+  "requests": [
+   {
+    "ordinal": 1,
+    "forwarded": true,
+    "outcome": "BLOCKED_PROVIDER_TRANSPORT",
+    "detail": "provider_timeout"
+   }
+  ],
+  "usage": null,
+  "latency_ms": 0
+ },
+ "relay_status": "BLOCKED_PROVIDER_TRANSPORT",
+ "usage": null,
+ "latency_ms": 0,
+ "retried": false,
+ "retry_refused_reason": null,
+ "status": "NETWORK",
+ "schema": "ai-experiment-run.holdout.v1",
+ "case": "case-011",
+ "rep": 2,
+ "arm": "B",
+ "try": 1,
+ "attempt_id": "case-011-2-B-t1",
+ "model_id": "deepseek-v4-flash-0731",
+ "prompt_sha256": "3c0f28bee6517c13c5c854615e7d3d59301893d9723880818e4034a32e9133bf"
+}

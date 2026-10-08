@@ -1,0 +1,176 @@
+{
+ "stage": "A",
+ "mode": "live",
+ "model": "deepseek-v4-flash-0731",
+ "tag": {
+  "phase": "holdout",
+  "attempt_id": "case-002-1-A-t1",
+  "arm": "A",
+  "stage": null,
+  "case": "case-002",
+  "rep": 1,
+  "try": 1
+ },
+ "retry_policy": "d2",
+ "qwen_exit": 0,
+ "wall_ms": 88835,
+ "relay": {
+  "schema_version": "advisory-ai-runtime-relay.v1",
+  "status": "FORWARDED_STRUCTURED_OUTPUT",
+  "received_request_count": 1,
+  "forwarded_request_count": 1,
+  "outcomes": [
+   "FORWARDED_STRUCTURED_OUTPUT"
+  ],
+  "retry_refused_reason": null,
+  "first_refused_reason": null,
+  "model_id": "deepseek-v4-flash-0731",
+  "retry_policy": "d2",
+  "requests": [
+   {
+    "ordinal": 1,
+    "forwarded": true,
+    "outcome": "FORWARDED_STRUCTURED_OUTPUT",
+    "provider_status": 200,
+    "latency_ms": 87519,
+    "usage": {
+     "prompt_tokens": 6222,
+     "total_tokens": 15838,
+     "completion_tokens": 9616,
+     "prompt_tokens_details": {
+      "cached_tokens": 1024
+     },
+     "completion_tokens_details": {
+      "reasoning_tokens": 7754
+     }
+    },
+    "model_returned": "deepseek-v4-flash-0731"
+   }
+  ],
+  "usage": {
+   "prompt_tokens": 6222,
+   "completion_tokens": 9616,
+   "total_tokens": 15838
+  },
+  "latency_ms": 87519
+ },
+ "relay_status": "FORWARDED_STRUCTURED_OUTPUT",
+ "usage": {
+  "prompt_tokens": 6222,
+  "completion_tokens": 9616,
+  "total_tokens": 15838
+ },
+ "latency_ms": 87519,
+ "retried": false,
+ "retry_refused_reason": null,
+ "status": "OK",
+ "note": null,
+ "output": {
+  "schema_version": "ai-advice-output.v1",
+  "summary": "A VALID run with COMPLETE coverage. The deterministic policy_verdict is PASS; the capacity estimate is BOUNDED with lower_inclusive 197 users (step-2 verified pass at achieved p05_10s = 197) and upper_exclusive 297 users (step-3 at ~300 users FAILs the latency rule). Per-window latency p95 is 140 ms in stage-1 and stage-2 (PASS vs 250 ms threshold) and 420 ms in stage-3 (FAIL), which is the only policy finding. Overall: 0 errors over 3601 samples, p99 420 ms, max 1500 ms. Load-generator CPU is ~0.43 in every stage (generator-cpu-guard PASS vs 0.85); no server-side resource metrics exist, and clock alignment is marked not_verified_by_core. The stage-3 latency exceedance is treated here as the primary signal, and the verified capacity range as [197, 297) users.",
+  "hypotheses": [
+   {
+    "rank": 1,
+    "observation": "Stage-3 (~300 users) fails the latency policy: window p95 observed 420 ms vs threshold 250 ms (status FAIL), and the window summary verdict is FAIL; stages 1 and 2 (~100 and ~200 users) both recorded p95 140 ms and PASS.",
+    "possible_explanation": "The system appears to cross a capacity point between the verified bound of ~197 users and ~297 users where queueing/contention causes p95 latency to exceed the 250 ms target.",
+    "recommended_check": "Run intermediate load steps between 197 and 297 users (e.g., 220, 250, 280) with per-10s-cell latency capture to locate the crossing point; also inspect per-cell p95/max in stage-3 (overall max is 1500 ms).",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/16",
+     "analysis-result.json#/evidence/17",
+     "analysis-result.json#/evidence/7",
+     "analysis-result.json#/evidence/18"
+    ]
+   },
+   {
+    "rank": 2,
+    "observation": "Load-generator CPU is stable at mean ~0.43 (max 0.45) across all three windows, and the generator-cpu-guard check (threshold 0.85) is PASS in every stage.",
+    "possible_explanation": "Load-generator CPU saturation is unlikely to be the cause of the stage-3 latency rise; the bottleneck may lie in the target system or network, but no target-side resource metrics were collected to confirm this.",
+    "recommended_check": "Add target-side resource telemetry (CPU, memory, I/O, connection counts) aligned to the same load windows and re-run to see which resource saturates between ~200 and ~300 users.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/4",
+     "analysis-result.json#/evidence/8",
+     "analysis-result.json#/evidence/11"
+    ]
+   },
+   {
+    "rank": 3,
+    "observation": "Overall there are 0 errors across 3601 checkout samples, with p95 = p99 = 420 ms and max 1500 ms.",
+    "possible_explanation": "A minority of checkout transactions may experience much larger latency (up to 1500 ms) even though no sampler errors are recorded, suggesting slow downstream calls or timeouts that do not surface as errors.",
+    "recommended_check": "Segment stage-3 samples by latency bucket and by per-10s cell to quantify how many observations exceed 250 ms and what drives the 1500 ms max (e.g., retries, pool exhaustion, third-party calls).",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0",
+     "analysis-result.json#/evidence/1",
+     "analysis-result.json#/evidence/16"
+    ]
+   },
+   {
+    "rank": 4,
+    "observation": "The resource binding records clock_alignment = not_verified_by_core for the run spanning 1767225600000 to 1767226500500 ms.",
+    "possible_explanation": "If clocks across the load generator, target, and analysis snapshots are not aligned, the apparent coupling between rising active users and rising latency in stage-3 could be mis-ordered or mis-timed.",
+    "recommended_check": "Verify clock synchronization/alignment across load generator, target, and analysis before asserting a cause-and-effect or lead/lag relationship between offered load and latency.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/2"
+    ]
+   }
+  ],
+  "recommendations": [
+   {
+    "rank": 1,
+    "action": "Verify clock alignment across the load generator, target metrics collection, and analysis time bases before any temporal interpretation of load-vs-latency.",
+    "rationale": "The resource binding reports clock_alignment = not_verified_by_core; without it, causal or lead/lag ordering between active users and latency cannot be asserted.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/2"
+    ]
+   },
+   {
+    "rank": 2,
+    "action": "Add server-side resource monitoring during re-runs of the same load steps.",
+    "rationale": "Only load-generator CPU is present (0.41-0.45 ratio, below the 0.85 guard with PASS in all stages); the failing resource cannot be located without target-side telemetry.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/4",
+     "analysis-result.json#/evidence/8",
+     "analysis-result.json#/evidence/11"
+    ]
+   },
+   {
+    "rank": 3,
+    "action": "Refine the capacity bound with finer steps between 197 and 297 users (e.g., 220, 250, 280), capturing per-window p95 latency at each step.",
+    "rationale": "The capacity is BOUNDED with lower_inclusive 197 and upper_exclusive 297, capacity_knee is null (KNEE_DETECTOR_NOT_IMPLEMENTED), and stage-3 at ~300 users fails the latency rule; the exact crossing point is unknown.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/18",
+     "analysis-result.json#/evidence/16",
+     "analysis-result.json#/evidence/17"
+    ]
+   },
+   {
+    "rank": 4,
+    "action": "Investigate the tail latency in stage-3: examine per-10s-cell p95/max and the 1500 ms maximum samples, including transaction-level detail for checkout.",
+    "rationale": "Overall p95 = p99 = 420 ms while max is 1500 ms and error_count is 0, so it is unclear whether the exceedance is a sustained plateau or rare spikes; this determines whether the fix targets steady-state sizing or tail/exception paths.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0",
+     "analysis-result.json#/evidence/1",
+     "analysis-result.json#/evidence/16",
+     "analysis-result.json#/evidence/17"
+    ]
+   }
+  ],
+  "caveats": [
+   "No target/server-side resource metrics are present; load-generator CPU ~0.43 does not prove server spare capacity and cannot rule out a server-side bottleneck.",
+   "capacity_knee is null because KNEE_DETECTOR_NOT_IMPLEMENTED; the exact load at which latency degrades between 197 and 297 users is unknown.",
+   "Overall p95 (417 ms) and p99 (420 ms) aggregate all three stages; per-window checks show stage-1/2 p95 = 140 ms, so aggregate values should not be read as applying to every stage.",
+   "clock_alignment = not_verified_by_core; no lead/lag or temporal causal ordering should be inferred from the co-occurrence of higher load and higher latency without clock verification.",
+   "error_count = 0 across 3601 samples does not demonstrate acceptable health at 300 users; the stage-3 latency policy FAIL is the controlling signal.",
+   "Coverage is limited to a single transaction label (checkout); other JMeter samplers, if any, are not represented in these metrics.",
+   "Every window reports resource_verdict = NO_POLICY; this is absence of a resource verdict, not evidence of target resource compliance.",
+   "The run window extends to 1767226500500 ms while the evaluation window ends at 1767226500000 ms (a 500 ms trailing difference); each stage window spans 300000 ms with 30 expected cells."
+  ]
+ },
+ "schema": "ai-experiment-run.holdout.v1",
+ "case": "case-002",
+ "rep": 1,
+ "arm": "A",
+ "try": 1,
+ "attempt_id": "case-002-1-A-t1",
+ "model_id": "deepseek-v4-flash-0731",
+ "prompt_sha256": "69f215a1ad4ae678c82410ba7cf7daf171cd9c7ca0ef4626bba6977db0af4ef7"
+}

@@ -1,0 +1,23 @@
+{
+ "stage": "S0",
+ "mode": "live",
+ "model": "deepseek-v4-flash-0731",
+ "tag": {
+  "phase": "v2-pilot",
+  "stage": "S0",
+  "case": "K03",
+  "rep": 1,
+  "attempt": 1
+ },
+ "qwen_exit": 1,
+ "wall_ms": 4150,
+ "relay": {},
+ "relay_status": null,
+ "usage": null,
+ "latency_ms": null,
+ "status": "RELAY_BOUNDARY",
+ "schema": "ai-experiment-run.v2",
+ "phase": "pilot",
+ "case": "K03",
+ "rep": 1
+}

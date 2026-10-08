@@ -1,0 +1,265 @@
+{
+ "stage": "S0",
+ "mode": "live",
+ "model": "qwen3.8-max",
+ "tag": {
+  "phase": "v3",
+  "model_tag": "qwen3.8-max",
+  "stage": "S0",
+  "case": "K04",
+  "rep": 1,
+  "attempt": 1
+ },
+ "qwen_exit": 0,
+ "wall_ms": 174293,
+ "relay": {
+  "schema_version": "advisory-ai-runtime-relay.v1",
+  "status": "FORWARDED_STRUCTURED_OUTPUT",
+  "request_count": 1,
+  "usage": {
+   "prompt_tokens": 3173,
+   "total_tokens": 11880,
+   "completion_tokens": 8707,
+   "prompt_tokens_details": {
+    "cached_tokens": 1024,
+    "text_tokens": 3173
+   },
+   "completion_tokens_details": {
+    "reasoning_tokens": 3634,
+    "text_tokens": 8707
+   }
+  },
+  "latency_ms": 172901,
+  "model_returned": "qwen3.8-max"
+ },
+ "relay_status": "FORWARDED_STRUCTURED_OUTPUT",
+ "usage": {
+  "prompt_tokens": 3173,
+  "total_tokens": 11880,
+  "completion_tokens": 8707,
+  "prompt_tokens_details": {
+   "cached_tokens": 1024,
+   "text_tokens": 3173
+  },
+  "completion_tokens_details": {
+   "reasoning_tokens": 3634,
+   "text_tokens": 8707
+  }
+ },
+ "latency_ms": 172901,
+ "status": "OK",
+ "note": null,
+ "output": {
+  "schema_version": "ai-advice-output.v1",
+  "summary": "Scope of this advice: one immutable LT Verdict analysis (run_id jmeter_jtl_csv-b87363cf..., analysis_id ff2a9752...). Recorded facts are run_validity = VALID, policy_verdict = PASS, and analysis_coverage = COMPLETE with no reasons; the findings array is empty. Nothing here changes that deterministic verdict.\n\nWhat the evidence states: the overall scope contains 2623 samples with 0 errors (error_rate_ratio numerator 0 / denominator 2623), latency p50 11 ms, p95 46 ms, p99 77 ms, max 904 ms, and throughput_rps expressed as 2623000 / 44986 (ratio ≈ 58.3). Six JMETER_SAMPLER transaction scopes are present — add product to cart (437), cart (437), checkout (437), home (438), product (437), reset cart (437) — whose sample counts sum to the overall 2623 and whose throughput numerators sum to the overall numerator, all sharing the same denominator 44986. All seven metric summaries report error_count 0. Exactly one policy check appears: rule overall-errors, metric error_rate_ratio, operator lte, threshold 0.01, observed 0/2623, status PASS.\n\nMain interpretive points: (1) The PASS verdict is supported by a single error-rate rule; no latency or throughput policy check is present in the evidence, so those dimensions are unadjudicated rather than passing. (2) Percentile summaries and maxima diverge sharply in several scopes — home p99 96 ms vs max 904 ms, checkout p99 85 ms vs max 444 ms, cart p99 49 ms vs max 187 ms, reset cart p95 7 ms vs p99 47 ms — and the overall max (904 ms) is numerically identical to home's max, which is suggestive but not proof that the slowest sample is a home sample. (3) With ~437 samples per label, p99 rests on only a handful of samples, so tail figures carry substantial sampling uncertainty. (4) No time-series, anomaly-detection, correlation, baseline/control run, server-side, or clock-relationship evidence is included; empty findings and 0 errors therefore do not demonstrate stability, correctness of error capture, or spare capacity. (5) throughput_rps is given only as numerator/denominator without unit definitions, so 44986 should not be read as an elapsed-millisecond run window and no absolute rate or duration should be quoted from it.\n\nThe hypotheses and recommendations below are bounded next checks — raw-sample inspection of the extreme elapsed values, confirmation of the JTL error/success column plumbing, review of the policy set for latency and throughput rules, and confirmation of scenario design (threads, loops, ramp-up) — none of which assert a proven cause.",
+  "hypotheses": [
+   {
+    "rank": 1,
+    "observation": "The overall metric summary reports latency max 904 ms against p99 77 ms, and the home transaction scope reports max 904 ms against p99 96 ms and p95 61 ms. The two max values are numerically identical, while no other transaction exceeds 444 ms.",
+    "possible_explanation": "One possible explanation is that the single slowest sample in the run carries the label 'home', so the extreme tail is concentrated in one transaction and one (or very few) samples rather than spread across the workload. A shared numeric value does not establish that these are the same sample, and the evidence contains no timestamp, response code, or thread identifier for the max.",
+    "recommended_check": "Inspect the raw JTL rows for entries whose elapsed value equals 904 ms and record their label, timestamp, responseCode, success flag, threadName, and URL; separately recompute max per label to confirm which scope owns the overall maximum.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0",
+     "analysis-result.json#/evidence/4"
+    ]
+   },
+   {
+    "rank": 2,
+    "observation": "The evidence contains exactly one policy_check: rule_id overall-errors, metric error_rate_ratio, operator lte, threshold 0.01, observed numerator 0 / denominator 2623, status PASS, bound to metric_evidence_id metric-summary-overall. No policy check referencing latency_ms or throughput_rps appears, and the recorded policy_verdict is PASS.",
+    "possible_explanation": "A possible explanation is that the configured policy set adjudicates only overall error rate, so the PASS verdict says nothing about the observed latency tails (overall max 904 ms, p99 77 ms) or throughput. Unadjudicated metrics are distinct from a NO_POLICY status and distinct from a pass; the absence of a latency rule here is not a recorded NO_POLICY entry.",
+    "recommended_check": "Review the policy configuration used for this run and list which metrics have rules; if latency acceptance is intended, define p95/p99 or max thresholds per scope and re-evaluate the same evidence so latency results are explicitly PASS, FAIL, or NO_POLICY.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/7",
+     "analysis-result.json#/policy_verdict",
+     "analysis-result.json#/evidence/0"
+    ]
+   },
+   {
+    "rank": 3,
+    "observation": "The reset cart scope reports p50 3 ms, p95 7 ms, p99 47 ms and max 75 ms; the add product to cart scope reports p50 3 ms, p95 30 ms, p99 72 ms and max 78 ms. In both, p99 is several times p95 (about 6.7x for reset cart, 2.4x for add product to cart) despite low medians.",
+    "possible_explanation": "A possible explanation is that a small minority of samples in these otherwise fast transactions take a slower path — for example first-iteration warmup, connection or session establishment, cache misses, or intermittent contention — producing a step in the upper tail that percentile summaries at p95 do not reveal. The evidence does not identify when or why those samples were slow.",
+    "recommended_check": "Build a per-label histogram and an ordered listing of elapsed values for reset cart and add product to cart, and check whether the samples above p95 cluster near the start of the file's own timestamp column or are scattered; compare their responseCode and success values against the rest.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/6",
+     "analysis-result.json#/evidence/1"
+    ]
+   },
+   {
+    "rank": 4,
+    "observation": "The checkout scope reports 437 samples with 0 errors, p50 13 ms, p95 45 ms, p99 85 ms and max 444 ms — the second-highest maximum of any transaction scope and roughly 5.2x its own p99.",
+    "possible_explanation": "A possible explanation is an intermittent stall in a downstream step invoked by checkout (payment, inventory, or order persistence) affecting a very small number of samples. Alternatively the maximum could reflect load-generator-side effects such as GC pauses or thread scheduling rather than the system under test; the evidence contains no server-side, resource, or dependency metrics to distinguish these.",
+    "recommended_check": "Extract the checkout samples with elapsed above p99 from the raw JTL, note their timestamps, responseCode, responseMessage and latency/connect-time columns, and cross-reference that narrow window against application, database, and load-generator logs if they exist.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/3"
+    ]
+   },
+   {
+    "rank": 5,
+    "observation": "All seven metric summaries report error_count 0 and error_rate_ratio numerator 0, with denominators 2623 overall and 437 or 438 per transaction; the sole policy check on error_rate_ratio therefore observed 0/2623 and returned PASS.",
+    "possible_explanation": "A possible explanation is that no sampled request genuinely failed. A competing explanation is that error determination depends on how the JTL columns were consumed — if the success flag, responseCode, or assertion results were absent, unmapped, or defaulted, failures could be under-counted, and a zero would then reflect the ingestion path rather than the workload. The evidence does not state which columns drove error classification.",
+    "recommended_check": "Confirm the JTL header and the columns the parser treats as authoritative for success, count rows where success is false or responseCode is outside the accepted set, and verify at least one intentionally failing request is classified as an error by the same pipeline.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0",
+     "analysis-result.json#/evidence/7"
+    ]
+   },
+   {
+    "rank": 6,
+    "observation": "Sample counts are near-uniform across the six transaction labels (437 for five labels, 438 for home), summing exactly to the overall 2623; the home scope has one more sample than every other label and also carries the run's highest reported max (904 ms) and the highest p50 (27 ms) and p95 (61 ms).",
+    "possible_explanation": "A possible explanation is a single scenario in which each iteration executes all six transactions once, with one extra home execution at the beginning or end of the run; if that extra or first home sample was served with cold caches or an uninitialized connection pool, it could be the 904 ms outlier. The alternative explanation is simply that home is the heaviest transaction and its extra sample is unrelated to the maximum. Neither is established by the evidence, which contains no ordering information.",
+    "recommended_check": "Review the JMeter test plan (thread groups, loop count, ramp-up, samplers per iteration) to explain the 438 vs 437 difference, then list home samples ordered by the file's own timestamp column and check whether the first or last home sample holds the 904 ms value.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/4",
+     "analysis-result.json#/evidence/0",
+     "analysis-result.json#/evidence/3"
+    ]
+   },
+   {
+    "rank": 7,
+    "observation": "Every throughput_rps object uses the same denominator, 44986, with numerators equal to sample_count multiplied by 1000 (2623000 overall; 437000 or 438000 per transaction). The per-scope numerators sum to the overall numerator, giving ratios of about 58.3 overall and about 9.7 per transaction.",
+    "possible_explanation": "A possible explanation is that one common run-window value serves as the denominator for all scopes, so each per-transaction figure is an average over the whole window rather than over that transaction's active time, and the per-scope rates are additive by construction. Because the field defines only a numerator/denominator pair and states no units, 44986 cannot be assumed to be elapsed milliseconds, and the resulting ratio should not be converted into a run duration.",
+    "recommended_check": "Read the metric specification for throughput_rps to confirm the units and meaning of numerator and denominator, and verify whether the denominator is the full run window or per-scope active time before quoting any absolute rate or duration.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0",
+     "analysis-result.json#/evidence/2"
+    ]
+   },
+   {
+    "rank": 8,
+    "observation": "The findings array is empty, and the evidence set contains only metric_summary and policy_check objects plus three facts (run_validity VALID, policy_verdict PASS, analysis_coverage COMPLETE with an empty reasons list). No time-series, anomaly-detection, correlation, baseline or control-run entries are present, and no count of anomalies tested is recorded.",
+    "possible_explanation": "A possible explanation is that no analyzer produced a threshold-crossing finding for this run. Another is that trend, anomaly, and correlation analyzers were not part of this evidence set at all, in which case the empty findings array reflects what was evaluated rather than what occurred. analysis_coverage = COMPLETE with no reasons describes analysis coverage and does not by itself establish that stability or capacity was measured.",
+    "recommended_check": "Enumerate which analyzers ran for this analysis_id and what each reported (including any anomalies-tested count and per-analyzer coverage reasons), and confirm whether time-series or anomaly detection was in scope before treating the empty findings list as reassurance.",
+    "evidence_refs": [
+     "analysis-result.json#/analysis_coverage",
+     "analysis-result.json#/run_validity",
+     "analysis-result.json#/evidence/0"
+    ]
+   }
+  ],
+  "recommendations": [
+   {
+    "rank": 1,
+    "action": "Report the PASS verdict as scoped to the single overall error-rate rule (lte 0.01, observed 0/2623) and state explicitly that latency and throughput were not adjudicated by any policy check present in this evidence.",
+    "rationale": "Only one policy_check exists and it binds to metric-summary-overall on error_rate_ratio; presenting PASS without that scope would imply latency acceptance that the evidence does not contain. Missing rules are distinct from a recorded NO_POLICY status and distinct from a pass.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/7",
+     "analysis-result.json#/policy_verdict",
+     "analysis-result.json#/evidence/0"
+    ]
+   },
+   {
+    "rank": 2,
+    "action": "Before treating the latency tails as benign, pull the raw JTL rows behind the maxima — 904 ms overall and for home, 444 ms for checkout, 187 ms for cart — and record label, timestamp, responseCode, success, latency and connect-time for each.",
+    "rationale": "Percentile summaries show maxima far above p99 (home max 904 ms vs p99 96 ms; checkout max 444 ms vs p99 85 ms; cart max 187 ms vs p99 49 ms), and the evidence identifies neither the sample nor its outcome, so the tails are currently unexplained rather than proven harmless.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0",
+     "analysis-result.json#/evidence/4",
+     "analysis-result.json#/evidence/3",
+     "analysis-result.json#/evidence/2"
+    ]
+   },
+   {
+    "rank": 3,
+    "action": "Validate the error-capture plumbing for this JTL source: confirm which columns the parser reads as success, count rows with success false or non-accepted responseCode, and run one deliberately failing request through the same pipeline.",
+    "rationale": "All seven scopes report error_count 0 and the only policy rule depends on that count; if error classification were mis-mapped, the PASS verdict would rest on an artifact of ingestion rather than on observed behavior.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0",
+     "analysis-result.json#/evidence/7"
+    ]
+   },
+   {
+    "rank": 4,
+    "action": "Add latency policy rules (for example p95, p99, or max per transaction scope) and, if throughput acceptance matters, a throughput rule, then re-evaluate this same evidence so each metric yields an explicit PASS, FAIL, or NO_POLICY.",
+    "rationale": "The transaction summaries already show meaningful spread (p50 from 3 ms to 27 ms; maxima from 75 ms to 904 ms) that no rule currently evaluates, so tail behavior cannot be gated or tracked run to run.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/1",
+     "analysis-result.json#/evidence/4",
+     "analysis-result.json#/evidence/6",
+     "analysis-result.json#/evidence/7"
+    ]
+   },
+   {
+    "rank": 5,
+    "action": "If p99 or max figures will drive decisions, increase per-transaction sample volume (longer duration, more threads, or more loop iterations) and report tail estimates with their sample counts and an uncertainty range.",
+    "rationale": "Each label has only 437 or 438 samples, so p99 is determined by roughly the top four samples per label; tail percentiles at this sample size are volatile and should not be compared across runs without that qualifier.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/1",
+     "analysis-result.json#/evidence/2",
+     "analysis-result.json#/evidence/3",
+     "analysis-result.json#/evidence/4",
+     "analysis-result.json#/evidence/5",
+     "analysis-result.json#/evidence/6"
+    ]
+   },
+   {
+    "rank": 6,
+    "action": "Confirm the definition and units of the throughput_rps numerator and denominator before publishing any rate or inferring a run duration from the shared denominator 44986.",
+    "rationale": "The field supplies only a numerator/denominator pair with no unit statement; treating 44986 as elapsed milliseconds, or the ratio as a measured requests-per-second capacity, would add an assumption the evidence does not support.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0",
+     "analysis-result.json#/evidence/5"
+    ]
+   },
+   {
+    "rank": 7,
+    "action": "Test the warmup hypothesis directly: order home, reset cart, and add product to cart samples by the file's own timestamp column and compare the elapsed distribution of the first iterations against the remainder, and review the test plan's ramp-up and loop settings to explain the 438 vs 437 home count.",
+    "rationale": "Home holds both the extra sample and the run's largest maximum (904 ms) plus the highest p50 (27 ms) and p95 (61 ms), and reset cart and add product to cart show p99 several times p95 — patterns consistent with, but not proof of, cold-start effects.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/4",
+     "analysis-result.json#/evidence/6",
+     "analysis-result.json#/evidence/1"
+    ]
+   },
+   {
+    "rank": 8,
+    "action": "Enumerate the analyzers that ran for this analysis_id, including any anomalies-tested count and per-analyzer coverage reasons, and record whether time-series, anomaly, correlation, and baseline comparisons were in scope.",
+    "rationale": "Findings are empty and analysis_coverage is COMPLETE with no reasons, but no time-series, anomaly, correlation, or control-run evidence is present; knowing what was actually evaluated is required before the empty findings list is interpreted as absence of a problem.",
+    "evidence_refs": [
+     "analysis-result.json#/analysis_coverage",
+     "analysis-result.json#/run_validity"
+    ]
+   },
+   {
+    "rank": 9,
+    "action": "Capture server-side and load-generator context for the next run — application, database, and GC logs plus load-generator CPU and memory — time-aligned to the JTL window, and verify the clock relationship between the load generator and the system under test before any lead/lag analysis.",
+    "rationale": "This evidence contains only client-side JMeter aggregates, so the outliers at 904 ms, 444 ms, and 187 ms cannot be attributed to the application, a dependency, or the generator; an unverified clock relationship also precludes any temporal ordering claim across sources.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0",
+     "analysis-result.json#/evidence/3",
+     "analysis-result.json#/evidence/4"
+    ]
+   },
+   {
+    "rank": 10,
+    "action": "Establish a baseline by re-running the identical scenario at the same load and compare per-scope sample counts, percentiles, maxima, and throughput ratios run over run before calling any tail a regression or an improvement.",
+    "rationale": "No control or comparison run appears in this evidence, so there is no reference against which the observed 0 errors, the percentile values, or the maxima can be judged as normal or abnormal.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0",
+     "analysis-result.json#/evidence/2",
+     "analysis-result.json#/evidence/3"
+    ]
+   }
+  ],
+  "caveats": [
+   "The deterministic verdict is preserved exactly and is not altered by this advice: run_validity = VALID, policy_verdict = PASS, analysis_coverage = COMPLETE with an empty reasons list, findings = empty.",
+   "PASS rests on one policy check only — rule overall-errors, metric error_rate_ratio, operator lte, threshold 0.01, observed 0/2623. No latency or throughput policy check is present, so those dimensions are unadjudicated; a missing rule is not a NO_POLICY status and is not a pass.",
+   "analysis_coverage = COMPLETE with no reasons describes analysis coverage for this run. It does not imply policy coverage, nor that stability, capacity, or headroom was measured.",
+   "No time-series, trend, anomaly-detection, correlation, baseline, or control-run evidence is included, and no count of anomalies tested is recorded. The empty findings array and 0 errors therefore do not prove stability, low load, spare capacity, or absence of a problem.",
+   "error_count 0 across all seven scopes means no sample was classified as failed under this run's error definition. It does not prove assertions existed, that success/responseCode columns were present and correctly mapped, or that responses were semantically correct.",
+   "throughput_rps is supplied only as a numerator/denominator pair (2623000/44986 overall; 437000 or 438000 per transaction) with no unit definitions. 44986 is not established as elapsed milliseconds, so no run duration, wall-clock window, or absolute capacity figure may be derived from it.",
+   "Latency figures are per-scope aggregates only. Maxima (904 ms overall and for home, 444 ms checkout, 187 ms cart, 108 ms product, 78 ms add product to cart, 75 ms reset cart) carry no sample identity, timestamp, response code, or thread information, so no specific sample, transaction path, or component can be blamed.",
+   "With 437 or 438 samples per transaction label, p99 is driven by roughly the top four samples per label; p99 and max values at this sample size have wide sampling uncertainty and are not comparable across runs without that qualifier.",
+   "The identical 904 ms max in the overall and home scopes is a numeric coincidence in the summaries, not proof that the slowest sample belongs to home; raw-sample verification is required.",
+   "No server-side, dependency, database, JVM/GC, network, or load-generator resource evidence is present, so client-side latency cannot be attributed to the application under test, a downstream service, or the generator itself.",
+   "No clock or timestamp relationship between any sources is given, so no lead/lag ordering, sequence, or temporal causal hypothesis can be supported; clock verification must precede any such analysis.",
+   "Sample counts (437/438) and the exact summation to 2623 describe the composition of this JTL file only. They do not establish the intended scenario design, thread count, ramp-up, or think times, and the extra home sample is unexplained by the evidence.",
+   "All statements labeled possible_explanation are hypotheses, not proven causes; no measured confidence, probability, or effect size is asserted anywhere in this advice because none appears in the input evidence."
+  ]
+ },
+ "schema": "ai-experiment-run.v3",
+ "case": "K04",
+ "rep": 1,
+ "model_id": "qwen3.8-max",
+ "net_retries": 0,
+ "infra_retries": 0
+}

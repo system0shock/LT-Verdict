@@ -1,0 +1,107 @@
+[
+  {
+    "id": "R087",
+    "hard_defect": false,
+    "defects": [],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 5,
+    "notes": "The advice preserves the verdict and key metrics and gives verifiable checks without treating the correlation as a proven effect."
+  },
+  {
+    "id": "R118",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T7",
+        "field": "#/summary",
+        "quote": "no policy is attached to the window",
+        "why": "NO_POLICY establishes that no rule applied to the window, not whether a policy was configured or attached."
+      },
+      {
+        "type": "T8",
+        "field": "#/summary",
+        "quote": "rose from 10 to 60",
+        "why": "The reported minimum and maximum do not establish their time order."
+      },
+      {
+        "type": "T8",
+        "field": "#/hypotheses/0/possible_explanation",
+        "quote": "The series rises steadily across the window",
+        "why": "A positive aggregate slope does not establish a steady rise."
+      },
+      {
+        "type": "T7",
+        "field": "#/hypotheses/5/possible_explanation",
+        "quote": "No policy/SLO is attached to the window",
+        "why": "The evidence establishes a lack of applicable rules, not this configuration state."
+      },
+      {
+        "type": "T8",
+        "field": "#/recommendations/2/rationale",
+        "quote": "The resource series rises from min 10 to max 60",
+        "why": "The summary statistics do not show that the minimum preceded the maximum."
+      },
+      {
+        "type": "T7",
+        "field": "#/caveats/5",
+        "quote": "All conclusions are bounded to the single ~36 s evaluation window",
+        "why": "The response also describes whole-run metrics and run validity, which are not window-only results."
+      }
+    ],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 2,
+    "notes": "Several checks are useful, but the policy configuration and resource trend claims could misdirect an operator."
+  },
+  {
+    "id": "R124",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T7",
+        "field": "#/recommendations/0/action",
+        "quote": "a business policy rule or a resource rule with effect 'sla' — if a PASS/FAIL or capacity verdict is needed, then rerun",
+        "why": "A window policy rule alone does not establish a capacity verdict; capacity also needs applicable stage SLAs and a required capacity."
+      }
+    ],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 4,
+    "notes": "The analysis is otherwise careful, but the capacity verdict recommendation overstates what configuring a window rule can achieve."
+  },
+  {
+    "id": "R127",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T7",
+        "field": "#/summary",
+        "quote": "no business or resource policy was bound to the evaluation window",
+        "why": "NO_POLICY establishes no applicable rule, not the policy binding or configuration state."
+      },
+      {
+        "type": "T2",
+        "field": "#/summary",
+        "quote": "Within the 36 s evaluation window ... the JMeter \"request\" transaction produced 720 samples",
+        "why": "The transaction count is a whole-run aggregate; the window count has no transaction scope."
+      },
+      {
+        "type": "T7",
+        "field": "#/recommendations/0/rationale",
+        "quote": "NO_POLICY because no policy was attached to the window",
+        "why": "The evidence does not establish that lack of attachment as the cause."
+      },
+      {
+        "type": "T7",
+        "field": "#/caveats/1",
+        "quote": "Run validity and COMPLETE coverage apply only to the configured scope and the single 36 s evaluation window",
+        "why": "Run validity and overall analysis coverage are not limited to the evaluation window."
+      }
+    ],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 2,
+    "notes": "The operator checks are mostly actionable, but the response misstates policy cause and assigns whole-run results to the window."
+  }
+]

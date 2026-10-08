@@ -1,0 +1,184 @@
+{
+ "stage": "B",
+ "mode": "live",
+ "model": "deepseek-v4-flash-0731",
+ "tag": {
+  "phase": "holdout",
+  "attempt_id": "case-009-1-B-t1",
+  "arm": "B",
+  "stage": null,
+  "case": "case-009",
+  "rep": 1,
+  "try": 1
+ },
+ "retry_policy": "d2",
+ "qwen_exit": 0,
+ "wall_ms": 88700,
+ "relay": {
+  "schema_version": "advisory-ai-runtime-relay.v1",
+  "status": "FORWARDED_STRUCTURED_OUTPUT",
+  "received_request_count": 1,
+  "forwarded_request_count": 1,
+  "outcomes": [
+   "FORWARDED_STRUCTURED_OUTPUT"
+  ],
+  "retry_refused_reason": null,
+  "first_refused_reason": null,
+  "model_id": "deepseek-v4-flash-0731",
+  "retry_policy": "d2",
+  "requests": [
+   {
+    "ordinal": 1,
+    "forwarded": true,
+    "outcome": "FORWARDED_STRUCTURED_OUTPUT",
+    "provider_status": 200,
+    "latency_ms": 87319,
+    "usage": {
+     "prompt_tokens": 6740,
+     "total_tokens": 16384,
+     "completion_tokens": 9644,
+     "prompt_tokens_details": {
+      "cached_tokens": 1024
+     },
+     "completion_tokens_details": {
+      "reasoning_tokens": 7600
+     }
+    },
+    "model_returned": "deepseek-v4-flash-0731"
+   }
+  ],
+  "usage": {
+   "prompt_tokens": 6740,
+   "completion_tokens": 9644,
+   "total_tokens": 16384
+  },
+  "latency_ms": 87319
+ },
+ "relay_status": "FORWARDED_STRUCTURED_OUTPUT",
+ "usage": {
+  "prompt_tokens": 6740,
+  "completion_tokens": 9644,
+  "total_tokens": 16384
+ },
+ "latency_ms": 87319,
+ "retried": false,
+ "retry_refused_reason": null,
+ "status": "OK",
+ "note": null,
+ "output": {
+  "schema_version": "ai-advice-output.v1",
+  "summary": "Run is VALID with COMPLETE analysis coverage. Capacity summary is BOUNDED: lower_inclusive 197 users (step-2 PASS at verified load 197) and upper_exclusive 297 users (step-3 achieved 297 but the latency policy FAILed). Stage-3 business policy FAIL: p95 response time 420 ms exceeds the 250 ms threshold, after stages 1 and 2 passed at 140 ms. capacity_knee is null because KNEE_DETECTOR_NOT_IMPLEMENTED (a fixed product limitation). Overall policy_verdict is NO_VERDICT; each window's resource_verdict is NO_POLICY; the generator CPU guard (effect diagnostic) PASSed all stages; error_count is 0. Because clock_alignment is not_verified_by_core and no server-side telemetry is present, the cause of the stage-3 latency increase is not established. Advice is to verify clocks, refine the load range with intermediate steps, collect target-side telemetry, and confirm the transaction mix, while preserving the deterministic verdict exactly.",
+  "hypotheses": [
+   {
+    "rank": 1,
+    "observation": "The latency policy PASSed in stage-1 and stage-2 (p95 = 140 ms <= 250 ms) and FAILed in stage-3 (p95 = 420 ms > 250 ms), as achieved load rose from 97 to 197 to 297 users; the stage-3 window summary verdict is FAIL.",
+    "possible_explanation": "The system may approach a saturation or queueing point somewhere between the last verified passing load (197 users, inclusive lower bound) and the failing verified load (297 users), causing a sharp rise in response time. This is a hypothesis; the evidence does not identify which resource or component saturates.",
+    "recommended_check": "Rerun with intermediate load steps between 200 and 300 users (e.g., 220, 250, 275) and inspect per-bin p95 latency plus target-side resource telemetry to locate the load at which p95 crosses 250 ms.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/16",
+     "analysis-result.json#/evidence/17",
+     "analysis-result.json#/evidence/18",
+     "analysis-result.json#/evidence/12",
+     "analysis-result.json#/evidence/14",
+     "analysis-result.json#/evidence/7"
+    ]
+   },
+   {
+    "rank": 2,
+    "observation": "Generator CPU stayed flat (mean 0.43, min 0.41, max 0.45) across all three stages while active users rose from ~98.5 to ~198.6 to ~298.5, and generator-cpu-guard (threshold 0.85, effect diagnostic) returned PASS in every stage.",
+    "possible_explanation": "The load generator was likely not CPU-saturated during the run, so the generator is probably not where the stage-3 latency limit originates; however, absence of generator CPU saturation does not prove that the target system or some other component was not the bottleneck.",
+    "recommended_check": "Collect and inspect server-side (target application/host) resource series during the rerun to test where the latency growth occurs.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/8",
+     "analysis-result.json#/evidence/11",
+     "analysis-result.json#/evidence/7",
+     "analysis-result.json#/evidence/4"
+    ]
+   },
+   {
+    "rank": 3,
+    "observation": "The overall metric summary (sample_count 3601, p50 136, p95 417, p99 420, max 1500, errors 0) exactly matches the checkout transaction metric summary.",
+    "possible_explanation": "The run may have executed only the checkout JMeter sampler, so the capacity bound [197, 297) users reflects only that single transaction mix rather than a broader workload.",
+    "recommended_check": "Inspect the JMeter test plan/JTL source to confirm the intended transaction mix was actually executed; rerun with the intended mix if checkout-only was not intended.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0",
+     "analysis-result.json#/evidence/1"
+    ]
+   },
+   {
+    "rank": 4,
+    "observation": "resource-binding reports clock_alignment 'not_verified_by_core' for the run window (evaluation from epoch 1767225600000 to 1767226500000).",
+    "possible_explanation": "Without verified clock alignment, any apparent ordering between generator, policy, and transaction series cannot support temporal or lead/lag causal conclusions.",
+    "recommended_check": "Verify and align clocks between the load generator and any telemetry or policy-evaluation components before making timing-based claims; after verification, re-run or re-evaluate with aligned timestamps.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/2"
+    ]
+   }
+  ],
+  "recommendations": [
+   {
+    "rank": 1,
+    "action": "Verify clock alignment between the load generator and any telemetry or evaluation components; clock_alignment is currently 'not_verified_by_core'.",
+    "rationale": "No timing-based or causal ordering can be established until clocks are verified; this is a prerequisite for any temporal explanation of the stage-3 latency increase.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/2"
+    ]
+   },
+   {
+    "rank": 2,
+    "action": "Rerun the load test with intermediate steps between 200 and 300 users (e.g., 220, 250, 275) to narrow the capacity bound toward the true crossing point.",
+    "rationale": "Stages 1-2 passed (verified loads 97 and 197) and stage-3 failed (verified load 297), so the limit lies between the inclusive lower bound 197 and the exclusive upper bound 297 users.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/18",
+     "analysis-result.json#/evidence/17",
+     "analysis-result.json#/evidence/15"
+    ]
+   },
+   {
+    "rank": 3,
+    "action": "Collect server-side (target system) telemetry during reruns - CPU, memory, disk/network, queue lengths - alongside the existing load-generator series.",
+    "rationale": "Current evidence contains only load-generator resource summaries; the cause of p95 rising from 140 ms to 420 ms is not attributable to any component without target-side data.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/8",
+     "analysis-result.json#/evidence/16"
+    ]
+   },
+   {
+    "rank": 4,
+    "action": "Inspect the JMeter test plan to confirm the transaction mix and whether running checkout-only was intended.",
+    "rationale": "The overall and checkout metric summaries are identical, which is consistent with all samples being the checkout sampler; the capacity result may not generalize to a mixed workload.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/1",
+     "analysis-result.json#/evidence/0"
+    ]
+   },
+   {
+    "rank": 5,
+    "action": "Keep the generator CPU guard with effect diagnostic during reruns; if a future guard fails, rerun with a healthy generator rather than changing the guard's effect.",
+    "rationale": "The guard is diagnostic by contract and currently PASSes with generator cpu_used max 0.45 against a 0.85 threshold; a failed or missing guard makes a stage unusable for a product bound and never creates an upper bound.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/11",
+     "analysis-result.json#/evidence/8"
+    ]
+   }
+  ],
+  "caveats": [
+   "clock_alignment is 'not_verified_by_core' (analysis-result.json#/evidence/2); temporal ordering and causality are unsupported by the timestamps.",
+   "capacity_knee is null with knee_reason KNEE_DETECTOR_NOT_IMPLEMENTED (analysis-result.json#/evidence/18); this is a fixed product limitation, not a run defect, and no knee-detector step is available for an operator to enable.",
+   "Each window's resource_verdict is NO_POLICY (analysis-result.json#/evidence/13, /evidence/15, /evidence/17); no SLA-effect resource rule applied, which is neither PASS nor FAIL and does not indicate health.",
+   "capacity_summary policy_verdict is NO_VERDICT (facts and analysis-result.json#/evidence/18); no overall capacity pass/fail is reported, so the BOUNDED [197, 297) range should not be presented as a final capacity verdict.",
+   "error_count is 0 across the sampled summaries (analysis-result.json#/evidence/0), but zero errors do not prove the absence of a problem; the stage-3 latency policy FAIL is a deterministic failure.",
+   "Only load-generator telemetry is present; no server-side metrics are in the evidence, so the cause of the latency increase is unidentified.",
+   "Overall-run metric summaries (scope: overall) and per-window policy checks measure different scopes and windows; differing values (e.g., overall p95 417 ms vs stage-3 window p95 420 ms) are not inconsistencies because they are not the same scope.",
+   "throughput_rps is presented as numerator 3601000 and denominator 900500 in analysis-result.json#/evidence/0 and /evidence/1 and is repeated without interpretation."
+  ]
+ },
+ "schema": "ai-experiment-run.holdout.v1",
+ "case": "case-009",
+ "rep": 1,
+ "arm": "B",
+ "try": 1,
+ "attempt_id": "case-009-1-B-t1",
+ "model_id": "deepseek-v4-flash-0731",
+ "prompt_sha256": "3c0f28bee6517c13c5c854615e7d3d59301893d9723880818e4034a32e9133bf"
+}

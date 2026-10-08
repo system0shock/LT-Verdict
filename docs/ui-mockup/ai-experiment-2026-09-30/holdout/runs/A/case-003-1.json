@@ -1,0 +1,250 @@
+{
+ "stage": "A",
+ "mode": "live",
+ "model": "deepseek-v4-flash-0731",
+ "tag": {
+  "phase": "holdout",
+  "attempt_id": "case-003-1-A-t1",
+  "arm": "A",
+  "stage": null,
+  "case": "case-003",
+  "rep": 1,
+  "try": 1
+ },
+ "retry_policy": "d2",
+ "qwen_exit": 0,
+ "wall_ms": 142453,
+ "relay": {
+  "schema_version": "advisory-ai-runtime-relay.v1",
+  "status": "FORWARDED_STRUCTURED_OUTPUT",
+  "received_request_count": 1,
+  "forwarded_request_count": 1,
+  "outcomes": [
+   "FORWARDED_STRUCTURED_OUTPUT"
+  ],
+  "retry_refused_reason": null,
+  "first_refused_reason": null,
+  "model_id": "deepseek-v4-flash-0731",
+  "retry_policy": "d2",
+  "requests": [
+   {
+    "ordinal": 1,
+    "forwarded": true,
+    "outcome": "FORWARDED_STRUCTURED_OUTPUT",
+    "provider_status": 200,
+    "latency_ms": 141005,
+    "usage": {
+     "prompt_tokens": 17404,
+     "total_tokens": 34007,
+     "completion_tokens": 16603,
+     "prompt_tokens_details": {
+      "cached_tokens": 1024
+     },
+     "completion_tokens_details": {
+      "reasoning_tokens": 13075
+     }
+    },
+    "model_returned": "deepseek-v4-flash-0731"
+   }
+  ],
+  "usage": {
+   "prompt_tokens": 17404,
+   "completion_tokens": 16603,
+   "total_tokens": 34007
+  },
+  "latency_ms": 141005
+ },
+ "relay_status": "FORWARDED_STRUCTURED_OUTPUT",
+ "usage": {
+  "prompt_tokens": 17404,
+  "completion_tokens": 16603,
+  "total_tokens": 34007
+ },
+ "latency_ms": 141005,
+ "retried": false,
+ "retry_refused_reason": null,
+ "status": "OK",
+ "note": null,
+ "output": {
+  "schema_version": "ai-advice-output.v1",
+  "summary": "Deterministic policy verdict preserved: overall policy_verdict = NO_VERDICT (run_validity VALID; analysis coverage INCOMPLETE due to RESOURCE_GAPS/MISSING_RESOURCE_CELLS). Per-window: reference window verdict FAIL (business FAIL: response_time_p95 60031 ms > threshold 200 ms; resource FAIL: database-limit on system-db-work ~1.0 > 0.9), workload-01 window NO_VERDICT (business FAIL, resource NO_VERDICT because the database-limit check reports MISSING_RESOURCE_CELLS). Overall: 24,000 samples, 16,009 errors (ratio 16009/24000); reference window 1,609/9,600 errors (~16.8%); workload-01 14,400/14,400 errors (100%). Latencies are pegged near 60 s (p50/p95/p99 all 60,031 ms, max 60,000 ms) with p50 > max, suggesting timeout truncation. Load generator request starts stay constant at 80 rps in both windows while active_threads grow from mean 1,803 (reference, slope 30/s, max 3,588) to mean 4,667 (workload-01, max 4,800). admission-queue depth grows from reference mean 1,556 (max 3,332) to workload-01 mean 4,411 (max 4,544). CPU is low (cpu-work max 0.2 ratio) while db-work is ~1.0 and db-queue stands at ~252.6-254.2 requests. All 9 correlation pairs are INSUFFICIENT_DATA with uncertainty NOT_ESTIMATED (constant load/resource series), so no causal association is established. One CANDIDATE anomaly episode is reported (db-queue, ZERO_MAD, max_abs_delta 1.6 requests). clock_alignment is not_verified_by_core, so temporal/lead-lag interpretations are unsupported.",
+  "hypotheses": [
+   {
+    "rank": 1,
+    "observation": "In the reference window, system-db-work is ~1.0 (mean 0.9999, min 0.99, max 1, unit ratio) and the database-limit policy check (operator gt, threshold 0.9) status is FAIL; db-queue depth mean is 243.7 (median 252.6, max 252.6). In workload-01, db-queue stays ~253.8 (min 252.6, max 254.2).",
+    "possible_explanation": "The database appears saturated (db_work ratio ~1.0) with a standing queue of ~252-254 requests; if requests cannot be served within the ~60 s window they may time out and count as errors. This is a hypothesis only: all correlation pairs are INSUFFICIENT_DATA / NOT_ESTIMATED, so no association was proven.",
+    "recommended_check": "Inspect database-side saturation (connection pool utilization, locks, slow queries, I/O) and correlate per-second db-work/db-queue with error counts using verified-clock timestamps; obtain the error/status-code breakdown from the JTL.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/30",
+     "analysis-result.json#/evidence/14",
+     "analysis-result.json#/evidence/6",
+     "analysis-result.json#/evidence/19",
+     "analysis-result.json#/evidence/37"
+    ]
+   },
+   {
+    "rank": 2,
+    "observation": "Latency policy FAIL in both windows: response_time_p95_ms observed 60031 vs threshold 200 (operator lte). Overall latency summary shows p50/p95/p99 all 60031 ms and max 60000 ms; reference p50 is 36063 ms while workload-01 p50 is 60031 ms.",
+    "possible_explanation": "Latency values concentrated at ~60000/60031 ms with max 60000 ms are consistent with a timeout that truncates measured response times; true latencies beyond the cap are unknown. The overall summary also shows p50 (60031) greater than max (60000), an internal reporting inconsistency.",
+    "recommended_check": "Confirm the load-tool timeout (appears ~60 s) and retrieve the raw per-sample latency and error-code distribution from the JTL; if truncation is confirmed, re-run with a larger/unlimited timeout or capture non-capped percentile data.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/33",
+     "analysis-result.json#/evidence/35",
+     "analysis-result.json#/evidence/0",
+     "analysis-result.json#/evidence/37",
+     "analysis-result.json#/evidence/38"
+    ]
+   },
+   {
+    "rank": 3,
+    "observation": "generator request_starts is constant 80/s in both windows (mean/min/max 80) and target-request-rate is 80/s; meanwhile active_threads mean is 1803.4 in reference (slope 30/s, max 3588.4) and 4667.4 in workload-01 (max 4800).",
+    "possible_explanation": "Active threads accumulate even though start rate is flat at 80/s, consistent with requests staying in-flight for ~60 s (likely timing out) instead of completing; this suggests queued/stuck requests rather than higher applied demand.",
+    "recommended_check": "Plot active threads, request starts, completions, and errors over time; verify whether thread count tracks outstanding timed-out requests and confirm the load generator itself was not the constraint.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/9",
+     "analysis-result.json#/evidence/22",
+     "analysis-result.json#/evidence/10",
+     "analysis-result.json#/evidence/23"
+    ]
+   },
+   {
+    "rank": 4,
+    "observation": "admission-queue depth grows from reference mean 1556.3 (median 1547.4, q95 3153.9, max 3332.4) to workload-01 mean 4411.4 (median 4544, max 4544) while request start rate stays 80/s.",
+    "possible_explanation": "Admission-control queue depth grows during the workload while applied rate is flat, consistent with backpressure building because requests cannot be drained at the expected rate; this may reflect downstream saturation rather than increased demand.",
+    "recommended_check": "Review admission-control configuration and queue limits; determine whether queued requests eventually complete or expire, and whether queue-depth growth tracks the error count over time.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/3",
+     "analysis-result.json#/evidence/16",
+     "analysis-result.json#/evidence/9"
+    ]
+   },
+   {
+    "rank": 5,
+    "observation": "cpu-queue is 0 in both windows; cpu-service-quota is constant 1; system-cpu-work mean is 0.130 (max 0.2) in reference and 0.183 (max 0.2) in workload-01; compute-limit policy check is PASS in both windows.",
+    "possible_explanation": "Compute does not appear saturated, so the latency/error problem is unlikely to be CPU-bound; the more plausible pressure is on the database or the admission/queue path.",
+    "recommended_check": "Confirm the cpu-work series reflects the service under test (not just the host) and check for throttling/limits not visible in these series before ruling CPU out.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/13",
+     "analysis-result.json#/evidence/26",
+     "analysis-result.json#/evidence/4",
+     "analysis-result.json#/evidence/17",
+     "analysis-result.json#/evidence/29",
+     "analysis-result.json#/evidence/31"
+    ]
+   },
+   {
+    "rank": 6,
+    "observation": "The workload-01 db-queue anomaly check reports status CANDIDATE with 1 episode (duration 140000 ms; observed_max 254.2, observed_min 254.2) and reason ZERO_MAD; reference db-queue median is 252.6 with reference MAD 0; the episode reports max_abs_delta 1.6.",
+    "possible_explanation": "Because the reference db-queue series is constant (MAD 0, flagged ZERO_MAD), a change of 1.6 requests is enough to trigger a candidate episode; the episode may be a detection artifact rather than an operationally meaningful queue increase.",
+    "recommended_check": "Review raw db-queue samples around 1704067360000-1704067500000 and apply a materiality threshold above zero for ZERO_MAD reference series; assess whether a 1.6-request shift is significant.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/59",
+     "analysis-result.json#/evidence/19",
+     "analysis-result.json#/evidence/6",
+     "analysis-result.json#/findings/4"
+    ]
+   },
+   {
+    "rank": 7,
+    "observation": "In workload-01, system-db-work has 10 missing cells (observed 170/180, reason RESOURCE_GAPS), the database-limit policy check is NO_VERDICT (reason MISSING_RESOURCE_CELLS), the window resource_verdict is NO_VERDICT, and the overall policy_verdict is NO_VERDICT with analysis coverage INCOMPLETE.",
+    "possible_explanation": "Telemetry gaps prevented evaluation of the database-limit rule during workload-01, making the resource verdict NO_VERDICT even though the observed db-work cells are ~1.0; this is a coverage limitation, not a proven pass or fail.",
+    "recommended_check": "Re-run with complete db-work telemetry so the database-limit policy can be evaluated across the entire workload-01 window, and verify why 10 cells were missing.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/27",
+     "analysis-result.json#/evidence/32",
+     "analysis-result.json#/evidence/36",
+     "analysis-result.json#/evidence/62"
+    ]
+   }
+  ],
+  "recommendations": [
+   {
+    "rank": 1,
+    "action": "Verify and align clocks across load generator, service, admission, and database telemetry; re-check clock_alignment, which is currently not_verified_by_core.",
+    "rationale": "The resource binding records clock_alignment='not_verified_by_core'; without verified clock relationships, ordering or lead/lag causal claims are unsupported.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/2"
+    ]
+   },
+   {
+    "rank": 2,
+    "action": "Investigate the database as the primary suspect: check connection pool utilization, locks, slow queries, and I/O; obtain DB-side metrics for both windows.",
+    "rationale": "system-db-work is ~1.0 with the database-limit policy FAIL in the reference window and a standing db-queue of ~252-254 requests; error counts grow from 1,609 (reference) to 14,400 (workload-01, 100% of samples).",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/30",
+     "analysis-result.json#/evidence/14",
+     "analysis-result.json#/evidence/37",
+     "analysis-result.json#/evidence/38"
+    ]
+   },
+   {
+    "rank": 3,
+    "action": "Determine whether the ~60,000/60,031 ms latency values are measured service times or a load-tool timeout; collect the raw latency histogram and error-code breakdown.",
+    "rationale": "p50/p95/p99 are all 60,031 ms with max 60,000 ms and the p95 policy FAIL is at 60,031 vs 200; if the tool times out at 60 s, observed percentiles are truncated and the true distribution is unknown.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0",
+     "analysis-result.json#/evidence/33",
+     "analysis-result.json#/evidence/35"
+    ]
+   },
+   {
+    "rank": 4,
+    "action": "Re-run the test with stepped or varied target request rates so load and resources show variation; current pairs were all INSUFFICIENT_DATA.",
+    "rationale": "All 9 correlation pairs are INSUFFICIENT_DATA with uncertainty NOT_ESTIMATED (NO_RANK_VARIATION, CONSTANT_CONTROL, LOAD_DELTA_BELOW_MINIMUM), headline selections are UNAVAILABLE, and 0 pairs were evaluable; sensitivity/causality could not be estimated.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/39",
+     "analysis-result.json#/evidence/48",
+     "analysis-result.json#/evidence/62"
+    ]
+   },
+   {
+    "rank": 5,
+    "action": "Restore complete system-db-work collection for workload-01 (10 cells were missing) and re-run the resource policy evaluation.",
+    "rationale": "Missing cells caused the database-limit check and workload-01 resource verdict to be NO_VERDICT (MISSING_RESOURCE_CELLS) and made analysis coverage INCOMPLETE.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/27",
+     "analysis-result.json#/evidence/32",
+     "analysis-result.json#/evidence/36"
+    ]
+   },
+   {
+    "rank": 6,
+    "action": "Validate load-generator health: monitor thread state and socket utilization, and confirm whether active threads plateau at the cap while requests remain in flight.",
+    "rationale": "Active threads reach 4,800 (workload-01) with mean 4,667 while request starts stay at 80/s, suggesting requests are not completing and threads accumulate.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/23",
+     "analysis-result.json#/evidence/22",
+     "analysis-result.json#/evidence/10"
+    ]
+   },
+   {
+    "rank": 7,
+    "action": "Configure minimum materiality or MAD floors for anomaly detection on constant reference series such as db-queue.",
+    "rationale": "The db-queue CANDIDATE episode is based on ZERO_MAD with max_abs_delta 1.6 requests, which may produce false-positive candidates for constant reference series.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/59",
+     "analysis-result.json#/findings/4"
+    ]
+   }
+  ],
+  "caveats": [
+   "Deterministic verdict preserved: overall policy_verdict is NO_VERDICT; per-window reference is FAIL and workload-01 is NO_VERDICT. This advice does not change the verdict.",
+   "Analysis coverage is INCOMPLETE (reasons RESOURCE_GAPS, MISSING_RESOURCE_CELLS); 10 system-db-work cells are missing in workload-01, so resource findings there are not fully supported.",
+   "All correlation pairs are INSUFFICIENT_DATA and headline selections UNAVAILABLE with uncertainty NOT_ESTIMATED; no causal association or sensitivity was estimated, and sensitivity values are null.",
+   "Latency values appear truncated at ~60,000/60,031 ms; the overall summary shows p50 (60031) greater than max (60000), an internal inconsistency that should be reconciled; the true latency distribution beyond the cap is unknown.",
+   "clock_alignment is not_verified_by_core; no lead/lag or temporal ordering between metrics is supported.",
+   "Error type/status-code breakdown is not present in the evidence; only counts are available: overall 16,009/24,000, reference 1,609/9,600, workload-01 14,400/14,400.",
+   "NO_MATERIAL_CHANGE results on admission-queue, cpu-queue, response, and runtime-gc-pause anomaly checks do not prove stability or absence of a problem; the response anomaly check itself references a high latency median (36,335) and MAD (18,008) from the reference window.",
+   "The db-queue episode is CANDIDATE flagged under ZERO_MAD with max_abs_delta 1.6 requests; treat it as a candidate, not a confirmed anomaly.",
+   "Load metrics stayed at a single level (80 rps, constant target rate), so no load-variation experiment is present; flat series, missing samples, and non-material anomaly results do not demonstrate spare capacity or stability."
+  ]
+ },
+ "schema": "ai-experiment-run.holdout.v1",
+ "case": "case-003",
+ "rep": 1,
+ "arm": "A",
+ "try": 1,
+ "attempt_id": "case-003-1-A-t1",
+ "model_id": "deepseek-v4-flash-0731",
+ "prompt_sha256": "69f215a1ad4ae678c82410ba7cf7daf171cd9c7ca0ef4626bba6977db0af4ef7"
+}

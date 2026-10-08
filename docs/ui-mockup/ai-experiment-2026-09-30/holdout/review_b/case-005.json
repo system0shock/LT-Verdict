@@ -1,0 +1,70 @@
+[
+  {
+    "id": "R011",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T1",
+        "field": "#/hypotheses/0/recommended_check",
+        "quote": "enable or implement a knee detector",
+        "why": "The knee detector is a fixed product limitation, cannot be enabled by the operator, and is not needed to compute the bound."
+      },
+      {
+        "type": "T1",
+        "field": "#/recommendations/1/action",
+        "quote": "enable/implement knee detection so the LOWER_BOUND of 297 users can be bounded above",
+        "why": "This incorrectly presents knee detection as an operator action and as necessary for capacity bounding."
+      }
+    ],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 3,
+    "notes": "The response preserves the reported results and offers useful checks, but repeatedly recommends an invalid knee-detector action."
+  },
+  {
+    "id": "R104",
+    "hard_defect": false,
+    "defects": [],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 5,
+    "notes": "The response accurately preserves the verdict and limitations and gives verifiable operator actions."
+  },
+  {
+    "id": "R134",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T1",
+        "field": "#/summary",
+        "quote": "enable or perform knee detection",
+        "why": "Knee detection is a fixed product limitation rather than an operator-controlled remedy."
+      },
+      {
+        "type": "T1",
+        "field": "#/hypotheses/1/recommended_check",
+        "quote": "Enable or implement a knee detector",
+        "why": "The reported bound does not depend on a knee detector, and the operator cannot enable or implement one."
+      },
+      {
+        "type": "T1",
+        "field": "#/recommendations/1/action",
+        "quote": "Enable or implement a knee detector",
+        "why": "This advises an invalid action based on the fixed KNEE_DETECTOR_NOT_IMPLEMENTED product limitation."
+      }
+    ],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 3,
+    "notes": "Most evidence interpretation is sound, but the repeated knee-detector advice could mislead an operator."
+  },
+  {
+    "id": "R149",
+    "hard_defect": false,
+    "defects": [],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 5,
+    "notes": "The response correctly distinguishes the lower bound, diagnostic guard, NO_POLICY resource status, and fixed knee limitation."
+  }
+]

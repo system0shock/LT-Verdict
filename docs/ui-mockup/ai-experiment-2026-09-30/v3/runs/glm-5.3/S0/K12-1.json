@@ -1,0 +1,278 @@
+{
+ "stage": "S0",
+ "mode": "live",
+ "model": "glm-5.3",
+ "tag": {
+  "phase": "v3",
+  "model_tag": "glm-5.3",
+  "stage": "S0",
+  "case": "K12",
+  "rep": 1,
+  "attempt": 1
+ },
+ "qwen_exit": 0,
+ "wall_ms": 265803,
+ "relay": {
+  "schema_version": "advisory-ai-runtime-relay.v1",
+  "status": "FORWARDED_STRUCTURED_OUTPUT",
+  "request_count": 1,
+  "usage": {
+   "prompt_tokens": 12546,
+   "total_tokens": 37445,
+   "completion_tokens": 24899,
+   "prompt_tokens_details": {
+    "cached_tokens": 1024
+   },
+   "completion_tokens_details": {
+    "reasoning_tokens": 20488
+   }
+  },
+  "latency_ms": 264141,
+  "model_returned": "glm-5.3"
+ },
+ "relay_status": "FORWARDED_STRUCTURED_OUTPUT",
+ "usage": {
+  "prompt_tokens": 12546,
+  "total_tokens": 37445,
+  "completion_tokens": 24899,
+  "prompt_tokens_details": {
+   "cached_tokens": 1024
+  },
+  "completion_tokens_details": {
+   "reasoning_tokens": 20488
+  }
+ },
+ "latency_ms": 264141,
+ "status": "OK",
+ "note": null,
+ "output": {
+  "caveats": [
+   "The deterministic verdict for this analysis is NO_POLICY (analysis-result.json#/policy_verdict) and is unchanged by this advisory; per-window business verdicts are PASS and per-window resource verdicts are NO_POLICY - missing policy is not a pass.",
+   "No capacity upper bound or knee exists in this evidence (upper_exclusive null, capacity_knee null, knee_reason KNEE_DETECTOR_NOT_IMPLEMENTED); PASS stages at 5/10/20 users do not establish headroom above 20 users.",
+   "findings is empty and analysis_coverage is COMPLETE with no reasons; an empty findings list does not demonstrate absence of anomalies or problems.",
+   "Clock alignment is 'not_verified_by_core' (analysis-result.json#/evidence/7); no lead/lag or temporal causal claims are made or supportable from this run, and clock verification should precede any correlation work.",
+   "Sampler and overall latency summaries span the full run (run epoch delta 1101178 ms), while capacity stages are evaluated only on three 300000 ms windows; derived arithmetic shows about 20431 of 135434 samples fall outside the evaluation windows, so latency statistics are not window-consistent with the stage verdicts.",
+   "Cross-stage comparisons (frontend CPU flatness, memory growth, sublinear throughput) confound load with elapsed time because the three stages run sequentially in time.",
+   "Derived per-window throughputs (about 100/125/158 samples per second) are computed from stored per-window sample counts and 300000 ms window epoch deltas; they are not stored measurements.",
+   "Only the generator throttle check is policy-evaluated and its effect is 'diagnostic'; checkoutservice/frontend/paymentservice CPU and memory values were not compared to any threshold, and no container or host limits appear in the evidence.",
+   "The throughput_rps fields are stored as numerator/denominator ratios (e.g., 135434000/1101178); the denominator equals the run epoch delta in milliseconds, but the evidence does not explicitly define the denominator's unit, so treat that unit inference with care.",
+   "Zero errors and the observed latency percentiles apply only to the loads tested (at most 20 users) and to this run's duration; they do not predict behavior at higher loads or longer durations.",
+   "Memory figures are stored in bytes with long decimal expansions; values quoted here are abbreviated for readability, and no memory saturation conclusion is supported because no limits are referenced."
+  ],
+  "hypotheses": [
+   {
+    "evidence_refs": [
+     "analysis-result.json#/capacity_summary",
+     "analysis-result.json#/evidence/41"
+    ],
+    "observation": "capacity_summary stores bound_type LOWER_BOUND, lower_inclusive 20, upper_exclusive null, capacity_knee null, and knee_reason KNEE_DETECTOR_NOT_IMPLEMENTED; the only stages present are r2-users5, r2-users10 and r2-users20, each with verdict PASS, achieved load equal to target (observed_min = observed_max = target on the p05_10s statistic, target_tolerance_ratio 0.1) and 30 of 30 expected bins complete.",
+    "possible_explanation": "The load ladder stopped at 20 users and no knee detector ran, so this evidence cannot distinguish a system already near saturation just above 20 users from one with large headroom; both are consistent with the stored data.",
+    "recommended_check": "Run additional stages above 20 users (e.g., 40, then 80) with the same windowing, bin-completeness and error-rate policy rules until a stage FAILs or latency degradation appears, and implement/enable the knee detector before quoting any capacity figure above 20 users.",
+    "rank": 1
+   },
+   {
+    "evidence_refs": [
+     "analysis-result.json#/evidence/35",
+     "analysis-result.json#/evidence/37",
+     "analysis-result.json#/evidence/39",
+     "analysis-result.json#/evidence/36",
+     "analysis-result.json#/evidence/38",
+     "analysis-result.json#/evidence/40",
+     "analysis-result.json#/evidence/9",
+     "analysis-result.json#/evidence/17",
+     "analysis-result.json#/evidence/25"
+    ],
+    "observation": "Per-window error policy checks record sample counts 30049 (r2-users5), 37550 (r2-users10) and 47404 (r2-users20), all with numerator 0; the window summaries bound windows of 300000 ms each (to_epoch_ms minus from_epoch_ms), giving derived throughputs of about 100, 125 and 158 samples per second, while active threads were flat at exactly 5, 10 and 20 (sample_standard_deviation 0).",
+    "possible_explanation": "Per-user request rate may fall as concurrency rises - consistent with a latency- or pacing-bound closed workload (fixed think time) or with an unidentified bottleneck; because the stages run sequentially in time, warm-up or other time-based effects are confounded with load, so no single cause is established.",
+    "recommended_check": "Compute per-stage latency percentiles and per-user request rates from per-window data and compare them against the JMeter pacing/think-time configuration; repeating the 5-user stage at the end of a run (or running a constant-load soak) would separate time from load effects.",
+    "rank": 2
+   },
+   {
+    "evidence_refs": [
+     "analysis-result.json#/evidence/12",
+     "analysis-result.json#/evidence/20",
+     "analysis-result.json#/evidence/28",
+     "analysis-result.json#/evidence/10",
+     "analysis-result.json#/evidence/18",
+     "analysis-result.json#/evidence/26"
+    ],
+    "observation": "frontend cpu_cores interval means are 0.1818516 (r2-users5), 0.1893414666... (r2-users10) and 0.1881028 (r2-users20) cores, with per-window maxima 0.196647, 0.199595 and 0.198735 - essentially unchanged while the user count quadruples; by contrast checkoutservice means rise from 0.04700906... to 0.06844343... cores over the same stages.",
+    "possible_explanation": "Frontend CPU may track requests per second rather than concurrent users (window throughput grew sublinearly), or a roughly constant background cost may dominate its usage, or the interval-mean aggregation may mask per-request changes; the stored summaries alone cannot distinguish these, and the sequential stages confound time with load.",
+    "recommended_check": "Divide each window's frontend CPU mean by that window's derived sample throughput to compare per-request CPU cost across stages, and cross-check the request counts reaching the frontend against an independent metric source.",
+    "rank": 3
+   },
+   {
+    "evidence_refs": [
+     "analysis-result.json#/evidence/15",
+     "analysis-result.json#/evidence/23",
+     "analysis-result.json#/evidence/31",
+     "analysis-result.json#/evidence/13",
+     "analysis-result.json#/evidence/21",
+     "analysis-result.json#/evidence/29",
+     "analysis-result.json#/evidence/7"
+    ],
+    "observation": "paymentservice memory interval means rise across the sequential windows (32281941.3 to 33451281.07 to 33689645.5 bytes) with positive in-window slopes (13281.94, 978.04 and 78.64 bytes per second); frontend memory means rise 11957407.3 to 12937261.5 to 14036150.03 bytes, also with positive slopes; the run epoch delta is 1101178 ms.",
+    "possible_explanation": "Gradual memory growth could be normal warm-up or allocation churn over the roughly 18-minute run, or a slow leak; because stages are sequential, growth may track elapsed time rather than user count, and no container limits appear in the evidence from which to judge proximity to saturation.",
+    "recommended_check": "Run a constant-load soak at a single user count and track the memory slope over a longer horizon, or re-run a 5-user stage after the 20-user stage to see whether memory returns toward the earlier baseline; compare against actual container limits.",
+    "rank": 4
+   },
+   {
+    "evidence_refs": [
+     "analysis-result.json#/evidence/7"
+    ],
+    "observation": "resource_binding records clock_alignment 'not_verified_by_core' with dropped_leading_cells 0, dropped_trailing_cells 0, dropped_leading_millis 0 and dropped_trailing_millis 0; the snapshot window (1790635630000 to 1790636860000) brackets the evaluation window (1790635740000 to 1790636780000) and the run window (1790635692953 to 1790636794131).",
+    "possible_explanation": "The relationship between the JMeter clock and the resource-metrics clock is unknown; apparent coincidences between latency behavior and resource series could equally be clock skew or offset, so temporal ordering between load-latency events and resource events cannot be supported from this run.",
+    "recommended_check": "Verify clock synchronization between the generator and the metrics source (e.g., compare NTP offsets or inject a shared timestamp probe) before attempting any lead/lag ordering or correlation analysis on this data.",
+    "rank": 5
+   },
+   {
+    "evidence_refs": [
+     "analysis-result.json#/policy_verdict",
+     "analysis-result.json#/evidence/36",
+     "analysis-result.json#/evidence/38",
+     "analysis-result.json#/evidence/40",
+     "analysis-result.json#/evidence/32",
+     "analysis-result.json#/evidence/33",
+     "analysis-result.json#/evidence/34",
+     "analysis-result.json#/evidence/0"
+    ],
+    "observation": "The top-level policy_verdict is NO_POLICY and each window_policy_summary records resource_verdict NO_POLICY with business_verdict PASS; the only resource checks present are diagnostic generator-cpu-throttle-ratio checks (operator gt, threshold 0.2, status PASS in all three windows); no policy checks exist for checkoutservice/frontend/paymentservice CPU or memory, and no latency (p95/p99) policy checks exist.",
+    "possible_explanation": "Resource and latency thresholds may simply not be configured for this analysis, so the service resource series were never evaluated against limits and latency percentiles were never policy-checked; missing policy is not a pass.",
+    "recommended_check": "Add resource policies (CPU and memory thresholds for the measured services) and latency/SLO policy checks to the analysis configuration and re-run to obtain explicit resource and latency verdicts alongside the existing error-rate rule.",
+    "rank": 6
+   },
+   {
+    "evidence_refs": [
+     "analysis-result.json#/evidence/4",
+     "analysis-result.json#/evidence/5",
+     "analysis-result.json#/evidence/2",
+     "analysis-result.json#/evidence/1",
+     "analysis-result.json#/evidence/6",
+     "analysis-result.json#/evidence/0"
+    ],
+    "observation": "Among the six sampler summaries, 'home' has the highest tail latency (p50 127 ms, p95 294 ms, p99 395 ms, max 1125 ms) versus 'product' (p99 294 ms) and 'cart' (p99 270 ms); 'add product to cart' and 'reset cart' have p50 of 5 and 3 ms; all six samplers report 0 errors, and the overall summary gives p99 298 ms.",
+    "possible_explanation": "The home page may perform more work per request (e.g., aggregation across services) or be less cache-friendly than other pages; these are run-overall summaries spanning the whole run, so the load dependence of the home tail cannot be assessed from this evidence.",
+    "recommended_check": "Request per-window, per-sampler latency statistics and compare 'home' percentiles across the 5-, 10- and 20-user stages to see whether its tail degrades as load rises; if it does, profile the home request path first.",
+    "rank": 7
+   },
+   {
+    "evidence_refs": [
+     "analysis-result.json#/evidence/8",
+     "analysis-result.json#/evidence/16",
+     "analysis-result.json#/evidence/24",
+     "analysis-result.json#/evidence/32",
+     "analysis-result.json#/evidence/33",
+     "analysis-result.json#/evidence/34"
+    ],
+    "observation": "generator cfs_throttled_period_ratio has median 0 in every window but nonzero maxima (0.069306930693 at r2-users5, 0.06 at r2-users10, 0.079207920792 at r2-users20) and small means (about 0.0037, 0.0043 and 0.0030); the diagnostic policy check (operator gt, threshold 0.2) is PASS in all three windows.",
+    "possible_explanation": "Transient CPU throttling on the generator could inject latency noise into measurements; it currently stays well below the 0.2 threshold and no impact on the recorded results is established.",
+    "recommended_check": "When extending the ladder above 20 users, watch per-bin throttle ratios; if maxima approach 0.2, raise the generator's CPU allocation before attributing latency changes to the system under test.",
+    "rank": 8
+   }
+  ],
+  "recommendations": [
+   {
+    "action": "Report capacity from this run strictly as 'verified lower bound: 20 concurrent users' and avoid any statement about capacity above 20 users.",
+    "evidence_refs": [
+     "analysis-result.json#/capacity_summary",
+     "analysis-result.json#/evidence/41"
+    ],
+    "rationale": "capacity_summary stores bound_type LOWER_BOUND with lower_inclusive 20, upper_exclusive null, capacity_knee null and knee_reason KNEE_DETECTOR_NOT_IMPLEMENTED; stage PASS verdicts cover only 5, 10 and 20 users.",
+    "rank": 1
+   },
+   {
+    "action": "Extend the load ladder above 20 users (e.g., 40, then 80) with identical windows, bin-completeness rules and the error-rate policy until a stage fails, and implement/enable knee detection to derive an upper bound.",
+    "evidence_refs": [
+     "analysis-result.json#/capacity_summary",
+     "analysis-result.json#/evidence/41",
+     "analysis-result.json#/evidence/35",
+     "analysis-result.json#/evidence/37",
+     "analysis-result.json#/evidence/39"
+    ],
+    "rationale": "Only loads at or below 20 users were exercised; zero errors and the observed percentiles at these loads do not extrapolate to higher loads.",
+    "rank": 2
+   },
+   {
+    "action": "Verify clock alignment between the JMeter generator and the resource-metrics source before any latency-vs-resource correlation, lead/lag or event-ordering analysis of this run.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/7"
+    ],
+    "rationale": "resource_binding records clock_alignment 'not_verified_by_core'; an unverified clock relationship cannot support temporal ordering hypotheses.",
+    "rank": 3
+   },
+   {
+    "action": "Configure resource policies (CPU and memory thresholds for checkoutservice, frontend and paymentservice) and latency policy checks (e.g., p95/p99 milliseconds) so future analyses yield explicit resource and latency verdicts rather than NO_POLICY.",
+    "evidence_refs": [
+     "analysis-result.json#/policy_verdict",
+     "analysis-result.json#/evidence/36",
+     "analysis-result.json#/evidence/38",
+     "analysis-result.json#/evidence/40",
+     "analysis-result.json#/evidence/0"
+    ],
+    "rationale": "Window resource verdicts and the top-level policy verdict are NO_POLICY; the only checks present are the error-rate rule (lte 0.01) and a diagnostic generator throttle rule, so resource and latency behavior was never policy-evaluated.",
+    "rank": 4
+   },
+   {
+    "action": "Emit per-window, per-sampler latency statistics (p50/p95/p99/max for each load stage) in future runs.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/1",
+     "analysis-result.json#/evidence/2",
+     "analysis-result.json#/evidence/3",
+     "analysis-result.json#/evidence/4",
+     "analysis-result.json#/evidence/5",
+     "analysis-result.json#/evidence/6",
+     "analysis-result.json#/evidence/7"
+    ],
+    "rationale": "Current sampler summaries are run-overall across the full run (run epoch delta 1101178 ms), so whether latency degrades between the 5-, 10- and 20-user stages cannot be determined from this evidence.",
+    "rank": 5
+   },
+   {
+    "action": "De-confound time from load: repeat a low-load stage at the end of the run, or run a constant-load soak, and track memory slopes over a longer horizon.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/15",
+     "analysis-result.json#/evidence/23",
+     "analysis-result.json#/evidence/31",
+     "analysis-result.json#/evidence/13",
+     "analysis-result.json#/evidence/21",
+     "analysis-result.json#/evidence/29"
+    ],
+    "rationale": "paymentservice and frontend memory means rise across the sequential windows and within windows (positive slope_per_second values), which could reflect warm-up or growth over elapsed time rather than user count.",
+    "rank": 6
+   },
+   {
+    "action": "Review the JMeter pacing/think-time configuration and compute per-user request rates per stage before interpreting the sublinear throughput growth as saturation.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/35",
+     "analysis-result.json#/evidence/37",
+     "analysis-result.json#/evidence/39",
+     "analysis-result.json#/evidence/9",
+     "analysis-result.json#/evidence/17",
+     "analysis-result.json#/evidence/25"
+    ],
+    "rationale": "Derived window throughputs (about 100, 125 and 158 samples per second at 5, 10 and 20 users) grow far less than the user count; intended pacing is one candidate explanation that should be ruled out first.",
+    "rank": 7
+   },
+   {
+    "action": "Monitor the per-bin generator CFS throttle ratio while extending load above 20 users, and raise the generator's CPU allocation if maxima approach the 0.2 diagnostic threshold.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/8",
+     "analysis-result.json#/evidence/16",
+     "analysis-result.json#/evidence/24",
+     "analysis-result.json#/evidence/32",
+     "analysis-result.json#/evidence/33",
+     "analysis-result.json#/evidence/34"
+    ],
+    "rationale": "Throttle maxima are already nonzero (up to 0.079207920792) though below the 0.2 threshold; generator-side throttling could contaminate latency measurements at higher loads.",
+    "rank": 8
+   }
+  ],
+  "schema_version": "ai-advice-output.v1",
+  "summary": "Immutable LT Verdict analysis eb507225b0f0ceeede4a77b536e7fcc37611ca3384fbf05e5bd237fbd86d282f (run jmeter_jtl_csv-3360734d7d8937c4cc768bcd37a5379e01325298227eb8646370a32215bc3e84) is VALID with COMPLETE analysis coverage and an empty findings list. The deterministic verdict is NO_POLICY (analysis-result.json#/policy_verdict) and is unchanged by this advisory. Capacity is reported only as a verified LOWER_BOUND: lower_inclusive 20 users, upper_exclusive null, capacity_knee null with knee_reason KNEE_DETECTOR_NOT_IMPLEMENTED. Stages r2-users5, r2-users10 and r2-users20 all PASS (achieved load equals target on the p05_10s statistic, 30 of 30 expected bins complete, per-window error-rate policy lte 0.01 passed with 0 errors). Overall metrics: 135434 samples, 0 errors, p50 93 ms, p95 202 ms, p99 298 ms, max 1200 ms. Resource evidence is descriptive for checkoutservice/frontend/paymentservice (mean CPU at 20 users about 0.068, 0.188 and 0.014 cores; memory stored in bytes) plus a diagnostic generator CFS-throttle check (max 0.079207920792 vs threshold 0.2, PASS). Clock alignment is 'not_verified_by_core', so no lead/lag or temporal-causal inference between latency and resources is supportable from this run. Derived from stored fields: the run epoch delta is 1101178 ms (equal to the throughput_rps denominator), each evaluated window spans 300000 ms, and per-window sample counts (30049 / 37550 / 47404) imply roughly 100 / 125 / 158 samples per second at 5 / 10 / 20 users, which is sublinear in user count."
+ },
+ "schema": "ai-experiment-run.v3",
+ "case": "K12",
+ "rep": 1,
+ "model_id": "glm-5.3",
+ "net_retries": 0,
+ "infra_retries": 0
+}

@@ -1,0 +1,195 @@
+{
+ "stage": "B",
+ "mode": "live",
+ "model": "deepseek-v4-flash-0731",
+ "tag": {
+  "phase": "holdout",
+  "attempt_id": "case-012-2-B-t1",
+  "arm": "B",
+  "stage": null,
+  "case": "case-012",
+  "rep": 2,
+  "try": 1
+ },
+ "retry_policy": "d2",
+ "qwen_exit": 0,
+ "wall_ms": 155597,
+ "relay": {
+  "schema_version": "advisory-ai-runtime-relay.v1",
+  "status": "FORWARDED_STRUCTURED_OUTPUT",
+  "received_request_count": 1,
+  "forwarded_request_count": 1,
+  "outcomes": [
+   "FORWARDED_STRUCTURED_OUTPUT"
+  ],
+  "retry_refused_reason": null,
+  "first_refused_reason": null,
+  "model_id": "deepseek-v4-flash-0731",
+  "retry_policy": "d2",
+  "requests": [
+   {
+    "ordinal": 1,
+    "forwarded": true,
+    "outcome": "FORWARDED_STRUCTURED_OUTPUT",
+    "provider_status": 200,
+    "latency_ms": 154194,
+    "usage": {
+     "prompt_tokens": 4764,
+     "total_tokens": 20151,
+     "completion_tokens": 15387,
+     "prompt_tokens_details": {
+      "cached_tokens": 1024
+     },
+     "completion_tokens_details": {
+      "reasoning_tokens": 12982
+     }
+    },
+    "model_returned": "deepseek-v4-flash-0731"
+   }
+  ],
+  "usage": {
+   "prompt_tokens": 4764,
+   "completion_tokens": 15387,
+   "total_tokens": 20151
+  },
+  "latency_ms": 154194
+ },
+ "relay_status": "FORWARDED_STRUCTURED_OUTPUT",
+ "usage": {
+  "prompt_tokens": 4764,
+  "completion_tokens": 15387,
+  "total_tokens": 20151
+ },
+ "latency_ms": 154194,
+ "retried": false,
+ "retry_refused_reason": null,
+ "status": "OK",
+ "note": null,
+ "output": {
+  "schema_version": "ai-advice-output.v1",
+  "summary": "Deterministic verdict: FAIL (run_validity VALID, coverage COMPLETE). The 'latency' rule (response_time_p95_ms <= 200) failed in window workload-04 with observed p95 = 28559 ms. Both overall and in-window error counts are 0, so this is a latency-only failure. The window resource verdict is NO_POLICY: no applicable SLA-effect resource rule is present, which is not a pass and yields no capacity bound or capacity verdict in this input. During the 300 s evaluation window the compute queue depth (cpu-queue, unit requests) averaged about 240.5 with median/max 251, while the generator target rate was constant at 110 requests/s and window throughput was 110 rps. The correlation pair (response_time_p95_ms vs cpu-queue) is CANDIDATE with uncertainty NOT_ESTIMATED; headline significance selection is UNAVAILABLE (OBSERVATION_COUNT_UNSUPPORTED), and clock_alignment is 'not_verified_by_core', so no causal or lead/lag explanation is supported by this evidence.",
+  "hypotheses": [
+   {
+    "rank": 1,
+    "observation": "policy-check-window for rule 'latency' reports status FAIL: response_time_p95_ms observed 28559 ms, operator lte, threshold 200 ms, window workload-04; the window policy verdict is FAIL via business_verdict.",
+    "possible_explanation": "The evaluated window's p95 response time exceeded the 200 ms threshold by a large margin; with error_count 0 (overall and window), this FAIL is latency-driven, not error-driven. Neither the cause nor the responsible component is established by this evidence.",
+    "recommended_check": "Inspect per-interval latency statistics (p50/p95/p99/max) for window workload-04 and find the earliest interval where p95 exceeded 200 ms, together with the queue depth and achieved throughput at that time.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/5",
+     "analysis-result.json#/evidence/6",
+     "analysis-result.json#/evidence/7",
+     "analysis-result.json#/findings/0"
+    ]
+   },
+   {
+    "rank": 2,
+    "observation": "cpu-queue (compute, system, queue_depth, unit requests) for window workload-04 has observed_cells 300/300, mean 240.5, median 251, max 251, min 5.00005, q95 251, and slope_per_second ~0.198.",
+    "possible_explanation": "The queue depth appears pinned at/near its maximum 251 for most of the window after starting near 5; sustained near-maximum queue depth could coincide with the high p95 (28559 ms), but the correlation (raw rho ~0.488 at best_lag_ms 0) is only CANDIDATE with NOT_ESTIMATED uncertainty, so this is a hypothesis, not a proven cause.",
+    "recommended_check": "Examine the cell-level cpu-queue series across the window to confirm how long it stays at 251 and compare that interval with the response-time degradation.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/3",
+     "analysis-result.json#/evidence/8",
+     "analysis-result.json#/evidence/7"
+    ]
+   },
+   {
+    "rank": 3,
+    "observation": "target-request-rate (generator) is constant at 110 requests/s (min=max=mean=110, std 0, slope 0); correlation pair reports reasons CONSTANT_CONTROL, controls_dropped ['target-request-rate'], controls_used [].",
+    "possible_explanation": "Because the load control never varied, the correlation analysis could not control for load; the identical rho (0.402269009983) at every lag from -10000 ms to +10000 ms likely reflects this constant-control limitation rather than a meaningful lag structure.",
+    "recommended_check": "Rerun with a stepped or ramped target-rate profile so the load control is non-constant and the correlation method can separate load effects.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/4",
+     "analysis-result.json#/evidence/8"
+    ]
+   },
+   {
+    "rank": 4,
+    "observation": "correlation headline selection is UNAVAILABLE with reasons OBSERVATION_COUNT_UNSUPPORTED (p_values null, selected false); best_lag_ms is 0; clock_alignment is 'not_verified_by_core'.",
+    "possible_explanation": "The correlation result lacks statistical support given the observation count, and the clock relationship is unverified; therefore best_lag_ms 0 and the rho values cannot support lead/lag ordering or a temporal causal hypothesis.",
+    "recommended_check": "Verify clock alignment between generator and compute telemetry first, then re-evaluate the correlation on a run whose observation count supports the significance method.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/9",
+     "analysis-result.json#/evidence/8",
+     "analysis-result.json#/evidence/2"
+    ]
+   },
+   {
+    "rank": 5,
+    "observation": "Overall run metrics: 93000 samples, throughput ~75.6 rps (93000000/1230040), p50 50 ms, p95 25823 ms. Window workload-04: 33000 samples, throughput 110 rps (33000000/300000), p50 15055 ms, p95 28559 ms.",
+    "possible_explanation": "The evaluated window has achieved throughput equal to the 110 rps target, while the full-run average is lower; the cpu-queue within the window grows from min 5.00005 toward a 251 cap, so sustained target load in this window may be when latency degraded. This is a hypothesis to test, not a proven cause.",
+    "recommended_check": "Plot achieved throughput, cpu-queue depth, and latency across the whole run (1704067200000 to 1704068430040) to see when load reached 110 rps and when p95 crossed 200 ms.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0",
+     "analysis-result.json#/evidence/7",
+     "analysis-result.json#/evidence/3"
+    ]
+   }
+  ],
+  "recommendations": [
+   {
+    "rank": 1,
+    "action": "Inspect per-interval latency and cpu-queue series for window workload-04 to determine when response_time_p95_ms crossed 200 ms and what load/queue state coincided.",
+    "rationale": "The deterministic FAIL comes from the 'latency' rule (observed 28559 ms vs threshold 200 ms); locating the crossing point is a prerequisite for any configuration or capacity change.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/5",
+     "analysis-result.json#/evidence/7",
+     "analysis-result.json#/evidence/3"
+    ]
+   },
+   {
+    "rank": 2,
+    "action": "Verify clock alignment between the load generator and compute telemetry before interpreting any correlation or lag result.",
+    "rationale": "clock_alignment is 'not_verified_by_core', so best_lag_ms 0 and any lag-based correlation cannot support lead/lag or causal ordering until clocks are verified.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/2",
+     "analysis-result.json#/evidence/8"
+    ]
+   },
+   {
+    "rank": 3,
+    "action": "Rerun the scenario with a non-constant (stepped/ramped) generator target-rate profile and enough samples for the correlation significance method.",
+    "rationale": "The constant target rate was dropped as a control (CONSTANT_CONTROL), and the headline significance selection was UNAVAILABLE (OBSERVATION_COUNT_UNSUPPORTED), so the current CANDIDATE correlation cannot be interpreted.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/4",
+     "analysis-result.json#/evidence/8",
+     "analysis-result.json#/evidence/9"
+    ]
+   },
+   {
+    "rank": 4,
+    "action": "If a capacity/resource verdict is needed for the compute stage, add or verify an applicable resource rule with effect 'sla' (and the required capacity) covering window workload-04.",
+    "rationale": "resource_verdict is NO_POLICY for the window: no applicable SLA-effect rule exists, which is not a pass and produces no capacity bound/verdict; only an applicable rule the product evaluates can yield PASS/FAIL.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/6"
+    ]
+   },
+   {
+    "rank": 5,
+    "action": "Confirm whether the cpu-queue is actually pinned at its 251 maximum through the window by inspecting the 300-cell series, then test how p95 responds when queue depth is lower (for example, a lower target-rate run).",
+    "rationale": "The aggregate suggests pinning (median=251, q95=251, max=251) but cell-level detail is not in this input; verifying pinning and its sensitivity is needed before attributing the latency FAIL to queue saturation.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/3",
+     "analysis-result.json#/evidence/8"
+    ]
+   }
+  ],
+  "caveats": [
+   "Correlation pair response_time_p95_ms vs cpu-queue is CANDIDATE with uncertainty NOT_ESTIMATED; headline significance selection is UNAVAILABLE (OBSERVATION_COUNT_UNSUPPORTED) with null p-values, so no statistical significance or causal link is established.",
+   "clock_alignment is 'not_verified_by_core'; best_lag_ms 0 cannot support lead/lag ordering or temporal causation.",
+   "The target-request-rate control was constant and therefore dropped (CONSTANT_CONTROL); controls_used is empty, so partial_rho equals raw_rho (~0.488) and load was not controlled for in the correlation.",
+   "anomalies_tested = 0 and episodes_reported = 0 do not prove stability or absence of a problem; the FAIL is determined by the latency rule, and no anomaly evidence changes that.",
+   "Overall and window metrics are different scopes: 93000 samples / ~75.6 rps for the full ~1230 s run vs 33000 samples / 110 rps for the 300 s window; differences such as p50 50 ms (overall) vs 15055 ms (window) are expected between scopes and are not inconsistencies.",
+   "resource_verdict = NO_POLICY is not a pass; no capacity bound or capacity verdict is present in the input, and the FAIL derives only from the business latency rule.",
+   "error_count is 0 both overall and in the window; zero errors do not imply health, and the latency failure (p95 28559 ms, max 30050 ms) remains.",
+   "The input contains only aggregated summaries; no per-interval series, server-side capacity metrics, or generator internals are included, so cell-level and host-level details could not be verified."
+  ]
+ },
+ "schema": "ai-experiment-run.holdout.v1",
+ "case": "case-012",
+ "rep": 2,
+ "arm": "B",
+ "try": 1,
+ "attempt_id": "case-012-2-B-t1",
+ "model_id": "deepseek-v4-flash-0731",
+ "prompt_sha256": "3c0f28bee6517c13c5c854615e7d3d59301893d9723880818e4034a32e9133bf"
+}

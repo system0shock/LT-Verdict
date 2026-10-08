@@ -1,0 +1,183 @@
+{
+ "stage": "A",
+ "mode": "live",
+ "model": "deepseek-v4-flash-0731",
+ "tag": {
+  "phase": "holdout",
+  "attempt_id": "case-029-1-A-t1",
+  "arm": "A",
+  "stage": null,
+  "case": "case-029",
+  "rep": 1,
+  "try": 1
+ },
+ "retry_policy": "d2",
+ "qwen_exit": 0,
+ "wall_ms": 53606,
+ "relay": {
+  "schema_version": "advisory-ai-runtime-relay.v1",
+  "status": "FORWARDED_STRUCTURED_OUTPUT",
+  "received_request_count": 1,
+  "forwarded_request_count": 1,
+  "outcomes": [
+   "FORWARDED_STRUCTURED_OUTPUT"
+  ],
+  "retry_refused_reason": null,
+  "first_refused_reason": null,
+  "model_id": "deepseek-v4-flash-0731",
+  "retry_policy": "d2",
+  "requests": [
+   {
+    "ordinal": 1,
+    "forwarded": true,
+    "outcome": "FORWARDED_STRUCTURED_OUTPUT",
+    "provider_status": 200,
+    "latency_ms": 52398,
+    "usage": {
+     "prompt_tokens": 2927,
+     "total_tokens": 7524,
+     "completion_tokens": 4597,
+     "prompt_tokens_details": {
+      "cached_tokens": 1024
+     },
+     "completion_tokens_details": {
+      "reasoning_tokens": 2615
+     }
+    },
+    "model_returned": "deepseek-v4-flash-0731"
+   }
+  ],
+  "usage": {
+   "prompt_tokens": 2927,
+   "completion_tokens": 4597,
+   "total_tokens": 7524
+  },
+  "latency_ms": 52398
+ },
+ "relay_status": "FORWARDED_STRUCTURED_OUTPUT",
+ "usage": {
+  "prompt_tokens": 2927,
+  "completion_tokens": 4597,
+  "total_tokens": 7524
+ },
+ "latency_ms": 52398,
+ "retried": false,
+ "retry_refused_reason": null,
+ "status": "OK",
+ "note": null,
+ "output": {
+  "schema_version": "ai-advice-output.v1",
+  "summary": "The run is VALID with COMPLETE coverage. The deterministic policy verdict is FAIL: the latency policy check reports response_time_p95_ms observed = 100 with operator lte against threshold 80, status FAIL, in the single 30-second evaluation window (epoch_ms 1767225600000 to 1767225630000); the window summary states business_verdict FAIL, resource_verdict PASS, overall verdict FAIL. The run recorded 600 samples with 0 errors (~19.93 rps from throughput_rps 600000/30099). All reported latency percentiles (p50, p95, p99, max) are exactly 100 ms for both overall and the JMETER transaction scope, and the resource metric is a flat series at 50 synthetic units with standard deviation 0 and slope 0 (PASS against threshold 80). The advice below investigates the latency failure and data-quality caveats; it does not change the FAIL verdict.",
+  "hypotheses": [
+   {
+    "rank": 1,
+    "observation": "The latency policy check reports response_time_p95_ms observed = 100, operator lte, threshold 80, status FAIL, and the window summary records business_verdict FAIL and overall verdict FAIL, while run validity is VALID and coverage is COMPLETE.",
+    "possible_explanation": "Genuine application/service latency during the evaluation window exceeded the 80 ms SLA target for the p95 percentile; this could arise from server-side processing, queueing, thread pool or database contention, or configuration limits, but the evidence does not identify a specific cause.",
+    "recommended_check": "Inspect per-sample elapsed times in the raw JMeter JTL CSV and correlate with server-side telemetry (application logs, APM traces, DB query plans, thread-pool/GC metrics) inside the window epoch_ms 1767225600000 to 1767225630000 to find what made p95 reach 100 ms.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/5",
+     "analysis-result.json#/evidence/6",
+     "analysis-result.json#/findings/0",
+     "analysis-result.json#/run_validity",
+     "analysis-result.json#/analysis_coverage"
+    ]
+   },
+   {
+    "rank": 2,
+    "observation": "Both metric summaries report latency_ms p50 = p95 = p99 = max = 100 across 600 samples for the overall scope and the JMETER_SAMPLER transaction scope.",
+    "possible_explanation": "The identical values across all percentiles suggest the reported latency is rounded, bucketed, or capped at 100 ms in the aggregation/sampler output, so the true response-time distribution (and the true p95) may differ from what the policy check evaluated.",
+    "recommended_check": "Examine the raw JTL CSV elapsed values and the aggregation logic for rounding, binning, or a 100 ms ceiling; verify whether the p95 of 100 ms is a measured value or an artifact of reporting precision.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0",
+     "analysis-result.json#/evidence/1"
+    ]
+   },
+   {
+    "rank": 3,
+    "observation": "The resource summary shows mean = median = min = max = 50 synthetic units with standard deviation 0, slope 0, all 30 cells observed and 0 missing; the resource policy check against threshold 80 (operator gt) is PASS.",
+    "possible_explanation": "The resource metric is completely flat across the window, which may indicate a synthetic or low-information signal or an extremely stable environment; flatness is not proof of spare capacity or that resource usage caused or did not cause the latency result.",
+    "recommended_check": "Verify the source and unit of the 'value' resource series, and collect real CPU/memory/network utilization data for the window to test whether the flat series reflects actual system behavior or instrumentation artifacts.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/3",
+     "analysis-result.json#/evidence/4"
+    ]
+   },
+   {
+    "rank": 4,
+    "observation": "The resource binding reports clock_alignment = 'not_verified_by_core' for the evaluation window epoch_ms 1767225600000 to 1767225630000, with run_to_epoch_ms 1767225630099.",
+    "possible_explanation": "The time relationship between the load generator and the target system is unverified, so observations attributed to this window may not align with the target's internal timestamps; this does not by itself change the latency policy result but limits any temporal correlation.",
+    "recommended_check": "Verify clock synchronization (e.g., NTP) between the load generator and target hosts before using timing data for causal or lead/lag analysis, and confirm the 30-second window boundaries align with when load was actually applied.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/2"
+    ]
+   }
+  ],
+  "recommendations": [
+   {
+    "rank": 1,
+    "action": "Drill into raw JMeter JTL per-sample elapsed data and server-side telemetry for the window epoch_ms 1767225600000 to 1767225630000 to determine what drove p95 response time to 100 ms.",
+    "rationale": "The deterministic FAIL is caused solely by the latency rule: response_time_p95_ms = 100 exceeds the 80 ms threshold while error count is 0, so latency is the discriminator and needs direct investigation.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/5",
+     "analysis-result.json#/evidence/0",
+     "analysis-result.json#/evidence/6"
+    ]
+   },
+   {
+    "rank": 2,
+    "action": "Validate the latency instrumentation and aggregation to confirm that p50 = p95 = p99 = max = 100 ms is a real measured value and not an artifact of rounding, binning, or capping.",
+    "rationale": "Identical values across all percentiles make it impossible to infer the actual response-time distribution, so the correctness of the 100 ms observations should be confirmed before tuning performance.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0",
+     "analysis-result.json#/evidence/1"
+    ]
+   },
+   {
+    "rank": 3,
+    "action": "Verify clock alignment between the load generator and the target system before using any timing or correlation results.",
+    "rationale": "The evidence explicitly records clock_alignment = 'not_verified_by_core', so any temporal or causal interpretation of window-attributed data is not yet supported.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/2"
+    ]
+   },
+   {
+    "rank": 4,
+    "action": "Run additional evaluation windows or a longer test with a baseline comparison to determine whether the p95 = 100 ms result is persistent or specific to this single 30-second window.",
+    "rationale": "Only one evaluation window exists in the evidence, so the result cannot distinguish a transient latency spike from a steady-state condition and provides no baseline for the 80 ms SLA target.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/2",
+     "analysis-result.json#/evidence/5",
+     "analysis-result.json#/evidence/6"
+    ]
+   },
+   {
+    "rank": 5,
+    "action": "Investigate whether the flat resource series at 50 with standard deviation 0 reflects real system utilization or a synthetic/placeholder metric, and connect real utilization data to the observed latency.",
+    "rationale": "A flat series with zero variance provides no evidence about spare capacity or load, and resource_verdict PASS does not explain or override the business FAIL, so the resource signal should not be interpreted as proof of a healthy system.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/3",
+     "analysis-result.json#/evidence/4",
+     "analysis-result.json#/evidence/6"
+    ]
+   }
+  ],
+  "caveats": [
+   "The deterministic verdict remains FAIL and is preserved; this advice does not alter it.",
+   "Only one 30-second evaluation window (epoch_ms 1767225600000 to 1767225630000) is covered, with no baseline window, so a transient vs persistent latency condition cannot be distinguished.",
+   "All reported latency percentiles (p50, p95, p99, max) are exactly 100 ms; the true response-time distribution cannot be inferred from these aggregates.",
+   "Error count 0 and error rate 0/600 only reflect captured requests; they do not prove absence of problems or unmeasured failures.",
+   "The resource series is flat at 50 synthetic units with standard deviation 0 and slope 0; flatness does not prove spare capacity, low load, or absence of a problem.",
+   "clock_alignment is 'not_verified_by_core', so timing relationships between load generator and target are unverified and cannot support temporal causal claims.",
+   "The latency policy FAIL should not be interpreted as NO_POLICY or missing coverage; it is an explicit rule failure (observed 100 > threshold 80).",
+   "resource_verdict PASS does not modify the business FAIL verdict; a PASS on the resource check is distinct from a PASS on the latency policy."
+  ]
+ },
+ "schema": "ai-experiment-run.holdout.v1",
+ "case": "case-029",
+ "rep": 1,
+ "arm": "A",
+ "try": 1,
+ "attempt_id": "case-029-1-A-t1",
+ "model_id": "deepseek-v4-flash-0731",
+ "prompt_sha256": "69f215a1ad4ae678c82410ba7cf7daf171cd9c7ca0ef4626bba6977db0af4ef7"
+}

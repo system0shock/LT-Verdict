@@ -1,0 +1,201 @@
+{
+ "stage": "A",
+ "mode": "live",
+ "model": "deepseek-v4-flash-0731",
+ "tag": {
+  "phase": "holdout",
+  "attempt_id": "case-015-2-A-t1",
+  "arm": "A",
+  "stage": null,
+  "case": "case-015",
+  "rep": 2,
+  "try": 1
+ },
+ "retry_policy": "d2",
+ "qwen_exit": 0,
+ "wall_ms": 70369,
+ "relay": {
+  "schema_version": "advisory-ai-runtime-relay.v1",
+  "status": "FORWARDED_STRUCTURED_OUTPUT",
+  "received_request_count": 1,
+  "forwarded_request_count": 1,
+  "outcomes": [
+   "FORWARDED_STRUCTURED_OUTPUT"
+  ],
+  "retry_refused_reason": null,
+  "first_refused_reason": null,
+  "model_id": "deepseek-v4-flash-0731",
+  "retry_policy": "d2",
+  "requests": [
+   {
+    "ordinal": 1,
+    "forwarded": true,
+    "outcome": "FORWARDED_STRUCTURED_OUTPUT",
+    "provider_status": 200,
+    "latency_ms": 69109,
+    "usage": {
+     "prompt_tokens": 3694,
+     "total_tokens": 10107,
+     "completion_tokens": 6413,
+     "prompt_tokens_details": {
+      "cached_tokens": 1024
+     },
+     "completion_tokens_details": {
+      "reasoning_tokens": 3809
+     }
+    },
+    "model_returned": "deepseek-v4-flash-0731"
+   }
+  ],
+  "usage": {
+   "prompt_tokens": 3694,
+   "completion_tokens": 6413,
+   "total_tokens": 10107
+  },
+  "latency_ms": 69109
+ },
+ "relay_status": "FORWARDED_STRUCTURED_OUTPUT",
+ "usage": {
+  "prompt_tokens": 3694,
+  "completion_tokens": 6413,
+  "total_tokens": 10107
+ },
+ "latency_ms": 69109,
+ "retried": false,
+ "retry_refused_reason": null,
+ "status": "OK",
+ "note": null,
+ "output": {
+  "schema_version": "ai-advice-output.v1",
+  "summary": "The referenced LT Verdict is NO_POLICY: the window-policy-summary reports NO_POLICY for business, resource, and overall verdicts, with COMPLETE coverage and VALID run validity and no findings recorded. Over the 35 s evaluation window, 700 JMeter samples were captured with error_count 0, latency p50 160 ms and p95/p99/max all 280 ms, and stored throughput ratio 700000/35000 (overall ratio 700000/35230). Both resource series (\"target\" in requests/s and \"value\" in synthetic_unit) store identical statistics (min 3, mean/median 12, max 21, slope_per_second 0.117647) across 35 interval-mean cells with no missing cells. The pairwise correlation between the \"value\" series and response_time_p95_ms was NOT_ESTIMATED: status INSUFFICIENT_DATA with reasons NO_RESIDUAL_VARIATION and LAG_NOT_EVALUABLE, partial_rho null, headline selection UNAVAILABLE (GENUINE_PARTIAL_UNCALIBRATED), selected=false. The diagnostic ran with anomalies_tested 0, episodes_reported 0, and pairs_evaluable 0. Because no policy is configured, the verdict is NO_POLICY, which is not a PASS; and the empty anomaly/episode counts do not demonstrate stability.",
+  "hypotheses": [
+   {
+    "rank": 1,
+    "observation": "The correlation pair for entity value vs response_time_p95_ms reports status INSUFFICIENT_DATA with reasons NO_RESIDUAL_VARIATION and LAG_NOT_EVALUABLE, lag_used_cells 0, partial_rho null, best_lag_rho null, best_lag_ms 0; the selection run is UNAVAILABLE with reason GENUINE_PARTIAL_UNCALIBRATED. The two resource summaries (target in requests/s and value in synthetic_unit) store identical statistics (mean 12, min 3, max 21, sample_standard_deviation 6.087595874350708302434807503762672).",
+    "possible_explanation": "The 'value' resource series may have no residual variation once the load metric is accounted for, or it may be a copy/derivative of the target series, so the partial correlation cannot be calibrated (GENUINE_PARTIAL_UNCALIBRATED). The stored raw_rho '1' comes from an insufficient pair (NO_RESIDUAL_VARIATION, LAG_NOT_EVALUABLE) and is not a proven correlation.",
+    "recommended_check": "Inspect how the 'value' series (synthetic_unit) is generated and collected relative to 'target' (requests/s); verify it is an independent explanatory variable, and rerun the correlation with a series that retains residual variation or exclude the degenerate series.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/7",
+     "analysis-result.json#/evidence/8",
+     "analysis-result.json#/evidence/3",
+     "analysis-result.json#/evidence/4"
+    ]
+   },
+   {
+    "rank": 2,
+    "observation": "Latency summaries report p95 = p99 = max = 280 ms with p50 160 ms and error_count 0 across 700 samples; the correlation pair uses load_metric response_time_p95_ms.",
+    "possible_explanation": "The identical p95/p99/max values may indicate observations are capped or tied at 280 ms, possibly a latency ceiling, timeout boundary, or sampler/JTL truncation artifact, rather than uniformly benign behavior; it could also reflect a coarse distribution with few distinct observations.",
+    "recommended_check": "Examine the raw JMeter JTL samples for a cluster of latencies at or near 280 ms, check for timeout or truncation settings in the sampler, and inspect the full latency distribution rather than only the summary percentiles.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0",
+     "analysis-result.json#/evidence/1",
+     "analysis-result.json#/evidence/6",
+     "analysis-result.json#/evidence/7"
+    ]
+   },
+   {
+    "rank": 3,
+    "observation": "Both resource summaries store interval means over 35 observed cells (no missing cells): min 3, mean 12, median 12, max 21, q05 3, q25 6, q75 18, q95 21, slope_per_second 0.1176470588235294117647058823529412, for units requests/s (target) and synthetic_unit (value).",
+    "possible_explanation": "The stored min/max and positive slope per second are consistent with a ramp-up workload from roughly 3 to 21 units over the 35 s window rather than a steady-state load; such a shape could be the intended JMeter ramp-up or an unintended load-profile misconfiguration.",
+    "recommended_check": "Compare the observed profile against the JMeter thread-group ramp-up and steady-state settings for the run, and confirm whether the intended load over the window was a ramp or a plateau.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/3",
+     "analysis-result.json#/evidence/4",
+     "analysis-result.json#/evidence/6"
+    ]
+   },
+   {
+    "rank": 4,
+    "observation": "The diagnostic summary reports anomalies_tested 0, episodes_reported 0, pairs_evaluable 0, pairs_tested 1, status COMPLETE, uncertainty NOT_ESTIMATED, with no reasons listed.",
+    "possible_explanation": "Because the only pair was found not evaluable (NO_RESIDUAL_VARIATION, LAG_NOT_EVALUABLE, INSUFFICIENT_DATA), the diagnostic had nothing testable; zero anomalies and zero episodes therefore reflect the absence of testable data rather than demonstrated stability or absence of a problem.",
+    "recommended_check": "Re-run the diagnostic only after the pair is evaluable (independent residual variation and verified clocks), and treat the current zero counts as 'not measured' rather than a clean bill of health.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/9",
+     "analysis-result.json#/evidence/7",
+     "analysis-result.json#/evidence/8"
+    ]
+   },
+   {
+    "rank": 5,
+    "observation": "The window policy summary reports business_verdict NO_POLICY, resource_verdict NO_POLICY, and verdict NO_POLICY; run validity is VALID, coverage is COMPLETE, and the findings list is empty.",
+    "possible_explanation": "No SLO/threshold policy appears to be configured for the target resource or business metric for this window, so the engine can only emit NO_POLICY. This is not equivalent to a PASS; it means no policy existed to evaluate against.",
+    "recommended_check": "Confirm whether an SLO/policy should be attached to this target and evaluation window; if so, deploy the policy and re-run so the verdict can be evaluated as PASS or FAIL.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/5",
+     "analysis-result.json#/policy_verdict",
+     "analysis-result.json#/run_validity",
+     "analysis-result.json#/analysis_coverage"
+    ]
+   }
+  ],
+  "recommendations": [
+   {
+    "rank": 1,
+    "action": "Verify clock alignment between the JMeter load generator and the metric collection pipeline before interpreting any temporal or lag relationships.",
+    "rationale": "The resource binding explicitly states clock_alignment 'not_verified_by_core' and lag was not evaluable (lag_used_cells 0, best_lag_rho null); without a verified clock relationship, lead/lag ordering and temporal causal hypotheses are unsupported.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/2",
+     "analysis-result.json#/evidence/7"
+    ]
+   },
+   {
+    "rank": 2,
+    "action": "Investigate the source of the 'value' series (synthetic_unit) and rerun the correlation with an independent series that has genuine residual variation, or drop the degenerate pair.",
+    "rationale": "The pair was INSUFFICIENT_DATA with NO_RESIDUAL_VARIATION and LAG_NOT_EVALUABLE, and the headline selection was UNAVAILABLE (GENUINE_PARTIAL_UNCALIBRATED); the stored raw_rho '1' and identical statistics across both series should not be treated as a proven correlation.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/7",
+     "analysis-result.json#/evidence/8",
+     "analysis-result.json#/evidence/3",
+     "analysis-result.json#/evidence/4"
+    ]
+   },
+   {
+    "rank": 3,
+    "action": "Attach an explicit SLO/threshold policy to the target resource and business metric so future runs can produce a PASS or FAIL verdict.",
+    "rationale": "The current verdict is NO_POLICY for business, resource, and overall; missing policy is not a pass and leaves the result unevaluated against any target.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/5",
+     "analysis-result.json#/policy_verdict"
+    ]
+   },
+   {
+    "rank": 4,
+    "action": "Inspect the raw per-sample latencies around 280 ms and check sampler/JTL timeout or truncation settings before attributing meaning to the latency summaries.",
+    "rationale": "p95 = p99 = max = 280 ms across 700 samples is consistent with a cap or cutoff; understanding whether that bound is a configuration artifact is a prerequisite for any latency interpretation.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0",
+     "analysis-result.json#/evidence/1",
+     "analysis-result.json#/evidence/6"
+    ]
+   },
+   {
+    "rank": 5,
+    "action": "Re-run the diagnostic suite only after the correlation pair is evaluable, and do not cite the current zero anomaly/episode counts as evidence of stability.",
+    "rationale": "Results recorded anomalies_tested 0, episodes_reported 0, and pairs_evaluable 0 with uncertainty NOT_ESTIMATED; zero counts here reflect untestable data, not a demonstrated absence of anomalies.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/9",
+     "analysis-result.json#/evidence/7"
+    ]
+   }
+  ],
+  "caveats": [
+   "Clock alignment between the load generator and collectors is recorded as 'not_verified_by_core', so no lead/lag ordering or temporal causal hypothesis is supported by this evidence.",
+   "The correlation is NOT_ESTIMATED: status INSUFFICIENT_DATA, uncertainty NOT_ESTIMATED, selection status UNAVAILABLE (GENUINE_PARTIAL_UNCALIBRATED), selected=false; the stored raw_rho '1' is a partial/candidate value and not proof of correlation.",
+   "error_count 0 across 700 samples covers only the 35 s evaluation window (observed cells 35, missing_cells 0); it does not prove zero errors outside that window or under other load conditions.",
+   "The 'target' (requests/s) and 'value' (synthetic_unit) series store identical statistics; their differing units and identical values make the stored correlation degenerately uninformative.",
+   "The evaluation covers a single 35 s window using interval_mean aggregation; within-window variation is smoothed, and no data before/after the window is present.",
+   "Throughput is stored as fractions with different denominators (window 700000/35000 vs overall 700000/35230), reflecting differing time bases; ratios are cited without assuming an exact RPS figure.",
+   "The verdict NO_POLICY is deterministic and unchanged by this advice; missing policy is not a PASS.",
+   "Zero anomalies_tested and zero episodes_reported reflect pairs_evaluable 0, not evidence of stability, spare capacity, or absence of problems.",
+   "No findings were recorded and analysis coverage is COMPLETE, but COMPLETE coverage of collection does not imply completeness of measurement or guarantee of correctness."
+  ]
+ },
+ "schema": "ai-experiment-run.holdout.v1",
+ "case": "case-015",
+ "rep": 2,
+ "arm": "A",
+ "try": 1,
+ "attempt_id": "case-015-2-A-t1",
+ "model_id": "deepseek-v4-flash-0731",
+ "prompt_sha256": "69f215a1ad4ae678c82410ba7cf7daf171cd9c7ca0ef4626bba6977db0af4ef7"
+}

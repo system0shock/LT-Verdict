@@ -1,0 +1,171 @@
+{
+ "stage": "S0",
+ "mode": "live",
+ "model": "deepseek-v4-flash-0731",
+ "tag": {
+  "phase": "v2-pilot",
+  "stage": "S0",
+  "case": "K01",
+  "rep": 1,
+  "attempt": 1
+ },
+ "qwen_exit": 0,
+ "wall_ms": 58415,
+ "relay": {
+  "schema_version": "advisory-ai-runtime-relay.v1",
+  "status": "FORWARDED_STRUCTURED_OUTPUT",
+  "request_count": 1,
+  "usage": {
+   "prompt_tokens": 6413,
+   "total_tokens": 12188,
+   "completion_tokens": 5775,
+   "prompt_tokens_details": {
+    "cached_tokens": 1024
+   },
+   "completion_tokens_details": {
+    "reasoning_tokens": 3602
+   }
+  },
+  "latency_ms": 57089,
+  "model_returned": "deepseek-v4-flash-0731"
+ },
+ "relay_status": "FORWARDED_STRUCTURED_OUTPUT",
+ "usage": {
+  "prompt_tokens": 6413,
+  "total_tokens": 12188,
+  "completion_tokens": 5775,
+  "prompt_tokens_details": {
+   "cached_tokens": 1024
+  },
+  "completion_tokens_details": {
+   "reasoning_tokens": 3602
+  }
+ },
+ "latency_ms": 57089,
+ "status": "OK",
+ "note": null,
+ "output": {
+  "schema_version": "ai-advice-output.v1",
+  "summary": "Deterministic verdict is PASS (analysis-result.json#/policy_verdict) with run validity VALID, but analysis coverage is INCOMPLETE with reason SOURCE_ACQUISITION_PARTIAL: the errors profile query against opensearch failed with SOURCE_HTTP_ERROR after 2 retries, so the error-rate policy check (0 errors / 36,034 observed) may not cover the full run while the overall JMeter summary count is 37,349 samples. All sampled transactions show 0 errors and low p50/p95 (p95 ≤ 168 ms), with maximum latencies near 1 s on several transactions (checkout max 1,092 ms vs p99 142 ms; home max 1,009 ms vs p99 197 ms). Resource series (checkoutservice, frontend, paymentservice) show low utilization over 23 fully observed 15-second cells; resource verdict is NO_POLICY, meaning no resource policy was assessed. Clock alignment is not verified by core. The findings list is empty; absence of flagged findings is not evidence of stability.",
+  "hypotheses": [
+   {
+    "rank": 1,
+    "observation": "Checkout has max latency 1092 ms while p99 is 142 ms; home has max 1009 ms with p99 197 ms; add product to cart has max 974 ms with p99 88 ms; reset cart has max 993 ms with p99 85 ms. Resource series (checkoutservice, frontend) show low, fairly flat CPU means (0.047 and 0.180 cores).",
+    "possible_explanation": "Infrequent slow samples create outliers far above p99 while typical latency stays low; this could reflect transient contention, garbage collection, or cold-start behavior, but the evidence provides no timestamp correlation or causal link for these maxima.",
+    "recommended_check": "Extract the timestamps of the samples near each transaction's max latency and overlay checkoutservice/frontend cpu_cores and memory_bytes 15-second interval means to test whether outliers coincide with resource changes.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/3",
+     "analysis-result.json#/evidence/4",
+     "analysis-result.json#/evidence/1",
+     "analysis-result.json#/evidence/6",
+     "analysis-result.json#/evidence/8",
+     "analysis-result.json#/evidence/9",
+     "analysis-result.json#/evidence/10",
+     "analysis-result.json#/evidence/11"
+    ]
+   },
+   {
+    "rank": 2,
+    "observation": "All three monitored services show positive memory slopes over 23 observed cells at 15-second intervals: paymentservice memory mean 33,023,347 bytes with slope_per_second 4658.28 and split_half_shift 610,304; frontend mean 12,059,871 bytes with slope_per_second 2239.44; checkoutservice mean 9,282,456 bytes with slope_per_second 1883.45.",
+    "possible_explanation": "A consistently positive slope could indicate growing memory usage, but a ~5.75-minute window is too short to establish a leak, and slope_per_second is a summary statistic rather than proof of a trend cause.",
+    "recommended_check": "Extend monitoring over hours, compare first-half vs second-half memory means, and check container memory limits and restart behavior before concluding there is a leak.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/13",
+     "analysis-result.json#/evidence/11",
+     "analysis-result.json#/evidence/9"
+    ]
+   },
+   {
+    "rank": 3,
+    "observation": "Policy check observed 0/36,034 error_rate_ratio with status PASS, while the overall metric summary reports 37,349 samples with error_count 0. The errors profile query failed with reason SOURCE_HTTP_ERROR, status FAILED, request_count 3, retries 2, and analysis coverage is INCOMPLETE (SOURCE_ACQUISITION_PARTIAL).",
+    "possible_explanation": "The PASS on error rate may rest on a partial dataset if the opensearch errors source dropped or failed to return data; the 1,315-sample difference plus dropped leading/trailing cells is consistent with partial acquisition, though attribution to the failed query is not proven.",
+    "recommended_check": "Re-run the errors/errors query against opensearch and compare error counts for the full run window (1790619844691 to 1790620204660) to confirm the zero-error result covers samples outside the policy-check window.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/14",
+     "analysis-result.json#/evidence/0",
+     "analysis-result.json#/evidence/16",
+     "analysis-result.json#/evidence/7",
+     "analysis-result.json#/analysis_coverage"
+    ]
+   },
+   {
+    "rank": 4,
+    "observation": "The window policy summary verdict is PASS with business_verdict PASS and resource_verdict NO_POLICY; resource series have missing_cells 0 and longest_gap_cells 0; the findings list is empty.",
+    "possible_explanation": "Absence of flagged findings and fully observed resource cells does not prove stability, spare capacity, or absence of problems; the NO_POLICY resource verdict means no resource guarantee was checked, not that resource behavior passed.",
+    "recommended_check": "Define and evaluate a resource policy (e.g., CPU/memory ceilings) and run targeted soak/SLO checks with per-interval latency distributions rather than relying only on summary percentiles.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/15",
+     "analysis-result.json#/evidence/8",
+     "analysis-result.json#/evidence/11",
+     "analysis-result.json#/policy_verdict"
+    ]
+   }
+  ],
+  "recommendations": [
+   {
+    "rank": 1,
+    "action": "Re-acquire the failed errors source: investigate the SOURCE_HTTP_ERROR on the opensearch errors/errors query (request_count 3, retries 2) and re-run it over the full run window.",
+    "rationale": "Coverage is INCOMPLETE (SOURCE_ACQUISITION_PARTIAL) even though the error-rate policy check passed; error-rate evidence may not cover the entire run.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/16",
+     "analysis-result.json#/analysis_coverage",
+     "analysis-result.json#/evidence/14"
+    ]
+   },
+   {
+    "rank": 2,
+    "action": "Verify clock alignment between JMeter samples, resource series, and the run window before any temporal or causal interpretation.",
+    "rationale": "clock_alignment is not_verified_by_core, so lead/lag ordering or temporal causal hypotheses are unsupported until clock relationships are confirmed.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/7"
+    ]
+   },
+   {
+    "rank": 3,
+    "action": "Investigate tail latency outliers: capture per-sampler latency distributions and identify the timestamps of samples near each maximum, correlating them with resource interval means.",
+    "rationale": "Several transactions show maxima near 1 s (checkout 1092 ms, home 1009 ms, add product to cart 974 ms) while p99 values are 88–197 ms; the cause of these outliers is unverified.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/3",
+     "analysis-result.json#/evidence/4",
+     "analysis-result.json#/evidence/1",
+     "analysis-result.json#/evidence/8",
+     "analysis-result.json#/evidence/10"
+    ]
+   },
+   {
+    "rank": 4,
+    "action": "Add and evaluate a resource policy (CPU/memory limits) for monitored services if resource behavior is a requirement.",
+    "rationale": "resource_verdict is NO_POLICY, meaning no resource policy was checked; this is not a pass on resource health.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/15",
+     "analysis-result.json#/evidence/8",
+     "analysis-result.json#/evidence/9"
+    ]
+   },
+   {
+    "rank": 5,
+    "action": "Run a longer soak test to determine whether positive memory slopes (paymentservice 4658 bytes/s, frontend 2239 bytes/s, checkoutservice 1883 bytes/s) persist.",
+    "rationale": "23 cells over ~5.75 minutes with positive slope_per_second are insufficient to distinguish normal growth from a leak.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/13",
+     "analysis-result.json#/evidence/11",
+     "analysis-result.json#/evidence/9"
+    ]
+   }
+  ],
+  "caveats": [
+   "Analysis coverage is INCOMPLETE (SOURCE_ACQUISITION_PARTIAL); the errors/errors query failed with SOURCE_HTTP_ERROR after 2 retries, so error-related evidence is partial even though the policy check passed.",
+   "Clock alignment is not verified by core (clock_alignment: not_verified_by_core); no lead/lag ordering or temporal causal hypothesis is supported.",
+   "Resource verdict is NO_POLICY; absence of a resource policy check is not a pass on resource behavior.",
+   "The policy-check denominator (36,034) differs from the overall summary sample_count (37,349); dropped leading/trailing cells (10,309 ms and 4,660 ms) mean samples outside the intersection window are not covered by the error-rate check.",
+   "Maximum latencies are single observations (no counts of slow samples are provided), so no attribution of errors or impact to any event is possible.",
+   "An empty findings list and zero missing resource cells do not prove stability, spare capacity, low load, or absence of a problem.",
+   "CPU and memory statistics are 15-second interval means; per-interval peaks and standard deviation are summaries, not raw distributions.",
+   "The run window is approximately 360 seconds (359,969 ms) at ~103.8 requests/second overall; results may not generalize to longer or higher-load runs."
+  ]
+ },
+ "schema": "ai-experiment-run.v2",
+ "phase": "pilot",
+ "case": "K01",
+ "rep": 1
+}

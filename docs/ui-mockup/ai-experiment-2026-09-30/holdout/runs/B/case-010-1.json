@@ -1,0 +1,167 @@
+{
+ "stage": "B",
+ "mode": "live",
+ "model": "deepseek-v4-flash-0731",
+ "tag": {
+  "phase": "holdout",
+  "attempt_id": "case-010-1-B-t1",
+  "arm": "B",
+  "stage": null,
+  "case": "case-010",
+  "rep": 1,
+  "try": 1
+ },
+ "retry_policy": "d2",
+ "qwen_exit": 0,
+ "wall_ms": 69109,
+ "relay": {
+  "schema_version": "advisory-ai-runtime-relay.v1",
+  "status": "FORWARDED_STRUCTURED_OUTPUT",
+  "received_request_count": 1,
+  "forwarded_request_count": 1,
+  "outcomes": [
+   "FORWARDED_STRUCTURED_OUTPUT"
+  ],
+  "retry_refused_reason": null,
+  "first_refused_reason": null,
+  "model_id": "deepseek-v4-flash-0731",
+  "retry_policy": "d2",
+  "requests": [
+   {
+    "ordinal": 1,
+    "forwarded": true,
+    "outcome": "FORWARDED_STRUCTURED_OUTPUT",
+    "provider_status": 200,
+    "latency_ms": 67789,
+    "usage": {
+     "prompt_tokens": 4944,
+     "total_tokens": 11990,
+     "completion_tokens": 7046,
+     "prompt_tokens_details": {
+      "cached_tokens": 1024
+     },
+     "completion_tokens_details": {
+      "reasoning_tokens": 5008
+     }
+    },
+    "model_returned": "deepseek-v4-flash-0731"
+   }
+  ],
+  "usage": {
+   "prompt_tokens": 4944,
+   "completion_tokens": 7046,
+   "total_tokens": 11990
+  },
+  "latency_ms": 67789
+ },
+ "relay_status": "FORWARDED_STRUCTURED_OUTPUT",
+ "usage": {
+  "prompt_tokens": 4944,
+  "completion_tokens": 7046,
+  "total_tokens": 11990
+ },
+ "latency_ms": 67789,
+ "retried": false,
+ "retry_refused_reason": null,
+ "status": "OK",
+ "note": null,
+ "output": {
+  "schema_version": "ai-advice-output.v1",
+  "summary": "The run is VALID with COMPLETE analysis coverage, and the deterministic policy verdict is FAIL. The failure comes from the error-rate rule (rule_id \"errors\"), which requires 0 errors, in both policy windows: reference observed 3000/30000 (0.1) and evaluation observed 2320/22000 (≈0.105), both above threshold 0. The response-time rule passed in both windows (p95 = 100 ms ≤ 120 ms), and latency percentiles are flat at 100 ms in the overall and window summaries. The resource verdict is NO_POLICY in both windows because no applicable resource rule was evaluated; this is not a pass and supports no capacity conclusion. The evaluation resource series shows a higher max/q95 (0.16/0.157) than the reference (0.101), while medians are equal (0.1), but the anomaly check reports NO_MATERIAL_CHANGE with 1 suppressed short episode and the diagnostic uncertainty is NOT_ESTIMATED with 0 pairs evaluated. Clock alignment is not_verified_by_core, so load-vs-resource timing relationships are unproven. The advice below only proposes operator checks; it does not change the FAIL verdict.",
+  "hypotheses": [
+   {
+    "rank": 1,
+    "observation": "Both policy windows failed the error_rate_ratio rule with threshold 0: reference observed 3000/30000 and evaluation observed 2320/22000, while the latency rule passed in both windows with observed p95 = 100 ms against threshold 120 ms; overall sampler metrics show 5320/52000 errors with all latency percentiles at 100 ms.",
+    "possible_explanation": "An approximately constant ~10% rate of sampler-level errors is present throughout the run and is not reflected in the measured response-time percentiles, which are flat at 100 ms; this is consistent with application- or response-level errors (e.g., non-2xx responses or assertions) rather than a latency-driven issue.",
+    "recommended_check": "Inspect the JMeter JTL error samples: categorize response codes/messages per sampler label, check whether errors are SUT-side responses or connection/assertion failures, and plot per-second error counts across the run.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0",
+     "analysis-result.json#/evidence/1",
+     "analysis-result.json#/evidence/6",
+     "analysis-result.json#/evidence/9"
+    ]
+   },
+   {
+    "rank": 2,
+    "observation": "The evaluation resource summary has q95 = 0.157 and max = 0.16 while the reference has q95 = 0.101 and max = 0.101; both windows have median = 0.1 and the evaluation has slope_per_second = 0; the anomaly check reports NO_MATERIAL_CHANGE with 1 suppressed short episode and the diagnostic summary has pairs_evaluable = 0, pairs_tested = 0, uncertainty NOT_ESTIMATED.",
+    "possible_explanation": "A small number of higher resource cells may exist within the evaluation window (a short burst that keeps median and slope unchanged), rather than a sustained material change; however, the anomaly checks did not detect a material change and uncertainty is NOT_ESTIMATED, so this is unconfirmed.",
+    "recommended_check": "List the per-cell resource values in the evaluation window (22 cells) to identify exactly which cells contain the 0.157–0.16 values and their timestamps relative to the run; verify why the anomaly checks suppressed the short episode and what tolerance produced NO_MATERIAL_CHANGE.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/3",
+     "analysis-result.json#/evidence/4",
+     "analysis-result.json#/evidence/13",
+     "analysis-result.json#/evidence/14"
+    ]
+   },
+   {
+    "rank": 3,
+    "observation": "The resource binding reports clock_alignment = not_verified_by_core for the run and both windows, with snapshot and evaluation bounds aligned to 1767225600000–1767225652000 ms.",
+    "possible_explanation": "The JMeter sampler timestamps and the resource snapshot are not confirmed to be on a verified common clock, so any apparent overlap between load and resource events cannot support a temporal or causal ordering.",
+    "recommended_check": "Verify clock alignment between the load generator and the monitored service (e.g., NTP/SNTP status, timestamp source in the JTL and the resource collector) before interpreting any load-vs-resource relationship; if alignment cannot be confirmed, treat timing overlap as unproven.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/2"
+    ]
+   }
+  ],
+  "recommendations": [
+   {
+    "rank": 1,
+    "action": "Inspect the JMeter JTL error samples (response codes, messages, sampler labels, timestamps) to categorize the 5320 sampler errors and determine whether they are SUT responses or load-side failures; if needed, rerun with structured error capture or additional telemetry.",
+    "rationale": "Both windows failed the errors rule because the threshold is 0 and observed ratios are about 10% (3000/30000 and 2320/22000); the latency rule passed everywhere, so response-time percentiles do not explain the failures.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0",
+     "analysis-result.json#/evidence/1",
+     "analysis-result.json#/evidence/6",
+     "analysis-result.json#/evidence/9",
+     "analysis-result.json#/findings/0",
+     "analysis-result.json#/findings/1"
+    ]
+   },
+   {
+    "rank": 2,
+    "action": "Verify clock alignment between JMeter timestamps and the resource snapshot, or rerun with verified alignment, before drawing any timing-based conclusions between load and resource data.",
+    "rationale": "clock_alignment = not_verified_by_core, so no lead/lag or causal ordering between error counts and the resource series is established by this analysis.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/2"
+    ]
+   },
+   {
+    "rank": 3,
+    "action": "Review the per-cell resource series in the evaluation window to see which 22 cells contain the q95 = 0.157 / max = 0.16 values, and review the anomaly detection configuration that produced NO_MATERIAL_CHANGE with 1 suppressed short episode.",
+    "rationale": "The evaluation window's high tail (0.157–0.16) differs from the reference max (0.101) while medians and slope are unchanged, but the anomaly check reports NO_MATERIAL_CHANGE and the diagnostic uncertainty is NOT_ESTIMATED with 0 pairs evaluated, so the change is not confirmed as material.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/4",
+     "analysis-result.json#/evidence/13",
+     "analysis-result.json#/evidence/14"
+    ]
+   },
+   {
+    "rank": 4,
+    "action": "If a resource or capacity verdict is desired, add an applicable resource rule with effect sla for the relevant service/stage and window; otherwise leave the resource verdict as NO_POLICY.",
+    "rationale": "resource_verdict is NO_POLICY in both windows because no applicable resource rule was evaluated; NO_POLICY is not a pass and supports no capacity or spare-capacity conclusion.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/7",
+     "analysis-result.json#/evidence/10"
+    ]
+   }
+  ],
+  "caveats": [
+   "The deterministic verdict FAIL comes solely from the errors rule (rule_id errors, threshold 0) failing in both windows; since the threshold is 0, the failure means 'any errors were observed', not that the error count increased between windows, although the two window ratios are similar (~10%).",
+   "The resource verdict is NO_POLICY in both windows; absence of an evaluated resource rule is not evidence of resource health, stability, or spare capacity, and NO_POLICY cannot become a pass.",
+   "The anomaly diagnostic has uncertainty NOT_ESTIMATED and pairs_evaluable = 0 / pairs_tested = 0; NO_MATERIAL_CHANGE with 1 suppressed short episode does not prove the resource series is unchanged.",
+   "clock_alignment = not_verified_by_core, so no lead/lag or causal ordering between load and resource events is established; clock verification should precede any temporal hypothesis.",
+   "All reported latency percentiles are identical (100 ms) for p50, p95, p99, and max in the overall and window summaries; the summaries do not show a latency distribution or spread.",
+   "Windows cover only parts of the run (reference 1767225600000–1767225630000 ms, evaluation 1767225630000–1767225652000 ms); per-window denominators (30000 and 22000) differ from the overall sample count (52000), so rates are comparable only within the same scope and window.",
+   "Resource values use unit synthetic_unit and throughput is reported as numerator/denominator ratios (e.g., 52000000/52099 overall); no unit conversion or direct comparison across different scopes is asserted.",
+   "The advice is advisory only; it preserves the deterministic FAIL verdict exactly and does not turn NO_POLICY into PASS."
+  ]
+ },
+ "schema": "ai-experiment-run.holdout.v1",
+ "case": "case-010",
+ "rep": 1,
+ "arm": "B",
+ "try": 1,
+ "attempt_id": "case-010-1-B-t1",
+ "model_id": "deepseek-v4-flash-0731",
+ "prompt_sha256": "3c0f28bee6517c13c5c854615e7d3d59301893d9723880818e4034a32e9133bf"
+}

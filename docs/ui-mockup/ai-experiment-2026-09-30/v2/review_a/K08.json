@@ -1,0 +1,76 @@
+[
+  {
+    "id": "R001",
+    "hard_defect": false,
+    "defects": [],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 5,
+    "notes": "Preserves the verdict and coverage limits and gives concrete checks for the checkout errors and missing telemetry."
+  },
+  {
+    "id": "R005",
+    "hard_defect": false,
+    "defects": [],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 4,
+    "notes": "The actions are useful, though the memory hypothesis adds speculation based partly on an index name."
+  },
+  {
+    "id": "R021",
+    "hard_defect": false,
+    "defects": [],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 4,
+    "notes": "The core triage is sound; the latency explanation is speculative but presented as a hypothesis."
+  },
+  {
+    "id": "R030",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T5",
+        "field": "#/hypotheses/2/possible_explanation",
+        "quote": "The memory discontinuity and the gaps",
+        "why": "The evidence gives aggregate memory statistics, not a time series showing a discontinuity."
+      }
+    ],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 3,
+    "notes": "Most operator actions are grounded, but the asserted memory discontinuity could misdirect a restart investigation."
+  },
+  {
+    "id": "R044",
+    "hard_defect": false,
+    "defects": [],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 5,
+    "notes": "Separates the confirmed business failure from the unresolved resource verdict and prioritizes verifiable checks."
+  },
+  {
+    "id": "R064",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T3",
+        "field": "#/hypotheses/0/recommended_check",
+        "quote": "Pull the 2312 error samples from the errors index (source_url)",
+        "why": "The profile reports 2,312 errors in aggregate but supplies source URLs for only two sampled documents."
+      },
+      {
+        "type": "T7",
+        "field": "#/caveats/6",
+        "quote": "coverage is limited to what that profile sampled",
+        "why": "Message sampling is limited to two documents, but the error-group aggregation reports COMPLETE coverage with no omitted groups."
+      }
+    ],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 3,
+    "notes": "The main triage is useful, but it conflates sampled messages with the complete error-group aggregation."
+  }
+]

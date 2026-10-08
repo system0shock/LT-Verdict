@@ -1,0 +1,191 @@
+{
+ "stage": "B",
+ "mode": "live",
+ "model": "deepseek-v4-flash-0731",
+ "tag": {
+  "phase": "holdout",
+  "attempt_id": "case-010-2-B-t1",
+  "arm": "B",
+  "stage": null,
+  "case": "case-010",
+  "rep": 2,
+  "try": 1
+ },
+ "retry_policy": "d2",
+ "qwen_exit": 0,
+ "wall_ms": 89169,
+ "relay": {
+  "schema_version": "advisory-ai-runtime-relay.v1",
+  "status": "FORWARDED_STRUCTURED_OUTPUT",
+  "received_request_count": 1,
+  "forwarded_request_count": 1,
+  "outcomes": [
+   "FORWARDED_STRUCTURED_OUTPUT"
+  ],
+  "retry_refused_reason": null,
+  "first_refused_reason": null,
+  "model_id": "deepseek-v4-flash-0731",
+  "retry_policy": "d2",
+  "requests": [
+   {
+    "ordinal": 1,
+    "forwarded": true,
+    "outcome": "FORWARDED_STRUCTURED_OUTPUT",
+    "provider_status": 200,
+    "latency_ms": 87805,
+    "usage": {
+     "prompt_tokens": 4944,
+     "total_tokens": 13573,
+     "completion_tokens": 8629,
+     "prompt_tokens_details": {
+      "cached_tokens": 1024
+     },
+     "completion_tokens_details": {
+      "reasoning_tokens": 6471
+     }
+    },
+    "model_returned": "deepseek-v4-flash-0731"
+   }
+  ],
+  "usage": {
+   "prompt_tokens": 4944,
+   "completion_tokens": 8629,
+   "total_tokens": 13573
+  },
+  "latency_ms": 87805
+ },
+ "relay_status": "FORWARDED_STRUCTURED_OUTPUT",
+ "usage": {
+  "prompt_tokens": 4944,
+  "completion_tokens": 8629,
+  "total_tokens": 13573
+ },
+ "latency_ms": 87805,
+ "retried": false,
+ "retry_refused_reason": null,
+ "status": "OK",
+ "note": null,
+ "output": {
+  "schema_version": "ai-advice-output.v1",
+  "summary": "Deterministic verdict: FAIL (analysis-result.json#/policy_verdict). Both policy windows fail the same business rule \"errors\" (error_rate_ratio lte 0): the reference window observed 3000 errors / 30000 samples and the evaluation window 2320 / 22000 samples, and both are recorded as policy_failure findings. The latency rule (response_time_p95_ms lte 120) PASSed in both windows at an observed 100 ms. The resource verdict is NO_POLICY in both windows, so no resource SLA rule was evaluated; the anomaly check reported NO_MATERIAL_CHANGE with 1 suppressed short episode, and the diagnostic summary tested 0 pairs with uncertainty NOT_ESTIMATED, so no resource-to-error correlation is supported. Clock alignment is not_verified_by_core, so temporal ordering between the resource series and policy windows cannot be asserted. The FAIL is fully attributable to the nonzero error-rate rule; latency was not the failing metric in either window.",
+  "hypotheses": [
+   {
+    "rank": 1,
+    "observation": "Both windows FAIL the errors policy against threshold 0 (error_rate_ratio 3000/30000 in the reference window and 2320/22000 in the evaluation window), while the latency rule PASSes in both windows, and the findings list both as policy_failure of rule_id 'errors'.",
+    "possible_explanation": "The failure is driven entirely by the error-rate rule whose tolerance is zero: any nonzero error rate yields FAIL, independent of the passing latency rule and independent of the NO_POLICY resource verdict. The cause therefore lies in sampler/application errors rather than latency or resource policy.",
+    "recommended_check": "Inspect the JTL sampler records behind the metric summaries for both windows: response codes, failure messages, and any assertion failures, to identify what produced the 3000 and 2320 errors.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/6",
+     "analysis-result.json#/evidence/9",
+     "analysis-result.json#/findings/0",
+     "analysis-result.json#/findings/1"
+    ]
+   },
+   {
+    "rank": 2,
+    "observation": "All reported latency summaries (overall, reference, and evaluation) show p50 = p95 = p99 = max = 100 ms.",
+    "possible_explanation": "The identical percentile values suggest the latency field is coarse, quantized, or drawn from a very narrow band; the percentile summary alone cannot show the underlying distribution or a true tail at 100 ms.",
+    "recommended_check": "Extract the raw latency field from the same JTL CSV and inspect the histogram and distinct values to determine whether the 100 ms values reflect rounding/reporting granularity or genuinely clustered latency.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0",
+     "analysis-result.json#/evidence/1",
+     "analysis-result.json#/evidence/11",
+     "analysis-result.json#/evidence/12"
+    ]
+   },
+   {
+    "rank": 3,
+    "observation": "The evaluation-window resource summary shows max 0.16 and mean 0.10545 versus the reference window's max 0.101 and mean 0.1, yet the anomaly check is NO_MATERIAL_CHANGE with suppressed_short_episodes 1 and the diagnostic summary shows pairs_evaluable 0 / pairs_tested 0 with uncertainty NOT_ESTIMATED.",
+    "possible_explanation": "A short-lived resource elevation may have occurred but was suppressed or classified as non-material, and no anomaly-to-policy pair could be evaluated, so the resource series cannot be tied to the error-rate FAIL on this evidence.",
+    "recommended_check": "Inspect the per-cell evaluation resource series, including any region around the 0.16 peak, and rerun to see whether the pattern recurs; collect more granular resource telemetry if the current interval_mean cells are too coarse.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/3",
+     "analysis-result.json#/evidence/4",
+     "analysis-result.json#/evidence/13",
+     "analysis-result.json#/evidence/14"
+    ]
+   },
+   {
+    "rank": 4,
+    "observation": "The resource binding reports clock_alignment 'not_verified_by_core', with explicit windows and run/snapshot timestamps (run_to_epoch_ms 1767225652099 vs evaluation_to_epoch_ms 1767225652000).",
+    "possible_explanation": "If the clocks of the load generator, service telemetry source, and analysis host are not aligned, resource-series cells and policy windows may not correspond to the same wall time, so no lead/lag or temporal causal ordering between them is supportable.",
+    "recommended_check": "Verify clock synchronization among the load generator, the service telemetry collector, and the analysis host before drawing any time-order conclusions from the resource and policy windows.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/2",
+     "analysis-result.json#/evidence/4"
+    ]
+   }
+  ],
+  "recommendations": [
+   {
+    "rank": 1,
+    "action": "Review the underlying error records behind the failing 'errors' rule in both windows (3000/30000 reference, 2320/22000 evaluation) before rerunning.",
+    "rationale": "The deterministic FAIL is entirely attributable to the error-rate rule at threshold 0; the latency rule PASSed and the resource verdict was NO_POLICY, so the action with the most signal is understanding why requests errored.",
+    "evidence_refs": [
+     "analysis-result.json#/findings/0",
+     "analysis-result.json#/findings/1",
+     "analysis-result.json#/evidence/6",
+     "analysis-result.json#/evidence/9"
+    ]
+   },
+   {
+    "rank": 2,
+    "action": "Verify clock alignment between the load generator, service telemetry collection, and analysis host; re-establish resource-binding alignment if needed.",
+    "rationale": "clock_alignment is 'not_verified_by_core', so without verified clocks no temporal relationship between the resource series and the policy windows can be asserted, and any lead/lag hypothesis would be unsupported.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/2"
+    ]
+   },
+   {
+    "rank": 3,
+    "action": "Inspect the evaluation resource series in detail (per-cell values, the region around max 0.16) and collect additional diagnostics; do not interpret the flat reference series as spare capacity.",
+    "rationale": "The anomaly check classified the change as NO_MATERIAL_CHANGE with 1 suppressed short episode, and the diagnostic summary evaluated 0 pairs with uncertainty NOT_ESTIMATED, so neither stability nor resource influence on the errors is established.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/3",
+     "analysis-result.json#/evidence/4",
+     "analysis-result.json#/evidence/13",
+     "analysis-result.json#/evidence/14"
+    ]
+   },
+   {
+    "rank": 4,
+    "action": "Confirm the intended policy semantics: the 'errors' rule uses threshold 0, so any error fails by design; if resource-bound verification is desired, configure an applicable resource rule with effect sla for the windows instead of expecting NO_POLICY to imply health.",
+    "rationale": "NO_POLICY means no applicable resource rule with effect sla was evaluated in either window; a healthy window does not turn NO_POLICY into PASS, and only product-evaluated rules yield PASS or FAIL.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/5",
+     "analysis-result.json#/evidence/6",
+     "analysis-result.json#/evidence/7",
+     "analysis-result.json#/evidence/8",
+     "analysis-result.json#/evidence/9",
+     "analysis-result.json#/evidence/10"
+    ]
+   },
+   {
+    "rank": 5,
+    "action": "After addressing the identified error causes, rerun the scenario and re-evaluate the policy windows.",
+    "rationale": "The current deterministic verdict FAIL is tied to this run's error counts; a rerun after remediation is the operator-side way to test whether the nonzero error rate recurs, without altering this analysis's recorded verdict.",
+    "evidence_refs": [
+     "analysis-result.json#/policy_verdict",
+     "analysis-result.json#/evidence/6",
+     "analysis-result.json#/evidence/9"
+    ]
+   }
+  ],
+  "caveats": [
+   "Resource verdict is NO_POLICY in both windows (window-policy-summary evidence): no applicable resource rule with effect sla was evaluated. A healthy-looking or flat resource series does not convert NO_POLICY into PASS.",
+   "clock_alignment is 'not_verified_by_core' for the resource binding, so temporal ordering between the resource series and policy windows is not supported until clocks are verified.",
+   "Diagnostic summary reports pairs_evaluable 0 and pairs_tested 0 with uncertainty NOT_ESTIMATED; no stored correlation between resource behavior and policy failures exists, and episodes_reported 0 does not prove stability, especially with suppressed_short_episodes 1.",
+   "Latency is reported only as percentile summaries with p50 = p95 = p99 = max = 100 ms across overall, reference, and evaluation scopes; the underlying distribution and any rounding/quantization cannot be inferred from these summaries.",
+   "Counts are scoped differently: overall error_count 5320 and sample_count 52000 cover the whole run, whereas window denominators are 30000 and 22000; run_to_epoch_ms 1767225652099 extends about 99 ms beyond evaluation_to_epoch_ms 1767225652000, so the windows cover only part of the run and throughput denominators differ (52099 vs 30000/22000) without being inconsistent.",
+   "Analysis coverage is COMPLETE and run validity is VALID, but these describe data coverage and validity only; they do not identify error causes and do not establish causal links between the resource series and the FAIL verdict."
+  ]
+ },
+ "schema": "ai-experiment-run.holdout.v1",
+ "case": "case-010",
+ "rep": 2,
+ "arm": "B",
+ "try": 1,
+ "attempt_id": "case-010-2-B-t1",
+ "model_id": "deepseek-v4-flash-0731",
+ "prompt_sha256": "3c0f28bee6517c13c5c854615e7d3d59301893d9723880818e4034a32e9133bf"
+}

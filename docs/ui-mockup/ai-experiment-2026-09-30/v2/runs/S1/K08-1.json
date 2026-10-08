@@ -1,0 +1,180 @@
+{
+ "stage": "S1",
+ "mode": "live",
+ "model": "deepseek-v4-flash-0731",
+ "tag": {
+  "phase": "v2-pilot",
+  "stage": "S1",
+  "case": "K08",
+  "rep": 1,
+  "attempt": 1
+ },
+ "qwen_exit": 0,
+ "wall_ms": 121495,
+ "relay": {
+  "schema_version": "advisory-ai-runtime-relay.v1",
+  "status": "FORWARDED_STRUCTURED_OUTPUT",
+  "request_count": 1,
+  "usage": {
+   "prompt_tokens": 9444,
+   "total_tokens": 20217,
+   "completion_tokens": 10773,
+   "prompt_tokens_details": {
+    "cached_tokens": 1024
+   },
+   "completion_tokens_details": {
+    "reasoning_tokens": 8250
+   }
+  },
+  "latency_ms": 120014,
+  "model_returned": "deepseek-v4-flash-0731"
+ },
+ "relay_status": "FORWARDED_STRUCTURED_OUTPUT",
+ "usage": {
+  "prompt_tokens": 9444,
+  "total_tokens": 20217,
+  "completion_tokens": 10773,
+  "prompt_tokens_details": {
+   "cached_tokens": 1024
+  },
+  "completion_tokens_details": {
+   "reasoning_tokens": 8250
+  }
+ },
+ "latency_ms": 120014,
+ "status": "OK",
+ "note": null,
+ "output": {
+  "schema_version": "ai-advice-output.v1",
+  "summary": "Deterministic verdict: NO_VERDICT (analysis-result.json#/policy_verdict). The overall-errors business policy FAILed: the policy-window check reports 2312 errors in 37841 samples against a 0.01 error-rate threshold, and the window summary reports business_verdict FAIL. The resource side is NO_VERDICT: the paymentservice cpu_throttle_ratio policy check (operator gt, threshold 0.2, effect sla) could not be evaluated because of MISSING_RESOURCE_CELLS, and analysis coverage is INCOMPLETE (RESOURCE_GAPS, MISSING_RESOURCE_CELLS, SOURCE_ACQUISITION_PARTIAL). All 2312 observed errors are on the checkout transaction (all other transactions report 0 errors); they are logged as frontend.request_error between 1790632254832 and 1790632369669. A candidate paymentservice CPU throttle peak (max ratio 0.56895862409) occurs at 1790632350000-1790632380000, overlapping the tail of the error burst, but clock alignment is not verified by core and the paymentservice series are partial, so no causal or lead/lag interpretation is supported. The run itself is validated (VALID) but the evidence base is incomplete for resource conclusions.",
+  "hypotheses": [
+   {
+    "rank": 1,
+    "observation": "The overall metric summary reports error_count 2312, and the checkout transaction summary also reports 2312 errors out of 6515 samples, while add product to cart, cart, home, product, and reset cart each report 0 errors.",
+    "possible_explanation": "Failures are concentrated in the checkout path rather than spread across transactions; this could indicate a checkout-specific defect, a dependency failure on that path, or a data/request issue unique to checkout.",
+    "recommended_check": "Inspect the JMeter checkout sampler responses and the sampled frontend.request_error documents for HTTP status codes and messages within 1790632254832-1790632369669.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/3",
+     "analysis-result.json#/evidence/0",
+     "analysis-result.json#/evidence/19"
+    ]
+   },
+   {
+    "rank": 2,
+    "observation": "The error timeline shows zero errors before 1790632245000 and after 1790632380000, with counts rising to 436-1300 per minute between those points; first error document at 1790632254832, last at 1790632369669, 2312 total.",
+    "possible_explanation": "A transient episode occurred mid-run (roughly 115 seconds) rather than sustained saturation; triggers such as a configuration change, deployment, external dependency interruption, or a load transition cannot be ruled in or out from this evidence.",
+    "recommended_check": "After verifying clocks, check deployment and configuration-change logs for the interval around 1790632245000-1790632380000 and inspect the load generator profile during that time.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/19",
+     "analysis-result.json#/evidence/0",
+     "analysis-result.json#/evidence/7"
+    ]
+   },
+   {
+    "rank": 3,
+    "observation": "Paymentservice cpu_throttle_ratio has observed max 0.56895862409 with a threshold finding at 1790632350000-1790632380000 (observed_max 0.56895862409, observed_min 0.39467548476), and the same 15-second bucket 1790632365000-1790632380000 contains 78 frontend.request_error events at the tail of the error burst.",
+    "possible_explanation": "If clocks align, paymentservice CPU throttling could be associated with the late errors in the burst; however clock_alignment is not_verified_by_core and the throttle series is partial (19 of 23 cells observed), so this is only a correlation hypothesis, not a causal one.",
+    "recommended_check": "Verify clock alignment between the load run, Prometheus, and the error index, then overlay per-second error counts with paymentservice throttle ratio to test whether the overlap persists with complete data.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/13",
+     "analysis-result.json#/findings/0",
+     "analysis-result.json#/evidence/19",
+     "analysis-result.json#/evidence/7",
+     "analysis-result.json#/evidence/15"
+    ]
+   },
+   {
+    "rank": 4,
+    "observation": "Paymentservice cpu, cpu_throttle_ratio, and memory series each lack 4 of 23 cells with longest_gap_cells 4 and reasons RESOURCE_GAPS; source_summary marks those three queries PARTIAL with reason MISSING_SAMPLES, analysis coverage is INCOMPLETE with SOURCE_ACQUISITION_PARTIAL, and the resource policy check returns NO_VERDICT due to MISSING_RESOURCE_CELLS.",
+    "possible_explanation": "Metrics acquisition dropped paymentservice samples during the run, preventing evaluation of the configured throttle policy; without complete cells no resource verdict (PASS or FAIL) can be produced.",
+    "recommended_check": "Inspect Prometheus scrape and retention behavior for the paymentservice targets during 1790632200000-1790632545000 and rerun metrics acquisition so the paymentservice series cover all 23 cells.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/12",
+     "analysis-result.json#/evidence/13",
+     "analysis-result.json#/evidence/14",
+     "analysis-result.json#/evidence/15",
+     "analysis-result.json#/evidence/18"
+    ]
+   },
+   {
+    "rank": 5,
+    "observation": "Overall latency quantiles are p50 13ms, p95 98ms, p99 179ms with max 1006ms; checkout is p50 16ms, p95 97ms, p99 100ms with max 965ms.",
+    "possible_explanation": "The policy failure is dominated by the 2312 errors rather than by gross latency degradation, which may indicate immediate request failures (error status codes) rather than timeout-driven failures.",
+    "recommended_check": "Examine the checkout sampler response codes and the error sample messages to confirm whether failures are status-code errors or timeouts.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0",
+     "analysis-result.json#/evidence/3",
+     "analysis-result.json#/evidence/19"
+    ]
+   }
+  ],
+  "recommendations": [
+   {
+    "rank": 1,
+    "action": "Inspect checkout transaction failures in detail: pull JMeter checkout sampler logs and the frontend.request_error documents referenced in the error evidence for 1790632254832-1790632369669, and identify status codes and messages.",
+    "rationale": "Checkout carries all 2312 observed errors while every other transaction shows 0 errors, so the failure signature is transaction-specific and worth isolating before any rerun.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/3",
+     "analysis-result.json#/evidence/19",
+     "analysis-result.json#/evidence/0"
+    ]
+   },
+   {
+    "rank": 2,
+    "action": "Verify clock alignment across the load generator, Prometheus, and the error index before correlating timelines; clock_alignment currently reports not_verified_by_core.",
+    "rationale": "No lead/lag or temporal association (for example between the error burst and the paymentservice throttle finding) is meaningful until cross-source timestamps are verified.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/7",
+     "analysis-result.json#/evidence/13",
+     "analysis-result.json#/evidence/19"
+    ]
+   },
+   {
+    "rank": 3,
+    "action": "Rerun with complete metrics acquisition so paymentservice cpu, memory, and cpu_throttle_ratio series cover all 23 cells of the run-intersection window.",
+    "rationale": "The resource policy check on paymentservice cpu_throttle_ratio is NO_VERDICT because of MISSING_RESOURCE_CELLS and coverage is INCOMPLETE; only complete cells allow the configured policy to produce PASS or FAIL.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/15",
+     "analysis-result.json#/evidence/18",
+     "analysis-result.json#/evidence/12",
+     "analysis-result.json#/evidence/13",
+     "analysis-result.json#/evidence/14"
+    ]
+   },
+   {
+    "rank": 4,
+    "action": "Investigate paymentservice CPU throttling around 1790632350000-1790632380000 (observed throttle ratio up to 0.56895862409): check container CPU limits/requests, scheduling, and neighboring workloads on the host.",
+    "rationale": "A candidate threshold finding exists for the configured throttle rule even though the policy check is NO_VERDICT; if confirmed with complete data it may explain late errors in the burst.",
+    "evidence_refs": [
+     "analysis-result.json#/findings/0",
+     "analysis-result.json#/evidence/13",
+     "analysis-result.json#/evidence/15"
+    ]
+   },
+   {
+    "rank": 5,
+    "action": "Keep the configured overall-errors policy (lte 0.01) and rerun after addressing the checkout error cause; treat this analysis as NO_VERDICT rather than PASS or FAIL even though business_verdict is FAIL.",
+    "rationale": "The policy-window error rate 2312/37841 exceeds the 0.01 threshold, but the overall verdict is NO_VERDICT because resource_verdict is NO_VERDICT; advice cannot change the deterministic verdict.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/16",
+     "analysis-result.json#/evidence/17",
+     "analysis-result.json#/policy_verdict"
+    ]
+   }
+  ],
+  "caveats": [
+   "Deterministic verdict is NO_VERDICT (analysis-result.json#/policy_verdict). The window summary reports business_verdict FAIL but resource_verdict NO_VERDICT and verdict NO_VERDICT; these are distinct values and the verdict is not changed by this advice.",
+   "Analysis coverage is INCOMPLETE with reasons RESOURCE_GAPS, MISSING_RESOURCE_CELLS, and SOURCE_ACQUISITION_PARTIAL; conclusions about paymentservice resource behavior are limited by 4 missing cells in each paymentservice series.",
+   "clock_alignment is not_verified_by_core; any ordering between the frontend.request_error timeline and the paymentservice throttle finding is unverified, so no lead/lag or temporal causal claim is supported.",
+   "Counts are not directly comparable across scopes/windows: overall sample_count is 39099, the policy-window denominator is 37841, and per-transaction denominators are about 6515; these differences do not imply an inconsistency.",
+   "Zero-error buckets outside the burst and detected_idle_gaps=0 describe only the observed window and do not prove stability, spare capacity, or absence of a problem.",
+   "The resource threshold finding (observed_max 0.56895862409 for paymentservice cpu_throttle_ratio) is a candidate finding under an NO_VERDICT policy check, not an established violation.",
+   "Errors are logged as frontend.request_error by the frontend service; attribution of the failures to paymentservice or any specific backend is not established by this evidence.",
+   "The error index name references 'resource-memory' (ltv-errors-20260928-214736-resource-memory-c51c58), but the index name is not analyzed evidence and no conclusion should be drawn from it."
+  ]
+ },
+ "schema": "ai-experiment-run.v2",
+ "phase": "pilot",
+ "case": "K08",
+ "rep": 1
+}

@@ -1,0 +1,195 @@
+{
+ "stage": "B",
+ "mode": "live",
+ "model": "deepseek-v4-flash-0731",
+ "tag": {
+  "phase": "holdout",
+  "attempt_id": "case-022-1-B-t1",
+  "arm": "B",
+  "stage": null,
+  "case": "case-022",
+  "rep": 1,
+  "try": 1
+ },
+ "retry_policy": "d2",
+ "qwen_exit": 0,
+ "wall_ms": 99058,
+ "relay": {
+  "schema_version": "advisory-ai-runtime-relay.v1",
+  "status": "FORWARDED_STRUCTURED_OUTPUT",
+  "received_request_count": 1,
+  "forwarded_request_count": 1,
+  "outcomes": [
+   "FORWARDED_STRUCTURED_OUTPUT"
+  ],
+  "retry_refused_reason": null,
+  "first_refused_reason": null,
+  "model_id": "deepseek-v4-flash-0731",
+  "retry_policy": "d2",
+  "requests": [
+   {
+    "ordinal": 1,
+    "forwarded": true,
+    "outcome": "FORWARDED_STRUCTURED_OUTPUT",
+    "provider_status": 200,
+    "latency_ms": 97735,
+    "usage": {
+     "prompt_tokens": 16057,
+     "total_tokens": 26982,
+     "completion_tokens": 10925,
+     "prompt_tokens_details": {
+      "cached_tokens": 1024
+     },
+     "completion_tokens_details": {
+      "reasoning_tokens": 8580
+     }
+    },
+    "model_returned": "deepseek-v4-flash-0731"
+   }
+  ],
+  "usage": {
+   "prompt_tokens": 16057,
+   "completion_tokens": 10925,
+   "total_tokens": 26982
+  },
+  "latency_ms": 97735
+ },
+ "relay_status": "FORWARDED_STRUCTURED_OUTPUT",
+ "usage": {
+  "prompt_tokens": 16057,
+  "completion_tokens": 10925,
+  "total_tokens": 26982
+ },
+ "latency_ms": 97735,
+ "retried": false,
+ "retry_refused_reason": null,
+ "status": "OK",
+ "note": null,
+ "output": {
+  "schema_version": "ai-advice-output.v1",
+  "summary": "Deterministic verdict: VALID run, overall policy_verdict PASS. Both windows (reference 1704067200000–1704067320000; workload-01 1704067320000–1704067800000) PASS business and resource checks; p95 latency is 50 ms (reference) and 100 ms (workload-01), both below the 200 ms threshold; 0 errors in all sampled scopes; achieved load constant at 60 requests/s. A CANDIDATE anomaly episode (p95 50→100 ms, duration 300000 ms) and one CANDIDATE correlation (generator active_threads vs p95, raw_rho ≈ 0.998, best_lag_ms −1000) were stored, but uncertainty is NOT_ESTIMATED, all headline selections are UNAVAILABLE, and clock alignment is not_verified_by_core, so no causal or lead/lag conclusion is supported. Advice focuses on clock verification, generator thread inspection, and a constant-thread rerun to test the hypothesis; none of this changes the PASS verdict.",
+  "hypotheses": [
+   {
+    "rank": 1,
+    "observation": "In workload-01, generator active_threads rose from ~3 (reference) to min 3 / max 6 (mean ≈ 4.87, split_half_shift 3) while p95 latency was 100 ms vs 50 ms in the reference window (window summaries evidence 36 and 35); the stored correlation pair association-09 is CANDIDATE with raw_rho ≈ 0.998 and best_lag_ms −1000, while resource-binding reports clock_alignment 'not_verified_by_core' (evidence 2).",
+    "possible_explanation": "The active-thread ramp may coincide with, or influence, the latency increase. This is a hypothesis only: the correlation is CANDIDATE with uncertainty NOT_ESTIMATED, and the clock relationship is unverified, so the −1000 ms lag does not establish that thread changes precede latency.",
+    "recommended_check": "First verify clock alignment between generator telemetry and service/load metrics; then compare the active_threads and p95 latency cell series at matched timestamps and rerun to test whether the CANDIDATE association persists.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/44",
+     "analysis-result.json#/evidence/21",
+     "analysis-result.json#/evidence/36",
+     "analysis-result.json#/evidence/35",
+     "analysis-result.json#/evidence/2"
+    ]
+   },
+   {
+    "rank": 2,
+    "observation": "During workload-01, target_rate and request_starts were constant at 60 requests/s (evidence 26, 20) while active_threads increased from ~3 to ~6 (evidence 21); all system queue depths stayed 0 (evidence 19, 16), cpu_work stayed 0.15, db_work stayed 0.015, and cpu-service-quota stayed 1 (evidence 24, 25, 17).",
+    "possible_explanation": "The latency increase may reflect generator-side behavior (thread ramp or per-thread pacing) rather than system saturation, since service-side resources show no variation and queues are empty; this is an alternative hypothesis, not established.",
+    "recommended_check": "Inspect generator thread configuration and JMeter sampler-level telemetry for workload-01; rerun at the same 60 requests/s target with a constant active-thread count to separate thread-ramp effects from service effects.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/26",
+     "analysis-result.json#/evidence/20",
+     "analysis-result.json#/evidence/21",
+     "analysis-result.json#/evidence/16",
+     "analysis-result.json#/evidence/24",
+     "analysis-result.json#/evidence/25",
+     "analysis-result.json#/evidence/17"
+    ]
+   },
+   {
+    "rank": 3,
+    "observation": "The anomaly check workload-01-response is CANDIDATE with ZERO_MAD against a reference median of 50 ms and reference MAD 0 (evidence 56); the reported episode shows p95 constant at 100 ms (observed_min=observed_max=100) for duration_ms 300000 (finding 0), and the workload-01 latency policy check PASSED with observed 100 ≤ threshold 200 (evidence 33).",
+    "possible_explanation": "The candidate episode may be an artifact of comparing to a zero-spread reference (any shift triggers ZERO_MAD) rather than evidence of a service problem; p95 was constant at 100 ms and below the 200 ms SLA threshold for the reported interval.",
+    "recommended_check": "Review the cell-level p95 series boundaries relative to the episode from/to timestamps and inspect per-request latency distributions; treat the episode as CANDIDATE/informational, not a policy failure.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/56",
+     "analysis-result.json#/findings/0",
+     "analysis-result.json#/evidence/33"
+    ]
+   },
+   {
+    "rank": 4,
+    "observation": "All system-resource association pairs (cpu_work, db_work, admission-queue, cpu-queue, db-queue, runtime-gc-pause, cpu-service-quota) are INSUFFICIENT_DATA with reasons including NO_RANK_VARIATION, CONSTANT_CONTROL and RESOURCE_DELTA_BELOW_MINIMUM, with null rho and uncertainty NOT_ESTIMATED (evidence 37–43); the diagnostic summary reports pairs_tested 8 and pairs_evaluable 1 (evidence 58).",
+    "possible_explanation": "Constant resource levels in this run provide no comparative variation from which to estimate sensitivity, so the relationship is unmeasured (NOT_ESTIMATED); this is not evidence that resources are unrelated or that the system is proven stable or unsaturated.",
+    "recommended_check": "Design a follow-up run with stepped load (multiple target rates) and verified clock alignment before attempting any sensitivity estimate.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/37",
+     "analysis-result.json#/evidence/43",
+     "analysis-result.json#/evidence/58",
+     "analysis-result.json#/evidence/2"
+    ]
+   }
+  ],
+  "recommendations": [
+   {
+    "rank": 1,
+    "action": "Verify clock alignment between the load generator, the service, and the analysis windows; resource-binding reports clock_alignment 'not_verified_by_core'.",
+    "rationale": "Best lag values (e.g., −1000 ms for the generator-threads pair) cannot support lead/lag or temporal hypotheses until the clock relationship is verified.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/2",
+     "analysis-result.json#/evidence/44"
+    ]
+   },
+   {
+    "rank": 2,
+    "action": "Inspect the generator's thread series and JMeter load profile for workload-01 to explain why active_threads rose from ~3 to ~6 while achieved and target rates stayed at 60 requests/s.",
+    "rationale": "The only CANDIDATE correlation involves generator-threads, so understanding whether the ramp is intentional or a telemetry artifact is the highest-value next step.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/21",
+     "analysis-result.json#/evidence/9",
+     "analysis-result.json#/evidence/20",
+     "analysis-result.json#/evidence/26",
+     "analysis-result.json#/evidence/44"
+    ]
+   },
+   {
+    "rank": 3,
+    "action": "Rerun workload-01 at the same 60 requests/s target with a constant active-thread count to test whether p95 latency returns to reference levels (50 ms) and whether the generator-threads CANDIDATE association persists.",
+    "rationale": "A controlled rerun is a test-operator action that can support or refute the thread-ramp hypothesis; it does not change the deterministic PASS verdict (100 ≤ 200 ms).",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/44",
+     "analysis-result.json#/evidence/35",
+     "analysis-result.json#/evidence/33",
+     "analysis-result.json#/evidence/34"
+    ]
+   },
+   {
+    "rank": 4,
+    "action": "Add load variation (multiple target rates) in a future run so sensitivity and correlation can be estimated.",
+    "rationale": "Constant resource series produced INSUFFICIENT_DATA / NOT_ESTIMATED for all system-resource pairs; rank variation is required for estimation.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/37",
+     "analysis-result.json#/evidence/58"
+    ]
+   },
+   {
+    "rank": 5,
+    "action": "Interpret the CANDIDATE anomaly episode and CANDIDATE correlations as informational only, given uncertainty NOT_ESTIMATED and all headline selections UNAVAILABLE; keep the policy verdict PASS.",
+    "rationale": "Facts report policy_verdict PASS and both window summaries PASS; no significance test was completed (e.g., association-09 headline selection reports OBSERVATION_COUNT_UNSUPPORTED).",
+    "evidence_refs": [
+     "analysis-result.json#/policy_verdict",
+     "analysis-result.json#/evidence/34",
+     "analysis-result.json#/evidence/52",
+     "analysis-result.json#/evidence/58"
+    ]
+   }
+  ],
+  "caveats": [
+   "Clock alignment is 'not_verified_by_core', so best_lag_ms values (including −1000 ms for association-09) cannot support lead/lag or causal readings until clocks are verified.",
+   "All correlation uncertainties are NOT_ESTIMATED and all headline selections are UNAVAILABLE (association-09: OBSERVATION_COUNT_UNSUPPORTED; others: PAIR_NOT_EVALUABLE); no statistical significance is established for any association.",
+   "The CANDIDATE anomaly episode and CANDIDATE correlation do not alter the deterministic verdict: overall policy_verdict PASS, and both window summaries PASS with p95 100 ms ≤ 200 ms threshold.",
+   "System resource series are constant in both windows, so the absence of an estimated correlation/sensitivity (INSUFFICIENT_DATA, NOT_ESTIMATED) does not prove stability, spare capacity, or absence of load.",
+   "Overall metric summaries (36,000 samples, throughput denominator 600083) and per-window summaries (7,200 and 28,800 samples, denominators 120,000 and 480,000) are different scopes; they are not inconsistent with each other.",
+   "Zero errors were observed in all sampled scopes (0/36000, 0/7200, 0/28800); this supports, but does not prove, absence of problems outside the sampled latencies."
+  ]
+ },
+ "schema": "ai-experiment-run.holdout.v1",
+ "case": "case-022",
+ "rep": 1,
+ "arm": "B",
+ "try": 1,
+ "attempt_id": "case-022-1-B-t1",
+ "model_id": "deepseek-v4-flash-0731",
+ "prompt_sha256": "3c0f28bee6517c13c5c854615e7d3d59301893d9723880818e4034a32e9133bf"
+}

@@ -1,0 +1,168 @@
+{
+ "stage": "S2",
+ "mode": "live",
+ "model": "deepseek-v4-flash-0731",
+ "tag": {
+  "phase": "v2-pilot",
+  "stage": "S2",
+  "case": "K08",
+  "rep": 2,
+  "attempt": 1
+ },
+ "qwen_exit": 0,
+ "wall_ms": 101462,
+ "relay": {
+  "schema_version": "advisory-ai-runtime-relay.v1",
+  "status": "FORWARDED_STRUCTURED_OUTPUT",
+  "request_count": 1,
+  "usage": {
+   "prompt_tokens": 10107,
+   "total_tokens": 19711,
+   "completion_tokens": 9604,
+   "prompt_tokens_details": {
+    "cached_tokens": 1024
+   },
+   "completion_tokens_details": {
+    "reasoning_tokens": 7122
+   }
+  },
+  "latency_ms": 100110,
+  "model_returned": "deepseek-v4-flash-0731"
+ },
+ "relay_status": "FORWARDED_STRUCTURED_OUTPUT",
+ "usage": {
+  "prompt_tokens": 10107,
+  "total_tokens": 19711,
+  "completion_tokens": 9604,
+  "prompt_tokens_details": {
+   "cached_tokens": 1024
+  },
+  "completion_tokens_details": {
+   "reasoning_tokens": 7122
+  }
+ },
+ "latency_ms": 100110,
+ "status": "OK",
+ "note": null,
+ "output": {
+  "schema_version": "ai-advice-output.v1",
+  "summary": "Run is VALID but analysis coverage is INCOMPLETE (RESOURCE_GAPS, MISSING_RESOURCE_CELLS, SOURCE_ACQUISITION_PARTIAL). The overall-errors policy (threshold <= 0.01) FAILED in the evaluation window: 2312 errors out of 37841 samples. All 2312 recorded errors are in the checkout transaction scope, and the error profile groups them as frontend.request_error on service frontend with timestamps from 1790632254832 to 1790632369669. The paymentservice cpu-throttle-ratio SLA check returned NO_VERDICT because 4 of 23 cells are missing, although a threshold finding shows two cells above 0.2 between 1790632350000 and 1790632380000. The window policy summary reports business_verdict FAIL, resource_verdict NO_VERDICT, and overall verdict NO_VERDICT; the policy_verdict fact is NO_VERDICT. No capacity summary is present, so no capacity bound is derivable. The deterministic verdict NO_VERDICT is preserved; recommended next steps are clock verification, a rerun with complete paymentservice metrics, and log/trace inspection for the error episode.",
+  "hypotheses": [
+   {
+    "rank": 1,
+    "observation": "The overall-errors policy check observed 2312 errors out of 37841 samples in the run-intersection window and returned FAIL against threshold 0.01 (analysis-result.json#/evidence/16). All 2312 errors in the transaction scope are attributed to the checkout transaction (analysis-result.json#/evidence/3), and the error profile groups them as frontend.request_error on service frontend with first error 1790632254832 and last error 1790632369669 (analysis-result.json#/evidence/19).",
+    "possible_explanation": "Checkout requests may have failed during a limited episode that overlapped a paymentservice CPU-throttling spike: a threshold finding records two cells above 0.2 in paymentservice cpu_throttle_ratio between 1790632350000 and 1790632380000 (analysis-result.json#/findings/0). This is only a hypothesis; clock alignment is not verified by core (analysis-result.json#/evidence/7), so no ordering or cause is established.",
+    "recommended_check": "Verify clock alignment across the load generator, the error index, and the metrics source first, then correlate the error timeline (about 1790632245000-1790632380000) with the paymentservice throttle ratio series and inspect logs/traces for that episode.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/3",
+     "analysis-result.json#/evidence/16",
+     "analysis-result.json#/evidence/19",
+     "analysis-result.json#/findings/0",
+     "analysis-result.json#/evidence/7"
+    ]
+   },
+   {
+    "rank": 2,
+    "observation": "The paymentservice cpu-throttle-ratio SLA policy check returned NO_VERDICT with reason MISSING_RESOURCE_CELLS (analysis-result.json#/evidence/15). The paymentservice cpu, cpu_throttle_ratio, and memory series each report 4 missing cells of 23 expected, with reasons RESOURCE_GAPS and longest_gap_cells=4 (analysis-result.json#/evidence/12, analysis-result.json#/evidence/13, analysis-result.json#/evidence/14), and the metrics source acquisition is PARTIAL with reason MISSING_SAMPLES (analysis-result.json#/evidence/18).",
+    "possible_explanation": "Incomplete metrics collection prevented any decisive verdict on paymentservice throttling; the observed threshold finding may understate throttling that occurred during the 4 missing cells.",
+    "recommended_check": "Rerun with complete paymentservice metrics coverage so missing_cells and longest_gap_cells are 0, then let the SLA check evaluate to PASS or FAIL.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/15",
+     "analysis-result.json#/evidence/12",
+     "analysis-result.json#/evidence/13",
+     "analysis-result.json#/evidence/14",
+     "analysis-result.json#/evidence/18"
+    ]
+   },
+   {
+    "rank": 3,
+    "observation": "In the run-intersection window, paymentservice memory averages about 28.1 MB with a positive slope of about 10,886 bytes/second and a max of about 33.0 MB (analysis-result.json#/evidence/14). The error index name in the sampled messages contains the string 'resource-memory' (analysis-result.json#/evidence/19).",
+    "possible_explanation": "Memory growth or memory-related pressure in paymentservice may be related to the error episode, but the input has no release/config data, log bodies, or traces, and the index name is not a measurement, so this is only a hypothesis.",
+    "recommended_check": "Rerun while monitoring paymentservice memory trajectory and correlate it with the throttle ratio and the error timeline after clock alignment is verified.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/14",
+     "analysis-result.json#/evidence/19"
+    ]
+   },
+   {
+    "rank": 4,
+    "observation": "The window policy summary reports business_verdict FAIL and resource_verdict NO_VERDICT with overall verdict NO_VERDICT (analysis-result.json#/evidence/17); the policy_verdict fact is NO_VERDICT and analysis coverage is INCOMPLETE with RESOURCE_GAPS, MISSING_RESOURCE_CELLS, and SOURCE_ACQUISITION_PARTIAL (analysis-result.json#/policy_verdict, analysis-result.json#/analysis_coverage).",
+    "possible_explanation": "The window verdict is non-decisive because the resource portion could not be evaluated due to missing paymentservice cells; the FAILing error policy alone does not yield a fuller verdict, and no capacity summary is present to add capacity information.",
+    "recommended_check": "Treat the window as non-decisive (NO_VERDICT), and rerun with complete data or confirm the intended policy set before drawing conclusions from the business FAIL.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/17",
+     "analysis-result.json#/policy_verdict",
+     "analysis-result.json#/analysis_coverage",
+     "analysis-result.json#/evidence/16"
+    ]
+   }
+  ],
+  "recommendations": [
+   {
+    "rank": 1,
+    "action": "Verify clock alignment across all sources (load generator timestamps, error index, Prometheus metrics) before interpreting any temporal overlap.",
+    "rationale": "clock_alignment is not_verified_by_core, so the apparent overlap between the checkout error episode and the paymentservice throttle finding cannot yet support lead/lag or causal ordering.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/7",
+     "analysis-result.json#/evidence/19",
+     "analysis-result.json#/findings/0"
+    ]
+   },
+   {
+    "rank": 2,
+    "action": "Rerun the test with complete paymentservice metrics collection so no cells are missing.",
+    "rationale": "4 of 23 cells are missing for paymentservice cpu, throttle, and memory (RESOURCE_GAPS / MISSING_SAMPLES), which caused the throttle SLA check to be NO_VERDICT and the analysis coverage to be INCOMPLETE.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/12",
+     "analysis-result.json#/evidence/13",
+     "analysis-result.json#/evidence/14",
+     "analysis-result.json#/evidence/15",
+     "analysis-result.json#/evidence/18"
+    ]
+   },
+   {
+    "rank": 3,
+    "action": "Inspect application logs and traces for checkout, frontend, and paymentservice covering the error episode, using the error-store samples as pointers.",
+    "rationale": "The error profile contains only sampled messages grouped as frontend.request_error (2,312 errors, first 1790632254832, last 1790632369669); no log bodies or traces are in the input, so the specific failure path in checkout is unverified.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/19",
+     "analysis-result.json#/evidence/3",
+     "analysis-result.json#/evidence/16"
+    ]
+   },
+   {
+    "rank": 4,
+    "action": "Keep the existing overall-errors policy (rule overall-errors, threshold <= 0.01) and the paymentservice cpu-throttle-ratio SLA policy unchanged; do not alter their effect, and do not treat NO_VERDICT as a pass.",
+    "rationale": "The overall-errors policy already produced a FAIL inside the window, and the throttle SLA check is NO_VERDICT only because of missing cells, not because of policy configuration; the remedy is complete data collection, not a policy change.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/16",
+     "analysis-result.json#/evidence/15"
+    ]
+   },
+   {
+    "rank": 5,
+    "action": "Monitor paymentservice memory over a rerun and compare its trajectory with the throttle and error timelines.",
+    "rationale": "paymentservice memory shows a positive slope of about 10,886 bytes/second in the run-intersection window, but no causal relationship is established; a monitored rerun is the bounded way to test whether memory growth tracks the episode.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/14",
+     "analysis-result.json#/evidence/19"
+    ]
+   }
+  ],
+  "caveats": [
+   "The deterministic verdict NO_VERDICT is preserved and unchanged by this advice; business_verdict FAIL and resource_verdict NO_VERDICT remain distinct in the window policy summary.",
+   "Analysis coverage is INCOMPLETE with reasons RESOURCE_GAPS, MISSING_RESOURCE_CELLS, and SOURCE_ACQUISITION_PARTIAL; 4 of 23 paymentservice cells are missing across cpu, throttle, and memory series.",
+   "Clock alignment is not_verified_by_core; no temporal ordering or causal hypothesis can be confirmed until clocks are verified, so the checkout-error and throttle-spike overlap is a hypothesis only.",
+   "The errors policy observation of 2312/37841 is scoped to the run-intersection window and the transaction-scope checkout count of 2312/6515 covers the whole run; these are different quantities and are not inconsistent with the overall count of 2312/39099.",
+   "A threshold finding of two paymentservice cpu_throttle_ratio cells above 0.2 is present, but the SLA policy check itself is NO_VERDICT; the finding does not by itself make a policy PASS or FAIL and may understate throttling during missing cells.",
+   "No capacity summary is present in the input, so no capacity bound, headroom, or capacity-related verdict can be derived.",
+   "Missing cells and partial source acquisition do not prove the absence of throttling, stability, spare capacity, or low load.",
+   "The error profile represents sampled messages only, not full log bodies; no traces, call graph/topology, individual samples, release data, or configuration data are in the input, so the number of samples that hit reported max latencies is unknown.",
+   "A window covers only part of the run (evaluation window about 345,000 ms of a 360,014 ms run); numbers outside the window are separate quantities."
+  ]
+ },
+ "schema": "ai-experiment-run.v2",
+ "phase": "pilot",
+ "case": "K08",
+ "rep": 2
+}

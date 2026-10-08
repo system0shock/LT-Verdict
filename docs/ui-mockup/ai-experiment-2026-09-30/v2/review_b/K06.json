@@ -1,0 +1,115 @@
+[
+  {
+    "id": "R012",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T1",
+        "field": "#/summary",
+        "quote": "NO_POLICY because no resource policy is configured",
+        "why": "NO_POLICY can also mean no applicable policy or no required capacity, so the evidence does not establish that no resource policy is configured."
+      },
+      {
+        "type": "T2",
+        "field": "#/hypotheses/2/possible_explanation",
+        "quote": "may originate in a downstream service called during checkout",
+        "why": "The aggregate JMeter and OpenSearch counts do not establish a mapping between checkout failures and the frontend error group or a downstream dependency."
+      }
+    ],
+    "required_facts_preserved": false,
+    "missing_facts": [
+      "run validity is VALID"
+    ],
+    "usefulness": 3,
+    "notes": "Detailed and mostly actionable, but it overstates both the NO_POLICY cause and the cross-source failure path."
+  },
+  {
+    "id": "R038",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T1",
+        "field": "#/summary",
+        "quote": "no capacity policy or capacity summary is present",
+        "why": "Although no capacity summary is present, NO_POLICY does not prove that no capacity policy is configured because it can also result from no applicable policy or no required capacity."
+      }
+    ],
+    "required_facts_preserved": false,
+    "missing_facts": [
+      "run validity is VALID"
+    ],
+    "usefulness": 4,
+    "notes": "Otherwise provides a careful, evidence-based investigation sequence."
+  },
+  {
+    "id": "R048",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T1",
+        "field": "#/summary",
+        "quote": "NO_POLICY (no capacity policy configured)",
+        "why": "NO_POLICY does not uniquely establish that a capacity policy is absent; it can also mean no applicable policy or no required capacity."
+      },
+      {
+        "type": "T2",
+        "field": "#/recommendations/4/rationale",
+        "quote": "the correlation over the window rest on incomplete data",
+        "why": "The reported correlation uses complete 47-cell error and achieved-load series, while the incomplete paymentservice resource series are not its paired inputs."
+      }
+    ],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 3,
+    "notes": "It preserves the main verdict and figures but incorrectly ties NO_POLICY and correlation validity to unsupported conditions."
+  },
+  {
+    "id": "R060",
+    "hard_defect": false,
+    "defects": [],
+    "required_facts_preserved": false,
+    "missing_facts": [
+      "run validity is VALID"
+    ],
+    "usefulness": 4,
+    "notes": "The analysis is careful and actionable but omits the stated run-validity fact."
+  },
+  {
+    "id": "R061",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T1",
+        "field": "#/summary",
+        "quote": "resource_verdict NO_POLICY (no resource policy configured)",
+        "why": "NO_POLICY does not prove that no resource policy is configured because it may instead reflect no applicable policy or no required capacity."
+      }
+    ],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 4,
+    "notes": "Strong evidence handling overall, with an unsupported explanation for the resource verdict."
+  },
+  {
+    "id": "R065",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T2",
+        "field": "#/summary",
+        "quote": "OpenSearch groups them as frontend.request_error",
+        "why": "Equal aggregate counts do not demonstrate that the checkout sampler errors and OpenSearch records are the same events."
+      },
+      {
+        "type": "T1",
+        "field": "#/recommendations/4/rationale",
+        "quote": "absence of a resource policy",
+        "why": "NO_POLICY does not establish that a resource policy is absent, since it can also result from no applicable policy or no required capacity."
+      }
+    ],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 4,
+    "notes": "Thorough and cautious in most respects, though it still makes an unsupported cross-source mapping and NO_POLICY inference."
+  }
+]

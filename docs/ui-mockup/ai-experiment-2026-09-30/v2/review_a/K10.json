@@ -1,0 +1,79 @@
+[
+  {
+    "id": "R016",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T3",
+        "field": "#/caveats/3",
+        "quote": "Max latency values ... are single-sample observations",
+        "why": "The aggregates do not reveal how many samples reached each reported maximum."
+      }
+    ],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 2,
+    "notes": "The verdict and metrics are accurate, but the claim about maximum-sample counts could mislead an investigation."
+  },
+  {
+    "id": "R017",
+    "hard_defect": false,
+    "defects": [],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 5,
+    "notes": "It preserves the verdict and key metrics and gives prioritized checks without claiming a cause."
+  },
+  {
+    "id": "R033",
+    "hard_defect": false,
+    "defects": [],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 4,
+    "notes": "The advice is useful and qualified, though its reference to a home endpoint goes beyond the recorded transaction label."
+  },
+  {
+    "id": "R062",
+    "hard_defect": false,
+    "defects": [],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 4,
+    "notes": "It gives practical checks and keeps possible causes hypothetical, with some generic monitoring advice."
+  },
+  {
+    "id": "R063",
+    "hard_defect": false,
+    "defects": [],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 5,
+    "notes": "It accurately distinguishes the missing capacity evidence from the fixed knee-detector limitation and proposes verifiable next steps."
+  },
+  {
+    "id": "R068",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T3",
+        "field": "#/summary",
+        "quote": "all 7 JMeter transactions",
+        "why": "The evidence has six transaction summaries; the seventh metric summary is overall."
+      },
+      {
+        "type": "T4",
+        "field": "#/summary",
+        "quote": "p99s range from 7 ms (reset cart) to 96 ms (home)",
+        "why": "Reset cart has p95 of 7 ms and p99 of 47 ms, so the transaction p99 range is 47–96 ms."
+      }
+    ],
+    "required_facts_preserved": false,
+    "missing_facts": [
+      "There are six transaction summaries, not seven.",
+      "Reset cart p99 is 47 ms, not 7 ms."
+    ],
+    "usefulness": 2,
+    "notes": "The action plan is partly useful, but the incorrect transaction count and percentile can misdirect interpretation."
+  }
+]

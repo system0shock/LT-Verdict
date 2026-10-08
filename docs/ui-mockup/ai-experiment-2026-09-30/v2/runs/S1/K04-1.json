@@ -1,0 +1,150 @@
+{
+ "stage": "S1",
+ "mode": "live",
+ "model": "deepseek-v4-flash-0731",
+ "tag": {
+  "phase": "v2-pilot",
+  "stage": "S1",
+  "case": "K04",
+  "rep": 1,
+  "attempt": 1
+ },
+ "qwen_exit": 0,
+ "wall_ms": 73393,
+ "relay": {
+  "schema_version": "advisory-ai-runtime-relay.v1",
+  "status": "FORWARDED_STRUCTURED_OUTPUT",
+  "request_count": 1,
+  "usage": {
+   "prompt_tokens": 3414,
+   "total_tokens": 11017,
+   "completion_tokens": 7603,
+   "prompt_tokens_details": {
+    "cached_tokens": 1024
+   },
+   "completion_tokens_details": {
+    "reasoning_tokens": 5906
+   }
+  },
+  "latency_ms": 72149,
+  "model_returned": "deepseek-v4-flash-0731"
+ },
+ "relay_status": "FORWARDED_STRUCTURED_OUTPUT",
+ "usage": {
+  "prompt_tokens": 3414,
+  "total_tokens": 11017,
+  "completion_tokens": 7603,
+  "prompt_tokens_details": {
+   "cached_tokens": 1024
+  },
+  "completion_tokens_details": {
+   "reasoning_tokens": 5906
+  }
+ },
+ "latency_ms": 72149,
+ "status": "OK",
+ "note": null,
+ "output": {
+  "schema_version": "ai-advice-output.v1",
+  "summary": "Deterministic verdict: PASS (run VALID; analysis coverage COMPLETE; findings empty). The only policy check present, \"overall-errors\", evaluated error_rate_ratio with operator lte at threshold 0.01 and observed 0 errors / 2623 overall samples, returning PASS. All six transaction summaries report error_count 0 with sample counts 437-438 each. The verdict covers only this configured error-rate policy; it is not evidence of latency-SLO or capacity-bound compliance, and zero errors / empty findings do not prove stability or spare capacity.",
+  "hypotheses": [
+   {
+    "rank": 1,
+    "observation": "The policy check \"overall-errors\" (evidence/7) reports PASS: error_rate_ratio observed numerator 0 / denominator 2623 against threshold 0.01 with operator lte, and the overall metric summary (evidence/0) reports error_count 0 and sample_count 2623.",
+    "possible_explanation": "All sampled requests in the overall window recorded no failures, which satisfies the configured error-rate policy. This supports PASS for that policy but does not prove the absence of failures outside the 2623-sample window or in unmeasured scopes.",
+    "recommended_check": "Confirm that the 2623-sample overall window corresponds to the intended full run (start/stop alignment via run metadata); if it does not, rerun with a corrected window before generalizing the PASS.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/7",
+     "analysis-result.json#/evidence/0",
+     "analysis-result.json#/policy_verdict"
+    ]
+   },
+   {
+    "rank": 2,
+    "observation": "Home (evidence/4) shows the highest observed max latency (904 ms) and p99 (96 ms, p50 27 ms) among transactions; checkout (evidence/3) max is 444 ms; the overall summary (evidence/0) is max 904 ms, p99 77 ms.",
+    "possible_explanation": "Home may occasionally take longer to respond under this workload (e.g., heavier page or transient contention); the spread between p95 (61 ms) and max (904 ms) is consistent with an outlier sample rather than sustained degradation. No latency policy was evaluated, so this does not affect the PASS verdict.",
+    "recommended_check": "If a latency SLO exists for home, configure an explicit latency policy/metric and rerun; otherwise inspect the home sampler timeline data to characterize the 904 ms outlier (single slow sample vs repeated pattern) before drawing any conclusion.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/4",
+     "analysis-result.json#/evidence/0",
+     "analysis-result.json#/evidence/3"
+    ]
+   },
+   {
+    "rank": 3,
+    "observation": "Per-transaction sample counts are 437-438 (evidence/1..6) and sum to the overall sample_count 2623 (evidence/0); every transaction summary reports error_count 0, and throughput numerators are 437000/438000 per transaction and 2623000 overall with a common denominator 44986.",
+    "possible_explanation": "The evidence is consistent with a scripted workload with a roughly even transaction mix and no recorded failures. Even sample counts and zero errors do not demonstrate that the intended load intensity was met or that the system has spare capacity.",
+    "recommended_check": "Review the load script and run metadata (threads, ramp, duration) to verify the intended load profile; if capacity or spare-capacity questions matter, compare achieved throughput against the target and consider a capacity-bound policy.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0",
+     "analysis-result.json#/evidence/1",
+     "analysis-result.json#/evidence/4",
+     "analysis-result.json#/evidence/6"
+    ]
+   },
+   {
+    "rank": 4,
+    "observation": "The analysis reports run_validity VALID, policy_verdict PASS, analysis_coverage COMPLETE with no reasons, and findings is empty; the only policy check present is the overall error-rate check (evidence/7).",
+    "possible_explanation": "Nothing was flagged by the configured checks, but COMPLETE coverage refers only to the checks that were configured. Absence of findings does not indicate compliance with unconfigured policies such as latency thresholds or capacity bounds.",
+    "recommended_check": "Confirm the intended policy set before relying on the PASS: add explicit policies for any latency or capacity SLOs that matter, then rerun with those policies present.",
+    "evidence_refs": [
+     "analysis-result.json#/run_validity",
+     "analysis-result.json#/policy_verdict",
+     "analysis-result.json#/analysis_coverage",
+     "analysis-result.json#/evidence/7"
+    ]
+   }
+  ],
+  "recommendations": [
+   {
+    "rank": 1,
+    "action": "Report and keep the deterministic verdict PASS unchanged; do not reinterpret it as FAIL or NO_POLICY.",
+    "rationale": "The configured error-rate policy observed 0 errors in 2623 samples against a 0.01 threshold and returned PASS; the verdict is deterministic and advisory output never changes it.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/7",
+     "analysis-result.json#/policy_verdict"
+    ]
+   },
+   {
+    "rank": 2,
+    "action": "Verify clock synchronization and run-window alignment before using latency max values or any ordering for conclusions; do not treat an outlier (e.g., home 904 ms) as a causal event.",
+    "rationale": "The metric summaries contain no timestamps or clock-relationship evidence, so a raw max value is a measured point, not a verified duration-based or temporal conclusion.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/4",
+     "analysis-result.json#/evidence/0"
+    ]
+   },
+   {
+    "rank": 3,
+    "action": "If latency or capacity SLOs matter, configure explicit policies for them and rerun; the current PASS covers only the error-rate policy.",
+    "rationale": "The evidence includes latency percentiles and maxima, but no latency policy or capacity bound is present, so PASS cannot be generalized to those SLO dimensions.",
+    "evidence_refs": [
+     "analysis-result.json#/analysis_coverage",
+     "analysis-result.json#/policy_verdict",
+     "analysis-result.json#/evidence/0"
+    ]
+   },
+   {
+    "rank": 4,
+    "action": "If the intent was load or capacity validation, inspect the load profile versus target (script, threads, ramp, duration) using run metadata.",
+    "rationale": "Even sample counts and zero errors across the summaries do not prove intended load intensity or spare capacity; confirming achieved load against the target is the bounded check.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0",
+     "analysis-result.json#/evidence/1",
+     "analysis-result.json#/evidence/6"
+    ]
+   }
+  ],
+  "caveats": [
+   "PASS is limited to the configured overall error-rate policy (<= 0.01). No latency policy, capacity bound, or knee-based assessment is present, so PASS must not be generalized to those dimensions.",
+   "error_count 0 and empty findings do not prove stability, spare capacity, low load, or absence of a problem beyond the sampled 2623-sample window.",
+   "Count comparisons (overall 2623 vs per-transaction 437/438) are only valid within the same scope and window; no timestamp or clock-relationship data is present to confirm window alignment.",
+   "Latency maxima (e.g., home 904 ms) are single observed points; without a baseline or configured policy they do not indicate degradation.",
+   "analysis_coverage COMPLETE reflects the configured checks only; it does not mean every possible SLO or metric was evaluated."
+  ]
+ },
+ "schema": "ai-experiment-run.v2",
+ "phase": "pilot",
+ "case": "K04",
+ "rep": 1
+}

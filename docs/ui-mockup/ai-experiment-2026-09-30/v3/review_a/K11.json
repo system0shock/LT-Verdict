@@ -1,0 +1,70 @@
+[
+  {
+    "id": "R004",
+    "hard_defect": false,
+    "defects": [],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 4,
+    "notes": "The advice prioritizes policy configuration, resource coverage, and inspection of the latency tail while keeping its conclusions within the overall scope."
+  },
+  {
+    "id": "R018",
+    "hard_defect": false,
+    "defects": [],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 4,
+    "notes": "The checks are actionable and the verdict is handled correctly, though the response is repetitive."
+  },
+  {
+    "id": "R023",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T5",
+        "field": "#/recommendations/9/action",
+        "quote": "treat the empty findings list in this run as NOT_ESTIMATED",
+        "why": "The evidence contains an empty findings array, not a NOT_ESTIMATED finding status; this advises an operator to report an invented classification."
+      }
+    ],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 2,
+    "notes": "Most observations are grounded, but the invented findings status could mislead reporting."
+  },
+  {
+    "id": "R030",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T7",
+        "field": "#/recommendations/7/rationale",
+        "quote": "a VALID run with incomplete coverage still cannot support a verdict",
+        "why": "Incomplete resource coverage does not itself prevent a policy verdict; NO_POLICY means no applicable policy or required capacity."
+      }
+    ],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 2,
+    "notes": "The main actions are useful, but the stated dependency between coverage and a verdict could send an operator toward the wrong remedy."
+  },
+  {
+    "id": "R047",
+    "hard_defect": false,
+    "defects": [],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 5,
+    "notes": "It gives concise, prioritized checks and keeps every conclusion within the available evidence."
+  },
+  {
+    "id": "R048",
+    "hard_defect": false,
+    "defects": [],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 4,
+    "notes": "It preserves the key facts and recommends verifiable checks, with some unnecessary speculative detail."
+  }
+]

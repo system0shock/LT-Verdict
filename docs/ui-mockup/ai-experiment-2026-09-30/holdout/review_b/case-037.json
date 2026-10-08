@@ -1,0 +1,6 @@
+[
+  {"id":"R043","hard_defect":false,"defects":[],"required_facts_preserved":true,"missing_facts":[],"usefulness":5,"notes":"Correctly preserves the PASS verdict and gives appropriately cautious, verifiable follow-up actions."},
+  {"id":"R068","hard_defect":false,"defects":[],"required_facts_preserved":true,"missing_facts":[],"usefulness":5,"notes":"Accurate, well-prioritized advice that keeps candidate associations and timing claims appropriately qualified."},
+  {"id":"R081","hard_defect":false,"defects":[],"required_facts_preserved":true,"missing_facts":[],"usefulness":5,"notes":"Correctly states the deterministic results and recommends suitable telemetry and rerun checks without asserting causation."},
+  {"id":"R127","hard_defect":true,"defects":[{"type":"T2","field":"#/recommendations/3","quote":"Treat downstream-wait and generator-threads as a single signal","why":"Identical candidate correlation summaries do not establish that two distinct resource series are one underlying signal or are not independent corroboration."}],"required_facts_preserved":true,"missing_facts":[],"usefulness":4,"notes":"Otherwise accurate and useful, but the recommendation overstates the relationship between the two candidate series."}
+]

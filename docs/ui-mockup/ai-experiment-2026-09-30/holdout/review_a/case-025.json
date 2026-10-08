@@ -1,0 +1,100 @@
+[
+  {
+    "id": "R043",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T8",
+        "field": "#/hypotheses/3/observation",
+        "quote": "db queue depth stays near 252.6–254.2 in both windows",
+        "why": "The reference-window db-queue falls as low as 14.7, so it does not stay in that range."
+      },
+      {
+        "type": "T8",
+        "field": "#/hypotheses/7/possible_explanation",
+        "quote": "the reference db-queue series is perfectly flat (MAD 0)",
+        "why": "Zero MAD does not mean a flat series; the reported reference values range from 14.7 to 252.6."
+      },
+      {
+        "type": "T8",
+        "field": "#/recommendations/2/rationale",
+        "quote": "a continuously full db-queue",
+        "why": "The evidence gives no queue capacity and does not show that the queue was continuously full."
+      },
+      {
+        "type": "T7",
+        "field": "#/caveats/9",
+        "quote": "across the run",
+        "why": "These resource summaries cover the evaluated windows, which end before the run ends."
+      }
+    ],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 3,
+    "notes": "The response preserves the verdicts and offers useful checks, but it overstates what the db-queue and windowed telemetry show."
+  },
+  {
+    "id": "R067",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T8",
+        "field": "#/hypotheses/3/observation",
+        "quote": "Overall and per-window latency summaries report p50 = p95 = p99 = 60031 ms",
+        "why": "The reference-window p50 is 36,063 ms, while its p95 and p99 are 60,031 ms."
+      }
+    ],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 4,
+    "notes": "The operator actions are specific and generally supported, with one incorrect statement about the reference-window median."
+  },
+  {
+    "id": "R125",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T8",
+        "field": "#/hypotheses/1/observation",
+        "quote": "db-queue stays near 252.6–254.2 in both windows",
+        "why": "The reference-window db-queue has a reported minimum of 14.7."
+      }
+    ],
+    "required_facts_preserved": false,
+    "missing_facts": [
+      "The reference window has 1,609 errors out of 9,600 samples."
+    ],
+    "usefulness": 4,
+    "notes": "The response gives practical checks and preserves the main verdicts, but omits the reference-window error count and overstates its db-queue range."
+  },
+  {
+    "id": "R131",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T8",
+        "field": "#/hypotheses/0/observation",
+        "quote": "p50/p95/p99 = 60031 ms with max 60000 ms in the overall and per-window summaries",
+        "why": "The reference-window p50 is 36,063 ms."
+      },
+      {
+        "type": "T8",
+        "field": "#/hypotheses/2/possible_explanation",
+        "quote": "its queue is near saturation",
+        "why": "No db-queue capacity or saturation threshold is provided."
+      },
+      {
+        "type": "T8",
+        "field": "#/hypotheses/3/possible_explanation",
+        "quote": "any deviation is anomalous",
+        "why": "A zero reference MAD alone does not establish that every deviation meets the anomaly rule."
+      }
+    ],
+    "required_facts_preserved": false,
+    "missing_facts": [
+      "The whole-run summary has 16,009 errors out of 24,000 samples."
+    ],
+    "usefulness": 3,
+    "notes": "The verdict and coverage are reported correctly, but several claims exceed the aggregates and the whole-run error count is omitted."
+  }
+]

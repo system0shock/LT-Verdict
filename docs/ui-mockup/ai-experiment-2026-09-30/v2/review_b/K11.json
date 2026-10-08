@@ -1,0 +1,104 @@
+[
+  {
+    "id": "R009",
+    "hard_defect": false,
+    "defects": [],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 5,
+    "notes": "Correctly preserves the verdict and limits conclusions to the available aggregate evidence."
+  },
+  {
+    "id": "R043",
+    "hard_defect": false,
+    "defects": [],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 4,
+    "notes": "Useful and well-bounded advice, although some resource-gap explanations are necessarily hypothetical."
+  },
+  {
+    "id": "R051",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T7",
+        "field": "#/summary",
+        "quote": "NO_POLICY reflects that no capacity policy or required capacity bound is configured",
+        "why": "NO_POLICY can also mean no applicable policy or no required capacity, so the evidence does not establish this specific configuration cause."
+      }
+    ],
+    "required_facts_preserved": false,
+    "missing_facts": [
+      "throughput_rps numerator=2623000 and denominator=44986"
+    ],
+    "usefulness": 3,
+    "notes": "Mostly cautious and actionable, but it overstates the cause of NO_POLICY and omits the raw throughput numbers."
+  },
+  {
+    "id": "R055",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T2",
+        "field": "#/summary",
+        "quote": "a throughput ratio of 2,623,000/44,986 (≈58.3 ... per-second semantics)",
+        "why": "The evidence provides raw numerator and denominator fields without semantics for deriving a rate, so this inferred rps relation is unsupported."
+      },
+      {
+        "type": "T3",
+        "field": "#/summary",
+        "quote": "suggests one or a few outlier samples",
+        "why": "The aggregate maximum and percentiles do not establish how many samples were near or equal to the maximum."
+      }
+    ],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 2,
+    "notes": "It preserves the main status facts but introduces an unsupported throughput interpretation and tail multiplicity inference."
+  },
+  {
+    "id": "R057",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T7",
+        "field": "#/summary",
+        "quote": "Because no configured policy or required capacity is present",
+        "why": "The evidence does not identify which NO_POLICY condition applies, and NO_POLICY may instead reflect no applicable policy or missing required capacity."
+      }
+    ],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 3,
+    "notes": "The aggregate-data limitations are handled carefully, but the stated explanation for the verdict is unsupported."
+  },
+  {
+    "id": "R071",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T7",
+        "field": "#/summary",
+        "quote": "no policy thresholds are present",
+        "why": "NO_POLICY does not prove that thresholds are absent; it may result from no applicable policy or missing required capacity."
+      },
+      {
+        "type": "T7",
+        "field": "#/recommendations/2/action",
+        "quote": "NO_POLICY will persist until a policy is configured",
+        "why": "Configuring a policy alone does not resolve NO_POLICY when required capacity is still absent."
+      },
+      {
+        "type": "T2",
+        "field": "#/hypotheses/3/possible_explanation",
+        "quote": "the ratio implies roughly 58 requests per second",
+        "why": "The numerator and denominator semantics are not defined in the evidence, so deriving an rps value is unsupported."
+      }
+    ],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 2,
+    "notes": "It accurately reports the aggregate metrics but misstates NO_POLICY conditions and derives an unsupported throughput rate."
+  }
+]

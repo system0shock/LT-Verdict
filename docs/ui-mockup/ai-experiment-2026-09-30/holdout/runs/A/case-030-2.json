@@ -1,0 +1,203 @@
+{
+ "stage": "A",
+ "mode": "live",
+ "model": "deepseek-v4-flash-0731",
+ "tag": {
+  "phase": "holdout",
+  "attempt_id": "case-030-2-A-t1",
+  "arm": "A",
+  "stage": null,
+  "case": "case-030",
+  "rep": 2,
+  "try": 1
+ },
+ "retry_policy": "d2",
+ "qwen_exit": 0,
+ "wall_ms": 69359,
+ "relay": {
+  "schema_version": "advisory-ai-runtime-relay.v1",
+  "status": "FORWARDED_STRUCTURED_OUTPUT",
+  "received_request_count": 1,
+  "forwarded_request_count": 1,
+  "outcomes": [
+   "FORWARDED_STRUCTURED_OUTPUT"
+  ],
+  "retry_refused_reason": null,
+  "first_refused_reason": null,
+  "model_id": "deepseek-v4-flash-0731",
+  "retry_policy": "d2",
+  "requests": [
+   {
+    "ordinal": 1,
+    "forwarded": true,
+    "outcome": "FORWARDED_STRUCTURED_OUTPUT",
+    "provider_status": 200,
+    "latency_ms": 68073,
+    "usage": {
+     "prompt_tokens": 2804,
+     "total_tokens": 9444,
+     "completion_tokens": 6640,
+     "prompt_tokens_details": {
+      "cached_tokens": 1024
+     },
+     "completion_tokens_details": {
+      "reasoning_tokens": 4385
+     }
+    },
+    "model_returned": "deepseek-v4-flash-0731"
+   }
+  ],
+  "usage": {
+   "prompt_tokens": 2804,
+   "completion_tokens": 6640,
+   "total_tokens": 9444
+  },
+  "latency_ms": 68073
+ },
+ "relay_status": "FORWARDED_STRUCTURED_OUTPUT",
+ "usage": {
+  "prompt_tokens": 2804,
+  "completion_tokens": 6640,
+  "total_tokens": 9444
+ },
+ "latency_ms": 68073,
+ "retried": false,
+ "retry_refused_reason": null,
+ "status": "OK",
+ "note": null,
+ "output": {
+  "schema_version": "ai-advice-output.v1",
+  "summary": "Deterministic verdict: PASS (policy_verdict=PASS, run_validity=VALID, analysis_coverage=COMPLETE with no reasons, findings empty). Business policy: response_time_p95_ms=100 <= 120 (PASS). Resource policy: service value=50 synthetic_unit, rule 'limit' (operator gt, threshold 80) PASS. 600 samples with error_count=0. The latency statistics are identical at every percentile (p50=p95=p99=max=100 ms) and the resource series is perfectly constant (mean=median=min=max=50, sample_standard_deviation=0, slope_per_second=0), which suggests possible aggregation/synthetic data that cannot be confirmed from the supplied evidence. Duration context: evaluation window is 30,000 ms (1767225600000 to 1767225630000); run spans 30,099 ms (1767225600000 to 1767225630099); dropped leading/trailing cells=0. clock_alignment='not_verified_by_core', so cross-source temporal ordering is not established. Advice does not change the PASS verdict; it flags data-fidelity and coverage checks.",
+  "hypotheses": [
+   {
+    "rank": 1,
+    "observation": "Latency statistics for both the overall run and the 'request' transaction are identical at every reported percentile and maximum: latency_ms max=p50=p95=p99=100 ms, over 600 samples with error_count=0.",
+    "possible_explanation": "The identical values at all percentiles could indicate coarse aggregation or rounding in the JTL-to-metric pipeline, or uniform/synthetic sample latencies, rather than a genuinely measured latency distribution.",
+    "recommended_check": "Inspect the raw JMeter JTL per-sample latency values and the percentile aggregation/rounding method; confirm that at least a few distinct latency observations and valid per-sample timestamps exist.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0",
+     "analysis-result.json#/evidence/1"
+    ]
+   },
+   {
+    "rank": 2,
+    "observation": "Resource summary for 'service' is perfectly constant: min=max=mean=median=50 synthetic_unit, sample_standard_deviation=0, slope_per_second=0, split_half_shift=0, with 30/30 expected cells present and 0 missing.",
+    "possible_explanation": "A constant resource series with zero variance may reflect a synthetic feed, a placeholder value, or collection at coarser granularity than reported, rather than genuine steady-state service utilization during the window.",
+    "recommended_check": "Verify the resource metric source, collection interval, and unit mapping; correlate the constant 50 synthetic_unit value against actual service utilization during the same 30s window and re-run under varying load.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/3",
+     "analysis-result.json#/evidence/4"
+    ]
+   },
+   {
+    "rank": 3,
+    "observation": "throughput_rps is stored as numerator 600000 over denominator 30099 in both metric summaries; separately, sample_count=600 over the run/evaluation span of ~30.099s implies roughly 20 requests/second.",
+    "possible_explanation": "The reported ratio shape (600000/30099 ~ 19.93, and 600 samples over ~30.099s ~ 19.9 rps) suggests the numerator may be a milliseconds- or sample-scaled count and the field may encode throughput differently than a plain requests-per-second label.",
+    "recommended_check": "Confirm the documented definition and units of throughput_rps for this pipeline; recompute throughput from sample_count and window duration and compare against the stored values.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0",
+     "analysis-result.json#/evidence/1",
+     "analysis-result.json#/evidence/2"
+    ]
+   },
+   {
+    "rank": 4,
+    "observation": "resource-binding reports clock_alignment='not_verified_by_core'; the evaluation and snapshot windows are 30,000 ms while the run spans 30,099 ms (99 ms trailing beyond the evaluation end).",
+    "possible_explanation": "Without verified clock alignment, any cross-source ordering or lead/lag interpretation between load samples, metrics, and policy checks is unsupported; the 99ms run-to-evaluation overshoot could be a benign artifact or a timing-skew symptom.",
+    "recommended_check": "Verify clock synchronization (e.g., NTP) across load generator, metric collector, and policy engine, and confirm the 99ms overshoot has no effect on dropped cells or window alignment.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/2"
+    ]
+   },
+   {
+    "rank": 5,
+    "observation": "analysis_coverage is COMPLETE with no reasons, findings is empty, run_validity is VALID, and policy_verdict is PASS for a single 30,000 ms evaluation window covering 600 samples and one transaction label 'request'.",
+    "possible_explanation": "COMPLETE coverage and an empty findings list describe only the artifacts actually examined; they do not by themselves prove stability, spare capacity, or absence of problems outside the measured window, load level, or transaction scope.",
+    "recommended_check": "Extend observation to additional windows, load levels, and transaction types before relying on the PASS as evidence of stability or capacity headroom beyond the measured conditions.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/2",
+     "analysis-result.json#/evidence/6",
+     "analysis-result.json#/run_validity",
+     "analysis-result.json#/policy_verdict",
+     "analysis-result.json#/analysis_coverage"
+    ]
+   }
+  ],
+  "recommendations": [
+   {
+    "rank": 1,
+    "action": "Retain and report the deterministic PASS verdict unchanged (policy_verdict PASS, run_validity VALID, coverage COMPLETE).",
+    "rationale": "The evidence records PASS for both business and resource policy checks in window-policy-summary; advisory interpretation must not modify the deterministic verdict.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/5",
+     "analysis-result.json#/evidence/6",
+     "analysis-result.json#/policy_verdict"
+    ]
+   },
+   {
+    "rank": 2,
+    "action": "Validate latency data fidelity before treating the flat 100 ms percentiles as a real latency profile.",
+    "rationale": "Identical p50/p95/p99/max values (100 ms) in both metric summaries could be caused by aggregation or synthetic data rather than actual measured latency.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0",
+     "analysis-result.json#/evidence/1"
+    ]
+   },
+   {
+    "rank": 3,
+    "action": "Verify the resource metric collection so the constant 50 synthetic_unit series reflects real service utilization before interpreting it as headroom below the threshold.",
+    "rationale": "The resource series has zero variance (std 0, slope 0), so the PASS comparison (50 not > 80) is trivially satisfied and may not represent genuine resource behavior.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/3",
+     "analysis-result.json#/evidence/4"
+    ]
+   },
+   {
+    "rank": 4,
+    "action": "Clarify the documented semantics and units of the throughput_rps field (stored as 600000/30099).",
+    "rationale": "The stored ratio is non-standard; interpreting it as exactly 600,000/30,099 ~ 19.93 rps requires confirmation, especially given the ~20 rps implied by 600 samples over the run span.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0",
+     "analysis-result.json#/evidence/1",
+     "analysis-result.json#/evidence/2"
+    ]
+   },
+   {
+    "rank": 5,
+    "action": "Establish verified clock alignment before any temporal or causal conclusions are drawn from this analysis.",
+    "rationale": "clock_alignment is recorded as 'not_verified_by_core', so lead/lag ordering or temporal causal hypotheses cannot be supported without time-sync verification.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/2"
+    ]
+   },
+   {
+    "rank": 6,
+    "action": "Broaden measurement coverage (more windows, load phases, and transaction types) to increase confidence beyond the single 30s/600-sample window.",
+    "rationale": "Coverage COMPLETE and empty findings apply only to the examined artifacts; the verdict does not certify behavior outside the measured 30,000 ms window or beyond the single 'request' transaction.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/2",
+     "analysis-result.json#/evidence/5",
+     "analysis-result.json#/evidence/6"
+    ]
+   }
+  ],
+  "caveats": [
+   "The deterministic verdict is PASS; this advisory output only suggests verification checks and does not change or weaken that verdict.",
+   "clock_alignment is 'not_verified_by_core'; cross-source temporal ordering and any lead/lag or temporal causal hypothesis are unsupported until clock synchronization is verified.",
+   "All reported latency percentiles are identical (p50=p95=p99=max=100 ms) and the resource series is perfectly constant (mean 50, std 0, slope 0); this is consistent with synthetic or coarse-aggregated data, and data fidelity was not independently verified in the evidence provided.",
+   "Coverage is limited to a single 30,000 ms evaluation window with 600 samples, one transaction label 'request', and one resource series; COMPLETE coverage and an empty findings list do not prove stability, spare capacity, or absence of problems beyond the measured scope.",
+   "throughput_rps is stored as 600000/30099; without the documented field definition, its exact meaning and units are uncertain despite the approximate ~19.9 rps read.",
+   "error_count=0 applies only to the 600 captured samples; it does not certify zero errors for any other interval or load condition.",
+   "The resource policy PASS (value 50, operator gt, threshold 80) and latency policy PASS (100 <= 120) are literal comparisons to thresholds, not estimates of available headroom or capacity.",
+   "The run spans 30,099 ms while the evaluation/snapshot windows span 30,000 ms (99 ms trailing difference); dropped cells are reported as 0, but the overshoot reason is not explained in the evidence."
+  ]
+ },
+ "schema": "ai-experiment-run.holdout.v1",
+ "case": "case-030",
+ "rep": 2,
+ "arm": "A",
+ "try": 1,
+ "attempt_id": "case-030-2-A-t1",
+ "model_id": "deepseek-v4-flash-0731",
+ "prompt_sha256": "69f215a1ad4ae678c82410ba7cf7daf171cd9c7ca0ef4626bba6977db0af4ef7"
+}

@@ -1,0 +1,194 @@
+{
+ "stage": "B",
+ "mode": "live",
+ "model": "deepseek-v4-flash-0731",
+ "tag": {
+  "phase": "holdout",
+  "attempt_id": "case-005-1-B-t1",
+  "arm": "B",
+  "stage": null,
+  "case": "case-005",
+  "rep": 1,
+  "try": 1
+ },
+ "retry_policy": "d2",
+ "qwen_exit": 0,
+ "wall_ms": 70781,
+ "relay": {
+  "schema_version": "advisory-ai-runtime-relay.v1",
+  "status": "FORWARDED_STRUCTURED_OUTPUT",
+  "received_request_count": 1,
+  "forwarded_request_count": 1,
+  "outcomes": [
+   "FORWARDED_STRUCTURED_OUTPUT"
+  ],
+  "retry_refused_reason": null,
+  "first_refused_reason": null,
+  "model_id": "deepseek-v4-flash-0731",
+  "retry_policy": "d2",
+  "requests": [
+   {
+    "ordinal": 1,
+    "forwarded": true,
+    "outcome": "FORWARDED_STRUCTURED_OUTPUT",
+    "provider_status": 200,
+    "latency_ms": 69532,
+    "usage": {
+     "prompt_tokens": 6616,
+     "total_tokens": 13987,
+     "completion_tokens": 7371,
+     "prompt_tokens_details": {
+      "cached_tokens": 1024
+     },
+     "completion_tokens_details": {
+      "reasoning_tokens": 5415
+     }
+    },
+    "model_returned": "deepseek-v4-flash-0731"
+   }
+  ],
+  "usage": {
+   "prompt_tokens": 6616,
+   "completion_tokens": 7371,
+   "total_tokens": 13987
+  },
+  "latency_ms": 69532
+ },
+ "relay_status": "FORWARDED_STRUCTURED_OUTPUT",
+ "usage": {
+  "prompt_tokens": 6616,
+  "completion_tokens": 7371,
+  "total_tokens": 13987
+ },
+ "latency_ms": 69532,
+ "retried": false,
+ "retry_refused_reason": null,
+ "status": "OK",
+ "note": null,
+ "output": {
+  "schema_version": "ai-advice-output.v1",
+  "summary": "The analysis reports run_validity VALID, policy_verdict PASS, and analysis coverage COMPLETE with no recorded findings. Capacity is a LOWER_BOUND of 297 users (lower_inclusive, unit count) with no upper_exclusive: every tested stage passed the latency policy (response_time_p95_ms observed 140 ms <= 250 ms across stage-1, stage-2, and stage-3), including the highest step-3 (achieved 297 users p05_10s, observed max 300). capacity_knee is null with knee_reason KNEE_DETECTOR_NOT_IMPLEMENTED, a fixed product limitation. Each window summary reports resource_verdict NO_POLICY (no resource rule with effect sla), while the diagnostic generator guard (generator-cpu-guard, effect diagnostic) passed in all three stages. Clock alignment is reported not_verified_by_core. Advice below only interprets the PASS verdict; it does not change it.",
+  "hypotheses": [
+   {
+    "rank": 1,
+    "observation": "The capacity summary reports bound_type LOWER_BOUND with lower_inclusive 297 users and upper_exclusive null; the highest tested stage (step-3) achieved 297 users (p05_10s) with observed max 300, and its latency policy check still passed (p95 140 ms <= 250 ms).",
+    "possible_explanation": "The described load profile stopped near 300 users, so the load at which the latency policy would fail was not reached; the reported value is a floor, not a proven maximum capacity.",
+    "recommended_check": "Extend the run with additional steps above 300 users under the same latency policy to find the failing load and derive an upper bound.",
+    "evidence_refs": [
+     "analysis-result.json#/capacity_summary",
+     "analysis-result.json#/evidence/18",
+     "analysis-result.json#/evidence/16"
+    ]
+   },
+   {
+    "rank": 2,
+    "observation": "capacity_knee is null and knee_reason is KNEE_DETECTOR_NOT_IMPLEMENTED in the capacity summary.",
+    "possible_explanation": "This is a fixed limitation of the product schema version; the knee is intentionally not estimated and its absence does not indicate a run defect or an invalid bound.",
+    "recommended_check": "No operator action is available or required for the knee; interpret the LOWER_BOUND independently of any knee.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/18",
+     "analysis-result.json#/capacity_summary"
+    ]
+   },
+   {
+    "rank": 3,
+    "observation": "Each stage window summary reports resource_verdict NO_POLICY while business_verdict is PASS; the only resource rule referenced is the diagnostic generator guard (generator-cpu-guard, effect diagnostic), which passed in all three stages.",
+    "possible_explanation": "No resource rule with effect sla appears to exist for these windows, so the product reports NO_POLICY rather than a resource pass/fail; the diagnostic guard only indicates generator health.",
+    "recommended_check": "If resource-level SLA enforcement is desired, add a resource rule with effect sla for the relevant window and rerun; otherwise NO_POLICY is the expected product outcome.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/13",
+     "analysis-result.json#/evidence/15",
+     "analysis-result.json#/evidence/17",
+     "analysis-result.json#/evidence/9"
+    ]
+   },
+   {
+    "rank": 4,
+    "observation": "resource-binding reports clock_alignment not_verified_by_core for the explicit evaluation windows.",
+    "possible_explanation": "Without verified clock alignment, lead/lag or temporal ordering between the sampler stream and resource series cannot be asserted from this evidence.",
+    "recommended_check": "Verify clock synchronization (for example NTP) between load generator, system under test, and collectors before any temporal interpretation of the same-window series.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/2"
+    ]
+   },
+   {
+    "rank": 5,
+    "observation": "The overall metric summary reports latency max 1500 ms while p50/p95/p99 are 130/140/140 ms with error_count 0 in 3601 samples.",
+    "possible_explanation": "A rare tail sample (for example a startup or cold path) could explain the maximum without representing a systematic latency issue, but the evidence does not identify which sample produced it.",
+    "recommended_check": "Inspect the sampler series to locate the sample(s) near 1500 ms and check for a transient condition; compare them against the per-window p95 checks, all observed at 140 ms.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0",
+     "analysis-result.json#/evidence/12",
+     "analysis-result.json#/evidence/14",
+     "analysis-result.json#/evidence/16"
+    ]
+   }
+  ],
+  "recommendations": [
+   {
+    "rank": 1,
+    "action": "If a capacity ceiling is needed, rerun with additional load steps above 300 users under the same latency policy to locate the failing load and obtain an upper bound.",
+    "rationale": "The current result is a LOWER_BOUND at 297 users because the highest tested step (step-3, target 300, observed max 300) still passed the latency policy; capacity above that level is untested in the evidence.",
+    "evidence_refs": [
+     "analysis-result.json#/capacity_summary",
+     "analysis-result.json#/evidence/18",
+     "analysis-result.json#/evidence/16"
+    ]
+   },
+   {
+    "rank": 2,
+    "action": "Verify clock synchronization across load generator, system under test, and telemetry collectors before interpreting relationships between response-time and resource series.",
+    "rationale": "resource-binding reports clock_alignment not_verified_by_core, so unverified clocks cannot support lead/lag or temporal causal claims.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/2"
+    ]
+   },
+   {
+    "rank": 3,
+    "action": "If resource-level SLA enforcement is needed for the application under test, add a resource rule with effect sla for the window and rerun; do not modify the diagnostic generator guard.",
+    "rationale": "All three windows report resource_verdict NO_POLICY, meaning no resource rule with effect sla existed; the generator guard (effect diagnostic) is diagnostic by contract and passed, and changing its effect is not a valid action.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/13",
+     "analysis-result.json#/evidence/15",
+     "analysis-result.json#/evidence/17",
+     "analysis-result.json#/evidence/9"
+    ]
+   },
+   {
+    "rank": 4,
+    "action": "Inspect the sampler source data to identify the sample(s) corresponding to latency max 1500 ms and determine their context, such as test start or a transient.",
+    "rationale": "p50/p95/p99 are 130/140/140 ms with zero errors; the 1500 ms maximum is not explained by the evidence and may be a transient rather than a systematic degradation.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0",
+     "analysis-result.json#/evidence/12"
+    ]
+   },
+   {
+    "rank": 5,
+    "action": "Take no action for the null capacity knee and record it as fixed product behavior.",
+    "rationale": "knee_reason is KNEE_DETECTOR_NOT_IMPLEMENTED, a defined product limitation; implementing or enabling a knee detector is not a step the operator can take and the bound does not depend on it.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/18"
+    ]
+   }
+  ],
+  "caveats": [
+   "Clock alignment is reported as not_verified_by_core; no lead/lag, temporal ordering, or causal relationship between metrics should be inferred.",
+   "The capacity value of 297 is a lower bound; the evidence describes tests only up to step-3 (target 300 users), so capacity above that load is unknown.",
+   "findings is empty and analysis coverage is COMPLETE; the hypotheses here are candidate interpretations, not proven causes.",
+   "resource_verdict NO_POLICY for every window means no resource SLA rule existed; this is neither a PASS nor a FAIL for resource health, and a healthy run does not turn NO_POLICY into PASS.",
+   "The 1500 ms latency maximum has no identified cause in the evidence; error_count 0 applies only to the reported samples and does not prove stability at higher or untested loads.",
+   "KNEE_DETECTOR_NOT_IMPLEMENTED is a fixed product limitation; no user action can produce a knee estimate in this version.",
+   "The metric summaries represent a single transaction (checkout); other transaction types were not analyzed in this evidence.",
+   "The evaluation/snapshot window ends at 1767226500000 ms while run_to_epoch_ms is 1767226500500 ms, so a 500 ms trailing portion of the run is outside the evaluated window."
+  ]
+ },
+ "schema": "ai-experiment-run.holdout.v1",
+ "case": "case-005",
+ "rep": 1,
+ "arm": "B",
+ "try": 1,
+ "attempt_id": "case-005-1-B-t1",
+ "model_id": "deepseek-v4-flash-0731",
+ "prompt_sha256": "3c0f28bee6517c13c5c854615e7d3d59301893d9723880818e4034a32e9133bf"
+}

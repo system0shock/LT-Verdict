@@ -1,0 +1,180 @@
+{
+ "stage": "S0",
+ "mode": "live",
+ "model": "deepseek-v4-flash-0731",
+ "tag": {
+  "phase": "v2-pilot",
+  "stage": "S0",
+  "case": "K07",
+  "rep": 2,
+  "attempt": 1
+ },
+ "qwen_exit": 0,
+ "wall_ms": 110450,
+ "relay": {
+  "schema_version": "advisory-ai-runtime-relay.v1",
+  "status": "FORWARDED_STRUCTURED_OUTPUT",
+  "request_count": 1,
+  "usage": {
+   "prompt_tokens": 8978,
+   "total_tokens": 19718,
+   "completion_tokens": 10740,
+   "prompt_tokens_details": {
+    "cached_tokens": 1024
+   },
+   "completion_tokens_details": {
+    "reasoning_tokens": 7856
+   }
+  },
+  "latency_ms": 109134,
+  "model_returned": "deepseek-v4-flash-0731"
+ },
+ "relay_status": "FORWARDED_STRUCTURED_OUTPUT",
+ "usage": {
+  "prompt_tokens": 8978,
+  "total_tokens": 19718,
+  "completion_tokens": 10740,
+  "prompt_tokens_details": {
+   "cached_tokens": 1024
+  },
+  "completion_tokens_details": {
+   "reasoning_tokens": 7856
+  }
+ },
+ "latency_ms": 109134,
+ "status": "OK",
+ "note": null,
+ "output": {
+  "schema_version": "ai-advice-output.v1",
+  "summary": "Deterministic verdict is FAIL: window-policy-summary reports verdict FAIL with business_verdict FAIL and resource_verdict FAIL (evidence 17), and the analysis-result policy_verdict fact is FAIL; run_validity is VALID and analysis_coverage is COMPLETE (facts). The business failure is the overall error-rate policy: observed 2471 errors of 38628 samples fails the lte 0.01 threshold (evidence 16). All 2471 available error records are of type frontend.request_error for service frontend and are confined to the interval 1790630540673–1790630663409 per the error timeline (evidence 19). Among the six listed transactions, only \"checkout\" records errors: 2471 of 6717 checkout samples, while every other listed transaction records error_count 0 (evidence 1–6). A resource policy for paymentservice cpu_throttle_ratio also fails (gt 0.2, evidence 15), with a 7-cell violation window from 1790630565000 to 1790630670000 and observed values up to max 1 (evidence 13, findings/0); the throttle-ratio mean was 0.2858 with q95 1.0 while measured paymentservice CPU mean was 0.0108 cores (evidence 12, 13). The throttled window overlaps the tail of the error burst, but clock_alignment is recorded as not_verified_by_core (evidence 7), so any temporal or causal ordering between throttling and the errors is unverified. Advisory guidance below treats the checkout-specific error concentration, the CPU throttling, and the burst timing as hypotheses to test, not proven causes.",
+  "hypotheses": [
+   {
+    "rank": 1,
+    "observation": "The \"checkout\" transaction summary records error_count 2471 out of 6717 samples (error_rate_ratio 2471/6717), while the other five listed transaction summaries (\"add product to cart\", \"cart\", \"home\", \"product\", \"reset cart\") each record error_count 0; the overall summary records error_count 2471 out of 40306 samples. All available error records are of type frontend.request_error for service frontend.",
+    "possible_explanation": "The errors concentrate in the checkout flow, so the failure may be specific to functionality or dependencies exercised only during checkout (for example a payment or order-processing call), rather than a whole-application or load-wide failure.",
+    "recommended_check": "Parse the JMeter JTL for checkout sampler result codes, assertion failures, and response messages, and map which backend calls the checkout flow performs; verify whether checkout is the only path that reaches the failing step.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/3",
+     "analysis-result.json#/evidence/1",
+     "analysis-result.json#/evidence/2",
+     "analysis-result.json#/evidence/4",
+     "analysis-result.json#/evidence/5",
+     "analysis-result.json#/evidence/6",
+     "analysis-result.json#/evidence/19"
+    ]
+   },
+   {
+    "rank": 2,
+    "observation": "paymentservice cpu_throttle_ratio summary records mean 0.2858, max 1, q95 1, and the resource policy check for that series is FAIL for threshold gt 0.2 (evidence 13, 15); the threshold finding covers 7 cells from 1790630565000 to 1790630670000 with observed_min 0.522390289979 and observed_max 1. The errors begin at 1790630540673, before the first recorded throttled cell at 1790630565000, and clock_alignment is not_verified_by_core.",
+    "possible_explanation": "paymentservice appeared to exceed its CPU budget and was throttled during part of the run; if checkout depends on paymentservice, throttling could plausibly be involved in checkout request errors. This is a hypothesis, not a proven cause, because the recorded error start precedes the recorded throttled window and clocks are not verified.",
+    "recommended_check": "First verify clock alignment between JMeter, the OpenSearch error store, and Prometheus (evidence 7); then inspect paymentservice CPU limits/requests and container throttling at finer-than-15s resolution to see whether throttling coincided with each failed checkout sample.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/13",
+     "analysis-result.json#/evidence/15",
+     "analysis-result.json#/findings/0",
+     "analysis-result.json#/evidence/19",
+     "analysis-result.json#/evidence/7"
+    ]
+   },
+   {
+    "rank": 3,
+    "observation": "The error timeline shows counts of 0 in every 15-second cell except nine consecutive cells from 1790630535000 to 1790630670000, peaking at count 318 (rate_per_minute 1272) in the 1790630625000–1790630640000 cell; first error at 1790630540673, last at 1790630663409, total 2471, with zero errors before and after that interval.",
+    "possible_explanation": "The failure condition appeared and disappeared within roughly two minutes, suggesting a transient event (for example a deployment, configuration change, or short-lived dependency outage) rather than sustained overload; the same total of 2471 errors also appears in the overall and checkout summaries.",
+    "recommended_check": "Correlate deployment/configuration/event logs for the interval 1790630535000–1790630670000 with the error timing, and confirm the burst window from JMeter JTL timestamps; identify what changed immediately before the first error at 1790630540673.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/19",
+     "analysis-result.json#/evidence/3",
+     "analysis-result.json#/evidence/0"
+    ]
+   },
+   {
+    "rank": 4,
+    "observation": "The overall metric summary records error_rate_ratio 2471/40306, while the overall-errors policy check uses observed 2471/38628 with status FAIL against threshold 0.01; the resource_binding evidence shows dropped leading/trailing cells and a DERIVED auto window with an applied margin of 61528 ms; the window policy summary records verdict FAIL with business_verdict FAIL and resource_verdict FAIL.",
+    "possible_explanation": "The differing denominators (40306 vs 38628) may reflect run-intersection window trimming that excludes some samples from the policy evaluation; if the evaluated population differs from the recorded population, the scope of the FAIL verdict and the exact failing ratio need confirmation.",
+    "recommended_check": "Reconcile the two denominators by mapping the run-intersection window (1790630475000–1790630820000) to JMeter sample timestamps; confirm which samples are excluded from the 38628 denominator and whether the policy threshold applies to the intended scope.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0",
+     "analysis-result.json#/evidence/16",
+     "analysis-result.json#/evidence/7",
+     "analysis-result.json#/evidence/17",
+     "analysis-result.json#/findings/1"
+    ]
+   }
+  ],
+  "recommendations": [
+   {
+    "rank": 1,
+    "action": "Verify clock alignment between JMeter, the OpenSearch error store, and the Prometheus metric store before drawing any temporal or causal conclusion from the error timeline and the throttle-ratio series.",
+    "rationale": "The resource_binding evidence records clock_alignment as not_verified_by_core; lead/lag ordering or causality (for example throttling causing errors) is unsupported until clocks are proven aligned.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/7",
+     "analysis-result.json#/evidence/19",
+     "analysis-result.json#/evidence/13"
+    ]
+   },
+   {
+    "rank": 2,
+    "action": "Inspect the JMeter JTL for checkout sampler result codes and messages in the interval 1790630540673–1790630663409 and reconcile them with the 2471 frontend.request_error records.",
+    "rationale": "Checkout is the only listed transaction with errors (2471 of 6717 samples) while all other listed transactions record 0 errors, and all available error records are frontend.request_error; sampler-level detail is required to identify the failing step.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/3",
+     "analysis-result.json#/evidence/19",
+     "analysis-result.json#/evidence/1",
+     "analysis-result.json#/evidence/2",
+     "analysis-result.json#/evidence/4",
+     "analysis-result.json#/evidence/5",
+     "analysis-result.json#/evidence/6"
+    ]
+   },
+   {
+    "rank": 3,
+    "action": "Investigate paymentservice CPU throttle configuration: confirm the CPU limit/request, cgroup quota, and the exact semantics of cpu_throttle_ratio, and verify that threshold 0.2 matches the intended SLA.",
+    "rationale": "The throttle ratio reached max 1 and failed the gt 0.2 policy across 7 cells while measured paymentservice CPU mean was only 0.0108 cores (evidence 12, 13, 15, findings/0); this combination should be explained before capacity or quota changes are made.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/13",
+     "analysis-result.json#/evidence/15",
+     "analysis-result.json#/findings/0",
+     "analysis-result.json#/evidence/12"
+    ]
+   },
+   {
+    "rank": 4,
+    "action": "Reconcile the sample counts 40306 (overall summary) and 38628 (policy check) and document which samples the FAIL verdict is based on.",
+    "rationale": "Both counts appear in the evidence with the same error total (2471) but different denominators; the difference may come from auto-derived window trimming and should be confirmed so the scope of the deterministic FAIL is unambiguous.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0",
+     "analysis-result.json#/evidence/16",
+     "analysis-result.json#/evidence/7",
+     "analysis-result.json#/evidence/18"
+    ]
+   },
+   {
+    "rank": 5,
+    "action": "Consider extending policy coverage where appropriate: add per-transaction error-rate policies (especially for checkout) and resource policies for other instrumented services or metrics that currently have none.",
+    "rationale": "The evidence contains only two policy checks — overall-errors and paymentservice cpu_throttle-ratio; missing policy is not a pass, and analysis_coverage COMPLETE refers to data collection, not to policy coverage.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/15",
+     "analysis-result.json#/evidence/16",
+     "analysis-result.json#/evidence/17",
+     "analysis-result.json#/analysis_coverage"
+    ]
+   }
+  ],
+  "caveats": [
+   "Clock alignment is recorded as not_verified_by_core (evidence 7); any ordering between JMeter/error timestamps and metric/error-store timestamps — including the observation that errors begin at 1790630540673 before the first throttled cell at 1790630565000 — is unverified until clocks are aligned.",
+   "Error detail is limited: samples_per_group_limit is 2 and only two error documents with message 'request error' were returned (evidence 19); HTTP status, response bodies, and stack traces for the 2471 errors are not available in this evidence.",
+   "Resource metrics exist only for frontend, checkoutservice, and paymentservice (evidence 8–14); resource usage or throttling for other services is not covered, and absence of findings there does not prove absence of problems.",
+   "Only two policy checks appear in the evidence — overall-errors and paymentservice cpu_throttle-ratio — so missing policies for other metrics/transactions are not passes (evidence 15–16).",
+   "Resource series are interval means at 15 s step over 23 cells (evidence 18, evidence 7); short-lived intra-cell spikes may be averaged out, so the exact per-request CPU state during failures is not known from this evidence.",
+   "The recorded error timeline starts at 1790630540673 while the first throttled cell starts at 1790630565000 (evidence 19, findings/0); even ignoring clock alignment, this recorded ordering does not support the hypothesis that throttling caused the errors.",
+   "The run window was auto-derived (auto_window_status DERIVED) with dropped leading/trailing cells and an applied margin of 61528 ms (evidence 18, evidence 7); samples at the edges may have been excluded, which could affect counts.",
+   "The overall summary denominator (40306, evidence 0) differs from the policy-check denominator (38628, evidence 16); the evidence does not explain which samples were or were not counted.",
+   "No baseline or comparison run is provided in the evidence, so the observed latencies and the ~2-minute error burst cannot be confirmed as abnormal versus expected behavior for this workload.",
+   "paymentservice memory shows a wide range (min 2666496, median 29720576, max 37756928 bytes, evidence 14) but no memory policy or threshold was evaluated; a memory-related cause is not established by this evidence."
+  ]
+ },
+ "schema": "ai-experiment-run.v2",
+ "phase": "pilot",
+ "case": "K07",
+ "rep": 2
+}

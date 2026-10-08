@@ -1,0 +1,170 @@
+{
+ "stage": "S0",
+ "mode": "live",
+ "model": "deepseek-v4-flash-0731",
+ "tag": {
+  "phase": "v2-smoke",
+  "stage": "S0",
+  "case": "K02",
+  "rep": 1,
+  "attempt": 1
+ },
+ "qwen_exit": 0,
+ "wall_ms": 82044,
+ "relay": {
+  "schema_version": "advisory-ai-runtime-relay.v1",
+  "status": "FORWARDED_STRUCTURED_OUTPUT",
+  "request_count": 1,
+  "usage": {
+   "prompt_tokens": 6701,
+   "total_tokens": 15143,
+   "completion_tokens": 8442,
+   "prompt_tokens_details": {
+    "cached_tokens": 1024
+   },
+   "completion_tokens_details": {
+    "reasoning_tokens": 5822
+   }
+  },
+  "latency_ms": 80718,
+  "model_returned": "deepseek-v4-flash-0731"
+ },
+ "relay_status": "FORWARDED_STRUCTURED_OUTPUT",
+ "usage": {
+  "prompt_tokens": 6701,
+  "total_tokens": 15143,
+  "completion_tokens": 8442,
+  "prompt_tokens_details": {
+   "cached_tokens": 1024
+  },
+  "completion_tokens_details": {
+   "reasoning_tokens": 5822
+  }
+ },
+ "latency_ms": 80718,
+ "status": "OK",
+ "note": null,
+ "output": {
+  "schema_version": "ai-advice-output.v1",
+  "summary": "The run is VALID, but the capacity analysis is INDETERMINATE with policy_verdict NO_POLICY and coverage INCOMPLETE (reasons: CAPACITY_GUARD_FAILED, CAPACITY_STAGE_NOT_VERIFIED). The single 20-user stage (d16-cpu-limited-20users) shows target/min/max 20 users over 30/30 observed cells, yet the stage verdict is INDETERMINATE and verified_bound_load is null because the JMeter generator's cfs_throttled_period_ratio exceeded the 0.2 threshold in 27 of 30 cells (finding observed_max 1.0, observed_min 0.3958; series mean 0.861, median 1.0). The capacity knee is null because knee_reason is KNEE_DETECTOR_NOT_IMPLEMENTED. The business error-rate policy check PASSed (0/38842 in window; 0/47396 run-wide), but that is not a capacity verification. Observed latencies at 20 users include overall p50 103ms, p95 299ms, p99 600ms, max 1299ms, with home p99 806ms and checkout p99 695ms; these are observations only. Because the generator was CPU-throttled for most of the window and clock_alignment is not_verified_by_core, latency/throughput from this run should not yet be interpreted as application-capacity behavior. Advisory findings preserve the deterministic verdicts: capacity INDETERMINATE, policy NO_POLICY, coverage INCOMPLETE.",
+  "hypotheses": [
+   {
+    "rank": 1,
+    "observation": "The resource policy check for generator-cpu-throttle-ratio (operator gt, threshold 0.2) has status FAIL, and the finding records 27 cells from epoch 1790627160000 to 1790627430000 with observed_max 1 and observed_min 0.395833333333 for cfs_throttled_period_ratio; the series statistics report mean 0.861, median 1, max 1, min 0.05.",
+    "possible_explanation": "The JMeter load generator was CPU-throttled during most of the window, so the intended 20-user load may not have been applied as designed; measured application latencies/throughput could be influenced by generator-side throttling rather than server capacity. This is a hypothesis because the evidence does not quantify the effect on application metrics.",
+    "recommended_check": "Re-run the d16-cpu-limited-20users stage after removing/reducing generator throttling (e.g., larger CPU allowance, dedicated/additional generator instances, fewer threads per generator) and confirm cfs_throttled_period_ratio stays at or below 0.2, then compare latency and throughput against this run.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/12",
+     "analysis-result.json#/evidence/16",
+     "analysis-result.json#/findings/0"
+    ]
+   },
+   {
+    "rank": 2,
+    "observation": "The capacity summary is bound_type INDETERMINATE with policy_verdict NO_POLICY, reasons CAPACITY_GUARD_FAILED and CAPACITY_STAGE_NOT_VERIFIED, capacity_knee null with knee_reason KNEE_DETECTOR_NOT_IMPLEMENTED, lower_inclusive null, upper_exclusive null; the only stage has target 20, verdict INDETERMINATE, and verified_bound_load null.",
+    "possible_explanation": "The absence of an estimated capacity bound reflects the failed capacity guard and unimplemented knee detector, not demonstrated headroom or a confirmed knee at 20 users.",
+    "recommended_check": "Once the generator-throttle guard passes, implement/enable the knee detector and run additional load stages at and above 20 users so lower_inclusive/upper_exclusive bounds and a capacity knee can be estimated.",
+    "evidence_refs": [
+     "analysis-result.json#/capacity_summary",
+     "analysis-result.json#/evidence/19",
+     "analysis-result.json#/analysis_coverage"
+    ]
+   },
+   {
+    "rank": 3,
+    "observation": "The window policy check overall-errors has status PASS with observed error_rate_ratio 0/38842 (threshold 0.01), and the window policy summary shows business_verdict PASS, resource_verdict NO_POLICY, verdict PASS for window d16-cpu-limited-20users.",
+    "possible_explanation": "A zero-error window can be consistent with a well-behaved application, but combined with the NO_POLICY resource verdict and generator throttling it does not establish that capacity or stability at 20 users is verified.",
+    "recommended_check": "Report the error-rate PASS as a business-metric result only; do not treat it as verification of capacity until the resource guard and knee detection pass for the stage.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/17",
+     "analysis-result.json#/evidence/18",
+     "analysis-result.json#/policy_verdict"
+    ]
+   },
+   {
+    "rank": 4,
+    "observation": "The jmeter_active_threads series is exactly 20 in all 30 cells (min = max = mean = median = 20, sample_standard_deviation 0, slope_per_second 0) while cfs_throttled_period_ratio on the same generator was high (mean 0.861, median 1).",
+    "possible_explanation": "Maintaining 20 active threads does not prove that the intended request load was delivered; throttled generation may pace or delay requests, so effective load could differ from the target.",
+    "recommended_check": "Compare generated request pacing/rate against the test plan in a throttled versus unthrottled run, correlating throughput_rps reported in the metric summaries with the generator's throttle state.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/13",
+     "analysis-result.json#/evidence/12"
+    ]
+   },
+   {
+    "rank": 5,
+    "observation": "resource_binding reports clock_alignment 'not_verified_by_core', mode 'explicit_windows', evaluation span 1790627160000–1790627460000, run span 1790627156282–1790627514513, snapshot span 1790627090000–1790627580000, and dropped_leading/dropped_trailing cells 0; the generator throttle series has slope_per_second -0.00216 over the window.",
+    "possible_explanation": "Without verified clock alignment between the generator and resource/transaction collectors, the decreasing throttle-ratio trend over the window (or any lead/lag relationship between series) cannot support a temporal causal ordering.",
+    "recommended_check": "Verify clock synchronization (e.g., NTP) across the JMeter generator and system/resource collectors before using any time-series trend or ordering from this run as causal evidence.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/7"
+    ]
+   }
+  ],
+  "recommendations": [
+   {
+    "rank": 1,
+    "action": "Re-run the 20-user stage after removing generator CPU throttling (raise/remove CPU cfs limits on jmeter-generator, add generator instances, or reduce per-generator thread count) so the generator-cpu-throttle-ratio policy check passes and the capacity guard clears.",
+    "rationale": "CAPACITY_GUARD_FAILED is caused by cfs_throttled_period_ratio exceeding the 0.2 threshold in 27 of 30 cells; until it passes, the stage verdict stays INDETERMINATE and coverage stays INCOMPLETE.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/16",
+     "analysis-result.json#/findings/0",
+     "analysis-result.json#/capacity_summary"
+    ]
+   },
+   {
+    "rank": 2,
+    "action": "Implement and enable the knee detector (currently knee_reason KNEE_DETECTOR_NOT_IMPLEMENTED) and run load stages at and above 20 users to obtain lower_inclusive/upper_exclusive capacity bounds.",
+    "rationale": "capacity_knee is null, bound_type is INDETERMINATE, and analysis_coverage is INCOMPLETE; no capacity bound can be estimated without the detector and successfully verified stages.",
+    "evidence_refs": [
+     "analysis-result.json#/capacity_summary",
+     "analysis-result.json#/analysis_coverage"
+    ]
+   },
+   {
+    "rank": 3,
+    "action": "Verify clock alignment (e.g., NTP) between the JMeter generator and system/resource collectors before interpreting any time-based relationships from this run.",
+    "rationale": "resource_binding records clock_alignment 'not_verified_by_core', so temporal ordering or causal claims about throttle trends and application metrics are unsupported by the current evidence.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/7"
+    ]
+   },
+   {
+    "rank": 4,
+    "action": "In any reporting, preserve the deterministic verdicts (capacity INDETERMINATE, policy NO_POLICY, coverage INCOMPLETE) and record the business error-rate policy check PASS as a separate business-metric result.",
+    "rationale": "The evidence shows overall-errors PASS (0/38842) while resource_verdict is NO_POLICY and the analysis is INCOMPLETE; conflating the two would misstate the verdict.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/17",
+     "analysis-result.json#/evidence/18",
+     "analysis-result.json#/policy_verdict",
+     "analysis-result.json#/analysis_coverage"
+    ]
+   },
+   {
+    "rank": 5,
+    "action": "After the generator guard passes, re-compare observed latencies (overall p50 103ms, p95 299ms, p99 600ms; home p99 806ms; checkout p99 695ms) between the throttled and unthrottled runs before drawing conclusions about latency headroom at 20 users.",
+    "rationale": "The current run's generator throttling means latencies may be distorted by load-generation limitations; the evidence does not quantify the effect on application-side metrics.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0",
+     "analysis-result.json#/evidence/12",
+     "analysis-result.json#/evidence/3",
+     "analysis-result.json#/evidence/4"
+    ]
+   }
+  ],
+  "caveats": [
+   "Capacity is not estimated or verified: bound_type INDETERMINATE, capacity_knee null, policy_verdict NO_POLICY, coverage INCOMPLETE due to CAPACITY_GUARD_FAILED and CAPACITY_STAGE_NOT_VERIFIED; NO_POLICY is not a pass, and absence of a knee/bound is not evidence of spare capacity.",
+   "Zero errors (0/47396 run-wide; 0/38842 in-window) do not prove stability, spare capacity, low load, or absence of a problem.",
+   "The generator was CPU-throttled for most of the window (cfs_throttled_period_ratio mean 0.861; 27 of 30 cells exceeded threshold 0.2), so the stage may not reflect the intended 20-user load and measurements may include generator-side effects.",
+   "clock_alignment is 'not_verified_by_core', so temporal/causal hypotheses (including the decreasing throttle-ratio slope) are not supported until clock synchronization is verified.",
+   "The throttle-violation finding covers 27 cells from epoch 1790627160000 to 1790627430000, slightly shorter than the full 30-cell evaluation interval; cells outside that range are not part of that finding.",
+   "knee_reason KNEE_DETECTOR_NOT_IMPLEMENTED is a tooling limitation, not evidence that a capacity knee does not exist.",
+   "Throughput and latency figures are reported as raw summary statistics only; no derived throughput, utilization-ratio, or causal claims are made beyond the referenced fields.",
+   "All observations are limited to the referenced evidence fields; hypotheses are explanations to test, not proven causes, and recommended checks are bounded verification steps."
+  ]
+ },
+ "schema": "ai-experiment-run.v2",
+ "phase": "smoke",
+ "case": "K02",
+ "rep": 1
+}

@@ -1,0 +1,76 @@
+[
+  {
+    "id": "R065",
+    "hard_defect": false,
+    "defects": [],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 5,
+    "notes": "Accurate, evidence-bounded advice with verifiable operator actions."
+  },
+  {
+    "id": "R070",
+    "hard_defect": false,
+    "defects": [],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 5,
+    "notes": "Correctly preserves verdicts, coverage limits, and uncertainty while proposing appropriate checks."
+  },
+  {
+    "id": "R128",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T2",
+        "field": "#/hypotheses/2/possible_explanation",
+        "quote": "Requests accumulate in admission control before processing and then fail",
+        "why": "The aggregates do not establish a causal or temporal relation between admission-queue depth and the error count."
+      },
+      {
+        "type": "T8",
+        "field": "#/recommendations/2/rationale",
+        "quote": "a continuously full db-queue suggest the database is the limiting resource",
+        "why": "The evidence provides no db-queue capacity or saturation threshold and does not establish the database as the limiting resource."
+      },
+      {
+        "type": "T2",
+        "field": "#/recommendations/4/rationale",
+        "quote": "The growing admission queue plus total sample failure suggests queued requests are failing at admission or timeout",
+        "why": "This assigns a failure path from separate aggregate queue and error measurements without sample-level attribution or temporal evidence."
+      }
+    ],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 2,
+    "notes": "The verdict reporting is accurate, but unsupported queue and database causal narratives could misdirect investigation."
+  },
+  {
+    "id": "R147",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T2",
+        "field": "#/summary",
+        "quote": "the recorded error rate rose from 1609/9600 (reference) to 14400/14400",
+        "why": "These are denominators from different policy windows, so the response must not present them as a directly comparable increase."
+      },
+      {
+        "type": "T2",
+        "field": "#/hypotheses/1/possible_explanation",
+        "quote": "Concurrency (active threads) increases while request rate stays at 80 rps, accumulating admission-queue depth",
+        "why": "The generator-thread and admission-queue aggregates do not establish that one accumulated or caused the other."
+      },
+      {
+        "type": "T8",
+        "field": "#/hypotheses/2/possible_explanation",
+        "quote": "its queue is near saturation",
+        "why": "No db-queue capacity, saturation threshold, or bound is present in the evidence."
+      }
+    ],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 3,
+    "notes": "It preserves the central verdict and uncertainty correctly but adds unsupported comparative and saturation claims."
+  }
+]

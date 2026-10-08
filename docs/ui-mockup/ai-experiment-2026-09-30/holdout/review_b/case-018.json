@@ -1,0 +1,66 @@
+[
+  {
+    "id": "R094",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T2",
+        "field": "#/summary",
+        "quote": "p95 140 ms <= 250 ms, 0 errors, business verdict PASS",
+        "why": "The zero-error count is a whole-run metric and is incorrectly presented with the window-scoped policy result."
+      },
+      {
+        "type": "T7",
+        "field": "#/caveats/5",
+        "quote": "Metric summaries cover only overall and one 'checkout' transaction scope in stage window stage-1, not the whole run",
+        "why": "The metric summaries are whole-run scoped, so describing them as stage-window-only and not whole-run is incorrect."
+      }
+    ],
+    "required_facts_preserved": true,
+    "missing_facts": [
+      "The 0-error, 1201-sample metric is whole-run scoped rather than a stage-window count."
+    ],
+    "usefulness": 3,
+    "notes": "The operator actions are strong, but the response misstates the scope of aggregate metrics."
+  },
+  {
+    "id": "R124",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T1",
+        "field": "#/recommendations/3/action",
+        "quote": "Enable or implement the capacity knee detector",
+        "why": "The knee detector is a fixed product limitation, and capacity bounds are computed independently of any knee."
+      },
+      {
+        "type": "T1",
+        "field": "#/recommendations/4/action",
+        "quote": "Decide whether generator-cpu-guard is diagnostic or enforcing",
+        "why": "The evidence establishes this guard as diagnostic, and suggesting it may be made enforcing contradicts its contract."
+      }
+    ],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 2,
+    "notes": "Most observations are accurate, but the knee-detector and guard-configuration recommendations are unsafe."
+  },
+  {
+    "id": "R129",
+    "hard_defect": false,
+    "defects": [],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 5,
+    "notes": "The response accurately preserves the verdicts, scopes, limitations, and actionable next steps."
+  },
+  {
+    "id": "R150",
+    "hard_defect": false,
+    "defects": [],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 5,
+    "notes": "The response correctly distinguishes hypotheses from conclusions and gives safe, evidence-based actions."
+  }
+]

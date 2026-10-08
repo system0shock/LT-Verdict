@@ -1,0 +1,164 @@
+{
+ "stage": "S2",
+ "mode": "live",
+ "model": "deepseek-v4-flash-0731",
+ "tag": {
+  "phase": "v2-pilot",
+  "stage": "S2",
+  "case": "K01",
+  "rep": 2,
+  "attempt": 1
+ },
+ "qwen_exit": 0,
+ "wall_ms": 102936,
+ "relay": {
+  "schema_version": "advisory-ai-runtime-relay.v1",
+  "status": "FORWARDED_STRUCTURED_OUTPUT",
+  "request_count": 1,
+  "usage": {
+   "prompt_tokens": 7304,
+   "total_tokens": 16914,
+   "completion_tokens": 9610,
+   "prompt_tokens_details": {
+    "cached_tokens": 1024
+   },
+   "completion_tokens_details": {
+    "reasoning_tokens": 7247
+   }
+  },
+  "latency_ms": 101592,
+  "model_returned": "deepseek-v4-flash-0731"
+ },
+ "relay_status": "FORWARDED_STRUCTURED_OUTPUT",
+ "usage": {
+  "prompt_tokens": 7304,
+  "total_tokens": 16914,
+  "completion_tokens": 9610,
+  "prompt_tokens_details": {
+   "cached_tokens": 1024
+  },
+  "completion_tokens_details": {
+   "reasoning_tokens": 7247
+  }
+ },
+ "latency_ms": 101592,
+ "status": "OK",
+ "note": null,
+ "output": {
+  "schema_version": "ai-advice-output.v1",
+  "summary": "The run analysis is VALID with policy_verdict PASS. The run-intersection window verdict is PASS via the business policy: the overall-errors policy check observed 0/36034 errors against a 0.01 threshold (evidence/14, evidence/15). The resource verdict is NO_POLICY because no resource/capacity policy is configured and no capacity_summary is present, so no capacity bound is reported. JTL-based metric summaries show 0 errors across 37,349 whole-run samples, which equals the sum of the six transaction-scope counts. However, analysis coverage is INCOMPLETE (SOURCE_ACQUISITION_PARTIAL): the OpenSearch 'errors' profile query failed with SOURCE_HTTP_ERROR after 2 retries, so error-focused data from that source was not acquired (evidence/16, analysis_coverage). Clock alignment is not_verified_by_core (evidence/7), so no temporal or causal ordering between load and resource series is supported. Resource series are stable for CPU and show a positive within-window memory slope; the evaluation window excludes the run's leading and trailing edges. No causal conclusions are drawn; hypotheses and checks below are advisory only and do not change the deterministic verdict.",
+  "hypotheses": [
+   {
+    "rank": 1,
+    "observation": "analysis_result coverage is INCOMPLETE with reason SOURCE_ACQUISITION_PARTIAL; the OpenSearch 'errors' profile query has status FAILED with reason SOURCE_HTTP_ERROR (request_count=3, retries=2), while the 'metrics-direct' profile is COMPLETE (evidence/16, analysis_coverage).",
+    "possible_explanation": "The error-focused OpenSearch source could not be acquired during the analysis, leaving a gap in the dataset; this does not change the JTL-derived PASS policy verdict but means coverage is not complete.",
+    "recommended_check": "Re-run data acquisition/analysis after confirming the OpenSearch query and endpoint are healthy (fixing the SOURCE_HTTP_ERROR), and confirm the 'errors' profile then reports SUCCESS.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/16",
+     "analysis-result.json#/analysis_coverage"
+    ]
+   },
+   {
+    "rank": 2,
+    "observation": "Overall latency is p95=98 ms, p99=176 ms, but max=1092 ms, and checkout also shows max=1092 ms with p99=142 ms (evidence/0, evidence/3). Individual samples are not present in the input.",
+    "possible_explanation": "A small number of high-latency samples may sit far above the p99 distribution, but their number, timing, transaction context, and cause are unknown from summary data alone.",
+    "recommended_check": "Inspect the JMeter JTL at the sample level to locate the specific samples reaching the max latency and their timestamps; do not correlate them with resource series until clock alignment is verified.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0",
+     "analysis-result.json#/evidence/3",
+     "analysis-result.json#/evidence/7"
+    ]
+   },
+   {
+    "rank": 3,
+    "observation": "Within run-intersection, CPU series are stable with small dispersion and no missing cells: frontend cpu_cores mean=0.1803007, IQR=0.013045, max=0.199107 (evidence/10); checkoutservice cpu_cores mean=0.0469147, IQR=0.003524 (evidence/8).",
+    "possible_explanation": "The monitored services may have been lightly utilized on the measured core scale during the window, but raw cores cannot be converted to headroom without configured limits, and a stable/flat series does not prove spare capacity.",
+    "recommended_check": "Compare observed CPU and memory to the services' configured container/pod limits to compute actual utilization percentages, and confirm the load actually exercised these services during the window.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/8",
+     "analysis-result.json#/evidence/10"
+    ]
+   },
+   {
+    "rank": 4,
+    "observation": "All JTL metric summaries report error_count=0 and the overall-errors policy check is PASS with observed 0/36034 in window run-intersection (evidence/14), while the OpenSearch 'errors' source failed with SOURCE_HTTP_ERROR (evidence/16).",
+    "possible_explanation": "Zero errors in the acquired JTL sample set is a positive observation, but the failed errors source means absence of recorded errors cannot be treated as proof that no errors existed in un-acquired data.",
+    "recommended_check": "After the OpenSearch errors source is re-acquired successfully, re-check its results for the same window and confirm whether any errors are present.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/14",
+     "analysis-result.json#/evidence/16"
+    ]
+   },
+   {
+    "rank": 5,
+    "observation": "Memory series within run-intersection show positive within-window slope and split-half shift: paymentservice memory_bytes mean=33023347, slope_per_second=4658.2779, split_half_shift=610304 (evidence/13); frontend memory_bytes mean=12059870, slope_per_second=2239.4435, split_half_shift=355328 (evidence/11). The evaluation window is 345000 ms (evidence/7).",
+    "possible_explanation": "Memory may be gradually increasing within the window (e.g., cache population or normal allocation), but the observation window is short and cannot by itself distinguish normal growth from a leak.",
+    "recommended_check": "Extend memory monitoring over a longer horizon than the run window and compare pre-run, in-run, and post-run levels to see whether growth continues or plateaus.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/11",
+     "analysis-result.json#/evidence/13",
+     "analysis-result.json#/evidence/7"
+    ]
+   }
+  ],
+  "recommendations": [
+   {
+    "rank": 1,
+    "action": "Re-run data acquisition/analysis after addressing the OpenSearch 'errors' query failure (SOURCE_HTTP_ERROR, retries=2) so that analysis coverage becomes COMPLETE.",
+    "rationale": "The 'errors' OpenSearch profile FAILED (evidence/16) and analysis coverage is INCOMPLETE (SOURCE_ACQUISITION_PARTIAL); run_validity stays VALID and policy_verdict stays PASS, but the dataset should be completed before relying on error conclusions.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/16",
+     "analysis-result.json#/analysis_coverage"
+    ]
+   },
+   {
+    "rank": 2,
+    "action": "Verify clock alignment between the load run timestamps and the metrics sources before performing any time-aligned comparison of load metrics and resource series.",
+    "rationale": "The resource binding reports clock_alignment=not_verified_by_core (evidence/7), so lead/lag ordering and temporal correlation between load-generated samples and resource series are unsupported until clocks are verified.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/7"
+    ]
+   },
+   {
+    "rank": 3,
+    "action": "If a capacity or utilization conclusion is needed, configure a resource policy (required capacity) and rerun; otherwise record the resource verdict as NO_POLICY rather than treating it as a pass.",
+    "rationale": "resource_verdict is NO_POLICY and no capacity_summary is present (evidence/15), so no capacity bound exists; a missing policy is not a PASS and cannot produce a capacity conclusion.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/15"
+    ]
+   },
+   {
+    "rank": 4,
+    "action": "Inspect the JMeter JTL at the sample level to identify which samples produced the maximum observed latencies (overall and checkout max=1092 ms) and when they occurred.",
+    "rationale": "Overall p99=176 ms versus max=1092 ms and checkout p99=142 ms versus max=1092 ms (evidence/0, evidence/3) suggest possible outlying samples, but their count, timing, and cause are unknown because individual samples are not in this input.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0",
+     "analysis-result.json#/evidence/3"
+    ]
+   },
+   {
+    "rank": 5,
+    "action": "If the increasing memory slopes are a concern, extend memory monitoring beyond the run window and compare pre-run, in-run, and post-run memory levels.",
+    "rationale": "Memory series show positive within-window slopes (e.g., paymentservice slope_per_second=4658.2779 bytes/s, split_half_shift=610304 bytes; evidence/13), but the 345000 ms window (evidence/7) is too short to establish a leak versus normal growth.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/13",
+     "analysis-result.json#/evidence/7"
+    ]
+   }
+  ],
+  "caveats": [
+   "Analysis coverage is INCOMPLETE (reason SOURCE_ACQUISITION_PARTIAL): the OpenSearch 'errors' query failed with SOURCE_HTTP_ERROR after 2 retries. run_validity remains VALID and policy_verdict remains PASS, but error data from that source was not acquired.",
+   "clock_alignment=not_verified_by_core: no temporal ordering, lead/lag, or causal relationship between the load run, its metrics, and the resource series can be inferred until clocks are verified.",
+   "resource_verdict is NO_POLICY because no resource/capacity policy is configured; a missing policy is not a PASS, and no capacity bound exists (no capacity_summary is present in the input).",
+   "The evaluation window (345000 ms) excludes 10309 ms at the run start and 4660 ms at the run end; window-scoped conclusions such as the policy check (0/36034) do not cover those edge portions of the run.",
+   "Zero observed errors in the acquired JTL samples (0/37349 whole-run metric summaries; 0/36034 window policy check) do not prove that no errors existed in the failed OpenSearch errors source or elsewhere.",
+   "The counts 36034 (policy check denominator, run-intersection window) and 37349 (overall metric summary, whole run) measure different scopes/windows; their difference is expected and not an inconsistency.",
+   "Individual samples, the number of samples at each recorded max latency, logs, traces, service topology, and release/configuration data are absent from the input; latency-spike counts, causes, and impacts cannot be determined.",
+   "Raw CPU (cores) and memory (bytes) values cannot be converted into utilization or headroom without configured limits/quotas; stable or mildly trending series do not prove spare capacity or absence of a problem."
+  ]
+ },
+ "schema": "ai-experiment-run.v2",
+ "phase": "pilot",
+ "case": "K01",
+ "rep": 2
+}

@@ -1,0 +1,102 @@
+[
+  {
+    "id": "R023",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T5",
+        "field": "#/hypotheses/0/possible_explanation",
+        "quote": "because paymentservice participates in checkout transactions",
+        "why": "The evidence contains no call graph establishing that paymentservice participates in checkout."
+      }
+    ],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 2,
+    "notes": "The checks are mostly actionable, but the invented dependency could misdirect the investigation."
+  },
+  {
+    "id": "R031",
+    "hard_defect": false,
+    "defects": [],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 5,
+    "notes": "It preserves the verdict and key measurements while keeping causes hypothetical and proposing verifiable checks."
+  },
+  {
+    "id": "R032",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T5",
+        "field": "#/hypotheses/0/possible_explanation",
+        "quote": "Paymentservice is part of the checkout path",
+        "why": "The evidence provides no topology or call graph establishing that path."
+      }
+    ],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 2,
+    "notes": "The measurements and checks are useful, but the asserted checkout dependency is unsupported."
+  },
+  {
+    "id": "R060",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T2",
+        "field": "#/summary",
+        "quote": "All 2,471 recorded errors are attributed to the \"checkout\" sampler ... and appear in the error store",
+        "why": "Matching aggregate counts do not establish that the checkout samples and OpenSearch records are the same events."
+      },
+      {
+        "type": "T5",
+        "field": "#/caveats/4",
+        "quote": "other services in the checkout call path are unobserved",
+        "why": "The evidence does not identify a checkout call path or the services on it."
+      },
+      {
+        "type": "T8",
+        "field": "#/recommendations/1/rationale",
+        "quote": "the series is bimodal",
+        "why": "Aggregate statistics do not establish the number of modes in the underlying series."
+      }
+    ],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 2,
+    "notes": "Useful diagnostic steps are weakened by unsupported record linkage and claims about system structure."
+  },
+  {
+    "id": "R061",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T2",
+        "field": "#/hypotheses/1/possible_explanation",
+        "quote": "The failed requests originated from the checkout portion of the workload and were surfaced by the frontend",
+        "why": "The aggregates do not link individual checkout failures to individual frontend error records."
+      },
+      {
+        "type": "T7",
+        "field": "#/caveats/3",
+        "quote": "other error types ... may not be represented",
+        "why": "The OpenSearch profile reports complete, exact group coverage for its query; only message detail is sample limited."
+      }
+    ],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 2,
+    "notes": "The operational checks are sound, but the response overstates cross-source attribution and understates error-group coverage."
+  },
+  {
+    "id": "R066",
+    "hard_defect": false,
+    "defects": [],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 4,
+    "notes": "It gives supported checks and preserves uncertainty, with some lower-priority count reconciliation."
+  }
+]

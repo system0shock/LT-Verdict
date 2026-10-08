@@ -1,0 +1,173 @@
+{
+ "stage": "S0",
+ "mode": "live",
+ "model": "glm-5.3",
+ "tag": {
+  "phase": "v3",
+  "model_tag": "glm-5.3",
+  "stage": "S0",
+  "case": "K04",
+  "rep": 1,
+  "attempt": 1
+ },
+ "qwen_exit": 0,
+ "wall_ms": 138173,
+ "relay": {
+  "schema_version": "advisory-ai-runtime-relay.v1",
+  "status": "FORWARDED_STRUCTURED_OUTPUT",
+  "request_count": 1,
+  "usage": {
+   "prompt_tokens": 2741,
+   "total_tokens": 14050,
+   "completion_tokens": 11309,
+   "prompt_tokens_details": {
+    "cached_tokens": 1024
+   },
+   "completion_tokens_details": {
+    "reasoning_tokens": 9043
+   }
+  },
+  "latency_ms": 136791,
+  "model_returned": "glm-5.3"
+ },
+ "relay_status": "FORWARDED_STRUCTURED_OUTPUT",
+ "usage": {
+  "prompt_tokens": 2741,
+  "total_tokens": 14050,
+  "completion_tokens": 11309,
+  "prompt_tokens_details": {
+   "cached_tokens": 1024
+  },
+  "completion_tokens_details": {
+   "reasoning_tokens": 9043
+  }
+ },
+ "latency_ms": 136791,
+ "status": "OK",
+ "note": null,
+ "output": {
+  "caveats": [
+   "The deterministic verdict is PASS and rests on a single policy rule (overall-errors, error_rate_ratio lte 0.01, observed 0/2623); it certifies only the error-rate rule, not latency, stability, or capacity performance. Advisory content here does not modify that verdict.",
+   "The evidence consists of aggregate metric summaries only; there are no time-bucketed series, concurrency/thread, pacing, or host resource metrics, so nothing here supports conclusions about behavior over the run duration, saturation, or spare capacity.",
+   "The findings array is empty and analysis_coverage is COMPLETE with no reasons; this means no anomalies were flagged by this analysis, not proof that none occurred.",
+   "Error counts reflect the JMeter success semantics recorded in the source data; the evidence does not state whether response-content assertions were configured, so zero errors may not equal correct responses.",
+   "No baseline or prior-run comparison is present; the tail values (home max 904 ms, checkout max 444 ms) cannot be judged normal or anomalous relative to history.",
+   "This is a single run (run_id jmeter_jtl_csv-b87363cf1d89c0789e174268c6d25cd65abd36f7b623d4ea84fe253ceaabf1e7); repeatability of the zero-error result and of the tail latencies is unverified.",
+   "The unit of the throughput denominator (44986) is not stated in the evidence; absolute requests-per-second conversion should be confirmed against the source run configuration before external reporting.",
+   "The error-rate threshold of 0.01 over 2623 samples would still pass with a small number of failing samples (about 1%, roughly 26 of 2623); the observed 0 is well within the rule, but the threshold itself is lenient relative to a strict zero-error goal."
+  ],
+  "hypotheses": [
+   {
+    "evidence_refs": [
+     "analysis-result.json#/evidence/4",
+     "analysis-result.json#/evidence/0"
+    ],
+    "observation": "Among the six transaction labels, 'home' reports the highest max (904 ms), highest p50 (27 ms), highest p95 (61 ms), and highest p99 (96 ms); its max equals the overall max of 904 ms, while the overall p99 is 77 ms.",
+    "possible_explanation": "'home' may be the consistently heaviest endpoint (uniformly highest percentiles) plus one or a few extreme outlier samples driving the 904 ms max, possibly a warm-up/first-hit effect or transient contention; this is a hypothesis, not an established cause.",
+    "recommended_check": "In the source JTL, list 'home' samples with response time above 96 ms (bounded count plus timestamps) and note whether they cluster at run start or are spread throughout; optionally compare the first 'home' sample against later ones.",
+    "rank": 1
+   },
+   {
+    "evidence_refs": [
+     "analysis-result.json#/evidence/3",
+     "analysis-result.json#/evidence/0"
+    ],
+    "observation": "The 'checkout' sampler reports max 444 ms against p99 85 ms, p95 45 ms, and p50 13 ms, with 437 samples and error_count 0.",
+    "possible_explanation": "A small number of tail outliers on checkout (for example transient contention during order-processing work) could produce the gap between max and p99; unverified.",
+    "recommended_check": "In the raw JTL, count and timestamp 'checkout' samples with response time above 85 ms and check whether they co-occur with the slow 'home' samples; stop after this bounded count.",
+    "rank": 2
+   },
+   {
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0",
+     "analysis-result.json#/evidence/1",
+     "analysis-result.json#/evidence/2",
+     "analysis-result.json#/evidence/3",
+     "analysis-result.json#/evidence/4",
+     "analysis-result.json#/evidence/5",
+     "analysis-result.json#/evidence/6"
+    ],
+    "observation": "Sample counts are 437 for each of 'add product to cart', 'cart', 'checkout', 'product', and 'reset cart', and 438 for 'home'; these sum to the overall 2623, and every label's throughput_rps uses the same denominator 44986.",
+    "possible_explanation": "The plan may be a repeated six-step flow executed roughly 437 times with one extra 'home' hit, possibly a leading navigation before iterations settled; the ordering of that extra sample is not evidenced.",
+    "recommended_check": "In the raw JTL, locate the extra 'home' sample (position and timestamp relative to the first and last 'home' requests) and check whether its response time is among the slowest for the label.",
+    "rank": 3
+   },
+   {
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0",
+     "analysis-result.json#/evidence/7"
+    ],
+    "observation": "error_count is 0 for the overall scope and for every label, and the policy rule 'overall-errors' (operator lte, threshold 0.01) passed with an observed ratio of 0/2623.",
+    "possible_explanation": "Responses were genuinely successful under this load profile; alternatively, the recorded success semantics may not include response-content assertions, since assertion configuration is not stated in the evidence.",
+    "recommended_check": "Confirm which assertions the JMeter test plan applies to these samplers, and spot-check a sample of recorded responses for correct content, so the 0-error result reflects functional as well as transport success.",
+    "rank": 4
+   },
+   {
+    "evidence_refs": [
+     "analysis-result.json#/evidence/7",
+     "analysis-result.json#/policy_verdict"
+    ],
+    "observation": "The only policy_check in the evidence targets metric error_rate_ratio (rule 'overall-errors', threshold 0.01, status PASS); no policy check references latency metrics, and the policy_verdict fact is PASS.",
+    "possible_explanation": "The policy set evaluated for this run may not define latency rules, leaving the reported percentile latencies unevaluated against any threshold.",
+    "recommended_check": "Review the policy configuration used for this run to confirm whether latency SLOs (p95, p99, or max) are intended; if so, add corresponding rules and re-run the policy evaluation.",
+    "rank": 5
+   }
+  ],
+  "recommendations": [
+   {
+    "action": "Scope the PASS verdict to what it certifies: the error-rate rule 'overall-errors' (lte 0.01, observed 0/2623). If latency SLOs exist for these endpoints, add latency policy rules (e.g., on p95, p99, or max) and re-run the policy evaluation.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/7",
+     "analysis-result.json#/policy_verdict",
+     "analysis-result.json#/evidence/0"
+    ],
+    "rationale": "The evidence contains exactly one policy check, on error_rate_ratio; latency percentiles are reported but never compared to a threshold, so the PASS verdict cannot speak to latency acceptability.",
+    "rank": 1
+   },
+   {
+    "action": "Run a bounded tail inspection on the source JTL: count and timestamp 'home' samples above 96 ms and 'checkout' samples above 85 ms, and record whether slow samples cluster at run start.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/4",
+     "analysis-result.json#/evidence/3",
+     "analysis-result.json#/evidence/0"
+    ],
+    "rationale": "home's max of 904 ms equals the overall max and is far above its p99 of 96 ms; checkout's max of 444 ms is well above its p99 of 85 ms; the aggregate summaries alone cannot show whether these are single outliers or a recurring pattern.",
+    "rank": 2
+   },
+   {
+    "action": "Verify the test plan's assertion configuration (adding content assertions for the sampled endpoints if none exist) before treating the zero-error result as functional correctness.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0",
+     "analysis-result.json#/evidence/7"
+    ],
+    "rationale": "All scopes report error_count 0, but the evidence does not state whether response-content assertions were configured; sampler success semantics alone may not catch incorrect payloads.",
+    "rank": 3
+   },
+   {
+    "action": "Keep this run's aggregate metrics (per-label p50/p95/p99/max, error counts, throughput ratios) as the recorded baseline and compare per-label tails on the next run of the identical plan.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0",
+     "analysis-result.json#/run_validity"
+    ],
+    "rationale": "No baseline or prior-run comparison is included in this analysis; the max and p99 values cannot be judged normal or anomalous without history, and the run is recorded as VALID.",
+    "rank": 4
+   },
+   {
+    "action": "Before quoting absolute request rates from this run, confirm the unit of the throughput denominator (44986) against the source run configuration.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0"
+    ],
+    "rationale": "throughput_rps is reported as 2623000/44986 overall and 437000/44986 per label; the field name implies per-second rates, but the denominator's unit is not stated in the evidence.",
+    "rank": 5
+   }
+  ],
+  "schema_version": "ai-advice-output.v1",
+  "summary": "Run jmeter_jtl_csv-b87363cf1d89c0789e174268c6d25cd65abd36f7b623d4ea84fe253ceaabf1e7 is VALID, coverage is COMPLETE with no reasons, and the deterministic policy verdict is PASS. That verdict rests on a single rule, 'overall-errors' (error_rate_ratio lte 0.01), which observed 0 errors over 2623 samples. Aggregate latency is low overall (p50 11 ms, p95 46 ms, p99 77 ms, max 904 ms), and all six labels recorded zero errors, with 437 samples each except 'home' at 438. The highest tail values sit on 'home' (max 904 ms, equal to the overall max, versus its p99 of 96 ms) and 'checkout' (max 444 ms versus p99 85 ms). The findings list is empty. Advisory reading: the PASS verdict certifies only the error-rate rule — no latency policy was evaluated; the evidence is aggregate-only (no time-bucketed series, concurrency, or resource data); and there is no baseline, so latency tails and any capacity or stability conclusions should not be drawn from this verdict alone."
+ },
+ "schema": "ai-experiment-run.v3",
+ "case": "K04",
+ "rep": 1,
+ "model_id": "glm-5.3",
+ "net_retries": 0,
+ "infra_retries": 0
+}

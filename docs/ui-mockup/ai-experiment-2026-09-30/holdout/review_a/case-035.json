@@ -1,0 +1,65 @@
+[
+  {
+    "id": "R008",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T2",
+        "field": "#/caveats/4",
+        "quote": "Zero error_count and error_rate 0/600 indicate no errors were recorded in this window",
+        "why": "The 0/600 ratio is a whole-run metric, but the statement presents it as evidence for the shorter evaluation window."
+      }
+    ],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 2,
+    "notes": "The actions are useful, but the caveat blurs the run and window scopes."
+  },
+  {
+    "id": "R021",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T2",
+        "field": "#/recommendations/4/action",
+        "quote": "for the 30-second evaluation window: 600 samples with error_count 0",
+        "why": "The 600 samples and zero errors are whole-run counts, not counts reported for the evaluation window."
+      },
+      {
+        "type": "T2",
+        "field": "#/caveats/5",
+        "quote": "error_count 0 across 600 samples and missing_cells 0 across 30 resource cells provide limited coverage over a 30-second window",
+        "why": "This combines whole-run sample counts with window-scoped resource cells as though both measured the same window."
+      }
+    ],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 2,
+    "notes": "It preserves the verdict and offers useful checks, but twice assigns whole-run counts to the window."
+  },
+  {
+    "id": "R036",
+    "hard_defect": false,
+    "defects": [],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 4,
+    "notes": "It preserves the reported results and gives verifiable checks, with some speculative but clearly hedged discussion."
+  },
+  {
+    "id": "R089",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T7",
+        "field": "#/caveats/0",
+        "quote": "all conclusions are window-limited",
+        "why": "The response also draws conclusions from whole-run metric summaries, so this misstates their coverage."
+      }
+    ],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 2,
+    "notes": "The operator checks are useful, but the blanket window limitation gives the wrong scope for whole-run results."
+  }
+]

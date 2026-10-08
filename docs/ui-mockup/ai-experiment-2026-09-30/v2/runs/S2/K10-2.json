@@ -1,0 +1,145 @@
+{
+ "stage": "S2",
+ "mode": "live",
+ "model": "deepseek-v4-flash-0731",
+ "tag": {
+  "phase": "v2-pilot",
+  "stage": "S2",
+  "case": "K10",
+  "rep": 2,
+  "attempt": 1
+ },
+ "qwen_exit": 0,
+ "wall_ms": 46979,
+ "relay": {
+  "schema_version": "advisory-ai-runtime-relay.v1",
+  "status": "FORWARDED_STRUCTURED_OUTPUT",
+  "request_count": 1,
+  "usage": {
+   "prompt_tokens": 3692,
+   "total_tokens": 8073,
+   "completion_tokens": 4381,
+   "prompt_tokens_details": {
+    "cached_tokens": 1024
+   },
+   "completion_tokens_details": {
+    "reasoning_tokens": 2638
+   }
+  },
+  "latency_ms": 45780,
+  "model_returned": "deepseek-v4-flash-0731"
+ },
+ "relay_status": "FORWARDED_STRUCTURED_OUTPUT",
+ "usage": {
+  "prompt_tokens": 3692,
+  "total_tokens": 8073,
+  "completion_tokens": 4381,
+  "prompt_tokens_details": {
+   "cached_tokens": 1024
+  },
+  "completion_tokens_details": {
+   "reasoning_tokens": 2638
+  }
+ },
+ "latency_ms": 45780,
+ "status": "OK",
+ "note": null,
+ "output": {
+  "schema_version": "ai-advice-output.v1",
+  "summary": "The run is VALID with COMPLETE analysis coverage. The overall metric summary reports 2,623 samples, 0 errors, p50 11 ms, p95 46 ms, p99 77 ms, max 904 ms, and the six per-transaction summaries (add product to cart, cart, checkout, home, product, reset cart) sum to the same 2,623 samples with 0 errors. Findings are empty. The deterministic verdict is NO_POLICY: no capacity policy (and no capacity_summary) is present in the input, so no capacity PASS/FAIL or bound can be derived regardless of the observed latency and error numbers. The latency maxima (904 ms overall and for home, 444 ms for checkout) stand out relative to those transactions' p99 values, but the input contains no individual samples, timestamps, resource series, or error profile, so this can only be investigated, not concluded, from the current evidence.",
+  "hypotheses": [
+   {
+    "rank": 1,
+    "observation": "The overall summary reports max latency 904 ms with p50 11 ms, p95 46 ms, p99 77 ms (evidence/0), and the 'home' transaction reports the same 904 ms max with p50 27 ms, p95 61 ms, p99 96 ms (evidence/4).",
+    "possible_explanation": "At least one home sample reached 904 ms, well above that transaction's p99, which could indicate a latency outlier or a brief localized slowdown during the run; this is a hypothesis only because no individual samples or time series are in the input.",
+    "recommended_check": "Extract the raw JMeter JTL samples and their timestamps to locate the sample(s) at 904 ms and determine whether they cluster in time or are isolated outliers.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0",
+     "analysis-result.json#/evidence/4"
+    ]
+   },
+   {
+    "rank": 2,
+    "observation": "The 'checkout' transaction reports max latency 444 ms with p50 13 ms, p95 45 ms, p99 85 ms (evidence/3).",
+    "possible_explanation": "A checkout sample reached 444 ms, far above the transaction's p99, which could be an outlier or coincide with a transient condition at that point in the run; the raw series needed to confirm this is not present in the input.",
+    "recommended_check": "Inspect the individual checkout samples and timestamps from the JTL source; if timestamps are compared to external events, verify clock alignment first because no clock or window relationship is defined in the input.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/3"
+    ]
+   },
+   {
+    "rank": 3,
+    "observation": "The verdict is NO_POLICY and the input contains no capacity_summary; the facts reference analysis-result.json#/policy_verdict as NO_POLICY and analysis-result.json#/analysis_coverage as COMPLETE.",
+    "possible_explanation": "No capacity policy or required capacity was configured for this run, so no PASS/FAIL capacity determination or capacity bound can be produced, independent of the observed latency and zero-error counts.",
+    "recommended_check": "If a capacity verdict is intended, define and configure a capacity policy or required capacity in the test harness and rerun; otherwise NO_POLICY will persist by product rule.",
+    "evidence_refs": [
+     "analysis-result.json#/policy_verdict",
+     "analysis-result.json#/analysis_coverage"
+    ]
+   },
+   {
+    "rank": 4,
+    "observation": "Overall and each per-transaction summary report error_count 0, giving error_rate_ratio 0/2623 overall and 0 per transaction (evidence/0 through evidence/6).",
+    "possible_explanation": "Zero errors may reflect JMeter sampler outcome aggregation only; server-side faults, retries, or errors outside the sampled scope would not appear, since no OpenSearch error profile, log bodies, or traces are in the input.",
+    "recommended_check": "On a follow-up run, collect an error profile and server-side logs/traces to test whether the zero-error result holds beyond sampler-level status.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0",
+     "analysis-result.json#/evidence/1",
+     "analysis-result.json#/evidence/4"
+    ]
+   }
+  ],
+  "recommendations": [
+   {
+    "rank": 1,
+    "action": "Configure a capacity policy or required capacity for the tested scope and rerun if a capacity PASS/FAIL or bound is needed.",
+    "rationale": "The verdict is NO_POLICY because no policy or capacity_summary exists in the input; per product rules, only a configured policy or required capacity can yield PASS or FAIL, and the current zero-error, low-p50 measurements do not establish capacity compliance.",
+    "evidence_refs": [
+     "analysis-result.json#/policy_verdict",
+     "analysis-result.json#/analysis_coverage"
+    ]
+   },
+   {
+    "rank": 2,
+    "action": "Pull the raw JMeter JTL samples with timestamps to find the samples at 904 ms (overall/home) and 444 ms (checkout) and count how many samples reached those maxima.",
+    "rationale": "These maxima are far above the respective p99 values (home p99 96 ms; checkout p99 85 ms), and the input does not contain individual samples, so the number and timing of the extreme samples are unknown.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0",
+     "analysis-result.json#/evidence/4",
+     "analysis-result.json#/evidence/3"
+    ]
+   },
+   {
+    "rank": 3,
+    "action": "If latency outliers are confirmed in the raw data, verify timestamps and clock alignment before correlating them with any load or system events.",
+    "rationale": "The input contains no clock relationship or window definitions, so no lead/lag or temporal causal ordering can be supported from this evidence alone.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/4",
+     "analysis-result.json#/evidence/3"
+    ]
+   },
+   {
+    "rank": 4,
+    "action": "For any future investigation of these latency maxima, collect resource series, call graph/topology, logs, and traces alongside the metric summaries.",
+    "rationale": "None of these are present in the input, and without them the 904 ms and 444 ms maxima cannot be attributed to request load, resource pressure, or application behavior.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0",
+     "analysis-result.json#/evidence/4",
+     "analysis-result.json#/evidence/3"
+    ]
+   }
+  ],
+  "caveats": [
+   "The deterministic verdict NO_POLICY is preserved: a missing policy is not a pass. Zero errors and low percentiles do not demonstrate capacity compliance, and no bound (LOWER_BOUND, UPPER_BOUND, BOUNDED) can be derived because no capacity_summary is present.",
+   "The input contains no individual samples or timestamps, so the number of samples at the 904 ms and 444 ms maxima is unknown, and no spike or outlier can be confirmed.",
+   "No resource series, OpenSearch error profile, call graph/topology, log bodies, traces, or release/configuration data are in the input, so no causal explanation for latency maxima is possible from this evidence.",
+   "error_count=0 reflects only the aggregated JMeter sampler scopes; server-side faults, retries, or errors outside the sampled scope would not appear in these counts.",
+   "Equal throughput_rps denominators (44986) appear across all metric summaries, but no window ids are referenced and no duration definition is provided, so the denominators cannot be interpreted as a run duration or used to infer temporal relationships.",
+   "If follow-up work compares timestamps to external events, clock alignment must be verified first; the input contains no verified clock or window relationship."
+  ]
+ },
+ "schema": "ai-experiment-run.v2",
+ "phase": "pilot",
+ "case": "K10",
+ "rep": 2
+}

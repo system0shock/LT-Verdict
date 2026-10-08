@@ -1,0 +1,202 @@
+{
+ "stage": "S1",
+ "mode": "live",
+ "model": "deepseek-v4-flash-0731",
+ "tag": {
+  "phase": "v2-pilot",
+  "stage": "S1",
+  "case": "K12",
+  "rep": 1,
+  "attempt": 1
+ },
+ "qwen_exit": 0,
+ "wall_ms": 100257,
+ "relay": {
+  "schema_version": "advisory-ai-runtime-relay.v1",
+  "status": "FORWARDED_STRUCTURED_OUTPUT",
+  "request_count": 1,
+  "usage": {
+   "prompt_tokens": 12867,
+   "total_tokens": 23570,
+   "completion_tokens": 10703,
+   "prompt_tokens_details": {
+    "cached_tokens": 1024
+   },
+   "completion_tokens_details": {
+    "reasoning_tokens": 7755
+   }
+  },
+  "latency_ms": 98961,
+  "model_returned": "deepseek-v4-flash-0731"
+ },
+ "relay_status": "FORWARDED_STRUCTURED_OUTPUT",
+ "usage": {
+  "prompt_tokens": 12867,
+  "total_tokens": 23570,
+  "completion_tokens": 10703,
+  "prompt_tokens_details": {
+   "cached_tokens": 1024
+  },
+  "completion_tokens_details": {
+   "reasoning_tokens": 7755
+  }
+ },
+ "latency_ms": 98961,
+ "status": "OK",
+ "note": null,
+ "output": {
+  "schema_version": "ai-advice-output.v1",
+  "summary": "The analysis of run jmeter_jtl_csv-3360734d7d8937c4cc768bcd37a5379e01325298227eb8646370a32215bc3e84 is VALID with COMPLETE coverage and no findings. The deterministic capacity verdict is NO_POLICY: a LOWER_BOUND at 20 users (lower_inclusive 20, upper_exclusive null) was produced from three verified stages (5, 10, 20 users, each window verdict PASS, resource_verdict NO_POLICY), while capacity_knee is null due to the fixed KNEE_DETECTOR_NOT_IMPLEMENTED product limitation. All generator diagnostic guards PASS, error rates are 0 in the covered windows, and CPU/memory utilization is low at the tested loads, but none of that changes the NO_POLICY verdict. Advice below covers configuring a capacity policy if PASS/FAIL is needed, extending load above 20 users only if more capacity information is required, verifying clocks before any temporal interpretation, and inspecting per-transaction latency and memory series without causal claims.",
+  "hypotheses": [
+   {
+    "rank": 1,
+    "observation": "The deterministic policy verdict is NO_POLICY while all three evaluated windows (r2-users5, r2-users10, r2-users20) report business_verdict PASS and resource_verdict NO_POLICY; the capacity summary also reports policy_verdict NO_POLICY with an empty reasons list.",
+    "possible_explanation": "The verdict reflects the absence of a configured capacity policy or required capacity for this target, not a failure of the load run; per product rules only a configured policy or required capacity can yield PASS or FAIL, and NO_POLICY stays NO_POLICY.",
+    "recommended_check": "Confirm whether any capacity policy or required-capacity bound is configured for this target; if a PASS/FAIL verdict is wanted, configure the appropriate policy (not inferred from results) and rerun.",
+    "evidence_refs": [
+     "analysis-result.json#/policy_verdict",
+     "analysis-result.json#/capacity_summary",
+     "analysis-result.json#/evidence/36",
+     "analysis-result.json#/evidence/38",
+     "analysis-result.json#/evidence/40"
+    ]
+   },
+   {
+    "rank": 2,
+    "observation": "capacity_summary reports bound_type LOWER_BOUND with lower_inclusive 20 and upper_exclusive null, capacity_knee null, and knee_reason KNEE_DETECTOR_NOT_IMPLEMENTED; each stage (5, 10, 20 users) has verdict PASS with verified_bound_load equal to its target.",
+    "possible_explanation": "The lower bound is derived from the stages with a verified product outcome; the null knee is a fixed product limitation (KNEE_DETECTOR_NOT_IMPLEMENTED), not a defect of this run and not a step the user can take.",
+    "recommended_check": "Do not attempt to enable or implement a knee detector; if behavior above 20 users is required, extend the run with additional higher load stages and let the analysis derive a new bound.",
+    "evidence_refs": [
+     "analysis-result.json#/capacity_summary",
+     "analysis-result.json#/evidence/41"
+    ]
+   },
+   {
+    "rank": 3,
+    "observation": "In each window the jmeter_active_threads series is flat with min=median=max=target (5, 10, 20), sample_standard_deviation 0 and slope_per_second 0; capacity stages show observed_min=observed_max=target and complete_bins 30.",
+    "possible_explanation": "The generator sustained exactly the targeted user counts during each 30-bin window, consistent with the achieved p05_10s statistic; the flat series reflects a constant target load, not a demonstration of spare capacity.",
+    "recommended_check": "Inspect bin-level active-thread and throughput series across the full run, including the unevaluated leading/trailing portions, to confirm load was constant everywhere rather than only inside the three windows.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/9",
+     "analysis-result.json#/evidence/17",
+     "analysis-result.json#/evidence/25",
+     "analysis-result.json#/capacity_summary"
+    ]
+   },
+   {
+    "rank": 4,
+    "observation": "Overall latency summary shows p99 298 ms and max 1200 ms; transaction summaries show home p50 127 ms / p99 395 ms and checkout p50 100 ms / p99 297 ms, while add product to cart and reset cart show p50 5 ms / p99 96 ms and p50 3 ms / p99 96 ms.",
+    "possible_explanation": "Transactions differ in measured latency distributions, so the aggregate overall p99 (298 ms) need not equal any single transaction's p99; this could reflect differing code paths or mix proportions, but the run-level summaries alone do not establish a cause.",
+    "recommended_check": "Inspect per-transaction latency percentiles per window and at bin level to see whether any transaction's latency increases between the 5-user and 20-user stages, keeping the comparison within the same window scope.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0",
+     "analysis-result.json#/evidence/1",
+     "analysis-result.json#/evidence/3",
+     "analysis-result.json#/evidence/4",
+     "analysis-result.json#/evidence/6"
+    ]
+   },
+   {
+    "rank": 5,
+    "observation": "resource-binding reports clock_alignment 'not_verified_by_core' and defines evaluation windows from 1790635740000 to 1790636780000 inside run bounds 1790635692953–1790636794131.",
+    "possible_explanation": "Without verified clock alignment, any temporal ordering or lead/lag relationship drawn across metric series and JTL samples could be an artifact of clock skew; no temporal causal hypothesis is supported yet.",
+    "recommended_check": "Verify clock synchronization among the JMeter generator, metric collectors, and the analysis host before interpreting cross-series temporal relationships; if clocks were skewed, rerun or re-evaluate.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/7"
+    ]
+   },
+   {
+    "rank": 6,
+    "observation": "CPU summaries are low at all stages (e.g., frontend mean ~0.18–0.19 cores, checkoutservice ~0.05–0.07 cores, paymentservice ~0.012–0.014 cores) with no missing cells and complete 30-bin windows; generator throttle ratio max is about 0.079 below the diagnostic threshold 0.2 and all generator resource policy checks PASS.",
+    "possible_explanation": "At the tested loads the monitored services were not saturated; however, low means and the diagnostic PASS cover only loads up to 20 users and do not prove spare capacity, headroom, or robustness at higher loads.",
+    "recommended_check": "Run additional load stages above 20 users in a fresh test if headroom or an upper limit matters; treat the low CPU means strictly as within-tested-load observations.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/10",
+     "analysis-result.json#/evidence/28",
+     "analysis-result.json#/evidence/30",
+     "analysis-result.json#/evidence/24",
+     "analysis-result.json#/evidence/32"
+    ]
+   },
+   {
+    "rank": 7,
+    "observation": "Memory summaries show positive slope_per_second and positive split_half_shift in each window for checkoutservice, frontend, and paymentservice (e.g., paymentservice slope_per_second 13281 bytes/s in r2-users5) while window means stay broadly stable across stages (paymentservice mean ~32.3–33.7 MB).",
+    "possible_explanation": "The positive per-window slopes could indicate upward memory drift within windows (e.g., warm-up or steady growth), but the bounded interval-mean statistics alone do not prove a leak or sustained growth over the full run.",
+    "recommended_check": "Inspect the raw memory series at bin resolution across the full run, including before and after the evaluated windows, to see whether memory stabilizes or grows without bound over longer durations.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/11",
+     "analysis-result.json#/evidence/15",
+     "analysis-result.json#/evidence/23",
+     "analysis-result.json#/evidence/31"
+    ]
+   }
+  ],
+  "recommendations": [
+   {
+    "rank": 1,
+    "action": "If a PASS/FAIL capacity verdict is required, configure a capacity policy (or required-capacity bound) for this target and rerun so the analysis can evaluate it; do not treat the current NO_POLICY as a pass.",
+    "rationale": "The deterministic verdict is NO_POLICY, and both the capacity summary and every window resource_verdict are NO_POLICY; product rules keep NO_POLICY until a policy is configured.",
+    "evidence_refs": [
+     "analysis-result.json#/policy_verdict",
+     "analysis-result.json#/capacity_summary",
+     "analysis-result.json#/evidence/36",
+     "analysis-result.json#/evidence/38",
+     "analysis-result.json#/evidence/40"
+    ]
+   },
+   {
+    "rank": 2,
+    "action": "Rerun with additional load stages above 20 users (e.g., 30, 40, 50) if the operator needs an upper bound or evidence of headroom, keeping the same business/error policies.",
+    "rationale": "Only a LOWER_BOUND at lower_inclusive 20 with upper_exclusive null was produced; all tested steps passed at 5/10/20 users, so behavior above 20 users is not covered.",
+    "evidence_refs": [
+     "analysis-result.json#/capacity_summary",
+     "analysis-result.json#/evidence/41"
+    ]
+   },
+   {
+    "rank": 3,
+    "action": "Verify clock alignment across the JMeter generator, metric collectors, and analysis host, and re-run or re-evaluate if any skew is found.",
+    "rationale": "resource-binding reports clock_alignment 'not_verified_by_core', so cross-series timing and any ordering interpretation are not yet reliable.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/7"
+    ]
+   },
+   {
+    "rank": 4,
+    "action": "Inspect per-transaction latency percentiles at bin level per window, focusing on home (p99 395 ms) and checkout (p99 297 ms) versus add product to cart / reset cart (p99 96 ms), to see whether dispersion or latency changes from 5 to 20 users.",
+    "rationale": "Overall p99 is 298 ms while some transactions exceed it (home p99 395 ms) and others are far lower; the summaries differ by transaction, and per-window inspection can test whether load affects them differently. This is inspection only; it does not establish a cause.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0",
+     "analysis-result.json#/evidence/1",
+     "analysis-result.json#/evidence/3",
+     "analysis-result.json#/evidence/4",
+     "analysis-result.json#/evidence/6"
+    ]
+   },
+   {
+    "rank": 5,
+    "action": "Inspect the raw memory series at bin resolution across the full run for checkoutservice, frontend, and paymentservice to determine whether the positive per-window slopes continue or stabilize beyond the evaluated windows.",
+    "rationale": "The three services show positive slope_per_second in every window (e.g., paymentservice 13281 bytes/s in r2-users5), but window means are stable; a bounded time-series inspection is needed to distinguish transient drift from sustained growth before any further action.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/11",
+     "analysis-result.json#/evidence/15",
+     "analysis-result.json#/evidence/23",
+     "analysis-result.json#/evidence/31"
+    ]
+   }
+  ],
+  "caveats": [
+   "The deterministic verdict remains NO_POLICY; healthy PASS windows and a valid run do not turn it into PASS. Only a configured policy or required capacity can yield PASS or FAIL.",
+   "capacity_knee is null with KNEE_DETECTOR_NOT_IMPLEMENTED: a fixed product limitation, not a defect of this run and not actionable by the user; do not implement or enable a knee detector and do not treat the bound as needing one.",
+   "The generator guard (cfs_throttled_period_ratio, effect diagnostic) is diagnostic by contract; all three checks PASS against threshold 0.2. Do not change its effect to binding, SLA, or enforcing; a failed guard would only make a stage unusable for a product bound.",
+   "Clock alignment is reported as not_verified_by_core; no lead/lag or temporal causal hypothesis is supported until clocks are verified.",
+   "Counts are scoped differently: the overall error_rate_ratio uses denominator 135434 (throughput denominator 1101178) while per-window checks use denominators 30049, 37550, and 47404; these are not comparable as sums, and the evaluated windows (1790635740000–1790636780000) cover only part of the run (1790635692953–1790636794131).",
+   "The test covers only 5, 10, and 20 users; zero observed errors, low CPU means, and flat active-thread series in the covered windows do not prove stability, spare capacity, low load, or absence of problems at higher loads or outside the windows.",
+   "Latency and resource figures are observed statistics for the covered windows only; they do not establish causes, and error_count 0 reflects only the measured period."
+  ]
+ },
+ "schema": "ai-experiment-run.v2",
+ "phase": "pilot",
+ "case": "K12",
+ "rep": 1
+}

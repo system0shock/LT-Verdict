@@ -1,0 +1,83 @@
+[
+  {
+    "id": "R006",
+    "hard_defect": false,
+    "defects": [],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 5,
+    "notes": "Accurately preserves the verdict, scope limits, correlation caveats, and actionable follow-up checks."
+  },
+  {
+    "id": "R083",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T7",
+        "field": "#/summary",
+        "quote": "no SLO was configured",
+        "why": "NO_POLICY establishes no applicable evaluated rule, not that no SLO or policy was configured."
+      },
+      {
+        "type": "T7",
+        "field": "#/hypotheses/3/possible_explanation",
+        "quote": "No SLO/policy was configured",
+        "why": "The evidence cannot establish this specific cause of NO_POLICY."
+      }
+    ],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 2,
+    "notes": "The correlation analysis and operational recommendations are useful, but it repeatedly overstates the cause of NO_POLICY."
+  },
+  {
+    "id": "R103",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T7",
+        "field": "#/summary",
+        "quote": "no business or resource policy was configured for either window",
+        "why": "NO_POLICY does not prove that policies were not configured; it only establishes that no applicable evaluated rule produced a result."
+      },
+      {
+        "type": "T8",
+        "field": "#/hypotheses/2/possible_explanation",
+        "quote": "Because achieved load never varied",
+        "why": "The evidence establishes that the target series was constant, not that achieved load had no variation."
+      },
+      {
+        "type": "T7",
+        "field": "#/hypotheses/3/possible_explanation",
+        "quote": "No policy was configured",
+        "why": "This names an unestablished configuration cause for NO_POLICY."
+      },
+      {
+        "type": "T7",
+        "field": "#/caveats/4",
+        "quote": "because no business or resource policy was configured",
+        "why": "The deterministic NO_POLICY result does not establish that configuration fact."
+      }
+    ],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 2,
+    "notes": "It contains strong diagnostic guidance but repeatedly misstates what NO_POLICY proves and overclaims about achieved-load variation."
+  },
+  {
+    "id": "R135",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T8",
+        "field": "#/hypotheses/5/recommended_check",
+        "quote": "Base capacity reasoning on the selected candidate",
+        "why": "A selected correlation candidate is not a capacity bound; capacity bounds require verified product outcomes from applicable-SLA stages, none of which are present."
+      }
+    ],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 4,
+    "notes": "Otherwise accurately reports the verdict, coverage, numbers, and evidentiary limits with useful operator actions."
+  }
+]

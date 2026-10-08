@@ -1,0 +1,169 @@
+{
+ "stage": "B",
+ "mode": "live",
+ "model": "deepseek-v4-flash-0731",
+ "tag": {
+  "phase": "holdout",
+  "attempt_id": "case-029-2-B-t1",
+  "arm": "B",
+  "stage": null,
+  "case": "case-029",
+  "rep": 2,
+  "try": 1
+ },
+ "retry_policy": "d2",
+ "qwen_exit": 0,
+ "wall_ms": 57754,
+ "relay": {
+  "schema_version": "advisory-ai-runtime-relay.v1",
+  "status": "FORWARDED_STRUCTURED_OUTPUT",
+  "received_request_count": 1,
+  "forwarded_request_count": 1,
+  "outcomes": [
+   "FORWARDED_STRUCTURED_OUTPUT"
+  ],
+  "retry_refused_reason": null,
+  "first_refused_reason": null,
+  "model_id": "deepseek-v4-flash-0731",
+  "retry_policy": "d2",
+  "requests": [
+   {
+    "ordinal": 1,
+    "forwarded": true,
+    "outcome": "FORWARDED_STRUCTURED_OUTPUT",
+    "provider_status": 200,
+    "latency_ms": 56490,
+    "usage": {
+     "prompt_tokens": 3400,
+     "total_tokens": 8923,
+     "completion_tokens": 5523,
+     "prompt_tokens_details": {
+      "cached_tokens": 1024
+     },
+     "completion_tokens_details": {
+      "reasoning_tokens": 3814
+     }
+    },
+    "model_returned": "deepseek-v4-flash-0731"
+   }
+  ],
+  "usage": {
+   "prompt_tokens": 3400,
+   "completion_tokens": 5523,
+   "total_tokens": 8923
+  },
+  "latency_ms": 56490
+ },
+ "relay_status": "FORWARDED_STRUCTURED_OUTPUT",
+ "usage": {
+  "prompt_tokens": 3400,
+  "completion_tokens": 5523,
+  "total_tokens": 8923
+ },
+ "latency_ms": 56490,
+ "retried": false,
+ "retry_refused_reason": null,
+ "status": "OK",
+ "note": null,
+ "output": {
+  "schema_version": "ai-advice-output.v1",
+  "summary": "The deterministic verdict for this analysis is FAIL (analysis_id 35f499a9ce5c32d3843e82aa8454b82b18df8387ab31fd2868f7fc8518f0d7f6; run_validity VALID; analysis_coverage COMPLETE). The business policy check for rule 'latency' (metric response_time_p95_ms, operator lte, threshold 80) failed with observed p95 = 100 ms during the evaluation window (epoch 1767225600000 .. 1767225630000), driving business_verdict FAIL and overall verdict FAIL. The resource policy check for rule 'limit' (value gt 80) passed on a complete 30-cell series that is constant at 50 synthetic_unit. No errors were observed (error_count 0, ratio 0/600). The advice below is advisory and does not change the deterministic verdict; all hypotheses are unproven and require the recommended checks.",
+  "hypotheses": [
+   {
+    "rank": 1,
+    "observation": "Policy check for rule 'latency' reports status FAIL with metric response_time_p95_ms = 100, operator lte, threshold 80 for the evaluation window; the window policy summary gives business_verdict FAIL and overall verdict FAIL.",
+    "possible_explanation": "The p95 response time exceeded the configured 80 ms SLO during the evaluation window, which is the direct basis of the FAIL verdict. The cause is not established by this evidence; it could be load, application behavior, or environment, but no causal claim is supported here.",
+    "recommended_check": "Inspect the per-interval p95 latency series and the raw sampler records for the evaluation window to see whether 100 ms is uniform across the window, and rerun to confirm reproducibility.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/5",
+     "analysis-result.json#/evidence/6",
+     "analysis-result.json#/findings/0"
+    ]
+   },
+   {
+    "rank": 2,
+    "observation": "The overall and transaction metric summaries both report latency_ms p50 = p95 = p99 = max = 100, with error_count 0 and error_rate_ratio numerator 0 over denominator 600.",
+    "possible_explanation": "A flat latency distribution at exactly 100 ms could reflect an aggregated or rounded value rather than a load-induced distribution; the summary cannot show whether individual samples varied over the window.",
+    "recommended_check": "Review the underlying JMeter sampler data to verify the distribution of response times before attributing the p95 breach to service load.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0",
+     "analysis-result.json#/evidence/1"
+    ]
+   },
+   {
+    "rank": 3,
+    "observation": "The resource summary for entity 'service' shows a complete 30-cell series, constant at 50 synthetic_unit (min = max = median = 50, slope_per_second = 0, missing_cells = 0), and the resource policy 'limit' (value gt 80) passed.",
+    "possible_explanation": "If this telemetry is genuine, the service's resource metric stayed below the 80 threshold with no observed variation, so the latency breach may stem from factors other than this resource metric (e.g., application logic, queues, external dependencies). A flat constant series may also indicate a placeholder or synthetic feed rather than live telemetry.",
+    "recommended_check": "Inspect the resource telemetry source and, if available, correlate per-interval resource values with the latency percentiles across the window.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/3",
+     "analysis-result.json#/evidence/4"
+    ]
+   },
+   {
+    "rank": 4,
+    "observation": "The resource binding for the explicit evaluation window reports clock_alignment 'not_verified_by_core'.",
+    "possible_explanation": "Without verified clock alignment between load generation and resource telemetry, any temporal ordering or lead/lag correlation between the latency failure and resource behavior is unsupported.",
+    "recommended_check": "Verify and, if necessary, synchronize clocks between the load generator and resource telemetry before performing any temporal correlation analysis.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/2"
+    ]
+   }
+  ],
+  "recommendations": [
+   {
+    "rank": 1,
+    "action": "Inspect the per-interval latency data and raw sampler records for the evaluation window, then rerun the scenario to determine whether the p95 = 100 ms breach reproduces.",
+    "rationale": "The FAIL is driven by rule 'latency' (response_time_p95_ms observed 100 gt threshold 80). Per-interval and raw data would show whether the breach is uniform or transient and whether it is reproducible.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/5",
+     "analysis-result.json#/evidence/0",
+     "analysis-result.json#/evidence/1"
+    ]
+   },
+   {
+    "rank": 2,
+    "action": "Verify that the configured latency SLO (rule_id 'latency', metric response_time_p95_ms, operator lte, threshold 80) matches the intended requirement; adjust the policy configuration only if the SLO is mis-specified.",
+    "rationale": "The observed 100 ms exceeds threshold 80; confirming the intended target avoids acting on a misconfigured policy. Configuring a policy is an operator action and does not retroactively change this deterministic verdict.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/5",
+     "analysis-result.json#/evidence/6"
+    ]
+   },
+   {
+    "rank": 3,
+    "action": "Verify clock alignment between load-generator timestamps and resource telemetry, because the resource binding reports 'not_verified_by_core', before correlating latency with resource behavior.",
+    "rationale": "Temporal correlation or causal ordering between load and resource data is unsupported while clock alignment is unverified.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/2"
+    ]
+   },
+   {
+    "rank": 4,
+    "action": "Confirm that the resource telemetry source for the constant 50 synthetic_unit series (30 of 30 cells observed, no gaps) is genuinely measured; if it is real, investigate latency causes beyond this resource metric.",
+    "rationale": "The flat series passed the resource SLA, and a constant value may indicate a synthetic or placeholder feed; confirming the feed prevents incorrect conclusions about spare capacity or stability.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/3",
+     "analysis-result.json#/evidence/4"
+    ]
+   }
+  ],
+  "caveats": [
+   "The evidence covers only the 30-second evaluation window (epoch 1767225600000 .. 1767225630000) of a run ending at epoch 1767225630099; conclusions may not hold outside this window.",
+   "Latency evidence is limited to the p50/p95/p99/max summary; no per-interval latency series or raw latency distribution is present in the provided evidence.",
+   "A zero error count (0/600) does not prove the absence of latency problems; error rate and latency are different metrics measured in the same window.",
+   "The constant resource series (50 synthetic_unit, slope_per_second 0, split_half_shift 0) does not prove spare capacity or stability; missing/gapped cells are zero only within this window.",
+   "clock_alignment is 'not_verified_by_core', so temporal ordering between load generation and resource telemetry is unverified.",
+   "Analysis coverage is COMPLETE, but this refers to availability of the analyzed artifact, not to proof of root cause.",
+   "The throughput_rps fields (numerator 600000, denominator 30099) are preserved as stored and are not interpreted as a duration or capacity claim in this advice."
+  ]
+ },
+ "schema": "ai-experiment-run.holdout.v1",
+ "case": "case-029",
+ "rep": 2,
+ "arm": "B",
+ "try": 1,
+ "attempt_id": "case-029-2-B-t1",
+ "model_id": "deepseek-v4-flash-0731",
+ "prompt_sha256": "3c0f28bee6517c13c5c854615e7d3d59301893d9723880818e4034a32e9133bf"
+}

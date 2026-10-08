@@ -1,0 +1,54 @@
+[
+  {
+    "id": "R079",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T7",
+        "field": "#/hypotheses/3/possible_explanation",
+        "quote": "No thresholds/policies were configured",
+        "why": "NO_POLICY establishes that no applicable rule was evaluated, not that no policy or threshold was configured."
+      }
+    ],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 4,
+    "notes": "Otherwise accurately preserves the verdict, validity, coverage, metrics, and diagnostic limitations."
+  },
+  {
+    "id": "R088",
+    "hard_defect": false,
+    "defects": [],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 5,
+    "notes": "Accurate, well-scoped operator advice that keeps correlations as hypotheses and preserves NO_POLICY semantics."
+  },
+  {
+    "id": "R110",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T5",
+        "field": "#/hypotheses/1/recommended_check",
+        "quote": "disaggregate the evaluation window by sub-intervals and by load step",
+        "why": "The evidence reports a constant 20 requests/s target and supplies no load steps to disaggregate."
+      }
+    ],
+    "required_facts_preserved": false,
+    "missing_facts": [
+      "The overall zero-error result and sample total of 0/7200 are not stated."
+    ],
+    "usefulness": 3,
+    "notes": "Most caveats and recommendations are sound, but the invented load-step analysis could misdirect the operator."
+  },
+  {
+    "id": "R139",
+    "hard_defect": false,
+    "defects": [],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 5,
+    "notes": "Comprehensive and evidence-grounded advice that correctly distinguishes candidate associations from verdicts or causes."
+  }
+]

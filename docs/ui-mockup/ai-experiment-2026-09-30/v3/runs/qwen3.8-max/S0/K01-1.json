@@ -1,0 +1,334 @@
+{
+ "stage": "S0",
+ "mode": "live",
+ "model": "qwen3.8-max",
+ "tag": {
+  "phase": "v3",
+  "model_tag": "qwen3.8-max",
+  "stage": "S0",
+  "case": "K01",
+  "rep": 1,
+  "attempt": 1
+ },
+ "qwen_exit": 0,
+ "wall_ms": 253915,
+ "relay": {
+  "schema_version": "advisory-ai-runtime-relay.v1",
+  "status": "FORWARDED_STRUCTURED_OUTPUT",
+  "request_count": 1,
+  "usage": {
+   "prompt_tokens": 7602,
+   "total_tokens": 22923,
+   "completion_tokens": 15321,
+   "prompt_tokens_details": {
+    "cached_tokens": 1024,
+    "text_tokens": 7602
+   },
+   "completion_tokens_details": {
+    "reasoning_tokens": 7621,
+    "text_tokens": 15321
+   }
+  },
+  "latency_ms": 252695,
+  "model_returned": "qwen3.8-max"
+ },
+ "relay_status": "FORWARDED_STRUCTURED_OUTPUT",
+ "usage": {
+  "prompt_tokens": 7602,
+  "total_tokens": 22923,
+  "completion_tokens": 15321,
+  "prompt_tokens_details": {
+   "cached_tokens": 1024,
+   "text_tokens": 7602
+  },
+  "completion_tokens_details": {
+   "reasoning_tokens": 7621,
+   "text_tokens": 15321
+  }
+ },
+ "latency_ms": 252695,
+ "status": "OK",
+ "note": null,
+ "output": {
+  "schema_version": "ai-advice-output.v1",
+  "summary": "Deterministic verdict, preserved exactly: run_validity = VALID; policy_verdict = PASS; analysis_coverage = INCOMPLETE with reason SOURCE_ACQUISITION_PARTIAL. The findings list is empty and no anomaly-test evidence is present; neither fact demonstrates absence of a problem.\n\nWhat the referenced evidence states: 37,349 JMeter samples across six transaction labels (add product to cart 6,224; cart 6,224; checkout 6,223; home 6,227; product 6,227; reset cart 6,224 — summing to the overall 37,349), all with error_count 0. Overall latency_ms p50 17, p95 98, p99 176, max 1092. Per-label p50 ranges from 2 ms (reset cart) and 3 ms (add product to cart) to 79–93 ms (product, checkout, cart, home); per-label p99 ranges 85–197 ms; per-label maxima are 752, 952, 974, 993, 1009 and 1092 ms, i.e. every label has a near-1 s maximum while its p99 stays well below that. Resource summaries exist for three entities only (frontend, checkoutservice, paymentservice), each with cpu_cores and memory_bytes, 23 expected and 23 observed cells, 0 missing cells, longest_gap_cells 0, aggregation interval_mean over the run-intersection window 1790619855000–1790620200000 (345,000 ms at a 15,000 ms step). Frontend cpu_cores mean 0.180301 (min 0.157986, max 0.199107); checkoutservice cpu_cores mean 0.046915; paymentservice cpu_cores mean 0.011197 with a slightly negative slope_per_second. Memory slope_per_second is positive for all three (checkoutservice 1883.45, frontend 2239.44, paymentservice 4658.28 bytes/s) with positive split_half_shift values (300032, 355328, 610304 bytes). No CPU/memory limits, requests, quotas, idle baselines or pre-run comparisons appear anywhere in the evidence.\n\nTwo limits dominate the interpretation. First, the OpenSearch \"errors\" profile FAILED with reason SOURCE_HTTP_ERROR after 3 requests and 2 retries (throttle_wait_ms 5986), while the Prometheus \"metrics-direct\" profile was COMPLETE with all six queries SUCCESS; overall source status is PARTIAL. The zero error counts therefore come from client-side JTL samples, and server-side error telemetry is absent rather than confirmed zero. Second, window_policy_summary reports business_verdict PASS, resource_verdict NO_POLICY, verdict PASS, backed by exactly one policy check (error_rate_ratio, operator lte, threshold 0.01, observed 0/36034, status PASS). NO_POLICY means no resource rule was evaluated — it is not a resource pass — and no latency or per-transaction policy check is present. Note also that the policy denominator 36,034 differs from the overall metric-summary sample_count 37,349, and that resource_binding reports clock_alignment \"not_verified_by_core\" with 1 leading cell (10,309 ms) and 1 trailing cell (4,660 ms) dropped, so the resource view is narrower than the run window and no lead/lag or temporal causal ordering can be supported until clocks are verified. This advisory does not change the verdict.",
+  "hypotheses": [
+   {
+    "rank": 1,
+    "observation": "The source_summary reports overall status PARTIAL: the 'errors' profile (source_kind opensearch, transport direct) has status FAILED with its single query failed for reason SOURCE_HTTP_ERROR after request_count 3 and retries 2 (throttle_wait_ms 5986), while the 'metrics-direct' profile (prometheus) is COMPLETE with all six queries SUCCESS. analysis_coverage is INCOMPLETE with reason SOURCE_ACQUISITION_PARTIAL. All metric summaries and the single policy check report error_count 0 / numerator 0 from JMeter sample data.",
+    "possible_explanation": "Server-side or application error telemetry may never have been acquired, so the zero error counts could reflect only client-observed JTL outcomes. The referenced failure reason is a source HTTP error, which is consistent with an endpoint, authentication, query-shape, timeout or rate-limit/throttling problem at the OpenSearch source rather than with a confirmed absence of server-side errors. This is a coverage gap, not evidence of a healthy backend.",
+    "recommended_check": "Re-issue the same errors query (expression_sha256 8c4a5e0e4cb4d043c3f32df604dfa652210af4dffd320da3632341f9cbed1db8) against the same window 1790619780000–1790620275000 and capture the HTTP status code, response body and elapsed time. Distinguish three outcomes explicitly: query succeeds and returns zero error documents; query succeeds and returns error documents; query fails again. Only the first outcome would let coverage move off SOURCE_ACQUISITION_PARTIAL.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/16",
+     "analysis-result.json#/analysis_coverage",
+     "analysis-result.json#/evidence/0",
+     "analysis-result.json#/evidence/14"
+    ]
+   },
+   {
+    "rank": 2,
+    "observation": "window_policy_summary for window run-intersection reports business_verdict PASS, resource_verdict NO_POLICY and verdict PASS. Exactly one policy_check is present: metric error_rate_ratio, scope kind overall, operator lte, threshold 0.01, observed 0/36034, status PASS. No latency, per-transaction, CPU or memory policy checks appear in the evidence, and no resource limits or requests are reported for any entity.",
+    "possible_explanation": "The PASS verdict may rest solely on a single overall error-rate rule, with resource metrics collected but never evaluated against any threshold (NO_POLICY). Resource figures and latency percentiles would then be descriptive context only; nothing in the evidence indicates that CPU, memory or latency were judged acceptable.",
+    "recommended_check": "Inspect the policy configuration bound to window run-intersection and enumerate which rules exist for resource and latency metrics. If none exist, record NO_POLICY explicitly in the report and, if a compliance judgement is wanted, define thresholds (including container CPU/memory limits and per-transaction latency SLOs) and re-evaluate rather than inferring a pass.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/15",
+     "analysis-result.json#/evidence/14",
+     "analysis-result.json#/evidence/8",
+     "analysis-result.json#/evidence/11"
+    ]
+   },
+   {
+    "rank": 3,
+    "observation": "resource_binding reports mode run_intersection and clock_alignment 'not_verified_by_core', with dropped_leading_cells 1 / dropped_leading_millis 10309 and dropped_trailing_cells 1 / dropped_trailing_millis 4660. run_from_epoch_ms 1790619844691 to run_to_epoch_ms 1790620204660 (a 359,969 ms span) is narrowed to evaluation_from_epoch_ms 1790619855000 to evaluation_to_epoch_ms 1790620200000 (a 345,000 ms span, 23 cells at step 15000 ms).",
+    "possible_explanation": "Because the clock relationship between the JMeter sample timeline and the Prometheus timeline is unverified, sample latencies cannot be placed in time relative to resource cells; any statement that a resource change preceded, caused or followed a latency effect would be unsupported. Separately, the trimmed evaluation window excludes the first ~10,309 ms and last ~4,660 ms of the run, so early ramp-up or cool-down behaviour would be invisible in the resource summaries even if it were visible in the sample data.",
+    "recommended_check": "Verify the clock relationship first (compare load-generator and metrics-store time offsets against a common reference, or a shared timestamped event) and record the result. Then re-bind metrics to the full run window, or widen the evaluation window, and confirm whether cell counts and statistics change when the dropped leading and trailing intervals are included.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/7",
+     "analysis-result.json#/evidence/8",
+     "analysis-result.json#/evidence/16"
+    ]
+   },
+   {
+    "rank": 4,
+    "observation": "The policy_check for error_rate_ratio reports observed numerator 0 with denominator 36034, while metric-summary-overall reports sample_count 37349 and error_rate_ratio denominator 37349. The policy check carries window_id run-intersection (from_epoch_ms 1790619855000, to_epoch_ms 1790620200000), whereas the throughput denominators in the metric summaries are 359969, matching the full run span.",
+    "possible_explanation": "The policy rule may be evaluated over the narrower run-intersection evaluation window while the metric summary aggregates the full run window, leaving about 1,315 samples outside the policy scope. The PASS would then describe a subset of the run, and any errors concentrated in the excluded leading or trailing intervals would not be counted by that rule.",
+    "recommended_check": "Recompute error_rate_ratio over both the full run window (1790619844691–1790620204660) and the evaluation window (1790619855000–1790620200000), and reconcile the two denominators (36034 vs 37349). State the window each error-rate figure applies to wherever PASS is reported.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/14",
+     "analysis-result.json#/evidence/0",
+     "analysis-result.json#/evidence/7"
+    ]
+   },
+   {
+    "rank": 5,
+    "observation": "Every transaction label has a maximum far above its p99: add product to cart max 974 vs p99 88; cart max 752 vs p99 97; checkout max 1092 vs p99 142; home max 1009 vs p99 197; product max 952 vs p99 100; reset cart max 993 vs p99 85. Overall max 1092 equals the checkout maximum, and overall p99 is 176. Five of six maxima fall between 952 and 1092 ms.",
+    "possible_explanation": "A small number of outliers, common across all labels, could produce near-1 s maxima without shifting the upper percentiles — for example contention during ramp-up, connection or pool warm-up, a shared dependency stall, or a timeout/retry step near one second. With clock_alignment 'not_verified_by_core' and the leading 10,309 ms of the run dropped from the resource window, none of these can be tied in time to any resource series, and no event in the evidence carries counts that would let impact be attributed to it.",
+    "recommended_check": "Extract the samples with elapsed time >= 750 ms and list their label, timestamp and response code; test whether they cluster inside the first seconds of the run, in one narrow interval, or are spread evenly. Only after clock verification, compare that clustering against resource cells; otherwise report the outliers as unattributed.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/1",
+     "analysis-result.json#/evidence/2",
+     "analysis-result.json#/evidence/3",
+     "analysis-result.json#/evidence/4",
+     "analysis-result.json#/evidence/5",
+     "analysis-result.json#/evidence/6",
+     "analysis-result.json#/evidence/0",
+     "analysis-result.json#/evidence/7"
+    ]
+   },
+   {
+    "rank": 6,
+    "observation": "Per-label p50 values split into two groups: reset cart 2 ms and add product to cart 3 ms, versus product 79 ms, checkout 85 ms, cart 87 ms and home 93 ms. Overall p50 is 17 ms while overall p95 (98 ms) and p99 (176 ms) sit close to the four higher-p50 labels' p95 values (93–168 ms). Sample counts are near-identical across labels (6,223–6,227).",
+    "possible_explanation": "The two very low medians may indicate samplers that measure lightweight or local operations, cached or no-op responses, or timer-shaped think time rather than a full server round trip, which would pull the pooled median well below the page-level labels. Alternatively the label set may mix page-level transactions with sub-operations. The evidence does not state what each sampler measures, so this remains a labelling/scope question rather than a performance finding.",
+    "recommended_check": "Inspect the JMX definitions for 'reset cart' and 'add product to cart' (sampler type, target, assertions, timers, and whether sub-samples are counted) and plot per-label latency histograms. Confirm whether the 37,349 overall samples are exactly the union of the six label counts before comparing pooled and per-label percentiles.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/6",
+     "analysis-result.json#/evidence/1",
+     "analysis-result.json#/evidence/0",
+     "analysis-result.json#/evidence/2",
+     "analysis-result.json#/evidence/4"
+    ]
+   },
+   {
+    "rank": 7,
+    "observation": "memory_bytes summaries over the 345,000 ms window show positive slope_per_second for all three entities: checkoutservice 1883.45 bytes/s (min 8683520, mean 9282456.13, max 9777152, split_half_shift 300032), frontend 2239.44 bytes/s (min 11374592, mean 12059870.61, max 12642304, split_half_shift 355328), paymentservice 4658.28 bytes/s (min 31844352, mean 33023347, max 33509376, split_half_shift 610304). No memory limit, request, idle baseline, pre-run value or post-run value is present, and resource_verdict is NO_POLICY.",
+    "possible_explanation": "Rising memory over a ~5.75 minute window could be ordinary warm-up, cache filling or heap growth toward a plateau, or it could be a slow allocation increase. The evidence cannot separate these: the window is short, there is no baseline or limit to compare against, and interval_mean aggregation smooths short-term variation including any collection-related sawtooth.",
+    "recommended_check": "Extend observation beyond the run (idle period plus at least one repeated run) and record whether memory returns to baseline or plateaus; add the configured memory limit/request for each entity so growth can be expressed relative to capacity; and re-check with a finer step or a max aggregation to see behaviour hidden by interval_mean.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/9",
+     "analysis-result.json#/evidence/11",
+     "analysis-result.json#/evidence/13",
+     "analysis-result.json#/evidence/15"
+    ]
+   },
+   {
+    "rank": 8,
+    "observation": "Resource summaries exist for exactly three entities — frontend, checkoutservice, paymentservice — each with cpu_cores and memory_bytes, expected_cells 23, observed_cells 23, missing_cells 0, longest_gap_cells 0, reasons [] and aggregation interval_mean at step_ms 15000. Six transaction labels are reported (home, product, cart, add product to cart, reset cart, checkout). CPU figures are narrowly spread (frontend mean 0.180301, min 0.157986, max 0.199107; checkoutservice mean 0.046915; paymentservice mean 0.011197 with slope_per_second -0.00000115).",
+    "possible_explanation": "Components other than these three may be unmonitored, so 0 missing cells describes completeness of the series that were requested, not completeness of system coverage. Narrow CPU spreads and low absolute core values also cannot be read as spare capacity, because no CPU limit, request or saturation metric (for example throttling or run-queue) is present in the evidence.",
+    "recommended_check": "Enumerate every service exercised by the six transaction labels and confirm which have metric series in the metrics-direct profile; add series for any missing ones. Add limit/request and saturation metrics before making any capacity statement, and consider a finer step than 15000 ms if short spikes matter.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/10",
+     "analysis-result.json#/evidence/12",
+     "analysis-result.json#/evidence/8",
+     "analysis-result.json#/evidence/16",
+     "analysis-result.json#/evidence/4"
+    ]
+   },
+   {
+    "rank": 9,
+    "observation": "The findings array is empty, no anomaly-detection evidence item and no anomalies_tested count appear anywhere in the input, and analysis_coverage is INCOMPLETE (SOURCE_ACQUISITION_PARTIAL) with source status PARTIAL.",
+    "possible_explanation": "No anomaly findings may have been produced because anomaly detection did not run, because it ran on a reduced data set after the errors-profile failure, or because it ran and triggered nothing. The evidence does not distinguish these cases, so an empty findings list cannot be read as proof of stability, low load or absence of a problem.",
+    "recommended_check": "Confirm from the analysis run whether anomaly detection executed for analysis_id 5bded23926f87d3dc9d61361f774e0f67158cab27a5e32cb4645cf2015d0e74e and record an explicit anomalies_tested count. If it did not run, execute it over the 345,000 ms evaluation window after the errors source is repaired, and report the count alongside any empty result.",
+    "evidence_refs": [
+     "analysis-result.json#/analysis_coverage",
+     "analysis-result.json#/evidence/16"
+    ]
+   },
+   {
+    "rank": 10,
+    "observation": "source_summary reports window_origin 'auto', auto_window_status DERIVED, requested_margin_ms 60000, applied_margin_ms 64691, cap_exceeded false, detected_idle_gaps 0, longest_idle_gap_ms null and max_idle_gap_ms 1800000. Snapshot bounds are 1790619780000–1790620275000 while recognized run bounds are 1790619844691–1790620204660; throttle_wait_ms totals 17980 across 9 requests.",
+    "possible_explanation": "The analysis window may have been derived automatically from the JTL bounds plus a margin rounded onto the 15,000 ms step grid, so the snapshot window can include pre-load and post-load intervals (about 64,691 ms before run start and 70,340 ms after run end) that are outside the driven load phase. longest_idle_gap_ms is null, which is an absent value rather than a measured zero, even though detected_idle_gaps is 0.",
+    "recommended_check": "Confirm that the derived evaluation window matches the intended load phase by comparing it against the load-generator schedule, and check whether any resource cells used in the summaries fall in the pre-load or post-load margin. Treat longest_idle_gap_ms null as missing data and re-derive it if idle-gap detection matters for windowing.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/16",
+     "analysis-result.json#/evidence/7"
+    ]
+   }
+  ],
+  "recommendations": [
+   {
+    "rank": 1,
+    "action": "Repair and re-run the failed OpenSearch 'errors' profile query for window 1790619780000–1790620275000, capture the HTTP status and response, and keep analysis_coverage at INCOMPLETE / SOURCE_ACQUISITION_PARTIAL until it returns successfully.",
+    "rationale": "The errors profile FAILED with reason SOURCE_HTTP_ERROR after 3 requests and 2 retries while overall source status is PARTIAL, so server-side error telemetry is absent. The reported zero error counts derive from client-side JMeter samples and cannot stand in for a confirmed absence of backend errors.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/16",
+     "analysis-result.json#/analysis_coverage",
+     "analysis-result.json#/evidence/0"
+    ]
+   },
+   {
+    "rank": 2,
+    "action": "Report the verdict with its scope spelled out: business_verdict PASS from one rule (error_rate_ratio <= 0.01, observed 0/36034), resource_verdict NO_POLICY, overall policy_verdict PASS, run_validity VALID — and state explicitly that NO_POLICY is not a resource pass.",
+    "rationale": "Only one policy_check exists and it covers overall error rate. No latency, per-transaction, CPU or memory rule was evaluated, and no resource limits are present, so an unqualified 'PASS' would overstate what was actually judged.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/15",
+     "analysis-result.json#/evidence/14",
+     "analysis-result.json#/policy_verdict"
+    ]
+   },
+   {
+    "rank": 3,
+    "action": "Verify the clock relationship between the load generator and the metrics store before making any lead/lag, correlation or causal statement between sample latencies and resource series.",
+    "rationale": "resource_binding records clock_alignment as 'not_verified_by_core'. An unverified clock relationship cannot support temporal ordering, so any hypothesis linking the near-1 s latency maxima to CPU or memory behaviour must wait on this verification.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/7"
+    ]
+   },
+   {
+    "rank": 4,
+    "action": "Re-bind or extend the metric collection to cover the full run span (1790619844691–1790620204660), recovering the dropped leading cell (10,309 ms) and trailing cell (4,660 ms), and re-check whether the 23-cell statistics change.",
+    "rationale": "The evaluation window is 345,000 ms versus a 359,969 ms run span, so ramp-up and cool-down intervals are excluded from every resource summary. Early-run behaviour is exactly where the outlier maxima would be expected to appear.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/7",
+     "analysis-result.json#/evidence/8",
+     "analysis-result.json#/evidence/16"
+    ]
+   },
+   {
+    "rank": 5,
+    "action": "Reconcile the policy denominator 36,034 with the overall sample_count 37,349, recompute error_rate_ratio for both the full run window and the run-intersection window, and annotate every PASS statement with the window and sample count it used.",
+    "rationale": "The single passing rule uses denominator 36034 under window_id run-intersection while the metric summary uses 37349 over the full run span, so the PASS describes a subset of roughly 1,315 fewer samples than the headline totals.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/14",
+     "analysis-result.json#/evidence/0",
+     "analysis-result.json#/evidence/7"
+    ]
+   },
+   {
+    "rank": 6,
+    "action": "List the samples with elapsed time >= 750 ms (label, timestamp, response code, thread group) and test whether they cluster at run start, in one narrow interval, or are evenly spread; report them as unattributed outliers until clocks are verified.",
+    "rationale": "All six labels show maxima of 752–1092 ms against p99 values of 85–197 ms, indicating a very small outlier set that does not move the upper percentiles. No referenced counts support attributing that tail to any specific event or resource.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/1",
+     "analysis-result.json#/evidence/3",
+     "analysis-result.json#/evidence/4",
+     "analysis-result.json#/evidence/0"
+    ]
+   },
+   {
+    "rank": 7,
+    "action": "Document what the 'reset cart' (p50 2 ms) and 'add product to cart' (p50 3 ms) samplers actually measure, and separate lightweight/local or cached operations from full server round trips before comparing them with 'home', 'product', 'cart' and 'checkout' (p50 79–93 ms).",
+    "rationale": "The two low-median labels dominate the pooled p50 of 17 ms and could distort any per-transaction comparison or SLO assessment if they are not equivalent server-side operations.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/6",
+     "analysis-result.json#/evidence/1",
+     "analysis-result.json#/evidence/0"
+    ]
+   },
+   {
+    "rank": 8,
+    "action": "Define resource thresholds (CPU and memory limits/requests per entity) and per-transaction latency SLO rules, then re-evaluate; until they exist, present cpu_cores and memory_bytes statistics as descriptive only and avoid any spare-capacity or headroom wording.",
+    "rationale": "resource_verdict is NO_POLICY and no limit, request or saturation metric appears in the evidence, so narrow CPU spreads (for example frontend mean 0.180301 cores, max 0.199107) cannot be interpreted as available capacity.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/15",
+     "analysis-result.json#/evidence/10",
+     "analysis-result.json#/evidence/12",
+     "analysis-result.json#/evidence/9"
+    ]
+   },
+   {
+    "rank": 9,
+    "action": "Before treating memory growth as a leak, collect an idle baseline and at least one repeated run, add each entity's memory limit, and re-measure with a finer step or max aggregation instead of interval_mean alone.",
+    "rationale": "Positive slope_per_second values (1883.45, 2239.44, 4658.28 bytes/s) and positive split_half_shift values were measured over only 345,000 ms with no baseline, no limit and mean aggregation, which is insufficient to distinguish warm-up from unbounded growth.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/9",
+     "analysis-result.json#/evidence/11",
+     "analysis-result.json#/evidence/13"
+    ]
+   },
+   {
+    "rank": 10,
+    "action": "Establish whether anomaly detection executed for this analysis and record an explicit anomalies_tested count; if it did not run, run it over the evaluation window after the errors source is repaired.",
+    "rationale": "The findings array is empty and no anomaly-test evidence or count is present, so the empty result is unexplained. Absent findings do not demonstrate stability, low load or absence of a problem.",
+    "evidence_refs": [
+     "analysis-result.json#/analysis_coverage",
+     "analysis-result.json#/evidence/16"
+    ]
+   },
+   {
+    "rank": 11,
+    "action": "Widen resource coverage beyond frontend, checkoutservice and paymentservice to every component exercised by the six transaction labels, and confirm which series the metrics-direct profile actually requests.",
+    "rationale": "Only three entities have resource summaries (23 of 23 cells each, 0 missing). Zero missing cells describes the completeness of requested series, not completeness of system coverage, so unmonitored components could carry the observed latency tail.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/8",
+     "analysis-result.json#/evidence/10",
+     "analysis-result.json#/evidence/12",
+     "analysis-result.json#/evidence/16"
+    ]
+   },
+   {
+    "rank": 12,
+    "action": "Confirm the derived auto window matches the intended load phase: compare window_origin 'auto' / auto_window_status DERIVED bounds against the load-generator schedule, and check whether pre-load (about 64,691 ms before run start) or post-load margin intervals contributed cells to the summaries.",
+    "rationale": "applied_margin_ms 64691 exceeds requested_margin_ms 60000 and the snapshot window extends to 1790620275000, about 70,340 ms past run end, so un-driven intervals may be included; longest_idle_gap_ms is null, which is missing data rather than a measured zero.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/16",
+     "analysis-result.json#/evidence/7"
+    ]
+   },
+   {
+    "rank": 13,
+    "action": "Carry run_validity VALID, policy_verdict PASS and analysis_coverage INCOMPLETE (SOURCE_ACQUISITION_PARTIAL) verbatim into any downstream report or dashboard, and label all latency, throughput and resource figures as advisory context.",
+    "rationale": "Advisory interpretation does not alter the deterministic verdict, and the coverage limitation must travel with the PASS so it is not read as a clean, fully measured result.",
+    "evidence_refs": [
+     "analysis-result.json#/run_validity",
+     "analysis-result.json#/policy_verdict",
+     "analysis-result.json#/analysis_coverage"
+    ]
+   }
+  ],
+  "caveats": [
+   "Deterministic verdict preserved unchanged: run_validity VALID, policy_verdict PASS, analysis_coverage INCOMPLETE with reason SOURCE_ACQUISITION_PARTIAL. Nothing in this advisory alters those values.",
+   "clock_alignment is 'not_verified_by_core', so no lead/lag ordering, correlation or temporal causal hypothesis between JMeter sample times and Prometheus resource cells is supportable; clock verification must come first.",
+   "The OpenSearch 'errors' profile FAILED (SOURCE_HTTP_ERROR, 3 requests, 2 retries) and overall source status is PARTIAL. Server-side error telemetry is absent, so error_count 0 reflects client-side JTL samples only and is not proof that no backend errors occurred.",
+   "resource_verdict NO_POLICY means no resource rule was evaluated. NO_POLICY is distinct from PASS and must not be reported as a resource pass.",
+   "Only one policy check exists (error_rate_ratio, operator lte, threshold 0.01, observed 0/36034, scope overall, status PASS). No latency, per-transaction, CPU or memory policy checks are present, and no PASS/FAIL/NO_POLICY status is reported for any of them.",
+   "The policy denominator 36034 differs from the overall metric-summary sample_count 37349 and from the per-label denominators; the PASS applies to the window and sample set stated in the policy check, not to the headline totals.",
+   "The resource evaluation window (1790619855000-1790620200000, 345,000 ms, 23 cells at step 15000 ms) is narrower than the run span (1790619844691-1790620204660, 359,969 ms); 1 leading cell (10,309 ms) and 1 trailing cell (4,660 ms) were dropped, so ramp-up and cool-down are outside every resource summary.",
+   "No CPU or memory limits, requests, quotas, saturation metrics, idle baselines, pre-run values or post-run values appear in the evidence. Low absolute core values and narrow spreads therefore cannot be read as spare capacity or headroom.",
+   "Resource coverage is limited to three entities (frontend, checkoutservice, paymentservice) with cpu_cores and memory_bytes only, aggregated as interval_mean. missing_cells 0 and longest_gap_cells 0 describe the requested series, not full system coverage, and interval_mean can smooth short spikes.",
+   "The findings array is empty and no anomalies_tested count is present. Absent findings, a flat series and zero missing cells do not prove stability, low load or absence of a problem.",
+   "slope_per_second and split_half_shift are descriptive statistics over a single 345,000 ms window; they are not trend proofs, leak diagnoses or capacity forecasts.",
+   "throughput_rps is supplied as numerator/denominator pairs (overall 37349000/359969, per-label for example 6224000/359969) and the referenced field does not define its unit convention; the numerator equals sample_count x 1000 while the denominator equals the run span in ms, so any derived rate should be treated as unverified until the convention is confirmed.",
+   "All epoch values in the evidence are absolute timestamps. Spans quoted here (359,969 ms run, 345,000 ms evaluation, 495,000 ms snapshot, 64,691 ms leading margin, 70,340 ms trailing margin) are differences computed from referenced from/to fields, not durations reported by the analysis.",
+   "longest_idle_gap_ms is null, which is a missing value rather than a measured zero, even though detected_idle_gaps is 0 and max_idle_gap_ms is 1800000.",
+   "Near-1 s per-label maxima (752-1092 ms) sit far above the corresponding p99 values (85-197 ms) and affect too few samples to be quantified from the referenced summaries; no referenced counts support attributing them, or any impact, to a particular event or resource.",
+   "throttle_wait_ms totals 17980 across 9 requests (5986 for the failed errors profile, 11994 for metrics-direct). Throttling is noted as context only; the referenced failure reason is SOURCE_HTTP_ERROR and no causal link to throttling is established.",
+   "No comparison baseline, previous run, control window or NOT_ESTIMATED marker for correlation appears in the evidence, so no before/after or partial-correlation interpretation is possible."
+  ]
+ },
+ "schema": "ai-experiment-run.v3",
+ "case": "K01",
+ "rep": 1,
+ "model_id": "qwen3.8-max",
+ "net_retries": 0,
+ "infra_retries": 0
+}

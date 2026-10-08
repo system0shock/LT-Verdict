@@ -1,0 +1,279 @@
+{
+ "stage": "B",
+ "mode": "live",
+ "model": "deepseek-v4-flash-0731",
+ "tag": {
+  "phase": "holdout",
+  "attempt_id": "case-003-1-B-t1",
+  "arm": "B",
+  "stage": null,
+  "case": "case-003",
+  "rep": 1,
+  "try": 1
+ },
+ "retry_policy": "d2",
+ "qwen_exit": 0,
+ "wall_ms": 167319,
+ "relay": {
+  "schema_version": "advisory-ai-runtime-relay.v1",
+  "status": "FORWARDED_STRUCTURED_OUTPUT",
+  "received_request_count": 1,
+  "forwarded_request_count": 1,
+  "outcomes": [
+   "FORWARDED_STRUCTURED_OUTPUT"
+  ],
+  "retry_refused_reason": null,
+  "first_refused_reason": null,
+  "model_id": "deepseek-v4-flash-0731",
+  "retry_policy": "d2",
+  "requests": [
+   {
+    "ordinal": 1,
+    "forwarded": true,
+    "outcome": "FORWARDED_STRUCTURED_OUTPUT",
+    "provider_status": 200,
+    "latency_ms": 165863,
+    "usage": {
+     "prompt_tokens": 17877,
+     "total_tokens": 37038,
+     "completion_tokens": 19161,
+     "prompt_tokens_details": {
+      "cached_tokens": 1024
+     },
+     "completion_tokens_details": {
+      "reasoning_tokens": 15319
+     }
+    },
+    "model_returned": "deepseek-v4-flash-0731"
+   }
+  ],
+  "usage": {
+   "prompt_tokens": 17877,
+   "completion_tokens": 19161,
+   "total_tokens": 37038
+  },
+  "latency_ms": 165863
+ },
+ "relay_status": "FORWARDED_STRUCTURED_OUTPUT",
+ "usage": {
+  "prompt_tokens": 17877,
+  "completion_tokens": 19161,
+  "total_tokens": 37038
+ },
+ "latency_ms": 165863,
+ "retried": false,
+ "retry_refused_reason": null,
+ "status": "OK",
+ "note": null,
+ "output": {
+  "schema_version": "ai-advice-output.v1",
+  "summary": "Run jmeter_jtl_csv-2a37c6c2eb20025463b7dffb7b70d72e381f7d3c46bc37188599239d8cf18a42 is VALID, but its deterministic policy verdict is NO_VERDICT with analysis coverage INCOMPLETE (reasons: RESOURCE_GAPS, MISSING_RESOURCE_CELLS). The business latency SLA failed in both evaluated windows: response_time_p95_ms observed 60031 ms against threshold 200 ms (reference and workload-01), so each window's business_verdict is FAIL. The reference window's resource verdict is FAIL (database-limit on system-db-work ~1.0 > 0.9); the workload-01 window's resource verdict is NO_VERDICT because 10 of 180 system-db-work cells are missing and the database-limit check was not evaluated. Errors rose from 1609 of 9600 samples (reference) to 14400 of 14400 samples (workload-01). The generator kept target request rate and request starts at 80 req/s in both windows; admission queue depth (mean 1556.262 to 4411.421) and active threads (mean 1803.4 to 4667.4) grew in workload-01. All 9 correlation pairs are INSUFFICIENT_DATA with uncertainty NOT_ESTIMATED, and clock alignment is not_verified_by_core. The advisory preserves NO_VERDICT, treats the evidence as insufficient for causal conclusions, and recommends completing db_work telemetry, inspecting the JTL error data, verifying clocks, and rerunning with a varying load profile.",
+  "hypotheses": [
+   {
+    "rank": 1,
+    "observation": "Policy checks in both windows report response_time_p95_ms observed 60031 ms against threshold 200 ms with status FAIL (reference and workload-01); the window metric summaries report p95 60031 ms, and the overall summary reports p50/p95/p99 60031 ms with max 60000 ms.",
+    "possible_explanation": "Reported latencies cluster at ~60031 ms, near the 60000 ms maximum recorded; this pattern is consistent with requests reaching a timeout/cap rather than completing normally, but the evidence does not identify the underlying mechanism.",
+    "recommended_check": "Inspect raw JMeter JTL response codes and timestamps around the 60000 ms boundary in both windows and determine whether 60031 ms corresponds to a client-side timeout constant before attributing a specific cause.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0",
+     "analysis-result.json#/evidence/1",
+     "analysis-result.json#/evidence/33",
+     "analysis-result.json#/evidence/35",
+     "analysis-result.json#/evidence/37",
+     "analysis-result.json#/evidence/38"
+    ]
+   },
+   {
+    "rank": 2,
+    "observation": "The workload-01 window summary reports error_count 14400 with error_rate_ratio denominator 14400 (all sampled requests errored) and p50/p95/p99 60031 ms; the reference window reports 1609 errors out of 9600 samples.",
+    "possible_explanation": "Between the two windows the run moved from partial errors to a state in which every sampled request errored while the generator kept starting requests at 80 req/s; the evidence does not state why all requests failed.",
+    "recommended_check": "Break the workload-01 window (1704067320000-1704067500000) into per-second error codes from the JTL and align them with service and admission logs; verify clocks before comparing event order.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/37",
+     "analysis-result.json#/evidence/38",
+     "analysis-result.json#/evidence/0",
+     "analysis-result.json#/evidence/2"
+    ]
+   },
+   {
+    "rank": 3,
+    "observation": "Analysis coverage is INCOMPLETE with reasons RESOURCE_GAPS and MISSING_RESOURCE_CELLS; system-db-work in workload-01 has observed_cells 170 of 180 (10 missing); the database-limit check is NO_VERDICT with reason MISSING_RESOURCE_CELLS; workload-01 resource_verdict and the overall policy verdict are NO_VERDICT.",
+    "possible_explanation": "Missing db_work cells prevented evaluation of the database-limit SLA in workload-01, leaving the resource verdict and overall verdict indeterminate; this is a telemetry-coverage limitation, not a PASS, FAIL, or NO_POLICY outcome.",
+    "recommended_check": "Identify why 10 db_work cells are missing during 1704067320000-1704067500000 (collector or export issue), fix or re-collect them, and rerun or re-evaluate so the database-limit rule can be scored.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/27",
+     "analysis-result.json#/evidence/32",
+     "analysis-result.json#/evidence/36",
+     "analysis-result.json#/analysis_coverage",
+     "analysis-result.json#/findings/1"
+    ]
+   },
+   {
+    "rank": 4,
+    "observation": "Admission queue depth mean rises from 1556.262 (reference) to 4411.421 (workload-01, max 4544) and generator active_threads mean rises from 1803.4 (reference) to 4667.4 (workload-01, max 4800); both workload-01 series have positive slope_per_second while generator request starts stay constant at 80 req/s.",
+    "possible_explanation": "Requests admitted but not completing could accumulate in the admission queue and raise active threads while the generator sustains 80 req/s; the ordering and cause of these changes are not established by the evidence.",
+    "recommended_check": "Plot per-second admission-queue, active_threads, error count, and latency side-by-side to see which series changes first; verify clock alignment before interpreting order.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/3",
+     "analysis-result.json#/evidence/10",
+     "analysis-result.json#/evidence/16",
+     "analysis-result.json#/evidence/23",
+     "analysis-result.json#/evidence/22"
+    ]
+   },
+   {
+    "rank": 5,
+    "observation": "All 9 correlation pairs are INSUFFICIENT_DATA with partial_rho null and uncertainty NOT_ESTIMATED; target-request-rate was requested as a control but dropped in every pair with reasons including NO_RANK_VARIATION and CONSTANT_CONTROL; all headline selections are UNAVAILABLE/PAIR_NOT_EVALUABLE, and the diagnostic summary reports pairs_evaluable 0 of 9.",
+    "possible_explanation": "Because target request rate was constant at 80 req/s and several resource series are constant (cpu-queue 0, cpu-service-quota 1, runtime-gc-pause 0), there was no rank variation to correlate; this is an analysis limitation, not evidence that load and latency are unrelated.",
+    "recommended_check": "Rerun with a varying target request rate (steps or ramps) and verified clock alignment so rank variation exists and the mbb-lag-max-holm association method can be applied.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/15",
+     "analysis-result.json#/evidence/28",
+     "analysis-result.json#/evidence/39",
+     "analysis-result.json#/evidence/42",
+     "analysis-result.json#/evidence/45",
+     "analysis-result.json#/evidence/62"
+    ]
+   },
+   {
+    "rank": 6,
+    "observation": "The workload-01-db-queue anomaly check is CANDIDATE with episodes_reported 1 and reasons ZERO_MAD; the episode finding reports direction increase, duration_ms 140000, max_abs_delta 1.6, observed_max 254.2 vs reference median 252.6; the reference db-queue series has mad 0.",
+    "possible_explanation": "Because the reference db-queue series has zero MAD, even a small deviation is flagged; a 1.6-request delta against a ~252.6 baseline may not be operationally material, though the evidence does not rule out a real queue growth event.",
+    "recommended_check": "Inspect raw db-queue values in both windows and database subsystem metrics for 1704067360000-1704067500000 before treating the CANDIDATE episode as material.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/59",
+     "analysis-result.json#/findings/4",
+     "analysis-result.json#/evidence/6",
+     "analysis-result.json#/evidence/19"
+    ]
+   },
+   {
+    "rank": 7,
+    "observation": "downstream-wait in_flight_requests has mean 1.899, min 1.826, max 1.9 in the reference window versus mean 0.421, median 0, q95 1.9 in workload-01.",
+    "possible_explanation": "The near-zero median in-flight downstream requests during workload-01 could mean requests failed before reaching the downstream dependency, but the evidence does not state at which hop the errors occurred.",
+    "recommended_check": "Trace a sample of errored requests to determine the failing hop and check downstream dependency availability from 1704067320000 onward.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/7",
+     "analysis-result.json#/evidence/20",
+     "analysis-result.json#/evidence/38"
+    ]
+   },
+   {
+    "rank": 8,
+    "observation": "cpu-service-quota (quota_fraction) is constant 1.0 in both windows; system-cpu-work mean is 0.130 (reference) and 0.183 (workload-01) with max 0.2; cpu-queue is constant 0; compute-limit checks are PASS in both windows (threshold gt 0.9).",
+    "possible_explanation": "A quota_fraction of 1.0 with cpu_work <= 0.2 may reflect different accounting scopes, such as throttling at a quota boundary rather than CPU utilization; the evidence contains no throttle counters, so this cannot be confirmed.",
+    "recommended_check": "Collect platform CPU quota/throttle counters and compare them with cpu-service-quota and system-cpu-work; clarify which scope each series measures.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/5",
+     "analysis-result.json#/evidence/18",
+     "analysis-result.json#/evidence/13",
+     "analysis-result.json#/evidence/26",
+     "analysis-result.json#/evidence/29",
+     "analysis-result.json#/evidence/31"
+    ]
+   }
+  ],
+  "recommendations": [
+   {
+    "rank": 1,
+    "action": "Rerun or re-collect telemetry so system-db-work covers all 180 cells of the workload-01 window, allowing the database-limit SLA to be evaluated with the same load and policies.",
+    "rationale": "The workload-01 resource verdict and the overall deterministic verdict are NO_VERDICT because 10 of 180 db_work cells are missing (RESOURCE_GAPS, MISSING_RESOURCE_CELLS). Only a rule the product actually evaluates can yield PASS or FAIL; a healthy window or rerun does not turn NO_VERDICT into a pass.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/27",
+     "analysis-result.json#/evidence/32",
+     "analysis-result.json#/evidence/36",
+     "analysis-result.json#/analysis_coverage"
+    ]
+   },
+   {
+    "rank": 2,
+    "action": "Extract the JMeter JTL for 1704067320000-1704067500000 and classify errors by response code/timeout marker and latency near 60031 ms.",
+    "rationale": "14400 of 14400 samples errored in workload-01 with p50/p95/p99 60031 ms; understanding whether these are timeouts at a ~60 s cap is a prerequisite to interpreting the business FAIL.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/38",
+     "analysis-result.json#/evidence/35",
+     "analysis-result.json#/evidence/1"
+    ]
+   },
+   {
+    "rank": 3,
+    "action": "Verify clock alignment among generator, service, database, and collector, and rerun with verified alignment if clocks were not aligned.",
+    "rationale": "resource-binding reports clock_alignment not_verified_by_core; without verified clocks, lead/lag ordering and temporal causal hypotheses cannot be supported.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/2",
+     "analysis-result.json#/evidence/39"
+    ]
+   },
+   {
+    "rank": 4,
+    "action": "Redesign the load profile to vary target request rate (e.g., steps or ramps) instead of a constant 80 req/s, keeping the same latency and resource SLA rules.",
+    "rationale": "All 9 correlation pairs are INSUFFICIENT_DATA with NOT_ESTIMATED uncertainty because controls and resource series lack rank variation (CONSTANT_CONTROL, NO_RANK_VARIATION); no load-latency association can be concluded from this run.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/15",
+     "analysis-result.json#/evidence/28",
+     "analysis-result.json#/evidence/39",
+     "analysis-result.json#/evidence/62"
+    ]
+   },
+   {
+    "rank": 5,
+    "action": "Produce aligned per-second charts of admission-queue, active_threads, error count, and p95 latency for both windows.",
+    "rationale": "Queue depth (mean 1556.262 to 4411.421) and active threads (mean 1803.4 to 4667.4) grew while generator request starts stayed at 80 req/s; aligning these series will clarify the order of changes, subject to clock verification.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/3",
+     "analysis-result.json#/evidence/16",
+     "analysis-result.json#/evidence/10",
+     "analysis-result.json#/evidence/23"
+    ]
+   },
+   {
+    "rank": 6,
+    "action": "Inspect raw db-queue values across both windows and database subsystem metrics for 1704067360000-1704067500000 before acting on the anomaly.",
+    "rationale": "The db-queue episode is CANDIDATE because the reference MAD is 0 (ZERO_MAD); the reported delta is 1.6 requests over a ~252.6 baseline, which may not be material.",
+    "evidence_refs": [
+     "analysis-result.json#/findings/4",
+     "analysis-result.json#/evidence/59",
+     "analysis-result.json#/evidence/6",
+     "analysis-result.json#/evidence/19"
+    ]
+   },
+   {
+    "rank": 7,
+    "action": "Trace a sample of errored requests to identify the failing hop and check downstream dependency health during workload-01.",
+    "rationale": "in_flight downstream requests drop from mean 1.899 (reference) to median 0 (workload-01) while all samples error; this pattern suggests failures before reaching the dependency, but the hop is not identified in the evidence.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/7",
+     "analysis-result.json#/evidence/20",
+     "analysis-result.json#/evidence/38"
+    ]
+   },
+   {
+    "rank": 8,
+    "action": "Collect platform CPU quota/throttle counters and compare with cpu-service-quota and system-cpu-work to clarify metric scopes.",
+    "rationale": "quota_fraction is pinned at 1.0 while system-cpu-work is <= 0.2 and cpu-queue is 0; clarifying scopes avoids misreading a quota boundary as idle CPU.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/5",
+     "analysis-result.json#/evidence/18",
+     "analysis-result.json#/evidence/13",
+     "analysis-result.json#/evidence/26"
+    ]
+   }
+  ],
+  "caveats": [
+   "The deterministic verdict NO_VERDICT is preserved exactly; it is neither PASS/FAIL nor NO_POLICY. NO_VERDICT for workload-01 reflects missing evaluation inputs (MISSING_RESOURCE_CELLS), not a healthy or pass result. run_validity is VALID but analysis coverage is INCOMPLETE (RESOURCE_GAPS, MISSING_RESOURCE_CELLS); validity and coverage are separate facts.",
+   "Clock alignment is not_verified_by_core; no lead/lag ordering, temporal causal hypothesis, or event ordering should be inferred from these series until clocks are verified.",
+   "All 9 correlation pairs report uncertainty NOT_ESTIMATED, and every headline selection is UNAVAILABLE; therefore no association (positive or negative) between load and latency can be concluded, and constant control/resource series do not prove the absence of a problem.",
+   "The anomaly episode is CANDIDATE (1 of 5 anomalies tested) and is flagged under ZERO_MAD; it is not a confirmed incident, and a small absolute delta (1.6 requests against a ~252.6 baseline) should not be overstated.",
+   "Latency values are preserved verbatim: overall and workload-01 summaries report p50/p95/p99 60031 ms with max 60000 ms. The p50-above-max pattern in those summaries should be verified against raw samples before interpretation (possible rounding/truncation or a capture artifact).",
+   "The evaluation covers windows ending at 1704067500000 while the run extends to 1704067559987; conclusions are bounded to the evaluated windows. Throughput/rate figures appear at different scopes (overall metric-summary numerator/denominator vs window generator series); per product rules only same-scope, same-window values are directly comparable, so apparent differences should not be treated as inconsistencies."
+  ]
+ },
+ "schema": "ai-experiment-run.holdout.v1",
+ "case": "case-003",
+ "rep": 1,
+ "arm": "B",
+ "try": 1,
+ "attempt_id": "case-003-1-B-t1",
+ "model_id": "deepseek-v4-flash-0731",
+ "prompt_sha256": "3c0f28bee6517c13c5c854615e7d3d59301893d9723880818e4034a32e9133bf"
+}

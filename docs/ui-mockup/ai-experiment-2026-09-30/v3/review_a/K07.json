@@ -1,0 +1,61 @@
+[
+  {
+    "id": "R009",
+    "hard_defect": false,
+    "defects": [],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 5,
+    "notes": "The verdict, coverage, counts, and scope distinctions are accurate, and the recommended checks are actionable."
+  },
+  {
+    "id": "R031",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T3",
+        "field": "#/hypotheses/5/possible_explanation",
+        "quote": "A single interval mean far below the 5th percentile",
+        "why": "The aggregates identify a minimum but do not establish that only one cell had that low value."
+      },
+      {
+        "type": "T3",
+        "field": "#/summary",
+        "quote": "the underlying series is bimodal",
+        "why": "The reported aggregates and violation window do not establish two distribution peaks."
+      }
+    ],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 4,
+    "notes": "The operator checks are detailed and useful, but the response states unsupported distribution details as facts."
+  },
+  {
+    "id": "R052",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T8",
+        "field": "#/hypotheses/0/recommended_check",
+        "quote": "1790630535000-1790670000 range",
+        "why": "The stated end timestamp is incorrect and could send an operator to the wrong query range."
+      },
+      {
+        "type": "T5",
+        "field": "#/hypotheses/8/observation",
+        "quote": "Both error sample documents ... carry load_input_sha256",
+        "why": "The hash belongs to the enclosing error profile; neither sample document contains that field."
+      },
+      {
+        "type": "T3",
+        "field": "#/summary",
+        "quote": "Its 23-cell distribution is bimodal",
+        "why": "The aggregates do not establish two distribution peaks."
+      }
+    ],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 3,
+    "notes": "Most checks are actionable and the verdict is correct, but the incorrect query range and invented document field could misdirect verification."
+  }
+]

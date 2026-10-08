@@ -1,0 +1,46 @@
+{
+ "required": [
+  [
+   "selector_unavailable",
+   [
+    "unavailable|not (?:available|computed)|unsupported|computation limit|observation count|too many observations|OBSERVATION_COUNT"
+   ]
+  ],
+  [
+   "sla_failed_p95",
+   [
+    "(?:(?:latency|p95|95th|response[ -]time))[^.\\n]{0,100}(?:(?<![\\d.,])(?:28,559|28\u202f559|28\\ 559|28559)(?![\\d]|[.,]\\d))|(?:(?<![\\d.,])(?:28,559|28\u202f559|28\\ 559|28559)(?![\\d]|[.,]\\d))[^.\\n]{0,100}(?:(?:latency|p95|95th|response[ -]time))"
+   ]
+  ],
+  [
+   "sla_failure_named",
+   [
+    "(?:(?:latency|p95|95th|response[ -]time)|sla)[^.\\n]{0,100}(?:(?:fail|violat|exceed|above|breach|over|not met|too (?:high|slow)))|(?:(?:fail|violat|exceed|above|breach|over|not met|too (?:high|slow)))[^.\\n]{0,100}(?:(?:latency|p95|95th|response[ -]time)|sla)"
+   ]
+  ],
+  [
+   "raw_association_preserved",
+   [
+    "(?<![\\d.])(?:0\\.4879|0\\.4880|0\\.487|0\\.488|0\\.49|0\\.48)(?!\\d)"
+   ]
+  ]
+ ],
+ "forbidden": [
+  "reports a selected headline although the selector is UNAVAILABLE",
+  "says the missing headline means there is no association"
+ ],
+ "useful_checks": [
+  "reduce the scope of the computation (fewer observations per pair or a shorter stage) so that the selector can run"
+ ],
+ "source": {
+  "builder": "AdvisoryEvidenceBuilder",
+  "build": "5b5e51c+harness",
+  "source": "a:NT01-clean-2001:0",
+  "source_sha256": "25f11b42eace9044ca5dc9176fe0b83c22fae34b3f1f2d397b17663363b09277",
+  "derivation": [
+   "d05"
+  ],
+  "evidence_sha256": "1b8d2c0921ee884b996f8cfbd753cd350b3949b0fd4d2195a489f404ad77ce29",
+  "inputs": "a:NT01-clean-2001:0, derivation [d05], analysed through RunBundleStore -> AnalysisService -> AdvisoryEvidenceBuilder by AdvisoryHoldoutCorpusTest on 5b5e51c+harness"
+ }
+}

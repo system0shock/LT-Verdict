@@ -1,0 +1,168 @@
+{
+ "method": "leaf values of the two packs without ids, refs, hashes; all_numbers_equal compares the multiset of every numeric value",
+ "value_identical_to_the_acceptance_pack": [
+  "D05",
+  "H01",
+  "H05",
+  "N05",
+  "S01",
+  "S02",
+  "S04",
+  "U01",
+  "U02",
+  "U03",
+  "U04"
+ ],
+ "slots": {
+  "C01": {
+   "acceptance_case": "case-011",
+   "leaf_values_equal_share": 0.709,
+   "all_numbers_equal": false
+  },
+  "C02": {
+   "acceptance_case": "case-012",
+   "leaf_values_equal_share": 0.618,
+   "all_numbers_equal": false
+  },
+  "C03": {
+   "acceptance_case": "case-013",
+   "leaf_values_equal_share": 0.255,
+   "all_numbers_equal": false
+  },
+  "C04": {
+   "acceptance_case": "case-014",
+   "leaf_values_equal_share": 0.649,
+   "all_numbers_equal": false
+  },
+  "C05": {
+   "acceptance_case": "case-015",
+   "leaf_values_equal_share": 0.61,
+   "all_numbers_equal": false
+  },
+  "D01": {
+   "acceptance_case": "case-006",
+   "leaf_values_equal_share": 0.811,
+   "all_numbers_equal": false
+  },
+  "D02": {
+   "acceptance_case": "case-007",
+   "leaf_values_equal_share": 0.788,
+   "all_numbers_equal": false
+  },
+  "D03": {
+   "acceptance_case": "case-008",
+   "leaf_values_equal_share": 0.021,
+   "all_numbers_equal": false
+  },
+  "D04": {
+   "acceptance_case": "case-009",
+   "leaf_values_equal_share": 0.649,
+   "all_numbers_equal": false
+  },
+  "D05": {
+   "acceptance_case": "case-010",
+   "leaf_values_equal_share": 1.0,
+   "all_numbers_equal": true
+  },
+  "H01": {
+   "acceptance_case": "case-026",
+   "leaf_values_equal_share": 0.99,
+   "all_numbers_equal": true
+  },
+  "H02": {
+   "acceptance_case": "case-027",
+   "leaf_values_equal_share": 0.75,
+   "all_numbers_equal": false
+  },
+  "H03": {
+   "acceptance_case": "case-028",
+   "leaf_values_equal_share": 0.017,
+   "all_numbers_equal": false
+  },
+  "H04": {
+   "acceptance_case": "case-029",
+   "leaf_values_equal_share": 0.021,
+   "all_numbers_equal": false
+  },
+  "H05": {
+   "acceptance_case": "case-030",
+   "leaf_values_equal_share": 0.996,
+   "all_numbers_equal": true
+  },
+  "N01": {
+   "acceptance_case": "case-016",
+   "leaf_values_equal_share": 0.823,
+   "all_numbers_equal": false
+  },
+  "N02": {
+   "acceptance_case": "case-017",
+   "leaf_values_equal_share": 0.775,
+   "all_numbers_equal": false
+  },
+  "N03": {
+   "acceptance_case": "case-018",
+   "leaf_values_equal_share": 0.639,
+   "all_numbers_equal": false
+  },
+  "N04": {
+   "acceptance_case": "case-019",
+   "leaf_values_equal_share": 0.705,
+   "all_numbers_equal": false
+  },
+  "N05": {
+   "acceptance_case": "case-020",
+   "leaf_values_equal_share": 1.0,
+   "all_numbers_equal": true
+  },
+  "S01": {
+   "acceptance_case": "case-001",
+   "leaf_values_equal_share": 1.0,
+   "all_numbers_equal": true
+  },
+  "S02": {
+   "acceptance_case": "case-002",
+   "leaf_values_equal_share": 1.0,
+   "all_numbers_equal": true
+  },
+  "S03": {
+   "acceptance_case": "case-003",
+   "leaf_values_equal_share": 0.767,
+   "all_numbers_equal": false
+  },
+  "S04": {
+   "acceptance_case": "case-004",
+   "leaf_values_equal_share": 1.0,
+   "all_numbers_equal": true
+  },
+  "S05": {
+   "acceptance_case": "case-005",
+   "leaf_values_equal_share": 0.017,
+   "all_numbers_equal": false
+  },
+  "U01": {
+   "acceptance_case": "case-021",
+   "leaf_values_equal_share": 1.0,
+   "all_numbers_equal": true
+  },
+  "U02": {
+   "acceptance_case": "case-022",
+   "leaf_values_equal_share": 1.0,
+   "all_numbers_equal": true
+  },
+  "U03": {
+   "acceptance_case": "case-023",
+   "leaf_values_equal_share": 1.0,
+   "all_numbers_equal": true
+  },
+  "U04": {
+   "acceptance_case": "case-024",
+   "leaf_values_equal_share": 1.0,
+   "all_numbers_equal": true
+  },
+  "U05": {
+   "acceptance_case": "case-025",
+   "leaf_values_equal_share": 0.699,
+   "all_numbers_equal": false
+  }
+ }
+}

@@ -1,0 +1,200 @@
+{
+ "stage": "B",
+ "mode": "live",
+ "model": "deepseek-v4-flash-0731",
+ "tag": {
+  "phase": "holdout",
+  "attempt_id": "case-026-2-B-t1",
+  "arm": "B",
+  "stage": null,
+  "case": "case-026",
+  "rep": 2,
+  "try": 1
+ },
+ "retry_policy": "d2",
+ "qwen_exit": 0,
+ "wall_ms": 85328,
+ "relay": {
+  "schema_version": "advisory-ai-runtime-relay.v1",
+  "status": "FORWARDED_STRUCTURED_OUTPUT",
+  "received_request_count": 1,
+  "forwarded_request_count": 1,
+  "outcomes": [
+   "FORWARDED_STRUCTURED_OUTPUT"
+  ],
+  "retry_refused_reason": null,
+  "first_refused_reason": null,
+  "model_id": "deepseek-v4-flash-0731",
+  "retry_policy": "d2",
+  "requests": [
+   {
+    "ordinal": 1,
+    "forwarded": true,
+    "outcome": "FORWARDED_STRUCTURED_OUTPUT",
+    "provider_status": 200,
+    "latency_ms": 83948,
+    "usage": {
+     "prompt_tokens": 18352,
+     "total_tokens": 26421,
+     "completion_tokens": 8069,
+     "prompt_tokens_details": {
+      "cached_tokens": 1024
+     },
+     "completion_tokens_details": {
+      "reasoning_tokens": 5803
+     }
+    },
+    "model_returned": "deepseek-v4-flash-0731"
+   }
+  ],
+  "usage": {
+   "prompt_tokens": 18352,
+   "completion_tokens": 8069,
+   "total_tokens": 26421
+  },
+  "latency_ms": 83948
+ },
+ "relay_status": "FORWARDED_STRUCTURED_OUTPUT",
+ "usage": {
+  "prompt_tokens": 18352,
+  "completion_tokens": 8069,
+  "total_tokens": 26421
+ },
+ "latency_ms": 83948,
+ "retried": false,
+ "retry_refused_reason": null,
+ "status": "OK",
+ "note": null,
+ "output": {
+  "schema_version": "ai-advice-output.v1",
+  "summary": "Deterministic verdict is FAIL and must be preserved: the latency rule (response_time_p95_ms <= 200) was breached in both windows, reference and workload-01, with observed p95 = 227 ms (max 248 ms, p50 50 ms). Recorded JMeter samples show 0 errors in both windows, and the configured cpu/db resource SLA checks PASS, but FAIL stays FAIL. The association analysis is not confirmatory: all 8 correlation headline selections are UNAVAILABLE, correlation uncertainties are NOT_ESTIMATED, the cpu/db system associations are BELOW_EFFECT, and clock alignment was not verified by core (clock_alignment = not_verified_by_core). Therefore no causal or lead/lag claim is supported. Operator next steps: verify clocks first, collect per-stage service-side telemetry for the same windows, and rerun to test reproducibility of the p95 breach.",
+  "hypotheses": [
+   {
+    "rank": 1,
+    "observation": "Both windows fail the latency rule with p95 = 227 ms (threshold 200 ms), while the compute quota stays constant at quota_fraction = 1.0 and cpu-queue depth holds near 1.37 (mean ~1.28 in workload-01); the cpu-queue correlation pair is CANDIDATE with best_lag 2000 ms and rho 0.588.",
+    "possible_explanation": "Requests may be queuing at a compute tier that is running at full configured quota, and that queuing could contribute to the p95 tail even though system-level cpu_work (mean ~0.15) stays far below the 0.9 SLA threshold.",
+    "recommended_check": "Collect compute-stage service-side latency and queue telemetry covering the same reference and workload-01 windows, and rerun with a staged load reduction to see whether p95 and cpu-queue depth move together.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/33",
+     "analysis-result.json#/evidence/35",
+     "analysis-result.json#/evidence/17",
+     "analysis-result.json#/evidence/18",
+     "analysis-result.json#/evidence/42",
+     "analysis-result.json#/evidence/4"
+    ]
+   },
+   {
+    "rank": 2,
+    "observation": "downstream-wait in_flight_requests is stable near 2.28 in both windows (mean 2.28, max 2.432), and its correlation pair with p95 is CANDIDATE with best_lag 4000 ms and rho 0.657.",
+    "possible_explanation": "A portion of each request's time may be spent waiting on a downstream dependency (~2.28 requests in flight on average), and that dependency's own latency could shape the p95 tail.",
+    "recommended_check": "Capture the downstream dependency's response-time and queue telemetry for the same windows, and verify clock alignment first because the 4000 ms best lag cannot be trusted as an ordering until clocks are verified.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/7",
+     "analysis-result.json#/evidence/20",
+     "analysis-result.json#/evidence/45"
+    ]
+   },
+   {
+    "rank": 3,
+    "observation": "p95 = 227 ms is identical in both windows with 0 errors and a stable p50 = 50 ms / p99 = 248 ms; the response anomaly check reports NO_MATERIAL_CHANGE with ZERO_MAD and 30 suppressed short episodes, and no correlation pair received a confirmed headline selection.",
+    "possible_explanation": "The SLO breach may reflect a steady-state property of the tested request path's tail distribution rather than a transient incident; the lack of a confirmed correlation or material-change episode does not by itself prove stability or absence of a problem.",
+    "recommended_check": "Rerun the same SLO test with per-transaction latency breakdowns and an independently timed window to see whether p95 > 200 ms reproduces, keeping the latency rule unchanged.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/33",
+     "analysis-result.json#/evidence/37",
+     "analysis-result.json#/evidence/38",
+     "analysis-result.json#/evidence/58",
+     "analysis-result.json#/evidence/47"
+    ]
+   },
+   {
+    "rank": 4,
+    "observation": "generator-threads averages ~4.82 (range 4.25-4.94) with a CANDIDATE correlation to p95 (best_lag 3000 ms, rho 0.584), while request_starts and target_rate are constant at 60 rps.",
+    "possible_explanation": "Small variation in generator concurrency could delay request starts and correlate with latency, although the requested control target-request-rate was constant and dropped, so this is an unconfirmed candidate only.",
+    "recommended_check": "Inspect generator thread configuration and logs, verify clocks, and rerun to check whether the thread variation (and its correlation) persists in fresh data.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/46",
+     "analysis-result.json#/evidence/22",
+     "analysis-result.json#/evidence/23"
+    ]
+   }
+  ],
+  "recommendations": [
+   {
+    "rank": 1,
+    "action": "Verify clock alignment across the load generator, service, and telemetry collectors before interpreting any lag-based correlation.",
+    "rationale": "clock_alignment is reported as not_verified_by_core, and best-lag values up to 4000 ms cannot support lead/lag ordering or temporal causation until the clock relationship is known.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/2",
+     "analysis-result.json#/evidence/39",
+     "analysis-result.json#/evidence/42",
+     "analysis-result.json#/evidence/45"
+    ]
+   },
+   {
+    "rank": 2,
+    "action": "Keep the policy verdict FAIL unchanged; treat the latency-rule failures as authoritative and do not let resource PASS, error_count 0, or NO_MATERIAL_CHANGE results flip the verdict.",
+    "rationale": "The deterministic verdict is FAIL because both window policy checks observed p95 = 227 ms against threshold 200 ms; a healthy-looking rerun or diagnostic result does not turn an evaluated FAIL into PASS.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/33",
+     "analysis-result.json#/evidence/34",
+     "analysis-result.json#/evidence/35",
+     "analysis-result.json#/evidence/36",
+     "analysis-result.json#/policy_verdict"
+    ]
+   },
+   {
+    "rank": 3,
+    "action": "Collect per-stage service-side latency and queue telemetry (admission, compute, database, dependency) aligned to the same reference and workload-01 windows.",
+    "rationale": "Only overall and single-transaction metrics exist; system cpu_work (~0.15) and db_work (~0.015) are far below the 0.9 SLA thresholds, while compute quota is a constant 1.0, so the available summaries cannot localize where the 227 ms tail is spent.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/4",
+     "analysis-result.json#/evidence/5",
+     "analysis-result.json#/evidence/17",
+     "analysis-result.json#/evidence/33",
+     "analysis-result.json#/evidence/37",
+     "analysis-result.json#/evidence/38"
+    ]
+   },
+   {
+    "rank": 4,
+    "action": "Inspect the compute quota configuration and why cpu-service-quota is a constant 1.0 while cpu-queue holds ~1.37 requests.",
+    "rationale": "A non-zero queue depth at a constant quota_fraction of 1.0 suggests queuing at the quota tier; system cpu_work alone does not explain the observed queue, and this is a configuration question rather than a claimed cause.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/5",
+     "analysis-result.json#/evidence/17",
+     "analysis-result.json#/evidence/4"
+    ]
+   },
+   {
+    "rank": 5,
+    "action": "Rerun the SLO test to test reproducibility and sensitivity of the p95 breach under fresh windows.",
+    "rationale": "All correlation headline selections are UNAVAILABLE (OBSERVATION_COUNT_UNSUPPORTED or PAIR_NOT_EVALUABLE) and uncertainty is NOT_ESTIMATED, so reproducing the breach is the safest operator check before any further investigation priority is set.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/47",
+     "analysis-result.json#/evidence/50",
+     "analysis-result.json#/evidence/54",
+     "analysis-result.json#/evidence/59"
+    ]
+   }
+  ],
+  "caveats": [
+   "Clock alignment is not_verified_by_core; lag-based correlation values (best_lag up to 4000 ms) cannot support lead/lag ordering or temporal causation until clocks are verified.",
+   "All 8 correlation headline selections are UNAVAILABLE (OBSERVATION_COUNT_UNSUPPORTED or PAIR_NOT_EVALUABLE), and every correlation_pair reports uncertainty NOT_ESTIMATED; the CANDIDATE pairs (cpu-queue, downstream-wait, generator-threads) have no p-values.",
+   "System cpu/db associations are BELOW_EFFECT because the control (target-request-rate) was constant and the resource delta was below the required minimum; sensitivity_without_achieved_rps is null, so no effect size is available.",
+   "error_count 0 covers recorded JMeter samples only; it does not prove absence of service-side failures, dropped samples, or generator issues, and no generator diagnostic guard resource rule is present in the evidence.",
+   "NO_MATERIAL_CHANGE / ZERO_MAD results, anomalies_tested = 4 with 0 episodes, and 30 suppressed short episodes do not prove stability or absence of the latency problem.",
+   "Only overall and the single 'request' transaction metrics are present; there is no per-stage latency breakdown, so where the p95 tail is spent inside the call path remains unknown.",
+   "Counts are consistent within scope: overall sample_count 36000 equals reference 7200 + workload-01 28800; these are window-scoped counts and should not be compared with other quantities.",
+   "Coverage is limited to the configured rules for the two windows (latency SLO plus cpu/db work SLA checks); no capacity bound, knee, or NO_POLICY scenario is in scope here."
+  ]
+ },
+ "schema": "ai-experiment-run.holdout.v1",
+ "case": "case-026",
+ "rep": 2,
+ "arm": "B",
+ "try": 1,
+ "attempt_id": "case-026-2-B-t1",
+ "model_id": "deepseek-v4-flash-0731",
+ "prompt_sha256": "3c0f28bee6517c13c5c854615e7d3d59301893d9723880818e4034a32e9133bf"
+}

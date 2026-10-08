@@ -1,0 +1,108 @@
+[
+  {
+    "id": "R016",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T2",
+        "field": "#/summary",
+        "quote": "All 2312 errors sit on the checkout sampler ... and are logged as frontend.request_error",
+        "why": "Matching counts in the JMeter summaries and OpenSearch do not establish that they are the same events."
+      },
+      {
+        "type": "T8",
+        "field": "#/hypotheses/0/possible_explanation",
+        "quote": "the other five transactions continued without logged errors",
+        "why": "Whole-run summaries do not show whether those transactions continued during the failure burst."
+      },
+      {
+        "type": "T5",
+        "field": "#/recommendations/5/action",
+        "quote": "the frontend-to-checkout-to-paymentservice path",
+        "why": "The evidence contains no call graph establishing that path."
+      }
+    ],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 3,
+    "notes": "The verdict and key numbers are correct, but the response overstates event correspondence and system structure."
+  },
+  {
+    "id": "R029",
+    "hard_defect": false,
+    "defects": [],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 4,
+    "notes": "The actions are verifiable and respect the verdict, scopes, and coverage, though the response is repetitive."
+  },
+  {
+    "id": "R038",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T2",
+        "field": "#/recommendations/0/rationale",
+        "quote": "This group drives the FAIL business verdict",
+        "why": "The OpenSearch group and policy-window failures have matching counts, but the evidence does not establish event identity between them."
+      }
+    ],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 3,
+    "notes": "Most checks are useful, but the asserted link between the error group and policy failure could misdirect investigation."
+  },
+  {
+    "id": "R049",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T8",
+        "field": "#/hypotheses/7/recommended_check",
+        "quote": "widen the margin beyond 60000 ms",
+        "why": "The source acquisition margin does not control the run-intersection policy window or make it cover the full run."
+      },
+      {
+        "type": "T5",
+        "field": "#/hypotheses/8/recommended_check",
+        "quote": "configure ... a capacity/required-capacity setting ... so that stages produce verified product outcomes",
+        "why": "No load stages are defined in the evidence, and configuring a policy does not itself create verified stage outcomes."
+      }
+    ],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 3,
+    "notes": "The factual reading is mostly sound, but two configuration recommendations promise outcomes the evidence does not support."
+  },
+  {
+    "id": "R055",
+    "hard_defect": false,
+    "defects": [],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 5,
+    "notes": "It preserves the deterministic results and gives prioritized checks while keeping cross-source correspondence hypothetical."
+  },
+  {
+    "id": "R065",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T2",
+        "field": "#/summary",
+        "quote": "exactly match the 2,312 frontend.request_error events",
+        "why": "Equal counts across the JMeter transaction summary and OpenSearch do not prove the records describe identical events."
+      },
+      {
+        "type": "T5",
+        "field": "#/recommendations/6/action",
+        "quote": "Trace failing checkout requests end-to-end (frontend, checkoutservice, paymentservice)",
+        "why": "The evidence does not establish that those services form the request path."
+      }
+    ],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 3,
+    "notes": "The investigation steps are useful, but the summary asserts event identity and the tracing action assumes an unverified topology."
+  }
+]

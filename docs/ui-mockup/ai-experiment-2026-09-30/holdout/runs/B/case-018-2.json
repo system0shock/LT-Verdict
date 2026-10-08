@@ -1,0 +1,185 @@
+{
+ "stage": "B",
+ "mode": "live",
+ "model": "deepseek-v4-flash-0731",
+ "tag": {
+  "phase": "holdout",
+  "attempt_id": "case-018-2-B-t1",
+  "arm": "B",
+  "stage": null,
+  "case": "case-018",
+  "rep": 2,
+  "try": 1
+ },
+ "retry_policy": "d2",
+ "qwen_exit": 0,
+ "wall_ms": 116530,
+ "relay": {
+  "schema_version": "advisory-ai-runtime-relay.v1",
+  "status": "FORWARDED_STRUCTURED_OUTPUT",
+  "received_request_count": 1,
+  "forwarded_request_count": 1,
+  "outcomes": [
+   "FORWARDED_STRUCTURED_OUTPUT"
+  ],
+  "retry_refused_reason": null,
+  "first_refused_reason": null,
+  "model_id": "deepseek-v4-flash-0731",
+  "retry_policy": "d2",
+  "requests": [
+   {
+    "ordinal": 1,
+    "forwarded": true,
+    "outcome": "FORWARDED_STRUCTURED_OUTPUT",
+    "provider_status": 200,
+    "latency_ms": 115193,
+    "usage": {
+     "prompt_tokens": 4349,
+     "total_tokens": 15503,
+     "completion_tokens": 11154,
+     "prompt_tokens_details": {
+      "cached_tokens": 1024
+     },
+     "completion_tokens_details": {
+      "reasoning_tokens": 8892
+     }
+    },
+    "model_returned": "deepseek-v4-flash-0731"
+   }
+  ],
+  "usage": {
+   "prompt_tokens": 4349,
+   "completion_tokens": 11154,
+   "total_tokens": 15503
+  },
+  "latency_ms": 115193
+ },
+ "relay_status": "FORWARDED_STRUCTURED_OUTPUT",
+ "usage": {
+  "prompt_tokens": 4349,
+  "completion_tokens": 11154,
+  "total_tokens": 15503
+ },
+ "latency_ms": 115193,
+ "retried": false,
+ "retry_refused_reason": null,
+ "status": "OK",
+ "note": null,
+ "output": {
+  "schema_version": "ai-advice-output.v1",
+  "summary": "The referenced run is VALID, but analysis coverage is INCOMPLETE and the policy verdict is NO_VERDICT: the capacity stage is INDETERMINATE because the load-generator diagnostic guard failed. The generator-cpu-guard (effect diagnostic, operator gt, threshold 0.85 ratio) reports FAIL for window stage-1, with generator-cpu flat at 0.93 across all 30 cells, so no capacity bound is derived (lower_inclusive null, upper_exclusive null, verified_bound_load null). The business latency policy passed in the window (p95 140 ms <= 250 ms, 0 errors, business verdict PASS) and active_users looks close to the reported target 200 (min 197, max 200, mean 198.5), but that does not turn NO_VERDICT into PASS; resource_verdict NO_POLICY means no resource rule with effect sla applied. capacity_knee is null with KNEE_DETECTOR_NOT_IMPLEMENTED, a fixed product limitation, not a run defect. Clock alignment is reported as not_verified_by_core. Advice is limited to operator actions: inspect the generator's resource series and host CPU telemetry, verify clocks, and rerun with a healthy generator while keeping the guard diagnostic.",
+  "hypotheses": [
+   {
+    "rank": 1,
+    "observation": "capacity-summary reports bound_type INDETERMINATE, policy_verdict NO_VERDICT, and reasons CAPACITY_GUARD_FAILED and CAPACITY_STAGE_NOT_VERIFIED, with lower_inclusive null, upper_exclusive null, and verified_bound_load null; the diagnostic resource policy check generator-cpu-guard (effect diagnostic, operator gt, threshold 0.85, unit ratio) for window stage-1 has status FAIL.",
+    "possible_explanation": "A failed diagnostic resource guard on the load generator makes the stage unusable for a product capacity bound, so no bound is derived from this run; the evidence does not state why the guard failed.",
+    "recommended_check": "Inspect the generator's resource series and host-level CPU telemetry for the stage window, then rerun the stage with the generator operating below the 0.85 diagnostic guard so the stage can be verified.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/5",
+     "analysis-result.json#/evidence/8",
+     "analysis-result.json#/findings/0",
+     "analysis-result.json#/capacity_summary"
+    ]
+   },
+   {
+    "rank": 2,
+    "observation": "The generator-cpu series for window stage-1 has observed_cells 30, missing_cells 0, min = max = mean = median = 0.93, sample_standard_deviation 0, and slope_per_second 0; findings/0 reports observed_min and observed_max both 0.93.",
+    "possible_explanation": "The perfectly flat value could indicate sustained CPU utilization across the window or an artifact of aggregation/sampling; the input evidence does not distinguish these possibilities.",
+    "recommended_check": "Verify how the generator-cpu metric is collected and aggregated, and compare against host-level CPU/utilization telemetry for the same window before treating saturation as confirmed.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/4",
+     "analysis-result.json#/findings/0"
+    ]
+   },
+   {
+    "rank": 3,
+    "observation": "window-policy-summary for stage-1 reports verdict PASS with business_verdict PASS and resource_verdict NO_POLICY; the latency policy check (response_time_p95_ms observed 140, operator lte, threshold 250) is PASS; metric-summary-overall reports error_count 0.",
+    "possible_explanation": "The business SLA policy passed in this window; the INDETERMINATE capacity outcome comes from the diagnostic guard rather than a business policy failure. resource_verdict NO_POLICY means no resource rule with effect sla applied, so this is not a resource pass.",
+    "recommended_check": "After rerunning with a healthy generator, re-confirm the same latency policy and window business verdict before using the run for capacity statements.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/7",
+     "analysis-result.json#/evidence/6",
+     "analysis-result.json#/evidence/0"
+    ]
+   },
+   {
+    "rank": 4,
+    "observation": "metric-summary-overall reports latency_ms max 1500, p99 140, p95 140, p50 130 over sample_count 1201; the checkout transaction summary (metric-summary-a9eeb727...) reports identical values.",
+    "possible_explanation": "At least one sample is far above the p99 (1500 ms versus 140 ms), which could be a short latency spike, but these aggregates do not say when it occurred or what caused it.",
+    "recommended_check": "Inspect the per-second latency distribution and individual sampler records for the window; first verify clock alignment before any timing interpretation.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0",
+     "analysis-result.json#/evidence/1",
+     "analysis-result.json#/evidence/2"
+    ]
+   },
+   {
+    "rank": 5,
+    "observation": "The active_users generator series for window stage-1 has observed_cells 30, missing_cells 0, min 197, max 200, mean 198.5, q05 197, q95 200; capacity stage step-1 reports target 200, target_tolerance_ratio 0.05, achieved 197 (achieved_statistic p05_10s), complete_bins 30, and verdict INDETERMINATE.",
+    "possible_explanation": "The generator load shape appears close to the reported target 200 and reported tolerance 0.05; the stage verdict is INDETERMINATE because of the failed diagnostic guard rather than the load profile.",
+    "recommended_check": "Keep the same load profile when rerunning after the generator CPU issue is resolved, and verify active_users remains close to target in the new run.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/3",
+     "analysis-result.json#/capacity_summary"
+    ]
+   }
+  ],
+  "recommendations": [
+   {
+    "rank": 1,
+    "action": "Rerun the capacity stage with a healthy load generator. Keep generator-cpu-guard as a diagnostic rule (do not change its effect to binding, SLA, or enforcing), and rerun until the generator CPU series stays below the 0.85 threshold for the stage window.",
+    "rationale": "The referenced run is VALID but the stage is not verified (CAPACITY_GUARD_FAILED, CAPACITY_STAGE_NOT_VERIFIED) and capacity-summary is INDETERMINATE with no derived bound. A rerun with the guard passing is needed before any capacity bound can be derived; per product rules a failed diagnostic guard never creates an upper bound.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/5",
+     "analysis-result.json#/evidence/8",
+     "analysis-result.json#/analysis_coverage",
+     "analysis-result.json#/run_validity"
+    ]
+   },
+   {
+    "rank": 2,
+    "action": "Inspect the generator's CPU resource series and gather host-level CPU/utilization telemetry for window stage-1 (epoch 1767225600000-1767225900000) to understand the flat 0.93 value; also check the collection/aggregation of the generator-cpu metric.",
+    "rationale": "The generator-cpu series is flat (sample_standard_deviation 0, slope_per_second 0) at 0.93 above the guard threshold, and the evidence does not say why. Confirming whether this is saturation or a reporting artifact determines whether a simple rerun is sufficient.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/4",
+     "analysis-result.json#/findings/0"
+    ]
+   },
+   {
+    "rank": 3,
+    "action": "Verify clock alignment between the load generator and the analysis host for this run before any temporal or causal interpretation of generator load against other series.",
+    "rationale": "resource-binding reports clock_alignment not_verified_by_core, so lead/lag ordering between the CPU series and other measurements is not supported by this evidence.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/2"
+    ]
+   },
+   {
+    "rank": 4,
+    "action": "After the rerun, re-check the latency policy (reported p95 140 ms versus threshold 250) and the window business verdict in the new run before making any capacity statement.",
+    "rationale": "The business policy passed in the referenced window, but a capacity bound requires a verified stage; the new run must confirm both the diagnostic guard and the business policy.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/6",
+     "analysis-result.json#/evidence/7"
+    ]
+   }
+  ],
+  "caveats": [
+   "run_validity is VALID but analysis_coverage is INCOMPLETE (CAPACITY_GUARD_FAILED, CAPACITY_STAGE_NOT_VERIFIED); the deterministic policy verdict NO_VERDICT is unchanged and no capacity bound exists for this run.",
+   "resource_verdict NO_POLICY means no resource rule with effect sla applied in the window; the business PASS (latency) is not a capacity or resource pass.",
+   "capacity_knee is null with knee_reason KNEE_DETECTOR_NOT_IMPLEMENTED; this is a fixed product limitation, not a defect of the run, and no knee-detector implementation or enabling is recommended.",
+   "Clock alignment is reported as not_verified_by_core, so no temporal ordering or causal attribution is supported from this input.",
+   "The generator-cpu series is a single flat value for all 30 observed cells; the input provides no reason for the guard failure.",
+   "Metric summaries cover only overall and one 'checkout' transaction scope in stage window stage-1, not the whole run or other transactions; counts are comparable only within the same scope and same window.",
+   "Throughput is reported as numerator/denominator pairs; no additional rate beyond the reported fields is inferred.",
+   "The window (1767225600000-1767225900000) covers only part of the run (run_to_epoch_ms 1767225900500), so run-level counts are not the same quantity as window-level counts."
+  ]
+ },
+ "schema": "ai-experiment-run.holdout.v1",
+ "case": "case-018",
+ "rep": 2,
+ "arm": "B",
+ "try": 1,
+ "attempt_id": "case-018-2-B-t1",
+ "model_id": "deepseek-v4-flash-0731",
+ "prompt_sha256": "3c0f28bee6517c13c5c854615e7d3d59301893d9723880818e4034a32e9133bf"
+}

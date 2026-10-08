@@ -1,0 +1,85 @@
+[
+  {
+    "id": "R017",
+    "hard_defect": false,
+    "defects": [],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 5,
+    "notes": "Accurately preserves the PASS verdict and provides evidence-bounded, actionable checks."
+  },
+  {
+    "id": "R043",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T3",
+        "field": "#/hypotheses/2/possible_explanation",
+        "quote": "A small number of slow tail samples occurred",
+        "why": "The aggregates do not state how many samples were in the tail or at the reported maximum."
+      },
+      {
+        "type": "T2",
+        "field": "#/hypotheses/4/possible_explanation",
+        "quote": "aggregate the same samples consistently",
+        "why": "Equal summed transaction counts and the overall count do not prove that the differently scoped summaries contain the same samples."
+      },
+      {
+        "type": "T2",
+        "field": "#/caveats/5",
+        "quote": "one specific scope and window",
+        "why": "The policy check is for the whole run with no window id, so describing it as a policy window invents a window distinction."
+      }
+    ],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 2,
+    "notes": "It preserves the recorded result but makes unsupported tail-count and scope-partition claims."
+  },
+  {
+    "id": "R056",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T7",
+        "field": "#/summary",
+        "quote": "those dimensions are best read as NO_POLICY rather than PASS",
+        "why": "The evidence supplies only the global deterministic policy_verdict PASS and no per-metric verdicts from which NO_POLICY can be assigned."
+      },
+      {
+        "type": "T3",
+        "field": "#/recommendations/1/rationale",
+        "quote": "likely in very few samples",
+        "why": "The evidence has no count of samples at the maximum or above the percentile."
+      },
+      {
+        "type": "T5",
+        "field": "#/recommendations/7/rationale",
+        "quote": "a short, evenly sequenced execution",
+        "why": "Near-equal aggregate counts do not establish duration, sequencing, or the load structure."
+      }
+    ],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 2,
+    "notes": "The advice contains useful caveats but adds unsupported verdict and workload-structure interpretations."
+  },
+  {
+    "id": "R064",
+    "hard_defect": false,
+    "defects": [],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 5,
+    "notes": "Correctly preserves all deterministic facts and keeps hypotheses explicitly unverified."
+  },
+  {
+    "id": "R066",
+    "hard_defect": false,
+    "defects": [],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 5,
+    "notes": "Thorough, evidence-bounded review with correct contract caveats and operator-verifiable recommendations."
+  }
+]

@@ -1,0 +1,97 @@
+[
+  {
+    "id": "R009",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T2",
+        "field": "#/recommendations/0/rationale",
+        "quote": "All recorded errors belong to the checkout transaction ... and are emitted by the frontend service",
+        "why": "Matching JMeter and OpenSearch counts do not establish that they record the same events."
+      }
+    ],
+    "required_facts_preserved": false,
+    "missing_facts": ["Run validity is VALID."],
+    "usefulness": 2,
+    "notes": "The checks are actionable, but the response treats errors from separate sources as identified events."
+  },
+  {
+    "id": "R011",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T2",
+        "field": "#/hypotheses/0/observation",
+        "quote": "the check is attributed to the checkout transaction",
+        "why": "The failed policy check has overall scope in a window; the checkout count is a separate whole-run transaction summary."
+      }
+    ],
+    "required_facts_preserved": false,
+    "missing_facts": ["Run validity is VALID."],
+    "usefulness": 2,
+    "notes": "It identifies the verdict and metric gap, but misattributes the policy check."
+  },
+  {
+    "id": "R019",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T8",
+        "field": "#/hypotheses/3/observation",
+        "quote": "reaches up to 0.56895862409 in the last observed cells",
+        "why": "The aggregate and finding do not identify those cells as the last observed cells."
+      },
+      {
+        "type": "T8",
+        "field": "#/recommendations/4/rationale",
+        "quote": "A large memory drop combined with missing metric cells",
+        "why": "Minimum and maximum memory aggregates do not establish a drop or its timing."
+      }
+    ],
+    "required_facts_preserved": false,
+    "missing_facts": ["Run validity is VALID."],
+    "usefulness": 2,
+    "notes": "Several useful checks are grounded in the evidence, but invented time-series behavior could misdirect the restart investigation."
+  },
+  {
+    "id": "R021",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T2",
+        "field": "#/summary",
+        "quote": "All 2,312 errors are checkout-transaction samples and are reported by the frontend service",
+        "why": "The evidence does not link the checkout samples to the OpenSearch frontend error documents as the same events."
+      }
+    ],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 3,
+    "notes": "It preserves the verdict, validity, coverage and key numbers, but asserts an unverified cross-source match."
+  },
+  {
+    "id": "R024",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T2",
+        "field": "#/summary",
+        "quote": "All 2,312 whole-run errors are attributable to a single transaction ... and to a single error group ... that appears only between",
+        "why": "The separate JMeter and OpenSearch aggregates do not prove event identity or place checkout failures in the OpenSearch interval."
+      }
+    ],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 3,
+    "notes": "Most actions are supported, and its later request to confirm the source match is appropriate, but the summary states that match as fact."
+  },
+  {
+    "id": "R059",
+    "hard_defect": false,
+    "defects": [],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 5,
+    "notes": "It preserves the deterministic results, treats the equal source counts as unconfirmed event identity, and gives verifiable next steps."
+  }
+]

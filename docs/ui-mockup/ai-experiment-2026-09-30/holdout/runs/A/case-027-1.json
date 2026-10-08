@@ -1,0 +1,234 @@
+{
+ "stage": "A",
+ "mode": "live",
+ "model": "deepseek-v4-flash-0731",
+ "tag": {
+  "phase": "holdout",
+  "attempt_id": "case-027-1-A-t1",
+  "arm": "A",
+  "stage": null,
+  "case": "case-027",
+  "rep": 1,
+  "try": 1
+ },
+ "retry_policy": "d2",
+ "qwen_exit": 0,
+ "wall_ms": 157104,
+ "relay": {
+  "schema_version": "advisory-ai-runtime-relay.v1",
+  "status": "FORWARDED_STRUCTURED_OUTPUT",
+  "received_request_count": 1,
+  "forwarded_request_count": 1,
+  "outcomes": [
+   "FORWARDED_STRUCTURED_OUTPUT"
+  ],
+  "retry_refused_reason": null,
+  "first_refused_reason": null,
+  "model_id": "deepseek-v4-flash-0731",
+  "retry_policy": "d2",
+  "requests": [
+   {
+    "ordinal": 1,
+    "forwarded": true,
+    "outcome": "FORWARDED_STRUCTURED_OUTPUT",
+    "provider_status": 200,
+    "latency_ms": 155612,
+    "usage": {
+     "prompt_tokens": 4979,
+     "total_tokens": 20768,
+     "completion_tokens": 15789,
+     "prompt_tokens_details": {
+      "cached_tokens": 1024
+     },
+     "completion_tokens_details": {
+      "reasoning_tokens": 12779
+     }
+    },
+    "model_returned": "deepseek-v4-flash-0731"
+   }
+  ],
+  "usage": {
+   "prompt_tokens": 4979,
+   "completion_tokens": 15789,
+   "total_tokens": 20768
+  },
+  "latency_ms": 155612
+ },
+ "relay_status": "FORWARDED_STRUCTURED_OUTPUT",
+ "usage": {
+  "prompt_tokens": 4979,
+  "completion_tokens": 15789,
+  "total_tokens": 20768
+ },
+ "latency_ms": 155612,
+ "retried": false,
+ "retry_refused_reason": null,
+ "status": "OK",
+ "note": null,
+ "output": {
+  "schema_version": "ai-advice-output.v1",
+  "summary": "Run c7aa4904... is VALID, but the deterministic policy_verdict is NO_VERDICT and capacity was assessed as bound_type INDETERMINATE with coverage INCOMPLETE (reasons: CAPACITY_GUARD_MISSING, CAPACITY_STAGE_NOT_VERIFIED). The two JMeter stages (~100 and ~200 users, each 30/30 complete 10-s bins) show p95 latency 140 ms <= 250 ms (PASS) and 0 errors over 2401 checkout samples, and load-generator CPU stayed ~0.43 (max 0.45) with generator-cpu-guard reporting PASS. Those are per-window latency results and generator-side diagnostics only; they do not constitute a capacity pass. No capacity knee was computed (KNEE_DETECTOR_NOT_IMPLEMENTED), no upper load bound or verified_bound_load exists, per-window resource_verdict is NO_POLICY, and no SUT-side resource policy/data are present. Advisory focus: add the missing capacity guard, enable knee detection, collect SUT resource metrics/policies, verify clock alignment, and investigate a 1500 ms latency tail before claiming capacity, stability, or headroom.",
+  "hypotheses": [
+   {
+    "rank": 1,
+    "observation": "In both stages the load-generator cpu_used series is flat at mean 0.43 (min 0.41, max 0.45, sd 0.014) while the resource-policy-check rule generator-cpu-guard (operator gt, threshold 0.85) reports status PASS for each window.",
+    "possible_explanation": "The load generator appears to have large CPU headroom and was not CPU-saturated in either stage, consistent with the guard not firing. This only concerns the generator; it provides no evidence about the SUT's own resource use.",
+    "recommended_check": "Confirm the documented semantics of rule generator-cpu-guard (what PASS means) and add a capacity guard that verifies the load bound against SUT-side resources.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/4",
+     "analysis-result.json#/evidence/6",
+     "analysis-result.json#/evidence/7",
+     "analysis-result.json#/evidence/8"
+    ]
+   },
+   {
+    "rank": 2,
+    "observation": "capacity_summary reports each stage achieved p05_10s of 97 (step-1 target 100, tolerance ratio 0.05) and 197 (step-2 target 200, tolerance ratio 0.05) with 30/30 complete bins, yet each stage verdict is INDETERMINATE with reason CAPACITY_GUARD_MISSING and verified_bound_load null.",
+    "possible_explanation": "The generated user load closely matched the intended targets, so the INDETERMINATE outcome is most plausibly caused by the missing capacity guard and unverified capacity stage in the pipeline, rather than by load falling short of target.",
+    "recommended_check": "Add the missing capacity guard policy and re-run so each stage can be classified as a verified bound; confirm the analysis coverage reasons disappear from INCOMPLETE.",
+    "evidence_refs": [
+     "analysis-result.json#/capacity_summary",
+     "analysis-result.json#/evidence/13",
+     "analysis-result.json#/analysis_coverage",
+     "analysis-result.json#/evidence/3",
+     "analysis-result.json#/evidence/5"
+    ]
+   },
+   {
+    "rank": 3,
+    "observation": "policy-check-window reports response_time_p95_ms observed 140 <= 250 (PASS) in both stage-1 and stage-2, metric summaries show p99 140 ms and 0 errors across 2401 samples, and the stored throughput_rps ratio is 2401000/600500 (approximately 4).",
+    "possible_explanation": "If the ratio denominator is run time in ms, offered request rate is only about 4 requests/second across the whole run, so doubling users from ~100 to ~200 may still leave the SUT far below any capacity knee, which would explain the unchanged p95 latency. The knee detector was not implemented, so this cannot be confirmed from the evidence.",
+    "recommended_check": "Increase actual request rate/concurrency across more stages and implement the knee detector (currently KNEE_DETECTOR_NOT_IMPLEMENTED) so a knee and upper bound can be computed instead of inferred.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0",
+     "analysis-result.json#/evidence/9",
+     "analysis-result.json#/evidence/11",
+     "analysis-result.json#/evidence/13"
+    ]
+   },
+   {
+    "rank": 4,
+    "observation": "metric-summary-overall and the checkout transaction summary both report latency max 1500 ms while p50/p95/p99 are 130/140/140 ms and error_count is 0.",
+    "possible_explanation": "At least one sample had latency about 10x the p99, consistent with a transient outlier such as a cold start, ramp artifact, or a single straggling checkout; the p95-based latency policy would not flag this tail event.",
+    "recommended_check": "Inspect the per-sample latency series to locate the 1500 ms sample(s), correlate with run timing and the user ramp, and decide whether a p99/max-based tail policy is required.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0",
+     "analysis-result.json#/evidence/1",
+     "analysis-result.json#/evidence/2"
+    ]
+   },
+   {
+    "rank": 5,
+    "observation": "capacity_summary reports capacity_knee null, knee_reason KNEE_DETECTOR_NOT_IMPLEMENTED, upper_exclusive null, and policy_verdict NO_VERDICT.",
+    "possible_explanation": "The null knee and absent upper bound are attributable to the pipeline not implementing a knee detector for this run, not to evidence that no knee exists; the run therefore cannot establish an upper load bound.",
+    "recommended_check": "Enable or implement the capacity knee detector in the analysis pipeline and re-run before any capacity knee or ceiling can be reported.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/13",
+     "analysis-result.json#/analysis_coverage",
+     "analysis-result.json#/policy_verdict"
+    ]
+   },
+   {
+    "rank": 6,
+    "observation": "window-policy-summary for stage-1 and stage-2 reports business_verdict PASS and resource_verdict NO_POLICY, and the only resource checks present are the diagnostic generator-cpu-guard checks.",
+    "possible_explanation": "No resource policy applies to the system under test in these windows (only a load-generator diagnostic exists), so the analysis contains no information about SUT resource limits and cannot support a capacity verdict.",
+    "recommended_check": "Add resource policies and collect SUT-side metrics (e.g., app node CPU/memory) in the next runs so the capacity stage can be evaluated against real SUT constraints.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/10",
+     "analysis-result.json#/evidence/12",
+     "analysis-result.json#/evidence/7",
+     "analysis-result.json#/evidence/8"
+    ]
+   },
+   {
+    "rank": 7,
+    "observation": "resource-binding reports clock_alignment 'not_verified_by_core', mode explicit_windows, run_to_epoch_ms 1767226200500, and evaluation/snapshot to_epoch_ms 1767226200000 (run extends 500 ms beyond the evaluation window).",
+    "possible_explanation": "Without verified clock alignment between the load generator and telemetry, any apparent ordering or lead/lag relationship between load and response is unsupported, and the 500 ms run-to-evaluation margin is not covered by the evaluation window.",
+    "recommended_check": "Verify clock synchronization between load generator and SUT telemetry before drawing temporal or causal conclusions; re-run with aligned clocks if needed.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/2"
+    ]
+   }
+  ],
+  "recommendations": [
+   {
+    "rank": 1,
+    "action": "Add the missing capacity guard policy (e.g., a guard on the SUT-side resource or on the achieved load bound) and re-run the analysis so stage verdicts can move from INDETERMINATE to a verified bound.",
+    "rationale": "The deterministic result is INCOMPLETE/INDETERMINATE with CAPACITY_GUARD_MISSING and CAPACITY_STAGE_NOT_VERIFIED; without the guard no stage has verified_bound_load and policy_verdict stays NO_VERDICT.",
+    "evidence_refs": [
+     "analysis-result.json#/analysis_coverage",
+     "analysis-result.json#/capacity_summary",
+     "analysis-result.json#/evidence/13"
+    ]
+   },
+   {
+    "rank": 2,
+    "action": "Implement or enable the capacity knee detector (currently KNEE_DETECTOR_NOT_IMPLEMENTED), or add further ascending load stages so a knee and upper load bound can be computed.",
+    "rationale": "capacity_knee is null and upper_exclusive null, so the run cannot currently identify a knee; the stated reason is that the detector was not implemented, not that a knee was observed to be absent.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/13"
+    ]
+   },
+   {
+    "rank": 3,
+    "action": "Collect SUT-side resource metrics and add resource policies for the system under test; currently only load-generator CPU diagnostics exist and both windows report resource_verdict NO_POLICY.",
+    "rationale": "No SUT resource evidence exists in the run, so any statement about SUT headroom or saturation would be speculation.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/10",
+     "analysis-result.json#/evidence/12",
+     "analysis-result.json#/evidence/4",
+     "analysis-result.json#/evidence/6"
+    ]
+   },
+   {
+    "rank": 4,
+    "action": "Verify clock alignment between load generator and SUT telemetry before using window boundaries for temporal comparisons.",
+    "rationale": "clock_alignment is 'not_verified_by_core', so lead/lag or causal ordering derived from these epochs is not supported.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/2"
+    ]
+   },
+   {
+    "rank": 5,
+    "action": "Investigate the 1500 ms latency sample(s) (p99 is 140 ms) via per-sample plots and optionally add a tail (p99/max) latency policy; the current p95 <= 250 policy passes despite the outlier.",
+    "rationale": "The tail outlier is hidden by the p95 policy; if checkout tail latency matters to the business, the current policy would not detect similar events.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0",
+     "analysis-result.json#/evidence/1",
+     "analysis-result.json#/evidence/9",
+     "analysis-result.json#/evidence/11"
+    ]
+   },
+   {
+    "rank": 6,
+    "action": "Clarify and document the semantics of generator-cpu-guard (operator gt, threshold 0.85, status PASS) and the throughput_rps ratio (2401000/600500) before relying on either for load-intensity conclusions.",
+    "rationale": "Both values appear in the evidence but their units/meaning are not defined in the input, so derived interpretations (e.g., about 4 requests/second, generator headroom) remain interpretive.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/7",
+     "analysis-result.json#/evidence/8",
+     "analysis-result.json#/evidence/0"
+    ]
+   }
+  ],
+  "caveats": [
+   "Deterministic outcomes to preserve: policy_verdict NO_VERDICT, capacity bound_type INDETERMINATE, analysis coverage INCOMPLETE (CAPACITY_GUARD_MISSING, CAPACITY_STAGE_NOT_VERIFIED), per-window resource_verdict NO_POLICY. Per-window latency PASS (p95 140 <= 250) is not a capacity PASS.",
+   "Only load-generator metrics are present (entity/role generator); the CPU around 0.43-0.45 refers to the load generator, not the system under test. No SUT-side CPU/memory evidence exists.",
+   "All 2401 samples are covered by the single JMeter sampler label 'checkout'; the overall metric summary is identical to the checkout summary, so evidence about other transactions is absent.",
+   "The semantics of generator-cpu-guard PASS (operator gt, threshold 0.85) are not documented in the evidence; the status should not be over-read beyond what the rule definition states.",
+   "throughput_rps is stored as a ratio (numerator 2401000, denominator 600500) whose units are not defined; the approximately 4 requests/second reading is interpretive, and user think time/pacing is not evidenced.",
+   "clock_alignment is not_verified_by_core, so no lead/lag or temporal causal statements are supported. The run window extends 500 ms beyond the evaluation/snapshot window (run_to_epoch_ms 1767226200500 vs to_epoch_ms 1767226200000), a margin not covered by evaluation.",
+   "30/30 complete bins with zero missing cells only establish measurement-window completeness for the 10-minute span; they do not prove stability, spare capacity, or absence of a problem. The findings list is empty, so no anomaly-level analysis beyond summary percentiles is evidenced.",
+   "latency max 1500 ms exceeds the 250 ms SLO threshold even though p95 (140 ms) passes; tail behavior is not controlled by the configured policy.",
+   "The 'achieved' p05 values (97, 197) are within 5% tolerance of targets, but the stages remain INDETERMINATE; being within tolerance is not the same as being capacity-verified.",
+   "run_validity VALID certifies the run mechanics, not the completeness of the capacity coverage."
+  ]
+ },
+ "schema": "ai-experiment-run.holdout.v1",
+ "case": "case-027",
+ "rep": 1,
+ "arm": "A",
+ "try": 1,
+ "attempt_id": "case-027-1-A-t1",
+ "model_id": "deepseek-v4-flash-0731",
+ "prompt_sha256": "69f215a1ad4ae678c82410ba7cf7daf171cd9c7ca0ef4626bba6977db0af4ef7"
+}

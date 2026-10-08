@@ -1,0 +1,171 @@
+{
+ "stage": "S0",
+ "mode": "live",
+ "model": "deepseek-v4-flash-0731",
+ "tag": {
+  "phase": "v2-pilot",
+  "stage": "S0",
+  "case": "K01",
+  "rep": 2,
+  "attempt": 1
+ },
+ "qwen_exit": 0,
+ "wall_ms": 56722,
+ "relay": {
+  "schema_version": "advisory-ai-runtime-relay.v1",
+  "status": "FORWARDED_STRUCTURED_OUTPUT",
+  "request_count": 1,
+  "usage": {
+   "prompt_tokens": 6413,
+   "total_tokens": 11956,
+   "completion_tokens": 5543,
+   "prompt_tokens_details": {
+    "cached_tokens": 1024
+   },
+   "completion_tokens_details": {
+    "reasoning_tokens": 3495
+   }
+  },
+  "latency_ms": 55519,
+  "model_returned": "deepseek-v4-flash-0731"
+ },
+ "relay_status": "FORWARDED_STRUCTURED_OUTPUT",
+ "usage": {
+  "prompt_tokens": 6413,
+  "total_tokens": 11956,
+  "completion_tokens": 5543,
+  "prompt_tokens_details": {
+   "cached_tokens": 1024
+  },
+  "completion_tokens_details": {
+   "reasoning_tokens": 3495
+  }
+ },
+ "latency_ms": 55519,
+ "status": "OK",
+ "note": null,
+ "output": {
+  "schema_version": "ai-advice-output.v1",
+  "summary": "The deterministic verdict is PASS. The business error-rate policy check passed (0/36034 errors <= 0.01) and all JMeter sampler summaries report error_count 0, but analysis coverage is INCOMPLETE (SOURCE_ACQUISITION_PARTIAL): the OpenSearch \"errors\" source query failed with SOURCE_HTTP_ERROR after 2 retries, so error evidence from that source was not acquired. Resources have NO_POLICY verdict, which is not a pass. Latency percentiles look comfortable (overall p50 17 ms, p95 98 ms, p99 176 ms) but maxima reach about 1092 ms, and per-transaction p99 values range up to 197 ms (home). Clock alignment is not verified by core, so temporal/ordering claims are unsupported until clocks are checked. Three resource series (checkoutservice, frontend, paymentservice) show complete 23-cell CPU/memory coverage over the run-intersection window with no gaps.",
+  "hypotheses": [
+   {
+    "rank": 1,
+    "observation": "Overall JMeter latency is p50 17 ms, p95 98 ms, p99 176 ms, max 1092 ms; checkout shows max 1092 ms with p99 142 ms, and home shows max 1009 ms with p99 197 ms.",
+    "possible_explanation": "Occasional long-tail requests (maxima roughly 5-10x the p99) may coincide with transient load or contention, but nothing in the evidence attributes these maxima to any specific cause.",
+    "recommended_check": "Time-bucket the latency samples and compare them with the CPU/memory series over the same run-intersection window to see whether the maxima co-occur with resource peaks, after verifying clock alignment first.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0",
+     "analysis-result.json#/evidence/3",
+     "analysis-result.json#/evidence/4"
+    ]
+   },
+   {
+    "rank": 2,
+    "observation": "frontend CPU cores averaged about 0.180 (max 0.199, p95 0.194), while checkoutservice CPU averaged about 0.047 (max 0.052) and paymentservice CPU averaged about 0.011 (max 0.013).",
+    "possible_explanation": "The frontend may handle a larger share of request processing than the other observed services during this run, but per-service workload attribution is not present in the evidence.",
+    "recommended_check": "Correlate frontend CPU with per-transaction throughput and inspect request routing/load distribution across services to test whether the higher frontend CPU is expected.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/10",
+     "analysis-result.json#/evidence/8",
+     "analysis-result.json#/evidence/12"
+    ]
+   },
+   {
+    "rank": 3,
+    "observation": "paymentservice memory averaged 33023347 bytes (min 31844352, max 33509376) with a positive slope of about 4658 bytes/second across the window; checkoutservice and frontend memory slopes are also positive (about 1883 and 2239 bytes/second).",
+    "possible_explanation": "This could indicate gradual memory growth (e.g., cache growth or a potential leak), but the slope is computed over a short window and does not by itself establish a leak.",
+    "recommended_check": "Run longer observation windows and repeated runs, then verify whether memory grows monotonically, plateaus, or is released, before concluding a leak.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/13",
+     "analysis-result.json#/evidence/9",
+     "analysis-result.json#/evidence/11"
+    ]
+   },
+   {
+    "rank": 4,
+    "observation": "The source summary is PARTIAL: the 'errors' profile query failed with SOURCE_HTTP_ERROR (2 retries) while all six metrics-direct queries succeeded, and analysis coverage is INCOMPLETE (SOURCE_ACQUISITION_PARTIAL).",
+    "possible_explanation": "A transient OpenSearch query failure during acquisition is plausible, leaving error-related coverage incomplete even though the JMeter JTL summaries report zero errors.",
+    "recommended_check": "Re-run acquisition of the 'errors' query and confirm OpenSearch endpoint health before treating error metrics as fully covered.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/16",
+     "analysis-result.json#/analysis_coverage"
+    ]
+   },
+   {
+    "rank": 5,
+    "observation": "The window policy summary reports resource_verdict NO_POLICY while the business error-rate policy check PASSes (0/36034 <= 0.01, rule overall-errors); overall verdict is PASS.",
+    "possible_explanation": "No resource policy was bound for this run, so the CPU/memory series were not scored; NO_POLICY does not certify resource health and is not equivalent to a PASS.",
+    "recommended_check": "Add explicit resource thresholds for CPU cores and memory bytes for the observed services, then re-run to obtain an actual resource verdict.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/15",
+     "analysis-result.json#/evidence/14"
+    ]
+   }
+  ],
+  "recommendations": [
+   {
+    "rank": 1,
+    "action": "Re-run or repair the failed OpenSearch 'errors' source query (SOURCE_HTTP_ERROR, status FAILED, 2 retries) so that error coverage is complete.",
+    "rationale": "Analysis coverage is INCOMPLETE (SOURCE_ACQUISITION_PARTIAL); the zero-error conclusion currently rests on the JMeter JTL summaries and the policy check, not on the errors source that failed.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/16",
+     "analysis-result.json#/analysis_coverage"
+    ]
+   },
+   {
+    "rank": 2,
+    "action": "Verify clock alignment across the JMeter run, snapshot, and metric sources before performing any temporal correlation or lead/lag analysis.",
+    "rationale": "The resource binding reports clock_alignment 'not_verified_by_core', so latency-to-resource or run-to-snapshot ordering cannot be supported until clocks are checked.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/7"
+    ]
+   },
+   {
+    "rank": 3,
+    "action": "Define explicit resource policy thresholds for checkoutservice, frontend, and paymentservice CPU cores and memory bytes.",
+    "rationale": "resource_verdict is NO_POLICY, which means the resource series were not scored; without a policy, resource health cannot be certified one way or the other.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/15",
+     "analysis-result.json#/evidence/8",
+     "analysis-result.json#/evidence/10",
+     "analysis-result.json#/evidence/12",
+     "analysis-result.json#/evidence/9",
+     "analysis-result.json#/evidence/11",
+     "analysis-result.json#/evidence/13"
+    ]
+   },
+   {
+    "rank": 4,
+    "action": "Investigate the latency tail by bucketing JMeter samples over time and matching them against the resource series, focusing on overall max 1092 ms and home p99 197 ms.",
+    "rationale": "Maxima are roughly 5-10x the p99 values; while no cause is evidenced, confirming whether maxima align with resource peaks clarifies whether the tail is load-related or an isolate outlier.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0",
+     "analysis-result.json#/evidence/4",
+     "analysis-result.json#/evidence/3"
+    ]
+   },
+   {
+    "rank": 5,
+    "action": "Extend monitoring of paymentservice (and other services) memory beyond the run-intersection window to see if the positive per-second slopes persist or plateau.",
+    "rationale": "Paymentservice memory shows a positive slope of about 4658 bytes/second with a 1.7 MB range between min and max, which is worth confirming as trend versus noise over a longer horizon.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/13",
+     "analysis-result.json#/evidence/9",
+     "analysis-result.json#/evidence/11"
+    ]
+   }
+  ],
+  "caveats": [
+   "Analysis coverage is INCOMPLETE (SOURCE_ACQUISITION_PARTIAL): the OpenSearch 'errors' query failed with SOURCE_HTTP_ERROR after 2 retries, so zero-error conclusions are based on JMeter JTL summaries and the policy check, not on the failed errors source.",
+   "resource_verdict NO_POLICY is not a pass; no resource thresholds were evaluated for the CPU/memory series.",
+   "clock_alignment is 'not_verified_by_core', so no lead/lag ordering or temporal causal hypothesis can be supported until clock alignment is verified.",
+   "The evaluation window is run-intersection and was auto-derived (DERIVED), with 1 dropped leading cell (10309 ms) and 1 dropped trailing cell (4660 ms); the metrics window differs slightly from run/snapshot bounds.",
+   "Latency summary values are aggregates; maxima such as 1092 ms may be outliers, and the absence of findings (findings: []) does not prove the absence of issues.",
+   "The policy check PASS applies only to the error-rate rule (overall-errors) over the run-intersection window; it does not cover resource behavior or untested dimensions."
+  ]
+ },
+ "schema": "ai-experiment-run.v2",
+ "phase": "pilot",
+ "case": "K01",
+ "rep": 2
+}

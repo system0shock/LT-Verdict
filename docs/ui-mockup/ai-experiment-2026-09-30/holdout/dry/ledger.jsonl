@@ -1,0 +1,28 @@
+{"event": "reserve", "call_id": "d0658f984605", "runner": "codex-headless", "data_class": "test_stand", "task": "o4-dry-run", "reviewer": "A", "model": "gpt-6-sol", "effort": "xhigh", "case": "K01", "ts": 1791286737.815208}
+{"event": "finish", "call_id": "d0658f984605", "status": "ok", "code": 0, "seconds": 87.4, "err_tail": ""}
+{"event": "reserve", "call_id": "40aa72e6c759", "runner": "codex-headless", "data_class": "test_stand", "task": "o4-dry-run", "reviewer": "A", "model": "gpt-6-sol", "effort": "xhigh", "case": "K03", "ts": 1791286825.2641926}
+{"event": "finish", "call_id": "40aa72e6c759", "status": "ok", "code": 0, "seconds": 168.1, "err_tail": ""}
+{"event": "reserve", "call_id": "e22fe9a865df", "runner": "codex-headless", "data_class": "test_stand", "task": "o4-dry-run", "reviewer": "A", "model": "gpt-6-sol", "effort": "xhigh", "case": "K06", "ts": 1791286993.3792915}
+{"event": "finish", "call_id": "e22fe9a865df", "status": "ok", "code": 0, "seconds": 52.5, "err_tail": ""}
+{"event": "reserve", "call_id": "bd5340788ecb", "runner": "codex-headless", "data_class": "test_stand", "task": "o4-dry-run", "reviewer": "A", "model": "gpt-6-sol", "effort": "xhigh", "case": "K07", "ts": 1791287045.8421714}
+{"event": "finish", "call_id": "bd5340788ecb", "status": "ok", "code": 0, "seconds": 40.4, "err_tail": ""}
+{"event": "reserve", "call_id": "25819f8a4e42", "runner": "codex-headless", "data_class": "test_stand", "task": "o4-dry-run", "reviewer": "A", "model": "gpt-6-sol", "effort": "xhigh", "case": "K08", "ts": 1791287086.208346}
+{"event": "finish", "call_id": "25819f8a4e42", "status": "ok", "code": 0, "seconds": 67.6, "err_tail": ""}
+{"event": "reserve", "call_id": "2d144273147e", "runner": "codex-headless", "data_class": "test_stand", "task": "o4-dry-run", "reviewer": "A", "model": "gpt-6-sol", "effort": "xhigh", "case": "K09", "ts": 1791287153.847845}
+{"event": "finish", "call_id": "2d144273147e", "status": "ok", "code": 0, "seconds": 33.4, "err_tail": ""}
+{"event": "reserve", "call_id": "06ae053697d5", "runner": "codex-headless", "data_class": "test_stand", "task": "o4-dry-run", "reviewer": "A", "model": "gpt-6-sol", "effort": "xhigh", "case": "K11", "ts": 1791287187.297961}
+{"event": "finish", "call_id": "06ae053697d5", "status": "ok", "code": 0, "seconds": 72.0, "err_tail": ""}
+{"event": "reserve", "call_id": "e19b4f631291", "runner": "codex-headless", "data_class": "test_stand", "task": "o4-dry-run", "reviewer": "B", "model": "gpt-5.6-terra", "effort": "high", "case": "K01", "ts": 1791287259.3160522}
+{"event": "finish", "call_id": "e19b4f631291", "status": "ok", "code": 0, "seconds": 151.8, "err_tail": ""}
+{"event": "reserve", "call_id": "f90c2be768ba", "runner": "codex-headless", "data_class": "test_stand", "task": "o4-dry-run", "reviewer": "B", "model": "gpt-5.6-terra", "effort": "high", "case": "K03", "ts": 1791287411.1708927}
+{"event": "finish", "call_id": "f90c2be768ba", "status": "ok", "code": 0, "seconds": 257.9, "err_tail": ""}
+{"event": "reserve", "call_id": "2f2f2e2d7683", "runner": "codex-headless", "data_class": "test_stand", "task": "o4-dry-run", "reviewer": "B", "model": "gpt-5.6-terra", "effort": "high", "case": "K06", "ts": 1791287669.0626268}
+{"event": "finish", "call_id": "2f2f2e2d7683", "status": "ok", "code": 0, "seconds": 116.3, "err_tail": ""}
+{"event": "reserve", "call_id": "ad0c04f004db", "runner": "codex-headless", "data_class": "test_stand", "task": "o4-dry-run", "reviewer": "B", "model": "gpt-5.6-terra", "effort": "high", "case": "K07", "ts": 1791287785.361381}
+{"event": "finish", "call_id": "ad0c04f004db", "status": "ok", "code": 0, "seconds": 137.9, "err_tail": ""}
+{"event": "reserve", "call_id": "0df55a243528", "runner": "codex-headless", "data_class": "test_stand", "task": "o4-dry-run", "reviewer": "B", "model": "gpt-5.6-terra", "effort": "high", "case": "K08", "ts": 1791287923.305405}
+{"event": "finish", "call_id": "0df55a243528", "status": "ok", "code": 0, "seconds": 101.6, "err_tail": ""}
+{"event": "reserve", "call_id": "49d3a194e1ae", "runner": "codex-headless", "data_class": "test_stand", "task": "o4-dry-run", "reviewer": "B", "model": "gpt-5.6-terra", "effort": "high", "case": "K09", "ts": 1791288024.9659874}
+{"event": "finish", "call_id": "49d3a194e1ae", "status": "ok", "code": 0, "seconds": 70.0, "err_tail": ""}
+{"event": "reserve", "call_id": "e54285653ba1", "runner": "codex-headless", "data_class": "test_stand", "task": "o4-dry-run", "reviewer": "B", "model": "gpt-5.6-terra", "effort": "high", "case": "K11", "ts": 1791288094.9550092}
+{"event": "finish", "call_id": "e54285653ba1", "status": "ok", "code": 0, "seconds": 159.2, "err_tail": ""}

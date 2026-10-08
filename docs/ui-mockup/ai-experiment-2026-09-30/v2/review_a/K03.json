@@ -1,0 +1,142 @@
+[
+  {
+    "id": "R013",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T1",
+        "field": "#/hypotheses/0/recommended_check",
+        "quote": "business policy or generator guard no longer passes",
+        "why": "A failed diagnostic generator guard makes a stage unusable for a product bound; it cannot establish an upper bound."
+      },
+      {
+        "type": "T7",
+        "field": "#/hypotheses/1/possible_explanation",
+        "quote": "No configured product/capacity policy exists ... zero-error observations are informational only",
+        "why": "The configured error-rate business policy exists and passes; the missing verdict concerns capacity or resource policy."
+      }
+    ],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 2,
+    "notes": "Most actions are concrete, but the guard advice and policy description could misdirect an operator."
+  },
+  {
+    "id": "R018",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T1",
+        "field": "#/hypotheses/0/recommended_check",
+        "quote": "with a usable knee-detection rule until an upper exclusive bound or knee is observed",
+        "why": "A product capacity bound is computed from verified stage outcomes independently of the unavailable knee detector."
+      },
+      {
+        "type": "T1",
+        "field": "#/recommendations/1/action",
+        "quote": "with a working knee detector to establish an upper exclusive capacity bound",
+        "why": "The knee detector is a fixed product limitation and is not needed to establish an upper bound."
+      },
+      {
+        "type": "T8",
+        "field": "#/hypotheses/2/observation",
+        "quote": "maxima increased across windows (0.059 ... 0.149 ... 0.13)",
+        "why": "The maximum falls from 0.149 in the second window to 0.13 in the third."
+      },
+      {
+        "type": "T8",
+        "field": "#/hypotheses/3/possible_explanation",
+        "quote": "A long-tail latency distribution exists even at 20 users",
+        "why": "The latency figures cover the whole run and cannot be attributed to the 20-user stage."
+      }
+    ],
+    "required_facts_preserved": false,
+    "missing_facts": [
+      "run_validity=VALID",
+      "analysis_coverage=COMPLETE"
+    ],
+    "usefulness": 2,
+    "notes": "It gives several useful checks, but invents a knee dependency and attributes whole-run latency to one stage."
+  },
+  {
+    "id": "R020",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T8",
+        "field": "#/summary",
+        "quote": "The load generator was not saturated in the observed windows",
+        "why": "Passing one diagnostic throttle check does not establish that the generator was unsaturated."
+      },
+      {
+        "type": "T8",
+        "field": "#/recommendations/1/rationale",
+        "quote": "further stages should not be limited by the load generator",
+        "why": "Generator behavior at loads above 20 users was not measured."
+      }
+    ],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 2,
+    "notes": "The verdict and capacity advice are sound, but generator health is asserted beyond what the diagnostic supports."
+  },
+  {
+    "id": "R046",
+    "hard_defect": false,
+    "defects": [],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 5,
+    "notes": "It preserves the verdict and key measurements and gives prioritized, verifiable actions."
+  },
+  {
+    "id": "R047",
+    "hard_defect": false,
+    "defects": [
+      {
+        "type": "T8",
+        "field": "#/caveats/1",
+        "quote": "no ... stage-ordering conclusions should be drawn until clocks are verified",
+        "why": "The listed stage windows establish their order, although cross-system timing claims still warrant caution."
+      }
+    ],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 4,
+    "notes": "The advice is accurate and actionable overall, with one overly broad clock caveat."
+  },
+  {
+    "id": "R051",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T1",
+        "field": "#/hypotheses/0/recommended_check",
+        "quote": "enable/implement the knee detector so the point where a policy starts failing can be located",
+        "why": "The knee detector is unavailable by design and policy failure can be found through higher verified stages without it."
+      },
+      {
+        "type": "T1",
+        "field": "#/recommendations/0/action",
+        "quote": "enable or implement the knee detector",
+        "why": "Implementing or enabling the knee detector is not a valid operator action for this product."
+      },
+      {
+        "type": "T8",
+        "field": "#/hypotheses/4/possible_explanation",
+        "quote": "App-side CPU appears far from saturation",
+        "why": "Absolute CPU-core measurements do not establish utilization or headroom without capacity limits."
+      },
+      {
+        "type": "T1",
+        "field": "#/hypotheses/4/recommended_check",
+        "quote": "generator throttle ... so future runs produce enforceable verdicts",
+        "why": "The generator throttle guard is diagnostic by contract and must not become enforcing."
+      }
+    ],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 2,
+    "notes": "It preserves the main results but recommends invalid knee and generator-policy changes."
+  }
+]

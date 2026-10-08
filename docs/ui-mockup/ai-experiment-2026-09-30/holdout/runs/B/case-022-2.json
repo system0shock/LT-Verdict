@@ -1,0 +1,212 @@
+{
+ "stage": "B",
+ "mode": "live",
+ "model": "deepseek-v4-flash-0731",
+ "tag": {
+  "phase": "holdout",
+  "attempt_id": "case-022-2-B-t1",
+  "arm": "B",
+  "stage": null,
+  "case": "case-022",
+  "rep": 2,
+  "try": 1
+ },
+ "retry_policy": "d2",
+ "qwen_exit": 0,
+ "wall_ms": 103084,
+ "relay": {
+  "schema_version": "advisory-ai-runtime-relay.v1",
+  "status": "FORWARDED_STRUCTURED_OUTPUT",
+  "received_request_count": 1,
+  "forwarded_request_count": 1,
+  "outcomes": [
+   "FORWARDED_STRUCTURED_OUTPUT"
+  ],
+  "retry_refused_reason": null,
+  "first_refused_reason": null,
+  "model_id": "deepseek-v4-flash-0731",
+  "retry_policy": "d2",
+  "requests": [
+   {
+    "ordinal": 1,
+    "forwarded": true,
+    "outcome": "FORWARDED_STRUCTURED_OUTPUT",
+    "provider_status": 200,
+    "latency_ms": 101773,
+    "usage": {
+     "prompt_tokens": 16063,
+     "total_tokens": 26628,
+     "completion_tokens": 10565,
+     "prompt_tokens_details": {
+      "cached_tokens": 1024
+     },
+     "completion_tokens_details": {
+      "reasoning_tokens": 8143
+     }
+    },
+    "model_returned": "deepseek-v4-flash-0731"
+   }
+  ],
+  "usage": {
+   "prompt_tokens": 16063,
+   "completion_tokens": 10565,
+   "total_tokens": 26628
+  },
+  "latency_ms": 101773
+ },
+ "relay_status": "FORWARDED_STRUCTURED_OUTPUT",
+ "usage": {
+  "prompt_tokens": 16063,
+  "completion_tokens": 10565,
+  "total_tokens": 26628
+ },
+ "latency_ms": 101773,
+ "retried": false,
+ "retry_refused_reason": null,
+ "status": "OK",
+ "note": null,
+ "output": {
+  "schema_version": "ai-advice-output.v1",
+  "summary": "Run is VALID with analysis coverage COMPLETE; the deterministic policy verdict is PASS. All evaluated SLA resource checks (compute-limit, database-limit) and both latency policy checks PASS for the reference and workload-01 windows (p95 50 ms vs 100 ms against a 200 ms threshold). A candidate anomaly episode reports workload-01 response_time_p95_ms at 100 ms vs reference median 50 ms over the last 5 minutes of the run, but every correlation pair carries uncertainty NOT_ESTIMATED and no headline selection succeeded; the only CANDIDATE pair (generator-threads vs p95, raw rho ~0.998) was not selected due to OBSERVATION_COUNT_UNSUPPORTED. Clock alignment is reported as not_verified_by_core. The advice below is diagnostic only and does not change the PASS verdict.",
+  "hypotheses": [
+   {
+    "rank": 1,
+    "observation": "In the workload-01 window the latency policy check reports response_time_p95_ms observed 100 (PASS vs threshold 200), while the reference window reports observed 50; the window metric summaries show p95 50 with 7,200 samples in reference and p95 100 with 28,800 samples in workload-01. A candidate anomaly episode covers the last 5 minutes of the workload-01 window with max_abs_delta 50 ms (observed p95 100 vs reference median 50, reference MAD 0).",
+    "possible_explanation": "The tail latency shifted from 50 ms to 100 ms between the reference and workload-01 windows. The increase is recorded as a CANDIDATE episode, not a statistically confirmed material regression.",
+    "recommended_check": "Inspect the per-cell response_time_p95_ms series and the raw per-sample latency distribution for both windows, focusing on the final 5 minutes, to confirm the step and identify when it begins.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/31",
+     "analysis-result.json#/evidence/33",
+     "analysis-result.json#/evidence/35",
+     "analysis-result.json#/evidence/36",
+     "analysis-result.json#/evidence/56",
+     "analysis-result.json#/findings/0"
+    ]
+   },
+   {
+    "rank": 2,
+    "observation": "generator active_threads in workload-01 has median 6, min 3, max 6, split_half_shift 3, mean 4.87 and positive slope, whereas the reference window is ~3 threads; target_rate and request_starts stay constant at 60 in both windows. Correlation pair association-09 (generator-threads vs response_time_p95_ms) is CANDIDATE with raw_rho ~0.998 and best_lag_ms -1000, uncertainty NOT_ESTIMATED.",
+    "possible_explanation": "The load generator increased its thread count (3 to 6) while target and achieved rates stayed constant at 60 requests/s; the thread ramp and the latency increase co-vary in the data, but the CANDIDATE correlation is not statistically selected and does not establish that threads caused the latency change.",
+    "recommended_check": "After verifying clock alignment, plot generator-threads and response_time_p95_ms per cell across the workload-01 window and review the thread-group/ramp configuration in the test plan.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/9",
+     "analysis-result.json#/evidence/21",
+     "analysis-result.json#/evidence/20",
+     "analysis-result.json#/evidence/26",
+     "analysis-result.json#/evidence/44"
+    ]
+   },
+   {
+    "rank": 3,
+    "observation": "In workload-01, system cpu_work is constant 0.15, db_work constant 0.015, worker_count constant 4, and queue depths constant 0; the correlation pairs for those system resources are INSUFFICIENT_DATA with uncertainty NOT_ESTIMATED (reasons include NO_RANK_VARIATION, NO_RESIDUAL_VARIATION, CONSTANT_CONTROL, LAG_NOT_EVALUABLE).",
+    "possible_explanation": "With constant measured inputs and outputs there is no rank or residual variation, so the association method cannot evaluate whether those resources relate to latency. Absence of an evaluable correlation does not demonstrate absence of a relationship.",
+    "recommended_check": "Rerun with a varying load profile (e.g., target-rate steps or ramps) so the paired series contain variation the correlation method can evaluate.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/24",
+     "analysis-result.json#/evidence/25",
+     "analysis-result.json#/evidence/23",
+     "analysis-result.json#/evidence/37",
+     "analysis-result.json#/evidence/38"
+    ]
+   },
+   {
+    "rank": 4,
+    "observation": "The headline selection for association-09 is UNAVAILABLE with reason OBSERVATION_COUNT_UNSUPPORTED (selected false); all other headline selections are UNAVAILABLE with PAIR_NOT_EVALUABLE, and the diagnostic summary reports pairs_evaluable 1, pairs_tested 8 and uncertainty NOT_ESTIMATED.",
+    "possible_explanation": "Even though association-09 reached CANDIDATE status with raw_rho ~0.998, the observation count is unsupported for the significance procedure, so no statistically selected association exists for this run.",
+    "recommended_check": "Collect more observation cells (longer window or finer interval) or add load variation, then re-run the significance selection; treat the CANDIDATE rho as unquantified until then.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/44",
+     "analysis-result.json#/evidence/52",
+     "analysis-result.json#/evidence/45",
+     "analysis-result.json#/evidence/58"
+    ]
+   },
+   {
+    "rank": 5,
+    "observation": "The response anomaly check returned CANDIDATE with reasons ZERO_MAD and reference_mad 0; the other four anomaly checks (admission-queue, cpu-queue, db-queue, runtime-gc-pause) returned NO_MATERIAL_CHANGE, also with ZERO_MAD.",
+    "possible_explanation": "Because the reference window has zero variability, any deviation triggers a candidate episode. The recorded 50→100 ms shift is factual, but its materiality is not statistically confirmed by the anomaly check.",
+    "recommended_check": "Compare the full latency distributions of the two windows and, if needed, re-run with a reference window that has nonzero variability before judging whether the change is material.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/53",
+     "analysis-result.json#/evidence/56",
+     "analysis-result.json#/evidence/57",
+     "analysis-result.json#/evidence/58",
+     "analysis-result.json#/findings/0"
+    ]
+   }
+  ],
+  "recommendations": [
+   {
+    "rank": 1,
+    "action": "Verify clock alignment between the load generator, service telemetry collectors, and the test driver before interpreting any temporal or lag relationship.",
+    "rationale": "resource-binding reports clock_alignment not_verified_by_core; best_lag_ms -1000 and the anomaly episode timing cannot support a lead/lag or causal hypothesis until clocks are verified.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/2",
+     "analysis-result.json#/evidence/44",
+     "analysis-result.json#/findings/0"
+    ]
+   },
+   {
+    "rank": 2,
+    "action": "Inspect the per-cell response_time_p95_ms series and raw latency samples in the reference and workload-01 windows, particularly the final 5 minutes of the run.",
+    "rationale": "Confirms whether the 50→100 ms step is a genuine step change or an artifact of the ZERO_MAD candidate rule before drawing conclusions about a regression.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/33",
+     "analysis-result.json#/evidence/35",
+     "analysis-result.json#/evidence/36",
+     "analysis-result.json#/evidence/56"
+    ]
+   },
+   {
+    "rank": 3,
+    "action": "Review the generator thread-group configuration and plot active_threads against response_time_p95_ms after clock verification.",
+    "rationale": "Association-09 is CANDIDATE only (raw rho ~0.998, uncertainty NOT_ESTIMATED); understanding the thread ramp (3 to 6 while achieving 60 requests/s) helps design a cleaner replication.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/21",
+     "analysis-result.json#/evidence/44",
+     "analysis-result.json#/evidence/9"
+    ]
+   },
+   {
+    "rank": 4,
+    "action": "Rerun with a non-constant load profile and enough observations so correlation and anomaly checks are evaluable and the significance procedure can run.",
+    "rationale": "The constant control (target-request-rate) and flat series made all other pairs INSUFFICIENT_DATA, and association-09's headline selection failed with OBSERVATION_COUNT_UNSUPPORTED.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/37",
+     "analysis-result.json#/evidence/44",
+     "analysis-result.json#/evidence/52"
+    ]
+   },
+   {
+    "rank": 5,
+    "action": "Keep the current policy configuration unchanged; all evaluated policy checks for both windows are PASS.",
+    "rationale": "The deterministic verdict is PASS with no FAIL or NO_POLICY to remediate, and the candidate anomaly should be investigated diagnostically rather than by changing thresholds without further evidence.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/27",
+     "analysis-result.json#/evidence/28",
+     "analysis-result.json#/evidence/31",
+     "analysis-result.json#/evidence/33",
+     "analysis-result.json#/evidence/34",
+     "analysis-result.json#/policy_verdict"
+    ]
+   }
+  ],
+  "caveats": [
+   "clock_alignment is not_verified_by_core, so no lead/lag ordering or temporal causal conclusion should be drawn from best_lag_ms or episode timing until clocks are verified.",
+   "All correlation uncertainty is NOT_ESTIMATED; association-09 is a CANDIDATE only and its headline selection is UNAVAILABLE (OBSERVATION_COUNT_UNSUPPORTED), so no statistical association was selected for this run.",
+   "The anomaly episode was flagged with reason ZERO_MAD; the 50→100 ms p95 change is recorded as a candidate, not a statistically confirmed material change.",
+   "Flat constant resource series and zero queue depths in both windows do not prove spare capacity or stability; they only make rank/residual correlation non-evaluable.",
+   "Counts come from different scopes and windows (36,000 overall, 7,200 reference, 28,800 workload-01); these are different quantities and should not be treated as inconsistent or combined beyond the evidence provided.",
+   "No generator guard (diagnostic resource rule) evidence appears in this input, so generator health beyond the reported queue depth, request rate, and thread series was not assessed.",
+   "The PASS verdict is deterministic and independent of this advice; no hypothesized cause changes the verdict."
+  ]
+ },
+ "schema": "ai-experiment-run.holdout.v1",
+ "case": "case-022",
+ "rep": 2,
+ "arm": "B",
+ "try": 1,
+ "attempt_id": "case-022-2-B-t1",
+ "model_id": "deepseek-v4-flash-0731",
+ "prompt_sha256": "3c0f28bee6517c13c5c854615e7d3d59301893d9723880818e4034a32e9133bf"
+}

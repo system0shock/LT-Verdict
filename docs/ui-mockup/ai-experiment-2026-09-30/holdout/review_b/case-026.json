@@ -1,0 +1,66 @@
+[
+  {
+    "id": "R048",
+    "hard_defect": false,
+    "defects": [],
+    "required_facts_preserved": false,
+    "missing_facts": [
+      "run validity VALID"
+    ],
+    "usefulness": 4,
+    "notes": "Careful, actionable analysis, but it omits the run-validity status."
+  },
+  {
+    "id": "R058",
+    "hard_defect": false,
+    "defects": [],
+    "required_facts_preserved": false,
+    "missing_facts": [
+      "run validity VALID",
+      "analysis coverage COMPLETE"
+    ],
+    "usefulness": 4,
+    "notes": "The response correctly preserves the FAIL and key window facts but omits the top-level validity and coverage statuses."
+  },
+  {
+    "id": "R072",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T5",
+        "field": "#/recommendations/2/action",
+        "quote": "Collect per-stage service-side latency and queue telemetry",
+        "why": "The evidence names aggregate resource entities but provides no per-stage or call-path structure."
+      },
+      {
+        "type": "T2",
+        "field": "#/caveats/6",
+        "quote": "overall sample_count 36000 equals reference 7200 + workload-01 28800",
+        "why": "It equates a whole-run count with policy-window counts even though those are different scopes and windows."
+      }
+    ],
+    "required_facts_preserved": false,
+    "missing_facts": [
+      "run validity VALID",
+      "analysis coverage COMPLETE"
+    ],
+    "usefulness": 2,
+    "notes": "Most advice is cautious, but the invented structure and invalid cross-scope count equality can mislead the operator."
+  },
+  {
+    "id": "R152",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T5",
+        "field": "#/hypotheses/3/recommended_check",
+        "quote": "Review the generator thread ramp",
+        "why": "The evidence reports active-thread aggregates but does not establish that a generator thread ramp exists."
+      }
+    ],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 4,
+    "notes": "It accurately preserves the verdict, validity, coverage, and key metrics, with one unsupported configuration structure."
+  }
+]

@@ -1,0 +1,124 @@
+[
+  {
+    "id": "R009",
+    "hard_defect": false,
+    "defects": [],
+    "required_facts_preserved": false,
+    "missing_facts": [
+      "analysis_coverage is COMPLETE"
+    ],
+    "usefulness": 4,
+    "notes": "The advice is evidence-grounded and operator-actionable but omits the analysis coverage status."
+  },
+  {
+    "id": "R028",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T7",
+        "field": "#/summary",
+        "quote": "NO_POLICY because no business or resource policy thresholds are configured",
+        "why": "NO_POLICY does not establish that no policy or threshold was configured; it establishes only that no applicable rule was evaluated."
+      },
+      {
+        "type": "T2",
+        "field": "#/summary",
+        "quote": "measured throughput of 20 rps, exactly matching the constant target",
+        "why": "This equates a whole-run throughput aggregate with per-window target values despite their different scopes and windows."
+      },
+      {
+        "type": "T7",
+        "field": "#/hypotheses/3/possible_explanation",
+        "quote": "with no policy thresholds",
+        "why": "The evidence does not prove that thresholds were unconfigured rather than inapplicable."
+      },
+      {
+        "type": "T7",
+        "field": "#/recommendations/0/rationale",
+        "quote": "a missing policy is not a pass",
+        "why": "It presents a missing policy as the established cause of NO_POLICY."
+      },
+      {
+        "type": "T7",
+        "field": "#/caveats/0",
+        "quote": "missing policy must not be treated as approval",
+        "why": "It states that policy configuration is missing, which NO_POLICY does not prove."
+      },
+      {
+        "type": "T2",
+        "field": "#/caveats/7",
+        "quote": "The measured throughput exactly matched the constant 20 rps target",
+        "why": "It treats whole-run measured throughput and window-scoped target series as exactly equal measurements."
+      }
+    ],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 2,
+    "notes": "It contains useful cautions, but its repeated unsupported explanation of NO_POLICY and scope-crossing throughput equality could mislead an operator."
+  },
+  {
+    "id": "R108",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T7",
+        "field": "#/summary",
+        "quote": "meaning no policy/threshold was configured",
+        "why": "NO_POLICY does not prove that no policy or threshold was configured."
+      },
+      {
+        "type": "T8",
+        "field": "#/hypotheses/1/possible_explanation",
+        "quote": "with throughput constant the association is not driven by load",
+        "why": "The evidence shows a constant target control, not that the observed association was not driven by load."
+      },
+      {
+        "type": "T7",
+        "field": "#/hypotheses/2/possible_explanation",
+        "quote": "No policy or threshold was configured",
+        "why": "This names an unproven configuration cause for NO_POLICY."
+      },
+      {
+        "type": "T7",
+        "field": "#/recommendations/1/action",
+        "quote": "Treat the NO_POLICY verdict as 'no policy configured'",
+        "why": "This directly misstates what NO_POLICY establishes."
+      },
+      {
+        "type": "T7",
+        "field": "#/recommendations/1/rationale",
+        "quote": "no threshold exists",
+        "why": "The evidence does not establish that no threshold exists, only that no applicable rule was evaluated."
+      },
+      {
+        "type": "T7",
+        "field": "#/caveats/2",
+        "quote": "the absence of a policy means no thresholds existed",
+        "why": "NO_POLICY does not prove that policy thresholds were absent from configuration."
+      }
+    ],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 2,
+    "notes": "The correlation and clock-alignment guidance is useful, but the repeated false interpretation of NO_POLICY is materially misleading."
+  },
+  {
+    "id": "R132",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T2",
+        "field": "#/summary",
+        "quote": "throughput is about 20 requests/s in both windows (7,200,000/360,202)",
+        "why": "The parenthesized numerator and denominator are whole-run throughput values and are presented as support for the per-window statement."
+      }
+    ],
+    "required_facts_preserved": false,
+    "missing_facts": [
+      "run_validity is VALID",
+      "analysis_coverage is COMPLETE"
+    ],
+    "usefulness": 4,
+    "notes": "Apart from the scope-crossing throughput presentation and omitted required status facts, the response is careful and actionable."
+  }
+]

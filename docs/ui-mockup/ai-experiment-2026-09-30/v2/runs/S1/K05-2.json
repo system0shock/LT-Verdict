@@ -1,0 +1,146 @@
+{
+ "stage": "S1",
+ "mode": "live",
+ "model": "deepseek-v4-flash-0731",
+ "tag": {
+  "phase": "v2-pilot",
+  "stage": "S1",
+  "case": "K05",
+  "rep": 2,
+  "attempt": 1
+ },
+ "qwen_exit": 0,
+ "wall_ms": 58613,
+ "relay": {
+  "schema_version": "advisory-ai-runtime-relay.v1",
+  "status": "FORWARDED_STRUCTURED_OUTPUT",
+  "request_count": 1,
+  "usage": {
+   "prompt_tokens": 2714,
+   "total_tokens": 8448,
+   "completion_tokens": 5734,
+   "prompt_tokens_details": {
+    "cached_tokens": 1024
+   },
+   "completion_tokens_details": {
+    "reasoning_tokens": 4111
+   }
+  },
+  "latency_ms": 57263,
+  "model_returned": "deepseek-v4-flash-0731"
+ },
+ "relay_status": "FORWARDED_STRUCTURED_OUTPUT",
+ "usage": {
+  "prompt_tokens": 2714,
+  "total_tokens": 8448,
+  "completion_tokens": 5734,
+  "prompt_tokens_details": {
+   "cached_tokens": 1024
+  },
+  "completion_tokens_details": {
+   "reasoning_tokens": 4111
+  }
+ },
+ "latency_ms": 57263,
+ "status": "OK",
+ "note": null,
+ "output": {
+  "schema_version": "ai-advice-output.v1",
+  "summary": "Deterministic verdict: FAIL. The `error-limit` policy check evaluates error_rate_ratio over the overall scope with operator `lte` and threshold 0.01; the run observed 2/100 (2%), which exceeds the threshold, so the check status is FAIL. Run validity is VALID, analysis coverage is COMPLETE, and the finding is a policy_failure for rule `error-limit`. The evidence contains only aggregate metric summaries and the policy result, with no per-error details (response codes, messages, or timestamps), so the cause of the 2 errors is undetermined. Advice is limited to operator actions: inspect the raw JMeter JTL/CSV error samples, verify the configured threshold matches the intended SLO, and rerun if needed. The verdict for this run is not changed by any advice.",
+  "hypotheses": [
+   {
+    "rank": 1,
+    "observation": "The policy check `error-limit` on error_rate_ratio over the overall scope shows observed 2/100 (2%), operator `lte`, threshold 0.01, and status FAIL; run validity is VALID, policy verdict is FAIL, and the finding is a policy_failure for this rule.",
+    "possible_explanation": "Two of the 100 samples in the overall run window are errors, so the observed ratio exceeds the configured 1% threshold; this policy evaluation is what produced the FAIL verdict, though it does not explain why the requests failed.",
+    "recommended_check": "Extract the individual error samples from the JMeter JTL/CSV for the run and confirm which requests failed and with what response code or message.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/2",
+     "analysis-result.json#/evidence/0",
+     "analysis-result.json#/policy_verdict",
+     "analysis-result.json#/run_validity",
+     "analysis-result.json#/findings/0"
+    ]
+   },
+   {
+    "rank": 2,
+    "observation": "The checkout transaction summary (sample_kind JMETER_SAMPLER) also reports error_count 2 with sample_count 100, matching the overall summary numbers.",
+    "possible_explanation": "The two failing samples might fall within the checkout transaction, but the overall scope and the per-transaction scope are separate measurements; the matching counts do not by themselves prove the errors belong to checkout.",
+    "recommended_check": "Open the per-sampler error records for the checkout transaction in the same run window and verify whether the error samples belong to it.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/1",
+     "analysis-result.json#/evidence/0"
+    ]
+   },
+   {
+    "rank": 3,
+    "observation": "The overall run window has only 100 samples with error_count 2, giving an error_rate_ratio of 2% against a 0.01 threshold.",
+    "possible_explanation": "With this small sample count, the policy result is decided by a very small number of failed requests, so transient failures could account for the ratio without representing steady-state behavior.",
+    "recommended_check": "Rerun the same scenario and policy to see whether the 2-per-100 error rate reproduces, and check whether the error timestamps cluster in a short interval.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0",
+     "analysis-result.json#/evidence/2"
+    ]
+   },
+   {
+    "rank": 4,
+    "observation": "The referenced evidence contains only aggregate metric summaries and the policy result; it contains no per-error details such as response codes, messages, or timestamps, and analysis coverage is COMPLETE.",
+    "possible_explanation": "The run flagged 2 errors, but with only aggregate counts the root cause (application failure, network issue, or load generator behavior) cannot be determined from this evidence.",
+    "recommended_check": "Export the raw JMeter JTL/CSV sampler records and, if available, server or generator logs to identify the error types before attempting any fix.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0",
+     "analysis-result.json#/analysis_coverage"
+    ]
+   }
+  ],
+  "recommendations": [
+   {
+    "rank": 1,
+    "action": "Inspect the raw JMeter JTL/CSV sampler records for the run and identify the specific failing samples and their response codes or messages before making any change.",
+    "rationale": "The policy FAIL (error_rate_ratio 2/100 > threshold 0.01) is confirmed, but the aggregate summaries in evidence do not reveal why the 2 requests failed.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0",
+     "analysis-result.json#/evidence/1",
+     "analysis-result.json#/evidence/2"
+    ]
+   },
+   {
+    "rank": 2,
+    "action": "Rerun the test with the same configuration and policy to check whether the 2-per-100 error rate reproduces.",
+    "rationale": "With only 100 samples, the 2% ratio is decided by two requests; a rerun indicates whether the failures are reproducible or transient, without changing the current FAIL verdict.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0",
+     "analysis-result.json#/evidence/2"
+    ]
+   },
+   {
+    "rank": 3,
+    "action": "Verify that the configured error-limit threshold (0.01 on error_rate_ratio over the overall scope) matches the intended SLO; if it does not, update the policy configuration for future runs.",
+    "rationale": "The evidence shows the check failed with observed 2/100; adjusting a threshold only affects future evaluations and does not turn this run's FAIL into a PASS.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/2",
+     "analysis-result.json#/policy_verdict"
+    ]
+   },
+   {
+    "rank": 4,
+    "action": "If inspection confirms that the two failing samples are within the checkout transaction, focus follow-up on checkout-specific logs or generator behavior; otherwise keep the failure unresolved rather than attributing it.",
+    "rationale": "The checkout scope reports 2 errors matching the overall count, but equality of counts across scopes does not prove the errors are in checkout, so this must be verified against per-sample records.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/1"
+    ]
+   }
+  ],
+  "caveats": [
+   "Only aggregate metric summaries and the policy check result were provided; no per-error response codes, messages, or timestamps are present, so the cause of the 2 errors is undetermined.",
+   "sample_count is 100; the FAIL verdict is deterministic for this run, but the result is sensitive at this scale — with one fewer error the ratio would equal the threshold and the same check would pass.",
+   "The overall scope and the checkout transaction scope are separate measurements; their equal sample and error counts do not demonstrate that the failing requests were the checkout requests.",
+   "The throughput_rps field is presented as numerator 100000 / denominator 99100 without a defined window or duration in the evidence, so it should not be used to infer load level or spare capacity.",
+   "No baseline or reference run and no additional transaction scopes were provided; this evidence cannot support conclusions about stability, low load, or absence of other problems.",
+   "No timestamp or clock-relationship evidence is present, so no temporal ordering, lead/lag, or temporal causal hypothesis is supported."
+  ]
+ },
+ "schema": "ai-experiment-run.v2",
+ "phase": "pilot",
+ "case": "K05",
+ "rep": 2
+}

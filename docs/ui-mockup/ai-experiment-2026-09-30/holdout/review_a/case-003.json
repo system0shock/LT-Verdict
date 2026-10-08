@@ -1,0 +1,60 @@
+[
+  {
+    "id": "R038",
+    "hard_defect": false,
+    "defects": [],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 5,
+    "notes": "Preserves the verdicts and key measurements, keeps causal explanations tentative, and gives specific checks an operator can perform."
+  },
+  {
+    "id": "R070",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T2",
+        "field": "#/caveats/3",
+        "quote": "overall sample counts (24000) equal the sums of the window samples, so samples in the final ~60 s are not reflected in the window summaries",
+        "why": "Equal aggregate counts across different time scopes do not establish that samples occurred in the final minute or where individual samples were counted."
+      }
+    ],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 3,
+    "notes": "The operator checks are useful, but the final-minute inference could misdirect investigation."
+  },
+  {
+    "id": "R077",
+    "hard_defect": false,
+    "defects": [],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 5,
+    "notes": "Preserves the deterministic results and recommends specific checks while leaving causes unproven."
+  },
+  {
+    "id": "R082",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T8",
+        "field": "#/hypotheses/4/observation",
+        "quote": "p50=p95=p99 are 60,031 ms in the overall summary and in both windows",
+        "why": "The reference window reports p50 of 36,063 ms."
+      },
+      {
+        "type": "T8",
+        "field": "#/recommendations/0/action",
+        "quote": "both windows FAIL the 200 ms p95 latency policy at the 60 s cap",
+        "why": "The policy failures are reported, but the evidence does not establish that a 60-second timeout cap caused the latency values."
+      }
+    ],
+    "required_facts_preserved": false,
+    "missing_facts": [
+      "run_validity = VALID"
+    ],
+    "usefulness": 2,
+    "notes": "Several checks are actionable, but a window latency is misstated and the timeout cap is presented as established."
+  }
+]

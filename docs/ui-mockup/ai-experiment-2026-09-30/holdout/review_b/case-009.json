@@ -1,0 +1,100 @@
+[
+  {
+    "id": "R018",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T7",
+        "field": "#/summary",
+        "quote": "policy_verdict is NO_VERDICT because capacity_knee is null",
+        "why": "The unavailable knee detector is a fixed limitation and does not establish the cause of the NO_VERDICT."
+      },
+      {
+        "type": "T1",
+        "field": "#/hypotheses/5/recommended_check",
+        "quote": "Enable knee detection",
+        "why": "A capacity bound is computed independently of a knee detector, which is not an operator-enabled prerequisite."
+      },
+      {
+        "type": "T1",
+        "field": "#/recommendations/5/action",
+        "quote": "re-run with knee detection enabled",
+        "why": "Advising an operator to enable knee detection contradicts the fixed-product-limitation contract."
+      },
+      {
+        "type": "T8",
+        "field": "#/hypotheses/6/possible_explanation",
+        "quote": "only ~1200 samples per stage",
+        "why": "The evidence provides only whole-run sample counts and does not report a per-stage sample count."
+      },
+      {
+        "type": "T8",
+        "field": "#/recommendations/6/rationale",
+        "quote": "latency percentiles rest on a low per-user request rate",
+        "why": "The claimed per-stage/per-user sampling basis is not reported by the evidence."
+      }
+    ],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 2,
+    "notes": "It preserves the core measurements and offers useful checks, but the knee-detector advice materially misstates the capacity contract."
+  },
+  {
+    "id": "R052",
+    "hard_defect": false,
+    "defects": [],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 5,
+    "notes": "Accurately preserves the verdicts, bound, coverage, and limitations while giving verifiable operator actions."
+  },
+  {
+    "id": "R064",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T2",
+        "field": "#/hypotheses/1/possible_explanation",
+        "quote": "its p95/p99/max are dominated by the failing stage-3 window",
+        "why": "Whole-run aggregate latency values cannot be attributed to a particular shorter policy window."
+      },
+      {
+        "type": "T7",
+        "field": "#/hypotheses/4/possible_explanation",
+        "quote": "stops short of a capacity estimate",
+        "why": "The evidence already reports a BOUNDED capacity estimate of [197, 297) users."
+      },
+      {
+        "type": "T1",
+        "field": "#/hypotheses/4/recommended_check",
+        "quote": "enable/implement the knee detector to convert the bounds into a capacity estimate",
+        "why": "The bound does not require a knee detector, and the detector is a fixed product limitation rather than an operator action."
+      },
+      {
+        "type": "T7",
+        "field": "#/recommendations/4/action",
+        "quote": "Add an explicit resource policy ... to obtain a definitive verdict",
+        "why": "The evidence does not establish that adding this one policy resolves the cause of the capacity NO_VERDICT."
+      },
+      {
+        "type": "T2",
+        "field": "#/caveats/6",
+        "quote": "its p95 417 ms largely reflects stage-3",
+        "why": "The whole-run p95 cannot be assigned to stage-3 without per-window latency aggregates."
+      }
+    ],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 2,
+    "notes": "Most diagnostic actions are sound, but it incorrectly negates the reported bound and recommends a nonexistent knee-detector remedy."
+  },
+  {
+    "id": "R066",
+    "hard_defect": false,
+    "defects": [],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 5,
+    "notes": "The response correctly preserves the deterministic results and keeps causal explanations appropriately conditional and actionable."
+  }
+]

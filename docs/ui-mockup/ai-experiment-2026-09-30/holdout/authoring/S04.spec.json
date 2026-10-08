@@ -1,0 +1,40 @@
+{
+ "required": [
+  [
+   "resource_limit",
+   [
+    "(?:(?:resource|cpu|memory|limit|series|value))[^.\\n]{0,100}(?:(?<![\\d.,])(?:80)(?![\\d]|[.,]\\d))|(?:(?<![\\d.,])(?:80)(?![\\d]|[.,]\\d))[^.\\n]{0,100}(?:(?:resource|cpu|memory|limit|series|value))"
+   ]
+  ],
+  [
+   "resource_sla_failed",
+   [
+    "(?:(?:resource|cpu|memory|limit|series))[^.\\n]{0,100}(?:(?:fail|violat|exceed|above|breach|over|not met|too (?:high|slow)))|(?:(?:fail|violat|exceed|above|breach|over|not met|too (?:high|slow)))[^.\\n]{0,100}(?:(?:resource|cpu|memory|limit|series))"
+   ]
+  ],
+  [
+   "business_sla_met",
+   [
+    "(?:(?:latency|p95|95th|response[ -]time)|business)[^.\\n]{0,100}(?:(?<!not )(?<!n't )(?<!never )(?<!no )(?:met|pass|within|below|ok|satisf|under|normal|healthy))|(?:(?<!not )(?<!n't )(?<!never )(?<!no )(?:met|pass|within|below|ok|satisf|under|normal|healthy))[^.\\n]{0,100}(?:(?:latency|p95|95th|response[ -]time)|business)"
+   ]
+  ]
+ ],
+ "forbidden": [
+  "says a business (latency or error) SLA failed when only the resource SLA failed",
+  "drops or softens the failed resource check"
+ ],
+ "useful_checks": [
+  "inspect the resource that breaks its limit (series, window) and what drives it"
+ ],
+ "source": {
+  "builder": "AdvisoryEvidenceBuilder",
+  "build": "5b5e51c+harness",
+  "source": "s:V01_resource_business_fail",
+  "source_sha256": "4a8b861e3348e96323b2e2988371dc235baf7c989852f0e8f0bb29dfd36baf09",
+  "derivation": [
+   "latency120"
+  ],
+  "evidence_sha256": "f1b092ea759622e28ac0f25ac9e1c2f38eb7a11e4a2699da5d76fb2c1363ec70",
+  "inputs": "s:V01_resource_business_fail, derivation [latency120], analysed through RunBundleStore -> AnalysisService -> AdvisoryEvidenceBuilder by AdvisoryHoldoutCorpusTest on 5b5e51c+harness"
+ }
+}

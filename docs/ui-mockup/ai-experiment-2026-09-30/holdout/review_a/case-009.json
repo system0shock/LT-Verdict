@@ -1,0 +1,119 @@
+[
+  {
+    "id": "R064",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T2",
+        "field": "#/hypotheses/1/possible_explanation",
+        "quote": "its p95/p99/max are dominated by the failing stage-3 window",
+        "why": "The whole-run aggregates cannot be attributed to a particular window from these summaries."
+      },
+      {
+        "type": "T8",
+        "field": "#/hypotheses/1/possible_explanation",
+        "quote": "the observed degradation is a latency/queueing effect",
+        "why": "Zero errors and a latency failure do not establish queueing as the cause."
+      },
+      {
+        "type": "T7",
+        "field": "#/hypotheses/4/possible_explanation",
+        "quote": "The analysis deliberately stops short of a capacity estimate",
+        "why": "The analysis reports a BOUNDED capacity estimate from 197 inclusive to 297 exclusive users."
+      },
+      {
+        "type": "T7",
+        "field": "#/hypotheses/4/possible_explanation",
+        "quote": "without a resource policy or knee detector the verdict stays NO_VERDICT",
+        "why": "Neither the resource policy nor the unimplemented knee detector is established as the cause of NO_VERDICT."
+      },
+      {
+        "type": "T1",
+        "field": "#/hypotheses/4/recommended_check",
+        "quote": "enable/implement the knee detector to convert the bounds into a capacity estimate",
+        "why": "The bound is already computed independently of the knee detector, which is a fixed product limitation."
+      },
+      {
+        "type": "T7",
+        "field": "#/recommendations/4/action",
+        "quote": "Add an explicit resource policy for the service under test and define the latency SLO at finer granularity; re-run to obtain a definitive verdict",
+        "why": "Those changes alone are not shown to change the capacity verdict, and the existing latency rule already produced verified stage outcomes."
+      }
+    ],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 2,
+    "notes": "The response preserves the reported results and offers useful checks, but its knee-detector and verdict advice could mislead an operator."
+  },
+  {
+    "id": "R068",
+    "hard_defect": false,
+    "defects": [],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 5,
+    "notes": "The response keeps hypotheses qualified and gives specific checks for the load boundary, telemetry, clocks, and workload mix."
+  },
+  {
+    "id": "R109",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T7",
+        "field": "#/summary",
+        "quote": "policy_verdict is NO_VERDICT because capacity_knee is null",
+        "why": "The missing knee is a fixed product limitation and is not established as the cause of NO_VERDICT."
+      },
+      {
+        "type": "T1",
+        "field": "#/hypotheses/5/recommended_check",
+        "quote": "Enable knee detection or add intermediate load steps so a capacity knee can be computed and a policy verdict issued",
+        "why": "An operator cannot enable the unimplemented knee detector, and the bound and policy verdict do not depend on a knee."
+      },
+      {
+        "type": "T2",
+        "field": "#/hypotheses/6/possible_explanation",
+        "quote": "only ~1200 samples per stage",
+        "why": "The whole-run sample count does not establish a sample count for each stage."
+      },
+      {
+        "type": "T2",
+        "field": "#/hypotheses/6/possible_explanation",
+        "quote": "With a low per-user request rate",
+        "why": "Whole-run throughput and a stage's active-user count do not establish a per-user request rate."
+      },
+      {
+        "type": "T8",
+        "field": "#/recommendations/1/rationale",
+        "quote": "the cause of the latency increase must be tested outside the generator",
+        "why": "A passing CPU guard does not exclude other generator-side causes."
+      },
+      {
+        "type": "T1",
+        "field": "#/recommendations/5/action",
+        "quote": "re-run with knee detection enabled or more granular steps so a capacity point and policy verdict can be issued",
+        "why": "Knee detection is not an operator-enabled step and is not required to compute or refine the capacity bound."
+      }
+    ],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 2,
+    "notes": "Several useful checks are undermined by false knee-detector advice and unsupported stage-level sampling claims."
+  },
+  {
+    "id": "R137",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T3",
+        "field": "#/hypotheses/2/recommended_check",
+        "quote": "to see where the 1500 ms outliers occurred",
+        "why": "The aggregate reports a 1500 ms maximum but does not show that multiple samples reached it."
+      }
+    ],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 4,
+    "notes": "The response is otherwise specific and well qualified, but it presumes multiple 1500 ms outliers."
+  }
+]

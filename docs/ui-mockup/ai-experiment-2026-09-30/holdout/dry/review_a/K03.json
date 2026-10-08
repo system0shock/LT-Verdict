@@ -1,0 +1,94 @@
+[
+  {
+    "id": "R004",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T7",
+        "field": "#/summary",
+        "quote": "This is a missing-policy outcome",
+        "why": "NO_POLICY does not establish that a policy was absent from the configuration."
+      },
+      {
+        "type": "T7",
+        "field": "#/hypotheses/0/possible_explanation",
+        "quote": "A resource or capacity policy is not configured for these windows",
+        "why": "The verdict establishes a lack of an applicable rule or another capacity prerequisite, not what was configured."
+      },
+      {
+        "type": "T7",
+        "field": "#/recommendations/0/action",
+        "quote": "Configure a resource/capacity policy (or required capacity) so the verdict can become PASS or FAIL",
+        "why": "Either step alone may leave capacity at NO_POLICY if the other required condition is still absent."
+      },
+      {
+        "type": "T7",
+        "field": "#/caveats/1",
+        "quote": "remains NO_POLICY because no resource/capacity policy is configured",
+        "why": "The evidence does not establish that missing configuration is the cause of the capacity verdict."
+      }
+    ],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 2,
+    "notes": "The load-extension and clock checks are useful, but the advice repeatedly asserts an unproven cause of NO_POLICY."
+  },
+  {
+    "id": "R005",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T2",
+        "field": "#/summary",
+        "quote": "each PASS their window verdict: error_count 0 and error_rate_ratio 0/132623 overall",
+        "why": "The 132,623 denominator covers the whole run, while the window policy checks use separate denominators."
+      },
+      {
+        "type": "T7",
+        "field": "#/summary",
+        "quote": "no capacity policy was defined",
+        "why": "Capacity NO_POLICY does not prove what policy was configured or which prerequisite is missing."
+      },
+      {
+        "type": "T1",
+        "field": "#/hypotheses/0/recommended_check",
+        "quote": "enable/implement the knee detector",
+        "why": "The absent knee detector is a fixed product limitation and is not an operator action needed to extend the verified bound."
+      },
+      {
+        "type": "T7",
+        "field": "#/hypotheses/4/possible_explanation",
+        "quote": "because no resource or capacity policy was defined",
+        "why": "The reported NO_POLICY verdicts do not establish that no such policy was configured."
+      },
+      {
+        "type": "T1",
+        "field": "#/hypotheses/4/recommended_check",
+        "quote": "Define explicit resource and capacity policies (CPU, memory, generator throttle, latency percentiles) so future runs produce enforceable verdicts",
+        "why": "The generator guard is diagnostic by contract and cannot be made an enforcing resource SLA."
+      },
+      {
+        "type": "T1",
+        "field": "#/recommendations/0/action",
+        "quote": "enable or implement the knee detector",
+        "why": "Implementing or enabling the fixed, unimplemented knee detector is not an operator action."
+      },
+      {
+        "type": "T1",
+        "field": "#/recommendations/4/action",
+        "quote": "Define explicit resource and capacity policies (e.g., CPU, memory, generator throttle, latency percentiles with thresholds)",
+        "why": "Including generator throttle among enforceable resource policies conflicts with the diagnostic-only generator guard contract."
+      },
+      {
+        "type": "T2",
+        "field": "#/caveats/0",
+        "quote": "stage PASS verdicts reflect only the business error-rate rule (error_rate_ratio <= 0.01, observed 0/132623 overall)",
+        "why": "The cited whole-run observation is not the observation used for any stage's window policy check."
+      }
+    ],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 2,
+    "notes": "Useful load and telemetry checks are mixed with invalid knee-detector advice, an enforcing generator-policy recommendation, and whole-run counts used to explain window verdicts."
+  }
+]

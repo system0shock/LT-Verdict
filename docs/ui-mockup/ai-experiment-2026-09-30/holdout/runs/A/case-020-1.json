@@ -1,0 +1,212 @@
+{
+ "stage": "A",
+ "mode": "live",
+ "model": "deepseek-v4-flash-0731",
+ "tag": {
+  "phase": "holdout",
+  "attempt_id": "case-020-1-A-t1",
+  "arm": "A",
+  "stage": null,
+  "case": "case-020",
+  "rep": 1,
+  "try": 1
+ },
+ "retry_policy": "d2",
+ "qwen_exit": 0,
+ "wall_ms": 70420,
+ "relay": {
+  "schema_version": "advisory-ai-runtime-relay.v1",
+  "status": "FORWARDED_STRUCTURED_OUTPUT",
+  "received_request_count": 1,
+  "forwarded_request_count": 1,
+  "outcomes": [
+   "FORWARDED_STRUCTURED_OUTPUT"
+  ],
+  "retry_refused_reason": null,
+  "first_refused_reason": null,
+  "model_id": "deepseek-v4-flash-0731",
+  "retry_policy": "d2",
+  "requests": [
+   {
+    "ordinal": 1,
+    "forwarded": true,
+    "outcome": "FORWARDED_STRUCTURED_OUTPUT",
+    "provider_status": 200,
+    "latency_ms": 69088,
+    "usage": {
+     "prompt_tokens": 16284,
+     "total_tokens": 23047,
+     "completion_tokens": 6763,
+     "prompt_tokens_details": {
+      "cached_tokens": 1024
+     },
+     "completion_tokens_details": {
+      "reasoning_tokens": 4284
+     }
+    },
+    "model_returned": "deepseek-v4-flash-0731"
+   }
+  ],
+  "usage": {
+   "prompt_tokens": 16284,
+   "completion_tokens": 6763,
+   "total_tokens": 23047
+  },
+  "latency_ms": 69088
+ },
+ "relay_status": "FORWARDED_STRUCTURED_OUTPUT",
+ "usage": {
+  "prompt_tokens": 16284,
+  "completion_tokens": 6763,
+  "total_tokens": 23047
+ },
+ "latency_ms": 69088,
+ "retried": false,
+ "retry_refused_reason": null,
+ "status": "OK",
+ "note": null,
+ "output": {
+  "schema_version": "ai-advice-output.v1",
+  "summary": "Deterministic policy verdict: NO_VERDICT. In the reference window (1704067200000–1704067320000) the window summary is PASS (business_verdict PASS, resource_verdict PASS). In the workload-01 window (1704067320000–1704067500000) the business latency check PASSES (response_time_p95_ms observed 68 vs threshold 200) and compute-limit PASSES, but the database-limit resource check is NO_VERDICT with reason MISSING_RESOURCE_CELLS because system-db-work has 10 missing cells out of 180 (longest_gap_cells 10, reason RESOURCE_GAPS). That makes workload-01 resource_verdict and overall window verdict NO_VERDICT, and the run has policy_verdict NO_VERDICT with analysis coverage INCOMPLETE (RESOURCE_GAPS, MISSING_RESOURCE_CELLS). All resource series in both windows are essentially constant; target and achieved request rate are constant 80 requests/s; p95 latency is constant 68 ms with error_count 0. All 9 correlation pairs are INSUFFICIENT_DATA with uncertainty NOT_ESTIMATED, all 5 anomaly checks are NO_MATERIAL_CHANGE with ZERO_MAD, and no findings or episodes are reported. Clock alignment is not_verified_by_core, so temporal/causal ordering is unsupported. The NO_VERDICT is a data-completeness limitation, not a measured pass or fail.",
+  "hypotheses": [
+   {
+    "rank": 1,
+    "observation": "workload-01 window summary shows business_verdict PASS but resource_verdict and verdict NO_VERDICT; the database-limit policy check for system-db-work is NO_VERDICT with reason MISSING_RESOURCE_CELLS, while the observed db_work statistic is max 0.8 against threshold 0.9.",
+    "possible_explanation": "The workload-01 NO_VERDICT is driven by a data-completeness limitation (missing cells in system-db-work), not by a measured SLO violation; the observed value was below threshold where present, but the check could not be completed over the full window.",
+    "recommended_check": "Re-run with a complete system-db-work series, or backfill/verify the 10 missing cells and re-evaluate the database-limit check and the workload-01 window verdict.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/32",
+     "analysis-result.json#/evidence/36",
+     "analysis-result.json#/evidence/27",
+     "analysis-result.json#/evidence/35"
+    ]
+   },
+   {
+    "rank": 2,
+    "observation": "system-db-work in workload-01 reports missing_cells 10, longest_gap_cells 10, reasons RESOURCE_GAPS, while db-queue is flat at 0, latency stays at 68 ms, and error_count is 0.",
+    "possible_explanation": "The gap may reflect telemetry/collection loss or a sampling issue on the db_work metric rather than a genuine load or database event, since neighboring series in the same window show no variation; constant 0.8 values elsewhere in the same series suggest steady state is plausible but unverified across the gap.",
+    "recommended_check": "Inspect the metric source/collector logs and timestamps around the 10-cell gap to determine whether MISSING_RESOURCE_CELLS was caused by data loss rather than an actual system event.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/27",
+     "analysis-result.json#/evidence/19",
+     "analysis-result.json#/evidence/38",
+     "analysis-result.json#/evidence/35",
+     "analysis-result.json#/evidence/32"
+    ]
+   },
+   {
+    "rank": 3,
+    "observation": "All 9 correlation pairs in workload-01 are INSUFFICIENT_DATA with uncertainty NOT_ESTIMATED, with reasons including NO_RANK_VARIATION, NO_RESIDUAL_VARIATION, CONSTANT_CONTROL; the requested control target-request-rate was dropped.",
+    "possible_explanation": "With constant load (target_rate and request_starts both constant 80 requests/s) and constant resource values, there is no variation from which to estimate a load-resource relationship; this cannot prove the absence of load sensitivity or stability.",
+    "recommended_check": "Run load steps or varied target rates to produce non-constant resource and load series, then re-run the correlation pairs and sensitivity estimation.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/39",
+     "analysis-result.json#/evidence/28",
+     "analysis-result.json#/evidence/22",
+     "analysis-result.json#/evidence/62"
+    ]
+   },
+   {
+    "rank": 4,
+    "observation": "The diagnostic summary reports anomalies_tested 5 and episodes_reported 0; each anomaly check is NO_MATERIAL_CHANGE with reason ZERO_MAD, and the response anomaly check has reference_median 68 and reference_mad 0.",
+    "possible_explanation": "The reference baseline had zero spread, so the anomaly method could not detect material change; a flat series does not by itself establish stability or spare capacity.",
+    "recommended_check": "Verify the reference baseline's spread and consider anomaly evaluation robust to zero-MAD baselines or absolute thresholds before relying on NO_MATERIAL_CHANGE.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/62",
+     "analysis-result.json#/evidence/60",
+     "analysis-result.json#/evidence/57"
+    ]
+   },
+   {
+    "rank": 5,
+    "observation": "The resource binding reports clock_alignment not_verified_by_core, and no lag profile was evaluable for the correlation pairs.",
+    "possible_explanation": "Without verified clock alignment, any temporal ordering between resource and latency series (e.g., resource rising before latency) could be a clock artifact; lead/lag causal attribution is unsupported by this evidence.",
+    "recommended_check": "Verify clock synchronization among generator, service, and telemetry sources before interpreting timing or ordering relationships.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/2",
+     "analysis-result.json#/evidence/39"
+    ]
+   },
+   {
+    "rank": 6,
+    "observation": "In workload-01 the latency policy check PASSES with observed response_time_p95_ms 68 against threshold 200, and the window metric summary shows error_count 0 across 14400 samples with p50/p95/p99 all 68 ms.",
+    "possible_explanation": "At the tested constant 80 requests/s load the service met the latency and error business checks; this is a bounded observation of acceptable performance under this scenario and is not evidence of headroom at higher load.",
+    "recommended_check": "Test higher or variable load rates to characterize capacity headroom rather than inferring it from the flat 68 ms latency.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/35",
+     "analysis-result.json#/evidence/38",
+     "analysis-result.json#/evidence/0"
+    ]
+   }
+  ],
+  "recommendations": [
+   {
+    "rank": 1,
+    "action": "Resolve the system-db-work data gap (10 missing cells, RESOURCE_GAPS) and re-evaluate the database-limit check and window verdict once the series is complete.",
+    "rationale": "The missing cells caused the database-limit check to be NO_VERDICT, which propagated to workload-01 resource_verdict and overall NO_VERDICT with analysis coverage INCOMPLETE; the verdict is not based on a measured violation.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/27",
+     "analysis-result.json#/evidence/32",
+     "analysis-result.json#/evidence/36"
+    ]
+   },
+   {
+    "rank": 2,
+    "action": "Verify clock alignment between generator, service, and telemetry sources before using this run for any lead/lag or temporal causal interpretation.",
+    "rationale": "clock_alignment is not_verified_by_core, so ordering relationships between resource series and latency are not supported by the evidence.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/2"
+    ]
+   },
+   {
+    "rank": 3,
+    "action": "Redesign the load test to introduce variation (ramps or steps in target rate beyond the constant 80 requests/s) so correlation and sensitivity can be estimated.",
+    "rationale": "All 9 correlation pairs were INSUFFICIENT_DATA with NOT_ESTIMATED uncertainty because target and achieved rates and resource series were constant (NO_RANK_VARIATION, CONSTANT_CONTROL).",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/39",
+     "analysis-result.json#/evidence/28",
+     "analysis-result.json#/evidence/22"
+    ]
+   },
+   {
+    "rank": 4,
+    "action": "Instrument or verify the db_work metric collection source so that RESOURCE_GAPS and MISSING_RESOURCE_CELLS do not recur.",
+    "rationale": "The 10-cell gap in system-db-work made the database-limit resource check NO_VERDICT and the correlation pair association-02 was only paired on 170 cells with MISSING_CELLS.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/27",
+     "analysis-result.json#/evidence/32",
+     "analysis-result.json#/evidence/40"
+    ]
+   },
+   {
+    "rank": 5,
+    "action": "Report the overall policy_verdict as NO_VERDICT and keep NO_VERDICT distinct from PASS and FAIL in any downstream decisioning.",
+    "rationale": "The reference window was PASS, but workload-01 is NO_VERDICT because of missing resource cells; missing policy evaluation is not a pass, and the unexplained INCOMPLETE coverage should not be treated as approval.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/36",
+     "analysis-result.json#/evidence/34",
+     "analysis-result.json#/evidence/62"
+    ]
+   }
+  ],
+  "caveats": [
+   "Overall policy_verdict is NO_VERDICT and analysis coverage is INCOMPLETE (reasons RESOURCE_GAPS, MISSING_RESOURCE_CELLS); this is not a PASS or FAIL.",
+   "The reference window verdict is PASS while the workload-01 window verdict is NO_VERDICT; these must not be conflated.",
+   "No correlation was computable: all 9 correlation pairs are INSUFFICIENT_DATA with uncertainty NOT_ESTIMATED; NOT_ESTIMATED is not evidence of zero correlation.",
+   "5 anomaly checks reported NO_MATERIAL_CHANGE with ZERO_MAD and 0 episodes; zero spread in the baseline means this does not prove stability or absence of problems.",
+   "Zero errors and constant p95 latency of 68 ms reflect only the tested constant 80 requests/s scenario, not spare capacity or headroom.",
+   "clock_alignment is not_verified_by_core, so no lead/lag ordering or temporal causal claim is supported.",
+   "system-db-work in workload-01 has 10 missing cells of 180 (longest_gap_cells 10); association-02 was paired on only 170 cells.",
+   "The latency policy check is scoped to overall p95 latency threshold 200 ms; other percentile or per-transaction thresholds were not evaluated.",
+   "No workload load step or rate change was present (target_rate and request_starts constant 80 requests/s), so load-response behavior was not exercised."
+  ]
+ },
+ "schema": "ai-experiment-run.holdout.v1",
+ "case": "case-020",
+ "rep": 1,
+ "arm": "A",
+ "try": 1,
+ "attempt_id": "case-020-1-A-t1",
+ "model_id": "deepseek-v4-flash-0731",
+ "prompt_sha256": "69f215a1ad4ae678c82410ba7cf7daf171cd9c7ca0ef4626bba6977db0af4ef7"
+}

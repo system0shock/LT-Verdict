@@ -1,0 +1,139 @@
+{
+ "stage": "S0",
+ "mode": "live",
+ "model": "deepseek-v4-flash-0731",
+ "tag": {
+  "phase": "v2-pilot",
+  "stage": "S0",
+  "case": "K11",
+  "rep": 1,
+  "attempt": 1
+ },
+ "qwen_exit": 0,
+ "wall_ms": 47169,
+ "relay": {
+  "schema_version": "advisory-ai-runtime-relay.v1",
+  "status": "FORWARDED_STRUCTURED_OUTPUT",
+  "request_count": 1,
+  "usage": {
+   "prompt_tokens": 1961,
+   "total_tokens": 6653,
+   "completion_tokens": 4692,
+   "prompt_tokens_details": {
+    "cached_tokens": 1024
+   },
+   "completion_tokens_details": {
+    "reasoning_tokens": 3163
+   }
+  },
+  "latency_ms": 45959,
+  "model_returned": "deepseek-v4-flash-0731"
+ },
+ "relay_status": "FORWARDED_STRUCTURED_OUTPUT",
+ "usage": {
+  "prompt_tokens": 1961,
+  "total_tokens": 6653,
+  "completion_tokens": 4692,
+  "prompt_tokens_details": {
+   "cached_tokens": 1024
+  },
+  "completion_tokens_details": {
+   "reasoning_tokens": 3163
+  }
+ },
+ "latency_ms": 45959,
+ "status": "OK",
+ "note": null,
+ "output": {
+  "schema_version": "ai-advice-output.v1",
+  "summary": "The run is VALID but the policy verdict is NO_POLICY: no acceptance thresholds were applied, so this is not a pass. Analysis coverage is INCOMPLETE (reason RESOURCE_GAPS), so the empty findings list cannot be read as proof that no problems exist. The single overall summary reports 2,623 samples, error_count 0 (0/2623), latency p50 11 ms, p95 46 ms, p99 77 ms, max 904 ms, and a throughput ratio of 2,623,000/44,986 (≈58.3 if the denominator is the same unit implied by the field's per-second semantics; that unit is not explicitly stated). The gap between max (904 ms) and p99 (77 ms) suggests one or a few outlier samples, but with incomplete coverage and no per-sample data this remains only a candidate for investigation, not a confirmed cause or impact.",
+  "hypotheses": [
+   {
+    "rank": 1,
+    "observation": "The overall metric summary reports latency max 904 ms while p99 is 77 ms (latency_ms field), across 2,623 samples with error_count 0.",
+    "possible_explanation": "One or a small number of requests experienced disproportionately high latency (for example queuing, GC pause, or a slow backend response), producing an outlier tail; this is a hypothesis, not a proven cause.",
+    "recommended_check": "Inspect the JTL CSV for the samples at or near the 904 ms max (their timestamps, thread/group, and endpoint) and re-run with a per-sample latency breakdown to see whether the outlier repeats.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0"
+    ]
+   },
+   {
+    "rank": 2,
+    "observation": "Throughput_rps is reported as numerator 2,623,000 and denominator 44,986 (arithmetic ratio ≈58.3 per the field's per-second naming), with sample_count 2,623.",
+    "possible_explanation": "The effective request rate may have been lower than the test plan intended (for example short active duration or concurrency not reached), although the referenced field does not explicitly state the unit of the denominator.",
+    "recommended_check": "Compare this rate against the JMeter test plan's thread count, ramp-up, and duration, and confirm the denominator's unit before drawing conclusions about load level.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0"
+    ]
+   },
+   {
+    "rank": 3,
+    "observation": "Analysis coverage is INCOMPLETE for reason RESOURCE_GAPS, and the findings array is empty.",
+    "possible_explanation": "The error_count of 0 (0/2623) may only reflect the samples that were collected; with resource gaps, missing data could hide errors or anomalous samples rather than proving they did not occur.",
+    "recommended_check": "Resolve the RESOURCE_GAPS (verify the JTL parser captured all lines, all response code/status fields, and the full run duration) and re-run the analysis before relying on the zero error count.",
+    "evidence_refs": [
+     "analysis-result.json#/analysis_coverage",
+     "analysis-result.json#/evidence/0"
+    ]
+   },
+   {
+    "rank": 4,
+    "observation": "The policy verdict is NO_POLICY, and the overall summary contains no threshold evaluation.",
+    "possible_explanation": "Without an LT policy, the analysis did not assess whether p50 11 ms, p95 46 ms, p99 77 ms, max 904 ms, or the error rate meet any acceptance criteria; NO_POLICY is neither a pass nor a fail.",
+    "recommended_check": "Define an LT policy with explicit latency (p95/p99/max) and error-rate thresholds for the same scope, then re-run the verdict to obtain a PASS/FAIL evaluation.",
+    "evidence_refs": [
+     "analysis-result.json#/policy_verdict",
+     "analysis-result.json#/evidence/0"
+    ]
+   }
+  ],
+  "recommendations": [
+   {
+    "rank": 1,
+    "action": "Define and attach an LT policy with latency and error-rate thresholds for this workload before treating the run as evaluable.",
+    "rationale": "The current verdict is NO_POLICY, so no acceptance thresholds were applied; without a policy the summary numbers cannot be classified as passing or failing.",
+    "evidence_refs": [
+     "analysis-result.json#/policy_verdict",
+     "analysis-result.json#/evidence/0"
+    ]
+   },
+   {
+    "rank": 2,
+    "action": "Close the RESOURCE_GAPS that made analysis coverage INCOMPLETE (for example, confirm the JTL CSV includes all samples and response-coded fields without truncation).",
+    "rationale": "Coverage is marked INCOMPLETE with reason RESOURCE_GAPS, so the empty findings list and the 0-error count are not yet reliable evidence of a clean run.",
+    "evidence_refs": [
+     "analysis-result.json#/analysis_coverage",
+     "analysis-result.json#/evidence/0"
+    ]
+   },
+   {
+    "rank": 3,
+    "action": "Investigate the 904 ms max-latency sample(s) against the 77 ms p99 before release sign-off.",
+    "rationale": "A max about 12x the p99 across 2,623 samples suggests an outlier tail worth checking for cause and repeatability, though the single-run summary alone cannot confirm its severity or impact.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0"
+    ]
+   },
+   {
+    "rank": 4,
+    "action": "Re-run or expand sampling to add per-endpoint, per-thread, and time-series latency and throughput breakdowns for the same workload.",
+    "rationale": "Only an overall metric summary is present; finer-grained data is required to test any hypothesis about outliers or load levels.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0"
+    ]
+   }
+  ],
+  "caveats": [
+   "The deterministic verdict is NO_POLICY, which is kept distinct from PASS and FAIL; missing policy is not a pass.",
+   "Analysis coverage is INCOMPLETE (RESOURCE_GAPS); the empty findings array does not prove stability, spare capacity, low load, or absence of a problem.",
+   "error_count 0 covers only the 2,623 recorded samples and does not prove that errors cannot occur outside the captured set.",
+   "The throughput figure 2,623,000/44,986 is an arithmetic ratio; the referenced field does not explicitly state the unit of the denominator, so ≈58.3 is a conditional reading, not a guaranteed requests-per-second measurement.",
+   "No per-sample, per-endpoint, or concurrency data was provided; latency percentiles and the max come from a single overall run and may vary across runs.",
+   "The 904 ms max versus 77 ms p99 comparison is a candidate observation; a stored outlier does not by itself demonstrate a cause or business impact."
+  ]
+ },
+ "schema": "ai-experiment-run.v2",
+ "phase": "pilot",
+ "case": "K11",
+ "rep": 1
+}

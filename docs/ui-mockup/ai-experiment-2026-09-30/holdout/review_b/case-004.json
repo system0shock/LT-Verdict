@@ -1,0 +1,99 @@
+[
+  {
+    "id": "R004",
+    "hard_defect": false,
+    "defects": [],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 5,
+    "notes": "Accurately preserves the verdicts, scopes, key metrics, and limitations while giving supported operator actions."
+  },
+  {
+    "id": "R019",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T7",
+        "field": "#/summary",
+        "quote": "neither the reference window ... nor the evaluation window ... has a business or resource policy",
+        "why": "NO_POLICY establishes no applicable evaluated rule for a window, not that no policy was configured."
+      },
+      {
+        "type": "T7",
+        "field": "#/hypotheses/5/possible_explanation",
+        "quote": "No explicit resource or business policy was configured",
+        "why": "The evidence does not establish configuration absence as the cause of NO_POLICY."
+      },
+      {
+        "type": "T7",
+        "field": "#/recommendations/2/rationale",
+        "quote": "missing policy is not a pass/fail outcome",
+        "why": "It presents policy absence as established rather than limiting the claim to lack of an applicable evaluated rule."
+      },
+      {
+        "type": "T7",
+        "field": "#/caveats/4",
+        "quote": "missing policy is not a pass",
+        "why": "NO_POLICY does not prove that a policy is missing or unconfigured."
+      },
+      {
+        "type": "T5",
+        "field": "#/caveats/5",
+        "quote": "other resources and endpoints were not analyzed",
+        "why": "The evidence identifies neither application endpoints nor a topology from which other endpoints can be asserted."
+      }
+    ],
+    "required_facts_preserved": true,
+    "missing_facts": [
+      "No capacity_summary or capacity bound is present in the evidence."
+    ],
+    "usefulness": 2,
+    "notes": "It contains useful metric interpretation but repeatedly misstates what NO_POLICY establishes."
+  },
+  {
+    "id": "R039",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T7",
+        "field": "#/hypotheses/1/possible_explanation",
+        "quote": "No policy or thresholds appear to have been configured for this run",
+        "why": "NO_POLICY does not prove that policies or thresholds were unconfigured; it only establishes that no applicable rule yielded PASS or FAIL."
+      },
+      {
+        "type": "T7",
+        "field": "#/recommendations/1/rationale",
+        "quote": "findings are empty because policy evaluation was not configured",
+        "why": "The evidence does not establish missing configuration as the cause of the empty findings or NO_POLICY."
+      },
+      {
+        "type": "T8",
+        "field": "#/hypotheses/3/possible_explanation",
+        "quote": "The service held a fairly steady ~50% utilization ratio",
+        "why": "resource-00 is an unspecified ratio metric, so the evidence does not support calling it utilization or asserting this operational characterization."
+      }
+    ],
+    "required_facts_preserved": true,
+    "missing_facts": [
+      "No capacity_summary or capacity bound is present in the evidence."
+    ],
+    "usefulness": 2,
+    "notes": "Most recommendations are sensible, but it makes an unsupported configuration claim about the deterministic verdict."
+  },
+  {
+    "id": "R122",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T8",
+        "field": "#/hypotheses/4/possible_explanation",
+        "quote": "The diagnostic pipeline found no candidate episodes to test",
+        "why": "anomalies_tested=0 does not establish why zero anomalies were tested or that the pipeline found no candidates."
+      }
+    ],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 4,
+    "notes": "The response is otherwise accurate and operationally useful, with one unsupported explanation for the diagnostic status."
+  }
+]

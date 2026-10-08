@@ -1,0 +1,189 @@
+{
+ "stage": "B",
+ "mode": "live",
+ "model": "deepseek-v4-flash-0731",
+ "tag": {
+  "phase": "holdout",
+  "attempt_id": "case-015-1-B-t1",
+  "arm": "B",
+  "stage": null,
+  "case": "case-015",
+  "rep": 1,
+  "try": 1
+ },
+ "retry_policy": "d2",
+ "qwen_exit": 0,
+ "wall_ms": 72563,
+ "relay": {
+  "schema_version": "advisory-ai-runtime-relay.v1",
+  "status": "FORWARDED_STRUCTURED_OUTPUT",
+  "received_request_count": 1,
+  "forwarded_request_count": 1,
+  "outcomes": [
+   "FORWARDED_STRUCTURED_OUTPUT"
+  ],
+  "retry_refused_reason": null,
+  "first_refused_reason": null,
+  "model_id": "deepseek-v4-flash-0731",
+  "retry_policy": "d2",
+  "requests": [
+   {
+    "ordinal": 1,
+    "forwarded": true,
+    "outcome": "FORWARDED_STRUCTURED_OUTPUT",
+    "provider_status": 200,
+    "latency_ms": 71193,
+    "usage": {
+     "prompt_tokens": 4165,
+     "total_tokens": 11591,
+     "completion_tokens": 7426,
+     "prompt_tokens_details": {
+      "cached_tokens": 1024
+     },
+     "completion_tokens_details": {
+      "reasoning_tokens": 5348
+     }
+    },
+    "model_returned": "deepseek-v4-flash-0731"
+   }
+  ],
+  "usage": {
+   "prompt_tokens": 4165,
+   "completion_tokens": 7426,
+   "total_tokens": 11591
+  },
+  "latency_ms": 71193
+ },
+ "relay_status": "FORWARDED_STRUCTURED_OUTPUT",
+ "usage": {
+  "prompt_tokens": 4165,
+  "completion_tokens": 7426,
+  "total_tokens": 11591
+ },
+ "latency_ms": 71193,
+ "retried": false,
+ "retry_refused_reason": null,
+ "status": "OK",
+ "note": null,
+ "output": {
+  "schema_version": "ai-advice-output.v1",
+  "summary": "The deterministic LT Verdict for the evaluation window is NO_POLICY: no business policy rule and no resource rule with effect sla applied, so no rule was evaluated (run_validity VALID, analysis_coverage COMPLETE, no findings). Sampler metrics are clean (0 errors, p95=p99=max 280 ms over 700 samples), but without an evaluated rule those numbers are descriptive only and do not constitute a pass. Correlation output is unavailable (INSUFFICIENT_DATA, uncertainty NOT_ESTIMATED) because the series show no residual variation and lag is not evaluable; headline selection reports UNAVAILABLE with null p-values. Clock alignment is not_verified_by_core, so temporal ordering cannot be inferred. The 'value' series (synthetic_unit) has statistics identical to the 'target' series (requests/s), suggesting it may not be an independent measurement. Advice: configure an intended policy if compliance status is needed, verify clock alignment, inspect the synthetic series, and rerun with more variation if load-response correlation is required.",
+  "hypotheses": [
+   {
+    "rank": 1,
+    "observation": "The evaluation window policy summary reports verdict NO_POLICY with business_verdict NO_POLICY and resource_verdict NO_POLICY; run_validity is VALID and analysis_coverage is COMPLETE with no findings.",
+    "possible_explanation": "No applicable business policy rule and no resource rule with effect sla covered the evaluation window, so the product evaluated no rule; NO_POLICY means no pass/fail conclusion, and the window's clean metrics do not imply compliance.",
+    "recommended_check": "Confirm whether any policy was intended for this window (for example a latency, error, or throughput rule on the 'request' transaction or a resource rule with effect sla). If yes, configure it and rerun; if none was intended, NO_POLICY is the expected verdict.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/5",
+     "analysis-result.json#/policy_verdict",
+     "analysis-result.json#/evidence/6"
+    ]
+   },
+   {
+    "rank": 2,
+    "observation": "Metric summaries (overall and for the 'request' transaction) report error_count 0 and latency p50 160 ms with p95, p99, and max all 280 ms over 700 samples in the evaluation window.",
+    "possible_explanation": "These are raw sampler observations; because the window verdict is NO_POLICY, they were not compared against any evaluable rule and therefore cannot be read as a pass.",
+    "recommended_check": "If an SLA on latency or error rate is desired, add the corresponding policy for the window and rerun so the product can evaluate it; otherwise keep these numbers as descriptive metrics only.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0",
+     "analysis-result.json#/evidence/1",
+     "analysis-result.json#/evidence/6"
+    ]
+   },
+   {
+    "rank": 3,
+    "observation": "Resource summaries for series 'target' (requests/s) and 'value' (synthetic_unit) list identical statistics (mean 12, median 12, min 3, max 21, slope_per_second 0.117647..., split_half_shift 4.5, sample_standard_deviation 6.087... over 35 cells each).",
+    "possible_explanation": "The 'value' series may be generated from or paired with the 'target' series rather than being an independent measurement, which would limit its usefulness as a separate explanatory variable.",
+    "recommended_check": "Inspect the collection configuration and raw series for 'value' and 'target' to determine how 'value' is produced and whether it is an independent telemetry stream rather than a duplicate.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/3",
+     "analysis-result.json#/evidence/4"
+    ]
+   },
+   {
+    "rank": 4,
+    "observation": "The correlation pair for 'value' vs response_time_p95_ms has status INSUFFICIENT_DATA, raw_rho 1, partial_rho null, best_lag_rho null, empty lag_profile, lag_used_cells 0, and reasons NO_RESIDUAL_VARIATION and LAG_NOT_EVALUABLE; headline selection is UNAVAILABLE with null p-values.",
+    "possible_explanation": "With a flat p95 latency series (280 ms at p95, p99, and max) and non-varying resource values, there is no residual variation and no evaluable lag, so the raw rho of 1 is not a calibrated load-response correlation; uncertainty is NOT_ESTIMATED.",
+    "recommended_check": "Rerun with a load profile that produces variation in both latency and the resource series across more cells, then re-inspect the correlation pair and its headline selection; treat the current correlation as unusable.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/7",
+     "analysis-result.json#/evidence/8",
+     "analysis-result.json#/evidence/6",
+     "analysis-result.json#/evidence/9"
+    ]
+   },
+   {
+    "rank": 5,
+    "observation": "Resource binding reports clock_alignment not_verified_by_core over the explicit evaluation and snapshot windows.",
+    "possible_explanation": "Without verified clock alignment, no temporal ordering or lead/lag between load, response, and resource series can be supported.",
+    "recommended_check": "Verify clock synchronization across the load generator, target, and telemetry collection before interpreting any timing or ordering between series.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/2"
+    ]
+   }
+  ],
+  "recommendations": [
+   {
+    "rank": 1,
+    "action": "Treat the NO_POLICY verdict as 'no rule was evaluated' rather than a pass; do not claim the window passed. If compliance with a specific rule is required, configure an applicable business policy or resource rule with effect sla that covers the evaluation window and rerun.",
+    "rationale": "The product's deterministic verdict is NO_POLICY with both business and resource verdicts NO_POLICY; per product invariants, only a rule the product evaluates yields PASS or FAIL, and a healthy window does not turn NO_POLICY into PASS.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/5",
+     "analysis-result.json#/policy_verdict"
+    ]
+   },
+   {
+    "rank": 2,
+    "action": "Verify clock alignment between the load generator, target, and metric collection before using any timing relationships.",
+    "rationale": "resource_binding explicitly states clock_alignment not_verified_by_core; an unverified clock relationship cannot support lead/lag ordering or temporal hypotheses.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/2"
+    ]
+   },
+   {
+    "rank": 3,
+    "action": "Inspect how the 'value' (synthetic_unit) series is produced and compare its raw samples with 'target' (requests/s) before using it in load-response analysis.",
+    "rationale": "Both resource summaries report identical statistics over the same 35 cells, which suggests the series may not be independent; an identical series cannot add information to a correlation.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/3",
+     "analysis-result.json#/evidence/4"
+    ]
+   },
+   {
+    "rank": 4,
+    "action": "If a load-response correlation is needed, rerun with a load profile that creates residual variation in p95 latency and in the resource series, then re-check the correlation pair and headline selection.",
+    "rationale": "The current correlation is INSUFFICIENT_DATA with reasons NO_RESIDUAL_VARIATION and LAG_NOT_EVALUABLE, uncertainty NOT_ESTIMATED, and null p-values; raw_rho 1 is not usable as calibrated evidence.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/7",
+     "analysis-result.json#/evidence/8"
+    ]
+   },
+   {
+    "rank": 5,
+    "action": "Do not treat anomalies_tested 0 or zero reported episodes as proof of stability or absence of problems; if anomaly output is desired, ensure the input series have the variation needed to make pairs evaluable.",
+    "rationale": "diagnostic_summary reports anomalies_tested 0, pairs_evaluable 0, and uncertainty NOT_ESTIMATED, so the absence of reported episodes is not evidence of a clean system.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/9"
+    ]
+   }
+  ],
+  "caveats": [
+   "The deterministic verdict is NO_POLICY; this advice does not change it and no pass/fail conclusion is implied.",
+   "Clock alignment is not_verified_by_core; any temporal ordering or causal claim is unsupported.",
+   "Correlation output is unavailable: status INSUFFICIENT_DATA, uncertainty NOT_ESTIMATED, raw_rho 1 with no residual variation, and headline selection UNAVAILABLE.",
+   "Diagnostic summary uncertainty is NOT_ESTIMATED with anomalies_tested 0 and pairs_evaluable 0; absence of reported episodes is not proof of absence of problems.",
+   "Throughput denominators differ between the overall run (35230) and the evaluation window (35000); these are different scopes/windows, and the numbers are not claimed to be inconsistent.",
+   "The 'value' metric is synthetic_unit; its semantics depend on the collection configuration, which is outside the product's output.",
+   "No findings were reported and analysis coverage is COMPLETE, but under NO_POLICY that does not certify health or compliance."
+  ]
+ },
+ "schema": "ai-experiment-run.holdout.v1",
+ "case": "case-015",
+ "rep": 1,
+ "arm": "B",
+ "try": 1,
+ "attempt_id": "case-015-1-B-t1",
+ "model_id": "deepseek-v4-flash-0731",
+ "prompt_sha256": "3c0f28bee6517c13c5c854615e7d3d59301893d9723880818e4034a32e9133bf"
+}

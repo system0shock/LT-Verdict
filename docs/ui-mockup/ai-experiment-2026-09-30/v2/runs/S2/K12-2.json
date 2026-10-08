@@ -1,0 +1,162 @@
+{
+ "stage": "S2",
+ "mode": "live",
+ "model": "deepseek-v4-flash-0731",
+ "tag": {
+  "phase": "v2-pilot",
+  "stage": "S2",
+  "case": "K12",
+  "rep": 2,
+  "attempt": 1
+ },
+ "qwen_exit": 0,
+ "wall_ms": 126392,
+ "relay": {
+  "schema_version": "advisory-ai-runtime-relay.v1",
+  "status": "FORWARDED_STRUCTURED_OUTPUT",
+  "request_count": 1,
+  "usage": {
+   "prompt_tokens": 13785,
+   "total_tokens": 25287,
+   "completion_tokens": 11502,
+   "prompt_tokens_details": {
+    "cached_tokens": 1024
+   },
+   "completion_tokens_details": {
+    "reasoning_tokens": 9363
+   }
+  },
+  "latency_ms": 124985,
+  "model_returned": "deepseek-v4-flash-0731"
+ },
+ "relay_status": "FORWARDED_STRUCTURED_OUTPUT",
+ "usage": {
+  "prompt_tokens": 13785,
+  "total_tokens": 25287,
+  "completion_tokens": 11502,
+  "prompt_tokens_details": {
+   "cached_tokens": 1024
+  },
+  "completion_tokens_details": {
+   "reasoning_tokens": 9363
+  }
+ },
+ "latency_ms": 124985,
+ "status": "OK",
+ "note": null,
+ "output": {
+  "schema_version": "ai-advice-output.v1",
+  "summary": "LT Verdict reports a deterministic NO_POLICY result. The capacity analysis yields a LOWER_BOUND of 20 users on the 'users' load axis, verified at load stages 5, 10, and 20 users (30/30 complete bins each, achieved target within 10% tolerance), with zero errors in the three evaluated windows (0/30,049, 0/37,550, 0/47,404) and PASS on the diagnostic generator-throttle guard. No upper bound is provided (upper_exclusive=null) and no load above 20 users was tested. capacity_knee is null with KNEE_DETECTOR_NOT_IMPLEMENTED, a fixed product limitation; the bound is derived from the stages independently of any knee. policy_verdict stays NO_POLICY because no policy or required capacity is configured; healthy observed results do not change that verdict. Clock alignment is not verified by core. No findings were recorded. Advice: to obtain a PASS/FAIL judgment, configure a policy first; to explore the upper envelope, rerun with loads above 20 users; verify clocks before any time-based use of the data; keep the generator guard diagnostic and treat its PASS as informational only.",
+  "hypotheses": [
+   {
+    "rank": 1,
+    "observation": "The capacity summary reports a LOWER_BOUND with lower_inclusive=20, upper_exclusive=null, and only three stages at loads 5, 10, and 20 users, all PASS with 30/30 complete bins; no stage above 20 users exists.",
+    "possible_explanation": "Because the bound is built only from the stages that were run, 20 users is simply the highest load verified; it does not demonstrate a ceiling, and higher sustainable load can be neither confirmed nor excluded from this input.",
+    "recommended_check": "Rerun with additional stages above 20 users (e.g., 30 and 40) using the same windowing and error-rate checks, and inspect whether those stages still PASS with complete bins.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/41",
+     "analysis-result.json#/evidence/39",
+     "analysis-result.json#/evidence/40"
+    ]
+   },
+   {
+    "rank": 2,
+    "observation": "Whole-run metric summaries show p99 latency of 395 ms for 'home' (evidence/4) and 298 ms overall (evidence/0), while 'add product to cart' (evidence/1) and 'reset cart' (evidence/6) report p99 of 96 ms with similar sample counts (22,585, 22,571, 22,572).",
+    "possible_explanation": "The home transaction may involve a deeper backend call chain or more server-side work than lighter transactions, but the input contains no call graph, traces, or per-transaction server-side metrics, so this is unverified.",
+    "recommended_check": "Collect per-transaction server-side latency and tracing/call-graph data for the home transaction, since none is present in this input, before attributing the latency difference to backend work.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0",
+     "analysis-result.json#/evidence/1",
+     "analysis-result.json#/evidence/4",
+     "analysis-result.json#/evidence/6"
+    ]
+   },
+   {
+    "rank": 3,
+    "observation": "In the r2-users5 window, the paymentservice memory summary (evidence/15) reports mean about 32,281,941 bytes with slope_per_second about 13,282 B/s and split_half_shift about 1,254,741 bytes; the frontend memory summary in the same window (evidence/13) reports slope_per_second about 3,292 B/s.",
+    "possible_explanation": "Memory may accumulate within that window (for example object retention or connection growth), but slope_per_second is only a descriptive within-window statistic and the input has no OOM events, logs, or errors to confirm a growing-memory problem.",
+    "recommended_check": "Run a longer window and inspect the memory series near the end of each window, and across later windows of the same entity, to see whether memory plateaus or keeps increasing.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/13",
+     "analysis-result.json#/evidence/15"
+    ]
+   }
+  ],
+  "recommendations": [
+   {
+    "rank": 1,
+    "action": "If a PASS/FAIL verdict is required, configure a business/capacity policy (for example an error-rate or latency threshold, or a required capacity) before future runs; this run remains NO_POLICY.",
+    "rationale": "policy_verdict is NO_POLICY with no reasons even though every evaluated window shows 0 errors and a PASS business_verdict; a missing policy cannot be turned into PASS by healthy observed results.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/41",
+     "analysis-result.json#/evidence/35",
+     "analysis-result.json#/evidence/36",
+     "analysis-result.json#/evidence/37",
+     "analysis-result.json#/evidence/38",
+     "analysis-result.json#/evidence/39",
+     "analysis-result.json#/evidence/40"
+    ]
+   },
+   {
+    "rank": 2,
+    "action": "Extend the load envelope beyond 20 users in a rerun (for example stages at 30 and 40 users with the same windows and thresholds) if an upper boundary is of interest.",
+    "rationale": "upper_exclusive=null and only stages at 5, 10, and 20 users were executed; the bound is stage-derived, and capacity_knee is always null because knee detection is not implemented in the product.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/41"
+    ]
+   },
+   {
+    "rank": 3,
+    "action": "Verify clock alignment between load generator, application, and metrics before any time-based or ordering interpretation of the data.",
+    "rationale": "The resource binding reports clock_alignment=not_verified_by_core, so epoch deltas and window boundaries in this input cannot yet be trusted for lead/lag or temporal reasoning.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/7"
+    ]
+   },
+   {
+    "rank": 4,
+    "action": "In future runs, export per-window business metric summaries (latency) alongside the error-rate checks so latency can be attributed to load stages.",
+    "rationale": "Only error-rate policy checks are reported per window here; the metric summaries are whole-run scope, so p50/p95/p99/max cannot be attributed to any specific load level or window from this input.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0",
+     "analysis-result.json#/evidence/35",
+     "analysis-result.json#/evidence/37",
+     "analysis-result.json#/evidence/39"
+    ]
+   },
+   {
+    "rank": 5,
+    "action": "Keep the generator throttle guard as diagnostic; treat its PASS as informational. If it ever fails in a future run, rerun with a generator that is not saturated.",
+    "rationale": "All three resource policy checks have effect=diagnostic, a failed guard would make its stage unusable for a product bound, and its PASS alone does not create an upper bound or prove spare capacity.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/32",
+     "analysis-result.json#/evidence/33",
+     "analysis-result.json#/evidence/34"
+    ]
+   },
+   {
+    "rank": 6,
+    "action": "In longer reruns, monitor paymentservice and frontend memory at window end to determine whether the within-window positive memory slopes represent sustained growth or transient behavior.",
+    "rationale": "Descriptive slopes show an upward within-window trend for these entities in the r2-users5 window, but there is no evidence of errors, OOM events, or an upper capacity impact in this input.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/13",
+     "analysis-result.json#/evidence/15"
+    ]
+   }
+  ],
+  "caveats": [
+   "NO_POLICY is the final verdict. Observed window PASSes, zero errors, and complete 30/30 stages do not make the run PASS because no policy or required capacity is configured.",
+   "The lower bound of 20 users was verified only at loads 5, 10, and 20; no load above 20 was tested, so no upper bound or capacity ceiling is asserted and the 20-user value should not be read as a demonstrated maximum.",
+   "capacity_knee is null with KNEE_DETECTOR_NOT_IMPLEMENTED, a fixed product limitation rather than a run defect; the LOWER_BOUND is derived from verified stages independently of any knee.",
+   "The generator throttle guard is diagnostic by design (effect=diagnostic). Its PASS indicates no saturation was observed in the evaluated windows, which is not proof of spare generator capacity and creates no upper bound.",
+   "Clock alignment is not verified by core; raw epoch values should not be treated as calibrated durations or used to infer lead/lag ordering without clock verification.",
+   "Window policy checks each cover a 300,000 ms window within the evaluation span; their denominators (30,049 / 37,550 / 47,404) and the whole-run sample_count (135,434) are different scope quantities, and the reported window checks do not cover every instant of the run.",
+   "Whole-run metric summaries cannot be attributed to specific windows or load levels, and the number of samples that reached the reported max latencies is not present in the input.",
+   "Absent findings do not prove stability, spare capacity, low load, or absence of a memory or latency problem. No individual samples, traces, logs, call graph, release/configuration data, or OpenSearch error profile are present, and error counts come only from the metric summaries in the input."
+  ]
+ },
+ "schema": "ai-experiment-run.v2",
+ "phase": "pilot",
+ "case": "K12",
+ "rep": 2
+}

@@ -1,0 +1,65 @@
+[
+  {
+    "id": "R040",
+    "hard_defect": false,
+    "defects": [],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 4,
+    "notes": "Correctly preserves the FAIL, VALID, COMPLETE result and gives verifiable follow-up actions, though it is somewhat speculative and verbose."
+  },
+  {
+    "id": "R107",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T2",
+        "field": "#/summary",
+        "quote": "overall and transaction summaries agree",
+        "why": "The overall and transaction summaries have different scopes, so their matching aggregate counts do not establish agreement about the same events."
+      },
+      {
+        "type": "T2",
+        "field": "#/hypotheses/4/possible_explanation",
+        "quote": "the recorded load behavior itself shows no sign of pushing resource use",
+        "why": "It infers a relationship between whole-run load metrics and the resource-policy window without evidence establishing that causal relationship."
+      }
+    ],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 3,
+    "notes": "It preserves the deterministic facts and offers useful checks, but makes unsupported cross-scope inferences."
+  },
+  {
+    "id": "R136",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T7",
+        "field": "#/caveats/4",
+        "quote": "that tail and anything outside the window are not analyzed",
+        "why": "The evidence includes whole-run overall and transaction metric summaries, so it is wrong to say that everything outside the evaluation window is unanalyzed."
+      }
+    ],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 3,
+    "notes": "The principal verdict interpretation and operator actions are useful, but the caveat incorrectly describes the available analysis scope."
+  },
+  {
+    "id": "R146",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T7",
+        "field": "#/caveats/5",
+        "quote": "Only a single 30-second evaluation window is covered by this analysis",
+        "why": "The evidence also reports whole-run overall and transaction metric summaries, so the analysis is not limited solely to the 30-second policy window."
+      }
+    ],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 3,
+    "notes": "It accurately presents the policy outcomes and sensible checks, but incorrectly narrows the evidence coverage to the evaluation window alone."
+  }
+]

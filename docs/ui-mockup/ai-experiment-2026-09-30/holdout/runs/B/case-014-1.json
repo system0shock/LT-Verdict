@@ -1,0 +1,211 @@
+{
+ "stage": "B",
+ "mode": "live",
+ "model": "deepseek-v4-flash-0731",
+ "tag": {
+  "phase": "holdout",
+  "attempt_id": "case-014-1-B-t1",
+  "arm": "B",
+  "stage": null,
+  "case": "case-014",
+  "rep": 1,
+  "try": 1
+ },
+ "retry_policy": "d2",
+ "qwen_exit": 0,
+ "wall_ms": 109808,
+ "relay": {
+  "schema_version": "advisory-ai-runtime-relay.v1",
+  "status": "FORWARDED_STRUCTURED_OUTPUT",
+  "received_request_count": 1,
+  "forwarded_request_count": 1,
+  "outcomes": [
+   "FORWARDED_STRUCTURED_OUTPUT"
+  ],
+  "retry_refused_reason": null,
+  "first_refused_reason": null,
+  "model_id": "deepseek-v4-flash-0731",
+  "retry_policy": "d2",
+  "requests": [
+   {
+    "ordinal": 1,
+    "forwarded": true,
+    "outcome": "FORWARDED_STRUCTURED_OUTPUT",
+    "provider_status": 200,
+    "latency_ms": 108407,
+    "usage": {
+     "prompt_tokens": 5558,
+     "total_tokens": 17244,
+     "completion_tokens": 11686,
+     "prompt_tokens_details": {
+      "cached_tokens": 1024
+     },
+     "completion_tokens_details": {
+      "reasoning_tokens": 9004
+     }
+    },
+    "model_returned": "deepseek-v4-flash-0731"
+   }
+  ],
+  "usage": {
+   "prompt_tokens": 5558,
+   "completion_tokens": 11686,
+   "total_tokens": 17244
+  },
+  "latency_ms": 108407
+ },
+ "relay_status": "FORWARDED_STRUCTURED_OUTPUT",
+ "usage": {
+  "prompt_tokens": 5558,
+  "completion_tokens": 11686,
+  "total_tokens": 17244
+ },
+ "latency_ms": 108407,
+ "retried": false,
+ "retry_refused_reason": null,
+ "status": "OK",
+ "note": null,
+ "output": {
+  "schema_version": "ai-advice-output.v1",
+  "summary": "Run jmeter_jtl_csv-e8fbac47… is VALID with deterministic policy_verdict NO_POLICY for both explicit windows (reference 1767225600000–1767225720000, evaluation 1767225720000–1767225960000); no business policy rule and no resource rule with effect: sla was applicable, so this is neither PASS nor FAIL. Metrics: 0 errors, sample_count 7200 overall (2400 reference + 4800 evaluation), constant target 20 requests/s, latency p50/p95/p99 ≈ 196/237/240 ms overall and 199/236/239 ms in the evaluation window, with p99 equal to max (240 ms) in the overall/reference summaries. Resource-00 utilization (ratio, interval mean) rose from mean 0.480/median 0.461 in the reference window to mean 0.529/median 0.556 in the evaluation window, with no missing cells and slightly negative within-window slopes. A candidate correlation (pair-00) between resource-00 and p95 latency was selected (best lag 1000 ms, rho −0.472, partial −0.381, p=0.001, uncertainty NOT_ESTIMATED), but the load control was dropped as CONSTANT_CONTROL; anomalies_tested=0 and episodes_reported=0. Clock alignment is not_verified_by_core, so lead/lag ordering is not supported. Advice preserves the NO_POLICY verdict.",
+  "hypotheses": [
+   {
+    "rank": 1,
+    "observation": "Both window policy summaries report business_verdict NO_POLICY, resource_verdict NO_POLICY, verdict NO_POLICY (reference and evaluation), and the run policy_verdict fact is NO_POLICY.",
+    "possible_explanation": "NO_POLICY is the product's deterministic state when no applicable rule was evaluated for the windows (no business policy rule and no resource rule with effect: sla); a healthy run, a rerun, or a healthy load generator does not convert it into PASS.",
+    "recommended_check": "Review the configured rules for these explicit windows; if a PASS/FAIL verdict is intended, configure applicable business policy and resource SLA rules for the windows and rerun the policy evaluation.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/7",
+     "analysis-result.json#/evidence/8",
+     "analysis-result.json#/policy_verdict"
+    ]
+   },
+   {
+    "rank": 2,
+    "observation": "Correlation pair pair-00 in the evaluation window reports best_lag_ms 1000, best_lag_rho -0.472, raw_rho and partial_rho -0.381, status CANDIDATE, uncertainty NOT_ESTIMATED, while headline selection reports p=0.001 and selected=true.",
+    "possible_explanation": "A negative association between resource-00 utilization and p95 latency is opposite to a load-saturation-prolongs-latency expectation, and it occurred under a constant 20 requests/s target; it may reflect series noise or an unrelated process rather than capacity impact, and no causal claim is supported.",
+    "recommended_check": "Verify clock alignment (clock_alignment is not_verified_by_core), inspect the raw resource-00 and p95 latency series at 1 s intervals, then rerun with a varied workload to see whether the relationship reproduces before interpreting it.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/11",
+     "analysis-result.json#/evidence/12",
+     "analysis-result.json#/evidence/2"
+    ]
+   },
+   {
+    "rank": 3,
+    "observation": "Overall and reference-window metric summaries show p99 240 ms equal to max 240 ms; the evaluation window shows p99 239 ms near max 240 ms; error_count is 0 in every summary.",
+    "possible_explanation": "p99 equal to max in the overall/reference summaries may indicate a plateau or ceiling near 240 ms (e.g., a test-side sampler limit or service-side cap) rather than a few genuinely slow samples; zero errors mean it is not an error-driven spike.",
+    "recommended_check": "Inspect the raw per-sample latency tail and JMeter sampler settings (timeouts, thread scheduling) to determine whether the 240 ms plateau is a test-side truncation or a service behavior.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0",
+     "analysis-result.json#/evidence/9",
+     "analysis-result.json#/evidence/10"
+    ]
+   },
+   {
+    "rank": 4,
+    "observation": "Resource-00 utilization rose between windows: reference mean 0.4803/median 0.4608 vs evaluation mean 0.5290/median 0.5560, while the target series stayed constant at 20 requests/s in both windows (std 0, slope 0) and no cells are missing.",
+    "possible_explanation": "The utilization increase is not explained by the imposed load alone; it could come from background/system activity or state accumulated during the run, but within-window slopes are slightly negative (-0.0005 and -0.0002 per second), so no sustained intra-window trend is established.",
+    "recommended_check": "Compare resource-00 at original interval granularity across the reference/evaluation boundary (1767225720000 ms) and check host/process activity logs for a step-change cause; rerun if needed.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/3",
+     "analysis-result.json#/evidence/4",
+     "analysis-result.json#/evidence/5",
+     "analysis-result.json#/evidence/6"
+    ]
+   },
+   {
+    "rank": 5,
+    "observation": "The diagnostic summary reports anomalies_tested 0, episodes_reported 0, pairs_tested 1, status COMPLETE, suppressed_short_episodes 0.",
+    "possible_explanation": "Zero tested anomalies and zero reported episodes do not prove the system is stable, has spare capacity, or has no problem; they only mean no anomaly episodes were reported under this diagnostic configuration.",
+    "recommended_check": "If a stability or capacity claim is needed, define explicit threshold/anomaly rules and evaluate them against the stored series; otherwise treat the zero counts strictly as a coverage statement.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/13"
+    ]
+   },
+   {
+    "rank": 6,
+    "observation": "The correlation pair requested 'target' as a control but dropped it (controls_used [], reasons CONSTANT_CONTROL), leaving the association unadjusted for load.",
+    "possible_explanation": "Because the load was constant at 20 requests/s (std 0) in the evaluation window, the requested control could not be used, so the reported partial correlation (-0.381) is not load-adjusted and may be confounded by uncontrolled factors.",
+    "recommended_check": "Rerun with non-constant load steps or add informative non-constant covariates so the control can be used; until then, interpret the correlation as uncontrolled.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/11",
+     "analysis-result.json#/evidence/6"
+    ]
+   }
+  ],
+  "recommendations": [
+   {
+    "rank": 1,
+    "action": "Do not treat NO_POLICY as PASS; confirm whether a rule was intended for these windows and, if so, configure applicable business policy or resource SLA rules before rerunning.",
+    "rationale": "policy_verdict is NO_POLICY for both windows because no business policy rule and no resource rule with effect: sla was applicable; the product yields PASS or FAIL only when a rule it evaluates applies, and a healthy run does not change NO_POLICY.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/7",
+     "analysis-result.json#/evidence/8",
+     "analysis-result.json#/policy_verdict"
+    ]
+   },
+   {
+    "rank": 2,
+    "action": "Verify clock alignment between the load-generator and resource-collection clocks before any lead/lag interpretation.",
+    "rationale": "resource-binding reports clock_alignment not_verified_by_core while the correlation pair selects a 1000 ms best lag; an unknown clock relationship cannot support lead/lag ordering or a temporal causal hypothesis.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/2",
+     "analysis-result.json#/evidence/11"
+    ]
+   },
+   {
+    "rank": 3,
+    "action": "Inspect resource-00 and p95 latency series at original interval granularity and rerun with varied load before drawing capacity conclusions from the correlation candidate.",
+    "rationale": "The target load was constant at 20 requests/s and was dropped as a control (CONSTANT_CONTROL); the selected correlation is negative (rho -0.472, partial -0.381) with uncertainty NOT_ESTIMATED and status CANDIDATE, so it does not establish that utilization drives latency.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/3",
+     "analysis-result.json#/evidence/5",
+     "analysis-result.json#/evidence/6",
+     "analysis-result.json#/evidence/11",
+     "analysis-result.json#/evidence/12"
+    ]
+   },
+   {
+    "rank": 4,
+    "action": "Investigate the 240 ms tail plateau (p99 equal to max in overall/reference summaries) by reviewing sampler configuration and raw tail samples.",
+    "rationale": "p99 240 ms equals max 240 ms in the overall and reference summaries, and evaluation p99 239 ms is near max 240 ms, while error_count is 0; a plateau at the maximum suggests a possible ceiling rather than genuinely distributed slow samples.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0",
+     "analysis-result.json#/evidence/9",
+     "analysis-result.json#/evidence/10"
+    ]
+   },
+   {
+    "rank": 5,
+    "action": "Collect host/process-level telemetry that explains resource-00 utilization before attributing the reference-to-evaluation mean rise to the run's workload.",
+    "rationale": "The target series was constant at 20 requests/s (std 0, slope 0) in both windows, so the utilization mean increase (0.480 to 0.529) is not explained by applied load alone; no causal attribution is supported by the evidence.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/4",
+     "analysis-result.json#/evidence/6",
+     "analysis-result.json#/evidence/3",
+     "analysis-result.json#/evidence/5"
+    ]
+   }
+  ],
+  "caveats": [
+   "The deterministic verdict is NO_POLICY for both windows; it is neither PASS nor FAIL, and no rerun, healthy window, or healthy load generator converts it into PASS.",
+   "Correlation pair-00 is CANDIDATE with uncertainty NOT_ESTIMATED; sensitivity_without_achieved_rps is null; the p-value 0.001 from mbb-lag-max-holm.v1 does not establish causality.",
+   "The requested load control ('target') was constant at 20 requests/s and was dropped (reasons CONSTANT_CONTROL); controls_used is empty, so the partial correlation (-0.381) is not load-adjusted.",
+   "clock_alignment is not_verified_by_core; the 1000 ms best lag should not be interpreted as a causal lead/lag until clocks are verified.",
+   "anomalies_tested=0 and episodes_reported=0: absence of reported episodes is not proof of stability, spare capacity, low load, or absence of a problem.",
+   "Window means are computed over different durations (reference 120 cells/2400 samples; evaluation 240 cells/4800 samples) using interval_mean aggregation, not raw samples; overall counts (7200 samples) are a different scope.",
+   "resource-binding reports evaluation_from_epoch_ms 1767225600000 to evaluation_to_epoch_ms 1767225960000 (full run span), while the window summaries split the run at 1767225720000; use the window summaries for window boundaries.",
+   "The correlation pair covers only the evaluation window (240 paired cells, 220 lag-used cells) for resource-00 (ratio) vs response_time_p95_ms; it does not cover the reference window or other metrics.",
+   "No capacity bound, knee detector data, or generator-guard (diagnostic) evidence is present in this analysis; no such conclusions were drawn."
+  ]
+ },
+ "schema": "ai-experiment-run.holdout.v1",
+ "case": "case-014",
+ "rep": 1,
+ "arm": "B",
+ "try": 1,
+ "attempt_id": "case-014-1-B-t1",
+ "model_id": "deepseek-v4-flash-0731",
+ "prompt_sha256": "3c0f28bee6517c13c5c854615e7d3d59301893d9723880818e4034a32e9133bf"
+}

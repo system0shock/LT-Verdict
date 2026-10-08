@@ -1,0 +1,41 @@
+{
+ "required": [
+  [
+   "reference_p95",
+   [
+    "(?:(?:latency|p95|95th|response[ -]time)|reference|baseline)[^.\\n]{0,100}(?:(?<![\\d.,])(?:50)(?![\\d]|[.,]\\d))|(?:(?<![\\d.,])(?:50)(?![\\d]|[.,]\\d))[^.\\n]{0,100}(?:(?:latency|p95|95th|response[ -]time)|reference|baseline)"
+   ]
+  ],
+  [
+   "degraded_p95",
+   [
+    "(?:(?:latency|p95|95th|response[ -]time)|workload|load)[^.\\n]{0,100}(?:(?<![\\d.,])(?:100)(?![\\d]|[.,]\\d))|(?:(?<![\\d.,])(?:100)(?![\\d]|[.,]\\d))[^.\\n]{0,100}(?:(?:latency|p95|95th|response[ -]time)|workload|load)"
+   ]
+  ],
+  [
+   "no_direct_downstream_telemetry",
+   [
+    "(?:(?:no|without|missing|absent|lack\\w*|not (?:available|collected|measured|observed|defined|declared|configured|present)))[^.\\n]{0,100}(?:(?:downstream|dependenc|external))|(?:(?:downstream|dependenc|external))[^.\\n]{0,100}(?:(?:no|without|missing|absent|lack\\w*|not (?:available|collected|measured|observed|defined|declared|configured|present)))",
+    "(?:(?:downstream|dependenc|external))[^.\\n]{0,100}(?:(?:not (?:measured|available|observed|collected)|absent|missing|no (?:direct )?(?:telemetry|measurement|metric)))|(?:(?:not (?:measured|available|observed|collected)|absent|missing|no (?:direct )?(?:telemetry|measurement|metric)))[^.\\n]{0,100}(?:(?:downstream|dependenc|external))"
+   ]
+  ]
+ ],
+ "forbidden": [
+  "attributes the degradation to the database or a downstream component as measured or proven without telemetry of it",
+  "claims that no database telemetry exists (the pack has a database work series; what is missing is the direct downstream wait series)"
+ ],
+ "useful_checks": [
+  "add direct downstream wait telemetry (the downstream occupancy or wait series) for the same windows to test the hypothesis"
+ ],
+ "source": {
+  "builder": "AdvisoryEvidenceBuilder",
+  "build": "5b5e51c+harness",
+  "source": "a:NT07-clean-2001:0",
+  "source_sha256": "1fc624d2aa40138c95671fa83c7e16218368af7e4ffc7cf6a183c35dc9c74692",
+  "derivation": [
+   "dropDownstream"
+  ],
+  "evidence_sha256": "61408aafb87039f0b6fb7c680d5aeda3a5bf3c32292b96cce826f1f82c45c9a0",
+  "inputs": "a:NT07-clean-2001:0, derivation [dropDownstream], analysed through RunBundleStore -> AnalysisService -> AdvisoryEvidenceBuilder by AdvisoryHoldoutCorpusTest on 5b5e51c+harness"
+ }
+}

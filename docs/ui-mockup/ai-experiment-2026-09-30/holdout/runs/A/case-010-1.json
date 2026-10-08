@@ -1,0 +1,221 @@
+{
+ "stage": "A",
+ "mode": "live",
+ "model": "deepseek-v4-flash-0731",
+ "tag": {
+  "phase": "holdout",
+  "attempt_id": "case-010-1-A-t1",
+  "arm": "A",
+  "stage": null,
+  "case": "case-010",
+  "rep": 1,
+  "try": 1
+ },
+ "retry_policy": "d2",
+ "qwen_exit": 0,
+ "wall_ms": 86164,
+ "relay": {
+  "schema_version": "advisory-ai-runtime-relay.v1",
+  "status": "FORWARDED_STRUCTURED_OUTPUT",
+  "received_request_count": 1,
+  "forwarded_request_count": 1,
+  "outcomes": [
+   "FORWARDED_STRUCTURED_OUTPUT"
+  ],
+  "retry_refused_reason": null,
+  "first_refused_reason": null,
+  "model_id": "deepseek-v4-flash-0731",
+  "retry_policy": "d2",
+  "requests": [
+   {
+    "ordinal": 1,
+    "forwarded": true,
+    "outcome": "FORWARDED_STRUCTURED_OUTPUT",
+    "provider_status": 200,
+    "latency_ms": 84805,
+    "usage": {
+     "prompt_tokens": 4475,
+     "total_tokens": 13624,
+     "completion_tokens": 9149,
+     "prompt_tokens_details": {
+      "cached_tokens": 1024
+     },
+     "completion_tokens_details": {
+      "reasoning_tokens": 6324
+     }
+    },
+    "model_returned": "deepseek-v4-flash-0731"
+   }
+  ],
+  "usage": {
+   "prompt_tokens": 4475,
+   "completion_tokens": 9149,
+   "total_tokens": 13624
+  },
+  "latency_ms": 84805
+ },
+ "relay_status": "FORWARDED_STRUCTURED_OUTPUT",
+ "usage": {
+  "prompt_tokens": 4475,
+  "completion_tokens": 9149,
+  "total_tokens": 13624
+ },
+ "latency_ms": 84805,
+ "retried": false,
+ "retry_refused_reason": null,
+ "status": "OK",
+ "note": null,
+ "output": {
+  "schema_version": "ai-advice-output.v1",
+  "summary": "The deterministic verdict is FAIL (analysis-result.json#/policy_verdict), with VALID run validity and COMPLETE analysis coverage. Both the reference window (1767225600000–1767225630000 ms) and the evaluation window (1767225630000–1767225652000 ms) fail the 'errors' policy (rule_id errors, operator lte, threshold 0): observed error_rate_ratio is 3000/30000 in the reference and 2320/22000 in the evaluation (evidence 6, 9); the overall series reports error_count 5320 of 52000 samples (evidence 0). The latency policy passes in both windows (response_time_p95_ms observed 100, threshold 120; evidence 5, 8), and all reported latency quantiles are 100 ms. Resource verdicts are NO_POLICY in both windows (evidence 7, 10); the anomaly check reports NO_MATERIAL_CHANGE with episodes_reported 0 and suppressed_short_episodes 1 (evidence 13); diagnostic uncertainty is NOT_ESTIMATED with pairs_evaluable 0 and pairs_tested 0 (evidence 14); clock alignment is not_verified_by_core (evidence 2). Advice prioritizes root-causing the ~10% error rate that drives the FAIL, confirming the zero-error threshold is intended, verifying clock alignment, and validating latency/resource data quality before any causal interpretation.",
+  "hypotheses": [
+   {
+    "rank": 1,
+    "observation": "Both window policy checks for rule_id 'errors' have status FAIL with observed error_rate_ratio 3000/30000 (reference, evidence 6) and 2320/22000 (evaluation, evidence 9) against threshold 0; window-policy summaries record business_verdict FAIL (evidence 7, 10); the overall metric summary reports error_count 5320 of 52000 samples and error_rate_ratio 5320/52000 (evidence 0).",
+    "possible_explanation": "The FAIL is fully consistent with a policy that forbids any error (threshold 0); an approximately 10% error rate in both windows suggests a systematic recurring failure type present throughout the run rather than a change introduced in the evaluation window.",
+    "recommended_check": "List the failing JMETER_SAMPLER 'request' results by response code, assertion, and error message, and plot error counts per interval to determine whether failures are uniform or clustered; compare the failure types against the reference window.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0",
+     "analysis-result.json#/evidence/6",
+     "analysis-result.json#/evidence/7",
+     "analysis-result.json#/evidence/9",
+     "analysis-result.json#/evidence/10",
+     "analysis-result.json#/findings/0",
+     "analysis-result.json#/findings/1"
+    ]
+   },
+   {
+    "rank": 2,
+    "observation": "Latency policy checks PASS in both windows with observed response_time_p95_ms 100 versus threshold 120 (evidence 5, 8), and every latency summary reports p50 = p95 = p99 = max = 100 ms (evidence 0, 1, 11, 12).",
+    "possible_explanation": "The perfectly constant 100 ms value across all quantiles, including max, is consistent with quantized, rounded, or synthetic latency rather than a real distribution; if genuine it indicates no latency degradation, but the values cannot be assumed valid without inspection of the raw data.",
+    "recommended_check": "Inspect raw JTL sampler latency values and the percentile computation (bucket size, rounding/truncation) to confirm whether 100 ms is a real observed value, and verify that failing requests are included in the latency summaries.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0",
+     "analysis-result.json#/evidence/1",
+     "analysis-result.json#/evidence/5",
+     "analysis-result.json#/evidence/8",
+     "analysis-result.json#/evidence/11",
+     "analysis-result.json#/evidence/12"
+    ]
+   },
+   {
+    "rank": 3,
+    "observation": "The evaluation resource series has mean 0.1054545, max 0.16, q95 0.157 versus reference mean 0.1, max 0.101, q95 0.101 (evidence 4, 3); the anomaly check still reports status NO_MATERIAL_CHANGE with episodes_reported 0 and suppressed_short_episodes 1 (evidence 13).",
+    "possible_explanation": "Relative to the reference window's very low variability (mad 0.001, evidence 3), the evaluation series is not flagged as a material change and one short episode was suppressed; the elevation could still be real, and the errors are not demonstrated to be correlated or uncorrelated with it.",
+    "recommended_check": "Re-run the anomaly rule without suppressing short episodes, locate the one suppressed episode, and overlay error count per interval against the resource series to see whether error spikes coincide with the max 0.16 or q95 0.157 cells.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/3",
+     "analysis-result.json#/evidence/4",
+     "analysis-result.json#/evidence/13",
+     "analysis-result.json#/evidence/14"
+    ]
+   },
+   {
+    "rank": 4,
+    "observation": "The diagnostic summary reports anomalies_tested 1, episodes_reported 0, pairs_evaluable 0, pairs_tested 0, and uncertainty NOT_ESTIMATED (evidence 14).",
+    "possible_explanation": "No episode pairs were available to test, so no correlation (or absence of correlation) between resource episodes and application errors has been established; uncertainty about any such relationship is formally NOT_ESTIMATED.",
+    "recommended_check": "Verify clock alignment, then recompute at aligned intervals with enough episodes (or a relaxed episode definition) to obtain testable pairs before drawing any resource-versus-error conclusion.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/2",
+     "analysis-result.json#/evidence/13",
+     "analysis-result.json#/evidence/14"
+    ]
+   },
+   {
+    "rank": 5,
+    "observation": "The resource binding reports clock_alignment 'not_verified_by_core' for the explicit windows from 1767225600000 to 1767225652000 ms, with run_to_epoch_ms 1767225652099 (evidence 2).",
+    "possible_explanation": "If clock sources are not synchronized, the apparent temporal relationship (or lack of one) between the resource series and request errors could be spurious; lead/lag ordering and temporal causal explanations are unsupported.",
+    "recommended_check": "Verify clock synchronization among the JMeter host, metric producer, and analysis host, and record the verification method before performing any temporal inference.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/2"
+    ]
+   }
+  ],
+  "recommendations": [
+   {
+    "rank": 1,
+    "action": "Prioritize root-causing the approximately 10% error rate: extract failing sampler details (response codes, assertions, exceptions, messages) from the JMETER_SAMPLER 'request' stream and the raw JTL records, and determine whether the failures existed in the baseline window.",
+    "rationale": "Both windows fail rule 'errors' (threshold 0) with observed ratios 3000/30000 and 2320/22000, and the overall summary reports 5320 errors of 52000 samples; the errors policy is the only failing policy and is the direct cause of the FAIL verdict.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0",
+     "analysis-result.json#/evidence/1",
+     "analysis-result.json#/evidence/6",
+     "analysis-result.json#/evidence/9",
+     "analysis-result.json#/findings/0",
+     "analysis-result.json#/findings/1"
+    ]
+   },
+   {
+    "rank": 2,
+    "action": "Confirm with the service owner that the errors policy threshold of 0 is intentional and reflects the desired SLO; if a nonzero error allowance is acceptable, review the policy definition before re-running the analysis.",
+    "rationale": "The verdict is driven entirely by the zero-error threshold with operator lte; even a single error causes FAIL, so the semantics of the rule should be explicitly agreed rather than assumed.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/6",
+     "analysis-result.json#/evidence/9"
+    ]
+   },
+   {
+    "rank": 3,
+    "action": "Verify clock alignment among the JMeter host, metric producer, and analysis host, and correct any skew before interpreting the resource and error series together.",
+    "rationale": "clock_alignment is 'not_verified_by_core' and no episode pairs were testable (pairs_evaluable/pairs_tested 0, uncertainty NOT_ESTIMATED); temporal causal claims are unsupported until clocks are verified.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/2",
+     "analysis-result.json#/evidence/14"
+    ]
+   },
+   {
+    "rank": 4,
+    "action": "Validate data quality of the latency and resource metrics: inspect raw sampler latency records to explain the constant 100 ms values, and clarify what the synthetic_unit resource metric measures in the target environment.",
+    "rationale": "All reported latency quantiles equal exactly 100 ms and the resource series unit is synthetic_unit, so the NO_MATERIAL_CHANGE anomaly result and the latency PASS are only as reliable as the underlying data.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0",
+     "analysis-result.json#/evidence/1",
+     "analysis-result.json#/evidence/3",
+     "analysis-result.json#/evidence/4",
+     "analysis-result.json#/evidence/11",
+     "analysis-result.json#/evidence/12",
+     "analysis-result.json#/evidence/13"
+    ]
+   },
+   {
+    "rank": 5,
+    "action": "Investigate the one suppressed short episode by re-running the anomaly rule with suppression disabled or with a shorter minimum episode duration, and compare its timing with error activity.",
+    "rationale": "suppressed_short_episodes 1 with episodes_reported 0 means a candidate event was hidden by the detector; it could coincide with error behavior that the current NO_MATERIAL_CHANGE result does not surface.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/13",
+     "analysis-result.json#/evidence/14"
+    ]
+   },
+   {
+    "rank": 6,
+    "action": "Consider adding an explicit resource-utilization policy (with an agreed metric and threshold) if resource behavior is a concern for this workload.",
+    "rationale": "resource_verdict is NO_POLICY in both windows, which is not a pass and provides no guardrail for the monitored resource series; the current run can only assess business latency and error rules.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/3",
+     "analysis-result.json#/evidence/4",
+     "analysis-result.json#/evidence/7",
+     "analysis-result.json#/evidence/10"
+    ]
+   }
+  ],
+  "caveats": [
+   "Clock alignment is reported as not_verified_by_core (analysis-result.json#/evidence/2); temporal, lead/lag, and causal conclusions are unsupported until clock synchronization is verified.",
+   "Diagnostic uncertainty is NOT_ESTIMATED and pairs_evaluable/pairs_tested are 0 (analysis-result.json#/evidence/14); no correlation analysis supports or refutes a resource-versus-errors relationship.",
+   "The anomaly check suppressed 1 short episode and reported 0 episodes (analysis-result.json#/evidence/13, #/evidence/14); the absence of reported episodes does not prove stability or absence of problems.",
+   "resource_verdict is NO_POLICY in both windows (analysis-result.json#/evidence/7, #/evidence/10); a missing policy is not a pass and does not validate resource behavior.",
+   "The resource metric unit is synthetic_unit (analysis-result.json#/evidence/3, #/evidence/4); it may not correspond to real production utilization, limiting interpretation.",
+   "All latency summaries show identical 100 ms for p50, p95, p99, and max (analysis-result.json#/evidence/0, #/evidence/1, #/evidence/11, #/evidence/12); possible quantization or synthetic values cannot be treated as genuine observations without raw data checks.",
+   "The overall throughput_rps denominator (52099) does not match the sample_count (52000) in the overall metric summary (analysis-result.json#/evidence/0); a minor internal inconsistency in the derived rate.",
+   "Error ratios are aggregated per window; the distribution of errors over time (bursts versus uniform spread) is not shown in these summaries and cannot be inferred.",
+   "run_validity VALID and analysis_coverage COMPLETE (analysis-result.json#/run_validity, #/analysis_coverage) attest to analysis execution completeness, not to data quality or root-cause completeness."
+  ]
+ },
+ "schema": "ai-experiment-run.holdout.v1",
+ "case": "case-010",
+ "rep": 1,
+ "arm": "A",
+ "try": 1,
+ "attempt_id": "case-010-1-A-t1",
+ "model_id": "deepseek-v4-flash-0731",
+ "prompt_sha256": "69f215a1ad4ae678c82410ba7cf7daf171cd9c7ca0ef4626bba6977db0af4ef7"
+}

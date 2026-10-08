@@ -1,0 +1,202 @@
+[
+  {
+    "id": "R006",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T2",
+        "field": "#/summary",
+        "quote": "The two JMeter stages ... show ... 0 errors over 2401 checkout samples",
+        "why": "The 2401 samples and zero errors are whole-run transaction aggregates, not counts reported for each stage window."
+      },
+      {
+        "type": "T1",
+        "field": "#/summary",
+        "quote": "enable knee detection",
+        "why": "The knee detector is a fixed product limitation and is not an operator step needed to obtain a capacity bound."
+      },
+      {
+        "type": "T1",
+        "field": "#/hypotheses/0/recommended_check",
+        "quote": "add a capacity guard that verifies the load bound against SUT-side resources",
+        "why": "The generator guard is diagnostic by contract; it does not verify a bound against SUT resources."
+      },
+      {
+        "type": "T1",
+        "field": "#/hypotheses/2/recommended_check",
+        "quote": "implement the knee detector ... so a knee and upper bound can be computed",
+        "why": "An upper bound is computed from verified stages independently of knee detection."
+      },
+      {
+        "type": "T1",
+        "field": "#/hypotheses/4/possible_explanation",
+        "quote": "The null knee and absent upper bound are attributable to the pipeline not implementing a knee detector",
+        "why": "The missing knee detector explains the null knee, not the absent capacity bound."
+      },
+      {
+        "type": "T1",
+        "field": "#/hypotheses/4/recommended_check",
+        "quote": "Enable or implement the capacity knee detector ... before any capacity knee or ceiling can be reported",
+        "why": "A product capacity bound does not require a knee detector."
+      },
+      {
+        "type": "T7",
+        "field": "#/hypotheses/5/possible_explanation",
+        "quote": "No resource policy applies ... and cannot support a capacity verdict",
+        "why": "Both windows have an applicable business latency policy that passed; the resource NO_POLICY result alone does not prevent a verified bound."
+      },
+      {
+        "type": "T1",
+        "field": "#/recommendations/0/action",
+        "quote": "a guard on the SUT-side resource or on the achieved load bound",
+        "why": "This substitutes a SUT or load-bound guard for the required diagnostic generator guard."
+      },
+      {
+        "type": "T1",
+        "field": "#/recommendations/1/action",
+        "quote": "Implement or enable the capacity knee detector ... so a knee and upper load bound can be computed",
+        "why": "Knee detection is a fixed product limitation and is not required for an upper bound."
+      },
+      {
+        "type": "T2",
+        "field": "#/caveats/2",
+        "quote": "All 2401 samples are covered by the single JMeter sampler label 'checkout'",
+        "why": "Matching overall and transaction aggregate counts do not establish that they contain the same events."
+      }
+    ],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 1,
+    "notes": "It reports the deterministic outcomes but repeatedly gives incorrect guard and knee-detector advice."
+  },
+  {
+    "id": "R007",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T1",
+        "field": "#/summary",
+        "quote": "Advice focuses on enabling capacity guard/stage verification and knee detection",
+        "why": "Knee detection is a fixed product limitation and is not required for a capacity bound."
+      },
+      {
+        "type": "T1",
+        "field": "#/hypotheses/0/possible_explanation",
+        "quote": "The absence of a capacity bound likely results ... from knee detection not being implemented",
+        "why": "A capacity bound is computed independently of knee detection."
+      },
+      {
+        "type": "T1",
+        "field": "#/hypotheses/0/recommended_check",
+        "quote": "Add a capacity-guard policy and a stage-verification rule, implement knee detection",
+        "why": "The product contract does not require a separate stage-verification rule or operator implementation of knee detection."
+      },
+      {
+        "type": "T7",
+        "field": "#/hypotheses/1/possible_explanation",
+        "quote": "The reported loads were near but not explicitly verified against the stage targets ... which contributes to the INDETERMINATE stage verdicts",
+        "why": "The achieved loads are within the stated tolerance, while the recorded stage reason is CAPACITY_GUARD_MISSING."
+      },
+      {
+        "type": "T2",
+        "field": "#/hypotheses/3/observation",
+        "quote": "Latency policy PASSes in both windows ... error_count 0",
+        "why": "The zero-error count comes from whole-run metric summaries, not the window policy records."
+      },
+      {
+        "type": "T1",
+        "field": "#/hypotheses/3/recommended_check",
+        "quote": "obtain the capacity verdict through the missing capacity guard and knee detection",
+        "why": "Knee detection is not a prerequisite for a capacity bound or verdict."
+      },
+      {
+        "type": "T1",
+        "field": "#/recommendations/1/action",
+        "quote": "Implement or wire knee detection",
+        "why": "The null knee is a fixed product limitation, not an operator action."
+      },
+      {
+        "type": "T1",
+        "field": "#/recommendations/1/rationale",
+        "quote": "capacity_knee is null ... so no knee or exclusive bound was estimated",
+        "why": "The null knee does not explain the absence of an upper capacity bound."
+      }
+    ],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 2,
+    "notes": "The status and measurements are mostly preserved, but several actions depend on an incorrect knee requirement."
+  },
+  {
+    "id": "R079",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T2",
+        "field": "#/summary",
+        "quote": "Both stage windows show business PASS ... error_count 0",
+        "why": "Zero errors are reported for the whole run, not separately for either stage window."
+      },
+      {
+        "type": "T7",
+        "field": "#/hypotheses/1/possible_explanation",
+        "quote": "without an applicable SLA the stages cannot be verified for a capacity bound",
+        "why": "An applicable business latency rule was evaluated and passed in both windows; resource NO_POLICY does not mean no SLA applies."
+      },
+      {
+        "type": "T7",
+        "field": "#/recommendations/2/rationale",
+        "quote": "NO_POLICY means no applicable resource rule was evaluated, so no stage can currently be verified",
+        "why": "The resource NO_POLICY result does not itself block verification when the business latency policy applies."
+      }
+    ],
+    "required_facts_preserved": false,
+    "missing_facts": [
+      "The whole-run maximum latency is 1500 ms."
+    ],
+    "usefulness": 3,
+    "notes": "The guard investigation is useful, but the response assigns a whole-run count to windows and treats a resource SLA as necessary despite passing business policy."
+  },
+  {
+    "id": "R114",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T7",
+        "field": "#/summary",
+        "quote": "both stages ... are marked CAPACITY_GUARD_MISSING and CAPACITY_STAGE_NOT_VERIFIED",
+        "why": "Each stage lists CAPACITY_GUARD_MISSING; CAPACITY_STAGE_NOT_VERIFIED is a capacity-summary and coverage reason."
+      },
+      {
+        "type": "T7",
+        "field": "#/hypotheses/3/recommended_check",
+        "quote": "for a future capacity verdict, add an applicable resource rule with effect sla",
+        "why": "Both windows already have an applicable business latency policy, so a resource SLA is not established as a prerequisite."
+      },
+      {
+        "type": "T3",
+        "field": "#/hypotheses/4/recommended_check",
+        "quote": "identify the timestamp of the 1500 ms sample",
+        "why": "The aggregate maximum does not reveal whether one or multiple samples reached 1500 ms."
+      },
+      {
+        "type": "T7",
+        "field": "#/recommendations/3/rationale",
+        "quote": "a product-evaluated rule would be needed for a capacity verdict",
+        "why": "A product-evaluated business latency rule already passed in both windows."
+      },
+      {
+        "type": "T8",
+        "field": "#/caveats/2",
+        "quote": "CPU series units (ratio) versus threshold (0.85) are ambiguous",
+        "why": "The evidence gives both the CPU series and the guard threshold the unit ratio."
+      }
+    ],
+    "required_facts_preserved": false,
+    "missing_facts": [
+      "The whole-run and checkout sample count is 2401."
+    ],
+    "usefulness": 3,
+    "notes": "It correctly protects the deterministic outcome and diagnostic guard contract, but adds an unsupported resource-SLA requirement."
+  }
+]

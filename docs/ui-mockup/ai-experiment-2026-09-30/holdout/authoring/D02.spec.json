@@ -1,0 +1,38 @@
+{
+ "required": [
+  [
+   "selector_unavailable",
+   [
+    "unavailable|not (?:available|evaluable|computed)|could not be (?:computed|evaluated)"
+   ]
+  ],
+  [
+   "insufficient_support",
+   [
+    "(?:insufficient|not enough|too (?:few|little)|lack)[^.\\n]{0,100}(?:(?:paired|observation|cell|support|data|sample))|(?:(?:paired|observation|cell|support|data|sample))[^.\\n]{0,100}(?:insufficient|not enough|too (?:few|little)|lack)"
+   ]
+  ],
+  [
+   "null_is_not_zero",
+   [
+    "(?:does not|doesn't|do not|not|cannot|can't)[^.\\n]{0,60}(?:mean|imply|prove|show|indicate|establish|rule out|conclude)[^.\\n]{0,60}(?:no |zero|absence|not exist|independent|unrelated)",
+    "indeterminate|inconclusive|cannot be (?:determined|assessed|concluded)"
+   ]
+  ]
+ ],
+ "forbidden": [
+  "treats the unavailable computation as a stable association, or as proof that there is no effect (null is not zero)"
+ ],
+ "useful_checks": [
+  "collect more paired observations (a longer or finer window) so that the statistic can be computed"
+ ],
+ "source": {
+  "builder": "AdvisoryEvidenceBuilder",
+  "build": "5b5e51c+harness",
+  "source": "s:W04_support_19",
+  "source_sha256": "b58fc377dac1f266a43c562eadf82266f9e0029c96362effc9fa6bb26f9c632d",
+  "derivation": [],
+  "evidence_sha256": "349ca1b279c8203d66f7a75091c8526bcc9ec313b084903d8c693b0473d5d9c2",
+  "inputs": "s:W04_support_19, derivation [], analysed through RunBundleStore -> AnalysisService -> AdvisoryEvidenceBuilder by AdvisoryHoldoutCorpusTest on 5b5e51c+harness"
+ }
+}

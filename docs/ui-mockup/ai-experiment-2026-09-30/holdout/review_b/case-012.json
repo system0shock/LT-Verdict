@@ -1,0 +1,78 @@
+[
+  {
+    "id": "R013",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T8",
+        "field": "#/summary",
+        "quote": "compute queue depth was near saturation",
+        "why": "The aggregates report an observed maximum of 251 but provide no queue capacity or saturation limit."
+      }
+    ],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 4,
+    "notes": "Otherwise accurately preserves the verdict and gives appropriately cautious, verifiable actions."
+  },
+  {
+    "id": "R059",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T7",
+        "field": "#/hypotheses/4/possible_explanation",
+        "quote": "No resource policy threshold was configured",
+        "why": "NO_POLICY does not establish that no policy was configured; it only establishes that no applicable SLA-effect rule produced a result for the window."
+      },
+      {
+        "type": "T2",
+        "field": "#/recommendations/3/rationale",
+        "quote": "overall throughput ratio ... is lower than the window ratio",
+        "why": "It compares rates derived from raw numerator/denominator fields whose relationship and unit conversion are not defined by the evidence."
+      }
+    ],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 3,
+    "notes": "The core verdict and diagnostic cautions are sound, but the policy-configured claim and unsupported rate comparison are misleading."
+  },
+  {
+    "id": "R077",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T7",
+        "field": "#/caveats/2",
+        "quote": "no resource policy existed to fail",
+        "why": "NO_POLICY does not prove that no resource policy was configured, only that no applicable SLA-effect rule yielded a resource result for the window."
+      }
+    ],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 4,
+    "notes": "It is otherwise cautious about causality, scope differences, and the unavailable statistical support."
+  },
+  {
+    "id": "R137",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T2",
+        "field": "#/summary",
+        "quote": "window throughput was 110 rps",
+        "why": "The evidence provides raw throughput numerator and denominator plus a separate target rate, but does not define a supported derived achieved-throughput rate."
+      },
+      {
+        "type": "T5",
+        "field": "#/hypotheses/1/possible_explanation",
+        "quote": "for most of the window after starting near 5",
+        "why": "Aggregate minimum and percentile values do not establish when the queue began low or its temporal progression through the window."
+      }
+    ],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 3,
+    "notes": "The verdict and most recommended checks are correct, but it invents a queue timeline and an achieved-throughput relation."
+  }
+]

@@ -1,0 +1,122 @@
+[
+  {
+    "id": "R011",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T2",
+        "field": "#/summary",
+        "quote": "all 2,312 errors found in the \"checkout\" transaction ... and logged as frontend.request_error",
+        "why": "It equates whole-run transaction aggregates with a separate OpenSearch aggregate despite different scopes and unverified clock alignment."
+      }
+    ],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 3,
+    "notes": "Otherwise gives appropriately cautious, actionable advice."
+  },
+  {
+    "id": "R022",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T2",
+        "field": "#/summary",
+        "quote": "All 2312 errors are recorded as frontend.request_error ... and all occur on the checkout JMeter sampler",
+        "why": "It asserts a one-to-one relationship between distinct error-profile and transaction-scope aggregates."
+      },
+      {
+        "type": "T5",
+        "field": "#/recommendations/4/rationale",
+        "quote": "the service most plausibly related to the failed transaction",
+        "why": "The evidence contains no topology or call graph establishing paymentservice as part of the checkout path."
+      }
+    ],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 2,
+    "notes": "It preserves the verdict and numbers but over-attributes the error aggregates."
+  },
+  {
+    "id": "R026",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T2",
+        "field": "#/summary",
+        "quote": "All 2312 recorded errors are in the checkout transaction scope, and the error profile groups them as frontend.request_error",
+        "why": "It treats matching counts from transaction and OpenSearch aggregates as the same events without a common scope or verified temporal alignment."
+      }
+    ],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 3,
+    "notes": "The remaining verdict, coverage, and capacity statements are careful and useful."
+  },
+  {
+    "id": "R045",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T2",
+        "field": "#/hypotheses/0/possible_explanation",
+        "quote": "the errors are concentrated in the checkout transaction",
+        "why": "This conclusion joins the policy-window and whole-run transaction aggregates, which are not directly comparable quantities."
+      },
+      {
+        "type": "T5",
+        "field": "#/hypotheses/3/recommended_check",
+        "quote": "identify which downstream call failed",
+        "why": "No call graph or dependency structure is present, so a failed downstream call is not established."
+      }
+    ],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 3,
+    "notes": "It otherwise distinguishes the resource NO_VERDICT from the business-policy failure correctly."
+  },
+  {
+    "id": "R049",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T2",
+        "field": "#/summary",
+        "quote": "All 2,312 errors are attributed to the checkout transaction with error_type frontend.request_error",
+        "why": "It merges transaction-scope counts with the separate OpenSearch error-group aggregate as though they identify the same events."
+      },
+      {
+        "type": "T8",
+        "field": "#/recommendations/3/rationale",
+        "quote": "only a complete rerun can produce a new verdict",
+        "why": "This wrongly excludes completing or backfilling the missing acquisition data, which the response itself identifies as a way to re-evaluate the resource policy."
+      }
+    ],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 3,
+    "notes": "The advice is largely cautious but contains a material aggregate-attribution error."
+  },
+  {
+    "id": "R068",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T2",
+        "field": "#/summary",
+        "quote": "All 2312 observed errors are on the checkout transaction ... they are logged as frontend.request_error",
+        "why": "It asserts that separate transaction and OpenSearch aggregates refer to the same errors despite differing scopes and unverified clock alignment."
+      },
+      {
+        "type": "T8",
+        "field": "#/hypotheses/1/possible_explanation",
+        "quote": "rather than sustained saturation",
+        "why": "Aggregate error buckets and resource summaries cannot establish the absence of sustained saturation or capacity pressure."
+      }
+    ],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 3,
+    "notes": "It states the deterministic verdict and coverage correctly but over-interprets aggregate evidence."
+  }
+]

@@ -1,0 +1,130 @@
+[
+  {
+    "id": "R008",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T7",
+        "field": "#/hypotheses/4/possible_explanation",
+        "quote": "under NO_POLICY means no checks were defined or evaluated",
+        "why": "NO_POLICY can also result from no applicable policy or no required capacity, so it does not establish that no checks or policy evaluation existed."
+      }
+    ],
+    "required_facts_preserved": true,
+    "missing_facts": [
+      "NO_POLICY does not identify which of its allowed causes applies."
+    ],
+    "usefulness": 4,
+    "notes": "Otherwise accurately preserves the run facts and keeps latency explanations hypothetical."
+  },
+  {
+    "id": "R014",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T7",
+        "field": "#/hypotheses/2/possible_explanation",
+        "quote": "No capacity policy or required capacity was configured",
+        "why": "The verdict establishes no applicable policy or no required capacity, not that no policy was configured."
+      }
+    ],
+    "required_facts_preserved": true,
+    "missing_facts": [
+      "NO_POLICY does not establish whether a policy exists but is inapplicable."
+    ],
+    "usefulness": 4,
+    "notes": "The numeric reporting and sample-level follow-up checks are otherwise well supported."
+  },
+  {
+    "id": "R017",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T7",
+        "field": "#/hypotheses/3/possible_explanation",
+        "quote": "no policy was configured to evaluate it",
+        "why": "NO_POLICY may instead mean that an existing policy is not applicable or that required capacity is absent."
+      }
+    ],
+    "required_facts_preserved": true,
+    "missing_facts": [
+      "The evidence does not identify the specific cause of NO_POLICY."
+    ],
+    "usefulness": 4,
+    "notes": "It correctly avoids treating the healthy-looking aggregates as a capacity result."
+  },
+  {
+    "id": "R028",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T7",
+        "field": "#/recommendations/0/rationale",
+        "quote": "NO_POLICY, meaning no policy was configured",
+        "why": "NO_POLICY does not prove that no policy was configured; it can mean no applicable policy or no required capacity."
+      },
+      {
+        "type": "T3",
+        "field": "#/caveats/3",
+        "quote": "Max latency values ... are single-sample observations",
+        "why": "The aggregate summaries give no count of samples at either reported maximum, so a maximum may have occurred more than once."
+      },
+      {
+        "type": "T5",
+        "field": "#/caveats/2",
+        "quote": "declared scopes and windows",
+        "why": "No window ids or window definitions are present in the evidence."
+      }
+    ],
+    "required_facts_preserved": true,
+    "missing_facts": [
+      "The number of samples at the reported maxima is unknown.",
+      "No windows are referenced in the input."
+    ],
+    "usefulness": 2,
+    "notes": "It contains useful checks but asserts unsupported sample multiplicity and window structure."
+  },
+  {
+    "id": "R035",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T3",
+        "field": "#/summary",
+        "quote": "all 7 JMeter transactions",
+        "why": "The evidence has six transaction summaries plus one overall summary, not seven transactions."
+      },
+      {
+        "type": "T7",
+        "field": "#/hypotheses/0/possible_explanation",
+        "quote": "No capacity policy or required capacity was configured",
+        "why": "NO_POLICY permits either no applicable policy or no required capacity and does not establish that no policy was configured."
+      }
+    ],
+    "required_facts_preserved": false,
+    "missing_facts": [
+      "There are six transaction summaries; the seventh metric summary is the overall scope.",
+      "The precise cause of NO_POLICY is not established."
+    ],
+    "usefulness": 2,
+    "notes": "The recommendations are generally sound, but the transaction inventory and NO_POLICY rationale are misstated."
+  },
+  {
+    "id": "R062",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T7",
+        "field": "#/summary",
+        "quote": "no policy or required capacity is configured",
+        "why": "NO_POLICY does not establish that no policy was configured, because an existing policy may be inapplicable."
+      }
+    ],
+    "required_facts_preserved": true,
+    "missing_facts": [
+      "The evidence does not determine which allowed NO_POLICY condition applies."
+    ],
+    "usefulness": 4,
+    "notes": "It otherwise correctly preserves the verdict and gives the appropriate verified-stage capacity advice without invoking a knee detector."
+  }
+]

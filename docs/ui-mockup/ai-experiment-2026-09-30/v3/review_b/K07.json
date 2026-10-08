@@ -1,0 +1,55 @@
+[
+  {
+    "id": "R009",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T5",
+        "field": "#/summary",
+        "quote": "Its 23-cell distribution is bimodal",
+        "why": "Aggregate summary statistics do not establish the number of modes in the underlying per-cell distribution."
+      },
+      {
+        "type": "T2",
+        "field": "#/hypotheses/6/possible_explanation",
+        "quote": "or transaction-scoped versus all samples",
+        "why": "Both cited JTL quantities are explicitly overall-scoped; their denominator difference is due to different windows, not a possible transaction-versus-all comparison."
+      }
+    ],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 3,
+    "notes": "It preserves the verdict and offers useful checks, but includes unsupported distribution shape and a misleading scope explanation."
+  },
+  {
+    "id": "R048",
+    "hard_defect": false,
+    "defects": [],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 5,
+    "notes": "Accurate, well-scoped, and operationally useful while preserving uncertainty and the deterministic FAIL."
+  },
+  {
+    "id": "R058",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T5",
+        "field": "#/summary",
+        "quote": "the underlying series is bimodal",
+        "why": "The evidence provides aggregates only, which cannot establish a bimodal per-cell distribution."
+      },
+      {
+        "type": "T3",
+        "field": "#/hypotheses/5/possible_explanation",
+        "quote": "A single interval mean far below the 5th percentile",
+        "why": "The aggregate evidence does not state how many cells share the reported minimum or fall below the fifth percentile."
+      }
+    ],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 3,
+    "notes": "The principal verdict and recommendations are sound, but unsupported claims about distribution shape and cell uniqueness reduce reliability."
+  }
+]

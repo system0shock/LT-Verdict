@@ -1,0 +1,150 @@
+{
+ "stage": "S1",
+ "mode": "live",
+ "model": "glm-5.3",
+ "tag": {
+  "phase": "v3",
+  "model_tag": "glm-5.3",
+  "stage": "S1",
+  "case": "K04",
+  "rep": 1,
+  "attempt": 1
+ },
+ "qwen_exit": 0,
+ "wall_ms": 123776,
+ "relay": {
+  "schema_version": "advisory-ai-runtime-relay.v1",
+  "status": "FORWARDED_STRUCTURED_OUTPUT",
+  "request_count": 1,
+  "usage": {
+   "prompt_tokens": 3095,
+   "total_tokens": 13976,
+   "completion_tokens": 10881,
+   "prompt_tokens_details": {
+    "cached_tokens": 1536
+   },
+   "completion_tokens_details": {
+    "reasoning_tokens": 9155
+   }
+  },
+  "latency_ms": 122442,
+  "model_returned": "glm-5.3"
+ },
+ "relay_status": "FORWARDED_STRUCTURED_OUTPUT",
+ "usage": {
+  "prompt_tokens": 3095,
+  "total_tokens": 13976,
+  "completion_tokens": 10881,
+  "prompt_tokens_details": {
+   "cached_tokens": 1536
+  },
+  "completion_tokens_details": {
+   "reasoning_tokens": 9155
+  }
+ },
+ "latency_ms": 122442,
+ "status": "OK",
+ "note": null,
+ "output": {
+  "caveats": [
+   "The deterministic verdict is PASS (policy_verdict), run validity is VALID, and analysis coverage is COMPLETE with an empty reasons list; this advisory interpretation does not modify any of them.",
+   "The PASS verdict is supported by a single policy check on the overall error_rate_ratio (operator lte, threshold 0.01, observed 0/2623); no latency thresholds, per-transaction thresholds, or capacity policies appear in the evidence.",
+   "The evidence consists of aggregate metric summaries plus one policy check; per-sample latencies between p99 and max (for example the 904 ms maximum on home and the 444 ms maximum on checkout) cannot be further characterized from this input.",
+   "All throughput_rps ratios in the evidence share the denominator 44986, whose unit is not defined in the referenced fields; read the reported rates as given and verify the basis before using them externally.",
+   "Overall and per-transaction counts are different scopes; the exact sum 437+437+437+438+437+437 = 2623 is arithmetic on referenced values and is not, by itself, a verified window or scope identity.",
+   "The findings array is empty; this advisory draws only on the referenced evidence and makes no claims about stability, spare capacity, saturation, or load levels beyond what that evidence states.",
+   "No capacity bound information is present in this input, and none is inferred here.",
+   "Only one run is referenced; no repeat runs or baseline comparisons appear in the evidence, so run-to-run variability of the reported percentiles and maxima is unknown."
+  ],
+  "hypotheses": [
+   {
+    "evidence_refs": [
+     "analysis-result.json#/evidence/4",
+     "analysis-result.json#/evidence/0"
+    ],
+    "observation": "The home sampler reports latency_ms max 904 with p99 96, and the overall summary reports max 904 with p99 77; error_count is 0 in every referenced scope.",
+    "possible_explanation": "A small number of slow home samples - possibly a single sample - may account for the 904 ms maximum while the bulk of responses stayed near the reported percentiles. This is a hypothesis about the distribution tail, not an established cause.",
+    "recommended_check": "Inspect the raw JTL rows for the home sampler: count samples above 100 ms and above 500 ms and note where they occur within the run window.",
+    "rank": 1
+   },
+   {
+    "evidence_refs": [
+     "analysis-result.json#/evidence/7",
+     "analysis-result.json#/policy_verdict"
+    ],
+    "observation": "The evidence contains exactly one policy_check: metric error_rate_ratio, overall scope (rule overall-errors), operator lte, threshold 0.01, status PASS. No policy checks for latency metrics or per-transaction scopes are present.",
+    "possible_explanation": "The run's policy configuration may consist solely of an overall error-rate rule, so latency percentiles and per-transaction behavior were not compared with any threshold; the PASS verdict would then reflect error rate only.",
+    "recommended_check": "Review the policy configuration for this run and list the configured rules; if latency objectives exist, configure latency threshold rules before a rerun.",
+    "rank": 2
+   },
+   {
+    "evidence_refs": [
+     "analysis-result.json#/evidence/3",
+     "analysis-result.json#/evidence/0"
+    ],
+    "observation": "The checkout sampler reports latency_ms max 444 with p99 85 and error_count 0 over 437 samples.",
+    "possible_explanation": "A few checkout responses slower than the p99 may exist without producing errors; the maximum may come from isolated samples rather than a sustained slowdown. This is unverified.",
+    "recommended_check": "Inspect checkout samples in the JTL above its reported p99, count them, and note their timing within the run.",
+    "rank": 3
+   },
+   {
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0",
+     "analysis-result.json#/evidence/1",
+     "analysis-result.json#/evidence/4"
+    ],
+    "observation": "The six per-transaction sample counts (437 each; 438 for home) sum to the overall sample_count 2623, and every throughput_rps ratio in the evidence uses the same denominator 44986.",
+    "possible_explanation": "The overall summary may aggregate exactly these six samplers over one common window, and the shared denominator may be the elapsed basis for the reported rates; the referenced fields do not state the denominator's unit, so this remains unverified.",
+    "recommended_check": "Compare the set of sampler labels and the timestamp span in the raw JTL with these summaries to confirm the transaction list is complete and to ground the throughput basis.",
+    "rank": 4
+   }
+  ],
+  "recommendations": [
+   {
+    "action": "Inspect the raw JTL sample records for the home and checkout samplers to characterize samples above their p99 values (max 904 ms and 444 ms respectively): count them and note their position within the run window.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/4",
+     "analysis-result.json#/evidence/3",
+     "analysis-result.json#/evidence/0"
+    ],
+    "rationale": "The maxima are far above the reported p99 values while error_count is 0 in every scope; per-sample inspection is the bounded way to tell whether slow responses are isolated or clustered.",
+    "rank": 1
+   },
+   {
+    "action": "Review the policy configuration for this run; if latency objectives exist, configure latency threshold checks (for example on overall or per-transaction p95/p99) and rerun. The current run's PASS verdict stands as recorded for this run.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/7",
+     "analysis-result.json#/policy_verdict"
+    ],
+    "rationale": "The evidence contains a single policy check on the overall error_rate_ratio, so the PASS verdict reflects error rate only; latency percentiles were not evaluated against any threshold.",
+    "rank": 2
+   },
+   {
+    "action": "If the reported throughput values will be used elsewhere, verify their time basis by comparing the shared denominator 44986 with the timestamp span of the JTL records for this run.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0",
+     "analysis-result.json#/evidence/1"
+    ],
+    "rationale": "All throughput_rps ratios in the evidence share denominator 44986, but the referenced fields do not define its unit; checking the raw timestamps grounds the reported rates.",
+    "rank": 3
+   },
+   {
+    "action": "If reproducibility of the latency profile matters, rerun the same test configuration and compare the reported percentiles and maxima.",
+    "evidence_refs": [
+     "analysis-result.json#/run_validity",
+     "analysis-result.json#/evidence/4"
+    ],
+    "rationale": "The evidence covers one run; a repeat under the same configuration would show whether the 904 ms and 444 ms maxima recur. This implies no capacity or saturation conclusion.",
+    "rank": 4
+   }
+  ],
+  "schema_version": "ai-advice-output.v1",
+  "summary": "Run jmeter_jtl_csv-b87363cf1d89c0789e174268c6d25cd65abd36f7b623d4ea84fe253ceaabf1e7 is reported VALID, with COMPLETE analysis coverage (empty reasons list) and a deterministic policy verdict of PASS. The single policy check in the evidence (rule overall-errors) evaluates the overall error_rate_ratio of 0/2623 against an lte 0.01 threshold and passes. All six transaction summaries (add product to cart, cart, checkout, home, product, reset cart) report error_count 0; their sample counts (437 each; 438 for home) sum to the overall 2623. Reported latency_ms percentiles are modest overall (p50 11, p95 46, p99 77) with a max of 904 that matches the home sampler's max; checkout's max is 444. The findings list is empty. This advisory does not change the PASS verdict. Open questions concern tail latency (maxima well above p99 on home and checkout), the absence of latency-oriented policy checks, and the undefined unit of the shared throughput denominator."
+ },
+ "schema": "ai-experiment-run.v3",
+ "case": "K04",
+ "rep": 1,
+ "model_id": "glm-5.3",
+ "net_retries": 0,
+ "infra_retries": 0
+}

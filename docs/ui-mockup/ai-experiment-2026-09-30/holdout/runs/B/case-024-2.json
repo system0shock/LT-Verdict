@@ -1,0 +1,207 @@
+{
+ "stage": "B",
+ "mode": "live",
+ "model": "deepseek-v4-flash-0731",
+ "tag": {
+  "phase": "holdout",
+  "attempt_id": "case-024-2-B-t1",
+  "arm": "B",
+  "stage": null,
+  "case": "case-024",
+  "rep": 2,
+  "try": 1
+ },
+ "retry_policy": "d2",
+ "qwen_exit": 0,
+ "wall_ms": 97173,
+ "relay": {
+  "schema_version": "advisory-ai-runtime-relay.v1",
+  "status": "FORWARDED_STRUCTURED_OUTPUT",
+  "received_request_count": 1,
+  "forwarded_request_count": 1,
+  "outcomes": [
+   "FORWARDED_STRUCTURED_OUTPUT"
+  ],
+  "retry_refused_reason": null,
+  "first_refused_reason": null,
+  "model_id": "deepseek-v4-flash-0731",
+  "retry_policy": "d2",
+  "requests": [
+   {
+    "ordinal": 1,
+    "forwarded": true,
+    "outcome": "FORWARDED_STRUCTURED_OUTPUT",
+    "provider_status": 200,
+    "latency_ms": 95861,
+    "usage": {
+     "prompt_tokens": 4484,
+     "total_tokens": 14574,
+     "completion_tokens": 10090,
+     "prompt_tokens_details": {
+      "cached_tokens": 1024
+     },
+     "completion_tokens_details": {
+      "reasoning_tokens": 7683
+     }
+    },
+    "model_returned": "deepseek-v4-flash-0731"
+   }
+  ],
+  "usage": {
+   "prompt_tokens": 4484,
+   "completion_tokens": 10090,
+   "total_tokens": 14574
+  },
+  "latency_ms": 95861
+ },
+ "relay_status": "FORWARDED_STRUCTURED_OUTPUT",
+ "usage": {
+  "prompt_tokens": 4484,
+  "completion_tokens": 10090,
+  "total_tokens": 14574
+ },
+ "latency_ms": 95861,
+ "retried": false,
+ "retry_refused_reason": null,
+ "status": "OK",
+ "note": null,
+ "output": {
+  "schema_version": "ai-advice-output.v1",
+  "summary": "The run is VALID with COMPLETE analysis coverage, but the deterministic policy verdict is NO_POLICY: no applicable business policy rule and no resource rule with effect sla produced PASS or FAIL for the evaluation window (1767225600000–1767225642000 ms). Load metrics show 0 errors over 840 samples with latency p50 300 ms and p95/p99/max all 600 ms. A stored correlation pair between the 'value' resource series and p95 response time is CANDIDATE (best_lag_ms 0, partial_rho 0.862678158076, raw_rho 0.771428571429) with uncertainty NOT_ESTIMATED; headline selection is UNAVAILABLE with reason GENUINE_PARTIAL_UNCALIBRATED and null p-values. Clock alignment is not_verified_by_core, which limits temporal interpretation. No findings and anomalies_tested 0 / episodes_reported 0 do not prove stability, spare capacity, or absence of a problem. This advice does not change the NO_POLICY verdict.",
+  "hypotheses": [
+   {
+    "rank": 1,
+    "observation": "The window policy summary for the evaluation window (1767225600000–1767225642000 ms) reports business_verdict NO_POLICY, resource_verdict NO_POLICY, and verdict NO_POLICY, while the run is VALID, analysis coverage is COMPLETE, and the findings list is empty.",
+    "possible_explanation": "No applicable business policy rule and no resource rule with effect sla were evaluated for the window, so the product could not produce PASS or FAIL; the absence of a policy is not the same as a healthy PASS.",
+    "recommended_check": "Review the configured policy rules and their evaluation windows; add a business threshold or a resource rule with effect sla covering the window and rerun so the product can emit PASS or FAIL.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/6",
+     "analysis-result.json#/policy_verdict",
+     "analysis-result.json#/run_validity",
+     "analysis-result.json#/analysis_coverage"
+    ]
+   },
+   {
+    "rank": 2,
+    "observation": "The correlation pair analysis reports status CANDIDATE with partial_rho 0.862678158076, raw_rho 0.771428571429, best_lag_ms 0, paired_cells 42, and uncertainty NOT_ESTIMATED; the headline selection is status UNAVAILABLE, selected false, holm_adjusted_p_value null, with reason GENUINE_PARTIAL_UNCALIBRATED.",
+    "possible_explanation": "The stored correlation may reflect a genuine association between the 'value' resource series and p95 response time, but significance is not estimated and the selection is uncalibrated, so it remains an unconfirmed candidate rather than a finding.",
+    "recommended_check": "Collect more data or rerun to obtain calibrated p-values from the bootstrap method (mbb-lag-max-holm.v1) before interpreting the partial rho as meaningful, and inspect the raw paired series.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/8",
+     "analysis-result.json#/evidence/9"
+    ]
+   },
+   {
+    "rank": 3,
+    "observation": "The resource binding reports clock_alignment 'not_verified_by_core' and the correlation pair used best_lag_ms 0 with a one-point lag_profile.",
+    "possible_explanation": "Without verified clock alignment between the load generator, system under test, and telemetry collection, a best lag of 0 ms cannot support a lead/lag or temporal-ordering claim for the correlation.",
+    "recommended_check": "Verify clock synchronization across the load generator, system under test, and telemetry collection, then rerun if lead/lag interpretation is needed.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/2",
+     "analysis-result.json#/evidence/8"
+    ]
+   },
+   {
+    "rank": 4,
+    "observation": "Resource summaries for control0, control1, and value all report identical statistics (min 1, max 6, mean 3.5, median 3.5, q05 1, q25 2, q75 5, q95 6, sample_standard_deviation 1.7285267941367818) over 42 observed cells with 0 missing cells.",
+    "possible_explanation": "The control and value series may carry very similar or coarse interval-mean data, which would limit the ability of the partial correlation to separate the effect of 'value' from the controls.",
+    "recommended_check": "Inspect the raw per-interval series and the controls_used list; confirm the series are distinct and check sampling resolution before relying on the partial rho.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/3",
+     "analysis-result.json#/evidence/4",
+     "analysis-result.json#/evidence/5",
+     "analysis-result.json#/evidence/8"
+    ]
+   },
+   {
+    "rank": 5,
+    "observation": "The diagnostic summary reports anomalies_tested 0, episodes_reported 0, pairs_tested 1, pairs_evaluable 1, status COMPLETE, and uncertainty NOT_ESTIMATED.",
+    "possible_explanation": "Absence of reported episodes does not prove the window was stable or anomaly-free; it may reflect that no anomaly tests were triggered in this configuration.",
+    "recommended_check": "Review the anomaly detection configuration and inspect per-interval series for structural changes before concluding the window was clean.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/10",
+     "analysis-result.json#/evidence/7"
+    ]
+   },
+   {
+    "rank": 6,
+    "observation": "Overall and transaction metric summaries report latency p50 300 ms with p95, p99, and max all equal to 600 ms, and error_count 0 over 840 samples.",
+    "possible_explanation": "Equal p95, p99, and max latency could indicate a ceiling or quantization near 600 ms in the sampled latency rather than a natural distribution; zero errors also do not prove absence of load issues.",
+    "recommended_check": "Inspect raw latency samples and the sampler configuration to see whether 600 ms represents a cap, a timeout, or measurement resolution.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0",
+     "analysis-result.json#/evidence/1",
+     "analysis-result.json#/evidence/7"
+    ]
+   }
+  ],
+  "recommendations": [
+   {
+    "rank": 1,
+    "action": "Configure an applicable business policy rule and/or a resource rule with effect sla that covers the evaluation window (1767225600000–1767225642000 ms), then rerun the analysis.",
+    "rationale": "The deterministic verdict is NO_POLICY because no applicable rule was evaluated; only a rule the product evaluates can yield PASS or FAIL, and a healthy-looking window does not convert NO_POLICY into PASS.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/6",
+     "analysis-result.json#/policy_verdict"
+    ]
+   },
+   {
+    "rank": 2,
+    "action": "Verify clock alignment among the load generator, system under test, and telemetry collection, because clock_alignment is currently not_verified_by_core, before interpreting lag or ordering.",
+    "rationale": "An unverified clock relationship cannot support lead/lag ordering or temporal causal hypotheses; clock verification is a prerequisite for any lag-based interpretation such as best_lag_ms 0.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/2",
+     "analysis-result.json#/evidence/8"
+    ]
+   },
+   {
+    "rank": 3,
+    "action": "Treat the correlation pair as CANDIDATE with NOT_ESTIMATED uncertainty and UNAVAILABLE uncalibrated selection; rerun or collect additional paired data to obtain calibrated p-values before drawing conclusions.",
+    "rationale": "Headline selection is selected false, holm_adjusted_p_value null, and reason GENUINE_PARTIAL_UNCALIBRATED, so there is no statistical significance estimate supporting the observed partial rho.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/8",
+     "analysis-result.json#/evidence/9",
+     "analysis-result.json#/evidence/10"
+    ]
+   },
+   {
+    "rank": 4,
+    "action": "Inspect the raw per-interval resource series (control0, control1, value) and the p95 latency series to check series distinctness, sampling resolution, and the plateau at 600 ms.",
+    "rationale": "The three resource series show identical descriptive statistics over 42 cells and p95 = p99 = max = 600 ms, which limits how much explanatory detail the current analyses can provide.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/3",
+     "analysis-result.json#/evidence/4",
+     "analysis-result.json#/evidence/5",
+     "analysis-result.json#/evidence/7"
+    ]
+   },
+   {
+    "rank": 5,
+    "action": "Review the anomaly detection configuration and per-interval data before treating the window as clean; do not infer stability from anomalies_tested 0 and episodes_reported 0.",
+    "rationale": "Absent findings, 0 anomalies tested, and 0 episodes reported do not prove stability, spare capacity, low load, or absence of a problem.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/10"
+    ]
+   }
+  ],
+  "caveats": [
+   "The NO_POLICY verdict is deterministic and is preserved; none of this advice changes it. Only a rule the product evaluated can yield PASS or FAIL.",
+   "Clock alignment is not_verified_by_core (analysis-result.json#/evidence/2), so temporal ordering and lag interpretations (best_lag_ms 0) are not supported.",
+   "Correlation significance is NOT_ESTIMATED and headline selection is UNAVAILABLE with reason GENUINE_PARTIAL_UNCALIBRATED; p-values are null, so no calibrated significance exists for the observed partial rho.",
+   "Overall run counts (throughput_rps denominator 42499) and evaluation-window counts (denominator 42000) are different scopes; they are not compared as if identical.",
+   "The overall metric summary and the transaction 'request' metric summary show identical values, but they are separate scopes; this is not treated as an inconsistency.",
+   "Analysis covers the evaluation window (1767225600000–1767225642000 ms, 42 s) only, while the run extends to 1767225642499 ms; window metrics do not cover the entire run.",
+   "No findings, 0 anomalies tested, and 0 episodes reported do not prove stability, spare capacity, low load, or absence of a problem.",
+   "This analysis contains no capacity bound, capacity knee, or generator-guard evidence, so no statements about capacity or generator-guard status are made.",
+   "Latency quantiles p95 = p99 = max = 600 ms may reflect measurement resolution or a cap; raw samples were not reviewed in this analysis."
+  ]
+ },
+ "schema": "ai-experiment-run.holdout.v1",
+ "case": "case-024",
+ "rep": 2,
+ "arm": "B",
+ "try": 1,
+ "attempt_id": "case-024-2-B-t1",
+ "model_id": "deepseek-v4-flash-0731",
+ "prompt_sha256": "3c0f28bee6517c13c5c854615e7d3d59301893d9723880818e4034a32e9133bf"
+}

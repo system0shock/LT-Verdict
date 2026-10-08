@@ -1,0 +1,84 @@
+[
+  {
+    "id": "R013",
+    "hard_defect": false,
+    "defects": [],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 5,
+    "notes": "The verdict is correctly scoped to the error-rate policy, and the proposed checks are specific and verifiable."
+  },
+  {
+    "id": "R017",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T3",
+        "field": "#/summary",
+        "quote": "All 7 transaction-level summaries",
+        "why": "The evidence contains six transaction summaries; the seventh metric summary is overall."
+      }
+    ],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 2,
+    "notes": "Most checks are useful, but the invented transaction count misstates the evidence structure."
+  },
+  {
+    "id": "R031",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T4",
+        "field": "#/caveats/4",
+        "quote": "All counts are whole-run scope",
+        "why": "The evidence also reports counts for six transaction scopes."
+      }
+    ],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 2,
+    "notes": "The main verdict and numbers are correct, but the scope claim could mislead count comparisons."
+  },
+  {
+    "id": "R034",
+    "hard_defect": false,
+    "defects": [],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 4,
+    "notes": "The advice keeps possible latency causes hypothetical and gives concrete checks."
+  },
+  {
+    "id": "R051",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T4",
+        "field": "#/hypotheses/1/observation",
+        "quote": "437,000/44,986 for each transaction",
+        "why": "The home transaction reports 438,000/44,986."
+      }
+    ],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 2,
+    "notes": "The recommendations are largely actionable, but the incorrect throughput claim could distort the load mix."
+  },
+  {
+    "id": "R056",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T5",
+        "field": "#/hypotheses/2/observation",
+        "quote": "derived facts section 3 lists no capacity_summary",
+        "why": "The supplied evidence has no derived-facts section, so this invents a source for the claim."
+      }
+    ],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 2,
+    "notes": "The verdict and operator actions are mostly sound, but the response cites a nonexistent evidence section."
+  }
+]

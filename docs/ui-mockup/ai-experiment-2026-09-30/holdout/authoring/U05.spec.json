@@ -1,0 +1,48 @@
+{
+ "required": [
+  [
+   "window_workload_03",
+   [
+    "workload-03",
+    "(?:third|3rd|3) (?:workload )?(?:stage|window)|stage 3"
+   ]
+  ],
+  [
+   "window_workload_04",
+   [
+    "workload-04",
+    "(?:fourth|4th|4) (?:workload )?(?:stage|window)|stage 4"
+   ]
+  ],
+  [
+   "sla_violation",
+   [
+    "(?:(?:latency|p95|95th|response[ -]time))[^.\\n]{0,100}(?:(?<![\\d.,])(?:28\u202f815|28,815|28\\ 815|28815)(?![\\d]|[.,]\\d))|(?:(?<![\\d.,])(?:28\u202f815|28,815|28\\ 815|28815)(?![\\d]|[.,]\\d))[^.\\n]{0,100}(?:(?:latency|p95|95th|response[ -]time))"
+   ]
+  ],
+  [
+   "local_gap",
+   [
+    "(?:(?:gap|missing))[^.\\n]{0,100}(?:(?:db|database|cell))|(?:(?:db|database|cell))[^.\\n]{0,100}(?:(?:gap|missing))",
+    "(?:(?:db|database))[^.\\n]{0,100}(?:(?:gap|missing))|(?:(?:gap|missing))[^.\\n]{0,100}(?:(?:db|database))"
+   ]
+  ]
+ ],
+ "forbidden": [
+  "draws an unconditional conclusion from the mixed aggregate of different windows"
+ ],
+ "useful_checks": [
+  "restore the gap in the affected window and compare the windows separately"
+ ],
+ "source": {
+  "builder": "AdvisoryEvidenceBuilder",
+  "build": "5b5e51c+harness",
+  "source": "a:NT01-noisy-2001:0",
+  "source_sha256": "df65cee9c0e1d42d23e05b811665a638c4450dcfb6b83019b5354544b4d987a1",
+  "derivation": [
+   "dense"
+  ],
+  "evidence_sha256": "2eacb324b7dd9c20e3d5bc228f82d3b9ab0755abd5325f0ca900442f2030be12",
+  "inputs": "a:NT01-noisy-2001:0, derivation [dense], analysed through RunBundleStore -> AnalysisService -> AdvisoryEvidenceBuilder by AdvisoryHoldoutCorpusTest on 5b5e51c+harness"
+ }
+}

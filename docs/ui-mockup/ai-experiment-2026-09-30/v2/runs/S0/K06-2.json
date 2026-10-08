@@ -1,0 +1,187 @@
+{
+ "stage": "S0",
+ "mode": "live",
+ "model": "deepseek-v4-flash-0731",
+ "tag": {
+  "phase": "v2-pilot",
+  "stage": "S0",
+  "case": "K06",
+  "rep": 2,
+  "attempt": 1
+ },
+ "qwen_exit": 0,
+ "wall_ms": 127345,
+ "relay": {
+  "schema_version": "advisory-ai-runtime-relay.v1",
+  "status": "FORWARDED_STRUCTURED_OUTPUT",
+  "request_count": 1,
+  "usage": {
+   "prompt_tokens": 9284,
+   "total_tokens": 22250,
+   "completion_tokens": 12966,
+   "prompt_tokens_details": {
+    "cached_tokens": 1024
+   },
+   "completion_tokens_details": {
+    "reasoning_tokens": 10213
+   }
+  },
+  "latency_ms": 125986,
+  "model_returned": "deepseek-v4-flash-0731"
+ },
+ "relay_status": "FORWARDED_STRUCTURED_OUTPUT",
+ "usage": {
+  "prompt_tokens": 9284,
+  "total_tokens": 22250,
+  "completion_tokens": 12966,
+  "prompt_tokens_details": {
+   "cached_tokens": 1024
+  },
+  "completion_tokens_details": {
+   "reasoning_tokens": 10213
+  }
+ },
+ "latency_ms": 125986,
+ "status": "OK",
+ "note": null,
+ "output": {
+  "schema_version": "ai-advice-output.v1",
+  "summary": "Deterministic verdict: FAIL (window policy summary verdict FAIL; business_verdict FAIL; resource_verdict NO_POLICY; run_validity VALID). The overall-errors policy check fails: observed error rate 3688/73813 (~5.0%) exceeds the 0.01 (1%) threshold in the run-intersection window. All 3688 JMeter sampler errors belong to the checkout transaction (the other five transaction summaries report 0 errors); OpenSearch groups them as frontend.request_error at service frontend (count 3688, error_rate_per_minute 258.8) with intermittent bursts up to 1244 errors/minute. Checkout also shows an extreme max latency of 10008 ms versus 980-1071 ms for the other transactions. Resource coverage is INCOMPLETE: paymentservice CPU/memory have RESOURCE_GAPS (5 and 6 missing cells of 47). The errors-vs-load correlation is descriptive only (raw rho 0.9744, partial rho 0.9722 at best_lag_ms 0; uncertainty NOT_ESTIMATED; headline selection UNAVAILABLE/GENUINE_PARTIAL_UNCALIBRATED), and clock_alignment is not_verified_by_core, so no causal or lead/lag claim is supported by the analysis. Advice does not change the FAIL verdict.",
+  "hypotheses": [
+   {
+    "rank": 1,
+    "observation": "The overall metric summary reports error_count 3688 (sample_count 75411), and the policy check for rule overall-errors reports status FAIL with observed 3688/73813 against threshold 0.01. The checkout transaction summary is the only transaction summary with nonzero error_count (3688 of its 12567 samples); the other five transaction summaries report error_count 0.",
+    "possible_explanation": "The deterministic FAIL verdict is driven by errors on the checkout transaction; the root cause of those checkout errors is not identified by this evidence.",
+    "recommended_check": "Extract per-request checkout results from the JMeter JTL (status codes, assertion failures, response messages) and cross-reference with frontend request error logs to identify the concrete failure mode.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0",
+     "analysis-result.json#/evidence/3",
+     "analysis-result.json#/evidence/15",
+     "analysis-result.json#/evidence/16"
+    ]
+   },
+   {
+    "rank": 2,
+    "observation": "The errors-vs-load correlation pair reports best_lag_ms 0, raw rho 0.974383916991, partial rho 0.972200295291, status DESCRIPTIVE, uncertainty NOT_ESTIMATED; the headline selection is UNAVAILABLE with reason GENUINE_PARTIAL_UNCALIBRATED.",
+    "possible_explanation": "The error rate and achieved load move together at zero lag within this run, but the correlation is uncalibrated and descriptive; it does not by itself prove that load caused the errors or identify a trigger threshold.",
+    "recommended_check": "After verifying clock alignment, run a staged load ramp and apply a calibrated lag/significance method on the error-rate series to test whether and at what load the error rate rises.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/18",
+     "analysis-result.json#/evidence/19",
+     "analysis-result.json#/evidence/7"
+    ]
+   },
+   {
+    "rank": 3,
+    "observation": "paymentservice cpu summary has expected_cells 47, observed_cells 42, missing_cells 5, longest_gap_cells 2 with reason RESOURCE_GAPS; paymentservice memory has observed_cells 41, missing_cells 6; analysis coverage is INCOMPLETE with reason RESOURCE_GAPS. The paymentservice memory statistics also show min 3268608 bytes versus median 30746624 bytes.",
+    "possible_explanation": "Missing paymentservice cells leave open whether paymentservice CPU/memory behavior (such as saturation or a restart) coincided with the checkout error bursts; the evidence neither confirms nor refutes this.",
+    "recommended_check": "Re-run with gap-free, clock-aligned paymentservice metrics at the same 15-second interval and compare the resulting series against the checkout error burst windows beginning at epoch 1790628855000 and later bursts.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/12",
+     "analysis-result.json#/evidence/13",
+     "analysis-result.json#/analysis_coverage",
+     "analysis-result.json#/evidence/22"
+    ]
+   },
+   {
+    "rank": 4,
+    "observation": "The OpenSearch errors profile reports one group: service frontend, error_type frontend.request_error, count 3688, error_rate_per_minute 258.807018, first_epoch_ms 1790628856826, last_epoch_ms 1790629414273, with generic message 'request error'; the failed JMeter sampler is labeled 'checkout'.",
+    "possible_explanation": "The failing requests surface as frontend.request_error records, consistent with checkout requests failing at the frontend layer; the downstream cause (e.g., a call to paymentservice) is not shown in this evidence.",
+    "recommended_check": "Compare frontend.request_error timestamps with checkout sampler failures and inspect the frontend call chain for checkout to locate the failing downstream dependency.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/22",
+     "analysis-result.json#/evidence/3",
+     "analysis-result.json#/evidence/21"
+    ]
+   },
+   {
+    "rank": 5,
+    "observation": "The checkout latency summary shows max 10008 ms with p50 62, p95 97, p99 112; each of the other five transaction summaries shows max between 980 and 1071 ms.",
+    "possible_explanation": "Some checkout requests experienced an extreme latency tail not observed in other transactions; whether those extreme samples overlap the 3688 checkout errors is not established by the summarized evidence.",
+    "recommended_check": "Build the per-sample checkout latency distribution from the JTL and join samples near 10008 ms with error records by timestamp to test overlap.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/3",
+     "analysis-result.json#/evidence/0",
+     "analysis-result.json#/evidence/22"
+    ]
+   },
+   {
+    "rank": 6,
+    "observation": "The OpenSearch error timeline shows bursts (rates per minute up to 1232, 1244, etc.) in several 15-second cells, separated by cells with count 0; the opensearch_error_rate summary has mean 313.872, median 0, max 1244 errors/minute over 47 cells.",
+    "possible_explanation": "Checkout errors occur in intermittent waves rather than continuously, possibly tied to repeating phases of the test or a specific recurring request in the checkout flow; the trigger is unidentified.",
+    "recommended_check": "Overlay the burst cells (e.g., rates of 872-1232/minute beginning at epoch 1790628855000) on the JMeter thread-group schedule and frontend logs to identify what phase or request pattern aligns with each burst.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/22",
+     "analysis-result.json#/evidence/14"
+    ]
+   }
+  ],
+  "recommendations": [
+   {
+    "rank": 1,
+    "action": "Prioritize root-cause investigation of the checkout transaction: collect status codes, response bodies/messages, and assertion results from the JMeter JTL for the 3688 failed checkout samples and match them to frontend.request_error records.",
+    "rationale": "The deterministic FAIL comes from overall error rate 3688/73813 exceeding threshold 0.01, and all 3688 errors in the evidence belong to the checkout transaction.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/15",
+     "analysis-result.json#/evidence/3",
+     "analysis-result.json#/evidence/22"
+    ]
+   },
+   {
+    "rank": 2,
+    "action": "Re-run the scenario with complete paymentservice metric collection (no RESOURCE_GAPS) and clock alignment verified by the core before attempting any temporal correlation.",
+    "rationale": "Paymentservice CPU/memory have missing cells (5 and 6 of 47) and clock_alignment is not_verified_by_core, so current evidence cannot support hypotheses about resource behavior or lead/lag relationships around the error bursts.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/12",
+     "analysis-result.json#/evidence/13",
+     "analysis-result.json#/evidence/7",
+     "analysis-result.json#/analysis_coverage"
+    ]
+   },
+   {
+    "rank": 3,
+    "action": "Treat the errors-vs-load correlation (rho 0.9722 at 0 ms lag) as descriptive only; do not cite it as causal evidence. Design a staged load test with calibrated significance (e.g., MBB lag-max with validated controls) to test any load-onset relationship.",
+    "rationale": "The correlation status is DESCRIPTIVE with uncertainty NOT_ESTIMATED, and the headline selection is UNAVAILABLE (GENUINE_PARTIAL_UNCALIBRATED), so no calibrated statistical support exists.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/18",
+     "analysis-result.json#/evidence/19"
+    ]
+   },
+   {
+    "rank": 4,
+    "action": "Investigate the checkout latency extreme: examine per-sample checkout latencies in the JTL, especially the tail approaching max 10008 ms, and check whether these overlap the error burst windows.",
+    "rationale": "Checkout max latency is 10008 ms while the other five transactions peak at 980-1071 ms; whether extreme latency coincides with the errors is not established by the summary evidence.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/3",
+     "analysis-result.json#/evidence/22"
+    ]
+   },
+   {
+    "rank": 5,
+    "action": "Add evaluated resource policies/thresholds for the involved services and resume resource verdict evaluation once metric coverage is complete.",
+    "rationale": "The window reports resource_verdict NO_POLICY, and absence of a resource policy is not a pass and is not evidence that resources are adequate; coverage is currently INCOMPLETE.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/16",
+     "analysis-result.json#/analysis_coverage"
+    ]
+   }
+  ],
+  "caveats": [
+   "Analysis coverage is INCOMPLETE: paymentservice CPU and memory summaries have RESOURCE_GAPS (5 and 6 missing cells of 47, longest_gap_cells 2), so resource-side conclusions about paymentservice are not supported.",
+   "Correlation uncertainty is NOT_ESTIMATED and the headline selection is UNAVAILABLE with reason GENUINE_PARTIAL_UNCALIBRATED; rho values are descriptive only and do not prove that load caused errors.",
+   "clock_alignment is not_verified_by_core, with dropped_leading_cells 1 and dropped_trailing_cells 1 within the run-intersection window; temporal lead/lag or causal hypotheses require clock verification first.",
+   "resource_verdict is NO_POLICY; a missing resource policy is not a pass and is not evidence that resource usage or capacity was healthy.",
+   "The diagnostic summary reports anomalies_tested 0 and episodes_reported 0 (status COMPLETE, uncertainty NOT_ESTIMATED); this does not demonstrate stability or absence of problems.",
+   "The overall metric summary uses sample_count 75411 (error rate 3688/75411 ~4.9%) while the window policy check uses denominator 73813 (~5.0%) because of run-intersection trimming; both exceed the 1% threshold.",
+   "All sampler errors are attributed to the checkout transaction, while OpenSearch records them as frontend.request_error at service frontend; the mapping between the JMeter sampler and the OpenSearch error group is not explicitly demonstrated.",
+   "The checkout max latency of 10008 ms is extreme compared with other transactions (<=1071 ms), but the temporal relationship of those samples to the 3688 errors is not established by the summarized evidence.",
+   "Error log messages are generic ('request error') with no response codes, stack traces, or downstream service details in the evidence, so the root cause of checkout errors is unresolved.",
+   "The OpenSearch error timeline spans a wider snapshot (1790628720000 to 1790629575000 ms) than the evaluation window (1790628795000 to 1790629500000 ms); correlation pairing used 47 cells within the evaluation window.",
+   "The run is VALID and the verdict FAIL is deterministic; the hypotheses and recommendations in this advice do not alter that verdict."
+  ]
+ },
+ "schema": "ai-experiment-run.v2",
+ "phase": "pilot",
+ "case": "K06",
+ "rep": 2
+}

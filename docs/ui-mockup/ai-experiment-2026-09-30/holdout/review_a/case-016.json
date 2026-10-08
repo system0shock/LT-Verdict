@@ -1,0 +1,106 @@
+[
+  {
+    "id": "R041",
+    "hard_defect": false,
+    "defects": [],
+    "required_facts_preserved": false,
+    "missing_facts": ["The response never states the observed error_count of 0."],
+    "usefulness": 4,
+    "notes": "The verdict and correlation caveats are accurate, and the operator checks are useful."
+  },
+  {
+    "id": "R069",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T7",
+        "field": "#/summary",
+        "quote": "absence of a configured policy",
+        "why": "NO_POLICY establishes that no rule was applicable to the windows, not that no policy was configured."
+      },
+      {
+        "type": "T7",
+        "field": "#/hypotheses/4/possible_explanation",
+        "quote": "No SLO or resource policy was configured for this run",
+        "why": "The evidence does not establish whether policies were configured but inapplicable."
+      },
+      {
+        "type": "T7",
+        "field": "#/hypotheses/4/recommended_check",
+        "quote": "until a policy exists",
+        "why": "This assumes no policy exists, although the evidence establishes only that none was applicable."
+      }
+    ],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 3,
+    "notes": "The diagnostic advice is useful, but it repeatedly overstates what NO_POLICY reveals about configuration."
+  },
+  {
+    "id": "R107",
+    "hard_defect": false,
+    "defects": [],
+    "required_facts_preserved": false,
+    "missing_facts": ["The response does not state the overall sample_count of 7200."],
+    "usefulness": 4,
+    "notes": "It preserves the verdict distinction and gives practical checks for clocks, policy applicability, and load variation."
+  },
+  {
+    "id": "R141",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T8",
+        "field": "#/summary",
+        "quote": "p95 237-238 ms, p99 = max = 239 ms overall and per window",
+        "why": "The evaluation-window p95 is 236 ms."
+      },
+      {
+        "type": "T8",
+        "field": "#/hypotheses/0/observation",
+        "quote": "status SELECTED",
+        "why": "The correlation pair has status CANDIDATE; SELECTED is the separate headline-selection status."
+      },
+      {
+        "type": "T7",
+        "field": "#/hypotheses/2/possible_explanation",
+        "quote": "The absence of a defined policy",
+        "why": "NO_POLICY does not establish that no policy was defined or configured."
+      },
+      {
+        "type": "T7",
+        "field": "#/hypotheses/7/possible_explanation",
+        "quote": "latency targets are not defined (NO_POLICY)",
+        "why": "NO_POLICY does not prove that latency targets were never defined."
+      },
+      {
+        "type": "T8",
+        "field": "#/hypotheses/7/observation",
+        "quote": "p50 206-212 ms across summaries",
+        "why": "The evaluation-window summary reports p50 of 203 ms."
+      },
+      {
+        "type": "T7",
+        "field": "#/recommendations/1/rationale",
+        "quote": "this is a missing-policy state",
+        "why": "The status indicates no applicable evaluated rule, which can occur even when policies are configured."
+      },
+      {
+        "type": "T7",
+        "field": "#/caveats/1",
+        "quote": "this is a missing-policy state",
+        "why": "NO_POLICY does not identify missing configuration as its cause."
+      },
+      {
+        "type": "T3",
+        "field": "#/caveats/4",
+        "quote": "Per-second p95 latency cells are derived from ~20 samples each",
+        "why": "Dividing 4800 window samples by 240 cells gives an average, not the sample count in each cell."
+      }
+    ],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 2,
+    "notes": "It offers several useful checks but mixes the pair and selection statuses and makes unsupported configuration and per-cell claims."
+  }
+]

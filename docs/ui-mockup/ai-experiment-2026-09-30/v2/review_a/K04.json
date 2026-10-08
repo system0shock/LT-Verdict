@@ -1,0 +1,63 @@
+[
+  {
+    "id": "R004",
+    "hard_defect": false,
+    "defects": [],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 5,
+    "notes": "The advice keeps PASS limited to the whole-run error-rate policy and gives verifiable follow-up actions."
+  },
+  {
+    "id": "R029",
+    "hard_defect": false,
+    "defects": [],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 4,
+    "notes": "The advice is useful, though its references to an overall window are imprecise because no policy window is present."
+  },
+  {
+    "id": "R037",
+    "hard_defect": false,
+    "defects": [],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 4,
+    "notes": "The actions are bounded and verifiable, with some speculative workload interpretation clearly framed as a possibility."
+  },
+  {
+    "id": "R050",
+    "hard_defect": false,
+    "defects": [],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 4,
+    "notes": "It correctly limits PASS to error rate and proposes useful checks for sampling and latency requirements."
+  },
+  {
+    "id": "R052",
+    "hard_defect": false,
+    "defects": [],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 4,
+    "notes": "It preserves the verdict and key metrics while treating latency causes as hypotheses."
+  },
+  {
+    "id": "R069",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T3",
+        "field": "#/summary",
+        "quote": "the largest max-to-p99 gap in the input",
+        "why": "Home’s gap is 808 ms, while the overall summary’s gap is 827 ms, so the stated ranking is false."
+      }
+    ],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 3,
+    "notes": "Most actions are supported, but the false gap ranking could misdirect attention when comparing the summaries."
+  }
+]

@@ -1,0 +1,83 @@
+[
+  {
+    "id": "R023",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T2",
+        "field": "#/hypotheses/2/possible_explanation",
+        "quote": "most slow samples were inside workload-04 while earlier run phases appear much faster",
+        "why": "Whole-run and window percentile aggregates cannot establish where most slow samples occurred or characterize the non-window portion."
+      }
+    ],
+    "required_facts_preserved": false,
+    "missing_facts": [
+      "analysis_coverage=COMPLETE"
+    ],
+    "usefulness": 4,
+    "notes": "Otherwise gives evidence-based, testable checks and preserves the FAIL verdict."
+  },
+  {
+    "id": "R055",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T2",
+        "field": "#/hypotheses/3/possible_explanation",
+        "quote": "latency degradation appears concentrated in the trailing 300 s evaluation window",
+        "why": "The overall and evaluation-window aggregates cover different windows and cannot locate the concentration or onset of slow samples."
+      }
+    ],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 4,
+    "notes": "It accurately reports the verdicts, validity, coverage, and key measurements apart from the unsupported aggregate-to-window inference."
+  },
+  {
+    "id": "R067",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T2",
+        "field": "#/hypotheses/2/possible_explanation",
+        "quote": "high-latency samples appear concentrated inside the evaluation window",
+        "why": "The distinct whole-run and evaluation-window percentile aggregates cannot establish where high-latency samples were concentrated."
+      },
+      {
+        "type": "T3",
+        "field": "#/hypotheses/4/possible_explanation",
+        "quote": "the cluster of max latency near 30050 ms",
+        "why": "The evidence gives only a maximum latency and provides no count showing a cluster of samples at or near that value."
+      }
+    ],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 3,
+    "notes": "The core verdict reporting and most recommended checks are sound, but the unsupported aggregate inferences could mislead investigation."
+  },
+  {
+    "id": "R078",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T8",
+        "field": "#/hypotheses/1/possible_explanation",
+        "quote": "Requests completed without recorded errors and at the target send rate, so the latency failure appears tied to time-to-completion rather than to dropped, failed, or under-sent traffic.",
+        "why": "Zero recorded JTL errors and matching aggregate rates do not rule out dropped requests, failures, or generator problems, nor establish that requests completed at the configured target rate."
+      },
+      {
+        "type": "T8",
+        "field": "#/recommendations/3/rationale",
+        "quote": "error_count = 0 and throughput matched the 110 rps target, so the multi-second P95 is a processing / time-to-completion issue",
+        "why": "The evidence does not establish that the latency problem is necessarily a processing or completion-time issue rather than another unobserved failure mode."
+      }
+    ],
+    "required_facts_preserved": false,
+    "missing_facts": [
+      "run_validity=VALID",
+      "analysis_coverage=COMPLETE"
+    ],
+    "usefulness": 3,
+    "notes": "It includes several useful bounded checks, but overstates what zero recorded errors and aggregate throughput prove."
+  }
+]

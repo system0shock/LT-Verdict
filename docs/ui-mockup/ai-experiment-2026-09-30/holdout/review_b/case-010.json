@@ -1,0 +1,73 @@
+[
+  {
+    "id": "R001",
+    "hard_defect": false,
+    "defects": [],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 5,
+    "notes": "Correctly preserves the verdicts, scope caveats, uncertainty, and actionable investigation steps."
+  },
+  {
+    "id": "R027",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T7",
+        "field": "#/caveats/3",
+        "quote": "a missing policy is not a pass",
+        "why": "NO_POLICY establishes no applicable evaluated SLA rule for the window, not that a policy is missing from the configuration."
+      },
+      {
+        "type": "T2",
+        "field": "#/caveats/6",
+        "quote": "a minor internal inconsistency in the derived rate",
+        "why": "The throughput denominator and sample count are different quantities, so their difference is not an internal inconsistency."
+      }
+    ],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 3,
+    "notes": "Useful investigation guidance is weakened by unsupported claims about policy configuration and metric consistency."
+  },
+  {
+    "id": "R053",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T2",
+        "field": "#/hypotheses/1/observation",
+        "quote": "the window totals add to the overall 5320/52000",
+        "why": "It equates policy-window aggregates with a whole-run aggregate even though they are different windowed quantities."
+      },
+      {
+        "type": "T7",
+        "field": "#/hypotheses/5/possible_explanation",
+        "quote": "There is no resource acceptance policy in this run",
+        "why": "NO_POLICY does not prove that no resource policy was configured; it only establishes that no applicable SLA resource rule was evaluated for the result."
+      }
+    ],
+    "required_facts_preserved": false,
+    "missing_facts": [
+      "Analysis coverage status is COMPLETE."
+    ],
+    "usefulness": 3,
+    "notes": "The error investigation recommendations are useful, but the response omits the required coverage fact and makes unsupported scope and policy claims."
+  },
+  {
+    "id": "R121",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T7",
+        "field": "#/hypotheses/0/possible_explanation",
+        "quote": "The cause therefore lies in sampler/application errors rather than latency or resource policy.",
+        "why": "The evidence shows that the error-rate rule caused the verdict but does not establish the root cause of the errors or exclude a latency-related contribution."
+      }
+    ],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 4,
+    "notes": "It is otherwise accurate and operationally useful, but overstates an unproven root-cause conclusion."
+  }
+]

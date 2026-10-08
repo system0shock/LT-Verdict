@@ -1,0 +1,219 @@
+{
+ "stage": "A",
+ "mode": "live",
+ "model": "deepseek-v4-flash-0731",
+ "tag": {
+  "phase": "holdout",
+  "attempt_id": "case-007-1-A-t1",
+  "arm": "A",
+  "stage": null,
+  "case": "case-007",
+  "rep": 1,
+  "try": 1
+ },
+ "retry_policy": "d2",
+ "qwen_exit": 0,
+ "wall_ms": 65451,
+ "relay": {
+  "schema_version": "advisory-ai-runtime-relay.v1",
+  "status": "FORWARDED_STRUCTURED_OUTPUT",
+  "received_request_count": 1,
+  "forwarded_request_count": 1,
+  "outcomes": [
+   "FORWARDED_STRUCTURED_OUTPUT"
+  ],
+  "retry_refused_reason": null,
+  "first_refused_reason": null,
+  "model_id": "deepseek-v4-flash-0731",
+  "retry_policy": "d2",
+  "requests": [
+   {
+    "ordinal": 1,
+    "forwarded": true,
+    "outcome": "FORWARDED_STRUCTURED_OUTPUT",
+    "provider_status": 200,
+    "latency_ms": 64205,
+    "usage": {
+     "prompt_tokens": 4629,
+     "total_tokens": 11598,
+     "completion_tokens": 6969,
+     "prompt_tokens_details": {
+      "cached_tokens": 1024
+     },
+     "completion_tokens_details": {
+      "reasoning_tokens": 4538
+     }
+    },
+    "model_returned": "deepseek-v4-flash-0731"
+   }
+  ],
+  "usage": {
+   "prompt_tokens": 4629,
+   "completion_tokens": 6969,
+   "total_tokens": 11598
+  },
+  "latency_ms": 64205
+ },
+ "relay_status": "FORWARDED_STRUCTURED_OUTPUT",
+ "usage": {
+  "prompt_tokens": 4629,
+  "completion_tokens": 6969,
+  "total_tokens": 11598
+ },
+ "latency_ms": 64205,
+ "retried": false,
+ "retry_refused_reason": null,
+ "status": "OK",
+ "note": null,
+ "output": {
+  "schema_version": "ai-advice-output.v1",
+  "summary": "Run is VALID with COMPLETE coverage and a deterministic policy verdict of NO_POLICY for both the reference and evaluation windows; no findings were reported. The workload sustained ~20 requests/s (7,200 samples) with 0 errors; p95 latency was ~237–238 ms and max 239–240 ms in both windows, while p50 moved slightly from 202 ms (reference) to 206 ms (evaluation). resource-00 (unit ratio; mean ~0.49–0.50, range ~0.30–0.70) varied widely in both windows yet showed only a weak, non-significant correlation with response p95 (rho ~0.049, Holm-adjusted p=0.443, status BELOW_EFFECT, NOT_SELECTED). The 'target' control was constant at 20 requests/s and was dropped with reason CONSTANT_CONTROL; correlation and diagnostic uncertainty are NOT_ESTIMATED; clock alignment is not_verified_by_core. NO_POLICY means no policy was applied, not a pass, and no causal or temporal claims are supported by this analysis.",
+  "hypotheses": [
+   {
+    "rank": 1,
+    "observation": "Evaluation-window latency shows p50 206 ms vs reference-window p50 202 ms, while p95 is 238 vs 237 ms, p99 is identical (239 ms), max is 239 vs 240 ms, and error_count is 0 in both windows (2400 vs 4800 samples).",
+    "possible_explanation": "The +4 ms central-tendency shift may be run-to-run or environmental noise rather than load-driven change, since throughput is ~20 rps in both windows and high percentiles are essentially flat.",
+    "recommended_check": "Compare per-interval (per-cell) latency distributions, including the inner percentiles and variance, across the reference and evaluation windows before attributing the shift to any cause.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/9",
+     "analysis-result.json#/evidence/10",
+     "analysis-result.json#/evidence/2"
+    ]
+   },
+   {
+    "rank": 2,
+    "observation": "resource-00 varied widely in both windows (reference min 0.304 / max 0.699, mean 0.502; evaluation min 0.302 / max 0.697, mean 0.491) while target load stayed at 20 requests/s, yet its correlation with response_time_p95_ms is rho 0.049 with Holm-adjusted p=0.443, status BELOW_EFFECT and NOT_SELECTED.",
+    "possible_explanation": "resource-00 may not be the dominant driver of p95 latency in this run, or response latency is governed by other unobserved factors; the low rho is insufficient to prove the absence of any relationship.",
+    "recommended_check": "Collect additional metrics (other resource series, downstream/network components) and non-constant load profiles, and estimate correlation uncertainty, which is currently NOT_ESTIMATED.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/3",
+     "analysis-result.json#/evidence/5",
+     "analysis-result.json#/evidence/11",
+     "analysis-result.json#/evidence/12"
+    ]
+   },
+   {
+    "rank": 3,
+    "observation": "The 'target' series is constant at 20 requests/s in both windows (all statistics equal 20, sample_standard_deviation 0, slope_per_second 0), and the correlation analysis dropped it with reason CONSTANT_CONTROL, leaving controls_used empty and sensitivity_without_achieved_rps null.",
+    "possible_explanation": "A constant control carries no variance, so it cannot be used for statistical control; the analysis therefore proceeded without that control and could not estimate sensitivity to achieved rps.",
+    "recommended_check": "In future runs, use a non-constant load profile (step or ramp) so the target series can act as a control and load sensitivity can be estimated.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/4",
+     "analysis-result.json#/evidence/6",
+     "analysis-result.json#/evidence/11"
+    ]
+   },
+   {
+    "rank": 4,
+    "observation": "Both window policy summaries and the overall policy verdict are NO_POLICY (business_verdict NO_POLICY, resource_verdict NO_POLICY) even though analysis coverage is COMPLETE with no findings.",
+    "possible_explanation": "The NO_POLICY verdict reflects missing or unimplemented policy definitions rather than an assessment that behavior is healthy; missing policy is not a PASS and not a FAIL.",
+    "recommended_check": "Define explicit business and resource policy thresholds and re-run; until then, do not read NO_POLICY as approval of the measured behavior.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/7",
+     "analysis-result.json#/evidence/8",
+     "analysis-result.json#/policy_verdict"
+    ]
+   },
+   {
+    "rank": 5,
+    "observation": "The resource binding reports clock_alignment 'not_verified_by_core', and the correlation pair reports best_lag_ms 0 with uncertainty NOT_ESTIMATED.",
+    "possible_explanation": "Without verified clock alignment, the reported 0 ms lag and any lead/lag ordering are not reliable, so this evidence cannot support a temporal causal hypothesis.",
+    "recommended_check": "Verify clock synchronization across the load generator, service telemetry, and analysis host before interpreting lag results or any temporal ordering.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/2",
+     "analysis-result.json#/evidence/11"
+    ]
+   },
+   {
+    "rank": 6,
+    "observation": "The diagnostic summary is COMPLETE with anomalies_tested 0 and episodes_reported 0, and uncertainty NOT_ESTIMATED.",
+    "possible_explanation": "No anomaly episodes were identified, but with zero anomalies tested there is no test evidence supporting a claim of stability, spare capacity, or absence of problems.",
+    "recommended_check": "Run targeted scenario checks (e.g., induced load steps or fault injection) so anomaly detection has testable data instead of an empty sample.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/13"
+    ]
+   }
+  ],
+  "recommendations": [
+   {
+    "rank": 1,
+    "action": "Verify clock alignment across load generation, telemetry, and the analysis host before any temporal or lead/lag interpretation.",
+    "rationale": "evidence/2 marks clock_alignment as not_verified_by_core while evidence/11 reports best_lag_ms 0 with NOT_ESTIMATED uncertainty; unverified clocks cannot support ordering or causal claims.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/2",
+     "analysis-result.json#/evidence/11"
+    ]
+   },
+   {
+    "rank": 2,
+    "action": "Define and attach explicit business and resource policies so future verdicts can be PASS or FAIL rather than NO_POLICY.",
+    "rationale": "Both windows and the overall verdict are NO_POLICY (evidence/7, evidence/8, policy_verdict); missing policy is not a pass, so threshold definitions are needed before the run can be interpreted against requirements.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/7",
+     "analysis-result.json#/evidence/8",
+     "analysis-result.json#/policy_verdict"
+    ]
+   },
+   {
+    "rank": 3,
+    "action": "Use a non-constant load profile (step or ramp) and vary achieved rps in future runs.",
+    "rationale": "The target series is constant at 20 rps (evidence/4, evidence/6) and was dropped as CONSTANT_CONTROL (evidence/11), so the control could not be used and sensitivity_without_achieved_rps was not estimated.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/4",
+     "analysis-result.json#/evidence/6",
+     "analysis-result.json#/evidence/11"
+    ]
+   },
+   {
+    "rank": 4,
+    "action": "Expand metrics collection beyond resource-00 and p95 latency to identify what actually drives latency.",
+    "rationale": "resource-00 varied widely (evidence/3, evidence/5) yet correlated only rho 0.049 with response p95 and was not selected (p=0.443, evidence/11, evidence/12); additional metrics are needed to locate latency drivers.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/3",
+     "analysis-result.json#/evidence/5",
+     "analysis-result.json#/evidence/11",
+     "analysis-result.json#/evidence/12"
+    ]
+   },
+   {
+    "rank": 5,
+    "action": "Investigate the p50 latency increase (202 ms reference to 206 ms evaluation) at the per-interval cell level, including variance and inner percentiles.",
+    "rationale": "Reference and evaluation window summaries differ at p50 while p95/p99/max are essentially flat (evidence/9, evidence/10); cell-level analysis is needed to decide if this is noise or a meaningful shift.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/9",
+     "analysis-result.json#/evidence/10",
+     "analysis-result.json#/evidence/3",
+     "analysis-result.json#/evidence/5"
+    ]
+   },
+   {
+    "rank": 6,
+    "action": "Configure estimation of correlation uncertainty and consider more bootstrap replicates or longer windows in future runs.",
+    "rationale": "Correlation and diagnostic uncertainty are NOT_ESTIMATED (evidence/11, evidence/13), and the headline selection is stochastic with 999 seed-based replicates (evidence/12), so the strength and precision of the near-zero correlation is not yet quantified.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/11",
+     "analysis-result.json#/evidence/12",
+     "analysis-result.json#/evidence/13"
+    ]
+   }
+  ],
+  "caveats": [
+   "Clock alignment is not_verified_by_core; no lead/lag ordering or temporal causal hypothesis is supported until clocks are verified.",
+   "The verdict NO_POLICY means no policy was applied, not that behavior passed or failed; it must not be read as evidence of health.",
+   "The weak correlation (rho ~0.049, status BELOW_EFFECT, Holm p=0.443) does not prove the absence of a relationship, and its uncertainty is NOT_ESTIMATED; the 'target' control was dropped for constancy, so the correlation is uncontrolled for load.",
+   "anomalies_tested = 0 and episodes_reported = 0 do not establish stability, spare capacity, or absence of a problem.",
+   "resource-00 is identified only by unit 'ratio'; its physical meaning (CPU, memory, etc.) is not specified, so no resource attribution is possible.",
+   "Reference and evaluation windows differ in size (120 cells / 2400 samples vs 240 cells / 4800 samples), limiting direct statistical comparability.",
+   "Latency values are in ms; the 0 ms best lag is an alignment result and must not be interpreted as a duration or causal delay given unverified clocks.",
+   "Bootstrap p-values are stochastic (999 replicates with a seeded RNG); the reported p=0.443 may vary across seeds/replicates."
+  ]
+ },
+ "schema": "ai-experiment-run.holdout.v1",
+ "case": "case-007",
+ "rep": 1,
+ "arm": "A",
+ "try": 1,
+ "attempt_id": "case-007-1-A-t1",
+ "model_id": "deepseek-v4-flash-0731",
+ "prompt_sha256": "69f215a1ad4ae678c82410ba7cf7daf171cd9c7ca0ef4626bba6977db0af4ef7"
+}

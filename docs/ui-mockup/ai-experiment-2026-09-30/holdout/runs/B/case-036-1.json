@@ -1,0 +1,215 @@
+{
+ "stage": "B",
+ "mode": "live",
+ "model": "deepseek-v4-flash-0731",
+ "tag": {
+  "phase": "holdout",
+  "attempt_id": "case-036-1-B-t1",
+  "arm": "B",
+  "stage": null,
+  "case": "case-036",
+  "rep": 1,
+  "try": 1
+ },
+ "retry_policy": "d2",
+ "qwen_exit": 0,
+ "wall_ms": 94529,
+ "relay": {
+  "schema_version": "advisory-ai-runtime-relay.v1",
+  "status": "FORWARDED_STRUCTURED_OUTPUT",
+  "received_request_count": 1,
+  "forwarded_request_count": 1,
+  "outcomes": [
+   "FORWARDED_STRUCTURED_OUTPUT"
+  ],
+  "retry_refused_reason": null,
+  "first_refused_reason": null,
+  "model_id": "deepseek-v4-flash-0731",
+  "retry_policy": "d2",
+  "requests": [
+   {
+    "ordinal": 1,
+    "forwarded": true,
+    "outcome": "FORWARDED_STRUCTURED_OUTPUT",
+    "provider_status": 200,
+    "latency_ms": 93094,
+    "usage": {
+     "prompt_tokens": 22537,
+     "total_tokens": 32110,
+     "completion_tokens": 9573,
+     "prompt_tokens_details": {
+      "cached_tokens": 1024
+     },
+     "completion_tokens_details": {
+      "reasoning_tokens": 7187
+     }
+    },
+    "model_returned": "deepseek-v4-flash-0731"
+   }
+  ],
+  "usage": {
+   "prompt_tokens": 22537,
+   "completion_tokens": 9573,
+   "total_tokens": 32110
+  },
+  "latency_ms": 93094
+ },
+ "relay_status": "FORWARDED_STRUCTURED_OUTPUT",
+ "usage": {
+  "prompt_tokens": 22537,
+  "completion_tokens": 9573,
+  "total_tokens": 32110
+ },
+ "latency_ms": 93094,
+ "retried": false,
+ "retry_refused_reason": null,
+ "status": "OK",
+ "note": null,
+ "output": {
+  "schema_version": "ai-advice-output.v1",
+  "summary": "The deterministic verdict is NO_POLICY for both the reference and evaluation windows (business_verdict NO_POLICY, resource_verdict NO_POLICY); the run is VALID and coverage is COMPLETE. No business policy or SLA resource rule was evaluated, so no PASS/FAIL was produced. Metrics show 0 errors, about 20 rps throughput with a constant 20 requests/s target, and one correlation candidate (pair-00: resource-00 vs response time p95, rho 0.965154108981, Holm-adjusted p-value 0.016) in the evaluation window with uncertainty NOT_ESTIMATED. That candidate is not a proven cause. Clock alignment is not_verified_by_core, and the constant target was dropped as a control in all 16 correlation pairs. The diagnostic summary reports anomalies_tested 0 and episodes_reported 0, which does not prove stability.",
+  "hypotheses": [
+   {
+    "rank": 1,
+    "observation": "Correlation pair pair-00 in the evaluation window is CANDIDATE with raw_rho and partial_rho 0.965154108981 at best_lag_ms 0; its headline selection reports max unadjusted p-value 0.001 and Holm-adjusted p-value 0.016 (alpha 0.05), with uncertainty NOT_ESTIMATED.",
+    "possible_explanation": "resource-00 utilization and response time p95 could be associated (e.g., shared contention), but because achieved load was constant at 20 requests/s this could also be a coincidental correlation between two independently varying series; the evidence does not establish a cause.",
+    "recommended_check": "Inspect the raw interval series for resource-00 and response time p95, verify clock alignment, and rerun with a variable load profile to see whether the correlation persists.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/41",
+     "analysis-result.json#/evidence/57",
+     "analysis-result.json#/evidence/20",
+     "analysis-result.json#/evidence/2"
+    ]
+   },
+   {
+    "rank": 2,
+    "observation": "All 16 correlation pairs list controls_dropped [\"target\"], controls_requested [\"target\"], controls_used [], reason CONSTANT_CONTROL; the target series is constant at 20 requests/s with standard deviation 0 in both windows.",
+    "possible_explanation": "Because the target never varied, the requested control could not be used; partial_rho equals raw_rho, so the correlations are not conditioned on achieved load.",
+    "recommended_check": "Rerun with a non-constant load profile (ramp or steps) so the target control becomes usable, then re-evaluate the partial correlations.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/41",
+     "analysis-result.json#/evidence/36",
+     "analysis-result.json#/evidence/19"
+    ]
+   },
+   {
+    "rank": 3,
+    "observation": "Evaluation-window p50 latency is 193 ms versus reference-window p50 211 ms, both at 20 rps throughput with 0 errors; clock alignment is not_verified_by_core and a lag of 0 ms is reported.",
+    "possible_explanation": "The latency difference between windows could be run-to-run or environmental variation rather than a deliberate change; without a controlled comparison the cause is unknown.",
+    "recommended_check": "Repeat the two-window comparison across multiple runs to measure inter-run variability before interpreting the latency difference.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/39",
+     "analysis-result.json#/evidence/40",
+     "analysis-result.json#/evidence/2"
+    ]
+   },
+   {
+    "rank": 4,
+    "observation": "Both windows report verdict NO_POLICY with business_verdict NO_POLICY and resource_verdict NO_POLICY; the run is VALID and coverage is COMPLETE.",
+    "possible_explanation": "No applicable business policy rule or resource rule with effect sla was evaluated for the windows, so the product reports NO_POLICY even though observed metrics look healthy.",
+    "recommended_check": "Configure an applicable business/SLA policy rule for the window and rerun or re-evaluate so the product can produce PASS/FAIL.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/37",
+     "analysis-result.json#/evidence/38",
+     "analysis-result.json#/policy_verdict",
+     "analysis-result.json#/run_validity",
+     "analysis-result.json#/analysis_coverage"
+    ]
+   },
+   {
+    "rank": 5,
+    "observation": "clock_alignment is not_verified_by_core; correlation pairs report best_lag_ms 0 with a single lag-profile entry at lag 0 ms.",
+    "possible_explanation": "Time alignment between resource telemetry, service response time, and the load generator is not verified, so even a lag of 0 ms cannot be confirmed; a clock offset could distort the correlation and any lag result.",
+    "recommended_check": "Verify clock synchronization across the load generator, the service under test, and the telemetry sources before interpreting any lag or lead relationship.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/2",
+     "analysis-result.json#/evidence/41"
+    ]
+   },
+   {
+    "rank": 6,
+    "observation": "The diagnostic summary reports anomalies_tested 0, episodes_reported 0, pairs_tested 16, status COMPLETE, uncertainty NOT_ESTIMATED.",
+    "possible_explanation": "The absence of tested or reported anomaly episodes does not by itself prove the run was stable or problem-free; the evidence does not state why no episodes were reported.",
+    "recommended_check": "Review the anomaly-detection configuration and the telemetry feeding it, and treat 0 episodes strictly as an absence of reported findings rather than proof of stability.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/73"
+    ]
+   }
+  ],
+  "recommendations": [
+   {
+    "rank": 1,
+    "action": "Configure an applicable business policy rule or resource rule with effect: sla for the evaluation window so the product can emit PASS/FAIL instead of NO_POLICY.",
+    "rationale": "The verdict is NO_POLICY for both windows and the analysis is VALID with COMPLETE coverage; NO_POLICY stays NO_POLICY until an applicable rule is actually evaluated, and healthy-looking metrics do not convert it into a pass.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/37",
+     "analysis-result.json#/evidence/38",
+     "analysis-result.json#/policy_verdict"
+    ]
+   },
+   {
+    "rank": 2,
+    "action": "Verify clock alignment across the load generator, the service under test, and resource telemetry before relying on best_lag_ms 0 or any temporal relationship.",
+    "rationale": "clock_alignment is not_verified_by_core and all correlation pairs use a lag of 0 ms, so timestamp alignment is not established.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/2",
+     "analysis-result.json#/evidence/41"
+    ]
+   },
+   {
+    "rank": 3,
+    "action": "Investigate the single correlation candidate resource-00 (rho 0.965154108981, Holm-adjusted p-value 0.016): inspect its raw interval series and rerun with variable load to confirm the association.",
+    "rationale": "It is the only correlation candidate in the analysis, with uncertainty NOT_ESTIMATED; it is a stored partial correlation, not a proven cause, so confirmation requires additional data.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/41",
+     "analysis-result.json#/evidence/57",
+     "analysis-result.json#/findings/0"
+    ]
+   },
+   {
+    "rank": 4,
+    "action": "Rerun with a non-constant load profile so the constant 20 requests/s target can act as a real control in partial-correlation analysis.",
+    "rationale": "The target was dropped from all 16 correlation pairs as CONSTANT_CONTROL, so partial_rho equals raw_rho and no load-adjusted correlation was computed.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/41",
+     "analysis-result.json#/evidence/36",
+     "analysis-result.json#/evidence/19"
+    ]
+   },
+   {
+    "rank": 5,
+    "action": "Track the p95 latency difference between the windows (evaluation 193 ms vs reference 211 ms) across repeated runs to assess whether it is environmental drift or noise.",
+    "rationale": "A single pair of windows at the same nominal 20 rps throughput with 0 errors does not support attributing the difference to a specific cause.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/39",
+     "analysis-result.json#/evidence/40"
+    ]
+   },
+   {
+    "rank": 6,
+    "action": "Review the anomaly-detection configuration and confirm what the operator expected to be flagged; add monitoring or rerun if anomaly detection was expected.",
+    "rationale": "anomalies_tested 0 and episodes_reported 0 are an absence of reported findings, not proof of stability, spare capacity, or absence of a problem.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/73"
+    ]
+   }
+  ],
+  "caveats": [
+   "The core did not verify clock alignment (analysis-result.json#/evidence/2); best_lag_ms 0 and lag-based significance results (analysis-result.json#/evidence/41, analysis-result.json#/evidence/57) require timestamp alignment that is not established.",
+   "The correlation candidate has uncertainty NOT_ESTIMATED and status CANDIDATE (analysis-result.json#/evidence/41); it is a stored partial correlation, not a proven cause, and no confidence interval is available.",
+   "The target control is constant at 20 requests/s with standard deviation 0 (analysis-result.json#/evidence/19, analysis-result.json#/evidence/36) and was dropped from all correlations as CONSTANT_CONTROL; no load-adjusted partial correlation was computed.",
+   "NO_POLICY for both windows (analysis-result.json#/evidence/37, analysis-result.json#/evidence/38, analysis-result.json#/policy_verdict) does not mean pass or fail; a VALID run status, COMPLETE coverage, and healthy-looking metrics do not convert NO_POLICY into PASS, and no rule was evaluated.",
+   "anomalies_tested 0 and episodes_reported 0 (analysis-result.json#/evidence/73) do not demonstrate stability, spare capacity, or absence of a problem.",
+   "Overall run sample_count 7200 and per-window sample counts 2400 (reference) and 4800 (evaluation) are different scopes (analysis-result.json#/evidence/0, analysis-result.json#/evidence/39, analysis-result.json#/evidence/40); they are not inconsistent measurements of the same quantity.",
+   "Advice is based only on the stored summaries and analysis output; raw JTL records and per-interval resource series beyond the provided summaries were not inspected."
+  ]
+ },
+ "schema": "ai-experiment-run.holdout.v1",
+ "case": "case-036",
+ "rep": 1,
+ "arm": "B",
+ "try": 1,
+ "attempt_id": "case-036-1-B-t1",
+ "model_id": "deepseek-v4-flash-0731",
+ "prompt_sha256": "3c0f28bee6517c13c5c854615e7d3d59301893d9723880818e4034a32e9133bf"
+}

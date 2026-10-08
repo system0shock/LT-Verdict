@@ -1,0 +1,247 @@
+{
+ "stage": "S0",
+ "mode": "live",
+ "model": "glm-5.3",
+ "tag": {
+  "phase": "v3",
+  "model_tag": "glm-5.3",
+  "stage": "S0",
+  "case": "K06",
+  "rep": 1,
+  "attempt": 1
+ },
+ "qwen_exit": 0,
+ "wall_ms": 215184,
+ "relay": {
+  "schema_version": "advisory-ai-runtime-relay.v1",
+  "status": "FORWARDED_STRUCTURED_OUTPUT",
+  "request_count": 1,
+  "usage": {
+   "prompt_tokens": 9184,
+   "total_tokens": 29475,
+   "completion_tokens": 20291,
+   "prompt_tokens_details": {
+    "cached_tokens": 1024
+   },
+   "completion_tokens_details": {
+    "reasoning_tokens": 16327
+   }
+  },
+  "latency_ms": 213653,
+  "model_returned": "glm-5.3"
+ },
+ "relay_status": "FORWARDED_STRUCTURED_OUTPUT",
+ "usage": {
+  "prompt_tokens": 9184,
+  "total_tokens": 29475,
+  "completion_tokens": 20291,
+  "prompt_tokens_details": {
+   "cached_tokens": 1024
+  },
+  "completion_tokens_details": {
+   "reasoning_tokens": 16327
+  }
+ },
+ "latency_ms": 213653,
+ "status": "OK",
+ "note": null,
+ "output": {
+  "caveats": [
+   "Deterministic outputs preserved exactly: verdict FAIL, business_verdict FAIL, resource_verdict NO_POLICY, run validity VALID; this advisory cannot and does not change the verdict.",
+   "resource_verdict NO_POLICY means no resource thresholds were configured; low observed CPU/memory is not a resource pass and is not evidence that resources are unrelated to the errors.",
+   "Analysis coverage is INCOMPLETE (RESOURCE_GAPS): paymentservice series cover only 42/47 expected cpu_cores cells and 41/47 memory_bytes cells in the run-intersection window, so paymentservice conclusions are bounded by those gaps.",
+   "Clock alignment is 'not_verified_by_core': epoch comparisons across JMeter, metrics, and OpenSearch cannot support lead/lag ordering or temporal causal hypotheses until clocks are verified.",
+   "The single correlation pair is DESCRIPTIVE with uncertainty NOT_ESTIMATED; headline selection is UNAVAILABLE (GENUINE_PARTIAL_UNCALIBRATED) with null Holm-adjusted and max p-values, so no statistical significance is established.",
+   "Only one correlation pair was evaluated (errors vs load error_rate); no CPU/memory-versus-error correlations exist in this analysis, so no resource-error statistical link is available.",
+   "anomalies_tested = 0 and episodes_reported = 0 in the diagnostic summary: no anomaly episodes were tested or reported, which does not demonstrate stability or absence of episodes.",
+   "The evidence states no service dependency topology, so attributing checkout sampler errors to a specific backend service (for example paymentservice) is unsupported by the referenced evidence.",
+   "The window policy denominator (73813 samples in run-intersection) differs from the overall summary denominator (75411); both yield error ratios well above the 0.01 threshold, so the FAIL does not depend on the windowing.",
+   "The evaluation window 1790628795000-1790629500000 trims 4232 ms at the run start and 10768 ms at the run end (one 15000 ms cell each); 1598 of 75411 samples fall outside the window, while all 3688 errors fall inside it (window and overall error_count are both 3688).",
+   "Checkout p99 latency is 112 ms while its max is 10008 ms; per-error latency distributions and JMeter response codes are not broken out in the evidence, so the ~10 s tail cannot be characterized further from this input.",
+   "The opensearch error series aggregates 15000 ms steps but is expressed in errors/minute (timeline rate_per_minute equals count times 4), while the correlation load metric is a ratio; preserve units and do not treat raw epoch values as durations."
+  ],
+  "hypotheses": [
+   {
+    "evidence_refs": [
+     "analysis-result.json#/evidence/3",
+     "analysis-result.json#/evidence/0",
+     "analysis-result.json#/evidence/17",
+     "analysis-result.json#/evidence/1",
+     "analysis-result.json#/evidence/2",
+     "analysis-result.json#/evidence/4",
+     "analysis-result.json#/evidence/5",
+     "analysis-result.json#/evidence/6"
+    ],
+    "observation": "All 3688 errors in both the overall and window summaries occur on the 'checkout' sampler (3688 of 12567 samples, approximately 29.4%); the other five samplers ('add product to cart', 'cart', 'home', 'product', 'reset cart') each report 0 errors out of roughly 12568-12569 samples. Checkout latency max is 10008 ms while the other samplers' maxima are 980-1071 ms; checkout p50/p95/p99 are 62/97/112 ms.",
+    "possible_explanation": "A subset of checkout requests fails in a distinct way — for example requests timing out near 10 seconds — while the rest of the purchase flow succeeds; the failures are rare enough that checkout percentiles remain low.",
+    "rank": 1,
+    "recommended_check": "Extract JMeter responseCode and failureMessage fields plus per-sample latencies for the 3688 failed checkout samples to test whether failures share a response code and cluster near 10000 ms; compare with frontend and checkoutservice logs in the same window."
+   },
+   {
+    "evidence_refs": [
+     "analysis-result.json#/evidence/22",
+     "analysis-result.json#/evidence/3",
+     "analysis-result.json#/evidence/0",
+     "analysis-result.json#/evidence/18"
+    ],
+    "observation": "OpenSearch reports total_errors 3688 — exactly equal to the JMeter error_count 3688 in both the overall and window summaries — all of error_type 'frontend.request_error', service 'frontend', message 'request error', with first_epoch_ms 1790628856826 and last_epoch_ms 1790629414273.",
+    "possible_explanation": "The OpenSearch events and the JMeter checkout sampler errors may be two recordings of the same underlying failures (frontend request errors surfaced to the load generator as checkout errors), which would also explain the near-unity correlation between errors/minute and the load error_rate ratio.",
+    "rank": 2,
+    "recommended_check": "Join a sample of OpenSearch document timestamps (e.g., the two sampled documents at timestamp_epoch_ms 1790628856826) with JMeter checkout sample timestamps or request IDs to confirm one-to-one correspondence before treating the two streams as the same events."
+   },
+   {
+    "evidence_refs": [
+     "analysis-result.json#/evidence/22",
+     "analysis-result.json#/evidence/7"
+    ],
+    "observation": "The OpenSearch timeline shows three error bursts: 1363 errors across 1790628855000-1790628930000, 809 errors across 1790629095000-1790629170000 (including the 5-error cell at 1790629095000), and 1516 errors across 1790629335000-1790629425000; burst starts are 240000 ms apart, separated by 165000 ms intervals with zero errors.",
+    "possible_explanation": "A recurring condition (for example a periodic dependency behavior, scheduled task, or cyclic state such as cache or connection-pool expiry) triggers the bursts rather than a constant fault.",
+    "rank": 3,
+    "recommended_check": "After verifying clock alignment, inspect frontend and dependency logs at those three epochs for events recurring with an approximately 240-second period; compare burst onset times across sources."
+   },
+   {
+    "evidence_refs": [
+     "analysis-result.json#/evidence/18",
+     "analysis-result.json#/evidence/19",
+     "analysis-result.json#/evidence/22"
+    ],
+    "observation": "The only correlation pair evaluated is errors-vs-load-error-rate: opensearch error rate (errors/minute) versus the load error_rate (ratio), raw rho 0.974383916991, partial rho 0.972200295291 with control achieved_rps, best_lag_ms 0, 47 paired cells, status DESCRIPTIVE, uncertainty NOT_ESTIMATED, reasons STAGE_UNSPECIFIED, CONTROL_CONTEXT_MISSING, ACHIEVED_LOAD_ONLY.",
+    "possible_explanation": "Because the load-side metric is the error rate itself and both series count the same 3688 error events in different units, the near-unity rho most plausibly reflects co-temporal identity of the two error streams rather than load driving errors.",
+    "rank": 4,
+    "recommended_check": "If load dependence is the question, correlate errors against achieved_rps or staged target load instead of the error rate, and obtain calibrated significance — the current headline selection is UNAVAILABLE (GENUINE_PARTIAL_UNCALIBRATED) with null p-values."
+   },
+   {
+    "evidence_refs": [
+     "analysis-result.json#/evidence/7",
+     "analysis-result.json#/evidence/18"
+    ],
+    "observation": "resource-binding reports clock_alignment 'not_verified_by_core' with 1 leading cell (4232 ms) and 1 trailing cell (10768 ms) dropped to form the run-intersection window; the correlation pair reports best_lag_ms 0 with a lag_profile containing only lag 0.",
+    "possible_explanation": "The clock relationship between the JMeter run, the resource metrics series, and the OpenSearch index is unknown, so the 0 ms lag and any epoch-to-epoch comparisons cannot be trusted as true temporal alignment or ordering.",
+    "rank": 5,
+    "recommended_check": "Verify a common clock source or measure sync offsets among the load generator, metrics pipeline, and OpenSearch before using epoch comparisons for lead/lag or causal-temporal reasoning."
+   },
+   {
+    "evidence_refs": [
+     "analysis-result.json#/evidence/12",
+     "analysis-result.json#/evidence/13",
+     "analysis-result.json#/analysis_coverage",
+     "analysis-result.json#/evidence/22"
+    ],
+    "observation": "paymentservice cpu observed 42 of 47 expected cells (5 missing, longest gap 2 cells) and memory 41 of 47 (6 missing), both with reason RESOURCE_GAPS; memory ranges 3268608 to 33370112 bytes (median 30746624, IQR 6916096, split_half_shift -2465792, negative slope_per_second).",
+    "possible_explanation": "The paymentservice may have restarted or been rescheduled during the window — a step from roughly 33 MB down to roughly 3 MB is restart-like — producing both the missing cells and the wide, bimodal distribution.",
+    "rank": 6,
+    "recommended_check": "Check pod/process restart counts and uptime within 1790628795000-1790629500000 and retrieve the timestamps of the missing cells to see whether gaps coincide with the error bursts; the evidence states no service dependency topology, so attributing checkout errors to paymentservice is unsupported."
+   },
+   {
+    "evidence_refs": [
+     "analysis-result.json#/evidence/10"
+    ],
+    "observation": "frontend cpu_cores mean is 0.1794321276595744680851063829787234 with max 0.198298 and q95 0.1979516 over 47 cells with no gaps; no CPU limit is stated anywhere in the evidence.",
+    "possible_explanation": "If the frontend container has a CPU limit near 0.2 cores, it may run against that ceiling and be throttled at peak; without limit data this remains unverified.",
+    "rank": 7,
+    "recommended_check": "Compare the observed cpu_cores series against the container's configured CPU limit and CPU throttling metrics for the same window; discard the hypothesis if no limit near 0.2 cores exists."
+   },
+   {
+    "evidence_refs": [
+     "analysis-result.json#/evidence/8",
+     "analysis-result.json#/evidence/9",
+     "analysis-result.json#/evidence/16",
+     "analysis-result.json#/evidence/20"
+    ],
+    "observation": "checkoutservice cpu mean 0.04288425531914893617021276595744681 cores (max 0.052615) and memory mean approximately 9624046 bytes with near-zero slopes over 47 cells, no gaps; resource_verdict is NO_POLICY, and diagnostics tested 1 pair (errors vs load error_rate) with 0 anomalies tested and 0 episodes reported.",
+    "possible_explanation": "No resource saturation signal is visible in the collected checkoutservice/frontend series; however, with no thresholds configured and no error-versus-CPU/memory correlation pairs, this is absence of a signal rather than evidence that resources are unrelated to the failures.",
+    "rank": 8,
+    "recommended_check": "If resource causality matters, configure resource thresholds and evaluate error-versus-CPU/memory correlations in a follow-up run; do not cite the current summaries as a resource pass."
+   }
+  ],
+  "recommendations": [
+   {
+    "action": "Accept and propagate the deterministic verdict as FAIL: policy rule 'overall-errors' requires error_rate_ratio lte 0.01 and the run-intersection window measured 3688/73813 (approximately 5.0%); do not re-badge the run based on resource observations.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/15",
+     "analysis-result.json#/evidence/16",
+     "analysis-result.json#/findings/0",
+     "analysis-result.json#/policy_verdict"
+    ],
+    "rank": 1,
+    "rationale": "The verdict, business_verdict FAIL, and resource_verdict NO_POLICY are deterministic outputs of the analysis; advisory interpretation cannot change them, and missing resource policy is not a pass."
+   },
+   {
+    "action": "Investigate the checkout failure path first: extract JMeter response codes and failure messages for the 3688 failed checkout samples and inspect frontend/checkout logs during the three burst windows (1790628855000-1790628930000, 1790629095000-1790629170000, 1790629335000-1790629425000).",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/3",
+     "analysis-result.json#/evidence/22",
+     "analysis-result.json#/evidence/17"
+    ],
+    "rank": 2,
+    "rationale": "All errors concentrate on the checkout sampler with a 10008 ms max latency, and OpenSearch attributes a matching count of errors to service 'frontend' as 'frontend.request_error'."
+   },
+   {
+    "action": "Confirm the identity of the two error streams before merging narratives: join sampled OpenSearch document timestamps (e.g., timestamp_epoch_ms 1790628856826) with JMeter checkout sample timestamps or request IDs.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/22",
+     "analysis-result.json#/evidence/3",
+     "analysis-result.json#/evidence/0"
+    ],
+    "rank": 3,
+    "rationale": "The counts match exactly (3688 OpenSearch total_errors versus 3688 JMeter error_count), but the referenced evidence does not explicitly link the two streams."
+   },
+   {
+    "action": "Verify clock alignment among the load generator, metrics pipeline, and OpenSearch before any lead/lag or cross-source burst-timing analysis.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/7",
+     "analysis-result.json#/evidence/18"
+    ],
+    "rank": 4,
+    "rationale": "clock_alignment is 'not_verified_by_core', so best_lag_ms 0 and cross-source epoch comparisons cannot support temporal ordering."
+   },
+   {
+    "action": "Investigate paymentservice stability and the resource gaps: check restart/reschedule events and retrieve the timestamps of the 5 missing cpu cells and 6 missing memory cells within 1790628795000-1790629500000.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/12",
+     "analysis-result.json#/evidence/13",
+     "analysis-result.json#/analysis_coverage"
+    ],
+    "rank": 5,
+    "rationale": "RESOURCE_GAPS make analysis coverage INCOMPLETE, and the paymentservice memory series shows a restart-like step with a very wide spread; the gaps may or may not coincide with the error bursts."
+   },
+   {
+    "action": "Do not cite the partial rho 0.972200295291 as evidence that load caused the errors; treat it as descriptive co-temporality of two views of the same errors, and re-analyze against achieved_rps or staged target load with calibrated significance if load dependence matters.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/18",
+     "analysis-result.json#/evidence/19"
+    ],
+    "rank": 6,
+    "rationale": "The pair is DESCRIPTIVE with uncertainty NOT_ESTIMATED; headline selection is UNAVAILABLE (GENUINE_PARTIAL_UNCALIBRATED) with null p-values; reasons include CONTROL_CONTEXT_MISSING and ACHIEVED_LOAD_ONLY; and the load metric is the error rate itself."
+   },
+   {
+    "action": "Configure resource policies/thresholds if resource gating is intended, and re-run to obtain a resource verdict.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/16",
+     "analysis-result.json#/evidence/8",
+     "analysis-result.json#/evidence/10",
+     "analysis-result.json#/evidence/11"
+    ],
+    "rank": 7,
+    "rationale": "resource_verdict is NO_POLICY — missing policy is not a pass, and the observed low CPU and memory values constitute no resource verdict either way."
+   },
+   {
+    "action": "Check whether the frontend CPU ceiling (max 0.198298 cores) corresponds to a configured container limit with throttling, and whether any scheduled job in the dependency chain recurs at the approximately 240-second burst period.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/10",
+     "analysis-result.json#/evidence/22"
+    ],
+    "rank": 8,
+    "rationale": "Frontend CPU max is close to a plausible 0.2-core limit, and the three error bursts start 240000 ms apart; both are unverified patterns that warrant bounded checks."
+   }
+  ],
+  "schema_version": "ai-advice-output.v1",
+  "summary": "Run jmeter_jtl_csv-dcc40905ef8a0238612b1c0869b275ea374c80770fb6d845ad1c7e8ac39b7b78 is VALID; the deterministic verdict for window run-intersection (1790628795000-1790629500000) is FAIL: business_verdict FAIL, resource_verdict NO_POLICY, and analysis coverage is INCOMPLETE (RESOURCE_GAPS). The FAIL is driven by policy rule 'overall-errors': window error_rate_ratio 3688/73813 (approximately 5.0%) against an lte threshold of 0.01. All 3688 JMeter errors occur on the 'checkout' sampler (3688 of 12567 samples, approximately 29.4%; max latency 10008 ms versus at most 1071 ms on the other five samplers), and OpenSearch reports exactly 3688 'frontend.request_error' events on service 'frontend' in three bursts whose starts are 240000 ms apart. checkoutservice and frontend CPU/memory series are low and flat with no gaps; paymentservice series have RESOURCE_GAPS (42/47 and 41/47 cells) and a wide, restart-like memory pattern. The only correlation pair (opensearch errors/minute versus load error_rate ratio; raw rho 0.974383916991, partial rho 0.972200295291, best_lag_ms 0) is DESCRIPTIVE with uncertainty NOT_ESTIMATED, and headline selection is UNAVAILABLE (GENUINE_PARTIAL_UNCALIBRATED). This advisory interprets the referenced evidence only and does not change the verdict."
+ },
+ "schema": "ai-experiment-run.v3",
+ "case": "K06",
+ "rep": 1,
+ "model_id": "glm-5.3",
+ "net_retries": 0,
+ "infra_retries": 0
+}

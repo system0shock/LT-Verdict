@@ -1,0 +1,182 @@
+{
+ "stage": "B",
+ "mode": "live",
+ "model": "deepseek-v4-flash-0731",
+ "tag": {
+  "phase": "holdout",
+  "attempt_id": "case-036-2-B-t1",
+  "arm": "B",
+  "stage": null,
+  "case": "case-036",
+  "rep": 2,
+  "try": 1
+ },
+ "retry_policy": "d2",
+ "qwen_exit": 0,
+ "wall_ms": 62391,
+ "relay": {
+  "schema_version": "advisory-ai-runtime-relay.v1",
+  "status": "FORWARDED_STRUCTURED_OUTPUT",
+  "received_request_count": 1,
+  "forwarded_request_count": 1,
+  "outcomes": [
+   "FORWARDED_STRUCTURED_OUTPUT"
+  ],
+  "retry_refused_reason": null,
+  "first_refused_reason": null,
+  "model_id": "deepseek-v4-flash-0731",
+  "retry_policy": "d2",
+  "requests": [
+   {
+    "ordinal": 1,
+    "forwarded": true,
+    "outcome": "FORWARDED_STRUCTURED_OUTPUT",
+    "provider_status": 200,
+    "latency_ms": 61154,
+    "usage": {
+     "prompt_tokens": 22537,
+     "total_tokens": 28218,
+     "completion_tokens": 5681,
+     "prompt_tokens_details": {
+      "cached_tokens": 1024
+     },
+     "completion_tokens_details": {
+      "reasoning_tokens": 3598
+     }
+    },
+    "model_returned": "deepseek-v4-flash-0731"
+   }
+  ],
+  "usage": {
+   "prompt_tokens": 22537,
+   "completion_tokens": 5681,
+   "total_tokens": 28218
+  },
+  "latency_ms": 61154
+ },
+ "relay_status": "FORWARDED_STRUCTURED_OUTPUT",
+ "usage": {
+  "prompt_tokens": 22537,
+  "completion_tokens": 5681,
+  "total_tokens": 28218
+ },
+ "latency_ms": 61154,
+ "retried": false,
+ "retry_refused_reason": null,
+ "status": "OK",
+ "note": null,
+ "output": {
+  "schema_version": "ai-advice-output.v1",
+  "summary": "The run is VALID and analysis coverage is COMPLETE, and the deterministic policy verdict is NO_POLICY for both the reference window (1767225600000–1767225720000) and the evaluation window (1767225720000–1767225960000). Both windows report business_verdict NO_POLICY and resource_verdict NO_POLICY, so no rule was evaluated; this is not a PASS/FAIL result and a healthy load with zero errors does not change it. In the evaluation window one correlation candidate (pair-00: resource-00 ratio vs response_time_p95_ms) was headline-selected (rho 0.965 at lag 0, Holm-adjusted p 0.016) and is reported as CANDIDATE with uncertainty NOT_ESTIMATED; however, the requested load control (target, constant at 20 requests/s) was dropped as CONSTANT_CONTROL, controls_used is empty, and clock alignment is not_verified_by_core. The remaining 15 pairs are BELOW_EFFECT/NOT_SELECTED. Anomaly testing reported 0 episodes, which does not by itself prove stability. No causal or temporal conclusion can be drawn from this evidence.",
+  "hypotheses": [
+   {
+    "rank": 1,
+    "observation": "Both reference and evaluation windows report verdict NO_POLICY with business_verdict NO_POLICY and resource_verdict NO_POLICY, and analysis-result.json#/policy_verdict is NO_POLICY, while the run is VALID with zero reported errors overall (error_count 0, 7200 samples).",
+    "possible_explanation": "Per product rules, NO_POLICY is reported when no applicable business policy rule and no resource rule with effect sla exists for the window; a healthy window, zero errors, or a rerun does not turn NO_POLICY into PASS.",
+    "recommended_check": "Review which policy/rules are configured for the run window and, if a PASS/FAIL evaluation is desired, add applicable business or resource SLA rules covering the window, then rerun.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/37",
+     "analysis-result.json#/evidence/38",
+     "analysis-result.json#/policy_verdict",
+     "analysis-result.json#/run_validity",
+     "analysis-result.json#/evidence/0"
+    ]
+   },
+   {
+    "rank": 2,
+    "observation": "Pair-00 (resource-00 vs response_time_p95_ms) reports rho 0.965154108981 at best_lag_ms 0, status CANDIDATE, uncertainty NOT_ESTIMATED; its headline selection reports Holm-adjusted p 0.016 and SELECTED status; the requested target control was dropped with reasons CONSTANT_CONTROL and controls_used is empty.",
+    "possible_explanation": "Resource-00 utilization and p95 latency co-vary within the evaluation window, but because the load control is constant and was dropped, the partial correlation equals the raw correlation and the candidate is not adjusted for achieved load; this does not establish causation or capacity headroom.",
+    "recommended_check": "Verify clock alignment first, inspect the resource-00 cell series and the p95 latency series directly, and rerun with a non-constant load profile so the target control can be used; do not interpret the lag-0 correlation as temporal ordering.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/41",
+     "analysis-result.json#/evidence/57",
+     "analysis-result.json#/evidence/36",
+     "analysis-result.json#/findings/0"
+    ]
+   },
+   {
+    "rank": 3,
+    "observation": "The target series is constant at 20 requests/s in both windows (min=mean=median=max=20, standard deviation 0, slope_per_second 0), and all 16 correlation pairs list controls_dropped ['target'] with reasons CONSTANT_CONTROL and empty controls_used.",
+    "possible_explanation": "Because load did not vary during the evaluation window, the correlation analysis could not control for achieved request rate, so associations between resources and latency are unadjusted and may reflect shared level rather than a load-driven relationship.",
+    "recommended_check": "Run a load profile with stepped or varying request rate to create target-series variation, then repeat the correlation analysis and compare whether pair-00 remains selected.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/19",
+     "analysis-result.json#/evidence/36",
+     "analysis-result.json#/evidence/41"
+    ]
+   },
+   {
+    "rank": 4,
+    "observation": "The evaluation-window diagnostic reports anomalies_tested 0, episodes_reported 0, pairs_evaluable 16, pairs_tested 16, status COMPLETE, and uncertainty NOT_ESTIMATED; overall latency p50 is 201 ms while the reference window p50 is 211 ms and the evaluation window p50 is 193 ms.",
+    "possible_explanation": "No anomaly episodes were tested or reported in this analysis stage, which does not by itself prove stability or absence of underlying issues; the reported counts are not estimates of confidence.",
+    "recommended_check": "Inspect the latency percentile series and resource series at cell granularity across both windows, and compare them against the correlation candidate, rather than relying on episode counts alone.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/73",
+     "analysis-result.json#/evidence/0",
+     "analysis-result.json#/evidence/39",
+     "analysis-result.json#/evidence/40"
+    ]
+   }
+  ],
+  "recommendations": [
+   {
+    "rank": 1,
+    "action": "Verify clock alignment of the load generator, service, and telemetry pipeline before interpreting any lag or temporal relationship.",
+    "rationale": "The resource binding reports clock_alignment not_verified_by_core; with an unverified clock relationship, best_lag_ms 0 and any lead/lag interpretation cannot support a causal or temporal hypothesis.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/2",
+     "analysis-result.json#/evidence/41"
+    ]
+   },
+   {
+    "rank": 2,
+    "action": "If a PASS/FAIL policy evaluation is desired, configure applicable business policy rules or resource rules with effect sla for the run window and rerun.",
+    "rationale": "Both windows and the overall policy verdict are NO_POLICY because no applicable rule was evaluated; NO_POLICY persists until such a rule exists, and a healthy rerun or zero errors will not convert it to PASS.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/37",
+     "analysis-result.json#/evidence/38",
+     "analysis-result.json#/policy_verdict"
+    ]
+   },
+   {
+    "rank": 3,
+    "action": "Inspect the resource-00 series and the p95 response-time series at cell granularity in the evaluation window, then rerun with a varying load profile.",
+    "rationale": "Pair-00 is the only CANDIDATE and was headline-selected, but its control was constant and dropped, uncertainty is NOT_ESTIMATED, and no load variation exists in this run; varying load would let the target control be used and tests whether the association persists.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/41",
+     "analysis-result.json#/evidence/57",
+     "analysis-result.json#/evidence/20",
+     "analysis-result.json#/evidence/36"
+    ]
+   },
+   {
+    "rank": 4,
+    "action": "Treat the 15 BELOW_EFFECT and NOT_SELECTED pairs as non-supportive, not as proof of absent relationships, and avoid comparing their correlations across different window scopes.",
+    "rationale": "Each pair carries uncertainty NOT_ESTIMATED and was evaluated only in the evaluation window; BELOW_EFFECT and HOLM_NOT_REJECTED mean the product did not select them, not that the product proved the absence of an effect.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/42",
+     "analysis-result.json#/evidence/58",
+     "analysis-result.json#/evidence/73"
+    ]
+   }
+  ],
+  "caveats": [
+   "The deterministic verdict NO_POLICY is preserved; this advisory cannot and does not change it into PASS or FAIL, and a healthy run does not turn NO_POLICY into PASS.",
+   "clock_alignment is not_verified_by_core; the lag-0 best_lag_ms in pair-00 cannot support any lead/lag ordering or temporal causal claim until clocks are verified.",
+   "All correlation pairs report uncertainty NOT_ESTIMATED; no confidence intervals or sensitivity estimates (sensitivity_without_achieved_rps is null) are provided.",
+   "The requested target control was constant and dropped (CONSTANT_CONTROL), leaving controls_used empty, so partial_rho equals raw_rho and results are unadjusted for load.",
+   "anomalies_tested 0 and episodes_reported 0 do not prove stability, spare capacity, or absence of problems; they describe this analysis stage only.",
+   "Reference and evaluation windows differ in length and position within the run (120 vs 240 cells); latency figures such as p50 211 ms vs 193 ms are descriptive across different windows, not causal comparisons.",
+   "No resource rule with effect sla or generator-guard evidence is present in the input; no statement is made about why NO_POLICY applies beyond the product's own rule, and no change to generator guard effects is recommended.",
+   "Aggregated resource ratios are interval means over cells; per-cell dynamics and non-monotonic behavior within a cell are not visible in the summaries provided."
+  ]
+ },
+ "schema": "ai-experiment-run.holdout.v1",
+ "case": "case-036",
+ "rep": 2,
+ "arm": "B",
+ "try": 1,
+ "attempt_id": "case-036-2-B-t1",
+ "model_id": "deepseek-v4-flash-0731",
+ "prompt_sha256": "3c0f28bee6517c13c5c854615e7d3d59301893d9723880818e4034a32e9133bf"
+}

@@ -1,0 +1,64 @@
+[
+  {
+    "id": "R001",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T7",
+        "field": "#/hypotheses/2/possible_explanation",
+        "quote": "NO_POLICY because no resource policy or required capacity is configured",
+        "why": "NO_POLICY does not establish which condition caused it, and required capacity does not determine a resource verdict."
+      },
+      {
+        "type": "T1",
+        "field": "#/hypotheses/2/recommended_check",
+        "quote": "configure an explicit resource policy (e.g., LOWER_BOUND/UPPER_BOUND/BOUNDED)",
+        "why": "Those are capacity bound types, not resource policy rules an operator can configure."
+      },
+      {
+        "type": "T7",
+        "field": "#/recommendations/2/rationale",
+        "quote": "only a configured policy or required capacity yields PASS or FAIL for resources",
+        "why": "Required capacity alone cannot produce a PASS or FAIL resource verdict."
+      }
+    ],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 2,
+    "notes": "The coverage and clock checks are useful, but the resource policy advice could misdirect configuration."
+  },
+  {
+    "id": "R009",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T7",
+        "field": "#/summary",
+        "quote": "the errors profile query against opensearch failed with SOURCE_HTTP_ERROR after 2 retries, so the error-rate policy check ... may not cover the full run",
+        "why": "The policy check covers the shorter evaluation window; the failed OpenSearch query is not shown to cause that coverage."
+      },
+      {
+        "type": "T2",
+        "field": "#/hypotheses/2/possible_explanation",
+        "quote": "the 1,315-sample difference plus dropped leading/trailing cells is consistent with partial acquisition",
+        "why": "The difference compares a whole-run count with a policy-window denominator and does not indicate missing acquisition."
+      },
+      {
+        "type": "T2",
+        "field": "#/hypotheses/2/recommended_check",
+        "quote": "compare error counts for the full run window ... to confirm the zero-error result covers samples outside the policy-check window",
+        "why": "OpenSearch error counts cannot confirm coverage of the same JMeter samples without event linkage."
+      },
+      {
+        "type": "T3",
+        "field": "#/caveats/4",
+        "quote": "Maximum latencies are single observations",
+        "why": "The aggregates do not give the number of samples tied at each maximum."
+      }
+    ],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 2,
+    "notes": "Several operator checks are useful, but the response mislinks source failure and counts to policy coverage."
+  }
+]

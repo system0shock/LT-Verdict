@@ -1,0 +1,218 @@
+{
+ "stage": "A",
+ "mode": "live",
+ "model": "deepseek-v4-flash-0731",
+ "tag": {
+  "phase": "holdout",
+  "attempt_id": "case-004-1-A-t1",
+  "arm": "A",
+  "stage": null,
+  "case": "case-004",
+  "rep": 1,
+  "try": 1
+ },
+ "retry_policy": "d2",
+ "qwen_exit": 0,
+ "wall_ms": 96529,
+ "relay": {
+  "schema_version": "advisory-ai-runtime-relay.v1",
+  "status": "FORWARDED_STRUCTURED_OUTPUT",
+  "received_request_count": 1,
+  "forwarded_request_count": 1,
+  "outcomes": [
+   "FORWARDED_STRUCTURED_OUTPUT"
+  ],
+  "retry_refused_reason": null,
+  "first_refused_reason": null,
+  "model_id": "deepseek-v4-flash-0731",
+  "retry_policy": "d2",
+  "requests": [
+   {
+    "ordinal": 1,
+    "forwarded": true,
+    "outcome": "FORWARDED_STRUCTURED_OUTPUT",
+    "provider_status": 200,
+    "latency_ms": 95218,
+    "usage": {
+     "prompt_tokens": 4633,
+     "total_tokens": 15549,
+     "completion_tokens": 10916,
+     "prompt_tokens_details": {
+      "cached_tokens": 1024
+     },
+     "completion_tokens_details": {
+      "reasoning_tokens": 8379
+     }
+    },
+    "model_returned": "deepseek-v4-flash-0731"
+   }
+  ],
+  "usage": {
+   "prompt_tokens": 4633,
+   "completion_tokens": 10916,
+   "total_tokens": 15549
+  },
+  "latency_ms": 95218
+ },
+ "relay_status": "FORWARDED_STRUCTURED_OUTPUT",
+ "usage": {
+  "prompt_tokens": 4633,
+  "completion_tokens": 10916,
+  "total_tokens": 15549
+ },
+ "latency_ms": 95218,
+ "retried": false,
+ "retry_refused_reason": null,
+ "status": "OK",
+ "note": null,
+ "output": {
+  "schema_version": "ai-advice-output.v1",
+  "summary": "Deterministic verdict is NO_POLICY: neither the reference window (1767225600000→1767225720000, 120 s) nor the evaluation window (1767225720000→1767225960000, 240 s) has a business or resource policy, so the analysis makes no PASS/FAIL determination (evidence/7, evidence/8; fact policy_verdict). run_validity is VALID and analysis_coverage is COMPLETE. Under a constant 20 requests/s load (target series mean=median=min=max=20, std 0), 7200 samples were collected (2400 reference, 4800 evaluation) with error_count 0; latency p50 ~196–203 ms, p95 236 ms, p99 238 ms, max 239–240 ms. Resource-00 (ratio) averaged ~0.50–0.52 with standard deviation ~0.12–0.13 in both windows. The only correlation pair tested (resource-00 vs response_time_p95_ms) was NOT_SELECTED: rho 0.049679535425 at lag 0, Holm-adjusted p 0.465, status BELOW_EFFECT, uncertainty NOT_ESTIMATED. The requested control 'target' was dropped as CONSTANT_CONTROL, so controls_used is empty and partial_rho equals raw_rho. Diagnostics report anomalies_tested=0 and episodes_reported=0 with uncertainty NOT_ESTIMATED. Because clock alignment is not verified by the core, sensitivity_without_achieved_rps is null, and uncertainty is NOT_ESTIMATED, these results support only bounded observations—not proofs of stability, spare capacity, or absence of an effect.",
+  "hypotheses": [
+   {
+    "rank": 1,
+    "observation": "The only evaluated correlation pair (pair-00, resource-00 vs response_time_p95_ms) reports best_lag_rho 0.049679535425 at lag 0, status BELOW_EFFECT, uncertainty NOT_ESTIMATED, and a Holm-adjusted p-value of 0.465 with selection status NOT_SELECTED (reason HOLM_NOT_REJECTED).",
+    "possible_explanation": "Resource-00 variation may be unrelated to p95 latency at the achieved constant 20 rps load, or the load may not exercise the resource enough to produce a detectable relationship; BELOW_EFFECT could also reflect limited statistical power rather than absence of an effect.",
+    "recommended_check": "Re-run with stepped or varying applied rps to widen the resource-00 range while keeping target as a control, and compare correlation status and p-values against this run.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/11",
+     "analysis-result.json#/evidence/12"
+    ]
+   },
+   {
+    "rank": 2,
+    "observation": "Reference and evaluation target series (target, requests/s) are constant: mean=median=min=max=20 with standard deviation 0; the requested control 'target' was dropped with reason CONSTANT_CONTROL and controls_used is empty, so partial_rho equals raw_rho.",
+    "possible_explanation": "With a constant 20 rps load, the intended load profile contributed no variance as a control, so the analysis ran without any control variable; this may reduce sensitivity and leaves potential confounders unadjusted.",
+    "recommended_check": "Introduce variance in the load profile (steps, ramps, or a randomized pattern) while recording the target control, and confirm controls_used is non-empty before interpreting the partial correlation.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/4",
+     "analysis-result.json#/evidence/6",
+     "analysis-result.json#/evidence/11"
+    ]
+   },
+   {
+    "rank": 3,
+    "observation": "Overall, reference, and evaluation metric summaries show p95=236 ms, p99=238 ms, and max at 239–240 ms, while p50 ranges 196–203 ms.",
+    "possible_explanation": "The near-coincident p99 and max across windows may indicate a latency ceiling or a queueing plateau near a limit, or simply that the tail is stable at 20 rps; the evidence does not establish which.",
+    "recommended_check": "Inspect per-cell latency time series and server/service configuration for maximum latency or timeout caps, then increase load above 20 rps to see whether p99 and max separate.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0",
+     "analysis-result.json#/evidence/1",
+     "analysis-result.json#/evidence/9",
+     "analysis-result.json#/evidence/10"
+    ]
+   },
+   {
+    "rank": 4,
+    "observation": "Resource-00 shows variable values in both windows (reference std 0.1293, min 0.3057, max 0.6986; evaluation std 0.1230, min 0.3020, max 0.6977), while the diagnostic summary reports anomalies_tested=0 and episodes_reported=0 with status COMPLETE.",
+    "possible_explanation": "No anomaly episodes were reported, but no anomaly tests are recorded either; the absence of reported episodes does not by itself demonstrate that the resource series is stable.",
+    "recommended_check": "Confirm whether anomaly detection was enabled for this run and what thresholds or policies trigger it; independently scan resource-00 interval means for sustained or threshold-crossing excursions.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/3",
+     "analysis-result.json#/evidence/5",
+     "analysis-result.json#/evidence/13"
+    ]
+   },
+   {
+    "rank": 5,
+    "observation": "Resource-00 slope_per_second is -0.0001367 in the reference window and +0.0001442 in the evaluation window; the resource-binding record states clock_alignment 'not_verified_by_core'.",
+    "possible_explanation": "The sign change between windows could reflect slow drift or sampling noise, but without verified clock alignment any temporal ordering or trend interpretation is unsupported.",
+    "recommended_check": "Verify clock alignment across load generator, service, and monitor first (as indicated by the resource-binding record), then recompute trend statistics over longer contiguous windows and compare against deployment or configuration change times.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/2",
+     "analysis-result.json#/evidence/3",
+     "analysis-result.json#/evidence/5"
+    ]
+   },
+   {
+    "rank": 6,
+    "observation": "Both window policy summaries return verdict NO_POLICY with business_verdict NO_POLICY and resource_verdict NO_POLICY, and the fact policy_verdict is NO_POLICY.",
+    "possible_explanation": "No explicit resource or business policy was configured for either window, so the analysis cannot separate an acceptable from an unacceptable outcome; NO_POLICY is not a pass.",
+    "recommended_check": "Define explicit business and resource policies (thresholds with units) and re-run so window verdicts can be PASS or FAIL rather than NO_POLICY.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/7",
+     "analysis-result.json#/evidence/8",
+     "analysis-result.json#/policy_verdict"
+    ]
+   }
+  ],
+  "recommendations": [
+   {
+    "rank": 1,
+    "action": "Verify clock alignment between the load generator, monitored service, and analysis snapshot before any temporal or lag interpretation.",
+    "rationale": "Evidence/2 reports clock_alignment 'not_verified_by_core'; without verified clocks, lead/lag ordering and temporal causal hypotheses cannot be supported.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/2"
+    ]
+   },
+   {
+    "rank": 2,
+    "action": "Design the next run with a varying load profile (steps, ramps, or randomized target) instead of a constant 20 rps.",
+    "rationale": "The target series is constant (std 0) in both windows and was dropped as CONSTANT_CONTROL, leaving controls_used empty; varying load would give the control variance and likely improve detection sensitivity.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/4",
+     "analysis-result.json#/evidence/6",
+     "analysis-result.json#/evidence/11"
+    ]
+   },
+   {
+    "rank": 3,
+    "action": "Define explicit business and resource policies and re-run to obtain PASS/FAIL verdicts.",
+    "rationale": "The current verdict is NO_POLICY for both windows; missing policy is not a pass/fail outcome.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/7",
+     "analysis-result.json#/evidence/8",
+     "analysis-result.json#/policy_verdict"
+    ]
+   },
+   {
+    "rank": 4,
+    "action": "Enable uncertainty estimation for the correlation pair and compute sensitivity_without_achieved_rps (currently null).",
+    "rationale": "Correlation uncertainty is NOT_ESTIMATED and sensitivity is null, so status BELOW_EFFECT cannot be read as proof of no relationship.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/11",
+     "analysis-result.json#/evidence/12",
+     "analysis-result.json#/evidence/13"
+    ]
+   },
+   {
+    "rank": 5,
+    "action": "Confirm anomaly-detection configuration and thresholds before relying on diagnostic episode counts.",
+    "rationale": "Diagnostics report anomalies_tested=0 with episodes_reported=0 and uncertainty NOT_ESTIMATED; without tests, absent episodes do not demonstrate stability.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/13"
+    ]
+   },
+   {
+    "rank": 6,
+    "action": "Investigate the latency plateau near 238–240 ms and determine whether a cap or timeout is configured.",
+    "rationale": "p99 (238 ms) and max (239–240 ms) are nearly identical across windows while p50 is 196–203 ms; this pattern could indicate a configured ceiling or queueing plateau that higher-load testing would clarify.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0",
+     "analysis-result.json#/evidence/1",
+     "analysis-result.json#/evidence/9",
+     "analysis-result.json#/evidence/10"
+    ]
+   }
+  ],
+  "caveats": [
+   "Clock alignment is not verified by the core (analysis-result.json#/evidence/2); any lead/lag or cross-series timing conclusion requires clock verification first.",
+   "Correlation uncertainty is NOT_ESTIMATED and sensitivity_without_achieved_rps is null (evidence/11); BELOW_EFFECT does not prove absence of an effect.",
+   "The requested control 'target' was dropped (CONSTANT_CONTROL) and controls_used is empty (evidence/11); the partial correlation is unadjusted.",
+   "Diagnostics report anomalies_tested=0, episodes_reported=0, uncertainty NOT_ESTIMATED (evidence/13); missing episodes are not evidence of stability.",
+   "Both windows are NO_POLICY for business and resource (evidence/7, evidence/8, policy_verdict fact); missing policy is not a pass.",
+   "Only one pair was tested (pair-00) involving one resource metric (resource-00) and one transaction label ('request'); other resources and endpoints were not analyzed.",
+   "Load was constant at 20 requests/s (evidence/4, evidence/6); conclusions apply only at that load level.",
+   "Resource-binding evidence/2 spans the full 360 s run (1767225600000→1767225960000), whereas window summaries define a 120 s reference and a 240 s evaluation window; confirm labeling consistency before relying on sub-window timing.",
+   "run_validity VALID and analysis_coverage COMPLETE describe execution of the analysis, not coverage of policies, metrics, or controls."
+  ]
+ },
+ "schema": "ai-experiment-run.holdout.v1",
+ "case": "case-004",
+ "rep": 1,
+ "arm": "A",
+ "try": 1,
+ "attempt_id": "case-004-1-A-t1",
+ "model_id": "deepseek-v4-flash-0731",
+ "prompt_sha256": "69f215a1ad4ae678c82410ba7cf7daf171cd9c7ca0ef4626bba6977db0af4ef7"
+}

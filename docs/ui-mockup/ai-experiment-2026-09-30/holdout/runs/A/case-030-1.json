@@ -1,0 +1,187 @@
+{
+ "stage": "A",
+ "mode": "live",
+ "model": "deepseek-v4-flash-0731",
+ "tag": {
+  "phase": "holdout",
+  "attempt_id": "case-030-1-A-t1",
+  "arm": "A",
+  "stage": null,
+  "case": "case-030",
+  "rep": 1,
+  "try": 1
+ },
+ "retry_policy": "d2",
+ "qwen_exit": 0,
+ "wall_ms": 59983,
+ "relay": {
+  "schema_version": "advisory-ai-runtime-relay.v1",
+  "status": "FORWARDED_STRUCTURED_OUTPUT",
+  "received_request_count": 1,
+  "forwarded_request_count": 1,
+  "outcomes": [
+   "FORWARDED_STRUCTURED_OUTPUT"
+  ],
+  "retry_refused_reason": null,
+  "first_refused_reason": null,
+  "model_id": "deepseek-v4-flash-0731",
+  "retry_policy": "d2",
+  "requests": [
+   {
+    "ordinal": 1,
+    "forwarded": true,
+    "outcome": "FORWARDED_STRUCTURED_OUTPUT",
+    "provider_status": 200,
+    "latency_ms": 58729,
+    "usage": {
+     "prompt_tokens": 2808,
+     "total_tokens": 8284,
+     "completion_tokens": 5476,
+     "prompt_tokens_details": {
+      "cached_tokens": 1024
+     },
+     "completion_tokens_details": {
+      "reasoning_tokens": 3456
+     }
+    },
+    "model_returned": "deepseek-v4-flash-0731"
+   }
+  ],
+  "usage": {
+   "prompt_tokens": 2808,
+   "completion_tokens": 5476,
+   "total_tokens": 8284
+  },
+  "latency_ms": 58729
+ },
+ "relay_status": "FORWARDED_STRUCTURED_OUTPUT",
+ "usage": {
+  "prompt_tokens": 2808,
+  "completion_tokens": 5476,
+  "total_tokens": 8284
+ },
+ "latency_ms": 58729,
+ "retried": false,
+ "retry_refused_reason": null,
+ "status": "OK",
+ "note": null,
+ "output": {
+  "schema_version": "ai-advice-output.v1",
+  "summary": "The deterministic verdict is PASS for the single evaluation window spanning 1767225600000 to 1767225630000 epoch_ms (30,000 ms). Run validity is VALID, analysis coverage is COMPLETE with no reasons, and no findings are recorded. Within that window: error_count is 0 across 600 samples; the overall p95 latency check passes at 100 ms vs threshold 120 ms (lte); the resource policy check for series value passes at 50 vs threshold 80 (gt); and the window policy summary reports business_verdict PASS and resource_verdict PASS with verdict PASS. The advice below does not change that verdict. However, the supporting series are entirely flat: every latency quantile (p50/p95/p99/max) is exactly 100 ms for both the overall and transaction scopes, and all 30 resource cells are exactly 50 synthetic_unit with zero variance, zero slope, and zero split-half shift. In addition, resource-binding reports clock_alignment \"not_verified_by_core\". Consequently, the PASS demonstrates the thresholds were met as modeled, but it does not by itself prove production stability, spare capacity, correct temporal correlation, or absence of latent issues.",
+  "hypotheses": [
+   {
+    "rank": 1,
+    "observation": "Every latency quantile is exactly 100 ms (p50, p95, p99, max) for both the overall metric summary and the transaction-scoped metric summary, and all 30 resource cells are exactly 50 synthetic_unit with zero variance statistics.",
+    "possible_explanation": "The constant values could indicate synthetic, simulated, or heavily coarse-grained/rounded telemetry rather than measured production variation; a deterministic load generator or an aggregation step that collapses values could produce flat quantiles and a flat resource series.",
+    "recommended_check": "Inspect the JMeter sampler capture and the aggregation/rounding configuration for latency, and compare against raw metric output; run a longer window with varied load to see whether latency and resource values deviate from 100 ms and 50 synthetic_unit.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0",
+     "analysis-result.json#/evidence/1",
+     "analysis-result.json#/evidence/3"
+    ]
+   },
+   {
+    "rank": 2,
+    "observation": "The resource summary series is perfectly constant (min=max=mean=median=50 synthetic_unit, sample_standard_deviation=0, mad=0, iqr=0, slope_per_second=0, split_half_shift=0) across all 30 observed cells, and its policy check against threshold 80 reports PASS.",
+    "possible_explanation": "A flat resource series with zero statistics may be a placeholder, a constant-injected synthetic metric, or an interval-mean aggregation too coarse to capture actual utilization; if so, the PASS on the 80 threshold does not demonstrate real headroom or saturation behavior.",
+    "recommended_check": "Confirm which real resource this synthetic_unit series represents and how it is collected; inspect the raw sampled feed rather than the interval-mean aggregation before relying on the resource verdict.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/3",
+     "analysis-result.json#/evidence/4"
+    ]
+   },
+   {
+    "rank": 3,
+    "observation": "Resource-binding reports clock_alignment \"not_verified_by_core\" while the evaluation, run, and snapshot windows share the same epoch boundaries (1767225600000 to 1767225630000/3099 ms).",
+    "possible_explanation": "If the clocks of the load generator and the monitored service are not actually aligned, apparent relationships between latency and resource usage could be temporally misordered even though both policy checks pass; an unverified clock relationship cannot support lead/lag ordering or a temporal causal hypothesis.",
+    "recommended_check": "Verify clock synchronization (NTP/PTP) between the JMeter host and the monitored service, then re-run resource binding so clock_alignment is verified before drawing any temporal or correlation conclusions.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/2"
+    ]
+   },
+   {
+    "rank": 4,
+    "observation": "error_count is 0 and error_rate_ratio is 0/600 across 600 samples in a 30,000 ms window, with throughput_rps expressed as numerator 600000 over denominator 30099.",
+    "possible_explanation": "The sampled population shows no errors, but the short single window and the ambiguous throughput ratio leave open the possibility of errors or degradations occurring outside the evaluated window; absent findings do not prove absence of problems.",
+    "recommended_check": "Extend the run across multiple windows and compare error rates and throughput between windows, including periods with higher load, before concluding error-free behavior.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0",
+     "analysis-result.json#/evidence/2"
+    ]
+   },
+   {
+    "rank": 5,
+    "observation": "Analysis coverage is COMPLETE with no reasons, policy checks report PASS (100 ms <= 120 ms latency; 50 vs 80 resource), the window policy summary verdict is PASS, and findings is empty.",
+    "possible_explanation": "The verdict is consistent with the recorded values, but a COMPLETE coverage status plus an empty findings list and flat series only reflects the analyzed data in this single window; it does not by itself prove stability, spare capacity, or absence of latent performance issues.",
+    "recommended_check": "Add baseline and trailing-window comparisons and enable anomaly detection over additional windows to detect variation that is absent from this single flat evaluation window.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/5",
+     "analysis-result.json#/evidence/6",
+     "analysis-result.json#/analysis_coverage"
+    ]
+   }
+  ],
+  "recommendations": [
+   {
+    "rank": 1,
+    "action": "Verify clock alignment between the JMeter load generator and the monitored service, then re-run binding so the clock_alignment field is not \"not_verified_by_core\".",
+    "rationale": "Temporal ordering or causal hypotheses require a verified clock relationship; the current evidence explicitly reports clock_alignment not_verified_by_core.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/2"
+    ]
+   },
+   {
+    "rank": 2,
+    "action": "Confirm whether the constant latency values (all quantiles exactly 100 ms) are genuine measurements by reviewing sampler capture, aggregation method, and any rounding, and re-run with varied load.",
+    "rationale": "Identical p50/p95/p99/max values across 600 samples are atypical for real traffic and could indicate synthetic or coarse-grained telemetry rather than demonstrated latency behavior.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0",
+     "analysis-result.json#/evidence/1"
+    ]
+   },
+   {
+    "rank": 3,
+    "action": "Map the synthetic_unit resource series (constant 50) to the real resource it represents and confirm that threshold 80 and operator \"gt\" match the intended SLO definition.",
+    "rationale": "Without knowing what the synthetic_unit measures and how it is aggregated to interval_mean, the resource PASS cannot be interpreted as a real capacity or saturation statement.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/3",
+     "analysis-result.json#/evidence/4"
+    ]
+   },
+   {
+    "rank": 4,
+    "action": "Re-run with a longer evaluation window and varying load to obtain non-flat statistics and confirm the PASS holds under realistic conditions.",
+    "rationale": "The 30,000 ms window with a perfectly constant series and zero variance cannot demonstrate stability or headroom; zero variation is not evidence of stability.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/2",
+     "analysis-result.json#/evidence/3"
+    ]
+   },
+   {
+    "rank": 5,
+    "action": "Add baseline and multi-window comparisons plus anomaly analysis before making reliability or capacity claims based on this verdict.",
+    "rationale": "Coverage COMPLETE applies only to the analyzed window, findings is empty, and a single task PASS with no variation does not prove absence of latent problems.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/6",
+     "analysis-result.json#/analysis_coverage"
+    ]
+   }
+  ],
+  "caveats": [
+   "Clock alignment is reported as \"not_verified_by_core\", so no temporal ordering or causal relationship between latency, resource usage, and load can be established from this evidence.",
+   "The evaluation window is a single 30,000 ms interval (1767225600000 to 1767225630000 epoch_ms); COMPLETE coverage applies only to that window and does not generalize to other periods.",
+   "All latency quantiles are exactly 100 ms and all 30 resource cells are exactly 50 synthetic_unit with zero variance; this may reflect synthetic, simulated, or coarse-grained aggregation data, and in no case proves stability or spare capacity.",
+   "error_count 0 across 600 samples and an empty findings list do not prove the absence of errors or problems outside the evaluated window.",
+   "The throughput_rps ratio (numerator 600000 / denominator 30099) is not clearly interpretable from the given fields; no throughput conclusion is drawn from it.",
+   "The deterministic verdict PASS is preserved exactly as recorded; this advice offers verification steps only and does not change the verdict."
+  ]
+ },
+ "schema": "ai-experiment-run.holdout.v1",
+ "case": "case-030",
+ "rep": 1,
+ "arm": "A",
+ "try": 1,
+ "attempt_id": "case-030-1-A-t1",
+ "model_id": "deepseek-v4-flash-0731",
+ "prompt_sha256": "69f215a1ad4ae678c82410ba7cf7daf171cd9c7ca0ef4626bba6977db0af4ef7"
+}

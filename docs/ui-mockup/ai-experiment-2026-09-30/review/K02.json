@@ -1,0 +1,152 @@
+[
+  {
+    "id": "R023",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T1",
+        "field": "#/hypotheses/1/recommended_check",
+        "quote": "Configure or implement a knee detector ... so a knee and verified bound load can be estimated",
+        "why": "A verified capacity bound does not depend on the unimplemented knee detector."
+      },
+      {
+        "type": "T1",
+        "field": "#/recommendations/1/action",
+        "quote": "Implement or configure knee detection ... before estimating capacity",
+        "why": "This recommends changing a fixed product limitation as a prerequisite for a bound."
+      }
+    ],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 2,
+    "notes": "It identifies the failed generator guard correctly but sends the operator toward an unnecessary knee-detector change."
+  },
+  {
+    "id": "R027",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T1",
+        "field": "#/recommendations/2/rationale",
+        "quote": "no lower_inclusive/upper_exclusive bound is derived without a configured policy",
+        "why": "Bounds come from verified stages with product outcomes; a required capacity is needed for a policy verdict, not for the bound itself."
+      }
+    ],
+    "required_facts_preserved": false,
+    "missing_facts": ["The whole-run count of 0 errors in 47,396 samples is omitted."],
+    "usefulness": 2,
+    "notes": "The rerun advice is useful, but it invents a policy prerequisite for computing a bound."
+  },
+  {
+    "id": "R038",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T7",
+        "field": "#/summary",
+        "quote": "policy_verdict NO_POLICY because the diagnostic generator CPU throttle guard FAILed",
+        "why": "The failed guard makes the stage unusable; it does not cause the NO_POLICY verdict."
+      },
+      {
+        "type": "T5",
+        "field": "#/hypotheses/0/possible_explanation",
+        "quote": "The load-generator container was CPU-throttled",
+        "why": "The evidence identifies a throttled generator but provides no container topology."
+      },
+      {
+        "type": "T1",
+        "field": "#/hypotheses/1/recommended_check",
+        "quote": "configure one so a bound can be produced",
+        "why": "A capacity policy is not a prerequisite for a bound from verified product-outcome stages."
+      }
+    ],
+    "required_facts_preserved": false,
+    "missing_facts": ["Run validity VALID is omitted.", "Analysis coverage INCOMPLETE is omitted."],
+    "usefulness": 2,
+    "notes": "It gives sensible guard and clock checks but misstates why NO_POLICY applies and what a bound requires."
+  },
+  {
+    "id": "R053",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T2",
+        "field": "#/hypotheses/2/observation",
+        "quote": "Whole-run latencies ... all measured during the window",
+        "why": "Whole-run aggregate latencies cannot be assigned entirely to the shorter policy window."
+      },
+      {
+        "type": "T7",
+        "field": "#/recommendations/2/action",
+        "quote": "Configure the required capacity policy/rules before the next run so the window can yield PASS or FAIL",
+        "why": "The evidence already reports a PASS for the window business policy."
+      },
+      {
+        "type": "T2",
+        "field": "#/caveats/0",
+        "quote": "8,554 whole-run samples fall outside the window",
+        "why": "Subtracting the policy-window denominator from the whole-run aggregate does not establish an exact outside-window sample count."
+      }
+    ],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 2,
+    "notes": "The main guard diagnosis is sound, but several claims treat aggregates from different windows as interchangeable."
+  },
+  {
+    "id": "R058",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T7",
+        "field": "#/summary",
+        "quote": "the capacity verdict is NO_POLICY",
+        "why": "NO_POLICY is the policy verdict; the capacity summary and stage are INDETERMINATE."
+      },
+      {
+        "type": "T2",
+        "field": "#/summary",
+        "quote": "metrics ... in window ... 0 errors across 47,396 samples",
+        "why": "47,396 is the whole-run sample count, while the window policy denominator is 38,842."
+      },
+      {
+        "type": "T1",
+        "field": "#/recommendations/2/action",
+        "quote": "estimate a capacity knee with a functioning knee detector",
+        "why": "The absent knee is a fixed product limitation and does not block a bound from verified stages."
+      },
+      {
+        "type": "T8",
+        "field": "#/hypotheses/2/possible_explanation",
+        "quote": "the application services were not CPU-saturated",
+        "why": "CPU usage aggregates without service CPU limits do not establish whether a service was saturated."
+      }
+    ],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 1,
+    "notes": "Verdict confusion, window-count confusion, and knee-detector advice make the operator guidance unreliable."
+  },
+  {
+    "id": "R064",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T2",
+        "field": "#/hypotheses/4/observation",
+        "quote": "Business metrics in the window ... overall summary 0 errors out of 47396 samples",
+        "why": "The 47,396-sample summary covers the whole run, not just the evaluation window."
+      },
+      {
+        "type": "T1",
+        "field": "#/recommendations/1/rationale",
+        "quote": "no capacity bound can be asserted until a policy or required capacity exists",
+        "why": "A bound depends on verified product-outcome stages, while required capacity governs the policy verdict."
+      }
+    ],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 2,
+    "notes": "It preserves the main verdicts and guard contract but introduces a false bound prerequisite and mislabels a whole-run count."
+  }
+]

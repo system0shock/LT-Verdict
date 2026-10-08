@@ -1,0 +1,193 @@
+{
+ "stage": "B",
+ "mode": "live",
+ "model": "deepseek-v4-flash-0731",
+ "tag": {
+  "phase": "holdout",
+  "attempt_id": "case-015-2-B-t1",
+  "arm": "B",
+  "stage": null,
+  "case": "case-015",
+  "rep": 2,
+  "try": 1
+ },
+ "retry_policy": "d2",
+ "qwen_exit": 0,
+ "wall_ms": 64629,
+ "relay": {
+  "schema_version": "advisory-ai-runtime-relay.v1",
+  "status": "FORWARDED_STRUCTURED_OUTPUT",
+  "received_request_count": 1,
+  "forwarded_request_count": 1,
+  "outcomes": [
+   "FORWARDED_STRUCTURED_OUTPUT"
+  ],
+  "retry_refused_reason": null,
+  "first_refused_reason": null,
+  "model_id": "deepseek-v4-flash-0731",
+  "retry_policy": "d2",
+  "requests": [
+   {
+    "ordinal": 1,
+    "forwarded": true,
+    "outcome": "FORWARDED_STRUCTURED_OUTPUT",
+    "provider_status": 200,
+    "latency_ms": 63415,
+    "usage": {
+     "prompt_tokens": 4167,
+     "total_tokens": 9027,
+     "completion_tokens": 4860,
+     "prompt_tokens_details": {
+      "cached_tokens": 1024
+     },
+     "completion_tokens_details": {
+      "reasoning_tokens": 2368
+     }
+    },
+    "model_returned": "deepseek-v4-flash-0731"
+   }
+  ],
+  "usage": {
+   "prompt_tokens": 4167,
+   "completion_tokens": 4860,
+   "total_tokens": 9027
+  },
+  "latency_ms": 63415
+ },
+ "relay_status": "FORWARDED_STRUCTURED_OUTPUT",
+ "usage": {
+  "prompt_tokens": 4167,
+  "completion_tokens": 4860,
+  "total_tokens": 9027
+ },
+ "latency_ms": 63415,
+ "retried": false,
+ "retry_refused_reason": null,
+ "status": "OK",
+ "note": null,
+ "output": {
+  "schema_version": "ai-advice-output.v1",
+  "summary": "The deterministic verdict for this run is NO_POLICY. Per product rules this stays NO_POLICY and is not a PASS or FAIL: the evaluation window 1767225600000–1767225635000 ms has no applicable business policy rule and no resource rule with effect sla, so no rule was evaluated (window-policy-summary-efe77b201dc216c0edf435a227df2b2898d3f6ea1ff16e5d4d0d4ec0cf593271). The measured test data itself is clean: 700 samples with error_count 0, latency p50 160ms / p95 280ms / p99 280ms, throughput 20 requests/s over the 35 s window, and both resource series (target, value) show 35/35 observed cells with no gaps or missing cells. However, the load-latency correlation pair is INSUFFICIENT_DATA (NO_RESIDUAL_VARIATION, LAG_NOT_EVALUABLE) with uncertainty NOT_ESTIMATED and p-value unavailable, and clock alignment is not_verified_by_core, so no causal or lead/lag claim is supported by this analysis. Advice preserves the verdict unchanged: NO_POLICY.",
+  "hypotheses": [
+   {
+    "rank": 1,
+    "observation": "The run reports verdict NO_POLICY with business_verdict NO_POLICY and resource_verdict NO_POLICY for window 'evaluation' (from_epoch_ms 1767225600000 to 1767225635000), and policy_verdict fact is NO_POLICY. At the same time the window metrics are error-free: 700 samples, error_count 0, latency p50 160ms / p95 280ms / p99 280ms, throughput 20 req/s.",
+    "possible_explanation": "No applicable business policy rule and no resource rule with effect sla matched this evaluation window, so the product had no rule to evaluate and therefore reported NO_POLICY. The error-free metrics are measurements, not a policy evaluation; they do not turn NO_POLICY into PASS.",
+    "recommended_check": "Configure an applicable policy for this window (for example a business SLA rule on the 'request' transaction latency, or a resource rule with effect sla on the 'target' series) and rerun so the product can evaluate a PASS/FAIL verdict.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/5",
+     "analysis-result.json#/policy_verdict",
+     "analysis-result.json#/evidence/6"
+    ]
+   },
+   {
+    "rank": 2,
+    "observation": "The single correlation pair (load response_time_p95_ms vs resource series 'value') has status INSUFFICIENT_DATA, reasons NO_RESIDUAL_VARIATION and LAG_NOT_EVALUABLE, partial_rho null, raw_rho \"1\", uncertainty NOT_ESTIMATED, paired_cells 35. The headline selection is status UNAVAILABLE with holm_adjusted_p_value null and reason GENUINE_PARTIAL_UNCALIBRATED. The diagnostic summary reports pairs_evaluable 0, anomalies_tested 0, episodes_reported 0.",
+    "possible_explanation": "The 'value' resource series showed no residual variation across the 35 evaluated cells, so a partial correlation with lag evaluation could not be computed, and a calibrated p-value is not available. This is insufficient data for a load-latency association claim, not evidence of 'no problem'.",
+    "recommended_check": "Inspect the 'value' resource series telemetry and the load generator setup to see whether the intended load variation was produced; if the series was intentionally flat, rerun with a varied load profile so the correlation analysis can be evaluated.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/7",
+     "analysis-result.json#/evidence/8",
+     "analysis-result.json#/evidence/9"
+    ]
+   },
+   {
+    "rank": 3,
+    "observation": "Resource binding reports mode explicit_windows, clock_alignment \"not_verified_by_core\", run from 1767225600000 to 1767225635230 ms, evaluation window 1767225600000 to 1767225635000 ms, and dropped leading/trailing cells 0.",
+    "possible_explanation": "Because the core did not verify the clock relationship between the load test and the resource series, any temporal ordering between events across these sources remains unverified; a timestamp disagreement could affect attribution even though no cells were dropped.",
+    "recommended_check": "Verify clock synchronization between the load generator/JMeter and the monitored systems and confirm the resource-bindings timestamps align with the run; only then attempt any temporal interpretation of the pair analysis.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/2"
+    ]
+   },
+   {
+    "rank": 4,
+    "observation": "Both resource summaries ('target' unit requests/s and 'value' unit synthetic_unit) report 35 observed cells out of 35 expected, missing_cells 0, longest_gap_cells 0, min 3 / max 21 / mean 12 (median 12), and slope_per_second 0.117647... over the evaluation window; the correlation pair used 'value' as its resource series.",
+    "possible_explanation": "The resource series appear complete but with a positive slope over the 35 s window, so load was not constant over time; this trend was considered by the correlation analysis, which still found no residual variation usable for lag evaluation.",
+    "recommended_check": "Plot the 'value' and 'target' series across the 35 cells and confirm they match the intended load schedule; if the rise is unintended, correct the load profile and rerun.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/3",
+     "analysis-result.json#/evidence/4",
+     "analysis-result.json#/evidence/7"
+    ]
+   },
+   {
+    "rank": 5,
+    "observation": "run_validity is VALID, analysis_coverage status is COMPLETE with reasons [], findings is [], and the diagnostic status is COMPLETE. No error, gap, or missing-cell pattern was reported.",
+    "possible_explanation": "The run and analysis completed cleanly from a data-quality standpoint, so the NO_POLICY verdict and NOT_ESTIMATED correlation uncertainty are not caused by a crashed or incomplete run; however this does not prove load stability, spare capacity, or the absence of a problem.",
+    "recommended_check": "Keep the run as a valid baseline; to assess behaviorونagainst requirements, add an applicable rule and rerun, and separately check whether the load profile used was representative of the intended test.",
+    "evidence_refs": [
+     "analysis-result.json#/run_validity",
+     "analysis-result.json#/analysis_coverage",
+     "analysis-result.json#/evidence/9"
+    ]
+   }
+  ],
+  "recommendations": [
+   {
+    "rank": 1,
+    "action": "Add a policy that applies to this evaluation window (business policy rule on the 'request' transaction, or a resource rule with effect sla on the 'target' series) and rerun the analysis.",
+    "rationale": "The verdict is NO_POLICY because no applicable business or SLA-effect resource rule was evaluated in the window; only a rule the product evaluates can yield PASS or FAIL. The measured error-free latency (p50 160ms, p95 280ms, p99 280ms) is currently unjudged.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/5",
+     "analysis-result.json#/policy_verdict",
+     "analysis-result.json#/evidence/6"
+    ]
+   },
+   {
+    "rank": 2,
+    "action": "Generate varied load in the resource series used for correlation (the 'value' series) and rerun so correlation can be estimated.",
+    "rationale": "The load-latency pair is INSUFFICIENT_DATA with NO_RESIDUAL_VARIATION and LAG_NOT_EVALUABLE, uncertainty NOT_ESTIMATED, and p-value unavailable; a flat series cannot support a calibrated correlation estimate.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/7",
+     "analysis-result.json#/evidence/8"
+    ]
+   },
+   {
+    "rank": 3,
+    "action": "Verify clock synchronization between the JMeter/load test and the systems supplying the resource series before interpreting any temporal pattern.",
+    "rationale": "clock_alignment is not_verified_by_core, so lead/lag or temporal causal hypotheses cannot be supported until the clock relationship is confirmed.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/2"
+    ]
+   },
+   {
+    "rank": 4,
+    "action": "Inspect the 'value' and 'target' resource series cell-by-cell (35 cells each, both complete with no gaps) to confirm whether the rising pattern (slope_per_second 0.1176) matches the intended load schedule.",
+    "rationale": "Both series show a positive slope over the window; confirming the actual load shape is a prerequisite to judging whether the flat residual behavior was intentional.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/3",
+     "analysis-result.json#/evidence/4"
+    ]
+   },
+   {
+    "rank": 5,
+    "action": "Treat NO_POLICY as a non-result (no applicable rule), not as proof that the window was healthy or compliant, and document it separately from the error/latency measurements.",
+    "rationale": "Product invariants keep NO_POLICY distinct from PASS and FAIL; a healthy window or clean measurements do not convert it into a pass.",
+    "evidence_refs": [
+     "analysis-result.json#/policy_verdict",
+     "analysis-result.json#/evidence/5",
+     "analysis-result.json#/evidence/6"
+    ]
+   }
+  ],
+  "caveats": [
+   "The verdict NO_POLICY is deterministic and unchanged by this advice; it means no applicable rule (no business policy rule and no resource rule with effect sla) matched the evaluation window, not that the window passed or failed.",
+   "Latency/throughput and error metrics are observations only; they are not judged against any requirement because no applicable policy was evaluated, so no compliance conclusion is drawn from p50 160ms / p95 280ms / p99 280ms or error_count 0.",
+   "The load-latency correlation is INSUFFICIENT_DATA (NO_RESIDUAL_VARIATION, LAG_NOT_EVALUABLE), with uncertainty NOT_ESTIMATED and no calibrated p-value (GENUINE_PARTIAL_UNCALIBRATED, status UNAVAILABLE); it does not establish association, absence of association, or causality.",
+   "clock_alignment is not_verified_by_core; no lead/lag ordering or temporal causal hypothesis is supported until clocks are verified.",
+   "Counts are scope-specific: overall and per-transaction sample counts (700) and window throughput denominators (35000, 35230) are different quantities; no comparison of these numbers is attempted here.",
+   "All series are complete within the evaluation window (35/35 cells, no gaps), and run validity is VALID with COMPLETE coverage; this supports data quality, not claims of stability, spare capacity, or absence of problems.",
+   "No capacity bound or knee analysis was present in the evidence; capacity-related conclusions are not drawn.",
+   "The diagnostic evaluated only one pair and reported anomalies_tested 0; this is a limitation of the available evidence, not proof that no anomalies exist."
+  ]
+ },
+ "schema": "ai-experiment-run.holdout.v1",
+ "case": "case-015",
+ "rep": 2,
+ "arm": "B",
+ "try": 1,
+ "attempt_id": "case-015-2-B-t1",
+ "model_id": "deepseek-v4-flash-0731",
+ "prompt_sha256": "3c0f28bee6517c13c5c854615e7d3d59301893d9723880818e4034a32e9133bf"
+}

@@ -1,0 +1,254 @@
+{
+ "stage": "A",
+ "mode": "live",
+ "model": "deepseek-v4-flash-0731",
+ "tag": {
+  "phase": "holdout",
+  "attempt_id": "case-005-1-A-t1",
+  "arm": "A",
+  "stage": null,
+  "case": "case-005",
+  "rep": 1,
+  "try": 1
+ },
+ "retry_policy": "d2",
+ "qwen_exit": 0,
+ "wall_ms": 108209,
+ "relay": {
+  "schema_version": "advisory-ai-runtime-relay.v1",
+  "status": "FORWARDED_STRUCTURED_OUTPUT",
+  "received_request_count": 1,
+  "forwarded_request_count": 1,
+  "outcomes": [
+   "FORWARDED_STRUCTURED_OUTPUT"
+  ],
+  "retry_refused_reason": null,
+  "first_refused_reason": null,
+  "model_id": "deepseek-v4-flash-0731",
+  "retry_policy": "d2",
+  "requests": [
+   {
+    "ordinal": 1,
+    "forwarded": true,
+    "outcome": "FORWARDED_STRUCTURED_OUTPUT",
+    "provider_status": 200,
+    "latency_ms": 106882,
+    "usage": {
+     "prompt_tokens": 6143,
+     "total_tokens": 17455,
+     "completion_tokens": 11312,
+     "prompt_tokens_details": {
+      "cached_tokens": 1024
+     },
+     "completion_tokens_details": {
+      "reasoning_tokens": 8015
+     }
+    },
+    "model_returned": "deepseek-v4-flash-0731"
+   }
+  ],
+  "usage": {
+   "prompt_tokens": 6143,
+   "completion_tokens": 11312,
+   "total_tokens": 17455
+  },
+  "latency_ms": 106882
+ },
+ "relay_status": "FORWARDED_STRUCTURED_OUTPUT",
+ "usage": {
+  "prompt_tokens": 6143,
+  "completion_tokens": 11312,
+  "total_tokens": 17455
+ },
+ "latency_ms": 106882,
+ "retried": false,
+ "retry_refused_reason": null,
+ "status": "OK",
+ "note": null,
+ "output": {
+  "schema_version": "ai-advice-output.v1",
+  "summary": "The deterministic LT Verdict is PASS with run validity VALID and analysis coverage COMPLETE; this advice does not change that verdict. The capacity analysis verified a LOWER_BOUND of 297 concurrent users on the load axis \"users\" (achieved statistic p05_10s), with all three steps passing the latency policy (response_time_p95_ms observed 140 vs threshold 250 in every stage) and zero errors (error_count 0, error_rate_ratio 0/3601, sample_count 3601). The recorded bound is 297 rather than the nominal 300 because the achieved statistic is the 5th percentile of 10-second active-user cells. No capacity knee is reported (knee_reason KNEE_DETECTOR_NOT_IMPLEMENTED) and upper_exclusive is null, so the actual ceiling is unknown. All window policy summaries carry resource_verdict NO_POLICY; the only resource policy evaluated is the load-generator CPU guard (threshold 0.85, observed max 0.45), so server-side resource headroom was not measured. Generator CPU statistics are identical across all three stages despite load rising 100→200→300 users. The throughput_rps ratio 3601000/900500 corresponds to roughly 4 requests/s over 3601 samples. Clock alignment is not_verified_by_core, so no temporal or causal ordering is supported. Key follow-ups: instrument the server side, enable or perform knee detection, verify clocks, and confirm that 300 active users generate the intended request rate.",
+  "hypotheses": [
+   {
+    "rank": 1,
+    "observation": "All three window policy summaries report resource_verdict NO_POLICY (analysis-result.json#/evidence/13, /15, /17), and the only resource policy evaluations present are generator-cpu-guard checks (threshold 0.85, status PASS) against a generator CPU series that stays ~0.41-0.45 across stages 1-3 (analysis-result.json#/evidence/4, /6, /8, /9, /10, /11).",
+    "possible_explanation": "The monitored resource dimension is the load generator's CPU, not the system under test. Flat generator CPU does not indicate server headroom; server-side CPU, memory, or queue saturation could exist without being measured, so capacity (297 users) is asserted only against latency and generator CPU, not SUT resources.",
+    "recommended_check": "Add SUT-side resource metrics and policy checks (CPU, memory, GC, queue depth) to future capacity runs so the PASS verdict covers the service under test rather than only the load generator.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/13",
+     "analysis-result.json#/evidence/15",
+     "analysis-result.json#/evidence/17",
+     "analysis-result.json#/evidence/9",
+     "analysis-result.json#/evidence/10",
+     "analysis-result.json#/evidence/11",
+     "analysis-result.json#/evidence/4"
+    ]
+   },
+   {
+    "rank": 2,
+    "observation": "capacity_knee is null with knee_reason KNEE_DETECTOR_NOT_IMPLEMENTED, upper_exclusive is null, and only lower_inclusive 297 is defined in the capacity summary (analysis-result.json#/capacity_summary and analysis-result.json#/evidence/18).",
+    "possible_explanation": "The run establishes only that at least 297 users satisfy the policies; it does not estimate the load at which capacity degrades, because no knee detector executed and no failing step was encountered.",
+    "recommended_check": "Enable or implement a knee detector, or extend the run with additional escalating load steps until a failing step or knee is observed, so an upper_exclusive capacity ceiling can be estimated.",
+    "evidence_refs": [
+     "analysis-result.json#/capacity_summary",
+     "analysis-result.json#/evidence/18"
+    ]
+   },
+   {
+    "rank": 3,
+    "observation": "With 300 users targeted in stage-3, achieved p05_10s is 297 and observed_min is 297 (analysis-result.json#/evidence/7); the overall metric summary reports sample_count 3601 and throughput_rps numerator/denominator 3601000/900500 (ratio roughly 4 rps), while p95 latency is 140 ms in each stage policy check (analysis-result.json#/evidence/0, /12, /14, /16).",
+    "possible_explanation": "The active-user count may not translate into a proportionally high request rate if the workload is pacing/think-time dominated; a modest total of 3601 samples over the run means flat p95 latency of 140 ms across steps is not strong evidence that the service was heavily saturated at 300 users.",
+    "recommended_check": "Review the JMeter/load configuration (think times, pacing, ramp) and compute per-user request rate to confirm that 300 active users produce the intended request mix and request-per-second load.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0",
+     "analysis-result.json#/evidence/7",
+     "analysis-result.json#/evidence/12",
+     "analysis-result.json#/evidence/14",
+     "analysis-result.json#/evidence/16"
+    ]
+   },
+   {
+    "rank": 4,
+    "observation": "The verified bound is 297 (p05_10s) in every stage even though nominal targets are 100/200/300; observed_min trails target by 3 users in each stage, and stage-3 has a slightly negative slope_per_second (-0.000378) with split_half_shift 1 (analysis-result.json#/evidence/3, /5, /7, /18).",
+    "possible_explanation": "Minor dips or measurement quantization in the 10-second active-user cells lower the p05 below the nominal target, so the deterministic verified load is 297 rather than 300; this is within the 0.05 target tolerance but it is the reason the recorded bound differs from the nominal target.",
+    "recommended_check": "Inspect the raw 10-second active-user cells, especially around stage boundaries, to confirm the 3-user shortfall is due to ramp or measurement behavior rather than a load-shaping defect.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/3",
+     "analysis-result.json#/evidence/5",
+     "analysis-result.json#/evidence/7",
+     "analysis-result.json#/evidence/18"
+    ]
+   },
+   {
+    "rank": 5,
+    "observation": "Generator CPU statistics (max 0.45, mean 0.43, min 0.41, sample_standard_deviation 0.01438) are identical across stage-1, stage-2, and stage-3 while active users rise 100→200→300 (analysis-result.json#/evidence/4, /6, /8).",
+    "possible_explanation": "The identical statistics across different load levels may reflect coarse metric resolution, quantized reporting, or background noise on the generator rather than true load insensitivity; equally, the generator may simply have been far below saturation in all stages.",
+    "recommended_check": "Inspect the raw generator-cpu series (unit, resolution, and cell-to-cell variation) to determine whether the identical statistics are a measurement artifact before using them to draw conclusions.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/4",
+     "analysis-result.json#/evidence/6",
+     "analysis-result.json#/evidence/8"
+    ]
+   },
+   {
+    "rank": 6,
+    "observation": "The run reports error_count 0 and error_rate_ratio 0/3601 with analysis coverage COMPLETE, but the only transaction-scope metric summary present is for the 'checkout' JMETER_SAMPLER (analysis-result.json#/evidence/0, /1, analysis-result.json#/analysis_coverage).",
+    "possible_explanation": "An error-free, coverage-complete result corroborates PASS for the measured envelope; however, the absence of errors and empty findings list does not prove stability outside that envelope, and any other transactions in the scenario were not summarized.",
+    "recommended_check": "Extend scenario coverage to additional transaction types and longer or burstier runs, and confirm 0 error counts per sampler beyond 'checkout'.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0",
+     "analysis-result.json#/evidence/1",
+     "analysis-result.json#/analysis_coverage"
+    ]
+   },
+   {
+    "rank": 7,
+    "observation": "resource_binding reports clock_alignment not_verified_by_core for the evaluation windows (analysis-result.json#/evidence/2), while the active-users series report split_half_shift values of -1, 0, and 1 across stages (analysis-result.json#/evidence/3, /5, /7).",
+    "possible_explanation": "Without verified clock alignment between the load generator and any server-side telemetry, no lead/lag ordering or temporal causal hypothesis (e.g., load changes causing latency changes) can be inferred from these series.",
+    "recommended_check": "Verify clock alignment/time synchronization across the load generator and server-side measurement sources before drawing any temporal or causal conclusions.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/2",
+     "analysis-result.json#/evidence/3",
+     "analysis-result.json#/evidence/5",
+     "analysis-result.json#/evidence/7"
+    ]
+   }
+  ],
+  "recommendations": [
+   {
+    "rank": 1,
+    "action": "Instrument the system under test with resource metrics (CPU, memory, GC, queue depth) and add resource policy checks to capacity runs.",
+    "rationale": "All window summaries carry resource_verdict NO_POLICY and the only resource guard evaluated is generator-cpu (threshold 0.85), so the PASS verdict does not reflect server-side headroom.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/13",
+     "analysis-result.json#/evidence/15",
+     "analysis-result.json#/evidence/17",
+     "analysis-result.json#/evidence/9",
+     "analysis-result.json#/evidence/10",
+     "analysis-result.json#/evidence/11"
+    ]
+   },
+   {
+    "rank": 2,
+    "action": "Enable or implement a knee detector, or escalate load beyond 300 users until a failing step, so an upper capacity bound can be estimated.",
+    "rationale": "capacity_knee is null with reason KNEE_DETECTOR_NOT_IMPLEMENTED and upper_exclusive is null; only the lower bound (297 users) is known and the ceiling is undetermined.",
+    "evidence_refs": [
+     "analysis-result.json#/capacity_summary",
+     "analysis-result.json#/evidence/18"
+    ]
+   },
+   {
+    "rank": 3,
+    "action": "Verify clock alignment/time synchronization between the load generator and all server-side telemetry.",
+    "rationale": "resource_binding reports clock_alignment not_verified_by_core, which prevents any temporal ordering or causal interpretation of the series.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/2"
+    ]
+   },
+   {
+    "rank": 4,
+    "action": "Validate the load scenario configuration (think times, pacing, ramp) and per-user request rate so 300 active users produce the intended request-per-second load.",
+    "rationale": "The run contains 3601 samples with a throughput_rps ratio of about 4 rps (3601000/900500); without confirming request-rate behavior, the flat 140 ms p95 across 100→200→300 users is weak evidence of saturation at 300 users.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0",
+     "analysis-result.json#/evidence/7",
+     "analysis-result.json#/evidence/12",
+     "analysis-result.json#/evidence/14",
+     "analysis-result.json#/evidence/16"
+    ]
+   },
+   {
+    "rank": 5,
+    "action": "Inspect the raw 10-second active-user cells at stage boundaries and confirm the definition and behavior of the p05_10s achieved statistic.",
+    "rationale": "The verified bound is 297 in steps targeting 100/200/300, indicating a consistent 3-user shortfall between observed_min and target; understanding whether this is ramp or measurement behavior clarifies the reported capacity bound.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/3",
+     "analysis-result.json#/evidence/5",
+     "analysis-result.json#/evidence/7",
+     "analysis-result.json#/evidence/18"
+    ]
+   },
+   {
+    "rank": 6,
+    "action": "Broaden scenario coverage to include other transactions, longer durations, and burst profiles, then re-check error counts per sampler.",
+    "rationale": "Only the 'checkout' transaction is summarized in the evidence; zero errors and an empty findings list apply to the measured envelope only and do not prove absence of problems elsewhere.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0",
+     "analysis-result.json#/evidence/1",
+     "analysis-result.json#/analysis_coverage"
+    ]
+   },
+   {
+    "rank": 7,
+    "action": "Check the raw generator-cpu series for unit, resolution, and cell-to-cell variation.",
+    "rationale": "Generator CPU statistics are byte-for-byte identical across three stages with different load levels, which may reflect metric quantization or coarse resolution rather than genuine load insensitivity.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/4",
+     "analysis-result.json#/evidence/6",
+     "analysis-result.json#/evidence/8"
+    ]
+   }
+  ],
+  "caveats": [
+   "Deterministic LT Verdict preserved unchanged: PASS, run validity VALID, analysis coverage COMPLETE.",
+   "Only a lower bound is established: 297 users (achieved statistic p05_10s, load axis users); upper_exclusive is null, so no capacity ceiling is known.",
+   "capacity_knee is null because knee_reason is KNEE_DETECTOR_NOT_IMPLEMENTED; a null knee is not evidence that no knee exists.",
+   "All window policy summaries have resource_verdict NO_POLICY; no server-side resource constraint was evaluated, so the PASS is limited to latency policy plus the generator-cpu guard.",
+   "clock_alignment is not_verified_by_core; no verified temporal ordering or causal relationship between load and latency/resource series is supported.",
+   "The recorded verified bound is 297 rather than the nominal 300 because the achieved statistic is the 5th percentile of 10-second active-user cells; per-stage observed_min trails target by 3 users.",
+   "Throughput reflected by metric-summary is roughly 4 rps (3601000/900500) over 3601 samples; this is a stored fraction, not an independently measured claim, and request-rate behavior per active user was not verified.",
+   "Only the 'checkout' transaction is summarized at transaction scope; other samplers and any non-summarized requests are not covered by this advice.",
+   "Generator CPU statistics are identical across all three stages; this may be a measurement-resolution artifact, so CPU-related observations should be treated with caution.",
+   "Zero errors (0/3601) and an empty findings list cover the measured envelope only; they do not prove stability, spare capacity, or the absence of problems under untested conditions.",
+   "A flat p95 latency of 140 ms across all three steps should not be interpreted as unlimited headroom, since no failing step or upper capacity bound was observed."
+  ]
+ },
+ "schema": "ai-experiment-run.holdout.v1",
+ "case": "case-005",
+ "rep": 1,
+ "arm": "A",
+ "try": 1,
+ "attempt_id": "case-005-1-A-t1",
+ "model_id": "deepseek-v4-flash-0731",
+ "prompt_sha256": "69f215a1ad4ae678c82410ba7cf7daf171cd9c7ca0ef4626bba6977db0af4ef7"
+}

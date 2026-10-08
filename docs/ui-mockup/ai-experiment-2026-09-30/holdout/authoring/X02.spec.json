@@ -1,0 +1,34 @@
+{
+ "required": [
+  [
+   "guard_missing",
+   [
+    "(?:no|without|missing|absent)\\s+(?:generator\\s+)?guard(?!\\s+(?:fail|breach))",
+    "(?:guard)[^.\\n]{0,100}(?:(?<!not )(?<!n't )(?<!never )(?<!no )(?:missing|absent|none)|not (?:declared|defined|configured|bound))|(?:(?<!not )(?<!n't )(?<!never )(?<!no )(?:missing|absent|none)|not (?:declared|defined|configured|bound))[^.\\n]{0,100}(?:guard)",
+    "CAPACITY_GUARD_MISSING"
+   ]
+  ],
+  [
+   "no_verified_bound",
+   [
+    "no (?:verified )?(?:capacity )?bound|(?:bound|capacity)[^.\\n]{0,40}(?:not (?:verified|established)|indeterminate|cannot be (?:verified|established))|no verified capacity"
+   ]
+  ]
+ ],
+ "forbidden": [
+  "says that the missing guard is a passed guard, or advises making the diagnostic guard binding or the SLA enforcing",
+  "reports a verified capacity bound"
+ ],
+ "useful_checks": [
+  "declare a generator guard rule in the capacity plan and repeat the run"
+ ],
+ "source": {
+  "builder": "AdvisoryEvidenceBuilder",
+  "build": "5b5e51c+harness",
+  "source": "x:X02",
+  "source_sha256": "890f5c25a818956227a18e4e1b490c5932d6b5afedc1c7832bc14e02d4578246",
+  "derivation": [],
+  "evidence_sha256": "025e8c692a98c97ef6d3da9b0765aadee8e9e760a88ab97eba3139b80972f9e8",
+  "inputs": "x:X02, derivation [], analysed through RunBundleStore -> AnalysisService -> AdvisoryEvidenceBuilder by AdvisoryHoldoutCorpusTest on 5b5e51c+harness"
+ }
+}

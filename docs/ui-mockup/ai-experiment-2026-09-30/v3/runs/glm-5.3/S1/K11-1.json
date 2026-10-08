@@ -1,0 +1,144 @@
+{
+ "stage": "S1",
+ "mode": "live",
+ "model": "glm-5.3",
+ "tag": {
+  "phase": "v3",
+  "model_tag": "glm-5.3",
+  "stage": "S1",
+  "case": "K11",
+  "rep": 1,
+  "attempt": 1
+ },
+ "qwen_exit": 0,
+ "wall_ms": 75721,
+ "relay": {
+  "schema_version": "advisory-ai-runtime-relay.v1",
+  "status": "FORWARDED_STRUCTURED_OUTPUT",
+  "request_count": 1,
+  "usage": {
+   "prompt_tokens": 2035,
+   "total_tokens": 8486,
+   "completion_tokens": 6451,
+   "prompt_tokens_details": {
+    "cached_tokens": 1536
+   },
+   "completion_tokens_details": {
+    "reasoning_tokens": 4896
+   }
+  },
+  "latency_ms": 74455,
+  "model_returned": "glm-5.3"
+ },
+ "relay_status": "FORWARDED_STRUCTURED_OUTPUT",
+ "usage": {
+  "prompt_tokens": 2035,
+  "total_tokens": 8486,
+  "completion_tokens": 6451,
+  "prompt_tokens_details": {
+   "cached_tokens": 1536
+  },
+  "completion_tokens_details": {
+   "reasoning_tokens": 4896
+  }
+ },
+ "latency_ms": 74455,
+ "status": "OK",
+ "note": null,
+ "output": {
+  "caveats": [
+   "The deterministic verdict is NO_POLICY and remains NO_POLICY regardless of the zero-error, overall-scope latency profile; only a configured policy or required capacity can produce PASS or FAIL, and this advice does not change that verdict.",
+   "Analysis coverage is INCOMPLETE (RESOURCE_GAPS): no resource utilization evidence was provided, so nothing here supports conclusions about saturation, spare capacity, low load, or system capacity.",
+   "Only an overall-scope metric summary was provided; no per-transaction, per-stage, policy-window, capacity-bound, or generator-guard results are included, so those dimensions are unassessed in this evidence.",
+   "The findings array is empty; the absence of findings does not demonstrate the absence of problems or stability.",
+   "The unit of the throughput_rps denominator (44986) is not stated in the evidence; the ≈58.3 per-second figure follows only from the given numerator and denominator, and the run window duration is not specified.",
+   "Zero errors across 2623 samples covers only the overall window sampled; it does not establish behavior at other load levels, longer windows, or under error definitions not captured by the source data.",
+   "The tail-latency picture is bounded by the stated percentiles; the exact count, timing, and identity of the slowest samples (up to the 904 ms maximum) are not present in the provided evidence."
+  ],
+  "hypotheses": [
+   {
+    "evidence_refs": [
+     "analysis-result.json#/policy_verdict",
+     "analysis-result.json#/run_validity",
+     "analysis-result.json#/evidence/0"
+    ],
+    "observation": "The policy verdict is NO_POLICY even though run validity is VALID and the overall metric summary reports error_count 0 with an error_rate_ratio of 0/2623.",
+    "possible_explanation": "No policy (SLO/SLA thresholds) or required capacity was configured for this run, so the analysis had no criteria against which to return PASS or FAIL, regardless of the healthy-looking metrics.",
+    "rank": 1,
+    "recommended_check": "Inspect the run/analysis configuration to confirm whether any policy or required capacity is defined; if none exists, configure one and rerun so a PASS or FAIL verdict can be produced."
+   },
+   {
+    "evidence_refs": [
+     "analysis-result.json#/analysis_coverage"
+    ],
+    "observation": "Analysis coverage is INCOMPLETE with the stated reason RESOURCE_GAPS.",
+    "possible_explanation": "Resource utilization data (for the system under test and/or the load generator) was not captured or not available to the analysis, so the reported latency and throughput cannot be interpreted against saturation or capacity.",
+    "rank": 2,
+    "recommended_check": "Verify that resource monitoring is enabled and attached for the system under test and the load generator, then inspect the collected resource data from a rerun to see whether either side was saturated."
+   },
+   {
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0"
+    ],
+    "observation": "In the overall summary, max latency is 904 ms while p99 is 77 ms (p95 46 ms, p50 11 ms); by the p99, on the order of 1% of the 2623 samples lie above 77 ms.",
+    "possible_explanation": "A small number of comparatively slow samples (outliers or transient stalls) may exist in the tail, but no findings were recorded to characterize them.",
+    "rank": 3,
+    "recommended_check": "Inspect the raw per-sample data for this run, count the samples between the p99 and the 904 ms maximum, and check whether they cluster in time or by transaction."
+   },
+   {
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0",
+     "analysis-result.json#/policy_verdict"
+    ],
+    "observation": "The overall summary reports 0 errors out of 2623 samples and throughput_rps as numerator 2623000 over denominator 44986 (approximately 58.3 per second).",
+    "possible_explanation": "All 2623 sampled transactions in the overall window completed without recorded errors at the load level exercised; however, with no policy and no resource data, this does not by itself establish adequacy, spare capacity, or stability at other loads.",
+    "rank": 4,
+    "recommended_check": "Once a policy is configured, rerun and compare the error rate and latency percentiles against the configured thresholds; also confirm how errors are counted in the source data."
+   }
+  ],
+  "recommendations": [
+   {
+    "action": "Configure a policy (SLO/SLA thresholds) or required capacity for the analyzed transactions, then rerun the test.",
+    "evidence_refs": [
+     "analysis-result.json#/policy_verdict",
+     "analysis-result.json#/run_validity",
+     "analysis-result.json#/evidence/0"
+    ],
+    "rationale": "The run is VALID but the verdict is NO_POLICY; only a configured policy or required capacity can yield PASS or FAIL, and a healthy-looking window with 0 errors cannot convert NO_POLICY into PASS.",
+    "rank": 1
+   },
+   {
+    "action": "Close the resource data gap before drawing any capacity conclusions: enable and attach resource monitoring for the system under test and the load generator, and rerun.",
+    "evidence_refs": [
+     "analysis-result.json#/analysis_coverage"
+    ],
+    "rationale": "Coverage is INCOMPLETE due to RESOURCE_GAPS; without resource data, the reported latency and throughput cannot be interpreted for saturation, and a saturated load generator would make its stages unusable for a product capacity bound.",
+    "rank": 2
+   },
+   {
+    "action": "Inspect the raw per-sample records for the latency tail between the p99 (77 ms) and the maximum (904 ms).",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0"
+    ],
+    "rationale": "The referenced summary shows a large gap between the p99 and the max, indicating only on the order of 1% of samples in that range, and the findings list is empty so the tail is otherwise uncharacterized.",
+    "rank": 3
+   },
+   {
+    "action": "Treat the reported numbers strictly as overall-run quantities: the 0/2623 error rate, the latency percentiles, and the throughput apply only to the overall scope and its window, not to per-transaction or policy-window scopes.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0"
+    ],
+    "rationale": "Counts are comparable only within the same scope and the same window; no per-transaction or policy-window summaries were provided in this evidence.",
+    "rank": 4
+   }
+  ],
+  "schema_version": "ai-advice-output.v1",
+  "summary": "The run is VALID, but the deterministic verdict is NO_POLICY: no policy or required capacity was configured, so no PASS or FAIL can be derived, and the healthy-looking overall metrics cannot be read as a pass. The only metric evidence is an overall-scope summary: 2623 samples, 0 errors (error_rate_ratio 0/2623), latency p50 11 ms / p95 46 ms / p99 77 ms / max 904 ms, and throughput_rps 2623000/44986 (approximately 58.3 per second). Analysis coverage is INCOMPLETE due to RESOURCE_GAPS, so no resource data is available to interpret load or saturation, and the findings list is empty. The recommended path is operator-actionable only: configure a policy or required capacity, close the resource monitoring gap, rerun, and inspect the raw tail-latency samples; this advice does not change the NO_POLICY verdict."
+ },
+ "schema": "ai-experiment-run.v3",
+ "case": "K11",
+ "rep": 1,
+ "model_id": "glm-5.3",
+ "net_retries": 0,
+ "infra_retries": 0
+}

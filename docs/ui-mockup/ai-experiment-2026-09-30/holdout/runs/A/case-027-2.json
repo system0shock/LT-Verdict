@@ -1,0 +1,235 @@
+{
+ "stage": "A",
+ "mode": "live",
+ "model": "deepseek-v4-flash-0731",
+ "tag": {
+  "phase": "holdout",
+  "attempt_id": "case-027-2-A-t1",
+  "arm": "A",
+  "stage": null,
+  "case": "case-027",
+  "rep": 2,
+  "try": 1
+ },
+ "retry_policy": "d2",
+ "qwen_exit": 0,
+ "wall_ms": 114960,
+ "relay": {
+  "schema_version": "advisory-ai-runtime-relay.v1",
+  "status": "FORWARDED_STRUCTURED_OUTPUT",
+  "received_request_count": 1,
+  "forwarded_request_count": 1,
+  "outcomes": [
+   "FORWARDED_STRUCTURED_OUTPUT"
+  ],
+  "retry_refused_reason": null,
+  "first_refused_reason": null,
+  "model_id": "deepseek-v4-flash-0731",
+  "retry_policy": "d2",
+  "requests": [
+   {
+    "ordinal": 1,
+    "forwarded": true,
+    "outcome": "FORWARDED_STRUCTURED_OUTPUT",
+    "provider_status": 200,
+    "latency_ms": 113495,
+    "usage": {
+     "prompt_tokens": 4977,
+     "total_tokens": 16943,
+     "completion_tokens": 11966,
+     "prompt_tokens_details": {
+      "cached_tokens": 1024
+     },
+     "completion_tokens_details": {
+      "reasoning_tokens": 9191
+     }
+    },
+    "model_returned": "deepseek-v4-flash-0731"
+   }
+  ],
+  "usage": {
+   "prompt_tokens": 4977,
+   "completion_tokens": 11966,
+   "total_tokens": 16943
+  },
+  "latency_ms": 113495
+ },
+ "relay_status": "FORWARDED_STRUCTURED_OUTPUT",
+ "usage": {
+  "prompt_tokens": 4977,
+  "completion_tokens": 11966,
+  "total_tokens": 16943
+ },
+ "latency_ms": 113495,
+ "retried": false,
+ "retry_refused_reason": null,
+ "status": "OK",
+ "note": null,
+ "output": {
+  "schema_version": "ai-advice-output.v1",
+  "summary": "The run is VALID but the capacity analysis is INCOMPLETE and returns a deterministic NO_VERDICT / INDETERMINATE: no capacity knee or bound is estimated (KNEE_DETECTOR_NOT_IMPLEMENTED, capacity_knee null) and coverage reasons are CAPACITY_GUARD_MISSING and CAPACITY_STAGE_NOT_VERIFIED. Both 300-second stages completed all 30 bins with active users near targets (p05_10s 97 of 100; 197 of 200), business latency policy PASSED at p95 140 <= 250, resource_verdict is NO_POLICY, and load-generator CPU stayed at 0.41-0.45 with generator-cpu-guard PASS at 0.85. None of these observations establish a capacity bound, stability, or spare capacity. Advice focuses on enabling capacity guard/stage verification and knee detection, verifying clock alignment before temporal claims, and investigating the 1500 ms latency max versus 140 ms p99/p95 tail.",
+  "hypotheses": [
+   {
+    "rank": 1,
+    "observation": "capacity_summary reports bound_type INDETERMINATE, policy_verdict NO_VERDICT, capacity_knee null, knee_reason KNEE_DETECTOR_NOT_IMPLEMENTED, and reasons CAPACITY_GUARD_MISSING and CAPACITY_STAGE_NOT_VERIFIED; analysis_coverage status is INCOMPLETE.",
+    "possible_explanation": "The absence of a capacity bound likely results from analysis coverage gaps (no capacity-guard rule and no stage verification) and from knee detection not being implemented, rather than from the measured load or latency values.",
+    "recommended_check": "Add a capacity-guard policy and a stage-verification rule, implement knee detection, and re-run the capacity analysis; confirm whether a lower bound and capacity knee become estimable.",
+    "evidence_refs": [
+     "analysis-result.json#/capacity_summary",
+     "analysis-result.json#/evidence/13",
+     "analysis-result.json#/analysis_coverage",
+     "analysis-result.json#/policy_verdict"
+    ]
+   },
+   {
+    "rank": 2,
+    "observation": "Capacity stages step-1 achieved 97 (p05_10s) at target 100 and step-2 achieved 197 at target 200, both with 30 complete bins and target_tolerance_ratio 0.05, and verified_bound_load is null; resource-summary shows active_users min 97/mean 98.57 (stage-1) and min 197/mean 198.5 (stage-2).",
+    "possible_explanation": "The reported loads were near but not explicitly verified against the stage targets (verified_bound_load is null), which contributes to the INDETERMINATE stage verdicts; whether the small shortfall is real or an artifact of the p05_10s statistic is unknown.",
+    "recommended_check": "Compare the JMeter thread configuration with the stored active_users series per stage and re-run with stage verification enabled to confirm each stage was verified at its target within the 0.05 tolerance.",
+    "evidence_refs": [
+     "analysis-result.json#/capacity_summary",
+     "analysis-result.json#/evidence/3",
+     "analysis-result.json#/evidence/5"
+    ]
+   },
+   {
+    "rank": 3,
+    "observation": "generator-cpu series is flat in both stages (mean 0.43, max 0.45, min 0.41) and generator-cpu-guard is PASS at threshold 0.85 for both windows; capacity coverage does not list any other guard.",
+    "possible_explanation": "The flat, low generator CPU would be consistent with a load generator that is not saturated, but the guard only covers the generator resource and does not verify that the system under test was loaded to target; flatness does not prove stage validity or spare capacity.",
+    "recommended_check": "Confirm whether generator-cpu-guard is the only guard evaluated and add checks that verify per-stage achieved load before treating any window as capacity-verified.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/4",
+     "analysis-result.json#/evidence/6",
+     "analysis-result.json#/evidence/7",
+     "analysis-result.json#/evidence/8"
+    ]
+   },
+   {
+    "rank": 4,
+    "observation": "Latency policy PASSes in both windows: response_time_p95_ms observed 140 at threshold 250; window-policy-summary verdict PASS with business_verdict PASS and resource_verdict NO_POLICY for both stages; error_count 0.",
+    "possible_explanation": "Business-level latency stayed within policy at both tested loads and no errors were recorded, which would be consistent with no observed business degradation up to 200 users; this does not establish a capacity knee or upper bound because the capacity policy verdict is NO_VERDICT.",
+    "recommended_check": "Treat latency PASS strictly as business-policy evidence; obtain the capacity verdict through the missing capacity guard and knee detection before inferring headroom or a bound.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/9",
+     "analysis-result.json#/evidence/10",
+     "analysis-result.json#/evidence/11",
+     "analysis-result.json#/evidence/12",
+     "analysis-result.json#/policy_verdict"
+    ]
+   },
+   {
+    "rank": 5,
+    "observation": "Latency summary shows max 1500 ms while p95 and p99 are 140 ms (overall and for checkout), sample_count 2401, error_count 0; clock_alignment is not_verified_by_core.",
+    "possible_explanation": "There is a candidate tail sample at 1500 ms well above p99, but without timestamped association or verified clocks it cannot be attributed to a stage, load level, or external event.",
+    "recommended_check": "After clock verification, extract the max-latency sample(s) from the JTL and correlate them with the timeline and resource series to test whether the tail coincides with any stage or event.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0",
+     "analysis-result.json#/evidence/1",
+     "analysis-result.json#/evidence/2"
+    ]
+   },
+   {
+    "rank": 6,
+    "observation": "sample_count is 2401, the run window is run_from 1767225600000 to run_to 1767226200500 ms (~600.5 s), and throughput_rps is stored as numerator 2401000 over denominator 600500 (ratio 4.0), while active_users targets are 100 and 200.",
+    "possible_explanation": "The checkout sampler stream yields roughly 4 throughput units per second across the run, which is low relative to 100-200 active users; this could indicate per-user pacing or that only one sampler is represented, but the evidence does not state a cause.",
+    "recommended_check": "Inspect JMeter thread-group pacing and the sampler set to confirm whether 2401 samples at ~4 rps is the intended workload before using throughput for capacity conclusions.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0",
+     "analysis-result.json#/evidence/1",
+     "analysis-result.json#/evidence/2",
+     "analysis-result.json#/evidence/3",
+     "analysis-result.json#/evidence/5"
+    ]
+   }
+  ],
+  "recommendations": [
+   {
+    "rank": 1,
+    "action": "Add a capacity-guard policy and stage verification so capacity_summary can emit a deterministic verdict.",
+    "rationale": "The current verdict is INDETERMINATE/NO_VERDICT because of CAPACITY_GUARD_MISSING and CAPACITY_STAGE_NOT_VERIFIED; without these, no capacity bound can be certified.",
+    "evidence_refs": [
+     "analysis-result.json#/capacity_summary",
+     "analysis-result.json#/evidence/13",
+     "analysis-result.json#/analysis_coverage"
+    ]
+   },
+   {
+    "rank": 2,
+    "action": "Implement or wire knee detection so capacity_knee is produced instead of KNEE_DETECTOR_NOT_IMPLEMENTED.",
+    "rationale": "capacity_knee is null and knee_reason is KNEE_DETECTOR_NOT_IMPLEMENTED, so no knee or exclusive bound was estimated.",
+    "evidence_refs": [
+     "analysis-result.json#/capacity_summary",
+     "analysis-result.json#/evidence/13"
+    ]
+   },
+   {
+    "rank": 3,
+    "action": "Verify clock alignment between the load generator, metrics, and resource snapshots before any temporal or causal interpretation.",
+    "rationale": "clock_alignment is not_verified_by_core; unverified clocks cannot support lead/lag ordering or temporal causal hypotheses.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/2"
+    ]
+   },
+   {
+    "rank": 4,
+    "action": "Validate achieved load against stage targets and re-run with stage verification enabled.",
+    "rationale": "step-1 achieved p05_10s 97 vs target 100 and step-2 achieved 197 vs target 200, and verified_bound_load is null; the stages are therefore not confirmed at target.",
+    "evidence_refs": [
+     "analysis-result.json#/capacity_summary",
+     "analysis-result.json#/evidence/3",
+     "analysis-result.json#/evidence/5"
+    ]
+   },
+   {
+    "rank": 5,
+    "action": "Investigate the 1500 ms max-latency sample(s) and confirm what makes the max differ from p95/p99 at 140 ms.",
+    "rationale": "The stored metrics show max 1500 vs p95/p99 140; the tail should not be attributed to any stage or event without timestamped, clock-verified association.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0",
+     "analysis-result.json#/evidence/1",
+     "analysis-result.json#/evidence/2"
+    ]
+   },
+   {
+    "rank": 6,
+    "action": "Clarify resource_verdict NO_POLICY handling so absence of a resource policy is not recorded as a pass or as capacity verification.",
+    "rationale": "Both window-policy-summary entries report resource_verdict NO_POLICY with verdict PASS derived from business policy only; missing policy is distinct from a resource pass.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/10",
+     "analysis-result.json#/evidence/12"
+    ]
+   },
+   {
+    "rank": 7,
+    "action": "Confirm whether the recorded sample/throughput volume (2401 samples; throughput_rps ratio 4.0) matches the intended JMeter workload for 100 and 200 users.",
+    "rationale": "sample_count 2401 over ~600.5 s and the stored throughput ratio both indicate a low per-second request rate relative to the stated user targets; confirming intent prevents incorrect capacity conclusions.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0",
+     "analysis-result.json#/evidence/1",
+     "analysis-result.json#/evidence/2"
+    ]
+   }
+  ],
+  "caveats": [
+   "The deterministic verdict is preserved: capacity_summary is INDETERMINATE with policy_verdict NO_VERDICT and analysis_coverage INCOMPLETE (CAPACITY_GUARD_MISSING, CAPACITY_STAGE_NOT_VERIFIED); no capacity knee or bound should be inferred.",
+   "resource_verdict NO_POLICY at both windows is not a resource pass; only the business latency policy (PASS) was evaluated.",
+   "Zero error_count, an empty findings array, and guard status PASS do not prove stability, spare capacity, low load, or the absence of a problem.",
+   "Clock alignment is not_verified_by_core, so no lead/lag ordering or temporal causal hypothesis is supported by this data.",
+   "Metric summaries cover only the checkout JMeter sampler (sample_count 2401); other transactions or unsampled load are not evidenced.",
+   "generator-cpu (0.41-0.45) is the load generator's CPU, not necessarily the system-under-test resource; the 0.85 generator-cpu-guard threshold relates to the generator only.",
+   "The 1500 ms latency max vs 140 ms p99/p95 lacks timestamp association in the evidence; the tail cannot be attributed to a stage or event.",
+   "Raw epoch values are millisecond timestamps; durations such as the ~600.5 s run and 300 s stages are deltas between fields, not separately stated durations.",
+   "All 30 bins per stage are complete with no missing cells, but that does not prove targets were met: achieved p05_10s was 97/197 vs targets 100/200 and verified_bound_load is null.",
+   "Because the capacity stage was not verified, no conclusion of headroom, stability, or absence of a knee at 200 users is supported.",
+   "run_validity is VALID; this advice should not be read as implying the run itself was invalid."
+  ]
+ },
+ "schema": "ai-experiment-run.holdout.v1",
+ "case": "case-027",
+ "rep": 2,
+ "arm": "A",
+ "try": 1,
+ "attempt_id": "case-027-2-A-t1",
+ "model_id": "deepseek-v4-flash-0731",
+ "prompt_sha256": "69f215a1ad4ae678c82410ba7cf7daf171cd9c7ca0ef4626bba6977db0af4ef7"
+}

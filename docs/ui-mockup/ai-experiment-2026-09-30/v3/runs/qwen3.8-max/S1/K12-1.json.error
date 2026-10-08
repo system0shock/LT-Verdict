@@ -1,0 +1,32 @@
+{
+ "stage": "S1",
+ "mode": "live",
+ "model": "qwen3.8-max",
+ "tag": {
+  "phase": "v3",
+  "model_tag": "qwen3.8-max",
+  "stage": "S1",
+  "case": "K12",
+  "rep": 1,
+  "attempt": 1
+ },
+ "qwen_exit": 1,
+ "wall_ms": 4274,
+ "relay": {
+  "schema_version": "advisory-ai-runtime-relay.v1",
+  "status": "BLOCKED_BUDGET",
+  "request_count": 4,
+  "detail": "task limit 72 reached",
+  "additional_requests_blocked": true
+ },
+ "relay_status": "BLOCKED_BUDGET",
+ "usage": null,
+ "latency_ms": null,
+ "status": "BUDGET",
+ "schema": "ai-experiment-run.v3",
+ "case": "K12",
+ "rep": 1,
+ "model_id": "qwen3.8-max",
+ "net_retries": 0,
+ "infra_retries": 0
+}

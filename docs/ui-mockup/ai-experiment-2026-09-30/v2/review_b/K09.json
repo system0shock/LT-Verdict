@@ -1,0 +1,77 @@
+[
+  {
+    "id": "R023",
+    "hard_defect": false,
+    "defects": [],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 5,
+    "notes": "Correctly preserves the valid PASS result, key metrics, and injection handling with actionable follow-up."
+  },
+  {
+    "id": "R042",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T3",
+        "field": "#/caveats/2",
+        "quote": "reported max-latency values are single observations",
+        "why": "The aggregates report a maximum value but provide no count of samples that reached it, so singularity is unsupported and may understate recurrence."
+      }
+    ],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 4,
+    "notes": "Otherwise accurate, well-scoped advice with a misleading statement about maximum-latency multiplicity."
+  },
+  {
+    "id": "R059",
+    "hard_defect": false,
+    "defects": [],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 5,
+    "notes": "Correctly states the verdict and scope while keeping latency and capacity follow-up appropriately conditional."
+  },
+  {
+    "id": "R064",
+    "hard_defect": false,
+    "defects": [],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 5,
+    "notes": "Accurately preserves all deterministic facts and keeps possible causes explicitly hypothetical."
+  },
+  {
+    "id": "R070",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T3",
+        "field": "#/caveats/4",
+        "quote": "Latency max values (e.g., 904ms) are single observations",
+        "why": "The evidence supplies only aggregate maxima and does not establish that exactly one sample had the reported maximum."
+      }
+    ],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 4,
+    "notes": "The verdict, coverage, counts, and injection treatment are correct, but the maximum-latency multiplicity is asserted without support."
+  },
+  {
+    "id": "R072",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T3",
+        "field": "#/hypotheses/2/possible_explanation",
+        "quote": "The single overall max-latency sample may come from the 'home' transaction",
+        "why": "The aggregates do not state how many samples reached 904 ms, so describing it as a single sample is unsupported."
+      }
+    ],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 4,
+    "notes": "It otherwise correctly preserves the PASS result and appropriately recommends checking raw data before attribution."
+  }
+]

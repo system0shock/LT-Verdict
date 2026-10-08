@@ -1,0 +1,90 @@
+[
+  {
+    "id": "R018",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T8",
+        "field": "#/hypotheses/4/possible_explanation",
+        "quote": "the cpu-queue within the window grows from min 5.00005 toward a 251 cap",
+        "why": "The aggregate minimum and maximum do not establish their time order or show that 251 is a queue cap."
+      }
+    ],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 4,
+    "notes": "The advice gives useful checks and preserves the verdict, but invents a queue trajectory."
+  },
+  {
+    "id": "R051",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T8",
+        "field": "#/summary",
+        "quote": "the compute queue depth was near saturation",
+        "why": "The evidence reports queue depth but gives no queue capacity or saturation threshold."
+      },
+      {
+        "type": "T8",
+        "field": "#/hypotheses/3/possible_explanation",
+        "quote": "The observation count within this window did not support inferential episode/anomaly selection",
+        "why": "OBSERVATION_COUNT_UNSUPPORTED explains the correlation headline selection, not why no anomalies were tested."
+      }
+    ],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 4,
+    "notes": "The operator actions are useful, though two explanations go beyond what the evidence establishes."
+  },
+  {
+    "id": "R130",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T2",
+        "field": "#/hypotheses/1/observation",
+        "quote": "a constant 110 requests/s target (33000000/300000)",
+        "why": "The parenthesized ratio is window throughput, not the generator target rate, even though both equal 110 numerically."
+      },
+      {
+        "type": "T7",
+        "field": "#/hypotheses/4/possible_explanation",
+        "quote": "No resource policy threshold was configured",
+        "why": "NO_POLICY shows that no applicable SLA-effect resource rule was evaluated for the window, not that none was configured."
+      },
+      {
+        "type": "T7",
+        "field": "#/caveats/6",
+        "quote": "analysis coverage complete means complete within the evaluated window, not beyond it",
+        "why": "The evidence reports analysis_coverage COMPLETE without limiting that status to the evaluation window."
+      }
+    ],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 2,
+    "notes": "Several checks are actionable, but the policy and coverage claims could misdirect an operator."
+  },
+  {
+    "id": "R146",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T8",
+        "field": "#/hypotheses/5/observation",
+        "quote": "the window shows sustained high latency",
+        "why": "A window aggregate p95 does not establish that latency stayed high throughout the window."
+      },
+      {
+        "type": "T7",
+        "field": "#/caveats/2",
+        "quote": "no resource policy existed to fail",
+        "why": "NO_POLICY does not prove that no resource policy was configured."
+      }
+    ],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 4,
+    "notes": "The response preserves the main results and proposes verifiable checks, but overstates latency persistence and the cause of NO_POLICY."
+  }
+]

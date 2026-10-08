@@ -1,0 +1,61 @@
+[
+  {
+    "id": "R012",
+    "hard_defect": false,
+    "defects": [],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 5,
+    "notes": "Accurately preserves the verdict, validity, coverage, metrics, and limitations with actionable checks."
+  },
+  {
+    "id": "R082",
+    "hard_defect": false,
+    "defects": [],
+    "required_facts_preserved": false,
+    "missing_facts": [
+      "run_validity is VALID",
+      "analysis_coverage is COMPLETE"
+    ],
+    "usefulness": 4,
+    "notes": "The advice is otherwise accurate and useful, but it omits the explicit validity and analysis-coverage facts."
+  },
+  {
+    "id": "R086",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T7",
+        "field": "#/hypotheses/1/possible_explanation",
+        "quote": "No threshold or policy was configured or applicable for the window",
+        "why": "NO_POLICY establishes that no applicable rule was evaluated, not that no policy or threshold was configured."
+      }
+    ],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 2,
+    "notes": "It is detailed and mostly useful, but it makes an unsupported claim about the cause of NO_POLICY."
+  },
+  {
+    "id": "R143",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T7",
+        "field": "#/summary",
+        "quote": "no business or resource policy was configured for the 30-second evaluation window",
+        "why": "NO_POLICY does not prove that policies were unconfigured; it only proves that no applicable rule was evaluated."
+      },
+      {
+        "type": "T7",
+        "field": "#/hypotheses/3/possible_explanation",
+        "quote": "No business or resource policy thresholds were configured for the evaluation window",
+        "why": "The evidence does not establish configuration absence as the cause of NO_POLICY."
+      }
+    ],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 2,
+    "notes": "It preserves many facts and useful cautions, but repeatedly misstates what NO_POLICY proves."
+  }
+]

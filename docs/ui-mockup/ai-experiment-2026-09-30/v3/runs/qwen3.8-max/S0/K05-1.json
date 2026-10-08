@@ -1,0 +1,215 @@
+{
+ "stage": "S0",
+ "mode": "live",
+ "model": "qwen3.8-max",
+ "tag": {
+  "phase": "v3",
+  "model_tag": "qwen3.8-max",
+  "stage": "S0",
+  "case": "K05",
+  "rep": 1,
+  "attempt": 1
+ },
+ "qwen_exit": 0,
+ "wall_ms": 93981,
+ "relay": {
+  "schema_version": "advisory-ai-runtime-relay.v1",
+  "status": "FORWARDED_STRUCTURED_OUTPUT",
+  "request_count": 1,
+  "usage": {
+   "prompt_tokens": 2386,
+   "total_tokens": 7223,
+   "completion_tokens": 4837,
+   "prompt_tokens_details": {
+    "cached_tokens": 1024,
+    "text_tokens": 2386
+   },
+   "completion_tokens_details": {
+    "reasoning_tokens": 1712,
+    "text_tokens": 4837
+   }
+  },
+  "latency_ms": 92847,
+  "model_returned": "qwen3.8-max"
+ },
+ "relay_status": "FORWARDED_STRUCTURED_OUTPUT",
+ "usage": {
+  "prompt_tokens": 2386,
+  "total_tokens": 7223,
+  "completion_tokens": 4837,
+  "prompt_tokens_details": {
+   "cached_tokens": 1024,
+   "text_tokens": 2386
+  },
+  "completion_tokens_details": {
+   "reasoning_tokens": 1712,
+   "text_tokens": 4837
+  }
+ },
+ "latency_ms": 92847,
+ "status": "OK",
+ "note": null,
+ "output": {
+  "schema_version": "ai-advice-output.v1",
+  "summary": "The analysis reports run_validity = VALID, analysis_coverage = COMPLETE (empty reasons), and a deterministic policy_verdict = FAIL. That verdict is produced by exactly one policy check: rule_id \"error-limit\" on metric \"error_rate_ratio\" for scope \"overall\", observed as numerator 2 / denominator 100, evaluated with operator \"lte\" against threshold 0.01, status FAIL. One finding (policy_failure, same rule_id) references that check.\n\nThe only two metric summaries present are identical in every reported field: overall scope and a single transaction scope labeled \"checkout\" (sample_kind JMETER_SAMPLER, empty group_path), each with sample_count 100, error_count 2, error_rate_ratio 2/100, latency_ms p50 50 / p95 95 / p99 99 / max 100, and throughput_rps numerator 100000 / denominator 99100. So the two failing samples lie inside the checkout label, and no other transaction label appears in the evidence.\n\nTwo important limits shape any interpretation. First, latency and throughput values are reported but no policy check exists for them; missing policy is not a pass, so latency and throughput compliance is unevaluated here. Second, the evidence carries no timestamps, no time series, no anomaly estimation, no error classification (response codes, messages, assertion results), and no server-side controls. With 100 samples each error moves the ratio by 0.01, so the FAIL rests on a very small number of samples and the underlying cause is undetermined. No temporal ordering or causal attribution can be inferred from this evidence.\n\nThis advice is interpretive only and does not alter the deterministic FAIL verdict.",
+  "hypotheses": [
+   {
+    "rank": 1,
+    "observation": "The single policy check reports metric error_rate_ratio, observed numerator 2 / denominator 100, operator lte, threshold 0.01, status FAIL, and policy_verdict is FAIL with one corresponding policy_failure finding.",
+    "possible_explanation": "The run exceeded the configured error-limit rule as written. This is a threshold breach, not a proven defect: with a denominator of 100 the ratio granularity is 0.01 per sample, so exactly one error would have satisfied lte 0.01 while two errors do not. The breach may reflect a genuine error regression, a small-sample fluctuation, or a threshold configured more tightly than the sample plan can resolve.",
+    "recommended_check": "Confirm the intended semantics of rule 'error-limit' (threshold 0.01, operator lte) with the policy owner, then re-execute the same workload at the sample size the rule was designed for and recompute error_count / sample_count. Compare the observed ratio across repeats before treating 0.02 as a stable rate.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/2",
+     "analysis-result.json#/policy_verdict",
+     "analysis-result.json#/findings/0",
+     "analysis-result.json#/evidence/0"
+    ]
+   },
+   {
+    "rank": 2,
+    "observation": "The overall metric summary and the transaction-scoped summary labeled 'checkout' (sample_kind JMETER_SAMPLER, group_path []) report identical sample_count 100, error_count 2, error_rate_ratio 2/100, latency_ms (p50 50, p95 95, p99 99, max 100), and throughput_rps (numerator 100000, denominator 99100). No other transaction or group scope appears in the evidence.",
+    "possible_explanation": "All sampled traffic in this run belongs to the single 'checkout' label, so the overall figures are simply the checkout figures. This is consistent either with a workload that intentionally exercises only checkout, or with expected labels being absent from the JTL (mislabelled samplers, a filtered export, or an incomplete test plan execution).",
+    "recommended_check": "Enumerate the distinct sampler labels and group paths present in the source JTL and compare them against the intended test plan. If additional transactions were expected, verify sampler naming and any row filtering applied before export.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0",
+     "analysis-result.json#/evidence/1"
+    ]
+   },
+   {
+    "rank": 3,
+    "observation": "The evidence set contains error_count 2 but no response codes, response messages, failure messages, assertion results, thread identifiers, or timestamps for those errors, and no error breakdown by category.",
+    "possible_explanation": "The two errors cannot be classified from this analysis. They may be application-level failures, transport or connection errors, JMeter assertion failures, or load-generator/config artifacts; each has a different remediation path, and none is supported by the referenced fields.",
+    "recommended_check": "Extract the rows in the source JTL whose success flag indicates failure and record responseCode, responseMessage, failureMessage, threadName and timeStamp for each. Classify the 2 errors before attributing them to the system under test.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0",
+     "analysis-result.json#/evidence/1"
+    ]
+   },
+   {
+    "rank": 4,
+    "observation": "Latency_ms is reported as p50 50, p95 95, p99 99, max 100, and throughput_rps as numerator 100000 / denominator 99100. No policy check references latency_ms or throughput_rps.",
+    "possible_explanation": "These dimensions are measured but ungoverned in this run, so they are neither passing nor failing — they are unevaluated. Separately, the latency percentiles form an unusually regular sequence and the throughput fields are given as an unresolved numerator/denominator pair whose units are not stated in the evidence, which is compatible with a fixture, rounded, or synthetic dataset rather than a live production-like execution; that compatibility is not itself proof of provenance.",
+    "recommended_check": "List the rules configured for this run and confirm whether latency and throughput rules were intended to apply. Verify the provenance of the source JTL (live run versus fixture) and confirm from the schema what units the throughput_rps numerator and denominator carry before converting them into a rate.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0",
+     "analysis-result.json#/evidence/1",
+     "analysis-result.json#/evidence/2"
+    ]
+   },
+   {
+    "rank": 5,
+    "observation": "run_validity is VALID and analysis_coverage is COMPLETE with an empty reasons array, yet the evidence contains no time series, no anomaly estimation results, and no server-side or platform control measurements.",
+    "possible_explanation": "Coverage COMPLETE describes completeness of the analysis over the data supplied, not representativeness of the workload or the presence of corroborating controls. Because no anomaly estimation appears, there is no basis to claim stability, spare capacity, or low load; and because no timestamps or clock relationship are referenced, no lead/lag or temporal causal ordering can be formed.",
+    "recommended_check": "Confirm whether time-series and anomaly analysis are enabled for this run type and whether any server-side controls (host CPU, GC, application logs, dependency health) are attached for the run window. Establish and verify the clock relationship between load-generator and server timestamps before attempting any ordering of events.",
+    "evidence_refs": [
+     "analysis-result.json#/run_validity",
+     "analysis-result.json#/analysis_coverage",
+     "analysis-result.json#/evidence/0"
+    ]
+   }
+  ],
+  "recommendations": [
+   {
+    "rank": 1,
+    "action": "Treat the deterministic policy_verdict = FAIL as the governing result for this run and keep it unchanged in any report or gate; use this advice only to plan investigation.",
+    "rationale": "The verdict derives from policy check status FAIL on rule 'error-limit' (observed 2/100 versus lte 0.01) and is echoed by a policy_failure finding. Advisory interpretation does not modify it.",
+    "evidence_refs": [
+     "analysis-result.json#/policy_verdict",
+     "analysis-result.json#/evidence/2",
+     "analysis-result.json#/findings/0"
+    ]
+   },
+   {
+    "rank": 2,
+    "action": "Retrieve and classify the 2 failing samples from the source JTL (responseCode, responseMessage, failureMessage, threadName, timeStamp) before naming a cause.",
+    "rationale": "error_count is 2 but no error-level detail is referenced anywhere in the evidence, so application faults, transport errors, assertion failures and harness/config artifacts all remain open possibilities.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0",
+     "analysis-result.json#/evidence/1"
+    ]
+   },
+   {
+    "rank": 3,
+    "action": "Re-run the same workload at a larger, pre-agreed sample size, repeating enough times to see whether error_rate_ratio stays near 0.02 or varies, and record error_count and sample_count for each repeat.",
+    "rationale": "At sample_count 100 the ratio moves in 0.01 increments, so the FAIL depends on only two samples. A larger sample plan is the bounded way to separate a persistent error rate from small-sample variation.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/2",
+     "analysis-result.json#/evidence/0"
+    ]
+   },
+   {
+    "rank": 4,
+    "action": "Review the 'error-limit' rule definition with its owner: confirm the threshold 0.01, the operator lte, the metric error_rate_ratio, and the minimum sample_count at which the rule is meant to be evaluated.",
+    "rationale": "The rule is applied to an overall metric computed from 100 samples. Confirming intent and any minimum-sample condition establishes whether this FAIL is a true gate breach or a rule/sample-plan mismatch.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/2",
+     "analysis-result.json#/evidence/0"
+    ]
+   },
+   {
+    "rank": 5,
+    "action": "Verify that the workload covered the intended transactions: enumerate sampler labels and group paths in the JTL and reconcile them with the test plan, since only the 'checkout' label appears.",
+    "rationale": "Overall and checkout metrics are identical, indicating a single-label run. If other transactions were expected, the coverage gap must be resolved before generalising the result beyond checkout.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0",
+     "analysis-result.json#/evidence/1"
+    ]
+   },
+   {
+    "rank": 6,
+    "action": "Confirm which policy rules were configured for this run and add latency and throughput rules if those dimensions are meant to be governed; until then record latency and throughput as unevaluated rather than compliant.",
+    "rationale": "latency_ms and throughput_rps are reported but referenced by no policy check. Absence of a policy is distinct from PASS and must not be reported as a pass.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0",
+     "analysis-result.json#/evidence/2"
+    ]
+   },
+   {
+    "rank": 7,
+    "action": "Confirm the units and definitions of the throughput_rps numerator and denominator from the schema, and confirm the provenance of the source JTL (live execution versus fixture or synthetic data), before quoting any throughput figure.",
+    "rationale": "The evidence gives numerator 100000 and denominator 99100 without stating units, and the latency percentiles form a notably regular progression. Neither supports a derived rate or a provenance conclusion as written.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0",
+     "analysis-result.json#/evidence/1"
+    ]
+   },
+   {
+    "rank": 8,
+    "action": "Enable or attach corroborating evidence for the next run — time-series data, anomaly estimation output, and server-side controls for the run window — and verify the clock relationship between load-generator and server timestamps before any lead/lag reasoning.",
+    "rationale": "No time series, anomaly estimates, or controls are referenced in this analysis, and no timestamps are present. Without a verified clock relationship, temporal ordering and causal attribution cannot be supported.",
+    "evidence_refs": [
+     "analysis-result.json#/analysis_coverage",
+     "analysis-result.json#/run_validity",
+     "analysis-result.json#/evidence/0"
+    ]
+   },
+   {
+    "rank": 9,
+    "action": "Scope the immediate investigation to the 'checkout' transaction path, and report findings as confined to that label and to this run's 100 samples.",
+    "rationale": "Both metric summaries describe the same 100 samples under the checkout label, so any conclusion drawn from this analysis applies only to that scope.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/1",
+     "analysis-result.json#/evidence/0"
+    ]
+   }
+  ],
+  "caveats": [
+   "Advisory only: nothing here changes the deterministic policy_verdict = FAIL, run_validity = VALID, or analysis_coverage = COMPLETE.",
+   "Sample size is 100, so error_rate_ratio resolves in 0.01 increments; the FAIL depends on exactly 2 errors and is highly sensitive to one or two samples. No confidence interval or statistical significance is present in the evidence.",
+   "No timestamps, time series, or clock relationship are referenced, so no lead/lag ordering, trend, or temporal causal hypothesis can be supported.",
+   "No anomaly estimation results appear in the evidence; the absence of anomaly findings does not demonstrate stability, spare capacity, low load, or the absence of a problem.",
+   "Only one policy check exists (error-limit on error_rate_ratio). latency_ms and throughput_rps were reported but never evaluated against a rule; missing policy is not PASS.",
+   "The cause of the 2 errors is unknown: no response codes, response messages, failure messages, assertion results, or thread identifiers are referenced, and no server-side controls are attached.",
+   "throughput_rps is given as an unresolved numerator 100000 / denominator 99100 pair with no units stated in the evidence; it has not been converted into a rate here.",
+   "Overall and checkout scopes report identical values, so results cannot be generalised beyond the single 'checkout' label or beyond this run.",
+   "run_validity = VALID and analysis_coverage = COMPLETE (empty reasons) describe the analysis over the supplied data; they do not attest that the workload is representative of production traffic or that the data is non-synthetic.",
+   "No NOT_ESTIMATED, CANDIDATE, or stored partial-correlation fields appear in the input, so no statements are made about them; their absence is not evidence of estimation."
+  ]
+ },
+ "schema": "ai-experiment-run.v3",
+ "case": "K05",
+ "rep": 1,
+ "model_id": "qwen3.8-max",
+ "net_retries": 0,
+ "infra_retries": 0
+}

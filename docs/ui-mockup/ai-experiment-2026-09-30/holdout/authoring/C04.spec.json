@@ -1,0 +1,46 @@
+{
+ "required": [
+  [
+   "negative_sign",
+   [
+    "-\\s?(?<![\\d.])(?:0\\.2286|0\\.229|0\\.228|0\\.23|0\\.22)(?!\\d)",
+    "(?:negative|inverse|anti-?correlat|opposite|minus)[^.\\n]{0,100}(?:(?:association|correlat|rho|relationship|lag))|(?:(?:association|correlat|rho|relationship|lag))[^.\\n]{0,100}(?:negative|inverse|anti-?correlat|opposite|minus)"
+   ]
+  ],
+  [
+   "signed_lag",
+   [
+    "-\\s?3(?:\\.0+)?\\s?(?:s\\b|sec|second)",
+    "-\\s?3,?000(?:\\s?ms)?",
+    "(?:minus|negative)\\s+(?:3|three)\\s*(?:s\\b|sec|second)",
+    "3 seconds? (?:before|earlier|ahead|prior)"
+   ]
+  ],
+  [
+   "aligned_clocks",
+   [
+    "(?<!un)(?<!not )(?<!n't )\\baligned\\b",
+    "declared[ -]aligned"
+   ]
+  ]
+ ],
+ "forbidden": [
+  "turns the lag order into causation",
+  "loses the negative sign of the association or the sign of the lag"
+ ],
+ "useful_checks": [
+  "verify the mechanism and the direction of the lag with a controlled change"
+ ],
+ "source": {
+  "builder": "AdvisoryEvidenceBuilder",
+  "build": "5b5e51c+harness",
+  "source": "u:P03-p16-l10-s1001",
+  "source_sha256": "97108ddccab289f5619f09032c1c39690490443924a633a651f942a00c33ee0a",
+  "derivation": [
+   "onePair"
+  ],
+  "evidence_sha256": "4f6c2ec1da38b95fe1b101de28a706c76f753ee0413e1f197223ac2ba88c6ae2",
+  "inputs": "u:P03-p16-l10-s1001, derivation [onePair], analysed through RunBundleStore -> AnalysisService -> AdvisoryEvidenceBuilder by AdvisoryHoldoutCorpusTest on 5b5e51c+harness"
+ },
+ "waiver": "Class C04 (negative association, known signed lag, declared aligned clocks). The registry checks only the Kotlin condition 'selected' (a selected headline exists). NOT machine-checked: the negative sign, the signed lag and the declared aligned clocks. WHY the class is still guaranteed: the source is u:P03-p16-l10-s1001 (family P03, whose frozen expected file declares a negative injected association with a lag of -3 cells; the declaration pairs of the source say clock_alignment declared_aligned) and the derivation onePair keeps the clock declaration of the source, while D04 is the same source with the extra derivation clockUnknown; read from the pack by the author: the selected pair pair-00 has best_lag_ms -3000, a negative raw rho (-0.2286) and no CLOCK_ALIGNMENT_UNKNOWN reason (the D04 pack has that reason). The two packs differ only by that reason (diff of the evidence), the contrast pair of methodology 11.3. The pack was made through RunBundleStore -> AnalysisService -> AdvisoryEvidenceBuilder by AdvisoryHoldoutCorpusTest (generator of the holdout, harness branch) on the harness base build 5b5e51c; the generator records the source, its SHA-256, the derivation and every candidate tried in holdout/generation/<slot>.provenance.json."
+}

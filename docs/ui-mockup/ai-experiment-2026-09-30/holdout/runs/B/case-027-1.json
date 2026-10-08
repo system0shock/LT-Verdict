@@ -1,0 +1,214 @@
+{
+ "stage": "B",
+ "mode": "live",
+ "model": "deepseek-v4-flash-0731",
+ "tag": {
+  "phase": "holdout",
+  "attempt_id": "case-027-1-B-t1",
+  "arm": "B",
+  "stage": null,
+  "case": "case-027",
+  "rep": 1,
+  "try": 1
+ },
+ "retry_policy": "d2",
+ "qwen_exit": 0,
+ "wall_ms": 122629,
+ "relay": {
+  "schema_version": "advisory-ai-runtime-relay.v1",
+  "status": "FORWARDED_STRUCTURED_OUTPUT",
+  "received_request_count": 1,
+  "forwarded_request_count": 1,
+  "outcomes": [
+   "FORWARDED_STRUCTURED_OUTPUT"
+  ],
+  "retry_refused_reason": null,
+  "first_refused_reason": null,
+  "model_id": "deepseek-v4-flash-0731",
+  "retry_policy": "d2",
+  "requests": [
+   {
+    "ordinal": 1,
+    "forwarded": true,
+    "outcome": "FORWARDED_STRUCTURED_OUTPUT",
+    "provider_status": 200,
+    "latency_ms": 121184,
+    "usage": {
+     "prompt_tokens": 5446,
+     "total_tokens": 18122,
+     "completion_tokens": 12676,
+     "prompt_tokens_details": {
+      "cached_tokens": 1024
+     },
+     "completion_tokens_details": {
+      "reasoning_tokens": 10209
+     }
+    },
+    "model_returned": "deepseek-v4-flash-0731"
+   }
+  ],
+  "usage": {
+   "prompt_tokens": 5446,
+   "completion_tokens": 12676,
+   "total_tokens": 18122
+  },
+  "latency_ms": 121184
+ },
+ "relay_status": "FORWARDED_STRUCTURED_OUTPUT",
+ "usage": {
+  "prompt_tokens": 5446,
+  "completion_tokens": 12676,
+  "total_tokens": 18122
+ },
+ "latency_ms": 121184,
+ "retried": false,
+ "retry_refused_reason": null,
+ "status": "OK",
+ "note": null,
+ "output": {
+  "schema_version": "ai-advice-output.v1",
+  "summary": "The run is VALID but the analysis coverage is INCOMPLETE. The capacity bound_type is INDETERMINATE with policy_verdict NO_VERDICT: both stages (step-1, step-2) are marked CAPACITY_GUARD_MISSING and CAPACITY_STAGE_NOT_VERIFIED, so no capacity bound (lower_inclusive/upper_exclusive) is estimated and capacity_knee is null (KNEE_DETECTOR_NOT_IMPLEMENTED, a fixed product limitation). Window policy summaries for both stages show business_verdict PASS (p95 response time 140 ms <= 250 ms) and resource_verdict NO_POLICY; error_count is 0 overall. The evidence also records diagnostic generator-cpu-guard checks with status PASS for both windows while the capacity summary reports CAPACITY_GUARD_MISSING; this discrepancy should be reconciled before a rerun. Per product rules, INDETERMINATE/NO_VERDICT and NO_POLICY cannot be read as PASS or as proof of spare capacity.",
+  "hypotheses": [
+   {
+    "rank": 1,
+    "observation": "capacity_summary reports bound_type INDETERMINATE, policy_verdict NO_VERDICT, and reasons CAPACITY_GUARD_MISSING and CAPACITY_STAGE_NOT_VERIFIED; both stages have verdict INDETERMINATE and verified_bound_load null.",
+    "possible_explanation": "No capacity bound was derived because neither stage was verified by the product; a missing or failed generator guard makes a stage unusable for a product bound, so the observed load numbers do not enter the verdict.",
+    "recommended_check": "Inspect the generator guard rule binding for the two stage windows and rerun with a healthy diagnostic guard so the stages can be verified.",
+    "evidence_refs": [
+     "analysis-result.json#/capacity_summary",
+     "analysis-result.json#/evidence/13"
+    ]
+   },
+   {
+    "rank": 2,
+    "observation": "Diagnostic resource-policy-check records for rule generator-cpu-guard exist with effect diagnostic and status PASS for stage-1 and stage-2 (threshold 0.85, unit ratio), while the capacity summary marks the guard missing (CAPACITY_GUARD_MISSING).",
+    "possible_explanation": "The guard record present in the evidence may not be the one the capacity evaluator requires, or its units/semantics (CPU ratio series with mean ~0.43 versus threshold 0.85 and operator gt) are interpreted differently; the evidence does not state why the guard is considered missing.",
+    "recommended_check": "Verify which rule and entity the capacity evaluator associates with the generator guard for these windows and reconcile the units of generator-cpu with the threshold before rerunning.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/7",
+     "analysis-result.json#/evidence/8",
+     "analysis-result.json#/evidence/4",
+     "analysis-result.json#/evidence/6",
+     "analysis-result.json#/evidence/13"
+    ]
+   },
+   {
+    "rank": 3,
+    "observation": "The load-generator active_users series shows achieved p05_10s of 97 against target 100 and 197 against target 200 (target_tolerance_ratio 0.05), with complete 30/30 cells per stage; the achieved values lie within 95-105 and 190-210.",
+    "possible_explanation": "The achieved load appears within the stated tolerance, so a bound might have been estimable had the stages been verified; the INDETERMINATE result is explained by stage verification (guard) rather than by the achieved load.",
+    "recommended_check": "After restoring a healthy generator guard and obtaining verified stage outcomes on a rerun, compare the p05_10s achieved statistic with each target under the same tolerance to test this.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/3",
+     "analysis-result.json#/evidence/5",
+     "analysis-result.json#/capacity_summary"
+    ]
+   },
+   {
+    "rank": 4,
+    "observation": "Both window_policy_summary records show business_verdict PASS with latency check p95 140 ms <= 250 ms, resource_verdict NO_POLICY, and error_count 0 overall, yet the capacity policy verdict is NO_VERDICT.",
+    "possible_explanation": "The business latency policy passes, but there is no applicable resource rule with effect sla for the windows, and the generator guard issue blocks stage verification; a passing business policy or zero errors does not create a capacity verdict.",
+    "recommended_check": "Treat the latency PASS as a business-policy result only; for a future capacity verdict, add an applicable resource rule with effect sla for the stage windows and ensure the diagnostic generator guard is healthy.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/10",
+     "analysis-result.json#/evidence/12",
+     "analysis-result.json#/policy_verdict"
+    ]
+   },
+   {
+    "rank": 5,
+    "observation": "The overall metric summary records latency max 1500 ms with p95 140 ms and p99 140 ms, and error_count 0, while the latency policy check (p95 <= 250) passes.",
+    "possible_explanation": "At least one sample reached 1500 ms while the p99 is 140 ms, so there is a long-tail latency reading; this does not violate the evaluated p95 policy, and its cause is unknown.",
+    "recommended_check": "Inspect the per-sample latency histogram and identify the timestamp of the 1500 ms sample; verify clock alignment before associating it with a specific stage.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0",
+     "analysis-result.json#/evidence/2",
+     "analysis-result.json#/evidence/9"
+    ]
+   },
+   {
+    "rank": 6,
+    "observation": "resource-binding records clock_alignment not_verified_by_core, with dropped_leading_cells 0, dropped_trailing_cells 0, run_from 1767225600000, run_to 1767226200500, evaluation_from 1767225600000, evaluation_to 1767226200000.",
+    "possible_explanation": "Without core-verified clock alignment, relative timing between generator series and system-under-test metrics is not established, so any lead/lag or stage-ordering inference would be unsupported.",
+    "recommended_check": "Verify clock synchronization between the load generator, the system under test, and the analysis host before making temporal claims about the two stages.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/2"
+    ]
+   }
+  ],
+  "recommendations": [
+   {
+    "rank": 1,
+    "action": "Preserve the deterministic outcome: capacity INDETERMINATE, policy NO_VERDICT, coverage INCOMPLETE. Do not report a capacity bound or a capacity pass from this run.",
+    "rationale": "bound_type INDETERMINATE with both stages unverified (CAPACITY_GUARD_MISSING, CAPACITY_STAGE_NOT_VERIFIED) leaves lower_inclusive and upper_exclusive null; the VALID run status does not by itself provide capacity evidence.",
+    "evidence_refs": [
+     "analysis-result.json#/capacity_summary",
+     "analysis-result.json#/analysis_coverage",
+     "analysis-result.json#/run_validity"
+    ]
+   },
+   {
+    "rank": 2,
+    "action": "Rerun with a healthy generator guard: inspect the load-generator's resource series and confirm the diagnostic guard is present and passing; do not change the guard's effect to binding, SLA, or enforcing.",
+    "rationale": "A missing or failed guard makes a stage unusable for a product bound and creates no upper bound; per product rules the guard is diagnostic by contract.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/3",
+     "analysis-result.json#/evidence/5",
+     "analysis-result.json#/evidence/7",
+     "analysis-result.json#/capacity_summary"
+    ]
+   },
+   {
+    "rank": 3,
+    "action": "Reconcile the generator-cpu-guard discrepancy: the evidence records status PASS for both windows while the capacity summary reports CAPACITY_GUARD_MISSING; check rule binding, entity, and CPU units before rerunning.",
+    "rationale": "Without reconciliation a rerun may repeat the same INDETERMINATE outcome; the evidence does not explain why the guard is considered missing.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/7",
+     "analysis-result.json#/evidence/8",
+     "analysis-result.json#/evidence/13"
+    ]
+   },
+   {
+    "rank": 4,
+    "action": "If a capacity policy outcome is needed in a future run, configure an applicable resource rule with effect sla for the stage windows and re-evaluate, while keeping the generator guard diagnostic.",
+    "rationale": "Both stage windows currently show resource_verdict NO_POLICY; NO_POLICY is not a pass, and a product-evaluated rule would be needed for a capacity verdict.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/10",
+     "analysis-result.json#/evidence/12"
+    ]
+   },
+   {
+    "rank": 5,
+    "action": "Verify clock alignment before any temporal interpretation of the two load stages.",
+    "rationale": "clock_alignment is not_verified_by_core; unverified clocks cannot support lead/lag ordering or temporal causal hypotheses.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/2"
+    ]
+   },
+   {
+    "rank": 6,
+    "action": "Do not attempt to implement, enable, or fix a knee detector; the null capacity_knee is due to KNEE_DETECTOR_NOT_IMPLEMENTED.",
+    "rationale": "This is a fixed product limitation in this analysis, not a defect of the run; a capacity bound requires verified stages with applicable SLA rules, not a knee.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/13"
+    ]
+   }
+  ],
+  "caveats": [
+   "Analysis coverage is INCOMPLETE (CAPACITY_GUARD_MISSING, CAPACITY_STAGE_NOT_VERIFIED); INDETERMINATE/NO_VERDICT is preserved and no lower or upper capacity bound exists.",
+   "Missing policy is not a pass: resource_verdict NO_POLICY on both stage windows and the overall NO_VERDICT do not mean the run is healthy for capacity.",
+   "The diagnostic generator-cpu-guard check records PASS in the evidence while the capacity summary reports CAPACITY_GUARD_MISSING; the evidence does not state why the guard is considered missing, and CPU series units (ratio) versus threshold (0.85) are ambiguous.",
+   "Zero errors and 30/30 complete generator cells do not prove spare capacity, absence of load problems, or a healthy guard; resource summaries cover only the load-generator entity, not the system under test.",
+   "Clock alignment is not_verified_by_core; temporal ordering between series is unsupported until clocks are verified.",
+   "capacity_knee is null because KNEE_DETECTOR_NOT_IMPLEMENTED, a fixed product limitation, not a run defect and not addressable by the user.",
+   "The evaluated latency policy is overall-scope (p95 <= 250 ms); the per-transaction checkout metric summary is provided but not separately policy-evaluated, and the 1500 ms latency max falls outside the evaluated p95 policy."
+  ]
+ },
+ "schema": "ai-experiment-run.holdout.v1",
+ "case": "case-027",
+ "rep": 1,
+ "arm": "B",
+ "try": 1,
+ "attempt_id": "case-027-1-B-t1",
+ "model_id": "deepseek-v4-flash-0731",
+ "prompt_sha256": "3c0f28bee6517c13c5c854615e7d3d59301893d9723880818e4034a32e9133bf"
+}

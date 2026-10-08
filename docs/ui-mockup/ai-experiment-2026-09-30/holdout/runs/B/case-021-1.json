@@ -1,0 +1,208 @@
+{
+ "stage": "B",
+ "mode": "live",
+ "model": "deepseek-v4-flash-0731",
+ "tag": {
+  "phase": "holdout",
+  "attempt_id": "case-021-1-B-t1",
+  "arm": "B",
+  "stage": null,
+  "case": "case-021",
+  "rep": 1,
+  "try": 1
+ },
+ "retry_policy": "d2",
+ "qwen_exit": 0,
+ "wall_ms": 96803,
+ "relay": {
+  "schema_version": "advisory-ai-runtime-relay.v1",
+  "status": "FORWARDED_STRUCTURED_OUTPUT",
+  "received_request_count": 1,
+  "forwarded_request_count": 1,
+  "outcomes": [
+   "FORWARDED_STRUCTURED_OUTPUT"
+  ],
+  "retry_refused_reason": null,
+  "first_refused_reason": null,
+  "model_id": "deepseek-v4-flash-0731",
+  "retry_policy": "d2",
+  "requests": [
+   {
+    "ordinal": 1,
+    "forwarded": true,
+    "outcome": "FORWARDED_STRUCTURED_OUTPUT",
+    "provider_status": 200,
+    "latency_ms": 95509,
+    "usage": {
+     "prompt_tokens": 6739,
+     "total_tokens": 16964,
+     "completion_tokens": 10225,
+     "prompt_tokens_details": {
+      "cached_tokens": 1024
+     },
+     "completion_tokens_details": {
+      "reasoning_tokens": 7975
+     }
+    },
+    "model_returned": "deepseek-v4-flash-0731"
+   }
+  ],
+  "usage": {
+   "prompt_tokens": 6739,
+   "completion_tokens": 10225,
+   "total_tokens": 16964
+  },
+  "latency_ms": 95509
+ },
+ "relay_status": "FORWARDED_STRUCTURED_OUTPUT",
+ "usage": {
+  "prompt_tokens": 6739,
+  "completion_tokens": 10225,
+  "total_tokens": 16964
+ },
+ "latency_ms": 95509,
+ "retried": false,
+ "retry_refused_reason": null,
+ "status": "OK",
+ "note": null,
+ "output": {
+  "schema_version": "ai-advice-output.v1",
+  "summary": "Run VALID, coverage COMPLETE. Deterministic verdict preserved: policy_verdict NO_POLICY (capacity); capacity bound BOUNDED on users with lower_inclusive 237 and upper_exclusive 357. Latency rule (response_time_p95_ms, threshold 250) passed in stage-1 (140) and stage-2 (140) and failed in stage-3 (420); the run-level metric summary shows p95 417 ms, p99 420 ms, max 1500 ms, error_count 0. Generator CPU stayed at mean 0.43 / max 0.45 with the diagnostic generator CPU guard PASSed in every stage, so generator overload is not supported by the evidence. capacity_knee is null with knee_reason KNEE_DETECTOR_NOT_IMPLEMENTED (fixed product limitation). clock_alignment is not_verified_by_core; verify clocks before any temporal interpretation.",
+  "hypotheses": [
+   {
+    "rank": 1,
+    "observation": "The capacity summary reports BOUNDED with lower_inclusive 237 and upper_exclusive 357 (unit: count, load_axis users). Step-1 (target 120) and step-2 (target 240) PASS with verified bound loads 117 and 237; step-3 (target 360) FAIL with verified bound load 357. The latency policy check observed p95 140 ms in stage-1 and stage-2 but 420 ms in stage-3 (threshold 250 ms).",
+    "possible_explanation": "The usable capacity under the latency SLA appears to lie between the last passing verified load (237 users) and the failing verified load (357 users).",
+    "recommended_check": "Run additional steps with target loads between 240 and 360 users (for example near 280, 300, 320) to narrow the boundary and confirm where the p95 response time exceeds the 250 ms threshold.",
+    "evidence_refs": [
+     "analysis-result.json#/capacity_summary",
+     "analysis-result.json#/evidence/12",
+     "analysis-result.json#/evidence/14",
+     "analysis-result.json#/evidence/16",
+     "analysis-result.json#/evidence/17",
+     "analysis-result.json#/evidence/18"
+    ]
+   },
+   {
+    "rank": 2,
+    "observation": "Generator CPU stayed near mean 0.43 / max 0.45 (ratio) in all three stages (resource summaries stage-1, stage-2, stage-3) and the generator CPU guard (threshold 0.85, operator gt, effect diagnostic) PASSed in each stage, while the latency policy failed only in stage-3.",
+    "possible_explanation": "The load generator does not appear overloaded during any stage, so the stage-3 latency failure is more likely attributable to the target system or the path under roughly 360 users of load.",
+    "recommended_check": "Inspect target-side resource series and queue/network telemetry for the stage-3 window to test where the degradation occurs; rerun with a healthy generator if target telemetry is missing.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/4",
+     "analysis-result.json#/evidence/6",
+     "analysis-result.json#/evidence/8",
+     "analysis-result.json#/evidence/9",
+     "analysis-result.json#/evidence/10",
+     "analysis-result.json#/evidence/11",
+     "analysis-result.json#/evidence/16"
+    ]
+   },
+   {
+    "rank": 3,
+    "observation": "The overall metric summary reports latency max 1500 ms, p95 417 ms, p99 420 ms, error_count 0 across the whole run; per-window policy checks report p95 140 ms for stage-1 and stage-2, and 420 ms for stage-3.",
+    "possible_explanation": "High-latency samples may be concentrated in the stage-3 window (the final part of the run), which could explain both the stage-3 policy failure and the run-level p95/p99 values.",
+    "recommended_check": "Pull per-window latency distributions or a latency time series to see whether the 1500 ms max and the p95/p99 values occur during stage-3 or are spread differently.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0",
+     "analysis-result.json#/evidence/12",
+     "analysis-result.json#/evidence/14",
+     "analysis-result.json#/evidence/16"
+    ]
+   },
+   {
+    "rank": 4,
+    "observation": "resource-binding reports clock_alignment 'not_verified_by_core' for the evaluation window covering all three stages.",
+    "possible_explanation": "If collector, generator, or target clocks are not aligned, window-to-series attribution and any temporal ordering between load and latency could be unreliable.",
+    "recommended_check": "Verify clock synchronization among generator, target, and collector before interpreting temporal or per-window relationships; rerun if misalignment is found.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/2"
+    ]
+   },
+   {
+    "rank": 5,
+    "observation": "The capacity summary policy_verdict is NO_POLICY with empty reasons, each window summary has resource_verdict NO_POLICY, and the run-level policy_verdict fact is also NO_POLICY.",
+    "possible_explanation": "For capacity, NO_POLICY is reported when the required capacity is not given or a stage has no applicable SLA resource rule (effect sla); here the windows carried the business latency policy and a diagnostic generator guard only, so no SLA capacity policy was evaluated.",
+    "recommended_check": "If a PASS/FAIL capacity policy verdict is required for future runs, provide a required capacity and configure an applicable resource rule with effect sla for the windows; this does not change the NO_POLICY result of this run.",
+    "evidence_refs": [
+     "analysis-result.json#/capacity_summary",
+     "analysis-result.json#/policy_verdict",
+     "analysis-result.json#/evidence/13",
+     "analysis-result.json#/evidence/15",
+     "analysis-result.json#/evidence/17"
+    ]
+   }
+  ],
+  "recommendations": [
+   {
+    "rank": 1,
+    "action": "Verify clock alignment among load generator, target, and collector, and correct any offset before drawing temporal or per-window conclusions.",
+    "rationale": "resource-binding reports clock_alignment 'not_verified_by_core', so per-window and temporal relationships are not yet trustworthy.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/2"
+    ]
+   },
+   {
+    "rank": 2,
+    "action": "Add intermediate load steps between 237 and 357 users (targets above 240 and below 360) and rerun to identify the highest passing load more precisely.",
+    "rationale": "The current bound is BOUNDED from 237 (PASS, verified 237) to 357 (FAIL, verified 357); intermediate steps narrow the boundary and test reproducibility.",
+    "evidence_refs": [
+     "analysis-result.json#/capacity_summary",
+     "analysis-result.json#/evidence/16",
+     "analysis-result.json#/evidence/17",
+     "analysis-result.json#/evidence/18"
+    ]
+   },
+   {
+    "rank": 3,
+    "action": "Inspect target-side resource and queue telemetry for the stage-3 window; collect it if missing.",
+    "rationale": "Generator CPU remained low with the diagnostic guard PASS in every stage, so generator overload is not supported; the stage-3 latency failure warrants inspecting the target or path.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/4",
+     "analysis-result.json#/evidence/6",
+     "analysis-result.json#/evidence/8",
+     "analysis-result.json#/evidence/9",
+     "analysis-result.json#/evidence/11",
+     "analysis-result.json#/evidence/16"
+    ]
+   },
+   {
+    "rank": 4,
+    "action": "Rerun the scenario and collect per-window latency distributions to confirm the stage-3 failure reproduces and identify where the 1500 ms max occurs.",
+    "rationale": "Only p95 policy checks are present in the evidence; a rerun with full latency series will show whether the 420 ms p95 at stage-3 is sustained and where the 1500 ms max falls.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0",
+     "analysis-result.json#/evidence/16",
+     "analysis-result.json#/evidence/17",
+     "analysis-result.json#/run_validity"
+    ]
+   },
+   {
+    "rank": 5,
+    "action": "For future runs, provide required capacity and configure an applicable resource rule with effect sla if a capacity PASS/FAIL policy verdict is desired.",
+    "rationale": "The capacity policy verdict is NO_POLICY and stays NO_POLICY for this run; a configured SLA resource rule plus required capacity is the supported way for the product to yield a capacity policy verdict.",
+    "evidence_refs": [
+     "analysis-result.json#/capacity_summary",
+     "analysis-result.json#/policy_verdict"
+    ]
+   }
+  ],
+  "caveats": [
+   "clock_alignment is 'not_verified_by_core' (analysis-result.json#/evidence/2); temporal ordering and per-window attribution should not be treated as proven until clocks are verified.",
+   "capacity_knee is null with knee_reason KNEE_DETECTOR_NOT_IMPLEMENTED; this is a fixed product limitation, not a run defect, and no knee-based conclusions are drawn.",
+   "The capacity policy_verdict is NO_POLICY and is preserved as-is; a healthy generator or passing business windows do not convert it to PASS, and no capacity PASS/FAIL is derived for this run.",
+   "Latency and count values are only comparable within the same scope and window: the overall metric summary spans the entire run while per-window policy checks and window summaries cover only their respective 300 s windows.",
+   "error_count 0 and missing_cells 0 do not prove absence of problems; the failing signal was the stage-3 p95 latency (420 ms above the 250 ms threshold).",
+   "Only p95 policy checks are available per window; no per-window latency distribution is present, so spike concentration and the source of the 1500 ms max cannot be confirmed from this evidence alone.",
+   "All resource policy checks present are the diagnostic generator CPU guard (effect: diagnostic), not SLA resource rules; its PASS does not assert target health."
+  ]
+ },
+ "schema": "ai-experiment-run.holdout.v1",
+ "case": "case-021",
+ "rep": 1,
+ "arm": "B",
+ "try": 1,
+ "attempt_id": "case-021-1-B-t1",
+ "model_id": "deepseek-v4-flash-0731",
+ "prompt_sha256": "3c0f28bee6517c13c5c854615e7d3d59301893d9723880818e4034a32e9133bf"
+}

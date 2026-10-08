@@ -1,0 +1,216 @@
+{
+ "stage": "S1",
+ "mode": "live",
+ "model": "qwen3.8-max",
+ "tag": {
+  "phase": "v3",
+  "model_tag": "qwen3.8-max",
+  "stage": "S1",
+  "case": "K11",
+  "rep": 2,
+  "attempt": 1
+ },
+ "qwen_exit": 0,
+ "wall_ms": 108997,
+ "relay": {
+  "schema_version": "advisory-ai-runtime-relay.v1",
+  "status": "FORWARDED_STRUCTURED_OUTPUT",
+  "request_count": 1,
+  "usage": {
+   "prompt_tokens": 2290,
+   "total_tokens": 7916,
+   "completion_tokens": 5626,
+   "prompt_tokens_details": {
+    "cached_tokens": 1024,
+    "text_tokens": 2290
+   },
+   "completion_tokens_details": {
+    "reasoning_tokens": 2446,
+    "text_tokens": 5626
+   }
+  },
+  "latency_ms": 107845,
+  "model_returned": "qwen3.8-max"
+ },
+ "relay_status": "FORWARDED_STRUCTURED_OUTPUT",
+ "usage": {
+  "prompt_tokens": 2290,
+  "total_tokens": 7916,
+  "completion_tokens": 5626,
+  "prompt_tokens_details": {
+   "cached_tokens": 1024,
+   "text_tokens": 2290
+  },
+  "completion_tokens_details": {
+   "reasoning_tokens": 2446,
+   "text_tokens": 5626
+  }
+ },
+ "latency_ms": 107845,
+ "status": "OK",
+ "note": null,
+ "output": {
+  "schema_version": "ai-advice-output.v1",
+  "summary": "This analysis (run_id jmeter_jtl_csv-b87363cf…, analysis_id ff2a9752b81138f8…) reports run_validity = VALID, policy_verdict = NO_POLICY, and analysis_coverage = INCOMPLETE with reason RESOURCE_GAPS, plus a single overall-scope metric summary: sample_count 2623, error_count 0 (error_rate_ratio 0/2623), latency_ms p50 11 / p95 46 / p99 77 / max 904, and throughput_rps recorded as numerator 2623000 over denominator 44986 (arithmetic ratio ≈ 58.31). The findings array is empty. The decisive facts are that no policy verdict exists and coverage is incomplete: the healthy-looking latency and zero-error figures cannot be read as PASS, as spare capacity, or as evidence that nothing is wrong. RESOURCE_GAPS means resource-side samples are missing, so no capacity bound, saturation, or load-level conclusion is supportable from this bundle, and the ~12x gap between max (904 ms) and p99 (77 ms) is an unexplained upper tail that this overall-scope summary cannot localize. Next steps are operator actions: configure the missing policy (or required capacity) and rerun so a PASS/FAIL determination can exist, close the resource gaps by re-collecting with resource monitoring attached, inspect the raw JTL for the maximum-latency sample and per-transaction detail, and verify assertion/response-code capture before treating error_count 0 as \"no failures\". Advice here does not alter the deterministic verdict; NO_POLICY remains NO_POLICY regardless of observed metric health or a rerun with a fixed generator.",
+  "hypotheses": [
+   {
+    "rank": 1,
+    "observation": "The referenced fact analysis-result.json#/policy_verdict is NO_POLICY, while the referenced overall metric summary reports error_rate_ratio 0/2623 and latency_ms p50 11, p95 46, p99 77, max 904.",
+    "possible_explanation": "No evaluation policy (or no required capacity input) was configured for this run scope, so the analyzer had nothing to judge the observed metrics against. Under the product rules, a missing policy or missing required capacity yields NO_POLICY; favorable latency and zero recorded errors cannot convert it to PASS.",
+    "recommended_check": "Inspect the policy configuration associated with this run/transaction set and confirm which thresholds (latency, error rate, throughput) or required-capacity inputs are absent. Configure them and rerun; only a configured policy or required capacity can produce PASS or FAIL.",
+    "evidence_refs": [
+     "analysis-result.json#/policy_verdict",
+     "analysis-result.json#/evidence/0"
+    ]
+   },
+   {
+    "rank": 2,
+    "observation": "The referenced fact analysis-result.json#/analysis_coverage reports status INCOMPLETE with reasons [\"RESOURCE_GAPS\"].",
+    "possible_explanation": "Resource-side measurement streams expected for this run were absent or contained gaps, so any statement about server utilization, saturation, headroom, or capacity bounds is unsupported by this bundle. Missing samples do not imply low load or spare capacity.",
+    "recommended_check": "Open the coverage record and enumerate which resource streams/hosts were expected versus present, then re-collect the run with resource monitoring attached and continuous. Re-check coverage status before drawing any capacity conclusion.",
+    "evidence_refs": [
+     "analysis-result.json#/analysis_coverage"
+    ]
+   },
+   {
+    "rank": 3,
+    "observation": "The referenced overall metric summary reports error_count 0 and error_rate_ratio numerator 0 with denominator 2623, matching sample_count 2623.",
+    "possible_explanation": "Within the overall run scope and window, zero samples were recorded as errors. This is an observation about recorded error classification only; it does not establish that no failures occurred, particularly where coverage is INCOMPLETE or where response assertions may not have been enabled for all labels.",
+    "recommended_check": "Inspect the source JTL for response codes, assertion results, and label coverage: confirm assertions were configured and that all transaction labels were captured, and confirm no samples were dropped or filtered before the summary was built.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0",
+     "analysis-result.json#/analysis_coverage"
+    ]
+   },
+   {
+    "rank": 4,
+    "observation": "In the referenced overall metric summary, latency_ms max is 904 while p99 is 77, p95 is 46, and p50 is 11 — the maximum is roughly an order of magnitude above p99.",
+    "possible_explanation": "A small number of unusually slow samples sit far above the central distribution. Candidate, unproven contributors include start-of-run warm-up or cold caches, a distinct slow transaction label mixed into the overall scope, or transient stalls on an unmonitored resource. The overall-scope summary alone cannot distinguish these, and no findings were emitted to corroborate any of them.",
+    "recommended_check": "Locate the sample(s) at or near 904 ms in the JTL and inspect their timestamp (including offset from run start), label, elapsed time, and response code; then request per-transaction latency summaries so the tail can be attributed to a scope rather than inferred from the aggregate.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0"
+    ]
+   },
+   {
+    "rank": 5,
+    "observation": "The referenced metric summary expresses throughput_rps as numerator 2623000 over denominator 44986; the ratio evaluates to approximately 58.31, while sample_count is 2623.",
+    "possible_explanation": "The operands appear to be scaled representations rather than raw counts of the same quantity (the numerator is 1000x sample_count), and the referenced evidence does not declare the units of either operand. Treating the ratio as a verified requests-per-second figure, or comparing it against a policy-window denominator, would mix scopes and units.",
+    "recommended_check": "Confirm the declared units and window semantics for throughput_rps operands in the analysis schema/metadata before quoting a rate, and keep any comparison inside the same scope (overall) and the same window.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0"
+    ]
+   },
+   {
+    "rank": 6,
+    "observation": "The referenced facts report run_validity = VALID together with analysis_coverage status INCOMPLETE (RESOURCE_GAPS) and policy_verdict NO_POLICY.",
+    "possible_explanation": "These are three distinct determinations: the run data was usable/valid, the evidence set was incomplete, and no policy verdict was possible. VALID does not imply complete coverage and does not imply a pass; INCOMPLETE coverage does not invalidate the recorded metrics.",
+    "recommended_check": "When reporting on this run, cite all three facts side by side and mark every resource-dependent or capacity-dependent conclusion as unsupported until coverage is no longer INCOMPLETE.",
+    "evidence_refs": [
+     "analysis-result.json#/run_validity",
+     "analysis-result.json#/analysis_coverage",
+     "analysis-result.json#/policy_verdict"
+    ]
+   },
+   {
+    "rank": 7,
+    "observation": "The findings array in this input is empty, and the only referenced evidence item is a single overall-scope metric_summary.",
+    "possible_explanation": "No analyzer finding was raised against the available data. Because coverage is INCOMPLETE and no per-transaction, per-window, resource, or load-generator evidence is referenced, the absence of findings reflects the limits of what was evaluated rather than demonstrated stability or headroom.",
+    "recommended_check": "After closing the resource gaps and configuring a policy, rerun and compare the findings list and coverage status; treat the current empty findings list as 'not evaluated against missing data', not as 'no problem'.",
+    "evidence_refs": [
+     "analysis-result.json#/analysis_coverage",
+     "analysis-result.json#/evidence/0"
+    ]
+   }
+  ],
+  "recommendations": [
+   {
+    "rank": 1,
+    "action": "Configure the missing evaluation policy (latency, error-rate, and/or throughput thresholds) or supply the required capacity input for this run scope, then rerun the test so a PASS or FAIL determination can exist.",
+    "rationale": "policy_verdict is NO_POLICY. Per the fixed product rules, NO_POLICY stays NO_POLICY: metric health, a rerun alone, or repairing the load generator will not turn it into PASS. Only a configured policy or required capacity yields PASS or FAIL.",
+    "evidence_refs": [
+     "analysis-result.json#/policy_verdict",
+     "analysis-result.json#/evidence/0"
+    ]
+   },
+   {
+    "rank": 2,
+    "action": "Close the RESOURCE_GAPS: identify the missing or gapped resource streams, attach continuous resource monitoring (and ensure the load generator itself is monitored and not saturated), and rerun; re-check analysis_coverage until it is no longer INCOMPLETE.",
+    "rationale": "Coverage is INCOMPLETE with reason RESOURCE_GAPS, so no capacity bound, saturation, or headroom conclusion is supportable from this bundle. A generator that is saturated makes its stage unusable for a product bound; the remedy is a rerun with a generator that is not saturated.",
+    "evidence_refs": [
+     "analysis-result.json#/analysis_coverage"
+    ]
+   },
+   {
+    "rank": 3,
+    "action": "Inspect the raw JTL for the sample(s) at or near latency_ms max 904 — record their timestamp offset from run start, label, elapsed time, and response code — and request per-transaction latency summaries.",
+    "rationale": "The overall-scope summary shows max 904 ms against p99 77 ms, an upper tail the aggregate cannot localize; per-transaction and per-sample inspection is the only bounded way to see whether the tail belongs to warm-up, one label, or the whole mix.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0"
+    ]
+   },
+   {
+    "rank": 4,
+    "action": "Verify error capture before relying on error_count 0: confirm response assertions were enabled, all transaction labels were recorded, and no samples were dropped or filtered out of the 2623 counted.",
+    "rationale": "Zero recorded errors in the overall scope is an observation about classification, not proof that no failure occurred, and coverage is INCOMPLETE. Absence of recorded errors and absence of findings do not demonstrate stability.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0",
+     "analysis-result.json#/analysis_coverage"
+    ]
+   },
+   {
+    "rank": 5,
+    "action": "Confirm the declared units and window semantics of the throughput_rps operands (2623000 / 44986) in the analysis metadata before quoting a rate, and restrict any comparison to the same scope and the same window.",
+    "rationale": "The referenced evidence does not declare operand units and the numerator is 1000x sample_count, so the ratio ≈ 58.31 is arithmetic only. Counts are comparable only within the same scope and window; overall run counts and policy-window denominators are different quantities.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0"
+    ]
+   },
+   {
+    "rank": 6,
+    "action": "Verify clock synchronization and offset between the load-generator host and every monitored resource host before attempting any ordering of events across those streams.",
+    "rationale": "No clock relationship is evidenced in this bundle. An unknown or unverified clock relationship cannot support lead/lag ordering or a temporal hypothesis, so clock verification must come first if resource and load data are later combined.",
+    "evidence_refs": [
+     "analysis-result.json#/analysis_coverage"
+    ]
+   },
+   {
+    "rank": 7,
+    "action": "If the goal is a capacity statement, plan a rerun at the intended load level with policy and resource monitoring in place; do not derive capacity or spare headroom from the current zero-error, incomplete-coverage result.",
+    "rationale": "With NO_POLICY, INCOMPLETE coverage, and no capacity bound or knee information in the referenced evidence, there is no basis for a lower or upper bound. Missing samples and a flat or healthy-looking series do not prove spare capacity or low load.",
+    "evidence_refs": [
+     "analysis-result.json#/policy_verdict",
+     "analysis-result.json#/analysis_coverage",
+     "analysis-result.json#/evidence/0"
+    ]
+   },
+   {
+    "rank": 8,
+    "action": "When reporting this run, present run_validity = VALID, policy_verdict = NO_POLICY, and analysis_coverage = INCOMPLETE (RESOURCE_GAPS) together as three separate facts.",
+    "rationale": "The three are distinct determinations and are frequently conflated: a VALID run with incomplete coverage still cannot support a verdict, and an INCOMPLETE coverage status does not invalidate the metrics that were recorded.",
+    "evidence_refs": [
+     "analysis-result.json#/run_validity",
+     "analysis-result.json#/policy_verdict",
+     "analysis-result.json#/analysis_coverage"
+    ]
+   }
+  ],
+  "caveats": [
+   "Advice does not change the deterministic verdict: policy_verdict remains NO_POLICY as reported in analysis-result.json#/policy_verdict.",
+   "NO_POLICY is not a PASS and not a FAIL. A healthy business window, a rerun, or fixing the load generator does not convert it; only a configured policy or required capacity yields PASS or FAIL.",
+   "analysis_coverage is INCOMPLETE with reason RESOURCE_GAPS. Missing resource samples do not prove stability, spare capacity, low load, or the absence of a problem.",
+   "The findings array is empty and only one evidence item is referenced (an overall-scope metric_summary). Absent findings are not evidence that nothing is wrong.",
+   "No per-transaction, per-window, resource, load-generator-guard, or clock-relationship evidence is referenced, so no attribution of the 904 ms maximum, and no lead/lag or temporal causal ordering, is supportable.",
+   "No capacity bound and no knee information appear in the referenced evidence. Knee detection is not implemented in the product; that is a fixed product limitation, not a defect of this run and not an operator action item.",
+   "throughput_rps is given as numerator 2623000 over denominator 44986; the ratio ≈ 58.31 is arithmetic only, since the referenced evidence does not declare the units of those operands. It is not a verified rate.",
+   "Latency figures (p50 11, p95 46, p99 77, max 904 ms) and error_rate_ratio 0/2623 describe the overall run scope only; overall counts and any future policy-window denominators are different quantities covering different extents of the run.",
+   "run_validity = VALID, analysis_coverage = INCOMPLETE, and policy_verdict = NO_POLICY are separate determinations and must not be collapsed into a single health statement.",
+   "No causal claims are made here; recommended actions are limited to operator-performable steps (rerun, inspect data, configure a policy, verify clocks)."
+  ]
+ },
+ "schema": "ai-experiment-run.v3",
+ "case": "K11",
+ "rep": 2,
+ "model_id": "qwen3.8-max",
+ "net_retries": 0,
+ "infra_retries": 0
+}

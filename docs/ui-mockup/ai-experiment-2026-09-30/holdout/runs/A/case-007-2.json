@@ -1,0 +1,261 @@
+{
+ "stage": "A",
+ "mode": "live",
+ "model": "deepseek-v4-flash-0731",
+ "tag": {
+  "phase": "holdout",
+  "attempt_id": "case-007-2-A-t1",
+  "arm": "A",
+  "stage": null,
+  "case": "case-007",
+  "rep": 2,
+  "try": 1
+ },
+ "retry_policy": "d2",
+ "qwen_exit": 0,
+ "wall_ms": 142516,
+ "relay": {
+  "schema_version": "advisory-ai-runtime-relay.v1",
+  "status": "FORWARDED_STRUCTURED_OUTPUT",
+  "received_request_count": 1,
+  "forwarded_request_count": 1,
+  "outcomes": [
+   "FORWARDED_STRUCTURED_OUTPUT"
+  ],
+  "retry_refused_reason": null,
+  "first_refused_reason": null,
+  "model_id": "deepseek-v4-flash-0731",
+  "retry_policy": "d2",
+  "requests": [
+   {
+    "ordinal": 1,
+    "forwarded": true,
+    "outcome": "FORWARDED_STRUCTURED_OUTPUT",
+    "provider_status": 200,
+    "latency_ms": 140940,
+    "usage": {
+     "prompt_tokens": 4627,
+     "total_tokens": 19741,
+     "completion_tokens": 15114,
+     "prompt_tokens_details": {
+      "cached_tokens": 1024
+     },
+     "completion_tokens_details": {
+      "reasoning_tokens": 11602
+     }
+    },
+    "model_returned": "deepseek-v4-flash-0731"
+   }
+  ],
+  "usage": {
+   "prompt_tokens": 4627,
+   "completion_tokens": 15114,
+   "total_tokens": 19741
+  },
+  "latency_ms": 140940
+ },
+ "relay_status": "FORWARDED_STRUCTURED_OUTPUT",
+ "usage": {
+  "prompt_tokens": 4627,
+  "completion_tokens": 15114,
+  "total_tokens": 19741
+ },
+ "latency_ms": 140940,
+ "retried": false,
+ "retry_refused_reason": null,
+ "status": "OK",
+ "note": null,
+ "output": {
+  "schema_version": "ai-advice-output.v1",
+  "summary": "This run analyzed a ~6-minute JMeter load test of a single 'request' sampler at a constant 20 requests/s target (overall sample_count 7200; reference window 120 s with 2400 samples; evaluation window 240 s with 4800 samples). Errors are 0 in every scope (0/7200 overall, 0/2400 reference, 0/4800 evaluation). Latency overall: p50 205 ms, p95 238 ms, p99 239 ms, max 240 ms; reference p50 202 ms / p95 237 ms / max 240 ms; evaluation p50 206 ms / p95 238 ms / max 239 ms. The throughput_rps ratios (2400000/120000 reference, 4800000/240000 evaluation, 7200000/360235 overall) evaluate to about 20 requests/s, consistent with the constant target. The deterministic verdict is NO_POLICY: both window policy summaries and the overall policy_verdict are NO_POLICY, so no PASS/FAIL determination exists. The only correlation pair (resource-00 utilization ratio vs p95 latency, best_lag_ms 0) had raw_rho = partial_rho = 0.0494361028, status BELOW_EFFECT, and was NOT_SELECTED as a headline (Holm-adjusted p 0.443 at alpha 0.05 with 999 bootstrap replicates); uncertainty is NOT_ESTIMATED. The target control was constant and dropped as CONSTANT_CONTROL, and sensitivity_without_achieved_rps is null. The diagnostic summary reports pairs_tested 1, anomalies_tested 0, episodes_reported 0, status COMPLETE, uncertainty NOT_ESTIMATED. Run validity is VALID and analysis coverage is COMPLETE. Because NO_POLICY is not a pass and zero errors/anomalies do not prove stability, advice focuses on defining policies, verifying clock alignment, and varying load so that sensitivity can actually be estimated.",
+  "hypotheses": [
+   {
+    "rank": 1,
+    "observation": "The deterministic verdict is NO_POLICY; both window policy summaries report business_verdict NO_POLICY and resource_verdict NO_POLICY for the reference window (1767225600000–1767225720000) and the evaluation window (1767225720000–1767225960000).",
+    "possible_explanation": "No pass/fail thresholds were configured for latency, errors, or resource utilization, so the absence of a FAIL signal reflects missing policy rather than demonstrated compliance.",
+    "recommended_check": "Define explicit business and resource policies (e.g., latency percentile thresholds, error-rate thresholds, utilization thresholds) and re-run so future windows return PASS or FAIL instead of NO_POLICY.",
+    "evidence_refs": [
+     "analysis-result.json#/policy_verdict",
+     "analysis-result.json#/evidence/7",
+     "analysis-result.json#/evidence/8"
+    ]
+   },
+   {
+    "rank": 2,
+    "observation": "The only correlation pair (resource-00 utilization ratio vs p95 latency) reports raw_rho = partial_rho = 0.0494361028 at best_lag_ms 0, status BELOW_EFFECT, uncertainty NOT_ESTIMATED, reason CONSTANT_CONTROL; the headline selection is NOT_SELECTED with Holm-adjusted p 0.443 (p_value_b10 0.432, p_value_b20 0.443) at alpha 0.05.",
+    "possible_explanation": "With load fixed at 20 requests/s across both windows (target series is constant with standard deviation 0) and achieved-RPS sensitivity unavailable, p95 latency shows no statistically supported linear relationship to the resource-00 utilization ratio over the tested lags.",
+    "recommended_check": "Run a stepped load test across multiple distinct RPS levels and re-estimate the correlation with achieved RPS as an explicit control, so load-varying effects on latency can be separated from utilization effects.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/11",
+     "analysis-result.json#/evidence/12",
+     "analysis-result.json#/evidence/4",
+     "analysis-result.json#/evidence/6"
+    ]
+   },
+   {
+    "rank": 3,
+    "observation": "Latency p99 sits within 1–2 ms of max in every scope: overall p95 238 ms / p99 239 ms / max 240 ms; reference p95 237 ms / max 240 ms; evaluation p95 238 ms / max 239 ms.",
+    "possible_explanation": "The small distance between p99 and max could indicate a client/sampler cap or timeout near 240 ms, or simply a very consistent service time; the referenced evidence does not identify which.",
+    "recommended_check": "Inspect raw latency samples and JMeter/collector configuration for a 240 ms ceiling or timeout, and check whether latencies above 240 ms are even possible in the harness.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0",
+     "analysis-result.json#/evidence/9",
+     "analysis-result.json#/evidence/10"
+    ]
+   },
+   {
+    "rank": 4,
+    "observation": "error_count is 0 and error_rate_ratio is 0/7200 overall, 0/2400 for the reference window, and 0/4800 for the evaluation window; run_validity is VALID.",
+    "possible_explanation": "At the tested constant 20 rps workload the system produced no recorded errors, but this covers only the sampled load profile and does not bound error behavior under higher load or failures.",
+    "recommended_check": "Extend testing to load steps above 20 rps and fault-injection scenarios with error-count assertions to probe the error boundary.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0",
+     "analysis-result.json#/evidence/9",
+     "analysis-result.json#/evidence/10",
+     "analysis-result.json#/run_validity"
+    ]
+   },
+   {
+    "rank": 5,
+    "observation": "The diagnostic summary reports anomalies_tested 0, episodes_reported 0, suppressed_short_episodes 0, pairs_tested 1, pairs_evaluable 1, status COMPLETE, uncertainty NOT_ESTIMATED.",
+    "possible_explanation": "No anomaly episodes were tested or reported in this run, so the absence of episodes cannot be used as proof of stability; it may reflect that no anomaly conditions were evaluated.",
+    "recommended_check": "Verify anomaly-detection configuration and eligibility so anomalies_tested is greater than 0 on future runs, and optionally inject known perturbation episodes to validate detection sensitivity.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/13"
+    ]
+   },
+   {
+    "rank": 6,
+    "observation": "resource_binding reports clock_alignment 'not_verified_by_core', and the correlation pair used best_lag_ms 0 with lag_used_cells 240 for resource-00 vs p95 latency.",
+    "possible_explanation": "If resource and latency timestamps are not aligned across collectors, the lag-0 correlation and any temporal reading of it could be affected; clock alignment is unverified by the core.",
+    "recommended_check": "Verify and document clock alignment between the load generator, resource collector, and SUT before relying on any lag, lead/lag ordering, or temporal interpretation.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/2",
+     "analysis-result.json#/evidence/11"
+    ]
+   },
+   {
+    "rank": 7,
+    "observation": "resource-00 (ratio) reference summary: mean 0.5020717583, median 0.5108435, min 0.303599, max 0.698676, slope_per_second -0.0005290557, split_half_shift -0.078255; evaluation summary: mean 0.4908152083, median 0.492286, min 0.301799, max 0.696747, slope_per_second 0.0000188453, split_half_shift -0.017846; missing_cells 0 in both windows.",
+    "possible_explanation": "Utilization fluctuated in roughly the 0.30–0.70 ratio band with near-zero per-second slopes and complete cell coverage, consistent with a stable workload; without policy thresholds this cannot be judged acceptable, marginal, or concerning.",
+    "recommended_check": "Define utilization thresholds and, after clock verification, monitor the series over a longer horizon to determine whether the reported slopes and split-half values reflect drift or noise.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/3",
+     "analysis-result.json#/evidence/5"
+    ]
+   },
+   {
+    "rank": 8,
+    "observation": "The throughput_rps fields are reported as ratios: 7200000/360235 overall, 2400000/120000 for the reference window, and 4800000/240000 for the evaluation window; the reference/evaluation denominators equal the window epoch spans in milliseconds (120000 ms and 240000 ms), and the overall denominator equals the 360235 ms span between run_from_epoch_ms and run_to_epoch_ms.",
+    "possible_explanation": "The ratios evaluate to about 20 requests/s, which is consistent with the constant 20 requests/s target series and 7200 samples over ~360 s, but the field's numerator/denominator units are not documented in the evidence, so the representation should be confirmed rather than assumed.",
+    "recommended_check": "Confirm what the numerator and denominator represent in the collector/reporting configuration and document the throughput metric definition before using it in capacity discussions.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0",
+     "analysis-result.json#/evidence/2",
+     "analysis-result.json#/evidence/4",
+     "analysis-result.json#/evidence/9",
+     "analysis-result.json#/evidence/10"
+    ]
+   }
+  ],
+  "recommendations": [
+   {
+    "rank": 1,
+    "action": "Add explicit business and resource policies (latency percentile thresholds, error-rate thresholds, utilization thresholds) and re-run the analysis.",
+    "rationale": "The deterministic verdict is NO_POLICY for both windows and overall; without defined thresholds the analysis cannot express PASS/FAIL, and NO_POLICY must not be mistaken for a pass.",
+    "evidence_refs": [
+     "analysis-result.json#/policy_verdict",
+     "analysis-result.json#/evidence/7",
+     "analysis-result.json#/evidence/8"
+    ]
+   },
+   {
+    "rank": 2,
+    "action": "Verify and document clock alignment across the load generator, resource collector, and SUT before any temporal or lag-based conclusion.",
+    "rationale": "resource_binding reports clock_alignment 'not_verified_by_core'; the correlation pair used best_lag_ms 0, and lead/lag ordering or temporal causal hypotheses cannot be supported without verified clocks.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/2",
+     "analysis-result.json#/evidence/11"
+    ]
+   },
+   {
+    "rank": 3,
+    "action": "Re-run with stepped or otherwise varied load (multiple distinct target RPS levels) to enable sensitivity estimation.",
+    "rationale": "The target series is constant at 20 requests/s with standard deviation 0 and was dropped as CONSTANT_CONTROL; sensitivity_without_achieved_rps is null, so load-induced latency sensitivity was not estimable in this run.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/4",
+     "analysis-result.json#/evidence/6",
+     "analysis-result.json#/evidence/11"
+    ]
+   },
+   {
+    "rank": 4,
+    "action": "Configure and validate anomaly detection so that future runs have anomalies_tested greater than 0.",
+    "rationale": "The diagnostic summary reports anomalies_tested 0 and episodes_reported 0, so this run did not evaluate any anomaly episodes and therefore cannot support a stability claim.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/13"
+    ]
+   },
+   {
+    "rank": 5,
+    "action": "Investigate the tight p99/max latency spacing (238–240 ms) to rule out a 240 ms cap, timeout, or sampler artifact.",
+    "rationale": "Overall p95 238 ms / p99 239 ms / max 240 ms; reference p95 237 ms / max 240 ms; evaluation p95 238 ms / max 239 ms. A 1–2 ms p99-to-max distance can result from a measurement ceiling as well as from genuinely consistent latency.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0",
+     "analysis-result.json#/evidence/9",
+     "analysis-result.json#/evidence/10"
+    ]
+   },
+   {
+    "rank": 6,
+    "action": "Document the throughput_rps ratio semantics (7200000/360235 overall; 2400000/120000 reference; 4800000/240000 evaluation).",
+    "rationale": "The ratios evaluate to about 20 requests/s and the denominators match the epoch spans in milliseconds, but the numerator/denominator units are not defined in the referenced evidence.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0",
+     "analysis-result.json#/evidence/2",
+     "analysis-result.json#/evidence/9"
+    ]
+   },
+   {
+    "rank": 7,
+    "action": "If latency requirements exist, encode them as policy and statistically compare the reference and evaluation windows.",
+    "rationale": "Reference p50 202 ms / p95 237 ms versus evaluation p50 206 ms / p95 238 ms shows small shifts, but no statistical test of the difference is referenced in the evidence.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/9",
+     "analysis-result.json#/evidence/10"
+    ]
+   },
+   {
+    "rank": 8,
+    "action": "Monitor resource-00 utilization over a longer horizon to determine whether the reported slopes represent drift.",
+    "rationale": "resource-00 slope_per_second is -0.000529 in the reference window and +0.0000188 in the evaluation window (ratio units per second); both are near zero but no test or confidence interval is referenced, and the 0.30–0.70 ratio range has no policy context.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/3",
+     "analysis-result.json#/evidence/5"
+    ]
+   }
+  ],
+  "caveats": [
+   "The deterministic verdict is NO_POLICY for the reference window, evaluation window, and overall; NO_POLICY is not a pass, and no PASS/FAIL determination exists.",
+   "Correlation uncertainty is NOT_ESTIMATED for pair-00; BELOW_EFFECT status does not quantify how large an effect could be ruled out.",
+   "sensitivity_without_achieved_rps is null because the target control was constant (CONSTANT_CONTROL); load-sensitivity was not estimable.",
+   "anomalies_tested was 0 in this run, so episodes_reported 0 does not demonstrate stability or absence of problems.",
+   "clock_alignment is 'not_verified_by_core'; lead/lag or temporal causal interpretations are unsupported until clock verification is completed.",
+   "Only the single 'request' JMeter sampler transaction was summarized (scope kind transaction, label request); other transaction types were not covered.",
+   "The run is a single ~6-minute scenario at constant 20 requests/s; conclusions do not generalize to higher, variable, or bursty load.",
+   "No statistical comparison of the reference (p50 202 ms, p95 237 ms) and evaluation (p50 206 ms, p95 238 ms) latency values is referenced.",
+   "No policy or configuration evidence explains why p99 is within 1–2 ms of max (238–240 ms); a 240 ms cap can be neither confirmed nor excluded from this evidence.",
+   "No policy thresholds exist for resource utilization; a mean ratio around 0.49–0.50 with a 0.30–0.70 range is neither acceptable nor alarming without defined bounds.",
+   "The throughput_rps numerator/denominator units are not documented in the referenced evidence; the observed consistency with epoch spans and sample counts is arithmetic only.",
+   "Window metric summaries rely on JMeter sampler data only; infrastructure-level latency, external timeouts, and machine-level resource contention are outside the referenced evidence."
+  ]
+ },
+ "schema": "ai-experiment-run.holdout.v1",
+ "case": "case-007",
+ "rep": 2,
+ "arm": "A",
+ "try": 1,
+ "attempt_id": "case-007-2-A-t1",
+ "model_id": "deepseek-v4-flash-0731",
+ "prompt_sha256": "69f215a1ad4ae678c82410ba7cf7daf171cd9c7ca0ef4626bba6977db0af4ef7"
+}

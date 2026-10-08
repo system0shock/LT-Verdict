@@ -1,0 +1,205 @@
+{
+ "stage": "A",
+ "mode": "live",
+ "model": "deepseek-v4-flash-0731",
+ "tag": {
+  "phase": "holdout",
+  "attempt_id": "case-012-2-A-t1",
+  "arm": "A",
+  "stage": null,
+  "case": "case-012",
+  "rep": 2,
+  "try": 1
+ },
+ "retry_policy": "d2",
+ "qwen_exit": 0,
+ "wall_ms": 102805,
+ "relay": {
+  "schema_version": "advisory-ai-runtime-relay.v1",
+  "status": "FORWARDED_STRUCTURED_OUTPUT",
+  "received_request_count": 1,
+  "forwarded_request_count": 1,
+  "outcomes": [
+   "FORWARDED_STRUCTURED_OUTPUT"
+  ],
+  "retry_refused_reason": null,
+  "first_refused_reason": null,
+  "model_id": "deepseek-v4-flash-0731",
+  "retry_policy": "d2",
+  "requests": [
+   {
+    "ordinal": 1,
+    "forwarded": true,
+    "outcome": "FORWARDED_STRUCTURED_OUTPUT",
+    "provider_status": 200,
+    "latency_ms": 101513,
+    "usage": {
+     "prompt_tokens": 4295,
+     "total_tokens": 13649,
+     "completion_tokens": 9354,
+     "prompt_tokens_details": {
+      "cached_tokens": 1024
+     },
+     "completion_tokens_details": {
+      "reasoning_tokens": 6848
+     }
+    },
+    "model_returned": "deepseek-v4-flash-0731"
+   }
+  ],
+  "usage": {
+   "prompt_tokens": 4295,
+   "completion_tokens": 9354,
+   "total_tokens": 13649
+  },
+  "latency_ms": 101513
+ },
+ "relay_status": "FORWARDED_STRUCTURED_OUTPUT",
+ "usage": {
+  "prompt_tokens": 4295,
+  "completion_tokens": 9354,
+  "total_tokens": 13649
+ },
+ "latency_ms": 101513,
+ "retried": false,
+ "retry_refused_reason": null,
+ "status": "OK",
+ "note": null,
+ "output": {
+  "schema_version": "ai-advice-output.v1",
+  "summary": "Deterministic verdict: FAIL. In window workload-04 the latency policy check (response_time_p95_ms lte 200) observed 28559ms, far above the 200ms threshold; run validity is VALID and analysis coverage is COMPLETE. The window shows 0 errors, p50 15055ms, p99 29759ms, max 30050ms, a constant 110 requests/s target, and queue_depth parked near 251 with a slight positive slope per second. Resource verdict is NO_POLICY, and the only queue-latency association is a CANDIDATE with NOT_ESTIMATED uncertainty and unavailable p-values, so the cause of the high latency is not established. The advice below investigates causes while preserving the FAIL verdict.",
+  "hypotheses": [
+   {
+    "rank": 1,
+    "observation": "In evaluation window workload-04 the policy check FAILs: response_time_p95_ms observed 28559ms against a 200ms lte threshold; the window summary shows p50 15055ms, p99 29759ms, max 30050ms, 0 errors, 33000 samples, and queue_depth with median 251, q25=q75=q95=251, max 251, min 5.00005, observed_cells 300 of 300 expected.",
+    "possible_explanation": "Sustained 110 requests/s target with queue_depth sitting at/near its apparent 251 plateau across the window suggests the system could not drain requests as fast as they arrived, so a large share of requests waited in the queue and p95 latency exceeded the 200ms threshold. This is a hypothesis; the analysis does not prove the causal link between queue depth and latency.",
+    "recommended_check": "Inspect sub-minute queue_depth and latency series together to see whether latency rises exactly when queue_depth reaches and stays at 251; check service-side concurrency, thread/connection-pool limits, and drain rate against the 110 requests/s arrival rate.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/5",
+     "analysis-result.json#/evidence/7",
+     "analysis-result.json#/evidence/3"
+    ]
+   },
+   {
+    "rank": 2,
+    "observation": "The overall summary has p50 50ms and throughput numerator/denominator 93000000/1230040 across the run, while the evaluation window has a constant 110 requests/s target (33000000/300000), p50 15055ms, and a queue_depth series with a low min of 5.00005 but median 251.",
+    "possible_explanation": "The evaluation window (from_epoch_ms 1704068100000) may capture the saturated steady state after a rate ramp or backlog that began earlier in the run; high latency may have started before the window opened, so the triggering event could precede the evaluated period. This is speculative because earlier sub-window data is not summarized here.",
+    "recommended_check": "First verify clock alignment (currently not_verified_by_core), then obtain pre-window per-second latency and queue series and compare sub-window p50 values before 1704068100000 to locate when latency rose.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/1",
+     "analysis-result.json#/evidence/4",
+     "analysis-result.json#/evidence/2",
+     "analysis-result.json#/evidence/3"
+    ]
+   },
+   {
+    "rank": 3,
+    "observation": "Correlation pair association-04 has status CANDIDATE, uncertainty NOT_ESTIMATED, best_lag_ms 0, raw_rho and partial_rho 0.48797470471; the headline selection is UNAVAILABLE with holm_adjusted_p_value and p_values null because of reason OBSERVATION_COUNT_UNSUPPORTED, and the target-request-rate control was dropped because the series is constant (reasons CONSTANT_CONTROL).",
+    "possible_explanation": "The apparent association between queue_depth and response_time_p95_ms is not statistically validated: the control variable could not be used because target rate was constant, and the observation count did not support bootstrap p-values, so queue depth may be coincidentally associated with latency rather than driving it.",
+    "recommended_check": "Rerun the correlation analysis with enough observations to compute MBB p-values (or adjust the observation-count requirement), and if possible vary the load profile so target-request-rate can be used as a control; do not treat the current rho as causal evidence.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/8",
+     "analysis-result.json#/evidence/9"
+    ]
+   },
+   {
+    "rank": 4,
+    "observation": "The window reports max latency 30050ms and p99 29759ms while error_count is 0; the overall and transaction summaries also report max 30050ms with 0 errors across 93000 samples.",
+    "possible_explanation": "Observed latencies cluster near a round ~30s maximum, which could reflect a timeout, sampler cap, or truncation rather than true service completion time; because error_count is 0, any request that ended at the cap would not be counted as an error.",
+    "recommended_check": "Confirm how latency samples are capped or expired (client and server timeouts, sampler timeouts, request cancellation) and verify whether any requests were dropped or truncated at the ~30050ms boundary without being recorded as errors.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/7",
+     "analysis-result.json#/evidence/1"
+    ]
+   },
+   {
+    "rank": 5,
+    "observation": "The window policy summary reports business_verdict FAIL and resource_verdict NO_POLICY, and the only policy check present is the latency rule response_time_p95_ms lte 200.",
+    "possible_explanation": "No resource policy threshold was configured, so the observed queue_depth level (median 251) is not judged pass/fail; the FAIL verdict is attributable solely to the latency SLO, and the resource series is contextual evidence rather than a second failing control.",
+    "recommended_check": "Define and attach a resource policy (e.g., queue depth or utilization bound near the observed 251 plateau) so future runs explicitly evaluate resource behavior alongside the latency SLO.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/6",
+     "analysis-result.json#/evidence/5",
+     "analysis-result.json#/evidence/8"
+    ]
+   }
+  ],
+  "recommendations": [
+   {
+    "rank": 1,
+    "action": "Verify clock alignment before drawing any temporal or lead/lag conclusion from the epoch-based series.",
+    "rationale": "resource-binding reports clock_alignment not_verified_by_core, and correlation best_lag_ms 0 plus any before/after reasoning depends on trustworthy time relationships between generator, system, and analysis timestamps.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/2",
+     "analysis-result.json#/evidence/8"
+    ]
+   },
+   {
+    "rank": 2,
+    "action": "Investigate the queue_depth plateau near 251 and its slight positive slope_per_second (0.1982826709) under sustained 110 requests/s target.",
+    "rationale": "The evaluation window latency (p95 28559ms) coincides with queue_depth median/q25/q75/q95 all at 251, suggesting saturation; understanding the ceiling and drain rate is the most direct path to explaining the latency SLO failure.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/3",
+     "analysis-result.json#/evidence/4",
+     "analysis-result.json#/evidence/5"
+    ]
+   },
+   {
+    "rank": 3,
+    "action": "If not already configured in the workload template, define a resource policy threshold for queue depth and rerun so resource state is evaluated rather than reported as NO_POLICY.",
+    "rationale": "Resource summary only labels queue depth with NO_POLICY, so the near-251 level is currently unjudged and cannot be compared against a target, limiting what the resource dimension can contribute to the FAIL verdict.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/6",
+     "analysis-result.json#/evidence/3"
+    ]
+   },
+   {
+    "rank": 4,
+    "action": "Obtain and analyze the portion of the run before evaluation_from_epoch_ms 1704068100000.",
+    "rationale": "Overall p50 is 50ms while the evaluation window p50 is 15055ms, and overall throughput ratio (93000000/1230040) is lower than the window ratio (33000000/300000); the failure may have been triggered before the evaluation window opened, and only the window is summarized here.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/1",
+     "analysis-result.json#/evidence/7",
+     "analysis-result.json#/evidence/2"
+    ]
+   },
+   {
+    "rank": 5,
+    "action": "Increase the statistical support for the queue-latency association so the correlation p-value can be computed.",
+    "rationale": "The correlation headline status is UNAVAILABLE with p-values null due to OBSERVATION_COUNT_UNSUPPORTED, and controls were dropped because target rate was constant; without a p-value, the CANDIDATE association cannot be treated as evidence of cause.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/9",
+     "analysis-result.json#/evidence/8"
+    ]
+   },
+   {
+    "rank": 6,
+    "action": "Validate the meaning of the 30050ms maximum and error counting for requests near that boundary.",
+    "rationale": "max latency 30050ms with 0 errors suggests either genuine slow completions or a ~30s cap; if a timeout is present, the observed p95/p99 may be censored and the error count may not reflect dropped work.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/7",
+     "analysis-result.json#/evidence/1"
+    ]
+   }
+  ],
+  "caveats": [
+   "The deterministic verdict FAIL is preserved exactly; this advice only interprets it and does not change verdict, policy, or run validity.",
+   "Clock alignment is not_verified_by_core; best_lag_ms 0 and any before/after ordering are unverified and require clock verification first.",
+   "The queue-latency relationship is a CANDIDATE with uncertainty NOT_ESTIMATED; p-values are unavailable (OBSERVATION_COUNT_UNSUPPORTED) and the target rate control was dropped (CONSTANT_CONTROL), so no causal claim is supported.",
+   "Resource verdict is NO_POLICY; queue_depth near 251 is context, not a policy finding.",
+   "error_count 0, anomalies_tested 0, and episodes_reported 0 do not prove stability or the absence of load, saturation, or other problems.",
+   "The overall run summary (p50 50ms, 93000 samples) differs sharply from the evaluation window (p50 15055ms, 33000 samples); behavior outside the evaluation window is not summarized and was not compared to the policy.",
+   "Only one transaction label ('request') is reported; there is no per-endpoint breakdown, and analysis coverage complete means complete within the evaluated window, not beyond it.",
+   "slope_per_second and split_half_shift values are reported without a documented validity definition in the evidence; trend claims based on them remain hypotheses.",
+   "Throughput is expressed here from the reported numerator/denominator ratios (93000000/1230040 overall and 33000000/300000 for the window); no other rate was measured."
+  ]
+ },
+ "schema": "ai-experiment-run.holdout.v1",
+ "case": "case-012",
+ "rep": 2,
+ "arm": "A",
+ "try": 1,
+ "attempt_id": "case-012-2-A-t1",
+ "model_id": "deepseek-v4-flash-0731",
+ "prompt_sha256": "69f215a1ad4ae678c82410ba7cf7daf171cd9c7ca0ef4626bba6977db0af4ef7"
+}

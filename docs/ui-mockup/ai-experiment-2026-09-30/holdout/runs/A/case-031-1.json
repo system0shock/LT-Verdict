@@ -1,0 +1,184 @@
+{
+ "stage": "A",
+ "mode": "live",
+ "model": "deepseek-v4-flash-0731",
+ "tag": {
+  "phase": "holdout",
+  "attempt_id": "case-031-1-A-t1",
+  "arm": "A",
+  "stage": null,
+  "case": "case-031",
+  "rep": 1,
+  "try": 1
+ },
+ "retry_policy": "d2",
+ "qwen_exit": 0,
+ "wall_ms": 54078,
+ "relay": {
+  "schema_version": "advisory-ai-runtime-relay.v1",
+  "status": "FORWARDED_STRUCTURED_OUTPUT",
+  "received_request_count": 1,
+  "forwarded_request_count": 1,
+  "outcomes": [
+   "FORWARDED_STRUCTURED_OUTPUT"
+  ],
+  "retry_refused_reason": null,
+  "first_refused_reason": null,
+  "model_id": "deepseek-v4-flash-0731",
+  "retry_policy": "d2",
+  "requests": [
+   {
+    "ordinal": 1,
+    "forwarded": true,
+    "outcome": "FORWARDED_STRUCTURED_OUTPUT",
+    "provider_status": 200,
+    "latency_ms": 52806,
+    "usage": {
+     "prompt_tokens": 2982,
+     "total_tokens": 8042,
+     "completion_tokens": 5060,
+     "prompt_tokens_details": {
+      "cached_tokens": 0
+     },
+     "completion_tokens_details": {
+      "reasoning_tokens": 2886
+     }
+    },
+    "model_returned": "deepseek-v4-flash-0731"
+   }
+  ],
+  "usage": {
+   "prompt_tokens": 2982,
+   "completion_tokens": 5060,
+   "total_tokens": 8042
+  },
+  "latency_ms": 52806
+ },
+ "relay_status": "FORWARDED_STRUCTURED_OUTPUT",
+ "usage": {
+  "prompt_tokens": 2982,
+  "completion_tokens": 5060,
+  "total_tokens": 8042
+ },
+ "latency_ms": 52806,
+ "retried": false,
+ "retry_refused_reason": null,
+ "status": "OK",
+ "note": null,
+ "output": {
+  "schema_version": "ai-advice-output.v1",
+  "summary": "Deterministic verdict is FAIL (analysis-result.json#/policy_verdict), with run validity VALID and coverage COMPLETE. The FAIL is caused solely by the resource policy check, not by business metrics: the \"value\" series (unit synthetic_unit) of entity/service was observed at a constant 90 in all 30 one-second cells of the evaluation window (1767225600000–1767225630000 ms) with zero variance (min=max=mean=median=90, mad/iqr/sd=0, slope=0), violating rule limit with operator gt and threshold 80 (analysis-result.json#/evidence/4, analysis-result.json#/evidence/3). Business/response metrics all passed: 600 samples, 0 errors, p95 latency 100 ms <= 120 ms, and window-policy-summary records business_verdict PASS while resource_verdict FAIL and verdict FAIL (analysis-result.json#/evidence/6). The metric's synthetic unit, perfectly flat series, and uniform 100 ms latencies suggest possible fixture/placeholder data; the failure should not be interpreted as proven real capacity exhaustion without confirming the metric's provenance. Clock alignment is not verified by core, so no lead/lag or temporal claims are supported.",
+  "hypotheses": [
+   {
+    "rank": 1,
+    "observation": "The resource summary for entity/service metric \"value\" (unit synthetic_unit) shows a constant 90 in all 30 cells with min=max=mean=median=90, zero standard deviation, zero MAD/IQR, and slope 0, and the resource policy check fails limit (gt, threshold 80) with the finding reporting observed_min=observed_max=90.",
+    "possible_explanation": "The \"value\" series appears to be a synthetic or placeholder metric rather than measured resource telemetry; the uniform 90 with zero variance and a synthetic unit suggests the FAIL reflects fixture/placeholder data or a deliberately seeded value, not demonstrated real capacity exhaustion.",
+    "recommended_check": "Retrieve the raw cell values and the metric definition/provider for the \"value\" series; confirm which collector emits unit synthetic_unit for entity/service and whether the constant 90 came from a live measurement or a seeded/stub source.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/3",
+     "analysis-result.json#/evidence/4",
+     "analysis-result.json#/findings/0"
+    ]
+   },
+   {
+    "rank": 2,
+    "observation": "window-policy-summary records business_verdict PASS and resource_verdict FAIL, with overall verdict FAIL; the only failed policy checks are the resource limit (gt 80) while the response_time_p95_ms check passes at 100 <= 120.",
+    "possible_explanation": "The composite verdict is determined entirely by the resource policy; the workload itself (0 errors, p95 100 ms) exhibited no business-metric violation, so the FAIL stems from one resource rule (limit, series_id \"value\", threshold 80) rather than from observed workload degradation.",
+    "recommended_check": "Inspect the resource policy rule configuration (rule_id limit, operator gt, threshold 80) and its intended materiality/capacity basis; verify the threshold was meant to be compared against this synthetic-unit series and that a reading of 90 maps to a real resource exceeding capacity.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/6",
+     "analysis-result.json#/evidence/4",
+     "analysis-result.json#/evidence/5"
+    ]
+   },
+   {
+    "rank": 3,
+    "observation": "Both metric summaries report 600 samples, 0 errors, error rate 0/600, and identical latency values (p50=p95=p99=max=100 ms); throughput_rps is 600000/30099, and the resource series is perfectly flat at 90.",
+    "possible_explanation": "Uniform latency across all percentiles, an exact error-free count, and a perfectly flat resource series are consistent with synthetic, simulated, or stub-generated data (e.g., generated JMeter JTL), so the resource breach may be an artifact of the dataset rather than a production condition.",
+    "recommended_check": "Check the JMeter JTL source and sampler/target configuration to confirm whether the run hit a live system or a stub/emulator; inspect raw sampler timestamps and value distributions for realism beyond the summarized aggregates.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0",
+     "analysis-result.json#/evidence/1",
+     "analysis-result.json#/evidence/3"
+    ]
+   },
+   {
+    "rank": 4,
+    "observation": "resource-binding states clock_alignment is \"not_verified_by_core\" with evaluation_from_epoch_ms 1767225600000 to evaluation_to_epoch_ms 1767225630000, run_to_epoch_ms +99 ms, and all 30 cells present with 0 missing.",
+    "possible_explanation": "If the load generator and resource collector clocks are not aligned, sampler and resource data might be assigned to mismatched cells; however, because the resource series is constant at 90 across every cell, clock skew alone cannot create the uniform limit violation.",
+    "recommended_check": "Run explicit clock alignment/verification between the JMeter host and the resource collector; after alignment, re-confirm the 30-cell evaluation window boundaries and that the violating value appears in the correct window.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/2",
+     "analysis-result.json#/evidence/3",
+     "analysis-result.json#/evidence/4"
+    ]
+   }
+  ],
+  "recommendations": [
+   {
+    "rank": 1,
+    "action": "Confirm the provenance and meaning of the \"value\" series (unit synthetic_unit) that failed the gt 80 limit; obtain the raw per-cell values and the metric definition/provider for entity/service.",
+    "rationale": "The constant 90 with zero variance and a synthetic unit indicates the FAIL may be driven by placeholder/fixture data, so production impact cannot be confirmed until the series is validated as real telemetry.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/3",
+     "analysis-result.json#/evidence/4",
+     "analysis-result.json#/findings/0"
+    ]
+   },
+   {
+    "rank": 2,
+    "action": "Review the resource policy rule (rule_id limit, operator gt, threshold 80, effect sla) and its materiality/capacity basis against the observed value of 90.",
+    "rationale": "A reading of 90 versus threshold 80 with a flat series triggers FAIL; confirm the threshold is appropriate for what the series measures and that a synthetic-unit reading of 90 genuinely corresponds to a resource over its limit.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/4",
+     "analysis-result.json#/findings/0"
+    ]
+   },
+   {
+    "rank": 3,
+    "action": "Verify clock alignment between the load generator and the resource collector before performing any time-based correlation between workload and resource data.",
+    "rationale": "clock_alignment is recorded as \"not_verified_by_core\"; without verified alignment, temporal relationships between sampler data and resource cells should not be treated as reliable.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/2"
+    ]
+   },
+   {
+    "rank": 4,
+    "action": "Investigate why the service resource metric remained at a constant 90 across all 30 cells while workload metrics show 0 errors, p95 100 ms, and PASS.",
+    "rationale": "A perfectly flat resource value concurrent with an error-free, low-latency workload is atypical for real systems; this may indicate a default/stale/starved value from the collector rather than actual utilization.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/3",
+     "analysis-result.json#/evidence/5",
+     "analysis-result.json#/evidence/6"
+    ]
+   },
+   {
+    "rank": 5,
+    "action": "Preserve the recorded FAIL verdict and, if the synthetic-unit series is confirmed as non-production or mislabeled, annotate the analysis and re-run the evaluation on validated telemetry.",
+    "rationale": "The deterministic verdict FAIL (analysis-result.json#/policy_verdict) must not be changed by this advice; valid follow-up requires corrected data and a fresh analysis run, not an override of the recorded result.",
+    "evidence_refs": [
+     "analysis-result.json#/policy_verdict",
+     "analysis-result.json#/analysis_coverage"
+    ]
+   }
+  ],
+  "caveats": [
+   "The failing metric's unit is \"synthetic_unit\"; nothing in the evidence defines which real-world resource this represents or its relationship to actual capacity or headroom.",
+   "The resource series is perfectly constant (min=max=mean=median=90, standard deviation/MAD/IQR=0, slope=0) across all 30 cells; there is no evidence of a load profile, trend, breach duration dynamics, or partial violations.",
+   "clock_alignment is \"not_verified_by_core\", so no lead/lag ordering or temporal causal claims are supported by this evidence.",
+   "The verdict FAIL is deterministic and preserved; the business PASS for response_time_p95_ms (analysis-result.json#/evidence/5) does not negate the resource FAIL (analysis-result.json#/evidence/4) in the composite verdict (analysis-result.json#/evidence/6).",
+   "run_validity VALID and analysis_coverage COMPLETE attest to analysis execution completeness, not to the correctness of the synthetic-unit metric or the truth of its source telemetry.",
+   "error_count 0, error rate 0/600, and uniform 100 ms latencies cannot by themselves prove absence of production problems outside the captured run window.",
+   "The synthetic unit and uniform latency values (p50=p95=p99=max=100 ms) may indicate fixture or simulated data; generalized conclusions about production load should be treated cautiously.",
+   "There is no evidence describing what the 80 threshold represents relative to the service's real resource capacity, so the FAIL should not be read as proven capacity exhaustion without additional verification."
+  ]
+ },
+ "schema": "ai-experiment-run.holdout.v1",
+ "case": "case-031",
+ "rep": 1,
+ "arm": "A",
+ "try": 1,
+ "attempt_id": "case-031-1-A-t1",
+ "model_id": "deepseek-v4-flash-0731",
+ "prompt_sha256": "69f215a1ad4ae678c82410ba7cf7daf171cd9c7ca0ef4626bba6977db0af4ef7"
+}

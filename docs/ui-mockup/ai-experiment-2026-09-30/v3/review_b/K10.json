@@ -1,0 +1,134 @@
+[
+  {
+    "id": "R018",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T3",
+        "field": "#/hypotheses/2/possible_explanation",
+        "quote": "the single worst reported sample (904 ms)",
+        "why": "The aggregates report a maximum value but do not state how many samples reached 904 ms."
+      }
+    ],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 4,
+    "notes": "Useful, evidence-grounded advice aside from the unsupported singular-max claim."
+  },
+  {
+    "id": "R024",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T3",
+        "field": "#/recommendations/1/rationale",
+        "quote": "Each max is a single recorded value",
+        "why": "The evidence gives only aggregate maxima and cannot establish that each maximum was reached by exactly one sample."
+      }
+    ],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 4,
+    "notes": "The response correctly preserves the verdict and gives practical checks, but overstates max-sample uniqueness."
+  },
+  {
+    "id": "R031",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T8",
+        "field": "#/hypotheses/3/possible_explanation",
+        "quote": "All responses passed JMeter's success criteria (HTTP status and any configured assertions)",
+        "why": "Zero aggregate error counts do not establish the JMeter success criteria, HTTP-status handling, or assertion configuration."
+      },
+      {
+        "type": "T8",
+        "field": "#/hypotheses/4/recommended_check",
+        "quote": "the implied ~45-second window",
+        "why": "The throughput denominator's unit is unstated, so it cannot support a claimed run-window duration."
+      }
+    ],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 3,
+    "notes": "It retains the core facts but makes unsupported claims about error semantics and duration."
+  },
+  {
+    "id": "R037",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T3",
+        "field": "#/hypotheses/2/possible_explanation",
+        "quote": "The single slowest sample in the run falls inside the home scope",
+        "why": "Equal overall and home maxima do not prove uniqueness or exclude tied 904 ms samples in other scopes."
+      },
+      {
+        "type": "T3",
+        "field": "#/hypotheses/3/possible_explanation",
+        "quote": "the max is a single observation",
+        "why": "No count of samples at any reported maximum is present in the evidence."
+      }
+    ],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 3,
+    "notes": "Mostly careful and useful, but it repeatedly converts aggregate maxima into unsupported singular samples."
+  },
+  {
+    "id": "R047",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T3",
+        "field": "#/summary",
+        "quote": "the slowest sample in the run sits in the \"home\" label",
+        "why": "The matching maximum values do not establish a unique slowest sample or its exclusive label."
+      },
+      {
+        "type": "T2",
+        "field": "#/caveats/14",
+        "quote": "every sample maps to one of the six labels",
+        "why": "The arithmetic equality of differently scoped aggregate counts does not prove sample membership or coverage."
+      },
+      {
+        "type": "T2",
+        "field": "#/recommendations/4/rationale",
+        "quote": "indicating one pooled window with no phase separation",
+        "why": "A shared unexplained denominator does not prove a shared pooled window or its phase structure."
+      }
+    ],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 2,
+    "notes": "It contains many sensible operator actions but repeatedly infers sample identity and structure absent from the aggregates."
+  },
+  {
+    "id": "R052",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T3",
+        "field": "#/hypotheses/1/possible_explanation",
+        "quote": "a single observation determines the max",
+        "why": "The evidence supplies only the maximum value and not the number of observations tied at that value."
+      },
+      {
+        "type": "T3",
+        "field": "#/caveats/5",
+        "quote": "each max ... is a single-sample statistic",
+        "why": "The reported maxima cannot establish that only one sample attained each value."
+      },
+      {
+        "type": "T2",
+        "field": "#/caveats/7",
+        "quote": "The shared denominator 44986 permits comparison within this window only",
+        "why": "The denominator's definition and window identity are not stated, so it cannot establish cross-scope comparability."
+      }
+    ],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 3,
+    "notes": "It correctly states the deterministic facts and limitations, but makes unsupported max-count and window-comparability claims."
+  }
+]

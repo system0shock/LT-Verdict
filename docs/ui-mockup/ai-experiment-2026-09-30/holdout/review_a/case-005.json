@@ -1,0 +1,120 @@
+[
+  {
+    "id": "R012",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T7",
+        "field": "#/recommendations/2/rationale",
+        "quote": "NO_POLICY, meaning no resource rule with effect sla existed",
+        "why": "NO_POLICY establishes that no applicable resource SLA rule was evaluated for these windows, not that no such rule was configured."
+      },
+      {
+        "type": "T7",
+        "field": "#/caveats/3",
+        "quote": "NO_POLICY for every window means no resource SLA rule existed",
+        "why": "The window verdict does not establish whether a resource SLA rule existed elsewhere in the configuration."
+      },
+      {
+        "type": "T7",
+        "field": "#/caveats/6",
+        "quote": "The metric summaries represent a single transaction (checkout)",
+        "why": "One summary has overall scope and the other has checkout transaction scope; matching aggregates do not establish single-transaction coverage."
+      }
+    ],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 4,
+    "notes": "The load-extension and clock checks are useful, but the response overstates what NO_POLICY and matching summaries establish."
+  },
+  {
+    "id": "R102",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T7",
+        "field": "#/caveats/4",
+        "quote": "so there is no comparison of required capacity against the 297 lower bound in this data",
+        "why": "The capacity policy verdict is PASS, which reflects a product comparison with required capacity even though the requirement value is absent from the supplied evidence."
+      }
+    ],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 4,
+    "notes": "Most checks are specific and sound, but the caveat draws an unsupported conclusion from the missing requirement value."
+  },
+  {
+    "id": "R117",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T1",
+        "field": "#/summary",
+        "quote": "enable or perform knee detection",
+        "why": "Knee detection is a fixed product limitation and is not an operator step needed to establish a capacity bound."
+      },
+      {
+        "type": "T7",
+        "field": "#/hypotheses/0/recommended_check",
+        "quote": "so the PASS verdict covers the service under test rather than only the load generator",
+        "why": "The existing PASS already includes the latency policy for the system under test; the generator CPU guard is diagnostic."
+      },
+      {
+        "type": "T1",
+        "field": "#/hypotheses/1/recommended_check",
+        "quote": "Enable or implement a knee detector, or extend the run with additional escalating load steps until a failing step or knee is observed, so an upper_exclusive capacity ceiling can be estimated",
+        "why": "An upper bound comes from verified stage outcomes, independently of knee detection."
+      },
+      {
+        "type": "T8",
+        "field": "#/hypotheses/3/observation",
+        "quote": "The verified bound is 297 (p05_10s) in every stage",
+        "why": "The three stages have verified bound loads of 97, 197, and 297 users respectively."
+      },
+      {
+        "type": "T1",
+        "field": "#/recommendations/1/action",
+        "quote": "Enable or implement a knee detector, or escalate load beyond 300 users until a failing step, so an upper capacity bound can be estimated",
+        "why": "Implementing knee detection is not an operator action and is not required for an upper capacity bound."
+      }
+    ],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 2,
+    "notes": "It preserves the headline result but repeatedly gives an invalid knee-detector action and misstates stage loads."
+  },
+  {
+    "id": "R120",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T1",
+        "field": "#/hypotheses/0/recommended_check",
+        "quote": "enable or implement a knee detector with a documented definition so the bound can be converted into an upper range",
+        "why": "The product computes capacity bounds from verified stages independently of its unimplemented knee detector."
+      },
+      {
+        "type": "T2",
+        "field": "#/hypotheses/1/possible_explanation",
+        "quote": "the per-user request rate stays low (approximately 4 samples/s derived from the throughput ratio over the run)",
+        "why": "The roughly 4 samples/s ratio is a whole-run rate, not a per-user rate."
+      },
+      {
+        "type": "T1",
+        "field": "#/recommendations/1/action",
+        "quote": "enable/implement knee detection so the LOWER_BOUND of 297 users can be bounded above",
+        "why": "A knee detector is neither an operator remedy nor a prerequisite for an upper bound."
+      },
+      {
+        "type": "T2",
+        "field": "#/caveats/1",
+        "quote": "sample_count 3601, evaluation window 1767225600000 to 1767226500000 ms",
+        "why": "The 3601 samples and stored throughput ratio have whole-run scope; the cited evaluation window is shorter."
+      }
+    ],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 2,
+    "notes": "Several operator checks are useful, but the knee-detector advice and rate-scope errors could misdirect the analysis."
+  }
+]

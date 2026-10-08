@@ -1,0 +1,144 @@
+[
+  {
+    "id": "R001",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T2",
+        "field": "#/summary",
+        "quote": "Within that window: error_count is 0 across 600 samples",
+        "why": "The 600-sample error count is a whole-run metric summary, not a count for the 30,000 ms evaluation window."
+      },
+      {
+        "type": "T2",
+        "field": "#/hypotheses/3/observation",
+        "quote": "across 600 samples in a 30,000 ms window",
+        "why": "This assigns whole-run sample and error counts to the shorter evaluation window."
+      },
+      {
+        "type": "T7",
+        "field": "#/caveats/1",
+        "quote": "COMPLETE coverage applies only to that window",
+        "why": "The response narrows analysis coverage to the evaluation window although the evidence also includes whole-run summaries."
+      }
+    ],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 2,
+    "notes": "The verification steps are useful, but the response repeatedly misstates the scope of the 600 samples."
+  },
+  {
+    "id": "R016",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T2",
+        "field": "#/summary",
+        "quote": "Evidence within the 30-second evaluation window ... shows: 600 samples",
+        "why": "The 600 samples come from whole-run metric summaries."
+      },
+      {
+        "type": "T2",
+        "field": "#/caveats/2",
+        "quote": "cover the 600-sample policy window; they are not a run-wide error guarantee",
+        "why": "The cited 0/600 error ratio is reported for the whole run, not for a policy-window denominator."
+      },
+      {
+        "type": "T7",
+        "field": "#/caveats/5",
+        "quote": "this reflects only the evaluated window and policies",
+        "why": "This incorrectly restricts COMPLETE analysis coverage to the evaluation window despite the whole-run summaries."
+      }
+    ],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 2,
+    "notes": "It preserves the verdict and suggests practical checks, but its window-versus-run distinction is misleading."
+  },
+  {
+    "id": "R026",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T2",
+        "field": "#/summary",
+        "quote": "In the single 30,000 ms evaluation window ... summaries both show 600 samples, 0 errors",
+        "why": "Those metric summaries cover the whole run, which extends beyond the evaluation window."
+      },
+      {
+        "type": "T2",
+        "field": "#/hypotheses/3/possible_explanation",
+        "quote": "different quantities within the same window",
+        "why": "The metric-summary quantities are whole-run quantities, while the cited evaluation window is shorter."
+      },
+      {
+        "type": "T2",
+        "field": "#/hypotheses/5/observation",
+        "quote": "error_count is 0 in both the overall and transaction metric summaries for the window",
+        "why": "The error counts are reported in whole-run summaries."
+      },
+      {
+        "type": "T2",
+        "field": "#/recommendations/4/rationale",
+        "quote": "window-scoped sample and error counts",
+        "why": "The 600 samples and zero errors are whole-run counts."
+      },
+      {
+        "type": "T2",
+        "field": "#/caveats/2",
+        "quote": "window-scoped sample count 600 and error denominator 600",
+        "why": "Both values belong to the whole-run metric summary, so this run-versus-window comparison is invented."
+      }
+    ],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 2,
+    "notes": "The operator checks are actionable, but the repeated mislabeling of whole-run counts undermines the interpretation."
+  },
+  {
+    "id": "R126",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T2",
+        "field": "#/hypotheses/2/observation",
+        "quote": "run/evaluation span of ~30.099s",
+        "why": "The run spans 30.099 seconds, while the evaluation window spans 30 seconds."
+      },
+      {
+        "type": "T2",
+        "field": "#/hypotheses/4/observation",
+        "quote": "evaluation window covering 600 samples",
+        "why": "The evidence reports 600 samples for the whole run and gives no evaluation-window sample count."
+      },
+      {
+        "type": "T2",
+        "field": "#/recommendations/3/action",
+        "quote": "recompute throughput from sample_count and window duration",
+        "why": "That would combine a whole-run sample count with the shorter evaluation-window duration."
+      },
+      {
+        "type": "T2",
+        "field": "#/recommendations/5/rationale",
+        "quote": "single 30s/600-sample window",
+        "why": "The 600-sample count is whole-run, not window-scoped."
+      },
+      {
+        "type": "T7",
+        "field": "#/caveats/3",
+        "quote": "Coverage is limited to a single 30,000 ms evaluation window with 600 samples",
+        "why": "This misstates the coverage and attaches the whole-run sample count to the evaluation window."
+      },
+      {
+        "type": "T2",
+        "field": "#/caveats/4",
+        "quote": "the approximate ~19.9 rps read",
+        "why": "The evidence does not define the stored throughput numerator and denominator well enough to label their quotient as a request rate."
+      }
+    ],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 2,
+    "notes": "It retains the recorded verdict, but the window-scoped count and throughput claims could misdirect an operator."
+  }
+]

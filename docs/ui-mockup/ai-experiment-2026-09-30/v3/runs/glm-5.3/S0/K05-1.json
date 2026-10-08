@@ -1,0 +1,170 @@
+{
+ "stage": "S0",
+ "mode": "live",
+ "model": "glm-5.3",
+ "tag": {
+  "phase": "v3",
+  "model_tag": "glm-5.3",
+  "stage": "S0",
+  "case": "K05",
+  "rep": 1,
+  "attempt": 1
+ },
+ "qwen_exit": 0,
+ "wall_ms": 88447,
+ "relay": {
+  "schema_version": "advisory-ai-runtime-relay.v1",
+  "status": "FORWARDED_STRUCTURED_OUTPUT",
+  "request_count": 1,
+  "usage": {
+   "prompt_tokens": 2058,
+   "total_tokens": 9849,
+   "completion_tokens": 7791,
+   "prompt_tokens_details": {
+    "cached_tokens": 1024
+   },
+   "completion_tokens_details": {
+    "reasoning_tokens": 5853
+   }
+  },
+  "latency_ms": 87030,
+  "model_returned": "glm-5.3"
+ },
+ "relay_status": "FORWARDED_STRUCTURED_OUTPUT",
+ "usage": {
+  "prompt_tokens": 2058,
+  "total_tokens": 9849,
+  "completion_tokens": 7791,
+  "prompt_tokens_details": {
+   "cached_tokens": 1024
+  },
+  "completion_tokens_details": {
+   "reasoning_tokens": 5853
+  }
+ },
+ "latency_ms": 87030,
+ "status": "OK",
+ "note": null,
+ "output": {
+  "caveats": [
+   "This advisory interpretation does not modify the deterministic policy verdict of FAIL or the recorded policy_failure finding.",
+   "No error details (response codes, response messages, timestamps, or failing sample identifiers) are present in the evidence, so no cause for the 2 errors can be supported from this data.",
+   "Only 100 samples were collected; the 2/100 error-rate estimate carries limited statistical support at this volume.",
+   "Only one policy check (error-limit on error_rate_ratio) appears in the evidence; the reported latency and throughput values being unchecked is not equivalent to passing them.",
+   "The evidence contains no baseline or control run, no time-series, and no anomaly-test results; nothing here supports attributing the errors to any specific event or condition.",
+   "The throughput denominator's time base and the run duration are not defined in the evidence; any duration inference (e.g., ~99.1 seconds) is unverified and must be confirmed against raw timestamps.",
+   "Identical overall and 'checkout' summaries suggest, but do not confirm, a single-sampler run; per-label verification against the raw JTL is required before scoping conclusions.",
+   "run_validity VALID and analysis_coverage COMPLETE attest to the analysis pipeline's processing of this run; they do not guarantee the presence of error diagnostics, additional samplers, or additional policy checks in the evidence."
+  ],
+  "hypotheses": [
+   {
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0",
+     "analysis-result.json#/evidence/2",
+     "analysis-result.json#/findings/0",
+     "analysis-result.json#/policy_verdict"
+    ],
+    "observation": "The error-limit policy check on metric error_rate_ratio observed 2 errors out of 100 samples (numerator 2, denominator 100) against threshold 0.01 with operator lte, returning status FAIL; the run's policy_verdict is FAIL and the only finding is a policy_failure for rule_id error-limit.",
+    "possible_explanation": "The system under test may have genuinely returned error responses for 2 of 100 requests (a 0.02 ratio, above the 0.01 limit), for example failures on the checkout path.",
+    "rank": 1,
+    "recommended_check": "Open the source JTL for this run and inspect the 2 failing samples' response codes, response messages, and timestamps to confirm they are genuine errors rather than recording or labeling artifacts."
+   },
+   {
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0",
+     "analysis-result.json#/evidence/1"
+    ],
+    "observation": "The overall metric summary and the 'checkout' transaction summary (label checkout, sample_kind JMETER_SAMPLER, empty group_path) are identical in every reported field: sample_count 100, error_count 2, error_rate_ratio 2/100, latency_ms p50 50 / p95 95 / p99 99 / max 100, and throughput_rps 100000/99100.",
+    "possible_explanation": "The run may consist entirely of the checkout sampler, so the overall aggregate equals that single transaction; alternatively, other samplers may exist in the raw data but were not summarized in this evidence.",
+    "rank": 2,
+    "recommended_check": "Count samples per label/sampler in the raw JTL and compare against the reported summaries to confirm whether checkout is the only sampler in the run or whether other labels are missing from the evidence."
+   },
+   {
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0",
+     "analysis-result.json#/evidence/1"
+    ],
+    "observation": "sample_count is 100 and error_count is 2 in both the overall and checkout summaries.",
+    "possible_explanation": "At this sample size, the measured 0.02 error rate may be an imprecise estimate of the system's true error rate; a longer or higher-volume run could yield a materially different ratio.",
+    "rank": 3,
+    "recommended_check": "Re-run or extend the test to collect a larger sample count and compare the error_rate_ratio across runs before treating 2/100 as a stable characteristic of the system."
+   },
+   {
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0",
+     "analysis-result.json#/evidence/1"
+    ],
+    "observation": "Throughput is reported as the ratio 100000/99100 (the field name denotes rps, i.e., approximately 1.009 requests per second) for both scopes; the evidence does not define the denominator's time base or the run duration.",
+    "possible_explanation": "The run may have spanned roughly 99.1 seconds at about one request per second, since 100 samples over 99.1 seconds equals 100000/99100; however, no duration is stated anywhere in the evidence.",
+    "rank": 4,
+    "recommended_check": "Verify the run's start and end timestamps and the throughput computation's time base from the raw JTL before using duration or throughput in any further interpretation."
+   },
+   {
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0",
+     "analysis-result.json#/evidence/2"
+    ],
+    "observation": "Only one policy check appears in the evidence (error-limit on error_rate_ratio); latency percentiles (p50 50, p95 95, p99 99, max 100) and throughput are reported but not evaluated against any rule in this evidence.",
+    "possible_explanation": "Latency or throughput thresholds may not be configured for this analysis, or such checks may exist but are not represented in this evidence set.",
+    "rank": 5,
+    "recommended_check": "Review the policy configuration applied to this run to determine which rules and metrics are covered and whether latency/throughput gates should be added or evaluated."
+   }
+  ],
+  "recommendations": [
+   {
+    "action": "Accept the deterministic verdict as FAIL: the overall error rate of 2/100 breaches the error-limit rule (operator lte, threshold 0.01). Withhold release or sign-off on this run until the error rate is investigated and brought within the threshold.",
+    "evidence_refs": [
+     "analysis-result.json#/policy_verdict",
+     "analysis-result.json#/evidence/2",
+     "analysis-result.json#/findings/0"
+    ],
+    "rationale": "The policy_verdict is FAIL and the sole finding is a policy_failure for rule_id error-limit; this advisory interpretation cannot change that outcome.",
+    "rank": 1
+   },
+   {
+    "action": "Inspect the two failing samples in the raw JTL (response code, response message, timestamp, label/thread) to identify the failure mode behind the 2 errors.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0",
+     "analysis-result.json#/evidence/2"
+    ],
+    "rationale": "The evidence reports error_count 2 but contains no error detail, so the cause of the failures is currently unknown.",
+    "rank": 2
+   },
+   {
+    "action": "Confirm whether the run contains only the checkout sampler, since the overall and checkout summaries are identical in all reported fields, and scope remediation accordingly.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0",
+     "analysis-result.json#/evidence/1"
+    ],
+    "rationale": "If all 100 samples are checkout requests, remediation focuses on the checkout path; if other samplers exist but are absent from the summaries, the evidence's representativeness must be verified first.",
+    "rank": 3
+   },
+   {
+    "action": "Verify the policy configuration for this run (which rules, metrics, and thresholds are defined) to establish whether latency and throughput gates exist and should be evaluated.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0",
+     "analysis-result.json#/evidence/2"
+    ],
+    "rationale": "Only the error-limit check is present in this evidence; the reported latency and throughput values being unchecked does not indicate they passed.",
+    "rank": 4
+   },
+   {
+    "action": "Re-run the load test with a larger sample count and a documented run duration before treating the 0.02 error rate as a stable property of the system.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0",
+     "analysis-result.json#/evidence/1"
+    ],
+    "rationale": "With only 100 samples, the error-rate estimate has limited statistical support, and the evidence does not state the run duration; a higher-volume rerun would test stability of the ratio.",
+    "rank": 5
+   }
+  ],
+  "schema_version": "ai-advice-output.v1",
+  "summary": "Run jmeter_jtl_csv-eedea044... is recorded as VALID with COMPLETE analysis coverage. The deterministic policy verdict is FAIL: the overall error_rate_ratio of 2/100 (0.02) breached the 'error-limit' rule (operator lte, threshold 0.01), which is the analysis's only finding. Both the overall metric summary and the only transaction summary ('checkout', sample_kind JMETER_SAMPLER) report identical values — sample_count 100, error_count 2, latency_ms p50 50 / p95 95 / p99 99 / max 100, throughput_rps 100000/99100 — which is consistent with, but does not prove, a run composed solely of the checkout sampler. No latency or throughput policy check appears in this evidence, and no error details (codes, messages, timestamps) are included. This advisory interpretation does not change the FAIL verdict."
+ },
+ "schema": "ai-experiment-run.v3",
+ "case": "K05",
+ "rep": 1,
+ "model_id": "glm-5.3",
+ "net_retries": 0,
+ "infra_retries": 0
+}

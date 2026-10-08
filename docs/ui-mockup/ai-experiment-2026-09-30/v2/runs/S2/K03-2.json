@@ -1,0 +1,196 @@
+{
+ "stage": "S2",
+ "mode": "live",
+ "model": "deepseek-v4-flash-0731",
+ "tag": {
+  "phase": "v2-pilot",
+  "stage": "S2",
+  "case": "K03",
+  "rep": 2,
+  "attempt": 1
+ },
+ "qwen_exit": 0,
+ "wall_ms": 88962,
+ "relay": {
+  "schema_version": "advisory-ai-runtime-relay.v1",
+  "status": "FORWARDED_STRUCTURED_OUTPUT",
+  "request_count": 1,
+  "usage": {
+   "prompt_tokens": 13744,
+   "total_tokens": 22548,
+   "completion_tokens": 8804,
+   "prompt_tokens_details": {
+    "cached_tokens": 1024
+   },
+   "completion_tokens_details": {
+    "reasoning_tokens": 6218
+   }
+  },
+  "latency_ms": 87628,
+  "model_returned": "deepseek-v4-flash-0731"
+ },
+ "relay_status": "FORWARDED_STRUCTURED_OUTPUT",
+ "usage": {
+  "prompt_tokens": 13744,
+  "total_tokens": 22548,
+  "completion_tokens": 8804,
+  "prompt_tokens_details": {
+   "cached_tokens": 1024
+  },
+  "completion_tokens_details": {
+   "reasoning_tokens": 6218
+  }
+ },
+ "latency_ms": 87628,
+ "status": "OK",
+ "note": null,
+ "output": {
+  "schema_version": "ai-advice-output.v1",
+  "summary": "Run is VALID with COMPLETE analysis coverage. Deterministic verdict: NO_POLICY. No product policy is configured (policy_verdict=NO_POLICY and window-level resource_verdict=NO_POLICY), so the run cannot render PASS/FAIL; a missing policy is not a pass even though every observed error check passed (window-level 0/30399, 0/36581, 0/45668; whole-run 0/132623). The capacity summary reports a LOWER_BOUND with lower_inclusive=20 users, derived from three verified stages (r1-users5, r1-users10, r1-users20), each PASS with 30/30 complete bins and PASS diagnostic generator guards. capacity_knee is null because KNEE_DETECTOR_NOT_IMPLEMENTED is a fixed product limitation and is independent of the bound. upper_exclusive=null because no load above 20 users was tested, so the actual ceiling is not established. Whole-run latency is p50/p95/p99/max = 94/202/298/2406 ms. Clock alignment is not_verified_by_core, so temporal/causal ordering is not supported; any latency-vs-resource correlation requires clock verification first.",
+  "hypotheses": [
+   {
+    "rank": 1,
+    "observation": "capacity_summary reports bound_type=LOWER_BOUND with lower_inclusive=20 and upper_exclusive=null; the highest stage r1-users20 achieved target 20 with 30/30 complete bins and its window policy summary verdict is PASS.",
+    "possible_explanation": "The system may be able to sustain more than 20 users; because no stage above 20 was executed, a failing load point and therefore an upper capacity bound are unknown.",
+    "recommended_check": "Run additional explicit stages above 20 users (e.g., 25, 30, 40) and record the load at which the business policy or generator guard no longer passes.",
+    "evidence_refs": [
+     "analysis-result.json#/capacity_summary",
+     "analysis-result.json#/evidence/39",
+     "analysis-result.json#/evidence/40"
+    ]
+   },
+   {
+    "rank": 2,
+    "observation": "capacity_summary has policy_verdict=NO_POLICY with no reasons, and each window_policy_summary reports resource_verdict=NO_POLICY while business_verdict=PASS and observed errors are 0.",
+    "possible_explanation": "No configured product/capacity policy exists to evaluate, so a deterministic PASS/FAIL cannot be rendered; the zero-error observations are informational only.",
+    "recommended_check": "Configure an explicit product policy (e.g., error-rate or latency threshold over the evaluation window) and rerun so that a PASS/FAIL verdict can be produced.",
+    "evidence_refs": [
+     "analysis-result.json#/capacity_summary",
+     "analysis-result.json#/evidence/36",
+     "analysis-result.json#/evidence/38",
+     "analysis-result.json#/evidence/40"
+    ]
+   },
+   {
+    "rank": 3,
+    "observation": "resource_binding reports clock_alignment=not_verified_by_core and an evaluation window of 1,040,000 ms within a 1,101,102 ms run (mode=explicit_windows).",
+    "possible_explanation": "Any apparent ordering between latency events and resource metrics cannot be assumed because the clock relationship between generator and services is not verified; lead/lag or temporal causality is unsupported by this data.",
+    "recommended_check": "Verify clock alignment between the load generator and monitored services before correlating latency spikes with resource series.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/7"
+    ]
+   },
+   {
+    "rank": 4,
+    "observation": "Transaction 'add product to cart' has p50=4 ms, p99=96 ms, max=1080 ms; 'reset cart' has p50=3 ms, p99=97 ms, max=1081 ms; counts of samples at the reported max are not present in the input.",
+    "possible_explanation": "Occasional straggler requests (for example GC, scheduling, or network effects) are not representative of typical latency, but their frequency cannot be quantified from this evidence.",
+    "recommended_check": "Inspect per-window or per-bucket latency time series for these transactions to quantify how often and when the spikes occur before attributing a cause.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/1",
+     "analysis-result.json#/evidence/6"
+    ]
+   },
+   {
+    "rank": 5,
+    "observation": "Transaction 'home' has p99=462 ms and max=1100 ms, while the whole-run overall summary has p99=298 ms and max=2406 ms; per-transaction window-level distributions are not provided.",
+    "possible_explanation": "The home flow may involve heavier work that produces a higher tail latency than the overall mix, but without per-transaction window data or a call graph this is unconfirmed.",
+    "recommended_check": "Retrieve per-transaction latency distributions per window and examine service-side metrics for the home flow across the r1-users5/10/20 stages.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0",
+     "analysis-result.json#/evidence/4"
+    ]
+   },
+   {
+    "rank": 6,
+    "observation": "checkoutservice cpu_cores mean rises from 0.0471662333 (r1-users5) to 0.0592057667 (r1-users10) to 0.0675350667 (r1-users20); frontend memory_bytes mean rises from 12,072,709.7 to 12,869,495.5 to 14,338,480.4 across the same stages.",
+    "possible_explanation": "Resource demand grows with user load as expected, but the node's core count or capacity is not in the input, so utilization, headroom, or saturation cannot be inferred from these absolute values.",
+    "recommended_check": "Add stages above 20 users and watch these series for a sharp inflection point while ensuring clock alignment, without treating current low absolute values as spare capacity.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/10",
+     "analysis-result.json#/evidence/18",
+     "analysis-result.json#/evidence/26",
+     "analysis-result.json#/evidence/13",
+     "analysis-result.json#/evidence/29"
+    ]
+   },
+   {
+    "rank": 7,
+    "observation": "Generator cfs_throttled_period_ratio max is 0.059405940594 (r1-users5), 0.148514851485 (r1-users10), 0.13 (r1-users20), while the diagnostic guard threshold is 0.2 and all three generator resource policy checks are PASS.",
+    "possible_explanation": "Brief generator CPU throttling spikes occur but stayed below the diagnostic threshold at the tested loads; at higher load stages they could cross 0.2 and invalidate that stage for product-bound use.",
+    "recommended_check": "Rerun higher-load stages while watching this ratio; if the diagnostic guard fails, rerun with a load generator that is not saturated (do not change the guard's diagnostic effect).",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/8",
+     "analysis-result.json#/evidence/16",
+     "analysis-result.json#/evidence/24",
+     "analysis-result.json#/evidence/32"
+    ]
+   }
+  ],
+  "recommendations": [
+   {
+    "rank": 1,
+    "action": "Configure an explicit product/capacity policy so future runs can render PASS or FAIL.",
+    "rationale": "The deterministic verdict is NO_POLICY because no policy is configured; zero errors or healthy windows do not turn a missing policy into PASS, and only a configured policy yields PASS/FAIL.",
+    "evidence_refs": [
+     "analysis-result.json#/capacity_summary",
+     "analysis-result.json#/evidence/36",
+     "analysis-result.json#/evidence/38",
+     "analysis-result.json#/evidence/40"
+    ]
+   },
+   {
+    "rank": 2,
+    "action": "Rerun with additional load stages above 20 users to establish an upper capacity bound.",
+    "rationale": "The computed bound is LOWER_BOUND with lower_inclusive=20 and upper_exclusive=null; only 5, 10, and 20 users were tested and all passed with 30/30 bins, so the ceiling load is unknown.",
+    "evidence_refs": [
+     "analysis-result.json#/capacity_summary",
+     "analysis-result.json#/evidence/39",
+     "analysis-result.json#/evidence/40",
+     "analysis-result.json#/evidence/34"
+    ]
+   },
+   {
+    "rank": 3,
+    "action": "Verify clock alignment between the load generator and monitored services before any temporal analysis.",
+    "rationale": "resource_binding records clock_alignment=not_verified_by_core, so lead/lag ordering or temporal causal hypotheses are not supported until clocks are verified.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/7"
+    ]
+   },
+   {
+    "rank": 4,
+    "action": "Inspect per-transaction latency time series for 'add product to cart', 'reset cart', and 'home' to quantify tail spikes.",
+    "rationale": "Low p99 values alongside max values of ~1,080 ms and the home transaction's p99=462 ms suggest rare outliers whose frequency and timing are not present in this input.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/1",
+     "analysis-result.json#/evidence/6",
+     "analysis-result.json#/evidence/4"
+    ]
+   },
+   {
+    "rank": 5,
+    "action": "Monitor generator cfs_throttled_period_ratio in future higher-load stages; if the diagnostic guard fails, rerun with a non-saturated load generator.",
+    "rationale": "Observed max throttling reached 0.1485/0.13 against a diagnostic threshold of 0.2, so higher loads could trip the guard; a failed guard makes that stage unusable for a product bound, and its effect remains diagnostic by contract.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/16",
+     "analysis-result.json#/evidence/24",
+     "analysis-result.json#/evidence/32"
+    ]
+   }
+  ],
+  "caveats": [
+   "NO_POLICY means no configured policy, not a pass; a healthy window, complete run, or zero observed errors does not change the deterministic verdict to PASS.",
+   "capacity_knee is null because knee_reason=KNEE_DETECTOR_NOT_IMPLEMENTED, a fixed product limitation; the LOWER_BOUND is derived from verified stages independently of any knee and no knee-detector remediation is implied.",
+   "Only three load levels (5, 10, 20 users) were tested and all passed; upper_exclusive=null, so the true maximum sustainable load is unknown and any extrapolation above 20 users is a hypothesis.",
+   "clock_alignment=not_verified_by_core, so no temporal ordering or causal relationship between latency events and resource metrics can be asserted.",
+   "The input contains no individual samples, counts of samples at reported max latency, call graph or topology, log bodies, traces, or release/configuration data; latency outliers therefore cannot be attributed to a cause.",
+   "The evaluation window covers 1,040,000 ms of the 1,101,102 ms run (about 94.5%); window-level error counts (0/30399, 0/36581, 0/45668) are within-window quantities and are not comparable to whole-run counts.",
+   "Resource summaries report absolute values (e.g., frontend cpu_cores mean ~0.187) without node core capacity in the input, so no utilization, spare-capacity, or saturated-load claim is made.",
+   "Generator guard checks are diagnostic by contract; any failed guard invalidates that stage for a product bound, and its effect must not be changed to binding, SLA, or enforcing."
+  ]
+ },
+ "schema": "ai-experiment-run.v2",
+ "phase": "pilot",
+ "case": "K03",
+ "rep": 2
+}

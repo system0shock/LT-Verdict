@@ -1,0 +1,276 @@
+{
+ "stage": "S0",
+ "mode": "live",
+ "model": "qwen3.8-max",
+ "tag": {
+  "phase": "v3",
+  "model_tag": "qwen3.8-max",
+  "stage": "S0",
+  "case": "K07",
+  "rep": 1,
+  "attempt": 1
+ },
+ "qwen_exit": 0,
+ "wall_ms": 274105,
+ "relay": {
+  "schema_version": "advisory-ai-runtime-relay.v1",
+  "status": "FORWARDED_STRUCTURED_OUTPUT",
+  "request_count": 1,
+  "usage": {
+   "prompt_tokens": 11045,
+   "total_tokens": 30761,
+   "completion_tokens": 19716,
+   "prompt_tokens_details": {
+    "cached_tokens": 1024,
+    "text_tokens": 11045
+   },
+   "completion_tokens_details": {
+    "reasoning_tokens": 11795,
+    "text_tokens": 19716
+   }
+  },
+  "latency_ms": 272658,
+  "model_returned": "qwen3.8-max"
+ },
+ "relay_status": "FORWARDED_STRUCTURED_OUTPUT",
+ "usage": {
+  "prompt_tokens": 11045,
+  "total_tokens": 30761,
+  "completion_tokens": 19716,
+  "prompt_tokens_details": {
+   "cached_tokens": 1024,
+   "text_tokens": 11045
+  },
+  "completion_tokens_details": {
+   "reasoning_tokens": 11795,
+   "text_tokens": 19716
+  }
+ },
+ "latency_ms": 272658,
+ "status": "OK",
+ "note": null,
+ "output": {
+  "schema_version": "ai-advice-output.v1",
+  "summary": "The deterministic verdict is preserved unchanged: run_validity VALID, analysis_coverage COMPLETE (reasons []), policy_verdict FAIL; window_policy_summary records business_verdict FAIL, resource_verdict FAIL, verdict FAIL for window_id run-intersection (evaluation 1790630475000-1790630820000). Exactly two policy checks appear and both are FAIL: rule overall-errors (error_rate_ratio observed numerator 2471 / denominator 38628, operator lte, threshold 0.01) and rule metrics-direct/paymentservice-cpu-throttle-ratio (operator gt, threshold 0.2, unit ratio, effect sla). These remain distinct failures; neither subsumes the other.\n\nLoad side: overall sample_count 40306, error_count 2471, latency_ms p50 39 / p95 98 / p99 134 / max 989, throughput_rps reported as 40306000/360008. All 2471 errors are recorded against the single JMeter transaction \"checkout\" (error_rate_ratio 2471/6717, ~36.8% of its samples); \"add product to cart\" (6717), \"cart\" (6717), \"home\" (6721), \"product\" (6717) and \"reset cart\" (6717) each report error_count 0.\n\nError side: one OpenSearch group only - error_type frontend.request_error, service frontend, message \"request error\", count 2471, first_epoch_ms 1790630540673, last_epoch_ms 1790630663409 (a 122736 ms span), error_rate_per_minute 299.515152, coverage COMPLETE, samples_per_group_limit 2 (two sample documents, message_truncated false). The timeline shows zero counts before 1790630535000, nine consecutive 15 s buckets with counts 189, 289, 298, 296, 286, 307, 318, 307, 181, then zero from 1790630670000 onward.\n\nResource side: the only threshold finding is paymentservice cpu_throttle_ratio over 7 cells (1790630565000-1790630670000, observed_min 0.522390289979, observed_max 1). Its 23-cell distribution is bimodal (min 0, median 0.003717472119, q25 0, mean 0.2857929157600434782608695652173913, q75 0.7353572514335, q95 1, max 1) while paymentservice cpu_cores is very low (mean 0.01080439130434782608695652173913043, max 0.016313 cores). paymentservice memory_bytes spans 2666496-37756928 bytes (mean 26572651.56521739130434782608695652, slope_per_second 19241.26106719367588932806324110672, split_half_shift 680960). frontend cpu_cores mean 0.1880700434782608695652173913043478 / max 0.199879 and checkoutservice cpu_cores mean 0.04359030434782608695652173913043478 / max 0.052275 have no throttle series collected at all. Every resource series reports expected_cells 23, observed_cells 23, missing_cells 0, longest_gap_cells 0, reasons []; all 8 source queries report SUCCESS with status COMPLETE, step_ms 15000, retries 0.\n\nBinding and limits: resource_binding mode run_intersection with clock_alignment \"not_verified_by_core\", dropped_leading_cells 1 (1536 ms), dropped_trailing_cells 1 (13472 ms), run 1790630473464-1790630833472, snapshot 1790630400000-1790630895000. Because clock alignment is unverified, the recorded overlap between the error burst (1790630540673-1790630663409) and the throttle-violation cells (1790630565000-1790630670000) supports no lead/lag ordering and no causal claim in either direction; clock verification is the first recommended step. Additional limits: only two generic error samples with no status code, endpoint or trace; the policy denominator 38628 differs from the overall sample_count 40306; no baseline or control run is referenced; and no latency or memory policy results appear in the evidence, so their absence is not a pass. This advice does not alter the FAIL verdict.",
+  "hypotheses": [
+   {
+    "rank": 1,
+    "observation": "The transaction-scoped metric summary for label \"checkout\" (sample_kind JMETER_SAMPLER, group_path []) reports sample_count 6717, error_count 2471 and error_rate_ratio numerator 2471 / denominator 6717. The overall summary reports the identical error_count 2471 across sample_count 40306. Every other transaction reports error_count 0: \"add product to cart\" (6717), \"cart\" (6717), \"home\" (6721), \"product\" (6717), \"reset cart\" (6717).",
+    "possible_explanation": "The failures may be confined to a step, downstream call or data set exercised only on the checkout path; alternatively the checkout sampler may be the single point at which a generic upstream error is surfaced. The referenced evidence does not distinguish these.",
+    "recommended_check": "Retrieve the two referenced error documents via their source_url, then split the checkout rows of the JTL by success flag for the burst buckets (1790630535000-1790670000 range as bucketed: 1790630535000-1790630670000) and compare failed versus successful rows on response code, response message, target URL, thread and parameterized data.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/3",
+     "analysis-result.json#/evidence/0",
+     "analysis-result.json#/evidence/1",
+     "analysis-result.json#/evidence/2",
+     "analysis-result.json#/evidence/4",
+     "analysis-result.json#/evidence/5",
+     "analysis-result.json#/evidence/6"
+    ]
+   },
+   {
+    "rank": 2,
+    "observation": "resource_policy_check for series metrics-direct/paymentservice-cpu-throttle-ratio has status FAIL (operator gt, threshold \"0.2\", unit ratio, effect sla, window_id run-intersection, reason null). The matching resource_summary over 23 observed cells reports min 0, q05 0, q25 0, median 0.003717472119, mean 0.2857929157600434782608695652173913, q75 0.7353572514335, q95 1, max 1, iqr 0.7353572514335, sample_standard_deviation 0.4383538008562475941469463407447362, slope_per_second -0.0009313654129923583662714097496706192, split_half_shift 0.0020369209495. paymentservice cpu_cores over the same window has mean 0.01080439130434782608695652173913043 and max 0.016313 cores. The single resource_threshold_violation finding covers cell_count 7 from 1790630565000 to 1790630670000 with observed_min 0.522390289979 and observed_max 1.",
+    "possible_explanation": "A throttle ratio at or near 1 alongside very low absolute core consumption is consistent with a small CPU limit/quota on paymentservice, so modest demand would be throttled. Other possibilities include bursty sub-interval demand smoothed by interval_mean aggregation over 15 s cells, or a ratio computed on a small throttling-period denominator. None of these is established by the referenced fields.",
+    "recommended_check": "Read the configured CPU request/limit for paymentservice (cgroup cpu.max quota and period) and the per-interval throttled-periods versus total-periods counters for the 7 violating cells; compare demanded cores against the configured ceiling to test whether the limit rather than the workload drives the ratio.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/13",
+     "analysis-result.json#/evidence/15",
+     "analysis-result.json#/findings/0",
+     "analysis-result.json#/evidence/12"
+    ]
+   },
+   {
+    "rank": 3,
+    "observation": "resource_binding reports clock_alignment \"not_verified_by_core\", mode run_intersection, evaluation_from_epoch_ms 1790630475000, evaluation_to_epoch_ms 1790630820000, run_from_epoch_ms 1790630473464, run_to_epoch_ms 1790630833472, snapshot_from_epoch_ms 1790630400000, snapshot_to_epoch_ms 1790630895000, dropped_leading_cells 1 (dropped_leading_millis 1536) and dropped_trailing_cells 1 (dropped_trailing_millis 13472). As recorded, error timestamps run 1790630540673-1790630663409 and the throttle-violation cells run 1790630565000-1790630670000.",
+    "possible_explanation": "Both windows may describe the same real interval, but with clock alignment unverified the epoch values from the load generator, the OpenSearch error store and Prometheus could carry unknown relative offsets. The recorded ordering (error timestamps preceding the first violating cell) is therefore not evidence of lead/lag or of causation in either direction.",
+    "recommended_check": "Verify and record the clock relationship first: measure NTP/wall-clock offset for the JMeter host, the OpenSearch ingest path and the Prometheus scrape/export path, and confirm whether error timestamps are event-time or ingest-time. Then re-derive the per-15 s error counts and throttle series on a single verified clock before any ordering comparison.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/7",
+     "analysis-result.json#/evidence/19",
+     "analysis-result.json#/findings/0",
+     "analysis-result.json#/evidence/15"
+    ]
+   },
+   {
+    "rank": 4,
+    "observation": "paymentservice memory_bytes over 23 observed cells (missing_cells 0, aggregation interval_mean, unit bytes) reports min 2666496, q05 9794969.6, q25 23654400, median 29720576, mean 26572651.56521739130434782608695652, q75 31997610.5, q95 34331852.8, max 37756928, iqr 8343210.5, mad 2834432, sample_standard_deviation 8486780.428056753136956609702767636, slope_per_second 19241.26106719367588932806324110672 and split_half_shift 680960. No memory policy check appears in the evidence.",
+    "possible_explanation": "A minimum far below q05 together with a positive per-second slope could reflect a container restart or re-initialization inside an interval, a partial-interval average, or genuine growth during the run. The summary statistics alone cannot separate these, and no restart or OOM evidence is referenced.",
+    "recommended_check": "Print the per-cell paymentservice memory series across 1790630475000-1790630820000 to locate the low cell(s), check container restart/OOMKilled events and start timestamps for paymentservice in that window, and confirm the exported metric is a gauge averaged per 15 s interval rather than a counter-derived value.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/14",
+     "analysis-result.json#/evidence/18"
+    ]
+   },
+   {
+    "rank": 5,
+    "observation": "The errors evidence returns exactly one group: error_type \"frontend.request_error\", service \"frontend\", count 2471, message \"request error\", with samples_per_group_limit 2, sample_message_bytes_max 4096 and two sample documents (message_truncated false). Coverage status COMPLETE, shards successful 1 of 1 (failed 0, skipped 0), returned_groups 1, sum_other_doc_count 0, doc_count_error_upper_bound 0, group_limit 50, timed_out false, reasons []. total_errors 2471 and error_rate_per_minute 299.515152.",
+    "possible_explanation": "All 2471 errors may share one failure mode reported generically by the frontend, or several distinct failure modes may be collapsed into a single error_type/message pair. With two samples and no status code, endpoint, exception or trace field in the evidence, this cannot be resolved.",
+    "recommended_check": "Re-query the same index over 1790630400000-1790630895000 with a higher per-group sample limit and grouping on all available fields (HTTP status, URL/endpoint, exception class, trace/span id, host or pod) to test whether the single returned group hides sub-populations.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/19"
+    ]
+   },
+   {
+    "rank": 6,
+    "observation": "The only error group is attributed to service \"frontend\" (error_type frontend.request_error, count 2471), while the only resource policy FAIL and the only resource_threshold_violation finding are for paymentservice cpu_throttle_ratio. frontend cpu_cores has mean 0.1880700434782608695652173913043478, median 0.188818, q95 0.1997082 and max 0.199879 cores; frontend memory_bytes mean 12027993.04347826086956521739130435, max 12863488. The collected query list includes cpu_throttle_ratio for paymentservice only; frontend and checkoutservice have cpu_cores and memory_bytes series only.",
+    "possible_explanation": "The component recording the errors may not be the component whose resource policy failed: frontend could be relaying a downstream failure, could itself be constrained in a way that was never measured, or could simply be the busiest component (its cpu_cores max 0.199879 lies just below a round 0.2 value, which may or may not correspond to a configured limit). No referenced field states frontend's limit.",
+    "recommended_check": "Collect cpu_throttle_ratio plus configured CPU requests/limits for frontend and checkoutservice over the same window, confirm whether 0.2 cores is frontend's ceiling, and correlate per-15 s frontend error counts against frontend and paymentservice saturation only after clock alignment is verified.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/19",
+     "analysis-result.json#/evidence/10",
+     "analysis-result.json#/evidence/11",
+     "analysis-result.json#/evidence/13",
+     "analysis-result.json#/evidence/8",
+     "analysis-result.json#/evidence/18"
+    ]
+   },
+   {
+    "rank": 7,
+    "observation": "The policy_check for rule overall-errors reports observed numerator 2471 and denominator 38628 (operator lte, threshold 0.01, status FAIL, scope kind overall, window_id run-intersection), whereas the overall metric_summary reports sample_count 40306 and error_rate_ratio denominator 40306 with the same numerator 2471. resource_binding shows the evaluation window trimmed relative to the run window by 1 leading cell (1536 ms) and 1 trailing cell (13472 ms).",
+    "possible_explanation": "The two denominators may reflect different windows or different sample-inclusion rules (trimmed evaluation window versus full run window, or transaction-scoped versus all samples). The referenced fields do not explain the 1678-sample difference.",
+    "recommended_check": "Recount JTL samples inside 1790630475000-1790630820000 versus 1790630473464-1790630833472, and inspect the overall-errors rule definition to confirm which window and which sample kinds its denominator intends.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/16",
+     "analysis-result.json#/evidence/0",
+     "analysis-result.json#/evidence/7"
+    ]
+   },
+   {
+    "rank": 8,
+    "observation": "Overall latency_ms is p50 39, p95 98, p99 134, max 989 with error_count 2471 of sample_count 40306; checkout latency_ms is p50 45, p95 97, p99 100, max 869. The error timeline shows nine consecutive 15 s buckets (189, 289, 298, 296, 286, 307, 318, 307, 181) bounded by zero-count buckets before 1790630535000 and from 1790630670000 onward. No latency policy check appears in the evidence.",
+    "possible_explanation": "Failed requests may have completed quickly (immediate rejection rather than timeout), keeping aggregate percentiles low; or the percentiles may be dominated by successful samples and mask a slower failing subset. The evidence does not separate latency by outcome.",
+    "recommended_check": "Split checkout and overall elapsed/connect/response-time statistics by the JMeter success flag, comparing the nine burst buckets against the zero-error buckets, to see whether failures were fast or slow.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0",
+     "analysis-result.json#/evidence/3",
+     "analysis-result.json#/evidence/19"
+    ]
+   },
+   {
+    "rank": 9,
+    "observation": "Both error sample documents reference index \"ltv-errors-20260928-211906-resource-cpu-33efd5\" and carry load_input_sha256 6ebefebf217e05e9fc25ae3d46962f707b3aa7301d662ba5d364c8a4f70d1b0c. source-summary reports auto_window_status DERIVED, window_origin auto, profile_id \"multiple\", detected_idle_gaps 0, longest_idle_gap_ms null, cap_exceeded false. No baseline or control run is referenced anywhere in the evidence.",
+    "possible_explanation": "The \"resource-cpu\" token in the index name may indicate this run was executed under a CPU-resource scenario (for example a deliberately constrained CPU allocation), which would be consistent with a throttle-ratio policy FAIL; it may equally be an unrelated naming convention. No referenced field states the scenario, and no comparison run is present.",
+    "recommended_check": "Confirm the scenario/fault-injection metadata and the index-naming convention behind this run, and establish whether a control run without the CPU condition exists so the FAIL can be classified as expected-scenario behaviour versus an organic regression.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/19",
+     "analysis-result.json#/evidence/18"
+    ]
+   }
+  ],
+  "recommendations": [
+   {
+    "rank": 1,
+    "action": "Before any remediation, expand the error evidence: fetch the two referenced documents at their source_url, then re-query index ltv-errors-20260928-211906-resource-cpu-33efd5 for 1790630400000-1790630895000 with a higher sample limit and grouping on status code, endpoint, exception and trace fields, restricted to the burst window 1790630535000-1790630670000.",
+    "rationale": "The business FAIL rests on 2471 errors whose only described content is the generic message \"request error\" under one error_type with samples_per_group_limit 2; without response detail the failing call and failure mode cannot be identified.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/19",
+     "analysis-result.json#/evidence/16",
+     "analysis-result.json#/findings/1"
+    ]
+   },
+   {
+    "rank": 2,
+    "action": "Inspect the paymentservice CPU ceiling and throttling counters for the 7 violating cells (1790630565000-1790630670000): record cgroup cpu.max quota/period, per-interval throttled versus total periods, and demanded cores (series mean 0.01080439130434782608695652173913043, max 0.016313 cores).",
+    "rationale": "This is the only resource_policy_check FAIL (gt 0.2, effect sla, observed_max 1, observed_min 0.522390289979) and it drives resource_verdict FAIL; the coexistence of a near-total throttle ratio with very low absolute core usage makes the configured limit the first thing to quantify.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/15",
+     "analysis-result.json#/findings/0",
+     "analysis-result.json#/evidence/13",
+     "analysis-result.json#/evidence/12",
+     "analysis-result.json#/evidence/17"
+    ]
+   },
+   {
+    "rank": 3,
+    "action": "Verify and persist the clock relationship between the JMeter host, the OpenSearch error store and the Prometheus scrape path (NTP offset plus event-time versus ingest-time semantics), then recompute the per-15 s error and throttle series on that single verified clock.",
+    "rationale": "resource_binding reports clock_alignment \"not_verified_by_core\"; until that is resolved, the recorded overlap of the error burst (1790630540673-1790630663409) with the throttle-violation cells (1790630565000-1790630670000) cannot support any ordering or causal statement.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/7",
+     "analysis-result.json#/evidence/19",
+     "analysis-result.json#/findings/0"
+    ]
+   },
+   {
+    "rank": 4,
+    "action": "Close the resource coverage gap: collect cpu_throttle_ratio and configured CPU requests/limits for frontend and checkoutservice over the same run-intersection window, and add per-service error attribution so the frontend-attributed error group can be tied to a measured component.",
+    "rationale": "cpu_throttle_ratio exists only for paymentservice, while all 2471 errors are attributed to service frontend whose cpu_cores max is 0.199879; unmeasured components cannot be declared healthy, and the current evidence links the two views only by window overlap.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/10",
+     "analysis-result.json#/evidence/11",
+     "analysis-result.json#/evidence/8",
+     "analysis-result.json#/evidence/13",
+     "analysis-result.json#/evidence/18",
+     "analysis-result.json#/evidence/19"
+    ]
+   },
+   {
+    "rank": 5,
+    "action": "Reconcile the error-rate denominators and window trimming: recount samples inside 1790630475000-1790630820000 versus the run window 1790630473464-1790630833472, and confirm which denominator rule overall-errors intends (38628 versus the overall sample_count 40306).",
+    "rationale": "The FAIL threshold comparison uses 2471/38628 while the overall metric summary uses 2471/40306; the trimmed evaluation window (dropped_leading_millis 1536, dropped_trailing_millis 13472) should be shown to account for the difference so the reported error rate is reproducible.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/16",
+     "analysis-result.json#/evidence/0",
+     "analysis-result.json#/evidence/7"
+    ]
+   },
+   {
+    "rank": 6,
+    "action": "Split checkout latency by outcome: compute p50/p95/p99 and max separately for failed and successful checkout samples across the nine burst buckets and the zero-error buckets.",
+    "rationale": "Aggregate checkout latency (p50 45, p95 97, p99 100, max 869 ms) stays low while 2471 of 6717 checkout samples error, so outcome-split timing is needed to tell fast rejection from a masked slow subset.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/3",
+     "analysis-result.json#/evidence/0",
+     "analysis-result.json#/evidence/19"
+    ]
+   },
+   {
+    "rank": 7,
+    "action": "Confirm the scenario and control-run status for this analysis (index token \"resource-cpu\", auto_window_status DERIVED, window_origin auto) and record whether a comparable run without the CPU condition exists.",
+    "rationale": "No baseline or control run is referenced, so the FAIL cannot yet be classified as expected behaviour of a resource-constrained scenario versus an organic regression; the classification changes remediation priority, not the verdict.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/19",
+     "analysis-result.json#/evidence/18",
+     "analysis-result.json#/run_validity"
+    ]
+   },
+   {
+    "rank": 8,
+    "action": "Report the two FAIL checks separately and completely: rule overall-errors (2471/38628 lte 0.01, status FAIL) as business_verdict FAIL, and rule metrics-direct/paymentservice-cpu-throttle-ratio (gt 0.2, effect sla, status FAIL) as resource_verdict FAIL, with the combined verdict FAIL for window_id run-intersection; explicitly note that no latency or memory policy results are present.",
+    "rationale": "The deterministic verdict must be preserved exactly and the two failure classes must not be merged or reinterpreted; only two policy checks appear in the evidence, and a missing policy result is not a pass.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/17",
+     "analysis-result.json#/evidence/16",
+     "analysis-result.json#/evidence/15",
+     "analysis-result.json#/policy_verdict",
+     "analysis-result.json#/analysis_coverage"
+    ]
+   }
+  ],
+  "caveats": [
+   "The deterministic outcome is unchanged by this advice: run_validity VALID, analysis_coverage COMPLETE (reasons []), policy_verdict FAIL, and window_policy_summary business_verdict FAIL / resource_verdict FAIL / verdict FAIL for window_id run-intersection.",
+   "resource_binding reports clock_alignment \"not_verified_by_core\". No lead/lag ordering, sequence or temporal causal hypothesis between the error burst and the paymentservice throttle violation is supported; window overlap is stated only as recorded epoch values.",
+   "Error detail is thin: a single group (error_type frontend.request_error, service frontend, message \"request error\", count 2471) with samples_per_group_limit 2 and sample_message_bytes_max 4096. No HTTP status, endpoint, exception, trace id or downstream target appears in the evidence, so the failure mode is unidentified.",
+   "Resource coverage is asymmetric: cpu_throttle_ratio was collected for paymentservice only. frontend and checkoutservice have cpu_cores and memory_bytes but no throttle or limit series, so the absence of findings for them is not evidence of health or of spare capacity.",
+   "No CPU or memory limits are referenced for any entity. Low observed cpu_cores values (paymentservice mean 0.01080439130434782608695652173913043, checkoutservice mean 0.04359030434782608695652173913043478, frontend mean 0.1880700434782608695652173913043478) cannot be interpreted as headroom without a configured ceiling.",
+   "Resource statistics use aggregation interval_mean over 15 s cells (expected_cells 23, observed_cells 23, missing_cells 0, longest_gap_cells 0). Sub-interval spikes are smoothed by this aggregation; complete cell coverage does not imply complete temporal resolution.",
+   "Only two policy checks appear (rule overall-errors FAIL; rule metrics-direct/paymentservice-cpu-throttle-ratio FAIL). No latency, memory or per-transaction policy results are present, and a missing policy is not a pass.",
+   "Denominators differ between views: the overall-errors policy check uses 2471/38628 while the overall metric_summary uses 2471/40306 (sample_count 40306). Reported error-rate magnitudes depend on which denominator applies, and the referenced fields do not explain the 1678-sample difference.",
+   "All epoch values are timestamps, not durations. Quoted spans (122736 ms error span, 105000 ms finding window over cell_count 7, 345000 ms evaluation window over 23 cells, 360008 ms run window, 495000 ms snapshot window) are differences computed between referenced fields.",
+   "The evaluation window is trimmed relative to the run and snapshot windows: dropped_leading_cells 1 / dropped_leading_millis 1536 and dropped_trailing_cells 1 / dropped_trailing_millis 13472, with auto_window_status DERIVED, window_origin auto and applied_margin_ms 61528 versus requested_margin_ms 60000. Statistics quoted for window_id run-intersection do not cover the trimmed edges.",
+   "throughput_rps is reported only as numerator/denominator pairs (overall 40306000/360008); the denominator equals the run duration in milliseconds. It is not an independently measured rate and carries no capacity interpretation.",
+   "source-summary reports all 8 queries SUCCESS with status COMPLETE, retries 0, cap_exceeded false, detected_idle_gaps 0, longest_idle_gap_ms null and throttle_wait_ms 15992. Gap detection over the recognized window does not prove steady load, and query success does not validate the semantics of the returned series.",
+   "paymentservice memory_bytes statistics (min 2666496, median 29720576, max 37756928 bytes, slope_per_second 19241.26106719367588932806324110672, split_half_shift 680960) describe the series only; no restart, OOM or limit event is referenced, so no leak, restart or growth conclusion is supported.",
+   "No baseline, control or prior run is referenced anywhere in the evidence. Nothing establishes that the observed error burst or throttle violation deviates from a known-good state, and no comparison run should be inferred.",
+   "The error index name ltv-errors-20260928-211906-resource-cpu-33efd5 contains a \"resource-cpu\" token, but no referenced field defines the naming convention or states that a CPU constraint was applied; this is context to verify, not evidence of fault injection.",
+   "Only 2 of 2471 errors are individually referenced (document_id 0D5DDCBA-910C-E3C8-B64F-C7D5CB056897 at 1790630540673 and D9A6FA37-CBD4-94E8-4012-3B9C59FAE5E0 at 1790630540682). Conclusions about the remaining 2469 events rest on aggregate counts only.",
+   "This advisory output contains no new measurements, no confidence percentages and no causal claims; every quantity quoted is taken from the referenced evidence fields."
+  ]
+ },
+ "schema": "ai-experiment-run.v3",
+ "case": "K07",
+ "rep": 1,
+ "model_id": "qwen3.8-max",
+ "net_retries": 0,
+ "infra_retries": 0
+}

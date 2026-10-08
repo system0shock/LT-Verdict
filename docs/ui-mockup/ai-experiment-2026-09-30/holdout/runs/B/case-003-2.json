@@ -1,0 +1,237 @@
+{
+ "stage": "B",
+ "mode": "live",
+ "model": "deepseek-v4-flash-0731",
+ "tag": {
+  "phase": "holdout",
+  "attempt_id": "case-003-2-B-t1",
+  "arm": "B",
+  "stage": null,
+  "case": "case-003",
+  "rep": 2,
+  "try": 1
+ },
+ "retry_policy": "d2",
+ "qwen_exit": 0,
+ "wall_ms": 135642,
+ "relay": {
+  "schema_version": "advisory-ai-runtime-relay.v1",
+  "status": "FORWARDED_STRUCTURED_OUTPUT",
+  "received_request_count": 1,
+  "forwarded_request_count": 1,
+  "outcomes": [
+   "FORWARDED_STRUCTURED_OUTPUT"
+  ],
+  "retry_refused_reason": null,
+  "first_refused_reason": null,
+  "model_id": "deepseek-v4-flash-0731",
+  "retry_policy": "d2",
+  "requests": [
+   {
+    "ordinal": 1,
+    "forwarded": true,
+    "outcome": "FORWARDED_STRUCTURED_OUTPUT",
+    "provider_status": 200,
+    "latency_ms": 134156,
+    "usage": {
+     "prompt_tokens": 17877,
+     "total_tokens": 32355,
+     "completion_tokens": 14478,
+     "prompt_tokens_details": {
+      "cached_tokens": 1024
+     },
+     "completion_tokens_details": {
+      "reasoning_tokens": 11327
+     }
+    },
+    "model_returned": "deepseek-v4-flash-0731"
+   }
+  ],
+  "usage": {
+   "prompt_tokens": 17877,
+   "completion_tokens": 14478,
+   "total_tokens": 32355
+  },
+  "latency_ms": 134156
+ },
+ "relay_status": "FORWARDED_STRUCTURED_OUTPUT",
+ "usage": {
+  "prompt_tokens": 17877,
+  "completion_tokens": 14478,
+  "total_tokens": 32355
+ },
+ "latency_ms": 134156,
+ "retried": false,
+ "retry_refused_reason": null,
+ "status": "OK",
+ "note": null,
+ "output": {
+  "schema_version": "ai-advice-output.v1",
+  "summary": "Run is VALID (jmeter_jtl_csv-2a37c6c2eb20025463b7dffb7b70d72e381f7d3c46bc37188599239d8cf18a42) but the overall policy verdict is NO_VERDICT with INCOMPLETE coverage (reasons RESOURCE_GAPS, MISSING_RESOURCE_CELLS). Reference window (1704067200000-1704067320000, 120 s) verdict is FAIL: latency p95 60031 ms vs threshold 200 ms, errors 1609/9600, database-limit resource policy FAIL (system-db-work ≈1 vs threshold 0.9). Workload-01 window (1704067320000-1704067500000, 180 s) verdict is NO_VERDICT: latency p95 60031 ms FAIL, errors 14400/14400 (100%), database-limit NO_VERDICT because 10 of 180 system-db-work cells are missing. Latency p50=p95=p99=60031 ms and 100% errors in workload-01 suggest saturation at a ~60 s cap. All 9 correlation pairs are INSUFFICIENT_DATA / NOT_ESTIMATED (0 evaluable; constant target-request-rate dropped); one CANDIDATE db-queue anomaly episode exists; clock alignment is not verified by core. This advice preserves the deterministic NO_VERDICT verdict and recommends raw-sample inspection, clock verification, telemetry backfill/rerun, and a variable-load rerun.",
+  "hypotheses": [
+   {
+    "rank": 1,
+    "observation": "In both windows the latency policy check reports response_time_p95_ms observed 60031 against threshold 200 (operator lte, status FAIL), and the workload-01 window shows p50=p95=p99=60031 ms with 14400/14400 errors; the overall summary also shows p50=p95=p99=60031 ms with max 60000 ms.",
+    "possible_explanation": "The identical 60031 ms plateau across p50/p95/p99 and a 100% error window are consistent with requests terminating at a fixed ~60 s cap (for example a sampler or read timeout), so the aggregate latency is saturated rather than reflecting varied service times.",
+    "recommended_check": "Inspect the raw JMeter JTL samples for this run for response codes and elapsed values, and compare sampler timeout settings to see whether 60031 ms matches a timeout constant.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0",
+     "analysis-result.json#/evidence/1",
+     "analysis-result.json#/evidence/33",
+     "analysis-result.json#/evidence/35",
+     "analysis-result.json#/evidence/38",
+     "analysis-result.json#/findings/3"
+    ]
+   },
+   {
+    "rank": 2,
+    "observation": "The reference window already has p50 latency 36063 ms, p95/p99 60031 ms, errors 1609/9600, and a FAIL for database-limit on system-db-work (≈1 vs threshold 0.9); the workload-01 response anomaly check reports NO_MATERIAL_CHANGE with episodes 0 using reference median 36335 ms and MAD 18008.",
+    "possible_explanation": "The system appears to already be degraded or saturated during the reference window, so the complete failure in workload-01 may be a continuation of that state rather than a newly introduced event.",
+    "recommended_check": "Compare raw error codes and DB-related timeouts across the window boundary at 1704067320000 and inspect the unaffected resource series at that boundary to test whether degradation started before workload-01.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/30",
+     "analysis-result.json#/evidence/37",
+     "analysis-result.json#/evidence/60",
+     "analysis-result.json#/findings/0"
+    ]
+   },
+   {
+    "rank": 3,
+    "observation": "system-db-work is ≈1.0 in the reference window and in the 170 observed cells of workload-01, with database-limit FAIL in reference (gt 0.9); in workload-01, 10 of 180 cells are missing, the same rule returns NO_VERDICT with reason MISSING_RESOURCE_CELLS, and overall coverage is INCOMPLETE (RESOURCE_GAPS, MISSING_RESOURCE_CELLS).",
+    "possible_explanation": "The DB-side metric stayed at saturation and also had reporting gaps during workload-01, which prevented the resource rule from reaching a verdict in that window.",
+    "recommended_check": "Investigate why system-db-work cells are missing near the end of workload-01 (after ~1704067490000 per the threshold finding range) and rerun or backfill the series so the database-limit rule can be evaluated.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/14",
+     "analysis-result.json#/evidence/27",
+     "analysis-result.json#/evidence/32",
+     "analysis-result.json#/findings/1",
+     "analysis-result.json#/analysis_coverage"
+    ]
+   },
+   {
+    "rank": 4,
+    "observation": "The generator keeps request_starts at 80/s with generator-queue 0 in both windows and target-request-rate constant at 80/s, while admission-queue depth rises from median 1547.4, slope 29.58/s in reference to median 4544, min 3362.4 in workload-01, and active generator threads rise from mean 1803.4 to 4667.4.",
+    "possible_explanation": "Requests continue to be started and admitted into a queue that is not draining (consistent with the near-cap db-queue), so queue depth and thread counts accumulate even though offered load is constant.",
+    "recommended_check": "Inspect raw completion timestamps to see whether admitted requests drain, and review the admission-queue and db-queue (~252-254 requests) series relative to the 1704067320000 boundary.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/3",
+     "analysis-result.json#/evidence/9",
+     "analysis-result.json#/evidence/16",
+     "analysis-result.json#/evidence/23",
+     "analysis-result.json#/evidence/57"
+    ]
+   },
+   {
+    "rank": 5,
+    "observation": "All 9 correlation pairs in workload-01 are INSUFFICIENT_DATA with uncertainty NOT_ESTIMATED and reasons including CONSTANT_CONTROL, NO_RANK_VARIATION, NO_RESIDUAL_VARIATION, LOAD_DELTA_BELOW_MINIMUM; the control target-request-rate was dropped, all headline selections are UNAVAILABLE, and the diagnostic summary reports pairs_evaluable 0 of pairs_tested 9.",
+    "possible_explanation": "A constant 80/s target rate combined with flat or saturated resource series offers no variation, so no load-resource relationship could be estimated from this run.",
+    "recommended_check": "Rerun with a stepped or ramped target-request-rate to introduce variation and allow correlation pairs to be evaluated.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/39",
+     "analysis-result.json#/evidence/48",
+     "analysis-result.json#/evidence/62"
+    ]
+   },
+   {
+    "rank": 6,
+    "observation": "resource-binding records clock_alignment \"not_verified_by_core\", and correlation pairs report LAG_NOT_EVALUABLE with empty lag profiles and lag_used_cells 0.",
+    "possible_explanation": "Without verified clocks, temporal ordering among the series (for example queue growth versus thread growth) cannot be interpreted, so any lead/lag hypothesis is unsupported by this evidence.",
+    "recommended_check": "Verify clock synchronization (for example NTP) across generator, service, database, and collectors before performing any temporal or lag analysis.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/2",
+     "analysis-result.json#/evidence/39"
+    ]
+   },
+   {
+    "rank": 7,
+    "observation": "The db-queue anomaly check is CANDIDATE with 1 episode and reason ZERO_MAD: direction increase, duration 140000 ms from 1704067360000 to 1704067500000, max_abs_delta 1.6 requests, observed 254.2 vs reference median 252.6 with reference MAD 0.",
+    "possible_explanation": "The reference window had zero variance in db-queue, so even a small absolute increase (1.6 requests) triggers a candidate flag; the change is small relative to the ~253 request level.",
+    "recommended_check": "Review raw db-queue samples over 1704067360000-1704067500000 and confirm whether a 1.6 request increase at a ~254 request level is operationally meaningful before acting on the candidate.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/59",
+     "analysis-result.json#/findings/4"
+    ]
+   }
+  ],
+  "recommendations": [
+   {
+    "rank": 1,
+    "action": "Inspect the raw JMeter JTL samples for the run (response codes, elapsed values, timestamps) and the sampler timeout configuration to explain the 60031 ms latency plateau and the 100% error window.",
+    "rationale": "The aggregate latency is pinned at 60031 ms for p50/p95/p99 in workload-01 and the error count is 14400/14400; knowing whether 60031 ms is a timeout cap versus true service time is required before changing anything.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0",
+     "analysis-result.json#/evidence/38",
+     "analysis-result.json#/findings/3"
+    ]
+   },
+   {
+    "rank": 2,
+    "action": "Verify clock alignment (for example NTP) across the load generator, service, database, and metric collectors.",
+    "rationale": "The evidence records clock_alignment \"not_verified_by_core\" and every lag evaluation is LAG_NOT_EVALUABLE, so no temporal ordering or lag-based conclusion is currently supported.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/2",
+     "analysis-result.json#/evidence/39"
+    ]
+   },
+   {
+    "rank": 3,
+    "action": "Backfill or rerun to obtain the 10 missing system-db-work cells in workload-01 so the database-limit rule can be evaluated.",
+    "rationale": "The database-limit rule is NO_VERDICT in workload-01 (MISSING_RESOURCE_CELLS) and the overall policy verdict is NO_VERDICT with INCOMPLETE coverage because of these gaps; a complete series is needed for a resource verdict.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/27",
+     "analysis-result.json#/evidence/32",
+     "analysis-result.json#/analysis_coverage"
+    ]
+   },
+   {
+    "rank": 4,
+    "action": "Rerun with a variable (stepped or ramped) target-request-rate instead of a constant 80/s.",
+    "rationale": "All 9 correlation pairs were INSUFFICIENT_DATA / NOT_ESTIMATED with 0 evaluable pairs, and the constant control was dropped; load variation is required to estimate any load-resource relationship.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/39",
+     "analysis-result.json#/evidence/48",
+     "analysis-result.json#/evidence/62"
+    ]
+   },
+   {
+    "rank": 5,
+    "action": "Collect and inspect DB-side telemetry and error codes across the 1704067320000 window boundary and over the missing-cell interval toward the end of workload-01.",
+    "rationale": "The database-limit rule FAILs in the reference (system-db-work ≈1 vs 0.9) but is NO_VERDICT in workload-01 due to missing cells; distinguishing persistent DB saturation from a telemetry gap requires raw DB evidence.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/14",
+     "analysis-result.json#/evidence/30",
+     "analysis-result.json#/evidence/32",
+     "analysis-result.json#/findings/0",
+     "analysis-result.json#/findings/1"
+    ]
+   },
+   {
+    "rank": 6,
+    "action": "Establish a healthy baseline before rerunning the test, since the current reference window was already failing latency and the database-limit rule.",
+    "rationale": "The reference window already had p95 60031 ms and 1609/9600 errors, and the workload-01 response anomaly check compares against reference median 36335 ms / MAD 18008; comparisons against a degraded baseline cannot establish stability.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/37",
+     "analysis-result.json#/evidence/60"
+    ]
+   }
+  ],
+  "caveats": [
+   "The deterministic overall policy verdict is NO_VERDICT with INCOMPLETE coverage (RESOURCE_GAPS, MISSING_RESOURCE_CELLS); this advice does not change that verdict.",
+   "Clock alignment is recorded as not_verified_by_core, so no lead/lag ordering or temporal causal hypothesis is supported by this evidence.",
+   "All correlation pairs are NOT_ESTIMATED with 0 evaluable pairs; no sensitivity, raw_rho, partial_rho, or p-value exists in this analysis.",
+   "The run extends to 1704067559987 while window evaluation ends at 1704067500000; overall sample counts (24000) equal the sums of the window samples, so samples in the final ~60 s are not reflected in the window summaries.",
+   "The reference window is not a healthy baseline: it already fails latency (p95 60031 vs 200) and the database-limit rule, so NO_MATERIAL_CHANGE anomaly results use that degraded reference.",
+   "The observed latency plateau values (p50=p95=p99=60031 ms, max 60000 ms) are as recorded; raw samples were not part of this evidence, so the cause of the plateau (timeout cap versus aggregation artifact) is unverified.",
+   "No capacity-bound or generator diagnostic-guard objects appear in this evidence set; generator state is limited to the resource summaries provided.",
+   "Percentages such as 14400/14400 (100%), 1609/9600 (≈16.8%), and 16009/24000 (≈66.7%) are derived by direct division of the recorded ratios; window error counts (1609 and 14400) and sample counts (9600 and 14400) sum to the overall totals as recorded."
+  ]
+ },
+ "schema": "ai-experiment-run.holdout.v1",
+ "case": "case-003",
+ "rep": 2,
+ "arm": "B",
+ "try": 1,
+ "attempt_id": "case-003-2-B-t1",
+ "model_id": "deepseek-v4-flash-0731",
+ "prompt_sha256": "3c0f28bee6517c13c5c854615e7d3d59301893d9723880818e4034a32e9133bf"
+}

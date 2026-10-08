@@ -1,0 +1,76 @@
+[
+  {
+    "id": "R044",
+    "hard_defect": false,
+    "defects": [],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 5,
+    "notes": "Accurately preserves the verdict, scope distinctions, uncertainty, and actionable checks."
+  },
+  {
+    "id": "R061",
+    "hard_defect": false,
+    "defects": [],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 5,
+    "notes": "Provides correct, appropriately qualified operator actions without asserting unsupported causes."
+  },
+  {
+    "id": "R080",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T7",
+        "field": "#/hypotheses/3/possible_explanation",
+        "quote": "No SLO/policy appears to have been attached to this run",
+        "why": "NO_POLICY establishes only that no applicable rule was evaluated for this window, not that no policy or SLO was attached or configured."
+      }
+    ],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 3,
+    "notes": "Most observations and recommendations are useful, but it overstates the cause of NO_POLICY."
+  },
+  {
+    "id": "R116",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T7",
+        "field": "#/summary",
+        "quote": "no policy was configured",
+        "why": "NO_POLICY does not prove that no policy was configured; it can result from no applicable rule for the window."
+      },
+      {
+        "type": "T7",
+        "field": "#/hypotheses/5/possible_explanation",
+        "quote": "Because no policy is configured",
+        "why": "This asserts an unsupported cause of NO_POLICY rather than limiting the claim to absence of an applicable evaluated rule."
+      },
+      {
+        "type": "T7",
+        "field": "#/recommendations/3/rationale",
+        "quote": "missing policy is not a pass",
+        "why": "In context this attributes the current NO_POLICY verdict to a missing policy, which the evidence does not establish."
+      },
+      {
+        "type": "T7",
+        "field": "#/caveats/0",
+        "quote": "NO_POLICY means no policy was configured",
+        "why": "NO_POLICY does not establish that policy configuration was absent."
+      },
+      {
+        "type": "T7",
+        "field": "#/caveats/6",
+        "quote": "No latency or throughput target was defined in this run",
+        "why": "The verdict does not prove that thresholds or targets were not configured, only that no applicable rule produced a result for the window."
+      }
+    ],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 2,
+    "notes": "It preserves the reported metrics and statuses but repeatedly misstates what NO_POLICY establishes."
+  }
+]

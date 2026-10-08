@@ -1,0 +1,208 @@
+{
+ "stage": "A",
+ "mode": "live",
+ "model": "deepseek-v4-flash-0731",
+ "tag": {
+  "phase": "holdout",
+  "attempt_id": "case-012-1-A-t1",
+  "arm": "A",
+  "stage": null,
+  "case": "case-012",
+  "rep": 1,
+  "try": 1
+ },
+ "retry_policy": "d2",
+ "qwen_exit": 0,
+ "wall_ms": 114918,
+ "relay": {
+  "schema_version": "advisory-ai-runtime-relay.v1",
+  "status": "FORWARDED_STRUCTURED_OUTPUT",
+  "received_request_count": 1,
+  "forwarded_request_count": 1,
+  "outcomes": [
+   "FORWARDED_STRUCTURED_OUTPUT"
+  ],
+  "retry_refused_reason": null,
+  "first_refused_reason": null,
+  "model_id": "deepseek-v4-flash-0731",
+  "retry_policy": "d2",
+  "requests": [
+   {
+    "ordinal": 1,
+    "forwarded": true,
+    "outcome": "FORWARDED_STRUCTURED_OUTPUT",
+    "provider_status": 200,
+    "latency_ms": 113332,
+    "usage": {
+     "prompt_tokens": 4297,
+     "total_tokens": 16377,
+     "completion_tokens": 12080,
+     "prompt_tokens_details": {
+      "cached_tokens": 1024
+     },
+     "completion_tokens_details": {
+      "reasoning_tokens": 9236
+     }
+    },
+    "model_returned": "deepseek-v4-flash-0731"
+   }
+  ],
+  "usage": {
+   "prompt_tokens": 4297,
+   "completion_tokens": 12080,
+   "total_tokens": 16377
+  },
+  "latency_ms": 113332
+ },
+ "relay_status": "FORWARDED_STRUCTURED_OUTPUT",
+ "usage": {
+  "prompt_tokens": 4297,
+  "completion_tokens": 12080,
+  "total_tokens": 16377
+ },
+ "latency_ms": 113332,
+ "retried": false,
+ "retry_refused_reason": null,
+ "status": "OK",
+ "note": null,
+ "output": {
+  "schema_version": "ai-advice-output.v1",
+  "summary": "Deterministic verdict: FAIL. For window workload-04, policy check rule 'latency' (metric response_time_p95_ms, observed 28559 ms, operator lte, threshold 200 ms) has status FAIL; window-policy-summary reports business_verdict FAIL and resource_verdict NO_POLICY, and the referenced policy_verdict fact is FAIL. No request errors were recorded (error_count 0, error_rate ratio 0/93000). During the 300-cell evaluation window (evaluation_from_epoch_ms 1704068100000 to evaluation_to_epoch_ms 1704068400000), generator target rate was constant at 110 requests/s (mean/median/min/max all 110, standard deviation 0) while compute queue depth stayed high (mean 240.5 requests, median 251, q75 251, q95 251, max 251 of 300 observed cells). Association-04 (cpu-queue vs response_time_p95_ms) is a CANDIDATE correlation (raw_rho/partial_rho ~0.488) with uncertainty NOT_ESTIMATED; its requested control 'target-request-rate' was dropped (reason CONSTANT_CONTROL), controls_used is empty, and headline significance is UNAVAILABLE (OBSERVATION_COUNT_UNSUPPORTED, no p-value). clock_alignment is not_verified_by_core, so cross-source temporal ordering is unverified. Run validity is VALID and analysis coverage is COMPLETE. This advice preserves the FAIL verdict and does not change it.",
+  "hypotheses": [
+   {
+    "rank": 1,
+    "observation": "In window workload-04, generator target rate was constant at 110 requests/s for all 300 cells (mean, median, min, max all 110, standard deviation 0), while compute queue depth stayed high (mean 240.5 requests, median 251, max 251, q75 251, q95 251) and response_time_p95_ms was observed at 28559 ms, failing the lte 200 ms latency policy.",
+    "possible_explanation": "The system may be at or beyond processing capacity under the sustained 110 requests/s load, so queued requests wait and inflate p95 latency to the observed ~28.5 s value. This is a hypothesis consistent with the stored CANDIDATE correlation, not a proven cause.",
+    "recommended_check": "Compare per-cell target rate, queue depth, and p95 latency across the window; run a step-down/step-up load test to find the rate at which queue depth grows and p95 exceeds 200 ms; verify that the queue_depth unit 'requests' reflects compute-side queued work with a known limit.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/3",
+     "analysis-result.json#/evidence/4",
+     "analysis-result.json#/evidence/5",
+     "analysis-result.json#/evidence/7"
+    ]
+   },
+   {
+    "rank": 2,
+    "observation": "The overall metric summary (93000 samples) reports error_count 0 and latency p50 50 ms, p95 25823 ms, p99 29215 ms, max 30050 ms; the transaction-level 'request' sampler summary shows identical values.",
+    "possible_explanation": "The large spread between p50 (50 ms) and p95/p99 (25823/29215 ms) suggests a heavy-tailed latency distribution in which most requests are fast but a minority are extremely slow, possibly requests waiting behind saturated workers rather than a uniform slowdown.",
+    "recommended_check": "Inspect the latency percentile curve and per-interval tail samples; identify whether the extreme-latency samples coincide with high queue depth and whether they are genuine client-visible responses rather than sampling or timestamp artifacts.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0",
+     "analysis-result.json#/evidence/1",
+     "analysis-result.json#/evidence/7"
+    ]
+   },
+   {
+    "rank": 3,
+    "observation": "The window metric summary for workload-04 (33000 samples) reports p50 15055 ms, p95 28559 ms, p99 29759 ms, max 30050 ms, whereas the overall summary (93000 samples) reports p50 50 ms and p95 25823 ms; the two summaries reference different sample counts.",
+    "possible_explanation": "Median latency differs sharply between the overall aggregation (50 ms) and the evaluated window (15055 ms), so the failure may be concentrated in this evaluation window while other portions of the run were faster; alternatively the summaries may aggregate non-comparable sample sets.",
+    "recommended_check": "Slice latency percentiles per window and per minute across the run; confirm which sample ranges feed the overall vs window summaries and determine whether earlier/later windows were below threshold.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0",
+     "analysis-result.json#/evidence/6",
+     "analysis-result.json#/evidence/7"
+    ]
+   },
+   {
+    "rank": 4,
+    "observation": "Association-04 (cpu-queue vs response_time_p95_ms) reports raw_rho/partial_rho ~0.48797470471 and status CANDIDATE, but controls_requested ['target-request-rate'] were dropped (reason CONSTANT_CONTROL), controls_used is empty, uncertainty is NOT_ESTIMATED, and the headline selection is UNAVAILABLE (OBSERVATION_COUNT_UNSUPPORTED) with null p-values (p_value_b10, p_value_b20, holm_adjusted_p_value all null).",
+    "possible_explanation": "The apparent queue-latency association cannot currently be separated from a constant load profile or other common drivers, and its statistical support is not established; without a p-value, the ~0.488 rho should not be read as proof that queue depth drives latency.",
+    "recommended_check": "Rerun the correlation with a non-constant control (e.g., measured/achieved request rate per cell) or collect more paired cells so the mbb-lag-max-holm selection can produce a p-value; treat the stored rho only as CANDIDATE until significance is available.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/8",
+     "analysis-result.json#/evidence/9",
+     "analysis-result.json#/evidence/10"
+    ]
+   },
+   {
+    "rank": 5,
+    "observation": "best_lag_ms is 0 and the lag profile reports the same rho (0.402269009983) at every lag from -10000 ms to +10000 ms, while clock_alignment is 'not_verified_by_core' in the resource binding.",
+    "possible_explanation": "The flat lag profile may indicate that at least one paired series carries no time-varying structure at this resolution, so lag cannot distinguish queue-before-latency from latency-before-queue; the unverified clock relationship also prevents any lead/lag or temporal causal ordering.",
+    "recommended_check": "First verify clock synchronization across generator, compute, and sampler timestamp sources; then inspect the per-cell series for variability and re-run the lag analysis only if the series are not near-constant.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/2",
+     "analysis-result.json#/evidence/8"
+    ]
+   },
+   {
+    "rank": 6,
+    "observation": "The diagnostic summary reports anomalies_tested 0, episodes_reported 0, pairs_evaluable 1, pairs_tested 1, status COMPLETE, suppressed_short_episodes 0, and uncertainty NOT_ESTIMATED; the window shows sustained high latency (p95 28559 ms).",
+    "possible_explanation": "Because anomalies_tested is 0 and no episodes are reported, the diagnostics did not detect episodic outliers; this is not evidence that the latency problem is steady or absent, and the sustained-looking window metrics could hide episodes that were never tested.",
+    "recommended_check": "Inspect raw per-cell latency and queue depth series to determine whether high latency is continuous or episodic; if episodic, configure anomaly testing over these series in a follow-up run.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/10",
+     "analysis-result.json#/evidence/7"
+    ]
+   }
+  ],
+  "recommendations": [
+   {
+    "rank": 1,
+    "action": "Verify and document clock alignment between generator, compute, and sampler timestamp sources before drawing any temporal or causal conclusion; if alignment cannot be established, re-run the evaluation with verified clocks.",
+    "rationale": "clock_alignment is 'not_verified_by_core', and any lead/lag claim such as best_lag_ms 0 or temporal ordering between queue depth and latency depends on comparable timestamps.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/2",
+     "analysis-result.json#/evidence/8"
+    ]
+   },
+   {
+    "rank": 2,
+    "action": "Root-cause the latency policy failure: collect per-interval latency percentiles, queue depth, and achieved throughput aligned by timestamp; identify when p95 exceeds 200 ms and which requests contribute to the tail.",
+    "rationale": "The deterministic FAIL is driven solely by rule 'latency' (observed p95 28559 ms vs threshold 200 ms) while error_count is 0, so the investigation should focus on response time, not request errors.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/5",
+     "analysis-result.json#/evidence/6",
+     "analysis-result.json#/findings/0"
+    ]
+   },
+   {
+    "rank": 3,
+    "action": "Run controlled load steps (including rates below and above 110 requests/s) while recording queue depth and p95 latency to characterize the capacity limit and confirm whether the constant 110 requests/s target exceeds sustainable processing.",
+    "rationale": "Target rate is constant at 110 requests/s while queue depth sits at q75/q95/median 251 of 300 cells, which is consistent with saturation but not proven without a capacity experiment.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/3",
+     "analysis-result.json#/evidence/4",
+     "analysis-result.json#/evidence/7"
+    ]
+   },
+   {
+    "rank": 4,
+    "action": "Re-run the queue-latency correlation with a non-constant control or a longer paired series so the headline selection can produce a p-value; until then treat rho ~0.488 as CANDIDATE only and do not quote it as statistically significant.",
+    "rationale": "Headline significance is UNAVAILABLE (OBSERVATION_COUNT_UNSUPPORTED) with null p-values and uncertainty NOT_ESTIMATED, and the only requested control was dropped as CONSTANT_CONTROL.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/8",
+     "analysis-result.json#/evidence/9"
+    ]
+   },
+   {
+    "rank": 5,
+    "action": "Evaluate policy checks across all windows of the run (not only workload-04) and reconcile the overall metric summary (93000 samples) with the window summary (33000 samples) to establish whether the latency failure is isolated or systemic.",
+    "rationale": "Overall p50 is 50 ms while the evaluated window p50 is 15055 ms, so the extent of the latency problem across the run is not yet established.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0",
+     "analysis-result.json#/evidence/7",
+     "analysis-result.json#/evidence/6"
+    ]
+   }
+  ],
+  "caveats": [
+   "clock_alignment is 'not_verified_by_core'; timestamps from generator, compute, and sampler may not be comparable, so best_lag_ms 0 and any temporal ordering are unverified.",
+   "Association-04 is CANDIDATE with uncertainty NOT_ESTIMATED; headline significance is UNAVAILABLE (OBSERVATION_COUNT_UNSUPPORTED) with no p-value, so raw_rho/partial_rho ~0.488 is not demonstrated to be statistically significant.",
+   "Resource verdict is NO_POLICY: no resource policy existed to fail; the high queue depth is an observation, not a policy failure.",
+   "error_count 0 and error_rate ratio 0/93000 mean the FAIL is purely latency-based; zero errors provide no information about latency complaints or non-sampled requests.",
+   "anomalies_tested 0 and episodes_reported 0 do not prove stability or absence of the latency problem; no episodes were tested.",
+   "Queue depth is expressed in unit 'requests' (mean 240.5, max 251); the max may reflect a bounded queue of unknown capacity, so no queue limit is inferable from the evidence.",
+   "The overall metric summary (93000 samples) and the window summary (33000 samples) likely span different periods; they should not be assumed to describe the same sample set.",
+   "Run validity VALID and analysis coverage COMPLETE confirm processing completed but do not supply the missing statistical support (p-value, uncertainty) for the candidate correlation.",
+   "throughput_rps fields expose raw numerator/denominator values; any derived rates should be cross-checked against generator instrumentation before use as measured throughput."
+  ]
+ },
+ "schema": "ai-experiment-run.holdout.v1",
+ "case": "case-012",
+ "rep": 1,
+ "arm": "A",
+ "try": 1,
+ "attempt_id": "case-012-1-A-t1",
+ "model_id": "deepseek-v4-flash-0731",
+ "prompt_sha256": "69f215a1ad4ae678c82410ba7cf7daf171cd9c7ca0ef4626bba6977db0af4ef7"
+}

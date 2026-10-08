@@ -1,0 +1,32 @@
+{
+ "required": [
+  [
+   "reported_headline_series",
+   [
+    "resource\\-14",
+    "pair\\-14"
+   ]
+  ],
+  [
+   "reported_headline_rho",
+   [
+    "(?:-|\\u2212|minus\\s)\\s?(?<![\\d.])(?:0\\.1052|0\\.105|0\\.11|0\\.10)(?!\\d)"
+   ]
+  ]
+ ],
+ "forbidden": [
+  "presents the best raw lag or rho as an independent confirmation of a cause"
+ ],
+ "useful_checks": [
+  "replicate the observation before acting on it"
+ ],
+ "source": {
+  "builder": "AdvisoryEvidenceBuilder",
+  "build": "5b5e51c+harness",
+  "source": "u:N02-p16-l10-s1037",
+  "source_sha256": "415f0134187ba34843831e77191a1d26e2133333409cc7d35496f591bebd9e7f",
+  "derivation": [],
+  "evidence_sha256": "903793d132ccd4164cf0536c209b37a5ec4e10f0c7d20c3f3cf144b50fcd3bf2",
+  "inputs": "u:N02-p16-l10-s1037, derivation [], analysed through RunBundleStore -> AnalysisService -> AdvisoryEvidenceBuilder by AdvisoryHoldoutCorpusTest on 5b5e51c+harness"
+ }
+}

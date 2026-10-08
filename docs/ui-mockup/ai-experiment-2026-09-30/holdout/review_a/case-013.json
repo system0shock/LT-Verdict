@@ -1,0 +1,64 @@
+[
+  {
+    "id": "R063",
+    "hard_defect": false,
+    "defects": [],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 5,
+    "notes": "The response preserves the verdict and key measurements and gives verifiable operator actions."
+  },
+  {
+    "id": "R074",
+    "hard_defect": false,
+    "defects": [],
+    "required_facts_preserved": false,
+    "missing_facts": ["Run validity VALID is not stated.", "Analysis coverage COMPLETE is not stated."],
+    "usefulness": 4,
+    "notes": "The advice is useful and respects the policy and correlation limits, but omits two required status facts."
+  },
+  {
+    "id": "R093",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T7",
+        "field": "#/summary",
+        "quote": "no business or resource policy was configured",
+        "why": "NO_POLICY establishes that no rule applied to the window, not that no policy was configured."
+      },
+      {
+        "type": "T7",
+        "field": "#/hypotheses/3/possible_explanation",
+        "quote": "No business or resource policy thresholds were configured",
+        "why": "The evidence does not establish whether thresholds were configured but inapplicable."
+      },
+      {
+        "type": "T7",
+        "field": "#/caveats/7",
+        "quote": "Coverage applies only to the evaluation window",
+        "why": "The evidence also reports whole-run metric summaries, so coverage cannot be restricted to that window."
+      }
+    ],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 2,
+    "notes": "Several checks are actionable, but the claims about configuration and coverage could misdirect an operator."
+  },
+  {
+    "id": "R100",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T7",
+        "field": "#/hypotheses/1/possible_explanation",
+        "quote": "No threshold or policy was configured or applicable for the window",
+        "why": "NO_POLICY establishes lack of an applicable rule, but does not establish that none was configured."
+      }
+    ],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 2,
+    "notes": "It preserves the main results and offers useful checks, but overstates what the verdict reveals about configuration."
+  }
+]

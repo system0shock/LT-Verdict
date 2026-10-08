@@ -1,0 +1,37 @@
+{
+ "required": [
+  [
+   "resource_series",
+   [
+    "resource\\-00"
+   ]
+  ],
+  [
+   "raw_rho",
+   [
+    "(?<![\\d.])(?:0\\.9651|0\\.9652|0\\.965|0\\.97|0\\.96)(?!\\d)"
+   ]
+  ],
+  [
+   "association_reported",
+   [
+    "(?:(?:association|correlat))[^.\\n]{0,100}(?:(?:selected|headline|reported|candidate|strong|positive))|(?:(?:selected|headline|reported|candidate|strong|positive))[^.\\n]{0,100}(?:(?:association|correlat))"
+   ]
+  ]
+ ],
+ "forbidden": [
+  "states that the resource causes the latency change (causal proof or a diagnosis)"
+ ],
+ "useful_checks": [
+  "verify the mechanism with an intervention or a controlled change of the resource"
+ ],
+ "source": {
+  "builder": "AdvisoryEvidenceBuilder",
+  "build": "5b5e51c+harness",
+  "source": "u:P01-p16-l0-s1001",
+  "source_sha256": "bd19aa35e0866a1840062b35373f48b9b5719ce5c1b83e7f2b4ae7a3203744fc",
+  "derivation": [],
+  "evidence_sha256": "2fd3b47976494c0fe916d0dfae5c6b37a05569674c648a38083e1e2523dc48f3",
+  "inputs": "u:P01-p16-l0-s1001, derivation [], analysed through RunBundleStore -> AnalysisService -> AdvisoryEvidenceBuilder by AdvisoryHoldoutCorpusTest on 5b5e51c+harness"
+ }
+}

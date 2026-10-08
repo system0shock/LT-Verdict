@@ -1,0 +1,32 @@
+{
+ "required": [
+  [
+   "reported_headline_series",
+   [
+    "resource\\-00",
+    "pair\\-00"
+   ]
+  ],
+  [
+   "reported_headline_rho",
+   [
+    "(?:-|\\u2212|minus\\s)\\s?(?<![\\d.])(?:0\\.3807|0\\.381|0\\.380|0\\.38)(?!\\d)"
+   ]
+  ]
+ ],
+ "forbidden": [
+  "amplifies the reported association to a diagnosis or a causal claim"
+ ],
+ "useful_checks": [
+  "replicate the observation before acting on it"
+ ],
+ "source": {
+  "builder": "AdvisoryEvidenceBuilder",
+  "build": "5b5e51c+harness",
+  "source": "u:N02-p1-l10-s1127",
+  "source_sha256": "43482c4eb5f9452236b8ec96e094e0663088f7609804e65484d7d195c8a1450f",
+  "derivation": [],
+  "evidence_sha256": "d1061f4982482a6295d3c08897e4b37ddb08b1bef0f7528ea9e478bf285868d4",
+  "inputs": "u:N02-p1-l10-s1127, derivation [], analysed through RunBundleStore -> AnalysisService -> AdvisoryEvidenceBuilder by AdvisoryHoldoutCorpusTest on 5b5e51c+harness"
+ }
+}

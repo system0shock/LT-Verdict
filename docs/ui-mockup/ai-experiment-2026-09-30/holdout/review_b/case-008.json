@@ -1,0 +1,109 @@
+[
+  {
+    "id": "R014",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T1",
+        "field": "#/hypotheses/3/possible_explanation",
+        "quote": "with no applicable SLA resource rule and no required-capacity input, no capacity bound or capacity verdict was derived",
+        "why": "A capacity bound does not require a required-capacity input; that input is only needed to compare a computed bound for a capacity verdict."
+      },
+      {
+        "type": "T1",
+        "field": "#/recommendations/3/action",
+        "quote": "If a formal verdict or capacity bound is required, configure applicable business policy and resource rules with effect sla for these windows and provide the required capacity",
+        "why": "This incorrectly presents required capacity as necessary for deriving a capacity bound."
+      }
+    ],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 3,
+    "notes": "The verdict, validity, coverage, metrics, and correlation caveats are otherwise reported accurately."
+  },
+  {
+    "id": "R051",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T7",
+        "field": "#/summary",
+        "quote": "no business or resource policies were configured",
+        "why": "NO_POLICY establishes only that no applicable rule was evaluated, not that no policies were configured."
+      },
+      {
+        "type": "T8",
+        "field": "#/hypotheses/1/possible_explanation",
+        "quote": "the observed variation in the resource series ... and latency is not driven by request load",
+        "why": "A constant target series does not prove that variation in latency or resources was not driven by actual request load."
+      },
+      {
+        "type": "T7",
+        "field": "#/hypotheses/4/possible_explanation",
+        "quote": "No policy thresholds were configured for the run",
+        "why": "NO_POLICY does not prove the absence of configured thresholds or policies."
+      },
+      {
+        "type": "T7",
+        "field": "#/hypotheses/6/observation",
+        "quote": "no policy thresholds are attached to them",
+        "why": "The evidence reports NO_POLICY, not whether thresholds were configured but inapplicable."
+      },
+      {
+        "type": "T7",
+        "field": "#/recommendations/1/rationale",
+        "quote": "a missing policy is not a pass",
+        "why": "Calling NO_POLICY a missing-policy state asserts an unproven cause of the verdict."
+      }
+    ],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 3,
+    "notes": "It contains many useful, evidence-grounded checks but repeatedly overstates what NO_POLICY proves."
+  },
+  {
+    "id": "R056",
+    "hard_defect": false,
+    "defects": [],
+    "required_facts_preserved": false,
+    "missing_facts": [
+      "analysis_coverage=COMPLETE"
+    ],
+    "usefulness": 4,
+    "notes": "The stated verdict, validity, metrics, and operator actions are accurate, but the coverage status is omitted."
+  },
+  {
+    "id": "R096",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T7",
+        "field": "#/summary",
+        "quote": "which is a missing-policy outcome",
+        "why": "NO_POLICY means no applicable rule was evaluated and does not establish that policy configuration was missing."
+      },
+      {
+        "type": "T7",
+        "field": "#/hypotheses/4/possible_explanation",
+        "quote": "No policy thresholds were attached to this run",
+        "why": "The evidence cannot establish that no thresholds or policies were configured."
+      },
+      {
+        "type": "T7",
+        "field": "#/recommendations/1/action",
+        "quote": "treat NO_POLICY as a missing-policy outcome",
+        "why": "This incorrectly states an unproven specific cause of NO_POLICY."
+      },
+      {
+        "type": "T7",
+        "field": "#/recommendations/1/rationale",
+        "quote": "Without policies the analysis cannot determine",
+        "why": "NO_POLICY does not prove that policies were absent rather than configured but inapplicable."
+      }
+    ],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 3,
+    "notes": "Its numerical reporting and diagnostic recommendations are strong, but it repeatedly mischaracterizes NO_POLICY as proof of missing configuration."
+  }
+]

@@ -1,0 +1,1 @@
+{"schema_version":"advisory-ai-runtime-relay.v1","status":"FORWARDED_STRUCTURED_OUTPUT","request_count":1,"usage":{"prompt_tokens":1,"completion_tokens":1,"total_tokens":2},"latency_ms":null,"model_returned":"deepseek-v4-flash-0731"}

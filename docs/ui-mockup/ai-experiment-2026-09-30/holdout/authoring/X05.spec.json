@@ -1,0 +1,38 @@
+{
+ "required": [
+  [
+   "bounded_interval",
+   [
+    "bounded|between|interval|range"
+   ]
+  ],
+  [
+   "lower_value",
+   [
+    "(?<![\\d.,])(?:197)(?![\\d]|[.,]\\d)"
+   ]
+  ],
+  [
+   "upper_value",
+   [
+    "(?<![\\d.,])(?:297)(?![\\d]|[.,]\\d)"
+   ]
+  ]
+ ],
+ "forbidden": [
+  "says that the interval requires a knee detector, or advises implementing or enabling one",
+  "reports a single capacity value instead of the interval"
+ ],
+ "useful_checks": [
+  "refine the stages inside the interval to narrow it"
+ ],
+ "source": {
+  "builder": "AdvisoryEvidenceBuilder",
+  "build": "5b5e51c+harness",
+  "source": "x:X05",
+  "source_sha256": "5d11bfba98d52f45bf9d3b68007b8e612209cb5534a1f6095473c041e1e23bea",
+  "derivation": [],
+  "evidence_sha256": "9478efabbdbd4d1c3a77ab9994889fde344e19d8d6fed1ddce9d2de1796d59b2",
+  "inputs": "x:X05, derivation [], analysed through RunBundleStore -> AnalysisService -> AdvisoryEvidenceBuilder by AdvisoryHoldoutCorpusTest on 5b5e51c+harness"
+ }
+}

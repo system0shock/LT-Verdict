@@ -1,0 +1,151 @@
+{
+ "stage": "S0",
+ "mode": "live",
+ "model": "deepseek-v4-flash-0731",
+ "tag": {
+  "phase": "v2-pilot",
+  "stage": "S0",
+  "case": "K05",
+  "rep": 1,
+  "attempt": 1
+ },
+ "qwen_exit": 0,
+ "wall_ms": 51207,
+ "relay": {
+  "schema_version": "advisory-ai-runtime-relay.v1",
+  "status": "FORWARDED_STRUCTURED_OUTPUT",
+  "request_count": 1,
+  "usage": {
+   "prompt_tokens": 2348,
+   "total_tokens": 7396,
+   "completion_tokens": 5048,
+   "prompt_tokens_details": {
+    "cached_tokens": 1024
+   },
+   "completion_tokens_details": {
+    "reasoning_tokens": 3294
+   }
+  },
+  "latency_ms": 50005,
+  "model_returned": "deepseek-v4-flash-0731"
+ },
+ "relay_status": "FORWARDED_STRUCTURED_OUTPUT",
+ "usage": {
+  "prompt_tokens": 2348,
+  "total_tokens": 7396,
+  "completion_tokens": 5048,
+  "prompt_tokens_details": {
+   "cached_tokens": 1024
+  },
+  "completion_tokens_details": {
+   "reasoning_tokens": 3294
+  }
+ },
+ "latency_ms": 50005,
+ "status": "OK",
+ "note": null,
+ "output": {
+  "schema_version": "ai-advice-output.v1",
+  "summary": "The deterministic verdict is FAIL. The error-limit policy check (rule_id \"error-limit\") observed error_rate_ratio 2/100 (0.02) against an lte threshold of 0.01 and returned status FAIL. The overall metric summary and the checkout transaction summary both report error_count 2 over sample_count 100, with identical latency metrics (p50 50 ms, p95 95 ms, p99 99 ms, max 100 ms) and the same throughput_rps ratio (numerator 100000 / denominator 99100). Run validity is VALID, analysis coverage is COMPLETE, and one policy_failure finding is recorded. The observed 0.02 exceeds the 0.01 policy bound by exactly 0.01 on a small sample (100), so the failure may be genuine, may originate in checkout, or may be affected by sampling noise; the advisory hypotheses are unproven explanations and do not alter the FAIL verdict.",
+  "hypotheses": [
+   {
+    "rank": 1,
+    "observation": "The overall metric summary (metric-summary-overall) and the checkout transaction summary (metric-summary-a9eeb727...) both report error_count 2 over sample_count 100 (error_rate_ratio 2/100) and identical latency and throughput values.",
+    "possible_explanation": "Both errors may originate from the checkout sampler, since the checkout-scoped summary reports the same error_count and sample_count as the overall summary; however, the summary metrics alone do not prove which sampler produced the errors.",
+    "recommended_check": "Inspect the per-sample JTL/CSV records for this run to identify the sampler label, response code, and failure message for each of the 2 errors.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0",
+     "analysis-result.json#/evidence/1"
+    ]
+   },
+   {
+    "rank": 2,
+    "observation": "The policy check for error_rate_ratio reported observed 2/100 (0.02) against an lte threshold of 0.01 and returned status FAIL.",
+    "possible_explanation": "The observed 2% error rate is based on only 100 samples; the true long-run rate could be at or below 0.01 and the observed value may be within sampling noise.",
+    "recommended_check": "Re-run with a larger sample count (and ideally multiple runs) and compute a confidence interval for error_rate_ratio to test whether 0.02 is a stable exceedance of the 0.01 threshold.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/2",
+     "analysis-result.json#/evidence/0"
+    ]
+   },
+   {
+    "rank": 3,
+    "observation": "The reported latency metrics are p50 50 ms, p95 95 ms, p99 99 ms, and max 100 ms, while the failing policy metric is error_rate_ratio, not latency.",
+    "possible_explanation": "The FAIL verdict appears driven by error rate rather than response latency, but without a baseline or per-sample timestamps this does not prove latency health and does not rule out a correlation between errors and latency.",
+    "recommended_check": "Compare the latency metrics to a baseline run and, using raw per-sample data, correlate the 2 error timestamps with latency percentiles over time.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0",
+     "analysis-result.json#/evidence/2"
+    ]
+   },
+   {
+    "rank": 4,
+    "observation": "No timestamps or clock references appear anywhere in the provided evidence (metric summaries, policy check, facts, findings).",
+    "possible_explanation": "If the 2 errors are clustered (bursty) rather than uniformly distributed, they could coincide with a single event; without timestamp evidence this cannot be tested or supported.",
+    "recommended_check": "Verify the clock/sampling timestamps in the raw JTL output and check whether the 2 failing samples cluster in time; confirm clock correctness before drawing any temporal or causal conclusion.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0",
+     "analysis-result.json#/evidence/2"
+    ]
+   }
+  ],
+  "recommendations": [
+   {
+    "rank": 1,
+    "action": "Extract the raw sampler records for this run and inspect the 2 error samples, recording sampler label, request, response code, and failure message to confirm whether both errors are in checkout.",
+    "rationale": "The overall and checkout summaries report identical error_count (2) and sample_count (100), making checkout a prime candidate, but summary metrics do not identify the failing samples.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/1",
+     "analysis-result.json#/evidence/0"
+    ]
+   },
+   {
+    "rank": 2,
+    "action": "Re-run the scenario with a larger sample count (e.g., several thousand samples) and compute a confidence interval for the error rate.",
+    "rationale": "The observed 0.02 is based on only 2 errors out of 100 samples; sampling noise could place the true rate at or below the 0.01 threshold, so a more precise estimate is needed before concluding an enduring regression.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/2",
+     "analysis-result.json#/evidence/0"
+    ]
+   },
+   {
+    "rank": 3,
+    "action": "After identifying and fixing the root cause of the 2 errors, re-run the load test and confirm the error-limit policy returns PASS (observed error_rate_ratio <= 0.01).",
+    "rationale": "The deterministic verdict FAIL follows directly from observed 0.02 > threshold 0.01; a remediation can only be evidenced by a subsequent pass of the same check.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/2"
+    ]
+   },
+   {
+    "rank": 4,
+    "action": "Add per-sampler error accounting and a latency baseline comparison to future runs so checkout versus other samplers and any latency changes can be distinguished.",
+    "rationale": "The evidence contains only two scopes with identical summary values and no per-sampler error detail or baseline, which limits root-cause attribution beyond the measured error rate.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0",
+     "analysis-result.json#/evidence/1"
+    ]
+   },
+   {
+    "rank": 5,
+    "action": "Establish and document the clock relationship and timestamps for the load-test run so future error samples can be ordered and correlated with events.",
+    "rationale": "No timestamp or clock information is present in the evidence, so temporal clustering or causal ordering of the errors cannot be assessed; clock verification is a prerequisite for any timing-based hypothesis.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/2",
+     "analysis-result.json#/evidence/0"
+    ]
+   }
+  ],
+  "caveats": [
+   "The deterministic verdict is FAIL: policy check observed error_rate_ratio 2/100 (0.02) exceeds the lte threshold 0.01. This advisory does not change that verdict.",
+   "The estimate is based on a small population (100 samples, 2 errors); the error-rate estimate has wide uncertainty and may not represent the long-run rate.",
+   "The overall and checkout summaries are identical in the reported fields; the evidence does not identify which specific samplers returned errors or their response codes or failure messages.",
+   "No baseline, historical run, or reference environment is included, so the reported latency (p50 50 ms, p95 95 ms, p99 99 ms, max 100 ms) and throughput_rps ratio (numerator 100000 / denominator 99100) cannot be judged anomalous or healthy.",
+   "No timestamps or clock relationship appear in the evidence; error clustering and any temporal or causal ordering cannot be assessed, and clock verification is required before any timing-based hypothesis is considered.",
+   "run_validity is VALID and analysis_coverage is COMPLETE for the metrics provided, but missing per-sample records and error details remain outside this evidence."
+  ]
+ },
+ "schema": "ai-experiment-run.v2",
+ "phase": "pilot",
+ "case": "K05",
+ "rep": 1
+}

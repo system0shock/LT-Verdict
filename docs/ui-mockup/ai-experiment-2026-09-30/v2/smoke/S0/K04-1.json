@@ -1,0 +1,28 @@
+{
+ "stage": "S0",
+ "mode": "live",
+ "model": "deepseek-v4-flash-0731",
+ "tag": {
+  "phase": "v2-smoke",
+  "stage": "S0",
+  "case": "K04",
+  "rep": 1,
+  "attempt": 1
+ },
+ "qwen_exit": 1,
+ "wall_ms": 67815,
+ "relay": {
+  "schema_version": "advisory-ai-runtime-relay.v1",
+  "status": "BLOCKED_ADDITIONAL_REQUEST",
+  "request_count": 5,
+  "first_status": "FORWARDED_STRUCTURED_OUTPUT"
+ },
+ "relay_status": "BLOCKED_ADDITIONAL_REQUEST",
+ "usage": null,
+ "latency_ms": null,
+ "status": "RELAY_BOUNDARY",
+ "schema": "ai-experiment-run.v2",
+ "phase": "smoke",
+ "case": "K04",
+ "rep": 1
+}

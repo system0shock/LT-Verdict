@@ -1,0 +1,189 @@
+{
+ "stage": "S1",
+ "mode": "live",
+ "model": "deepseek-v4-flash-0731",
+ "tag": {
+  "phase": "v2-pilot",
+  "stage": "S1",
+  "case": "K03",
+  "rep": 1,
+  "attempt": 1
+ },
+ "qwen_exit": 0,
+ "wall_ms": 106612,
+ "relay": {
+  "schema_version": "advisory-ai-runtime-relay.v1",
+  "status": "FORWARDED_STRUCTURED_OUTPUT",
+  "request_count": 1,
+  "usage": {
+   "prompt_tokens": 12826,
+   "total_tokens": 23106,
+   "completion_tokens": 10280,
+   "prompt_tokens_details": {
+    "cached_tokens": 1024
+   },
+   "completion_tokens_details": {
+    "reasoning_tokens": 7694
+   }
+  },
+  "latency_ms": 105197,
+  "model_returned": "deepseek-v4-flash-0731"
+ },
+ "relay_status": "FORWARDED_STRUCTURED_OUTPUT",
+ "usage": {
+  "prompt_tokens": 12826,
+  "total_tokens": 23106,
+  "completion_tokens": 10280,
+  "prompt_tokens_details": {
+   "cached_tokens": 1024
+  },
+  "completion_tokens_details": {
+   "reasoning_tokens": 7694
+  }
+ },
+ "latency_ms": 105197,
+ "status": "OK",
+ "note": null,
+ "output": {
+  "schema_version": "ai-advice-output.v1",
+  "summary": "This capacity analysis reports policy_verdict NO_POLICY for a run with three verified stages (5, 10, and 20 users). Each stage window passed its business policy check (error_rate_ratio <= 0.01, zero errors) and the diagnostic generator CPU-throttle guard (threshold 0.2 ratio), so capacity_summary establishes a LOWER_BOUND of 20 verified users with upper_exclusive null and capacity_knee null (knee_reason KNEE_DETECTOR_NOT_IMPLEMENTED). The NO_POLICY verdict reflects that no capacity policy or required capacity is configured; it is not a pass and passing windows do not change it. No findings are reported and analysis coverage is COMPLETE. The load generator was not saturated in the observed windows (cfs throttle ratio mostly 0, max 0.1485 in r1-users10, below the 0.2 diagnostic threshold). Clock alignment is not_verified_by_core, so temporal or causal statements are unsupported. Advice focuses on: configuring a capacity policy if a PASS/FAIL verdict is needed, extending testing with higher loads to explore headroom beyond 20 users, accepting the fixed knee-detector limitation, and verifying clocks before interpreting latency outliers (e.g., product p99 665 ms, cart max 2406 ms).",
+  "hypotheses": [
+   {
+    "rank": 1,
+    "observation": "capacity_summary reports policy_verdict NO_POLICY with lower_inclusive 20, while each of the three stage windows (r1-users5, r1-users10, r1-users20) has verdict PASS on its window_policy_summary, and the facts also record policy_verdict NO_POLICY.",
+    "possible_explanation": "The NO_POLICY verdict likely reflects that no capacity policy or required capacity is configured for this run; the product returns NO_POLICY for a missing policy regardless of the passing stages and business windows.",
+    "recommended_check": "Configure a capacity policy (e.g., required capacity or an error/latency SLO) in the test definition and rerun so a PASS or FAIL verdict can be produced.",
+    "evidence_refs": [
+     "analysis-result.json#/capacity_summary",
+     "analysis-result.json#/policy_verdict",
+     "analysis-result.json#/evidence/36",
+     "analysis-result.json#/evidence/38",
+     "analysis-result.json#/evidence/40"
+    ]
+   },
+   {
+    "rank": 2,
+    "observation": "All three window policy summaries and error-rate policy checks PASS (0 errors over denominators 30399, 36581, 45668), overall and per-transaction metric summaries report error_count 0, and the analysis findings list is empty.",
+    "possible_explanation": "At the tested loads (5, 10, 20 users) the system met the observed error SLO, but the absence of errors or findings does not by itself prove spare capacity, stability, or absence of problems at higher load.",
+    "recommended_check": "Add higher-load stages (e.g., 40 or 80 users) or a configured policy to empirically test where the system stops meeting the SLO.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0",
+     "analysis-result.json#/evidence/35",
+     "analysis-result.json#/evidence/37",
+     "analysis-result.json#/evidence/39",
+     "analysis-result.json#/analysis_coverage"
+    ]
+   },
+   {
+    "rank": 3,
+    "observation": "Generator cfs_throttled_period_ratio is mostly 0 with max 0.0594 (r1-users5), 0.1485 (r1-users10), and 0.13 (r1-users20), all below the 0.2 diagnostic threshold, and the diagnostic resource policy checks PASS in every stage.",
+    "possible_explanation": "The load generator was not saturated during the observed windows, leaving the stages usable for the product lower bound; the generator guard is diagnostic by contract, so it would not create an upper bound even if it had failed.",
+    "recommended_check": "If generator saturation is suspected in future runs, monitor the throttle-ratio series and rerun with a generator that is not saturated; keep the rule diagnostic rather than binding.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/8",
+     "analysis-result.json#/evidence/16",
+     "analysis-result.json#/evidence/24",
+     "analysis-result.json#/evidence/32",
+     "analysis-result.json#/evidence/33",
+     "analysis-result.json#/evidence/34"
+    ]
+   },
+   {
+    "rank": 4,
+    "observation": "capacity_summary has capacity_knee null with knee_reason KNEE_DETECTOR_NOT_IMPLEMENTED, bound_type LOWER_BOUND, lower_inclusive 20, and upper_exclusive null.",
+    "possible_explanation": "The absence of a knee estimate is a fixed product limitation (knee detection is not implemented), not evidence that no knee exists or that capacity is unlimited; the verified LOWER_BOUND is derived from stages independent of any knee.",
+    "recommended_check": "Do not rely on a knee value; extend testing with additional higher-load stages and inspect resource utilization and latency metrics for empirical signs of saturation.",
+    "evidence_refs": [
+     "analysis-result.json#/capacity_summary"
+    ]
+   },
+   {
+    "rank": 5,
+    "observation": "Per-transaction summaries show p99 latency 665 ms and max 1099 ms for 'product', max 2406 ms for 'cart' (evidence 2), with 0 errors overall; clock_alignment is not_verified_by_core.",
+    "possible_explanation": "Tail latency outliers may exist for certain transactions, but with clock alignment unverified and no per-window latency breakdown, any attribution of these values to a specific load stage is unsupported.",
+    "recommended_check": "First verify clock alignment among generator, services, and monitoring; then inspect per-window per-transaction latency distributions from the JTL to see whether p99/max coincide with any stage.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/2",
+     "analysis-result.json#/evidence/5",
+     "analysis-result.json#/evidence/7"
+    ]
+   },
+   {
+    "rank": 6,
+    "observation": "In the r1-users5 window, paymentservice memory_bytes ranges from min 26849280 to max 33318912 with slope_per_second 12458.39, while later windows stabilize (r1-users10 mean 33196691.93, r1-users20 mean 33249075.2 with slope -110.40).",
+    "possible_explanation": "The early-window rise and later stabilization could indicate warm-up or allocation growth rather than a sustained leak, but this is a hypothesis and cannot be established from these summaries alone.",
+    "recommended_check": "Extend the observation window or inspect additional memory/GC series for paymentservice across a longer run to determine whether growth persists.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/15",
+     "analysis-result.json#/evidence/23",
+     "analysis-result.json#/evidence/31"
+    ]
+   }
+  ],
+  "recommendations": [
+   {
+    "rank": 1,
+    "action": "Configure a capacity policy (e.g., required capacity or an observable SLO such as an error/latency threshold) in the test definition and rerun if a PASS or FAIL capacity verdict is needed.",
+    "rationale": "The run is currently assessed as NO_POLICY because no policy or required capacity is configured; the product only produces PASS or FAIL once a policy exists, regardless of the passing stages.",
+    "evidence_refs": [
+     "analysis-result.json#/capacity_summary",
+     "analysis-result.json#/policy_verdict"
+    ]
+   },
+   {
+    "rank": 2,
+    "action": "Extend the run with additional higher load stages beyond 20 users to validate headroom beyond the verified LOWER_BOUND.",
+    "rationale": "The verified bound is 20 users; the generator throttle ratio stayed far below the 0.2 diagnostic threshold (max 0.1485 in r1-users10) with no saturation, so further stages should not be limited by the load generator.",
+    "evidence_refs": [
+     "analysis-result.json#/capacity_summary",
+     "analysis-result.json#/evidence/16",
+     "analysis-result.json#/evidence/24",
+     "analysis-result.json#/evidence/34"
+    ]
+   },
+   {
+    "rank": 3,
+    "action": "Verify clock alignment between generator, services, and monitoring before any time-based interpretation; if latency outliers matter, then inspect per-window per-transaction latency distributions from the JTL.",
+    "rationale": "clock_alignment is not_verified_by_core, so no lead/lag or temporal causal interpretation of the latency and resource series is supported; overall p99/max values (product 665 ms, cart 2406 ms) are not per-window.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/7",
+     "analysis-result.json#/evidence/2",
+     "analysis-result.json#/evidence/5"
+    ]
+   },
+   {
+    "rank": 4,
+    "action": "Keep the generator CPU-throttle rule as diagnostic and do not convert it to a binding, SLA, or enforcing rule; if the guard ever fails, rerun with a generator that is not saturated.",
+    "rationale": "The guard is diagnostic by contract; a failed guard would make its stage unusable for a product bound and would never create an upper bound.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/32",
+     "analysis-result.json#/evidence/33",
+     "analysis-result.json#/evidence/34"
+    ]
+   },
+   {
+    "rank": 5,
+    "action": "Treat capacity_knee as unavailable by design (KNEE_DETECTOR_NOT_IMPLEMENTED) and base capacity conclusions on the verified LOWER_BOUND, using extended staging to estimate headroom empirically.",
+    "rationale": "Knee detection is not implemented in the product and cannot be enabled by the user; the LOWER_BOUND is already derived from stages with verified product outcomes independently of a knee.",
+    "evidence_refs": [
+     "analysis-result.json#/capacity_summary"
+    ]
+   }
+  ],
+  "caveats": [
+   "NO_POLICY is a distinct verdict: a missing capacity policy or required capacity yields NO_POLICY; passing business windows do not turn it into PASS.",
+   "capacity_knee is null because knee detection is not implemented (KNEE_DETECTOR_NOT_IMPLEMENTED), a fixed product limitation; no user action changes this and the LOWER_BOUND is derived from verified stages independently of a knee.",
+   "The generator CPU-throttle rule is diagnostic by contract (effect: diagnostic); even a failure would only make its stage unusable and would never create an upper bound, and its effect must not be changed to binding, SLA, or enforcing.",
+   "Clock alignment is not_verified_by_core; without a verified clock relationship, no lead/lag ordering or temporal causal hypothesis is supported.",
+   "Resource summaries and policy windows cover only three explicit 300-second windows within the run (evaluation 1790634210000-1790635250000 ms vs run 1790634168783-1790635269885 ms); they do not describe the entire run.",
+   "Window denominators (30399, 36581, 45668) differ from the overall run sample count (132623) because they measure different scopes and windows; this is not an inconsistency.",
+   "Zero errors at the tested loads and an empty findings list do not prove stability, spare capacity, or absence of problems beyond 20 users.",
+   "Overall-scope latency percentiles (e.g., product p99 665 ms, cart max 2406 ms) are not broken down per window, so attributing them to any stage would be unsupported.",
+   "The run validity is VALID and analysis coverage is COMPLETE, but this refers to the analysis pipeline completing, not to proof that untested loads are safe."
+  ]
+ },
+ "schema": "ai-experiment-run.v2",
+ "phase": "pilot",
+ "case": "K03",
+ "rep": 1
+}

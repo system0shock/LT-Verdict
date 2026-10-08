@@ -1,0 +1,128 @@
+[
+  {
+    "id": "R006",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T1",
+        "field": "#/hypotheses/0/recommended_check",
+        "quote": "re-run the capacity analysis with knee detection enabled",
+        "why": "Knee detection is a fixed unimplemented limitation and is neither actionable nor required to compute a capacity bound."
+      },
+      {
+        "type": "T1",
+        "field": "#/hypotheses/1/recommended_check",
+        "quote": "Implement or enable knee detection",
+        "why": "Advising implementation or enablement of the knee detector contradicts the product contract."
+      },
+      {
+        "type": "T1",
+        "field": "#/recommendations/0/action",
+        "quote": "with knee detection enabled",
+        "why": "Additional verified stages can extend bounds without a knee detector."
+      },
+      {
+        "type": "T7",
+        "field": "#/caveats/1",
+        "quote": "no capacity estimate exists",
+        "why": "The evidence explicitly provides a LOWER_BOUND of 20 users."
+      }
+    ],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 2,
+    "notes": "It preserves the main run facts but repeatedly recommends an invalid knee-detector action."
+  },
+  {
+    "id": "R010",
+    "hard_defect": false,
+    "defects": [],
+    "required_facts_preserved": false,
+    "missing_facts": [
+      "Run validity is VALID.",
+      "Analysis coverage is COMPLETE."
+    ],
+    "usefulness": 4,
+    "notes": "The advice is evidence-grounded and operator-safe, but omits the required validity and coverage statements."
+  },
+  {
+    "id": "R016",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T1",
+        "field": "#/hypotheses/1/possible_explanation",
+        "quote": "no knee point (and therefore no upper bound) is estimated",
+        "why": "An upper bound is derived from verified stage outcomes independently of knee detection."
+      }
+    ],
+    "required_facts_preserved": false,
+    "missing_facts": [
+      "Run validity is VALID.",
+      "Analysis coverage is COMPLETE."
+    ],
+    "usefulness": 3,
+    "notes": "Most recommendations are correct, but it incorrectly makes the absence of an upper bound depend on the knee detector."
+  },
+  {
+    "id": "R036",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T1",
+        "field": "#/hypotheses/0/recommended_check",
+        "quote": "Enable a knee detector",
+        "why": "The knee detector is a fixed unimplemented product limitation and is not an operator action."
+      },
+      {
+        "type": "T1",
+        "field": "#/recommendations/1/action",
+        "quote": "Implement knee detection",
+        "why": "Capacity bounds do not require knee detection, so this proposes an invalid remedy."
+      }
+    ],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 2,
+    "notes": "It accurately reports most evidence but promotes invalid knee-detector work as a priority action."
+  },
+  {
+    "id": "R054",
+    "hard_defect": false,
+    "defects": [],
+    "required_facts_preserved": false,
+    "missing_facts": [
+      "Run validity is VALID."
+    ],
+    "usefulness": 4,
+    "notes": "The analysis is otherwise correct, scoped carefully, and gives safe, verifiable operator actions."
+  },
+  {
+    "id": "R066",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T8",
+        "field": "#/summary",
+        "quote": "CPU/memory utilization is low at the tested loads",
+        "why": "The evidence reports absolute CPU-core and memory values but no quotas, limits, or saturation baseline from which utilization can be determined."
+      },
+      {
+        "type": "T8",
+        "field": "#/hypotheses/5/possible_explanation",
+        "quote": "the monitored services were not saturated",
+        "why": "Low absolute CPU means and a passing generator guard do not establish service saturation or headroom."
+      },
+      {
+        "type": "T7",
+        "field": "#/caveats/6",
+        "quote": "Latency and resource figures are observed statistics for the covered windows only",
+        "why": "The reported latency metric summaries are whole-run aggregates, while evaluation windows cover only part of the run."
+      }
+    ],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 3,
+    "notes": "It correctly preserves the verdict and contract caveats but overstates utilization and misstates the latency scope."
+  }
+]

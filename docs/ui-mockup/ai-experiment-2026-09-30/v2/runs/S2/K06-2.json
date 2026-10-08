@@ -1,0 +1,160 @@
+{
+ "stage": "S2",
+ "mode": "live",
+ "model": "deepseek-v4-flash-0731",
+ "tag": {
+  "phase": "v2-pilot",
+  "stage": "S2",
+  "case": "K06",
+  "rep": 2,
+  "attempt": 1
+ },
+ "qwen_exit": 0,
+ "wall_ms": 74183,
+ "relay": {
+  "schema_version": "advisory-ai-runtime-relay.v1",
+  "status": "FORWARDED_STRUCTURED_OUTPUT",
+  "request_count": 1,
+  "usage": {
+   "prompt_tokens": 10312,
+   "total_tokens": 17845,
+   "completion_tokens": 7533,
+   "prompt_tokens_details": {
+    "cached_tokens": 1024
+   },
+   "completion_tokens_details": {
+    "reasoning_tokens": 5505
+   }
+  },
+  "latency_ms": 72835,
+  "model_returned": "deepseek-v4-flash-0731"
+ },
+ "relay_status": "FORWARDED_STRUCTURED_OUTPUT",
+ "usage": {
+  "prompt_tokens": 10312,
+  "total_tokens": 17845,
+  "completion_tokens": 7533,
+  "prompt_tokens_details": {
+   "cached_tokens": 1024
+  },
+  "completion_tokens_details": {
+   "reasoning_tokens": 5505
+  }
+ },
+ "latency_ms": 72835,
+ "status": "OK",
+ "note": null,
+ "output": {
+  "schema_version": "ai-advice-output.v1",
+  "summary": "Policy overall-errors FAILED the deterministic check: in the run-intersection window the observed error_rate_ratio was 3688/73813 (~5.0%), exceeding the 0.01 threshold. All 3688 errors in transaction scope belong to the \"checkout\" sampler, and the OpenSearch error profile reports one error group, frontend.request_error (3688), from the frontend service, appearing in bursts in the timeline. The overall verdict is FAIL (business_verdict FAIL, resource_verdict NO_POLICY). Load correlation is descriptive only (uncertainty NOT_ESTIMATED, headline UNAVAILABLE), clock alignment is not verified, paymentservice resource gaps make analysis coverage INCOMPLETE, and no capacity policy or capacity summary is present.",
+  "hypotheses": [
+   {
+    "rank": 1,
+    "observation": "Policy check overall-errors reports FAIL with observed 3688/73813 (~5.0%) vs threshold 0.01 in the run-intersection window; transaction-scope metrics show all 3688 errors in the 'checkout' sampler while the other five transaction scopes have error_count=0.",
+    "possible_explanation": "All observed request errors in this run appear to come from the checkout flow: the OpenSearch profile found a single error group 'frontend.request_error' totaling 3688 across the window. A defect or resource limitation specific to the checkout path is a candidate explanation, not a proven cause.",
+    "recommended_check": "Inspect per-sample JTL records and frontend service logs for the 'checkout' sampler (status codes, response messages, timestamps) to identify the concrete error type before rerunning.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/15",
+     "analysis-result.json#/evidence/3",
+     "analysis-result.json#/evidence/22",
+     "analysis-result.json#/evidence/0"
+    ]
+   },
+   {
+    "rank": 2,
+    "observation": "The OpenSearch error timeline shows errors in bursts (e.g., 15s intervals with 218-311 errors) rather than continuously, and the descriptive correlation of error rate with achieved load is rho=0.9722 at best_lag 0ms, but uncertainty is NOT_ESTIMATED and the headline selection status is UNAVAILABLE with null p-values.",
+    "possible_explanation": "Error episodes may coincide with elevated achieved load, but the correlation is descriptive only (reasons STAGE_UNSPECIFIED, CONTROL_CONTEXT_MISSING, ACHIEVED_LOAD_ONLY) and is not calibrated; it does not establish that load caused the errors.",
+    "recommended_check": "Verify clock alignment between the load generator, error index, and resource metrics first (currently not_verified_by_core), then compare the achieved_rps load profile against the error timeline and inspect whether errors appear only above a load threshold.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/22",
+     "analysis-result.json#/evidence/18",
+     "analysis-result.json#/evidence/19",
+     "analysis-result.json#/evidence/7"
+    ]
+   },
+   {
+    "rank": 3,
+    "observation": "Checkout latency has max=10008 ms (p50=62, p99=112) and the overall latency summary also has max=10008 ms, while the other transaction scopes report max latencies around 980-1071 ms.",
+    "possible_explanation": "A subset of checkout requests experienced a very long-tail response time (~10 s) in the same window as the 3688 errors, which is consistent with timeouts or connection failures in that flow; however, no per-sample association can be confirmed from this input.",
+    "recommended_check": "Extract per-sample checkout records (timestamps, status codes, success flag, latency) and check whether the 10 s max-latency samples align with the error bursts in the timeline.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/3",
+     "analysis-result.json#/evidence/0",
+     "analysis-result.json#/evidence/17",
+     "analysis-result.json#/evidence/22"
+    ]
+   },
+   {
+    "rank": 4,
+    "observation": "paymentservice resource series have gaps in the run-intersection window (cpu missing 5 of 47 expected cells, memory missing 6 of 47), and any attempted resource coverage is limited by RESOURCE_GAPS.",
+    "possible_explanation": "Missing paymentservice metric cells mean paymentservice behavior during the error periods cannot be fully assessed, so a resource-side contribution can be neither confirmed nor excluded.",
+    "recommended_check": "Restore complete metric collection for paymentservice (cpu and memory) and rerun so the resource series have no missing cells before drawing resource-side conclusions.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/12",
+     "analysis-result.json#/evidence/13"
+    ]
+   }
+  ],
+  "recommendations": [
+   {
+    "rank": 1,
+    "action": "Inspect per-sample JTL data and frontend logs for the 'checkout' sampler error_type 'frontend.request_error' (status codes, response messages, timestamps) to identify the concrete failure mode.",
+    "rationale": "All 3688 observed errors are in the checkout scope, all sampled error documents are frontend.request_error from the frontend service, and the policy FAIL is driven by those errors (3688/73813 vs threshold 0.01).",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/3",
+     "analysis-result.json#/evidence/22",
+     "analysis-result.json#/evidence/15",
+     "analysis-result.json#/evidence/0"
+    ]
+   },
+   {
+    "rank": 2,
+    "action": "Rerun the test (or fix collector wiring) so paymentservice cpu and memory series have no missing cells before drawing resource conclusions.",
+    "rationale": "Coverage is INCOMPLETE because of RESOURCE_GAPS: paymentservice cpu is missing 5 of 47 cells and memory 6 of 47 cells, which reduces confidence in any resource-side interpretation.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/12",
+     "analysis-result.json#/evidence/13"
+    ]
+   },
+   {
+    "rank": 3,
+    "action": "Verify and, if needed, align clocks between the load generator, the OpenSearch errors index, and the metrics source before interpreting any lead/lag relationship.",
+    "rationale": "clock_alignment is not_verified_by_core and the only correlation present (errors vs load) was computed at lag 0 ms; without verified alignment it cannot support a temporal or lead/lag ordering claim.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/7",
+     "analysis-result.json#/evidence/18"
+    ]
+   },
+   {
+    "rank": 4,
+    "action": "If a resource capacity verdict is desired, configure a resource policy with required capacity and rerun; do not treat the current NO_POLICY resource verdict as pass or fail.",
+    "rationale": "The run has no capacity policy configured: the window resource_verdict is NO_POLICY and no capacity_summary is present, so no capacity bound can be derived from this run.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/16"
+    ]
+   },
+   {
+    "rank": 5,
+    "action": "After any fix, rerun and compare overall-errors in the same run-intersection window against the 0.01 threshold; the current observation is 3688/73813 (~5.0%).",
+    "rationale": "The determinative FAIL comes from the overall-errors policy check in the run-intersection window; only a rerun can assess whether a change brings the error rate back to the 1% target.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/15",
+     "analysis-result.json#/evidence/17"
+    ]
+   }
+  ],
+  "caveats": [
+   "Analysis coverage is INCOMPLETE: paymentservice cpu and memory series had missing cells (5/47 and 6/47) due to RESOURCE_GAPS, so resource-side conclusions are limited.",
+   "The errors-vs-load correlation is descriptive only: uncertainty NOT_ESTIMATED, headline status UNAVAILABLE (null p-values), reasons STAGE_UNSPECIFIED, CONTROL_CONTEXT_MISSING, ACHIEVED_LOAD_ONLY. It establishes neither causality nor that load caused the errors.",
+   "No capacity policy was configured: resource_verdict NO_POLICY and no capacity_summary is present; NO_POLICY is not a pass, and no capacity bound is derived.",
+   "Counts are scope- and window-specific: the policy check uses 73813 samples inside run-intersection while the whole run has 75411 samples; comparing these quantities without their windows would be inconsistent.",
+   "No per-sample data, status codes, full log bodies, traces, or release/configuration information are present; the sampled error message is only 'request error', so error causes and temporal relationships cannot be confirmed.",
+   "anomalies_tested=0 and episodes_reported=0 in the diagnostic summary; the absence of detected anomaly episodes does not prove stability or the absence of a problem.",
+   "Clock alignment is not_verified_by_core; no lead/lag or temporal causal ordering can be supported until clocks are verified."
+  ]
+ },
+ "schema": "ai-experiment-run.v2",
+ "phase": "pilot",
+ "case": "K06",
+ "rep": 2
+}

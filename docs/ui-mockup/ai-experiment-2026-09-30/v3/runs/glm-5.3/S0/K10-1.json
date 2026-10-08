@@ -1,0 +1,196 @@
+{
+ "stage": "S0",
+ "mode": "live",
+ "model": "glm-5.3",
+ "tag": {
+  "phase": "v3",
+  "model_tag": "glm-5.3",
+  "stage": "S0",
+  "case": "K10",
+  "rep": 1,
+  "attempt": 1
+ },
+ "qwen_exit": 0,
+ "wall_ms": 114522,
+ "relay": {
+  "schema_version": "advisory-ai-runtime-relay.v1",
+  "status": "FORWARDED_STRUCTURED_OUTPUT",
+  "request_count": 1,
+  "usage": {
+   "prompt_tokens": 2627,
+   "total_tokens": 12655,
+   "completion_tokens": 10028,
+   "prompt_tokens_details": {
+    "cached_tokens": 1024
+   },
+   "completion_tokens_details": {
+    "reasoning_tokens": 7741
+   }
+  },
+  "latency_ms": 113183,
+  "model_returned": "glm-5.3"
+ },
+ "relay_status": "FORWARDED_STRUCTURED_OUTPUT",
+ "usage": {
+  "prompt_tokens": 2627,
+  "total_tokens": 12655,
+  "completion_tokens": 10028,
+  "prompt_tokens_details": {
+   "cached_tokens": 1024
+  },
+  "completion_tokens_details": {
+   "reasoning_tokens": 7741
+  }
+ },
+ "latency_ms": 113183,
+ "status": "OK",
+ "note": null,
+ "output": {
+  "caveats": [
+   "NO_POLICY is not a pass: no latency or error-rate thresholds were defined or evaluated for this run, so the observed results remain unjudged.",
+   "Zero errors and the reported percentiles describe only this run's observed window; they do not prove error-free behavior, stability, or spare capacity at other load levels.",
+   "The evidence contains aggregate metric summaries only - no per-sample timestamps, no time series, and no anomaly-test counts - so warm-up effects, drift, or clustering of slow samples cannot be confirmed from this evidence.",
+   "The throughput denominator (44986) is identical across all seven summaries but its unit and definition are not stated in the evidence; any requests-per-second interpretation is unverified.",
+   "The gap between the overall p99 (77 ms) and max (904 ms) indicates a long latency tail whose frequency, timing, and per-sampler distribution are not quantified in the evidence.",
+   "This advisory interpretation does not modify the deterministic verdict (NO_POLICY), the VALID run validity, the COMPLETE analysis coverage, or the findings of the immutable analysis."
+  ],
+  "hypotheses": [
+   {
+    "evidence_refs": [
+     "analysis-result.json#/policy_verdict",
+     "analysis-result.json#/run_validity",
+     "analysis-result.json#/analysis_coverage"
+    ],
+    "observation": "policy_verdict is NO_POLICY while run_validity is VALID and analysis_coverage is COMPLETE with no reasons recorded.",
+    "possible_explanation": "The analysis ran without a performance policy/SLO attached, so latency and error results were never compared against acceptance thresholds; the run is unjudged, not passing.",
+    "recommended_check": "Confirm whether a policy was expected for this run; if so, define thresholds (for example p95/p99 latency and error rate) and re-run the verdict so a PASS or FAIL determination is produced.",
+    "rank": 1
+   },
+   {
+    "evidence_refs": [
+     "analysis-result.json#/evidence/4",
+     "analysis-result.json#/evidence/0"
+    ],
+    "observation": "The home sampler reports the highest values among samplers at every reported level (p50 27 ms, p95 61 ms, p99 96 ms, max 904 ms), and its max equals the overall max of 904 ms; other sampler maxima are lower (checkout 444 ms, cart 187 ms, product 108 ms, add product to cart 78 ms, reset cart 75 ms).",
+    "possible_explanation": "A small number of slow home-page responses, possibly clustered near the start of the run (warm-up, cold cache, connection establishment) or isolated slow samples, may drive the overall maximum latency.",
+    "recommended_check": "From the source JTL, list raw home-sampler samples with elapsed time above the overall p99 (77 ms) and check whether the slowest samples share timestamps near the run start or are spread throughout; also count how many home samples exceed its own p99 (96 ms).",
+    "rank": 2
+   },
+   {
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0"
+    ],
+    "observation": "Overall latency is p50 11 ms, p95 46 ms, p99 77 ms, while the maximum is 904 ms.",
+    "possible_explanation": "The distribution has a thin tail: by definition of the p99, at most about 1% of samples exceed 77 ms, and the single worst reported sample (904 ms) is far above the p99.",
+    "recommended_check": "Extract raw samples above the p99 threshold from the JTL and quantify the tail: count, elapsed values, and per-sampler distribution, confirming whether the tail is concentrated in one sampler or spread across several.",
+    "rank": 3
+   },
+   {
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0",
+     "analysis-result.json#/evidence/1",
+     "analysis-result.json#/evidence/3"
+    ],
+    "observation": "Every metric summary reports error_count 0 and error_rate_ratio numerator 0, across 2623 total samples and 437-438 samples per sampler.",
+    "possible_explanation": "The system under test handled this specific load without recorded errors within this run; alternatively, sampler success may be judged only at transport level (for example HTTP completion), so functional failures could go uncounted.",
+    "recommended_check": "Verify the JMeter test plan includes assertions on response content and response codes for each sampler, and inspect the raw JTL success and responseCode fields to confirm there are no non-success records.",
+    "rank": 4
+   },
+   {
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0",
+     "analysis-result.json#/evidence/1",
+     "analysis-result.json#/evidence/4"
+    ],
+    "observation": "All seven summaries report throughput_rps with the identical denominator 44986 (overall numerator 2623000; per-sampler numerators 437000, with 438000 for home).",
+    "possible_explanation": "A single shared measurement window, plausibly the run's elapsed duration, is used for every summary and per-sampler numerators scale with sample counts; however, the unit and definition of the denominator are not stated in the evidence.",
+    "recommended_check": "Verify the denominator's definition and unit (for example, total elapsed run time derived from JTL timestamps) before interpreting the ratio as requests per second or comparing it across runs.",
+    "rank": 5
+   },
+   {
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0",
+     "analysis-result.json#/evidence/1",
+     "analysis-result.json#/evidence/4"
+    ],
+    "observation": "Per-sampler sample counts are 437 for five samplers and 438 for home, summing to 2623, which equals the overall sample count.",
+    "possible_explanation": "The scenario appears to execute one request per sampler per iteration, with the single extra home sample possibly coming from an initial page load or start-up request.",
+    "recommended_check": "Review the JMeter test plan (thread group and loop settings) to confirm the iteration structure, which determines how per-sampler counts and throughput should be interpreted.",
+    "rank": 6
+   },
+   {
+    "evidence_refs": [
+     "analysis-result.json#/analysis_coverage"
+    ],
+    "observation": "analysis_coverage status is COMPLETE with an empty reasons list, and the analysis produced no findings.",
+    "possible_explanation": "The analysis considers its coverage of this run complete and its configured checks found nothing to flag; an empty findings list by itself does not demonstrate stability or the absence of problems.",
+    "recommended_check": "Confirm which detections the analysis performs for JMeter JTL sources (for example anomaly or trend checks) and that they executed on this run, so the empty findings list can be interpreted with a known scope.",
+    "rank": 7
+   }
+  ],
+  "recommendations": [
+   {
+    "action": "Define and attach a performance policy for this run (thresholds for at least p95/p99 latency and error rate) and re-run the verdict to obtain a PASS or FAIL determination.",
+    "evidence_refs": [
+     "analysis-result.json#/policy_verdict",
+     "analysis-result.json#/evidence/0"
+    ],
+    "rationale": "The deterministic verdict is NO_POLICY: no acceptance criteria were evaluated, so the run's results are unjudged; missing policy is not a pass.",
+    "rank": 1
+   },
+   {
+    "action": "Inspect raw JTL samples for the home sampler above the overall p99 (77 ms) and the home p99 (96 ms), recording their timestamps relative to run start and their elapsed times.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/4",
+     "analysis-result.json#/evidence/0"
+    ],
+    "rationale": "home has the highest values at every reported percentile and its max (904 ms) equals the overall max; determining whether slow samples cluster at run start would distinguish a warm-up effect from an intermittent slowdown.",
+    "rank": 2
+   },
+   {
+    "action": "Verify the unit and definition of the shared throughput denominator (44986) against the run's elapsed time before quoting throughput values or comparing runs.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0",
+     "analysis-result.json#/evidence/1"
+    ],
+    "rationale": "All seven summaries share the same denominator without a stated unit; treating the ratio as requests per second without verification could misstate the load level.",
+    "rank": 3
+   },
+   {
+    "action": "Confirm the JMeter test plan includes response assertions for each sampler (content and response codes) and re-inspect the raw JTL success flags.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0"
+    ],
+    "rationale": "Zero errors across 2623 samples is consistent with correct behavior, but if sampler success is judged only at transport level, functional failures could be uncounted.",
+    "rank": 4
+   },
+   {
+    "action": "If capacity or stability under load matters, schedule a separate run at higher or stepped load levels rather than inferring headroom from this run.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0",
+     "analysis-result.json#/run_validity"
+    ],
+    "rationale": "A single valid run with zero errors and low percentiles does not demonstrate spare capacity or stability at other load levels; no ramp or comparison run is present in the evidence.",
+    "rank": 5
+   },
+   {
+    "action": "Record this advisory alongside the analysis while keeping the deterministic verdict unchanged: NO_POLICY, run_validity VALID, analysis_coverage COMPLETE.",
+    "evidence_refs": [
+     "analysis-result.json#/policy_verdict",
+     "analysis-result.json#/run_validity",
+     "analysis-result.json#/analysis_coverage"
+    ],
+    "rationale": "Advisory interpretation adds context but never modifies the verdict, coverage status, or findings of the immutable analysis.",
+    "rank": 6
+   }
+  ],
+  "schema_version": "ai-advice-output.v1",
+  "summary": "Run jmeter_jtl_csv-b87363cf1d89c0789e174268c6d25cd65abd36f7b623d4ea84fe253ceaabf1e7 is VALID with COMPLETE analysis coverage and no findings, but the policy verdict is NO_POLICY: no acceptance thresholds were defined or evaluated, so the observed performance is unjudged rather than passing. Across 2623 total samples there were 0 errors; overall latency was p50=11 ms, p95=46 ms, p99=77 ms, max=904 ms. Six samplers (home with 438 samples; product, add product to cart, cart, checkout, and reset cart with 437 each) each reported 0 errors. The home sampler shows the highest tail (p50=27 ms, p95=61 ms, p99=96 ms, max=904 ms, equal to the overall max), with checkout next (p99=85 ms, max=444 ms). All throughput ratios share a single denominator (44986) whose unit or definition is not stated in the evidence. This advisory interpretation does not change the deterministic NO_POLICY verdict."
+ },
+ "schema": "ai-experiment-run.v3",
+ "case": "K10",
+ "rep": 1,
+ "model_id": "glm-5.3",
+ "net_retries": 0,
+ "infra_retries": 0
+}

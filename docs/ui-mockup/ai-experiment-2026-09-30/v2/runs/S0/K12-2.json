@@ -1,0 +1,186 @@
+{
+ "stage": "S0",
+ "mode": "live",
+ "model": "deepseek-v4-flash-0731",
+ "tag": {
+  "phase": "v2-pilot",
+  "stage": "S0",
+  "case": "K12",
+  "rep": 2,
+  "attempt": 1
+ },
+ "qwen_exit": 0,
+ "wall_ms": 105611,
+ "relay": {
+  "schema_version": "advisory-ai-runtime-relay.v1",
+  "status": "FORWARDED_STRUCTURED_OUTPUT",
+  "request_count": 1,
+  "usage": {
+   "prompt_tokens": 12505,
+   "total_tokens": 22686,
+   "completion_tokens": 10181,
+   "prompt_tokens_details": {
+    "cached_tokens": 1024
+   },
+   "completion_tokens_details": {
+    "reasoning_tokens": 7586
+   }
+  },
+  "latency_ms": 104233,
+  "model_returned": "deepseek-v4-flash-0731"
+ },
+ "relay_status": "FORWARDED_STRUCTURED_OUTPUT",
+ "usage": {
+  "prompt_tokens": 12505,
+  "total_tokens": 22686,
+  "completion_tokens": 10181,
+  "prompt_tokens_details": {
+   "cached_tokens": 1024
+  },
+  "completion_tokens_details": {
+   "reasoning_tokens": 7586
+  }
+ },
+ "latency_ms": 104233,
+ "status": "OK",
+ "note": null,
+ "output": {
+  "schema_version": "ai-advice-output.v1",
+  "summary": "Deterministic verdict preserved: the capacity policy verdict is NO_POLICY. The run is VALID (run_validity) with COMPLETE coverage and no findings. Capacity summary reports bound_type LOWER_BOUND, lower_inclusive 20 users, capacity_knee null (knee_reason KNEE_DETECTOR_NOT_IMPLEMENTED), and upper_exclusive null, so 20 users is a verified lower bound only, not an upper capacity estimate. All three load stages (5, 10, 20 users) show 30/30 complete bins and PASS, but that PASS is only the error-rate business check (0 errors: 0/30,049; 0/37,550; 0/47,404 vs threshold 0.01); each window's resource_verdict is NO_POLICY and only diagnostic generator-CPU-throttle-ratio checks (threshold 0.2) were evaluated, with observed maxima 0.0693, 0.06, and 0.0792. Overall error count is 0 of 135,434 samples; latency observations include home p99 395 ms / max 1125 ms and checkout max 1200 ms with no errors. Clock alignment is reported as not_verified_by_core, so no temporal causal or lead/lag claim is supported. Absent findings/errors do not prove stability, spare capacity, or absence of problems.",
+  "hypotheses": [
+   {
+    "rank": 1,
+    "observation": "capacity_summary reports bound_type LOWER_BOUND, lower_inclusive 20, capacity_knee null, knee_reason KNEE_DETECTOR_NOT_IMPLEMENTED, and upper_exclusive null; stages at 5, 10, and 20 users each show 30/30 complete bins with verdict PASS, and the last stage has verified_bound_load 20.",
+    "possible_explanation": "The run only establishes that load up to 20 users was sustained against the configured checks; because knee detection was not implemented and no upper bound was estimated, the flat appearance of resource means across stages cannot be used to infer real spare capacity above 20 users.",
+    "recommended_check": "Enable a knee detector and add load stages beyond 20 users (e.g., 40/80/160) with the same per-window checks so an upper capacity bound can be estimated rather than assumed.",
+    "evidence_refs": [
+     "analysis-result.json#/capacity_summary",
+     "analysis-result.json#/evidence/41"
+    ]
+   },
+   {
+    "rank": 2,
+    "observation": "Overall error rate is 0 of 135,434 samples (error_count 0); every transaction scope reports error_count 0; per-stage overall-errors checks pass (0/30,049, 0/37,550, 0/47,404 vs threshold 0.01); generator-cpu-throttle-ratio stays below 0.2 with maxima 0.0693, 0.06, and 0.0792.",
+    "possible_explanation": "Zero errors together with generator throttle ratios below the diagnostic threshold are consistent with an injector that was not CPU-throttled and services that handled the tested loads without request failures; however these are diagnostic checks, not a capacity policy, and do not prove the system is problem-free.",
+    "recommended_check": "Define explicit latency/throughput and resource SLOs, evaluate them per window, and treat error rate alone as insufficient for a capacity verdict.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0",
+     "analysis-result.json#/evidence/35",
+     "analysis-result.json#/evidence/37",
+     "analysis-result.json#/evidence/39",
+     "analysis-result.json#/evidence/32",
+     "analysis-result.json#/evidence/33",
+     "analysis-result.json#/evidence/34"
+    ]
+   },
+   {
+    "rank": 3,
+    "observation": "Latency differs by transaction: home reports p50 127 ms, p95 294 ms, p99 395 ms, max 1125 ms; checkout reports p50 100 ms, p95 203 ms, p99 297 ms, max 1200 ms; add product to cart and reset cart report p50 5 ms / 3 ms; all error counts are 0.",
+    "possible_explanation": "The gap between light-weight transactions and home/checkout could reflect more server-side work such as page assembly or cart/payment orchestration, or higher variance in backend processing; zero errors mean the latency tail is not explained by request failures, but the evidence alone cannot identify where the extra time is spent.",
+    "recommended_check": "Add per-transaction tracing for home and checkout across windows and correlate time-in-service with frontend/checkoutservice cpu_cores and memory_bytes series, after verifying clock alignment.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/4",
+     "analysis-result.json#/evidence/3",
+     "analysis-result.json#/evidence/1",
+     "analysis-result.json#/evidence/6",
+     "analysis-result.json#/evidence/12",
+     "analysis-result.json#/evidence/26"
+    ]
+   },
+   {
+    "rank": 4,
+    "observation": "frontend memory_bytes mean rises 11,957,407 -> 12,937,262 -> 14,036,150 across the 5/10/20-user windows and paymentservice memory_bytes mean rises 32,281,941 -> 33,451,281 -> 33,689,646, each with positive slope_per_second within its window; CPU means stay comparatively flat (frontend ~0.18-0.19 cores).",
+    "possible_explanation": "Rising memory with load could be expected caching/session growth or warm-up effects, but positive within-window slopes are also consistent with memory retention growth; the data do not prove a leak and do not identify allocation sources.",
+    "recommended_check": "Run an extended constant-load soak at 20 users over a longer horizon, compare memory slope_per_second across time, and inspect heap/GC/allocation metrics if available.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/13",
+     "analysis-result.json#/evidence/21",
+     "analysis-result.json#/evidence/29",
+     "analysis-result.json#/evidence/15",
+     "analysis-result.json#/evidence/23",
+     "analysis-result.json#/evidence/31",
+     "analysis-result.json#/evidence/12",
+     "analysis-result.json#/evidence/28"
+    ]
+   },
+   {
+    "rank": 5,
+    "observation": "Each window policy summary reports business_verdict PASS and resource_verdict NO_POLICY, and the overall policy_verdict is NO_POLICY; only diagnostic resource-policy checks (generator-cpu-throttle-ratio) were evaluated.",
+    "possible_explanation": "The reported PASS at each stage reflects only the error-rate business check; because no resource or latency policy is defined, NO_POLICY rather than PASS is the capacity policy verdict, so this run does not currently establish a policed capacity statement.",
+    "recommended_check": "Add resource and latency policies to the load test configuration and re-run so each window yields a policed verdict instead of NO_POLICY.",
+    "evidence_refs": [
+     "analysis-result.json#/policy_verdict",
+     "analysis-result.json#/evidence/36",
+     "analysis-result.json#/evidence/38",
+     "analysis-result.json#/evidence/40",
+     "analysis-result.json#/evidence/32"
+    ]
+   }
+  ],
+  "recommendations": [
+   {
+    "rank": 1,
+    "action": "Verify clock alignment across the generator, metrics pipeline, and services before attributing any temporal ordering or causality between series.",
+    "rationale": "resource-binding reports clock_alignment not_verified_by_core; raw epoch fields are timestamps, not durations, and without verified clocks lead/lag ordering cannot be supported by the evidence.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/7"
+    ]
+   },
+   {
+    "rank": 2,
+    "action": "Implement knee detection and extend the load test with stages above 20 users, then re-read the capacity summary for an upper bound.",
+    "rationale": "capacity_knee is null with knee_reason KNEE_DETECTOR_NOT_IMPLEMENTED and upper_exclusive is null; only the LOWER_BOUND at 20 users is verified, so headroom beyond 20 users is unmeasured.",
+    "evidence_refs": [
+     "analysis-result.json#/capacity_summary",
+     "analysis-result.json#/evidence/41"
+    ]
+   },
+   {
+    "rank": 3,
+    "action": "Define explicit SLO policies for latency, throughput, and resource utilization and re-run so per-window verdicts are policed.",
+    "rationale": "policy_verdict is NO_POLICY and each window's resource_verdict is NO_POLICY; the current PASS is only the error-rate business check, so no capacity compliance is actually established.",
+    "evidence_refs": [
+     "analysis-result.json#/policy_verdict",
+     "analysis-result.json#/evidence/36",
+     "analysis-result.json#/evidence/38",
+     "analysis-result.json#/evidence/40"
+    ]
+   },
+   {
+    "rank": 4,
+    "action": "Investigate the home and checkout latency tail (p99 395 ms / 298 ms, max 1125 ms / 1200 ms) with per-transaction tracing and correlate with service resource series.",
+    "rationale": "All error counts are 0, so the recorded latency tail is the only degradation signal captured; its cause is not identifiable from the summary statistics alone.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/4",
+     "analysis-result.json#/evidence/3",
+     "analysis-result.json#/evidence/12",
+     "analysis-result.json#/evidence/26"
+    ]
+   },
+   {
+    "rank": 5,
+    "action": "Monitor the rising memory trajectory (frontend and paymentservice) with a longer constant-load soak and allocation/heap visibility.",
+    "rationale": "Memory means rise across stages with positive slope_per_second within each window, which is compatible with caching or warm-up but also with retention growth; a bounded soak test is needed to distinguish these.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/13",
+     "analysis-result.json#/evidence/29",
+     "analysis-result.json#/evidence/15",
+     "analysis-result.json#/evidence/31"
+    ]
+   }
+  ],
+  "caveats": [
+   "Clock alignment is reported as not_verified_by_core (analysis-result.json#/evidence/7); raw epoch values are timestamps, not durations, and cross-series lead/lag or temporal causality cannot be inferred until clock alignment is verified.",
+   "The deterministic capacity policy verdict is NO_POLICY: only an overall-errors business check (threshold 0.01) and a diagnostic generator-CPU-throttle-ratio check (threshold 0.2) were evaluated; per-stage PASS does not verify capacity, latency, or resource compliance.",
+   "No upper capacity estimate exists: capacity_knee is null with knee_reason KNEE_DETECTOR_NOT_IMPLEMENTED and upper_exclusive is null; load above 20 users was not measured, so headroom cannot be inferred from flat mean CPU values.",
+   "findings is empty and all recorded error counts are zero; absent findings or errors do not prove stability, spare capacity, or absence of problems.",
+   "Resources are summarized as 10-second interval means of cpu_cores (absolute core usage, not a ratio to any quota/limit) and memory_bytes; low mean usage does not prove idle capacity without known limits.",
+   "Each load level was collected in a single run with no repetition or statistical confidence bounds; all windows had complete bins (30/30, no missing cells), but that records completeness of sampling, not correctness.",
+   "No latency SLO exists: latency maxima 1020-1200 ms and p99 up to 395 ms are observations only (metric_summary values) and are not evaluated against any policy."
+  ]
+ },
+ "schema": "ai-experiment-run.v2",
+ "phase": "pilot",
+ "case": "K12",
+ "rep": 2
+}

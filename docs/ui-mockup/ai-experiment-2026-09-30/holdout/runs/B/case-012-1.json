@@ -1,0 +1,193 @@
+{
+ "stage": "B",
+ "mode": "live",
+ "model": "deepseek-v4-flash-0731",
+ "tag": {
+  "phase": "holdout",
+  "attempt_id": "case-012-1-B-t1",
+  "arm": "B",
+  "stage": null,
+  "case": "case-012",
+  "rep": 1,
+  "try": 1
+ },
+ "retry_policy": "d2",
+ "qwen_exit": 0,
+ "wall_ms": 72018,
+ "relay": {
+  "schema_version": "advisory-ai-runtime-relay.v1",
+  "status": "FORWARDED_STRUCTURED_OUTPUT",
+  "received_request_count": 1,
+  "forwarded_request_count": 1,
+  "outcomes": [
+   "FORWARDED_STRUCTURED_OUTPUT"
+  ],
+  "retry_refused_reason": null,
+  "first_refused_reason": null,
+  "model_id": "deepseek-v4-flash-0731",
+  "retry_policy": "d2",
+  "requests": [
+   {
+    "ordinal": 1,
+    "forwarded": true,
+    "outcome": "FORWARDED_STRUCTURED_OUTPUT",
+    "provider_status": 200,
+    "latency_ms": 70610,
+    "usage": {
+     "prompt_tokens": 4764,
+     "total_tokens": 11942,
+     "completion_tokens": 7178,
+     "prompt_tokens_details": {
+      "cached_tokens": 1024
+     },
+     "completion_tokens_details": {
+      "reasoning_tokens": 4763
+     }
+    },
+    "model_returned": "deepseek-v4-flash-0731"
+   }
+  ],
+  "usage": {
+   "prompt_tokens": 4764,
+   "completion_tokens": 7178,
+   "total_tokens": 11942
+  },
+  "latency_ms": 70610
+ },
+ "relay_status": "FORWARDED_STRUCTURED_OUTPUT",
+ "usage": {
+  "prompt_tokens": 4764,
+  "completion_tokens": 7178,
+  "total_tokens": 11942
+ },
+ "latency_ms": 70610,
+ "retried": false,
+ "retry_refused_reason": null,
+ "status": "OK",
+ "note": null,
+ "output": {
+  "schema_version": "ai-advice-output.v1",
+  "summary": "Deterministic verdict for window workload-04 is FAIL, driven by the business policy rule 'latency': response_time_p95_ms observed 28559 ms exceeds the 200 ms threshold (lte) in the policy check, and the window policy summary reports business_verdict FAIL, resource_verdict NO_POLICY, verdict FAIL. The run is VALID and analysis coverage is COMPLETE. Within the 300 s evaluation window the latency summary is severe (p50 15055 ms, p95 28559 ms, p99 29759 ms) with 0 errors among 33000 samples, while the load generator target rate was constant at 110 requests/s and the compute queue depth was near saturation (mean 240.5, median/max 251 requests). The reported correlation between queue depth and p95 latency is only CANDIDATE with uncertainty NOT_ESTIMATED because the control 'target-request-rate' was dropped as CONSTANT_CONTROL, sensitivity_without_achieved_rps is null, clock alignment is not_verified_by_core, and the inferential selection is UNAVAILABLE (OBSERVATION_COUNT_UNSUPPORTED) with anomalies_tested = 0. Advice: keep the FAIL verdict unchanged, verify clocks before any temporal interpretation, inspect interval-level telemetry, and rerun with variable load to estimate load-latency sensitivity; NO_POLICY and zero anomalies/errors must not be read as PASS or as proof of stability.",
+  "hypotheses": [
+   {
+    "rank": 1,
+    "observation": "The policy check for workload-04 reports metric response_time_p95_ms observed 28559, operator lte, threshold 200, status FAIL for rule_id 'latency'; the window policy summary reports business_verdict FAIL and verdict FAIL; the window metric summary shows 0 errors among 33000 samples.",
+    "possible_explanation": "Response times inside the workload-04 window far exceeded the 200 ms p95 threshold, so the latency policy failed. The summary metrics do not establish why (saturation, bottleneck, load, or application behavior), only that the measured p95 violated the rule.",
+    "recommended_check": "Plot the interval-level response-time (p95/p99) series across the window against queue depth and achieved throughput to locate when and where latency rose before attributing a cause.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/5",
+     "analysis-result.json#/evidence/6",
+     "analysis-result.json#/evidence/7"
+    ]
+   },
+   {
+    "rank": 2,
+    "observation": "The compute cpu-queue summary for workload-04 shows mean 240.4998, median 251, max 251, q95 251 requests with 300 observed cells and no missing cells; the correlation pair reports raw_rho 0.48797470471 with status CANDIDATE and uncertainty NOT_ESTIMATED.",
+    "possible_explanation": "Sustained near-maximum queue depth (mean 240.5, ceiling 251) may be associated with the high p95 latency in the same window, but the correlation is candidate-only, has no estimated uncertainty, and does not prove causation.",
+    "recommended_check": "Verify clock alignment first (not_verified_by_core), then inspect per-interval latency versus cpu-queue scatter to see whether latency excursions coincide with queue depth near 251.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/3",
+     "analysis-result.json#/evidence/8",
+     "analysis-result.json#/evidence/2"
+    ]
+   },
+   {
+    "rank": 3,
+    "observation": "The generator target-request-rate summary shows min = max = mean = 110 requests/s with sample standard deviation 0 across 300 cells; the correlation pair lists controls_requested ['target-request-rate'], controls_dropped ['target-request-rate'], controls_used [], reasons ['CONSTANT_CONTROL'], and sensitivity_without_achieved_rps null.",
+    "possible_explanation": "Because load was held constant at 110 requests/s, the control was dropped and the correlation cannot estimate how much of the observed latency association is explained by load; the stored correlation therefore cannot be interpreted as load-latency sensitivity.",
+    "recommended_check": "Rerun with a stepped or variable target rate and record achieved request rate so the control is non-constant and sensitivity can be estimated.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/4",
+     "analysis-result.json#/evidence/8"
+    ]
+   },
+   {
+    "rank": 4,
+    "observation": "The diagnostic summary reports status COMPLETE but anomalies_tested 0 and episodes_reported 0 with uncertainty NOT_ESTIMATED; the correlation headline selection reports status UNAVAILABLE, selected false, reasons ['OBSERVATION_COUNT_UNSUPPORTED'], and null p-values.",
+    "possible_explanation": "The observation count within this window did not support inferential episode/anomaly selection, so the absence of reported anomalies or episodes does not establish stability or absence of a problem.",
+    "recommended_check": "Collect additional or longer observations across more windows and rerun the selection; do not treat anomalies_tested = 0 as evidence of a healthy latency regime.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/9",
+     "analysis-result.json#/evidence/10"
+    ]
+   },
+   {
+    "rank": 5,
+    "observation": "The workload-04 window summary reports p50 15055 ms, p95 28559 ms, p99 29759 ms over 33000 samples and throughput denominator 300000; the overall run summary reports p50 50 ms, p95 25823 ms, p99 29215 ms over 93000 samples.",
+    "possible_explanation": "The evaluation window covers only part of the run (300 s of a run ending at 1704068430040 ms), so the windowed interval exhibits a heavier latency regime than the run as a whole; different scopes and windows explain the difference rather than inconsistency.",
+    "recommended_check": "Compare per-window or per-interval latency across the full run timeline to identify when the latency regime changed relative to the workload-04 window.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0",
+     "analysis-result.json#/evidence/7",
+     "analysis-result.json#/evidence/2"
+    ]
+   }
+  ],
+  "recommendations": [
+   {
+    "rank": 1,
+    "action": "Record and preserve the deterministic verdict for workload-04 unchanged: policy_verdict FAIL, business_verdict FAIL, resource_verdict NO_POLICY; treat any rerun or healthy-window observation only as further evidence, not as a revision of this verdict.",
+    "rationale": "The latency policy check measured p95 28559 ms > 200 ms (FAIL); NO_POLICY for resources stays NO_POLICY and only an applicable rule evaluated by the product can produce PASS or FAIL.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/5",
+     "analysis-result.json#/evidence/6",
+     "analysis-result.json#/policy_verdict"
+    ]
+   },
+   {
+    "rank": 2,
+    "action": "Verify the clock relationship between the load generator, the system under test, and the compute telemetry before interpreting any lag or ordering from the correlation output.",
+    "rationale": "clock_alignment is not_verified_by_core, so the reported best_lag_ms 0 and flat lag profile cannot support lead/lag ordering or a temporal causal hypothesis.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/2",
+     "analysis-result.json#/evidence/8"
+    ]
+   },
+   {
+    "rank": 3,
+    "action": "Inspect interval-level telemetry for the window: cpu-queue depth, response-time p95/p99, and achieved request rate, to test whether near-constant queue depth around 251 coincided with the latency excursion.",
+    "rationale": "The queue summary is near saturation (mean 240.5, median/max 251) while the window p95 is 28559 ms, but the stored correlation is only CANDIDATE with NOT_ESTIMATED uncertainty and cannot be treated as established.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/3",
+     "analysis-result.json#/evidence/5",
+     "analysis-result.json#/evidence/7"
+    ]
+   },
+   {
+    "rank": 4,
+    "action": "Rerun with a stepped or variable load profile and capture achieved request rate so the load control is non-constant, then re-estimate sensitivity.",
+    "rationale": "The constant 110 requests/s control was dropped (CONSTANT_CONTROL), controls_used is empty, and sensitivity_without_achieved_rps is null, so load-latency sensitivity is currently unknown.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/4",
+     "analysis-result.json#/evidence/8"
+    ]
+   },
+   {
+    "rank": 5,
+    "action": "If an explicit resource verdict is desired in future runs, configure an applicable resource rule with effect sla for the workload-04 window; otherwise expect NO_POLICY to remain.",
+    "rationale": "resource_verdict NO_POLICY indicates no applicable resource rule with effect: sla was evaluated for the window; NO_POLICY is not a pass and only a configured rule evaluated by the product can produce PASS or FAIL.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/6"
+    ]
+   }
+  ],
+  "caveats": [
+   "clock_alignment is not_verified_by_core; no verified clock relationship exists, so no lead/lag ordering or temporal causal conclusion can be drawn from the correlation output.",
+   "The correlation pair is status CANDIDATE with uncertainty NOT_ESTIMATED; the control 'target-request-rate' was dropped as CONSTANT_CONTROL, partial_rho equals raw_rho, and sensitivity_without_achieved_rps is null, so association strength is not established.",
+   "Inferential correlation selection is UNAVAILABLE with reasons ['OBSERVATION_COUNT_UNSUPPORTED'] and null p-values; anomalies_tested = 0 and episodes_reported = 0 do not prove stability or absence of a problem.",
+   "Overall run counts (93000 samples over the run) and the workload-04 window counts (33000 samples over 300 s) are different scopes/windows; no direct numerical comparison across them is made.",
+   "resource_verdict NO_POLICY means no applicable resource rule with effect sla was evaluated for the window; a policy window without such a rule is not a pass.",
+   "error_count 0 in both the overall and window summaries does not preclude a latency SLO failure, since the latency policy judged p95 28559 ms against 200 ms.",
+   "The evaluation window covers only part of the run (run_to_epoch_ms 1704068430040 vs evaluation_to_epoch_ms 1704068400000); windowed metrics describe only that 300 s interval.",
+   "No capacity bound, required-capacity, or knee-detector evidence is present in this input, so no capacity interpretation or knee-related advice is given."
+  ]
+ },
+ "schema": "ai-experiment-run.holdout.v1",
+ "case": "case-012",
+ "rep": 1,
+ "arm": "B",
+ "try": 1,
+ "attempt_id": "case-012-1-B-t1",
+ "model_id": "deepseek-v4-flash-0731",
+ "prompt_sha256": "3c0f28bee6517c13c5c854615e7d3d59301893d9723880818e4034a32e9133bf"
+}

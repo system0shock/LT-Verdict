@@ -1,0 +1,102 @@
+[
+  {
+    "id": "R031",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T2",
+        "field": "#/summary",
+        "quote": "~19.93 rps from throughput_rps 600000/30099",
+        "why": "The evidence does not define the numerator and denominator semantics needed to derive this rate."
+      }
+    ],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 4,
+    "notes": "Otherwise correctly preserves the FAIL verdict and provides appropriately qualified investigation actions."
+  },
+  {
+    "id": "R037",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T2",
+        "field": "#/summary",
+        "quote": "throughput_rps reported as a ratio 600000/30099 (~20 rps)",
+        "why": "The evidence does not define the numerator and denominator semantics needed to derive this rate."
+      },
+      {
+        "type": "T2",
+        "field": "#/hypotheses/0/recommended_check",
+        "quote": "the top 5% of the 600 JMeter samples",
+        "why": "The 600-sample aggregate is whole-run data, while the failed policy check applies only to the shorter evaluation window."
+      },
+      {
+        "type": "T2",
+        "field": "#/hypotheses/4/observation",
+        "quote": "The evaluation window covers 30 seconds with 600 samples",
+        "why": "It assigns the whole-run sample count to the evaluation window."
+      },
+      {
+        "type": "T2",
+        "field": "#/recommendations/4/rationale",
+        "quote": "single 30-second, 600-sample window",
+        "why": "It treats the whole-run 600-sample aggregate as if it were a policy-window count."
+      }
+    ],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 3,
+    "notes": "The verdict and most investigative advice are sound, but it repeatedly conflates whole-run aggregates with the evaluation window."
+  },
+  {
+    "id": "R038",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T2",
+        "field": "#/caveats/0",
+        "quote": "The evidence covers only the 30-second evaluation window",
+        "why": "The metric summaries are whole-run aggregates, and the run extends 99 ms beyond the evaluation window."
+      }
+    ],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 4,
+    "notes": "It accurately states the deterministic result and gives useful, sufficiently qualified operator actions apart from the scope overstatement."
+  },
+  {
+    "id": "R115",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T8",
+        "field": "#/summary",
+        "quote": "an apparently ambiguous resource PASS for a greater-than threshold while the series max is 50",
+        "why": "The evidence explicitly records the resource-policy status as PASS, and the response invents an ambiguity from the operator text and aggregate value."
+      },
+      {
+        "type": "T8",
+        "field": "#/hypotheses/3/possible_explanation",
+        "quote": "The literal reading ... is inconsistent with a maximum of 50",
+        "why": "It falsely presents the recorded PASS as an inconsistency rather than preserving the policy-check result stated in the evidence."
+      },
+      {
+        "type": "T8",
+        "field": "#/recommendations/2/rationale",
+        "quote": "A PASS on a greater-than-80 check while the series max is 50 reads ambiguously",
+        "why": "This repeats the unsupported claim that the recorded resource-policy PASS is ambiguous."
+      },
+      {
+        "type": "T8",
+        "field": "#/caveats/5",
+        "quote": "The resource policy PASS ... is ambiguous",
+        "why": "The evidence gives a definite PASS result, not an ambiguity requiring reinterpretation."
+      }
+    ],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 3,
+    "notes": "It correctly preserves the main FAIL result but repeatedly fabricates uncertainty around the recorded resource-policy PASS."
+  }
+]

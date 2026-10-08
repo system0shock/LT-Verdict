@@ -1,0 +1,51 @@
+{
+ "required": [
+  [
+   "error_rate_observed",
+   [
+    "(?<![\\d.,])(?:3\\ 000|3,000|3\u202f000|3000)(?![\\d]|[.,]\\d)\\s*(?:/|of|out of)\\s*(?<![\\d.,])(?:30\\ 000|30,000|30\u202f000|30000)(?![\\d]|[.,]\\d)",
+    "(?<![\\d.,])(?:3\\ 000|3,000|3\u202f000|3000)(?![\\d]|[.,]\\d)\\s*(?:errors|failed|failures|failing)",
+    "(?<![\\d.])10\\.0\\s*%",
+    "(?<![\\d.])10\\s*%",
+    "(?<![\\d.])10\\.00\\s*%",
+    "(?<![\\d.])(?:0\\.100|0\\.10)(?!\\d)",
+    "(?<![\\d.,])(?:2,320|2\\ 320|2\u202f320|2320)(?![\\d]|[.,]\\d)\\s*(?:/|of|out of)\\s*(?<![\\d.,])(?:22\u202f000|22\\ 000|22,000|22000)(?![\\d]|[.,]\\d)",
+    "(?<![\\d.,])(?:2,320|2\\ 320|2\u202f320|2320)(?![\\d]|[.,]\\d)\\s*(?:errors|failed|failures|failing)",
+    "(?<![\\d.])10\\.5\\s*%",
+    "(?<![\\d.])11\\s*%",
+    "(?<![\\d.])10\\.55\\s*%",
+    "(?<![\\d.])(?:0\\.105|0\\.10)(?!\\d)"
+   ]
+  ],
+  [
+   "error_rate_sla_failed",
+   [
+    "(?:error)[^.\\n]{0,100}(?:(?:fail|violat|exceed|above|breach|over|not met|too (?:high|slow)))|(?:(?:fail|violat|exceed|above|breach|over|not met|too (?:high|slow)))[^.\\n]{0,100}(?:error)"
+   ]
+  ],
+  [
+   "latency_sla_met",
+   [
+    "(?:(?:latency|p95|95th|response[ -]time))[^.\\n]{0,100}(?:(?<!not )(?<!n't )(?<!never )(?<!no )(?:met|pass|within|below|ok|satisf|under|normal|healthy))|(?:(?<!not )(?<!n't )(?<!never )(?<!no )(?:met|pass|within|below|ok|satisf|under|normal|healthy))[^.\\n]{0,100}(?:(?:latency|p95|95th|response[ -]time))"
+   ]
+  ]
+ ],
+ "forbidden": [
+  "reports the error-rate check as met, or names another metric as failed",
+  "writes the error ratio as a percentage without converting it, or mixes the ratio with the count"
+ ],
+ "useful_checks": [
+  "inspect the errors of the failing window: response codes, transactions, time of the failures"
+ ],
+ "source": {
+  "builder": "AdvisoryEvidenceBuilder",
+  "build": "5b5e51c+harness",
+  "source": "i:A02_short_error_rate",
+  "source_sha256": "3b7d0f709e2bd39692a80b43b60b6acdb7e956db3aa359ddfe5c25ce1165216f",
+  "derivation": [
+   "error"
+  ],
+  "evidence_sha256": "3ea2a369f6f6b4c13effaa5c77125a1410e9239985d9a62023077eb9ce42c2d6",
+  "inputs": "i:A02_short_error_rate, derivation [error], analysed through RunBundleStore -> AnalysisService -> AdvisoryEvidenceBuilder by AdvisoryHoldoutCorpusTest on 5b5e51c+harness"
+ }
+}

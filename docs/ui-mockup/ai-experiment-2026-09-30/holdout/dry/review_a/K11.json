@@ -1,0 +1,45 @@
+[
+  {
+    "id": "R008",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T7",
+        "field": "#/summary",
+        "quote": "NO_POLICY reflects that no capacity policy or required capacity bound is configured",
+        "why": "NO_POLICY does not establish which policy or capacity requirement is missing, or prove that none was configured."
+      },
+      {
+        "type": "T7",
+        "field": "#/hypotheses/0/observation",
+        "quote": "no configured capacity bound",
+        "why": "The absence of a capacity_summary does not establish what was configured."
+      },
+      {
+        "type": "T1",
+        "field": "#/recommendations/0/action",
+        "quote": "Configure a capacity policy with required capacity or bounds",
+        "why": "A capacity bound is computed from verified stages with applicable SLAs; it is not a bound the operator configures."
+      },
+      {
+        "type": "T7",
+        "field": "#/recommendations/0/rationale",
+        "quote": "NO_POLICY results from no configured policy or required capacity; only a configured policy or required capacity yields PASS or FAIL",
+        "why": "The cause of NO_POLICY is undetermined, and only an evaluated applicable rule can yield PASS or FAIL."
+      },
+      {
+        "type": "T7",
+        "field": "#/caveats/0",
+        "quote": "it means no capacity policy or required capacity is configured",
+        "why": "NO_POLICY does not prove either configuration claim."
+      }
+    ],
+    "required_facts_preserved": false,
+    "missing_facts": [
+      "The reported throughput_rps ratio is 2623000/44986, approximately 58.3 rps.",
+      "The specific reason for NO_POLICY cannot be determined from this evidence."
+    ],
+    "usefulness": 2,
+    "notes": "The response reports the run status, coverage, counts, and latencies correctly, but repeatedly assigns an unsupported cause to NO_POLICY and recommends configuring a computed bound."
+  }
+]

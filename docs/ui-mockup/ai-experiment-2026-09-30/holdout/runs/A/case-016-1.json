@@ -1,0 +1,200 @@
+{
+ "stage": "A",
+ "mode": "live",
+ "model": "deepseek-v4-flash-0731",
+ "tag": {
+  "phase": "holdout",
+  "attempt_id": "case-016-1-A-t1",
+  "arm": "A",
+  "stage": null,
+  "case": "case-016",
+  "rep": 1,
+  "try": 1
+ },
+ "retry_policy": "d2",
+ "qwen_exit": 0,
+ "wall_ms": 97737,
+ "relay": {
+  "schema_version": "advisory-ai-runtime-relay.v1",
+  "status": "FORWARDED_STRUCTURED_OUTPUT",
+  "received_request_count": 1,
+  "forwarded_request_count": 1,
+  "outcomes": [
+   "FORWARDED_STRUCTURED_OUTPUT"
+  ],
+  "retry_refused_reason": null,
+  "first_refused_reason": null,
+  "model_id": "deepseek-v4-flash-0731",
+  "retry_policy": "d2",
+  "requests": [
+   {
+    "ordinal": 1,
+    "forwarded": true,
+    "outcome": "FORWARDED_STRUCTURED_OUTPUT",
+    "provider_status": 200,
+    "latency_ms": 96426,
+    "usage": {
+     "prompt_tokens": 15225,
+     "total_tokens": 24364,
+     "completion_tokens": 9139,
+     "prompt_tokens_details": {
+      "cached_tokens": 1024
+     },
+     "completion_tokens_details": {
+      "reasoning_tokens": 6634
+     }
+    },
+    "model_returned": "deepseek-v4-flash-0731"
+   }
+  ],
+  "usage": {
+   "prompt_tokens": 15225,
+   "completion_tokens": 9139,
+   "total_tokens": 24364
+  },
+  "latency_ms": 96426
+ },
+ "relay_status": "FORWARDED_STRUCTURED_OUTPUT",
+ "usage": {
+  "prompt_tokens": 15225,
+  "completion_tokens": 9139,
+  "total_tokens": 24364
+ },
+ "latency_ms": 96426,
+ "retried": false,
+ "retry_refused_reason": null,
+ "status": "OK",
+ "note": null,
+ "output": {
+  "schema_version": "ai-advice-output.v1",
+  "summary": "The deterministic verdict is NO_POLICY for both the reference and evaluation windows and at the top level; run_validity is VALID and analysis_coverage is COMPLETE, but absence of a configured policy means this run is NOT passed/not evaluated against thresholds. Performance evidence: 0 errors across 7200 samples, ~20 requests/s sustained (target series constant at 20 requests/s in both windows), overall latency p50 206 / p95 237 / p99 239 ms, with the evaluation window slightly lower (p50 203 vs 212). One correlation candidate (pair-00: resource-00 vs response_time_p95_ms) was selected with status CANDIDATE: best_lag_ms -3000, best_lag_rho -0.962, but reported raw_rho/partial_rho = -0.2286, the requested 'target' control was dropped as CONSTANT_CONTROL, uncertainty is NOT_ESTIMATED, and core clock alignment is not_verified_by_core. Advice: verify clock alignment before interpreting any lag, restore a usable (non-constant) load control, confirm resource-00 semantics, quantify correlation uncertainty/load sensitivity, and define explicit SLO policies before treating metrics as compliant.",
+  "hypotheses": [
+   {
+    "rank": 1,
+    "observation": "pair-00 reports best_lag_ms -3000 with best_lag_rho -0.962228670852, while raw_rho and partial_rho are both -0.228630594043; resource-binding reports clock_alignment \"not_verified_by_core\" and mode \"explicit_windows\".",
+    "possible_explanation": "Without verified alignment between the load-generator (JMeter) timestamps and resource telemetry timestamps, the -3000 ms optimal lag and its large negative rho may reflect timestamp misalignment or lag-max selection rather than a genuine resource-to-latency coupling; the much weaker reported raw/partial rho supports caution.",
+    "recommended_check": "Verify and, if possible, correct clock synchronization/alignment between the JMeter host and the resource telemetry source, then recompute the correlation; treat lag-dependent values as uninterpretable if alignment cannot be confirmed.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/41",
+     "analysis-result.json#/evidence/2"
+    ]
+   },
+   {
+    "rank": 2,
+    "observation": "The correlation pair requested 'target' as a control but controls_used is empty with reason CONSTANT_CONTROL, and the target series is constant at 20 requests/s (iqr 0, mad 0, sample_standard_deviation 0) in both the reference and evaluation windows.",
+    "possible_explanation": "Because load never varies in this run, the 'target' control cannot be partialled out, so raw_rho equals partial_rho and any load-driven coupling remains confounded; the candidate cannot distinguish a resource effect from other unmeasured factors.",
+    "recommended_check": "Re-run the correlation analysis against a load profile that actually varies (e.g., ramp or stepped requests/s) so the control becomes non-constant and a partial correlation with controls_used can be computed; compare the resulting rho with the current uncontrolled value.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/41",
+     "analysis-result.json#/evidence/36",
+     "analysis-result.json#/evidence/19"
+    ]
+   },
+   {
+    "rank": 3,
+    "observation": "resource-00 mean is 0.4696716083333333333333333333333333 in the reference window and 0.491202375 in the evaluation window, while p95 latency is 238 ms in the reference window and 236 ms in the evaluation window; the best-lag rho for pair-00 is negative (-0.962 at -3000 ms).",
+    "possible_explanation": "If resource-00 is a utilization-style ratio, higher values alongside lower latency is counterintuitive; the negative correlation may reflect the metric's semantics (e.g., ratio of headroom or noise), a spurious relationship, or an aliasing effect rather than congestion or resource saturation.",
+    "recommended_check": "Confirm the exact semantics and unit definition of resource-00, plot per-cell resource-00 vs p95 latency aligned at the peak lag, and run a targeted load-change experiment to see whether latency moves in the expected direction with resource level.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/41",
+     "analysis-result.json#/evidence/3",
+     "analysis-result.json#/evidence/20",
+     "analysis-result.json#/evidence/39",
+     "analysis-result.json#/evidence/40"
+    ]
+   },
+   {
+    "rank": 4,
+    "observation": "diagnostic-summary reports anomalies_tested 0, episodes_reported 0, pairs_evaluable 1, pairs_tested 1, status COMPLETE; the correlation candidate has uncertainty \"NOT_ESTIMATED\" and sensitivity_without_achieved_rps null, while the headline selection records holm_adjusted_p_value 0.001.",
+    "possible_explanation": "The run performed no anomaly testing and did not estimate uncertainty or load sensitivity for the selected candidate, so the statistically flagged lag-max correlation lacks episodic corroboration and its strength/robustness is not quantified.",
+    "recommended_check": "Enable anomaly detection over the resource series and latency, and compute uncertainty (e.g., bootstrap/confidence) plus an achieved-RPS sensitivity estimate before relying on the candidate for any interpretation.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/43",
+     "analysis-result.json#/evidence/41",
+     "analysis-result.json#/evidence/42"
+    ]
+   },
+   {
+    "rank": 5,
+    "observation": "Both window policy summaries and the top-level policy verdict are NO_POLICY (business_verdict NO_POLICY, resource_verdict NO_POLICY), while the overall metric summary shows error_count 0 / 7200 samples and latency p50 206 / p99 239 ms.",
+    "possible_explanation": "No SLO or resource policy was configured for this run, so the absent violations and stable-looking metrics should be read as 'not evaluated against thresholds' rather than as a pass or proof of absence of problems.",
+    "recommended_check": "Define explicit business and resource SLO policies (latency, error rate, resource thresholds) and re-evaluate the same data or a new run against those thresholds, keeping the NO_POLICY verdict unchanged until a policy exists.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/37",
+     "analysis-result.json#/evidence/38",
+     "analysis-result.json#/policy_verdict",
+     "analysis-result.json#/evidence/0"
+    ]
+   }
+  ],
+  "recommendations": [
+   {
+    "rank": 1,
+    "action": "Verify and correct clock alignment between the JMeter load generator and the resource telemetry source before interpreting any lag-ordered relationship.",
+    "rationale": "resource-binding states clock_alignment \"not_verified_by_core\", and pair-00's headline value depends on a -3000 ms best lag; without verified alignment, lead/lag or temporal causal ordering is unsupported.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/2",
+     "analysis-result.json#/evidence/41"
+    ]
+   },
+   {
+    "rank": 2,
+    "action": "Re-run the load test with a non-constant load profile (ramp or steps) so the 'target' control can be used in partial correlation.",
+    "rationale": "The 'target' control was dropped with reason CONSTANT_CONTROL and the target series is constant 20 requests/s, so raw_rho equals partial_rho and the candidate is uncontrolled for load.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/41",
+     "analysis-result.json#/evidence/36",
+     "analysis-result.json#/evidence/19"
+    ]
+   },
+   {
+    "rank": 3,
+    "action": "Define explicit business and resource SLO policies, then re-evaluate the run against them; do not treat NO_POLICY as a pass.",
+    "rationale": "Both window policy summaries and the top-level verdict are NO_POLICY, so 0 errors and stable latency do not constitute compliance in the absence of thresholds.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/37",
+     "analysis-result.json#/evidence/38",
+     "analysis-result.json#/policy_verdict",
+     "analysis-result.json#/evidence/0"
+    ]
+   },
+   {
+    "rank": 4,
+    "action": "Compute uncertainty (e.g., bootstrap confidence intervals) and achieved-RPS sensitivity estimates for the selected correlation candidate.",
+    "rationale": "Uncertainty is NOT_ESTIMATED and sensitivity_without_achieved_rps is null; the headline holm-adjusted p-value 0.001 does not quantify the magnitude or robustness of the candidate.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/41",
+     "analysis-result.json#/evidence/42",
+     "analysis-result.json#/evidence/43"
+    ]
+   },
+   {
+    "rank": 5,
+    "action": "Run anomaly detection over the resource series and latency, and compare any reported episodes with the correlation timing window.",
+    "rationale": "diagnostic-summary reports anomalies_tested 0 and episodes_reported 0, so there is currently no episodic corroboration for the correlation candidate.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/43",
+     "analysis-result.json#/evidence/41"
+    ]
+   }
+  ],
+  "caveats": [
+   "Clock alignment is not_verified_by_core (analysis-result.json#/evidence/2), so all lag-ordered and temporal interpretations, including the -3000 ms best lag, are tentative until verified.",
+   "The 'target' control is constant (20 requests/s with zero variance) and was dropped as CONSTANT_CONTROL; the correlation is therefore uncontrolled for load and raw_rho equals partial_rho (analysis-result.json#/evidence/41, /evidence/36, /evidence/19).",
+   "Uncertainty is NOT_ESTIMATED and sensitivity_without_achieved_rps is null; the headline p-values (0.001) flag selection but do not quantify magnitude or robustness (analysis-result.json#/evidence/41, /evidence/42, /evidence/43).",
+   "anomalies_tested is 0 and episodes_reported is 0; lack of tested anomalies or reported episodes does not prove stability, spare capacity, or absence of a problem (analysis-result.json#/evidence/43).",
+   "The verdict is NO_POLICY in both windows and at top level; this is not a PASS, and 0 errors with low/stable latency do not constitute compliance without defined thresholds (analysis-result.json#/evidence/37, /evidence/38, analysis-result.json#/policy_verdict).",
+   "Only one pair was evaluable and tested; the other 15 resource series have similar ratio summaries but were not correlated (analysis-result.json#/evidence/43, /evidence/4 through /evidence/18).",
+   "Resource series are unit 'ratio' without labels or semantics, so the direction implied by the negative correlation (higher ratio with lower latency) cannot be validated from this evidence alone (analysis-result.json#/evidence/3, /evidence/20, /evidence/41).",
+   "best_lag_rho (-0.962) differs materially from the reported raw/partial rho (-0.2286) and the evidence does not explain that discrepancy (analysis-result.json#/evidence/41)."
+  ]
+ },
+ "schema": "ai-experiment-run.holdout.v1",
+ "case": "case-016",
+ "rep": 1,
+ "arm": "A",
+ "try": 1,
+ "attempt_id": "case-016-1-A-t1",
+ "model_id": "deepseek-v4-flash-0731",
+ "prompt_sha256": "69f215a1ad4ae678c82410ba7cf7daf171cd9c7ca0ef4626bba6977db0af4ef7"
+}

@@ -1,0 +1,37 @@
+{
+ "required": [
+  [
+   "controls_used",
+   [
+    "target"
+   ]
+  ],
+  [
+   "no_residual",
+   [
+    "no residual|NO_RESIDUAL|residual[^.\\n]{0,40}(?:zero|none|constant|vanish|no )"
+   ]
+  ],
+  [
+   "raw_rho",
+   [
+    "(?:rho|correlat)[^.\\n]{0,100}(?:(?<![\\d.])1(?:\\.0+)?(?![\\d.]))|(?:(?<![\\d.])1(?:\\.0+)?(?![\\d.]))[^.\\n]{0,100}(?:rho|correlat)"
+   ]
+  ]
+ ],
+ "forbidden": [
+  "states that the observed resource is the proven cause of the degradation"
+ ],
+ "useful_checks": [
+  "condition the comparison on the workload (compare at equal load) before judging the resource"
+ ],
+ "source": {
+  "builder": "AdvisoryEvidenceBuilder",
+  "build": "5b5e51c+harness",
+  "source": "x:C05",
+  "source_sha256": "26e5877e7364ccfee4fde498b8ae24b1705ec079dc570fcefe630dc1c97bc4c8",
+  "derivation": [],
+  "evidence_sha256": "85b62224aca052202bafc8a8d95927ca273d52e6c1403daa3351447eec0ddca7",
+  "inputs": "x:C05, derivation [], analysed through RunBundleStore -> AnalysisService -> AdvisoryEvidenceBuilder by AdvisoryHoldoutCorpusTest on 5b5e51c+harness"
+ }
+}

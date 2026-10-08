@@ -1,0 +1,100 @@
+[
+  {
+    "id": "R015",
+    "hard_defect": false,
+    "defects": [],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 4,
+    "notes": "The advice preserves the verdict and metrics and gives verifiable checks, with some unnecessary clock-related work."
+  },
+  {
+    "id": "R016",
+    "hard_defect": false,
+    "defects": [],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 5,
+    "notes": "The advice accurately prioritizes policy configuration and resource coverage while keeping conclusions within the evidence."
+  },
+  {
+    "id": "R033",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T7",
+        "field": "#/summary",
+        "quote": "no load-testing policy or required capacity was configured",
+        "why": "NO_POLICY establishes that no policy was applicable or no required capacity existed, not that none was configured."
+      },
+      {
+        "type": "T8",
+        "field": "#/recommendations/1/action",
+        "quote": "fill the RESOURCE_GAPS ... including ... the OpenSearch error profile",
+        "why": "The evidence does not establish that an OpenSearch error profile is required to resolve RESOURCE_GAPS."
+      }
+    ],
+    "required_facts_preserved": false,
+    "missing_facts": [
+      "throughput_rps ratio 2623000/44986"
+    ],
+    "usefulness": 2,
+    "notes": "Several checks are useful, but the advice overstates the cause of NO_POLICY and adds an unsupported collection requirement."
+  },
+  {
+    "id": "R037",
+    "hard_defect": false,
+    "defects": [
+      {
+        "type": "T8",
+        "field": "#/caveats/3",
+        "quote": "The 904 ms maximum with p99 77 ms is an outlier",
+        "why": "The aggregate values show a high maximum but do not establish an outlier classification."
+      }
+    ],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 3,
+    "notes": "The main actions are sound, though the outlier label and speculation about run length are stronger than the evidence warrants."
+  },
+  {
+    "id": "R049",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T7",
+        "field": "#/summary",
+        "quote": "no policy or required capacity was configured",
+        "why": "NO_POLICY does not establish that no policy was configured; a configured policy may have been inapplicable."
+      },
+      {
+        "type": "T1",
+        "field": "#/hypotheses/2/recommended_check",
+        "quote": "Rerun with resource-series capture enabled ... so a capacity evaluation becomes possible",
+        "why": "A capacity bound requires stages with verified product outcomes, which resource-series capture alone does not supply."
+      }
+    ],
+    "required_facts_preserved": false,
+    "missing_facts": [
+      "throughput_rps ratio 2623000/44986"
+    ],
+    "usefulness": 2,
+    "notes": "The response correctly limits health claims but gives an unsupported prerequisite for capacity evaluation."
+  },
+  {
+    "id": "R065",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T7",
+        "field": "#/caveats/7",
+        "quote": "run_validity is VALID only for the collected data",
+        "why": "The evidence states run_validity is VALID; resource coverage is a separate status and does not qualify that verdict."
+      }
+    ],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 3,
+    "notes": "Most checks are verifiable, but the final caveat conflates run validity with incomplete analysis coverage."
+  }
+]

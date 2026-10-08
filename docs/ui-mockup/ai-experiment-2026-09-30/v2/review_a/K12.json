@@ -1,0 +1,139 @@
+[
+  {
+    "id": "R011",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T1",
+        "field": "#/hypotheses/1/possible_explanation",
+        "quote": "no knee point (and therefore no upper bound) is estimated",
+        "why": "Capacity bounds are derived from verified stages independently of knee detection."
+      }
+    ],
+    "required_facts_preserved": false,
+    "missing_facts": ["Run validity VALID", "Analysis coverage COMPLETE"],
+    "usefulness": 3,
+    "notes": "Most actions are useful, but the knee explanation invents a dependency."
+  },
+  {
+    "id": "R015",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T7",
+        "field": "#/summary",
+        "quote": "the overall policy verdict is NO_POLICY: no resource policy was configured",
+        "why": "The absence of a resource policy does not explain the capacity policy verdict."
+      },
+      {
+        "type": "T8",
+        "field": "#/hypotheses/0/observation",
+        "quote": "mean CPU cores increased with load for ... frontend",
+        "why": "The cited frontend mean falls from about 0.189341 at 10 users to 0.188103 at 20."
+      },
+      {
+        "type": "T1",
+        "field": "#/hypotheses/1/recommended_check",
+        "quote": "Implement or enable knee detection ... so an upper exclusive bound can be estimated",
+        "why": "Knee detection is a fixed unimplemented product limitation and is not needed to derive a bound."
+      },
+      {
+        "type": "T1",
+        "field": "#/recommendations/0/action",
+        "quote": "with knee detection enabled so the capacity result can move beyond a lower bound",
+        "why": "Higher verified load stages can change the bound without a knee detector."
+      },
+      {
+        "type": "T7",
+        "field": "#/caveats/1",
+        "quote": "no capacity estimate exists",
+        "why": "The evidence reports a verified LOWER_BOUND of 20 users."
+      }
+    ],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 2,
+    "notes": "It preserves the main numbers but repeatedly recommends an invalid knee-detector action."
+  },
+  {
+    "id": "R019",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T1",
+        "field": "#/hypotheses/0/recommended_check",
+        "quote": "Enable a knee detector ... so an upper capacity bound can be estimated",
+        "why": "A knee detector cannot be enabled here and bounds are computed independently of it."
+      },
+      {
+        "type": "T1",
+        "field": "#/recommendations/1/action",
+        "quote": "Implement knee detection ... then re-read the capacity summary for an upper bound",
+        "why": "This directs the operator toward a product change that is not required for an upper bound."
+      },
+      {
+        "type": "T7",
+        "field": "#/caveats/1",
+        "quote": "per-stage PASS does not verify capacity",
+        "why": "The passing verified stages establish the reported 20-user lower capacity bound."
+      }
+    ],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 2,
+    "notes": "The proposed knee work and denial of the verified bound materially undermine otherwise useful checks."
+  },
+  {
+    "id": "R027",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T7",
+        "field": "#/recommendations/0/action",
+        "quote": "configure a business/capacity policy (for example an error-rate or latency threshold ...)",
+        "why": "An error-rate policy already passes in every window; adding one alone does not resolve the capacity NO_POLICY verdict."
+      },
+      {
+        "type": "T4",
+        "field": "#/caveats/7",
+        "quote": "error counts come only from the metric summaries",
+        "why": "The three window policy checks also report zero-error numerators."
+      }
+    ],
+    "required_facts_preserved": false,
+    "missing_facts": ["Run validity VALID", "Analysis coverage COMPLETE", "Whole-run sample count 135434"],
+    "usefulness": 3,
+    "notes": "The load-ladder advice is useful, but the policy remedy and source inventory are misleading."
+  },
+  {
+    "id": "R040",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T8",
+        "field": "#/hypotheses/5/possible_explanation",
+        "quote": "the monitored services were not saturated",
+        "why": "Low mean core usage without service limits cannot establish that the services were unsaturated."
+      },
+      {
+        "type": "T2",
+        "field": "#/caveats/6",
+        "quote": "Latency and resource figures are observed statistics for the covered windows only",
+        "why": "The cited latency metric summaries cover the whole run, while resource summaries cover individual windows."
+      }
+    ],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 3,
+    "notes": "Its main actions are sound, but it overstates saturation and mislabels the latency scope."
+  },
+  {
+    "id": "R059",
+    "hard_defect": false,
+    "defects": [],
+    "required_facts_preserved": false,
+    "missing_facts": ["Run validity VALID"],
+    "usefulness": 4,
+    "notes": "The advice is accurate and actionable, with run validity omitted."
+  }
+]

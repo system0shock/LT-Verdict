@@ -1,0 +1,401 @@
+{
+ "seed": 182892093950823,
+ "key": {
+  "R001": {
+   "model": "glm-5.3",
+   "stage": "S1",
+   "case": "K03",
+   "rep": 2
+  },
+  "R002": {
+   "model": "qwen3.8-max",
+   "stage": "S1",
+   "case": "K01",
+   "rep": 2
+  },
+  "R003": {
+   "model": "glm-5.3",
+   "stage": "S1",
+   "case": "K02",
+   "rep": 2
+  },
+  "R004": {
+   "model": "glm-5.3",
+   "stage": "S1",
+   "case": "K05",
+   "rep": 1
+  },
+  "R005": {
+   "model": "glm-5.3",
+   "stage": "S0",
+   "case": "K06",
+   "rep": 1
+  },
+  "R006": {
+   "model": "qwen3.8-max",
+   "stage": "S1",
+   "case": "K02",
+   "rep": 1
+  },
+  "R007": {
+   "model": "glm-5.3",
+   "stage": "S0",
+   "case": "K02",
+   "rep": 1
+  },
+  "R008": {
+   "model": "glm-5.3",
+   "stage": "S0",
+   "case": "K08",
+   "rep": 1
+  },
+  "R009": {
+   "model": "qwen3.8-max",
+   "stage": "S0",
+   "case": "K07",
+   "rep": 1
+  },
+  "R010": {
+   "model": "glm-5.3",
+   "stage": "S1",
+   "case": "K06",
+   "rep": 1
+  },
+  "R011": {
+   "model": "glm-5.3",
+   "stage": "S1",
+   "case": "K11",
+   "rep": 2
+  },
+  "R012": {
+   "model": "qwen3.8-max",
+   "stage": "S1",
+   "case": "K08",
+   "rep": 1
+  },
+  "R013": {
+   "model": "glm-5.3",
+   "stage": "S0",
+   "case": "K12",
+   "rep": 1
+  },
+  "R014": {
+   "model": "glm-5.3",
+   "stage": "S1",
+   "case": "K11",
+   "rep": 1
+  },
+  "R015": {
+   "model": "qwen3.8-max",
+   "stage": "S1",
+   "case": "K05",
+   "rep": 1
+  },
+  "R016": {
+   "model": "qwen3.8-max",
+   "stage": "S1",
+   "case": "K02",
+   "rep": 2
+  },
+  "R017": {
+   "model": "qwen3.8-max",
+   "stage": "S1",
+   "case": "K09",
+   "rep": 1
+  },
+  "R018": {
+   "model": "glm-5.3",
+   "stage": "S0",
+   "case": "K10",
+   "rep": 1
+  },
+  "R019": {
+   "model": "glm-5.3",
+   "stage": "S1",
+   "case": "K08",
+   "rep": 1
+  },
+  "R020": {
+   "model": "glm-5.3",
+   "stage": "S1",
+   "case": "K12",
+   "rep": 2
+  },
+  "R021": {
+   "model": "qwen3.8-max",
+   "stage": "S0",
+   "case": "K11",
+   "rep": 1
+  },
+  "R022": {
+   "model": "glm-5.3",
+   "stage": "S0",
+   "case": "K01",
+   "rep": 1
+  },
+  "R023": {
+   "model": "qwen3.8-max",
+   "stage": "S1",
+   "case": "K04",
+   "rep": 2
+  },
+  "R024": {
+   "model": "glm-5.3",
+   "stage": "S1",
+   "case": "K10",
+   "rep": 2
+  },
+  "R025": {
+   "model": "qwen3.8-max",
+   "stage": "S1",
+   "case": "K06",
+   "rep": 2
+  },
+  "R026": {
+   "model": "glm-5.3",
+   "stage": "S1",
+   "case": "K03",
+   "rep": 1
+  },
+  "R027": {
+   "model": "qwen3.8-max",
+   "stage": "S0",
+   "case": "K05",
+   "rep": 1
+  },
+  "R028": {
+   "model": "qwen3.8-max",
+   "stage": "S0",
+   "case": "K12",
+   "rep": 1
+  },
+  "R029": {
+   "model": "glm-5.3",
+   "stage": "S0",
+   "case": "K03",
+   "rep": 1
+  },
+  "R030": {
+   "model": "qwen3.8-max",
+   "stage": "S0",
+   "case": "K04",
+   "rep": 1
+  },
+  "R031": {
+   "model": "glm-5.3",
+   "stage": "S1",
+   "case": "K10",
+   "rep": 1
+  },
+  "R032": {
+   "model": "qwen3.8-max",
+   "stage": "S0",
+   "case": "K06",
+   "rep": 1
+  },
+  "R033": {
+   "model": "glm-5.3",
+   "stage": "S0",
+   "case": "K05",
+   "rep": 1
+  },
+  "R034": {
+   "model": "glm-5.3",
+   "stage": "S1",
+   "case": "K08",
+   "rep": 2
+  },
+  "R035": {
+   "model": "qwen3.8-max",
+   "stage": "S1",
+   "case": "K01",
+   "rep": 1
+  },
+  "R036": {
+   "model": "qwen3.8-max",
+   "stage": "S0",
+   "case": "K02",
+   "rep": 1
+  },
+  "R037": {
+   "model": "qwen3.8-max",
+   "stage": "S1",
+   "case": "K10",
+   "rep": 2
+  },
+  "R038": {
+   "model": "qwen3.8-max",
+   "stage": "S1",
+   "case": "K03",
+   "rep": 2
+  },
+  "R039": {
+   "model": "qwen3.8-max",
+   "stage": "S1",
+   "case": "K11",
+   "rep": 2
+  },
+  "R040": {
+   "model": "qwen3.8-max",
+   "stage": "S1",
+   "case": "K12",
+   "rep": 2
+  },
+  "R041": {
+   "model": "glm-5.3",
+   "stage": "S1",
+   "case": "K12",
+   "rep": 1
+  },
+  "R042": {
+   "model": "glm-5.3",
+   "stage": "S0",
+   "case": "K11",
+   "rep": 1
+  },
+  "R043": {
+   "model": "glm-5.3",
+   "stage": "S1",
+   "case": "K09",
+   "rep": 2
+  },
+  "R044": {
+   "model": "glm-5.3",
+   "stage": "S0",
+   "case": "K04",
+   "rep": 1
+  },
+  "R045": {
+   "model": "glm-5.3",
+   "stage": "S1",
+   "case": "K02",
+   "rep": 1
+  },
+  "R046": {
+   "model": "qwen3.8-max",
+   "stage": "S0",
+   "case": "K01",
+   "rep": 1
+  },
+  "R047": {
+   "model": "qwen3.8-max",
+   "stage": "S0",
+   "case": "K10",
+   "rep": 1
+  },
+  "R048": {
+   "model": "qwen3.8-max",
+   "stage": "S1",
+   "case": "K07",
+   "rep": 1
+  },
+  "R049": {
+   "model": "glm-5.3",
+   "stage": "S1",
+   "case": "K01",
+   "rep": 2
+  },
+  "R050": {
+   "model": "qwen3.8-max",
+   "stage": "S1",
+   "case": "K05",
+   "rep": 2
+  },
+  "R051": {
+   "model": "qwen3.8-max",
+   "stage": "S1",
+   "case": "K03",
+   "rep": 1
+  },
+  "R052": {
+   "model": "qwen3.8-max",
+   "stage": "S1",
+   "case": "K10",
+   "rep": 1
+  },
+  "R053": {
+   "model": "qwen3.8-max",
+   "stage": "S1",
+   "case": "K04",
+   "rep": 1
+  },
+  "R054": {
+   "model": "qwen3.8-max",
+   "stage": "S0",
+   "case": "K08",
+   "rep": 1
+  },
+  "R055": {
+   "model": "glm-5.3",
+   "stage": "S1",
+   "case": "K01",
+   "rep": 1
+  },
+  "R056": {
+   "model": "qwen3.8-max",
+   "stage": "S0",
+   "case": "K09",
+   "rep": 1
+  },
+  "R057": {
+   "model": "glm-5.3",
+   "stage": "S1",
+   "case": "K04",
+   "rep": 2
+  },
+  "R058": {
+   "model": "qwen3.8-max",
+   "stage": "S1",
+   "case": "K07",
+   "rep": 2
+  },
+  "R059": {
+   "model": "qwen3.8-max",
+   "stage": "S1",
+   "case": "K06",
+   "rep": 1
+  },
+  "R060": {
+   "model": "glm-5.3",
+   "stage": "S1",
+   "case": "K04",
+   "rep": 1
+  },
+  "R061": {
+   "model": "qwen3.8-max",
+   "stage": "S0",
+   "case": "K03",
+   "rep": 1
+  },
+  "R062": {
+   "model": "qwen3.8-max",
+   "stage": "S1",
+   "case": "K11",
+   "rep": 1
+  },
+  "R063": {
+   "model": "qwen3.8-max",
+   "stage": "S1",
+   "case": "K08",
+   "rep": 2
+  },
+  "R064": {
+   "model": "glm-5.3",
+   "stage": "S1",
+   "case": "K09",
+   "rep": 1
+  },
+  "R065": {
+   "model": "glm-5.3",
+   "stage": "S1",
+   "case": "K06",
+   "rep": 2
+  },
+  "R066": {
+   "model": "qwen3.8-max",
+   "stage": "S1",
+   "case": "K09",
+   "rep": 2
+  }
+ }
+}

@@ -1,0 +1,113 @@
+[
+  {
+    "id": "R010",
+    "hard_defect": false,
+    "defects": [],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 5,
+    "notes": "Accurately preserves the verdicts, bounds, stage results, and operator-safe next actions."
+  },
+  {
+    "id": "R015",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T7",
+        "field": "#/hypotheses/4/possible_explanation",
+        "quote": "so no SLA capacity policy was evaluated",
+        "why": "It presents a particular explanation of NO_POLICY as established although the evidence does not identify which NO_POLICY condition holds."
+      }
+    ],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 3,
+    "notes": "Mostly useful and well-grounded, but it overstates the cause of the NO_POLICY result."
+  },
+  {
+    "id": "R022",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T1",
+        "field": "#/hypotheses/0/recommended_check",
+        "quote": "enable a knee detector",
+        "why": "KNEE_DETECTOR_NOT_IMPLEMENTED is a fixed product limitation, not an operator-remediable prerequisite for the capacity bound."
+      },
+      {
+        "type": "T3",
+        "field": "#/hypotheses/1/possible_explanation",
+        "quote": "a small number of samples reach 1500 ms",
+        "why": "The aggregates do not report how many samples reached the maximum latency."
+      },
+      {
+        "type": "T7",
+        "field": "#/hypotheses/4/possible_explanation",
+        "quote": "with no defined capacity policy",
+        "why": "NO_POLICY does not establish that no capacity policy was configured."
+      },
+      {
+        "type": "T1",
+        "field": "#/hypotheses/4/recommended_check",
+        "quote": "a knee estimate instead of NO_POLICY and null knee",
+        "why": "Configuring a policy and rerunning cannot replace the fixed null-knee limitation with a knee estimate."
+      },
+      {
+        "type": "T1",
+        "field": "#/recommendations/3/action",
+        "quote": "Implement or enable knee detection",
+        "why": "The response incorrectly recommends changing a fixed product limitation."
+      },
+      {
+        "type": "T7",
+        "field": "#/recommendations/4/rationale",
+        "quote": "a missing policy",
+        "why": "It treats missing policy configuration as the established cause of NO_POLICY."
+      }
+    ],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 2,
+    "notes": "It preserves the main measurements but gives invalid knee-detector and NO_POLICY guidance."
+  },
+  {
+    "id": "R076",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T7",
+        "field": "#/summary",
+        "quote": "there is no capacity-level policy",
+        "why": "NO_POLICY does not prove that no capacity-level policy was configured."
+      },
+      {
+        "type": "T1",
+        "field": "#/hypotheses/4/recommended_check",
+        "quote": "Implement knee detection",
+        "why": "Knee detection is a fixed product limitation and is not an operator action that can be enabled to derive the bound."
+      },
+      {
+        "type": "T3",
+        "field": "#/recommendations/3/action",
+        "quote": "locate the 1500 ms maximum sample",
+        "why": "The evidence reports a maximum value but not that exactly one sample attained it."
+      },
+      {
+        "type": "T7",
+        "field": "#/recommendations/4/rationale",
+        "quote": "no capacity policy exists",
+        "why": "It states an unsupported cause of the NO_POLICY verdict as fact."
+      },
+      {
+        "type": "T7",
+        "field": "#/caveats/3",
+        "quote": "a missing capacity policy",
+        "why": "The evidence does not establish that policy configuration is absent rather than another NO_POLICY condition applying."
+      }
+    ],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 2,
+    "notes": "The stage analysis is useful, but the knee-detector recommendation and assertions about missing policy are misleading."
+  }
+]

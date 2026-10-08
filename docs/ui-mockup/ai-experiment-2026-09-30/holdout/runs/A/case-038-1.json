@@ -1,0 +1,197 @@
+{
+ "stage": "A",
+ "mode": "live",
+ "model": "deepseek-v4-flash-0731",
+ "tag": {
+  "phase": "holdout",
+  "attempt_id": "case-038-1-A-t1",
+  "arm": "A",
+  "stage": null,
+  "case": "case-038",
+  "rep": 1,
+  "try": 1
+ },
+ "retry_policy": "d2",
+ "qwen_exit": 0,
+ "wall_ms": 95036,
+ "relay": {
+  "schema_version": "advisory-ai-runtime-relay.v1",
+  "status": "FORWARDED_STRUCTURED_OUTPUT",
+  "received_request_count": 1,
+  "forwarded_request_count": 1,
+  "outcomes": [
+   "FORWARDED_STRUCTURED_OUTPUT"
+  ],
+  "retry_refused_reason": null,
+  "first_refused_reason": null,
+  "model_id": "deepseek-v4-flash-0731",
+  "retry_policy": "d2",
+  "requests": [
+   {
+    "ordinal": 1,
+    "forwarded": true,
+    "outcome": "FORWARDED_STRUCTURED_OUTPUT",
+    "provider_status": 200,
+    "latency_ms": 93732,
+    "usage": {
+     "prompt_tokens": 4594,
+     "total_tokens": 13885,
+     "completion_tokens": 9291,
+     "prompt_tokens_details": {
+      "cached_tokens": 1024
+     },
+     "completion_tokens_details": {
+      "reasoning_tokens": 6609
+     }
+    },
+    "model_returned": "deepseek-v4-flash-0731"
+   }
+  ],
+  "usage": {
+   "prompt_tokens": 4594,
+   "completion_tokens": 9291,
+   "total_tokens": 13885
+  },
+  "latency_ms": 93732
+ },
+ "relay_status": "FORWARDED_STRUCTURED_OUTPUT",
+ "usage": {
+  "prompt_tokens": 4594,
+  "completion_tokens": 9291,
+  "total_tokens": 13885
+ },
+ "latency_ms": 93732,
+ "retried": false,
+ "retry_refused_reason": null,
+ "status": "OK",
+ "note": null,
+ "output": {
+  "schema_version": "ai-advice-output.v1",
+  "summary": "The deterministic verdict is FAIL: the only business policy check (response_time_p95_ms, rule_id \"latency\", operator lte, threshold 200) observed 550 ms in window workload-01, and the window policy summary reports business_verdict FAIL, resource_verdict NO_POLICY, verdict FAIL. Run validity is VALID and analysis coverage is COMPLETE. Within the evaluated window (from_epoch_ms 1704067320000 to 1704067800000), the target request rate was constant 100 req/s while the generator achieved a mean of ~60.25 req/s (median 40, max 100); latency is heavily skewed (p50=50 ms, p95=p99=max=550 ms). A candidate association between active threads and response_time_p95_ms is reported (raw_rho ~0.998, best_lag_ms -1000, status CANDIDATE, uncertainty NOT_ESTIMATED) but was not statistically established (headline selection UNAVAILABLE, p-values null, OBSERVATION_COUNT_UNSUPPORTED), and clock alignment is not_verified_by_core. No anomaly episodes were reported (anomalies_tested=0), which does not prove stability. All advice below is hypothesis-oriented for verification and does not change the FAIL verdict.",
+  "hypotheses": [
+   {
+    "rank": 1,
+    "observation": "policy-check-window reports metric response_time_p95_ms observed 550, operator lte, threshold 200, status FAIL for window workload-01; window-policy-summary reports business_verdict FAIL, resource_verdict NO_POLICY, verdict FAIL; window-metric-summary shows p95=p99=max=550 ms with p50=50 ms for the evaluated window.",
+    "possible_explanation": "The p95 response time exceeded the 200 ms threshold during the evaluated window, and the tail (p95=p99=max=550 ms) sits far above the median (50 ms), which is consistent with a tail-latency problem affecting a subset of requests. The evidence does not identify a server-side or client-side cause.",
+    "recommended_check": "Inspect server-side indicators (CPU, queues, GC, connection-pool saturation) for the evaluated window 1704067320000–1704067800000 and see whether the 550 ms tail is sustained or concentrated in specific cells when compared with per-cell achieved request rate.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/6",
+     "analysis-result.json#/evidence/7",
+     "analysis-result.json#/evidence/8",
+     "analysis-result.json#/evidence/0"
+    ]
+   },
+   {
+    "rank": 2,
+    "observation": "correlation pair association-09 pairs resource generator-threads against load metric response_time_p95_ms with raw_rho 0.998274154046, partial_rho 0.998274154046, best_lag_ms -1000, best_lag_rho 0.999342586275, status CANDIDATE, uncertainty NOT_ESTIMATED; headline selection for the same pair is UNAVAILABLE with p-values null and reason OBSERVATION_COUNT_UNSUPPORTED; resource-binding states clock_alignment not_verified_by_core.",
+    "possible_explanation": "Higher active thread counts coincide with higher p95 latency (very high raw correlation), which could indicate load-dependent latency. However, because statistical selection was not performed (OBSERVATION_COUNT_UNSUPPORTED, p-values null) and clock alignment is not verified, the -1000 ms best lag cannot be interpreted as lead/lag ordering or cause.",
+    "recommended_check": "Verify clock alignment between the generator/result timestamps and any system-under-test clock first; then re-estimate the association with a statistically supported method and sufficient observations so a p-value can be produced before drawing any temporal conclusion.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/9",
+     "analysis-result.json#/evidence/10",
+     "analysis-result.json#/evidence/2"
+    ]
+   },
+   {
+    "rank": 3,
+    "observation": "target-request-rate is constant 100 req/s (min=max=mean=median=100, std 0), while generator request_starts has mean 60.2479 req/s, median 40, q75=100 and max=100; window-metric-summary reports sample_count 28919 over 480000 ms (approx 60.25 req/s); generator active_threads is capped at max 20 with a bimodal profile (q05=q25=5, median=q75=q95=max=20).",
+    "possible_explanation": "The generator did not sustain its constant 100 req/s target during the evaluated window (roughly half of cells are near 30–40 req/s), which may reflect system-under-test saturation at higher offered load or generator-side concurrency limits (active_threads max 20 with a 5/20 bimodal pattern). This evidence does not distinguish between those causes.",
+    "recommended_check": "Compare per-cell target rate vs achieved request_starts and per-cell latency; capture generator-side thread/queueing logs and re-run with a higher thread cap to test whether active_threads at 20 constrains achieved rate.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/5",
+     "analysis-result.json#/evidence/3",
+     "analysis-result.json#/evidence/4",
+     "analysis-result.json#/evidence/8"
+    ]
+   },
+   {
+    "rank": 4,
+    "observation": "metric-summary-overall reports error_count 0 and error_rate_ratio 0/60000; window-metric-summary reports error_count 0 and error_rate_ratio 0/28919 for the evaluated window.",
+    "possible_explanation": "All sampled requests completed without recorded errors, which could suggest the service returned responses even while missing the latency policy. Absent recorded errors do not prove good performance, low load, or the absence of queuing, and the FAIL verdict is driven by latency, not by errors.",
+    "recommended_check": "Verify that the JTL error/status fields were fully populated for all 60,000 overall and 28,919 window samples and that failed or unrecorded requests were not excluded; confirm coverage of the instrumentation for the evaluated window.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/0",
+     "analysis-result.json#/evidence/8"
+    ]
+   },
+   {
+    "rank": 5,
+    "observation": "diagnostic-summary reports anomalies_tested=0, episodes_reported=0, pairs_evaluable=1, pairs_tested=1, status COMPLETE, uncertainty NOT_ESTIMATED.",
+    "possible_explanation": "No anomaly episodes were reported because no anomalies were tested (anomalies_tested=0); this does not demonstrate whether the p95 violation was persistent or episodic, nor does it prove stability or the absence of a problem.",
+    "recommended_check": "Run anomaly/episode detection over per-cell latency (response_time_p95_ms) and achieved request-rate series in the evaluated window to determine whether the 550 ms tail persisted throughout or was confined to short episodes.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/11",
+     "analysis-result.json#/evidence/9",
+     "analysis-result.json#/evidence/3"
+    ]
+   }
+  ],
+  "recommendations": [
+   {
+    "rank": 1,
+    "action": "Verify clock/time alignment between the load generator/result timestamp source and the system-under-test before using any lag-based interpretation.",
+    "rationale": "resource-binding states clock_alignment not_verified_by_core, and the only temporal signal available (best_lag_ms -1000 in correlation pair association-09) cannot be treated as lead/lag ordering until the clock relationship is confirmed.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/2",
+     "analysis-result.json#/evidence/9"
+    ]
+   },
+   {
+    "rank": 2,
+    "action": "Investigate the latency policy failure by collecting server-side metrics (CPU, queues, GC, connection pools) and thread dumps for the evaluated window so the 550 ms tail (p95=p99=max, p50=50) can be explained.",
+    "rationale": "The deterministic verdict is FAIL because response_time_p95_ms observed 550 exceeds threshold 200 (policy-check status FAIL; window-policy-summary verdict FAIL); the evidence only quantifies the tail, not its cause.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/6",
+     "analysis-result.json#/evidence/7",
+     "analysis-result.json#/evidence/8"
+    ]
+   },
+   {
+    "rank": 3,
+    "action": "Re-establish the active_threads vs response_time_p95 association with a statistically supported method and adequate observation count, and report uncertainty explicitly.",
+    "rationale": "The correlation pair is CANDIDATE with uncertainty NOT_ESTIMATED, and headline selection was UNAVAILABLE with p-values null due to OBSERVATION_COUNT_UNSUPPORTED; without a p-value the ~0.998 raw_rho cannot support a load-dependent latency conclusion.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/9",
+     "analysis-result.json#/evidence/10"
+    ]
+   },
+   {
+    "rank": 4,
+    "action": "Investigate why achieved request start rate (mean ~60.25 req/s, median 40) fell short of the constant 100 req/s target, including generator-side concurrency limits (active_threads max 20, bimodal 5/20).",
+    "rationale": "target-request-rate is constant at 100 req/s while generator request_starts mean is 60.2479 req/s with q75=100, and the evaluated window throughput is ~60.25 req/s; closing this gap test is needed to separate saturation from generator limitation.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/5",
+     "analysis-result.json#/evidence/3",
+     "analysis-result.json#/evidence/4"
+    ]
+   },
+   {
+    "rank": 5,
+    "action": "Define resource-level policies and enable anomaly/episode detection so resource saturation is caught before it breaches the business latency policy.",
+    "rationale": "resource_verdict is NO_POLICY (a missing resource policy, not a pass), and diagnostic-summary shows anomalies_tested=0 with episodes_reported=0, so no resource threshold or episode evidence currently exists to detect incipient degradation.",
+    "evidence_refs": [
+     "analysis-result.json#/evidence/7",
+     "analysis-result.json#/evidence/11"
+    ]
+   }
+  ],
+  "caveats": [
+   "clock_alignment is not_verified_by_core; raw epoch values are timestamps, and best_lag_ms -1000 is only a candidate lag, so no lead/lag ordering or temporal causal claim is supported by the evidence.",
+   "The correlation pair (association-09) is CANDIDATE with uncertainty NOT_ESTIMATED; headline selection is UNAVAILABLE with p-values null and reason OBSERVATION_COUNT_UNSUPPORTED, so statistical significance of the ~0.998 raw_rho is not established.",
+   "target-request-rate was constant and dropped as a control (reasons CONSTANT_CONTROL, controls_used empty); partial_rho equals raw_rho, so the effect of the target rate on the threads-latency association was not controlled.",
+   "resource_verdict NO_POLICY means no resource policy was evaluated; a missing policy is not a pass and does not imply resource health.",
+   "anomalies_tested=0 and episodes_reported=0 do not prove stability, spare capacity, or absence of a problem; no anomaly episodes were generated or tested.",
+   "Overall metric-summary spans the whole run (sample_count 60000 over denominator 648110 ms, approx 92.6 req/s) while window-metric-summary covers the evaluated window (sample_count 28919 over 480000 ms, approx 60.25 req/s); about 31,081 samples fall outside the evaluated window, so the two rates should not be conflated.",
+   "No server-side or network metrics are present in this analysis; all candidate causes of the 550 ms p95 tail (saturation, queuing, generator limits) are hypotheses to be verified, not proven causes.",
+   "The deterministic verdict (FAIL for latency policy) is preserved and none of the advice modifies it."
+  ]
+ },
+ "schema": "ai-experiment-run.holdout.v1",
+ "case": "case-038",
+ "rep": 1,
+ "arm": "A",
+ "try": 1,
+ "attempt_id": "case-038-1-A-t1",
+ "model_id": "deepseek-v4-flash-0731",
+ "prompt_sha256": "69f215a1ad4ae678c82410ba7cf7daf171cd9c7ca0ef4626bba6977db0af4ef7"
+}

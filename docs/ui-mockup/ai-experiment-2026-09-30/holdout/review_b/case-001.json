@@ -1,0 +1,52 @@
+[
+  {
+    "id": "R050",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T7",
+        "field": "#/caveats/6",
+        "quote": "Latency and error figures (p95 68ms, 0 errors) cover only the sampled windows; they are not a statement about the entire run",
+        "why": "The evidence also reports whole-run metrics of p95 68 ms and zero errors across 24,000 samples, so this incorrectly limits those figures to policy windows."
+      }
+    ],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 4,
+    "notes": "Otherwise gives accurate, prioritized actions and preserves the reported verdicts and coverage."
+  },
+  {
+    "id": "R073",
+    "hard_defect": true,
+    "defects": [
+      {
+        "type": "T2",
+        "field": "#/hypotheses/1/observation",
+        "quote": "Both windows report ... error_count 0 with error rate 0/24000",
+        "why": "24,000 is the whole-run denominator, while the reference and workload-01 window denominators are 9,600 and 14,400 respectively."
+      }
+    ],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 4,
+    "notes": "The verdict, coverage, resource gap, and recommended operator actions are otherwise well supported."
+  },
+  {
+    "id": "R092",
+    "hard_defect": false,
+    "defects": [],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 5,
+    "notes": "Accurately distinguishes the incomplete resource evaluation from a policy failure and provides verifiable next steps."
+  },
+  {
+    "id": "R138",
+    "hard_defect": false,
+    "defects": [],
+    "required_facts_preserved": true,
+    "missing_facts": [],
+    "usefulness": 5,
+    "notes": "Accurately reports the deterministic outcomes, limits causal claims, and recommends appropriate operator actions."
+  }
+]

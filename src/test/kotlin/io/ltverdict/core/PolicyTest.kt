@@ -67,6 +67,45 @@ class PolicyTest {
     }
 
     @Test
+    fun `missing transaction mode parses and an unknown value lists the allowed ones`() {
+        val warn = validatePolicy(ByteArrayInputStream(policyJson(defaults = """{"missing_transaction":"warn"}""").encodeToByteArray()))
+        val strict =
+            validatePolicy(ByteArrayInputStream(policyJson(defaults = """{"missing_transaction":"no_verdict"}""").encodeToByteArray()))
+        val unknown = policyJson(defaults = """{"missing_transaction":"ignore"}""").encodeToByteArray()
+
+        assertEquals(MissingTransactionMode.WARN, (warn as PolicyValidation.Valid).policy.defaults?.missingTransaction)
+        assertEquals(MissingTransactionMode.NO_VERDICT, (strict as PolicyValidation.Valid).policy.defaults?.missingTransaction)
+        assertInvalid(unknown, "UNKNOWN_MISSING_TRANSACTION_MODE", "/defaults/missing_transaction")
+        assertInvalid(
+            policyJson(defaults = """{"missing_transaction":true}""").encodeToByteArray(),
+            "INVALID_TYPE",
+            "/defaults/missing_transaction",
+        )
+        assertTrue(message(unknown).endsWith("allowed: no_verdict, warn"), message(unknown))
+    }
+
+    @Test
+    fun `unknown enum values name the allowed values`() {
+        val platform = Files.readString(Path.of("docs/contracts/policy/v1/examples/valid/platform-services.json"))
+        val cases =
+            listOf(
+                policyJson(metric = "p50") to "allowed: response_time_p95_ms, response_time_p99_ms, error_rate_ratio, throughput_rps",
+                policyJson(operator = "eq") to "allowed: lte, gte",
+                policyJson().replace("\"kind\":\"overall\"", "\"kind\":\"all\"") to "allowed: overall, transaction",
+                platform.replace("\"gt\"", "\"eq\"") to "allowed: gt, lt",
+                platform.replace("\"interval_mean\"", "\"mean\"") to
+                    "allowed: interval_mean, interval_rate, interval_max, interval_min",
+                platform.replace("\"sla\"", "\"fatal\"") to "allowed: diagnostic, sla",
+                platform.replace("\"all_services\"", "\"every\"") to "allowed: service, all_services",
+            )
+
+        cases.forEach { (source, hint) ->
+            val text = message(source.encodeToByteArray())
+            assertTrue(text.endsWith(hint), "$text should end with $hint")
+        }
+    }
+
+    @Test
     fun `window ids parse and malformed lists fail at the field`() {
         val valid =
             validatePolicy(
@@ -212,6 +251,9 @@ class PolicyTest {
         assertEquals(pointer, result.errors.first().jsonPointer, message)
     }
 
+    private fun message(bytes: ByteArray): String =
+        (validatePolicy(ByteArrayInputStream(bytes)) as PolicyValidation.Invalid).errors.first().message
+
     private fun invalidCode(source: String): String =
         (validatePolicy(ByteArrayInputStream(source.encodeToByteArray())) as PolicyValidation.Invalid).errors.first().code
 
@@ -258,6 +300,9 @@ class PolicyTest {
                 "docs/contracts/policy/v1/examples/valid/all-metrics.json" to Expectation(true, true),
                 "docs/contracts/policy/v1/examples/valid/sample-gate.json" to Expectation(true, true),
                 "docs/contracts/policy/v1/examples/valid/window-ids.json" to Expectation(true, true),
+                "docs/contracts/policy/v1/examples/valid/missing-transaction-warn.json" to Expectation(true, true),
+                "docs/contracts/policy/v1/examples/invalid/unknown-missing-transaction-mode.json" to
+                    Expectation(false, false, "UNKNOWN_MISSING_TRANSACTION_MODE", "/defaults/missing_transaction"),
                 "docs/contracts/policy/v1/examples/invalid/window-ids-empty.json" to
                     Expectation(false, false, "WINDOW_IDS_INVALID", "/rules/0/window_ids"),
                 "docs/contracts/policy/v1/examples/invalid/empty-rules.json" to Expectation(false, false, "EMPTY_RULES", "/rules"),

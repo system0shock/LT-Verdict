@@ -71,6 +71,53 @@ class PolicyEvaluationTest {
     }
 
     @Test
+    fun `warn mode keeps a found failure as FAIL and a missing transaction as a coverage warning`() {
+        val failingOverall = rule("overall", PolicyMetric.RESPONSE_TIME_P95_MS, PolicyOperator.LTE, "99")
+        val passingOverall = rule("overall", PolicyMetric.RESPONSE_TIME_P95_MS, PolicyOperator.LTE, "100")
+        val missing = rule("missing", PolicyMetric.RESPONSE_TIME_P99_MS, PolicyOperator.LTE, "100", "absent")
+
+        val failed = evaluatePolicy(warnPolicy(failingOverall, missing), RunValidity.VALID, metrics())
+        val passed = evaluatePolicy(warnPolicy(passingOverall, missing), RunValidity.VALID, metrics())
+        val strict = evaluatePolicy(policy(failingOverall, missing), RunValidity.VALID, metrics())
+        val check = failed.evidence.single { it["rule_id"]?.jsonPrimitive?.content == "missing" }
+
+        assertEquals(PolicyVerdict.FAIL, failed.verdict)
+        assertEquals(listOf("TRANSACTION_NOT_FOUND"), failed.coverageReasons)
+        assertEquals(listOf("overall"), failed.findings.mapNotNull { it["rule_id"]?.jsonPrimitive?.content })
+        assertEquals("NO_VERDICT", check.getValue("status").jsonPrimitive.content)
+        assertEquals("TRANSACTION_NOT_FOUND", check.getValue("reason_code").jsonPrimitive.content)
+        assertEquals(PolicyVerdict.PASS, passed.verdict)
+        assertEquals(listOf("TRANSACTION_NOT_FOUND"), passed.coverageReasons)
+        assertEquals(PolicyVerdict.NO_VERDICT, strict.verdict)
+    }
+
+    @Test
+    fun `warn mode never turns a policy with no decided rule into a PASS`() {
+        val onlyMissing = warnPolicy(rule("missing", PolicyMetric.RESPONSE_TIME_P99_MS, PolicyOperator.LTE, "100", "absent"))
+
+        val result = evaluatePolicy(onlyMissing, RunValidity.VALID, metrics())
+
+        assertEquals(PolicyVerdict.NO_VERDICT, result.verdict)
+        assertEquals(listOf("TRANSACTION_NOT_FOUND"), result.coverageReasons)
+    }
+
+    @Test
+    fun `warn mode does not relax an ambiguous transaction`() {
+        val failingOverall = rule("overall", PolicyMetric.RESPONSE_TIME_P95_MS, PolicyOperator.LTE, "99")
+        val ambiguous = rule("ambiguous", PolicyMetric.RESPONSE_TIME_P99_MS, PolicyOperator.LTE, "100", "shared")
+
+        val result =
+            evaluatePolicy(
+                warnPolicy(failingOverall, ambiguous),
+                RunValidity.VALID,
+                metrics(transactions = listOf(transaction("shared", listOf("a")), transaction("shared", listOf("b")))),
+            )
+
+        assertEquals(PolicyVerdict.NO_VERDICT, result.verdict)
+        assertEquals(listOf("AMBIGUOUS_TRANSACTION"), result.coverageReasons)
+    }
+
+    @Test
     fun `evaluates exact ratios and keeps typed policy checks in policy order`() {
         val rules =
             policy(
@@ -222,6 +269,14 @@ class PolicyEvaluationTest {
 
     private fun policy(vararg rules: PolicyRuleV1) =
         PolicyV1("policy.v1", "test", rules.toList(), PolicyDefaultsV1(sampleFloor = 1, minSamples = 1))
+
+    private fun warnPolicy(vararg rules: PolicyRuleV1) =
+        PolicyV1(
+            "policy.v1",
+            "test",
+            rules.toList(),
+            PolicyDefaultsV1(sampleFloor = 1, minSamples = 1, missingTransaction = MissingTransactionMode.WARN),
+        )
 
     private fun rule(
         id: String,

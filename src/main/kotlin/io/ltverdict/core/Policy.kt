@@ -109,6 +109,7 @@ internal fun evaluatePolicy(
     val checks = mutableListOf<JsonObject>()
     val informational = mutableListOf<String>()
     var failed = false
+    var warnedMissing = false
     if (windowId == null && policy.platformRules.isNotEmpty()) {
         if (policy.platformRules.any { it.effect == ResourceRuleEffect.SLA }) {
             reasons += REASON_RESOURCE_SNAPSHOT_REQUIRED
@@ -126,7 +127,12 @@ internal fun evaluatePolicy(
         }
         val binding = bind(rule, metrics, metricEvidence)
         if (binding.reason != null) {
-            reasons += binding.reason
+            if (binding.reason == REASON_TRANSACTION_NOT_FOUND && policy.defaults?.missingTransaction == MissingTransactionMode.WARN) {
+                warnedMissing = true
+                informational += binding.reason
+            } else {
+                reasons += binding.reason
+            }
             checks += policyCheck(rule, null, null, binding.reason, windowId, includeMetricEvidence, null)
             return@forEach
         }
@@ -164,6 +170,10 @@ internal fun evaluatePolicy(
         }
     }
     evidence += checks
+    // warn mode never lets a policy without a single decided rule pass: nothing was checked
+    if (warnedMissing && checks.none { it.getValue("status").jsonPrimitive.content != "NO_VERDICT" }) {
+        reasons += REASON_TRANSACTION_NOT_FOUND
+    }
     val verdict =
         when {
             reasons.isNotEmpty() -> PolicyVerdict.NO_VERDICT
@@ -255,7 +265,7 @@ private fun bind(
         is PolicyScope.Transaction -> {
             val matches = evidence.drop(1).filter { it.identity?.label == scope.name }.distinctBy { it.identity }
             when (matches.size) {
-                0 -> Binding(reason = "TRANSACTION_NOT_FOUND")
+                0 -> Binding(reason = REASON_TRANSACTION_NOT_FOUND)
                 1 -> Binding(matches.single())
                 else -> Binding(reason = "AMBIGUOUS_TRANSACTION")
             }
@@ -459,6 +469,7 @@ private const val METRIC_NOT_AVAILABLE = "METRIC_NOT_AVAILABLE"
 private const val POLICY_FAILED = "POLICY_FAILED"
 private const val REASON_INSUFFICIENT_SAMPLES = "INSUFFICIENT_SAMPLES"
 private const val REASON_SMALL_SAMPLE = "SMALL_SAMPLE"
+private const val REASON_TRANSACTION_NOT_FOUND = "TRANSACTION_NOT_FOUND"
 private const val REASON_RULE_WINDOW_NOT_FOUND = "RULE_WINDOW_NOT_FOUND"
 private const val REASON_RESOURCE_SNAPSHOT_REQUIRED = "RESOURCE_SNAPSHOT_REQUIRED"
 
@@ -525,11 +536,11 @@ private fun parsePolicy(element: JsonElement): PolicyV1 {
             val metricName = rule.stringAt("metric", pointer)
             val metric =
                 PolicyMetric.entries.find { it.wireName == metricName }
-                    ?: fail("UNKNOWN_METRIC", "$pointer/metric", "unknown metric")
+                    ?: fail("UNKNOWN_METRIC", "$pointer/metric", unknownValue("metric", PolicyMetric.entries.map { it.wireName }))
             val operatorName = rule.stringAt("operator", pointer)
             val operator =
                 PolicyOperator.entries.find { it.wireName == operatorName }
-                    ?: fail("UNKNOWN_OPERATOR", "$pointer/operator", "unknown operator")
+                    ?: fail("UNKNOWN_OPERATOR", "$pointer/operator", unknownValue("operator", PolicyOperator.entries.map { it.wireName }))
             val expectedOperator = if (metric == PolicyMetric.THROUGHPUT_RPS) PolicyOperator.GTE else PolicyOperator.LTE
             if (operator != expectedOperator) {
                 fail("METRIC_OPERATOR_MISMATCH", "$pointer/operator", "operator is not valid for metric")
@@ -604,7 +615,7 @@ private fun parsePlatformScope(
             resolved
         }
 
-        else -> fail("INVALID_SCOPE", "$pointer/kind", "unknown scope kind")
+        else -> fail("INVALID_SCOPE", "$pointer/kind", unknownValue("scope kind", listOf("service", "all_services")))
     }
 }
 
@@ -647,14 +658,18 @@ private fun parsePlatformRules(
             val operatorName = item.stringAt("operator", pointer)
             val operator =
                 ResourceOperator.entries.find { it.wireName == operatorName }
-                    ?: fail("UNKNOWN_OPERATOR", "$pointer/operator", "unknown operator")
+                    ?: fail("UNKNOWN_OPERATOR", "$pointer/operator", unknownValue("operator", ResourceOperator.entries.map { it.wireName }))
             val threshold = item.numberAt("threshold", pointer)
             val unit = item.stringAt("unit", pointer)
             validateIdentifier(unit, "$pointer/unit")
             val aggregationName = item.stringAt("aggregation", pointer)
             val aggregation =
                 ResourceAggregation.entries.find { it.wireName == aggregationName }
-                    ?: fail("UNKNOWN_AGGREGATION", "$pointer/aggregation", "unknown aggregation")
+                    ?: fail(
+                        "UNKNOWN_AGGREGATION",
+                        "$pointer/aggregation",
+                        unknownValue("aggregation", ResourceAggregation.entries.map { it.wireName }),
+                    )
             if (operator == ResourceOperator.GT && threshold.signum() == 0 && aggregation == ResourceAggregation.INTERVAL_MIN) {
                 fail("PLATFORM_AGGREGATION_OPERATOR_MISMATCH", "$pointer/aggregation", "gt 0 must not use interval_min")
             }
@@ -664,7 +679,7 @@ private fun parsePlatformRules(
             val effectName = item.stringAt("effect", pointer)
             val effect =
                 ResourceRuleEffect.entries.find { it.wireName == effectName }
-                    ?: fail("UNKNOWN_EFFECT", "$pointer/effect", "unknown effect")
+                    ?: fail("UNKNOWN_EFFECT", "$pointer/effect", unknownValue("effect", ResourceRuleEffect.entries.map { it.wireName }))
             val maxMissingFraction = item.fractionAt("max_missing_fraction", pointer)
             val maxGapCells = item.gapCellsAt(pointer)
             if (effect != ResourceRuleEffect.SLA) {
@@ -753,14 +768,28 @@ private fun parseDefaults(
     pointer: String,
 ): PolicyDefaultsV1 {
     val value = element.objectAt(pointer)
-    value.rejectUnknown(setOf("sample_floor", "min_samples", "max_missing_fraction", "max_gap_cells"), pointer)
+    value.rejectUnknown(setOf("sample_floor", "min_samples", "max_missing_fraction", "max_gap_cells", "missing_transaction"), pointer)
     return PolicyDefaultsV1(
         value.longInRangeAt("sample_floor", pointer),
         value.longInRangeAt("min_samples", pointer),
         value.fractionAt("max_missing_fraction", pointer),
         value.gapCellsAt(pointer),
+        value["missing_transaction"]?.let {
+            val name = value.stringAt("missing_transaction", pointer)
+            MissingTransactionMode.entries.find { mode -> mode.wireName == name }
+                ?: fail(
+                    "UNKNOWN_MISSING_TRANSACTION_MODE",
+                    pointer.child("missing_transaction"),
+                    unknownValue("missing_transaction mode", MissingTransactionMode.entries.map { mode -> mode.wireName }),
+                )
+        },
     )
 }
+
+private fun unknownValue(
+    what: String,
+    allowed: List<String>,
+) = "unknown $what; allowed: ${allowed.joinToString(", ")}"
 
 private fun JsonObject.fractionAt(
     name: String,
@@ -848,7 +877,7 @@ private fun parseScope(
             PolicyScope.Transaction(name)
         }
 
-        else -> fail("INVALID_SCOPE", "$pointer/kind", "unknown scope kind")
+        else -> fail("INVALID_SCOPE", "$pointer/kind", unknownValue("scope kind", listOf("overall", "transaction")))
     }
 }
 

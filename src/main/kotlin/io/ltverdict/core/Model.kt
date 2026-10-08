@@ -64,7 +64,15 @@ internal data class PolicyDefaultsV1(
     val minSamples: Long? = null,
     val maxMissingFraction: BigDecimal? = null,
     val maxGapCells: Int? = null,
+    val missingTransaction: MissingTransactionMode? = null,
 )
+
+internal enum class MissingTransactionMode(
+    val wireName: String,
+) {
+    NO_VERDICT("no_verdict"),
+    WARN("warn"),
+}
 
 internal data class PolicyRuleV1(
     val id: String,

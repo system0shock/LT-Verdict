@@ -362,10 +362,18 @@ class CliArtifactsTest {
 
     @Test
     fun `junit marks not evaluated checks skipped when the gate is decided and keeps them errors otherwise`() {
-        val warn = """{"id":"b","type":"policy_check","rule_id":"a<&>\"b","metric":"error_rate_ratio","operator":"lte","threshold":0.1,"status":"NO_VERDICT","reason_code":"TRANSACTION_NOT_FOUND"}"""
-        val gap = """{"id":"e","type":"resource_policy_check","window_id":"steady","rule_id":"gap","series_id":"disk","unit":"percent","operator":"gt","threshold":"70","effect":"sla","status":"NO_VERDICT","reason":"MISSING_RESOURCE_CELLS"}"""
-        val ok = """{"id":"p","type":"policy_check","rule_id":"ok","metric":"error_rate_ratio","operator":"lte","threshold":0.1,"status":"PASS","observed":0}"""
-        val bad = """{"id":"f","type":"policy_check","rule_id":"bad","metric":"response_time_p95_ms","operator":"lte","threshold":300,"status":"FAIL","observed":339}"""
+        val warn =
+            """{"id":"b","type":"policy_check","rule_id":"a<&>\"b","metric":"error_rate_ratio","operator":"lte",""" +
+                """"threshold":0.1,"status":"NO_VERDICT","reason_code":"TRANSACTION_NOT_FOUND"}"""
+        val gap =
+            """{"id":"e","type":"resource_policy_check","window_id":"steady","rule_id":"gap","series_id":"disk","unit":"percent",""" +
+                """"operator":"gt","threshold":"70","effect":"sla","status":"NO_VERDICT","reason":"MISSING_RESOURCE_CELLS"}"""
+        val ok =
+            """{"id":"p","type":"policy_check","rule_id":"ok","metric":"error_rate_ratio","operator":"lte",""" +
+                """"threshold":0.1,"status":"PASS","observed":0}"""
+        val bad =
+            """{"id":"f","type":"policy_check","rule_id":"bad","metric":"response_time_p95_ms","operator":"lte",""" +
+                """"threshold":300,"status":"FAIL","observed":339}"""
 
         fun suite(
             validity: String,
@@ -409,7 +417,9 @@ class CliArtifactsTest {
         assertEquals("0", noVerdict.getAttribute("skipped"))
         assertEquals(0, count(noVerdict, "skipped"))
 
-        val reason = """{"id":"x","type":"policy_check","rule_id":"r","metric":"m","operator":"lte","threshold":1,"status":"NO_VERDICT","reason_code":"a<&>\"b"}"""
+        val reason =
+            """{"id":"x","type":"policy_check","rule_id":"r","metric":"m","operator":"lte",""" +
+                """"threshold":1,"status":"NO_VERDICT","reason_code":"a<&>\"b"}"""
         val escaped = suite("VALID", "PASS", reason)
         assertEquals("не вычислено: a<&>\"b", (escaped.getElementsByTagName("skipped").item(0) as Element).getAttribute("message"))
     }

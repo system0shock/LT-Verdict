@@ -142,12 +142,15 @@ internal fun junitXml(result: ByteArray): ByteArray {
                 )
             }
         }
+    val failures = cases.count { it.problem?.first == "failure" }
+    val errors = cases.count { it.problem?.first == "error" }
+    val skipped = cases.count { it.problem?.first == "skipped" }
     val xml =
         buildString {
             append("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n")
             append(
-                "<testsuite name=\"lt-verdict\" tests=\"${cases.size}\" failures=\"${cases.count { it.problem?.first == "failure" }}\" " +
-                    "errors=\"${cases.count { it.problem?.first == "error" }}\" skipped=\"${cases.count { it.problem?.first == "skipped" }}\" time=\"0\">\n",
+                "<testsuite name=\"lt-verdict\" tests=\"${cases.size}\" failures=\"$failures\" " +
+                    "errors=\"$errors\" skipped=\"$skipped\" time=\"0\">\n",
             )
             cases.forEach { case ->
                 val head = "<testcase classname=\"${xml(case.classname)}\" name=\"${xml(case.name)}\" time=\"0\""

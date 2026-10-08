@@ -700,16 +700,19 @@ class AdvisoryAiTest {
         val v2 = bytes.decodeToString()
         // The pinned hash is computed over LF bytes: a CRLF checkout would change it (.gitattributes keeps the file on LF).
         assertFalse(v2.contains('\r'))
-        assertTrue(v2.startsWith(v1.replace("# Advisory system prompt v1", "# Advisory system prompt v2").trimEnd()))
+        // v2 keeps the v1 text without the later "Output language" section, which v2 does not carry.
+        val v1Base = v1.substringBefore("\n## Output language").trimEnd()
+        assertTrue(v2.startsWith(v1Base.replace("# Advisory system prompt v1", "# Advisory system prompt v2")))
         assertTrue("\n\n## LT Verdict domain invariants\n" in v2)
         assertTrue(bytes.size <= 16_384)
     }
 
     @Test
-    fun `prompt v1 file stays unchanged next to the v2 file`() {
-        // Stored advice and the preregistration refer to the v1 hash (ADR 0021, D1 p. 1); only the LF form is checked here.
+    fun `prompt v1 file is pinned by hash next to the v2 file`() {
+        // This is the v1 revision with the "Output language" section (label and schema unchanged, ADR 0021, D1 p. 1).
+        // Earlier revisions (69f215a1... LF, cec9ec6d... CRLF) stay readable in stored advice; only the LF form is checked here.
         val v1 = Files.readAllBytes(Path.of("docs/contracts/advice/v1/system-prompt.md"))
-        assertEquals("69f215a1ad4ae678c82410ba7cf7daf171cd9c7ca0ef4626bba6977db0af4ef7", sha256Hex(v1))
+        assertEquals("5e28f8ecfc22765ea3289d6628249fc8ce28a3b7d1adc86105021c86996b971e", sha256Hex(v1))
     }
 
     @Test

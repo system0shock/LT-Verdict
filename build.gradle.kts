@@ -47,6 +47,11 @@ dependencies {
     testImplementation("org.junit.jupiter:junit-jupiter")
     testRuntimeOnly("org.junit.jupiter:junit-jupiter-engine")
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")
+    constraints {
+        implementation("org.jetbrains.kotlin:kotlin-reflect:2.4.10") {
+            because("Ktor 3.5.2 pulls kotlin-reflect 2.3.21; keep it equal to kotlin-stdlib 2.4.10")
+        }
+    }
 }
 
 configurations.configureEach {

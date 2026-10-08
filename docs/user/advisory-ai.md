@@ -316,6 +316,9 @@ ltv ui
 `PREFIX_ARGS=--no-install gigacode` или `QWEN_CMD=gigacode` и `PREFIX_ARGS=qwen`; хэшируется
 первый файл (`npx`, `gigacode`), а не пакет за ним. Shim с `#!/usr/bin/env node`
 работает: `PATH` передаётся CLI.
+Для `QWEN_CMD=npx` и `PREFIX_ARGS=--no-install gigacode` задайте
+`LT_VERDICT_AI_LOCAL_CWD` на каталог с `node_modules/.bin/gigacode`: `npx --no-install`
+не ищет пакет по `PATH`, а launcher по умолчанию запускает CLI в пустом временном каталоге.
 
 Необязательные переменные: `LT_VERDICT_AI_LOCAL_PASSTHROUGH_ENV` (имена переменных
 окружения через запятую, которые нужны самому CLI и копируются ему; по умолчанию

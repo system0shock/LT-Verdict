@@ -2054,7 +2054,7 @@ bundle. Семантически одинаковые данные с други
 ltv ui [--data-dir <path>] [--analysis-parallelism <n>] [--histogram-significant-digits <3..5>]
 ltv analyze <input> [--policy <policy.json>|-] [--resources <snapshot.json>] [--histogram-significant-digits <3..5>] [--data-dir <path>] [--out-dir <dir>]
 ltv policy validate <policy.json>|-
-ltv report <run-id> <analysis-id> --format json|html|asciidoc [--data-dir <path>]
+ltv report <run-id> <analysis-id> --format json|html|asciidoc|confluence|svg [--data-dir <path>]
 ltv summary <run-id> <analysis-id> [--data-dir <path>]
 ltv --help
 ltv --version
@@ -2159,7 +2159,8 @@ HdrHistogram и не бывают выше максимума отклика. З
 эталон заново).
 
 `ltv report` читает уже сохранённый analysis, проверяет его manifest и выводит
-JSON, UTF-8 HTML либо UTF-8 AsciiDoc в stdout. `--format` обязателен. Для сохранения файла
+в stdout JSON, UTF-8 HTML, UTF-8 AsciiDoc, Confluence-ready XHTML (`confluence`)
+либо SVG-график нагрузки (`svg`). `--format` обязателен. Для сохранения файла
 перенаправьте stdout, сохранив исходную кодировку/bytes. На Windows используйте
 PowerShell 7.4+ либо redirection в `cmd`; Windows PowerShell 5.1 перекодирует
 native stdout ([поведение redirection](https://learn.microsoft.com/en-us/powershell/module/microsoft.powershell.core/about/about_redirection)).

@@ -44,6 +44,20 @@ EXPECTED FILES TO CHANGE:
 
 Anything outside REQUIRED TO ACHIEVE IT needs explicit user approval.
 
+## Исключение: бюджет консолидации
+
+Политика минимальных изменений не применяется к PR с префиксом `refactor/`,
+если цель рефакторинга явно указана владельцем в
+`docs/superpowers/plans/2026-10-08-review-work-plan.md` (W2.2) или в
+отдельном поручении. Условия:
+
+1. В PR нет изменений поведения, публичных контрактов и схем.
+2. Существующие тесты не редактируются и не удаляются; добавлять можно.
+3. PR содержит только одну цель из списка.
+4. Канонический JSON и вычисление хэшей identity не затрагиваются.
+5. Перед реализацией агент приводит блок REQUESTED / REQUIRED с перечнем
+   перемещаемых символов.
+
 ## Before changing files
 
 1. Read relevant PRC, specs, ADRs, plans, and the current milestone gate.

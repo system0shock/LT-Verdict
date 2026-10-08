@@ -72,6 +72,22 @@ tasks.withType<Test>().configureEach {
     useJUnitPlatform()
 }
 
+tasks.test {
+    inputs.files(tasks.startScripts).withPathSensitivity(PathSensitivity.RELATIVE)
+}
+
+// cmd.exe limits a command line to 8191 characters; the generated explicit jar list overflows it on long install paths.
+tasks.startScripts {
+    doLast {
+        val classpathLine = Regex("(?m)^set CLASSPATH=.*$")
+        val script = windowsScript.readText()
+        check(classpathLine.findAll(script).count() == 1) { "ltv.bat: expected exactly one CLASSPATH line, template changed" }
+        windowsScript.writeText(
+            script.replace(classpathLine, Regex.escapeReplacement("set CLASSPATH=%APP_HOME%\\lib\\*")),
+        )
+    }
+}
+
 val csvSpike by tasks.registering(Test::class) {
     description = "Runs the bounded uniVocity CSV dependency spike."
     group = "verification"

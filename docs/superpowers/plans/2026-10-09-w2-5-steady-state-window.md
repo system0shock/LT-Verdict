@@ -56,14 +56,19 @@ REQUIRED TO ACHIEVE IT:
   - валидатор объявления и превращение стадий steady в окна (смещения от начала прогона);
   - вызов существующей оконной оценки без ресурсной стороны + свидетельства stage_binding и window_metric_summary;
   - условные поля identity (load_stages_sha256, load_stages_version), модуль/версия входа/лимиты, условное звено ключа сопоставимости;
-  - вход: CLI --stages <file>, API multipart-часть stages; ошибки сочетаний (resources, capacity, source);
-  - видимость: фиксированная фраза в карточке вердикта (UI), HTML, summary.txt/summary JSON, junit gate, AsciiDoc/Confluence;
+  - вход: CLI --stages <file>, API multipart-часть stages; ошибки сочетаний (resources, capacity, онлайн source; офлайн
+    --source-context без снимка разрешён); защита в analyzeWithSources до обращения к источнику;
+  - видимость: фраза в заголовке (headline) карточки вердикта (UI) и в строке вердикта HTML, далее HTML-блок, summary.txt и
+    summary JSON (windows[]), junit gate (сообщение или system-out), AsciiDoc/Confluence;
+  - предупреждение WHOLE_RUN_METRICS_WITH_STAGES только в сравнении с эталоном (BaselineComparison.kt, ui types.ts, labels.ts);
   - документация и changelog-фрагменты на каждый PR.
 NOT REQUIRED:
   - автоопределение плато, любой новый статистический метод;
   - загрузка стадий в форме UI (первый потребитель CLI/API/MCP; форма отдельным срезом);
   - изменение схемы policy, `capacity_step`, ресурсной оценки, формата saved-analytics, слотов baseline (ADR 0019);
-  - пересчёт арифметики сравнения прогонов (дельты сравнения остаются по метрике «весь прогон», с предупреждением);
+  - пересчёт арифметики сравнения прогонов (дельты сравнения, динамика, сравнение транзакций и ранжирование кандидатов статистического
+    эталона остаются по метрике «весь прогон»; предупреждение только в сравнении с эталоном, остальное обязательство W2.3/W2.4);
+  - маршрут скачивания load-stages.json;
   - доля разгона/простоев как отдельная метрика заголовка и пометка throughput-правил (это W2.4; здесь только поля для неё);
   - инциденты (W3.7), типизация evidence (W2.1 срез 2), baseline в CLI и отчёте (W2.3), отчёт для людей (W2.6);
   - зонд подсказки границ (doctor/MCP, W3.1/W3.2).
@@ -108,7 +113,7 @@ EXPECTED FILES TO CHANGE: см. «Разбивка на PR». Новые: core/L
 и ключ сопоставимости (решение 4) не ломается при каждом новом запуске. С epoch хэш был бы разным у каждого прогона и ни один
 прогон не был бы сопоставим с другим. Привязка к `load_input_sha256` как у снимка не нужна: границы относительные. Цена ошибки:
 объявление от другого профиля молча применится, если длина прогона подходит; смягчено полем `stage_binding.stages[].from_epoch_ms`
-в отчёте, ошибкой `STAGE_OUTSIDE_RUN` и ключом сопоставимости (другое объявление не сравнивается). Если владелец захочет epoch,
+в отчёте, ошибкой `STAGE_OUTSIDE_RUN` для `steady` и ключом сопоставимости (другое объявление не сравнивается). Если владелец захочет epoch,
 замена локальна (валидатор и `resolveStageWindows`), identity и ключ не меняются.
 
 **R2. Окнами становятся только стадии с ролью `steady`; роль `excluded` окном не является.** Почему: правила без `window_ids`
@@ -241,12 +246,13 @@ ltv analyze <input> [--policy <policy.json>|-] [--stages <load-stages.json>] [--
   "stages": [
     { "id": "ramp-up", "role": "excluded", "from_offset_ms": 0, "to_offset_ms": 40000 },
     { "id": "steady", "role": "steady", "from_offset_ms": 40000, "to_offset_ms": 100000 },
-    { "id": "ramp-down", "role": "excluded", "from_offset_ms": 100000, "to_offset_ms": 118000 }
+    { "id": "ramp-down", "role": "excluded", "from_offset_ms": 100000, "to_offset_ms": 120000 }
   ]
 }
 ```
 
-- `ramp-steady-down.json`: пример выше.
+- `ramp-steady-down.json`: пример выше. Это ровно то объявление, которое используют AC1-AC3 и AC6 для фикстуры `ramp-steady-rampdown.jtl`
+  (стадия `ramp-down` кончается на 120 с, прогон на 119,8 с: допустимо, `excluded` не проверяется на конец прогона).
 - `steady-only.json`: единственная стадия `steady` без исключённых (всё до неё и после неё исключено неявно).
 - `two-steady.json`: две стадии `steady` (`steady-a`, `steady-b`) с исключённой `spike` между ними; вердикт это объединение окон.
 
@@ -292,8 +298,9 @@ ltv analyze <input> [--policy <policy.json>|-] [--stages <load-stages.json>] [--
 `resolveStageWindows(stages, runStartEpochMillis, runEndEpochMillis): List<ResourceWindowV1>` (в `core/LoadStages.kt`):
 
 1. Для каждой стадии (любой роли) `from = runStart + from_offset_ms`, `to = runStart + to_offset_ms` (`Math.addExact`).
-   Если `to > runEnd` (конец прогона это максимум `started_at + elapsed`), `IllegalArgumentException("STAGE_OUTSIDE_RUN")`:
-   строгая проверка и для `excluded`, чтобы объявление не расходилось с реальной длиной прогона молча.
+   Если у стадии `steady` `to > runEnd` (конец прогона это максимум `started_at + elapsed`), `IllegalArgumentException("STAGE_OUTSIDE_RUN")`.
+   Стадии `excluded` проверке не подлежат: это подписи, реальные прогоны заканчиваются на сотни мс раньше или позже объявленного, и один
+   файл на профиль не должен падать на части прогонов (иначе R1 теряет смысл). Начало `steady` до `runStart` невозможно (смещение ≥ 0).
 2. Окнами становятся стадии с ролью `steady`, `ResourceWindowV1(id = stage.id, from, to)`, в порядке `from`.
 3. Накопитель `WindowMetricsAccumulator` получает эти окна (полуоткрытые `[from, to)`, по моменту старта выборки);
    удерживаемые транзакции (`retainedTransactions`) собираются при `resources != null || stages != null`
@@ -364,8 +371,8 @@ id окон, длительность `evaluated_millis` и `excluded_millis` в
 
 | Место | Что показывается | Файл |
 | --- | --- | --- |
-| Карточка вердикта (UI): заголовок и подзаголовок | к `lead` добавляется предложение с фразой; в `facts` строки «Окно вердикта: steady, 20 мин, 12:05:00-12:25:00 UTC» и «Исключено: 6 мин» | `ui/src/verdictSummary.ts`, `ui/src/types.ts` (тип `stage_binding`), `ui/src/shell/labels.advice.ts` (подписи типов) |
-| HTML-отчёт | блок сразу после `dl` с вердиктом: фраза, таблица стадий, подпись «метрики по всему прогону справочные»; разделы Window policy outcomes без «Resource binding» | `report/HtmlReport.kt` (`verdictBlock`) |
+| Карточка вердикта (UI): заголовок и подзаголовок | в `headline` (и для PASS, и для FAIL) добавляется короткий маркер: `Прогон проходит — нарушений нет, проверок: N · по окну steady, разгон исключён`, `Прогон не проходит — нарушено проверок: K из N · по окну steady, разгон исключён`; к `lead` добавляется предложение с полной фразой; в `facts` строки «Окно вердикта: steady, 20 мин, 12:05:00-12:25:00 UTC» и «Исключено: 6 мин». При NO_VERDICT, DEGRADED, NO_POLICY заголовок остаётся прежним, маркер только в `lead` и в нейтральной формулировке | `ui/src/verdictSummary.ts`, `ui/src/types.ts` (тип `stage_binding`), `ui/src/shell/labels.advice.ts` (подписи типов) |
+| HTML-отчёт | строка `dt/dd` «Область вердикта» в самом `dl` с вердиктом сразу после «Policy verdict» (маркер виден без чтения блока ниже); блок после `dl`: фраза, таблица стадий, подпись «метрики по всему прогону справочные»; разделы Window policy outcomes без «Resource binding» | `report/HtmlReport.kt` (`verdictBlock`, список `dl`) |
 | AsciiDoc и Confluence | одна строка-примечание с той же фразой | `report/AsciiDocReport.kt` |
 | `summary.txt` | строка `scope: steady window (<ids>), excluded <N> ms` и по строке на каждое окно `window[<id>]: samples .. errors .. p95_ms .. p99_ms .. rps ..` (порядок окон результата); прежняя строка `samples/p95/p99` помечается `whole_run (reference only)` | `cli/CliArtifacts.kt` |
 | `ltv summary` JSON (`cli-summary.v1`) | необязательный массив `windows[]` (по окну steady в порядке результата) {id, from_epoch_ms, to_epoch_ms, samples, errors, error_rate, p50, p95, p99, max, rps} и число `excluded_ms`; `overall` остаётся «весь прогон»; без стадий полей нет | `cli/CliArtifacts.kt` |
@@ -390,8 +397,11 @@ Proposed; принимает владелец (как ADR 0029). Номер 0030
 4. **Публичные контракты, которые меняются** (перечень): флаг `ltv analyze --stages`; multipart-часть `stages`; коды
    `STAGES_*`, `STAGE_OUTSIDE_RUN`, `INVALID_STAGES`; evidence `stage_binding` и использование `window_metric_summary`;
    необязательные поля identity `load_stages_sha256`, `load_stages_version`, поле `input_versions.stages`; новые ключи `limits`;
-   условное звено ключа сопоставимости; суффикс сообщения gate `junit.xml`; поле `window` в `cli-summary.v1`; предупреждение
-   сравнения `WHOLE_RUN_METRICS_WITH_STAGES`; файл `load-stages.json` в каталоге анализа.
+   условное звено ключа сопоставимости; суффикс сообщения gate `junit.xml` (FAIL, NO_VERDICT, INVALID) и дочерний `<system-out>`
+   у проходящего gate; необязательный массив `windows[]` и число `excluded_ms` в `cli-summary.v1`; маркер в `headline` карточки
+   вердикта и `dt/dd` «Область вердикта» в HTML; предупреждение `WHOLE_RUN_METRICS_WITH_STAGES` только в ответе сравнения с эталоном
+   (с типом и подписью UI); защита `STAGES_SOURCE_CONFLICT` в `analyzeWithSources`; файл `load-stages.json` в каталоге анализа
+   (маршрута скачивания нет).
 5. **Identity и ключ сопоставимости** (условная привязка, почему не безусловная как `incident_method`, `analysis_id` меняется только у
    анализов со стадиями; слот baseline не расширяется).
 6. **Следствия:** совместимость (прогоны без стадий неизменны, золотые файлы не перегенерируются), взаимодействие с W2.1/W2.3/W2.4/W2.6/W3.7,
@@ -443,7 +453,7 @@ throughput = `720000/119800` ≈ 6,01 rps.
   `RESOURCE_SNAPSHOT_REQUIRED` (как сегодня без снимка), правило не теряется молча.
 - [ ] **AC9. Сочетания.** Стадии и `--resources`, `--capacity`, `--source` дают коды `STAGES_RESOURCES_CONFLICT`,
   `STAGES_CAPACITY_CONFLICT`, `STAGES_SOURCE_CONFLICT` (без обращения к источнику), выход 4 (CLI) и 422 (API); стадии с
-  `--source-context` без снимка проходят; стадии за границей прогона дают `STAGE_OUTSIDE_RUN`
+  `--source-context` без снимка проходят; `steady` за концом прогона даёт `STAGE_OUTSIDE_RUN`, `excluded` за концом прогона (ramp-down до 120 с при конце 119,8 с) проходит
   (CLI выход 4, API задание `FAILED` с `diagnostic.code`).
 - [ ] **AC10. Валидатор.** Все `examples/valid` проходят, все `examples/invalid` дают ожидаемый код (таблица выше), граничные случаи:
   16 стадий (проходит), 17 (лимит), id 128 и 129 байт, дубль ключа JSON, число `1e3`.
@@ -507,13 +517,18 @@ throughput = `720000/119800` ≈ 6,01 rps.
 - Тесты: `CommandLineTest` (новые методы: коды выхода 0/2/3/4/64, сочетания, повтор флага), API-тест задания со стадиями (часть `stages`,
   `INVALID_STAGES`, сочетания, `FAILED` с `STAGE_OUTSIDE_RUN`).
 - `changelog.d/w2-5-stage-window-input.added.md`.
+- Пересечение с W2.2 (идёт после W2.1: `installLocalApi` на маршруты по ресурсам, `RunBundleStore` на хранилища): PR B правит
+  `receiveJob`, отображение `Invalid*` в 422 и тест хранилища из R9, то есть те же места. PR B идёт ПОСЛЕ W2.2 либо rebase на неё;
+  код PR A (core) от W2.2 не зависит.
 - Пересечение с W2.3 (`--baseline` в `CommandLine.kt`): оба пишут в разбор флагов `analyze` и `usageText()`; конфликт механический,
   разрешается по порядку слияния; семантически независимо (сравнение берёт ключ из PR A).
 
 ### PR C. `feat/w2-5-stage-window-visibility` (отчёт, UI, junit; зависит от PR B)
 
-- `cli/CliArtifacts.kt` (`summaryText`, `summaryJson`, `junitXml`), `report/HtmlReport.kt` (`verdictBlock`), `report/AsciiDocReport.kt`,
-  `ui/src/verdictSummary.ts`, `ui/src/types.ts` (тип `stage_binding`), `ui/src/shell/labels.advice.ts`, контрактные тесты `ui/`
+- `cli/CliArtifacts.kt` (`summaryText`, `summaryJson` с `windows[]`, `junitXml` с суффиксом и `<system-out>`), `report/HtmlReport.kt`
+  (`verdictBlock` и `dl`), `report/AsciiDocReport.kt`, `ui/src/verdictSummary.ts` (`headline`, `lead`, `facts`),
+  `ui/src/types.ts` (тип `stage_binding`, объединение `BaselineComparisonWarning`), `ui/src/shell/labels.advice.ts`,
+  `ui/src/shell/labels.ts` (подпись предупреждения), `core/BaselineComparison.kt` (предупреждение), контрактные тесты `ui/`
   (`npm run test:contracts`), при изменении UI оффлайн Playwright.
 - Тесты: `CliArtifactsTest` (новые методы + побайтовое равенство без стадий), `HtmlReport`-тест, контрактный тест UI.
 - `changelog.d/w2-5-stage-window-visibility.changed.md`.
@@ -551,9 +566,16 @@ PR C и D закрывают критерий видимости W2.5, W3.7 не
 
 ## Вопросы владельцу
 
-Нет блокирующих: решение 1-5 покрывает форму. Не вопросы, а ruling'и с ценой ошибки, которые можно переиграть до PR A:
-R1 (смещения от начала прогона, а не epoch), R7 (предупреждение вместо пересчёта дельт сравнения на steady), R12 (форма загрузки
-стадий в UI отдельным срезом).
+Блокирующих вопросов нет: решения 1-5 задают форму. Но четыре ruling'а не следуют из ответов владельца напрямую и названы явно;
+каждый можно переиграть до PR A:
+
+- **R4.** В режиме стадий политика только из платформенных SLA-правил даёт `NO_VERDICT`, а без стадий та же политика даёт
+  `NO_POLICY` с причиной покрытия. Это намеренное ужесточение (не молчать про непроверенный SLA ресурса).
+- **R7.** Динамика прогонов, сравнение транзакций и ранжирование кандидатов статистического эталона (`BaselineComparison.kt`,
+  `metricValue`) остаются на метрике «весь прогон» без предупреждения; предупреждение есть только в сравнении с эталоном. Пересчёт
+  на steady это обязательство W2.3/W2.4.
+- **R1.** Смещения от начала прогона, а не epoch; `excluded` стадии не проверяются на конец прогона.
+- **R12.** Форма загрузки стадий в UI отдельным срезом (первые потребители CLI, API, MCP).
 
 ## Проверка (без CI; перед пушем каждого PR, на результате слияния со свежим `origin/main`)
 
@@ -631,7 +653,8 @@ p99=836, 6,01 rps. Совпало с планом. Замечания прове
 
 - Покрытие: решения владельца 1-5 покрыты R1-R12 и AC1-AC12; «форма входа», «стадии в окна», «evidence», «identity и ключ»,
   «влияние на analysis_id», «взаимодействие», «критерии», «PR и пересечения», «риски», «ADR 0030» присутствуют.
-- Плейсхолдеров нет. Имена согласованы: `load-stages.v1`, `load_stages_sha256`, `stage_binding`, `STAGES_*_CONFLICT`, `STAGE_OUTSIDE_RUN`.
+- Плейсхолдеров нет. Имена согласованы (после правок по совету Astra перечитаны все места): `load-stages.v1`, `load_stages_sha256`,
+  `stage_binding`, `windows[]` в сводке, `STAGES_{RESOURCES,CAPACITY,SOURCE}_CONFLICT`, `STAGE_OUTSIDE_RUN` (только `steady`).
 - Допущение, не проверенное кодом: каталог анализа с новым файлом `load-stages.json` читается хранилищем (проверка тестом в PR A).
 - Допущение: `FixtureManifestTest` не охватывает `fixtures/stages` (проверка в PR A).
 

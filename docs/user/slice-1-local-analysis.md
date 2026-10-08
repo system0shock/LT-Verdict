@@ -2053,7 +2053,7 @@ analysis_id=<64 hex> run_id=<id>
 **Policy из stdin.** Значение `-` у `--policy` и у `ltv policy validate` читает
 policy из stdin (до 1 MiB, как файл): `cat policy.json | ltv analyze run.jtl --policy -`.
 Файл с именем `-` в текущем каталоге задаётся как `./-`. Хэш policy считается по
-байтам, поэтому `analysis_id` тот же, что при запуске из файла с таким же содержимым.
+канонической форме JSON, поэтому `analysis_id` тот же, что при запуске из файла с таким же содержимым.
 В Windows PowerShell 5.1 конвейер перекодирует текст; используйте `cmd /c "... < policy.json"`
 или PowerShell 7.4+.
 
@@ -2090,7 +2090,6 @@ policy из stdin (до 1 MiB, как файл): `cat policy.json | ltv analyze 
 компактный canonical JSON `cli-summary.v1` (ключи по алфавиту, без пробелов и перевода строки;
 для сохранения перенаправьте stdout). Код `0` при успешном чтении независимо от вердикта;
 отсутствующий анализ даёт `4`, занятый data dir `6`, повреждение `70` (как `ltv report`).
-Эквивалентно `ltv report <run-id> <analysis-id> --format summary`.
 
 ```json
 {"analysis_id":"...","overall":{"error_rate":0.333333,"errors":1,"max":26,"p50":1,"p95":26,"p99":26,"rps":34.883721,"samples":3},

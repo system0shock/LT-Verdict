@@ -101,6 +101,12 @@ ltv report <run-id> <analysis-id> --format confluence --data-dir .lt-verdict
 В Web UI тот же output скачивается как `.xhtml`. Это локальный canonical
 artifact для ручной загрузки.
 
+`<run-id>` и `<analysis-id>` печатает `ltv analyze` в stderr строкой
+`analysis_id=<id> run_id=<id>`; искать каталог анализа вручную не нужно.
+В CI достаточно `ltv analyze ... --out-dir <dir>`: один вызов кладёт
+`report.html`, `chart.svg`, `junit.xml` и остальные артефакты (см. раздел CLI
+в [руководстве локального анализа](slice-1-local-analysis.md)).
+
 REST publisher оставлен fail-soft skeleton со статусами `NOT_CONFIGURED`,
 `PUBLISHING`, `PUBLISHED` и `FAILED`. Он работает только с явно переданной
 Cloud/Data Center publish strategy; endpoint, auth и page update semantics не

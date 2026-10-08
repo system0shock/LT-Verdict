@@ -266,6 +266,10 @@ export function summarizeVerdict(result: AnalysisResult, context: { policySha256
   const total = business.length + resource.length
   const failed = failedLines.length
   const unresolved = business.filter((check) => check.status === 'NO_VERDICT').length + resource.filter((check) => check.status === 'NO_VERDICT').length
+  // With a decided PASS/FAIL, an unresolved rule is a warned skip (missing_transaction=warn): it is not an evaluated check.
+  const decided = verdict === 'PASS' || verdict === 'FAIL'
+  const evaluated = decided ? total - unresolved : total
+  const skipped = decided && unresolved > 0 ? `, не вычислено: ${unresolved}` : ''
   const small = business.filter((check) => check.sample_mode === 'SMALL_SAMPLE').length
 
   let causes = verdict === 'NO_VERDICT' ? causesOf(result) : []
@@ -304,15 +308,15 @@ export function summarizeVerdict(result: AnalysisResult, context: { policySha256
     lead = `Граница ёмкости: ${bound}. Подробности по ступеням — ${context.tabs ? 'в таблице на вкладке «Таблицы»' : 'в таблице ниже'}.`
     chip = 'оценка ёмкости'
   } else if (verdict === 'FAIL') {
-    headline = `Прогон не проходит — нарушено проверок: ${failed} из ${total}`
+    headline = `Прогон не проходит — нарушено проверок: ${failed} из ${evaluated}${skipped}`
     lead = 'Измеренные значения вышли за пороги правил. Первые нарушения показаны ниже, остальные — в таблицах правил.'
-    chip = `нарушено ${failed} из ${total}`
+    chip = `нарушено ${failed} из ${evaluated}`
     if (small > 0) {
       lead += SAMPLE_TEXT.lead(small)
       chip += SAMPLE_TEXT.chipSuffix
     }
   } else if (verdict === 'PASS') {
-    headline = `Прогон проходит — нарушений нет, проверок: ${total}`
+    headline = `Прогон проходит — нарушений нет, проверок: ${evaluated}${skipped}`
     lead = 'Ни одно правило не нарушено. Ниже первые проверки с порогом; полный список — в таблицах правил.'
     chip = 'нарушений нет'
     if (small > 0) {
@@ -360,7 +364,7 @@ export function summarizeVerdict(result: AnalysisResult, context: { policySha256
       { label: 'Длительность', value: denominator ? formatDuration(denominator) : '—' },
       { label: 'Запросов', value: overall ? numbers.format(overall.sample_count) : '—' },
       { label: 'Доля ошибок', value: errorRate === null ? '—' : `${numbers.format(errorRate * 100)} %` },
-      { label: 'Проверок', value: String(total) },
+      { label: 'Проверок', value: `${evaluated}${skipped}` },
       ...(context.policyId ? [{ label: 'Политика (id)', value: context.policyId }] : []),
       ...policyFact,
     ],

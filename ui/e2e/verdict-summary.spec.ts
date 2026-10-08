@@ -112,6 +112,43 @@ test.describe('verdict summary', () => {
     expect(summary.notes).toEqual([])
   })
 
+  test('warn mode PASS counts the evaluated checks and names the skipped one', () => {
+    const gone = p95Rule('gone-p95', 'NO_VERDICT', 0, { reason_code: 'TRANSACTION_NOT_FOUND', observed: undefined })
+    const summary = summarizeVerdict(build({
+      policy_verdict: 'PASS',
+      analysis_coverage: { status: 'INCOMPLETE', reasons: ['TRANSACTION_NOT_FOUND'] },
+      evidence: [overall, checkout, p95Rule('a-p95', 'PASS', 1500), p95Rule('b-p95', 'PASS', 1600), gone],
+    }))
+
+    expect(summary.headline).toBe('Прогон проходит — нарушений нет, проверок: 2, не вычислено: 1')
+    expect(flat(summary.facts.find((fact) => fact.label === 'Проверок')!.value)).toBe('2, не вычислено: 1')
+  })
+
+  test('warn mode FAIL counts violations among the evaluated checks only', () => {
+    const gone = p95Rule('gone-p95', 'NO_VERDICT', 0, { reason_code: 'TRANSACTION_NOT_FOUND', observed: undefined })
+    const summary = summarizeVerdict(build({
+      policy_verdict: 'FAIL',
+      analysis_coverage: { status: 'INCOMPLETE', reasons: ['TRANSACTION_NOT_FOUND'] },
+      evidence: [overall, checkout, p95Rule('a-p95', 'FAIL', 2340), p95Rule('b-p95', 'PASS', 1600), gone],
+    }))
+
+    expect(summary.headline).toBe('Прогон не проходит — нарушено проверок: 1 из 2, не вычислено: 1')
+    expect(summary.chip).toBe('нарушено 1 из 2')
+    expect(flat(summary.facts.find((fact) => fact.label === 'Проверок')!.value)).toBe('2, не вычислено: 1')
+  })
+
+  test('NO_VERDICT with every transaction missing keeps the counter over all rules', () => {
+    const gone = (id: string) => p95Rule(id, 'NO_VERDICT', 0, { reason_code: 'TRANSACTION_NOT_FOUND', observed: undefined })
+    const summary = summarizeVerdict(build({
+      policy_verdict: 'NO_VERDICT',
+      analysis_coverage: { status: 'INCOMPLETE', reasons: ['TRANSACTION_NOT_FOUND'] },
+      evidence: [overall, gone('gone-1'), gone('gone-2')],
+    }))
+
+    expect(summary.headline).toBe('Вердикт не выдан — не удалось проверить: 2 из 2')
+    expect(summary.facts.find((fact) => fact.label === 'Проверок')!.value).toBe('2')
+  })
+
   test('PASS with only resource SLA rules states that no violation was found', () => {
     const summary = summarizeVerdict(build({
       policy_verdict: 'PASS',

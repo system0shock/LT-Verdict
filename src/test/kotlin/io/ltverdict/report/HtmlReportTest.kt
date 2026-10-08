@@ -116,6 +116,62 @@ class HtmlReportTest {
     }
 
     @Test
+    fun `a passed verdict with a warned missing transaction counts only the evaluated checks and names the skipped one`() {
+        val html =
+            page(
+                "PASS",
+                listOf(
+                    check("a-p95", "PASS", observed = "1500"),
+                    check("b-p95", "PASS", observed = "1600"),
+                    check("gone-p95", "NO_VERDICT", observed = null, reason = "TRANSACTION_NOT_FOUND"),
+                ),
+                coverageStatus = "INCOMPLETE",
+                coverageReasons = listOf("TRANSACTION_NOT_FOUND"),
+            )
+
+        assertTrue(html.contains("Прогон проходит — нарушений нет, проверок: 2, не вычислено: 1"))
+        assertTrue(html.contains("Нарушено правил: 0 из 2. Не вычислено: 1."))
+        assertFalse(html.contains("проверок: 3"))
+    }
+
+    @Test
+    fun `a failed verdict with a warned missing transaction counts violations among the evaluated checks only`() {
+        val html =
+            page(
+                "FAIL",
+                listOf(
+                    check("a-p95", "FAIL", observed = "2340"),
+                    check("b-p95", "PASS", observed = "1600"),
+                    check("gone-p95", "NO_VERDICT", observed = null, reason = "TRANSACTION_NOT_FOUND"),
+                ),
+                coverageStatus = "INCOMPLETE",
+                coverageReasons = listOf("TRANSACTION_NOT_FOUND"),
+            )
+
+        assertTrue(html.contains("Прогон не проходит — нарушено проверок: 1 из 2, не вычислено: 1"))
+        assertTrue(html.contains("Нарушено правил: 1 из 2. Не вычислено: 1."))
+    }
+
+    @Test
+    fun `a result where every checked transaction is missing keeps the no-verdict counter over all rules`() {
+        val html =
+            page(
+                "NO_VERDICT",
+                listOf(
+                    check("gone-1", "NO_VERDICT", observed = null, reason = "TRANSACTION_NOT_FOUND"),
+                    check("gone-2", "NO_VERDICT", observed = null, reason = "TRANSACTION_NOT_FOUND"),
+                ),
+                coverageStatus = "INCOMPLETE",
+                coverageReasons = listOf("TRANSACTION_NOT_FOUND"),
+            )
+
+        assertTrue(html.contains("Вердикт не выдан — не удалось проверить: 2 из 2"))
+        assertTrue(html.contains("Нарушено правил: 0 из 2."))
+        assertFalse(html.contains("не вычислено"))
+        assertFalse(html.contains("Не вычислено"))
+    }
+
+    @Test
     fun `the verdict block comes before the metrics and names the no-policy limitation`() {
         val html = page("NO_POLICY")
 

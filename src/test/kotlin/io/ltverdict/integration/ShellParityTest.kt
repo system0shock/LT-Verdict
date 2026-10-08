@@ -168,9 +168,9 @@ class ShellParityTest {
             }
 
         assertEquals(expectedExitCode, exitCode, stderr.toString(UTF_8))
-        assertEquals("", stderr.toString(UTF_8))
         val run = onlyChild(dataDir.resolve("runs"))
         val analysis = onlyChild(run.resolve("analyses"))
+        assertEquals("analysis_id=${analysis.fileName} run_id=${run.fileName}", stderr.toString(UTF_8).trim())
         val result = Files.readAllBytes(analysis.resolve("analysis-result.json"))
         assertArrayEquals(result, stdout.toByteArray())
         assertEquals(

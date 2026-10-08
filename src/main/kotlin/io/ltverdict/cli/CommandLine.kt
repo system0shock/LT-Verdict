@@ -53,6 +53,7 @@ import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import java.io.IOException
+import java.io.InputStream
 import java.io.PrintStream
 import java.nio.file.Files
 import java.nio.file.InvalidPathException
@@ -66,12 +67,22 @@ internal fun runCli(
     args: Array<String>,
     stdout: PrintStream = System.out,
     stderr: PrintStream = System.err,
+    stdin: InputStream = System.`in`,
 ): Int =
     try {
-        when (args.firstOrNull()) {
-            "analyze" -> analyze(args.drop(1), stdout)
-            "policy" -> validatePolicyCommand(args.drop(1), stdout)
+        when (if (args.size == 2 && (args[1] == "--help" || args[1] == "-h")) "help" else args.firstOrNull()) {
+            "help", "--help", "-h" -> {
+                stdout.println(usageText())
+                EXIT_OK
+            }
+            "--version" -> {
+                stdout.print("ltv ${ltvVersion()}\n")
+                EXIT_OK
+            }
+            "analyze" -> analyze(args.drop(1), stdout, stderr, stdin)
+            "policy" -> validatePolicyCommand(args.drop(1), stdout, stdin)
             "report" -> report(args.drop(1), stdout)
+            "summary" -> report(args.drop(1) + listOf("--format", "summary"), stdout)
             "ui" -> ui(args.drop(1))
             "source" -> captureSource(args.drop(1), stdout)
             "opensearch" -> prepareOpenSearchCommand(args.drop(1), stdout)
@@ -99,6 +110,8 @@ internal fun runCli(
 private fun analyze(
     args: List<String>,
     stdout: PrintStream,
+    stderr: PrintStream,
+    stdin: InputStream,
 ): Int {
     if (args.isEmpty() || args.first().startsWith("--")) usage()
     val input = path(args.first())
@@ -115,6 +128,7 @@ private fun analyze(
     var postgresPostPath: Path? = null
     var pgProfileHtmlPath: Path? = null
     var dataDir = defaultDataDir()
+    var outDir: Path? = null
     var significantDigits = 3
     var policySeen = false
     var dataDirSeen = false
@@ -126,6 +140,10 @@ private fun analyze(
                 if (policySeen || index + 1 >= args.size) usage()
                 policySeen = true
                 policyPath = path(args[index + 1])
+            }
+            "--out-dir" -> {
+                if (outDir != null || index + 1 >= args.size) usage()
+                outDir = path(args[index + 1])
             }
             "--resources" -> {
                 if (resourcesPath != null || index + 1 >= args.size) usage()
@@ -187,6 +205,7 @@ private fun analyze(
     }
 
     requireRegularFile(input, EXIT_INVALID_INPUT, "INVALID_INPUT")
+    outDir?.let { requireOutDir(it, input) }
     if ((sourcePath == null) != (connectionsPath == null)) usage()
     if (sourcePath != null &&
         (
@@ -206,7 +225,7 @@ private fun analyze(
         throw CliFailure(EXIT_INVALID_INPUT, "SOURCE_PROFILE_NOT_FOUND")
     }
     val source = if (sourceRequest == null) null else PromqlSource(profiles, SourceHttp(profiles))
-    val policy = policyPath?.let(::readPolicy)
+    val policy = policyPath?.let { readPolicy(it, stdin) }
     val resources = resourcesPath?.let(::readResources)
     val diagnostics = diagnosticsPath?.let(::readDiagnostics)
     val capacity = capacityPath?.let(::readCapacity)
@@ -244,6 +263,8 @@ private fun analyze(
             )
         }
     }
+    var analysisId = ""
+    var chart: ByteArray? = null
     val result =
         DataDirectory.open(dataDir).use { directory ->
             val store = RunBundleStore(directory)
@@ -307,7 +328,10 @@ private fun analyze(
                         postgres = postgres,
                     ),
                     source,
-                ).canonicalResult
+                ).also { outcome ->
+                    analysisId = outcome.analysisId
+                    if (outDir != null) chart = renderSavedLoadChart(outcome.analysisDirectory.resolve("rollup-60s.ndjson"))
+                }.canonicalResult
             } catch (failure: IllegalArgumentException) {
                 throw CliFailure(EXIT_INVALID_INPUT, failure.cliMessage())
             }
@@ -326,8 +350,56 @@ private fun analyze(
                     else -> error("UNKNOWN_POLICY_VERDICT")
                 }
         }
+    stderr.println("analysis_id=$analysisId run_id=${json.getValue("run_id").jsonPrimitive.content}")
+    outDir?.let {
+        writeOutDir(
+            it,
+            linkedMapOf(
+                "result.json" to result,
+                "report.html" to renderHtmlReport(result, analysisId),
+                "chart.svg" to checkNotNull(chart),
+                "summary.txt" to summaryText(analysisId, exitCode, result),
+                "junit.xml" to junitXml(result),
+            ),
+        )
+    }
     stdout.write(result)
     return exitCode
+}
+
+private val OUT_DIR_FILES = listOf("result.json", "report.html", "chart.svg", "summary.txt", "junit.xml")
+
+// Checked before the analysis: the directory and each artifact must be a plain directory or file, not a link or the input itself.
+private fun requireOutDir(
+    dir: Path,
+    input: Path,
+) {
+    fun invalid(): Nothing = throw CliFailure(EXIT_INVALID_INPUT, "OUT_DIR_INVALID")
+    if (Files.exists(dir, LinkOption.NOFOLLOW_LINKS) && !Files.isDirectory(dir, LinkOption.NOFOLLOW_LINKS)) invalid()
+    OUT_DIR_FILES.map(dir::resolve).filter { Files.exists(it, LinkOption.NOFOLLOW_LINKS) }.forEach {
+        if (!Files.isRegularFile(it, LinkOption.NOFOLLOW_LINKS) || Files.isSameFile(it, input)) invalid()
+    }
+}
+
+private fun writeOutDir(
+    dir: Path,
+    files: Map<String, ByteArray>,
+) {
+    try {
+        Files.createDirectories(dir)
+        files.forEach { (name, bytes) ->
+            Files.write(
+                dir.resolve(name),
+                bytes,
+                StandardOpenOption.CREATE,
+                StandardOpenOption.TRUNCATE_EXISTING,
+                StandardOpenOption.WRITE,
+                LinkOption.NOFOLLOW_LINKS,
+            )
+        }
+    } catch (_: IOException) {
+        throw CliFailure(EXIT_INVALID_INPUT, "OUT_DIR_WRITE_FAILED")
+    }
 }
 
 private fun captureSource(
@@ -425,7 +497,7 @@ private fun report(
         }
         index += 2
     }
-    if (format !in setOf("json", "html", "asciidoc", "confluence", "svg")) usage()
+    if (format !in setOf("json", "html", "asciidoc", "confluence", "svg", "summary")) usage()
     val result =
         DataDirectory.open(dataDir).use { directory ->
             val analysis =
@@ -452,6 +524,7 @@ private fun report(
         when (format) {
             "json" -> result
             "svg" -> result
+            "summary" -> summaryJson(analysisId, result)
             "html" -> renderHtmlReport(result, analysisId)
             "confluence" -> renderConfluenceReport(result, analysisId)
             else -> renderAsciiDocReport(result, analysisId)
@@ -463,9 +536,10 @@ private fun report(
 private fun validatePolicyCommand(
     args: List<String>,
     stdout: PrintStream,
+    stdin: InputStream,
 ): Int {
     if (args.size != 2 || args[0] != "validate") usage()
-    stdout.write(readPolicy(path(args[1])).canonicalBytes)
+    stdout.write(readPolicy(path(args[1]), stdin).canonicalBytes)
     return EXIT_OK
 }
 
@@ -633,11 +707,16 @@ private fun <T> readSourceFile(
     }
 }
 
-private fun readPolicy(path: Path): PolicyValidation.Valid {
-    requireRegularFile(path, EXIT_INVALID_POLICY, "INVALID_POLICY")
+// The value `-` reads the policy from stdin; a file named `-` is passed as `./-`.
+private fun readPolicy(
+    path: Path,
+    stdin: InputStream,
+): PolicyValidation.Valid {
+    val fromStdin = path.toString() == "-"
+    if (!fromStdin) requireRegularFile(path, EXIT_INVALID_POLICY, "INVALID_POLICY")
     val validation =
         try {
-            Files.newInputStream(path, LinkOption.NOFOLLOW_LINKS).use(::validatePolicy)
+            if (fromStdin) validatePolicy(stdin) else Files.newInputStream(path, LinkOption.NOFOLLOW_LINKS).use(::validatePolicy)
         } catch (failure: IOException) {
             throw CliFailure(EXIT_INVALID_POLICY, "INVALID_POLICY: ${failure.message ?: "read failed"}")
         }
@@ -764,20 +843,22 @@ internal fun histogramSignificantDigits(value: String): Int? = value.toIntOrNull
 
 private fun defaultDataDir(): Path = Path.of(System.getProperty("user.home"), ".lt-verdict")
 
-private fun usage(): Nothing =
-    throw CliFailure(
-        EXIT_USAGE,
+private fun usage(): Nothing = throw CliFailure(EXIT_USAGE, usageText())
+
+private fun usageText(): String =
+    (
         "Usage: ltv ui [--data-dir <path>] [--analysis-parallelism <n>] [--histogram-significant-digits <3..5>] " +
             "[--connections <profiles.json>] [--jenkins-config <jenkins.json>] | " +
-            "ltv analyze <input> [--policy <policy.json>] [--resources <snapshot.json>] [--capacity <plan.json>] " +
+            "ltv analyze <input> [--policy <policy.json>|-] [--out-dir <dir>] [--resources <snapshot.json>] [--capacity <plan.json>] " +
             "[--trend <plan.json>] [--pod-view <pod-view.json>] [--correlation <plan.json>] [--source-context <context.json>] " +
             "[--postgres-pre <pre.json>] [--postgres-post <post.json>] [--pg-profile-html <report.html>] " +
             "[--connections <profiles.json> --source <source.json>] [--histogram-significant-digits <3..5>] [--data-dir <path>] | " +
             "ltv source pre|post --connections <profiles.json> --profile <id> [--pre <pre.json>] [--pg-profile-html <output.html>] | " +
             "ltv opensearch prepare --context <file> --templates <file> --load-sha256 <hash> --output-dir <new-dir> | " +
-            "ltv policy validate <policy.json> | ltv report <run-id> <analysis-id> " +
-            "--format json|html|asciidoc|confluence|svg [--data-dir <path>]" + System.lineSeparator() +
-            "--source accepts source-request.v1|v2|v3|v4; a v3 or v4 window is explicit or auto",
+            "ltv policy validate <policy.json>|- | ltv report <run-id> <analysis-id> " +
+            "--format json|html|asciidoc|confluence|svg [--data-dir <path>] | " +
+            "ltv summary <run-id> <analysis-id> [--data-dir <path>] | ltv --help | ltv --version" + System.lineSeparator() +
+            "--source accepts source-request.v1|v2|v3|v4; a v3 or v4 window is explicit or auto"
     )
 
 private class CliFailure(

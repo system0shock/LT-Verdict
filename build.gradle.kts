@@ -24,6 +24,9 @@ kotlin {
     }
 }
 
+// `-PltvVersion=0.1.0` sets the version of a release build; `ltv --version` reads it from ltv-version.properties.
+version = providers.gradleProperty("ltvVersion").getOrElse("0.1.0-SNAPSHOT")
+
 application {
     mainClass.set("io.ltverdict.MainKt")
     applicationName = "ltv"
@@ -165,9 +168,13 @@ val uiBuild by tasks.registering(Exec::class) {
     outputs.dir(uiDirectory.dir("dist"))
 }
 
+val ltvVersion = project.version.toString()
+
 tasks.processResources {
     dependsOn(uiBuild)
     from(uiDirectory.dir("dist")) { into("web") }
+    inputs.property("ltvVersion", ltvVersion)
+    filesMatching("ltv-version.properties") { expand("version" to ltvVersion) }
 }
 
 val runE2eServer by tasks.registering(JavaExec::class) {

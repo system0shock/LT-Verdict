@@ -12,6 +12,7 @@ import java.io.PrintStream
 import java.nio.charset.StandardCharsets.UTF_8
 import java.nio.file.Files
 import java.nio.file.Path
+import java.nio.file.StandardCopyOption
 
 /**
  * W2.1 characterization: the bytes of `analysis-result.json` and `identity.json` written by a CLI run of every fixture
@@ -90,6 +91,11 @@ class TypedBoundaryGoldenBytesTest {
                 Files.write(golden.resolve("analysis-result.json"), result)
                 Files.write(golden.resolve("identity.json"), identity)
                 Files.writeString(golden.resolve("analysis_id.txt"), analysis.fileName.toString() + "\n")
+                if (case.name ==
+                    "csv-pass"
+                ) {
+                    compactBundle(dataDir.resolve("runs/$runId"), analysis, Path.of("fixtures/typed-boundary/bundle-v1"))
+                }
             }
             assertArrayEquals(Files.readAllBytes(golden.resolve("analysis-result.json")), result, "${case.name}: analysis-result.json")
             assertArrayEquals(Files.readAllBytes(golden.resolve("identity.json")), identity, "${case.name}: identity.json")
@@ -108,4 +114,20 @@ class TypedBoundaryGoldenBytesTest {
             """"windows":[{"id":"steady","from_epoch_ms":1767225600000,"to_epoch_ms":1767225601000}],""" +
             """"rules":[{"id":"cpu-high","series_id":"cpu","unit":"ratio","operator":"gt","threshold":0.8,""" +
             """"min_consecutive_cells":1,"effect":"sla"}]}"""
+
+    // The store layout runs/<run_id>/analyses/<analysis_id>/ is too long for a Windows checkout path; the bundle is kept
+    // flat (source.json, inputs/, analysis/) and TypedBoundaryBundleTest puts it back into the store layout.
+    private fun compactBundle(
+        run: Path,
+        analysis: Path,
+        to: Path,
+    ) {
+        Files.createDirectories(to.resolve("inputs"))
+        Files.createDirectories(to.resolve("analysis"))
+        Files.copy(run.resolve("source.json"), to.resolve("source.json"), StandardCopyOption.REPLACE_EXISTING)
+        Files.copy(run.resolve("inputs/source.bin"), to.resolve("inputs/source.bin"), StandardCopyOption.REPLACE_EXISTING)
+        Files.list(analysis).use { files ->
+            files.forEach { Files.copy(it, to.resolve("analysis").resolve(it.fileName.toString()), StandardCopyOption.REPLACE_EXISTING) }
+        }
+    }
 }

@@ -49,7 +49,7 @@
           "required": ["kind", "label"],
           "properties": {
             "kind": { "const": "transaction" },
-            "label": { "type": "string", "minLength": 1, "maxLength": 4096, "pattern": "^[^\\u0000-\\u001F\\u007F-\\u009F]+$" },
+            "label": { "type": "string", "minLength": 1, "maxLength": 4096 },
             "group_path": { "type": "array", "maxItems": 64, "items": { "type": "string", "maxLength": 4096 } },
             "sample_kind": { "enum": ["JMETER_SAMPLER", "JMETER_CONTAINER", "GATLING_REQUEST", "GATLING_GROUP"] }
           }

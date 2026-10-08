@@ -24,7 +24,7 @@ class WindowsLauncherScriptTest {
         val classpathLines = script.lines().filter { it.startsWith("CLASSPATH=") }
 
         assertEquals(1, classpathLines.size)
-        assertTrue(classpathLines.single().startsWith("CLASSPATH=\$APP_HOME/lib/lt-verdict.jar:"))
+        assertTrue(classpathLines.single().startsWith("CLASSPATH=\$APP_HOME/lib/lt-verdict-"))
         assertFalse(classpathLines.single().contains("lib/*"))
     }
 }

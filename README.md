@@ -39,11 +39,12 @@ Gatling (`simulation.log`, текстовый и бинарный). «Прове
   статистическая приёмка корреляций v1 не пройдена;
 - вердикта по окну устойчивого состояния: без окон ресурсов вердикт считается по
   всему прогону, включая разгон;
-- baseline в CLI (только в UI) и `analysis_id` в выводе `ltv analyze`;
+- baseline в CLI (только в UI);
 - многопользовательского и серверного режима: один процесс на каталог данных,
   сервер слушает только `127.0.0.1`;
-- выпущенной версии: нет тега, версии в сборке и готового дистрибутива, запуск
-  только из сборки (нужны JDK и Node.js).
+- выпущенной версии: тега пока нет. Версия есть в сборке (`ltv --version`), zip-дистрибутив
+  собирает workflow `release.yml` (см. «Установка из архива»); до первого релиза
+  запуск только из сборки (нужны JDK и Node.js).
 
 Подробности границ: [alignment review v0.6](docs/prc-v0.6-alignment-review.md) и
 [нормативный PRC/PRD v0.6](lt-verdict-prc-prd-v0.6.md).
@@ -65,16 +66,18 @@ Gatling (`simulation.log`, текстовый и бинарный). «Прове
 ```
 
 Анализ и HTML-отчёт. `ltv` здесь это `./build/install/ltv/bin/ltv` (Windows:
-`.\build\install\ltv\bin\ltv.bat` и `Get-ChildItem` вместо `ls`):
+`.\build\install\ltv\bin\ltv.bat`):
 
 ```bash
-ltv analyze results.jtl --policy policy.json --data-dir data > result.json
+ltv analyze results.jtl --policy policy.json --data-dir data --out-dir out
 echo $?        # 0 PASS, 2 FAIL, 3 NO_VERDICT, 4 неверный вход, 5 неверная политика
-RUN=$(ls data/runs); ANALYSIS=$(ls data/runs/$RUN/analyses)   # в чистом data/ один запуск и один анализ
-ltv report "$RUN" "$ANALYSIS" --format html --data-dir data > report.html
 ```
 
-`result.json` содержит `analysis-result.v1` (вердикт, причины, evidence).
+В `out/` появятся `result.json` (`analysis-result.v1`: вердикт, причины, evidence),
+`report.html`, `chart.svg`, `summary.txt` и `junit.xml`; stdout по-прежнему несёт тот
+же JSON результата. В stderr печатается
+`analysis_id=... run_id=...`; по ним формат отчёта выбирается отдельно:
+`ltv report <run_id> <analysis_id> --format asciidoc --data-dir data > report.adoc`.
 `--format` принимает `json`, `html`, `asciidoc`, `confluence`, `svg`. Без
 `--policy` вердикт `NO_POLICY`, метрики считаются. Пример входа:
 `fixtures/slice1/jmeter/csv-5.6.3/input.jtl`.

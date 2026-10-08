@@ -78,6 +78,46 @@ class WindowPolicyEvaluationTest {
     }
 
     @Test
+    fun `warn mode keeps a window failure when another rule names a missing transaction`() {
+        val gone =
+            PolicyRuleV1(
+                "gone",
+                PolicyMetric.RESPONSE_TIME_P95_MS,
+                PolicyOperator.LTE,
+                BigDecimal("100"),
+                PolicyScope.Transaction("absent"),
+            )
+        val base = policy("100")
+
+        fun evaluate(mode: MissingTransactionMode?) =
+            evaluateSharedWindowPolicy(
+                base.copy(
+                    rules = base.rules + gone,
+                    defaults = PolicyDefaultsV1(sampleFloor = 1, minSamples = 1, missingTransaction = mode),
+                ),
+                RunValidity.VALID,
+                metrics(95),
+                mapOf("first" to metrics(90), "second" to metrics(110)),
+                resource(PolicyVerdict.NO_POLICY, PolicyVerdict.NO_POLICY),
+                WINDOWS,
+            )
+
+        fun verdicts(evaluation: PolicyEvaluation) =
+            evaluation.evidence
+                .filter { it["type"]?.jsonPrimitive?.content == "window_policy_summary" }
+                .map { it.getValue("verdict").jsonPrimitive.content }
+
+        val warn = evaluate(MissingTransactionMode.WARN)
+        val strict = evaluate(null)
+
+        assertEquals(PolicyVerdict.FAIL, warn.verdict)
+        assertEquals(listOf("PASS", "FAIL"), verdicts(warn))
+        assertEquals(listOf("TRANSACTION_NOT_FOUND"), warn.coverageReasons)
+        assertEquals(PolicyVerdict.NO_VERDICT, strict.verdict)
+        assertEquals(listOf("NO_VERDICT", "NO_VERDICT"), verdicts(strict))
+    }
+
+    @Test
     fun `missing required resource data dominates an observed business failure`() {
         val evaluation =
             evaluateSharedWindowPolicy(

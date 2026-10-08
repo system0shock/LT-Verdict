@@ -1,0 +1,18 @@
+{
+  "schema_version": "policy.v1",
+  "policy_id": "unknown-missing-transaction-mode",
+  "defaults": {
+    "missing_transaction": "ignore"
+  },
+  "rules": [
+    {
+      "id": "overall-p95",
+      "metric": "response_time_p95_ms",
+      "operator": "lte",
+      "threshold": 300,
+      "scope": {
+        "kind": "overall"
+      }
+    }
+  ]
+}

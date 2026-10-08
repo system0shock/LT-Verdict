@@ -185,7 +185,13 @@ private fun evaluateStage(
         }
     if ((sampleCount != null && sampleCount < minSamples) || smallRule) reasons += "CAPACITY_INSUFFICIENT_SAMPLES"
     val policyStatus = summary?.string("verdict")
-    if (policyStatus == "NO_VERDICT") reasons += "CAPACITY_SLA_NO_VERDICT"
+    // a rule skipped by missing_transaction = warn leaves the stage SLA unchecked, so the stage cannot confirm capacity
+    val unboundRule =
+        businessChecks.any {
+            it["window_id"]?.jsonPrimitive?.content == stage.evaluationWindowId &&
+                it["reason_code"]?.jsonPrimitive?.content == "TRANSACTION_NOT_FOUND"
+        }
+    if (policyStatus == "NO_VERDICT" || unboundRule) reasons += "CAPACITY_SLA_NO_VERDICT"
     val verdict =
         when {
             "CAPACITY_SLA_MISSING" in reasons -> "NO_POLICY"

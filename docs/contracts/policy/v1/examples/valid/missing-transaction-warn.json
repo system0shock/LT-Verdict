@@ -1,0 +1,28 @@
+{
+  "schema_version": "policy.v1",
+  "policy_id": "missing-transaction-warn",
+  "defaults": {
+    "missing_transaction": "warn"
+  },
+  "rules": [
+    {
+      "id": "overall-p95",
+      "metric": "response_time_p95_ms",
+      "operator": "lte",
+      "threshold": 300,
+      "scope": {
+        "kind": "overall"
+      }
+    },
+    {
+      "id": "checkout-p95",
+      "metric": "response_time_p95_ms",
+      "operator": "lte",
+      "threshold": 500,
+      "scope": {
+        "kind": "transaction",
+        "name": "POST /checkout"
+      }
+    }
+  ]
+}

@@ -42,6 +42,10 @@
       "sha256": "1ad860cacaeaf2dba179ad4d37bb6b7c253aa6e76624848085f7f4a2f8c40323"
     },
     {
+      "path": "docs/contracts/policy/v1/examples/invalid/unknown-missing-transaction-mode.json",
+      "sha256": "6b8f55e4a68809559166ba2476300b8e8e4a1d27bcb68015f9ecc93b903be927"
+    },
+    {
       "path": "docs/contracts/policy/v1/examples/invalid/window-ids-empty.json",
       "sha256": "cdcfdb3b1c0925a85ca7a18728af146e6dfa7197fd8af84cf28d926548e65cff"
     },
@@ -52,6 +56,10 @@
     {
       "path": "docs/contracts/policy/v1/examples/valid/all-metrics.json",
       "sha256": "fbd8005334cb1fd2e7216429a1b5e3df1e4c25a66baff31e61f2937c7bc883c4"
+    },
+    {
+      "path": "docs/contracts/policy/v1/examples/valid/missing-transaction-warn.json",
+      "sha256": "9901c11929893411dd3e19dede569363fe0997f8096b59f058474adbca834db0"
     },
     {
       "path": "docs/contracts/policy/v1/examples/valid/platform-base-profile.json",
@@ -75,7 +83,7 @@
     },
     {
       "path": "docs/contracts/policy/v1/policy.schema.json",
-      "sha256": "ed1ee09d0c3724b73cd598ff20357309e51769c909ac09cbda1261234fd547d1"
+      "sha256": "0a54dbdecf9cc1667b7052d8ef8c6d86d3b9b296028edec9878e8e5463dbfa21"
     },
     {
       "path": "fixtures/slice1/gatling/binary-3.13.5/oracle.json",
@@ -323,6 +331,17 @@
       "path": "docs/contracts/policy/v1/examples/valid/window-ids.json",
       "schema_valid": true,
       "runtime_valid": true
+    },
+    {
+      "path": "docs/contracts/policy/v1/examples/valid/missing-transaction-warn.json",
+      "schema_valid": true,
+      "runtime_valid": true
+    },
+    {
+      "path": "docs/contracts/policy/v1/examples/invalid/unknown-missing-transaction-mode.json",
+      "schema_valid": false,
+      "runtime_valid": false,
+      "expected_diagnostic": "UNKNOWN_MISSING_TRANSACTION_MODE"
     },
     {
       "path": "docs/contracts/policy/v1/examples/invalid/window-ids-empty.json",

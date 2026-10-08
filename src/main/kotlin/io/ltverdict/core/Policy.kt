@@ -7,6 +7,7 @@ import io.ltverdict.metrics.MetricSummary
 import io.ltverdict.metrics.NormalizedMetrics
 import io.ltverdict.metrics.TransactionIdentity
 import io.ltverdict.metrics.TransactionSummary
+import kotlinx.serialization.Serializable
 import kotlinx.serialization.SerializationException
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
@@ -42,6 +43,7 @@ internal const val PLATFORM_COVERAGE_MAX_GAP_CELLS_DEFAULT = 0
 private const val MAX_SAMPLES_BOUND = 1_000_000L
 private const val MAX_GAP_CELLS_BOUND = 100_000L
 
+@Serializable
 internal enum class PolicyVerdict {
     PASS,
     FAIL,

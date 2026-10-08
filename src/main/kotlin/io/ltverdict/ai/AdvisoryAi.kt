@@ -1,6 +1,8 @@
 package io.ltverdict.ai
 
+import io.ltverdict.core.SUPPORTED_ANALYSIS_RESULT_VERSIONS
 import io.ltverdict.core.canonicalJson
+import io.ltverdict.core.hasSupportedAnalysisResultKeys
 import io.ltverdict.core.sha256Hex
 import io.ltverdict.storage.RunBundleStore
 import kotlinx.serialization.SerializationException
@@ -61,8 +63,8 @@ internal object AdvisoryEvidenceBuilder {
         analysisResult: JsonObject,
     ): AdvisoryEvidence {
         if (!SHA256.matches(analysisId) || !SHA256.matches(analysisManifestSha256)) invalidAnalysis()
-        if (analysisResult.keys !in ANALYSIS_RESULT_FIELD_SETS ||
-            analysisResult.string("schema_version") != "analysis-result.v1" ||
+        if (!hasSupportedAnalysisResultKeys(analysisResult) ||
+            analysisResult.string("schema_version") !in SUPPORTED_ANALYSIS_RESULT_VERSIONS ||
             analysisResult.string("run_id") != runId
         ) {
             invalidAnalysis()
@@ -565,21 +567,6 @@ private val SHA256 = Regex("[0-9a-f]{64}")
 
 internal fun validSha256(value: String): Boolean = SHA256.matches(value)
 
-private val ANALYSIS_RESULT_FIELD_SETS =
-    setOf(
-        setOf("schema_version", "run_id", "analysis_mode", "run_validity", "policy_verdict", "analysis_coverage", "findings", "evidence"),
-        setOf(
-            "schema_version",
-            "run_id",
-            "analysis_mode",
-            "run_validity",
-            "policy_verdict",
-            "analysis_coverage",
-            "findings",
-            "evidence",
-            "capacity_summary",
-        ),
-    )
 private val OUTPUT_FIELDS = setOf("schema_version", "summary", "hypotheses", "recommendations", "caveats")
 private val HYPOTHESIS_FIELDS = setOf("rank", "observation", "possible_explanation", "recommended_check", "evidence_refs")
 private val RECOMMENDATION_FIELDS = setOf("rank", "action", "rationale", "evidence_refs")

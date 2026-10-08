@@ -61,10 +61,23 @@ class TypedBoundaryGoldenBytesTest {
                 }
             val stdout = ByteArrayOutputStream()
             val stderr = ByteArrayOutputStream()
-            val exit = runCli(args.toTypedArray(), PrintStream(stdout, true, UTF_8), PrintStream(stderr, true, UTF_8), ByteArrayInputStream(ByteArray(0)))
+            val exit =
+                runCli(
+                    args.toTypedArray(),
+                    PrintStream(stdout, true, UTF_8),
+                    PrintStream(stderr, true, UTF_8),
+                    ByteArrayInputStream(ByteArray(0)),
+                )
             assertTrue(exit in 0..3, "${case.name}: exit $exit ${stderr.toString(UTF_8)}")
 
-            val runId = Files.list(dataDir.resolve("runs")).use { it.toList().single().fileName.toString() }
+            val runId =
+                Files.list(dataDir.resolve("runs")).use {
+                    it
+                        .toList()
+                        .single()
+                        .fileName
+                        .toString()
+                }
             val analysis = Files.list(dataDir.resolve("runs/$runId/analyses")).use { it.toList().single() }
             val result = Files.readAllBytes(analysis.resolve("analysis-result.json"))
             val identity = Files.readAllBytes(analysis.resolve("identity.json"))
@@ -80,7 +93,11 @@ class TypedBoundaryGoldenBytesTest {
             }
             assertArrayEquals(Files.readAllBytes(golden.resolve("analysis-result.json")), result, "${case.name}: analysis-result.json")
             assertArrayEquals(Files.readAllBytes(golden.resolve("identity.json")), identity, "${case.name}: identity.json")
-            assertEquals(Files.readString(golden.resolve("analysis_id.txt")).trim(), analysis.fileName.toString(), "${case.name}: analysis_id")
+            assertEquals(
+                Files.readString(golden.resolve("analysis_id.txt")).trim(),
+                analysis.fileName.toString(),
+                "${case.name}: analysis_id",
+            )
         }
     }
 

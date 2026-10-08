@@ -1606,6 +1606,32 @@ distinct `(group path, label, kind)`, coverage получает
 `AMBIGUOUS_TRANSACTION`. Оба случая дают всей policy `NO_VERDICT`, даже если
 другое rule уже нарушено.
 
+#### Режим «пропавшая транзакция»
+
+По умолчанию (`defaults.missing_transaction` не задано или `"no_verdict"`)
+`TRANSACTION_NOT_FOUND` блокирует вердикт, как описано выше. Опечатка в имени
+транзакции или переименованный label скрывают найденное нарушение другого
+правила: p95 339 при пороге 300 даёт `NO_VERDICT` и код выхода 3.
+
+Режим `"defaults": { "missing_transaction": "warn" }` делает `TRANSACTION_NOT_FOUND`
+предупреждением:
+
+- пропавшее правило не проверяется; его `policy_check` остаётся со статусом
+  `NO_VERDICT` и `reason_code = TRANSACTION_NOT_FOUND`, а причина попадает в
+  `analysis_coverage.reasons` (покрытие `INCOMPLETE`);
+- нарушение любого другого правила даёт `FAIL` и код выхода 2;
+- если нарушений нет, итог `PASS` (код 0) вместе с предупреждением покрытия;
+  такой анализ не принимается как baseline и не подтверждает ступень ёмкости
+  (`CAPACITY_SLA_NO_VERDICT`);
+- если не решено ни одно правило (все применимые правила пропали), вердикт
+  остаётся `NO_VERDICT`;
+- `AMBIGUOUS_TRANSACTION`, `INSUFFICIENT_SAMPLES`, `METRIC_NOT_AVAILABLE`,
+  `RULE_WINDOW_NOT_FOUND` и невалидный вход режим не смягчает.
+
+Пример: `docs/contracts/policy/v1/examples/valid/missing-transaction-warn.json`.
+Включайте режим осознанно: опечатка в имени транзакции при отсутствии других
+нарушений даст `PASS` с предупреждением, а не отказ.
+
 ### Ошибки validation
 
 UI и CLI используют один validator. Ошибка содержит stable `code`, JSON Pointer
@@ -1619,7 +1645,8 @@ UI и CLI используют один validator. Ошибка содержит
 | `INVALID_SCHEMA_VERSION` | `schema_version` не равен `policy.v1` |
 | `EMPTY_IDENTIFIER` | Пустой `policy_id`, rule id или transaction name |
 | `EMPTY_RULES`, `DUPLICATE_RULE_ID` | Нет rules или rule ids не уникальны |
-| `UNKNOWN_METRIC`, `UNKNOWN_OPERATOR` | Metric/operator не поддерживается |
+| `UNKNOWN_METRIC`, `UNKNOWN_OPERATOR` | Metric/operator не поддерживается; сообщение перечисляет допустимые значения (`allowed: ...`) |
+| `UNKNOWN_MISSING_TRANSACTION_MODE` | `defaults.missing_transaction` не равно `no_verdict` или `warn` |
 | `METRIC_OPERATOR_MISMATCH` | Operator не соответствует metric |
 | `THRESHOLD_OUT_OF_RANGE` | Threshold отрицателен или ratio не входит в `0..1` |
 | `MIN_SAMPLES_OUT_OF_RANGE` | `sample_floor` или `min_samples` вне `1..1000000` |
@@ -1629,7 +1656,7 @@ UI и CLI используют один validator. Ошибка содержит
 | `WINDOW_IDS_INVALID` | `window_ids` правила пуст, не массив строк, содержит повтор, пустую строку или id длиннее 128 байт UTF-8 |
 | `INVALID_SCOPE` | Scope не равен exact `overall` или `transaction` form; у платформенного правила: неизвестный `kind`, пустой или повторяющийся список сервисов, `all_services` без каталога `platform_services`, `except` вне каталога, область пуста после `except` |
 | `INVALID_MINIMUM` | `min_consecutive_cells` платформенного правила вне `1..100000` |
-| `UNKNOWN_AGGREGATION`, `UNKNOWN_EFFECT` | Агрегация или effect платформенного правила не поддерживается |
+| `UNKNOWN_AGGREGATION`, `UNKNOWN_EFFECT` | Агрегация или effect платформенного правила не поддерживается; сообщение перечисляет допустимые значения |
 | `PLATFORM_AGGREGATION_OPERATOR_MISMATCH` | Платформенное правило `gt` с порогом `0` и агрегацией `interval_min` |
 | `PLATFORM_COVERAGE_MISSING` | Нет правила покрытия для пары «сервис × окно» платформенного `sla`-правила |
 | `RESOURCE_LIMIT_EXCEEDED` | Превышен размер, depth, count или lexical numeric limit |
@@ -2025,12 +2052,88 @@ bundle. Семантически одинаковые данные с други
 
 ```text
 ltv ui [--data-dir <path>] [--analysis-parallelism <n>] [--histogram-significant-digits <3..5>]
-ltv analyze <input> [--policy <policy.json>] [--resources <snapshot.json>] [--histogram-significant-digits <3..5>] [--data-dir <path>]
-ltv policy validate <policy.json>
+ltv analyze <input> [--policy <policy.json>|-] [--resources <snapshot.json>] [--histogram-significant-digits <3..5>] [--data-dir <path>] [--out-dir <dir>]
+ltv policy validate <policy.json>|-
 ltv report <run-id> <analysis-id> --format json|html|asciidoc [--data-dir <path>]
+ltv summary <run-id> <analysis-id> [--data-dir <path>]
+ltv --help
+ltv --version
 ```
 
-`ltv analyze` печатает canonical `analysis-result.v1` в stdout.
+`ltv analyze` печатает canonical `analysis-result.v1` в stdout, а идентификаторы
+сохранённого анализа одной строкой в stderr:
+
+```text
+analysis_id=<64 hex> run_id=<id>
+```
+
+Эти значения подставляются в `ltv report` и `ltv summary`; искать каталог анализа
+вручную не нужно. stdout не меняется (байты результата те же, что у
+`ltv report --format json`), поэтому `ltv analyze ... > result.json` работает как
+раньше; скрипт, который считает любой вывод в stderr ошибкой, надо поправить.
+
+`ltv --help` (также `-h`, `help`, `ltv <команда> --help`) печатает справку в stdout
+с кодом `0`; `ltv --version` печатает `ltv <версия>` (версия сборки, например
+`0.1.0-SNAPSHOT`; для запуска не из сборки `unknown`). Версию релизной сборки задаёт
+`-PltvVersion=<x.y.z>` у Gradle.
+
+**Policy из stdin.** Значение `-` у `--policy` и у `ltv policy validate` читает
+policy из stdin (до 1 MiB, как файл): `cat policy.json | ltv analyze run.jtl --policy -`.
+Файл с именем `-` в текущем каталоге задаётся как `./-`. Хэш policy считается по
+канонической форме JSON, поэтому `analysis_id` тот же, что при запуске из файла с таким же содержимым.
+В Windows PowerShell 5.1 конвейер перекодирует текст; используйте `cmd /c "... < policy.json"`
+или PowerShell 7.4+.
+
+**Артефакты для CI: `--out-dir <dir>`.** Один вызов `ltv analyze` записывает в каталог
+(создаётся при необходимости) пять файлов с фиксированными именами; существующие
+файлы с этими именами перезаписываются:
+
+| Файл | Содержимое |
+| --- | --- |
+| `result.json` | canonical `analysis-result.v1`, байты как в stdout |
+| `report.html` | HTML-отчёт, как `ltv report --format html` |
+| `chart.svg` | график нагрузки, как `ltv report --format svg` |
+| `summary.txt` | краткий итог для лога сборки: идентификаторы, `run_validity`, `policy_verdict`, `exit_code`, выборка, p95 и p99, число правил и строки непройденных правил |
+| `junit.xml` | один `testsuite` на прогон |
+
+Код выхода определяется вердиктом, как без `--out-dir` (таблица ниже). Каталог и каждый из
+пяти файлов проверяются до анализа: симлинк, не обычный файл и файл, совпадающий со
+входным, дают код `4` и `OUT_DIR_INVALID`, ничего не записывается. Если файл записать не
+удалось, код `4`, `OUT_DIR_WRITE_FAILED`, stdout пуст; анализ при этом уже сохранён,
+идентификаторы напечатаны, часть файлов могла быть записана.
+
+`junit.xml`: случай `gate` (`classname="lt-verdict.gate"`) отражает итог гейта и совпадает
+с кодом выхода (проходит только при `run_validity` `VALID` и `PASS` или `NO_POLICY`;
+`FAIL` это `failure`, `NO_VERDICT`, `DEGRADED` и `INVALID` это `error`). Далее по одному
+случаю на каждую проверку правила: `lt-verdict.policy` (имя `<rule_id>`, для оконных
+проверок `<rule_id> @ <window_id>`) и `lt-verdict.resource-sla` (`<rule_id> @ <window_id>`
+для SLA-правил ресурсов). Диагностические ресурсные проверки в файл не попадают. Публиковать
+отчёт нужно шагом CI, который выполняется и после ненулевого кода выхода: Jenkins `junit`
+в `post { always { ... } }`, GitLab `artifacts: reports: junit` с `when: always`, GitHub Actions
+шаг стороннего JUnit-репортёра с `if: always()`. Код выхода `ltv` по-прежнему проваливает
+шаг, отчёт JUnit его не заменяет.
+
+**`ltv summary <run-id> <analysis-id>`** читает сохранённый анализ и печатает в stdout один
+компактный canonical JSON `cli-summary.v1` (ключи по алфавиту, без пробелов и перевода строки;
+для сохранения перенаправьте stdout). Код `0` при успешном чтении независимо от вердикта;
+отсутствующий анализ даёт `4`, занятый data dir `6`, повреждение `70` (как `ltv report`).
+
+```json
+{"analysis_id":"...","overall":{"error_rate":0.333333,"errors":1,"max":26,"p50":1,"p95":26,"p99":26,"rps":34.883721,"samples":3},
+ "policy_verdict":"FAIL","run_id":"...","run_validity":"VALID","schema_version":"cli-summary.v1",
+ "rules":[{"metric":"error_rate_ratio","observed":0.333333,"operator":"lte","rule_id":"overall-errors","status":"FAIL","threshold":0.1}],
+ "transactions":[{"error_rate":1,"errors":1,"group_path":["Checkout scenario"],"kind":"JMETER_SAMPLER","label":"POST /order",
+                  "max":0,"p50":0,"p95":0,"p99":0,"rps":11.627907,"samples":1}]}
+```
+
+- `overall` и `transactions` берутся из метрик без окна; `error_rate` и `rps` вычислены как
+  частное числителя и знаменателя с шестью знаками (`null`, если данных нет); перцентили
+  и счётчики копируются из результата. Порядок `transactions` как в `analysis-result.json`.
+- `rules`: по одному элементу на проверку правила политики и SLA-правила ресурсов
+  (`rule_id`, `status`, `operator`, `threshold`, `window_id` и `reason` при наличии; у
+  правил нагрузки ещё `metric` и `observed`, у ресурсных `series_id` и `unit`). Оператор
+  ресурсного правила описывает нарушение (`gt`: значение выше порога). Итоговый вердикт
+  анализа лежит в `policy_verdict`.
 
 **Точность перцентилей.** Перцентили p50, p95 и p99 считаются по гистограмме
 HdrHistogram и не бывают выше максимума отклика. Значения до 2047 мс точны. Выше
@@ -2092,7 +2195,7 @@ Optional `correlation-plan.v1` включает только явно переч
 Его можно взять из `resource_snapshot_sha256` сохранённого `identity.json`
 предварительного анализа с тем же snapshot без плана; файл лежит в
 `data/runs/<run-id>/analyses/<analysis-id>/identity.json`. Адаптер может
-подготовить план по [контракту](../superpowers/plans/2026-09-05-load-resource-correlation.md).
+подготовить план по [контракту](../superpowers/plans/archive/2026-09-05-load-resource-correlation.md).
 Исходный `correlation-plan.json` сохраняется рядом и защищён manifest.
 
 Правило аномалии выбирает signal, непересекающиеся reference/evaluation windows,

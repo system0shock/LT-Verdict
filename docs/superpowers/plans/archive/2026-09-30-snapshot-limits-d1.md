@@ -57,7 +57,7 @@ EXPECTED FILES TO CHANGE:
   modify docs/analytics-scale-triage.md
   modify docs/adr/0014-resource-series-limits-autostep-arm-api.md
   modify CHANGELOG.md
-  create docs/superpowers/plans/2026-09-30-snapshot-limits-d1.md
+  create docs/superpowers/plans/archive/2026-09-30-snapshot-limits-d1.md
 ```
 
 Если реализация становится заметно больше ожидаемого, остановиться и объяснить (AGENTS.md, п. 10).

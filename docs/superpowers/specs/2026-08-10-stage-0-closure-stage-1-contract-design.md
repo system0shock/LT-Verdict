@@ -8,7 +8,7 @@
 
 **Статус:** исторический; superseded 2026-08-26
 
-**Основание:** PRC v0.5, `docs/superpowers/plans/2026-08-10-development-plan.md`,
+**Основание:** PRC v0.5, `docs/superpowers/plans/archive/2026-08-10-development-plan.md`,
 `docs/stage-1-spec.md` и exit gate этапа 0.
 
 ## Цель и границы

@@ -8,7 +8,7 @@
 создан. Всё содержимое поставки, включая документацию Task 7
 (`docs/user/online-sources.md`, `CHANGELOG.md`, этот файл и
 `docs/development-plan-v0.6.md`), закоммичено. План:
-[auto window](superpowers/plans/2026-09-27-source-auto-window.md), спецификация
+[auto window](superpowers/plans/archive/2026-09-27-source-auto-window.md), спецификация
 [evidence triage / auto window](superpowers/specs/2026-09-27-evidence-triage-auto-window-design.md),
 решение [ADR 0012](adr/0012-auto-window-recognized-period.md). Запись
 «Передача 2026-09-22 (ночь)» ниже остаётся в силе по своей поставке, но её
@@ -186,7 +186,7 @@ v0.23.3 по четырём изменённым документам и по в
   7.7–13.2% помечены как измерение NumPy на development-seeds, а не гарантия
   JVM-реализации.
 - `docs/development-plan-v0.6.md`: `BASELINE-CONDITIONS-01` переведён в CLOSED
-  по реализации (ADR 0010, `local-baseline-conditions.v1`, endpoints
+  по реализации (ADR 0028, `local-baseline-conditions.v1`, endpoints
   `baseline-conditions`, three-state `CONFIRMED`/`NOT_CONFIRMED`/`UNKNOWN`).
   Исходное описание gap сохранено как историческое и явно помечено; сквозная
   приёмка сценария осталась отдельной задачей.
@@ -299,7 +299,7 @@ epoch-seconds покрывает 2001..5138. Существующие фикст
   утверждает «p-values отсутствуют», тогда как `DiagnosticAnalysis.kt` публикует
   `correlation_headline_selection` с `holm_adjusted_p_value`; ограничения выводной
   семьи в `docs/user/*` не описаны вовсе. Эта запись ниже также держит
-  `BASELINE-CONDITIONS-01` как OPEN, хотя ADR 0010 и `LocalApi.kt:400,416`
+  `BASELINE-CONDITIONS-01` как OPEN, хотя ADR 0028 и `LocalApi.kt:400,416`
   реализованы. Оба противоречия сняты в разделе от 2026-09-27 выше.
 - Пункт 7: `processed_bytes`, число прочитанных записей и число проигнорированных
   Gatling `ERROR`/`USER` в evidence. Сейчас `ParseReport.processedBytes` не
@@ -537,7 +537,7 @@ Sol max независимо пересчитал все 28000 per-case measurem
 - [План проекта](development-plan-v0.6.md).
 - [План приёмки](superpowers/plans/2026-09-06-statistical-validation.md):
   актуален заключительный Execution state; старые checklists исторические.
-- [Capacity plan](superpowers/plans/2026-09-06-capacity.md).
+- [Capacity plan](superpowers/plans/archive/2026-09-06-capacity.md).
 - [Отложенные методы, включая Pearson/Kendall](statistical-method-roadmap.md).
 - Локальный ledger: `.superpowers/sdd/2026-09-06-statistical-validation/progress.md`.
 - Python: `tools/stats_validation.py`, `synthetic_service.py`,

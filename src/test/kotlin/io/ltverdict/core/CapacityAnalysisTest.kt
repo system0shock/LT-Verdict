@@ -53,6 +53,11 @@ class CapacityAnalysisTest {
             "PASS" to emptyList<String>(),
             stageOf(summaryWithSamples("300", 5_000, 100), smallRule("other")),
         )
+        assertEquals(
+            "INDETERMINATE" to listOf("CAPACITY_SLA_NO_VERDICT"),
+            stageOf(summary("300", "PASS"), missingTransactionRule("300")),
+        )
+        assertEquals("PASS" to emptyList<String>(), stageOf(summary("300", "PASS"), missingTransactionRule("other")))
     }
 
     @Test
@@ -641,6 +646,16 @@ class CapacityAnalysisTest {
                 minSamples?.let { put("min_samples", it) }
             },
     )
+
+    private fun missingTransactionRule(window: String) =
+        buildJsonObject {
+            put("id", "check-gone-$window")
+            put("type", "policy_check")
+            put("window_id", window)
+            put("rule_id", "gone")
+            put("status", "NO_VERDICT")
+            put("reason_code", "TRANSACTION_NOT_FOUND")
+        }
 
     private fun smallRule(
         window: String,

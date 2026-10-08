@@ -368,7 +368,7 @@ Pearson/Kendall и другие коэффициенты также отложе
 - [Системная rubric](statistical-validation-applicability-rubric-v1.md).
 - [Выбранные и отложенные методы](statistical-method-roadmap.md).
 - [Дизайн корреляционного анализа](superpowers/specs/2026-09-05-load-resource-correlation-design.md).
-- [Контракт и план корреляционного анализа](superpowers/plans/2026-09-05-load-resource-correlation.md).
+- [Контракт и план корреляционного анализа](superpowers/plans/archive/2026-09-05-load-resource-correlation.md).
 - [Дизайн статистики ресурсов](superpowers/specs/2026-09-05-resource-statistics-design.md).
 
 Для численного аудита доступны локальные evidence archives:

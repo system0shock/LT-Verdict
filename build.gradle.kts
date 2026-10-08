@@ -24,6 +24,9 @@ kotlin {
     }
 }
 
+// `-PltvVersion=0.1.0` sets the version of a release build; `ltv --version` reads it from ltv-version.properties.
+version = providers.gradleProperty("ltvVersion").getOrElse("0.1.0-SNAPSHOT")
+
 application {
     mainClass.set("io.ltverdict.MainKt")
     applicationName = "ltv"
@@ -70,6 +73,22 @@ dependencyLocking {
 
 tasks.withType<Test>().configureEach {
     useJUnitPlatform()
+}
+
+tasks.test {
+    inputs.files(tasks.startScripts).withPathSensitivity(PathSensitivity.RELATIVE)
+}
+
+// cmd.exe limits a command line to 8191 characters; the generated explicit jar list overflows it on long install paths.
+tasks.startScripts {
+    doLast {
+        val classpathLine = Regex("(?m)^set CLASSPATH=.*$")
+        val script = windowsScript.readText()
+        check(classpathLine.findAll(script).count() == 1) { "ltv.bat: expected exactly one CLASSPATH line, template changed" }
+        windowsScript.writeText(
+            script.replace(classpathLine, Regex.escapeReplacement("set CLASSPATH=%APP_HOME%\\lib\\*")),
+        )
+    }
 }
 
 val csvSpike by tasks.registering(Test::class) {
@@ -165,9 +184,13 @@ val uiBuild by tasks.registering(Exec::class) {
     outputs.dir(uiDirectory.dir("dist"))
 }
 
+val ltvVersion = project.version.toString()
+
 tasks.processResources {
     dependsOn(uiBuild)
     from(uiDirectory.dir("dist")) { into("web") }
+    inputs.property("ltvVersion", ltvVersion)
+    filesMatching("ltv-version.properties") { expand("version" to ltvVersion) }
 }
 
 val runE2eServer by tasks.registering(JavaExec::class) {

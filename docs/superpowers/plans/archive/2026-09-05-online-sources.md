@@ -3,7 +3,7 @@
 > Execute using subagent-driven-development; independent file ownership below.
 
 Цель: законченная первая поставка Prometheus/VM direct и Grafana proxy по
-[принятому дизайну](../specs/2026-09-05-online-sources-design.md).
+[принятому дизайну](../../specs/2026-09-05-online-sources-design.md).
 База ae6a076, существующий worktree, ветка feat/online-sources. Baseline JVM test
 успешен (UP-TO-DATE). Пользователь разрешил параллельную реализацию и один итоговый
 review с адресными исправлениями вместо повторных волн. Worker commits запрещены.

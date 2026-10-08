@@ -33,7 +33,7 @@ gap, но не блокируют проверку вычислительног�
 Первый deterministic production batch выполнен. Пороги, данные и эталоны
 не подбирались по результатам acceptance.
 Capacity подключён к CLI/API/UI и проверяется отдельно; локальные gates и
-ограничения описаны в [capacity плане](superpowers/plans/2026-09-06-capacity.md).
+ограничения описаны в [capacity плане](superpowers/plans/archive/2026-09-06-capacity.md).
 
 ## Поправка Applicability до запусков
 
@@ -763,7 +763,7 @@ score подтверждены. Report/harness blockers не обнаружен�
   независимой приёмкой это не является: повтор на новых seeds не выполнялся, а
   JVM-реализация на `java.util.Random` Monte-Carlo не калибровалась.
 - Two-run comparison не изменялся: шум T02 36.8% и T03 5.4% остаётся в продукте.
-- `BASELINE-CONDITIONS-01` закрыт по реализации (ADR 0010,
+- `BASELINE-CONDITIONS-01` закрыт по реализации (ADR 0028,
   `local-baseline-conditions.v1`, endpoints `baseline-conditions`); сквозная
   приёмка сценария остаётся отдельной задачей.
 - Добавлен opt-in `trend-plan.v1` с L0-детектором роста (ADR 0011). Он не

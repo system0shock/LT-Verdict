@@ -201,6 +201,8 @@ class FixtureManifestTest {
                 "docs/contracts/policy/v1/examples/valid/all-metrics.json",
                 "docs/contracts/policy/v1/examples/valid/sample-gate.json",
                 "docs/contracts/policy/v1/examples/valid/window-ids.json",
+                "docs/contracts/policy/v1/examples/valid/missing-transaction-warn.json",
+                "docs/contracts/policy/v1/examples/invalid/unknown-missing-transaction-mode.json",
                 "docs/contracts/policy/v1/examples/invalid/window-ids-empty.json",
                 "docs/contracts/policy/v1/examples/invalid/empty-rules.json",
                 "docs/contracts/policy/v1/examples/valid/platform-services.json",

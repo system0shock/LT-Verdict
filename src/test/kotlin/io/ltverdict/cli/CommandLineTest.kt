@@ -513,9 +513,46 @@ class CommandLineTest {
                 )
 
             assertEquals(case.exitCode, result.exitCode, case.input.toString())
-            assertTrue(result.stderr.isEmpty(), result.stderr)
+            assertTrue(Regex("analysis_id=[0-9a-f]{64} run_id=\\S+\\R").matches(result.stderr), result.stderr)
             assertEquals(case.policyVerdict, result.stdout.json("policy_verdict"))
         }
+    }
+
+    @Test
+    fun `missing transaction warn mode lets a found violation exit 2 and keeps the default fail-closed`() {
+        val input = fixture("jmeter/xml-5.6.3/input.xml")
+
+        fun analyze(
+            name: String,
+            p95Threshold: Int,
+            mode: String,
+        ): CliResult {
+            val policy = tempDir.resolve("$name.json")
+            val p95 =
+                """{"id":"p95","metric":"response_time_p95_ms","operator":"lte","threshold":$p95Threshold,"scope":{"kind":"overall"}}"""
+            val gone =
+                """{"id":"gone","metric":"response_time_p95_ms","operator":"lte","threshold":100,""" +
+                    """"scope":{"kind":"transaction","name":"GET /missing"}}"""
+            Files.writeString(
+                policy,
+                """{"schema_version":"policy.v1","policy_id":"$name","defaults":{"sample_floor":1,"min_samples":1$mode},"rules":[$p95,$gone]}""",
+            )
+            return run("analyze", input.toString(), "--policy", policy.toString(), "--data-dir", tempDir.resolve("data-$name").toString())
+        }
+
+        val warn = ",\"missing_transaction\":\"warn\""
+        val failed = analyze("warn-fail", 20, warn)
+        val passed = analyze("warn-pass", 1000, warn)
+        val default = analyze("default", 20, "")
+
+        assertEquals(2, failed.exitCode, failed.stderr)
+        assertEquals("FAIL", failed.stdout.json("policy_verdict"))
+        assertTrue(failed.stdout.contains(""""reasons":["TRANSACTION_NOT_FOUND"]"""), failed.stdout)
+        assertEquals(0, passed.exitCode, passed.stderr)
+        assertEquals("PASS", passed.stdout.json("policy_verdict"))
+        assertTrue(passed.stdout.contains(""""status":"INCOMPLETE""""), passed.stdout)
+        assertEquals(3, default.exitCode, default.stderr)
+        assertEquals("NO_VERDICT", default.stdout.json("policy_verdict"))
     }
 
     @Test

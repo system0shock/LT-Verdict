@@ -18,7 +18,7 @@ MVP, развёртыванию, источникам данных или пор
 решения этого delta design имеют приоритет.
 
 Текущие `docs/stage-1-spec.md` и
-`docs/superpowers/plans/2026-08-10-development-plan.md` остаются историческими
+`docs/superpowers/plans/archive/2026-08-10-development-plan.md` остаются историческими
 материалами v0.5 и не являются исполнимым планом v0.6. Фактического
 production-кода, закрытого Phase 0 и milestone evidence в репозитории пока нет.
 

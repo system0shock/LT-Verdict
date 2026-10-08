@@ -9,7 +9,7 @@ file разрешает read-only acquisition до pure AnalysisService. Без 
 приложение остаётся offline. Новых production dependencies нет (JDK HttpClient).
 
 Контракты и caps зафиксированы до production code в
-[implementation plan](../superpowers/plans/2026-09-05-online-sources.md).
+[implementation plan](../superpowers/plans/archive/2026-09-05-online-sources.md).
 UI выбирает только backend profile ID; env credentials не передаются в браузер.
 Redirects отключены, TLS проверяется, credentialed HTTP требует explicit opt-in.
 Один governor на backend разделяет origin budget между jobs, profiles и retries.

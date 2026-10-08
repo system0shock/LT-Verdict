@@ -57,7 +57,7 @@ runtime, connectors и framework для контрактов не создают
 - Modify: `CHANGELOG.md`
 - Modify: `prc-lt-verdict-v0.5.md`
 - Modify: `docs/stage-1-spec.md`
-- Modify: `docs/superpowers/plans/2026-08-10-development-plan.md`
+- Modify: `docs/superpowers/plans/archive/2026-08-10-development-plan.md`
 
 **Interfaces:**
 

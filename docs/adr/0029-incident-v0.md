@@ -104,6 +104,24 @@ incidents, критерий 7 требует evidence reference у каждог�
 **R9. Заморозка ширины D1 соблюдена:** новых источников, статистических методов,
 режимов ИИ нет. Инцидент это перегруппировка уже вычисленных находок.
 
+**R10. Непригодный и частично разобранный прогон.** `INVALID`: `NOT_EVALUATED`,
+`items` пуст. `DEGRADED` (сегодня это Gatling binary, разобранный не полностью):
+правила policy по транзакциям не вычисляются (`Policy.kt:104`), поэтому
+TRANSACTION-инцидентов нет, а ресурсная сторона вычисляется; каждый инцидент
+получает отрицательное свидетельство `POLICY_NOT_EVALUATED` с `reason_code`
+`RUN_DEGRADED`, чтобы пустая транзакционная сторона не читалась как «нарушений
+нет». Цена ошибки: если «Обзор» не покажет это свидетельство, `DEGRADED` читается
+как здоровый прогон.
+
+**R11. Особые входы.** Нарушение ресурса с `presumed: true` (правило без вердикта
+из-за пропущенных ячеек, `ResourceStatistics.kt:507`) получает tier 3 при любом
+`effect`, чтобы предполагаемое нарушение не стояло выше подтверждённого; пропуск
+виден через `CHECKS_NOT_EVALUATED`. Эпизод по сигналу нагрузки
+(`DiagnosticSignalV1.Load`, `entity` равно `overall`,
+`DiagnosticAnalysis.kt:727`) остаётся в семействе RESOURCE с областью
+`{kind: entity, entity: overall}`; для него шаблоны используют слова «нагрузка»
+вместо «ресурс» (см. шаблоны). Отдельное семейство для него v0 не вводит.
+
 ### Инцидент не говорит о причине
 
 Инцидент утверждает только: в этом окне и на этой области совпали такие
@@ -128,7 +146,7 @@ incidents, критерий 7 требует evidence reference у каждог�
 | Тип находки | Источник | Семейство | Tier | Область | Окно | Интервал | Evidence |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | `policy_failure` | `Policy.kt:412` | TRANSACTION | 1 | `scope` из `policy_check` (в режиме окон), иначе `scope` из `metric_summary` по `metric_evidence_id` | `window_id` или нет | границы окна из `window_policy_summary` (`WindowPolicy.kt:109`); без окна нет | `evidence_id` (`policy_check`), `metric_evidence_id` |
-| `resource_threshold_violation` | `ResourceStatistics.kt:507` | RESOURCE | 2, если у `resource_policy_check` `effect` = `sla`; иначе 3 | `entity` | `window_id` | `from_epoch_ms`, `to_epoch_ms` находки | `evidence_id` (`resource_policy_check`) |
+| `resource_threshold_violation` | `ResourceStatistics.kt:507` | RESOURCE | 2, если у `resource_policy_check` `effect` = `sla`, а находка не `presumed`; иначе 3 | `entity` | `window_id` | `from_epoch_ms`, `to_epoch_ms` находки | `evidence_id` (`resource_policy_check`) |
 | `anomaly_episode` | `DiagnosticAnalysis.kt:670` | RESOURCE | 4 | `entity` | `window_id` (оцениваемое окно) | `from_epoch_ms`, `to_epoch_ms` эпизода | `evidence_id` (`anomaly_check`) |
 | `resource_trend` | `TrendAnalysis.kt:224` | RESOURCE | 5 | `entity` | `window_id` | `from_epoch_ms`, `to_epoch_ms` | `evidence_id` (`trend_check`) |
 
@@ -204,8 +222,8 @@ transaction (`label`, `group_path`, `sample_kind`), `window_id` либо
 ### Приоритет и обзор
 
 `priority_key` = `{tier, finding_count, first_epoch_ms}`, где `tier` минимальный tier
-атомов, `first_epoch_ms` минимальное начало атомов (для TRANSACTION начало окна, у
-`UNKNOWN` значение `null`). Порядок: `tier` по возрастанию, `finding_count` по
+атомов, `first_epoch_ms` равно началу `interval` инцидента (для TRANSACTION начало
+окна, для RESOURCE минимальное начало атомов, при `UNKNOWN` значение `null`). Порядок: `tier` по возрастанию, `finding_count` по
 убыванию, `first_epoch_ms` по возрастанию (`null` в конце), `id` по байтам UTF-8.
 `priority`: `tier` 1-2 `HIGH`, 3-4 `MEDIUM`, 5 `LOW`. Влияние на метрики в ключ не
 входит.
@@ -220,9 +238,9 @@ transaction (`label`, `group_path`, `sample_kind`), `window_id` либо
 сохранённых.
 
 Состояние: `status` = `EVALUATED`, если `run_validity` равен `VALID` или
-`DEGRADED`; для `INVALID` `status` = `NOT_EVALUATED`, `reason_code` =
-`RUN_NOT_VALID`, `items` пуст (так же устроены `diagnosticUnavailable` и
-`trendUnavailable`). `policy_verdict` `NO_VERDICT` инциденты не отключает:
+`DEGRADED` (для `DEGRADED` см. R10); для `INVALID` `status` = `NOT_EVALUATED`,
+`reason_code` = `RUN_NOT_VALID`, `items` пуст (так же устроены
+`diagnosticUnavailable` и `trendUnavailable`). `policy_verdict` `NO_VERDICT` инциденты не отключает:
 найденное нарушение остаётся видимым.
 
 ### Отрицательные свидетельства
@@ -237,10 +255,12 @@ transaction (`label`, `group_path`, `sample_kind`), `window_id` либо
   `reason_code`; `evidence_ids` может быть пустым.
 
 Проверки (по одной записи каждого вида на инцидент, в этом порядке, не более 8),
-область: evidence того же `window_id`, что у инцидента (без окна только первая):
+область: evidence того же `window_id`, что у инцидента (без окна только
+`POLICY_NOT_EVALUATED`, `OTHER_POLICY_CHECKS_PASSED` и `RESOURCE_DATA_NOT_PROVIDED`):
 
 | `check` | Исход | Условие |
 | --- | --- | --- |
+| `POLICY_NOT_EVALUATED` | `NOT_EVALUATED` | `run_validity` равен `DEGRADED`; `reason_code` = `RUN_DEGRADED`; `evidence_ids` пуст |
 | `OTHER_POLICY_CHECKS_PASSED` | `NOT_CONFIRMED` | в TRANSACTION-инциденте: `policy_check` со `status` `PASS` в том же окне, не входящие в его evidence |
 | `RESOURCE_RULES_WITHIN_LIMITS` | `NOT_CONFIRMED` | `resource_policy_check` со `status` `PASS` в окне; роль ряда не `generator`; в RESOURCE-инциденте без собственной сущности |
 | `GENERATOR_RESOURCES_WITHIN_LIMITS` | `NOT_CONFIRMED` | `resource_policy_check` `PASS` в окне, роль ряда `generator` (роль берётся из `resource_summary` по паре `window_id`, `series_id`) |
@@ -260,7 +280,7 @@ transaction (`label`, `group_path`, `sample_kind`), `window_id` либо
 | `check` | Когда | Шаблон текста |
 | --- | --- | --- |
 | `COMPARE_WITH_BASELINE` | TRANSACTION, всегда | `Сравнить метрики {область} с baseline.` |
-| `OPEN_RESOURCE_SERIES` | RESOURCE, всегда | `Открыть ряды сущности {entity} за интервал находок.` |
+| `OPEN_RESOURCE_SERIES` | RESOURCE, всегда | `Открыть ряды сущности {entity} за интервал находок.` (для `overall`: `Открыть ряды нагрузки за интервал находок.`) |
 | `OPEN_SAME_WINDOW_SIGNALS` | есть `coincident_with` | `Открыть сигналы окна {window_id}, совпавшие по времени: {n}.` |
 | `PROVIDE_RESOURCE_SNAPSHOT` | есть `RESOURCE_DATA_NOT_PROVIDED` | `Передать снимок ресурсов, чтобы проверить ресурсные сигналы на том же интервале.` |
 | `COMPLETE_NOT_EVALUATED_CHECKS` | есть `CHECKS_NOT_EVALUATED` | `Устранить недостаток данных для проверок, помеченных как не выполненные.` |
@@ -272,6 +292,7 @@ transaction (`label`, `group_path`, `sample_kind`), `window_id` либо
 | TRANSACTION, окно есть | `Нарушение SLA: {область} в окне {window_id}` | `В окне {window_id} нарушено правил policy: {n}. Область: {область}.` |
 | TRANSACTION, окна нет | `Нарушение SLA: {область}` | `За весь прогон нарушено правил policy: {n}. Область: {область}. Время нарушения не определено.` |
 | RESOURCE | `Сигналы ресурса: {entity} в окне {window_id}` | `На интервале совпали по времени находки по сущности {entity}: {n}.` |
+| RESOURCE, `entity` равно `overall` | `Сигналы нагрузки в окне {window_id}` | `На интервале совпали по времени находки по общей нагрузке: {n}.` |
 
 `{область}` это `весь прогон` для `overall` и `транзакция {label}` для
 `transaction`. Подстановки данных (имена транзакций и сущностей) задаёт
@@ -328,8 +349,20 @@ transaction (`label`, `group_path`, `sample_kind`), `window_id` либо
   `analysis-result.json`, убрать `incidents`, пересчитать, сравнить байты.
 - Прочие поля результата побайтно не меняются; тест сравнивает результат без
   `incidents` с прежним золотым файлом.
-- Сравнение прогонов, baseline, run-dynamics читают evidence по типам и ключ
-  сопоставимости; ни то ни другое не меняется (проверяется тестом ключа).
+- Сравнение прогонов, baseline и «Сохранённая аналитика»
+  ([Saved-run analytics](../user/saved-analytics.md): динамика по N анализам с
+  точным ключом сопоставимости, проверка manifest и хэшей `run.json`, result и
+  identity) читают evidence по типам и ключ сопоставимости; ключ не меняется
+  (проверяется тестом), поэтому новые и старые анализы остаются в одной динамике.
+  Побочный эффект R3: повторная отправка тех же файлов после включения даёт
+  второй анализ того же прогона, и в динамике он виден отдельной строкой рядом со
+  старым (так же было при ADR 0026).
+- Неподвижные значения, которые меняются вместе с `analysis_id`: золотые identity и
+  их хэши в `fixtures/slice1/identity` и перечень файлов в
+  `fixtures/slice1/manifest.json` (проверка `FixtureManifestTest`); тесты и
+  e2e с жёстко заданным `analysis_id` и корпус приёмки ИИ, если они создают
+  анализы через ядро, находятся поиском в W3.7 и перегенерируются; статические
+  bundle не меняются.
 - Советник ИИ: `incidents` не передаётся модели и не меняет ни frozen prompt v2,
   ни хэши доказательств (как с `capacity_knee_diagnostic`, ADR 0026). Белый список
   полей `AdvisoryAi.kt:568` расширяется.
@@ -381,12 +414,15 @@ transaction (`label`, `group_path`, `sample_kind`), `window_id` либо
    `in_overview`, ранги `1..n` подряд, не более 64 сохранённых, верный
    `omitted_count` (фикстура с более чем 64 группами). Результат без инцидентов
    даёт `EVALUATED` и пустой `items`; он не равен PASS.
-3. **Нет причинных слов.** Все константы шаблонов (`title`, `summary`, тексты
-   отрицательных свидетельств и следующих проверок) проверяются списком запретов, и
-   отрисованные тексты на фикстурах с нейтральными именами тоже. Минимальный
+3. **Нет причинных слов.** Проверяются константы шаблонов (`title`, `summary`,
+   тексты отрицательных свидетельств и следующих проверок) списком запретов; на
+   фикстурах с нейтральными именами проверяются и отрисованные тексты. В рабочем
+   коде проверки отрисованных текстов нет: имена транзакций и сущностей задаёт
+   пользователь, и имя вроде `cause-list` не должно ломать анализ. Минимальный
    список (без учёта регистра): `из-за`, `вследствие`, `в результате`, `потому`,
-   `поэтому`, `причин`, `виновн`, `вызва`, `вызыв`, `привод`, `привёл`/`привел`,
-   `обусловл`, `корнев`, `следстви`, `благодаря`, `ответственн`, `влия`,
+   `поэтому`, `причин`, `виновн`, `вызва`, `вызыв`, `привод`, `привед`, `привест`,
+   `привёл`/`привел`, `обусловл`, `корнев`, `следстви`, `благодаря`,
+   `ответственн`, `влия`, `так как`, `ввиду`, `в связи с`,
    `because`, `caus*`, `due to`, `owing to`, `root cause`, `lead(s) to`, `led to`,
    `result of/in/from`, `responsible`, `culprit`, `blame`, `trigger*`. Источник
    истины для примеров контракта: `CAUSAL_WORDING` в `tools/verify_slice0.py`;
@@ -414,7 +450,9 @@ transaction (`label`, `group_path`, `sample_kind`), `window_id` либо
     `RESOURCE_DATA_NOT_PROVIDED`; пустое `evidence_ids` у `NOT_CONFIRMED`
     невозможно.
 12. **Схема.** Kotlin-тест читает `docs/contracts/incident/v1/examples` и проверяет
-    результат ядра на соответствие схеме и семантическим правилам из её описания.
+    результат ядра на соответствие схеме и семантическим правилам из её описания
+    (кроме проверки отрисованных текстов, см. п. 3). Все valid-примеры принимаются,
+    каждый invalid-пример отвергается по названной в имени причине.
 13. **Размер.** Результат с 64 инцидентами на крупной фикстуре укладывается в
     лимиты хранилища; время синтеза на результате с 10 000 находок измеряется и
     записывается.

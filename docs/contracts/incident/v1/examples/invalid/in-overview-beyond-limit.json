@@ -3,12 +3,317 @@
   "method": "incident-synthesis.v1",
   "status": "EVALUATED",
   "overview_limit": 7,
-  "total_count": 9,
-  "omitted_count": 0,
+  "total_count": 12,
+  "omitted_count": 3,
   "items": [
     {
-      "id": "incident-73ed13832c69bace87c306124c5dfb4b6527b67ec24824d8373168527a76d4da",
+      "id": "incident-2a0dade9f08c2814c38554aafde08b6eec22e3ab641cf606727809bac6478df5",
       "rank": 1,
+      "in_overview": true,
+      "priority": "HIGH",
+      "priority_key": {
+        "tier": 1,
+        "finding_count": 1,
+        "first_epoch_ms": 1767225610000
+      },
+      "title": "Нарушение SLA: транзакция tx-05 в окне steady",
+      "summary": "В окне steady нарушено правил policy: 1. Область: транзакция tx-05.",
+      "scope": {
+        "kind": "transaction",
+        "label": "tx-05",
+        "group_path": [],
+        "sample_kind": "TRANSACTION"
+      },
+      "window_id": "steady",
+      "interval_basis": "WINDOW",
+      "interval": {
+        "from_epoch_ms": 1767225610000,
+        "to_epoch_ms": 1767225640000
+      },
+      "grouping": {
+        "rule": "incident-grouping.v1",
+        "key": {
+          "family": "TRANSACTION",
+          "window_id": "steady",
+          "scope": {
+            "kind": "transaction",
+            "label": "tx-05",
+            "group_path": [],
+            "sample_kind": "TRANSACTION"
+          },
+          "cluster_from_epoch_ms": null
+        }
+      },
+      "finding_count": 1,
+      "finding_types": [
+        "policy_failure"
+      ],
+      "finding_ids": [
+        "policy-failure-window-04403cc19e6987aa"
+      ],
+      "evidence_ids": [
+        "policy-check-window-0e47f6911500006b"
+      ],
+      "refs_truncated": false,
+      "negative_evidence": [],
+      "next_checks": [
+        {
+          "check": "COMPARE_WITH_BASELINE",
+          "text": "Сравнить метрики транзакции tx-05 с baseline.",
+          "evidence_ids": [
+            "policy-check-window-0e47f6911500006b"
+          ]
+        }
+      ],
+      "coincident_with": []
+    },
+    {
+      "id": "incident-2ae759666f525cfca88d39e523fbdae4b33a3293135dc5e5842665a5d93d3b9f",
+      "rank": 2,
+      "in_overview": true,
+      "priority": "HIGH",
+      "priority_key": {
+        "tier": 1,
+        "finding_count": 1,
+        "first_epoch_ms": 1767225610000
+      },
+      "title": "Нарушение SLA: транзакция tx-01 в окне steady",
+      "summary": "В окне steady нарушено правил policy: 1. Область: транзакция tx-01.",
+      "scope": {
+        "kind": "transaction",
+        "label": "tx-01",
+        "group_path": [],
+        "sample_kind": "TRANSACTION"
+      },
+      "window_id": "steady",
+      "interval_basis": "WINDOW",
+      "interval": {
+        "from_epoch_ms": 1767225610000,
+        "to_epoch_ms": 1767225640000
+      },
+      "grouping": {
+        "rule": "incident-grouping.v1",
+        "key": {
+          "family": "TRANSACTION",
+          "window_id": "steady",
+          "scope": {
+            "kind": "transaction",
+            "label": "tx-01",
+            "group_path": [],
+            "sample_kind": "TRANSACTION"
+          },
+          "cluster_from_epoch_ms": null
+        }
+      },
+      "finding_count": 1,
+      "finding_types": [
+        "policy_failure"
+      ],
+      "finding_ids": [
+        "policy-failure-window-56ee54a6fcabb2ec"
+      ],
+      "evidence_ids": [
+        "policy-check-window-feaef9ab5f6d87ad"
+      ],
+      "refs_truncated": false,
+      "negative_evidence": [],
+      "next_checks": [
+        {
+          "check": "COMPARE_WITH_BASELINE",
+          "text": "Сравнить метрики транзакции tx-01 с baseline.",
+          "evidence_ids": [
+            "policy-check-window-feaef9ab5f6d87ad"
+          ]
+        }
+      ],
+      "coincident_with": []
+    },
+    {
+      "id": "incident-38fc4497e93f2b690cbfe30486ce25ea60cc04ceeb44cb09f87f6bbfdf7c8ad3",
+      "rank": 3,
+      "in_overview": true,
+      "priority": "HIGH",
+      "priority_key": {
+        "tier": 1,
+        "finding_count": 1,
+        "first_epoch_ms": 1767225610000
+      },
+      "title": "Нарушение SLA: транзакция tx-08 в окне steady",
+      "summary": "В окне steady нарушено правил policy: 1. Область: транзакция tx-08.",
+      "scope": {
+        "kind": "transaction",
+        "label": "tx-08",
+        "group_path": [],
+        "sample_kind": "TRANSACTION"
+      },
+      "window_id": "steady",
+      "interval_basis": "WINDOW",
+      "interval": {
+        "from_epoch_ms": 1767225610000,
+        "to_epoch_ms": 1767225640000
+      },
+      "grouping": {
+        "rule": "incident-grouping.v1",
+        "key": {
+          "family": "TRANSACTION",
+          "window_id": "steady",
+          "scope": {
+            "kind": "transaction",
+            "label": "tx-08",
+            "group_path": [],
+            "sample_kind": "TRANSACTION"
+          },
+          "cluster_from_epoch_ms": null
+        }
+      },
+      "finding_count": 1,
+      "finding_types": [
+        "policy_failure"
+      ],
+      "finding_ids": [
+        "policy-failure-window-f4a14fd942fadf21"
+      ],
+      "evidence_ids": [
+        "policy-check-window-927bc36f7bc9a781"
+      ],
+      "refs_truncated": false,
+      "negative_evidence": [],
+      "next_checks": [
+        {
+          "check": "COMPARE_WITH_BASELINE",
+          "text": "Сравнить метрики транзакции tx-08 с baseline.",
+          "evidence_ids": [
+            "policy-check-window-927bc36f7bc9a781"
+          ]
+        }
+      ],
+      "coincident_with": []
+    },
+    {
+      "id": "incident-5f4a27bc3f0148907f01da028fa8b5ab4f1eea3de39743f243a22213a664bc95",
+      "rank": 4,
+      "in_overview": true,
+      "priority": "HIGH",
+      "priority_key": {
+        "tier": 1,
+        "finding_count": 1,
+        "first_epoch_ms": 1767225610000
+      },
+      "title": "Нарушение SLA: транзакция tx-02 в окне steady",
+      "summary": "В окне steady нарушено правил policy: 1. Область: транзакция tx-02.",
+      "scope": {
+        "kind": "transaction",
+        "label": "tx-02",
+        "group_path": [],
+        "sample_kind": "TRANSACTION"
+      },
+      "window_id": "steady",
+      "interval_basis": "WINDOW",
+      "interval": {
+        "from_epoch_ms": 1767225610000,
+        "to_epoch_ms": 1767225640000
+      },
+      "grouping": {
+        "rule": "incident-grouping.v1",
+        "key": {
+          "family": "TRANSACTION",
+          "window_id": "steady",
+          "scope": {
+            "kind": "transaction",
+            "label": "tx-02",
+            "group_path": [],
+            "sample_kind": "TRANSACTION"
+          },
+          "cluster_from_epoch_ms": null
+        }
+      },
+      "finding_count": 1,
+      "finding_types": [
+        "policy_failure"
+      ],
+      "finding_ids": [
+        "policy-failure-window-ff57b263c970ae3c"
+      ],
+      "evidence_ids": [
+        "policy-check-window-9b8d6af28f36d3b2"
+      ],
+      "refs_truncated": false,
+      "negative_evidence": [],
+      "next_checks": [
+        {
+          "check": "COMPARE_WITH_BASELINE",
+          "text": "Сравнить метрики транзакции tx-02 с baseline.",
+          "evidence_ids": [
+            "policy-check-window-9b8d6af28f36d3b2"
+          ]
+        }
+      ],
+      "coincident_with": []
+    },
+    {
+      "id": "incident-6a89acdb109d6fac984665e9f82ec5a4c413cf8f0b93685fa1d28ce17bd8b508",
+      "rank": 5,
+      "in_overview": true,
+      "priority": "HIGH",
+      "priority_key": {
+        "tier": 1,
+        "finding_count": 1,
+        "first_epoch_ms": 1767225610000
+      },
+      "title": "Нарушение SLA: транзакция tx-03 в окне steady",
+      "summary": "В окне steady нарушено правил policy: 1. Область: транзакция tx-03.",
+      "scope": {
+        "kind": "transaction",
+        "label": "tx-03",
+        "group_path": [],
+        "sample_kind": "TRANSACTION"
+      },
+      "window_id": "steady",
+      "interval_basis": "WINDOW",
+      "interval": {
+        "from_epoch_ms": 1767225610000,
+        "to_epoch_ms": 1767225640000
+      },
+      "grouping": {
+        "rule": "incident-grouping.v1",
+        "key": {
+          "family": "TRANSACTION",
+          "window_id": "steady",
+          "scope": {
+            "kind": "transaction",
+            "label": "tx-03",
+            "group_path": [],
+            "sample_kind": "TRANSACTION"
+          },
+          "cluster_from_epoch_ms": null
+        }
+      },
+      "finding_count": 1,
+      "finding_types": [
+        "policy_failure"
+      ],
+      "finding_ids": [
+        "policy-failure-window-2a7936f8d5ad39e6"
+      ],
+      "evidence_ids": [
+        "policy-check-window-0e5ec63f00bc21a4"
+      ],
+      "refs_truncated": false,
+      "negative_evidence": [],
+      "next_checks": [
+        {
+          "check": "COMPARE_WITH_BASELINE",
+          "text": "Сравнить метрики транзакции tx-03 с baseline.",
+          "evidence_ids": [
+            "policy-check-window-0e5ec63f00bc21a4"
+          ]
+        }
+      ],
+      "coincident_with": []
+    },
+    {
+      "id": "incident-73ed13832c69bace87c306124c5dfb4b6527b67ec24824d8373168527a76d4da",
+      "rank": 6,
       "in_overview": true,
       "priority": "HIGH",
       "priority_key": {
@@ -68,197 +373,14 @@
       "coincident_with": []
     },
     {
-      "id": "incident-2ae759666f525cfca88d39e523fbdae4b33a3293135dc5e5842665a5d93d3b9f",
-      "rank": 2,
-      "in_overview": true,
-      "priority": "HIGH",
-      "priority_key": {
-        "tier": 1,
-        "finding_count": 1,
-        "first_epoch_ms": 1767225611000
-      },
-      "title": "Нарушение SLA: транзакция tx-01 в окне steady",
-      "summary": "В окне steady нарушено правил policy: 1. Область: транзакция tx-01.",
-      "scope": {
-        "kind": "transaction",
-        "label": "tx-01",
-        "group_path": [],
-        "sample_kind": "TRANSACTION"
-      },
-      "window_id": "steady",
-      "interval_basis": "WINDOW",
-      "interval": {
-        "from_epoch_ms": 1767225610000,
-        "to_epoch_ms": 1767225640000
-      },
-      "grouping": {
-        "rule": "incident-grouping.v1",
-        "key": {
-          "family": "TRANSACTION",
-          "window_id": "steady",
-          "scope": {
-            "kind": "transaction",
-            "label": "tx-01",
-            "group_path": [],
-            "sample_kind": "TRANSACTION"
-          },
-          "cluster_from_epoch_ms": null
-        }
-      },
-      "finding_count": 1,
-      "finding_types": [
-        "policy_failure"
-      ],
-      "finding_ids": [
-        "policy-failure-window-56ee54a6fcabb2ec"
-      ],
-      "evidence_ids": [
-        "policy-check-window-feaef9ab5f6d87ad"
-      ],
-      "refs_truncated": false,
-      "negative_evidence": [],
-      "next_checks": [
-        {
-          "check": "COMPARE_WITH_BASELINE",
-          "text": "Сравнить метрики транзакции tx-01 с baseline.",
-          "evidence_ids": [
-            "policy-check-window-feaef9ab5f6d87ad"
-          ]
-        }
-      ],
-      "coincident_with": []
-    },
-    {
-      "id": "incident-5f4a27bc3f0148907f01da028fa8b5ab4f1eea3de39743f243a22213a664bc95",
-      "rank": 3,
-      "in_overview": true,
-      "priority": "HIGH",
-      "priority_key": {
-        "tier": 1,
-        "finding_count": 1,
-        "first_epoch_ms": 1767225612000
-      },
-      "title": "Нарушение SLA: транзакция tx-02 в окне steady",
-      "summary": "В окне steady нарушено правил policy: 1. Область: транзакция tx-02.",
-      "scope": {
-        "kind": "transaction",
-        "label": "tx-02",
-        "group_path": [],
-        "sample_kind": "TRANSACTION"
-      },
-      "window_id": "steady",
-      "interval_basis": "WINDOW",
-      "interval": {
-        "from_epoch_ms": 1767225610000,
-        "to_epoch_ms": 1767225640000
-      },
-      "grouping": {
-        "rule": "incident-grouping.v1",
-        "key": {
-          "family": "TRANSACTION",
-          "window_id": "steady",
-          "scope": {
-            "kind": "transaction",
-            "label": "tx-02",
-            "group_path": [],
-            "sample_kind": "TRANSACTION"
-          },
-          "cluster_from_epoch_ms": null
-        }
-      },
-      "finding_count": 1,
-      "finding_types": [
-        "policy_failure"
-      ],
-      "finding_ids": [
-        "policy-failure-window-ff57b263c970ae3c"
-      ],
-      "evidence_ids": [
-        "policy-check-window-9b8d6af28f36d3b2"
-      ],
-      "refs_truncated": false,
-      "negative_evidence": [],
-      "next_checks": [
-        {
-          "check": "COMPARE_WITH_BASELINE",
-          "text": "Сравнить метрики транзакции tx-02 с baseline.",
-          "evidence_ids": [
-            "policy-check-window-9b8d6af28f36d3b2"
-          ]
-        }
-      ],
-      "coincident_with": []
-    },
-    {
-      "id": "incident-6a89acdb109d6fac984665e9f82ec5a4c413cf8f0b93685fa1d28ce17bd8b508",
-      "rank": 4,
-      "in_overview": true,
-      "priority": "HIGH",
-      "priority_key": {
-        "tier": 1,
-        "finding_count": 1,
-        "first_epoch_ms": 1767225613000
-      },
-      "title": "Нарушение SLA: транзакция tx-03 в окне steady",
-      "summary": "В окне steady нарушено правил policy: 1. Область: транзакция tx-03.",
-      "scope": {
-        "kind": "transaction",
-        "label": "tx-03",
-        "group_path": [],
-        "sample_kind": "TRANSACTION"
-      },
-      "window_id": "steady",
-      "interval_basis": "WINDOW",
-      "interval": {
-        "from_epoch_ms": 1767225610000,
-        "to_epoch_ms": 1767225640000
-      },
-      "grouping": {
-        "rule": "incident-grouping.v1",
-        "key": {
-          "family": "TRANSACTION",
-          "window_id": "steady",
-          "scope": {
-            "kind": "transaction",
-            "label": "tx-03",
-            "group_path": [],
-            "sample_kind": "TRANSACTION"
-          },
-          "cluster_from_epoch_ms": null
-        }
-      },
-      "finding_count": 1,
-      "finding_types": [
-        "policy_failure"
-      ],
-      "finding_ids": [
-        "policy-failure-window-2a7936f8d5ad39e6"
-      ],
-      "evidence_ids": [
-        "policy-check-window-0e5ec63f00bc21a4"
-      ],
-      "refs_truncated": false,
-      "negative_evidence": [],
-      "next_checks": [
-        {
-          "check": "COMPARE_WITH_BASELINE",
-          "text": "Сравнить метрики транзакции tx-03 с baseline.",
-          "evidence_ids": [
-            "policy-check-window-0e5ec63f00bc21a4"
-          ]
-        }
-      ],
-      "coincident_with": []
-    },
-    {
       "id": "incident-9dd99f54d420f545dc7f9e80016c05fa34465637fc91ded4fae4a1d13d1c897b",
-      "rank": 5,
+      "rank": 7,
       "in_overview": true,
       "priority": "HIGH",
       "priority_key": {
         "tier": 1,
         "finding_count": 1,
-        "first_epoch_ms": 1767225614000
+        "first_epoch_ms": 1767225610000
       },
       "title": "Нарушение SLA: транзакция tx-04 в окне steady",
       "summary": "В окне steady нарушено правил policy: 1. Область: транзакция tx-04.",
@@ -312,75 +434,14 @@
       "coincident_with": []
     },
     {
-      "id": "incident-2a0dade9f08c2814c38554aafde08b6eec22e3ab641cf606727809bac6478df5",
-      "rank": 6,
-      "in_overview": true,
-      "priority": "HIGH",
-      "priority_key": {
-        "tier": 1,
-        "finding_count": 1,
-        "first_epoch_ms": 1767225615000
-      },
-      "title": "Нарушение SLA: транзакция tx-05 в окне steady",
-      "summary": "В окне steady нарушено правил policy: 1. Область: транзакция tx-05.",
-      "scope": {
-        "kind": "transaction",
-        "label": "tx-05",
-        "group_path": [],
-        "sample_kind": "TRANSACTION"
-      },
-      "window_id": "steady",
-      "interval_basis": "WINDOW",
-      "interval": {
-        "from_epoch_ms": 1767225610000,
-        "to_epoch_ms": 1767225640000
-      },
-      "grouping": {
-        "rule": "incident-grouping.v1",
-        "key": {
-          "family": "TRANSACTION",
-          "window_id": "steady",
-          "scope": {
-            "kind": "transaction",
-            "label": "tx-05",
-            "group_path": [],
-            "sample_kind": "TRANSACTION"
-          },
-          "cluster_from_epoch_ms": null
-        }
-      },
-      "finding_count": 1,
-      "finding_types": [
-        "policy_failure"
-      ],
-      "finding_ids": [
-        "policy-failure-window-04403cc19e6987aa"
-      ],
-      "evidence_ids": [
-        "policy-check-window-0e47f6911500006b"
-      ],
-      "refs_truncated": false,
-      "negative_evidence": [],
-      "next_checks": [
-        {
-          "check": "COMPARE_WITH_BASELINE",
-          "text": "Сравнить метрики транзакции tx-05 с baseline.",
-          "evidence_ids": [
-            "policy-check-window-0e47f6911500006b"
-          ]
-        }
-      ],
-      "coincident_with": []
-    },
-    {
       "id": "incident-b0ed8275f9f53f7744f764617af977154f320c2af8af6068bedcc668e31b3fc3",
-      "rank": 7,
+      "rank": 8,
       "in_overview": true,
       "priority": "HIGH",
       "priority_key": {
         "tier": 1,
         "finding_count": 1,
-        "first_epoch_ms": 1767225616000
+        "first_epoch_ms": 1767225610000
       },
       "title": "Нарушение SLA: транзакция tx-06 в окне steady",
       "summary": "В окне steady нарушено правил policy: 1. Область: транзакция tx-06.",
@@ -435,13 +496,13 @@
     },
     {
       "id": "incident-c3f99547fa2460a46e5f39754ff10c6b2848c4020a87b7af48ecefc8bf5320df",
-      "rank": 8,
+      "rank": 9,
       "in_overview": true,
       "priority": "HIGH",
       "priority_key": {
         "tier": 1,
         "finding_count": 1,
-        "first_epoch_ms": 1767225617000
+        "first_epoch_ms": 1767225610000
       },
       "title": "Нарушение SLA: транзакция tx-07 в окне steady",
       "summary": "В окне steady нарушено правил policy: 1. Область: транзакция tx-07.",
@@ -489,67 +550,6 @@
           "text": "Сравнить метрики транзакции tx-07 с baseline.",
           "evidence_ids": [
             "policy-check-window-cf80ef5bde813c77"
-          ]
-        }
-      ],
-      "coincident_with": []
-    },
-    {
-      "id": "incident-38fc4497e93f2b690cbfe30486ce25ea60cc04ceeb44cb09f87f6bbfdf7c8ad3",
-      "rank": 9,
-      "in_overview": true,
-      "priority": "HIGH",
-      "priority_key": {
-        "tier": 1,
-        "finding_count": 1,
-        "first_epoch_ms": 1767225618000
-      },
-      "title": "Нарушение SLA: транзакция tx-08 в окне steady",
-      "summary": "В окне steady нарушено правил policy: 1. Область: транзакция tx-08.",
-      "scope": {
-        "kind": "transaction",
-        "label": "tx-08",
-        "group_path": [],
-        "sample_kind": "TRANSACTION"
-      },
-      "window_id": "steady",
-      "interval_basis": "WINDOW",
-      "interval": {
-        "from_epoch_ms": 1767225610000,
-        "to_epoch_ms": 1767225640000
-      },
-      "grouping": {
-        "rule": "incident-grouping.v1",
-        "key": {
-          "family": "TRANSACTION",
-          "window_id": "steady",
-          "scope": {
-            "kind": "transaction",
-            "label": "tx-08",
-            "group_path": [],
-            "sample_kind": "TRANSACTION"
-          },
-          "cluster_from_epoch_ms": null
-        }
-      },
-      "finding_count": 1,
-      "finding_types": [
-        "policy_failure"
-      ],
-      "finding_ids": [
-        "policy-failure-window-f4a14fd942fadf21"
-      ],
-      "evidence_ids": [
-        "policy-check-window-927bc36f7bc9a781"
-      ],
-      "refs_truncated": false,
-      "negative_evidence": [],
-      "next_checks": [
-        {
-          "check": "COMPARE_WITH_BASELINE",
-          "text": "Сравнить метрики транзакции tx-08 с baseline.",
-          "evidence_ids": [
-            "policy-check-window-927bc36f7bc9a781"
           ]
         }
       ],

@@ -114,18 +114,47 @@ class IncidentContractTests(unittest.TestCase):
     def test_contract_directory_verifies(self) -> None:
         verify_slice0.verify_incident_contract()
 
-    def test_every_valid_example_passes_and_every_invalid_one_is_rejected(self) -> None:
+    # Every invalid example must fail for the reason its name states, not for an accidental one.
+    EXPECTED_REJECTION = {
+        "causal-next-check-english": "causal wording",
+        "causal-title": "causal wording",
+        "coincident-with-unknown-incident": "coincident_with",
+        "evaluated-with-reason-code": "forbidden alternative",
+        "first-epoch-differs-from-interval-start": "first_epoch_ms must equal",
+        "id-is-not-grouping-key-hash": "SHA-256",
+        "in-overview-beyond-limit": "in_overview",
+        "missing-evidence-ids": r"evidence_ids: item count",
+        "negative-evidence-without-outcome": "missing outcome",
+        "not-confirmed-without-evidence": r"evidence_ids: item count",
+        "not-evaluated-with-incidents": "must equal 0",
+        "not-evaluated-without-reason": "missing reason_code",
+        "not-evaluated-without-reason-code": "missing reason_code",
+        "overview-limit-not-7": "overview_limit",
+        "priority-does-not-match-tier": "priority does not match tier",
+        "ranks-not-contiguous": "rank must be",
+        "refs-truncated-flag-wrong": "refs_truncated",
+        "resource-family-with-overall-scope": "RESOURCE needs",
+        "too-many-next-checks": r"next_checks: item count",
+        "total-count-mismatch": "total_count",
+        "unknown-field-candidate-subsystem": "unknown field candidate_subsystem",
+        "unknown-field-confidence": "unknown field confidence",
+        "unknown-interval-with-values": "interval_basis UNKNOWN",
+        "unsorted-by-priority": "ordered by priority_key",
+        "wrong-schema-version": "schema_version",
+    }
+
+    def test_every_valid_example_passes_and_every_invalid_one_is_rejected_for_its_reason(self) -> None:
         schema = self.load(self.directory / "incident.schema.json")
         valid = self.examples("valid")
         invalid = self.examples("invalid")
-        self.assertGreaterEqual(len(valid), 5)
-        self.assertGreaterEqual(len(invalid), 20)
+        self.assertGreaterEqual(len(valid), 7)
+        self.assertEqual(set(self.EXPECTED_REJECTION), {path.stem for path in invalid})
         for path in valid:
             with self.subTest(valid=path.name):
                 verify_slice0.verify_incident_document(self.load(path), schema)
         for path in invalid:
             with self.subTest(invalid=path.name):
-                with self.assertRaises(ValueError):
+                with self.assertRaisesRegex(ValueError, self.EXPECTED_REJECTION[path.stem]):
                     verify_slice0.verify_incident_document(self.load(path), schema)
 
     def test_incident_id_is_the_hash_of_the_canonical_grouping_key(self) -> None:
@@ -149,6 +178,8 @@ class IncidentContractTests(unittest.TestCase):
             "This is the root cause",
             "Latency rose because CPU rose",
             "Leads to timeouts",
+            "Привело к росту p95",
+            "Так как пул мал",
         ):
             with self.subTest(text=text):
                 self.assertIsNotNone(verify_slice0.CAUSAL_WORDING.search(text))

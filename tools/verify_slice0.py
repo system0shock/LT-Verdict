@@ -104,8 +104,8 @@ _KEYWORDS = {
 }
 # ADR 0029: incident texts state what coincided in time, never a cause.
 CAUSAL_WORDING = re.compile(
-    r"из-за|вследствие|в результате|потому|поэтому|причин|виновн|вызва|вызыв|привод|привё?л|обусловл|корнев|"
-    r"следстви|благодаря|ответственн|влия|"
+    r"из-за|вследствие|в результате|потому|поэтому|причин|виновн|вызва|вызыв|прив[её]л|привод|привед|привест|обусловл|корнев|"
+    r"следстви|благодаря|ответственн|влия|так как|ввиду|в связи с|"
     r"\bbecause\b|\bcaus(?:e|es|ed|ing|al)\b|\bdue to\b|\bowing to\b|\broot cause\b|\bleads? to\b|\bled to\b|"
     r"\bresult(?:s|ed)? (?:of|in|from)\b|\bresponsible\b|\bculprit\b|\bblame\b|\btriggers?\b|\btriggered\b",
     re.IGNORECASE,
@@ -229,6 +229,8 @@ def verify_incident_semantics(document: dict) -> None:
         if item["priority_key"]["finding_count"] != item["finding_count"]:
             raise ValueError(f"{name}: priority_key.finding_count must equal finding_count")
         interval = item["interval"]
+        if item["priority_key"]["first_epoch_ms"] != (None if interval is None else interval["from_epoch_ms"]):
+            raise ValueError(f"{name}: priority_key.first_epoch_ms must equal the interval start")
         if (item["interval_basis"] == "UNKNOWN") != (interval is None):
             raise ValueError(f"{name}: interval_basis UNKNOWN exactly when interval is null")
         if interval is not None and interval["from_epoch_ms"] >= interval["to_epoch_ms"]:

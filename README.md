@@ -61,10 +61,7 @@ Temurin и на урезанном runtime без инструментов JDK).
    `gh release download v0.1.0 -R system0shock/LT-Verdict`.
 2. Проверьте сумму: `sha256sum -c ltv-0.1.0.zip.sha256` (Linux) или
    `(Get-FileHash ltv-0.1.0.zip).Hash` в PowerShell и сравните с содержимым `.sha256`.
-3. Распакуйте архив в **короткий** каталог, например `C:\ltv` или `~/ltv`. В Windows
-   `bin\ltv.bat` собирает весь classpath в одну командную строку, и при пути
-   установки около 100 символов и длиннее `cmd.exe` отвечает
-   «The syntax of the command is incorrect».
+3. Распакуйте архив в любой каталог, например `C:\ltv` или `~/ltv`.
 4. Проверьте установку и запустите UI:
 
 ```powershell

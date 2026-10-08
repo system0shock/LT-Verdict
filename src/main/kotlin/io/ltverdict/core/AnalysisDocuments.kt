@@ -4,7 +4,10 @@ import io.ltverdict.ingest.RunValidity
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.jsonObject
 
 // Typed shape of the two documents that define an analysis (W2.1). They are encoded to a JsonElement and then written by
 // the unchanged canonicalJson, so key order, number formatting and the hash path stay as they were. Rules for these models:
@@ -127,8 +130,24 @@ private val RESULT_ALLOWED_KEYS = (0 until RESULT_FIELDS.elementsCount).map(RESU
 internal fun hasSupportedAnalysisResultKeys(document: JsonObject): Boolean =
     document.keys.containsAll(RESULT_REQUIRED_KEYS) && RESULT_ALLOWED_KEYS.containsAll(document.keys)
 
-internal fun encodeAnalysisResult(document: AnalysisResultDocument): ByteArray =
-    canonicalJson(ANALYSIS_DOCUMENT_JSON.encodeToJsonElement(AnalysisResultDocument.serializer(), document))
+/**
+ * `findings`, `evidence` and `capacity_summary` are opaque JSON payloads in this slice. They are spliced into the encoded
+ * tree instead of going through the serializer: kotlinx writes a JsonElement number as Long or Double, which would round
+ * "12345678901234567890.5" or fail on "1e400". Any new payload field (ADR 0029 `incidents`) must be spliced the same way;
+ * AnalysisDocumentsEquivalenceTest compares wide numbers in every payload.
+ */
+internal fun encodeAnalysisResult(document: AnalysisResultDocument): ByteArray {
+    val shell =
+        document.copy(
+            findings = emptyList(),
+            evidence = emptyList(),
+            capacitySummary = document.capacitySummary?.let { JsonObject(emptyMap()) },
+        )
+    val tree = ANALYSIS_DOCUMENT_JSON.encodeToJsonElement(AnalysisResultDocument.serializer(), shell).jsonObject
+    val payloads = mutableMapOf<String, JsonElement>("findings" to JsonArray(document.findings), "evidence" to JsonArray(document.evidence))
+    document.capacitySummary?.let { payloads["capacity_summary"] = it }
+    return canonicalJson(JsonObject(tree + payloads))
+}
 
 internal fun encodeAnalysisIdentity(document: AnalysisIdentityDocument): ByteArray =
     canonicalJson(ANALYSIS_DOCUMENT_JSON.encodeToJsonElement(AnalysisIdentityDocument.serializer(), document))

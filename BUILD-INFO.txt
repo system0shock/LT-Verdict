@@ -1,0 +1,7 @@
+commit:  6d9e0acb98912dc16a5504daa75e0f418414ea07
+subject: feat(ai): answer in Russian, keep terms and pod names in English (#202)
+built:   2026-10-08 15:14 UTC
+ui_in_jar:                True
+ai_direct_local_runner:   True   (ADR 0027, advisory_ai_runtime_local.sh)
+capacity_knee_diagnostic: True   (ADR 0026)
+ai_command_by_name:       True   (ADR 0027 amendment, PR 200: command name, optional pin, PREFIX_ARGS)

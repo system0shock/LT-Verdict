@@ -1,0 +1,67 @@
+{
+  "schema_version": "incident.v1",
+  "method": "incident-synthesis.v1",
+  "status": "EVALUATED",
+  "overview_limit": 7,
+  "total_count": 1,
+  "omitted_count": 0,
+  "items": [
+    {
+      "id": "incident-fb03b7ce2c180d0902ec7c55d95df92999346d44175f1ecb57a30b884463fceb",
+      "rank": 1,
+      "in_overview": true,
+      "priority": "MEDIUM",
+      "priority_key": {
+        "tier": 4,
+        "finding_count": 1,
+        "first_epoch_ms": 1767225610000
+      },
+      "title": "Сигналы нагрузки в окне steady",
+      "summary": "На интервале по общей нагрузке найдено находок: 1; их интервалы перекрываются или соприкасаются.",
+      "scope": {
+        "kind": "entity",
+        "entity": "overall"
+      },
+      "window_id": "steady",
+      "interval_basis": "FINDINGS",
+      "interval": {
+        "from_epoch_ms": 1767225610000,
+        "to_epoch_ms": 1767225630000
+      },
+      "grouping": {
+        "rule": "incident-grouping.v1",
+        "key": {
+          "family": "RESOURCE",
+          "window_id": "steady",
+          "scope": {
+            "kind": "entity",
+            "entity": "overall"
+          },
+          "cluster_from_epoch_ms": 1767225610000
+        }
+      },
+      "finding_count": 1,
+      "finding_types": [
+        "anomaly_episode"
+      ],
+      "finding_ids": [
+        "anomaly_episode-d1a965910d9d4eb6"
+      ],
+      "evidence_ids": [
+        "resource-policy-check-55f72219dc643144"
+      ],
+      "refs_truncated": false,
+      "negative_evidence": [],
+      "next_checks": [
+        {
+          "check": "OPEN_RESOURCE_SERIES",
+          "text": "Открыть ряды нагрузки за интервал находок.",
+          "evidence_ids": [
+            "resource-policy-check-55f72219dc643144"
+          ]
+        }
+      ],
+      "coincident_with": []
+    }
+  ]
+}

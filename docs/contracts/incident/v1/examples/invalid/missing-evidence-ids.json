@@ -1,0 +1,199 @@
+{
+  "schema_version": "incident.v1",
+  "method": "incident-synthesis.v1",
+  "status": "EVALUATED",
+  "overview_limit": 7,
+  "total_count": 2,
+  "omitted_count": 0,
+  "items": [
+    {
+      "id": "incident-f7d5e56598d1f8413453a9fb617bf63f90a9171ce1dd469d953691a092088652",
+      "rank": 1,
+      "in_overview": true,
+      "priority": "HIGH",
+      "priority_key": {
+        "tier": 1,
+        "finding_count": 2,
+        "first_epoch_ms": 1767225610000
+      },
+      "title": "Нарушение SLA: транзакция create-payment в окне steady",
+      "summary": "В окне steady нарушено правил policy: 2. Область: транзакция create-payment.",
+      "scope": {
+        "kind": "transaction",
+        "label": "create-payment",
+        "group_path": [
+          "checkout"
+        ],
+        "sample_kind": "JMETER_SAMPLER"
+      },
+      "window_id": "steady",
+      "interval_basis": "WINDOW",
+      "interval": {
+        "from_epoch_ms": 1767225610000,
+        "to_epoch_ms": 1767225640000
+      },
+      "grouping": {
+        "rule": "incident-grouping.v1",
+        "key": {
+          "family": "TRANSACTION",
+          "window_id": "steady",
+          "scope": {
+            "kind": "transaction",
+            "label": "create-payment",
+            "group_path": [
+              "checkout"
+            ],
+            "sample_kind": "JMETER_SAMPLER"
+          },
+          "cluster_from_epoch_ms": null
+        }
+      },
+      "finding_count": 2,
+      "finding_types": [
+        "policy_failure"
+      ],
+      "finding_ids": [
+        "policy-failure-window-48a98ddb993c4985",
+        "policy-failure-window-5f2b17ded2f56baf"
+      ],
+      "evidence_ids": [],
+      "refs_truncated": false,
+      "negative_evidence": [
+        {
+          "check": "OTHER_POLICY_CHECKS_PASSED",
+          "outcome": "NOT_CONFIRMED",
+          "text": "Остальные проверки policy в окне steady выполнены: 3.",
+          "evidence_ids": [
+            "policy-check-window-6dd6192276016562",
+            "policy-check-window-a02b3b7657e2c3ab",
+            "policy-check-window-c2f8920d2ae4a8aa"
+          ]
+        },
+        {
+          "check": "GENERATOR_RESOURCES_WITHIN_LIMITS",
+          "outcome": "NOT_CONFIRMED",
+          "text": "Правила ресурсов нагрузочного генератора в окне steady не нарушены: проверок 1.",
+          "evidence_ids": [
+            "resource-policy-check-c9de125c60d7f70a"
+          ]
+        },
+        {
+          "check": "NO_ANOMALY_EPISODES",
+          "outcome": "NOT_CONFIRMED",
+          "text": "Проверки отклонений в окне steady не нашли эпизодов: 1.",
+          "evidence_ids": [
+            "anomaly-check-8426f2ef8e17ca8c"
+          ]
+        }
+      ],
+      "next_checks": [
+        {
+          "check": "COMPARE_WITH_BASELINE",
+          "text": "Сравнить метрики транзакции create-payment с baseline.",
+          "evidence_ids": [
+            "policy-check-window-446f2b9d79ab058a"
+          ]
+        },
+        {
+          "check": "OPEN_SAME_WINDOW_SIGNALS",
+          "text": "Открыть сигналы окна steady, совпавшие по времени: 1.",
+          "evidence_ids": []
+        }
+      ],
+      "coincident_with": [
+        {
+          "incident_id": "incident-28d0feb239c90079d1e31e29aceaa2c2e89cf52b6f63c87e6423e27e4833038b",
+          "basis": "SAME_WINDOW"
+        }
+      ]
+    },
+    {
+      "id": "incident-28d0feb239c90079d1e31e29aceaa2c2e89cf52b6f63c87e6423e27e4833038b",
+      "rank": 2,
+      "in_overview": true,
+      "priority": "HIGH",
+      "priority_key": {
+        "tier": 2,
+        "finding_count": 3,
+        "first_epoch_ms": 1767225620000
+      },
+      "title": "Сигналы ресурса: host-a в окне steady",
+      "summary": "На интервале по сущности host-a найдено находок: 3; их интервалы перекрываются или соприкасаются.",
+      "scope": {
+        "kind": "entity",
+        "entity": "host-a"
+      },
+      "window_id": "steady",
+      "interval_basis": "FINDINGS",
+      "interval": {
+        "from_epoch_ms": 1767225620000,
+        "to_epoch_ms": 1767225640000
+      },
+      "grouping": {
+        "rule": "incident-grouping.v1",
+        "key": {
+          "family": "RESOURCE",
+          "window_id": "steady",
+          "scope": {
+            "kind": "entity",
+            "entity": "host-a"
+          },
+          "cluster_from_epoch_ms": 1767225620000
+        }
+      },
+      "finding_count": 3,
+      "finding_types": [
+        "resource_threshold_violation"
+      ],
+      "finding_ids": [
+        "resource_threshold_violation-5f05601c1015767a",
+        "resource_threshold_violation-71b521fd2b866f7a",
+        "resource_threshold_violation-f06da1e935660698"
+      ],
+      "evidence_ids": [
+        "resource-policy-check-0038b22240772073",
+        "resource-policy-check-a077d5dd1dce8e12"
+      ],
+      "refs_truncated": false,
+      "negative_evidence": [
+        {
+          "check": "RESOURCE_RULES_WITHIN_LIMITS",
+          "outcome": "NOT_CONFIRMED",
+          "text": "Правила ресурсов в окне steady не нарушены: проверок 2.",
+          "evidence_ids": [
+            "resource-policy-check-b116a11bd1d980c0",
+            "resource-policy-check-bd6c804476258fba"
+          ]
+        },
+        {
+          "check": "NO_ANOMALY_EPISODES",
+          "outcome": "NOT_CONFIRMED",
+          "text": "Проверки отклонений в окне steady не нашли эпизодов: 1.",
+          "evidence_ids": [
+            "anomaly-check-8426f2ef8e17ca8c"
+          ]
+        }
+      ],
+      "next_checks": [
+        {
+          "check": "OPEN_RESOURCE_SERIES",
+          "text": "Открыть ряды сущности host-a за интервал находок.",
+          "evidence_ids": [
+            "resource-policy-check-0038b22240772073"
+          ]
+        },
+        {
+          "check": "OPEN_SAME_WINDOW_SIGNALS",
+          "text": "Открыть сигналы окна steady, совпавшие по времени: 1.",
+          "evidence_ids": []
+        }
+      ],
+      "coincident_with": [
+        {
+          "incident_id": "incident-f7d5e56598d1f8413453a9fb617bf63f90a9171ce1dd469d953691a092088652",
+          "basis": "SAME_WINDOW"
+        }
+      ]
+    }
+  ]
+}

@@ -142,6 +142,10 @@ private fun verdictBlock(
     val rules = business + resource
     val failed = rules.count { it.text("status") == "FAIL" }
     val unresolved = rules.count { it.text("status") == "NO_VERDICT" }
+    // With a decided PASS/FAIL, an unresolved rule is a warned skip (missing_transaction=warn): it is not an evaluated check.
+    val decided = verdict == "PASS" || verdict == "FAIL"
+    val evaluated = if (decided) rules.size - unresolved else rules.size
+    val skipped = if (decided && unresolved > 0) ", не вычислено: $unresolved" else ""
     val capacity = result.text("analysis_mode") == "capacity_step" && result.obj("capacity_summary") != null
     val headline =
         when {
@@ -153,8 +157,8 @@ private fun verdictBlock(
                     "NO_POLICY" -> "Вердикта нет — не задана требуемая ёмкость или SLA-правила"
                     else -> null
                 }
-            verdict == "FAIL" -> "Прогон не проходит — нарушено проверок: $failed из ${rules.size}"
-            verdict == "PASS" -> "Прогон проходит — нарушений нет, проверок: ${rules.size}"
+            verdict == "FAIL" -> "Прогон не проходит — нарушено проверок: $failed из $evaluated$skipped"
+            verdict == "PASS" -> "Прогон проходит — нарушений нет, проверок: $evaluated$skipped"
             verdict == "NO_POLICY" -> "Вердикта нет — политика не задана"
             verdict == "NO_VERDICT" ->
                 when {
@@ -210,7 +214,7 @@ private fun verdictBlock(
             capacity && stages.isEmpty() -> "В результате нет данных по ступеням ёмкости."
             capacity -> capacityCount(stages)
             rules.isEmpty() -> "Проверок правил в результате нет."
-            else -> "Нарушено правил: $failed из ${rules.size}."
+            else -> "Нарушено правил: $failed из $evaluated." + if (decided && unresolved > 0) " Не вычислено: $unresolved." else ""
         }
     val bound = if (capacity) capacityBound(result) else ""
     return "<section><h2>Вердикт и причины</h2><p><strong>${escape(headline)}</strong> <code>${escape(verdict ?: DASH)}</code></p>" +

@@ -1,5 +1,6 @@
 package io.ltverdict.storage
 
+import io.ltverdict.core.AnalysisArtifacts
 import io.ltverdict.core.MAX_POD_VIEW_BYTES
 import io.ltverdict.core.MAX_RELEASE_BYTES
 import io.ltverdict.core.RELEASE_DRAFT_FIELDS
@@ -50,15 +51,10 @@ import java.util.HexFormat
 import java.util.PriorityQueue
 import java.util.UUID
 
-internal data class AcceptedInput(
-    val runId: String,
-    val sourceType: SourceType,
-    val sha256: String,
-    val sizeBytes: Long,
-    val originalFilename: String,
-    val path: Path,
-    val acceptedAt: String? = null,
-)
+// The tests of the storage name these types in this package; their definitions live where the core and the ingest can reach them.
+internal typealias AcceptedInput = io.ltverdict.ingest.AcceptedInput
+internal typealias StoredAnalysis = io.ltverdict.core.StoredAnalysis
+internal typealias StoredArtifact = io.ltverdict.core.StoredArtifact
 
 internal data class RunSummary(
     val runId: String,
@@ -87,17 +83,6 @@ internal data class AnalysisSummary(
 internal data class AnalysisPage(
     val analyses: List<AnalysisSummary>,
     val nextAfter: String?,
-)
-
-internal data class StoredArtifact(
-    val path: String,
-    val sizeBytes: Long,
-    val sha256: String,
-)
-
-internal data class StoredAnalysis(
-    val path: Path,
-    val artifacts: List<StoredArtifact>,
 )
 
 internal data class VerifiedAnalysis(
@@ -154,7 +139,7 @@ internal data class BaselineSlot(
 internal class RunBundleStore(
     private val dataDirectory: DataDirectory,
     private val clock: Clock = Clock.systemUTC(),
-) {
+) : AnalysisArtifacts {
     fun acceptInput(
         source: InputStream,
         originalFilename: String,
@@ -246,7 +231,7 @@ internal class RunBundleStore(
             RunPage(returned, if (selected.size > limit) returned.last().runId else null)
         }
 
-    fun readAnalysis(
+    override fun readAnalysis(
         runId: String,
         analysisId: String,
     ): StoredAnalysis? =
@@ -357,10 +342,10 @@ internal class RunBundleStore(
         }
     }
 
-    fun writeAnalysisAtomically(
+    override fun writeAnalysisAtomically(
         runId: String,
         analysisId: String,
-        beforePublish: () -> Unit = {},
+        beforePublish: () -> Unit,
         writeStagingDirectory: (Path) -> Unit,
     ): Path {
         val (analyses, staging) =
@@ -622,13 +607,13 @@ internal class RunBundleStore(
             readIdentityUnlocked(runId, analysisId)
         }
 
-    fun readRunPeriod(runId: String): JsonObject? =
+    override fun readRunPeriod(runId: String): JsonObject? =
         synchronized(dataDirectory.operationLock) {
             dataDirectory.requireOpen()
             readRunPeriodUnlocked(requireInputUnlocked(runId))
         }
 
-    fun replaceRunPeriod(
+    override fun replaceRunPeriod(
         runId: String,
         period: JsonObject,
     ): JsonObject =

@@ -1,5 +1,6 @@
 package io.ltverdict.core
 
+import io.ltverdict.ingest.AcceptedInput
 import io.ltverdict.ingest.Diagnostic
 import io.ltverdict.ingest.RunValidity
 import io.ltverdict.ingest.parseInput
@@ -17,8 +18,6 @@ import io.ltverdict.sources.SourceAcquisition
 import io.ltverdict.sources.WindowedSourceRequest
 import io.ltverdict.sources.comparePostgresPhases
 import io.ltverdict.sources.readPostgresAnalysisInput
-import io.ltverdict.storage.AcceptedInput
-import io.ltverdict.storage.RunBundleStore
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
@@ -58,7 +57,7 @@ internal data class AnalysisOutcome(
 )
 
 internal class AnalysisService(
-    internal val store: RunBundleStore,
+    internal val store: AnalysisArtifacts,
     private val engineConfig: EngineConfig,
 ) {
     fun analyze(

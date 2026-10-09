@@ -32,12 +32,21 @@ class WindowHeadingsTest {
             windows.mapIndexed { index, (from, to) ->
                 """{"id":"w$index","type":"window_policy_summary","window_id":"w$index","from_epoch_ms":$from,"to_epoch_ms":$to}"""
             }
-        return """{"run_id":"r","run_validity":"VALID","policy_verdict":"PASS","evidence":[${(listOf(binding) + summaries).joinToString(",")}],"findings":[]}"""
+        return """{"run_id":"r","run_validity":"VALID","policy_verdict":"PASS","evidence":[${(
+            listOf(
+                binding,
+            ) + summaries
+        ).joinToString(",")}],"findings":[]}"""
     }
 
     @Test
     fun `stage mode shares the excluded time of the run from stage_binding`() {
-        val outcome = StagedResults.analyze(tempDir, policy = StagedResults.policy(StagedResults.p95(250)), stages = StagedResults.RAMP_STEADY_DOWN)
+        val outcome =
+            StagedResults.analyze(
+                tempDir,
+                policy = StagedResults.policy(StagedResults.p95(250)),
+                stages = StagedResults.RAMP_STEADY_DOWN,
+            )
 
         val share = checkNotNull(windowShareText(Json.parseToJsonElement(outcome.canonicalResult.decodeToString()).jsonObject))
 
@@ -54,7 +63,8 @@ class WindowHeadingsTest {
             windowShareText(
                 Json
                     .parseToJsonElement(
-                        StagedResults.analyze(tempDir, policy = StagedResults.policy(StagedResults.p95(1000)), stages = stages)
+                        StagedResults
+                            .analyze(tempDir, policy = StagedResults.policy(StagedResults.p95(1000)), stages = stages)
                             .canonicalResult
                             .decodeToString(),
                     ).jsonObject,
@@ -106,7 +116,12 @@ class WindowHeadingsTest {
 
     @Test
     fun `a staged run is shown with the share and the same run without the stage items is not`() {
-        val outcome = StagedResults.analyze(tempDir, policy = StagedResults.policy(StagedResults.p95(250)), stages = StagedResults.RAMP_STEADY_DOWN)
+        val outcome =
+            StagedResults.analyze(
+                tempDir,
+                policy = StagedResults.policy(StagedResults.p95(250)),
+                stages = StagedResults.RAMP_STEADY_DOWN,
+            )
 
         val report = renderHtmlReport(outcome.canonicalResult, outcome.analysisId).decodeToString()
         val stripped = renderHtmlReport(StagedResults.withoutStageItems(outcome.canonicalResult), "x").decodeToString()
@@ -121,7 +136,8 @@ class WindowHeadingsTest {
         status: String = "FAIL",
     ): String {
         val window = windowId?.let { """"window_id":"$it",""" } ?: ""
-        return """{"id":"c1","type":"policy_check","rule_id":"rps","metric":"$metric","operator":"gte","threshold":{"numerator":100,"denominator":1},""" +
+        return """{"id":"c1","type":"policy_check","rule_id":"rps","metric":"$metric","operator":"gte",""" +
+            """"threshold":{"numerator":100,"denominator":1},""" +
             """"observed":{"numerator":50,"denominator":1},$window"scope":{"kind":"overall"},"status":"$status"}"""
     }
 

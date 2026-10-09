@@ -14,9 +14,9 @@ import java.time.Instant
 import java.util.Base64
 
 /**
- * W2.6 PR 2: the HTML report with the run block and the inline chart. The first test pins the bytes of the report WITHOUT the block
- * (captured from origin/main before the change), so the proof of "nothing else moved" does not depend on the golden files, which this PR
- * regenerates on purpose.
+ * W2.6 PR 2: the HTML report with the run block and the inline chart. The first test pins the bytes of the report WITHOUT the block,
+ * so the proof of "nothing else moved" does not depend on the golden files, which a report change regenerates on purpose. The hashes were
+ * taken again in PR 3 (Russian headings, appendix); that the data did not move is proved by HumanReportAppendixTest.
  */
 class RunTimelineReportTest {
     @TempDir
@@ -26,9 +26,9 @@ class RunTimelineReportTest {
     fun `report without a timeline keeps the bytes captured before the change`() {
         val expected =
             mapOf(
-                "ramp-pass" to "8f84be2b1e4221c0f58c9aa599ae480247698732e70934df6f9cebe64de606ca",
-                "ramp-fail" to "c29bd47969f0934f918f3f4bd2638524c152410cba2a42379cd36da3489db88c",
-                "csv-no-policy" to "6294430839c5060555a93371c1a34dacbca1a1504681715c80ca113aaf1eef95",
+                "ramp-pass" to "ff0a20cb9385cf2e7fe32c774ee51ad428408a5f6ff0cdd305867b4d9157b110",
+                "ramp-fail" to "069d0b160c5c137f425a73b66346a570e652b2540939b3e9941e779db80d40be",
+                "csv-no-policy" to "e8ce0c3e8c5633068ac130d8ef2d28f6c93e9e1c0882bd2545274c206da45a0a",
             )
         val inputs =
             mapOf(
@@ -85,7 +85,7 @@ class RunTimelineReportTest {
         assertTrue(block.contains("по времени начала"), block)
         assertTrue(block.contains("<figure><svg class=\"load-chart\">"), block)
         // The block sits with the verdict material, before the technical metrics.
-        assertTrue(html.indexOf("<h2>Прогон</h2>") < html.indexOf("Overall and transaction metrics"))
+        assertTrue(html.indexOf("<h2>Прогон</h2>") < html.indexOf("Общие метрики и метрики транзакций"))
     }
 
     @Test

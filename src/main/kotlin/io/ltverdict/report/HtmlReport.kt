@@ -31,81 +31,66 @@ internal fun renderHtmlReport(
     val windowSummaries = evidence.filter { it.string("type") == "window_policy_summary" }
     val resourceChecks = evidence.filter { it.string("type") == "resource_policy_check" }
     val resourceBindings = evidence.filter { it.string("type") == "resource_binding" }
-    val resourceSections =
-        if (resourceSummaries.isEmpty() && windowSummaries.isEmpty() && resourceChecks.isEmpty() && resourceBindings.isEmpty()) {
-            ""
-        } else {
-            "<section lang=\"en\"><h2>Resource binding</h2>${list(
-                resourceBindings,
-            )}</section><section lang=\"en\"><h2>Resource summaries</h2>${resourceSummariesSection(
-                resourceSummaries,
-            )}</section><section lang=\"en\"><h2>Window policy outcomes</h2>${list(
-                windowSummaries,
-            )}</section><section lang=\"en\"><h2>Resource policy checks</h2>${list(resourceChecks)}</section>"
+    val hasResourceEvidence =
+        resourceSummaries.isNotEmpty() || windowSummaries.isNotEmpty() || resourceChecks.isNotEmpty() || resourceBindings.isNotEmpty()
+    // W2.6 PR 3: the raw blocks go to the collapsed appendix at the end; the order below is the order of the page.
+    val appendixItems =
+        buildList {
+            add(
+                "Общие метрики и метрики транзакций" to
+                    if (metrics.isEmpty()) "<p>unavailable</p>" else metrics.joinToString("") { metric(it) },
+            )
+            add("Проверки правил, исходные данные" to list(checks))
+            if (hasResourceEvidence) {
+                add("Привязка ресурсов" to list(resourceBindings))
+                add("Сводки по ресурсам" to resourceSummariesSection(resourceSummaries))
+                add("Итоги правил по окнам" to list(windowSummaries))
+                add("Проверки правил по ресурсам" to list(resourceChecks))
+            }
+            listOf(
+                "source_summary" to "Получение источников",
+                "diagnostic_summary" to "Диагностический анализ",
+                "correlation_pair" to "Корреляции",
+                "anomaly_check" to "Проверки аномалий",
+                "window_metric_summary" to "Метрики по окнам",
+            ).forEach { (type, title) ->
+                val values = evidence.filter { it.string("type") == type }
+                if (values.isNotEmpty()) add(title to list(values))
+            }
+            add("Находки" to list(result.array("findings")))
+            add("Идентификаторы evidence" to "<ul>${evidence.joinToString("") { "<li>${it.value("id")}</li>" }}</ul>")
+            add("Канонический JSON" to "<pre>${escape(resultBytes.decodeToString())}</pre>")
         }
-    val diagnosticSections =
-        listOf(
-            "source_summary" to "Source acquisition",
-            "diagnostic_summary" to "Diagnostic analysis",
-            "correlation_pair" to "Correlations",
-            "anomaly_check" to "Anomaly checks",
-            "window_metric_summary" to "Window metrics",
-        ).joinToString("") { (type, title) ->
-            val values = evidence.filter { it.string("type") == type }
-            if (values.isEmpty()) "" else "<section lang=\"en\"><h2>$title</h2>${list(values)}</section>"
-        }
+    val appendix =
+        "<section><h2>Приложение</h2><p>$APPENDIX_NOTE</p>" +
+            appendixItems.joinToString("") { (title, body) -> "<details><summary>$title</summary><div lang=\"en\">$body</div></details>" } +
+            "</section>"
     val notice = stageNotice(result)
     val changes = baselineChangesSection(baselineChangesView(baseline))
     // The chart rules join the page style only with a chart; the policy hash is made from the style as sent.
     val style = if (timeline?.chartSvg != null) STYLE + timeline.chartCss.orEmpty() else STYLE
+    val head =
+        "<!doctype html><html lang=\"ru\"><head><meta charset=\"utf-8\">" +
+            "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">" +
+            "<meta http-equiv=\"Content-Security-Policy\" content=\"default-src 'none'; style-src 'sha256-${styleHash(style)}'; " +
+            "base-uri 'none'; form-action 'none'\"><title>Отчёт LT Verdict</title><style>$style</style></head>"
+    val summary =
+        "<main><h1>Отчёт LT Verdict</h1><p>Отчёт об анализе нагрузочного прогона</p><dl>" +
+            "<dt>Идентификатор прогона</dt><dd>${result.value("run_id")}</dd>" +
+            "<dt>Идентификатор анализа</dt><dd>${escape(analysisId)}</dd>" +
+            "<dt>Валидность прогона</dt><dd>${result.value("run_validity")}</dd>" +
+            "<dt>Вердикт политики</dt><dd>${result.value("policy_verdict")}</dd>" +
+            stageScopeRow(notice) + windowShareRow(result) +
+            "<dt>Покрытие данных</dt><dd>${result.objectValue("analysis_coverage", "status")}</dd></dl>"
     val html =
-        """<!doctype html><html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'sha256-${styleHash(
-            style,
-        )}'; base-uri 'none'; form-action 'none'"><title>LT Verdict report</title><style>$style</style></head><body><main><h1 lang="en">LT Verdict report</h1><p>Отчёт об анализе нагрузочного прогона</p><dl lang="en"><dt>Run</dt><dd>${result.value(
-            "run_id",
-        )}</dd><dt>Analysis</dt><dd>${escape(
-            analysisId,
-        )}</dd><dt>Run validity</dt><dd>${result.value(
-            "run_validity",
-        )}</dd><dt>Policy verdict</dt><dd>${result.value(
-            "policy_verdict",
-        )}</dd>${stageScopeRow(notice)}${windowShareRow(result)}<dt>Coverage</dt><dd>${result.objectValue(
-            "analysis_coverage",
-            "status",
-        )}</dd></dl>${stageBlock(
-            notice,
-        )}${verdictBlock(result, evidence)}${diagnosticsBlock(result, evidence)}${runSection(timeline)}$changes${rulesSection(
-            evidence,
-        )}${errorGroupsSection(errorGroupsView(result, errorGroups))}${transactionsSection(result, evidence)}${limitationsBlock(
-            result,
-            evidence,
-        )}<section lang="en"><h2>Overall and transaction metrics</h2>${if (metrics.isEmpty()) {
-            "<p>unavailable</p>"
-        } else {
-            metrics
-                .joinToString(
-                    "",
-                ) {
-                    metric(
-                        it,
-                    )
-                }
-        }}</section><section lang="en"><h2>Policy checks</h2>${list(
-            checks,
-        )}</section>$resourceSections$diagnosticSections<section lang="en"><h2>Findings</h2>${list(
-            result.array("findings"),
-        )}</section><section lang="en"><h2>Evidence IDs</h2><ul>${evidence.joinToString(
-            "",
-        ) {
-            "<li>${it.value(
-                "id",
-            )}</li>"
-        }}</ul></section><section lang="en"><h2>Canonical JSON</h2><pre>${escape(
-            resultBytes.decodeToString(),
-        )}</pre></section></main></body></html>"""
+        head + summary + stageBlock(notice) + verdictBlock(result, evidence) + diagnosticsBlock(result, evidence) + runSection(timeline) +
+            errorGroupsSection(errorGroupsView(result, errorGroups)) + rulesSection(evidence) + transactionsSection(result, evidence) +
+            changes + limitationsBlock(result, evidence) + appendix + "</main></body></html>"
     return html.encodeToByteArray()
 }
 
+private const val APPENDIX_NOTE =
+    "Сырые данные анализа для сверки и обработки программами; расшифровка есть в разделах выше. Блоки свёрнуты: раскройте нужный."
 private const val NO_DATA = "нет данных"
 private const val DASH = "—"
 private const val NBSP = " "
@@ -395,7 +380,7 @@ private fun rulesSection(evidence: List<JsonObject>): String {
     val checks = evidence.filter { it.string("type") == "policy_check" }
     val resourceNote =
         if (evidence.any { it.string("type") == "resource_policy_check" }) {
-            "<p>Правила по ресурсам перечислены ниже в разделе «Resource policy checks».</p>"
+            "<p>Правила по ресурсам перечислены в приложении, блок «Проверки правил по ресурсам».</p>"
         } else {
             ""
         }
@@ -538,7 +523,7 @@ private fun transactionsSection(
             val hidden = rows.size - MAX_TRANSACTION_ROWS
             val rest =
                 if (hidden > 0) {
-                    "<tr><td colspan=\"${heads.size}\">и ещё $hidden — полный список в разделе «Overall and transaction metrics» ниже</td></tr>"
+                    "<tr><td colspan=\"${heads.size}\">и ещё $hidden — полный список в приложении, блок «Общие метрики и метрики транзакций»</td></tr>"
                 } else {
                     ""
                 }
@@ -900,4 +885,6 @@ private const val STYLE =
         "th,td{border:1px solid #ccd3df;padding:.25rem .5rem;text-align:left;vertical-align:top}td:first-child{overflow-wrap:anywhere}" +
         "th{background:#f3f5f8}.st-fail{color:#b00020;font-weight:700}.st-pass{color:#1b6e3a;font-weight:700}" +
         ".st-none{color:#8a5a00;font-weight:700}" +
+        "details{border-top:1px solid #ccd3df;margin-top:.5rem;padding-top:.5rem}summary{cursor:pointer;font-weight:700}" +
+        "summary:focus-visible{outline:2px solid #172033;outline-offset:2px}" +
         "@media print{body{max-width:none;padding:0}pre{font-size:8pt}}"

@@ -19,9 +19,9 @@ class HtmlReportTest {
             {"id":"a","type":"anomaly_check","status":"NO_MATERIAL_CHANGE"}],"findings":[]}
             """.trimIndent()
         val html = renderHtmlReport(result.encodeToByteArray(), "a").decodeToString()
-        assertTrue(html.contains("<h2>Diagnostic analysis</h2>"))
-        assertTrue(html.contains("<h2>Correlations</h2>"))
-        assertTrue(html.contains("<h2>Anomaly checks</h2>"))
+        assertTrue(html.contains("<summary>Диагностический анализ</summary>"))
+        assertTrue(html.contains("<summary>Корреляции</summary>"))
+        assertTrue(html.contains("<summary>Проверки аномалий</summary>"))
         assertTrue(html.contains("NOT_ESTIMATED"))
         assertTrue(html.contains("&lt;script&gt;bad&lt;/script&gt;"))
         assertFalse(html.contains("<script>"))
@@ -38,7 +38,7 @@ class HtmlReportTest {
 
         assertTrue(html.startsWith("<!doctype html>"))
         assertTrue(html.contains("<html lang=\"ru\">"))
-        assertTrue(html.contains("<section lang=\"en\"><h2>Overall and transaction metrics</h2>"))
+        assertTrue(html.contains("<summary>Общие метрики и метрики транзакций</summary>"))
         assertTrue(html.contains("run-1"))
         assertTrue(html.contains("analysis-1"))
         assertTrue(html.contains("INCOMPLETE"))
@@ -61,9 +61,9 @@ class HtmlReportTest {
             ).decodeToString()
 
         assertTrue(html.contains("NO_POLICY"))
-        assertTrue(html.contains("Overall and transaction metrics</h2><p>unavailable</p>"))
+        assertTrue(html.contains("Общие метрики и метрики транзакций</summary><div lang=\"en\"><p>unavailable</p>"))
         assertFalse(html.contains("Samples: 0"))
-        assertFalse(html.contains("Resource summaries"))
+        assertFalse(html.contains("Сводки по ресурсам"))
     }
 
     @Test
@@ -75,10 +75,10 @@ class HtmlReportTest {
                 "analysis-1",
             ).decodeToString()
 
-        assertTrue(html.contains("Resource summaries"))
+        assertTrue(html.contains("Сводки по ресурсам"))
         assertTrue(html.contains("dropped_leading_cells: 1"))
-        assertTrue(html.contains("Window policy outcomes"))
-        assertTrue(html.contains("Resource policy checks"))
+        assertTrue(html.contains("Итоги правил по окнам"))
+        assertTrue(html.contains("Проверки правил по ресурсам"))
         assertTrue(html.contains("Statistics: unavailable"))
         assertTrue(html.contains("window_id: evaluation"))
         assertTrue(html.contains("&lt;/p&gt;&lt;script&gt;alert(1)&lt;/script&gt;"))
@@ -96,7 +96,7 @@ class HtmlReportTest {
             """.trimIndent()
         val html = render(result.encodeToByteArray(), "a").decodeToString()
 
-        assertTrue(html.contains("<h2>Window metrics</h2>"))
+        assertTrue(html.contains("<summary>Метрики по окнам</summary>"))
         assertTrue(html.contains("latency_ms: {&quot;p50&quot;:null,&quot;p95&quot;:null,&quot;p99&quot;:null,&quot;max&quot;:null}"))
         assertTrue(html.contains("latency_ms: {&quot;p50&quot;:0,&quot;p95&quot;:0,&quot;p99&quot;:0,&quot;max&quot;:0}"))
         assertTrue(html.contains("error_rate_ratio: null"))
@@ -175,8 +175,8 @@ class HtmlReportTest {
     fun `the verdict block comes before the metrics and names the no-policy limitation`() {
         val html = page("NO_POLICY")
 
-        assertTrue(html.indexOf("Вердикт") < html.indexOf("Overall and transaction metrics"))
-        assertTrue(html.indexOf("Ограничения") < html.indexOf("Overall and transaction metrics"))
+        assertTrue(html.indexOf("Вердикт") < html.indexOf("Общие метрики и метрики транзакций"))
+        assertTrue(html.indexOf("Ограничения") < html.indexOf("Общие метрики и метрики транзакций"))
         assertTrue(html.contains("Правила не заданы"))
     }
 
@@ -390,13 +390,13 @@ class HtmlReportTest {
     }
 
     @Test
-    fun `the report keeps its English title while the new blocks are Russian`() {
+    fun `the report has a Russian title and Russian blocks and keeps the machine tail in the appendix`() {
         val html = page("NO_POLICY")
 
-        assertTrue(html.contains("<h1 lang=\"en\">LT Verdict report</h1>"))
+        assertTrue(html.contains("<h1>Отчёт LT Verdict</h1>"))
         assertTrue(html.contains("<h2>Вердикт и причины</h2>"))
         assertTrue(html.contains("<h2>Правила</h2>"))
-        assertTrue(html.contains("<section lang=\"en\"><h2>Canonical JSON</h2>"))
+        assertTrue(html.contains("<summary>Канонический JSON</summary>"))
         assertFalse(html.contains("<script"))
         assertFalse(html.contains("<form"))
         assertFalse(html.contains("<base"))
@@ -405,7 +405,7 @@ class HtmlReportTest {
     @Test
     fun `a failed diagnostic resource rule appears in the Russian part and the limitations are not empty`() {
         val html = render(diagnosticResult("PASS"), "a").decodeToString()
-        val russian = html.substringBefore("<section lang=\"en\"><h2>Overall and transaction metrics</h2>")
+        val russian = html.substringBefore("<h2>Приложение</h2>")
         val diagnostics = russian.substringAfter("<h2>Диагностика ресурсов</h2>").substringBefore("</section>")
 
         assertTrue(diagnostics.contains("db-saturated"))

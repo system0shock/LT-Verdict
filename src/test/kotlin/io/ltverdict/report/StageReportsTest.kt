@@ -34,7 +34,7 @@ class StageReportsTest {
             val report = html(outcome)
 
             assertTrue(
-                report.contains("<dt>Policy verdict</dt><dd>$verdict</dd><dt lang=\"ru\">Область вердикта</dt><dd lang=\"ru\">"),
+                report.contains("<dt>Вердикт политики</dt><dd>$verdict</dd><dt lang=\"ru\">Область вердикта</dt><dd lang=\"ru\">"),
                 report,
             )
             assertTrue(report.contains("<p><strong>$decided</strong></p>"), report)

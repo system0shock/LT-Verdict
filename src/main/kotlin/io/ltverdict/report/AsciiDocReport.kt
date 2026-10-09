@@ -32,6 +32,10 @@ internal fun renderAsciiDocReport(
             append("Область вердикта\n")
             literal("${it.phrase}. ${it.detail} $STAGE_REFERENCE_NOTE")
         }
+        windowShareText(result)?.let {
+            append("$WINDOW_SHARE_LABEL\n")
+            literal(it)
+        }
         metricsSection("Overall metrics", metrics.filter { it.scopeKind() == "overall" })
         metricsSection("Transaction metrics", metrics.filter { it.scopeKind() == "transaction" })
         objectsSection("Policy checks", evidence.filter { it.string("type") == "policy_check" })

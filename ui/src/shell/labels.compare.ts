@@ -175,7 +175,7 @@ export const EN_COMPARE_LABELS: CompareLabels = {
   roundingNote: 'Display rounded to 6 decimal places. Error rate uses ratio units: 0.01 = 1%.',
   rawMetricsSummary: null,
   windowTitle: 'Selected-window observations',
-  windowStatus: (status) => status,
+  windowStatus: (status) => (status === 'CANDIDATE' ? 'CANDIDATE (material delta, significance not assessed)' : status),
   windowStats: (side, samples, durationMs) =>
     `${side === 'baseline' ? 'Baseline' : 'Current'}: ${samples ?? 'N/A'} samples / ${durationMs ?? 'N/A'} ms.`,
   uncertaintyNote: 'Uncertainty: NOT_ESTIMATED. These two observations do not establish a reproducible version regression.',
@@ -233,7 +233,7 @@ const RU_WINDOW_STATUS: Record<string, string> = {
   NOT_EVALUATED: 'не оценивалось',
   DESCRIPTIVE: 'описательно',
   NO_MATERIAL_CHANGE: 'без заметных изменений',
-  CANDIDATE: 'существенное изменение (кандидат)',
+  CANDIDATE: 'материальная дельта, значимость не оценена',
   INSUFFICIENT_DATA: 'недостаточно данных',
 }
 // Причины сравнения: код остаётся в скобках, чтобы его можно было сверить с ответом сервера.
@@ -284,7 +284,7 @@ export const COMPARE_LABELS: CompareLabels = {
   title: 'Сравнение с baseline',
   intro: 'Baseline это зафиксированный сохранённый анализ, выбранный вручную или статистически: новые прогоны его не заменяют. '
     + 'Сравнение показывает изменения, но вердикт не меняет. '
-    + 'Статус «кандидат» появляется только после вашего подтверждения, что условия прогонов сопоставимы.',
+    + 'Статус «материальная дельта, значимость не оценена» появляется только после вашего подтверждения, что условия прогонов сопоставимы.',
   seriesLabel: 'Серия сравнения',
   seriesHint: 'Назовите сценарий и условия теста (до 128 байт UTF-8). Одно имя не доказывает сопоставимость.',
   seriesDefault: 'Выбранная серия тестов',
@@ -341,7 +341,7 @@ export const COMPARE_LABELS: CompareLabels = {
   metricsTitle: 'Общие метрики относительно baseline',
   statusLine: (comparability) => (comparability === 'USER_CONFIRMED'
     ? 'Условия подтверждены вами'
-    : 'Условия не подтверждены: изменения только описательные, статус «кандидат» невозможен'),
+    : 'Условия не подтверждены: изменения только описательные, статус «материальная дельта, значимость не оценена» невозможен'),
   deltasNote: 'Одни дельты не доказывают регрессию версии и не меняют вердикт политики.',
   deltasRegion: 'Отклонения общих метрик от baseline',
   metricHead: 'Метрика / единица',

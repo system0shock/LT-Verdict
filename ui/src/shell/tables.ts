@@ -1,5 +1,5 @@
 import type { AnalysisResult, CapacityKneeDiagnosticEvidence, CapacityStage, ExactRatio, MetricSummaryEvidence, PolicyCheckEvidence, RuleWindowCheckEvidence, TrendCheckEvidence, TrendSummaryEvidence } from '../types'
-import { METRIC_LABELS, scopeLabel, valueText } from '../verdictSummary'
+import { metricLabel, scopeLabel, valueText } from '../verdictSummary'
 import { reasonText as verdictReasonText } from '../verdictReasons'
 import { CAPACITY_LABELS, TABLES_LABELS, TREND_LABELS } from './labels.tables'
 
@@ -53,7 +53,7 @@ export function ruleRows(result: AnalysisResult): RuleRow[] {
         key: check.id,
         ruleId: check.rule_id,
         scope: !scope ? TABLES_LABELS.scopeMissing : scope.kind === 'overall' ? TABLES_LABELS.scopeOverall : scopeLabel(scope),
-        metric: METRIC_LABELS[check.metric] ?? check.metric,
+        metric: metricLabel(check.metric, check.window_id),
         condition: check.operator === 'lte' ? TABLES_LABELS.conditionLte : TABLES_LABELS.conditionGte,
         threshold,
         observed,

@@ -111,3 +111,36 @@ private fun utcText(epochMillis: Long): String = "${UTC_FORMAT.format(Instant.of
 private fun JsonObject.text(name: String): String? = (this[name] as? JsonPrimitive)?.takeUnless { it is JsonNull }?.content
 
 private fun JsonObject.long(name: String): Long? = text(name)?.toLongOrNull()
+
+// About 31 years: above it the integer arithmetic of Kotlin and of the UI could differ.
+private const val MAX_SHARE_MILLIS = 1_000_000_000_000L
+
+internal const val WINDOW_SHARE_LABEL = "Вне окна вердикта (разгон, остановка, простои и прочее)"
+
+/**
+ * W2.4: the part of the run that lies outside the verdict window, from numbers the result already carries: stage_binding
+ * (evaluated and excluded time) or resource_binding (run bounds) with the window_policy_summary of every window. Null for a run
+ * without windows. The share is whole tenths of a percent, rounded half up in integers, so Kotlin and the UI print the same text.
+ */
+internal fun windowShareText(result: JsonObject): String? {
+    val evidence = (result["evidence"] as? JsonArray).orEmpty().mapNotNull { it as? JsonObject }
+    val stage = evidence.firstOrNull { it.text("type") == "stage_binding" }
+    val run: Long
+    val excluded: Long
+    if (stage != null) {
+        excluded = stage.long("excluded_millis") ?: return null
+        run = (stage.long("evaluated_millis") ?: return null) + excluded
+    } else {
+        val binding = evidence.firstOrNull { it.text("type") == "resource_binding" } ?: return null
+        val windows = evidence.filter { it.text("type") == "window_policy_summary" }
+        if (windows.isEmpty()) return null
+        var evaluated = 0L
+        for (window in windows) evaluated += (window.long("to_epoch_ms") ?: return null) - (window.long("from_epoch_ms") ?: return null)
+        run = (binding.long("run_to_epoch_ms") ?: return null) - (binding.long("run_from_epoch_ms") ?: return null)
+        excluded = run - evaluated
+    }
+    if (run <= 0 || run > MAX_SHARE_MILLIS || excluded < 0 || excluded > run) return null
+    val tenths = (excluded * 2000 + run) / (2 * run)
+    val percent = if (tenths == 0L && excluded > 0) "меньше 0,1 %" else "${tenths / 10},${tenths % 10} %"
+    return "$percent прогона (${durationText(excluded)} из ${durationText(run)})"
+}

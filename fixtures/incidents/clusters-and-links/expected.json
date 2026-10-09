@@ -53,6 +53,14 @@
             "refs_truncated": false,
             "negative_evidence": [
                 {
+                    "check": "RESOURCE_RULES_WITHIN_LIMITS",
+                    "outcome": "NOT_CONFIRMED",
+                    "text": "Правила ресурсов в окне steady не нарушены: проверок 1.",
+                    "evidence_ids": [
+                        "rpc-ok-d"
+                    ]
+                },
+                {
                     "check": "GENERATOR_RESOURCES_WITHIN_LIMITS",
                     "outcome": "NOT_CONFIRMED",
                     "text": "Правила ресурсов нагрузочного генератора в окне steady не нарушены: проверок 1.",
@@ -189,6 +197,14 @@
                     ]
                 },
                 {
+                    "check": "GENERATOR_RESOURCES_WITHIN_LIMITS",
+                    "outcome": "NOT_CONFIRMED",
+                    "text": "Правила ресурсов нагрузочного генератора в окне steady не нарушены: проверок 1.",
+                    "evidence_ids": [
+                        "rpc-ok-g"
+                    ]
+                },
+                {
                     "check": "NO_ANOMALY_EPISODES",
                     "outcome": "NOT_CONFIRMED",
                     "text": "Проверки отклонений в окне steady не нашли эпизодов: 1.",
@@ -302,6 +318,14 @@
                     "text": "Правила ресурсов в окне steady не нарушены: проверок 1.",
                     "evidence_ids": [
                         "rpc-ok-d"
+                    ]
+                },
+                {
+                    "check": "GENERATOR_RESOURCES_WITHIN_LIMITS",
+                    "outcome": "NOT_CONFIRMED",
+                    "text": "Правила ресурсов нагрузочного генератора в окне steady не нарушены: проверок 1.",
+                    "evidence_ids": [
+                        "rpc-ok-g"
                     ]
                 },
                 {
@@ -421,6 +445,14 @@
                     ]
                 },
                 {
+                    "check": "GENERATOR_RESOURCES_WITHIN_LIMITS",
+                    "outcome": "NOT_CONFIRMED",
+                    "text": "Правила ресурсов нагрузочного генератора в окне steady не нарушены: проверок 1.",
+                    "evidence_ids": [
+                        "rpc-ok-g"
+                    ]
+                },
+                {
                     "check": "NO_ANOMALY_EPISODES",
                     "outcome": "NOT_CONFIRMED",
                     "text": "Проверки отклонений в окне steady не нашли эпизодов: 1.",
@@ -533,6 +565,14 @@
                     ]
                 },
                 {
+                    "check": "GENERATOR_RESOURCES_WITHIN_LIMITS",
+                    "outcome": "NOT_CONFIRMED",
+                    "text": "Правила ресурсов нагрузочного генератора в окне steady не нарушены: проверок 1.",
+                    "evidence_ids": [
+                        "rpc-ok-g"
+                    ]
+                },
+                {
                     "check": "NO_ANOMALY_EPISODES",
                     "outcome": "NOT_CONFIRMED",
                     "text": "Проверки отклонений в окне steady не нашли эпизодов: 1.",
@@ -642,6 +682,14 @@
                     "text": "Правила ресурсов в окне steady не нарушены: проверок 1.",
                     "evidence_ids": [
                         "rpc-ok-d"
+                    ]
+                },
+                {
+                    "check": "GENERATOR_RESOURCES_WITHIN_LIMITS",
+                    "outcome": "NOT_CONFIRMED",
+                    "text": "Правила ресурсов нагрузочного генератора в окне steady не нарушены: проверок 1.",
+                    "evidence_ids": [
+                        "rpc-ok-g"
                     ]
                 },
                 {

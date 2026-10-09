@@ -76,9 +76,45 @@ class IncidentSynthesisTest {
                 .filter { it.startsWith("contract-") }
                 .map { it.removePrefix("contract-") }
                 .sorted()
-        // overlapping-resource-incidents shows the window-wide checks (NO_ANOMALY_EPISODES, CHECKS_NOT_EVALUATED) on one incident each:
-        // no single input gives that output under the window rules of ADR 0029, so it stays a validator example only (reported in the PR).
-        assertEquals(examples - "overlapping-resource-incidents", cases)
+        // The two examples that show a window-wide check on one incident of the window only are not outputs of ADR 0029 for any input;
+        // they are checked by `the two examples ...` below through their variant fixtures.
+        assertEquals(examples - NOT_EXACT.keys, cases)
+    }
+
+    @Test
+    fun `the two examples that show a window-wide check on one incident only differ from the output by exactly those checks`() {
+        for ((example, variant) in NOT_EXACT) {
+            val case = FIXTURES.resolve(variant.fixture)
+            val input = Json.parseToJsonElement(Files.readString(case.resolve("input.json"))).jsonObject
+            val actual =
+                synthesizeIncidents(
+                    RunValidity.valueOf(input.getValue("run_validity").jsonPrimitive.content),
+                    input.getValue("findings").jsonArray.map { it.jsonObject },
+                    input.getValue("evidence").jsonArray.map { it.jsonObject },
+                )
+            var removed = 0
+            val trimmed =
+                actual.items().mapIndexed { position, item ->
+                    val (negative, next) = variant.extra.getValue(position)
+                    val negatives = item.getValue("negative_evidence").jsonArray.filter { it.jsonObject.str("check") !in negative }
+                    val nexts = item.getValue("next_checks").jsonArray.filter { it.jsonObject.str("check") !in next }
+                    removed +=
+                        item.getValue("negative_evidence").jsonArray.size - negatives.size + item.getValue("next_checks").jsonArray.size -
+                        nexts.size
+                    JsonObject(item + mapOf("negative_evidence" to JsonArray(negatives), "next_checks" to JsonArray(nexts)))
+                }
+            assertEquals(variant.extra.values.sumOf { it.first.size + it.second.size }, removed, example)
+            val expected =
+                Json
+                    .parseToJsonElement(
+                        Files.readString(Path.of("docs/contracts/incident/v1/examples/valid/$example.json")),
+                    ).jsonObject
+            assertEquals(
+                String(canonicalJson(expected)),
+                String(canonicalJson(JsonObject(actual + mapOf("items" to JsonArray(trimmed))))),
+                example,
+            )
+        }
     }
 
     // ------------------------------------------------------------------------------------------ status, shape, explicit nulls
@@ -794,6 +830,7 @@ class IncidentSynthesisTest {
         assertEquals(
             listOf(
                 "OTHER_POLICY_CHECKS_PASSED",
+                "RESOURCE_RULES_WITHIN_LIMITS",
                 "GENERATOR_RESOURCES_WITHIN_LIMITS",
                 "NO_ANOMALY_EPISODES",
                 "NO_MATERIAL_TREND",
@@ -801,6 +838,8 @@ class IncidentSynthesisTest {
             ),
             transaction.checks(),
         )
+        assertEquals(listOf("rpc-ok"), transaction.negative("RESOURCE_RULES_WITHIN_LIMITS")!!.ids("evidence_ids"))
+        assertEquals(listOf("rpc-gen"), transaction.negative("GENERATOR_RESOURCES_WITHIN_LIMITS")!!.ids("evidence_ids"))
         val other = transaction.negative("OTHER_POLICY_CHECKS_PASSED")!!
         assertEquals("NOT_CONFIRMED", other.str("outcome"))
         assertFalse(other.containsKey("reason_code"))
@@ -822,10 +861,17 @@ class IncidentSynthesisTest {
         assertEquals("Часть проверок в окне steady не выполнена: 3; код: A_CODE.", notEvaluated.str("text"))
 
         assertEquals(
-            listOf("RESOURCE_RULES_WITHIN_LIMITS", "NO_ANOMALY_EPISODES", "NO_MATERIAL_TREND", "CHECKS_NOT_EVALUATED"),
+            listOf(
+                "RESOURCE_RULES_WITHIN_LIMITS",
+                "GENERATOR_RESOURCES_WITHIN_LIMITS",
+                "NO_ANOMALY_EPISODES",
+                "NO_MATERIAL_TREND",
+                "CHECKS_NOT_EVALUATED",
+            ),
             resource.checks(),
         )
         assertEquals(listOf("rpc-ok"), resource.negative("RESOURCE_RULES_WITHIN_LIMITS")!!.ids("evidence_ids"))
+        assertEquals(listOf("rpc-gen"), resource.negative("GENERATOR_RESOURCES_WITHIN_LIMITS")!!.ids("evidence_ids"))
         assertEquals(
             "Правила ресурсов в окне steady не нарушены: проверок 1.",
             resource.negative("RESOURCE_RULES_WITHIN_LIMITS")!!.str("text"),
@@ -838,10 +884,11 @@ class IncidentSynthesisTest {
     }
 
     @Test
-    fun `a resource incident leaves out the checks of its own entity and of an unknown entity`() {
+    fun `a resource incident leaves out the checks of its own entity and of an unknown one, a transaction incident does not`() {
         val case =
             Case().apply {
                 res("1", "steady", "host-a", 1_100, 1_200)
+                tx("2", "steady", "login")
                 evidence += obj("type" to "resource_binding", "id" to "binding")
                 evidence += resourceCheck("rpc-own", "steady", "s-own", "PASS")
                 evidence += resourceSummary("rs-own", "steady", "s-own", "host-a", "system")
@@ -849,14 +896,16 @@ class IncidentSynthesisTest {
                 evidence += resourceCheck("rpc-other", "steady", "s-other", "PASS")
                 evidence += resourceSummary("rs-other", "steady", "s-other", "host-b", "system")
             }
-        val entry =
-            case
-                .run()
-                .items()
-                .single()
-                .negative("RESOURCE_RULES_WITHIN_LIMITS")!!
+        val items = case.run().items()
 
-        assertEquals(listOf("rpc-other"), entry.ids("evidence_ids"))
+        assertEquals(
+            listOf("rpc-other"),
+            items.first { it.family() == "RESOURCE" }.negative("RESOURCE_RULES_WITHIN_LIMITS")!!.ids("evidence_ids"),
+        )
+        assertEquals(
+            listOf("rpc-other", "rpc-own", "rpc-unknown"),
+            items.first { it.family() == "TRANSACTION" }.negative("RESOURCE_RULES_WITHIN_LIMITS")!!.ids("evidence_ids"),
+        )
     }
 
     @Test
@@ -1359,6 +1408,34 @@ class IncidentSynthesisTest {
             )
 
         private val FIXTURES: Path = Path.of("fixtures/incidents")
+
+        /** An example of the contract that no input reproduces, the fixture with the input of a variant and what the output adds, by rank. */
+        private class Variant(
+            val fixture: String,
+            val extra: Map<Int, Pair<Set<String>, Set<String>>>,
+        )
+
+        private val NOT_EXACT =
+            mapOf(
+                // the example gives the transaction no RESOURCE_RULES_WITHIN_LIMITS and the resource incident no GENERATOR_RESOURCES_WITHIN_LIMITS
+                "transaction-and-resource-in-window" to
+                    Variant(
+                        "both-families-in-window",
+                        mapOf(
+                            0 to (setOf("RESOURCE_RULES_WITHIN_LIMITS") to emptySet()),
+                            1 to (setOf("GENERATOR_RESOURCES_WITHIN_LIMITS") to emptySet()),
+                        ),
+                    ),
+                // the example gives host-a no CHECKS_NOT_EVALUATED and host-b no NO_ANOMALY_EPISODES, though both checks are of the whole window
+                "overlapping-resource-incidents" to
+                    Variant(
+                        "entity-neighbours-in-window",
+                        mapOf(
+                            0 to (setOf("CHECKS_NOT_EVALUATED") to setOf("COMPLETE_NOT_EVALUATED_CHECKS")),
+                            1 to (setOf("NO_ANOMALY_EPISODES") to emptySet()),
+                        ),
+                    ),
+            )
 
         private fun fixtureCases(): List<Path> =
             Files.list(FIXTURES).use { stream -> stream.filter { Files.isDirectory(it) }.sorted().toList() }

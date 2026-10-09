@@ -69,7 +69,7 @@ internal fun synthesizeIncidents(
     if (validity == RunValidity.INVALID) return incidentDocument(notEvaluated = true, total = 0, omitted = 0, items = emptyList())
     requireUniqueIds(findings, "findings")
     requireUniqueIds(evidence, "evidence")
-    val index = EvidenceIndex(evidence)
+    val index = IncidentEvidenceIndex(evidence)
     val drafts = group(findings.mapNotNull { atomOf(it, index) })
     val stored = drafts.sortedWith(PRIORITY_ORDER).take(INCIDENT_STORED_MAX)
     val links = stored.map { draft -> eligibleLinks(draft, stored) }
@@ -95,78 +95,11 @@ private fun JsonObject.string(name: String): String? = (this[name] as? JsonPrimi
 private fun JsonObject.epoch(name: String): Long? =
     (this[name] as? JsonPrimitive)?.takeIf { !it.isString }?.longOrNull?.takeIf { it in 0..EPOCH_MS_MAX }
 
-private fun JsonObject.strings(name: String): List<String> =
-    (this[name] as? JsonArray)?.mapNotNull { (it as? JsonPrimitive)?.takeIf { value -> value.isString }?.content } ?: emptyList()
-
-private fun JsonObject.idOrEmpty(): String = string("id").orEmpty()
-
-/** A check of the evidence that can give a negative result: the fields of the closed list of ADR 0029. */
-private class CheckRef(
-    val id: String,
-    val windowId: String?,
-    val status: String,
-    val codes: List<String>,
-    val seriesId: String? = null,
-)
-
-private class SeriesRef(
-    val entity: String?,
-    val role: String?,
-)
-
-private class EvidenceIndex(
-    private val evidence: List<JsonObject>,
-) {
-    val byId: Map<String, JsonObject> = evidence.mapNotNull { item -> item.string("id")?.let { it to item } }.toMap()
-    val hasBinding: Boolean = evidence.any { it.string("type") == "resource_binding" }
-
-    private fun ofType(type: String): List<JsonObject> = evidence.filter { it.string("type") == type }
-
-    /** The bounds of a window; if a window has several summaries the one with the least id decides. */
-    val windows: Map<String, Pair<Long, Long>> =
-        ofType("window_policy_summary")
-            .sortedWith { a, b -> utf8Compare(a.idOrEmpty(), b.idOrEmpty()) }
-            .mapNotNull { item ->
-                val window = item.string("window_id")
-                val from = item.epoch("from_epoch_ms")
-                val to = item.epoch("to_epoch_ms")
-                if (window != null && from != null && to != null && from < to) window to (from to to) else null
-            }.reversed()
-            .toMap()
-
-    /** Entity and role of a series come from resource_summary by (window, series); the summary with the least id decides. */
-    private val series: Map<Pair<String?, String>, SeriesRef> =
-        ofType("resource_summary")
-            .sortedWith { a, b -> utf8Compare(a.idOrEmpty(), b.idOrEmpty()) }
-            .mapNotNull { item ->
-                val seriesId = item.string("series_id") ?: return@mapNotNull null
-                (item.string("window_id") to seriesId) to SeriesRef(item.string("entity"), item.string("role"))
-            }.reversed()
-            .toMap()
-
-    private fun checks(
-        type: String,
-        codes: (JsonObject) -> List<String>,
-    ): List<CheckRef> =
-        ofType(type).mapNotNull { item ->
-            val id = item.string("id") ?: return@mapNotNull null
-            CheckRef(id, item.string("window_id"), item.string("status").orEmpty(), codes(item), item.string("series_id"))
-        }
-
-    val policyChecks = checks("policy_check") { listOfNotNull(it.string("reason_code")) }
-    val resourceChecks = checks("resource_policy_check") { listOfNotNull(it.string("reason")) }
-    val anomalyChecks = checks("anomaly_check") { it.strings("reasons") }
-    val trendChecks = checks("trend_check") { it.strings("reasons") }
-    val ruleWindowChecks = checks("rule_window_check") { listOfNotNull(it.string("reason_code")) }
-
-    fun seriesOf(check: CheckRef): SeriesRef? = check.seriesId?.let { series[check.windowId to it] }
-}
-
 // ------------------------------------------------------------------------------------------------------------------------- atoms
 
-private enum class Family { TRANSACTION, RESOURCE }
+internal enum class IncidentFamily { TRANSACTION, RESOURCE }
 
-private class Atom(
+internal class IncidentAtom(
     val findingId: String,
     val findingType: String,
     val evidenceIds: List<String>,
@@ -179,8 +112,8 @@ private class Atom(
 
 private fun atomOf(
     finding: JsonObject,
-    index: EvidenceIndex,
-): Atom? {
+    index: IncidentEvidenceIndex,
+): IncidentAtom? {
     val id = finding.string("id") ?: return null
     val type = finding.string("type") ?: return null
     val evidenceId = finding.string("evidence_id") ?: return null
@@ -205,14 +138,14 @@ private fun transactionAtom(
     finding: JsonObject,
     evidenceId: String,
     evidence: JsonObject,
-    index: EvidenceIndex,
-): Atom? {
+    index: IncidentEvidenceIndex,
+): IncidentAtom? {
     val windowId = finding.string("window_id")
     val metricId = evidence.string("metric_evidence_id")?.takeIf { it in index.byId }
     val scope =
         transactionScope((evidence["scope"] as? JsonObject) ?: metricId?.let { index.byId[it]?.get("scope") as? JsonObject }) ?: return null
     val bounds = if (windowId == null) 0L to 0L else index.windows[windowId] ?: return null
-    return Atom(id, type, listOfNotNull(evidenceId, metricId), TIER_POLICY_FAILURE, windowId, scope, bounds.first, bounds.second)
+    return IncidentAtom(id, type, listOfNotNull(evidenceId, metricId), TIER_POLICY_FAILURE, windowId, scope, bounds.first, bounds.second)
 }
 
 private fun resourceAtom(
@@ -221,13 +154,13 @@ private fun resourceAtom(
     finding: JsonObject,
     evidenceId: String,
     tier: Int,
-): Atom? {
+): IncidentAtom? {
     val windowId = finding.string("window_id") ?: return null
     val entity = finding.string("entity")?.takeIf { it.isNotEmpty() } ?: return null
     val from = finding.epoch("from_epoch_ms") ?: return null
     val to = finding.epoch("to_epoch_ms")?.takeIf { it > from } ?: return null
     val scope = JsonObject(mapOf("kind" to JsonPrimitive("entity"), "entity" to JsonPrimitive(entity)))
-    return Atom(id, type, listOf(evidenceId), tier, windowId, scope, from, to)
+    return IncidentAtom(id, type, listOf(evidenceId), tier, windowId, scope, from, to)
 }
 
 /** The scope as the schema has it: kind, label, group_path and sample_kind only; null if the scope names no overall run or transaction. */
@@ -256,19 +189,19 @@ private fun transactionScope(raw: JsonObject?): JsonObject? =
 
 // ------------------------------------------------------------------------------------------------------------------------ groups
 
-private class Draft(
-    val family: Family,
+internal class IncidentDraft(
+    val family: IncidentFamily,
     val windowId: String?,
     val scope: JsonObject,
     val clusterFromEpochMs: Long?,
-    val atoms: List<Atom>,
+    val atoms: List<IncidentAtom>,
 ) {
     val tier: Int = atoms.minOf { it.tier }
 
     /** TRANSACTION: the bounds of the window (null without a window); RESOURCE: from the least start to the greatest end of the atoms. */
     val interval: Pair<Long, Long>? =
         when {
-            family == Family.RESOURCE -> atoms.minOf { it.fromEpochMs } to atoms.maxOf { it.toEpochMs }
+            family == IncidentFamily.RESOURCE -> atoms.minOf { it.fromEpochMs } to atoms.maxOf { it.toEpochMs }
             windowId != null -> atoms.first().fromEpochMs to atoms.first().toEpochMs
             else -> null
         }
@@ -288,17 +221,17 @@ private class Draft(
     val evidenceIds: List<String> = atoms.flatMap { it.evidenceIds }.distinct().sortedWith(::utf8Compare)
 }
 
-private fun group(atoms: List<Atom>): List<Draft> {
+private fun group(atoms: List<IncidentAtom>): List<IncidentDraft> {
     val transaction = atoms.filter { it.scope.string("kind") != "entity" }.groupBy { it.windowId to String(canonicalJson(it.scope)) }
     val resource =
         atoms
             .filter { it.scope.string("kind") == "entity" }
             .groupBy { it.windowId to it.scope.string("entity") }
-    return transaction.values.map { Draft(Family.TRANSACTION, it.first().windowId, it.first().scope, null, it) } +
+    return transaction.values.map { IncidentDraft(IncidentFamily.TRANSACTION, it.first().windowId, it.first().scope, null, it) } +
         resource.values.flatMap { sameEntity ->
             clusters(sameEntity).map {
-                Draft(
-                    Family.RESOURCE,
+                IncidentDraft(
+                    IncidentFamily.RESOURCE,
                     it.first().windowId,
                     it.first().scope,
                     it.minOf { atom ->
@@ -311,12 +244,17 @@ private fun group(atoms: List<Atom>): List<Draft> {
 }
 
 /** Atoms sorted by (from, to, finding id); an atom joins the current cluster if it starts no later than the cluster ends (touching joins). */
-private fun clusters(atoms: List<Atom>): List<List<Atom>> {
+private fun clusters(atoms: List<IncidentAtom>): List<List<IncidentAtom>> {
     val sorted =
         atoms.sortedWith(
-            compareBy<Atom> { it.fromEpochMs }.thenBy { it.toEpochMs }.thenComparator { a, b -> utf8Compare(a.findingId, b.findingId) },
+            compareBy<IncidentAtom> { it.fromEpochMs }.thenBy { it.toEpochMs }.thenComparator {
+                a,
+                b,
+                ->
+                utf8Compare(a.findingId, b.findingId)
+            },
         )
-    val result = mutableListOf<MutableList<Atom>>()
+    val result = mutableListOf<MutableList<IncidentAtom>>()
     var end = Long.MIN_VALUE
     for (atom in sorted) {
         if (result.isEmpty() || atom.fromEpochMs > end) {
@@ -331,7 +269,7 @@ private fun clusters(atoms: List<Atom>): List<List<Atom>> {
 }
 
 /** tier ascending, finding count descending, start ascending (null last), id by UTF-8 bytes. */
-private val PRIORITY_ORDER: Comparator<Draft> =
+private val PRIORITY_ORDER: Comparator<IncidentDraft> =
     Comparator { a, b ->
         val byTier = a.tier.compareTo(b.tier)
         if (byTier != 0) return@Comparator byTier
@@ -349,24 +287,24 @@ private val PRIORITY_ORDER: Comparator<Draft> =
         if (byStart != 0) byStart else utf8Compare(a.id, b.id)
     }
 
-private class Link(
+private class IncidentLink(
     val incidentId: String,
     val basis: String,
 )
 
 /** The first five incidents by rank that ADR 0029 (rule 7) relates to this one: the same window, a different family or overlapping entities. */
 private fun eligibleLinks(
-    draft: Draft,
-    stored: List<Draft>,
-): List<Link> {
+    draft: IncidentDraft,
+    stored: List<IncidentDraft>,
+): List<IncidentLink> {
     val window = draft.windowId ?: return emptyList()
-    val links = mutableListOf<Link>()
+    val links = mutableListOf<IncidentLink>()
     for (other in stored) {
         if (other === draft || other.windowId != window) continue
         val basis =
             when {
                 other.family != draft.family -> "SAME_WINDOW"
-                draft.family == Family.RESOURCE &&
+                draft.family == IncidentFamily.RESOURCE &&
                     other.scope != draft.scope &&
                     overlaps(
                         draft.interval,
@@ -374,7 +312,7 @@ private fun eligibleLinks(
                     ) -> "INTERVAL_OVERLAP"
                 else -> continue
             }
-        links += Link(other.id, basis)
+        links += IncidentLink(other.id, basis)
         if (links.size == INCIDENT_LINKS_MAX) break
     }
     return links
@@ -408,16 +346,24 @@ private fun incidentDocument(
 
 private fun incidentItem(
     rank: Int,
-    draft: Draft,
-    links: List<Link>,
+    draft: IncidentDraft,
+    links: List<IncidentLink>,
     validity: RunValidity,
-    index: EvidenceIndex,
+    index: IncidentEvidenceIndex,
 ): JsonObject {
     val atoms = draft.atoms
     val findingIds =
         when (draft.family) {
-            Family.TRANSACTION -> atoms.sortedWith { a, b -> utf8Compare(a.findingId, b.findingId) }
-            else -> atoms.sortedWith(compareBy<Atom> { it.fromEpochMs }.thenComparator { a, b -> utf8Compare(a.findingId, b.findingId) })
+            IncidentFamily.TRANSACTION -> atoms.sortedWith { a, b -> utf8Compare(a.findingId, b.findingId) }
+            else ->
+                atoms.sortedWith(
+                    compareBy<IncidentAtom> { it.fromEpochMs }.thenComparator {
+                        a,
+                        b,
+                        ->
+                        utf8Compare(a.findingId, b.findingId)
+                    },
+                )
         }.map { it.findingId }
     val negative = negativeEvidence(draft, validity, index)
     val first = draft.interval?.first
@@ -451,7 +397,7 @@ private fun incidentItem(
                 JsonPrimitive(
                     when {
                         draft.interval == null -> "UNKNOWN"
-                        draft.family == Family.RESOURCE -> "FINDINGS"
+                        draft.family == IncidentFamily.RESOURCE -> "FINDINGS"
                         else -> "WINDOW"
                     },
                 ),
@@ -488,7 +434,7 @@ private fun strings(values: List<String>): JsonArray = JsonArray(values.map { Js
 
 /** The wording of one incident: only the templates of IncidentTexts.kt with the (cleaned) names substituted. */
 private class IncidentWording(
-    private val draft: Draft,
+    private val draft: IncidentDraft,
 ) {
     private val window = draft.windowId.orEmpty()
     private val count = draft.atoms.size.toString()
@@ -508,16 +454,16 @@ private class IncidentWording(
 
     fun title(): String =
         when {
-            draft.family == Family.RESOURCE && isLoad -> renderIncidentText(TITLE_LOAD, "window_id" to window)
-            draft.family == Family.RESOURCE -> renderIncidentText(TITLE_RESOURCE, "entity" to entity, "window_id" to window)
+            draft.family == IncidentFamily.RESOURCE && isLoad -> renderIncidentText(TITLE_LOAD, "window_id" to window)
+            draft.family == IncidentFamily.RESOURCE -> renderIncidentText(TITLE_RESOURCE, "entity" to entity, "window_id" to window)
             draft.windowId != null -> renderIncidentText(TITLE_TRANSACTION_WINDOW, "area" to area(), "window_id" to window)
             else -> renderIncidentText(TITLE_TRANSACTION, "area" to area())
         }
 
     fun summary(): String =
         when {
-            draft.family == Family.RESOURCE && isLoad -> renderIncidentText(SUMMARY_LOAD, "n" to count)
-            draft.family == Family.RESOURCE -> renderIncidentText(SUMMARY_RESOURCE, "entity" to entity, "n" to count)
+            draft.family == IncidentFamily.RESOURCE && isLoad -> renderIncidentText(SUMMARY_LOAD, "n" to count)
+            draft.family == IncidentFamily.RESOURCE -> renderIncidentText(SUMMARY_RESOURCE, "entity" to entity, "n" to count)
             draft.windowId != null -> renderIncidentText(SUMMARY_TRANSACTION_WINDOW, "window_id" to window, "n" to count, "area" to area())
             else -> renderIncidentText(SUMMARY_TRANSACTION, "n" to count, "area" to area())
         }
@@ -531,121 +477,10 @@ private class IncidentWording(
 
 // ---------------------------------------------------------------------------------------------------- negative evidence, next checks
 
-private class Negative(
-    val check: String,
-    val evidenceIds: List<String>,
-    val reasonCode: String?,
-    text: String,
-) {
-    val json: JsonObject =
-        JsonObject(
-            buildMap<String, JsonElement> {
-                put("check", JsonPrimitive(check))
-                put("outcome", JsonPrimitive(if (reasonCode == null) "NOT_CONFIRMED" else "NOT_EVALUATED"))
-                if (reasonCode != null) put("reason_code", JsonPrimitive(reasonCode))
-                put("text", JsonPrimitive(text))
-                put("evidence_ids", strings(evidenceIds))
-            },
-        )
-}
-
-private fun List<CheckRef>.firstIds(): List<String> = map { it.id }.sortedWith(::utf8Compare).take(INCIDENT_NEGATIVE_IDS_MAX)
-
-private fun negativeEvidence(
-    draft: Draft,
-    validity: RunValidity,
-    index: EvidenceIndex,
-): List<Negative> {
-    val window = draft.windowId
-    val own = draft.evidenceIds.toSet()
-    val inWindow = { check: CheckRef -> window != null && check.windowId == window }
-    val out = mutableListOf<Negative>()
-
-    fun confirmed(
-        check: String,
-        matching: List<CheckRef>,
-        template: String,
-    ) {
-        if (matching.isEmpty()) return
-        val text = renderIncidentText(template, "window_id" to window.orEmpty(), "n" to matching.size.toString())
-        out += Negative(check, matching.firstIds(), null, text)
-    }
-
-    if (validity == RunValidity.DEGRADED && draft.family == Family.RESOURCE) {
-        out += Negative("POLICY_NOT_EVALUATED", emptyList(), "RUN_DEGRADED", NEGATIVE_POLICY_NOT_EVALUATED)
-    }
-    if (draft.family == Family.TRANSACTION) {
-        val passed = index.policyChecks.filter { it.windowId == window && it.status == "PASS" && it.id !in own }
-        confirmed("OTHER_POLICY_CHECKS_PASSED", passed, if (window == null) NEGATIVE_OTHER_POLICY else NEGATIVE_OTHER_POLICY_WINDOW)
-    }
-    if (window != null) {
-        val passedResources = index.resourceChecks.filter { inWindow(it) && it.status == "PASS" }
-        if (draft.family == Family.RESOURCE) {
-            // other entities only: the checks of the own entity, and of an entity that cannot be told, are left out
-            val ownEntity = draft.scope.string("entity")
-            confirmed(
-                "RESOURCE_RULES_WITHIN_LIMITS",
-                passedResources.filter { check ->
-                    index.seriesOf(check)?.let {
-                        it.role != "generator" &&
-                            it.entity != null &&
-                            it.entity != ownEntity
-                    } ==
-                        true
-                },
-                NEGATIVE_RESOURCE_RULES,
-            )
-        } else {
-            confirmed(
-                "GENERATOR_RESOURCES_WITHIN_LIMITS",
-                passedResources.filter {
-                    index.seriesOf(it)?.role == "generator"
-                },
-                NEGATIVE_GENERATOR_RESOURCES,
-            )
-        }
-        confirmed(
-            "NO_ANOMALY_EPISODES",
-            index.anomalyChecks.filter {
-                inWindow(it) && it.status == "NO_MATERIAL_CHANGE"
-            },
-            NEGATIVE_NO_ANOMALY_EPISODES,
-        )
-        confirmed(
-            "NO_MATERIAL_TREND",
-            index.trendChecks.filter { inWindow(it) && it.status == "NO_MATERIAL_TREND" },
-            NEGATIVE_NO_MATERIAL_TREND,
-        )
-    }
-    if (!index.hasBinding) {
-        out += Negative("RESOURCE_DATA_NOT_PROVIDED", emptyList(), "RESOURCE_SNAPSHOT_NOT_PROVIDED", NEGATIVE_RESOURCE_DATA_NOT_PROVIDED)
-    }
-    if (window != null) {
-        val notEvaluated =
-            index.policyChecks.filter { inWindow(it) && it.status == "NO_VERDICT" } +
-                index.resourceChecks.filter { inWindow(it) && it.status == "NO_VERDICT" } +
-                index.anomalyChecks.filter { inWindow(it) && it.status == "INSUFFICIENT_DATA" } +
-                index.trendChecks.filter { inWindow(it) && (it.status == "INSUFFICIENT_CELLS" || it.status == "UNAVAILABLE") } +
-                index.ruleWindowChecks.filter { inWindow(it) && it.status == "NO_VERDICT" }
-        if (notEvaluated.isNotEmpty()) {
-            val code = notEvaluated.flatMap { it.codes.ifEmpty { listOf(it.status) } }.minWithOrNull(::utf8Compare)!!
-            val text =
-                renderIncidentText(
-                    NEGATIVE_CHECKS_NOT_EVALUATED,
-                    "window_id" to window,
-                    "n" to notEvaluated.size.toString(),
-                    "reason_code" to code,
-                )
-            out += Negative("CHECKS_NOT_EVALUATED", notEvaluated.firstIds(), code, text)
-        }
-    }
-    return out
-}
-
 private fun nextChecks(
-    draft: Draft,
+    draft: IncidentDraft,
     links: Int,
-    negative: List<Negative>,
+    negative: List<IncidentNegative>,
     texts: IncidentWording,
 ): List<JsonObject> {
     fun next(
@@ -657,7 +492,7 @@ private fun nextChecks(
     val firstEvidence = draft.evidenceIds.take(1)
     val out = mutableListOf<JsonObject>()
     out +=
-        if (draft.family == Family.TRANSACTION) {
+        if (draft.family == IncidentFamily.TRANSACTION) {
             next("COMPARE_WITH_BASELINE", texts.compare(), firstEvidence)
         } else {
             next("OPEN_RESOURCE_SERIES", texts.series(), firstEvidence)

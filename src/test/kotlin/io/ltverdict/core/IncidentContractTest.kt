@@ -169,16 +169,6 @@ class IncidentContractTest {
         assertTrue(items > 100, "the fixtures must exercise the schema: $items incidents")
     }
 
-    @Test
-    fun `the invalid examples are rejected by the verifier of the contract, not by chance`() {
-        // verify_slice0.py asserts this in CI ("Slice 0 contracts"); here the names are checked against the files so none is lost.
-        val names = examples("invalid").map { it.first }
-        assertTrue("causal-title.json" in names && "id-is-not-grouping-key-hash.json" in names && "unknown-field-confidence.json" in names)
-        for ((name, document) in examples("invalid")) {
-            assertTrue(document is JsonObject && document.containsKey("items"), name)
-        }
-    }
-
     private fun enumOf(property: JsonElement): Set<String> =
         (property as JsonObject).getValue("enum").let { (it as JsonArray).map { value -> (value as JsonPrimitive).content }.toSet() }
 }

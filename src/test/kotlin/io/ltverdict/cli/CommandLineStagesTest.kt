@@ -118,6 +118,34 @@ class CommandLineStagesTest {
     }
 
     @Test
+    fun `a conflict is refused before the policy is read from stdin and before any artifact is written`() {
+        val resources = Path.of("docs/contracts/resources/v1/examples/valid/basic.json").toString()
+        val out = tempDir.resolve("out")
+        val stdout = ByteArrayOutputStream()
+        val stderr = ByteArrayOutputStream()
+        val unreadable =
+            object : java.io.InputStream() {
+                override fun read(): Int = throw java.io.IOException("stdin must not be read")
+            }
+
+        val exit =
+            runCli(
+                arrayOf("analyze", load, "--policy", "-", "--stages", stages, "--resources", resources, "--out-dir", out.toString()),
+                PrintStream(stdout, true, UTF_8),
+                PrintStream(stderr, true, UTF_8),
+                unreadable,
+            )
+
+        assertEquals(4, exit)
+        assertEquals("STAGES_RESOURCES_CONFLICT", stderr.toString(UTF_8).trim())
+        assertFalse(Files.exists(out), "no artifact is written")
+        val late = stagesFile("late", """{"id":"late","role":"steady","from_offset_ms":130000,"to_offset_ms":140000}""")
+        val outside = run("analyze", load, "--stages", late, "--out-dir", out.toString(), "--data-dir", data("a"))
+        assertEquals(4, outside.exitCode)
+        assertFalse(Files.exists(out.resolve("result.json")), "no artifact is written for STAGE_OUTSIDE_RUN")
+    }
+
+    @Test
     fun `a steady stage past the run end is exit 4, an excluded one and a clipped end pass`() {
         val late = stagesFile("late", """{"id":"late","role":"steady","from_offset_ms":130000,"to_offset_ms":140000}""")
         val tail = stagesFile("tail", """{"id":"tail","role":"steady","from_offset_ms":100000,"to_offset_ms":130000}""")
@@ -161,7 +189,7 @@ class CommandLineStagesTest {
     }
 
     @Test
-    fun `a run without the flag keeps the bytes of the same run analysed before`() {
+    fun `a run without the flag is repeatable and carries no stage fields`() {
         val first = run("analyze", load, "--data-dir", data("a"))
         val second = run("analyze", load, "--data-dir", data("b"))
 

@@ -261,8 +261,11 @@ class HumanReportAppendixTest {
         )
 
     // PR 4 adds one block to the page; it is the only difference from the snapshots that the equality tests let through.
-    private fun withoutOverall(html: String) =
-        Regex("<section><h2>Итого по прогону</h2>.*?</section>", RegexOption.DOT_MATCHES_ALL).replace(html, "")
+    private fun withoutOverall(html: String): String {
+        val block = Regex("<section><h2>Итого по прогону</h2>.*?</section>", RegexOption.DOT_MATCHES_ALL)
+        assertEquals(1, block.findAll(html).count())
+        return block.replace(html, "")
+    }
 
     private val sectionBlock = Regex("<section[^>]*><h2>(.*?)</h2>(.*?)</section>", RegexOption.DOT_MATCHES_ALL)
     private val detailsBlock = Regex("<details><summary>(.*?)</summary><div lang=\"en\">(.*?)</div></details>", RegexOption.DOT_MATCHES_ALL)

@@ -164,7 +164,10 @@ class StaticLoadChartTest {
     }
 
     private fun sha256(bytes: ByteArray): String =
-        java.security.MessageDigest.getInstance("SHA-256").digest(bytes).joinToString("") { "%02x".format(it) }
+        java.security.MessageDigest
+            .getInstance("SHA-256")
+            .digest(bytes)
+            .joinToString("") { "%02x".format(it) }
 
     private fun bucket(
         startMillis: Long,

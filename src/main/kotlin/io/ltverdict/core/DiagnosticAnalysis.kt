@@ -6,12 +6,7 @@ import io.ltverdict.metrics.ExactRatio
 import io.ltverdict.metrics.NormalizedMetrics
 import io.ltverdict.metrics.UtcLoadCell
 import io.ltverdict.metrics.UtcLoadMetrics
-import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
-import kotlinx.serialization.json.JsonPrimitive
-import kotlinx.serialization.json.buildJsonArray
-import kotlinx.serialization.json.buildJsonObject
-import kotlinx.serialization.json.put
 import java.math.BigDecimal
 import java.math.MathContext
 import java.math.RoundingMode
@@ -250,56 +245,42 @@ private fun evaluatePair(
         }
     val evidenceId = diagnosticId("correlation-pair", pair.id, window.id)
     val evidence =
-        buildJsonObject {
-            put("id", evidenceId)
-            put("type", "correlation_pair")
-            put("pair_id", pair.id)
-            put("window_id", window.id)
-            put("resource_series_id", source.id)
-            put("load_metric", pair.loadMetric.wireName)
-            put("entity", source.entity)
-            put("resource_unit", source.unit)
-            put("load_unit", pair.loadMetric.unit)
-            put("from_epoch_ms", window.fromEpochMillis)
-            put("to_epoch_ms", window.toEpochMillis)
-            put("expected_cells", expected)
-            put("paired_cells", points.size)
-            put("lag_used_cells", if (lagProfile.isEmpty()) 0 else anchorCount)
-            putDecimal("raw_rho", association.raw)
-            putDecimal("partial_rho", association.partial)
-            put("best_lag_ms", bestLag)
-            putDecimal("best_lag_rho", bestRho)
-            put(
-                "lag_profile",
-                buildJsonArray {
-                    lagProfile.forEach { (lag, rho) ->
-                        add(
-                            buildJsonObject {
-                                put("lag_ms", lag)
-                                putDecimal("rho", rho)
-                            },
-                        )
-                    }
-                },
-            )
-            put("status", status)
-            put("controls_requested", strings(controlKeys))
-            put("controls_used", strings(association.controlsUsed))
-            put("controls_dropped", strings(association.controlsDropped))
-            putDecimal("sensitivity_without_achieved_rps", association.sensitivityWithoutAchievedRps)
-            put("reasons", strings(reasons.distinct()))
-            put("uncertainty", "NOT_ESTIMATED")
-        }
+        CorrelationPairEvidence(
+            id = evidenceId,
+            pairId = pair.id,
+            windowId = window.id,
+            resourceSeriesId = source.id,
+            loadMetric = pair.loadMetric.wireName,
+            entity = source.entity,
+            resourceUnit = source.unit,
+            loadUnit = pair.loadMetric.unit,
+            fromEpochMs = window.fromEpochMillis,
+            toEpochMs = window.toEpochMillis,
+            expectedCells = expected,
+            pairedCells = points.size,
+            lagUsedCells = if (lagProfile.isEmpty()) 0 else anchorCount,
+            rawRho = association.raw?.let(::decimalString),
+            partialRho = association.partial?.let(::decimalString),
+            bestLagMs = bestLag,
+            bestLagRho = bestRho?.let(::decimalString),
+            lagProfile = lagProfile.map { (lag, rho) -> LagProfileEntry(lag, rho?.let(::decimalString)) },
+            status = status,
+            controlsRequested = controlKeys,
+            controlsUsed = association.controlsUsed,
+            controlsDropped = association.controlsDropped,
+            sensitivityWithoutAchievedRps = association.sensitivityWithoutAchievedRps?.let(::decimalString),
+            reasons = reasons.distinct(),
+            uncertainty = "NOT_ESTIMATED",
+        ).toJson()
     val finding =
         if (status == "CANDIDATE") {
-            buildJsonObject {
-                put("id", diagnosticId("correlation-candidate", pair.id, window.id))
-                put("type", "correlation_candidate")
-                put("pair_id", pair.id)
-                put("window_id", window.id)
-                put("evidence_id", evidenceId)
-                put("uncertainty", "NOT_ESTIMATED")
-            }
+            CorrelationCandidateFinding(
+                id = diagnosticId("correlation-candidate", pair.id, window.id),
+                pairId = pair.id,
+                windowId = window.id,
+                evidenceId = evidenceId,
+                uncertainty = "NOT_ESTIMATED",
+            ).toJson()
         } else {
             null
         }
@@ -665,27 +646,26 @@ private fun evaluateAnomaly(
 
     val findings =
         episodes.map { episode ->
-            buildJsonObject {
-                put("id", diagnosticId("anomaly-episode", anomaly.id, anomaly.windowId, episode.fromEpochMillis.toString()))
-                put("type", "anomaly_episode")
-                put("rule_id", anomaly.id)
-                put("window_id", anomaly.windowId)
-                put("reference_window_id", anomaly.referenceWindowId)
-                put("metric", evaluation.metric)
-                put("unit", evaluation.unit)
-                put("entity", evaluation.entity)
-                put("from_epoch_ms", episode.fromEpochMillis)
-                put("to_epoch_ms", episode.toEpochMillis)
-                put("duration_ms", episode.toEpochMillis - episode.fromEpochMillis)
-                put("direction", episode.direction)
-                put("reference_median", canonicalDecimal(median))
-                put("reference_mad", canonicalDecimal(mad))
-                put("observed_min", canonicalDecimal(episode.values.min()))
-                put("observed_max", canonicalDecimal(episode.values.max()))
-                put("max_abs_delta", canonicalDecimal(episode.values.maxOf { it.subtract(median).abs() }))
-                put("evidence_id", checkId)
-                put("reasons", strings(if (mad.signum() == 0) listOf("ZERO_MAD") else emptyList()))
-            }
+            AnomalyEpisodeFinding(
+                id = diagnosticId("anomaly-episode", anomaly.id, anomaly.windowId, episode.fromEpochMillis.toString()),
+                ruleId = anomaly.id,
+                windowId = anomaly.windowId,
+                referenceWindowId = anomaly.referenceWindowId,
+                metric = evaluation.metric,
+                unit = evaluation.unit,
+                entity = evaluation.entity,
+                fromEpochMs = episode.fromEpochMillis,
+                toEpochMs = episode.toEpochMillis,
+                durationMs = episode.toEpochMillis - episode.fromEpochMillis,
+                direction = episode.direction,
+                referenceMedian = canonicalDecimal(median),
+                referenceMad = canonicalDecimal(mad),
+                observedMin = canonicalDecimal(episode.values.min()),
+                observedMax = canonicalDecimal(episode.values.max()),
+                maxAbsDelta = canonicalDecimal(episode.values.maxOf { it.subtract(median).abs() }),
+                evidenceId = checkId,
+                reasons = if (mad.signum() == 0) listOf("ZERO_MAD") else emptyList(),
+            ).toJson()
         }
     val status = if (findings.isEmpty()) "NO_MATERIAL_CHANGE" else "CANDIDATE"
     return AnomalyResult(
@@ -744,74 +724,62 @@ internal fun anomalyCheck(
     suppressed: Int,
     reasons: List<String>,
 ): JsonObject =
-    buildJsonObject {
-        put("id", id)
-        put("type", "anomaly_check")
-        put("rule_id", anomaly.id)
-        put("window_id", evaluation.id)
-        put("reference_window_id", reference.id)
-        put("status", status)
-        putBigDecimal("reference_median", median)
-        putBigDecimal("reference_mad", mad)
-        put("reference_observed_cells", referenceObserved)
-        put("reference_expected_cells", referenceExpected)
-        put("observed_cells", observed)
-        put("expected_cells", expected)
-        put("episodes_reported", episodes)
-        put("suppressed_short_episodes", suppressed)
-        put("reasons", strings(reasons.distinct()))
-    }
+    AnomalyCheckEvidence(
+        id = id,
+        ruleId = anomaly.id,
+        windowId = evaluation.id,
+        referenceWindowId = reference.id,
+        status = status,
+        referenceMedian = median?.let { canonicalDecimal(it) },
+        referenceMad = mad?.let { canonicalDecimal(it) },
+        referenceObservedCells = referenceObserved,
+        referenceExpectedCells = referenceExpected,
+        observedCells = observed,
+        expectedCells = expected,
+        episodesReported = episodes,
+        suppressedShortEpisodes = suppressed,
+        reasons = reasons.distinct(),
+    ).toJson()
 
 internal fun windowMetricSummary(
     window: ResourceWindowV1,
     metrics: NormalizedMetrics,
     resources: List<ResourceSeriesV1>,
-): JsonObject =
-    buildJsonObject {
-        put("id", "window-metric-summary-${sha256Hex(window.id.encodeToByteArray())}")
-        put("type", "window_metric_summary")
-        put("window_id", window.id)
-        put("from_epoch_ms", window.fromEpochMillis)
-        put("to_epoch_ms", window.toEpochMillis)
-        put("sample_count", metrics.overall.sampleCount)
-        put("error_count", metrics.overall.errorCount)
-        put("error_rate_ratio", metrics.overall.errorRate?.json() ?: JsonNull)
-        put("throughput_rps", metrics.overall.throughputRps.json())
-        val hasSamples = metrics.overall.sampleCount > 0L
-        put(
-            "latency_ms",
-            buildJsonObject {
-                put("p50", if (hasSamples) JsonPrimitive(metrics.overall.latency.p50Millis) else JsonNull)
-                put("p95", if (hasSamples) JsonPrimitive(metrics.overall.latency.p95Millis) else JsonNull)
-                put("p99", if (hasSamples) JsonPrimitive(metrics.overall.latency.p99Millis) else JsonNull)
-                put("max", if (hasSamples) JsonPrimitive(metrics.overall.latency.maxMillis) else JsonNull)
+): JsonObject {
+    val overall = metrics.overall
+    val hasSamples = overall.sampleCount > 0L
+    return WindowMetricSummaryEvidence(
+        id = "window-metric-summary-${sha256Hex(window.id.encodeToByteArray())}",
+        windowId = window.id,
+        fromEpochMs = window.fromEpochMillis,
+        toEpochMs = window.toEpochMillis,
+        sampleCount = overall.sampleCount,
+        errorCount = overall.errorCount,
+        errorRateRatio = overall.errorRate?.document(),
+        throughputRps = overall.throughputRps.document(),
+        latencyMs =
+            NullableLatencyDocument(
+                p50 = if (hasSamples) overall.latency.p50Millis else null,
+                p95 = if (hasSamples) overall.latency.p95Millis else null,
+                p99 = if (hasSamples) overall.latency.p99Millis else null,
+                max = if (hasSamples) overall.latency.maxMillis else null,
+            ),
+        resourceBindings =
+            resources.sortedBy(ResourceSeriesV1::id).map { resource ->
+                WindowResourceBindingDocument(
+                    seriesId = resource.id,
+                    metric = resource.metric,
+                    unit = resource.unit,
+                    entity = resource.entity,
+                    role = resource.role.wireName,
+                    aggregation = resource.aggregation.wireName,
+                    labels = resource.labels,
+                )
             },
-        )
-        put(
-            "resource_bindings",
-            buildJsonArray {
-                resources.sortedBy(ResourceSeriesV1::id).forEach { resource ->
-                    add(
-                        buildJsonObject {
-                            put("series_id", resource.id)
-                            put("metric", resource.metric)
-                            put("unit", resource.unit)
-                            put("entity", resource.entity)
-                            put("role", resource.role.wireName)
-                            put("aggregation", resource.aggregation.wireName)
-                            put("labels", buildJsonObject { resource.labels.forEach { (key, value) -> put(key, value) } })
-                        },
-                    )
-                }
-            },
-        )
-    }
+    ).toJson()
+}
 
-private fun ExactRatio.json(): JsonObject =
-    buildJsonObject {
-        put("numerator", numerator)
-        put("denominator", denominator)
-    }
+private fun ExactRatio.document() = ExactRatioDocument(numerator, denominator)
 
 private fun ExactRatio.decimal(): BigDecimal = BigDecimal.valueOf(numerator).divide(BigDecimal.valueOf(denominator), DECIMAL_CONTEXT)
 
@@ -833,65 +801,44 @@ internal fun diagnosticSummary(
     reasons: List<String>,
     idSalt: String = "v1",
 ): JsonObject =
-    buildJsonObject {
-        put("id", diagnosticId("diagnostic-summary", idSalt))
-        put("type", "diagnostic_summary")
-        put("status", status)
-        put("pairs_tested", pairsTested)
-        put("pairs_evaluable", pairsEvaluable)
-        put("anomalies_tested", anomaliesTested)
-        put("episodes_reported", episodesReported)
-        put("suppressed_short_episodes", suppressedShortEpisodes)
-        put("uncertainty", "NOT_ESTIMATED")
-        put("reasons", strings(reasons))
-    }
+    DiagnosticSummaryEvidence(
+        id = diagnosticId("diagnostic-summary", idSalt),
+        status = status,
+        pairsTested = pairsTested,
+        pairsEvaluable = pairsEvaluable,
+        anomaliesTested = anomaliesTested,
+        episodesReported = episodesReported,
+        suppressedShortEpisodes = suppressedShortEpisodes,
+        uncertainty = "NOT_ESTIMATED",
+        reasons = reasons,
+    ).toJson()
 
 internal fun CorrelationHeadlineSelection.evidence(
     sourceCells: Int,
     analysedPoints: Int,
 ): JsonObject =
-    buildJsonObject {
-        put("id", diagnosticId("correlation-headline-selection", pairId, windowId))
-        put("type", "correlation_headline_selection")
-        put("pair_id", pairId)
-        put("window_id", windowId)
-        put("method", CORRELATION_HEADLINE_METHOD)
-        put("rng", CORRELATION_HEADLINE_RNG)
-        put("status", status.name)
-        put("family_hypotheses", familyHypotheses)
-        put("family_count", familyCount)
-        put("representation", CORRELATION_HEADLINE_REPRESENTATION)
-        put("source_cells", sourceCells)
-        put("analysed_points", analysedPoints)
-        put("bootstrap_replicates", CORRELATION_HEADLINE_REPLICATES)
-        put(
-            "block_lengths_cells",
-            buildJsonArray { CORRELATION_HEADLINE_BLOCKS.forEach { add(JsonPrimitive(it)) } },
-        )
-        put("alpha", decimalString(alpha))
-        putDecimal("p_value_b10", pValueBlock10)
-        putDecimal("p_value_b20", pValueBlock20)
-        putDecimal("max_p_value", maxPValue)
-        putDecimal("holm_adjusted_p_value", holmAdjustedPValue)
-        put("selected", selected)
-        put("reasons", strings(reasons))
-    }
-
-private fun strings(values: List<String>) = buildJsonArray { values.forEach { add(JsonPrimitive(it)) } }
-
-private fun kotlinx.serialization.json.JsonObjectBuilder.putDecimal(
-    name: String,
-    value: Double?,
-) {
-    put(name, value?.let { JsonPrimitive(decimalString(it)) } ?: JsonNull)
-}
-
-private fun kotlinx.serialization.json.JsonObjectBuilder.putBigDecimal(
-    name: String,
-    value: BigDecimal?,
-) {
-    put(name, value?.let { JsonPrimitive(canonicalDecimal(it)) } ?: JsonNull)
-}
+    CorrelationHeadlineSelectionEvidence(
+        id = diagnosticId("correlation-headline-selection", pairId, windowId),
+        pairId = pairId,
+        windowId = windowId,
+        method = CORRELATION_HEADLINE_METHOD,
+        rng = CORRELATION_HEADLINE_RNG,
+        status = status.name,
+        familyHypotheses = familyHypotheses,
+        familyCount = familyCount,
+        representation = CORRELATION_HEADLINE_REPRESENTATION,
+        sourceCells = sourceCells,
+        analysedPoints = analysedPoints,
+        bootstrapReplicates = CORRELATION_HEADLINE_REPLICATES,
+        blockLengthsCells = CORRELATION_HEADLINE_BLOCKS,
+        alpha = decimalString(alpha),
+        pValueB10 = pValueBlock10?.let(::decimalString),
+        pValueB20 = pValueBlock20?.let(::decimalString),
+        maxPValue = maxPValue?.let(::decimalString),
+        holmAdjustedPValue = holmAdjustedPValue?.let(::decimalString),
+        selected = selected,
+        reasons = reasons,
+    ).toJson()
 
 private fun decimalString(value: Double): String =
     canonicalDecimal(BigDecimal.valueOf(value).setScale(DECIMAL_SCALE, RoundingMode.HALF_EVEN))

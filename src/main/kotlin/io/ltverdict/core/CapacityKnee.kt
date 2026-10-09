@@ -1,11 +1,6 @@
 package io.ltverdict.core
 
-import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
-import kotlinx.serialization.json.JsonPrimitive
-import kotlinx.serialization.json.buildJsonArray
-import kotlinx.serialization.json.buildJsonObject
-import kotlinx.serialization.json.put
 import java.math.BigDecimal
 import java.math.RoundingMode
 
@@ -27,57 +22,35 @@ internal fun capacityKneeEvidence(
     refusal: String?,
 ): JsonObject {
     val outcome = refusal?.let { KneeOutcome(reason = it) } ?: detectKnee(points)
-    return buildJsonObject {
-        put("id", "capacity-knee-diagnostic")
-        put("type", "capacity_knee_diagnostic")
-        put("method", KNEE_METHOD)
-        put("metric", "response_time_p95_ms")
-        put("load_axis", loadAxis.wireName)
-        put("unit", loadAxis.unit)
-        put("status", if (outcome.knotIndex != null) "DETECTED" else "NOT_DETECTED")
-        put("confidence", "UNCALIBRATED")
-        put("calibrated", false)
-        put("diagnostic_only", true)
-        val stable = outcome.knotIndex?.let { points[it] }
-        val degraded = outcome.knotIndex?.let { points[it + 1] }
-        put("last_stable_stage_id", stable?.stageId?.let(::JsonPrimitive) ?: JsonNull)
-        put("last_stable_load", stable?.let { JsonPrimitive(BigDecimal(canonicalDecimal(it.load))) } ?: JsonNull)
-        put("first_degraded_stage_id", degraded?.stageId?.let(::JsonPrimitive) ?: JsonNull)
-        put("first_degraded_load", degraded?.let { JsonPrimitive(BigDecimal(canonicalDecimal(it.load))) } ?: JsonNull)
-        put(
-            "sse_ratio",
-            outcome.sseRatio?.let { JsonPrimitive(BigDecimal(canonicalDecimal(it.setScale(6, RoundingMode.HALF_EVEN)))) } ?: JsonNull,
-        )
-        put(
-            "excess_factor",
-            outcome.excessFactor?.let { JsonPrimitive(BigDecimal(canonicalDecimal(it.setScale(2, RoundingMode.HALF_EVEN)))) } ?: JsonNull,
-        )
-        put("reasons", buildJsonArray { outcome.reason?.let { add(JsonPrimitive(it)) } })
-        put(
-            "points",
-            buildJsonArray {
-                points.forEach {
-                    add(
-                        buildJsonObject {
-                            put("stage_id", it.stageId)
-                            put("load", JsonPrimitive(BigDecimal(canonicalDecimal(it.load))))
-                            put("value", it.p95Millis)
-                        },
-                    )
-                }
-            },
-        )
-        put(
-            "parameters",
-            buildJsonObject {
-                put("min_stages", KNEE_MIN_STAGES)
-                put("min_points_before_knee", KNEE_MIN_LEFT_POINTS)
-                put("max_sse_ratio", KNEE_MAX_SSE_RATIO.toPlainString())
-                put("min_excess_factor", KNEE_MIN_EXCESS_FACTOR.toPlainString())
-                put("noise_multiplier", KNEE_NOISE_MULTIPLIER)
-            },
-        )
-    }
+    val stable = outcome.knotIndex?.let { points[it] }
+    val degraded = outcome.knotIndex?.let { points[it + 1] }
+    return CapacityKneeDiagnosticEvidence(
+        id = "capacity-knee-diagnostic",
+        method = KNEE_METHOD,
+        metric = "response_time_p95_ms",
+        loadAxis = loadAxis.wireName,
+        unit = loadAxis.unit,
+        status = if (outcome.knotIndex != null) "DETECTED" else "NOT_DETECTED",
+        confidence = "UNCALIBRATED",
+        calibrated = false,
+        diagnosticOnly = true,
+        lastStableStageId = stable?.stageId,
+        lastStableLoad = stable?.let { BigDecimal(canonicalDecimal(it.load)) },
+        firstDegradedStageId = degraded?.stageId,
+        firstDegradedLoad = degraded?.let { BigDecimal(canonicalDecimal(it.load)) },
+        sseRatio = outcome.sseRatio?.let { BigDecimal(canonicalDecimal(it.setScale(6, RoundingMode.HALF_EVEN))) },
+        excessFactor = outcome.excessFactor?.let { BigDecimal(canonicalDecimal(it.setScale(2, RoundingMode.HALF_EVEN))) },
+        reasons = listOfNotNull(outcome.reason),
+        points = points.map { KneePointDocument(it.stageId, BigDecimal(canonicalDecimal(it.load)), it.p95Millis) },
+        parameters =
+            KneeParametersDocument(
+                minStages = KNEE_MIN_STAGES,
+                minPointsBeforeKnee = KNEE_MIN_LEFT_POINTS,
+                maxSseRatio = KNEE_MAX_SSE_RATIO.toPlainString(),
+                minExcessFactor = KNEE_MIN_EXCESS_FACTOR.toPlainString(),
+                noiseMultiplier = KNEE_NOISE_MULTIPLIER,
+            ),
+    ).toJson()
 }
 
 private data class KneeOutcome(

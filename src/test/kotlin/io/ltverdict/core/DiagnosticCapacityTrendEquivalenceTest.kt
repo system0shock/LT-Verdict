@@ -1,5 +1,6 @@
 package io.ltverdict.core
 
+import kotlinx.serialization.descriptors.elementDescriptors
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
@@ -340,4 +341,32 @@ class DiagnosticCapacityTrendEquivalenceTest {
         sourceCells: Int,
         analysedPoints: Int,
     ) = evidence(sourceCells, analysedPoints)
+
+    @Test
+    fun `the type literals are the class serial names of the derived hierarchies`() {
+        fun types(descriptor: kotlinx.serialization.descriptors.SerialDescriptor) =
+            descriptor
+                .getElementDescriptor(1)
+                .elementDescriptors
+                .map { it.serialName }
+                .toSet()
+        assertEquals(
+            setOf(
+                "correlation_pair",
+                "anomaly_check",
+                "window_metric_summary",
+                "diagnostic_summary",
+                "correlation_headline_selection",
+                "capacity_summary",
+                "capacity_knee_diagnostic",
+                "trend_check",
+                "trend_summary",
+            ),
+            types(DerivedEvidence.serializer().descriptor),
+        )
+        assertEquals(
+            setOf("correlation_candidate", "anomaly_episode", "resource_trend"),
+            types(DerivedFinding.serializer().descriptor),
+        )
+    }
 }

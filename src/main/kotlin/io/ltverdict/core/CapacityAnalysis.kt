@@ -4,14 +4,10 @@ import io.ltverdict.ingest.RunValidity
 import io.ltverdict.metrics.NormalizedMetrics
 import io.ltverdict.metrics.UtcLoadCell
 import io.ltverdict.metrics.UtcLoadMetrics
-import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
-import kotlinx.serialization.json.buildJsonArray
-import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.longOrNull
-import kotlinx.serialization.json.put
 import java.math.BigDecimal
 import java.math.MathContext
 import java.math.RoundingMode
@@ -61,13 +57,9 @@ internal fun evaluateCapacity(
     val stageVerdict = policyVerdict(plan.requiredCapacity, evaluations, bound)
     val blocked = unboundRule && (stageVerdict == PolicyVerdict.PASS || stageVerdict == PolicyVerdict.FAIL)
     val policyVerdict = if (blocked) PolicyVerdict.NO_VERDICT else stageVerdict
-    val capacityJson = capacityJson(plan, evaluations, bound, policyVerdict, reasons)
-    val summary =
-        buildJsonObject {
-            put("id", "capacity-summary")
-            put("type", "capacity_summary")
-            capacityJson.forEach { (name, value) -> put(name, value) }
-        }
+    // The payload of analysis-result and of capacity.json is the summary evidence without its `id` and `type`.
+    val summary = capacitySummary(plan, evaluations, bound, policyVerdict, reasons).toJson()
+    val capacityJson = JsonObject(summary.filterKeys { it != "id" && it != "type" })
     // ADR 0026: a diagnostic evidence item after the summary; it does not touch the bounds, the verdict or capacity_summary.
     val knee = windowMetrics?.let { capacityKnee(plan, evaluations, validity, it) }
     return CapacityAnalysis(policyVerdict, capacityJson, listOfNotNull(summary, knee), reasons)
@@ -349,53 +341,47 @@ private fun policyVerdict(
         else -> PolicyVerdict.NO_VERDICT
     }
 
-private fun capacityJson(
+private fun capacitySummary(
     plan: CapacityPlanV1,
     evaluations: List<StageEvaluation>,
     bounds: Bounds,
     policyVerdict: PolicyVerdict,
     reasons: List<String>,
-): JsonObject =
-    buildJsonObject {
-        put("schema_version", "capacity.v1")
-        put("load_axis", plan.loadAxis.wireName)
-        put("unit", plan.loadAxis.unit)
-        put("stages", buildJsonArray { evaluations.forEach { add(stageJson(it, plan.targetToleranceRatio)) } })
-        put("bound_type", bounds.type)
-        putDecimal("lower_inclusive", bounds.lower)
-        putDecimal("upper_exclusive", bounds.upper)
-        put("policy_verdict", policyVerdict.name)
-        put("reasons", buildJsonArray { reasons.forEach { add(JsonPrimitive(it)) } })
-        put("capacity_knee", JsonNull)
-        put("knee_reason", "KNEE_DETECTOR_NOT_IMPLEMENTED")
-    }
+) = CapacitySummaryEvidence(
+    id = "capacity-summary",
+    schemaVersion = "capacity.v1",
+    loadAxis = plan.loadAxis.wireName,
+    unit = plan.loadAxis.unit,
+    stages = evaluations.map { stageDocument(it, plan.targetToleranceRatio) },
+    boundType = bounds.type,
+    lowerInclusive = bounds.lower.canonical(),
+    upperExclusive = bounds.upper.canonical(),
+    policyVerdict = policyVerdict,
+    reasons = reasons,
+    capacityKnee = null,
+    kneeReason = "KNEE_DETECTOR_NOT_IMPLEMENTED",
+)
 
-private fun stageJson(
+private fun stageDocument(
     evaluation: StageEvaluation,
     tolerance: BigDecimal,
-): JsonObject =
-    buildJsonObject {
-        put("id", evaluation.stage.id)
-        put("target", JsonPrimitive(evaluation.stage.target))
-        putDecimal("achieved", evaluation.achieved)
-        put("achieved_statistic", "p05_10s")
-        putDecimal("observed_min", evaluation.observedMin)
-        putDecimal("observed_max", evaluation.observedMax)
-        put("complete_bins", evaluation.completeBins)
-        put("expected_bins", evaluation.expectedBins)
-        put("target_tolerance_ratio", JsonPrimitive(tolerance))
-        putDecimal("verified_bound_load", evaluation.verifiedLoad)
-        put("verdict", evaluation.verdict)
-        put("reasons", buildJsonArray { evaluation.reasons.forEach { add(JsonPrimitive(it)) } })
-        put("evidence_refs", buildJsonArray { evaluation.evidenceRefs.forEach { add(JsonPrimitive(it)) } })
-    }
+) = CapacityStageDocument(
+    id = evaluation.stage.id,
+    target = evaluation.stage.target,
+    achieved = evaluation.achieved.canonical(),
+    achievedStatistic = "p05_10s",
+    observedMin = evaluation.observedMin.canonical(),
+    observedMax = evaluation.observedMax.canonical(),
+    completeBins = evaluation.completeBins,
+    expectedBins = evaluation.expectedBins,
+    targetToleranceRatio = tolerance,
+    verifiedBoundLoad = evaluation.verifiedLoad.canonical(),
+    verdict = evaluation.verdict,
+    reasons = evaluation.reasons,
+    evidenceRefs = evaluation.evidenceRefs,
+)
 
-private fun kotlinx.serialization.json.JsonObjectBuilder.putDecimal(
-    name: String,
-    value: BigDecimal?,
-) {
-    put(name, value?.let { JsonPrimitive(BigDecimal(canonicalDecimal(it))) } ?: JsonNull)
-}
+private fun BigDecimal?.canonical() = this?.let { BigDecimal(canonicalDecimal(it)) }
 
 private fun JsonObject.string(name: String): String? = this[name]?.jsonPrimitive?.content
 

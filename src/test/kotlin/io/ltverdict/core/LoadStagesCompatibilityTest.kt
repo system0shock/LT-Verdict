@@ -206,6 +206,37 @@ class LoadStagesCompatibilityTest {
         }
 
     @Test
+    fun `two staged analyses that differ only by the declaration hash are separated by every comparison`() =
+        withService { store, service ->
+            val data = accept(store, Files.readAllBytes(Path.of("fixtures/stages/ramp-steady-rampdown.jtl")))
+            val staged = saved(service.analyze(AnalysisRequest(data, policy(), stages = declared)), 'b')
+            val sameHash = staged.copy(reference = reference('c'))
+            val otherHash =
+                staged.copy(
+                    reference = reference('d'),
+                    identity = JsonObject(staged.identity + ("load_stages_sha256" to JsonPrimitive("f".repeat(64)))),
+                )
+
+            val dynamics = buildRunDynamics(staged, listOf(sameHash, otherHash))
+            assertEquals("2", dynamics.getValue("comparable_count").jsonPrimitive.content)
+            assertEquals("1", dynamics.getValue("excluded_incompatible_count").jsonPrimitive.content)
+            assertEquals(
+                JsonPrimitive(true),
+                compareTransactions(staged.result, staged.identity, sameHash.result, sameHash.identity).getValue("compatible"),
+            )
+            assertEquals(
+                JsonPrimitive(false),
+                compareTransactions(staged.result, staged.identity, otherHash.result, otherHash.identity).getValue("compatible"),
+            )
+            val mixed =
+                assertThrows(IllegalArgumentException::class.java) {
+                    val items = listOf(staged, sameHash.copy(reference = reference('e')), otherHash)
+                    statisticalBaselineSelection("series", items.map { it.reference }, items.map { it.result }, items.map { it.identity })
+                }
+            assertEquals("BASELINE_MIXED_SEMANTICS", mixed.message)
+        }
+
+    @Test
     fun `a run without stages gives the same analysis id whether stages are absent or never offered`() =
         withService { store, service ->
             val data = accept(store, Files.readAllBytes(Path.of("fixtures/stages/ramp-steady-rampdown.jtl")))

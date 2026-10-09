@@ -670,6 +670,8 @@ private fun semanticKey(
     SEMANTIC_FIELDS.forEach { field -> values += identity[field] ?: return null }
     // ADR 0014, часть 5: плечо входит в ключ условно. Отсутствие у обоих анализов равно равенству, отсутствие у одного - несовместимость.
     values += identity["resource_arm"] ?: JsonNull
+    // ADR 0030, R6: the declared stages are a conditional link too; the windows 5-25 min and 5-30 min are different metrics.
+    values += identity["load_stages_sha256"] ?: JsonNull
     return values
 }
 

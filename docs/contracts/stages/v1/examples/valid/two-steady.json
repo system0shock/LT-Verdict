@@ -1,0 +1,8 @@
+{
+  "schema_version": "load-stages.v1",
+  "stages": [
+    { "id": "steady-a", "role": "steady", "from_offset_ms": 10000, "to_offset_ms": 40000 },
+    { "id": "spike", "role": "excluded", "from_offset_ms": 40000, "to_offset_ms": 50000 },
+    { "id": "steady-b", "role": "steady", "from_offset_ms": 50000, "to_offset_ms": 90000 }
+  ]
+}

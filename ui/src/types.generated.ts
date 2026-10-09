@@ -47,6 +47,8 @@ export interface AnalysisIdentityDocument {
   trend_plan_version?: string
   pod_view_sha256?: string
   pod_view_version?: string
+  load_stages_sha256?: string
+  load_stages_version?: string
   engine: ComponentRef
   parsers: Array<ComponentRef>
   modules: Array<ComponentRef>
@@ -69,6 +71,7 @@ export interface InputVersionsDocument {
   diagnostics?: string
   capacity?: string
   trend?: string
+  stages?: string
 }
 
 export interface OutputsDocument {

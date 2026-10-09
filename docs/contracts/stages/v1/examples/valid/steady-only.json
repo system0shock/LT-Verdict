@@ -1,0 +1,6 @@
+{
+  "schema_version": "load-stages.v1",
+  "stages": [
+    { "id": "steady", "role": "steady", "from_offset_ms": 40000, "to_offset_ms": 100000 }
+  ]
+}

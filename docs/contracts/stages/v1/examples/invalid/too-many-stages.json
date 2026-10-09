@@ -1,0 +1,107 @@
+{
+  "schema_version": "load-stages.v1",
+  "stages": [
+    {
+      "id": "stage-0",
+      "role": "steady",
+      "from_offset_ms": 0,
+      "to_offset_ms": 1000
+    },
+    {
+      "id": "stage-1",
+      "role": "excluded",
+      "from_offset_ms": 1000,
+      "to_offset_ms": 2000
+    },
+    {
+      "id": "stage-2",
+      "role": "excluded",
+      "from_offset_ms": 2000,
+      "to_offset_ms": 3000
+    },
+    {
+      "id": "stage-3",
+      "role": "excluded",
+      "from_offset_ms": 3000,
+      "to_offset_ms": 4000
+    },
+    {
+      "id": "stage-4",
+      "role": "excluded",
+      "from_offset_ms": 4000,
+      "to_offset_ms": 5000
+    },
+    {
+      "id": "stage-5",
+      "role": "excluded",
+      "from_offset_ms": 5000,
+      "to_offset_ms": 6000
+    },
+    {
+      "id": "stage-6",
+      "role": "excluded",
+      "from_offset_ms": 6000,
+      "to_offset_ms": 7000
+    },
+    {
+      "id": "stage-7",
+      "role": "excluded",
+      "from_offset_ms": 7000,
+      "to_offset_ms": 8000
+    },
+    {
+      "id": "stage-8",
+      "role": "excluded",
+      "from_offset_ms": 8000,
+      "to_offset_ms": 9000
+    },
+    {
+      "id": "stage-9",
+      "role": "excluded",
+      "from_offset_ms": 9000,
+      "to_offset_ms": 10000
+    },
+    {
+      "id": "stage-10",
+      "role": "excluded",
+      "from_offset_ms": 10000,
+      "to_offset_ms": 11000
+    },
+    {
+      "id": "stage-11",
+      "role": "excluded",
+      "from_offset_ms": 11000,
+      "to_offset_ms": 12000
+    },
+    {
+      "id": "stage-12",
+      "role": "excluded",
+      "from_offset_ms": 12000,
+      "to_offset_ms": 13000
+    },
+    {
+      "id": "stage-13",
+      "role": "excluded",
+      "from_offset_ms": 13000,
+      "to_offset_ms": 14000
+    },
+    {
+      "id": "stage-14",
+      "role": "excluded",
+      "from_offset_ms": 14000,
+      "to_offset_ms": 15000
+    },
+    {
+      "id": "stage-15",
+      "role": "excluded",
+      "from_offset_ms": 15000,
+      "to_offset_ms": 16000
+    },
+    {
+      "id": "stage-16",
+      "role": "excluded",
+      "from_offset_ms": 16000,
+      "to_offset_ms": 17000
+    }
+  ]
+}

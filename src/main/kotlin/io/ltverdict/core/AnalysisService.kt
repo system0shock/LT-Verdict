@@ -47,6 +47,7 @@ internal data class AnalysisRequest(
     val capacity: CapacityPlanValidation.Valid? = null,
     val trend: TrendPlanValidation.Valid? = null,
     val podView: PodViewValidation.Valid? = null,
+    val stages: LoadStagesValidation.Valid? = null,
 )
 
 internal data class AnalysisOutcome(
@@ -78,6 +79,11 @@ internal class AnalysisService(
                 else -> AnalysisMode.STANDARD
             }
         checkCancelled()
+        // ADR 0030, R3: two sources of windows are an error, not a priority. The online request is refused in analyzeWithSources.
+        if (request.stages != null) {
+            require(request.capacity == null) { "STAGES_CAPACITY_CONFLICT" }
+            require(request.resources == null) { "STAGES_RESOURCES_CONFLICT" }
+        }
         require(request.sourceRequest == null) { "SOURCE_ACQUISITION_REQUIRED" }
         request.sourceAcquisition?.let {
             require(request.resources?.semanticSha256 == it.snapshot?.semanticSha256) { "SOURCE_SNAPSHOT_MISMATCH" }
@@ -140,6 +146,7 @@ internal class AnalysisService(
                 request.capacity,
                 request.trend,
                 request.podView,
+                request.stages,
             )
         val analysisId = sha256Hex(identity)
         store.readAnalysis(request.input.runId, analysisId)?.let { stored ->
@@ -209,6 +216,7 @@ internal class AnalysisService(
             val trendBytes = trend?.let { canonicalJson(it.trendJson) }
             val trendPlanBytes = request.trend?.rawBytes()
             val podViewBytes = request.podView?.canonicalBytes()
+            val stagesBytes = request.stages?.canonicalBytes()
             val directory =
                 store.writeAnalysisAtomically(request.input.runId, analysisId, beforePublish) { staging ->
                     checkCancelled()
@@ -245,6 +253,9 @@ internal class AnalysisService(
                     podViewBytes?.let {
                         Files.write(staging.resolve(POD_VIEW_FILE), it, StandardOpenOption.CREATE_NEW, StandardOpenOption.WRITE)
                     }
+                    stagesBytes?.let {
+                        Files.write(staging.resolve(LOAD_STAGES_FILE), it, StandardOpenOption.CREATE_NEW, StandardOpenOption.WRITE)
+                    }
                 }
             return AnalysisOutcome(request.input.runId, analysisId, result, directory)
         }
@@ -252,7 +263,7 @@ internal class AnalysisService(
         var firstStart: Long? = null
         var firstEnd: Long? = null
         val requestedTransactions =
-            if (request.resources == null) {
+            if (request.resources == null && request.stages == null) {
                 emptySet()
             } else {
                 request.policy
@@ -306,11 +317,12 @@ internal class AnalysisService(
                 throw IllegalArgumentException(it.code)
             }
         }
+        val stageResolution = request.stages?.let { resolveStageWindows(it.stages, runStart, runEnd) }
         val accumulator = MetricsAccumulator(runStart, runEnd, engineConfig.metrics)
         val retainedTransactions = transactionCandidates.values.flatten().toSet()
         val windowAccumulator =
             try {
-                resourceWindows?.let { windows ->
+                (resourceWindows ?: stageResolution?.windows)?.let { windows ->
                     WindowMetricsAccumulator(
                         windows.map { MetricWindow(it.id, it.fromEpochMillis, it.toEpochMillis) },
                         retainedTransactions,
@@ -410,7 +422,21 @@ internal class AnalysisService(
         val finishedWindowMetrics = windowAccumulator?.finish(checkCancelled)
         var evaluation =
             if (request.resources == null) {
-                evaluatePolicy(request.policy?.policy, first.validity, metrics, first.diagnostics)
+                if (stageResolution == null || request.stages == null) {
+                    evaluatePolicy(request.policy?.policy, first.validity, metrics, first.diagnostics)
+                } else {
+                    val binding = stageBindingEvidence(request.stages.sha256, stageResolution, runStart, runEnd)
+                    val windowMetrics = checkNotNull(finishedWindowMetrics)
+                    evaluateSharedWindowPolicy(
+                        request.policy?.policy,
+                        first.validity,
+                        metrics,
+                        windowMetrics,
+                        stageResourceSide(request.policy?.policy, stageResolution.windows, binding),
+                        stageResolution.windows,
+                        first.diagnostics,
+                    ).let { it.copy(evidence = it.evidence + stageWindowMetricSummaries(stageResolution.windows, windowMetrics)) }
+                }
             } else {
                 val windows = checkNotNull(resourceWindows)
                 val resourceEvaluation =
@@ -503,6 +529,7 @@ internal class AnalysisService(
         val trendPlanBytes = request.trend?.rawBytes()
         val trendBytes = trend?.let { canonicalJson(it.trendJson) }
         val podViewBytes = request.podView?.canonicalBytes()
+        val stagesBytes = request.stages?.canonicalBytes()
         val run =
             runMetadata(
                 request.input,
@@ -548,6 +575,10 @@ internal class AnalysisService(
                 capacityBytes?.let {
                     checkCancelled()
                     Files.write(staging.resolve(CAPACITY_FILE), it, StandardOpenOption.CREATE_NEW, StandardOpenOption.WRITE)
+                }
+                stagesBytes?.let {
+                    checkCancelled()
+                    Files.write(staging.resolve(LOAD_STAGES_FILE), it, StandardOpenOption.CREATE_NEW, StandardOpenOption.WRITE)
                 }
                 trendPlanBytes?.let {
                     checkCancelled()
@@ -792,6 +823,7 @@ private const val CAPACITY_FILE = "capacity.json"
 private const val TREND_PLAN_FILE = "trend-plan.json"
 private const val TREND_FILE = "trend.json"
 private const val POD_VIEW_FILE = "pod-view.json"
+private const val LOAD_STAGES_FILE = "load-stages.json"
 private const val POSTGRES_PRE_FILE = "postgres-pre.json"
 private const val POSTGRES_POST_FILE = "postgres-post.json"
 private const val POSTGRES_CONTEXT_FILE = "postgres-context.json"

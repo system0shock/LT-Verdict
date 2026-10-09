@@ -1,25 +1,34 @@
 package io.ltverdict.core
 
+// FROZEN COPY of CapacityAnalysis.kt as it was on origin/main before W2.1 slice 2b typed its findings and evidence.
+// It is the oracle of DiagnosticCapacityTrendEquivalenceTest: do not "fix" or modernise it. Entry points and the classes
+// they expose carry the prefix legacy/Legacy; the private helpers keep their names (a private top-level function does
+// not clash with the one of the main source set).
+
 import io.ltverdict.ingest.RunValidity
 import io.ltverdict.metrics.NormalizedMetrics
 import io.ltverdict.metrics.UtcLoadCell
 import io.ltverdict.metrics.UtcLoadMetrics
+import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.buildJsonArray
+import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.longOrNull
+import kotlinx.serialization.json.put
 import java.math.BigDecimal
 import java.math.MathContext
 import java.math.RoundingMode
 
-internal data class CapacityAnalysis(
+internal data class LegacyCapacityAnalysis(
     val policyVerdict: PolicyVerdict,
     val capacityJson: JsonObject,
     val evidence: List<JsonObject>,
     val coverageReasons: List<String>,
 )
 
-internal fun evaluateCapacity(
+internal fun legacyEvaluateCapacity(
     plan: CapacityPlanV1,
     resources: ResourceSnapshotV1,
     utcLoad: UtcLoadMetrics,
@@ -27,7 +36,7 @@ internal fun evaluateCapacity(
     windowPolicy: PolicyEvaluation,
     windowMetrics: Map<String, NormalizedMetrics>? = null,
     checkCancelled: () -> Unit = {},
-): CapacityAnalysis {
+): LegacyCapacityAnalysis {
     val summaries = windowPolicy.evidence.filter { it.string("type") == "window_policy_summary" }.associateBy { it.string("window_id") }
     val checks = windowPolicy.evidence.filter { it.string("type") == "resource_policy_check" }
     val businessChecks = windowPolicy.evidence.filter { it.string("type") == "policy_check" }
@@ -52,22 +61,26 @@ internal fun evaluateCapacity(
         }
     val bound = bounds(evaluations, validity)
     val unboundRule = RULE_WINDOW_NOT_FOUND in windowPolicy.coverageReasons
-    val stageReasons = evaluations.flatMap(StageEvaluation::reasons) + bound.reasons
+    val stageReasons = evaluations.flatMap(LegacyStageEvaluation::reasons) + bound.reasons
     val reasons = if (unboundRule) (stageReasons + RULE_WINDOW_NOT_FOUND).distinct() else stageReasons.distinct()
     val stageVerdict = policyVerdict(plan.requiredCapacity, evaluations, bound)
     val blocked = unboundRule && (stageVerdict == PolicyVerdict.PASS || stageVerdict == PolicyVerdict.FAIL)
     val policyVerdict = if (blocked) PolicyVerdict.NO_VERDICT else stageVerdict
-    // The payload of analysis-result and of capacity.json is the summary evidence without its `id` and `type`.
-    val summary = capacitySummary(plan, evaluations, bound, policyVerdict, reasons).toJson()
-    val capacityJson = JsonObject(summary.filterKeys { it != "id" && it != "type" })
+    val capacityJson = capacityJson(plan, evaluations, bound, policyVerdict, reasons)
+    val summary =
+        buildJsonObject {
+            put("id", "capacity-summary")
+            put("type", "capacity_summary")
+            capacityJson.forEach { (name, value) -> put(name, value) }
+        }
     // ADR 0026: a diagnostic evidence item after the summary; it does not touch the bounds, the verdict or capacity_summary.
     val knee = windowMetrics?.let { capacityKnee(plan, evaluations, validity, it) }
-    return CapacityAnalysis(policyVerdict, capacityJson, listOfNotNull(summary, knee), reasons)
+    return LegacyCapacityAnalysis(policyVerdict, capacityJson, listOfNotNull(summary, knee), reasons)
 }
 
 private fun capacityKnee(
     plan: CapacityPlanV1,
-    evaluations: List<StageEvaluation>,
+    evaluations: List<LegacyStageEvaluation>,
     validity: RunValidity,
     windowMetrics: Map<String, NormalizedMetrics>,
 ): JsonObject {
@@ -90,10 +103,10 @@ private fun capacityKnee(
             points.any { it == null } -> "KNEE_STAGE_DATA_MISSING"
             else -> null
         }
-    return capacityKneeEvidence(plan.loadAxis, points.filterNotNull(), refusal)
+    return legacyCapacityKneeEvidence(plan.loadAxis, points.filterNotNull(), refusal)
 }
 
-private data class StageEvaluation(
+private data class LegacyStageEvaluation(
     val stage: CapacityStageV1,
     val achieved: BigDecimal?,
     val observedMin: BigDecimal?,
@@ -106,7 +119,7 @@ private data class StageEvaluation(
     val reasons: List<String>,
 )
 
-private data class Bounds(
+private data class LegacyBounds(
     val type: String,
     val lower: BigDecimal?,
     val upper: BigDecimal?,
@@ -125,7 +138,7 @@ private fun evaluateStage(
     utcLoad: UtcLoadMetrics,
     validity: RunValidity,
     checkCancelled: () -> Unit,
-): StageEvaluation {
+): LegacyStageEvaluation {
     val stageChecks = checks.filter { it.string("window_id") == stage.evaluationWindowId }
     val evidenceRefs = listOfNotNull(summary?.string("id")) + stageChecks.mapNotNull { it.string("id") }
     val bins =
@@ -193,7 +206,7 @@ private fun evaluateStage(
             else -> "INDETERMINATE"
         }
     val verified = achieved?.let { minOf(stage.target, it) }
-    return StageEvaluation(
+    return LegacyStageEvaluation(
         stage,
         achieved,
         values.minOrNull(),
@@ -282,9 +295,9 @@ private fun p05(values: List<BigDecimal>): BigDecimal {
 }
 
 private fun bounds(
-    evaluations: List<StageEvaluation>,
+    evaluations: List<LegacyStageEvaluation>,
     validity: RunValidity,
-): Bounds {
+): LegacyBounds {
     val reasons = mutableListOf<String>()
     if (validity != RunValidity.VALID) reasons += "CAPACITY_RUN_NOT_VALID"
     if (evaluations.isEmpty() ||
@@ -309,13 +322,13 @@ private fun bounds(
         if (it.verdict == "FAIL") failed = true
         if (failed && it.verdict == "PASS") reasons += "CAPACITY_NON_MONOTONIC_OUTCOME"
     }
-    if (reasons.isNotEmpty()) return Bounds("INDETERMINATE", null, null, reasons.distinct())
+    if (reasons.isNotEmpty()) return LegacyBounds("INDETERMINATE", null, null, reasons.distinct())
     val firstFail = evaluations.firstOrNull { it.verdict == "FAIL" }
     val lastPass = evaluations.lastOrNull { it.verdict == "PASS" }
     if (firstFail != null && lastPass != null && checkNotNull(lastPass.verifiedLoad) >= checkNotNull(firstFail.verifiedLoad)) {
-        return Bounds("INDETERMINATE", null, null, listOf("CAPACITY_NON_MONOTONIC_VERIFIED_LOAD"))
+        return LegacyBounds("INDETERMINATE", null, null, listOf("CAPACITY_NON_MONOTONIC_VERIFIED_LOAD"))
     }
-    return Bounds(
+    return LegacyBounds(
         when {
             firstFail != null && lastPass != null -> "BOUNDED"
             firstFail != null -> "UPPER_BOUND"
@@ -329,8 +342,8 @@ private fun bounds(
 
 private fun policyVerdict(
     required: BigDecimal?,
-    evaluations: List<StageEvaluation>,
-    bounds: Bounds,
+    evaluations: List<LegacyStageEvaluation>,
+    bounds: LegacyBounds,
 ): PolicyVerdict =
     when {
         required == null -> PolicyVerdict.NO_POLICY
@@ -341,47 +354,53 @@ private fun policyVerdict(
         else -> PolicyVerdict.NO_VERDICT
     }
 
-private fun capacitySummary(
+private fun capacityJson(
     plan: CapacityPlanV1,
-    evaluations: List<StageEvaluation>,
-    bounds: Bounds,
+    evaluations: List<LegacyStageEvaluation>,
+    bounds: LegacyBounds,
     policyVerdict: PolicyVerdict,
     reasons: List<String>,
-) = CapacitySummaryEvidence(
-    id = "capacity-summary",
-    schemaVersion = "capacity.v1",
-    loadAxis = plan.loadAxis.wireName,
-    unit = plan.loadAxis.unit,
-    stages = evaluations.map { stageDocument(it, plan.targetToleranceRatio) },
-    boundType = bounds.type,
-    lowerInclusive = bounds.lower.canonical(),
-    upperExclusive = bounds.upper.canonical(),
-    policyVerdict = policyVerdict,
-    reasons = reasons,
-    capacityKnee = null,
-    kneeReason = "KNEE_DETECTOR_NOT_IMPLEMENTED",
-)
+): JsonObject =
+    buildJsonObject {
+        put("schema_version", "capacity.v1")
+        put("load_axis", plan.loadAxis.wireName)
+        put("unit", plan.loadAxis.unit)
+        put("stages", buildJsonArray { evaluations.forEach { add(stageJson(it, plan.targetToleranceRatio)) } })
+        put("bound_type", bounds.type)
+        putDecimal("lower_inclusive", bounds.lower)
+        putDecimal("upper_exclusive", bounds.upper)
+        put("policy_verdict", policyVerdict.name)
+        put("reasons", buildJsonArray { reasons.forEach { add(JsonPrimitive(it)) } })
+        put("capacity_knee", JsonNull)
+        put("knee_reason", "KNEE_DETECTOR_NOT_IMPLEMENTED")
+    }
 
-private fun stageDocument(
-    evaluation: StageEvaluation,
+private fun stageJson(
+    evaluation: LegacyStageEvaluation,
     tolerance: BigDecimal,
-) = CapacityStageDocument(
-    id = evaluation.stage.id,
-    target = evaluation.stage.target,
-    achieved = evaluation.achieved.canonical(),
-    achievedStatistic = "p05_10s",
-    observedMin = evaluation.observedMin.canonical(),
-    observedMax = evaluation.observedMax.canonical(),
-    completeBins = evaluation.completeBins,
-    expectedBins = evaluation.expectedBins,
-    targetToleranceRatio = tolerance,
-    verifiedBoundLoad = evaluation.verifiedLoad.canonical(),
-    verdict = evaluation.verdict,
-    reasons = evaluation.reasons,
-    evidenceRefs = evaluation.evidenceRefs,
-)
+): JsonObject =
+    buildJsonObject {
+        put("id", evaluation.stage.id)
+        put("target", JsonPrimitive(evaluation.stage.target))
+        putDecimal("achieved", evaluation.achieved)
+        put("achieved_statistic", "p05_10s")
+        putDecimal("observed_min", evaluation.observedMin)
+        putDecimal("observed_max", evaluation.observedMax)
+        put("complete_bins", evaluation.completeBins)
+        put("expected_bins", evaluation.expectedBins)
+        put("target_tolerance_ratio", JsonPrimitive(tolerance))
+        putDecimal("verified_bound_load", evaluation.verifiedLoad)
+        put("verdict", evaluation.verdict)
+        put("reasons", buildJsonArray { evaluation.reasons.forEach { add(JsonPrimitive(it)) } })
+        put("evidence_refs", buildJsonArray { evaluation.evidenceRefs.forEach { add(JsonPrimitive(it)) } })
+    }
 
-private fun BigDecimal?.canonical() = this?.let { BigDecimal(canonicalDecimal(it)) }
+private fun kotlinx.serialization.json.JsonObjectBuilder.putDecimal(
+    name: String,
+    value: BigDecimal?,
+) {
+    put(name, value?.let { JsonPrimitive(BigDecimal(canonicalDecimal(it))) } ?: JsonNull)
+}
 
 private fun JsonObject.string(name: String): String? = this[name]?.jsonPrimitive?.content
 

@@ -1,5 +1,10 @@
 package io.ltverdict.core
 
+// FROZEN COPY of TrendAnalysis.kt as it was on origin/main before W2.1 slice 2b typed its findings and evidence.
+// It is the oracle of DiagnosticCapacityTrendEquivalenceTest: do not "fix" or modernise it. Entry points and the classes
+// they expose carry the prefix legacy/Legacy; the private helpers keep their names (a private top-level function does
+// not clash with the one of the main source set).
+
 import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
@@ -9,44 +14,44 @@ import kotlinx.serialization.json.put
 import java.math.BigDecimal
 import java.math.MathContext
 
-internal data class TrendAnalysis(
+internal data class LegacyTrendAnalysis(
     val trendJson: JsonObject,
     val evidence: List<JsonObject>,
     val findings: List<JsonObject>,
 )
 
-internal fun evaluateTrend(
+internal fun legacyEvaluateTrend(
     plan: TrendPlanV1,
     snapshot: ResourceSnapshotV1,
     windows: List<ResourceWindowV1>,
     checkCancelled: () -> Unit = {},
-): TrendAnalysis {
+): LegacyTrendAnalysis {
     val seriesById = snapshot.series.associateBy { it.id }
     val windowById = windows.associateBy { it.id }
     val results =
         plan.checks.map { check ->
             evaluateTrendCheck(check, snapshot, seriesById[check.seriesId], windowById[check.windowId], checkCancelled)
         }
-    return TrendAnalysis(
+    return LegacyTrendAnalysis(
         trendJson(results),
-        results.map(TrendCheckResult::evidence) + trendSummary(results),
-        results.mapNotNull(TrendCheckResult::finding),
+        results.map(LegacyTrendCheckResult::evidence) + trendSummary(results),
+        results.mapNotNull(LegacyTrendCheckResult::finding),
     )
 }
 
-internal fun trendUnavailable(
+internal fun legacyTrendUnavailable(
     plan: TrendPlanV1,
     reason: String,
-): TrendAnalysis {
-    val results = plan.checks.map { check -> abstain(check, null, null, "UNAVAILABLE", listOf(reason), TrendFacts()) }
-    return TrendAnalysis(
+): LegacyTrendAnalysis {
+    val results = plan.checks.map { check -> abstain(check, null, null, "UNAVAILABLE", listOf(reason), LegacyTrendFacts()) }
+    return LegacyTrendAnalysis(
         trendJson(results),
-        results.map(TrendCheckResult::evidence) + trendSummary(results),
+        results.map(LegacyTrendCheckResult::evidence) + trendSummary(results),
         emptyList(),
     )
 }
 
-private data class TrendFacts(
+private data class LegacyTrendFacts(
     val median: BigDecimal? = null,
     val slope: BigDecimal? = null,
     val shift: BigDecimal? = null,
@@ -56,11 +61,11 @@ private data class TrendFacts(
     val longestGapCells: Int = 0,
 )
 
-private data class TrendCheckResult(
+private data class LegacyTrendCheckResult(
     val check: TrendCheckV1,
     val status: String,
     val observedDirection: String?,
-    val facts: TrendFacts,
+    val facts: LegacyTrendFacts,
     val reasons: List<String>,
     val evidence: JsonObject,
     val finding: JsonObject?,
@@ -72,11 +77,11 @@ private fun evaluateTrendCheck(
     series: ResourceSeriesV1?,
     window: ResourceWindowV1?,
     checkCancelled: () -> Unit,
-): TrendCheckResult {
+): LegacyTrendCheckResult {
     val reasons = mutableListOf<String>()
     if (series == null) reasons += "TREND_SERIES_NOT_FOUND"
     if (window == null) reasons += "TREND_WINDOW_NOT_FOUND"
-    if (series == null || window == null) return abstain(check, series, window, "UNAVAILABLE", reasons, TrendFacts())
+    if (series == null || window == null) return abstain(check, series, window, "UNAVAILABLE", reasons, LegacyTrendFacts())
 
     val fromIndex = snapshot.cellIndex(window.fromEpochMillis)
     val toIndex = snapshot.cellIndex(window.toEpochMillis)
@@ -95,7 +100,7 @@ private fun evaluateTrendCheck(
             observed += IndexedValue(index - fromIndex, value)
         }
     }
-    val partial = TrendFacts(expectedCells = expectedCells, observedCells = observed.size, longestGapCells = longestGap)
+    val partial = LegacyTrendFacts(expectedCells = expectedCells, observedCells = observed.size, longestGapCells = longestGap)
     if (observed.size < expectedCells) reasons += "RESOURCE_GAPS"
     if (observed.isEmpty()) {
         return abstain(check, series, window, "INSUFFICIENT_CELLS", reasons + "NO_OBSERVATIONS", partial)
@@ -138,7 +143,7 @@ private fun evaluateTrendCheck(
     evaluated += "STATIONARITY_NOT_EVALUATED"
     val direction = directionOf(slope)
     val evidenceId = resourceId("trend-check", check.id)
-    return TrendCheckResult(
+    return LegacyTrendCheckResult(
         check,
         "TREND_OBSERVED",
         direction,
@@ -155,12 +160,12 @@ private fun abstain(
     window: ResourceWindowV1?,
     status: String,
     reasons: List<String>,
-    facts: TrendFacts,
-): TrendCheckResult {
+    facts: LegacyTrendFacts,
+): LegacyTrendCheckResult {
     val direction = facts.slope?.let(::directionOf)
     val evidenceId = resourceId("trend-check", check.id)
     val evidence = evidence(check, series, window, status, reasons, facts, direction, evidenceId)
-    return TrendCheckResult(check, status, direction, facts, reasons, evidence, null)
+    return LegacyTrendCheckResult(check, status, direction, facts, reasons, evidence, null)
 }
 
 private fun evidence(
@@ -169,41 +174,44 @@ private fun evidence(
     window: ResourceWindowV1?,
     status: String,
     reasons: List<String>,
-    facts: TrendFacts,
+    facts: LegacyTrendFacts,
     direction: String?,
     evidenceId: String,
 ): JsonObject =
-    TrendCheckEvidence(
-        id = evidenceId,
-        checkId = check.id,
-        seriesId = check.seriesId,
-        metric = series?.metric,
-        unit = series?.unit,
-        entity = series?.entity,
-        windowId = check.windowId,
-        windowFromEpochMs = window?.fromEpochMillis,
-        windowToEpochMs = window?.toEpochMillis,
-        declaredDirection = check.direction.wireName,
-        status = status,
-        minCells = check.minCells,
-        expectedCells = facts.expectedCells,
-        observedCells = facts.observedCells,
-        missingCells = facts.expectedCells - facts.observedCells,
-        longestGapCells = facts.longestGapCells,
-        median = facts.median?.let { canonicalDecimal(it) },
-        slopePerSecond = facts.slope?.let { canonicalDecimal(it) },
-        splitHalfShift = facts.shift?.let { canonicalDecimal(it) },
-        magnitudeGate =
-            MagnitudeGateDocument(
-                minSlopeUnitsPerSecond = canonicalDecimal(check.magnitudeGate.minSlopeUnitsPerSecond),
-                minSplitHalfShiftPct = canonicalDecimal(check.magnitudeGate.minSplitHalfShiftPct),
-                requiredSplitHalfShiftUnits = facts.requiredShiftUnits?.let { canonicalDecimal(it) },
-            ),
-        observedDirection = direction,
-        method = TREND_METHOD,
-        uncertainty = "NOT_ESTIMATED",
-        reasons = reasons,
-    ).toJson()
+    buildJsonObject {
+        put("id", evidenceId)
+        put("type", "trend_check")
+        put("check_id", check.id)
+        put("series_id", check.seriesId)
+        put("metric", series?.metric?.let(::JsonPrimitive) ?: JsonNull)
+        put("unit", series?.unit?.let(::JsonPrimitive) ?: JsonNull)
+        put("entity", series?.entity?.let(::JsonPrimitive) ?: JsonNull)
+        put("window_id", check.windowId)
+        put("window_from_epoch_ms", window?.fromEpochMillis?.let(::JsonPrimitive) ?: JsonNull)
+        put("window_to_epoch_ms", window?.toEpochMillis?.let(::JsonPrimitive) ?: JsonNull)
+        put("declared_direction", check.direction.wireName)
+        put("status", status)
+        put("min_cells", check.minCells)
+        put("expected_cells", facts.expectedCells)
+        put("observed_cells", facts.observedCells)
+        put("missing_cells", facts.expectedCells - facts.observedCells)
+        put("longest_gap_cells", facts.longestGapCells)
+        putDecimal("median", facts.median)
+        putDecimal("slope_per_second", facts.slope)
+        putDecimal("split_half_shift", facts.shift)
+        put(
+            "magnitude_gate",
+            buildJsonObject {
+                put("min_slope_units_per_second", canonicalDecimal(check.magnitudeGate.minSlopeUnitsPerSecond))
+                put("min_split_half_shift_pct", canonicalDecimal(check.magnitudeGate.minSplitHalfShiftPct))
+                putDecimal("required_split_half_shift_units", facts.requiredShiftUnits)
+            },
+        )
+        put("observed_direction", direction?.let(::JsonPrimitive) ?: JsonNull)
+        put("method", TREND_METHOD)
+        put("uncertainty", "NOT_ESTIMATED")
+        put("reasons", buildJsonArray { reasons.forEach { add(JsonPrimitive(it)) } })
+    }
 
 private fun finding(
     check: TrendCheckV1,
@@ -213,43 +221,45 @@ private fun finding(
     fromIndex: Int,
     toIndex: Int,
     direction: String,
-    facts: TrendFacts,
+    facts: LegacyTrendFacts,
     evidenceId: String,
 ): JsonObject =
-    ResourceTrendFinding(
-        id = resourceId("resource-trend-finding", check.id, window.fromEpochMillis.toString()),
-        checkId = check.id,
-        seriesId = series.id,
-        metric = series.metric,
-        unit = series.unit,
-        entity = series.entity,
-        windowId = window.id,
-        observedDirection = direction,
-        fromEpochMs = snapshot.cellStart(fromIndex),
-        toEpochMs = snapshot.cellStart(toIndex),
-        expectedCells = facts.expectedCells,
-        observedCells = facts.observedCells,
-        median = canonicalDecimal(checkNotNull(facts.median)),
-        slopePerSecond = canonicalDecimal(checkNotNull(facts.slope)),
-        splitHalfShift = canonicalDecimal(checkNotNull(facts.shift)),
-        effect = "diagnostic",
-        uncertainty = "NOT_ESTIMATED",
-        evidenceId = evidenceId,
-    ).toJson()
+    buildJsonObject {
+        put("id", resourceId("resource-trend-finding", check.id, window.fromEpochMillis.toString()))
+        put("type", "resource_trend")
+        put("check_id", check.id)
+        put("series_id", series.id)
+        put("metric", series.metric)
+        put("unit", series.unit)
+        put("entity", series.entity)
+        put("window_id", window.id)
+        put("observed_direction", direction)
+        put("from_epoch_ms", snapshot.cellStart(fromIndex))
+        put("to_epoch_ms", snapshot.cellStart(toIndex))
+        put("expected_cells", facts.expectedCells)
+        put("observed_cells", facts.observedCells)
+        put("median", canonicalDecimal(checkNotNull(facts.median)))
+        put("slope_per_second", canonicalDecimal(checkNotNull(facts.slope)))
+        put("split_half_shift", canonicalDecimal(checkNotNull(facts.shift)))
+        put("effect", "diagnostic")
+        put("uncertainty", "NOT_ESTIMATED")
+        put("evidence_id", evidenceId)
+    }
 
-private fun trendSummary(results: List<TrendCheckResult>): JsonObject =
-    TrendSummaryEvidence(
-        id = "trend-summary",
-        checksTotal = results.size,
-        observed = results.count { it.status == "TREND_OBSERVED" },
-        notMaterial = results.count { it.status == "NO_MATERIAL_TREND" },
-        insufficient = results.count { it.status == "INSUFFICIENT_CELLS" },
-        unavailable = results.count { it.status == "UNAVAILABLE" },
-        method = TREND_METHOD,
-        uncertainty = "NOT_ESTIMATED",
-    ).toJson()
+private fun trendSummary(results: List<LegacyTrendCheckResult>): JsonObject =
+    buildJsonObject {
+        put("id", "trend-summary")
+        put("type", "trend_summary")
+        put("checks_total", results.size)
+        put("observed", results.count { it.status == "TREND_OBSERVED" })
+        put("not_material", results.count { it.status == "NO_MATERIAL_TREND" })
+        put("insufficient", results.count { it.status == "INSUFFICIENT_CELLS" })
+        put("unavailable", results.count { it.status == "UNAVAILABLE" })
+        put("method", TREND_METHOD)
+        put("uncertainty", "NOT_ESTIMATED")
+    }
 
-private fun trendJson(results: List<TrendCheckResult>): JsonObject =
+private fun trendJson(results: List<LegacyTrendCheckResult>): JsonObject =
     buildJsonObject {
         put("schema_version", "trend.v1")
         put("method", TREND_METHOD)

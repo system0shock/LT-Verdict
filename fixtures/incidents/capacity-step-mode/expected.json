@@ -1,0 +1,67 @@
+{
+    "schema_version": "incident.v1",
+    "method": "incident-synthesis.v1",
+    "status": "EVALUATED",
+    "overview_limit": 7,
+    "total_count": 1,
+    "omitted_count": 0,
+    "items": [
+        {
+            "id": "incident-5fa00770ea2cd296e13920f6369704aa68c9a98836657c23cb321d8042955077",
+            "rank": 1,
+            "in_overview": true,
+            "priority": "HIGH",
+            "priority_key": {
+                "tier": 1,
+                "finding_count": 1,
+                "first_epoch_ms": 1000
+            },
+            "title": "Нарушение SLA: транзакция login в окне steady",
+            "summary": "В окне steady нарушено правил policy: 1. Область: транзакция login.",
+            "scope": {
+                "kind": "transaction",
+                "label": "login"
+            },
+            "window_id": "steady",
+            "interval_basis": "WINDOW",
+            "interval": {
+                "from_epoch_ms": 1000,
+                "to_epoch_ms": 2000
+            },
+            "grouping": {
+                "rule": "incident-grouping.v1",
+                "key": {
+                    "family": "TRANSACTION",
+                    "window_id": "steady",
+                    "scope": {
+                        "kind": "transaction",
+                        "label": "login"
+                    },
+                    "cluster_from_epoch_ms": null
+                }
+            },
+            "finding_count": 1,
+            "finding_types": [
+                "policy_failure"
+            ],
+            "finding_ids": [
+                "pf-1"
+            ],
+            "evidence_ids": [
+                "pc-1"
+            ],
+            "refs_truncated": false,
+            "negative_evidence": [],
+            "next_checks": [
+                {
+                    "check": "COMPARE_WITH_BASELINE",
+                    "text": "Сравнить метрики транзакции login с baseline.",
+                    "evidence_ids": [
+                        "pc-1"
+                    ]
+                }
+            ],
+            "coincident_with": []
+        }
+    ]
+}

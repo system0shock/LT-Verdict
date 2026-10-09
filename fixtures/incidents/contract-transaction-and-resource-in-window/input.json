@@ -1,0 +1,208 @@
+{
+  "run_validity": "VALID",
+  "findings": [
+    {
+      "type": "policy_failure",
+      "id": "policy-failure-window-48a98ddb993c4985",
+      "rule_id": "rule-0",
+      "evidence_id": "policy-check-window-446f2b9d79ab058a",
+      "window_id": "steady"
+    },
+    {
+      "type": "policy_failure",
+      "id": "policy-failure-window-5f2b17ded2f56baf",
+      "rule_id": "rule-1",
+      "evidence_id": "policy-check-window-8a0f1b2251bb182e",
+      "window_id": "steady"
+    },
+    {
+      "type": "resource_threshold_violation",
+      "id": "resource_threshold_violation-5f05601c1015767a",
+      "window_id": "steady",
+      "entity": "host-a",
+      "from_epoch_ms": 1767225620000,
+      "to_epoch_ms": 1767225629999,
+      "evidence_id": "resource-policy-check-0038b22240772073",
+      "rule_id": "rule",
+      "series_id": "series-resource-policy-check-0038b22240772073"
+    },
+    {
+      "type": "resource_threshold_violation",
+      "id": "resource_threshold_violation-71b521fd2b866f7a",
+      "window_id": "steady",
+      "entity": "host-a",
+      "from_epoch_ms": 1767225626666,
+      "to_epoch_ms": 1767225636665,
+      "evidence_id": "resource-policy-check-a077d5dd1dce8e12",
+      "rule_id": "rule",
+      "series_id": "series-resource-policy-check-a077d5dd1dce8e12"
+    },
+    {
+      "type": "resource_threshold_violation",
+      "id": "resource_threshold_violation-f06da1e935660698",
+      "window_id": "steady",
+      "entity": "host-a",
+      "from_epoch_ms": 1767225633332,
+      "to_epoch_ms": 1767225640000,
+      "evidence_id": "resource-policy-check-0038b22240772073",
+      "rule_id": "rule",
+      "series_id": "series-resource-policy-check-0038b22240772073"
+    }
+  ],
+  "evidence": [
+    {
+      "type": "window_policy_summary",
+      "id": "window-policy-summary-steady",
+      "window_id": "steady",
+      "from_epoch_ms": 1767225610000,
+      "to_epoch_ms": 1767225640000,
+      "verdict": "FAIL"
+    },
+    {
+      "type": "policy_check",
+      "id": "policy-check-window-446f2b9d79ab058a",
+      "rule_id": "rule",
+      "status": "FAIL",
+      "window_id": "steady",
+      "scope": {
+        "kind": "transaction",
+        "label": "create-payment",
+        "group_path": [
+          "checkout"
+        ],
+        "sample_kind": "JMETER_SAMPLER"
+      }
+    },
+    {
+      "type": "policy_check",
+      "id": "policy-check-window-8a0f1b2251bb182e",
+      "rule_id": "rule",
+      "status": "FAIL",
+      "window_id": "steady",
+      "scope": {
+        "kind": "transaction",
+        "label": "create-payment",
+        "group_path": [
+          "checkout"
+        ],
+        "sample_kind": "JMETER_SAMPLER"
+      }
+    },
+    {
+      "type": "policy_check",
+      "id": "policy-check-window-6dd6192276016562",
+      "rule_id": "rule",
+      "status": "PASS",
+      "window_id": "steady",
+      "scope": {
+        "kind": "overall"
+      }
+    },
+    {
+      "type": "policy_check",
+      "id": "policy-check-window-a02b3b7657e2c3ab",
+      "rule_id": "rule",
+      "status": "PASS",
+      "window_id": "steady",
+      "scope": {
+        "kind": "overall"
+      }
+    },
+    {
+      "type": "policy_check",
+      "id": "policy-check-window-c2f8920d2ae4a8aa",
+      "rule_id": "rule",
+      "status": "PASS",
+      "window_id": "steady",
+      "scope": {
+        "kind": "overall"
+      }
+    },
+    {
+      "type": "resource_policy_check",
+      "id": "resource-policy-check-c9de125c60d7f70a",
+      "window_id": "steady",
+      "rule_id": "rule",
+      "series_id": "series-resource-policy-check-c9de125c60d7f70a",
+      "effect": "sla",
+      "status": "PASS",
+      "reason": null
+    },
+    {
+      "type": "resource_summary",
+      "id": "resource-summary-resource-policy-check-c9de125c60d7f70a",
+      "window_id": "steady",
+      "series_id": "series-resource-policy-check-c9de125c60d7f70a",
+      "entity": "gen-1",
+      "role": "generator"
+    },
+    {
+      "type": "anomaly_check",
+      "id": "anomaly-check-8426f2ef8e17ca8c",
+      "window_id": "steady",
+      "status": "NO_MATERIAL_CHANGE",
+      "reasons": []
+    },
+    {
+      "type": "resource_policy_check",
+      "id": "resource-policy-check-0038b22240772073",
+      "window_id": "steady",
+      "rule_id": "rule",
+      "series_id": "series-resource-policy-check-0038b22240772073",
+      "effect": "sla",
+      "status": "FAIL",
+      "reason": null
+    },
+    {
+      "type": "resource_policy_check",
+      "id": "resource-policy-check-a077d5dd1dce8e12",
+      "window_id": "steady",
+      "rule_id": "rule",
+      "series_id": "series-resource-policy-check-a077d5dd1dce8e12",
+      "effect": "diagnostic",
+      "status": "FAIL",
+      "reason": null
+    },
+    {
+      "type": "resource_policy_check",
+      "id": "resource-policy-check-b116a11bd1d980c0",
+      "window_id": "steady",
+      "rule_id": "rule",
+      "series_id": "series-resource-policy-check-b116a11bd1d980c0",
+      "effect": "sla",
+      "status": "PASS",
+      "reason": null
+    },
+    {
+      "type": "resource_summary",
+      "id": "resource-summary-resource-policy-check-b116a11bd1d980c0",
+      "window_id": "steady",
+      "series_id": "series-resource-policy-check-b116a11bd1d980c0",
+      "entity": "peer-80c0",
+      "role": "system"
+    },
+    {
+      "type": "resource_policy_check",
+      "id": "resource-policy-check-bd6c804476258fba",
+      "window_id": "steady",
+      "rule_id": "rule",
+      "series_id": "series-resource-policy-check-bd6c804476258fba",
+      "effect": "sla",
+      "status": "PASS",
+      "reason": null
+    },
+    {
+      "type": "resource_summary",
+      "id": "resource-summary-resource-policy-check-bd6c804476258fba",
+      "window_id": "steady",
+      "series_id": "series-resource-policy-check-bd6c804476258fba",
+      "entity": "peer-8fba",
+      "role": "system"
+    },
+    {
+      "type": "resource_binding",
+      "id": "resource-binding",
+      "mode": "explicit_windows"
+    }
+  ]
+}

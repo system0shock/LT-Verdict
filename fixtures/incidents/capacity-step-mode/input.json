@@ -1,0 +1,59 @@
+{
+    "run_validity": "VALID",
+    "findings": [
+        {
+            "type": "policy_failure",
+            "id": "pf-1",
+            "window_id": "steady",
+            "rule_id": "r",
+            "evidence_id": "pc-1"
+        },
+        {
+            "type": "capacity_stage_violation",
+            "id": "cap-1",
+            "window_id": "stage-1",
+            "evidence_id": "cap-e1"
+        },
+        {
+            "type": "correlation_candidate",
+            "id": "cc-1",
+            "window_id": "steady",
+            "evidence_id": "pair-1"
+        }
+    ],
+    "evidence": [
+        {
+            "type": "window_policy_summary",
+            "id": "wps-steady",
+            "window_id": "steady",
+            "from_epoch_ms": 1000,
+            "to_epoch_ms": 2000,
+            "verdict": "FAIL"
+        },
+        {
+            "type": "policy_check",
+            "id": "pc-1",
+            "window_id": "steady",
+            "rule_id": "r",
+            "status": "FAIL",
+            "scope": {
+                "kind": "transaction",
+                "label": "login"
+            }
+        },
+        {
+            "type": "capacity_knee_diagnostic",
+            "id": "cap-e1",
+            "window_id": "stage-1"
+        },
+        {
+            "type": "correlation_pair",
+            "id": "pair-1",
+            "window_id": "steady"
+        },
+        {
+            "type": "resource_binding",
+            "id": "resource-binding"
+        }
+    ]
+}

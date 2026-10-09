@@ -1,0 +1,1384 @@
+{
+    "run_validity": "VALID",
+    "findings": [
+        {
+            "type": "policy_failure",
+            "id": "pf-t0",
+            "window_id": "steady",
+            "rule_id": "r",
+            "evidence_id": "pc-t0"
+        },
+        {
+            "type": "resource_threshold_violation",
+            "id": "f-r1",
+            "window_id": "steady",
+            "rule_id": "r",
+            "series_id": "s-r1",
+            "entity": "host-01",
+            "from_epoch_ms": 1001,
+            "to_epoch_ms": 1101,
+            "evidence_id": "rpc-r1"
+        },
+        {
+            "type": "policy_failure",
+            "id": "pf-t2",
+            "window_id": "steady",
+            "rule_id": "r",
+            "evidence_id": "pc-t2"
+        },
+        {
+            "type": "resource_threshold_violation",
+            "id": "f-r3",
+            "window_id": "steady",
+            "rule_id": "r",
+            "series_id": "s-r3",
+            "entity": "host-03",
+            "from_epoch_ms": 1003,
+            "to_epoch_ms": 1103,
+            "evidence_id": "rpc-r3"
+        },
+        {
+            "type": "policy_failure",
+            "id": "pf-t4",
+            "window_id": "steady",
+            "rule_id": "r",
+            "evidence_id": "pc-t4"
+        },
+        {
+            "type": "resource_threshold_violation",
+            "id": "f-r5",
+            "window_id": "steady",
+            "rule_id": "r",
+            "series_id": "s-r5",
+            "entity": "host-05",
+            "from_epoch_ms": 1005,
+            "to_epoch_ms": 1105,
+            "evidence_id": "rpc-r5"
+        },
+        {
+            "type": "policy_failure",
+            "id": "pf-t6",
+            "window_id": "steady",
+            "rule_id": "r",
+            "evidence_id": "pc-t6"
+        },
+        {
+            "type": "resource_threshold_violation",
+            "id": "f-r7",
+            "window_id": "steady",
+            "rule_id": "r",
+            "series_id": "s-r7",
+            "entity": "host-07",
+            "from_epoch_ms": 1007,
+            "to_epoch_ms": 1107,
+            "evidence_id": "rpc-r7"
+        },
+        {
+            "type": "policy_failure",
+            "id": "pf-t8",
+            "window_id": "steady",
+            "rule_id": "r",
+            "evidence_id": "pc-t8"
+        },
+        {
+            "type": "resource_threshold_violation",
+            "id": "f-r9",
+            "window_id": "steady",
+            "rule_id": "r",
+            "series_id": "s-r9",
+            "entity": "host-09",
+            "from_epoch_ms": 1009,
+            "to_epoch_ms": 1109,
+            "evidence_id": "rpc-r9"
+        },
+        {
+            "type": "policy_failure",
+            "id": "pf-t10",
+            "window_id": "steady",
+            "rule_id": "r",
+            "evidence_id": "pc-t10"
+        },
+        {
+            "type": "resource_threshold_violation",
+            "id": "f-r11",
+            "window_id": "steady",
+            "rule_id": "r",
+            "series_id": "s-r11",
+            "entity": "host-11",
+            "from_epoch_ms": 1011,
+            "to_epoch_ms": 1111,
+            "evidence_id": "rpc-r11"
+        },
+        {
+            "type": "policy_failure",
+            "id": "pf-t12",
+            "window_id": "steady",
+            "rule_id": "r",
+            "evidence_id": "pc-t12"
+        },
+        {
+            "type": "resource_threshold_violation",
+            "id": "f-r13",
+            "window_id": "steady",
+            "rule_id": "r",
+            "series_id": "s-r13",
+            "entity": "host-13",
+            "from_epoch_ms": 1013,
+            "to_epoch_ms": 1113,
+            "evidence_id": "rpc-r13"
+        },
+        {
+            "type": "policy_failure",
+            "id": "pf-t14",
+            "window_id": "steady",
+            "rule_id": "r",
+            "evidence_id": "pc-t14"
+        },
+        {
+            "type": "resource_threshold_violation",
+            "id": "f-r15",
+            "window_id": "steady",
+            "rule_id": "r",
+            "series_id": "s-r15",
+            "entity": "host-15",
+            "from_epoch_ms": 1015,
+            "to_epoch_ms": 1115,
+            "evidence_id": "rpc-r15"
+        },
+        {
+            "type": "policy_failure",
+            "id": "pf-t16",
+            "window_id": "steady",
+            "rule_id": "r",
+            "evidence_id": "pc-t16"
+        },
+        {
+            "type": "resource_threshold_violation",
+            "id": "f-r17",
+            "window_id": "steady",
+            "rule_id": "r",
+            "series_id": "s-r17",
+            "entity": "host-17",
+            "from_epoch_ms": 1017,
+            "to_epoch_ms": 1117,
+            "evidence_id": "rpc-r17"
+        },
+        {
+            "type": "policy_failure",
+            "id": "pf-t18",
+            "window_id": "steady",
+            "rule_id": "r",
+            "evidence_id": "pc-t18"
+        },
+        {
+            "type": "resource_threshold_violation",
+            "id": "f-r19",
+            "window_id": "steady",
+            "rule_id": "r",
+            "series_id": "s-r19",
+            "entity": "host-19",
+            "from_epoch_ms": 1019,
+            "to_epoch_ms": 1119,
+            "evidence_id": "rpc-r19"
+        },
+        {
+            "type": "policy_failure",
+            "id": "pf-t20",
+            "window_id": "steady",
+            "rule_id": "r",
+            "evidence_id": "pc-t20"
+        },
+        {
+            "type": "resource_threshold_violation",
+            "id": "f-r21",
+            "window_id": "steady",
+            "rule_id": "r",
+            "series_id": "s-r21",
+            "entity": "host-21",
+            "from_epoch_ms": 1021,
+            "to_epoch_ms": 1121,
+            "evidence_id": "rpc-r21"
+        },
+        {
+            "type": "policy_failure",
+            "id": "pf-t22",
+            "window_id": "steady",
+            "rule_id": "r",
+            "evidence_id": "pc-t22"
+        },
+        {
+            "type": "resource_threshold_violation",
+            "id": "f-r23",
+            "window_id": "steady",
+            "rule_id": "r",
+            "series_id": "s-r23",
+            "entity": "host-23",
+            "from_epoch_ms": 1023,
+            "to_epoch_ms": 1123,
+            "evidence_id": "rpc-r23"
+        },
+        {
+            "type": "policy_failure",
+            "id": "pf-t24",
+            "window_id": "steady",
+            "rule_id": "r",
+            "evidence_id": "pc-t24"
+        },
+        {
+            "type": "resource_threshold_violation",
+            "id": "f-r25",
+            "window_id": "steady",
+            "rule_id": "r",
+            "series_id": "s-r25",
+            "entity": "host-25",
+            "from_epoch_ms": 1025,
+            "to_epoch_ms": 1125,
+            "evidence_id": "rpc-r25"
+        },
+        {
+            "type": "policy_failure",
+            "id": "pf-t26",
+            "window_id": "steady",
+            "rule_id": "r",
+            "evidence_id": "pc-t26"
+        },
+        {
+            "type": "resource_threshold_violation",
+            "id": "f-r27",
+            "window_id": "steady",
+            "rule_id": "r",
+            "series_id": "s-r27",
+            "entity": "host-27",
+            "from_epoch_ms": 1027,
+            "to_epoch_ms": 1127,
+            "evidence_id": "rpc-r27"
+        },
+        {
+            "type": "policy_failure",
+            "id": "pf-t28",
+            "window_id": "steady",
+            "rule_id": "r",
+            "evidence_id": "pc-t28"
+        },
+        {
+            "type": "resource_threshold_violation",
+            "id": "f-r29",
+            "window_id": "steady",
+            "rule_id": "r",
+            "series_id": "s-r29",
+            "entity": "host-29",
+            "from_epoch_ms": 1029,
+            "to_epoch_ms": 1129,
+            "evidence_id": "rpc-r29"
+        },
+        {
+            "type": "policy_failure",
+            "id": "pf-t30",
+            "window_id": "steady",
+            "rule_id": "r",
+            "evidence_id": "pc-t30"
+        },
+        {
+            "type": "resource_threshold_violation",
+            "id": "f-r31",
+            "window_id": "steady",
+            "rule_id": "r",
+            "series_id": "s-r31",
+            "entity": "host-31",
+            "from_epoch_ms": 1031,
+            "to_epoch_ms": 1131,
+            "evidence_id": "rpc-r31"
+        },
+        {
+            "type": "policy_failure",
+            "id": "pf-t32",
+            "window_id": "steady",
+            "rule_id": "r",
+            "evidence_id": "pc-t32"
+        },
+        {
+            "type": "resource_threshold_violation",
+            "id": "f-r33",
+            "window_id": "steady",
+            "rule_id": "r",
+            "series_id": "s-r33",
+            "entity": "host-33",
+            "from_epoch_ms": 1033,
+            "to_epoch_ms": 1133,
+            "evidence_id": "rpc-r33"
+        },
+        {
+            "type": "policy_failure",
+            "id": "pf-t34",
+            "window_id": "steady",
+            "rule_id": "r",
+            "evidence_id": "pc-t34"
+        },
+        {
+            "type": "resource_threshold_violation",
+            "id": "f-r35",
+            "window_id": "steady",
+            "rule_id": "r",
+            "series_id": "s-r35",
+            "entity": "host-35",
+            "from_epoch_ms": 1035,
+            "to_epoch_ms": 1135,
+            "evidence_id": "rpc-r35"
+        },
+        {
+            "type": "policy_failure",
+            "id": "pf-t36",
+            "window_id": "steady",
+            "rule_id": "r",
+            "evidence_id": "pc-t36"
+        },
+        {
+            "type": "resource_threshold_violation",
+            "id": "f-r37",
+            "window_id": "steady",
+            "rule_id": "r",
+            "series_id": "s-r37",
+            "entity": "host-37",
+            "from_epoch_ms": 1037,
+            "to_epoch_ms": 1137,
+            "evidence_id": "rpc-r37"
+        },
+        {
+            "type": "policy_failure",
+            "id": "pf-t38",
+            "window_id": "steady",
+            "rule_id": "r",
+            "evidence_id": "pc-t38"
+        },
+        {
+            "type": "resource_threshold_violation",
+            "id": "f-r39",
+            "window_id": "steady",
+            "rule_id": "r",
+            "series_id": "s-r39",
+            "entity": "host-39",
+            "from_epoch_ms": 1039,
+            "to_epoch_ms": 1139,
+            "evidence_id": "rpc-r39"
+        },
+        {
+            "type": "policy_failure",
+            "id": "pf-t40",
+            "window_id": "steady",
+            "rule_id": "r",
+            "evidence_id": "pc-t40"
+        },
+        {
+            "type": "resource_threshold_violation",
+            "id": "f-r41",
+            "window_id": "steady",
+            "rule_id": "r",
+            "series_id": "s-r41",
+            "entity": "host-41",
+            "from_epoch_ms": 1041,
+            "to_epoch_ms": 1141,
+            "evidence_id": "rpc-r41"
+        },
+        {
+            "type": "policy_failure",
+            "id": "pf-t42",
+            "window_id": "steady",
+            "rule_id": "r",
+            "evidence_id": "pc-t42"
+        },
+        {
+            "type": "resource_threshold_violation",
+            "id": "f-r43",
+            "window_id": "steady",
+            "rule_id": "r",
+            "series_id": "s-r43",
+            "entity": "host-43",
+            "from_epoch_ms": 1043,
+            "to_epoch_ms": 1143,
+            "evidence_id": "rpc-r43"
+        },
+        {
+            "type": "policy_failure",
+            "id": "pf-t44",
+            "window_id": "steady",
+            "rule_id": "r",
+            "evidence_id": "pc-t44"
+        },
+        {
+            "type": "resource_threshold_violation",
+            "id": "f-r45",
+            "window_id": "steady",
+            "rule_id": "r",
+            "series_id": "s-r45",
+            "entity": "host-45",
+            "from_epoch_ms": 1045,
+            "to_epoch_ms": 1145,
+            "evidence_id": "rpc-r45"
+        },
+        {
+            "type": "policy_failure",
+            "id": "pf-t46",
+            "window_id": "steady",
+            "rule_id": "r",
+            "evidence_id": "pc-t46"
+        },
+        {
+            "type": "resource_threshold_violation",
+            "id": "f-r47",
+            "window_id": "steady",
+            "rule_id": "r",
+            "series_id": "s-r47",
+            "entity": "host-47",
+            "from_epoch_ms": 1047,
+            "to_epoch_ms": 1147,
+            "evidence_id": "rpc-r47"
+        },
+        {
+            "type": "policy_failure",
+            "id": "pf-t48",
+            "window_id": "steady",
+            "rule_id": "r",
+            "evidence_id": "pc-t48"
+        },
+        {
+            "type": "resource_threshold_violation",
+            "id": "f-r49",
+            "window_id": "steady",
+            "rule_id": "r",
+            "series_id": "s-r49",
+            "entity": "host-49",
+            "from_epoch_ms": 1049,
+            "to_epoch_ms": 1149,
+            "evidence_id": "rpc-r49"
+        },
+        {
+            "type": "policy_failure",
+            "id": "pf-t50",
+            "window_id": "steady",
+            "rule_id": "r",
+            "evidence_id": "pc-t50"
+        },
+        {
+            "type": "resource_threshold_violation",
+            "id": "f-r51",
+            "window_id": "steady",
+            "rule_id": "r",
+            "series_id": "s-r51",
+            "entity": "host-51",
+            "from_epoch_ms": 1051,
+            "to_epoch_ms": 1151,
+            "evidence_id": "rpc-r51"
+        },
+        {
+            "type": "policy_failure",
+            "id": "pf-t52",
+            "window_id": "steady",
+            "rule_id": "r",
+            "evidence_id": "pc-t52"
+        },
+        {
+            "type": "resource_threshold_violation",
+            "id": "f-r53",
+            "window_id": "steady",
+            "rule_id": "r",
+            "series_id": "s-r53",
+            "entity": "host-53",
+            "from_epoch_ms": 1053,
+            "to_epoch_ms": 1153,
+            "evidence_id": "rpc-r53"
+        },
+        {
+            "type": "policy_failure",
+            "id": "pf-t54",
+            "window_id": "steady",
+            "rule_id": "r",
+            "evidence_id": "pc-t54"
+        },
+        {
+            "type": "resource_threshold_violation",
+            "id": "f-r55",
+            "window_id": "steady",
+            "rule_id": "r",
+            "series_id": "s-r55",
+            "entity": "host-55",
+            "from_epoch_ms": 1055,
+            "to_epoch_ms": 1155,
+            "evidence_id": "rpc-r55"
+        },
+        {
+            "type": "policy_failure",
+            "id": "pf-t56",
+            "window_id": "steady",
+            "rule_id": "r",
+            "evidence_id": "pc-t56"
+        },
+        {
+            "type": "resource_threshold_violation",
+            "id": "f-r57",
+            "window_id": "steady",
+            "rule_id": "r",
+            "series_id": "s-r57",
+            "entity": "host-57",
+            "from_epoch_ms": 1057,
+            "to_epoch_ms": 1157,
+            "evidence_id": "rpc-r57"
+        },
+        {
+            "type": "policy_failure",
+            "id": "pf-t58",
+            "window_id": "steady",
+            "rule_id": "r",
+            "evidence_id": "pc-t58"
+        },
+        {
+            "type": "resource_threshold_violation",
+            "id": "f-r59",
+            "window_id": "steady",
+            "rule_id": "r",
+            "series_id": "s-r59",
+            "entity": "host-59",
+            "from_epoch_ms": 1059,
+            "to_epoch_ms": 1159,
+            "evidence_id": "rpc-r59"
+        },
+        {
+            "type": "policy_failure",
+            "id": "pf-t60",
+            "window_id": "steady",
+            "rule_id": "r",
+            "evidence_id": "pc-t60"
+        },
+        {
+            "type": "resource_threshold_violation",
+            "id": "f-r61",
+            "window_id": "steady",
+            "rule_id": "r",
+            "series_id": "s-r61",
+            "entity": "host-61",
+            "from_epoch_ms": 1061,
+            "to_epoch_ms": 1161,
+            "evidence_id": "rpc-r61"
+        },
+        {
+            "type": "policy_failure",
+            "id": "pf-t62",
+            "window_id": "steady",
+            "rule_id": "r",
+            "evidence_id": "pc-t62"
+        },
+        {
+            "type": "resource_threshold_violation",
+            "id": "f-r63",
+            "window_id": "steady",
+            "rule_id": "r",
+            "series_id": "s-r63",
+            "entity": "host-63",
+            "from_epoch_ms": 1063,
+            "to_epoch_ms": 1163,
+            "evidence_id": "rpc-r63"
+        },
+        {
+            "type": "policy_failure",
+            "id": "pf-t64",
+            "window_id": "steady",
+            "rule_id": "r",
+            "evidence_id": "pc-t64"
+        },
+        {
+            "type": "resource_threshold_violation",
+            "id": "f-r65",
+            "window_id": "steady",
+            "rule_id": "r",
+            "series_id": "s-r65",
+            "entity": "host-65",
+            "from_epoch_ms": 1065,
+            "to_epoch_ms": 1165,
+            "evidence_id": "rpc-r65"
+        },
+        {
+            "type": "policy_failure",
+            "id": "pf-t66",
+            "window_id": "steady",
+            "rule_id": "r",
+            "evidence_id": "pc-t66"
+        },
+        {
+            "type": "resource_threshold_violation",
+            "id": "f-r67",
+            "window_id": "steady",
+            "rule_id": "r",
+            "series_id": "s-r67",
+            "entity": "host-67",
+            "from_epoch_ms": 1067,
+            "to_epoch_ms": 1167,
+            "evidence_id": "rpc-r67"
+        },
+        {
+            "type": "policy_failure",
+            "id": "pf-t68",
+            "window_id": "steady",
+            "rule_id": "r",
+            "evidence_id": "pc-t68"
+        },
+        {
+            "type": "resource_threshold_violation",
+            "id": "f-r69",
+            "window_id": "steady",
+            "rule_id": "r",
+            "series_id": "s-r69",
+            "entity": "host-69",
+            "from_epoch_ms": 1069,
+            "to_epoch_ms": 1169,
+            "evidence_id": "rpc-r69"
+        }
+    ],
+    "evidence": [
+        {
+            "type": "window_policy_summary",
+            "id": "wps-steady",
+            "window_id": "steady",
+            "from_epoch_ms": 1000,
+            "to_epoch_ms": 2000,
+            "verdict": "FAIL"
+        },
+        {
+            "type": "policy_check",
+            "id": "pc-t0",
+            "window_id": "steady",
+            "rule_id": "r",
+            "status": "FAIL",
+            "scope": {
+                "kind": "transaction",
+                "label": "tx-00"
+            }
+        },
+        {
+            "type": "resource_policy_check",
+            "id": "rpc-r1",
+            "window_id": "steady",
+            "rule_id": "r",
+            "series_id": "s-r1",
+            "effect": "sla",
+            "status": "FAIL",
+            "reason": null
+        },
+        {
+            "type": "policy_check",
+            "id": "pc-t2",
+            "window_id": "steady",
+            "rule_id": "r",
+            "status": "FAIL",
+            "scope": {
+                "kind": "transaction",
+                "label": "tx-02"
+            }
+        },
+        {
+            "type": "resource_policy_check",
+            "id": "rpc-r3",
+            "window_id": "steady",
+            "rule_id": "r",
+            "series_id": "s-r3",
+            "effect": "sla",
+            "status": "FAIL",
+            "reason": null
+        },
+        {
+            "type": "policy_check",
+            "id": "pc-t4",
+            "window_id": "steady",
+            "rule_id": "r",
+            "status": "FAIL",
+            "scope": {
+                "kind": "transaction",
+                "label": "tx-04"
+            }
+        },
+        {
+            "type": "resource_policy_check",
+            "id": "rpc-r5",
+            "window_id": "steady",
+            "rule_id": "r",
+            "series_id": "s-r5",
+            "effect": "sla",
+            "status": "FAIL",
+            "reason": null
+        },
+        {
+            "type": "policy_check",
+            "id": "pc-t6",
+            "window_id": "steady",
+            "rule_id": "r",
+            "status": "FAIL",
+            "scope": {
+                "kind": "transaction",
+                "label": "tx-06"
+            }
+        },
+        {
+            "type": "resource_policy_check",
+            "id": "rpc-r7",
+            "window_id": "steady",
+            "rule_id": "r",
+            "series_id": "s-r7",
+            "effect": "sla",
+            "status": "FAIL",
+            "reason": null
+        },
+        {
+            "type": "policy_check",
+            "id": "pc-t8",
+            "window_id": "steady",
+            "rule_id": "r",
+            "status": "FAIL",
+            "scope": {
+                "kind": "transaction",
+                "label": "tx-08"
+            }
+        },
+        {
+            "type": "resource_policy_check",
+            "id": "rpc-r9",
+            "window_id": "steady",
+            "rule_id": "r",
+            "series_id": "s-r9",
+            "effect": "sla",
+            "status": "FAIL",
+            "reason": null
+        },
+        {
+            "type": "policy_check",
+            "id": "pc-t10",
+            "window_id": "steady",
+            "rule_id": "r",
+            "status": "FAIL",
+            "scope": {
+                "kind": "transaction",
+                "label": "tx-10"
+            }
+        },
+        {
+            "type": "resource_policy_check",
+            "id": "rpc-r11",
+            "window_id": "steady",
+            "rule_id": "r",
+            "series_id": "s-r11",
+            "effect": "sla",
+            "status": "FAIL",
+            "reason": null
+        },
+        {
+            "type": "policy_check",
+            "id": "pc-t12",
+            "window_id": "steady",
+            "rule_id": "r",
+            "status": "FAIL",
+            "scope": {
+                "kind": "transaction",
+                "label": "tx-12"
+            }
+        },
+        {
+            "type": "resource_policy_check",
+            "id": "rpc-r13",
+            "window_id": "steady",
+            "rule_id": "r",
+            "series_id": "s-r13",
+            "effect": "sla",
+            "status": "FAIL",
+            "reason": null
+        },
+        {
+            "type": "policy_check",
+            "id": "pc-t14",
+            "window_id": "steady",
+            "rule_id": "r",
+            "status": "FAIL",
+            "scope": {
+                "kind": "transaction",
+                "label": "tx-14"
+            }
+        },
+        {
+            "type": "resource_policy_check",
+            "id": "rpc-r15",
+            "window_id": "steady",
+            "rule_id": "r",
+            "series_id": "s-r15",
+            "effect": "sla",
+            "status": "FAIL",
+            "reason": null
+        },
+        {
+            "type": "policy_check",
+            "id": "pc-t16",
+            "window_id": "steady",
+            "rule_id": "r",
+            "status": "FAIL",
+            "scope": {
+                "kind": "transaction",
+                "label": "tx-16"
+            }
+        },
+        {
+            "type": "resource_policy_check",
+            "id": "rpc-r17",
+            "window_id": "steady",
+            "rule_id": "r",
+            "series_id": "s-r17",
+            "effect": "sla",
+            "status": "FAIL",
+            "reason": null
+        },
+        {
+            "type": "policy_check",
+            "id": "pc-t18",
+            "window_id": "steady",
+            "rule_id": "r",
+            "status": "FAIL",
+            "scope": {
+                "kind": "transaction",
+                "label": "tx-18"
+            }
+        },
+        {
+            "type": "resource_policy_check",
+            "id": "rpc-r19",
+            "window_id": "steady",
+            "rule_id": "r",
+            "series_id": "s-r19",
+            "effect": "sla",
+            "status": "FAIL",
+            "reason": null
+        },
+        {
+            "type": "policy_check",
+            "id": "pc-t20",
+            "window_id": "steady",
+            "rule_id": "r",
+            "status": "FAIL",
+            "scope": {
+                "kind": "transaction",
+                "label": "tx-20"
+            }
+        },
+        {
+            "type": "resource_policy_check",
+            "id": "rpc-r21",
+            "window_id": "steady",
+            "rule_id": "r",
+            "series_id": "s-r21",
+            "effect": "sla",
+            "status": "FAIL",
+            "reason": null
+        },
+        {
+            "type": "policy_check",
+            "id": "pc-t22",
+            "window_id": "steady",
+            "rule_id": "r",
+            "status": "FAIL",
+            "scope": {
+                "kind": "transaction",
+                "label": "tx-22"
+            }
+        },
+        {
+            "type": "resource_policy_check",
+            "id": "rpc-r23",
+            "window_id": "steady",
+            "rule_id": "r",
+            "series_id": "s-r23",
+            "effect": "sla",
+            "status": "FAIL",
+            "reason": null
+        },
+        {
+            "type": "policy_check",
+            "id": "pc-t24",
+            "window_id": "steady",
+            "rule_id": "r",
+            "status": "FAIL",
+            "scope": {
+                "kind": "transaction",
+                "label": "tx-24"
+            }
+        },
+        {
+            "type": "resource_policy_check",
+            "id": "rpc-r25",
+            "window_id": "steady",
+            "rule_id": "r",
+            "series_id": "s-r25",
+            "effect": "sla",
+            "status": "FAIL",
+            "reason": null
+        },
+        {
+            "type": "policy_check",
+            "id": "pc-t26",
+            "window_id": "steady",
+            "rule_id": "r",
+            "status": "FAIL",
+            "scope": {
+                "kind": "transaction",
+                "label": "tx-26"
+            }
+        },
+        {
+            "type": "resource_policy_check",
+            "id": "rpc-r27",
+            "window_id": "steady",
+            "rule_id": "r",
+            "series_id": "s-r27",
+            "effect": "sla",
+            "status": "FAIL",
+            "reason": null
+        },
+        {
+            "type": "policy_check",
+            "id": "pc-t28",
+            "window_id": "steady",
+            "rule_id": "r",
+            "status": "FAIL",
+            "scope": {
+                "kind": "transaction",
+                "label": "tx-28"
+            }
+        },
+        {
+            "type": "resource_policy_check",
+            "id": "rpc-r29",
+            "window_id": "steady",
+            "rule_id": "r",
+            "series_id": "s-r29",
+            "effect": "sla",
+            "status": "FAIL",
+            "reason": null
+        },
+        {
+            "type": "policy_check",
+            "id": "pc-t30",
+            "window_id": "steady",
+            "rule_id": "r",
+            "status": "FAIL",
+            "scope": {
+                "kind": "transaction",
+                "label": "tx-30"
+            }
+        },
+        {
+            "type": "resource_policy_check",
+            "id": "rpc-r31",
+            "window_id": "steady",
+            "rule_id": "r",
+            "series_id": "s-r31",
+            "effect": "sla",
+            "status": "FAIL",
+            "reason": null
+        },
+        {
+            "type": "policy_check",
+            "id": "pc-t32",
+            "window_id": "steady",
+            "rule_id": "r",
+            "status": "FAIL",
+            "scope": {
+                "kind": "transaction",
+                "label": "tx-32"
+            }
+        },
+        {
+            "type": "resource_policy_check",
+            "id": "rpc-r33",
+            "window_id": "steady",
+            "rule_id": "r",
+            "series_id": "s-r33",
+            "effect": "sla",
+            "status": "FAIL",
+            "reason": null
+        },
+        {
+            "type": "policy_check",
+            "id": "pc-t34",
+            "window_id": "steady",
+            "rule_id": "r",
+            "status": "FAIL",
+            "scope": {
+                "kind": "transaction",
+                "label": "tx-34"
+            }
+        },
+        {
+            "type": "resource_policy_check",
+            "id": "rpc-r35",
+            "window_id": "steady",
+            "rule_id": "r",
+            "series_id": "s-r35",
+            "effect": "sla",
+            "status": "FAIL",
+            "reason": null
+        },
+        {
+            "type": "policy_check",
+            "id": "pc-t36",
+            "window_id": "steady",
+            "rule_id": "r",
+            "status": "FAIL",
+            "scope": {
+                "kind": "transaction",
+                "label": "tx-36"
+            }
+        },
+        {
+            "type": "resource_policy_check",
+            "id": "rpc-r37",
+            "window_id": "steady",
+            "rule_id": "r",
+            "series_id": "s-r37",
+            "effect": "sla",
+            "status": "FAIL",
+            "reason": null
+        },
+        {
+            "type": "policy_check",
+            "id": "pc-t38",
+            "window_id": "steady",
+            "rule_id": "r",
+            "status": "FAIL",
+            "scope": {
+                "kind": "transaction",
+                "label": "tx-38"
+            }
+        },
+        {
+            "type": "resource_policy_check",
+            "id": "rpc-r39",
+            "window_id": "steady",
+            "rule_id": "r",
+            "series_id": "s-r39",
+            "effect": "sla",
+            "status": "FAIL",
+            "reason": null
+        },
+        {
+            "type": "policy_check",
+            "id": "pc-t40",
+            "window_id": "steady",
+            "rule_id": "r",
+            "status": "FAIL",
+            "scope": {
+                "kind": "transaction",
+                "label": "tx-40"
+            }
+        },
+        {
+            "type": "resource_policy_check",
+            "id": "rpc-r41",
+            "window_id": "steady",
+            "rule_id": "r",
+            "series_id": "s-r41",
+            "effect": "sla",
+            "status": "FAIL",
+            "reason": null
+        },
+        {
+            "type": "policy_check",
+            "id": "pc-t42",
+            "window_id": "steady",
+            "rule_id": "r",
+            "status": "FAIL",
+            "scope": {
+                "kind": "transaction",
+                "label": "tx-42"
+            }
+        },
+        {
+            "type": "resource_policy_check",
+            "id": "rpc-r43",
+            "window_id": "steady",
+            "rule_id": "r",
+            "series_id": "s-r43",
+            "effect": "sla",
+            "status": "FAIL",
+            "reason": null
+        },
+        {
+            "type": "policy_check",
+            "id": "pc-t44",
+            "window_id": "steady",
+            "rule_id": "r",
+            "status": "FAIL",
+            "scope": {
+                "kind": "transaction",
+                "label": "tx-44"
+            }
+        },
+        {
+            "type": "resource_policy_check",
+            "id": "rpc-r45",
+            "window_id": "steady",
+            "rule_id": "r",
+            "series_id": "s-r45",
+            "effect": "sla",
+            "status": "FAIL",
+            "reason": null
+        },
+        {
+            "type": "policy_check",
+            "id": "pc-t46",
+            "window_id": "steady",
+            "rule_id": "r",
+            "status": "FAIL",
+            "scope": {
+                "kind": "transaction",
+                "label": "tx-46"
+            }
+        },
+        {
+            "type": "resource_policy_check",
+            "id": "rpc-r47",
+            "window_id": "steady",
+            "rule_id": "r",
+            "series_id": "s-r47",
+            "effect": "sla",
+            "status": "FAIL",
+            "reason": null
+        },
+        {
+            "type": "policy_check",
+            "id": "pc-t48",
+            "window_id": "steady",
+            "rule_id": "r",
+            "status": "FAIL",
+            "scope": {
+                "kind": "transaction",
+                "label": "tx-48"
+            }
+        },
+        {
+            "type": "resource_policy_check",
+            "id": "rpc-r49",
+            "window_id": "steady",
+            "rule_id": "r",
+            "series_id": "s-r49",
+            "effect": "sla",
+            "status": "FAIL",
+            "reason": null
+        },
+        {
+            "type": "policy_check",
+            "id": "pc-t50",
+            "window_id": "steady",
+            "rule_id": "r",
+            "status": "FAIL",
+            "scope": {
+                "kind": "transaction",
+                "label": "tx-50"
+            }
+        },
+        {
+            "type": "resource_policy_check",
+            "id": "rpc-r51",
+            "window_id": "steady",
+            "rule_id": "r",
+            "series_id": "s-r51",
+            "effect": "sla",
+            "status": "FAIL",
+            "reason": null
+        },
+        {
+            "type": "policy_check",
+            "id": "pc-t52",
+            "window_id": "steady",
+            "rule_id": "r",
+            "status": "FAIL",
+            "scope": {
+                "kind": "transaction",
+                "label": "tx-52"
+            }
+        },
+        {
+            "type": "resource_policy_check",
+            "id": "rpc-r53",
+            "window_id": "steady",
+            "rule_id": "r",
+            "series_id": "s-r53",
+            "effect": "sla",
+            "status": "FAIL",
+            "reason": null
+        },
+        {
+            "type": "policy_check",
+            "id": "pc-t54",
+            "window_id": "steady",
+            "rule_id": "r",
+            "status": "FAIL",
+            "scope": {
+                "kind": "transaction",
+                "label": "tx-54"
+            }
+        },
+        {
+            "type": "resource_policy_check",
+            "id": "rpc-r55",
+            "window_id": "steady",
+            "rule_id": "r",
+            "series_id": "s-r55",
+            "effect": "sla",
+            "status": "FAIL",
+            "reason": null
+        },
+        {
+            "type": "policy_check",
+            "id": "pc-t56",
+            "window_id": "steady",
+            "rule_id": "r",
+            "status": "FAIL",
+            "scope": {
+                "kind": "transaction",
+                "label": "tx-56"
+            }
+        },
+        {
+            "type": "resource_policy_check",
+            "id": "rpc-r57",
+            "window_id": "steady",
+            "rule_id": "r",
+            "series_id": "s-r57",
+            "effect": "sla",
+            "status": "FAIL",
+            "reason": null
+        },
+        {
+            "type": "policy_check",
+            "id": "pc-t58",
+            "window_id": "steady",
+            "rule_id": "r",
+            "status": "FAIL",
+            "scope": {
+                "kind": "transaction",
+                "label": "tx-58"
+            }
+        },
+        {
+            "type": "resource_policy_check",
+            "id": "rpc-r59",
+            "window_id": "steady",
+            "rule_id": "r",
+            "series_id": "s-r59",
+            "effect": "sla",
+            "status": "FAIL",
+            "reason": null
+        },
+        {
+            "type": "policy_check",
+            "id": "pc-t60",
+            "window_id": "steady",
+            "rule_id": "r",
+            "status": "FAIL",
+            "scope": {
+                "kind": "transaction",
+                "label": "tx-60"
+            }
+        },
+        {
+            "type": "resource_policy_check",
+            "id": "rpc-r61",
+            "window_id": "steady",
+            "rule_id": "r",
+            "series_id": "s-r61",
+            "effect": "sla",
+            "status": "FAIL",
+            "reason": null
+        },
+        {
+            "type": "policy_check",
+            "id": "pc-t62",
+            "window_id": "steady",
+            "rule_id": "r",
+            "status": "FAIL",
+            "scope": {
+                "kind": "transaction",
+                "label": "tx-62"
+            }
+        },
+        {
+            "type": "resource_policy_check",
+            "id": "rpc-r63",
+            "window_id": "steady",
+            "rule_id": "r",
+            "series_id": "s-r63",
+            "effect": "sla",
+            "status": "FAIL",
+            "reason": null
+        },
+        {
+            "type": "policy_check",
+            "id": "pc-t64",
+            "window_id": "steady",
+            "rule_id": "r",
+            "status": "FAIL",
+            "scope": {
+                "kind": "transaction",
+                "label": "tx-64"
+            }
+        },
+        {
+            "type": "resource_policy_check",
+            "id": "rpc-r65",
+            "window_id": "steady",
+            "rule_id": "r",
+            "series_id": "s-r65",
+            "effect": "sla",
+            "status": "FAIL",
+            "reason": null
+        },
+        {
+            "type": "policy_check",
+            "id": "pc-t66",
+            "window_id": "steady",
+            "rule_id": "r",
+            "status": "FAIL",
+            "scope": {
+                "kind": "transaction",
+                "label": "tx-66"
+            }
+        },
+        {
+            "type": "resource_policy_check",
+            "id": "rpc-r67",
+            "window_id": "steady",
+            "rule_id": "r",
+            "series_id": "s-r67",
+            "effect": "sla",
+            "status": "FAIL",
+            "reason": null
+        },
+        {
+            "type": "policy_check",
+            "id": "pc-t68",
+            "window_id": "steady",
+            "rule_id": "r",
+            "status": "FAIL",
+            "scope": {
+                "kind": "transaction",
+                "label": "tx-68"
+            }
+        },
+        {
+            "type": "resource_policy_check",
+            "id": "rpc-r69",
+            "window_id": "steady",
+            "rule_id": "r",
+            "series_id": "s-r69",
+            "effect": "sla",
+            "status": "FAIL",
+            "reason": null
+        },
+        {
+            "type": "resource_binding",
+            "id": "resource-binding"
+        }
+    ]
+}

@@ -1,0 +1,11 @@
+{
+  "run_validity": "VALID",
+  "findings": [],
+  "evidence": [
+    {
+      "type": "resource_binding",
+      "id": "resource-binding",
+      "mode": "explicit_windows"
+    }
+  ]
+}

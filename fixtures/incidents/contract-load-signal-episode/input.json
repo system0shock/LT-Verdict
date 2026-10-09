@@ -1,0 +1,36 @@
+{
+  "run_validity": "VALID",
+  "findings": [
+    {
+      "type": "anomaly_episode",
+      "id": "anomaly_episode-d1a965910d9d4eb6",
+      "window_id": "steady",
+      "entity": "overall",
+      "from_epoch_ms": 1767225610000,
+      "to_epoch_ms": 1767225630000,
+      "evidence_id": "resource-policy-check-55f72219dc643144"
+    }
+  ],
+  "evidence": [
+    {
+      "type": "window_policy_summary",
+      "id": "window-policy-summary-steady",
+      "window_id": "steady",
+      "from_epoch_ms": 1767225600000,
+      "to_epoch_ms": 1767225660000,
+      "verdict": "FAIL"
+    },
+    {
+      "type": "anomaly_check",
+      "id": "resource-policy-check-55f72219dc643144",
+      "window_id": "steady",
+      "status": "EPISODES_FOUND",
+      "reasons": []
+    },
+    {
+      "type": "resource_binding",
+      "id": "resource-binding",
+      "mode": "explicit_windows"
+    }
+  ]
+}

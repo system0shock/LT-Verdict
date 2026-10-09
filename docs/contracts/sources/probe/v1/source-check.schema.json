@@ -1,0 +1,124 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://lt-verdict.local/contracts/sources/probe/v1/source-check.schema.json",
+  "title": "LT Verdict source check v1",
+  "description": "Offline checks of saved source profiles (ADR 0033, ltv source validate). Codes only: no address, no environment variable name, no file path. A profile that did not parse is not listed: the whole file is refused before the report. An HTTP profile lists config, url, credentials, tls, rules and governor in this order; a PostgreSQL profile lists config and credentials.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "profiles"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "source-check.v1"
+    },
+    "profiles": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "profile_id",
+          "source_kind",
+          "transport",
+          "arm",
+          "query_count",
+          "rule_count",
+          "checks"
+        ],
+        "properties": {
+          "profile_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "source_kind": {
+            "enum": [
+              "prometheus",
+              "victoria_metrics",
+              "influxdb",
+              "opensearch",
+              "postgresql"
+            ]
+          },
+          "transport": {
+            "enum": [
+              "direct",
+              "grafana_proxy",
+              null
+            ]
+          },
+          "arm": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "query_count": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "rule_count": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "checks": {
+            "type": "array",
+            "minItems": 2,
+            "maxItems": 6,
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "id",
+                "status",
+                "code"
+              ],
+              "properties": {
+                "id": {
+                  "enum": [
+                    "config",
+                    "url",
+                    "credentials",
+                    "tls",
+                    "rules",
+                    "governor"
+                  ]
+                },
+                "status": {
+                  "enum": [
+                    "OK",
+                    "WARN",
+                    "FAIL",
+                    "SKIPPED"
+                  ]
+                },
+                "code": {
+                  "enum": [
+                    "SOURCE_PROFILE_INVALID",
+                    "SOURCE_AUTH_UNAVAILABLE",
+                    "SOURCE_AUTH_INVALID",
+                    "SOURCE_TLS_CONFIG_INVALID",
+                    "SOURCE_TLS_HANDSHAKE_FAILED",
+                    "SOURCE_TLS_CLIENT_CERT_EXPIRED",
+                    "GOVERNOR_STRICT",
+                    null
+                  ]
+                },
+                "auth_kind": {
+                  "enum": [
+                    "none",
+                    "bearer",
+                    "token",
+                    "basic"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

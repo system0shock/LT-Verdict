@@ -1,0 +1,75 @@
+{
+  "schema_version": "source-probe.v1",
+  "profile_id": "prom-main",
+  "source_kind": "prometheus",
+  "transport": "direct",
+  "mode": "profile_query",
+  "query_id": "cpu",
+  "expression_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "window": {
+    "start_epoch_ms": 1767225000000,
+    "end_epoch_ms": 1767225300000,
+    "step_ms": 15000,
+    "cells": 20
+  },
+  "status": "OK",
+  "code": null,
+  "http_status": 200,
+  "series_count": 3,
+  "series": [
+    {
+      "labels": {
+        "instance": "host",
+        "pod": "api-1"
+      },
+      "observed_cells": 20,
+      "expected_cells": 20
+    },
+    {
+      "labels": {
+        "instance": "host",
+        "pod": "api-2"
+      },
+      "observed_cells": 20,
+      "expected_cells": 20
+    },
+    {
+      "labels": {
+        "instance": "host",
+        "pod": "api-3"
+      },
+      "observed_cells": 20,
+      "expected_cells": 20
+    }
+  ],
+  "series_truncated": false,
+  "label_keys": [
+    {
+      "key": "instance",
+      "distinct_values": 1,
+      "sample_values": [
+        "host"
+      ],
+      "truncated": false
+    },
+    {
+      "key": "pod",
+      "distinct_values": 3,
+      "sample_values": [
+        "api-1",
+        "api-2",
+        "api-3"
+      ],
+      "truncated": false
+    }
+  ],
+  "label_keys_truncated": false,
+  "redacted_count": 0,
+  "warnings": [],
+  "decoder_check": {
+    "accepted": false,
+    "code": "AMBIGUOUS_SERIES"
+  },
+  "request_count": 2,
+  "elapsed_ms": 412
+}

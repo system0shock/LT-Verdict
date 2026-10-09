@@ -16,6 +16,7 @@ SCHEMAS = (
     ROOT / "docs/contracts/result/v1/analysis-result.schema.json",
 )
 INCIDENT_DIR = ROOT / "docs/contracts/incident/v1"
+PROBE_DIR = ROOT / "docs/contracts/sources/probe/v1"
 PORTABLE_PATH_PATTERN = (
     r"^(?!.*(?:^|/)(?:[Cc][Oo][Nn]|[Pp][Rr][Nn]|[Aa][Uu][Xx]|"
     r"[Nn][Uu][Ll]|[Cc][Oo][Mm][1-9]|[Ll][Pp][Tt][1-9])"
@@ -391,6 +392,28 @@ def verify_incident_contract(directory: Path = INCIDENT_DIR) -> None:
                     raise ValueError(f"{path.name}: invalid example accepted")
 
 
+def probe_schema_errors(document: object, schema: dict) -> list[str]:
+    return schema_errors(document, schema, schema)
+
+
+def verify_probe_contract(directory: Path = PROBE_DIR) -> None:
+    """ADR 0033: source-probe.v1, source-check.v1 and resource-hash.v1; examples are named <schema>-<reason>.json."""
+    for name in ("source-probe", "source-check", "resource-hash"):
+        with (directory / f"{name}.schema.json").open(encoding="utf-8") as source:
+            schema = json.load(source)
+        for kind, must_fail in (("valid", False), ("invalid", True)):
+            paths = sorted((directory / "examples" / kind).glob(f"{name}-*.json"))
+            if not paths:
+                raise ValueError(f"{name}: no {kind} examples")
+            for path in paths:
+                with path.open(encoding="utf-8") as source:
+                    errors = probe_schema_errors(json.load(source), schema)
+                if errors and not must_fail:
+                    raise ValueError(f"{path.name}: valid example rejected: {'; '.join(errors[:3])}")
+                if not errors and must_fail:
+                    raise ValueError(f"{path.name}: invalid example accepted")
+
+
 def main() -> int:
     try:
         run, _result = (load_example(path) for path in SCHEMAS)
@@ -402,6 +425,7 @@ def main() -> int:
         for item in inputs:
             verify_input(item)
         verify_incident_contract()
+        verify_probe_contract()
     except (OSError, json.JSONDecodeError, TypeError, ValueError) as error:
         print(f"slice 0 verification: FAIL: {error}", file=sys.stderr)
         return 1

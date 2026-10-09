@@ -65,6 +65,26 @@ internal class SourceHttp(
         checkCancelled: () -> Unit = {},
     ): ByteArray = execute(profile, queryParameters, null, budget, checkCancelled)
 
+    /** One bounded request for the source probe: attempts, response size and timeout may only be tightened below the profile settings. */
+    internal fun getBounded(
+        profile: SourceProfile,
+        queryParameters: Map<String, String>,
+        budget: SourceBudget,
+        maxResponseBytes: Int,
+        timeoutCapMillis: Long,
+        checkCancelled: () -> Unit,
+    ): ByteArray =
+        execute(
+            profile,
+            queryParameters,
+            null,
+            budget,
+            checkCancelled,
+            responseLimit = maxResponseBytes,
+            maxAttemptsCap = 1,
+            timeoutCapMillis = timeoutCapMillis,
+        )
+
     internal fun getGrafanaPanel(
         profile: SourceProfile,
         panel: GrafanaPanelRequest,
@@ -101,10 +121,23 @@ internal class SourceHttp(
         checkCancelled: () -> Unit,
         endpointOverride: URI? = null,
         responseLimit: Int = MAX_HTTP_RESPONSE_BYTES,
+        maxAttemptsCap: Int? = null,
+        timeoutCapMillis: Long? = null,
     ): ByteArray {
         val configuredProfile =
             configured[profile.id]?.takeIf { it.profile == profile }
                 ?: sourceFailure("SOURCE_PROFILE_NOT_CONFIGURED")
+        val settings =
+            configuredProfile.state.settings.let { origin ->
+                if (maxAttemptsCap == null && timeoutCapMillis == null) {
+                    origin
+                } else {
+                    origin.copy(
+                        maxAttempts = min(origin.maxAttempts, maxAttemptsCap ?: origin.maxAttempts),
+                        timeoutMillis = min(origin.timeoutMillis, timeoutCapMillis ?: origin.timeoutMillis),
+                    )
+                }
+            }
         val requestClient: Pair<HttpClient, SourceTlsMaterial>? =
             profile.tls?.let { tls ->
                 val holder =
@@ -140,7 +173,7 @@ internal class SourceHttp(
             request(
                 uriWithQuery(endpointOverride ?: configuredProfile.endpoint, queryParameters),
                 authorization,
-                configuredProfile.state.settings,
+                settings,
                 body,
             )
         var attempt = 0
@@ -157,12 +190,12 @@ internal class SourceHttp(
                         sendClient,
                         profile.tls != null,
                         request,
-                        configuredProfile.state.settings.timeoutMillis,
+                        settings.timeoutMillis,
                         checkCancelled,
                         responseLimit,
                     )
                 } catch (failure: AttemptFailure) {
-                    if (!failure.retryable || attempt + 1 >= configuredProfile.state.settings.maxAttempts) {
+                    if (!failure.retryable || attempt + 1 >= settings.maxAttempts) {
                         sourceFailure(failure.code)
                     }
                     null
@@ -182,19 +215,19 @@ internal class SourceHttp(
                     else -> "SOURCE_HTTP_STATUS"
                 }
             val retryable = status == null || status == 429 || status in 500..599
-            if (!retryable || attempt + 1 >= configuredProfile.state.settings.maxAttempts) sourceFailure(failureCode)
+            if (!retryable || attempt + 1 >= settings.maxAttempts) throw SourceHttpFailure(failureCode, status)
 
             val retryAfter =
                 response
-                    ?.takeIf { configuredProfile.state.settings.honorRetryAfter }
+                    ?.takeIf { settings.honorRetryAfter }
                     ?.headers()
                     ?.firstValue("Retry-After")
                     ?.orElse(null)
                     ?.let(::retryAfterMillis)
-            if (retryAfter != null && retryAfter > configuredProfile.state.settings.timeoutMillis) {
+            if (retryAfter != null && retryAfter > settings.timeoutMillis) {
                 sourceFailure("SOURCE_RETRY_AFTER_TOO_LONG")
             }
-            val delay = retryAfter ?: exponentialBackoffMillis(attempt, configuredProfile.state.settings.timeoutMillis)
+            val delay = retryAfter ?: exponentialBackoffMillis(attempt, settings.timeoutMillis)
             waitCancellable(TimeUnit.MILLISECONDS.toNanos(delay), budget, checkCancelled)
             attempt++
         }

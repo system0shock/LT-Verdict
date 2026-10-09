@@ -233,6 +233,8 @@ internal class SourceBudget(
 
 internal class SourceHttpFailure(
     val code: String,
+    // The HTTP status of a refused response (source probe, W3.1); null when the failure had no response.
+    val httpStatus: Int? = null,
 ) : RuntimeException(code)
 
 internal data class SourceConnections(

@@ -89,7 +89,7 @@ class StoreTreeSnapshotTest {
         lines += "listRuns | ${store.listRuns(null, 10)}"
         lines += "listRuns page 1 | ${store.listRuns(null, 1)}"
         lines += "listRuns page 2 | ${store.listRuns(store.listRuns(null, 1).nextAfter, 1)}"
-        lines += "requireInput | ${store.requireInput(a.runId)}".replace(root.toString(), "<root>")
+        lines += "requireInput | ${store.requireInput(a.runId)}".replace(root.toString(), "<root>").replace(java.io.File.separator, "/")
 
         val a1 = save(store, a, "a1", policy = true)
         val a2 = save(store, a, "a2", arm = "blue", podView = true)
@@ -110,7 +110,7 @@ class StoreTreeSnapshotTest {
         lines +=
             "readComparisonHistory | ${store.readComparisonHistory().entries.map {
                 it.analysisId
-            }} ${store.readComparisonHistory().truncated}"
+            }.sorted()} ${store.readComparisonHistory().truncated}"
         lines += "analysisExists | ${store.analysisExists(a.runId, a1)} ${store.analysisExists(a.runId, "f".repeat(64))}"
         lines += "analysisState | ${store.analysisState(a.runId, a1)} ${store.analysisState(a.runId, "f".repeat(64))}"
         lines += "readAnalysisIdentity | ${store.readAnalysisIdentity(a.runId, a2)}"

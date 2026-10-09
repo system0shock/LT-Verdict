@@ -134,7 +134,7 @@ class ConcurrencyAcceptanceTest {
 
                 val stored = requireNotNull(store.readAnalysis(input.runId, analysisId))
                 assertEquals(analyses.resolve(analysisId), stored.path)
-                assertEquals(COMPLETE_ARTIFACTS, stored.artifacts.map { it.path }.toSet())
+                assertEquals(COMPLETE_ARTIFACTS + "error-groups.json", stored.artifacts.map { it.path }.toSet())
                 assertTrue(Files.isRegularFile(stored.path.resolve("manifest.json")))
             }
         }

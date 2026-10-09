@@ -418,7 +418,12 @@ export interface SourceSummaryEvidence {
   profile_id: string
   source_kind: string
   transport: string
-  queries: Array<{ id: string; status: string; reason?: string }>
+  arm?: string
+  start_epoch_ms?: number
+  end_epoch_ms?: number
+  step_ms?: number
+  queries: Array<{ id: string; status: string; reason?: string; expression_sha256?: string }>
+  rule_spans?: Array<{ rule_id: string; declared_span_ms: number; step_ms: number; cells: number; effective_span_ms: number }>
   request_count: number
   retries: number
   throttle_wait_ms: number
@@ -445,9 +450,15 @@ export interface SourceSummaryEvidence {
 export interface OpenSearchEvidence {
   id: string
   type: 'opensearch_errors'
+  schema_version?: string
+  load_input_sha256?: string
   profile_id: string
+  start_epoch_ms?: number
+  end_epoch_ms?: number
+  step_ms?: number
   total_errors: number | string
   error_rate_per_minute: number | string
+  timeline?: Array<{ from_epoch_ms: number; to_epoch_ms: number; count: number | string; rate_per_minute: number | string }>
   coverage: { status: string; reasons: string[] }
   groups: Array<{
     service: string

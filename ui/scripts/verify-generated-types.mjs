@@ -11,6 +11,9 @@
 // The same is done for the diagnostic, capacity and trend items of ui/src/types.derived-items.generated.ts, with the real
 // items of fixtures/typed-evidence/samples-diagnostic-capacity-trend.ndjson. This script does not prove the bytes of the
 // documents (JSON.parse loses the precision of wide numbers): the Kotlin tests do.
+// The resource_binding, source_summary and opensearch_errors items of ui/src/types.input-items.generated.ts are checked the same way, with the
+// items of fixtures/typed-evidence/samples-input-evidence.ndjson (the window provenance that a source_summary may carry is merged after the
+// typed item, so it is not in the generated type and not in the samples; the hand-written type keeps those keys, see providedElsewhere).
 // The check source is virtual (never written to disk) and compiled with the options of ui/tsconfig.json.
 import { readdirSync, readFileSync } from 'node:fs'
 import { dirname, resolve } from 'node:path'
@@ -45,6 +48,30 @@ const derivedSamples = readFileSync(resolve(repoRoot, 'fixtures/typed-evidence/s
   .split('\n')
   .filter(Boolean)
   .map((line) => JSON.parse(line))
+const inputText = readFileSync(resolve(uiRoot, 'src/types.input-items.generated.ts'), 'utf8').replace(/\r\n/g, '\n')
+const inputTags = new Set([...inputText.matchAll(/^ {2}type: '([a-z_]+)'$/gm)].map((match) => match[1]))
+const inputSamples = readFileSync(resolve(repoRoot, 'fixtures/typed-evidence/samples-input-evidence.ndjson'), 'utf8')
+  .split('\n')
+  .filter(Boolean)
+  .map((line) => JSON.parse(line))
+// Keys the hand-written source_summary has for the window provenance (merged into the item after the typed encoding, so not generated).
+const providedElsewhere = [
+  'window_origin',
+  'recognized_start_epoch_ms',
+  'recognized_end_epoch_ms',
+  'requested_margin_ms',
+  'applied_margin_ms',
+  'max_idle_gap_ms',
+  'detected_idle_gaps',
+  'longest_idle_gap_ms',
+  'auto_window_status',
+  'step_origin',
+  'requested_step_ms',
+  'series_count',
+  'cell_budget',
+  'cells_per_series',
+  'warnings',
+]
 const derivedEvidence = [
   'DiagnosticSummaryEvidence',
   'CorrelationPairEvidence',
@@ -76,9 +103,10 @@ const lines = [
   `import type { ${typedEvidence.map((name) => `${name} as Generated${name}`).join(', ')} } from './types.items.generated'`,
   "import type { DerivedEvidence as GeneratedDerivedEvidence, DerivedFinding as GeneratedDerivedFinding } from './types.derived-items.generated'",
   `import type { ${[...derivedEvidence, ...derivedFindings, 'CapacitySummaryEvidence', 'CapacityStageDocument'].map((name) => `${name} as Generated${name}`).join(', ')} } from './types.derived-items.generated'`,
+  "import type { InputEvidence as GeneratedInputEvidence, SourceSummaryEvidence as GeneratedSourceSummaryEvidence, OpensearchErrorsEvidence as GeneratedOpensearchErrorsEvidence } from './types.input-items.generated'",
   "import type { StageEvidence as GeneratedStageEvidence, StageBindingEvidence as GeneratedStageBindingEvidence, StageBindingStage as GeneratedStageBindingStage } from './types.stage-items.generated'",
   "import type { StageBindingEvidence } from './types'",
-  `import type { AnalysisResult, CapacityStage, CapacitySummary, ${[...typedEvidence, ...derivedEvidence, ...derivedFindings].join(', ')} } from './types'`,
+  `import type { AnalysisResult, CapacityStage, CapacitySummary, OpenSearchEvidence, SourceSummaryEvidence, ${[...typedEvidence, ...derivedEvidence, ...derivedFindings].join(', ')} } from './types'`,
   '',
 ]
 let index = 0
@@ -97,6 +125,11 @@ for (const name of cases) {
     for (const item of result[array].filter((entry) => derivedKinds.has(entry.type))) {
       lines.push(`export const item${itemCount++}: ${derivedUnion} = ${JSON.stringify(item)}`)
     }
+    if (array === 'evidence') {
+      for (const item of result[array].filter((entry) => inputTags.has(entry.type))) {
+        lines.push(`export const item${itemCount++}: GeneratedInputEvidence = ${JSON.stringify(item)}`)
+      }
+    }
   }
 }
 for (const sample of samples) {
@@ -106,9 +139,12 @@ for (const sample of derivedSamples) {
   const union = derivedKinds.get(sample.type) === 'finding' ? 'GeneratedDerivedFinding' : 'GeneratedDerivedEvidence'
   lines.push(`export const sample${itemCount++}: ${union} = ${JSON.stringify(sample)}`)
 }
+for (const sample of inputSamples) {
+  lines.push(`export const sample${itemCount++}: GeneratedInputEvidence = ${JSON.stringify(sample)}`)
+}
 lines.push(`export const sample${itemCount++}: GeneratedStageEvidence = ${JSON.stringify(stageSample)}`)
-const sampleTags = new Set([...samples, ...derivedSamples].map((sample) => sample.type))
-const untested = [...typedTags, ...derivedKinds.keys()].filter((tag) => !sampleTags.has(tag))
+const sampleTags = new Set([...samples, ...derivedSamples, ...inputSamples].map((sample) => sample.type))
+const untested = [...typedTags, ...derivedKinds.keys(), ...inputTags].filter((tag) => !sampleTags.has(tag))
 if (untested.length) {
   console.error(`verify-generated-types: no sample in fixtures/typed-evidence/samples*.ndjson for type ${untested.join(', ')}`)
   process.exit(1)
@@ -129,7 +165,7 @@ const negatives = [
   ['extra identity key', 'AnalysisIdentityDocument', { ...identitySample, extra: 1 }],
   ['missing identity key', 'AnalysisIdentityDocument', Object.fromEntries(Object.entries(identitySample).filter(([key]) => key !== 'engine'))],
 ]
-const richest = (tag) => [...samples, ...derivedSamples].filter((sample) => sample.type === tag).sort((a, b) => Object.keys(b).length - Object.keys(a).length)[0]
+const richest = (tag) => [...samples, ...derivedSamples, ...inputSamples].filter((sample) => sample.type === tag).sort((a, b) => Object.keys(b).length - Object.keys(a).length)[0]
 const policyCheck = richest('policy_check')
 const metricSummary = richest('metric_summary')
 const itemNegatives = [
@@ -162,6 +198,25 @@ const derivedNegatives = [
     magnitude_gate: withoutKey(richest('trend_check').magnitude_gate, 'required_split_half_shift_units'),
   }],
 ]
+const binding = richest('resource_binding')
+const sourceSummary = [...inputSamples].filter((item) => item.type === 'source_summary').sort((a, b) => Object.keys(b).length - Object.keys(a).length)[0]
+const importedSummary = inputSamples.find((item) => item.type === 'source_summary' && !('start_epoch_ms' in item))
+const openSearch = inputSamples.find((item) => item.type === 'opensearch_errors')
+const inputNegatives = [
+  ['extra key in a resource_binding', 'GeneratedInputEvidence', { ...binding, extra: 1 }],
+  ['missing key in a resource_binding', 'GeneratedInputEvidence', withoutKey(binding, 'clock_alignment')],
+  ['string for a number field of a resource_binding', 'GeneratedInputEvidence', { ...binding, dropped_leading_millis: '5' }],
+  ['unknown type tag of an input item', 'GeneratedInputEvidence', { ...binding, type: 'resource_bindings' }],
+  ['extra key in a source_summary', 'GeneratedInputEvidence', { ...sourceSummary, extra: 1 }],
+  ['missing request_count of a source_summary', 'GeneratedInputEvidence', withoutKey(sourceSummary, 'request_count')],
+  ['string for the cap flag of a source_summary', 'GeneratedInputEvidence', { ...sourceSummary, cap_exceeded: 'no' }],
+  ['a query without a status in a source_summary', 'GeneratedInputEvidence', { ...sourceSummary, queries: [{ id: 'cpu' }] }],
+  ['string for the window start of a source_summary', 'GeneratedInputEvidence', { ...importedSummary, start_epoch_ms: 'x' }],
+  ['extra key in an opensearch_errors', 'GeneratedInputEvidence', { ...openSearch, extra: 1 }],
+  ['missing coverage of an opensearch_errors', 'GeneratedInputEvidence', withoutKey(openSearch, 'coverage')],
+  ['string for the rate of an opensearch_errors', 'GeneratedInputEvidence', { ...openSearch, error_rate_per_minute: '90' }],
+  ['missing shards of the coverage', 'GeneratedInputEvidence', { ...openSearch, coverage: withoutKey(openSearch.coverage, 'shards') }],
+]
 const stageNegatives = [
   ['extra key in a stage_binding', 'GeneratedStageEvidence', { ...stageSample, extra: 1 }],
   ['missing evaluated_millis in a stage_binding', 'GeneratedStageEvidence', withoutKey(stageSample, 'evaluated_millis')],
@@ -169,7 +224,7 @@ const stageNegatives = [
   ['unknown type tag of a stage_binding', 'GeneratedStageEvidence', { ...stageSample, type: 'stage_bindings' }],
   ['string for the clip flag of a stage', 'GeneratedStageEvidence', { ...stageSample, stages: [{ ...stageSample.stages[1], clipped_to_run_end: 'no' }] }],
 ]
-negatives.push(...itemNegatives, ...derivedNegatives, ...stageNegatives)
+negatives.push(...itemNegatives, ...derivedNegatives, ...inputNegatives, ...stageNegatives)
 negatives.forEach(([label, type, value], position) => {
   lines.push(`// @ts-expect-error ${label}`)
   lines.push(`export const negative${position}: ${type} = ${JSON.stringify(value)}`)
@@ -203,6 +258,16 @@ derivedEvidence.forEach((name, position) => {
 derivedFindings.forEach((name, position) => {
   lines.push(`export const findingKeys${position}: SameKeys<${name}, Generated${name}> = true`)
 })
+lines.push(
+  '',
+  '// The hand-written source_summary and opensearch_errors keep the keys of the Kotlin classes (the window provenance is added to the',
+  '// source_summary after the typed encoding); the resource_binding is an open record in the hand-written types and is not compared.',
+  `type ProvidedElsewhere = ${providedElsewhere.map((key) => `'${key}'`).join(' | ')}`,
+  "export const sourceKeys: SameKeys<Omit<SourceSummaryEvidence, ProvidedElsewhere>, GeneratedSourceSummaryEvidence> = true",
+  'export const sourceOptional: NotStricter<SourceSummaryEvidence, GeneratedSourceSummaryEvidence> = true',
+  'export const openSearchKeys: SameKeys<OpenSearchEvidence, GeneratedOpensearchErrorsEvidence> = true',
+  'export const openSearchOptional: NotStricter<OpenSearchEvidence, GeneratedOpensearchErrorsEvidence> = true',
+)
 lines.push(
   '',
   '// The hand-written stage_binding keeps the keys of the Kotlin class and of its stages.',
@@ -246,5 +311,5 @@ if (diagnostics.length) {
   process.exit(1)
 }
 console.log(
-  `verify-generated-types: ${cases.length} results, ${identityFiles.length} identities, ${itemCount} items of ${typedTags.size + derivedKinds.size} types and ${negatives.length} negative cases agree with the generated types`,
+  `verify-generated-types: ${cases.length} results, ${identityFiles.length} identities, ${itemCount} items of ${typedTags.size + derivedKinds.size + inputTags.size} types and ${negatives.length} negative cases agree with the generated types`,
 )

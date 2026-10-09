@@ -1,7 +1,15 @@
 package io.ltverdict.sources
 
+import io.ltverdict.core.OpenSearchCoverageDocument
+import io.ltverdict.core.OpenSearchErrorsEvidence
+import io.ltverdict.core.OpenSearchGroupDocument
+import io.ltverdict.core.OpenSearchSampleDocument
+import io.ltverdict.core.OpenSearchShardsDocument
+import io.ltverdict.core.OpenSearchTermsDocument
+import io.ltverdict.core.OpenSearchTimelineCellDocument
 import io.ltverdict.core.StrictJsonScanner
 import io.ltverdict.core.canonicalJson
+import io.ltverdict.core.toJson
 import io.ltverdict.ingest.MAX_TIMESTAMP_EPOCH_MILLIS
 import kotlinx.serialization.SerializationException
 import kotlinx.serialization.json.Json
@@ -641,77 +649,40 @@ private fun coverageReasons(artifact: OpenSearchArtifact): List<String> {
 private fun coverageStatus(reasons: List<String>): String = if (reasons.isEmpty()) "COMPLETE" else "PARTIAL"
 
 private fun OpenSearchArtifact.json(): JsonObject =
-    buildJsonObject {
-        put("schema_version", SCHEMA_VERSION)
-        put("id", ARTIFACT_ID)
-        put("type", ARTIFACT_TYPE)
-        put("load_input_sha256", loadInputSha256)
-        put("profile_id", profileId)
-        put("start_epoch_ms", startEpochMillis)
-        put("end_epoch_ms", endEpochMillis)
-        put("step_ms", stepMillis)
-        put("total_errors", totalErrors)
-        put("error_rate_per_minute", JsonPrimitive(errorRatePerMinute))
-        put("timeline", buildJsonArray { timeline.forEach { add(it.json()) } })
-        put("groups", buildJsonArray { groups.forEach { add(it.json()) } })
-        put("coverage", coverage.json())
-    }
+    OpenSearchErrorsEvidence(
+        id = ARTIFACT_ID,
+        schemaVersion = SCHEMA_VERSION,
+        loadInputSha256 = loadInputSha256,
+        profileId = profileId,
+        startEpochMs = startEpochMillis,
+        endEpochMs = endEpochMillis,
+        stepMs = stepMillis,
+        totalErrors = totalErrors,
+        errorRatePerMinute = errorRatePerMinute,
+        timeline = timeline.map { it.document() },
+        groups = groups.map { it.document() },
+        coverage = coverage.document(),
+    ).toJson()
 
-private fun OpenSearchTimelineCell.json(): JsonObject =
-    buildJsonObject {
-        put("from_epoch_ms", fromEpochMillis)
-        put("to_epoch_ms", toEpochMillis)
-        put("count", count)
-        put("rate_per_minute", JsonPrimitive(ratePerMinute))
-    }
+private fun OpenSearchTimelineCell.document() = OpenSearchTimelineCellDocument(fromEpochMillis, toEpochMillis, count, ratePerMinute)
 
-private fun OpenSearchGroup.json(): JsonObject =
-    buildJsonObject {
-        put("service", service)
-        put("error_type", errorType)
-        put("count", count)
-        put("first_epoch_ms", firstEpochMillis)
-        put("last_epoch_ms", lastEpochMillis)
-        put("samples", buildJsonArray { samples.forEach { add(it.json()) } })
-    }
+private fun OpenSearchGroup.document() =
+    OpenSearchGroupDocument(service, errorType, count, firstEpochMillis, lastEpochMillis, samples.map { it.document() })
 
-private fun OpenSearchSample.json(): JsonObject =
-    buildJsonObject {
-        put("timestamp_epoch_ms", timestampEpochMillis)
-        put("index", index)
-        put("document_id", documentId)
-        put("message", message)
-        put("message_truncated", messageTruncated)
-        put("source_url", sourceUrl)
-    }
+private fun OpenSearchSample.document() =
+    OpenSearchSampleDocument(timestampEpochMillis, index, documentId, message, messageTruncated, sourceUrl)
 
-private fun OpenSearchCoverage.json(): JsonObject =
-    buildJsonObject {
-        put("status", status)
-        put("reasons", buildJsonArray { reasons.forEach { add(JsonPrimitive(it)) } })
-        put("timed_out", timedOut)
-        put("total_relation", totalRelation)
-        put(
-            "shards",
-            buildJsonObject {
-                put("total", shards.total)
-                put("successful", shards.successful)
-                put("skipped", shards.skipped)
-                put("failed", shards.failed)
-            },
-        )
-        put(
-            "terms",
-            buildJsonObject {
-                put("group_limit", terms.groupLimit)
-                put("returned_groups", terms.returnedGroups)
-                put("sum_other_doc_count", terms.sumOtherDocCount)
-                put("doc_count_error_upper_bound", terms.docCountErrorUpperBound)
-            },
-        )
-        put("samples_per_group_limit", samplesPerGroupLimit)
-        put("sample_message_bytes_max", sampleMessageBytesMax)
-    }
+private fun OpenSearchCoverage.document() =
+    OpenSearchCoverageDocument(
+        status = status,
+        reasons = reasons,
+        timedOut = timedOut,
+        totalRelation = totalRelation,
+        shards = OpenSearchShardsDocument(shards.total, shards.successful, shards.skipped, shards.failed),
+        terms = OpenSearchTermsDocument(terms.groupLimit, terms.returnedGroups, terms.sumOtherDocCount, terms.docCountErrorUpperBound),
+        samplesPerGroupLimit = samplesPerGroupLimit,
+        sampleMessageBytesMax = sampleMessageBytesMax,
+    )
 
 private fun metricAggregation(
     operation: String,

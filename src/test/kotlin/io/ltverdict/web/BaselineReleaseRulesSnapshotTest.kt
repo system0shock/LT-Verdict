@@ -145,8 +145,26 @@ class BaselineReleaseRulesSnapshotTest {
                 statistical(listOf(ref(pass[0]), ref(pass[1]), """{"run_id":"${pass[2].first}","analysis_id":"${"c".repeat(64)}"}"""))
             bodies["statistical FAIL last"] = statistical(listOf(ref(pass[1]), ref(pass[2]), ref(fail.first to fail.second)))
             bodies["statistical NO_POLICY first"] = statistical(listOf(ref(noPolicy), ref(pass[2]), ref(pass[3])))
-            bodies["statistical FAIL and NO_POLICY"] = statistical(listOf(ref(pass[1]), ref(noPolicy), ref(pass[2])))
+            val unknownOnRun3 = """{"run_id":"${pass[3].first}","analysis_id":"${"d".repeat(64)}"}"""
+            bodies["statistical FAIL, NO_POLICY, PASS"] = statistical(listOf(ref(fail), ref(noPolicy), ref(pass[3])))
+            bodies["statistical NO_POLICY, FAIL, PASS"] = statistical(listOf(ref(noPolicy), ref(fail), ref(pass[3])))
+            bodies["statistical FAIL, NO_POLICY, unknown"] = statistical(listOf(ref(fail), ref(noPolicy), unknownOnRun3))
+            bodies["statistical unknown, FAIL, NO_POLICY"] = statistical(listOf(unknownOnRun3, ref(fail), ref(noPolicy)))
+            bodies["statistical duplicate run and FAIL"] = statistical(listOf(ref(fail), ref(pass[0]), ref(noPolicy)))
             for ((name, body) in bodies) rec("POST /api/baseline: $name", api.post("/api/baseline", json, body.toByteArray()))
+            val badArm = synthetic(pass[4].first, "bad-arm", "2026-01-01T00:00:00Z", "PASS", null, rawArm = JsonPrimitive(5))
+            val nullArm = synthetic(pass[4].first, "null-arm", "2026-01-01T00:00:00Z", "PASS", null, rawArm = JsonNull)
+            rec(
+                "POST /api/baseline: manual with a number as arm",
+                api.post("/api/baseline", json, manual(ref(pass[4].first to badArm)).toByteArray()),
+            )
+            rec(
+                "POST /api/baseline: manual with a null arm",
+                api.post("/api/baseline", json, manual(ref(pass[4].first to nullArm), "null-arm").toByteArray()),
+            )
+            val badArmPath = "/api/runs/${pass[4].first}/analyses/$badArm"
+            rec("GET comparison: number as arm", api.get("$badArmPath/comparison?series=release"))
+            rec("GET baseline-conditions: number as arm", api.get("$badArmPath/baseline-conditions?series=release"))
             rec("POST /api/baseline: wrong content type", api.post("/api/baseline", "text/plain", "{}".toByteArray()))
             rec("POST /api/baseline: array", api.post("/api/baseline", json, "[]".toByteArray()))
             rec("POST /api/baseline: depth 9", api.post("/api/baseline", json, ("[".repeat(9) + "]".repeat(9)).toByteArray()))
@@ -428,6 +446,31 @@ class BaselineReleaseRulesSnapshotTest {
                 api.post("/api/releases", json, releaseBody("jmeter_jtl_csv-${"2".repeat(64)}", listOf(a))),
             )
 
+            rec(
+                "POST /api/releases facts: bad metadata then unknown",
+                api.post("/api/releases", json, releaseBody(runId, listOf(noMeta, "f".repeat(64)))),
+            )
+            rec(
+                "POST /api/releases facts: unknown then bad metadata",
+                api.post("/api/releases", json, releaseBody(runId, listOf("f".repeat(64), noMeta))),
+            )
+            rec(
+                "POST /api/releases facts: ok, foreign, unknown",
+                api.post("/api/releases", json, releaseBody(runId, listOf(a, foreign, "f".repeat(64)))),
+            )
+            rec(
+                "POST /api/releases facts: start differs then unknown",
+                api.post("/api/releases", json, releaseBody(runId, listOf(a, otherStart, "f".repeat(64)))),
+            )
+            rec(
+                "POST /api/releases facts: arm conflict is checked after all reads",
+                api.post("/api/releases", json, releaseBody(runId, listOf(a, b, "f".repeat(64)))),
+            )
+            rec(
+                "POST /api/releases: malformed field and unknown run",
+                api.post("/api/releases", json, releaseBody("jmeter_jtl_csv-${"2".repeat(64)}", listOf(a), label = "a\u0007")),
+            )
+
             // creation, normalization and the view
             val profileBody =
                 profile(
@@ -527,7 +570,28 @@ class BaselineReleaseRulesSnapshotTest {
                 put("profile", profile)
                 put("notes", notes)
             }
-            rec("PUT /api/releases: label and notes", replace(plain, update(listOf(a), "  1.0b  ", notes = JsonPrimitive("n\r\nm"))))
+            val before = api.get("/api/releases/$plain").jsonObject()
+            val firstUpdate = replace(plain, update(listOf(a), "  1.0b  ", notes = JsonPrimitive("n\r\nm")))
+            rec("PUT /api/releases: label and notes", firstUpdate)
+            val after = firstUpdate.jsonObject()
+            for (key in listOf("release_id", "series", "run_id", "started_at", "created_at", "schema_version")) {
+                check(before[key] == after[key]) { "$key changed: ${before[key]} -> ${after[key]}" }
+            }
+            check(after["label"] == JsonPrimitive("1.0b") && after["notes"] == JsonPrimitive("n\nm")) { "label and notes: $after" }
+            check(Regex("[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9:]{8}(?:[.][0-9]{3})?Z").matches((after["updated_at"] as JsonPrimitive).content)) {
+                "updated_at: $after"
+            }
+            check((after["started_at"] as JsonPrimitive).content == "2026-01-01T00:00:00Z") { "started_at: $after" }
+            rec(
+                "PUT /api/releases: malformed body and unknown id",
+                replace("0".repeat(15) + "-" + "0".repeat(8), JsonObject(update(listOf(a)) - "notes")),
+            )
+            rec(
+                "PUT /api/releases: unknown analysis and unknown id",
+                replace("0".repeat(15) + "-" + "0".repeat(8), update(listOf("f".repeat(64)))),
+            )
+            rec("PUT /api/releases: unknown analysis", replace(plain, update(listOf("f".repeat(64)))))
+            rec("PUT /api/releases: bad metadata then unknown", replace(plain, update(listOf(noMeta, "f".repeat(64)))))
             rec("PUT /api/releases: profile", replace(plain, update(listOf(a), profile = profile("scenario_mix" to JsonPrimitive("2")))))
             rec("PUT /api/releases: other analysis, same start", replace(plain, update(listOf(a2))))
             rec("PUT /api/releases: registered elsewhere", replace(plain, update(listOf(f1))))
@@ -618,6 +682,7 @@ class BaselineReleaseRulesSnapshotTest {
             startedAt: String?,
             verdict: String,
             arm: String?,
+            rawArm: JsonElement? = null,
             resultRunId: String = runId,
             metadataRunId: String = runId,
             coverageStatus: String? = "COMPLETE",
@@ -629,6 +694,7 @@ class BaselineReleaseRulesSnapshotTest {
                         put("tag", tag)
                         put("policy_sha256", "a".repeat(64))
                         if (arm != null) put("resource_arm", arm)
+                        if (rawArm != null) put("resource_arm", rawArm)
                     },
                 )
             val analysisId = sha256Hex(identity)

@@ -34,6 +34,8 @@ internal class StageNotice(
     val detail: String,
     /** A short scope for a list of facts. */
     val scope: String,
+    /** Evaluated and excluded time of the whole run. */
+    val totals: String,
     val stages: List<StageRow>,
 )
 
@@ -46,6 +48,7 @@ internal fun stageNotice(result: JsonObject): StageNotice? {
             ?: return null
     val ids = (binding["evaluated_window_ids"] as? JsonArray).orEmpty().mapNotNull { (it as? JsonPrimitive)?.content }
     val excluded = binding.long("excluded_millis") ?: return null
+    val evaluated = binding.long("evaluated_millis") ?: return null
     val stages = (binding["stages"] as? JsonArray).orEmpty().mapNotNull { it as? JsonObject }
     val rows =
         stages.map { stage ->
@@ -77,6 +80,7 @@ internal fun stageNotice(result: JsonObject): StageNotice? {
             },
         detail = "Окно вердикта: ${windows.joinToString("; ")}. Исключено: ${durationText(excluded)}.",
         scope = "окно steady (${ids.joinToString(", ")}), разгон исключён",
+        totals = "Оценено: ${durationText(evaluated)}, исключено: ${durationText(excluded)}.",
         stages = rows,
     )
 }
@@ -89,7 +93,15 @@ private fun durationText(milliseconds: Long): String {
             .divide(BigDecimal(if (seconds) 1_000 else 60_000), 2, RoundingMode.HALF_UP)
             .stripTrailingZeros()
             .toPlainString()
-    return "${number.replace('.', ',')} ${if (seconds) "с" else "мин"}"
+    val whole =
+        number
+            .substringBefore('.')
+            .reversed()
+            .chunked(3)
+            .joinToString("\u00A0")
+            .reversed()
+    val fraction = number.substringAfter('.', "").let { if (it.isEmpty()) "" else ",$it" }
+    return "$whole$fraction ${if (seconds) "с" else "мин"}"
 }
 
 private val UTC_FORMAT = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss").withZone(ZoneOffset.UTC)

@@ -237,7 +237,7 @@ private fun stageBlock(notice: StageNotice?): String {
         }
     val heads = listOf("Стадия", "Роль", "Смещения, мс", "Границы (UTC)", "Границы (epoch, мс)", "Обрезана до конца прогона")
     return "<section lang=\"ru\"><h2>Область вердикта</h2><p><strong>${escape(notice.phrase)}</strong></p><p>${escape(notice.detail)}</p>" +
-        table("Стадии нагрузки", heads, rows) + "<p>${escape(STAGE_REFERENCE_NOTE)}</p></section>"
+        table("Стадии нагрузки", heads, rows) + "<p>${escape(notice.totals)}</p><p>${escape(STAGE_REFERENCE_NOTE)}</p></section>"
 }
 
 private fun capacityStages(result: JsonObject): List<JsonObject> =

@@ -664,7 +664,7 @@ private fun JsonObject.metricValue(metric: Metric): Rational? {
     }
 }
 
-private fun hasStageBinding(result: JsonObject): Boolean =
+internal fun hasStageBinding(result: JsonObject): Boolean =
     (result["evidence"] as? JsonArray).orEmpty().any { (it as? JsonObject)?.stringOrNull("type") == "stage_binding" }
 
 private fun semanticKey(

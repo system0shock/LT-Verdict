@@ -23,11 +23,12 @@ internal fun renderRunDynamicsExport(
     format: AnalyticsExportFormat,
     historyScanTruncated: Boolean = false,
     historyScanLimit: Int? = null,
+    wholeRunWithStages: Boolean = false,
 ): ByteArray {
     val truncated = historyScanTruncated || dynamics.booleanOrNull("history_scan_truncated") == true
     val scanLimit = historyScanLimit ?: dynamics.integerOrNull("history_scan_limit")
     require(!truncated || scanLimit != null && scanLimit > 0) { "INVALID_RUN_DYNAMICS_EXPORT" }
-    val table = dynamics.exportTable(truncated, scanLimit)
+    val table = dynamics.exportTable(truncated, scanLimit, wholeRunWithStages)
     val rendered =
         when (format) {
             AnalyticsExportFormat.HTML -> table.html()
@@ -40,6 +41,7 @@ internal fun renderRunDynamicsExport(
 private fun JsonObject.exportTable(
     historyScanTruncated: Boolean,
     historyScanLimit: Int?,
+    wholeRunWithStages: Boolean,
 ): ExportTable {
     require(string("schema_version") == "run-dynamics.v1") { "INVALID_RUN_DYNAMICS_EXPORT" }
     val rows = objects("rows")
@@ -82,6 +84,11 @@ private fun JsonObject.exportTable(
         notices =
             buildList {
                 add("Deltas refer to the original preceding comparable run and are not recalculated after row selection.")
+                if (wholeRunWithStages) {
+                    add(
+                        "Metrics are of the whole run, for reference only: this analysis has declared load stages and its verdict is by the steady window.",
+                    )
+                }
                 if (historyScanTruncated) {
                     add(
                         "Local history scan stopped at configured bounds (up to $historyScanLimit analyses); " +

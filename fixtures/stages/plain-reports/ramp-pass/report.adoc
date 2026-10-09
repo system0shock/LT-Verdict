@@ -1,0 +1,134 @@
+= LT Verdict report
+:!webfonts:
+
+== Run
+Run ID
+[subs=specialchars]
+----
+"jmeter_jtl_csv-ec01e6fe71409fc8ad3654e16f759bf7c7ad0661aad40802f45ecb0f894fd3e4"
+----
+Analysis ID
+[subs=specialchars]
+----
+"fixed"
+----
+
+== Status
+Run validity
+[subs=specialchars]
+----
+"VALID"
+----
+Policy verdict
+[subs=specialchars]
+----
+"PASS"
+----
+Coverage
+[subs=specialchars]
+----
+"COMPLETE"
+----
+
+== Overall metrics
+Metric ID
+[subs=specialchars]
+----
+"metric-summary-overall"
+----
+Scope
+[subs=specialchars]
+----
+{"kind":"overall"}
+----
+Samples (count)
+[subs=specialchars]
+----
+720
+----
+Errors (count)
+[subs=specialchars]
+----
+0
+----
+Throughput (requests/s)
+[subs=specialchars]
+----
+{"denominator":119800,"numerator":720000}
+----
+Error rate (ratio)
+[subs=specialchars]
+----
+{"denominator":720,"numerator":0}
+----
+Latency (ms)
+[subs=specialchars]
+----
+{"max":839,"p50":159,"p95":821,"p99":836}
+----
+
+== Transaction metrics
+Metric ID
+[subs=specialchars]
+----
+"metric-summary-12567634dc037cd0871b510a6af64b37e6d6a5755313b8b3f5298f9679ccb787"
+----
+Scope
+[subs=specialchars]
+----
+{"group_path":[],"kind":"transaction","label":"GET /items","sample_kind":"JMETER_SAMPLER"}
+----
+Samples (count)
+[subs=specialchars]
+----
+720
+----
+Errors (count)
+[subs=specialchars]
+----
+0
+----
+Throughput (requests/s)
+[subs=specialchars]
+----
+{"denominator":119800,"numerator":720000}
+----
+Error rate (ratio)
+[subs=specialchars]
+----
+{"denominator":720,"numerator":0}
+----
+Latency (ms)
+[subs=specialchars]
+----
+{"max":839,"p50":159,"p95":821,"p99":836}
+----
+
+== Policy checks
+[subs=specialchars]
+----
+{"id":"policy-check-f771f4d32eee4ed24b0532b790dc9869d4a828d070f3071cae26d3529cca23e7","metric":"response_time_p95_ms","metric_evidence_id":"metric-summary-overall","min_samples":1,"observed":821,"operator":"lte","rule_id":"p95","sample_count":720,"sample_floor":1,"sample_mode":"FULL","status":"PASS","threshold":100000,"type":"policy_check"}
+----
+
+== Findings
+unavailable
+
+== Evidence IDs
+[subs=specialchars]
+----
+"metric-summary-overall"
+----
+[subs=specialchars]
+----
+"metric-summary-12567634dc037cd0871b510a6af64b37e6d6a5755313b8b3f5298f9679ccb787"
+----
+[subs=specialchars]
+----
+"policy-check-f771f4d32eee4ed24b0532b790dc9869d4a828d070f3071cae26d3529cca23e7"
+----
+
+== Canonical JSON
+[subs=specialchars]
+----
+{"analysis_coverage":{"reasons":[],"status":"COMPLETE"},"analysis_mode":"standard","evidence":[{"error_count":0,"error_rate_ratio":{"denominator":720,"numerator":0},"id":"metric-summary-overall","latency_ms":{"max":839,"p50":159,"p95":821,"p99":836},"sample_count":720,"scope":{"kind":"overall"},"throughput_rps":{"denominator":119800,"numerator":720000},"type":"metric_summary"},{"error_count":0,"error_rate_ratio":{"denominator":720,"numerator":0},"id":"metric-summary-12567634dc037cd0871b510a6af64b37e6d6a5755313b8b3f5298f9679ccb787","latency_ms":{"max":839,"p50":159,"p95":821,"p99":836},"sample_count":720,"scope":{"group_path":[],"kind":"transaction","label":"GET /items","sample_kind":"JMETER_SAMPLER"},"throughput_rps":{"denominator":119800,"numerator":720000},"type":"metric_summary"},{"id":"policy-check-f771f4d32eee4ed24b0532b790dc9869d4a828d070f3071cae26d3529cca23e7","metric":"response_time_p95_ms","metric_evidence_id":"metric-summary-overall","min_samples":1,"observed":821,"operator":"lte","rule_id":"p95","sample_count":720,"sample_floor":1,"sample_mode":"FULL","status":"PASS","threshold":100000,"type":"policy_check"}],"findings":[],"policy_verdict":"PASS","run_id":"jmeter_jtl_csv-ec01e6fe71409fc8ad3654e16f759bf7c7ad0661aad40802f45ecb0f894fd3e4","run_validity":"VALID","schema_version":"analysis-result.v1"}
+----

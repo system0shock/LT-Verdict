@@ -42,6 +42,7 @@ class StageReportsTest {
                 report.contains("Окно вердикта: steady, 1 мин, 2026-01-01 00:00:40 UTC – 2026-01-01 00:01:40 UTC. Исключено: 59,8 с."),
                 report,
             )
+            assertTrue(report.contains("<p>Оценено: 1 мин, исключено: 59,8 с.</p>"), report)
             assertTrue(report.contains("Метрики по всему прогону справочные"), report)
             assertTrue(
                 report.contains("<th scope=\"col\">Стадия</th><th scope=\"col\">Роль</th><th scope=\"col\">Смещения, мс</th>"),
@@ -119,8 +120,47 @@ class StageReportsTest {
             assertFalse(plainReport.contains(it), it)
         }
         assertFalse(renderHtmlReport(stripped, "x").decodeToString().contains("Область вердикта"))
-        assertFalse(renderAsciiDocReport(stripped, "x").decodeToString().contains("NOTE:"))
+        assertFalse(renderAsciiDocReport(stripped, "x").decodeToString().contains("Область вердикта"))
         assertFalse(renderConfluenceReport(stripped, "x").decodeToString().contains("разгон"))
+    }
+
+    @Test
+    fun `a stage id is free text, so AsciiDoc keeps it in a literal block and the other formats escape it`() {
+        val id = "image:x.png[]{attr}<b>&"
+        val stages =
+            """{"schema_version":"load-stages.v1","stages":""" +
+                """[{"id":"$id","role":"steady","from_offset_ms":40000,"to_offset_ms":100000}]}"""
+        val outcome = staged(stages = stages)
+
+        val ascii = renderAsciiDocReport(outcome.canonicalResult, outcome.analysisId).decodeToString()
+        val confluence = renderConfluenceReport(outcome.canonicalResult, outcome.analysisId).decodeToString()
+        val report = html(outcome)
+
+        val block = ascii.substringAfter("Область вердикта\n[subs=specialchars]\n----\n").substringBefore("\n----\n")
+        assertTrue(block.startsWith("Вердикт посчитан по окну steady"), block)
+        assertTrue(block.contains(id), block)
+        assertFalse(ascii.lines().any { it.startsWith("NOTE:") || it.startsWith("image:") })
+        assertTrue(confluence.contains("image:x.png[]{attr}&lt;b&gt;&amp;"), confluence)
+        assertTrue(report.contains("image:x.png[]{attr}&lt;b&gt;&amp;"), report)
+        assertFalse(report.contains("<b>"))
+    }
+
+    @Test
+    fun `long durations group the thousands like the UI`() {
+        val binding =
+            """{"type":"stage_binding","evaluated_window_ids":["steady"],"evaluated_millis":120000000,"excluded_millis":60000000,""" +
+                """"stages":[{"id":"steady","role":"steady","from_offset_ms":0,"to_offset_ms":120000000,""" +
+                """"from_epoch_ms":0,"to_epoch_ms":120000000}]}"""
+        val document = """{"policy_verdict":"PASS","run_validity":"VALID","evidence":[$binding]}"""
+        val result =
+            kotlinx.serialization.json.Json
+                .parseToJsonElement(document) as kotlinx.serialization.json.JsonObject
+
+        val notice = checkNotNull(stageNotice(result))
+
+        assertTrue(notice.detail.contains("steady, 2\u00A0000 мин, "), notice.detail)
+        assertTrue(notice.detail.endsWith("Исключено: 1\u00A0000 мин."), notice.detail)
+        assertEquals("Оценено: 2\u00A0000 мин, исключено: 1\u00A0000 мин.", notice.totals)
     }
 
     @Test
@@ -133,12 +173,15 @@ class StageReportsTest {
         val neutral = renderAsciiDocReport(noPolicy.canonicalResult, noPolicy.analysisId).decodeToString()
 
         assertTrue(
-            ascii.contains("NOTE: $decided. Окно вердикта: steady, 1 мин, 2026-01-01 00:00:40 UTC – 2026-01-01 00:01:40 UTC."),
+            ascii.contains("Область вердикта\n[subs=specialchars]\n----\n$decided. Окно вердикта: steady, 1 мин, 2026-01-01 00:00:40 UTC"),
             ascii,
         )
         assertTrue(confluence.contains("<p>$decided. Окно вердикта: steady, 1 мин, "), confluence)
         assertEquals(1, Regex("Вердикт посчитан").findAll(ascii).count())
-        assertTrue(neutral.contains("NOTE: Окно steady задано (steady), разгон исключён из метрик окна; вердикт: NO_POLICY"), neutral)
+        assertTrue(
+            neutral.contains("----\nОкно steady задано (steady), разгон исключён из метрик окна; вердикт: NO_POLICY. Окно вердикта:"),
+            neutral,
+        )
         assertFalse(neutral.contains("Вердикт посчитан"))
     }
 }

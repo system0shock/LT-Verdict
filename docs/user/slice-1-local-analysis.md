@@ -2392,10 +2392,10 @@ ADR 0030).
 
 ```text
 ltv ui [--data-dir <path>] [--analysis-parallelism <n>] [--histogram-significant-digits <3..5>]
-ltv analyze <input> [--policy <policy.json>|-] [--stages <load-stages.json>] [--resources <snapshot.json>] [--histogram-significant-digits <3..5>] [--data-dir <path>] [--out-dir <dir>]
+ltv analyze <input> [--policy <policy.json>|-] [--stages <load-stages.json>] [--resources <snapshot.json>] [--histogram-significant-digits <3..5>] [--data-dir <path>] [--out-dir <dir> [--baseline <analysis-result.json>]]
 ltv policy validate <policy.json>|-
-ltv report <run-id> <analysis-id> --format json|html|asciidoc|confluence|svg [--data-dir <path>]
-ltv summary <run-id> <analysis-id> [--data-dir <path>]
+ltv report <run-id> <analysis-id> --format json|html|asciidoc|confluence|svg [--baseline <analysis-result.json>] [--data-dir <path>]
+ltv summary <run-id> <analysis-id> [--baseline <analysis-result.json>] [--data-dir <path>]
 ltv --help
 ltv --version
 ```
@@ -2465,6 +2465,47 @@ policy из stdin (до 1 MiB, как файл): `cat policy.json | ltv analyze 
 `NO_VERDICT` добавлен суффикс `scope=steady_window window_ids=<ids> excluded_ms=<N>`, а у
 проходящего gate та же строка лежит в дочернем `<system-out>`; `summary.txt` получает строки
 `scope:` и `window[<id>]:`.
+
+**Сравнение с baseline: `--baseline <analysis-result.json>`** (W2.3). Добавляет в `report.html`
+и `summary.txt` из `--out-dir`, в `ltv report --format html|asciidoc|confluence` и в `ltv summary`
+изменения текущего анализа относительно эталона. Эталон это сохранённый анализ из того же
+`--data-dir`: путь должен вести к файлу
+`<data-dir>/runs/<run_id>/analyses/<analysis_id>/analysis-result.json` (`ltv analyze` печатает
+`analysis_id` и `run_id` в stderr). Рядом с результатом читается `identity.json`, потому что ключ
+сопоставимости (тип источника, движок, парсеры, версии, лимиты, объявление стадий) состоит из обоих
+документов; произвольный `result.json` из `--out-dir` или с другой машины не подходит, его нужно
+сначала положить в каталог данных тем же анализом. Файл вне каталога данных, не по шаблону,
+ссылка, неизвестный или повреждённый анализ дают код `4` и `BASELINE_NOT_FOUND`,
+`BASELINE_CORRUPT` или `BASELINE_TOO_LARGE` до чтения входа. У `ltv analyze` флаг требует
+`--out-dir` (иначе код `4`, `BASELINE_OUT_DIR_REQUIRED`: сравнение показывается только в
+артефактах); у `ltv report` он допустим с форматами `html`, `asciidoc`, `confluence` (и `summary`
+через `ltv summary`), с `json` и `svg` это ошибка использования (код `64`). Флаг указывается один
+раз.
+
+- Что не меняется. Код выхода `analyze`, stdout, `result.json`, `junit.xml`, `chart.svg`,
+  `analysis_id` и вердикт не зависят от эталона (ADR 0017, 0018: сравнение вердикт не меняет);
+  без `--baseline` все артефакты прежние побайтово. Несопоставимость это не ошибка и не меняет код
+  выхода, раздел говорит причину. Эталон без политики (`NO_POLICY`) допустим: раздел предупреждает,
+  что вердикт эталона не `PASS`.
+- Условия не подтверждены. В CLI нет подтверждения условий (ADR 0028): сравнение всегда
+  `UNCONFIRMED`, материальная дельта получает статус «описательно, условия не подтверждены», а
+  статус «материальная дельта, значимость не оценена» (`CANDIDATE`) в CLI не возникает; раздел
+  говорит это словами. Ключ сопоставимости ядра отсекает анализы с разными условиями обработки
+  данных или разным объявлением стадий («сравнение невозможно: …»).
+- Область дельт. Без стадий дельты за весь прогон (p95, p99, пропускная способность, доля
+  ошибок). Если у эталона или у текущего анализа есть `stage_binding` (ADR 0030, R7), дельты
+  считаются по `window_metric_summary` окон `steady` (p50, p95, p99, пропускная способность, доля
+  ошибок; пороги заметного изменения 5 % и 0,001 по умолчанию), метрики «весь прогон» в разделе не
+  используются. Если одна сторона без стадий, объявления разные или окна нет, раздел пишет
+  причину и таблицу не показывает.
+- Где видно. Раздел «Изменения относительно baseline» в HTML, AsciiDoc и Confluence; блок строк
+  `baseline: ...` и `[<окно>] <метрика>: <baseline> -> <текущий>, delta ...` (с отступом) в `summary.txt`;
+  необязательный ключ `baseline_comparison` в `cli-summary.v1` (`baseline`, `comparability`,
+  `scope` `whole_run` или `steady_window`, `warnings[]`, `metrics[]` для `whole_run` либо `windows[]`
+  с `window_id`, `status`, `reasons[]`, числом сэмплов и длительностью сторон и `metrics[]` для
+  `steady_window`). Тексты из результата в отчётах экранированы. Без `--baseline` ключа нет.
+- Границы. Подтверждение условий, выбор эталона по серии или статистически, сравнение профилей
+  релизов, окна и пороги флагами и эталон вне каталога данных в CLI не входят.
 
 **`ltv summary <run-id> <analysis-id>`** читает сохранённый анализ и печатает в stdout один
 компактный canonical JSON `cli-summary.v1` (ключи по алфавиту, без пробелов и перевода строки;

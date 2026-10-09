@@ -19,6 +19,7 @@ internal fun renderHtmlReport(
     resultBytes: ByteArray,
     analysisId: String,
     errorGroups: ByteArray? = null,
+    baseline: JsonObject? = null,
 ): ByteArray {
     val result = Json.parseToJsonElement(resultBytes.decodeToString()).jsonObject
     val evidence = result.array("evidence")
@@ -52,6 +53,7 @@ internal fun renderHtmlReport(
             if (values.isEmpty()) "" else "<section lang=\"en\"><h2>$title</h2>${list(values)}</section>"
         }
     val notice = stageNotice(result)
+    val changes = baselineChangesSection(baselineChangesView(baseline))
     val html =
         """<!doctype html><html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'sha256-${styleHash()}'; base-uri 'none'; form-action 'none'"><title>LT Verdict report</title><style>$STYLE</style></head><body><main><h1 lang="en">LT Verdict report</h1><p>Отчёт об анализе нагрузочного прогона</p><dl lang="en"><dt>Run</dt><dd>${result.value(
             "run_id",
@@ -64,7 +66,7 @@ internal fun renderHtmlReport(
         )}</dd>${stageScopeRow(notice)}${windowShareRow(result)}<dt>Coverage</dt><dd>${result.objectValue(
             "analysis_coverage",
             "status",
-        )}</dd></dl>${stageBlock(notice)}${verdictBlock(result, evidence)}${diagnosticsBlock(result, evidence)}${rulesSection(
+        )}</dd></dl>${stageBlock(notice)}${verdictBlock(result, evidence)}${diagnosticsBlock(result, evidence)}$changes${rulesSection(
             evidence,
         )}${errorGroupsSection(errorGroupsView(result, errorGroups))}${transactionsSection(result, evidence)}${limitationsBlock(
             result,
@@ -536,6 +538,21 @@ private fun transactionsSection(
                 "<p>Порядок: сначала нарушения, затем по числу ошибок, p99 и выборке; не более $MAX_TRANSACTION_ROWS строк.</p>"
         }
     return "<section><h2>Транзакции</h2>$body</section>"
+}
+
+// W2.3: the changes against a baseline given with --baseline; null when there is none.
+private fun baselineChangesSection(view: BaselineChangesView?): String {
+    if (view == null) return ""
+    val notes = view.notes.joinToString("") { "<p>${escape(it)}</p>" }
+    val grids =
+        view.tables.filter { it.rows.isNotEmpty() }.joinToString("") { grid ->
+            table(
+                grid.caption,
+                grid.heads,
+                grid.rows.joinToString("") { row -> "<tr>" + row.joinToString("") { "<td>${escape(it)}</td>" } + "</tr>" },
+            )
+        }
+    return "<section><h2>$BASELINE_CHANGES_TITLE</h2>$notes$grids</section>"
 }
 
 // W2.6 / ADR 0031: the top errors by response code and message; null when the run has no errors.

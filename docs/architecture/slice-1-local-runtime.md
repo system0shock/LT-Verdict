@@ -62,6 +62,7 @@ directory. Конкурирующий CLI/UI process получает `DATA_DIR_
         ├── resource-snapshot.json   # и другие необязательные входы анализа:
         │                            # correlation-plan, capacity(-plan), trend(-plan),
         │                            # pod-view, postgres-*.json, pg-profile.html
+        ├── error-groups.json        # топ ошибок прогона (ADR 0031), только если были ошибки
         └── manifest.json
 ```
 

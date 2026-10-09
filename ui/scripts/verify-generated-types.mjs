@@ -6,6 +6,9 @@
 // results and one real item per type and key set (fixtures/typed-evidence/samples.ndjson) must be assignable, broken
 // copies must not, and the hand-written evidence types of types.ts must keep the same keys (and may be looser about
 // optional keys, because stored results of older engines lack them).
+// The same is done for the diagnostic, capacity and trend items of ui/src/types.derived-items.generated.ts, with the real
+// items of fixtures/typed-evidence/samples-diagnostic-capacity-trend.ndjson. This script does not prove the bytes of the
+// documents (JSON.parse loses the precision of wide numbers): the Kotlin tests do.
 // The check source is virtual (never written to disk) and compiled with the options of ui/tsconfig.json.
 import { readdirSync, readFileSync } from 'node:fs'
 import { dirname, resolve } from 'node:path'
@@ -32,6 +35,27 @@ const samples = readFileSync(resolve(repoRoot, 'fixtures/typed-evidence/samples.
   .split('\n')
   .filter(Boolean)
   .map((line) => JSON.parse(line))
+const derivedText = readFileSync(resolve(uiRoot, 'src/types.derived-items.generated.ts'), 'utf8').replace(/\r\n/g, '\n')
+const derivedKinds = new Map(
+  [...derivedText.matchAll(/^export interface (\w+) \{\n {2}type: '([a-z_]+)'$/gm)].map((match) => [match[2], match[1].endsWith('Finding') ? 'finding' : 'evidence']),
+)
+const derivedSamples = readFileSync(resolve(repoRoot, 'fixtures/typed-evidence/samples-diagnostic-capacity-trend.ndjson'), 'utf8')
+  .split('\n')
+  .filter(Boolean)
+  .map((line) => JSON.parse(line))
+const derivedEvidence = [
+  'DiagnosticSummaryEvidence',
+  'CorrelationPairEvidence',
+  'CorrelationHeadlineSelectionEvidence',
+  'AnomalyCheckEvidence',
+  'WindowMetricSummaryEvidence',
+  'TrendCheckEvidence',
+  'TrendSummaryEvidence',
+  'CapacityKneeDiagnosticEvidence',
+]
+const derivedFindings = ['ResourceTrendFinding']
+// Keys the hand-written type keeps for results of older engines; the current engine does not write them.
+const legacyKeys = { CorrelationHeadlineSelectionEvidence: ['stage_count'] }
 const typedEvidence = [
   'MetricSummaryEvidence',
   'PolicyCheckEvidence',
@@ -46,7 +70,9 @@ const lines = [
   "import type { AnalysisIdentityDocument, AnalysisResultDocument } from './types.generated'",
   "import type { AnalysisEvidence as GeneratedEvidence, AnalysisFinding as GeneratedFinding } from './types.items.generated'",
   `import type { ${typedEvidence.map((name) => `${name} as Generated${name}`).join(', ')} } from './types.items.generated'`,
-  `import type { AnalysisResult, ${typedEvidence.join(', ')} } from './types'`,
+  "import type { DerivedEvidence as GeneratedDerivedEvidence, DerivedFinding as GeneratedDerivedFinding } from './types.derived-items.generated'",
+  `import type { ${[...derivedEvidence, ...derivedFindings, 'CapacitySummaryEvidence', 'CapacityStageDocument'].map((name) => `${name} as Generated${name}`).join(', ')} } from './types.derived-items.generated'`,
+  `import type { AnalysisResult, CapacityStage, CapacitySummary, ${[...typedEvidence, ...derivedEvidence, ...derivedFindings].join(', ')} } from './types'`,
   '',
 ]
 let index = 0
@@ -61,15 +87,23 @@ for (const name of cases) {
     for (const item of result[array].filter((entry) => typedTags.has(entry.type))) {
       lines.push(`export const item${itemCount++}: ${union} = ${JSON.stringify(item)}`)
     }
+    const derivedUnion = array === 'evidence' ? 'GeneratedDerivedEvidence' : 'GeneratedDerivedFinding'
+    for (const item of result[array].filter((entry) => derivedKinds.has(entry.type))) {
+      lines.push(`export const item${itemCount++}: ${derivedUnion} = ${JSON.stringify(item)}`)
+    }
   }
 }
 for (const sample of samples) {
   lines.push(`export const sample${itemCount++}: GeneratedEvidence | GeneratedFinding = ${JSON.stringify(sample)}`)
 }
-const sampleTags = new Set(samples.map((sample) => sample.type))
-const untested = [...typedTags].filter((tag) => !sampleTags.has(tag))
+for (const sample of derivedSamples) {
+  const union = derivedKinds.get(sample.type) === 'finding' ? 'GeneratedDerivedFinding' : 'GeneratedDerivedEvidence'
+  lines.push(`export const sample${itemCount++}: ${union} = ${JSON.stringify(sample)}`)
+}
+const sampleTags = new Set([...samples, ...derivedSamples].map((sample) => sample.type))
+const untested = [...typedTags, ...derivedKinds.keys()].filter((tag) => !sampleTags.has(tag))
 if (untested.length) {
-  console.error(`verify-generated-types: no sample in fixtures/typed-evidence/samples.ndjson for type ${untested.join(', ')}`)
+  console.error(`verify-generated-types: no sample in fixtures/typed-evidence/samples*.ndjson for type ${untested.join(', ')}`)
   process.exit(1)
 }
 for (const [, path] of identityFiles) {
@@ -88,7 +122,7 @@ const negatives = [
   ['extra identity key', 'AnalysisIdentityDocument', { ...identitySample, extra: 1 }],
   ['missing identity key', 'AnalysisIdentityDocument', Object.fromEntries(Object.entries(identitySample).filter(([key]) => key !== 'engine'))],
 ]
-const richest = (tag) => samples.filter((sample) => sample.type === tag).sort((a, b) => Object.keys(b).length - Object.keys(a).length)[0]
+const richest = (tag) => [...samples, ...derivedSamples].filter((sample) => sample.type === tag).sort((a, b) => Object.keys(b).length - Object.keys(a).length)[0]
 const policyCheck = richest('policy_check')
 const metricSummary = richest('metric_summary')
 const itemNegatives = [
@@ -99,7 +133,29 @@ const itemNegatives = [
   ['unknown scope kind', 'GeneratedEvidence', { ...metricSummary, scope: { kind: 'other' } }],
   ['missing explicit null error_rate_ratio', 'GeneratedEvidence', Object.fromEntries(Object.entries(metricSummary).filter(([key]) => key !== 'error_rate_ratio'))],
 ]
-negatives.push(...itemNegatives)
+const pair = richest('correlation_pair')
+const capacity = richest('capacity_summary')
+const withStage = (change) => ({ ...capacity, stages: [{ ...capacity.stages[0], ...change }] })
+const withoutKey = (object, key) => Object.fromEntries(Object.entries(object).filter(([name]) => name !== key))
+const derivedNegatives = [
+  ['extra key in a correlation_pair', 'GeneratedDerivedEvidence', { ...pair, extra: 1 }],
+  ['missing explicit null raw_rho', 'GeneratedDerivedEvidence', withoutKey(pair, 'raw_rho')],
+  ['number for a string field of a correlation_pair', 'GeneratedDerivedEvidence', { ...pair, pair_id: 5 }],
+  ['string for a number field of a correlation_pair', 'GeneratedDerivedEvidence', { ...pair, paired_cells: '5' }],
+  ['string in a lag_profile lag', 'GeneratedDerivedEvidence', { ...pair, lag_profile: [{ lag_ms: 'x', rho: null }] }],
+  ['unknown derived type tag', 'GeneratedDerivedEvidence', { ...pair, type: 'correlation_pairs' }],
+  ['an evidence item as a finding', 'GeneratedDerivedFinding', pair],
+  ['string for the achieved load of a stage', 'GeneratedDerivedEvidence', withStage({ achieved: '5' })],
+  ['missing verdict of a stage', 'GeneratedDerivedEvidence', withStage({ verdict: undefined })],
+  ['unknown policy_verdict of a capacity_summary', 'GeneratedDerivedEvidence', { ...capacity, policy_verdict: 'MAYBE' }],
+  ['string for a knee point load', 'GeneratedDerivedEvidence', { ...richest('capacity_knee_diagnostic'), points: [{ stage_id: 'a', load: 'x', value: 1 }] }],
+  ['missing required window_metric_summary latency', 'GeneratedDerivedEvidence', withoutKey(richest('window_metric_summary'), 'latency_ms')],
+  ['missing explicit null in the magnitude gate of a trend_check', 'GeneratedDerivedEvidence', {
+    ...richest('trend_check'),
+    magnitude_gate: withoutKey(richest('trend_check').magnitude_gate, 'required_split_half_shift_units'),
+  }],
+]
+negatives.push(...itemNegatives, ...derivedNegatives)
 negatives.forEach(([label, type, value], position) => {
   lines.push(`// @ts-expect-error ${label}`)
   lines.push(`export const negative${position}: ${type} = ${JSON.stringify(value)}`)
@@ -123,6 +179,22 @@ typedEvidence.forEach((name, position) => {
     `export const optional${position}: NotStricter<${name}, Generated${name}> = true`,
   )
 })
+derivedEvidence.forEach((name, position) => {
+  const omitted = (legacyKeys[name] ?? []).map((key) => `'${key}'`).join(' | ') || 'never'
+  lines.push(
+    `export const derivedKeys${position}: SameKeys<Omit<${name}, ${omitted}>, Generated${name}> = true`,
+    `export const derivedOptional${position}: NotStricter<${name}, Generated${name}> = true`,
+  )
+})
+derivedFindings.forEach((name, position) => {
+  lines.push(`export const findingKeys${position}: SameKeys<${name}, Generated${name}> = true`)
+})
+lines.push(
+  '',
+  "// The capacity_summary payload of analysis-result is the evidence without its id and type; the stages keep their keys too.",
+  "export const capacityKeys: SameKeys<CapacitySummary, Omit<GeneratedCapacitySummaryEvidence, 'id' | 'type'>> = true",
+  'export const capacityStageKeys: SameKeys<CapacityStage, GeneratedCapacityStageDocument> = true',
+)
 lines.push('')
 
 const options = ts.parseJsonConfigFileContent(
@@ -152,5 +224,5 @@ if (diagnostics.length) {
   process.exit(1)
 }
 console.log(
-  `verify-generated-types: ${cases.length} results, ${identityFiles.length} identities, ${itemCount} items of ${typedTags.size} types and ${negatives.length} negative cases agree with the generated types`,
+  `verify-generated-types: ${cases.length} results, ${identityFiles.length} identities, ${itemCount} items of ${typedTags.size + derivedKinds.size} types and ${negatives.length} negative cases agree with the generated types`,
 )

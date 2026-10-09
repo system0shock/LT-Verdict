@@ -1,68 +1,95 @@
 package io.ltverdict.core
 
+// FROZEN COPY of CapacityKnee.kt as it was on origin/main before W2.1 slice 2b typed its findings and evidence.
+// It is the oracle of DiagnosticCapacityTrendEquivalenceTest: do not "fix" or modernise it. Entry points and the classes
+// they expose carry the prefix legacy/Legacy; the private helpers keep their names (a private top-level function does
+// not clash with the one of the main source set).
+
+import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.buildJsonArray
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.put
 import java.math.BigDecimal
 import java.math.RoundingMode
 
 // ADR 0026: a diagnostic only. It never feeds bounds, stage verdicts or the policy verdict, and it is not shown to the advisory AI.
-internal data class KneePoint(
-    val stageId: String,
-    val load: BigDecimal,
-    val p95Millis: Long,
-)
 
 /**
  * Piecewise-linear ("hinge") regression of ln(p95) on the achieved load, one knot per candidate stage:
  * y = a + b*x + c*max(0, x - x_j). The knot with the minimal SSE wins; the knee is then the interval
  * [x_j, x_j+1) between the last stable stage and the first degraded one. Refuses instead of guessing.
  */
-internal fun capacityKneeEvidence(
+internal fun legacyCapacityKneeEvidence(
     loadAxis: CapacityLoadAxis,
     points: List<KneePoint>,
     refusal: String?,
 ): JsonObject {
-    val outcome = refusal?.let { KneeOutcome(reason = it) } ?: detectKnee(points)
-    val stable = outcome.knotIndex?.let { points[it] }
-    val degraded = outcome.knotIndex?.let { points[it + 1] }
-    return CapacityKneeDiagnosticEvidence(
-        id = "capacity-knee-diagnostic",
-        method = KNEE_METHOD,
-        metric = "response_time_p95_ms",
-        loadAxis = loadAxis.wireName,
-        unit = loadAxis.unit,
-        status = if (outcome.knotIndex != null) "DETECTED" else "NOT_DETECTED",
-        confidence = "UNCALIBRATED",
-        calibrated = false,
-        diagnosticOnly = true,
-        lastStableStageId = stable?.stageId,
-        lastStableLoad = stable?.let { BigDecimal(canonicalDecimal(it.load)) },
-        firstDegradedStageId = degraded?.stageId,
-        firstDegradedLoad = degraded?.let { BigDecimal(canonicalDecimal(it.load)) },
-        sseRatio = outcome.sseRatio?.let { BigDecimal(canonicalDecimal(it.setScale(6, RoundingMode.HALF_EVEN))) },
-        excessFactor = outcome.excessFactor?.let { BigDecimal(canonicalDecimal(it.setScale(2, RoundingMode.HALF_EVEN))) },
-        reasons = listOfNotNull(outcome.reason),
-        points = points.map { KneePointDocument(it.stageId, BigDecimal(canonicalDecimal(it.load)), it.p95Millis) },
-        parameters =
-            KneeParametersDocument(
-                minStages = KNEE_MIN_STAGES,
-                minPointsBeforeKnee = KNEE_MIN_LEFT_POINTS,
-                maxSseRatio = KNEE_MAX_SSE_RATIO.toPlainString(),
-                minExcessFactor = KNEE_MIN_EXCESS_FACTOR.toPlainString(),
-                noiseMultiplier = KNEE_NOISE_MULTIPLIER,
-            ),
-    ).toJson()
+    val outcome = refusal?.let { LegacyKneeOutcome(reason = it) } ?: detectKnee(points)
+    return buildJsonObject {
+        put("id", "capacity-knee-diagnostic")
+        put("type", "capacity_knee_diagnostic")
+        put("method", KNEE_METHOD)
+        put("metric", "response_time_p95_ms")
+        put("load_axis", loadAxis.wireName)
+        put("unit", loadAxis.unit)
+        put("status", if (outcome.knotIndex != null) "DETECTED" else "NOT_DETECTED")
+        put("confidence", "UNCALIBRATED")
+        put("calibrated", false)
+        put("diagnostic_only", true)
+        val stable = outcome.knotIndex?.let { points[it] }
+        val degraded = outcome.knotIndex?.let { points[it + 1] }
+        put("last_stable_stage_id", stable?.stageId?.let(::JsonPrimitive) ?: JsonNull)
+        put("last_stable_load", stable?.let { JsonPrimitive(BigDecimal(canonicalDecimal(it.load))) } ?: JsonNull)
+        put("first_degraded_stage_id", degraded?.stageId?.let(::JsonPrimitive) ?: JsonNull)
+        put("first_degraded_load", degraded?.let { JsonPrimitive(BigDecimal(canonicalDecimal(it.load))) } ?: JsonNull)
+        put(
+            "sse_ratio",
+            outcome.sseRatio?.let { JsonPrimitive(BigDecimal(canonicalDecimal(it.setScale(6, RoundingMode.HALF_EVEN)))) } ?: JsonNull,
+        )
+        put(
+            "excess_factor",
+            outcome.excessFactor?.let { JsonPrimitive(BigDecimal(canonicalDecimal(it.setScale(2, RoundingMode.HALF_EVEN)))) } ?: JsonNull,
+        )
+        put("reasons", buildJsonArray { outcome.reason?.let { add(JsonPrimitive(it)) } })
+        put(
+            "points",
+            buildJsonArray {
+                points.forEach {
+                    add(
+                        buildJsonObject {
+                            put("stage_id", it.stageId)
+                            put("load", JsonPrimitive(BigDecimal(canonicalDecimal(it.load))))
+                            put("value", it.p95Millis)
+                        },
+                    )
+                }
+            },
+        )
+        put(
+            "parameters",
+            buildJsonObject {
+                put("min_stages", KNEE_MIN_STAGES)
+                put("min_points_before_knee", KNEE_MIN_LEFT_POINTS)
+                put("max_sse_ratio", KNEE_MAX_SSE_RATIO.toPlainString())
+                put("min_excess_factor", KNEE_MIN_EXCESS_FACTOR.toPlainString())
+                put("noise_multiplier", KNEE_NOISE_MULTIPLIER)
+            },
+        )
+    }
 }
 
-private data class KneeOutcome(
+private data class LegacyKneeOutcome(
     val knotIndex: Int? = null,
     val reason: String? = null,
     val sseRatio: BigDecimal? = null,
     val excessFactor: BigDecimal? = null,
 )
 
-private fun detectKnee(points: List<KneePoint>): KneeOutcome {
-    if (points.size < KNEE_MIN_STAGES) return KneeOutcome(reason = "KNEE_TOO_FEW_STAGES")
-    if (points.zipWithNext().any { (left, right) -> left.load >= right.load }) return KneeOutcome(reason = "KNEE_LOAD_NOT_INCREASING")
+private fun detectKnee(points: List<KneePoint>): LegacyKneeOutcome {
+    if (points.size < KNEE_MIN_STAGES) return LegacyKneeOutcome(reason = "KNEE_TOO_FEW_STAGES")
+    if (points.zipWithNext().any { (left, right) -> left.load >= right.load }) return LegacyKneeOutcome(reason = "KNEE_LOAD_NOT_INCREASING")
     val scale = points.last().load.toDouble()
     val x = DoubleArray(points.size) { points[it].load.toDouble() / scale }
     val y = DoubleArray(points.size) { StrictMath.log(points[it].p95Millis.coerceAtLeast(1L).toDouble()) }
@@ -78,7 +105,7 @@ private fun detectKnee(points: List<KneePoint>): KneeOutcome {
     }
     val ratio = if (linear > 0.0) bestSse / linear else 1.0
     val sseRatio = BigDecimal(ratio)
-    if (linear <= 0.0 || ratio > KNEE_MAX_SSE_RATIO.toDouble()) return KneeOutcome(reason = "KNEE_NO_BREAK", sseRatio = sseRatio)
+    if (linear <= 0.0 || ratio > KNEE_MAX_SSE_RATIO.toDouble()) return LegacyKneeOutcome(reason = "KNEE_NO_BREAK", sseRatio = sseRatio)
     // The stable branch is a line through the points up to the knot; the break is how far the degraded stages rise above it.
     val (intercept, slope) = line(x.copyOfRange(0, best + 1), y.copyOfRange(0, best + 1))
     var residual = 0.0
@@ -92,7 +119,7 @@ private fun detectKnee(points: List<KneePoint>): KneeOutcome {
             excess < KNEE_NOISE_MULTIPLIER * sigma -> "KNEE_BREAK_WITHIN_NOISE"
             else -> null
         }
-    return KneeOutcome(if (reason == null) best else null, reason, sseRatio, factor)
+    return LegacyKneeOutcome(if (reason == null) best else null, reason, sseRatio, factor)
 }
 
 private fun line(

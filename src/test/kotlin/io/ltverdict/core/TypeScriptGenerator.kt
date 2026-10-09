@@ -19,7 +19,8 @@ import kotlinx.serialization.json.JsonClassDiscriminator
  *  - an enum is a union of its serialized names, a Map<String, V> is Record<string, V>;
  *  - JsonObject / JsonElement are opaque payloads: Record<string, unknown> / unknown;
  *  - a sealed hierarchy is a union of its subclasses; a subclass is an interface named PascalCase(@SerialName) + the root name
- *    without its "Analysis" prefix (`policy_check` in AnalysisEvidence is PolicyCheckEvidence) whose first field is the
+ *    without its "Analysis" prefix (`policy_check` in AnalysisEvidence is PolicyCheckEvidence), or the suffix given for the
+ *    root in `suffixes` (`DerivedEvidence` -> "Evidence"), whose first field is the
  *    discriminator (`type`, or the @JsonClassDiscriminator of the root) typed with the @SerialName literal.
  */
 internal object TypeScriptGenerator {
@@ -31,15 +32,17 @@ internal object TypeScriptGenerator {
     fun generate(
         roots: List<KSerializer<*>>,
         header: String = HEADER,
+        suffixes: Map<String, String> = emptyMap(),
     ): String {
         val declarations = linkedMapOf<String, String>()
-        roots.forEach { declare(it.descriptor, declarations) }
+        roots.forEach { declare(it.descriptor, declarations, suffixes) }
         return header + "\n" + declarations.values.joinToString("\n\n") + "\n"
     }
 
     private fun declare(
         descriptor: SerialDescriptor,
         declarations: MutableMap<String, String>,
+        suffixes: Map<String, String>,
     ) {
         val name = typeName(descriptor)
         if (name in declarations) return
@@ -48,16 +51,16 @@ internal object TypeScriptGenerator {
                 declarations[name] = "export type $name = " + descriptor.elementNames.joinToString(" | ") { "'$it'" }
             }
 
-            StructureKind.CLASS -> declareInterface(descriptor, name, null, declarations)
+            StructureKind.CLASS -> declareInterface(descriptor, name, null, declarations, suffixes)
 
             PolymorphicKind.SEALED -> {
                 declarations[name] = "" // reserve the position: the subclasses follow their union
                 val discriminator = discriminatorOf(descriptor)
-                val suffix = name.removePrefix("Analysis")
+                val suffix = suffixes[name] ?: name.removePrefix("Analysis")
                 val subclasses = descriptor.getElementDescriptor(1).elementDescriptors.toList()
                 val names = subclasses.map { pascal(it.serialName) + suffix }
                 subclasses.zip(names).forEach { (subclass, subName) ->
-                    declareInterface(subclass, subName, discriminator to subclass.serialName, declarations)
+                    declareInterface(subclass, subName, discriminator to subclass.serialName, declarations, suffixes)
                 }
                 declarations[name] = "export type $name = " + names.joinToString(" | ")
             }
@@ -71,12 +74,13 @@ internal object TypeScriptGenerator {
         name: String,
         tag: Pair<String, String>?,
         declarations: MutableMap<String, String>,
+        suffixes: Map<String, String>,
     ) {
         declarations[name] = "" // reserve the position: nested declarations follow their user
         val fields =
             (0 until descriptor.elementsCount).map { index ->
                 val child = descriptor.getElementDescriptor(index)
-                collect(child, declarations)
+                collect(child, declarations, suffixes)
                 val optional = descriptor.isElementOptional(index)
                 val type = tsType(child)
                 when {
@@ -101,12 +105,13 @@ internal object TypeScriptGenerator {
     private fun collect(
         descriptor: SerialDescriptor,
         declarations: MutableMap<String, String>,
+        suffixes: Map<String, String>,
     ) {
         if (descriptor.serialName.removeSuffix("?").startsWith(JSON_PREFIX)) return // opaque payloads have no declaration
         when (descriptor.kind) {
-            SerialKind.ENUM, StructureKind.CLASS, PolymorphicKind.SEALED -> declare(descriptor, declarations)
-            StructureKind.LIST -> collect(descriptor.getElementDescriptor(0), declarations)
-            StructureKind.MAP -> collect(descriptor.getElementDescriptor(1), declarations)
+            SerialKind.ENUM, StructureKind.CLASS, PolymorphicKind.SEALED -> declare(descriptor, declarations, suffixes)
+            StructureKind.LIST -> collect(descriptor.getElementDescriptor(0), declarations, suffixes)
+            StructureKind.MAP -> collect(descriptor.getElementDescriptor(1), declarations, suffixes)
             else -> Unit
         }
     }

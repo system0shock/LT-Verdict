@@ -41,6 +41,7 @@ class PlainReportsGoldenTest {
         scenarios.forEach { scenario ->
             val outcome = StagedResults.analyze(tempDir.resolve(scenario.name), scenario.input, scenario.policy)
             val result = outcome.canonicalResult
+            val groups = readErrorGroupsFile(outcome.analysisDirectory)
             val exit =
                 when {
                     scenario.policy == null || scenario.name == "ramp-pass" -> 0
@@ -48,11 +49,11 @@ class PlainReportsGoldenTest {
                 }
             val files =
                 mapOf(
-                    "report.html" to renderHtmlReport(result, "fixed"),
-                    "report.adoc" to renderAsciiDocReport(result, "fixed"),
-                    "report.confluence" to renderConfluenceReport(result, "fixed"),
-                    "summary.txt" to summaryText("fixed", exit, result),
-                    "summary.json" to summaryJson("fixed", result),
+                    "report.html" to renderHtmlReport(result, "fixed", groups),
+                    "report.adoc" to renderAsciiDocReport(result, "fixed", groups),
+                    "report.confluence" to renderConfluenceReport(result, "fixed", groups),
+                    "summary.txt" to summaryText("fixed", exit, result, groups),
+                    "summary.json" to summaryJson("fixed", result, groups),
                     "junit.xml" to junitXml(result),
                 )
             files.forEach { (name, bytes) ->

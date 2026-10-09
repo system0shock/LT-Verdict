@@ -1,6 +1,8 @@
 package io.ltverdict.cli
 
 import io.ltverdict.core.canonicalJson
+import io.ltverdict.report.ErrorGroupsView
+import io.ltverdict.report.errorGroupsView
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
@@ -30,8 +32,10 @@ private object CliArtifactsMarker
 internal fun summaryJson(
     analysisId: String,
     result: ByteArray,
+    errorGroups: ByteArray? = null,
 ): ByteArray {
     val root = parse(result)
+    val errors = errorGroupsView(root, errorGroups)?.takeIf { it.rows.isNotEmpty() }
     val metrics =
         root
             .evidence("metric_summary")
@@ -61,6 +65,8 @@ internal fun summaryJson(
                 ),
             )
             put("rules", JsonArray(checks(root).map(::ruleJson)))
+            // W2.6 / ADR 0031: the top error groups of the whole run; a run without the breakdown has no such key.
+            errors?.let { put("error_groups", errorGroupsJson(it)) }
             // ADR 0030: the windows of a staged run; overall stays the whole run. A run without stages has neither key.
             stageBinding(root)?.let { binding ->
                 put("windows", JsonArray(stageWindows(root, binding).map { window -> windowJson(window) }))
@@ -74,8 +80,10 @@ internal fun summaryText(
     analysisId: String,
     exitCode: Int,
     result: ByteArray,
+    errorGroups: ByteArray? = null,
 ): ByteArray {
     val root = parse(result)
+    val errors = errorGroupsView(root, errorGroups)?.takeIf { it.rows.isNotEmpty() }
     val overall = root.evidence("metric_summary").firstOrNull { it.scope()?.text("kind") == "overall" && it["window_id"] == null }
     val latency = overall?.get("latency_ms") as? JsonObject
     val checks = checks(root)
@@ -120,6 +128,12 @@ internal fun summaryText(
             checks.filter { it.text("status") != "PASS" }.forEach { check ->
                 val detail = if (check.text("status") == "NO_VERDICT") reasonOf(check) ?: description(check) else description(check)
                 append("${check.text("status")} ${checkName(check)}: $detail\n")
+            }
+            errors?.let { view ->
+                append("top errors (whole run, ${view.total} total):\n")
+                view.rows.take(SUMMARY_ERROR_GROUPS).forEach { row ->
+                    append("  ${row.count} ${row.codeValue ?: NO_VALUE} ${row.messageValue ?: NO_VALUE} [${row.transaction}]\n")
+                }
             }
         }
     return text.encodeToByteArray()
@@ -227,6 +241,32 @@ private fun windowJson(window: JsonObject): JsonObject =
         put("to_epoch_ms", window["to_epoch_ms"] ?: JsonNull)
         metricJson(window).forEach { (key, value) -> put(key, value) }
     }
+
+private const val SUMMARY_ERROR_GROUPS = 5
+
+private fun errorGroupsJson(view: ErrorGroupsView): JsonObject {
+    val shown = view.rows.take(SUMMARY_ERROR_GROUPS)
+    return buildJsonObject {
+        put("scope", "whole_run")
+        put("total_error_count", view.total)
+        put("other_error_count", view.total - shown.sumOf { it.count })
+        put(
+            "groups",
+            JsonArray(
+                shown.map { row ->
+                    buildJsonObject {
+                        put("group_path", JsonArray(row.groupPath.map(::JsonPrimitive)))
+                        put("label", row.label)
+                        put("sample_kind", row.sampleKind?.let(::JsonPrimitive) ?: JsonNull)
+                        put("response_code", row.codeValue?.let(::JsonPrimitive) ?: JsonNull)
+                        put("message", row.messageValue?.let(::JsonPrimitive) ?: JsonNull)
+                        put("count", row.count)
+                    }
+                },
+            ),
+        )
+    }
+}
 
 private fun parse(result: ByteArray): JsonObject = Json.parseToJsonElement(result.decodeToString()) as JsonObject
 

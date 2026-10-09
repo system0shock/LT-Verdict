@@ -18,6 +18,7 @@ import java.util.Base64
 internal fun renderHtmlReport(
     resultBytes: ByteArray,
     analysisId: String,
+    errorGroups: ByteArray? = null,
 ): ByteArray {
     val result = Json.parseToJsonElement(resultBytes.decodeToString()).jsonObject
     val evidence = result.array("evidence")
@@ -65,7 +66,7 @@ internal fun renderHtmlReport(
             "status",
         )}</dd></dl>${stageBlock(notice)}${verdictBlock(result, evidence)}${diagnosticsBlock(result, evidence)}${rulesSection(
             evidence,
-        )}${transactionsSection(result, evidence)}${limitationsBlock(
+        )}${errorGroupsSection(errorGroupsView(result, errorGroups))}${transactionsSection(result, evidence)}${limitationsBlock(
             result,
             evidence,
         )}<section lang="en"><h2>Overall and transaction metrics</h2>${if (metrics.isEmpty()) {
@@ -535,6 +536,20 @@ private fun transactionsSection(
                 "<p>Порядок: сначала нарушения, затем по числу ошибок, p99 и выборке; не более $MAX_TRANSACTION_ROWS строк.</p>"
         }
     return "<section><h2>Транзакции</h2>$body</section>"
+}
+
+// W2.6 / ADR 0031: the top errors by response code and message; null when the run has no errors.
+private fun errorGroupsSection(view: ErrorGroupsView?): String {
+    if (view == null) return ""
+    val notes = view.notes.joinToString("") { "<p>${escape(it)}</p>" }
+    val rows =
+        view.rows.joinToString("") { row ->
+            "<tr>" +
+                listOf(row.count.toString(), row.share, row.code, row.message, row.transaction).joinToString("") { "<td>${escape(it)}</td>" } +
+                "</tr>"
+        }
+    val grid = if (view.rows.isEmpty()) "" else table("Группы ошибок", listOf("Ошибок", "Доля", "Код ответа", "Сообщение", "Транзакция"), rows)
+    return "<section><h2>Ошибки</h2>$grid$notes</section>"
 }
 
 // Windowed checks carry the full transaction scope instead of a metric reference; null means "not a transaction".

@@ -12,6 +12,7 @@ import io.ktor.server.routing.Route
 import io.ktor.server.routing.get
 import io.ltverdict.integrations.report.renderConfluenceReport
 import io.ltverdict.integrations.report.renderSavedLoadChart
+import io.ltverdict.report.readErrorGroupsFile
 import io.ltverdict.report.renderAsciiDocReport
 import io.ltverdict.report.renderHtmlReport
 import kotlinx.coroutines.Dispatchers
@@ -123,13 +124,19 @@ internal fun Route.runRoutes(context: LocalApiContext) {
         val stored = context.store.requireAnalysis(call)
         val bytes = withContext(Dispatchers.IO) { Files.readAllBytes(stored.path.resolve(RESULT_FILE)) }
         val analysisId = stored.path.fileName.toString()
+        val errorGroups =
+            if (format in setOf("html", "asciidoc", "confluence") && stored.artifacts.any { it.path == "error-groups.json" }) {
+                withContext(Dispatchers.IO) { readErrorGroupsFile(stored.path) }
+            } else {
+                null
+            }
         val report =
             when (format) {
                 "json" -> bytes
                 "svg" -> withContext(Dispatchers.IO) { renderSavedLoadChart(stored.path.resolve("rollup-60s.ndjson")) }
-                "html" -> renderHtmlReport(bytes, analysisId)
-                "confluence" -> renderConfluenceReport(bytes, analysisId)
-                else -> renderAsciiDocReport(bytes, analysisId)
+                "html" -> renderHtmlReport(bytes, analysisId, errorGroups)
+                "confluence" -> renderConfluenceReport(bytes, analysisId, errorGroups)
+                else -> renderAsciiDocReport(bytes, analysisId, errorGroups)
             }
         call.response.headers.append(
             HttpHeaders.ContentDisposition,

@@ -2,6 +2,7 @@ package io.ltverdict.cli
 
 import io.ltverdict.core.canonicalJson
 import io.ltverdict.report.ErrorGroupsView
+import io.ltverdict.report.baselineChangesView
 import io.ltverdict.report.errorGroupsView
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
@@ -33,6 +34,7 @@ internal fun summaryJson(
     analysisId: String,
     result: ByteArray,
     errorGroups: ByteArray? = null,
+    baseline: JsonObject? = null,
 ): ByteArray {
     val root = parse(result)
     val errors = errorGroupsView(root, errorGroups)?.takeIf { it.rows.isNotEmpty() }
@@ -67,6 +69,8 @@ internal fun summaryJson(
             put("rules", JsonArray(checks(root).map(::ruleJson)))
             // W2.6 / ADR 0031: the top error groups of the whole run; a run without the breakdown has no such key.
             errors?.let { put("error_groups", errorGroupsJson(it)) }
+            // W2.3: the deltas against --baseline; without the flag there is no such key.
+            baseline?.let { put("baseline_comparison", it) }
             // ADR 0030: the windows of a staged run; overall stays the whole run. A run without stages has neither key.
             stageBinding(root)?.let { binding ->
                 put("windows", JsonArray(stageWindows(root, binding).map { window -> windowJson(window) }))
@@ -81,6 +85,7 @@ internal fun summaryText(
     exitCode: Int,
     result: ByteArray,
     errorGroups: ByteArray? = null,
+    baseline: JsonObject? = null,
 ): ByteArray {
     val root = parse(result)
     val errors = errorGroupsView(root, errorGroups)?.takeIf { it.rows.isNotEmpty() }
@@ -129,6 +134,7 @@ internal fun summaryText(
                 val detail = if (check.text("status") == "NO_VERDICT") reasonOf(check) ?: description(check) else description(check)
                 append("${check.text("status")} ${checkName(check)}: $detail\n")
             }
+            baselineChangesView(baseline)?.lines?.forEach { append(it).append('\n') }
             errors?.let { view ->
                 append("top errors (whole run, ${view.total} total):\n")
                 view.rows.take(SUMMARY_ERROR_GROUPS).forEach { row ->

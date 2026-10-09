@@ -1,7 +1,9 @@
 package io.ltverdict.integrations.report
 
+import io.ltverdict.report.BASELINE_CHANGES_TITLE
 import io.ltverdict.report.STAGE_REFERENCE_NOTE
 import io.ltverdict.report.WINDOW_SHARE_LABEL
+import io.ltverdict.report.baselineChangesView
 import io.ltverdict.report.errorGroupsView
 import io.ltverdict.report.stageNotice
 import io.ltverdict.report.windowShareText
@@ -17,6 +19,7 @@ internal fun renderConfluenceReport(
     resultBytes: ByteArray,
     analysisId: String,
     errorGroups: ByteArray? = null,
+    baseline: JsonObject? = null,
 ): ByteArray {
     val source = resultBytes.decodeToString(throwOnInvalidSequence = true)
     val result = Json.parseToJsonElement(source).jsonObject
@@ -42,6 +45,21 @@ internal fun renderConfluenceReport(
                     listOf(row.count.toString(), row.share, row.code, row.message, row.transaction).forEach {
                         append("<td>").append(it.xml()).append("</td>")
                     }
+                    append("</tr>")
+                }
+                append("</tbody></table>")
+            }
+        }
+        baselineChangesView(baseline)?.let { view ->
+            append("<h2>").append(BASELINE_CHANGES_TITLE.xml()).append("</h2>")
+            view.notes.forEach { append("<p>").append(it.xml()).append("</p>") }
+            view.tables.filter { it.rows.isNotEmpty() }.forEach { grid ->
+                append("<table><thead><tr>")
+                grid.heads.forEach { append("<th>").append(it.xml()).append("</th>") }
+                append("</tr></thead><tbody>")
+                grid.rows.forEach { row ->
+                    append("<tr>")
+                    row.forEach { append("<td>").append(it.xml()).append("</td>") }
                     append("</tr>")
                 }
                 append("</tbody></table>")

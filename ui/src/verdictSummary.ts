@@ -129,6 +129,7 @@ function formatDuration(milliseconds: number): string {
 // W2.4: the part of the run outside the verdict window, from numbers the result already carries (the same rule as windowShareText of
 // report/StageNotice.kt): stage_binding, or resource_binding with the window_policy_summary of every window. Whole tenths of a percent,
 // rounded half up in integers, so the text equals the one of the reports.
+const MAX_SHARE_MILLIS = 1_000_000_000_000
 export const WINDOW_SHARE_LABEL = 'Вне окна вердикта (разгон, остановка, простои и прочее)'
 
 function windowShare(result: AnalysisResult): string | null {
@@ -136,18 +137,19 @@ function windowShare(result: AnalysisResult): string | null {
   let excluded: number
   const stage = stageBindingOf(result)
   if (stage) {
+    if (typeof stage.excluded_millis !== 'number' || typeof stage.evaluated_millis !== 'number') return null
     excluded = stage.excluded_millis
     run = stage.evaluated_millis + excluded
   } else {
     const binding = result.evidence.find((item) => item.type === 'resource_binding')
     const windows = result.evidence.filter((item): item is WindowPolicySummaryEvidence => item.type === 'window_policy_summary')
-    if (!binding || windows.length === 0) return null
-    const from = Number(binding.run_from_epoch_ms)
-    const to = Number(binding.run_to_epoch_ms)
-    run = to - from
+    if (!binding || windows.length === 0 || typeof binding.run_from_epoch_ms !== 'number' || typeof binding.run_to_epoch_ms !== 'number') return null
+    if (windows.some((window) => typeof window.from_epoch_ms !== 'number' || typeof window.to_epoch_ms !== 'number')) return null
+    run = binding.run_to_epoch_ms - binding.run_from_epoch_ms
     excluded = run - windows.reduce((sum, window) => sum + (window.to_epoch_ms - window.from_epoch_ms), 0)
   }
-  if (!Number.isFinite(run) || !Number.isFinite(excluded) || run <= 0 || excluded < 0 || excluded > run) return null
+  // The same bounds as windowShareText: above them the integer arithmetic of the two languages could differ.
+  if (!Number.isSafeInteger(run) || !Number.isSafeInteger(excluded) || run <= 0 || run > MAX_SHARE_MILLIS || excluded < 0 || excluded > run) return null
   const tenths = Math.floor((excluded * 2000 + run) / (2 * run))
   const percent = tenths === 0 && excluded > 0 ? 'меньше 0,1 %' : `${Math.floor(tenths / 10)},${tenths % 10} %`
   return `${percent} прогона (${formatDuration(excluded)} из ${formatDuration(run)})`

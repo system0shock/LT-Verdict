@@ -112,6 +112,9 @@ private fun JsonObject.text(name: String): String? = (this[name] as? JsonPrimiti
 
 private fun JsonObject.long(name: String): Long? = text(name)?.toLongOrNull()
 
+// About 31 years: above it the integer arithmetic of Kotlin and of the UI could differ.
+private const val MAX_SHARE_MILLIS = 1_000_000_000_000L
+
 internal const val WINDOW_SHARE_LABEL = "Вне окна вердикта (разгон, остановка, простои и прочее)"
 
 /**
@@ -136,7 +139,7 @@ internal fun windowShareText(result: JsonObject): String? {
         run = (binding.long("run_to_epoch_ms") ?: return null) - (binding.long("run_from_epoch_ms") ?: return null)
         excluded = run - evaluated
     }
-    if (run <= 0 || excluded < 0 || excluded > run) return null
+    if (run <= 0 || run > MAX_SHARE_MILLIS || excluded < 0 || excluded > run) return null
     val tenths = (excluded * 2000 + run) / (2 * run)
     val percent = if (tenths == 0L && excluded > 0) "меньше 0,1 %" else "${tenths / 10},${tenths % 10} %"
     return "$percent прогона (${durationText(excluded)} из ${durationText(run)})"

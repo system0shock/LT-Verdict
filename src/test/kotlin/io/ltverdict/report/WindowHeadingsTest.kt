@@ -82,6 +82,7 @@ class WindowHeadingsTest {
         assertNull(windowShareText(parse("""{"evidence":[]}""")))
         assertNull(windowShareText(parse(resourceWindows(0, 60_000))))
         assertNull(windowShareText(parse(resourceWindows(5, 5, 5L to 5L))))
+        assertNull(windowShareText(parse(resourceWindows(0, 250_000_000_000_004, 0L to 125_000_000_000_002))))
     }
 
     @Test

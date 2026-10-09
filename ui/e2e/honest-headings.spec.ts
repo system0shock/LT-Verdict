@@ -69,6 +69,13 @@ test.describe('the share of the run outside the verdict window', () => {
     expect(share(build('PASS', [overall, ...resourceWindows(0, 60_000, [0, 30_000]).slice(1)]))).toBeUndefined()
   })
 
+  test('a field that is not a number or a run beyond the bound gives no fact (no null turned into zero)', () => {
+    const nullFrom = [{ id: 'resource-binding', type: 'resource_binding', run_from_epoch_ms: null, run_to_epoch_ms: 60_000 }, ...resourceWindows(0, 0, [0, 30_000]).slice(1)]
+    expect(share(build('PASS', [overall, ...nullFrom]))).toBeUndefined()
+    expect(share(build('PASS', [overall, { ...binding, evaluated_millis: null }]))).toBeUndefined()
+    expect(share(build('PASS', [overall, { ...binding, evaluated_millis: 124_875_000_000_002, excluded_millis: 125_125_000_000_002 }]))).toBeUndefined()
+  })
+
   test('a decided FAIL by stages keeps the old facts first, the share comes after the window facts', () => {
     const labels = summarizeVerdict(build('FAIL', [overall, binding, check('response_time_p95_ms', 'steady')])).facts.map((fact) => fact.label)
 

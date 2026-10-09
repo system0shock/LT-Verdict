@@ -30,6 +30,7 @@ import io.ltverdict.core.sha256Hex
 import io.ltverdict.core.validatePodView
 import io.ltverdict.core.validateRelease
 import io.ltverdict.core.validateResourceSnapshot
+import io.ltverdict.integrations.report.readRunTimeline
 import io.ltverdict.jobs.AnalysisJobs
 import io.ltverdict.report.renderAsciiDocReport
 import io.ltverdict.report.renderHtmlReport
@@ -3836,7 +3837,7 @@ class LocalApiTest {
                 val expected =
                     when (format) {
                         "json" -> resultBytes
-                        "html" -> renderHtmlReport(resultBytes, analysisId)
+                        "html" -> renderHtmlReport(resultBytes, analysisId, null, null, readRunTimeline(stored.path))
                         else -> renderAsciiDocReport(resultBytes, analysisId)
                     }
                 assertEquals(expected.decodeToString(), response.body())

@@ -10,6 +10,7 @@ import io.ktor.server.request.contentType
 import io.ktor.server.response.respondBytes
 import io.ktor.server.routing.Route
 import io.ktor.server.routing.get
+import io.ltverdict.integrations.report.readRunTimeline
 import io.ltverdict.integrations.report.renderConfluenceReport
 import io.ltverdict.integrations.report.renderSavedLoadChart
 import io.ltverdict.report.readErrorGroupsFile
@@ -130,11 +131,12 @@ internal fun Route.runRoutes(context: LocalApiContext) {
             } else {
                 null
             }
+        val timeline = if (format == "html") withContext(Dispatchers.IO) { readRunTimeline(stored.path) } else null
         val report =
             when (format) {
                 "json" -> bytes
                 "svg" -> withContext(Dispatchers.IO) { renderSavedLoadChart(stored.path.resolve("rollup-60s.ndjson")) }
-                "html" -> renderHtmlReport(bytes, analysisId, errorGroups)
+                "html" -> renderHtmlReport(bytes, analysisId, errorGroups, null, timeline)
                 "confluence" -> renderConfluenceReport(bytes, analysisId, errorGroups)
                 else -> renderAsciiDocReport(bytes, analysisId, errorGroups)
             }

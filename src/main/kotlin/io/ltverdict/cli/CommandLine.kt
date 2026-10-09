@@ -29,10 +29,12 @@ import io.ltverdict.core.validateTrendBinding
 import io.ltverdict.core.validateTrendPlan
 import io.ltverdict.integrations.jenkins.JenkinsConnections
 import io.ltverdict.integrations.jenkins.readJenkinsConnections
+import io.ltverdict.integrations.report.readRunTimeline
 import io.ltverdict.integrations.report.renderConfluenceReport
 import io.ltverdict.integrations.report.renderSavedLoadChart
 import io.ltverdict.jobs.AnalysisJobs
 import io.ltverdict.metrics.MetricsConfig
+import io.ltverdict.report.RunTimeline
 import io.ltverdict.report.readErrorGroupsFile
 import io.ltverdict.report.renderAsciiDocReport
 import io.ltverdict.report.renderHtmlReport
@@ -290,6 +292,7 @@ private fun analyze(
     var analysisId = ""
     var chart: ByteArray? = null
     var errorGroups: ByteArray? = null
+    var timeline: RunTimeline? = null
     var comparison: JsonObject? = null
     val result =
         DataDirectory.open(dataDir).use { directory ->
@@ -361,6 +364,7 @@ private fun analyze(
                     if (outDir != null) {
                         chart = renderSavedLoadChart(outcome.analysisDirectory.resolve("rollup-60s.ndjson"))
                         errorGroups = readErrorGroupsFile(outcome.analysisDirectory)
+                        timeline = readRunTimeline(outcome.analysisDirectory)
                     }
                     baselineAnalysis?.let {
                         comparison = baselineComparison(it, readCurrentAnalysis(store, outcome.runId, outcome.analysisId))
@@ -390,7 +394,7 @@ private fun analyze(
             it,
             linkedMapOf(
                 "result.json" to result,
-                "report.html" to renderHtmlReport(result, analysisId, errorGroups, comparison),
+                "report.html" to renderHtmlReport(result, analysisId, errorGroups, comparison, timeline),
                 "chart.svg" to checkNotNull(chart),
                 "summary.txt" to summaryText(analysisId, exitCode, result, errorGroups, comparison),
                 "junit.xml" to junitXml(result),
@@ -538,6 +542,7 @@ private fun report(
     if (baselinePath != null && format in setOf("json", "svg")) usage()
     val baselineAt = baselinePath?.let { baselineLocation(it, dataDir) }
     var errorGroups: ByteArray? = null
+    var timeline: RunTimeline? = null
     var comparison: JsonObject? = null
     val result =
         DataDirectory.open(dataDir).use { directory ->
@@ -567,6 +572,7 @@ private fun report(
                 renderSavedLoadChart(analysis.path.resolve("rollup-60s.ndjson"))
             } else {
                 if (analysis.artifacts.any { it.path == "error-groups.json" }) errorGroups = readErrorGroupsFile(analysis.path)
+                if (format == "html") timeline = readRunTimeline(analysis.path)
                 Files.readAllBytes(analysis.path.resolve(artifact.path))
             }
         }
@@ -575,7 +581,7 @@ private fun report(
             "json" -> result
             "svg" -> result
             "summary" -> summaryJson(analysisId, result, errorGroups, comparison)
-            "html" -> renderHtmlReport(result, analysisId, errorGroups, comparison)
+            "html" -> renderHtmlReport(result, analysisId, errorGroups, comparison, timeline)
             "confluence" -> renderConfluenceReport(result, analysisId, errorGroups, comparison)
             else -> renderAsciiDocReport(result, analysisId, errorGroups, comparison)
         },

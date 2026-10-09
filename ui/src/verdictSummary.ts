@@ -38,6 +38,7 @@ export interface StageTable {
   title: string
   heads: string[]
   rows: string[][]
+  totals: string
   note: string
 }
 
@@ -151,6 +152,7 @@ function stageTable(binding: StageBindingEvidence): StageTable {
       `${stage.from_epoch_ms} – ${stage.to_epoch_ms}`,
       stage.clipped_to_run_end ? 'да' : '—',
     ]),
+    totals: `Оценено: ${formatDuration(binding.evaluated_millis)}, исключено: ${formatDuration(binding.excluded_millis)}.`,
     note: STAGE_REFERENCE_NOTE,
   }
 }

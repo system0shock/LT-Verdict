@@ -3,7 +3,7 @@ import { expect, test, type Page } from '@playwright/test'
 import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import type { AnalysisResult } from '../src/types'
-import { BASELINE_LABELS } from '../src/shell/labels'
+import { BASELINE_LABELS, OVERVIEW_LABELS } from '../src/shell/labels'
 import { ADVICE_LABELS } from '../src/shell/labels.advice'
 import { EN_ANALYTICS_LABELS } from '../src/shell/labels.export'
 import { STAGE_DECIDED_PHRASE, STAGE_MARKER, STAGE_REFERENCE_NOTE, summarizeVerdict } from '../src/verdictSummary'
@@ -48,6 +48,7 @@ test.describe('stage window in the verdict summary', () => {
         ['steady', 'steady', '40000 – 100000', '2026-01-01 00:00:40 UTC – 2026-01-01 00:01:40 UTC', '1767225640000 – 1767225700000', '—'],
         ['ramp-down', 'excluded', '100000 – 120000', '2026-01-01 00:01:40 UTC – 2026-01-01 00:02:00 UTC', '1767225700000 – 1767225720000', '—'],
       ])
+      expect(summary.stages?.totals).toBe('Оценено: 1 мин, исключено: 59,8 с.')
       expect(summary.stages?.note).toBe(STAGE_REFERENCE_NOTE)
     }
   })
@@ -97,6 +98,14 @@ test.describe('stage window in the verdict summary', () => {
     const summary = summarizeVerdict(build('PASS', [overall, shifted, rule('PASS')]))
 
     expect(summary.stages?.rows[1]).toEqual(['steady', 'steady', '40000 – 100000', '2026-01-01 00:00:10 UTC – 2026-01-01 00:01:10 UTC', '1767225610000 – 1767225670000', 'да'])
+  })
+
+  test('long durations group the thousands like the report does', () => {
+    const long = { ...binding, evaluated_millis: 120_000_000, excluded_millis: 60_000_000 }
+    const summary = summarizeVerdict(build('PASS', [overall, long, rule('PASS')]))
+
+    expect(summary.lead).toContain('Исключено: 1\u00a0000 мин.')
+    expect(summary.stages?.totals).toBe('Оценено: 2\u00a0000 мин, исключено: 1\u00a0000 мин.')
   })
 
   test('the labels exist: the comparison warning, the evidence type and the whole-run note', () => {
@@ -155,6 +164,7 @@ test.describe('stage window on the screen', () => {
     await expect(stages.locator('tbody tr')).toHaveCount(3)
     await expect(stages.locator('tbody tr').nth(1)).toContainText('1767225640000 – 1767225700000')
     await expect(stages).toContainText(STAGE_REFERENCE_NOTE)
+    await expect(page.getByTestId('verdict-stages-totals')).toHaveText('Оценено: 1 мин, исключено: 59,8 с.')
     await expect(page.locator('.verdict-facts div').filter({ hasText: 'Окно вердикта' })).toHaveCount(1)
   })
 
@@ -178,6 +188,23 @@ test.describe('stage window on the screen', () => {
     await other.getByRole('button', { name: EN_ANALYTICS_LABELS.refresh, exact: true }).click()
     await expect(other.getByRole('heading', { name: EN_ANALYTICS_LABELS.title })).toBeVisible()
     await expect(other.getByTestId('analytics-whole-run')).toHaveCount(0)
+  })
+
+  test('the key metrics of the new shell say they are of the whole run only for a staged analysis', async ({ page }) => {
+    await fixtureApi(page, staged('PASS', [rule('PASS')]))
+    await page.goto('/?shell=new')
+    await page.getByRole('button', { name: 'stages.jtl' }).click()
+    await page.locator(`button[title="${reference.analysis_id}"]`).click()
+    await expect(page.locator('#overview-metrics')).toBeVisible()
+    await expect(page.getByTestId('metrics-whole-run-note')).toHaveText(OVERVIEW_LABELS.metricsWholeRunNote)
+
+    await page.unroute('**/api/**')
+    await fixtureApi(page, plain('PASS', [rule('PASS')]))
+    await page.goto('/?shell=new')
+    await page.getByRole('button', { name: 'stages.jtl' }).click()
+    await page.locator(`button[title="${reference.analysis_id}"]`).click()
+    await expect(page.locator('#overview-metrics')).toBeVisible()
+    await expect(page.getByTestId('metrics-whole-run-note')).toHaveCount(0)
   })
 
   for (const theme of ['light', 'dark'] as const) {

@@ -120,6 +120,9 @@ defineProps<{ summary: VerdictSummary }>()
             </tbody>
           </table>
         </div>
+        <p data-testid="verdict-stages-totals">
+          {{ summary.stages.totals }}
+        </p>
         <p class="muted">
           {{ summary.stages.note }}
         </p>

@@ -208,6 +208,7 @@ lines.push(
   '// The hand-written stage_binding keeps the keys of the Kotlin class and of its stages.',
   'export const stageKeys: SameKeys<StageBindingEvidence, GeneratedStageBindingEvidence> = true',
   'export const stageOptional: NotStricter<StageBindingEvidence, GeneratedStageBindingEvidence> = true',
+  'export const stageAssignable = (value: GeneratedStageBindingEvidence): StageBindingEvidence => value',
   "export const stageRowKeys: SameKeys<StageBindingEvidence['stages'][number], GeneratedStageBindingStage> = true",
 )
 lines.push(

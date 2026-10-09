@@ -27,7 +27,7 @@ NOT REQUIRED:
   - правки ядра оценки, identity, схем, существующих тестов, замороженных снимков (golden, typed-evidence), существующих e2e;
   - разделы «Резюме для людей» (W2.6) и доля разгона как метрика (W2.4).
 EXPECTED FILES TO CHANGE:
-  новые: report/StageNotice.kt, ui/src/types.stage-items.generated.ts, ui/e2e/stage-window.spec.ts, ui/e2e/stage-ui.config.ts (быстрый прогон без Gradle), fixtures/stages/stage-binding.sample.json,
+  новые: report/StageNotice.kt, fixtures/stages/plain-reports/** (18 золотых файлов), ui/src/types.stage-items.generated.ts, ui/e2e/stage-window.spec.ts, ui/e2e/stage-ui.config.ts (быстрый прогон без Gradle), fixtures/stages/stage-binding.sample.json,
     тесты (report, cli, core), changelog.d/w2-5-stage-window-visibility.changed.md;
   правки: HtmlReport.kt, AsciiDocReport.kt, ConfluenceReport.kt, CliArtifacts.kt, BaselineComparison.kt, ui/src/{types.ts,verdictSummary.ts,
     VerdictCard.vue,AnalyticsPanel.vue,App.vue,shell/labels.ts,shell/labels.advice.ts,shell/labels.export.ts}, ui/scripts/verify-generated-types.mjs.
@@ -68,6 +68,18 @@ gate (самозакрытый `testcase`) появляется дочерний
 
 **C7. `cli-summary.v1`.** Необязательные `windows[]` (по окну `steady` в порядке `evaluated_window_ids`: `id`, `from_epoch_ms`, `to_epoch_ms`,
 `samples`, `errors`, `error_rate`, `p50`, `p95`, `p99`, `max`, `rps`) и число `excluded_ms`; `overall` остаётся «весь прогон». Без `stage_binding` ключей нет.
+
+**C8. Доработки по совету Astra (проверены по коду).** (а) В AsciiDoc фраза идёт в литеральный блок `[subs=specialchars]` как остальные поля
+отчёта, не абзацем `NOTE:`: идентификатор стадии это свободный текст, в абзаце он стал бы разметкой (`image:`, `{атрибут}`). (б) Подписи
+аналитики и предупреждения сравнения нейтральны («заданы стадии нагрузки»): они включаются по наличию `stage_binding` и не утверждают
+вердикт при `NO_POLICY`, `NO_VERDICT`, `DEGRADED`. (в) Экспорт динамики (HTML, AsciiDoc, Confluence) получает примечание, если у текущего
+анализа есть `stage_binding` (внутренний параметр `wholeRunWithStages`, публичный JSON динамики не меняется). (г) Плитки «Ключевые метрики
+прогона» «Обзора» новой оболочки получают подпись «метрики всего прогона, справочно» (там p95 всего прогона стоит рядом с PASS по окну).
+(д) Итог таблицы `Оценено: X, исключено: Y` выводится в UI и HTML. (е) Длительность Kotlin группирует разряды NBSP, как `Intl` ru-RU в UI.
+(ж) Побайтовая неизменность без стадий доказана не отсутствием слов, а золотыми файлами `fixtures/stages/plain-reports` (18 файлов: HTML,
+AsciiDoc, Confluence, `summary.txt`, `summary.json`, `junit.xml` трёх прогонов), снятыми на коде origin/main ДО правок (тот же тест с
+`LTV_UPDATE_PLAIN_REPORTS=1` на дереве PR B), и сравнением текущего вывода с ними. (з) Ручной `StageBindingEvidence` проверяется ещё и на присваиваемость
+сгенерированного типа.
 
 ## Критерии приёмки
 

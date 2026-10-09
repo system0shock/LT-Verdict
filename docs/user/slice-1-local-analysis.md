@@ -432,9 +432,10 @@ spikes заполнением или усреднением готовых perce
 | 403 | Неверные Host, Origin, local session или CSRF | Перезагрузить только открытый local URL |
 | `NOT_FOUND` / 404 | Run, job или analysis отсутствует | Обновить список runs и повторить |
 | `BUSY` / 409 | Analysis queue заполнена | Подождать или отменить queued job |
-| `RESOURCE_LIMIT_EXCEEDED` / 413 | Input больше 4 GiB, policy больше 1 MiB или resource snapshot превышает limits | Уменьшить файл; partial result не создаётся. Для input сервер прекращает приём сразу при превышении 4 GiB и удаляет частично записанные данные |
+| `RESOURCE_LIMIT_EXCEEDED` / 413 | Input больше 4 GiB, policy больше 1 MiB, resource snapshot превышает limits или файл стадий больше 65536 байт, больше 16 стадий | Уменьшить файл; partial result не создаётся. Для input сервер прекращает приём сразу при превышении 4 GiB и удаляет частично записанные данные |
 | `LENGTH_REQUIRED` / 411 | У запроса `POST /api/jobs` нет `Content-Length` | Передать размер multipart body; браузерный UI делает это автоматически |
 | `INVALID_RESOURCES` / 422 | Snapshot не соответствует контракту или другому load input | Проверить validation details и SHA-256 |
+| `INVALID_STAGES` / 422 | Файл стадий нагрузки недопустим или стадии сочетаются со снимком ресурсов, планом ёмкости, онлайн-источником | Исправить по `error.details`, см. «Стадии нагрузки и вердикт по окну steady» |
 | `UNSUPPORTED_MEDIA_TYPE` / 415 | Неверный request content type | Использовать UI или documented CLI |
 | `UNSUPPORTED_INPUT` / 422 | Input пуст или формат не распознан | Экспортировать один из supported formats |
 | `DATA_DIR_BUSY` / CLI exit 6 | Другой process держит data directory | Остановить его или выбрать другой directory |
@@ -1313,8 +1314,9 @@ policy остаются integer milliseconds.
 - Id окна, которого нет в снимке, даёт `NO_VERDICT` с причиной
   `RULE_WINDOW_NOT_FOUND` и evidence `rule_window_check` (`rule_id`,
   `window_id`). Опечатка в id не может дать `PASS`, даже если другие правила
-  прошли или нарушены. Без снимка ресурсов окон нет, поэтому правило с
-  `window_ids` даёт `NO_VERDICT` с той же причиной. В режиме `capacity_step`
+  прошли или нарушены. Без снимка ресурсов и без объявленных стадий окон нет, поэтому
+  правило с `window_ids` даёт `NO_VERDICT` с той же причиной. Со стадиями окнами служат
+  стадии `steady`, см. «Стадии нагрузки и вердикт по окну steady». В режиме `capacity_step`
   итоговый `PASS` или `FAIL` по ёмкости при такой опечатке тоже заменяется на
   `NO_VERDICT`, причина `RULE_WINDOW_NOT_FOUND` попадает в причины ёмкости.
 - Число запросов для минимума выборки считается по области правила в оцениваемом
@@ -2048,11 +2050,302 @@ bundle. Семантически одинаковые данные с други
 первый запрос по новому анализу разбирает файл снимка заново, поэтому занимает
 заметно больше времени, чем последующие.
 
+## Стадии нагрузки и вердикт по окну steady
+
+Без снимка ресурсов вердикт считается по всему прогону, и разгон с остановкой попадают в p95
+и throughput: прогон «разгон, плато, остановка» получает `FAIL` по правилу, которое плато
+выполняет. Если вы знаете границы стадий, объявите их файлом `load-stages.v1`: стадии с ролью
+`steady` становятся окнами, и существующая оконная оценка политики считает вердикт только по
+ним. Вердикт при этом говорит вслух: «Вердикт посчитан по окну steady, разгон исключён».
+Решение и границы: [ADR 0030](../adr/0030-load-stages-steady-window.md). Автоопределения
+плато нет: окна задаёте вы, ядро их не угадывает.
+
+Режим включается только явным объявлением. Без `--stages` (и без части `stages` в API)
+ничего не меняется: вердикт, `analysis_id`, `identity.json`, `junit.xml`, `summary.txt` и
+отчёты прежние.
+
+### Формат `load-stages.v1`
+
+Контракт: [схема](../contracts/stages/v1/load-stages.schema.json) и
+[примеры](../contracts/stages/v1/examples/valid/ramp-steady-down.json). Границы это
+смещения в миллисекундах от начала прогона, не epoch: один файл подходит любому прогону
+того же профиля.
+
+| Поле | Правило |
+| --- | --- |
+| `schema_version` | ровно `load-stages.v1` |
+| `stages` | от 1 до 16 стадий; после разбора сортируются по `from_offset_ms`, не перекрываются (касание допустимо), зазоры допустимы; хотя бы одна стадия `steady` |
+| `stages[].id` | непустая строка до 128 байт UTF-8, без управляющих символов, уникальна |
+| `stages[].role` | `steady` или `excluded`; других значений нет, в частности нет `auto` |
+| `stages[].from_offset_ms` | целое от 0 до 604800000 (7 суток) |
+| `stages[].to_offset_ms` | целое больше `from_offset_ms`, не больше 604800000 |
+
+Лишние поля отвергаются. Файл не больше 65536 байт, глубина JSON не больше 8; дубли
+ключей, `NaN` и дробные смещения запрещены.
+
+```json
+{
+  "schema_version": "load-stages.v1",
+  "stages": [
+    { "id": "ramp-up", "role": "excluded", "from_offset_ms": 0, "to_offset_ms": 40000 },
+    { "id": "steady", "role": "steady", "from_offset_ms": 40000, "to_offset_ms": 100000 },
+    { "id": "ramp-down", "role": "excluded", "from_offset_ms": 100000, "to_offset_ms": 120000 }
+  ]
+}
+```
+
+- Окном становится только стадия `steady`; её `id` это `window_id`. Окно полуоткрытое
+  `[from, to)`, выборка относится к окну по моменту старта. Стадия `excluded` окном не
+  является: она даёт имя («разгон») и учитывается в строке «Исключено».
+- Правила политики с `window_ids: ["steady"]` проверяются в окне `steady`; правило без
+  `window_ids` проверяется во всех окнах `steady`. Правило, привязанное к id стадии
+  `excluded` (например, `ramp-up`), или к несуществующему id даёт `NO_VERDICT` с причиной
+  `RULE_WINDOW_NOT_FOUND`: опечатка не может дать `PASS`.
+- Стадий `steady` может быть несколько ([пример](../contracts/stages/v1/examples/valid/two-steady.json)):
+  каждое окно проверяется отдельно, нарушение в любом даёт `FAIL`.
+- Окно меньше порога выборки политики даёт `INSUFFICIENT_SAMPLES`, пустое окно при
+  применимом правиле даёт `BUSINESS_OBSERVATIONS_NOT_FOUND` и `NO_VERDICT`, как у окон
+  снимка ресурсов.
+- Платформенные правила (`platform_rules`) со стадиями не проверяются: им нужен снимок.
+  Политика с платформенным SLA-правилом даёт `NO_VERDICT` с причиной
+  `RESOURCE_SNAPSHOT_REQUIRED` (покрыто тестом `StageWindowPolicyTest`), без SLA причина
+  только информационная.
+
+### Запуск из CLI
+
+```powershell
+ltv analyze fixtures/stages/ramp-steady-rampdown.jtl --policy policy.json --stages docs/contracts/stages/v1/examples/valid/ramp-steady-down.json --out-dir out
+```
+
+`--stages` указывается один раз (повтор даёт `usage`, код `64`). Фикстура
+[ramp-steady-rampdown.jtl](../../fixtures/stages/ramp-steady-rampdown.jtl) это 720 выборок
+за 119,8 с: разгон 0-40 с, плато 40-100 с (600 выборок, 10 rps, p95 194 мс), остановка с
+большей задержкой. Политика `policy.json`:
+
+```json
+{
+  "schema_version": "policy.v1",
+  "policy_id": "ramp-steady",
+  "defaults": { "sample_floor": 1, "min_samples": 1 },
+  "rules": [
+    { "id": "p95", "metric": "response_time_p95_ms", "operator": "lte", "threshold": 250,
+      "scope": { "kind": "overall" } },
+    { "id": "rps", "metric": "throughput_rps", "operator": "gte", "threshold": 9,
+      "scope": { "kind": "overall" } }
+  ]
+}
+```
+
+| Запуск | Вердикт | p95 | throughput | Код выхода |
+| --- | --- | ---: | ---: | ---: |
+| без `--stages` (весь прогон) | `FAIL` | 821 мс | 6,010017 rps | `2` |
+| со стадиями (окно `steady`) | `PASS` | 194 мс | 10 rps | `0` |
+
+`summary.txt` анализа со стадиями (вывод реального запуска):
+
+```text
+LT Verdict summary
+run_id: jmeter_jtl_csv-ec01e6fe71409fc8ad3654e16f759bf7c7ad0661aad40802f45ecb0f894fd3e4
+analysis_id: e94a34559b38ba38b3945a6fd9c7f6fe38acf703a7ae94555b4f3036c58753ec
+run_validity: VALID
+policy_verdict: PASS
+exit_code: 0
+scope: steady window (steady), excluded 59800 ms
+samples: 720  errors: 0  p95_ms: 821  p99_ms: 836  whole_run (reference only)
+window[steady]: samples: 600  errors: 0  p95_ms: 194  p99_ms: 198  rps: 10
+rules: 2 (PASS 2, FAIL 0, NO_VERDICT 0)
+```
+
+`excluded 59800 ms` это длина прогона (119 800 мс) минус длина окна (60 000 мс). Строка
+`samples` по-прежнему считается по всему прогону и помечена `whole_run (reference only)`.
+
+Анализ сохраняет объявление рядом с `identity.json` файлом `load-stages.json` (канонические
+байты); его SHA-256 входит в identity как `load_stages_sha256`. Тот же файл с другим
+порядком стадий или пробелами даёт тот же `analysis_id`.
+
+### Что вердикт говорит вслух и где
+
+Фраза «Вердикт посчитан по окну steady, разгон исключён» выводится только когда вердикт
+вынесен (`run_validity` `VALID`, `policy_verdict` `PASS` или `FAIL`). При `NO_VERDICT`
+(в том числе `DEGRADED`) и `NO_POLICY` текст нейтральный и вердикта не утверждает:
+«Окно steady задано (steady), разгон исключён из метрик окна; вердикт: NO_VERDICT».
+Прогон без стадий этих фраз не получает. Непригодный (`INVALID`) прогон не получает
+`stage_binding`, поэтому ни фразы, ни окон у него нет.
+
+| Где | Что показано |
+| --- | --- |
+| Карточка вердикта (UI) | при `PASS` и `FAIL` в заголовке пометка «по окну steady, разгон исключён», фраза с окном и исключённым временем, факты «Окно вердикта» и «Исключено», таблица стадий с границами в UTC и epoch |
+| HTML-отчёт | строка «Область вердикта» в списке с вердиктом, раздел «Область вердикта» с фразой, окном, таблицей стадий (смещения, границы UTC и epoch, признак обрезки до конца прогона) и подписью, что метрики по всему прогону справочные |
+| AsciiDoc и Confluence | абзац с той же фразой, окном, исключённым временем и подписью о справочных метриках |
+| `summary.txt` | строка `scope: steady window (<ids>), excluded <N> ms`, строка `window[<id>]: ...` на каждое окно; прежняя строка метрик помечена `whole_run (reference only)` |
+| `ltv summary` (`cli-summary.v1`) | необязательные `windows[]` (по объекту на окно: `id`, `from_epoch_ms`, `to_epoch_ms`, `samples`, `errors`, `error_rate`, `p50`, `p95`, `p99`, `max`, `rps`) и `excluded_ms`; `overall` остаётся метрикой всего прогона; у проверок правил есть `window_id` |
+| `junit.xml` | у `FAIL` и `NO_VERDICT` (в том числе `DEGRADED`) к сообщению gate добавлен суффикс `scope=steady_window window_ids=<ids> excluded_ms=<N>`; у проходящего gate (`PASS`, `NO_POLICY`) сообщения нет, поэтому та же строка лежит в дочернем `<system-out>`; у `INVALID` ни суффикса, ни `<system-out>` нет |
+| Сравнение с эталоном | предупреждение `WHOLE_RUN_METRICS_WITH_STAGES`; в динамике прогонов и сравнении транзакций метрики подписаны «весь прогон, справочно» |
+
+Фактический `junit.xml` проходящего gate со стадиями:
+
+```xml
+<testcase classname="lt-verdict.gate" name="gate" time="0"><system-out>scope=steady_window window_ids=steady excluded_ms=59800</system-out></testcase>
+<testcase classname="lt-verdict.policy" name="p95 @ steady" time="0"/>
+```
+
+В таблице правил HTML-отчёта колонка «Область» показывает область правила (`overall`,
+«весь прогон»), а колонка «Окно» (`steady`) показывает, по какому окну оно посчитано.
+Метрики блока «весь прогон» (в HTML, `summary.txt`, `overall` сводки) справочные: они
+включают разгон и остановку и вердикт не определяют.
+
+### API
+
+Стадии передаются необязательной файловой частью `stages` запроса `POST /api/jobs` (одна
+часть, повтор даёт `400 MALFORMED_REQUEST`; до 65536 байт). Остальные части те же: `run_id`,
+при необходимости `policy`.
+
+- Недопустимое объявление даёт `422 INVALID_STAGES` с `error.details[{code, json_pointer,
+  message}]`. Для файла без стадии `steady` тело ответа:
+  `{"error":{"code":"INVALID_STAGES","message":"Load stages are invalid","details":[{"code":"STAGES_NO_STEADY","json_pointer":"/stages","message":"at least one stage must have the role steady"}]}}`.
+- Файл больше 65536 байт, больше 16 стадий или `id` длиннее 128 байт даёт
+  `413 RESOURCE_LIMIT_EXCEEDED`.
+- Сочетание со снимком ресурсов, планом ёмкости или онлайн-запросом источника даёт
+  `422 INVALID_STAGES`; в `details` код `STAGES_RESOURCES_CONFLICT` (указатель
+  `/resource_snapshot`), `STAGES_CAPACITY_CONFLICT` (`/capacity_plan`) или
+  `STAGES_SOURCE_CONFLICT` (`/source_request`). Проверка идёт до обращения к источнику.
+- `STAGE_OUTSIDE_RUN` в API это не `422`: начало и конец прогона известны только после
+  разбора входа, поэтому задание принимается (`202`) и завершается состоянием `FAILED` с
+  `diagnostic.code = STAGE_OUTSIDE_RUN`.
+
+Формы загрузки стадий в UI нет: UI показывает карточку и таблицу стадий для анализа,
+созданного через CLI или API.
+
+### Коды ошибок
+
+В CLI ошибка объявления даёт код `4` и строки `<code> <json-pointer>: <message>` в stderr
+(например, `STAGES_NO_STEADY /stages: at least one stage must have the role steady`); в API
+те же коды лежат в `error.details`.
+
+| Код | Когда |
+| --- | --- |
+| `STAGES_NO_STEADY` | нет ни одной стадии `steady` |
+| `OVERLAPPING_STAGES` | стадии перекрываются |
+| `DUPLICATE_STAGE_ID` | повтор `id` |
+| `INVALID_STAGE` | `to_offset_ms` не больше `from_offset_ms` |
+| `INVALID_STAGE_OFFSET` | смещение вне диапазона 0..604800000 мс |
+| `INVALID_TYPE` | неверный тип значения, в том числе дробное смещение |
+| `INVALID_TEXT` | `id` пуст или содержит управляющие символы |
+| `MISSING_FIELD` | нет обязательного поля |
+| `UNKNOWN_ROLE` | роль не `steady` и не `excluded` (`auto` тоже) |
+| `UNKNOWN_FIELD` | лишнее поле |
+| `INVALID_SCHEMA_VERSION` | `schema_version` не `load-stages.v1` |
+| `DUPLICATE_OBJECT_KEY` | повтор ключа в объекте JSON |
+| `RESOURCE_LIMIT_EXCEEDED` | больше 16 стадий, файл больше 65536 байт, глубина больше 8 или `id` длиннее 128 байт (в API `413`) |
+| `MALFORMED_JSON`, `INVALID_UTF8`, `STAGES_READ_ERROR` | файл не разобрать как JSON или UTF-8 либо не прочитать |
+| `INVALID_STAGES` (в CLI без деталей) | файл стадий не найден или не обычный файл; в API это общий код `422` для всех ошибок объявления |
+| `STAGES_RESOURCES_CONFLICT`, `STAGES_CAPACITY_CONFLICT`, `STAGES_SOURCE_CONFLICT` | стадии вместе со снимком ресурсов (`--resources`), планом ёмкости (`--capacity`) или онлайн-источником (`--source`); в CLI код `4` до чтения входа |
+| `STAGE_OUTSIDE_RUN` | стадия `steady` начинается в конце прогона или позже |
+
+Стадии нельзя сочетать со снимком ресурсов, планом ёмкости и онлайн-запросом источника:
+оба источника определяют окна, и молчаливого приоритета нет. Офлайн-контекст
+`--source-context` без снимка со стадиями разрешён.
+
+### Ловушка начала прогона
+
+Смещения отсчитываются от начала прогона, и это минимальный `started_at` среди **всех**
+выборок журнала, включая setUp-группу JMeter и health-check того же JTL. Ранние посторонние
+выборки сдвигают начало, а вместе с ним и все окна, молча: объявление остаётся допустимым,
+вердикт выносится, но по другому интервалу.
+
+Пример на той же фикстуре. Вставим в журнал сразу после заголовка одну выборку setUp за
+30 секунд до первой выборки нагрузки (`1767225600000`):
+
+```text
+1767225570000,50,setUp,200,OK,setUp 1-1,text,true,,128,64,1,1,http://example.test/setup,25,0,5
+```
+
+Объявление и политика те же (`ramp-steady-down.json`, `policy.json`). Результат:
+
+| | Без setUp | С выборкой setUp за 30 с |
+| --- | --- | --- |
+| начало прогона, `run_from_epoch_ms` | 1767225600000 | 1767225570000 |
+| окно `steady` (epoch, мс) | 1767225640000 - 1767225700000 | 1767225610000 - 1767225670000 |
+| выборок в окне | 600 | 360 (60 разгона и 300 плато) |
+| p95 / throughput окна | 194 мс / 10 rps | 830 мс / 6 rps |
+| вердикт | `PASS` | `FAIL` (код `2`) |
+| `excluded` в `summary.txt` и `junit.xml` | 59800 | 89800 |
+
+Объявленное плато `[40 с, 100 с)` теперь лежит на `[10 с, 70 с)` настоящей временной шкалы
+и захватывает конец разгона. Те же числа проверяет тест
+[`StageWindowPolicyTest`](../../src/test/kotlin/io/ltverdict/core/StageWindowPolicyTest.kt)
+(`an early foreign sample moves the run start and with it every window`, критерий AC13 из
+ADR 0030).
+
+Как увидеть: сверьте `run_from_epoch_ms` и `stages[].from_epoch_ms` в `stage_binding`
+результата, колонку «Границы (epoch, мс)» таблицы стадий в HTML-отчёте или
+`windows[].from_epoch_ms` в `ltv summary` с известным временем старта нагрузки. В логе CI тот
+же сигнал это `excluded <N> ms` в `summary.txt` и `excluded_ms` в `junit.xml`: «исключено»
+заметно больше разгона и остановки.
+
+Как поправить:
+
+- лучше всего убрать setUp и health-check из журнала (отдельный журнал или фильтр на стороне
+  JMeter), чтобы первой выборкой была нагрузка;
+- иначе увеличьте все смещения на длину опережения (здесь 30000 мс; можно добавить стадию
+  `excluded` `0 - 30000`). С таким объявлением тот же журнал снова даёт `PASS`: 600 выборок,
+  p95 194 мс, 10 rps. Это верно только пока опережение setUp одинаково от прогона к прогону.
+
+После поправки `excluded` остаётся 89800 (30 секунд setUp по-прежнему внутри прогона), поэтому
+поправку проверяйте по окну: `from_epoch_ms` окна `steady` должен равняться известному
+времени старта нагрузки плюс 40000 (здесь 1767225640000).
+
+Поправленное объявление имеет другой хэш, поэтому прогон перестаёт быть сопоставимым с
+прогонами по прежнему файлу (см. «Сопоставимость»): эталон придётся закрепить заново.
+
+### Steady до конца профиля
+
+Конец стадии `steady` за концом прогона обрезается до конца прогона: дрейф конца в доли
+секунды обычен, и профиль «steady до конца» не должен падать. Пример: на фикстуре конец
+прогона 119 800 мс, а объявлена стадия `steady` `40000 - 120000`. В `stage_binding` у
+стадии `to_epoch_ms` равен 1767225719800 (а не 1767225720000) и стоит
+`clipped_to_run_end: true`, а в таблице стадий HTML-отчёта колонка «Обрезана до конца
+прогона» содержит «да». Оценённое время 79 800 мс, throughput окна делится на эту
+обрезанную длину (640 выборок, 8,02005 rps). Окно захватило остановку, поэтому на
+фикстуре p95 окна 300 мс и вердикт `FAIL` по порогу 250: окно определяете вы, ядро его не
+исправляет.
+
+Стадия `steady`, которая начинается в конце прогона или позже (`from >= конец прогона`,
+например `120000 - 180000` при конце 119 800 мс), даёт `STAGE_OUTSIDE_RUN` (в CLI код `4`);
+чаще всего это объявление от другого профиля. Стадии `excluded` на конец прогона не
+проверяются.
+
+### Сопоставимость
+
+Прогон со стадиями и прогон без них нельзя сравнивать как baseline: окно 5-25 мин и окно
+5-30 мин дают разные p95 и throughput, это разные метрики. Хэш объявления входит в ключ
+сопоставимости (`load_stages_sha256`, условное звено, как `resource_arm`):
+
+- одинаковое объявление у обоих прогонов даёт сопоставимость; другое объявление, а также
+  стадии у одного прогона и их отсутствие у другого дают `compatible = false` и причину
+  `INCOMPATIBLE_METRIC_DEFINITION`; при выборе кандидатов эталона смесь прогонов со
+  стадиями и без них даёт `BASELINE_MIXED_SEMANTICS`;
+- эталон, сохранённый для прогона без стадий, при переходе на стадии становится
+  несовместимым: закрепите эталон заново по прогону со стадиями (слоты baseline, пара
+  «серия, плечо», не меняются);
+- сравнение прогонов со стадиями считает дельты по метрике «весь прогон», а не по окну
+  `steady`. В ответе сравнения с эталоном для этого есть предупреждение
+  `WHOLE_RUN_METRICS_WITH_STAGES`, динамика прогонов и сравнение транзакций подписаны «весь
+  прогон, справочно». Вердикт и его окно смотрите в карточке и отчёте каждого анализа.
+
+### Ограничения
+
+- Автоопределения плато нет: границы объявляете вы.
+- Стадии нельзя сочетать со снимком ресурсов, планом ёмкости и онлайн-источником.
+- Формы загрузки стадий в UI нет (только CLI и API).
+- Платформенные правила со стадиями не проверяются (нужен снимок ресурсов).
+- Без стадий всё работает как раньше: вердикт по всему прогону.
+
 ## CLI
 
 ```text
 ltv ui [--data-dir <path>] [--analysis-parallelism <n>] [--histogram-significant-digits <3..5>]
-ltv analyze <input> [--policy <policy.json>|-] [--resources <snapshot.json>] [--histogram-significant-digits <3..5>] [--data-dir <path>] [--out-dir <dir>]
+ltv analyze <input> [--policy <policy.json>|-] [--stages <load-stages.json>] [--resources <snapshot.json>] [--histogram-significant-digits <3..5>] [--data-dir <path>] [--out-dir <dir>]
 ltv policy validate <policy.json>|-
 ltv report <run-id> <analysis-id> --format json|html|asciidoc|confluence|svg [--data-dir <path>]
 ltv summary <run-id> <analysis-id> [--data-dir <path>]
@@ -2083,6 +2376,11 @@ policy из stdin (до 1 MiB, как файл): `cat policy.json | ltv analyze 
 канонической форме JSON, поэтому `analysis_id` тот же, что при запуске из файла с таким же содержимым.
 В Windows PowerShell 5.1 конвейер перекодирует текст; используйте `cmd /c "... < policy.json"`
 или PowerShell 7.4+.
+
+**Стадии нагрузки: `--stages <load-stages.json>`.** Объявляет стадии прогона; вердикт
+считается по окну `steady`, разгон исключён. Параметр указывается один раз и не
+сочетается с `--resources`, `--capacity` и `--source` (код `4`). Формат, коды ошибок и
+ловушки описаны в разделе «Стадии нагрузки и вердикт по окну steady».
 
 **Артефакты для CI: `--out-dir <dir>`.** Один вызов `ltv analyze` записывает в каталог
 (создаётся при необходимости) пять файлов с фиксированными именами; существующие
@@ -2116,7 +2414,10 @@ policy из stdin (до 1 MiB, как файл): `cat policy.json | ltv analyze 
 отчёт нужно шагом CI, который выполняется и после ненулевого кода выхода: Jenkins `junit`
 в `post { always { ... } }`, GitLab `artifacts: reports: junit` с `when: always`, GitHub Actions
 шаг стороннего JUnit-репортёра с `if: always()`. Код выхода `ltv` по-прежнему проваливает
-шаг, отчёт JUnit его не заменяет.
+шаг, отчёт JUnit его не заменяет. У анализа со стадиями нагрузки к сообщению gate у `FAIL` и
+`NO_VERDICT` добавлен суффикс `scope=steady_window window_ids=<ids> excluded_ms=<N>`, а у
+проходящего gate та же строка лежит в дочернем `<system-out>`; `summary.txt` получает строки
+`scope:` и `window[<id>]:`.
 
 **`ltv summary <run-id> <analysis-id>`** читает сохранённый анализ и печатает в stdout один
 компактный canonical JSON `cli-summary.v1` (ключи по алфавиту, без пробелов и перевода строки;
@@ -2139,6 +2440,8 @@ policy из stdin (до 1 MiB, как файл): `cat policy.json | ltv analyze 
   правил нагрузки ещё `metric` и `observed`, у ресурсных `series_id` и `unit`). Оператор
   ресурсного правила описывает нарушение (`gt`: значение выше порога). Итоговый вердикт
   анализа лежит в `policy_verdict`.
+- У анализа со стадиями нагрузки добавлены необязательные `windows[]` (метрики каждого окна
+  `steady`) и `excluded_ms`; `overall` остаётся метрикой всего прогона.
 
 **Точность перцентилей.** Перцентили p50, p95 и p99 считаются по гистограмме
 HdrHistogram и не бывают выше максимума отклика. Значения до 2047 мс точны. Выше

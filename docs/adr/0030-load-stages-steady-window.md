@@ -6,8 +6,8 @@
 ниже). Номер 0030
 выбран как следующий после 0029 (на `origin/main` 2026-10-09 последний ADR с
 номером 0029); перед слиянием его нужно перепроверить по `origin/main`. ADR
-фиксирует публичные контракты работы W2.5; кода, схем и примеров в этом PR нет:
-схема `load-stages.v1` появится в PR A реализации (см. «Следствия»). Решения
+фиксирует публичные контракты работы W2.5 (реализовано PR A-D, см. «Следствия»; схема
+`load-stages.v1` и примеры лежат в `docs/contracts/stages/v1`). Решения
 владельца 2026-10-09 (раздел «Решения владельца») приняты как есть. Четыре
 ruling'а (R1, R4, R7, R12) подтверждены владельцем 2026-10-09 (раздел «Решения
 владельца по ruling'ам»); PR A может начинаться.
@@ -214,8 +214,7 @@ MCP (W3.2). UI показывает фразу и таблицу окон; фо�
 
 Файл: `docs/contracts/stages/v1/load-stages.schema.json` (JSON Schema draft
 2020-12) и примеры `examples/valid`, `examples/invalid` создаются в PR A, как
-`docs/contracts/resources/v1`. Пока этого файла нет в `main`, ссылок на него в
-документах нет.
+`docs/contracts/resources/v1` (созданы в PR A, лежат в `main`).
 
 | Поле | Тип | Правило |
 | --- | --- | --- |
@@ -237,7 +236,9 @@ policy и снимка (дубли ключей, NaN, большие числа 
 Коды ошибок валидации (печатаются как `<code> <json-pointer>: <message>`):
 `STAGES_NO_STEADY`, `OVERLAPPING_STAGES`, `DUPLICATE_STAGE_ID`, `INVALID_STAGE`,
 `INVALID_STAGE_OFFSET`, `INVALID_TYPE`, `UNKNOWN_ROLE`, `UNKNOWN_FIELD`,
-`RESOURCE_LIMIT_EXCEEDED`, `INVALID_SCHEMA_VERSION`. Допустимые примеры:
+`RESOURCE_LIMIT_EXCEEDED`, `INVALID_SCHEMA_VERSION`, а также `MALFORMED_JSON`,
+`STAGES_READ_ERROR`, `INVALID_TEXT`, `MISSING_FIELD`, `DUPLICATE_OBJECT_KEY`,
+`INVALID_UTF8` (полный перечень в `core/LoadStages.kt`). Допустимые примеры:
 `ramp-steady-down` (разгон, steady, остановка), `steady-only`, `two-steady`
 (две стадии `steady` с исключённой между ними; вердикт это объединение окон).
 Недопустимые примеры по одному на каждый код выше (таблица в плане).
@@ -363,7 +364,7 @@ policy и снимка (дубли ключей, NaN, большие числа 
 | AsciiDoc и Confluence | строка-примечание с той же фразой |
 | `summary.txt` | строка `scope: steady window (<ids>), excluded <N> ms`, строка `window[<id>]: ...` на каждое окно; прежняя строка помечается `whole_run (reference only)` |
 | `ltv summary` JSON (`cli-summary.v1`) | необязательный массив `windows[]` и число `excluded_ms`; `overall` остаётся «весь прогон» |
-| `junit.xml` gate | у FAIL, NO_VERDICT, INVALID суффикс сообщения `scope=steady_window window_ids=<ids> excluded_ms=<N>`; у PASS и NO_POLICY (сообщения нет) дочерний `<system-out>` с той же строкой |
+| `junit.xml` gate | у FAIL, NO_VERDICT суффикс сообщения `scope=steady_window window_ids=<ids> excluded_ms=<N>`; у PASS и NO_POLICY (сообщения нет) дочерний `<system-out>` с той же строкой |
 | Сравнение с эталоном (API) | предупреждение `WHOLE_RUN_METRICS_WITH_STAGES` (R7) |
 
 Изменения `summary.txt`, `cli-summary.v1` и `junit.xml` только для прогонов со
@@ -423,8 +424,7 @@ policy и снимка (дубли ключей, NaN, большие числа 
 - Реализация разбита на PR 0 (этот ADR), PR A (ядро, схема `load-stages.v1`,
   примеры, фикстура, identity и ключ), PR B (CLI и API), PR C (видимость: отчёты,
   UI, junit), PR D (руководство, статус Accepted по слову владельца). Файлы
-  контракта, перечисленные выше, создаются в PR A; в документах до этого на них нет
-  ссылок.
+  контракта, перечисленные выше, созданы в PR A.
 - Реализация PR A идёт после слияния среза 2 W2.1 (типизация evidence): `stage_binding`
   строится как типизированный вариант по его паттерну. PR B идёт после W2.2 или с
   rebase на неё; пересечения с W2.3 (сравнение с baseline), W2.4 (честные заголовки,

@@ -14,6 +14,7 @@ import io.ktor.server.routing.routing
 import io.ltverdict.ai.AdvisoryAiJobs
 import io.ltverdict.ai.AdvisoryAiService
 import io.ltverdict.ai.AiModelsConfig
+import io.ltverdict.core.RuleFailure
 import io.ltverdict.integrations.jenkins.JenkinsProfileSummary
 import io.ltverdict.integrations.jenkins.JenkinsWorkflow
 import io.ltverdict.jobs.AnalysisJobs
@@ -99,6 +100,9 @@ internal fun Application.installLocalApi(context: LocalApiContext) {
             finish()
         } catch (failure: ApiFailure) {
             call.respondError(failure.status, failure.code, failure.message, limit = failure.limit)
+            finish()
+        } catch (failure: RuleFailure) {
+            call.respondError(failure.status(), failure.code, failure.message)
             finish()
         }
     }

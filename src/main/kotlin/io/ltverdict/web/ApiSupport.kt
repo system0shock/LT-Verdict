@@ -13,6 +13,8 @@ import io.ktor.server.response.respondBytes
 import io.ktor.utils.io.jvm.javaio.toInputStream
 import io.ltverdict.core.PolicyValidation
 import io.ltverdict.core.PolicyValidationError
+import io.ltverdict.core.RuleFailure
+import io.ltverdict.core.RuleFailureKind
 import io.ltverdict.core.canonicalJson
 import io.ltverdict.storage.RunBundleStore
 import kotlinx.coroutines.Dispatchers
@@ -187,6 +189,14 @@ internal fun unsupportedMedia(message: String): Nothing =
     throw ApiFailure(HttpStatusCode.UnsupportedMediaType, "UNSUPPORTED_MEDIA_TYPE", message)
 
 internal fun unsupportedInput(message: String): Nothing = throw ApiFailure(HttpStatusCode.UnprocessableEntity, "UNSUPPORTED_INPUT", message)
+
+// The core rules raise RuleFailure without any HTTP; the statuses are the three that these rules always answered with.
+internal fun RuleFailure.status(): HttpStatusCode =
+    when (kind) {
+        RuleFailureKind.MALFORMED -> HttpStatusCode.BadRequest
+        RuleFailureKind.UNPROCESSABLE -> HttpStatusCode.UnprocessableEntity
+        RuleFailureKind.CORRUPT -> HttpStatusCode.InternalServerError
+    }
 
 internal class ApiFailure(
     val status: HttpStatusCode,

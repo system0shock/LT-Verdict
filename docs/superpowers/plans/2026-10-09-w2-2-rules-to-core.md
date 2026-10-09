@@ -9,7 +9,7 @@
 
 | № | Условие | Как выполняется |
 | --- | --- | --- |
-| 1 | нет изменений поведения, публичных контрактов и схем | снимок `fixtures/http-layer/{routes,responses}.txt` PR 1 проходит без обновления; новый снимок правил `fixtures/http-layer/rules.txt` (229 записей) снят первым коммитом на неизменённом коде |
+| 1 | нет изменений поведения, публичных контрактов и схем | снимок `fixtures/http-layer/{routes,responses}.txt` PR 1 проходит без обновления; новый снимок правил `fixtures/http-layer/rules.txt` (247 записей) снят до правок на неизменённом коде |
 | 2 | существующие тесты не редактируются и не удаляются | `git diff origin/main --diff-filter=MD -- src/test` пуст; добавляются новые файлы |
 | 3 | одна цель | только «доменные правила baseline и release в core». `RunBundleStore` и циклы `core` <-> `storage` это PR 3 |
 | 4 | канонический JSON и хэши identity не затронуты | существующие файлы `core/` не меняются вообще (только новые файлы); `canonicalJson`, `AnalysisIdentity` не трогаются |
@@ -59,12 +59,16 @@ REQUIRED TO ACHIEVE IT (перемещение: символ, откуда -> к
     resolveBaselineScope (чистая часть)  web/BaselineRoutes.kt -> core: baselineScope(explicit, registered, identity)
                                          (конфликт серии 422 BASELINE_SERIES_CONFLICT, затем arm из identity)
     ApplicationCall.baselineSeriesQuery  (разбор значения) -> core baselineSeriesParameter
-    разбор arm в DELETE /api/baseline    (разбор значения) -> core baselineArmParameter
+    разбор series и arm в DELETE /api/baseline, включая правило «arm требует series» -> core baselineSlotAddress(series, arm)
     BASELINE_CONDITION_DECISIONS, разбор тела решения -> core baselineConditionDecision
     ApplicationCall.windowComparisonQuery, boundedDecimalQuery -> core windowComparisonRequest(строки) (парсинг окон и порогов)
   Новый core/ReleaseRules.kt (из web/ReleaseRoutes.kt):
-    releaseTextField, releaseProfile(element), releaseNotes, releaseRunId, releaseAnalysisIds -> core (private; через
-      parseReleaseCreate / parseReleaseUpdate, классы ReleaseDraftRequest, ReleaseUpdateRequest; порядок проверок прежний)
+    releaseTextField -> core (internal: нужен baseline); releaseProfile(element), releaseNotes, releaseRunId, releaseAnalysisIds
+      -> core (private; через parseReleaseCreate / parseReleaseUpdate, классы ReleaseDraftRequest, ReleaseUpdateRequest; порядок
+      проверок прежний, `RUN_ID` и `ANALYSIS_ID` как частные копии)
+    Видимость internal у перенесённых символов, которые вызывает web: baselineString, baselineReference, baselineArm,
+      baselineIneligible, BaselineScope, releaseField, releaseStateKeys, releaseOkStates, releaseView, releaseTextField.
+    Остаётся в web: значения по умолчанию и диапазон `limit` списка release (intQuery), `receiveBaselineRequest`.
     RELEASE_POST_FIELDS, RELEASE_PUT_FIELDS, ANALYSIS_ID -> core (private)
     ApplicationCall.releaseIdParameter (разбор значения), разбор `series` и `after` списка -> core releaseIdParameter(String?),
       releaseSeriesParameter, releaseAfterParameter
@@ -80,8 +84,8 @@ REQUIRED TO ACHIEVE IT (перемещение: символ, откуда -> к
       releaseProfile() с nullable-получателем.
     LocalApi.kt: один новый catch (RuleFailure) в интерцепторе: вид -> 400 / 422 / 500, тело ошибки то же, что у ApiFailure.
   Тесты (только новые файлы):
-    - src/test/kotlin/io/ltverdict/web/BaselineReleaseRulesSnapshotTest.kt + fixtures/http-layer/rules.txt (первый коммит,
-      на неизменённом коде): правила в ответах HTTP (229 записей).
+    - src/test/kotlin/io/ltverdict/web/BaselineReleaseRulesSnapshotTest.kt + fixtures/http-layer/rules.txt (первые коммиты,
+      на неизменённом коде): правила в ответах HTTP (247 записей).
     - src/test/kotlin/io/ltverdict/core/BaselineReleaseRulesTest.kt: прямые тесты новых функций core (виды нарушений, накопитель
       фактов, представление release).
   changelog.d/w2-2-rules-to-core.changed.md
@@ -127,7 +131,18 @@ Documentation impact: none для пользовательской докуме�
   и непересечение с W2.5 PR A.
 - **R5. Сообщения, коды, порядок остаются дословно; `malformed(...)` меняется на `ruleMalformed(...)`**, `ApiFailure(422, ...)` на
   `ruleUnprocessable(...)`, `corruptBaseline` на `ruleCorrupt`. Тексты сообщений на английском (контракт API), не меняются.
-- **R6. Совет Codex Astra учтён** (раздел ниже заполняется после совета).
+- **R6. Совет Codex Astra (read-only, gpt-6-astra) учтён.** Принято и проверено по коду: `releaseTextField` internal (его зовёт
+  baseline), все вызываемые из web перенесённые символы internal, `RUN_ID` релиза частной копией, правило «arm requires series»
+  назначено явно (`baselineSlotAddress`); границы порядка: у statistical разобрать все ссылки, отклонить повтор запуска, прочитать
+  все документы, затем допуск по порядку запроса, затем статистика; у release поля тела до чтений, накопитель вызывается сразу
+  после каждого чтения и хранит только факты, `finish` проверяет arm между анализами; PUT собирает запись из `current`, который отдаёт
+  `replaceRelease`; сообщения о несовпадении начала различаются; новый `catch` вызывает `respondError` и `finish()`; накопитель
+  и выбор принимают `run`/`result`/`identity` отдельно, а не `VerifiedAnalysis`. Совет подтвердил R1 (RuntimeException без общего
+  предка с перехватываемыми) и R3. Принято по снимку: добавлены смешанные отказы (кандидат с отказом допуска и неизвестный
+  анализ в обоих порядках, плохие метаданные и неизвестный анализ, плохое тело PUT при неизвестном id), порча arm в identity
+  (500 CORRUPT_BASELINE), явные проверки формы PUT вне нормализации (неизменяемые поля, `updated_at`, `started_at`). Не принято:
+  отдельный тест «накопитель не хранит документы» (структура накопителя такова, что хранит только извлечённые факты).
+  Отклонение от поручения оркестратора зафиксировано: R3.
 
 ## Контракты
 

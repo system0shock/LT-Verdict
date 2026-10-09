@@ -12,6 +12,7 @@ internal fun renderAsciiDocReport(
     resultBytes: ByteArray,
     analysisId: String,
     errorGroups: ByteArray? = null,
+    baseline: JsonObject? = null,
 ): ByteArray {
     val result = Json.parseToJsonElement(resultBytes.decodeToString()).jsonObject
     val evidence = result.objects("evidence")
@@ -47,6 +48,18 @@ internal fun renderAsciiDocReport(
                     view.notes +
                         (if (view.rows.isEmpty()) emptyList() else listOf("Errors | Share | Response code | Message | Transaction")) +
                         view.rows.map { "${it.count} | ${it.share} | ${it.code} | ${it.message} | ${it.transaction}" }
+                ).joinToString("\n"),
+            )
+        }
+        baselineChangesView(baseline)?.let { view ->
+            append("\n== $BASELINE_CHANGES_TITLE\n")
+            // One literal block: every line starts with a fixed word or a metric name, so no text of the comparison closes the block.
+            literal(
+                (
+                    view.notes.map { "Примечание: $it" } +
+                        view.tables.flatMap { grid ->
+                            listOf("Таблица: ${grid.caption}", grid.heads.joinToString(" | ")) + grid.rows.map { it.joinToString(" | ") }
+                        }
                 ).joinToString("\n"),
             )
         }

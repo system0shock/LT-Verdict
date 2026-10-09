@@ -53,6 +53,7 @@ import io.ltverdict.storage.RunBundleStore
 import io.ltverdict.web.LocalApiContext
 import io.ltverdict.web.startLocalServer
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import java.io.IOException
@@ -133,6 +134,7 @@ private fun analyze(
     var pgProfileHtmlPath: Path? = null
     var dataDir = defaultDataDir()
     var outDir: Path? = null
+    var baselinePath: Path? = null
     var significantDigits = 3
     var policySeen = false
     var dataDirSeen = false
@@ -148,6 +150,10 @@ private fun analyze(
             "--out-dir" -> {
                 if (outDir != null || index + 1 >= args.size) usage()
                 outDir = path(args[index + 1])
+            }
+            "--baseline" -> {
+                if (baselinePath != null || index + 1 >= args.size) usage()
+                baselinePath = path(args[index + 1])
             }
             "--resources" -> {
                 if (resourcesPath != null || index + 1 >= args.size) usage()
@@ -214,6 +220,9 @@ private fun analyze(
 
     requireRegularFile(input, EXIT_INVALID_INPUT, "INVALID_INPUT")
     outDir?.let { requireOutDir(it, input) }
+    // W2.3: the comparison is shown only in the artifacts of --out-dir; the path is checked before the input is read or the data directory opened.
+    if (baselinePath != null && outDir == null) throw CliFailure(EXIT_INVALID_INPUT, "BASELINE_OUT_DIR_REQUIRED")
+    val baselineAt = baselinePath?.let { baselineLocation(it, dataDir) }
     if ((sourcePath == null) != (connectionsPath == null)) usage()
     // ADR 0030, R3: stages and a snapshot, a capacity plan or an online request are two sources of windows; refused before any read.
     if (stagesPath != null) {
@@ -281,9 +290,11 @@ private fun analyze(
     var analysisId = ""
     var chart: ByteArray? = null
     var errorGroups: ByteArray? = null
+    var comparison: JsonObject? = null
     val result =
         DataDirectory.open(dataDir).use { directory ->
             val store = RunBundleStore(directory)
+            val baselineAnalysis = baselineAt?.let { readBaselineAnalysis(store, it.first, it.second) }
             val accepted =
                 try {
                     Files.newInputStream(input, LinkOption.NOFOLLOW_LINKS).use {
@@ -351,6 +362,9 @@ private fun analyze(
                         chart = renderSavedLoadChart(outcome.analysisDirectory.resolve("rollup-60s.ndjson"))
                         errorGroups = readErrorGroupsFile(outcome.analysisDirectory)
                     }
+                    baselineAnalysis?.let {
+                        comparison = baselineComparison(it, readCurrentAnalysis(store, outcome.runId, outcome.analysisId))
+                    }
                 }.canonicalResult
             } catch (failure: IllegalArgumentException) {
                 throw CliFailure(EXIT_INVALID_INPUT, failure.cliMessage())
@@ -376,9 +390,9 @@ private fun analyze(
             it,
             linkedMapOf(
                 "result.json" to result,
-                "report.html" to renderHtmlReport(result, analysisId, errorGroups),
+                "report.html" to renderHtmlReport(result, analysisId, errorGroups, comparison),
                 "chart.svg" to checkNotNull(chart),
-                "summary.txt" to summaryText(analysisId, exitCode, result, errorGroups),
+                "summary.txt" to summaryText(analysisId, exitCode, result, errorGroups, comparison),
                 "junit.xml" to junitXml(result),
             ),
         )
@@ -500,12 +514,14 @@ private fun report(
     val analysisId = args[1]
     var dataDir = defaultDataDir()
     var format: String? = null
+    var baselinePath: Path? = null
     var dataDirSeen = false
     var index = 2
     while (index < args.size) {
         if (index + 1 >= args.size) usage()
         when (args[index]) {
             "--format" -> if (format == null) format = args[index + 1] else usage()
+            "--baseline" -> if (baselinePath == null) baselinePath = path(args[index + 1]) else usage()
             "--data-dir" ->
                 if (!dataDirSeen) {
                     dataDirSeen = true
@@ -518,18 +534,30 @@ private fun report(
         index += 2
     }
     if (format !in setOf("json", "html", "asciidoc", "confluence", "svg", "summary")) usage()
+    // W2.3: json and svg do not depend on a baseline.
+    if (baselinePath != null && format in setOf("json", "svg")) usage()
+    val baselineAt = baselinePath?.let { baselineLocation(it, dataDir) }
     var errorGroups: ByteArray? = null
+    var comparison: JsonObject? = null
     val result =
         DataDirectory.open(dataDir).use { directory ->
+            val store = RunBundleStore(directory)
             val analysis =
                 try {
-                    RunBundleStore(directory).readAnalysis(runId, analysisId)
+                    store.readAnalysis(runId, analysisId)
                 } catch (_: NoSuchElementException) {
                     null
                 } catch (_: IllegalArgumentException) {
                     null
                 }
                     ?: throw CliFailure(EXIT_INVALID_INPUT, "ANALYSIS_NOT_FOUND")
+            baselineAt?.let {
+                comparison =
+                    baselineComparison(
+                        readBaselineAnalysis(store, it.first, it.second),
+                        readCurrentAnalysis(store, runId, analysisId),
+                    )
+            }
             val artifact =
                 analysis.artifacts.singleOrNull { it.path == "analysis-result.json" }
                     ?: throw IllegalStateException("CORRUPT_RUN_BUNDLE: missing analysis result")
@@ -546,10 +574,10 @@ private fun report(
         when (format) {
             "json" -> result
             "svg" -> result
-            "summary" -> summaryJson(analysisId, result, errorGroups)
-            "html" -> renderHtmlReport(result, analysisId, errorGroups)
-            "confluence" -> renderConfluenceReport(result, analysisId, errorGroups)
-            else -> renderAsciiDocReport(result, analysisId, errorGroups)
+            "summary" -> summaryJson(analysisId, result, errorGroups, comparison)
+            "html" -> renderHtmlReport(result, analysisId, errorGroups, comparison)
+            "confluence" -> renderConfluenceReport(result, analysisId, errorGroups, comparison)
+            else -> renderAsciiDocReport(result, analysisId, errorGroups, comparison)
         },
     )
     return EXIT_OK
@@ -891,7 +919,8 @@ private fun usageText(): String =
     (
         "Usage: ltv ui [--data-dir <path>] [--analysis-parallelism <n>] [--histogram-significant-digits <3..5>] " +
             "[--connections <profiles.json>] [--jenkins-config <jenkins.json>] | " +
-            "ltv analyze <input> [--policy <policy.json>|-] [--stages <load-stages.json>] [--out-dir <dir>] " +
+            "ltv analyze <input> [--policy <policy.json>|-] [--stages <load-stages.json>] " +
+            "[--out-dir <dir> [--baseline <analysis-result.json>]] " +
             "[--resources <snapshot.json>] [--capacity <plan.json>] " +
             "[--trend <plan.json>] [--pod-view <pod-view.json>] [--correlation <plan.json>] [--source-context <context.json>] " +
             "[--postgres-pre <pre.json>] [--postgres-post <post.json>] [--pg-profile-html <report.html>] " +
@@ -899,12 +928,13 @@ private fun usageText(): String =
             "ltv source pre|post --connections <profiles.json> --profile <id> [--pre <pre.json>] [--pg-profile-html <output.html>] | " +
             "ltv opensearch prepare --context <file> --templates <file> --load-sha256 <hash> --output-dir <new-dir> | " +
             "ltv policy validate <policy.json>|- | ltv report <run-id> <analysis-id> " +
-            "--format json|html|asciidoc|confluence|svg [--data-dir <path>] | " +
-            "ltv summary <run-id> <analysis-id> [--data-dir <path>] | ltv --help | ltv --version" + System.lineSeparator() +
+            "--format json|html|asciidoc|confluence|svg [--baseline <analysis-result.json>] [--data-dir <path>] | " +
+            "ltv summary <run-id> <analysis-id> [--baseline <analysis-result.json>] [--data-dir <path>] | ltv --help | ltv --version" +
+            System.lineSeparator() +
             "--source accepts source-request.v1|v2|v3|v4; a v3 or v4 window is explicit or auto"
     )
 
-private class CliFailure(
+internal class CliFailure(
     val exitCode: Int,
     override val message: String,
 ) : RuntimeException(message)
@@ -912,7 +942,7 @@ private class CliFailure(
 private const val EXIT_OK = 0
 private const val EXIT_FAIL = 2
 private const val EXIT_NO_VERDICT = 3
-private const val EXIT_INVALID_INPUT = 4
+internal const val EXIT_INVALID_INPUT = 4
 private const val EXIT_INVALID_POLICY = 5
 private const val EXIT_DATA_DIR_BUSY = 6
 private const val EXIT_USAGE = 64

@@ -1229,6 +1229,7 @@ function focusPolicy() {
             :series="baselineSeries"
             :labels="analyticsLabels"
             :lang="shellNew ? 'ru' : undefined"
+            :whole-run="result?.evidence.some((item) => item.type === 'stage_binding')"
             @loaded="chartMarkers = $event?.overlay?.markers ?? []"
           />
 

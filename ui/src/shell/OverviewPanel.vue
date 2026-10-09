@@ -23,6 +23,7 @@ const LIMIT = 6
 const expanded = ref(false)
 const items = computed(() => attentionItems(props.result))
 const visibleItems = computed(() => expanded.value ? items.value : items.value.slice(0, LIMIT))
+const staged = computed(() => props.result.evidence.some((item) => item.type === 'stage_binding'))
 const capacity = computed(() => props.result.analysis_mode === 'capacity_step' ? capacityBlock(props.result) : null)
 const tiles = computed(() => keyMetrics(props.result))
 const runLoad = ref<RunLoad>({ buckets: [], rollupSeconds: 60, truncated: false })
@@ -303,6 +304,13 @@ const kindLabels: Record<AttentionKind, string> = {
       <h2 id="overview-metrics-title">
         {{ OVERVIEW_LABELS.metricsTitle }}
       </h2>
+      <p
+        v-if="staged"
+        class="muted"
+        data-testid="metrics-whole-run-note"
+      >
+        {{ OVERVIEW_LABELS.metricsWholeRunNote }}
+      </p>
       <p
         v-if="result.analysis_mode === 'capacity_step'"
         class="muted"

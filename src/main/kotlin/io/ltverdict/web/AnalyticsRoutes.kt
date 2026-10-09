@@ -12,6 +12,7 @@ import io.ltverdict.core.AnalyticsExportFormat
 import io.ltverdict.core.SavedAnalysisForComparison
 import io.ltverdict.core.buildRunDynamics
 import io.ltverdict.core.compareTransactions
+import io.ltverdict.core.hasStageBinding
 import io.ltverdict.core.metricPackAnalysis
 import io.ltverdict.core.openSearchOverlay
 import io.ltverdict.core.renderRunDynamicsExport
@@ -69,9 +70,11 @@ internal fun Route.analyticsRoutes(context: LocalApiContext) {
                         ?.selection
                 }
             }
+        var currentHasStages = false
         val response =
             withContext(Dispatchers.IO) {
                 val current = context.store.readComparisonDocuments(runId, analysisId) ?: notFound("Analysis was not found")
+                currentHasStages = hasStageBinding(current.result)
                 val baseline = baselineSelection?.get("reference") as? JsonObject
                 val candidates = mutableListOf<SavedAnalysisForComparison>()
                 val history = context.store.readComparisonHistory()
@@ -184,7 +187,10 @@ internal fun Route.analyticsRoutes(context: LocalApiContext) {
                     AnalyticsExportFormat.CONFLUENCE -> "xhtml"
                 }
             call.response.headers.append(HttpHeaders.ContentDisposition, "attachment; filename=\"run-dynamics.$extension\"")
-            call.respondBytes(renderRunDynamicsExport(selectedDynamics, format), ContentType.Text.Plain.withCharset(Charsets.UTF_8))
+            call.respondBytes(
+                renderRunDynamicsExport(selectedDynamics, format, wholeRunWithStages = currentHasStages),
+                ContentType.Text.Plain.withCharset(Charsets.UTF_8),
+            )
         }
     }
 }

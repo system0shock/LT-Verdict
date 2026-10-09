@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="lt-verdict" tests="2" failures="2" errors="0" skipped="0" time="0">
+  <testcase classname="lt-verdict.gate" name="gate" time="0"><failure message="policy_verdict=FAIL run_validity=VALID reasons=">policy_verdict=FAIL run_validity=VALID reasons=</failure></testcase>
+  <testcase classname="lt-verdict.policy" name="p95" time="0"><failure message="response_time_p95_ms: observed 821 (rule lte 250)">response_time_p95_ms: observed 821 (rule lte 250)</failure></testcase>
+</testsuite>

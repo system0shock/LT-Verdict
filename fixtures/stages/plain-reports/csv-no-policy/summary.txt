@@ -1,0 +1,7 @@
+LT Verdict summary
+run_id: jmeter_jtl_csv-6f9e658876e83eda9a3727dbb32612a2f54800ee34ea22641deeab6781f82601
+analysis_id: fixed
+run_validity: VALID
+policy_verdict: NO_POLICY
+exit_code: 0
+samples: 3  errors: 1  p95_ms: 496  p99_ms: 496

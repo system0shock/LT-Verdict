@@ -11,7 +11,7 @@ import TransactionComparisonTable from './TransactionComparisonTable.vue'
 
 // `series` is the series of the active baseline (BaselinePanel): the server picks the baseline of the comparison by it.
 // `labels` and `lang` switch the panel texts to Russian in the new shell; the tables below stay English and are marked as such.
-const props = withDefaults(defineProps<{ selection: AnalysisReference | null; working: boolean; series?: string; labels?: AnalyticsLabels; lang?: string }>(), { series: undefined, labels: () => EN_ANALYTICS_LABELS, lang: undefined })
+const props = withDefaults(defineProps<{ selection: AnalysisReference | null; working: boolean; series?: string; labels?: AnalyticsLabels; lang?: string; wholeRun?: boolean }>(), { series: undefined, wholeRun: false, labels: () => EN_ANALYTICS_LABELS, lang: undefined })
 const foreignLang = computed(() => (props.lang ? 'en' : undefined))
 const emit = defineEmits<{ loaded: [analytics: SavedAnalytics | null] }>()
 const limit = ref(10)
@@ -178,6 +178,13 @@ function referenceKey(reference: AnalysisReference) {
       >
         {{ labels.scanTruncated(analytics.history_scan_limit, analytics.history_metadata_byte_limit.toLocaleString()) }}
         {{ labels.scanTruncatedNote }}
+      </p>
+      <p
+        v-if="wholeRun"
+        class="field__hint"
+        data-testid="analytics-whole-run"
+      >
+        {{ labels.wholeRunNote }}
       </p>
       <RunDynamicsTable
         v-if="analytics.dynamics"

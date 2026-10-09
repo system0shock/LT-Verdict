@@ -6,6 +6,8 @@
 // results and one real item per type and key set (fixtures/typed-evidence/samples.ndjson) must be assignable, broken
 // copies must not, and the hand-written evidence types of types.ts must keep the same keys (and may be looser about
 // optional keys, because stored results of older engines lack them).
+// The stage_binding item of ui/src/types.stage-items.generated.ts is checked against a real item (fixtures/stages/stage-binding.sample.json,
+// compared with the engine output by a Kotlin test) and against the hand-written StageBindingEvidence of types.ts (ADR 0030).
 // The same is done for the diagnostic, capacity and trend items of ui/src/types.derived-items.generated.ts, with the real
 // items of fixtures/typed-evidence/samples-diagnostic-capacity-trend.ndjson. This script does not prove the bytes of the
 // documents (JSON.parse loses the precision of wide numbers): the Kotlin tests do.
@@ -66,12 +68,16 @@ const typedEvidence = [
   'ResourcePolicyCheckEvidence',
 ]
 
+const stageSample = readJson(resolve(repoRoot, 'fixtures/stages/stage-binding.sample.json'))
+
 const lines = [
   "import type { AnalysisIdentityDocument, AnalysisResultDocument } from './types.generated'",
   "import type { AnalysisEvidence as GeneratedEvidence, AnalysisFinding as GeneratedFinding } from './types.items.generated'",
   `import type { ${typedEvidence.map((name) => `${name} as Generated${name}`).join(', ')} } from './types.items.generated'`,
   "import type { DerivedEvidence as GeneratedDerivedEvidence, DerivedFinding as GeneratedDerivedFinding } from './types.derived-items.generated'",
   `import type { ${[...derivedEvidence, ...derivedFindings, 'CapacitySummaryEvidence', 'CapacityStageDocument'].map((name) => `${name} as Generated${name}`).join(', ')} } from './types.derived-items.generated'`,
+  "import type { StageEvidence as GeneratedStageEvidence, StageBindingEvidence as GeneratedStageBindingEvidence, StageBindingStage as GeneratedStageBindingStage } from './types.stage-items.generated'",
+  "import type { StageBindingEvidence } from './types'",
   `import type { AnalysisResult, CapacityStage, CapacitySummary, ${[...typedEvidence, ...derivedEvidence, ...derivedFindings].join(', ')} } from './types'`,
   '',
 ]
@@ -100,6 +106,7 @@ for (const sample of derivedSamples) {
   const union = derivedKinds.get(sample.type) === 'finding' ? 'GeneratedDerivedFinding' : 'GeneratedDerivedEvidence'
   lines.push(`export const sample${itemCount++}: ${union} = ${JSON.stringify(sample)}`)
 }
+lines.push(`export const sample${itemCount++}: GeneratedStageEvidence = ${JSON.stringify(stageSample)}`)
 const sampleTags = new Set([...samples, ...derivedSamples].map((sample) => sample.type))
 const untested = [...typedTags, ...derivedKinds.keys()].filter((tag) => !sampleTags.has(tag))
 if (untested.length) {
@@ -155,7 +162,14 @@ const derivedNegatives = [
     magnitude_gate: withoutKey(richest('trend_check').magnitude_gate, 'required_split_half_shift_units'),
   }],
 ]
-negatives.push(...itemNegatives, ...derivedNegatives)
+const stageNegatives = [
+  ['extra key in a stage_binding', 'GeneratedStageEvidence', { ...stageSample, extra: 1 }],
+  ['missing evaluated_millis in a stage_binding', 'GeneratedStageEvidence', withoutKey(stageSample, 'evaluated_millis')],
+  ['string for a number field of a stage_binding', 'GeneratedStageEvidence', { ...stageSample, excluded_millis: '59800' }],
+  ['unknown type tag of a stage_binding', 'GeneratedStageEvidence', { ...stageSample, type: 'stage_bindings' }],
+  ['string for the clip flag of a stage', 'GeneratedStageEvidence', { ...stageSample, stages: [{ ...stageSample.stages[1], clipped_to_run_end: 'no' }] }],
+]
+negatives.push(...itemNegatives, ...derivedNegatives, ...stageNegatives)
 negatives.forEach(([label, type, value], position) => {
   lines.push(`// @ts-expect-error ${label}`)
   lines.push(`export const negative${position}: ${type} = ${JSON.stringify(value)}`)
@@ -189,6 +203,14 @@ derivedEvidence.forEach((name, position) => {
 derivedFindings.forEach((name, position) => {
   lines.push(`export const findingKeys${position}: SameKeys<${name}, Generated${name}> = true`)
 })
+lines.push(
+  '',
+  '// The hand-written stage_binding keeps the keys of the Kotlin class and of its stages.',
+  'export const stageKeys: SameKeys<StageBindingEvidence, GeneratedStageBindingEvidence> = true',
+  'export const stageOptional: NotStricter<StageBindingEvidence, GeneratedStageBindingEvidence> = true',
+  'export const stageAssignable = (value: GeneratedStageBindingEvidence): StageBindingEvidence => value',
+  "export const stageRowKeys: SameKeys<StageBindingEvidence['stages'][number], GeneratedStageBindingStage> = true",
+)
 lines.push(
   '',
   "// The capacity_summary payload of analysis-result is the evidence without its id and type; the stages keep their keys too.",

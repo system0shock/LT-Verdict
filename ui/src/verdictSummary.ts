@@ -8,6 +8,7 @@ import type {
   PolicyCheckEvidence,
   ResourcePolicyCheckEvidence,
   RuleWindowCheckEvidence,
+  StageBindingEvidence,
 } from './types'
 import { isNoVerdictReason, reasonText, SAMPLE_TEXT } from './verdictReasons'
 
@@ -32,6 +33,15 @@ export interface CauseGroup {
   subjectsHidden: number
 }
 
+// Таблица стадий для анализа со стадиями (ADR 0030): строки в порядке объявления.
+export interface StageTable {
+  title: string
+  heads: string[]
+  rows: string[][]
+  totals: string
+  note: string
+}
+
 export interface VerdictSummary {
   verdict: Verdict
   headline: string
@@ -44,7 +54,13 @@ export interface VerdictSummary {
   notesTitle: string | null
   notes: CauseGroup[]
   facts: Array<{ label: string; value: string }>
+  stages: StageTable | null
 }
+
+// Фраза генерируется при отрисовке из stage_binding и в результате не хранится (R10); те же слова в HTML-отчёте (report/StageNotice.kt).
+export const STAGE_DECIDED_PHRASE = 'Вердикт посчитан по окну steady, разгон исключён'
+export const STAGE_MARKER = 'по окну steady, разгон исключён'
+export const STAGE_REFERENCE_NOTE = 'Метрики по всему прогону справочные: они включают разгон и остановку и не определяют вердикт.'
 
 export const MAX_LINES = 3
 export const MAX_SUBJECTS = 5
@@ -101,6 +117,44 @@ function formatUtc(milliseconds: number): string {
 
 function formatDuration(milliseconds: number): string {
   return milliseconds < 60_000 ? `${numbers.format(milliseconds / 1_000)} с` : `${numbers.format(milliseconds / 60_000)} мин`
+}
+
+function stageBindingOf(result: AnalysisResult): StageBindingEvidence | undefined {
+  return result.evidence.find((item): item is StageBindingEvidence => item.type === 'stage_binding')
+}
+
+function stageNotice(result: AnalysisResult, binding: StageBindingEvidence) {
+  const verdict = result.policy_verdict
+  const decided = result.run_validity === 'VALID' && (verdict === 'PASS' || verdict === 'FAIL')
+  const steady = binding.stages.filter((stage) => stage.role === 'steady')
+  const windows = steady
+    .map((stage) => `${stage.id}, ${formatDuration(stage.to_epoch_ms - stage.from_epoch_ms)}, ${formatUtc(stage.from_epoch_ms)} – ${formatUtc(stage.to_epoch_ms)}`)
+    .join('; ')
+  const ids = binding.evaluated_window_ids.join(', ')
+  return {
+    decided,
+    phrase: decided ? STAGE_DECIDED_PHRASE : `Окно steady задано (${ids}), разгон исключён из метрик окна; вердикт: ${verdict}`,
+    detail: `Окно вердикта: ${windows}. Исключено: ${formatDuration(binding.excluded_millis)}.`,
+    windows,
+    excluded: formatDuration(binding.excluded_millis),
+  }
+}
+
+function stageTable(binding: StageBindingEvidence): StageTable {
+  return {
+    title: 'Область вердикта',
+    heads: ['Стадия', 'Роль', 'Смещения, мс', 'Границы (UTC)', 'Границы (epoch, мс)', 'Обрезана до конца прогона'],
+    rows: binding.stages.map((stage) => [
+      stage.id,
+      stage.role,
+      `${stage.from_offset_ms} – ${stage.to_offset_ms}`,
+      `${formatUtc(stage.from_epoch_ms)} – ${formatUtc(stage.to_epoch_ms)}`,
+      `${stage.from_epoch_ms} – ${stage.to_epoch_ms}`,
+      stage.clipped_to_run_end ? 'да' : '—',
+    ]),
+    totals: `Оценено: ${formatDuration(binding.evaluated_millis)}, исключено: ${formatDuration(binding.excluded_millis)}.`,
+    note: STAGE_REFERENCE_NOTE,
+  }
 }
 
 function businessLine(check: PolicyCheckEvidence, metrics: Map<string, MetricSummaryEvidence>): RuleLine {
@@ -341,6 +395,14 @@ export function summarizeVerdict(result: AnalysisResult, context: { policySha256
     chip = invalid ? 'файл не разобран' : degraded ? 'файл разобран не полностью' : unresolved > 0 ? `не проверено: ${unresolved}` : 'причины ниже'
   }
 
+  const binding = stageBindingOf(result)
+  const notice = binding ? stageNotice(result, binding) : null
+  if (notice && !capacity) {
+    // Заголовок меняется только у вынесенного вердикта; иначе маркер стоит в lead и не утверждает вердикт.
+    if (notice.decided) headline += ` · ${STAGE_MARKER}`
+    lead += ` ${notice.phrase}. ${notice.detail}`
+  }
+
   const overall = overallMetrics(result)
   const denominator = overall?.throughput_rps.denominator
   const errorRate = overall ? ratioValue(overall.error_rate_ratio ?? undefined) : null
@@ -365,8 +427,10 @@ export function summarizeVerdict(result: AnalysisResult, context: { policySha256
       { label: 'Запросов', value: overall ? numbers.format(overall.sample_count) : '—' },
       { label: 'Доля ошибок', value: errorRate === null ? '—' : `${numbers.format(errorRate * 100)} %` },
       { label: 'Проверок', value: `${evaluated}${skipped}` },
+      ...(notice ? [{ label: 'Окно вердикта', value: notice.windows }, { label: 'Исключено', value: notice.excluded }] : []),
       ...(context.policyId ? [{ label: 'Политика (id)', value: context.policyId }] : []),
       ...policyFact,
     ],
+    stages: binding ? stageTable(binding) : null,
   }
 }

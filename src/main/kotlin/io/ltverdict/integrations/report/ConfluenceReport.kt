@@ -1,5 +1,7 @@
 package io.ltverdict.integrations.report
 
+import io.ltverdict.report.STAGE_REFERENCE_NOTE
+import io.ltverdict.report.stageNotice
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
@@ -22,6 +24,7 @@ internal fun renderConfluenceReport(
         row("Policy verdict", result["policy_verdict"])
         row("Coverage", (result["analysis_coverage"] as? JsonObject)?.get("status"))
         append("</tbody></table>")
+        stageNotice(result)?.let { append("<p>").append("${it.phrase}. ${it.detail} $STAGE_REFERENCE_NOTE".xml()).append("</p>") }
         section("Evidence", result["evidence"] as? JsonArray)
         section("Findings", result["findings"] as? JsonArray)
         append("<h2>Canonical JSON</h2><pre>").append(source.xml()).append("</pre>")

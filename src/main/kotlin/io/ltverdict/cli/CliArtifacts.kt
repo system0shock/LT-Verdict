@@ -61,6 +61,11 @@ internal fun summaryJson(
                 ),
             )
             put("rules", JsonArray(checks(root).map(::ruleJson)))
+            // ADR 0030: the windows of a staged run; overall stays the whole run. A run without stages has neither key.
+            stageBinding(root)?.let { binding ->
+                put("windows", JsonArray(stageWindows(root, binding).map { window -> windowJson(window) }))
+                put("excluded_ms", binding["excluded_millis"] ?: JsonNull)
+            }
         },
     )
 }
@@ -74,6 +79,7 @@ internal fun summaryText(
     val overall = root.evidence("metric_summary").firstOrNull { it.scope()?.text("kind") == "overall" && it["window_id"] == null }
     val latency = overall?.get("latency_ms") as? JsonObject
     val checks = checks(root)
+    val binding = stageBinding(root)
     val text =
         buildString {
             append("LT Verdict summary\n")
@@ -82,10 +88,28 @@ internal fun summaryText(
             append("run_validity: ${root.text("run_validity")}\n")
             append("policy_verdict: ${root.text("policy_verdict")}\n")
             append("exit_code: $exitCode\n")
+            if (binding != null) {
+                append(
+                    "scope: steady window (${stageIds(
+                        binding,
+                    ).joinToString(", ")}), excluded ${valueText(binding["excluded_millis"])} ms\n",
+                )
+            }
             append(
                 "samples: ${valueText(overall?.get("sample_count"))}  errors: ${valueText(overall?.get("error_count"))}  " +
-                    "p95_ms: ${valueText(latency?.get("p95"))}  p99_ms: ${valueText(latency?.get("p99"))}\n",
+                    "p95_ms: ${valueText(latency?.get("p95"))}  p99_ms: ${valueText(latency?.get("p99"))}" +
+                    (if (binding != null) "  whole_run (reference only)" else "") + "\n",
             )
+            if (binding != null) {
+                stageWindows(root, binding).forEach { window ->
+                    val windowLatency = window["latency_ms"] as? JsonObject
+                    append(
+                        "window[${window.text("window_id")}]: samples: ${valueText(window["sample_count"])}  " +
+                            "errors: ${valueText(window["error_count"])}  p95_ms: ${valueText(windowLatency?.get("p95"))}  " +
+                            "p99_ms: ${valueText(windowLatency?.get("p99"))}  rps: ${valueText(window["throughput_rps"])}\n",
+                    )
+                }
+            }
             if (checks.isNotEmpty()) {
                 val counts = checks.groupingBy { it.text("status") }.eachCount()
                 append(
@@ -106,7 +130,8 @@ internal fun junitXml(result: ByteArray): ByteArray {
     val validity = root.text("run_validity")
     val verdict = root.text("policy_verdict")
     val reasons = ((root["analysis_coverage"] as? JsonObject)?.get("reasons") as? JsonArray).orEmpty().joinToString(",") { valueText(it) }
-    val gateMessage = "policy_verdict=$verdict run_validity=$validity reasons=$reasons"
+    val stageScope = stageBinding(root)?.let(::junitScope)
+    val gateMessage = "policy_verdict=$verdict run_validity=$validity reasons=$reasons" + (stageScope?.let { " $it" } ?: "")
     // A decided gate (exit 0 or 2) stays green for checks that were not evaluated (missing_transaction=warn): they are skipped.
     val decided = validity == "VALID" && (verdict == "PASS" || verdict == "FAIL")
     val cases =
@@ -120,6 +145,8 @@ internal fun junitXml(result: ByteArray): ByteArray {
                         validity == "VALID" && verdict == "FAIL" -> "failure" to gateMessage
                         else -> "error" to gateMessage
                     },
+                    // A passed gate has no message, so a staged run says its scope in system-out (ADR 0030).
+                    stageScope,
                 ),
             )
             checks(root).forEach { check ->
@@ -156,7 +183,8 @@ internal fun junitXml(result: ByteArray): ByteArray {
                 val head = "<testcase classname=\"${xml(case.classname)}\" name=\"${xml(case.name)}\" time=\"0\""
                 val problem = case.problem
                 if (problem == null) {
-                    append("  $head/>\n")
+                    val output = case.output
+                    if (output != null) append("  $head><system-out>${xml(output)}</system-out></testcase>\n") else append("  $head/>\n")
                 } else if (problem.first == "skipped") {
                     append("  $head><skipped message=\"${xml(problem.second)}\"/></testcase>\n")
                 } else {
@@ -173,7 +201,32 @@ private class JunitCase(
     val classname: String,
     val name: String,
     val problem: Pair<String, String>?,
+    val output: String? = null,
 )
+
+private fun stageBinding(root: JsonObject): JsonObject? = root.evidence("stage_binding").firstOrNull()
+
+private fun stageIds(binding: JsonObject): List<String> = (binding["evaluated_window_ids"] as? JsonArray).orEmpty().map { valueText(it) }
+
+private fun junitScope(binding: JsonObject): String =
+    "scope=steady_window window_ids=${stageIds(binding).joinToString(",")} excluded_ms=${valueText(binding["excluded_millis"])}"
+
+// The window_metric_summary of each evaluated window, in the order of the stage binding.
+private fun stageWindows(
+    root: JsonObject,
+    binding: JsonObject,
+): List<JsonObject> {
+    val summaries = root.evidence("window_metric_summary")
+    return stageIds(binding).mapNotNull { id -> summaries.firstOrNull { it.text("window_id") == id } }
+}
+
+private fun windowJson(window: JsonObject): JsonObject =
+    buildJsonObject {
+        put("id", window.text("window_id"))
+        put("from_epoch_ms", window["from_epoch_ms"] ?: JsonNull)
+        put("to_epoch_ms", window["to_epoch_ms"] ?: JsonNull)
+        metricJson(window).forEach { (key, value) -> put(key, value) }
+    }
 
 private fun parse(result: ByteArray): JsonObject = Json.parseToJsonElement(result.decodeToString()) as JsonObject
 

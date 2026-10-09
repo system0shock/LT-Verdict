@@ -65,6 +65,8 @@
 5. **R4.** Принято. Расхождение `NO_POLICY` без стадий и `NO_VERDICT` со стадиями записано в бэклог как
    правка policy-гигиены вслед за W1.3 (трогать без стадий нельзя).
 
+6. **Уточнение при реализации (PR A).** `STAGE_OUTSIDE_RUN` даёт `steady` с `from >= runEnd`, а не только `from > runEnd`: после обрезки получается окно нулевой длины, которое накопитель окон отвергает. Ошибки API лежат в `error.details[]`, не в `errors[]`.
+
 ## Блок для AGENTS.md
 
 ```text
@@ -231,8 +233,8 @@ ltv analyze <input> [--policy <policy.json>|-] [--stages <load-stages.json>] [--
 ### API
 
 - Multipart-часть задания анализа `stages` (файл), одна на задание. Ошибки формата: `422 INVALID_STAGES` с массивом
-  `errors[{code, json_pointer, message}]` (по образцу `INVALID_RESOURCES`); превышение лимита размера: `413 RESOURCE_LIMIT_EXCEEDED`.
-- Сочетания: `422 INVALID_STAGES` с одним `errors[]` элементом кода из таблицы сочетаний.
+  `error.details[{code, json_pointer, message}]` (по образцу `INVALID_RESOURCES`); превышение лимита размера: `413 RESOURCE_LIMIT_EXCEEDED`.
+- Сочетания: `422 INVALID_STAGES` с одним элементом `error.details[]` кода из таблицы сочетаний.
 - Выход за границы прогона обнаруживается при выполнении задания: задание в состоянии `FAILED` с `diagnostic.code = STAGE_OUTSIDE_RUN`
   (добавляется ветка в `AnalysisJobs.kt:209`, рядом с `RESOURCE_WINDOW_OUTSIDE_RUN`).
 - Маршрут скачивания `load-stages.json` не добавляется (R9); объявление восстанавливается из `stage_binding` результата.
@@ -464,8 +466,8 @@ throughput = `720000/119800` ≈ 6,01 rps.
   `compatible = false`; анализ со стадиями и без стадий `compatible = false` и в сравнении baseline, и в динамике прогонов, и в
   `BASELINE_MIXED_SEMANTICS`; два анализа с одним объявлением `compatible = true`.
 - [ ] **AC6. Без `resource_binding`.** В результате со стадиями нет `resource_binding`, `resource_summary`, `resource_policy_check`;
-  есть `window_policy_summary` окна `steady` с `resource_verdict = NO_POLICY`, `window_id`, границами; `stage_binding` первым в
-  `evidence`; `evaluated_millis = 60000`, `excluded_millis = 59800`.
+  есть `window_policy_summary` окна `steady` с `resource_verdict = NO_POLICY`, `window_id`, границами; `stage_binding` после `metric_summary` «весь
+  прогон» (общего и по транзакции) и до `policy_check` / `window_policy_summary` (так в ADR 0030 и в коде PR A); `evaluated_millis = 60000`, `excluded_millis = 59800`.
 - [ ] **AC7. Правила и окна.** Правило без `window_ids` применяется к `steady`; правило с `window_ids: ["ramp-up"]` даёт
   `rule_window_check` `RULE_WINDOW_NOT_FOUND` и `NO_VERDICT`; две стадии `steady` дают два окна и объединённый вердикт.
 - [ ] **AC8. Платформенные правила.** Policy с `platform_rules` `effect = SLA` и стадиями даёт `NO_VERDICT` и причину

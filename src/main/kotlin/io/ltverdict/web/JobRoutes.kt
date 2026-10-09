@@ -16,7 +16,9 @@ import io.ktor.utils.io.jvm.javaio.toInputStream
 import io.ltverdict.core.AnalysisRequest
 import io.ltverdict.core.CapacityPlanValidation
 import io.ltverdict.core.DiagnosticValidation
+import io.ltverdict.core.LoadStagesValidation
 import io.ltverdict.core.MAX_CAPACITY_PLAN_BYTES
+import io.ltverdict.core.MAX_LOAD_STAGES_BYTES
 import io.ltverdict.core.MAX_POD_VIEW_BYTES
 import io.ltverdict.core.MAX_RESOURCE_SNAPSHOT_BYTES
 import io.ltverdict.core.MAX_TREND_PLAN_BYTES
@@ -29,6 +31,7 @@ import io.ltverdict.core.validateCapacityBinding
 import io.ltverdict.core.validateCapacityPlan
 import io.ltverdict.core.validateDiagnosticBinding
 import io.ltverdict.core.validateDiagnosticPlan
+import io.ltverdict.core.validateLoadStages
 import io.ltverdict.core.validatePlatformBinding
 import io.ltverdict.core.validatePodView
 import io.ltverdict.core.validatePodViewBinding
@@ -206,6 +209,7 @@ private class JobParts {
     var capacity: CapacityPlanValidation.Valid? = null
     var trend: TrendPlanValidation.Valid? = null
     var podView: PodViewValidation.Valid? = null
+    var stages: LoadStagesValidation.Valid? = null
     var sourceRequest: WindowedSourceRequest? = null
     val sourceContexts = mutableListOf<ByteArray>()
     val postgresFiles = mutableMapOf<String, ByteArray>()
@@ -215,6 +219,7 @@ private class JobParts {
     var capacitySeen = false
     var trendSeen = false
     var podViewSeen = false
+    var stagesSeen = false
     var invalidParts = false
 }
 
@@ -368,6 +373,25 @@ private suspend fun readJobParts(call: ApplicationCall): JobParts {
                             }
                     }
 
+                    part is PartData.FileItem && part.name == "stages" && !job.stagesSeen && !job.invalidParts -> {
+                        job.stagesSeen = true
+                        job.stages =
+                            when (
+                                val validation =
+                                    withContext(
+                                        Dispatchers.IO,
+                                    ) { validateLoadStages(part.provider().toInputStream(), MAX_LOAD_STAGES_BYTES) }
+                            ) {
+                                is LoadStagesValidation.Valid -> validation
+                                is LoadStagesValidation.Invalid -> {
+                                    if (validation.errors.any { it.code == "RESOURCE_LIMIT_EXCEEDED" }) {
+                                        tooLarge("Load stages exceed their resource limit")
+                                    }
+                                    throw InvalidStages(validation.errors)
+                                }
+                            }
+                    }
+
                     else -> job.invalidParts = true
                 }
             } finally {
@@ -387,6 +411,8 @@ private suspend fun readJobParts(call: ApplicationCall): JobParts {
     } catch (failure: InvalidTrend) {
         throw failure
     } catch (failure: InvalidPodView) {
+        throw failure
+    } catch (failure: InvalidStages) {
         throw failure
     } catch (_: Exception) {
         malformed("Multipart body is malformed")
@@ -416,6 +442,17 @@ private suspend fun bindJob(
     val podViewSeen = job.podViewSeen
     val invalidParts = job.invalidParts
     if (invalidParts || runId == null || !RUN_ID.matches(runId)) malformed("Job multipart body is invalid")
+    // ADR 0030, R3: stages and a capacity plan, a snapshot or an online request are two sources of windows. Checked first, in
+    // the order of the ADR table, before the run is resolved and before the online request is checked against the manual inputs.
+    if (job.stages != null) {
+        if (capacitySeen) stagesConflict("STAGES_CAPACITY_CONFLICT", "/capacity_plan", "Stages cannot be combined with a capacity plan")
+        if (resourcesSeen) {
+            stagesConflict("STAGES_RESOURCES_CONFLICT", "/resource_snapshot", "Stages cannot be combined with a resource snapshot")
+        }
+        if (sourceRequest != null) {
+            stagesConflict("STAGES_SOURCE_CONFLICT", "/source_request", "Stages cannot be combined with an online source request")
+        }
+    }
     sourceRequest?.let { selection ->
         if (resourcesSeen ||
             diagnosticsSeen ||
@@ -537,11 +574,18 @@ private suspend fun bindJob(
         capacity = capacity,
         trend = trend,
         podView = podView,
+        stages = job.stages,
         sourceRequest = sourceRequest,
         sourceAcquisition = acquisition,
         postgres = postgres,
     )
 }
+
+private fun stagesConflict(
+    code: String,
+    pointer: String,
+    message: String,
+): Nothing = throw InvalidStages(listOf(PolicyValidationError(code, pointer, message)))
 
 private fun PolicyValidation.failureResponse(): ApiFailure? =
     when (this) {

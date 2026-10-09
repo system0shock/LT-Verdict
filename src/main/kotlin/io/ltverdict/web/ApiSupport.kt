@@ -230,6 +230,10 @@ internal class InvalidPodView(
     val errors: List<PolicyValidationError>,
 ) : RuntimeException()
 
+internal class InvalidStages(
+    val errors: List<PolicyValidationError>,
+) : RuntimeException()
+
 internal const val MAX_UPLOAD_BYTES = 4_294_967_296L
 
 // 16 MiB: source_context, PostgreSQL parts and capture. The resource snapshot has its own limit in the core.

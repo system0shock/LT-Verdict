@@ -98,6 +98,9 @@ internal fun Application.installLocalApi(context: LocalApiContext) {
         } catch (failure: InvalidPodView) {
             call.respondError(HttpStatusCode.UnprocessableEntity, "INVALID_POD_VIEW", "Pod view is invalid", failure.errors)
             finish()
+        } catch (failure: InvalidStages) {
+            call.respondError(HttpStatusCode.UnprocessableEntity, "INVALID_STAGES", "Load stages are invalid", failure.errors)
+            finish()
         } catch (failure: ApiFailure) {
             call.respondError(failure.status, failure.code, failure.message, limit = failure.limit)
             finish()

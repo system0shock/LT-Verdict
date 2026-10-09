@@ -1,12 +1,7 @@
 package io.ltverdict.core
 
-import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
-import kotlinx.serialization.json.JsonPrimitive
-import kotlinx.serialization.json.buildJsonArray
-import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.jsonPrimitive
-import kotlinx.serialization.json.put
 import java.math.BigDecimal
 import java.math.MathContext
 import java.math.RoundingMode
@@ -122,7 +117,7 @@ private data class RuleOutcome(
     val findings: List<JsonObject>,
 )
 
-private fun resourceSummary(
+internal fun resourceSummary(
     snapshot: ResourceSnapshotV1,
     series: ResourceSeriesV1,
     window: ResourceWindowV1,
@@ -155,25 +150,24 @@ private fun resourceSummary(
                 add("INSUFFICIENT_OBSERVATIONS")
             }
         }
-    return buildJsonObject {
-        put("id", resourceId("resource-summary", window.id, series.id))
-        put("type", "resource_summary")
-        put("series_id", series.id)
-        put("metric", series.metric)
-        put("unit", series.unit)
-        put("entity", series.entity)
-        put("role", series.role.wireName)
-        put("aggregation", series.aggregation.wireName)
-        put("window_id", window.id)
-        put("from_epoch_ms", window.fromEpochMillis)
-        put("to_epoch_ms", window.toEpochMillis)
-        put("expected_cells", expected)
-        put("observed_cells", observed.size)
-        put("missing_cells", expected - observed.size)
-        put("longest_gap_cells", longestGap)
-        put("statistics", statistics.json())
-        put("reasons", buildJsonArray { reasons.forEach { add(JsonPrimitive(it)) } })
-    }
+    return ResourceSummaryEvidence(
+        id = resourceId("resource-summary", window.id, series.id),
+        seriesId = series.id,
+        metric = series.metric,
+        unit = series.unit,
+        entity = series.entity,
+        role = series.role.wireName,
+        aggregation = series.aggregation.wireName,
+        windowId = window.id,
+        fromEpochMs = window.fromEpochMillis,
+        toEpochMs = window.toEpochMillis,
+        expectedCells = expected,
+        observedCells = observed.size,
+        missingCells = expected - observed.size,
+        longestGapCells = longestGap,
+        statistics = statistics.toDocument(),
+        reasons = reasons,
+    ).toJson()
 }
 
 internal fun statistics(
@@ -343,7 +337,7 @@ private fun evaluateRule(
     }
 }
 
-private data class CellStats(
+internal data class CellStats(
     val expected: Int,
     val observed: Int,
     val longestGap: Int,
@@ -456,7 +450,7 @@ private fun evaluateBridged(
     }
 }
 
-private fun resourceCheck(
+internal fun resourceCheck(
     id: String,
     window: ResourceWindowV1,
     rule: ResourceRuleV1,
@@ -464,31 +458,26 @@ private fun resourceCheck(
     reason: String?,
     cells: CellStats?,
 ): JsonObject =
-    buildJsonObject {
-        put("id", id)
-        put("type", "resource_policy_check")
-        put("window_id", window.id)
-        put("rule_id", rule.id)
-        put("series_id", rule.seriesId)
-        put("unit", rule.unit)
-        put("operator", rule.operator.wireName)
-        put("threshold", canonicalDecimal(rule.threshold))
-        put("effect", rule.effect.wireName)
-        put("status", status)
-        put("reason", reason?.let(::JsonPrimitive) ?: JsonNull)
-        rule.platform?.let {
-            put("platform_rule_id", it.ruleId)
-            put("service", it.service)
-        }
-        cells?.let {
-            put("expected_cells", it.expected)
-            put("observed_cells", it.observed)
-            put("missing_cells", it.missing)
-            put("longest_gap_cells", it.longestGap)
-        }
-    }
+    ResourcePolicyCheckEvidence(
+        id = id,
+        windowId = window.id,
+        ruleId = rule.id,
+        seriesId = rule.seriesId,
+        unit = rule.unit,
+        operator = rule.operator.wireName,
+        threshold = canonicalDecimal(rule.threshold),
+        effect = rule.effect.wireName,
+        status = status,
+        reason = reason,
+        platformRuleId = rule.platform?.ruleId,
+        service = rule.platform?.service,
+        expectedCells = cells?.expected,
+        observedCells = cells?.observed,
+        missingCells = cells?.missing,
+        longestGapCells = cells?.longestGap,
+    ).toJson()
 
-private fun thresholdFinding(
+internal fun thresholdFinding(
     snapshot: ResourceSnapshotV1,
     window: ResourceWindowV1,
     series: ResourceSeriesV1,
@@ -502,47 +491,39 @@ private fun thresholdFinding(
 ): JsonObject {
     val from = snapshot.cellStart(fromIndex)
     val to = snapshot.cellStart(toIndex)
-    return buildJsonObject {
-        put("id", resourceId("resource-threshold-finding", window.id, rule.id, from.toString()))
-        put("type", "resource_threshold_violation")
-        put("window_id", window.id)
-        put("rule_id", rule.id)
-        put("series_id", series.id)
-        put("entity", series.entity)
-        put("unit", series.unit)
-        put("from_epoch_ms", from)
-        put("to_epoch_ms", to)
-        put("cell_count", toIndex - fromIndex)
-        put("observed_min", canonicalDecimal(observedMin))
-        put("observed_max", canonicalDecimal(observedMax))
-        if (presumed) put("presumed", true)
-        put("evidence_id", evidenceId)
-    }
+    return ResourceThresholdViolationFinding(
+        id = resourceId("resource-threshold-finding", window.id, rule.id, from.toString()),
+        windowId = window.id,
+        ruleId = rule.id,
+        seriesId = series.id,
+        entity = series.entity,
+        unit = series.unit,
+        fromEpochMs = from,
+        toEpochMs = to,
+        cellCount = toIndex - fromIndex,
+        observedMin = canonicalDecimal(observedMin),
+        observedMax = canonicalDecimal(observedMax),
+        presumed = if (presumed) true else null,
+        evidenceId = evidenceId,
+    ).toJson()
 }
 
-private fun Statistics.json(): JsonObject =
-    buildJsonObject {
-        putDecimal("min", min)
-        putDecimal("max", max)
-        putDecimal("mean", mean)
-        putDecimal("median", median)
-        putDecimal("q05", q05)
-        putDecimal("q25", q25)
-        putDecimal("q75", q75)
-        putDecimal("q95", q95)
-        putDecimal("iqr", iqr)
-        putDecimal("mad", mad)
-        putDecimal("sample_standard_deviation", sampleStandardDeviation)
-        putDecimal("slope_per_second", slopePerSecond)
-        putDecimal("split_half_shift", splitHalfShift)
-    }
-
-private fun kotlinx.serialization.json.JsonObjectBuilder.putDecimal(
-    name: String,
-    value: BigDecimal?,
-) {
-    put(name, value?.let { JsonPrimitive(canonicalDecimal(it)) } ?: JsonNull)
-}
+private fun Statistics.toDocument() =
+    ResourceStatisticsDocument(
+        min = min?.let(::canonicalDecimal),
+        max = max?.let(::canonicalDecimal),
+        mean = mean?.let(::canonicalDecimal),
+        median = median?.let(::canonicalDecimal),
+        q05 = q05?.let(::canonicalDecimal),
+        q25 = q25?.let(::canonicalDecimal),
+        q75 = q75?.let(::canonicalDecimal),
+        q95 = q95?.let(::canonicalDecimal),
+        iqr = iqr?.let(::canonicalDecimal),
+        mad = mad?.let(::canonicalDecimal),
+        sampleStandardDeviation = sampleStandardDeviation?.let(::canonicalDecimal),
+        slopePerSecond = slopePerSecond?.let(::canonicalDecimal),
+        splitHalfShift = splitHalfShift?.let(::canonicalDecimal),
+    )
 
 internal fun ResourceSnapshotV1.cellIndex(epochMillis: Long): Int = ((epochMillis - startEpochMillis) / stepMillis).toInt()
 

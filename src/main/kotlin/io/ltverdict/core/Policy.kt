@@ -185,9 +185,9 @@ internal fun evaluatePolicy(
     return PolicyEvaluation(verdict, (reasons + informational).distinct(), findings, evidence)
 }
 
-private enum class SampleMode { FULL, SMALL_SAMPLE, INSUFFICIENT, NOT_GATED }
+internal enum class SampleMode { FULL, SMALL_SAMPLE, INSUFFICIENT, NOT_GATED }
 
-private data class SampleGate(
+internal data class SampleGate(
     val mode: SampleMode?,
     val sampleCount: Long,
     val floor: Long,
@@ -212,12 +212,14 @@ private fun sampleGate(
     return SampleGate(mode, sampleCount, floor, minimum)
 }
 
-private data class MetricEvidence(
+internal data class MetricEvidence(
     val identity: TransactionIdentity?,
     val summary: MetricSummary,
     val id: String,
     val json: JsonObject,
-)
+) {
+    val scope: MetricScope get() = metricScope(identity)
+}
 
 private data class Binding(
     val metric: MetricEvidence? = null,
@@ -299,7 +301,7 @@ private fun ExactRatio.ratioObserved(threshold: BigDecimal) =
         compareTo(threshold),
     )
 
-private fun policyCheck(
+internal fun policyCheck(
     rule: PolicyRuleV1,
     metric: MetricEvidence?,
     observed: JsonElement?,
@@ -307,87 +309,70 @@ private fun policyCheck(
     windowId: String?,
     includeMetricReference: Boolean,
     gate: SampleGate?,
-): JsonObject =
-    buildJsonObject {
-        put("id", windowId?.let { stableId("policy-check-window", "$it\u0000${rule.id}") } ?: stableId("policy-check", rule.id))
-        put("type", "policy_check")
-        windowId?.let {
-            put("window_id", it)
-            put("scope", metric?.json?.getValue("scope") ?: rule.scope.json())
-        }
-        put("rule_id", rule.id)
-        put("metric", rule.metric.wireName)
-        put("operator", rule.operator.wireName)
-        put("threshold", JsonPrimitive(rule.threshold))
-        put(
-            "status",
+): JsonObject {
+    val mode = gate?.mode
+    val gated = if (gate != null && mode != null) gate else null
+    return PolicyCheckEvidence(
+        id = windowId?.let { stableId("policy-check-window", "$it\u0000${rule.id}") } ?: stableId("policy-check", rule.id),
+        windowId = windowId,
+        scope = windowId?.let { metric?.scope ?: rule.scope.toMetricScope() },
+        ruleId = rule.id,
+        metric = rule.metric.wireName,
+        operator = rule.operator.wireName,
+        threshold = JsonPrimitive(rule.threshold),
+        status =
             when {
                 reason == POLICY_FAILED -> "FAIL"
                 observed != null -> "PASS"
                 else -> "NO_VERDICT"
             },
-        )
-        if (metric != null && includeMetricReference) put("metric_evidence_id", metric.id)
-        if (observed != null) put("observed", observed)
-        if (reason != null && reason != POLICY_FAILED) put("reason_code", reason)
-        gate?.mode?.let { mode ->
-            put("sample_count", gate.sampleCount)
-            if (mode != SampleMode.NOT_GATED) {
-                put("sample_floor", gate.floor)
-                put("min_samples", gate.minSamples)
-            }
-            put("sample_mode", mode.name)
-        }
+        metricEvidenceId = if (metric != null && includeMetricReference) metric.id else null,
+        observed = observed,
+        reasonCode = if (reason != null && reason != POLICY_FAILED) reason else null,
+        sampleCount = gated?.sampleCount,
+        sampleFloor = if (mode != SampleMode.NOT_GATED) gated?.floor else null,
+        minSamples = if (mode != SampleMode.NOT_GATED) gated?.minSamples else null,
+        sampleMode = mode?.name,
+    ).toJson()
+}
+
+private fun PolicyScope.toMetricScope(): MetricScope =
+    when (this) {
+        PolicyScope.Overall -> OverallScope
+        is PolicyScope.Transaction -> TransactionScope(label = name)
     }
 
-private fun PolicyScope.json(): JsonObject =
-    buildJsonObject {
-        when (this@json) {
-            PolicyScope.Overall -> put("kind", "overall")
-            is PolicyScope.Transaction -> {
-                put("kind", "transaction")
-                put("label", name)
-            }
-        }
+internal fun metricScope(identity: TransactionIdentity?): MetricScope =
+    if (identity == null) {
+        OverallScope
+    } else {
+        TransactionScope(label = identity.label, groupPath = identity.groupPath, sampleKind = identity.kind.name)
     }
 
-private fun metricSummary(
+internal fun metricSummary(
     id: String,
     identity: TransactionIdentity?,
     summary: MetricSummary,
     windowId: String?,
 ): JsonObject =
-    buildJsonObject {
-        put("id", id)
-        put("type", "metric_summary")
-        windowId?.let { put("window_id", it) }
-        put(
-            "scope",
-            if (identity == null) {
-                buildJsonObject { put("kind", "overall") }
-            } else {
-                buildJsonObject {
-                    put("kind", "transaction")
-                    put("group_path", buildJsonArray { identity.groupPath.forEach { add(JsonPrimitive(it)) } })
-                    put("label", identity.label)
-                    put("sample_kind", identity.kind.name)
-                }
-            },
-        )
-        put("sample_count", summary.sampleCount)
-        put("error_count", summary.errorCount)
-        put("error_rate_ratio", summary.errorRate?.let(::ratioJson) ?: JsonNull)
-        put("throughput_rps", ratioJson(summary.throughputRps))
-        put(
-            "latency_ms",
-            buildJsonObject {
-                put("p50", summary.latency.p50Millis)
-                put("p95", summary.latency.p95Millis)
-                put("p99", summary.latency.p99Millis)
-                put("max", summary.latency.maxMillis)
-            },
-        )
-    }
+    MetricSummaryEvidence(
+        id = id,
+        windowId = windowId,
+        scope = metricScope(identity),
+        sampleCount = summary.sampleCount,
+        errorCount = summary.errorCount,
+        errorRateRatio = summary.errorRate?.toDocument(),
+        throughputRps = summary.throughputRps.toDocument(),
+        latencyMs =
+            LatencyDocument(
+                summary.latency.p50Millis,
+                summary.latency.p95Millis,
+                summary.latency.p99Millis,
+                summary.latency.maxMillis,
+            ),
+    ).toJson()
+
+private fun ExactRatio.toDocument() = ExactRatioDocument(numerator, denominator)
 
 private fun ratioJson(value: ExactRatio): JsonObject =
     buildJsonObject {
@@ -395,37 +380,32 @@ private fun ratioJson(value: ExactRatio): JsonObject =
         put("denominator", value.denominator)
     }
 
-private fun diagnosticEvidence(diagnostic: Diagnostic): JsonObject {
-    val id = diagnosticId(diagnostic)
-    return buildJsonObject {
-        put("id", id)
-        put("type", "diagnostic")
-        put("code", diagnostic.code)
-        put("message", diagnostic.message)
-        diagnostic.sourceOffset?.let { put("source_offset", it) }
-    }
-}
+internal fun diagnosticEvidence(diagnostic: Diagnostic): JsonObject =
+    DiagnosticEvidence(
+        id = diagnosticId(diagnostic),
+        code = diagnostic.code,
+        message = diagnostic.message,
+        sourceOffset = diagnostic.sourceOffset,
+    ).toJson()
 
-private fun diagnosticFinding(diagnostic: Diagnostic): JsonObject =
-    buildJsonObject {
-        put("id", stableId("diagnostic-finding", diagnosticKey(diagnostic)))
-        put("type", "diagnostic")
-        put("code", diagnostic.code)
-        put("evidence_id", diagnosticId(diagnostic))
-    }
+internal fun diagnosticFinding(diagnostic: Diagnostic): JsonObject =
+    DiagnosticFinding(
+        id = stableId("diagnostic-finding", diagnosticKey(diagnostic)),
+        code = diagnostic.code,
+        evidenceId = diagnosticId(diagnostic),
+    ).toJson()
 
-private fun policyFailure(
+internal fun policyFailure(
     rule: PolicyRuleV1,
     evidenceId: String,
     windowId: String?,
 ): JsonObject =
-    buildJsonObject {
-        put("id", windowId?.let { stableId("policy-failure-window", "$it\u0000${rule.id}") } ?: stableId("policy-failure", rule.id))
-        put("type", "policy_failure")
-        windowId?.let { put("window_id", it) }
-        put("rule_id", rule.id)
-        put("evidence_id", evidenceId)
-    }
+    PolicyFailureFinding(
+        id = windowId?.let { stableId("policy-failure-window", "$it\u0000${rule.id}") } ?: stableId("policy-failure", rule.id),
+        windowId = windowId,
+        ruleId = rule.id,
+        evidenceId = evidenceId,
+    ).toJson()
 
 private fun diagnosticId(diagnostic: Diagnostic) = stableId("diagnostic", diagnosticKey(diagnostic))
 

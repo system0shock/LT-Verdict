@@ -4,8 +4,6 @@ import io.ltverdict.ingest.Diagnostic
 import io.ltverdict.ingest.RunValidity
 import io.ltverdict.metrics.NormalizedMetrics
 import kotlinx.serialization.json.JsonObject
-import kotlinx.serialization.json.buildJsonObject
-import kotlinx.serialization.json.put
 
 internal fun evaluateSharedWindowPolicy(
     policy: PolicyV1?,
@@ -68,14 +66,13 @@ internal fun ruleWindowCheck(
     ruleId: String,
     windowId: String,
 ): JsonObject =
-    buildJsonObject {
-        put("id", "rule-window-check-${sha256Hex("$ruleId\u0000$windowId".encodeToByteArray())}")
-        put("type", "rule_window_check")
-        put("rule_id", ruleId)
-        put("window_id", windowId)
-        put("status", "NO_VERDICT")
-        put("reason_code", RULE_WINDOW_NOT_FOUND)
-    }
+    RuleWindowCheckEvidence(
+        id = "rule-window-check-${sha256Hex("$ruleId\u0000$windowId".encodeToByteArray())}",
+        ruleId = ruleId,
+        windowId = windowId,
+        status = "NO_VERDICT",
+        reasonCode = RULE_WINDOW_NOT_FOUND,
+    ).toJson()
 
 private fun jointVerdict(
     business: PolicyVerdict,
@@ -96,7 +93,7 @@ private fun overallVerdict(windows: List<PolicyVerdict>): PolicyVerdict =
         else -> PolicyVerdict.PASS
     }
 
-private fun windowPolicySummary(
+internal fun windowPolicySummary(
     window: ResourceWindowV1,
     business: PolicyVerdict,
     resource: PolicyVerdict,
@@ -104,18 +101,17 @@ private fun windowPolicySummary(
     sampleCount: Long,
     minSamples: Long?,
 ): JsonObject =
-    buildJsonObject {
-        put("id", "window-policy-summary-${sha256Hex(window.id.encodeToByteArray())}")
-        put("type", "window_policy_summary")
-        put("window_id", window.id)
-        put("from_epoch_ms", window.fromEpochMillis)
-        put("to_epoch_ms", window.toEpochMillis)
-        put("business_verdict", business.name)
-        put("resource_verdict", resource.name)
-        put("verdict", verdict.name)
-        put("sample_count", sampleCount)
-        minSamples?.let { put("min_samples", it) }
-    }
+    WindowPolicySummaryEvidence(
+        id = "window-policy-summary-${sha256Hex(window.id.encodeToByteArray())}",
+        windowId = window.id,
+        fromEpochMs = window.fromEpochMillis,
+        toEpochMs = window.toEpochMillis,
+        businessVerdict = business,
+        resourceVerdict = resource,
+        verdict = verdict,
+        sampleCount = sampleCount,
+        minSamples = minSamples,
+    ).toJson()
 
 private const val BUSINESS_OBSERVATIONS_NOT_FOUND = "BUSINESS_OBSERVATIONS_NOT_FOUND"
 private const val RULE_WINDOW_NOT_FOUND = "RULE_WINDOW_NOT_FOUND"

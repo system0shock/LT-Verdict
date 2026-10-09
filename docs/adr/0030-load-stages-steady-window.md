@@ -149,7 +149,7 @@ bundle) требует, чтобы объявление лежало рядом 
 относительные. Решение владельца 2026-10-09: конец стадии `steady` за концом прогона
 обрезается до `runEnd`, и это видно в `stage_binding` признаком
 `clipped_to_run_end` у стадии; ошибку `STAGE_OUTSIDE_RUN` даёт только `steady`,
-которая начинается за концом прогона (`from > runEnd`). Стадии `excluded` на конец
+которая начинается в конце прогона или позже (`from >= runEnd`; после обрезки получилось бы окно нулевой длины, которое накопитель отвергает). Стадии `excluded` на конец
 прогона не проверяются (это подписи). Причина: дрейф конца прогона в доли секунды
 обычен, и профиль «steady до конца» не должен падать. Ловушка начала прогона:
 `runStart` это минимальный `started_at` среди ВСЕХ выборок, включая setUp-группу и
@@ -260,7 +260,7 @@ policy и снимка (дубли ключей, NaN, большие числа 
 1. Для каждой стадии `from = runStart + from_offset_ms`, `to = runStart +
    to_offset_ms` (`Math.addExact`). Начало прогона это минимальный `started_at`,
    конец это максимум `started_at + elapsed`.
-2. У стадии `steady` `from > runEnd` даёт `IllegalArgumentException("STAGE_OUTSIDE_RUN")`;
+2. У стадии `steady` `from >= runEnd` даёт `IllegalArgumentException("STAGE_OUTSIDE_RUN")`;
    при `to > runEnd` конец обрезается до `runEnd`, у стадии в `stage_binding` стоит
    `clipped_to_run_end = true` (R1). Стадии `excluded` не проверяются.
 3. Окнами становятся стадии `steady`: `ResourceWindowV1(id = stage.id, from, to)`
@@ -377,7 +377,7 @@ policy и снимка (дубли ключей, NaN, большие числа 
 | --- | --- | --- |
 | Вход `load-stages.v1` | новый файл-объявление, схема, лимиты, примеры | новый, необязательный |
 | CLI `ltv analyze --stages <file>` | новый флаг, одно вхождение (повтор даёт `usage`, код 64); строка `analyze` в `usageText()`/`--help` | добавочное; коды выхода анализа прежние |
-| API | multipart-часть задания анализа `stages` (одна); `422 INVALID_STAGES` с `errors[{code, json_pointer, message}]`; `413 RESOURCE_LIMIT_EXCEEDED` при превышении размера; задание `FAILED` с `diagnostic.code = STAGE_OUTSIDE_RUN` | добавочное |
+| API | multipart-часть задания анализа `stages` (одна); `422 INVALID_STAGES` с `error.details[{code, json_pointer, message}]` (как у остальных `INVALID_*`); `413 RESOURCE_LIMIT_EXCEEDED` при превышении размера; задание `FAILED` с `diagnostic.code = STAGE_OUTSIDE_RUN` | добавочное |
 | Коды ошибок | `INVALID_STAGES`, `STAGES_RESOURCES_CONFLICT`, `STAGES_CAPACITY_CONFLICT`, `STAGES_SOURCE_CONFLICT`, `STAGE_OUTSIDE_RUN` и коды валидатора (`STAGES_NO_STEADY` и др.) | новые коды |
 | Identity | `load_stages_sha256`, `load_stages_version`, `input_versions.stages`, модули `stage-window-evaluation` и `window-policy-evaluation`, четыре ключа `limits`; только при стадиях | условное; `analysis_id` меняется только у анализов со стадиями |
 | Ключ сопоставимости | условное звено `load_stages_sha256` в `semanticKey` и `comparisonSemanticKey` | прогоны со стадиями и без них несовместимы (`compatible = false`); слоты baseline не меняются |

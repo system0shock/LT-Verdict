@@ -1,0 +1,229 @@
+POST /api/baseline: no mode | 400 | {"error":{"code":"MALFORMED_REQUEST","details":[],"message":"mode must be a string"}}
+POST /api/baseline: mode number | 400 | {"error":{"code":"MALFORMED_REQUEST","details":[],"message":"mode must be a string"}}
+POST /api/baseline: unknown mode | 400 | {"error":{"code":"MALFORMED_REQUEST","details":[],"message":"mode must be manual or statistical"}}
+POST /api/baseline: series blank | 400 | {"error":{"code":"MALFORMED_REQUEST","details":[],"message":"Comparison series must contain 1–128 UTF-8 bytes"}}
+POST /api/baseline: series 129 bytes | 400 | {"error":{"code":"MALFORMED_REQUEST","details":[],"message":"series is invalid"}}
+POST /api/baseline: series control | 400 | {"error":{"code":"MALFORMED_REQUEST","details":[],"message":"series is invalid"}}
+POST /api/baseline: series missing | 400 | {"error":{"code":"MALFORMED_REQUEST","details":[],"message":"series must be a string"}}
+POST /api/baseline: manual extra key | 400 | {"error":{"code":"MALFORMED_REQUEST","details":[],"message":"Manual baseline fields are invalid"}}
+POST /api/baseline: manual reference not object | 400 | {"error":{"code":"MALFORMED_REQUEST","details":[],"message":"Baseline reference is invalid"}}
+POST /api/baseline: manual reference extra key | 400 | {"error":{"code":"MALFORMED_REQUEST","details":[],"message":"Baseline reference is invalid"}}
+POST /api/baseline: manual reference bad run | 400 | {"error":{"code":"MALFORMED_REQUEST","details":[],"message":"Baseline reference is invalid"}}
+POST /api/baseline: manual reference bad analysis | 400 | {"error":{"code":"MALFORMED_REQUEST","details":[],"message":"Baseline reference is invalid"}}
+POST /api/baseline: manual unknown analysis | 404 | {"error":{"code":"NOT_FOUND","details":[],"message":"Referenced analysis was not found"}}
+POST /api/baseline: manual unknown run | 404 | {"error":{"code":"NOT_FOUND","details":[],"message":"Referenced run or analysis was not found"}}
+POST /api/baseline: manual FAIL | 422 | {"error":{"code":"BASELINE_CANDIDATE_NOT_PASS","details":[],"message":"Baseline candidate is unavailable: BASELINE_CANDIDATE_NOT_PASS (policy_verdict=FAIL)"}}
+POST /api/baseline: manual NO_POLICY | 422 | {"error":{"code":"BASELINE_CANDIDATE_NOT_PASS","details":[],"message":"Baseline candidate is unavailable: BASELINE_CANDIDATE_NOT_PASS (policy_verdict=NO_POLICY)"}}
+POST /api/baseline: statistical extra key | 400 | {"error":{"code":"MALFORMED_REQUEST","details":[],"message":"Statistical baseline fields are invalid"}}
+POST /api/baseline: statistical comparable string | 400 | {"error":{"code":"MALFORMED_REQUEST","details":[],"message":"comparable must be a boolean"}}
+POST /api/baseline: statistical comparable null | 400 | {"error":{"code":"MALFORMED_REQUEST","details":[],"message":"comparable must be a boolean"}}
+POST /api/baseline: statistical comparable false | 422 | {"error":{"code":"BASELINE_COMPARABILITY_UNCONFIRMED","details":[],"message":"Baseline candidate is unavailable: BASELINE_COMPARABILITY_UNCONFIRMED"}}
+POST /api/baseline: statistical candidates object | 400 | {"error":{"code":"MALFORMED_REQUEST","details":[],"message":"candidates must be an array"}}
+POST /api/baseline: statistical no candidates | 422 | {"error":{"code":"BASELINE_CANDIDATE_COUNT","details":[],"message":"Baseline candidate is unavailable: BASELINE_CANDIDATE_COUNT"}}
+POST /api/baseline: statistical two | 422 | {"error":{"code":"BASELINE_CANDIDATE_COUNT","details":[],"message":"Baseline candidate is unavailable: BASELINE_CANDIDATE_COUNT"}}
+POST /api/baseline: statistical 21 equal | 422 | {"error":{"code":"BASELINE_CANDIDATE_COUNT","details":[],"message":"Baseline candidate is unavailable: BASELINE_CANDIDATE_COUNT"}}
+POST /api/baseline: statistical 3 with a number | 400 | {"error":{"code":"MALFORMED_REQUEST","details":[],"message":"Candidate reference is invalid"}}
+POST /api/baseline: statistical 3 with a bad reference | 400 | {"error":{"code":"MALFORMED_REQUEST","details":[],"message":"Baseline reference is invalid"}}
+POST /api/baseline: statistical duplicate run | 422 | {"error":{"code":"BASELINE_DUPLICATE_RUN","details":[],"message":"Baseline candidate is unavailable: BASELINE_DUPLICATE_RUN"}}
+POST /api/baseline: statistical unknown candidate | 404 | {"error":{"code":"NOT_FOUND","details":[],"message":"Referenced analysis was not found"}}
+POST /api/baseline: statistical FAIL last | 422 | {"error":{"code":"BASELINE_CANDIDATE_NOT_PASS","details":[],"message":"Baseline candidate is unavailable: BASELINE_CANDIDATE_NOT_PASS (policy_verdict=FAIL)"}}
+POST /api/baseline: statistical NO_POLICY first | 422 | {"error":{"code":"BASELINE_CANDIDATE_NOT_PASS","details":[],"message":"Baseline candidate is unavailable: BASELINE_CANDIDATE_NOT_PASS (policy_verdict=NO_POLICY)"}}
+POST /api/baseline: statistical FAIL and NO_POLICY | 422 | {"error":{"code":"BASELINE_DUPLICATE_RUN","details":[],"message":"Baseline candidate is unavailable: BASELINE_DUPLICATE_RUN"}}
+POST /api/baseline: wrong content type | 415 | {"error":{"code":"UNSUPPORTED_MEDIA_TYPE","details":[],"message":"application/json is required"}}
+POST /api/baseline: array | 400 | {"error":{"code":"MALFORMED_REQUEST","details":[],"message":"Baseline request must be an object"}}
+POST /api/baseline: depth 9 | 413 | {"error":{"code":"RESOURCE_LIMIT_EXCEEDED","details":[],"message":"Baseline request JSON depth exceeds 8"}}
+POST /api/baseline: invalid UTF-8 | 400 | {"error":{"code":"MALFORMED_REQUEST","details":[],"message":"Baseline request must be UTF-8 JSON"}}
+POST /api/baseline: 16 KiB + 1 | 413 | {"error":{"code":"RESOURCE_LIMIT_EXCEEDED","details":[],"message":"Baseline request exceeds 16 KiB"}}
+POST /api/baseline: manual too large | 422 | {"error":{"code":"BASELINE_CANDIDATE_TOO_LARGE","details":[],"message":"Baseline candidate is unavailable: BASELINE_CANDIDATE_TOO_LARGE"}}
+POST /api/baseline: statistical too large | 422 | {"error":{"code":"BASELINE_CANDIDATE_TOO_LARGE","details":[],"message":"Baseline candidate is unavailable: BASELINE_CANDIDATE_TOO_LARGE"}}
+POST /api/baseline: manual padded series | 200 | {"baseline":{"algorithm":null,"candidates":[{"analysis_id":"ef28f7a1cf44e1fc1e5392438b0e2fc08317b285c87d1acd3e0e0a744244d41d","run_id":"jmeter_jtl_csv-6d8b83decbc5a86a9527ff1c53553fa43ce8eb469a1011e96a47a40cc2137636"}],"mode":"manual","reference":{"analysis_id":"ef28f7a1cf44e1fc1e5392438b0e2fc08317b285c87d1acd3e0e0a744244d41d","run_id":"jmeter_jtl_csv-6d8b83decbc5a86a9527ff1c53553fa43ce8eb469a1011e96a47a40cc2137636"},"schema_version":"local-baseline.v1","scores":[],"series":"reĺ"}}
+GET /api/baseline: after manual | 200 | {"baseline":null,"baselines":[{"arm":null,"baseline":{"algorithm":null,"candidates":[{"analysis_id":"ef28f7a1cf44e1fc1e5392438b0e2fc08317b285c87d1acd3e0e0a744244d41d","run_id":"jmeter_jtl_csv-6d8b83decbc5a86a9527ff1c53553fa43ce8eb469a1011e96a47a40cc2137636"}],"mode":"manual","reference":{"analysis_id":"ef28f7a1cf44e1fc1e5392438b0e2fc08317b285c87d1acd3e0e0a744244d41d","run_id":"jmeter_jtl_csv-6d8b83decbc5a86a9527ff1c53553fa43ce8eb469a1011e96a47a40cc2137636"},"schema_version":"local-baseline.v1","scores":[],"series":"reĺ"},"series":"reĺ","source":"SLOT"}]}
+POST /api/baseline: manual small sample | 200 | {"baseline":{"algorithm":null,"candidates":[{"analysis_id":"f785730f00fa93a2e1b51036b95ba25e76297fd0efc08dc3873bf09b4fe5f8b5","run_id":"jmeter_jtl_csv-c14c10de4373983a7434ac9c67707c21706faffeb5b9345a24f7353124100256"}],"mode":"manual","reference":{"analysis_id":"f785730f00fa93a2e1b51036b95ba25e76297fd0efc08dc3873bf09b4fe5f8b5","run_id":"jmeter_jtl_csv-c14c10de4373983a7434ac9c67707c21706faffeb5b9345a24f7353124100256"},"schema_version":"local-baseline.v1","scores":[],"series":"small"}}
+POST /api/baseline: statistical 3 | 200 | len=1447 sha256=c11cba882dcad11da49dc71b2b0a9f490483a6110eb6ca3279571a663ab77834
+POST /api/baseline: statistical 4 | 200 | len=1819 sha256=0a23d6c544da68e6cb549776db39b19d4bc06c126cc6ddc12c07637c2ce889d0
+POST /api/baseline: statistical 6 | 200 | len=2565 sha256=b186f90a267f8397bf8f97a6ef3e1749eee3c88c5303311ca12ee0667dba9df3
+POST /api/baseline: statistical with small sample | 200 | len=1451 sha256=51eb2326a11f8f4bc6255fbd2683526f8902e5dab6b28d021e2da4236f147138
+POST /api/baseline: statistical reversed | 200 | len=1821 sha256=d689c4d67b60115228bab351ff2c68e23466f02a600c18eccde291b150ceed79
+GET /api/baseline: all slots | 200 | len=10432 sha256=a2f0e6f346432f4dc90759a29c401b62b0d9a95bb051dfadd761cb792bba773d
+GET comparison?series=stat-3 | 200 | len=2367 sha256=6fc400c172d56fe87a59fd43310d97b29434e59f294a7bab4422225a54e6435d
+GET baseline-conditions?series=stat-3 | 200 | {"conditions":null}
+GET comparison?series=%20stat-3%20 | 200 | len=2367 sha256=6fc400c172d56fe87a59fd43310d97b29434e59f294a7bab4422225a54e6435d
+GET baseline-conditions?series=%20stat-3%20 | 200 | {"conditions":null}
+GET comparison?series=stat-4 | 200 | len=2739 sha256=405fcc1fbde05720cb037809a6c1a5b8d7b7c7ecd9b1c1d020627dd502cdc8b9
+GET baseline-conditions?series=stat-4 | 200 | {"conditions":null}
+GET comparison?series=release | 404 | {"error":{"code":"NOT_FOUND","details":[],"message":"No baseline is selected"}}
+GET baseline-conditions?series=release | 404 | {"error":{"code":"NOT_FOUND","details":[],"message":"No baseline is selected"}}
+GET comparison?series=missing | 404 | {"error":{"code":"NOT_FOUND","details":[],"message":"No baseline is selected"}}
+GET baseline-conditions?series=missing | 404 | {"error":{"code":"NOT_FOUND","details":[],"message":"No baseline is selected"}}
+GET comparison (no series) | 404 | {"error":{"code":"NOT_FOUND","details":[],"message":"No baseline is selected"}}
+GET comparison (control series) | 400 | {"error":{"code":"MALFORMED_REQUEST","details":[],"message":"series is invalid"}}
+GET comparison (long series) | 400 | {"error":{"code":"MALFORMED_REQUEST","details":[],"message":"series is invalid"}}
+GET comparison: only baseline window | 400 | {"error":{"code":"MALFORMED_REQUEST","details":[],"message":"Both window IDs must contain 1–128 UTF-8 bytes without control characters"}}
+GET baseline-conditions: only baseline window | 400 | {"error":{"code":"MALFORMED_REQUEST","details":[],"message":"Both window IDs must contain 1–128 UTF-8 bytes without control characters"}}
+GET comparison: only current window | 400 | {"error":{"code":"MALFORMED_REQUEST","details":[],"message":"Both window IDs must contain 1–128 UTF-8 bytes without control characters"}}
+GET baseline-conditions: only current window | 400 | {"error":{"code":"MALFORMED_REQUEST","details":[],"message":"Both window IDs must contain 1–128 UTF-8 bytes without control characters"}}
+GET comparison: thresholds without windows | 400 | {"error":{"code":"MALFORMED_REQUEST","details":[],"message":"Materiality thresholds require both windows"}}
+GET baseline-conditions: thresholds without windows | 200 | {"conditions":null}
+GET comparison: error threshold without windows | 400 | {"error":{"code":"MALFORMED_REQUEST","details":[],"message":"Materiality thresholds require both windows"}}
+GET baseline-conditions: error threshold without windows | 200 | {"conditions":null}
+GET comparison: blank window | 400 | {"error":{"code":"MALFORMED_REQUEST","details":[],"message":"Both window IDs must contain 1–128 UTF-8 bytes without control characters"}}
+GET baseline-conditions: blank window | 400 | {"error":{"code":"MALFORMED_REQUEST","details":[],"message":"Both window IDs must contain 1–128 UTF-8 bytes without control characters"}}
+GET comparison: long window | 400 | {"error":{"code":"MALFORMED_REQUEST","details":[],"message":"Both window IDs must contain 1–128 UTF-8 bytes without control characters"}}
+GET baseline-conditions: long window | 400 | {"error":{"code":"MALFORMED_REQUEST","details":[],"message":"Both window IDs must contain 1–128 UTF-8 bytes without control characters"}}
+GET comparison: control window | 400 | {"error":{"code":"MALFORMED_REQUEST","details":[],"message":"Both window IDs must contain 1–128 UTF-8 bytes without control characters"}}
+GET baseline-conditions: control window | 400 | {"error":{"code":"MALFORMED_REQUEST","details":[],"message":"Both window IDs must contain 1–128 UTF-8 bytes without control characters"}}
+GET comparison: defaults | 200 | len=2705 sha256=2e51c9b7f093db8aa2b3da9c8d98cbb61078638588b652a783157c06f6d590af
+GET baseline-conditions: defaults | 200 | {"conditions":null}
+GET comparison: change 0 | 400 | {"error":{"code":"MALFORMED_REQUEST","details":[],"message":"min_change_percent is invalid"}}
+GET baseline-conditions: change 0 | 200 | {"conditions":null}
+GET comparison: change 1000 | 200 | len=2708 sha256=a8fc2abaa2296a5e5701273eb9f04b1ddf80bc280ca4c956d1a2ed4d34fbe4ea
+GET baseline-conditions: change 1000 | 200 | {"conditions":null}
+GET comparison: change 1001 | 400 | {"error":{"code":"MALFORMED_REQUEST","details":[],"message":"min_change_percent is invalid"}}
+GET baseline-conditions: change 1001 | 200 | {"conditions":null}
+GET comparison: change 12.5 | 200 | len=2708 sha256=415b444d7625a301dd6fade4c19e179c803958d34e97232630210258a9a164a8
+GET baseline-conditions: change 12.5 | 200 | {"conditions":null}
+GET comparison: change 1e2 | 200 | len=2707 sha256=a63d6e1d9cb1c71ff535888d432c8fa337b75f508ed9c36e1c59bf82057b6f6e
+GET baseline-conditions: change 1e2 | 200 | {"conditions":null}
+GET comparison: change 1e999 | 400 | {"error":{"code":"MALFORMED_REQUEST","details":[],"message":"min_change_percent is invalid"}}
+GET baseline-conditions: change 1e999 | 200 | {"conditions":null}
+GET comparison: change abc | 400 | {"error":{"code":"MALFORMED_REQUEST","details":[],"message":"min_change_percent is invalid"}}
+GET baseline-conditions: change abc | 200 | {"conditions":null}
+GET comparison: change negative | 400 | {"error":{"code":"MALFORMED_REQUEST","details":[],"message":"min_change_percent is invalid"}}
+GET baseline-conditions: change negative | 200 | {"conditions":null}
+GET comparison: change long | 400 | {"error":{"code":"MALFORMED_REQUEST","details":[],"message":"min_change_percent is invalid"}}
+GET baseline-conditions: change long | 200 | {"conditions":null}
+GET comparison: change precision 33 | 400 | {"error":{"code":"MALFORMED_REQUEST","details":[],"message":"min_change_percent is invalid"}}
+GET baseline-conditions: change precision 33 | 200 | {"conditions":null}
+GET comparison: error 1 | 200 | len=2701 sha256=32f261efc644ddacd4faa67ba06ce7d093535c41ed4e4c74f2e7c08a5a2b9c5f
+GET baseline-conditions: error 1 | 200 | {"conditions":null}
+GET comparison: error 1.1 | 400 | {"error":{"code":"MALFORMED_REQUEST","details":[],"message":"min_error_rate_delta is invalid"}}
+GET baseline-conditions: error 1.1 | 200 | {"conditions":null}
+GET comparison: error 0.0005 | 200 | len=2706 sha256=d121d181d57cb972e84805e081f3d5a8f42559cd5bc8fc28806fa36954bccd0e
+GET baseline-conditions: error 0.0005 | 200 | {"conditions":null}
+GET comparison: error scale 13 | 400 | {"error":{"code":"MALFORMED_REQUEST","details":[],"message":"min_error_rate_delta is invalid"}}
+GET baseline-conditions: error scale 13 | 200 | {"conditions":null}
+POST baseline-conditions: CONFIRMED | 200 | {"conditions":{"baseline":{"analysis_id":"569a1b68495c2ddab1b2dcda9c4aafb123e18f115e61868d21a2bc5420ccc4bf","run_id":"jmeter_jtl_csv-aef2dfe571a827411a3bdf6e08ee695a34e0f6c8632d7af2e9d2b11580b86a11"},"current":{"analysis_id":"7455002759b4fa995ce6856f6335587a4750a4708538b4128296f26d870168ca","run_id":"jmeter_jtl_csv-6ae6cc246377e723ab1f1eac222bdc93f7b4f242722a197151cb59059590c0ee"},"decision":"CONFIRMED","provenance":"EXPLICIT_LOCAL_ACTION","schema_version":"local-baseline-conditions.v1","updated_at":"<ts>","windows":null}}
+POST baseline-conditions: NOT_CONFIRMED | 200 | {"conditions":{"baseline":{"analysis_id":"569a1b68495c2ddab1b2dcda9c4aafb123e18f115e61868d21a2bc5420ccc4bf","run_id":"jmeter_jtl_csv-aef2dfe571a827411a3bdf6e08ee695a34e0f6c8632d7af2e9d2b11580b86a11"},"current":{"analysis_id":"7455002759b4fa995ce6856f6335587a4750a4708538b4128296f26d870168ca","run_id":"jmeter_jtl_csv-6ae6cc246377e723ab1f1eac222bdc93f7b4f242722a197151cb59059590c0ee"},"decision":"NOT_CONFIRMED","provenance":"EXPLICIT_LOCAL_ACTION","schema_version":"local-baseline-conditions.v1","updated_at":"<ts>","windows":null}}
+POST baseline-conditions: UNKNOWN | 200 | {"conditions":{"baseline":{"analysis_id":"569a1b68495c2ddab1b2dcda9c4aafb123e18f115e61868d21a2bc5420ccc4bf","run_id":"jmeter_jtl_csv-aef2dfe571a827411a3bdf6e08ee695a34e0f6c8632d7af2e9d2b11580b86a11"},"current":{"analysis_id":"7455002759b4fa995ce6856f6335587a4750a4708538b4128296f26d870168ca","run_id":"jmeter_jtl_csv-6ae6cc246377e723ab1f1eac222bdc93f7b4f242722a197151cb59059590c0ee"},"decision":"UNKNOWN","provenance":"EXPLICIT_LOCAL_ACTION","schema_version":"local-baseline-conditions.v1","updated_at":"<ts>","windows":null}}
+POST baseline-conditions: lowercase | 400 | {"error":{"code":"MALFORMED_REQUEST","details":[],"message":"decision is invalid"}}
+POST baseline-conditions: number | 400 | {"error":{"code":"MALFORMED_REQUEST","details":[],"message":"decision must be a string"}}
+POST baseline-conditions: extra key | 400 | {"error":{"code":"MALFORMED_REQUEST","details":[],"message":"Baseline condition fields are invalid"}}
+POST baseline-conditions: no decision | 400 | {"error":{"code":"MALFORMED_REQUEST","details":[],"message":"Baseline condition fields are invalid"}}
+POST baseline-conditions: windows | 200 | {"conditions":{"baseline":{"analysis_id":"569a1b68495c2ddab1b2dcda9c4aafb123e18f115e61868d21a2bc5420ccc4bf","run_id":"jmeter_jtl_csv-aef2dfe571a827411a3bdf6e08ee695a34e0f6c8632d7af2e9d2b11580b86a11"},"current":{"analysis_id":"7455002759b4fa995ce6856f6335587a4750a4708538b4128296f26d870168ca","run_id":"jmeter_jtl_csv-6ae6cc246377e723ab1f1eac222bdc93f7b4f242722a197151cb59059590c0ee"},"decision":"CONFIRMED","provenance":"EXPLICIT_LOCAL_ACTION","schema_version":"local-baseline-conditions.v1","updated_at":"<ts>","windows":{"baseline_window":"a","current_window":"b"}}}
+GET baseline-conditions: stored | 200 | {"conditions":{"baseline":{"analysis_id":"569a1b68495c2ddab1b2dcda9c4aafb123e18f115e61868d21a2bc5420ccc4bf","run_id":"jmeter_jtl_csv-aef2dfe571a827411a3bdf6e08ee695a34e0f6c8632d7af2e9d2b11580b86a11"},"current":{"analysis_id":"7455002759b4fa995ce6856f6335587a4750a4708538b4128296f26d870168ca","run_id":"jmeter_jtl_csv-6ae6cc246377e723ab1f1eac222bdc93f7b4f242722a197151cb59059590c0ee"},"decision":"UNKNOWN","provenance":"EXPLICIT_LOCAL_ACTION","schema_version":"local-baseline-conditions.v1","updated_at":"<ts>","windows":null}}
+GET comparison: confirmed | 200 | len=2874 sha256=c0bfe5789ce71731eb4fd5dac872ab34826a40a273267048e863e51ae88ea4cc
+GET comparison: windows after decisions | 200 | len=3257 sha256=efc124c3725596f5136d5a235875536cbf4129f1ca58cfcb1ae8c0693da4c001
+POST /api/releases: series of a baseline | 201 | {"analyses":[{"analysis_id":"78cb91ee1ba92c3186f08a59e7f7ea5f28c8a5b2a17a2009a545cd4815aacfd9","analysis_state":"OK","arm":null,"baseline_eligible":true,"coverage_reasons":[],"coverage_status":"COMPLETE","ineligible_reasons":[],"policy_sha256":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","policy_verdict":"PASS","run_validity":"VALID"}],"baseline_eligible":true,"created_at":"<ts>","ineligible_reasons":[],"label":"1.0","notes":null,"profile":null,"release_id":"<release_id>","run_id":"jmeter_jtl_csv-6ae6cc246377e723ab1f1eac222bdc93f7b4f242722a197151cb59059590c0ee","schema_version":"local-release.v1","series":"stat-3","started_at":"<ts>","updated_at":"<ts>"}
+GET comparison: query contradicts release series | 422 | {"error":{"code":"BASELINE_SERIES_CONFLICT","details":[],"message":"Series differs from the release series"}}
+GET comparison: release series without query | 200 | len=2433 sha256=dd9242173d64d036863dbda8420d62e07651be8c1bdcad3f97c469e77099eac5
+GET baseline-conditions: query contradicts release series | 422 | {"error":{"code":"BASELINE_SERIES_CONFLICT","details":[],"message":"Series differs from the release series"}}
+DELETE /api/baseline: arm without series | 400 | {"error":{"code":"MALFORMED_REQUEST","details":[],"message":"arm requires series"}}
+DELETE /api/baseline: blank arm | 400 | {"error":{"code":"MALFORMED_REQUEST","details":[],"message":"arm is invalid"}}
+DELETE /api/baseline: control arm | 400 | {"error":{"code":"MALFORMED_REQUEST","details":[],"message":"arm is invalid"}}
+DELETE /api/baseline: long arm | 400 | {"error":{"code":"MALFORMED_REQUEST","details":[],"message":"arm is invalid"}}
+DELETE /api/baseline: blank series | 400 | {"error":{"code":"MALFORMED_REQUEST","details":[],"message":"series is invalid"}}
+DELETE /api/baseline: unknown slot | 200 | {"baseline":null}
+DELETE /api/baseline: padded series | 200 | {"baseline":null}
+DELETE /api/baseline: repeated series | 400 | {"error":{"code":"MALFORMED_REQUEST","details":[],"message":"Query parameters are invalid"}}
+DELETE /api/baseline: unknown parameter | 400 | {"error":{"code":"MALFORMED_REQUEST","details":[],"message":"Query parameters are invalid"}}
+DELETE /api/baseline: arm that does not match | 200 | {"baseline":null}
+GET /api/baseline: after deletes | 200 | len=8567 sha256=7fe3cc3873bc9faeb447fe810c1f7b9c195b9b1f47f4580a9ae0238e76a50523
+DELETE /api/baseline: legacy | 200 | {"baseline":null}
+GET /api/baseline: final | 200 | len=8567 sha256=7fe3cc3873bc9faeb447fe810c1f7b9c195b9b1f47f4580a9ae0238e76a50523
+POST /api/releases invalid: extra key | 400 | {"error":{"code":"MALFORMED_REQUEST","details":[],"message":"Release fields are invalid"}}
+POST /api/releases invalid: missing notes | 400 | {"error":{"code":"MALFORMED_REQUEST","details":[],"message":"Release fields are invalid"}}
+POST /api/releases invalid: missing profile | 400 | {"error":{"code":"MALFORMED_REQUEST","details":[],"message":"Release fields are invalid"}}
+POST /api/releases invalid: series number | 400 | {"error":{"code":"MALFORMED_REQUEST","details":[],"message":"series must be a string"}}
+POST /api/releases invalid: series blank | 400 | {"error":{"code":"MALFORMED_REQUEST","details":[],"message":"series is required"}}
+POST /api/releases invalid: series control | 400 | {"error":{"code":"MALFORMED_REQUEST","details":[],"message":"series is invalid"}}
+POST /api/releases invalid: label blank | 400 | {"error":{"code":"MALFORMED_REQUEST","details":[],"message":"label is required"}}
+POST /api/releases invalid: label 129 bytes | 400 | {"error":{"code":"MALFORMED_REQUEST","details":[],"message":"label is invalid"}}
+POST /api/releases invalid: label 128 multibyte | 404 | {"error":{"code":"NOT_FOUND","details":[],"message":"Analysis was not found"}}
+POST /api/releases invalid: label 129 multibyte | 400 | {"error":{"code":"MALFORMED_REQUEST","details":[],"message":"label is invalid"}}
+POST /api/releases invalid: label newline | 400 | {"error":{"code":"MALFORMED_REQUEST","details":[],"message":"label is invalid"}}
+POST /api/releases invalid: run id bad | 400 | {"error":{"code":"MALFORMED_REQUEST","details":[],"message":"run_id is invalid"}}
+POST /api/releases invalid: run id number | 400 | {"error":{"code":"MALFORMED_REQUEST","details":[],"message":"run_id must be a string"}}
+POST /api/releases invalid: analyses object | 400 | {"error":{"code":"MALFORMED_REQUEST","details":[],"message":"analyses must be an array"}}
+POST /api/releases invalid: analyses empty | 400 | {"error":{"code":"MALFORMED_REQUEST","details":[],"message":"analyses must hold 1-8 items"}}
+POST /api/releases invalid: analyses nine | 400 | {"error":{"code":"MALFORMED_REQUEST","details":[],"message":"analyses must hold 1-8 items"}}
+POST /api/releases invalid: analyses eight | 404 | {"error":{"code":"NOT_FOUND","details":[],"message":"Analysis was not found"}}
+POST /api/releases invalid: analyses duplicate | 400 | {"error":{"code":"MALFORMED_REQUEST","details":[],"message":"analysis_id values must differ"}}
+POST /api/releases invalid: analyses entry string | 400 | {"error":{"code":"MALFORMED_REQUEST","details":[],"message":"analysis entry is invalid"}}
+POST /api/releases invalid: analyses entry extra | 400 | {"error":{"code":"MALFORMED_REQUEST","details":[],"message":"analysis entry is invalid"}}
+POST /api/releases invalid: analyses entry bad id | 400 | {"error":{"code":"MALFORMED_REQUEST","details":[],"message":"analysis_id is invalid"}}
+POST /api/releases invalid: profile string | 400 | {"error":{"code":"MALFORMED_REQUEST","details":[],"message":"profile is invalid"}}
+POST /api/releases invalid: profile extra key | 400 | {"error":{"code":"MALFORMED_REQUEST","details":[],"message":"profile fields are invalid"}}
+POST /api/releases invalid: profile number value | 400 | {"error":{"code":"MALFORMED_REQUEST","details":[],"message":"profile is invalid"}}
+POST /api/releases invalid: profile object value | 400 | {"error":{"code":"MALFORMED_REQUEST","details":[],"message":"profile is invalid"}}
+POST /api/releases invalid: profile control value | 400 | {"error":{"code":"MALFORMED_REQUEST","details":[],"message":"scenario_mix is invalid"}}
+POST /api/releases invalid: profile long value | 400 | {"error":{"code":"MALFORMED_REQUEST","details":[],"message":"scenario_mix is invalid"}}
+POST /api/releases invalid: notes number | 400 | {"error":{"code":"MALFORMED_REQUEST","details":[],"message":"notes is invalid"}}
+POST /api/releases invalid: notes object | 400 | {"error":{"code":"MALFORMED_REQUEST","details":[],"message":"notes is invalid"}}
+POST /api/releases invalid: notes control | 400 | {"error":{"code":"MALFORMED_REQUEST","details":[],"message":"notes is invalid"}}
+POST /api/releases invalid: notes 1025 bytes | 400 | {"error":{"code":"MALFORMED_REQUEST","details":[],"message":"notes is invalid"}}
+POST /api/releases invalid: unknown analysis | 404 | {"error":{"code":"NOT_FOUND","details":[],"message":"Analysis was not found"}}
+POST /api/releases: wrong content type | 415 | {"error":{"code":"UNSUPPORTED_MEDIA_TYPE","details":[],"message":"application/json is required"}}
+POST /api/releases: 16 KiB + 1 | 413 | {"error":{"code":"RESOURCE_LIMIT_EXCEEDED","details":[],"message":"Release request exceeds 16 KiB"}}
+POST /api/releases: array | 400 | {"error":{"code":"MALFORMED_REQUEST","details":[],"message":"Release request must be an object"}}
+POST /api/releases facts: no run metadata | 422 | {"error":{"code":"RELEASE_ANALYSIS_NO_RUN_METADATA","details":[],"message":"Analysis has no usable run metadata"}}
+POST /api/releases facts: bad start | 422 | {"error":{"code":"RELEASE_ANALYSIS_NO_RUN_METADATA","details":[],"message":"Analysis has no usable run metadata"}}
+POST /api/releases facts: start differs | 422 | {"error":{"code":"RELEASE_STARTED_AT_MISMATCH","details":[],"message":"Analyses start at different times"}}
+POST /api/releases facts: foreign result | 422 | {"error":{"code":"RELEASE_RUN_MISMATCH","details":[],"message":"Analysis documents belong to another run"}}
+POST /api/releases facts: foreign metadata | 422 | {"error":{"code":"RELEASE_RUN_MISMATCH","details":[],"message":"Analysis documents belong to another run"}}
+POST /api/releases facts: two without arm | 422 | {"error":{"code":"RELEASE_ARM_CONFLICT","details":[],"message":"Arms must be distinct and present when a release has several analyses"}}
+POST /api/releases facts: repeated arm | 422 | {"error":{"code":"RELEASE_ARM_CONFLICT","details":[],"message":"Arms must be distinct and present when a release has several analyses"}}
+POST /api/releases facts: unmarked next to marked | 422 | {"error":{"code":"RELEASE_ARM_CONFLICT","details":[],"message":"Arms must be distinct and present when a release has several analyses"}}
+POST /api/releases facts: invalid facts | 422 | {"error":{"code":"RELEASE_FACTS_INVALID","details":[],"message":"Analysis facts are unavailable"}}
+POST /api/releases facts: tampered | 500 | {"error":{"code":"CORRUPT_RUN_BUNDLE","details":[],"message":"Referenced analysis is corrupt"}}
+POST /api/releases facts: oversized | 422 | {"error":{"code":"RELEASE_RESULT_TOO_LARGE","details":[],"message":"Analysis result exceeds the verification limit"}}
+POST /api/releases facts: unknown run | 404 | {"error":{"code":"NOT_FOUND","details":[],"message":"Release or referenced analysis was not found"}}
+POST /api/releases: plain | 201 | {"analyses":[{"analysis_id":"b80d43e9635114584dc649f38aba8c70ea388d59329ee1e25abbe5226a67cc91","analysis_state":"OK","arm":null,"baseline_eligible":true,"coverage_reasons":[],"coverage_status":"COMPLETE","ineligible_reasons":[],"policy_sha256":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","policy_verdict":"PASS","run_validity":"VALID"}],"baseline_eligible":true,"created_at":"<ts>","ineligible_reasons":[],"label":"1.0","notes":null,"profile":null,"release_id":"<release_id>","run_id":"jmeter_jtl_csv-6d8b83decbc5a86a9527ff1c53553fa43ce8eb469a1011e96a47a40cc2137636","schema_version":"local-release.v1","series":"checkout","started_at":"<ts>","updated_at":"<ts>"}
+POST /api/releases: fail | 201 | len=746 sha256=d8952a5831dccffcde478d54cd479791d753b4e7ea393587e4697794f01e08dd
+POST /api/releases: two arms | 201 | len=1034 sha256=6c53b00a9ddcdfce461fc613dafc92fbe3faa0453be5202e68ff928ad0d2f806
+POST /api/releases: profile and notes | 201 | len=823 sha256=7b46b369c637d95b2e4aeba44e1c94d6793b0e0248e57209a170c00543e8baa1
+POST /api/releases: empty profile | 201 | {"analyses":[{"analysis_id":"520d3fd0e4fb341f4b62919de6875861b86e64253fa1b8702fc522a3df377c44","analysis_state":"OK","arm":"damaged","baseline_eligible":true,"coverage_reasons":[],"coverage_status":"COMPLETE","ineligible_reasons":[],"policy_sha256":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","policy_verdict":"PASS","run_validity":"VALID"}],"baseline_eligible":true,"created_at":"<ts>","ineligible_reasons":[],"label":"empty","notes":null,"profile":null,"release_id":"<release_id>","run_id":"jmeter_jtl_csv-6d8b83decbc5a86a9527ff1c53553fa43ce8eb469a1011e96a47a40cc2137636","schema_version":"local-release.v1","series":"empty","started_at":"<ts>","updated_at":"<ts>"}
+POST /api/releases: analysis already registered | 409 | {"error":{"code":"RELEASE_ANALYSIS_ALREADY_REGISTERED","details":[],"message":"An analysis already belongs to a release"}}
+GET /api/releases | 200 | len=4949 sha256=be7593a6bc64ec5f9dfa2caca80bf6fe3479994459758c4a0901c72930b8755c
+GET /api/releases?series=checkout&limit=1 | 200 | len=994 sha256=195001d1b87246e0553e940cc1ade964db938a609dc8104900f4f250e917e53b
+GET /api/releases?series=%20checkout%20 | 200 | len=1671 sha256=4bea8f5504c952b7eeee1c31c904ecdc1696ea367bae55c50117156b4afe80d8
+GET /api/releases?series=a%07 | 400 | {"error":{"code":"MALFORMED_REQUEST","details":[],"message":"series is invalid"}}
+GET /api/releases?series=%20 | 400 | {"error":{"code":"MALFORMED_REQUEST","details":[],"message":"series is invalid"}}
+GET /api/releases?after=zz | 400 | {"error":{"code":"MALFORMED_REQUEST","details":[],"message":"after is invalid"}}
+GET /api/releases?after=000000000000000-00000000 | 200 | {"corrupt_count":0,"corrupt_names":[],"next_after":null,"releases":[],"series_summary":[{"count":1,"series":"Seŕies"},{"count":1,"series":"arms"},{"count":2,"series":"checkout"},{"count":1,"series":"empty"},{"count":1,"series":"stat-3"}]}
+GET /api/releases?limit=0 | 400 | {"error":{"code":"MALFORMED_REQUEST","details":[],"message":"limit is invalid"}}
+GET /api/releases?limit=101 | 400 | {"error":{"code":"MALFORMED_REQUEST","details":[],"message":"limit is invalid"}}
+GET /api/releases?x=1 | 400 | {"error":{"code":"MALFORMED_REQUEST","details":[],"message":"Query parameters are invalid"}}
+GET /api/releases?series=a&series=b | 400 | {"error":{"code":"MALFORMED_REQUEST","details":[],"message":"Query parameters are invalid"}}
+GET /api/releases/{id}: plain | 200 | {"analyses":[{"analysis_id":"b80d43e9635114584dc649f38aba8c70ea388d59329ee1e25abbe5226a67cc91","analysis_state":"OK","arm":null,"baseline_eligible":true,"coverage_reasons":[],"coverage_status":"COMPLETE","ineligible_reasons":[],"policy_sha256":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","policy_verdict":"PASS","run_validity":"VALID"}],"baseline_eligible":true,"created_at":"<ts>","ineligible_reasons":[],"label":"1.0","notes":null,"profile":null,"release_id":"<release_id>","run_id":"jmeter_jtl_csv-6d8b83decbc5a86a9527ff1c53553fa43ce8eb469a1011e96a47a40cc2137636","schema_version":"local-release.v1","series":"checkout","started_at":"<ts>","updated_at":"<ts>"}
+GET /api/releases/{id}: fail | 200 | len=746 sha256=d8952a5831dccffcde478d54cd479791d753b4e7ea393587e4697794f01e08dd
+GET /api/releases/{id}: two arms | 200 | len=1034 sha256=6c53b00a9ddcdfce461fc613dafc92fbe3faa0453be5202e68ff928ad0d2f806
+GET /api/releases/{id}: profile and notes | 200 | len=866 sha256=c9fefc18e5567d2d924cd26eaa537f3b77f38e78bdc11b8eea3856245e14671a
+GET /api/releases/{id}: empty profile | 200 | len=733 sha256=784acbc69e2dbb28d8979c4c73f1d7708a5dcbc333ca3472c91aa7d82ea0ed85
+GET /api/releases/zz | 400 | {"error":{"code":"MALFORMED_REQUEST","details":[],"message":"Release id is invalid"}}
+GET /api/releases/000000000000000-00000000 | 404 | {"error":{"code":"NOT_FOUND","details":[],"message":"Release was not found"}}
+GET /api/releases/000000000000000-00000000 | 404 | {"error":{"code":"NOT_FOUND","details":[],"message":"Release was not found"}}
+GET /api/releases/{id}?x=1 | 400 | {"error":{"code":"MALFORMED_REQUEST","details":[],"message":"Query parameters are invalid"}}
+PUT /api/releases: label and notes | 200 | {"analyses":[{"analysis_id":"b80d43e9635114584dc649f38aba8c70ea388d59329ee1e25abbe5226a67cc91","analysis_state":"OK","arm":null,"baseline_eligible":true,"coverage_reasons":[],"coverage_status":"COMPLETE","ineligible_reasons":[],"policy_sha256":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","policy_verdict":"PASS","run_validity":"VALID"}],"baseline_eligible":true,"created_at":"<ts>","ineligible_reasons":[],"label":"1.0b","notes":"n\nm","profile":null,"release_id":"<release_id>","run_id":"jmeter_jtl_csv-6d8b83decbc5a86a9527ff1c53553fa43ce8eb469a1011e96a47a40cc2137636","schema_version":"local-release.v1","series":"checkout","started_at":"<ts>","updated_at":"<ts>"}
+PUT /api/releases: profile | 200 | len=808 sha256=7ec8f1bc9719b59d21e1882b40adec6015bcf3db1a52cff93c16fccd24728c06
+PUT /api/releases: other analysis, same start | 200 | {"analyses":[{"analysis_id":"9978eb61c119a07cc55a80982f2390c14d991947f1ceb8ae16fbce2602a08d63","analysis_state":"OK","arm":null,"baseline_eligible":true,"coverage_reasons":[],"coverage_status":"COMPLETE","ineligible_reasons":[],"policy_sha256":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","policy_verdict":"PASS","run_validity":"VALID"}],"baseline_eligible":true,"created_at":"<ts>","ineligible_reasons":[],"label":"1.0b","notes":null,"profile":null,"release_id":"<release_id>","run_id":"jmeter_jtl_csv-6d8b83decbc5a86a9527ff1c53553fa43ce8eb469a1011e96a47a40cc2137636","schema_version":"local-release.v1","series":"checkout","started_at":"<ts>","updated_at":"<ts>"}
+PUT /api/releases: registered elsewhere | 422 | {"error":{"code":"RELEASE_STARTED_AT_MISMATCH","details":[],"message":"Analyses start at a different time than the release"}}
+PUT /api/releases: start differs | 422 | {"error":{"code":"RELEASE_STARTED_AT_MISMATCH","details":[],"message":"Analyses start at a different time than the release"}}
+PUT /api/releases: two without arms | 422 | {"error":{"code":"RELEASE_ARM_CONFLICT","details":[],"message":"Arms must be distinct and present when a release has several analyses"}}
+PUT /api/releases: no metadata | 422 | {"error":{"code":"RELEASE_ANALYSIS_NO_RUN_METADATA","details":[],"message":"Analysis has no usable run metadata"}}
+PUT /api/releases: extra key | 400 | {"error":{"code":"MALFORMED_REQUEST","details":[],"message":"Release fields are invalid"}}
+PUT /api/releases: missing key | 400 | {"error":{"code":"MALFORMED_REQUEST","details":[],"message":"Release fields are invalid"}}
+PUT /api/releases: label blank | 400 | {"error":{"code":"MALFORMED_REQUEST","details":[],"message":"label is required"}}
+PUT /api/releases: bad analyses | 400 | {"error":{"code":"MALFORMED_REQUEST","details":[],"message":"analyses must be an array"}}
+PUT /api/releases: bad profile | 400 | {"error":{"code":"MALFORMED_REQUEST","details":[],"message":"profile is invalid"}}
+PUT /api/releases: bad notes | 400 | {"error":{"code":"MALFORMED_REQUEST","details":[],"message":"notes is invalid"}}
+PUT /api/releases: unknown id | 404 | {"error":{"code":"NOT_FOUND","details":[],"message":"Release was not found"}}
+PUT /api/releases: invalid id | 400 | {"error":{"code":"MALFORMED_REQUEST","details":[],"message":"Release id is invalid"}}
+PUT /api/releases: wrong content type | 415 | {"error":{"code":"UNSUPPORTED_MEDIA_TYPE","details":[],"message":"application/json is required"}}
+GET /api/releases/{id}: after replacements | 200 | {"analyses":[{"analysis_id":"9978eb61c119a07cc55a80982f2390c14d991947f1ceb8ae16fbce2602a08d63","analysis_state":"OK","arm":null,"baseline_eligible":true,"coverage_reasons":[],"coverage_status":"COMPLETE","ineligible_reasons":[],"policy_sha256":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","policy_verdict":"PASS","run_validity":"VALID"}],"baseline_eligible":true,"created_at":"<ts>","ineligible_reasons":[],"label":"1.0b","notes":null,"profile":null,"release_id":"<release_id>","run_id":"jmeter_jtl_csv-6d8b83decbc5a86a9527ff1c53553fa43ce8eb469a1011e96a47a40cc2137636","schema_version":"local-release.v1","series":"checkout","started_at":"<ts>","updated_at":"<ts>"}
+DELETE /api/releases/{id} | 200 | {"release":null}
+DELETE /api/releases/{id} | 200 | {"release":null}
+DELETE /api/releases/{id} | 200 | {"release":null}
+DELETE /api/releases/{id} | 200 | {"release":null}
+DELETE /api/releases/{id} | 200 | {"release":null}
+DELETE /api/releases/{id}: invalid | 400 | {"error":{"code":"MALFORMED_REQUEST","details":[],"message":"Release id is invalid"}}
+GET /api/releases: empty | 200 | len=803 sha256=9676fc1bba247b05cf6e010e469a775f329e4cfa4019c05b44945868c8ac0665

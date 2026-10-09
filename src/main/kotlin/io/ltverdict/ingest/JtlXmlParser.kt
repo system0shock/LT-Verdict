@@ -100,7 +100,13 @@ private fun parseXmlEvents(
 
             XMLStreamConstants.END_ELEMENT -> {
                 if (captured != null && reader.localName == "failureMessage") {
-                    captured?.let { owner -> if (owner.failureMessage == null) owner.failureMessage = capture.toString().takeIf { it.isNotBlank() } }
+                    captured?.let { owner ->
+                        if (owner.failureMessage ==
+                            null
+                        ) {
+                            owner.failureMessage = capture.toString().takeIf { it.isNotBlank() }
+                        }
+                    }
                     captured = null
                     capture.setLength(0)
                 }
@@ -108,7 +114,8 @@ private fun parseXmlEvents(
                     val completed = samples.pollLast() ?: invalidXml("MALFORMED_JMETER_XML")
                     emit(
                         completed.sample.copy(
-                            failureMessage = completed.failureMessage?.takeIf { !completed.sample.successful } ?: completed.sample.failureMessage,
+                            failureMessage =
+                                completed.failureMessage?.takeIf { !completed.sample.successful } ?: completed.sample.failureMessage,
                             kind =
                                 if (completed.hasSampleChild) {
                                     SampleKind.JMETER_CONTAINER
@@ -145,8 +152,24 @@ private fun XMLStreamReader.readSample(groupPath: List<String>): LoadSample {
             groupPath,
             SampleKind.JMETER_SAMPLER,
             successful,
-            responseCode = if (successful) null else getAttributeValue(null, "rc")?.take(MAX_XML_RESPONSE_CODE_CHARS)?.takeIf { it.isNotEmpty() },
-            failureMessage = if (successful) null else getAttributeValue(null, "rm")?.take(MAX_XML_FAILURE_MESSAGE_CHARS)?.takeIf { it.isNotEmpty() },
+            responseCode =
+                if (successful) {
+                    null
+                } else {
+                    getAttributeValue(
+                        null,
+                        "rc",
+                    )?.take(MAX_XML_RESPONSE_CODE_CHARS)?.takeIf { it.isNotEmpty() }
+                },
+            failureMessage =
+                if (successful) {
+                    null
+                } else {
+                    getAttributeValue(
+                        null,
+                        "rm",
+                    )?.take(MAX_XML_FAILURE_MESSAGE_CHARS)?.takeIf { it.isNotEmpty() }
+                },
         )
     } catch (_: IllegalArgumentException) {
         invalidXml("INVALID_SAMPLE_TIMESTAMP")

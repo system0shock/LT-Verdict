@@ -16,7 +16,6 @@ import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.io.TempDir
 import java.io.ByteArrayInputStream
-import java.nio.file.Files
 import java.nio.file.Path
 import javax.xml.parsers.DocumentBuilderFactory
 
@@ -65,17 +64,24 @@ class ErrorGroupsReportsTest {
         val good = checkNotNull(groups(outcome)).decodeToString()
         val damaged =
             listOf(
-                "{", "[]", good.replace("error-groups.v1", "error-groups.v9"),
-                good.replace("\"count\":2", "\"count\":-2"), "[".repeat(50) + "]".repeat(50),
+                "{",
+                "[]",
+                good.replace("error-groups.v1", "error-groups.v9"),
+                good.replace("\"count\":2", "\"count\":-2"),
+                "[".repeat(50) + "]".repeat(50),
             )
 
         damaged.forEach { text ->
             val html = renderHtmlReport(outcome.canonicalResult, "fixed", text.encodeToByteArray()).decodeToString()
             assertTrue(html.contains("Разбивка ошибок недоступна"), text.take(40))
         }
-        val inconsistent = listOf(good.replace("\"count\":2", "\"count\":9"), good.replace("\"total_error_count\":5", "\"total_error_count\":6"))
+        val inconsistent =
+            listOf(good.replace("\"count\":2", "\"count\":9"), good.replace("\"total_error_count\":5", "\"total_error_count\":6"))
         inconsistent.forEach { text ->
-            assertTrue(renderHtmlReport(outcome.canonicalResult, "fixed", text.encodeToByteArray()).decodeToString().contains("недоступна"), text)
+            assertTrue(
+                renderHtmlReport(outcome.canonicalResult, "fixed", text.encodeToByteArray()).decodeToString().contains("недоступна"),
+                text,
+            )
         }
         val badUtf8 = good.encodeToByteArray().also { it[it.indexOf('s'.code.toByte())] = 0xC3.toByte() }
         assertTrue(renderHtmlReport(outcome.canonicalResult, "fixed", badUtf8).decodeToString().contains("недоступна"))
@@ -127,9 +133,12 @@ class ErrorGroupsReportsTest {
     @Test
     fun `a staged run says the errors are of the whole run`() {
         val csv =
-            StagedResults.RAMP.decodeToString().lines().mapIndexed { index, line ->
-                if (index == 3) line.replace("200,OK,stages 1-1,text,true", "503,Busy,stages 1-1,text,false") else line
-            }.joinToString("\n")
+            StagedResults.RAMP
+                .decodeToString()
+                .lines()
+                .mapIndexed { index, line ->
+                    if (index == 3) line.replace("200,OK,stages 1-1,text,true", "503,Busy,stages 1-1,text,false") else line
+                }.joinToString("\n")
         val outcome = StagedResults.analyze(tempDir, csv.encodeToByteArray(), null, StagedResults.RAMP_STEADY_DOWN)
 
         val html = renderHtmlReport(outcome.canonicalResult, "fixed", groups(outcome)).decodeToString()
@@ -150,7 +159,16 @@ class ErrorGroupsReportsTest {
         assertTrue(text.contains("top errors (whole run, 5 total):\n  2 503 Service Unavailable [login]\n"), text)
         assertEquals("whole_run", block.getValue("scope").jsonPrimitive.content)
         assertEquals("5", block.getValue("total_error_count").jsonPrimitive.content)
-        assertEquals("503", block.getValue("groups").jsonArray.first().jsonObject.getValue("response_code").jsonPrimitive.content)
+        assertEquals(
+            "503",
+            block
+                .getValue("groups")
+                .jsonArray
+                .first()
+                .jsonObject
+                .getValue("response_code")
+                .jsonPrimitive.content,
+        )
         assertTrue(block.getValue("groups").jsonArray.size <= 5)
     }
 

@@ -545,10 +545,25 @@ private fun errorGroupsSection(view: ErrorGroupsView?): String {
     val rows =
         view.rows.joinToString("") { row ->
             "<tr>" +
-                listOf(row.count.toString(), row.share, row.code, row.message, row.transaction).joinToString("") { "<td>${escape(it)}</td>" } +
+                listOf(
+                    row.count.toString(),
+                    row.share,
+                    row.code,
+                    row.message,
+                    row.transaction,
+                ).joinToString("") { "<td>${escape(it)}</td>" } +
                 "</tr>"
         }
-    val grid = if (view.rows.isEmpty()) "" else table("Группы ошибок", listOf("Ошибок", "Доля", "Код ответа", "Сообщение", "Транзакция"), rows)
+    val grid =
+        if (view.rows.isEmpty()) {
+            ""
+        } else {
+            table(
+                "Группы ошибок",
+                listOf("Ошибок", "Доля", "Код ответа", "Сообщение", "Транзакция"),
+                rows,
+            )
+        }
     return "<section><h2>Ошибки</h2>$grid$notes</section>"
 }
 

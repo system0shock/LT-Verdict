@@ -44,20 +44,47 @@ class ErrorGroupsIdentityTest {
             val groups = Json.parseToJsonElement(Files.readString(outcome.analysisDirectory.resolve("error-groups.json"))).jsonObject
             val manifest = Json.parseToJsonElement(Files.readString(outcome.analysisDirectory.resolve("manifest.json"))).jsonObject
             val overall =
-                Json.parseToJsonElement(outcome.canonicalResult.decodeToString()).jsonObject.getValue("evidence").jsonArray.map { it.jsonObject }.single {
-                    it["type"]?.jsonPrimitive?.content == "metric_summary" && it.getValue("scope").jsonObject["kind"]?.jsonPrimitive?.content == "overall"
-                }
+                Json
+                    .parseToJsonElement(
+                        outcome.canonicalResult.decodeToString(),
+                    ).jsonObject
+                    .getValue("evidence")
+                    .jsonArray
+                    .map { it.jsonObject }
+                    .single {
+                        it["type"]?.jsonPrimitive?.content == "metric_summary" &&
+                            it
+                                .getValue("scope")
+                                .jsonObject["kind"]
+                                ?.jsonPrimitive
+                                ?.content == "overall"
+                    }
 
             assertEquals(overall.getValue("error_count").jsonPrimitive.content, groups.getValue("total_error_count").jsonPrimitive.content)
             assertEquals(
-                listOf("login|503|Service Unavailable|2", "search|200|Test failed: text expected to contain 'ok'|1", "search|Non HTTP response code: java.net.SocketTimeoutException|Non HTTP response message: Read timed out|1"),
+                listOf(
+                    "login|503|Service Unavailable|2",
+                    "search|200|Test failed: text expected to contain 'ok'|1",
+                    "search|Non HTTP response code: java.net.SocketTimeoutException|Non HTTP response message: Read timed out|1",
+                ),
                 groups.getValue("groups").jsonArray.map { group ->
                     val item = group.jsonObject
-                    listOf(item.getValue("scope").jsonObject.getValue("label"), item.getValue("response_code"), item.getValue("message"), item.getValue("count"))
-                        .joinToString("|") { it.jsonPrimitive.content }
+                    listOf(
+                        item.getValue("scope").jsonObject.getValue("label"),
+                        item.getValue("response_code"),
+                        item.getValue("message"),
+                        item.getValue("count"),
+                    ).joinToString("|") { it.jsonPrimitive.content }
                 },
             )
-            assertTrue(manifest.getValue("artifacts").jsonArray.any { it.jsonObject.getValue("path").jsonPrimitive.content == "error-groups.json" })
+            assertTrue(
+                manifest.getValue("artifacts").jsonArray.any {
+                    it.jsonObject
+                        .getValue("path")
+                        .jsonPrimitive.content ==
+                        "error-groups.json"
+                },
+            )
             assertEquals(outcome.analysisId, service.analyze(AnalysisRequest(input, null)).analysisId)
             assertTrue(Files.exists(outcome.analysisDirectory.resolve("error-groups.json")))
         }

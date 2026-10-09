@@ -49,7 +49,11 @@ class ErrorGroupsTest {
         assertEquals("0", result.text("omitted_group_count"))
         assertEquals(
             listOf("login|503|Service Unavailable|3", "search|200|Test failed|3", "login|500|boom|1", "search|null|null|1"),
-            groups.map { "${it.getValue("scope").jsonObject.text("label")}|${it.text("response_code")}|${it.text("message")}|${it.text("count")}" },
+            groups.map {
+                "${it.getValue(
+                    "scope",
+                ).jsonObject.text("label")}|${it.text("response_code")}|${it.text("message")}|${it.text("count")}"
+            },
         )
         val first = groups.first()
         assertEquals("1000", first.text("from_epoch_ms"))
@@ -57,7 +61,14 @@ class ErrorGroupsTest {
         assertEquals("transaction", first.getValue("scope").jsonObject.text("kind"))
         assertEquals("JMETER_SAMPLER", first.getValue("scope").jsonObject.text("sample_kind"))
         assertEquals(JsonArray(emptyList()), first.getValue("scope").jsonObject.getValue("group_path"))
-        assertEquals(JsonArray(listOf(JsonPrimitive("flow"))), groups.last().getValue("scope").jsonObject.getValue("group_path"))
+        assertEquals(
+            JsonArray(listOf(JsonPrimitive("flow"))),
+            groups
+                .last()
+                .getValue("scope")
+                .jsonObject
+                .getValue("group_path"),
+        )
         assertTrue(first.text("id")!!.matches(Regex("errgrp-[0-9a-f]{64}")))
         assertEquals(groups.size, groups.map { it.text("id") }.toSet().size)
         assertEquals(JsonNull, groups.last().getValue("response_code"))
@@ -87,10 +98,20 @@ class ErrorGroupsTest {
         val cut = byCode.getValue("x".repeat(64) + "…")
 
         assertEquals("a b c d e f g h", cut.text("message"))
-        assertFalse(cut.getValue("message_truncated").jsonPrimitive.content.toBoolean())
+        assertFalse(
+            cut
+                .getValue("message_truncated")
+                .jsonPrimitive.content
+                .toBoolean(),
+        )
         val long = byCode.getValue("200")
         assertEquals("m".repeat(200) + "…", long.text("message"))
-        assertTrue(long.getValue("message_truncated").jsonPrimitive.content.toBoolean())
+        assertTrue(
+            long
+                .getValue("message_truncated")
+                .jsonPrimitive.content
+                .toBoolean(),
+        )
         val empty = groups.single { it.getValue("response_code") == JsonNull }
         assertEquals(JsonNull, empty.getValue("message"))
         assertEquals(3, groups.size)
@@ -119,7 +140,15 @@ class ErrorGroupsTest {
         assertEquals("2028", result.text("omitted_group_count"))
         val shown = result.getValue("groups").jsonArray.sumOf { it.jsonObject.text("count")!!.toLong() }
         assertEquals(3005L, shown + result.text("omitted_error_count")!!.toLong() + result.text("untracked_error_count")!!.toLong())
-        assertEquals("6", result.getValue("groups").jsonArray.first().jsonObject.text("count"))
+        assertEquals(
+            "6",
+            result
+                .getValue("groups")
+                .jsonArray
+                .first()
+                .jsonObject
+                .text("count"),
+        )
     }
 
     @Test
@@ -132,7 +161,13 @@ class ErrorGroupsTest {
 
         assertEquals(1, groups.size)
         assertEquals("2", groups.single().text("count"))
-        assertTrue(groups.single().getValue("message_truncated").jsonPrimitive.content.toBoolean())
+        assertTrue(
+            groups
+                .single()
+                .getValue("message_truncated")
+                .jsonPrimitive.content
+                .toBoolean(),
+        )
     }
 
     @Test
@@ -141,7 +176,15 @@ class ErrorGroupsTest {
         accumulator.record(sample("z", path = listOf("a")))
         accumulator.record(sample("a", path = listOf("z")))
 
-        val labels = parse(accumulator.finish()).getValue("groups").jsonArray.map { it.jsonObject.getValue("scope").jsonObject.text("label") }
+        val labels =
+            parse(
+                accumulator.finish(),
+            ).getValue("groups").jsonArray.map {
+                it.jsonObject
+                    .getValue("scope")
+                    .jsonObject
+                    .text("label")
+            }
 
         assertEquals(listOf("a", "z"), labels)
     }

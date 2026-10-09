@@ -146,7 +146,8 @@ internal class ErrorGroupAccumulator(
     }
 
     private fun Key.byteSize(): Long =
-        (groupPath + label + kind.name + (code ?: "") + (message ?: "")).sumOf { it.encodeToByteArray().size.toLong() + 1 } + KEY_OVERHEAD_BYTES
+        (groupPath + label + kind.name + (code ?: "") + (message ?: "")).sumOf { it.encodeToByteArray().size.toLong() + 1 } +
+            KEY_OVERHEAD_BYTES
 
     // Contract order: label, group path, sample kind, code, message (UTF-8 bytes; a missing code or message sorts first).
     private fun compareKeys(

@@ -83,7 +83,9 @@ class LoadSampleFailureTextTest {
     @Test
     fun `xml response code and message attributes are bounded`() {
         val xml =
-            "<testResults><httpSample ts=\"1000\" t=\"5\" lb=\"a\" s=\"false\" rc=\"${"7".repeat(1_000)}\" rm=\"${"m".repeat(100_000)}\"/></testResults>"
+            "<testResults><httpSample ts=\"1000\" t=\"5\" lb=\"a\" s=\"false\" rc=\"${"7".repeat(
+                1_000,
+            )}\" rm=\"${"m".repeat(100_000)}\"/></testResults>"
         val samples = mutableListOf<LoadSample>()
 
         parseJtlXml(write("attributes.xml", xml), samples::add)

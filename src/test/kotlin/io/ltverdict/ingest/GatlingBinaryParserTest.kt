@@ -41,7 +41,15 @@ class GatlingBinaryParserTest {
                     listOf(
                         sample(1_788_212_198_063L, 78, "catalog", listOf("checkout"), SampleKind.GATLING_REQUEST, true),
                         sample(1_788_212_198_149L, 4, "catalog", listOf("checkout"), SampleKind.GATLING_REQUEST, true),
-                        sample(1_788_212_198_153L, 2, "missing", listOf("checkout"), SampleKind.GATLING_REQUEST, false, "status.find.is(200), found 404"),
+                        sample(
+                            1_788_212_198_153L,
+                            2,
+                            "missing",
+                            listOf("checkout"),
+                            SampleKind.GATLING_REQUEST,
+                            false,
+                            "status.find.is(200), found 404",
+                        ),
                         sample(1_788_212_198_156L, 2, "catalog", listOf("checkout"), SampleKind.GATLING_REQUEST, true),
                         sample(1_788_212_198_048L, 110, "checkout", emptyList(), SampleKind.GATLING_GROUP, false),
                     ),

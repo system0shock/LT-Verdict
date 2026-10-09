@@ -57,7 +57,9 @@ internal fun readErrorGroupsFile(analysisDirectory: Path): ByteArray? {
         if (!Files.isRegularFile(file, LinkOption.NOFOLLOW_LINKS) || Files.size(file) > MAX_ERROR_GROUPS_BYTES) {
             null
         } else {
-            Files.newInputStream(file, LinkOption.NOFOLLOW_LINKS).use { it.readNBytes(MAX_ERROR_GROUPS_BYTES.toInt() + 1) }
+            Files
+                .newInputStream(file, LinkOption.NOFOLLOW_LINKS)
+                .use { it.readNBytes(MAX_ERROR_GROUPS_BYTES.toInt() + 1) }
                 .takeIf { it.size <= MAX_ERROR_GROUPS_BYTES }
         }
     } catch (_: java.io.IOException) {
@@ -74,10 +76,17 @@ internal fun errorGroupsView(
     errorGroups: ByteArray?,
 ): ErrorGroupsView? {
     val overallErrors = overallErrorCount(result)
-    val parsed = errorGroups?.let { parseErrorGroups(it, (result["run_id"] as? JsonPrimitive)?.content, stageNotice(result) != null, overallErrors) }
+    val parsed =
+        errorGroups?.let {
+            parseErrorGroups(it, (result["run_id"] as? JsonPrimitive)?.content, stageNotice(result) != null, overallErrors)
+        }
     if (parsed == null) {
         return if (overallErrors != null && overallErrors > 0) {
-            ErrorGroupsView(overallErrors, emptyList(), listOf("Разбивка ошибок недоступна: анализ создан до появления разбивки или её файл повреждён."))
+            ErrorGroupsView(
+                overallErrors,
+                emptyList(),
+                listOf("Разбивка ошибок недоступна: анализ создан до появления разбивки или её файл повреждён."),
+            )
         } else {
             null
         }
@@ -120,7 +129,13 @@ private fun parseErrorGroups(
             groups.map { group ->
                 val count = group.count("count") ?: return null
                 val scope = group["scope"] as? JsonObject ?: return null
-                val path = (scope["group_path"] as? JsonArray).orEmpty().mapNotNull { (it as? JsonPrimitive)?.takeUnless { v -> v is JsonNull }?.content }
+                val path =
+                    (scope["group_path"] as? JsonArray).orEmpty().mapNotNull {
+                        (it as? JsonPrimitive)
+                            ?.takeUnless { v ->
+                                v is JsonNull
+                            }?.content
+                    }
                 val label = scope.text("label") ?: return null
                 val code = group.text("response_code")?.let { cleanErrorText(it, ERROR_CODE_CHARS_MAX + 1).first }
                 val message = group.text("message")?.let { cleanErrorText(it, ERROR_MESSAGE_CHARS_MAX + 1).first }
@@ -154,7 +169,11 @@ private fun percent(
     count: Long,
     total: Long,
 ): String =
-    BigDecimal(count).multiply(BigDecimal(100)).divide(BigDecimal(total), 1, RoundingMode.HALF_UP).toPlainString().replace('.', ',') + " %"
+    BigDecimal(count)
+        .multiply(BigDecimal(100))
+        .divide(BigDecimal(total), 1, RoundingMode.HALF_UP)
+        .toPlainString()
+        .replace('.', ',') + " %"
 
 private fun jsonDepth(bytes: ByteArray): Int {
     var depth = 0
@@ -164,7 +183,14 @@ private fun jsonDepth(bytes: ByteArray): Int {
     for (value in bytes) {
         val char = value.toInt().toChar()
         when {
-            inString -> if (escaped) escaped = false else if (char == '\\') escaped = true else if (char == '"') inString = false
+            inString ->
+                if (escaped) {
+                    escaped = false
+                } else if (char == '\\') {
+                    escaped = true
+                } else if (char == '"') {
+                    inString = false
+                }
             char == '"' -> inString = true
             char == '{' || char == '[' -> maximum = maxOf(maximum, ++depth)
             char == '}' || char == ']' -> depth--

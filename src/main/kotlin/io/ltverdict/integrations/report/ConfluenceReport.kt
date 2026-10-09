@@ -34,7 +34,9 @@ internal fun renderConfluenceReport(
             append("<h2>Error groups</h2>")
             view.notes.forEach { append("<p>").append(it.xml()).append("</p>") }
             if (view.rows.isNotEmpty()) {
-                append("<table><thead><tr><th>Errors</th><th>Share</th><th>Response code</th><th>Message</th><th>Transaction</th></tr></thead><tbody>")
+                append(
+                    "<table><thead><tr><th>Errors</th><th>Share</th><th>Response code</th><th>Message</th><th>Transaction</th></tr></thead><tbody>",
+                )
                 view.rows.forEach { row ->
                     append("<tr>")
                     listOf(row.count.toString(), row.share, row.code, row.message, row.transaction).forEach {

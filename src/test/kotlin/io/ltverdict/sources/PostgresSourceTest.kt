@@ -14,6 +14,9 @@ import org.junit.jupiter.api.Assertions.assertThrows
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Assumptions.assumeTrue
 import org.junit.jupiter.api.Test
+import org.junit.jupiter.api.fail
+import org.opentest4j.AssertionFailedError
+import org.opentest4j.TestAbortedException
 import java.io.ByteArrayInputStream
 import java.lang.reflect.Method
 import java.lang.reflect.Proxy
@@ -370,20 +373,40 @@ class PostgresSourceTest {
     }
 
     @Test
+    fun `strict PostgreSQL gate is on only for the value 1 and rejects other values`() {
+        assertFalse(strictPostgresRequired { null })
+        assertFalse(strictPostgresRequired { "" })
+        assertTrue(strictPostgresRequired { name -> if (name == "LTV_REQUIRE_POSTGRES") "1" else null })
+        listOf("true", "0", "1 ", "yes").forEach { value ->
+            assertThrows(AssertionFailedError::class.java) { strictPostgresRequired { value } }
+        }
+    }
+
+    @Test
+    fun `strict PostgreSQL gate fails an unmet condition while the default gate skips it`() {
+        assumeIntegration(true, "met", strict = true)
+        assumeIntegration(true, "met", strict = false)
+        val failure =
+            assertThrows(AssertionFailedError::class.java) { assumeIntegration(false, "UNVERIFIED: not configured", strict = true) }
+        assertTrue(failure.message.orEmpty().contains("UNVERIFIED: not configured"))
+        assertThrows(TestAbortedException::class.java) { assumeIntegration(false, "UNVERIFIED: not configured", strict = false) }
+    }
+
+    @Test
     fun `dedicated PostgreSQL captures exact synthetic table and statement delta`() {
-        assumeTrue(
+        assumeIntegration(
             System.getenv("LT_VERDICT_PG_IT_DEDICATED") == "true",
             "UNVERIFIED: set LT_VERDICT_PG_IT_DEDICATED=true for the opt-in real PostgreSQL gate",
         )
         val host = integrationEnvironment("LT_VERDICT_PG_IT_HOST")
         val port = integrationEnvironment("LT_VERDICT_PG_IT_PORT").toIntOrNull()
-        assumeTrue(port != null, "UNVERIFIED: LT_VERDICT_PG_IT_PORT must be an integer")
+        assumeIntegration(port != null, "UNVERIFIED: LT_VERDICT_PG_IT_PORT must be an integer")
         val database = integrationEnvironment("LT_VERDICT_PG_IT_DATABASE")
         val adminUser = integrationEnvironment("LT_VERDICT_PG_IT_ADMIN_USER")
         val adminPassword = integrationEnvironment("LT_VERDICT_PG_IT_ADMIN_PASSWORD")
         val captureUser = integrationEnvironment("LT_VERDICT_PG_IT_CAPTURE_USER")
         integrationEnvironment("LT_VERDICT_PG_IT_CAPTURE_PASSWORD")
-        assumeTrue(adminUser != captureUser, "UNVERIFIED: capture role must be separate from the admin role")
+        assumeIntegration(adminUser != captureUser, "UNVERIFIED: capture role must be separate from the admin role")
         val allowInsecure = System.getenv("LT_VERDICT_PG_IT_ALLOW_INSECURE") == "true"
         val schema = "lt_verdict_it_${UUID.randomUUID().toString().replace("-", "")}"
         val integrationProfile =
@@ -436,7 +459,7 @@ class PostgresSourceTest {
                             "JOIN pg_catalog.pg_namespace n ON n.oid = e.extnamespace " +
                             "WHERE e.extname = 'pg_stat_statements'",
                     )
-                assumeTrue(pgssSchema != null, "UNVERIFIED: pg_stat_statements is not installed")
+                assumeIntegration(pgssSchema != null, "UNVERIFIED: pg_stat_statements is not installed")
                 admin.createStatement().use { statement ->
                     statement.queryTimeout = 30
                     statement.execute("CREATE SCHEMA ${testIdentifier(schema)}")
@@ -827,8 +850,28 @@ private fun statementRow(
 
 private fun integrationEnvironment(name: String): String {
     val value = System.getenv(name)
-    assumeTrue(!value.isNullOrBlank(), "UNVERIFIED: $name is not configured")
+    assumeIntegration(!value.isNullOrBlank(), "UNVERIFIED: $name is not configured")
     return requireNotNull(value)
+}
+
+private const val REQUIRE_POSTGRES_ENV = "LTV_REQUIRE_POSTGRES"
+
+// Strict gate: with LTV_REQUIRE_POSTGRES=1 a missing PostgreSQL setup fails the test instead of skipping it.
+// Any other non-empty value fails too, so a typo cannot switch the gate off silently.
+private fun strictPostgresRequired(environment: (String) -> String? = System::getenv): Boolean =
+    when (val value = environment(REQUIRE_POSTGRES_ENV)) {
+        null, "" -> false
+        "1" -> true
+        else -> fail("$REQUIRE_POSTGRES_ENV must be unset, empty or 1, got '$value'")
+    }
+
+private fun assumeIntegration(
+    condition: Boolean,
+    message: String,
+    strict: Boolean = strictPostgresRequired(),
+) {
+    if (!condition && strict) fail("$message ($REQUIRE_POSTGRES_ENV=1 requires a configured PostgreSQL)")
+    assumeTrue(condition, message)
 }
 
 private fun integrationDatabasePath(value: String): String =

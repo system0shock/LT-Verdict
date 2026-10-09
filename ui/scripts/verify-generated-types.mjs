@@ -267,6 +267,7 @@ lines.push(
   'export const sourceOptional: NotStricter<SourceSummaryEvidence, GeneratedSourceSummaryEvidence> = true',
   'export const openSearchKeys: SameKeys<OpenSearchEvidence, GeneratedOpensearchErrorsEvidence> = true',
   'export const openSearchOptional: NotStricter<OpenSearchEvidence, GeneratedOpensearchErrorsEvidence> = true',
+  'export const openSearchAssignable = (value: GeneratedOpensearchErrorsEvidence): OpenSearchEvidence => value',
 )
 lines.push(
   '',

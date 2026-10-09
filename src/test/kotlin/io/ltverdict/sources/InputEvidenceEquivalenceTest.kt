@@ -279,5 +279,11 @@ class InputEvidenceEquivalenceTest {
                 put("extra", "kept silently")
             }.toQueryDocument("x")
         }
+        // an explicit null or a number would be turned into text by the typed document: refused as well
+        listOf<JsonElement>(JsonNull, JsonPrimitive(5)).forEach { odd ->
+            assertThrows(IllegalStateException::class.java) {
+                JsonObject(mapOf("id" to JsonPrimitive("x"), "status" to JsonPrimitive("SUCCESS"), "reason" to odd)).toQueryDocument("x")
+            }
+        }
     }
 }

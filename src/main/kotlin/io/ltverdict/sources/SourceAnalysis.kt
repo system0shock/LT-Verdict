@@ -679,9 +679,9 @@ internal fun acquireMultipleSources(
 
 private val SOURCE_QUERY_KEYS = setOf("id", "status", "reason", "expression_sha256")
 
-/** A query entry of a profile summary as the typed document, under the (qualified) [id]; an unknown key is never dropped silently. */
+/** A query entry of a profile summary as the typed document, under the (qualified) [id]; an unknown key or value is never dropped silently. */
 internal fun JsonObject.toQueryDocument(id: String): SourceQueryDocument {
-    check(keys.all { it in SOURCE_QUERY_KEYS }) { "SOURCE_QUERY_SHAPE_UNKNOWN" }
+    check(keys.all { it in SOURCE_QUERY_KEYS } && values.all { it is JsonPrimitive && it.isString }) { "SOURCE_QUERY_SHAPE_UNKNOWN" }
     return SourceQueryDocument(
         id,
         getValue("status").jsonPrimitive.content,

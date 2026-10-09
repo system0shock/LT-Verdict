@@ -28,7 +28,9 @@ class HumanReportAppendixTest {
     private val baseline =
         Json
             .parseToJsonElement(
-                """{"baseline":{"run_id":"jmeter_jtl_csv-${"a".repeat(64)}","analysis_id":"${"b".repeat(64)}"},"comparability":"UNCONFIRMED",
+                """{"baseline":{"run_id":"jmeter_jtl_csv-${"a".repeat(
+                    64,
+                )}","analysis_id":"${"b".repeat(64)}"},"comparability":"UNCONFIRMED",
                 "scope":"whole_run","warnings":[],"metrics":[{"metric":"response_time_p95_ms","unit":"ms","baseline":"100","current":"125",
                 "delta":"25","delta_percent":"25","reason":null,"percent_reason":null}]}""",
             ).jsonObject
@@ -58,12 +60,12 @@ class HumanReportAppendixTest {
         {"type":"window_metric_summary","id":"w-1","window_id":"evaluation","sample_count":10,"error_count":0,"error_rate_ratio":null,
         "throughput_rps":{"numerator":10,"denominator":5000},"latency_ms":{"p50":1,"p95":2,"p99":3,"max":4}}],
         "findings":[{"id":"finding-1","type":"policy_failure","rule_id":"items-p95","evidence_id":"check-1"}],
-        "policy_verdict":"FAIL","run_id":"run-1","run_validity":"VALID","schema_version":"analysis-result.v1"}"""
-            .replace("\n", "")
+        "policy_verdict":"FAIL","run_id":"run-1","run_validity":"VALID","schema_version":"analysis-result.v1"}""".replace("\n", "")
             .replace(Regex("\\s{2,}"), "")
 
     private fun scenarios(): Map<String, String> {
         val csv = Files.readAllBytes(Path.of("fixtures/slice1/jmeter/csv-5.6.3/input.jtl"))
+
         fun plain(
             name: String,
             input: ByteArray,
@@ -108,14 +110,26 @@ class HumanReportAppendixTest {
         }
         assertEquals(
             listOf(
-                "Вердикт и причины", "Прогон", "Ошибки", "Правила", "Транзакции", "Изменения относительно baseline", "Ограничения",
+                "Вердикт и причины",
+                "Прогон",
+                "Ошибки",
+                "Правила",
+                "Транзакции",
+                "Изменения относительно baseline",
+                "Ограничения",
                 "Приложение",
             ),
             h2(all.getValue("csv-baseline")),
         )
         assertEquals(
             listOf(
-                "Область вердикта", "Вердикт и причины", "Прогон", "Правила", "Транзакции", "Изменения относительно baseline", "Ограничения",
+                "Область вердикта",
+                "Вердикт и причины",
+                "Прогон",
+                "Правила",
+                "Транзакции",
+                "Изменения относительно baseline",
+                "Ограничения",
                 "Приложение",
             ),
             h2(all.getValue("staged-fail-baseline")),
@@ -134,9 +148,20 @@ class HumanReportAppendixTest {
 
         assertEquals(
             listOf(
-                "Общие метрики и метрики транзакций", "Проверки правил, исходные данные", "Привязка ресурсов", "Сводки по ресурсам",
-                "Итоги правил по окнам", "Проверки правил по ресурсам", "Получение источников", "Диагностический анализ", "Корреляции",
-                "Проверки аномалий", "Метрики по окнам", "Находки", "Идентификаторы evidence", "Канонический JSON",
+                "Общие метрики и метрики транзакций",
+                "Проверки правил, исходные данные",
+                "Привязка ресурсов",
+                "Сводки по ресурсам",
+                "Итоги правил по окнам",
+                "Проверки правил по ресурсам",
+                "Получение источников",
+                "Диагностический анализ",
+                "Корреляции",
+                "Проверки аномалий",
+                "Метрики по окнам",
+                "Находки",
+                "Идентификаторы evidence",
+                "Канонический JSON",
             ),
             summaries,
         )
@@ -175,7 +200,13 @@ class HumanReportAppendixTest {
             assertTrue(html.contains("style-src 'sha256-$hash'"), name)
             assertTrue(style.contains("summary:focus-visible"), name)
         }
-        assertTrue(scenarios().getValue("ramp-pass").substringAfter("<style>").substringBefore("</style>").contains("load-chart"))
+        assertTrue(
+            scenarios()
+                .getValue("ramp-pass")
+                .substringAfter("<style>")
+                .substringBefore("</style>")
+                .contains("load-chart"),
+        )
     }
 
     private fun text(fragment: String) = fragment.replace(Regex("<[^>]+>"), "")
@@ -184,11 +215,15 @@ class HumanReportAppendixTest {
         val body = html.substringAfter("<main>").substringBefore("</main>")
         val out = mutableListOf<String>()
         Regex("<tr>(.*?)</tr>", RegexOption.DOT_MATCHES_ALL).findAll(body).forEach { row ->
-            out += "tr:" + Regex("<t[dh][^>]*>(.*?)</t[dh]>", RegexOption.DOT_MATCHES_ALL).findAll(row.groupValues[1]).joinToString("|") {
-                text(it.groupValues[1])
-            }
+            out += "tr:" +
+                Regex("<t[dh][^>]*>(.*?)</t[dh]>", RegexOption.DOT_MATCHES_ALL).findAll(row.groupValues[1]).joinToString("|") {
+                    text(it.groupValues[1])
+                }
         }
-        Regex("<dt[^>]*>(.*?)</dt><dd[^>]*>(.*?)</dd>").findAll(body).forEach { out += "dl:${text(it.groupValues[1])}=${text(it.groupValues[2])}" }
+        Regex("<dt[^>]*>(.*?)</dt><dd[^>]*>(.*?)</dd>").findAll(body).forEach {
+            out +=
+                "dl:${text(it.groupValues[1])}=${text(it.groupValues[2])}"
+        }
         listOf("li", "p", "code", "pre", "h3").forEach { tag ->
             Regex("<$tag[ >](.*?)</$tag>", RegexOption.DOT_MATCHES_ALL).findAll(body).forEach { out += "$tag:${text(it.groupValues[1])}" }
         }
@@ -238,12 +273,26 @@ class HumanReportAppendixTest {
     /** Title and raw body of every block; the order and the wrappers may change, a body may neither change nor move under another title. */
     private fun bodies(html: String): List<String> =
         (
-            sectionBlock.findAll(html).filter { it.groupValues[1] != "Приложение" }.map { (appendixTitles[it.groupValues[1]] ?: it.groupValues[1]) + " " + it.groupValues[2] } +
+            sectionBlock.findAll(html).filter { it.groupValues[1] != "Приложение" }.map {
+                (
+                    appendixTitles[it.groupValues[1]]
+                        ?: it.groupValues[1]
+                ) +
+                    " " +
+                    it.groupValues[2]
+            } +
                 detailsBlock.findAll(html).map { it.groupValues[1] + " " + it.groupValues[2] }
         ).toList()
 
     private val headerRenames =
-        renames.map { (old, new) -> if (old.startsWith("dl:")) "<dt>${old.removePrefix("dl:").removeSuffix("=")}</dt>" to "<dt>${new.removePrefix("dl:").removeSuffix("=")}</dt>" else old to new } +
+        renames.map { (old, new) ->
+            if (old.startsWith("dl:")) {
+                "<dt>${old.removePrefix("dl:").removeSuffix("=")}</dt>" to
+                    "<dt>${new.removePrefix("dl:").removeSuffix("=")}</dt>"
+            } else {
+                old to new
+            }
+        } +
             listOf("<h1 lang=\"en\">LT Verdict report</h1>" to "<h1>Отчёт LT Verdict</h1>", "<dl lang=\"en\">" to "<dl>")
 
     @Test
@@ -252,7 +301,10 @@ class HumanReportAppendixTest {
             val old = Files.readString(legacyRoot.resolve("$name.html"))
             assertTrue(bodies(html).size >= 7, name)
             assertEquals(bodies(old).map(::renamed).sorted(), bodies(html).sorted(), name)
-            val oldRest = headerRenames.fold(sectionBlock.replace(old.substringAfter("<main>"), "")) { text, (from, to) -> text.replace(from, to) }
+            val oldRest =
+                headerRenames.fold(
+                    sectionBlock.replace(old.substringAfter("<main>"), ""),
+                ) { text, (from, to) -> text.replace(from, to) }
             assertEquals(oldRest, sectionBlock.replace(html.substringAfter("<main>"), ""), name)
         }
     }

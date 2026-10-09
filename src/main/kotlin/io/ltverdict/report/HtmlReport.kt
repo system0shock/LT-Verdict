@@ -36,7 +36,10 @@ internal fun renderHtmlReport(
     // W2.6 PR 3: the raw blocks go to the collapsed appendix at the end; the order below is the order of the page.
     val appendixItems =
         buildList {
-            add("Общие метрики и метрики транзакций" to if (metrics.isEmpty()) "<p>unavailable</p>" else metrics.joinToString("") { metric(it) })
+            add(
+                "Общие метрики и метрики транзакций" to
+                    if (metrics.isEmpty()) "<p>unavailable</p>" else metrics.joinToString("") { metric(it) },
+            )
             add("Проверки правил, исходные данные" to list(checks))
             if (hasResourceEvidence) {
                 add("Привязка ресурсов" to list(resourceBindings))

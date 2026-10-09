@@ -2,7 +2,7 @@
   `ltv analyze <input> --stages <load-stages.json>` и multipart-часть `stages` задания анализа
   (`POST /api/jobs`, одна часть) включают вердикт по окну `steady` без снимка ресурсов. Недопустимое
   объявление даёт в CLI выход 4 со строками `<code> <json-pointer>: <message>`, в API `422 INVALID_STAGES`
-  с `errors[{code, json_pointer, message}]`; слишком большой файл или больше 16 стадий это
+  с `error.details[{code, json_pointer, message}]`; слишком большой файл или больше 16 стадий это
   `413 RESOURCE_LIMIT_EXCEEDED`. Сочетание стадий со снимком ресурсов, планом ёмкости или онлайн-запросом
   источника отвергается (`STAGES_RESOURCES_CONFLICT`, `STAGES_CAPACITY_CONFLICT`, `STAGES_SOURCE_CONFLICT`:
   в CLI выход 4 до чтения входа и без обращения к источнику, в API `422 INVALID_STAGES`); офлайн-контекст

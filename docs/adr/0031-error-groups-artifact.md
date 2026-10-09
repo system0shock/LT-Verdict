@@ -107,7 +107,7 @@ Canonical JSON. Считаются только неуспешные сэмпл�
 
 - Новый файл `error-groups.json` каталога анализа (этот ADR).
 - `summary.txt` получает блок `top errors (whole run, <N> total):` с не более чем 5 строками
-  `  <count> <code> <message> [<transaction>]` только при наличии групп.
+  `<count> <code> <message> [<transaction>]` (с отступом в два пробела) только при наличии групп.
 - `ltv summary` (`cli-summary.v1`) получает необязательный ключ `error_groups`
   (`scope`, `total_error_count`, `other_error_count`, `groups[]` не более 5) только при наличии групп.
 - Отчёты HTML, AsciiDoc, Confluence получают раздел «Ошибки» / `Error groups`; HTML и AsciiDoc

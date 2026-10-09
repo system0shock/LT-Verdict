@@ -194,6 +194,11 @@ private suspend fun receiveJob(
         call.request.contentLength()
             ?: throw ApiFailure(HttpStatusCode.LengthRequired, "LENGTH_REQUIRED", "Job request requires Content-Length")
     if (contentLength > MAX_JOB_REQUEST_BYTES) tooLarge("Job request exceeds its resource limit")
+    val job = readJobParts(call)
+    return bindJob(job, store, sourceProfiles)
+}
+
+private class JobParts {
     var runId: String? = null
     var policy: PolicyValidation.Valid? = null
     var resources: ResourceValidation.Valid? = null
@@ -210,60 +215,69 @@ private suspend fun receiveJob(
     var capacitySeen = false
     var trendSeen = false
     var podViewSeen = false
-    var parts = 0
     var invalidParts = false
+}
+
+private suspend fun readJobParts(call: ApplicationCall): JobParts {
+    val job = JobParts()
+    var parts = 0
     try {
         call.receiveMultipart(formFieldLimit = (MAX_RESOURCE_SNAPSHOT_BYTES + 1).toLong()).forEachPart { part ->
             try {
                 if (++parts > MAX_JOB_PARTS) malformed("Job multipart body has too many parts")
                 when {
-                    part is PartData.FileItem && part.name in POSTGRES_PART_LIMITS && part.name !in postgresFiles && !invalidParts -> {
+                    part is PartData.FileItem &&
+                        part.name in POSTGRES_PART_LIMITS &&
+                        part.name !in job.postgresFiles &&
+                        !job.invalidParts -> {
                         val name = checkNotNull(part.name)
                         val limit = POSTGRES_PART_LIMITS.getValue(name)
                         val bytes = withContext(Dispatchers.IO) { part.provider().toInputStream().readNBytes(limit + 1) }
                         if (bytes.size > limit) tooLarge("PostgreSQL artifact exceeds its resource limit")
-                        postgresFiles[name] = bytes
+                        job.postgresFiles[name] = bytes
                     }
-                    part is PartData.FileItem && part.name == "source_context" && !invalidParts -> {
-                        if (sourceContexts.size == 16) malformed("Too many source contexts")
+                    part is PartData.FileItem && part.name == "source_context" && !job.invalidParts -> {
+                        if (job.sourceContexts.size == 16) malformed("Too many source contexts")
                         val bytes = withContext(Dispatchers.IO) { part.provider().toInputStream().readNBytes(MAX_RESOURCE_BYTES + 1) }
-                        if (bytes.size > MAX_RESOURCE_BYTES || sourceContexts.sumOf { it.size.toLong() } + bytes.size > MAX_CONTEXT_BYTES) {
+                        if (bytes.size > MAX_RESOURCE_BYTES ||
+                            job.sourceContexts.sumOf { it.size.toLong() } + bytes.size > MAX_CONTEXT_BYTES
+                        ) {
                             tooLarge("Source context exceeds its resource limit")
                         }
-                        sourceContexts += bytes
+                        job.sourceContexts += bytes
                     }
-                    part is PartData.FileItem && part.name == "source_request" && sourceRequest == null && !invalidParts -> {
-                        sourceRequest =
+                    part is PartData.FileItem && part.name == "source_request" && job.sourceRequest == null && !job.invalidParts -> {
+                        job.sourceRequest =
                             try {
                                 withContext(Dispatchers.IO) { readWindowedSourceRequest(part.provider().toInputStream()) }
                             } catch (_: IllegalArgumentException) {
                                 malformed("Source request is invalid")
                             }
                     }
-                    part is PartData.FormItem && part.name == "run_id" && runId == null && !invalidParts -> {
+                    part is PartData.FormItem && part.name == "run_id" && job.runId == null && !job.invalidParts -> {
                         if (part.value.isEmpty() || part.value.encodeToByteArray().size > MAX_RUN_ID_BYTES) {
                             malformed("run_id is invalid")
                         }
-                        runId = part.value
+                        job.runId = part.value
                     }
 
-                    part is PartData.FileItem && part.name == "policy" && !policySeen && !invalidParts -> {
-                        policySeen = true
+                    part is PartData.FileItem && part.name == "policy" && !job.policySeen && !job.invalidParts -> {
+                        job.policySeen = true
                         val validation =
                             withContext(Dispatchers.IO) {
                                 validatePolicy(part.provider().toInputStream(), MAX_POLICY_BYTES)
                             }
                         validation.failureResponse()?.let { throw it }
-                        policy =
+                        job.policy =
                             when (validation) {
                                 is PolicyValidation.Valid -> validation
                                 is PolicyValidation.Invalid -> throw InvalidPolicy(validation)
                             }
                     }
 
-                    part is PartData.FileItem && part.name == "resource_snapshot" && !resourcesSeen && !invalidParts -> {
-                        resourcesSeen = true
-                        resources =
+                    part is PartData.FileItem && part.name == "resource_snapshot" && !job.resourcesSeen && !job.invalidParts -> {
+                        job.resourcesSeen = true
+                        job.resources =
                             when (
                                 val validation =
                                     withContext(
@@ -280,9 +294,9 @@ private suspend fun receiveJob(
                             }
                     }
 
-                    part is PartData.FileItem && part.name == "correlation_plan" && !diagnosticsSeen && !invalidParts -> {
-                        diagnosticsSeen = true
-                        diagnostics =
+                    part is PartData.FileItem && part.name == "correlation_plan" && !job.diagnosticsSeen && !job.invalidParts -> {
+                        job.diagnosticsSeen = true
+                        job.diagnostics =
                             when (
                                 val validation =
                                     withContext(Dispatchers.IO) {
@@ -299,9 +313,9 @@ private suspend fun receiveJob(
                             }
                     }
 
-                    part is PartData.FileItem && part.name == "capacity_plan" && !capacitySeen && !invalidParts -> {
-                        capacitySeen = true
-                        capacity =
+                    part is PartData.FileItem && part.name == "capacity_plan" && !job.capacitySeen && !job.invalidParts -> {
+                        job.capacitySeen = true
+                        job.capacity =
                             when (
                                 val validation =
                                     withContext(Dispatchers.IO) {
@@ -318,9 +332,9 @@ private suspend fun receiveJob(
                             }
                     }
 
-                    part is PartData.FileItem && part.name == "trend_plan" && !trendSeen && !invalidParts -> {
-                        trendSeen = true
-                        trend =
+                    part is PartData.FileItem && part.name == "trend_plan" && !job.trendSeen && !job.invalidParts -> {
+                        job.trendSeen = true
+                        job.trend =
                             when (
                                 val validation =
                                     withContext(Dispatchers.IO) {
@@ -337,9 +351,9 @@ private suspend fun receiveJob(
                             }
                     }
 
-                    part is PartData.FileItem && part.name == "pod_view" && !podViewSeen && !invalidParts -> {
-                        podViewSeen = true
-                        podView =
+                    part is PartData.FileItem && part.name == "pod_view" && !job.podViewSeen && !job.invalidParts -> {
+                        job.podViewSeen = true
+                        job.podView =
                             when (
                                 val validation =
                                     withContext(Dispatchers.IO) { validatePodView(part.provider().toInputStream(), MAX_POD_VIEW_BYTES) }
@@ -354,7 +368,7 @@ private suspend fun receiveJob(
                             }
                     }
 
-                    else -> invalidParts = true
+                    else -> job.invalidParts = true
                 }
             } finally {
                 part.release()
@@ -377,6 +391,30 @@ private suspend fun receiveJob(
     } catch (_: Exception) {
         malformed("Multipart body is malformed")
     }
+    return job
+}
+
+private suspend fun bindJob(
+    job: JobParts,
+    store: RunBundleStore,
+    sourceProfiles: List<SourceProfile>,
+): AnalysisRequest {
+    val runId = job.runId
+    val policy = job.policy
+    val resources = job.resources
+    val diagnostics = job.diagnostics
+    val capacity = job.capacity
+    val trend = job.trend
+    val podView = job.podView
+    val sourceRequest = job.sourceRequest
+    val sourceContexts = job.sourceContexts
+    val postgresFiles = job.postgresFiles
+    val resourcesSeen = job.resourcesSeen
+    val diagnosticsSeen = job.diagnosticsSeen
+    val capacitySeen = job.capacitySeen
+    val trendSeen = job.trendSeen
+    val podViewSeen = job.podViewSeen
+    val invalidParts = job.invalidParts
     if (invalidParts || runId == null || !RUN_ID.matches(runId)) malformed("Job multipart body is invalid")
     sourceRequest?.let { selection ->
         if (resourcesSeen ||

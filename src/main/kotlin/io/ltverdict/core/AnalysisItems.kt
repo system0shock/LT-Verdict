@@ -46,11 +46,17 @@ internal sealed interface AnalysisEvidence {
 
 internal fun AnalysisFinding.toJson(): JsonObject = ITEM_JSON.encodeToJsonElement(AnalysisFinding.serializer(), this).jsonObject
 
-internal fun AnalysisEvidence.toJson(): JsonObject = ITEM_JSON.encodeToJsonElement(AnalysisEvidence.serializer(), this).jsonObject
+/** A raw-number field is put back as the very JsonPrimitive the builder passed, see [RawNumberSerializer]. */
+internal fun AnalysisEvidence.toJson(): JsonObject {
+    val tree = ITEM_JSON.encodeToJsonElement(AnalysisEvidence.serializer(), this).jsonObject
+    return if (this is PolicyCheckEvidence) JsonObject(tree + ("threshold" to threshold)) else tree
+}
 
 /**
  * A policy threshold is a JsonPrimitive number of any precision ("12345678901234567890.5"). kotlinx would write it into the
- * tree through Long or Double; an unquoted literal keeps the text, as the old `put("threshold", JsonPrimitive(x))` did.
+ * tree through Long or Double, so the encoder gets an unquoted literal that keeps the text; [toJson] then replaces it with the
+ * original primitive, so the item is the same object as the old `put("threshold", JsonPrimitive(x))` built, also for any later
+ * kotlinx encoding of the in-memory item (a marked literal and a plain one are `equals` but are written differently).
  */
 internal object RawNumberSerializer : KSerializer<JsonPrimitive> {
     override val descriptor = PrimitiveSerialDescriptor("RawNumber", PrimitiveKind.DOUBLE)

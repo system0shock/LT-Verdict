@@ -1,5 +1,6 @@
 // GENERATED from the @Serializable models in src/main/kotlin/io/ltverdict/core/AnalysisItems.kt.
-// Do not edit. Regenerate: LTV_UPDATE_GENERATED_TYPES=1 gradlew test --tests io.ltverdict.core.TypeScriptGeneratorItemsTest
+// Do not edit. Regenerate with
+// LTV_UPDATE_GENERATED_TYPES=1 gradlew test --tests io.ltverdict.core.TypeScriptGeneratorItemsTest
 // Describes the findings and evidence items the engine writes (optional fields are omitted, never null);
 // it is not a validator. Only the families already typed in Kotlin are here.
 

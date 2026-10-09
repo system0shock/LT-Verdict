@@ -55,7 +55,8 @@ class TypeScriptGeneratorItemsTest {
             TypeScriptGenerator.generate(
                 listOf(AnalysisFinding.serializer(), AnalysisEvidence.serializer()),
                 "// GENERATED from the @Serializable models in src/main/kotlin/io/ltverdict/core/AnalysisItems.kt.\n" +
-                    "// Do not edit. Regenerate: LTV_UPDATE_GENERATED_TYPES=1 gradlew test --tests io.ltverdict.core.TypeScriptGeneratorItemsTest\n" +
+                    "// Do not edit. Regenerate with\n" +
+                    "// LTV_UPDATE_GENERATED_TYPES=1 gradlew test --tests io.ltverdict.core.TypeScriptGeneratorItemsTest\n" +
                     "// Describes the findings and evidence items the engine writes (optional fields are omitted, never null);\n" +
                     "// it is not a validator. Only the families already typed in Kotlin are here.\n",
             )

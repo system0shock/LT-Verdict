@@ -7,6 +7,9 @@ import io.ltverdict.metrics.LatencySummary
 import io.ltverdict.metrics.MetricSummary
 import io.ltverdict.metrics.TransactionIdentity
 import kotlinx.serialization.descriptors.elementDescriptors
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.jsonPrimitive
@@ -26,6 +29,23 @@ class AnalysisItemsEquivalenceTest {
     private fun outcome(item: JsonObject): String =
         runCatching { canonicalJson(item).decodeToString() }.getOrElse { "FAILS: ${it.message}" }
 
+    // A kotlinx encoding of the in-memory item must also stay what it was: it writes a plain JsonPrimitive number through
+    // Double ("0.10" becomes 0.1) and an unquoted literal verbatim, although the two are equal. Compared leaf by leaf, because
+    // the key order of a kotlinx encoding is the insertion order.
+    private fun kotlinxLeaves(
+        element: JsonElement,
+        path: String = "",
+        into: MutableMap<String, String> = sortedMapOf(),
+    ): Map<String, String> {
+        when (element) {
+            is JsonObject -> element.forEach { (key, value) -> kotlinxLeaves(value, "$path/$key", into) }
+            is JsonArray -> element.forEachIndexed { index, value -> kotlinxLeaves(value, "$path[$index]", into) }
+            is JsonPrimitive ->
+                into[path] = runCatching { Json.encodeToString(JsonElement.serializer(), element) }.getOrElse { "FAILS: ${it::class}" }
+        }
+        return into
+    }
+
     private fun same(
         expected: JsonObject,
         actual: JsonObject,
@@ -33,6 +53,7 @@ class AnalysisItemsEquivalenceTest {
     ) {
         assertEquals(expected, actual, label)
         assertEquals(outcome(expected), outcome(actual), label)
+        assertEquals(kotlinxLeaves(expected), kotlinxLeaves(actual), label)
         compared++
     }
 

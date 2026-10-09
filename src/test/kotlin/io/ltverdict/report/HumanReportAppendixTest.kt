@@ -112,6 +112,7 @@ class HumanReportAppendixTest {
             listOf(
                 "Вердикт и причины",
                 "Прогон",
+                "Итого по прогону",
                 "Ошибки",
                 "Правила",
                 "Транзакции",
@@ -126,6 +127,7 @@ class HumanReportAppendixTest {
                 "Область вердикта",
                 "Вердикт и причины",
                 "Прогон",
+                "Итого по прогону",
                 "Правила",
                 "Транзакции",
                 "Изменения относительно baseline",
@@ -135,7 +137,16 @@ class HumanReportAppendixTest {
             h2(all.getValue("staged-fail-baseline")),
         )
         assertEquals(
-            listOf("Вердикт и причины", "Диагностика ресурсов", "Ошибки", "Правила", "Транзакции", "Ограничения", "Приложение"),
+            listOf(
+                "Вердикт и причины",
+                "Диагностика ресурсов",
+                "Итого по прогону",
+                "Ошибки",
+                "Правила",
+                "Транзакции",
+                "Ограничения",
+                "Приложение",
+            ),
             h2(all.getValue("rich")),
         )
     }
@@ -249,6 +260,9 @@ class HumanReportAppendixTest {
             "p:Сырые данные анализа для сверки и обработки программами; расшифровка есть в разделах выше. Блоки свёрнуты: раскройте нужный.",
         )
 
+    // PR 4 adds one block to the page; it is the only difference from the snapshots that the equality tests let through.
+    private fun withoutOverall(html: String) = Regex("<section><h2>Итого по прогону</h2>.*?</section>", RegexOption.DOT_MATCHES_ALL).replace(html, "")
+
     private val sectionBlock = Regex("<section[^>]*><h2>(.*?)</h2>(.*?)</section>", RegexOption.DOT_MATCHES_ALL)
     private val detailsBlock = Regex("<details><summary>(.*?)</summary><div lang=\"en\">(.*?)</div></details>", RegexOption.DOT_MATCHES_ALL)
 
@@ -278,10 +292,10 @@ class HumanReportAppendixTest {
                     appendixTitles[it.groupValues[1]]
                         ?: it.groupValues[1]
                 ) +
-                    " " +
+                    "<<>>" +
                     it.groupValues[2]
             } +
-                detailsBlock.findAll(html).map { it.groupValues[1] + " " + it.groupValues[2] }
+                detailsBlock.findAll(html).map { it.groupValues[1] + "<<>>" + it.groupValues[2] }
         ).toList()
 
     private val headerRenames =
@@ -297,7 +311,8 @@ class HumanReportAppendixTest {
 
     @Test
     fun `every block body is byte for byte the body captured before the change and nothing else was added to the page`() {
-        scenarios().forEach { (name, html) ->
+        scenarios().forEach { (name, page) ->
+            val html = withoutOverall(page)
             val old = Files.readString(legacyRoot.resolve("$name.html"))
             assertTrue(bodies(html).size >= 7, name)
             assertEquals(bodies(old).map(::renamed).sorted(), bodies(html).sorted(), name)
@@ -311,7 +326,8 @@ class HumanReportAppendixTest {
 
     @Test
     fun `numbers, cells, verdicts and codes are the same as in the report captured before the change`() {
-        scenarios().forEach { (name, html) ->
+        scenarios().forEach { (name, page) ->
+            val html = withoutOverall(page)
             val old = Files.readString(legacyRoot.resolve("$name.html"))
             val expected = records(old).map(::renamed).sorted()
             val actual = records(html).filterNot { it in addedByThisChange }.sorted()

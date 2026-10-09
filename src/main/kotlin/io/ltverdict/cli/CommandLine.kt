@@ -9,6 +9,7 @@ import io.ltverdict.core.AnalysisService
 import io.ltverdict.core.CapacityPlanValidation
 import io.ltverdict.core.DiagnosticValidation
 import io.ltverdict.core.EngineConfig
+import io.ltverdict.core.LoadStagesValidation
 import io.ltverdict.core.PodViewValidation
 import io.ltverdict.core.PolicyValidation
 import io.ltverdict.core.ResourceValidation
@@ -18,6 +19,7 @@ import io.ltverdict.core.validateCapacityBinding
 import io.ltverdict.core.validateCapacityPlan
 import io.ltverdict.core.validateDiagnosticBinding
 import io.ltverdict.core.validateDiagnosticPlan
+import io.ltverdict.core.validateLoadStages
 import io.ltverdict.core.validatePlatformBinding
 import io.ltverdict.core.validatePodView
 import io.ltverdict.core.validatePodViewBinding
@@ -121,6 +123,7 @@ private fun analyze(
     var capacityPath: Path? = null
     var trendPath: Path? = null
     var podViewPath: Path? = null
+    var stagesPath: Path? = null
     var connectionsPath: Path? = null
     var sourcePath: Path? = null
     val sourceContextPaths = mutableListOf<Path>()
@@ -165,6 +168,10 @@ private fun analyze(
                 if (podViewPath != null || index + 1 >= args.size) usage()
                 podViewPath = path(args[index + 1])
             }
+            "--stages" -> {
+                if (stagesPath != null || index + 1 >= args.size) usage()
+                stagesPath = path(args[index + 1])
+            }
             "--connections" -> {
                 if (connectionsPath != null || index + 1 >= args.size) usage()
                 connectionsPath = path(args[index + 1])
@@ -207,6 +214,12 @@ private fun analyze(
     requireRegularFile(input, EXIT_INVALID_INPUT, "INVALID_INPUT")
     outDir?.let { requireOutDir(it, input) }
     if ((sourcePath == null) != (connectionsPath == null)) usage()
+    // ADR 0030, R3: stages and a snapshot, a capacity plan or an online request are two sources of windows; refused before any read.
+    if (stagesPath != null) {
+        if (capacityPath != null) throw CliFailure(EXIT_INVALID_INPUT, "STAGES_CAPACITY_CONFLICT")
+        if (resourcesPath != null) throw CliFailure(EXIT_INVALID_INPUT, "STAGES_RESOURCES_CONFLICT")
+        if (sourcePath != null) throw CliFailure(EXIT_INVALID_INPUT, "STAGES_SOURCE_CONFLICT")
+    }
     if (sourcePath != null &&
         (
             resourcesPath != null ||
@@ -226,6 +239,7 @@ private fun analyze(
     }
     val source = if (sourceRequest == null) null else PromqlSource(profiles, SourceHttp(profiles))
     val policy = policyPath?.let { readPolicy(it, stdin) }
+    val stages = stagesPath?.let(::readStages)
     val resources = resourcesPath?.let(::readResources)
     val diagnostics = diagnosticsPath?.let(::readDiagnostics)
     val capacity = capacityPath?.let(::readCapacity)
@@ -323,6 +337,7 @@ private fun analyze(
                         capacity = capacity,
                         trend = trend,
                         podView = podView,
+                        stages = stages,
                         sourceRequest = sourceRequest,
                         sourceAcquisition = context,
                         postgres = postgres,
@@ -752,6 +767,26 @@ private fun readResources(path: Path): ResourceValidation.Valid {
     }
 }
 
+private fun readStages(path: Path): LoadStagesValidation.Valid {
+    requireRegularFile(path, EXIT_INVALID_INPUT, "INVALID_STAGES")
+    val validation =
+        try {
+            Files.newInputStream(path, LinkOption.NOFOLLOW_LINKS).use { validateLoadStages(it) }
+        } catch (failure: IOException) {
+            throw CliFailure(EXIT_INVALID_INPUT, "INVALID_STAGES: ${failure.message ?: "read failed"}")
+        }
+    return when (validation) {
+        is LoadStagesValidation.Valid -> validation
+        is LoadStagesValidation.Invalid ->
+            throw CliFailure(
+                EXIT_INVALID_INPUT,
+                validation.errors.joinToString(System.lineSeparator()) {
+                    "${it.code} ${it.jsonPointer.ifEmpty { "/" }}: ${it.message}"
+                },
+            )
+    }
+}
+
 private fun readDiagnostics(path: Path): DiagnosticValidation.Valid {
     requireRegularFile(path, EXIT_INVALID_INPUT, "INVALID_DIAGNOSTICS")
     val validation =
@@ -849,7 +884,8 @@ private fun usageText(): String =
     (
         "Usage: ltv ui [--data-dir <path>] [--analysis-parallelism <n>] [--histogram-significant-digits <3..5>] " +
             "[--connections <profiles.json>] [--jenkins-config <jenkins.json>] | " +
-            "ltv analyze <input> [--policy <policy.json>|-] [--out-dir <dir>] [--resources <snapshot.json>] [--capacity <plan.json>] " +
+            "ltv analyze <input> [--policy <policy.json>|-] [--stages <load-stages.json>] [--out-dir <dir>] " +
+            "[--resources <snapshot.json>] [--capacity <plan.json>] " +
             "[--trend <plan.json>] [--pod-view <pod-view.json>] [--correlation <plan.json>] [--source-context <context.json>] " +
             "[--postgres-pre <pre.json>] [--postgres-post <post.json>] [--pg-profile-html <report.html>] " +
             "[--connections <profiles.json> --source <source.json>] [--histogram-significant-digits <3..5>] [--data-dir <path>] | " +

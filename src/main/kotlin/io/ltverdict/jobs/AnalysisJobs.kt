@@ -238,6 +238,17 @@ internal class AnalysisJobs(
                                             Diagnostic("DIAGNOSTIC_WINDOW_NOT_FOUND", "Diagnostic window was not found")
                                         "DIAGNOSTIC_INVALID_BINDING" ->
                                             Diagnostic("DIAGNOSTIC_INVALID_BINDING", "Diagnostic plan binding is invalid")
+                                        "STAGE_OUTSIDE_RUN" ->
+                                            Diagnostic(
+                                                "STAGE_OUTSIDE_RUN",
+                                                "A steady stage starts at or after the end of the run; check the stage offsets",
+                                            )
+                                        "STAGES_RESOURCES_CONFLICT" ->
+                                            Diagnostic("STAGES_RESOURCES_CONFLICT", "Stages cannot be combined with a resource snapshot")
+                                        "STAGES_CAPACITY_CONFLICT" ->
+                                            Diagnostic("STAGES_CAPACITY_CONFLICT", "Stages cannot be combined with a capacity plan")
+                                        "STAGES_SOURCE_CONFLICT" ->
+                                            Diagnostic("STAGES_SOURCE_CONFLICT", "Stages cannot be combined with an online source request")
                                         "AUTO_WINDOW_UNAVAILABLE" ->
                                             Diagnostic(
                                                 "AUTO_WINDOW_UNAVAILABLE",

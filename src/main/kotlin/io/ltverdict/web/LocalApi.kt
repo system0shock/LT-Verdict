@@ -159,6 +159,9 @@ private const val SESSION_COOKIE = "ltv_session"
 
 private const val CSRF_HEADER = "X-LTV-CSRF"
 
+// Stays in this file: ui/e2e/rules-adapters.spec.ts reads this declaration to keep the UI policy bound aligned with it.
+internal const val MAX_POLICY_BYTES = 1_048_576
+
 private const val CONTENT_SECURITY_POLICY =
     "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; " +
         "object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'"

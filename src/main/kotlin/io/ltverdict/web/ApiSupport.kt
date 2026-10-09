@@ -221,8 +221,6 @@ internal class InvalidPodView(
 
 internal const val MAX_UPLOAD_BYTES = 4_294_967_296L
 
-internal const val MAX_POLICY_BYTES = 1_048_576
-
 // 16 MiB: source_context, PostgreSQL parts and capture. The resource snapshot has its own limit in the core.
 internal const val MAX_RESOURCE_BYTES = 16 * 1024 * 1024
 

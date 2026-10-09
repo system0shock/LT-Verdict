@@ -36,6 +36,7 @@ import io.ltverdict.core.validatePolicy
 import io.ltverdict.core.validateResourceSnapshot
 import io.ltverdict.core.validateTrendBinding
 import io.ltverdict.core.validateTrendPlan
+import io.ltverdict.ingest.AcceptedInput
 import io.ltverdict.jobs.JobStatus
 import io.ltverdict.jobs.SubmitResult
 import io.ltverdict.sources.SourceProfile
@@ -43,7 +44,6 @@ import io.ltverdict.sources.WindowedSourceRequest
 import io.ltverdict.sources.readOpenSearchContexts
 import io.ltverdict.sources.readPostgresAnalysisInput
 import io.ltverdict.sources.readWindowedSourceRequest
-import io.ltverdict.storage.AcceptedInput
 import io.ltverdict.storage.RunBundleStore
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.NonCancellable

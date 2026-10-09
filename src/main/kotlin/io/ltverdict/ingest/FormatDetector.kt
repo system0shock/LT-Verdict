@@ -2,7 +2,6 @@
 
 package io.ltverdict.ingest
 
-import io.ltverdict.storage.AcceptedInput
 import java.io.ByteArrayInputStream
 import java.nio.ByteBuffer
 import java.nio.charset.StandardCharsets

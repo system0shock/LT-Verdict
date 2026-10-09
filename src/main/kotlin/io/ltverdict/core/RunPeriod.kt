@@ -1,11 +1,11 @@
 package io.ltverdict.core
 
+import io.ltverdict.ingest.AcceptedInput
 import io.ltverdict.ingest.MAX_TIMESTAMP_EPOCH_MILLIS
 import io.ltverdict.ingest.RunValidity
 import io.ltverdict.ingest.SampleKind
 import io.ltverdict.ingest.SourceType
 import io.ltverdict.ingest.parseInput
-import io.ltverdict.storage.AcceptedInput
 import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive

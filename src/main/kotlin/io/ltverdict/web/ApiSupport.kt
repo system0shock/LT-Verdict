@@ -15,6 +15,7 @@ import io.ltverdict.core.PolicyValidation
 import io.ltverdict.core.PolicyValidationError
 import io.ltverdict.core.RuleFailure
 import io.ltverdict.core.RuleFailureKind
+import io.ltverdict.core.StoredAnalysis
 import io.ltverdict.core.canonicalJson
 import io.ltverdict.storage.RunBundleStore
 import kotlinx.coroutines.Dispatchers
@@ -95,7 +96,7 @@ internal fun PolicyValidationError.toJson(): JsonObject =
         put("message", message)
     }
 
-internal suspend fun RunBundleStore.requireAnalysis(call: ApplicationCall): io.ltverdict.storage.StoredAnalysis {
+internal suspend fun RunBundleStore.requireAnalysis(call: ApplicationCall): StoredAnalysis {
     val runId = call.parameters["runId"] ?: notFound("Run was not found")
     val analysisId = call.parameters["analysisId"] ?: notFound("Analysis was not found")
     return withContext(Dispatchers.IO) {

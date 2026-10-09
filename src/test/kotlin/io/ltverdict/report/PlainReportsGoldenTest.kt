@@ -4,6 +4,7 @@ import io.ltverdict.cli.junitXml
 import io.ltverdict.cli.summaryJson
 import io.ltverdict.cli.summaryText
 import io.ltverdict.core.StagedResults
+import io.ltverdict.integrations.report.readRunTimeline
 import io.ltverdict.integrations.report.renderConfluenceReport
 import org.junit.jupiter.api.Assertions.assertArrayEquals
 import org.junit.jupiter.api.Assertions.assertTrue
@@ -49,7 +50,7 @@ class PlainReportsGoldenTest {
                 }
             val files =
                 mapOf(
-                    "report.html" to renderHtmlReport(result, "fixed", groups),
+                    "report.html" to renderHtmlReport(result, "fixed", groups, null, readRunTimeline(outcome.analysisDirectory)),
                     "report.adoc" to renderAsciiDocReport(result, "fixed", groups),
                     "report.confluence" to renderConfluenceReport(result, "fixed", groups),
                     "summary.txt" to summaryText("fixed", exit, result, groups),

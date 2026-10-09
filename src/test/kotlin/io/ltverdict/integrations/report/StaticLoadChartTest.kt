@@ -134,6 +134,41 @@ class StaticLoadChartTest {
         assertEquals("SAVED_BUCKETS_INVALID", failure.message)
     }
 
+    @Test
+    fun `standalone chart bytes are frozen`() {
+        val start = 1_767_225_600_000L
+        val gapped =
+            listOf(
+                bucket(start, samples = 60, errors = 1, p95Millis = 100),
+                bucket(start + 60_000, samples = 120, errors = 2, p95Millis = 10_000),
+                bucket(start + 180_000, samples = 30, errors = 0, p95Millis = 50),
+            )
+        val saved = temporaryDirectory.resolve("rollup-60s.ndjson")
+        Files.writeString(
+            saved,
+            buildString {
+                repeat(501) { index ->
+                    append(bucket(index * 60_000L, samples = 60L + index, errors = index % 3L, p95Millis = 10L + index)).append('\n')
+                }
+            },
+        )
+        val actual =
+            mapOf(
+                "gapped" to renderLoadChart(gapped, rollup = 60),
+                "single" to renderLoadChart(listOf(bucket(start, samples = 5, errors = 0, p95Millis = 7)), rollup = 10),
+                "empty" to renderLoadChart(emptyList(), rollup = 60),
+                "missing" to renderSavedLoadChart(temporaryDirectory.resolve("missing.ndjson")),
+                "truncated" to renderSavedLoadChart(saved),
+            ).mapValues { (_, bytes) -> sha256(bytes) }
+        assertEquals(FROZEN, actual)
+    }
+
+    private fun sha256(bytes: ByteArray): String =
+        java.security.MessageDigest
+            .getInstance("SHA-256")
+            .digest(bytes)
+            .joinToString("") { "%02x".format(it) }
+
     private fun bucket(
         startMillis: Long,
         samples: Long,
@@ -158,5 +193,16 @@ class StaticLoadChartTest {
         val buffer = ByteBuffer.allocate(histogram.neededByteBufferCapacity)
         val length = histogram.encodeIntoCompressedByteBuffer(buffer)
         return Base64.getEncoder().encodeToString(buffer.array().copyOf(length))
+    }
+
+    private companion object {
+        val FROZEN: Map<String, String> =
+            mapOf(
+                "gapped" to "eead4372c22932261fe3de13eed750b3e146f339e295b02d1e57b930e5fb0c37",
+                "single" to "b663c7d01c94bf47ba6a79339917f8c3467690f73363db943db8b342d771ad16",
+                "empty" to "9589389c53a8bf9761ee504b9057541223531162bb6d6ba948198a61a1c7a33f",
+                "missing" to "9589389c53a8bf9761ee504b9057541223531162bb6d6ba948198a61a1c7a33f",
+                "truncated" to "af3c817cd6d059875f3421728c159e02588c9c62e0f4907c500106424d1ce791",
+            )
     }
 }

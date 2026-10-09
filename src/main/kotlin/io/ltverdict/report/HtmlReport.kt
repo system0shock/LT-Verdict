@@ -10,6 +10,7 @@ import kotlinx.serialization.json.jsonObject
 import java.math.BigDecimal
 import java.math.RoundingMode
 import java.security.MessageDigest
+import java.time.Duration
 import java.time.Instant
 import java.time.ZoneOffset
 import java.time.format.DateTimeFormatter
@@ -20,6 +21,7 @@ internal fun renderHtmlReport(
     analysisId: String,
     errorGroups: ByteArray? = null,
     baseline: JsonObject? = null,
+    timeline: RunTimeline? = null,
 ): ByteArray {
     val result = Json.parseToJsonElement(resultBytes.decodeToString()).jsonObject
     val evidence = result.array("evidence")
@@ -54,8 +56,12 @@ internal fun renderHtmlReport(
         }
     val notice = stageNotice(result)
     val changes = baselineChangesSection(baselineChangesView(baseline))
+    // The chart rules join the page style only with a chart; the policy hash is made from the style as sent.
+    val style = if (timeline?.chartSvg != null) STYLE + timeline.chartCss.orEmpty() else STYLE
     val html =
-        """<!doctype html><html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'sha256-${styleHash()}'; base-uri 'none'; form-action 'none'"><title>LT Verdict report</title><style>$STYLE</style></head><body><main><h1 lang="en">LT Verdict report</h1><p>Отчёт об анализе нагрузочного прогона</p><dl lang="en"><dt>Run</dt><dd>${result.value(
+        """<!doctype html><html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'sha256-${styleHash(
+            style,
+        )}'; base-uri 'none'; form-action 'none'"><title>LT Verdict report</title><style>$style</style></head><body><main><h1 lang="en">LT Verdict report</h1><p>Отчёт об анализе нагрузочного прогона</p><dl lang="en"><dt>Run</dt><dd>${result.value(
             "run_id",
         )}</dd><dt>Analysis</dt><dd>${escape(
             analysisId,
@@ -66,7 +72,9 @@ internal fun renderHtmlReport(
         )}</dd>${stageScopeRow(notice)}${windowShareRow(result)}<dt>Coverage</dt><dd>${result.objectValue(
             "analysis_coverage",
             "status",
-        )}</dd></dl>${stageBlock(notice)}${verdictBlock(result, evidence)}${diagnosticsBlock(result, evidence)}$changes${rulesSection(
+        )}</dd></dl>${stageBlock(
+            notice,
+        )}${verdictBlock(result, evidence)}${diagnosticsBlock(result, evidence)}${runSection(timeline)}$changes${rulesSection(
             evidence,
         )}${errorGroupsSection(errorGroupsView(result, errorGroups))}${transactionsSection(result, evidence)}${limitationsBlock(
             result,
@@ -584,6 +592,36 @@ private fun errorGroupsSection(view: ErrorGroupsView?): String {
     return "<section><h2>Ошибки</h2>$grid$notes</section>"
 }
 
+// W2.6 PR 2: when the run happened, how long it lasted, its busiest second and the load chart; null (or no data at all) shows no block.
+private fun runSection(timeline: RunTimeline?): String {
+    if (timeline == null || (timeline.startedAt == null && timeline.peakRps == null && timeline.chartSvg == null)) return ""
+    val started = timeline.startedAt
+    val ended = timeline.endedAt
+    val duration =
+        if (started != null && ended != null) {
+            runCatching { formatRunDuration(Duration.between(started, ended).toMillis()) }.getOrNull() ?: NO_DATA
+        } else {
+            NO_DATA
+        }
+    val peak =
+        timeline.peakRps?.let { peak ->
+            formatNumber(BigDecimal.valueOf(peak), 0) + " запросов/с" + (timeline.peakAt?.let { ", ${instantText(it)}" } ?: "")
+        } ?: NO_DATA
+    val notes =
+        if (timeline.peakRps == null) {
+            ""
+        } else {
+            "<p>Пик это число запросов в самой нагруженной секунде за весь прогон: секунды отсчитываются от начала прогона, " +
+                "запрос учитывается по времени начала; окна стадий и steady не применяются.</p>"
+        }
+    val chart =
+        timeline.chartSvg?.let { "<figure>$it</figure>" } ?: "<p>График нагрузки недоступен.</p>"
+    return "<section><h2>Прогон</h2><dl><dt>Начало</dt><dd>${instantText(started)}</dd><dt>Конец</dt><dd>${instantText(ended)}</dd>" +
+        "<dt>Длительность</dt><dd>$duration</dd><dt>Пиковый RPS, весь прогон</dt><dd>$peak</dd></dl>$notes$chart</section>"
+}
+
+private fun instantText(instant: Instant?): String = instant?.let { runCatching { "${UTC_FORMAT.format(it)} UTC" }.getOrNull() } ?: NO_DATA
+
 // Windowed checks carry the full transaction scope instead of a metric reference; null means "not a transaction".
 private fun transactionKey(scope: JsonObject?): List<Any?>? =
     if (scope?.text("kind") ==
@@ -847,9 +885,9 @@ private fun escape(value: String): String =
         }
     }
 
-private fun styleHash(): String =
+private fun styleHash(style: String): String =
     Base64.getEncoder().encodeToString(
-        MessageDigest.getInstance("SHA-256").digest(STYLE.encodeToByteArray()),
+        MessageDigest.getInstance("SHA-256").digest(style.encodeToByteArray()),
     )
 
 private const val STYLE =

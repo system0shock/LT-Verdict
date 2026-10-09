@@ -107,6 +107,39 @@ class IncidentFixtureTests(unittest.TestCase):
             with self.subTest(case=case.name):
                 self.check_against_input(case.name, load(expected), load(case / "input.json"))
 
+    def check_negative_evidence(self, name: str, item: dict, evidence: dict) -> None:
+        """What a negative entry refers to must be what its check says, in the window of the incident (ADR 0029, negative evidence)."""
+        kinds = {
+            "OTHER_POLICY_CHECKS_PASSED": ("policy_check", {"PASS"}),
+            "RESOURCE_RULES_WITHIN_LIMITS": ("resource_policy_check", {"PASS"}),
+            "GENERATOR_RESOURCES_WITHIN_LIMITS": ("resource_policy_check", {"PASS"}),
+            "NO_ANOMALY_EPISODES": ("anomaly_check", {"NO_MATERIAL_CHANGE"}),
+            "NO_MATERIAL_TREND": ("trend_check", {"NO_MATERIAL_TREND"}),
+        }
+        for entry in item["negative_evidence"]:
+            where = f"{name}: {item['id']} {entry['check']}"
+            count = re.search(r"(?<![\w-])(\d+)[.;]", entry["text"])
+            if entry["check"] in kinds:
+                kind, statuses = kinds[entry["check"]]
+                for reference in entry["evidence_ids"]:
+                    self.assertEqual(evidence[reference]["type"], kind, where)
+                    self.assertIn(evidence[reference]["status"], statuses, where)
+                    self.assertEqual(evidence[reference].get("window_id"), item["window_id"], where)
+                shown = len(entry["evidence_ids"])
+                total = int(count.group(1))
+                self.assertTrue(total == shown if shown < 8 else total >= 8, f"{where}: {total} checks, {shown} references")
+            elif entry["check"] == "CHECKS_NOT_EVALUATED":
+                for reference in entry["evidence_ids"]:
+                    self.assertIn(evidence[reference]["status"], {"NO_VERDICT", "INSUFFICIENT_DATA", "INSUFFICIENT_CELLS", "UNAVAILABLE"}, where)
+                    self.assertEqual(evidence[reference].get("window_id"), item["window_id"], where)
+                shown = len(entry["evidence_ids"])
+                total = int(count.group(1))
+                self.assertTrue(total == shown if shown < 8 else total >= 8, f"{where}: {total} checks, {shown} references")
+            else:
+                self.assertEqual(entry["evidence_ids"], [], where)
+            if entry["check"] == "OTHER_POLICY_CHECKS_PASSED":
+                self.assertTrue(set(entry["evidence_ids"]).isdisjoint(item["evidence_ids"]), where)
+
     def check_against_input(self, name: str, document: dict, source: dict) -> None:
         findings = {item["id"]: item for item in source["findings"]}
         evidence = {item["id"]: item for item in source["evidence"]}
@@ -143,6 +176,7 @@ class IncidentFixtureTests(unittest.TestCase):
                 self.assertEqual(item["interval"]["from_epoch_ms"], min(row["from_epoch_ms"] for row in rows))
                 self.assertEqual(item["interval"]["to_epoch_ms"], max(row["to_epoch_ms"] for row in rows))
                 self.assertEqual(sorted({row["type"] for row in rows}), item["finding_types"])
+            self.check_negative_evidence(name, item, evidence)
             if not name.startswith("names-"):
                 self.assertTrue(matches("title", item["title"]), item["title"])
                 self.assertTrue(matches("summary", item["summary"]), item["summary"])

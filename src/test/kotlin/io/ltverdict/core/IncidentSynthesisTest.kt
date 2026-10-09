@@ -331,6 +331,7 @@ class IncidentSynthesisTest {
         val dupEvidence = Case().apply { tx("1", "steady", "login") }
         dupEvidence.evidence += dupEvidence.evidence.first()
         assertThrows(IllegalArgumentException::class.java) { dupEvidence.run() }
+        assertThrows(IllegalArgumentException::class.java) { dupFindings.run(RunValidity.INVALID) }
     }
 
     @Test

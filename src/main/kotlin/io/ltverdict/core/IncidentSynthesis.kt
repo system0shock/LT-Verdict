@@ -66,9 +66,9 @@ internal fun synthesizeIncidents(
     findings: List<JsonObject>,
     evidence: List<JsonObject>,
 ): JsonObject {
-    if (validity == RunValidity.INVALID) return incidentDocument(notEvaluated = true, total = 0, omitted = 0, items = emptyList())
     requireUniqueIds(findings, "findings")
     requireUniqueIds(evidence, "evidence")
+    if (validity == RunValidity.INVALID) return incidentDocument(notEvaluated = true, total = 0, omitted = 0, items = emptyList())
     val index = IncidentEvidenceIndex(evidence)
     val drafts = group(findings.mapNotNull { atomOf(it, index) })
     val stored = drafts.sortedWith(PRIORITY_ORDER).take(INCIDENT_STORED_MAX)

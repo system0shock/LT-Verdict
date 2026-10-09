@@ -72,7 +72,6 @@ class DiagnosticCapacityTrendSnapshotTest {
         group: String,
         error: Throwable,
     ) {
-        println("THROWS $group ${error::class.simpleName}: ${error.message}")
         groups
             .getOrPut(group) {
                 StringBuilder()

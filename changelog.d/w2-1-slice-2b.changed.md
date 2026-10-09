@@ -10,7 +10,7 @@
   (продьюсеры и целые прогоны), и сравнением с замороженными копиями прежних построителей на широкой
   матрице. Добавлен `ui/src/types.derived-items.generated.ts` (генерируется из Kotlin, проверяется
   тестом и `npm run test:contracts` на реальных элементах); в рукописный `ui/src/types.ts` добавлены
-  только поля `metric`, `load_axis`, `unit`, `diagnostic_only`, `sse_ratio`, `excess_factor`,
+  только необязательные поля `metric`, `load_axis`, `unit`, `diagnostic_only`, `sse_ratio`, `excess_factor`,
   `points`, `parameters` у `CapacityKneeDiagnosticEvidence`, которые движок уже писал. Не входит:
   evidence источников (запросы Prometheus, OpenSearch, PostgreSQL), `resource_binding`, типизация границ
   `DiagnosticEvaluation`, `CapacityAnalysis`, `TrendAnalysis` и ответов HTTP.

@@ -555,22 +555,22 @@ export interface CapacityKneeDiagnosticEvidence {
   id: string
   type: 'capacity_knee_diagnostic'
   method: string
-  metric: string
-  load_axis: string
-  unit: string
+  metric?: string
+  load_axis?: string
+  unit?: string
   status: 'DETECTED' | 'NOT_DETECTED'
   confidence: 'UNCALIBRATED'
   calibrated: false
-  diagnostic_only: true
+  diagnostic_only?: true
   last_stable_stage_id: string | null
   last_stable_load: number | string | null
   first_degraded_stage_id: string | null
   first_degraded_load: number | string | null
-  sse_ratio: number | string | null
-  excess_factor: number | string | null
+  sse_ratio?: number | string | null
+  excess_factor?: number | string | null
   reasons: string[]
-  points: Array<{ stage_id: string; load: number | string; value: number }>
-  parameters: {
+  points?: Array<{ stage_id: string; load: number | string; value: number }>
+  parameters?: {
     min_stages: number
     min_points_before_knee: number
     max_sse_ratio: string

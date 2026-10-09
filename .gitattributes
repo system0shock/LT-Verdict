@@ -23,3 +23,4 @@ docs/ui-mockup/ai-experiment-2026-09-30/** -text whitespace=-trailing-space,-spa
 docs/ui-mockup/ai-defects-analysis-2026-09-30.md -text whitespace=-trailing-space,-space-before-tab,cr-at-eol
 docs/ai-experiment/harness-264a340/** -text whitespace=-trailing-space,-space-before-tab,cr-at-eol
 fixtures/typed-boundary/** -text
+fixtures/stages/** text eol=lf

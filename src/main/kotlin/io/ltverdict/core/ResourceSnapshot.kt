@@ -209,22 +209,21 @@ internal fun resourceBindingEvidence(
     val intersectionEnd = minOf(runEndEpochMillis, snapshot.gridEndEpochMillis())
     val droppedLeadingMillis = if (implicit) evaluationStart - intersectionStart else 0L
     val droppedTrailingMillis = if (implicit) intersectionEnd - evaluationEnd else 0L
-    return buildJsonObject {
-        put("id", "resource-binding")
-        put("type", "resource_binding")
-        put("mode", if (implicit) "run_intersection" else "explicit_windows")
-        put("snapshot_from_epoch_ms", snapshot.startEpochMillis)
-        put("snapshot_to_epoch_ms", snapshot.gridEndEpochMillis())
-        put("run_from_epoch_ms", runStartEpochMillis)
-        put("run_to_epoch_ms", runEndEpochMillis)
-        put("evaluation_from_epoch_ms", evaluationStart)
-        put("evaluation_to_epoch_ms", evaluationEnd)
-        put("dropped_leading_cells", if (droppedLeadingMillis > 0) 1 else 0)
-        put("dropped_leading_millis", droppedLeadingMillis)
-        put("dropped_trailing_cells", if (droppedTrailingMillis > 0) 1 else 0)
-        put("dropped_trailing_millis", droppedTrailingMillis)
-        put("clock_alignment", "not_verified_by_core")
-    }
+    return ResourceBindingEvidence(
+        id = "resource-binding",
+        mode = if (implicit) "run_intersection" else "explicit_windows",
+        snapshotFromEpochMs = snapshot.startEpochMillis,
+        snapshotToEpochMs = snapshot.gridEndEpochMillis(),
+        runFromEpochMs = runStartEpochMillis,
+        runToEpochMs = runEndEpochMillis,
+        evaluationFromEpochMs = evaluationStart,
+        evaluationToEpochMs = evaluationEnd,
+        droppedLeadingCells = if (droppedLeadingMillis > 0) 1 else 0,
+        droppedLeadingMillis = droppedLeadingMillis,
+        droppedTrailingCells = if (droppedTrailingMillis > 0) 1 else 0,
+        droppedTrailingMillis = droppedTrailingMillis,
+        clockAlignment = "not_verified_by_core",
+    ).toJson()
 }
 
 private fun parseResourceSnapshot(element: JsonElement): ResourceSnapshotV1 {

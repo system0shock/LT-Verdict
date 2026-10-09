@@ -9,6 +9,7 @@ import type {
   ResourcePolicyCheckEvidence,
   RuleWindowCheckEvidence,
   StageBindingEvidence,
+  WindowPolicySummaryEvidence,
 } from './types'
 import { isNoVerdictReason, reasonText, SAMPLE_TEXT } from './verdictReasons'
 
@@ -72,6 +73,12 @@ export const METRIC_LABELS: Record<string, string> = {
   throughput_rps: 'пропускная способность',
 }
 
+// W2.4: a throughput rule on a window is the rate of the window, not of the whole run (ramp-up and idle time are not in it).
+export function metricLabel(metric: string, windowId?: string | null): string {
+  const label = METRIC_LABELS[metric] ?? metric
+  return metric === 'throughput_rps' && windowId ? `${label} (throughput на окне)` : label
+}
+
 const numbers = new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 2 })
 
 interface Violation {
@@ -117,6 +124,33 @@ function formatUtc(milliseconds: number): string {
 
 function formatDuration(milliseconds: number): string {
   return milliseconds < 60_000 ? `${numbers.format(milliseconds / 1_000)} с` : `${numbers.format(milliseconds / 60_000)} мин`
+}
+
+// W2.4: the part of the run outside the verdict window, from numbers the result already carries (the same rule as windowShareText of
+// report/StageNotice.kt): stage_binding, or resource_binding with the window_policy_summary of every window. Whole tenths of a percent,
+// rounded half up in integers, so the text equals the one of the reports.
+export const WINDOW_SHARE_LABEL = 'Вне окна вердикта (разгон, остановка, простои и прочее)'
+
+function windowShare(result: AnalysisResult): string | null {
+  let run: number
+  let excluded: number
+  const stage = stageBindingOf(result)
+  if (stage) {
+    excluded = stage.excluded_millis
+    run = stage.evaluated_millis + excluded
+  } else {
+    const binding = result.evidence.find((item) => item.type === 'resource_binding')
+    const windows = result.evidence.filter((item): item is WindowPolicySummaryEvidence => item.type === 'window_policy_summary')
+    if (!binding || windows.length === 0) return null
+    const from = Number(binding.run_from_epoch_ms)
+    const to = Number(binding.run_to_epoch_ms)
+    run = to - from
+    excluded = run - windows.reduce((sum, window) => sum + (window.to_epoch_ms - window.from_epoch_ms), 0)
+  }
+  if (!Number.isFinite(run) || !Number.isFinite(excluded) || run <= 0 || excluded < 0 || excluded > run) return null
+  const tenths = Math.floor((excluded * 2000 + run) / (2 * run))
+  const percent = tenths === 0 && excluded > 0 ? 'меньше 0,1 %' : `${Math.floor(tenths / 10)},${tenths % 10} %`
+  return `${percent} прогона (${formatDuration(excluded)} из ${formatDuration(run)})`
 }
 
 function stageBindingOf(result: AnalysisResult): StageBindingEvidence | undefined {
@@ -174,7 +208,7 @@ function businessLine(check: PolicyCheckEvidence, metrics: Map<string, MetricSum
   const tie = check.status === 'FAIL' && observed === threshold ? ' (нарушение меньше точности отображения)' : ''
   const line = {
     key: check.id,
-    title: `Правило ${check.rule_id} · ${METRIC_LABELS[check.metric] ?? check.metric} · ${scopeLabel(scope)}${window}`,
+    title: `Правило ${check.rule_id} · ${metricLabel(check.metric, check.window_id)} · ${scopeLabel(scope)}${window}`,
     detail: `${observed} при пороге ${sign} ${threshold}${tie}`,
   }
   if (check.sample_mode === 'SMALL_SAMPLE' && typeof check.sample_count === 'number' && typeof check.min_samples === 'number') {
@@ -403,6 +437,7 @@ export function summarizeVerdict(result: AnalysisResult, context: { policySha256
     lead += ` ${notice.phrase}. ${notice.detail}`
   }
 
+  const share = windowShare(result)
   const overall = overallMetrics(result)
   const denominator = overall?.throughput_rps.denominator
   const errorRate = overall ? ratioValue(overall.error_rate_ratio ?? undefined) : null
@@ -428,6 +463,7 @@ export function summarizeVerdict(result: AnalysisResult, context: { policySha256
       { label: 'Доля ошибок', value: errorRate === null ? '—' : `${numbers.format(errorRate * 100)} %` },
       { label: 'Проверок', value: `${evaluated}${skipped}` },
       ...(notice ? [{ label: 'Окно вердикта', value: notice.windows }, { label: 'Исключено', value: notice.excluded }] : []),
+      ...(share ? [{ label: WINDOW_SHARE_LABEL, value: share }] : []),
       ...(context.policyId ? [{ label: 'Политика (id)', value: context.policyId }] : []),
       ...policyFact,
     ],

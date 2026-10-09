@@ -84,6 +84,7 @@ internal fun renderHtmlReport(
             "<dt>Покрытие данных</dt><dd>${result.objectValue("analysis_coverage", "status")}</dd></dl>"
     val html =
         head + summary + stageBlock(notice) + verdictBlock(result, evidence) + diagnosticsBlock(result, evidence) + runSection(timeline) +
+            overallSection(evidence, notice) +
             errorGroupsSection(errorGroupsView(result, errorGroups)) + rulesSection(evidence) + transactionsSection(result, evidence) +
             changes + limitationsBlock(result, evidence) + appendix + "</main></body></html>"
     return html.encodeToByteArray()
@@ -575,6 +576,38 @@ private fun errorGroupsSection(view: ErrorGroupsView?): String {
             )
         }
     return "<section><h2>Ошибки</h2>$grid$notes</section>"
+}
+
+// W2.6 PR 4: the overall metric_summary (the whole run) in the human part. Display only: the fields and the formatting are those of a
+// transaction row; with declared stages the numbers are a reference, the verdict is by the steady window (ADR 0030, R7).
+private fun overallSection(
+    evidence: List<JsonObject>,
+    notice: StageNotice?,
+): String {
+    val items = evidence.filter { it.string("type") == "metric_summary" && it.obj("scope")?.text("kind") == "overall" }
+    if (items.isEmpty()) return ""
+    val area = if (notice == null) "весь прогон" else "весь прогон, справочно"
+    val latencyMetric = "response_time_p95_ms"
+    val rows =
+        items.joinToString("") { item ->
+            val latency = item.obj("latency_ms")
+            val cells =
+                listOf(
+                    area,
+                    item.number("sample_count")?.let { formatNumber(it, 0) } ?: NO_DATA,
+                    item.number("error_count")?.let { formatNumber(it, 0) } ?: NO_DATA,
+                    formatMetric("error_rate_ratio", exactValue(item["error_rate_ratio"]), 2),
+                    formatMetric(latencyMetric, latency?.number("p50"), 2),
+                    formatMetric(latencyMetric, latency?.number("p95"), 2),
+                    formatMetric(latencyMetric, latency?.number("p99"), 2),
+                    formatMetric(latencyMetric, latency?.number("max"), 2),
+                    formatMetric("throughput_rps", exactValue(item["throughput_rps"]), 2),
+                )
+            "<tr>${cells.joinToString("") { "<td>${escape(it)}</td>" }}</tr>"
+        }
+    val heads = listOf("Область", "Выборка", "Ошибки", "Доля ошибок", "p50", "p95", "p99", "max", "RPS")
+    val note = if (notice == null) "" else "<p>${escape(STAGE_REFERENCE_NOTE)}</p>"
+    return "<section><h2>Итого по прогону</h2>${table("Итого по прогону", heads, rows)}$note</section>"
 }
 
 // W2.6 PR 2: when the run happened, how long it lasted, its busiest second and the load chart; null (or no data at all) shows no block.

@@ -79,7 +79,13 @@ class OverallSummaryReportTest {
 
     @Test
     fun `a run with stages marks the whole run numbers as reference and says why`() {
-        val staged = StagedResults.analyze(tempDir, StagedResults.RAMP, StagedResults.policy(StagedResults.p95(250)), StagedResults.RAMP_STEADY_DOWN)
+        val staged =
+            StagedResults.analyze(
+                tempDir,
+                StagedResults.RAMP,
+                StagedResults.policy(StagedResults.p95(250)),
+                StagedResults.RAMP_STEADY_DOWN,
+            )
         val html = renderHtmlReport(staged.canonicalResult, "fixed").decodeToString()
         val block = section(html)
 

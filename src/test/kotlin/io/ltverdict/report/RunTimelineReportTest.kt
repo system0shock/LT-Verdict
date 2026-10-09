@@ -16,7 +16,7 @@ import java.util.Base64
 /**
  * W2.6 PR 2: the HTML report with the run block and the inline chart. The first test pins the bytes of the report WITHOUT the block,
  * so the proof of "nothing else moved" does not depend on the golden files, which a report change regenerates on purpose. The hashes were
- * taken again in PR 3 (Russian headings, appendix); that the data did not move is proved by HumanReportAppendixTest.
+ * taken again in PR 3 and PR 4 (Russian headings, appendix); that the data did not move is proved by HumanReportAppendixTest.
  */
 class RunTimelineReportTest {
     @TempDir
@@ -26,9 +26,9 @@ class RunTimelineReportTest {
     fun `report without a timeline keeps the bytes captured before the change`() {
         val expected =
             mapOf(
-                "ramp-pass" to "ff0a20cb9385cf2e7fe32c774ee51ad428408a5f6ff0cdd305867b4d9157b110",
-                "ramp-fail" to "069d0b160c5c137f425a73b66346a570e652b2540939b3e9941e779db80d40be",
-                "csv-no-policy" to "e8ce0c3e8c5633068ac130d8ef2d28f6c93e9e1c0882bd2545274c206da45a0a",
+                "ramp-pass" to "fa89a4d8cef8ac3b726abc76eb41a5a922df606d08949ad66f41a7b21600ed2e",
+                "ramp-fail" to "da721af5fc6c4f2c37834170cc04a6bc5d5d0c48510a4a37f450684de650cbb9",
+                "csv-no-policy" to "02fca70916fb21193e4169d418de97a58dc1808464ca3151f55d142f69408370",
             )
         val inputs =
             mapOf(

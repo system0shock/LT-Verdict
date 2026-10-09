@@ -59,10 +59,10 @@ EXPECTED FILES TO CHANGE:
 Образец сверяется с реальным выводом движка Kotlin-тестом.
 
 **C5. `summary.txt`.** Строка `scope: steady window (<ids>), excluded <N> ms` после `exit_code`; строка `window[<id>]: samples .. errors .. p95_ms ..
-p99_ms .. rps ..` на окно после строки `samples/p95/p99`; эта прежняя строка получает суффикс `  whole_run (reference only)`. Без `stage_binding`
+p99_ms .. rps ..` на окно после строки `samples/p95/p99`; эта прежняя строка получает суффикс «two spaces, whole_run (reference only)». Без `stage_binding`
 файл побайтово прежний.
 
-**C6. `junit.xml`.** Сообщение gate у `failure` и `error` получает суффикс ` scope=steady_window window_ids=<ids> excluded_ms=<N>`; у проходящего
+**C6. `junit.xml`.** Сообщение gate у `failure` и `error` получает суффикс «пробел, scope=steady_window window_ids=<ids> excluded_ms=<N>»; у проходящего
 gate (самозакрытый `testcase`) появляется дочерний `<system-out>` с той же строкой `scope=...` без прежнего начала. `INVALID` не имеет
 `stage_binding` (R11), поэтому суффикса нет. Без `stage_binding` байты прежние.
 

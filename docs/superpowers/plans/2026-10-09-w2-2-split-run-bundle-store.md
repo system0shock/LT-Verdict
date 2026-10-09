@@ -10,7 +10,7 @@
 
 | № | Условие | Как выполняется |
 | --- | --- | --- |
-| 1 | нет изменений поведения, публичных контрактов и схем | снимок раскладки данных `fixtures/storage-layout/store-tree.txt` (164 строки: файлы после каждого шага, документы чтения, класс и сообщение 40 отказов) снят первым коммитом на неизменённом коде; снимки `fixtures/http-layer/{routes,responses,rules}.txt` проходят без обновления |
+| 1 | нет изменений поведения, публичных контрактов и схем | снимок раскладки данных `fixtures/storage-layout/store-tree.txt` (164 строки: файлы после каждого шага, документы чтения, класс и сообщение 40 отказов) и `StoreLockingTest` сняты первыми коммитами на неизменённом коде; снимки `fixtures/http-layer/{routes,responses,rules}.txt` проходят без обновления |
 | 2 | существующие тесты не редактируются и не удаляются | `git diff origin/main --diff-filter=MD -- src/test` пуст; тесты импортируют только `storage.DataDirectory`, `storage.RunBundleStore`, `storage.AcceptedInput` и две константы, поэтому эти имена остаются |
 | 3 | одна цель | «`RunBundleStore` на хранилища анализов, baseline и релизов поверх `DataDirectory` и разрыв циклов `core` <-> `storage`». Типизация ошибок хранилища и перенос `baselineOperation`/`releaseOperation` в core: PR 4 (R6) |
 | 4 | канонический JSON и хэши identity не затронуты | тела методов переносятся дословно; `canonicalJson`, `sha256Hex`, `AnalysisIdentity` и файлы `core/` с ними не меняются |
@@ -45,7 +45,8 @@ REQUIRED TO ACHIEVE IT (перемещение: символ, откуда -> к
   Разрыв циклов:
     AcceptedInput                 storage/RunBundleStore.kt -> ingest/AcceptedInput.kt (рядом с SourceType). В storage остаётся
                                   `internal typealias AcceptedInput` (тесты импортируют storage.AcceptedInput); main-код импортирует ingest.
-    StoredArtifact, StoredAnalysis  storage/RunBundleStore.kt -> core/AnalysisArtifacts.kt (данные без зависимостей)
+    StoredArtifact, StoredAnalysis  storage/RunBundleStore.kt -> core/AnalysisArtifacts.kt (данные без зависимостей); в storage
+                                  остаются псевдонимы (RunBundleStoreTest называет StoredAnalysis без импорта, замечание Astra)
     AnalysisArtifacts (интерфейс)  новый, core/AnalysisArtifacts.kt: readAnalysis, writeAnalysisAtomically, readRunPeriod,
                                   replaceRunPeriod - ровно то, что core и sources берут у хранилища. AnalysisService берёт
                                   AnalysisArtifacts вместо RunBundleStore; RunBundleStore его реализует. Интерфейс нужен задаче:
@@ -79,8 +80,11 @@ REQUIRED TO ACHIEVE IT (перемещение: символ, откуда -> к
   Тесты (только новые файлы):
     - src/test/kotlin/io/ltverdict/storage/StoreTreeSnapshotTest.kt + fixtures/storage-layout/store-tree.txt (первый коммит,
       на неизменённом коде).
-    - src/test/kotlin/io/ltverdict/architecture/PackageDependencyTest.kt: ни один файл core/ и ingest/ в main не импортирует
-      io.ltverdict.storage; ingest не импортирует core (сторож против возврата цикла).
+    - src/test/kotlin/io/ltverdict/architecture/PackageDependencyTest.kt: ни один файл core/ и ingest/ в main не ссылается на
+      io.ltverdict.storage (импорт или полное имя); ingest не ссылается на core (сторож против возврата цикла).
+    - src/test/kotlin/io/ltverdict/storage/StoreLockingTest.kt (второй коммит, на неизменённом коде): beforePublish под блокировкой
+      каталога данных и ожидание чтений всех областей, обратный вызов replaceRelease вне блокировки, запись анализа после закрытия
+      каталога (DATA_DIR_CLOSED без остатков), независимость двух каталогов.
   changelog.d/w2-2-split-run-bundle-store.changed.md
 
 NOT REQUIRED (не делается; в отчёт как PR 4):
@@ -126,7 +130,19 @@ Documentation impact: none для пользовательской докуме�
   допускало PR 4 при росте объёма; текущий PR уже перемещает около 2000 строк плюс разрыв циклов, добавление типизации (около 25
   мест `throw` с кодом в сообщении, типы должны жить в core, чтобы core мог их ловить) и переноса отображения ошибок
   (коды HTTP 404/409/422/500 с `limit`) в одном PR не проверяется той же прямой сверкой «ничего не изменилось». Цена: PR 4.
-- **R7. Совет Codex Astra учтён** (раздел ниже заполняется после совета).
+- **R7. Совет Codex Astra (read-only, gpt-6-astra) учтён.** Принято и проверено по коду: псевдоним `StoredAnalysis` (и
+  `StoredArtifact`) в storage, потому что `RunBundleStoreTest` называет `StoredAnalysis?` без импорта; `randomReleaseSuffix`
+  остаётся в `ReleaseStore.kt` как `internal` (по умолчанию у `createRelease` фасада); шесть констант и все закрытые помощники
+  размещены по фактическому использованию (общие в `StorageSupport.kt` как `internal`, остальные `private` в своём файле);
+  `beforePublish` с умолчанием `{}` объявлен в интерфейсе, у переопределения умолчания нет, `writeStagingDirectory` остаётся
+  последним (подтверждено компиляцией вызовов с завершающей лямбдой в `AnalysisService`, тестах и `SourceAnalysis`);
+  фасад не синхронизирует методы целиком, все хранилища получают один и тот же `DataDirectory`; сторож зависимостей ловит и полные
+  имена, не только импорты; добавлен `StoreLockingTest` (общая блокировка, обратные вызовы вне блокировки, закрытие каталога) и
+  порядковая сверка тел (см. критерий 4: сверка идёт по порядку строк каждого метода, а не по мультимножеству, поэтому
+  перестановка операторов её нарушила бы). Ограничения, которые принимаются и записываются: снимок раскладки фиксирует состояния
+  после операций, а не порядок fsync внутри операции (порядок защищает дословная порядковая сверка), в `AcceptedInput` снимка
+  разделители путей системы, поэтому снимок снят на Windows и на Linux потребует нормализации. Совет подтвердил отложить
+  типизацию ошибок (R6) и напомнил, что PR 4 должен учесть `NoSuchElementException` (`RUN_NOT_FOUND`, `RELEASE_NOT_FOUND`).
 
 ## Контракты
 
@@ -141,7 +157,9 @@ Documentation impact: none для пользовательской докуме�
 1. `StoreTreeSnapshotTest` и все снимки `fixtures/http-layer` проходят без обновления файлов.
 2. Все существующие тесты зелёные без правок: `git diff origin/main --diff-filter=MD --name-only -- src/test` пуст.
 3. `rg "^import io.ltverdict.storage" src/main/kotlin/io/ltverdict/{core,ingest}` пуст; `PackageDependencyTest` зелёный.
-4. Тела перемещённых методов дословны: сверка мультимножества строк `RunBundleStore.kt` и новых файлов (отчёт скрипта).
+4. Тела перемещённых методов дословны и в том же порядке: сверка по порядку нормализованных строк каждого из 57 членов класса и
+   90 объявлений верхнего уровня `RunBundleStore.kt` с новыми файлами (отчёт скрипта; допустимые различия: `private` -> `internal`,
+   `analyses.readIdentityUnlocked`, три перенесённых типа).
 5. Полный набор «Без CI» на результате слияния с `origin/main`: `Invoke-LtvExclusive { gradlew --no-daemon --no-build-cache
    cleanTest check installDist }`; `cd ui; npm run typecheck; npm run lint; npm run test:contracts`; оффлайн Playwright
    (`Invoke-LtvE2E`); `python tools/verify_slice0.py`; `python tools/changelog_assemble.py --check`; markdownlint.
@@ -156,6 +174,8 @@ Documentation impact: none для пользовательской докуме�
 
 ## Следующий PR 4 (не в этом)
 
-Типизированные ошибки хранилища (в `core`, подклассы тех же `IllegalArgumentException`/`IllegalStateException` с теми же
-сообщениями) и перенос в core отображения этих ошибок в `RuleFailure`/HTTP-коды (сейчас `baselineOperation`, `releaseOperation` в
-`web`), включая виды NOT_FOUND и CONFLICT и поле `limit`.
+Типизированные ошибки хранилища (в `core`, подклассы тех же `IllegalArgumentException`/`IllegalStateException`/
+`NoSuchElementException` с теми же сообщениями; около 25 мест `throw` и `require` с кодом в сообщении, пять функций `corrupt*`) и
+перенос в core отображения этих ошибок в `RuleFailure`/HTTP-коды (сейчас `baselineOperation`, `releaseOperation` в `web`),
+включая виды NOT_FOUND и CONFLICT и поле `limit`. Типизация без потребителя в этом PR была бы абстракцией «про запас»
+(MINIMAL-CHANGE п. 3-4): её потребитель это перенос.

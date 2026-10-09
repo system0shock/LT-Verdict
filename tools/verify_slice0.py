@@ -17,6 +17,7 @@ SCHEMAS = (
 )
 INCIDENT_DIR = ROOT / "docs/contracts/incident/v1"
 PROBE_DIR = ROOT / "docs/contracts/sources/probe/v1"
+RESULT_SCHEMA = ROOT / "docs/contracts/result/v1/analysis-result.schema.json"
 PORTABLE_PATH_PATTERN = (
     r"^(?!.*(?:^|/)(?:[Cc][Oo][Nn]|[Pp][Rr][Nn]|[Aa][Uu][Xx]|"
     r"[Nn][Uu][Ll]|[Cc][Oo][Mm][1-9]|[Ll][Pp][Tt][1-9])"
@@ -271,8 +272,12 @@ def _eligible_links(item: dict, items: list[dict]) -> list[dict]:
     return links
 
 
-def verify_incident_semantics(document: dict) -> None:
-    """Checks of incident.v1 that JSON Schema cannot express (see the schema description)."""
+def verify_incident_semantics(document: dict, check_wording: bool = True) -> None:
+    """Checks of incident.v1 that JSON Schema cannot express (see the schema description).
+
+    check_wording=False skips the causal-wording check of the rendered texts: transaction and entity names are chosen by the user
+    (a transaction may be called cause-list), so the check applies to the examples of the contract and to fixtures with neutral names.
+    """
     items = document["items"]
     if len(items) != min(document["total_count"], _MAX_STORED) or document["omitted_count"] != document["total_count"] - len(items):
         raise ValueError("incident items must hold min(total_count, 64) incidents and omitted_count the rest")
@@ -358,6 +363,8 @@ def verify_incident_semantics(document: dict) -> None:
         expected_links = sorted(_eligible_links(item, items), key=lambda link: rank_of[link["incident_id"]])[:5]
         if item["coincident_with"] != expected_links:
             raise ValueError(f"{name}: coincident_with must be the first five eligible incidents by rank")
+        if not check_wording:
+            continue
         texts = [item["title"], item["summary"]]
         texts += [entry["text"] for entry in item["negative_evidence"] + item["next_checks"]]
         for text in texts:
@@ -365,11 +372,11 @@ def verify_incident_semantics(document: dict) -> None:
                 raise ValueError(f"{name}: causal wording in {text!r}")
 
 
-def verify_incident_document(document: object, schema: dict) -> None:
+def verify_incident_document(document: object, schema: dict, check_wording: bool = True) -> None:
     errors = schema_errors(document, schema, schema)
     if errors:
         raise ValueError("incident.v1: " + "; ".join(errors[:5]))
-    verify_incident_semantics(document)
+    verify_incident_semantics(document, check_wording)
 
 
 def verify_incident_contract(directory: Path = INCIDENT_DIR) -> None:
@@ -414,6 +421,21 @@ def verify_probe_contract(directory: Path = PROBE_DIR) -> None:
                     raise ValueError(f"{path.name}: invalid example accepted")
 
 
+def verify_result_incident_reference(
+    result_path: Path = RESULT_SCHEMA, incident_path: Path = INCIDENT_DIR / "incident.schema.json"
+) -> None:
+    """analysis-result.v1 may carry the incidents field: its $ref must be the $id of the incident schema, and the field is optional."""
+    with result_path.open(encoding="utf-8") as source:
+        result = json.load(source)
+    with incident_path.open(encoding="utf-8") as source:
+        incident_id = json.load(source).get("$id")
+    reference = result.get("properties", {}).get("incidents")
+    if reference != {"$ref": incident_id} or not isinstance(incident_id, str):
+        raise ValueError("analysis-result.v1: properties.incidents must be exactly the $ref to the $id of the incident schema")
+    if "incidents" in result.get("required", []):
+        raise ValueError("analysis-result.v1: incidents must stay optional")
+
+
 def main() -> int:
     try:
         run, _result = (load_example(path) for path in SCHEMAS)
@@ -426,6 +448,7 @@ def main() -> int:
             verify_input(item)
         verify_incident_contract()
         verify_probe_contract()
+        verify_result_incident_reference()
     except (OSError, json.JSONDecodeError, TypeError, ValueError) as error:
         print(f"slice 0 verification: FAIL: {error}", file=sys.stderr)
         return 1

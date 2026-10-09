@@ -1,0 +1,53 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://lt-verdict.local/contracts/sources/probe/v1/resource-hash.schema.json",
+  "title": "LT Verdict resource hash v1",
+  "description": "Hashes of a resource snapshot (ADR 0033, ltv source hash). From a snapshot file all fields are filled. From a saved analysis (--run, --analysis) the values come from its identity: semantic_sha256 is resource_snapshot_sha256, config_sha256 is resource_config_sha256, load_input_sha256 is input_sha256, and series_count and point_count are null.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "semantic_sha256",
+    "config_sha256",
+    "load_input_sha256",
+    "series_count",
+    "point_count"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "resource-hash.v1"
+    },
+    "semantic_sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "config_sha256": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "load_input_sha256": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "series_count": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "minimum": 0
+    },
+    "point_count": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "minimum": 1
+    }
+  }
+}

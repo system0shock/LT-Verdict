@@ -391,6 +391,47 @@ resource side: UNAVAILABLE (prom-main: нет учётных данных)
   анализе нет).
 - [ ] Коммиты атомарные: `feat(sources): source probes`, `feat(cli): ltv source validate, probe and hash`.
 
+#### Уточнения PR 1 (записаны до кода, 2026-10-09)
+
+```text
+REQUESTED: зонд источника в режиме profile_query (query_id из сохранённого профиля) для prometheus, victoria_metrics, influxdb;
+  ltv source validate (офлайн), ltv source probe, ltv source hash (две формы). Режим ad hoc НЕ реализуется: ждёт решения владельца (Q1).
+REQUIRED TO ACHIEVE IT:
+  - sources/SourceProbe.kt (новый); sources/SourceHttp.kt (getBounded, httpStatus в SourceHttpFailure, потолок попыток и таймаута);
+  - sources/PromqlSource.kt (вынос построения параметров в queryRangeParameters, resolvedExpression становится internal; поведение то же);
+  - cli/CliProbe.kt (новый); cli/CommandLine.kt (диспетчер validate|probe|hash, usage, EXIT_DOCTOR_FAILED, private -> internal у вспомогательных функций);
+  - docs/contracts/sources/probe/v1 (схемы source-probe, source-check, resource-hash и примеры), tools/verify_slice0.py (проверка примеров, без правки
+    существующих тестов), docs/user/online-sources.md (раздел), тесты, changelog.d/w3-1-probe.added.md.
+NOT REQUIRED: ad hoc (--expression, --expression-file); ltv doctor, reload, API-маршруты, UI, OpenSearch и PostgreSQL зонды (PR 2-5);
+  правки decodePromqlMatrix, decodeInfluxqlResponse, AnalysisService, identity, существующих тестов и снимков http-layer.
+EXPECTED FILES TO CHANGE: см. REQUIRED (новые SourceProbe.kt, CliProbe.kt, схемы с примерами, тесты; правки SourceHttp.kt, PromqlSource.kt,
+  SourceConfig.kt (только поле httpStatus в SourceHttpFailure; validateInfluxqlExpression остаётся private до PR с ad hoc), CommandLine.kt,
+  verify_slice0.py, online-sources.md).
+```
+
+Ruling'и PR 1 (дополняют P1-P13, закрывают замечания совета к реализации):
+
+- **PR1-a. Текстовый вывод `probe` и `validate` для человека и не является контрактом; стабильный формат это JSON (`--format json`).** Тесты текста проверяют только
+  наличие ключевых слов (статус, `series_count`, коды), не точные строки. Цена ошибки: скрипт, разбирающий текст, сломается; в документации сказано «используйте JSON».
+- **PR1-b. `ltv source hash` всегда печатает JSON `resource-hash.v1` (канонический, с переводом строки), флага `--format` нет.** Поля: `schema_version`, `semantic_sha256`, `config_sha256`,
+  `load_input_sha256`, `series_count`, `point_count`. Форма с файлом заполняет все. Форма `--run/--analysis` берёт из identity `resource_snapshot_sha256`, `resource_config_sha256`
+  и `input_sha256` (равен `load_input_sha256` снимка, это проверяет `AnalysisService`), а `series_count` и `point_count` равны `null` (в identity их нет). `config_sha256`
+  и `load_input_sha256` допускают `null` в схеме.
+- **PR1-c. Код выхода `ltv source validate` равен 0, даже если какая-либо проверка `FAIL`** (контракт CLI плана: 0/4/64); провал виден в выводе. Тест фиксирует это, чтобы код не стал 7.
+  Код 7 `ltv source probe` только при `status: FAILED`, не при `decoder_check.accepted = false`.
+- **PR1-d. `--expression` и `--expression-file` в PR 1 это неизвестные флаги (usage, 64) и в `usageText()` не упоминаются** (Q1 не решён); тест фиксирует это.
+  Схема `source-probe.v1` в PR 1 допускает только `mode: profile_query`; примеров `ad_hoc` нет; `decoder_check` равен `null` при `status: FAILED`.
+- **PR1-e. Виды.** Зонд поддерживает `prometheus`, `victoria_metrics`, `influxdb`. Профиль `opensearch` или PostgreSQL даёт `INVALID_PROBE` (выход 4) до PR 5; неизвестный `id`
+  это `SOURCE_PROFILE_NOT_FOUND`. Окно: по умолчанию `window_ms` 300 000, `step_ms` 15 000, `end` это «сейчас», округлённое вниз до шага; ошибка окна это `SOURCE_REQUEST_INVALID` (выход 4).
+- **PR1-f. Токены лимитера.** `OriginState` стартует с пустым ведром: первый запрос на новом `SourceHttp` ждёт `1/requests_per_second`. Каждая команда `probe` создаёт новый
+  `SourceHttp`, поэтому профиль с `requests_per_second` ниже примерно 0,067 при сроке 15 с всегда получает `SOURCE_TIMEOUT`; это честно (зонд не обходит governor) и записано в документации.
+  Срок 15 с и потолки попыток и таймаута передаются как параметры (в тестах секунды заменены долями секунды).
+- **PR1-g. Маскирование.** Набор секретов для маскирования: значения переменных окружения `auth` профиля и пароля хранилища ключей TLS (`client_keystore_password_env`).
+- **PR1-h. Проверка схем.** Примеры проверяет `tools/verify_slice0.py` существующим `schema_errors` (по образцу `incident.v1`; Kotlin-библиотеки JSON Schema в зависимостях нет, новых зависимостей нет);
+  Kotlin-тест сверяет набор ключей настоящего вывода зонда с `properties` схемы. Тип `number` в проверяющем скрипте не поддержан, поэтому в схемах только `integer`, `string`, `boolean`, `null`, `array`, `object`.
+- **PR1-i. `validate` проверяет и профили PostgreSQL** (проверки `config`, `credentials`; `transport` равен `null`).
+- **PR1-j. `http_status` при успехе равен 200 для любого 2xx** (`SourceHttp` отдаёт только тело).
+
 ### PR 2 (feat/cli, около 1 дня): `ltv doctor`
 
 **Файлы:** `cli/CliDoctor.kt` (новый), `cli/CommandLine.kt` (диспетчер, usage, `EXIT_DOCTOR_FAILED`), `docs/contracts/sources/probe/v1/doctor-report.schema.json`,

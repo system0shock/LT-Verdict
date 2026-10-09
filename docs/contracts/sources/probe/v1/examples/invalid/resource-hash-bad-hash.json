@@ -1,0 +1,8 @@
+{
+  "schema_version": "resource-hash.v1",
+  "semantic_sha256": "ABC",
+  "config_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+  "load_input_sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+  "series_count": 4,
+  "point_count": 120
+}

@@ -90,7 +90,12 @@ internal fun runCli(
             "report" -> report(args.drop(1), stdout)
             "summary" -> report(args.drop(1) + listOf("--format", "summary"), stdout)
             "ui" -> ui(args.drop(1))
-            "source" -> captureSource(args.drop(1), stdout)
+            "source" ->
+                if (args.getOrNull(1) in setOf("validate", "probe", "hash")) {
+                    sourceProbeCommand(args.drop(1), stdout)
+                } else {
+                    captureSource(args.drop(1), stdout)
+                }
             "opensearch" -> prepareOpenSearchCommand(args.drop(1), stdout)
             else -> usage()
         }
@@ -746,7 +751,7 @@ private fun ui(args: List<String>): Int {
     }
 }
 
-private fun <T> readSourceFile(
+internal fun <T> readSourceFile(
     path: Path,
     read: (java.io.InputStream) -> T,
 ): T {
@@ -787,6 +792,9 @@ private fun readPolicy(
             )
     }
 }
+
+// `ltv source hash <file>` reads a snapshot exactly as `ltv analyze --resources` does.
+internal fun readResourcesFile(path: Path): ResourceValidation.Valid = readResources(path)
 
 private fun readResources(path: Path): ResourceValidation.Valid {
     requireRegularFile(path, EXIT_INVALID_INPUT, "INVALID_RESOURCES")
@@ -898,7 +906,7 @@ private fun readPodView(path: Path): PodViewValidation.Valid {
     }
 }
 
-private fun requireRegularFile(
+internal fun requireRegularFile(
     path: Path,
     exitCode: Int,
     code: String,
@@ -908,7 +916,7 @@ private fun requireRegularFile(
     }
 }
 
-private fun path(value: String): Path =
+internal fun path(value: String): Path =
     try {
         Path.of(value)
     } catch (_: InvalidPathException) {
@@ -917,9 +925,9 @@ private fun path(value: String): Path =
 
 internal fun histogramSignificantDigits(value: String): Int? = value.toIntOrNull()?.takeIf { it in 3..5 }
 
-private fun defaultDataDir(): Path = Path.of(System.getProperty("user.home"), ".lt-verdict")
+internal fun defaultDataDir(): Path = Path.of(System.getProperty("user.home"), ".lt-verdict")
 
-private fun usage(): Nothing = throw CliFailure(EXIT_USAGE, usageText())
+internal fun usage(): Nothing = throw CliFailure(EXIT_USAGE, usageText())
 
 private fun usageText(): String =
     (
@@ -932,6 +940,10 @@ private fun usageText(): String =
             "[--postgres-pre <pre.json>] [--postgres-post <post.json>] [--pg-profile-html <report.html>] " +
             "[--connections <profiles.json> --source <source.json>] [--histogram-significant-digits <3..5>] [--data-dir <path>] | " +
             "ltv source pre|post --connections <profiles.json> --profile <id> [--pre <pre.json>] [--pg-profile-html <output.html>] | " +
+            "ltv source validate --connections <profiles.json> [--profile <id>] [--format text|json] | " +
+            "ltv source probe --connections <profiles.json> --profile <id> --query-id <id> [--window-ms <n>] [--step-ms <n>] " +
+            "[--end-epoch-ms <n>] [--format text|json] | " +
+            "ltv source hash <resource-snapshot.json> | ltv source hash --run <run-id> --analysis <analysis-id> [--data-dir <path>] | " +
             "ltv opensearch prepare --context <file> --templates <file> --load-sha256 <hash> --output-dir <new-dir> | " +
             "ltv policy validate <policy.json>|- | ltv report <run-id> <analysis-id> " +
             "--format json|html|asciidoc|confluence|svg [--baseline <analysis-result.json>] [--data-dir <path>] | " +
@@ -945,11 +957,14 @@ internal class CliFailure(
     override val message: String,
 ) : RuntimeException(message)
 
-private const val EXIT_OK = 0
+internal const val EXIT_OK = 0
 private const val EXIT_FAIL = 2
 private const val EXIT_NO_VERDICT = 3
 internal const val EXIT_INVALID_INPUT = 4
 private const val EXIT_INVALID_POLICY = 5
-private const val EXIT_DATA_DIR_BUSY = 6
-private const val EXIT_USAGE = 64
+internal const val EXIT_DATA_DIR_BUSY = 6
+
+// `ltv source probe` (status FAILED) and `ltv doctor` (a failed check): the report was built, the source is not usable.
+internal const val EXIT_DOCTOR_FAILED = 7
+internal const val EXIT_USAGE = 64
 private const val EXIT_INTERNAL = 70

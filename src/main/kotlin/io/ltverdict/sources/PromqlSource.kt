@@ -92,30 +92,7 @@ internal class PromqlSource(
             }
             try {
                 val expression = resolvedExpression(profile, query, request)
-                val body =
-                    http.get(
-                        profile,
-                        when (profile.sourceKind) {
-                            SourceKind.OPENSEARCH -> error("SOURCE_PROFILE_INVALID")
-                            SourceKind.INFLUXDB ->
-                                mapOf(
-                                    "db" to (profile.database ?: throw IllegalArgumentException("SOURCE_PROFILE_INVALID")),
-                                    "q" to expression,
-                                    "epoch" to "ms",
-                                )
-                            SourceKind.PROMETHEUS,
-                            SourceKind.VICTORIA_METRICS,
-                            ->
-                                mapOf(
-                                    "query" to expression,
-                                    "start" to seconds(request.startEpochMillis + request.stepMillis),
-                                    "end" to seconds(request.endEpochMillis),
-                                    "step" to seconds(request.stepMillis),
-                                )
-                        },
-                        budget,
-                        checkCancelled,
-                    )
+                val body = http.get(profile, queryRangeParameters(profile, expression, request), budget, checkCancelled)
                 val decoded =
                     when (profile.sourceKind) {
                         SourceKind.OPENSEARCH -> error("SOURCE_PROFILE_INVALID")
@@ -535,7 +512,32 @@ private fun decodeUtf8(bytes: ByteArray): String =
 
 private fun seconds(epochMillis: Long): String = BigDecimal.valueOf(epochMillis, 3).stripTrailingZeros().toPlainString()
 
-private fun resolvedExpression(
+// The parameters of one range query, shared by the analysis and the source probe so that both send the same request.
+internal fun queryRangeParameters(
+    profile: SourceProfile,
+    expression: String,
+    request: SourceRequest,
+): Map<String, String> =
+    when (profile.sourceKind) {
+        SourceKind.OPENSEARCH -> error("SOURCE_PROFILE_INVALID")
+        SourceKind.INFLUXDB ->
+            mapOf(
+                "db" to (profile.database ?: throw IllegalArgumentException("SOURCE_PROFILE_INVALID")),
+                "q" to expression,
+                "epoch" to "ms",
+            )
+        SourceKind.PROMETHEUS,
+        SourceKind.VICTORIA_METRICS,
+        ->
+            mapOf(
+                "query" to expression,
+                "start" to seconds(request.startEpochMillis + request.stepMillis),
+                "end" to seconds(request.endEpochMillis),
+                "step" to seconds(request.stepMillis),
+            )
+    }
+
+internal fun resolvedExpression(
     profile: SourceProfile,
     query: SourceQuery,
     request: SourceRequest,

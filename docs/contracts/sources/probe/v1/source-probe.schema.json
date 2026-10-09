@@ -1,0 +1,318 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://lt-verdict.local/contracts/sources/probe/v1/source-probe.schema.json",
+  "title": "LT Verdict source probe v1",
+  "description": "Result of ONE range query of a saved profile query (ADR 0033, ltv source probe). It reports how many series came back and their cleaned labels; it never carries an address, a credential, an environment variable name, a response body or the text of an exception. decoder_check says whether the production decoder would accept the same bytes; it does not check the arm label, negative event values or snapshot limits, and it is null when status is FAILED. http_status is 200 for any 2xx response. series holds at most 20 series, each with at most 16 label keys; observed_cells counts the finite numbers of the whole response; strings are cut to 128 code points (the ellipsis included) and 256 bytes. Ad hoc expressions are not part of this version (ADR 0033, P2, question Q1).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "profile_id",
+    "source_kind",
+    "transport",
+    "mode",
+    "query_id",
+    "expression_sha256",
+    "window",
+    "status",
+    "code",
+    "http_status",
+    "series_count",
+    "series",
+    "series_truncated",
+    "label_keys",
+    "label_keys_truncated",
+    "redacted_count",
+    "warnings",
+    "decoder_check",
+    "request_count",
+    "elapsed_ms"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "source-probe.v1"
+    },
+    "profile_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128
+    },
+    "source_kind": {
+      "enum": [
+        "prometheus",
+        "victoria_metrics",
+        "influxdb"
+      ]
+    },
+    "transport": {
+      "enum": [
+        "direct",
+        "grafana_proxy"
+      ]
+    },
+    "mode": {
+      "const": "profile_query"
+    },
+    "query_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128
+    },
+    "expression_sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "window": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "start_epoch_ms",
+        "end_epoch_ms",
+        "step_ms",
+        "cells"
+      ],
+      "properties": {
+        "start_epoch_ms": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "end_epoch_ms": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "step_ms": {
+          "type": "integer",
+          "minimum": 1000,
+          "maximum": 60000
+        },
+        "cells": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 240
+        }
+      }
+    },
+    "status": {
+      "enum": [
+        "OK",
+        "FAILED"
+      ]
+    },
+    "code": {
+      "enum": [
+        "SOURCE_PROFILE_NOT_CONFIGURED",
+        "SOURCE_AUTH_UNAVAILABLE",
+        "SOURCE_AUTH_INVALID",
+        "SOURCE_HTTP_AUTH",
+        "SOURCE_HTTP_429",
+        "SOURCE_HTTP_5XX",
+        "SOURCE_HTTP_STATUS",
+        "SOURCE_HTTP_ERROR",
+        "SOURCE_TIMEOUT",
+        "SOURCE_RESPONSE_TOO_LARGE",
+        "SOURCE_TLS_CONFIG_INVALID",
+        "SOURCE_TLS_HANDSHAKE_FAILED",
+        "SOURCE_TLS_CLIENT_CERT_EXPIRED",
+        "SOURCE_CANCELLED",
+        "MALFORMED_RESPONSE",
+        "PROMQL_QUERY_FAILED",
+        "INFLUXQL_QUERY_FAILED",
+        "UNSUPPORTED_RESULT_TYPE",
+        "UNSUPPORTED_HISTOGRAM",
+        "RESOURCE_LIMIT_EXCEEDED",
+        null
+      ]
+    },
+    "http_status": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "minimum": 100,
+      "maximum": 599
+    },
+    "series_count": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "minimum": 0
+    },
+    "series": {
+      "type": "array",
+      "maxItems": 20,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "labels",
+          "observed_cells",
+          "expected_cells"
+        ],
+        "properties": {
+          "labels": {
+            "type": "object"
+          },
+          "observed_cells": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "expected_cells": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 240
+          }
+        }
+      }
+    },
+    "series_truncated": {
+      "type": "boolean"
+    },
+    "label_keys": {
+      "type": "array",
+      "maxItems": 16,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "key",
+          "distinct_values",
+          "sample_values",
+          "truncated"
+        ],
+        "properties": {
+          "key": {
+            "type": "string",
+            "maxLength": 128
+          },
+          "distinct_values": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "sample_values": {
+            "type": "array",
+            "maxItems": 5,
+            "items": {
+              "type": "string",
+              "maxLength": 128
+            }
+          },
+          "truncated": {
+            "type": "boolean"
+          }
+        }
+      }
+    },
+    "label_keys_truncated": {
+      "type": "boolean"
+    },
+    "redacted_count": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "warnings": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {
+        "enum": [
+          "SOURCE_WARNINGS",
+          "SOURCE_PARTIAL_RESPONSE"
+        ]
+      }
+    },
+    "decoder_check": {
+      "type": [
+        "object",
+        "null"
+      ],
+      "additionalProperties": false,
+      "required": [
+        "accepted",
+        "code"
+      ],
+      "properties": {
+        "accepted": {
+          "type": "boolean"
+        },
+        "code": {
+          "enum": [
+            "EMPTY_RESULT",
+            "MALFORMED_RESPONSE",
+            "PROMQL_QUERY_FAILED",
+            "INFLUXQL_QUERY_FAILED",
+            "SOURCE_WARNINGS",
+            "SOURCE_PARTIAL_RESPONSE",
+            "UNSUPPORTED_RESULT_TYPE",
+            "UNSUPPORTED_HISTOGRAM",
+            "AMBIGUOUS_SERIES",
+            "AMBIGUOUS_STATEMENT",
+            "LABEL_MISMATCH",
+            "OFF_GRID_TIMESTAMP",
+            "DUPLICATE_TIMESTAMP",
+            "RESOURCE_LIMIT_EXCEEDED",
+            "DUPLICATE_OBJECT_KEY",
+            null
+          ]
+        }
+      }
+    },
+    "request_count": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 1
+    },
+    "elapsed_ms": {
+      "type": "integer",
+      "minimum": 0
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "required": [
+          "status"
+        ],
+        "properties": {
+          "status": {
+            "const": "OK"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "code": {
+            "const": null
+          },
+          "series_count": {
+            "type": "integer"
+          },
+          "decoder_check": {
+            "type": "object"
+          }
+        }
+      },
+      "else": {
+        "properties": {
+          "code": {
+            "type": "string"
+          },
+          "series_count": {
+            "type": "null"
+          },
+          "series": {
+            "maxItems": 0
+          },
+          "label_keys": {
+            "maxItems": 0
+          },
+          "warnings": {
+            "maxItems": 0
+          },
+          "decoder_check": {
+            "type": "null"
+          }
+        }
+      }
+    }
+  ]
+}

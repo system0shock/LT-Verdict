@@ -1,0 +1,67 @@
+{
+  "schema_version": "source-check.v1",
+  "profiles": [
+    {
+      "profile_id": "prom-main",
+      "source_kind": "prometheus",
+      "transport": "direct",
+      "arm": null,
+      "query_count": 12,
+      "rule_count": 3,
+      "checks": [
+        {
+          "id": "config",
+          "status": "OK",
+          "code": null
+        },
+        {
+          "id": "url",
+          "status": "OK",
+          "code": null
+        },
+        {
+          "id": "credentials",
+          "status": "FAIL",
+          "code": "MISSING PROBE_TOKEN",
+          "auth_kind": "bearer"
+        },
+        {
+          "id": "tls",
+          "status": "SKIPPED",
+          "code": null
+        },
+        {
+          "id": "rules",
+          "status": "OK",
+          "code": null
+        },
+        {
+          "id": "governor",
+          "status": "WARN",
+          "code": "GOVERNOR_STRICT"
+        }
+      ]
+    },
+    {
+      "profile_id": "pg",
+      "source_kind": "postgresql",
+      "transport": null,
+      "arm": null,
+      "query_count": 0,
+      "rule_count": 0,
+      "checks": [
+        {
+          "id": "config",
+          "status": "OK",
+          "code": null
+        },
+        {
+          "id": "credentials",
+          "status": "OK",
+          "code": null,
+          "auth_kind": "basic"
+        }
+      ]
+    }
+  ]
+}

@@ -174,6 +174,15 @@ Latency (ms)
 {"max":84,"p50":84,"p95":84,"p99":84}
 ----
 
+== Error groups
+[subs=specialchars]
+----
+Ошибки за весь прогон.
+Показано групп: 1, всего ошибок: 1.
+Errors | Share | Response code | Message | Transaction
+1 | 100,0 % | 500 | Internal Server Error | GET /items, detail
+----
+
 == Policy checks
 unavailable
 

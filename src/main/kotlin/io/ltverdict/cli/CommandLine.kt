@@ -33,6 +33,7 @@ import io.ltverdict.integrations.report.renderConfluenceReport
 import io.ltverdict.integrations.report.renderSavedLoadChart
 import io.ltverdict.jobs.AnalysisJobs
 import io.ltverdict.metrics.MetricsConfig
+import io.ltverdict.report.readErrorGroupsFile
 import io.ltverdict.report.renderAsciiDocReport
 import io.ltverdict.report.renderHtmlReport
 import io.ltverdict.sources.PostgresAnalysisInput
@@ -279,6 +280,7 @@ private fun analyze(
     }
     var analysisId = ""
     var chart: ByteArray? = null
+    var errorGroups: ByteArray? = null
     val result =
         DataDirectory.open(dataDir).use { directory ->
             val store = RunBundleStore(directory)
@@ -345,7 +347,10 @@ private fun analyze(
                     source,
                 ).also { outcome ->
                     analysisId = outcome.analysisId
-                    if (outDir != null) chart = renderSavedLoadChart(outcome.analysisDirectory.resolve("rollup-60s.ndjson"))
+                    if (outDir != null) {
+                        chart = renderSavedLoadChart(outcome.analysisDirectory.resolve("rollup-60s.ndjson"))
+                        errorGroups = readErrorGroupsFile(outcome.analysisDirectory)
+                    }
                 }.canonicalResult
             } catch (failure: IllegalArgumentException) {
                 throw CliFailure(EXIT_INVALID_INPUT, failure.cliMessage())
@@ -371,9 +376,9 @@ private fun analyze(
             it,
             linkedMapOf(
                 "result.json" to result,
-                "report.html" to renderHtmlReport(result, analysisId),
+                "report.html" to renderHtmlReport(result, analysisId, errorGroups),
                 "chart.svg" to checkNotNull(chart),
-                "summary.txt" to summaryText(analysisId, exitCode, result),
+                "summary.txt" to summaryText(analysisId, exitCode, result, errorGroups),
                 "junit.xml" to junitXml(result),
             ),
         )
@@ -513,6 +518,7 @@ private fun report(
         index += 2
     }
     if (format !in setOf("json", "html", "asciidoc", "confluence", "svg", "summary")) usage()
+    var errorGroups: ByteArray? = null
     val result =
         DataDirectory.open(dataDir).use { directory ->
             val analysis =
@@ -532,6 +538,7 @@ private fun report(
             ) {
                 renderSavedLoadChart(analysis.path.resolve("rollup-60s.ndjson"))
             } else {
+                if (analysis.artifacts.any { it.path == "error-groups.json" }) errorGroups = readErrorGroupsFile(analysis.path)
                 Files.readAllBytes(analysis.path.resolve(artifact.path))
             }
         }
@@ -539,10 +546,10 @@ private fun report(
         when (format) {
             "json" -> result
             "svg" -> result
-            "summary" -> summaryJson(analysisId, result)
-            "html" -> renderHtmlReport(result, analysisId)
-            "confluence" -> renderConfluenceReport(result, analysisId)
-            else -> renderAsciiDocReport(result, analysisId)
+            "summary" -> summaryJson(analysisId, result, errorGroups)
+            "html" -> renderHtmlReport(result, analysisId, errorGroups)
+            "confluence" -> renderConfluenceReport(result, analysisId, errorGroups)
+            else -> renderAsciiDocReport(result, analysisId, errorGroups)
         },
     )
     return EXIT_OK

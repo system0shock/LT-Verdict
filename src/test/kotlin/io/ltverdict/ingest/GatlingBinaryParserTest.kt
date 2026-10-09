@@ -1,6 +1,7 @@
 package io.ltverdict.ingest
 
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertSame
 import org.junit.jupiter.api.Assertions.assertThrows
 import org.junit.jupiter.api.Assertions.assertTrue
@@ -32,7 +33,7 @@ class GatlingBinaryParserTest {
                             true,
                         ),
                         sample(1_788_212_173_426L, 3, "catalog", listOf("checkout"), SampleKind.GATLING_REQUEST, true),
-                        sample(1_788_212_173_430L, 2, "missing", listOf("checkout"), SampleKind.GATLING_REQUEST, false),
+                        sample(1_788_212_173_430L, 2, "missing", listOf("checkout"), SampleKind.GATLING_REQUEST, false, MISSING_MESSAGE),
                         sample(1_788_212_173_434L, 2, "catalog", listOf("checkout"), SampleKind.GATLING_REQUEST, true),
                         sample(1_788_212_173_295L, 141, "checkout", emptyList(), SampleKind.GATLING_GROUP, false),
                     ),
@@ -40,7 +41,15 @@ class GatlingBinaryParserTest {
                     listOf(
                         sample(1_788_212_198_063L, 78, "catalog", listOf("checkout"), SampleKind.GATLING_REQUEST, true),
                         sample(1_788_212_198_149L, 4, "catalog", listOf("checkout"), SampleKind.GATLING_REQUEST, true),
-                        sample(1_788_212_198_153L, 2, "missing", listOf("checkout"), SampleKind.GATLING_REQUEST, false),
+                        sample(
+                            1_788_212_198_153L,
+                            2,
+                            "missing",
+                            listOf("checkout"),
+                            SampleKind.GATLING_REQUEST,
+                            false,
+                            "status.find.is(200), found 404",
+                        ),
                         sample(1_788_212_198_156L, 2, "catalog", listOf("checkout"), SampleKind.GATLING_REQUEST, true),
                         sample(1_788_212_198_048L, 110, "checkout", emptyList(), SampleKind.GATLING_GROUP, false),
                     ),
@@ -330,6 +339,21 @@ class GatlingBinaryParserTest {
         }
     }
 
+    @Test
+    fun `a KO request keeps its message and no response code`() {
+        val path =
+            binary("ko-${System.nanoTime()}.log") {
+                run()
+                flatRequest(name = "pay", successful = false, message = "status.find.is(200), but actually found 503")
+            }
+        val samples = mutableListOf<LoadSample>()
+
+        parseGatlingBinary(path, samples::add)
+
+        assertEquals("status.find.is(200), but actually found 503", samples.single().failureMessage)
+        assertNull(samples.single().responseCode)
+    }
+
     private fun validLog(version: String): Path =
         binary("$version-${System.nanoTime()}.log") {
             run(version)
@@ -358,7 +382,8 @@ class GatlingBinaryParserTest {
         groupPath: List<String>,
         kind: SampleKind,
         successful: Boolean,
-    ) = LoadSample(startedAt, elapsed, label, groupPath, kind, successful)
+        failureMessage: String? = null,
+    ) = LoadSample(startedAt, elapsed, label, groupPath, kind, successful, failureMessage = failureMessage)
 
     private fun binary(
         name: String,
@@ -427,6 +452,7 @@ class GatlingBinaryParserTest {
         endDelta: Int = 2,
         successful: Boolean = true,
         cacheBase: Int = 1,
+        message: String = "",
     ) {
         writeByte(REQUEST)
         writeInt(0)
@@ -434,7 +460,7 @@ class GatlingBinaryParserTest {
         writeInt(startDelta)
         writeInt(endDelta)
         writeBoolean(successful)
-        cachedMiss(cacheBase + 1, "")
+        cachedMiss(cacheBase + 1, message)
     }
 
     private fun DataOutputStream.user(
@@ -485,6 +511,7 @@ class GatlingBinaryParserTest {
     }
 
     private companion object {
+        const val MISSING_MESSAGE = "status.find.is(200), but actually found 404"
         const val RUN = 0
         const val REQUEST = 1
         const val USER = 2

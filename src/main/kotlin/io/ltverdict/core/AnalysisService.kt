@@ -381,6 +381,7 @@ internal class AnalysisService(
             }
         var secondStart: Long? = null
         var secondEnd: Long? = null
+        val errorGroups = ErrorGroupAccumulator(request.input.runId)
         val second =
             try {
                 parseInput(
@@ -389,6 +390,7 @@ internal class AnalysisService(
                         secondStart = minOf(secondStart ?: sample.startedAtEpochMillis, sample.startedAtEpochMillis)
                         secondEnd = maxOf(secondEnd ?: sample.endedAtEpochMillis, sample.endedAtEpochMillis)
                         accumulator.record(sample)
+                        errorGroups.record(sample)
                         windowAccumulator?.record(sample)
                         capacityAccumulator?.record(sample)
                         diagnosticAccumulator?.record(sample)
@@ -418,6 +420,7 @@ internal class AnalysisService(
             }
 
         val metrics = accumulator.finish()
+        val errorGroupBytes = errorGroups.finish()
         val finishedWindowMetrics = windowAccumulator?.finish(checkCancelled)
         var evaluation =
             if (request.resources == null) {
@@ -590,6 +593,10 @@ internal class AnalysisService(
                 podViewBytes?.let {
                     checkCancelled()
                     Files.write(staging.resolve(POD_VIEW_FILE), it, StandardOpenOption.CREATE_NEW, StandardOpenOption.WRITE)
+                }
+                errorGroupBytes?.let {
+                    checkCancelled()
+                    Files.write(staging.resolve(ERROR_GROUPS_FILE), it, StandardOpenOption.CREATE_NEW, StandardOpenOption.WRITE)
                 }
                 writeBuckets(staging.resolve(NORMALIZED_FILE), metrics.oneSecondBuckets, checkCancelled)
                 ROLLUPS.forEach { seconds ->

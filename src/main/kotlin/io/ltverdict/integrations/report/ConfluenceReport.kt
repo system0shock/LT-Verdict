@@ -2,6 +2,7 @@ package io.ltverdict.integrations.report
 
 import io.ltverdict.report.STAGE_REFERENCE_NOTE
 import io.ltverdict.report.WINDOW_SHARE_LABEL
+import io.ltverdict.report.errorGroupsView
 import io.ltverdict.report.stageNotice
 import io.ltverdict.report.windowShareText
 import kotlinx.serialization.json.Json
@@ -15,6 +16,7 @@ import kotlinx.serialization.json.jsonObject
 internal fun renderConfluenceReport(
     resultBytes: ByteArray,
     analysisId: String,
+    errorGroups: ByteArray? = null,
 ): ByteArray {
     val source = resultBytes.decodeToString(throwOnInvalidSequence = true)
     val result = Json.parseToJsonElement(source).jsonObject
@@ -28,6 +30,23 @@ internal fun renderConfluenceReport(
         windowShareText(result)?.let { row(WINDOW_SHARE_LABEL, JsonPrimitive(it)) }
         append("</tbody></table>")
         stageNotice(result)?.let { append("<p>").append("${it.phrase}. ${it.detail} $STAGE_REFERENCE_NOTE".xml()).append("</p>") }
+        errorGroupsView(result, errorGroups)?.let { view ->
+            append("<h2>Error groups</h2>")
+            view.notes.forEach { append("<p>").append(it.xml()).append("</p>") }
+            if (view.rows.isNotEmpty()) {
+                append(
+                    "<table><thead><tr><th>Errors</th><th>Share</th><th>Response code</th><th>Message</th><th>Transaction</th></tr></thead><tbody>",
+                )
+                view.rows.forEach { row ->
+                    append("<tr>")
+                    listOf(row.count.toString(), row.share, row.code, row.message, row.transaction).forEach {
+                        append("<td>").append(it.xml()).append("</td>")
+                    }
+                    append("</tr>")
+                }
+                append("</tbody></table>")
+            }
+        }
         section("Evidence", result["evidence"] as? JsonArray)
         section("Findings", result["findings"] as? JsonArray)
         append("<h2>Canonical JSON</h2><pre>").append(source.xml()).append("</pre>")

@@ -5,3 +5,5 @@ run_validity: VALID
 policy_verdict: NO_POLICY
 exit_code: 0
 samples: 3  errors: 1  p95_ms: 496  p99_ms: 496
+top errors (whole run, 1 total):
+  1 500 Internal Server Error [GET /items, detail]

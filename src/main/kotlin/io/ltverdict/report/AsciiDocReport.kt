@@ -11,6 +11,7 @@ import kotlinx.serialization.json.jsonObject
 internal fun renderAsciiDocReport(
     resultBytes: ByteArray,
     analysisId: String,
+    errorGroups: ByteArray? = null,
 ): ByteArray {
     val result = Json.parseToJsonElement(resultBytes.decodeToString()).jsonObject
     val evidence = result.objects("evidence")
@@ -38,6 +39,17 @@ internal fun renderAsciiDocReport(
         }
         metricsSection("Overall metrics", metrics.filter { it.scopeKind() == "overall" })
         metricsSection("Transaction metrics", metrics.filter { it.scopeKind() == "transaction" })
+        errorGroupsView(result, errorGroups)?.let { view ->
+            append("\n== Error groups\n")
+            // One literal block: every row starts with a count, so no text of a message can be a line that closes the block.
+            literal(
+                (
+                    view.notes +
+                        (if (view.rows.isEmpty()) emptyList() else listOf("Errors | Share | Response code | Message | Transaction")) +
+                        view.rows.map { "${it.count} | ${it.share} | ${it.code} | ${it.message} | ${it.transaction}" }
+                ).joinToString("\n"),
+            )
+        }
         objectsSection("Policy checks", evidence.filter { it.string("type") == "policy_check" })
         if (resourceSummaries.isNotEmpty() ||
             windowSummaries.isNotEmpty() ||

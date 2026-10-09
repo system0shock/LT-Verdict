@@ -512,7 +512,7 @@ class AnalysisServiceTest {
             )
 
             val stored = store.readAnalysis(input.runId, outcome.analysisId)!!
-            assertEquals(COMPLETE_ARTIFACTS, stored.artifacts.map { it.path }.toSet())
+            assertEquals(COMPLETE_ARTIFACTS + ERROR_GROUPS_FILE, stored.artifacts.map { it.path }.toSet())
             assertTrue(Files.isRegularFile(stored.path.resolve("manifest.json")))
             assertTrue(stored.artifacts.all { it.sizeBytes > 0 && Regex("[0-9a-f]{64}").matches(it.sha256) })
 
@@ -608,7 +608,7 @@ class AnalysisServiceTest {
                 Files.readString(outcome.analysisDirectory.resolve("run.json")),
             )
             assertEquals(
-                COMPLETE_ARTIFACTS,
+                COMPLETE_ARTIFACTS + ERROR_GROUPS_FILE,
                 store
                     .readAnalysis(input.runId, outcome.analysisId)!!
                     .artifacts
@@ -891,7 +891,7 @@ class AnalysisServiceTest {
                     },
             )
             val artifacts = storedArtifacts(store, input, first)
-            assertEquals(COMPLETE_ARTIFACTS + RESOURCE_FILE, artifacts)
+            assertEquals(COMPLETE_ARTIFACTS + ERROR_GROUPS_FILE + RESOURCE_FILE, artifacts)
             assertArrayEquals(firstRaw, Files.readAllBytes(first.analysisDirectory.resolve(RESOURCE_FILE)))
 
             val identity = Json.parseToJsonElement(Files.readString(first.analysisDirectory.resolve("identity.json"))).jsonObject

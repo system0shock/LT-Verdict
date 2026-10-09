@@ -1,0 +1,164 @@
+== open
++ .ltv.lock lock 0
++ .staging dir
++ runs dir
+accept A | jmeter_jtl_csv-6f9e658876e83eda9a3727dbb32612a2f54800ee34ea22641deeab6781f82601 JMETER_CSV 433 a.jtl 2026-02-03T04:05:06.000Z
+== accept A
++ runs/jmeter_jtl_csv-6f9e658876e83eda9a3727dbb32612a2f54800ee34ea22641deeab6781f82601 dir
++ runs/jmeter_jtl_csv-6f9e658876e83eda9a3727dbb32612a2f54800ee34ea22641deeab6781f82601/inputs dir
++ runs/jmeter_jtl_csv-6f9e658876e83eda9a3727dbb32612a2f54800ee34ea22641deeab6781f82601/inputs/source.bin 433 6f9e658876e83eda9a3727dbb32612a2f54800ee34ea22641deeab6781f82601
++ runs/jmeter_jtl_csv-6f9e658876e83eda9a3727dbb32612a2f54800ee34ea22641deeab6781f82601/source.json 285 e952f52a993df52bd0a62d4bd860b7fba186e8b72d0b9fc32d90d9f4cf36d808
+accept A again | jmeter_jtl_csv-6f9e658876e83eda9a3727dbb32612a2f54800ee34ea22641deeab6781f82601 a.jtl 2026-02-03T04:05:06.000Z
+== accept A again
+accept B | jmeter_jtl_xml-e01fcf204803ad94f66f5bd5e96c7750a26922abfdc929489b6a5fc44627d82e JMETER_XML 2026-02-03T04:05:08.000Z
+== accept B
++ runs/jmeter_jtl_xml-e01fcf204803ad94f66f5bd5e96c7750a26922abfdc929489b6a5fc44627d82e dir
++ runs/jmeter_jtl_xml-e01fcf204803ad94f66f5bd5e96c7750a26922abfdc929489b6a5fc44627d82e/inputs dir
++ runs/jmeter_jtl_xml-e01fcf204803ad94f66f5bd5e96c7750a26922abfdc929489b6a5fc44627d82e/inputs/source.bin 1349 e01fcf204803ad94f66f5bd5e96c7750a26922abfdc929489b6a5fc44627d82e
++ runs/jmeter_jtl_xml-e01fcf204803ad94f66f5bd5e96c7750a26922abfdc929489b6a5fc44627d82e/source.json 286 33e3cec784a6ba48d9cabb2006a368ad70aa0dedddacdcb7235ffd25ee61df6c
+listRuns | RunPage(runs=[RunSummary(runId=jmeter_jtl_xml-e01fcf204803ad94f66f5bd5e96c7750a26922abfdc929489b6a5fc44627d82e, sourceType=JMETER_XML, sha256=e01fcf204803ad94f66f5bd5e96c7750a26922abfdc929489b6a5fc44627d82e, sizeBytes=1349, originalFilename=b.xml, acceptedAt=2026-02-03T04:05:08.000Z), RunSummary(runId=jmeter_jtl_csv-6f9e658876e83eda9a3727dbb32612a2f54800ee34ea22641deeab6781f82601, sourceType=JMETER_CSV, sha256=6f9e658876e83eda9a3727dbb32612a2f54800ee34ea22641deeab6781f82601, sizeBytes=433, originalFilename=a.jtl, acceptedAt=2026-02-03T04:05:06.000Z)], nextAfter=null)
+listRuns page 1 | RunPage(runs=[RunSummary(runId=jmeter_jtl_xml-e01fcf204803ad94f66f5bd5e96c7750a26922abfdc929489b6a5fc44627d82e, sourceType=JMETER_XML, sha256=e01fcf204803ad94f66f5bd5e96c7750a26922abfdc929489b6a5fc44627d82e, sizeBytes=1349, originalFilename=b.xml, acceptedAt=2026-02-03T04:05:08.000Z)], nextAfter=jmeter_jtl_xml-e01fcf204803ad94f66f5bd5e96c7750a26922abfdc929489b6a5fc44627d82e)
+listRuns page 2 | RunPage(runs=[RunSummary(runId=jmeter_jtl_csv-6f9e658876e83eda9a3727dbb32612a2f54800ee34ea22641deeab6781f82601, sourceType=JMETER_CSV, sha256=6f9e658876e83eda9a3727dbb32612a2f54800ee34ea22641deeab6781f82601, sizeBytes=433, originalFilename=a.jtl, acceptedAt=2026-02-03T04:05:06.000Z)], nextAfter=null)
+requireInput | AcceptedInput(runId=jmeter_jtl_csv-6f9e658876e83eda9a3727dbb32612a2f54800ee34ea22641deeab6781f82601, sourceType=JMETER_CSV, sha256=6f9e658876e83eda9a3727dbb32612a2f54800ee34ea22641deeab6781f82601, sizeBytes=433, originalFilename=a.jtl, path=<root>\runs\jmeter_jtl_csv-6f9e658876e83eda9a3727dbb32612a2f54800ee34ea22641deeab6781f82601\inputs\source.bin, acceptedAt=2026-02-03T04:05:06.000Z)
+== three analyses
++ runs/jmeter_jtl_csv-6f9e658876e83eda9a3727dbb32612a2f54800ee34ea22641deeab6781f82601/analyses dir
++ runs/jmeter_jtl_csv-6f9e658876e83eda9a3727dbb32612a2f54800ee34ea22641deeab6781f82601/analyses/2d40300664d2ae9b44d50defc08aace821364e407188612d2d81a90f899deabc dir
++ runs/jmeter_jtl_csv-6f9e658876e83eda9a3727dbb32612a2f54800ee34ea22641deeab6781f82601/analyses/2d40300664d2ae9b44d50defc08aace821364e407188612d2d81a90f899deabc/analysis-result.json 139 0901c64a8ff18b3a0758b3f3fbbe59ff7dff5e3fba37bad08bc4f319ec7b245f
++ runs/jmeter_jtl_csv-6f9e658876e83eda9a3727dbb32612a2f54800ee34ea22641deeab6781f82601/analyses/2d40300664d2ae9b44d50defc08aace821364e407188612d2d81a90f899deabc/identity.json 293 2d40300664d2ae9b44d50defc08aace821364e407188612d2d81a90f899deabc
++ runs/jmeter_jtl_csv-6f9e658876e83eda9a3727dbb32612a2f54800ee34ea22641deeab6781f82601/analyses/2d40300664d2ae9b44d50defc08aace821364e407188612d2d81a90f899deabc/manifest.json 646 21eac63f677fef512cb642e670c17c810276b597788d21f143eb595737ea6170
++ runs/jmeter_jtl_csv-6f9e658876e83eda9a3727dbb32612a2f54800ee34ea22641deeab6781f82601/analyses/2d40300664d2ae9b44d50defc08aace821364e407188612d2d81a90f899deabc/nested dir
++ runs/jmeter_jtl_csv-6f9e658876e83eda9a3727dbb32612a2f54800ee34ea22641deeab6781f82601/analyses/2d40300664d2ae9b44d50defc08aace821364e407188612d2d81a90f899deabc/nested/note.txt 7 30effe65de02f81fb748fad553202ff1ad9abf924fc362747e0ca58c8311f068
++ runs/jmeter_jtl_csv-6f9e658876e83eda9a3727dbb32612a2f54800ee34ea22641deeab6781f82601/analyses/2d40300664d2ae9b44d50defc08aace821364e407188612d2d81a90f899deabc/pod-view.json 14 003bdee6216d56e11243815c6b1d147fa253a3f87666655fa6f43121413394af
++ runs/jmeter_jtl_csv-6f9e658876e83eda9a3727dbb32612a2f54800ee34ea22641deeab6781f82601/analyses/2d40300664d2ae9b44d50defc08aace821364e407188612d2d81a90f899deabc/run.json 128 921832101aa1fb3aa71c90ac236e582386fac9aeaaddec52e7a1bb864d727e93
++ runs/jmeter_jtl_csv-6f9e658876e83eda9a3727dbb32612a2f54800ee34ea22641deeab6781f82601/analyses/3ac8905a674fc220e046b3caf5fee33d1bb5fce4b8b1993930979f728cb4210e dir
++ runs/jmeter_jtl_csv-6f9e658876e83eda9a3727dbb32612a2f54800ee34ea22641deeab6781f82601/analyses/3ac8905a674fc220e046b3caf5fee33d1bb5fce4b8b1993930979f728cb4210e/analysis-result.json 139 0901c64a8ff18b3a0758b3f3fbbe59ff7dff5e3fba37bad08bc4f319ec7b245f
++ runs/jmeter_jtl_csv-6f9e658876e83eda9a3727dbb32612a2f54800ee34ea22641deeab6781f82601/analyses/3ac8905a674fc220e046b3caf5fee33d1bb5fce4b8b1993930979f728cb4210e/identity.json 186 3ac8905a674fc220e046b3caf5fee33d1bb5fce4b8b1993930979f728cb4210e
++ runs/jmeter_jtl_csv-6f9e658876e83eda9a3727dbb32612a2f54800ee34ea22641deeab6781f82601/analyses/3ac8905a674fc220e046b3caf5fee33d1bb5fce4b8b1993930979f728cb4210e/manifest.json 644 fff5cc227d70ed4210b5778a6c990ff5f4b6e4f197262006d2c828966ea81dbd
++ runs/jmeter_jtl_csv-6f9e658876e83eda9a3727dbb32612a2f54800ee34ea22641deeab6781f82601/analyses/3ac8905a674fc220e046b3caf5fee33d1bb5fce4b8b1993930979f728cb4210e/nested dir
++ runs/jmeter_jtl_csv-6f9e658876e83eda9a3727dbb32612a2f54800ee34ea22641deeab6781f82601/analyses/3ac8905a674fc220e046b3caf5fee33d1bb5fce4b8b1993930979f728cb4210e/nested/note.txt 7 fc888cf6e46650c97c766eedf618a749c47c71dea5afbfbd44b73e1c0c233a65
++ runs/jmeter_jtl_csv-6f9e658876e83eda9a3727dbb32612a2f54800ee34ea22641deeab6781f82601/analyses/3ac8905a674fc220e046b3caf5fee33d1bb5fce4b8b1993930979f728cb4210e/policy.json 52 0aa136f2f30c54e1584ae2f7b8c3d5dfcd7235c22d7e6c9fe801cd960860da28
++ runs/jmeter_jtl_csv-6f9e658876e83eda9a3727dbb32612a2f54800ee34ea22641deeab6781f82601/analyses/3ac8905a674fc220e046b3caf5fee33d1bb5fce4b8b1993930979f728cb4210e/run.json 128 921832101aa1fb3aa71c90ac236e582386fac9aeaaddec52e7a1bb864d727e93
++ runs/jmeter_jtl_xml-e01fcf204803ad94f66f5bd5e96c7750a26922abfdc929489b6a5fc44627d82e/analyses dir
++ runs/jmeter_jtl_xml-e01fcf204803ad94f66f5bd5e96c7750a26922abfdc929489b6a5fc44627d82e/analyses/357cc83742f6b7a4fd4942bbcd4a5f0e0a00e68bd2ede294f43cd4ef56f9b475 dir
++ runs/jmeter_jtl_xml-e01fcf204803ad94f66f5bd5e96c7750a26922abfdc929489b6a5fc44627d82e/analyses/357cc83742f6b7a4fd4942bbcd4a5f0e0a00e68bd2ede294f43cd4ef56f9b475/analysis-result.json 139 52f78b8ee1bd816109b1cc2dfb3ef799f59ef4b6a18a3799b10289347c9c74ef
++ runs/jmeter_jtl_xml-e01fcf204803ad94f66f5bd5e96c7750a26922abfdc929489b6a5fc44627d82e/analyses/357cc83742f6b7a4fd4942bbcd4a5f0e0a00e68bd2ede294f43cd4ef56f9b475/identity.json 186 357cc83742f6b7a4fd4942bbcd4a5f0e0a00e68bd2ede294f43cd4ef56f9b475
++ runs/jmeter_jtl_xml-e01fcf204803ad94f66f5bd5e96c7750a26922abfdc929489b6a5fc44627d82e/analyses/357cc83742f6b7a4fd4942bbcd4a5f0e0a00e68bd2ede294f43cd4ef56f9b475/manifest.json 416 acf819b0ba2af1853af3772b5b985e8d17fb1a2d5dbd291e748c1833ae0c7579
++ runs/jmeter_jtl_xml-e01fcf204803ad94f66f5bd5e96c7750a26922abfdc929489b6a5fc44627d82e/analyses/357cc83742f6b7a4fd4942bbcd4a5f0e0a00e68bd2ede294f43cd4ef56f9b475/nested dir
++ runs/jmeter_jtl_xml-e01fcf204803ad94f66f5bd5e96c7750a26922abfdc929489b6a5fc44627d82e/analyses/357cc83742f6b7a4fd4942bbcd4a5f0e0a00e68bd2ede294f43cd4ef56f9b475/nested/note.txt 7 dba90ed480879380a50cb38aa856a4831ac4ce9edfe0fe8bfc630551adad1396
+re-save a1 | true
+== re-save a1
+listAnalyses A | AnalysisPage(analyses=[AnalysisSummary(analysisId=2d40300664d2ae9b44d50defc08aace821364e407188612d2d81a90f899deabc, policySha256=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa, policyVerdict=PASS, runValidity=VALID, policyId=null, resourceArm=blue, resourceSnapshotSha256=null), AnalysisSummary(analysisId=3ac8905a674fc220e046b3caf5fee33d1bb5fce4b8b1993930979f728cb4210e, policySha256=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa, policyVerdict=PASS, runValidity=VALID, policyId=null, resourceArm=null, resourceSnapshotSha256=null)], nextAfter=null)
+listAnalyses A paged | AnalysisPage(analyses=[AnalysisSummary(analysisId=2d40300664d2ae9b44d50defc08aace821364e407188612d2d81a90f899deabc, policySha256=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa, policyVerdict=PASS, runValidity=VALID, policyId=null, resourceArm=blue, resourceSnapshotSha256=null)], nextAfter=2d40300664d2ae9b44d50defc08aace821364e407188612d2d81a90f899deabc)
+listAnalyses B | AnalysisPage(analyses=[AnalysisSummary(analysisId=357cc83742f6b7a4fd4942bbcd4a5f0e0a00e68bd2ede294f43cd4ef56f9b475, policySha256=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa, policyVerdict=FAIL, runValidity=VALID, policyId=null, resourceArm=null, resourceSnapshotSha256=null)], nextAfter=null)
+readAnalysis | [StoredArtifact(path=analysis-result.json, sizeBytes=139, sha256=0901c64a8ff18b3a0758b3f3fbbe59ff7dff5e3fba37bad08bc4f319ec7b245f), StoredArtifact(path=identity.json, sizeBytes=293, sha256=2d40300664d2ae9b44d50defc08aace821364e407188612d2d81a90f899deabc), StoredArtifact(path=nested/note.txt, sizeBytes=7, sha256=30effe65de02f81fb748fad553202ff1ad9abf924fc362747e0ca58c8311f068), StoredArtifact(path=pod-view.json, sizeBytes=14, sha256=003bdee6216d56e11243815c6b1d147fa253a3f87666655fa6f43121413394af), StoredArtifact(path=run.json, sizeBytes=128, sha256=921832101aa1fb3aa71c90ac236e582386fac9aeaaddec52e7a1bb864d727e93)]
+readAnalysisDocuments | ({"policy_verdict":"PASS","run_id":"jmeter_jtl_csv-6f9e658876e83eda9a3727dbb32612a2f54800ee34ea22641deeab6781f82601","run_validity":"VALID"}, {"policy_sha256":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","run_id":"jmeter_jtl_csv-6f9e658876e83eda9a3727dbb32612a2f54800ee34ea22641deeab6781f82601","tag":"a1"})
+readVerifiedAnalysis | VerifiedAnalysis(result={"policy_verdict":"PASS","run_id":"jmeter_jtl_csv-6f9e658876e83eda9a3727dbb32612a2f54800ee34ea22641deeab6781f82601","run_validity":"VALID"}, identity={"policy_sha256":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","run_id":"jmeter_jtl_csv-6f9e658876e83eda9a3727dbb32612a2f54800ee34ea22641deeab6781f82601","tag":"a1"}, run={"run_id":"jmeter_jtl_csv-6f9e658876e83eda9a3727dbb32612a2f54800ee34ea22641deeab6781f82601","started_at":"2026-01-01T00:00:00Z"})
+readVerifiedAnalysis no run | null
+readPodViewBytes | 003bdee6216d56e11243815c6b1d147fa253a3f87666655fa6f43121413394af null
+readComparisonDocuments | ComparisonDocuments(run={"run_id":"jmeter_jtl_csv-6f9e658876e83eda9a3727dbb32612a2f54800ee34ea22641deeab6781f82601","started_at":"2026-01-01T00:00:00Z"}, result={"policy_verdict":"PASS","run_id":"jmeter_jtl_csv-6f9e658876e83eda9a3727dbb32612a2f54800ee34ea22641deeab6781f82601","run_validity":"VALID"}, identity={"pod_view_sha256":"003bdee6216d56e11243815c6b1d147fa253a3f87666655fa6f43121413394af","policy_sha256":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","resource_arm":"blue","run_id":"jmeter_jtl_csv-6f9e658876e83eda9a3727dbb32612a2f54800ee34ea22641deeab6781f82601","tag":"a2"})
+readComparisonHistory | [2d40300664d2ae9b44d50defc08aace821364e407188612d2d81a90f899deabc, 3ac8905a674fc220e046b3caf5fee33d1bb5fce4b8b1993930979f728cb4210e, 357cc83742f6b7a4fd4942bbcd4a5f0e0a00e68bd2ede294f43cd4ef56f9b475] false
+analysisExists | true false
+analysisState | OK MISSING
+readAnalysisIdentity | {"pod_view_sha256":"003bdee6216d56e11243815c6b1d147fa253a3f87666655fa6f43121413394af","policy_sha256":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","resource_arm":"blue","run_id":"jmeter_jtl_csv-6f9e658876e83eda9a3727dbb32612a2f54800ee34ea22641deeab6781f82601","tag":"a2"}
+analyze | 0010b8e86bbec018a6bd83c92b7d9c48adec71c059d6b0f79ecc5d62c794014e 1784
+== real analysis
++ runs/jmeter_jtl_csv-6f9e658876e83eda9a3727dbb32612a2f54800ee34ea22641deeab6781f82601/analyses/0010b8e86bbec018a6bd83c92b7d9c48adec71c059d6b0f79ecc5d62c794014e dir
++ runs/jmeter_jtl_csv-6f9e658876e83eda9a3727dbb32612a2f54800ee34ea22641deeab6781f82601/analyses/0010b8e86bbec018a6bd83c92b7d9c48adec71c059d6b0f79ecc5d62c794014e/analysis-result.json 1784 8e1ec25d25c02669b705e01cfbbcf7b2756727a2323e3f28b308cd70b22518c5
++ runs/jmeter_jtl_csv-6f9e658876e83eda9a3727dbb32612a2f54800ee34ea22641deeab6781f82601/analyses/0010b8e86bbec018a6bd83c92b7d9c48adec71c059d6b0f79ecc5d62c794014e/identity.json 1855 0010b8e86bbec018a6bd83c92b7d9c48adec71c059d6b0f79ecc5d62c794014e
++ runs/jmeter_jtl_csv-6f9e658876e83eda9a3727dbb32612a2f54800ee34ea22641deeab6781f82601/analyses/0010b8e86bbec018a6bd83c92b7d9c48adec71c059d6b0f79ecc5d62c794014e/manifest.json 904 ccfd64e53f9b6bb919a8a27279bc79311aed0642f2039b90d44cf024701d8547
++ runs/jmeter_jtl_csv-6f9e658876e83eda9a3727dbb32612a2f54800ee34ea22641deeab6781f82601/analyses/0010b8e86bbec018a6bd83c92b7d9c48adec71c059d6b0f79ecc5d62c794014e/normalized-1s.ndjson 159 2e42e9b3eef42a5ddaa088fc92f984fe3d597589ebf507378504c724f6cd0fa2
++ runs/jmeter_jtl_csv-6f9e658876e83eda9a3727dbb32612a2f54800ee34ea22641deeab6781f82601/analyses/0010b8e86bbec018a6bd83c92b7d9c48adec71c059d6b0f79ecc5d62c794014e/rollup-10s.ndjson 159 2e42e9b3eef42a5ddaa088fc92f984fe3d597589ebf507378504c724f6cd0fa2
++ runs/jmeter_jtl_csv-6f9e658876e83eda9a3727dbb32612a2f54800ee34ea22641deeab6781f82601/analyses/0010b8e86bbec018a6bd83c92b7d9c48adec71c059d6b0f79ecc5d62c794014e/rollup-30s.ndjson 159 2e42e9b3eef42a5ddaa088fc92f984fe3d597589ebf507378504c724f6cd0fa2
++ runs/jmeter_jtl_csv-6f9e658876e83eda9a3727dbb32612a2f54800ee34ea22641deeab6781f82601/analyses/0010b8e86bbec018a6bd83c92b7d9c48adec71c059d6b0f79ecc5d62c794014e/rollup-60s.ndjson 159 2e42e9b3eef42a5ddaa088fc92f984fe3d597589ebf507378504c724f6cd0fa2
++ runs/jmeter_jtl_csv-6f9e658876e83eda9a3727dbb32612a2f54800ee34ea22641deeab6781f82601/analyses/0010b8e86bbec018a6bd83c92b7d9c48adec71c059d6b0f79ecc5d62c794014e/run.json 363 b46b40c968e93318f9fad800c42a579fdd50db3ad9b80d20c0e97460663c45a2
+readRunPeriod before | null
+== run period
++ runs/jmeter_jtl_csv-6f9e658876e83eda9a3727dbb32612a2f54800ee34ea22641deeab6781f82601/run-period.json 320 2d65e5ce45d85c38fe63fc1f4ac701451815b0dc883c63f3ab2e31e78d07a4d0
+readRunPeriod | true
+== legacy baseline
++ baseline.json 476 181ec70eae8b60bff99b7c4cfb299ec789f1f562046cd8a6ac917bfe7b366ddd
+== conditions
++ baseline-conditions dir
++ baseline-conditions/d7505f13a4207fc8e6f4410e093908fbc0f364a310d842ef7b2d35a3f5b2b284.json 529 1b5c91a79aefb4b6e69cd77734bd5aa0a2e1a03ab6cb7563bb0cf34a2e4c7b69
++ baseline-conditions/e7e3977ece3ceacb3e6942f376ad0991e83ef0258f0e1382271cbee3b571da91.json 582 0fd49d1e5a8c70a26e39c6bd0533385543be4d7f16150c6faaca0e7256e6100f
+readBaseline | {"schema_version":"local-baseline.v1","series":"legacy","mode":"manual","reference":{"run_id":"jmeter_jtl_csv-6f9e658876e83eda9a3727dbb32612a2f54800ee34ea22641deeab6781f82601","analysis_id":"3ac8905a674fc220e046b3caf5fee33d1bb5fce4b8b1993930979f728cb4210e"},"algorithm":null,"candidates":[{"run_id":"jmeter_jtl_csv-6f9e658876e83eda9a3727dbb32612a2f54800ee34ea22641deeab6781f82601","analysis_id":"3ac8905a674fc220e046b3caf5fee33d1bb5fce4b8b1993930979f728cb4210e"}],"scores":[]}
+readBaselineCondition | {"schema_version":"local-baseline-conditions.v1","baseline":{"run_id":"jmeter_jtl_csv-6f9e658876e83eda9a3727dbb32612a2f54800ee34ea22641deeab6781f82601","analysis_id":"3ac8905a674fc220e046b3caf5fee33d1bb5fce4b8b1993930979f728cb4210e"},"current":{"run_id":"jmeter_jtl_csv-6f9e658876e83eda9a3727dbb32612a2f54800ee34ea22641deeab6781f82601","analysis_id":"2d40300664d2ae9b44d50defc08aace821364e407188612d2d81a90f899deabc"},"windows":null,"decision":"CONFIRMED","provenance":"EXPLICIT_LOCAL_ACTION","updated_at":"2026-09-06T10:00:00Z"}
+== slots (the last one shadows the legacy file)
+- baseline.json
++ baselines dir
++ baselines/7f9c9a1905b7fd57e9bca7335c0ceff1b431cfa97f7b8cd81cb46cddc7bfae07.json 475 b9e5735edd1120c971ae890a48c073fc5dfedd7aac6dac2a872b4816dc0a1c3f
++ baselines/8f190097923e6d01077001c401b7057d4ed5280e0debc9624472a9457d750db3.json 476 181ec70eae8b60bff99b7c4cfb299ec789f1f562046cd8a6ac917bfe7b366ddd
++ baselines/9bf4acf1a376fe6a988aa9d0bdf16646893f9e5b6f6e2c1813dbf8b476e23ee8.json 481 18603327ca98c5c578089cadd2355d09831b4691be00858230aafeca2723a008
+listBaselineSlots | [blue-series/blue/false/9bf4acf1a376fe6a988aa9d0bdf16646893f9e5b6f6e2c1813dbf8b476e23ee8, legacy/null/false/8f190097923e6d01077001c401b7057d4ed5280e0debc9624472a9457d750db3, plain/null/false/7f9c9a1905b7fd57e9bca7335c0ceff1b431cfa97f7b8cd81cb46cddc7bfae07]
+readBaselineSlotWithCondition legacy | (null, null)
+readBaselineSlotWithCondition slot | (BaselineSlot(series=blue-series, arm=blue, selection={"schema_version":"local-baseline.v1","series":"blue-series","mode":"manual","reference":{"run_id":"jmeter_jtl_csv-6f9e658876e83eda9a3727dbb32612a2f54800ee34ea22641deeab6781f82601","analysis_id":"2d40300664d2ae9b44d50defc08aace821364e407188612d2d81a90f899deabc"},"algorithm":null,"candidates":[{"run_id":"jmeter_jtl_csv-6f9e658876e83eda9a3727dbb32612a2f54800ee34ea22641deeab6781f82601","analysis_id":"2d40300664d2ae9b44d50defc08aace821364e407188612d2d81a90f899deabc"}],"scores":[]}, legacy=false), null)
+clearBaselineSlot | true false
+== slot cleared
+- baselines/9bf4acf1a376fe6a988aa9d0bdf16646893f9e5b6f6e2c1813dbf8b476e23ee8.json
+clearBaseline | kotlin.Unit
+== legacy cleared
+== two releases
++ releases dir
++ releases/001767225600000-0123abcd.json 634 2e1d0a257ab9e8f8acbf51bad67005a2249c3ab0b43cffd618732e65cce29c82
++ releases/001767398400000-89abcdef.json 628 0c486b0cd96c31f51eac528170c8dbe3938b57e00343165d92caa6c77b471a88
+createRelease | "001767225600000-0123abcd"
+listReleases | ReleasePage(releases=[{"analyses":[{"analysis_id":"2d40300664d2ae9b44d50defc08aace821364e407188612d2d81a90f899deabc","arm":"blue","coverage_reasons":[],"coverage_status":"COMPLETE","policy_sha256":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","policy_verdict":"PASS","run_validity":"VALID"}],"created_at":"2026-01-04T03:04:05Z","label":"2.0","notes":null,"profile":null,"release_id":"001767398400000-89abcdef","run_id":"jmeter_jtl_csv-6f9e658876e83eda9a3727dbb32612a2f54800ee34ea22641deeab6781f82601","schema_version":"local-release.v1","series":"checkout","started_at":"2026-01-03T00:00:00Z","updated_at":"2026-01-04T03:04:05Z"}, {"analyses":[{"analysis_id":"3ac8905a674fc220e046b3caf5fee33d1bb5fce4b8b1993930979f728cb4210e","arm":null,"coverage_reasons":[],"coverage_status":"COMPLETE","policy_sha256":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","policy_verdict":"PASS","run_validity":"VALID"}],"created_at":"2026-01-02T03:04:05.006Z","label":"1.0","notes":null,"profile":null,"release_id":"001767225600000-0123abcd","run_id":"jmeter_jtl_csv-6f9e658876e83eda9a3727dbb32612a2f54800ee34ea22641deeab6781f82601","schema_version":"local-release.v1","series":"checkout","started_at":"2026-01-01T00:00:00Z","updated_at":"2026-01-02T03:04:05.006Z"}], nextAfter=null, seriesSummary=[(checkout, 2)], corruptCount=0, corruptNames=[])
+listReleases series | ReleasePage(releases=[{"analyses":[{"analysis_id":"2d40300664d2ae9b44d50defc08aace821364e407188612d2d81a90f899deabc","arm":"blue","coverage_reasons":[],"coverage_status":"COMPLETE","policy_sha256":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","policy_verdict":"PASS","run_validity":"VALID"}],"created_at":"2026-01-04T03:04:05Z","label":"2.0","notes":null,"profile":null,"release_id":"001767398400000-89abcdef","run_id":"jmeter_jtl_csv-6f9e658876e83eda9a3727dbb32612a2f54800ee34ea22641deeab6781f82601","schema_version":"local-release.v1","series":"checkout","started_at":"2026-01-03T00:00:00Z","updated_at":"2026-01-04T03:04:05Z"}], nextAfter=001767398400000-89abcdef, seriesSummary=[(checkout, 2)], corruptCount=0, corruptNames=[])
+findReleasesByAnalysis | ReleaseLookup(byAnalysis={2d40300664d2ae9b44d50defc08aace821364e407188612d2d81a90f899deabc={"analyses":[{"analysis_id":"2d40300664d2ae9b44d50defc08aace821364e407188612d2d81a90f899deabc","arm":"blue","coverage_reasons":[],"coverage_status":"COMPLETE","policy_sha256":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","policy_verdict":"PASS","run_validity":"VALID"}],"created_at":"2026-01-04T03:04:05Z","label":"2.0","notes":null,"profile":null,"release_id":"001767398400000-89abcdef","run_id":"jmeter_jtl_csv-6f9e658876e83eda9a3727dbb32612a2f54800ee34ea22641deeab6781f82601","schema_version":"local-release.v1","series":"checkout","started_at":"2026-01-03T00:00:00Z","updated_at":"2026-01-04T03:04:05Z"}, 3ac8905a674fc220e046b3caf5fee33d1bb5fce4b8b1993930979f728cb4210e={"analyses":[{"analysis_id":"3ac8905a674fc220e046b3caf5fee33d1bb5fce4b8b1993930979f728cb4210e","arm":null,"coverage_reasons":[],"coverage_status":"COMPLETE","policy_sha256":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","policy_verdict":"PASS","run_validity":"VALID"}],"created_at":"2026-01-02T03:04:05.006Z","label":"1.0","notes":null,"profile":null,"release_id":"001767225600000-0123abcd","run_id":"jmeter_jtl_csv-6f9e658876e83eda9a3727dbb32612a2f54800ee34ea22641deeab6781f82601","schema_version":"local-release.v1","series":"checkout","started_at":"2026-01-01T00:00:00Z","updated_at":"2026-01-02T03:04:05.006Z"}}, ambiguous=[])
+replaceRelease | {"analyses":[{"analysis_id":"3ac8905a674fc220e046b3caf5fee33d1bb5fce4b8b1993930979f728cb4210e","arm":null,"coverage_reasons":[],"coverage_status":"COMPLETE","policy_sha256":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","policy_verdict":"PASS","run_validity":"VALID"}],"created_at":"2026-01-02T03:04:05.006Z","label":"1.0.1","notes":null,"profile":null,"release_id":"001767225600000-0123abcd","run_id":"jmeter_jtl_csv-6f9e658876e83eda9a3727dbb32612a2f54800ee34ea22641deeab6781f82601","schema_version":"local-release.v1","series":"checkout","started_at":"2026-01-01T00:00:00Z","updated_at":"2026-01-05T00:00:00Z"}
+== release replaced
+~ releases/001767225600000-0123abcd.json 632 6624e1599edddcef44bdc983b134e803895b1cf8b5e80bdaf5c1ef514af6fa37
+deleteRelease | true false
+== release deleted
+- releases/001767225600000-0123abcd.json
+refused | accept unsafe filename | IllegalArgumentException: UNSAFE_FILENAME
+refused | accept empty | IllegalArgumentException: EMPTY_INPUT
+refused | accept unsupported | IllegalArgumentException: UNSUPPORTED_INPUT
+refused | accept over the limit | IllegalArgumentException: RESOURCE_LIMIT_EXCEEDED
+refused | accept negative limit | IllegalArgumentException: INVALID_SIZE_LIMIT
+refused | listRuns limit 0 | IllegalArgumentException: INVALID_PAGE_LIMIT
+refused | listRuns unknown cursor | IllegalArgumentException: UNKNOWN_CURSOR
+refused | listRuns bad cursor | IllegalArgumentException: INVALID_RUN_ID
+refused | requireInput unknown | NoSuchElementException: RUN_NOT_FOUND
+refused | requireInput bad id | IllegalArgumentException: INVALID_RUN_ID
+refused | write analysis unknown run | NoSuchElementException: RUN_NOT_FOUND
+refused | write analysis bad id | IllegalArgumentException: INVALID_ANALYSIS_ID
+refused | write analysis with a manifest | IllegalStateException: CORRUPT_RUN_BUNDLE: analysis writer must not create manifest.json
+refused | write analysis failing writer | IllegalStateException: writer failed
+refused | listAnalyses limit 101 | IllegalArgumentException: INVALID_PAGE_LIMIT
+refused | listAnalyses bad cursor | IllegalArgumentException: INVALID_ANALYSIS_ID
+refused | listAnalyses unknown run | NoSuchElementException: RUN_NOT_FOUND
+refused | readAnalysis unknown | ok null
+refused | readVerifiedAnalysis too small a limit | IllegalArgumentException: RESULT_TOO_LARGE
+refused | readVerifiedAnalysis limit 0 | IllegalArgumentException: Failed requirement.
+refused | readAnalysisIdentity unknown | ok null
+refused | readRunPeriod unknown run | NoSuchElementException: RUN_NOT_FOUND
+refused | replaceRunPeriod other input | IllegalArgumentException: RUN_PERIOD_INPUT_MISMATCH
+refused | replaceBaseline invalid | IllegalArgumentException: INVALID_BASELINE_SELECTION
+refused | replaceBaselineSlot unknown analysis | IllegalArgumentException: BASELINE_ANALYSIS_NOT_FOUND
+refused | replaceBaselineSlot wrong arm | IllegalArgumentException: BASELINE_ARM_MISMATCH
+refused | replaceBaselineCondition invalid | IllegalArgumentException: INVALID_BASELINE_CONDITION
+refused | createRelease wrong keys | IllegalArgumentException: INVALID_RELEASE
+refused | createRelease bad start | IllegalArgumentException: INVALID_RELEASE
+refused | createRelease already registered | IllegalArgumentException: RELEASE_ANALYSIS_ALREADY_REGISTERED
+refused | createRelease too large | IllegalArgumentException: INVALID_RELEASE
+refused | readRelease bad id | IllegalArgumentException: INVALID_RELEASE_ID
+refused | readRelease deleted | ok null
+refused | replaceRelease unknown | NoSuchElementException: RELEASE_NOT_FOUND
+refused | replaceRelease immutable | IllegalArgumentException: INVALID_RELEASE
+refused | replaceRelease bad id | IllegalArgumentException: INVALID_RELEASE_ID
+refused | deleteRelease bad id | IllegalArgumentException: INVALID_RELEASE_ID
+refused | listReleases limit 0 | IllegalArgumentException: INVALID_PAGE_LIMIT
+refused | listReleases bad cursor | IllegalArgumentException: INVALID_RELEASE_ID
+== refused calls leave no residue
+corrupt baseline | IllegalStateException: CORRUPT_BASELINE: selection contract is invalid
+corrupt run period | IllegalStateException: CORRUPT_RUN_PERIOD: period contract is invalid
+corrupt analysis | IllegalStateException: CORRUPT_RUN_BUNDLE: analysis artifacts differ
+corrupt analysis state | CORRUPT
+corrupt release | IllegalStateException: CORRUPT_RELEASE: record CORRUPT
+corrupt release list | 0 1 [ReleaseCorruptName(name=001767398400000-89abcdef.json, reason=CORRUPT)]
+== reopen
+- runs/jmeter_jtl_csv-6f9e658876e83eda9a3727dbb32612a2f54800ee34ea22641deeab6781f82601/run-period.json
+reopen readBaseline | null
+reopen listBaselineSlots | [legacy/null/false, plain/null/false]
+reopen listReleases | ["001767398400000-89abcdef"]

@@ -223,6 +223,8 @@ internal fun compareAnalyses(
             // No series warning: the API selects the baseline slot by the series of the current release (ADR 0019, section 7).
             if (baselineIdentity["policy_sha256"] != currentIdentity["policy_sha256"]) add("POLICY_DIFFERS")
             if ((profile?.get("status") as? JsonPrimitive)?.content == "MISMATCH") add("PROFILE_MISMATCH")
+            // ADR 0030, R7: the compared metrics are of the whole run, the verdict of a staged analysis is by its steady window.
+            if (hasStageBinding(baselineResult) || hasStageBinding(currentResult)) add("WHOLE_RUN_METRICS_WITH_STAGES")
         }
     val compatible = semanticKey(baselineResult, baselineIdentity)?.let { it == semanticKey(currentResult, currentIdentity) } == true
     return buildJsonObject {
@@ -661,6 +663,9 @@ private fun JsonObject.metricValue(metric: Metric): Rational? {
         Metric.ERROR_RATE -> overall.ratioOrNull("error_rate_ratio")
     }
 }
+
+private fun hasStageBinding(result: JsonObject): Boolean =
+    (result["evidence"] as? JsonArray).orEmpty().any { (it as? JsonObject)?.stringOrNull("type") == "stage_binding" }
 
 private fun semanticKey(
     result: JsonObject,

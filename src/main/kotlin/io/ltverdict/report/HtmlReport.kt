@@ -50,6 +50,7 @@ internal fun renderHtmlReport(
             val values = evidence.filter { it.string("type") == type }
             if (values.isEmpty()) "" else "<section lang=\"en\"><h2>$title</h2>${list(values)}</section>"
         }
+    val notice = stageNotice(result)
     val html =
         """<!doctype html><html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'sha256-${styleHash()}'; base-uri 'none'; form-action 'none'"><title>LT Verdict report</title><style>$STYLE</style></head><body><main><h1 lang="en">LT Verdict report</h1><p>Отчёт об анализе нагрузочного прогона</p><dl lang="en"><dt>Run</dt><dd>${result.value(
             "run_id",
@@ -59,10 +60,10 @@ internal fun renderHtmlReport(
             "run_validity",
         )}</dd><dt>Policy verdict</dt><dd>${result.value(
             "policy_verdict",
-        )}</dd><dt>Coverage</dt><dd>${result.objectValue(
+        )}</dd>${stageScopeRow(notice)}<dt>Coverage</dt><dd>${result.objectValue(
             "analysis_coverage",
             "status",
-        )}</dd></dl>${verdictBlock(result, evidence)}${diagnosticsBlock(result, evidence)}${rulesSection(
+        )}</dd></dl>${stageBlock(notice)}${verdictBlock(result, evidence)}${diagnosticsBlock(result, evidence)}${rulesSection(
             evidence,
         )}${transactionsSection(result, evidence)}${limitationsBlock(
             result,
@@ -221,6 +222,22 @@ private fun verdictBlock(
         "<p>$count</p>$bound<p>Валидность прогона: $validityWords (<code>${escape(validity ?: DASH)}</code>).</p>" +
         "<p>Покрытие данных: $coverageWords (<code>${escape(coverageStatus ?: DASH)}</code>).</p>" +
         "<h3>Причины</h3>$reasonList</section>"
+}
+
+// ADR 0030: a run with declared stages says in the verdict list and in a block that the verdict is by the steady window.
+private fun stageScopeRow(notice: StageNotice?): String =
+    if (notice == null) "" else "<dt lang=\"ru\">Область вердикта</dt><dd lang=\"ru\">${escape(notice.scope)}</dd>"
+
+private fun stageBlock(notice: StageNotice?): String {
+    if (notice == null) return ""
+    val rows =
+        notice.stages.joinToString("") {
+            "<tr><td>${escape(it.id)}</td><td>${escape(it.role)}</td><td>${escape(it.offsets)}</td>" +
+                "<td>${escape(it.utc)}</td><td>${escape(it.epoch)}</td><td>${escape(it.clipped)}</td></tr>"
+        }
+    val heads = listOf("Стадия", "Роль", "Смещения, мс", "Границы (UTC)", "Границы (epoch, мс)", "Обрезана до конца прогона")
+    return "<section lang=\"ru\"><h2>Область вердикта</h2><p><strong>${escape(notice.phrase)}</strong></p><p>${escape(notice.detail)}</p>" +
+        table("Стадии нагрузки", heads, rows) + "<p>${escape(STAGE_REFERENCE_NOTE)}</p></section>"
 }
 
 private fun capacityStages(result: JsonObject): List<JsonObject> =

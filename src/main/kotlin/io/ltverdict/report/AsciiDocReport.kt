@@ -28,6 +28,7 @@ internal fun renderAsciiDocReport(
         field("Run validity", result["run_validity"])
         field("Policy verdict", result["policy_verdict"])
         field("Coverage", (result["analysis_coverage"] as? JsonObject)?.get("status"))
+        stageNotice(result)?.let { append("\nNOTE: ${it.phrase}. ${it.detail} $STAGE_REFERENCE_NOTE\n") }
         metricsSection("Overall metrics", metrics.filter { it.scopeKind() == "overall" })
         metricsSection("Transaction metrics", metrics.filter { it.scopeKind() == "transaction" })
         objectsSection("Policy checks", evidence.filter { it.string("type") == "policy_check" })

@@ -79,6 +79,52 @@ defineProps<{ summary: VerdictSummary }>()
         </ul>
       </template>
 
+      <section
+        v-if="summary.stages"
+        data-testid="verdict-stages"
+        aria-labelledby="verdict-stages-title"
+      >
+        <h3 id="verdict-stages-title">
+          {{ summary.stages.title }}
+        </h3>
+        <div
+          class="table-wrap"
+          tabindex="0"
+          role="region"
+          aria-label="Стадии нагрузки"
+        >
+          <table>
+            <thead>
+              <tr>
+                <th
+                  v-for="head in summary.stages.heads"
+                  :key="head"
+                  scope="col"
+                >
+                  {{ head }}
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr
+                v-for="row in summary.stages.rows"
+                :key="row[0]"
+              >
+                <td
+                  v-for="(cell, index) in row"
+                  :key="index"
+                >
+                  {{ cell }}
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p class="muted">
+          {{ summary.stages.note }}
+        </p>
+      </section>
+
       <template v-if="summary.notes.length">
         <h3>{{ summary.notesTitle }}</h3>
         <ul

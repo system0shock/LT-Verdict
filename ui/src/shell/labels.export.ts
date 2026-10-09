@@ -70,6 +70,7 @@ export interface AnalyticsLabels {
   noDynamics: string
   noBaseline: string
   noOverlay: string
+  wholeRunNote: string
 }
 
 export const ANALYTICS_LABELS: AnalyticsLabels = {
@@ -91,6 +92,7 @@ export const ANALYTICS_LABELS: AnalyticsLabels = {
   noDynamics: 'Динамика N прогонов недоступна: у этого анализа нет корректных метаданных прогона.',
   noBaseline: 'Выберите сохранённый baseline, чтобы сравнить транзакции.',
   noOverlay: 'Наложение OpenSearch недоступно: у этого анализа нет корректных метаданных прогона.',
+  wholeRunNote: 'Метрики динамики и сравнения транзакций взяты по всему прогону, справочно: вердикт этого анализа посчитан по окну steady, разгон исключён.',
 }
 
 export const EN_ANALYTICS_LABELS: AnalyticsLabels = {
@@ -112,4 +114,5 @@ export const EN_ANALYTICS_LABELS: AnalyticsLabels = {
   noDynamics: 'N-run dynamics are unavailable because this analysis has no valid run metadata.',
   noBaseline: 'Select a saved baseline to compare transactions.',
   noOverlay: 'OpenSearch overlay is unavailable because this analysis has no valid run metadata.',
+  wholeRunNote: 'The dynamics and the transaction comparison use whole-run metrics, for reference only: the verdict of this analysis is by its steady window, ramp-up excluded.',
 }

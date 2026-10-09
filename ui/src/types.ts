@@ -388,6 +388,29 @@ export interface WindowMetricSummaryEvidence {
   resource_bindings: unknown[]
 }
 
+// ADR 0030: the declared load stages of a run whose verdict is by the steady window. Checked against types.stage-items.generated.ts.
+export interface StageBindingEvidence {
+  id: string
+  type: 'stage_binding'
+  mode: string
+  declaration_sha256: string
+  run_from_epoch_ms: number
+  run_to_epoch_ms: number
+  evaluated_window_ids: string[]
+  evaluated_millis: number
+  excluded_millis: number
+  stages: Array<{
+    id: string
+    role: string
+    from_offset_ms: number
+    to_offset_ms: number
+    from_epoch_ms: number
+    to_epoch_ms: number
+    clipped_to_run_end?: boolean
+  }>
+  verdict_scope: string
+}
+
 export interface SourceSummaryEvidence {
   id: string
   type: 'source_summary'
@@ -579,7 +602,7 @@ export interface CapacityKneeDiagnosticEvidence {
   }
 }
 
-export type AnalysisEvidence = MetricSummaryEvidence | PolicyCheckEvidence | DiagnosticEvidence | ResourceSummaryEvidence | WindowPolicySummaryEvidence | ResourcePolicyCheckEvidence | RuleWindowCheckEvidence | ResourceBindingEvidence | DiagnosticSummaryEvidence | CorrelationPairEvidence | CorrelationHeadlineSelectionEvidence | AnomalyCheckEvidence | WindowMetricSummaryEvidence | SourceSummaryEvidence | OpenSearchEvidence | PostgresContextEvidence | TrendCheckEvidence | TrendSummaryEvidence | CapacityKneeDiagnosticEvidence
+export type AnalysisEvidence = MetricSummaryEvidence | PolicyCheckEvidence | DiagnosticEvidence | ResourceSummaryEvidence | WindowPolicySummaryEvidence | ResourcePolicyCheckEvidence | RuleWindowCheckEvidence | ResourceBindingEvidence | DiagnosticSummaryEvidence | CorrelationPairEvidence | CorrelationHeadlineSelectionEvidence | AnomalyCheckEvidence | WindowMetricSummaryEvidence | StageBindingEvidence | SourceSummaryEvidence | OpenSearchEvidence | PostgresContextEvidence | TrendCheckEvidence | TrendSummaryEvidence | CapacityKneeDiagnosticEvidence
 
 export interface CapacityStage {
   id: string
@@ -689,6 +712,7 @@ export type BaselineComparisonWarning =
   | 'BASELINE_SMALL_SAMPLE'
   | 'POLICY_DIFFERS'
   | 'PROFILE_MISMATCH'
+  | 'WHOLE_RUN_METRICS_WITH_STAGES'
 
 export interface BaselineComparison {
   baseline: BaselineSelection

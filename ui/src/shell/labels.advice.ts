@@ -32,6 +32,7 @@ export const ADVICE_LABELS = {
       correlation_pair: 'Корреляция ресурса и нагрузки',
       anomaly_check: 'Проверка аномалии',
       window_metric_summary: 'Сводка метрик окна',
+      stage_binding: 'Стадии нагрузки (окно steady)',
       source_summary: 'Сводка источников',
       opensearch_errors: 'Ошибки из OpenSearch',
       postgres_context: 'Контекст PostgreSQL',

@@ -46,7 +46,7 @@ EXPECTED FILES TO CHANGE:
   src/test/kotlin/io/ltverdict/report/HumanReportAppendixTest.kt (новый)
   src/test/kotlin/io/ltverdict/report/{HtmlReportTest,StageReportsTest,WindowHeadingsTest,RunTimelineReportTest}.kt
     (ожидания HTML, список в разделе «Правки существующих тестов»)
-  fixtures/report-html-before-ru-appendix/*.html (новый снимок старого HTML для теста равенства данных)
+  fixtures/stages/report-html-before-ru-appendix/*.html (новый снимок старого HTML для теста равенства данных)
   fixtures/stages/plain-reports/*/report.html (3), fixtures/http-layer/responses.txt (строки report?format=html)
   ui/e2e/report-export.spec.ts (имя h1)
   docs/user/slice-1-local-analysis.md, docs/user/demo-script.md, changelog.d/w2-6-ru-appendix.changed.md,
@@ -104,7 +104,7 @@ EXPECTED FILES TO CHANGE:
    JSON</h2>`); выравнивание это предложение в отчёте.
 8. **Доказательство «данные не изменились».** Снимок HTML до изменения (5 сценариев: три golden,
    стадийный прогон, богатый результат с ресурсными и диагностическими блоками) лежит в
-   `fixtures/report-html-before-ru-appendix/`. Тест извлекает из старого и нового HTML мультимножества
+   `fixtures/stages/report-html-before-ru-appendix/`. Тест извлекает из старого и нового HTML мультимножества
    записей в контексте: строка таблицы целиком (`td|td|...`), пара `dt=dd`, `li`, `p`, `code`, `pre`,
    `h3`, сырой фрагмент `figure` (геометрия графика). Допускается явный список: переименованные
    подписи `dt` (5), две переименованные ссылки в тексте, один новый абзац-пояснение приложения.

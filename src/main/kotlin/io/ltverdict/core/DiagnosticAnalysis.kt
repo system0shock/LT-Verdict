@@ -728,7 +728,7 @@ private fun DiagnosticSignalV1.values(
             SignalSeries(metric.wireName, metric.unit, "overall", load.windows.getValue(window.id).map { it.value(metric) })
     }
 
-private fun anomalyCheck(
+internal fun anomalyCheck(
     anomaly: DiagnosticAnomalyV1,
     id: String,
     reference: ResourceWindowV1,
@@ -762,7 +762,7 @@ private fun anomalyCheck(
         put("reasons", strings(reasons.distinct()))
     }
 
-private fun windowMetricSummary(
+internal fun windowMetricSummary(
     window: ResourceWindowV1,
     metrics: NormalizedMetrics,
     resources: List<ResourceSeriesV1>,
@@ -823,7 +823,7 @@ private fun median(values: List<BigDecimal>): BigDecimal {
 
 private fun ResourceSnapshotV1.indexAt(epochMillis: Long): Int = ((epochMillis - startEpochMillis) / stepMillis).toInt()
 
-private fun diagnosticSummary(
+internal fun diagnosticSummary(
     status: String,
     pairsTested: Int,
     pairsEvaluable: Int,
@@ -846,7 +846,7 @@ private fun diagnosticSummary(
         put("reasons", strings(reasons))
     }
 
-private fun CorrelationHeadlineSelection.evidence(
+internal fun CorrelationHeadlineSelection.evidence(
     sourceCells: Int,
     analysedPoints: Int,
 ): JsonObject =

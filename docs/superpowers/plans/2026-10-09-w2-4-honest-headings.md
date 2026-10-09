@@ -50,6 +50,7 @@ EXPECTED FILES TO CHANGE:
 отдельное понятие и оговорки не требует. Цена ошибки: длинная подпись в узкой колонке (заметно, не ломает).
 
 **H3. Доля вне окна это отношение двух чисел из уже записанного результата.**
+
 - Стадии: `stage_binding.excluded_millis` / (`evaluated_millis` + `excluded_millis`); в ядре `excluded = (run_to - run_from) - evaluated`,
   поэтому знаменатель равен длине прогона по выборкам.
 - Окна снимка ресурсов: длина прогона `resource_binding.run_to_epoch_ms - run_from_epoch_ms`, оценено = сумма `to_epoch_ms - from_epoch_ms`

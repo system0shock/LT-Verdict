@@ -70,6 +70,8 @@ class RunTimelineReportTest {
             3_600_000L to "1 ч 0 мин 0 с",
             90_061_000L to "25 ч 1 мин 1 с",
         ).forEach { (millis, text) -> assertEquals(text, formatRunDuration(millis), "$millis ms") }
+        assertTrue(formatRunDuration(Long.MAX_VALUE).first().isDigit())
+        assertFalse(formatRunDuration(Long.MAX_VALUE).contains('-'))
     }
 
     @Test

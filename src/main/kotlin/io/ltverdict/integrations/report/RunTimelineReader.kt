@@ -17,7 +17,7 @@ import java.time.Instant
 
 private const val MAX_RUN_FILE_BYTES = 65_536L
 private const val MAX_SECOND_ROWS = 100_000
-private const val MAX_SECOND_CHARACTERS = 268_435_456L
+private const val MAX_SECOND_BYTES = 268_435_456L
 private const val SECOND_MILLIS = 1_000L
 
 /** The run block of an analysis directory, or null when none of its parts is available. */
@@ -36,10 +36,10 @@ private fun readRunTimes(file: Path): Pair<Instant, Instant>? =
         if (!Files.isRegularFile(file, LinkOption.NOFOLLOW_LINKS) || Files.size(file) > MAX_RUN_FILE_BYTES) {
             null
         } else {
-            val run =
-                Json.parseToJsonElement(
-                    String(Files.newInputStream(file, LinkOption.NOFOLLOW_LINKS).use { it.readAllBytes() }, UTF_8),
-                )
+            // The size was checked before opening; the file may have been replaced since, so the read is bounded too.
+            val bytes = Files.newInputStream(file, LinkOption.NOFOLLOW_LINKS).use { it.readNBytes(MAX_RUN_FILE_BYTES.toInt() + 1) }
+            check(bytes.size <= MAX_RUN_FILE_BYTES)
+            val run = Json.parseToJsonElement(String(bytes, UTF_8))
             val started = Instant.parse(run.jsonObject.text("started_at"))
             val ended = Instant.parse(run.jsonObject.text("ended_at"))
             if (ended.isBefore(started)) null else started to ended
@@ -61,18 +61,18 @@ private fun readPeakSecond(file: Path): Pair<Long, Long>? =
             var peak: Pair<Long, Long>? = null
             var previous = -1L
             var rows = 0
-            var characters = 0L
+            var bytes = 0L
             var valid = true
             Files.newInputStream(file, LinkOption.NOFOLLOW_LINKS).bufferedReader(UTF_8).use { reader ->
                 while (valid) {
                     val line = reader.boundedLine() ?: break
-                    characters += line.length
+                    bytes += line.toByteArray(UTF_8).size + 1L
                     rows++
                     val row = Json.parseToJsonElement(line).jsonObject
                     val offset = row.integer("bucket_start_ms")
                     val count = row.integer("sample_count")
                     if (rows > MAX_SECOND_ROWS ||
-                        characters > MAX_SECOND_CHARACTERS ||
+                        bytes > MAX_SECOND_BYTES ||
                         offset == null ||
                         count == null ||
                         offset <= previous ||

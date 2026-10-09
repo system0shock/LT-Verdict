@@ -3,6 +3,7 @@ package io.ltverdict.integrations.report
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertNull
+import org.junit.jupiter.api.Assertions.assertThrows
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.io.TempDir
@@ -123,6 +124,39 @@ class InlineLoadChartTest {
         assertTrue(svg.contains("data-truncated=\"true\""))
         assertTrue(svg.contains("Показаны первые 10"))
         assertTrue(svg.contains("data-source-bins=\"10080\""))
+    }
+
+    @Test
+    fun `a group divides by its full width, also the last one that holds a single minute`() {
+        // 241 minutes: k = 2, the last group holds minute 240 alone: 600 requests over 120 seconds are 5 RPS (not 10).
+        val svg = need(chart(InlineChartRows.rows(count = 241, samples = { if (it == 240) 600L else 60L }))).svg
+        assertTrue(svg.contains("макс. 5 запр./с"), svg.substringAfter("Запросов в секунду").take(200))
+    }
+
+    @Test
+    fun `histogram bytes that are damaged give no chart instead of an error`() {
+        val valid =
+            java.util.Base64
+                .getDecoder()
+                .decode(InlineChartRows.histogram(100, 60))
+        val damaged = valid.copyOf(valid.size).also { for (i in 10 until it.size) it[i] = 0x7f }
+        assertThrows(java.util.zip.DataFormatException::class.java) {
+            org.HdrHistogram.PackedHistogram.decodeFromCompressedByteBuffer(java.nio.ByteBuffer.wrap(damaged), 86_400_000L)
+        }
+        val row =
+            """{"bucket_start_ms":0,"error_count":0,"hdr_v2_base64":"${java.util.Base64.getEncoder().encodeToString(damaged)}",""" +
+                """"max_latency_ms":100,"sample_count":60}""" + "\n"
+        assertNull(chart(row))
+    }
+
+    @Test
+    fun `starts that are not whole minutes cannot get around the bound on the points`() {
+        val rows =
+            (0 until 10_080).joinToString("") {
+                """{"bucket_start_ms":$it,"error_count":0,"hdr_v2_base64":"${InlineChartRows.histogram(100, 1)}",""" +
+                    """"max_latency_ms":100,"sample_count":1}""" + "\n"
+            }
+        assertNull(chart(rows))
     }
 
     @Test

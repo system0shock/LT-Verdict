@@ -98,6 +98,30 @@ class RunTimelineReaderTest {
     }
 
     @Test
+    fun `more rows than an analysis can write give no peak`() {
+        val dir = directory(secondRows = listOf(0L to 1L))
+        val row = { index: Int ->
+            """{"bucket_start_ms":${index * 1000L},"error_count":0,"hdr_v2_base64":"AAAA","max_latency_ms":1,"sample_count":1}"""
+        }
+        Files.writeString(dir.resolve("normalized-1s.ndjson"), (0 until 100_000).joinToString("") { row(it) + "\n" })
+        assertEquals(1L, need(readRunTimeline(dir)).peakRps)
+        Files.writeString(dir.resolve("normalized-1s.ndjson"), (0 until 100_001).joinToString("") { row(it) + "\n" })
+        assertNull(need(readRunTimeline(dir)).peakRps)
+    }
+
+    @Test
+    fun `a run json over the limit is no time`() {
+        val dir = directory(secondRows = listOf(0L to 3L))
+        Files.writeString(
+            dir.resolve("run.json"),
+            """{"started_at":"$started","ended_at":"2026-01-01T10:02:00Z","padding":"${"x".repeat(65_536)}"}""",
+        )
+        val timeline = need(readRunTimeline(dir))
+        assertNull(timeline.startedAt)
+        assertEquals(3L, timeline.peakRps)
+    }
+
+    @Test
     fun `broken minute rows give no chart and keep the numbers`() {
         val dir = directory(secondRows = listOf(0L to 7L))
         Files.writeString(dir.resolve("rollup-60s.ndjson"), "{}\n")

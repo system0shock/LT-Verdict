@@ -59,7 +59,7 @@ internal fun renderInlineLoadChart(path: Path): InlineLoadChart? {
     if (!Files.isRegularFile(path, LinkOption.NOFOLLOW_LINKS)) return null
     val data = ArrayList<Bucket>()
     var truncated = false
-    var characters = 0L
+    var bytes = 0L
     try {
         Files.newInputStream(path, LinkOption.NOFOLLOW_LINKS).bufferedReader(UTF_8).use { reader ->
             while (true) {
@@ -68,14 +68,16 @@ internal fun renderInlineLoadChart(path: Path): InlineLoadChart? {
                     truncated = true
                     break
                 }
-                characters += line.length
-                if (characters > INLINE_MAX_CHARACTERS) return null
-                data += decodeBucket(Json.parseToJsonElement(line).jsonObject)
+                bytes += line.toByteArray(UTF_8).size + 1L
+                if (bytes > INLINE_MAX_BYTES) return null
+                val bucket = decodeBucket(Json.parseToJsonElement(line).jsonObject)
+                // The analysis writes whole minutes; anything else would defeat the bound on the number of points.
+                if (bucket.start % MINUTE_MILLIS != 0L) return null
+                data += bucket
             }
         }
-    } catch (_: IOException) {
-        return null
-    } catch (_: RuntimeException) {
+    } catch (_: Exception) {
+        // IOException, RuntimeException and the DataFormatException of a histogram whose compressed bytes are damaged.
         return null
     }
     if (data.isEmpty()) return null
@@ -302,7 +304,8 @@ private const val MAX_LATENCY = 86_400_000L
 private const val INVALID_BUCKETS = "SAVED_BUCKETS_INVALID"
 private const val INLINE_MAX_BUCKETS = 10_080
 private const val INLINE_MAX_POINTS = 240
-private const val INLINE_MAX_CHARACTERS = 268_435_456L
+private const val INLINE_MAX_BYTES = 268_435_456L
+private const val MINUTE_MILLIS = 60_000L
 private const val INLINE_SCOPE = "svg.load-chart "
 private const val INLINE_FRAME = "svg.load-chart{display:block;max-width:100%;height:auto}"
 

@@ -19,7 +19,7 @@ internal class RunTimeline(
 
 /** "1 ч 2 мин 3,4 с": the duration rounded to 0.1 s, zero units above the first non-zero one omitted, seconds always shown. */
 internal fun formatRunDuration(millis: Long): String {
-    val tenths = (millis + 50) / 100
+    val tenths = millis / 100 + if (millis % 100 >= 50) 1 else 0
     val hours = tenths / 36_000
     val minutes = tenths / 600 % 60
     val seconds = tenths % 600

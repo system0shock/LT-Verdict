@@ -59,6 +59,7 @@ internal data class InputVersionsDocument(
     val diagnostics: String? = null,
     val capacity: String? = null,
     val trend: String? = null,
+    val stages: String? = null,
 )
 
 @Serializable
@@ -108,6 +109,8 @@ internal data class AnalysisIdentityDocument(
     @SerialName("trend_plan_version") val trendPlanVersion: String? = null,
     @SerialName("pod_view_sha256") val podViewSha256: String? = null,
     @SerialName("pod_view_version") val podViewVersion: String? = null,
+    @SerialName("load_stages_sha256") val loadStagesSha256: String? = null,
+    @SerialName("load_stages_version") val loadStagesVersion: String? = null,
     val engine: ComponentRef,
     val parsers: List<ComponentRef>,
     val modules: List<ComponentRef>,

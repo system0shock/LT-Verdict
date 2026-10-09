@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://lt-verdict.local/contracts/stages/v1/load-stages.schema.json",
+  "title": "LT Verdict load stages v1", "type": "object", "additionalProperties": false,
+  "required": ["schema_version", "stages"],
+  "properties": {
+    "schema_version": {"const":"load-stages.v1"},
+    "stages": {"type":"array","minItems":1,"maxItems":16,"description":"Offsets are milliseconds from the run start (the earliest sample start). Stages are sorted by from_offset_ms after parsing and must not overlap (touching is allowed, gaps are allowed). Ids must be unique and at least one stage must have the role steady; the runtime rejects the violations with DUPLICATE_STAGE_ID, OVERLAPPING_STAGES and STAGES_NO_STEADY.","items":{"$ref":"#/$defs/stage"}}
+  },
+  "$defs": {
+    "id": {"type":"string","minLength":1,"maxLength":128,"pattern":"^[^\\u0000-\\u001F\\u007F-\\u009F]+$","description":"Runtime additionally enforces 128 UTF-8 bytes."},
+    "offset": {"type":"integer","minimum":0,"maximum":604800000,"description":"Milliseconds from the run start; at most 7 days."},
+    "stage": {
+      "type": "object", "additionalProperties": false,
+      "required": ["id", "role", "from_offset_ms", "to_offset_ms"],
+      "properties": {
+        "id": {"$ref":"#/$defs/id","description":"The id of a steady stage is the window_id of the evaluated window."},
+        "role": {"enum":["steady","excluded"],"description":"steady becomes an evaluated window; excluded only names a part of the run that is left out (there is no automatic role)."},
+        "from_offset_ms": {"$ref":"#/$defs/offset"},
+        "to_offset_ms": {"$ref":"#/$defs/offset","description":"Must be greater than from_offset_ms. The end of a steady stage past the end of the run is clipped to the run end and reported as clipped_to_run_end."}
+      }
+    }
+  }
+}

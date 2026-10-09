@@ -1,0 +1,8 @@
+{
+  "schema_version": "load-stages.v1",
+  "stages": [
+    { "id": "ramp-up", "role": "excluded", "from_offset_ms": 0, "to_offset_ms": 40000 },
+    { "id": "steady", "role": "steady", "from_offset_ms": 40000, "to_offset_ms": 100000 },
+    { "id": "ramp-down", "role": "excluded", "from_offset_ms": 100000, "to_offset_ms": 120000 }
+  ]
+}

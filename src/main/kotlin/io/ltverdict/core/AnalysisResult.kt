@@ -36,12 +36,15 @@ internal fun analysisIdentity(
     capacity: CapacityPlanValidation.Valid? = null,
     trend: TrendPlanValidation.Valid? = null,
     podView: PodViewValidation.Valid? = null,
+    stages: LoadStagesValidation.Valid? = null,
 ): ByteArray {
     val modules = mutableListOf("normalization", "metrics", "policy-evaluation")
     if (resources != null) modules += listOf("resource-statistics", "window-policy-evaluation")
     if (diagnostics != null) modules += "load-resource-diagnostics"
     if (capacity != null) modules += "capacity-stage-evaluation"
     if (trend != null) modules += "resource-trend-evaluation"
+    // ADR 0030: the window evaluation without a snapshot; a snapshot excludes stages, so the module is listed once.
+    if (stages != null) modules += listOf("stage-window-evaluation", "window-policy-evaluation")
     return encodeAnalysisIdentity(
         AnalysisIdentityDocument(
             schemaVersion = "analysis-identity.v1",
@@ -77,6 +80,10 @@ internal fun analysisIdentity(
             // which are part of the comparability key.
             podViewSha256 = podView?.canonicalSha256,
             podViewVersion = podView?.let { "pod-view.v1" },
+            // ADR 0030, R6: the declaration is bound only when there is one. Modules, input_versions and limits carry the stage
+            // mode into the comparability key; the hash itself is the conditional link of that key.
+            loadStagesSha256 = stages?.sha256,
+            loadStagesVersion = stages?.let { "load-stages.v1" },
             engine = ComponentRef(config.engineId, config.engineVersion),
             parsers =
                 listOf(ComponentRef(input.sourceType.parserId(), if (input.sourceType == SourceType.JMETER_CSV) "2" else "1")),
@@ -99,6 +106,7 @@ internal fun analysisIdentity(
                     diagnostics = if (diagnostics != null) "correlation-plan.v1" else null,
                     capacity = if (capacity != null) "capacity-plan.v1" else null,
                     trend = if (trend != null) "trend-plan.v1" else null,
+                    stages = if (stages != null) "load-stages.v1" else null,
                 ),
             outputs =
                 OutputsDocument(
@@ -115,7 +123,7 @@ internal fun analysisIdentity(
                     significantDigits = config.metrics.significantDigits.toString(),
                 ),
             normalization = NormalizationDocument(bucketMillis = "1000", rollupSeconds = listOf("10", "30", "60")),
-            limits = limits(config.metrics, resources != null, diagnostics != null, capacity != null, trend != null),
+            limits = limits(config.metrics, resources != null, diagnostics != null, capacity != null, trend != null, stages != null),
         ),
     )
 }
@@ -173,6 +181,7 @@ private fun limits(
     includeDiagnostics: Boolean,
     includeCapacity: Boolean,
     includeTrend: Boolean,
+    includeStages: Boolean,
 ): Map<String, String> =
     buildMap {
         put("input_bytes_max", "4294967296")
@@ -242,6 +251,12 @@ private fun limits(
             put("trend_checks_max", MAX_TREND_CHECKS.toString())
             put("trend_min_cells_floor", TREND_MIN_CELLS_FLOOR.toString())
             put("trend_method", "slope-materiality.v1")
+        }
+        if (includeStages) {
+            put("stages_plan_bytes_max", MAX_LOAD_STAGES_BYTES.toString())
+            put("stages_json_depth_max", LOAD_STAGES_JSON_DEPTH_MAX.toString())
+            put("stages_max", MAX_LOAD_STAGES.toString())
+            put("stages_offset_ms_max", MAX_LOAD_STAGE_OFFSET_MS.toString())
         }
     }
 

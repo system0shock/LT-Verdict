@@ -1,4 +1,4 @@
-- Вход стадий нагрузки в CLI и API (W2.5, PR B, [ADR 0030](docs/adr/0030-load-stages-steady-window.md)):
+- Вход стадий нагрузки в CLI и API (W2.5, PR B, ADR 0030):
   `ltv analyze <input> --stages <load-stages.json>` и multipart-часть `stages` задания анализа
   (`POST /api/jobs`, одна часть) включают вердикт по окну `steady` без снимка ресурсов. Недопустимое
   объявление даёт в CLI выход 4 со строками `<code> <json-pointer>: <message>`, в API `422 INVALID_STAGES`

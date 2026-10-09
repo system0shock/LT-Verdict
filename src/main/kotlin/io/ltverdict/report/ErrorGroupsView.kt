@@ -74,7 +74,7 @@ internal fun errorGroupsView(
     errorGroups: ByteArray?,
 ): ErrorGroupsView? {
     val overallErrors = overallErrorCount(result)
-    val parsed = errorGroups?.let { parseErrorGroups(it, (result["run_id"] as? JsonPrimitive)?.content, stageNotice(result) != null) }
+    val parsed = errorGroups?.let { parseErrorGroups(it, (result["run_id"] as? JsonPrimitive)?.content, stageNotice(result) != null, overallErrors) }
     if (parsed == null) {
         return if (overallErrors != null && overallErrors > 0) {
             ErrorGroupsView(overallErrors, emptyList(), listOf("Разбивка ошибок недоступна: анализ создан до появления разбивки или её файл повреждён."))
@@ -100,6 +100,7 @@ private fun parseErrorGroups(
     bytes: ByteArray,
     runId: String?,
     staged: Boolean,
+    overallErrors: Long?,
 ): ErrorGroupsView? =
     try {
         if (jsonDepth(bytes) > MAX_ERROR_GROUPS_DEPTH) return null
@@ -111,6 +112,10 @@ private fun parseErrorGroups(
         val omittedErrors = root.count("omitted_error_count") ?: return null
         val groups = (root["groups"] as? JsonArray)?.map { it as? JsonObject ?: return null } ?: return null
         if (groups.size > ERROR_GROUPS_LISTED_MAX || total == 0L) return null
+        // The counters must add up and agree with the metrics of the result, or the file is not of this analysis.
+        val listed = groups.fold(0L) { sum, group -> Math.addExact(sum, group.count("count") ?: return null) }
+        if (Math.addExact(Math.addExact(listed, omittedErrors), untracked) != total) return null
+        if (overallErrors != null && overallErrors != total) return null
         val rows =
             groups.map { group ->
                 val count = group.count("count") ?: return null
@@ -140,7 +145,8 @@ private fun parseErrorGroups(
         if (omittedGroups > 0) notes += "Ещё $omittedGroups групп ($omittedErrors ошибок) не показаны."
         if (untracked > 0) notes += "Ещё $untracked ошибок не разложены по группам: различных групп слишком много (лимит учёта)."
         ErrorGroupsView(total, rows, notes)
-    } catch (_: RuntimeException) {
+    } catch (_: Exception) {
+        // Invalid UTF-8, bad JSON, wrong types or overflowing counters: the breakdown is unavailable, the report is not.
         null
     }
 

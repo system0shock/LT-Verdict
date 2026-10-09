@@ -145,8 +145,8 @@ private fun XMLStreamReader.readSample(groupPath: List<String>): LoadSample {
             groupPath,
             SampleKind.JMETER_SAMPLER,
             successful,
-            responseCode = if (successful) null else getAttributeValue(null, "rc")?.takeIf { it.isNotEmpty() },
-            failureMessage = if (successful) null else getAttributeValue(null, "rm")?.takeIf { it.isNotEmpty() },
+            responseCode = if (successful) null else getAttributeValue(null, "rc")?.take(MAX_XML_RESPONSE_CODE_CHARS)?.takeIf { it.isNotEmpty() },
+            failureMessage = if (successful) null else getAttributeValue(null, "rm")?.take(MAX_XML_FAILURE_MESSAGE_CHARS)?.takeIf { it.isNotEmpty() },
         )
     } catch (_: IllegalArgumentException) {
         invalidXml("INVALID_SAMPLE_TIMESTAMP")
@@ -202,3 +202,4 @@ private class InvalidXml(
 private const val MAX_XML_DEPTH = 64
 private const val MAX_XML_LABEL_BYTES = 4_096
 private const val MAX_XML_FAILURE_MESSAGE_CHARS = 4_096
+private const val MAX_XML_RESPONSE_CODE_CHARS = 256

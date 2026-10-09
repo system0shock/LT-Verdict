@@ -73,6 +73,12 @@ class ErrorGroupsReportsTest {
             val html = renderHtmlReport(outcome.canonicalResult, "fixed", text.encodeToByteArray()).decodeToString()
             assertTrue(html.contains("Разбивка ошибок недоступна"), text.take(40))
         }
+        val inconsistent = listOf(good.replace("\"count\":2", "\"count\":9"), good.replace("\"total_error_count\":5", "\"total_error_count\":6"))
+        inconsistent.forEach { text ->
+            assertTrue(renderHtmlReport(outcome.canonicalResult, "fixed", text.encodeToByteArray()).decodeToString().contains("недоступна"), text)
+        }
+        val badUtf8 = good.encodeToByteArray().also { it[it.indexOf('s'.code.toByte())] = 0xC3.toByte() }
+        assertTrue(renderHtmlReport(outcome.canonicalResult, "fixed", badUtf8).decodeToString().contains("недоступна"))
         val foreign = good.replace(Regex("\"run_id\":\"[^\"]*\""), "\"run_id\":\"other\"")
         assertTrue(renderHtmlReport(outcome.canonicalResult, "fixed", foreign.encodeToByteArray()).decodeToString().contains("недоступна"))
     }

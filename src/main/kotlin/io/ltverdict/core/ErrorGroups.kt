@@ -17,6 +17,7 @@ internal const val ERROR_GROUPS_FILE = "error-groups.json"
 internal const val TRACKED_GROUPS_MAX = 2048
 internal const val TRACKED_BYTES_MAX = 16L * 1024 * 1024
 internal const val ERROR_GROUPS_LISTED_MAX = 20
+internal const val ERROR_GROUPS_LISTED_BYTES_MAX = 768L * 1024
 internal const val ERROR_CODE_CHARS_MAX = 64
 internal const val ERROR_MESSAGE_CHARS_MAX = 200
 
@@ -29,6 +30,8 @@ internal class ErrorGroupAccumulator(
         var count: Long,
         var fromEpochMillis: Long,
         var toEpochMillis: Long,
+        // Not part of the key: the same cleaned text cut and uncut is one group; the flag is true if any of its samples was cut.
+        var messageTruncated: Boolean,
     )
 
     private data class Key(
@@ -37,7 +40,6 @@ internal class ErrorGroupAccumulator(
         val kind: SampleKind,
         val code: String?,
         val message: String?,
-        val messageTruncated: Boolean,
     )
 
     private val groups = HashMap<Key, Counter>()
@@ -52,12 +54,13 @@ internal class ErrorGroupAccumulator(
         total++
         val code = sample.responseCode?.let { cleanErrorText(it, ERROR_CODE_CHARS_MAX).first }
         val (message, truncated) = sample.failureMessage?.let { cleanErrorText(it, ERROR_MESSAGE_CHARS_MAX) } ?: (null to false)
-        val key = Key(sample.groupPath.toList(), sample.label, sample.kind, code, message, truncated)
+        val key = Key(sample.groupPath.toList(), sample.label, sample.kind, code, message)
         val existing = groups[key]
         if (existing != null) {
             existing.count++
             existing.fromEpochMillis = minOf(existing.fromEpochMillis, sample.startedAtEpochMillis)
             existing.toEpochMillis = maxOf(existing.toEpochMillis, sample.endedAtEpochMillis)
+            existing.messageTruncated = existing.messageTruncated || truncated
             return
         }
         val bytes = key.byteSize()
@@ -66,7 +69,7 @@ internal class ErrorGroupAccumulator(
             return
         }
         retainedBytes += bytes
-        groups[key] = Counter(1, sample.startedAtEpochMillis, sample.endedAtEpochMillis)
+        groups[key] = Counter(1, sample.startedAtEpochMillis, sample.endedAtEpochMillis, truncated)
     }
 
     /** The canonical bytes of error-groups.v1, or null when no sampler failed. */
@@ -77,8 +80,17 @@ internal class ErrorGroupAccumulator(
                 compareByDescending<Map.Entry<Key, Counter>> { it.value.count }
                     .thenComparator { left, right -> compareKeys(left.key, right.key) },
             )
-        val listed = ordered.take(ERROR_GROUPS_LISTED_MAX)
-        val omitted = ordered.drop(ERROR_GROUPS_LISTED_MAX)
+        // At most 20 groups and at most ERROR_GROUPS_LISTED_BYTES_MAX serialized bytes of them (the reader refuses a larger file);
+        // the groups that do not fit are counted as omitted.
+        var listedBytes = 0L
+        val listedJson = mutableListOf<JsonObject>()
+        for ((key, counter) in ordered.take(ERROR_GROUPS_LISTED_MAX)) {
+            val json = groupJson(key, counter)
+            listedBytes += canonicalJson(json).size + 1
+            if (listedBytes > ERROR_GROUPS_LISTED_BYTES_MAX) break
+            listedJson += json
+        }
+        val omitted = ordered.drop(listedJson.size)
         return canonicalJson(
             buildJsonObject {
                 put("schema_version", "error-groups.v1")
@@ -99,7 +111,7 @@ internal class ErrorGroupAccumulator(
                         put("message_chars_max", ERROR_MESSAGE_CHARS_MAX.toLong())
                     },
                 )
-                put("groups", JsonArray(listed.map { (key, counter) -> groupJson(key, counter) }))
+                put("groups", JsonArray(listedJson))
             },
         )
     }
@@ -126,7 +138,7 @@ internal class ErrorGroupAccumulator(
             put("scope", scope)
             put("response_code", key.code?.let(::JsonPrimitive) ?: JsonNull)
             put("message", key.message?.let(::JsonPrimitive) ?: JsonNull)
-            put("message_truncated", key.messageTruncated)
+            put("message_truncated", counter.messageTruncated)
             put("count", counter.count)
             put("from_epoch_ms", counter.fromEpochMillis)
             put("to_epoch_ms", counter.toEpochMillis)
@@ -136,21 +148,34 @@ internal class ErrorGroupAccumulator(
     private fun Key.byteSize(): Long =
         (groupPath + label + kind.name + (code ?: "") + (message ?: "")).sumOf { it.encodeToByteArray().size.toLong() + 1 } + KEY_OVERHEAD_BYTES
 
+    // Contract order: label, group path, sample kind, code, message (UTF-8 bytes; a missing code or message sorts first).
     private fun compareKeys(
         left: Key,
         right: Key,
     ): Int {
-        val leftParts = left.parts()
-        val rightParts = right.parts()
-        for (index in 0 until minOf(leftParts.size, rightParts.size)) {
-            val compared = compareUtf8(leftParts[index], rightParts[index])
+        var compared = compareUtf8(left.label, right.label)
+        if (compared != 0) return compared
+        for (index in 0 until minOf(left.groupPath.size, right.groupPath.size)) {
+            compared = compareUtf8(left.groupPath[index], right.groupPath[index])
             if (compared != 0) return compared
         }
-        return leftParts.size.compareTo(rightParts.size)
+        compared = left.groupPath.size.compareTo(right.groupPath.size)
+        if (compared != 0) return compared
+        compared = compareUtf8(left.kind.name, right.kind.name)
+        if (compared != 0) return compared
+        compared = compareOptional(left.code, right.code)
+        return if (compared != 0) compared else compareOptional(left.message, right.message)
     }
 
-    // The path first, then the label, kind, code and message; a missing code or message sorts before any text.
-    private fun Key.parts(): List<String> = groupPath + ("\u0000" + label) + kind.name + (code ?: "\u0000") + (message ?: "\u0000")
+    private fun compareOptional(
+        left: String?,
+        right: String?,
+    ): Int =
+        when {
+            left == null -> if (right == null) 0 else -1
+            right == null -> 1
+            else -> compareUtf8(left, right)
+        }
 
     private fun compareUtf8(
         left: String,

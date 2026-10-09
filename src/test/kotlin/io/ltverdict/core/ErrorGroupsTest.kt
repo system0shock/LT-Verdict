@@ -123,6 +123,46 @@ class ErrorGroupsTest {
     }
 
     @Test
+    fun `the same cleaned text cut and uncut is one group and the flag is any`() {
+        val accumulator = ErrorGroupAccumulator("run")
+        accumulator.record(sample("t", message = "a".repeat(199) + " b"))
+        accumulator.record(sample("t", message = "a".repeat(199) + "…"))
+
+        val groups = parse(accumulator.finish()).getValue("groups").jsonArray.map { it.jsonObject }
+
+        assertEquals(1, groups.size)
+        assertEquals("2", groups.single().text("count"))
+        assertTrue(groups.single().getValue("message_truncated").jsonPrimitive.content.toBoolean())
+    }
+
+    @Test
+    fun `equal counts are ordered by label before group path`() {
+        val accumulator = ErrorGroupAccumulator("run")
+        accumulator.record(sample("z", path = listOf("a")))
+        accumulator.record(sample("a", path = listOf("z")))
+
+        val labels = parse(accumulator.finish()).getValue("groups").jsonArray.map { it.jsonObject.getValue("scope").jsonObject.text("label") }
+
+        assertEquals(listOf("a", "z"), labels)
+    }
+
+    @Test
+    fun `the file stays below the size the reader accepts and the unlisted groups are counted as omitted`() {
+        val accumulator = ErrorGroupAccumulator("run")
+        val path = List(14) { "p".repeat(4_096 - 1) + it.toString(16) }
+        repeat(20) { accumulator.record(sample("t$it", start = it.toLong(), path = path)) }
+
+        val bytes = checkNotNull(accumulator.finish())
+        val result = parse(bytes)
+
+        assertTrue(bytes.size < 1_048_576, bytes.size.toString())
+        assertTrue(result.getValue("groups").jsonArray.size < 20)
+        val listed = result.getValue("groups").jsonArray.sumOf { it.jsonObject.text("count")!!.toLong() }
+        assertEquals(20L, listed + result.text("omitted_error_count")!!.toLong() + result.text("untracked_error_count")!!.toLong())
+        assertEquals(20L - result.getValue("groups").jsonArray.size, result.text("omitted_group_count")!!.toLong())
+    }
+
+    @Test
     fun `the byte budget of tracked keys also stops tracking`() {
         val accumulator = ErrorGroupAccumulator("run", trackedBytesMax = 1_000)
         repeat(10) { accumulator.record(sample("t", start = it.toLong(), code = "500", message = "m".repeat(150) + it)) }

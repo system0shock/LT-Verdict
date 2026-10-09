@@ -127,7 +127,15 @@ private fun textSample(
             else -> invalidText("MALFORMED_GATLING_TEXT")
         }
     return try {
-        LoadSample(startedAt, endedAt - startedAt, label, groupPath, kind, successful)
+        LoadSample(
+            startedAt,
+            endedAt - startedAt,
+            label,
+            groupPath,
+            kind,
+            successful,
+            failureMessage = if (successful || kind != SampleKind.GATLING_REQUEST) null else fields[6].takeIf { it.isNotBlank() },
+        )
     } catch (_: IllegalArgumentException) {
         invalidText("INVALID_SAMPLE_TIMESTAMP")
     }

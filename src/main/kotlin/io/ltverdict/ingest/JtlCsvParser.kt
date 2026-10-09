@@ -63,6 +63,9 @@ internal fun parseJtlCsv(
                 header.forEach(::checkCsvField)
                 val columns = requiredColumns(header)
                 val responseMessage = optionalColumn(header, "responseMessage")
+                // W2.6: the error text columns are optional and never reject an input that was accepted before they were read.
+                val responseCodeColumn = header.indices.singleOrNull { header[it] == "responseCode" }
+                val failureMessageColumn = header.indices.singleOrNull { header[it] == "failureMessage" }
                 val dataType = optionalColumn(header, "dataType")
                 val parentColumns =
                     if (responseMessage != null &&
@@ -100,6 +103,14 @@ internal fun parseJtlCsv(
                                         SampleKind.JMETER_SAMPLER
                                     },
                                 successful = successful,
+                                responseCode = if (successful) null else responseCodeColumn?.let { row[it] }?.takeIf { it.isNotEmpty() },
+                                failureMessage =
+                                    if (successful) {
+                                        null
+                                    } else {
+                                        failureMessageColumn?.let { row[it] }?.takeIf { it.isNotEmpty() }
+                                            ?: responseMessage?.let { row[it] }?.takeIf { it.isNotEmpty() }
+                                    },
                             )
                         } catch (_: IllegalArgumentException) {
                             invalidCsv("INVALID_SAMPLE_TIMESTAMP")

@@ -35,6 +35,10 @@ internal data class LoadSample(
     val groupPath: List<String>,
     val kind: SampleKind,
     val successful: Boolean,
+    // W2.6: only a failed sample carries them (the response code as the source wrote it; the failure text, or the response
+    // message when there is no failure text). A successful sample keeps both null so a long run holds no extra strings.
+    val responseCode: String? = null,
+    val failureMessage: String? = null,
 ) {
     val endedAtEpochMillis: Long
 

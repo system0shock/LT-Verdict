@@ -120,8 +120,8 @@ private class GatlingBinaryReader(
         val endedAt = readTimestamp()
         if (endedAt < startedAt) invalidBinary("INVALID_SAMPLE_TIMESTAMP")
         val successful = readBoolean()
-        readCachedString()
-        return sample(startedAt, endedAt, label, groupPath, SampleKind.GATLING_REQUEST, successful)
+        val message = readCachedString()
+        return sample(startedAt, endedAt, label, groupPath, SampleKind.GATLING_REQUEST, successful, message)
     }
 
     private fun readGroup(): LoadSample {
@@ -249,9 +249,18 @@ private fun sample(
     groupPath: List<String>,
     kind: SampleKind,
     successful: Boolean,
+    message: String = "",
 ): LoadSample =
     try {
-        LoadSample(startedAt, endedAt - startedAt, label, groupPath, kind, successful)
+        LoadSample(
+            startedAt,
+            endedAt - startedAt,
+            label,
+            groupPath,
+            kind,
+            successful,
+            failureMessage = if (successful) null else message.takeIf { it.isNotBlank() },
+        )
     } catch (_: IllegalArgumentException) {
         invalidBinary("INVALID_SAMPLE_TIMESTAMP")
     }

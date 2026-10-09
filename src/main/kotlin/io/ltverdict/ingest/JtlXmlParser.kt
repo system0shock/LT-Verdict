@@ -64,6 +64,9 @@ private fun parseXmlEvents(
     var depth = 0
     var rootSeen = false
     var sampleCount = 0L
+    // W2.6: the text of the first non-empty <failureMessage> of the innermost open sample, read in bounded chunks.
+    var captured: XmlSample? = null
+    val capture = StringBuilder()
 
     while (reader.hasNext()) {
         checkCancelled()
@@ -75,6 +78,10 @@ private fun parseXmlEvents(
                     if (depth != 1 || reader.localName != "testResults") invalidXml("MALFORMED_JMETER_XML")
                     rootSeen = true
                 }
+                if (reader.localName == "failureMessage" && captured == null) {
+                    captured = samples.peekLast()
+                    capture.setLength(0)
+                }
                 if (reader.localName.isSampleElement()) {
                     samples.peekLast()?.hasSampleChild = true
                     val path = samples.map { it.sample.label }
@@ -82,11 +89,26 @@ private fun parseXmlEvents(
                 }
             }
 
+            XMLStreamConstants.CHARACTERS,
+            XMLStreamConstants.CDATA,
+            -> {
+                if (captured != null && capture.length < MAX_XML_FAILURE_MESSAGE_CHARS) {
+                    val room = MAX_XML_FAILURE_MESSAGE_CHARS - capture.length
+                    capture.append(reader.textCharacters, reader.textStart, minOf(reader.textLength, room))
+                }
+            }
+
             XMLStreamConstants.END_ELEMENT -> {
+                if (captured != null && reader.localName == "failureMessage") {
+                    captured?.let { owner -> if (owner.failureMessage == null) owner.failureMessage = capture.toString().takeIf { it.isNotBlank() } }
+                    captured = null
+                    capture.setLength(0)
+                }
                 if (reader.localName.isSampleElement()) {
                     val completed = samples.pollLast() ?: invalidXml("MALFORMED_JMETER_XML")
                     emit(
                         completed.sample.copy(
+                            failureMessage = completed.failureMessage?.takeIf { !completed.sample.successful } ?: completed.sample.failureMessage,
                             kind =
                                 if (completed.hasSampleChild) {
                                     SampleKind.JMETER_CONTAINER
@@ -116,7 +138,16 @@ private fun XMLStreamReader.readSample(groupPath: List<String>): LoadSample {
     val successful = requiredAttribute("s").strictBoolean()
 
     return try {
-        LoadSample(timestamp, elapsed, label, groupPath, SampleKind.JMETER_SAMPLER, successful)
+        LoadSample(
+            timestamp,
+            elapsed,
+            label,
+            groupPath,
+            SampleKind.JMETER_SAMPLER,
+            successful,
+            responseCode = if (successful) null else getAttributeValue(null, "rc")?.takeIf { it.isNotEmpty() },
+            failureMessage = if (successful) null else getAttributeValue(null, "rm")?.takeIf { it.isNotEmpty() },
+        )
     } catch (_: IllegalArgumentException) {
         invalidXml("INVALID_SAMPLE_TIMESTAMP")
     }
@@ -161,6 +192,7 @@ private fun invalidXml(code: String): Nothing = throw InvalidXml(code)
 private data class XmlSample(
     val sample: LoadSample,
     var hasSampleChild: Boolean = false,
+    var failureMessage: String? = null,
 )
 
 private class InvalidXml(
@@ -169,3 +201,4 @@ private class InvalidXml(
 
 private const val MAX_XML_DEPTH = 64
 private const val MAX_XML_LABEL_BYTES = 4_096
+private const val MAX_XML_FAILURE_MESSAGE_CHARS = 4_096

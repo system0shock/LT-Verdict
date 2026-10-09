@@ -1,0 +1,39 @@
+{
+  "run_validity": "VALID",
+  "findings": [
+    {
+      "type": "policy_failure",
+      "id": "policy-failure-window-69262186fe735dee",
+      "rule_id": "rule-0",
+      "evidence_id": "policy-check-window-8c86022b8f05d374"
+    }
+  ],
+  "evidence": [
+    {
+      "type": "policy_check",
+      "id": "policy-check-window-8c86022b8f05d374",
+      "rule_id": "rule",
+      "status": "FAIL",
+      "metric_evidence_id": "metric-summary-overall"
+    },
+    {
+      "type": "metric_summary",
+      "id": "metric-summary-overall",
+      "scope": {
+        "kind": "overall"
+      }
+    },
+    {
+      "type": "policy_check",
+      "id": "policy-check-2c53ad68a63670dc",
+      "rule_id": "rule",
+      "status": "PASS"
+    },
+    {
+      "type": "policy_check",
+      "id": "policy-check-ce7affb79a700128",
+      "rule_id": "rule",
+      "status": "PASS"
+    }
+  ]
+}

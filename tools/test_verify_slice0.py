@@ -222,6 +222,36 @@ class IncidentContractTests(unittest.TestCase):
             with self.subTest(text=text):
                 self.assertIsNotNone(verify_slice0.CAUSAL_WORDING.search(text))
 
+    def test_check_wording_false_accepts_a_user_name_that_looks_causal_and_nothing_else(self) -> None:
+        schema = self.load(self.directory / "incident.schema.json")
+        document = self.load(self.directory / "examples/valid/transaction-and-resource-in-window.json")
+        document["items"][0]["title"] = "Нарушение SLA: транзакция cause-list в окне steady"
+        with self.assertRaisesRegex(ValueError, "causal wording"):
+            verify_slice0.verify_incident_document(document, schema)
+        verify_slice0.verify_incident_document(document, schema, check_wording=False)
+        document["items"][0]["rank"] = 7
+        with self.assertRaisesRegex(ValueError, "rank must be"):
+            verify_slice0.verify_incident_document(document, schema, check_wording=False)
+
+    def test_result_schema_reference_is_the_id_of_the_incident_schema_and_optional(self) -> None:
+        verify_slice0.verify_result_incident_reference()
+        result = self.load(ROOT / "docs/contracts/result/v1/analysis-result.schema.json")
+        incident = self.directory / "incident.schema.json"
+        cases = {
+            "wrong reference": lambda r: r["properties"].update(incidents={"$ref": "https://lt-verdict.local/other.json"}),
+            "missing": lambda r: r["properties"].pop("incidents"),
+            "required": lambda r: r["required"].append("incidents"),
+            "sibling keyword": lambda r: r["properties"]["incidents"].update(type="object"),
+        }
+        for name, break_it in cases.items():
+            with self.subTest(name), tempfile.TemporaryDirectory() as temp:
+                broken = json.loads(json.dumps(result))
+                break_it(broken)
+                path = Path(temp) / "analysis-result.schema.json"
+                path.write_text(json.dumps(broken), encoding="utf-8")
+                with self.assertRaisesRegex(ValueError, "incidents"):
+                    verify_slice0.verify_result_incident_reference(path, incident)
+
 
 if __name__ == "__main__":
     unittest.main()

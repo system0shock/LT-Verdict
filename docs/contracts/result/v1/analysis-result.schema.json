@@ -59,6 +59,9 @@
     },
     "capacity_summary": {
       "type": "object"
+    },
+    "incidents": {
+      "$ref": "https://lt-verdict.local/contracts/incident/v1/incident.schema.json"
     }
   },
   "additionalProperties": false,

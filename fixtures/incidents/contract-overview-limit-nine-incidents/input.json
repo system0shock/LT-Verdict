@@ -1,0 +1,218 @@
+{
+  "run_validity": "VALID",
+  "findings": [
+    {
+      "type": "policy_failure",
+      "id": "policy-failure-window-2a7936f8d5ad39e6",
+      "rule_id": "rule-0",
+      "evidence_id": "policy-check-window-0e5ec63f00bc21a4",
+      "window_id": "steady"
+    },
+    {
+      "type": "policy_failure",
+      "id": "policy-failure-window-a6f25a4066b8c815",
+      "rule_id": "rule-0",
+      "evidence_id": "policy-check-window-b94ed3510af56f4a",
+      "window_id": "steady"
+    },
+    {
+      "type": "policy_failure",
+      "id": "policy-failure-window-04403cc19e6987aa",
+      "rule_id": "rule-0",
+      "evidence_id": "policy-check-window-0e47f6911500006b",
+      "window_id": "steady"
+    },
+    {
+      "type": "policy_failure",
+      "id": "policy-failure-window-56ee54a6fcabb2ec",
+      "rule_id": "rule-0",
+      "evidence_id": "policy-check-window-feaef9ab5f6d87ad",
+      "window_id": "steady"
+    },
+    {
+      "type": "policy_failure",
+      "id": "policy-failure-window-49cf9ecfd066d920",
+      "rule_id": "rule-0",
+      "evidence_id": "policy-check-window-12aa5b3fc0266c4f",
+      "window_id": "steady"
+    },
+    {
+      "type": "policy_failure",
+      "id": "policy-failure-window-f4a14fd942fadf21",
+      "rule_id": "rule-0",
+      "evidence_id": "policy-check-window-927bc36f7bc9a781",
+      "window_id": "steady"
+    },
+    {
+      "type": "policy_failure",
+      "id": "policy-failure-window-c2f12b267be03b10",
+      "rule_id": "rule-0",
+      "evidence_id": "policy-check-window-97d75f38418da060",
+      "window_id": "steady"
+    },
+    {
+      "type": "policy_failure",
+      "id": "policy-failure-window-87895e5855c9b4e4",
+      "rule_id": "rule-0",
+      "evidence_id": "policy-check-window-cf80ef5bde813c77",
+      "window_id": "steady"
+    },
+    {
+      "type": "policy_failure",
+      "id": "policy-failure-window-ff57b263c970ae3c",
+      "rule_id": "rule-0",
+      "evidence_id": "policy-check-window-9b8d6af28f36d3b2",
+      "window_id": "steady"
+    }
+  ],
+  "evidence": [
+    {
+      "type": "window_policy_summary",
+      "id": "window-policy-summary-steady",
+      "window_id": "steady",
+      "from_epoch_ms": 1767225610000,
+      "to_epoch_ms": 1767225640000,
+      "verdict": "FAIL"
+    },
+    {
+      "type": "policy_check",
+      "id": "policy-check-window-0e5ec63f00bc21a4",
+      "rule_id": "rule",
+      "status": "FAIL",
+      "window_id": "steady",
+      "scope": {
+        "kind": "transaction",
+        "label": "tx-03",
+        "group_path": [
+          "checkout"
+        ],
+        "sample_kind": "JMETER_SAMPLER"
+      }
+    },
+    {
+      "type": "policy_check",
+      "id": "policy-check-window-b94ed3510af56f4a",
+      "rule_id": "rule",
+      "status": "FAIL",
+      "window_id": "steady",
+      "scope": {
+        "kind": "transaction",
+        "label": "tx-00",
+        "group_path": [
+          "checkout"
+        ],
+        "sample_kind": "JMETER_SAMPLER"
+      }
+    },
+    {
+      "type": "policy_check",
+      "id": "policy-check-window-0e47f6911500006b",
+      "rule_id": "rule",
+      "status": "FAIL",
+      "window_id": "steady",
+      "scope": {
+        "kind": "transaction",
+        "label": "tx-05",
+        "group_path": [
+          "checkout"
+        ],
+        "sample_kind": "JMETER_SAMPLER"
+      }
+    },
+    {
+      "type": "policy_check",
+      "id": "policy-check-window-feaef9ab5f6d87ad",
+      "rule_id": "rule",
+      "status": "FAIL",
+      "window_id": "steady",
+      "scope": {
+        "kind": "transaction",
+        "label": "tx-01",
+        "group_path": [
+          "checkout"
+        ],
+        "sample_kind": "JMETER_SAMPLER"
+      }
+    },
+    {
+      "type": "policy_check",
+      "id": "policy-check-window-12aa5b3fc0266c4f",
+      "rule_id": "rule",
+      "status": "FAIL",
+      "window_id": "steady",
+      "scope": {
+        "kind": "transaction",
+        "label": "tx-04",
+        "group_path": [
+          "checkout"
+        ],
+        "sample_kind": "JMETER_SAMPLER"
+      }
+    },
+    {
+      "type": "policy_check",
+      "id": "policy-check-window-927bc36f7bc9a781",
+      "rule_id": "rule",
+      "status": "FAIL",
+      "window_id": "steady",
+      "scope": {
+        "kind": "transaction",
+        "label": "tx-08",
+        "group_path": [
+          "checkout"
+        ],
+        "sample_kind": "JMETER_SAMPLER"
+      }
+    },
+    {
+      "type": "policy_check",
+      "id": "policy-check-window-97d75f38418da060",
+      "rule_id": "rule",
+      "status": "FAIL",
+      "window_id": "steady",
+      "scope": {
+        "kind": "transaction",
+        "label": "tx-06",
+        "group_path": [
+          "checkout"
+        ],
+        "sample_kind": "JMETER_SAMPLER"
+      }
+    },
+    {
+      "type": "policy_check",
+      "id": "policy-check-window-cf80ef5bde813c77",
+      "rule_id": "rule",
+      "status": "FAIL",
+      "window_id": "steady",
+      "scope": {
+        "kind": "transaction",
+        "label": "tx-07",
+        "group_path": [
+          "checkout"
+        ],
+        "sample_kind": "JMETER_SAMPLER"
+      }
+    },
+    {
+      "type": "policy_check",
+      "id": "policy-check-window-9b8d6af28f36d3b2",
+      "rule_id": "rule",
+      "status": "FAIL",
+      "window_id": "steady",
+      "scope": {
+        "kind": "transaction",
+        "label": "tx-02",
+        "group_path": [
+          "checkout"
+        ],
+        "sample_kind": "JMETER_SAMPLER"
+      }
+    },
+    {
+      "type": "resource_binding",
+      "id": "resource-binding",
+      "mode": "explicit_windows"
+    }
+  ]
+}

@@ -1,0 +1,1670 @@
+{
+    "schema_version": "incident.v1",
+    "method": "incident-synthesis.v1",
+    "status": "EVALUATED",
+    "overview_limit": 7,
+    "total_count": 20,
+    "omitted_count": 0,
+    "items": [
+        {
+            "id": "incident-0d019d56edc4c832d812bf736cb4d37a7de2abcd01bd1090e2cf2da86dbe4026",
+            "rank": 1,
+            "in_overview": true,
+            "priority": "HIGH",
+            "priority_key": {
+                "tier": 1,
+                "finding_count": 1,
+                "first_epoch_ms": 1000
+            },
+            "title": "Нарушение SLA: транзакция tx-04 в окне steady",
+            "summary": "В окне steady нарушено правил policy: 1. Область: транзакция tx-04.",
+            "scope": {
+                "kind": "transaction",
+                "label": "tx-04"
+            },
+            "window_id": "steady",
+            "interval_basis": "WINDOW",
+            "interval": {
+                "from_epoch_ms": 1000,
+                "to_epoch_ms": 2000
+            },
+            "grouping": {
+                "rule": "incident-grouping.v1",
+                "key": {
+                    "family": "TRANSACTION",
+                    "window_id": "steady",
+                    "scope": {
+                        "kind": "transaction",
+                        "label": "tx-04"
+                    },
+                    "cluster_from_epoch_ms": null
+                }
+            },
+            "finding_count": 1,
+            "finding_types": [
+                "policy_failure"
+            ],
+            "finding_ids": [
+                "pf-t4"
+            ],
+            "evidence_ids": [
+                "pc-t4"
+            ],
+            "refs_truncated": false,
+            "negative_evidence": [],
+            "next_checks": [
+                {
+                    "check": "COMPARE_WITH_BASELINE",
+                    "text": "Сравнить метрики транзакции tx-04 с baseline.",
+                    "evidence_ids": [
+                        "pc-t4"
+                    ]
+                },
+                {
+                    "check": "OPEN_SAME_WINDOW_SIGNALS",
+                    "text": "Открыть сигналы окна steady, совпавшие по времени: 5.",
+                    "evidence_ids": []
+                }
+            ],
+            "coincident_with": [
+                {
+                    "incident_id": "incident-76080b4e7c2edc04faf9870d8b1fd390a41fed276030ef4ff3e324432426a33a",
+                    "basis": "SAME_WINDOW"
+                },
+                {
+                    "incident_id": "incident-c501395a657fab90a59795b70562c17069940467f91c1f625632457a248f31ec",
+                    "basis": "SAME_WINDOW"
+                },
+                {
+                    "incident_id": "incident-70ed8920ae515a93c1371ccaefd66b37432fd29c3c874469e499098b60db4b3d",
+                    "basis": "SAME_WINDOW"
+                },
+                {
+                    "incident_id": "incident-94e651beed8278c5e281102435d1e49fa9bcc917b7e64c4e500fea163da306d4",
+                    "basis": "SAME_WINDOW"
+                },
+                {
+                    "incident_id": "incident-a9f286b9bf46a100406b00d0e9b6fbf0c7e7eebed5971d2d70e2e5c63b86b544",
+                    "basis": "SAME_WINDOW"
+                }
+            ]
+        },
+        {
+            "id": "incident-56612f5ae9d4820ecc42ab5c7c602897c0fa30db7d113cf96d4f7e079d48674f",
+            "rank": 2,
+            "in_overview": true,
+            "priority": "HIGH",
+            "priority_key": {
+                "tier": 1,
+                "finding_count": 1,
+                "first_epoch_ms": 1000
+            },
+            "title": "Нарушение SLA: транзакция tx-16 в окне steady",
+            "summary": "В окне steady нарушено правил policy: 1. Область: транзакция tx-16.",
+            "scope": {
+                "kind": "transaction",
+                "label": "tx-16"
+            },
+            "window_id": "steady",
+            "interval_basis": "WINDOW",
+            "interval": {
+                "from_epoch_ms": 1000,
+                "to_epoch_ms": 2000
+            },
+            "grouping": {
+                "rule": "incident-grouping.v1",
+                "key": {
+                    "family": "TRANSACTION",
+                    "window_id": "steady",
+                    "scope": {
+                        "kind": "transaction",
+                        "label": "tx-16"
+                    },
+                    "cluster_from_epoch_ms": null
+                }
+            },
+            "finding_count": 1,
+            "finding_types": [
+                "policy_failure"
+            ],
+            "finding_ids": [
+                "pf-t16"
+            ],
+            "evidence_ids": [
+                "pc-t16"
+            ],
+            "refs_truncated": false,
+            "negative_evidence": [],
+            "next_checks": [
+                {
+                    "check": "COMPARE_WITH_BASELINE",
+                    "text": "Сравнить метрики транзакции tx-16 с baseline.",
+                    "evidence_ids": [
+                        "pc-t16"
+                    ]
+                },
+                {
+                    "check": "OPEN_SAME_WINDOW_SIGNALS",
+                    "text": "Открыть сигналы окна steady, совпавшие по времени: 5.",
+                    "evidence_ids": []
+                }
+            ],
+            "coincident_with": [
+                {
+                    "incident_id": "incident-76080b4e7c2edc04faf9870d8b1fd390a41fed276030ef4ff3e324432426a33a",
+                    "basis": "SAME_WINDOW"
+                },
+                {
+                    "incident_id": "incident-c501395a657fab90a59795b70562c17069940467f91c1f625632457a248f31ec",
+                    "basis": "SAME_WINDOW"
+                },
+                {
+                    "incident_id": "incident-70ed8920ae515a93c1371ccaefd66b37432fd29c3c874469e499098b60db4b3d",
+                    "basis": "SAME_WINDOW"
+                },
+                {
+                    "incident_id": "incident-94e651beed8278c5e281102435d1e49fa9bcc917b7e64c4e500fea163da306d4",
+                    "basis": "SAME_WINDOW"
+                },
+                {
+                    "incident_id": "incident-a9f286b9bf46a100406b00d0e9b6fbf0c7e7eebed5971d2d70e2e5c63b86b544",
+                    "basis": "SAME_WINDOW"
+                }
+            ]
+        },
+        {
+            "id": "incident-8864670589de140e2624fe933d2b6a59030edb1970a97e034cce1b381535511d",
+            "rank": 3,
+            "in_overview": true,
+            "priority": "HIGH",
+            "priority_key": {
+                "tier": 1,
+                "finding_count": 1,
+                "first_epoch_ms": 1000
+            },
+            "title": "Нарушение SLA: транзакция tx-18 в окне steady",
+            "summary": "В окне steady нарушено правил policy: 1. Область: транзакция tx-18.",
+            "scope": {
+                "kind": "transaction",
+                "label": "tx-18"
+            },
+            "window_id": "steady",
+            "interval_basis": "WINDOW",
+            "interval": {
+                "from_epoch_ms": 1000,
+                "to_epoch_ms": 2000
+            },
+            "grouping": {
+                "rule": "incident-grouping.v1",
+                "key": {
+                    "family": "TRANSACTION",
+                    "window_id": "steady",
+                    "scope": {
+                        "kind": "transaction",
+                        "label": "tx-18"
+                    },
+                    "cluster_from_epoch_ms": null
+                }
+            },
+            "finding_count": 1,
+            "finding_types": [
+                "policy_failure"
+            ],
+            "finding_ids": [
+                "pf-t18"
+            ],
+            "evidence_ids": [
+                "pc-t18"
+            ],
+            "refs_truncated": false,
+            "negative_evidence": [],
+            "next_checks": [
+                {
+                    "check": "COMPARE_WITH_BASELINE",
+                    "text": "Сравнить метрики транзакции tx-18 с baseline.",
+                    "evidence_ids": [
+                        "pc-t18"
+                    ]
+                },
+                {
+                    "check": "OPEN_SAME_WINDOW_SIGNALS",
+                    "text": "Открыть сигналы окна steady, совпавшие по времени: 5.",
+                    "evidence_ids": []
+                }
+            ],
+            "coincident_with": [
+                {
+                    "incident_id": "incident-76080b4e7c2edc04faf9870d8b1fd390a41fed276030ef4ff3e324432426a33a",
+                    "basis": "SAME_WINDOW"
+                },
+                {
+                    "incident_id": "incident-c501395a657fab90a59795b70562c17069940467f91c1f625632457a248f31ec",
+                    "basis": "SAME_WINDOW"
+                },
+                {
+                    "incident_id": "incident-70ed8920ae515a93c1371ccaefd66b37432fd29c3c874469e499098b60db4b3d",
+                    "basis": "SAME_WINDOW"
+                },
+                {
+                    "incident_id": "incident-94e651beed8278c5e281102435d1e49fa9bcc917b7e64c4e500fea163da306d4",
+                    "basis": "SAME_WINDOW"
+                },
+                {
+                    "incident_id": "incident-a9f286b9bf46a100406b00d0e9b6fbf0c7e7eebed5971d2d70e2e5c63b86b544",
+                    "basis": "SAME_WINDOW"
+                }
+            ]
+        },
+        {
+            "id": "incident-901a30f819a28a988dce0019f63480ef8aa26551c7b22374f0d7a20b041d1ba4",
+            "rank": 4,
+            "in_overview": true,
+            "priority": "HIGH",
+            "priority_key": {
+                "tier": 1,
+                "finding_count": 1,
+                "first_epoch_ms": 1000
+            },
+            "title": "Нарушение SLA: транзакция tx-10 в окне steady",
+            "summary": "В окне steady нарушено правил policy: 1. Область: транзакция tx-10.",
+            "scope": {
+                "kind": "transaction",
+                "label": "tx-10"
+            },
+            "window_id": "steady",
+            "interval_basis": "WINDOW",
+            "interval": {
+                "from_epoch_ms": 1000,
+                "to_epoch_ms": 2000
+            },
+            "grouping": {
+                "rule": "incident-grouping.v1",
+                "key": {
+                    "family": "TRANSACTION",
+                    "window_id": "steady",
+                    "scope": {
+                        "kind": "transaction",
+                        "label": "tx-10"
+                    },
+                    "cluster_from_epoch_ms": null
+                }
+            },
+            "finding_count": 1,
+            "finding_types": [
+                "policy_failure"
+            ],
+            "finding_ids": [
+                "pf-t10"
+            ],
+            "evidence_ids": [
+                "pc-t10"
+            ],
+            "refs_truncated": false,
+            "negative_evidence": [],
+            "next_checks": [
+                {
+                    "check": "COMPARE_WITH_BASELINE",
+                    "text": "Сравнить метрики транзакции tx-10 с baseline.",
+                    "evidence_ids": [
+                        "pc-t10"
+                    ]
+                },
+                {
+                    "check": "OPEN_SAME_WINDOW_SIGNALS",
+                    "text": "Открыть сигналы окна steady, совпавшие по времени: 5.",
+                    "evidence_ids": []
+                }
+            ],
+            "coincident_with": [
+                {
+                    "incident_id": "incident-76080b4e7c2edc04faf9870d8b1fd390a41fed276030ef4ff3e324432426a33a",
+                    "basis": "SAME_WINDOW"
+                },
+                {
+                    "incident_id": "incident-c501395a657fab90a59795b70562c17069940467f91c1f625632457a248f31ec",
+                    "basis": "SAME_WINDOW"
+                },
+                {
+                    "incident_id": "incident-70ed8920ae515a93c1371ccaefd66b37432fd29c3c874469e499098b60db4b3d",
+                    "basis": "SAME_WINDOW"
+                },
+                {
+                    "incident_id": "incident-94e651beed8278c5e281102435d1e49fa9bcc917b7e64c4e500fea163da306d4",
+                    "basis": "SAME_WINDOW"
+                },
+                {
+                    "incident_id": "incident-a9f286b9bf46a100406b00d0e9b6fbf0c7e7eebed5971d2d70e2e5c63b86b544",
+                    "basis": "SAME_WINDOW"
+                }
+            ]
+        },
+        {
+            "id": "incident-af05bcf0f62b4bf75c6c4eb5b14def43104e10d4749f65d18514cbbd8ef57608",
+            "rank": 5,
+            "in_overview": true,
+            "priority": "HIGH",
+            "priority_key": {
+                "tier": 1,
+                "finding_count": 1,
+                "first_epoch_ms": 1000
+            },
+            "title": "Нарушение SLA: транзакция tx-02 в окне steady",
+            "summary": "В окне steady нарушено правил policy: 1. Область: транзакция tx-02.",
+            "scope": {
+                "kind": "transaction",
+                "label": "tx-02"
+            },
+            "window_id": "steady",
+            "interval_basis": "WINDOW",
+            "interval": {
+                "from_epoch_ms": 1000,
+                "to_epoch_ms": 2000
+            },
+            "grouping": {
+                "rule": "incident-grouping.v1",
+                "key": {
+                    "family": "TRANSACTION",
+                    "window_id": "steady",
+                    "scope": {
+                        "kind": "transaction",
+                        "label": "tx-02"
+                    },
+                    "cluster_from_epoch_ms": null
+                }
+            },
+            "finding_count": 1,
+            "finding_types": [
+                "policy_failure"
+            ],
+            "finding_ids": [
+                "pf-t2"
+            ],
+            "evidence_ids": [
+                "pc-t2"
+            ],
+            "refs_truncated": false,
+            "negative_evidence": [],
+            "next_checks": [
+                {
+                    "check": "COMPARE_WITH_BASELINE",
+                    "text": "Сравнить метрики транзакции tx-02 с baseline.",
+                    "evidence_ids": [
+                        "pc-t2"
+                    ]
+                },
+                {
+                    "check": "OPEN_SAME_WINDOW_SIGNALS",
+                    "text": "Открыть сигналы окна steady, совпавшие по времени: 5.",
+                    "evidence_ids": []
+                }
+            ],
+            "coincident_with": [
+                {
+                    "incident_id": "incident-76080b4e7c2edc04faf9870d8b1fd390a41fed276030ef4ff3e324432426a33a",
+                    "basis": "SAME_WINDOW"
+                },
+                {
+                    "incident_id": "incident-c501395a657fab90a59795b70562c17069940467f91c1f625632457a248f31ec",
+                    "basis": "SAME_WINDOW"
+                },
+                {
+                    "incident_id": "incident-70ed8920ae515a93c1371ccaefd66b37432fd29c3c874469e499098b60db4b3d",
+                    "basis": "SAME_WINDOW"
+                },
+                {
+                    "incident_id": "incident-94e651beed8278c5e281102435d1e49fa9bcc917b7e64c4e500fea163da306d4",
+                    "basis": "SAME_WINDOW"
+                },
+                {
+                    "incident_id": "incident-a9f286b9bf46a100406b00d0e9b6fbf0c7e7eebed5971d2d70e2e5c63b86b544",
+                    "basis": "SAME_WINDOW"
+                }
+            ]
+        },
+        {
+            "id": "incident-cf4e09ae3ceae1f9118bf2f40ecd1c6762309e7dd40d8796d0784bd42c194a9a",
+            "rank": 6,
+            "in_overview": true,
+            "priority": "HIGH",
+            "priority_key": {
+                "tier": 1,
+                "finding_count": 1,
+                "first_epoch_ms": 1000
+            },
+            "title": "Нарушение SLA: транзакция tx-08 в окне steady",
+            "summary": "В окне steady нарушено правил policy: 1. Область: транзакция tx-08.",
+            "scope": {
+                "kind": "transaction",
+                "label": "tx-08"
+            },
+            "window_id": "steady",
+            "interval_basis": "WINDOW",
+            "interval": {
+                "from_epoch_ms": 1000,
+                "to_epoch_ms": 2000
+            },
+            "grouping": {
+                "rule": "incident-grouping.v1",
+                "key": {
+                    "family": "TRANSACTION",
+                    "window_id": "steady",
+                    "scope": {
+                        "kind": "transaction",
+                        "label": "tx-08"
+                    },
+                    "cluster_from_epoch_ms": null
+                }
+            },
+            "finding_count": 1,
+            "finding_types": [
+                "policy_failure"
+            ],
+            "finding_ids": [
+                "pf-t8"
+            ],
+            "evidence_ids": [
+                "pc-t8"
+            ],
+            "refs_truncated": false,
+            "negative_evidence": [],
+            "next_checks": [
+                {
+                    "check": "COMPARE_WITH_BASELINE",
+                    "text": "Сравнить метрики транзакции tx-08 с baseline.",
+                    "evidence_ids": [
+                        "pc-t8"
+                    ]
+                },
+                {
+                    "check": "OPEN_SAME_WINDOW_SIGNALS",
+                    "text": "Открыть сигналы окна steady, совпавшие по времени: 5.",
+                    "evidence_ids": []
+                }
+            ],
+            "coincident_with": [
+                {
+                    "incident_id": "incident-76080b4e7c2edc04faf9870d8b1fd390a41fed276030ef4ff3e324432426a33a",
+                    "basis": "SAME_WINDOW"
+                },
+                {
+                    "incident_id": "incident-c501395a657fab90a59795b70562c17069940467f91c1f625632457a248f31ec",
+                    "basis": "SAME_WINDOW"
+                },
+                {
+                    "incident_id": "incident-70ed8920ae515a93c1371ccaefd66b37432fd29c3c874469e499098b60db4b3d",
+                    "basis": "SAME_WINDOW"
+                },
+                {
+                    "incident_id": "incident-94e651beed8278c5e281102435d1e49fa9bcc917b7e64c4e500fea163da306d4",
+                    "basis": "SAME_WINDOW"
+                },
+                {
+                    "incident_id": "incident-a9f286b9bf46a100406b00d0e9b6fbf0c7e7eebed5971d2d70e2e5c63b86b544",
+                    "basis": "SAME_WINDOW"
+                }
+            ]
+        },
+        {
+            "id": "incident-e1ac264ebccf428f53ce9263c74adb52430521d9cc9da9fbea8c0b1717efd0a5",
+            "rank": 7,
+            "in_overview": true,
+            "priority": "HIGH",
+            "priority_key": {
+                "tier": 1,
+                "finding_count": 1,
+                "first_epoch_ms": 1000
+            },
+            "title": "Нарушение SLA: транзакция tx-14 в окне steady",
+            "summary": "В окне steady нарушено правил policy: 1. Область: транзакция tx-14.",
+            "scope": {
+                "kind": "transaction",
+                "label": "tx-14"
+            },
+            "window_id": "steady",
+            "interval_basis": "WINDOW",
+            "interval": {
+                "from_epoch_ms": 1000,
+                "to_epoch_ms": 2000
+            },
+            "grouping": {
+                "rule": "incident-grouping.v1",
+                "key": {
+                    "family": "TRANSACTION",
+                    "window_id": "steady",
+                    "scope": {
+                        "kind": "transaction",
+                        "label": "tx-14"
+                    },
+                    "cluster_from_epoch_ms": null
+                }
+            },
+            "finding_count": 1,
+            "finding_types": [
+                "policy_failure"
+            ],
+            "finding_ids": [
+                "pf-t14"
+            ],
+            "evidence_ids": [
+                "pc-t14"
+            ],
+            "refs_truncated": false,
+            "negative_evidence": [],
+            "next_checks": [
+                {
+                    "check": "COMPARE_WITH_BASELINE",
+                    "text": "Сравнить метрики транзакции tx-14 с baseline.",
+                    "evidence_ids": [
+                        "pc-t14"
+                    ]
+                },
+                {
+                    "check": "OPEN_SAME_WINDOW_SIGNALS",
+                    "text": "Открыть сигналы окна steady, совпавшие по времени: 5.",
+                    "evidence_ids": []
+                }
+            ],
+            "coincident_with": [
+                {
+                    "incident_id": "incident-76080b4e7c2edc04faf9870d8b1fd390a41fed276030ef4ff3e324432426a33a",
+                    "basis": "SAME_WINDOW"
+                },
+                {
+                    "incident_id": "incident-c501395a657fab90a59795b70562c17069940467f91c1f625632457a248f31ec",
+                    "basis": "SAME_WINDOW"
+                },
+                {
+                    "incident_id": "incident-70ed8920ae515a93c1371ccaefd66b37432fd29c3c874469e499098b60db4b3d",
+                    "basis": "SAME_WINDOW"
+                },
+                {
+                    "incident_id": "incident-94e651beed8278c5e281102435d1e49fa9bcc917b7e64c4e500fea163da306d4",
+                    "basis": "SAME_WINDOW"
+                },
+                {
+                    "incident_id": "incident-a9f286b9bf46a100406b00d0e9b6fbf0c7e7eebed5971d2d70e2e5c63b86b544",
+                    "basis": "SAME_WINDOW"
+                }
+            ]
+        },
+        {
+            "id": "incident-e7b9ed151eec7bb2f419aafafd48e24abb23092d2e525e17d0f83f40164dc37d",
+            "rank": 8,
+            "in_overview": false,
+            "priority": "HIGH",
+            "priority_key": {
+                "tier": 1,
+                "finding_count": 1,
+                "first_epoch_ms": 1000
+            },
+            "title": "Нарушение SLA: транзакция tx-06 в окне steady",
+            "summary": "В окне steady нарушено правил policy: 1. Область: транзакция tx-06.",
+            "scope": {
+                "kind": "transaction",
+                "label": "tx-06"
+            },
+            "window_id": "steady",
+            "interval_basis": "WINDOW",
+            "interval": {
+                "from_epoch_ms": 1000,
+                "to_epoch_ms": 2000
+            },
+            "grouping": {
+                "rule": "incident-grouping.v1",
+                "key": {
+                    "family": "TRANSACTION",
+                    "window_id": "steady",
+                    "scope": {
+                        "kind": "transaction",
+                        "label": "tx-06"
+                    },
+                    "cluster_from_epoch_ms": null
+                }
+            },
+            "finding_count": 1,
+            "finding_types": [
+                "policy_failure"
+            ],
+            "finding_ids": [
+                "pf-t6"
+            ],
+            "evidence_ids": [
+                "pc-t6"
+            ],
+            "refs_truncated": false,
+            "negative_evidence": [],
+            "next_checks": [
+                {
+                    "check": "COMPARE_WITH_BASELINE",
+                    "text": "Сравнить метрики транзакции tx-06 с baseline.",
+                    "evidence_ids": [
+                        "pc-t6"
+                    ]
+                },
+                {
+                    "check": "OPEN_SAME_WINDOW_SIGNALS",
+                    "text": "Открыть сигналы окна steady, совпавшие по времени: 5.",
+                    "evidence_ids": []
+                }
+            ],
+            "coincident_with": [
+                {
+                    "incident_id": "incident-76080b4e7c2edc04faf9870d8b1fd390a41fed276030ef4ff3e324432426a33a",
+                    "basis": "SAME_WINDOW"
+                },
+                {
+                    "incident_id": "incident-c501395a657fab90a59795b70562c17069940467f91c1f625632457a248f31ec",
+                    "basis": "SAME_WINDOW"
+                },
+                {
+                    "incident_id": "incident-70ed8920ae515a93c1371ccaefd66b37432fd29c3c874469e499098b60db4b3d",
+                    "basis": "SAME_WINDOW"
+                },
+                {
+                    "incident_id": "incident-94e651beed8278c5e281102435d1e49fa9bcc917b7e64c4e500fea163da306d4",
+                    "basis": "SAME_WINDOW"
+                },
+                {
+                    "incident_id": "incident-a9f286b9bf46a100406b00d0e9b6fbf0c7e7eebed5971d2d70e2e5c63b86b544",
+                    "basis": "SAME_WINDOW"
+                }
+            ]
+        },
+        {
+            "id": "incident-e95b45c959186d46af69571f87cf9d692cdeb031cc5cfea517f39cab634f24a3",
+            "rank": 9,
+            "in_overview": false,
+            "priority": "HIGH",
+            "priority_key": {
+                "tier": 1,
+                "finding_count": 1,
+                "first_epoch_ms": 1000
+            },
+            "title": "Нарушение SLA: транзакция tx-12 в окне steady",
+            "summary": "В окне steady нарушено правил policy: 1. Область: транзакция tx-12.",
+            "scope": {
+                "kind": "transaction",
+                "label": "tx-12"
+            },
+            "window_id": "steady",
+            "interval_basis": "WINDOW",
+            "interval": {
+                "from_epoch_ms": 1000,
+                "to_epoch_ms": 2000
+            },
+            "grouping": {
+                "rule": "incident-grouping.v1",
+                "key": {
+                    "family": "TRANSACTION",
+                    "window_id": "steady",
+                    "scope": {
+                        "kind": "transaction",
+                        "label": "tx-12"
+                    },
+                    "cluster_from_epoch_ms": null
+                }
+            },
+            "finding_count": 1,
+            "finding_types": [
+                "policy_failure"
+            ],
+            "finding_ids": [
+                "pf-t12"
+            ],
+            "evidence_ids": [
+                "pc-t12"
+            ],
+            "refs_truncated": false,
+            "negative_evidence": [],
+            "next_checks": [
+                {
+                    "check": "COMPARE_WITH_BASELINE",
+                    "text": "Сравнить метрики транзакции tx-12 с baseline.",
+                    "evidence_ids": [
+                        "pc-t12"
+                    ]
+                },
+                {
+                    "check": "OPEN_SAME_WINDOW_SIGNALS",
+                    "text": "Открыть сигналы окна steady, совпавшие по времени: 5.",
+                    "evidence_ids": []
+                }
+            ],
+            "coincident_with": [
+                {
+                    "incident_id": "incident-76080b4e7c2edc04faf9870d8b1fd390a41fed276030ef4ff3e324432426a33a",
+                    "basis": "SAME_WINDOW"
+                },
+                {
+                    "incident_id": "incident-c501395a657fab90a59795b70562c17069940467f91c1f625632457a248f31ec",
+                    "basis": "SAME_WINDOW"
+                },
+                {
+                    "incident_id": "incident-70ed8920ae515a93c1371ccaefd66b37432fd29c3c874469e499098b60db4b3d",
+                    "basis": "SAME_WINDOW"
+                },
+                {
+                    "incident_id": "incident-94e651beed8278c5e281102435d1e49fa9bcc917b7e64c4e500fea163da306d4",
+                    "basis": "SAME_WINDOW"
+                },
+                {
+                    "incident_id": "incident-a9f286b9bf46a100406b00d0e9b6fbf0c7e7eebed5971d2d70e2e5c63b86b544",
+                    "basis": "SAME_WINDOW"
+                }
+            ]
+        },
+        {
+            "id": "incident-f62b883b939abacad282a16a9e87afffebd864ff369201af1fb28edf68f41676",
+            "rank": 10,
+            "in_overview": false,
+            "priority": "HIGH",
+            "priority_key": {
+                "tier": 1,
+                "finding_count": 1,
+                "first_epoch_ms": 1000
+            },
+            "title": "Нарушение SLA: транзакция tx-00 в окне steady",
+            "summary": "В окне steady нарушено правил policy: 1. Область: транзакция tx-00.",
+            "scope": {
+                "kind": "transaction",
+                "label": "tx-00"
+            },
+            "window_id": "steady",
+            "interval_basis": "WINDOW",
+            "interval": {
+                "from_epoch_ms": 1000,
+                "to_epoch_ms": 2000
+            },
+            "grouping": {
+                "rule": "incident-grouping.v1",
+                "key": {
+                    "family": "TRANSACTION",
+                    "window_id": "steady",
+                    "scope": {
+                        "kind": "transaction",
+                        "label": "tx-00"
+                    },
+                    "cluster_from_epoch_ms": null
+                }
+            },
+            "finding_count": 1,
+            "finding_types": [
+                "policy_failure"
+            ],
+            "finding_ids": [
+                "pf-t0"
+            ],
+            "evidence_ids": [
+                "pc-t0"
+            ],
+            "refs_truncated": false,
+            "negative_evidence": [],
+            "next_checks": [
+                {
+                    "check": "COMPARE_WITH_BASELINE",
+                    "text": "Сравнить метрики транзакции tx-00 с baseline.",
+                    "evidence_ids": [
+                        "pc-t0"
+                    ]
+                },
+                {
+                    "check": "OPEN_SAME_WINDOW_SIGNALS",
+                    "text": "Открыть сигналы окна steady, совпавшие по времени: 5.",
+                    "evidence_ids": []
+                }
+            ],
+            "coincident_with": [
+                {
+                    "incident_id": "incident-76080b4e7c2edc04faf9870d8b1fd390a41fed276030ef4ff3e324432426a33a",
+                    "basis": "SAME_WINDOW"
+                },
+                {
+                    "incident_id": "incident-c501395a657fab90a59795b70562c17069940467f91c1f625632457a248f31ec",
+                    "basis": "SAME_WINDOW"
+                },
+                {
+                    "incident_id": "incident-70ed8920ae515a93c1371ccaefd66b37432fd29c3c874469e499098b60db4b3d",
+                    "basis": "SAME_WINDOW"
+                },
+                {
+                    "incident_id": "incident-94e651beed8278c5e281102435d1e49fa9bcc917b7e64c4e500fea163da306d4",
+                    "basis": "SAME_WINDOW"
+                },
+                {
+                    "incident_id": "incident-a9f286b9bf46a100406b00d0e9b6fbf0c7e7eebed5971d2d70e2e5c63b86b544",
+                    "basis": "SAME_WINDOW"
+                }
+            ]
+        },
+        {
+            "id": "incident-76080b4e7c2edc04faf9870d8b1fd390a41fed276030ef4ff3e324432426a33a",
+            "rank": 11,
+            "in_overview": false,
+            "priority": "HIGH",
+            "priority_key": {
+                "tier": 2,
+                "finding_count": 1,
+                "first_epoch_ms": 1001
+            },
+            "title": "Сигналы ресурса: host-01 в окне steady",
+            "summary": "На интервале по сущности host-01 найдено находок: 1; их интервалы перекрываются или соприкасаются.",
+            "scope": {
+                "kind": "entity",
+                "entity": "host-01"
+            },
+            "window_id": "steady",
+            "interval_basis": "FINDINGS",
+            "interval": {
+                "from_epoch_ms": 1001,
+                "to_epoch_ms": 1101
+            },
+            "grouping": {
+                "rule": "incident-grouping.v1",
+                "key": {
+                    "family": "RESOURCE",
+                    "window_id": "steady",
+                    "scope": {
+                        "kind": "entity",
+                        "entity": "host-01"
+                    },
+                    "cluster_from_epoch_ms": 1001
+                }
+            },
+            "finding_count": 1,
+            "finding_types": [
+                "resource_threshold_violation"
+            ],
+            "finding_ids": [
+                "f-r1"
+            ],
+            "evidence_ids": [
+                "rpc-r1"
+            ],
+            "refs_truncated": false,
+            "negative_evidence": [],
+            "next_checks": [
+                {
+                    "check": "OPEN_RESOURCE_SERIES",
+                    "text": "Открыть ряды сущности host-01 за интервал находок.",
+                    "evidence_ids": [
+                        "rpc-r1"
+                    ]
+                },
+                {
+                    "check": "OPEN_SAME_WINDOW_SIGNALS",
+                    "text": "Открыть сигналы окна steady, совпавшие по времени: 5.",
+                    "evidence_ids": []
+                }
+            ],
+            "coincident_with": [
+                {
+                    "incident_id": "incident-0d019d56edc4c832d812bf736cb4d37a7de2abcd01bd1090e2cf2da86dbe4026",
+                    "basis": "SAME_WINDOW"
+                },
+                {
+                    "incident_id": "incident-56612f5ae9d4820ecc42ab5c7c602897c0fa30db7d113cf96d4f7e079d48674f",
+                    "basis": "SAME_WINDOW"
+                },
+                {
+                    "incident_id": "incident-8864670589de140e2624fe933d2b6a59030edb1970a97e034cce1b381535511d",
+                    "basis": "SAME_WINDOW"
+                },
+                {
+                    "incident_id": "incident-901a30f819a28a988dce0019f63480ef8aa26551c7b22374f0d7a20b041d1ba4",
+                    "basis": "SAME_WINDOW"
+                },
+                {
+                    "incident_id": "incident-af05bcf0f62b4bf75c6c4eb5b14def43104e10d4749f65d18514cbbd8ef57608",
+                    "basis": "SAME_WINDOW"
+                }
+            ]
+        },
+        {
+            "id": "incident-c501395a657fab90a59795b70562c17069940467f91c1f625632457a248f31ec",
+            "rank": 12,
+            "in_overview": false,
+            "priority": "HIGH",
+            "priority_key": {
+                "tier": 2,
+                "finding_count": 1,
+                "first_epoch_ms": 1003
+            },
+            "title": "Сигналы ресурса: host-03 в окне steady",
+            "summary": "На интервале по сущности host-03 найдено находок: 1; их интервалы перекрываются или соприкасаются.",
+            "scope": {
+                "kind": "entity",
+                "entity": "host-03"
+            },
+            "window_id": "steady",
+            "interval_basis": "FINDINGS",
+            "interval": {
+                "from_epoch_ms": 1003,
+                "to_epoch_ms": 1103
+            },
+            "grouping": {
+                "rule": "incident-grouping.v1",
+                "key": {
+                    "family": "RESOURCE",
+                    "window_id": "steady",
+                    "scope": {
+                        "kind": "entity",
+                        "entity": "host-03"
+                    },
+                    "cluster_from_epoch_ms": 1003
+                }
+            },
+            "finding_count": 1,
+            "finding_types": [
+                "resource_threshold_violation"
+            ],
+            "finding_ids": [
+                "f-r3"
+            ],
+            "evidence_ids": [
+                "rpc-r3"
+            ],
+            "refs_truncated": false,
+            "negative_evidence": [],
+            "next_checks": [
+                {
+                    "check": "OPEN_RESOURCE_SERIES",
+                    "text": "Открыть ряды сущности host-03 за интервал находок.",
+                    "evidence_ids": [
+                        "rpc-r3"
+                    ]
+                },
+                {
+                    "check": "OPEN_SAME_WINDOW_SIGNALS",
+                    "text": "Открыть сигналы окна steady, совпавшие по времени: 5.",
+                    "evidence_ids": []
+                }
+            ],
+            "coincident_with": [
+                {
+                    "incident_id": "incident-0d019d56edc4c832d812bf736cb4d37a7de2abcd01bd1090e2cf2da86dbe4026",
+                    "basis": "SAME_WINDOW"
+                },
+                {
+                    "incident_id": "incident-56612f5ae9d4820ecc42ab5c7c602897c0fa30db7d113cf96d4f7e079d48674f",
+                    "basis": "SAME_WINDOW"
+                },
+                {
+                    "incident_id": "incident-8864670589de140e2624fe933d2b6a59030edb1970a97e034cce1b381535511d",
+                    "basis": "SAME_WINDOW"
+                },
+                {
+                    "incident_id": "incident-901a30f819a28a988dce0019f63480ef8aa26551c7b22374f0d7a20b041d1ba4",
+                    "basis": "SAME_WINDOW"
+                },
+                {
+                    "incident_id": "incident-af05bcf0f62b4bf75c6c4eb5b14def43104e10d4749f65d18514cbbd8ef57608",
+                    "basis": "SAME_WINDOW"
+                }
+            ]
+        },
+        {
+            "id": "incident-70ed8920ae515a93c1371ccaefd66b37432fd29c3c874469e499098b60db4b3d",
+            "rank": 13,
+            "in_overview": false,
+            "priority": "HIGH",
+            "priority_key": {
+                "tier": 2,
+                "finding_count": 1,
+                "first_epoch_ms": 1005
+            },
+            "title": "Сигналы ресурса: host-05 в окне steady",
+            "summary": "На интервале по сущности host-05 найдено находок: 1; их интервалы перекрываются или соприкасаются.",
+            "scope": {
+                "kind": "entity",
+                "entity": "host-05"
+            },
+            "window_id": "steady",
+            "interval_basis": "FINDINGS",
+            "interval": {
+                "from_epoch_ms": 1005,
+                "to_epoch_ms": 1105
+            },
+            "grouping": {
+                "rule": "incident-grouping.v1",
+                "key": {
+                    "family": "RESOURCE",
+                    "window_id": "steady",
+                    "scope": {
+                        "kind": "entity",
+                        "entity": "host-05"
+                    },
+                    "cluster_from_epoch_ms": 1005
+                }
+            },
+            "finding_count": 1,
+            "finding_types": [
+                "resource_threshold_violation"
+            ],
+            "finding_ids": [
+                "f-r5"
+            ],
+            "evidence_ids": [
+                "rpc-r5"
+            ],
+            "refs_truncated": false,
+            "negative_evidence": [],
+            "next_checks": [
+                {
+                    "check": "OPEN_RESOURCE_SERIES",
+                    "text": "Открыть ряды сущности host-05 за интервал находок.",
+                    "evidence_ids": [
+                        "rpc-r5"
+                    ]
+                },
+                {
+                    "check": "OPEN_SAME_WINDOW_SIGNALS",
+                    "text": "Открыть сигналы окна steady, совпавшие по времени: 5.",
+                    "evidence_ids": []
+                }
+            ],
+            "coincident_with": [
+                {
+                    "incident_id": "incident-0d019d56edc4c832d812bf736cb4d37a7de2abcd01bd1090e2cf2da86dbe4026",
+                    "basis": "SAME_WINDOW"
+                },
+                {
+                    "incident_id": "incident-56612f5ae9d4820ecc42ab5c7c602897c0fa30db7d113cf96d4f7e079d48674f",
+                    "basis": "SAME_WINDOW"
+                },
+                {
+                    "incident_id": "incident-8864670589de140e2624fe933d2b6a59030edb1970a97e034cce1b381535511d",
+                    "basis": "SAME_WINDOW"
+                },
+                {
+                    "incident_id": "incident-901a30f819a28a988dce0019f63480ef8aa26551c7b22374f0d7a20b041d1ba4",
+                    "basis": "SAME_WINDOW"
+                },
+                {
+                    "incident_id": "incident-af05bcf0f62b4bf75c6c4eb5b14def43104e10d4749f65d18514cbbd8ef57608",
+                    "basis": "SAME_WINDOW"
+                }
+            ]
+        },
+        {
+            "id": "incident-94e651beed8278c5e281102435d1e49fa9bcc917b7e64c4e500fea163da306d4",
+            "rank": 14,
+            "in_overview": false,
+            "priority": "HIGH",
+            "priority_key": {
+                "tier": 2,
+                "finding_count": 1,
+                "first_epoch_ms": 1007
+            },
+            "title": "Сигналы ресурса: host-07 в окне steady",
+            "summary": "На интервале по сущности host-07 найдено находок: 1; их интервалы перекрываются или соприкасаются.",
+            "scope": {
+                "kind": "entity",
+                "entity": "host-07"
+            },
+            "window_id": "steady",
+            "interval_basis": "FINDINGS",
+            "interval": {
+                "from_epoch_ms": 1007,
+                "to_epoch_ms": 1107
+            },
+            "grouping": {
+                "rule": "incident-grouping.v1",
+                "key": {
+                    "family": "RESOURCE",
+                    "window_id": "steady",
+                    "scope": {
+                        "kind": "entity",
+                        "entity": "host-07"
+                    },
+                    "cluster_from_epoch_ms": 1007
+                }
+            },
+            "finding_count": 1,
+            "finding_types": [
+                "resource_threshold_violation"
+            ],
+            "finding_ids": [
+                "f-r7"
+            ],
+            "evidence_ids": [
+                "rpc-r7"
+            ],
+            "refs_truncated": false,
+            "negative_evidence": [],
+            "next_checks": [
+                {
+                    "check": "OPEN_RESOURCE_SERIES",
+                    "text": "Открыть ряды сущности host-07 за интервал находок.",
+                    "evidence_ids": [
+                        "rpc-r7"
+                    ]
+                },
+                {
+                    "check": "OPEN_SAME_WINDOW_SIGNALS",
+                    "text": "Открыть сигналы окна steady, совпавшие по времени: 5.",
+                    "evidence_ids": []
+                }
+            ],
+            "coincident_with": [
+                {
+                    "incident_id": "incident-0d019d56edc4c832d812bf736cb4d37a7de2abcd01bd1090e2cf2da86dbe4026",
+                    "basis": "SAME_WINDOW"
+                },
+                {
+                    "incident_id": "incident-56612f5ae9d4820ecc42ab5c7c602897c0fa30db7d113cf96d4f7e079d48674f",
+                    "basis": "SAME_WINDOW"
+                },
+                {
+                    "incident_id": "incident-8864670589de140e2624fe933d2b6a59030edb1970a97e034cce1b381535511d",
+                    "basis": "SAME_WINDOW"
+                },
+                {
+                    "incident_id": "incident-901a30f819a28a988dce0019f63480ef8aa26551c7b22374f0d7a20b041d1ba4",
+                    "basis": "SAME_WINDOW"
+                },
+                {
+                    "incident_id": "incident-af05bcf0f62b4bf75c6c4eb5b14def43104e10d4749f65d18514cbbd8ef57608",
+                    "basis": "SAME_WINDOW"
+                }
+            ]
+        },
+        {
+            "id": "incident-a9f286b9bf46a100406b00d0e9b6fbf0c7e7eebed5971d2d70e2e5c63b86b544",
+            "rank": 15,
+            "in_overview": false,
+            "priority": "HIGH",
+            "priority_key": {
+                "tier": 2,
+                "finding_count": 1,
+                "first_epoch_ms": 1009
+            },
+            "title": "Сигналы ресурса: host-09 в окне steady",
+            "summary": "На интервале по сущности host-09 найдено находок: 1; их интервалы перекрываются или соприкасаются.",
+            "scope": {
+                "kind": "entity",
+                "entity": "host-09"
+            },
+            "window_id": "steady",
+            "interval_basis": "FINDINGS",
+            "interval": {
+                "from_epoch_ms": 1009,
+                "to_epoch_ms": 1109
+            },
+            "grouping": {
+                "rule": "incident-grouping.v1",
+                "key": {
+                    "family": "RESOURCE",
+                    "window_id": "steady",
+                    "scope": {
+                        "kind": "entity",
+                        "entity": "host-09"
+                    },
+                    "cluster_from_epoch_ms": 1009
+                }
+            },
+            "finding_count": 1,
+            "finding_types": [
+                "resource_threshold_violation"
+            ],
+            "finding_ids": [
+                "f-r9"
+            ],
+            "evidence_ids": [
+                "rpc-r9"
+            ],
+            "refs_truncated": false,
+            "negative_evidence": [],
+            "next_checks": [
+                {
+                    "check": "OPEN_RESOURCE_SERIES",
+                    "text": "Открыть ряды сущности host-09 за интервал находок.",
+                    "evidence_ids": [
+                        "rpc-r9"
+                    ]
+                },
+                {
+                    "check": "OPEN_SAME_WINDOW_SIGNALS",
+                    "text": "Открыть сигналы окна steady, совпавшие по времени: 5.",
+                    "evidence_ids": []
+                }
+            ],
+            "coincident_with": [
+                {
+                    "incident_id": "incident-0d019d56edc4c832d812bf736cb4d37a7de2abcd01bd1090e2cf2da86dbe4026",
+                    "basis": "SAME_WINDOW"
+                },
+                {
+                    "incident_id": "incident-56612f5ae9d4820ecc42ab5c7c602897c0fa30db7d113cf96d4f7e079d48674f",
+                    "basis": "SAME_WINDOW"
+                },
+                {
+                    "incident_id": "incident-8864670589de140e2624fe933d2b6a59030edb1970a97e034cce1b381535511d",
+                    "basis": "SAME_WINDOW"
+                },
+                {
+                    "incident_id": "incident-901a30f819a28a988dce0019f63480ef8aa26551c7b22374f0d7a20b041d1ba4",
+                    "basis": "SAME_WINDOW"
+                },
+                {
+                    "incident_id": "incident-af05bcf0f62b4bf75c6c4eb5b14def43104e10d4749f65d18514cbbd8ef57608",
+                    "basis": "SAME_WINDOW"
+                }
+            ]
+        },
+        {
+            "id": "incident-9a85f2226e182dbee084451ff9e64aa77576c189b1defd3f872a364a408a2364",
+            "rank": 16,
+            "in_overview": false,
+            "priority": "HIGH",
+            "priority_key": {
+                "tier": 2,
+                "finding_count": 1,
+                "first_epoch_ms": 1011
+            },
+            "title": "Сигналы ресурса: host-11 в окне steady",
+            "summary": "На интервале по сущности host-11 найдено находок: 1; их интервалы перекрываются или соприкасаются.",
+            "scope": {
+                "kind": "entity",
+                "entity": "host-11"
+            },
+            "window_id": "steady",
+            "interval_basis": "FINDINGS",
+            "interval": {
+                "from_epoch_ms": 1011,
+                "to_epoch_ms": 1111
+            },
+            "grouping": {
+                "rule": "incident-grouping.v1",
+                "key": {
+                    "family": "RESOURCE",
+                    "window_id": "steady",
+                    "scope": {
+                        "kind": "entity",
+                        "entity": "host-11"
+                    },
+                    "cluster_from_epoch_ms": 1011
+                }
+            },
+            "finding_count": 1,
+            "finding_types": [
+                "resource_threshold_violation"
+            ],
+            "finding_ids": [
+                "f-r11"
+            ],
+            "evidence_ids": [
+                "rpc-r11"
+            ],
+            "refs_truncated": false,
+            "negative_evidence": [],
+            "next_checks": [
+                {
+                    "check": "OPEN_RESOURCE_SERIES",
+                    "text": "Открыть ряды сущности host-11 за интервал находок.",
+                    "evidence_ids": [
+                        "rpc-r11"
+                    ]
+                },
+                {
+                    "check": "OPEN_SAME_WINDOW_SIGNALS",
+                    "text": "Открыть сигналы окна steady, совпавшие по времени: 5.",
+                    "evidence_ids": []
+                }
+            ],
+            "coincident_with": [
+                {
+                    "incident_id": "incident-0d019d56edc4c832d812bf736cb4d37a7de2abcd01bd1090e2cf2da86dbe4026",
+                    "basis": "SAME_WINDOW"
+                },
+                {
+                    "incident_id": "incident-56612f5ae9d4820ecc42ab5c7c602897c0fa30db7d113cf96d4f7e079d48674f",
+                    "basis": "SAME_WINDOW"
+                },
+                {
+                    "incident_id": "incident-8864670589de140e2624fe933d2b6a59030edb1970a97e034cce1b381535511d",
+                    "basis": "SAME_WINDOW"
+                },
+                {
+                    "incident_id": "incident-901a30f819a28a988dce0019f63480ef8aa26551c7b22374f0d7a20b041d1ba4",
+                    "basis": "SAME_WINDOW"
+                },
+                {
+                    "incident_id": "incident-af05bcf0f62b4bf75c6c4eb5b14def43104e10d4749f65d18514cbbd8ef57608",
+                    "basis": "SAME_WINDOW"
+                }
+            ]
+        },
+        {
+            "id": "incident-4f2b0b51b315da88b7927df0dc96f1ce8c6cc476d2bd2a58ab54a2f64da3f583",
+            "rank": 17,
+            "in_overview": false,
+            "priority": "HIGH",
+            "priority_key": {
+                "tier": 2,
+                "finding_count": 1,
+                "first_epoch_ms": 1013
+            },
+            "title": "Сигналы ресурса: host-13 в окне steady",
+            "summary": "На интервале по сущности host-13 найдено находок: 1; их интервалы перекрываются или соприкасаются.",
+            "scope": {
+                "kind": "entity",
+                "entity": "host-13"
+            },
+            "window_id": "steady",
+            "interval_basis": "FINDINGS",
+            "interval": {
+                "from_epoch_ms": 1013,
+                "to_epoch_ms": 1113
+            },
+            "grouping": {
+                "rule": "incident-grouping.v1",
+                "key": {
+                    "family": "RESOURCE",
+                    "window_id": "steady",
+                    "scope": {
+                        "kind": "entity",
+                        "entity": "host-13"
+                    },
+                    "cluster_from_epoch_ms": 1013
+                }
+            },
+            "finding_count": 1,
+            "finding_types": [
+                "resource_threshold_violation"
+            ],
+            "finding_ids": [
+                "f-r13"
+            ],
+            "evidence_ids": [
+                "rpc-r13"
+            ],
+            "refs_truncated": false,
+            "negative_evidence": [],
+            "next_checks": [
+                {
+                    "check": "OPEN_RESOURCE_SERIES",
+                    "text": "Открыть ряды сущности host-13 за интервал находок.",
+                    "evidence_ids": [
+                        "rpc-r13"
+                    ]
+                },
+                {
+                    "check": "OPEN_SAME_WINDOW_SIGNALS",
+                    "text": "Открыть сигналы окна steady, совпавшие по времени: 5.",
+                    "evidence_ids": []
+                }
+            ],
+            "coincident_with": [
+                {
+                    "incident_id": "incident-0d019d56edc4c832d812bf736cb4d37a7de2abcd01bd1090e2cf2da86dbe4026",
+                    "basis": "SAME_WINDOW"
+                },
+                {
+                    "incident_id": "incident-56612f5ae9d4820ecc42ab5c7c602897c0fa30db7d113cf96d4f7e079d48674f",
+                    "basis": "SAME_WINDOW"
+                },
+                {
+                    "incident_id": "incident-8864670589de140e2624fe933d2b6a59030edb1970a97e034cce1b381535511d",
+                    "basis": "SAME_WINDOW"
+                },
+                {
+                    "incident_id": "incident-901a30f819a28a988dce0019f63480ef8aa26551c7b22374f0d7a20b041d1ba4",
+                    "basis": "SAME_WINDOW"
+                },
+                {
+                    "incident_id": "incident-af05bcf0f62b4bf75c6c4eb5b14def43104e10d4749f65d18514cbbd8ef57608",
+                    "basis": "SAME_WINDOW"
+                }
+            ]
+        },
+        {
+            "id": "incident-86997004fec83eb396ac74a5e48f0af2dd7d0e696b4272d4868184ed537dc850",
+            "rank": 18,
+            "in_overview": false,
+            "priority": "HIGH",
+            "priority_key": {
+                "tier": 2,
+                "finding_count": 1,
+                "first_epoch_ms": 1015
+            },
+            "title": "Сигналы ресурса: host-15 в окне steady",
+            "summary": "На интервале по сущности host-15 найдено находок: 1; их интервалы перекрываются или соприкасаются.",
+            "scope": {
+                "kind": "entity",
+                "entity": "host-15"
+            },
+            "window_id": "steady",
+            "interval_basis": "FINDINGS",
+            "interval": {
+                "from_epoch_ms": 1015,
+                "to_epoch_ms": 1115
+            },
+            "grouping": {
+                "rule": "incident-grouping.v1",
+                "key": {
+                    "family": "RESOURCE",
+                    "window_id": "steady",
+                    "scope": {
+                        "kind": "entity",
+                        "entity": "host-15"
+                    },
+                    "cluster_from_epoch_ms": 1015
+                }
+            },
+            "finding_count": 1,
+            "finding_types": [
+                "resource_threshold_violation"
+            ],
+            "finding_ids": [
+                "f-r15"
+            ],
+            "evidence_ids": [
+                "rpc-r15"
+            ],
+            "refs_truncated": false,
+            "negative_evidence": [],
+            "next_checks": [
+                {
+                    "check": "OPEN_RESOURCE_SERIES",
+                    "text": "Открыть ряды сущности host-15 за интервал находок.",
+                    "evidence_ids": [
+                        "rpc-r15"
+                    ]
+                },
+                {
+                    "check": "OPEN_SAME_WINDOW_SIGNALS",
+                    "text": "Открыть сигналы окна steady, совпавшие по времени: 5.",
+                    "evidence_ids": []
+                }
+            ],
+            "coincident_with": [
+                {
+                    "incident_id": "incident-0d019d56edc4c832d812bf736cb4d37a7de2abcd01bd1090e2cf2da86dbe4026",
+                    "basis": "SAME_WINDOW"
+                },
+                {
+                    "incident_id": "incident-56612f5ae9d4820ecc42ab5c7c602897c0fa30db7d113cf96d4f7e079d48674f",
+                    "basis": "SAME_WINDOW"
+                },
+                {
+                    "incident_id": "incident-8864670589de140e2624fe933d2b6a59030edb1970a97e034cce1b381535511d",
+                    "basis": "SAME_WINDOW"
+                },
+                {
+                    "incident_id": "incident-901a30f819a28a988dce0019f63480ef8aa26551c7b22374f0d7a20b041d1ba4",
+                    "basis": "SAME_WINDOW"
+                },
+                {
+                    "incident_id": "incident-af05bcf0f62b4bf75c6c4eb5b14def43104e10d4749f65d18514cbbd8ef57608",
+                    "basis": "SAME_WINDOW"
+                }
+            ]
+        },
+        {
+            "id": "incident-86d774370450c6a59c7dc7c93f11e7bb426bc0233b394bd691216fe50906abb4",
+            "rank": 19,
+            "in_overview": false,
+            "priority": "HIGH",
+            "priority_key": {
+                "tier": 2,
+                "finding_count": 1,
+                "first_epoch_ms": 1017
+            },
+            "title": "Сигналы ресурса: host-17 в окне steady",
+            "summary": "На интервале по сущности host-17 найдено находок: 1; их интервалы перекрываются или соприкасаются.",
+            "scope": {
+                "kind": "entity",
+                "entity": "host-17"
+            },
+            "window_id": "steady",
+            "interval_basis": "FINDINGS",
+            "interval": {
+                "from_epoch_ms": 1017,
+                "to_epoch_ms": 1117
+            },
+            "grouping": {
+                "rule": "incident-grouping.v1",
+                "key": {
+                    "family": "RESOURCE",
+                    "window_id": "steady",
+                    "scope": {
+                        "kind": "entity",
+                        "entity": "host-17"
+                    },
+                    "cluster_from_epoch_ms": 1017
+                }
+            },
+            "finding_count": 1,
+            "finding_types": [
+                "resource_threshold_violation"
+            ],
+            "finding_ids": [
+                "f-r17"
+            ],
+            "evidence_ids": [
+                "rpc-r17"
+            ],
+            "refs_truncated": false,
+            "negative_evidence": [],
+            "next_checks": [
+                {
+                    "check": "OPEN_RESOURCE_SERIES",
+                    "text": "Открыть ряды сущности host-17 за интервал находок.",
+                    "evidence_ids": [
+                        "rpc-r17"
+                    ]
+                },
+                {
+                    "check": "OPEN_SAME_WINDOW_SIGNALS",
+                    "text": "Открыть сигналы окна steady, совпавшие по времени: 5.",
+                    "evidence_ids": []
+                }
+            ],
+            "coincident_with": [
+                {
+                    "incident_id": "incident-0d019d56edc4c832d812bf736cb4d37a7de2abcd01bd1090e2cf2da86dbe4026",
+                    "basis": "SAME_WINDOW"
+                },
+                {
+                    "incident_id": "incident-56612f5ae9d4820ecc42ab5c7c602897c0fa30db7d113cf96d4f7e079d48674f",
+                    "basis": "SAME_WINDOW"
+                },
+                {
+                    "incident_id": "incident-8864670589de140e2624fe933d2b6a59030edb1970a97e034cce1b381535511d",
+                    "basis": "SAME_WINDOW"
+                },
+                {
+                    "incident_id": "incident-901a30f819a28a988dce0019f63480ef8aa26551c7b22374f0d7a20b041d1ba4",
+                    "basis": "SAME_WINDOW"
+                },
+                {
+                    "incident_id": "incident-af05bcf0f62b4bf75c6c4eb5b14def43104e10d4749f65d18514cbbd8ef57608",
+                    "basis": "SAME_WINDOW"
+                }
+            ]
+        },
+        {
+            "id": "incident-f3ac719099118e96190a02fa3620e551109172cbd6e35753e2fb9be16bbaf784",
+            "rank": 20,
+            "in_overview": false,
+            "priority": "HIGH",
+            "priority_key": {
+                "tier": 2,
+                "finding_count": 1,
+                "first_epoch_ms": 1019
+            },
+            "title": "Сигналы ресурса: host-19 в окне steady",
+            "summary": "На интервале по сущности host-19 найдено находок: 1; их интервалы перекрываются или соприкасаются.",
+            "scope": {
+                "kind": "entity",
+                "entity": "host-19"
+            },
+            "window_id": "steady",
+            "interval_basis": "FINDINGS",
+            "interval": {
+                "from_epoch_ms": 1019,
+                "to_epoch_ms": 1119
+            },
+            "grouping": {
+                "rule": "incident-grouping.v1",
+                "key": {
+                    "family": "RESOURCE",
+                    "window_id": "steady",
+                    "scope": {
+                        "kind": "entity",
+                        "entity": "host-19"
+                    },
+                    "cluster_from_epoch_ms": 1019
+                }
+            },
+            "finding_count": 1,
+            "finding_types": [
+                "resource_threshold_violation"
+            ],
+            "finding_ids": [
+                "f-r19"
+            ],
+            "evidence_ids": [
+                "rpc-r19"
+            ],
+            "refs_truncated": false,
+            "negative_evidence": [],
+            "next_checks": [
+                {
+                    "check": "OPEN_RESOURCE_SERIES",
+                    "text": "Открыть ряды сущности host-19 за интервал находок.",
+                    "evidence_ids": [
+                        "rpc-r19"
+                    ]
+                },
+                {
+                    "check": "OPEN_SAME_WINDOW_SIGNALS",
+                    "text": "Открыть сигналы окна steady, совпавшие по времени: 5.",
+                    "evidence_ids": []
+                }
+            ],
+            "coincident_with": [
+                {
+                    "incident_id": "incident-0d019d56edc4c832d812bf736cb4d37a7de2abcd01bd1090e2cf2da86dbe4026",
+                    "basis": "SAME_WINDOW"
+                },
+                {
+                    "incident_id": "incident-56612f5ae9d4820ecc42ab5c7c602897c0fa30db7d113cf96d4f7e079d48674f",
+                    "basis": "SAME_WINDOW"
+                },
+                {
+                    "incident_id": "incident-8864670589de140e2624fe933d2b6a59030edb1970a97e034cce1b381535511d",
+                    "basis": "SAME_WINDOW"
+                },
+                {
+                    "incident_id": "incident-901a30f819a28a988dce0019f63480ef8aa26551c7b22374f0d7a20b041d1ba4",
+                    "basis": "SAME_WINDOW"
+                },
+                {
+                    "incident_id": "incident-af05bcf0f62b4bf75c6c4eb5b14def43104e10d4749f65d18514cbbd8ef57608",
+                    "basis": "SAME_WINDOW"
+                }
+            ]
+        }
+    ]
+}

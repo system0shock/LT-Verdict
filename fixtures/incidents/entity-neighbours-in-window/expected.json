@@ -1,0 +1,205 @@
+{
+    "schema_version": "incident.v1",
+    "method": "incident-synthesis.v1",
+    "status": "EVALUATED",
+    "overview_limit": 7,
+    "total_count": 2,
+    "omitted_count": 0,
+    "items": [
+        {
+            "id": "incident-33222c34f08b06498068656278cef6eff9e13ecda2093c64d6b3bbdfb6945794",
+            "rank": 1,
+            "in_overview": true,
+            "priority": "HIGH",
+            "priority_key": {
+                "tier": 2,
+                "finding_count": 2,
+                "first_epoch_ms": 1767225615000
+            },
+            "title": "Сигналы ресурса: host-a в окне steady",
+            "summary": "На интервале по сущности host-a найдено находок: 2; их интервалы перекрываются или соприкасаются.",
+            "scope": {
+                "kind": "entity",
+                "entity": "host-a"
+            },
+            "window_id": "steady",
+            "interval_basis": "FINDINGS",
+            "interval": {
+                "from_epoch_ms": 1767225615000,
+                "to_epoch_ms": 1767225630000
+            },
+            "grouping": {
+                "rule": "incident-grouping.v1",
+                "key": {
+                    "family": "RESOURCE",
+                    "window_id": "steady",
+                    "scope": {
+                        "kind": "entity",
+                        "entity": "host-a"
+                    },
+                    "cluster_from_epoch_ms": 1767225615000
+                }
+            },
+            "finding_count": 2,
+            "finding_types": [
+                "resource_threshold_violation"
+            ],
+            "finding_ids": [
+                "resource_threshold_violation-5f05601c1015767a",
+                "resource_threshold_violation-71b521fd2b866f7a"
+            ],
+            "evidence_ids": [
+                "resource-policy-check-0038b22240772073",
+                "resource-policy-check-a077d5dd1dce8e12"
+            ],
+            "refs_truncated": false,
+            "negative_evidence": [
+                {
+                    "check": "RESOURCE_RULES_WITHIN_LIMITS",
+                    "outcome": "NOT_CONFIRMED",
+                    "text": "Правила ресурсов в окне steady не нарушены: проверок 2.",
+                    "evidence_ids": [
+                        "resource-policy-check-b116a11bd1d980c0",
+                        "resource-policy-check-bd6c804476258fba"
+                    ]
+                },
+                {
+                    "check": "NO_ANOMALY_EPISODES",
+                    "outcome": "NOT_CONFIRMED",
+                    "text": "Проверки отклонений в окне steady не нашли эпизодов: 1.",
+                    "evidence_ids": [
+                        "anomaly-check-8426f2ef8e17ca8c"
+                    ]
+                },
+                {
+                    "check": "CHECKS_NOT_EVALUATED",
+                    "outcome": "NOT_EVALUATED",
+                    "reason_code": "MISSING_RESOURCE_CELLS",
+                    "text": "Часть проверок в окне steady не выполнена: 1; код: MISSING_RESOURCE_CELLS.",
+                    "evidence_ids": [
+                        "resource-policy-check-1c8569158e6a2911"
+                    ]
+                }
+            ],
+            "next_checks": [
+                {
+                    "check": "OPEN_RESOURCE_SERIES",
+                    "text": "Открыть ряды сущности host-a за интервал находок.",
+                    "evidence_ids": [
+                        "resource-policy-check-0038b22240772073"
+                    ]
+                },
+                {
+                    "check": "OPEN_SAME_WINDOW_SIGNALS",
+                    "text": "Открыть сигналы окна steady, совпавшие по времени: 1.",
+                    "evidence_ids": []
+                },
+                {
+                    "check": "COMPLETE_NOT_EVALUATED_CHECKS",
+                    "text": "Устранить недостаток данных для проверок, помеченных как не выполненные.",
+                    "evidence_ids": [
+                        "resource-policy-check-1c8569158e6a2911"
+                    ]
+                }
+            ],
+            "coincident_with": [
+                {
+                    "incident_id": "incident-8ec4e4bb90062cff38fcc91041fc948d84d3f2f0c3ad28f8fc717ddf8b9505bd",
+                    "basis": "INTERVAL_OVERLAP"
+                }
+            ]
+        },
+        {
+            "id": "incident-8ec4e4bb90062cff38fcc91041fc948d84d3f2f0c3ad28f8fc717ddf8b9505bd",
+            "rank": 2,
+            "in_overview": true,
+            "priority": "MEDIUM",
+            "priority_key": {
+                "tier": 3,
+                "finding_count": 1,
+                "first_epoch_ms": 1767225622000
+            },
+            "title": "Сигналы ресурса: host-b в окне steady",
+            "summary": "На интервале по сущности host-b найдено находок: 1; их интервалы перекрываются или соприкасаются.",
+            "scope": {
+                "kind": "entity",
+                "entity": "host-b"
+            },
+            "window_id": "steady",
+            "interval_basis": "FINDINGS",
+            "interval": {
+                "from_epoch_ms": 1767225622000,
+                "to_epoch_ms": 1767225630000
+            },
+            "grouping": {
+                "rule": "incident-grouping.v1",
+                "key": {
+                    "family": "RESOURCE",
+                    "window_id": "steady",
+                    "scope": {
+                        "kind": "entity",
+                        "entity": "host-b"
+                    },
+                    "cluster_from_epoch_ms": 1767225622000
+                }
+            },
+            "finding_count": 1,
+            "finding_types": [
+                "resource_threshold_violation"
+            ],
+            "finding_ids": [
+                "resource_threshold_violation-2c498cc9633183bf"
+            ],
+            "evidence_ids": [
+                "resource-policy-check-862a55ec3cf36279"
+            ],
+            "refs_truncated": false,
+            "negative_evidence": [
+                {
+                    "check": "NO_ANOMALY_EPISODES",
+                    "outcome": "NOT_CONFIRMED",
+                    "text": "Проверки отклонений в окне steady не нашли эпизодов: 1.",
+                    "evidence_ids": [
+                        "anomaly-check-8426f2ef8e17ca8c"
+                    ]
+                },
+                {
+                    "check": "CHECKS_NOT_EVALUATED",
+                    "outcome": "NOT_EVALUATED",
+                    "reason_code": "MISSING_RESOURCE_CELLS",
+                    "text": "Часть проверок в окне steady не выполнена: 1; код: MISSING_RESOURCE_CELLS.",
+                    "evidence_ids": [
+                        "resource-policy-check-1c8569158e6a2911"
+                    ]
+                }
+            ],
+            "next_checks": [
+                {
+                    "check": "OPEN_RESOURCE_SERIES",
+                    "text": "Открыть ряды сущности host-b за интервал находок.",
+                    "evidence_ids": [
+                        "resource-policy-check-862a55ec3cf36279"
+                    ]
+                },
+                {
+                    "check": "OPEN_SAME_WINDOW_SIGNALS",
+                    "text": "Открыть сигналы окна steady, совпавшие по времени: 1.",
+                    "evidence_ids": []
+                },
+                {
+                    "check": "COMPLETE_NOT_EVALUATED_CHECKS",
+                    "text": "Устранить недостаток данных для проверок, помеченных как не выполненные.",
+                    "evidence_ids": [
+                        "resource-policy-check-1c8569158e6a2911"
+                    ]
+                }
+            ],
+            "coincident_with": [
+                {
+                    "incident_id": "incident-33222c34f08b06498068656278cef6eff9e13ecda2093c64d6b3bbdfb6945794",
+                    "basis": "INTERVAL_OVERLAP"
+                }
+            ]
+        }
+    ]
+}

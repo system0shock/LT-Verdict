@@ -1,0 +1,766 @@
+{
+    "schema_version": "incident.v1",
+    "method": "incident-synthesis.v1",
+    "status": "EVALUATED",
+    "overview_limit": 7,
+    "total_count": 6,
+    "omitted_count": 0,
+    "items": [
+        {
+            "id": "incident-5fa00770ea2cd296e13920f6369704aa68c9a98836657c23cb321d8042955077",
+            "rank": 1,
+            "in_overview": true,
+            "priority": "HIGH",
+            "priority_key": {
+                "tier": 1,
+                "finding_count": 1,
+                "first_epoch_ms": 1000
+            },
+            "title": "Нарушение SLA: транзакция login в окне steady",
+            "summary": "В окне steady нарушено правил policy: 1. Область: транзакция login.",
+            "scope": {
+                "kind": "transaction",
+                "label": "login"
+            },
+            "window_id": "steady",
+            "interval_basis": "WINDOW",
+            "interval": {
+                "from_epoch_ms": 1000,
+                "to_epoch_ms": 2000
+            },
+            "grouping": {
+                "rule": "incident-grouping.v1",
+                "key": {
+                    "family": "TRANSACTION",
+                    "window_id": "steady",
+                    "scope": {
+                        "kind": "transaction",
+                        "label": "login"
+                    },
+                    "cluster_from_epoch_ms": null
+                }
+            },
+            "finding_count": 1,
+            "finding_types": [
+                "policy_failure"
+            ],
+            "finding_ids": [
+                "pf-t1"
+            ],
+            "evidence_ids": [
+                "pc-t1"
+            ],
+            "refs_truncated": false,
+            "negative_evidence": [
+                {
+                    "check": "RESOURCE_RULES_WITHIN_LIMITS",
+                    "outcome": "NOT_CONFIRMED",
+                    "text": "Правила ресурсов в окне steady не нарушены: проверок 1.",
+                    "evidence_ids": [
+                        "rpc-ok-d"
+                    ]
+                },
+                {
+                    "check": "GENERATOR_RESOURCES_WITHIN_LIMITS",
+                    "outcome": "NOT_CONFIRMED",
+                    "text": "Правила ресурсов нагрузочного генератора в окне steady не нарушены: проверок 1.",
+                    "evidence_ids": [
+                        "rpc-ok-g"
+                    ]
+                },
+                {
+                    "check": "NO_ANOMALY_EPISODES",
+                    "outcome": "NOT_CONFIRMED",
+                    "text": "Проверки отклонений в окне steady не нашли эпизодов: 1.",
+                    "evidence_ids": [
+                        "ac-ok"
+                    ]
+                },
+                {
+                    "check": "NO_MATERIAL_TREND",
+                    "outcome": "NOT_CONFIRMED",
+                    "text": "Проверки трендов в окне steady не нашли существенного тренда: 1.",
+                    "evidence_ids": [
+                        "tc-ok"
+                    ]
+                },
+                {
+                    "check": "CHECKS_NOT_EVALUATED",
+                    "outcome": "NOT_EVALUATED",
+                    "reason_code": "MISSING_RESOURCE_CELLS",
+                    "text": "Часть проверок в окне steady не выполнена: 1; код: MISSING_RESOURCE_CELLS.",
+                    "evidence_ids": [
+                        "rpc-nv"
+                    ]
+                }
+            ],
+            "next_checks": [
+                {
+                    "check": "COMPARE_WITH_BASELINE",
+                    "text": "Сравнить метрики транзакции login с baseline.",
+                    "evidence_ids": [
+                        "pc-t1"
+                    ]
+                },
+                {
+                    "check": "OPEN_SAME_WINDOW_SIGNALS",
+                    "text": "Открыть сигналы окна steady, совпавшие по времени: 5.",
+                    "evidence_ids": []
+                },
+                {
+                    "check": "COMPLETE_NOT_EVALUATED_CHECKS",
+                    "text": "Устранить недостаток данных для проверок, помеченных как не выполненные.",
+                    "evidence_ids": [
+                        "rpc-nv"
+                    ]
+                }
+            ],
+            "coincident_with": [
+                {
+                    "incident_id": "incident-9ca3ee239ef2a89a9858c627249b55adea1f7108f89c2a4c493d9b5d611246fc",
+                    "basis": "SAME_WINDOW"
+                },
+                {
+                    "incident_id": "incident-5334c76746e0ef3c3c5dabf518246c24e0ecfeb273ab96e7af54d99dac209b40",
+                    "basis": "SAME_WINDOW"
+                },
+                {
+                    "incident_id": "incident-8f5ed53df6b178a624c6925723f5d7809c27829fe1dc48c416e662565cef7b09",
+                    "basis": "SAME_WINDOW"
+                },
+                {
+                    "incident_id": "incident-24a3c409e2edabfe6b8572b793ea62b4e6d905cf1aafa5b6b5893c00d82c784f",
+                    "basis": "SAME_WINDOW"
+                },
+                {
+                    "incident_id": "incident-bf3107fd0caf763fc8505f8386061f55d3f24d76e3bb34e1750fd5de4dda9eea",
+                    "basis": "SAME_WINDOW"
+                }
+            ]
+        },
+        {
+            "id": "incident-9ca3ee239ef2a89a9858c627249b55adea1f7108f89c2a4c493d9b5d611246fc",
+            "rank": 2,
+            "in_overview": true,
+            "priority": "HIGH",
+            "priority_key": {
+                "tier": 2,
+                "finding_count": 3,
+                "first_epoch_ms": 1000
+            },
+            "title": "Сигналы ресурса: host-a в окне steady",
+            "summary": "На интервале по сущности host-a найдено находок: 3; их интервалы перекрываются или соприкасаются.",
+            "scope": {
+                "kind": "entity",
+                "entity": "host-a"
+            },
+            "window_id": "steady",
+            "interval_basis": "FINDINGS",
+            "interval": {
+                "from_epoch_ms": 1000,
+                "to_epoch_ms": 1030
+            },
+            "grouping": {
+                "rule": "incident-grouping.v1",
+                "key": {
+                    "family": "RESOURCE",
+                    "window_id": "steady",
+                    "scope": {
+                        "kind": "entity",
+                        "entity": "host-a"
+                    },
+                    "cluster_from_epoch_ms": 1000
+                }
+            },
+            "finding_count": 3,
+            "finding_types": [
+                "resource_threshold_violation"
+            ],
+            "finding_ids": [
+                "f-a1",
+                "f-a2",
+                "f-a3"
+            ],
+            "evidence_ids": [
+                "rpc-a1",
+                "rpc-a2",
+                "rpc-a3"
+            ],
+            "refs_truncated": false,
+            "negative_evidence": [
+                {
+                    "check": "RESOURCE_RULES_WITHIN_LIMITS",
+                    "outcome": "NOT_CONFIRMED",
+                    "text": "Правила ресурсов в окне steady не нарушены: проверок 1.",
+                    "evidence_ids": [
+                        "rpc-ok-d"
+                    ]
+                },
+                {
+                    "check": "GENERATOR_RESOURCES_WITHIN_LIMITS",
+                    "outcome": "NOT_CONFIRMED",
+                    "text": "Правила ресурсов нагрузочного генератора в окне steady не нарушены: проверок 1.",
+                    "evidence_ids": [
+                        "rpc-ok-g"
+                    ]
+                },
+                {
+                    "check": "NO_ANOMALY_EPISODES",
+                    "outcome": "NOT_CONFIRMED",
+                    "text": "Проверки отклонений в окне steady не нашли эпизодов: 1.",
+                    "evidence_ids": [
+                        "ac-ok"
+                    ]
+                },
+                {
+                    "check": "NO_MATERIAL_TREND",
+                    "outcome": "NOT_CONFIRMED",
+                    "text": "Проверки трендов в окне steady не нашли существенного тренда: 1.",
+                    "evidence_ids": [
+                        "tc-ok"
+                    ]
+                },
+                {
+                    "check": "CHECKS_NOT_EVALUATED",
+                    "outcome": "NOT_EVALUATED",
+                    "reason_code": "MISSING_RESOURCE_CELLS",
+                    "text": "Часть проверок в окне steady не выполнена: 1; код: MISSING_RESOURCE_CELLS.",
+                    "evidence_ids": [
+                        "rpc-nv"
+                    ]
+                }
+            ],
+            "next_checks": [
+                {
+                    "check": "OPEN_RESOURCE_SERIES",
+                    "text": "Открыть ряды сущности host-a за интервал находок.",
+                    "evidence_ids": [
+                        "rpc-a1"
+                    ]
+                },
+                {
+                    "check": "OPEN_SAME_WINDOW_SIGNALS",
+                    "text": "Открыть сигналы окна steady, совпавшие по времени: 3.",
+                    "evidence_ids": []
+                },
+                {
+                    "check": "COMPLETE_NOT_EVALUATED_CHECKS",
+                    "text": "Устранить недостаток данных для проверок, помеченных как не выполненные.",
+                    "evidence_ids": [
+                        "rpc-nv"
+                    ]
+                }
+            ],
+            "coincident_with": [
+                {
+                    "incident_id": "incident-5fa00770ea2cd296e13920f6369704aa68c9a98836657c23cb321d8042955077",
+                    "basis": "SAME_WINDOW"
+                },
+                {
+                    "incident_id": "incident-5334c76746e0ef3c3c5dabf518246c24e0ecfeb273ab96e7af54d99dac209b40",
+                    "basis": "INTERVAL_OVERLAP"
+                },
+                {
+                    "incident_id": "incident-bf3107fd0caf763fc8505f8386061f55d3f24d76e3bb34e1750fd5de4dda9eea",
+                    "basis": "INTERVAL_OVERLAP"
+                }
+            ]
+        },
+        {
+            "id": "incident-5334c76746e0ef3c3c5dabf518246c24e0ecfeb273ab96e7af54d99dac209b40",
+            "rank": 3,
+            "in_overview": true,
+            "priority": "MEDIUM",
+            "priority_key": {
+                "tier": 3,
+                "finding_count": 1,
+                "first_epoch_ms": 1005
+            },
+            "title": "Сигналы ресурса: host-b в окне steady",
+            "summary": "На интервале по сущности host-b найдено находок: 1; их интервалы перекрываются или соприкасаются.",
+            "scope": {
+                "kind": "entity",
+                "entity": "host-b"
+            },
+            "window_id": "steady",
+            "interval_basis": "FINDINGS",
+            "interval": {
+                "from_epoch_ms": 1005,
+                "to_epoch_ms": 1015
+            },
+            "grouping": {
+                "rule": "incident-grouping.v1",
+                "key": {
+                    "family": "RESOURCE",
+                    "window_id": "steady",
+                    "scope": {
+                        "kind": "entity",
+                        "entity": "host-b"
+                    },
+                    "cluster_from_epoch_ms": 1005
+                }
+            },
+            "finding_count": 1,
+            "finding_types": [
+                "resource_threshold_violation"
+            ],
+            "finding_ids": [
+                "f-b1"
+            ],
+            "evidence_ids": [
+                "rpc-b1"
+            ],
+            "refs_truncated": false,
+            "negative_evidence": [
+                {
+                    "check": "RESOURCE_RULES_WITHIN_LIMITS",
+                    "outcome": "NOT_CONFIRMED",
+                    "text": "Правила ресурсов в окне steady не нарушены: проверок 1.",
+                    "evidence_ids": [
+                        "rpc-ok-d"
+                    ]
+                },
+                {
+                    "check": "GENERATOR_RESOURCES_WITHIN_LIMITS",
+                    "outcome": "NOT_CONFIRMED",
+                    "text": "Правила ресурсов нагрузочного генератора в окне steady не нарушены: проверок 1.",
+                    "evidence_ids": [
+                        "rpc-ok-g"
+                    ]
+                },
+                {
+                    "check": "NO_ANOMALY_EPISODES",
+                    "outcome": "NOT_CONFIRMED",
+                    "text": "Проверки отклонений в окне steady не нашли эпизодов: 1.",
+                    "evidence_ids": [
+                        "ac-ok"
+                    ]
+                },
+                {
+                    "check": "NO_MATERIAL_TREND",
+                    "outcome": "NOT_CONFIRMED",
+                    "text": "Проверки трендов в окне steady не нашли существенного тренда: 1.",
+                    "evidence_ids": [
+                        "tc-ok"
+                    ]
+                },
+                {
+                    "check": "CHECKS_NOT_EVALUATED",
+                    "outcome": "NOT_EVALUATED",
+                    "reason_code": "MISSING_RESOURCE_CELLS",
+                    "text": "Часть проверок в окне steady не выполнена: 1; код: MISSING_RESOURCE_CELLS.",
+                    "evidence_ids": [
+                        "rpc-nv"
+                    ]
+                }
+            ],
+            "next_checks": [
+                {
+                    "check": "OPEN_RESOURCE_SERIES",
+                    "text": "Открыть ряды сущности host-b за интервал находок.",
+                    "evidence_ids": [
+                        "rpc-b1"
+                    ]
+                },
+                {
+                    "check": "OPEN_SAME_WINDOW_SIGNALS",
+                    "text": "Открыть сигналы окна steady, совпавшие по времени: 3.",
+                    "evidence_ids": []
+                },
+                {
+                    "check": "COMPLETE_NOT_EVALUATED_CHECKS",
+                    "text": "Устранить недостаток данных для проверок, помеченных как не выполненные.",
+                    "evidence_ids": [
+                        "rpc-nv"
+                    ]
+                }
+            ],
+            "coincident_with": [
+                {
+                    "incident_id": "incident-5fa00770ea2cd296e13920f6369704aa68c9a98836657c23cb321d8042955077",
+                    "basis": "SAME_WINDOW"
+                },
+                {
+                    "incident_id": "incident-9ca3ee239ef2a89a9858c627249b55adea1f7108f89c2a4c493d9b5d611246fc",
+                    "basis": "INTERVAL_OVERLAP"
+                },
+                {
+                    "incident_id": "incident-bf3107fd0caf763fc8505f8386061f55d3f24d76e3bb34e1750fd5de4dda9eea",
+                    "basis": "INTERVAL_OVERLAP"
+                }
+            ]
+        },
+        {
+            "id": "incident-8f5ed53df6b178a624c6925723f5d7809c27829fe1dc48c416e662565cef7b09",
+            "rank": 4,
+            "in_overview": true,
+            "priority": "MEDIUM",
+            "priority_key": {
+                "tier": 3,
+                "finding_count": 1,
+                "first_epoch_ms": 1100
+            },
+            "title": "Сигналы ресурса: host-a в окне steady",
+            "summary": "На интервале по сущности host-a найдено находок: 1; их интервалы перекрываются или соприкасаются.",
+            "scope": {
+                "kind": "entity",
+                "entity": "host-a"
+            },
+            "window_id": "steady",
+            "interval_basis": "FINDINGS",
+            "interval": {
+                "from_epoch_ms": 1100,
+                "to_epoch_ms": 1110
+            },
+            "grouping": {
+                "rule": "incident-grouping.v1",
+                "key": {
+                    "family": "RESOURCE",
+                    "window_id": "steady",
+                    "scope": {
+                        "kind": "entity",
+                        "entity": "host-a"
+                    },
+                    "cluster_from_epoch_ms": 1100
+                }
+            },
+            "finding_count": 1,
+            "finding_types": [
+                "resource_threshold_violation"
+            ],
+            "finding_ids": [
+                "f-a4"
+            ],
+            "evidence_ids": [
+                "rpc-a4"
+            ],
+            "refs_truncated": false,
+            "negative_evidence": [
+                {
+                    "check": "RESOURCE_RULES_WITHIN_LIMITS",
+                    "outcome": "NOT_CONFIRMED",
+                    "text": "Правила ресурсов в окне steady не нарушены: проверок 1.",
+                    "evidence_ids": [
+                        "rpc-ok-d"
+                    ]
+                },
+                {
+                    "check": "GENERATOR_RESOURCES_WITHIN_LIMITS",
+                    "outcome": "NOT_CONFIRMED",
+                    "text": "Правила ресурсов нагрузочного генератора в окне steady не нарушены: проверок 1.",
+                    "evidence_ids": [
+                        "rpc-ok-g"
+                    ]
+                },
+                {
+                    "check": "NO_ANOMALY_EPISODES",
+                    "outcome": "NOT_CONFIRMED",
+                    "text": "Проверки отклонений в окне steady не нашли эпизодов: 1.",
+                    "evidence_ids": [
+                        "ac-ok"
+                    ]
+                },
+                {
+                    "check": "NO_MATERIAL_TREND",
+                    "outcome": "NOT_CONFIRMED",
+                    "text": "Проверки трендов в окне steady не нашли существенного тренда: 1.",
+                    "evidence_ids": [
+                        "tc-ok"
+                    ]
+                },
+                {
+                    "check": "CHECKS_NOT_EVALUATED",
+                    "outcome": "NOT_EVALUATED",
+                    "reason_code": "MISSING_RESOURCE_CELLS",
+                    "text": "Часть проверок в окне steady не выполнена: 1; код: MISSING_RESOURCE_CELLS.",
+                    "evidence_ids": [
+                        "rpc-nv"
+                    ]
+                }
+            ],
+            "next_checks": [
+                {
+                    "check": "OPEN_RESOURCE_SERIES",
+                    "text": "Открыть ряды сущности host-a за интервал находок.",
+                    "evidence_ids": [
+                        "rpc-a4"
+                    ]
+                },
+                {
+                    "check": "OPEN_SAME_WINDOW_SIGNALS",
+                    "text": "Открыть сигналы окна steady, совпавшие по времени: 2.",
+                    "evidence_ids": []
+                },
+                {
+                    "check": "COMPLETE_NOT_EVALUATED_CHECKS",
+                    "text": "Устранить недостаток данных для проверок, помеченных как не выполненные.",
+                    "evidence_ids": [
+                        "rpc-nv"
+                    ]
+                }
+            ],
+            "coincident_with": [
+                {
+                    "incident_id": "incident-5fa00770ea2cd296e13920f6369704aa68c9a98836657c23cb321d8042955077",
+                    "basis": "SAME_WINDOW"
+                },
+                {
+                    "incident_id": "incident-bf3107fd0caf763fc8505f8386061f55d3f24d76e3bb34e1750fd5de4dda9eea",
+                    "basis": "INTERVAL_OVERLAP"
+                }
+            ]
+        },
+        {
+            "id": "incident-24a3c409e2edabfe6b8572b793ea62b4e6d905cf1aafa5b6b5893c00d82c784f",
+            "rank": 5,
+            "in_overview": true,
+            "priority": "MEDIUM",
+            "priority_key": {
+                "tier": 4,
+                "finding_count": 1,
+                "first_epoch_ms": 1050
+            },
+            "title": "Сигналы ресурса: host-b в окне steady",
+            "summary": "На интервале по сущности host-b найдено находок: 1; их интервалы перекрываются или соприкасаются.",
+            "scope": {
+                "kind": "entity",
+                "entity": "host-b"
+            },
+            "window_id": "steady",
+            "interval_basis": "FINDINGS",
+            "interval": {
+                "from_epoch_ms": 1050,
+                "to_epoch_ms": 1060
+            },
+            "grouping": {
+                "rule": "incident-grouping.v1",
+                "key": {
+                    "family": "RESOURCE",
+                    "window_id": "steady",
+                    "scope": {
+                        "kind": "entity",
+                        "entity": "host-b"
+                    },
+                    "cluster_from_epoch_ms": 1050
+                }
+            },
+            "finding_count": 1,
+            "finding_types": [
+                "anomaly_episode"
+            ],
+            "finding_ids": [
+                "f-b2"
+            ],
+            "evidence_ids": [
+                "ac-b2"
+            ],
+            "refs_truncated": false,
+            "negative_evidence": [
+                {
+                    "check": "RESOURCE_RULES_WITHIN_LIMITS",
+                    "outcome": "NOT_CONFIRMED",
+                    "text": "Правила ресурсов в окне steady не нарушены: проверок 1.",
+                    "evidence_ids": [
+                        "rpc-ok-d"
+                    ]
+                },
+                {
+                    "check": "GENERATOR_RESOURCES_WITHIN_LIMITS",
+                    "outcome": "NOT_CONFIRMED",
+                    "text": "Правила ресурсов нагрузочного генератора в окне steady не нарушены: проверок 1.",
+                    "evidence_ids": [
+                        "rpc-ok-g"
+                    ]
+                },
+                {
+                    "check": "NO_ANOMALY_EPISODES",
+                    "outcome": "NOT_CONFIRMED",
+                    "text": "Проверки отклонений в окне steady не нашли эпизодов: 1.",
+                    "evidence_ids": [
+                        "ac-ok"
+                    ]
+                },
+                {
+                    "check": "NO_MATERIAL_TREND",
+                    "outcome": "NOT_CONFIRMED",
+                    "text": "Проверки трендов в окне steady не нашли существенного тренда: 1.",
+                    "evidence_ids": [
+                        "tc-ok"
+                    ]
+                },
+                {
+                    "check": "CHECKS_NOT_EVALUATED",
+                    "outcome": "NOT_EVALUATED",
+                    "reason_code": "MISSING_RESOURCE_CELLS",
+                    "text": "Часть проверок в окне steady не выполнена: 1; код: MISSING_RESOURCE_CELLS.",
+                    "evidence_ids": [
+                        "rpc-nv"
+                    ]
+                }
+            ],
+            "next_checks": [
+                {
+                    "check": "OPEN_RESOURCE_SERIES",
+                    "text": "Открыть ряды сущности host-b за интервал находок.",
+                    "evidence_ids": [
+                        "ac-b2"
+                    ]
+                },
+                {
+                    "check": "OPEN_SAME_WINDOW_SIGNALS",
+                    "text": "Открыть сигналы окна steady, совпавшие по времени: 2.",
+                    "evidence_ids": []
+                },
+                {
+                    "check": "COMPLETE_NOT_EVALUATED_CHECKS",
+                    "text": "Устранить недостаток данных для проверок, помеченных как не выполненные.",
+                    "evidence_ids": [
+                        "rpc-nv"
+                    ]
+                }
+            ],
+            "coincident_with": [
+                {
+                    "incident_id": "incident-5fa00770ea2cd296e13920f6369704aa68c9a98836657c23cb321d8042955077",
+                    "basis": "SAME_WINDOW"
+                },
+                {
+                    "incident_id": "incident-bf3107fd0caf763fc8505f8386061f55d3f24d76e3bb34e1750fd5de4dda9eea",
+                    "basis": "INTERVAL_OVERLAP"
+                }
+            ]
+        },
+        {
+            "id": "incident-bf3107fd0caf763fc8505f8386061f55d3f24d76e3bb34e1750fd5de4dda9eea",
+            "rank": 6,
+            "in_overview": true,
+            "priority": "LOW",
+            "priority_key": {
+                "tier": 5,
+                "finding_count": 1,
+                "first_epoch_ms": 1000
+            },
+            "title": "Сигналы нагрузки в окне steady",
+            "summary": "На интервале по общей нагрузке найдено находок: 1; их интервалы перекрываются или соприкасаются.",
+            "scope": {
+                "kind": "entity",
+                "entity": "overall"
+            },
+            "window_id": "steady",
+            "interval_basis": "FINDINGS",
+            "interval": {
+                "from_epoch_ms": 1000,
+                "to_epoch_ms": 1900
+            },
+            "grouping": {
+                "rule": "incident-grouping.v1",
+                "key": {
+                    "family": "RESOURCE",
+                    "window_id": "steady",
+                    "scope": {
+                        "kind": "entity",
+                        "entity": "overall"
+                    },
+                    "cluster_from_epoch_ms": 1000
+                }
+            },
+            "finding_count": 1,
+            "finding_types": [
+                "resource_trend"
+            ],
+            "finding_ids": [
+                "f-c1"
+            ],
+            "evidence_ids": [
+                "tc-c1"
+            ],
+            "refs_truncated": false,
+            "negative_evidence": [
+                {
+                    "check": "RESOURCE_RULES_WITHIN_LIMITS",
+                    "outcome": "NOT_CONFIRMED",
+                    "text": "Правила ресурсов в окне steady не нарушены: проверок 1.",
+                    "evidence_ids": [
+                        "rpc-ok-d"
+                    ]
+                },
+                {
+                    "check": "GENERATOR_RESOURCES_WITHIN_LIMITS",
+                    "outcome": "NOT_CONFIRMED",
+                    "text": "Правила ресурсов нагрузочного генератора в окне steady не нарушены: проверок 1.",
+                    "evidence_ids": [
+                        "rpc-ok-g"
+                    ]
+                },
+                {
+                    "check": "NO_ANOMALY_EPISODES",
+                    "outcome": "NOT_CONFIRMED",
+                    "text": "Проверки отклонений в окне steady не нашли эпизодов: 1.",
+                    "evidence_ids": [
+                        "ac-ok"
+                    ]
+                },
+                {
+                    "check": "NO_MATERIAL_TREND",
+                    "outcome": "NOT_CONFIRMED",
+                    "text": "Проверки трендов в окне steady не нашли существенного тренда: 1.",
+                    "evidence_ids": [
+                        "tc-ok"
+                    ]
+                },
+                {
+                    "check": "CHECKS_NOT_EVALUATED",
+                    "outcome": "NOT_EVALUATED",
+                    "reason_code": "MISSING_RESOURCE_CELLS",
+                    "text": "Часть проверок в окне steady не выполнена: 1; код: MISSING_RESOURCE_CELLS.",
+                    "evidence_ids": [
+                        "rpc-nv"
+                    ]
+                }
+            ],
+            "next_checks": [
+                {
+                    "check": "OPEN_RESOURCE_SERIES",
+                    "text": "Открыть ряды нагрузки за интервал находок.",
+                    "evidence_ids": [
+                        "tc-c1"
+                    ]
+                },
+                {
+                    "check": "OPEN_SAME_WINDOW_SIGNALS",
+                    "text": "Открыть сигналы окна steady, совпавшие по времени: 5.",
+                    "evidence_ids": []
+                },
+                {
+                    "check": "COMPLETE_NOT_EVALUATED_CHECKS",
+                    "text": "Устранить недостаток данных для проверок, помеченных как не выполненные.",
+                    "evidence_ids": [
+                        "rpc-nv"
+                    ]
+                }
+            ],
+            "coincident_with": [
+                {
+                    "incident_id": "incident-5fa00770ea2cd296e13920f6369704aa68c9a98836657c23cb321d8042955077",
+                    "basis": "SAME_WINDOW"
+                },
+                {
+                    "incident_id": "incident-9ca3ee239ef2a89a9858c627249b55adea1f7108f89c2a4c493d9b5d611246fc",
+                    "basis": "INTERVAL_OVERLAP"
+                },
+                {
+                    "incident_id": "incident-5334c76746e0ef3c3c5dabf518246c24e0ecfeb273ab96e7af54d99dac209b40",
+                    "basis": "INTERVAL_OVERLAP"
+                },
+                {
+                    "incident_id": "incident-8f5ed53df6b178a624c6925723f5d7809c27829fe1dc48c416e662565cef7b09",
+                    "basis": "INTERVAL_OVERLAP"
+                },
+                {
+                    "incident_id": "incident-24a3c409e2edabfe6b8572b793ea62b4e6d905cf1aafa5b6b5893c00d82c784f",
+                    "basis": "INTERVAL_OVERLAP"
+                }
+            ]
+        }
+    ]
+}

@@ -1,0 +1,41 @@
+{
+  "run_validity": "DEGRADED",
+  "findings": [
+    {
+      "type": "resource_threshold_violation",
+      "id": "resource_threshold_violation-5f05601c1015767a",
+      "window_id": "steady",
+      "entity": "host-a",
+      "from_epoch_ms": 1767225620000,
+      "to_epoch_ms": 1767225640000,
+      "evidence_id": "resource-policy-check-a077d5dd1dce8e12",
+      "rule_id": "rule",
+      "series_id": "series-resource-policy-check-a077d5dd1dce8e12"
+    }
+  ],
+  "evidence": [
+    {
+      "type": "window_policy_summary",
+      "id": "window-policy-summary-steady",
+      "window_id": "steady",
+      "from_epoch_ms": 1767225600000,
+      "to_epoch_ms": 1767225660000,
+      "verdict": "FAIL"
+    },
+    {
+      "type": "resource_policy_check",
+      "id": "resource-policy-check-a077d5dd1dce8e12",
+      "window_id": "steady",
+      "rule_id": "rule",
+      "series_id": "series-resource-policy-check-a077d5dd1dce8e12",
+      "effect": "diagnostic",
+      "status": "FAIL",
+      "reason": null
+    },
+    {
+      "type": "resource_binding",
+      "id": "resource-binding",
+      "mode": "explicit_windows"
+    }
+  ]
+}

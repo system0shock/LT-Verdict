@@ -60,7 +60,7 @@ internal fun renderHtmlReport(
             "run_validity",
         )}</dd><dt>Policy verdict</dt><dd>${result.value(
             "policy_verdict",
-        )}</dd>${stageScopeRow(notice)}<dt>Coverage</dt><dd>${result.objectValue(
+        )}</dd>${stageScopeRow(notice)}${windowShareRow(result)}<dt>Coverage</dt><dd>${result.objectValue(
             "analysis_coverage",
             "status",
         )}</dd></dl>${stageBlock(notice)}${verdictBlock(result, evidence)}${diagnosticsBlock(result, evidence)}${rulesSection(
@@ -120,6 +120,17 @@ private val STATUS_WORDS =
         "NO_POLICY" to "Без правил",
         "NOT_CHECKED" to "Не проверялось",
     )
+
+// W2.4: a throughput rule on a window is the rate of the window, not of the whole run (ramp-up and idle time are not in it).
+private fun metricWords(
+    metric: String?,
+    check: JsonObject,
+): String =
+    when {
+        metric == null -> DASH
+        metric == "throughput_rps" && check.text("window_id") != null -> "${METRIC_WORDS.getValue(metric)} (throughput на окне)"
+        else -> METRIC_WORDS[metric] ?: metric
+    }
 
 private val SAMPLE_MODE_WORDS =
     mapOf(
@@ -228,6 +239,9 @@ private fun verdictBlock(
 private fun stageScopeRow(notice: StageNotice?): String =
     if (notice == null) "" else "<dt lang=\"ru\">Область вердикта</dt><dd lang=\"ru\">${escape(notice.scope)}</dd>"
 
+private fun windowShareRow(result: JsonObject): String =
+    windowShareText(result)?.let { "<dt lang=\"ru\">$WINDOW_SHARE_LABEL</dt><dd lang=\"ru\">${escape(it)}</dd>" } ?: ""
+
 private fun stageBlock(notice: StageNotice?): String {
     if (notice == null) return ""
     val rows =
@@ -314,7 +328,7 @@ private fun businessFailureText(
     val (threshold, observed) = valuePair(metric, exactValue(check["threshold"]), exactValue(check["observed"]), true)
     val sign = if (check.text("operator") == "gte") "≥" else "≤"
     val window = check.text("window_id")?.let { " · окно $it" } ?: ""
-    return "${scopeText(scope)} · ${metric?.let { METRIC_WORDS[it] ?: it } ?: DASH}$window: $observed при пороге $sign $threshold"
+    return "${scopeText(scope)} · ${metricWords(metric, check)}$window: $observed при пороге $sign $threshold"
 }
 
 // The operator of a resource rule describes the violation (gt: the value is above the threshold), not the passing condition.
@@ -403,7 +417,7 @@ private fun ruleRow(
         listOf(
             check.text("rule_id") ?: DASH,
             scopeText(scope),
-            metric?.let { METRIC_WORDS[it] ?: it } ?: DASH,
+            metricWords(metric, check),
             condition,
             threshold,
             observed,

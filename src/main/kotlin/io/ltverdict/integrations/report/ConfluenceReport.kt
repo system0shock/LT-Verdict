@@ -1,7 +1,9 @@
 package io.ltverdict.integrations.report
 
 import io.ltverdict.report.STAGE_REFERENCE_NOTE
+import io.ltverdict.report.WINDOW_SHARE_LABEL
 import io.ltverdict.report.stageNotice
+import io.ltverdict.report.windowShareText
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
@@ -23,6 +25,7 @@ internal fun renderConfluenceReport(
         row("Run validity", result["run_validity"])
         row("Policy verdict", result["policy_verdict"])
         row("Coverage", (result["analysis_coverage"] as? JsonObject)?.get("status"))
+        windowShareText(result)?.let { row(WINDOW_SHARE_LABEL, JsonPrimitive(it)) }
         append("</tbody></table>")
         stageNotice(result)?.let { append("<p>").append("${it.phrase}. ${it.detail} $STAGE_REFERENCE_NOTE".xml()).append("</p>") }
         section("Evidence", result["evidence"] as? JsonArray)

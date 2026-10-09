@@ -66,7 +66,7 @@ internal object RawDecimalSerializer : KSerializer<BigDecimal> {
  * Every number that is not a Long is a RawDecimal (the only other numbers are counts); the test is the text, not `longOrNull`,
  * which also accepts an exponent.
  */
-private fun restoreNumbers(element: JsonElement): JsonElement =
+internal fun restoreNumbers(element: JsonElement): JsonElement =
     when (element) {
         is JsonObject -> JsonObject(element.mapValues { restoreNumbers(it.value) })
         is JsonArray -> JsonArray(element.map(::restoreNumbers))

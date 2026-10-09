@@ -6,9 +6,13 @@ import io.ltverdict.core.RESOURCE_NUMERIC_EXPONENT_ABS_MAX
 import io.ltverdict.core.RESOURCE_NUMERIC_TOKEN_BYTES_MAX
 import io.ltverdict.core.ResourceRuleV1
 import io.ltverdict.core.ResourceValidation
+import io.ltverdict.core.SourceQueryDocument
+import io.ltverdict.core.SourceRuleSpanDocument
+import io.ltverdict.core.SourceSummaryEvidence
 import io.ltverdict.core.StrictJsonScanner
 import io.ltverdict.core.canonicalJson
 import io.ltverdict.core.sha256Hex
+import io.ltverdict.core.toJson
 import io.ltverdict.core.validateResourceSnapshot
 import kotlinx.serialization.SerializationException
 import kotlinx.serialization.json.Json
@@ -301,7 +305,7 @@ private data class CollectedSeries(
     val values: List<BigDecimal?>,
 )
 
-private data class QueryEvidence(
+internal data class QueryEvidence(
     val id: String,
     val status: String,
     val reason: String?,
@@ -436,7 +440,7 @@ private fun ResourceRuleV1.json(): JsonObject =
         put("effect", effect.wireName)
     }
 
-private fun sourceEvidence(
+internal fun sourceEvidence(
     profile: SourceProfile,
     request: SourceRequest,
     budget: SourceBudget,
@@ -448,58 +452,33 @@ private fun sourceEvidence(
             queries.any { it.status == "SUCCESS" || it.status == "PARTIAL" } -> "PARTIAL"
             else -> "FAILED"
         }
-    return buildJsonObject {
-        put("id", "source-summary")
-        put("type", "source_summary")
-        put("status", status)
-        put("profile_id", profile.id)
+    return SourceSummaryEvidence(
+        id = "source-summary",
+        status = status,
+        profileId = profile.id,
         // Published only for an armed profile, so the summary bytes of a profile without an arm stay unchanged.
-        profile.arm?.let { put("arm", it) }
-        put("source_kind", profile.sourceKind.wireName)
-        put("transport", profile.transport.wireName)
-        put("start_epoch_ms", request.startEpochMillis)
-        put("end_epoch_ms", request.endEpochMillis)
-        put("step_ms", request.stepMillis)
-        put(
-            "queries",
-            buildJsonArray {
-                queries.forEach { query ->
-                    add(
-                        buildJsonObject {
-                            put("id", query.id)
-                            put("status", query.status)
-                            query.reason?.let { put("reason", it) }
-                            put("expression_sha256", query.expressionSha256)
-                        },
-                    )
+        arm = profile.arm,
+        sourceKind = profile.sourceKind.wireName,
+        transport = profile.transport.wireName,
+        startEpochMs = request.startEpochMillis,
+        endEpochMs = request.endEpochMillis,
+        stepMs = request.stepMillis,
+        queries = queries.map { SourceQueryDocument(it.id, it.status, it.reason, it.expressionSha256) },
+        ruleSpans =
+            if (profile.ruleSpansMillis.isNotEmpty()) {
+                profile.rules.filter { it.id in profile.ruleSpansMillis }.map { rule ->
+                    val span = profile.ruleSpansMillis.getValue(rule.id)
+                    val cells = spanToCells(span, request.stepMillis)
+                    SourceRuleSpanDocument(rule.id, span, request.stepMillis, cells, cells.toLong() * request.stepMillis)
                 }
+            } else {
+                null
             },
-        )
-        if (profile.ruleSpansMillis.isNotEmpty()) {
-            put(
-                "rule_spans",
-                buildJsonArray {
-                    profile.rules.filter { it.id in profile.ruleSpansMillis }.forEach { rule ->
-                        val span = profile.ruleSpansMillis.getValue(rule.id)
-                        val cells = spanToCells(span, request.stepMillis)
-                        add(
-                            buildJsonObject {
-                                put("rule_id", rule.id)
-                                put("declared_span_ms", span)
-                                put("step_ms", request.stepMillis)
-                                put("cells", cells)
-                                put("effective_span_ms", cells.toLong() * request.stepMillis)
-                            },
-                        )
-                    }
-                },
-            )
-        }
-        put("request_count", budget.requestCount)
-        put("retries", budget.retries)
-        put("throttle_wait_ms", budget.throttleWaitMillis)
-        put("cap_exceeded", budget.capExceeded)
-    }.withWindowProvenance(request.windowProvenance)
+        requestCount = budget.requestCount.toLong(),
+        retries = budget.retries.toLong(),
+        throttleWaitMs = budget.throttleWaitMillis,
+        capExceeded = budget.capExceeded,
+    ).toJson().withWindowProvenance(request.windowProvenance)
 }
 
 // Provenance окна добавляется только запросами v3; для v1 и v2 сводка возвращается байт-в-байт прежней.

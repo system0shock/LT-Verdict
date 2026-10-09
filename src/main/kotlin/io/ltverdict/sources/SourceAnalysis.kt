@@ -9,12 +9,15 @@ import io.ltverdict.core.MAX_RESOURCE_SERIES
 import io.ltverdict.core.ResourceValidation
 import io.ltverdict.core.RunPeriodReadFailure
 import io.ltverdict.core.RunPeriodV1
+import io.ltverdict.core.SourceQueryDocument
+import io.ltverdict.core.SourceSummaryEvidence
 import io.ltverdict.core.canonicalJson
 import io.ltverdict.core.recognitionMethod
 import io.ltverdict.core.recognizeRunPeriod
 import io.ltverdict.core.runPeriodFromJson
 import io.ltverdict.core.runPeriodJson
 import io.ltverdict.core.sha256Hex
+import io.ltverdict.core.toJson
 import io.ltverdict.core.validateResourceSnapshot
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
@@ -283,29 +286,21 @@ internal fun readOpenSearchContext(
             .getValue("status")
             .jsonPrimitive.content
     val summary =
-        buildJsonObject {
-            put("id", "source-summary")
-            put("type", "source_summary")
-            put("profile_id", context.getValue("profile_id"))
-            put("source_kind", "opensearch")
-            put("transport", "manual")
-            put("status", status)
-            put("request_count", 0)
-            put("retries", 0)
-            put("throttle_wait_ms", 0)
-            put("cap_exceeded", false)
-            put(
-                "queries",
-                buildJsonArray {
-                    add(
-                        buildJsonObject {
-                            put("id", "import")
-                            put("status", if (status == "COMPLETE") "SUCCESS" else "PARTIAL")
-                        },
-                    )
-                },
-            )
-        }
+        SourceSummaryEvidence(
+            id = "source-summary",
+            status = status,
+            profileId =
+                context
+                    .getValue("profile_id")
+                    .jsonPrimitive.content,
+            sourceKind = "opensearch",
+            transport = "manual",
+            queries = listOf(SourceQueryDocument("import", if (status == "COMPLETE") "SUCCESS" else "PARTIAL")),
+            requestCount = 0,
+            retries = 0,
+            throttleWaitMs = 0,
+            capExceeded = false,
+        ).toJson()
     return SourceAcquisition(
         resources,
         summary,
@@ -409,43 +404,35 @@ internal fun acquireOpenSearch(
             ?.jsonPrimitive
             ?.content ?: "FAILED"
     val summary =
-        buildJsonObject {
-            put("id", "source-summary")
-            put("type", "source_summary")
-            put("profile_id", profile.id)
-            put("source_kind", profile.sourceKind.wireName)
-            put("transport", profile.transport.wireName)
-            put("status", status)
-            put("start_epoch_ms", request.startEpochMillis)
-            put("end_epoch_ms", request.endEpochMillis)
-            put("step_ms", request.stepMillis)
-            put("request_count", budget.requestCount)
-            put("retries", budget.retries)
-            put("throttle_wait_ms", budget.throttleWaitMillis)
-            put("cap_exceeded", budget.capExceeded)
-            put(
-                "queries",
-                buildJsonArray {
-                    add(
-                        buildJsonObject {
-                            put("id", "errors")
-                            put(
-                                "status",
-                                if (status == "COMPLETE") {
-                                    "SUCCESS"
-                                } else if (status == "PARTIAL") {
-                                    "PARTIAL"
-                                } else {
-                                    "FAILED"
-                                },
-                            )
-                            put("expression_sha256", sha256Hex(query))
-                            reason?.let { put("reason", it) }
+        SourceSummaryEvidence(
+            id = "source-summary",
+            status = status,
+            profileId = profile.id,
+            sourceKind = profile.sourceKind.wireName,
+            transport = profile.transport.wireName,
+            startEpochMs = request.startEpochMillis,
+            endEpochMs = request.endEpochMillis,
+            stepMs = request.stepMillis,
+            queries =
+                listOf(
+                    SourceQueryDocument(
+                        "errors",
+                        if (status == "COMPLETE") {
+                            "SUCCESS"
+                        } else if (status == "PARTIAL") {
+                            "PARTIAL"
+                        } else {
+                            "FAILED"
                         },
-                    )
-                },
-            )
-        }.withWindowProvenance(request.windowProvenance)
+                        reason,
+                        sha256Hex(query),
+                    ),
+                ),
+            requestCount = budget.requestCount.toLong(),
+            retries = budget.retries.toLong(),
+            throttleWaitMs = budget.throttleWaitMillis,
+            capExceeded = budget.capExceeded,
+        ).toJson().withWindowProvenance(request.windowProvenance)
     artifacts["source-acquisition.json"] = canonicalJson(summary)
     return SourceAcquisition(null, summary, artifacts, listOfNotNull(context))
 }
@@ -651,55 +638,56 @@ internal fun acquireMultipleSources(
                 Long.MAX_VALUE
             }
         }
+    val states = summaries.map { it.getValue("status").jsonPrimitive.content }
     val summary =
-        buildJsonObject {
-            put("id", "source-summary")
-            put("type", "source_summary")
-            put("profile_id", "multiple")
-            put("source_kind", "multiple")
-            put("transport", "multiple")
-            put("start_epoch_ms", request.startEpochMillis)
-            put("end_epoch_ms", request.endEpochMillis)
-            put("step_ms", request.stepMillis)
-            val states = summaries.map { it.getValue("status").jsonPrimitive.content }
-            put(
-                "status",
+        SourceSummaryEvidence(
+            id = "source-summary",
+            status =
                 when {
                     states.all { it == "COMPLETE" } -> "COMPLETE"
                     states.any { it != "FAILED" } -> "PARTIAL"
                     else -> "FAILED"
                 },
-            )
-            put("profiles", JsonArray(summaries))
-            put(
-                "queries",
-                JsonArray(
-                    summaries.flatMap { item ->
-                        item.getValue("queries").jsonArray.map { query ->
-                            JsonObject(
-                                query.jsonObject + (
-                                    "id" to
-                                        JsonPrimitive(
-                                            qualified(
-                                                item.getValue("profile_id").jsonPrimitive.content,
-                                                query.jsonObject
-                                                    .getValue("id")
-                                                    .jsonPrimitive.content,
-                                            ),
-                                        )
-                                ),
-                            )
-                        }
-                    },
-                ),
-            )
-            put("request_count", total("request_count"))
-            put("retries", total("retries"))
-            put("throttle_wait_ms", total("throttle_wait_ms"))
-            put("cap_exceeded", summaries.any { it.getValue("cap_exceeded").jsonPrimitive.boolean })
-        }.withWindowProvenance(request.windowProvenance)
+            profileId = "multiple",
+            sourceKind = "multiple",
+            transport = "multiple",
+            startEpochMs = request.startEpochMillis,
+            endEpochMs = request.endEpochMillis,
+            stepMs = request.stepMillis,
+            profiles = summaries.toList(),
+            queries =
+                summaries.flatMap { item ->
+                    item.getValue("queries").jsonArray.map { query ->
+                        query.jsonObject.toQueryDocument(
+                            qualified(
+                                item.getValue("profile_id").jsonPrimitive.content,
+                                query.jsonObject
+                                    .getValue("id")
+                                    .jsonPrimitive.content,
+                            ),
+                        )
+                    }
+                },
+            requestCount = total("request_count"),
+            retries = total("retries"),
+            throttleWaitMs = total("throttle_wait_ms"),
+            capExceeded = summaries.any { it.getValue("cap_exceeded").jsonPrimitive.boolean },
+        ).toJson().withWindowProvenance(request.windowProvenance)
     artifacts["source-acquisition.json"] = canonicalJson(summary)
     return SourceAcquisition(snapshot, summary, artifacts, contexts)
+}
+
+private val SOURCE_QUERY_KEYS = setOf("id", "status", "reason", "expression_sha256")
+
+/** A query entry of a profile summary as the typed document, under the (qualified) [id]; an unknown key is never dropped silently. */
+internal fun JsonObject.toQueryDocument(id: String): SourceQueryDocument {
+    check(keys.all { it in SOURCE_QUERY_KEYS }) { "SOURCE_QUERY_SHAPE_UNKNOWN" }
+    return SourceQueryDocument(
+        id,
+        getValue("status").jsonPrimitive.content,
+        this["reason"]?.jsonPrimitive?.content,
+        this["expression_sha256"]?.jsonPrimitive?.content,
+    )
 }
 
 internal fun qualifiedSeriesId(

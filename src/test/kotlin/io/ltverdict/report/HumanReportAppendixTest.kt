@@ -214,6 +214,49 @@ class HumanReportAppendixTest {
             "p:Сырые данные анализа для сверки и обработки программами; расшифровка есть в разделах выше. Блоки свёрнуты: раскройте нужный.",
         )
 
+    private val sectionBlock = Regex("<section[^>]*><h2>(.*?)</h2>(.*?)</section>", RegexOption.DOT_MATCHES_ALL)
+    private val detailsBlock = Regex("<details><summary>(.*?)</summary><div lang=\"en\">(.*?)</div></details>", RegexOption.DOT_MATCHES_ALL)
+
+    private val appendixTitles =
+        mapOf(
+            "Overall and transaction metrics" to "Общие метрики и метрики транзакций",
+            "Policy checks" to "Проверки правил, исходные данные",
+            "Resource binding" to "Привязка ресурсов",
+            "Resource summaries" to "Сводки по ресурсам",
+            "Window policy outcomes" to "Итоги правил по окнам",
+            "Resource policy checks" to "Проверки правил по ресурсам",
+            "Source acquisition" to "Получение источников",
+            "Diagnostic analysis" to "Диагностический анализ",
+            "Correlations" to "Корреляции",
+            "Anomaly checks" to "Проверки аномалий",
+            "Window metrics" to "Метрики по окнам",
+            "Findings" to "Находки",
+            "Evidence IDs" to "Идентификаторы evidence",
+            "Canonical JSON" to "Канонический JSON",
+        )
+
+    /** Title and raw body of every block; the order and the wrappers may change, a body may neither change nor move under another title. */
+    private fun bodies(html: String): List<String> =
+        (
+            sectionBlock.findAll(html).filter { it.groupValues[1] != "Приложение" }.map { (appendixTitles[it.groupValues[1]] ?: it.groupValues[1]) + " " + it.groupValues[2] } +
+                detailsBlock.findAll(html).map { it.groupValues[1] + " " + it.groupValues[2] }
+        ).toList()
+
+    private val headerRenames =
+        renames.map { (old, new) -> if (old.startsWith("dl:")) "<dt>${old.removePrefix("dl:").removeSuffix("=")}</dt>" to "<dt>${new.removePrefix("dl:").removeSuffix("=")}</dt>" else old to new } +
+            listOf("<h1 lang=\"en\">LT Verdict report</h1>" to "<h1>Отчёт LT Verdict</h1>", "<dl lang=\"en\">" to "<dl>")
+
+    @Test
+    fun `every block body is byte for byte the body captured before the change and nothing else was added to the page`() {
+        scenarios().forEach { (name, html) ->
+            val old = Files.readString(legacyRoot.resolve("$name.html"))
+            assertTrue(bodies(html).size >= 7, name)
+            assertEquals(bodies(old).map(::renamed).sorted(), bodies(html).sorted(), name)
+            val oldRest = headerRenames.fold(sectionBlock.replace(old.substringAfter("<main>"), "")) { text, (from, to) -> text.replace(from, to) }
+            assertEquals(oldRest, sectionBlock.replace(html.substringAfter("<main>"), ""), name)
+        }
+    }
+
     @Test
     fun `numbers, cells, verdicts and codes are the same as in the report captured before the change`() {
         scenarios().forEach { (name, html) ->

@@ -106,8 +106,8 @@ internal fun runCli(
         stderr.println(failure.message)
         failure.exitCode
     } catch (failure: IllegalStateException) {
-        if (failure.message == "DATA_DIR_BUSY") {
-            stderr.println("DATA_DIR_BUSY")
+        if (failure.message?.lineSequence()?.first() == "DATA_DIR_BUSY") {
+            stderr.println(failure.message)
             EXIT_DATA_DIR_BUSY
         } else {
             stderr.println("INTERNAL_ERROR: ${failure.message ?: failure.javaClass.simpleName}")
@@ -661,7 +661,7 @@ private fun ui(args: List<String>): Int {
     val profiles = connections.http
     val sourceHttp = if (profiles.isEmpty()) null else SourceHttp(profiles)
     val source = sourceHttp?.let { PromqlSource(profiles, it) }
-    val directory = DataDirectory.open(dataDir)
+    val directory = DataDirectory.open(dataDir, "server")
     val store = RunBundleStore(directory)
     val jenkinsWorkflows =
         try {

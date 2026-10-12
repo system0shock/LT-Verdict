@@ -102,10 +102,10 @@ internal suspend fun RunBundleStore.requireAnalysis(call: ApplicationCall): Stor
     return withContext(Dispatchers.IO) {
         try {
             readAnalysis(runId, analysisId) ?: notFound("Analysis was not found")
-        } catch (_: NoSuchElementException) {
-            notFound("Analysis was not found")
+        } catch (error: NoSuchElementException) {
+            notFound(if (error.message == "RUN_NOT_FOUND") "Run was not found" else "Analysis was not found")
         } catch (_: IllegalArgumentException) {
-            notFound("Analysis was not found")
+            notFound("Run id or analysis id is malformed")
         }
     }
 }

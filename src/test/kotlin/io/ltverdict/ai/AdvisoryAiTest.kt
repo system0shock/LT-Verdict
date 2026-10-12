@@ -801,7 +801,7 @@ class AdvisoryAiTest {
                 "--output-format=json",
                 "--json-schema=@/input/ai-advice-output.schema.json",
                 "--exclude-tools=read_file,edit,notebook_edit,run_shell_command",
-                "--max-tool-calls=0",
+                "--max-tool-calls=1",
                 "--max-wall-time=600s",
                 "--approval-mode=default",
                 "--chat-recording=false",

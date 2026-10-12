@@ -101,7 +101,11 @@ internal fun evaluatePolicy(
     val metricEvidence = metrics?.let { metricEvidence(it, windowId) }.orEmpty()
     val evidence = if (includeMetricEvidence) metricEvidence.map(MetricEvidence::json).toMutableList() else mutableListOf()
     evidence += orderedDiagnostics.map(::diagnosticEvidence)
-    val reasons = orderedDiagnostics.map(Diagnostic::code).toMutableList()
+    val reasons =
+        orderedDiagnostics
+            .filterNot { validity == RunValidity.VALID && it.code == "JMETER_CSV_TRUNCATED_TAIL" }
+            .map(Diagnostic::code)
+            .toMutableList()
 
     if (validity != RunValidity.VALID) {
         return PolicyEvaluation(PolicyVerdict.NO_VERDICT, reasons.distinct(), findings, evidence)

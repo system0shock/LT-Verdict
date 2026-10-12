@@ -304,6 +304,215 @@ class JtlCsvParserTest {
         }
     }
 
+    @Test
+    fun `truncated tail without newline keeps preceding rows and reports exact UTF-8 bytes`() {
+        listOf("\n", "\r\n").forEach { lineEnding ->
+            val file = csv("timeStamp,elapsed,label,success", "1,2,one,true", "3,4,two,false", lineEnding = lineEnding)
+            val prefixBytes = Files.size(file)
+            val tail = "5,6,Привет😀"
+            Files.writeString(file, Files.readString(file) + tail)
+            val samples = mutableListOf<LoadSample>()
+
+            val report = parseJtlCsv(file, samples::add)
+
+            assertEquals(RunValidity.VALID, report.validity)
+            assertEquals(listOf("one", "two"), samples.map { it.label })
+            assertEquals(Files.size(file), report.processedBytes)
+            assertEquals(listOf("JMETER_CSV_TRUNCATED_TAIL"), report.diagnostics.map { it.code })
+            assertEquals(prefixBytes, report.diagnostics.single().sourceOffset)
+            assertTrue(
+                report.diagnostics
+                    .single()
+                    .message
+                    .contains("discarded_bytes=${tail.encodeToByteArray().size}"),
+            )
+        }
+    }
+
+    @Test
+    fun `complete last record without newline is valid without warnings`() {
+        listOf("\n", "\r\n").forEach { lineEnding ->
+            val file = csv("timeStamp,elapsed,label,success", "1,2,one,true", lineEnding = lineEnding)
+            Files.writeString(file, Files.readString(file).removeSuffix(lineEnding))
+            val samples = mutableListOf<LoadSample>()
+
+            val report = parseJtlCsv(file, samples::add)
+
+            assertEquals(RunValidity.VALID, report.validity)
+            assertEquals(listOf("one"), samples.map { it.label })
+            assertEquals(emptyList<Diagnostic>(), report.diagnostics)
+        }
+    }
+
+    @Test
+    fun `open quoted tail without newline is discarded including embedded newlines`() {
+        listOf("\n", "\r\n").forEach { lineEnding ->
+            listOf("3,4,\"Привет", "3,4,\"Привет${lineEnding}мир😀", "3,4,label,\"tru").forEach { tail ->
+                val file = csv("timeStamp,elapsed,label,success", "1,2,one,true", lineEnding = lineEnding)
+                val prefixBytes = Files.size(file)
+                Files.writeString(file, Files.readString(file) + tail)
+                val samples = mutableListOf<LoadSample>()
+
+                val report = parseJtlCsv(file, samples::add)
+
+                assertEquals(RunValidity.VALID, report.validity)
+                assertEquals(listOf("one"), samples.map { it.label })
+                assertEquals(listOf("JMETER_CSV_TRUNCATED_TAIL"), report.diagnostics.map { it.code })
+                assertEquals(prefixBytes, report.diagnostics.single().sourceOffset)
+                assertTrue(
+                    report.diagnostics
+                        .single()
+                        .message
+                        .contains("discarded_bytes=${tail.encodeToByteArray().size}"),
+                )
+            }
+        }
+    }
+
+    @Test
+    fun `bad record with newline or in the middle remains malformed`() {
+        listOf("\n", "\r\n").forEach { lineEnding ->
+            listOf("3,4,short", "3,4,\"open", "bad,4,label,true", "3,4,label,yes", "3,4,label,true,extra").forEach { bad ->
+                listOf(listOf("1,2,one,true", bad), listOf("1,2,one,true", bad, "5,6,last,true")).forEach { rows ->
+                    val report = parseJtlCsv(csv("timeStamp,elapsed,label,success", *rows.toTypedArray(), lineEnding = lineEnding), {})
+
+                    assertEquals(RunValidity.INVALID, report.validity)
+                    assertEquals(listOf("MALFORMED_JMETER_CSV"), report.diagnostics.map { it.code })
+                }
+            }
+        }
+    }
+
+    @Test
+    fun `complete corrupt last record without newline remains malformed`() {
+        listOf("bad,4,label,true", "3,4,label,yes", "3,4,label,true,extra", "3,4,label,true,\"open", "3,4,la\"bel,true").forEach { tail ->
+            val file = csv("timeStamp,elapsed,label,success", "1,2,one,true")
+            Files.writeString(file, Files.readString(file) + tail)
+
+            val report = parseJtlCsv(file, {})
+
+            assertEquals(RunValidity.INVALID, report.validity)
+            assertEquals(listOf("MALFORMED_JMETER_CSV"), report.diagnostics.map { it.code })
+        }
+    }
+
+    @Test
+    fun `truncated tail with corrupt completed required fields remains invalid`() {
+        listOf(
+            "bad,4,label,true" to "MALFORMED_JMETER_CSV",
+            "3,bad,label,true" to "MALFORMED_JMETER_CSV",
+            "3,4,label,yes" to "MALFORMED_JMETER_CSV",
+            "bad,4,\"open" to "MALFORMED_JMETER_CSV",
+            "3,4,label,yes,\"open" to "MALFORMED_JMETER_CSV",
+            "1767225600,4,label,true" to "INVALID_SAMPLE_TIMESTAMP",
+            "253402300799999,1,label,true" to "INVALID_SAMPLE_TIMESTAMP",
+        ).forEach { (tail, code) ->
+            val file = csv("timeStamp,elapsed,label,success,extra", "1,2,one,true,")
+            Files.writeString(file, Files.readString(file) + tail)
+
+            val report = parseJtlCsv(file, {})
+
+            assertEquals(RunValidity.INVALID, report.validity)
+            assertEquals(listOf(code), report.diagnostics.map { it.code })
+        }
+    }
+
+    @Test
+    fun `truncated tail validates elapsed range when timestamp column is still missing`() {
+        listOf("253402300800000", "9223372036854775807").forEach { tail ->
+            val file = csv("elapsed,timeStamp,label,success,extra", "2,1,one,true,")
+            Files.writeString(file, Files.readString(file) + tail)
+
+            val report = parseJtlCsv(file, {})
+
+            assertEquals(RunValidity.INVALID, report.validity)
+            assertEquals(listOf("INVALID_SAMPLE_TIMESTAMP"), report.diagnostics.map { it.code })
+        }
+    }
+
+    @Test
+    fun `open quote in the header remains malformed without a final newline`() {
+        val file = csv("timeStamp,elapsed,label,\"success")
+        Files.writeString(file, Files.readString(file).removeSuffix("\n"))
+
+        val report = parseJtlCsv(file, {})
+
+        assertEquals(RunValidity.INVALID, report.validity)
+        assertEquals(listOf("MALFORMED_JMETER_CSV"), report.diagnostics.map { it.code })
+    }
+
+    @Test
+    fun `CRLF tail with only its final LF missing counts the remaining CR`() {
+        val file = csv("timeStamp,elapsed,label,success", "1,2,one,true", lineEnding = "\r\n")
+        val tail = "3,4,short\r"
+        val prefixBytes = Files.size(file)
+        Files.writeString(file, Files.readString(file) + tail)
+
+        val report = parseJtlCsv(file, {})
+
+        assertEquals(RunValidity.VALID, report.validity)
+        assertEquals(prefixBytes, report.diagnostics.single().sourceOffset)
+        assertTrue(
+            report.diagnostics
+                .single()
+                .message
+                .contains("discarded_bytes=${tail.encodeToByteArray().size}"),
+        )
+    }
+
+    @Test
+    fun `truncated tail does not bypass field and label resource limits`() {
+        listOf("3,4,${"я".repeat(2_049)}", "3,4,\"${"a".repeat(4_097)}", "3,4,label,true,${"я".repeat(32_769)}").forEach { tail ->
+            val file = csv("timeStamp,elapsed,label,success,extra,extra2", "1,2,one,true,,")
+            Files.writeString(file, Files.readString(file) + tail)
+
+            val report = parseJtlCsv(file, {})
+
+            assertEquals(RunValidity.INVALID, report.validity)
+            assertEquals(listOf("RESOURCE_LIMIT_EXCEEDED"), report.diagnostics.map { it.code })
+        }
+    }
+
+    @Test
+    fun `header followed only by a truncated tail is empty input`() {
+        listOf("1,2,short", "1,2,\"open").forEach { tail ->
+            val file = csv("timeStamp,elapsed,label,success")
+            Files.writeString(file, Files.readString(file) + tail)
+
+            val report = parseJtlCsv(file, {})
+
+            assertEquals(RunValidity.INVALID, report.validity)
+            assertEquals(listOf("EMPTY_INPUT"), report.diagnostics.map { it.code })
+        }
+    }
+
+    @Test
+    fun `parent preview excludes truncated tails and preserves completed mixed parents`() {
+        listOf("\n", "\r\n").forEach { lineEnding ->
+            listOf("3,4,short", "3,4,\"open", jmeterRow("partial-child").substringBeforeLast(',')).forEach { tail ->
+                listOf(listOf(jmeterRow("parent", PARENT_MESSAGE, "")), listOf(jmeterRow("parent", PARENT_MESSAGE, ""), jmeterRow("child")))
+                    .forEach { rows ->
+                        val file = csv(JMETER_HEADER, *rows.toTypedArray(), lineEnding = lineEnding)
+                        Files.writeString(file, Files.readString(file) + tail)
+                        val samples = mutableListOf<LoadSample>()
+
+                        val report = parseJtlCsv(file, samples::add)
+
+                        assertEquals(RunValidity.VALID, report.validity)
+                        assertEquals(rows.size, samples.size)
+                        assertEquals(if (rows.size == 1) SampleKind.JMETER_SAMPLER else SampleKind.JMETER_CONTAINER, samples.first().kind)
+                        assertEquals(listOf("JMETER_CSV_TRUNCATED_TAIL"), report.diagnostics.map { it.code })
+                        assertTrue(
+                            report.diagnostics
+                                .single()
+                                .message
+                                .contains("discarded_bytes=${tail.encodeToByteArray().size}"),
+                        )
+                    }
+            }
+        }
+    }
+
     private fun assertInvalid(file: Path) {
         val report = parseJtlCsv(file, {})
         assertEquals(RunValidity.INVALID, report.validity)

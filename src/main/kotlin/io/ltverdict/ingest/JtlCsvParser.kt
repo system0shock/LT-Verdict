@@ -57,7 +57,7 @@ internal fun parseJtlCsv(
                         if (notify) processedBytes(bytesRead)
                     }
                 }
-            val parser = csvParser(counted)
+            val (parser, reader) = csvParser(counted)
             try {
                 val header = parser.parseNext() ?: invalidCsv("EMPTY_INPUT")
                 header.forEach(::checkCsvField)
@@ -77,10 +77,37 @@ internal fun parseJtlCsv(
                         null
                     }
                 var hasRows = false
+                val diagnostics = mutableListOf<Diagnostic>()
+                var pending = parser.parseNext()
 
                 while (true) {
                     checkCancelled()
-                    val row = parser.parseNext() ?: break
+                    val row = pending ?: break
+                    pending = parser.parseNext()
+                    if (pending == null && reader.isTruncatedTail(row, header.size)) {
+                        row.forEach(::checkCsvField)
+                        row.getOrNull(columns.getValue("label"))?.let { label ->
+                            if (label.utf8Size() > MAX_LABEL_BYTES) invalidCsv("RESOURCE_LIMIT_EXCEEDED")
+                        }
+                        val completeFields = if (reader.hasOpenQuote) row.dropLast(1) else row.asList()
+                        val startedAt = completeFields.getOrNull(columns.getValue("timeStamp"))?.nonNegativeLong()
+                        val elapsed = completeFields.getOrNull(columns.getValue("elapsed"))?.nonNegativeLong()
+                        completeFields.getOrNull(columns.getValue("success"))?.strictBoolean()
+                        if (startedAt != null || elapsed != null) {
+                            try {
+                                LoadSample(startedAt ?: 0L, elapsed ?: 0L, "", emptyList(), SampleKind.JMETER_SAMPLER, true)
+                            } catch (_: IllegalArgumentException) {
+                                invalidCsv("INVALID_SAMPLE_TIMESTAMP")
+                            }
+                        }
+                        diagnostics +=
+                            Diagnostic(
+                                "JMETER_CSV_TRUNCATED_TAIL",
+                                "Неполная последняя запись JMeter CSV отброшена; discarded_bytes=${reader.trailingBytes}",
+                                bytesRead - reader.trailingBytes,
+                            )
+                        break
+                    }
                     if (row.size != header.size) invalidCsv("MALFORMED_JMETER_CSV")
                     row.forEach(::checkCsvField)
 
@@ -119,7 +146,7 @@ internal fun parseJtlCsv(
                     hasRows = true
                 }
                 if (!hasRows) invalidCsv("EMPTY_INPUT")
-                ParseReport(RunValidity.VALID, bytesRead, emptyList())
+                ParseReport(RunValidity.VALID, bytesRead, diagnostics)
             } finally {
                 parser.stopParsing()
             }
@@ -132,15 +159,14 @@ internal fun parseJtlCsv(
     }
 }
 
-private fun csvParser(input: InputStream): CsvParser {
+private fun csvParser(input: InputStream): Pair<CsvParser, RejectUnclosedQuoteReader> {
     val decoder =
         StandardCharsets.UTF_8
             .newDecoder()
             .onMalformedInput(CodingErrorAction.REPORT)
             .onUnmappableCharacter(CodingErrorAction.REPORT)
-    return CsvParser(csvSettings()).also {
-        it.beginParsing(RejectUnclosedQuoteReader(InputStreamReader(input, decoder)))
-    }
+    val reader = RejectUnclosedQuoteReader(InputStreamReader(input, decoder))
+    return CsvParser(csvSettings()).also { it.beginParsing(reader) } to reader
 }
 
 private fun previewMixedParents(
@@ -155,12 +181,15 @@ private fun previewMixedParents(
     var sawOther = false
     try {
         Files.newInputStream(path, LinkOption.NOFOLLOW_LINKS).use { input ->
-            val parser = csvParser(input)
+            val (parser, reader) = csvParser(input)
             try {
                 parser.parseNext()
+                var pending = parser.parseNext()
                 while (!sawParent || !sawOther) {
                     checkCancelled()
-                    val row = parser.parseNext() ?: break
+                    val row = pending ?: break
+                    pending = parser.parseNext()
+                    if (pending == null && reader.isTruncatedTail(row, columnCount)) break
                     if (row.size != columnCount) continue
                     if (isParentRow(row, responseMessage, dataType)) sawParent = true else sawOther = true
                 }
@@ -290,6 +319,21 @@ private class RejectUnclosedQuoteReader(
     private val delegate: Reader,
 ) : Reader() {
     private var oddQuoteCount = false
+    private var endedWithNewline = false
+    private var hasCompleteRecord = false
+    private var malformedQuote = false
+
+    // 0: field start, 1: unquoted field, 2: quoted field, 3: closing or escaped quote.
+    private var quoteState = 0
+    var trailingBytes = 0L
+        private set
+    val hasOpenQuote: Boolean
+        get() = oddQuoteCount
+
+    fun isTruncatedTail(
+        row: Array<String>,
+        columnCount: Int,
+    ): Boolean = !endedWithNewline && !malformedQuote && row.size <= columnCount && (row.size < columnCount || oddQuoteCount)
 
     override fun read(
         buffer: CharArray,
@@ -298,11 +342,45 @@ private class RejectUnclosedQuoteReader(
     ): Int {
         val count = delegate.read(buffer, offset, length)
         if (count == -1) {
-            if (oddQuoteCount) throw IOException("Unclosed quoted CSV field")
+            if (oddQuoteCount && (!hasCompleteRecord || endedWithNewline || malformedQuote)) throw IOException("Unclosed quoted CSV field")
             return -1
         }
         for (index in offset until offset + count) {
-            if (buffer[index] == '\"') oddQuoteCount = !oddQuoteCount
+            val character = buffer[index]
+            endedWithNewline = character == '\n'
+            trailingBytes +=
+                when {
+                    character.code <= 0x7f -> 1
+                    character.code <= 0x7ff || character.isSurrogate() -> 2
+                    else -> 3
+                }
+            when (quoteState) {
+                0 ->
+                    quoteState =
+                        when (character) {
+                            '"' -> 2
+                            ',', '\r', '\n' -> 0
+                            else -> 1
+                        }
+                1 ->
+                    when (character) {
+                        '"' -> malformedQuote = true
+                        ',', '\r', '\n' -> quoteState = 0
+                    }
+                2 -> if (character == '"') quoteState = 3
+                3 ->
+                    when (character) {
+                        '"' -> quoteState = 2
+                        ',', '\r', '\n' -> quoteState = 0
+                        else -> malformedQuote = true
+                    }
+            }
+            if (character == '"') oddQuoteCount = !oddQuoteCount
+            if (character == '\n' && !oddQuoteCount) {
+                hasCompleteRecord = true
+                trailingBytes = 0
+                malformedQuote = false
+            }
         }
         return count
     }

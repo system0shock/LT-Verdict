@@ -385,7 +385,14 @@ class JtlCsvParserTest {
 
     @Test
     fun `complete corrupt last record without newline remains malformed`() {
-        listOf("bad,4,label,true", "3,4,label,yes", "3,4,label,true,extra", "3,4,label,true,\"open", "3,4,la\"bel,true").forEach { tail ->
+        listOf(
+            "bad,4,label,true",
+            "3,4,label,yes",
+            "3,4,label,t",
+            "3,4,label,true,extra",
+            "3,4,label,true,\"open",
+            "3,4,la\"bel,true",
+        ).forEach { tail ->
             val file = csv("timeStamp,elapsed,label,success", "1,2,one,true")
             Files.writeString(file, Files.readString(file) + tail)
 
@@ -401,13 +408,13 @@ class JtlCsvParserTest {
         listOf(
             "bad,4,label,true" to "MALFORMED_JMETER_CSV",
             "3,bad,label,true" to "MALFORMED_JMETER_CSV",
-            "3,4,label,yes" to "MALFORMED_JMETER_CSV",
+            "3,4,label,yes," to "MALFORMED_JMETER_CSV",
             "bad,4,\"open" to "MALFORMED_JMETER_CSV",
             "3,4,label,yes,\"open" to "MALFORMED_JMETER_CSV",
             "1767225600,4,label,true" to "INVALID_SAMPLE_TIMESTAMP",
             "253402300799999,1,label,true" to "INVALID_SAMPLE_TIMESTAMP",
         ).forEach { (tail, code) ->
-            val file = csv("timeStamp,elapsed,label,success,extra", "1,2,one,true,")
+            val file = csv("timeStamp,elapsed,label,success,extra,extra2", "1,2,one,true,,")
             Files.writeString(file, Files.readString(file) + tail)
 
             val report = parseJtlCsv(file, {})
@@ -421,7 +428,7 @@ class JtlCsvParserTest {
     fun `truncated tail validates elapsed range when timestamp column is still missing`() {
         listOf("253402300800000", "9223372036854775807").forEach { tail ->
             val file = csv("elapsed,timeStamp,label,success,extra", "2,1,one,true,")
-            Files.writeString(file, Files.readString(file) + tail)
+            Files.writeString(file, Files.readString(file) + tail + ",")
 
             val report = parseJtlCsv(file, {})
 
@@ -511,6 +518,144 @@ class JtlCsvParserTest {
                     }
             }
         }
+    }
+
+    @Test
+    fun `truncated tail skips the last present required field`() {
+        listOf(
+            Triple("timeStamp,elapsed,label,success", "3,", 2),
+            Triple("timeStamp,elapsed,label,success,bytes", "3,4,a,tr", 8),
+            Triple("timeStamp,elapsed,label,success", "1767225600", 10),
+            Triple("timeStamp,elapsed,label,success", "bad", 3),
+            Triple("timeStamp,elapsed,label,success", "3,4,label,\"t", 12),
+            Triple("timeStamp,elapsed,label,success,bytes", "3,4,a,yes", 9),
+        ).forEach { (header, tail, discardedBytes) ->
+            val file = csv(header, if (header.endsWith(",bytes")) "1,2,label,true,0" else "1,2,label,true")
+            val prefixBytes = Files.size(file)
+            Files.writeString(file, Files.readString(file) + tail)
+            val samples = mutableListOf<LoadSample>()
+
+            val report = parseJtlCsv(file, samples::add)
+
+            assertEquals(RunValidity.VALID, report.validity, tail)
+            assertEquals(listOf("label"), samples.map { it.label }, tail)
+            assertEquals(Files.size(file), report.processedBytes, tail)
+            assertEquals(listOf("JMETER_CSV_TRUNCATED_TAIL"), report.diagnostics.map { it.code }, tail)
+            assertEquals(prefixBytes, report.diagnostics.single().sourceOffset, tail)
+            assertTrue(
+                report.diagnostics
+                    .single()
+                    .message
+                    .endsWith("discarded_bytes=$discardedBytes"),
+                tail,
+            )
+        }
+    }
+
+    @Test
+    fun `timestamp error precedes malformed next record`() {
+        val file = csv("timeStamp,elapsed,label,success", "1767225600,2,label,true", "3,4,la\"bel,true")
+        val samples = mutableListOf<LoadSample>()
+
+        val report = parseJtlCsv(file, samples::add)
+
+        assertEquals(RunValidity.INVALID, report.validity)
+        assertEquals(listOf("INVALID_SAMPLE_TIMESTAMP"), report.diagnostics.map { it.code })
+        assertEquals(Files.size(file), report.processedBytes)
+        assertEquals(Files.size(file), report.diagnostics.single().sourceOffset)
+        assertTrue(samples.isEmpty())
+    }
+
+    @Test
+    fun `label resource limit precedes malformed next record`() {
+        val file = csv("timeStamp,elapsed,label,success", "1,2,${"a".repeat(4_097)},true", "3,4,la\"bel,true")
+        val samples = mutableListOf<LoadSample>()
+
+        val report = parseJtlCsv(file, samples::add)
+
+        assertEquals(RunValidity.INVALID, report.validity)
+        assertEquals(listOf("RESOURCE_LIMIT_EXCEEDED"), report.diagnostics.map { it.code })
+        assertEquals(Files.size(file), report.processedBytes)
+        assertEquals(Files.size(file), report.diagnostics.single().sourceOffset)
+        assertTrue(samples.isEmpty())
+    }
+
+    @Test
+    fun `valid record is emitted before malformed next record`() {
+        val file = csv("timeStamp,elapsed,label,success", "1,2,label,true", "3,4,la\"bel,true")
+        val samples = mutableListOf<LoadSample>()
+
+        val report = parseJtlCsv(file, samples::add)
+
+        assertEquals(RunValidity.INVALID, report.validity)
+        assertEquals(listOf("MALFORMED_JMETER_CSV"), report.diagnostics.map { it.code })
+        assertEquals(Files.size(file), report.processedBytes)
+        assertEquals(Files.size(file), report.diagnostics.single().sourceOffset)
+        assertEquals(listOf("label"), samples.map { it.label })
+    }
+
+    @Test
+    fun `CR only separators preserve exact truncated tail offset`() {
+        val file = csv("timeStamp,elapsed,label,success", "1,2,label,true", lineEnding = "\r")
+        Files.writeString(file, Files.readString(file) + "3,4,short")
+        val samples = mutableListOf<LoadSample>()
+
+        val report = parseJtlCsv(file, samples::add)
+
+        assertEquals(RunValidity.VALID, report.validity)
+        assertEquals(listOf("label"), samples.map { it.label })
+        assertEquals(56L, report.processedBytes)
+        assertEquals(listOf("JMETER_CSV_TRUNCATED_TAIL"), report.diagnostics.map { it.code })
+        assertEquals(47L, report.diagnostics.single().sourceOffset)
+        assertTrue(
+            report.diagnostics
+                .single()
+                .message
+                .endsWith("discarded_bytes=9"),
+        )
+    }
+
+    @Test
+    fun `truncated quoted field allows whitespace after closing quote`() {
+        listOf(" ", "\t").forEach { whitespace ->
+            val file = csv("timeStamp,elapsed,label,success", "1,2,label,true")
+            val prefixBytes = Files.size(file)
+            Files.writeString(file, Files.readString(file) + "3,4,\"b\"$whitespace")
+            val samples = mutableListOf<LoadSample>()
+
+            val report = parseJtlCsv(file, samples::add)
+
+            assertEquals(RunValidity.VALID, report.validity)
+            assertEquals(listOf("label"), samples.map { it.label })
+            assertEquals(listOf("JMETER_CSV_TRUNCATED_TAIL"), report.diagnostics.map { it.code })
+            assertEquals(prefixBytes, report.diagnostics.single().sourceOffset)
+            assertTrue(
+                report.diagnostics
+                    .single()
+                    .message
+                    .endsWith("discarded_bytes=8"),
+            )
+        }
+    }
+
+    @Test
+    fun `CR only complete records retain origin quote failure`() {
+        val file =
+            csv(
+                "timeStamp,elapsed,label,success",
+                "3,4,la\"bel,true",
+                "3,4,\"multiline\nlabel\",false",
+                lineEnding = "\r",
+            )
+        val samples = mutableListOf<LoadSample>()
+
+        val report = parseJtlCsv(file, samples::add)
+
+        assertEquals(RunValidity.INVALID, report.validity)
+        assertEquals(listOf("MALFORMED_JMETER_CSV"), report.diagnostics.map { it.code })
+        assertEquals(76L, report.processedBytes)
+        assertEquals(76L, report.diagnostics.single().sourceOffset)
+        assertEquals(listOf("la\"bel"), samples.map { it.label })
     }
 
     private fun assertInvalid(file: Path) {

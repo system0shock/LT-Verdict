@@ -78,18 +78,16 @@ internal fun parseJtlCsv(
                     }
                 var hasRows = false
                 val diagnostics = mutableListOf<Diagnostic>()
-                var pending = parser.parseNext()
 
                 while (true) {
                     checkCancelled()
-                    val row = pending ?: break
-                    pending = parser.parseNext()
-                    if (pending == null && reader.isTruncatedTail(row, header.size)) {
+                    val row = parser.parseNext() ?: break
+                    if (parser.context.isStopped && reader.isTruncatedTail(row, header.size)) {
                         row.forEach(::checkCsvField)
                         row.getOrNull(columns.getValue("label"))?.let { label ->
                             if (label.utf8Size() > MAX_LABEL_BYTES) invalidCsv("RESOURCE_LIMIT_EXCEEDED")
                         }
-                        val completeFields = if (reader.hasOpenQuote) row.dropLast(1) else row.asList()
+                        val completeFields = row.dropLast(1)
                         val startedAt = completeFields.getOrNull(columns.getValue("timeStamp"))?.nonNegativeLong()
                         val elapsed = completeFields.getOrNull(columns.getValue("elapsed"))?.nonNegativeLong()
                         completeFields.getOrNull(columns.getValue("success"))?.strictBoolean()
@@ -100,11 +98,16 @@ internal fun parseJtlCsv(
                                 invalidCsv("INVALID_SAMPLE_TIMESTAMP")
                             }
                         }
+                        val discardedBytes =
+                            parser.context
+                                .currentParsedContent()
+                                .utf8Size()
+                                .toLong()
                         diagnostics +=
                             Diagnostic(
                                 "JMETER_CSV_TRUNCATED_TAIL",
-                                "Неполная последняя запись JMeter CSV отброшена; discarded_bytes=${reader.trailingBytes}",
-                                bytesRead - reader.trailingBytes,
+                                "Неполная последняя запись JMeter CSV отброшена; discarded_bytes=$discardedBytes",
+                                bytesRead - discardedBytes,
                             )
                         break
                     }
@@ -184,12 +187,10 @@ private fun previewMixedParents(
             val (parser, reader) = csvParser(input)
             try {
                 parser.parseNext()
-                var pending = parser.parseNext()
                 while (!sawParent || !sawOther) {
                     checkCancelled()
-                    val row = pending ?: break
-                    pending = parser.parseNext()
-                    if (pending == null && reader.isTruncatedTail(row, columnCount)) break
+                    val row = parser.parseNext() ?: break
+                    if (parser.context.isStopped && reader.isTruncatedTail(row, columnCount)) break
                     if (row.size != columnCount) continue
                     if (isParentRow(row, responseMessage, dataType)) sawParent = true else sawOther = true
                 }
@@ -325,10 +326,6 @@ private class RejectUnclosedQuoteReader(
 
     // 0: field start, 1: unquoted field, 2: quoted field, 3: closing or escaped quote.
     private var quoteState = 0
-    var trailingBytes = 0L
-        private set
-    val hasOpenQuote: Boolean
-        get() = oddQuoteCount
 
     fun isTruncatedTail(
         row: Array<String>,
@@ -348,12 +345,6 @@ private class RejectUnclosedQuoteReader(
         for (index in offset until offset + count) {
             val character = buffer[index]
             endedWithNewline = character == '\n'
-            trailingBytes +=
-                when {
-                    character.code <= 0x7f -> 1
-                    character.code <= 0x7ff || character.isSurrogate() -> 2
-                    else -> 3
-                }
             when (quoteState) {
                 0 ->
                     quoteState =
@@ -372,14 +363,12 @@ private class RejectUnclosedQuoteReader(
                     when (character) {
                         '"' -> quoteState = 2
                         ',', '\r', '\n' -> quoteState = 0
-                        else -> malformedQuote = true
+                        else -> if (character > ' ') malformedQuote = true
                     }
             }
             if (character == '"') oddQuoteCount = !oddQuoteCount
-            if (character == '\n' && !oddQuoteCount) {
+            if ((character == '\r' || character == '\n') && !oddQuoteCount) {
                 hasCompleteRecord = true
-                trailingBytes = 0
-                malformedQuote = false
             }
         }
         return count

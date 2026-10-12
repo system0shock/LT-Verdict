@@ -786,6 +786,7 @@ export interface AdviceJob {
   reused: boolean | null
   failure: string | null
   unavailable_reason: string | null
+  detail?: string | null
   model_id?: string | null
 }
 

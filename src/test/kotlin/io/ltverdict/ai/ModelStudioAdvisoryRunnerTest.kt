@@ -4,6 +4,7 @@ import org.junit.jupiter.api.Assertions.assertArrayEquals
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertInstanceOf
+import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Assumptions.assumeTrue
@@ -22,7 +23,120 @@ class ModelStudioAdvisoryRunnerTest {
     fun `missing credential configuration is unavailable without starting a process`() {
         val outcome = ModelStudioAdvisoryRunner.fromEnvironment(emptyMap(), tempDir).invoke(EVIDENCE)
 
-        assertEquals(RunnerOutcome.Unavailable(AdviceUnavailableReason.CREDENTIAL_NOT_CONFIGURED), outcome)
+        val unavailable = assertInstanceOf(RunnerOutcome.Unavailable::class.java, outcome)
+        assertEquals(AdviceUnavailableReason.CREDENTIAL_NOT_CONFIGURED, unavailable.reason)
+        assertTrue(unavailable.detail!!.contains("LT_VERDICT_AI_CREDENTIAL_ENV_FILE"))
+        assertTrue(unavailable.detail.contains("unset or empty"))
+    }
+
+    @Test
+    fun `credential home expansion reports unset HOME without leaking secrets`() {
+        val outcome =
+            ModelStudioAdvisoryRunner
+                .fromEnvironment(
+                    mapOf(
+                        "LT_VERDICT_AI_CREDENTIAL_ENV_FILE" to "~/.gigacode/gigacode_token.json",
+                        "OPENAI_API_KEY" to "secret-token-value",
+                    ),
+                    tempDir,
+                ).invoke(EVIDENCE)
+        val unavailable = assertInstanceOf(RunnerOutcome.Unavailable::class.java, outcome)
+        assertEquals(AdviceUnavailableReason.CREDENTIAL_NOT_CONFIGURED, unavailable.reason)
+        assertTrue(unavailable.detail!!.contains("HOME"))
+        assertTrue(unavailable.detail.contains("USERPROFILE"))
+        assertTrue(unavailable.detail.contains("~/.gigacode/gigacode_token.json"))
+        assertTrue(unavailable.detail.contains("unset or empty"))
+        assertFalse(unavailable.detail.contains("secret-token-value"))
+    }
+
+    @Test
+    fun `missing credential reports expanded path`() {
+        Files.createDirectories(tempDir.resolve("tools"))
+        Files.writeString(tempDir.resolve("tools/advisory_ai_runtime.ps1"), "unused")
+        val prompt =
+            Files
+                .createDirectories(tempDir.resolve("docs/contracts/advice/v1"))
+                .resolve("system-prompt.md")
+        Files.writeString(prompt, "prompt")
+        val outcome =
+            ModelStudioAdvisoryRunner
+                .fromEnvironment(
+                    mapOf("LT_VERDICT_AI_CREDENTIAL_ENV_FILE" to "~/.gigacode/gigacode_token.json", "HOME" to tempDir.toString()),
+                    tempDir,
+                ).invoke(EVIDENCE)
+        val unavailable = assertInstanceOf(RunnerOutcome.Unavailable::class.java, outcome)
+        assertEquals(AdviceUnavailableReason.CREDENTIAL_NOT_CONFIGURED, unavailable.reason)
+        assertTrue(unavailable.detail!!.contains(tempDir.resolve(".gigacode/gigacode_token.json").toString()))
+        assertTrue(unavailable.detail.contains("file missing"))
+    }
+
+    @Test
+    fun `invalid credential size never exposes file contents`() {
+        Files.createDirectories(tempDir.resolve("tools"))
+        Files.writeString(tempDir.resolve("tools/advisory_ai_runtime.ps1"), "unused")
+        val prompt =
+            Files
+                .createDirectories(tempDir.resolve("docs/contracts/advice/v1"))
+                .resolve("system-prompt.md")
+        Files.writeString(prompt, "prompt")
+        val credential = tempDir.resolve("credential.env")
+        val secret = "secret-token-value"
+        Files.writeString(credential, secret.repeat(8192))
+        val outcome =
+            ModelStudioAdvisoryRunner
+                .fromEnvironment(
+                    mapOf("LT_VERDICT_AI_CREDENTIAL_ENV_FILE" to credential.toString()),
+                    tempDir,
+                ).invoke(EVIDENCE)
+        val unavailable = assertInstanceOf(RunnerOutcome.Unavailable::class.java, outcome)
+        assertEquals(AdviceUnavailableReason.CREDENTIAL_NOT_CONFIGURED, unavailable.reason)
+        assertTrue(unavailable.detail!!.contains(credential.toString()))
+        assertTrue(unavailable.detail.contains("file size"))
+        assertFalse(unavailable.detail.contains(secret))
+    }
+
+    @Test
+    @EnabledOnOs(OS.WINDOWS)
+    fun `runtime credential unavailable reports fallback detail for a readable file`() {
+        val tools = Files.createDirectories(tempDir.resolve("tools"))
+        val prompt =
+            Files
+                .createDirectories(tempDir.resolve("docs/contracts/advice/v1"))
+                .resolve("system-prompt.md")
+        Files.writeString(prompt, "bounded prompt")
+        val credential = tempDir.resolve("modelstudio.env")
+        Files.writeString(credential, "OPENAI_API_KEY=fake\n")
+        Files.writeString(
+            tools.resolve("advisory_ai_runtime.ps1"),
+            """
+            param(
+                [string]${'$'}Mode, [string]${'$'}EvidencePath, [string]${'$'}OutputPath,
+                [string]${'$'}ResultPath, [string]${'$'}CancelPath, [string]${'$'}CredentialEnvFile,
+                [string]${'$'}QwenPackageRoot, [string]${'$'}ModelId, [string]${'$'}UpstreamUrl,
+                [switch]${'$'}AllowInsecureHttp
+            )
+            [IO.File]::WriteAllText(${'$'}ResultPath, '{
+                "schema_version":"advisory-ai-runtime-result.v1",
+                "status":"UNAVAILABLE","duration_ms":1,"exit_code":1,
+                "unavailable_reason":"CREDENTIAL_NOT_CONFIGURED"
+            }')
+            exit 1
+            """.trimIndent(),
+        )
+        val outcome =
+            ModelStudioAdvisoryRunner
+                .fromEnvironment(
+                    mapOf("LT_VERDICT_AI_CREDENTIAL_ENV_FILE" to credential.toString()),
+                    tempDir,
+                ).invoke(EVIDENCE)
+
+        val unavailable = assertInstanceOf(RunnerOutcome.Unavailable::class.java, outcome)
+        assertEquals(AdviceUnavailableReason.CREDENTIAL_NOT_CONFIGURED, unavailable.reason)
+        assertNotNull(unavailable.detail)
+        val detail = unavailable.detail!!
+        assertTrue(detail.contains("LT_VERDICT_AI_CREDENTIAL_ENV_FILE"))
+        assertTrue(detail.contains(credential.toString()))
+        assertTrue(detail.contains("OPENAI_API_KEY is missing or invalid"))
     }
 
     @Test

@@ -41,10 +41,10 @@ internal class ModelStudioAdvisoryRunner private constructor(
             return RunnerOutcome.Unavailable(AdviceUnavailableReason.RUNNER_ARTIFACT_MISSING)
         }
         // The direct runner reads no credential: the CLI uses its own authorization (ADR 0027).
-        if (direct == null &&
-            (!Files.isRegularFile(credentialEnvFile) || Files.size(credentialEnvFile) !in 1..MAX_CREDENTIAL_FILE_BYTES)
-        ) {
-            return RunnerOutcome.Unavailable(AdviceUnavailableReason.CREDENTIAL_NOT_CONFIGURED)
+        if (direct == null) {
+            credentialFileDetail()?.let {
+                return RunnerOutcome.Unavailable(AdviceUnavailableReason.CREDENTIAL_NOT_CONFIGURED, it)
+            }
         }
 
         val temporary = Files.createTempDirectory("lt-verdict-ai-")
@@ -237,11 +237,20 @@ internal class ModelStudioAdvisoryRunner private constructor(
             }
 
             "FAILED" -> RunnerOutcome.Failed(result.enumValue("failure_code") ?: AdviceFailure.PROCESS_FAILED)
-            "UNAVAILABLE" ->
-                RunnerOutcome.Unavailable(
+            "UNAVAILABLE" -> {
+                val reason =
                     result.enumValue<AdviceUnavailableReason>("unavailable_reason")
-                        ?: AdviceUnavailableReason.OS_ISOLATION_NOT_PROVEN,
+                        ?: AdviceUnavailableReason.OS_ISOLATION_NOT_PROVEN
+                RunnerOutcome.Unavailable(
+                    reason,
+                    if (reason == AdviceUnavailableReason.CREDENTIAL_NOT_CONFIGURED && direct == null) {
+                        credentialFileDetail()
+                            ?: "$CREDENTIAL_ENVIRONMENT: $credentialEnvFile: OPENAI_API_KEY is missing or invalid in the credential file"
+                    } else {
+                        null
+                    },
                 )
+            }
 
             "CANCELLED" -> throw CancellationException("CANCELLED")
             else -> RunnerOutcome.Failed(AdviceFailure.PROCESS_FAILED)
@@ -316,8 +325,30 @@ internal class ModelStudioAdvisoryRunner private constructor(
                 return ModelStudioAdvisoryRunner(root, root, root, environment, config, settings)
             }
             val configured = environment[CREDENTIAL_ENVIRONMENT]?.trim()
-            if (configured.isNullOrEmpty()) return UnavailableAdvisoryRunner(AdviceUnavailableReason.CREDENTIAL_NOT_CONFIGURED)
-            val credential = configured.pathOrNull() ?: return UnavailableAdvisoryRunner(AdviceUnavailableReason.CREDENTIAL_NOT_CONFIGURED)
+            if (configured.isNullOrEmpty()) {
+                return UnavailableAdvisoryRunner(
+                    AdviceUnavailableReason.CREDENTIAL_NOT_CONFIGURED,
+                    "$CREDENTIAL_ENVIRONMENT is unset or empty; no credential file path configured",
+                )
+            }
+            val expanded =
+                if (configured.startsWith("~/") || configured.startsWith("~\\")) {
+                    val home =
+                        environment["HOME"]?.trim()?.takeIf(String::isNotEmpty)
+                            ?: environment["USERPROFILE"]?.trim()?.takeIf(String::isNotEmpty)
+                            ?: return UnavailableAdvisoryRunner(
+                                AdviceUnavailableReason.CREDENTIAL_NOT_CONFIGURED,
+                                "$CREDENTIAL_ENVIRONMENT: HOME and USERPROFILE are unset or empty; cannot expand $configured",
+                            )
+                    home + "/" + configured.substring(2)
+                } else {
+                    configured
+                }
+            val credential =
+                expanded.pathOrNull() ?: return UnavailableAdvisoryRunner(
+                    AdviceUnavailableReason.CREDENTIAL_NOT_CONFIGURED,
+                    "$CREDENTIAL_ENVIRONMENT: $expanded: invalid credential file path",
+                )
             val root =
                 environment[RUNTIME_ROOT_ENVIRONMENT]?.trim()?.takeIf(String::isNotEmpty)?.pathOrNull()
                     ?: repositoryRoot?.toAbsolutePath()?.normalize()
@@ -327,6 +358,25 @@ internal class ModelStudioAdvisoryRunner private constructor(
                     ?: root.resolve(DEFAULT_QWEN_ROOT).normalize()
             return ModelStudioAdvisoryRunner(root, qwen, credential, environment, config)
         }
+    }
+
+    private fun credentialFileDetail(): String? {
+        val problem =
+            try {
+                when {
+                    Files.notExists(credentialEnvFile) -> "file missing"
+                    !Files.isRegularFile(credentialEnvFile) -> "not a regular file or not readable"
+                    !Files.isReadable(credentialEnvFile) -> "file not readable"
+                    Files.size(credentialEnvFile) !in 1..MAX_CREDENTIAL_FILE_BYTES ->
+                        "file size must be 1..$MAX_CREDENTIAL_FILE_BYTES bytes"
+                    else -> return null
+                }
+            } catch (_: IOException) {
+                "file not readable"
+            } catch (_: SecurityException) {
+                "file not readable"
+            }
+        return "$CREDENTIAL_ENVIRONMENT: $credentialEnvFile: $problem"
     }
 }
 

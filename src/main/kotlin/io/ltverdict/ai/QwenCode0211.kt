@@ -76,6 +76,7 @@ internal object QwenCode0211 {
 
 internal class UnavailableAdvisoryRunner(
     private val reason: AdviceUnavailableReason,
+    private val detail: String? = null,
 ) : AdvisoryRunner {
-    override fun invoke(evidence: AdvisoryEvidence): RunnerOutcome = RunnerOutcome.Unavailable(reason)
+    override fun invoke(evidence: AdvisoryEvidence): RunnerOutcome = RunnerOutcome.Unavailable(reason, detail)
 }

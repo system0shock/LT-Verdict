@@ -308,7 +308,13 @@ class LocalApiTest {
     @Test
     fun `advice status is restored by analysis and unavailable runner never changes verdict`() =
         withServer(
-            adviceRunner = AdvisoryRunner { RunnerOutcome.Unavailable(AdviceUnavailableReason.OS_ISOLATION_NOT_PROVEN) },
+            adviceRunner =
+                AdvisoryRunner {
+                    RunnerOutcome.Unavailable(
+                        AdviceUnavailableReason.CREDENTIAL_NOT_CONFIGURED,
+                        "HOME is unset; cannot expand ~/.gigacode/gigacode_token.json",
+                    )
+                },
         ) { store, api ->
             api.bootstrap()
             val input = store.acceptInput(SPIKE_DROP.bytes().inputStream(), "spike-drop.jtl")
@@ -329,6 +335,19 @@ class LocalApiTest {
                 status = api.get("/api/advice-jobs/$jobId").jsonObject()
             }
             assertEquals("UNAVAILABLE", status.getValue("state").jsonPrimitive.content)
+            assertEquals("CREDENTIAL_NOT_CONFIGURED", status.getValue("unavailable_reason").jsonPrimitive.content)
+            assertEquals(
+                "HOME is unset; cannot expand ~/.gigacode/gigacode_token.json",
+                status.getValue("detail").jsonPrimitive.content,
+            )
+            assertEquals(
+                status,
+                api
+                    .get("$base/advice")
+                    .jsonObject()
+                    .getValue("job")
+                    .jsonObject,
+            )
             assertEquals(
                 jobId,
                 api

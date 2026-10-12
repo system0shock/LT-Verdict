@@ -51,6 +51,8 @@ class CliArtifactsTest {
             listOf("--out-dir", "ltv summary", "--version", "--policy <policy.json>|-").forEach {
                 assertTrue(help.stdout.contains(it), "usage lacks $it")
             }
+            assertTrue(help.stdout.contains("ltv source validate: validate source profiles offline"), help.stdout)
+            assertTrue(help.stdout.contains("ltv source probe: test one saved query against a source"), help.stdout)
         }
         assertEquals(64, run(noStdin).exitCode)
     }

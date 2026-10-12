@@ -22,6 +22,7 @@ onMounted(async () => {
   catch { error.value = 'Grafana configuration is unavailable.' }
 })
 async function load(render: boolean) {
+  if (!dashboard.value.trim()) return
   const current = ++revision
   busy.value = true; error.value = ''; png.value = ''
   try {
@@ -59,6 +60,13 @@ async function load(render: boolean) {
         pattern="[A-Za-z0-9_\-]+"
         :disabled="busy"
       ></label>
+      <p
+        v-if="!dashboard.trim()"
+        lang="ru"
+        role="status"
+      >
+        Укажите dashboard uid в поле Dashboard UID
+      </p>
       <label>Panel ID <input
         v-model.number="panel"
         required
@@ -67,12 +75,12 @@ async function load(render: boolean) {
         max="2147483647"
         :disabled="busy"
       ></label>
-      <button :disabled="busy || !profile">
+      <button :disabled="busy || !profile || !dashboard.trim()">
         Prepare link
       </button>
       <button
         type="button"
-        :disabled="busy || !link"
+        :disabled="busy || !link || !dashboard.trim()"
         @click="load(true)"
       >
         Render PNG
@@ -91,7 +99,7 @@ async function load(render: boolean) {
       {{ error }}
     </p>
     <a
-      v-if="link"
+      v-if="link && dashboard.trim()"
       :href="link"
       target="_blank"
       rel="noopener noreferrer"

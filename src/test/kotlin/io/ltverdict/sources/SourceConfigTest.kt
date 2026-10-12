@@ -20,6 +20,96 @@ import java.nio.file.Path
 
 class SourceConfigTest {
     @Test
+    fun `unknown field diagnostics cap a 200 character key`() {
+        val key = "x".repeat(200)
+        val failure =
+            assertThrows(SourceInputFailure::class.java) {
+                readSourceConnections("""{"$key":[]}""".byteInputStream())
+            }
+        val capped = "x".repeat(64) + "..."
+        assertEquals("SOURCE_CONFIG_INVALID", failure.code)
+        assertEquals("/$capped", failure.jsonPointer)
+        assertEquals("unknown field $capped", failure.detail)
+    }
+
+    @Test
+    fun `external profile validators retain their pointer and original code`() {
+        val cases =
+            listOf(
+                Triple(
+                    example("docs/contracts/sources/v1/postgresql-connections.example.json").replace("5432", "0"),
+                    "/connections/0",
+                    "profile violates PostgreSQL constraints (PG_PROFILE_INVALID)",
+                ),
+                Triple(
+                    example("docs/contracts/sources/v1/opensearch-connections.example.json")
+                        .replace("\"group_limit\": 50", "\"group_limit\": 0"),
+                    "/connections/0/opensearch",
+                    "mapping violates OpenSearch constraints (OPENSEARCH_INVALID_MAPPING)",
+                ),
+            )
+        cases.forEach { (json, pointer, detail) ->
+            val failure = assertThrows(SourceInputFailure::class.java) { readSourceConnections(json.byteInputStream()) }
+            assertEquals("SOURCE_CONFIG_INVALID", failure.code)
+            assertEquals(pointer, failure.jsonPointer)
+            assertEquals(detail, failure.detail)
+        }
+    }
+
+    @Test
+    fun `optional numeric fields report type errors without claiming they are required`() {
+        listOf(
+            "requests_per_second" to "must be a number",
+            "burst" to "must be an integer in the 32-bit range",
+            "timeout_ms" to "must be an integer in the 64-bit range",
+        ).forEach { (field, rule) ->
+            val json = validConnections().replace(Regex("\"$field\":\\s*[0-9.]+"), "\"$field\":{}")
+            val failure = assertThrows(SourceInputFailure::class.java) { readSourceConnections(json.byteInputStream()) }
+            assertEquals("/connections/0/governor/$field", failure.jsonPointer)
+            assertEquals("$field $rule", failure.detail)
+        }
+    }
+
+    @Test
+    fun `label key diagnostics cap the pointer`() {
+        val json = validConnections().replace("\"job\":\"api\"", "\"${"x".repeat(200)}\":\"api\"")
+        val failure = assertThrows(SourceInputFailure::class.java) { readSourceConnections(json.byteInputStream()) }
+        assertEquals("/connections/0/queries/0/labels/${"x".repeat(64)}...", failure.jsonPointer)
+    }
+
+    @Test
+    fun `config failures retain the bare code and identify the field and rule`() {
+        val prometheus = """{"schema_version":"source-connections.v1","connections":[${minimalConnection("main")}]}"""
+        val cases =
+            listOf(
+                Triple(prometheus.replace("\"connections\":", "\"postgres\":[],\"connections\":"), "/postgres", "postgres"),
+                Triple(influxConnections().replace("\"database\":\"metrics\",", ""), "/connections/0/database", "database"),
+                Triple(
+                    prometheus.replace("prometheus", "victoria_metrics").replace("\"queries\":", "\"database\":\"metrics\",\"queries\":"),
+                    "/connections/0/database",
+                    "database",
+                ),
+                Triple(prometheus.replace("prometheus", "unsupported"), "/connections/0/source_kind", "source_kind"),
+                Triple(
+                    prometheus.replace("\"queries\":", "\"governor\":{\"max_attempts\":0},\"queries\":"),
+                    "/connections/0/governor/max_attempts",
+                    "max_attempts",
+                ),
+                Triple(prometheus.replace("\"role\":\"system\"", "\"role\":false"), "/connections/0/queries/0/role", "role"),
+                Triple(prometheus.replace("\"connections\":", "\"a~/b\":[],\"connections\":"), "/a~0~1b", "a~/b"),
+            )
+        cases.forEach { (json, pointer, field) ->
+            val failure = assertThrows(SourceInputFailure::class.java) { readSourceConnections(json.byteInputStream()) }
+            assertEquals("SOURCE_CONFIG_INVALID", failure.code)
+            assertEquals("SOURCE_CONFIG_INVALID", failure.message)
+            assertEquals(pointer, failure.jsonPointer)
+            assertTrue(requireNotNull(failure.detail).contains(field), failure.detail)
+        }
+        // PromQL profiles keep their existing rule: database is absent.
+        assertNull(readSourceProfiles(prometheus.byteInputStream()).single().database)
+    }
+
+    @Test
     fun `v2 connections accept PostgreSQL without fabricating an HTTP profile`() {
         val config = """{"schema_version":"source-connections.v2","connections":[{
             "id":"pg","source_kind":"postgresql","source_database_id":"orders-test",

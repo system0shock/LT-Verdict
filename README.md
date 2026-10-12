@@ -35,6 +35,22 @@ Gatling (`simulation.log`, текстовый и бинарный). «Прове
   идёт путём Docker и relay (харнесс для экспериментов). С настоящим GigaCode на Linux
   direct-runner не проверялся. Отгружается промпт v1, измеренный v2 не включён.
 
+Где задаются ресурсные пороги:
+
+Транзакционные правила `policy.v1` по замыслу проверяют задержки, ошибки и throughput;
+его `platform_rules` задают пороги CPU, памяти и OOM по сервисам ([правила
+платформы](docs/user/slice-1-local-analysis.md#правила-платформы)). Пороги CPU и памяти
+задаются в `rules` снимка `resource-snapshot.v1` или профиля источника в connections:
+[схема и примеры](docs/user/online-sources.md#правила-ресурсных-sla), [ADR
+0005](docs/adr/0005-resource-window-sla.md).
+Корреляции включаются явно: `ltv analyze --correlation <plan.json>`
+([ADR 0006](docs/adr/0006-bounded-load-resource-correlation.md),
+[руководство](docs/user/slice-1-local-analysis.md#описательная-диагностика-одного-прогона)).
+Представление по подам — `--pod-view <pod-view.json>`
+([ADR 0020](docs/adr/0020-pod-view-artifact.md), [руководство](docs/user/pod-view.md));
+рост ресурсов — [`--trend`](docs/user/slice-1-local-analysis.md#рост-метрики-в-пределах-sla),
+ёмкость — `--capacity` ([ADR 0009](docs/adr/0009-explicit-capacity-stages.md)).
+
 Чего нет:
 
 - синтеза инцидентов («3–7 инцидентов вместо графиков»): «Обзор» показывает плоский

@@ -36,6 +36,15 @@ Code 0.21.1 как замену GigaCode с GigaCode naming на уровне wr
    `UNAVAILABLE`; конфигурационный флаг не может объявить boundary проверенной.
    Ordinary tools одновременно удаляются через exact `--exclude-tools` и
    блокируются `--max-tool-calls=0`; одного budget guard недостаточно.
+
+   **Поправка 2026-10-13 к п. 6:** по решению владельца от 2026-10-12 во всех
+   runners бюджет изменён на `--max-tool-calls=1`. Реальный gigacode CLI считает
+   единственный разрешённый `structured_output` как tool call и при бюджете `0`
+   прерывается с `FatalBudgetExceededError`. Остаточный риск: теперь технически
+   возможен один вызов неисключённого инструмента. Компенсирующие меры:
+   `--exclude-tools=read_file,edit,notebook_edit,run_shell_command`,
+   `--bare --safe-mode` и `--approval-mode=default` (headless не может подтвердить
+   вызов инструмента). Единственным разрешённым вызовом остаётся `structured_output`.
 7. Timeout, process failure, output overflow, invalid contract и неизвестные
    references возвращаются как bounded fail-soft outcome. Raw stdout/stderr и
    secret values не сохраняются.

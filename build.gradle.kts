@@ -90,9 +90,50 @@ tasks.startScripts {
         val classpathLine = Regex("(?m)^set CLASSPATH=.*$")
         val script = windowsScript.readText()
         check(classpathLine.findAll(script).count() == 1) { "ltv.bat: expected exactly one CLASSPATH line, template changed" }
-        windowsScript.writeText(
-            script.replace(classpathLine, Regex.escapeReplacement("set CLASSPATH=%APP_HOME%\\lib\\*")),
-        )
+        val windowsAnchor = ":execute\r\n"
+        check(script.windowed(windowsAnchor.length).count { it == windowsAnchor } == 1) {
+            "ltv.bat: expected exactly one execute label, template changed"
+        }
+        val windowsVersionCheck =
+            """
+            @rem Check the Java version before launching LT Verdict.
+            set LTV_JAVA_VERSION=
+            set LTV_JAVA_MAJOR=
+            for /f "tokens=2,3" %%a in ('"%JAVA_EXE%" -version 2^>^&1') do if "%%a"=="version" set "LTV_JAVA_VERSION=%%~b"
+            for /f "tokens=1 delims=.+-_" %%v in ("%LTV_JAVA_VERSION%") do set "LTV_JAVA_MAJOR=%%v"
+            if "%LTV_JAVA_MAJOR%"=="1" for /f "tokens=2 delims=." %%v in ("%LTV_JAVA_VERSION%") do set "LTV_JAVA_MAJOR=%%v"
+            if not defined LTV_JAVA_MAJOR goto javaVersionChecked
+            if %LTV_JAVA_MAJOR% GEQ 21 goto javaVersionChecked
+            1>&2 echo LT Verdict requires Java 21 or newer; found %LTV_JAVA_VERSION%. Set JAVA_HOME to a JDK/JRE 21+.
+            exit /b 1
+            :javaVersionChecked
+            """.trimIndent().replace("\n", "\r\n") + "\r\n"
+        val patched = script.replace(classpathLine, Regex.escapeReplacement("set CLASSPATH=%APP_HOME%\\lib\\*"))
+        windowsScript.writeText(patched.replace(windowsAnchor, windowsAnchor + windowsVersionCheck))
+
+        val unixAnchor = "# Increase the maximum file descriptors if we can."
+        val unix = unixScript.readText()
+        check(unix.windowed(unixAnchor.length).count { it == unixAnchor } == 1) {
+            "ltv: expected exactly one file descriptor comment, template changed"
+        }
+        val unixVersionCheck =
+            """
+            # Check the Java version before launching LT Verdict.
+            ltv_java_version=${'$'}("${'$'}JAVACMD" -version 2>&1 | sed -n 's/^[^"]*version "\([^"]*\)".*/\1/p')
+            ltv_java_major=${'$'}{ltv_java_version#1.}
+            ltv_java_major=${'$'}{ltv_java_major%%[.+_-]*}
+            case "${'$'}ltv_java_major" in
+                ''|*[!0-9]*) ;;
+                *)
+                    if [ "${'$'}ltv_java_major" -lt 21 ]; then
+                        printf '%s\n' "LT Verdict requires Java 21 or newer; found ${'$'}ltv_java_version. Set JAVA_HOME to a JDK/JRE 21+." >&2
+                        exit 1
+                    fi
+                    ;;
+            esac
+
+            """.trimIndent() + "\n"
+        unixScript.writeText(unix.replace(unixAnchor, unixVersionCheck + unixAnchor))
     }
 }
 

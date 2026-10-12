@@ -42,6 +42,7 @@ import io.ltverdict.sources.PostgresAnalysisInput
 import io.ltverdict.sources.PromqlSource
 import io.ltverdict.sources.SourceConnections
 import io.ltverdict.sources.SourceHttp
+import io.ltverdict.sources.SourceInputFailure
 import io.ltverdict.sources.analyzeWithSources
 import io.ltverdict.sources.capturePostgresPhase
 import io.ltverdict.sources.cliMessage
@@ -104,13 +105,26 @@ internal fun runCli(
         EXIT_INVALID_INPUT
     } catch (failure: CliFailure) {
         stderr.println(failure.message)
+        failure.detail?.let {
+            val pointer = failure.jsonPointer.orEmpty()
+            val diagnostic =
+                (if (pointer.isEmpty()) it else "$pointer: $it")
+                    .map { character ->
+                        if (character.isISOControl() || character == '\u2028' || character == '\u2029') {
+                            "\\u${character.code.toString(16).padStart(4, '0')}"
+                        } else {
+                            character.toString()
+                        }
+                    }.joinToString("")
+            stderr.println(diagnostic)
+        }
         if (args.firstOrNull() == "analyze" && Regex("^SOURCE_[A-Z_]+_INVALID(?:$|[:\\s])").containsMatchIn(failure.message)) {
             stderr.println("hint: run ltv source validate --connections <file> for details")
         }
         failure.exitCode
     } catch (failure: IllegalStateException) {
-        if (failure.message == "DATA_DIR_BUSY") {
-            stderr.println("DATA_DIR_BUSY")
+        if (failure.message?.lineSequence()?.first() == "DATA_DIR_BUSY") {
+            stderr.println(failure.message)
             EXIT_DATA_DIR_BUSY
         } else {
             stderr.println("INTERNAL_ERROR: ${failure.message ?: failure.javaClass.simpleName}")
@@ -664,7 +678,7 @@ private fun ui(args: List<String>): Int {
     val profiles = connections.http
     val sourceHttp = if (profiles.isEmpty()) null else SourceHttp(profiles)
     val source = sourceHttp?.let { PromqlSource(profiles, it) }
-    val directory = DataDirectory.open(dataDir)
+    val directory = DataDirectory.open(dataDir, "server")
     val store = RunBundleStore(directory)
     val jenkinsWorkflows =
         try {
@@ -765,6 +779,8 @@ internal fun <T> readSourceFile(
         throw CliFailure(
             EXIT_INVALID_INPUT,
             failure.message?.takeIf { Regex("(?:SOURCE|PG)_[A-Z_]+").matches(it) } ?: "SOURCE_CONFIG_INVALID",
+            jsonPointer = (failure as? SourceInputFailure)?.jsonPointer,
+            detail = (failure as? SourceInputFailure)?.detail,
         )
     } catch (_: IOException) {
         throw CliFailure(EXIT_INVALID_INPUT, "SOURCE_READ_ERROR")
@@ -962,6 +978,8 @@ private fun usageText(): String =
 internal class CliFailure(
     val exitCode: Int,
     override val message: String,
+    val jsonPointer: String? = null,
+    val detail: String? = null,
 ) : RuntimeException(message)
 
 internal const val EXIT_OK = 0

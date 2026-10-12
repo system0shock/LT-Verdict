@@ -1,6 +1,7 @@
 package io.ltverdict.storage
 
 import java.io.IOException
+import java.nio.ByteBuffer
 import java.nio.channels.FileChannel
 import java.nio.channels.FileLock
 import java.nio.channels.OverlappingFileLockException
@@ -11,6 +12,7 @@ import java.nio.file.Path
 import java.nio.file.SimpleFileVisitor
 import java.nio.file.StandardOpenOption
 import java.nio.file.attribute.BasicFileAttributes
+import java.time.Instant
 import java.util.UUID
 
 internal class DataDirectory private constructor(
@@ -40,7 +42,12 @@ internal class DataDirectory private constructor(
     }
 
     internal companion object {
-        fun open(root: Path): DataDirectory {
+        const val LOCK_REGION_OFFSET = 4096L
+
+        fun open(
+            root: Path,
+            commandKind: String = "cli",
+        ): DataDirectory {
             val normalized = root.toAbsolutePath().normalize()
             rejectSymlinkComponents(normalized)
             Files.createDirectories(normalized)
@@ -64,11 +71,18 @@ internal class DataDirectory private constructor(
                 rejectOwnedSymlink(lockPath)
                 acquired =
                     try {
-                        channel.tryLock()
+                        // Older binaries lock 0..MAX, overlapping this region and preserving mutual exclusion.
+                        channel.tryLock(LOCK_REGION_OFFSET, 1L, false)
                     } catch (_: OverlappingFileLockException) {
                         null
                     }
-                if (acquired == null) throw IllegalStateException("DATA_DIR_BUSY")
+                if (acquired == null) throw IllegalStateException(busyMessage(lockPath))
+
+                val metadata = "pid=${ProcessHandle.current().pid()}\ncommand=$commandKind\nstarted=${Instant.now()}\n"
+                val owner = ByteBuffer.wrap(metadata.toByteArray(Charsets.UTF_8))
+                channel.truncate(0)
+                while (owner.hasRemaining()) channel.write(owner)
+                channel.force(true)
 
                 val staging = ensureOwnedDirectory(normalized.resolve(".staging"))
                 val runs = ensureOwnedDirectory(normalized.resolve("runs"))
@@ -84,6 +98,27 @@ internal class DataDirectory private constructor(
                 }
                 throw error
             }
+        }
+
+        private fun busyMessage(lockPath: Path): String {
+            val detail =
+                runCatching {
+                    val content =
+                        FileChannel.open(lockPath, StandardOpenOption.READ, LinkOption.NOFOLLOW_LINKS).use { channel ->
+                            if (channel.size() > 512) return@runCatching null
+                            val buffer = ByteBuffer.allocate(512)
+                            while (buffer.hasRemaining() && channel.read(buffer) > 0) { }
+                            String(buffer.array(), 0, buffer.position(), Charsets.UTF_8)
+                        }
+                    val match =
+                        Regex("pid=([1-9][0-9]*)\ncommand=(cli|server)\nstarted=([^\r\n]+)\n").matchEntire(content)
+                            ?: return@runCatching null
+                    val pid = match.groupValues[1].toLong()
+                    val kind = match.groupValues[2]
+                    val started = Instant.parse(match.groupValues[3])
+                    "held by pid $pid ($kind) since $started; stop that process or use another --data-dir"
+                }.getOrNull()
+            return if (detail == null) "DATA_DIR_BUSY" else "DATA_DIR_BUSY\n$detail"
         }
 
         private fun ensureOwnedDirectory(path: Path): Path {

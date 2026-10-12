@@ -14,6 +14,7 @@ import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
@@ -24,7 +25,8 @@ import java.nio.file.Path
 
 // W3.1, ADR 0033: `ltv source validate|probe|hash`. validate and hash never open a connection; probe sends exactly one request of a
 // saved profile query. Text output is for people and not a contract; JSON (`--format json`) is stable. Nothing here prints an address,
-// a credential, an environment variable name, a response body or the text of an exception.
+// a credential, an environment variable name, a response body or the text of an upstream exception.
+// Config diagnostics carry the field pointer and a parser-authored reason.
 
 internal fun sourceProbeCommand(
     args: List<String>,
@@ -68,7 +70,35 @@ private fun sourceValidate(
 ): Int {
     val options = options(args, 1, setOf("--connections", "--profile", "--format"))
     val format = format(options)
-    val connections = readSourceFile(path(options["--connections"] ?: usage()), ::readSourceConnections)
+    val connections =
+        try {
+            readSourceFile(path(options["--connections"] ?: usage()), ::readSourceConnections)
+        } catch (failure: CliFailure) {
+            if (format == "json" && failure.message == "SOURCE_CONFIG_INVALID") {
+                stdout.write(
+                    canonicalJson(
+                        buildJsonObject {
+                            put("schema_version", "source-check.v1")
+                            put("valid", false)
+                            put(
+                                "errors",
+                                buildJsonArray {
+                                    add(
+                                        buildJsonObject {
+                                            put("code", failure.message)
+                                            put("json_pointer", failure.jsonPointer.orEmpty())
+                                            put("message", failure.detail ?: "source connections are invalid")
+                                        },
+                                    )
+                                },
+                            )
+                        },
+                    ),
+                )
+                stdout.println()
+            }
+            throw failure
+        }
     val report =
         try {
             checkSourceProfiles(connections, options["--profile"], System::getenv, System::getProperty)

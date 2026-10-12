@@ -237,6 +237,7 @@ internal sealed interface RunnerOutcome {
 
     data class Unavailable(
         val reason: AdviceUnavailableReason,
+        val detail: String? = null,
     ) : RunnerOutcome
 }
 
@@ -252,6 +253,7 @@ internal sealed interface AdviceRunResult {
 
     data class Unavailable(
         val reason: AdviceUnavailableReason,
+        val detail: String? = null,
     ) : AdviceRunResult
 }
 
@@ -294,7 +296,7 @@ internal class AdvisoryAiService(
             }
         return when (outcome) {
             is RunnerOutcome.Failed -> AdviceRunResult.Failed(outcome.reason)
-            is RunnerOutcome.Unavailable -> AdviceRunResult.Unavailable(outcome.reason)
+            is RunnerOutcome.Unavailable -> AdviceRunResult.Unavailable(outcome.reason, outcome.detail)
             is RunnerOutcome.Success ->
                 // The model the runtime reports it ran must be the selected one (ADR 0023, D4).
                 if (modelId != null && outcome.provenance.modelId != modelId) {

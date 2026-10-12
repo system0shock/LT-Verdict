@@ -74,6 +74,32 @@ class GrafanaEvidenceTest {
         assertTrue(rendered.sourceLink.toString().startsWith("https://grafana.example/d-solo/safe"))
     }
 
+    @Test
+    fun `empty dashboard uid produces no link or render request`() {
+        val profile = profile(URI("https://grafana.example/"))
+        val request = GrafanaPanelRequest("", 1, 0, 1)
+
+        assertEquals(
+            "GRAFANA_REQUEST_INVALID",
+            assertThrows(IllegalArgumentException::class.java) { grafanaPanelLink(profile, request) }.message,
+        )
+        assertEquals(
+            "GRAFANA_REQUEST_INVALID",
+            assertThrows(IllegalArgumentException::class.java) { grafanaRenderUri(profile, request) }.message,
+        )
+        var fetched = false
+        assertEquals(
+            "GRAFANA_REQUEST_INVALID",
+            assertThrows(IllegalArgumentException::class.java) {
+                renderGrafanaPanel(profile, request) {
+                    fetched = true
+                    byteArrayOf()
+                }
+            }.message,
+        )
+        assertEquals(false, fetched)
+    }
+
     private fun profile(baseUrl: URI): SourceProfile =
         SourceProfile(
             id = "grafana",

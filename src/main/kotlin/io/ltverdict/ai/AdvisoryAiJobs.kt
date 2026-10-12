@@ -30,6 +30,7 @@ internal data class AdviceJobStatus(
     val reused: Boolean? = null,
     val failure: AdviceFailure? = null,
     val unavailableReason: AdviceUnavailableReason? = null,
+    val detail: String? = null,
     /** The model selected for the job (ADR 0023, D2); null when the model configuration is unavailable. */
     val modelId: String? = null,
 )
@@ -173,7 +174,7 @@ internal class AdvisoryAiJobs(
                                 )
                             is AdviceRunResult.Failed -> current.copy(state = AdviceJobState.FAILED, failure = result.reason)
                             is AdviceRunResult.Unavailable ->
-                                current.copy(state = AdviceJobState.UNAVAILABLE, unavailableReason = result.reason)
+                                current.copy(state = AdviceJobState.UNAVAILABLE, unavailableReason = result.reason, detail = result.detail)
                         },
                     )
                 }

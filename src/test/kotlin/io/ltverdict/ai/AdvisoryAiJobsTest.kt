@@ -51,7 +51,7 @@ class AdvisoryAiJobsTest {
         val outcomes =
             mapOf(
                 "failed" to AdviceRunResult.Failed(AdviceFailure.TIMEOUT),
-                "unavailable" to AdviceRunResult.Unavailable(AdviceUnavailableReason.CREDENTIAL_NOT_CONFIGURED),
+                "unavailable" to AdviceRunResult.Unavailable(AdviceUnavailableReason.CREDENTIAL_NOT_CONFIGURED, "HOME is unset"),
             )
         AdvisoryAiJobs(generate = { _, analysisId -> outcomes.getValue(analysisId) }).use { jobs ->
             val failed = accepted(jobs.submit(RUN_ID, "failed")).status
@@ -62,6 +62,7 @@ class AdvisoryAiJobsTest {
             val unavailable = accepted(jobs.submit(RUN_ID, "unavailable")).status
             val unavailableStatus = awaitState(jobs, unavailable.jobId, AdviceJobState.UNAVAILABLE)
             assertEquals(AdviceUnavailableReason.CREDENTIAL_NOT_CONFIGURED, unavailableStatus.unavailableReason)
+            assertEquals("HOME is unset", unavailableStatus.detail)
             assertNull(unavailableStatus.failure)
         }
     }

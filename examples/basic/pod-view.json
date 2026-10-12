@@ -1,0 +1,75 @@
+{
+  "schema_version": "pod-view.v1",
+  "load_input_sha256": "ec01e6fe71409fc8ad3654e16f759bf7c7ad0661aad40802f45ecb0f894fd3e4",
+  "resource_snapshot_sha256": "ebf231384b9743a5dd0d717e9fe073978473e3e1becb06cbd4ddcba4849b371c",
+  "start_epoch_ms": 1767225600000,
+  "step_ms": 10000,
+  "column_count": 12,
+  "coverage": {
+    "pods_observed_total": 1,
+    "pods_included": 1,
+    "rows_observed_total": 2,
+    "rows_included": 2,
+    "selection": {
+      "kind": "ALL"
+    }
+  },
+  "pods": [
+    {
+      "pod": "catalog-01",
+      "service": "catalog",
+      "containers": [
+        {
+          "name": "app",
+          "role": "app"
+        }
+      ]
+    }
+  ],
+  "rows": [
+    {
+      "id": "cpu",
+      "pod": "catalog-01",
+      "container": "app",
+      "metric": "process_cpu_usage",
+      "unit": "cores",
+      "aggregation": "interval_rate",
+      "values": [
+        0.2,
+        0.3,
+        0.4,
+        0.5,
+        0.4,
+        0.5,
+        0.6,
+        0.5,
+        0.4,
+        0.5,
+        0.3,
+        0.2
+      ]
+    },
+    {
+      "id": "rss",
+      "pod": "catalog-01",
+      "container": "app",
+      "metric": "process_resident_memory_bytes",
+      "unit": "bytes",
+      "aggregation": "interval_mean",
+      "values": [
+        268435456,
+        268435456,
+        285212672,
+        301989888,
+        301989888,
+        318767104,
+        335544320,
+        335544320,
+        318767104,
+        301989888,
+        285212672,
+        268435456
+      ]
+    }
+  ]
+}

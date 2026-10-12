@@ -1,5 +1,5 @@
 == open
-+ .ltv.lock lock 0
++ .ltv.lock lock
 + .staging dir
 + runs dir
 accept A | jmeter_jtl_csv-6f9e658876e83eda9a3727dbb32612a2f54800ee34ea22641deeab6781f82601 JMETER_CSV 433 a.jtl 2026-02-03T04:05:06.000Z

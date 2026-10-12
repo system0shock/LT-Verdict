@@ -116,5 +116,6 @@ private fun AdviceJobStatus.toJson(): JsonObject =
         put("reused", reused?.let(::JsonPrimitive) ?: JsonNull)
         put("failure", failure?.name?.let(::JsonPrimitive) ?: JsonNull)
         put("unavailable_reason", unavailableReason?.name?.let(::JsonPrimitive) ?: JsonNull)
+        put("detail", detail?.let(::JsonPrimitive) ?: JsonNull)
         put("model_id", modelId?.let(::JsonPrimitive) ?: JsonNull)
     }

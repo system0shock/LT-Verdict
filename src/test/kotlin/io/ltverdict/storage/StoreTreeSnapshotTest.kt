@@ -445,11 +445,11 @@ class StoreTreeSnapshotTest {
                 .filter { it != root }
                 .map { path ->
                     val relative = root.relativize(path).joinToString("/")
-                    // The lock file is locked by the open data directory (Windows refuses to read it); its size is all it has.
+                    // The lock file names its holder (pid, command kind, time), so only its presence is recorded.
                     relative to
                         when {
                             Files.isDirectory(path) -> "dir"
-                            relative == ".ltv.lock" -> "lock ${Files.size(path)}"
+                            relative == ".ltv.lock" -> "lock"
                             else -> "${Files.size(path)} ${sha256Hex(Files.readAllBytes(path))}"
                         }
                 }.toList()

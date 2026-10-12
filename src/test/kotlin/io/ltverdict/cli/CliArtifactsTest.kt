@@ -28,6 +28,26 @@ class CliArtifactsTest {
     lateinit var tempDir: Path
 
     @Test
+    fun `busy data directory keeps code first and reports server owner for CLI and UI`() {
+        val dataDir = tempDir.resolve("busy-owner")
+        DataDirectory.open(dataDir, "server").use {
+            listOf(
+                arrayOf("summary", "run", "0".repeat(64), "--data-dir", dataDir.toString()),
+                arrayOf("ui", "--data-dir", dataDir.toString()),
+            ).forEach { args ->
+                val result = run(*args)
+                assertEquals(6, result.exitCode)
+                assertEquals("", result.stdout)
+                val lines = result.stderr.trimEnd().lines()
+                assertEquals("DATA_DIR_BUSY", lines[0])
+                assertEquals(2, lines.size)
+                assertTrue(lines[1].startsWith("held by pid ${ProcessHandle.current().pid()} (server) since "), result.stderr)
+                assertTrue(lines[1].endsWith("; stop that process or use another --data-dir"), result.stderr)
+            }
+        }
+    }
+
+    @Test
     fun `version prints the build version and help prints usage without touching stdin`() {
         val noStdin =
             object : InputStream() {

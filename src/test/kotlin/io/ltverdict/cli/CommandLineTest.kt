@@ -339,6 +339,47 @@ class CommandLineTest {
     }
 
     @Test
+    fun `analyze source input failures keep the reason code and suggest validation`() {
+        val profiles = tempDir.resolve("invalid-connections.json")
+        val selection = tempDir.resolve("source.json")
+        Files.writeString(profiles, "{}")
+        Files.writeString(selection, ONLINE_SOURCE_REQUEST)
+        listOf(
+            profiles to "SOURCE_CONFIG_INVALID",
+            tempDir.resolve("missing-connections.json") to "SOURCE_FILE_INVALID",
+        ).forEach { (connections, code) ->
+            val result =
+                run(
+                    "analyze",
+                    fixture("jmeter/csv-5.6.3/input.jtl").toString(),
+                    "--connections",
+                    connections.toString(),
+                    "--source",
+                    selection.toString(),
+                    "--data-dir",
+                    tempDir.resolve("invalid-source-data").toString(),
+                )
+            assertError(result, 4, code)
+            val lines =
+                result.stderr
+                    .replace("\r\n", "\n")
+                    .trimEnd('\n')
+                    .split("\n")
+            assertEquals(code, lines.first())
+            assertEquals("hint: run ltv source validate --connections <file> for details", lines.last())
+        }
+        val validation = run("source", "validate", "--connections", profiles.toString())
+        assertError(validation, 4, "invalid source validation input")
+        assertEquals(
+            "SOURCE_CONFIG_INVALID",
+            validation.stderr
+                .replace("\r\n", "\n")
+                .lineSequence()
+                .first(),
+        )
+    }
+
+    @Test
     fun `CLI derives the v3 auto window and refuses a malformed v3 document before acquisition`() {
         OnlineSourceFixture().use { fixture ->
             val profiles = tempDir.resolve("auto-connections.json")
@@ -389,6 +430,10 @@ class CommandLineTest {
                 )
             assertError(malformed, 4, "malformed v3 source request")
             assertTrue(malformed.stderr.contains("SOURCE_REQUEST_INVALID"), malformed.stderr)
+            assertTrue(
+                malformed.stderr.contains("\nhint: run ltv source validate --connections <file> for details"),
+                malformed.stderr,
+            )
             assertEquals(1, fixture.requests.get())
         }
     }

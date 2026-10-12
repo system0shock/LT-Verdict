@@ -118,6 +118,9 @@ internal fun runCli(
                     }.joinToString("")
             stderr.println(diagnostic)
         }
+        if (args.firstOrNull() == "analyze" && Regex("^SOURCE_[A-Z_]+_INVALID(?:$|[:\\s])").containsMatchIn(failure.message)) {
+            stderr.println("hint: run ltv source validate --connections <file> for details")
+        }
         failure.exitCode
     } catch (failure: IllegalStateException) {
         if (failure.message?.lineSequence()?.first() == "DATA_DIR_BUSY") {
@@ -965,7 +968,11 @@ private fun usageText(): String =
             "--format json|html|asciidoc|confluence|svg [--baseline <analysis-result.json>] [--data-dir <path>] | " +
             "ltv summary <run-id> <analysis-id> [--baseline <analysis-result.json>] [--data-dir <path>] | ltv --help | ltv --version" +
             System.lineSeparator() +
-            "--source accepts source-request.v1|v2|v3|v4; a v3 or v4 window is explicit or auto"
+            "--source accepts source-request.v1|v2|v3|v4; a v3 or v4 window is explicit or auto" +
+            System.lineSeparator() +
+            "ltv source validate: validate source profiles offline" +
+            System.lineSeparator() +
+            "ltv source probe: test one saved query against a source"
     )
 
 internal class CliFailure(

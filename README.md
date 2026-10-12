@@ -88,6 +88,11 @@ echo $?        # 0 PASS, 2 FAIL, 3 NO_VERDICT, 4 неверный вход, 5 н
 `--policy` вердикт `NO_POLICY`, метрики считаются. Пример входа:
 `fixtures/slice1/jmeter/csv-5.6.3/input.jtl`.
 
+Перед первым `ltv analyze --connections` проверьте файл профилей:
+`ltv source validate --connections profiles.json` (без обращения к сети).
+Для проверки одного сохранённого запроса выполните `ltv source probe --connections profiles.json --profile <id> --query-id <id>`.
+Подробности — в [разделе проверки профиля](docs/user/online-sources.md#проверка-профиля-ltv-source-validate-ltv-source-probe-ltv-source-hash).
+
 Вердикт по окну устойчивого состояния, а не по всему прогону с разгоном: объявите стадии
 файлом `load-stages.v1` и добавьте `--stages`. Пример на фикстуре с разгоном и остановкой:
 

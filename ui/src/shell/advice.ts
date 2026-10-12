@@ -63,7 +63,7 @@ export function jobView(job: AdviceJob): FailureView {
   if (job.state === 'UNAVAILABLE') {
     const code = job.unavailable_reason ?? null
     const known = code !== null && Object.hasOwn(ADVICE_LABELS.unavailable, code)
-    return { state, text: known ? ADVICE_LABELS.unavailable[code]! : ADVICE_LABELS.unknownUnavailable,
+    return { state, text: [known ? ADVICE_LABELS.unavailable[code]! : ADVICE_LABELS.unknownUnavailable, job.detail].filter(Boolean).join(' '),
       code, hint: known && Object.hasOwn(ADVICE_LABELS.unavailableHint, code) ? ADVICE_LABELS.unavailableHint[code]! : ADVICE_LABELS.unknownFailureHint, tone: 'warn' }
   }
   return { state, text: '', code: Object.hasOwn(ADVICE_LABELS.states, job.state) ? null : String(job.state), hint: null, tone: 'info' }

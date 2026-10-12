@@ -126,6 +126,9 @@ Launcher сам проверяет version и SHA-256 entrypoint; другое �
 OPENAI_API_KEY=<ModelStudio token>
 ```
 
+Значения `LT_VERDICT_AI_CREDENTIAL_ENV_FILE`, начинающиеся с `~/` или `~\`, раскрываются через `HOME`
+(на Windows при пустом `HOME` используется `USERPROFILE`).
+
 Укажите абсолютные пути перед запуском LT Verdict:
 
 ```powershell
@@ -548,7 +551,7 @@ ADR 0021 (см. «Файл конфигурации моделей»); приз�
 | `UNKNOWN_EVIDENCE_REFERENCE` | модель сослалась на evidence, которого нет | запросить совет ещё раз |
 | `TIMEOUT` | модель не ответила за отведённое время | повторить позже |
 | `PROCESS_FAILED` | сбой runner при выполнении разбора | повторить; при повторе сообщить администратору |
-| `CREDENTIAL_NOT_CONFIGURED` | нет файла с ключом | администратору: `LT_VERDICT_AI_CREDENTIAL_ENV_FILE` |
+| `CREDENTIAL_NOT_CONFIGURED` | Credential не настроен; `detail` рядом с `unavailable_reason` содержит имя `LT_VERDICT_AI_CREDENTIAL_ENV_FILE`, раскрытый путь и причину. Причина: настройка отсутствует, файл отсутствует, не читается, имеет недопустимый размер либо не содержит корректный `OPENAI_API_KEY`. Если `HOME` и `USERPROFILE` пусты, показан исходный путь с `~`. | администратору: проверить настройку, HOME, USERPROFILE, путь и права доступа; UI показывает detail рядом с причиной, значения ключей не выводятся |
 | `DOCKER_UNAVAILABLE` | Docker недоступен | запустить Docker и повторить |
 | `RUNTIME_IMAGE_MISSING` | нет закреплённого образа | администратору: `docker pull` из этого документа |
 | `OS_ISOLATION_NOT_PROVEN` | изоляция не подтверждена | администратору: см. раздел про изоляцию |

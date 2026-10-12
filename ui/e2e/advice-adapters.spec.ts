@@ -3,6 +3,13 @@ import type { AdviceDocument, AdviceJob, AnalysisResult } from '../src/types'
 import { ADVICE_LABELS } from '../src/shell/labels.advice'
 import { apiFailureView, evidenceRef, jobView, provenanceLines } from '../src/shell/advice'
 
+test('unavailable credential detail is passed through next to the reason', () => {
+  const detail = 'LT_VERDICT_AI_CREDENTIAL_ENV_FILE: HOME is unset; cannot expand ~/.gigacode/gigacode_token.json'
+  const view = jobView(job({ state: 'UNAVAILABLE', unavailable_reason: 'CREDENTIAL_NOT_CONFIGURED', detail }))
+  expect(view.code).toBe('CREDENTIAL_NOT_CONFIGURED')
+  expect(view.text).toContain(detail)
+})
+
 // Чистые функции ИИ-разбора: происхождение совета и русские тексты ошибок. Данные на входе, готовые строки на выходе.
 function advice(over: Record<string, unknown>): AdviceDocument {
   return {

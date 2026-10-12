@@ -395,7 +395,9 @@ class AiModelsConfigTest {
         val quiet = ByteArrayOutputStream()
         val builtIn = advisoryAiSetup(emptyMap(), stderr = PrintStream(quiet, true, "UTF-8"))
         assertEquals(AiModelsConfig.BUILT_IN, builtIn.models)
-        assertEquals(RunnerOutcome.Unavailable(AdviceUnavailableReason.CREDENTIAL_NOT_CONFIGURED), builtIn.runner.invoke(EVIDENCE))
+        val unavailable = assertInstanceOf(RunnerOutcome.Unavailable::class.java, builtIn.runner.invoke(EVIDENCE))
+        assertEquals(AdviceUnavailableReason.CREDENTIAL_NOT_CONFIGURED, unavailable.reason)
+        assertTrue(unavailable.detail!!.contains("LT_VERDICT_AI_CREDENTIAL_ENV_FILE"))
         assertEquals("", quiet.toString("UTF-8"))
     }
 

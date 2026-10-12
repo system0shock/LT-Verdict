@@ -40,6 +40,251 @@ CLI использует [пример source request](../contracts/sources/v1/r
 описаны ниже. Subpath установки задаётся в base URL. Redirects и произвольные
 URLs из UI запрещены.
 
+## Схема файла connections по виду источника
+
+Правила ниже соответствуют `SourceConfig.kt` и вызываемым им валидаторам.
+Имена видов точные: `influxdb` и `postgresql`, а не `influx` и `postgres`.
+**У `prometheus` и `victoria_metrics` поле `database` запрещено;
+у `influxdb` оно обязательно.**
+
+Неизвестные поля на верхнем уровне, в профиле, запросе, `auth` и вложенных
+объектах отвергают весь файл с кодом `SOURCE_CONFIG_INVALID`. Например,
+`"postgres": []` рядом с `connections` недопустимо: PostgreSQL-профили
+помещаются в общий массив `connections`. Необязательное поле нужно опускать,
+а не заменять на `null`; пустой массив также не отменяет запрет поля.
+Ключи объекта `labels` — пользовательские метки, а не поля схемы.
+
+### Верхний уровень файла
+
+| `source_kind` в `connections` | Обязательные поля | Необязательные поля | Запрещённые поля и ограничения |
+| --- | --- | --- | --- |
+| `prometheus`, `victoria_metrics`, `influxdb`, `opensearch` | `schema_version`, `connections` | нет | любые другие; версия `source-connections.v1`, `source-connections.v2` или `source-connections.v3` |
+| `postgresql` | `schema_version`, `connections` | нет | любые другие; только `source-connections.v2` или `source-connections.v3` |
+
+Корень — JSON-объект; `connections` — массив из 1..16 профилей с уникальными
+`id` для всех видов вместе. Файл — до 1 048 576 байт (1 МиБ), иначе
+`SOURCE_CONFIG_TOO_LARGE`; неверный UTF-8 — `SOURCE_CONFIG_INVALID_UTF8`.
+JSON-сканер ограничивает глубину значением 12, числовой токен — 64 байтами,
+модуль показателя степени — 64; повторяющиеся ключи не допускаются.
+
+### Уровень профиля
+
+В таблице «общие HTTP» означает обязательные `id`, `source_kind`, `transport`,
+`base_url`; «HTTP-настройки» — необязательные `auth`, `tls`,
+`allow_insecure_http`, `governor`. Все поля, не перечисленные как разрешённые,
+запрещены.
+
+| `source_kind` | Обязательные поля | Необязательные поля | Запрещённые поля и условия |
+| --- | --- | --- | --- |
+| `prometheus` | общие HTTP, `queries` | HTTP-настройки, `rules`, `datasource_uid` для `grafana_proxy`; в `v3`: `scrape_interval_ms`, `arm` | `database`, `opensearch`, поля PostgreSQL; `datasource_uid` при `direct` |
+| `victoria_metrics` | общие HTTP, `queries` | как у `prometheus` | как у `prometheus` |
+| `influxdb` | общие HTTP, `database`, `queries` | как у `prometheus` | `opensearch`, поля PostgreSQL; `datasource_uid` при `direct` |
+| `opensearch` | общие HTTP, `opensearch` | HTTP-настройки | только `transport: direct`; `queries`, `rules`, `database`, `datasource_uid`, `scrape_interval_ms`, `arm`, поля PostgreSQL |
+| `postgresql` | `id`, `source_kind`, `source_database_id`, `host`, `database`, `username_env`, `password_env` | `port` (5432), `allow_insecure` (false), `tables` ([]), `pg_profile` | все HTTP-поля, включая `auth`, `tls`, `queries`, `rules`, `transport`, `base_url` |
+
+HTTP `id`, `arm` и InfluxDB `database` — непустые строки до 128 байт UTF-8
+без управляющих символов. `transport` — `direct` или `grafana_proxy`;
+у второго обязателен `datasource_uid`, соответствующий
+`[A-Za-z0-9._~-]{1,128}`, кроме `.` и `..`.
+`base_url` требует `http`/`https` и host; порт, если задан, — 1..65535.
+Запрещены userinfo, query, fragment, `%` в пути и сегменты `.`/`..`.
+При `http` и `auth`, отличном от `none`, требуется
+`allow_insecure_http: true` (по умолчанию false).
+В `v1`/`v2` поля `scrape_interval_ms` и `arm` запрещены; в `v3`
+`scrape_interval_ms` — 1000..3600000, кратно 1000. Если у профиля задан `arm`,
+метка `arm` запроса (если она есть) должна ему равняться.
+
+У `governor` все поля необязательны: `requests_per_second` — больше 0 и
+не больше 1000 (0.5), `burst` — 1..1000 (1), `max_concurrent` — 1..64 (1),
+`timeout_ms` — 1..300000 (30000), `max_attempts` — 1..10 (3),
+`honor_retry_after` — boolean (true), `max_requests_per_run` — 0..1000000
+(по умолчанию отсутствует). В скобках указаны значения по умолчанию.
+Правила `tls` описаны в разделе «mTLS»: пути до 1024 байт, объект непустой,
+только HTTPS; `client_keystore_file` и `client_keystore_password_env`
+задаются вместе.
+
+В `opensearch` обязательны `indices`, `timestamp_field`, `service_field`,
+`error_type_field`, `message_field`. `indices` — 1..16 строк до 128 байт,
+соответствующих `[a-z0-9._*-]+`: нельзя `_all`, только звёздочки, `..`
+или первый символ из `-._`. Имена полей — до 128 байт, соответствуют
+`[A-Za-z_@][A-Za-z0-9_@-]*(\.[A-Za-z_@][A-Za-z0-9_@-]*)*`.
+Необязательны `group_limit` — 1..200 (50), `samples_per_group` — 0..5 (2),
+`sample_message_bytes_max` — 1..65536 (4096). Остальные поля запрещены.
+При чтении файла ошибки формы и значений mapping дают
+`SOURCE_CONFIG_INVALID` (внутренний `OPENSEARCH_INVALID_MAPPING`
+преобразуется в этот код).
+
+Для PostgreSQL `id` и `source_database_id` — непустые строки до 128 байт
+без управляющих символов; второй не может начинаться с `jdbc:` или содержать
+`://`. `database` — до 63 байт; `host` — допустимое имя хоста или IPv6-адрес,
+до 253 символов; `port` — 1..65535. `tables` содержит не более 16 уникальных
+пар (`schema`, `table`). В каждой записи обязательны `schema`, `table`,
+`columns`; необязательны `key` ([]), `row_limit` — 1..10000 (10000),
+`byte_limit` — 2..1048576 (1048576). `columns` — 1..128 уникальных SQL
+идентификаторов; `key` — уникальное подмножество `columns`.
+`schema`, `table` и имена столбцов — непустые строки до 63 байт UTF-8
+без управляющих символов; дополнительных ограничений на их алфавит нет.
+В `pg_profile` обязательны все три положительных Int: `server_id`,
+`start_sample_id`, `end_sample_id`, причём start меньше end.
+Другие вложенные поля запрещены. Ошибки формы дают `SOURCE_CONFIG_INVALID`;
+нарушения правил `validatePostgresProfile` при чтении файла преобразуются
+в `SOURCE_CONFIG_INVALID`.
+
+### Уровень query
+
+| `source_kind` | Обязательные поля | Необязательные поля | Запреты и ограничения |
+| --- | --- | --- | --- |
+| `prometheus`, `victoria_metrics` | `id`, `expression`, `metric`, `unit`, `entity`, `role`, `aggregation` | `labels`; только в `v3`: `non_negative_events` (false) | другие поля; `expression` обязательно содержит `$__interval` |
+| `influxdb` | как у `prometheus` | как у `prometheus` | другие поля; InfluxQL с `$__start`, `$__end`, `$__interval`, необязательным `$__offset` |
+| `opensearch`, `postgresql` | нет | нет | `queries` целиком запрещено |
+
+На метрический профиль требуется 1..64 запросов с уникальными `id`.
+`id`, `metric`, `unit`, `entity` — непустые строки до 128 байт UTF-8;
+`expression` — до 65536 байт; управляющие символы запрещены.
+`role` — `system` или `generator`; `aggregation` — `interval_mean`,
+`interval_rate`, `interval_max` или `interval_min`.
+`labels` — объект до 16 строковых меток: ключ до 128 байт, значение до
+512 байт, оба непустые и без управляющих символов.
+
+InfluxQL должен начинаться с `SELECT` и содержать `FROM`, выбирать `value`
+либо использовать `AS value` (кавычки вокруг `value` допустимы).
+Другие `$__...`, `;`, комментарии `--`, `/*`, `*/`, `#` и `INTO`
+запрещены; `fill(...)` допускает только `null` или `none`.
+
+`rules` — до 256 записей с уникальными `id`. Обязательны `id`, `series_id`,
+`unit`, `operator` (`gt`/`lt`), `threshold`, `effect` (`sla`/`diagnostic`)
+и `min_consecutive_cells` (1..100000). `series_id` ссылается на query,
+`unit` совпадает с его единицей; строковые идентификаторы — до 128 байт.
+В `v3` вместо cells можно задать `min_consecutive_span_ms` — 1..86400000;
+оба поля вместе запрещены. `threshold`: точность до 32 цифр, scale до 12,
+модуль до 10^18. В `v3` правило с `operator: gt` и `threshold <= 0`
+для query с `non_negative_events: true` не допускает `interval_min`; подробности
+семантики событий и автошага приведены ниже.
+
+### Уровень auth
+
+Парсер допускает все четыре типа для каждого HTTP-вида независимо от вида
+источника; примет ли сервер выбранный тип, выясняется только запросом
+(`ltv source probe`).
+
+| `source_kind` | `auth.type` | Обязательные поля внутри `auth` | Необязательные поля | Запрещённые поля |
+| --- | --- | --- | --- | --- |
+| `prometheus`, `victoria_metrics`, `influxdb`, `opensearch` | `none` | `type` | нет | все остальные |
+| те же HTTP-виды | `bearer`, `token` | `type`, `token_env` | нет | все остальные |
+| те же HTTP-виды | `basic` | `type`, `username_env`, `password_env` | нет | все остальные |
+| `postgresql` | не применяется | `username_env`, `password_env` на уровне профиля | нет | объект `auth` |
+
+HTTP `auth` можно опустить: действует `none`. Имена переменных окружения
+соответствуют `[A-Za-z_][A-Za-z0-9_]{0,127}` (до 128 ASCII-символов).
+Значения credentials в файл не записываются.
+
+### Минимальные валидные примеры
+
+Каждый блок — отдельный полный файл. Prometheus и InfluxDB используют запросы
+из существующих [PromQL](../contracts/sources/v1/connections.example.json)
+и [InfluxDB](../contracts/sources/v1/influxdb-connections.example.json) примеров;
+VictoriaMetrics использует тот же PromQL. OpenSearch и PostgreSQL сокращены
+из [OpenSearch](../contracts/sources/v1/opensearch-connections.example.json)
+и [PostgreSQL](../contracts/sources/v1/postgresql-connections.example.json)
+примеров. Валидная форма не гарантирует доступность адреса или метрики.
+
+#### Prometheus
+
+```json
+{
+  "schema_version": "source-connections.v1",
+  "connections": [{
+    "id": "local-prometheus", "source_kind": "prometheus",
+    "transport": "direct", "base_url": "http://127.0.0.1:9090",
+    "queries": [{
+      "id": "cpu",
+      "expression": "avg_over_time(cpu_used_ratio{instance=\"host\"}[$__interval])",
+      "metric": "cpu_used", "unit": "ratio", "entity": "host",
+      "role": "system", "aggregation": "interval_mean"
+    }]
+  }]
+}
+```
+
+#### VictoriaMetrics
+
+```json
+{
+  "schema_version": "source-connections.v1",
+  "connections": [{
+    "id": "local-vm", "source_kind": "victoria_metrics",
+    "transport": "direct", "base_url": "http://127.0.0.1:8428",
+    "queries": [{
+      "id": "cpu",
+      "expression": "avg_over_time(cpu_used_ratio{instance=\"host\"}[$__interval])",
+      "metric": "cpu_used", "unit": "ratio", "entity": "host",
+      "role": "system", "aggregation": "interval_mean"
+    }]
+  }]
+}
+```
+
+#### InfluxDB
+
+```json
+{
+  "schema_version": "source-connections.v1",
+  "connections": [{
+    "id": "local-influxdb", "source_kind": "influxdb",
+    "transport": "direct", "base_url": "http://127.0.0.1:8086",
+    "database": "metrics",
+    "queries": [{
+      "id": "cpu",
+      "expression": "SELECT mean(\"cpu\") AS \"value\" FROM \"host\" WHERE time >= $__start AND time < $__end GROUP BY time($__interval, $__offset) fill(null)",
+      "metric": "cpu_used", "unit": "ratio", "entity": "host",
+      "role": "system", "aggregation": "interval_mean"
+    }]
+  }]
+}
+```
+
+#### OpenSearch
+
+```json
+{
+  "schema_version": "source-connections.v1",
+  "connections": [{
+    "id": "errors", "source_kind": "opensearch",
+    "transport": "direct", "base_url": "https://logs.example.invalid",
+    "opensearch": {
+      "indices": ["application-errors-*"],
+      "timestamp_field": "@timestamp", "service_field": "service.keyword",
+      "error_type_field": "error.type.keyword", "message_field": "message"
+    }
+  }]
+}
+```
+
+#### PostgreSQL
+
+```json
+{
+  "schema_version": "source-connections.v2",
+  "connections": [{
+    "id": "pg", "source_kind": "postgresql",
+    "source_database_id": "load-test-db",
+    "host": "postgres.example.test", "database": "loadtest",
+    "username_env": "LTV_POSTGRES_USER",
+    "password_env": "LTV_POSTGRES_PASSWORD"
+  }]
+}
+```
+
+### Чек-лист перед `ltv analyze`
+
+Сначала выполните `ltv source validate --connections <file>` и проверьте
+статусы в отчёте, а не только код выхода. Затем для `prometheus`,
+`victoria_metrics` или `influxdb` выполните
+`ltv source probe --connections <file> --profile <id> --query-id <id>`:
+проверьте доступность, число серий и `decoder_check` для нужного запроса.
+OpenSearch и PostgreSQL команда `probe` пока не поддерживает.
+Подробности — в разделе «Проверка профиля» ниже.
+
 ## Окно выборки
 
 Запрос источника объявляет окно выборки. Поддерживаются четыре версии документа:

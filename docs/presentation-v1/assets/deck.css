@@ -1,0 +1,476 @@
+@import url("fonts/fonts.local.css");
+
+/* ---------- Токены ---------- */
+:root {
+  --bg: #0b1620;
+  --bg2: #101f2d;
+  --panel: #142736;
+  --panel2: #1a3145;
+  --line: #28445c;
+  --ink: #e8f0f7;
+  --mute: #8fa6ba;
+  --accent: #4d94eb;
+  --accent-soft: rgba(77, 148, 235, .16);
+  --pass: #4cc38a;
+  --fail: #ff6b5e;
+  --warn: #f0b24a;
+  --warn-soft: rgba(240, 178, 74, .14);
+  --pass-soft: rgba(76, 195, 138, .14);
+  --shadow: 0 18px 50px rgba(0, 0, 0, .35);
+  --font: "Onest", "Segoe UI", system-ui, sans-serif;
+  --mono: "IBM Plex Mono", Consolas, monospace;
+  --r: 14px;
+  --r-s: 8px;
+}
+:root[data-theme="light"] {
+  --bg: #eef1f4;
+  --bg2: #e3e8ed;
+  --panel: #ffffff;
+  --panel2: #f4f7fa;
+  --line: #c5cfd9;
+  --ink: #0f171f;
+  --mute: #51657a;
+  --accent: #1d5fa8;
+  --accent-soft: rgba(29, 95, 168, .12);
+  --pass: #256f4f;
+  --fail: #b3261e;
+  --warn: #8a5a00;
+  --warn-soft: rgba(138, 90, 0, .12);
+  --pass-soft: rgba(37, 111, 79, .12);
+  --shadow: 0 14px 36px rgba(15, 23, 31, .12);
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { height: 100%; overflow: hidden; background: #05090e; }
+body { font-family: var(--font); color: var(--ink); -webkit-font-smoothing: antialiased; }
+:root[data-theme="light"] body, :root[data-theme="light"] html { background: #d5dbe2; }
+button { font: inherit; color: inherit; cursor: pointer; }
+a { color: var(--accent); }
+:focus-visible { outline: 3px solid var(--accent); outline-offset: 3px; }
+
+/* ---------- Сцена 1920×1080 ---------- */
+#viewport { position: fixed; inset: 0; display: grid; place-items: center; }
+#stage { position: relative; width: 1920px; height: 1080px; flex: none; transform-origin: center center; background: var(--bg); overflow: hidden; box-shadow: var(--shadow); }
+.slide { position: absolute; inset: 0; padding: 88px 112px 96px; display: none; background: var(--bg); }
+.slide.on { display: block; animation: slide-in .55s ease-out both; }
+@keyframes slide-in { from { opacity: 0; transform: translateX(28px); } to { opacity: 1; transform: none; } }
+
+/* ---------- Типографика ---------- */
+.crumb { font-size: 22px; color: var(--mute); display: flex; align-items: center; gap: 12px; margin-bottom: 18px; }
+.crumb i { width: 12px; height: 12px; border-radius: 50%; background: var(--accent); display: inline-block; }
+h2 { font-size: 58px; line-height: 1.12; font-weight: 600; letter-spacing: -.015em; max-width: 1696px; }
+h3 { font-size: 32px; font-weight: 600; line-height: 1.2; }
+p, li { font-size: 28px; line-height: 1.38; }
+.mute { color: var(--mute); }
+.small { font-size: 22px; line-height: 1.35; }
+.mono { font-family: var(--mono); }
+.lead { font-size: 32px; color: var(--mute); max-width: 1300px; margin-top: 18px; }
+
+/* ---------- Компоненты ---------- */
+.card { background: var(--panel); border: 1px solid var(--line); border-radius: var(--r); padding: 28px 32px; }
+.chip { display: inline-flex; align-items: center; gap: 10px; padding: 8px 18px; border-radius: 999px; background: var(--panel2); border: 1px solid var(--line); font-size: 22px; white-space: nowrap; }
+.badge { display: inline-flex; align-items: center; gap: 10px; font-size: 22px; padding: 6px 16px; border-radius: 999px; font-weight: 500; }
+.badge::before { content: ""; width: 10px; height: 10px; border-radius: 50%; background: currentColor; }
+.badge.live { color: var(--pass); background: var(--pass-soft); }
+.badge.dev { color: var(--warn); background: var(--warn-soft); }
+.badge.draft { color: var(--warn); background: var(--warn-soft); border: 1px dashed var(--warn); }
+.stamp { font-family: var(--mono); font-weight: 600; border: 3px solid currentColor; border-radius: 10px; padding: 6px 20px; display: inline-block; }
+.stamp.pass { color: var(--pass); } .stamp.fail { color: var(--fail); } .stamp.nov { color: var(--warn); }
+.top-right { position: absolute; top: 84px; right: 112px; }
+
+/* Шаги показа */
+.slide .st { opacity: 0; transform: translateY(18px); transition: opacity .5s, transform .5s; pointer-events: none; }
+.slide[data-step="1"] .st[data-s="1"], .slide[data-step="2"] .st[data-s="1"], .slide[data-step="3"] .st[data-s="1"],
+.slide[data-step="2"] .st[data-s="2"], .slide[data-step="3"] .st[data-s="2"],
+.slide[data-step="3"] .st[data-s="3"] { opacity: 1; transform: none; pointer-events: auto; }
+
+/* ---------- Навигация ---------- */
+#progress { position: fixed; left: 0; bottom: 0; height: 5px; background: var(--accent); width: 0; transition: width .4s ease; z-index: 20; }
+#counter { position: fixed; right: 18px; bottom: 14px; font-family: var(--mono); font-size: 14px; color: var(--mute); z-index: 20; opacity: .8; }
+#hud { position: fixed; left: 50%; bottom: 14px; transform: translateX(-50%); display: flex; gap: 8px; z-index: 20; opacity: 0; transition: opacity .3s; }
+body.hud #hud { opacity: 1; }
+#hud button { background: rgba(10, 18, 27, .8); color: #dfe8f0; border: 1px solid #355068; border-radius: 8px; padding: 6px 14px; font-size: 14px; }
+#notes { position: fixed; left: 0; right: 0; bottom: 0; max-height: 40vh; overflow: auto; background: rgba(5, 9, 14, .96); color: #e6eef5; padding: 20px 40px 30px; font-size: 18px; line-height: 1.5; display: none; z-index: 30; border-top: 2px solid var(--accent); }
+body.show-notes #notes { display: block; }
+#notes b { color: #8cc0ff; }
+#toc { position: fixed; inset: 0; background: rgba(5, 9, 14, .92); z-index: 40; display: none; padding: 5vh 8vw; overflow: auto; color: #e6eef5; }
+body.show-toc #toc { display: block; }
+#toc ol { columns: 2; column-gap: 60px; list-style: none; counter-reset: n; }
+#toc li { font-size: 20px; line-height: 1.3; padding: 10px 14px; border-radius: 8px; cursor: pointer; counter-increment: n; display: flex; gap: 14px; break-inside: avoid; }
+#toc li::before { content: counter(n); font-family: var(--mono); color: #8cc0ff; min-width: 28px; }
+#toc li:hover, #toc li.cur { background: #16293a; }
+#toc li.skip { opacity: .5; }
+#toc h4 { font-size: 22px; margin-bottom: 20px; font-weight: 500; color: #8fa6ba; }
+
+@media (prefers-reduced-motion: reduce) {
+  .slide.on { animation: none; }
+  *, *::before, *::after { animation-duration: .01ms !important; animation-delay: 0s !important; transition-duration: .01ms !important; }
+}
+
+/* ======================================================
+   Слайд 1. Титул
+   ====================================================== */
+#s1 { padding: 0; }
+#s1 canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
+#s1 .hero { position: absolute; left: 112px; top: 96px; max-width: 1200px; }
+#s1 h1 { font-size: 152px; font-weight: 700; letter-spacing: -.035em; line-height: 1; }
+#s1 .sub { font-size: 40px; line-height: 1.25; color: var(--mute); margin-top: 28px; max-width: 1050px; }
+#s1 .when { position: absolute; right: 112px; top: 100px; font-size: 24px; color: var(--mute); }
+
+/* ======================================================
+   Слайд 2. Проблема
+   ====================================================== */
+#s2 .wrap { display: grid; grid-template-columns: 1020px 1fr; gap: 64px; margin-top: 44px; }
+#s2 .tiles { display: grid; grid-template-columns: repeat(8, 1fr); gap: 10px; align-content: start; }
+#s2 .tile { height: 112px; border-radius: 8px; background: var(--panel); border: 1px solid var(--line); overflow: hidden; opacity: 0; animation: pop .4s ease-out forwards; transition: opacity .6s, border-color .6s, background .6s; }
+#s2 .tile svg { width: 100%; height: 100%; display: block; }
+#s2 .tile path { fill: none; stroke: var(--mute); stroke-width: 2; vector-effect: non-scaling-stroke; transition: stroke .6s; }
+@keyframes pop { from { opacity: 0; transform: scale(.85); } to { opacity: 1; transform: none; } }
+#s2[data-step="1"] .tile:not(.hot) { opacity: .1 !important; }
+#s2[data-step="1"] .tile.hot { border-color: var(--accent); background: var(--accent-soft); }
+#s2[data-step="1"] .tile.hot path { stroke: var(--accent); }
+#s2 .pains { display: flex; flex-direction: column; gap: 22px; }
+#s2 .pain { border-left: 4px solid var(--fail); padding: 4px 0 4px 26px; }
+#s2 .pain h3 { margin-bottom: 6px; }
+#s2 .pain p { font-size: 26px; color: var(--mute); }
+#s2 .goal { position: absolute; left: 112px; right: 112px; bottom: 80px; display: flex; align-items: center; gap: 28px; padding: 24px 36px; border-radius: var(--r); background: var(--accent-soft); border: 1px solid var(--accent); }
+#s2 .goal b { font-weight: 600; }
+#s2 .goal .flow { font-family: var(--mono); font-size: 26px; color: var(--accent); white-space: nowrap; }
+#s2 .goal p { font-size: 28px; }
+
+/* ======================================================
+   Слайд 3. Экосистема
+   ====================================================== */
+#s3 .grid4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 24px; margin-top: 44px; }
+#s3 .grp { background: var(--panel); border: 1px solid var(--line); border-radius: var(--r); padding: 26px 26px 22px; opacity: 0; animation: rise .6s ease-out forwards; min-height: 470px; display: flex; flex-direction: column; }
+#s3 .grp:nth-child(1) { animation-delay: .1s; } #s3 .grp:nth-child(2) { animation-delay: .35s; } #s3 .grp:nth-child(3) { animation-delay: .6s; } #s3 .grp:nth-child(4) { animation-delay: .85s; }
+@keyframes rise { from { opacity: 0; transform: translateY(26px); } to { opacity: 1; transform: none; } }
+#s3 .grp h3 { margin-bottom: 4px; }
+#s3 .grp .badge { align-self: flex-start; margin: 10px 0 18px; }
+#s3 .tool { padding: 12px 0; border-top: 1px solid var(--line); }
+#s3 .tool b { font-size: 26px; font-weight: 600; display: block; }
+#s3 .tool span { font-size: 22px; color: var(--mute); line-height: 1.3; display: block; margin-top: 4px; }
+#s3 .effect { position: absolute; left: 112px; right: 112px; bottom: 80px; display: grid; grid-template-columns: 1fr 1fr; gap: 24px; opacity: 0; animation: rise .7s 1.6s ease-out forwards; }
+#s3 .effect div { padding: 20px 32px; border-radius: var(--r); background: var(--accent-soft); border: 1px solid var(--accent); font-size: 28px; }
+#s3 .effect b { font-weight: 600; color: var(--accent); }
+
+/* ======================================================
+   Слайд 4. RCA-агент
+   ====================================================== */
+#s4 .pipe { position: relative; display: grid; grid-template-columns: repeat(5, 1fr); gap: 34px; margin-top: 110px; }
+#s4 .pipe::before { content: ""; position: absolute; left: 6%; right: 6%; top: 62px; height: 4px; background: repeating-linear-gradient(90deg, var(--line) 0 14px, transparent 14px 26px); }
+#s4 .node { position: relative; text-align: center; }
+#s4 .node:nth-child(1) { --d: 0s; } #s4 .node:nth-child(2) { --d: 2s; } #s4 .node:nth-child(3) { --d: 4s; } #s4 .node:nth-child(4) { --d: 6s; } #s4 .node:nth-child(5) { --d: 8s; }
+#s4 .node h3, #s4 .node p { opacity: .5; animation: lit 11s infinite var(--d); }
+@keyframes lit { 0%, 100% { opacity: .5; } 4%, 16% { opacity: 1; } 22% { opacity: .5; } }
+#s4 .ico { width: 124px; height: 124px; margin: 0 auto 22px; border-radius: 50%; background: var(--bg); border: 3px solid var(--line); display: grid; place-items: center; animation: ring 11s infinite var(--d); }
+@keyframes ring { 0%, 100% { border-color: var(--line); } 4%, 16% { border-color: var(--accent); box-shadow: 0 0 0 10px var(--accent-soft); } 22% { border-color: var(--line); box-shadow: none; } }
+#s4 .ico svg { width: 58px; height: 58px; stroke: var(--accent); fill: none; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
+#s4 .node h3 { font-size: 27px; margin-bottom: 8px; }
+#s4 .node p { font-size: 22px; color: var(--mute); line-height: 1.3; }
+#s4 .modes { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 24px; position: absolute; left: 112px; right: 112px; bottom: 80px; }
+#s4 .modes .card p { font-size: 24px; margin-top: 8px; color: var(--mute); }
+#s4 .modes .card h3 { font-size: 28px; }
+#s4 .modes q { font-family: var(--mono); font-size: 22px; color: var(--accent); quotes: "«" "»"; }
+
+/* ======================================================
+   Слайд 5. Скрипты
+   ====================================================== */
+#s5 .cols { display: grid; grid-template-columns: repeat(3, 1fr); gap: 28px; margin-top: 44px; }
+#s5 .col { display: flex; flex-direction: column; gap: 18px; }
+#s5 .term { height: 430px; border-radius: var(--r); background: #08111a; border: 1px solid var(--line); padding: 20px 24px; font-family: var(--mono); font-size: 23px; line-height: 1.6; color: #b8cbdb; overflow: hidden; position: relative; }
+:root[data-theme="light"] .term { background: #0f1b27; }
+.term .ln { display: block; white-space: pre; opacity: 0; animation: type .01s forwards; }
+.term .k { color: #7db4f5; } .term .s { color: #8fdcb4; } .term .c { color: #6b8499; }
+.term .ok { color: #4cc38a; font-weight: 600; }
+.term .bar { position: absolute; top: 0; left: 0; right: 0; height: 30px; background: #12202d; display: flex; align-items: center; gap: 7px; padding-left: 14px; }
+.term .bar i { width: 10px; height: 10px; border-radius: 50%; background: #35506a; }
+.term .body { padding-top: 26px; }
+@keyframes type { to { opacity: 1; } }
+#s5 .col h3 { display: flex; align-items: center; gap: 14px; }
+#s5 .col ul { list-style: none; display: flex; flex-direction: column; gap: 8px; }
+#s5 .col li { font-size: 24px; color: var(--mute); padding-left: 28px; position: relative; line-height: 1.3; }
+#s5 .col li::before { content: ""; position: absolute; left: 0; top: .5em; width: 12px; height: 12px; border-radius: 3px; background: var(--accent); }
+.gm { position: absolute; inset: 30px 0 0 0; display: grid; grid-template-columns: 1fr 1fr; font-family: var(--font); }
+.gm .tree { padding: 14px 16px; font-family: var(--mono); font-size: 20px; line-height: 1.6; color: #8fa6ba; border-right: 1px solid #1f3346; }
+.gm .chat { padding: 14px; display: flex; flex-direction: column; gap: 10px; justify-content: flex-end; }
+.gm .msg { font-size: 20px; line-height: 1.3; padding: 9px 12px; border-radius: 10px; opacity: 0; animation: type .01s forwards; max-width: 94%; }
+.gm .u { background: #1d3a56; align-self: flex-end; color: #dbe9f6; }
+.gm .a { background: #17382c; color: #bfeed6; }
+
+/* ======================================================
+   Слайд 6. Знания и автоматизация
+   ====================================================== */
+#s6 .wrap { display: grid; grid-template-columns: 1fr 1fr; gap: 60px; margin-top: 40px; }
+#s6 .panel-title { font-size: 26px; color: var(--mute); margin-bottom: 14px; }
+#s6 .kb { display: grid; grid-template-columns: 220px 1fr; gap: 26px; align-items: center; }
+#s6 .src { display: flex; flex-direction: column; gap: 10px; }
+#s6 .src .chip { justify-content: space-between; position: relative; font-size: 26px; padding: 12px 22px; }
+#s6 .src .chip::after { content: ""; position: absolute; right: -28px; top: 50%; width: 28px; height: 2px; background: var(--accent); }
+#s6 .kbox { border: 2px solid var(--accent); border-radius: var(--r); padding: 22px 24px; background: var(--accent-soft); position: relative; }
+#s6 .kbox h3 { font-size: 30px; }
+#s6 .kbox .outs { display: flex; gap: 10px; margin-top: 14px; flex-wrap: wrap; }
+#s6 .expert { margin-top: 24px; padding: 20px 26px; border-radius: var(--r); background: var(--panel); border: 1px solid var(--line); font-size: 27px; }
+#s6 .expert b { color: var(--accent); font-weight: 600; }
+#s6 .loop { position: relative; height: 430px; }
+#s6 .loop svg { width: 100%; height: 100%; }
+#s6 .loop .rot { transform-origin: 50% 50%; animation: spin 14s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+#s6 .bottom { position: absolute; left: 112px; right: 112px; bottom: 80px; display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
+#s6 .bottom .card { padding: 20px 28px; }
+#s6 .bottom h3 { font-size: 27px; margin-bottom: 6px; }
+#s6 .bottom p { font-size: 23px; color: var(--mute); line-height: 1.3; }
+
+/* ======================================================
+   Слайд 7. Эффект
+   ====================================================== */
+#s7 .two { display: grid; grid-template-columns: 1fr 1.25fr; gap: 40px; margin-top: 48px; }
+#s7 .big { padding: 38px 44px; min-height: 560px; }
+#s7 .big .num { font-size: 92px; font-weight: 700; letter-spacing: -.03em; line-height: 1; color: var(--accent); margin: 12px 0 14px; }
+#s7 .big .what { font-size: 26px; color: var(--mute); }
+#s7 .clock { margin-top: 30px; display: flex; align-items: center; gap: 22px; }
+#s7 .clock svg { width: 110px; height: 110px; }
+#s7 .clock .hand { transform-origin: 50px 50px; animation: spin 6s linear infinite; }
+#s7 .bars { display: flex; flex-direction: column; gap: 26px; margin-top: 30px; }
+#s7 .brow { display: grid; grid-template-columns: 140px 1fr; align-items: center; gap: 20px; font-size: 26px; color: var(--mute); }
+#s7 .track { height: 96px; background: var(--panel2); border-radius: 10px; position: relative; overflow: hidden; }
+#s7 .fill { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 10px; display: flex; align-items: center; padding-left: 22px; font-size: 28px; font-weight: 600; color: #fff; white-space: nowrap; }
+#s7 .before .fill { width: 100%; background: repeating-linear-gradient(45deg, #5b7389 0 18px, #66809a 18px 36px); }
+#s7 .after .fill { width: 100%; background: var(--accent); animation: shrink 1.6s .9s cubic-bezier(.7, 0, .2, 1) forwards; }
+#s7 .after .fill span { animation: fade-t 1.6s .9s forwards; }
+@keyframes shrink { to { width: 27%; } }
+@keyframes fade-t { 0% { opacity: 1; } 100% { opacity: 1; } }
+#s7 .foot { position: absolute; left: 112px; right: 112px; bottom: 80px; padding: 18px 28px; border-radius: var(--r); border: 1px dashed var(--line); color: var(--mute); font-size: 24px; }
+
+/* ======================================================
+   Слайд 8. Что такое Вердикт
+   ====================================================== */
+#s8 .flow { display: grid; grid-template-columns: 1fr 70px 1.05fr 70px 1fr 70px 1fr; align-items: stretch; margin-top: 54px; }
+#s8 .flow .arr { align-self: center; }
+#s8 .box { background: var(--panel); border: 1px solid var(--line); border-radius: var(--r); padding: 26px 26px; min-height: 420px; }
+#s8 .box h3 { font-size: 28px; margin-bottom: 12px; }
+#s8 .box li { font-size: 24px; line-height: 1.3; margin: 6px 0 0 20px; color: var(--mute); }
+#s8 .box.core { border: 2px solid var(--accent); background: var(--accent-soft); }
+#s8 .arr { height: 4px; background: repeating-linear-gradient(90deg, var(--accent) 0 12px, transparent 12px 22px); background-size: 22px 4px; animation: dash 1s linear infinite; position: relative; }
+#s8 .arr::after { content: ""; position: absolute; right: -2px; top: -8px; border-left: 14px solid var(--accent); border-top: 10px solid transparent; border-bottom: 10px solid transparent; }
+@keyframes dash { to { background-position: 22px 0; } }
+#s8 .verd { display: flex; flex-direction: column; gap: 14px; align-items: flex-start; }
+#s8 .verd .stamp { font-size: 30px; opacity: .35; animation: pick 6s infinite; }
+#s8 .verd .stamp:nth-child(2) { animation-delay: 2s; } #s8 .verd .stamp:nth-child(3) { animation-delay: 4s; }
+@keyframes pick { 0%, 100% { opacity: .3; } 6%, 28% { opacity: 1; transform: scale(1.06); } 34% { opacity: .3; transform: none; } }
+#s8 .ai { margin-top: 16px; font-size: 20px; color: var(--mute); border-top: 1px dashed var(--line); padding-top: 12px; }
+#s8 .rules { display: flex; gap: 14px; flex-wrap: wrap; position: absolute; left: 112px; right: 112px; bottom: 80px; }
+#s8 .rules .chip { font-size: 24px; padding: 12px 22px; }
+
+/* ======================================================
+   Слайд 9. MCP
+   ====================================================== */
+#s9 .arch { display: grid; grid-template-columns: 420px 1fr 520px; gap: 0; align-items: center; margin-top: 40px; height: 560px; position: relative; }
+#s9 .agents { display: flex; flex-direction: column; justify-content: space-between; height: 100%; }
+#s9 .agent { height: 96px; padding: 0 22px; border-radius: var(--r); background: var(--panel); border: 1px solid var(--line); font-size: 26px; display: flex; align-items: center; gap: 14px; }
+#s9 .agent small { display: block; font-size: 20px; color: var(--mute); }
+#s9 .agent i { width: 14px; height: 14px; border-radius: 4px; background: var(--accent); flex: none; }
+#s9 .agent.mine i { background: var(--pass); }
+#s9 .mcp { position: relative; height: 100%; }
+#s9 .mcp svg { position: absolute; inset: 0; width: 100%; height: 100%; }
+#s9 .mcp .label { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); background: var(--bg); border: 2px solid var(--accent); border-radius: 999px; padding: 10px 30px; font-family: var(--mono); font-size: 30px; font-weight: 600; color: var(--accent); z-index: 2; }
+#s9 .core { border: 2px solid var(--accent); border-radius: var(--r); background: var(--accent-soft); padding: 26px 30px; }
+#s9 .core h3 { margin-bottom: 14px; font-size: 34px; }
+#s9 .core li { list-style: none; font-size: 24px; padding: 9px 0; border-top: 1px solid var(--line); color: var(--ink); }
+#s9 .core li::before { content: "› "; color: var(--accent); font-weight: 700; }
+#s9 .principle { position: absolute; left: 112px; right: 112px; bottom: 80px; padding: 22px 32px; border-radius: var(--r); background: var(--panel); border: 1px solid var(--line); font-size: 28px; display: flex; gap: 30px; align-items: center; }
+#s9 .principle b { color: var(--accent); font-weight: 600; }
+#s9 .principle small { color: var(--mute); font-size: 20px; margin-left: auto; max-width: 420px; }
+@keyframes go { from { offset-distance: 0%; opacity: 0; } 10% { opacity: 1; } 90% { opacity: 1; } to { offset-distance: 100%; opacity: 0; } }
+.pkt { r: 7; }
+.pkt circle { fill: var(--accent); }
+.pkt.back circle { fill: var(--pass); }
+
+/* ======================================================
+   Слайд 10. Макет
+   ====================================================== */
+#s10 .wrap { display: grid; grid-template-columns: 330px 1fr; gap: 36px; margin-top: 30px; }
+#s10 .tabs { display: flex; flex-direction: column; gap: 4px; }
+#s10 .tabs button { text-align: left; background: none; border: 0; border-left: 3px solid var(--line); padding: 8px 16px; font-size: 24px; color: var(--mute); transition: color .2s, border-color .2s, background .2s; }
+#s10 .tabs button[aria-selected="true"] { color: var(--ink); border-color: var(--accent); background: var(--accent-soft); font-weight: 500; }
+#s10 .frame { border-radius: var(--r); border: 1px solid var(--line); background: var(--panel); overflow: hidden; box-shadow: var(--shadow); }
+#s10 .chrome { height: 40px; background: var(--panel2); display: flex; align-items: center; gap: 8px; padding: 0 16px; border-bottom: 1px solid var(--line); }
+#s10 .chrome i { width: 12px; height: 12px; border-radius: 50%; background: var(--line); }
+#s10 .chrome span { margin-left: 14px; font-family: var(--mono); font-size: 16px; color: var(--mute); }
+#s10 .view { height: 700px; overflow: hidden; background: #fff; position: relative; }
+#s10 .view img { position: absolute; left: 0; top: 0; width: 100%; display: block; opacity: 0; transition: opacity .5s; }
+#s10 .view img.on { opacity: 1; animation: pan var(--dur, 12s) ease-in-out forwards; }
+@keyframes pan { 0%, 8% { transform: translateY(0); } 100% { transform: translateY(var(--shift, -800px)); } }
+#s10 .cap { display: flex; justify-content: space-between; align-items: center; margin-top: 14px; font-size: 22px; color: var(--mute); gap: 20px; }
+#s10 .cap a { white-space: nowrap; font-weight: 500; }
+
+/* ======================================================
+   Слайд 11. Основы статистики
+   ====================================================== */
+#s11 .g6 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; margin-top: 34px; }
+#s11 .sc { padding: 18px 24px 18px; opacity: 0; animation: rise .55s ease-out forwards; }
+#s11 .sc:nth-child(1) { animation-delay: .05s; } #s11 .sc:nth-child(2) { animation-delay: .2s; } #s11 .sc:nth-child(3) { animation-delay: .35s; }
+#s11 .sc:nth-child(4) { animation-delay: .5s; } #s11 .sc:nth-child(5) { animation-delay: .65s; } #s11 .sc:nth-child(6) { animation-delay: .8s; }
+#s11 .sc svg { width: 100%; height: 96px; display: block; margin-bottom: 8px; }
+#s11 .sc h3 { font-size: 27px; margin-bottom: 4px; }
+#s11 .sc .met { font-size: 22px; color: var(--accent); font-style: italic; margin-bottom: 6px; }
+#s11 .sc .fact { font-size: 21px; color: var(--mute); line-height: 1.3; }
+#s11 .repro { position: absolute; left: 112px; right: 112px; bottom: 78px; padding: 16px 30px; border-radius: var(--r); background: var(--accent-soft); border: 1px solid var(--accent); font-size: 26px; display: flex; align-items: center; gap: 18px; }
+#s11 .repro .mono { color: var(--accent); }
+.sv-line { fill: none; stroke: var(--accent); stroke-width: 3; stroke-linecap: round; stroke-linejoin: round; }
+.sv-mute { fill: none; stroke: var(--mute); stroke-width: 2; }
+.sv-fill { fill: var(--accent); }
+.sv-dash { fill: none; stroke: var(--fail); stroke-width: 2; stroke-dasharray: 6 5; }
+.sv-t { fill: var(--mute); font-family: var(--mono); font-size: 18px; }
+
+/* ======================================================
+   Слайд 12. Корреляции: механизм
+   ====================================================== */
+#s12 .wrap { display: grid; grid-template-columns: 1fr 760px; gap: 54px; margin-top: 30px; }
+#s12 .chart { padding: 22px 26px; }
+#s12 .chart svg { width: 100%; height: 420px; display: block; }
+#s12 .legend { display: flex; gap: 28px; font-size: 22px; margin-top: 8px; flex-wrap: wrap; }
+#s12 .legend span::before { content: ""; display: inline-block; width: 26px; height: 5px; border-radius: 3px; margin-right: 10px; vertical-align: middle; background: var(--accent); }
+#s12 .legend span.o::before { background: var(--warn); }
+#s12 .read { display: flex; gap: 26px; align-items: center; margin-top: 14px; }
+#s12 .read .mono { font-size: 30px; color: var(--accent); min-width: 250px; }
+#s12 .meter { flex: 1; height: 16px; border-radius: 8px; background: var(--panel2); overflow: hidden; }
+#s12 .meter i { display: block; height: 100%; width: 12%; background: var(--accent); animation: meter 8s infinite ease-in-out; }
+@keyframes meter { 0%, 18% { width: 12%; } 50%, 90% { width: 94%; } 100% { width: 12%; } }
+#s12 .prot { list-style: none; display: flex; flex-direction: column; gap: 14px; }
+#s12 .prot li { font-size: 25px; line-height: 1.3; padding: 14px 20px 14px 60px; position: relative; background: var(--panel); border: 1px solid var(--line); border-radius: var(--r); opacity: 0; animation: rise .5s ease-out forwards; }
+#s12 .prot li:nth-child(1) { animation-delay: .4s; } #s12 .prot li:nth-child(2) { animation-delay: .8s; } #s12 .prot li:nth-child(3) { animation-delay: 1.2s; } #s12 .prot li:nth-child(4) { animation-delay: 1.6s; } #s12 .prot li:nth-child(5) { animation-delay: 2s; }
+#s12 .prot li::before { content: ""; position: absolute; left: 20px; top: 50%; width: 22px; height: 12px; border-left: 4px solid var(--pass); border-bottom: 4px solid var(--pass); transform: translateY(-70%) rotate(-45deg); }
+#s12 .prot h4 { font-size: 25px; font-weight: 600; }
+#s12 .prot span { color: var(--mute); font-size: 22px; display: block; }
+#s12 .next { position: absolute; left: 112px; right: 112px; bottom: 78px; padding: 18px 30px; border-radius: var(--r); border: 2px dashed var(--accent); display: flex; gap: 22px; align-items: center; font-size: 26px; }
+#s12 .next b { color: var(--accent); font-weight: 600; }
+
+/* ======================================================
+   Слайд 13. Корреляции: честные цифры
+   ====================================================== */
+#s13 .wrap { display: grid; grid-template-columns: 1.15fr 1fr; gap: 44px; margin-top: 28px; }
+#s13 .cmp h3 { font-size: 28px; margin: 0 0 14px; }
+#s13 .cmp { padding: 32px 36px; }
+#s13 .cmp .row { margin-bottom: 30px; }
+#s13 .cmp .nm { font-size: 27px; margin-bottom: 10px; }
+#s13 .cmp .nm span { color: var(--mute); font-size: 21px; margin-left: 8px; }
+#s13 .bl { display: grid; grid-template-columns: 110px 1fr; align-items: center; gap: 14px; margin-bottom: 8px; font-size: 21px; color: var(--mute); }
+#s13 .bt { height: 44px; background: var(--panel2); border-radius: 6px; position: relative; overflow: hidden; }
+#s13 .bf { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 6px; display: flex; align-items: center; padding-left: 12px; font-family: var(--mono); font-size: 22px; font-weight: 600; color: #fff; white-space: nowrap; transform-origin: left; animation: grow 1.1s .4s cubic-bezier(.2, .7, .2, 1) both; }
+@keyframes grow { from { transform: scaleX(0); } to { transform: scaleX(1); } }
+#s13 .bf.v1 { background: #8a5252; } #s13 .bf.v2 { background: var(--accent); } #s13 .bf.ok { background: var(--pass); }
+:root[data-theme="light"] #s13 .bf.v1 { background: #a45656; }
+#s13 .target { position: absolute; top: -4px; bottom: -4px; width: 0; border-left: 3px dashed var(--warn); }
+#s13 .still { padding: 30px 34px; border-color: var(--warn); background: var(--warn-soft); }
+#s13 .still h3 { color: var(--warn); margin-bottom: 12px; font-size: 28px; }
+#s13 .still li { font-size: 25px; line-height: 1.32; margin: 0 0 14px 22px; }
+#s13 .demo { position: absolute; left: 112px; right: 112px; bottom: 76px; display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; }
+#s13 .demo div { padding: 14px 22px; border-radius: var(--r); background: var(--panel); border: 1px solid var(--line); font-size: 22px; line-height: 1.3; color: var(--mute); }
+#s13 .demo b { color: var(--ink); font-weight: 600; display: block; font-size: 23px; }
+
+/* ======================================================
+   Слайд 14. Проверено в бою
+   ====================================================== */
+#s14 .wrap { display: grid; grid-template-columns: 1fr 1fr; gap: 48px; margin-top: 36px; }
+#s14 .wrap > .card { min-height: 560px; }
+#s14 .big { font-size: 96px; font-weight: 700; color: var(--accent); letter-spacing: -.03em; line-height: 1; }
+#s14 .big small { font-size: 34px; font-weight: 500; color: var(--mute); letter-spacing: 0; margin-left: 10px; }
+#s14 ul { list-style: none; margin-top: 18px; display: flex; flex-direction: column; gap: 10px; }
+#s14 li { font-size: 25px; padding-left: 26px; position: relative; line-height: 1.3; }
+#s14 li::before { content: ""; position: absolute; left: 0; top: .55em; width: 11px; height: 11px; border-radius: 3px; background: var(--accent); }
+#s14 .waves { display: flex; gap: 10px; margin-top: 22px; }
+#s14 .waves .chip { font-size: 21px; }
+#s14 .ab { margin-top: 24px; }
+#s14 .pair { margin-bottom: 20px; }
+#s14 .pair .nm { font-size: 23px; margin-bottom: 6px; }
+#s14 .foot { position: absolute; left: 112px; right: 112px; bottom: 76px; font-size: 22px; color: var(--mute); padding: 14px 24px; border: 1px dashed var(--line); border-radius: var(--r); }
+
+/* ======================================================
+   Слайд 15. Лестница
+   ====================================================== */
+#s15 .stairs { position: absolute; left: 112px; right: 112px; bottom: 80px; height: 640px; display: grid; grid-template-columns: repeat(3, 1fr); gap: 0; align-items: end; }
+#s15 .stair { padding: 26px 30px; border: 1px solid var(--line); border-bottom: 0; border-radius: var(--r) var(--r) 0 0; background: var(--panel); position: relative; }
+#s15 .stair.a { height: 330px; }
+#s15 .stair.b { height: 480px; background: linear-gradient(180deg, var(--accent-soft), var(--panel) 70%); }
+#s15 .stair.c { height: 630px; background: linear-gradient(180deg, var(--accent-soft), var(--panel) 55%); border-color: var(--accent); }
+#s15 .stair h3 { font-size: 32px; margin-bottom: 10px; }
+#s15 .stair p { font-size: 25px; color: var(--mute); line-height: 1.35; }
+#s15 .stair .when { font-family: var(--mono); font-size: 21px; color: var(--accent); margin-bottom: 8px; }
+#s15 .stair ul { margin-top: 12px; padding-left: 22px; }
+#s15 .stair li { font-size: 24px; color: var(--mute); margin-bottom: 4px; }
+#s15 .climber { position: absolute; width: 26px; height: 26px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 0 8px var(--accent-soft); left: 10%; bottom: 0; z-index: 3; opacity: 0; transition: left 1s ease-in-out, bottom 1s ease-in-out, opacity .4s; }
+#s15[data-step="0"] .climber { opacity: 1; left: 18%; bottom: 346px; }
+#s15[data-step="1"] .climber { opacity: 1; left: 50%; bottom: 496px; }
+#s15[data-step="2"] .climber { opacity: 1; left: 82%; bottom: 646px; }
+
+/* ======================================================
+   Слайд 16. Целевая картина
+   ====================================================== */
+#s16 .map { position: relative; margin-top: 34px; height: 700px; }
+#s16 .n { position: absolute; background: var(--panel); border: 1px solid var(--line); border-radius: var(--r); padding: 14px 20px; font-size: 24px; text-align: center; line-height: 1.25; }
+#s16 .n small { display: block; font-size: 19px; color: var(--mute); margin-top: 2px; }
+#s16 .srv { position: absolute; left: 250px; right: 330px; top: 40px; height: 460px; border: 2px dashed var(--accent); border-radius: 22px; background: var(--accent-soft); }
+#s16 .srv > b { position: absolute; left: 24px; top: -18px; background: var(--bg); padding: 0 14px; font-size: 24px; color: var(--accent); font-weight: 600; }
+#s16 .lane { position: absolute; left: 22px; right: 22px; top: 62px; display: grid; grid-template-columns: repeat(5, 1fr); gap: 18px; }
+#s16 .ag { display: flex; align-items: center; justify-content: center; min-height: 128px; background: var(--panel); border: 1px solid var(--line); border-radius: var(--r-s); padding: 16px 10px; text-align: center; font-size: 25px; line-height: 1.2; animation: agl 10s infinite; }
+#s16 .ag:nth-child(1) { animation-delay: 0s; } #s16 .ag:nth-child(2) { animation-delay: 1.6s; } #s16 .ag:nth-child(3) { animation-delay: 3.2s; } #s16 .ag:nth-child(4) { animation-delay: 4.8s; } #s16 .ag:nth-child(5) { animation-delay: 6.4s; }
+@keyframes agl { 0%, 20%, 100% { border-color: var(--line); background: var(--panel); } 3%, 14% { border-color: var(--accent); background: var(--panel2); box-shadow: 0 0 0 6px var(--accent-soft); } }
+#s16 .heal { position: absolute; left: 22px; right: 22px; top: 210px; height: 84px; }
+#s16 .heal svg { width: 100%; height: 100%; }
+#s16 .access { position: absolute; left: 22px; right: 22px; bottom: 28px; display: flex; gap: 12px; flex-wrap: wrap; }
+#s16 .access .chip { font-size: 21px; padding: 8px 16px; }
+#s16 .access > span:first-child { width: 100%; font-size: 21px; color: var(--mute); }
+#s16 .trig { left: 0; top: 190px; width: 200px; }
+#s16 .rep { right: 0; top: 40px; width: 250px; }
+#s16 .gate { right: 0; top: 230px; width: 250px; border: 3px solid var(--pass); background: var(--pass-soft); font-weight: 600; font-size: 26px; padding: 18px 20px; animation: gate 5s infinite; }
+@keyframes gate { 0%, 100% { box-shadow: 0 0 0 0 rgba(76, 195, 138, 0); } 50% { box-shadow: 0 0 0 14px rgba(76, 195, 138, .22); } }
+#s16 .out { right: 0; top: 410px; width: 250px; }
+#s16 .arrow-line { position: absolute; inset: 0; pointer-events: none; }
+#s16 .foot { position: absolute; left: 0; right: 0; bottom: 30px; font-size: 26px; color: var(--mute); text-align: center; }
+#s16 .foot b { color: var(--ink); font-weight: 600; }
+
+/* ======================================================
+   Слайд 17. Impact-analysis
+   ====================================================== */
+#s17 .wrap { display: grid; grid-template-columns: 1fr 120px 1fr 120px 1fr; align-items: center; margin-top: 52px; }
+#s17 .code { background: #08111a; border: 1px solid var(--line); border-radius: var(--r); padding: 22px 26px; font-family: var(--mono); font-size: 21px; line-height: 1.8; color: #b8cbdb; min-height: 440px; }
+:root[data-theme="light"] #s17 .code { background: #0f1b27; }
+#s17 .code .add { color: #8fdcb4; display: block; } #s17 .code .del { color: #ff9a90; display: block; } #s17 .code .hot { background: rgba(240, 178, 74, .22); display: block; border-left: 3px solid var(--warn); margin-left: -8px; padding-left: 5px; animation: hot 3s infinite; }
+@keyframes hot { 50% { background: rgba(240, 178, 74, .4); } }
+#s17 .pr { font-family: var(--font); font-size: 22px; color: #8fa6ba; margin-bottom: 8px; }
+#s17 .ag2 { border: 2px solid var(--accent); background: var(--accent-soft); border-radius: var(--r); padding: 24px; text-align: center; font-size: 28px; font-weight: 600; min-height: 440px; display: flex; flex-direction: column; justify-content: center; gap: 12px; }
+#s17 .ag2 span { font-size: 21px; font-weight: 400; color: var(--mute); }
+#s17 .arr2 { height: 4px; background: repeating-linear-gradient(90deg, var(--accent) 0 12px, transparent 12px 22px); animation: dash 1s linear infinite; position: relative; margin: 0 14px; }
+#s17 .arr2::after { content: ""; position: absolute; right: -2px; top: -8px; border-left: 14px solid var(--accent); border-top: 10px solid transparent; border-bottom: 10px solid transparent; }
+#s17 .out2 { display: flex; flex-direction: column; gap: 14px; }
+#s17 .risk { padding: 20px 24px; border-radius: var(--r); background: var(--warn-soft); border: 1px solid var(--warn); font-size: 25px; }
+#s17 .risk b { color: var(--warn); display: block; font-size: 22px; font-weight: 600; margin-bottom: 2px; }
+#s17 .hyp { padding: 20px 24px; border-radius: var(--r); background: var(--accent-soft); border: 1px solid var(--accent); font-size: 25px; }
+#s17 .hyp b { color: var(--accent); display: block; font-size: 22px; font-weight: 600; margin-bottom: 2px; }
+#s17 .foot { position: absolute; left: 112px; right: 112px; bottom: 76px; font-size: 28px; padding: 20px 30px; background: var(--panel); border: 1px solid var(--line); border-radius: var(--r); }
+#s17 .foot b { color: var(--accent); font-weight: 600; }
+
+/* ======================================================
+   Слайд 18. Бэклог
+   ====================================================== */
+#s18 .bk { display: grid; grid-template-columns: 220px repeat(3, 1fr); gap: 14px; margin-top: 28px; }
+#s18 .hd { height: 74px; border-radius: var(--r); display: flex; align-items: center; justify-content: center; font-size: 30px; font-weight: 600; color: #fff; flex-direction: column; line-height: 1.1; }
+#s18 .hd small { font-size: 19px; font-weight: 400; opacity: .85; }
+#s18 .hd.c1 { background: #1d6fd6; } #s18 .hd.c2 { background: #5a85ba; } #s18 .hd.c3 { background: #8ba3bd; }
+:root[data-theme="light"] #s18 .hd.c1 { background: #1d5fa8; } :root[data-theme="light"] #s18 .hd.c2 { background: #5f86b3; } :root[data-theme="light"] #s18 .hd.c3 { background: #93a8bf; }
+#s18 .rowh { display: flex; align-items: center; font-size: 27px; font-weight: 600; line-height: 1.2; padding-right: 10px; }
+#s18 .cell { background: var(--panel); border: 1px solid var(--line); border-radius: var(--r); padding: 16px 20px; min-height: 330px; }
+#s18 .cell.r2 { min-height: 250px; }
+#s18 .cell.k1 { border-color: #1d6fd6; background: linear-gradient(180deg, rgba(29, 111, 214, .16), var(--panel) 60%); }
+#s18 .cell.k2 { border-color: #5a85ba; background: linear-gradient(180deg, rgba(90, 133, 186, .12), var(--panel) 60%); }
+#s18 .cell.k3 { border-style: dashed; border-color: #8ba3bd; background: linear-gradient(180deg, rgba(139, 163, 189, .08), var(--panel) 60%); }
+#s18 .cell li { list-style: none; font-size: 22px; line-height: 1.28; margin-bottom: 10px; padding-left: 18px; position: relative; }
+#s18 .cell li::before { content: ""; position: absolute; left: 0; top: .5em; width: 8px; height: 8px; border-radius: 50%; background: var(--accent); }
+#s18 .cell.k3 li { color: var(--mute); }
+#s18 .cell li em { font-style: normal; font-size: 19px; color: var(--warn); margin-left: 6px; }
+#s18 .st[data-s] { transition: opacity .5s; }
+
+.slide .notes { display: none; }
+#s13 .bf.out { overflow: visible; }
+#s13 .bf.out span { position: absolute; left: calc(100% + 12px); color: var(--ink); }

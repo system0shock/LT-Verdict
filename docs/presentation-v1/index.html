@@ -1,0 +1,553 @@
+<!doctype html>
+<html lang="ru" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>LT Verdict: итоги и путь к автономному НТ</title>
+<link rel="stylesheet" href="assets/deck.css">
+</head>
+<body>
+<div id="viewport"><main id="stage">
+
+<!-- ===================== 1. Титул ===================== -->
+<section class="slide" id="s1" data-title="Титул" data-steps="0">
+  <canvas id="heroCanvas" width="1920" height="1080" aria-hidden="true"></canvas>
+  <div class="hero">
+    <h1>LT Verdict</h1>
+    <p class="sub">Платформа статистического анализа нагрузочного тестирования и путь к автономному НТ</p>
+  </div>
+  <div class="when">Итоги и дорожная карта, октябрь 2026</div>
+  <aside class="notes"><b>Вступление (1 мин).</b> Три части: что уже сделано вокруг Вердикта, сама платформа, путь к автономному НТ. Анимация показывает идею: десятки шумных графиков стягиваются в один вердикт.</aside>
+</section>
+
+<!-- ===================== 2. Проблема ===================== -->
+<section class="slide" id="s2" data-title="Проблема: ручной разбор графиков" data-steps="1">
+  <div class="crumb"><i></i>Зачем всё это</div>
+  <h2>После теста инженер вручную листает 50–200 графиков</h2>
+  <div class="wrap">
+    <div class="tiles" id="tiles" aria-hidden="true"></div>
+    <div class="pains">
+      <div class="pain"><h3>Внимание тонет в графиках</h3><p>Что инженер не открыл, того он не заметил.</p></div>
+      <div class="pain"><h3>Всё растёт вместе с нагрузкой</h3><p>Похожие графики ещё не причина. Ложные связи съедают часы.</p></div>
+      <div class="pain"><h3>Два инженера, два вывода</h3><p>Разные графики и разный эталон. Результат нельзя повторить.</p></div>
+    </div>
+  </div>
+  <div class="goal st" data-s="1">
+    <span class="flow">50–200 графиков → вердикт</span>
+    <p>Цель Вердикта: вместо россыпи графиков дать <b>вердикт</b>, короткий список находок и <b>доказательства</b> к каждой.</p>
+  </div>
+  <aside class="notes"><b>Проблема (2 мин).</b> Три боли из концепции PRC: перегрузка вниманием, ложные корреляции (всё растёт вместе с RPS), неповторяемость. Нажмите → : подсвечиваются те графики, которые действительно важны.<br><b>Честно:</b> «список находок» (инциденты) пока в планах, сегодня Вердикт даёт вердикт, метрики, тренды, эпизоды и связи.</aside>
+</section>
+
+<!-- ===================== 3. Экосистема ===================== -->
+<section class="slide" id="s3" data-title="Что сделано: 8 инструментов" data-steps="0">
+  <div class="crumb"><i></i>Часть 1. Что уже сделано</div>
+  <h2>Восемь инструментов вокруг нагрузочного тестирования</h2>
+  <div class="grid4">
+    <div class="grp">
+      <h3>Анализ</h3><span class="badge live">работает</span>
+      <div class="tool"><b>RCA-агент</b><span>Читает логи бэкенда после прогона и приносит отчёт с доказательствами</span></div>
+    </div>
+    <div class="grp">
+      <h3>Скрипты</h3><span class="badge live">работает</span>
+      <div class="tool"><b>Скиллы Gatling</b><span>Пишут сценарии, профиль нагрузки проверяет детерминированный инструмент</span></div>
+      <div class="tool"><b>Инструменты JMeter</b><span>Правка JMX из командной строки</span></div>
+      <div class="tool"><b>GigaMeter</b><span>ИИ-ассистент прямо в GUI JMeter</span></div>
+    </div>
+    <div class="grp">
+      <h3>Знания</h3><span class="badge live">работает</span>
+      <div class="tool"><b>База знаний и онбординг</b><span>Собирает МЕТА, Jira, Confluence и репозитории. Отвечает и агенту, и инженеру</span></div>
+    </div>
+    <div class="grp">
+      <h3>Автоматизация</h3><span class="badge live">работает</span>
+      <div class="tool"><b>Бутстрап репозитория НТ</b><span>Разворачивает по шаблону со скиллами, MCP и агентами</span></div>
+      <div class="tool"><b>Плейбуки и self-healing</b><span>Пишут, отлаживают и запускают скрипты с проверками</span></div>
+      <div class="tool"><b>MCP SSH</b><span>Агент работает с генераторами нагрузки напрямую</span></div>
+    </div>
+  </div>
+  <div class="effect">
+    <div>Разработка и отладка скрипта: <b>до нескольких часов</b></div>
+    <div>Старт НТ на новой системе: <b>3–4 дня вместо недель</b></div>
+  </div>
+  <aside class="notes"><b>Обзор (2 мин).</b> Группируем восемь инструментов в четыре смысловые группы. Все работают и используются.<br>1) RCA-агент. 2) Скиллы Gatling и детерминированная проверка профиля. 3) Инструменты JMeter, правка JMX из CLI. 4) GigaMeter. 5) База знаний и онбординг. 6) Бутстрап репозитория НТ. 7) Плейбуки с self-healing. 8) MCP SSH.<br>Внизу итог по эффекту: детали на слайде 7.</aside>
+</section>
+
+<!-- ===================== 4. RCA ===================== -->
+<section class="slide" id="s4" data-title="RCA-агент" data-steps="0">
+  <div class="crumb"><i></i>Часть 1. Что уже сделано</div>
+  <h2>RCA-агент: после прогона сам читает логи бэкенда и приносит доказательства</h2>
+  <div class="pipe">
+    <div class="node"><div class="ico"><svg viewBox="0 0 24 24"><path d="M5 21V4M5 4h11l-2 4 2 4H5"/></svg></div><h3>Прогон завершён</h3><p>Агент запускается после теста</p></div>
+    <div class="node"><div class="ico"><svg viewBox="0 0 24 24"><path d="M4 6h14M4 12h10M4 18h7M17 16l4 4"/><circle cx="15" cy="14" r="3"/></svg></div><h3>Читает логи</h3><p>Ищет варны и ошибки в OpenSearch (PVS)</p></div>
+    <div class="node"><div class="ico"><svg viewBox="0 0 24 24"><path d="M8 7l-5 5 5 5M16 7l5 5-5 5M14 4l-4 16"/></svg></div><h3>Сверяет с кодом</h3><p>Сопоставляет ошибки с кодом продукта из актуальной ветки</p></div>
+    <div class="node"><div class="ico"><svg viewBox="0 0 24 24"><path d="M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z"/><path d="M9 12l2 2 4-4"/></svg></div><h3>Пытается опровергнуть</h3><p>Адверсариал-ревью собственных выводов</p></div>
+    <div class="node"><div class="ico"><svg viewBox="0 0 24 24"><path d="M6 3h9l4 4v14H6zM14 3v5h5M9 13h7M9 17h7"/></svg></div><h3>Отчёт</h3><p>Выводы со ссылками на доказательства</p></div>
+  </div>
+  <div class="modes">
+    <div class="card"><h3>Широкая проверка</h3><p>Запрос вроде <q>посмотри логи</q>. Агент сам выбирает, что важно.</p></div>
+    <div class="card"><h3>Точечный разбор</h3><p>Запрос вроде <q>разберись с этой ошибкой</q>. Агент идёт к первопричине.</p></div>
+    <div class="card"><h3>Валидность прогона</h3><p>Проверяет, что тест корректен с точки зрения бэкенда, а не только по метрикам клиента.</p></div>
+  </div>
+  <aside class="notes"><b>RCA-агент (2 мин).</b> Это мини-флоу, оформленный как скилл: сбор доказательств, проверка соответствия ошибок коду продукта из актуальной ветки, адверсариал-ревью результата, отчёт со ссылками. Может работать как по широкой проверке, так и по точечному вопросу. Для руководства: «ИИ не гадает, а приносит доказательства, которые можно перепроверить».</aside>
+</section>
+
+<!-- ===================== 5. Скрипты ===================== -->
+<section class="slide" id="s5" data-title="Скрипты: Gatling, JMeter, GigaMeter" data-steps="0">
+  <div class="crumb"><i></i>Часть 1. Что уже сделано</div>
+  <h2>Скрипты: ИИ пишет и правит, детерминированный инструмент проверяет</h2>
+  <div class="cols">
+    <div class="col">
+      <div class="term" aria-label="Пример кода Gatling"><div class="bar"><i></i><i></i><i></i></div><div class="body">
+        <span class="ln c" style="animation-delay:.3s">// скилл пишет сценарий Gatling</span>
+        <span class="ln" style="animation-delay:.8s"><span class="k">setUp</span>(scn.<span class="k">inject</span>(</span>
+        <span class="ln" style="animation-delay:1.3s">  <span class="k">rampUsersPerSec</span>(10).to(100)</span>
+        <span class="ln" style="animation-delay:1.8s">    .during(<span class="s">15.minutes</span>)</span>
+        <span class="ln" style="animation-delay:2.3s">))</span>
+        <span class="ln ok" style="animation-delay:3.2s">✓ профиль нагрузки проверен</span>
+      </div></div>
+      <h3>Gatling</h3>
+      <ul><li>Скиллы для написания скриптов</li><li>Профиль нагрузки проверяет детерминированный инструмент</li></ul>
+    </div>
+    <div class="col">
+      <div class="term" aria-label="Пример структуры JMX"><div class="bar"><i></i><i></i><i></i></div><div class="body">
+        <span class="ln c" style="animation-delay:.3s"># правка JMX без открытия GUI</span>
+        <span class="ln" style="animation-delay:.8s">&lt;ThreadGroup <span class="k">threads</span>=<span class="s">"200"</span>&gt;</span>
+        <span class="ln" style="animation-delay:1.3s">  &lt;HTTPSampler <span class="k">path</span>=<span class="s">"/login"</span>/&gt;</span>
+        <span class="ln" style="animation-delay:1.8s">  &lt;ResponseAssertion/&gt;</span>
+        <span class="ln" style="animation-delay:2.3s">&lt;/ThreadGroup&gt;</span>
+        <span class="ln ok" style="animation-delay:3.2s">✓ изменения применены из CLI</span>
+      </div></div>
+      <h3>JMeter</h3>
+      <ul><li>Скиллы и инструменты для работы со скриптами</li><li>Редактирование JMX из командной строки</li></ul>
+    </div>
+    <div class="col">
+      <div class="term" aria-label="Пример чата GigaMeter"><div class="bar"><i></i><i></i><i></i></div>
+        <div class="gm">
+          <div class="tree">▾ Тест-план<br>&nbsp;&nbsp;▾ Пользователи<br>&nbsp;&nbsp;&nbsp;&nbsp;• Login<br>&nbsp;&nbsp;&nbsp;&nbsp;• Каталог<br>&nbsp;&nbsp;&nbsp;&nbsp;• Оплата</div>
+          <div class="chat">
+            <div class="msg u" style="animation-delay:.6s">Добавь проверку ответа на Login</div>
+            <div class="msg a" style="animation-delay:1.8s">Готово: добавил Response Assertion в Login.</div>
+          </div>
+        </div>
+      </div>
+      <h3>GigaMeter</h3>
+      <ul><li>ИИ-ассистент как плагин JMeter</li><li>Работа с ИИ прямо из GUI</li></ul>
+    </div>
+  </div>
+  <aside class="notes"><b>Скрипты (2 мин).</b> Примеры на экране иллюстративные. Главная мысль: ИИ ускоряет написание, но профиль нагрузки проверяет детерминированный инструмент, а не сам ИИ. Для JMeter есть работа через CLI и через GUI (GigaMeter).</aside>
+</section>
+
+<!-- ===================== 6. Знания и автоматизация ===================== -->
+<section class="slide" id="s6" data-title="Знания и автоматизация" data-steps="0">
+  <div class="crumb"><i></i>Часть 1. Что уже сделано</div>
+  <h2>Знания о системе и полуавтономные флоу</h2>
+  <div class="wrap">
+    <div>
+      <div class="panel-title">База знаний и онбординг</div>
+      <div class="kb">
+        <div class="src"><span class="chip">МЕТА</span><span class="chip">Jira</span><span class="chip">Confluence</span><span class="chip">Репозитории</span></div>
+        <div class="kbox"><h3>База знаний о тестируемой системе</h3>
+          <div class="outs"><span class="chip">для агента</span><span class="chip">для инженера</span></div></div>
+      </div>
+      <div class="expert">При работе над скриптами агент зовёт <b>субагента-эксперта</b>, и тот отвечает по базе знаний.</div>
+    </div>
+    <div>
+      <div class="panel-title">Плейбуки: написать, отладить, запустить</div>
+      <div class="loop">
+        <svg viewBox="0 0 700 430" aria-label="Цикл: написать, отладить, запустить, проверить; при сбое self-healing возвращает на шаг назад">
+          <g class="rot" style="transform-origin:350px 215px">
+            <circle cx="350" cy="215" r="150" fill="none" stroke="var(--accent)" stroke-width="3" stroke-dasharray="3 14" stroke-linecap="round"/>
+          </g>
+          <g font-family="Onest, sans-serif" font-size="25" fill="var(--ink)" text-anchor="middle">
+            <g><rect x="250" y="20" width="200" height="56" rx="12" fill="var(--panel)" stroke="var(--line)"/><text x="350" y="57">Написать</text></g>
+            <g><rect x="490" y="187" width="200" height="56" rx="12" fill="var(--panel)" stroke="var(--line)"/><text x="590" y="224">Отладить</text></g>
+            <g><rect x="250" y="354" width="200" height="56" rx="12" fill="var(--panel)" stroke="var(--line)"/><text x="350" y="391">Запустить</text></g>
+            <g><rect x="10" y="187" width="200" height="56" rx="12" fill="var(--panel)" stroke="var(--line)"/><text x="110" y="224">Проверить</text></g>
+          </g>
+          <text x="350" y="205" text-anchor="middle" font-family="Onest, sans-serif" font-size="25" font-weight="600" fill="var(--accent)">self-healing</text>
+          <text x="350" y="238" text-anchor="middle" font-family="Onest, sans-serif" font-size="21" fill="var(--mute)">при сбое возвращает</text>
+          <text x="350" y="263" text-anchor="middle" font-family="Onest, sans-serif" font-size="21" fill="var(--mute)">на шаг назад</text>
+        </svg>
+      </div>
+    </div>
+  </div>
+  <div class="bottom">
+    <div class="card"><h3>Бутстрап репозитория НТ</h3><p>Разворачивает репозиторий по шаблону и сразу настраивает скиллы, MCP и агентов.</p></div>
+    <div class="card"><h3>MCP SSH</h3><p>Агенты работают с генераторами нагрузки напрямую, без ручных заходов на машины.</p></div>
+  </div>
+  <aside class="notes"><b>Знания и автоматизация (2 мин).</b> База знаний объединяет МЕТА, Jira, Confluence и репозитории. Её читает и агент, и инженер, а новые люди быстрее входят в систему (онбординг). Плейбуки: полуавтономные флоу написания, отладки и запуска скриптов с проверками и self-healing.</aside>
+</section>
+
+<!-- ===================== 7. Эффект ===================== -->
+<section class="slide" id="s7" data-title="Эффект на практике" data-steps="0">
+  <div class="crumb"><i></i>Часть 1. Что уже сделано</div>
+  <h2>Эффект на практике: недели превратились в дни и часы</h2>
+  <div class="two">
+    <div class="card big">
+      <div class="what">Разработка и отладка скрипта</div>
+      <div class="num">до нескольких часов</div>
+      <div class="clock">
+        <svg viewBox="0 0 100 100" aria-hidden="true"><circle cx="50" cy="50" r="44" fill="none" stroke="var(--line)" stroke-width="4"/><path class="hand" d="M50 50V14" stroke="var(--accent)" stroke-width="5" stroke-linecap="round"/><circle cx="50" cy="50" r="5" fill="var(--accent)"/></svg>
+        <span class="what">на всём пути от задачи до рабочего сценария</span>
+      </div>
+    </div>
+    <div class="card big">
+      <div class="what">Старт НТ на новой системе: Uni UI, команда CUBA</div>
+      <div class="bars">
+        <div class="brow before"><span>раньше</span><div class="track"><div class="fill">недели</div></div></div>
+        <div class="brow after"><span>сейчас</span><div class="track"><div class="fill"><span>3–4 дня</span></div></div></div>
+      </div>
+    </div>
+  </div>
+  <div class="foot">Вердикт только начал обкатываться в реальных условиях, поэтому цифры выше относятся к инструментам вокруг него.</div>
+  <aside class="notes"><b>Эффект (1,5 мин).</b> Две цифры: лид-тайм разработки и отладки скриптов сократился до нескольких часов; старт НТ на новой системе (Uni UI команды CUBA) занимает 3–4 дня, раньше занимал недели. Честная оговорка: Вердикт сам пока только входит в реальные условия, цифр по нему нет.</aside>
+</section>
+
+<!-- ===================== 8. Что такое Вердикт ===================== -->
+<section class="slide" id="s8" data-title="Что такое Вердикт" data-steps="0">
+  <div class="crumb"><i></i>Часть 2. Платформа Вердикт</div>
+  <h2>Вердикт: из результатов теста в повторяемое решение</h2>
+  <div class="flow">
+    <div class="box"><h3>На входе</h3><ul>
+      <li>Результаты JMeter (JTL) и Gatling</li>
+      <li>Политика: пороги, например «p95 не более 500 мс»</li>
+      <li>Метрики системы (по желанию): Prometheus, VictoriaMetrics, InfluxDB, OpenSearch, PostgreSQL</li></ul></div>
+    <div class="arr"></div>
+    <div class="box core"><h3>Ядро</h3><ul>
+      <li>Проверяет, что прогон валиден</li>
+      <li>Считает метрики по всем замерам</li>
+      <li>Применяет политику</li>
+      <li>Ищет тренды, эпизоды и связи ресурсов</li></ul></div>
+    <div class="arr"></div>
+    <div class="box"><h3>Вердикт</h3>
+      <div class="verd"><span class="stamp pass">PASS</span><span class="stamp fail">FAIL</span><span class="stamp nov">NO_VERDICT</span></div>
+      <div class="ai">ИИ-совет приходит отдельно и вердикт не меняет.</div></div>
+    <div class="arr"></div>
+    <div class="box"><h3>Отчёты</h3><ul><li>JSON, HTML, AsciiDoc</li><li>Публикация в Confluence</li><li>SVG-графики</li><li>Коды выхода для CI</li></ul></div>
+  </div>
+  <div class="rules">
+    <span class="chip">Работает по штатным JTL и simulation.log, без правки скриптов</span>
+    <span class="chip">Локально или в контейнере, без SaaS</span>
+    <span class="chip">Те же данные и правила дают тот же результат</span>
+    <span class="chip">Нет данных, нет вердикта</span>
+  </div>
+  <aside class="notes"><b>Платформа (1,5 мин).</b> Вход: штатные результаты JMeter и Gatling, политика (пороги) и, по желанию, метрики системы. Ядро проверяет валидность прогона, считает и применяет политику. Вердикт трёх видов: PASS, FAIL и NO_VERDICT (данных недостаточно, «зелёный по умолчанию» невозможен). ИИ-совет всегда отдельным артефактом.</aside>
+</section>
+
+<!-- ===================== 9. MCP ===================== -->
+<section class="slide" id="s9" data-title="Вердикт как инструмент для агентов (MCP)" data-steps="0">
+  <div class="crumb"><i></i>Часть 2. Платформа Вердикт</div>
+  <h2>Вердикт как инструмент для ИИ-агентов через MCP</h2>
+  <span class="badge dev top-right">в разработке</span>
+  <div class="arch">
+    <div class="agents">
+      <div class="agent"><i></i><div>Qwen Code<small>внешний агент</small></div></div>
+      <div class="agent"><i></i><div>Claude Code<small>внешний агент</small></div></div>
+      <div class="agent"><i></i><div>GigaCode<small>внешний агент</small></div></div>
+      <div class="agent mine"><i></i><div>RCA-агент<small>наш инструмент</small></div></div>
+      <div class="agent mine"><i></i><div>Агент скриптов<small>наш инструмент</small></div></div>
+    </div>
+    <div class="mcp">
+      <svg viewBox="0 0 500 560" preserveAspectRatio="none" aria-hidden="true" id="mcpSvg"></svg>
+      <div class="label">MCP</div>
+    </div>
+    <div class="core">
+      <h3>Вердикт</h3>
+      <ul>
+        <li>Дать вердикт по прогону</li>
+        <li>Показать доказательства</li>
+        <li>Сравнить с эталоном</li>
+        <li>Найти связи между метриками</li>
+      </ul>
+    </div>
+  </div>
+  <div class="principle"><span><b>Вердикт считает, агент действует.</b> ИИ не меняет вердикт.</span><small>Состав вызовов уточняется в ходе разработки.</small></div>
+  <aside class="notes"><b>MCP (2 мин).</b> Решение владельца: Вердикт становится инструментом для внешнего агента (Qwen Code, Claude Code, GigaCode), а не хостит модель внутри. MCP-сервер Вердикта сейчас в разработке (в волне W3 плана). Это ключ к автономности: агент сам запрашивает вердикт, доказательства, сравнение с эталоном и связи метрик.<br><b>Важно:</b> перечень вызовов на слайде описывает намерение, точные имена инструментов будут уточняться.</aside>
+</section>
+
+<!-- ===================== 10. Макет ===================== -->
+<section class="slide" id="s10" data-title="Макет интерфейса" data-steps="0">
+  <div class="crumb"><i></i>Часть 2. Платформа Вердикт</div>
+  <h2>Интерфейс: от вердикта до доказательств</h2>
+  <div class="wrap">
+    <div class="tabs" id="tabs" role="tablist"></div>
+    <div>
+      <div class="frame">
+        <div class="chrome"><i></i><i></i><i></i><span>макет интерфейса LT Verdict</span></div>
+        <div class="view" id="view"></div>
+      </div>
+      <div class="cap"><span>Макет на придуманных данных: экспорт и создание политик в нём не работают.</span><a href="assets/mockup/lt-verdict-ui-mockup.html" target="_blank" rel="noopener">Открыть живой макет</a></div>
+    </div>
+  </div>
+  <aside class="notes"><b>Интерфейс (1,5 мин).</b> Показываем макет: экраны листаются сами, можно кликнуть по названию слева. Сценарий макета: тест на 4–8 часов, стенд из двух плеч, один под в payments-svc упирается в память и перезапускается. Все данные придуманы. Ссылка «Открыть живой макет» открывает интерактивную версию в новой вкладке.</aside>
+</section>
+
+<!-- ===================== 11. Основы статистики ===================== -->
+<section class="slide" id="s11" data-title="Основы статистики" data-steps="0">
+  <div class="crumb"><i></i>Часть 2. Платформа Вердикт</div>
+  <h2>Статистика, которая не обманывает</h2>
+  <div class="g6">
+    <div class="card sc">
+      <svg viewBox="0 0 500 96" aria-hidden="true"><g class="sv-fill" opacity=".55"><rect x="20" y="62" width="20" height="26"/><rect x="48" y="40" width="20" height="48"/><rect x="76" y="18" width="20" height="70"/><rect x="104" y="24" width="20" height="64"/><rect x="132" y="46" width="20" height="42"/><rect x="160" y="60" width="20" height="28"/><rect x="188" y="70" width="20" height="18"/><rect x="216" y="76" width="20" height="12"/><rect x="244" y="80" width="20" height="8"/><rect x="272" y="83" width="20" height="5"/></g><path d="M236 6V92" class="sv-dash"/><text x="252" y="26" class="sv-t">p95 по всем</text><text x="252" y="50" class="sv-t">замерам сразу</text></svg>
+      <h3>Перцентили без усреднения</h3><div class="met">Средний балл по школам не равен баллу по всему городу</div>
+      <div class="fact">p95 считается по всем замерам сразу, а не как среднее из кусков.</div></div>
+    <div class="card sc">
+      <svg viewBox="0 0 500 96" aria-hidden="true"><rect x="10" y="30" width="110" height="34" rx="6" fill="var(--fail)" opacity=".85"/><rect x="124" y="30" width="190" height="34" rx="6" fill="var(--warn)" opacity=".9"/><rect x="318" y="30" width="172" height="34" rx="6" fill="var(--pass)" opacity=".9"/><text x="65" y="53" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="19" font-weight="600" fill="#0b1620">&lt;20</text><text x="219" y="53" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="19" font-weight="600" fill="#0b1620">20–99</text><text x="404" y="53" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="19" font-weight="600" fill="#0b1620">от 100</text><text x="65" y="88" text-anchor="middle" class="sv-t">нет вердикта</text><text x="219" y="88" text-anchor="middle" class="sv-t">с пометкой</text><text x="404" y="88" text-anchor="middle" class="sv-t">полный</text><path d="M0 12l9 14h-18z" fill="var(--ink)"><animateTransform attributeName="transform" type="translate" values="40 0;404 0;404 0;40 0" keyTimes="0;.5;.9;1" dur="7s" repeatCount="indefinite"/></path></svg>
+      <h3>Мало данных: вердикта нет</h3><div class="met">Врач без анализов не напишет «здоров»</div>
+      <div class="fact">Меньше 20 замеров: NO_VERDICT. От 20 до 99: вердикт с пометкой «малая выборка».</div></div>
+    <div class="card sc">
+      <svg viewBox="0 0 500 96" aria-hidden="true"><rect x="150" y="6" width="200" height="84" fill="var(--accent)" opacity=".16"/><path class="sv-line" d="M10 84 L150 28 L350 28 L490 84"/><text x="250" y="72" text-anchor="middle" class="sv-t">оценка только здесь</text></svg>
+      <h3>Оценка по «плато»</h3><div class="met">Время на трассе без прогрева и парковки</div>
+      <div class="fact">Разгон исключён. В вердикте так и написано. Границы стадий задаёт человек.</div></div>
+    <div class="card sc">
+      <svg viewBox="0 0 500 96" aria-hidden="true"><rect x="20" y="22" width="180" height="34" rx="6" fill="var(--mute)" opacity=".6"/><rect x="300" y="22" width="180" height="34" rx="6" fill="var(--accent)"/><path d="M228 31h44M228 47h44" stroke="var(--pass)" stroke-width="5" stroke-linecap="round"/><text x="20" y="84" class="sv-t">эталон</text><text x="300" y="84" class="sv-t">текущий прогон</text></svg>
+      <h3>Эталон при равных условиях</h3><div class="met">Забеги сравнивают на одной дистанции</div>
+      <div class="fact">Сравнение только после явного подтверждения, что условия совпадают.</div></div>
+    <div class="card sc">
+      <svg viewBox="0 0 500 96" aria-hidden="true"><path d="M10 24H490" class="sv-dash"/><text x="490" y="18" text-anchor="end" class="sv-t">порог SLA</text><path class="sv-line" d="M10 84 C120 80 230 72 330 62 S450 48 490 44" stroke-dasharray="600" stroke-dashoffset="600"><animate attributeName="stroke-dashoffset" values="600;0;0" keyTimes="0;.6;1" dur="5s" repeatCount="indefinite"/></path></svg>
+      <h3>Медленный рост до порога</h3><div class="met">Вода в баке поднимается, а до края ещё далеко</div>
+      <div class="fact">Тренд ресурса внутри SLA. Это описание, а не диагноз «утечка».</div></div>
+    <div class="card sc">
+      <svg viewBox="0 0 500 96" aria-hidden="true"><g fill="var(--accent)"><rect x="30" y="68" width="60" height="26" opacity=".5"/><rect x="110" y="54" width="60" height="40" opacity=".6"/><rect x="190" y="40" width="60" height="54" opacity=".75"/><rect x="270" y="26" width="60" height="68"/></g><rect x="350" y="20" width="60" height="74" fill="var(--warn)" opacity=".5" stroke="var(--warn)" stroke-dasharray="5 4"/><text x="480" y="14" text-anchor="end" class="sv-t">генератор упёрся</text></svg>
+      <h3>Ёмкость по ступеням</h3><div class="met">До какого этажа лифт едет ровно</div>
+      <div class="fact">Если упёрся генератор нагрузки, Вердикт не винит систему: NO_VERDICT.</div></div>
+  </div>
+  <div class="repro"><span class="mono">=</span>Те же данные и те же правила дают тот же результат до байта.</div>
+  <aside class="notes"><b>Основы статистики (3 мин).</b> Шесть механизмов простыми словами. Два акцента: (1) fail-closed: нет данных, нет вердикта; (2) воспроизводимость.<br><b>Оговорки на случай вопросов:</b> пороги 20 и 100 замеров настраиваются и пока не калибровались на стенде; окно плато задаёт человек, автоопределения нет; тренды описательные (без p-value); «колено» и ёмкость по ступеням помечены как неоткалиброванная диагностика; выбор эталона — эвристика, а не тест значимости; «до байта» подтверждено для одного движка и одной версии правил.</aside>
+</section>
+
+<!-- ===================== 12. Корреляции: механизм ===================== -->
+<section class="slide" id="s12" data-title="Корреляции: как Вердикт ищет связи" data-steps="0">
+  <div class="crumb"><i></i>Часть 2. Платформа Вердикт</div>
+  <h2>Как Вердикт ищет связи между метриками</h2>
+  <div class="wrap">
+    <div class="card chart">
+      <svg id="corrSvg" viewBox="0 0 700 380" role="img" aria-label="Иллюстрация: сдвигаем один ряд по времени, пока он не совпадёт со вторым"></svg>
+      <div class="legend"><span>Пул соединений БД</span><span class="o">Время отклика p95</span></div>
+      <div class="read"><div class="mono" id="corrRead">сдвиг 0 с</div><div class="meter"><i id="corrMeter"></i></div></div>
+      <div class="small mute" style="margin-top:8px">Иллюстрация на синтетических данных. Вывод всегда звучит как «гипотеза для проверки».</div>
+    </div>
+    <ul class="prot">
+      <li><h4>Каталог гипотез</h4><span>Проверяются заранее заданные пары «ресурс → метрика», а не всё со всем</span></li>
+      <li><h4>Сравнение приращений</h4><span>Сравниваются изменения, а не уровни, поэтому общий рост нагрузки не создаёт связь</span></li>
+      <li><h4>Перемешивание блоками (bootstrap)</h4><span>Случайные совпадения отсеиваются повторами на перемешанных данных</span></li>
+      <li><h4>Поправка Holm</h4><span>Чем больше проверок, тем строже порог</span></li>
+      <li><h4>Контрольные ряды</h4><span>Заведомо несвязанные пары показывают уровень шума</span></li>
+    </ul>
+  </div>
+  <div class="next"><b>Планируется:</b> интеграция с результатами codeGraph/graphify, чтобы улучшить оценку связей между метриками.</div>
+  <aside class="notes"><b>Корреляции (2 мин).</b> Идея: ищем, какой ресурс «ведёт» за собой время отклика, и со сдвигом по времени. Анимация показывает, как один ряд сдвигается, пока не совпадёт со вторым. Защита от ложных связей: каталог гипотез (не перебор всего), сравнение приращений (метод v2), перемешивание блоками (moving-block bootstrap), поправка Holm, контрольные ряды. Любая находка называется гипотезой, причиной не считается и на вердикт SLA не влияет.<br>Дальше: интеграция с результатами codeGraph/graphify (граф связей кода) для более качественной оценки связей между метриками.</aside>
+</section>
+
+<!-- ===================== 13. Корреляции: честные цифры ===================== -->
+<section class="slide" id="s13" data-title="Корреляции: что проверено, что калибруем" data-steps="0">
+  <div class="crumb"><i></i>Часть 2. Платформа Вердикт</div>
+  <h2>Корреляции: что уже проверено и что ещё калибруем</h2>
+  <div class="wrap">
+    <div class="cmp card">
+      <div class="row">
+        <div class="nm">Ложные находки при сильном дрейфе метрик</div>
+        <div class="bl"><span>метод v1</span><div class="bt"><div class="bf v1" style="width:100%">100%</div></div></div>
+        <div class="bl"><span>метод v2</span><div class="bt"><div class="bf v2 out" style="width:3.6%"><span>3,6%</span></div></div></div>
+      </div>
+      <div class="row">
+        <div class="nm">Ложные находки на независимых рядах с инерцией<span>цель: не выше 5%</span></div>
+        <div class="bl"><span>метод v1</span><div class="bt"><div class="bf v1" style="width:88%">7,7–13,2%</div><div class="target" style="left:33.3%"></div></div></div>
+        <div class="bl"><span>метод v2</span><div class="bt"><div class="bf v2" style="width:24.7%">2,6–3,7%</div><div class="target" style="left:33.3%"></div></div></div>
+      </div>
+      <div class="row" style="margin-bottom:0">
+        <div class="nm">Находит заложенные связи<span>линейные, с разным сдвигом</span></div>
+        <div class="bl"><span>метод v2</span><div class="bt"><div class="bf ok" style="width:99.8%">99,8–99,9%</div></div></div>
+      </div>
+      <div class="small mute" style="margin-top:14px">Синтетика. Метод v2: 22 сценария по 1 000 отчётов (замер H4). Метод v1: пилот и ранние замеры. Источник: ADR 0022.</div>
+    </div>
+    <div class="card still">
+      <h3>Что ещё не доказано</h3>
+      <ul>
+        <li>Независимая приёмка не проведена: цифры получены на данных разработки.</li>
+        <li>Проверялась только синтетика. На реальных стендах метод пока не проверялся.</li>
+        <li>Связи «через порог» (например, p95 растёт после 85% памяти) находятся слабо: около 5%.</li>
+        <li>Если в данных пропуски, часть проверок честно помечается «не удалось проверить».</li>
+        <li><b>Поэтому любая связь это гипотеза для проверки, а не причина.</b></li>
+      </ul>
+    </div>
+  </div>
+  <div class="demo">
+    <div><b>Связь со сдвигом 30 с</b>Демо на синтетике: найдена верно.</div>
+    <div><b>Эпизод 240 с</b>Найден, секундные всплески подавлены.</div>
+    <div><b>Генератор нагрузки упёрся</b>Вердикт не винит систему: NO_VERDICT.</div>
+  </div>
+  <aside class="notes"><b>Честные цифры (2 мин).</b> Это важный слайд для доверия. Метод v1 (сравнивал уровни рядов) давал 100% ложных находок при сильном дрейфе и 7,7–13,2% на независимых рядах с инерцией. Метод v2 (сравнивает приращения), по замеру H4 на 22 000 синтетических отчётах: 0–4,4% ложных находок по всем сценариям, при сильном дрейфе 3,6%, заложенные линейные связи находит в 99,8–99,9%.<br><b>Что говорить, если спросят «а на реальных данных?»</b> Независимая приёмка C5 ещё не проведена (протокол не заморожен, замер на данных разработки), реальные стенды не проверялись. Поэтому все находки подаются как гипотезы для проверки инженером. Связи через порог метод ловит слабо (около 5%).<br>Демо-сценарии внизу сняты на раннем ядре, это иллюстрации поведения (эпизод, лаг, упор генератора).</aside>
+</section>
+
+<!-- ===================== 14. Проверено в бою ===================== -->
+<section class="slide" id="s14" data-title="Проверено в бою (черновик)" data-draft="1" data-steps="0">
+  <div class="crumb"><i></i>Часть 2. Платформа Вердикт</div>
+  <h2>Первые проверки в реальных условиях</h2>
+  <span class="badge draft top-right">черновик: клавиша D пропускает слайд</span>
+  <div class="wrap">
+    <div class="card" style="padding:32px 36px">
+      <div class="small mute">Первая внешняя обратная связь</div>
+      <div class="big">24<small>пункта</small></div>
+      <ul>
+        <li>Тестировщик в корпоративном контуре: IAM-прокси, VictoriaMetrics.</li>
+        <li>78 ресурсных серий, JTL на 208 МБ.</li>
+        <li>ИИ-разбор через gigacode, GLM и Qwen.</li>
+        <li>Большинство замечаний подтвердилось, часть уже была сделана.</li>
+      </ul>
+      <div class="waves"><span class="chip">Волна A: диагностика</span><span class="chip">B: документация, примеры</span><span class="chip">C: решения (ADR)</span></div>
+    </div>
+    <div class="card" style="padding:32px 36px">
+      <div class="small mute">Пилот ИИ-советника: ответы с серьёзным дефектом</div>
+      <div class="ab">
+        <div class="pair"><div class="nm">Рецензент A</div>
+          <div class="bl" style="display:grid;grid-template-columns:110px 1fr;gap:14px;align-items:center;margin-bottom:6px;color:var(--mute);font-size:21px"><span>промпт v1</span><div class="bt" style="height:36px;background:var(--panel2);border-radius:6px;position:relative"><div class="bf v1" style="position:absolute;left:0;top:0;bottom:0;width:87%;display:flex;align-items:center;padding-left:12px;font-family:var(--mono);font-size:20px;font-weight:600;color:#fff;background:#8a5252;border-radius:6px">87%</div></div></div>
+          <div class="bl" style="display:grid;grid-template-columns:110px 1fr;gap:14px;align-items:center;color:var(--mute);font-size:21px"><span>промпт v2</span><div class="bt" style="height:36px;background:var(--panel2);border-radius:6px;position:relative"><div class="bf v2" style="position:absolute;left:0;top:0;bottom:0;width:61%;display:flex;align-items:center;padding-left:12px;font-family:var(--mono);font-size:20px;font-weight:600;color:#fff;background:var(--accent);border-radius:6px">61%</div></div></div>
+        </div>
+        <div class="pair"><div class="nm">Рецензент B</div>
+          <div class="bl" style="display:grid;grid-template-columns:110px 1fr;gap:14px;align-items:center;margin-bottom:6px;color:var(--mute);font-size:21px"><span>промпт v1</span><div class="bt" style="height:36px;background:var(--panel2);border-radius:6px;position:relative"><div class="bf v1" style="position:absolute;left:0;top:0;bottom:0;width:84%;display:flex;align-items:center;padding-left:12px;font-family:var(--mono);font-size:20px;font-weight:600;color:#fff;background:#8a5252;border-radius:6px">84%</div></div></div>
+          <div class="bl" style="display:grid;grid-template-columns:110px 1fr;gap:14px;align-items:center;color:var(--mute);font-size:21px"><span>промпт v2</span><div class="bt" style="height:36px;background:var(--panel2);border-radius:6px;position:relative"><div class="bf v2" style="position:absolute;left:0;top:0;bottom:0;width:43%;display:flex;align-items:center;padding-left:12px;font-family:var(--mono);font-size:20px;font-weight:600;color:#fff;background:var(--accent);border-radius:6px">43%</div></div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="foot">Формальный критерий пилота не пройден: проверка целостности дала ложное срабатывание. Решение: повторить на новых кейсах, а в поставке пока остаётся промпт v1.</div>
+  <aside class="notes"><b>Черновик (1,5 мин, можно пропустить клавишей D).</b> Первая внешняя обратная связь: 24 пункта от тестировщика в корпоративном контуре. Часть тезисов подтвердилась, часть оказалась уже реализованной. Работа идёт волнами A, B, C. Пилот ИИ-советника: по двум независимым рецензентам доля серьёзных дефектов в ответах упала с 87% до 61% и с 84% до 43%, но формальный критерий не пройден, поэтому в поставке остаётся осторожный промпт v1.</aside>
+</section>
+
+<!-- ===================== 15. Лестница ===================== -->
+<section class="slide" id="s15" data-title="Лестница автономности" data-steps="2">
+  <div class="crumb"><i></i>Часть 3. Путь к автономному НТ</div>
+  <h2>Три ступени к автономному НТ</h2>
+  <div class="stairs">
+    <div class="climber" aria-hidden="true"></div>
+    <div class="stair a">
+      <div class="when">Сегодня</div>
+      <h3>Инструменты рядом с инженером</h3>
+      <p>ИИ ускоряет отдельные шаги, человек ведёт процесс.</p>
+      <ul><li>8 инструментов в работе</li><li>Часы вместо недель</li></ul>
+    </div>
+    <div class="stair b st" data-s="1">
+      <div class="when">Следующий шаг</div>
+      <h3>Серверные автономные флоу</h3>
+      <p>Флоу запускается на сервере без инженера у терминала. Агенты вызывают инструменты и Вердикт через MCP.</p>
+    </div>
+    <div class="stair c st" data-s="2">
+      <div class="when">Цель</div>
+      <h3>Автономное НТ с одобрением человека</h3>
+      <p>От изменения в продукте до отчёта: агенты готовят, отлаживают, запускают и разбирают тест. Человек принимает решение по отчёту.</p>
+    </div>
+  </div>
+  <aside class="notes"><b>Лестница (1,5 мин).</b> Нажимайте → для показа ступеней. Сегодня: инструменты помогают инженеру. Следующий шаг: серверные автономные флоу, где агенты через MCP собирают все инструменты и Вердикт. Цель: автономное НТ, в котором человек остаётся на решении (одобрение отчёта).</aside>
+</section>
+
+<!-- ===================== 16. Целевая картина ===================== -->
+<section class="slide" id="s16" data-title="Целевая картина автономного флоу" data-steps="0">
+  <div class="crumb"><i></i>Часть 3. Путь к автономному НТ</div>
+  <h2>Сервер ведёт тест, человек одобряет отчёт</h2>
+  <div class="map" id="map">
+    <div class="n trig">Задача или изменение в продукте</div>
+    <div class="srv">
+      <b>Сервер: автономный флоу</b>
+      <div class="lane">
+        <div class="ag">Разработка скриптов</div>
+        <div class="ag">Отладка</div>
+        <div class="ag">Запуск на генераторах</div>
+        <div class="ag">Логи и метрики системы</div>
+        <div class="ag">Вердикт через MCP</div>
+      </div>
+      <div class="heal"><svg viewBox="0 0 1072 84" preserveAspectRatio="none" aria-hidden="true"><path d="M754 4 C754 50, 318 50, 318 6" fill="none" stroke="var(--warn)" stroke-width="3" stroke-dasharray="7 6"/><path d="M318 4l-8 12h16z" fill="var(--warn)"/><text x="536" y="78" text-anchor="middle" font-family="Onest, sans-serif" font-size="21" fill="var(--warn)">self-healing: нашли причину, поправили, повторили</text></svg></div>
+      <div class="access"><span>Прямой доступ агентов:</span><span class="chip">БД</span><span class="chip">Репозиторий кода продукта</span><span class="chip">База знаний</span><span class="chip">Генераторы нагрузки (MCP SSH)</span></div>
+    </div>
+    <div class="n rep">Отчёт с доказательствами</div>
+    <div class="n gate">Человек одобряет</div>
+    <div class="n out">Решение по релизу</div>
+    <svg class="arrow-line" viewBox="0 0 1696 700" aria-hidden="true" id="mapArrows"></svg>
+    <div class="foot">Не одобрено: флоу возвращается к доработке. Одобрено: <b>решение принимает человек</b>.</div>
+  </div>
+  <aside class="notes"><b>Целевая картина (2 мин).</b> Серверный запуск автономных флоу, которые собирают все наши инструменты вместе с Вердиктом по MCP. Агенты разрабатывают, правят и отлаживают скрипты, имеют прямой доступ к БД и репозиторию кода продукта, сверяют ошибки, после теста проверяют метрики системы и пишут отчёт. Человек одобряет отчёт — ключевая точка контроля.</aside>
+</section>
+
+<!-- ===================== 17. Impact-analysis ===================== -->
+<section class="slide" id="s17" data-title="Impact-analysis агент" data-steps="0">
+  <div class="crumb"><i></i>Часть 3. Путь к автономному НТ</div>
+  <h2>Impact-analysis: риски и гипотезы для НТ ещё до выхода фичи</h2>
+  <span class="badge dev top-right">в разработке</span>
+  <div class="wrap">
+    <div class="code">
+      <div class="pr">Иллюстрация: изменение в коде новой фичи</div>
+      <span class="del">- items.forEach(save)</span>
+      <span class="add">+ repo.saveAll(items)</span>
+      <span class="hot">+ ids.forEach(id -&gt; load(id))</span>
+      <span class="add">+ audit.log(order)</span>
+    </div>
+    <div class="arr2"></div>
+    <div class="ag2">Impact-analysis агент<span>читает изменение кода и базу знаний о системе</span></div>
+    <div class="arr2"></div>
+    <div class="out2">
+      <div class="risk"><b>Риск</b>Запрос к БД в цикле: нагрузка растёт вместе с размером заказа.</div>
+      <div class="hyp"><b>Гипотеза для НТ</b>p95 растёт на заказах из 50+ позиций. Добавить такой сценарий.</div>
+    </div>
+  </div>
+  <div class="foot"><b>Результат:</b> НТ начинается с готовых гипотез, а продуктовая команда узнаёт о рисках до релиза.</div>
+  <aside class="notes"><b>Impact-analysis (1,5 мин).</b> Отдельный агент в разработке: на этапе разработки фичи продуктовыми командами ищет потенциальные риски и формулирует гипотезы для НТ. Пример на слайде иллюстративный. Идея: сдвинуть НТ «влево», к моменту написания кода.</aside>
+</section>
+
+<!-- ===================== 18. Бэклог ===================== -->
+<section class="slide" id="s18" data-title="Бэклог: близко, средне, далеко" data-steps="2">
+  <div class="crumb"><i></i>Что дальше</div>
+  <h2>Упрощённый бэклог: от ближнего к дальнему</h2>
+  <div class="bk">
+    <div></div>
+    <div class="hd c1">Близко<small>ближайшие недели</small></div>
+    <div class="hd c2 st" data-s="1">Средне<small>следующий этап</small></div>
+    <div class="hd c3 st" data-s="2">Далеко<small>горизонт</small></div>
+
+    <div class="rowh">Вердикт</div>
+    <div class="cell k1"><ul>
+      <li>Ответы на первую обратную связь: понятные ошибки, документация, примеры</li>
+      <li>MCP-сервер для агентов</li>
+      <li>Сравнение с эталоном в CLI и отчёте</li>
+      <li>Проверка подключений к источникам</li></ul></div>
+    <div class="cell k2 st" data-s="1"><ul>
+      <li>Независимая приёмка корреляций</li>
+      <li>Интеграция с codeGraph/graphify</li>
+      <li>Ёмкость и «колено» на реальных прогонах</li>
+      <li>Повтор ИИ-эксперимента на новых кейсах</li></ul></div>
+    <div class="cell k3 st" data-s="2"><ul>
+      <li>Инциденты: сводка находок вместо россыпи</li>
+      <li>Агентное расследование</li>
+      <li>Сравнение нескольких прогонов подряд</li>
+      <li>Многопользовательский режим</li></ul></div>
+
+    <div class="rowh">Инструменты и флоу</div>
+    <div class="cell r2 k1"><ul>
+      <li>Impact-analysis агент: рабочая версия</li>
+      <li>Обкатка Вердикта в реальных условиях</li></ul></div>
+    <div class="cell r2 k2 st" data-s="1"><ul>
+      <li>Серверный запуск автономных флоу</li>
+      <li>Вердикт и инструменты через единый MCP</li></ul></div>
+    <div class="cell r2 k3 st" data-s="2"><ul>
+      <li>Автономный цикл НТ: от изменения кода до отчёта на одобрение человеку</li></ul></div>
+  </div>
+  <aside class="notes"><b>Бэклог (2 мин + вопросы).</b> Нажимайте → : сначала «близко», затем «средне», затем «далеко». Градиент цвета показывает горизонт: чем насыщеннее, тем ближе. Состав колонок — рабочий, уточняется владельцем продукта.</aside>
+</section>
+
+</main></div>
+
+<div id="progress"></div>
+<div id="counter"></div>
+<div id="hud" role="toolbar" aria-label="Управление презентацией">
+  <button data-act="prev" title="Назад (←)">←</button>
+  <button data-act="next" title="Вперёд (→, пробел)">→</button>
+  <button data-act="toc" title="Список слайдов (O)">Слайды</button>
+  <button data-act="notes" title="Заметки докладчика (N)">Заметки</button>
+  <button data-act="theme" title="Тема (T)">Тема</button>
+  <button data-act="full" title="Полный экран (F)">Экран</button>
+</div>
+<div id="notes" aria-live="polite"></div>
+<div id="toc"><h4>Слайды (клик, чтобы перейти; Esc закрывает; D включает или пропускает черновик)</h4><ol id="tocList"></ol></div>
+
+<script src="assets/deck.js"></script>
+</body>
+</html>

@@ -1,0 +1,966 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>LT Verdict — интерактивный макет</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Onest:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<style>
+/* Layout: постоянная шапка с вердиктом + левая навигация из пяти разделов; обзор ведёт в глубокий анализ по клику на карточку. */
+:root{
+  --bg:#EEF1F4; --panel:#FFFFFF; --ink:#13202B; --muted:#56667A; --line:#DCE2E8; --soft:#F5F7F9;
+  --accent:#1D5FA8; --accent-bg:#E4EEF9;
+  --crit:#B3261E; --crit-bg:#FBE9E7; --crit-solid:#B3261E; --good-solid:#256F4F; --warn-solid:#8A5A00; --on-accent:#FFFFFF;
+  --warn:#8A5A00; --warn-bg:#FCEFD0; --good:#256F4F; --good-bg:#E2F2EA;
+  --s-p95:#1D5FA8; --s-rps:#64748B; --s-cpu:#0E8F86; --s-heap:#7B4FB3; --s-err:#B3261E; --s-base:#8A97A6;
+  --sans:'Onest','Segoe UI',system-ui,sans-serif; --mono:'IBM Plex Mono',Consolas,monospace;
+  color-scheme:light;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#0F171F; --panel:#17222D; --ink:#E6ECF2; --muted:#93A3B5; --line:#2A3846; --soft:#1C2935;
+  --accent:#6FA8F0; --accent-bg:#1B2C42;
+  --crit:#FF8F86; --crit-bg:#3A1D1B; --crit-solid:#D9453B; --good-solid:#2E8B62; --warn-solid:#9A6A00; --on-accent:#0F171F;
+  --warn:#F2C265; --warn-bg:#33290F; --good:#6FCB9F; --good-bg:#12301F;
+  --s-p95:#6FA8F0; --s-rps:#9AA8B8; --s-cpu:#4FD1C5; --s-heap:#B794F4; --s-err:#FF8F86; --s-base:#7D8C9C;
+  color-scheme:dark;}}
+:root[data-theme="dark"]{
+  --bg:#0F171F; --panel:#17222D; --ink:#E6ECF2; --muted:#93A3B5; --line:#2A3846; --soft:#1C2935;
+  --accent:#6FA8F0; --accent-bg:#1B2C42;
+  --crit:#FF8F86; --crit-bg:#3A1D1B; --crit-solid:#D9453B; --good-solid:#2E8B62; --warn-solid:#9A6A00; --on-accent:#0F171F;
+  --warn:#F2C265; --warn-bg:#33290F; --good:#6FCB9F; --good-bg:#12301F;
+  --s-p95:#6FA8F0; --s-rps:#9AA8B8; --s-cpu:#4FD1C5; --s-heap:#B794F4; --s-err:#FF8F86; --s-base:#7D8C9C;
+  color-scheme:dark;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:400 14px/1.5 var(--sans);display:grid;grid-template-columns:232px minmax(0,1fr);min-height:100vh}
+button,select,input{font:inherit;color:inherit}
+button{cursor:pointer}
+:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
+h1,h2,h3,p{margin:0}
+h1,h2,h3{text-wrap:balance}
+.num{font-family:var(--mono);font-variant-numeric:tabular-nums}
+/* sidebar */
+aside.rail{position:sticky;top:0;height:100vh;padding:20px 14px;border-right:1px solid var(--line);background:var(--panel);display:flex;flex-direction:column;gap:24px}
+.brand{font:600 19px/1 var(--sans);letter-spacing:-.01em;padding:4px 10px}
+.nav{display:flex;flex-direction:column;gap:4px}
+.nav a{display:flex;align-items:center;gap:12px;padding:10px 12px;border-radius:8px;color:var(--muted);text-decoration:none;font-weight:500}
+.nav a:hover{background:var(--soft);color:var(--ink)}
+.nav a[aria-current="page"]{background:var(--accent-bg);color:var(--accent)}
+.nav a .cnt{margin-left:auto;font:500 12px/1 var(--mono)}
+.srcs{margin-top:auto;display:flex;flex-direction:column;gap:8px;padding:12px;border:1px solid var(--line);border-radius:8px}
+.srcs li{list-style:none;display:flex;justify-content:space-between;font-size:13px;color:var(--muted)}
+.srcs ul{margin:0;padding:0;display:flex;flex-direction:column;gap:6px}
+.kicker{font:600 12px/1 var(--sans);letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+/* topbar */
+.main{min-width:0;display:flex;flex-direction:column}
+.top{position:sticky;top:env(safe-area-inset-top,0px);z-index:5;background:var(--bg);border-bottom:1px solid var(--line);padding:14px 32px;display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap}
+.runmeta{display:flex;flex-direction:column;gap:4px}
+.runmeta b{font-weight:600;font-size:16px}
+.runmeta span{font:400 12px/1 var(--mono);color:var(--muted)}
+.topright{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.verdict{display:inline-flex;align-items:center;gap:10px;height:40px;padding:0 14px 0 6px;border-radius:8px;border:1px solid var(--line);background:var(--panel);text-decoration:none;color:var(--ink)}
+.verdict .v.PASS,.vbadge.PASS{background:var(--good-solid)} .verdict .v.NO_VERDICT,.vbadge.NO_VERDICT,.verdict .v.NO_POLICY,.vbadge.NO_POLICY{background:var(--warn-solid)}
+.verdict .v{font:600 15px/1 var(--mono);color:#fff;background:var(--crit-solid);height:28px;padding:0 10px;border-radius:5px;display:inline-flex;align-items:center}
+.wrap{padding:28px 32px 56px;display:flex;flex-direction:column;gap:32px;max-width:1360px;width:100%}
+.view[hidden]{display:none}
+.view{display:flex;flex-direction:column;gap:32px}
+/* controls */
+.btn{height:36px;padding:0 14px;border-radius:8px;border:1px solid var(--line);background:var(--panel);font-weight:500;display:inline-flex;align-items:center;gap:8px;white-space:nowrap}
+.btn:hover{border-color:var(--muted)}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:var(--on-accent)}
+.btn:disabled{opacity:.5;cursor:not-allowed}
+.btn.sm{height:30px;padding:0 10px;font-size:13px}
+.seg{display:inline-flex;border:1px solid var(--line);border-radius:8px;overflow:hidden;background:var(--panel)}
+.seg button{height:34px;padding:0 14px;border:0;background:transparent;color:var(--muted);font-weight:500}
+.seg button[aria-pressed="true"],.seg button[aria-selected="true"]{background:var(--ink);color:var(--panel)}
+input[type=text],input[type=number],input[type=datetime-local],select,input[type=search]{height:36px;padding:0 10px;border-radius:8px;border:1px solid var(--line);background:var(--panel)}
+.pill{display:inline-flex;align-items:center;gap:6px;height:24px;padding:0 10px;border-radius:12px;font:600 12px/1 var(--sans);letter-spacing:.04em;text-transform:uppercase;white-space:nowrap}
+.pill.crit{background:var(--crit-bg);color:var(--crit)} .pill.warn{background:var(--warn-bg);color:var(--warn)} .pill.good{background:var(--good-bg);color:var(--good)} .pill.info{background:var(--soft);color:var(--muted);border:1px solid var(--line)}
+.pill.s{height:20px;font-size:11px;padding:0 8px}
+/* cards */
+.card{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:20px}
+.sec-h{display:flex;justify-content:space-between;align-items:flex-end;gap:16px;flex-wrap:wrap}
+.sec-h h2{font:600 22px/1.2 var(--sans)} .sec-h p{color:var(--muted);max-width:720px;margin-top:4px}
+.grid3{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:20px;align-items:stretch}
+.grid4{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:16px}
+.grid2{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}
+.acard{display:flex;flex-direction:column;gap:14px}
+.acard header{display:flex;justify-content:space-between;gap:12px;align-items:flex-start}
+.acard h3{font:600 17px/1.25 var(--sans)} .sub{font-size:13px;color:var(--muted)}
+.why{border-top:1px solid var(--line);padding-top:14px;display:flex;flex-direction:column;gap:8px;flex:1}
+.why p{line-height:1.5} .src{font:400 12px/1.4 var(--mono);color:var(--muted)}
+.vcard{display:flex;align-items:center;justify-content:space-between;gap:28px;flex-wrap:wrap;padding:24px 28px}
+.vbadge{width:124px;height:88px;border-radius:10px;background:var(--crit-solid);color:#fff;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;flex:none}
+.vbadge b{font:600 32px/1 var(--mono)} .vbadge span{font-size:12px}
+.stats{display:flex;flex-wrap:wrap;gap:0}
+.stat{padding:0 24px;border-left:1px solid var(--line);display:flex;flex-direction:column;gap:6px}
+.stat b{font:600 24px/1 var(--mono)} .stat span{font-size:13px;color:var(--muted)}
+.tile{display:flex;flex-direction:column;gap:8px;text-align:left;padding:14px 16px;border-radius:8px;border:1px solid var(--line);background:var(--panel);min-width:0}
+.tile:hover{border-color:var(--accent)}
+.tile .top2{display:flex;justify-content:space-between;align-items:center;gap:8px;color:var(--muted);font-weight:500;font-size:13px}
+.tile .val{display:flex;align-items:baseline;gap:6px} .tile .val b{font:600 26px/1 var(--mono)} .tile .val span{color:var(--muted);font-size:13px}
+.note{background:var(--warn-bg);color:var(--ink);border-radius:10px;padding:14px 16px;font-size:13px;display:flex;gap:10px}
+.note b{color:var(--warn);font-weight:600}
+/* charts */
+.chart{position:relative} .chart svg{display:block;width:100%;height:auto;overflow:visible}
+.gl{stroke:var(--line);stroke-width:1} .tx{fill:var(--muted);font:11px var(--mono)} .frame{fill:none;stroke:var(--line)}
+.guide line{stroke:var(--ink);stroke-width:1.5} .guide rect{fill:var(--ink)} .guide text{fill:var(--panel);font:11px var(--mono)}
+.chip{display:grid;grid-template-columns:14px 1fr auto;align-items:center;gap:10px;width:100%;text-align:left;padding:9px 12px;border-radius:8px;border:1px solid var(--line);background:var(--panel)}
+.chip[aria-pressed="false"]{opacity:.55}
+.chip i{width:14px;height:14px;border-radius:3px;display:block}
+.chip .num{font-size:13px}
+.ovl{display:grid;grid-template-columns:minmax(0,1fr) 320px;gap:20px;align-items:start}
+/* tables */
+.tw{overflow:auto;border:1px solid var(--line);border-radius:10px;background:var(--panel);max-height:520px}
+table{border-collapse:collapse;width:100%;min-width:640px}
+th,td{padding:10px 14px;text-align:left;border-bottom:1px solid var(--line);white-space:nowrap}
+th{position:sticky;top:0;background:var(--soft);font:600 12px/1 var(--sans);letter-spacing:.04em;text-transform:uppercase;color:var(--muted);z-index:1}
+th button{background:none;border:0;padding:0;font:inherit;letter-spacing:inherit;text-transform:inherit;color:inherit;display:inline-flex;gap:4px;align-items:center}
+td.r,th.r{text-align:right} tr:last-child td{border-bottom:0}
+tbody tr:hover{background:var(--soft)}
+a.lnk{color:var(--accent);text-decoration:none;font-weight:500} a.lnk:hover{text-decoration:underline}
+/* deep */
+.deep{display:grid;grid-template-columns:260px minmax(0,1fr);gap:20px;align-items:start}
+.mlist{display:flex;flex-direction:column;gap:14px;position:sticky;top:96px;max-height:calc(100vh - 120px);overflow:auto}
+.mgroup{display:flex;flex-direction:column;gap:4px}
+.mrow{display:flex;align-items:center;gap:4px}
+.mrow .pick{flex:1;text-align:left;padding:8px 10px;border-radius:6px;border:1px solid transparent;background:transparent;display:flex;justify-content:space-between;gap:8px}
+.mrow .pick:hover{background:var(--soft)}
+.mrow .pick[aria-pressed="true"]{background:var(--accent-bg);color:var(--accent);font-weight:500}
+.mrow .pin{width:30px;height:30px;border-radius:6px;border:0;background:transparent;color:var(--muted);display:grid;place-items:center}
+.mrow .pin[aria-pressed="true"]{color:var(--accent)}
+.ctl{display:flex;flex-wrap:wrap;gap:12px;align-items:center}
+.ctl label{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--muted)}
+.sstrip{display:grid;grid-template-columns:repeat(auto-fit,minmax(110px,1fr));gap:1px;background:var(--line);border:1px solid var(--line);border-radius:8px;overflow:hidden}
+.sstrip div{background:var(--panel);padding:10px 12px;display:flex;flex-direction:column;gap:4px}
+.sstrip b{font:600 16px/1 var(--mono)} .sstrip span{font-size:12px;color:var(--muted)}
+.ro{font:500 13px/1 var(--mono);color:var(--muted);min-height:13px}
+/* ai */
+.aigrid{display:grid;grid-template-columns:340px minmax(0,1fr);gap:20px;align-items:start}
+.chk{display:flex;gap:10px;align-items:flex-start;padding:10px 0;border-bottom:1px solid var(--line)}
+.chk:last-of-type{border-bottom:0}
+.chk input{margin-top:3px;width:16px;height:16px;accent-color:var(--accent)}
+.hyp{display:flex;flex-direction:column;gap:12px}
+.hyp h3{font:600 17px/1.3 var(--sans)}
+.evl{display:flex;gap:8px;flex-wrap:wrap}
+.todo{margin:0;padding-left:20px;display:flex;flex-direction:column;gap:4px}
+.skel{height:14px;border-radius:6px;background:linear-gradient(90deg,var(--soft),var(--line),var(--soft));background-size:200% 100%;animation:sk 1.2s linear infinite}
+@keyframes sk{to{background-position:-200% 0}}
+.toast{position:fixed;left:50%;bottom:calc(24px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--ink);color:var(--panel);padding:10px 16px;border-radius:8px;font-size:13px;z-index:20}
+.toast[hidden]{display:none}
+
+.grp{padding:14px 12px 4px;font:600 11px/1 var(--sans);letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+.newbtn{display:flex;align-items:center;justify-content:center;gap:8px;height:42px;border-radius:8px;background:var(--accent);color:var(--on-accent);font-weight:600;text-decoration:none}
+.nav a.newbtn,.nav a.newbtn[aria-current="page"]{background:var(--accent);color:var(--on-accent)} .nav a.newbtn:hover{filter:brightness(1.08);background:var(--accent);color:var(--on-accent)} .nav a.newbtn[aria-current="page"]{box-shadow:0 0 0 3px var(--accent-bg)}
+.sstrip{display:flex;flex-wrap:wrap;gap:8px;background:none;border:0;border-radius:0;overflow:visible} .sstrip div{flex:1 1 110px;border:1px solid var(--line);border-radius:8px}
+.field{display:flex;flex-direction:column;gap:6px;min-width:0} .field>label,.lbl{font-size:13px;color:var(--muted);font-weight:500}
+.field input,.field select{width:100%}
+.frow{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:14px}
+.setup{display:grid;grid-template-columns:minmax(0,1fr) 340px;gap:20px;align-items:start}
+.polgrid{display:grid;grid-template-columns:270px minmax(0,1fr);gap:20px;align-items:start}
+.stack{display:flex;flex-direction:column;gap:16px;min-width:0}
+.drop{position:relative;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;padding:28px 16px;border:2px dashed var(--line);border-radius:10px;text-align:center;cursor:pointer;background:var(--soft)}
+.drop:hover,.drop.over{border-color:var(--accent);background:var(--accent-bg)}
+.drop input{position:absolute;opacity:0;inset:0;width:100%;height:100%;cursor:pointer}
+.drop:focus-within{outline:3px solid var(--accent);outline-offset:2px}
+.srow{display:grid;grid-template-columns:minmax(0,1fr) minmax(170px,240px);gap:14px;align-items:center;padding:12px 0;border-bottom:1px solid var(--line)}
+.srow:last-of-type{border-bottom:0}
+.step{display:flex;gap:12px;align-items:center;padding:9px 0;color:var(--muted)} .step.done{color:var(--ink)} .step.now{color:var(--accent);font-weight:500}
+.step i{width:20px;height:20px;border-radius:50%;border:2px solid var(--line);display:grid;place-items:center;flex:none;font-style:normal;font-size:11px}
+.step.done i{background:var(--good-solid);border-color:var(--good-solid);color:#fff}
+.step.now i{border-color:var(--accent);border-top-color:transparent;animation:spin 1s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+.rrow{display:grid;grid-template-columns:minmax(130px,1.1fr) minmax(190px,1.4fr) 66px 96px minmax(170px,1.3fr) minmax(160px,1fr) 36px;gap:10px;align-items:end;padding:14px 0;border-bottom:1px solid var(--line)}
+.pol{width:100%;text-align:left;padding:12px 14px;border-radius:8px;border:1px solid var(--line);background:var(--panel);display:flex;flex-direction:column;gap:6px;align-items:flex-start}
+.pol[aria-pressed="true"]{border-color:var(--accent);background:var(--accent-bg)}
+.rchart svg{display:block;width:100%;height:auto;overflow:visible}
+.mx{display:grid;grid-template-columns:minmax(140px,.6fr) minmax(0,1fr) minmax(0,1fr);gap:8px 10px;align-items:stretch}
+.ctl label{min-width:0;max-width:100%} .ctl select{max-width:100%;min-width:0;text-overflow:ellipsis}
+.stages{display:flex;gap:4px;align-items:stretch}
+.stg{border:1px solid var(--line);background:var(--panel);border-radius:6px;padding:6px 8px;text-align:left;min-width:0;display:flex;flex-direction:column;gap:2px;font-size:12px;color:var(--ink)}
+.stg.fixed{flex:none}
+.stg b{font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.stg span{font:11px var(--mono);color:var(--muted)}
+.stg:hover{border-color:var(--accent)}
+.stg[aria-pressed="true"]{background:var(--ink);color:var(--panel);border-color:var(--ink)} .stg[aria-pressed="true"] span{color:var(--panel);opacity:.8}
+.trow{display:grid;grid-template-columns:minmax(150px,1.3fr) minmax(130px,1fr) 64px minmax(120px,1fr) minmax(110px,.8fr) minmax(90px,.7fr) 96px 88px 36px;gap:8px;align-items:center;padding:8px 0;border-bottom:1px solid var(--line)}
+.trow.head{font:600 11px/1 var(--sans);letter-spacing:.05em;text-transform:uppercase;color:var(--muted);border-bottom:1px solid var(--line)}
+.chk-ok{color:var(--good);font-weight:600} .chk-no{color:var(--muted)}
+.req{display:flex;gap:10px;align-items:flex-start;padding:8px 0}
+.req .d{width:18px;height:18px;border-radius:50%;flex:none;display:grid;place-items:center;font-size:11px;color:#fff;margin-top:2px}
+@media (max-width:1100px){.setup,.polgrid{grid-template-columns:1fr}.grid3{grid-template-columns:1fr}.grid4{grid-template-columns:repeat(2,minmax(0,1fr))}.ovl,.deep,.aigrid{grid-template-columns:1fr}.mlist{position:static;max-height:none}}
+@media (max-width:820px){.stages{flex-wrap:wrap}.stg{flex:1 1 30% !important}.brand{flex:none}.nav{flex:none}.nav .grp{display:none}.nav a{flex:none}.mx{grid-template-columns:1fr 1fr}.mx .hd{display:none}.mx .nm{grid-column:1/-1;padding-top:8px}.rrow{grid-template-columns:1fr 1fr}.srow{grid-template-columns:1fr}
+  body{grid-template-columns:1fr}
+  aside.rail{position:static;height:auto;flex-direction:row;align-items:center;padding:10px 16px;overflow-x:auto;border-right:0;border-bottom:1px solid var(--line);gap:12px}
+  .nav{flex-direction:row} .nav a{white-space:nowrap} .srcs{display:none}
+  .top{padding:12px 16px;position:static}.wrap{padding:20px 16px 48px}.grid4,.grid2{grid-template-columns:1fr}
+  .stat{border-left:0;padding:8px 24px 8px 0}
+}
+@media (prefers-reduced-motion:reduce){.skel{animation:none}}
+</style>
+
+</head>
+<body>
+<aside class="rail" aria-label="Разделы">
+  <div class="brand">LT Verdict</div>
+  <nav class="nav" id="nav" aria-label="Разделы"></nav>
+  <div class="srcs"><span class="kicker">Источники</span><ul>
+    <li><span>JMeter JTL</span><span style="color:var(--good)">полный</span></li>
+    <li><span>Prometheus</span><span style="color:var(--good)">полный</span></li>
+    <li><span>OpenSearch</span><span style="color:var(--good)">полный</span></li></ul></div>
+</aside>
+
+<div class="main">
+  <header class="top">
+    <div class="runmeta"><b>Checkout, релиз 2026.09.3</b><span>29.09.2026 · 10:00–18:00 · 8 ч · окно задано политикой</span></div>
+    <div class="topright">
+      <span class="pill info" id="scopepill"></span>
+      <span class="pill info">Макет · условные данные</span>
+      <a class="pill info" id="bpill" href="#history" style="text-decoration:none"></a>
+      <a class="verdict" id="vchip" href="#tables" data-tab="rules"></a>
+      <button class="btn" type="button" data-act="toast" data-msg="В макете скачивание не работает. В продукте: JSON, HTML и AsciiDoc для Confluence.">Экспорт</button>
+    </div>
+  </header>
+  <main class="wrap">
+    <section class="view" id="v-new" hidden></section>
+    <section class="view" id="v-overview" hidden></section>
+    <section class="view" id="v-deep" hidden></section>
+    <section class="view" id="v-tables" hidden></section>
+    <section class="view" id="v-ai" hidden></section>
+    <section class="view" id="v-compare" hidden></section>
+    <section class="view" id="v-rules" hidden></section>
+    <section class="view" id="v-history" hidden></section>
+  </main>
+</div>
+<div class="toast" id="toast" role="status" hidden></div>
+
+<script>
+'use strict';
+/* ============ data (deterministic, invented) ============ */
+const RES = 16, N = 120 * RES + 1, STEP = 15, KNEE = 56, T0 = 0, AUTO = 60; // 8 часов: 1 921 точка с шагом 15 с; формулы ведутся в единицах u = i / RES (u от 0 до 120)
+const mul = s => () => { s |= 0; s = s + 0x6D2B79F5 | 0; let t = Math.imul(s ^ s >>> 15, 1 | s); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296 - 0.5; };
+const ramp = (i, a, b) => i < a ? 0 : Math.min(1, (i - a) / (b - a));
+const STAGES = [['ramp', 'Разгон', 0, 7.5], ['p1', 'Плато 1', 7.5, 37.5], ['step', 'Ступень +50%', 37.5, 45], ['p2', 'Плато 2', 45, 67.5], ['rec', 'Спад', 67.5, 75], ['soak', 'Soak', 75, 120]];
+const SF = u => u < 7.5 ? .25 + .75 * u / 7.5 : u < 37.5 ? 1 : u < 45 ? 1 + .5 * (u - 37.5) / 7.5 : u < 67.5 ? 1.5 : u < 75 ? 1.5 - .5 * (u - 67.5) / 7.5 : 1;
+const TX = [
+  { n: 'POST /checkout', f: 1, kf: 1, share: .22, st: 'crit' }, { n: 'POST /payment/confirm', f: 1.3, kf: .6, share: .10, st: 'warn' },
+  { n: 'GET /cart', f: .55, kf: .12, share: .16, st: 'ok' }, { n: 'POST /login', f: .7, kf: .08, share: .09, st: 'ok' },
+  { n: 'GET /catalog', f: .4, kf: .05, share: .20, st: 'ok' }, { n: 'GET /product/{id}', f: .45, kf: .06, share: .15, st: 'ok' },
+  { n: 'GET /orders', f: .6, kf: .1, share: .05, st: 'ok' }, { n: 'GET /health', f: .1, kf: 0, share: .03, st: 'ok' }
+];
+const MET = {
+  p50: { name: 'p50', unit: 'мс', group: 'Отклик', tx: 1, agg: 'pct', col: 's-p95' },
+  p95: { name: 'p95', unit: 'мс', group: 'Отклик', tx: 1, agg: 'pct', col: 's-p95', thr: 2000, thrTx: 0 },
+  p99: { name: 'p99', unit: 'мс', group: 'Отклик', tx: 1, agg: 'pct', col: 's-p95' },
+  rps: { name: 'Запросы в секунду', unit: 'зпр/с', group: 'Нагрузка', tx: 1, agg: 'mean', col: 's-rps' },
+  err: { name: 'Доля ошибок', unit: '%', group: 'Ошибки', tx: 1, agg: 'mean', col: 's-err', thr: 1, thrTx: 0, hi: 6 },
+  cpu: { name: 'CPU, среднее по подам', unit: '%', group: 'Платформа', wl: 1, pods: 1, band: 1, agg: 'mean', col: 's-cpu', lo: 0, hi: 100, thr: 80 },
+  cpuw: { name: 'CPU, худший под', unit: '%', group: 'Платформа', wl: 1, agg: 'max', col: 's-cpu', lo: 0, hi: 100, thr: 80 },
+  thr: { name: 'Троттлинг, среднее по подам', unit: '%', group: 'Платформа', wl: 1, pods: 1, band: 1, agg: 'mean', col: 's-heap', lo: 0, hi: 50, thr: 25 },
+  thrw: { name: 'Троттлинг, худший под', unit: '%', group: 'Платформа', wl: 1, agg: 'max', col: 's-err', lo: 0, hi: 50, thr: 25 },
+  mem: { name: 'Память, среднее по подам', unit: '%', group: 'Платформа', wl: 1, pods: 1, band: 1, agg: 'mean', col: 's-heap', lo: 40, hi: 100, thr: 90 },
+  memw: { name: 'Память, худший под', unit: '%', group: 'Платформа', wl: 1, agg: 'max', col: 's-err', lo: 40, hi: 100, thr: 90 },
+  rst: { name: 'Перезапуски подов', unit: 'шт', group: 'Платформа', wl: 1, pods: 1, agg: 'max', col: 's-err', lo: 0 },
+  imb: { name: 'Дисбаланс подов по CPU', unit: '%', group: 'Платформа', wl: 1, agg: 'mean', col: 's-cpu', lo: 0, hi: 60, thr: 25 },
+  heap: { name: 'Old Gen, среднее по подам', unit: '%', group: 'Платформа', wl: 1, pods: 1, band: 1, agg: 'mean', col: 's-heap', lo: 40, hi: 100, thr: 85 },
+  scmem: { name: 'Память сайдкаров, среднее по подам', unit: '%', group: 'Платформа', wl: 1, pods: 1, band: 1, agg: 'mean', col: 's-heap', lo: 0, hi: 100, thr: 75 },
+  gc: { name: 'Пауза GC, максимум по подам', unit: 'мс', group: 'Платформа', wl: 1, pods: 1, agg: 'max', col: 's-err', thr: 300 },
+  threads: { name: 'Потоки JVM', unit: '', group: 'Платформа', wl: 1, agg: 'mean', col: 's-cpu' },
+  pool: { name: 'Пул соединений БД', unit: '%', group: 'Платформа', wl: 1, agg: 'mean', col: 's-heap', lo: 0, hi: 100, thr: 85 },
+  os_err: { name: 'Ошибки OpenSearch', unit: 'шт', group: 'Логи', wl: 1, agg: 'sum', col: 's-err', bars: 1 }
+};
+const SRC = { cpuw: 'cpu', thrw: 'thr', memw: 'mem' }, PODM = ['cpu', 'thr', 'mem', 'rst', 'heap', 'gc', 'scmem'], AGGP = { cpu: 'mean', thr: 'mean', mem: 'mean', heap: 'mean', gc: 'max', rst: 'sum', scmem: 'mean' };
+const WLS = [
+  { n: 'checkout-api', pods: 6 }, { n: 'payments-svc', pods: 4 }, { n: 'cart-svc', pods: 4 }, { n: 'catalog-svc', pods: 8 }, { n: 'auth-svc', pods: 3 }, { n: 'orders-svc', pods: 4 },
+  { n: 'inventory-svc', pods: 5 }, { n: 'search-svc', pods: 6 }, { n: 'pricing-svc', pods: 3 }, { n: 'gateway', pods: 6 }, { n: 'notification-svc', pods: 2 }, { n: 'reports-svc', pods: 2 },
+  { n: 'users-svc', pods: 4 }, { n: 'shipping-svc', pods: 3 }, { n: 'promo-svc', pods: 2 }, { n: 'recommend-svc', pods: 5 }, { n: 'review-svc', pods: 2 }, { n: 'wishlist-svc', pods: 2 }, { n: 'billing-svc', pods: 3 }, { n: 'audit-svc', pods: 2 }, { n: 'postgres-main', pods: 2, db: 1 }
+];
+const podsTotal = () => 2 * WLS.reduce((a, w) => a + w.pods, 0);
+const RS = ['6d8f7', '7c9b4', '5f6d2', '84b7c', '9a3e1', '6b2d8', '7d4f9', '58c6a', '65b9d', '7a1c3', '5d8e2', '69f4b', '5c7d1', '8e2a4', '6f1b9', '79d3c', '5a8f2', '6c4e7', '7b9a1', '58d6e', '9c2f3'];
+const podName = (wl, sh, j) => WLS[wl].n + '-' + RS[wl] + '-' + 'ab'[sh] + (j + 1);
+const hsh = s => [...s].reduce((a, c) => a + c.charCodeAt(0) * 7, 0);
+/* Сценарий: плечо B, payments-svc, под 2 упирается в память и перезапускается 3 раза; checkout-api в B: два пода в троттлинге; catalog-svc: один горячий под в обоих плечах. */
+function podVal(id, wl, sh, j, i, r, base) {
+  const k = base ? 0 : ramp(i, KNEE, 110), B = sh === 1, bad = B && wl === 1 && j === 1 && !base, hot = B && wl === 0 && j < 2 && !base, skew = wl === 3 && j === 3;
+  const t0 = KNEE - 8, t = i - t0, ph = t < 0 ? 0 : (t % 21) / 21;
+  switch (id) {
+    case 'cpu': return Math.min(100, 38 + (wl % 10) * 2 + r() * 4 + 6 * k + (hot ? 42 * k : 0) + (skew ? 38 : 0));
+    case 'thr': return Math.max(0, .8 + r() * .8 + (hot ? 36 * k : 0) + (skew ? 4 : 0));
+    case 'mem': return bad ? (t < 0 ? 56 + r() * 2 : 58 + 42 * ph + r() * 1.5) : 54 + (wl % 10) * 1.2 + .03 * i + r() * 2 + (B && wl === 1 && !base ? 2 * k : 0);
+    case 'rst': return bad && t >= 0 ? Math.floor(t / 21) : 0;
+    case 'heap': return bad ? (t < 0 ? 55 + r() : 56 + 38 * ph + r()) : 50 + wl * .8 + .03 * i + r() + (B && wl === 5 && !base ? .33 * Math.max(0, i - 60) : 0);
+    case 'scmem': return 28 + wl * .5 + r() * 1.5 + .02 * i + (B && wl === 9 && !base ? .6 * Math.max(0, i - 50) : 0);
+    case 'gc': return bad && t >= 0 ? 40 + 420 * ph * ph + r() * 8 : 36 + r() * 10;
+  }
+  return 0;
+}
+const PC = {};
+function podsArr(id, wl, sh, base) {
+  const key = id + '|' + wl + '|' + sh + '|' + (base ? 1 : 0); if (PC[key]) return PC[key];
+  const out = []; for (let j = 0; j < WLS[wl].pods; j++) { const r = mul(7000 + hsh(id) * 13 + wl * 101 + sh * 17 + j * 29 + (base ? 5 : 0)), a = []; for (let i = 0; i < N; i++) a.push(Math.min(id === 'mem' || id === 'heap' || id === 'scmem' ? 100 : Infinity, +podVal(id, wl, sh, j, i / RES, r, base).toFixed(2))); out.push(a); }
+  return PC[key] = out;
+}
+function wlAgg(id, wl, sh, base) {
+  if (id === 'imb') { const c = podsArr('cpu', wl, sh, base), o = []; for (let i = 0; i < N; i++) { const v = c.map(p => p[i]), m = mean(v), sd = Math.sqrt(mean(v.map(x => (x - m) * (x - m)))); o.push(+(sd / m * 100).toFixed(1)); } return o; }
+  const src = SRC[id] || id, pods = podsArr(src, wl, sh, base), mode = SRC[id] ? 'max' : AGGP[src], o = [];
+  for (let i = 0; i < N; i++) { const v = pods.map(p => p[i]); o.push(+(mode === 'sum' ? sum(v) : mode === 'max' ? Math.max(...v) : mean(v)).toFixed(2)); }
+  return o;
+}
+const WSC = {};
+const plural = n => n === 1 ? 'перезапуск' : n < 5 ? 'перезапуска' : 'перезапусков';
+function wlStats(wl, sh) {
+  const k = wl + '|' + sh; if (WSC[k]) return WSC[k];
+  const mx = a => Math.max(...a.map(p => Math.max(...p))), cpu = podsArr('cpu', wl, sh), thr = podsArr('thr', wl, sh), mem = podsArr('mem', wl, sh), rst = podsArr('rst', wl, sh), n = cpu.length;
+  const scm = podsArr('scmem', wl, sh), scMax = mx(scm), cpuAvg = mean(cpu.map(p => mean(p))), cpuMax = mx(cpu), thrMax = mx(thr), memMax = mx(mem), rstN = sum(rst.map(p => p[N - 1] - p[0])), imb = mean(wlAgg('imb', wl, sh).slice(-30));
+  const hotThr = thr.filter(p => Math.max(...p) >= 25).length, notes = []; let stt = 'ok', focus = 'cpu';
+  if (memMax >= 95) { notes.push('память ' + Math.round(memMax) + '%'); stt = 'crit'; focus = 'mem'; }
+  if (rstN > 0) { notes.push(rstN + ' ' + plural(rstN)); stt = 'crit'; if (focus === 'cpu') focus = 'rst'; }
+  if (hotThr) { notes.push('троттлинг ' + Math.round(thrMax) + '% на ' + hotThr + ' из ' + n); stt = 'crit'; if (focus === 'cpu') focus = 'thr'; }
+  if (stt === 'ok' && imb >= 25) { notes.push('дисбаланс подов ' + Math.round(imb) + '%'); stt = 'warn'; focus = 'imb'; }
+  if (stt === 'ok' && cpuMax >= 85) { notes.push('один под с CPU ' + Math.round(cpuMax) + '%'); stt = 'warn'; focus = 'cpuw'; }
+  if (stt === 'ok' && scMax >= 75) { notes.push('память сайдкара ' + Math.round(scMax) + '%'); stt = 'warn'; focus = 'scmem'; }
+  return WSC[k] = { wl, sh, scMax, pods: n, cpuAvg, cpuMax, thrMax, memMax, rst: rstN, imb, hotThr, st: stt, note: notes.join(', '), focus };
+}
+const wlBad = () => WLS.reduce((a, _, i) => a + (wlStats(i, 0).st !== 'ok') + (wlStats(i, 1).st !== 'ok'), 0) + ' из ' + WLS.length * 2;
+
+const cache = {};
+function raw(id, tx, base, wl = 1, sh = 1) {
+  const key = id + '|' + tx + '|' + (base ? 1 : 0) + '|' + wl + '|' + sh; if (cache[key]) return cache[key];
+  if (PODM.includes(id) || SRC[id] || id === 'imb') return cache[key] = wlAgg(id, wl, sh, base);
+  const r = mul(1000 + tx * 17 + id.length * 31 + (base ? 7 : 0)), t = TX[tx] || TX[0], a = [];
+  for (let ii = 0; ii < N; ii++) {
+    const i = ii / RES, F = SF(i), k = base ? 0 : ramp(i, KNEE, 110); let v;
+    const p95 = t.f * (760 * (1 + .3 * (F - 1)) + 1900 * t.kf * Math.pow(k, 1.25)) + t.f * r() * 90 * (base ? .8 : 1) - (base ? 40 * t.f : 0);
+    switch (id) {
+      case 'p95': v = p95; break; case 'p50': v = p95 * .45 + r() * 20; break; case 'p99': v = p95 * 1.35 + r() * 40; break;
+      case 'rps': v = 121 * t.share * F * (1 - (base ? 0 : .17) * ramp(i, 60, 105)) + r() * 3 * t.share * 4; break;
+      case 'err': v = .1 + Math.abs(r()) * .1 + (tx === 0 ? 2.6 * k : tx === 1 ? .5 * k : .03 * k); break;
+      case 'cpu': v = 44 + i * .09 + r() * 3 + (base ? 0 : 12 * k); break;
+      case 'load': v = 2.1 + r() * .3 + (base ? 0 : .9 * k); break;
+      case 'disk': v = 14 + r() * 5 + (base ? 0 : 3 * k); break;
+      case 'heap': { const s = (i % 18) / 18; v = 52 + (base ? .05 : .18) * i + 14 * s * (.6 + k) - (s > .9 ? 6 : 0) + r(); break; }
+      case 'gc': v = 38 + r() * 14 + (base ? 0 : 360 * Math.pow(k, 1.6) * (.5 + Math.abs(r()) * 1.4)); break;
+      case 'threads': v = 210 + i * .4 + r() * 6 + (base ? 0 : 90 * k); break;
+      case 'pool': v = 38 + r() * 4 + (base ? 0 : 52 * ramp(i, 50, 100)); break;
+      case 'os_err': v = (i < KNEE + 3 || base ? (Math.abs(r()) > .48 ? 1 : 0) : Math.abs(r()) * 6 + 22 * k * (.6 + Math.abs(r()))) * (wl === 1 && sh === 1 ? 1 : .03); break;
+    }
+    a.push(id === 'load' || id === 'err' || id === 'heap' || id === 'cpu' ? +v.toFixed(2) : Math.round(v));
+  }
+  return cache[key] = a;
+}
+const q = (a, p) => { const s = [...a].sort((x, y) => x - y), x = (s.length - 1) * p, lo = Math.floor(x); return s[lo] + (s[Math.min(lo + 1, s.length - 1)] - s[lo]) * (x - lo); };
+const sum = a => a.reduce((x, y) => x + y, 0), mean = a => a.length ? sum(a) / a.length : 0;
+const fmtN = n => String(Math.round(n)).replace(/\B(?=(\d{3})+$)/g, ' ');
+const cm = (n, d) => n.toFixed(d).replace('.', ',');
+const clock = s => { const t = 10 * 3600 + T0 + s, h = Math.floor(t / 3600), m = Math.floor(t % 3600 / 60), ss = t % 60; return String(h).padStart(2, '0') + ':' + String(m).padStart(2, '0') + (ss ? ':' + String(ss).padStart(2, '0') : ''); };
+function fv(id, v) { const m = MET[id]; if (v == null || isNaN(v)) return '—'; const d = m.dec != null ? m.dec : (id === 'err' ? 2 : m.unit === '%' ? 1 : 0); return (d ? cm(v, d) : fmtN(v)) + (m.unit ? ' ' + m.unit : ''); }
+const AGG = { 15: 1, 60: 4, 300: 20, 900: 60 };
+const RANGES = { all: [0, N], after: [KNEE * RES, N] }; STAGES.forEach(x => { RANGES[x[0]] = [Math.round(x[2] * RES), x[3] === 120 ? N : Math.round(x[3] * RES)]; });
+/* series: slice → aggregate. returns {ts,a,mn,mx} */
+function series(id, tx, agg, range, base, wl = 1, sh = 1) {
+  const full = raw(id, tx, base, wl, sh), [r0, r1] = RANGES[range], g = AGG[agg], m = MET[id], ts = [], a = [], mn = [], mx = [];
+  for (let i = r0; i < r1; i += g) {
+    const ch = full.slice(i, Math.min(i + g, r1)); let v;
+    if (m.agg === 'sum') v = sum(ch); else if (m.agg === 'max') v = Math.max(...ch); else if (m.agg === 'pct') v = g === 1 ? ch[0] : q(ch, .75); else v = mean(ch);
+    ts.push(i * STEP); a.push(v); mn.push(Math.min(...ch)); mx.push(Math.max(...ch));
+  }
+  return { ts, a, mn, mx };
+}
+const thrOf = (id, tx) => { const m = MET[id]; return m.thr && (m.thrTx == null || m.thrTx === tx) ? m.thr : null; };
+const kneeT = KNEE * RES * STEP;
+const p95All = raw('p95', 0), breachI = p95All.findIndex(v => v > 2000), breachMin = p95All.filter(v => v > 2000).length * STEP / 60;
+const heapA = raw('heap', 0), gcA = raw('gc', 0), oeA = raw('os_err', 0);
+const oeShare = 100 * sum(oeA.slice(KNEE * RES)) / sum(oeA);
+
+/* ============ svg chart ============ */
+const CH = {};
+function niceHi(v) { const p = Math.pow(10, Math.floor(Math.log10(v))), n = v / p; return (n <= 1 ? 1 : n <= 2 ? 2 : n <= 2.5 ? 2.5 : n <= 5 ? 5 : 10) * p; }
+function chart(cfg) {
+  const { id, w = 900, h = 300, l = 56, r = 14, t = 12, b = 30, S, lo, hi, thr, xl = true, shade, mini } = cfg;
+  const t0 = S[0].ts[0], t1 = Math.max(S[0].ts[S[0].ts.length - 1], t0 + STEP);
+  const X = ts => l + (ts - t0) / (t1 - t0) * (w - l - r), Y = v => t + (h - t - b) - (v - lo) / (hi - lo) * (h - t - b);
+  const ph = h - t - b; let g = '';
+  const tk = [0, .25, .5, .75, 1].map(f => lo + (hi - lo) * f);
+  if (!mini) tk.forEach(v => { if (h < 140 && (v !== lo && v !== hi && Math.abs(v - (lo + hi) / 2) > 1e-9)) return; g += `<line class="gl" x1="${l}" x2="${w - r}" y1="${Y(v)}" y2="${Y(v)}"/><text class="tx" x="${l - 8}" y="${Y(v) + 4}" text-anchor="end">${Number.isInteger(v) ? fmtN(v) : cm(v, 1)}</text>`; });
+  if (xl) [0, .25, .5, .75, 1].forEach(f => { const ts = t0 + (t1 - t0) * f; g += `<text class="tx" x="${X(ts)}" y="${h - 8}" text-anchor="${f === 0 ? 'start' : f === 1 ? 'end' : 'middle'}">${clock(Math.round(ts / STEP) * STEP)}</text>`; });
+  if (shade != null && shade < t1) g += `<rect x="${X(Math.max(shade, t0))}" y="${t}" width="${w - r - X(Math.max(shade, t0))}" height="${ph}" style="fill:var(--crit);opacity:.07"/>`;
+  if (cfg.stages) STAGES.forEach(x => { const a = x[2] * RES * STEP, e = x[3] * RES * STEP; if (a > t0 && a < t1) g += `<line x1="${X(a)}" x2="${X(a)}" y1="${t}" y2="${t + ph}" style="stroke:var(--muted);stroke-width:1;stroke-dasharray:2 4;opacity:.6"/>`; const xa = X(Math.max(a, t0)), xb = X(Math.min(e, t1)); if (cfg.stageLabels && e > t0 && a < t1 && xb - xa > 46) g += `<text class="tx" x="${(xa + xb) / 2}" y="${t + 11}" text-anchor="middle" style="opacity:.85">${x[1]}</text>`; });
+  S.forEach(s => {
+    const c = `var(--${s.col})`;
+    if (s.band) { const up = s.band.mx.map((v, i) => X(s.ts[i]).toFixed(1) + ',' + Y(v).toFixed(1)), dn = s.band.mn.map((v, i) => X(s.ts[i]).toFixed(1) + ',' + Y(v).toFixed(1)).reverse(); g += `<polygon points="${up.concat(dn).join(' ')}" style="fill:${c};opacity:.16"/>`; }
+    if (s.bars) { const bw = Math.max(1.5, (w - l - r) / s.ts.length * .72); s.a.forEach((v, i) => { if (v) g += `<rect x="${X(s.ts[i]) - bw / 2}" y="${Y(v)}" width="${bw}" height="${Y(lo) - Y(v)}" style="fill:${c};opacity:${s.ts[i] >= kneeT ? .85 : .35}"/>`; }); return; }
+    const p = s.a.map((v, i) => (i ? 'L' : 'M') + X(s.ts[i]).toFixed(1) + ',' + Y(v).toFixed(1)).join('');
+    if (s.area) g += `<path d="${p}L${X(s.ts[s.ts.length - 1])},${Y(lo)}L${X(s.ts[0])},${Y(lo)}Z" style="fill:${c};opacity:.1"/>`;
+    g += `<path d="${p}" style="fill:none;stroke:${c};stroke-width:${s.dash ? 1.6 : 2};stroke-linejoin:round;stroke-linecap:round${s.dash ? ';stroke-dasharray:5 4' : ''}"/>`;
+    if (!s.dash) g += `<circle cx="${X(s.ts[s.ts.length - 1])}" cy="${Y(s.a[s.a.length - 1])}" r="4" style="fill:${c};stroke:var(--panel);stroke-width:2"/>`;
+  });
+  if (thr != null && thr >= lo && thr <= hi) g += `<line x1="${l}" x2="${w - r}" y1="${Y(thr)}" y2="${Y(thr)}" style="stroke:var(--crit);stroke-width:1.5;stroke-dasharray:5 4"/><text class="tx" x="${l + 6}" y="${Y(thr) - 6}" style="fill:var(--crit)">порог ${fmtN(thr)}</text>`;
+  if (!mini) g += `<rect class="frame" x="${l}" y="${t}" width="${w - l - r}" height="${ph}"/>`;
+  if (!mini) g += `<g class="guide" style="display:none"><line y1="${t}" y2="${t + ph}"/><rect y="${h - b + 2}" width="52" height="16" rx="3"/><text y="${h - b + 14}" text-anchor="middle"></text></g>`;
+  CH[id] = { cfg, X, t0, t1, l, r, w, t, ph, h, b };
+  return `<div class="chart" data-c="${id}"><svg viewBox="0 0 ${w} ${h}" role="img" aria-label="${(cfg.label || '').replace(/"/g, '')}">${g}</svg></div>`;
+}
+function valAt(s, ts) { const st = s.ts[1] - s.ts[0] || STEP; const i = Math.max(0, Math.min(s.ts.length - 1, Math.round((ts - s.ts[0]) / st))); return s.a[i]; }
+function setCursor(ts) {
+  document.querySelectorAll('.view:not([hidden]) .chart').forEach(el => {
+    const c = CH[el.dataset.c]; if (!c) return; const g = el.querySelector('.guide'); if (!g) return; const sn = Math.round(ts / STEP) * STEP;
+    if (ts == null || ts < c.t0 || ts > c.t1) { g.style.display = 'none'; return; }
+    const x = c.X(sn); g.style.display = ''; const ln = g.querySelector('line'); ln.setAttribute('x1', x); ln.setAttribute('x2', x);
+    const rc = g.querySelector('rect'); rc.setAttribute('x', Math.min(Math.max(x - 26, c.l), c.w - c.r - 52)); const tx = g.querySelector('text'); tx.setAttribute('x', Math.min(Math.max(x, c.l + 26), c.w - c.r - 26)); tx.textContent = clock(sn);
+    (c.cfg.S || []).forEach(s => { if (!s.ro) return; document.querySelectorAll('[data-ro="' + s.ro + '"]').forEach(n => n.textContent = fv(s.id, valAt(s, sn))); });
+  });
+}
+document.addEventListener('pointermove', e => {
+  const svg = e.target.closest && e.target.closest('.chart svg'); if (!svg) return;
+  const c = CH[svg.parentElement.dataset.c]; if (!c) return; const rc = svg.getBoundingClientRect(), px = (e.clientX - rc.left) / rc.width * c.w;
+  if (px < c.l || px > c.w - c.r) { setCursor(null); return; } setCursor(c.t0 + (px - c.l) / (c.w - c.l - c.r) * (c.t1 - c.t0));
+});
+document.addEventListener('pointerleave', () => setCursor(null), true);
+
+/* ============ helpers ============ */
+const ic = { grid: '<rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/>', deep: '<path d="M3 3v18h18"/><path d="m7 15 4-5 3 3 5-7"/>', tbl: '<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 10h18M9 4v16"/>', ai: '<path d="M12 3l1.8 4.7L18.5 9.5l-4.7 1.8L12 16l-1.8-4.7L5.5 9.5l4.7-1.8L12 3Z"/><path d="M19 15l.8 2.2L22 18l-2.2.8L19 21l-.8-2.2L16 18l2.2-.8L19 15Z"/>', cmp: '<path d="M7 4 3 8l4 4M3 8h14M17 20l4-4-4-4M21 16H7"/>', plus: '<path d="M12 5v14M5 12h14"/>', rules: '<path d="M9 6h11M9 12h11M9 18h11"/><path d="m3.5 6 1.2 1.2L6.8 5M3.5 12l1.2 1.2L6.8 11M3.5 18l1.2 1.2L6.8 17"/>', hist: '<path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5M12 7v5l3 2"/>', warn: '<path d="M12 3 2.5 20h19L12 3Z"/><path d="M12 10v5M12 18v.01"/>', pin: '<path d="M12 17v5M9 3h6l-1 6 3 3H7l3-3-1-6Z"/>', arrow: '<path d="M5 12h14M13 6l6 6-6 6"/>' };
+const I = (k, s = 18) => `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ic[k]}</svg>`;
+const pill = (t, k, s) => `<span class="pill ${k}${s ? ' s' : ''}">${t}</span>`;
+const st = { nv: pill('мало данных', 'warn', 1), ok: pill('в норме', 'good', 1), warn: pill('внимание', 'warn', 1), crit: pill('нарушение', 'crit', 1) };
+const bx = s => `<b class="num" style="font-weight:600">${s}</b>`;
+const state = { view: 'overview', metric: 'p95', tx: 0, agg: 60, range: 'all', base: true, pinned: ['memw', 'os_err', 'rps'], tab: 'rules', dtab: 'chart', ov: { p95: 1, rps: 1, memw: 1, rst: 1, os_err: 1 }, txSort: { k: 'p95', d: -1 }, txQ: '', txF: 'all', ai: 'idle', aiSel: { rules: 1, lat: 1, res: 1, pods: 1, logs: 0, trend: 1 }, aiOk: false, cmpOk: false, cmpTx: 0, lastK: null, hf: 'all', hm: 'p95', baselineId: '2026.09.2', run: null, sh: 'B', wl: 1, lvl: 'agg', mapOnly: true, svcQ: '', svcSh: 'all',
+  setup: { file: null, sample: false, polKey: 'checkout-release-gate', prom: true, promP: 'prod-prometheus', os: true, osP: 'app-logs-prod', pg: false, pgP: 'pg-prod-main', win: 'auto', margin: 60, step: 15, idle: 300, start: '2026-09-29T10:00', end: '2026-09-29T18:00', baseline: '2026.09.2', corr: false, cap: false } };
+const ALLV = ['new', 'overview', 'deep', 'tables', 'ai', 'compare', 'rules', 'history'];
+const NAVG = [['Открытый прогон', [['overview', 'Обзор', 'grid'], ['deep', 'Глубокий анализ', 'deep'], ['tables', 'Таблицы', 'tbl'], ['ai', 'ИИ-разбор', 'ai'], ['compare', 'Сравнение', 'cmp']]], ['Проект', [['rules', 'Правила', 'rules'], ['history', 'История релизов', 'hist']]]];
+const $ = s => document.querySelector(s);
+function toast(m) { const t = $('#toast'); t.textContent = m; t.hidden = false; clearTimeout(toast.h); toast.h = setTimeout(() => t.hidden = true, 3200); }
+function openDeep(metric, tx, wl, sh, range, trend) { state.metric = metric; state.tx = MET[metric].tx ? (tx || 0) : 0; if (wl != null && wl !== '') state.wl = +wl; if (sh) state.sh = sh; state.range = range && RANGES[range] ? range : 'all'; state.showTrend = !!trend; state.dtab = 'chart'; go('deep'); }
+
+/* ============ views ============ */
+/* ============ views: overview ============ */
+const WORST = { cpu: 'cpuw', thr: 'thrw', mem: 'memw' };
+function bandSeries(id, wl, sh, agg, range) {
+  const pods = podsArr(id, wl, sh), [r0, r1] = RANGES[range], g = AGG[agg], mn = [], mx = [];
+  for (let i = r0; i < r1; i += g) { let a = 0, b = 0, c = 0; for (let t = i; t < Math.min(i + g, r1); t++) { const v = pods.map(p => p[t]); a += Math.min(...v); b += Math.max(...v); c++; } mn.push(a / c); mx.push(b / c); }
+  return { mn, mx };
+}
+function svcMatrix() {
+  const all = WLS.flatMap((w, i) => [wlStats(i, 0), wlStats(i, 1)]), bad = all.filter(x => x.st !== 'ok').length;
+  const rows = WLS.map((w, i) => [i, wlStats(i, 0), wlStats(i, 1)]).filter(x => !state.mapOnly || x[1].st !== 'ok' || x[2].st !== 'ok');
+  const cell = (i, sh, S) => `<button class="tile" type="button" style="padding:10px 12px;gap:4px" data-act="deep" data-m="${S.focus}" data-w="${i}" data-s="${'AB'[sh]}" data-k="mx-${i}-${sh}" aria-label="${WLS[i].n}, плечо ${'AB'[sh]}: ${S.st === 'ok' ? 'без отклонений' : S.note}"><div style="display:flex;justify-content:space-between;align-items:center;gap:8px">${st[S.st]}<span class="sub num">${'AB'[sh]} · ${S.pods} подов</span></div><span style="font-size:13px;line-height:1.35;${S.st === 'ok' ? 'color:var(--muted)' : ''}">${S.st === 'ok' ? 'без отклонений' : S.note}</span></button>`;
+  const head = `<div class="kicker hd" style="padding:0 4px">Сервис</div><div class="kicker hd">Плечо A · ocp-a</div><div class="kicker hd">Плечо B · ocp-b</div>`;
+  return `<div class="ctl" style="justify-content:space-between"><span class="sub"><b class="num" style="font-weight:600;color:var(--ink)">${bad} из ${all.length}</b> пар «сервис · плечо» требуют внимания, остальные в норме</span><label><input type="checkbox" data-act="mapOnly" data-k="mapOnly" ${state.mapOnly ? 'checked' : ''}> Только проблемные</label></div>
+  <div class="mx">${head}${rows.map(x => `<div class="nm" style="display:flex;flex-direction:column;justify-content:center;padding:0 4px"><b style="font-weight:500">${WLS[x[0]].n}</b><span class="sub">${WLS[x[0]].pods} + ${WLS[x[0]].pods} подов</span></div>${cell(x[0], 0, x[1])}${cell(x[0], 1, x[2])}`).join('') || '<p class="sub" style="grid-column:1/-1;padding:24px 0">Проблемных пар нет.</p>'}</div>`;
+}
+function attention() {
+  const B = wlStats(1, 1), A = wlStats(1, 0), C = wlStats(0, 1), pw = podName(1, 1, 1), memS = series('mem', 0, AUTO, 'all', false, 1, 1);
+  const R1 = ruleFor('p95', 0), thr1 = R1 ? R1.r.thr : 2000, bi = p95All.findIndex(v => v > thr1), bmin = p95All.filter(v => v > thr1).length * STEP / 60, R2 = ruleFor('rst', 'w1B') || ruleFor('mem', 'w1B');
+  const c1 = chart({ id: 'a-p95', h: 200, l: 50, stages: 1, S: [{ ...series('p95', 0, AUTO, 'all'), col: 's-p95', area: 1 }], lo: 0, hi: Math.max(3000, niceHi(thr1 * 1.2)), thr: thr1, shade: bi >= 0 ? bi * STEP : null, label: 'p95 POST /checkout, порог ' + fmtN(thr1) + ' мс' });
+  const c2 = chart({ id: 'a-mem', h: 200, l: 50, S: [{ ...memS, col: 's-heap', band: bandSeries('mem', 1, 1, AUTO, 'all') }, { ...series('memw', 0, AUTO, 'all', false, 1, 1), col: 's-err', dash: 1 }], lo: 40, hi: 100, thr: 90, label: 'Память payments-svc, плечо B: среднее по подам, полоса min–max и худший под' });
+  const c3 = chart({ id: 'a-oe', h: 200, l: 50, S: [{ ...series('os_err', 0, AUTO, 'all'), col: 's-err', bars: 1 }], lo: 0, hi: 100, label: 'Ошибки OpenSearch за минуту, payments-svc' });
+  const oeB = sum(raw('os_err', 0, false, 1, 1)), oeA = sum(raw('os_err', 0, false, 1, 0)), sh_ = 100 * sum(oeB ? raw('os_err', 0, false, 1, 1).slice(KNEE * RES) : [0]) / Math.max(1, oeB);
+  const rp = R => R ? (R.s === 'crit' ? pill(I('warn', 14) + 'Нарушение', 'crit') : R.s === 'nv' ? pill('Мало данных', 'warn') : pill('В норме', 'good')) : pill(I('warn', 14) + 'Внимание', 'warn');
+  const card = (pl, title, sub, ch, pts, src, m, w, s) => `<article class="card acard"><header><div><h3>${title}</h3><div class="sub">${sub}</div></div>${pl}</header>${ch}<div class="why"><span class="kicker">Что не так</span>${pts.map(p => `<p>${p}</p>`).join('')}<span class="src">${src}</span></div><button class="btn" type="button" data-act="deep" data-m="${m}" data-w="${w}" data-s="${s}" data-k="open-${m}">Открыть в глубоком анализе ${I('arrow', 16)}</button></article>`;
+  return `<div class="grid3">` +
+    card(rp(R1), 'POST /checkout · p95', 'p95 по минутам', c1, bi >= 0 ? [`Около ${bx('800 мс')} до ${clock(kneeT)}, затем рост до ${bx(fmtN(Math.max(...p95All)) + ' мс')}. Порог ${bx(fmtN(thr1) + ' мс')} превышен с ${bx(clock(bi * STEP))}.`, `Превышение длится ${bx(cm(bmin, 1) + ' мин')} из ${cm((N - 1) * STEP / 3600, 0)} часов теста.`] : [`Рост p95 виден с ${clock(kneeT)}, но порог ${bx(fmtN(thr1) + ' мс')} не превышен.`], R1 ? 'правило ' + R1.r.id : 'вне применённой политики', 'p95', 1, 'B') +
+    card(rp(R2), 'payments-svc · плечо B', 'память подов, % от лимита', c2, [`${bx('1 из 4')} подов (${bx(pw)}) упирается в лимит: ${bx(Math.round(B.memMax) + '%')}. Перезапусков: ${bx(B.rst)}. Остальные 3 пода в норме.`, `В плече A тот же сервис держит память до ${bx(Math.round(A.memMax) + '%')} без перезапусков, значит проблема локальна для B. Каждый перезапуск совпадает с провалом p95.`], 'Prometheus · плечо B · working set / limit', 'memw', 1, 'B') +
+    card(pill('Контекст', 'info'), 'Ошибки в OpenSearch', 'события ERROR за минуту, payments-svc', c3, [`${bx(cm(sh_, 1) + '%')} ошибок пришлись на время после ${bx(clock(kneeT))}. Чаще всего ${bx('ConnectException')} к payments-svc.`, `Все ошибки приходят из плеча B (${bx(oeB)} против ${bx(oeA)} в A). На вердикт это не влияет.`], 'OpenSearch · app-logs-*', 'os_err', 1, 'B') + `</div>`;
+}
+function overlay() {
+  const L = [['p95', 0, 'p95 · POST /checkout', 0, 3000], ['rps', 0, 'RPS · все транзакции', 60, 220], ['memw', 0, 'Память · худший под payments-svc, B', 40, 100], ['rst', 0, 'Перезапуски · payments-svc, B', 0, 4], ['os_err', 0, 'Ошибки · OpenSearch, payments-svc', 0, 100]];
+  const on = L.filter(x => state.ov[x[0]]); let lanes = '';
+  on.forEach((x, i) => {
+    const S = x[0] === 'rps' ? (() => { const s0 = series('rps', 0, AUTO, 'all'); const per = TX.map((_, k) => series('rps', k, AUTO, 'all').a); return { ts: s0.ts, a: s0.ts.map((_, j) => sum(per.map(x => x[j]))) }; })() : series(x[0], 0, AUTO, 'all');
+    const last = i === on.length - 1;
+    lanes += `<div>${chart({ id: 'ov-' + x[0], h: last ? 116 : 90, l: 56, t: 6, b: last ? 30 : 6, xl: last, stages: 1, stageLabels: i === 0, S: [{ ...S, id: x[0], ro: 'ov-' + x[0], col: MET[x[0]].col, area: !MET[x[0]].bars, bars: MET[x[0]].bars }], lo: x[3], hi: x[4], thr: x[0] === 'p95' ? 2000 : x[0] === 'memw' ? 90 : null, shade: breachI * STEP, label: x[2] })}</div>`;
+  });
+  const chips = L.map(x => `<button class="chip" type="button" aria-pressed="${!!state.ov[x[0]]}" data-act="ov" data-m="${x[0]}" data-k="ov-${x[0]}"><i style="background:var(--${MET[x[0]].col})"></i><span>${x[2]}</span><span class="num" data-ro="ov-${x[0]}">—</span></button>`).join('');
+  return `<div class="ovl"><div class="card" style="padding:16px 16px 8px">${lanes || '<p class="sub" style="padding:40px;text-align:center">Выберите хотя бы один ряд справа.</p>'}</div><div style="display:flex;flex-direction:column;gap:14px"><div class="card" style="display:flex;flex-direction:column;gap:12px;padding:18px"><div style="display:flex;justify-content:space-between"><span class="kicker">Ряды</span><span class="sub num">наведите на график</span></div>${chips}<span class="sub">Другие сервисы, плечи и поды добавляются в разделе «Глубокий анализ».</span></div><div class="note"><span style="color:var(--warn)">${I('warn')}</span><div><b>Как читать наложение.</b> Одновременный рост рядов подсказывает, где искать. Причину он не доказывает.</div></div></div></div>`;
+}
+function tiles() {
+  const stOf = id => { const a = raw(id, 0), m = MET[id], last = a[N - 1], mx = Math.max(...a); if (id === 'rst') return last > 0 ? 'crit' : 'ok'; if (id === 'imb') return last >= 25 ? 'warn' : 'ok'; if (m.thr) return mx > m.thr ? 'crit' : mx > m.thr * .8 ? 'warn' : 'ok'; return last / a[0] > 1.25 ? 'warn' : 'ok'; };
+  const t = (id, note) => { const s = raw(id, 0), m = MET[id]; return `<button class="tile" type="button" data-act="deep" data-m="${id}" data-w="1" data-s="B" data-k="tile-${id}"><div class="top2"><span>${m.name}</span>${st[stOf(id)]}</div><div class="val"><b>${fv(id, ['memw', 'gc'].includes(id) ? Math.max(...s) : s[N - 1]).split(' ')[0]}</b><span>${m.unit}</span></div>${chart({ id: 't-' + id, w: 200, h: 44, l: 2, r: 4, t: 4, b: 4, xl: false, mini: 1, S: [{ ...series(id, 0, AUTO, 'all'), col: m.col, area: 1 }], lo: Math.min(...s), hi: Math.max(...s) + 1e-9, label: 'тренд ' + m.name })}<span class="sub">${note}</span></button>`; };
+  const B = wlStats(1, 1);
+  return `<div style="display:flex;flex-direction:column;gap:14px"><span class="kicker">Ресурсы</span><div class="grid4">${t('cpu', 'полоса подов до ' + Math.round(B.cpuMax) + '%')}${t('memw', 'пик за окно, под ' + podName(1, 1, 1).slice(-14))}${t('rst', 'все в одном поде')}${t('imb', 'разброс CPU между подами')}</div><span class="kicker" style="margin-top:8px">JVM и зависимости</span><div class="grid4">${t('heap', 'среднее по 4 подам')}${t('gc', 'пик за окно, нужны логи GC')}${t('threads', 'с ' + raw('threads', 0)[0] + ' до ' + raw('threads', 0)[N - 1])}${t('pool', 'близко к исчерпанию')}</div></div>`;
+}
+function rOverview() {
+  return `${verdictCard(evalPolicy(state.applied))}
+  <section style="display:flex;flex-direction:column;gap:10px"><div class="sec-h"><div><h2 style="font-size:18px">Стадии теста</h2><p>Тест на 8 часов состоит из стадий. Нажмите на стадию, чтобы открыть её в глубоком анализе.</p></div></div>${stageStrip(null, 'stage', 'ov-st')}</section>
+  <section style="display:flex;flex-direction:column;gap:16px"><div class="sec-h"><div><h2>Где проблема</h2><p>Каждый сервис по каждому плечу. Ячейка показывает худшее из подов сервиса. Нажмите на ячейку, чтобы открыть ряд и поды.</p></div></div>${svcMatrix()}</section>
+  <section style="display:flex;flex-direction:column;gap:16px"><div class="sec-h"><div><h2>Требует внимания</h2><p>Ряды, которые сильнее всего отклоняются от порога. Порядок: сначала нарушение правила, затем рост вне правил.</p></div></div>${attention()}</section>
+  ${trendSection()}
+  <section style="display:flex;flex-direction:column;gap:16px"><div class="sec-h"><div><h2>Наложение рядов</h2><p>Ряды стоят друг под другом на общей шкале времени. Разные единицы не смешиваются на одной оси.</p></div></div>${overlay()}</section>
+  <section style="display:flex;flex-direction:column;gap:16px"><div class="sec-h"><div><h2>Платформа · payments-svc, плечо B</h2><p>Сервис с самым сильным отклонением. Остальные сервисы и плечи есть в карте выше и в глубоком анализе.</p></div></div>${tiles()}</section>`;
+}
+
+/* ============ views: deep analysis ============ */
+function seriesFor(id, big, pre) {
+  const m = MET[id], out = [];
+  if (!m.wl) {
+    const tx = m.tx ? state.tx : 0, S = series(id, tx, state.agg, state.range);
+    if (big && state.base && m.tx) out.push({ ...series(id, tx, state.agg, state.range, true), col: 's-base', dash: 1, label: 'прошлый релиз' });
+    out.push({ ...S, id, ro: pre, label: m.tx ? TX[tx].n : m.name, col: m.col, area: !m.bars, bars: m.bars });
+    return out;
+  }
+  const shs = state.sh === 'AB' ? [0, 1] : [state.sh === 'A' ? 0 : 1], one = shs.length === 1;
+  shs.forEach(sh => {
+    const S = series(id, 0, state.agg, state.range, false, state.wl, sh), col = one ? m.col : sh === 0 ? 's-p95' : 's-heap';
+    if (big && state.base && one && !m.bars) out.push({ ...series(id, 0, state.agg, state.range, true, state.wl, sh), col: 's-base', dash: 1, label: 'прошлый релиз' });
+    if (one && m.band) out.push({ ...S, id, ro: pre + sh, label: 'среднее по подам', col, band: bandSeries(id, state.wl, sh, state.agg, state.range) });
+    else out.push({ ...S, id, ro: pre + sh, label: 'плечо ' + 'AB'[sh], col, area: one && !m.bars, bars: m.bars && one });
+    if (big && one && state.showTrend) { const tc_ = trendCheckFor(id); if (tc_) { const r_ = trendEval(tc_), rg = r_.rg, cur = RANGES[state.range]; if (r_.y0 != null && rg[0] >= cur[0] && rg[1] <= cur[1]) out.push({ ts: [rg[0] * STEP, (rg[1] - 1) * STEP], a: [r_.y0, r_.y1], id, label: 'тренд', col: 'accent', dash: 1 }); } }
+    if (big && one && WORST[id]) out.push({ ...series(WORST[id], 0, state.agg, state.range, false, state.wl, sh), id: WORST[id], ro: pre + 'w', label: 'худший под', col: 's-err', dash: 1 });
+  });
+  return out;
+}
+function yRange(id, ser, thr) {
+  const m = MET[id], lo = m.lo != null ? m.lo : 0, mxv = Math.max(...ser.flatMap(s => s.band ? s.band.mx : s.a), thr || 0);
+  let hi = m.hi || (id === 'rst' ? Math.max(4, Math.ceil(mxv)) : niceHi(mxv * 1.1));
+  if (mxv > hi) hi = niceHi(mxv * 1.05); return [lo, Math.max(hi, lo + 1)];
+}
+function heat(id, wl, sh) {
+  const m = MET[id], [r0, r1] = RANGES[state.range], gs = Math.max(AGG[state.agg], Math.ceil((RANGES[state.range][1] - RANGES[state.range][0]) / 160)), cols = []; for (let i = r0; i < r1; i += gs) cols.push(i);
+  const rows = podsArr(id, wl, sh).map((a, j) => ({ name: podName(wl, sh, j), v: cols.map(i => { const ch = a.slice(i, Math.min(i + gs, r1)); return m.agg === 'max' || id === 'rst' ? Math.max(...ch) : mean(ch); }), mx: Math.max(...a.slice(r0, r1)) })).sort((x, y) => y.mx - x.mx);
+  const shown = rows.slice(0, 24), hidden = rows.length - shown.length, thr = m.thr, lo = m.lo != null ? m.lo : 0, hi = m.hi || (id === 'rst' ? Math.max(4, ...rows.map(r => r.mx)) : niceHi(Math.max(...rows.map(r => r.mx)) * 1.05));
+  const w = 900, l = 196, r = 14, t = 22, rh = 24, cw = (w - l - r) / cols.length, h = t + shown.length * rh + 30;
+  const fill = v => id === 'rst' ? (v > 0 ? `fill:var(--crit);opacity:${.35 + .65 * Math.min(1, v / hi)}` : `fill:var(--accent);opacity:.05`) : thr != null && v >= thr ? `fill:var(--crit);opacity:${.4 + .6 * Math.min(1, (v - thr) / Math.max(hi - thr, 1e-9))}` : `fill:var(--accent);opacity:${.05 + .55 * Math.max(0, v - lo) / Math.max(((thr != null ? thr : hi) - lo), 1e-9)}`;
+  let g = ''; [0, .25, .5, .75, 1].forEach(f => { const i = Math.min(cols.length - 1, Math.round((cols.length - 1) * f)); g += `<text class="tx" x="${l + i * cw + (f === 1 ? cw : 0)}" y="${t - 8}" text-anchor="${f === 0 ? 'start' : f === 1 ? 'end' : 'middle'}">${clock(cols[i] * STEP)}</text>`; });
+  shown.forEach((p, ri) => {
+    const y = t + ri * rh, hot = thr != null ? p.mx >= thr : id === 'rst' && p.mx > 0;
+    g += `<text class="tx" x="${l - 10}" y="${y + rh / 2 + 3}" text-anchor="end" style="${hot ? 'fill:var(--crit);font-weight:600' : ''}">${p.name.length > 24 ? '…' + p.name.slice(-23) : p.name}</text>`;
+    p.v.forEach((v, ci) => { g += `<rect x="${(l + ci * cw).toFixed(1)}" y="${y}" width="${(cw + .4).toFixed(1)}" height="${rh - 2}" style="${fill(v)}"><title>${p.name} · ${clock(cols[ci] * STEP)} · ${fv(id, v)}</title></rect>`; });
+  });
+  g += `<text class="tx" x="${l}" y="${h - 6}">${hidden ? 'ещё ' + hidden + ' подов скрыто, показаны худшие 24' : 'показаны все ' + rows.length + ' подов, худшие сверху'}</text>`;
+  return `<div class="rchart"><svg viewBox="0 0 ${w} ${h}" role="img" aria-label="Тепловая карта подов ${WLS[wl].n}, плечо ${'AB'[sh]}: ${m.name}">${g}</svg></div>`;
+}
+function stripHtml(id, sh) {
+  const m = MET[id], tx = m.tx ? state.tx : 0, thr = thrOf(id, tx), a = raw(id, tx, false, state.wl, sh == null ? 1 : sh).slice(...RANGES[state.range]);
+  const cells = [['минимум', fv(id, Math.min(...a))], ['среднее', fv(id, mean(a))], ['p50', fv(id, q(a, .5))], ['p95', fv(id, q(a, .95))], ['максимум', fv(id, Math.max(...a))], ['последнее', fv(id, a[a.length - 1])]];
+  if (thr != null) cells.push(['выше порога', cm(a.filter(v => v > thr).length * STEP / 60, 1) + ' мин']);
+  if (m.wl && m.pods && id !== 'rst') { const P = podsArr(id, state.wl, sh), mxs = P.map(p => Math.max(...p.slice(...RANGES[state.range]))), j = mxs.indexOf(Math.max(...mxs)); cells.push(['худший под', podName(state.wl, sh, j).slice(-2)]); }
+  return `<div class="sstrip">${cells.map(x => `<div><b>${x[1]}</b><span>${x[0]}</span></div>`).join('')}</div>`;
+}
+function rDeep() {
+  const id = state.metric, m = MET[id], tx = m.tx ? state.tx : 0, thr = thrOf(id, tx), lvl = m.pods ? state.lvl : 'agg';
+  const shs = m.wl ? (state.sh === 'AB' ? [0, 1] : [state.sh === 'A' ? 0 : 1]) : [null];
+  const ser = seriesFor(id, true, 'main'), [lo, hi] = yRange(id, ser, thr), tCheck = trendCheckFor(id), tr = tCheck && state.showTrend ? trendEval(tCheck) : null;
+  const tNote = tr ? (ser.some(x => x.dash && x.col === 'accent') ? `Пунктир акцентным цветом: тренд по проверке «${tCheck.id}», окно «${winName(tCheck.win)}»: ${slopeH(tr)}, сдвиг медианы половин ${shiftTxt(tr)}. Это наблюдение, не диагноз.` : `Окно проверки «${winName(tCheck.win)}» (${winTime(tr.rg)}) вне выбранного периода, тренд не показан.`) : '';
+  const main = chart({ id: 'main', h: 320, stages: 1, stageLabels: 1, S: ser, lo, hi, thr, shade: id === 'p95' && tx === 0 ? breachI * STEP : null, label: m.name });
+  const ro = ser.filter(s => s.ro).map(s => `<span style="display:inline-flex;gap:6px;align-items:center;margin-right:14px"><i style="width:10px;height:10px;border-radius:2px;background:var(--${s.col});display:inline-block"></i>${s.label}: <span data-ro="${s.ro}"></span></span>`).join('');
+  const groups = {}; Object.entries(MET).forEach(([k, v]) => (groups[v.group] = groups[v.group] || []).push(k));
+  const list = Object.entries(groups).map(([g, ks]) => `<div class="mgroup"><span class="kicker" style="padding:0 10px 6px">${g}</span>${ks.map(k => `<div class="mrow"><button class="pick" type="button" aria-pressed="${k === id}" data-act="metric" data-m="${k}" data-k="m-${k}"><span>${MET[k].name}</span><span class="sub num">${MET[k].unit}</span></button><button class="pin" type="button" aria-pressed="${state.pinned.includes(k)}" aria-label="Закрепить ${MET[k].name}" title="Закрепить для сопоставления" data-act="pin" data-m="${k}" data-k="p-${k}">${I('pin', 16)}</button></div>`).join('')}</div>`).join('');
+  const base = ser.find(s => s.col === 's-base'), two = shs.length > 1;
+  let tbl;
+  if (lvl === 'pods') tbl = shs.map(sh => `<span class="kicker">Плечо ${'AB'[sh]}</span><div class="tw" style="max-height:300px"><table><thead><tr><th scope="col">Под</th><th scope="col" class="r">Минимум</th><th scope="col" class="r">Среднее</th><th scope="col" class="r">Максимум</th><th scope="col" class="r">Последнее</th></tr></thead><tbody>${podsArr(id, state.wl, sh).map((a, j) => { const s = a.slice(...RANGES[state.range]); return { n: podName(state.wl, sh, j), mn: Math.min(...s), av: mean(s), mx: Math.max(...s), ls: s[s.length - 1] }; }).sort((x, y) => y.mx - x.mx).map(p => `<tr><td class="num">${p.n}</td><td class="r num">${fv(id, p.mn)}</td><td class="r num">${fv(id, p.av)}</td><td class="r num" style="${thr != null && p.mx >= thr ? 'color:var(--crit);font-weight:600' : ''}">${fv(id, p.mx)}</td><td class="r num">${fv(id, p.ls)}</td></tr>`).join('')}</tbody></table></div>`).join('');
+  else { const S0 = ser.filter(s => s.ro), first = S0[0]; tbl = `<div class="tw" style="max-height:380px"><table><thead><tr><th scope="col">Время</th>${two ? S0.map(s => `<th scope="col" class="r">${s.label}</th>`).join('') : '<th scope="col" class="r">Значение</th><th scope="col" class="r">Минимум</th><th scope="col" class="r">Максимум</th>'}${!two && base ? '<th scope="col" class="r">Прошлый релиз</th>' : ''}</tr></thead><tbody>${first.ts.map((t, i) => `<tr><td class="num">${clock(t)}</td>${two ? S0.map(s => `<td class="r num">${fv(id, s.a[i])}</td>`).join('') : `<td class="r num">${fv(id, first.a[i])}</td><td class="r num">${fv(id, first.mn ? first.mn[i] : first.a[i])}</td><td class="r num">${fv(id, first.mx ? first.mx[i] : first.a[i])}</td>`}${!two && base ? `<td class="r num">${fv(id, base.a[i])}</td>` : ''}</tr>`).join('')}</tbody></table></div>`; }
+  const body = state.dtab === 'chart' ? (lvl === 'pods' ? shs.map(sh => `<div class="stack" style="gap:8px"><span class="kicker">Плечо ${'AB'[sh]} · ${WLS[state.wl].n}</span>${heat(id, state.wl, sh)}</div>`).join('') + `<p class="sub">Строки: поды сервиса. Цвет: значение в интервале, красный означает выше порога${thr != null ? ' ' + fmtN(thr) : ''}. Наведите на клетку, чтобы увидеть значение.</p>` : `<div><div class="ro" style="margin-bottom:8px">${ro}</div>${main}</div><p class="sub">${ser.some(s => s.band) ? 'Полоса: минимум и максимум по подам. Красный пунктир: худший под. ' : ''}${base ? 'Серый пунктир: прошлый релиз, сравнение описательное. ' : ''}${m.agg === 'pct' && state.agg != 15 ? 'Перцентили при укрупнении шага пересчитываются из объединённых гистограмм, а не усредняются. В макете значения условные.' : ''}</p>${tNote ? '<p class="sub">' + tNote + '</p>' : ''}`) : tbl;
+  const strips = shs.map(sh => (two ? `<span class="kicker">Плечо ${'AB'[sh]}</span>` : '') + stripHtml(id, sh)).join('');
+  const podBtn = m.pods ? `<div class="seg" role="group" aria-label="Уровень"><button type="button" aria-pressed="${lvl === 'agg'}" data-act="lvl" data-l="agg" data-k="l-agg">Сводка по подам</button><button type="button" aria-pressed="${lvl === 'pods'}" data-act="lvl" data-l="pods" data-k="l-pods">Каждый под</button></div>` : '';
+  const wlCtl = m.wl ? `<div class="seg" role="group" aria-label="Плечо">${[['A', 'Плечо A'], ['B', 'Плечо B'], ['AB', 'A и B']].map(o => `<button type="button" aria-pressed="${state.sh === o[0]}" data-act="shs" data-s="${o[0]}" data-k="sh-${o[0]}">${o[1]}</button>`).join('')}</div><label>Сервис <select id="wl" data-act="wl" data-k="wl">${WLS.map((w, i) => `<option value="${i}" ${i === state.wl ? 'selected' : ''}>${w.n}${(wlStats(i, 0).st !== 'ok' || wlStats(i, 1).st !== 'ok') ? ' (!)' : ''}</option>`).join('')}</select></label>${podBtn}` : `<label>Транзакция <select id="tx" data-act="tx" data-k="tx">${TX.map((t, i) => `<option value="${i}" ${i === tx ? 'selected' : ''}>${t.n}</option>`).join('')}</select></label>`;
+  const pinned = state.pinned.filter(k => k !== id).map(k => { const mm = MET[k], sr = seriesFor(k, false, 'pin-' + k), [l2, h2] = yRange(k, sr, thrOf(k, 0)); return `<article class="card" style="display:flex;flex-direction:column;gap:8px;padding:16px"><div style="display:flex;justify-content:space-between;align-items:center;gap:8px"><button class="btn sm" type="button" data-act="metric" data-m="${k}" data-k="pm-${k}" title="Сделать основным">${mm.name}</button><span class="ro">${sr.filter(s => s.ro).map(s => `<span data-ro="${s.ro}"></span>`).join(' ')}</span><button class="btn sm" type="button" data-act="pin" data-m="${k}" data-k="pu-${k}">Открепить</button></div>${chart({ id: 'pin-' + k, h: 170, l: 50, S: sr, lo: l2, hi: h2, thr: thrOf(k, 0), label: mm.name })}</article>`; }).join('');
+  return `<div class="sec-h"><div><h2>Глубокий анализ</h2><p>Агрегаты и отдельные ряды. Для платформы: плечо, сервис и уровень «сводка по подам» или «каждый под». Закрепите ряды булавкой, чтобы сопоставлять их на общей шкале времени.</p></div></div>
+  <div class="deep"><aside class="card mlist" aria-label="Ряды">${list}</aside><div style="display:flex;flex-direction:column;gap:20px;min-width:0">
+   <div class="card" style="display:flex;flex-direction:column;gap:16px">
+    <div class="ctl"><h3 style="font:600 18px/1.2 var(--sans);margin-right:auto">${m.name}${m.tx ? ' · ' + TX[tx].n : m.wl ? ' · ' + WLS[state.wl].n : ''}</h3>${wlCtl}
+     <label title="Для теста на 8 часов шаг выбран автоматически: при 1 минуте ячеек хватает">Шаг <select id="agg" data-act="agg" data-k="agg">${[[15, '15 с'], [60, '1 мин'], [300, '5 мин'], [900, '15 мин']].map(a => `<option value="${a[0]}" ${state.agg == a[0] ? 'selected' : ''}>${a[1]}</option>`).join('')}</select></label>
+     <label><input type="checkbox" id="bs" data-act="base" data-k="bs" ${state.base ? 'checked' : ''}> Прошлый релиз</label><label ${tCheck ? '' : 'title="Для этого ряда нет проверки в плане трендов"'}><input type="checkbox" id="stx" data-act="showTrend" data-k="stx" ${state.showTrend && tCheck ? 'checked' : ''} ${tCheck ? '' : 'disabled'}> Тренд</label></div>
+    ${stageStrip(state.range, 'range', 'st')}
+    ${strips}
+    <div class="seg" role="tablist" style="align-self:flex-start"><button type="button" role="tab" aria-selected="${state.dtab === 'chart'}" data-act="dtab" data-t="chart" data-k="dt-c">${lvl === 'pods' ? 'Тепловая карта' : 'График'}</button><button type="button" role="tab" aria-selected="${state.dtab === 'table'}" data-act="dtab" data-t="table" data-k="dt-t">${lvl === 'pods' ? 'Таблица подов' : 'Агрегаты'}</button></div>
+    ${body}
+   </div>
+   <div style="display:flex;flex-direction:column;gap:12px"><div class="sec-h"><h2 style="font-size:18px">Закреплённые для сопоставления</h2><span class="sub">Общий курсор и шаг времени${m.wl ? '. Плечо и сервис те же, что выше' : ''}</span></div>${pinned ? `<div class="grid2">${pinned}</div>` : '<p class="sub">Закрепите ряды булавкой в списке слева.</p>'}</div>
+  </div></div>`;
+}
+
+/* ============ views: tables ============ */
+function txRows() {
+  let rows = TX.map((t, i) => { const p = raw('p95', i), e = raw('err', i); return { i, n: t.n, st: t.st, rps: mean(raw('rps', i)), samples: sum(raw('rps', i)) * STEP, p50: q(raw('p50', i), .9), p95: q(p, .9), p99: q(raw('p99', i), .9), err: mean(e) }; });
+  rows = rows.filter(r => r.n.toLowerCase().includes(state.txQ.toLowerCase()) && (state.txF === 'all' || r.st === state.txF));
+  const { k, d } = state.txSort; return rows.sort((a, b) => (typeof a[k] === 'string' ? a[k].localeCompare(b[k]) : a[k] - b[k]) * d);
+}
+function rTables() {
+  const tab = state.tab, th = (k, t, r) => `<th scope="col" class="${r ? 'r' : ''}" aria-sort="${state.txSort.k === k ? (state.txSort.d > 0 ? 'ascending' : 'descending') : 'none'}"><button type="button" data-act="sort" data-s="${k}" data-k="s-${k}">${t}${state.txSort.k === k ? (state.txSort.d > 0 ? ' ↑' : ' ↓') : ''}</button></th>`;
+  let body;
+  if (tab === 'rules') {
+    const e = evalPolicy(state.applied), ev = x => { const r = x.r, mm = { mem: 'memw', thr: 'thrw', rst: 'rst' }[r.m] || r.m; if (typeof r.sc === 'string') { const z = /^w(\d+)([AB])$/.exec(r.sc); return `data-m="${mm}" data-w="${z[1]}" data-s="${z[2]}"`; } return `data-m="${mm}" data-x="${Math.max(0, r.sc)}"`; };
+    if (!e.total) body = '<div class="note"><span style="color:var(--warn)">' + I('warn') + '</span><div><b>Правила не заданы.</b> Метрики посчитаны, но вердикт не выдаётся. <a class="lnk" href="#rules" data-act="go" data-v="rules" data-k="to-rules0">Открыть правила</a></div></div>'; else body = `<div class="tw"><table><thead><tr><th scope="col">Правило</th><th scope="col">Что проверяем</th><th scope="col" class="r">Порог</th><th scope="col" class="r">Измерено в окне</th><th scope="col">Статус</th><th scope="col">Доказательство</th></tr></thead><tbody>${e.rows.map(x => `<tr><td class="num">${x.r.id}</td><td>${ruleName(x.r)}</td><td class="r num">${thrTxt(x.r)}</td><td class="r num" style="${x.s === 'crit' ? 'color:var(--crit);font-weight:600' : ''}">${x.s === 'nv' ? 'мало данных' : fmtMeas(x.r.m, x.v)}</td><td>${st[x.s]}</td><td><a class="lnk" href="#deep" data-act="deep" ${ev(x)} data-k="ev-${x.r.id}">Открыть ряд →</a></td></tr>`).join('')}</tbody></table></div><p class="sub">Политика «${state.appliedKey}», окно весь тест, 10:00–18:00. Вердикт считается только по этим правилам. <a class="lnk" href="#rules" data-act="go" data-v="rules" data-k="to-rules">Изменить правила</a></p>`;
+  } else if (tab === 'tx') {
+    const rows = txRows();
+    body = `<div class="ctl"><input type="search" id="txq" placeholder="Найти транзакцию" aria-label="Найти транзакцию" value="${state.txQ}" data-act="txq" data-k="txq"><select id="txf" aria-label="Статус" data-act="txf" data-k="txf">${[['all', 'Все статусы'], ['crit', 'Нарушение'], ['warn', 'Внимание'], ['ok', 'В норме']].map(o => `<option value="${o[0]}" ${state.txF === o[0] ? 'selected' : ''}>${o[1]}</option>`).join('')}</select><span class="sub">${rows.length} из ${TX.length}</span></div><div class="tw"><table><thead><tr>${th('n', 'Транзакция')}${th('samples', 'Запросы', 1)}${th('rps', 'RPS', 1)}${th('p50', 'p50, мс', 1)}${th('p95', 'p95, мс', 1)}${th('p99', 'p99, мс', 1)}${th('err', 'Ошибки', 1)}<th scope="col">Статус</th></tr></thead><tbody>${rows.map(r => `<tr><td><a class="lnk" href="#deep" data-act="deep" data-m="p95" data-x="${r.i}" data-k="tr-${r.i}">${r.n}</a></td><td class="r num">${fmtN(r.samples)}</td><td class="r num">${cm(r.rps, 1)}</td><td class="r num">${fmtN(r.p50)}</td><td class="r num">${fmtN(r.p95)}</td><td class="r num">${fmtN(r.p99)}</td><td class="r num">${cm(r.err, 2)}%</td><td>${st[r.st]}</td></tr>`).join('') || '<tr><td colspan="8" class="sub" style="text-align:center;padding:32px">Ничего не найдено. Сбросьте поиск или статус.</td></tr>'}</tbody></table></div><p class="sub">Значения за окно. Перцентили окна считаются из объединённых гистограмм. В макете значения условные.</p>`;
+  } else if (tab === 'trend') { body = trendTable(); } else {
+    const order = { crit: 0, warn: 1, ok: 2 };
+    let rows = WLS.flatMap((w, i) => [wlStats(i, 0), wlStats(i, 1)]).filter(S => (state.svcSh === 'all' || state.svcSh === 'AB'[S.sh]) && WLS[S.wl].n.includes(state.svcQ.toLowerCase()) && (!state.mapOnly || S.st !== 'ok'));
+    rows.sort((a, b) => order[a.st] - order[b.st] || a.wl - b.wl || a.sh - b.sh);
+    body = `<div class="ctl"><input type="search" id="svcq" placeholder="Найти сервис" aria-label="Найти сервис" value="${state.svcQ}" data-act="svcq" data-k="svcq"><select id="svcsh" aria-label="Плечо" data-act="svcsh" data-k="svcsh">${[['all', 'Оба плеча'], ['A', 'Плечо A'], ['B', 'Плечо B']].map(o => `<option value="${o[0]}" ${state.svcSh === o[0] ? 'selected' : ''}>${o[1]}</option>`).join('')}</select><label><input type="checkbox" data-act="mapOnly" data-k="mapOnly2" ${state.mapOnly ? 'checked' : ''}> Только проблемные</label><span class="sub">${rows.length} из ${WLS.length * 2}</span></div><div class="tw"><table><thead><tr><th scope="col">Сервис</th><th scope="col">Плечо</th><th scope="col">Статус</th><th scope="col" class="r">Поды</th><th scope="col" class="r">CPU, ср. / худший</th><th scope="col" class="r">Троттлинг, худший</th><th scope="col" class="r">Память, худший</th><th scope="col" class="r">Перезапуски</th><th scope="col" class="r">Дисбаланс</th></tr></thead><tbody>${rows.map(S => `<tr><td><a class="lnk" href="#deep" data-act="deep" data-m="${S.focus}" data-w="${S.wl}" data-s="${'AB'[S.sh]}" data-k="sv-${S.wl}-${S.sh}">${WLS[S.wl].n}</a></td><td>${'AB'[S.sh]}</td><td>${st[S.st]}${S.note ? `<div class="sub" style="white-space:normal;min-width:170px">${S.note}</div>` : ''}</td><td class="r num">${S.pods}</td><td class="r num">${Math.round(S.cpuAvg)}% / ${Math.round(S.cpuMax)}%</td><td class="r num" style="${S.hotThr ? 'color:var(--crit);font-weight:600' : ''}">${Math.round(S.thrMax)}%</td><td class="r num" style="${S.memMax >= 95 ? 'color:var(--crit);font-weight:600' : ''}">${Math.round(S.memMax)}%</td><td class="r num" style="${S.rst ? 'color:var(--crit);font-weight:600' : ''}">${S.rst || '—'}</td><td class="r num">${Math.round(S.imb)}%</td></tr>`).join('') || '<tr><td colspan="9" class="sub" style="text-align:center;padding:32px">Ничего не найдено. Сбросьте поиск или фильтры.</td></tr>'}</tbody></table></div><p class="sub">Поды сервиса свёрнуты в признаки: среднее и худший под. Нажмите на сервис, чтобы увидеть каждый под тепловой картой. Ряды платформы участвуют в вердикте только через правила.</p>`;
+  }
+  return `<div class="sec-h"><div><h2>Таблицы</h2><p>Правила, транзакции, сервисы платформы и тренды. Каждая строка ведёт к ряду в глубоком анализе.</p></div><div class="seg" role="tablist">${[['rules', 'Правила'], ['tx', 'Транзакции'], ['svc', 'Сервисы и поды'], ['trend', 'Тренды']].map(t => `<button type="button" role="tab" aria-selected="${tab === t[0]}" data-act="tab" data-t="${t[0]}" data-k="tab-${t[0]}">${t[1]}</button>`).join('')}</div></div>${body}`;
+}
+
+/* ============ views: ai ============ */
+function rAI() {
+  const opts = [['rules', 'Сводки правил и вердикт', '1,2 КБ'], ['lat', 'Ряды отклика и нагрузки', '8 КБ'], ['res', 'Признаки сервисов по плечам (' + budgetOf(state.setup) * Math.max(1, shCount(state.setup)) + ' рядов)', '18 КБ'], ['pods', 'Только поды с отклонениями (из ' + podsTotal() + ')', '4 КБ · имена подов и их ряды'], ['logs', 'Ошибки OpenSearch, сгруппированные', '3 КБ · тексты сообщений не отправляются'], ['trend', 'Тренды и параметры проверок (' + state.trendApplied.length + ' проверок)', '2 КБ']];
+  const kb = [1.2, 8, 18, 4, 3, 2], tot = opts.reduce((a, o, i) => a + (state.aiSel[o[0]] ? kb[i] : 0), 0);
+  const B = wlStats(1, 1), A = wlStats(1, 0), C = wlStats(0, 1), pw = podName(1, 1, 1);
+  const left = `<div class="card" style="display:flex;flex-direction:column;gap:6px"><span class="kicker">Что уйдёт в модель</span><div>${opts.map(o => `<label class="chk"><input type="checkbox" data-act="aisel" data-s="${o[0]}" data-k="ai-${o[0]}" ${state.aiSel[o[0]] ? 'checked' : ''}><span><b style="font-weight:500">${o[1]}</b><br><span class="sub">${o[2]}</span></span></label>`).join('')}</div><label class="chk" style="border-top:1px solid var(--line);border-bottom:0"><input type="checkbox" data-act="aiok" data-k="ai-ok" ${state.aiOk ? 'checked' : ''}><span>Разрешаю отправить выбранное во внешний сервис ModelStudio. Итого ${cm(tot, 1)} КБ.</span></label><button class="btn primary" type="button" data-act="airun" data-k="ai-run" ${state.aiOk && tot > 0 && state.ai !== 'loading' ? '' : 'disabled'}>${state.ai === 'done' ? 'Запросить заново' : 'Получить разбор'}</button>${!state.aiOk ? '<span class="sub">Кнопка станет доступна после разрешения.</span>' : ''}</div><div class="note"><span style="color:var(--warn)">${I('warn')}</span><div><b>Рекомендация, не вердикт.</b> Разбор не меняет PASS или FAIL. Поды без отклонений в модель не уходят, сырые сэмплы тоже.</div></div>`;
+  let right;
+  if (state.ai === 'idle') right = `<div class="card" style="min-height:280px;display:flex;flex-direction:column;justify-content:center;align-items:center;gap:8px;text-align:center;color:var(--muted)"><span style="color:var(--accent)">${I('ai', 28)}</span><h3 style="color:var(--ink);font:600 18px/1.3 var(--sans)">Разбор ещё не запрошен</h3><p style="max-width:420px">Выберите данные слева, подтвердите отправку и получите гипотезы со ссылками на ряды. Каждую можно проверить в глубоком анализе.</p></div>`;
+  else if (state.ai === 'loading') right = `<div class="card" style="display:flex;flex-direction:column;gap:14px" role="status" aria-live="polite"><span class="kicker">Идёт разбор…</span><div class="skel" style="width:70%"></div><div class="skel" style="width:95%"></div><div class="skel" style="width:60%"></div><div class="skel" style="width:85%"></div></div>`;
+  else {
+    const link = (m, w, s, t) => `<a class="pill info" style="text-decoration:none;color:var(--accent)" href="#deep" data-act="deep" data-m="${m}" data-w="${w}" data-s="${s}" data-k="ev-${m}-${s}">${t} →</a>`, hd = (t, p, k) => `<div style="display:flex;justify-content:space-between;gap:12px;align-items:flex-start"><h3>${t}</h3>${pill(p, k, 1)}</div>`;
+    right = `<div class="card" style="display:flex;flex-direction:column;gap:8px"><span class="kicker">Краткий вывод</span><p style="font-size:16px;line-height:1.5">Деградация POST /checkout началась в ${clock(kneeT)} вместе с ростом памяти у одного пода payments-svc в плече B и серией перезапусков. В плече A этого нет, значит причину стоит искать в состоянии именно этого пода или его конфигурации.</p><span class="src">Модель: ModelStudio · ${cm(tot, 1)} КБ · 29.09.2026 10:41 · ответ не детерминирован</span></div>
+    <article class="card hyp">${hd('1. Нехватка памяти у пода ' + pw, 'основание сильное', 'crit')}<p>Память пода растёт до ${Math.round(B.memMax)}% лимита, под перезапускается ${B.rst} ${plural(B.rst)}. Остальные 3 пода сервиса в норме. Провалы p95 совпадают с перезапусками.</p><div class="evl">${link('memw', 1, 'B', 'Память, худший под')}${link('rst', 1, 'B', 'Перезапуски')}${link('p95', 1, 'B', 'p95 checkout')}</div><span class="kicker">Что проверить</span><ul class="todo"><li>Лимиты и запросы памяти пода, heap dump перед перезапуском.</li><li>Разницу образа и настроек этого пода с подами плеча A.</li></ul></article>
+    <article class="card hyp">${hd('2. Недоступность payments-svc во время перезапусков', 'основание среднее', 'warn')}<p>Ошибки соединения (ConnectException) идут только из плеча B и совпадают с окнами перезапуска. Пул соединений БД вырос до ${raw('pool', 0)[N - 1]}%.</p><div class="evl">${link('os_err', 1, 'B', 'Ошибки OpenSearch')}${link('pool', 1, 'B', 'Пул БД')}</div><span class="kicker">Что проверить</span><ul class="todo"><li>Readiness-пробу, число реплик и PodDisruptionBudget.</li><li>Повторные попытки и circuit breaker в checkout-api.</li></ul></article>
+    <article class="card hyp">${hd('3. Троттлинг CPU в checkout-api, плечо B', 'основание слабое', 'info')}<p>Два пода из ${C.pods} получают троттлинг до ${Math.round(C.thrMax)}%. Это может добавлять задержку, но начинается позже и не объясняет резкий излом p95.</p><div class="evl">${link('thrw', 0, 'B', 'Троттлинг, худший под')}${link('cpu', 0, 'B', 'CPU подов')}</div></article>
+    ${trendObs(hd)}
+    <article class="card hyp">${hd('4. Проблема общая для обоих плеч', 'отклонено', 'good')}<p>В плече A у payments-svc память до ${Math.round(A.memMax)}%, перезапусков ${A.rst}. Значит источник локален для плеча B.</p><div class="evl">${link('memw', 1, 'A', 'Память в плече A')}</div></article>`;
+  }
+  return `<div class="sec-h"><div><h2>ИИ-разбор</h2><p>Гипотезы о причинах по выбранным данным. Каждая привязана к рядам, которые можно открыть и проверить.</p></div></div><div class="aigrid"><div style="display:flex;flex-direction:column;gap:14px">${left}</div><div style="display:flex;flex-direction:column;gap:16px;min-width:0">${right}</div></div>`;
+}
+
+/* compare */
+function rCompare() {
+  const tx = state.cmpTx, cur = series('p95', tx, AUTO, 'all'), bas = series('p95', tx, AUTO, 'all', true);
+  const c = chart({ id: 'cmp', h: 280, S: [{ ...bas, col: 's-base', dash: 1 }, { ...cur, id: 'p95', ro: 'cmp', col: 's-p95', area: 1 }], lo: 0, hi: 3000, thr: tx === 0 ? 2000 : null, shade: tx === 0 ? breachI * STEP : null, label: 'p95 текущий прогон и прошлый релиз' });
+  const rowsD = [['p95', 'p95 ' + TX[tx].n, tx], ['p99', 'p99 ' + TX[tx].n, tx], ['err', 'Ошибки ' + TX[tx].n, tx], ['rps', 'RPS ' + TX[tx].n, tx], ['cpu', 'CPU app-01', 0], ['heap', 'Old Gen app-01', 0]].map(r => { const a = mean(raw(r[0], r[2])), b = mean(raw(r[0], r[2], true)), d = (a - b) / b * 100, big = Math.abs(d) > 5; const s = !state.cmpOk ? pill('описательно', 'info', 1) : big ? pill('кандидат на регрессию', 'crit', 1) : pill('без заметных изменений', 'good', 1); return `<tr><td>${r[1]}</td><td class="r num">${fv(r[0], b)}</td><td class="r num">${fv(r[0], a)}</td><td class="r num" style="${big ? 'color:var(--crit);font-weight:600' : ''}">${d > 0 ? '+' : ''}${cm(d, 1)}%</td><td>${s}</td></tr>`; }).join('');
+  return `<div class="sec-h"><div><h2>Сравнение с прошлым релизом</h2><p>Сравнение показывает изменения, но вердикт не меняет. Статус «кандидат» появляется только после подтверждения, что условия прогонов сопоставимы.</p></div></div>
+  <div class="card" style="display:flex;flex-direction:column;gap:14px"><div class="ctl"><label>Baseline <select id="bsel" data-act="bsel" data-k="bsel">${HIST.filter(h => !h.cur).map(h => `<option value="${h.id}" ${h.id === state.baselineId ? 'selected' : ''}>Релиз ${h.id} · ${h.d} · ${h.v}</option>`).join('')}</select></label><label>Транзакция <select id="ctx" data-act="ctx" data-k="ctx">${TX.slice(0, 4).map((t, i) => `<option value="${i}" ${i === tx ? 'selected' : ''}>${t.n}</option>`).join('')}</select></label></div>
+   <label class="chk" style="border:0;padding:0"><input type="checkbox" data-act="cmpok" data-k="cmp-ok" ${state.cmpOk ? 'checked' : ''}><span><b style="font-weight:500">Подтверждаю, что условия сопоставимы.</b><br><span class="sub">Тот же профиль нагрузки, стенд и версия данных. Сопоставимость ядро само не доказывает, имя прогона для этого недостаточно.</span></span></label>
+   ${(HIST.find(h => h.id === state.baselineId) || {}).cmp === false ? '<div class="note"><span style="color:var(--warn)">${I(\'warn\')}</span><div><b>Профили нагрузки различаются.</b> У релиза ${state.baselineId} другой профиль, поэтому сравнение можно читать только как описание.</div></div>' : ''}<div class="ro"><span data-ro="cmp"></span></div>${c}<p class="sub">Пунктир: прошлый релиз. Сплошная линия: текущий прогон.</p></div>
+  <div class="tw"><table><thead><tr><th scope="col">Ряд</th><th scope="col" class="r">Прошлый релиз</th><th scope="col" class="r">Текущий</th><th scope="col" class="r">Изменение</th><th scope="col">Статус</th></tr></thead><tbody>${rowsD}</tbody></table></div>`;
+}
+/* ============ policy, verdict ============ */
+const clone = o => JSON.parse(JSON.stringify(o));
+const MT = {
+  p95: { label: 'p95 отклика', unit: 'мс' }, p99: { label: 'p99 отклика', unit: 'мс' }, err: { label: 'Доля ошибок', unit: '%' }, rps: { label: 'Пропускная способность', unit: 'зпр/с' },
+  mem: { label: 'Память, худший под', unit: '%' }, thr: { label: 'Троттлинг CPU, худший под', unit: '%' }, rst: { label: 'Перезапуски подов', unit: 'шт' }
+};
+const PLAT = ['mem', 'thr', 'rst'];
+const POLS = {
+  'checkout-release-gate': { ver: 3, note: 'Гейт релиза checkout', guard: true, minS: 1000, rules: [
+    { id: 'checkout-p95', m: 'p95', op: 'lte', thr: 2000, sc: 0 }, { id: 'checkout-errors', m: 'err', op: 'lte', thr: 1, sc: 0 },
+    { id: 'payment-p95', m: 'p95', op: 'lte', thr: 1500, sc: 1 }, { id: 'global-p99', m: 'p99', op: 'lte', thr: 4000, sc: -1 },
+    { id: 'global-rps', m: 'rps', op: 'gte', thr: 100, sc: -1 }, { id: 'login-errors', m: 'err', op: 'lte', thr: 0.5, sc: 3 },
+    { id: 'catalog-p95', m: 'p95', op: 'lte', thr: 800, sc: 4 },
+    { id: 'payments-a-memory', m: 'mem', op: 'lte', thr: 90, sc: 'w1A' }, { id: 'payments-b-restarts', m: 'rst', op: 'lte', thr: 0, sc: 'w1B' }] },
+  'smoke-nightly': { ver: 1, note: 'Ночной smoke, мягкие пороги', guard: false, minS: 0, rules: [
+    { id: 'smoke-rps', m: 'rps', op: 'gte', thr: 50, sc: -1 }, { id: 'smoke-p99', m: 'p99', op: 'lte', thr: 6000, sc: -1 }, { id: 'smoke-errors', m: 'err', op: 'lte', thr: 5, sc: -1 }] },
+  'capacity-gates': { ver: 2, note: 'Пороги для ступенчатых тестов', guard: true, minS: 2000, rules: [
+    { id: 'cap-p95', m: 'p95', op: 'lte', thr: 1200, sc: -1 }, { id: 'cap-errors', m: 'err', op: 'lte', thr: 0.5, sc: -1 },
+    { id: 'cap-rps', m: 'rps', op: 'gte', thr: 110, sc: -1 }, { id: 'cap-checkout-p99', m: 'p99', op: 'lte', thr: 2500, sc: 0 },
+    { id: 'cap-throttling-b', m: 'thr', op: 'lte', thr: 10, sc: 'w0B' }] }
+};
+state.polKey = 'checkout-release-gate'; state.appliedKey = 'checkout-release-gate';
+state.applied = clone(POLS['checkout-release-gate']); state.draft = clone(POLS['checkout-release-gate']);
+const MEAS = { 'p95|0': 2340, 'err|0': 2.4, 'p95|1': 1120, 'p99|-1': 3050, 'rps|-1': 112, 'err|3': 0.1, 'p95|4': 410 };
+function measure(m, sc) {
+  if (typeof sc === 'string') { const x = /^w(\d+)([AB])$/.exec(sc); if (!x) return 0; const S = wlStats(+x[1], x[2] === 'A' ? 0 : 1); return m === 'mem' ? S.memMax : m === 'thr' ? S.thrMax : S.rst; }
+  const k = m + '|' + sc; if (MEAS[k] != null) return MEAS[k];
+  const one = i => mean(raw(m, i)) * (m === 'p95' || m === 'p99' ? 1.1 : 1);
+  if (sc >= 0) return one(sc);
+  if (m === 'rps') return sum(TX.map((_, i) => one(i)));
+  return sum(TX.map((t, i) => one(i) * t.share)) / sum(TX.map(t => t.share));
+}
+const samples = sc => typeof sc === 'string' ? Infinity : sc >= 0 ? sum(raw('rps', sc)) * STEP : sum(TX.map((_, i) => sum(raw('rps', i)) * STEP));
+function evalPolicy(p) {
+  const rows = p.rules.map(r => { const v = measure(r.m, r.sc), n = samples(r.sc); let s;
+    if (p.guard && n < p.minS) s = 'nv'; else s = (r.op === 'lte' ? v <= r.thr : v >= r.thr) ? 'ok' : 'crit'; return { r, v, n, s }; });
+  const f = rows.filter(x => x.s === 'crit').length, nv = rows.filter(x => x.s === 'nv').length;
+  return { rows, f, nv, total: rows.length, verdict: !rows.length ? 'NO_POLICY' : f ? 'FAIL' : nv ? 'NO_VERDICT' : 'PASS' };
+}
+const unitOf = m => MT[m].unit;
+const thrTxt = r => (r.op === 'lte' ? '≤ ' : '≥ ') + (unitOf(r.m) === '%' ? String(r.thr).replace('.', ',') + '%' : fmtN(r.thr) + ' ' + unitOf(r.m));
+const scopeName = sc => typeof sc === 'string' ? (() => { const x = /^w(\d+)([AB])$/.exec(sc); return WLS[+x[1]].n + ' · плечо ' + x[2]; })() : sc < 0 ? 'все транзакции' : TX[sc].n;
+const ruleName = r => MT[r.m].label + ' · ' + scopeName(r.sc);
+const fmtMeas = (m, v) => unitOf(m) === '%' ? cm(v, v < 10 && m === 'err' ? 2 : m === 'err' ? 1 : 0) + '%' : fmtN(v) + ' ' + unitOf(m);
+const ruleFor = (m, sc) => evalPolicy(state.applied).rows.find(x => x.r.m === m && x.r.sc === sc);
+const badgeTxt = v => v === 'NO_VERDICT' || v === 'NO_POLICY' ? 'NO' : v;
+const badgeSub = { NO_VERDICT: 'вердикта нет', NO_POLICY: 'правил нет' };
+function verdictCard(e) {
+  const bad = e.rows.filter(x => x.s === 'crit');
+  const h = e.verdict === 'FAIL' ? `Релиз не проходит: нарушены ${e.f} из ${e.total} правил` : e.verdict === 'PASS' ? `Релиз проходит: все ${e.total} правил выполнены` : e.verdict === 'NO_POLICY' ? 'Вердикта нет: правила не заданы' : `Вердикта нет: для ${e.nv} правил мало данных`;
+  const d = e.verdict === 'FAIL' ? bad.slice(0, 3).map(x => `${ruleName(x.r)}: ${fmtMeas(x.r.m, x.v)} при пороге ${thrTxt(x.r)}`).join('. ') + (bad.length > 3 ? `. Ещё ${bad.length - 3} в таблице правил.` : '.') : e.verdict === 'PASS' ? 'Ни одно правило не нарушено за весь тест, 10:00–18:00.' : e.verdict === 'NO_POLICY' ? 'Метрики посчитаны, но без политики нечего сравнивать с порогами. Выберите политику в разделе «Правила» или при новом анализе.' : 'Запросов меньше минимума, который задан в политике. Это не FAIL: порог не проверен. Увеличьте нагрузку или снизьте минимум.';
+  const order = { crit: 0, nv: 1, ok: 2 }, top = [...e.rows].sort((a, b) => order[a.s] - order[b.s]).slice(0, 3);
+  const tile = x => `<div class="stat"><span class="kicker">${x.r.id}</span><b style="color:${x.s === 'crit' ? 'var(--crit)' : x.s === 'nv' ? 'var(--warn)' : 'var(--ink)'};${x.s === 'nv' ? 'font-size:18px' : ''}">${x.s === 'nv' ? 'мало данных' : fmtMeas(x.r.m, x.v)}</b><span>порог ${thrTxt(x.r)}</span></div>`;
+  const total = samples(-1);
+  return `<div class="card vcard"><div style="display:flex;align-items:center;gap:24px;flex-wrap:wrap"><div class="vbadge ${e.verdict}"><b>${badgeTxt(e.verdict)}</b><span>${badgeSub[e.verdict] || 'вердикт ядра'}</span></div><div style="max-width:520px;display:flex;flex-direction:column;gap:8px"><h1 style="font:600 24px/1.25 var(--sans)">${h}</h1><p style="color:var(--muted)">${d}</p></div></div><div class="stats">${top.map(tile).join('')}<div class="stat"><span class="kicker">Запросы</span><b>${fmtN(Math.round(total / 100) * 100)}</b><span>${e.nv ? e.nv + ' правил: мало данных' : 'выборка достаточна'}</span></div><div class="stat"><span class="kicker">Сервисы с отклонением</span><b>${wlBad()}</b><span>пар сервис·плечо</span></div></div></div>`;
+}
+function renderTop() {
+  const e = evalPolicy(state.applied), v = $('#vchip'); if (!v) return;
+  const sp = $('#scopepill'); if (sp) sp.textContent = '2 плеча · ' + (WLS.length - 1) + ' сервисов и БД · ' + podsTotal() + ' подов';
+  const t = e.verdict === 'FAIL' ? `<b>${e.f} из ${e.total}</b> правил нарушены` : e.verdict === 'PASS' ? `все <b>${e.total}</b> правил выполнены` : e.verdict === 'NO_POLICY' ? 'правила не заданы' : `<b>${e.nv}</b> правил не оценены`;
+  v.innerHTML = `<span class="v ${e.verdict}">${e.verdict}</span><span>${t}</span>`; v.setAttribute('aria-label', 'Вердикт ' + e.verdict + '. Открыть правила');
+  $('#bpill').textContent = state.baselineId ? 'baseline: ' + state.baselineId : 'без baseline';
+}
+
+/* ============ history ============ */
+const HIST = [
+  { id: '2026.09.3', d: '29.09.2026', v: 'FAIL', f: 3, pv: 3, p95: 2340, err: 2.4, rps: 112, prof: 'пик 180 зпр/с · 8 ч', cmp: true, cur: true },
+  { id: '2026.09.2', d: '22.09.2026', v: 'PASS', f: 0, pv: 3, p95: 820, err: 0.12, rps: 121, prof: 'пик 180 зпр/с · 8 ч', cmp: true },
+  { id: '2026.09.1', d: '15.09.2026', v: 'PASS', f: 0, pv: 3, p95: 860, err: 0.15, rps: 119, prof: 'пик 180 зпр/с · 8 ч', cmp: true },
+  { id: '2026.09.0', d: '08.09.2026', v: 'NO_VERDICT', f: 0, pv: 2, p95: null, err: null, rps: null, prof: 'пик 180 зпр/с · 8 ч', cmp: true, why: 'транзакция POST /checkout не найдена в логе' },
+  { id: '2026.08.4', d: '01.09.2026', v: 'PASS', f: 0, pv: 2, p95: 790, err: 0.11, rps: 120, prof: 'пик 120 зпр/с · 4 ч', cmp: false },
+  { id: '2026.08.3', d: '25.08.2026', v: 'FAIL', f: 1, pv: 2, p95: 2110, err: 0.3, rps: 118, prof: 'пик 180 зпр/с · 8 ч', cmp: true },
+  { id: '2026.08.2', d: '18.08.2026', v: 'PASS', f: 0, pv: 2, p95: 780, err: 0.1, rps: 121, prof: 'пик 180 зпр/с · 8 ч', cmp: true },
+  { id: '2026.08.1', d: '11.08.2026', v: 'PASS', f: 0, pv: 2, p95: 810, err: 0.14, rps: 117, prof: 'пик 180 зпр/с · 8 ч', cmp: true },
+  { id: '2026.07.4', d: '04.08.2026', v: 'PASS', f: 0, pv: 2, p95: 800, err: 0.12, rps: 120, prof: 'пик 180 зпр/с · 8 ч', cmp: true }
+];
+const VCLS = { PASS: 'good', FAIL: 'crit', NO_VERDICT: 'warn' };
+const vpill = v => pill(v, VCLS[v], 1);
+function relChart(metric) {
+  const pts = [...HIST].reverse(), w = 900, h = 290, l = 60, r = 24, t = 26, b = 40, thr = metric === 'p95' ? 2000 : metric === 'err' ? 1 : null;
+  const vals = pts.map(p => p[metric]).filter(v => v != null), hi = niceHi(Math.max(...vals, thr || 0) * 1.18), lo = metric === 'rps' ? 80 : 0, hi2 = metric === 'rps' ? 140 : hi;
+  const X = i => l + (i + .5) / pts.length * (w - l - r), Y = v => t + (h - t - b) - (v - lo) / (hi2 - lo) * (h - t - b);
+  const u = { p95: 'мс', err: '%', rps: 'зпр/с' }[metric]; let g = '';
+  [0, .25, .5, .75, 1].forEach(f => { const v = lo + (hi2 - lo) * f; g += `<line class="gl" x1="${l}" x2="${w - r}" y1="${Y(v)}" y2="${Y(v)}"/><text class="tx" x="${l - 8}" y="${Y(v) + 4}" text-anchor="end">${Number.isInteger(v) ? fmtN(v) : cm(v, 1)}</text>`; });
+  if (thr) g += `<line x1="${l}" x2="${w - r}" y1="${Y(thr)}" y2="${Y(thr)}" style="stroke:var(--crit);stroke-width:1.5;stroke-dasharray:5 4"/><text class="tx" x="${l + 6}" y="${Y(thr) - 6}" style="fill:var(--crit)">порог ${fmtN(thr)}</text>`;
+  let d = ''; pts.forEach((p, i) => { if (p[metric] == null) { d += ' '; return; } d += (d.trim() && !d.endsWith(' ') ? 'L' : 'M') + X(i).toFixed(1) + ',' + Y(p[metric]).toFixed(1); });
+  g += `<path d="${d.replace(/ +M/g, 'M').replace(/ /g, '')}" style="fill:none;stroke:var(--muted);stroke-width:1.6"/>`;
+  pts.forEach((p, i) => {
+    const cur = p.cur, col = p.v === 'PASS' ? 'var(--good-solid)' : p.v === 'FAIL' ? 'var(--crit-solid)' : 'var(--warn-solid)';
+    if (p[metric] == null) { g += `<text class="tx" x="${X(i)}" y="${Y(lo) - 26}" text-anchor="middle" style="fill:var(--warn)">нет данных</text><path d="M${X(i) - 5},${Y(lo) - 5}l10,-10M${X(i) + 5},${Y(lo) - 5}l-10,-10" style="stroke:var(--warn-solid);stroke-width:2"/>`; }
+    else g += `<circle cx="${X(i)}" cy="${Y(p[metric])}" r="${cur ? 7 : 5}" style="fill:${col};stroke:var(--panel);stroke-width:2"/><text class="tx" x="${X(i)}" y="${Y(p[metric]) - 12}" text-anchor="middle" style="${cur ? 'fill:var(--ink);font-weight:600' : ''}">${metric === 'err' ? cm(p[metric], 2) : fmtN(p[metric])}</text>`;
+    g += `<text class="tx" x="${X(i)}" y="${h - 14}" text-anchor="middle" style="${cur ? 'fill:var(--ink);font-weight:600' : ''}">${p.id.slice(5)}</text>`;
+  });
+  return `<div class="rchart"><svg viewBox="0 0 ${w} ${h}" role="img" aria-label="${u}: динамика по релизам, точки окрашены по вердикту">${g}</svg></div>`;
+}
+function rHistory() {
+  const all = HIST, list = all.filter(h => state.hf === 'all' || h.v === state.hf);
+  const cnt = v => all.filter(h => h.v === v).length, lastPass = all.find(h => h.v === 'PASS');
+  const acts = h => h.cur ? pill('открыт', 'info', 1) : `<div style="display:flex;gap:6px"><button class="btn sm" type="button" data-act="hopen" data-id="${h.id}" data-k="ho-${h.id}">Открыть</button>${h.id === state.baselineId ? pill('baseline', 'good', 1) : `<button class="btn sm" type="button" data-act="hbase" data-id="${h.id}" data-k="hb-${h.id}" ${h.v === 'PASS' && h.cmp ? '' : 'disabled'} title="${h.v !== 'PASS' ? 'Baseline берётся только из PASS' : !h.cmp ? 'Профиль нагрузки отличается' : ''}">Baseline</button>`}<button class="btn sm" type="button" data-act="hcmp" data-id="${h.id}" data-k="hc-${h.id}">Сравнить</button></div>`;
+  return `<div class="sec-h"><div><h2>История релизов</h2><p>Прогоны проекта по времени. Откройте прошлый результат, назначьте baseline или сравните с текущим. Baseline берётся только из PASS с тем же профилем нагрузки.</p></div><button class="btn primary" type="button" data-act="go" data-v="new" data-k="h-new">${I('plus', 16)} Новый анализ</button></div>
+  <div class="grid4"><div class="tile"><span class="kicker">Прогонов</span><b class="num" style="font-size:26px">${all.length}</b></div><div class="tile"><span class="kicker">PASS</span><b class="num" style="font-size:26px;color:var(--good)">${cnt('PASS')}</b></div><div class="tile"><span class="kicker">FAIL · NO_VERDICT</span><b class="num" style="font-size:26px"><span style="color:var(--crit)">${cnt('FAIL')}</span> · <span style="color:var(--warn)">${cnt('NO_VERDICT')}</span></b></div><div class="tile"><span class="kicker">Последний PASS</span><b class="num" style="font-size:22px">${lastPass.id}</b><span class="sub">${lastPass.d}</span></div></div>
+  <div class="card" style="display:flex;flex-direction:column;gap:14px"><div class="ctl"><h3 style="font:600 18px/1.2 var(--sans);margin-right:auto">Динамика по релизам</h3><div class="seg" role="group" aria-label="Показатель">${[['p95', 'p95 checkout'], ['err', 'Ошибки checkout'], ['rps', 'RPS']].map(o => `<button type="button" aria-pressed="${state.hm === o[0]}" data-act="hm" data-m="${o[0]}" data-k="hm-${o[0]}">${o[1]}</button>`).join('')}</div></div>${relChart(state.hm)}<p class="sub">Цвет точки: вердикт релиза. Слева старые релизы, справа новые. Релиз 2026.09.0 остался без вердикта: правило не смогло найти транзакцию.</p></div>
+  <div class="ctl"><div class="seg" role="group" aria-label="Фильтр по вердикту">${[['all', 'Все'], ['PASS', 'PASS'], ['FAIL', 'FAIL'], ['NO_VERDICT', 'NO_VERDICT']].map(o => `<button type="button" aria-pressed="${state.hf === o[0]}" data-act="hf" data-f="${o[0]}" data-k="hf-${o[0]}">${o[1]}</button>`).join('')}</div><span class="sub">${list.length} из ${all.length}</span></div>
+  <div class="tw"><table><thead><tr><th scope="col">Релиз</th><th scope="col">Вердикт</th><th scope="col" class="r">Нарушено</th><th scope="col" class="r">p95 checkout</th><th scope="col" class="r">Ошибки</th><th scope="col" class="r">RPS</th><th scope="col">Профиль нагрузки</th><th scope="col">Действия</th></tr></thead><tbody>${list.map(h => `<tr><td><b class="num" style="font-weight:600">${h.id}</b><div class="sub">${h.d} · политика v${h.pv}</div></td><td>${vpill(h.v)}${h.why ? `<div class="sub" style="white-space:normal;min-width:160px">${h.why}</div>` : ''}</td><td class="r num">${h.f || '—'}</td><td class="r num">${h.p95 == null ? '—' : fmtN(h.p95) + ' мс'}</td><td class="r num">${h.err == null ? '—' : cm(h.err, 2) + '%'}</td><td class="r num">${h.rps == null ? '—' : h.rps}</td><td>${h.prof.replace('пик ', '')}${h.cmp ? '' : ' ' + pill('другой', 'warn', 1)}</td><td>${acts(h)}</td></tr>`).join('') || '<tr><td colspan="8" class="sub" style="text-align:center;padding:32px">Нет релизов с таким вердиктом.</td></tr>'}</tbody></table></div>`;
+}
+
+/* ============ rules editor ============ */
+const sig = p => JSON.stringify([p.rules, p.guard, p.minS]);
+function rRules() {
+  const d = state.draft, e = evalPolicy(d), same = sig(d) === sig(state.applied) && state.polKey === state.appliedKey;
+  const opts = (arr, cur) => arr.map(o => `<option value="${o[0]}" ${String(o[0]) === String(cur) ? 'selected' : ''}>${o[1]}</option>`).join('');
+  const scopes = m => PLAT.includes(m) ? WLS.flatMap((w, i) => ['A', 'B'].map(s => ['w' + i + s, w.n + ' · плечо ' + s])) : [[-1, 'Все транзакции']].concat(TX.map((t, i) => [i, t.n]));
+  const lib = Object.entries(POLS).map(([k, p]) => `<button class="pol" type="button" aria-pressed="${k === state.polKey}" data-act="pol" data-p="${k}" data-k="pol-${k}"><b>${k}</b><span class="sub">версия ${p.ver} · ${p.rules.length} правил · ${p.note}</span>${k === state.appliedKey ? pill('применена к прогону', 'good', 1) : ''}</button>`).join('');
+  const rows = e.rows.map((x, i) => `<div class="rrow" role="group" aria-label="Правило ${i + 1}">
+    <div class="field"><label for="ri-${i}">Идентификатор</label><input type="text" id="ri-${i}" value="${x.r.id}" data-act="rf" data-i="${i}" data-f="id" data-k="rf-${i}-id"></div>
+    <div class="field"><label for="rm-${i}">Метрика</label><select id="rm-${i}" data-act="rf" data-i="${i}" data-f="m" data-k="rf-${i}-m">${opts([['p95', 'p95 отклика, мс'], ['p99', 'p99 отклика, мс'], ['err', 'Доля ошибок, %'], ['rps', 'Пропускная способность'], ['mem', 'Память, худший под, %'], ['thr', 'Троттлинг CPU, худший под, %'], ['rst', 'Перезапуски подов']], x.r.m)}</select></div>
+    <div class="field"><label for="ro-${i}">Условие</label><select id="ro-${i}" data-act="rf" data-i="${i}" data-f="op" data-k="rf-${i}-op">${opts([['lte', '≤'], ['gte', '≥']], x.r.op)}</select></div>
+    <div class="field"><label for="rt-${i}">Порог, ${unitOf(x.r.m)}</label><input type="number" step="any" id="rt-${i}" value="${x.r.thr}" data-act="rf" data-i="${i}" data-f="thr" data-k="rf-${i}-thr"></div>
+    <div class="field"><label for="rs-${i}">Область</label><select id="rs-${i}" data-act="rf" data-i="${i}" data-f="sc" data-k="rf-${i}-sc">${opts(scopes(x.r.m), x.r.sc)}</select></div>
+    <div class="field"><span class="lbl">Пробный прогон</span><div style="display:flex;align-items:center;gap:8px;min-height:36px">${st[x.s]}<span class="num" style="font-size:13px">${x.s === 'nv' ? cm(x.n / 1000, 1) + ' тыс. запр.' : fmtMeas(x.r.m, x.v)}</span></div></div>
+    <button class="btn sm" type="button" data-act="rdel" data-i="${i}" data-k="rd-${i}" aria-label="Удалить правило ${x.r.id}" title="Удалить правило" style="padding:0;justify-content:center;width:36px">×</button></div>`).join('');
+  return `<div class="sec-h"><div><h2>Правила</h2><p>Политика определяет, что считать нарушением. Правки сразу проверяются на открытом прогоне, вердикт релиза меняется после «Применить». Окно правил сейчас весь тест: для длинных прогонов нужны стадийные окна.</p></div></div>
+  <div class="polgrid"><div class="stack"><span class="kicker">Библиотека политик</span>${lib}<button class="btn" type="button" data-act="toast" data-msg="В макете создание политик не работает." data-k="pol-new">${I('plus', 16)} Новая политика</button></div>
+  <div class="stack"><div class="card" style="display:flex;justify-content:space-between;align-items:center;gap:16px;flex-wrap:wrap"><div style="display:flex;align-items:center;gap:16px"><div class="vbadge ${e.verdict}" style="width:96px;height:64px;gap:4px"><b style="font-size:22px">${e.verdict === 'NO_VERDICT' ? 'NO' : e.verdict}</b></div><div><b style="font-weight:600">Пробный прогон на Checkout 2026.09.3</b><div class="sub">${e.verdict === 'FAIL' ? `нарушено ${e.f} из ${e.total} правил` : e.verdict === 'PASS' ? `выполнены все ${e.total} правил` : `не оценено ${e.nv} правил`} · ${same ? 'совпадает с применённой политикой' : 'отличается от применённой'}</div></div></div><div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn" type="button" data-act="rreset" data-k="r-reset">Сбросить правки</button><button class="btn" type="button" data-act="toast" data-msg="Сохранена версия ${POLS[state.polKey].ver + 1}. В макете файл не создаётся." data-k="r-save">Сохранить как версию ${POLS[state.polKey].ver + 1}</button><button class="btn primary" type="button" data-act="rapply" data-k="r-apply" ${same ? 'disabled' : ''}>Применить к открытому прогону</button></div></div>
+  <div class="card"><div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap"><h3 style="font:600 18px/1.2 var(--sans)">${state.polKey} <span class="sub">версия ${POLS[state.polKey].ver}</span></h3><button class="btn sm" type="button" data-act="radd" data-k="r-add">${I('plus', 14)} Добавить правило</button></div>${rows ? `<div style="overflow-x:auto"><div style="min-width:900px">${rows}</div></div>` : '<p class="sub" style="padding:24px 0">В политике нет правил. Без правил вердикт не выдаётся.</p>'}
+  <p class="sub" style="margin-top:12px">Метрики платформы (память, троттлинг, перезапуски) берут худший под сервиса в выбранном плече. Так одно плечо не маскирует проблему другого.</p></div>
+  <div class="card" style="display:flex;flex-direction:column;gap:12px"><div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap"><h3 style="font:600 16px/1.2 var(--sans)">Защита от малой выборки</h3>${pill('новое', 'info', 1)}</div><label class="chk" style="border:0;padding:0"><input type="checkbox" data-act="guard" data-k="guard" ${d.guard ? 'checked' : ''}><span>Не оценивать правило, если запросов в его области меньше минимума</span></label><div class="field" style="max-width:240px"><label for="mins">Минимум запросов</label><input type="number" id="mins" min="0" step="100" value="${d.minS}" data-act="mins" data-k="mins" ${d.guard ? '' : 'disabled'}></div><p class="sub">Такое правило получает статус «мало данных», а вердикт становится NO_VERDICT. Нарушение другого правила по-прежнему даёт FAIL. Попробуйте 1 000 000: правила по отдельным транзакциям получат «мало данных», но перезапуски в плече B всё равно дадут FAIL.</p></div></div></div>`;
+}
+
+/* ============ new analysis ============ */
+const FEATS = [['cpu', 'CPU'], ['thr', 'Троттлинг CPU'], ['mem', 'Память (working set)'], ['rst', 'Перезапуски и OOM'], ['imb', 'Дисбаланс подов'], ['heap', 'JVM Old Gen'], ['gc', 'Паузы GC'], ['rep', 'Реплики и готовность']];
+Object.assign(state.setup, { shA: true, shB: true, profA: 'prod-prometheus-a', profB: 'prod-prometheus-b', ns: 'shop-prod', nWl: 21, lim: 'target', osP: 'app-logs-prod', pgP: 'pg-prod-main', corr: '', cap: '', feats: { cpu: 1, thr: 1, mem: 1, rst: 1, imb: 1, heap: 0, gc: 0, rep: 0 } });
+const detect = n => { n = n.toLowerCase(); if (/\.(jtl|csv|xml)$/.test(n)) return 'JMeter JTL'; if (/\.log$/.test(n)) return 'Gatling simulation.log'; return null; };
+const fsz = b => b > 1e6 ? cm(b / 1e6, 1) + ' МБ' : Math.max(1, Math.round(b / 1e3)) + ' КБ';
+const budgetOf = s => s.nWl * Object.values(s.feats).filter(Boolean).length;
+const shCount = s => (s.shA ? 1 : 0) + (s.shB ? 1 : 0);
+const usedRows = s => budgetOf(s) * Math.max(1, shCount(s));
+const LIMS = { now: { series: 64, cells: 500000, name: 'сейчас' }, target: { series: 1024, cells: 1000000, name: 'цель' } };
+const cellsOf = s => usedRows(s) * (Math.floor((N - 1) * STEP / Math.max(1, s.step)) + 1);
+function runSteps() {
+  const s = state.setup, a = [s.sample ? 'Чтение примера checkout-2026.09.3.jtl' : 'Чтение файла ' + (s.file ? s.file.name : ''), 'Нормализация: гистограммы задержек по 15 с'];
+  if (s.shA) a.push(s.profA === '__file' ? 'Чтение снимка ресурсов, плечо A' : 'Prometheus, плечо A: запрос за окно');
+  if (s.shB) a.push(s.profB === '__file' ? 'Чтение снимка ресурсов, плечо B' : 'Prometheus, плечо B: запрос за окно');
+  if (s.shA || s.shB) a.push('Свёртка подов в признаки сервисов');
+  if (s.os) a.push(s.osP === '__file' ? 'Чтение контекста OpenSearch из файла' : 'OpenSearch: группировка ошибок');
+  if (s.pg) a.push(s.pgP === '__file' ? 'Чтение снимков PostgreSQL из файлов' : 'PostgreSQL: снимки до и после');
+  a.push(POLS[s.polKey] ? 'Проверка правил «' + s.polKey + '»' : s.polKey === '__file' ? 'Чтение политики из файла и проверка правил' : 'Правила не заданы: вердикт не выдаётся');
+  if (state.trendDraft.length) a.push('Проверка трендов: ' + state.trendDraft.length + ' проверок'); if (s.baseline) a.push('Сравнение с ' + s.baseline); a.push('Сохранение результата'); return a;
+}
+function rNew() {
+  const s = state.setup, f = s.file, fmt_ = f ? detect(f.name) : null, logOk = s.sample || (f && fmt_), used = usedRows(s), L = LIMS[s.lim], cells = cellsOf(s), over = used > L.series || cells > L.cells, shN = shCount(s), per = budgetOf(s);
+  if (state.run) { const st_ = runSteps(); return `<div class="card" style="max-width:640px;display:flex;flex-direction:column;gap:12px" role="status" aria-live="polite"><h2 style="font:600 22px/1.2 var(--sans)">Анализ выполняется</h2><p class="sub">Можно закрыть страницу: результат сохранится в истории.</p><div>${st_.map((t, i) => `<div class="step ${i < state.run.i ? 'done' : i === state.run.i ? 'now' : ''}"><i>${i < state.run.i ? '✓' : ''}</i><span>${t}</span></div>`).join('')}</div><div><button class="btn" type="button" data-act="cancelrun" data-k="cancel">Отменить</button></div></div>`; }
+  const fileIn = (k, label) => `<div class="field"><label for="fi-${k}">${label}</label><input type="file" id="fi-${k}" data-act="fset" data-f="${k}" data-k="fi-${k}">${s[k] ? `<span class="sub">Выбрано: ${s[k]}</span>` : ''}</div>`;
+  const optsSel = (list, cur) => list.map(o => `<option value="${o[0]}" ${o[0] === cur ? 'selected' : ''}>${o[1]}</option>`).join('');
+  const drop = `<label class="drop" id="drop"><input type="file" id="f-log" data-act="flog" data-k="f-log" aria-label="Файл нагрузочного теста"><span style="color:var(--accent)">${I('plus', 26)}</span><b style="font-weight:600">${logOk ? (s.sample ? 'checkout-2026.09.3.jtl · пример' : f.name) : 'Перетащите файл или нажмите, чтобы выбрать'}</b><span class="sub">${logOk ? (s.sample ? 'JMeter JTL · 3,7 млн запросов · 8 ч' : fmt_ + ' · ' + fsz(f.size)) : 'JMeter JTL (CSV или XML) или Gatling simulation.log'}</span></label>${f && !fmt_ ? `<div class="note" style="background:var(--crit-bg)" role="alert"><span style="color:var(--crit)">${I('warn')}</span><div><b style="color:var(--crit)">Формат не поддерживается.</b> Ожидается JMeter JTL (CSV или XML) или Gatling simulation.log. Выберите другой файл.</div></div>` : ''}<div><button class="btn sm" type="button" data-act="sample" data-k="sample">Загрузить пример прогона</button></div>`;
+  const pols = Object.entries(POLS).map(([k, p]) => [k, `${k} · версия ${p.ver} · ${p.rules.length} правил`]).concat([['__file', 'Из файла…'], ['__none', 'Без политики']]);
+  const shRow = (k, name, cl, pk, fk, main) => `<div class="srow"><label class="chk" style="border:0;padding:0"><input type="checkbox" data-act="sset" data-f="${k}" data-k="s-${k}" ${s[k] ? 'checked' : ''}><span><b style="font-weight:500">${name}</b><br><span class="sub">${cl}</span></span></label><div class="stack" style="gap:8px"><select aria-label="Источник, ${name}" data-act="sset" data-f="${pk}" data-k="s-${pk}" ${s[k] ? '' : 'disabled'}>${optsSel([[main, main], ['stage-prometheus', 'stage-prometheus'], ['__file', 'Из файла (снимок ресурсов)']], s[pk])}</select>${s[k] && s[pk] === '__file' ? fileIn(fk, 'Снимок ресурсов, ' + name) : ''}</div></div>`;
+  const anyOnline = (s.shA && s.profA !== '__file') || (s.shB && s.profB !== '__file') || (s.os && s.osP !== '__file') || (s.pg && s.pgP !== '__file');
+  const win = anyOnline ? `<div style="border-top:1px solid var(--line);padding-top:14px;display:flex;flex-direction:column;gap:12px"><div class="ctl"><span class="lbl">Окно запроса к онлайн-источникам</span><div class="seg" role="group" aria-label="Окно запроса"><button type="button" aria-pressed="${s.win === 'auto'}" data-act="swin" data-w="auto" data-k="w-auto">Из лога, автоматически</button><button type="button" aria-pressed="${s.win === 'manual'}" data-act="swin" data-w="manual" data-k="w-man">Указать вручную</button></div></div>${s.win === 'auto' ? `<div class="frow"><div class="field"><label for="w-m">Запас по краям, с</label><input type="number" id="w-m" min="0" value="${s.margin}" data-act="sset" data-f="margin" data-k="w-m"></div><div class="field"><label for="w-s">Шаг рядов, с</label><input type="number" id="w-s" min="1" value="${s.step}" data-act="sset" data-f="step" data-k="w-s"></div><div class="field"><label for="w-i">Максимальный простой, с</label><input type="number" id="w-i" min="1" value="${s.idle}" data-act="sset" data-f="idle" data-k="w-i"></div></div><p class="sub">Окно берётся от первого до последнего запроса в логе. Если в логе простой длиннее максимума, анализ откажется: в файле, скорее всего, несколько тестов.</p>` : `<div class="frow"><div class="field"><label for="w-a">Начало</label><input type="datetime-local" id="w-a" value="${s.start}" data-act="sset" data-f="start" data-k="w-a"></div><div class="field"><label for="w-b">Конец</label><input type="datetime-local" id="w-b" value="${s.end}" data-act="sset" data-f="end" data-k="w-b"></div></div>`}</div>` : '';
+  const barc = over ? 'var(--crit-solid)' : used > L.series * .85 || cells > L.cells * .85 ? 'var(--warn-solid)' : 'var(--good-solid)', limLabel = 'на прогон, ' + L.name, nf = Object.values(s.feats).filter(Boolean).length;
+  const req = [[logOk, 'Файл нагрузочного теста', logOk ? (s.sample ? 'пример' : fmt_) : 'выберите файл'], [true, 'Правила', POLS[s.polKey] ? s.polKey : s.polKey === '__file' ? 'из файла' : 'не заданы, будет NO_POLICY'], [!over, 'Ряды платформы', `${fmtN(used)} из ${fmtN(L.series)} рядов, ${fmtN(Math.round(cells / 1000))} тыс. из ${fmtN(L.cells / 1000)} тыс. ячеек`], [true, 'Источники', [s.shA && 'плечо A', s.shB && 'плечо B', s.os && 'OpenSearch', s.pg && 'PostgreSQL'].filter(Boolean).join(', ') || 'только лог'], [true, 'Тренды', state.trendDraft.length ? state.trendDraft.length + ' проверок из 32' : 'не заданы'], [true, 'Baseline', s.baseline || 'без сравнения']]
+    .map(x => `<div class="req"><span class="d" style="background:${x[0] ? 'var(--good-solid)' : 'var(--crit-solid)'}">${x[0] ? '✓' : '!'}</span><div><b style="font-weight:500">${x[1]}</b><div class="sub">${x[2]}</div></div></div>`).join('');
+  const nr = POLS[s.polKey] ? POLS[s.polKey].rules.length + ' правилам' : 'правилам из файла';
+  const will = (s.polKey === '__none' ? 'Метрики без вердикта (NO_POLICY)' : 'Вердикт по ' + nr) + (shN ? `, ряды по ${shN} плечам` : '') + (s.os ? ', ошибки из логов' : '') + (s.baseline ? ', сравнение с ' + s.baseline : '') + '.';
+  const limNote = over ? `Выбрано ${fmtN(used)} рядов (${s.nWl} сервисов × ${nf} признаков × ${Math.max(1, shN)} плеч) и ${fmtN(Math.round(cells / 1000))} тыс. ячеек при шаге ${s.step} с. Лимит ${L.name}: ${fmtN(L.series)} рядов и ${fmtN(L.cells / 1000)} тыс. ячеек на прогон. Уберите сервисы или признаки, либо увеличьте шаг рядов.` : s.lim === 'now' ? 'Сейчас в прогон уходит один снимок ресурсов: до 64 рядов и 500 тыс. ячеек на всё. Поды сервиса сворачиваются в признаки до анализа.' : 'Цель: поднять предел до 1 024 рядов и 1 млн ячеек в одном снимке, с автоподбором шага. Это меняет контракт resource-snapshot, нужен ADR. Поды сворачиваются в признаки, данные по подам сохраняются как доказательства.';
+  return `<div class="sec-h"><div><h2>Новый анализ</h2><p>Загрузите результат нагрузочного теста, выберите правила и данные о системе. Обязателен только файл теста: остальное повышает глубину анализа. Любой источник можно подключить онлайн или загрузить из файла.</p></div></div>
+  <div class="setup"><div class="stack">
+   <section class="card stack" aria-labelledby="s1"><h3 id="s1" style="font:600 17px/1.2 var(--sans)">1. Нагрузочный тест</h3>${drop}</section>
+   <section class="card stack" aria-labelledby="s2"><h3 id="s2" style="font:600 17px/1.2 var(--sans)">2. Правила</h3><div class="field"><label for="polsel">Политика</label><select id="polsel" data-act="sset" data-f="polKey" data-k="polsel">${optsSel(pols, s.polKey)}</select></div>${s.polKey === '__file' ? fileIn('fPol', 'Файл политики') : ''}<p class="sub">${s.polKey === '__none' ? 'Вердикт не будет выдан: результат получит статус NO_POLICY, метрики останутся доступны.' : 'Без правил вердикт не выдаётся, результат получит статус NO_POLICY.'} <a class="lnk" href="#rules" data-act="go" data-v="rules" data-k="to-rules2">Открыть правила</a></p></section>
+   <section class="card stack" aria-labelledby="s3"><h3 id="s3" style="font:600 17px/1.2 var(--sans)">3. Платформа и логи</h3><div><span class="lbl">Плечи OpenShift</span>${shRow('shA', 'Плечо A', 'кластер ocp-a · namespace ' + s.ns, 'profA', 'fA', 'prod-prometheus-a')}${shRow('shB', 'Плечо B', 'кластер ocp-b · namespace ' + s.ns, 'profB', 'fB', 'prod-prometheus-b')}</div>
+    <div class="frow"><div class="field"><label for="nwl">Сколько сервисов анализировать</label><input type="number" id="nwl" min="1" max="38" value="${s.nWl}" data-act="sset" data-f="nWl" data-k="nwl"><span class="sub">из 38 в namespace, отбор по трафику теста</span></div></div>
+    <fieldset style="border:0;padding:0;margin:0;min-width:0"><legend class="lbl" style="padding:0 0 8px">Признаки сервиса</legend><div class="frow" style="grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:8px">${FEATS.map(x => `<label class="chk" style="border:0;padding:4px 0"><input type="checkbox" data-act="sfeat" data-f="${x[0]}" data-k="ft-${x[0]}" ${s.feats[x[0]] ? 'checked' : ''}><span>${x[1]}</span></label>`).join('')}</div></fieldset>
+    <div class="stack" style="gap:8px"><div class="ctl" style="justify-content:space-between"><span class="lbl">Лимит рядов</span><div class="seg" role="group" aria-label="Лимит рядов"><button type="button" aria-pressed="${s.lim === 'now'}" data-act="lim" data-l="now" data-k="lim-now">Сейчас: 64 ряда, 500 тыс. ячеек</button><button type="button" aria-pressed="${s.lim === 'target'}" data-act="lim" data-l="target" data-k="lim-target">Цель: 1 024 ряда, 1 млн ячеек</button></div></div><div style="display:flex;justify-content:space-between;font-size:13px"><span class="lbl">Ряды ${limLabel}</span><span class="num" style="color:${used > L.series ? 'var(--crit)' : 'var(--ink)'}">${fmtN(used)} из ${fmtN(L.series)}</span></div><div style="height:8px;border-radius:4px;background:var(--soft);border:1px solid var(--line);overflow:hidden" role="img" aria-label="Ряды: ${used} из ${L.series}"><div style="height:100%;width:${Math.min(100, used / L.series * 100)}%;background:${used > L.series ? 'var(--crit-solid)' : barc}"></div></div><div style="display:flex;justify-content:space-between;font-size:13px"><span class="lbl">Ячейки при шаге ${s.step} с</span><span class="num" style="color:${cells > L.cells ? 'var(--crit)' : 'var(--ink)'}">${fmtN(Math.round(cells / 1000))} тыс. из ${fmtN(L.cells / 1000)} тыс.</span></div><div style="height:8px;border-radius:4px;background:var(--soft);border:1px solid var(--line);overflow:hidden" role="img" aria-label="Ячейки: ${Math.round(cells / 1000)} тыс. из ${L.cells / 1000} тыс."><div style="height:100%;width:${Math.min(100, cells / L.cells * 100)}%;background:${cells > L.cells ? 'var(--crit-solid)' : barc}"></div></div><p class="sub" style="${over ? 'color:var(--crit)' : ''}">${limNote}</p></div>
+    <div><span class="lbl">Другие источники</span>
+     <div class="srow"><label class="chk" style="border:0;padding:0"><input type="checkbox" data-act="sset" data-f="os" data-k="s-os" ${s.os ? 'checked' : ''}><span><b style="font-weight:500">OpenSearch</b><br><span class="sub">ошибки приложений, группировка по сервисам</span></span></label><div class="stack" style="gap:8px"><select aria-label="Источник OpenSearch" data-act="sset" data-f="osP" data-k="s-osP" ${s.os ? '' : 'disabled'}>${optsSel([['app-logs-prod', 'app-logs-prod'], ['app-logs-stage', 'app-logs-stage'], ['__file', 'Из файла (контекст)']], s.osP)}</select>${s.os && s.osP === '__file' ? fileIn('fOs', 'Контекст OpenSearch') : ''}</div></div>
+     <div class="srow"><label class="chk" style="border:0;padding:0"><input type="checkbox" data-act="sset" data-f="pg" data-k="s-pg" ${s.pg ? 'checked' : ''}><span><b style="font-weight:500">PostgreSQL до и после</b><br><span class="sub">pg_profile, снимки состояния</span></span></label><div class="stack" style="gap:8px"><select aria-label="Источник PostgreSQL" data-act="sset" data-f="pgP" data-k="s-pgP" ${s.pg ? '' : 'disabled'}>${optsSel([['pg-prod-main', 'pg-prod-main'], ['__file', 'Из файлов (до и после)']], s.pgP)}</select>${s.pg && s.pgP === '__file' ? fileIn('fPre', 'Снимок до') + fileIn('fPost', 'Снимок после') + fileIn('fPgHtml', 'pg_profile HTML (только для скачивания)') : ''}</div></div></div>${win}</section>
+   <section class="card stack" aria-labelledby="s4"><h3 id="s4" style="font:600 17px/1.2 var(--sans)">4. Сравнение</h3><div class="field"><label for="bl">Baseline</label><select id="bl" data-act="sset" data-f="baseline" data-k="bl"><option value="">Без сравнения</option>${HIST.filter(h => !h.cur && h.v === 'PASS').map(h => `<option value="${h.id}" ${h.id === s.baseline ? 'selected' : ''}>${h.id} · ${h.d}${h.cmp ? '' : ' · другой профиль'}</option>`).join('')}</select></div></section>
+   ${trendSetup()}
+   <details class="card"><summary style="cursor:pointer;font-weight:600">Расширенные планы</summary><div class="stack" style="margin-top:14px"><div><span class="sub">План корреляций: до 16 гипотез, одно устойчивое окно</span>${fileIn('corr', 'Файл плана корреляций')}</div><div><span class="sub">План ёмкости: ступени нагрузки и защита генератора</span>${fileIn('cap', 'Файл плана ёмкости')}</div></div></details>
+  </div>
+  <aside class="stack" style="position:sticky;top:96px" aria-label="Готовность"><div class="card stack"><span class="kicker">Готовность к запуску</span><div>${req}</div><div style="border-top:1px solid var(--line);padding-top:12px"><span class="kicker">Что получится</span><p style="margin-top:6px">${will}</p></div><button class="btn primary" type="button" data-act="startrun" data-k="startrun" style="height:44px;justify-content:center" ${logOk && !over ? '' : 'disabled'}>Запустить анализ</button>${!logOk ? '<span class="sub">Выберите файл или загрузите пример.</span>' : over ? '<span class="sub" style="color:var(--crit)">Сократите число рядов платформы.</span>' : ''}</div></aside></div>`;
+}
+
+/* ============ actions for new views ============ */
+let runTimer = null;
+function finishRun() {
+  const s = state.setup; clearInterval(runTimer);
+  if (s.polKey === '__none') { state.applied = { ver: 0, note: '', guard: false, minS: 0, rules: [] }; state.appliedKey = '—'; state.polKey = 'checkout-release-gate'; }
+  else { const k = POLS[s.polKey] ? s.polKey : 'checkout-release-gate'; state.applied = clone(POLS[k]); state.appliedKey = k; state.polKey = k; }
+  state.draft = clone(POLS[state.polKey]); state.baselineId = s.baseline; state.trendApplied = clone(state.trendDraft); state.run = null;
+  go('overview'); toast('Анализ готов: ' + evalPolicy(state.applied).verdict);
+}
+const CLICK = {
+  pol(d) { state.polKey = d.p; state.draft = clone(POLS[d.p]); },
+  radd() { state.draft.rules.push({ id: 'new-rule-' + (state.draft.rules.length + 1), m: 'p95', op: 'lte', thr: 1000, sc: -1 }); },
+  rdel(d) { state.draft.rules.splice(+d.i, 1); },
+  rreset() { state.draft = clone(POLS[state.polKey]); },
+  rapply() { state.applied = clone(state.draft); state.appliedKey = state.polKey; toast('Вердикт пересчитан: ' + evalPolicy(state.applied).verdict); },
+  sample() { state.setup.sample = true; state.setup.file = null; },
+  swin(d) { state.setup.win = d.w; }, lim(d) { state.setup.lim = d.l; },
+  startrun() { state.run = { i: 0 }; render(); runTimer = setInterval(() => { state.run.i++; if (state.run.i >= runSteps().length) { finishRun(); } else if (state.view === 'new') render(); }, 650); },
+  cancelrun() { clearInterval(runTimer); state.run = null; },
+  hm(d) { state.hm = d.m; }, hf(d) { state.hf = d.f; },
+  hopen(d) { toast('В макете полные данные есть только у 2026.09.3.'); },
+  hbase(d) { state.baselineId = d.id; state.setup.baseline = d.id; toast('Baseline: ' + d.id); },
+  hcmp(d) { state.baselineId = d.id; state.setup.baseline = d.id; go('compare'); }
+};
+const CHANGE = {
+  rf(a, d) { const r = state.draft.rules[+d.i], f = d.f; if (f === 'thr') r.thr = parseFloat(a.value) || 0; else if (f === 'sc') r.sc = /^w/.test(a.value) ? a.value : +a.value; else if (f === 'm') { const wasP = PLAT.includes(r.m); r.m = a.value; const isP = PLAT.includes(r.m); if (wasP !== isP) r.sc = isP ? 'w1B' : -1; } else r[f] = a.value; },
+  guard(a) { state.draft.guard = a.checked; }, mins(a) { state.draft.minS = Math.max(0, parseInt(a.value) || 0); },
+  sset(a, d) { const f = d.f; state.setup[f] = a.type === 'checkbox' ? a.checked : a.type === 'number' ? Math.max(0, parseFloat(a.value) || 0) : a.value; },
+  fset(a, d) { const fl = a.files && a.files[0]; if (fl) state.setup[d.f] = fl.name; },
+  sfeat(a, d) { state.setup.feats[d.f] = a.checked ? 1 : 0; },
+  flog(a) { const fl = a.files && a.files[0]; if (fl) { state.setup.file = { name: fl.name, size: fl.size }; state.setup.sample = false; } }
+};
+document.addEventListener('dragover', e => { const z = e.target.closest && e.target.closest('.drop'); if (z) { e.preventDefault(); z.classList.add('over'); } });
+document.addEventListener('dragleave', e => { const z = e.target.closest && e.target.closest('.drop'); if (z) z.classList.remove('over'); });
+document.addEventListener('drop', e => { const z = e.target.closest && e.target.closest('.drop'); if (!z) return; e.preventDefault(); const fl = e.dataTransfer && e.dataTransfer.files[0]; if (fl) { state.setup.file = { name: fl.name, size: fl.size }; state.setup.sample = false; state.lastK = 'f-log'; render(); } });
+
+Object.assign(CLICK, { shs(d) { state.sh = d.s; }, lvl(d) { state.lvl = d.l; } });
+Object.assign(CHANGE, { wl(a) { state.wl = +a.value; }, mapOnly(a) { state.mapOnly = a.checked; }, svcsh(a) { state.svcSh = a.value; } });
+/* ============ stages and trends (L0, по ADR 0011) ============ */
+const stageStrip = (active, act, key) => {
+  const toggle = act === 'range', win = x => clock(x[2] * RES * STEP) + '–' + clock(Math.min(x[3] * RES * STEP, (N - 1) * STEP));
+  return `<div class="stages" role="group" aria-label="Стадии теста">${toggle ? `<button type="button" class="stg fixed" aria-pressed="${active === 'all'}" data-act="range" data-r="all" data-k="${key}-all"><b>Весь тест</b><span>${clock(0)}–${clock((N - 1) * STEP)}</span></button>` : ''}${STAGES.map(x => `<button type="button" class="stg" style="flex:${x[3] - x[2]} 1 0" ${toggle ? `aria-pressed="${active === x[0]}"` : ''} data-act="${act}" data-r="${x[0]}" data-k="${key}-${x[0]}" title="${x[1]}: ${win(x)}"><b>${x[1]}</b><span>${clock(x[2] * RES * STEP)}</span></button>`).join('')}${toggle ? `<button type="button" class="stg fixed" aria-pressed="${active === 'after'}" data-act="range" data-r="after" data-k="${key}-after"><b>После излома</b><span>${clock(kneeT)}</span></button>` : ''}</div>`;
+};
+const TF = [['mem', 'Память'], ['heap', 'Old Gen'], ['scmem', 'Память сайдкаров'], ['cpu', 'CPU'], ['pool', 'Пул соединений БД'], ['threads', 'Потоки JVM']];
+const TWINS = STAGES.map(x => [x[0], x[1]]).concat([['all', 'Весь тест']]), STEADY = ['p1', 'p2', 'soak'];
+const winName = id => (TWINS.find(x => x[0] === id) || [0, id])[1];
+const tc = (id, wl, sh, m, win, dir, gs, gp) => ({ id, wl, sh, m, win, dir, gs, gp, min: 30 });
+const TREND_DEFAULT = [
+  tc('orders-b-oldgen', 5, 1, 'heap', 'soak', 'increase', 1, 2.5), tc('orders-a-oldgen', 5, 0, 'heap', 'soak', 'increase', 1, 2.5),
+  tc('gateway-b-sidecar-mem', 9, 1, 'scmem', 'soak', 'increase', 1, 2.5), tc('gateway-a-sidecar-mem', 9, 0, 'scmem', 'soak', 'increase', 1, 2.5),
+  tc('payments-b-memory', 1, 1, 'mem', 'soak', 'either', 1, 2.5), tc('payments-b-db-pool', 1, 1, 'pool', 'soak', 'increase', 1, 2.5),
+  tc('payments-b-threads', 1, 1, 'threads', 'soak', 'increase', 5, 2.5), tc('checkout-b-cpu', 0, 1, 'cpu', 'soak', 'either', 1, 2.5),
+  tc('cart-b-memory', 2, 1, 'mem', 'soak', 'increase', 1, 2.5), tc('catalog-a-cpu', 3, 0, 'cpu', 'soak', 'either', 1, 2.5),
+  tc('postgres-a-memory', 20, 0, 'mem', 'soak', 'increase', 1, 2.5)
+];
+state.trendDraft = clone(TREND_DEFAULT); state.trendApplied = clone(TREND_DEFAULT); state.showTrend = false;
+const TREASON = { STATIONARITY_NOT_EVALUATED: 'стационарность окна не проверялась', TREND_SLOPE_BELOW_MINIMUM: 'наклон ниже порога', TREND_SHIFT_BELOW_MINIMUM: 'сдвиг половин ниже порога', TREND_DIRECTION_MISMATCH: 'направление не совпало с заявленным', TREND_DIRECTION_DISAGREEMENT: 'наклон и сдвиг разного знака', TREND_MIN_CELLS_NOT_MET: 'ячеек меньше минимума', TREND_MEDIAN_ZERO: 'медиана равна нулю' };
+const TCACHE = {};
+function trendEval(c) {
+  const key = JSON.stringify(c); if (TCACHE[key]) return TCACHE[key];
+  const m = MET[c.m], rg = RANGES[c.win], arr = raw(c.m, 0, false, c.wl, c.sh).slice(rg[0], rg[1]), n = arr.length, base = { c, n, expected: n, rg };
+  if (n < c.min) return TCACHE[key] = { ...base, status: 'INSUFFICIENT_CELLS', reasons: ['TREND_MIN_CELLS_NOT_MET'] };
+  const med = q(arr, .5); if (med === 0) return TCACHE[key] = { ...base, status: 'UNAVAILABLE', reasons: ['TREND_MEDIAN_ZERO'] };
+  const my = mean(arr), mx = (n - 1) * STEP / 2; let cov = 0, vr = 0; arr.forEach((y, i) => { const dx = i * STEP - mx; cov += dx * (y - my); vr += dx * dx; });
+  const slope = cov / vr, h = Math.floor(n / 2), shift = q(arr.slice(h), .5) - q(arr.slice(0, h), .5), shiftPct = shift / Math.abs(med) * 100;
+  const dir = slope > 0 ? 'increase' : slope < 0 ? 'decrease' : 'flat', reasons = []; let status = 'NO_MATERIAL_TREND';
+  if (c.dir !== 'either' && dir !== c.dir) reasons.push('TREND_DIRECTION_MISMATCH');
+  else if (Math.sign(slope) !== Math.sign(shift)) reasons.push('TREND_DIRECTION_DISAGREEMENT');
+  else if (Math.abs(slope) < c.gs / 3600) reasons.push('TREND_SLOPE_BELOW_MINIMUM');
+  else if (Math.abs(shiftPct) < c.gp) reasons.push('TREND_SHIFT_BELOW_MINIMUM');
+  else { status = 'TREND_OBSERVED'; reasons.push('STATIONARITY_NOT_EVALUATED'); }
+  return TCACHE[key] = { ...base, status, reasons, med, slope, shiftPct, dir, y0: my - slope * mx, y1: my + slope * ((n - 1) * STEP - mx) };
+}
+const uTxt = m => MET[m].unit === '%' ? 'п.п.' : MET[m].unit;
+const slopeH = r => (r.slope >= 0 ? '+' : '−') + cm(Math.abs(r.slope * 3600), r.c.m === 'threads' ? 0 : 1) + ' ' + uTxt(r.c.m) + '/ч';
+const shiftTxt = r => (r.shiftPct >= 0 ? '+' : '−') + cm(Math.abs(r.shiftPct), 1) + '%';
+const trendName = c => WLS[c.wl].n + ' · плечо ' + 'AB'[c.sh] + ' · ' + MET[c.m].name.split(',')[0];
+const trendSt = { TREND_OBSERVED: pill('наблюдается', 'warn', 1), NO_MATERIAL_TREND: pill('ниже порога', 'good', 1), INSUFFICIENT_CELLS: pill('мало ячеек', 'info', 1), UNAVAILABLE: pill('недоступно', 'info', 1) };
+const winTime = rg => clock(rg[0] * STEP) + '–' + clock((rg[1] - 1) * STEP);
+const trendCheckFor = id => MET[id].wl && state.sh !== 'AB' ? state.trendApplied.find(c => c.m === id && c.wl === state.wl && c.sh === (state.sh === 'A' ? 0 : 1)) : null;
+function trendSection() {
+  const rs = state.trendApplied.map(trendEval), cnt = s => rs.filter(x => x.status === s).length, obs = rs.filter(x => x.status === 'TREND_OBSERVED');
+  const card = r => {
+    const c = r.c, ser = series(c.m, 0, AUTO, c.win, false, c.wl, c.sh), lo0 = Math.min(...ser.a), hi0 = Math.max(...ser.a), pad = Math.max((hi0 - lo0) * .35, .5);
+    const ch = chart({ id: 'tr-' + c.id, w: 380, h: 150, l: 40, r: 8, t: 8, b: 26, S: [{ ...ser, col: MET[c.m].col, area: 1 }, { ts: [r.rg[0] * STEP, (r.rg[1] - 1) * STEP], a: [r.y0, r.y1], col: 'accent', dash: 1 }], lo: Math.floor(lo0 - pad), hi: Math.ceil(hi0 + pad), label: 'Тренд: ' + trendName(c) });
+    return `<article class="card" style="display:flex;flex-direction:column;gap:10px;padding:16px"><div style="display:flex;justify-content:space-between;gap:8px;align-items:flex-start"><div><b style="font-weight:600">${trendName(c)}</b><div class="sub">окно «${winName(c.win)}», ${winTime(r.rg)}</div></div>${trendSt.TREND_OBSERVED}</div>${ch}<p><b class="num">${slopeH(r)}</b>, сдвиг медианы половин окна <b class="num">${shiftTxt(r)}</b>. Медиана окна ${fv(c.m, r.med)}.</p><button class="btn sm" type="button" data-act="deep" data-m="${c.m}" data-w="${c.wl}" data-s="${'AB'[c.sh]}" data-r="${c.win}" data-t="1" data-k="tr-open-${c.id}">Открыть ряд ${I('arrow', 14)}</button></article>`;
+  };
+  return `<section style="display:flex;flex-direction:column;gap:16px"><div class="sec-h"><div><h2>Тренды в устойчивом окне</h2><p>Проверки объявлены до анализа: окно, направление и порог. Результат диагностический и на вердикт не влияет.</p></div><div style="display:flex;gap:8px;flex-wrap:wrap">${pill('диагностика', 'info')}${pill('неопределённость не оценена', 'info')}</div></div>
+  <div class="sub"><b class="num" style="color:var(--ink)">${rs.length}</b> проверок · наблюдается <b class="num" style="color:var(--ink)">${cnt('TREND_OBSERVED')}</b> · ниже порога ${cnt('NO_MATERIAL_TREND')} · мало ячеек ${cnt('INSUFFICIENT_CELLS')} · недоступно ${cnt('UNAVAILABLE')} · <a class="lnk" href="#tables" data-act="tabgo" data-t="trend" data-k="to-trend">Все проверки</a></div>
+  ${obs.length ? `<div class="grid3">${obs.slice(0, 6).map(card).join('')}</div>` : '<p class="sub">Ни одна проверка не нашла тренд выше объявленного порога. Это не доказывает отсутствие деградации.</p>'}
+  <div class="note"><span style="color:var(--warn)">${I('warn')}</span><div><b>Наблюдение, не диагноз.</b> Рост показывает, что метрика изменилась. Слово «утечка» здесь неуместно: метод не отличает утечку от прогрева кэша и не проверяет, что окно стационарно.</div></div></section>`;
+}
+function trendTable() {
+  const rs = state.trendApplied.map(trendEval).sort((a, b) => (b.status === 'TREND_OBSERVED') - (a.status === 'TREND_OBSERVED')), dirs = { increase: 'рост', decrease: 'спад', either: 'любое' };
+  return `<div class="tw"><table><thead><tr><th scope="col">Проверка</th><th scope="col">Ряд</th><th scope="col">Окно</th><th scope="col">Заявлено</th><th scope="col">Статус</th><th scope="col" class="r">Наклон в час</th><th scope="col" class="r">Сдвиг половин</th><th scope="col" class="r">Порог</th><th scope="col" class="r">Ячейки</th><th scope="col">Причины</th><th scope="col">Ряд</th></tr></thead><tbody>${rs.map(r => { const c = r.c; return `<tr><td class="num">${c.id}</td><td>${trendName(c)}</td><td>${winName(c.win)}<div class="sub">${winTime(r.rg)}</div></td><td>${dirs[c.dir]}</td><td>${trendSt[r.status]}</td><td class="r num" title="${r.slope != null ? r.slope.toExponential(2) + ' на секунду' : ''}">${r.slope != null ? slopeH(r) : '—'}</td><td class="r num">${r.slope != null ? shiftTxt(r) : '—'}</td><td class="r num">${cm(c.gs, 1)} ${uTxt(c.m)}/ч · ${cm(c.gp, 1)}%</td><td class="r num">${r.n} из ${r.expected}</td><td style="white-space:normal;min-width:230px">${r.reasons.map(x => (TREASON[x] || x) + ' <span class="sub num">' + x + '</span>').join('<br>')}</td><td><a class="lnk" href="#deep" data-act="deep" data-m="${c.m}" data-w="${c.wl}" data-s="${'AB'[c.sh]}" data-r="${c.win}" data-t="1" data-k="tt-${c.id}">Открыть</a></td></tr>`; }).join('')}</tbody></table></div><p class="sub">Метод slope-materiality.v1: наклон по методу наименьших квадратов и сдвиг медиан половин окна должны пройти объявленный порог и совпасть по знаку. Вероятностей и поправок на множественность нет. Отсутствие находки не доказывает отсутствие деградации.</p>`;
+}
+function trendSetup() {
+  const d = state.trendDraft, s = state.setup, full = d.length >= 32, online = (s.shA && s.profA !== '__file') || (s.shB && s.profB !== '__file'), stepN = d.filter(c => !STEADY.includes(c.win)).length;
+  const so = (arr, cur) => arr.map(o => `<option value="${o[0]}" ${String(o[0]) === String(cur) ? 'selected' : ''}>${o[1]}</option>`).join('');
+  const rows = d.map((c, i) => `<div class="trow"><input type="text" aria-label="Идентификатор проверки ${i + 1}" value="${c.id}" data-act="tf" data-i="${i}" data-f="id" data-k="tf-${i}-id"><select aria-label="Сервис, проверка ${i + 1}" data-act="tf" data-i="${i}" data-f="wl" data-k="tf-${i}-wl">${so(WLS.map((w, j) => [j, w.n]), c.wl)}</select><select aria-label="Плечо, проверка ${i + 1}" data-act="tf" data-i="${i}" data-f="sh" data-k="tf-${i}-sh">${so([[0, 'A'], [1, 'B']], c.sh)}</select><select aria-label="Признак, проверка ${i + 1}" data-act="tf" data-i="${i}" data-f="m" data-k="tf-${i}-m">${so(TF, c.m)}</select><select aria-label="Окно, проверка ${i + 1}" data-act="tf" data-i="${i}" data-f="win" data-k="tf-${i}-win">${so(TWINS, c.win)}</select><select aria-label="Направление, проверка ${i + 1}" data-act="tf" data-i="${i}" data-f="dir" data-k="tf-${i}-dir">${so([['increase', 'рост'], ['decrease', 'спад'], ['either', 'любое']], c.dir)}</select><input type="number" step="any" min="0" aria-label="Порог наклона в час, проверка ${i + 1}" value="${c.gs}" data-act="tf" data-i="${i}" data-f="gs" data-k="tf-${i}-gs"><input type="number" step="any" min="0" aria-label="Порог сдвига в процентах, проверка ${i + 1}" value="${c.gp}" data-act="tf" data-i="${i}" data-f="gp" data-k="tf-${i}-gp"><button class="btn sm" type="button" data-act="tdel" data-i="${i}" data-k="td-${i}" aria-label="Удалить проверку ${c.id}" title="Удалить проверку" style="padding:0;justify-content:center;width:36px">×</button></div>`).join('');
+  return `<section class="card stack" aria-labelledby="s5"><div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap"><h3 id="s5" style="font:600 17px/1.2 var(--sans)">5. Тренды</h3>${pill('необязательно', 'info', 1)}</div>
+   <p class="sub">Проверки задаются до анализа: сервис, плечо, признак, окно, направление и порог. Менять их после просмотра данных нельзя, иначе результат перестаёт быть проверкой. Результат диагностический: он не меняет вердикт и не оценивает неопределённость. Окна берутся из стадий теста.</p>
+   <div class="ctl" style="justify-content:space-between"><span class="num" style="color:${full ? 'var(--crit)' : 'var(--ink)'}">Проверок ${d.length} из 32</span><div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn sm" type="button" data-act="ttpl" data-k="ttpl">Шаблон для soak</button><button class="btn sm" type="button" data-act="tclr" data-k="tclr">Очистить</button><button class="btn sm" type="button" data-act="tadd" data-k="tadd" ${full ? 'disabled' : ''}>${I('plus', 14)} Добавить проверку</button></div></div>
+   <div style="overflow-x:auto"><div style="min-width:1040px"><div class="trow head"><span>Проверка</span><span>Сервис</span><span>Плечо</span><span>Признак</span><span>Окно</span><span>Заявлено</span><span>Наклон, ед/ч</span><span>Сдвиг, %</span><span></span></div>${rows || '<p class="sub" style="padding:16px 0">Проверок нет. Тренды не будут считаться.</p>'}</div></div>
+   ${stepN ? `<div class="note"><span style="color:var(--warn)">${I('warn')}</span><div><b>${stepN} проверок в окне с разгоном, ступенью или всем тестом.</b> Тренд там опишет профиль нагрузки, а не проблему. Метод стационарность окна не проверяет.</div></div>` : ''}
+   <div class="note" style="background:${online ? 'var(--warn-bg)' : 'var(--soft)'}"><span style="color:${online ? 'var(--warn)' : 'var(--muted)'}">${I('warn')}</span><div><b>План привязан к снимку ресурсов по хэшу.</b> ${online ? 'Сейчас он работает только со снимком из файла: без снимка проверки не запускаются. При онлайн-источниках снимок создаётся во время анализа, и как связать с ним план заранее, пока не решено.' : 'Снимок ресурсов загружается из файла, план привязывается к нему по хэшу.'}</div></div></section>`;
+}
+Object.assign(CLICK, {
+  tadd() { if (state.trendDraft.length < 32) state.trendDraft.push(tc('check-' + (state.trendDraft.length + 1), 1, 1, 'mem', 'soak', 'increase', 1, 2.5)); },
+  tdel(d) { state.trendDraft.splice(+d.i, 1); }, ttpl() { state.trendDraft = clone(TREND_DEFAULT); }, tclr() { state.trendDraft = []; },
+  stage(d) { state.range = d.r; state.showTrend = false; go('deep'); }, tabgo(d) { state.tab = d.t; go('tables'); }
+});
+Object.assign(CHANGE, {
+  tf(a, d) { const c = state.trendDraft[+d.i], f = d.f; c[f] = f === 'gs' || f === 'gp' ? Math.max(0, parseFloat(a.value) || 0) : f === 'wl' || f === 'sh' ? +a.value : a.value; },
+  showTrend(a) { state.showTrend = a.checked; }
+});
+function trendObs(hd) {
+  return state.trendApplied.map(trendEval).filter(r => r.status === 'TREND_OBSERVED').slice(0, 2).map(r => `<article class="card hyp">${hd('Наблюдение: ' + trendName(r.c), 'наблюдение, не диагноз', 'info')}<p>В окне «${winName(r.c.win)}» ряд меняется на ${slopeH(r)}, сдвиг медианы половин ${shiftTxt(r)}. Метод не проверяет стационарность окна и не оценивает неопределённость, поэтому это повод проверить, а не вывод о причине.</p><div class="evl"><a class="pill info" style="text-decoration:none;color:var(--accent)" href="#deep" data-act="deep" data-m="${r.c.m}" data-w="${r.c.wl}" data-s="${'AB'[r.c.sh]}" data-r="${r.c.win}" data-t="1" data-k="ev-tr-${r.c.id}">Ряд и тренд →</a></div></article>`).join('');
+}
+const R = { new: rNew, rules: rRules, history: rHistory, overview: rOverview, deep: rDeep, tables: rTables, ai: rAI, compare: rCompare };
+function render() {
+  renderTop();
+  $('#nav').innerHTML = `<a class="newbtn" href="#new" ${state.view === 'new' ? 'aria-current="page"' : ''}>${I('plus')}<span>Новый анализ</span></a>` + NAVG.map(g => `<span class="grp">${g[0]}</span>` + g[1].map(v => `<a href="#${v[0]}" ${v[0] === state.view ? 'aria-current="page"' : ''}>${I(v[2])}<span>${v[1]}</span>${v[0] === 'tables' && evalPolicy(state.applied).f ? `<span class="cnt pill crit s">${evalPolicy(state.applied).f}</span>` : ''}</a>`).join('')).join('');
+  ALLV.forEach(v => { $('#v-' + v).hidden = v !== state.view; });
+  const el = $('#v-' + state.view); el.innerHTML = R[state.view]();
+  if (state.lastK) { const f = el.querySelector('[data-k="' + state.lastK + '"]'); if (f) { f.focus({ preventScroll: true }); if (f.type === 'search' || f.type === 'text') f.setSelectionRange(f.value.length, f.value.length); } }
+}
+function go(v) { state.view = v; state.lastK = null; if (location.hash !== '#' + v) history.replaceState(null, '', '#' + v); render(); window.scrollTo(0, 0); }
+document.addEventListener('click', e => {
+  const a = e.target.closest('[data-act]'); if (!a || a.tagName === 'SELECT' || a.tagName === 'INPUT') return;
+  const d = a.dataset; state.lastK = d.k || null; const act = d.act;
+  if (a.tagName === 'A') e.preventDefault();
+  if (act === 'deep') { openDeep(d.m, +d.x || 0, d.w, d.s, d.r, d.t); return; }
+  if (act === 'go') { go(d.v); return; }
+  if (CLICK[act]) { CLICK[act](d); render(); return; }
+  if (act === 'toast') toast(d.msg); else if (act === 'ov') state.ov[d.m] = state.ov[d.m] ? 0 : 1;
+  else if (act === 'metric') { state.metric = d.m; if (!MET[d.m].tx) state.tx = 0; } else if (act === 'pin') { const i = state.pinned.indexOf(d.m); i < 0 ? state.pinned.push(d.m) : state.pinned.splice(i, 1); }
+  else if (act === 'range') state.range = d.r; else if (act === 'dtab') state.dtab = d.t; else if (act === 'tab') state.tab = d.t;
+  else if (act === 'sort') state.txSort = { k: d.s, d: state.txSort.k === d.s ? -state.txSort.d : (d.s === 'n' ? 1 : -1) };
+  else if (act === 'airun') { state.ai = 'loading'; render(); setTimeout(() => { state.ai = 'done'; if (state.view === 'ai') render(); }, 1400); return; }
+  render();
+});
+document.addEventListener('change', e => {
+  const a = e.target.closest('[data-act]'); if (!a) return; const d = a.dataset; state.lastK = d.k; const act = d.act;
+  if (act === 'tx') state.tx = +a.value; else if (act === 'agg') state.agg = +a.value; else if (act === 'base') state.base = a.checked; else if (act === 'txf') state.txF = a.value;
+  else if (act === 'aisel') { state.aiSel[d.s] = a.checked ? 1 : 0; } else if (act === 'aiok') state.aiOk = a.checked; else if (act === 'cmpok') state.cmpOk = a.checked; else if (act === 'ctx') state.cmpTx = +a.value; else if (act === 'bsel') { state.baselineId = a.value; state.setup.baseline = a.value; } else if (CHANGE[act]) { CHANGE[act](a, d); } else return;
+  render();
+});
+document.addEventListener('input', e => { const a = e.target.closest('[data-act="txq"],[data-act="svcq"]'); if (!a) return; if (a.dataset.act === 'txq') state.txQ = a.value; else state.svcQ = a.value; state.lastK = a.dataset.k; render(); });
+document.addEventListener('click', e => { const v = e.target.closest('a.verdict'); if (v) { e.preventDefault(); state.tab = 'rules'; go('tables'); } });
+window.addEventListener('hashchange', () => { const v = location.hash.slice(1); if (R[v] && v !== state.view) { state.view = v; state.lastK = null; render(); } });
+{ const v = location.hash.slice(1); if (R[v]) state.view = v; render(); }
+</script>
+
+</body>
+</html>

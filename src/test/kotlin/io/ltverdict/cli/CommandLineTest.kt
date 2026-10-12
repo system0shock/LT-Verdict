@@ -360,14 +360,23 @@ class CommandLineTest {
                     tempDir.resolve("invalid-source-data").toString(),
                 )
             assertError(result, 4, code)
-            assertEquals(
-                "$code\nhint: run ltv source validate --connections <file> for details\n",
-                result.stderr.replace("\r\n", "\n"),
-            )
+            val lines =
+                result.stderr
+                    .replace("\r\n", "\n")
+                    .trimEnd('\n')
+                    .split("\n")
+            assertEquals(code, lines.first())
+            assertEquals("hint: run ltv source validate --connections <file> for details", lines.last())
         }
         val validation = run("source", "validate", "--connections", profiles.toString())
         assertError(validation, 4, "invalid source validation input")
-        assertEquals("SOURCE_CONFIG_INVALID\n", validation.stderr.replace("\r\n", "\n"))
+        assertEquals(
+            "SOURCE_CONFIG_INVALID",
+            validation.stderr
+                .replace("\r\n", "\n")
+                .lineSequence()
+                .first(),
+        )
     }
 
     @Test

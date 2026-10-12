@@ -581,6 +581,15 @@ ltv source hash --run <run-id> --analysis <analysis-id> [--data-dir <path>]
 (`query_range` для Prometheus и VictoriaMetrics, `/query` для InfluxQL), и по умолчанию просит последние 5 минут с шагом 15 с. Адрес и учётные данные берутся
 только из профиля, запрос из файла профиля выбирается по `--query-id`; произвольное выражение в этой версии не поддерживается.
 
+При ошибке конфигурации первая строка stderr сохраняет код `SOURCE_CONFIG_INVALID`,
+следующая указывает поле через JSON pointer и кратко объясняет причину на английском:
+например, `/connections/0/database: database is required for source_kind influxdb`.
+В режиме `source validate --format json` ошибка разбора также выводится в stdout как
+канонический JSON с `schema_version: source-check.v1`, `valid: false` и массивом
+`errors: [{code, json_pointer, message}]`;
+код выхода остаётся 4. Правила полей сохраняются: `database` обязателен для InfluxDB
+и запрещён для Prometheus и VictoriaMetrics.
+
 Что показывает `probe` (`source-probe.v1`): число серий в ответе (`series_count`, точное), до 20 серий с метками и числом заполненных ячеек, до 16 ключей меток
 с числом различных значений и пятью образцами, предупреждения источника и поле `decoder_check`: принял бы боевой декодер анализа те же байты
 (боевой анализ требует ровно одну серию, поэтому три серии дают `AMBIGUOUS_SERIES`). `decoder_check` не проверяет метку плеча, отрицательные

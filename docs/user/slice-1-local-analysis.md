@@ -2466,6 +2466,11 @@ policy из stdin (до 1 MiB, как файл): `cat policy.json | ltv analyze 
 В Windows PowerShell 5.1 конвейер перекодирует текст; используйте `cmd /c "... < policy.json"`
 или PowerShell 7.4+.
 
+**Снимок ресурсов: `--resources <snapshot.json>`.** Окна снимка должны лежать
+внутри прогона; без объявленных окон используются полные ячейки пересечения.
+Правила, коды отказов и пример исправления:
+[«Окно сбора: правила»](online-sources.md#окно-сбора-правила).
+
 **Стадии нагрузки: `--stages <load-stages.json>`.** Объявляет стадии прогона; вердикт
 считается по окну `steady`, разгон исключён. Параметр указывается один раз и не
 сочетается с `--resources`, `--capacity` и `--source` (код `4`). Формат, коды ошибок и
@@ -2604,6 +2609,10 @@ PowerShell 7.4+ либо redirection в `cmd`; Windows PowerShell 5.1 перек
 native stdout ([поведение redirection](https://learn.microsoft.com/en-us/powershell/module/microsoft.powershell.core/about/about_redirection)).
 Перед запуском CLI остановите UI, использующий тот же data
 directory; скачивание из работающего UI доступно без остановки.
+При занятом каталоге CLI сохраняет `DATA_DIR_BUSY` в первой строке stderr и код
+выхода `6`, а во второй строке указывает PID владельца, вид команды (`server`
+или `cli`), время захвата блокировки в ISO-8601 и совет остановить процесс или
+выбрать другой `--data-dir`, если данные владельца доступны и корректны.
 
 Успешный export возвращает `0` даже для `FAIL` или `NO_VERDICT`: exit описывает
 экспорт, исходный verdict остаётся в отчёте. Отсутствующий run/analysis даёт

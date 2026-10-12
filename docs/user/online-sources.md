@@ -40,6 +40,251 @@ CLI использует [пример source request](../contracts/sources/v1/r
 описаны ниже. Subpath установки задаётся в base URL. Redirects и произвольные
 URLs из UI запрещены.
 
+## Схема файла connections по виду источника
+
+Правила ниже соответствуют `SourceConfig.kt` и вызываемым им валидаторам.
+Имена видов точные: `influxdb` и `postgresql`, а не `influx` и `postgres`.
+**У `prometheus` и `victoria_metrics` поле `database` запрещено;
+у `influxdb` оно обязательно.**
+
+Неизвестные поля на верхнем уровне, в профиле, запросе, `auth` и вложенных
+объектах отвергают весь файл с кодом `SOURCE_CONFIG_INVALID`. Например,
+`"postgres": []` рядом с `connections` недопустимо: PostgreSQL-профили
+помещаются в общий массив `connections`. Необязательное поле нужно опускать,
+а не заменять на `null`; пустой массив также не отменяет запрет поля.
+Ключи объекта `labels` — пользовательские метки, а не поля схемы.
+
+### Верхний уровень файла
+
+| `source_kind` в `connections` | Обязательные поля | Необязательные поля | Запрещённые поля и ограничения |
+| --- | --- | --- | --- |
+| `prometheus`, `victoria_metrics`, `influxdb`, `opensearch` | `schema_version`, `connections` | нет | любые другие; версия `source-connections.v1`, `source-connections.v2` или `source-connections.v3` |
+| `postgresql` | `schema_version`, `connections` | нет | любые другие; только `source-connections.v2` или `source-connections.v3` |
+
+Корень — JSON-объект; `connections` — массив из 1..16 профилей с уникальными
+`id` для всех видов вместе. Файл — до 1 048 576 байт (1 МиБ), иначе
+`SOURCE_CONFIG_TOO_LARGE`; неверный UTF-8 — `SOURCE_CONFIG_INVALID_UTF8`.
+JSON-сканер ограничивает глубину значением 12, числовой токен — 64 байтами,
+модуль показателя степени — 64; повторяющиеся ключи не допускаются.
+
+### Уровень профиля
+
+В таблице «общие HTTP» означает обязательные `id`, `source_kind`, `transport`,
+`base_url`; «HTTP-настройки» — необязательные `auth`, `tls`,
+`allow_insecure_http`, `governor`. Все поля, не перечисленные как разрешённые,
+запрещены.
+
+| `source_kind` | Обязательные поля | Необязательные поля | Запрещённые поля и условия |
+| --- | --- | --- | --- |
+| `prometheus` | общие HTTP, `queries` | HTTP-настройки, `rules`, `datasource_uid` для `grafana_proxy`; в `v3`: `scrape_interval_ms`, `arm` | `database`, `opensearch`, поля PostgreSQL; `datasource_uid` при `direct` |
+| `victoria_metrics` | общие HTTP, `queries` | как у `prometheus` | как у `prometheus` |
+| `influxdb` | общие HTTP, `database`, `queries` | как у `prometheus` | `opensearch`, поля PostgreSQL; `datasource_uid` при `direct` |
+| `opensearch` | общие HTTP, `opensearch` | HTTP-настройки | только `transport: direct`; `queries`, `rules`, `database`, `datasource_uid`, `scrape_interval_ms`, `arm`, поля PostgreSQL |
+| `postgresql` | `id`, `source_kind`, `source_database_id`, `host`, `database`, `username_env`, `password_env` | `port` (5432), `allow_insecure` (false), `tables` ([]), `pg_profile` | все HTTP-поля, включая `auth`, `tls`, `queries`, `rules`, `transport`, `base_url` |
+
+HTTP `id`, `arm` и InfluxDB `database` — непустые строки до 128 байт UTF-8
+без управляющих символов. `transport` — `direct` или `grafana_proxy`;
+у второго обязателен `datasource_uid`, соответствующий
+`[A-Za-z0-9._~-]{1,128}`, кроме `.` и `..`.
+`base_url` требует `http`/`https` и host; порт, если задан, — 1..65535.
+Запрещены userinfo, query, fragment, `%` в пути и сегменты `.`/`..`.
+При `http` и `auth`, отличном от `none`, требуется
+`allow_insecure_http: true` (по умолчанию false).
+В `v1`/`v2` поля `scrape_interval_ms` и `arm` запрещены; в `v3`
+`scrape_interval_ms` — 1000..3600000, кратно 1000. Если у профиля задан `arm`,
+метка `arm` запроса (если она есть) должна ему равняться.
+
+У `governor` все поля необязательны: `requests_per_second` — больше 0 и
+не больше 1000 (0.5), `burst` — 1..1000 (1), `max_concurrent` — 1..64 (1),
+`timeout_ms` — 1..300000 (30000), `max_attempts` — 1..10 (3),
+`honor_retry_after` — boolean (true), `max_requests_per_run` — 0..1000000
+(по умолчанию отсутствует). В скобках указаны значения по умолчанию.
+Правила `tls` описаны в разделе «mTLS»: пути до 1024 байт, объект непустой,
+только HTTPS; `client_keystore_file` и `client_keystore_password_env`
+задаются вместе.
+
+В `opensearch` обязательны `indices`, `timestamp_field`, `service_field`,
+`error_type_field`, `message_field`. `indices` — 1..16 строк до 128 байт,
+соответствующих `[a-z0-9._*-]+`: нельзя `_all`, только звёздочки, `..`
+или первый символ из `-._`. Имена полей — до 128 байт, соответствуют
+`[A-Za-z_@][A-Za-z0-9_@-]*(\.[A-Za-z_@][A-Za-z0-9_@-]*)*`.
+Необязательны `group_limit` — 1..200 (50), `samples_per_group` — 0..5 (2),
+`sample_message_bytes_max` — 1..65536 (4096). Остальные поля запрещены.
+При чтении файла ошибки формы и значений mapping дают
+`SOURCE_CONFIG_INVALID` (внутренний `OPENSEARCH_INVALID_MAPPING`
+преобразуется в этот код).
+
+Для PostgreSQL `id` и `source_database_id` — непустые строки до 128 байт
+без управляющих символов; второй не может начинаться с `jdbc:` или содержать
+`://`. `database` — до 63 байт; `host` — допустимое имя хоста или IPv6-адрес,
+до 253 символов; `port` — 1..65535. `tables` содержит не более 16 уникальных
+пар (`schema`, `table`). В каждой записи обязательны `schema`, `table`,
+`columns`; необязательны `key` ([]), `row_limit` — 1..10000 (10000),
+`byte_limit` — 2..1048576 (1048576). `columns` — 1..128 уникальных SQL
+идентификаторов; `key` — уникальное подмножество `columns`.
+`schema`, `table` и имена столбцов — непустые строки до 63 байт UTF-8
+без управляющих символов; дополнительных ограничений на их алфавит нет.
+В `pg_profile` обязательны все три положительных Int: `server_id`,
+`start_sample_id`, `end_sample_id`, причём start меньше end.
+Другие вложенные поля запрещены. Ошибки формы дают `SOURCE_CONFIG_INVALID`;
+нарушения правил `validatePostgresProfile` при чтении файла преобразуются
+в `SOURCE_CONFIG_INVALID`.
+
+### Уровень query
+
+| `source_kind` | Обязательные поля | Необязательные поля | Запреты и ограничения |
+| --- | --- | --- | --- |
+| `prometheus`, `victoria_metrics` | `id`, `expression`, `metric`, `unit`, `entity`, `role`, `aggregation` | `labels`; только в `v3`: `non_negative_events` (false) | другие поля; `expression` обязательно содержит `$__interval` |
+| `influxdb` | как у `prometheus` | как у `prometheus` | другие поля; InfluxQL с `$__start`, `$__end`, `$__interval`, необязательным `$__offset` |
+| `opensearch`, `postgresql` | нет | нет | `queries` целиком запрещено |
+
+На метрический профиль требуется 1..64 запросов с уникальными `id`.
+`id`, `metric`, `unit`, `entity` — непустые строки до 128 байт UTF-8;
+`expression` — до 65536 байт; управляющие символы запрещены.
+`role` — `system` или `generator`; `aggregation` — `interval_mean`,
+`interval_rate`, `interval_max` или `interval_min`.
+`labels` — объект до 16 строковых меток: ключ до 128 байт, значение до
+512 байт, оба непустые и без управляющих символов.
+
+InfluxQL должен начинаться с `SELECT` и содержать `FROM`, выбирать `value`
+либо использовать `AS value` (кавычки вокруг `value` допустимы).
+Другие `$__...`, `;`, комментарии `--`, `/*`, `*/`, `#` и `INTO`
+запрещены; `fill(...)` допускает только `null` или `none`.
+
+`rules` — до 256 записей с уникальными `id`. Обязательны `id`, `series_id`,
+`unit`, `operator` (`gt`/`lt`), `threshold`, `effect` (`sla`/`diagnostic`)
+и `min_consecutive_cells` (1..100000). `series_id` ссылается на query,
+`unit` совпадает с его единицей; строковые идентификаторы — до 128 байт.
+В `v3` вместо cells можно задать `min_consecutive_span_ms` — 1..86400000;
+оба поля вместе запрещены. `threshold`: точность до 32 цифр, scale до 12,
+модуль до 10^18. В `v3` правило с `operator: gt` и `threshold <= 0`
+для query с `non_negative_events: true` не допускает `interval_min`; подробности
+семантики событий и автошага приведены ниже.
+
+### Уровень auth
+
+Парсер допускает все четыре типа для каждого HTTP-вида независимо от вида
+источника; примет ли сервер выбранный тип, выясняется только запросом
+(`ltv source probe`).
+
+| `source_kind` | `auth.type` | Обязательные поля внутри `auth` | Необязательные поля | Запрещённые поля |
+| --- | --- | --- | --- | --- |
+| `prometheus`, `victoria_metrics`, `influxdb`, `opensearch` | `none` | `type` | нет | все остальные |
+| те же HTTP-виды | `bearer`, `token` | `type`, `token_env` | нет | все остальные |
+| те же HTTP-виды | `basic` | `type`, `username_env`, `password_env` | нет | все остальные |
+| `postgresql` | не применяется | `username_env`, `password_env` на уровне профиля | нет | объект `auth` |
+
+HTTP `auth` можно опустить: действует `none`. Имена переменных окружения
+соответствуют `[A-Za-z_][A-Za-z0-9_]{0,127}` (до 128 ASCII-символов).
+Значения credentials в файл не записываются.
+
+### Минимальные валидные примеры
+
+Каждый блок — отдельный полный файл. Prometheus и InfluxDB используют запросы
+из существующих [PromQL](../contracts/sources/v1/connections.example.json)
+и [InfluxDB](../contracts/sources/v1/influxdb-connections.example.json) примеров;
+VictoriaMetrics использует тот же PromQL. OpenSearch и PostgreSQL сокращены
+из [OpenSearch](../contracts/sources/v1/opensearch-connections.example.json)
+и [PostgreSQL](../contracts/sources/v1/postgresql-connections.example.json)
+примеров. Валидная форма не гарантирует доступность адреса или метрики.
+
+#### Prometheus
+
+```json
+{
+  "schema_version": "source-connections.v1",
+  "connections": [{
+    "id": "local-prometheus", "source_kind": "prometheus",
+    "transport": "direct", "base_url": "http://127.0.0.1:9090",
+    "queries": [{
+      "id": "cpu",
+      "expression": "avg_over_time(cpu_used_ratio{instance=\"host\"}[$__interval])",
+      "metric": "cpu_used", "unit": "ratio", "entity": "host",
+      "role": "system", "aggregation": "interval_mean"
+    }]
+  }]
+}
+```
+
+#### VictoriaMetrics
+
+```json
+{
+  "schema_version": "source-connections.v1",
+  "connections": [{
+    "id": "local-vm", "source_kind": "victoria_metrics",
+    "transport": "direct", "base_url": "http://127.0.0.1:8428",
+    "queries": [{
+      "id": "cpu",
+      "expression": "avg_over_time(cpu_used_ratio{instance=\"host\"}[$__interval])",
+      "metric": "cpu_used", "unit": "ratio", "entity": "host",
+      "role": "system", "aggregation": "interval_mean"
+    }]
+  }]
+}
+```
+
+#### InfluxDB
+
+```json
+{
+  "schema_version": "source-connections.v1",
+  "connections": [{
+    "id": "local-influxdb", "source_kind": "influxdb",
+    "transport": "direct", "base_url": "http://127.0.0.1:8086",
+    "database": "metrics",
+    "queries": [{
+      "id": "cpu",
+      "expression": "SELECT mean(\"cpu\") AS \"value\" FROM \"host\" WHERE time >= $__start AND time < $__end GROUP BY time($__interval, $__offset) fill(null)",
+      "metric": "cpu_used", "unit": "ratio", "entity": "host",
+      "role": "system", "aggregation": "interval_mean"
+    }]
+  }]
+}
+```
+
+#### OpenSearch
+
+```json
+{
+  "schema_version": "source-connections.v1",
+  "connections": [{
+    "id": "errors", "source_kind": "opensearch",
+    "transport": "direct", "base_url": "https://logs.example.invalid",
+    "opensearch": {
+      "indices": ["application-errors-*"],
+      "timestamp_field": "@timestamp", "service_field": "service.keyword",
+      "error_type_field": "error.type.keyword", "message_field": "message"
+    }
+  }]
+}
+```
+
+#### PostgreSQL
+
+```json
+{
+  "schema_version": "source-connections.v2",
+  "connections": [{
+    "id": "pg", "source_kind": "postgresql",
+    "source_database_id": "load-test-db",
+    "host": "postgres.example.test", "database": "loadtest",
+    "username_env": "LTV_POSTGRES_USER",
+    "password_env": "LTV_POSTGRES_PASSWORD"
+  }]
+}
+```
+
+### Чек-лист перед `ltv analyze`
+
+Сначала выполните `ltv source validate --connections <file>` и проверьте
+статусы в отчёте, а не только код выхода. Затем для `prometheus`,
+`victoria_metrics` или `influxdb` выполните
+`ltv source probe --connections <file> --profile <id> --query-id <id>`:
+проверьте доступность, число серий и `decoder_check` для нужного запроса.
+OpenSearch и PostgreSQL команда `probe` пока не поддерживает.
+Подробности — в разделе «Проверка профиля» ниже.
+
 ## Правила ресурсных SLA
 
 Пороги CPU, памяти и других ресурсных рядов задаются массивом `rules` в
@@ -146,6 +391,108 @@ evidence bytes не меняются.
 `window.origin: explicit` в `v3` повторяет семантику `v2`: `start_epoch_ms`,
 `end_epoch_ms`, `step_ms` и интервал из полных cells.
 [Пример explicit-окна](../contracts/sources/v3/examples/valid/explicit-window.json).
+
+## Окно сбора: правила
+
+Для метрических источников окно запроса становится сеткой resource snapshot,
+а явное окно — также окном анализа. Время задаётся в UTC epoch milliseconds.
+Период JTL-прогона — от минимального времени начала сэмпла до максимального
+времени его окончания, включая длительность последнего сэмпла. Ячейки и окна
+анализа полуоткрытые: `[start, end)`, правая граница не входит в окно.
+
+### Явное окно источника
+
+- `start_epoch_ms >= 0`, `end_epoch_ms > start_epoch_ms`; обе границы должны
+  находиться в поддерживаемом диапазоне timestamps (до
+  `253402300799999 ms`, то есть 9999-12-31T23:59:59.999Z).
+  Нарушение даёт `SOURCE_REQUEST_INVALID`:
+  проверьте границы и единицы: значения в миллисекундах; микросекунды или
+  наносекунды выходят за диапазон.
+- `(end_epoch_ms - start_epoch_ms) % step_ms == 0`: длительность состоит из
+  полных ячеек. Нарушение даёт `SOURCE_REQUEST_INVALID`: скорректируйте конец
+  относительно начала или выберите шаг, делящий длительность нацело.
+  Начало явного окна не обязано быть кратным шагу относительно Unix epoch.
+- Шаг метрического snapshot — целое число секунд от 1 до 60
+  (`1000..60000 ms`). Нарушение даёт `SOURCE_REQUEST_INVALID`: задайте
+  допустимый шаг. Для `v1`/`v2` это проверяется до выборки метрического профиля;
+  исключение для OpenSearch описано в разделе «Окно выборки».
+- Число ячеек — от 1 до 100 000. Нарушение даёт `SOURCE_REQUEST_INVALID`:
+  сократите окно или увеличьте шаг с сохранением кратности. В `v4` с
+  `step_mode: auto` верхний предел проверяется при подборе применённого шага;
+  если подходящего шага нет, приходит `AUTO_STEP_UNSATISFIABLE`. Сократите
+  период или число рядов; остальные ограничения см. в разделе «Автошаг».
+- Явное окно должно целиком лежать в периоде нагрузки:
+  `start_epoch_ms >= run_start` и `end_epoch_ms <= run_end`. Совпадение границ
+  разрешено; дополнительный отступ внутрь не требуется. Выход за любую границу
+  даёт `RESOURCE_WINDOW_OUTSIDE_RUN` при связывании с прогоном: сузьте окно до
+  границ JTL с сохранением полных ячеек или выберите авто-окно. Явное окно
+  автоматически не обрезается. Это правило относится к профилям, создающим
+  resource snapshot; OpenSearch такого снимка не создаёт.
+
+### Загруженный snapshot и пересечение с прогоном
+
+При `--resources` сетка начинается в `start_epoch_ms` и заканчивается в
+`start_epoch_ms + point_count * step_ms`. Недопустимые начало, конец или шаг
+дают `INVALID_GRID`: исправьте сетку (шаг — целые секунды 1..60).
+`point_count` вне 1..100 000, более 64 окон, более 1024 рядов или более
+1 500 000 ячеек суммарно дают `RESOURCE_LIMIT_EXCEEDED`: сократите снимок или
+увеличьте шаг и пересоберите значения рядов. Снимок должен относиться к тем же
+байтам нагрузки; `RESOURCE_LOAD_HASH_MISMATCH` исправляется выбором снимка
+для данного JTL или повторным сбором по этому файлу.
+
+Если в snapshot объявлены `windows`, для каждого окна действуют проверки:
+
+- `from_epoch_ms < to_epoch_ms`, иначе `INVALID_WINDOW`: задайте непустое окно.
+- Обе границы внутри сетки snapshot, иначе `WINDOW_OUTSIDE_GRID`: сузьте окно
+  или пересоберите снимок с нужным покрытием.
+- Обе границы на сетке относительно `snapshot.start_epoch_ms`, иначе
+  `WINDOW_NOT_ON_GRID`: выровняйте границы по шагу от начала снимка.
+- Идентификаторы окон уникальны, иначе `DUPLICATE_WINDOW_ID`: переименуйте
+  повторяющийся `id`. Окна не пересекаются, иначе `OVERLAPPING_WINDOWS`:
+  разделите их; соседние окна с общей границей разрешены.
+- Каждое окно целиком внутри прогона, с разрешённым совпадением границ, иначе
+  `RESOURCE_WINDOW_OUTSIDE_RUN`: исправьте все объявленные окна, а не только
+  выбранное для правила.
+
+Без `windows` (поле отсутствует или массив пуст) применяется
+`resource_binding.mode: run_intersection`: берётся пересечение периода прогона
+и сетки snapshot. Начало пересечения округляется вверх, конец вниз по сетке
+**снимка**, чтобы оставить только полные ячейки. Если не осталось ни одной,
+возникает `RESOURCE_WINDOW_NO_FULL_CELLS`: обеспечьте перекрытие хотя бы одной
+целой ячейки, пересобрав снимок с подходящими границами или меньшим шагом.
+Одного касания границ или частичного перекрытия ячейки недостаточно.
+
+Авто-окно источника расширяет распознанный период на `margin_ms` и выравнивает
+начало вниз, конец вверх по абсолютной сетке шага (с обрезкой начала до нуля).
+Оно намеренно может быть шире прогона. Полученный snapshot не объявляет
+`windows`, поэтому запас обрезается через `run_intersection`, а неполные
+краевые ячейки исключаются. Исходный снимок сохраняется; анализ использует
+только полученное окно. Границы видны в `resource_binding`:
+`snapshot_from_epoch_ms`/`snapshot_to_epoch_ms` и
+`evaluation_from_epoch_ms`/`evaluation_to_epoch_ms`. Отказы распознавания и
+их исправления перечислены в разделе «Авто-окно» ниже; авто-окно и автошаг —
+разные настройки.
+
+### Пример: прогон 10:00:00–10:30:00, шаг 15 с
+
+Все времена ниже относятся к одному дню в UTC. Длительность прогона —
+1800 с, то есть 120 ячеек. Предполагается корректный snapshot для этого JTL.
+
+| Окно | Результат и исправление |
+| --- | --- |
+| Явное 10:00:00–10:30:00 | Проходит: 120 ячеек, совпадение границ разрешено. |
+| Явное 10:00:15–10:29:45 | Проходит: 1770 / 15 = 118 ячеек внутри прогона. |
+| Явное 10:00:01–10:29:46 | Проходит: 1785 / 15 = 119 ячеек; начало задаёт сетку. |
+| Явное 10:00:00–10:29:59 | `SOURCE_REQUEST_INVALID`: 1799 с не кратны 15; задайте конец 10:29:45 или 10:30:00. |
+| Явное 09:59:45–10:30:00 | `RESOURCE_WINDOW_OUTSIDE_RUN`: начало раньше прогона; задайте 10:00:00. |
+| Явное 10:00:00–10:30:15 | `RESOURCE_WINDOW_OUTSIDE_RUN`: конец позже прогона; задайте 10:30:00. |
+| Auto с margin 60 с | Снимок 09:59:00–10:31:00 (128 ячеек); анализ 10:00:00–10:30:00 (120 ячеек). |
+| Снимок без окон 10:29:50–10:30:05 | `RESOURCE_WINDOW_NO_FULL_CELLS`: пересечение длится 10 с и не содержит целой ячейки; пересоберите снимок с ячейкой 10:29:45–10:30:00. |
+
+Для загруженного снимка с началом сетки 10:00:00 окно
+10:00:01–10:29:46, в отличие от отдельного запроса источника, даёт
+`WINDOW_NOT_ON_GRID`: обе границы сдвинуты на 1 с относительно сетки.
+Исправление — например, объявить 10:00:15–10:29:45.
 
 ## Авто-окно
 
@@ -426,6 +773,143 @@ duplicate/off-grid timestamps, histograms и неоднозначные labels �
 Непустые source warnings в первой поставке также отклоняют query (`SOURCE_WARNINGS`):
 частично отброшенные источником данные не выдаются за полный ответ.
 
+## Как писать выражения
+
+Запросы из Grafana нужно адаптировать вручную: LT Verdict не применяет переменные
+dashboard и panel transformations. В PromQL `expression` обязательно должен
+содержать буквальный `$__interval`, иначе профиль отклоняется с
+`SOURCE_CONFIG_INVALID`. Перед запросом он заменяется применённым шагом в
+миллисекундах: при `step_ms: 15000` селектор `[$__interval]` станет `[15000ms]`.
+`$__rate_interval` автоматически не вычисляется и не заменяется.
+
+Для автошага, который фактически увеличивает шаг, правило строже: выражение
+должно содержать хотя бы один range selector, и каждый селектор должен быть
+`[$__interval]` (пробелы внутри скобок допустимы). Если профиль уже прошёл
+проверку наличия placeholder, смешанные окна (например, `[5m]` вместе с
+`[$__interval]`) и подзапрос `[$__interval:15s]` при огрублении дают
+`AUTO_STEP_QUERY_NOT_INTERVAL_BOUND`. Выражение только с `[5m]`, без
+placeholder, раньше отклоняется с `SOURCE_CONFIG_INVALID`.
+Строковые литералы при этой проверке игнорируются. Для InfluxQL требуется один
+`SELECT` и группировка `GROUP BY time($__interval)`: все найденные `time(...)`
+должны использовать `$__interval`. Так окно агрегации следует за сеткой при
+огрублении, а не остаётся прежним. При `fixed` или автошаге без огрубления эта
+дополнительная проверка не выполняется; наличие placeholder само по себе не
+доказывает корректность PromQL. Остальные условия автошага описаны выше.
+
+### Примеры из Grafana: до и после
+
+Instant gauge без окна не содержит placeholder и даёт `SOURCE_CONFIG_INVALID`.
+Для контроля пиков памяти одного контейнера используйте максимум по ячейке
+и укажите `aggregation: interval_max`:
+
+```promql
+# До
+container_memory_working_set_bytes{namespace="app",pod="api-0",container="api"}
+# После
+max_over_time(container_memory_working_set_bytes{namespace="app",pod="api-0",container="api"}[$__interval])
+```
+
+Фильтры должны выбирать один ряд, включая нужный instance при дублирующем
+сборе. Если нужно среднее или минимум, используйте `avg_over_time` или
+`min_over_time` и соответствующую `aggregation`.
+
+Для скорости счётчика замените фиксированное окно Grafana на окно шага
+и укажите `aggregation: interval_rate`:
+
+```promql
+# До
+sum(rate(http_requests_total{job="api"}[5m]))
+# После
+sum(rate(http_requests_total{job="api"}[$__interval]))
+```
+
+Это меняет окно усреднения скорости. Для `rate` нужны как минимум два сэмпла
+в окне: шаг, равный scrape interval, может дать пропуски. Выбирайте шаг с
+учётом частоты сбора; увеличение шага меняет разрешение и должно соответствовать
+правилам SLA. Простая замена `$__rate_interval` на `$__interval` не гарантирует
+достаточного числа сэмплов.
+Если автошаг укрупняет шаг, правило `gt` на таком ряду отклоняется с
+`AUTO_STEP_AGGREGATION_MISMATCH`: нужна `interval_max`, либо ряд должен быть
+объявлен `non_negative_events` с правилом `gt` и порогом не выше 0 (см.
+«Автошаг»).
+
+`sum by (pod)` сохраняет отдельный ряд на каждый pod. Если pods несколько,
+ответ отклоняется с `AMBIGUOUS_SERIES`, даже если все окна правильные.
+Если нужен общий расход CPU сервиса, уберите группировку и укажите
+`aggregation: interval_rate`:
+
+```promql
+# До
+sum by (pod) (rate(container_cpu_usage_seconds_total{namespace="app",container="api"}[$__interval]))
+# После
+sum(rate(container_cpu_usage_seconds_total{namespace="app",container="api"}[$__interval]))
+```
+
+Если нужны отдельные pods, объявите отдельный query для каждого с точным
+фильтром pod. Каждый expression должен вернуть ровно одну серию за всё окно,
+а не только по одной в каждый момент: смена labels тоже может создать несколько
+серий. LT Verdict не складывает их автоматически. Ожидаемые `labels` проверяются
+как subset фактических меток; после `sum` без группировки метки исчезают,
+поэтому ожидаемые метки такого query нужно согласовать с результатом.
+
+### Разреженные серии и нули
+
+Если источник не вернул точку на границе ячейки, в снимке остаётся `null`.
+Интерполяции и автоматического заполнения нулями нет; `NaN`, `Inf`, `+Inf`
+и `-Inf` тоже становятся `null`. Полностью пустой результат отмечается
+`EMPTY_RESULT` и сохраняется all-null рядом. Отсутствие данных не является
+доказательством нулевого расхода или успешного SLA.
+
+Добавляйте `or vector(0)` только если по смыслу метрики отсутствие серии
+действительно означает ноль, например для событий, которые публикуются только
+при возникновении. Для общего числа событий без labels можно написать:
+
+```promql
+sum(increase(errors_total{job="api"}[$__interval])) or vector(0)
+```
+
+Здесь `sum` без группировки оставляет один ряд без меток, совпадающий с
+`vector(0)`. Если левая часть сохраняет labels, простой `or vector(0)` может
+добавить второй ряд и вызвать `AMBIGUOUS_SERIES`. Согласуйте метки fallback с
+результатом и ожидаемыми `labels`, затем проверьте нужные участки диапазона через
+`ltv source probe` (за один вызов — не более часа и 240 ячеек). `or` заполняет
+отсутствие элемента вектора, но не заменяет `NaN`/`Inf` в существующей точке.
+Не маскируйте им сбой сбора, недостаток
+сэмплов для `rate` и `increase` или пропадание gauge: такие пропуски должны
+остаться видимыми.
+Пустая ячейка в окне оценки даёт правилу `NO_VERDICT` с причиной
+`MISSING_RESOURCE_CELLS`, а запросу статус `PARTIAL` с `MISSING_SAMPLES`;
+заполнение через `or vector(0)` превращает такой `NO_VERDICT` в возможный
+`PASS`, поэтому применяйте его только там, где ноль действительно означает
+«событий не было».
+
+### Коды проверки выражений и ответа
+
+Коды ниже относятся к загрузке профиля, планированию шага и декодированию
+ответа (в том числе `decoder_check` команды `ltv source probe`). HTTP/TLS-ошибки
+диагностируются отдельно. Полный список отказов автошага приведён в разделе
+«Автошаг»; здесь указаны отказы, связанные с выражением, и коды декодера.
+
+| Код | Что исправить |
+| --- | --- |
+| `SOURCE_CONFIG_INVALID` | Добавить буквальный `$__interval` в PromQL; для InfluxQL проверить обязательные placeholders и ограничения раздела «InfluxDB / InfluxQL». Код также означает другие ошибки конфигурации. |
+| `AUTO_STEP_QUERY_NOT_INTERVAL_BOUND` | Использовать только `[$__interval]`, без подзапросов; для InfluxQL один `SELECT` с `GROUP BY time($__interval)`. Либо выбрать `fixed`, осознанно сохранив исходное окно. |
+| `EMPTY_RESULT` | Проверить фильтры, период и наличие сэмплов; нулевой fallback добавлять только при обоснованной семантике нуля. Это отсутствие данных, а не ошибка формата. |
+| `AMBIGUOUS_SERIES` | Сузить фильтры или явно агрегировать до одного ряда; убрать лишний ряд fallback. Для отдельных сущностей объявить отдельные queries. |
+| `LABEL_MISMATCH` | Согласовать ожидаемые `labels` с метками результата, учитывая агрегацию и fallback. |
+| `PROMQL_QUERY_FAILED` | Исправить PromQL по диагностике Prometheus/VictoriaMetrics: источник вернул status, отличный от `success`. |
+| `INFLUXQL_QUERY_FAILED` | Исправить InfluxQL по диагностике InfluxDB: ответ содержит `error`. |
+| `SOURCE_WARNINGS` | Устранить warnings источника; для InfluxQL проверить `messages`. Ответ с предупреждениями не принимается как полный. |
+| `SOURCE_PARTIAL_RESPONSE` | Для InfluxQL устранить причину `partial: true` и получить полный ответ. |
+| `UNSUPPORTED_RESULT_TYPE` | Использовать PromQL `query_range` с результатом `matrix`. |
+| `UNSUPPORTED_HISTOGRAM` | Преобразовать native histogram в числовой ряд на стороне PromQL, например функцией `histogram_count`, с нужной агрегацией. |
+| `AMBIGUOUS_STATEMENT` | Для InfluxQL оставить один statement в ответе. |
+| `OFF_GRID_TIMESTAMP` | Проверить timestamps и шаг источника: PromQL возвращает правые границы ячеек, InfluxQL — начала бакетов (см. раздел ниже). |
+| `DUPLICATE_TIMESTAMP` | Устранить повторные timestamps в ответе источника; одна ячейка принимает одну точку. |
+| `RESOURCE_LIMIT_EXCEEDED` | Сократить окно или объём ответа, увеличить допустимый шаг; проверить лимиты числа точек и размера числовых значений. |
+| `DUPLICATE_OBJECT_KEY` | Исправить источник или прокси, возвращающий JSON с повторными ключами. |
+| `MALFORMED_RESPONSE` | Проверить маршрут API и формат ответа: нужны корректный UTF-8 JSON и ожидаемая структура, для InfluxQL — колонки `time` и `value`. |
+
 ## Метка плеча
 
 Профиль `source-connections.v3` может объявить необязательное поле `arm`: идентификатор
@@ -659,6 +1143,15 @@ ltv source hash --run <run-id> --analysis <analysis-id> [--data-dir <path>]
 файл, который не разобран, и неизвестный профиль дают 4. `probe` делает ровно один запрос того же вида и с теми же параметрами, что и анализ
 (`query_range` для Prometheus и VictoriaMetrics, `/query` для InfluxQL), и по умолчанию просит последние 5 минут с шагом 15 с. Адрес и учётные данные берутся
 только из профиля, запрос из файла профиля выбирается по `--query-id`; произвольное выражение в этой версии не поддерживается.
+
+При ошибке конфигурации первая строка stderr сохраняет код `SOURCE_CONFIG_INVALID`,
+следующая указывает поле через JSON pointer и кратко объясняет причину на английском:
+например, `/connections/0/database: database is required for source_kind influxdb`.
+В режиме `source validate --format json` ошибка разбора также выводится в stdout как
+канонический JSON с `schema_version: source-check.v1`, `valid: false` и массивом
+`errors: [{code, json_pointer, message}]`;
+код выхода остаётся 4. Правила полей сохраняются: `database` обязателен для InfluxDB
+и запрещён для Prometheus и VictoriaMetrics.
 
 Что показывает `probe` (`source-probe.v1`): число серий в ответе (`series_count`, точное), до 20 серий с метками и числом заполненных ячеек, до 16 ключей меток
 с числом различных значений и пятью образцами, предупреждения источника и поле `decoder_check`: принял бы боевой декодер анализа те же байты

@@ -81,6 +81,9 @@ content-addressed. Ручная загрузка JTL/`simulation.log` сохра
 Grafana rendering доступен только для настроенного source profile с
 `transport: "grafana_proxy"`. Browser передаёт profile id, dashboard UID,
 panel id и сохранённое окно run; URL и auth из browser не принимаются.
+Dashboard uid задаётся в поле `Dashboard UID` панели `Grafana evidence`, отдельно
+от `datasource_uid` профиля; при пустом значении UI показывает подсказку вместо
+ссылки, а backend не формирует URL панели.
 Dashboard UID ограничен safe identifier, panel id должен быть положительным,
 окно — не более 31 дня. Render идёт через общий `SourceHttp` governor и auth,
 не следует redirects и принимает не более 8 MiB.

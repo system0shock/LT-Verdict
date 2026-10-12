@@ -306,9 +306,76 @@ class LocalApiTest {
     }
 
     @Test
+    fun `advice GET and POST distinguish unknown run malformed ids and missing analysis`() =
+        withServer { store, api ->
+            api.bootstrap()
+            val input = store.acceptInput(SPIKE_DROP.bytes().inputStream(), "spike-drop.jtl")
+            val missingId = "0".repeat(64)
+            val cases =
+                listOf(
+                    Triple("jmeter_jtl_csv-${"0".repeat(64)}", missingId, "Run was not found"),
+                    Triple(input.runId, "not-hex", "Run id or analysis id is malformed"),
+                    Triple("not-a-run", missingId, "Run id or analysis id is malformed"),
+                    Triple(input.runId, missingId, "Analysis was not found"),
+                )
+            for ((runId, analysisId, message) in cases) {
+                val path = "/api/runs/$runId/analyses/$analysisId/advice"
+                for (response in listOf(api.get(path), api.post(path, "application/json", "{}".encodeToByteArray()))) {
+                    assertError(response, 404, "NOT_FOUND")
+                    val error = response.jsonObject().getValue("error").jsonObject
+                    assertEquals(message, error.getValue("message").jsonPrimitive.content, path)
+                }
+            }
+        }
+
+    @Test
+    fun `advice GET and POST allow existing analyses with and without policy`() {
+        for (policy in listOf(null, PERMISSIVE_POLICY)) {
+            withServer(
+                adviceRunner = AdvisoryRunner { RunnerOutcome.Unavailable(AdviceUnavailableReason.OS_ISOLATION_NOT_PROVEN) },
+            ) { store, api ->
+                api.bootstrap()
+                val input = store.acceptInput(SPIKE_DROP.bytes().inputStream(), "spike-drop.jtl")
+                val id = api.createJob(input.runId, policy).analysisId(api)
+                val stored = requireNotNull(store.readAnalysis(input.runId, id))
+                assertEquals(policy != null, Files.exists(stored.path.resolve("policy.json")))
+                val path = "/api/runs/${input.runId}/analyses/$id/advice"
+                val read = api.get(path)
+                assertEquals(200, read.statusCode())
+                assertEquals(JsonNull, read.jsonObject().getValue("advice"))
+                assertEquals(JsonNull, read.jsonObject().getValue("job"))
+                val submitted = api.post(path, "application/json", "{}".encodeToByteArray())
+                assertEquals(202, submitted.statusCode())
+                assertEquals(
+                    input.runId,
+                    submitted
+                        .jsonObject()
+                        .getValue("run_id")
+                        .jsonPrimitive.content,
+                )
+                assertEquals(
+                    id,
+                    submitted
+                        .jsonObject()
+                        .getValue("analysis_id")
+                        .jsonPrimitive.content,
+                )
+                assertTrue("job_id" in submitted.jsonObject())
+                assertEquals(200, api.get(path).statusCode())
+            }
+        }
+    }
+
+    @Test
     fun `advice status is restored by analysis and unavailable runner never changes verdict`() =
         withServer(
-            adviceRunner = AdvisoryRunner { RunnerOutcome.Unavailable(AdviceUnavailableReason.OS_ISOLATION_NOT_PROVEN) },
+            adviceRunner =
+                AdvisoryRunner {
+                    RunnerOutcome.Unavailable(
+                        AdviceUnavailableReason.CREDENTIAL_NOT_CONFIGURED,
+                        "HOME is unset; cannot expand ~/.gigacode/gigacode_token.json",
+                    )
+                },
         ) { store, api ->
             api.bootstrap()
             val input = store.acceptInput(SPIKE_DROP.bytes().inputStream(), "spike-drop.jtl")
@@ -329,6 +396,19 @@ class LocalApiTest {
                 status = api.get("/api/advice-jobs/$jobId").jsonObject()
             }
             assertEquals("UNAVAILABLE", status.getValue("state").jsonPrimitive.content)
+            assertEquals("CREDENTIAL_NOT_CONFIGURED", status.getValue("unavailable_reason").jsonPrimitive.content)
+            assertEquals(
+                "HOME is unset; cannot expand ~/.gigacode/gigacode_token.json",
+                status.getValue("detail").jsonPrimitive.content,
+            )
+            assertEquals(
+                status,
+                api
+                    .get("$base/advice")
+                    .jsonObject()
+                    .getValue("job")
+                    .jsonObject,
+            )
             assertEquals(
                 jobId,
                 api

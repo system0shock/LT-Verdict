@@ -1,19 +1,72 @@
 package io.ltverdict.storage
 
+import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertThrows
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Assumptions.assumeTrue
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.io.TempDir
+import java.nio.channels.FileChannel
 import java.nio.file.Files
 import java.nio.file.Path
+import java.nio.file.StandardOpenOption
+import java.time.Instant
 import java.util.UUID
 import java.util.concurrent.TimeUnit
 
 class DataDirectoryTest {
     @TempDir
     lateinit var tempDir: Path
+
+    @Test
+    fun `acquired lock records owner pid command and ISO start time`() {
+        val root = tempDir.resolve("owner")
+        val before = Instant.now()
+        DataDirectory.open(root, "server").use { }
+        val metadata = Files.readString(root.resolve(".ltv.lock")).lines()
+        assertEquals("pid=${ProcessHandle.current().pid()}", metadata[0])
+        assertEquals("command=server", metadata[1])
+        val started = Instant.parse(metadata[2].removePrefix("started="))
+        assertFalse(started.isBefore(before))
+        assertFalse(started.isAfter(Instant.now()))
+    }
+
+    @Test
+    fun `second acquire reports owner without replacing lock content`() {
+        val root = tempDir.resolve("busy-owner")
+        DataDirectory.open(root).use {
+            val failure = assertThrows(IllegalStateException::class.java) { DataDirectory.open(root) }
+            assertEquals("DATA_DIR_BUSY", failure.message!!.lineSequence().first())
+            assertTrue(failure.message!!.contains("held by pid ${ProcessHandle.current().pid()} (cli) since "))
+            assertTrue(failure.message!!.contains("stop that process or use another --data-dir"))
+        }
+        assertTrue(Files.readString(root.resolve(".ltv.lock")).contains("pid=${ProcessHandle.current().pid()}"))
+        DataDirectory.open(root).close()
+    }
+
+    @Test
+    fun `empty or garbage lock metadata yields bare DATA_DIR_BUSY`() {
+        val root = Files.createDirectories(tempDir.resolve("garbage-owner"))
+        val lockPath = root.resolve(".ltv.lock")
+        listOf(
+            "",
+            "garbage",
+            "pid=123\ncommand=server\nstarted=invalid\n",
+            "pid=0\ncommand=cli\nstarted=2026-10-12T10:00:00Z\n",
+            "pid=999999999999999999999999\ncommand=server\nstarted=2026-10-12T10:00:00Z\n",
+            "pid=123\ncommand=server\nstarted=2026-10-12T10:00:00Z\n" + "x".repeat(512),
+        ).forEach { content ->
+            Files.writeString(lockPath, content)
+            FileChannel.open(lockPath, StandardOpenOption.WRITE).use { channel ->
+                channel.lock(DataDirectory.LOCK_REGION_OFFSET, 1L, false).use {
+                    val failure = assertThrows(IllegalStateException::class.java) { DataDirectory.open(root) }
+                    assertEquals("DATA_DIR_BUSY", failure.message)
+                }
+            }
+            assertEquals(content, Files.readString(lockPath))
+        }
+    }
 
     @Test
     fun `startup removes only owned stale UUID entries without following links`() {
@@ -73,6 +126,7 @@ class DataDirectoryTest {
 
             assertTrue(finished, "lock probe timed out")
             assertTrue(output.contains("DATA_DIR_BUSY"), output)
+            assertTrue(output.contains("held by pid ${ProcessHandle.current().pid()} (cli) since "), output)
             assertTrue(Files.exists(survivor), "losing process mutated staging")
         }
     }

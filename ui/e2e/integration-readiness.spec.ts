@@ -2,8 +2,12 @@ import { expect, test } from '@playwright/test'
 
 test('Grafana render failure keeps a safe source link and the local verdict', async ({ page }) => {
   let renders = 0
+  let links = 0
   await page.route('**/api/grafana', route => route.fulfill({ json: { profiles: [{ id: 'grafana', base_url: 'https://grafana.example/' }] } }))
-  await page.route('**/grafana-link?*', route => route.fulfill({ json: { source_link: 'https://grafana.example/d-solo/demo?panelId=1' } }))
+  await page.route('**/grafana-link?*', route => {
+    links++
+    return route.fulfill({ json: { source_link: 'https://grafana.example/d-solo/demo?panelId=1' } })
+  })
   await page.route('**/grafana-render?*', async route => {
     renders++
     expect(route.request().method()).toBe('POST')
@@ -15,6 +19,18 @@ test('Grafana render failure keeps a safe source link and the local verdict', as
   await expect(page.locator('#verdict')).toContainText('NO_POLICY')
   await page.getByText('Grafana evidence', { exact: true }).click()
   const uid = page.getByLabel('Dashboard UID', { exact: true })
+  const hint = page.getByText('Укажите dashboard uid в поле Dashboard UID', { exact: true })
+  await expect(hint).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Prepare link', exact: true })).toBeDisabled()
+  await expect(page.getByRole('button', { name: 'Render PNG', exact: true })).toBeDisabled()
+  await expect(page.getByRole('link', { name: 'Open source panel' })).toHaveCount(0)
+  await uid.fill('   ')
+  await expect(hint).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Prepare link', exact: true })).toBeDisabled()
+  await uid.evaluate((input: HTMLInputElement) => input.form!.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true })))
+  await expect(page.getByRole('button', { name: 'Prepare link', exact: true })).toBeDisabled()
+  expect(links).toBe(0)
+  expect(renders).toBe(0)
   await uid.fill('demo-uid_1')
   // Атрибут pattern должен компилироваться в режиме флага v (дефис в классе экранирован) и реально проверять поле.
   expect(await uid.evaluate((input: HTMLInputElement) => {
@@ -24,6 +40,7 @@ test('Grafana render failure keeps a safe source link and the local verdict', as
   await uid.fill('bad uid!')
   expect(await uid.evaluate((input: HTMLInputElement) => input.validity.patternMismatch)).toBe(true)
   await uid.fill('demo')
+  await expect(hint).toHaveCount(0)
   await page.getByRole('button', { name: 'Prepare link', exact: true }).click()
   await expect(page.getByRole('link', { name: 'Open source panel' })).toHaveAttribute('rel', 'noopener noreferrer')
   expect(renders).toBe(0)
@@ -32,6 +49,11 @@ test('Grafana render failure keeps a safe source link and the local verdict', as
   await expect(page.getByRole('link', { name: 'Open source panel' })).toBeVisible()
   await expect(page.locator('#verdict')).toContainText('NO_POLICY')
   expect(renders).toBe(1)
+  await uid.fill('')
+  await expect(hint).toBeVisible()
+  await expect(page.getByRole('link', { name: 'Open source panel' })).toHaveCount(0)
+  await expect(page.getByRole('button', { name: 'Render PNG', exact: true })).toBeDisabled()
+  expect(links).toBe(1)
 })
 
 test('an unknown Jenkins trigger can only reconcile and never posts another trigger', async ({ page }) => {

@@ -286,28 +286,49 @@ internal fun deriveAutoWindow(
 }
 
 private fun parseConnections(element: JsonElement): SourceConnections {
-    val root = element.sourceObject()
-    root.rejectUnknown(setOf("schema_version", "connections"))
-    val version = root.sourceString("schema_version")
-    if (version !in setOf("source-connections.v1", "source-connections.v2", "source-connections.v3")) configInvalid()
-    val values = root.sourceArray("connections")
-    if (values.isEmpty() || values.size > MAX_SOURCE_PROFILES) configInvalid()
+    val pointer = ""
+    val root = element.sourceObject(pointer = pointer)
+    root.rejectUnknown(setOf("schema_version", "connections"), pointer = pointer)
+    val version = root.sourceString("schema_version", pointer = pointer)
+    if (version !in setOf("source-connections.v1", "source-connections.v2", "source-connections.v3")) {
+        configInvalid(
+            "/schema_version",
+            "schema_version must be one of source-connections.v1, source-connections.v2, source-connections.v3",
+        )
+    }
+    val values = root.sourceArray("connections", pointer = pointer)
+    if (values.isEmpty() ||
+        values.size > MAX_SOURCE_PROFILES
+    ) {
+        configInvalid("/connections", "connections must contain 1..$MAX_SOURCE_PROFILES profiles")
+    }
     val ids = HashSet<String>()
     val http = mutableListOf<SourceProfile>()
     val postgres = mutableListOf<PostgresProfile>()
-    values.forEach { value ->
-        if (!ids.add(value.sourceObject().sourceString("id"))) configInvalid()
-        if (version != "source-connections.v1" && value.sourceObject().sourceString("source_kind") == "postgresql") {
-            postgres += parsePostgresProfile(value)
+    values.forEachIndexed { index, value ->
+        val pointer = pointer.child("connections").child(index.toString())
+        if (!ids.add(
+                value.sourceObject(pointer = pointer).sourceString("id", pointer = pointer),
+            )
+        ) {
+            configInvalid(pointer.child("id"), "id must be unique")
+        }
+        if (version != "source-connections.v1" &&
+            value.sourceObject(pointer = pointer).sourceString("source_kind", pointer = pointer) == "postgresql"
+        ) {
+            postgres += parsePostgresProfile(value, pointer)
         } else {
-            http += parseProfile(value, allowAutoStep = version == "source-connections.v3")
+            http += parseProfile(value, allowAutoStep = version == "source-connections.v3", pointer = pointer)
         }
     }
     return SourceConnections(http, postgres)
 }
 
-private fun parsePostgresProfile(element: JsonElement): PostgresProfile {
-    val value = element.sourceObject()
+private fun parsePostgresProfile(
+    element: JsonElement,
+    pointer: String,
+): PostgresProfile {
+    val value = element.sourceObject(pointer = pointer)
     value.rejectUnknown(
         setOf(
             "id",
@@ -322,50 +343,61 @@ private fun parsePostgresProfile(element: JsonElement): PostgresProfile {
             "tables",
             "pg_profile",
         ),
+        pointer = pointer,
     )
     val tables =
-        value.optionalArray("tables").orEmpty().map { element ->
-            val table = element.sourceObject()
-            table.rejectUnknown(setOf("schema", "table", "columns", "key", "row_limit", "byte_limit"))
+        value.optionalArray("tables", pointer = pointer).orEmpty().mapIndexed { index, element ->
+            val pointer = pointer.child("tables").child(index.toString())
+            val table = element.sourceObject(pointer = pointer)
+            table.rejectUnknown(setOf("schema", "table", "columns", "key", "row_limit", "byte_limit"), pointer = pointer)
 
             fun strings(name: String): List<String> =
-                table.sourceArray(name).map {
-                    (it as? JsonPrimitive)?.takeIf(JsonPrimitive::isString)?.content ?: configInvalid()
+                table.sourceArray(name, pointer = pointer).mapIndexed { index, it ->
+                    (it as? JsonPrimitive)?.takeIf(JsonPrimitive::isString)?.content
+                        ?: configInvalid(pointer.child(name).child(index.toString()), "$name items must be strings")
                 }
             PostgresTableProfile(
-                table.sourceString("schema"),
-                table.sourceString("table"),
+                table.sourceString("schema", pointer = pointer),
+                table.sourceString("table", pointer = pointer),
                 strings("columns"),
                 if ("key" in table) strings("key") else emptyList(),
-                table.optionalInt("row_limit") ?: 10_000,
-                table.optionalInt("byte_limit") ?: 1_048_576,
+                table.optionalInt("row_limit", pointer = pointer) ?: 10_000,
+                table.optionalInt("byte_limit", pointer = pointer) ?: 1_048_576,
             )
         }
     val report =
-        value["pg_profile"]?.sourceObject()?.also {
-            it.rejectUnknown(setOf("server_id", "start_sample_id", "end_sample_id"))
+        value["pg_profile"]?.sourceObject(pointer.child("pg_profile"))?.also {
+            val pointer = pointer.child("pg_profile")
+            it.rejectUnknown(setOf("server_id", "start_sample_id", "end_sample_id"), pointer = pointer)
         }
     return PostgresProfile(
-        id = value.sourceString("id"),
-        sourceDatabaseId = value.sourceString("source_database_id"),
-        host = value.sourceString("host"),
-        port = value.optionalInt("port") ?: 5432,
-        database = value.sourceString("database"),
-        usernameEnv = value.sourceEnvironmentName("username_env"),
-        passwordEnv = value.sourceEnvironmentName("password_env"),
-        allowInsecure = value.optionalBoolean("allow_insecure") ?: false,
+        id = value.sourceString("id", pointer = pointer),
+        sourceDatabaseId = value.sourceString("source_database_id", pointer = pointer),
+        host = value.sourceString("host", pointer = pointer),
+        port = value.optionalInt("port", pointer = pointer) ?: 5432,
+        database = value.sourceString("database", pointer = pointer),
+        usernameEnv = value.sourceEnvironmentName("username_env", pointer = pointer),
+        passwordEnv = value.sourceEnvironmentName("password_env", pointer = pointer),
+        allowInsecure = value.optionalBoolean("allow_insecure", pointer = pointer) ?: false,
         tables = tables,
-        pgProfileServerId = report?.sourceInt("server_id"),
-        pgProfileStartSampleId = report?.sourceInt("start_sample_id"),
-        pgProfileEndSampleId = report?.sourceInt("end_sample_id"),
-    ).also(::validatePostgresProfile)
+        pgProfileServerId = report?.sourceInt("server_id", pointer.child("pg_profile")),
+        pgProfileStartSampleId = report?.sourceInt("start_sample_id", pointer.child("pg_profile")),
+        pgProfileEndSampleId = report?.sourceInt("end_sample_id", pointer.child("pg_profile")),
+    ).also {
+        try {
+            validatePostgresProfile(it)
+        } catch (_: IllegalArgumentException) {
+            configInvalid(pointer, "profile violates PostgreSQL constraints (PG_PROFILE_INVALID)")
+        }
+    }
 }
 
 private fun parseProfile(
     element: JsonElement,
     allowAutoStep: Boolean,
+    pointer: String,
 ): SourceProfile {
-    val value = element.sourceObject()
+    val value = element.sourceObject(pointer = pointer)
     value.rejectUnknown(
         buildSet {
             addAll(
@@ -387,66 +419,118 @@ private fun parseProfile(
             )
             if (allowAutoStep) addAll(setOf("scrape_interval_ms", "arm"))
         },
+        pointer = pointer,
     )
-    val id = value.sourceText("id", MAX_IDENTIFIER_BYTES)
-    val sourceKind = SourceKind.entries.find { it.wireName == value.sourceString("source_kind") } ?: configInvalid()
-    val transport = SourceTransport.entries.find { it.wireName == value.sourceString("transport") } ?: configInvalid()
-    val baseUrl = parseBaseUrl(value.sourceString("base_url"))
-    val tls = value["tls"]?.let { parseTls(it, baseUrl) }
-    val datasourceUid = value.optionalString("datasource_uid")
-    val database = value.optionalString("database")?.let { validateText(it, MAX_DATABASE_BYTES) }
+    val id = value.sourceText("id", MAX_IDENTIFIER_BYTES, pointer = pointer)
+    val sourceKind =
+        SourceKind.entries.find { it.wireName == value.sourceString("source_kind", pointer = pointer) }
+            ?: configInvalid(pointer.child("source_kind"), "source_kind must be one of ${SourceKind.entries.joinToString { it.wireName }}")
+    val transport =
+        SourceTransport.entries.find { it.wireName == value.sourceString("transport", pointer = pointer) }
+            ?: configInvalid(pointer.child("transport"), "transport must be one of direct, grafana_proxy")
+    val baseUrl = parseBaseUrl(value.sourceString("base_url", pointer = pointer), pointer.child("base_url"))
+    val tls = value["tls"]?.let { parseTls(it, baseUrl, pointer.child("tls")) }
+    val datasourceUid = value.optionalString("datasource_uid", pointer = pointer)
+    val database =
+        value.optionalString("database", pointer = pointer)?.let {
+            validateText(it, MAX_DATABASE_BYTES, pointer.child("database"), "database")
+        }
     when (sourceKind) {
-        SourceKind.INFLUXDB -> if (database == null) configInvalid()
+        SourceKind.INFLUXDB ->
+            if (database ==
+                null
+            ) {
+                configInvalid(pointer.child("database"), "database is required for source_kind influxdb")
+            }
         SourceKind.PROMETHEUS,
         SourceKind.VICTORIA_METRICS,
         SourceKind.OPENSEARCH,
-        -> if (database != null) configInvalid()
+        -> if (database != null) configInvalid(pointer.child("database"), "database is not allowed for source_kind ${sourceKind.wireName}")
     }
     when (transport) {
-        SourceTransport.DIRECT -> if (datasourceUid != null) configInvalid()
+        SourceTransport.DIRECT ->
+            if (datasourceUid !=
+                null
+            ) {
+                configInvalid(pointer.child("datasource_uid"), "datasource_uid is not allowed for transport direct")
+            }
         SourceTransport.GRAFANA_PROXY -> {
-            if (datasourceUid == null || datasourceUid in setOf(".", "..") || !SAFE_PATH_SEGMENT.matches(datasourceUid)) configInvalid()
+            if (datasourceUid == null || datasourceUid in setOf(".", "..") || !SAFE_PATH_SEGMENT.matches(datasourceUid)) {
+                configInvalid(pointer.child("datasource_uid"), "datasource_uid must be a safe path segment for transport grafana_proxy")
+            }
         }
     }
-    val auth = value["auth"]?.let(::parseAuth) ?: SourceAuth.None
-    val allowInsecureHttp = value.optionalBoolean("allow_insecure_http") ?: false
-    if (baseUrl.scheme == "http" && auth != SourceAuth.None && !allowInsecureHttp) configInvalid()
-    val governor = value["governor"]?.let(::parseGovernor) ?: SourceGovernor()
-    val scrapeIntervalMillis = if (allowAutoStep) value.optionalLong("scrape_interval_ms") else null
+    val auth = value["auth"]?.let { parseAuth(it, pointer.child("auth")) } ?: SourceAuth.None
+    val allowInsecureHttp = value.optionalBoolean("allow_insecure_http", pointer = pointer) ?: false
+    if (baseUrl.scheme == "http" && auth != SourceAuth.None && !allowInsecureHttp) {
+        configInvalid(pointer.child("allow_insecure_http"), "allow_insecure_http must be true when using auth over HTTP")
+    }
+    val governor = value["governor"]?.let { parseGovernor(it, pointer.child("governor")) } ?: SourceGovernor()
+    val scrapeIntervalMillis = if (allowAutoStep) value.optionalLong("scrape_interval_ms", pointer = pointer) else null
     if (scrapeIntervalMillis != null &&
         (scrapeIntervalMillis !in 1_000..MAX_SCRAPE_INTERVAL_MILLIS || scrapeIntervalMillis % 1_000L != 0L)
     ) {
-        configInvalid()
+        configInvalid(
+            pointer.child("scrape_interval_ms"),
+            "scrape_interval_ms must be 1000..$MAX_SCRAPE_INTERVAL_MILLIS and divisible by 1000",
+        )
     }
     val openSearch =
         if (sourceKind == SourceKind.OPENSEARCH) {
-            if (transport != SourceTransport.DIRECT ||
-                listOf("queries", "rules", "database", "datasource_uid", "scrape_interval_ms", "arm").any { it in value }
-            ) {
-                configInvalid()
+            if (transport != SourceTransport.DIRECT) {
+                configInvalid(pointer.child("transport"), "transport must be direct for source_kind opensearch")
             }
-            parseOpenSearch(value["opensearch"] ?: configInvalid())
+            listOf("queries", "rules", "database", "datasource_uid", "scrape_interval_ms", "arm")
+                .firstOrNull { it in value }
+                ?.let {
+                    configInvalid(pointer.child(it), "$it is not allowed for source_kind opensearch")
+                }
+            parseOpenSearch(
+                value["opensearch"] ?: configInvalid(pointer.child("opensearch"), "opensearch is required for source_kind opensearch"),
+                pointer.child("opensearch"),
+            )
         } else {
-            if ("opensearch" in value) configInvalid()
+            if ("opensearch" in value) configInvalid(pointer.child("opensearch"), "opensearch is only allowed for source_kind opensearch")
             null
         }
-    val queries = if (openSearch != null) emptyList() else parseQueries(value.sourceArray("queries"), sourceKind, allowAutoStep)
-    val arm = if (allowAutoStep && "arm" in value) value.sourceText("arm", MAX_IDENTIFIER_BYTES) else null
+    val queries =
+        if (openSearch !=
+            null
+        ) {
+            emptyList()
+        } else {
+            parseQueries(value.sourceArray("queries", pointer = pointer), sourceKind, allowAutoStep, pointer.child("queries"))
+        }
+    val arm = if (allowAutoStep && "arm" in value) value.sourceText("arm", MAX_IDENTIFIER_BYTES, pointer = pointer) else null
     // The arm comes from the profile, never from a query label: a query that expects another arm contradicts it.
-    if (arm != null && queries.any { (it.labels["arm"] ?: arm) != arm }) configInvalid()
+    if (arm != null) {
+        queries.indexOfFirst { (it.labels["arm"] ?: arm) != arm }.takeIf { it >= 0 }?.let {
+            configInvalid(
+                pointer
+                    .child("queries")
+                    .child(it.toString())
+                    .child("labels")
+                    .child("arm"),
+                "arm label must match the profile arm",
+            )
+        }
+    }
     val (rules, spans) =
-        value.optionalArray("rules")?.let { parseRules(it, queries, allowAutoStep) }
+        value.optionalArray("rules", pointer = pointer)?.let { parseRules(it, queries, allowAutoStep, pointer.child("rules")) }
             ?: (emptyList<ResourceRuleV1>() to emptyMap<String, Long>())
     if (allowAutoStep) {
         val byId = queries.associateBy(SourceQuery::id)
-        rules.forEach { rule ->
+        rules.forEachIndexed { index, rule ->
             val query = byId[rule.seriesId]
             if (query != null &&
                 query.nonNegativeEvents &&
                 eventIncrementRule(rule) &&
                 query.aggregation == ResourceAggregation.INTERVAL_MIN
             ) {
-                configInvalid()
+                configInvalid(
+                    pointer.child("rules").child(index.toString()),
+                    "event increment rule cannot use a non_negative_events query with aggregation interval_min",
+                )
             }
         }
     }
@@ -473,19 +557,36 @@ private fun parseProfile(
 private fun parseTls(
     element: JsonElement,
     baseUrl: URI,
+    pointer: String,
 ): SourceTls {
-    val value = element.sourceObject()
-    if (value.isEmpty() || baseUrl.scheme != "https") configInvalid()
-    value.rejectUnknown(setOf("ca_file", "client_keystore_file", "client_keystore_password_env"))
-    val caFile = value.optionalString("ca_file")?.let(::sourceTlsPath)
-    val keystoreFile = value.optionalString("client_keystore_file")?.let(::sourceTlsPath)
+    val value = element.sourceObject(pointer = pointer)
+    if (value.isEmpty()) configInvalid(pointer, "tls must not be empty")
+    if (baseUrl.scheme != "https") configInvalid(pointer, "tls requires an HTTPS base_url")
+    value.rejectUnknown(setOf("ca_file", "client_keystore_file", "client_keystore_password_env"), pointer = pointer)
+    val caFile = value.optionalString("ca_file", pointer = pointer)?.let { sourceTlsPath(it, pointer.child("ca_file")) }
+    val keystoreFile =
+        value.optionalString("client_keystore_file", pointer = pointer)?.let {
+            sourceTlsPath(it, pointer.child("client_keystore_file"))
+        }
     val passwordEnv =
-        if ("client_keystore_password_env" in value) value.sourceEnvironmentName("client_keystore_password_env") else null
-    if ((keystoreFile == null) != (passwordEnv == null)) configInvalid()
+        if ("client_keystore_password_env" in
+            value
+        ) {
+            value.sourceEnvironmentName("client_keystore_password_env", pointer = pointer)
+        } else {
+            null
+        }
+    if ((keystoreFile == null) != (passwordEnv == null)) {
+        val missing = if (keystoreFile == null) "client_keystore_file" else "client_keystore_password_env"
+        configInvalid(pointer.child(missing), "$missing is required with its client keystore counterpart")
+    }
     return SourceTls(caFile, keystoreFile, passwordEnv)
 }
 
-private fun sourceTlsPath(value: String): Path {
+private fun sourceTlsPath(
+    value: String,
+    pointer: String,
+): Path {
     if (value.isEmpty() ||
         value.encodeToByteArray().size > 1024 ||
         value.any(Char::isISOControl) ||
@@ -495,17 +596,24 @@ private fun sourceTlsPath(value: String): Path {
         value.startsWith("file:", ignoreCase = true) ||
         value.split('/', '\\').any { it == "." || it == ".." }
     ) {
-        configInvalid()
+        configInvalid(
+            pointer,
+            "TLS file path must be non-empty, bounded to 1024 UTF-8 bytes and contain no controls, " +
+                "home expansion, UNC prefix, file URI or dot segments",
+        )
     }
     return try {
-        Path.of(value).also { if (!it.isAbsolute) configInvalid() }
+        Path.of(value).also { if (!it.isAbsolute) configInvalid(pointer, "TLS file path must be absolute") }
     } catch (_: InvalidPathException) {
-        configInvalid()
+        configInvalid(pointer, "TLS file path is invalid")
     }
 }
 
-private fun parseOpenSearch(element: JsonElement): OpenSearchMapping {
-    val value = element.sourceObject()
+private fun parseOpenSearch(
+    element: JsonElement,
+    pointer: String,
+): OpenSearchMapping {
+    val value = element.sourceObject(pointer = pointer)
     value.rejectUnknown(
         setOf(
             "indices",
@@ -517,48 +625,67 @@ private fun parseOpenSearch(element: JsonElement): OpenSearchMapping {
             "samples_per_group",
             "sample_message_bytes_max",
         ),
+        pointer = pointer,
     )
-    return OpenSearchMapping(
-        value.sourceArray("indices").map { (it as? JsonPrimitive)?.takeIf(JsonPrimitive::isString)?.content ?: configInvalid() },
-        value.sourceString("timestamp_field"),
-        value.sourceString("service_field"),
-        value.sourceString("error_type_field"),
-        value.sourceString("message_field"),
-        value.optionalInt("group_limit") ?: 50,
-        value.optionalInt("samples_per_group") ?: 2,
-        value.optionalInt("sample_message_bytes_max") ?: 4096,
-    )
+    return try {
+        OpenSearchMapping(
+            value.sourceArray("indices", pointer = pointer).mapIndexed { index, it ->
+                (it as? JsonPrimitive)?.takeIf(JsonPrimitive::isString)?.content
+                    ?: configInvalid(pointer.child("indices").child(index.toString()), "indices items must be strings")
+            },
+            value.sourceString("timestamp_field", pointer = pointer),
+            value.sourceString("service_field", pointer = pointer),
+            value.sourceString("error_type_field", pointer = pointer),
+            value.sourceString("message_field", pointer = pointer),
+            value.optionalInt("group_limit", pointer = pointer) ?: 50,
+            value.optionalInt("samples_per_group", pointer = pointer) ?: 2,
+            value.optionalInt("sample_message_bytes_max", pointer = pointer) ?: 4096,
+        )
+    } catch (failure: SourceInputFailure) {
+        throw failure
+    } catch (_: IllegalArgumentException) {
+        configInvalid(pointer, "mapping violates OpenSearch constraints (OPENSEARCH_INVALID_MAPPING)")
+    }
 }
 
-private fun parseAuth(element: JsonElement): SourceAuth {
-    val value = element.sourceObject()
-    return when (value.sourceString("type")) {
+private fun parseAuth(
+    element: JsonElement,
+    pointer: String,
+): SourceAuth {
+    val value = element.sourceObject(pointer = pointer)
+    return when (value.sourceString("type", pointer = pointer)) {
         "none" -> {
-            value.rejectUnknown(setOf("type"))
+            value.rejectUnknown(setOf("type"), pointer = pointer)
             SourceAuth.None
         }
 
         "bearer" -> {
-            value.rejectUnknown(setOf("type", "token_env"))
-            SourceAuth.Bearer(value.sourceEnvironmentName("token_env"))
+            value.rejectUnknown(setOf("type", "token_env"), pointer = pointer)
+            SourceAuth.Bearer(value.sourceEnvironmentName("token_env", pointer = pointer))
         }
 
         "token" -> {
-            value.rejectUnknown(setOf("type", "token_env"))
-            SourceAuth.Token(value.sourceEnvironmentName("token_env"))
+            value.rejectUnknown(setOf("type", "token_env"), pointer = pointer)
+            SourceAuth.Token(value.sourceEnvironmentName("token_env", pointer = pointer))
         }
 
         "basic" -> {
-            value.rejectUnknown(setOf("type", "username_env", "password_env"))
-            SourceAuth.Basic(value.sourceEnvironmentName("username_env"), value.sourceEnvironmentName("password_env"))
+            value.rejectUnknown(setOf("type", "username_env", "password_env"), pointer = pointer)
+            SourceAuth.Basic(
+                value.sourceEnvironmentName("username_env", pointer = pointer),
+                value.sourceEnvironmentName("password_env", pointer = pointer),
+            )
         }
 
-        else -> configInvalid()
+        else -> configInvalid(pointer.child("type"), "auth type must be one of none, bearer, token, basic")
     }
 }
 
-private fun parseGovernor(element: JsonElement): SourceGovernor {
-    val value = element.sourceObject()
+private fun parseGovernor(
+    element: JsonElement,
+    pointer: String,
+): SourceGovernor {
+    val value = element.sourceObject(pointer = pointer)
     value.rejectUnknown(
         setOf(
             "requests_per_second",
@@ -569,18 +696,28 @@ private fun parseGovernor(element: JsonElement): SourceGovernor {
             "honor_retry_after",
             "max_requests_per_run",
         ),
+        pointer = pointer,
     )
-    val requestsPerSecond = value.optionalDecimal("requests_per_second")?.toDouble() ?: 0.5
-    val burst = value.optionalInt("burst") ?: 1
-    val maxConcurrent = value.optionalInt("max_concurrent") ?: 1
-    val timeoutMillis = value.optionalLong("timeout_ms") ?: 30_000
-    val maxAttempts = value.optionalInt("max_attempts") ?: 3
-    val honorRetryAfter = value.optionalBoolean("honor_retry_after") ?: true
-    val maxRequestsPerRun = value.optionalInt("max_requests_per_run")
-    if (!requestsPerSecond.isFinite() || requestsPerSecond <= 0.0 || requestsPerSecond > MAX_REQUESTS_PER_SECOND) configInvalid()
-    if (burst !in 1..MAX_BURST || maxConcurrent !in 1..MAX_CONCURRENT) configInvalid()
-    if (timeoutMillis !in 1..MAX_TIMEOUT_MILLIS || maxAttempts !in 1..MAX_ATTEMPTS) configInvalid()
-    if (maxRequestsPerRun != null && maxRequestsPerRun !in 0..MAX_REQUESTS_PER_RUN) configInvalid()
+    val requestsPerSecond = value.optionalDecimal("requests_per_second", pointer = pointer)?.toDouble() ?: 0.5
+    val burst = value.optionalInt("burst", pointer = pointer) ?: 1
+    val maxConcurrent = value.optionalInt("max_concurrent", pointer = pointer) ?: 1
+    val timeoutMillis = value.optionalLong("timeout_ms", pointer = pointer) ?: 30_000
+    val maxAttempts = value.optionalInt("max_attempts", pointer = pointer) ?: 3
+    val honorRetryAfter = value.optionalBoolean("honor_retry_after", pointer = pointer) ?: true
+    val maxRequestsPerRun = value.optionalInt("max_requests_per_run", pointer = pointer)
+    if (!requestsPerSecond.isFinite() || requestsPerSecond <= 0.0 || requestsPerSecond > MAX_REQUESTS_PER_SECOND) {
+        configInvalid(
+            pointer.child("requests_per_second"),
+            "requests_per_second must be finite, above 0 and at most $MAX_REQUESTS_PER_SECOND",
+        )
+    }
+    if (burst !in 1..MAX_BURST) configInvalid(pointer.child("burst"), "burst must be 1..$MAX_BURST")
+    if (maxConcurrent !in 1..MAX_CONCURRENT) configInvalid(pointer.child("max_concurrent"), "max_concurrent must be 1..$MAX_CONCURRENT")
+    if (timeoutMillis !in 1..MAX_TIMEOUT_MILLIS) configInvalid(pointer.child("timeout_ms"), "timeout_ms must be 1..$MAX_TIMEOUT_MILLIS")
+    if (maxAttempts !in 1..MAX_ATTEMPTS) configInvalid(pointer.child("max_attempts"), "max_attempts must be 1..$MAX_ATTEMPTS")
+    if (maxRequestsPerRun != null && maxRequestsPerRun !in 0..MAX_REQUESTS_PER_RUN) {
+        configInvalid(pointer.child("max_requests_per_run"), "max_requests_per_run must be 0..$MAX_REQUESTS_PER_RUN")
+    }
     return SourceGovernor(
         requestsPerSecond,
         burst,
@@ -596,62 +733,94 @@ private fun parseQueries(
     values: JsonArray,
     sourceKind: SourceKind,
     allowAutoStep: Boolean,
+    pointer: String,
 ): List<SourceQuery> {
-    if (values.isEmpty() || values.size > MAX_SOURCE_QUERIES) configInvalid()
+    if (values.isEmpty() || values.size > MAX_SOURCE_QUERIES) configInvalid(pointer, "queries must contain 1..$MAX_SOURCE_QUERIES queries")
     val ids = HashSet<String>()
-    return values.map { element ->
-        val value = element.sourceObject()
+    return values.mapIndexed { index, element ->
+        val pointer = pointer.child(index.toString())
+        val value = element.sourceObject(pointer = pointer)
         value.rejectUnknown(
             setOf("id", "expression", "metric", "unit", "entity", "role", "aggregation", "labels") +
                 if (allowAutoStep) setOf("non_negative_events") else emptySet(),
+            pointer = pointer,
         )
-        val id = value.sourceText("id", MAX_IDENTIFIER_BYTES)
-        if (!ids.add(id)) configInvalid()
-        val expression = value.sourceText("expression", MAX_QUERY_BYTES)
+        val id = value.sourceText("id", MAX_IDENTIFIER_BYTES, pointer = pointer)
+        if (!ids.add(id)) configInvalid(pointer.child("id"), "id must be unique")
+        val expression = value.sourceText("expression", MAX_QUERY_BYTES, pointer = pointer)
         when (sourceKind) {
-            SourceKind.INFLUXDB -> validateInfluxqlExpression(expression)
-            SourceKind.OPENSEARCH -> configInvalid()
+            SourceKind.INFLUXDB -> validateInfluxqlExpression(expression, pointer.child("expression"))
+            SourceKind.OPENSEARCH -> configInvalid(pointer, "queries are not allowed for source_kind opensearch")
             SourceKind.PROMETHEUS,
             SourceKind.VICTORIA_METRICS,
-            -> if (!expression.contains(INTERVAL_PLACEHOLDER)) configInvalid()
+            ->
+                if (!expression.contains(
+                        INTERVAL_PLACEHOLDER,
+                    )
+                ) {
+                    configInvalid(pointer.child("expression"), "expression must contain $INTERVAL_PLACEHOLDER")
+                }
         }
-        val role = ResourceRole.entries.find { it.wireName == value.sourceString("role") } ?: configInvalid()
+        val role =
+            ResourceRole.entries.find { it.wireName == value.sourceString("role", pointer = pointer) }
+                ?: configInvalid(pointer.child("role"), "role must be one of ${ResourceRole.entries.joinToString { it.wireName }}")
         val aggregation =
-            ResourceAggregation.entries.find { it.wireName == value.sourceString("aggregation") } ?: configInvalid()
+            ResourceAggregation.entries.find { it.wireName == value.sourceString("aggregation", pointer = pointer) }
+                ?: configInvalid(
+                    pointer.child("aggregation"),
+                    "aggregation must be one of ${ResourceAggregation.entries.joinToString { it.wireName }}",
+                )
         SourceQuery(
             id,
             expression,
-            value.sourceText("metric", MAX_IDENTIFIER_BYTES),
-            value.sourceText("unit", MAX_IDENTIFIER_BYTES),
-            value.sourceText("entity", MAX_IDENTIFIER_BYTES),
+            value.sourceText("metric", MAX_IDENTIFIER_BYTES, pointer = pointer),
+            value.sourceText("unit", MAX_IDENTIFIER_BYTES, pointer = pointer),
+            value.sourceText("entity", MAX_IDENTIFIER_BYTES, pointer = pointer),
             role,
             aggregation,
-            value["labels"]?.let(::parseLabels).orEmpty(),
-            if (allowAutoStep) value.optionalBoolean("non_negative_events") ?: false else false,
+            value["labels"]?.let { parseLabels(it, pointer.child("labels")) }.orEmpty(),
+            if (allowAutoStep) value.optionalBoolean("non_negative_events", pointer = pointer) ?: false else false,
         )
     }
 }
 
-private fun validateInfluxqlExpression(expression: String) {
+private fun validateInfluxqlExpression(
+    expression: String,
+    pointer: String,
+) {
     val placeholders = INFLUX_PLACEHOLDER_PATTERN.findAll(expression).map(MatchResult::value).toList()
     if (INFLUX_REQUIRED_PLACEHOLDERS.any { it !in placeholders } || placeholders.any { it !in INFLUX_PLACEHOLDERS }) {
-        configInvalid()
+        configInvalid(pointer, "expression must contain the required InfluxQL time placeholders and only supported placeholders")
     }
-    if ("${'$'}__" in INFLUX_PLACEHOLDER_PATTERN.replace(expression, "")) configInvalid()
-    if (';' in expression || INFLUX_COMMENTS.any(expression::contains) || INFLUX_INTO.containsMatchIn(expression)) configInvalid()
-    if (INFLUX_FILL.findAll(expression).any { it.groupValues[1].trim().lowercase() !in INFLUX_GAP_PRESERVING_FILL }) configInvalid()
-    if (!INFLUX_SELECT.matches(expression)) configInvalid()
-    if (!INFLUX_VALUE_ALIAS.containsMatchIn(expression) && !INFLUX_DIRECT_VALUE.matches(expression)) configInvalid()
+    if ("${'$'}__" in
+        INFLUX_PLACEHOLDER_PATTERN.replace(expression, "")
+    ) {
+        configInvalid(pointer, "expression contains a malformed InfluxQL placeholder")
+    }
+    if (';' in expression || INFLUX_COMMENTS.any(expression::contains) || INFLUX_INTO.containsMatchIn(expression)) {
+        configInvalid(pointer, "expression must not contain semicolons, comments or INTO")
+    }
+    if (INFLUX_FILL.findAll(expression).any { it.groupValues[1].trim().lowercase() !in INFLUX_GAP_PRESERVING_FILL }) {
+        configInvalid(pointer, "expression fill must be null or none")
+    }
+    if (!INFLUX_SELECT.matches(expression)) configInvalid(pointer, "expression must be a SELECT with FROM")
+    if (!INFLUX_VALUE_ALIAS.containsMatchIn(expression) && !INFLUX_DIRECT_VALUE.matches(expression)) {
+        configInvalid(pointer, "expression must select value or use AS value")
+    }
 }
 
-private fun parseLabels(element: JsonElement): Map<String, String> {
-    val value = element.sourceObject()
-    if (value.size > MAX_LABELS) configInvalid()
+private fun parseLabels(
+    element: JsonElement,
+    pointer: String,
+): Map<String, String> {
+    val value = element.sourceObject(pointer = pointer)
+    if (value.size > MAX_LABELS) configInvalid(pointer, "labels must contain at most $MAX_LABELS entries")
     return value.mapValues { (key, element) ->
-        validateText(key, MAX_LABEL_KEY_BYTES)
-        val label = element as? JsonPrimitive ?: configInvalid()
-        if (!label.isString) configInvalid()
-        validateText(label.content, MAX_LABEL_VALUE_BYTES)
+        val pointer = pointer.child(if (key.length > 64) key.take(64) + "..." else key)
+        validateText(key, MAX_LABEL_KEY_BYTES, pointer, "label key")
+        val label = element as? JsonPrimitive ?: configInvalid(pointer, "label value must be a string")
+        if (!label.isString) configInvalid(pointer, "label value must be a string")
+        validateText(label.content, MAX_LABEL_VALUE_BYTES, pointer, "label value")
     }
 }
 
@@ -659,40 +828,79 @@ private fun parseRules(
     values: JsonArray,
     queries: List<SourceQuery>,
     allowSpan: Boolean,
+    pointer: String,
 ): Pair<List<ResourceRuleV1>, Map<String, Long>> {
-    if (values.size > MAX_RESOURCE_RULES) configInvalid()
+    if (values.size > MAX_RESOURCE_RULES) configInvalid(pointer, "rules must contain at most $MAX_RESOURCE_RULES entries")
     val ids = HashSet<String>()
     val queryById = queries.associateBy(SourceQuery::id)
     val spans = linkedMapOf<String, Long>()
     val rules =
-        values.map { element ->
-            val value = element.sourceObject()
+        values.mapIndexed { index, element ->
+            val pointer = pointer.child(index.toString())
+            val value = element.sourceObject(pointer = pointer)
             value.rejectUnknown(
                 setOf("id", "series_id", "unit", "operator", "threshold", "min_consecutive_cells", "effect") +
                     if (allowSpan) setOf("min_consecutive_span_ms") else emptySet(),
+                pointer = pointer,
             )
-            val id = value.sourceText("id", MAX_IDENTIFIER_BYTES)
-            if (!ids.add(id)) configInvalid()
-            val seriesId = value.sourceText("series_id", MAX_IDENTIFIER_BYTES)
-            val unit = value.sourceText("unit", MAX_IDENTIFIER_BYTES)
-            if (queryById[seriesId]?.unit != unit) configInvalid()
-            val operator = ResourceOperator.entries.find { it.wireName == value.sourceString("operator") } ?: configInvalid()
-            val threshold = value.sourceDecimal("threshold")
-            if (threshold.precision() > MAX_DECIMAL_PRECISION || maxOf(threshold.scale(), 0) > MAX_DECIMAL_SCALE) configInvalid()
-            if (threshold.abs() > MAX_DECIMAL_MAGNITUDE) configInvalid()
+            val id = value.sourceText("id", MAX_IDENTIFIER_BYTES, pointer = pointer)
+            if (!ids.add(id)) configInvalid(pointer.child("id"), "id must be unique")
+            val seriesId = value.sourceText("series_id", MAX_IDENTIFIER_BYTES, pointer = pointer)
+            val unit = value.sourceText("unit", MAX_IDENTIFIER_BYTES, pointer = pointer)
+            if (seriesId !in queryById) configInvalid(pointer.child("series_id"), "series_id must refer to an existing query")
+            if (queryById[seriesId]?.unit != unit) configInvalid(pointer.child("unit"), "unit must match the referenced query unit")
+            val operator =
+                ResourceOperator.entries.find { it.wireName == value.sourceString("operator", pointer = pointer) }
+                    ?: configInvalid(
+                        pointer.child("operator"),
+                        "operator must be one of ${ResourceOperator.entries.joinToString { it.wireName }}",
+                    )
+            val threshold = value.sourceDecimal("threshold", pointer = pointer)
+            if (threshold.precision() > MAX_DECIMAL_PRECISION || maxOf(threshold.scale(), 0) > MAX_DECIMAL_SCALE) {
+                configInvalid(
+                    pointer.child("threshold"),
+                    "threshold must have at most $MAX_DECIMAL_PRECISION digits and $MAX_DECIMAL_SCALE decimal places",
+                )
+            }
+            if (threshold.abs() >
+                MAX_DECIMAL_MAGNITUDE
+            ) {
+                configInvalid(pointer.child("threshold"), "threshold magnitude must be at most $MAX_DECIMAL_MAGNITUDE")
+            }
             val hasCells = "min_consecutive_cells" in value
-            if (hasCells == ("min_consecutive_span_ms" in value)) configInvalid()
+            if (hasCells == ("min_consecutive_span_ms" in value)) {
+                configInvalid(
+                    pointer.child("min_consecutive_cells"),
+                    "exactly one of min_consecutive_cells or min_consecutive_span_ms is required",
+                )
+            }
             val minimum =
                 if (hasCells) {
-                    value.sourceInt("min_consecutive_cells")
+                    value.sourceInt("min_consecutive_cells", pointer = pointer)
                 } else {
-                    val span = value.sourceLong("min_consecutive_span_ms")
-                    if (span !in 1..MAX_RULE_SPAN_MILLIS) configInvalid()
+                    val span = value.sourceLong("min_consecutive_span_ms", pointer = pointer)
+                    if (span !in
+                        1..MAX_RULE_SPAN_MILLIS
+                    ) {
+                        configInvalid(
+                            pointer.child("min_consecutive_span_ms"),
+                            "min_consecutive_span_ms must be 1..$MAX_RULE_SPAN_MILLIS",
+                        )
+                    }
                     spans[id] = span
                     1
                 }
-            if (minimum !in 1..MAX_POINTS_PER_SERIES) configInvalid()
-            val effect = ResourceRuleEffect.entries.find { it.wireName == value.sourceString("effect") } ?: configInvalid()
+            if (minimum !in
+                1..MAX_POINTS_PER_SERIES
+            ) {
+                configInvalid(pointer.child("min_consecutive_cells"), "min_consecutive_cells must be 1..$MAX_POINTS_PER_SERIES")
+            }
+            val effect =
+                ResourceRuleEffect.entries.find { it.wireName == value.sourceString("effect", pointer = pointer) }
+                    ?: configInvalid(
+                        pointer.child("effect"),
+                        "effect must be one of ${ResourceRuleEffect.entries.joinToString { it.wireName }}",
+                    )
             ResourceRuleV1(id, seriesId, unit, operator, threshold, minimum, effect)
         }
     return rules to spans
@@ -836,22 +1044,38 @@ private fun validateStepMillis(
     }
 }
 
-private fun parseBaseUrl(value: String): URI {
+private fun parseBaseUrl(
+    value: String,
+    pointer: String,
+): URI {
     val uri =
         try {
             URI(value)
         } catch (_: Exception) {
-            configInvalid()
+            configInvalid(pointer, "base_url must be a valid URI")
         }
-    val scheme = uri.scheme?.lowercase() ?: configInvalid()
-    if (scheme !in setOf("http", "https") || uri.isOpaque || uri.host == null || uri.port == 0 || uri.port > 65_535) configInvalid()
-    if (uri.rawUserInfo != null || uri.rawQuery != null || uri.rawFragment != null || '%' in (uri.rawPath ?: "")) configInvalid()
+    val scheme = uri.scheme?.lowercase() ?: configInvalid(pointer, "base_url must have a scheme")
+    if (scheme !in setOf("http", "https") ||
+        uri.isOpaque ||
+        uri.host == null ||
+        uri.port == 0 ||
+        uri.port > 65_535
+    ) {
+        configInvalid(pointer, "base_url must be an absolute HTTP or HTTPS URL with a host and a valid port")
+    }
+    if (uri.rawUserInfo != null ||
+        uri.rawQuery != null ||
+        uri.rawFragment != null ||
+        '%' in (uri.rawPath ?: "")
+    ) {
+        configInvalid(pointer, "base_url must not contain credentials, query, fragment or percent-encoded path")
+    }
     val path = uri.path.orEmpty()
-    if (path.split('/').any { it == "." || it == ".." }) configInvalid()
+    if (path.split('/').any { it == "." || it == ".." }) configInvalid(pointer, "base_url must not contain dot path segments")
     return try {
         URI(scheme, null, uri.host.lowercase(), uri.port, path, null, null)
     } catch (_: Exception) {
-        configInvalid()
+        configInvalid(pointer, "base_url must be a valid HTTP or HTTPS URL")
     }
 }
 
@@ -870,8 +1094,10 @@ private inline fun <T> readSourceInput(
     } catch (_: IOException) {
         sourceInputFailure("SOURCE_${subject}_READ_ERROR")
     } catch (_: SerializationException) {
+        if (subject == "CONFIG") configInvalid("", "source connections must be valid JSON")
         sourceInputFailure("SOURCE_${subject}_INVALID")
     } catch (_: IllegalArgumentException) {
+        if (subject == "CONFIG") configInvalid("", "source connections violate source-specific profile constraints")
         sourceInputFailure("SOURCE_${subject}_INVALID")
     }
 
@@ -880,7 +1106,8 @@ private fun scanSourceJson(
     subject: String,
     failureCode: String,
 ) {
-    StrictJsonScanner(text, MAX_JSON_DEPTH, MAX_NUMERIC_TOKEN_BYTES, MAX_NUMERIC_EXPONENT, subject) { _, _, _ ->
+    StrictJsonScanner(text, MAX_JSON_DEPTH, MAX_NUMERIC_TOKEN_BYTES, MAX_NUMERIC_EXPONENT, subject) { _, pointer, detail ->
+        if (failureCode == "SOURCE_CONFIG_INVALID") configInvalid(pointer, detail)
         sourceInputFailure(failureCode)
     }.scan()
 }
@@ -900,105 +1127,190 @@ private fun decodeUtf8(
         sourceInputFailure("SOURCE_${subject}_INVALID_UTF8")
     }
 
-private fun JsonElement.sourceObject(): JsonObject = this as? JsonObject ?: configInvalid()
+private fun String.child(token: String): String = "$this/${token.replace("~", "~0").replace("/", "~1")}"
 
-private fun JsonObject.sourceArray(name: String): JsonArray = this[name] as? JsonArray ?: configInvalid()
+private fun JsonElement.sourceObject(pointer: String = ""): JsonObject = this as? JsonObject ?: configInvalid(pointer, "must be an object")
 
-private fun JsonObject.optionalArray(name: String): JsonArray? {
+private fun JsonObject.sourceArray(
+    name: String,
+    pointer: String = "",
+): JsonArray = this[name] as? JsonArray ?: configInvalid(pointer.child(name), "$name is required and must be an array")
+
+private fun JsonObject.optionalArray(
+    name: String,
+    pointer: String = "",
+): JsonArray? {
     val value = this[name] ?: return null
-    return value as? JsonArray ?: configInvalid()
+    return value as? JsonArray ?: configInvalid(pointer.child(name), "$name must be an array")
 }
 
-private fun JsonObject.sourceString(name: String): String =
-    (this[name] as? JsonPrimitive)?.takeIf(JsonPrimitive::isString)?.content ?: configInvalid()
+private fun JsonObject.sourceString(
+    name: String,
+    pointer: String = "",
+): String =
+    (this[name] as? JsonPrimitive)?.takeIf(JsonPrimitive::isString)?.content
+        ?: configInvalid(pointer.child(name), "$name is required and must be a string")
 
-private fun JsonObject.optionalString(name: String): String? {
+private fun JsonObject.optionalString(
+    name: String,
+    pointer: String = "",
+): String? {
     val value = this[name] ?: return null
-    return (value as? JsonPrimitive)?.takeIf(JsonPrimitive::isString)?.content ?: configInvalid()
+    return (value as? JsonPrimitive)?.takeIf(JsonPrimitive::isString)?.content
+        ?: configInvalid(pointer.child(name), "$name must be a string")
 }
 
-private fun JsonObject.sourceEnvironmentName(name: String): String =
-    sourceString(name).also { if (!ENVIRONMENT_NAME.matches(it)) configInvalid() }
+private fun JsonObject.sourceEnvironmentName(
+    name: String,
+    pointer: String = "",
+): String =
+    sourceString(name, pointer).also {
+        if (!ENVIRONMENT_NAME.matches(it)) configInvalid(pointer.child(name), "$name must be a valid environment variable name")
+    }
 
 private fun JsonObject.sourceText(
     name: String,
     maxBytes: Int,
-    invalid: () -> Nothing = ::configInvalid,
+    invalid: (() -> Nothing)? = null,
+    pointer: String = "",
 ): String {
     val value =
         try {
-            sourceString(name)
-        } catch (_: SourceInputFailure) {
-            invalid()
+            sourceString(name, pointer)
+        } catch (failure: SourceInputFailure) {
+            invalid?.invoke() ?: throw failure
         }
     return try {
-        validateText(value, maxBytes)
-    } catch (_: SourceInputFailure) {
-        invalid()
+        validateText(value, maxBytes, pointer.child(name), name)
+    } catch (failure: SourceInputFailure) {
+        invalid?.invoke() ?: throw failure
     }
 }
 
 private fun validateText(
     value: String,
     maxBytes: Int,
+    pointer: String = "",
+    name: String = "text",
 ): String {
-    if (value.isEmpty() || value.any(Char::isISOControl) || value.encodeToByteArray().size > maxBytes) configInvalid()
+    if (value.isEmpty() || value.any(Char::isISOControl) || value.encodeToByteArray().size > maxBytes) {
+        configInvalid(pointer, "$name must be non-empty, contain no control characters and fit in $maxBytes UTF-8 bytes")
+    }
     return value
 }
 
-private fun JsonObject.optionalBoolean(name: String): Boolean? {
+private fun JsonObject.optionalBoolean(
+    name: String,
+    pointer: String = "",
+): Boolean? {
     val value = this[name] ?: return null
-    if (value !is JsonPrimitive || value.isString) configInvalid()
-    return value.content.toBooleanStrictOrNull() ?: configInvalid()
+    if (value !is JsonPrimitive || value.isString) configInvalid(pointer.child(name), "$name must be a boolean")
+    return value.content.toBooleanStrictOrNull() ?: configInvalid(pointer.child(name), "$name must be a boolean")
 }
 
-private fun JsonObject.sourceDecimal(name: String): BigDecimal {
-    val value = this[name] as? JsonPrimitive ?: configInvalid()
-    if (value.isString || value === JsonNull || value.content in setOf("true", "false")) configInvalid()
+private fun JsonObject.sourceDecimal(
+    name: String,
+    pointer: String = "",
+): BigDecimal {
+    val value = this[name] as? JsonPrimitive ?: configInvalid(pointer.child(name), "$name is required and must be a number")
+    if (value.isString || value === JsonNull || value.content in setOf("true", "false")) {
+        configInvalid(pointer.child(name), "$name must be a number")
+    }
     return try {
         BigDecimal(value.content)
     } catch (_: NumberFormatException) {
-        configInvalid()
+        configInvalid(pointer.child(name), "$name must be a number")
     }
 }
 
-private fun JsonObject.optionalDecimal(name: String): BigDecimal? = if (name in this) sourceDecimal(name) else null
+private fun JsonObject.optionalDecimal(
+    name: String,
+    pointer: String = "",
+): BigDecimal? =
+    if (name in this) {
+        try {
+            sourceDecimal(name, pointer)
+        } catch (_: SourceInputFailure) {
+            configInvalid(pointer.child(name), "$name must be a number")
+        }
+    } else {
+        null
+    }
 
 private fun JsonObject.sourceLong(
     name: String,
-    invalid: () -> Nothing = ::configInvalid,
+    invalid: (() -> Nothing)? = null,
+    pointer: String = "",
 ): Long =
     try {
-        sourceDecimal(name).longValueExact()
+        sourceDecimal(name, pointer).longValueExact()
     } catch (_: ArithmeticException) {
-        invalid()
-    } catch (_: SourceInputFailure) {
-        invalid()
+        invalid?.invoke() ?: configInvalid(pointer.child(name), "$name must be an integer in the 64-bit range")
+    } catch (failure: SourceInputFailure) {
+        invalid?.invoke() ?: throw failure
     }
 
-private fun JsonObject.optionalLong(name: String): Long? = if (name in this) sourceLong(name) else null
+private fun JsonObject.optionalLong(
+    name: String,
+    pointer: String = "",
+): Long? =
+    if (name in this) {
+        try {
+            sourceLong(name, pointer = pointer)
+        } catch (_: SourceInputFailure) {
+            configInvalid(pointer.child(name), "$name must be an integer in the 64-bit range")
+        }
+    } else {
+        null
+    }
 
-private fun JsonObject.sourceInt(name: String): Int =
+private fun JsonObject.sourceInt(
+    name: String,
+    pointer: String = "",
+): Int =
     try {
-        sourceDecimal(name).intValueExact()
+        sourceDecimal(name, pointer).intValueExact()
     } catch (_: ArithmeticException) {
-        configInvalid()
+        configInvalid(pointer.child(name), "$name must be an integer in the 32-bit range")
     }
 
-private fun JsonObject.optionalInt(name: String): Int? = if (name in this) sourceInt(name) else null
+private fun JsonObject.optionalInt(
+    name: String,
+    pointer: String = "",
+): Int? =
+    if (name in this) {
+        try {
+            sourceInt(name, pointer)
+        } catch (_: SourceInputFailure) {
+            configInvalid(pointer.child(name), "$name must be an integer in the 32-bit range")
+        }
+    } else {
+        null
+    }
 
-private fun JsonObject.rejectUnknown(allowed: Set<String>) {
-    if (keys.any { it !in allowed }) configInvalid()
+private fun JsonObject.rejectUnknown(
+    allowed: Set<String>,
+    pointer: String = "",
+) {
+    keys.firstOrNull { it !in allowed }?.let {
+        val key = if (it.length > 64) it.take(64) + "..." else it
+        configInvalid(pointer.child(key), "unknown field $key")
+    }
 }
 
-private fun configInvalid(): Nothing = sourceInputFailure("SOURCE_CONFIG_INVALID")
+private fun configInvalid(
+    pointer: String,
+    detail: String,
+): Nothing = throw SourceInputFailure("SOURCE_CONFIG_INVALID", pointer, detail)
 
 private fun requestInvalid(): Nothing = sourceInputFailure("SOURCE_REQUEST_INVALID")
 
 private fun sourceInputFailure(code: String): Nothing = throw SourceInputFailure(code)
 
-private class SourceInputFailure(
-    code: String,
+internal class SourceInputFailure(
+    val code: String,
+    val jsonPointer: String? = null,
+    val detail: String? = null,
 ) : IllegalArgumentException(code)
 
 private const val MAX_SOURCE_CONFIG_BYTES = 1_048_576

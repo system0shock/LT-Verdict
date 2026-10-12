@@ -35,6 +35,81 @@ class CommandLineProbeTest {
     private val end = 1_767_225_300_000L
 
     @Test
+    fun `config diagnostics escape terminal controls while JSON keeps the exact pointer`() {
+        val file =
+            tempDir.resolve("control-key.json").also {
+                Files.writeString(it, """{"bad\nfield\u001b\u2028\u2029":[]}""")
+            }
+        val result = run("source", "validate", "--connections", file.toString(), "--format", "json")
+        assertEquals(4, result.exitCode, result.stderr)
+        assertEquals(
+            listOf(
+                "SOURCE_CONFIG_INVALID",
+                "/bad\\u000afield\\u001b\\u2028\\u2029: unknown field bad\\u000afield\\u001b\\u2028\\u2029",
+            ),
+            result.stderr.lines().filter { it.isNotEmpty() },
+        )
+        val error =
+            Json
+                .parseToJsonElement(result.stdout)
+                .jsonObject
+                .getValue("errors")
+                .jsonArray
+                .single()
+                .jsonObject
+        assertEquals("/bad\nfield\u001b\u2028\u2029", error.string("json_pointer"))
+        assertEquals("unknown field bad\nfield\u001b\u2028\u2029", error.string("message"))
+    }
+
+    @Test
+    fun `root config diagnostics print the detail without a colon prefix`() {
+        val file = tempDir.resolve("invalid-root.json").also { Files.writeString(it, "[]") }
+        val result = run("source", "validate", "--connections", file.toString())
+        assertEquals(4, result.exitCode, result.stderr)
+        assertEquals(
+            listOf("SOURCE_CONFIG_INVALID", "must be an object"),
+            result.stderr.lines().filter { it.isNotEmpty() },
+        )
+    }
+
+    @Test
+    fun `validate reports config pointer on stderr and in JSON without changing the exit code`() {
+        val file =
+            tempDir.resolve("invalid-config.json").also {
+                Files.writeString(it, """{"schema_version":"source-connections.v1","connections":[],"postgres":[]}""")
+            }
+        listOf("text", "json").forEach { format ->
+            val result = run("source", "validate", "--connections", file.toString(), "--format", format)
+            assertEquals(4, result.exitCode, result.stderr)
+            assertEquals(
+                listOf("SOURCE_CONFIG_INVALID", "/postgres: unknown field postgres"),
+                result.stderr.lines().filter { it.isNotEmpty() },
+            )
+            if (format == "json") {
+                val report = Json.parseToJsonElement(result.stdout).jsonObject
+                assertEquals("source-check.v1", report.string("schema_version"))
+                assertEquals(
+                    """{"errors":[{"code":"SOURCE_CONFIG_INVALID","json_pointer":"/postgres","message":"unknown field postgres"}],""" +
+                        """"schema_version":"source-check.v1","valid":false}""" + "\n",
+                    result.stdout.replace("\r\n", "\n"),
+                )
+                assertEquals("false", report.getValue("valid").jsonPrimitive.content)
+                val error =
+                    report
+                        .getValue("errors")
+                        .jsonArray
+                        .single()
+                        .jsonObject
+                assertEquals("SOURCE_CONFIG_INVALID", error.string("code"))
+                assertEquals("/postgres", error.string("json_pointer"))
+                assertEquals("unknown field postgres", error.string("message"))
+            } else {
+                assertEquals("", result.stdout)
+            }
+        }
+    }
+
+    @Test
     fun `validate is offline, prints a failed check without failing the command and hides names and addresses`() =
         withServer { server ->
             val connections = connections(server, auth = """"auth":{"type":"bearer","token_env":"LTV_PROBE_UNSET_ENV_1"},""")

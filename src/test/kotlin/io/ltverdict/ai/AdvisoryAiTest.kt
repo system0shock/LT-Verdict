@@ -280,6 +280,102 @@ class AdvisoryAiTest {
     }
 
     @Test
+    fun `output validator accepts exactly one MiB`() {
+        val reference = "analysis-result.json#/evidence/0"
+        val output = validOutput(reference)
+        val bytes = canonicalJson(output)
+        val bounded = bytes + " ".repeat(1_048_576 - bytes.size).encodeToByteArray()
+
+        assertEquals(1_048_576, bounded.size)
+        assertEquals(output, AdviceOutputValidator.validate(bounded, setOf(reference)))
+    }
+
+    @Test
+    fun `output validator rejects one byte over one MiB`() {
+        val bytes = canonicalJson(validOutput("analysis-result.json#/evidence/0"))
+        val oversized = bytes + " ".repeat(1_048_577 - bytes.size).encodeToByteArray()
+
+        val failure =
+            assertThrows(AdviceValidationException::class.java) {
+                AdviceOutputValidator.validate(oversized, setOf("analysis-result.json#/evidence/0"))
+            }
+
+        assertEquals(AdviceFailure.OUTPUT_LIMIT, failure.reason)
+    }
+
+    @Test
+    fun `roughly five hundred KiB output is parsed saved and reloadable`() =
+        DataDirectory.open(tempDir.resolve("large-output")).use { directory ->
+            val fixture = prepareAnalysis(directory)
+            val bundles = RunBundleStore(directory)
+            val store = AiAdviceStore(directory, bundles)
+            val reference = "analysis-result.json#/evidence/0"
+            val output =
+                JsonObject(
+                    validOutput(reference) +
+                        (
+                            "hypotheses" to
+                                buildJsonArray {
+                                    repeat(20) { index ->
+                                        add(
+                                            buildJsonObject {
+                                                put("rank", index + 1)
+                                                put("observation", "\u0001".repeat(4096))
+                                                put("possible_explanation", "x".repeat(1024))
+                                                put("recommended_check", "Inspect the referenced interval.")
+                                                put("evidence_refs", buildJsonArray { add(JsonPrimitive(reference)) })
+                                            },
+                                        )
+                                    }
+                                }
+                        ),
+                )
+            val bytes = canonicalJson(output)
+            assertTrue(bytes.size in 500 * 1024..520 * 1024)
+            assertEquals(output, AdviceOutputValidator.validate(bytes, setOf(reference)))
+            val service =
+                AdvisoryAiService(
+                    bundles,
+                    store,
+                    AdvisoryRunner { RunnerOutcome.Success(bytes, provenance()) },
+                )
+
+            val saved = assertInstanceOf(AdviceRunResult.Saved::class.java, service.generate(fixture.runId, fixture.analysisId))
+
+            assertEquals(output, saved.advice.document.getValue("output"))
+            assertEquals(saved.advice.document, store.read(fixture.runId, fixture.analysisId)?.document)
+        }
+
+    @Test
+    fun `advice store size guard allows headroom and rejects one byte over its limit`() =
+        DataDirectory.open(tempDir.resolve("oversized-advice")).use { directory ->
+            val fixture = prepareAnalysis(directory)
+            val bundles = RunBundleStore(directory)
+            val store = AiAdviceStore(directory, bundles)
+            val service =
+                AdvisoryAiService(
+                    bundles,
+                    store,
+                    AdvisoryRunner {
+                        RunnerOutcome.Success(canonicalJson(validOutput("analysis-result.json#/evidence/0")), provenance())
+                    },
+                )
+            val saved = assertInstanceOf(AdviceRunResult.Saved::class.java, service.generate(fixture.runId, fixture.analysisId))
+            val path = saved.advice.path.resolve("ai-advice.json")
+            val bytes = Files.readAllBytes(path)
+            val storedLimit = 1_048_576 + 32 * 1024
+            assertTrue(storedLimit > MAX_ADVICE_OUTPUT_BYTES)
+            Files.write(path, bytes.copyOf(storedLimit))
+
+            val atLimit = assertThrows(IllegalStateException::class.java) { store.read(fixture.runId, fixture.analysisId) }
+            assertTrue(atLimit.message.orEmpty().contains("advice manifest differs"))
+
+            Files.write(path, bytes.copyOf(storedLimit + 1))
+            val overLimit = assertThrows(IllegalStateException::class.java) { store.read(fixture.runId, fixture.analysisId) }
+            assertTrue(overLimit.message.orEmpty().contains("advice exceeds limit"))
+        }
+
+    @Test
     fun `successful advice is atomic reloadable and never rewrites analysis`() {
         val root = tempDir.resolve("success")
         lateinit var runId: String

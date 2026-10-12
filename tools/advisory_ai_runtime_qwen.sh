@@ -45,12 +45,12 @@ out_size=$(wc -c </tmp/qwen.stdout)
 err_size=$(wc -c </tmp/qwen.stderr)
 echo "qwen_exit=$code stdout_bytes=$out_size stderr_bytes=$err_size"
 echo stdout
-head -c 131073 /tmp/qwen.stdout
+head -c 1048577 /tmp/qwen.stdout
 echo
 echo stderr
 head -c 16385 /tmp/qwen.stderr
 echo
 
-[ "$out_size" -le 131072 ] || exit 91
+[ "$out_size" -le 1048576 ] || exit 91
 [ "$err_size" -le 16384 ] || exit 92
 exit "$code"

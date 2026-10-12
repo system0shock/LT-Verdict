@@ -456,7 +456,7 @@ query-string, например `access_token`, `JSESSIONID`), `Bearer`-знач�
 содержал такие строки, после обновления не проходит проверку
 совпадения evidence и читается как `CORRUPT_AI_ADVICE`.
 
-Лимиты: evidence `262144` bytes, advice `131072` bytes, stderr `16384` bytes,
+Лимиты: evidence `262144` bytes, advice `1048576` bytes (1 MiB), stderr `16384` bytes,
 provider response `67108864` bytes. Qwen timeout — `600s`, container deadline —
 `605s`, host launcher deadline — `613s`, Kotlin outer timeout — `620s`.
 После успеха, ошибки, timeout или cancellation launcher ограниченно по времени

@@ -22,7 +22,7 @@ import java.util.UUID
 import java.util.concurrent.CancellationException
 
 internal const val MAX_ADVISORY_EVIDENCE_BYTES = 262_144
-internal const val MAX_ADVICE_OUTPUT_BYTES = 131_072
+internal const val MAX_ADVICE_OUTPUT_BYTES = 1_048_576
 
 internal data class AdvisoryEvidence(
     val bytes: ByteArray,

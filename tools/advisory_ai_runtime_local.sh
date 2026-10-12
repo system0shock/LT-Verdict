@@ -31,7 +31,7 @@ repo="$(cd "$here/.." && pwd)"
 prompt="$repo/docs/contracts/advice/v1/system-prompt.md"
 schema="$repo/docs/contracts/advice/v1/ai-advice-output.schema.json"
 evidence_limit=262144
-output_limit=131072
+output_limit=1048576
 stderr_limit=16384
 cli_deadline=605
 [[ "$deadline_arg" =~ ^[0-9]{1,3}$ ]] && [ "$deadline_arg" -ge 1 ] && [ "$deadline_arg" -lt "$cli_deadline" ] && cli_deadline="$deadline_arg"

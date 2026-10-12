@@ -24,7 +24,7 @@ $ImageDigest = "sha256:7b82f29c6ef83480a97f612d53ac3fd5f30a32df3fea1e06923d4204d
 $ImageReference = "mcr.microsoft.com/playwright/mcp@$ImageDigest"
 $CliSha256 = "1db9709bf1753611ca2fec234cf5adf517376efeb1540fcf9e309da010f9ed38"
 $EvidenceLimit = 262144L
-$OutputLimit = 131072L
+$OutputLimit = 1048576L
 $HostDeadlineSeconds = 613
 $DockerCommandTimeoutMilliseconds = 10000
 $DockerCleanupTimeoutMilliseconds = 1500
@@ -248,7 +248,7 @@ function Read-RelayResult {
 
 function Save-QwenAdvice {
     param([Parameter(Mandatory)] [string]$StdoutPath)
-    if (-not (Test-Path -LiteralPath $StdoutPath -PathType Leaf) -or (Get-Item -LiteralPath $StdoutPath).Length -gt 150000) {
+    if (-not (Test-Path -LiteralPath $StdoutPath -PathType Leaf) -or (Get-Item -LiteralPath $StdoutPath).Length -gt ($OutputLimit + 32768)) {
         return $false
     }
     $text = [System.IO.File]::ReadAllText($StdoutPath)

@@ -24,3 +24,4 @@ docs/ui-mockup/ai-defects-analysis-2026-09-30.md -text whitespace=-trailing-spac
 docs/ai-experiment/harness-264a340/** -text whitespace=-trailing-space,-space-before-tab,cr-at-eol
 fixtures/typed-boundary/** -text
 fixtures/stages/** text eol=lf
+examples/basic/input.jtl text eol=lf

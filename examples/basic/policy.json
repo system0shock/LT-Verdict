@@ -1,0 +1,50 @@
+{
+  "schema_version": "policy.v1",
+  "policy_id": "catalog-basic",
+  "defaults": {
+    "sample_floor": 20,
+    "min_samples": 100
+  },
+  "rules": [
+    {
+      "id": "items-response_time_p95_ms",
+      "metric": "response_time_p95_ms",
+      "operator": "lte",
+      "threshold": 500,
+      "scope": {
+        "kind": "transaction",
+        "name": "GET /items"
+      }
+    },
+    {
+      "id": "items-response_time_p99_ms",
+      "metric": "response_time_p99_ms",
+      "operator": "lte",
+      "threshold": 600,
+      "scope": {
+        "kind": "transaction",
+        "name": "GET /items"
+      }
+    },
+    {
+      "id": "items-error_rate_ratio",
+      "metric": "error_rate_ratio",
+      "operator": "lte",
+      "threshold": 0.01,
+      "scope": {
+        "kind": "transaction",
+        "name": "GET /items"
+      }
+    },
+    {
+      "id": "items-throughput_rps",
+      "metric": "throughput_rps",
+      "operator": "gte",
+      "threshold": 1,
+      "scope": {
+        "kind": "transaction",
+        "name": "GET /items"
+      }
+    }
+  ]
+}

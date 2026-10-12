@@ -1,0 +1,26 @@
+{
+  "schema_version": "correlation-plan.v1",
+  "resource_snapshot_sha256": "ebf231384b9743a5dd0d717e9fe073978473e3e1becb06cbd4ddcba4849b371c",
+  "pairs": [
+    {
+      "id": "cpu-latency",
+      "resource_series_id": "cpu",
+      "load_metric": "response_time_p95_ms",
+      "window_ids": [
+        "steady"
+      ],
+      "expected_sign": "positive",
+      "max_lag_ms": 0,
+      "min_abs_effect": 0.3,
+      "min_resource_delta": 0.1,
+      "min_load_delta": 20,
+      "controls": [
+        {
+          "meaning": "achieved_rps"
+        }
+      ],
+      "topology_basis": "CPU сервиса catalog, обслуживающего GET /items",
+      "clock_alignment": "unknown"
+    }
+  ]
+}

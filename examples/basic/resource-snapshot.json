@@ -1,0 +1,86 @@
+{
+  "schema_version": "resource-snapshot.v1",
+  "load_input_sha256": "ec01e6fe71409fc8ad3654e16f759bf7c7ad0661aad40802f45ecb0f894fd3e4",
+  "start_epoch_ms": 1767225600000,
+  "step_ms": 10000,
+  "point_count": 12,
+  "series": [
+    {
+      "id": "cpu",
+      "metric": "process_cpu_usage",
+      "unit": "cores",
+      "entity": "catalog",
+      "role": "system",
+      "aggregation": "interval_rate",
+      "labels": {
+        "job": "catalog"
+      },
+      "values": [
+        0.2,
+        0.3,
+        0.4,
+        0.5,
+        0.4,
+        0.5,
+        0.6,
+        0.5,
+        0.4,
+        0.5,
+        0.3,
+        0.2
+      ]
+    },
+    {
+      "id": "rss",
+      "metric": "process_resident_memory_bytes",
+      "unit": "bytes",
+      "entity": "catalog",
+      "role": "system",
+      "aggregation": "interval_mean",
+      "labels": {
+        "job": "catalog"
+      },
+      "values": [
+        268435456,
+        268435456,
+        285212672,
+        301989888,
+        301989888,
+        318767104,
+        335544320,
+        335544320,
+        318767104,
+        301989888,
+        285212672,
+        268435456
+      ]
+    }
+  ],
+  "windows": [
+    {
+      "id": "steady",
+      "from_epoch_ms": 1767225640000,
+      "to_epoch_ms": 1767225700000
+    }
+  ],
+  "rules": [
+    {
+      "id": "cpu-high",
+      "series_id": "cpu",
+      "unit": "cores",
+      "operator": "gt",
+      "threshold": 0.8,
+      "min_consecutive_cells": 2,
+      "effect": "sla"
+    },
+    {
+      "id": "rss-high",
+      "series_id": "rss",
+      "unit": "bytes",
+      "operator": "gt",
+      "threshold": 536870912,
+      "min_consecutive_cells": 2,
+      "effect": "sla"
+    }
+  ]
+}

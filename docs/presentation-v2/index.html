@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>LT Verdict: итоги и путь к автономному НТ</title>
-<link rel="stylesheet" href="assets/deck.css?v=11">
+<link rel="stylesheet" href="assets/deck.css?v=12">
 </head>
 <body>
 <div id="viewport"><main id="stage">
@@ -185,7 +185,7 @@
 <!-- Разделитель 2 -->
 <section class="slide divider" id="d2" data-title="Часть 2. Платформа Вердикт" data-steps="0">
   <div class="big">02</div><h2>Платформа Вердикт</h2><div class="rule"></div>
-  <ol><li><span>10</span>Как работает</li><li><span>11</span>MCP для агентов</li><li><span>12</span>Интерфейс</li><li><span>13</span>Измерение</li><li><span>14</span>Статистика</li></ol>
+  <ol><li><span>10</span>Как работает</li><li><span>11</span>MCP для агентов</li><li><span>12</span>Интерфейс</li><li><span>13</span>Статистика</li></ol>
   <aside class="notes">Переход ко второй части.</aside>
 </section>
 
@@ -227,30 +227,7 @@
   <aside class="notes"><b>Интерфейс (1,5 мин).</b> Экраны листаются сами, полоска под активной вкладкой показывает время до следующего. Клик по названию останавливает автопрокрутку. «Открыть живой макет» открывает интерактивную версию.</aside>
 </section>
 
-<!-- 13. Статистика 1 -->
-<section class="slide" id="s-stat1" data-title="Статистика: корректность измерения" data-sec="Платформа Вердикт" data-num="02" data-steps="0" data-src="Источник: ADR 0016, 0018, 0030 LT Verdict. Графики иллюстративные, синтетические данные.">
-  <div class="title"><h2>Измерение: вердикт строится только по корректной выборке и корректной статистике</h2></div>
-  <div class="body" style="top:230px">
-    <div class="stat">
-      <div class="m"><div class="hdr"><span class="ix">А</span><h3>Окно устойчивого состояния</h3></div>
-        <svg id="st1a" viewBox="0 0 520 300" aria-hidden="true"></svg>
-        <div class="how">Оценка идёт только по стадии устойчивой нагрузки. Разгон и спад исключены, и вердикт явно об этом сообщает.</div>
-        <div class="risk"><b>Закрывает риск:</b> ложный FAIL из-за разгона в p95 и throughput.</div></div>
-      <div class="m"><div class="hdr"><span class="ix">Б</span><h3>Перцентили по всем замерам</h3></div>
-        <svg id="st1b" viewBox="0 0 520 300" aria-hidden="true"></svg>
-        <div class="how">p95 считается по HDR-гистограмме всех замеров окна. Усреднение p95 по подам или интервалам запрещено.</div>
-        <div class="risk"><b>Закрывает риск:</b> заниженный p95 и пропущенное нарушение SLA.</div></div>
-      <div class="m"><div class="hdr"><span class="ix">В</span><h3>Достаточность выборки</h3></div>
-        <svg id="st1c" viewBox="0 0 520 300" aria-hidden="true"></svg>
-        <div class="how">Меньше 20 замеров — NO_VERDICT. От 20 до 99 — вердикт с пометкой «малая выборка». От 100 — полный вердикт.</div>
-        <div class="risk"><b>Закрывает риск:</b> «зелёный» вердикт по нескольким замерам.</div></div>
-    </div>
-    <div class="sum"><b>Итог</b>Каждое ограничение явно попадает в отчёт: что исключено из оценки, сколько замеров учтено и в каком режиме вынесен вердикт.</div>
-  </div>
-  <aside class="notes"><b>Измерение (1,5 мин).</b> А: окно устойчивого состояния; стадии объявляет человек (load-stages), автоопределения плато нет намеренно. Б: перцентили по HDR-гистограмме; на графике видно, что среднее p95 по подам ниже истинного p95 — именно так пропускают нарушения. В: пороги выборки 20 и 100 (настраиваются, на стенде ещё не калибровались).<br><b>Аналогии для устного рассказа:</b> время на трассе без прогрева; средний балл по школам не равен баллу по городу; без анализов диагноз не ставят.</aside>
-</section>
-
-<!-- 14. Статистика: методы -->
+<!-- 13. Статистика: методы -->
 <section class="slide" id="s-methods" data-title="Статистика: что анализируем" data-sec="Платформа Вердикт" data-num="02" data-steps="0" data-src="Источник: описание статистического анализа LT Verdict (2026-10-09); корреляции: ADR 0022, замер H4. Графики иллюстративные, синтетические данные.">
   <div class="title"><h2>Шесть методов статистики отвечают на вопросы инженера НТ: от выбросов до границы ёмкости</h2></div>
   <div class="body" style="top:250px">
@@ -274,7 +251,7 @@
 <!-- Разделитель 3 -->
 <section class="slide divider" id="d3" data-title="Часть 3. Путь к автономному НТ" data-steps="0">
   <div class="big">03</div><h2>Путь к автономному НТ</h2><div class="rule"></div>
-  <ol><li><span>16</span>Модель зрелости</li><li><span>17</span>Целевая картина</li><li><span>18</span>Статус и план</li></ol>
+  <ol><li><span>15</span>Модель зрелости</li><li><span>16</span>Целевая картина</li><li><span>17</span>Статус и план</li></ol>
   <aside class="notes">Переход к третьей части.</aside>
 </section>
 
@@ -312,7 +289,7 @@
   <aside class="notes"><b>Целевая картина (2 мин).</b> Дорожки: триггер, автономный флоу на сервере, инструменты через MCP, человек. Агенты разрабатывают, отлаживают, запускают скрипты, имеют доступ к БД и коду продукта, сверяют ошибки, после теста проверяют метрики и пишут отчёт. Отчёт попадает к человеку; не одобрен — флоу возвращается к доработке.</aside>
 </section>
 
-<!-- 18. Статус и план -->
+<!-- 17. Статус и план -->
 <section class="slide" id="s-status" data-title="Статус и план" data-sec="Путь к автономному НТ" data-num="03" data-steps="2" data-src="Статус по состоянию на ветку main, 2026-10-13; распределение по горизонтам уточняется владельцем продукта.">
   <div class="title"><h2>Закрыты ядро Вердикта и восемь инструментов НТ; в разработке MCP-сервер, калибровка корреляций и Impact-analysis</h2></div>
   <div class="body" style="top:250px">
@@ -350,6 +327,6 @@
 </div>
 <div id="notes" aria-live="polite"></div>
 <div id="toc"><h4>Слайды (клик — перейти, Esc — закрыть)</h4><ol id="tocList"></ol></div>
-<script src="assets/deck.js?v=11"></script>
+<script src="assets/deck.js?v=12"></script>
 </body>
 </html>

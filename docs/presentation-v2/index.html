@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>LT Verdict: итоги и путь к автономному НТ</title>
-<link rel="stylesheet" href="assets/deck.css?v=9">
+<link rel="stylesheet" href="assets/deck.css?v=10">
 </head>
 <body>
 <div id="viewport"><main id="stage">
@@ -24,18 +24,18 @@
 
 <!-- 2. Проблема -->
 <section class="slide" id="s-problem" data-title="Проблема" data-sec="Контекст" data-num="00" data-steps="1" data-src="Источник: концепция LT Verdict (PRC v0.6, раздел 1).">
-  <div class="title"><h2>Ручной разбор 50–200 графиков не масштабируется и не воспроизводится</h2>
+  <div class="title"><h2>Ручной разбор 50–200 графиков медленный и пропускает ошибки</h2>
     <p class="lead">После каждого прогона инженер сам выбирает, какие графики открыть и с чем сравнить.</p></div>
   <div class="body">
     <div class="thumbs" id="thumbs" aria-hidden="true"></div>
     <div class="pains">
       <div class="pain"><h3>Перегрузка вниманием</h3><p>Что инженер не открыл, того он не заметил.</p></div>
       <div class="pain"><h3>Ложные связи</h3><p>С ростом нагрузки растут почти все метрики. Похожие графики ещё не причина.</p></div>
-      <div class="pain"><h3>Невоспроизводимость</h3><p>Разные графики и разный эталон дают разные выводы по одним и тем же данным.</p></div>
+      <div class="pain"><h3>Сырые ряды не по силам агенту</h3><p>Агент в базе не может оценить сырые временные ряды, а визуальный просмотр графиков дорог и долог.</p></div>
     </div>
     <div class="goal st" data-s="1"><div class="flow">50–200 графиков → вердикт</div><p>Цель Вердикта: вердикт, короткий список находок и доказательства к каждой.</p></div>
   </div>
-  <aside class="notes"><b>Проблема (1,5 мин).</b> Три боли из концепции: перегрузка вниманием, ложные корреляции, неповторяемость. Нажмите →: подсвечиваются графики, которые действительно важны, и появляется цель.<br><b>Оговорка:</b> «список находок» (инциденты) в планах; сегодня Вердикт даёт вердикт, метрики, тренды, эпизоды и связи.</aside>
+  <aside class="notes"><b>Проблема (1,5 мин).</b> Три боли: перегрузка вниманием, ложные корреляции, сырые ряды не по силам агенту (в базе агент не оценит сырые временные ряды, визуальный просмотр графиков дорог и долог). Зелёные графики в норме, красные содержат ошибку; часть красных инженер открыл, часть пропустил. Нажмите →: остаются графики с ошибками и появляется цель.<br><b>Оговорка:</b> «список находок» (инциденты) в планах; сегодня Вердикт даёт вердикт, метрики, тренды, эпизоды и связи.</aside>
 </section>
 
 <!-- Разделитель 1 -->
@@ -64,7 +64,7 @@
           <div class="tool in" style="--d:1.2s"><div class="ico"><svg viewBox="0 0 24 24"><path d="M4 5h16v11H9l-5 4z"/></svg></div><div><b>GigaMeter</b><span>ИИ-ассистент в GUI JMeter</span></div></div>
         </div>
         <div class="col">
-          <div class="tool in" style="--d:1.4s"><div class="ico"><svg viewBox="0 0 24 24"><path d="M20 12a8 8 0 1 1-2.3-5.7M20 4v5h-5"/></svg></div><div><b>Плейбуки и self-healing</b><span>Написать, отладить, запустить, проверить; при сбое шаг назад</span></div></div>
+          <div class="tool in" style="--d:1.4s"><div class="ico"><svg viewBox="0 0 24 24"><path d="M20 12a8 8 0 1 1-2.3-5.7M20 4v5h-5"/></svg></div><div><b>Плейбуки и workflow с self-healing</b><span>Написать, отладить, запустить, проверить; при сбое шаг назад</span></div></div>
           <div class="tool in" style="--d:1.55s"><div class="ico"><svg viewBox="0 0 24 24"><path d="M3 5h18v10H3zM7 19h10M12 15v4M7 9l3 2-3 2"/></svg></div><div><b>MCP SSH</b><span>Агенты работают с генераторами нагрузки напрямую</span></div></div>
         </div>
         <div class="col">
@@ -206,12 +206,12 @@
 
 <!-- 11. MCP -->
 <section class="slide has-status" id="s-mcp" data-title="MCP для агентов" data-sec="Платформа Вердикт" data-num="02" data-steps="0" data-src="Решение владельца продукта: Вердикт как инструмент для внешнего агента. MCP-сервер в плане волны W3.">
-  <div class="title"><h2>Через MCP Вердикт становится инструментом для любых ИИ-агентов</h2>
+  <div class="title"><h2>Через MCP Вердикт становится инструментом для агентов</h2>
     <p class="lead">Агент запрашивает расчёт и доказательства, а сам вердикт остаётся детерминированным.</p></div>
   <span class="status dev">в разработке</span>
   <div class="body"><svg class="arch" id="mcpSvg" viewBox="0 0 1680 560" aria-hidden="true"></svg>
     <div class="principle"><span><b>Вердикт считает, агент действует.</b> ИИ не меняет вердикт.</span><small>Состав вызовов уточняется в разработке.</small></div></div>
-  <aside class="notes"><b>MCP (2 мин).</b> Внешний агент (Qwen Code, Claude Code, GigaCode) и наши агенты обращаются к Вердикту через MCP: запрос (синий) и ответ с доказательствами (бирюзовый). Это ключ к автономности. MCP-сервер в разработке; перечень вызовов на слайде описывает намерение.</aside>
+  <aside class="notes"><b>MCP (2 мин).</b> Агент (GigaCode) обращается к Вердикту через MCP: запрос (синий) и ответ с доказательствами (бирюзовый). Это ключ к автономности. MCP-сервер в разработке; перечень вызовов на слайде описывает намерение.</aside>
 </section>
 
 <!-- 12. Интерфейс -->
@@ -344,15 +344,15 @@
     <div class="mx">
       <div></div>
       <div class="hd now"><span class="pin">сейчас</span><span class="w">Уровень 1</span><b>Инструменты рядом с инженером</b></div>
-      <div class="hd st" data-s="1"><span class="w">Уровень 2</span><b>Серверные автономные флоу</b></div>
+      <div class="hd st" data-s="1"><span class="w">Уровень 2</span><b>Полуавтономные воркфлоу</b></div>
       <div class="hd goal st" data-s="2"><span class="pin t">цель</span><span class="w">Уровень 3</span><b>Автономное НТ с одобрением человека</b></div>
       <div class="rh">Что делают агенты</div>
       <div class="c now">Ускоряют отдельные шаги: скрипты, разбор логов, знания о системе</div>
-      <div class="c st" data-s="1">Флоу запускается на сервере; агенты вызывают инструменты и Вердикт через MCP</div>
+      <div class="c st" data-s="1">Воркфлоу работают на сервере по спеке; агенты вызывают инструменты и Вердикт через MCP</div>
       <div class="c goal st" data-s="2">Готовят, отлаживают, запускают и разбирают тест от изменения в продукте до отчёта</div>
       <div class="rh">Что делает человек</div>
       <div class="c now">Ведёт процесс и принимает все решения</div>
-      <div class="c st" data-s="1">Ставит задачу и проверяет результат флоу</div>
+      <div class="c st" data-s="1">Отдаёт спеку и контролирует результат только на ключевых точках</div>
       <div class="c goal st" data-s="2">Одобряет отчёт и принимает решение по релизу</div>
       <div class="rh">Опора</div>
       <div class="c now">8 инструментов в работе</div>
@@ -428,6 +428,6 @@
 </div>
 <div id="notes" aria-live="polite"></div>
 <div id="toc"><h4>Слайды (клик — перейти, Esc — закрыть, D — включить или пропустить черновик)</h4><ol id="tocList"></ol></div>
-<script src="assets/deck.js?v=9"></script>
+<script src="assets/deck.js?v=10"></script>
 </body>
 </html>

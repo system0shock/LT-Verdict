@@ -242,13 +242,20 @@
   hooks["s-problem"] = {
     enter() {
       const box = $("#thumbs"); box.innerHTML = "";
-      const r = rng(5), hot = new Set([3, 10, 19, 26]);
+      const r = rng(5), hot = new Set([3, 10, 19, 26, 14, 22]), seen = new Set([3, 14, 19]);
       for (let i = 0; i < 30; i++) {
         const d = document.createElement("div");
-        d.className = "th" + (hot.has(i) ? " hot" : "");
-        let y = 18 + r() * 8; const pts = [];
-        for (let x = 0; x <= 100; x += 4) { y += (r() - .5) * 6 - (hot.has(i) && x > 50 ? 1.1 : 0); y = clamp(y, 3, 33); pts.push(`${x} ${y.toFixed(1)}`); }
-        d.innerHTML = `<svg viewBox="0 0 100 40" preserveAspectRatio="none"><path class="ax" d="M0 39H100"/><path class="ln" d="M${pts.join(" L")}"/></svg>`;
+        const bad = hot.has(i);
+        d.className = "th " + (bad ? (seen.has(i) ? "bad seen hot" : "bad miss hot") : "ok");
+        // ровные плавные ряды: базовый уровень, пара медленных волн, у проблемных — плавный сдвиг во второй половине
+        const base = 18 + r() * 6, a1 = 1 + r() * 1.5, f1 = 1 + r() * 1.5, p1 = r() * 6, a2 = .4 + r() * .6, f2 = 3 + r() * 2, p2 = r() * 6;
+        const pts = [];
+        for (let x = 0; x <= 100; x += 4) {
+          const u = x / 100, ramp = bad ? 11 / (1 + Math.exp(-(u - .6) * 14)) : 0;
+          const y = clamp(base + a1 * Math.sin(u * f1 * 6.28 + p1) + a2 * Math.sin(u * f2 * 6.28 + p2) - ramp, 3, 33);
+          pts.push(`${x} ${y.toFixed(1)}`);
+        }
+        d.innerHTML = `<svg viewBox="0 0 100 40" preserveAspectRatio="none"><path class="ax" d="M0 39H100"/><path class="ln" d="M${pts.join(" L")}"/></svg>` + (bad ? `<i class="tag">${seen.has(i) ? "замечено" : "пропущено"}</i>` : "");
         box.appendChild(d);
         d.animate([{ opacity: 0, transform: "translateY(8px)" }, { opacity: 1, transform: "none" }], { duration: D(400), delay: D(i * 25), fill: "backwards", easing: E });
       }
@@ -439,10 +446,10 @@
   hooks["s-mcp"] = {
     enter() {
       const s = clear($("#mcpSvg"));
-      const ag = [["Qwen Code", "внешний агент", 0], ["Claude Code", "внешний агент", 0], ["GigaCode", "внешний агент", 0], ["RCA-агент", "наш инструмент", 1], ["Агент скриптов", "наш инструмент", 1]];
+      const ag = [["GigaCode", "ИИ-агент", 0]];
       const AH = 84, GAP = 35;
       ag.forEach(([n, sub, mine], i) => {
-        const y = i * (AH + GAP), cy = y + AH / 2;
+        const y = 280 - AH / 2 + i * (AH + GAP), cy = y + AH / 2;
         const g = el("g", {}, s);
         rect(g, 0, y, 330, AH, { fill: css("--surface"), stroke: css("--line"), rx: 3 });
         rect(g, 0, y, 6, AH, { fill: mine ? css("--teal") : css("--blue") });

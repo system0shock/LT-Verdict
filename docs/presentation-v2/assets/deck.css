@@ -173,11 +173,15 @@ body.show-toc #toc { display: block; }
 #s-problem .thumbs { position: absolute; left: 0; top: 0; width: 1040px; display: grid; grid-template-columns: repeat(6, 1fr); gap: 12px; }
 #s-problem .th { height: 108px; background: var(--surface); border-radius: 3px; position: relative; transition: opacity .6s, background .6s, box-shadow .6s; }
 #s-problem .th svg { position: absolute; inset: 8px 10px; width: calc(100% - 20px); height: calc(100% - 16px); }
-#s-problem .th .ln { fill: none; stroke: var(--mute); stroke-width: 1.6; vector-effect: non-scaling-stroke; transition: stroke .6s; }
+#s-problem .th .ln { fill: none; stroke: var(--pass); stroke-width: 2; vector-effect: non-scaling-stroke; transition: stroke .6s; }
+#s-problem .th.bad .ln { stroke: var(--fail); stroke-width: 2.4; }
 #s-problem .th .ax { stroke: var(--line); stroke-width: 1; vector-effect: non-scaling-stroke; }
+#s-problem .th .tag { position: absolute; right: 8px; bottom: 6px; font-style: normal; font-size: 13px; font-weight: 600; letter-spacing: .02em; }
+#s-problem .th.seen .tag { color: var(--pass); }
+#s-problem .th.miss { background: var(--fail-soft); box-shadow: inset 0 0 0 2px var(--fail); }
+#s-problem .th.miss .tag { color: var(--fail); }
 #s-problem[data-step="1"] .th:not(.hot) { opacity: .22; }
-#s-problem[data-step="1"] .th.hot { background: var(--blue-soft); box-shadow: inset 0 0 0 2px var(--blue); }
-#s-problem[data-step="1"] .th.hot .ln { stroke: var(--blue); }
+#s-problem[data-step="1"] .th.hot { box-shadow: inset 0 0 0 2px var(--fail); background: var(--fail-soft); }
 #s-problem .pains { position: absolute; left: 1100px; right: 0; top: 0; display: flex; flex-direction: column; }
 #s-problem .pain { padding: 20px 0 22px; border-top: 1px solid var(--line); }
 #s-problem .pain:first-child { border-top: 3px solid var(--navy); }

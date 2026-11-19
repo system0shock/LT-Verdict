@@ -34,7 +34,13 @@ internal fun cellCounts(
 /** Step 2: σ in requests per cell from the median absolute deviation of first differences, never below one request. */
 internal fun noiseCounts(counts: LongArray): Double {
     if (counts.size < 2) return NOISE_FLOOR_COUNTS
-    val differences = LongArray(counts.size - 1) { Math.subtractExact(counts[it + 1], counts[it]) }
+    // Only differences between loaded cells (both at least STEADY_LEVEL_RATIO of the upper quartile): long low-rate sections
+    // (warm-up, tail, idle lead-in) have a smaller spread and would deflate the noise of the plateau. Too few such pairs: all.
+    val sorted = counts.sortedArray()
+    val loaded = STEADY_LEVEL_RATIO * sorted[(3 * sorted.size + 3) / 4 - 1]
+    val pairs = (0 until counts.size - 1).filter { counts[it] >= loaded && counts[it + 1] >= loaded }
+    val chosen = if (pairs.size >= MIN_RUN_CELLS) pairs else (0 until counts.size - 1).toList()
+    val differences = LongArray(chosen.size) { Math.subtractExact(counts[chosen[it] + 1], counts[chosen[it]]) }
     val median = lowerMedian(differences)
     val mad = lowerMedian(LongArray(differences.size) { Math.abs(Math.subtractExact(differences[it], median)) })
     return maxOf(NOISE_FLOOR_COUNTS, MAD_TO_SIGMA * mad / Math.sqrt(2.0))
@@ -223,9 +229,11 @@ internal fun mergeThreshold(
 private const val ONE_SECOND = 1_000L
 private const val MAX_DRIFT_RATIO = 0.10
 private const val MAX_RESIDUAL_CV = 0.25
-private const val IDLE_LEVEL_RATIO = 0.02
+internal const val IDLE_LEVEL_RATIO = 0.02
 internal const val LEVEL_MERGE_RATIO = 0.05
 private const val LEVEL_MERGE_SIGMAS = 4.0
 internal const val MIN_STEADY_MILLIS = 30_000L
 internal const val DROP_MIN_MILLIS = 60_000L
+internal const val STEADY_LEVEL_RATIO = 0.5
+internal const val MIN_RUN_CELLS = 12
 private const val HOLD_MAX_DRIFT_RATIO = 0.25

@@ -75,16 +75,19 @@ internal fun readLoadSecondSeries(
                     secondFirst = minOf(secondFirst ?: sample.startedAtEpochMillis, sample.startedAtEpochMillis)
                     if (sample.isRequest()) {
                         val offset = sample.startedAtEpochMillis - runStart
-                        if (offset < 0 || offset > runEnd - runStart) throw IllegalStateException(PARSER_PASS_MISMATCH)
+                        if (offset < 0 || offset > runEnd - runStart) throw InputChanged()
                         counts[(offset / ONE_SECOND).toInt()]++
                     }
                 },
                 checkCancelled = checkCancelled,
             )
         } catch (_: IllegalArgumentException) {
-            throw IllegalStateException(PARSER_PASS_MISMATCH)
+            return LoadSecondSeriesRead.Refused(REFUSED_INPUT_CHANGED)
+        } catch (_: InputChanged) {
+            return LoadSecondSeriesRead.Refused(REFUSED_INPUT_CHANGED)
         }
-    if (secondReport.validity != firstReport.validity || secondFirst != runStart) throw IllegalStateException(PARSER_PASS_MISMATCH)
+    // The input changed between the two reads (a JTL still being written): a refusal, not an internal error.
+    if (secondReport.validity != firstReport.validity || secondFirst != runStart) return LoadSecondSeriesRead.Refused(REFUSED_INPUT_CHANGED)
     return LoadSecondSeriesRead.Series(LoadSecondSeries(runStart, runEnd, counts, firstReport.validity == RunValidity.DEGRADED))
 }
 
@@ -92,11 +95,14 @@ private fun io.ltverdict.ingest.LoadSample.isRequest() = kind == SampleKind.JMET
 
 internal const val STAGE_PROPOSAL_METHOD = "rps-plateau-segmentation.v1"
 private const val PROPOSAL_RUN_ID = "run"
-private const val PARSER_PASS_MISMATCH = "PARSER_PASS_MISMATCH"
+
+private class InputChanged : RuntimeException()
+
 private const val ONE_SECOND = 1_000L
 internal const val REFUSED_INPUT_INVALID = "INPUT_INVALID"
 internal const val REFUSED_NO_REQUEST_SAMPLES = "NO_REQUEST_SAMPLES"
 internal const val REFUSED_RUN_TOO_LONG = "RUN_TOO_LONG"
+internal const val REFUSED_INPUT_CHANGED = "INPUT_CHANGED"
 
 internal enum class StageProposalStatus { DETECTED, NOT_DETECTED }
 
@@ -180,6 +186,11 @@ internal fun proposeLoadStages(
 internal fun detectLoadStages(
     series: LoadSecondSeries,
     steadySteps: SteadySteps = SteadySteps.TOP,
+): StageProposal = leadInRefusal(series, detectSeries(series, steadySteps))
+
+private fun detectSeries(
+    series: LoadSecondSeries,
+    steadySteps: SteadySteps,
 ): StageProposal {
     val runStart = series.runStartEpochMillis
     val runEnd = series.runEndEpochMillis
@@ -202,6 +213,42 @@ internal fun detectLoadStages(
     }
 }
 
+/**
+ * A refusal for a low rate or no plateau caused by a long lead-in (setUp hours before the load) says so: the lead-in ends with
+ * the last run of at least IDLE_GAP_MIN_MILLIS without requests before 2 % (IDLE_LEVEL_RATIO) of all requests have started.
+ */
+private fun leadInRefusal(
+    series: LoadSecondSeries,
+    proposal: StageProposal,
+): StageProposal {
+    if (proposal.status != StageProposalStatus.NOT_DETECTED ||
+        proposal.reason !in setOf("RATE_TOO_LOW", REFUSED_NO_PLATEAU)
+    ) {
+        return proposal
+    }
+    val counts = series.requestsPerSecond
+    val total = counts.sum()
+    var started = 0L
+    var zeros = 0
+    var leadEnd = 0
+    for (second in counts.indices) {
+        if (started >= IDLE_LEVEL_RATIO * total) break
+        if (counts[second] == 0L) {
+            zeros++
+        } else {
+            if (zeros * ONE_SECOND >= IDLE_GAP_MIN_MILLIS) leadEnd = second
+            zeros = 0
+        }
+        started += counts[second]
+    }
+    if (leadEnd == 0) return proposal
+    val runMillis = series.runEndEpochMillis - series.runStartEpochMillis
+    return proposal.copy(
+        reason = "LEAD_IN_TOO_LONG",
+        detail = "lead_in_ms=${leadEnd * ONE_SECOND} lead_in_share=${decimal(leadEnd * ONE_SECOND.toDouble() / runMillis)}",
+    )
+}
+
 private class RunFacts(
     val runStart: Long,
     val runEnd: Long,
@@ -215,8 +262,6 @@ private class Step(
     val first: Int,
     var last: Int,
     val opening: Piece,
-    /** The cells of the long fall before this step, when a fall opened it (D4). */
-    val afterDecline: IntRange? = null,
 )
 
 private fun detectInCells(
@@ -261,7 +306,7 @@ private fun detectInCells(
 
     // Step 7: the stop is the longest suffix of idles, short pieces and falls after the last plateau. A long fall belongs to the
     // stop only if it loses more than half of its rate: a long piece that holds its level is never hidden in the ramp-down,
-    // it stays in the last steady stage (D4).
+    // it stays in the last steady stage (D4). Whatever goes to the stop is named by a warning (step 13, D4).
     var stopFirst = pieces.size
     while (stopFirst - 1 > candidates.last()) {
         val piece = pieces[stopFirst - 1]
@@ -276,31 +321,30 @@ private fun detectInCells(
         stopFirst--
     }
 
-    // Step 8: a higher plateau after rises only, or any plateau after a long fall (D4), opens a new step; anything else stays in
-    // the current step (D4).
+    fun longRise(piece: Piece) = piece.kind == StageSegmentKind.RISING && piece.fit.cells * cellMillis >= DROP_MIN_MILLIS
+
+    // Step 8: consecutive plateaus at the same level (within the merge threshold) form one step, and everything between them
+    // stays in it (a dip is never cut, D4). A plateau at another level opens a new step however fast the level changed: two
+    // levels are never pooled into one window (ADR 0030). A rise of DROP_MIN_MILLIS or more always ends a step.
     val steps = ArrayList<Step>()
     var current = Step(candidates.first(), candidates.first(), pieces[candidates.first()])
     for (index in candidates.drop(1)) {
         val next = pieces[index]
         val between = (current.last + 1 until index).map { pieces[it] }
-        val higher = next.fit.level - current.opening.fit.level > mergeThreshold(current.opening.fit, next.fit, noise)
-        // A short FLAT piece that rises is a transition between steps too: a step of +10 % is a rise of under
-        // MAX_DRIFT_RATIO over a short piece (plan W4.1, ruling of task 3).
-        val transition =
-            between.all {
-                it.kind == StageSegmentKind.RISING ||
-                    (it.kind == StageSegmentKind.FLAT && it.fit.slope > 0 && it.fit.cells * cellMillis < MIN_STEADY_MILLIS)
-            }
-        val decline = between.any { it.kind == StageSegmentKind.FALLING && it.fit.cells * cellMillis >= DROP_MIN_MILLIS }
-        if ((higher && transition) || decline) {
-            steps += current
-            current = Step(index, index, next, if (decline) between.first().fit.from until between.last().fit.to else null)
-        } else {
+        val sameLevel = Math.abs(next.fit.level - current.opening.fit.level) <= mergeThreshold(current.opening.fit, next.fit, noise)
+        if (sameLevel && between.none(::longRise)) {
             current.last = index
+        } else {
+            steps += current
+            current = Step(index, index, next)
         }
     }
-    current.last = stopFirst - 1
+    // The last step keeps what follows its last plateau up to the stop (D4), unless a long rise comes first.
+    var tailFirst = current.last + 1
+    while (tailFirst < stopFirst && !longRise(pieces[tailFirst])) tailFirst++
+    current.last = tailFirst - 1
     steps += current
+    val riseAfterSteady = (tailFirst until pieces.size).any { longRise(pieces[it]) }
 
     // Step 9: an edge cell outside the noise of the line of its own piece moves the edge inwards.
     val bounds =
@@ -336,12 +380,19 @@ private fun detectInCells(
         stages += StageV1(STAGE_RAMP_UP, StageRole.EXCLUDED, leadInCells * cellMillis, bounds.first().first * cellMillis)
         boundaries += StageBoundaryFact(STAGE_RAMP_UP, "BEFORE_FIRST_STEADY", null, null, null, 0)
     }
+    // D12, mode top: every step at the level of the highest one (within the merge threshold) is steady, so equal plateaus are
+    // never chosen among by noise; a lower step after the first steady one is a hold that top does not evaluate.
+    val top = steps.maxBy { it.opening.fit.level }.opening.fit
+    val steadyFlags =
+        steps.map { step ->
+            steadySteps == SteadySteps.ALL || top.level - step.opening.fit.level <= mergeThreshold(top, step.opening.fit, noise)
+        }
+    val firstSteady = steadyFlags.indexOf(true)
     val steadyStages = ArrayList<Pair<Step, String>>()
-    // D12, mode top: the highest step (the last of equal ones); a lower step after it is a hold that top does not evaluate.
-    val top = steps.indices.maxWith(compareBy<Int> { steps[it].opening.fit.level }.thenBy { it })
+    val ids = steps.indices.map { if (single) STAGE_STEADY else "step-${it + 1}" }
     steps.forEachIndexed { index, step ->
-        val id = if (single) STAGE_STEADY else "step-${index + 1}"
-        val steady = steadySteps == SteadySteps.ALL || index == top
+        val id = ids[index]
+        val steady = steadyFlags[index]
         val (from, to, trimmed) = bounds[index]
         val last = index == steps.lastIndex
         val end = if (last && to == run.cells) gridEnd else to * cellMillis
@@ -360,11 +411,12 @@ private fun detectInCells(
         if (steady) steadyStages += step to id
     }
     val lastTo = stages.last().toOffsetMillis
-    var rampDownMillis = 0L
+    var tailMillis = 0L
+    val tailId = if (riseAfterSteady) STAGE_AFTER_STEADY else STAGE_RAMP_DOWN
     if (lastTo < gridEnd) {
-        stages += StageV1(STAGE_RAMP_DOWN, StageRole.EXCLUDED, lastTo, gridEnd)
-        boundaries += StageBoundaryFact(STAGE_RAMP_DOWN, "AFTER_LAST_STEADY", null, null, null, 0)
-        rampDownMillis = gridEnd - lastTo
+        stages += StageV1(tailId, StageRole.EXCLUDED, lastTo, gridEnd)
+        boundaries += StageBoundaryFact(tailId, "AFTER_LAST_STEADY", null, null, null, 0)
+        tailMillis = gridEnd - lastTo
     }
 
     // Step 11: the plateaus must cover enough of the run without its lead-in (all steps, whatever the mode).
@@ -374,75 +426,129 @@ private fun detectInCells(
     // Step 12.
     if (stages.size > MAX_LOAD_STAGES) return refuse("TOO_MANY_STAGES", "stages=${stages.size}")
 
-    // Step 13: warnings of the verdict windows only (D12), then the confidence.
+    // Step 13: warnings, then the confidence. From the start of the first steady stage nothing leaves the verdict windows
+    // silently (D4): every excluded stretch of DROP_MIN_MILLIS or more after it is named, and such a proposal is never HIGH.
     val perSecond = (cellMillis / ONE_SECOND).toDouble()
+    val stepFits = steps.indices.associateWith { sums.fit(bounds[it].first, bounds[it].second) }
     for ((step, id) in steadyStages) {
         val opening = step.opening.fit
+        // The largest drop: the lowest fitted rate among the pieces of the step below the opening plateau.
         (step.first..step.last)
-            .map { pieces[it] }
-            .firstOrNull { it.fit.level < (1 - LEVEL_MERGE_RATIO) * opening.level }
+            .map { pieces[it].fit }
+            .filter { it.level < (1 - LEVEL_MERGE_RATIO) * opening.level }
+            .minByOrNull { minOf(it.lineAt(it.from), it.lineAt(it.to - 1)) }
             ?.let {
                 warnings +=
                     StageProposalWarning(
                         "LOAD_DROP_INSIDE_STEADY",
                         id,
-                        it.fit.from * cellMillis,
+                        it.from * cellMillis,
                         fromRps = opening.level / perSecond,
-                        toRps = it.fit.level / perSecond,
+                        toRps = maxOf(0.0, minOf(it.lineAt(it.from), it.lineAt(it.to - 1))) / perSecond,
                     )
             }
-        if (Math.abs(opening.drift) > STEADY_DRIFT_WARN_RATIO) {
+        // Drift over the whole step, not only its opening plateau.
+        val whole = stepFits.getValue(steps.indexOf(step))
+        if (Math.abs(whole.drift) > STEADY_DRIFT_WARN_RATIO) {
             warnings +=
                 StageProposalWarning(
                     "STEADY_DRIFT",
                     id,
-                    opening.from * cellMillis,
-                    fromRps = opening.lineAt(opening.from) / perSecond,
-                    toRps = opening.lineAt(opening.to - 1) / perSecond,
+                    whole.from * cellMillis,
+                    fromRps = whole.lineAt(whole.from) / perSecond,
+                    toRps = whole.lineAt(whole.to - 1) / perSecond,
                 )
         }
+        if (opening.level < STEADY_LEVEL_RATIO * top.level) {
+            warnings +=
+                StageProposalWarning("LOW_LEVEL_STEP", id, whole.from * cellMillis, opening.level / perSecond, top.level / perSecond)
+        }
     }
-    steps.forEachIndexed { index, step ->
-        val id = "step-${index + 1}"
-        step.afterDecline?.let { cells ->
-            val fall = pieces.first { it.fit.from == cells.first }.fit
-            val end = pieces.last { it.fit.to == cells.last + 1 }.fit
+    for (index in 1 until steps.size) {
+        val previous = steps[index - 1].opening.fit
+        val next = steps[index].opening.fit
+        val gapFrom = bounds[index - 1].second * cellMillis
+        val gapMillis = bounds[index].first * cellMillis - gapFrom
+        val dips =
+            (steps[index - 1].last + 1 until steps[index].first).any {
+                pieces[it].fit.level < (1 - LEVEL_MERGE_RATIO) * minOf(previous.level, next.level)
+            }
+        if (next.level < previous.level || (dips && gapMillis >= DROP_MIN_MILLIS)) {
             warnings +=
                 StageProposalWarning(
                     "LOAD_DECLINE_BETWEEN_STEPS",
-                    id,
-                    cells.first * cellMillis,
-                    fromRps = fall.lineAt(fall.from) / perSecond,
-                    toRps = end.lineAt(end.to - 1) / perSecond,
-                    durationMillis = (cells.last + 1 - cells.first) * cellMillis,
+                    ids[index],
+                    gapFrom,
+                    previous.level / perSecond,
+                    next.level / perSecond,
+                    gapMillis,
+                )
+        } else if (gapMillis >= DROP_MIN_MILLIS && firstSteady in 0 until index) {
+            warnings +=
+                StageProposalWarning(
+                    "LOAD_RISE_BETWEEN_STEPS",
+                    ids[index],
+                    gapFrom,
+                    previous.level / perSecond,
+                    next.level / perSecond,
+                    gapMillis,
                 )
         }
-        if (steadySteps == SteadySteps.TOP && index > top) {
+        if (!steadyFlags[index] && index > firstSteady) {
             warnings +=
                 StageProposalWarning(
                     "HOLD_NOT_EVALUATED",
-                    id,
+                    ids[index],
                     bounds[index].first * cellMillis,
-                    fromRps = steps[top].opening.fit.level / perSecond,
-                    toRps = step.opening.fit.level / perSecond,
-                    durationMillis = stages.single { it.id == id }.let { it.toOffsetMillis - it.fromOffsetMillis },
+                    fromRps = top.level / perSecond,
+                    toRps = next.level / perSecond,
+                    durationMillis = stages.single { it.id == ids[index] }.let { it.toOffsetMillis - it.fromOffsetMillis },
                 )
         }
     }
-    if (rampDownMillis > maxOf(DROP_MIN_MILLIS.toDouble(), LONG_RAMP_DOWN_RATIO * stepMillis)) {
-        warnings += StageProposalWarning("LONG_RAMP_DOWN", STAGE_RAMP_DOWN, lastTo, durationMillis = rampDownMillis)
+    // The tail after the last step: whatever it is (a planned stop, a collapse, a hang, an unfinished rise), from the request
+    // rate alone it cannot be told apart, so a long one is always named.
+    val tailCellsMillis = run.cells * cellMillis - lastTo
+    var longTail = false
+    if (tailCellsMillis >= DROP_MIN_MILLIS) {
+        val tailPieces = pieces.filter { it.fit.to * cellMillis > lastTo }
+        val first = tailPieces.first().fit
+        val end = tailPieces.last().fit
+        warnings +=
+            StageProposalWarning(
+                if (riseAfterSteady) "RISE_AFTER_STEADY" else "LONG_RAMP_DOWN",
+                tailId,
+                lastTo,
+                fromRps = maxOf(0.0, first.lineAt(maxOf(first.from, (lastTo / cellMillis).toInt()))) / perSecond,
+                toRps = maxOf(0.0, end.lineAt(end.to - 1)) / perSecond,
+                durationMillis = tailMillis,
+            )
+        longTail = tailMillis >= LONG_TAIL_LOW_MILLIS
     }
     if (series.degraded) warnings += StageProposalWarning("DEGRADED_INPUT", null, 0)
     val steadyFacts = boundaries.filter { it.basis == "PLATEAU" }
     val codes = warnings.map { it.code }.toSet()
     val confidence =
         when {
-            codes.any { it in setOf("LOAD_DROP_INSIDE_STEADY", "LONG_RAMP_DOWN", "HOLD_NOT_EVALUATED") } -> StageProposalConfidence.LOW
-            codes.any { it in setOf("LEAD_IN_IDLE", "STEADY_DRIFT", "DEGRADED_INPUT", "LOAD_DECLINE_BETWEEN_STEPS") } ||
+            longTail || codes.any { it in setOf("LOAD_DROP_INSIDE_STEADY", "HOLD_NOT_EVALUATED") } -> StageProposalConfidence.LOW
+            codes.any {
+                it in
+                    setOf(
+                        "LEAD_IN_IDLE",
+                        "STEADY_DRIFT",
+                        "DEGRADED_INPUT",
+                        "LOAD_DECLINE_BETWEEN_STEPS",
+                        "LOAD_RISE_BETWEEN_STEPS",
+                        "LOW_LEVEL_STEP",
+                        "LONG_RAMP_DOWN",
+                        "RISE_AFTER_STEADY",
+                    )
+            } ||
                 steadyFacts.any { fact ->
                     listOfNotNull(fact.fromContrastSigma, fact.toContrastSigma).any { it < HIGH_EDGE_SIGMAS }
                 } ||
-                steadyStages.any { (step, _) -> step.opening.fit.residualCv > HIGH_RESIDUAL_CV } -> StageProposalConfidence.MEDIUM
+                steadyStages.any { (step, _) -> stepFits.getValue(steps.indexOf(step)).residualCv > HIGH_RESIDUAL_CV } ->
+                StageProposalConfidence.MEDIUM
             else -> StageProposalConfidence.HIGH
         }
     return StageProposal(
@@ -522,14 +628,13 @@ private const val STAGE_LEAD_IN = "lead-in"
 private const val STAGE_RAMP_UP = "ramp-up"
 private const val STAGE_STEADY = "steady"
 private const val STAGE_RAMP_DOWN = "ramp-down"
+private const val STAGE_AFTER_STEADY = "after-steady"
 private const val REFUSED_NO_PLATEAU = "NO_PLATEAU"
 private const val MIN_RUN_MILLIS = 60_000L
-private const val MIN_RUN_CELLS = 12
-private const val STEADY_LEVEL_RATIO = 0.5
 private const val STEADY_DURATION_RATIO = 0.75
 private const val EDGE_TOLERANCE_SIGMAS = 2.0
 private const val EDGE_TRIM_MAX_CELLS = 2
-private const val LONG_RAMP_DOWN_RATIO = 0.25
+private const val LONG_TAIL_LOW_MILLIS = 300_000L
 private const val IDLE_GAP_MIN_MILLIS = 30_000L
 private const val MIN_STEADY_SHARE = 0.30
 private const val STEADY_DRIFT_WARN_RATIO = 0.05

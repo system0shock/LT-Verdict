@@ -113,14 +113,21 @@ class StageProposalTest {
         val w = proposal.cellMillis!!
         val shift = profile.firstRequestOffsetMillis()
 
-        val steady = proposal.stages.single { it.role == StageRole.STEADY }
-        assertEquals("steady", steady.id, explain(proposal))
-        assertTrue(steady.fromOffsetMillis + shift in 60_000 - w..60_000 + 2 * w, explain(proposal))
-        assertTrue(steady.toOffsetMillis + shift in 3_600_000 - 2 * w..3_600_000 + w, explain(proposal))
-        val drop = proposal.warnings.single { it.code == "LOAD_DROP_INSIDE_STEADY" }
-        assertEquals("steady", drop.stageId)
-        // Ruling (task 3): the drop is the start of the transition piece, which is at least three cells long.
-        assertTrue(drop.atOffsetMillis + shift in 2_400_000 - 2 * w..2_400_000 + w, explain(proposal))
+        // Second review round (R4): the lower level is a plateau of its own, so it is a step of its own and never pooled; in mode
+        // top it is excluded and named (HOLD_NOT_EVALUATED), the step down itself is named (LOAD_DECLINE_BETWEEN_STEPS).
+        val all = detect(profile, SteadySteps.ALL)
+        assertEquals(listOf("ramp-up", "step-1", "step-2", "ramp-down"), all.stages.map { it.id }, explain(all))
+        assertTrue(all.stages.filter { it.id.startsWith("step-") }.all { it.role == StageRole.STEADY })
+        val upper = proposal.stages.single { it.id == "step-1" }
+        val lower = proposal.stages.single { it.id == "step-2" }
+        assertEquals(StageRole.STEADY, upper.role)
+        assertEquals(StageRole.EXCLUDED, lower.role)
+        assertTrue(upper.fromOffsetMillis + shift in 60_000 - w..60_000 + 2 * w, explain(proposal))
+        assertTrue(upper.toOffsetMillis + shift in 2_400_000 - 2 * w..2_400_000 + w, explain(proposal))
+        assertTrue(lower.toOffsetMillis + shift in 3_600_000 - 2 * w..3_600_000 + w, explain(proposal))
+        val decline = proposal.warnings.single { it.code == "LOAD_DECLINE_BETWEEN_STEPS" }
+        assertTrue(decline.atOffsetMillis + shift in 2_400_000 - 2 * w..2_400_000 + w, explain(proposal))
+        assertTrue(proposal.warnings.any { it.code == "HOLD_NOT_EVALUATED" && it.stageId == "step-2" }, explain(proposal))
         assertEquals(StageProposalConfidence.LOW, proposal.confidence, explain(proposal))
     }
 

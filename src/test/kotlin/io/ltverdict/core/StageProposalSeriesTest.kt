@@ -81,6 +81,23 @@ class StageProposalSeriesTest {
     }
 
     @Test
+    fun `an input that changes between the two reads is refused`() {
+        val rows = small.startOffsetsMillis().map { requestRow(t0 + it) }
+        val path = jtl("changing.jtl", *rows.toTypedArray())
+        var calls = 0
+        readLoadSecondSeries(SourceType.JMETER_CSV, path) { calls++ }
+        var seen = 0
+
+        val read =
+            readLoadSecondSeries(SourceType.JMETER_CSV, path) {
+                seen++
+                if (seen == calls / 2) jtl("changing.jtl", requestRow(t0 - 10_000), *rows.toTypedArray())
+            }
+
+        assertEquals(LoadSecondSeriesRead.Refused("INPUT_CHANGED"), read)
+    }
+
+    @Test
     fun `a run of exactly seven days is read and one millisecond more is refused`() {
         val week = 604_800_000L
         val exact = jtl("week.jtl", requestRow(t0), requestRow(t0 + week - ELAPSED_MILLIS))

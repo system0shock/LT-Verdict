@@ -2,6 +2,7 @@ package io.ltverdict.core
 
 import java.nio.file.Files
 import java.nio.file.Path
+import kotlin.math.exp
 import kotlin.math.floor
 
 // Synthetic load profiles for the stage proposal (plan W4.1, section «Фикстуры»): a piecewise-linear rate in rps, turned into
@@ -12,6 +13,17 @@ internal data class RatePiece(
     val seconds: Int,
     val fromRps: Double,
     val toRps: Double,
+    /** `elapsed` of every request of the piece, written to the JTL. */
+    val latencyMs: Long = ELAPSED_MILLIS,
+    /** Share of failed requests, every k-th request of the piece fails deterministically. */
+    val errorRatio: Double = 0.0,
+)
+
+/** One generated request: start in generator time, `elapsed`, `success`. */
+internal data class GeneratedRequest(
+    val offsetMillis: Long,
+    val elapsedMillis: Long,
+    val success: Boolean,
 )
 
 internal data class StageProfile(
@@ -19,13 +31,15 @@ internal data class StageProfile(
     val pieces: List<RatePiece>,
     val jitter: Double = 0.0,
     val seed: Long = 1L,
+    /** When set, the count of each second is a Poisson draw around the expected count (deterministic xorshift64). */
+    val poissonSeed: Long? = null,
 ) {
     val seconds: Int get() = pieces.sumOf { it.seconds }
 
     /** Requests started in generator second `s` (generator time, not the run start). */
     fun requestsPerSecond(): LongArray {
         val counts = LongArray(seconds)
-        var random = seed
+        var random = poissonSeed ?: seed
         var cumulative = 0.0
         var second = 0
         for (piece in pieces) {
@@ -40,35 +54,64 @@ internal data class StageProfile(
                     val u = (random ushr 11).toDouble() / (1L shl 53).toDouble() * 2.0 - 1.0
                     expected *= 1.0 + jitter * u
                 }
-                val before = floor(cumulative).toLong()
-                cumulative += expected
-                counts[second] = floor(cumulative).toLong() - before
+                if (poissonSeed != null) {
+                    random = random xor (random shl 13)
+                    random = random xor (random ushr 7)
+                    random = random xor (random shl 17)
+                    val u = (random ushr 11).toDouble() / (1L shl 53).toDouble()
+                    var k = 0L
+                    var p = exp(-expected)
+                    var cumulativeP = p
+                    while (u > cumulativeP && k < 100_000) {
+                        k++
+                        p *= expected / k
+                        cumulativeP += p
+                    }
+                    counts[second] = k
+                } else {
+                    val before = floor(cumulative).toLong()
+                    cumulative += expected
+                    counts[second] = floor(cumulative).toLong() - before
+                }
                 second++
             }
         }
         return counts
     }
 
-    /** Start offsets of every request in milliseconds of generator time, evenly spread inside each second. */
-    fun startOffsetsMillis(): List<Long> {
+    /** Every request, evenly spread inside its second, with the latency and the failures of its piece. */
+    fun requests(): List<GeneratedRequest> {
         val counts = requestsPerSecond()
-        val starts = ArrayList<Long>()
-        counts.forEachIndexed { second, count ->
-            for (i in 0 until count) starts += second * 1000L + (1000L * i) / count
+        val requests = ArrayList<GeneratedRequest>()
+        var second = 0
+        for (piece in pieces) {
+            var index = 0L
+            for (local in 0 until piece.seconds) {
+                val count = counts[second]
+                for (i in 0 until count) {
+                    val failed = floor((index + 1) * piece.errorRatio) > floor(index * piece.errorRatio)
+                    requests += GeneratedRequest(second * 1000L + (1000L * i) / count, piece.latencyMs, !failed)
+                    index++
+                }
+                second++
+            }
         }
-        return starts
+        return requests
     }
+
+    /** Start offsets of every request in milliseconds of generator time, evenly spread inside each second. */
+    fun startOffsetsMillis(): List<Long> = requests().map { it.offsetMillis }
 
     /** Generator time of the first request: the run start of the written JTL is `t0` plus this. */
     fun firstRequestOffsetMillis(): Long = startOffsetsMillis().first()
 
     /** The series [readLoadSecondSeries] builds from [writeJtl] without the file. */
     fun series(t0: Long = DEFAULT_T0): LoadSecondSeries {
-        val starts = startOffsetsMillis()
-        val first = starts.first()
-        val end = starts.maxOf { it + ELAPSED_MILLIS }
+        val requests = requests()
+        val first = requests.first().offsetMillis
+        val end = requests.maxOf { it.offsetMillis + it.elapsedMillis }
         val counts = LongArray(((end - first) / 1000L).toInt() + 1)
-        starts.forEach { counts[((it - first) / 1000L).toInt()]++ }
+        requests.forEach { counts[((it.offsetMillis - first) / 1000L).toInt()]++ }
         return LoadSecondSeries(t0 + first, t0 + end, counts, false)
     }
 
@@ -79,7 +122,13 @@ internal data class StageProfile(
     ): Path {
         val text = StringBuilder(JTL_HEADER).append('\n')
         extraRows.forEach { text.append(it).append('\n') }
-        startOffsetsMillis().forEach { text.append(requestRow(t0 + it)).append('\n') }
+        requests().forEach {
+            val row = requestRow(t0 + it.offsetMillis, elapsed = it.elapsedMillis)
+            text
+                .append(
+                    if (it.success) row else row.replace(",200,OK,stages 1-1,text,true,", ",500,Error,stages 1-1,text,false,"),
+                ).append('\n')
+        }
         Files.writeString(path, text)
         return path
     }
@@ -197,5 +246,117 @@ internal object StageProfiles {
                 ramp(1800, 36.0, 21.5 * (1 + drift / 2)),
                 ramp(10800, 21.5 * (1 + drift / 2), 21.5 * (1 - drift / 2)),
             ),
+        )
+
+    // Second review round (coordinator 2026-11-19): Poisson counts, latency and failures per piece.
+
+    /** Poisson variant of a noise-free profile. */
+    fun poisson(
+        profile: StageProfile,
+        seed: Long = 11L,
+    ) = profile.copy(name = "${profile.name}, Poisson seed $seed", poissonSeed = seed)
+
+    /** R1: a plateau, then a slow collapse with latency 1500 ms and 10 % errors and no stop phase. */
+    fun collapse(
+        fallSeconds: Int,
+        toRps: Double,
+    ) = StageProfile(
+        "R1 collapse ${fallSeconds}s to $toRps",
+        listOf(ramp(120, 0.0, 100.0), flat(3600, 100.0), RatePiece(fallSeconds, 100.0, toRps, 1500, 0.10)),
+        poissonSeed = 11L,
+    )
+
+    /** R1: a 4-hour soak at 30 rps, then a 3000 s collapse to 10 rps. */
+    val soakCollapse =
+        StageProfile(
+            "R1 soak then collapse",
+            listOf(ramp(120, 0.0, 30.0), flat(14_400, 30.0), RatePiece(3000, 30.0, 10.0, 1500, 0.10)),
+            poissonSeed = 11L,
+        )
+
+    /** R1: a plateau, then a 10-minute hang at 1 rps. */
+    val hang =
+        StageProfile(
+            "R1 hang",
+            listOf(ramp(120, 0.0, 100.0), flat(1800, 100.0), RatePiece(600, 1.0, 1.0, 1500, 0.10)),
+            poissonSeed = 11L,
+        )
+
+    /** R2: five plateaus at 100 rps, each followed by a 120 s fall to 60 rps at 2000 ms, then a last plateau. */
+    val equalDips =
+        StageProfile(
+            "R2 equal plateaus with falls",
+            buildList {
+                repeat(5) {
+                    add(flat(180, 100.0))
+                    add(RatePiece(120, 100.0, 60.0, 2000))
+                }
+                add(flat(180, 100.0))
+            },
+            poissonSeed = 11L,
+        )
+
+    /** R2: two equal 900 s plateaus with a 240 s dip between them. */
+    fun twoEqual(seed: Long) =
+        StageProfile(
+            "R2 two equal plateaus, seed $seed",
+            listOf(flat(900, 100.0), ramp(120, 100.0, 60.0), ramp(120, 60.0, 100.0), flat(900, 100.0)),
+            poissonSeed = seed,
+        )
+
+    /** R3: a plateau, then a 180 s rise to 200 rps at 3000 ms, run aborted. */
+    val riseAbort =
+        StageProfile(
+            "R3 rise after the plateau",
+            listOf(ramp(60, 0.0, 100.0), flat(600, 100.0), RatePiece(180, 100.0, 200.0, 3000)),
+            poissonSeed = 11L,
+        )
+
+    /** R3: a plateau, then a 2400 s creep from 100 to 125 rps. */
+    val creep =
+        StageProfile(
+            "R3 creep",
+            listOf(ramp(60, 0.0, 100.0), flat(1200, 100.0), ramp(2400, 100.0, 125.0)),
+            poissonSeed = 11L,
+        )
+
+    /** R4: 1800 s at 100 rps, then an abrupt step down to a 120 s plateau at 60 rps with latency 1500 ms. */
+    val stepDownAbrupt =
+        StageProfile(
+            "R4 abrupt step down",
+            listOf(ramp(60, 0.0, 100.0), flat(1800, 100.0), RatePiece(120, 60.0, 60.0, 1500), ramp(60, 60.0, 0.0)),
+            poissonSeed = 11L,
+        )
+
+    /** R4: the same with a 120 s fall between the levels. */
+    val stepDown120 =
+        StageProfile(
+            "R4 step down over 120 s",
+            listOf(ramp(60, 0.0, 100.0), flat(1800, 100.0), ramp(120, 100.0, 60.0), RatePiece(120, 60.0, 60.0, 1500), ramp(60, 60.0, 0.0)),
+            poissonSeed = 11L,
+        )
+
+    /** R4: up, down, up with abrupt edges. */
+    val upDownUp =
+        StageProfile(
+            "R4 up down up",
+            listOf(ramp(60, 0.0, 100.0), flat(600, 100.0), flat(600, 60.0), flat(600, 100.0), ramp(60, 100.0, 0.0)),
+            poissonSeed = 11L,
+        )
+
+    /** R5: long low-rate sections around a 100 rps plateau. */
+    val lowRateSections =
+        StageProfile(
+            "R5 low-rate sections",
+            listOf(flat(1800, 5.0), ramp(60, 5.0, 100.0), flat(1800, 100.0), flat(1800, 5.0)),
+            poissonSeed = 11L,
+        )
+
+    /** R6: a warm-up at 40 % for 15 minutes before a 1000 s plateau. */
+    val warmUp40 =
+        StageProfile(
+            "R6 warm-up at 40 %",
+            listOf(flat(900, 40.0), ramp(60, 40.0, 100.0), flat(1000, 100.0), ramp(60, 100.0, 0.0)),
+            poissonSeed = 11L,
         )
 }

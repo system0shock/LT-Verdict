@@ -165,7 +165,12 @@ class StageProposalReviewTest {
                     StageProfiles.upDownUp,
                     StageProfiles.lowRateSections,
                     StageProfiles.warmUp40,
-                )
+                    // ADR 0036, D14: kept stretches move step edges; no unnamed leftover may appear next to them.
+                    StageProfiles.degradedGap,
+                ) + (1L..4L).map { StageProfiles.degradedDip(it) } +
+                listOf(0.45, 0.49, 0.51, 0.60).flatMap { listOf(StageProfiles.fall(it, true), StageProfiles.fall(it, false)) } +
+                listOf(60, 300, 900).map { StageProfiles.healthyRampDown(it, 1L) } +
+                listOf(0.2, 0.5, 1.0, 2.0).map { StageProfiles.lowRate(it) }
         for (profile in profiles) {
             for (mode in SteadySteps.entries) {
                 val proposal = detectLoadStages(profile.series(), mode)

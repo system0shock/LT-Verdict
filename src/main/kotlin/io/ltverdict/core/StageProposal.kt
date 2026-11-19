@@ -435,44 +435,55 @@ private fun detectInCells(
 
     fun stepEnd(index: Int) = if (index == steps.lastIndex && bounds[index].to == run.cells) gridEnd else bounds[index].to * cellMillis
 
-    // Step 9a (D14): every stretch of DROP_MIN_MILLIS or more after the start of the first steady stage that the roles by load
-    // would exclude is judged by error ratio and mean latency against a step at the same or a higher load. References and
-    // stretches are taken from the layout by load alone, before any decision, so a kept stretch never becomes a reference.
+    // Step 9a (D14): every stretch after the start of the first steady stage that the roles by load would exclude is judged by
+    // error ratio and mean latency against a step at the same or a higher load, whatever its duration: the sample count decides
+    // whether it can be judged (re-review N1: a 50 s collapse of 2000 requests was excluded silently). DROP_MIN_MILLIS keeps
+    // governing only the naming of healthy stretches: a shorter one that is not degraded is not reported, as before. References
+    // and stretches are taken from the layout by load alone, before any decision, so a kept stretch never becomes a reference.
     fun judged(
         kind: String,
         from: Long,
         to: Long,
         reference: Int,
-    ): StageStretchFact {
+        namedMillis: Long = to - from,
+    ): StageStretchFact? {
+        if (to <= from) return null
         val load = stretchLoad(series, from, to)
-        val referenceLoad = stretchLoad(series, bounds[reference].from * cellMillis, stepEnd(reference))
-        return StageStretchFact(kind, from, to, ids[reference], load, referenceLoad, judge(load, referenceLoad))
+        val referenceFrom = bounds[reference].from * cellMillis
+        val referenceLoad = stretchLoad(series, referenceFrom, stepEnd(reference))
+        // The stop of a test fails the requests in flight: about the reference rate times its mean latency. Failures of a tail
+        // within STOP_IN_FLIGHT_FACTOR of that are the stop artefact, not a degradation (re-review N1).
+        val referenceSeconds = minOf(stepEnd(reference) / ONE_SECOND, series.requestsPerSecond.size.toLong()) - referenceFrom / ONE_SECOND
+        val inFlight =
+            if (kind == "TAIL" && referenceSeconds > 0) {
+                STOP_IN_FLIGHT_FACTOR * referenceLoad.samples / referenceSeconds * referenceLoad.meanMillis / ONE_SECOND
+            } else {
+                0.0
+            }
+        val fact = StageStretchFact(kind, from, to, ids[reference], load, referenceLoad, judge(load, referenceLoad, inFlight))
+        return fact.takeIf { namedMillis >= DROP_MIN_MILLIS || it.verdict == StretchVerdict.DEGRADED }
     }
     // A lower step of mode top after the first steady one: against the last steady step before it (the top level).
     val stepStretches = HashMap<Int, StageStretchFact>()
     for (index in steps.indices) {
-        if (steadyFlags[index] || index < firstSteady || stepEnd(index) - bounds[index].from * cellMillis < DROP_MIN_MILLIS) continue
-        stepStretches[index] =
-            judged("STEP", bounds[index].from * cellMillis, stepEnd(index), (index - 1 downTo 0).first { steadyFlags[it] })
+        if (steadyFlags[index] || index < firstSteady) continue
+        judged("STEP", bounds[index].from * cellMillis, stepEnd(index), (index - 1 downTo 0).first { steadyFlags[it] })
+            ?.let { stepStretches[index] = it }
     }
     // A gap between two steps: against the step at the higher level, the previous one for a decline, the next one for a rise
     // (a rise judged against the lower step would flag the ordinary growth of latency with load).
     val gapStretches = HashMap<Int, StageStretchFact>()
     for (index in 1 until steps.size) {
-        val from = stepEnd(index - 1)
-        val to = bounds[index].from * cellMillis
-        if (index - 1 < firstSteady || to - from < DROP_MIN_MILLIS) continue
+        if (index - 1 < firstSteady) continue
         val decline = steps[index].opening.fit.level < steps[index - 1].opening.fit.level
-        gapStretches[index] = judged("GAP", from, to, if (decline) index - 1 else index)
+        judged("GAP", stepEnd(index - 1), bounds[index].from * cellMillis, if (decline) index - 1 else index)
+            ?.let { gapStretches[index] = it }
     }
     // The tail after the last step: against the last step. A rise after it has no step at the same load to compare with.
     val lastEnd = stepEnd(steps.lastIndex)
+    // The tail is named from its full cells (step 13), as before; its judgement covers the grid end.
     val tailStretch =
-        if (run.cells * cellMillis - lastEnd >= DROP_MIN_MILLIS) {
-            judged(if (riseAfterSteady) "AFTER_STEADY" else "TAIL", lastEnd, gridEnd, steps.lastIndex)
-        } else {
-            null
-        }
+        judged(if (riseAfterSteady) "AFTER_STEADY" else "TAIL", lastEnd, gridEnd, steps.lastIndex, run.cells * cellMillis - lastEnd)
 
     // Step 9b (D14): a degraded stretch is never excluded. A lower step becomes its own steady window; a gap or a tail joins
     // the window of the step it was judged against, which becomes steady if it was not. Two plateau levels are never pooled.
@@ -682,10 +693,10 @@ private fun detectInCells(
                 tailStretch.toOffsetMillis - tailStretch.fromOffsetMillis,
                 tailStretch,
             )
-    } else if (tailCellsMillis >= DROP_MIN_MILLIS) {
+    } else if (tailCellsMillis >= DROP_MIN_MILLIS || (riseAfterSteady && tailStretch?.verdict == StretchVerdict.DEGRADED)) {
         val (fromRps, toRps) = tailRates(lastTo)
         // A rise after the last step that is worse than it stays excluded (no step at its load to join), but is named as
-        // degraded: an open question to the owner (ADR 0036, D14).
+        // degraded, however short: an open question to the owner (ADR 0036, D14).
         val degradedRise = riseAfterSteady && tailStretch?.verdict == StretchVerdict.DEGRADED
         warnings +=
             StageProposalWarning(
@@ -786,15 +797,18 @@ private fun stretchLoad(
 private fun judge(
     load: StretchLoad,
     reference: StretchLoad,
+    inFlightFailures: Double,
 ): StretchVerdict {
     if (load.samples < DEGRADED_MIN_SAMPLES || reference.samples < DEGRADED_MIN_SAMPLES) return StretchVerdict.NOT_JUDGED
     val ratio = load.errorRatio
     val referenceRatio = reference.errorRatio
     val expectedFailures = load.samples * referenceRatio
+    val excess = load.failures - expectedFailures
     val errors =
         ratio >= DEGRADED_ERROR_FACTOR * referenceRatio &&
             ratio - referenceRatio >= DEGRADED_ERROR_MIN_INCREASE &&
-            load.failures - expectedFailures >= DEGRADED_ERROR_NOISE_SIGMAS * Math.sqrt(maxOf(1.0, expectedFailures))
+            excess >= DEGRADED_ERROR_NOISE_SIGMAS * Math.sqrt(maxOf(1.0, expectedFailures)) &&
+            excess > inFlightFailures
     val latency =
         load.meanMillis >= DEGRADED_LATENCY_FACTOR * reference.meanMillis &&
             load.meanMillis - reference.meanMillis >= DEGRADED_LATENCY_MIN_INCREASE_MILLIS
@@ -880,3 +894,4 @@ private const val DEGRADED_ERROR_MIN_INCREASE = 0.01
 private const val DEGRADED_ERROR_NOISE_SIGMAS = 4.0
 private const val DEGRADED_LATENCY_FACTOR = 1.5
 private const val DEGRADED_LATENCY_MIN_INCREASE_MILLIS = 50.0
+private const val STOP_IN_FLIGHT_FACTOR = 2.0

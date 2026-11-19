@@ -191,6 +191,44 @@ class StageProposalDegradationTest {
     }
 
     @Test
+    fun `a collapse shorter than a minute at the end is judged and kept`() {
+        for (seed in 1L..3L) {
+            for (mode in SteadySteps.entries) {
+                val proposal = detectLoadStages(StageProfiles.shortCollapse(seed).series(), mode)
+
+                assertEquals(StageRole.STEADY, proposal.stages.last().role, "seed $seed $mode ${explain(proposal)}")
+                val kept = proposal.warnings.single { it.code == "DEGRADED_TAIL_KEPT" }
+                assertTrue(kept.durationMillis!! < 60_000 && kept.stretch!!.load.samples >= 200, explain(proposal))
+                assertEquals(StageProposalConfidence.LOW, proposal.confidence)
+            }
+        }
+    }
+
+    @Test
+    fun `a degraded decline shorter than a minute between steps is kept`() {
+        val proposal = detectLoadStages(StageProfiles.shortDegradedGap.series(), SteadySteps.ALL)
+
+        val kept = proposal.warnings.single { it.code == "DEGRADED_GAP_KEPT" }
+        assertTrue(kept.durationMillis!! < 60_000, explain(proposal))
+        val steady = proposal.stages.filter { it.role == StageRole.STEADY }
+        steady.zipWithNext().forEach { (a, b) -> assertEquals(a.toOffsetMillis, b.fromOffsetMillis, explain(proposal)) }
+    }
+
+    @Test
+    fun `the JMeter stop artefact is not a degraded tail`() {
+        for (seed in 1L..5L) {
+            for (rampDown in listOf(false, true)) {
+                for (mode in SteadySteps.entries) {
+                    val proposal = detectLoadStages(StageProfiles.stopArtefact(seed, rampDown).series(), mode)
+
+                    assertTrue(proposal.warnings.none { it.code.startsWith("DEGRADED_") }, "seed $seed $rampDown ${explain(proposal)}")
+                    assertTrue(proposal.stretches.none { it.verdict == StretchVerdict.DEGRADED }, explain(proposal))
+                }
+            }
+        }
+    }
+
+    @Test
     fun `the judgement is deterministic`() {
         val first = detectLoadStages(StageProfiles.collapse(600, 20.0).series())
         val second = detectLoadStages(StageProfiles.collapse(600, 20.0).series())

@@ -454,6 +454,43 @@ internal object StageProfiles {
             poissonSeed = seed,
         )
 
+    /** Re-review N1: a 50 s collapse at the end (40 rps, 5000 ms, 50 % errors) after 300 s at 100 rps. */
+    fun shortCollapse(seed: Long) =
+        StageProfile(
+            "N1 short collapse, seed $seed",
+            listOf(ramp(120, 0.0, 100.0), flat(300, 100.0), RatePiece(50, 40.0, 40.0, 5000, 0.50)),
+            poissonSeed = seed,
+        )
+
+    /** Re-review N1: steps at 100 and 60 rps with a degraded 50 s decline between them (1500 ms, 10 % errors). */
+    val shortDegradedGap =
+        StageProfile(
+            "N1 short degraded decline between steps",
+            listOf(ramp(60, 0.0, 100.0), flat(900, 100.0), RatePiece(50, 100.0, 60.0, 1500, 0.10), flat(900, 60.0), ramp(60, 60.0, 0.0)),
+            poissonSeed = 11L,
+        )
+
+    /**
+     * Re-review N1: the ordinary JMeter stop. The requests in flight when the test stops fail: about rate × latency of them,
+     * 10 at 100 rps and 100 ms; modelled pessimistically as the last 5 s with errors (20 failures at full rate, 4 %).
+     * [rampDown]: threads first stop over 25 s, as with a JMeter ramp-down, then the last 5 s at 20 % errors.
+     */
+    fun stopArtefact(
+        seed: Long,
+        rampDown: Boolean,
+    ) = StageProfile(
+        "N1 stop artefact, ramp-down $rampDown, seed $seed",
+        listOf(ramp(120, 0.0, 100.0), flat(900, 100.0)) +
+            if (rampDown) {
+                listOf(ramp(25, 100.0, 20.0), RatePiece(5, 20.0, 0.0, ELAPSED_MILLIS, 0.20))
+            } else {
+                listOf(RatePiece(5, 100.0, 100.0, ELAPSED_MILLIS, 0.04))
+            },
+        poissonSeed = seed,
+        noiseSeed = seed + 1000,
+        backgroundErrorRatio = 0.005,
+    )
+
     /** R6: a warm-up at 40 % for 15 minutes before a 1000 s plateau. */
     val warmUp40 =
         StageProfile(

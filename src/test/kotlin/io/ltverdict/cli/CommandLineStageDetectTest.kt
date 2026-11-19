@@ -323,11 +323,18 @@ class CommandLineStageDetectTest {
                 Triple(StageProfiles.stepDown120, "all", stepDown120),
                 Triple(StageProfiles.stepDown120, "top", stepDown120),
             ) +
-                listOf(StageProfiles.collapse(600, 20.0), StageProfiles.collapse(300, 40.0), StageProfiles.soakCollapse, StageProfiles.hang)
-                    .flatMap { profile ->
-                        // The plateau and everything after it, to the end of the run.
-                        listOf("all", "top").map { Triple(profile, it, listOf(120_000L until profile.seconds * 1000L + 60_000L)) }
-                    }
+                (
+                    listOf(
+                        StageProfiles.collapse(600, 20.0),
+                        StageProfiles.collapse(300, 40.0),
+                        StageProfiles.soakCollapse,
+                        StageProfiles.hang,
+                    ) +
+                        (1L..3L).map { StageProfiles.shortCollapse(it) }
+                ).flatMap { profile ->
+                    // The plateau and everything after it, to the end of the run.
+                    listOf("all", "top").map { Triple(profile, it, listOf(120_000L until profile.seconds * 1000L + 60_000L)) }
+                }
         cases.forEachIndexed { index, (profile, mode, careful) ->
             val jtl = profile.writeJtl(tempDir.resolve("careful-$index.jtl"))
             val detected = run("stages", "detect", jtl.toString(), "--steady-steps", mode)
@@ -339,7 +346,7 @@ class CommandLineStageDetectTest {
             val byCareful = verdict(jtl, declared, "c$index")
 
             assertEquals(byCareful, byProposal, "${profile.name} $mode:\n${detected.stderr}")
-            if (profile.name.startsWith("R1 collapse") || profile == StageProfiles.soakCollapse) {
+            if (profile.name.startsWith("R1 collapse") || profile.name.startsWith("N1 ") || profile == StageProfiles.soakCollapse) {
                 assertEquals("FAIL", byProposal, "${profile.name} $mode:\n${detected.stderr}")
             }
         }

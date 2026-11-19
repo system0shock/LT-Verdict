@@ -38,7 +38,7 @@ internal fun baselineLocation(
 ): Pair<String, String> {
     fun notFound(): Nothing = throw CliFailure(EXIT_INVALID_INPUT, "BASELINE_NOT_FOUND")
     try {
-        // The path as given, not resolved: a link in any part of it (the file, the analysis, the run) is refused.
+        // The path as given, not resolved: a link in any part of it (the file, the analysis, the run, the data dir) is refused.
         val file = path.toAbsolutePath().normalize()
         val analysis = file.parent ?: notFound()
         val analyses = analysis.parent ?: notFound()
@@ -48,7 +48,7 @@ internal fun baselineLocation(
         if (file.fileName.toString() != "analysis-result.json" ||
             analyses.fileName.toString() != "analyses" ||
             runs.fileName.toString() != "runs" ||
-            listOf(file, analysis, analyses, run, runs).any { Files.isSymbolicLink(it) } ||
+            listOf(file, analysis, analyses, run, runs, root).any { Files.isSymbolicLink(it) } ||
             !Files.isRegularFile(file, LinkOption.NOFOLLOW_LINKS) ||
             !Files.isSameFile(root, dataDir)
         ) {

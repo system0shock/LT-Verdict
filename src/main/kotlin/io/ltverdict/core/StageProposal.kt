@@ -5,6 +5,8 @@ import io.ltverdict.ingest.RunValidity
 import io.ltverdict.ingest.SampleKind
 import io.ltverdict.ingest.SourceType
 import io.ltverdict.ingest.parseInput
+import java.math.BigDecimal
+import java.math.RoundingMode
 import java.nio.file.Files
 import java.nio.file.Path
 
@@ -96,147 +98,401 @@ internal const val REFUSED_INPUT_INVALID = "INPUT_INVALID"
 internal const val REFUSED_NO_REQUEST_SAMPLES = "NO_REQUEST_SAMPLES"
 internal const val REFUSED_RUN_TOO_LONG = "RUN_TOO_LONG"
 
-/** Step 1 of the method: the first width of the ladder with at most MAX_CELLS full cells and an upper quartile of at least MIN_CELL_COUNT_P75. */
-internal fun chooseCellSeconds(series: LoadSecondSeries): Int? {
-    val runMillis = series.runEndEpochMillis - series.runStartEpochMillis
-    for (width in CELL_LADDER_SECONDS) {
-        val cells = runMillis / (ONE_SECOND * width)
-        if (cells == 0L || cells > MAX_CELLS) continue
-        val sorted = cellCounts(series, width).sortedArray()
-        val rank = ((3 * sorted.size + 3) / 4) // ceil(0.75 n), 1-based
-        if (sorted[rank - 1] >= MIN_CELL_COUNT_P75) return width
-    }
-    return null
+internal enum class StageProposalStatus { DETECTED, NOT_DETECTED }
+
+internal enum class StageSegmentKind { IDLE, FLAT, RISING, FALLING, UNSTABLE }
+
+internal enum class StageProposalConfidence { HIGH, MEDIUM, LOW }
+
+/** ADR 0036, D12: which plateau steps get the role steady. Default TOP: one window of one load level. */
+internal enum class SteadySteps(
+    val wireName: String,
+) {
+    TOP("top"),
+    ALL("all"),
 }
 
-/** Requests per full cell of [cellSeconds]; the remainder at the end is not a cell (it goes to the last stage). */
-internal fun cellCounts(
+internal data class StageSegment(
+    val fromOffsetMillis: Long,
+    val toOffsetMillis: Long,
+    val kind: StageSegmentKind,
+    val levelRps: Double,
+    val driftRatio: Double,
+    val residualCv: Double,
+)
+
+internal data class StageBoundaryFact(
+    val stageId: String,
+    val basis: String,
+    val levelRps: Double?,
+    val fromContrastSigma: Double?,
+    val toContrastSigma: Double?,
+    val trimmedCells: Int,
+)
+
+internal data class StageProposalWarning(
+    val code: String,
+    val stageId: String?,
+    val atOffsetMillis: Long,
+    val fromRps: Double? = null,
+    val toRps: Double? = null,
+    val durationMillis: Long? = null,
+)
+
+internal data class StageProposal(
+    val status: StageProposalStatus,
+    val steadySteps: SteadySteps,
+    /** A refusal code of ADR 0036, D5, or null. */
+    val reason: String?,
+    /** The measured fact of a refusal (`steady_share=0.120`), or null. */
+    val detail: String?,
+    val confidence: StageProposalConfidence?,
+    val runStartEpochMillis: Long?,
+    val runEndEpochMillis: Long?,
+    val cellMillis: Long?,
+    val cells: Int?,
+    val noiseRps: Double?,
+    val segments: List<StageSegment>,
+    /** Empty for a refusal. */
+    val stages: List<StageV1>,
+    val boundaries: List<StageBoundaryFact>,
+    val warnings: List<StageProposalWarning>,
+)
+
+/** The canonical bytes of load-stages.v1, the same serialization as [validateLoadStages]; only for a proposal. */
+internal fun StageProposal.proposalBytes(): ByteArray {
+    check(status == StageProposalStatus.DETECTED) { "NO_PROPOSAL" }
+    return canonicalJson(stagesJson(stages))
+}
+
+internal fun proposeLoadStages(
+    sourceType: SourceType,
+    source: Path,
+    steadySteps: SteadySteps = SteadySteps.TOP,
+    checkCancelled: () -> Unit = {},
+): StageProposal =
+    when (val read = readLoadSecondSeries(sourceType, source, checkCancelled)) {
+        is LoadSecondSeriesRead.Refused -> refusal(steadySteps, read.reason, null)
+        is LoadSecondSeriesRead.Series -> detectLoadStages(read.series, steadySteps)
+    }
+
+/** Steps 4-13 of the method `rps-plateau-segmentation.v1` (plan W4.1, section «Метод»). Pure: the same series gives the same proposal. */
+internal fun detectLoadStages(
     series: LoadSecondSeries,
-    cellSeconds: Int,
-): LongArray {
-    val cells = ((series.runEndEpochMillis - series.runStartEpochMillis) / (ONE_SECOND * cellSeconds)).toInt()
-    val counts = LongArray(cells)
-    for (cell in 0 until cells) {
-        var sum = 0L
-        for (second in cell * cellSeconds until (cell + 1) * cellSeconds) sum = Math.addExact(sum, series.requestsPerSecond[second])
-        counts[cell] = sum
+    steadySteps: SteadySteps = SteadySteps.TOP,
+): StageProposal {
+    val runStart = series.runStartEpochMillis
+    val runEnd = series.runEndEpochMillis
+    val runMillis = runEnd - runStart
+    if (series.requestsPerSecond.all { it == 0L }) return refusal(steadySteps, REFUSED_NO_REQUEST_SAMPLES, null)
+    if (runMillis < MIN_RUN_MILLIS) return refusal(steadySteps, "RUN_TOO_SHORT", "run_ms=$runMillis", runStart, runEnd)
+    val width =
+        chooseCellSeconds(series)
+            ?: return refusal(steadySteps, "RATE_TOO_LOW", "requests=${series.requestsPerSecond.sum()}", runStart, runEnd)
+    val cellMillis = width * ONE_SECOND
+    val counts = cellCounts(series, width)
+    val n = counts.size
+    val noise = noiseCounts(counts)
+    val run = RunFacts(runStart, runEnd, cellMillis, n, noise / width)
+    if (n < MIN_RUN_CELLS) return refusal(steadySteps, "RUN_TOO_SHORT", "cells=$n", runStart, runEnd, run)
+    return try {
+        detectInCells(series, steadySteps, counts, noise, run)
+    } catch (_: ArithmeticException) {
+        refusal(steadySteps, "RATE_OUT_OF_RANGE", null, runStart, runEnd, run)
     }
-    return counts
 }
 
-/** Step 2: σ in requests per cell from the median absolute deviation of first differences, never below one request. */
-internal fun noiseCounts(counts: LongArray): Double {
-    if (counts.size < 2) return NOISE_FLOOR_COUNTS
-    val differences = LongArray(counts.size - 1) { Math.subtractExact(counts[it + 1], counts[it]) }
-    val median = lowerMedian(differences)
-    val mad = lowerMedian(LongArray(differences.size) { Math.abs(Math.subtractExact(differences[it], median)) })
-    return maxOf(NOISE_FLOOR_COUNTS, MAD_TO_SIGMA * mad / Math.sqrt(2.0))
-}
+private class RunFacts(
+    val runStart: Long,
+    val runEnd: Long,
+    val cellMillis: Long,
+    val cells: Int,
+    val noiseRps: Double,
+)
 
-/**
- * Step 3: the exact minimum of Σ SSE + β · segments over segments of at least MIN_SEGMENT_CELLS cells, as half-open cell
- * ranges. A tie keeps the earliest boundary. [ArithmeticException] means the integer sums overflowed (RATE_OUT_OF_RANGE).
- */
-internal fun segmentCounts(
+/** A run of plateau pieces `[first, last]` that becomes one stage; [opening] is the plateau that opened it. */
+private class Step(
+    val first: Int,
+    var last: Int,
+    val opening: Piece,
+)
+
+private fun detectInCells(
+    series: LoadSecondSeries,
+    steadySteps: SteadySteps,
     counts: LongArray,
     noise: Double,
-): List<IntRange> {
-    val n = counts.size
-    if (n < 2 * MIN_SEGMENT_CELLS) return listOf(0 until n)
+    run: RunFacts,
+): StageProposal {
+    val cellMillis = run.cellMillis
     val sums = CellSums(counts)
-    val penalty = PENALTY_BIC_FACTOR * noise * noise * StrictMath.log(n.toDouble())
-    val cost = DoubleArray(n + 1) { Double.POSITIVE_INFINITY }
-    val previous = IntArray(n + 1) { -1 }
-    cost[0] = 0.0
-    for (to in MIN_SEGMENT_CELLS..n) {
-        var best = cost[0] + sums.fit(0, to).sse + penalty
-        var bestFrom = 0
-        for (from in MIN_SEGMENT_CELLS..to - MIN_SEGMENT_CELLS) {
-            if (cost[from].isInfinite()) continue
-            val candidate = cost[from] + sums.fit(from, to).sse + penalty
-            if (candidate < best) {
-                best = candidate
-                bestFrom = from
+    val fits = segmentCounts(counts, noise).map { sums.fit(it.first, it.last + 1) }
+    val peak = fits.maxOf { it.level }
+    val pieces = mergeFlat(fits.map { Piece(it, classify(it, peak)) }.toMutableList(), sums, noise, peak, cellMillis)
+    val segments = pieces.map { segmentOf(it, cellMillis) }
+
+    fun refuse(
+        reason: String,
+        detail: String?,
+    ) = refusal(steadySteps, reason, detail, run.runStart, run.runEnd, run, segments)
+
+    // Step 5: candidates for steady.
+    val flats = pieces.filter { it.kind == StageSegmentKind.FLAT }
+    val maxLevel = flats.maxOfOrNull { it.fit.level } ?: 0.0
+    val longest = flats.maxOfOrNull { it.fit.cells } ?: 0
+    val candidates =
+        pieces.indices.filter { index ->
+            val piece = pieces[index]
+            piece.kind == StageSegmentKind.FLAT &&
+                piece.fit.cells * cellMillis >= MIN_STEADY_MILLIS &&
+                (piece.fit.level >= STEADY_LEVEL_RATIO * maxLevel || piece.fit.cells >= STEADY_DURATION_RATIO * longest)
+        }
+    if (candidates.isEmpty()) return refuse(REFUSED_NO_PLATEAU, "steady_share=${decimal(0.0)}")
+
+    // Step 6: an idle gap between the first and the last plateau looks like two tests in one file.
+    val idleGap =
+        (candidates.first()..candidates.last())
+            .map { pieces[it] }
+            .filter { it.kind == StageSegmentKind.IDLE && it.fit.cells * cellMillis >= IDLE_GAP_MIN_MILLIS }
+            .maxOfOrNull { it.fit.cells * cellMillis }
+    if (idleGap != null) return refuse("IDLE_GAP_INSIDE_RUN", "idle_gap_ms=$idleGap")
+
+    // Step 7: the stop is the longest suffix of falls, idles and short pieces after the last plateau.
+    var stopFirst = pieces.size
+    while (stopFirst - 1 > candidates.last()) {
+        val piece = pieces[stopFirst - 1]
+        val stop =
+            piece.kind == StageSegmentKind.FALLING || piece.kind == StageSegmentKind.IDLE || piece.fit.cells * cellMillis < DROP_MIN_MILLIS
+        if (!stop) break
+        stopFirst--
+    }
+
+    // Step 8: a higher plateau after rises only opens a new step; anything else stays in the current step (D4).
+    val steps = ArrayList<Step>()
+    var current = Step(candidates.first(), candidates.first(), pieces[candidates.first()])
+    for (index in candidates.drop(1)) {
+        val next = pieces[index]
+        val between = (current.last + 1 until index).map { pieces[it] }
+        val higher = next.fit.level - current.opening.fit.level > mergeThreshold(current.opening.fit, next.fit, noise)
+        // A short FLAT piece that rises is a transition between steps too: a step of +10 % is a rise of under
+        // MAX_DRIFT_RATIO over a short piece (plan W4.1, ruling of task 3).
+        val transition =
+            between.all {
+                it.kind == StageSegmentKind.RISING ||
+                    (it.kind == StageSegmentKind.FLAT && it.fit.slope > 0 && it.fit.cells * cellMillis < MIN_STEADY_MILLIS)
             }
+        if (higher && transition) {
+            steps += current
+            current = Step(index, index, next)
+        } else {
+            current.last = index
         }
-        cost[to] = best
-        previous[to] = bestFrom
     }
-    val ranges = ArrayList<IntRange>()
-    var to = n
-    while (to > 0) {
-        val from = previous[to]
-        ranges += from until to
-        to = from
+    current.last = stopFirst - 1
+    steps += current
+
+    // Step 9: an edge cell outside the noise of the line of its own piece moves the edge inwards.
+    val bounds =
+        steps.map { step ->
+            var from = pieces[step.first].fit.from
+            var to = pieces[step.last].fit.to
+            var trimmedFrom = 0
+            while (trimmedFrom < EDGE_TRIM_MAX_CELLS && to - from > MIN_SEGMENT_CELLS && outsideNoise(counts, pieces, from, noise)) {
+                from++
+                trimmedFrom++
+            }
+            var trimmedTo = 0
+            while (trimmedTo < EDGE_TRIM_MAX_CELLS && to - from > MIN_SEGMENT_CELLS && outsideNoise(counts, pieces, to - 1, noise)) {
+                to--
+                trimmedTo++
+            }
+            Triple(from, to, trimmedFrom + trimmedTo)
+        }
+
+    // Step 10: lead-in, ramp-up, steps, ramp-down on the cell grid; the stage after the last full cell reaches the grid end.
+    val gridEnd = ceilDiv(run.runEnd - run.runStart, cellMillis) * cellMillis
+    val leadInCells = pieces.takeWhile { it.kind == StageSegmentKind.IDLE }.sumOf { it.fit.cells }.coerceAtMost(bounds.first().first)
+    val single = steps.size == 1
+    val stages = ArrayList<StageV1>()
+    val boundaries = ArrayList<StageBoundaryFact>()
+    val warnings = ArrayList<StageProposalWarning>()
+    if (leadInCells > 0) {
+        stages += StageV1(STAGE_LEAD_IN, StageRole.EXCLUDED, 0, leadInCells * cellMillis)
+        boundaries += StageBoundaryFact(STAGE_LEAD_IN, "LEAD_IN_IDLE", null, null, null, 0)
+        warnings += StageProposalWarning("LEAD_IN_IDLE", STAGE_LEAD_IN, 0, durationMillis = leadInCells * cellMillis)
     }
-    return ranges.reversed()
+    if (bounds.first().first > leadInCells) {
+        stages += StageV1(STAGE_RAMP_UP, StageRole.EXCLUDED, leadInCells * cellMillis, bounds.first().first * cellMillis)
+        boundaries += StageBoundaryFact(STAGE_RAMP_UP, "BEFORE_FIRST_STEADY", null, null, null, 0)
+    }
+    val steadyStages = ArrayList<Pair<Step, String>>()
+    steps.forEachIndexed { index, step ->
+        val id = if (single) STAGE_STEADY else "step-${index + 1}"
+        val steady = steadySteps == SteadySteps.ALL || index == steps.lastIndex
+        val (from, to, trimmed) = bounds[index]
+        val last = index == steps.lastIndex
+        val end = if (last && to == run.cells) gridEnd else to * cellMillis
+        stages += StageV1(id, if (steady) StageRole.STEADY else StageRole.EXCLUDED, from * cellMillis, end)
+        val firstPiece = pieces[step.first]
+        val lastPiece = pieces[step.last]
+        boundaries +=
+            StageBoundaryFact(
+                id,
+                if (steady) "PLATEAU" else "LOWER_STEP",
+                step.opening.fit.level / (cellMillis / ONE_SECOND),
+                pieces.getOrNull(step.first - 1)?.let { Math.abs(firstPiece.fit.level - it.fit.level) / noise },
+                pieces.getOrNull(step.last + 1)?.let { Math.abs(lastPiece.fit.level - it.fit.level) / noise },
+                trimmed,
+            )
+        if (steady) steadyStages += step to id
+    }
+    val lastTo = stages.last().toOffsetMillis
+    var rampDownMillis = 0L
+    if (lastTo < gridEnd) {
+        stages += StageV1(STAGE_RAMP_DOWN, StageRole.EXCLUDED, lastTo, gridEnd)
+        boundaries += StageBoundaryFact(STAGE_RAMP_DOWN, "AFTER_LAST_STEADY", null, null, null, 0)
+        rampDownMillis = gridEnd - lastTo
+    }
+
+    // Step 11: the plateaus must cover enough of the run without its lead-in (all steps, whatever the mode).
+    val stepMillis = bounds.sumOf { (from, to, _) -> minOf(to * cellMillis, run.runEnd - run.runStart) - from * cellMillis }
+    val share = stepMillis.toDouble() / (run.runEnd - run.runStart - leadInCells * cellMillis)
+    if (share < MIN_STEADY_SHARE) return refuse(REFUSED_NO_PLATEAU, "steady_share=${decimal(share)}")
+    // Step 12.
+    if (stages.size > MAX_LOAD_STAGES) return refuse("TOO_MANY_STAGES", "stages=${stages.size}")
+
+    // Step 13: warnings of the verdict windows only (D12), then the confidence.
+    val perSecond = (cellMillis / ONE_SECOND).toDouble()
+    for ((step, id) in steadyStages) {
+        val opening = step.opening.fit
+        (step.first..step.last)
+            .map { pieces[it] }
+            .firstOrNull { it.fit.level < (1 - LEVEL_MERGE_RATIO) * opening.level }
+            ?.let {
+                warnings +=
+                    StageProposalWarning(
+                        "LOAD_DROP_INSIDE_STEADY",
+                        id,
+                        it.fit.from * cellMillis,
+                        fromRps = opening.level / perSecond,
+                        toRps = it.fit.level / perSecond,
+                    )
+            }
+        if (Math.abs(opening.drift) > STEADY_DRIFT_WARN_RATIO) {
+            warnings +=
+                StageProposalWarning(
+                    "STEADY_DRIFT",
+                    id,
+                    opening.from * cellMillis,
+                    fromRps = opening.lineAt(opening.from) / perSecond,
+                    toRps = opening.lineAt(opening.to - 1) / perSecond,
+                )
+        }
+    }
+    if (rampDownMillis > maxOf(DROP_MIN_MILLIS.toDouble(), LONG_RAMP_DOWN_RATIO * stepMillis)) {
+        warnings += StageProposalWarning("LONG_RAMP_DOWN", STAGE_RAMP_DOWN, lastTo, durationMillis = rampDownMillis)
+    }
+    if (series.degraded) warnings += StageProposalWarning("DEGRADED_INPUT", null, 0)
+    val steadyFacts = boundaries.filter { it.basis == "PLATEAU" }
+    val codes = warnings.map { it.code }.toSet()
+    val confidence =
+        when {
+            "LOAD_DROP_INSIDE_STEADY" in codes || "LONG_RAMP_DOWN" in codes -> StageProposalConfidence.LOW
+            codes.any { it in setOf("LEAD_IN_IDLE", "STEADY_DRIFT", "DEGRADED_INPUT") } ||
+                steadyFacts.any { fact ->
+                    listOfNotNull(fact.fromContrastSigma, fact.toContrastSigma).any { it < HIGH_EDGE_SIGMAS }
+                } ||
+                steadyStages.any { (step, _) -> step.opening.fit.residualCv > HIGH_RESIDUAL_CV } -> StageProposalConfidence.MEDIUM
+            else -> StageProposalConfidence.HIGH
+        }
+    return StageProposal(
+        StageProposalStatus.DETECTED,
+        steadySteps,
+        null,
+        null,
+        confidence,
+        run.runStart,
+        run.runEnd,
+        cellMillis,
+        run.cells,
+        run.noiseRps,
+        segments,
+        stages,
+        boundaries,
+        warnings,
+    )
 }
 
-/** A least-squares line over the cells of a segment: level is the mean, slope in requests per cell per cell. */
-internal class CellFit(
-    val from: Int,
-    val to: Int,
-    val level: Double,
-    val slope: Double,
-    val sse: Double,
-) {
-    val cells: Int get() = to - from
-
-    /** The level change over the segment relative to its level (0 when the level is 0). */
-    val drift: Double get() = if (level > 0.0) slope * cells / level else 0.0
-
-    val residualCv: Double get() = if (level > 0.0) Math.sqrt(sse / cells) / level else 0.0
-
-    fun lineAt(cell: Int): Double = level + slope * ((cell - from) - (cells - 1) / 2.0)
-}
-
-/** Exact prefix sums of the counts centred on their lower median; the SSE is computed in double from the exact sums. */
-private class CellSums(
+private fun outsideNoise(
     counts: LongArray,
-) {
-    private val center = lowerMedian(counts)
-    private val sum = LongArray(counts.size + 1)
-    private val squares = LongArray(counts.size + 1)
-    private val moments = LongArray(counts.size + 1)
-
-    init {
-        for (k in counts.indices) {
-            val value = Math.subtractExact(counts[k], center)
-            sum[k + 1] = Math.addExact(sum[k], value)
-            squares[k + 1] = Math.addExact(squares[k], Math.multiplyExact(value, value))
-            moments[k + 1] = Math.addExact(moments[k], Math.multiplyExact(k.toLong(), value))
-        }
-    }
-
-    fun fit(
-        from: Int,
-        to: Int,
-    ): CellFit {
-        val m = (to - from).toLong()
-        val sy = Math.subtractExact(sum[to], sum[from])
-        val syy = Math.subtractExact(squares[to], squares[from])
-        val sxy = Math.subtractExact(Math.subtractExact(moments[to], moments[from]), Math.multiplyExact(from.toLong(), sy))
-        val sx = m * (m - 1) / 2
-        val sxx = (m - 1) * m * (2 * m - 1) / 6
-        val mean = sy.toDouble() / m
-        val spreadY = syy.toDouble() - sy.toDouble() * sy.toDouble() / m
-        val spreadX = sxx.toDouble() - sx.toDouble() * sx.toDouble() / m
-        val covariance = sxy.toDouble() - sx.toDouble() * sy.toDouble() / m
-        val slope = if (spreadX > 0.0) covariance / spreadX else 0.0
-        val sse = if (spreadX > 0.0) spreadY - covariance * covariance / spreadX else spreadY
-        return CellFit(from, to, center + mean, slope, maxOf(0.0, sse))
-    }
+    pieces: List<Piece>,
+    cell: Int,
+    noise: Double,
+): Boolean {
+    val piece = pieces.first { cell >= it.fit.from && cell < it.fit.to }
+    return Math.abs(counts[cell] - piece.fit.lineAt(cell)) > EDGE_TOLERANCE_SIGMAS * noise
 }
 
-private fun lowerMedian(values: LongArray): Long {
-    val sorted = values.sortedArray()
-    return sorted[(sorted.size - 1) / 2]
-}
+private fun segmentOf(
+    piece: Piece,
+    cellMillis: Long,
+) = StageSegment(
+    piece.fit.from * cellMillis,
+    piece.fit.to * cellMillis,
+    piece.kind,
+    piece.fit.level / (cellMillis / ONE_SECOND),
+    piece.fit.drift,
+    piece.fit.residualCv,
+)
 
-private val CELL_LADDER_SECONDS = intArrayOf(1, 2, 5, 10, 15, 30, 60, 120, 300)
-private const val MAX_CELLS = 2400L
-private const val MIN_CELL_COUNT_P75 = 50L
-private const val MIN_SEGMENT_CELLS = 3
-private const val MAD_TO_SIGMA = 1.4826
-private const val NOISE_FLOOR_COUNTS = 1.0
-private const val PENALTY_BIC_FACTOR = 3.0
+private fun refusal(
+    steadySteps: SteadySteps,
+    reason: String,
+    detail: String?,
+    runStart: Long? = null,
+    runEnd: Long? = null,
+    run: RunFacts? = null,
+    segments: List<StageSegment> = emptyList(),
+) = StageProposal(
+    StageProposalStatus.NOT_DETECTED,
+    steadySteps,
+    reason,
+    detail,
+    null,
+    runStart,
+    runEnd,
+    run?.cellMillis,
+    run?.cells,
+    run?.noiseRps,
+    segments,
+    emptyList(),
+    emptyList(),
+    emptyList(),
+)
+
+private fun ceilDiv(
+    value: Long,
+    divisor: Long,
+) = -Math.floorDiv(-value, divisor)
+
+/** HALF_EVEN, three digits: the number format of the explanation (ADR 0036, D11). */
+internal fun decimal(value: Double): String = BigDecimal(value).setScale(3, RoundingMode.HALF_EVEN).toPlainString()
+
+private const val STAGE_LEAD_IN = "lead-in"
+private const val STAGE_RAMP_UP = "ramp-up"
+private const val STAGE_STEADY = "steady"
+private const val STAGE_RAMP_DOWN = "ramp-down"
+private const val REFUSED_NO_PLATEAU = "NO_PLATEAU"
+private const val MIN_RUN_MILLIS = 60_000L
+private const val MIN_RUN_CELLS = 12
+private const val STEADY_LEVEL_RATIO = 0.5
+private const val STEADY_DURATION_RATIO = 0.75
+private const val EDGE_TOLERANCE_SIGMAS = 2.0
+private const val EDGE_TRIM_MAX_CELLS = 2
+private const val DROP_MIN_MILLIS = 60_000L
+private const val LONG_RAMP_DOWN_RATIO = 0.25
+private const val IDLE_GAP_MIN_MILLIS = 30_000L
+private const val MIN_STEADY_SHARE = 0.30
+private const val STEADY_DRIFT_WARN_RATIO = 0.05
+private const val HIGH_EDGE_SIGMAS = 6.0
+private const val HIGH_RESIDUAL_CV = 0.15

@@ -102,7 +102,7 @@ onBeforeUnmount(() => {
       </svg>
       <span
         class="time-chart__value"
-        :class="`time-chart__value--${edge}`"
+        :class="[`time-chart__value--${edge}`, { 'time-chart__value--below-stage': flags.stageLabels }]"
         :data-testid="`cursor-value-${lane.key}`"
         :style="{ left: `${x / 10}%` }"
       >{{ cursorValue }}</span>
@@ -159,6 +159,11 @@ onBeforeUnmount(() => {
 
 .time-chart__value {
   top: 0;
+  background: color-mix(in srgb, var(--surface-inset) 75%, transparent);
+}
+
+.time-chart__value--below-stage {
+  top: 21px;
 }
 
 .time-chart__time {

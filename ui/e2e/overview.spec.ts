@@ -423,6 +423,21 @@ test('declared stages are drawn on every lane and named on the top lane', async 
   expect(await texts('p95')).not.toContain('steady')
 })
 
+test('the cursor value label stays clear of the stage name and does not hide the line', async ({ page }) => {
+  await openOverview(page, { ...failing, evidence: [...failing.evidence, binding] }, runOf(120))
+  await page.getByTestId('chart-plot').scrollIntoViewIfNeeded()
+  const box = (await page.getByTestId('chart-plot').boundingBox())!
+  // The middle of the steady stage (40 s to 100 s of a 120 s run).
+  await page.mouse.move(box.x + PLOT_INSET.left + (box.width - PLOT_INSET.left - PLOT_INSET.right) * (70 / 120), box.y + 8)
+  await expect(page.getByTestId('cursor-value-rps')).toBeVisible()
+  const value = (await page.getByTestId('cursor-value-rps').boundingBox())!
+  const name = (await page.getByTestId('track-rps').locator('svg text', { hasText: 'steady' }).boundingBox())!
+  const apart = value.y >= name.y + name.height || value.y + value.height <= name.y || value.x >= name.x + name.width || value.x + value.width <= name.x
+  expect(apart, `value ${JSON.stringify(value)} against stage name ${JSON.stringify(name)}`).toBe(true)
+  const background = await page.getByTestId('cursor-value-rps').evaluate((el) => getComputedStyle(el).backgroundColor)
+  expect(Number(/(?:\/|,)\s*([0-9.]+)\s*\)$/.exec(background)?.[1] ?? 1), background).toBeLessThan(1)
+})
+
 test('a result without stages draws no stage names', async ({ page }) => {
   await openOverview(page, failing, runOf(120))
   await expect(page.getByTestId('track-rps').locator('svg text').first()).toBeVisible()

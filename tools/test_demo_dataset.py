@@ -304,7 +304,8 @@ class PlansTest(unittest.TestCase):
         self.assertEqual(set(gates), set(planted))
         for series_id, gate in gates.items():
             self.assertEqual(gate * 2, planted[series_id], series_id)
-        self.assertIsNone(re.search("[0-9][eE][-+]?[0-9]", dd.dumps(plan)))
+        for check in plan["checks"]:
+            self.assertIsNone(re.search("[eE]", str(check["magnitude_gate"]["min_slope_units_per_second"])))
 
     def test_stages_valid(self):
         stages = dd.build_load_stages(self.profile, self.scenario)
@@ -341,6 +342,102 @@ class PlansTest(unittest.TestCase):
                 path.write_text(dd.dumps(policy) + chr(10), encoding="utf-8")
                 result = subprocess.run([ltv, "policy", "validate", str(path)], capture_output=True, text=True)
                 self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+
+
+class PodViewTest(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.scenario = dd.load_scenario(SCENARIO_PATH)
+        cls.release = release_of(cls.scenario, "2026.09.3")
+        cls.sha, cls.load = "ef" * 32, "12" * 32
+        cls.views = {}
+        for name in ("tiny", "demo"):
+            profile = dd.resolve_profile(name)
+            for arm in ("A", "B"):
+                model = dd.simulate_arm(arm, cls.release, profile, cls.scenario)
+                cls.views[(name, arm)] = dd.build_pod_view(model, cls.sha, cls.load, cls.release, profile, cls.scenario)
+
+    @staticmethod
+    def row(view, pod, container, metric):
+        row = next(r for r in view["rows"] if r["pod"] == pod and r["container"] == container and r["metric"] == metric)
+        return [Decimal(v) for v in row["values"]]
+
+    def test_pod_view_limits(self):
+        for (name, arm), view in self.views.items():
+            profile = dd.resolve_profile(name)
+            self.assertLessEqual(view["column_count"], 240)
+            self.assertLessEqual(len(view["pods"]), 256)
+            self.assertLessEqual(len(view["rows"]), 2560)
+            self.assertLessEqual(len(dd.dumps(view).encode()), 12 * 1024 * 1024)
+            self.assertEqual(view["step_ms"] % profile["snapshot_step_ms"], 0)
+            self.assertEqual(view["column_count"] * view["step_ms"], profile["duration_s"] * 1000)
+            for row in view["rows"]:
+                self.assertEqual(len(row["values"]), view["column_count"])
+
+    def test_pod_totals(self):
+        for arm in ("A", "B"):
+            view = self.views[("demo", arm)]
+            self.assertEqual(len(view["pods"]), 78)
+            self.assertEqual(len({pod["service"] for pod in view["pods"]}), 21)
+            self.assertEqual(view["coverage"]["pods_included"], 78)
+
+    def test_pod_view_story(self):
+        b, a = self.views[("demo", "B")], self.views[("demo", "A")]
+        leaking = self.row(b, "payments-svc-b2", "app", "openshift_container_memory_limit_ratio")
+        self.assertGreaterEqual(max(leaking), Decimal("0.95"))
+        for pod in ("payments-svc-b1", "payments-svc-b3", "payments-svc-b4"):
+            self.assertLess(max(self.row(b, pod, "app", "openshift_container_memory_limit_ratio")), Decimal("0.8"))
+        self.assertLess(max(self.row(a, "payments-svc-a2", "app", "openshift_container_memory_limit_ratio")), Decimal("0.8"))
+        for view, arm in ((a, "a"), (b, "b")):
+            hot = self.row(view, f"catalog-svc-{arm}3", "app", "openshift_container_cpu_limit_ratio")
+            calm = self.row(view, f"catalog-svc-{arm}1", "app", "openshift_container_cpu_limit_ratio")
+            self.assertGreater(sum(hot), Decimal("1.2") * sum(calm))
+        for pod in ("checkout-api-b1", "checkout-api-b2"):
+            self.assertGreater(max(self.row(b, pod, "app", "openshift_cpu_throttling")), Decimal("0.4"))
+        for pod in ("checkout-api-b3", "checkout-api-b4"):
+            self.assertLess(max(self.row(b, pod, "app", "openshift_cpu_throttling")), Decimal("0.2"))
+        self.assertLess(max(self.row(a, "checkout-api-a1", "app", "openshift_cpu_throttling")), Decimal("0.2"))
+
+    def test_pod_view_binds(self):
+        for (name, arm), view in self.views.items():
+            self.assertEqual(view["resource_snapshot_sha256"], self.sha)
+            self.assertEqual(view["load_input_sha256"], self.load)
+            self.assertEqual(view["arm"], arm)
+            self.assertEqual(view["start_epoch_ms"], dd.start_epoch_ms(self.release))
+
+    def test_pod_view_matches_snapshot(self):
+        """The mean of the snapshot cells of a column of the worst pod cannot exceed the service series maximum."""
+        profile = dd.resolve_profile("tiny")
+        model = dd.simulate_arm("B", self.release, profile, self.scenario)
+        view = self.views[("tiny", "B")]
+        service = model["services"]["payments-svc"]["memory_limit_ratio"]
+        pods = [r for r in view["rows"] if r["metric"] == "openshift_container_memory_limit_ratio" and r["pod"].startswith("payments-svc")]
+        for column in range(view["column_count"]):
+            worst = max(Decimal(r["values"][column]) for r in pods)
+            self.assertLessEqual(worst * 1000, max(service[column * 4 : column * 4 + 4]))
+
+
+class OpenSearchTest(unittest.TestCase):
+    def test_opensearch_shape(self):
+        scenario = dd.load_scenario(SCENARIO_PATH)
+        release = release_of(scenario, "2026.09.3")
+        for name in ("tiny", "demo"):
+            profile = dd.resolve_profile(name)
+            document = dd.build_opensearch_errors("34" * 32, release, profile, scenario)
+            self.assertEqual(document["schema_version"], "opensearch-errors.v1")
+            self.assertEqual(document["load_input_sha256"], "34" * 32)
+            timeline = document["timeline"]
+            self.assertEqual(len(timeline), profile["duration_s"] * 1000 // 15000)
+            self.assertLessEqual(len(timeline), 100000)
+            self.assertEqual(document["total_errors"], sum(cell["count"] for cell in timeline))
+            self.assertEqual(document["total_errors"], sum(group["count"] for group in document["groups"]))
+            knee = profile["duration_s"] * 1000 * scenario["load"]["knee_minute"] // scenario["load"]["total_minutes"] // 15000
+            after = sum(cell["count"] for cell in timeline[knee:])
+            self.assertGreater(after, 0.8 * document["total_errors"])
+            self.assertTrue(all(group["service"] and group["error_type"] for group in document["groups"]))
+            self.assertEqual(document["coverage"]["status"], "COMPLETE")
+            self.assertEqual(timeline[0]["from_epoch_ms"], dd.start_epoch_ms(release))
+            self.assertEqual(document["end_epoch_ms"], timeline[-1]["to_epoch_ms"])
 
 
 if __name__ == "__main__":

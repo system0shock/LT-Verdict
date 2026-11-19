@@ -323,7 +323,7 @@ def simulate_arm(arm: str, release: dict, profile: dict, scenario: dict) -> dict
             leaking = name == leak_service and k == leak_pod
             cpu_base = 250 + mix(pod_seed, 1) % 300
             if hot:
-                cpu_base = cpu_base * 22 // 10
+                cpu_base = 700 + mix(pod_seed, 6) % 100  # the other pods stay at 250..549
             cpu = [min(1000, max(0, cpu_base * f // 1000 + n)) for f, n in zip(load_factor, nz(10))]
             if name == "checkout-api" and knee:
                 cpu = [min(1000, value + 250 * d // 1000) for value, d in zip(cpu, dg)]
@@ -579,3 +579,113 @@ def build_correlation_plan(snapshot_sha256: str, arm: str, scenario: dict) -> di
     if arm == scenario["story"]["memory_leak"]["arm"]:
         pairs.append(pair("payments-memory-latency", scenario["story"]["memory_leak"]["service"], "memory_limit_ratio", "0.1", "память payments-svc, вызываемого из POST /checkout"))
     return {"schema_version": "correlation-plan.v1", "resource_snapshot_sha256": snapshot_sha256, "pairs": pairs}
+
+
+# ---------------------------------------------------------------- pod-view and OpenSearch context (Task 5)
+
+import re
+
+from tools.pod_view_adapter import Observation, assemble
+
+POD_METRICS = {"cpu": "openshift_container_cpu_limit_ratio", "memory": "openshift_container_memory_limit_ratio", "throttle": "openshift_cpu_throttling"}
+POD_USAGE_METRIC = "openshift_pod_cpu_usage"
+SIDECAR_PATTERN = re.compile(SIDECAR)
+ERROR_GROUPS = (
+    ("checkout-api", "UpstreamTimeoutException", 30),
+    ("payments-svc", "ConnectionPoolTimeout", 25),
+    ("gateway", "502 Bad Gateway", 15),
+    ("checkout-db", "SlowQueryCancelled", 12),
+    ("orders-svc", "RetryExhaustedException", 10),
+    ("catalog-svc", "CircuitBreakerOpen", 8),
+)
+
+
+def column_means(values: list, ratio: int, columns: int) -> list:
+    """Mean of `ratio` consecutive snapshot cells per column, rounded half up on the fixed-point integer."""
+    return [(sum(values[c * ratio : (c + 1) * ratio]) * 2 + ratio) // (2 * ratio) for c in range(columns)]
+
+
+def build_pod_view(model: dict, snapshot_sha256: str, load_sha256: str, release: dict, profile: dict, scenario: dict) -> dict:
+    """pod-view.v1 of one arm from the pod rows of `simulate_arm`; the columns are means of the snapshot cells."""
+    ratio = profile["pod_step_ms"] // profile["snapshot_step_ms"]
+    if profile["pod_step_ms"] % profile["snapshot_step_ms"] or model["points"] % ratio:
+        raise ValueError("the pod step must be a whole multiple of the snapshot step and divide the run")
+    columns = model["points"] // ratio
+    observations = []
+    for pod in model["pods"]:
+        for (container, metric), values in pod["rows"].items():
+            tokens = [token(v, 3) for v in column_means(values, ratio, columns)]
+            observations.append(Observation(scenario["namespace"], pod["service"], pod["pod"], container, POD_METRICS[metric], tokens))
+        observations.append(
+            Observation(scenario["namespace"], pod["service"], pod["pod"], None, POD_USAGE_METRIC, [token(v, 3) for v in column_means(pod["usage"], ratio, columns)])
+        )
+    return assemble(
+        observations,
+        load_sha256=load_sha256,
+        snapshot_sha256=snapshot_sha256,
+        arm=model["arm"],
+        start_ms=start_epoch_ms(release),
+        step_ms=profile["pod_step_ms"],
+        columns=columns,
+        sidecar=SIDECAR_PATTERN,
+        select=None,
+        qualify=False,
+    )
+
+
+def build_opensearch_errors(load_sha256: str, release: dict, profile: dict, scenario: dict) -> dict:
+    """opensearch-errors.v1: an error count per snapshot-sized bin that grows after the knee, split into groups by service and type."""
+    step = profile["snapshot_step_ms"]
+    start = start_epoch_ms(release)
+    bins = profile["duration_s"] * 1000 // step
+    noise = noise_table(mix(scenario["seed"], release["seed"], 77))
+    weight_total = sum(weight for _service, _type, weight in ERROR_GROUPS)
+    group_counts = [0] * len(ERROR_GROUPS)
+    group_first, group_last = [None] * len(ERROR_GROUPS), [None] * len(ERROR_GROUPS)
+    timeline = []
+    for i in range(bins):
+        depth = degradation(knee_progress(profile, i * step + step // 2, scenario)) if release["knee"] else 0.0
+        count = max(0, 1 + (noise[i] + 10) // 8 + int(60 * depth))
+        timeline.append({"from_epoch_ms": start + i * step, "to_epoch_ms": start + (i + 1) * step, "count": count, "rate_per_minute": plain_number(Decimal(count * 60000) / Decimal(step))})
+        given = 0
+        for g, (_service, _type, weight) in enumerate(ERROR_GROUPS):
+            share = count * weight // weight_total
+            given += share
+            group_counts[g] += share
+            if share:
+                group_first[g] = start + i * step + 500 if group_first[g] is None else group_first[g]
+                group_last[g] = start + (i + 1) * step - 500
+        for extra in range(count - given):  # the remainder goes to the heaviest groups in turn
+            group_counts[extra % 2] += 1
+            group_first[extra % 2] = start + i * step + 500 if group_first[extra % 2] is None else group_first[extra % 2]
+            group_last[extra % 2] = start + (i + 1) * step - 500
+    total = sum(cell["count"] for cell in timeline)
+    groups = [
+        {"service": service, "error_type": error_type, "count": group_counts[g], "first_epoch_ms": group_first[g], "last_epoch_ms": group_last[g], "samples": []}
+        for g, (service, error_type, _weight) in enumerate(ERROR_GROUPS)
+        if group_counts[g]
+    ]
+    return {
+        "schema_version": "opensearch-errors.v1",
+        "id": "opensearch-errors:errors",
+        "type": "opensearch_errors",
+        "load_input_sha256": load_sha256,
+        "profile_id": "errors",
+        "start_epoch_ms": start,
+        "end_epoch_ms": start + bins * step,
+        "step_ms": step,
+        "total_errors": total,
+        "error_rate_per_minute": plain_number((Decimal(total) * 60 / Decimal(profile["duration_s"])).quantize(Decimal("0.000001"))),
+        "timeline": timeline,
+        "groups": groups,
+        "coverage": {
+            "status": "COMPLETE",
+            "reasons": [],
+            "timed_out": False,
+            "total_relation": "eq",
+            "shards": {"total": 1, "successful": 1, "skipped": 0, "failed": 0},
+            "terms": {"group_limit": 50, "returned_groups": len(groups), "sum_other_doc_count": 0, "doc_count_error_upper_bound": 0},
+            "samples_per_group_limit": 0,
+            "sample_message_bytes_max": 4096,
+        },
+    }

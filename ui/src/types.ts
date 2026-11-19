@@ -407,6 +407,10 @@ export interface StageBindingEvidence {
     from_epoch_ms: number
     to_epoch_ms: number
     clipped_to_run_end?: boolean
+    // ADR 0037: only for steady stages of an analysis with a resource snapshot
+    resource_from_epoch_ms?: number
+    resource_to_epoch_ms?: number
+    resource_partial?: boolean
   }>
   verdict_scope: string
 }

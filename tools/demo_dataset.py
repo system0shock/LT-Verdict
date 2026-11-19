@@ -446,3 +446,136 @@ def snapshot_hash(snapshot: dict) -> str:
 
     parsed = json.loads(snapshot_text(snapshot), parse_float=Decimal, parse_int=Decimal)
     return stats_validation.snapshot_hash(parsed)
+
+
+# ---------------------------------------------------------------- policies and plans (Task 4)
+
+from decimal import Decimal
+
+THROUGHPUT_RULE = "throughput_rps"
+
+
+def plain_number(value: Decimal) -> Raw:
+    """A decimal as a JSON number token without an exponent."""
+    text = format(value.normalize(), "f")
+    return Raw(text if "." not in text else text.rstrip("0").rstrip("."))
+
+
+def business_rules(scenario: dict, profile: dict) -> list:
+    limits = scenario["policy"]
+    overall = {"kind": "overall"}
+    checkout = {"kind": "transaction", "name": "POST /checkout"}
+    threshold = plain_number(Decimal(limits["throughput_min_rps_full"]) * Decimal(str(profile["rps_scale"])))
+    return [
+        {"id": "checkout-p95", "metric": "response_time_p95_ms", "operator": "lte", "threshold": limits["p95_checkout_ms"], "scope": checkout, "window_ids": ["soak"]},
+        {"id": "checkout-errors", "metric": "error_rate_ratio", "operator": "lte", "threshold": plain_number(Decimal(str(limits["error_checkout"]))), "scope": checkout, "window_ids": ["soak"]},
+        {
+            "id": "payment-confirm-p95",
+            "metric": "response_time_p95_ms",
+            "operator": "lte",
+            "threshold": limits["p95_payment_ms"],
+            "scope": {"kind": "transaction", "name": "POST /payment/confirm"},
+            "window_ids": ["soak"],
+        },
+        {"id": "overall-errors", "metric": "error_rate_ratio", "operator": "lte", "threshold": plain_number(Decimal(str(limits["error_overall"]))), "scope": overall, "window_ids": ["soak"]},
+        {"id": "overall-throughput", "metric": THROUGHPUT_RULE, "operator": "gte", "threshold": threshold, "scope": overall, "window_ids": ["soak"]},
+    ]
+
+
+def policy_defaults() -> dict:
+    return {"sample_floor": 20, "min_samples": 50}
+
+
+def build_policy(scenario: dict, profile: dict) -> dict:
+    """The nine rules of the demo: five business rules and four platform rules (one of them the coverage rule)."""
+
+    def platform(rule_id, key, threshold, cells, effect, windowed=True):
+        signal = SIGNALS[key]
+        rule = {
+            "id": rule_id,
+            "signal": signal["metric"],
+            "scope": {"kind": "all_services"},
+            "operator": "gt",
+            "threshold": threshold,
+            "unit": signal["unit"],
+            "aggregation": signal["aggregation"],
+            "min_consecutive_cells": cells,
+            "effect": effect,
+        }
+        if windowed:
+            rule["window_ids"] = ["soak"]
+        return rule
+
+    return {
+        "schema_version": "policy.v1",
+        "policy_id": "checkout-demo-8h",
+        "defaults": policy_defaults(),
+        "rules": business_rules(scenario, profile),
+        "platform_services": [item[0] for item in workload_list(profile, scenario)],
+        "platform_coverage": {"signal": SIGNALS["unavailable_replicas"]["metric"]},
+        "platform_rules": [
+            platform("restarts", "restarts", 0, 1, "sla"),
+            platform("memory-limit", "memory_limit_ratio", Raw("0.9"), 2, "diagnostic"),
+            platform("cpu-throttling", "cpu_throttling", Raw("0.25"), 4, "diagnostic"),
+            platform("unavailable-replicas", "unavailable_replicas", 0, 1, "sla", windowed=False),
+        ],
+    }
+
+
+def build_policy_stages(scenario: dict, profile: dict) -> dict:
+    """The five business rules only: with platform_rules at the level sla a missing snapshot blocks the verdict."""
+    return {"schema_version": "policy.v1", "policy_id": "checkout-demo-8h-stages", "defaults": policy_defaults(), "rules": business_rules(scenario, profile)}
+
+
+def build_load_stages(profile: dict, scenario: dict | None = None) -> dict:
+    return {
+        "schema_version": "load-stages.v1",
+        "stages": [{"id": sid, "role": role, "from_offset_ms": begin, "to_offset_ms": end} for sid, role, begin, end in stage_bounds(profile, scenario)],
+    }
+
+
+def build_trend_plan(snapshot_sha256: str, scenario: dict, profile: dict) -> dict:
+    """Five checks in the soak window; the magnitude gate is half of the planted slope, so the planted trend passes it."""
+    checks = []
+    for key, slope in scenario["trend_slopes"].items():
+        signal, entity = key.split("@")
+        planted = Decimal(str(slope)) * Decimal(FULL_DURATION_S) / Decimal(profile["duration_s"])
+        checks.append(
+            {
+                "id": f"{entity}-{signal}-growth",
+                "series_id": f"{entity}.{SIGNALS[signal]['metric']}",
+                "window_id": "soak",
+                "direction": "increase",
+                "min_cells": 30,
+                "magnitude_gate": {"min_slope_units_per_second": plain_number(planted / 2), "min_split_half_shift_pct": 5},
+            }
+        )
+    return {"schema_version": "trend-plan.v1", "resource_snapshot_sha256": snapshot_sha256, "checks": checks}
+
+
+def build_correlation_plan(snapshot_sha256: str, arm: str, scenario: dict) -> dict:
+    """Pairs of a resource series of checkout-api (and, on arm B, payments-svc) against the overall p95 in the soak window."""
+
+    def pair(pair_id, service, key, delta, basis):
+        return {
+            "id": pair_id,
+            "resource_series_id": f"{service}.{SIGNALS[key]['metric']}",
+            "load_metric": "response_time_p95_ms",
+            "window_ids": ["soak"],
+            "expected_sign": "positive",
+            "max_lag_ms": 0,
+            "min_abs_effect": Raw("0.3"),
+            "min_resource_delta": Raw(delta),
+            "min_load_delta": 50,
+            "controls": [{"meaning": "achieved_rps"}],
+            "topology_basis": basis,
+            "clock_alignment": "declared_aligned",
+        }
+
+    pairs = [
+        pair("checkout-cpu-latency", "checkout-api", "cpu_limit_ratio", "0.05", "CPU сервиса checkout-api, обслуживающего POST /checkout"),
+        pair("checkout-throttling-latency", "checkout-api", "cpu_throttling", "0.05", "троттлинг сервиса checkout-api, обслуживающего POST /checkout"),
+    ]
+    if arm == scenario["story"]["memory_leak"]["arm"]:
+        pairs.append(pair("payments-memory-latency", scenario["story"]["memory_leak"]["service"], "memory_limit_ratio", "0.1", "память payments-svc, вызываемого из POST /checkout"))
+    return {"schema_version": "correlation-plan.v1", "resource_snapshot_sha256": snapshot_sha256, "pairs": pairs}

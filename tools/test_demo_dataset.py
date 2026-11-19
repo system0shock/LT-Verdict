@@ -239,5 +239,109 @@ class SnapshotTest(unittest.TestCase):
         self.assertNotEqual(dd.snapshot_hash(self.arms["A"]), dd.snapshot_hash(self.arms["B"]))
 
 
+class PlansTest(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.scenario = dd.load_scenario(SCENARIO_PATH)
+        cls.profile = dd.resolve_profile("tiny")
+        cls.release = release_of(cls.scenario, "2026.09.3")
+        cls.snapshot = dd.build_snapshot("B", cls.release, cls.profile, cls.scenario, "cd" * 32)
+        cls.sha = dd.snapshot_hash(cls.snapshot)
+
+    def test_policy_rule_count(self):
+        policy = dd.build_policy(self.scenario, self.profile)
+        self.assertEqual(len(policy["rules"]) + len(policy["platform_rules"]), 9)
+        self.assertEqual(len(policy["rules"]), 5)
+        for rule in policy["rules"]:
+            self.assertEqual(rule["window_ids"], ["soak"])
+        self.assertEqual(policy["platform_services"], [item[0] for item in dd.workload_list(self.profile, self.scenario)])
+        self.assertEqual(len(dd.build_policy(self.scenario, dd.resolve_profile("demo"))["platform_services"]), 21)
+
+    def test_platform_coverage_present(self):
+        policy = dd.build_policy(self.scenario, self.profile)
+        self.assertEqual(policy["platform_coverage"], {"signal": "openshift_unavailable_replicas"})
+        coverage = [rule for rule in policy["platform_rules"] if rule["signal"] == "openshift_unavailable_replicas"]
+        self.assertEqual(len(coverage), 1)
+        self.assertEqual(coverage[0]["effect"], "sla")
+        self.assertNotIn("window_ids", coverage[0])
+        signals = {key["metric"]: key for key in dd.SIGNALS.values()}
+        for rule in policy["platform_rules"]:
+            signal = signals[rule["signal"]]
+            self.assertEqual((rule["unit"], rule["aggregation"]), (signal["unit"], signal["aggregation"]), rule["id"])
+
+    def test_policy_throughput_scales_with_profile(self):
+        thresholds = {
+            name: Decimal(next(rule for rule in dd.build_policy(self.scenario, dd.resolve_profile(name))["rules"] if rule["metric"] == "throughput_rps")["threshold"])
+            for name in ("full", "demo", "tiny")
+        }
+        self.assertEqual(thresholds, {"full": Decimal(90), "demo": Decimal(18), "tiny": Decimal("1.8")})
+
+    def test_policy_stages_has_no_platform_sections(self):
+        policy = dd.build_policy_stages(self.scenario, self.profile)
+        self.assertEqual(len(policy["rules"]), 5)
+        for key in ("platform_rules", "platform_services", "platform_coverage"):
+            self.assertNotIn(key, policy)
+        self.assertNotEqual(policy["policy_id"], dd.build_policy(self.scenario, self.profile)["policy_id"])
+
+    def test_trend_plan_binds_hash(self):
+        plan = dd.build_trend_plan(self.sha, self.scenario, self.profile)
+        self.assertEqual(plan["resource_snapshot_sha256"], self.sha)
+        self.assertEqual(len(plan["checks"]), 5)
+        series = {row["id"] for row in self.snapshot["series"]}
+        windows = {row["id"] for row in self.snapshot["windows"]}
+        for check in plan["checks"]:
+            self.assertGreaterEqual(check["min_cells"], 30)
+            self.assertIn(check["window_id"], windows)
+            self.assertIn(check["series_id"], series)
+
+    def test_trend_magnitude_gate_below_planted_slope(self):
+        plan = dd.build_trend_plan(self.sha, self.scenario, self.profile)
+        gates = {check["series_id"]: Decimal(str(check["magnitude_gate"]["min_slope_units_per_second"])) for check in plan["checks"]}
+        planted = {}
+        for key, slope in self.scenario["trend_slopes"].items():
+            signal, entity = key.split("@")
+            planted[f"{entity}.{dd.SIGNALS[signal]['metric']}"] = Decimal(str(slope)) * Decimal(dd.FULL_DURATION_S) / Decimal(self.profile["duration_s"])
+        self.assertEqual(set(gates), set(planted))
+        for series_id, gate in gates.items():
+            self.assertEqual(gate * 2, planted[series_id], series_id)
+        self.assertIsNone(re.search("[0-9][eE][-+]?[0-9]", dd.dumps(plan)))
+
+    def test_stages_valid(self):
+        stages = dd.build_load_stages(self.profile, self.scenario)
+        self.assertEqual(stages["schema_version"], "load-stages.v1")
+        items = stages["stages"]
+        self.assertEqual(len(items), 6)
+        self.assertLessEqual(len(items), 16)
+        self.assertTrue(any(item["role"] == "steady" for item in items))
+        for before, after in zip(items, items[1:]):
+            self.assertEqual(before["to_offset_ms"], after["from_offset_ms"])
+        self.assertEqual(items[-1]["to_offset_ms"], self.profile["duration_s"] * 1000)
+
+    def test_correlation_plan(self):
+        series = {row["id"] for row in self.snapshot["series"]}
+        for arm, pairs in (("A", 2), ("B", 3)):
+            plan = dd.build_correlation_plan(self.sha, arm, self.scenario)
+            self.assertEqual(plan["resource_snapshot_sha256"], self.sha)
+            self.assertEqual(len(plan["pairs"]), pairs)
+            for pair in plan["pairs"]:
+                self.assertIn(pair["resource_series_id"], series)
+                self.assertEqual(pair["controls"], [{"meaning": "achieved_rps"}])
+                self.assertEqual(pair["window_ids"], ["soak"])
+
+    def test_policy_validates_offline(self):
+        import os
+        import subprocess
+
+        ltv = os.environ.get("LTV_BIN")
+        if not ltv:
+            self.skipTest("LTV_BIN is not set")
+        for policy in (dd.build_policy(self.scenario, self.profile), dd.build_policy_stages(self.scenario, self.profile)):
+            with tempfile.TemporaryDirectory() as folder:
+                path = Path(folder) / "policy.json"
+                path.write_text(dd.dumps(policy) + chr(10), encoding="utf-8")
+                result = subprocess.run([ltv, "policy", "validate", str(path)], capture_output=True, text=True)
+                self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+
+
 if __name__ == "__main__":
     unittest.main()

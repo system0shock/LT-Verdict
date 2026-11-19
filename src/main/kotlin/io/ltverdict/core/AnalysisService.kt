@@ -79,8 +79,9 @@ internal class AnalysisService(
             }
         checkCancelled()
         // ADR 0030, R3, narrowed by ADR 0037 (D3, D8, D9): two sources of windows are an error, not a priority. Stages meet a
-        // snapshot only when the snapshot declares no windows; capacity, correlation and trend plans stay refused, in this order.
-        // The online request is refused in analyzeWithSources.
+        // snapshot only when the snapshot declares no windows. Refused in this order: a capacity plan, a snapshot that declares
+        // windows, a correlation plan, a trend plan (the CLI and the API check the same order). An online request is allowed: with
+        // stages analyzeWithSources builds its snapshot without windows (D7).
         if (request.stages != null) {
             require(request.capacity == null) { "STAGES_CAPACITY_CONFLICT" }
             require(

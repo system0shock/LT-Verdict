@@ -229,6 +229,35 @@ class StageProposalDegradationTest {
     }
 
     @Test
+    fun `a noisy rise at the end of the plateau never turns a collapse into an excluded rise`() {
+        for (seed in 1L..40L) {
+            val degraded = detectLoadStages(StageProfiles.fallAfterPlateau(seed, degraded = true).series())
+            val healthy = detectLoadStages(StageProfiles.fallAfterPlateau(seed, degraded = false).series())
+
+            assertTrue(degraded.stages.none { it.id == "after-steady" }, "seed $seed ${explain(degraded)}")
+            assertTrue(degraded.warnings.any { it.code == "DEGRADED_TAIL_KEPT" }, "seed $seed ${explain(degraded)}")
+            assertTrue(healthy.stages.none { it.id == "after-steady" }, "seed $seed ${explain(healthy)}")
+            assertTrue(healthy.warnings.none { it.code == "RISE_AFTER_STEADY" }, "seed $seed ${explain(healthy)}")
+        }
+    }
+
+    @Test
+    fun `a rise that ends below the step is not a rise after steady`() {
+        for (mode in SteadySteps.entries) {
+            val degraded = detectLoadStages(StageProfiles.riseThenFall(degraded = true).series(), mode)
+            val healthy = detectLoadStages(StageProfiles.riseThenFall(degraded = false).series(), mode)
+
+            assertTrue(degraded.stages.none { it.id == "after-steady" }, explain(degraded))
+            assertTrue(degraded.warnings.any { it.code == "DEGRADED_TAIL_KEPT" }, explain(degraded))
+            assertEquals("ramp-down", healthy.stages.last().id, explain(healthy))
+            assertTrue(healthy.warnings.none { it.code == "RISE_AFTER_STEADY" }, explain(healthy))
+        }
+        // A rise that ends above the step stays a rise after steady (R3).
+        assertTrue(detectLoadStages(StageProfiles.riseAbort.series()).stages.any { it.id == "after-steady" })
+        assertTrue(detectLoadStages(StageProfiles.creep.series()).stages.any { it.id == "after-steady" })
+    }
+
+    @Test
     fun `the judgement is deterministic`() {
         val first = detectLoadStages(StageProfiles.collapse(600, 20.0).series())
         val second = detectLoadStages(StageProfiles.collapse(600, 20.0).series())

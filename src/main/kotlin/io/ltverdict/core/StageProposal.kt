@@ -396,6 +396,18 @@ private fun detectInCells(
     // The last step keeps what follows its last plateau up to the stop (D4), unless a long rise comes first.
     var tailFirst = current.last + 1
     while (tailFirst < stopFirst && !longRise(pieces[tailFirst])) tailFirst++
+    // Re-review N2: the stretch from a long rise to the end of the run is a rise after steady only if it ends above the level of
+    // the step by the merge threshold (the end of its last long piece with load; idle and short pieces are the stop). A noisy
+    // rise at the end of the plateau followed by a fall is part of the step, and the fall is the tail, judged by D14.
+    if (tailFirst < stopFirst) {
+        val opening = current.opening.fit
+        val end =
+            (tailFirst until pieces.size)
+                .map { pieces[it] }
+                .lastOrNull { it.kind != StageSegmentKind.IDLE && it.fit.cells * cellMillis >= DROP_MIN_MILLIS }
+                ?.fit
+        if (end == null || end.lineAt(end.to - 1) - opening.level <= mergeThreshold(opening, end, noise)) tailFirst = stopFirst
+    }
     current.last = tailFirst - 1
     steps += current
     val riseAfterSteady = (tailFirst until pieces.size).any { longRise(pieces[it]) }

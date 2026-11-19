@@ -491,6 +491,37 @@ internal object StageProfiles {
         backgroundErrorRatio = 0.005,
     )
 
+    /** Re-review N2: 20 min at 100 rps, then a 600 s fall to 20 rps; degraded: 1500 ms and 10 % errors. */
+    fun fallAfterPlateau(
+        seed: Long,
+        degraded: Boolean,
+    ) = StageProfile(
+        "N2 fall after the plateau, degraded $degraded, seed $seed",
+        listOf(
+            ramp(120, 0.0, 100.0),
+            flat(1200, 100.0),
+            if (degraded) RatePiece(600, 100.0, 20.0, 1500, 0.10) else ramp(600, 100.0, 20.0),
+        ),
+        poissonSeed = seed,
+    )
+
+    /**
+     * Re-review N2, the mechanism made deterministic: the plateau ends with a 195 s wiggle from 90 to 110 rps around its own
+     * level (classified RISING, like the noise piece of drift +0.119 the reviewer found on 1 seed of 40), then the 600 s fall
+     * to 20 rps.
+     */
+    fun riseThenFall(degraded: Boolean) =
+        StageProfile(
+            "N2 rise then fall, degraded $degraded",
+            listOf(
+                ramp(120, 0.0, 100.0),
+                flat(1005, 100.0),
+                ramp(195, 90.0, 110.0),
+                if (degraded) RatePiece(600, 100.0, 20.0, 1500, 0.10) else ramp(600, 100.0, 20.0),
+            ),
+            poissonSeed = 11L,
+        )
+
     /** R6: a warm-up at 40 % for 15 minutes before a 1000 s plateau. */
     val warmUp40 =
         StageProfile(

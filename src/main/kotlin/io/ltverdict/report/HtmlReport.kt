@@ -226,7 +226,7 @@ private fun verdictBlock(
             verdict == "FAIL" -> ruleFailureItems(result, evidence, business.filter { it.text("status") == "FAIL" }, resource)
             else -> emptyList()
         }
-    val items = failures + reasons.map { "<li><code>${escape(it)}</code>: ${escape(reasonWords(it))}</li>" }
+    val items = failures + reasons.map { "<li><code>${escape(it)}</code>: ${escape(reasonWords(it) + reasonStages(it, evidence))}</li>" }
     val reasonList = if (items.isEmpty()) "<p>Причины в результате не указаны.</p>" else "<ul>${items.joinToString("")}</ul>"
     val count =
         when {
@@ -855,6 +855,22 @@ private fun list(values: List<JsonObject>): String =
     }
 
 private fun JsonObject.array(name: String): List<JsonObject> = (this[name] as? JsonArray).orEmpty().mapNotNull { it as? JsonObject }
+
+// ADR 0037, D2: the partial coverage reason names the steady stages that the snapshot grid covers only in part.
+private fun reasonStages(
+    code: String,
+    evidence: List<JsonObject>,
+): String {
+    if (code != "STAGE_WINDOW_SNAPSHOT_PARTIAL") return ""
+    val ids =
+        evidence
+            .filter { it.string("type") == "stage_binding" }
+            .flatMap { (it["stages"] as? JsonArray).orEmpty() }
+            .mapNotNull { it as? JsonObject }
+            .filter { it.string("resource_partial") == "true" }
+            .mapNotNull { it.string("id") }
+    return if (ids.isEmpty()) "" else " Стадии: ${ids.joinToString(", ")}."
+}
 
 private fun JsonObject.string(name: String): String? = (this[name] as? JsonPrimitive)?.content
 

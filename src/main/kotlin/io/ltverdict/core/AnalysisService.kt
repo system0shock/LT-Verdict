@@ -477,7 +477,14 @@ internal class AnalysisService(
                                 },
                             evidence =
                                 listOf(
-                                    stageBindingEvidence(request.stages.sha256, stageResolution, runStart, runEnd, windows),
+                                    stageBindingEvidence(
+                                        request.stages.sha256,
+                                        stageResolution,
+                                        runStart,
+                                        runEnd,
+                                        windows,
+                                        stageResources.partialWindowIds,
+                                    ),
                                     resourceBindingEvidence(request.resources.snapshot, windows, runStart, runEnd, declaredStages = true),
                                 ) + evaluated.evidence,
                         )

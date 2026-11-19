@@ -86,6 +86,44 @@ class StageResourceWindowTest {
     }
 
     @Test
+    fun `only the stages the grid covers in part are named partial`() {
+        val windows = listOf(window("steady-a", 40_000, 85_000), window("steady-b", 85_000, 115_000))
+
+        val resolved = resolveStageResourceWindows(grid(start = T0 + 55_000), windows)
+
+        assertEquals(listOf(window("steady-a", 55_000, 85_000), window("steady-b", 85_000, 115_000)), resolved.windows)
+        assertTrue(resolved.partial)
+        assertEquals(listOf("steady-a"), resolved.partialWindowIds)
+        assertEquals(emptyList<String>(), resolveStageResourceWindows(grid(), listOf(window("steady", 40_000, 100_000))).partialWindowIds)
+    }
+
+    @Test
+    fun `the stage binding marks the partial steady stages only with a snapshot`() {
+        val declared =
+            assertInstanceOf(
+                LoadStagesValidation.Valid::class.java,
+                validateLoadStages(ByteArrayInputStream(Files.readAllBytes(Path.of(RAMP_STEADY_DOWN)))),
+            )
+        val resolved = resolveStageWindows(declared.stages, T0, T0 + 119_800)
+        val resourceWindows = resolveStageResourceWindows(grid(start = T0 + 60_000, points = 4), resolved.windows)
+
+        val partial =
+            stageBindingEvidence(declared.sha256, resolved, T0, T0 + 119_800, resourceWindows.windows, resourceWindows.partialWindowIds)
+        val full =
+            stageBindingEvidence(declared.sha256, resolved, T0, T0 + 119_800, resolveStageResourceWindows(grid(), resolved.windows).windows)
+        val without = stageBindingEvidence(declared.sha256, resolved, T0, T0 + 119_800)
+
+        fun flags(binding: JsonObject) =
+            binding.getValue("stages").jsonArray.associate {
+                it.jsonObject.str("id") to
+                    it.jsonObject["resource_partial"]?.jsonPrimitive?.content
+            }
+        assertEquals(mapOf("ramp-up" to null, "steady" to "true", "ramp-down" to null), flags(partial))
+        assertEquals(mapOf("ramp-up" to null, "steady" to "false", "ramp-down" to null), flags(full))
+        assertEquals(mapOf("ramp-up" to null, "steady" to null, "ramp-down" to null), flags(without))
+    }
+
+    @Test
     fun `touching steady stages do not share a cell`() {
         val resolved =
             resolveStageResourceWindows(grid(), listOf(window("steady-a", 40_000, 70_000), window("steady-b", 70_000, 100_000)))

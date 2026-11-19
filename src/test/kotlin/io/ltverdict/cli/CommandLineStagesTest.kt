@@ -218,6 +218,7 @@ class CommandLineStagesTest {
         val html = Files.readString(out.resolve("report.html"))
         assertTrue(html.contains("STAGE_WINDOW_SNAPSHOT_PARTIAL"))
         assertFalse(html.contains("Причина без расшифровки"), "the coverage reason is named in words")
+        assertTrue(html.contains("Стадии: steady."), "the coverage reason names the partial stage")
     }
 
     @Test

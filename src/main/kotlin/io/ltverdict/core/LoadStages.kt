@@ -147,6 +147,8 @@ internal data class StageResourceWindows(
     val windows: List<ResourceWindowV1>,
     /** The grid covers a stage window short of more than its incomplete edge cells (ADR 0037, D2). */
     val partial: Boolean,
+    /** The ids of those stage windows, in window order; empty when [partial] is false. */
+    val partialWindowIds: List<String> = emptyList(),
 )
 
 /**
@@ -162,7 +164,7 @@ internal fun resolveStageResourceWindows(
     val start = snapshot.startEpochMillis
     val step = snapshot.stepMillis
     val gridEnd = Math.addExact(start, Math.multiplyExact(step, snapshot.pointCount.toLong()))
-    var partial = false
+    val partialIds = mutableListOf<String>()
     val windows =
         stageWindows.map { window ->
             val low = maxOf(window.fromEpochMillis, start)
@@ -170,10 +172,10 @@ internal fun resolveStageResourceWindows(
             val from = Math.addExact(start, Math.multiplyExact(Math.floorDiv(low - start + step - 1, step), step))
             val to = Math.addExact(start, Math.multiplyExact(Math.floorDiv(high - start, step), step))
             require(from < to) { STAGE_WINDOW_NO_FULL_CELLS }
-            if (from - window.fromEpochMillis >= step || window.toEpochMillis - to >= step) partial = true
+            if (from - window.fromEpochMillis >= step || window.toEpochMillis - to >= step) partialIds += window.id
             ResourceWindowV1(window.id, from, to)
         }
-    return StageResourceWindows(windows, partial)
+    return StageResourceWindows(windows, partialIds.isNotEmpty(), partialIds)
 }
 
 internal const val STAGE_WINDOW_NO_FULL_CELLS = "STAGE_WINDOW_NO_FULL_CELLS"
@@ -212,6 +214,8 @@ internal fun stageBindingEvidence(
     runEndEpochMillis: Long,
     /** ADR 0037, D5: the resource windows of the steady stages when a snapshot is given; without one the fields are absent. */
     resourceWindows: List<ResourceWindowV1>? = null,
+    /** ADR 0037, D2: the steady stages the snapshot grid covers only in part ([StageResourceWindows.partialWindowIds]). */
+    partialWindowIds: Collection<String> = emptyList(),
 ): JsonObject {
     val evaluated = resolved.windows.sumOf { it.toEpochMillis - it.fromEpochMillis }
     val resourceById = resourceWindows?.associateBy(ResourceWindowV1::id).orEmpty()
@@ -236,6 +240,7 @@ internal fun stageBindingEvidence(
                     clippedToRunEnd = if (it.role == StageRole.STEADY) it.clippedToRunEnd else null,
                     resourceFromEpochMs = if (it.role == StageRole.STEADY) resourceById[it.id]?.fromEpochMillis else null,
                     resourceToEpochMs = if (it.role == StageRole.STEADY) resourceById[it.id]?.toEpochMillis else null,
+                    resourcePartial = if (it.role == StageRole.STEADY && it.id in resourceById) it.id in partialWindowIds else null,
                 )
             },
         verdictScope = "STEADY_WINDOW",
@@ -264,6 +269,8 @@ internal data class StageBindingStage(
     /** ADR 0037, D5: the full-cell resource window of a steady stage, written only with a resource snapshot. */
     @SerialName("resource_from_epoch_ms") val resourceFromEpochMs: Long? = null,
     @SerialName("resource_to_epoch_ms") val resourceToEpochMs: Long? = null,
+    /** ADR 0037, D2: true when the grid covers the steady stage short of more than its edge cells (STAGE_WINDOW_SNAPSHOT_PARTIAL). */
+    @SerialName("resource_partial") val resourcePartial: Boolean? = null,
 )
 
 @Serializable

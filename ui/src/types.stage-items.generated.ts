@@ -29,4 +29,5 @@ export interface StageBindingStage {
   clipped_to_run_end?: boolean
   resource_from_epoch_ms?: number
   resource_to_epoch_ms?: number
+  resource_partial?: boolean
 }

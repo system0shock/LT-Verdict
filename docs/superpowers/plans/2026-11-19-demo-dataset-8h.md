@@ -191,9 +191,11 @@ Documentation impact: `examples/demo-8h/README.md`, строка в `examples/RE
 ### Task 1: Каркас, `scenario.json` и разбор профилей
 
 **Files:**
+
 - Create: `examples/demo-8h/scenario.json`, `tools/demo_dataset.py`, `tools/test_demo_dataset.py`
 
 **Interfaces:**
+
 - Produces: `load_scenario(path: Path) -> dict`; `resolve_profile(name: str) -> Profile` где `Profile = {"name", "duration_s", "rps_scale", "workloads", "snapshot_step_ms", "pod_step_ms"}` для `full`, `demo`, `tiny`; `stage_bounds(profile) -> list[Stage]` с `Stage = (id, role, from_ms, to_ms)` в долях длительности 30/480, 120/480, 30/480, 90/480, 30/480, 180/480.
 
 - [ ] **Step 1: Тест `test_stage_bounds_full` и `test_stage_bounds_tiny`.** Для `full` границы в минутах 0, 30, 150, 180, 270, 300, 480; для `tiny` (24 мин) 1,5/6/1,5/4,5/1,5/9 мин, все границы кратны 15 000 мс, `soak` содержит не менее 36 ячеек.
@@ -207,6 +209,7 @@ Documentation impact: `examples/demo-8h/README.md`, строка в `examples/RE
 **Files:** Modify `tools/demo_dataset.py`, `tools/test_demo_dataset.py`
 
 **Interfaces:**
+
 - Consumes: `Profile`, `Stage`, `load_scenario`.
 - Produces: `write_jtl(path: Path, release: dict, profile: Profile, scenario: dict) -> str` (возвращает SHA-256 файла); `load_multiplier(profile, t_ms) -> float` (кусочно-линейная функция стадий макета); `p95_model(tx: dict, t_ms, kind: str) -> float` (форма p95 макета: базовая 760 мс, рост после колена на 1900 мс × `kf` × `ramp^1,25`, множитель транзакции `f`).
 
@@ -222,6 +225,7 @@ Documentation impact: `examples/demo-8h/README.md`, строка в `examples/RE
 **Files:** Modify `tools/demo_dataset.py`, `tools/test_demo_dataset.py`
 
 **Interfaces:**
+
 - Produces: `build_snapshot(arm: str, release: dict, profile: Profile, scenario: dict, load_sha256: str) -> dict` (объект `resource-snapshot.v1`, ряды отсортированы по `id`, 15 с, метка `arm` в каждом ряду); `snapshot_hash(snapshot) -> str` (обёртка над `tools.stats_validation.snapshot_hash`, как в `docs/ui-mockup/core-demo/tools/gen.py`); `SIGNALS: dict` (таблица сигнал → `unit`, `aggregation`, свёртка).
 
 - [ ] **Step 1: Тесты.** (а) `test_signals_match_pack_doc` (Review Focus 1): таблица `SIGNALS` совпадает с таблицей «Сигналы» в `docs/user/platform-metric-packs.md` по метрике, единице и агрегации (`restarts` = `interval_rate`, `memory_limit_ratio` в политике = `interval_max`); (б) `test_snapshot_limits` (Review Focus 2): `demo` и `full` имеют не более 1 024 рядов, не более 1 500 000 ячеек, не более 32 MiB, один ряд на пару (сигнал, `entity`); при искусственно заданных 800 рядах на 15 с `build_snapshot` бросает `ValueError` до записи; (в) `test_arm_label_uniform`: `arm` один и тот же в каждом ряду; (г) `test_story_arm_b`: ряд `restarts` для `payments-svc` на B неубывающий и заканчивается 3, на A нулевой; `memory_limit_ratio` `payments-svc` на B достигает не менее 0,99 (максимум по подам) и на A не более 0,75; (д) `test_unavailable_replicas_zero`; (е) `test_windows_match_stages`: окна снимка совпадают со стадиями `steady` из Task 1 (id и границы); (ж) `test_snapshot_rules_empty`.
@@ -235,6 +239,7 @@ Documentation impact: `examples/demo-8h/README.md`, строка в `examples/RE
 **Files:** Modify `tools/demo_dataset.py`, `tools/test_demo_dataset.py`
 
 **Interfaces:**
+
 - Consumes: `build_snapshot`, `snapshot_hash`, `stage_bounds`.
 - Produces: `build_policy(scenario) -> dict` (9 правил), `build_policy_stages(scenario) -> dict` (5 правил), `build_load_stages(profile) -> dict` (`load-stages.v1`), `build_trend_plan(snapshot_sha256: str, scenario) -> dict` (`trend-plan.v1`, окно `soak`, 5 проверок: Old Gen, сайдкар, пул, потоки, CPU), `build_correlation_plan(snapshot_sha256: str, arm: str, scenario) -> dict` (`correlation-plan.v1`, 2-3 пары, элемент `controls` `achieved_rps`).
 
@@ -249,6 +254,7 @@ Documentation impact: `examples/demo-8h/README.md`, строка в `examples/RE
 **Files:** Modify `tools/demo_dataset.py`, `tools/test_demo_dataset.py`
 
 **Interfaces:**
+
 - Produces: `build_pod_view(arm: str, snapshot: dict, snapshot_sha256: str, load_sha256: str, scenario, profile) -> dict` (`pod-view.v1`, шаг 120 с, 240 колонок, подам даны имена как в макете `<сервис>-<rs>-<a|b><n>`; число подов 78 в `full` и `demo`); `build_opensearch_errors(load_sha256: str, scenario, profile) -> dict` (`opensearch-errors.v1`).
 
 - [ ] **Step 1: Тесты.** (а) `test_pod_view_limits`: не более 240 колонок, 256 подов, 2 560 строк, 12 MiB, `step_ms` кратен шагу снимка; (б) `test_pod_totals`: 78 подов на плечо в `full` и `demo`; (в) `test_pod_view_story`: на B в `payments-svc` ровно один под (второй) имеет `restarts` 3 и пилу памяти, другой под `catalog-svc` горячий на обоих плечах, два пода `checkout-api` троттлят на B; (г) `test_pod_view_binds`: `resource_snapshot_sha256` и `load_input_sha256` совпадают; (д) `test_opensearch_shape`: `timeline` не более 100 000 бинов, `total_errors` равен сумме бинов, после колена доля ошибок выше 80 %, группы по сервису и типу ошибки, `coverage.status` = `COMPLETE`.
@@ -262,6 +268,7 @@ Documentation impact: `examples/demo-8h/README.md`, строка в `examples/RE
 **Files:** Modify `tools/demo_dataset.py`, `tools/test_demo_dataset.py`
 
 **Interfaces:**
+
 - Produces: CLI `python tools/demo_dataset.py generate --out DIR [--profile tiny|demo|full] [--scenario PATH] [--only RELEASE]`; `generate(out: Path, profile: Profile, scenario: dict, only: str | None) -> dict` (манифест: путь, размер, SHA-256 каждого файла, `load_sha256` по релизам).
 
 Порядок цепочки хэшей внутри `generate`: JTL → `load_sha256` → снимок плеча → семантический хэш → планы трендов и корреляций → pod-view. Контекст OpenSearch в снимок не сливается (`ltv opensearch prepare` перезаписал бы снимок и сломал привязки, а у него собственный план корреляций; на `analyze` подаётся один `--correlation`). Слияние ошибок OpenSearch в снимок остаётся необязательным шагом README.
@@ -275,10 +282,12 @@ Documentation impact: `examples/demo-8h/README.md`, строка в `examples/RE
 ### Task 7: Скрипт сборки каталога данных
 
 **Files:**
+
 - Create: `tools/demo_dataset_build.py`
 - Modify: `tools/test_demo_dataset.py`
 
 **Interfaces:**
+
 - Consumes: каталог `--out` из Task 6, `manifest.json`.
 - Produces: CLI `python tools/demo_dataset_build.py --ltv PATH --out DIR --data-dir DIR [--profile ...] [--skip-generate] [--force-new]`; `run_analyze(ltv: Path, args: list[str], expected_exit: int, env: dict) -> tuple[str, str]` (возвращает `run_id`, `analysis_id` из строки stderr `analysis_id=<id> run_id=<id>`, `CommandLine.kt:413`); `ApiClient(origin: str)` с методами `bootstrap()`, `post(path: str, body: dict) -> dict`; `start_ui(ltv, data_dir) -> (process, origin)`; `save_releases(...)`, `set_baselines(...)`.
 
@@ -332,6 +341,7 @@ Documentation impact: `examples/demo-8h/README.md`, строка в `examples/RE
 ### Task 11: Документация и журнал изменений
 
 **Files:**
+
 - Create: `examples/demo-8h/README.md`, `changelog.d/demo-8h-dataset.added.md`
 - Modify: `examples/README.md`
 

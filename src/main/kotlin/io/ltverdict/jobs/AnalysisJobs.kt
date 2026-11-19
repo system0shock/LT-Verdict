@@ -259,8 +259,6 @@ internal class AnalysisJobs(
                                                 "STAGE_WINDOW_NO_FULL_CELLS",
                                                 "A steady stage holds no full cell of the resource snapshot grid; check the stages and the snapshot",
                                             )
-                                        "STAGES_SOURCE_CONFLICT" ->
-                                            Diagnostic("STAGES_SOURCE_CONFLICT", "Stages cannot be combined with an online source request")
                                         "AUTO_WINDOW_UNAVAILABLE" ->
                                             Diagnostic(
                                                 "AUTO_WINDOW_UNAVAILABLE",

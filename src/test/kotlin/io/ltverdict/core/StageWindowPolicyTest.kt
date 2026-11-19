@@ -407,17 +407,18 @@ class StageWindowPolicyTest {
                 "STAGES_CAPACITY_CONFLICT",
                 message { service.analyze(AnalysisRequest(input, null, resources = snapshot, capacity = capacity, stages = declared)) },
             )
-            // no source is configured: only the stages check can answer before the source is looked up
+            // ADR 0037, D7: stages no longer refuse an online request; with no source configured the source check answers
             assertEquals(
-                "STAGES_SOURCE_CONFLICT",
+                "SOURCE_NOT_CONFIGURED",
                 message { analyzeWithSources(service, AnalysisRequest(input, null, sourceRequest = online, stages = declared), null) },
             )
             assertEquals(
                 "SOURCE_NOT_CONFIGURED",
                 message { analyzeWithSources(service, AnalysisRequest(input, null, sourceRequest = online), null) },
             )
+            // ADR 0037, D7: an online request with a snapshot stays a source input conflict, with or without stages
             assertEquals(
-                "STAGES_SOURCE_CONFLICT",
+                "SOURCE_INPUT_CONFLICT",
                 message {
                     analyzeWithSources(
                         service,

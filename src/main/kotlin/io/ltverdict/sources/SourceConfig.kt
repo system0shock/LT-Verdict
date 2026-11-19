@@ -138,6 +138,8 @@ internal data class SourceRequest(
     val windowProvenance: JsonObject? = null,
     // Выведенное окно шире прогона, поэтому snapshot не объявляет окна: ядро само обрезает его по пересечению с прогоном.
     val autoDerivedWindow: Boolean = false,
+    // ADR 0037, D7: with declared stages the stages are the only windows, so the snapshot of an explicit window declares none.
+    val stagesDeclared: Boolean = false,
 )
 
 internal sealed interface RequestWindow {

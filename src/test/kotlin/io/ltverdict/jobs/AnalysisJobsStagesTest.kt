@@ -18,7 +18,6 @@ class AnalysisJobsStagesTest {
             "STAGE_OUTSIDE_RUN" to "STAGE_OUTSIDE_RUN",
             "STAGES_RESOURCES_CONFLICT" to "STAGES_RESOURCES_CONFLICT",
             "STAGES_CAPACITY_CONFLICT" to "STAGES_CAPACITY_CONFLICT",
-            "STAGES_SOURCE_CONFLICT" to "STAGES_SOURCE_CONFLICT",
             "private filesystem detail" to "ANALYSIS_FAILED",
         ).forEach { (failureMessage, expectedCode) ->
             AnalysisJobs(1) { _, _, _ -> throw IllegalArgumentException(failureMessage) }.use { jobs ->

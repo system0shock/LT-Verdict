@@ -118,8 +118,7 @@ internal fun analyzeWithSources(
     cellBudget: Long = MAX_RESOURCE_CELLS,
 ): AnalysisOutcome {
     val windowed = request.sourceRequest ?: return service.analyze(request, processedBytes, checkCancelled, beforePublish)
-    // ADR 0030, R3: the online request builds a snapshot itself; refuse before the source is looked up or touched.
-    require(request.stages == null) { "STAGES_SOURCE_CONFLICT" }
+    // ADR 0037, D7: stages are allowed with an online request; the snapshot is built without windows (resolveWindow).
     require(request.resources == null && request.diagnostics == null && request.sourceAcquisition == null) { "SOURCE_INPUT_CONFLICT" }
     val configured = requireNotNull(source) { "SOURCE_NOT_CONFIGURED" }
     val selection = resolveWindow(service, request, windowed, configured.profiles, cellBudget, checkCancelled)
@@ -179,6 +178,7 @@ private fun resolveWindow(
                 } else {
                     null
                 },
+                stagesDeclared = request.stages != null,
             )
         }
         is AutoWindow -> {
@@ -223,6 +223,7 @@ private fun resolveWindow(
                 additional,
                 provenance,
                 autoDerivedWindow = true,
+                stagesDeclared = request.stages != null,
             )
         }
     }
@@ -580,7 +581,8 @@ internal fun acquireMultipleSources(
                 put("series", JsonArray(values))
                 put("rules", JsonArray(rules))
                 // Как и в одиночной выборке: авто-окно не объявляется, его обрезает пересечение с прогоном.
-                if (!request.autoDerivedWindow) {
+                // Со стадиями окна задают только стадии (ADR 0037, D7), окно `full` тоже не пишется.
+                if (!request.autoDerivedWindow && !request.stagesDeclared) {
                     put(
                         "windows",
                         buildJsonArray {

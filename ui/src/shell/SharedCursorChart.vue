@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import { OVERVIEW_LABELS } from './labels'
-import { cursorSummary, formatNumber, formatOffset, loadFrame, loadLane, nearestIndex, type LoadSeries, type TrackKey } from './overview'
+import { cursorSummary, formatNumber, loadFrame, loadLane, nearestIndex, type LoadSeries, type TrackKey } from './overview'
 import TimeChart from './TimeChart.vue'
 import { plotFraction, type ChartStage } from './timeChart'
 
@@ -24,8 +24,6 @@ const lanes = computed(() => tracks.map((track) => ({
 })))
 const cursorMs = computed(() => cursor.value === null ? null : props.series.points[cursor.value]?.startMs ?? null)
 const units: Record<TrackKey, string> = { rps: ` ${OVERVIEW_LABELS.unitRps}`, errors: '', p95: ` ${OVERVIEW_LABELS.unitMs}` }
-const firstOffset = computed(() => formatOffset(props.series.points[0]?.startMs ?? 0))
-const lastOffset = computed(() => formatOffset(props.series.points[props.series.points.length - 1]?.startMs ?? 0))
 
 function onPointer(event: PointerEvent) {
   const rect = (event.currentTarget as HTMLElement).getBoundingClientRect()
@@ -82,8 +80,11 @@ function inputCursor(event: Event) {
         />
       </div>
     </div>
-    <p class="shared-chart__axis-labels">
-      <span>{{ firstOffset }}</span><span>{{ OVERVIEW_LABELS.axisLabel }}</span><span>{{ lastOffset }}</span>
+    <p
+      class="shared-chart__axis-title"
+      data-testid="chart-axis-title"
+    >
+      {{ OVERVIEW_LABELS.axisLabel }}
     </p>
     <p data-testid="cursor-time">
       {{ readout ? OVERVIEW_LABELS.cursorTime(readout.time) : OVERVIEW_LABELS.cursorNone }}
@@ -154,11 +155,9 @@ function inputCursor(event: Event) {
   margin: 0;
 }
 
-.shared-chart__axis-labels {
-  display: flex;
-  justify-content: space-between;
-  gap: 8px;
-  margin: 0;
+.shared-chart__axis-title {
+  margin: 0 16px 0 56px;
+  text-align: center;
 }
 
 .shared-chart__slider {

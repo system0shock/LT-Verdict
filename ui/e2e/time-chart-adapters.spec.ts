@@ -39,10 +39,12 @@ test('valueAxis never collapses', () => {
 })
 test('timeTicks follow the step ladder and the run origin', () => {
   expect(timeTicks({ fromMs: 0, toMs: 6000, originMs: 0 })).toEqual([0, 1000, 2000, 3000, 4000, 5000, 6000])
-  expect(timeTicks({ fromMs: 0, toMs: 14_390_000, originMs: 0 })).toEqual([0, 3_600_000, 7_200_000, 10_800_000])
+  expect(timeTicks({ fromMs: 0, toMs: 14_390_000, originMs: 0 })).toEqual([0, 3_600_000, 7_200_000, 10_800_000, 14_390_000])
   const origin = 1_767_225_600_000
   expect(timeTicks({ fromMs: origin - 61_000, toMs: origin + 119_000, originMs: origin }).map((t) => signedOffset(t - origin)))
-    .toEqual(['-1:00', '-0:30', '0:00', '0:30', '1:00', '1:30'])
+    .toEqual(['-1:00', '-0:30', '0:00', '0:30', '1:00', '1:30', '1:59'])
+  // A step ladder tick closer than three quarters of a step to the frame end gives way to the end itself.
+  expect(timeTicks({ fromMs: 0, toMs: 6500, originMs: 0 })).toEqual([0, 2000, 4000, 6500])
 })
 test('lineData breaks between segments and marks an isolated point with a symbol', () => {
   const data = lineData([[{ x: 0, y: 1 }, { x: 1000, y: 2 }], [{ x: 4000, y: 3 }]])

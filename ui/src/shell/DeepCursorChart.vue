@@ -104,8 +104,11 @@ function readout(key: string) {
         />
       </div>
     </div>
-    <p class="axis-labels">
-      <span>{{ offset(axis.fromMs - originMs) }}</span><span>{{ DEEP_LABELS.axisLabel }}</span><span>{{ offset(axis.toMs - originMs) }}</span>
+    <p
+      class="axis-title"
+      data-testid="chart-axis-title"
+    >
+      {{ DEEP_LABELS.axisLabel }}
     </p>
     <p
       data-testid="deep-cursor-time"
@@ -146,6 +149,6 @@ function readout(key: string) {
 .threshold-text.violated { color:var(--fail); }
 .deep-head { display:flex; flex-wrap:wrap; gap:4px 12px; margin:0 0 4px; overflow-wrap:anywhere; }
 .track-name { font-weight:600; }
-.axis-labels { display:flex; justify-content:space-between; flex-wrap:wrap; gap:8px; margin:0; }
+.axis-title { margin:0 16px 0 56px; text-align:center; }
 .slider { width:100%; min-height:44px; margin:0; }
 </style>

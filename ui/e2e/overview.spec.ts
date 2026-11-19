@@ -377,6 +377,19 @@ test('the cursor time mark never overlaps a time axis tick label', async ({ page
   }
 })
 
+test('the axis title is aligned with the plot area and no legend row is left under the charts', async ({ page }) => {
+  await openOverview(page)
+  await page.getByTestId('chart-plot').scrollIntoViewIfNeeded()
+  const plot = (await page.getByTestId('chart-plot').boundingBox())!
+  const title = page.getByTestId('chart-axis-title')
+  await expect(title).toHaveText(OVERVIEW_LABELS.axisLabel)
+  await expect(page.locator('.shared-chart__axis-labels')).toHaveCount(0)
+  const rect = (await title.boundingBox())!
+  expect(rect.x).toBeGreaterThanOrEqual(plot.x + PLOT_INSET.left - 1)
+  expect(rect.x + rect.width).toBeLessThanOrEqual(plot.x + plot.width - PLOT_INSET.right + 1)
+  expect(rect.y).toBeGreaterThanOrEqual(plot.y + plot.height - 1)
+})
+
 test('the charts raise no CSP violation under the real server policy', async ({ page }) => {
   expect((await page.request.get('/')).headers()['content-security-policy']).toContain("style-src 'self'")
   await page.addInitScript(() => {
@@ -465,7 +478,12 @@ test('a 4 hour run is shown in full at a 10 s step and the caption says so', asy
   await expect(page.getByTestId('load-step')).toHaveText(OVERVIEW_LABELS.loadStep(10))
   await expect(page.getByTestId('load-partial')).toHaveCount(0)
   await expect(page.getByTestId('load-gaps')).toHaveCount(0)
-  await expect(page.locator('.shared-chart__axis-labels span').last()).toHaveText('3:59:50')
+  await expect(page.locator('.shared-chart__axis-labels')).toHaveCount(0)
+  const ticks = page.getByTestId('track-p95').locator('svg text').filter({ hasText: /^\d+:\d\d(:\d\d)?$/ })
+  await expect(ticks.last()).toHaveText('3:59:50')
+  const lane = (await page.getByTestId('track-p95').getByTestId('time-chart').boundingBox())!
+  const end = (await ticks.last().boundingBox())!
+  expect(end.x + end.width).toBeLessThanOrEqual(lane.x + lane.width)
   await expect(slider(page)).toHaveAttribute('max', '1439')
   await slider(page).focus()
   await page.keyboard.press('End')

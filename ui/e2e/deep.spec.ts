@@ -109,6 +109,27 @@ test('resource lanes show value ticks and a threshold label on the axis', async 
   expect(await cpu.allTextContents()).toEqual(expect.arrayContaining(['0', formatNumber(1000), formatNumber(2000)]))
 })
 
+test('the axis title is aligned with the plot area and the last tick shows the end of the period', async ({ page }) => {
+  fixtureApi(page)
+  await openDeep(page)
+  await expect(page.locator('[data-testid^="deep-track-"]').last().getByTestId('time-chart').locator('svg text').first()).toBeVisible()
+  await page.getByTestId('deep-plot').scrollIntoViewIfNeeded()
+  const plot = (await page.getByTestId('deep-plot').boundingBox())!
+  const title = page.getByTestId('chart-axis-title')
+  await expect(title).toHaveText(DEEP_LABELS.axisLabel)
+  await expect(page.locator('.axis-labels')).toHaveCount(0)
+  const rect = (await title.boundingBox())!
+  expect(rect.x).toBeGreaterThanOrEqual(plot.x + PLOT_INSET.left - 1)
+  expect(rect.x + rect.width).toBeLessThanOrEqual(plot.x + plot.width - PLOT_INSET.right + 1)
+  expect(rect.y).toBeGreaterThanOrEqual(plot.y + plot.height - 1)
+  const bottom = page.locator('[data-testid^="deep-track-"]').last()
+  const ticks = bottom.locator('svg text').filter({ hasText: /^\d+:\d\d$/ })
+  await expect(ticks.last()).toHaveText('3:00')
+  const lane = (await bottom.getByTestId('time-chart').boundingBox())!
+  const end = (await ticks.last().boundingBox())!
+  expect(end.x + end.width).toBeLessThanOrEqual(lane.x + lane.width)
+})
+
 test('hovering the middle of the plot reads every lane at the middle of the period', async ({ page }) => {
   const mock = fixtureApi(page)
   await openDeep(page)
@@ -269,7 +290,7 @@ test('resource ids that match load track names retain distinct readouts', async 
 test('pre-run axis and cursor offsets are formatted as signed times', async ({ page }) => {
   fixtureApi(page, { startMs: origin - 61000 })
   await openDeep(page)
-  await expect(page.getByTestId('deep-chart')).toContainText('-1:01')
+  await expect(page.getByTestId('deep-chart')).toContainText('-1:00')
   const plot = page.getByTestId('deep-plot')
   const box = (await plot.boundingBox())!
   await page.mouse.move(box.x + 1, box.y + 30)

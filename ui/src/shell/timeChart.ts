@@ -51,6 +51,12 @@ export function timeTicks(frame: ChartFrame, maxIntervals = 6): number[] {
   const step = TIME_STEPS_MS.find((candidate) => span / candidate <= maxIntervals) ?? TIME_STEPS_MS[TIME_STEPS_MS.length - 1]
   const ticks: number[] = []
   for (let k = Math.ceil((frame.fromMs - frame.originMs) / step); frame.originMs + k * step <= frame.toMs; k += 1) ticks.push(frame.originMs + k * step)
+  // The last label shows the end of the frame; a step tick closer than three quarters of a step gives way to it.
+  const last = ticks[ticks.length - 1]
+  if (last !== undefined && last < frame.toMs) {
+    if (frame.toMs - last < step * 0.75) ticks.pop()
+    ticks.push(frame.toMs)
+  }
   return ticks
 }
 
@@ -132,7 +138,7 @@ export function laneOption(lane: ChartLane, frame: ChartFrame, stages: ChartStag
       type: 'value',
       min: frame.fromMs,
       max: frame.toMs,
-      axisLabel: { show: flags.timeLabels, customValues: ticks, formatter: (value: number) => signedOffset(value - frame.originMs), ...text },
+      axisLabel: { show: flags.timeLabels, customValues: ticks, alignMaxLabel: 'right', formatter: (value: number) => signedOffset(value - frame.originMs), ...text },
       axisTick: { show: flags.timeLabels, customValues: ticks },
       axisLine: { lineStyle: { color: colors.border } },
       splitLine: { show: false },

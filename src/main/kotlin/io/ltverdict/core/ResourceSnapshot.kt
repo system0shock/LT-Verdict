@@ -200,9 +200,11 @@ internal fun resourceBindingEvidence(
     windows: List<ResourceWindowV1>,
     runStartEpochMillis: Long,
     runEndEpochMillis: Long,
+    /** ADR 0037, D5: the windows are the full-cell resource windows of the steady stages; the edges show in stage_binding. */
+    declaredStages: Boolean = false,
 ): JsonObject {
     require(windows.isNotEmpty())
-    val implicit = snapshot.windows.isEmpty()
+    val implicit = snapshot.windows.isEmpty() && !declaredStages
     val evaluationStart = windows.minOf(ResourceWindowV1::fromEpochMillis)
     val evaluationEnd = windows.maxOf(ResourceWindowV1::toEpochMillis)
     val intersectionStart = maxOf(runStartEpochMillis, snapshot.startEpochMillis)
@@ -211,7 +213,12 @@ internal fun resourceBindingEvidence(
     val droppedTrailingMillis = if (implicit) intersectionEnd - evaluationEnd else 0L
     return ResourceBindingEvidence(
         id = "resource-binding",
-        mode = if (implicit) "run_intersection" else "explicit_windows",
+        mode =
+            when {
+                declaredStages -> "declared_stages"
+                implicit -> "run_intersection"
+                else -> "explicit_windows"
+            },
         snapshotFromEpochMs = snapshot.startEpochMillis,
         snapshotToEpochMs = snapshot.gridEndEpochMillis(),
         runFromEpochMs = runStartEpochMillis,

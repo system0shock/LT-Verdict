@@ -143,6 +143,42 @@ internal fun resolveStageWindows(
     return ResolvedStages(windows, resolved)
 }
 
+internal data class StageResourceWindows(
+    val windows: List<ResourceWindowV1>,
+    /** The grid covers a stage window short of more than its incomplete edge cells (ADR 0037, D2). */
+    val partial: Boolean,
+)
+
+/**
+ * ADR 0037, D2: the resource window of a steady stage is the full cells of the snapshot grid inside the stage window, the rule of
+ * the implicit run-intersection window (ADR 0005) applied to the stage. Same ids and order as [stageWindows]. A stage window
+ * without a full cell is refused; a window that the grid covers short of more than the incomplete edge cells is evaluated on the
+ * intersection and reported as [StageResourceWindows.partial].
+ */
+internal fun resolveStageResourceWindows(
+    snapshot: ResourceSnapshotV1,
+    stageWindows: List<ResourceWindowV1>,
+): StageResourceWindows {
+    val start = snapshot.startEpochMillis
+    val step = snapshot.stepMillis
+    val gridEnd = Math.addExact(start, Math.multiplyExact(step, snapshot.pointCount.toLong()))
+    var partial = false
+    val windows =
+        stageWindows.map { window ->
+            val low = maxOf(window.fromEpochMillis, start)
+            val high = minOf(window.toEpochMillis, gridEnd)
+            val from = Math.addExact(start, Math.multiplyExact(Math.floorDiv(low - start + step - 1, step), step))
+            val to = Math.addExact(start, Math.multiplyExact(Math.floorDiv(high - start, step), step))
+            require(from < to) { STAGE_WINDOW_NO_FULL_CELLS }
+            if (from - window.fromEpochMillis >= step || window.toEpochMillis - to >= step) partial = true
+            ResourceWindowV1(window.id, from, to)
+        }
+    return StageResourceWindows(windows, partial)
+}
+
+internal const val STAGE_WINDOW_NO_FULL_CELLS = "STAGE_WINDOW_NO_FULL_CELLS"
+internal const val STAGE_WINDOW_SNAPSHOT_PARTIAL = "STAGE_WINDOW_SNAPSHOT_PARTIAL"
+
 /**
  * The resource side of the shared window evaluation when there is no resource snapshot. A window has no resource policy
  * (NO_POLICY), so the joint verdict is the business verdict. The window evaluation skips `platform_rules` (they need a
@@ -174,8 +210,11 @@ internal fun stageBindingEvidence(
     resolved: ResolvedStages,
     runStartEpochMillis: Long,
     runEndEpochMillis: Long,
+    /** ADR 0037, D5: the resource windows of the steady stages when a snapshot is given; without one the fields are absent. */
+    resourceWindows: List<ResourceWindowV1>? = null,
 ): JsonObject {
     val evaluated = resolved.windows.sumOf { it.toEpochMillis - it.fromEpochMillis }
+    val resourceById = resourceWindows?.associateBy(ResourceWindowV1::id).orEmpty()
     return StageBindingEvidence(
         id = "stage-binding",
         mode = "declared_stages",
@@ -195,6 +234,8 @@ internal fun stageBindingEvidence(
                     fromEpochMs = it.fromEpochMillis,
                     toEpochMs = it.toEpochMillis,
                     clippedToRunEnd = if (it.role == StageRole.STEADY) it.clippedToRunEnd else null,
+                    resourceFromEpochMs = if (it.role == StageRole.STEADY) resourceById[it.id]?.fromEpochMillis else null,
+                    resourceToEpochMs = if (it.role == StageRole.STEADY) resourceById[it.id]?.toEpochMillis else null,
                 )
             },
         verdictScope = "STEADY_WINDOW",
@@ -220,6 +261,9 @@ internal data class StageBindingStage(
     @SerialName("to_epoch_ms") val toEpochMs: Long,
     /** Written only for a steady stage. */
     @SerialName("clipped_to_run_end") val clippedToRunEnd: Boolean? = null,
+    /** ADR 0037, D5: the full-cell resource window of a steady stage, written only with a resource snapshot. */
+    @SerialName("resource_from_epoch_ms") val resourceFromEpochMs: Long? = null,
+    @SerialName("resource_to_epoch_ms") val resourceToEpochMs: Long? = null,
 )
 
 @Serializable

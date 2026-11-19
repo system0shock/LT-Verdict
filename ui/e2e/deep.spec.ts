@@ -1,15 +1,18 @@
 import AxeBuilder from '@axe-core/playwright'
+import { readFileSync } from 'node:fs'
+import { fileURLToPath } from 'node:url'
 import { expect, test, type Page } from '@playwright/test'
 import { DEEP_LABELS, OVERVIEW_LABELS, SHELL_LABELS, SHELL_TABS } from '../src/shell/labels'
 import { formatNumber } from '../src/shell/overview'
 import { PLOT_INSET } from '../src/shell/timeChart'
 
+const stageBinding = JSON.parse(readFileSync(fileURLToPath(new URL('../../fixtures/stages/stage-binding.sample.json', import.meta.url)), 'utf8'))
 const runId = 'deep-run'
 const analysisId = 'a'.repeat(64)
 const origin = 1_767_225_600_000
 const ids = ['queue', 'cpu', 'memory', 'disk', 'network', 'latency', 'spare']
 const overall = { id: 'overall', type: 'metric_summary', scope: { kind: 'overall' }, sample_count: 180, error_count: 0, error_rate_ratio: { numerator: 0, denominator: 180 }, throughput_rps: { numerator: 180000, denominator: 180000 }, latency_ms: { p50: 100, p95: 100, p99: 100, max: 100 } }
-type Options = { snapshot?: boolean; missingCatalog?: boolean; pointCount?: number; stepMs?: number; startMs?: number; ids?: string[]; catalogPage?: number; valuesPage?: number; invalid?: boolean; mode?: string; loadCount?: number; delayValues?: (call: number) => number; delayDeepBucket?: number; failValuesAt?: number; delayCatalogSecondPage?: number; passRule?: boolean; diagnosticFail?: boolean }
+type Options = { snapshot?: boolean; missingCatalog?: boolean; pointCount?: number; stepMs?: number; startMs?: number; ids?: string[]; catalogPage?: number; valuesPage?: number; invalid?: boolean; mode?: string; loadCount?: number; delayValues?: (call: number) => number; delayDeepBucket?: number; failValuesAt?: number; delayCatalogSecondPage?: number; passRule?: boolean; diagnosticFail?: boolean; stages?: boolean }
 
 function fixtureApi(page: Page, options: Options = {}) {
   const names = options.ids ?? ids
@@ -18,7 +21,7 @@ function fixtureApi(page: Page, options: Options = {}) {
   const count = options.pointCount ?? 180
   const calls: URL[] = []
   let valuesCalls = 0
-  const evidence = [overall, ...(options.snapshot === false ? [] : [{ id: 'binding', type: 'resource_binding', run_from_epoch_ms: origin }]),
+  const evidence = [overall, ...(options.stages ? [stageBinding] : []), ...(options.snapshot === false ? [] : [{ id: 'binding', type: 'resource_binding', run_from_epoch_ms: origin }]),
     ...[0, 1].map((n) => ({ id: `rule-${n}`, type: 'resource_policy_check', window_id: `w${n}`, rule_id: 'cpu-high', series_id: 'cpu', unit: '%', operator: 'gt', threshold: '5', effect: 'sla', status: 'FAIL', reason: null })),
     ...(options.passRule ? [{ id: 'queue-rule', type: 'resource_policy_check', window_id: 'w0', rule_id: 'queue-ok', series_id: 'queue', unit: '%', operator: 'gt', threshold: '5000', effect: 'sla', status: 'PASS', reason: null }] : []),
     ...(options.diagnosticFail ? [{ id: 'rule-diagnostic', type: 'resource_policy_check', window_id: 'w0', rule_id: 'cpu-high-diag', series_id: 'cpu', unit: '%', operator: 'gt', threshold: '5', effect: 'diagnostic', status: 'FAIL', reason: null }] : [])]
@@ -89,6 +92,14 @@ async function openDeep(page: Page) {
   await expect(page.getByTestId('deep-panel')).toBeVisible()
   await expect(page.getByTestId('deep-panel').getByRole('status')).toHaveCount(0)
 }
+
+test('declared stages are drawn in deep analysis on the run clock', async ({ page }) => {
+  fixtureApi(page, { stages: true })
+  await openDeep(page)
+  const top = page.getByTestId('deep-track-load-rps').locator('svg text')
+  await expect.poll(() => top.allTextContents()).toEqual(expect.arrayContaining(['ramp-up', 'steady', 'ramp-down']))
+  expect(await page.getByTestId('deep-track-cpu').locator('svg text').allTextContents()).not.toContain('steady')
+})
 
 test('resource lanes show value ticks and a threshold label on the axis', async ({ page }) => {
   fixtureApi(page, { passRule: true })

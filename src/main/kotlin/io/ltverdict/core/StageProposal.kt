@@ -494,7 +494,8 @@ private fun detectInCells(
                     gapMillis,
                 )
         }
-        if (!steadyFlags[index] && index > firstSteady) {
+        // Any excluded step after the first steady one or after a step down is a hold that the verdict does not evaluate.
+        if (!steadyFlags[index] && (index > firstSteady || next.level < previous.level)) {
             warnings +=
                 StageProposalWarning(
                     "HOLD_NOT_EVALUATED",

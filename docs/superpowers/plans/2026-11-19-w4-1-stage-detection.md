@@ -193,7 +193,7 @@ EXPECTED FILES TO CHANGE:
 него хвост это стадия `after-steady` (`RISE_AFTER_STEADY`). `LOAD_DROP_INSIDE_STEADY` указывает самое глубокое место (наименьшее
 значение прямой среди отрезков ниже `(1 - LEVEL_MERGE_RATIO)` уровня). `STEADY_DRIFT` и разброс для уверенности считаются по
 прямой через всю ступень. Режим `top`: `steady` каждая ступень, уровень которой не ниже наивысшего минус порог слияния;
-`HOLD_NOT_EVALUATED` у каждой исключённой ступени после первой стадии steady. Между ступенями: переход вниз или провал от
+`HOLD_NOT_EVALUATED` у каждой исключённой ступени после первой стадии steady или после перехода вниз. Между ступенями: переход вниз или провал от
 `DROP_MIN_MILLIS` даёт `LOAD_DECLINE_BETWEEN_STEPS`, иначе переход от `DROP_MIN_MILLIS` после первой стадии steady даёт
 `LOAD_RISE_BETWEEN_STEPS`. Хвост (ячейки после последней ступени) от `DROP_MIN_MILLIS` даёт `LONG_RAMP_DOWN` (или
 `RISE_AFTER_STEADY`) с `from_rps`, `to_rps`, `duration_ms`; `LOW` от `LONG_TAIL_LOW_MILLIS`, иначе `MEDIUM`. Ступень steady ниже

@@ -344,6 +344,14 @@ internal object StageProfiles {
             poissonSeed = 11L,
         )
 
+    /** R2: a step down before the highest step: 100, then 60, then 120 rps. */
+    val downThenUp =
+        StageProfile(
+            "R2 down then up",
+            listOf(ramp(60, 0.0, 100.0), flat(600, 100.0), flat(600, 60.0), flat(600, 120.0), ramp(60, 120.0, 0.0)),
+            poissonSeed = 11L,
+        )
+
     /** R5: long low-rate sections around a 100 rps plateau. */
     val lowRateSections =
         StageProfile(

@@ -54,6 +54,15 @@ class StageProposalReviewTest {
     }
 
     @Test
+    fun `R2 an excluded step after a decline is named even before the top`() {
+        val proposal = detectLoadStages(StageProfiles.downThenUp.series(), SteadySteps.TOP)
+
+        assertEquals(listOf("step-3"), proposal.stages.filter { it.role == StageRole.STEADY }.map { it.id }, explain(proposal))
+        assertEquals(listOf("step-2"), proposal.warnings.filter { it.code == "HOLD_NOT_EVALUATED" }.map { it.stageId }, explain(proposal))
+        assertEquals(StageProposalConfidence.LOW, proposal.confidence, explain(proposal))
+    }
+
+    @Test
     fun `R3 a rise after the plateau ends the step`() {
         val rise = detectLoadStages(StageProfiles.riseAbort.series())
         val creep = detectLoadStages(StageProfiles.creep.series())

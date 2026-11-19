@@ -270,6 +270,22 @@ class CommandLineStagesTest {
     }
 
     @Test
+    fun `stages with a snapshot without windows refuse a correlation or trend plan by the codes of the core`() {
+        val dir = data("plans")
+
+        // the plans do not exist: the refusals come before they are opened and before the snapshot binding is checked
+        val withCorrelation =
+            run("analyze", load, "--stages", stages, "--resources", SNAPSHOT, "--correlation", "c.json", "--data-dir", dir)
+        val withTrend = run("analyze", load, "--stages", stages, "--resources", SNAPSHOT, "--trend", "t.json", "--data-dir", dir)
+
+        assertEquals(4, withCorrelation.exitCode)
+        assertEquals("STAGES_CORRELATION_CONFLICT", withCorrelation.stderr.trim())
+        assertEquals(4, withTrend.exitCode)
+        assertEquals("STAGES_TREND_CONFLICT", withTrend.stderr.trim())
+        assertFalse(Files.exists(Path.of(dir)), "no data directory is created")
+    }
+
+    @Test
     fun `a conflict is refused before the policy is read from stdin and before any artifact is written`() {
         val resources = Path.of("docs/contracts/resources/v1/examples/valid/basic.json").toString()
         val out = tempDir.resolve("out")

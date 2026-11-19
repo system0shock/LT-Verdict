@@ -132,7 +132,8 @@ EXPECTED FILES TO CHANGE:
    `n = floor((runEnd - runStart) / (1000 W))`; остаток в конце в подбор не идёт и достаётся последней стадии. Берётся первая `W`,
    у которой `n <= MAX_CELLS` и верхний квартиль (ранг `ceil(0,75 n)` по возрастанию) числа запросов в ячейке не меньше
    `MIN_CELL_COUNT_P75`. Нет такой `W`: отказ `RATE_TOO_LOW`.
-2. **Шум.** `d_k = c_{k+1} - c_k`; `m` нижняя медиана `d`; `MAD` нижняя медиана `|d_k - m|`;
+2. **Шум.** `d_k = c_{k+1} - c_k` только по парам ячеек, где обе не меньше `STEADY_LEVEL_RATIO` верхнего квартиля (второе
+   ревью: длинные участки малой нагрузки занижали шум плато; меньше `MIN_RUN_CELLS` таких пар: все пары); `m` нижняя медиана `d`; `MAD` нижняя медиана `|d_k - m|`;
    `σ = max(NOISE_FLOOR_COUNTS, MAD_TO_SIGMA * MAD / sqrt(2))` (в запросах на ячейку).
 3. **Сегментация.** Минимизируется `Σ SSE(отрезок) + β · (число отрезков)`, `β = PENALTY_BIC_FACTOR · σ² · ln n`
    (`StrictMath.log`), где `SSE` это сумма квадратов остатков прямой МНК по ячейкам отрезка. Динамическое программирование
@@ -186,6 +187,21 @@ EXPECTED FILES TO CHANGE:
     любой границы steady (`|ℓ_steady - ℓ_соседа| / σ`) меньше `HIGH_EDGE_SIGMAS` или разбросе остатков плато больше
     `HIGH_RESIDUAL_CV`; иначе `HIGH`. Всегда `calibrated=false`.
 
+**Второе ревью (2026-11-19), поверх пунктов 7, 8, 8a и 13** (ADR 0036, D4 и D12): соседние кандидаты одного уровня (порог
+слияния п. 4) образуют одну ступень, если между ними нет `RISING` от `DROP_MIN_MILLIS`; кандидат другого уровня открывает новую
+ступень при любой скорости перехода; последняя ступень забирает отрезки до остановки, пока не встретит долгий `RISING`, после
+него хвост это стадия `after-steady` (`RISE_AFTER_STEADY`). `LOAD_DROP_INSIDE_STEADY` указывает самое глубокое место (наименьшее
+значение прямой среди отрезков ниже `(1 - LEVEL_MERGE_RATIO)` уровня). `STEADY_DRIFT` и разброс для уверенности считаются по
+прямой через всю ступень. Режим `top`: `steady` каждая ступень, уровень которой не ниже наивысшего минус порог слияния;
+`HOLD_NOT_EVALUATED` у каждой исключённой ступени после первой стадии steady. Между ступенями: переход вниз или провал от
+`DROP_MIN_MILLIS` даёт `LOAD_DECLINE_BETWEEN_STEPS`, иначе переход от `DROP_MIN_MILLIS` после первой стадии steady даёт
+`LOAD_RISE_BETWEEN_STEPS`. Хвост (ячейки после последней ступени) от `DROP_MIN_MILLIS` даёт `LONG_RAMP_DOWN` (или
+`RISE_AFTER_STEADY`) с `from_rps`, `to_rps`, `duration_ms`; `LOW` от `LONG_TAIL_LOW_MILLIS`, иначе `MEDIUM`. Ступень steady ниже
+`STEADY_LEVEL_RATIO` наивысшей даёт `LOW_LEVEL_STEP`. Длинный lead-in заменяет отказ `RATE_TOO_LOW` или `NO_PLATEAU` на
+`LEAD_IN_TOO_LONG`; расхождение двух чтений это отказ `INPUT_CHANGED` (код 4). Профили R1-R6 и пуассоновские варианты в
+`StageProfiles.kt`, тесты в `StageProposalReviewTest.kt` и `CommandLineStageDetectTest` (сверка вердикта с окном аккуратного
+инженера для R2-R4).
+
 Порядок отказов: `INPUT_INVALID`, `NO_REQUEST_SAMPLES`, `RUN_TOO_LONG` (в проходе, до выделения массива), `RUN_TOO_SHORT`
 (`runEnd - runStart < MIN_RUN_MILLIS`), `RATE_TOO_LOW`, `RUN_TOO_SHORT` (`n < MIN_RUN_CELLS`), `RATE_OUT_OF_RANGE`,
 `IDLE_GAP_INSIDE_RUN`, `NO_PLATEAU`, `TOO_MANY_STAGES`.
@@ -215,7 +231,7 @@ EXPECTED FILES TO CHANGE:
 | `EDGE_TRIM_MAX_CELLS` | 2 | ошибка точки смены больше двух ячеек это признак другого профиля, а не края |
 | `DROP_MIN_MILLIS` | 60000 | хвост опорной фикстуры (20 с) остаётся остановкой, падение на минуту и дольше нет |
 | `HOLD_MAX_DRIFT_RATIO` | 0,25 | добавлена 2026-11-19: долгий (от `DROP_MIN_MILLIS`) падающий отрезок, теряющий не больше четверти уровня, это удержание (плато), а не спад; спад в остановку теряет больше половины (`STEADY_LEVEL_RATIO`), промежуток 25-50 % остаётся в steady по D4 |
-| `LONG_RAMP_DOWN_RATIO` | 0,25 | плановая остановка обычно короче четверти плато |
+| `LONG_TAIL_LOW_MILLIS` | 300000 | заменила `LONG_RAMP_DOWN_RATIO` (второе ревью 2026-11-19): хвост от 60 с назван всегда, от пяти `DROP_MIN_MILLIS` уверенность `LOW`; при пяти минутах исключённый участок уже сам по себе даёт осмысленный p95, а правило не зависит от длины плато, так что длинный soak больше не прячет длинный обвал |
 | `IDLE_GAP_MIN_MILLIS` | 30000 | простой полминуты и больше внутри плато похож на два теста |
 | `MIN_STEADY_SHARE` | 0,30 | опорная фикстура 0,5; разгон, плато и остановка по 10 мин дают 0,33; непрерывный рост 0 |
 | `STEADY_DRIFT_WARN_RATIO` | 0,05 | половина `MAX_DRIFT_RATIO` |
@@ -631,7 +647,7 @@ proposal: <объект load-stages.v1> | null}`; числа это JSON-чис�
 | F0 | `anchor fixture` | `fixtures/stages/ramp-steady-rampdown.jtl` | байты `ramp-steady-down.json`, `HIGH` |
 | F1 | `ramp steady ramp-down` | 120: 0→100; 600: 100; 60: 100→0 | `ramp-up`, `steady`, `ramp-down`; `HIGH` |
 | F2 | `capacity steps` | 30: 0→20; 300: 20; 30: 20→40; 300: 40; ...; 300: 100; 30: 100→0 | `step-1`..`step-5`, переходы зазорами, 7 стадий |
-| F3 | `soak with a mid-run drop` | 60: 0→50; 2340: 50; 1200: 35; 60: 35→0 | одна `steady` 60-3600 с, `LOAD_DROP_INSIDE_STEADY` около 2400 с, `LOW` |
+| F3 | `soak with a mid-run drop` | 60: 0→50; 2340: 50; 1200: 35; 60: 35→0 | после второго ревью: `step-1` 60-2400 с и `step-2` 2400-3600 с, `LOAD_DECLINE_BETWEEN_STEPS` около 2400 с; `top`: `step-2` исключена с `HOLD_NOT_EVALUATED`, `LOW` |
 | F4 | `continuous ramp` | 1200: 0→200 | `NO_PLATEAU` |
 | F5 | `noisy plateau` | F1 с `jitter = 0.15`, `seed = 42` | `steady` в допуске для шума |
 | F6 | `very short run` | 45: 50 | `RUN_TOO_SHORT` |

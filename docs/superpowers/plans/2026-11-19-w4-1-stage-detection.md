@@ -16,6 +16,11 @@
 **Спецификация:** [ADR 0036](../../adr/0036-load-stage-proposal.md) (Proposed). Решения владельца 2026-11-19 (обязательность,
 предложение с подтверждением человеком, без автоприменения) не пересматриваются.
 
+**Решения владельца 2026-11-19 по открытым вопросам** (ADR 0036, раздел «Решения владельца 2026-11-19»): обязательность
+автоопределения это явное исключение из заморозки D1 перечня ревью 2026-10-08, PR 1 реализуется при ADR в статусе Proposed;
+ступенчатый профиль получает переключатель `--steady-steps top|all` (D12, умолчание `top` выбрал исполнитель, ждёт слова
+владельца); `--like` одобрен следующим срезом (PR 1b, D13); код выхода `3` для отказа остаётся.
+
 ## Глобальные ограничения
 
 - `ltv analyze`, `AnalysisService`, identity, `analysis_id`, ключ сопоставимости, `CanonicalJson.kt`, схемы
@@ -33,8 +38,9 @@
 PR 1 (`feat/stage-proposal-cli`):
 
 ```text
-REQUESTED: команда ltv stages detect <input> [--out <file>], которая по данным JTL/Gatling предлагает load-stages.v1 с объяснением
-  и уверенностью либо явно отказывает с причиной; документация и фрагмент журнала.
+REQUESTED: команда ltv stages detect <input> [--out <file>] [--steady-steps top|all], которая по данным JTL/Gatling предлагает
+  load-stages.v1 с объяснением и уверенностью либо явно отказывает с причиной; режим ступеней (D12); документация и фрагмент
+  журнала.
 REQUIRED TO ACHIEVE IT:
   - core/StageProposal.kt (новый): проход по входу (ряд запросов по секундам), метод rps-plateau-segmentation.v1, модель результата;
   - core/LoadStages.kt: private fun stagesJson -> internal (одно слово), чтобы предложение сериализовалось той же функцией;
@@ -47,7 +53,7 @@ REQUIRED TO ACHIEVE IT:
 NOT REQUIRED:
   - любые правки AnalysisService, identity, результата, отчётов, summary.txt, junit.xml;
   - маршрут API и UI (PR 2); MCP; сохранение предложения в каталоге данных; схема stage-proposal.v1;
-  - ltv stages validate, --like, --format json, локализация вывода CLI;
+  - ltv stages validate, --format json, локализация вывода CLI; --like (следующий срез, PR 1b);
   - правка tools/perf/generate_jtl.py и новые закоммиченные JTL-фикстуры (синтетика строится в тестах).
 EXPECTED FILES TO CHANGE:
   новые: src/main/kotlin/io/ltverdict/core/StageProposal.kt, src/main/kotlin/io/ltverdict/cli/CliStages.kt,
@@ -152,6 +158,11 @@ EXPECTED FILES TO CHANGE:
    зазором. Иначе всё от текущей стадии до конца следующего кандидата сливается в одну стадию. Если внутри стадии есть отрезок с
    уровнем ниже `(1 - LEVEL_MERGE_RATIO) ·` уровня первого плато стадии, ставится `LOAD_DROP_INSIDE_STEADY` (смещение начала
    самого раннего такого отрезка, уровни до и после в rps).
+8a. **Режим ступеней (D12).** Пункты 1-8 строят стадии-ступени одинаково в обоих режимах. `--steady-steps all`: роль `steady`
+   у каждой ступени. `--steady-steps top` (умолчание): роль `steady` только у последней (наивысшей) ступени, остальные
+   получают роль `excluded` с теми же именами `step-K`. Пункты 6, 9, 10, 11, 12 и знаменатель `LONG_RAMP_DOWN` считаются по
+   всем ступеням; `LOAD_DROP_INSIDE_STEADY`, `STEADY_DRIFT`, контраст границ и разброс плато в уверенности только по стадиям с
+   ролью `steady`. При одной ступени режимы неразличимы.
 9. **Края.** Для каждой стадии steady: пока крайняя ячейка отличается больше чем на `EDGE_TOLERANCE_SIGMAS · σ` от значения
    прямой того отрезка, которому эта ячейка принадлежит (не от уровня первого плато стадии: у стадии с падением конец лежит на
    пониженном уровне), и сдвиг меньше `EDGE_TRIM_MAX_CELLS`, граница сдвигается внутрь на ячейку.
@@ -227,7 +238,7 @@ EXPECTED FILES TO CHANGE:
 - stderr, порядок строк фиксирован (числа `HALF_EVEN`, три знака):
 
   ```text
-  stage_proposal status=DETECTED method=rps-plateau-segmentation.v1 confidence=HIGH calibrated=false
+  stage_proposal status=DETECTED method=rps-plateau-segmentation.v1 steady_steps=top confidence=HIGH calibrated=false
   run start_epoch_ms=1767225600000 end_epoch_ms=1767225719800 cell_ms=5000 cells=23 noise_rps=0.200
   segment from_offset_ms=0 to_offset_ms=40000 kind=FLAT level_rps=2.000 drift=0.000 residual_cv=0.000
   segment from_offset_ms=40000 to_offset_ms=100000 kind=FLAT level_rps=10.000 drift=0.000 residual_cv=0.000
@@ -238,15 +249,16 @@ EXPECTED FILES TO CHANGE:
   next: review the stages, then run ltv analyze <input> --stages <file>
   ```
 
-  Отказ: первая строка `stage_proposal status=NOT_DETECTED method=rps-plateau-segmentation.v1 reason=<код>`, затем строки
+  Отказ: первая строка `stage_proposal status=NOT_DETECTED method=rps-plateau-segmentation.v1 steady_steps=<режим> reason=<код>`,
+  затем строки
   `run` и `segment`, если они уже вычислены, и `detail` с измеренным фактом (`steady_share=0.120`, `idle_gap_ms=60000`,
   `stages=18`). Предупреждение: `warning code=<код> stage_id=<id> at_offset_ms=<n> [from_rps=.. to_rps=..] [duration_ms=..]`.
   Контраст границы без соседа (начало прогона) печатается как `-`.
 
 - Коды выхода: `0` предложение; `3` отказ метода (все причины, кроме `INPUT_INVALID`); `4` вход непригоден (`INPUT_INVALID`,
   как `INVALID` у `ltv analyze`), не найден, не обычный файл, формат не распознан, `--out` существует или не записан
-  (`STAGES_OUT_EXISTS`, `STAGES_OUT_WRITE_FAILED`); `64` использование (нет входа, повтор `--out`, лишний аргумент,
-  подкоманда не `detect`).
+  (`STAGES_OUT_EXISTS`, `STAGES_OUT_WRITE_FAILED`); `64` использование (нет входа, повтор `--out` или `--steady-steps`,
+  значение `--steady-steps` не `top` и не `all`, лишний аргумент, подкоманда не `detect`).
 - Схема `stage-proposal.v1` не вводится (ADR 0036, D7): предложение не сохраняется и не входит в артефакты; документ сразу
   годится для `--stages`, объяснение нужно человеку один раз. Ответ API во втором PR это добавочный маршрут локального API
   (ADR 0036, D10).
@@ -256,7 +268,8 @@ EXPECTED FILES TO CHANGE:
 | PR | Ветка | Содержание | Зависимость |
 | --- | --- | --- | --- |
 | 0 | `docs/w4-1-stage-detection-plan` | ADR 0036 (Proposed) и этот план | нет |
-| 1 | `feat/stage-proposal-cli` | задачи 1-5: проход, метод, CLI, документация, фрагмент журнала | слияние PR 0 и слово владельца по вопросам 1-3 |
+| 1 | `feat/stage-proposal-cli` | задачи 1-5: проход, метод, CLI, документация, фрагмент журнала | слияние PR 0; вопросы 1-3 решены владельцем 2026-11-19 |
+| 1b | `feat/stage-proposal-like` | задача 5b: режим `--like <load-stages.json>` (ADR 0036, D13) | слияние PR 1 |
 | 2 | `feat/stage-proposal-ui` | задачи 6-8: маршрут API, поле стадий и кнопка в UI, документация | слияние PR 1, слово владельца по вопросу 4 |
 
 ## Фокус ревью
@@ -331,8 +344,11 @@ internal sealed interface LoadSecondSeriesRead {
     data class Series(val series: LoadSecondSeries) : LoadSecondSeriesRead
     data class Refused(val reason: String) : LoadSecondSeriesRead   // INPUT_INVALID, NO_REQUEST_SAMPLES, RUN_TOO_LONG
 }
-internal fun detectLoadStages(series: LoadSecondSeries): StageProposal
-internal fun proposeLoadStages(sourceType: SourceType, source: Path, checkCancelled: () -> Unit = {}): StageProposal
+internal enum class SteadySteps(val wireName: String) { TOP("top"), ALL("all") }   // D12, умолчание TOP
+internal fun detectLoadStages(series: LoadSecondSeries, steadySteps: SteadySteps = SteadySteps.TOP): StageProposal
+internal fun proposeLoadStages(
+    sourceType: SourceType, source: Path, steadySteps: SteadySteps = SteadySteps.TOP, checkCancelled: () -> Unit = {},
+): StageProposal
 internal fun StageProposal.proposalBytes(): ByteArray   // canonicalJson(stagesJson(stages)); только при DETECTED
 internal const val STAGE_PROPOSAL_METHOD = "rps-plateau-segmentation.v1"
 ```
@@ -424,6 +440,9 @@ internal const val STAGE_PROPOSAL_METHOD = "rps-plateau-segmentation.v1"
     `Valid`, и его `canonicalBytes()` равны `bytes`;
   - `the proposal is deterministic` — `detectLoadStages` дважды на одном ряде даёт равные `StageProposal` и байты;
   - `a single plateau is named steady and several are steps` — профили F1 и F2: id `steady` и `step-1`..`step-5`;
+  - `the steady steps mode changes only roles` — F2 в режиме `all`: роль `steady` у `step-1`..`step-5`; в режиме `top`:
+    `steady` только у `step-5`, остальные `excluded`, границы всех стадий те же; F0 и F1: байты предложения в обоих режимах
+    равны;
   - `refusals carry their reason` — F4 `NO_PLATEAU` (`detail` начинается с `steady_share=`), F6 `RUN_TOO_SHORT`, F8
     `IDLE_GAP_INSIDE_RUN`, F11 `TOO_MANY_STAGES` (`detail = "stages=18"`), ряд из нулей `NO_REQUEST_SAMPLES`, 0,1 rps
     `RATE_TOO_LOW`; у всех `stages` пусто и `proposalBytes()` бросает `IllegalStateException`.
@@ -438,13 +457,15 @@ internal const val STAGE_PROPOSAL_METHOD = "rps-plateau-segmentation.v1"
 
 **Файлы:** создать `src/main/kotlin/io/ltverdict/cli/CliStages.kt`, `src/test/kotlin/io/ltverdict/cli/CommandLineStageDetectTest.kt`;
 изменить `src/main/kotlin/io/ltverdict/cli/CommandLine.kt` (`:89-101` ветка `"stages" -> stagesCommand(args.drop(1), stdout, stderr)`,
-`:951-976` строка `ltv stages detect <input> [--out <file>]` перед `ltv policy validate`, `:987` `EXIT_NO_VERDICT` на `internal`).
+`:951-976` строка `ltv stages detect <input> [--out <file>] [--steady-steps top|all]` перед `ltv policy validate`, `:987` `EXIT_NO_VERDICT` на `internal`).
 
 **Интерфейсы:** `internal fun stagesCommand(args: List<String>, stdout: PrintStream, stderr: PrintStream): Int`,
 `internal fun stageProposalLines(proposal: StageProposal): List<String>`.
 
 - [ ] **Шаг 1: падающие тесты** (запуск через `runCli`, как в `CommandLineStagesTest`):
-  - `help names the detect command` — `--help` содержит `ltv stages detect <input> [--out <file>]`;
+  - `help names the detect command` — `--help` содержит `ltv stages detect <input> [--out <file>] [--steady-steps top|all]`;
+  - `the steady steps mode is printed and only flips roles` — опорная фикстура с `--steady-steps all` и без флага: stdout
+    побайтно равны, stderr отличается только значением `steady_steps=`;
   - `the anchor fixture prints the example declaration` — stdout равен каноническим байтам `ramp-steady-down.json`, код 0,
     stderr равен блоку строк раздела «Контракт и вывод» (строка в строку);
   - `the proposal drives the analysis to the plateau` — предложение из stdout записано в файл, `ltv analyze` опорной фикстуры
@@ -461,7 +482,8 @@ internal const val STAGE_PROPOSAL_METHOD = "rps-plateau-segmentation.v1"
     строка stderr `stage_proposal status=NOT_DETECTED method=rps-plateau-segmentation.v1 reason=NO_PLATEAU`;
   - `--out writes the file and refuses to overwrite` — первый запуск создаёт файл с байтами предложения и пустым stdout;
     повтор даёт код 4 и `STAGES_OUT_EXISTS`, файл не изменён; `--out` на ссылку тоже `STAGES_OUT_EXISTS`;
-  - `usage errors exit 64` — `ltv stages`, `ltv stages detect`, `ltv stages validate x`, повтор `--out`, лишний аргумент;
+  - `usage errors exit 64` — `ltv stages`, `ltv stages detect`, `ltv stages validate x`, повтор `--out`, лишний аргумент,
+    `--steady-steps middle`, повтор `--steady-steps`;
   - `a missing or unsupported input exits 4` — нет файла: stderr `INVALID_INPUT`; текстовый файл не JTL: stderr
     `UNSUPPORTED_INPUT` (литерал `FormatDetector.kt:135`);
   - `the gatling log is accepted` — `fixtures/slice0/simulation.log`: код 0 или 3, первая строка stderr начинается с
@@ -502,6 +524,27 @@ internal const val STAGE_PROPOSAL_METHOD = "rps-plateau-segmentation.v1"
   `python tools/changelog_assemble.py --check`; полный `./gradlew check` (один раз, через `Invoke-LtvExclusive`).
   Ожидается: всё зелёное, `git status` показывает только файлы блока AGENTS.md.
 - [ ] **Шаг 7: коммит** `docs(stages): document ltv stages detect`.
+
+## PR 1b: режим `--like` (после слияния PR 1; набросок, ADR 0036, D13)
+
+### Задача 5b: `ltv stages detect <input> --like <load-stages.json>`
+
+Одобрено владельцем 2026-11-19 следующим срезом; в PR 1 не реализуется. Перед началом нужен подробный план задачи по образцу
+задач 1-5 (тесты, команды, ожидания).
+
+**Цель:** проверить, подходит ли уже принятое объявление профиля этому прогону, и при совпадении вывести его байты без
+изменений (тот же `load_stages_sha256`, ADR 0030 R6), а не новое предложение, которое может сдвинуться на ячейку (D9).
+
+- Вход: прогон и действующий `load-stages.v1` (через `validateLoadStages`, ошибки как у `--stages`, код 4).
+- Проверка: предложение по прогону строится как в PR 1; объявление подходит, если число и порядок стадий-ступеней совпадают
+  и каждая граница стадии `steady` объявления лежит в допуске от границы предложения (кандидат допуска: `max(W, EDGE_TRIM_MAX_CELLS · W)`,
+  уточняется в плане задачи), а окна `steady` объявления не захватывают отрезки `RISING` и `IDLE` предложения.
+- Вывод: подходит — stdout это канонические байты объявления (не предложения), stderr строка
+  `stage_proposal status=MATCHED ...` и расхождения границ в мс; не подходит — код `3`, причина (`LIKE_SHAPE_DIFFERS`,
+  `LIKE_BOUNDARY_SHIFTED` с величиной сдвига), stdout пуст, предложение по прогону печатается в stderr для справки.
+- Тесты: опорная фикстура с `ramp-steady-down.json` (подходит, байты равны файлу); F1 со сдвинутым на 2 W объявлением
+  (подходит), на 10 W (не подходит); F2 с объявлением для F1 (форма другая); детерминизм; `--like` вместе с `--out`.
+- Документация: раздел руководства «Предложение стадий» (порядок D9 через `--like`), фрагмент журнала, ADR 0036 «Реализовано».
 
 ## PR 2: маршрут API и UI (после слияния PR 1)
 
@@ -608,9 +651,9 @@ proposal: <объект load-stages.v1> | null}`; числа это JSON-чис�
    ступени (автокоррелированный шум генератора) и пропуски. Смягчение: предложение всегда подтверждает человек, константы и
    факты печатаются, ADR остаётся Proposed до прогона на корпусе.
 2. **Сопоставимость.** Предложение для каждого прогона может отличаться на ячейку, и ключ сопоставимости разведёт прогоны
-   (ADR 0030 R6). Смягчение: порядок работы D9 в руководстве; открытый вопрос 5 (`--like`).
+   (ADR 0030 R6). Смягчение: порядок работы D9 в руководстве; режим `--like` (PR 1b).
 3. **Смесь ролей у ступеней ёмкости.** Правило п. 5 исключает короткие низкие ступени; профиль с удлинённой последней ступенью
-   получит нижние ступени как разгон. Открытый вопрос 2.
+   получит нижние ступени как разгон. Режим `--steady-steps` (D12) решает роли отобранных ступеней, но не это правило.
 4. **Деградация, похожая на остановку.** Плавное умирание в конце исключается как `ramp-down` (только предупреждение).
    Ошибки в хвосте метод не смотрит; это кандидат на следующий срез.
 5. **Стоимость на больших входах.** Два полных чтения (вход до 4 GiB); в UI запрос длится столько же, сколько разбор при
@@ -622,14 +665,11 @@ proposal: <объект load-stages.v1> | null}`; числа это JSON-чис�
 
 ## Открытые вопросы владельцу
 
-1. Заморозка D1 (перечень ревью 2026-10-08, «статметоды не принимаются до конца волны 3»): считать ли решение 2026-11-19
-   явным исключением из неё?
-2. Роли в ступенчатом профиле: по умолчанию steady все ступени, прошедшие правило п. 5 (уровень не ниже половины максимума или
-   длина не меньше 3/4 самой длинной). Альтернатива: steady только последняя (наивысшая) ступень. Что нужно для ваших тестов
-   максимума?
-3. Код выхода отказа: `3` (как `NO_VERDICT`). Подходит ли для CI, или отказ должен быть `0` с пустым stdout?
-4. Поле стадий в форме UI снимает ADR 0030 R12. Подтверждаете? Достаточно ли поля JSON без загрузки файла с диска?
-5. Нужен ли следующим срезом режим `--like <load-stages.json>`: сравнить предложение с принятым объявлением профиля и сказать,
-   подходит ли оно этому прогону (это сохраняет хэш и сопоставимость)?
-6. Есть ли корпус реальных прогонов (в том числе со ступенями и падениями), на котором можно прогнать метод до перевода ADR в
+Решены владельцем 2026-11-19: заморозка D1 (явное исключение), роли ступеней (два режима, D12), код выхода `3`, `--like`
+(PR 1b). Остаются:
+
+1. Умолчание `--steady-steps`: исполнитель выбрал `top` (окно из ступеней разного уровня делает перцентили бессмысленными).
+   Подтверждаете или нужно `all`?
+2. Поле стадий в форме UI снимает ADR 0030 R12. Подтверждаете? Достаточно ли поля JSON без загрузки файла с диска?
+3. Есть ли корпус реальных прогонов (в том числе со ступенями и падениями), на котором можно прогнать метод до перевода ADR в
    Accepted?

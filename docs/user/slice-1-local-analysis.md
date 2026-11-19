@@ -479,7 +479,7 @@ spikes заполнением или усреднением готовых perce
 | `RESOURCE_LIMIT_EXCEEDED` / 413 | Input больше 4 GiB, policy больше 1 MiB, resource snapshot превышает limits или файл стадий больше 65536 байт, больше 16 стадий | Уменьшить файл; partial result не создаётся. Для input сервер прекращает приём сразу при превышении 4 GiB и удаляет частично записанные данные |
 | `LENGTH_REQUIRED` / 411 | У запроса `POST /api/jobs` нет `Content-Length` | Передать размер multipart body; браузерный UI делает это автоматически |
 | `INVALID_RESOURCES` / 422 | Snapshot не соответствует контракту или другому load input | Проверить validation details и SHA-256 |
-| `INVALID_STAGES` / 422 | Файл стадий нагрузки недопустим или стадии сочетаются со снимком ресурсов, планом ёмкости, онлайн-источником | Исправить по `error.details`, см. «Стадии нагрузки и вердикт по окну steady» |
+| `INVALID_STAGES` / 422 | Файл стадий нагрузки недопустим или стадии сочетаются с планом ёмкости, корреляций или тренда либо со снимком, у которого есть собственные `windows` | Исправить по `error.details`, см. «Стадии нагрузки и вердикт по окну steady» |
 | `UNSUPPORTED_MEDIA_TYPE` / 415 | Неверный request content type | Использовать UI или documented CLI |
 | `UNSUPPORTED_INPUT` / 422 | Input пуст или формат не распознан | Экспортировать один из supported formats |
 | `DATA_DIR_BUSY` / CLI exit 6 | Другой process держит data directory | Остановить его или выбрать другой directory |

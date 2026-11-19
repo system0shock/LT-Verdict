@@ -5,7 +5,7 @@
   "required": ["schema_version", "stages"],
   "properties": {
     "schema_version": {"const":"load-stages.v1"},
-    "stages": {"type":"array","minItems":1,"maxItems":16,"description":"Offsets are milliseconds from the run start (the earliest sample start). Stages are sorted by from_offset_ms after parsing and must not overlap (touching is allowed, gaps are allowed). Ids must be unique and at least one stage must have the role steady; the runtime rejects the violations with DUPLICATE_STAGE_ID, OVERLAPPING_STAGES and STAGES_NO_STEADY.","items":{"$ref":"#/$defs/stage"}}
+    "stages": {"type":"array","minItems":1,"maxItems":16,"description":"Offsets are milliseconds from the run start (the earliest sample start). Stages are sorted by from_offset_ms after parsing and must not overlap (touching is allowed, gaps are allowed). Ids must be unique and at least one stage must have the role steady; the runtime rejects the violations with DUPLICATE_STAGE_ID, OVERLAPPING_STAGES and STAGES_NO_STEADY. With a resource snapshot (ADR 0037) business rules use the exact bounds of a steady stage and resource rules the full cells of the snapshot grid inside it; a steady stage without a full cell is refused with STAGE_WINDOW_NO_FULL_CELLS.","items":{"$ref":"#/$defs/stage"}}
   },
   "$defs": {
     "id": {"type":"string","minLength":1,"maxLength":128,"pattern":"^[^\\u0000-\\u001F\\u007F-\\u009F]+$","description":"Runtime additionally enforces 128 UTF-8 bytes."},

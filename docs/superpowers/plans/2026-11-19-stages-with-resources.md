@@ -181,6 +181,7 @@ PR A меняет поведение ядра без входов CLI и API (о
 ### Task 1: Характеризация байтов существующих режимов (до изменения кода)
 
 **Files:**
+
 - Create: `src/test/kotlin/io/ltverdict/core/StageResourceCrossVersionTest.kt`
 - Create: `fixtures/stages/cross-version/stages-only/{identity.json,analysis-result.json}`,
   `fixtures/stages/cross-version/snapshot-only/{identity.json,analysis-result.json}`,
@@ -194,6 +195,7 @@ PR A меняет поведение ядра без входов CLI и API (о
   `openshift_unavailable_replicas` добавить в снимок)
 
 **Interfaces:**
+
 - Produces: фикстуры, на которые опираются задачи 2-4; хелпер теста
   `analyzeStored(jtl: Path, policy: Path?, snapshot: Path?, stages: Path?): Pair<ByteArray, ByteArray>`
   (identity, result) поверх `AnalysisService` и `RunBundleStore` во временном каталоге.
@@ -214,10 +216,12 @@ PR A меняет поведение ядра без входов CLI и API (о
 ### Task 2: Identity сочетания без дубля модуля
 
 **Files:**
+
 - Modify: `src/main/kotlin/io/ltverdict/core/AnalysisResult.kt:46-47`
 - Test: `src/test/kotlin/io/ltverdict/core/LoadStagesCompatibilityTest.kt`
 
 **Interfaces:**
+
 - Produces: `analysisIdentity(..., resources = r, stages = s)` с `modules` из шести id без
   повторов.
 
@@ -238,6 +242,7 @@ assertEquals("resource-snapshot.v1", inputVersions.getValue("resources").jsonPri
   и `the combination is not comparable with stages alone nor with the snapshot alone`
   (через `compareTransactions(...).getValue("compatible") == false` в обе стороны; с тем же
   объявлением и снимком `true`).
+
 - [ ] **Step 2: Run** `.\gradlew.bat test --tests "io.ltverdict.core.LoadStagesCompatibilityTest"`
   Expected: FAIL (в `modules` два `window-policy-evaluation`).
 - [ ] **Step 3: Implement**: в строке `:47` добавлять каждый из двух id, только если его ещё нет
@@ -248,12 +253,14 @@ assertEquals("resource-snapshot.v1", inputVersions.getValue("resources").jsonPri
 ### Task 3: Ресурсные окна стадий
 
 **Files:**
+
 - Modify: `src/main/kotlin/io/ltverdict/core/LoadStages.kt` (новая функция после
   `resolveStageWindows`; `StageBindingStage`; `stageBindingEvidence`)
 - Modify: `src/main/kotlin/io/ltverdict/core/ResourceSnapshot.kt:198-226`
 - Test: `src/test/kotlin/io/ltverdict/core/StageResourceWindowTest.kt`
 
 **Interfaces:**
+
 - Produces:
   - `internal data class StageResourceWindows(val windows: List<ResourceWindowV1>, val partial: Boolean)`
   - `internal fun resolveStageResourceWindows(snapshot: ResourceSnapshotV1, stageWindows: List<ResourceWindowV1>): StageResourceWindows`
@@ -301,6 +308,7 @@ assertEquals("resource-snapshot.v1", inputVersions.getValue("resources").jsonPri
 ### Task 4: Сочетание стадий и снимка в `AnalysisService`, суженные отказы
 
 **Files:**
+
 - Modify: `src/main/kotlin/io/ltverdict/core/AnalysisService.kt:81-85`, `:310-333`, `:425-467`
 - Modify: `src/main/kotlin/io/ltverdict/jobs/AnalysisJobs.kt:241-251`
 - Test: `src/test/kotlin/io/ltverdict/core/StageWindowPolicyTest.kt`,
@@ -308,6 +316,7 @@ assertEquals("resource-snapshot.v1", inputVersions.getValue("resources").jsonPri
   `src/test/kotlin/io/ltverdict/core/StageResourceCrossVersionTest.kt`
 
 **Interfaces:**
+
 - Consumes: задача 3 (`resolveStageResourceWindows`, `stageBindingEvidence(..., resourceWindows)`,
   `resourceBindingEvidence(..., declaredStages = true)`), задача 2.
 - Produces: результат сочетания по ADR 0037 D5 (порядок evidence ниже).
@@ -345,8 +354,10 @@ assertEquals("resource-snapshot.v1", inputVersions.getValue("resources").jsonPri
   - `incidents of the combination reference stage windows`: на результате сочетания с
     FAIL ресурсного SLA (значение 0.9 в окне) все `window_id` атомов `incidents` равны id
     стадий `steady`, негатива `RESOURCE_DATA_NOT_PROVIDED` нет (его даёт отсутствие
-    `resource_binding`, `IncidentNegativeEvidence.kt:165-172`), границы атома это границы
-    `window_policy_summary` (`IncidentSynthesis.kt:147`, точные границы стадии).
+    `resource_binding`, `IncidentNegativeEvidence.kt:165-172`); границы бизнес-атома это
+    границы `window_policy_summary` (`IncidentSynthesis.kt:147`, точные границы стадии),
+    а атом ресурсного нарушения берёт нарушенные ячейки своей находки (поправлено после
+    PR A: исходный текст плана приписывал границы стадии обоим атомам).
 - [ ] **Step 2: Run**
   `.\gradlew.bat test --tests "io.ltverdict.core.StageWindowPolicyTest" --tests "io.ltverdict.jobs.AnalysisJobsStagesTest" --tests "io.ltverdict.core.StageResourceCrossVersionTest"`
   Expected: FAIL (`STAGES_RESOURCES_CONFLICT` на любой снимок, коды не отображены).
@@ -389,6 +400,7 @@ assertEquals("resource-snapshot.v1", inputVersions.getValue("resources").jsonPri
 ### Task 6: CLI
 
 **Files:**
+
 - Modify: `src/main/kotlin/io/ltverdict/cli/CommandLine.kt:251-256`, `:277`
 - Test: `src/test/kotlin/io/ltverdict/cli/CommandLineStagesTest.kt`
 
@@ -418,6 +430,7 @@ assertEquals("resource-snapshot.v1", inputVersions.getValue("resources").jsonPri
 ### Task 7: API
 
 **Files:**
+
 - Modify: `src/main/kotlin/io/ltverdict/web/JobRoutes.kt:443-454`
 - Test: `src/test/kotlin/io/ltverdict/web/LocalApiStagesTest.kt:130-150`
 
@@ -437,6 +450,7 @@ assertEquals("resource-snapshot.v1", inputVersions.getValue("resources").jsonPri
 ### Task 8: Онлайн-источник
 
 **Files:**
+
 - Modify: `src/main/kotlin/io/ltverdict/sources/SourceConfig.kt:131-141` (поле
   `stagesDeclared: Boolean = false` в `SourceRequest`)
 - Modify: `src/main/kotlin/io/ltverdict/sources/PromqlSource.kt:371`,
@@ -470,6 +484,7 @@ assertEquals("resource-snapshot.v1", inputVersions.getValue("resources").jsonPri
 ### Task 9: Документация, ADR, changelog, проверка PR B
 
 **Files:**
+
 - Modify: `docs/user/slice-1-local-analysis.md` (раздел «Стадии нагрузки и вердикт по окну
   steady», строки 2256-2289: сочетания, новые коды, смена кода для стадий с
   `--correlation`/`--trend` без снимка, правило полных ячеек, пример со снимком и с
@@ -525,9 +540,11 @@ assertEquals("resource-snapshot.v1", inputVersions.getValue("resources").jsonPri
 - **Инциденты.** `IncidentNegativeEvidence.kt:45`, `:165-172`: `resource_binding` только
   убирает негатив «ресурсных данных нет»; окна инцидентов берутся из
   `window_policy_summary` по `window_id` (`IncidentNegativeEvidence.kt:47-58`,
-  `IncidentSynthesis.kt:147`), ресурсные проверки сочетания несут те же id стадий. Атом
-  ресурсного нарушения получает границы стадии, а не ресурсного окна (шире на неполные
-  ячейки краёв). Закреплено тестом в задаче 4.
+  `IncidentSynthesis.kt:147`), ресурсные проверки сочетания несут те же id стадий.
+  Границы стадии получает только бизнес-атом; атом ресурсного нарушения берёт
+  нарушенные ячейки своей находки (внутри ресурсного окна). Закреплено тестом в
+  задаче 4 (поправлено после PR A: прежний текст приписывал атому ресурсного нарушения
+  границы стадии).
 - **Смена кода для существующих сочетаний.** `--stages` с `--correlation` или `--trend` без
   снимка сегодня даёт `DIAGNOSTIC_RESOURCE_REQUIRED`/`TREND_RESOURCE_REQUIRED` (ADR 0030,
   таблица, строка 5), после изменения `STAGES_CORRELATION_CONFLICT`/`STAGES_TREND_CONFLICT`.

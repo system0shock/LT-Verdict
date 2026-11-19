@@ -65,10 +65,13 @@ ltv analyze examples/basic/input.jtl --policy examples/basic/policy.json --stage
 Стадия `steady` задаёт то же окно 40–100 секунд. Разгон и снижение нагрузки
 помечены `excluded` и не участвуют в оконной оценке бизнес-политики.
 
-Все перечисленные флаги нельзя совместить в одной команде:
-`--stages` с `--resources` даёт `STAGES_RESOURCES_CONFLICT`, с `--source` —
-`STAGES_SOURCE_CONFLICT`. Онлайн-сбор с `--correlation` или `--pod-view` даёт
-`SOURCE_INPUT_CONFLICT`. Поэтому эти варианты показаны отдельными запусками.
+Все перечисленные флаги нельзя совместить в одной команде. `--stages` сочетается
+со снимком ресурсов без `windows` и с `--source` ([ADR 0037](../../docs/adr/0037-stages-with-resource-snapshot.md)),
+но не с `--correlation` (`STAGES_CORRELATION_CONFLICT`), `--trend`
+(`STAGES_TREND_CONFLICT`) и снимком с собственными окнами
+(`STAGES_RESOURCES_CONFLICT`); снимок этого примера окна объявляет. Онлайн-сбор с
+`--correlation` или `--pod-view` даёт `SOURCE_INPUT_CONFLICT`. Поэтому эти варианты
+показаны отдельными запусками.
 
 ## Онлайн-сбор для своего прогона
 

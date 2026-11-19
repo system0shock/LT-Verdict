@@ -162,10 +162,12 @@ resource_to   = snapshot.start + floor((hi - snapshot.start) / step) * step
 Схема `analysis-result.v1` не меняется (элементы `evidence` в схеме это объекты без
 перечня типов), верхнеуровневых полей нет. Для анализа со стадиями и снимком:
 
-1. `stage_binding` как в ADR 0030; у стадий `steady` два новых необязательных поля
-   `resource_from_epoch_ms` и `resource_to_epoch_ms` (границы D2). Без снимка поля
-   отсутствуют (по умолчанию `null`, `encodeDefaults = false`), байты результата
-   режима «только стадии» прежние. `mode = declared_stages`,
+1. `stage_binding` как в ADR 0030; у стадий `steady` три новых необязательных поля:
+   `resource_from_epoch_ms` и `resource_to_epoch_ms` (границы D2) и `resource_partial`
+   (`true`, если для этой стадии выполнено условие `STAGE_WINDOW_SNAPSHOT_PARTIAL`,
+   иначе `false`; добавлено по ревью PR A, чтобы причина покрытия называла стадии).
+   Без снимка поля отсутствуют (по умолчанию `null`, `encodeDefaults = false`), байты
+   результата режима «только стадии» прежние. `mode = declared_stages`,
    `verdict_scope = STEADY_WINDOW` не меняются.
 2. `resource_binding` пишется, как в режиме снимка, с новым значением
    `mode = declared_stages` (значения сейчас `run_intersection` и
@@ -299,7 +301,7 @@ ADR 0018, раздел 7.) Этот ADR расхождение не трогае
 
 | Контракт | Изменение | Совместимость |
 | --- | --- | --- |
-| `analysis-result.v1` | схема не меняется; в `stage_binding.stages[]` необязательные `resource_from_epoch_ms`, `resource_to_epoch_ms`; `resource_binding.mode` получает значение `declared_stages`; сочетание `stage_binding` с `resource_binding`, `resource_summary`, `resource_policy_check` | добавочное, только новое сочетание |
+| `analysis-result.v1` | схема не меняется; в `stage_binding.stages[]` необязательные `resource_from_epoch_ms`, `resource_to_epoch_ms`, `resource_partial`; `resource_binding.mode` получает значение `declared_stages`; сочетание `stage_binding` с `resource_binding`, `resource_summary`, `resource_policy_check` | добавочное, только новое сочетание |
 | `load-stages.v1` | нет; описание схемы дополняется фразой про ресурсные окна | — |
 | `resource-snapshot.v1` | нет | — |
 | `source-request.v1`-`v4` | нет; со стадиями снимок явного окна строится без `windows` | только новое сочетание |
@@ -309,8 +311,8 @@ ADR 0018, раздел 7.) Этот ADR расхождение не трогае
 | Ключ сопоставимости | кода не меняет | сочетание несовместимо с каждым режимом по отдельности |
 | CLI `ltv analyze` | `--stages` с `--resources` (снимок без окон) и с `--source` разрешены | ослабление отказа |
 | API задания анализа | часть `stages` с `resource_snapshot` (без окон) и с `source_request` разрешена | ослабление отказа |
-| Коды ошибок | новые: `STAGE_WINDOW_NO_FULL_CELLS`, `STAGES_CORRELATION_CONFLICT`, `STAGES_TREND_CONFLICT`; новая причина покрытия `STAGE_WINDOW_SNAPSHOT_PARTIAL`; `STAGES_RESOURCES_CONFLICT` с суженным условием (снимок с `windows`); `STAGES_SOURCE_CONFLICT` больше не выдаётся; `STAGES_CAPACITY_CONFLICT` прежний; стадии с планом корреляций или тренда без снимка получают `STAGES_CORRELATION_CONFLICT`/`STAGES_TREND_CONFLICT` вместо `DIAGNOSTIC_RESOURCE_REQUIRED`/`TREND_RESOURCE_REQUIRED` | клиент, ждавший `STAGES_RESOURCES_CONFLICT` на любой снимок, теперь получает анализ; отказ корреляций и тренда со стадиями меняет только код |
-| UI типы | `ui/src/types.stage-items.generated.ts` регенерируется (два поля) | добавочное |
+| Коды ошибок | новые: `STAGE_WINDOW_NO_FULL_CELLS`, `STAGES_CORRELATION_CONFLICT`, `STAGES_TREND_CONFLICT`; новая причина покрытия `STAGE_WINDOW_SNAPSHOT_PARTIAL`; `STAGES_RESOURCES_CONFLICT` с суженным условием (снимок с `windows`); `STAGES_SOURCE_CONFLICT` больше не выдаётся; `STAGES_CAPACITY_CONFLICT` прежний; стадии с планом корреляций или тренда без снимка получают `STAGES_CORRELATION_CONFLICT`/`STAGES_TREND_CONFLICT` вместо `DIAGNOSTIC_RESOURCE_REQUIRED`/`TREND_RESOURCE_REQUIRED` (в ядре, CLI и API; в API это `422 INVALID_STAGES` вместо `422 INVALID_DIAGNOSTICS`/`INVALID_TREND_PLAN`) | клиент, ждавший `STAGES_RESOURCES_CONFLICT` на любой снимок, теперь получает анализ; отказ корреляций и тренда со стадиями меняет только код |
+| UI типы | `ui/src/types.stage-items.generated.ts` регенерируется (три поля) | добавочное |
 
 Версии схем не повышаются: изменение добавочное, а старые читатели
 `analysis-result.v1` не видят нового сочетания у старых анализов.
@@ -393,6 +395,34 @@ ADR 0018, раздел 7.) Этот ADR расхождение не трогае
   PR реализации.
 - Новых зависимостей production нет; `CanonicalJson.kt`, вычисление хэшей identity,
   белый список `AdvisoryAi.kt`, `run.v1`, коды выхода CLI не меняются.
+- Остаток обрезки внутрь (D2): у каждого края стадии `steady` до одного шага снимка
+  минус 1 мс ресурсными правилами не проверяется (при шаге 60 с это до двух минут на
+  стадию). Причины покрытия на это нет; видно только по `resource_from_epoch_ms` и
+  `resource_to_epoch_ms` в `stage_binding`.
+- Окно, которое сетка покрывает не целиком, сохраняет свой `PASS` по ресурсам
+  (оценка по покрытой части) с покрытием `INCOMPLETE` и причиной
+  `STAGE_WINDOW_SNAPSHOT_PARTIAL`; это исполнение по рекомендации, решение
+  владельца по вопросу 1 ещё ждёт.
+
+## Реализовано
+
+Статус остаётся Proposed до слова владельца. Реализация на локальных ветках (PR ещё
+не открыты):
+
+- `feat/stages-with-resources-core` (PR A, задачи 1-5 плана): ядро, identity,
+  ресурсные окна стадий, сочетание в `AnalysisService`, суженные отказы, задания.
+- `feat/stages-with-resources-cli` (PR B, задачи 6-9): CLI, API, онлайн-источник,
+  подпись причины `STAGE_WINDOW_SNAPSHOT_PARTIAL` в отчёте и UI, поле
+  `resource_partial`, документация, пометки в ADR 0030, фрагмент changelog.
+
+Отличия от текста выше, выявленные при реализации:
+
+- Проверка снимка с окнами в CLI стоит в общем блоке проверок стадий, до чтения
+  политики (снимок со стадиями читается раньше политики), чтобы порядок кодов совпадал
+  с ядром и API.
+- Атом инцидента ресурсного нарушения получает границы нарушенных ячеек самой находки,
+  а не границы стадии; границы `window_policy_summary` (точные границы стадии)
+  получает только бизнес-атом.
 
 ## Вопросы владельцу: исполнение по рекомендации
 

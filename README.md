@@ -122,8 +122,8 @@ ltv analyze fixtures/stages/ramp-steady-rampdown.jtl --policy policy.json \
 health-check; ловушка и коды ошибок описаны в
 [руководстве](docs/user/slice-1-local-analysis.md#стадии-нагрузки-и-вердикт-по-окну-steady).
 Если границы неизвестны, `ltv stages detect <input> --out stages.json` предложит объявление по
-ряду запросов прогона: проверьте его и передайте в `--stages`
-([ADR 0036](docs/adr/0036-load-stage-proposal.md)).
+ряду запросов прогона (участок с деградацией задержки или ошибок из окна не исключается):
+проверьте его и передайте в `--stages` ([ADR 0036](docs/adr/0036-load-stage-proposal.md)).
 
 ## Статус
 

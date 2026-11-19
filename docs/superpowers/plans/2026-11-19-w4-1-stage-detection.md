@@ -123,7 +123,10 @@ EXPECTED FILES TO CHANGE:
 9. **Генераторы.** `tools/perf/generate_jtl.py` пишет равномерные выборки для perf-проверки CI, профилей нагрузки не умеет;
    `fixtures/stages/` содержит одну JTL. Новые профили строятся в тестах (см. «Фикстуры»), инструменты не трогаются.
 
-## Метод `rps-plateau-segmentation.v1`
+## Метод `rps-plateau-segmentation.v2`
+
+Версия 2 (решение владельца 2026-11-19, ADR 0036, D14) это версия 1 (пункты 1-13 ниже) плюс
+проверка исключаемых участков по задержке и ошибкам (раздел «Проверка D14» после пункта 13).
 
 Вход: `LoadSecondSeries` (начало и конец прогона, `requestsPerSecond[i]` это число стартов запросов в
 `[runStart + 1000 i, runStart + 1000 (i + 1))`, длина `floor((runEnd - runStart) / 1000) + 1`, признак `DEGRADED`).
@@ -202,6 +205,23 @@ EXPECTED FILES TO CHANGE:
 `StageProfiles.kt`, тесты в `StageProposalReviewTest.kt` и `CommandLineStageDetectTest` (сверка вердикта с окном аккуратного
 инженера для R2-R4).
 
+**Проверка D14 (решение владельца 2026-11-19, между пунктами 9 и 10).** Второе чтение копит по секундам старта ещё число
+неуспешных выборок-запросов и сумму их `elapsed` (`Math.addExact`; переполнение даёт `RATE_OUT_OF_RANGE`). Роли по нагрузке
+(пункт 8a) считаются до проверки. Каждый участок от `DROP_MIN_MILLIS` после начала первой стадии steady, который эти роли
+исключили бы, судится против опорной ступени с нагрузкой не ниже его: хвост (`TAIL`) против последней ступени; зазор (`GAP`)
+против предыдущей ступени при переходе вниз и следующей при переходе вверх; нижняя ступень `top` (`STEP`) против последней
+стадии steady перед ней; рост после последней ступени (`AFTER_STEADY`) против последней ступени. Суммы `n`, `f`, `e` берутся
+по секундам `[from / 1000, to / 1000)` участка и опорной ступени (границы после сдвига краёв). Вердикт: `NOT_JUDGED`, если
+`n < DEGRADED_MIN_SAMPLES` у участка или опоры; `DEGRADED`, если `p ≥ DEGRADED_ERROR_FACTOR · p_ref`,
+`p − p_ref ≥ DEGRADED_ERROR_MIN_INCREASE` и `f − n · p_ref ≥ DEGRADED_ERROR_NOISE_SIGMAS · √max(1, n · p_ref)`, либо
+`m ≥ DEGRADED_LATENCY_FACTOR · m_ref` и `m − m_ref ≥ DEGRADED_LATENCY_MIN_INCREASE_MILLIS` (`p = f / n`, `m = e / n`);
+иначе `HEALTHY`. Действия по `DEGRADED`: нижняя ступень получает роль steady; зазор входит в опорную ступень (её край
+переносится к краю соседней ступени, опорная ступень получает роль steady); хвост `TAIL` входит в последнюю ступень до конца
+прогона (роль steady); `AFTER_STEADY` остаётся исключённым. Предупреждения: `DEGRADED_TAIL_KEPT`, `DEGRADED_GAP_KEPT`,
+`DEGRADED_STEP_KEPT`, `DEGRADED_RISE_EXCLUDED` (вместо `LONG_RAMP_DOWN`, `LOAD_DECLINE_BETWEEN_STEPS` или
+`LOAD_RISE_BETWEEN_STEPS`, `HOLD_NOT_EVALUATED`, `RISE_AFTER_STEADY`), все дают `LOW`. `NOT_JUDGED` оставляет предупреждение
+RPS-метода с полем `degradation=NOT_JUDGED`. Тесты: `StageProposalDegradationTest`, `CommandLineStageDetectTest`.
+
 Порядок отказов: `INPUT_INVALID`, `NO_REQUEST_SAMPLES`, `RUN_TOO_LONG` (в проходе, до выделения массива), `RUN_TOO_SHORT`
 (`runEnd - runStart < MIN_RUN_MILLIS`), `RATE_TOO_LOW`, `RUN_TOO_SHORT` (`n < MIN_RUN_CELLS`), `RATE_OUT_OF_RANGE`,
 `IDLE_GAP_INSIDE_RUN`, `NO_PLATEAU`, `TOO_MANY_STAGES`.
@@ -237,6 +257,12 @@ EXPECTED FILES TO CHANGE:
 | `STEADY_DRIFT_WARN_RATIO` | 0,05 | половина `MAX_DRIFT_RATIO` |
 | `HIGH_EDGE_SIGMAS` | 6,0 | граница уверенно видна |
 | `HIGH_RESIDUAL_CV` | 0,15 | около одного пуассоновского шума при 50 запросах |
+| `DEGRADED_MIN_SAMPLES` | 200 | D14: средняя по 200 выборкам распределения с коэффициентом вариации 2 (тяжёлый хвост) шумит на 14 %, порог 1,5 это 3,5 такого шума; меньше 200 у участка или опоры: `NOT_JUDGED`, поведение RPS-метода. Ниже 600 выборок зависания R1 (1 rps, 10 мин), иначе его нельзя судить |
+| `DEGRADED_ERROR_FACTOR` | 2,0 | D14: доля ошибок вдвое выше опоры; относительное условие для систем с фоном ошибок |
+| `DEGRADED_ERROR_MIN_INCREASE` | 0,01 | D14: абсолютный пол, один неуспешный запрос из ста сверх опоры; меньший прирост не меняет вердикт по типичным порогам 1-5 %; при нулевом фоне без пола хватило бы одной ошибки |
+| `DEGRADED_ERROR_NOISE_SIGMAS` | 4,0 | D14: избыток ошибок `f − n · p_ref` не меньше четырёх пуассоновских σ ожидаемого числа (не меньше одной ошибки); без него фон 1 % на 200 выборках давал ложное срабатывание в 14 % случаев, с ним около 0,1 % |
+| `DEGRADED_LATENCY_FACTOR` | 1,5 | D14: средняя задержка в полтора раза выше опоры; при нагрузке не выше опорной здоровая система не медленнее; на синтетике здоровые участки 0,92-1,08, демо 0,93-0,98, обвалы 10,5-24,5, soak демо 1,81 |
+| `DEGRADED_LATENCY_MIN_INCREASE_MILLIS` | 50 | D14: абсолютный пол для быстрых сервисов (средняя меньше 100 мс): рост меньше 50 мс в пределах пауз GC и установки соединений и ниже типичной точности порогов p95; для средних от 100 мс действует только множитель |
 
 Все значения не калибровались на корпусе реальных прогонов (ADR 0036, D3).
 
@@ -263,7 +289,7 @@ EXPECTED FILES TO CHANGE:
 - stderr, порядок строк фиксирован (числа `HALF_EVEN`, три знака):
 
   ```text
-  stage_proposal status=DETECTED method=rps-plateau-segmentation.v1 steady_steps=top confidence=HIGH calibrated=false
+  stage_proposal status=DETECTED method=rps-plateau-segmentation.v2 steady_steps=top confidence=HIGH calibrated=false
   run start_epoch_ms=1767225600000 end_epoch_ms=1767225719800 cell_ms=5000 cells=23 noise_rps=0.200
   segment from_offset_ms=0 to_offset_ms=40000 kind=FLAT level_rps=2.000 drift=0.000 residual_cv=0.000
   segment from_offset_ms=40000 to_offset_ms=100000 kind=FLAT level_rps=10.000 drift=0.000 residual_cv=0.000
@@ -274,11 +300,19 @@ EXPECTED FILES TO CHANGE:
   next: review the stages, then run ltv analyze <input> --stages <file>
   ```
 
-  Отказ: первая строка `stage_proposal status=NOT_DETECTED method=rps-plateau-segmentation.v1 steady_steps=<режим> reason=<код>`,
+  Отказ: первая строка `stage_proposal status=NOT_DETECTED method=rps-plateau-segmentation.v2 steady_steps=<режим> reason=<код>`,
   затем строки
   `run` и `segment`, если они уже вычислены, и `detail` с измеренным фактом (`steady_share=0.120`, `idle_gap_ms=60000`,
   `stages=18`). Предупреждение: `warning code=<код> stage_id=<id> at_offset_ms=<n> [from_rps=.. to_rps=..] [duration_ms=..]`.
   Контраст границы без соседа (начало прогона) печатается как `-`.
+
+  Проверка D14 (версия 2): после строк `stage` по строке на каждый проверенный участок, по времени:
+  `stretch kind=<TAIL|GAP|STEP|AFTER_STEADY> from_offset_ms=.. to_offset_ms=.. reference_id=<id> samples=.. failures=..
+  error_ratio=.. mean_ms=.. reference_samples=.. reference_failures=.. reference_error_ratio=.. reference_mean_ms=..
+  verdict=<DEGRADED|HEALTHY|NOT_JUDGED>` (одной строкой). Предупреждение `DEGRADED_*` дописывает
+  `error_ratio=.. mean_ms=.. reference_id=.. reference_error_ratio=.. reference_mean_ms=..`; предупреждение RPS-метода у
+  участка `NOT_JUDGED` дописывает `degradation=NOT_JUDGED samples=.. reference_samples=..`. У здорового участка строка
+  предупреждения прежняя.
 
 - Коды выхода: `0` предложение; `3` отказ метода (все причины, кроме `INPUT_INVALID`); `4` вход непригоден (`INPUT_INVALID`,
   как `INVALID` у `ltv analyze`), не найден, не обычный файл, формат не распознан, `--out` существует или не записан
@@ -375,7 +409,7 @@ internal fun proposeLoadStages(
     sourceType: SourceType, source: Path, steadySteps: SteadySteps = SteadySteps.TOP, checkCancelled: () -> Unit = {},
 ): StageProposal
 internal fun StageProposal.proposalBytes(): ByteArray   // canonicalJson(stagesJson(stages)); только при DETECTED
-internal const val STAGE_PROPOSAL_METHOD = "rps-plateau-segmentation.v1"
+internal const val STAGE_PROPOSAL_METHOD = "rps-plateau-segmentation.v2" // v1 до проверки D14
 ```
 
 ---

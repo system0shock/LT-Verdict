@@ -1,9 +1,11 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import { OVERVIEW_LABELS } from './labels'
-import { cursorFraction, cursorSummary, formatNumber, formatOffset, nearestIndex, trackPoints, type LoadSeries, type TrackKey } from './overview'
+import { cursorSummary, formatNumber, formatOffset, loadFrame, loadLane, nearestIndex, type LoadSeries, type TrackKey } from './overview'
+import TimeChart from './TimeChart.vue'
+import { plotFraction, type ChartStage } from './timeChart'
 
-const props = defineProps<{ series: LoadSeries }>()
+const props = withDefaults(defineProps<{ series: LoadSeries; stages?: ChartStage[] }>(), { stages: () => [] })
 const cursor = ref<number | null>(null)
 const tracks: Array<{ key: TrackKey; label: string }> = [
   { key: 'rps', label: OVERVIEW_LABELS.trackRps },
@@ -14,14 +16,21 @@ const tracks: Array<{ key: TrackKey; label: string }> = [
 watch(() => props.series, () => { cursor.value = null })
 
 const readout = computed(() => cursor.value === null ? null : cursorSummary(props.series, cursor.value))
-const cursorX = computed(() => cursor.value === null ? 0 : Math.round(cursorFraction(props.series, cursor.value) * 1000 * 100) / 100)
+const frame = computed(() => loadFrame(props.series))
+const lanes = computed(() => tracks.map((track) => ({
+  ...track,
+  lane: loadLane(props.series, track.key),
+  flags: { timeLabels: track.key === 'p95', stageLabels: track.key === 'rps' },
+})))
+const cursorMs = computed(() => cursor.value === null ? null : props.series.points[cursor.value]?.startMs ?? null)
+const units: Record<TrackKey, string> = { rps: ` ${OVERVIEW_LABELS.unitRps}`, errors: '', p95: ` ${OVERVIEW_LABELS.unitMs}` }
 const firstOffset = computed(() => formatOffset(props.series.points[0]?.startMs ?? 0))
 const lastOffset = computed(() => formatOffset(props.series.points[props.series.points.length - 1]?.startMs ?? 0))
 
 function onPointer(event: PointerEvent) {
   const rect = (event.currentTarget as HTMLElement).getBoundingClientRect()
   if (rect.width <= 0) return
-  const index = nearestIndex(props.series, (event.clientX - rect.left) / rect.width)
+  const index = nearestIndex(props.series, plotFraction(event.clientX, rect))
   if (index !== -1) cursor.value = index
 }
 
@@ -48,7 +57,7 @@ function inputCursor(event: Event) {
       @pointerdown="onPointer"
     >
       <div
-        v-for="track in tracks"
+        v-for="track in lanes"
         :key="track.key"
         class="shared-chart__track"
         :class="`shared-chart__track--${track.key}`"
@@ -62,40 +71,15 @@ function inputCursor(event: Event) {
           >{{ readout ? readout[track.key] : '-' }}<template v-if="track.key === 'p95' && readout"> {{ OVERVIEW_LABELS.unitMs }}</template></strong>
           <span class="muted">{{ OVERVIEW_LABELS.trackMax(formatNumber(series.max[track.key])) }}</span>
         </p>
-        <svg
-          viewBox="0 0 1000 80"
-          preserveAspectRatio="none"
-          aria-hidden="true"
-          focusable="false"
-        >
-          <line
-            class="shared-chart__axis"
-            x1="0"
-            y1="76"
-            x2="1000"
-            y2="76"
-          />
-          <polyline
-            v-for="(points, index) in trackPoints(series, track.key, 1000, 80)"
-            :key="index"
-            :data-testid="`track-line-${track.key}`"
-            :points="points"
-            fill="none"
-            vector-effect="non-scaling-stroke"
-            stroke-linecap="round"
-          />
-          <line
-            v-if="readout"
-            :data-testid="`cursor-line-${track.key}`"
-            :data-x="cursorX"
-            :x1="cursorX"
-            :x2="cursorX"
-            y1="0"
-            y2="80"
-            class="shared-chart__cursor"
-            vector-effect="non-scaling-stroke"
-          />
-        </svg>
+        <TimeChart
+          :lane="track.lane"
+          :frame="frame"
+          :stages="stages"
+          :flags="track.flags"
+          :cursor-ms="cursorMs"
+          :cursor-value="readout ? `${readout[track.key]}${units[track.key]}` : ''"
+          :cursor-time="track.key === 'p95' ? readout?.time ?? null : null"
+        />
       </div>
     </div>
     <p class="shared-chart__axis-labels">
@@ -159,36 +143,8 @@ function inputCursor(event: Event) {
   touch-action: pan-y;
 }
 
-.shared-chart__track svg {
-  display: block;
-  width: 100%;
-  height: 80px;
-  background: var(--surface-inset);
-}
-
-.shared-chart__track polyline {
-  stroke-width: 2;
-}
-
-.shared-chart__track--rps polyline {
-  stroke: var(--brand);
-}
-
-.shared-chart__track--errors polyline {
-  stroke: var(--fail);
-}
-
-.shared-chart__track--p95 polyline {
-  stroke: var(--warn);
-}
-
-.shared-chart__cursor {
-  stroke: var(--text);
-  stroke-width: 1;
-}
-
-.shared-chart__axis {
-  stroke: var(--border);
+.shared-chart__track {
+  min-width: 0;
 }
 
 .shared-chart__head {

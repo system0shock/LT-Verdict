@@ -1,6 +1,8 @@
 import AxeBuilder from '@axe-core/playwright'
 import { expect, test, type Page } from '@playwright/test'
 import { CORRELATION_LABELS, OVERVIEW_LABELS, SHELL_LABELS } from '../src/shell/labels'
+import { formatNumber } from '../src/shell/overview'
+import { PLOT_INSET } from '../src/shell/timeChart'
 
 const reference = { run_id: 'overview-run', analysis_id: 'a'.repeat(64) }
 const run = { ...reference, source_type: 'jmeter', sha256: 'b'.repeat(64), size_bytes: 100, original_filename: 'overview.jtl' }
@@ -275,7 +277,7 @@ test('the load chart draws three tracks on one time axis and never joins the lin
   await expect(page.getByRole('group', { name: OVERVIEW_LABELS.chartAria })).toHaveCount(1)
   for (const key of ['rps', 'errors', 'p95']) {
     await expect(page.getByTestId(`track-${key}`)).toBeVisible()
-    await expect(page.getByTestId(`track-line-${key}`)).toHaveCount(2)
+    await expect(page.getByTestId(`track-${key}`).getByTestId('time-chart')).toHaveAttribute('data-segments', '2')
   }
   await expect(page.getByTestId('load-gaps')).toHaveText(OVERVIEW_LABELS.loadGaps(1))
   await expect(page.getByTestId('load-summary')).toHaveText(OVERVIEW_LABELS.loadSummary(6, 1))
@@ -333,6 +335,65 @@ test('hovering the plot moves the same cursor to the nearest interval', async ({
   const [rps, errors, p95] = await lineX(page)
   expect(rps).toBe(errors)
   expect(errors).toBe(p95)
+})
+
+test('each lane has value ticks and only the bottom lane has time ticks', async ({ page }) => {
+  await openOverview(page)
+  const texts = (key: string) => page.getByTestId(`track-${key}`).locator('svg text').allTextContents()
+  await expect.poll(() => texts('rps')).toEqual(expect.arrayContaining(['0', '100', '200']))
+  expect(await texts('p95')).toEqual(expect.arrayContaining(['0', formatNumber(500), formatNumber(1000), '0:00', '0:04', '0:06']))
+  expect(await texts('rps')).not.toContain('0:04')
+})
+
+test('hovering shows the value at the cursor in every lane and the time on the axis', async ({ page }) => {
+  await openOverview(page)
+  await page.getByTestId('chart-plot').scrollIntoViewIfNeeded()
+  const box = (await page.getByTestId('chart-plot').boundingBox())!
+  const x = box.x + PLOT_INSET.left + (box.width - PLOT_INSET.left - PLOT_INSET.right) * (4000 / 6000)
+  await page.mouse.move(x, box.y + 8)
+  await expect(slider(page)).toHaveValue('3')
+  await expect(page.getByTestId('cursor-value-p95')).toHaveText(`${formatNumber(900)} ${OVERVIEW_LABELS.unitMs}`)
+  await expect(page.getByTestId('cursor-value-rps')).toHaveText(`${formatNumber(90)} ${OVERVIEW_LABELS.unitRps}`)
+  await expect(page.getByTestId('cursor-time-mark')).toHaveText('0:04')
+  await expect(page.getByTestId('cursor-time-mark')).toHaveCount(1)
+})
+
+test('the charts raise no CSP violation under the real server policy', async ({ page }) => {
+  expect((await page.request.get('/')).headers()['content-security-policy']).toContain("style-src 'self'")
+  await page.addInitScript(() => {
+    (window as never as { csp: string[] }).csp = []
+    document.addEventListener('securitypolicyviolation', (event) => (window as never as { csp: string[] }).csp.push(`${event.violatedDirective} ${event.blockedURI}`))
+  })
+  await openOverview(page)
+  await expect(page.getByTestId('track-rps').locator('svg text').first()).toBeVisible()
+  await page.getByTestId('chart-plot').scrollIntoViewIfNeeded()
+  const box = (await page.getByTestId('chart-plot').boundingBox())!
+  await page.mouse.move(box.x + box.width / 2, box.y + 8)
+  await slider(page).focus()
+  await page.keyboard.press('End')
+  await page.locator('.theme-toggle').click()
+  expect(await page.evaluate(() => (window as never as { csp: string[] }).csp)).toEqual([])
+})
+
+test('the lanes follow the theme toggle', async ({ page }) => {
+  await openOverview(page)
+  const line = page.getByTestId('track-rps').locator('svg path[stroke-width="2"]').first()
+  const brand = () => page.evaluate(() => { const probe = document.createElement('span'); probe.style.color = 'var(--brand)'; document.body.append(probe); const color = getComputedStyle(probe).color; probe.remove(); return color })
+  await expect.poll(async () => line.evaluate((el) => getComputedStyle(el).stroke)).toBe(await brand())
+  const before = await brand()
+  await page.locator('.theme-toggle').click()
+  await expect.poll(async () => line.evaluate((el) => getComputedStyle(el).stroke)).toBe(await brand())
+  expect(await brand()).not.toBe(before)
+})
+
+test('lanes shrink with the viewport and never scroll the page', async ({ page }) => {
+  await openOverview(page)
+  await page.setViewportSize({ width: 320, height: 800 })
+  await slider(page).focus()
+  await page.keyboard.press('End')
+  await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true)
+  const lane = (await page.getByTestId('track-rps').getByTestId('time-chart').boundingBox())!
+  await expect.poll(async () => (await page.getByTestId('track-rps').locator('svg').first().boundingBox())!.width).toBeLessThanOrEqual(lane.width)
 })
 
 test('an empty page shows a plain message instead of a zero line', async ({ page }) => {

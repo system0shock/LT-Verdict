@@ -4,6 +4,7 @@ import io.ltverdict.ingest.SourceType
 import org.junit.jupiter.api.Assertions.assertArrayEquals
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
+import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.io.TempDir
 import java.nio.file.Files
@@ -47,6 +48,33 @@ class StageProposalSeriesTest {
     }
 
     @Test
+    fun `failures and elapsed are summed per start second of request samples`() {
+        val failed = requestRow(t0 + 999, elapsed = 700).replace(",200,OK,stages 1-1,text,true,", ",500,Error,stages 1-1,text,false,")
+        val jtl = jtl("mixed.jtl", requestRow(t0, elapsed = 300), failed, requestRow(t0 + 1000, elapsed = 50), containerRow(t0 + 1500))
+
+        val read = series(jtl)
+
+        assertArrayEquals(longArrayOf(2, 1), read.requestsPerSecond)
+        assertArrayEquals(longArrayOf(1, 0), read.failuresPerSecond)
+        assertArrayEquals(longArrayOf(1000, 50), read.elapsedMillisPerSecond)
+    }
+
+    @Test
+    fun `the generator series equals the series read from its JTL`() {
+        val profile = StageProfiles.collapse(300, 40.0)
+
+        val read = series(profile.writeJtl(tempDir.resolve("collapse.jtl"), t0))
+        val generated = profile.series(t0)
+
+        assertEquals(generated.runStartEpochMillis, read.runStartEpochMillis)
+        assertEquals(generated.runEndEpochMillis, read.runEndEpochMillis)
+        assertArrayEquals(generated.requestsPerSecond, read.requestsPerSecond)
+        assertArrayEquals(generated.failuresPerSecond, read.failuresPerSecond)
+        assertArrayEquals(generated.elapsedMillisPerSecond, read.elapsedMillisPerSecond)
+        assertTrue(read.failuresPerSecond.sum() > 0)
+    }
+
+    @Test
     fun `row order does not change the series`() {
         val rows = small.startOffsetsMillis().map { requestRow(t0 + it) }
         val forward = series(jtl("forward.jtl", *rows.toTypedArray()))
@@ -55,6 +83,8 @@ class StageProposalSeriesTest {
         assertEquals(forward.runStartEpochMillis, backward.runStartEpochMillis)
         assertEquals(forward.runEndEpochMillis, backward.runEndEpochMillis)
         assertArrayEquals(forward.requestsPerSecond, backward.requestsPerSecond)
+        assertArrayEquals(forward.failuresPerSecond, backward.failuresPerSecond)
+        assertArrayEquals(forward.elapsedMillisPerSecond, backward.elapsedMillisPerSecond)
         assertArrayEquals(small.series(t0).requestsPerSecond, forward.requestsPerSecond)
     }
 

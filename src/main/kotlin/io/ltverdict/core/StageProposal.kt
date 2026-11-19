@@ -13,12 +13,17 @@ import java.nio.file.Path
 // ADR 0036: a proposal of load-stages.v1 from the request series of a run. The analysis never calls it; a person checks the
 // proposal and passes it to `ltv analyze --stages` as an ordinary explicit input.
 
-/** `requestsPerSecond[i]` counts request starts in `[runStart + 1000 i, runStart + 1000 (i + 1))`. */
+/**
+ * `requestsPerSecond[i]` counts request starts in `[runStart + 1000 i, runStart + 1000 (i + 1))`; `failuresPerSecond[i]` and
+ * `elapsedMillisPerSecond[i]` count the failed ones and sum the `elapsed` of the same samples (ADR 0036, D14).
+ */
 internal class LoadSecondSeries(
     val runStartEpochMillis: Long,
     val runEndEpochMillis: Long,
     val requestsPerSecond: LongArray,
     val degraded: Boolean,
+    val failuresPerSecond: LongArray = LongArray(requestsPerSecond.size),
+    val elapsedMillisPerSecond: LongArray = LongArray(requestsPerSecond.size),
 )
 
 internal sealed interface LoadSecondSeriesRead {
@@ -26,7 +31,7 @@ internal sealed interface LoadSecondSeriesRead {
         val series: LoadSecondSeries,
     ) : LoadSecondSeriesRead
 
-    /** INPUT_INVALID, NO_REQUEST_SAMPLES or RUN_TOO_LONG. */
+    /** INPUT_INVALID, NO_REQUEST_SAMPLES, RUN_TOO_LONG, INPUT_CHANGED or RATE_OUT_OF_RANGE (a sum of `elapsed` overflowed). */
     data class Refused(
         val reason: String,
     ) : LoadSecondSeriesRead
@@ -65,7 +70,11 @@ internal fun readLoadSecondSeries(
     val runEnd = last
     if (runStart == null || runEnd == null || !requests) return LoadSecondSeriesRead.Refused(REFUSED_NO_REQUEST_SAMPLES)
     if (runEnd - runStart > MAX_LOAD_STAGE_OFFSET_MS) return LoadSecondSeriesRead.Refused(REFUSED_RUN_TOO_LONG)
-    val counts = LongArray(((runEnd - runStart) / ONE_SECOND).toInt() + 1)
+    // Three arrays of one Long per second: at most 3 · 604801 · 8 bytes, about 14.5 MB for a run of seven days (ADR 0036, D14).
+    val seconds = ((runEnd - runStart) / ONE_SECOND).toInt() + 1
+    val counts = LongArray(seconds)
+    val failures = LongArray(seconds)
+    val elapsed = LongArray(seconds)
     var secondFirst: Long? = null
     val secondReport =
         try {
@@ -76,7 +85,10 @@ internal fun readLoadSecondSeries(
                     if (sample.isRequest()) {
                         val offset = sample.startedAtEpochMillis - runStart
                         if (offset < 0 || offset > runEnd - runStart) throw InputChanged()
-                        counts[(offset / ONE_SECOND).toInt()]++
+                        val second = (offset / ONE_SECOND).toInt()
+                        counts[second]++
+                        if (!sample.successful) failures[second]++
+                        elapsed[second] = Math.addExact(elapsed[second], sample.elapsedMillis)
                     }
                 },
                 checkCancelled = checkCancelled,
@@ -85,10 +97,14 @@ internal fun readLoadSecondSeries(
             return LoadSecondSeriesRead.Refused(REFUSED_INPUT_CHANGED)
         } catch (_: InputChanged) {
             return LoadSecondSeriesRead.Refused(REFUSED_INPUT_CHANGED)
+        } catch (_: ArithmeticException) {
+            return LoadSecondSeriesRead.Refused(REFUSED_RATE_OUT_OF_RANGE)
         }
     // The input changed between the two reads (a JTL still being written): a refusal, not an internal error.
     if (secondReport.validity != firstReport.validity || secondFirst != runStart) return LoadSecondSeriesRead.Refused(REFUSED_INPUT_CHANGED)
-    return LoadSecondSeriesRead.Series(LoadSecondSeries(runStart, runEnd, counts, firstReport.validity == RunValidity.DEGRADED))
+    return LoadSecondSeriesRead.Series(
+        LoadSecondSeries(runStart, runEnd, counts, firstReport.validity == RunValidity.DEGRADED, failures, elapsed),
+    )
 }
 
 private fun io.ltverdict.ingest.LoadSample.isRequest() = kind == SampleKind.JMETER_SAMPLER || kind == SampleKind.GATLING_REQUEST
@@ -103,6 +119,7 @@ internal const val REFUSED_INPUT_INVALID = "INPUT_INVALID"
 internal const val REFUSED_NO_REQUEST_SAMPLES = "NO_REQUEST_SAMPLES"
 internal const val REFUSED_RUN_TOO_LONG = "RUN_TOO_LONG"
 internal const val REFUSED_INPUT_CHANGED = "INPUT_CHANGED"
+internal const val REFUSED_RATE_OUT_OF_RANGE = "RATE_OUT_OF_RANGE"
 
 internal enum class StageProposalStatus { DETECTED, NOT_DETECTED }
 
@@ -209,7 +226,7 @@ private fun detectSeries(
     return try {
         detectInCells(series, steadySteps, counts, noise, run)
     } catch (_: ArithmeticException) {
-        refusal(steadySteps, "RATE_OUT_OF_RANGE", null, runStart, runEnd, run)
+        refusal(steadySteps, REFUSED_RATE_OUT_OF_RANGE, null, runStart, runEnd, run)
     }
 }
 

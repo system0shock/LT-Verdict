@@ -111,8 +111,15 @@ internal data class StageProfile(
         val first = requests.first().offsetMillis
         val end = requests.maxOf { it.offsetMillis + it.elapsedMillis }
         val counts = LongArray(((end - first) / 1000L).toInt() + 1)
-        requests.forEach { counts[((it.offsetMillis - first) / 1000L).toInt()]++ }
-        return LoadSecondSeries(t0 + first, t0 + end, counts, false)
+        val failures = LongArray(counts.size)
+        val elapsed = LongArray(counts.size)
+        requests.forEach {
+            val second = ((it.offsetMillis - first) / 1000L).toInt()
+            counts[second]++
+            if (!it.success) failures[second]++
+            elapsed[second] += it.elapsedMillis
+        }
+        return LoadSecondSeries(t0 + first, t0 + end, counts, false, failures, elapsed)
     }
 
     fun writeJtl(

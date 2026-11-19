@@ -1,5 +1,6 @@
 package io.ltverdict.cli
 
+import io.ltverdict.core.StageProfile
 import io.ltverdict.core.StageProfiles
 import io.ltverdict.core.containerRow
 import kotlinx.serialization.json.Json
@@ -302,6 +303,70 @@ class CommandLineStageDetectTest {
     @Test
     fun `the command takes no data directory`() {
         assertEquals(64, run("stages", "detect", load.toString(), "--data-dir", data("d")).exitCode)
+    }
+
+    @Test
+    fun `the proposal gives the verdict of the careful window`() {
+        // Second review round (R2-R4): the careful engineer's window is the ground truth of the generator. R1 (a collapse at the
+        // end) is not here: from the request rate alone a collapse and a planned ramp-down look the same (ADR 0036, D4).
+        val cases =
+            listOf(
+                Triple(StageProfiles.equalDips, "all", listOf(0L until 1_680_000L)),
+                Triple(StageProfiles.equalDips, "top", listOf(0L until 1_680_000L)),
+                Triple(StageProfiles.riseAbort, "all", listOf(60_000L until 660_000L)),
+                Triple(StageProfiles.riseAbort, "top", listOf(60_000L until 660_000L)),
+                Triple(StageProfiles.stepDownAbrupt, "all", listOf(60_000L until 1_860_000L, 1_860_000L until 1_980_000L)),
+                Triple(StageProfiles.stepDown120, "all", listOf(60_000L until 1_860_000L, 1_980_000L until 2_100_000L)),
+            )
+        cases.forEachIndexed { index, (profile, mode, careful) ->
+            val jtl = profile.writeJtl(tempDir.resolve("careful-$index.jtl"))
+            val detected = run("stages", "detect", jtl.toString(), "--steady-steps", mode)
+            assertEquals(0, detected.exitCode, detected.stderr)
+            val proposal = Files.writeString(tempDir.resolve("careful-$index-proposal.json"), detected.stdout)
+            val declared = carefulStages(profile, careful, "careful-$index")
+
+            val byProposal = verdict(jtl, proposal, "p$index")
+            val byCareful = verdict(jtl, declared, "c$index")
+
+            assertEquals(byCareful, byProposal, "${profile.name} $mode:\n${detected.stderr}")
+        }
+    }
+
+    private fun carefulStages(
+        profile: StageProfile,
+        windows: List<LongRange>,
+        name: String,
+    ): Path {
+        val shift = profile.firstRequestOffsetMillis()
+        val stages =
+            windows.mapIndexed { index, window ->
+                """{"id":"w$index","role":"steady","from_offset_ms":${window.first - shift},"to_offset_ms":${window.last + 1 - shift}}"""
+            }
+        return Files.writeString(
+            tempDir.resolve("$name-careful.json"),
+            """{"schema_version":"load-stages.v1","stages":[${stages.joinToString(",")}]}""",
+        )
+    }
+
+    private fun verdict(
+        jtl: Path,
+        stages: Path,
+        name: String,
+    ): String {
+        val policy =
+            Files.writeString(
+                tempDir.resolve("careful-policy.json"),
+                """{"schema_version":"policy.v1","policy_id":"careful","defaults":{"sample_floor":1,"min_samples":1},"rules":[""" +
+                    """{"id":"p95","metric":"response_time_p95_ms","operator":"lte","threshold":1000,"scope":{"kind":"overall"}},""" +
+                    """{"id":"errors","metric":"error_rate_ratio","operator":"lte","threshold":0.05,"scope":{"kind":"overall"}}]}""",
+            )
+        val result = run("analyze", jtl.toString(), "--policy", policy.toString(), "--stages", stages.toString(), "--data-dir", data(name))
+        assertTrue(result.exitCode in 0..3, result.stderr)
+        return Json
+            .parseToJsonElement(result.stdout)
+            .jsonObject
+            .getValue("policy_verdict")
+            .jsonPrimitive.content
     }
 
     @Test

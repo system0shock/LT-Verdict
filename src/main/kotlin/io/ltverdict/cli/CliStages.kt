@@ -55,7 +55,7 @@ internal fun stagesCommand(
     stderr.write(stageProposalLines(proposal).joinToString("") { "$it\n" }.toByteArray(StandardCharsets.UTF_8))
     stderr.flush()
     if (proposal.status == StageProposalStatus.NOT_DETECTED) {
-        return if (proposal.reason == "INPUT_INVALID") EXIT_INVALID_INPUT else EXIT_NO_VERDICT
+        return if (proposal.reason == "INPUT_INVALID" || proposal.reason == "INPUT_CHANGED") EXIT_INVALID_INPUT else EXIT_NO_VERDICT
     }
     val bytes = proposal.proposalBytes()
     if (target == null) {

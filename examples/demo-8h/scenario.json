@@ -1,0 +1,345 @@
+{
+ "scenario_id": "checkout-2026.09.3",
+ "series": "Checkout",
+ "namespace": "shop",
+ "arms": [
+  "A",
+  "B"
+ ],
+ "seed": 20260929,
+ "stages": [
+  {
+   "id": "ramp",
+   "role": "excluded",
+   "minutes": 30
+  },
+  {
+   "id": "plateau-1",
+   "role": "steady",
+   "minutes": 120
+  },
+  {
+   "id": "step",
+   "role": "steady",
+   "minutes": 30
+  },
+  {
+   "id": "plateau-2",
+   "role": "steady",
+   "minutes": 90
+  },
+  {
+   "id": "recovery",
+   "role": "excluded",
+   "minutes": 30
+  },
+  {
+   "id": "soak",
+   "role": "steady",
+   "minutes": 180
+  }
+ ],
+ "load": {
+  "total_minutes": 480,
+  "plateau_rps": 121,
+  "start_multiplier_permille": 250,
+  "step_multiplier_permille": 1500,
+  "knee_minute": 224,
+  "knee_rps_drop_permille": 170
+ },
+ "transactions": [
+  {
+   "name": "POST /checkout",
+   "share": 0.22,
+   "p95_ms": 760,
+   "knee_factor_permille": 1600,
+   "error_permille": 2,
+   "knee_error_permille": 26
+  },
+  {
+   "name": "POST /payment/confirm",
+   "share": 0.1,
+   "p95_ms": 1100,
+   "knee_factor_permille": 250,
+   "error_permille": 2,
+   "knee_error_permille": 5
+  },
+  {
+   "name": "GET /cart",
+   "share": 0.16,
+   "p95_ms": 320,
+   "knee_factor_permille": 150,
+   "error_permille": 1,
+   "knee_error_permille": 0
+  },
+  {
+   "name": "POST /login",
+   "share": 0.09,
+   "p95_ms": 450,
+   "knee_factor_permille": 50,
+   "error_permille": 1,
+   "knee_error_permille": 0
+  },
+  {
+   "name": "GET /catalog",
+   "share": 0.2,
+   "p95_ms": 210,
+   "knee_factor_permille": 50,
+   "error_permille": 1,
+   "knee_error_permille": 0
+  },
+  {
+   "name": "GET /product/{id}",
+   "share": 0.15,
+   "p95_ms": 240,
+   "knee_factor_permille": 50,
+   "error_permille": 1,
+   "knee_error_permille": 0
+  },
+  {
+   "name": "GET /orders",
+   "share": 0.05,
+   "p95_ms": 380,
+   "knee_factor_permille": 100,
+   "error_permille": 1,
+   "knee_error_permille": 0
+  },
+  {
+   "name": "GET /health",
+   "share": 0.03,
+   "p95_ms": 25,
+   "knee_factor_permille": 0,
+   "error_permille": 0,
+   "knee_error_permille": 0
+  }
+ ],
+ "services": [
+  {
+   "name": "checkout-api",
+   "pods": 4
+  },
+  {
+   "name": "payments-svc",
+   "pods": 4
+  },
+  {
+   "name": "catalog-svc",
+   "pods": 4
+  },
+  {
+   "name": "gateway",
+   "pods": 4
+  },
+  {
+   "name": "orders-svc",
+   "pods": 4
+  },
+  {
+   "name": "auth-svc",
+   "pods": 4
+  },
+  {
+   "name": "cart-svc",
+   "pods": 4
+  },
+  {
+   "name": "user-svc",
+   "pods": 4
+  },
+  {
+   "name": "inventory-svc",
+   "pods": 4
+  },
+  {
+   "name": "pricing-svc",
+   "pods": 4
+  },
+  {
+   "name": "search-svc",
+   "pods": 4
+  },
+  {
+   "name": "notification-svc",
+   "pods": 4
+  },
+  {
+   "name": "shipping-svc",
+   "pods": 4
+  },
+  {
+   "name": "fraud-svc",
+   "pods": 4
+  },
+  {
+   "name": "promo-svc",
+   "pods": 4
+  },
+  {
+   "name": "review-svc",
+   "pods": 4
+  },
+  {
+   "name": "recs-svc",
+   "pods": 3
+  },
+  {
+   "name": "session-svc",
+   "pods": 3
+  },
+  {
+   "name": "media-svc",
+   "pods": 3
+  },
+  {
+   "name": "wishlist-svc",
+   "pods": 3
+  }
+ ],
+ "database": {
+  "name": "checkout-db",
+  "pods": 2
+ },
+ "tiny_workloads": [
+  "checkout-api",
+  "payments-svc",
+  "catalog-svc",
+  "gateway"
+ ],
+ "story": {
+  "memory_leak": {
+   "service": "payments-svc",
+   "pod_index": 2,
+   "arm": "B",
+   "restart_minutes": [
+    228,
+    312,
+    396
+   ],
+   "cycle_minutes": 84
+  },
+  "throttled": {
+   "service": "checkout-api",
+   "pod_indexes": [
+    1,
+    2
+   ],
+   "arm": "B",
+   "from_minute": 150
+  },
+  "hot_pod": {
+   "service": "catalog-svc",
+   "pod_index": 3
+  },
+  "sidecar_service": "gateway"
+ },
+ "trend_slopes": {
+  "jvm_old_gen_used@checkout-api": 40000,
+  "openshift_sidecar_memory_limit_ratio@gateway": 7.5e-06,
+  "jvm_pool_saturation@orders-svc": 3e-05,
+  "jvm_thread_count@checkout-api": 0.004,
+  "jvm_process_cpu@payments-svc": 1e-05
+ },
+ "policy": {
+  "throughput_min_rps_full": 90,
+  "p95_checkout_ms": 2000,
+  "p95_payment_ms": 3000,
+  "error_checkout": 0.01,
+  "error_overall": 0.02
+ },
+ "releases": [
+  {
+   "id": "2026.09.3",
+   "start": "2026-09-29T10:00:00Z",
+   "seed": 93,
+   "knee": true,
+   "story": true,
+   "checkout": true,
+   "checkout_p95_ms": 760,
+   "checkout_error_permille": 2,
+   "exit_codes": {
+    "A": 2,
+    "B": 2,
+    "S": 2
+   }
+  },
+  {
+   "id": "2026.09.2",
+   "start": "2026-09-22T10:00:00Z",
+   "seed": 92,
+   "knee": false,
+   "story": false,
+   "checkout": true,
+   "checkout_p95_ms": 820,
+   "checkout_error_permille": 2,
+   "exit_codes": {
+    "A": 0,
+    "B": 0,
+    "S": 0
+   }
+  },
+  {
+   "id": "2026.09.1",
+   "start": "2026-09-15T10:00:00Z",
+   "seed": 91,
+   "knee": false,
+   "story": false,
+   "checkout": true,
+   "checkout_p95_ms": 860,
+   "checkout_error_permille": 2,
+   "exit_codes": {
+    "A": 0,
+    "B": 0
+   }
+  },
+  {
+   "id": "2026.09.0",
+   "start": "2026-09-08T10:00:00Z",
+   "seed": 90,
+   "knee": false,
+   "story": false,
+   "checkout": false,
+   "checkout_p95_ms": 0,
+   "checkout_error_permille": 0,
+   "exit_codes": {
+    "A": 3,
+    "B": 3
+   }
+  },
+  {
+   "id": "2026.08.3",
+   "start": "2026-08-25T10:00:00Z",
+   "seed": 83,
+   "knee": false,
+   "story": false,
+   "checkout": true,
+   "checkout_p95_ms": 2110,
+   "checkout_error_permille": 3,
+   "exit_codes": {
+    "A": 2,
+    "B": 2
+   }
+  },
+  {
+   "id": "2026.08.2",
+   "start": "2026-08-18T10:00:00Z",
+   "seed": 82,
+   "knee": false,
+   "story": false,
+   "checkout": true,
+   "checkout_p95_ms": 800,
+   "checkout_error_permille": 2,
+   "exit_codes": {
+    "A": 0,
+    "B": 0
+   }
+  }
+ ],
+ "release_profile": {
+  "scenario_mix": "checkout 22%, payment 10%, cart 16%, login 9%, catalog 20%, product 15%, orders 5%, health 3%",
+  "environment_dataset": "синтетический набор, 20 сервисов и БД",
+  "load_model": "открытая модель, плато 121 зпр/с, ступень +50%",
+  "targets_stages": "разгон 30 мин, плато 1 120 мин, ступень 30 мин, плато 2 90 мин, спад 30 мин, soak 180 мин",
+  "pacing": "постоянная интенсивность без пауз",
+  "generator_limits": "синтетический генератор без пределов"
+ }
+}

@@ -44,6 +44,12 @@ test('valueAxis keeps whole-number ticks for counts', () => {
   expect(valueAxis(0, 25, true)).toEqual({ min: 0, max: 26, interval: 13 })
   expect(valueAxis(0, 7, true)).toEqual({ min: 0, max: 10, interval: 5 })
 })
+test('value tick labels keep every digit of the step instead of rounding it', () => {
+  const formatter = (hi: number) => ((laneOption({ ...lane, hi }, { fromMs: 0, toMs: 6000, originMs: 0 }, [], { timeLabels: false, stageLabels: false }, colors).yAxis as { axisLabel: { formatter: (value: number) => string } }).axisLabel.formatter)
+  expect([0, 0.025, 0.05].map(formatter(0.03))).toEqual(['0', '0,025', '0,05'])
+  expect([0, 0.5, 1].map(formatter(1))).toEqual(['0', '0,5', '1'])
+  expect([0, 2500, 5000].map(formatter(3241))).toEqual([0, 2500, 5000].map((value) => formatNumber(value)))
+})
 test('only the error lane is a count lane', () => {
   const series = loadSeries([bucket(0, 100, 0, 200), bucket(1000, 120, 3, 220)], 1)
   expect([loadLane(series, 'rps').integer, loadLane(series, 'errors').integer, loadLane(series, 'p95').integer]).toEqual([undefined, true, undefined])

@@ -48,6 +48,12 @@ export function valueAxis(lo: number, hi: number, integer = false): { min: numbe
   return { min, max, interval: (max - min) / 2 }
 }
 
+// Fraction digits that show the tick step exactly (0,025 must not read as 0,03).
+function stepDigits(interval: number): number {
+  for (let digits = 0; digits < 6; digits += 1) if (Math.abs(interval * 10 ** digits - Math.round(interval * 10 ** digits)) < 1e-9) return digits
+  return 6
+}
+
 export function timeTicks(frame: ChartFrame, maxIntervals = 6): number[] {
   const span = frame.toMs - frame.fromMs
   if (span <= 0) return [frame.fromMs]
@@ -151,7 +157,7 @@ export function laneOption(lane: ChartLane, frame: ChartFrame, stages: ChartStag
       min: axis.min,
       max: axis.max,
       interval: axis.interval,
-      axisLabel: { formatter: (value: number) => formatNumber(value), ...text },
+      axisLabel: { formatter: (value: number) => formatNumber(value, Math.max(2, stepDigits(axis.interval))), ...text },
       axisLine: { show: false },
       axisTick: { show: false },
       splitLine: { lineStyle: { color: colors.border } },

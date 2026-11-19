@@ -418,6 +418,21 @@ test('the lanes follow the theme toggle', async ({ page }) => {
   expect(await brand()).not.toBe(before)
 })
 
+test('the lanes follow the operating system theme when no theme is chosen', async ({ page }) => {
+  await page.emulateMedia({ colorScheme: 'light' })
+  await openOverview(page)
+  // The app writes data-theme once at start; without it the tokens follow the operating system.
+  await page.evaluate(() => document.documentElement.removeAttribute('data-theme'))
+  const line = page.getByTestId('track-rps').locator('svg path[stroke-width="2"]').first()
+  const stroke = () => line.evaluate((el) => getComputedStyle(el).stroke)
+  const brand = () => page.evaluate(() => { const probe = document.createElement('span'); probe.style.color = 'var(--brand)'; document.body.append(probe); const color = getComputedStyle(probe).color; probe.remove(); return color })
+  await expect.poll(stroke).toBe(await brand())
+  const light = await brand()
+  await page.emulateMedia({ colorScheme: 'dark' })
+  await expect.poll(brand).not.toBe(light)
+  await expect.poll(stroke).toBe(await brand())
+})
+
 test('lanes shrink with the viewport and never scroll the page', async ({ page }) => {
   await openOverview(page)
   await page.setViewportSize({ width: 320, height: 800 })

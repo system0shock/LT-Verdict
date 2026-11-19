@@ -23,6 +23,7 @@ const host = ref<HTMLElement | null>(null)
 let chart: echarts.ECharts | null = null
 let resizeObserver: ResizeObserver | null = null
 let themeObserver: MutationObserver | null = null
+const systemTheme = window.matchMedia('(prefers-color-scheme: dark)')
 
 const grid = computed(() => laneGrid(props.flags))
 const x = computed(() => props.cursorMs === null ? 0 : cursorX(props.frame, props.cursorMs))
@@ -54,6 +55,7 @@ onMounted(() => {
   resizeObserver.observe(host.value)
   themeObserver = new MutationObserver(draw)
   themeObserver.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] })
+  systemTheme.addEventListener('change', draw)
 })
 
 watch(() => [props.lane, props.frame, props.stages, props.flags], draw)
@@ -61,6 +63,7 @@ watch(() => [props.lane, props.frame, props.stages, props.flags], draw)
 onBeforeUnmount(() => {
   resizeObserver?.disconnect()
   themeObserver?.disconnect()
+  systemTheme.removeEventListener('change', draw)
   chart?.dispose()
   chart = null
 })

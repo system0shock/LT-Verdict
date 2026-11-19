@@ -179,6 +179,8 @@ def write_jtl(path: Path, release: dict, profile: dict, scenario: dict) -> str:
                 count = math.ceil(cumulative[index]) - math.ceil(before)
                 for k in range(count):
                     events.append(((index * 125 + k * 1000 // count) % 1000, index))
+                if second == profile["duration_s"] - 1 and count == 0:  # a sample in the last second keeps the snapshot windows inside the run
+                    events.append((990 + index, index))
             events.sort()
             lines = []
             for offset, index in events:

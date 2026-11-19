@@ -338,7 +338,7 @@
   "scenario_mix": "checkout 22%, payment 10%, cart 16%, login 9%, catalog 20%, product 15%, orders 5%, health 3%",
   "environment_dataset": "синтетический набор, 20 сервисов и БД",
   "load_model": "открытая модель, плато 121 зпр/с, ступень +50%",
-  "targets_stages": "разгон 30 мин, плато 1 120 мин, ступень 30 мин, плато 2 90 мин, спад 30 мин, soak 180 мин",
+  "targets_stages": "разгон 30, плато 120, ступень 30, плато 90, спад 30, soak 180 мин",
   "pacing": "постоянная интенсивность без пауз",
   "generator_limits": "синтетический генератор без пределов"
  },
@@ -351,5 +351,6 @@
   "user-svc",
   "auth-svc",
   "fraud-svc"
- ]
+ ],
+ "baseline_release": "2026.09.2"
 }

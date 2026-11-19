@@ -1,6 +1,7 @@
 """Tests of the synthetic 8-hour demo data set generator (tools/demo_dataset.py), tiny profile only."""
 
 import csv
+import subprocess
 import json
 import re
 from decimal import Decimal
@@ -10,6 +11,7 @@ import unittest
 from pathlib import Path
 
 from tools import demo_dataset as dd
+from tools import demo_dataset_build as bld
 
 SCENARIO_PATH = Path(__file__).resolve().parent.parent / "examples" / "demo-8h" / "scenario.json"
 
@@ -108,6 +110,14 @@ class JtlTest(unittest.TestCase):
             values = [int(r["elapsed"]) for r in rows if r["label"] == "POST /checkout" and tail <= int(r["timeStamp"]) - start < soak[3]]
             self.assertGreater(len(values), 50)
             self.assertTrue(check(p95(values)), (release_id, p95(values)))
+
+    def test_jtl_covers_run_end(self):
+        """Resource windows must lie inside the run: the last sample ends at or after the end of the last stage."""
+        for release_id in ("2026.09.3", "2026.09.0"):
+            rows = self.rows(release_id)
+            start = int(rows[0]["timeStamp"])
+            end = max(int(row["timeStamp"]) + int(row["elapsed"]) for row in rows)
+            self.assertGreaterEqual(end - start, self.profile["duration_s"] * 1000, release_id)
 
     def test_release_without_checkout(self):
         labels = {row["label"] for row in self.rows("2026.09.0")}
@@ -454,17 +464,17 @@ RUN_FILES = (
     "arm-B/correlation-plan.json",
 )
 GOLDEN_TINY_2026_09_3 = {
-    "arm-A/correlation-plan.json": "64ceae12fbd858a9df014d5126f209a47e867e0bf6cfbb6c5ae19fdb3c497832",
-    "arm-A/pod-view.json": "d62b9dac9f0a8559b4ae6a0c638913b74f125b5fbb2e2f7017584e4395c4f2a5",
-    "arm-A/resource-snapshot.json": "038a0f39a2d3ede70614285effc7c9e14060a7f39bd69ec37b761391c7f65e7b",
-    "arm-A/trend-plan.json": "236db17d80c87ad428e9d7b403c1698d7ba66a879dbe93f2fecd84581191946b",
-    "arm-B/correlation-plan.json": "5724d50cc078651f54f663a12b8021e3eb9117d63dec9d408b04739119b9dde7",
-    "arm-B/pod-view.json": "f781b5b3fcaf8237a16d5953f53d8fe565f08865c67558f6e0fb46b668712397",
-    "arm-B/resource-snapshot.json": "9d4df8400cbed8028219fde4ba75d020b8b9f92b8672e7eb00f12b67044ed40f",
-    "arm-B/trend-plan.json": "b1a80ed08a8701f6a68f9da78cc1bbb3c3f62f92a92f9da99986c00b9d301cc7",
+    "arm-A/correlation-plan.json": "a7bc4adcb2612b7983f63d56a47d48e717e0d54a0e79bbc2047311fa06917c41",
+    "arm-A/pod-view.json": "bba5fe05564adc66fb59a581d87b7b292435da8f930036205055e43c81bdc550",
+    "arm-A/resource-snapshot.json": "fe6e9e7b0267a91b41d37a523dff0e881b74c12813429bb84e2003b51024415c",
+    "arm-A/trend-plan.json": "e1a8361095ecf2214c6459d23db17ee21ef775fad8493faf7a716d302e2a8f02",
+    "arm-B/correlation-plan.json": "38a9c0067e12c2612af2be129f8ed06e45c1c0b2d9f5f1552821ccf7c372ce3f",
+    "arm-B/pod-view.json": "d92fe849f63fbf9282aa6f6109bf0966db1c50203e2f400db744171ab4f8d884",
+    "arm-B/resource-snapshot.json": "50d29fcae32c77f37878c446de0145255a33b6cea1a89b622787e910391fe849",
+    "arm-B/trend-plan.json": "497c1dabe2169b7db967097843013f43f0643967a069155266f78c944529fb89",
     "load-stages.json": "f10fc3e4f45784964ca3be2814bd6b13e04644b86b8dd7394b9966893167ebc3",
-    "load.jtl": "87b13298dc2b950be86a308c7e7c82b82dca24172cd1b760e523615a8b0866c5",
-    "opensearch-errors.json": "c41c1af9d8cbf78d74faeaae46e4042bc5d0a62fdf7f05728186d6b67150e849",
+    "load.jtl": "10ae2db35a812c72a2cfd4814f5e72610d1d70a5ee2340fc86dd2cf33574083a",
+    "opensearch-errors.json": "0993f5b80b3a39901c41c3555cde8c52afd5857a1b1cf5c14a82e62b31481781",
 }
 
 
@@ -556,6 +566,94 @@ class GenerateTest(unittest.TestCase):
         self.assertEqual(manifest["releases"]["2026.09.3"]["load_sha256"], file_sha(self.out / "2026.09.3" / "load.jtl"))
         self.assertEqual(manifest["files"]["2026.09.3/load.jtl"]["sha256"], file_sha(self.out / "2026.09.3" / "load.jtl"))
         self.assertEqual(manifest["files"]["policy.json"]["bytes"], (self.out / "policy.json").stat().st_size)
+
+
+class BuildTest(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.scenario = dd.load_scenario(SCENARIO_PATH)
+        cls.out = Path("out")
+        cls.data = Path("data")
+        cls.ltv = Path("ltv")
+
+    def matrix(self, **options):
+        return bld.analysis_matrix(self.scenario, self.out, self.data, **options)
+
+    def test_analysis_matrix(self):
+        matrix = self.matrix()
+        self.assertEqual(len(matrix), 14)
+        self.assertEqual([item["release"] for item in matrix][:3], ["2026.08.2"] * 2 + ["2026.08.3"])  # oldest first
+        expected = {("2026.09.3", "A"): 2, ("2026.09.3", "B"): 2, ("2026.09.3", "S"): 2, ("2026.09.2", "S"): 0, ("2026.09.0", "A"): 3, ("2026.09.0", "B"): 3, ("2026.08.3", "B"): 2, ("2026.08.2", "A"): 0}
+        actual = {(item["release"], item["slot"]): item["expected_exit"] for item in matrix}
+        for key, code in expected.items():
+            self.assertEqual(actual[key], code, key)
+        self.assertEqual(sum(1 for item in matrix if item["slot"] == "S"), 2)
+        for item in matrix:
+            args = item["args"]
+            flags = [a for a in args if a.startswith("--")]
+            if item["slot"] == "S":
+                self.assertEqual(flags, ["--policy", "--stages", "--data-dir"])
+                self.assertIn("policy-stages.json", args[args.index("--policy") + 1])
+            else:
+                self.assertEqual(flags, ["--policy", "--resources", "--trend", "--pod-view", "--correlation", "--source-context", "--data-dir"])
+                self.assertIn(f"arm-{item['slot']}", args[args.index("--resources") + 1])
+
+    def test_combined_stages_is_one_switch(self):
+        matrix = self.matrix(combined_stages=True)
+        self.assertEqual(len(matrix), 12)
+        self.assertNotIn("S", {item["slot"] for item in matrix})
+        for item in matrix:
+            self.assertIn("--stages", item["args"])
+            self.assertIn("--resources", item["args"])
+
+    def test_unexpected_exit_code_fails(self):
+        from unittest import mock
+
+        done = subprocess.CompletedProcess([], 4, stdout="", stderr="boom")
+        with mock.patch("subprocess.run", return_value=done):
+            with self.assertRaises(bld.BuildError):
+                bld.run_analyze(self.ltv, ["x.jtl"], 2, {})
+
+    def test_parse_ids_from_stderr(self):
+        from unittest import mock
+
+        analysis, run = "ab" * 32, "jmeter_jtl_csv-" + "cd" * 32
+        done = subprocess.CompletedProcess([], 2, stdout="{}", stderr=f"warning line\nanalysis_id={analysis} run_id={run}\n")
+        with mock.patch("subprocess.run", return_value=done):
+            self.assertEqual(bld.run_analyze(self.ltv, ["x.jtl"], 2, {}), (run, analysis))
+        with mock.patch("subprocess.run", return_value=subprocess.CompletedProcess([], 2, stdout="{}", stderr="no ids")):
+            with self.assertRaises(bld.BuildError):
+                bld.run_analyze(self.ltv, ["x.jtl"], 2, {})
+
+    def test_nonempty_data_dir_refused(self):
+        with tempfile.TemporaryDirectory() as folder:
+            bld.ensure_empty(Path(folder) / "new", False)
+            bld.ensure_empty(Path(folder), False)
+            (Path(folder) / "runs").mkdir()
+            with self.assertRaises(bld.BuildError):
+                bld.ensure_empty(Path(folder), False)
+            bld.ensure_empty(Path(folder), True)
+
+    def test_release_bodies(self):
+        ids = {"A": ("jmeter_jtl_csv-" + "1" * 64, "a" * 64), "B": ("jmeter_jtl_csv-" + "1" * 64, "b" * 64)}
+        release = release_of(self.scenario, "2026.09.3")
+        body = bld.release_body(self.scenario, release, ids)
+        self.assertEqual(set(body), {"series", "label", "run_id", "analyses", "profile", "notes"})
+        self.assertEqual((body["series"], body["label"], body["run_id"]), ("Checkout", "2026.09.3", "jmeter_jtl_csv-" + "1" * 64))
+        self.assertEqual(body["analyses"], [{"analysis_id": "a" * 64}, {"analysis_id": "b" * 64}])
+        self.assertEqual(set(body["profile"]), {"scenario_mix", "environment_dataset", "load_model", "targets_stages", "pacing", "generator_limits"})
+
+    def test_release_profile_fits_the_text_limit(self):
+        for name, value in self.scenario["release_profile"].items():
+            self.assertLessEqual(len(value.encode("utf-8")), 128, name)
+
+    def test_baseline_bodies(self):
+        run = "jmeter_jtl_csv-" + "2" * 64
+        ids = {"A": (run, "a" * 64), "B": (run, "b" * 64), "S": (run, "c" * 64)}
+        bodies = bld.baseline_bodies(self.scenario, "2026.09.2", ids)
+        self.assertEqual(len(bodies), 3)
+        for body, slot in zip(bodies, "ABS"):
+            self.assertEqual(body, {"mode": "manual", "series": "Checkout", "reference": {"run_id": run, "analysis_id": ids[slot][1]}})
 
 
 if __name__ == "__main__":

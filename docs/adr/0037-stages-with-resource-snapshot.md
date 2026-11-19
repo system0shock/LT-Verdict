@@ -144,6 +144,11 @@ resource_to   = snapshot.start + floor((hi - snapshot.start) / step) * step
 переиграть со стадиями через `--resources`; нужен повторный онлайн-запрос со
 стадиями (D7) либо снимок без `windows`. Это вынесено в вопросы владельцу.
 
+Порядок чтения в CLI: чтобы отказ `STAGES_RESOURCES_CONFLICT` шёл в общем порядке
+проверок стадий и до чтения политики из stdin, со `--stages` файл снимка читается
+раньше политики. Поэтому со стадиями недопустимый снимок сообщается раньше
+недопустимой политики; без `--stages` порядок чтения прежний.
+
 ### D4. Платформенные правила `policy.v1` (ADR 0018) со стадиями и снимком
 
 Платформенные правила разворачиваются по снимку как сегодня (`expandPlatformRules`,
@@ -309,7 +314,7 @@ ADR 0018, раздел 7.) Этот ADR расхождение не трогае
 | `capacity-plan.v1` | нет | — |
 | Identity | новых полей нет; `window-policy-evaluation` один раз в `modules` | `analysis_id` новый только у сочетания |
 | Ключ сопоставимости | кода не меняет | сочетание несовместимо с каждым режимом по отдельности |
-| CLI `ltv analyze` | `--stages` с `--resources` (снимок без окон) и с `--source` разрешены | ослабление отказа |
+| CLI `ltv analyze` | `--stages` с `--resources` (снимок без окон) и с `--source` разрешены; со `--stages` снимок читается раньше политики (ошибка снимка сообщается раньше ошибки политики) | ослабление отказа; порядок чтения меняется только со `--stages` |
 | API задания анализа | часть `stages` с `resource_snapshot` (без окон) и с `source_request` разрешена | ослабление отказа |
 | Коды ошибок | новые: `STAGE_WINDOW_NO_FULL_CELLS`, `STAGES_CORRELATION_CONFLICT`, `STAGES_TREND_CONFLICT`; новая причина покрытия `STAGE_WINDOW_SNAPSHOT_PARTIAL`; `STAGES_RESOURCES_CONFLICT` с суженным условием (снимок с `windows`); `STAGES_SOURCE_CONFLICT` больше не выдаётся; `STAGES_CAPACITY_CONFLICT` прежний; стадии с планом корреляций или тренда без снимка получают `STAGES_CORRELATION_CONFLICT`/`STAGES_TREND_CONFLICT` вместо `DIAGNOSTIC_RESOURCE_REQUIRED`/`TREND_RESOURCE_REQUIRED` (в ядре, CLI и API; в API это `422 INVALID_STAGES` вместо `422 INVALID_DIAGNOSTICS`/`INVALID_TREND_PLAN`) | клиент, ждавший `STAGES_RESOURCES_CONFLICT` на любой снимок, теперь получает анализ; отказ корреляций и тренда со стадиями меняет только код |
 | UI типы | `ui/src/types.stage-items.generated.ts` регенерируется (три поля) | добавочное |
@@ -435,6 +440,16 @@ ADR 0018, раздел 7.) Этот ADR расхождение не трогае
    информационная причина покрытия `STAGE_WINDOW_SNAPSHOT_PARTIAL`
    (`analysis_coverage = INCOMPLETE`, вердикт по данным). Исполнено по рекомендации,
    ждёт слова владельца.
+
+   Факты ревью PR B для решения: со снимком, обрезанным до 0–75 с (стадия `steady`
+   40–100 с), прогон завершается кодом `0`, `summary.txt` показывает
+   `rules: 3 (PASS 3, FAIL 0, NO_VERDICT 0)`, `junit.xml` имеет `failures="0"`, и ни
+   тот, ни другой не упоминают `INCOMPLETE`. Неполное покрытие видно только в
+   `result.json` (`analysis_coverage`, `resource_partial`), HTML-отчёте и UI. Тот же
+   результат дал снимок с началом сетки на 60 с. Варианты: (а) печатать причины
+   покрытия в `summary.txt` и в `<system-out>` gate `junit.xml` (меняет байты этих
+   файлов у всех анализов с неполным покрытием); (б) отвергать такой анализ новым
+   кодом. Пока не сделано ни то, ни другое.
 2. Снимок с собственными `windows` вместе со стадиями (D3): остаётся ошибкой
    `STAGES_RESOURCES_CONFLICT` с суженным условием; особого случая для единственного
    окна на всю сетку нет. Исполнено по рекомендации, ждёт слова владельца.

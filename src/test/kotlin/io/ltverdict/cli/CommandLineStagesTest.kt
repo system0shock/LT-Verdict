@@ -2,6 +2,8 @@ package io.ltverdict.cli
 
 import io.ltverdict.core.sha256Hex
 import io.ltverdict.sources.ONLINE_LOAD
+import io.ltverdict.sources.ONLINE_SOURCE_REQUEST
+import io.ltverdict.sources.OnlineSourceFixture
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
@@ -355,6 +357,61 @@ class CommandLineStagesTest {
                 .jsonArray
                 .map { it.type() }
         assertTrue("stage_binding" in types && "opensearch_errors" in types, types.toString())
+    }
+
+    @Test
+    fun `stages with an online request analyze on a snapshot without windows`() {
+        OnlineSourceFixture().use { fixture ->
+            val input = tempDir.resolve("online.jtl").also { Files.writeString(it, ONLINE_LOAD) }
+            val connections = tempDir.resolve("connections.json").also { Files.writeString(it, fixture.profilesJson()) }
+            val request = tempDir.resolve("source.json").also { Files.writeString(it, ONLINE_SOURCE_REQUEST) }
+            val window = stagesFile("online", """{"id":"steady","role":"steady","from_offset_ms":0,"to_offset_ms":1000}""")
+            val dir = Path.of(data("online"))
+
+            val result =
+                run(
+                    "analyze",
+                    input.toString(),
+                    "--stages",
+                    window,
+                    "--connections",
+                    connections.toString(),
+                    "--source",
+                    request.toString(),
+                    "--data-dir",
+                    dir.toString(),
+                )
+
+            // the stub answers 0.9 against the source rule cpu-high (gt 0.8): a resource FAIL, exit 2
+            assertEquals(2, result.exitCode, result.stderr)
+            assertEquals(1, fixture.requests.get())
+            val evidence =
+                Json
+                    .parseToJsonElement(result.stdout)
+                    .jsonObject
+                    .getValue("evidence")
+                    .jsonArray
+                    .map { it.jsonObject }
+            assertEquals(
+                "declared_stages",
+                evidence
+                    .single { it.type() == "resource_binding" }
+                    .getValue("mode")
+                    .jsonPrimitive.content,
+            )
+            val steady =
+                evidence
+                    .single { it.type() == "stage_binding" }
+                    .getValue("stages")
+                    .jsonArray
+                    .single()
+                    .jsonObject
+            assertEquals("1767225600000", steady.getValue("resource_from_epoch_ms").jsonPrimitive.content)
+            assertEquals("1767225601000", steady.getValue("resource_to_epoch_ms").jsonPrimitive.content)
+            val snapshots = Files.walk(dir).use { files -> files.filter { it.fileName.toString() == "resource-snapshot.json" }.toList() }
+            assertEquals(1, snapshots.size)
+            assertFalse("windows" in Json.parseToJsonElement(Files.readString(snapshots.single())).jsonObject)
+        }
     }
 
     @Test

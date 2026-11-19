@@ -5,6 +5,13 @@ import io.ltverdict.core.EngineConfig
 import io.ltverdict.core.MAX_LOAD_STAGES_BYTES
 import io.ltverdict.core.sha256Hex
 import io.ltverdict.jobs.AnalysisJobs
+import io.ltverdict.sources.ONLINE_LOAD
+import io.ltverdict.sources.ONLINE_SOURCE_REQUEST
+import io.ltverdict.sources.OnlineSourceFixture
+import io.ltverdict.sources.PromqlSource
+import io.ltverdict.sources.SourceHttp
+import io.ltverdict.sources.analyzeWithSources
+import io.ltverdict.sources.readSourceProfiles
 import io.ltverdict.storage.DataDirectory
 import io.ltverdict.storage.RunBundleStore
 import kotlinx.serialization.json.Json
@@ -221,6 +228,62 @@ class LocalApiStagesTest {
                 detail(api.createJob(runId, stages = stages, resources = SNAPSHOT, trend = trend)).let { it.first to it.second },
             )
         }
+
+    @Test
+    fun `a job with stages and an online request analyzes on a snapshot without windows`() {
+        OnlineSourceFixture().use { fixture ->
+            val profiles = readSourceProfiles(fixture.profilesJson().byteInputStream())
+            val source = PromqlSource(profiles, SourceHttp(profiles))
+            val window =
+                """{"schema_version":"load-stages.v1","stages":[{"id":"steady","role":"steady","from_offset_ms":0,"to_offset_ms":1000}]}"""
+            DataDirectory.open(tempDir.resolve("data-online")).use { directory ->
+                val store = RunBundleStore(directory)
+                val service = AnalysisService(store, EngineConfig())
+                AnalysisJobs(1) { request, progress, cancelled -> analyzeWithSources(service, request, source, progress, cancelled) }
+                    .use { jobs ->
+                        startLocalServer(LocalApiContext(store, jobs, profiles), openBrowser = false).use { server ->
+                            val api = ApiClient(server.origin)
+                            api.bootstrap()
+                            val input = store.acceptInput(ONLINE_LOAD.byteInputStream(), "online.jtl")
+
+                            val accepted =
+                                api.createJob(
+                                    input.runId,
+                                    stages = window.encodeToByteArray(),
+                                    source = ONLINE_SOURCE_REQUEST.encodeToByteArray(),
+                                )
+
+                            assertEquals(202, accepted.statusCode(), accepted.body())
+                            val analysisId = complete(api, accepted)
+                            assertEquals(1, fixture.requests.get())
+                            val stored = checkNotNull(store.readAnalysis(input.runId, analysisId)).path
+                            assertFalse(
+                                "windows" in Json.parseToJsonElement(Files.readString(stored.resolve("resource-snapshot.json"))).jsonObject,
+                            )
+                            val evidence =
+                                result(store, input.runId, analysisId).getValue("evidence").jsonArray.map { it.jsonObject }
+                            assertEquals(
+                                "declared_stages",
+                                evidence
+                                    .single { it["type"]?.jsonPrimitive?.content == "resource_binding" }
+                                    .getValue(
+                                        "mode",
+                                    ).jsonPrimitive.content,
+                            )
+                            val steady =
+                                evidence
+                                    .single { it["type"]?.jsonPrimitive?.content == "stage_binding" }
+                                    .getValue("stages")
+                                    .jsonArray
+                                    .single()
+                                    .jsonObject
+                            assertEquals("1767225600000", steady.getValue("resource_from_epoch_ms").jsonPrimitive.content)
+                            assertEquals("1767225601000", steady.getValue("resource_to_epoch_ms").jsonPrimitive.content)
+                        }
+                    }
+            }
+        }
+    }
 
     @Test
     fun `a steady stage past the run end fails the job with STAGE_OUTSIDE_RUN`() =

@@ -38,6 +38,8 @@ internal fun renderAsciiDocReport(
             append("$WINDOW_SHARE_LABEL\n")
             literal(it)
         }
+        val ingestWarnings = evidence.filter { it.string("type") == "diagnostic" && it.string("code") == "JMETER_CSV_TRUNCATED_TAIL" }
+        if (ingestWarnings.isNotEmpty()) objectsSection("Предупреждения входных данных", ingestWarnings)
         metricsSection("Overall metrics", metrics.filter { it.scopeKind() == "overall" })
         metricsSection("Transaction metrics", metrics.filter { it.scopeKind() == "transaction" })
         errorGroupsView(result, errorGroups)?.let { view ->

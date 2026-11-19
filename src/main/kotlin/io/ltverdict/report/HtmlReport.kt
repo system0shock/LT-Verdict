@@ -82,8 +82,18 @@ internal fun renderHtmlReport(
             "<dt>Вердикт политики</dt><dd>${result.value("policy_verdict")}</dd>" +
             stageScopeRow(notice) + windowShareRow(result) +
             "<dt>Покрытие данных</dt><dd>${result.objectValue("analysis_coverage", "status")}</dd></dl>"
+    val ingestWarnings = evidence.filter { it.string("type") == "diagnostic" && it.text("code") == "JMETER_CSV_TRUNCATED_TAIL" }
+    val warningBlock =
+        if (ingestWarnings.isEmpty()) {
+            ""
+        } else {
+            "<section><h2>Предупреждения входных данных</h2><ul>" +
+                ingestWarnings.joinToString("") { "<li><code>${it.value("code")}</code>: ${it.value("message")}</li>" } +
+                "</ul></section>"
+        }
     val html =
-        head + summary + stageBlock(notice) + verdictBlock(result, evidence) + diagnosticsBlock(result, evidence) + runSection(timeline) +
+        head + summary + warningBlock + stageBlock(notice) + verdictBlock(result, evidence) + diagnosticsBlock(result, evidence) +
+            runSection(timeline) +
             overallSection(evidence, notice) +
             errorGroupsSection(errorGroupsView(result, errorGroups)) + rulesSection(evidence) + transactionsSection(result, evidence) +
             changes + limitationsBlock(result, evidence) + appendix + "</main></body></html>"

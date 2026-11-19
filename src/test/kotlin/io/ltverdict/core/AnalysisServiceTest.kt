@@ -35,6 +35,31 @@ class AnalysisServiceTest {
     lateinit var tempDir: Path
 
     @Test
+    fun `truncated JMeter tail reaches diagnostic evidence without blocking PASS`() =
+        withService { store, service ->
+            val prefix = "timeStamp,elapsed,label,success\n1767225600000,100,one,true\n"
+            val tail = "1767225600100,100,Привет"
+            val input = accept(store, (prefix + tail).encodeToByteArray(), "truncated.jtl")
+
+            val outcome = service.analyze(AnalysisRequest(input, passPolicy()))
+            val result = Json.parseToJsonElement(outcome.canonicalResult.decodeToString()).jsonObject
+            val diagnostic =
+                result
+                    .getValue("evidence")
+                    .jsonArray
+                    .map { it.jsonObject }
+                    .single { it.value("type") == "diagnostic" }
+
+            assertEquals("VALID", result.value("run_validity"))
+            assertEquals("PASS", result.value("policy_verdict"))
+            assertEquals("COMPLETE", result.getValue("analysis_coverage").jsonObject.value("status"))
+            assertEquals("JMETER_CSV_TRUNCATED_TAIL", diagnostic.value("code"))
+            assertEquals(prefix.encodeToByteArray().size.toString(), diagnostic.value("source_offset"))
+            assertTrue(diagnostic.value("message").contains("discarded_bytes=${tail.encodeToByteArray().size}"))
+            assertTrue(result.getValue("findings").jsonArray.any { it.jsonObject.value("code") == "JMETER_CSV_TRUNCATED_TAIL" })
+        }
+
+    @Test
     fun `controller parents are excluded from overall counts and evaluated by transaction policy`() =
         withService { store, service ->
             val input = accept(store, controllerCsv("child").encodeToByteArray(), "parents.jtl")

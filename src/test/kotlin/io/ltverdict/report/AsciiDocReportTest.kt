@@ -6,6 +6,18 @@ import org.junit.jupiter.api.Test
 
 class AsciiDocReportTest {
     @Test
+    fun `truncated tail warning and discarded bytes are visible outside raw JSON`() {
+        val result =
+            """{"run_validity":"VALID","policy_verdict":"PASS","evidence":[{"type":"diagnostic","id":"d","code":"JMETER_CSV_TRUNCATED_TAIL","message":"Неполная последняя запись отброшена; discarded_bytes=17","source_offset":42}],"findings":[]}"""
+        val report = renderAsciiDocReport(result.encodeToByteArray(), "a").decodeToString()
+        val visible = report.substringBefore("<h2>Приложение</h2>").substringBefore("== Canonical JSON")
+
+        assertTrue(visible.contains("JMETER_CSV_TRUNCATED_TAIL"))
+        assertTrue(visible.contains("discarded_bytes=17"))
+        assertTrue(visible.contains("Неполная последняя запись"))
+    }
+
+    @Test
     fun `diagnostic sections preserve uncertainty and literal acquired strings`() {
         val result =
             """

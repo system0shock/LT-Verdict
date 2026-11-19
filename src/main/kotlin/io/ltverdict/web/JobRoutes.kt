@@ -442,16 +442,22 @@ private suspend fun bindJob(
     val podViewSeen = job.podViewSeen
     val invalidParts = job.invalidParts
     if (invalidParts || runId == null || !RUN_ID.matches(runId)) malformed("Job multipart body is invalid")
-    // ADR 0030, R3: stages and a capacity plan, a snapshot or an online request are two sources of windows. Checked first, in
-    // the order of the ADR table, before the run is resolved and before the online request is checked against the manual inputs.
+    // ADR 0030, R3, narrowed by ADR 0037 (D3, D8, D9): stages meet a snapshot without windows and an online request. A capacity
+    // plan, a snapshot that declares windows, a correlation plan and a trend plan are refused in this order (as in the core and the
+    // CLI), before the run is resolved and before the online request is checked against the manual inputs.
     if (job.stages != null) {
         if (capacitySeen) stagesConflict("STAGES_CAPACITY_CONFLICT", "/capacity_plan", "Stages cannot be combined with a capacity plan")
-        if (resourcesSeen) {
-            stagesConflict("STAGES_RESOURCES_CONFLICT", "/resource_snapshot", "Stages cannot be combined with a resource snapshot")
+        if (resources?.snapshot?.windows?.isNotEmpty() == true) {
+            stagesConflict(
+                "STAGES_RESOURCES_CONFLICT",
+                "/resource_snapshot",
+                "Stages cannot be combined with a resource snapshot that declares its own windows",
+            )
         }
-        if (sourceRequest != null) {
-            stagesConflict("STAGES_SOURCE_CONFLICT", "/source_request", "Stages cannot be combined with an online source request")
+        if (diagnosticsSeen) {
+            stagesConflict("STAGES_CORRELATION_CONFLICT", "/correlation_plan", "Stages cannot be combined with a correlation plan")
         }
+        if (trendSeen) stagesConflict("STAGES_TREND_CONFLICT", "/trend_plan", "Stages cannot be combined with a trend plan")
     }
     sourceRequest?.let { selection ->
         if (resourcesSeen ||

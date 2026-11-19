@@ -4,6 +4,8 @@ import com.sun.net.httpserver.HttpServer
 import io.ltverdict.core.AnalysisOutcome
 import io.ltverdict.core.AnalysisRequest
 import io.ltverdict.core.AnalysisService
+import io.ltverdict.core.CapacityPlanValidation
+import io.ltverdict.core.DiagnosticValidation
 import io.ltverdict.core.EngineConfig
 import io.ltverdict.core.LoadStagesValidation
 import io.ltverdict.core.RUN_PERIOD_RECOGNITION_METHOD
@@ -11,11 +13,17 @@ import io.ltverdict.core.RUN_PERIOD_SCHEMA_VERSION
 import io.ltverdict.core.RUN_PERIOD_STATUS_RECOGNIZED
 import io.ltverdict.core.ResourceAggregation
 import io.ltverdict.core.ResourceRole
+import io.ltverdict.core.ResourceValidation
 import io.ltverdict.core.RunPeriodV1
+import io.ltverdict.core.TrendPlanValidation
 import io.ltverdict.core.canonicalJson
 import io.ltverdict.core.recognizeRunPeriod
 import io.ltverdict.core.runPeriodJson
+import io.ltverdict.core.validateCapacityPlan
+import io.ltverdict.core.validateDiagnosticPlan
 import io.ltverdict.core.validateLoadStages
+import io.ltverdict.core.validateResourceSnapshot
+import io.ltverdict.core.validateTrendPlan
 import io.ltverdict.storage.AcceptedInput
 import io.ltverdict.storage.DataDirectory
 import io.ltverdict.storage.RunBundleStore
@@ -626,6 +634,44 @@ class SourceAnalysisTest {
                 assertFalse(coverage.toString().contains("STAGE_WINDOW_SNAPSHOT_PARTIAL"), coverage.toString())
                 assertEquals("declared_stages", bindingEvidence(outcome).getValue("mode").jsonPrimitive.content)
                 assertEquals("auto", sourceSummary(outcome).getValue("window_origin").jsonPrimitive.content)
+            }
+        }
+    }
+
+    @Test
+    fun `stages refuse a capacity plan, a snapshot with windows, a correlation plan and a trend plan before the source is called`() {
+        RecordingPrometheus().use { fixture ->
+            withService { store, service, _ ->
+                val input = accept(store, contiguousCsv(RUN_START, 30), "stages-refused.jtl")
+                val capacity =
+                    validateCapacityPlan(Files.newInputStream(Path.of("docs/contracts/capacity/v1/examples/valid/rps.json")))
+                        as CapacityPlanValidation.Valid
+                val windowed =
+                    validateResourceSnapshot(Files.newInputStream(Path.of("docs/contracts/resources/v1/examples/valid/basic.json")))
+                        as ResourceValidation.Valid
+                val correlation =
+                    validateDiagnosticPlan(Files.newInputStream(Path.of("docs/contracts/diagnostics/v1/examples/valid/basic.json")))
+                        as DiagnosticValidation.Valid
+                val trend =
+                    validateTrendPlan(Files.newInputStream(Path.of("docs/contracts/trend/v1/examples/valid/basic.json")))
+                        as TrendPlanValidation.Valid
+                val staged = AnalysisRequest(input, null, sourceRequest = EXPLICIT_V3, stages = STEADY_STAGES)
+
+                fun refusal(request: AnalysisRequest): String? =
+                    assertThrows(IllegalArgumentException::class.java) { analyzeWithSources(service, request, fixture.source()) }.message
+
+                // ADR 0037: the order of the core, the CLI and the API, before the online request reaches the source
+                assertEquals(
+                    "STAGES_CAPACITY_CONFLICT",
+                    refusal(staged.copy(capacity = capacity, resources = windowed, diagnostics = correlation, trend = trend)),
+                )
+                assertEquals(
+                    "STAGES_RESOURCES_CONFLICT",
+                    refusal(staged.copy(resources = windowed, diagnostics = correlation, trend = trend)),
+                )
+                assertEquals("STAGES_CORRELATION_CONFLICT", refusal(staged.copy(diagnostics = correlation, trend = trend)))
+                assertEquals("STAGES_TREND_CONFLICT", refusal(staged.copy(trend = trend)))
+                assertEquals(0, fixture.requests.get(), "the source is not called")
             }
         }
     }

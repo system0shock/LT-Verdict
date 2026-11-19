@@ -14,6 +14,7 @@ import io.ltverdict.core.SourceSummaryEvidence
 import io.ltverdict.core.canonicalJson
 import io.ltverdict.core.recognitionMethod
 import io.ltverdict.core.recognizeRunPeriod
+import io.ltverdict.core.requireStageCombination
 import io.ltverdict.core.runPeriodFromJson
 import io.ltverdict.core.runPeriodJson
 import io.ltverdict.core.sha256Hex
@@ -118,7 +119,9 @@ internal fun analyzeWithSources(
     cellBudget: Long = MAX_RESOURCE_CELLS,
 ): AnalysisOutcome {
     val windowed = request.sourceRequest ?: return service.analyze(request, processedBytes, checkCancelled, beforePublish)
-    // ADR 0037, D7: stages are allowed with an online request; the snapshot is built without windows (resolveWindow).
+    // ADR 0037, D7: stages are allowed with an online request; the snapshot is built without windows (resolveWindow). Their
+    // refusals come first, in the order of the core, the CLI and the API, before the source is looked up or called.
+    requireStageCombination(request)
     require(request.resources == null && request.diagnostics == null && request.sourceAcquisition == null) { "SOURCE_INPUT_CONFLICT" }
     val configured = requireNotNull(source) { "SOURCE_NOT_CONFIGURED" }
     val selection = resolveWindow(service, request, windowed, configured.profiles, cellBudget, checkCancelled)

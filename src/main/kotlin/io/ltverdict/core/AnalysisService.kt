@@ -56,6 +56,25 @@ internal data class AnalysisOutcome(
     val analysisDirectory: Path,
 )
 
+/**
+ * ADR 0030, R3, narrowed by ADR 0037 (D3, D8, D9): two sources of windows are an error, not a priority. Stages meet a snapshot
+ * only when the snapshot declares no windows. Refused in this order: a capacity plan, a snapshot that declares windows, a
+ * correlation plan, a trend plan (the CLI and the API check the same order). An online request is allowed: with stages
+ * analyzeWithSources builds its snapshot without windows (D7), and checks this first, before the source is called.
+ */
+internal fun requireStageCombination(request: AnalysisRequest) {
+    if (request.stages == null) return
+    require(request.capacity == null) { "STAGES_CAPACITY_CONFLICT" }
+    require(
+        request.resources
+            ?.snapshot
+            ?.windows
+            .isNullOrEmpty(),
+    ) { "STAGES_RESOURCES_CONFLICT" }
+    require(request.diagnostics == null) { "STAGES_CORRELATION_CONFLICT" }
+    require(request.trend == null) { "STAGES_TREND_CONFLICT" }
+}
+
 internal class AnalysisService(
     internal val store: AnalysisArtifacts,
     private val engineConfig: EngineConfig,
@@ -78,21 +97,7 @@ internal class AnalysisService(
                 else -> AnalysisMode.STANDARD
             }
         checkCancelled()
-        // ADR 0030, R3, narrowed by ADR 0037 (D3, D8, D9): two sources of windows are an error, not a priority. Stages meet a
-        // snapshot only when the snapshot declares no windows. Refused in this order: a capacity plan, a snapshot that declares
-        // windows, a correlation plan, a trend plan (the CLI and the API check the same order). An online request is allowed: with
-        // stages analyzeWithSources builds its snapshot without windows (D7).
-        if (request.stages != null) {
-            require(request.capacity == null) { "STAGES_CAPACITY_CONFLICT" }
-            require(
-                request.resources
-                    ?.snapshot
-                    ?.windows
-                    .isNullOrEmpty(),
-            ) { "STAGES_RESOURCES_CONFLICT" }
-            require(request.diagnostics == null) { "STAGES_CORRELATION_CONFLICT" }
-            require(request.trend == null) { "STAGES_TREND_CONFLICT" }
-        }
+        requireStageCombination(request)
         require(request.sourceRequest == null) { "SOURCE_ACQUISITION_REQUIRED" }
         request.sourceAcquisition?.let {
             require(request.resources?.semanticSha256 == it.snapshot?.semanticSha256) { "SOURCE_SNAPSHOT_MISMATCH" }

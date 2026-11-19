@@ -416,9 +416,9 @@ class StageWindowPolicyTest {
                 "SOURCE_NOT_CONFIGURED",
                 message { analyzeWithSources(service, AnalysisRequest(input, null, sourceRequest = online), null) },
             )
-            // ADR 0037, D7: an online request with a snapshot stays a source input conflict, with or without stages
+            // ADR 0037: with stages a snapshot that declares windows is refused first, as in the CLI and the API
             assertEquals(
-                "SOURCE_INPUT_CONFLICT",
+                "STAGES_RESOURCES_CONFLICT",
                 message {
                     analyzeWithSources(
                         service,

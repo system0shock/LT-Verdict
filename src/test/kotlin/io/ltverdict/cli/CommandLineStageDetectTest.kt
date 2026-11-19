@@ -30,7 +30,7 @@ class CommandLineStageDetectTest {
 
     private val anchorExplanation =
         listOf(
-            "stage_proposal status=DETECTED method=rps-plateau-segmentation.v1 steady_steps=top confidence=HIGH calibrated=false",
+            "stage_proposal status=DETECTED method=rps-plateau-segmentation.v2 steady_steps=top confidence=HIGH calibrated=false",
             "run start_epoch_ms=1767225600000 end_epoch_ms=1767225719800 cell_ms=5000 cells=23 noise_rps=0.200",
             "segment from_offset_ms=0 to_offset_ms=40000 kind=FLAT level_rps=2.000 drift=0.000 residual_cv=0.000",
             "segment from_offset_ms=40000 to_offset_ms=100000 kind=FLAT level_rps=10.000 drift=0.000 residual_cv=0.000",
@@ -124,7 +124,7 @@ class CommandLineStageDetectTest {
         assertTrue(result.stderr.contains("\nwarning code=LEAD_IN_IDLE stage_id=lead-in at_offset_ms=0 duration_ms=30000\n"), result.stderr)
         assertTrue(
             result.stderr.startsWith(
-                "stage_proposal status=DETECTED method=rps-plateau-segmentation.v1 steady_steps=top confidence=MEDIUM",
+                "stage_proposal status=DETECTED method=rps-plateau-segmentation.v2 steady_steps=top confidence=MEDIUM",
             ),
         )
         val proposal = Files.writeString(tempDir.resolve("setup-stages.json"), result.stdout)
@@ -204,7 +204,7 @@ class CommandLineStageDetectTest {
         assertEquals("", result.stdout)
         assertFalse(Files.exists(out))
         assertEquals(
-            "stage_proposal status=NOT_DETECTED method=rps-plateau-segmentation.v1 steady_steps=top reason=NO_PLATEAU",
+            "stage_proposal status=NOT_DETECTED method=rps-plateau-segmentation.v2 steady_steps=top reason=NO_PLATEAU",
             result.stderr.lineSequence().first(),
         )
         assertTrue(result.stderr.contains("\ndetail steady_share="), result.stderr)
@@ -289,7 +289,7 @@ class CommandLineStageDetectTest {
 
         assertEquals(4, slice0.exitCode, slice0.stderr)
         assertEquals(
-            "stage_proposal status=NOT_DETECTED method=rps-plateau-segmentation.v1 steady_steps=top reason=INPUT_INVALID",
+            "stage_proposal status=NOT_DETECTED method=rps-plateau-segmentation.v2 steady_steps=top reason=INPUT_INVALID",
             slice0.stderr.lineSequence().first(),
         )
         assertEquals(4, analyzed.exitCode, analyzed.stderr)
@@ -308,16 +308,26 @@ class CommandLineStageDetectTest {
     @Test
     fun `the proposal gives the verdict of the careful window`() {
         // Second review round (R2-R4): the careful engineer's window is the ground truth of the generator. R1 (a collapse at the
-        // end) is not here: from the request rate alone a collapse and a planned ramp-down look the same (ADR 0036, D4).
+        // end) joined with ADR 0036, D14: from the request rate alone a collapse and a planned ramp-down look the same, with
+        // latency and errors they do not, and the collapse stays in the window as the careful engineer keeps it.
+        val stepDownAbrupt = listOf(60_000L until 1_860_000L, 1_860_000L until 1_980_000L)
+        val stepDown120 = listOf(60_000L until 1_860_000L, 1_980_000L until 2_100_000L)
         val cases =
             listOf(
                 Triple(StageProfiles.equalDips, "all", listOf(0L until 1_680_000L)),
                 Triple(StageProfiles.equalDips, "top", listOf(0L until 1_680_000L)),
                 Triple(StageProfiles.riseAbort, "all", listOf(60_000L until 660_000L)),
                 Triple(StageProfiles.riseAbort, "top", listOf(60_000L until 660_000L)),
-                Triple(StageProfiles.stepDownAbrupt, "all", listOf(60_000L until 1_860_000L, 1_860_000L until 1_980_000L)),
-                Triple(StageProfiles.stepDown120, "all", listOf(60_000L until 1_860_000L, 1_980_000L until 2_100_000L)),
-            )
+                Triple(StageProfiles.stepDownAbrupt, "all", stepDownAbrupt),
+                Triple(StageProfiles.stepDownAbrupt, "top", stepDownAbrupt),
+                Triple(StageProfiles.stepDown120, "all", stepDown120),
+                Triple(StageProfiles.stepDown120, "top", stepDown120),
+            ) +
+                listOf(StageProfiles.collapse(600, 20.0), StageProfiles.collapse(300, 40.0), StageProfiles.soakCollapse, StageProfiles.hang)
+                    .flatMap { profile ->
+                        // The plateau and everything after it, to the end of the run.
+                        listOf("all", "top").map { Triple(profile, it, listOf(120_000L until profile.seconds * 1000L + 60_000L)) }
+                    }
         cases.forEachIndexed { index, (profile, mode, careful) ->
             val jtl = profile.writeJtl(tempDir.resolve("careful-$index.jtl"))
             val detected = run("stages", "detect", jtl.toString(), "--steady-steps", mode)
@@ -329,7 +339,82 @@ class CommandLineStageDetectTest {
             val byCareful = verdict(jtl, declared, "c$index")
 
             assertEquals(byCareful, byProposal, "${profile.name} $mode:\n${detected.stderr}")
+            if (profile.name.startsWith("R1 collapse") || profile == StageProfiles.soakCollapse) {
+                assertEquals("FAIL", byProposal, "${profile.name} $mode:\n${detected.stderr}")
+            }
         }
+    }
+
+    @Test
+    fun `a degraded tail prints the judged stretch and its facts`() {
+        val jtl = StageProfiles.collapse(600, 20.0).writeJtl(tempDir.resolve("collapse.jtl"))
+
+        val result = run("stages", "detect", jtl.toString())
+
+        assertEquals(0, result.exitCode, result.stderr)
+        val lines = result.stderr.lines()
+        assertTrue(lines.first().startsWith("stage_proposal status=DETECTED method=rps-plateau-segmentation.v2 "), result.stderr)
+        val stretch = lines.single { it.startsWith("stretch ") }
+        assertTrue(
+            Regex(
+                "stretch kind=TAIL from_offset_ms=\\d+ to_offset_ms=\\d+ reference_id=steady samples=\\d+ failures=\\d+ " +
+                    "error_ratio=0\\.\\d{3} mean_ms=\\d+\\.\\d{3} reference_samples=\\d+ reference_failures=0 " +
+                    "reference_error_ratio=0\\.000 reference_mean_ms=100\\.000 verdict=DEGRADED",
+            ).matches(stretch),
+            stretch,
+        )
+        val warning = lines.single { it.startsWith("warning code=DEGRADED_TAIL_KEPT ") }
+        assertTrue(
+            Regex(
+                "warning code=DEGRADED_TAIL_KEPT stage_id=steady at_offset_ms=\\d+ from_rps=\\S+ to_rps=\\S+ duration_ms=\\d+ " +
+                    "error_ratio=0\\.\\d{3} mean_ms=\\d+\\.\\d{3} reference_id=steady reference_error_ratio=0\\.000 " +
+                    "reference_mean_ms=100\\.000",
+            ).matches(warning),
+            warning,
+        )
+        assertTrue(lines.indexOf(stretch) < lines.indexOf(warning) && lines[lines.indexOf(stretch) - 1].startsWith("stage "))
+        assertFalse(Regex("\"id\":\"ramp-down\"").containsMatchIn(result.stdout), result.stdout)
+    }
+
+    @Test
+    fun `a stretch too small to judge says so on its warning`() {
+        val profile =
+            StageProfile(
+                "too few samples",
+                listOf(
+                    io.ltverdict.core.RatePiece(600, 0.0, 0.5),
+                    io.ltverdict.core.RatePiece(10_800, 0.5, 0.5),
+                    io.ltverdict.core.RatePiece(360, 0.5, 0.0, 2000, 0.30),
+                ),
+                poissonSeed = 11L,
+            )
+        val result = run("stages", "detect", profile.writeJtl(tempDir.resolve("few.jtl")).toString())
+
+        assertEquals(0, result.exitCode, result.stderr)
+        assertTrue(
+            Regex("warning code=LONG_RAMP_DOWN .* duration_ms=\\d+ degradation=NOT_JUDGED samples=\\d+ reference_samples=\\d+\n")
+                .containsMatchIn(result.stderr),
+            result.stderr,
+        )
+        assertTrue(Regex("\nstretch kind=TAIL .* verdict=NOT_JUDGED\n").containsMatchIn(result.stderr), result.stderr)
+    }
+
+    @Test
+    fun `row order does not change a judged proposal`() {
+        val jtl = StageProfiles.degradedGap.writeJtl(tempDir.resolve("gap.jtl"))
+        val lines = Files.readAllLines(jtl)
+        val shuffled = tempDir.resolve("gap-shuffled.jtl")
+        val rows = lines.drop(1).toMutableList()
+        java.util.Collections.shuffle(rows, java.util.Random(7))
+        Files.writeString(shuffled, (listOf(lines.first()) + rows).joinToString("\n", postfix = "\n"))
+
+        val forward = run("stages", "detect", jtl.toString(), "--steady-steps", "all")
+        val mixed = run("stages", "detect", shuffled.toString(), "--steady-steps", "all")
+
+        assertEquals(0, forward.exitCode, forward.stderr)
+        assertTrue(forward.stderr.contains("warning code=DEGRADED_GAP_KEPT "), forward.stderr)
+        assertArrayEquals(forward.stdout.toByteArray(UTF_8), mixed.stdout.toByteArray(UTF_8))
+        assertArrayEquals(forward.stderr.toByteArray(UTF_8), mixed.stderr.toByteArray(UTF_8))
     }
 
     private fun carefulStages(

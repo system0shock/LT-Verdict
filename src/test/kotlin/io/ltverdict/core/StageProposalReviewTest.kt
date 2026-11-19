@@ -12,15 +12,17 @@ import org.junit.jupiter.api.Test
  */
 class StageProposalReviewTest {
     @Test
-    fun `R1 a collapse at the end is never excluded without a warning`() {
+    fun `R1 a collapse at the end is never excluded`() {
+        // Before ADR 0036, D14 (owner 2026-11-19) the collapse was excluded and named LONG_RAMP_DOWN; with latency and errors it
+        // stays in the last steady stage and is named DEGRADED_TAIL_KEPT.
         listOf(StageProfiles.collapse(600, 20.0), StageProfiles.collapse(300, 40.0), StageProfiles.soakCollapse, StageProfiles.hang)
             .forEach { profile ->
                 val proposal = detectLoadStages(profile.series())
 
-                val tail = proposal.stages.last()
-                assertTrue(tail.role == StageRole.EXCLUDED && tail.toOffsetMillis - tail.fromOffsetMillis >= 60_000, explain(proposal))
-                val warning = proposal.warnings.single { it.code == "LONG_RAMP_DOWN" }
-                assertEquals(tail.fromOffsetMillis, warning.atOffsetMillis, explain(proposal))
+                val last = proposal.stages.last()
+                assertEquals(StageRole.STEADY, last.role, explain(proposal))
+                val warning = proposal.warnings.single { it.code == "DEGRADED_TAIL_KEPT" }
+                assertTrue(warning.atOffsetMillis in last.fromOffsetMillis until last.toOffsetMillis, explain(proposal))
                 assertTrue(warning.durationMillis!! >= 60_000 && warning.fromRps != null && warning.toRps != null, explain(proposal))
                 assertEquals(StageProposalConfidence.LOW, proposal.confidence, "${profile.name}: ${explain(proposal)}")
             }
@@ -89,9 +91,12 @@ class StageProposalReviewTest {
             val steps = all.stages.filter { it.id.startsWith("step-") }
             assertEquals(profile.truthSteady().size, steps.size, "${profile.name}: ${explain(all)}")
             assertTrue(steps.all { it.role == StageRole.STEADY }, explain(all))
-            val lower = top.stages.filter { it.id.startsWith("step-") && it.role == StageRole.EXCLUDED }
-            assertEquals(1, lower.size, explain(top))
-            assertTrue(top.warnings.any { it.code == "HOLD_NOT_EVALUATED" && it.stageId == lower.single().id }, explain(top))
+            // The lower plateau of the step-down profiles runs at 1500 ms: since ADR 0036, D14 a degraded lower step is its own
+            // steady window in mode top (DEGRADED_STEP_KEPT); the healthy one of upDownUp stays excluded and named.
+            val lower = steps.single { it.id == "step-2" }
+            val code = if (profile == StageProfiles.upDownUp) "HOLD_NOT_EVALUATED" else "DEGRADED_STEP_KEPT"
+            assertEquals(code == "DEGRADED_STEP_KEPT", top.stages.single { it.id == lower.id }.role == StageRole.STEADY, explain(top))
+            assertTrue(top.warnings.any { it.code == code && it.stageId == lower.id }, explain(top))
             assertEquals(StageProposalConfidence.LOW, top.confidence)
         }
         val upDownUp = detectLoadStages(StageProfiles.upDownUp.series(), SteadySteps.TOP)

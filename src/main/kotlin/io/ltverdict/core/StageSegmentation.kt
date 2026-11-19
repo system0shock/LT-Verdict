@@ -1,6 +1,6 @@
 package io.ltverdict.core
 
-// Steps 1-4 of the method rps-plateau-segmentation.v1 (ADR 0036, D3; plan W4.1, section «Метод»): the cell width, the noise, the
+// Steps 1-4 of the method rps-plateau-segmentation.v2 (ADR 0036, D3; plan W4.1, section «Метод»): the cell width, the noise, the
 // penalised piecewise-linear segmentation and the classification of the pieces. Split from StageProposal.kt by size only.
 
 /** Step 1 of the method: the first width of the ladder with at most MAX_CELLS full cells and an upper quartile of at least MIN_CELL_COUNT_P75. */

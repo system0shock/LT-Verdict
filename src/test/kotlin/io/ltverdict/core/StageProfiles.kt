@@ -33,6 +33,13 @@ internal data class StageProfile(
     val seed: Long = 1L,
     /** When set, the count of each second is a Poisson draw around the expected count (deterministic xorshift64). */
     val poissonSeed: Long? = null,
+    /**
+     * When set, every `elapsed` is the latency of its piece times a heavy-tailed factor of mean about 1 (0.4 plus 0.6 of an
+     * exponential, and one request in 500 times 20, a timeout), and every request also fails with [backgroundErrorRatio];
+     * deterministic xorshift64 (ADR 0036, D14: thresholds tested against noise, not against constant latencies).
+     */
+    val noiseSeed: Long? = null,
+    val backgroundErrorRatio: Double = 0.0,
 ) {
     val seconds: Int get() = pieces.sumOf { it.seconds }
 
@@ -83,14 +90,29 @@ internal data class StageProfile(
     fun requests(): List<GeneratedRequest> {
         val counts = requestsPerSecond()
         val requests = ArrayList<GeneratedRequest>()
+        var noise = noiseSeed ?: 0L
+
+        fun uniform(): Double {
+            noise = noise xor (noise shl 13)
+            noise = noise xor (noise ushr 7)
+            noise = noise xor (noise shl 17)
+            return (noise ushr 11).toDouble() / (1L shl 53).toDouble()
+        }
         var second = 0
         for (piece in pieces) {
             var index = 0L
             for (local in 0 until piece.seconds) {
                 val count = counts[second]
                 for (i in 0 until count) {
-                    val failed = floor((index + 1) * piece.errorRatio) > floor(index * piece.errorRatio)
-                    requests += GeneratedRequest(second * 1000L + (1000L * i) / count, piece.latencyMs, !failed)
+                    var failed = floor((index + 1) * piece.errorRatio) > floor(index * piece.errorRatio)
+                    var latency = piece.latencyMs
+                    if (noiseSeed != null) {
+                        var factor = 0.4 - 0.6 * StrictMath.log(1.0 - uniform())
+                        if (uniform() < 0.002) factor *= 20.0
+                        latency = maxOf(1L, Math.round(piece.latencyMs * factor))
+                        if (uniform() < backgroundErrorRatio) failed = true
+                    }
+                    requests += GeneratedRequest(second * 1000L + (1000L * i) / count, latency, !failed)
                     index++
                 }
                 second++
@@ -273,11 +295,11 @@ internal object StageProfiles {
         poissonSeed = 11L,
     )
 
-    /** R1: a 4-hour soak at 30 rps, then a 3000 s collapse to 10 rps. */
+    /** R1: a 4-hour soak at 30 rps, then a 3000 s collapse to 10 rps at 2500 ms. */
     val soakCollapse =
         StageProfile(
             "R1 soak then collapse",
-            listOf(ramp(120, 0.0, 30.0), flat(14_400, 30.0), RatePiece(3000, 30.0, 10.0, 1500, 0.10)),
+            listOf(ramp(120, 0.0, 30.0), flat(14_400, 30.0), RatePiece(3000, 30.0, 10.0, 2500, 0.10)),
             poissonSeed = 11L,
         )
 
@@ -365,6 +387,71 @@ internal object StageProfiles {
             "R5 low-rate sections",
             listOf(flat(1800, 5.0), ramp(60, 5.0, 100.0), flat(1800, 100.0), flat(1800, 5.0)),
             poissonSeed = 11L,
+        )
+
+    // ADR 0036, D14 (owner 2026-11-19): latency and errors tell a collapse from a planned ramp-down. Healthy profiles carry
+    // heavy-tailed latency jitter and background errors, so the thresholds are tested against noise.
+
+    /** A healthy planned ramp-down of [seconds] after a 1800 s plateau; [rampLatencyMs] below 100 means latency improves. */
+    fun healthyRampDown(
+        seconds: Int,
+        seed: Long,
+        rampLatencyMs: Long = ELAPSED_MILLIS,
+    ) = StageProfile(
+        "D14 healthy ramp-down ${seconds}s latency $rampLatencyMs, seed $seed",
+        listOf(ramp(120, 0.0, 100.0), flat(1800, 100.0), RatePiece(seconds, 100.0, 0.0, rampLatencyMs)),
+        poissonSeed = seed,
+        noiseSeed = seed + 1000,
+        backgroundErrorRatio = 0.005,
+    )
+
+    /** A low-rate run: 3 h at [rps] between a 600 s ramp-up and a 1800 s ramp-down, 1 % background errors. */
+    fun lowRate(
+        rps: Double,
+        seed: Long = 11L,
+    ) = StageProfile(
+        "D14 low rate $rps rps, seed $seed",
+        listOf(ramp(600, 0.0, rps), flat(10_800, rps), ramp(1800, rps, 0.0)),
+        poissonSeed = seed,
+        noiseSeed = seed + 1000,
+        backgroundErrorRatio = 0.01,
+    )
+
+    /** A 300 s fall that loses [loss] of 100 rps at the end of the run; degraded: 1500 ms and 10 % errors. */
+    fun fall(
+        loss: Double,
+        degraded: Boolean,
+    ) = StageProfile(
+        "D14 fall losing $loss, degraded $degraded",
+        listOf(
+            ramp(120, 0.0, 100.0),
+            flat(1800, 100.0),
+            if (degraded) RatePiece(300, 100.0, 100.0 * (1 - loss), 1500, 0.10) else ramp(300, 100.0, 100.0 * (1 - loss)),
+        ),
+        poissonSeed = 11L,
+        noiseSeed = 1011L,
+        backgroundErrorRatio = 0.005,
+    )
+
+    /** Two steps, 100 and 60 rps, with a degraded 300 s decline between them (1500 ms, 10 % errors). */
+    val degradedGap =
+        StageProfile(
+            "D14 degraded decline between steps",
+            listOf(ramp(60, 0.0, 100.0), flat(1200, 100.0), RatePiece(300, 100.0, 60.0, 1500, 0.10), flat(1200, 60.0), ramp(60, 60.0, 0.0)),
+            poissonSeed = 11L,
+        )
+
+    /** [twoEqual] whose dip between the plateaus collapses (1500 ms, 10 % errors) and recovers. */
+    fun degradedDip(seed: Long) =
+        StageProfile(
+            "D14 degraded dip, seed $seed",
+            listOf(
+                flat(900, 100.0),
+                RatePiece(120, 100.0, 60.0, 1500, 0.10),
+                RatePiece(120, 60.0, 100.0, 1500, 0.10),
+                flat(900, 100.0),
+            ),
+            poissonSeed = seed,
         )
 
     /** R6: a warm-up at 40 % for 15 minutes before a 1000 s plateau. */

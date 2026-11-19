@@ -109,7 +109,8 @@ internal fun readLoadSecondSeries(
 
 private fun io.ltverdict.ingest.LoadSample.isRequest() = kind == SampleKind.JMETER_SAMPLER || kind == SampleKind.GATLING_REQUEST
 
-internal const val STAGE_PROPOSAL_METHOD = "rps-plateau-segmentation.v1"
+// v2 (ADR 0036, D14): the segmentation is still by request rate; v2 adds the latency and error check of excluded stretches.
+internal const val STAGE_PROPOSAL_METHOD = "rps-plateau-segmentation.v2"
 private const val PROPOSAL_RUN_ID = "run"
 
 private class InputChanged : RuntimeException()
@@ -160,6 +161,32 @@ internal data class StageProposalWarning(
     val fromRps: Double? = null,
     val toRps: Double? = null,
     val durationMillis: Long? = null,
+    /** The judged stretch (ADR 0036, D14): on a `DEGRADED_*` warning, or NOT_JUDGED on the warning of the RPS method. */
+    val stretch: StageStretchFact? = null,
+)
+
+internal enum class StretchVerdict { DEGRADED, HEALTHY, NOT_JUDGED }
+
+/** Request samples, failed ones and the sum of their `elapsed` over a stretch, by start second (ADR 0036, D14). */
+internal data class StretchLoad(
+    val samples: Long,
+    val failures: Long,
+    val elapsedMillis: Long,
+) {
+    val errorRatio: Double get() = if (samples > 0) failures.toDouble() / samples else 0.0
+    val meanMillis: Double get() = if (samples > 0) elapsedMillis.toDouble() / samples else 0.0
+}
+
+/** A stretch the RPS method would exclude after the start of the first steady stage, judged against [referenceId] (D14). */
+internal data class StageStretchFact(
+    /** TAIL (ramp-down), AFTER_STEADY (a rise after the last step), GAP (between steps) or STEP (a lower step of mode top). */
+    val kind: String,
+    val fromOffsetMillis: Long,
+    val toOffsetMillis: Long,
+    val referenceId: String,
+    val load: StretchLoad,
+    val reference: StretchLoad,
+    val verdict: StretchVerdict,
 )
 
 internal data class StageProposal(
@@ -180,6 +207,8 @@ internal data class StageProposal(
     val stages: List<StageV1>,
     val boundaries: List<StageBoundaryFact>,
     val warnings: List<StageProposalWarning>,
+    /** Every judged stretch in time order (ADR 0036, D14); empty for a refusal. */
+    val stretches: List<StageStretchFact> = emptyList(),
 )
 
 /** The canonical bytes of load-stages.v1, the same serialization as [validateLoadStages]; only for a proposal. */
@@ -199,7 +228,7 @@ internal fun proposeLoadStages(
         is LoadSecondSeriesRead.Series -> detectLoadStages(read.series, steadySteps)
     }
 
-/** Steps 4-13 of the method `rps-plateau-segmentation.v1` (plan W4.1, section «Метод»). Pure: the same series gives the same proposal. */
+/** Steps 4-13 of the method `rps-plateau-segmentation.v2` (plan W4.1, section «Метод»). Pure: the same series gives the same proposal. */
 internal fun detectLoadStages(
     series: LoadSecondSeries,
     steadySteps: SteadySteps = SteadySteps.TOP,
@@ -276,9 +305,17 @@ private class RunFacts(
 
 /** A run of plateau pieces `[first, last]` that becomes one stage; [opening] is the plateau that opened it. */
 private class Step(
-    val first: Int,
+    var first: Int,
     var last: Int,
     val opening: Piece,
+)
+
+/** The cells `[from, to)` of a step after the edge trim of step 9. */
+private data class Edges(
+    val from: Int,
+    val to: Int,
+    val trimmedFrom: Int,
+    val trimmedTo: Int,
 )
 
 private fun detectInCells(
@@ -365,26 +402,102 @@ private fun detectInCells(
 
     // Step 9: an edge cell outside the noise of the line of its own piece moves the edge inwards.
     val bounds =
-        steps.map { step ->
-            var from = pieces[step.first].fit.from
-            var to = pieces[step.last].fit.to
-            var trimmedFrom = 0
-            while (trimmedFrom < EDGE_TRIM_MAX_CELLS && to - from > MIN_SEGMENT_CELLS && outsideNoise(counts, pieces, from, noise)) {
-                from++
-                trimmedFrom++
-            }
-            var trimmedTo = 0
-            while (trimmedTo < EDGE_TRIM_MAX_CELLS && to - from > MIN_SEGMENT_CELLS && outsideNoise(counts, pieces, to - 1, noise)) {
-                to--
-                trimmedTo++
-            }
-            Triple(from, to, trimmedFrom + trimmedTo)
+        steps
+            .map { step ->
+                var from = pieces[step.first].fit.from
+                var to = pieces[step.last].fit.to
+                var trimmedFrom = 0
+                while (trimmedFrom < EDGE_TRIM_MAX_CELLS && to - from > MIN_SEGMENT_CELLS && outsideNoise(counts, pieces, from, noise)) {
+                    from++
+                    trimmedFrom++
+                }
+                var trimmedTo = 0
+                while (trimmedTo < EDGE_TRIM_MAX_CELLS && to - from > MIN_SEGMENT_CELLS && outsideNoise(counts, pieces, to - 1, noise)) {
+                    to--
+                    trimmedTo++
+                }
+                Edges(from, to, trimmedFrom, trimmedTo)
+            }.toMutableList()
+
+    // D12, mode top: every step at the level of the highest one (within the merge threshold) is steady, so equal plateaus are
+    // never chosen among by noise; a lower step after the first steady one is a hold that top does not evaluate.
+    val top = steps.maxBy { it.opening.fit.level }.opening.fit
+    val steadyFlags =
+        steps
+            .map { step ->
+                steadySteps == SteadySteps.ALL || top.level - step.opening.fit.level <= mergeThreshold(top, step.opening.fit, noise)
+            }.toMutableList()
+    val firstSteady = steadyFlags.indexOf(true)
+    val single = steps.size == 1
+    val ids = steps.indices.map { if (single) STAGE_STEADY else "step-${it + 1}" }
+    val gridEnd = ceilDiv(run.runEnd - run.runStart, cellMillis) * cellMillis
+    val perSecond = (cellMillis / ONE_SECOND).toDouble()
+
+    fun stepEnd(index: Int) = if (index == steps.lastIndex && bounds[index].to == run.cells) gridEnd else bounds[index].to * cellMillis
+
+    // Step 9a (D14): every stretch of DROP_MIN_MILLIS or more after the start of the first steady stage that the roles by load
+    // would exclude is judged by error ratio and mean latency against a step at the same or a higher load. References and
+    // stretches are taken from the layout by load alone, before any decision, so a kept stretch never becomes a reference.
+    fun judged(
+        kind: String,
+        from: Long,
+        to: Long,
+        reference: Int,
+    ): StageStretchFact {
+        val load = stretchLoad(series, from, to)
+        val referenceLoad = stretchLoad(series, bounds[reference].from * cellMillis, stepEnd(reference))
+        return StageStretchFact(kind, from, to, ids[reference], load, referenceLoad, judge(load, referenceLoad))
+    }
+    // A lower step of mode top after the first steady one: against the last steady step before it (the top level).
+    val stepStretches = HashMap<Int, StageStretchFact>()
+    for (index in steps.indices) {
+        if (steadyFlags[index] || index < firstSteady || stepEnd(index) - bounds[index].from * cellMillis < DROP_MIN_MILLIS) continue
+        stepStretches[index] =
+            judged("STEP", bounds[index].from * cellMillis, stepEnd(index), (index - 1 downTo 0).first { steadyFlags[it] })
+    }
+    // A gap between two steps: against the step at the higher level, the previous one for a decline, the next one for a rise
+    // (a rise judged against the lower step would flag the ordinary growth of latency with load).
+    val gapStretches = HashMap<Int, StageStretchFact>()
+    for (index in 1 until steps.size) {
+        val from = stepEnd(index - 1)
+        val to = bounds[index].from * cellMillis
+        if (index - 1 < firstSteady || to - from < DROP_MIN_MILLIS) continue
+        val decline = steps[index].opening.fit.level < steps[index - 1].opening.fit.level
+        gapStretches[index] = judged("GAP", from, to, if (decline) index - 1 else index)
+    }
+    // The tail after the last step: against the last step. A rise after it has no step at the same load to compare with.
+    val lastEnd = stepEnd(steps.lastIndex)
+    val tailStretch =
+        if (run.cells * cellMillis - lastEnd >= DROP_MIN_MILLIS) {
+            judged(if (riseAfterSteady) "AFTER_STEADY" else "TAIL", lastEnd, gridEnd, steps.lastIndex)
+        } else {
+            null
         }
 
+    // Step 9b (D14): a degraded stretch is never excluded. A lower step becomes its own steady window; a gap or a tail joins
+    // the window of the step it was judged against, which becomes steady if it was not. Two plateau levels are never pooled.
+    for ((index, stretch) in stepStretches) if (stretch.verdict == StretchVerdict.DEGRADED) steadyFlags[index] = true
+    for ((index, stretch) in gapStretches) {
+        if (stretch.verdict != StretchVerdict.DEGRADED) continue
+        if (stretch.referenceId == ids[index - 1]) {
+            steps[index - 1].last = steps[index].first - 1
+            bounds[index - 1] = bounds[index - 1].copy(to = bounds[index].from, trimmedTo = 0)
+            steadyFlags[index - 1] = true
+        } else {
+            steps[index].first = steps[index - 1].last + 1
+            bounds[index] = bounds[index].copy(from = bounds[index - 1].to, trimmedFrom = 0)
+            steadyFlags[index] = true
+        }
+    }
+    val tailKept = tailStretch?.kind == "TAIL" && tailStretch.verdict == StretchVerdict.DEGRADED
+    if (tailKept) {
+        steps.last().last = pieces.lastIndex
+        bounds[steps.lastIndex] = bounds.last().copy(to = run.cells, trimmedTo = 0)
+        steadyFlags[steps.lastIndex] = true
+    }
+
     // Step 10: lead-in, ramp-up, steps, ramp-down on the cell grid; the stage after the last full cell reaches the grid end.
-    val gridEnd = ceilDiv(run.runEnd - run.runStart, cellMillis) * cellMillis
-    val leadInCells = pieces.takeWhile { it.kind == StageSegmentKind.IDLE }.sumOf { it.fit.cells }.coerceAtMost(bounds.first().first)
-    val single = steps.size == 1
+    val leadInCells = pieces.takeWhile { it.kind == StageSegmentKind.IDLE }.sumOf { it.fit.cells }.coerceAtMost(bounds.first().from)
     val stages = ArrayList<StageV1>()
     val boundaries = ArrayList<StageBoundaryFact>()
     val warnings = ArrayList<StageProposalWarning>()
@@ -393,26 +506,17 @@ private fun detectInCells(
         boundaries += StageBoundaryFact(STAGE_LEAD_IN, "LEAD_IN_IDLE", null, null, null, 0)
         warnings += StageProposalWarning("LEAD_IN_IDLE", STAGE_LEAD_IN, 0, durationMillis = leadInCells * cellMillis)
     }
-    if (bounds.first().first > leadInCells) {
-        stages += StageV1(STAGE_RAMP_UP, StageRole.EXCLUDED, leadInCells * cellMillis, bounds.first().first * cellMillis)
+    if (bounds.first().from > leadInCells) {
+        stages += StageV1(STAGE_RAMP_UP, StageRole.EXCLUDED, leadInCells * cellMillis, bounds.first().from * cellMillis)
         boundaries += StageBoundaryFact(STAGE_RAMP_UP, "BEFORE_FIRST_STEADY", null, null, null, 0)
     }
-    // D12, mode top: every step at the level of the highest one (within the merge threshold) is steady, so equal plateaus are
-    // never chosen among by noise; a lower step after the first steady one is a hold that top does not evaluate.
-    val top = steps.maxBy { it.opening.fit.level }.opening.fit
-    val steadyFlags =
-        steps.map { step ->
-            steadySteps == SteadySteps.ALL || top.level - step.opening.fit.level <= mergeThreshold(top, step.opening.fit, noise)
-        }
-    val firstSteady = steadyFlags.indexOf(true)
     val steadyStages = ArrayList<Pair<Step, String>>()
-    val ids = steps.indices.map { if (single) STAGE_STEADY else "step-${it + 1}" }
     steps.forEachIndexed { index, step ->
         val id = ids[index]
         val steady = steadyFlags[index]
-        val (from, to, trimmed) = bounds[index]
-        val last = index == steps.lastIndex
-        val end = if (last && to == run.cells) gridEnd else to * cellMillis
+        val from = bounds[index].from
+        val trimmed = bounds[index].trimmedFrom + bounds[index].trimmedTo
+        val end = stepEnd(index)
         stages += StageV1(id, if (steady) StageRole.STEADY else StageRole.EXCLUDED, from * cellMillis, end)
         val firstPiece = pieces[step.first]
         val lastPiece = pieces[step.last]
@@ -437,7 +541,7 @@ private fun detectInCells(
     }
 
     // Step 11: the plateaus must cover enough of the run without its lead-in (all steps, whatever the mode).
-    val stepMillis = bounds.sumOf { (from, to, _) -> minOf(to * cellMillis, run.runEnd - run.runStart) - from * cellMillis }
+    val stepMillis = bounds.sumOf { minOf(it.to * cellMillis, run.runEnd - run.runStart) - it.from * cellMillis }
     val share = stepMillis.toDouble() / (run.runEnd - run.runStart - leadInCells * cellMillis)
     if (share < MIN_STEADY_SHARE) return refuse(REFUSED_NO_PLATEAU, "steady_share=${decimal(share)}")
     // Step 12.
@@ -445,8 +549,7 @@ private fun detectInCells(
 
     // Step 13: warnings, then the confidence. From the start of the first steady stage nothing leaves the verdict windows
     // silently (D4): every excluded stretch of DROP_MIN_MILLIS or more after it is named, and such a proposal is never HIGH.
-    val perSecond = (cellMillis / ONE_SECOND).toDouble()
-    val stepFits = steps.indices.associateWith { sums.fit(bounds[it].first, bounds[it].second) }
+    val stepFits = steps.indices.associateWith { sums.fit(bounds[it].from, bounds[it].to) }
     for ((step, id) in steadyStages) {
         val opening = step.opening.fit
         // The largest drop: the lowest fitted rate among the pieces of the step below the opening plateau.
@@ -481,16 +584,31 @@ private fun detectInCells(
                 StageProposalWarning("LOW_LEVEL_STEP", id, whole.from * cellMillis, opening.level / perSecond, top.level / perSecond)
         }
     }
+
+    // A stretch too small to judge keeps the warning of the RPS method and says so (D14).
+    fun notJudged(stretch: StageStretchFact?) = stretch?.takeIf { it.verdict == StretchVerdict.NOT_JUDGED }
     for (index in 1 until steps.size) {
         val previous = steps[index - 1].opening.fit
         val next = steps[index].opening.fit
-        val gapFrom = bounds[index - 1].second * cellMillis
-        val gapMillis = bounds[index].first * cellMillis - gapFrom
+        val gapFrom = bounds[index - 1].to * cellMillis
+        val gapMillis = bounds[index].from * cellMillis - gapFrom
         val dips =
             (steps[index - 1].last + 1 until steps[index].first).any {
                 pieces[it].fit.level < (1 - LEVEL_MERGE_RATIO) * minOf(previous.level, next.level)
             }
-        if (next.level < previous.level || (dips && gapMillis >= DROP_MIN_MILLIS)) {
+        val gap = gapStretches[index]
+        if (gap?.verdict == StretchVerdict.DEGRADED) {
+            warnings +=
+                StageProposalWarning(
+                    "DEGRADED_GAP_KEPT",
+                    gap.referenceId,
+                    gap.fromOffsetMillis,
+                    previous.level / perSecond,
+                    next.level / perSecond,
+                    gap.toOffsetMillis - gap.fromOffsetMillis,
+                    gap,
+                )
+        } else if (next.level < previous.level || (dips && gapMillis >= DROP_MIN_MILLIS)) {
             warnings +=
                 StageProposalWarning(
                     "LOAD_DECLINE_BETWEEN_STEPS",
@@ -499,6 +617,7 @@ private fun detectInCells(
                     previous.level / perSecond,
                     next.level / perSecond,
                     gapMillis,
+                    notJudged(gap),
                 )
         } else if (gapMillis >= DROP_MIN_MILLIS && firstSteady in 0 until index) {
             warnings +=
@@ -509,37 +628,80 @@ private fun detectInCells(
                     previous.level / perSecond,
                     next.level / perSecond,
                     gapMillis,
+                    notJudged(gap),
                 )
         }
-        // Any excluded step after the first steady one or after a step down is a hold that the verdict does not evaluate.
-        if (!steadyFlags[index] && (index > firstSteady || next.level < previous.level)) {
+        // Any excluded step after the first steady one or after a step down is a hold that the verdict does not evaluate; a
+        // degraded one became its own steady window (D14).
+        val step = stepStretches[index]
+        if (step?.verdict == StretchVerdict.DEGRADED) {
+            warnings +=
+                StageProposalWarning(
+                    "DEGRADED_STEP_KEPT",
+                    ids[index],
+                    step.fromOffsetMillis,
+                    top.level / perSecond,
+                    next.level / perSecond,
+                    step.toOffsetMillis - step.fromOffsetMillis,
+                    step,
+                )
+        } else if (!steadyFlags[index] && (index > firstSteady || next.level < previous.level)) {
             warnings +=
                 StageProposalWarning(
                     "HOLD_NOT_EVALUATED",
                     ids[index],
-                    bounds[index].first * cellMillis,
+                    bounds[index].from * cellMillis,
                     fromRps = top.level / perSecond,
                     toRps = next.level / perSecond,
                     durationMillis = stages.single { it.id == ids[index] }.let { it.toOffsetMillis - it.fromOffsetMillis },
+                    stretch = notJudged(step),
                 )
         }
     }
+
     // The tail after the last step: whatever it is (a planned stop, a collapse, a hang, an unfinished rise), from the request
-    // rate alone it cannot be told apart, so a long one is always named.
-    val tailCellsMillis = run.cells * cellMillis - lastTo
-    var longTail = false
-    if (tailCellsMillis >= DROP_MIN_MILLIS) {
-        val tailPieces = pieces.filter { it.fit.to * cellMillis > lastTo }
+    // rate alone it cannot be told apart, so a long one is always named; a degraded one stays in the last step (D14).
+    fun tailRates(from: Long): Pair<Double, Double> {
+        val tailPieces = pieces.filter { it.fit.to * cellMillis > from }
         val first = tailPieces.first().fit
         val end = tailPieces.last().fit
+        return maxOf(0.0, first.lineAt(maxOf(first.from, (from / cellMillis).toInt()))) / perSecond to
+            maxOf(0.0, end.lineAt(end.to - 1)) / perSecond
+    }
+    val tailCellsMillis = run.cells * cellMillis - lastTo
+    var longTail = false
+    if (tailKept && tailStretch != null) {
+        val (fromRps, toRps) = tailRates(tailStretch.fromOffsetMillis)
         warnings +=
             StageProposalWarning(
-                if (riseAfterSteady) "RISE_AFTER_STEADY" else "LONG_RAMP_DOWN",
+                "DEGRADED_TAIL_KEPT",
+                tailStretch.referenceId,
+                tailStretch.fromOffsetMillis,
+                fromRps,
+                toRps,
+                tailStretch.toOffsetMillis - tailStretch.fromOffsetMillis,
+                tailStretch,
+            )
+    } else if (tailCellsMillis >= DROP_MIN_MILLIS) {
+        val (fromRps, toRps) = tailRates(lastTo)
+        // A rise after the last step that is worse than it stays excluded (no step at its load to join), but is named as
+        // degraded: an open question to the owner (ADR 0036, D14).
+        val degradedRise = riseAfterSteady && tailStretch?.verdict == StretchVerdict.DEGRADED
+        warnings +=
+            StageProposalWarning(
+                if (degradedRise) {
+                    "DEGRADED_RISE_EXCLUDED"
+                } else if (riseAfterSteady) {
+                    "RISE_AFTER_STEADY"
+                } else {
+                    "LONG_RAMP_DOWN"
+                },
                 tailId,
                 lastTo,
-                fromRps = maxOf(0.0, first.lineAt(maxOf(first.from, (lastTo / cellMillis).toInt()))) / perSecond,
-                toRps = maxOf(0.0, end.lineAt(end.to - 1)) / perSecond,
+                fromRps = fromRps,
+                toRps = toRps,
                 durationMillis = tailMillis,
+                stretch = if (degradedRise) tailStretch else notJudged(tailStretch),
             )
         longTail = tailMillis >= LONG_TAIL_LOW_MILLIS
     }
@@ -548,7 +710,18 @@ private fun detectInCells(
     val codes = warnings.map { it.code }.toSet()
     val confidence =
         when {
-            longTail || codes.any { it in setOf("LOAD_DROP_INSIDE_STEADY", "HOLD_NOT_EVALUATED") } -> StageProposalConfidence.LOW
+            longTail ||
+                codes.any {
+                    it in
+                        setOf(
+                            "LOAD_DROP_INSIDE_STEADY",
+                            "HOLD_NOT_EVALUATED",
+                            "DEGRADED_TAIL_KEPT",
+                            "DEGRADED_GAP_KEPT",
+                            "DEGRADED_STEP_KEPT",
+                            "DEGRADED_RISE_EXCLUDED",
+                        )
+                } -> StageProposalConfidence.LOW
             codes.any {
                 it in
                     setOf(
@@ -584,7 +757,48 @@ private fun detectInCells(
         stages,
         boundaries,
         warnings,
+        (stepStretches.values + gapStretches.values + listOfNotNull(tailStretch)).sortedBy { it.fromOffsetMillis },
     )
+}
+
+/** Exact integer sums over the seconds `[from / 1000, to / 1000)` of the series, clipped to its length (ADR 0036, D14). */
+private fun stretchLoad(
+    series: LoadSecondSeries,
+    fromMillis: Long,
+    toMillis: Long,
+): StretchLoad {
+    var samples = 0L
+    var failures = 0L
+    var elapsed = 0L
+    for (second in (fromMillis / ONE_SECOND).toInt() until minOf(toMillis / ONE_SECOND, series.requestsPerSecond.size.toLong()).toInt()) {
+        samples = Math.addExact(samples, series.requestsPerSecond[second])
+        failures = Math.addExact(failures, series.failuresPerSecond[second])
+        elapsed = Math.addExact(elapsed, series.elapsedMillisPerSecond[second])
+    }
+    return StretchLoad(samples, failures, elapsed)
+}
+
+/**
+ * D14: a stretch is DEGRADED when its error ratio or its mean latency is materially worse than the reference's, both from
+ * exact counts over the whole stretch; NOT_JUDGED when either has fewer than DEGRADED_MIN_SAMPLES request samples. Each signal
+ * needs a relative factor and an absolute increase; the error signal also needs an excess of failures beyond Poisson noise.
+ */
+private fun judge(
+    load: StretchLoad,
+    reference: StretchLoad,
+): StretchVerdict {
+    if (load.samples < DEGRADED_MIN_SAMPLES || reference.samples < DEGRADED_MIN_SAMPLES) return StretchVerdict.NOT_JUDGED
+    val ratio = load.errorRatio
+    val referenceRatio = reference.errorRatio
+    val expectedFailures = load.samples * referenceRatio
+    val errors =
+        ratio >= DEGRADED_ERROR_FACTOR * referenceRatio &&
+            ratio - referenceRatio >= DEGRADED_ERROR_MIN_INCREASE &&
+            load.failures - expectedFailures >= DEGRADED_ERROR_NOISE_SIGMAS * Math.sqrt(maxOf(1.0, expectedFailures))
+    val latency =
+        load.meanMillis >= DEGRADED_LATENCY_FACTOR * reference.meanMillis &&
+            load.meanMillis - reference.meanMillis >= DEGRADED_LATENCY_MIN_INCREASE_MILLIS
+    return if (errors || latency) StretchVerdict.DEGRADED else StretchVerdict.HEALTHY
 }
 
 private fun outsideNoise(
@@ -658,3 +872,11 @@ private const val MIN_STEADY_SHARE = 0.30
 private const val STEADY_DRIFT_WARN_RATIO = 0.05
 private const val HIGH_EDGE_SIGMAS = 6.0
 private const val HIGH_RESIDUAL_CV = 0.15
+
+// D14: the latency and error check (plan W4.1, «Константы»).
+private const val DEGRADED_MIN_SAMPLES = 200L
+private const val DEGRADED_ERROR_FACTOR = 2.0
+private const val DEGRADED_ERROR_MIN_INCREASE = 0.01
+private const val DEGRADED_ERROR_NOISE_SIGMAS = 4.0
+private const val DEGRADED_LATENCY_FACTOR = 1.5
+private const val DEGRADED_LATENCY_MIN_INCREASE_MILLIS = 50.0

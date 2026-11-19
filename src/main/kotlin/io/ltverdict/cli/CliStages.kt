@@ -3,7 +3,10 @@ package io.ltverdict.cli
 import io.ltverdict.core.STAGE_PROPOSAL_METHOD
 import io.ltverdict.core.StageProposal
 import io.ltverdict.core.StageProposalStatus
+import io.ltverdict.core.StageStretchFact
 import io.ltverdict.core.SteadySteps
+import io.ltverdict.core.StretchLoad
+import io.ltverdict.core.StretchVerdict
 import io.ltverdict.core.decimal
 import io.ltverdict.core.proposalBytes
 import io.ltverdict.core.proposeLoadStages
@@ -100,11 +103,21 @@ internal fun stageProposalLines(proposal: StageProposal): List<String> =
                     "to_offset_ms=${stage.toOffsetMillis} basis=${fact.basis}$plateau",
             )
         }
+        // ADR 0036, D14: every judged stretch with the exact counts of the stretch and of its reference.
+        proposal.stretches.forEach {
+            val load = loadFacts("", it.load)
+            val reference = loadFacts("reference_", it.reference)
+            add(
+                "stretch kind=${it.kind} from_offset_ms=${it.fromOffsetMillis} to_offset_ms=${it.toOffsetMillis} " +
+                    "reference_id=${it.referenceId} $load $reference verdict=${it.verdict}",
+            )
+        }
         proposal.warnings.forEach {
             add(
                 "warning code=${it.code} stage_id=${it.stageId ?: "-"} at_offset_ms=${it.atOffsetMillis}" +
                     (if (it.fromRps != null && it.toRps != null) " from_rps=${decimal(it.fromRps)} to_rps=${decimal(it.toRps)}" else "") +
-                    (it.durationMillis?.let { duration -> " duration_ms=$duration" }.orEmpty()),
+                    (it.durationMillis?.let { duration -> " duration_ms=$duration" }.orEmpty()) +
+                    it.stretch?.let(::stretchSuffix).orEmpty(),
             )
         }
         proposal.detail?.let { add("detail $it") }
@@ -112,3 +125,20 @@ internal fun stageProposalLines(proposal: StageProposal): List<String> =
     }
 
 private fun Double?.orDash() = this?.let(::decimal) ?: "-"
+
+private fun loadFacts(
+    prefix: String,
+    load: StretchLoad,
+) = "${prefix}samples=${load.samples} ${prefix}failures=${load.failures} ${prefix}error_ratio=${decimal(load.errorRatio)} " +
+    "${prefix}mean_ms=${decimal(load.meanMillis)}"
+
+/** A warning that names a judged stretch: the facts of a degradation, or that the stretch was too small to judge (D14). */
+private fun stretchSuffix(stretch: StageStretchFact): String =
+    if (stretch.verdict == StretchVerdict.NOT_JUDGED) {
+        " degradation=NOT_JUDGED samples=${stretch.load.samples} reference_samples=${stretch.reference.samples}"
+    } else {
+        val load = " error_ratio=${decimal(stretch.load.errorRatio)} mean_ms=${decimal(stretch.load.meanMillis)}"
+        val ratio = decimal(stretch.reference.errorRatio)
+        val mean = decimal(stretch.reference.meanMillis)
+        "$load reference_id=${stretch.referenceId} reference_error_ratio=$ratio reference_mean_ms=$mean"
+    }

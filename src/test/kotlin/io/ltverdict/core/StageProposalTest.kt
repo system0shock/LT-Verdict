@@ -11,7 +11,7 @@ import org.junit.jupiter.api.Test
 import java.nio.file.Files
 import java.nio.file.Path
 
-/** Plan W4.1, tasks 2 and 3: the method rps-plateau-segmentation.v1 (ADR 0036, D3-D7). */
+/** Plan W4.1, tasks 2 and 3: the method rps-plateau-segmentation.v2 (ADR 0036, D3-D7). */
 class StageProposalTest {
     private val anchor: LoadSecondSeries by lazy {
         val read = readLoadSecondSeries(SourceType.JMETER_CSV, Path.of("fixtures/stages/ramp-steady-rampdown.jtl"))

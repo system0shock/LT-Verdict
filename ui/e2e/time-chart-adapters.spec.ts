@@ -37,6 +37,19 @@ test('valueAxis never collapses', () => {
   expect(valueAxis(0, 0)).toEqual({ min: 0, max: 1, interval: 0.5 })
   expect(valueAxis(-3, 10)).toEqual({ min: -5, max: 10, interval: 7.5 })
 })
+test('valueAxis keeps whole-number ticks for counts', () => {
+  expect(valueAxis(0, 0, true)).toEqual({ min: 0, max: 2, interval: 1 })
+  expect(valueAxis(0, 1, true)).toEqual({ min: 0, max: 2, interval: 1 })
+  expect(valueAxis(0, 3, true)).toEqual({ min: 0, max: 6, interval: 3 })
+  expect(valueAxis(0, 25, true)).toEqual({ min: 0, max: 26, interval: 13 })
+  expect(valueAxis(0, 7, true)).toEqual({ min: 0, max: 10, interval: 5 })
+})
+test('only the error lane is a count lane', () => {
+  const series = loadSeries([bucket(0, 100, 0, 200), bucket(1000, 120, 3, 220)], 1)
+  expect([loadLane(series, 'rps').integer, loadLane(series, 'errors').integer, loadLane(series, 'p95').integer]).toEqual([undefined, true, undefined])
+  const option = laneOption(loadLane(series, 'errors'), loadFrame(series), [], { timeLabels: false, stageLabels: false }, colors)
+  expect(option.yAxis).toMatchObject({ min: 0, max: 6, interval: 3 })
+})
 test('timeTicks follow the step ladder and the run origin', () => {
   expect(timeTicks({ fromMs: 0, toMs: 6000, originMs: 0 })).toEqual([0, 1000, 2000, 3000, 4000, 5000, 6000])
   expect(timeTicks({ fromMs: 0, toMs: 14_390_000, originMs: 0 })).toEqual([0, 3_600_000, 7_200_000, 10_800_000, 14_390_000])

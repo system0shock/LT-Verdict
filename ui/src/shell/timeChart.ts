@@ -14,6 +14,7 @@ export interface ChartLane {
   segments: ChartPoint[][]
   lo: number
   hi: number
+  integer?: boolean
   thresholds?: ChartThreshold[]
 }
 export interface ChartColors { brand: string; warn: string; fail: string; text: string; muted: string; border: string; fontFamily: string }
@@ -39,9 +40,11 @@ export function niceCeil(value: number): number {
   return Number((step * scale).toPrecision(12))
 }
 
-export function valueAxis(lo: number, hi: number): { min: number; max: number; interval: number } {
+export function valueAxis(lo: number, hi: number, integer = false): { min: number; max: number; interval: number } {
   const min = lo < 0 ? -niceCeil(-lo) : 0
-  const max = niceCeil(Math.max(hi, 0))
+  const ceiling = niceCeil(Math.max(hi, 0))
+  // Counts: an even maximum keeps the middle tick a whole number.
+  const max = integer && ceiling % 2 !== 0 ? ceiling + 1 : ceiling
   return { min, max, interval: (max - min) / 2 }
 }
 
@@ -128,7 +131,7 @@ function thresholdLine(threshold: ChartThreshold, axisMax: number, colors: Chart
 export function laneOption(lane: ChartLane, frame: ChartFrame, stages: ChartStage[], flags: LaneFlags, colors: ChartColors): EChartsCoreOption {
   const grid = laneGrid(flags)
   const ticks = timeTicks(frame)
-  const axis = valueAxis(lane.lo, lane.hi)
+  const axis = valueAxis(lane.lo, lane.hi, lane.integer)
   const text = { color: colors.muted, fontSize: 12, fontFamily: colors.fontFamily }
   const areas = stageAreas(stages, frame, flags, colors)
   return {

@@ -487,6 +487,7 @@ export function loadLane(series: LoadSeries, key: TrackKey): ChartLane {
     segments: series.segments.map((segment) => segment.map((index) => ({ x: series.points[index].startMs, y: series.points[index][key] }))),
     lo: 0,
     hi: series.max[key],
+    ...(key === 'errors' ? { integer: true } : {}),
   }
 }
 

@@ -113,3 +113,8 @@ test('deepLane keeps cell middles, breaks at nulls and carries thresholds', () =
   expect([result.lo, result.hi]).toEqual([0, 8])
   expect(result.thresholds).toEqual([{ id: 'high', value: 8, text: DEEP_LABELS.thresholdMark(formatNumber(8), '%'), violated: false }])
 })
+test('a threshold on the top edge of the axis puts its label below the line', () => {
+  const thresholds = [{ id: 'top', value: 200, text: 'порог 200', violated: false }, { id: 'inside', value: 50, text: 'порог 50', violated: false }]
+  const line = (laneOption({ ...lane, thresholds }, { fromMs: 0, toMs: 6000, originMs: 0 }, [], { timeLabels: false, stageLabels: false }, colors).series as Array<{ markLine: { data: Array<{ label: { position: string } }> } }>)[0].markLine
+  expect(line.data.map((item) => item.label.position)).toEqual(['insideStartBottom', 'insideStartTop'])
+})

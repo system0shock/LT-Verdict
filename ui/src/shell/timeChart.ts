@@ -108,13 +108,14 @@ function stageAreas(stages: ChartStage[], frame: ChartFrame, flags: LaneFlags, c
   })
 }
 
-function thresholdLine(threshold: ChartThreshold, colors: ChartColors) {
+// На верхней границе оси подпись над линией выходит за поле графика и обрезается, поэтому она ставится под линию.
+function thresholdLine(threshold: ChartThreshold, axisMax: number, colors: ChartColors) {
   const color = threshold.violated ? colors.fail : colors.muted
   return {
     name: threshold.id,
     yAxis: threshold.value,
     lineStyle: { type: [5, 4], width: 1.5, color },
-    label: { formatter: threshold.text, position: 'insideStartTop', color, fontSize: 12, fontFamily: colors.fontFamily },
+    label: { formatter: threshold.text, position: threshold.value >= axisMax ? 'insideStartBottom' : 'insideStartTop', color, fontSize: 12, fontFamily: colors.fontFamily },
   }
 }
 
@@ -157,7 +158,7 @@ export function laneOption(lane: ChartLane, frame: ChartFrame, stages: ChartStag
       lineStyle: { width: 2, color: colors[lane.color] },
       itemStyle: { color: colors[lane.color] },
       data: lineData(lane.segments),
-      ...(lane.thresholds?.length ? { markLine: { silent: true, symbol: 'none', data: lane.thresholds.map((threshold) => thresholdLine(threshold, colors)) } } : {}),
+      ...(lane.thresholds?.length ? { markLine: { silent: true, symbol: 'none', data: lane.thresholds.map((threshold) => thresholdLine(threshold, axis.max, colors)) } } : {}),
       ...(areas.length ? { markArea: { silent: true, data: areas } } : {}),
     }],
   }

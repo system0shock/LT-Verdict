@@ -251,6 +251,32 @@ class LoadStagesCompatibilityTest {
             assertFalse(document.keys.any { it.startsWith("load_stages_") })
         }
 
+    @Test
+    fun `with stages and a snapshot the identity lists every module once and carries both inputs`() {
+        val snapshot =
+            assertInstanceOf(
+                ResourceValidation.Valid::class.java,
+                validateResourceSnapshot(ByteArrayInputStream(Files.readAllBytes(Path.of("fixtures/stages/cross-version/snapshot-15s.json")))),
+            )
+
+        val document =
+            Json
+                .parseToJsonElement(
+                    analysisIdentity(input, null, EngineConfig(), resources = snapshot, stages = declared).decodeToString(),
+                ).jsonObject
+
+        val ids = document.getValue("modules").jsonArray.map { it.jsonObject.getValue("id").jsonPrimitive.content }
+        assertEquals(
+            listOf("normalization", "metrics", "policy-evaluation", "resource-statistics", "window-policy-evaluation", "stage-window-evaluation"),
+            ids,
+        )
+        val inputVersions = document.getValue("input_versions").jsonObject
+        assertEquals(declared.sha256, document.getValue("load_stages_sha256").jsonPrimitive.content)
+        assertEquals(snapshot.semanticSha256, document.getValue("resource_snapshot_sha256").jsonPrimitive.content)
+        assertEquals("load-stages.v1", inputVersions.getValue("stages").jsonPrimitive.content)
+        assertEquals("resource-snapshot.v1", inputVersions.getValue("resources").jsonPrimitive.content)
+    }
+
     private fun compatible(
         baseline: SavedAnalysisForComparison,
         current: SavedAnalysisForComparison,

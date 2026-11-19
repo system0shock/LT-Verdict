@@ -43,8 +43,11 @@ internal fun analysisIdentity(
     if (diagnostics != null) modules += "load-resource-diagnostics"
     if (capacity != null) modules += "capacity-stage-evaluation"
     if (trend != null) modules += "resource-trend-evaluation"
-    // ADR 0030: the window evaluation without a snapshot; a snapshot excludes stages, so the module is listed once.
-    if (stages != null) modules += listOf("stage-window-evaluation", "window-policy-evaluation")
+    // ADR 0030: the window evaluation of the stages. ADR 0037, D6: with a snapshot too, window-policy-evaluation is already listed
+    // and is not repeated; the lists of stages alone and of the snapshot alone keep their order.
+    if (stages != null) {
+        listOf("stage-window-evaluation", "window-policy-evaluation").forEach { if (it !in modules) modules += it }
+    }
     return encodeAnalysisIdentity(
         AnalysisIdentityDocument(
             schemaVersion = "analysis-identity.v1",

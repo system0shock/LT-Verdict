@@ -1,6 +1,9 @@
 """Tests of the synthetic 8-hour demo data set generator (tools/demo_dataset.py), tiny profile only."""
 
 import csv
+import json
+import re
+from decimal import Decimal
 import hashlib
 import tempfile
 import unittest
@@ -125,6 +128,115 @@ class JtlTest(unittest.TestCase):
         self.assertEqual((at(0), at(30), at(100), at(150), at(180), at(220), at(270), at(300), at(400)), (250, 1000, 1000, 1000, 1500, 1500, 1500, 1000, 1000))
         self.assertEqual(at(15), 625)
         self.assertEqual(at(165), 1250)
+
+
+DOC = Path(__file__).resolve().parent.parent / "docs" / "user" / "platform-metric-packs.md"
+
+
+def number_rows(snapshot, entity=None, metric=None):
+    return {
+        row["id"]: [Decimal(v) for v in row["values"]]
+        for row in snapshot["series"]
+        if (entity is None or row["entity"] == entity) and (metric is None or row["metric"] == metric)
+    }
+
+
+class SnapshotTest(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.scenario = dd.load_scenario(SCENARIO_PATH)
+        cls.profile = dd.resolve_profile("tiny")
+        cls.release = release_of(cls.scenario, "2026.09.3")
+        cls.sha = "ab" * 32
+        cls.arms = {arm: dd.build_snapshot(arm, cls.release, cls.profile, cls.scenario, cls.sha) for arm in ("A", "B")}
+
+    def test_signals_match_pack_doc(self):
+        documented = {}
+        for line in DOC.read_text(encoding="utf-8").splitlines():
+            cells = [cell.strip() for cell in line.strip().strip("|").split("|")]
+            if len(cells) >= 6 and cells[1].startswith(("`openshift_", "`jvm_")):
+                documented[cells[0].strip("`")] = (cells[1].strip("`"), cells[2].strip("`"), cells[3].strip("`"), cells[5].startswith("да"))
+        self.assertGreaterEqual(len(documented), 12)
+        for key, signal in dd.SIGNALS.items():
+            metric, unit, aggregation, peak = documented[key]
+            self.assertEqual((signal["metric"], signal["unit"]), (metric, unit), key)
+            self.assertTrue(signal["aggregation"] == aggregation or (peak and signal["aggregation"] == "interval_max"), key)
+        self.assertEqual(dd.SIGNALS["restarts"]["aggregation"], "interval_rate")
+
+    def test_snapshot_limits(self):
+        for name in ("demo", "full"):
+            profile = dd.resolve_profile(name)
+            snapshot = dd.build_snapshot("B", self.release, profile, self.scenario, self.sha)
+            cells = len(snapshot["series"]) * snapshot["point_count"]
+            self.assertLessEqual(len(snapshot["series"]), 1024)
+            self.assertLessEqual(cells, 1500000)
+            self.assertLessEqual(len(dd.snapshot_text(snapshot).encode()), 32 * 1024 * 1024)
+            pairs = [(row["metric"], row["entity"]) for row in snapshot["series"]]
+            self.assertEqual(len(pairs), len(set(pairs)))
+            self.assertEqual(snapshot["point_count"], 1920)
+        with self.assertRaises(ValueError):
+            dd.check_snapshot_limits(800, 1920)
+        dd.check_snapshot_limits(781, 1920)
+
+    def test_arm_label_uniform(self):
+        for arm, snapshot in self.arms.items():
+            self.assertEqual({row["labels"]["arm"] for row in snapshot["series"]}, {arm})
+            self.assertEqual([row["id"] for row in snapshot["series"]], sorted(row["id"] for row in snapshot["series"]))
+
+    def test_story_arm_b(self):
+        step = self.profile["snapshot_step_ms"] / 1000
+        for arm, expect in (("B", 3), ("A", 0)):
+            snapshot = self.arms[arm]
+            restarts = number_rows(snapshot, "payments-svc", "openshift_restarts")["payments-svc.openshift_restarts"]
+            self.assertEqual(round(sum(restarts) * Decimal(str(step))), expect)
+            memory = number_rows(snapshot, "payments-svc", "openshift_container_memory_limit_ratio")["payments-svc.openshift_container_memory_limit_ratio"]
+            if arm == "B":
+                self.assertGreaterEqual(max(memory), Decimal("0.99"))
+            else:
+                self.assertLessEqual(max(memory), Decimal("0.75"))
+        others = number_rows(self.arms["B"], None, "openshift_restarts")
+        self.assertEqual([key for key, values in others.items() if any(values)], ["payments-svc.openshift_restarts"])
+
+    def test_unavailable_replicas_zero(self):
+        for snapshot in self.arms.values():
+            rows = number_rows(snapshot, None, "openshift_unavailable_replicas")
+            self.assertEqual(len(rows), 4)
+            self.assertFalse(any(any(values) for values in rows.values()))
+
+    def test_windows_match_stages(self):
+        start = dd.start_epoch_ms(self.release)
+        expected = [
+            {"id": sid, "from_epoch_ms": start + begin, "to_epoch_ms": start + end}
+            for sid, role, begin, end in dd.stage_bounds(self.profile, self.scenario)
+            if role == "steady"
+        ]
+        for snapshot in self.arms.values():
+            self.assertEqual(snapshot["windows"], expected)
+            self.assertEqual(snapshot["start_epoch_ms"], start)
+
+    def test_snapshot_rules_empty_and_bound(self):
+        for snapshot in self.arms.values():
+            self.assertEqual(snapshot["rules"], [])
+            self.assertEqual(snapshot["load_input_sha256"], self.sha)
+            self.assertEqual(snapshot["step_ms"], 15000)
+            self.assertEqual(snapshot["point_count"], 96)
+
+    def test_trends_are_planted_in_soak(self):
+        snapshot = self.arms["B"]
+        soak = dd.stage_bounds(self.profile, self.scenario)[-1]
+        first, last = soak[2] // 15000, soak[3] // 15000
+        for key in self.scenario["trend_slopes"]:
+            metric_key, entity = key.split("@")
+            row = number_rows(snapshot, entity, dd.SIGNALS[metric_key]["metric"])
+            values = next(iter(row.values()))[first:last]
+            half = len(values) // 2
+            self.assertGreater(sum(values[half:]) / (len(values) - half), sum(values[:half]) / half, key)
+
+    def test_snapshot_deterministic(self):
+        again = dd.build_snapshot("B", self.release, self.profile, self.scenario, self.sha)
+        self.assertEqual(dd.snapshot_text(again), dd.snapshot_text(self.arms["B"]))
+        self.assertEqual(dd.snapshot_hash(again), dd.snapshot_hash(self.arms["B"]))
+        self.assertNotEqual(dd.snapshot_hash(self.arms["A"]), dd.snapshot_hash(self.arms["B"]))
 
 
 if __name__ == "__main__":

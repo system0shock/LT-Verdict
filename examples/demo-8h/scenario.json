@@ -234,8 +234,8 @@
  },
  "trend_slopes": {
   "jvm_old_gen_used@checkout-api": 40000,
-  "openshift_sidecar_memory_limit_ratio@gateway": 7.5e-06,
-  "jvm_pool_saturation@orders-svc": 3e-05,
+  "sidecar_memory_limit_ratio@gateway": 7.5e-06,
+  "jvm_pool_saturation@checkout-api": 2.5e-05,
   "jvm_thread_count@checkout-api": 0.004,
   "jvm_process_cpu@payments-svc": 1e-05
  },
@@ -341,5 +341,15 @@
   "targets_stages": "разгон 30 мин, плато 1 120 мин, ступень 30 мин, плато 2 90 мин, спад 30 мин, soak 180 мин",
   "pacing": "постоянная интенсивность без пауз",
   "generator_limits": "синтетический генератор без пределов"
- }
+ },
+ "pool_services": [
+  "orders-svc",
+  "checkout-api",
+  "payments-svc",
+  "cart-svc",
+  "inventory-svc",
+  "user-svc",
+  "auth-svc",
+  "fraud-svc"
+ ]
 }

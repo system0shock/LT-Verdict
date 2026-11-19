@@ -195,3 +195,254 @@ def write_jtl(path: Path, release: dict, profile: dict, scenario: dict) -> str:
             if lines:
                 emit("".join(lines))
     return digest.hexdigest()
+
+
+# ---------------------------------------------------------------- resource snapshots (Task 3)
+
+from tools import stats_validation
+from tools.pod_view_adapter import Raw, dumps
+
+MAX_SNAPSHOT_SERIES = 1024
+MAX_SNAPSHOT_CELLS = 1500000
+MAX_SNAPSHOT_BYTES = 32 * 1024 * 1024
+MAX_SNAPSHOT_POINTS = 100000
+NOISE_SIZE = 4096
+APP, SIDECAR, DB_APP = "app", "istio-proxy", "postgres"
+# key of the pack document -> series metric, unit, aggregation (interval_max is the peak variant of the document)
+# and decimals of the fixed-point cell value
+SIGNALS = {
+    "cpu_limit_ratio": {"metric": "openshift_container_cpu_limit_ratio", "unit": "ratio", "aggregation": "interval_mean", "decimals": 3},
+    "memory_limit_ratio": {"metric": "openshift_container_memory_limit_ratio", "unit": "ratio", "aggregation": "interval_max", "decimals": 3},
+    "oom": {"metric": "openshift_oom", "unit": "events/s", "aggregation": "interval_rate", "decimals": 6},
+    "restarts": {"metric": "openshift_restarts", "unit": "events/s", "aggregation": "interval_rate", "decimals": 6},
+    "cpu_throttling": {"metric": "openshift_cpu_throttling", "unit": "ratio", "aggregation": "interval_mean", "decimals": 3},
+    "unavailable_replicas": {"metric": "openshift_unavailable_replicas", "unit": "count", "aggregation": "interval_max", "decimals": 0},
+    "pod_imbalance": {"metric": "openshift_pod_imbalance", "unit": "ratio", "aggregation": "interval_mean", "decimals": 3},
+    "sidecar_memory_limit_ratio": {"metric": "openshift_sidecar_memory_limit_ratio", "unit": "ratio", "aggregation": "interval_max", "decimals": 3},
+    "sidecar_cpu_throttling": {"metric": "openshift_sidecar_cpu_throttling", "unit": "ratio", "aggregation": "interval_mean", "decimals": 3},
+    "jvm_old_gen_used": {"metric": "jvm_old_gen_used", "unit": "bytes", "aggregation": "interval_mean", "decimals": 0},
+    "jvm_gc_pause": {"metric": "jvm_gc_pause", "unit": "s", "aggregation": "interval_max", "decimals": 3},
+    "jvm_thread_count": {"metric": "jvm_thread_count", "unit": "count", "aggregation": "interval_mean", "decimals": 0},
+    "jvm_process_cpu": {"metric": "jvm_process_cpu", "unit": "ratio", "aggregation": "interval_mean", "decimals": 3},
+    "jvm_pool_saturation": {"metric": "jvm_pool_saturation", "unit": "ratio", "aggregation": "interval_mean", "decimals": 3},
+}
+SIGNAL_ORDER = tuple(SIGNALS)
+MIB = 1048576
+_NOISE: dict = {}
+
+
+def noise_table(seed: int) -> list:
+    """4096 small deterministic offsets (-10..10), doubled so that any window of `points` cells can be sliced from it."""
+    if seed not in _NOISE:
+        table = [mix(seed, index) % 21 - 10 for index in range(NOISE_SIZE)]
+        _NOISE[seed] = table + table
+    return _NOISE[seed]
+
+
+def token(value: int, decimals: int) -> Raw:
+    """A fixed-point integer as a number token without trailing zeros: 450 with 3 decimals is 0.45."""
+    if decimals == 0:
+        return Raw(str(value))
+    whole, fraction = divmod(abs(value), 10**decimals)
+    text = f"{whole}.{fraction:0{decimals}d}".rstrip("0").rstrip(".")
+    return Raw(("-" if value < 0 else "") + text)
+
+
+def check_snapshot_limits(series: int, points: int) -> None:
+    """The limits of ADR 0014 (the byte limit is checked on the text), before anything is written."""
+    if series > MAX_SNAPSHOT_SERIES or points > MAX_SNAPSHOT_POINTS or series * points > MAX_SNAPSHOT_CELLS:
+        raise ValueError(f"{series} series of {points} cells exceed the snapshot limits ({MAX_SNAPSHOT_SERIES} series, {MAX_SNAPSHOT_CELLS} cells)")
+
+
+def workload_list(profile: dict, scenario: dict) -> list:
+    """(name, pods, is_database) of the workloads of the profile in a fixed order: services first, database last."""
+    items = [(item["name"], item["pods"], False) for item in scenario["services"]]
+    items.append((scenario["database"]["name"], scenario["database"]["pods"], True))
+    if profile["workloads"] >= len(items):
+        return items
+    wanted = scenario["tiny_workloads"][: profile["workloads"]]
+    return [item for item in items if item[0] in wanted]
+
+
+def trend_slope(profile: dict, scenario: dict, key: str) -> float:
+    """Planted slope in series units per second; a short profile compresses the same change into its duration."""
+    return scenario["trend_slopes"][key] * FULL_DURATION_S / profile["duration_s"]
+
+
+def minute_cell(profile: dict, scenario: dict, minute: int) -> int:
+    """Snapshot cell of a minute of the full-length scenario."""
+    points = profile["duration_s"] * 1000 // profile["snapshot_step_ms"]
+    return minute * points // scenario["load"]["total_minutes"]
+
+
+def simulate_arm(arm: str, release: dict, profile: dict, scenario: dict) -> dict:
+    """Every pod row at every snapshot cell (fixed-point integers) and the service series folded from them.
+
+    A service series is the worst pod and container of the service in the cell, as the platform signals fold it
+    (docs/user/platform-metric-packs.md); pod-view takes the same pod rows averaged over its columns."""
+    step_ms = profile["snapshot_step_ms"]
+    points = profile["duration_s"] * 1000 // step_ms
+    if points > NOISE_SIZE:
+        raise ValueError(f"{points} cells exceed the {NOISE_SIZE} cells of the noise table")
+    step_s = step_ms // 1000
+    seed = mix(scenario["seed"], release["seed"], scenario["arms"].index(arm))
+    noise = noise_table(seed)
+    story = scenario["story"] if release["story"] else None
+    knee = release["knee"]
+    starts = [i * step_ms for i in range(points)]
+    lm = [load_multiplier(profile, t + step_ms // 2, scenario) for t in starts]
+    dg = [int(1000 * degradation(knee_progress(profile, t + step_ms // 2, scenario))) if knee else 0 for t in starts]
+    load_factor = [400 + 6 * value // 10 for value in lm]
+    pool = set(scenario["pool_services"])
+    leak_phase, restart_cells = [0] * points, []
+    leak_service = leak_pod = throttle_service = None
+    if story:
+        leak = story["memory_leak"]
+        leak_service, leak_pod = (leak["service"], leak["pod_index"]) if arm == leak["arm"] else (None, None)
+        throttle_service = story["throttled"]["service"] if arm == story["throttled"]["arm"] else None
+        cycle = max(1, minute_cell(profile, scenario, leak["cycle_minutes"]))
+        restart_cells = [minute_cell(profile, scenario, minute) for minute in leak["restart_minutes"]]
+        for i in range(points):
+            before = [cell for cell in restart_cells if cell <= i]
+            last = before[-1] if before else restart_cells[0] - cycle
+            leak_phase[i] = min(1000, (i - last) * 1000 // cycle)
+    pods, services = [], {}
+    for service_index, (name, pod_count, is_database) in enumerate(workload_list(profile, scenario)):
+        containers = [DB_APP] if is_database else [APP, SIDECAR]
+        folded = {key: [0] * points for key in ("cpu", "memory", "throttle", "side_memory", "side_throttle")}
+        usage_min, usage_max, usage_sum = [10**9] * points, [0] * points, [0] * points
+        for k in range(1, pod_count + 1):
+            pod_seed = mix(seed, service_index, k)
+
+            def nz(salt: int) -> list:
+                offset = mix(pod_seed, salt) % NOISE_SIZE
+                return noise[offset : offset + points]
+
+            hot = bool(story) and name == story["hot_pod"]["service"] and k == story["hot_pod"]["pod_index"]
+            throttled = name == throttle_service and k in story["throttled"]["pod_indexes"]
+            leaking = name == leak_service and k == leak_pod
+            cpu_base = 250 + mix(pod_seed, 1) % 300
+            if hot:
+                cpu_base = cpu_base * 22 // 10
+            cpu = [min(1000, max(0, cpu_base * f // 1000 + n)) for f, n in zip(load_factor, nz(10))]
+            if name == "checkout-api" and knee:
+                cpu = [min(1000, value + 250 * d // 1000) for value, d in zip(cpu, dg)]
+            memory_base = 400 + mix(pod_seed, 2) % 200
+            memory = [min(1000, max(0, memory_base + 30 * i // points + n)) for i, n in enumerate(nz(11))]
+            if leaking:
+                memory = [min(1000, max(0, 300 + 700 * phase // 1000 + n // 2)) for phase, n in zip(leak_phase, nz(11))]
+            throttle_base = 10 + mix(pod_seed, 3) % 30
+            throttle = [max(0, throttle_base * m // 1000 + n // 2) for m, n in zip(lm, nz(12))]
+            if throttled:
+                from_cell = minute_cell(profile, scenario, story["throttled"]["from_minute"])
+                throttle = [value + (400 + 200 * d // 1000 if i >= from_cell else 0) for i, (value, d) in enumerate(zip(throttle, dg))]
+            rows = {(containers[0], "cpu"): cpu, (containers[0], "memory"): memory, (containers[0], "throttle"): [min(1000, v) for v in throttle]}
+            usage = list(cpu)
+            if not is_database:
+                side_cpu = [min(1000, (60 + mix(pod_seed, 4) % 60) * f // 1000 + n // 2) for f, n in zip(load_factor, nz(13))]
+                side_base = 250 + mix(pod_seed, 5) % 100
+                side_memory = [min(1000, side_base + n) for n in nz(14)]
+                if name == scenario["story"]["sidecar_service"]:
+                    slope = trend_slope(profile, scenario, "sidecar_memory_limit_ratio@gateway") * 1000
+                    side_memory = [min(1000, value + int(slope * i * step_s)) for i, value in enumerate(side_memory)]
+                side_throttle = [max(0, 5 + n // 3) for n in nz(15)]
+                rows.update({(SIDECAR, "cpu"): side_cpu, (SIDECAR, "memory"): side_memory, (SIDECAR, "throttle"): side_throttle})
+                usage = [a + b // 2 for a, b in zip(cpu, side_cpu)]
+            pods.append({"service": name, "pod": f"{name}-{arm.lower()}{k}", "containers": containers, "rows": rows, "usage": usage})
+            for (container, metric), values in rows.items():
+                folded[metric] = [max(a, b) for a, b in zip(folded[metric], values)]
+                if container == SIDECAR and metric in ("memory", "throttle"):
+                    folded["side_" + metric] = [max(a, b) for a, b in zip(folded["side_" + metric], values)]
+            usage_min = [min(a, b) for a, b in zip(usage_min, usage)]
+            usage_max = [max(a, b) for a, b in zip(usage_max, usage)]
+            usage_sum = [a + b for a, b in zip(usage_sum, usage)]
+        series = {
+            "cpu_limit_ratio": folded["cpu"],
+            "memory_limit_ratio": folded["memory"],
+            "oom": [0] * points,
+            "restarts": [0] * points,
+            "cpu_throttling": folded["throttle"],
+            "unavailable_replicas": [0] * points,
+            "pod_imbalance": [(hi - lo) * 1000 * pod_count // max(1, total) for hi, lo, total in zip(usage_max, usage_min, usage_sum)],
+        }
+        if name == leak_service:
+            for cell in restart_cells:
+                series["restarts"][cell] = 1000000 // step_s
+        if not is_database:
+            series["sidecar_memory_limit_ratio"] = folded["side_memory"]
+            series["sidecar_cpu_throttling"] = folded["side_throttle"]
+            sn = noise[mix(seed, service_index, 90) % NOISE_SIZE :][:points]
+            old_gen = (400 + mix(seed, service_index, 91) % 400) * MIB
+            series["jvm_old_gen_used"] = [old_gen + n * MIB // 5 for n in sn]
+            series["jvm_gc_pause"] = [max(1, 15 + mix(seed, service_index, 92) % 25 + n // 2) for n in sn]
+            if name == leak_service:
+                series["jvm_gc_pause"] = [value + 900 * phase**3 // 10**9 for value, phase in zip(series["jvm_gc_pause"], leak_phase)]
+            series["jvm_thread_count"] = [100 + mix(seed, service_index, 93) % 60 + n // 3 + m // 50 for n, m in zip(sn, lm)]
+            series["jvm_process_cpu"] = [200 + mix(seed, service_index, 94) % 150 + m // 10 + n for n, m in zip(sn, lm)]
+            if name in pool:
+                series["jvm_pool_saturation"] = [max(0, 50 + mix(seed, service_index, 95) % 100 + 20 * i // points + n) for i, n in enumerate(sn)]
+            for key, unit_scale in (("jvm_old_gen_used", 1), ("jvm_thread_count", 1), ("jvm_process_cpu", 1000), ("jvm_pool_saturation", 1000)):
+                trend_key = f"{key}@{name}"
+                if trend_key in scenario["trend_slopes"]:
+                    slope = trend_slope(profile, scenario, trend_key) * unit_scale
+                    series[key] = [value + int(slope * i * step_s) for i, value in enumerate(series[key])]
+            if "jvm_pool_saturation" in series:
+                series["jvm_pool_saturation"] = [min(1000, value) for value in series["jvm_pool_saturation"]]
+        services[name] = series
+    return {"arm": arm, "points": points, "pods": pods, "services": services}
+
+
+def build_snapshot(arm: str, release: dict, profile: dict, scenario: dict, load_sha256: str, model: dict | None = None) -> dict:
+    """resource-snapshot.v1 of one arm: one series per (signal, workload), rows sorted by id, the `arm` label in each."""
+    model = model or simulate_arm(arm, release, profile, scenario)
+    rows = []
+    for name, series in model["services"].items():
+        for key in SIGNAL_ORDER:
+            if key not in series:
+                continue
+            signal = SIGNALS[key]
+            rows.append(
+                {
+                    "id": f"{name}.{signal['metric']}",
+                    "metric": signal["metric"],
+                    "unit": signal["unit"],
+                    "entity": name,
+                    "role": "system",
+                    "aggregation": signal["aggregation"],
+                    "labels": {"arm": arm, "namespace": scenario["namespace"]},
+                    "values": [token(value, signal["decimals"]) for value in series[key]],
+                }
+            )
+    rows.sort(key=lambda row: row["id"].encode("utf-8"))
+    check_snapshot_limits(len(rows), model["points"])
+    start = start_epoch_ms(release)
+    snapshot = {
+        "schema_version": "resource-snapshot.v1",
+        "load_input_sha256": load_sha256,
+        "start_epoch_ms": start,
+        "step_ms": profile["snapshot_step_ms"],
+        "point_count": model["points"],
+        "series": rows,
+        "windows": [
+            {"id": stage_id, "from_epoch_ms": start + begin, "to_epoch_ms": start + end}
+            for stage_id, role, begin, end in stage_bounds(profile, scenario)
+            if role == "steady"
+        ],
+        "rules": [],
+        "provenance": {"source_kind": "synthetic", "query_semantics": "declared interval aggregation", "clock_alignment": "declared_aligned"},
+    }
+    if len(snapshot_text(snapshot).encode("utf-8")) > MAX_SNAPSHOT_BYTES:
+        raise ValueError("the snapshot would exceed 32 MiB")
+    return snapshot
+
+
+def snapshot_text(snapshot: dict) -> str:
+    return dumps(snapshot) + "\n"
+
+
+def snapshot_hash(snapshot: dict) -> str:
+    """Semantic hash of the snapshot (tools/stats_validation.snapshot_hash) over the text as the core reads it."""
+    from decimal import Decimal
+
+    parsed = json.loads(snapshot_text(snapshot), parse_float=Decimal, parse_int=Decimal)
+    return stats_validation.snapshot_hash(parsed)

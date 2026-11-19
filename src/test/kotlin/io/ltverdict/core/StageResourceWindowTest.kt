@@ -68,6 +68,24 @@ class StageResourceWindowTest {
     }
 
     @Test
+    fun `a start gap of exactly one step is partial`() {
+        val resolved = resolveStageResourceWindows(grid(start = T0 + 55_000), listOf(window("steady", 40_000, 100_000)))
+
+        // 55000 - 40000 == 15000: a whole cell of the stage is outside the grid
+        assertEquals(listOf(window("steady", 55_000, 100_000)), resolved.windows)
+        assertTrue(resolved.partial)
+    }
+
+    @Test
+    fun `an end gap of exactly one step is partial`() {
+        val resolved = resolveStageResourceWindows(grid(start = T0 + 10_000, points = 5), listOf(window("steady", 40_000, 100_000)))
+
+        // the grid ends at 85000: 100000 - 85000 == 15000
+        assertEquals(listOf(window("steady", 40_000, 85_000)), resolved.windows)
+        assertTrue(resolved.partial)
+    }
+
+    @Test
     fun `touching steady stages do not share a cell`() {
         val resolved =
             resolveStageResourceWindows(grid(), listOf(window("steady-a", 40_000, 70_000), window("steady-b", 70_000, 100_000)))

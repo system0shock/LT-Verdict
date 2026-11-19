@@ -2,8 +2,14 @@ package io.ltverdict.core
 
 import io.ltverdict.storage.DataDirectory
 import io.ltverdict.storage.RunBundleStore
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.jsonArray
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 import org.junit.jupiter.api.Assertions.assertArrayEquals
 import org.junit.jupiter.api.Assertions.assertInstanceOf
+import org.junit.jupiter.api.Assertions.assertNotEquals
+import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.io.TempDir
 import java.io.ByteArrayInputStream
@@ -28,6 +34,31 @@ class StageResourceCrossVersionTest {
         }
     }
 
+    @Test
+    fun `the combination has its own identity and leaves the three modes unchanged`() {
+        val (combinedIdentity, combinedResult) = analyzeStored(JTL, SLICE1_POLICY, SNAPSHOT, STAGES)
+        val combinedId = sha256Hex(combinedIdentity)
+
+        MODES.forEach { mode ->
+            val (identity, result) = analyzeStored(JTL, mode.policy, mode.snapshot, mode.stages)
+            assertArrayEquals(Files.readAllBytes(CROSS_VERSION.resolve("${mode.name}/identity.json")), identity, mode.name)
+            assertArrayEquals(Files.readAllBytes(CROSS_VERSION.resolve("${mode.name}/analysis-result.json")), result, mode.name)
+            assertNotEquals(sha256Hex(identity), combinedId, mode.name)
+        }
+        val types =
+            Json
+                .parseToJsonElement(combinedResult.decodeToString())
+                .jsonObject
+                .getValue("evidence")
+                .jsonArray
+                .map {
+                    it.jsonObject
+                        .getValue("type")
+                        .jsonPrimitive.content
+                }
+        assertTrue("stage_binding" in types && "resource_binding" in types)
+    }
+
     /** Identity and result bytes of one analysis in a fresh data directory. */
     private fun analyzeStored(
         jtl: Path,
@@ -43,7 +74,10 @@ class StageResourceCrossVersionTest {
                     AnalysisRequest(
                         input,
                         policy?.let {
-                            assertInstanceOf(PolicyValidation.Valid::class.java, validatePolicy(ByteArrayInputStream(Files.readAllBytes(it))))
+                            assertInstanceOf(
+                                PolicyValidation.Valid::class.java,
+                                validatePolicy(ByteArrayInputStream(Files.readAllBytes(it))),
+                            )
                         },
                         resources =
                             snapshot?.let {

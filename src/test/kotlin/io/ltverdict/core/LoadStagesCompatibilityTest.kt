@@ -256,7 +256,9 @@ class LoadStagesCompatibilityTest {
         val snapshot =
             assertInstanceOf(
                 ResourceValidation.Valid::class.java,
-                validateResourceSnapshot(ByteArrayInputStream(Files.readAllBytes(Path.of("fixtures/stages/cross-version/snapshot-15s.json")))),
+                validateResourceSnapshot(
+                    ByteArrayInputStream(Files.readAllBytes(Path.of("fixtures/stages/cross-version/snapshot-15s.json"))),
+                ),
             )
 
         val document =
@@ -265,9 +267,21 @@ class LoadStagesCompatibilityTest {
                     analysisIdentity(input, null, EngineConfig(), resources = snapshot, stages = declared).decodeToString(),
                 ).jsonObject
 
-        val ids = document.getValue("modules").jsonArray.map { it.jsonObject.getValue("id").jsonPrimitive.content }
+        val ids =
+            document.getValue("modules").jsonArray.map {
+                it.jsonObject
+                    .getValue("id")
+                    .jsonPrimitive.content
+            }
         assertEquals(
-            listOf("normalization", "metrics", "policy-evaluation", "resource-statistics", "window-policy-evaluation", "stage-window-evaluation"),
+            listOf(
+                "normalization",
+                "metrics",
+                "policy-evaluation",
+                "resource-statistics",
+                "window-policy-evaluation",
+                "stage-window-evaluation",
+            ),
             ids,
         )
         val inputVersions = document.getValue("input_versions").jsonObject
@@ -276,6 +290,37 @@ class LoadStagesCompatibilityTest {
         assertEquals("load-stages.v1", inputVersions.getValue("stages").jsonPrimitive.content)
         assertEquals("resource-snapshot.v1", inputVersions.getValue("resources").jsonPrimitive.content)
     }
+
+    @Test
+    fun `the combination is not comparable with stages alone nor with the snapshot alone`() =
+        withService { store, service ->
+            val data = accept(store, Files.readAllBytes(Path.of("fixtures/stages/ramp-steady-rampdown.jtl")))
+            val snapshot =
+                assertInstanceOf(
+                    ResourceValidation.Valid::class.java,
+                    validateResourceSnapshot(
+                        ByteArrayInputStream(Files.readAllBytes(Path.of("fixtures/stages/cross-version/snapshot-15s.json"))),
+                    ),
+                )
+            val combined = saved(service.analyze(AnalysisRequest(data, policy(), resources = snapshot, stages = declared)), 'b')
+            val combinedToo = combined.copy(reference = reference('c'))
+            val stagesOnly = saved(service.analyze(AnalysisRequest(data, policy(), stages = declared)), 'd')
+            val snapshotOnly = saved(service.analyze(AnalysisRequest(data, policy(), resources = snapshot)), 'e')
+
+            fun transactions(
+                baseline: SavedAnalysisForComparison,
+                current: SavedAnalysisForComparison,
+            ) = compareTransactions(baseline.result, baseline.identity, current.result, current.identity).getValue("compatible")
+
+            assertEquals(JsonPrimitive(true), transactions(combined, combinedToo))
+            listOf(stagesOnly, snapshotOnly).forEach { other ->
+                assertEquals(JsonPrimitive(false), transactions(combined, other))
+                assertEquals(JsonPrimitive(false), transactions(other, combined))
+                assertFalse(compatible(combined, other))
+                assertFalse(compatible(other, combined))
+            }
+            assertTrue(compatible(combined, combinedToo))
+        }
 
     private fun compatible(
         baseline: SavedAnalysisForComparison,

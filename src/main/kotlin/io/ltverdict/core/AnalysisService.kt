@@ -78,10 +78,19 @@ internal class AnalysisService(
                 else -> AnalysisMode.STANDARD
             }
         checkCancelled()
-        // ADR 0030, R3: two sources of windows are an error, not a priority. The online request is refused in analyzeWithSources.
+        // ADR 0030, R3, narrowed by ADR 0037 (D3, D8, D9): two sources of windows are an error, not a priority. Stages meet a
+        // snapshot only when the snapshot declares no windows; capacity, correlation and trend plans stay refused, in this order.
+        // The online request is refused in analyzeWithSources.
         if (request.stages != null) {
             require(request.capacity == null) { "STAGES_CAPACITY_CONFLICT" }
-            require(request.resources == null) { "STAGES_RESOURCES_CONFLICT" }
+            require(
+                request.resources
+                    ?.snapshot
+                    ?.windows
+                    .isNullOrEmpty(),
+            ) { "STAGES_RESOURCES_CONFLICT" }
+            require(request.diagnostics == null) { "STAGES_CORRELATION_CONFLICT" }
+            require(request.trend == null) { "STAGES_TREND_CONFLICT" }
         }
         require(request.sourceRequest == null) { "SOURCE_ACQUISITION_REQUIRED" }
         request.sourceAcquisition?.let {
@@ -309,19 +318,26 @@ internal class AnalysisService(
 
         val runStart = firstStart ?: error("PARSER_PASS_MISMATCH")
         val runEnd = firstEnd ?: error("PARSER_PASS_MISMATCH")
+        val stageResolution = request.stages?.let { resolveStageWindows(it.stages, runStart, runEnd) }
+        // ADR 0037, D2: with stages the resource windows are the full grid cells inside each steady stage.
+        val stageResourceWindows =
+            request.resources?.let { resources ->
+                stageResolution?.let { resolveStageResourceWindows(resources.snapshot, it.windows) }
+            }
         val resourceWindows =
-            request.resources?.let { resolveResourceWindows(it.snapshot, request.input.sha256, runStart, runEnd) }
+            stageResourceWindows?.windows
+                ?: request.resources?.let { resolveResourceWindows(it.snapshot, request.input.sha256, runStart, runEnd) }
         request.diagnostics?.let { diagnostics ->
             validateDiagnosticResolvedWindows(diagnostics, checkNotNull(resourceWindows)).firstOrNull()?.let {
                 throw IllegalArgumentException(it.code)
             }
         }
-        val stageResolution = request.stages?.let { resolveStageWindows(it.stages, runStart, runEnd) }
         val accumulator = MetricsAccumulator(runStart, runEnd, engineConfig.metrics)
         val retainedTransactions = transactionCandidates.values.flatten().toSet()
         val windowAccumulator =
             try {
-                (resourceWindows ?: stageResolution?.windows)?.let { windows ->
+                // ADR 0037, F7: business metrics of a stage take the exact stage window, not its grid cells.
+                (stageResolution?.windows ?: resourceWindows)?.let { windows ->
                     WindowMetricsAccumulator(
                         windows.map { MetricWindow(it.id, it.fromEpochMillis, it.toEpochMillis) },
                         retainedTransactions,
@@ -439,6 +455,41 @@ internal class AnalysisService(
                         first.diagnostics,
                     ).let { it.copy(evidence = it.evidence + stageWindowMetricSummaries(stageResolution.windows, windowMetrics)) }
                 }
+            } else if (stageResolution != null) {
+                // ADR 0037, D1-D5: one set of windows, the steady stages; the resource side evaluates their full grid cells.
+                val stageResources = checkNotNull(stageResourceWindows)
+                val windows = stageResources.windows
+                val windowMetrics = checkNotNull(finishedWindowMetrics)
+                val resourceEvaluation =
+                    evaluateResources(
+                        request.resources.snapshot,
+                        windows,
+                        checkCancelled,
+                        request.policy?.policy?.let { expandPlatformRules(it, request.resources.snapshot) } ?: PlatformExpansion.EMPTY,
+                    ).let { evaluated ->
+                        evaluated.copy(
+                            coverageReasons =
+                                if (stageResources.partial) {
+                                    (evaluated.coverageReasons + STAGE_WINDOW_SNAPSHOT_PARTIAL).distinct()
+                                } else {
+                                    evaluated.coverageReasons
+                                },
+                            evidence =
+                                listOf(
+                                    stageBindingEvidence(request.stages.sha256, stageResolution, runStart, runEnd, windows),
+                                    resourceBindingEvidence(request.resources.snapshot, windows, runStart, runEnd, declaredStages = true),
+                                ) + evaluated.evidence,
+                        )
+                    }
+                evaluateSharedWindowPolicy(
+                    request.policy?.policy,
+                    first.validity,
+                    metrics,
+                    windowMetrics,
+                    resourceEvaluation,
+                    stageResolution.windows,
+                    first.diagnostics,
+                ).let { it.copy(evidence = it.evidence + stageWindowMetricSummaries(stageResolution.windows, windowMetrics)) }
             } else {
                 val windows = checkNotNull(resourceWindows)
                 val resourceEvaluation =

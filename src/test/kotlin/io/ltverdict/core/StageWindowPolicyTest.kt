@@ -461,6 +461,309 @@ class StageWindowPolicyTest {
             )
         }
 
+    @Test
+    fun `stages with a snapshot evaluate business rules on the stage and resource rules on its full cells`() =
+        withService { store, service ->
+            val outcome =
+                service.analyze(
+                    AnalysisRequest(
+                        accept(store, ramp),
+                        policy(PLATFORM_POLICY),
+                        resources = snapshot(),
+                        stages = stages(RAMP_STEADY_DOWN),
+                    ),
+                )
+
+            assertEquals(
+                listOf(
+                    "metric_summary",
+                    "metric_summary",
+                    "stage_binding",
+                    "resource_binding",
+                    "resource_summary",
+                    "resource_summary",
+                    "resource_policy_check",
+                    "resource_policy_check",
+                    "policy_check",
+                    "window_policy_summary",
+                    "window_metric_summary",
+                ),
+                evidence(outcome).map { it.str("type") },
+            )
+            val window = single(outcome, "window_policy_summary")
+            assertEquals("steady", window.str("window_id"))
+            assertEquals((T0 + 40_000).toString(), window.str("from_epoch_ms"))
+            assertEquals((T0 + 100_000).toString(), window.str("to_epoch_ms"))
+            evidence(outcome).filter { it.str("type") in setOf("resource_summary", "resource_policy_check") }.forEach {
+                assertEquals("steady", it.str("window_id"))
+            }
+            evidence(outcome).filter { it.str("type") == "resource_summary" }.forEach {
+                assertEquals((T0 + 45_000).toString(), it.str("from_epoch_ms"))
+                assertEquals((T0 + 90_000).toString(), it.str("to_epoch_ms"))
+            }
+            val steady =
+                single(outcome, "stage_binding")
+                    .getValue("stages")
+                    .jsonArray
+                    .map { it.jsonObject }
+                    .single { it.str("id") == "steady" }
+            assertEquals((T0 + 45_000).toString(), steady.str("resource_from_epoch_ms"))
+            assertEquals((T0 + 90_000).toString(), steady.str("resource_to_epoch_ms"))
+            val binding = single(outcome, "resource_binding")
+            assertEquals("declared_stages", binding.str("mode"))
+            assertEquals((T0 + 45_000).toString(), binding.str("evaluation_from_epoch_ms"))
+            assertEquals((T0 + 90_000).toString(), binding.str("evaluation_to_epoch_ms"))
+            // business metrics come from the exact stage window, not from the grid cells (F7)
+            val metrics = single(outcome, "window_metric_summary")
+            assertEquals("600", metrics.str("sample_count"))
+            assertEquals("600000" to "60000", metrics.obj("throughput_rps").let { it.str("numerator") to it.str("denominator") })
+            assertEquals("194", single(outcome, "policy_check").getValue("observed").toString())
+            // cells 2 and 3 are 0.9; the stage takes cells 3 to 5, so the two-cell CPU rule sees one high cell and passes
+            val cpu = evidence(outcome).single { it.str("type") == "resource_policy_check" && it.str("platform_rule_id") == "cpu" }
+            assertEquals("PASS", cpu.str("status"))
+            assertEquals("3", cpu.str("expected_cells"))
+            assertEquals("PASS", window.str("resource_verdict"))
+            assertEquals("PASS", field(outcome, "policy_verdict"))
+            assertEquals("COMPLETE", result(outcome).obj("analysis_coverage").str("status"))
+        }
+
+    @Test
+    fun `a platform sla rule is checked on the steady window when a snapshot is given`() =
+        withService { store, service ->
+            val input = accept(store, ramp)
+
+            fun analyze(values: String) =
+                service.analyze(
+                    AnalysisRequest(input, policy(PLATFORM_POLICY), resources = snapshot(cpu = values), stages = stages(RAMP_STEADY_DOWN)),
+                )
+
+            val passing = analyze("0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2")
+            val failing = analyze("0.2, 0.2, 0.2, 0.9, 0.9, 0.9, 0.2, 0.2")
+            // the ramp-up cell [30 s, 45 s) and the ramp-down cells are outside the stage: they do not change the verdict
+            val rampsOnly = analyze("0.9, 0.9, 0.9, 0.2, 0.2, 0.2, 0.9, 0.9")
+
+            assertEquals("PASS", single(passing, "window_policy_summary").str("resource_verdict"))
+            assertEquals("FAIL", single(failing, "window_policy_summary").str("resource_verdict"))
+            assertEquals("FAIL", field(failing, "policy_verdict"))
+            assertEquals("PASS", single(rampsOnly, "window_policy_summary").str("resource_verdict"))
+            listOf(passing, failing, rampsOnly).forEach { assertFalse("RESOURCE_SNAPSHOT_REQUIRED" in coverageReasons(it)) }
+        }
+
+    @Test
+    fun `a platform rule bound to an excluded stage is not found`() =
+        withService { store, service ->
+            val bound = PLATFORM_POLICY.replace("\"id\": \"cpu\",", "\"id\": \"cpu\", \"window_ids\": [\"ramp-up\"],")
+
+            val outcome =
+                service.analyze(
+                    AnalysisRequest(accept(store, ramp), policy(bound), resources = snapshot(), stages = stages(RAMP_STEADY_DOWN)),
+                )
+
+            assertEquals("NO_VERDICT", field(outcome, "policy_verdict"))
+            val check = single(outcome, "rule_window_check")
+            assertEquals("cpu", check.str("rule_id"))
+            assertEquals("ramp-up", check.str("window_id"))
+            assertEquals("RULE_WINDOW_NOT_FOUND", check.str("reason_code"))
+            assertTrue(evidence(outcome).none { it.str("type") == "resource_policy_check" && it.str("platform_rule_id") == "cpu" })
+        }
+
+    @Test
+    fun `a snapshot that starts inside the steady stage is partial`() =
+        withService { store, service ->
+            val late = snapshot(start = T0 + 60_000, points = 4, cpu = "0.2, 0.2, 0.2, 0.2", replicas = "0, 0, 0, 0")
+
+            val outcome =
+                service.analyze(
+                    AnalysisRequest(accept(store, ramp), policy(rules(P95_LTE_250)), resources = late, stages = stages(RAMP_STEADY_DOWN)),
+                )
+
+            assertEquals(listOf("STAGE_WINDOW_SNAPSHOT_PARTIAL"), coverageReasons(outcome))
+            assertEquals("INCOMPLETE", result(outcome).obj("analysis_coverage").str("status"))
+            assertEquals("PASS", field(outcome, "policy_verdict"))
+            val steady =
+                single(outcome, "stage_binding")
+                    .getValue("stages")
+                    .jsonArray
+                    .map { it.jsonObject }
+                    .single { it.str("id") == "steady" }
+            assertEquals((T0 + 60_000).toString(), steady.str("resource_from_epoch_ms"))
+            assertEquals((T0 + 90_000).toString(), steady.str("resource_to_epoch_ms"))
+        }
+
+    @Test
+    fun `a steady stage without a full cell of the snapshot grid is refused`() =
+        withService { store, service ->
+            val failure =
+                assertThrows(IllegalArgumentException::class.java) {
+                    service.analyze(
+                        AnalysisRequest(
+                            accept(store, ramp),
+                            null,
+                            resources = snapshot(),
+                            stages = stages(declaration(stage("short", "steady", 16_000, 29_000))),
+                        ),
+                    )
+                }
+
+            assertEquals("STAGE_WINDOW_NO_FULL_CELLS", failure.message)
+        }
+
+    @Test
+    fun `an invalid input with stages and a snapshot has no stage binding but keeps both files`() =
+        withService { store, service ->
+            val input = accept(store, (ramp.decodeToString().lineSequence().first() + "\nmalformed\n").encodeToByteArray())
+            val declared = stages(RAMP_STEADY_DOWN)
+            val resources = snapshot(loadHash = input.sha256)
+
+            val outcome = service.analyze(AnalysisRequest(input, null, resources = resources, stages = declared))
+
+            assertEquals("INVALID", field(outcome, "run_validity"))
+            assertTrue(
+                evidence(outcome).none {
+                    it.str("type") in setOf("stage_binding", "resource_binding", "resource_summary", "window_metric_summary")
+                },
+            )
+            assertEquals(declared.sha256, sha256Hex(Files.readAllBytes(outcome.analysisDirectory.resolve("load-stages.json"))))
+            assertArrayEquals(resources.rawBytes(), Files.readAllBytes(outcome.analysisDirectory.resolve("resource-snapshot.json")))
+        }
+
+    @Test
+    fun `the same inputs with stages and a snapshot return the stored analysis`() =
+        withService { store, service ->
+            val input = accept(store, ramp)
+
+            val first =
+                service.analyze(
+                    AnalysisRequest(input, policy(PLATFORM_POLICY), resources = snapshot(), stages = stages(RAMP_STEADY_DOWN)),
+                )
+            val again =
+                service.analyze(
+                    AnalysisRequest(input, policy(PLATFORM_POLICY), resources = snapshot(), stages = stages(RAMP_STEADY_DOWN)),
+                )
+            val snapshotOnly = service.analyze(AnalysisRequest(input, policy(PLATFORM_POLICY), resources = snapshot()))
+
+            assertEquals(first.analysisId, again.analysisId)
+            assertEquals(first.analysisDirectory, again.analysisDirectory)
+            assertArrayEquals(first.canonicalResult, again.canonicalResult)
+            assertNotEquals(first.analysisId, snapshotOnly.analysisId)
+            assertFalse(Files.exists(snapshotOnly.analysisDirectory.resolve("load-stages.json")))
+        }
+
+    @Test
+    fun `stages with a capacity plan, a snapshot with windows, a correlation plan or a trend plan are refused`() =
+        withService { store, service ->
+            val input = accept(store, ramp)
+            val declared = stages(RAMP_STEADY_DOWN)
+            val windowed =
+                assertInstanceOf(
+                    ResourceValidation.Valid::class.java,
+                    validateResourceSnapshot(
+                        ByteArrayInputStream(Files.readAllBytes(Path.of("docs/contracts/resources/v1/examples/valid/basic.json"))),
+                    ),
+                )
+            val capacity =
+                assertInstanceOf(
+                    CapacityPlanValidation.Valid::class.java,
+                    validateCapacityPlan(
+                        ByteArrayInputStream(Files.readAllBytes(Path.of("docs/contracts/capacity/v1/examples/valid/rps.json"))),
+                    ),
+                )
+            val correlation =
+                assertInstanceOf(
+                    DiagnosticValidation.Valid::class.java,
+                    validateDiagnosticPlan(
+                        ByteArrayInputStream(Files.readAllBytes(Path.of("docs/contracts/diagnostics/v1/examples/valid/basic.json"))),
+                    ),
+                )
+            val trend =
+                assertInstanceOf(
+                    TrendPlanValidation.Valid::class.java,
+                    validateTrendPlan(
+                        ByteArrayInputStream(Files.readAllBytes(Path.of("docs/contracts/trend/v1/examples/valid/basic.json"))),
+                    ),
+                )
+
+            fun message(request: AnalysisRequest) = assertThrows(IllegalArgumentException::class.java) { service.analyze(request) }.message
+
+            // order: capacity, snapshot with windows, correlation, trend; all before the snapshot is compared with the load input
+            assertEquals(
+                "STAGES_CAPACITY_CONFLICT",
+                message(
+                    AnalysisRequest(input, null, resources = windowed, capacity = capacity, diagnostics = correlation, stages = declared),
+                ),
+            )
+            assertEquals(
+                "STAGES_RESOURCES_CONFLICT",
+                message(AnalysisRequest(input, null, resources = windowed, diagnostics = correlation, trend = trend, stages = declared)),
+            )
+            assertEquals(
+                "STAGES_CORRELATION_CONFLICT",
+                message(AnalysisRequest(input, null, resources = snapshot(), diagnostics = correlation, trend = trend, stages = declared)),
+            )
+            assertEquals(
+                "STAGES_TREND_CONFLICT",
+                message(AnalysisRequest(input, null, resources = snapshot(), trend = trend, stages = declared)),
+            )
+            // without a snapshot the stage codes come before DIAGNOSTIC_RESOURCE_REQUIRED and TREND_RESOURCE_REQUIRED
+            assertEquals("STAGES_CORRELATION_CONFLICT", message(AnalysisRequest(input, null, diagnostics = correlation, stages = declared)))
+            assertEquals("STAGES_TREND_CONFLICT", message(AnalysisRequest(input, null, trend = trend, stages = declared)))
+            assertEquals("DIAGNOSTIC_RESOURCE_REQUIRED", message(AnalysisRequest(input, null, diagnostics = correlation)))
+            assertEquals("TREND_RESOURCE_REQUIRED", message(AnalysisRequest(input, null, trend = trend)))
+        }
+
+    @Test
+    fun `incidents of the combination reference stage windows`() =
+        withService { store, service ->
+            val outcome =
+                service.analyze(
+                    AnalysisRequest(
+                        accept(store, ramp),
+                        // p95 on the plateau is 194: a business failure in the window next to the resource failure
+                        policy(PLATFORM_POLICY.replace("\"threshold\": 250", "\"threshold\": 190")),
+                        resources = snapshot(cpu = "0.2, 0.2, 0.2, 0.9, 0.9, 0.9, 0.2, 0.2"),
+                        stages = stages(RAMP_STEADY_DOWN),
+                    ),
+                )
+
+            val incidents = synthesizeIncidents(io.ltverdict.ingest.RunValidity.VALID, findings(outcome), evidence(outcome))
+            val items = incidents.getValue("items").jsonArray.map { it.jsonObject }
+            assertEquals(setOf("overall", "entity"), items.map { it.obj("scope").str("kind") }.toSet())
+            items.forEach { item ->
+                assertEquals("steady", item.str("window_id"))
+                val negatives = item.getValue("negative_evidence").jsonArray.map { it.jsonObject.str("check") }
+                assertFalse("RESOURCE_DATA_NOT_PROVIDED" in negatives)
+            }
+            // a business atom takes the exact stage bounds of window_policy_summary; a resource atom takes the cells it violated
+            val window = single(outcome, "window_policy_summary")
+            val business = items.single { it.obj("scope").str("kind") == "overall" }.obj("interval")
+            assertEquals(
+                window.str("from_epoch_ms") to window.str("to_epoch_ms"),
+                business.str("from_epoch_ms") to business.str("to_epoch_ms"),
+            )
+            val resource = items.single { it.obj("scope").str("kind") == "entity" }.obj("interval")
+            assertEquals((T0 + 45_000).toString() to (T0 + 90_000).toString(), resource.str("from_epoch_ms") to resource.str("to_epoch_ms"))
+        }
+
+    private fun snapshot(
+        loadHash: String? = null,
+        start: Long = T0,
+        points: Int = 8,
+        cpu: String = "0.2, 0.2, 0.9, 0.9, 0.2, 0.2, 0.2, 0.2",
+        replicas: String = "0, 0, 0, 0, 0, 0, 0, 0",
+    ): ResourceValidation.Valid {
+        val text =
+            SNAPSHOT_15S
+                .replace("\"start_epoch_ms\": $T0,", "\"start_epoch_ms\": $start,")
+                .replace("\"point_count\": 8,", "\"point_count\": $points,")
+                .replace("[0.2, 0.2, 0.9, 0.9, 0.2, 0.2, 0.2, 0.2]", "[$cpu]")
+                .replace("[0, 0, 0, 0, 0, 0, 0, 0]", "[$replicas]")
+                .let { if (loadHash == null) it else it.replace(RAMP_SHA256, loadHash) }
+        return assertInstanceOf(
+            ResourceValidation.Valid::class.java,
+            validateResourceSnapshot(ByteArrayInputStream(text.encodeToByteArray())),
+        )
+    }
+
     private fun withService(block: (RunBundleStore, AnalysisService) -> Unit) {
         DataDirectory.open(tempDir.resolve("data-${System.nanoTime()}")).use { directory ->
             val store = RunBundleStore(directory)
@@ -548,6 +851,9 @@ private fun declaration(vararg stages: String) = """{"schema_version":"load-stag
 
 private val RAMP_STEADY_DOWN = Files.readString(Path.of("docs/contracts/stages/v1/examples/valid/ramp-steady-down.json"))
 private val TWO_STEADY = Files.readString(Path.of("docs/contracts/stages/v1/examples/valid/two-steady.json"))
+private val SNAPSHOT_15S = Files.readString(Path.of("fixtures/stages/cross-version/snapshot-15s.json"))
+private val PLATFORM_POLICY = Files.readString(Path.of("fixtures/stages/cross-version/policy-platform.json"))
+private const val RAMP_SHA256 = "ec01e6fe71409fc8ad3654e16f759bf7c7ad0661aad40802f45ecb0f894fd3e4"
 private val RAMP_STEADY_DOWN_RESPELLED =
     declaration(
         stage("ramp-down", "excluded", 100_000, 120_000),

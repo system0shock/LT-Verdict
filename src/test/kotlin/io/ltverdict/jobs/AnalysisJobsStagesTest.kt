@@ -30,6 +30,29 @@ class AnalysisJobsStagesTest {
         }
     }
 
+    @Test
+    fun `failures of stages with a snapshot are actionable in the failed job`() {
+        listOf(
+            "STAGE_WINDOW_NO_FULL_CELLS" to "STAGE_WINDOW_NO_FULL_CELLS",
+            "STAGES_CORRELATION_CONFLICT" to "STAGES_CORRELATION_CONFLICT",
+            "STAGES_TREND_CONFLICT" to "STAGES_TREND_CONFLICT",
+            "STAGES_RESOURCES_CONFLICT" to "STAGES_RESOURCES_CONFLICT",
+        ).forEach { (failureMessage, expectedCode) ->
+            AnalysisJobs(1) { _, _, _ -> throw IllegalArgumentException(failureMessage) }.use { jobs ->
+                val submitted = assertInstanceOf(SubmitResult.Accepted::class.java, jobs.submit(request()))
+                val failed = awaitFailed(jobs, submitted.status.jobId)
+
+                assertEquals(expectedCode, failed.diagnostic?.code)
+                if (expectedCode == "STAGES_RESOURCES_CONFLICT") {
+                    assertEquals(
+                        "Stages cannot be combined with a resource snapshot that declares its own windows",
+                        failed.diagnostic?.message,
+                    )
+                }
+            }
+        }
+    }
+
     private fun awaitFailed(
         jobs: AnalysisJobs,
         jobId: String,

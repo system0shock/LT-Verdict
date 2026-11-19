@@ -138,8 +138,10 @@ class StageResourceWindowTest {
                 """{"id":"cpu","metric":"cpu","unit":"ratio","entity":"orders","role":"system","aggregation":"interval_mean",""" +
                 """"values":[$values]}],""" +
                 """"provenance":{"source_kind":"fixture","query_semantics":"interval","clock_alignment":"unknown"}}"""
-        return assertInstanceOf(ResourceValidation.Valid::class.java, validateResourceSnapshot(ByteArrayInputStream(json.encodeToByteArray())))
-            .snapshot
+        return assertInstanceOf(
+            ResourceValidation.Valid::class.java,
+            validateResourceSnapshot(ByteArrayInputStream(json.encodeToByteArray())),
+        ).snapshot
     }
 
     private fun window(

@@ -79,7 +79,7 @@ test('laneOption is static, svg-safe and fixes the gutters', () => {
   const option = laneOption(lane, { fromMs: 0, toMs: 6000, originMs: 0 }, [], { timeLabels: true, stageLabels: false }, colors)
   expect(option.animation).toBe(false)
   expect(option).not.toHaveProperty('tooltip')
-  expect(option.grid).toMatchObject({ left: 56, right: 16, bottom: 30 })
+  expect(option.grid).toMatchObject({ left: 56, right: 16, bottom: 50 })
   expect(option.xAxis).toMatchObject({ type: 'value', min: 0, max: 6000, axisLabel: { show: true, customValues: [0, 1000, 2000, 3000, 4000, 5000, 6000] } })
   expect(option.yAxis).toMatchObject({ min: 0, max: 200, interval: 100 })
 })

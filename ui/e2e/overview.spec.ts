@@ -360,6 +360,23 @@ test('hovering shows the value at the cursor in every lane and the time on the a
   await expect(page.getByTestId('cursor-time-mark')).toHaveCount(1)
 })
 
+test('the cursor time mark never overlaps a time axis tick label', async ({ page }) => {
+  await openOverview(page)
+  await page.getByTestId('chart-plot').scrollIntoViewIfNeeded()
+  const box = (await page.getByTestId('chart-plot').boundingBox())!
+  // 3980 ms of 6000: the nearest point is the 4 s one, so the mark sits right next to the "0:04" tick.
+  await page.mouse.move(box.x + PLOT_INSET.left + (box.width - PLOT_INSET.left - PLOT_INSET.right) * (4000 / 6000), box.y + 8)
+  await expect(page.getByTestId('cursor-time-mark')).toHaveText('0:04')
+  const mark = (await page.getByTestId('cursor-time-mark').boundingBox())!
+  const labels = page.getByTestId('track-p95').locator('svg text').filter({ hasText: /^\d+:\d\d$/ })
+  expect(await labels.count()).toBeGreaterThan(3)
+  for (const label of await labels.all()) {
+    const rect = (await label.boundingBox())!
+    const apart = mark.y >= rect.y + rect.height || mark.y + mark.height <= rect.y || mark.x >= rect.x + rect.width || mark.x + mark.width <= rect.x
+    expect(apart, `mark ${JSON.stringify(mark)} against tick label ${await label.textContent()} ${JSON.stringify(rect)}`).toBe(true)
+  }
+})
+
 test('the charts raise no CSP violation under the real server policy', async ({ page }) => {
   expect((await page.request.get('/')).headers()['content-security-policy']).toContain("style-src 'self'")
   await page.addInitScript(() => {

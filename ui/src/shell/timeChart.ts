@@ -26,7 +26,7 @@ const TIME_STEPS_MS = [1, 2, 5, 10, 15, 30, 60, 120, 300, 600, 900, 1800, 3600, 
 
 export function laneGrid(flags: LaneFlags) {
   const top = flags.stageLabels ? 18 : 6
-  const bottom = flags.timeLabels ? 30 : 6
+  const bottom = flags.timeLabels ? 50 : 6
   return { left: PLOT_INSET.left, right: PLOT_INSET.right, top, bottom, height: PLOT_HEIGHT + top + bottom }
 }
 

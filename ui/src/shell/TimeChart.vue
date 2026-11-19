@@ -163,7 +163,7 @@ onBeforeUnmount(() => {
 
 .time-chart__time {
   top: 100%;
-  margin-top: 6px;
+  margin-top: 30px;
 }
 
 .time-chart__value--middle {

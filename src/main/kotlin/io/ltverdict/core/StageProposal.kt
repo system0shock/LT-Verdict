@@ -215,6 +215,8 @@ private class Step(
     val first: Int,
     var last: Int,
     val opening: Piece,
+    /** The cells of the long fall before this step, when a fall opened it (D4). */
+    val afterDecline: IntRange? = null,
 )
 
 private fun detectInCells(
@@ -228,7 +230,7 @@ private fun detectInCells(
     val sums = CellSums(counts)
     val fits = segmentCounts(counts, noise).map { sums.fit(it.first, it.last + 1) }
     val peak = fits.maxOf { it.level }
-    val pieces = mergeFlat(fits.map { Piece(it, classify(it, peak)) }.toMutableList(), sums, noise, peak, cellMillis)
+    val pieces = mergeFlat(fits.map { Piece(it, classify(it, peak, cellMillis)) }.toMutableList(), sums, noise, peak, cellMillis)
     val segments = pieces.map { segmentOf(it, cellMillis) }
 
     fun refuse(
@@ -257,17 +259,25 @@ private fun detectInCells(
             .maxOfOrNull { it.fit.cells * cellMillis }
     if (idleGap != null) return refuse("IDLE_GAP_INSIDE_RUN", "idle_gap_ms=$idleGap")
 
-    // Step 7: the stop is the longest suffix of falls, idles and short pieces after the last plateau.
+    // Step 7: the stop is the longest suffix of idles, short pieces and falls after the last plateau. A long fall belongs to the
+    // stop only if it loses more than half of its rate: a long piece that holds its level is never hidden in the ramp-down,
+    // it stays in the last steady stage (D4).
     var stopFirst = pieces.size
     while (stopFirst - 1 > candidates.last()) {
         val piece = pieces[stopFirst - 1]
         val stop =
-            piece.kind == StageSegmentKind.FALLING || piece.kind == StageSegmentKind.IDLE || piece.fit.cells * cellMillis < DROP_MIN_MILLIS
+            piece.kind == StageSegmentKind.IDLE ||
+                piece.fit.cells * cellMillis < DROP_MIN_MILLIS ||
+                (
+                    piece.kind == StageSegmentKind.FALLING &&
+                        piece.fit.lineAt(piece.fit.to - 1) < STEADY_LEVEL_RATIO * piece.fit.lineAt(piece.fit.from)
+                )
         if (!stop) break
         stopFirst--
     }
 
-    // Step 8: a higher plateau after rises only opens a new step; anything else stays in the current step (D4).
+    // Step 8: a higher plateau after rises only, or any plateau after a long fall (D4), opens a new step; anything else stays in
+    // the current step (D4).
     val steps = ArrayList<Step>()
     var current = Step(candidates.first(), candidates.first(), pieces[candidates.first()])
     for (index in candidates.drop(1)) {
@@ -281,9 +291,10 @@ private fun detectInCells(
                 it.kind == StageSegmentKind.RISING ||
                     (it.kind == StageSegmentKind.FLAT && it.fit.slope > 0 && it.fit.cells * cellMillis < MIN_STEADY_MILLIS)
             }
-        if (higher && transition) {
+        val decline = between.any { it.kind == StageSegmentKind.FALLING && it.fit.cells * cellMillis >= DROP_MIN_MILLIS }
+        if ((higher && transition) || decline) {
             steps += current
-            current = Step(index, index, next)
+            current = Step(index, index, next, if (decline) between.first().fit.from until between.last().fit.to else null)
         } else {
             current.last = index
         }
@@ -326,9 +337,11 @@ private fun detectInCells(
         boundaries += StageBoundaryFact(STAGE_RAMP_UP, "BEFORE_FIRST_STEADY", null, null, null, 0)
     }
     val steadyStages = ArrayList<Pair<Step, String>>()
+    // D12, mode top: the highest step (the last of equal ones); a lower step after it is a hold that top does not evaluate.
+    val top = steps.indices.maxWith(compareBy<Int> { steps[it].opening.fit.level }.thenBy { it })
     steps.forEachIndexed { index, step ->
         val id = if (single) STAGE_STEADY else "step-${index + 1}"
-        val steady = steadySteps == SteadySteps.ALL || index == steps.lastIndex
+        val steady = steadySteps == SteadySteps.ALL || index == top
         val (from, to, trimmed) = bounds[index]
         val last = index == steps.lastIndex
         val end = if (last && to == run.cells) gridEnd else to * cellMillis
@@ -389,6 +402,33 @@ private fun detectInCells(
                 )
         }
     }
+    steps.forEachIndexed { index, step ->
+        val id = "step-${index + 1}"
+        step.afterDecline?.let { cells ->
+            val fall = pieces.first { it.fit.from == cells.first }.fit
+            val end = pieces.last { it.fit.to == cells.last + 1 }.fit
+            warnings +=
+                StageProposalWarning(
+                    "LOAD_DECLINE_BETWEEN_STEPS",
+                    id,
+                    cells.first * cellMillis,
+                    fromRps = fall.lineAt(fall.from) / perSecond,
+                    toRps = end.lineAt(end.to - 1) / perSecond,
+                    durationMillis = (cells.last + 1 - cells.first) * cellMillis,
+                )
+        }
+        if (steadySteps == SteadySteps.TOP && index > top) {
+            warnings +=
+                StageProposalWarning(
+                    "HOLD_NOT_EVALUATED",
+                    id,
+                    bounds[index].first * cellMillis,
+                    fromRps = steps[top].opening.fit.level / perSecond,
+                    toRps = step.opening.fit.level / perSecond,
+                    durationMillis = stages.single { it.id == id }.let { it.toOffsetMillis - it.fromOffsetMillis },
+                )
+        }
+    }
     if (rampDownMillis > maxOf(DROP_MIN_MILLIS.toDouble(), LONG_RAMP_DOWN_RATIO * stepMillis)) {
         warnings += StageProposalWarning("LONG_RAMP_DOWN", STAGE_RAMP_DOWN, lastTo, durationMillis = rampDownMillis)
     }
@@ -397,8 +437,8 @@ private fun detectInCells(
     val codes = warnings.map { it.code }.toSet()
     val confidence =
         when {
-            "LOAD_DROP_INSIDE_STEADY" in codes || "LONG_RAMP_DOWN" in codes -> StageProposalConfidence.LOW
-            codes.any { it in setOf("LEAD_IN_IDLE", "STEADY_DRIFT", "DEGRADED_INPUT") } ||
+            codes.any { it in setOf("LOAD_DROP_INSIDE_STEADY", "LONG_RAMP_DOWN", "HOLD_NOT_EVALUATED") } -> StageProposalConfidence.LOW
+            codes.any { it in setOf("LEAD_IN_IDLE", "STEADY_DRIFT", "DEGRADED_INPUT", "LOAD_DECLINE_BETWEEN_STEPS") } ||
                 steadyFacts.any { fact ->
                     listOfNotNull(fact.fromContrastSigma, fact.toContrastSigma).any { it < HIGH_EDGE_SIGMAS }
                 } ||
@@ -489,7 +529,6 @@ private const val STEADY_LEVEL_RATIO = 0.5
 private const val STEADY_DURATION_RATIO = 0.75
 private const val EDGE_TOLERANCE_SIGMAS = 2.0
 private const val EDGE_TRIM_MAX_CELLS = 2
-private const val DROP_MIN_MILLIS = 60_000L
 private const val LONG_RAMP_DOWN_RATIO = 0.25
 private const val IDLE_GAP_MIN_MILLIS = 30_000L
 private const val MIN_STEADY_SHARE = 0.30

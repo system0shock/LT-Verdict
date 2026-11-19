@@ -228,6 +228,54 @@ class StageProposalTest {
     }
 
     @Test
+    fun `a long soak after a decline is its own stage`() {
+        val profile = StageProfiles.f13
+        val all = detect(profile, SteadySteps.ALL)
+        val top = detect(profile, SteadySteps.TOP)
+        val w = all.cellMillis!!
+        val shift = profile.firstRequestOffsetMillis()
+
+        assertEquals(listOf("ramp-up", "step-1", "step-2", "step-3"), all.stages.map { it.id }.take(4), explain(all))
+        assertTrue(all.stages.none { it.id == "ramp-down" && it.toOffsetMillis - it.fromOffsetMillis >= 60_000 }, explain(all))
+        assertPlateau(profile, all, "step-1", 1_800_000L until 9_000_000L)
+        assertPlateau(profile, all, "step-2", 10_800_000L until 16_200_000L)
+        val soak = all.stages.single { it.id == "step-3" }
+        assertTrue(soak.fromOffsetMillis + shift in 18_000_000 - w..18_000_000 + 2 * w, explain(all))
+        assertTrue(soak.toOffsetMillis + shift >= 28_800_000 - 2 * w, explain(all))
+        assertEquals(
+            listOf(StageRole.STEADY, StageRole.STEADY, StageRole.STEADY),
+            all.stages.filter { it.id.startsWith("step-") }.map { it.role },
+        )
+        assertTrue(all.warnings.any { it.code == "STEADY_DRIFT" && it.stageId == "step-3" }, explain(all))
+        assertTrue(all.warnings.any { it.code == "LOAD_DECLINE_BETWEEN_STEPS" && it.stageId == "step-3" }, explain(all))
+
+        assertEquals(all.stages.map { it.copy(role = StageRole.STEADY) }, top.stages.map { it.copy(role = StageRole.STEADY) })
+        assertEquals(listOf("step-2"), top.stages.filter { it.role == StageRole.STEADY }.map { it.id }, explain(top))
+        assertTrue(top.warnings.any { it.code == "HOLD_NOT_EVALUATED" && it.stageId == "step-3" }, explain(top))
+        assertEquals(StageProposalConfidence.LOW, top.confidence, explain(top))
+    }
+
+    @Test
+    fun `a soak just under the hold drift cap is its own stage`() {
+        val proposal = detect(StageProfiles.soak(0.22), SteadySteps.ALL)
+
+        assertEquals(listOf("ramp-up", "step-1", "step-2", "step-3"), proposal.stages.map { it.id }.take(4), explain(proposal))
+    }
+
+    @Test
+    fun `a soak over the hold drift cap stays in the window, never in the ramp-down`() {
+        val profile = StageProfiles.soak(0.30)
+        val proposal = detect(profile, SteadySteps.ALL)
+        val w = proposal.cellMillis!!
+
+        assertTrue(proposal.stages.none { it.id == "ramp-down" && it.toOffsetMillis - it.fromOffsetMillis >= 60_000 }, explain(proposal))
+        val last = proposal.stages.last { it.role == StageRole.STEADY }
+        assertTrue(last.toOffsetMillis + profile.firstRequestOffsetMillis() >= 28_800_000 - 2 * w, explain(proposal))
+        assertTrue(proposal.warnings.any { it.code == "LOAD_DROP_INSIDE_STEADY" }, explain(proposal))
+        assertEquals(StageProposalConfidence.LOW, proposal.confidence, explain(proposal))
+    }
+
+    @Test
     fun `a ten percent step is two steps, not one window`() {
         val profile =
             StageProfile(

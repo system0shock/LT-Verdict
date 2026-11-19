@@ -156,10 +156,18 @@ internal class Piece(
 internal fun classify(
     fit: CellFit,
     peak: Double,
+    cellMillis: Long,
 ): StageSegmentKind =
     when {
         fit.level <= IDLE_LEVEL_RATIO * peak -> StageSegmentKind.IDLE
         Math.abs(fit.drift) <= MAX_DRIFT_RATIO && fit.residualCv <= MAX_RESIDUAL_CV -> StageSegmentKind.FLAT
+        // A hold (ADR 0036, D4): drift is the change over the whole piece, so a long hold whose rate slowly degrades exceeds
+        // MAX_DRIFT_RATIO by length alone. A falling piece of at least DROP_MIN_MILLIS that loses at most HOLD_MAX_DRIFT_RATIO of
+        // its level is a plateau. Falling only: a slow rise stays a ramp, which D4 excludes.
+        fit.slope < 0 &&
+            fit.cells * cellMillis >= DROP_MIN_MILLIS &&
+            Math.abs(fit.drift) <= HOLD_MAX_DRIFT_RATIO &&
+            fit.residualCv <= MAX_RESIDUAL_CV -> StageSegmentKind.FLAT
         fit.residualCv > MAX_RESIDUAL_CV -> StageSegmentKind.UNSTABLE
         fit.slope > 0 -> StageSegmentKind.RISING
         else -> StageSegmentKind.FALLING
@@ -189,7 +197,7 @@ internal fun mergeFlat(
                 Math.abs(a.fit.level - b.fit.level) <= mergeThreshold(a.fit, b.fit, noise)
             ) {
                 val merged = sums.fit(a.fit.from, b.fit.to)
-                if (classify(merged, peak) == StageSegmentKind.FLAT) {
+                if (classify(merged, peak, cellMillis) == StageSegmentKind.FLAT) {
                     pieces[index] = Piece(merged, StageSegmentKind.FLAT)
                     pieces.removeAt(index + 1)
                     changed = true
@@ -219,3 +227,5 @@ private const val IDLE_LEVEL_RATIO = 0.02
 internal const val LEVEL_MERGE_RATIO = 0.05
 private const val LEVEL_MERGE_SIGMAS = 4.0
 internal const val MIN_STEADY_MILLIS = 30_000L
+internal const val DROP_MIN_MILLIS = 60_000L
+private const val HOLD_MAX_DRIFT_RATIO = 0.25

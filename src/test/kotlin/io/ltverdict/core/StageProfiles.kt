@@ -181,4 +181,21 @@ internal object StageProfiles {
             "F12 warm-up below half",
             listOf(flat(120, 30.0), ramp(30, 30.0, 100.0), flat(1200, 100.0), ramp(60, 100.0, 0.0)),
         )
+
+    /** F13: the 8-hour shape of the coordinator (2026-11-19): two plateaus, a 30-minute decline, a 3-hour soak whose rate drifts down. */
+    val f13 = soak(0.14)
+
+    /** F13 with a soak of the given total drift (relative to its mean level 21.5 rps). */
+    fun soak(drift: Double) =
+        StageProfile(
+            "F13 soak after a decline, drift $drift",
+            listOf(
+                ramp(1800, 0.0, 24.0),
+                flat(7200, 24.0),
+                ramp(1800, 24.0, 36.0),
+                flat(5400, 36.0),
+                ramp(1800, 36.0, 21.5 * (1 + drift / 2)),
+                ramp(10800, 21.5 * (1 + drift / 2), 21.5 * (1 - drift / 2)),
+            ),
+        )
 }

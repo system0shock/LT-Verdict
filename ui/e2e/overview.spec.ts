@@ -1,5 +1,7 @@
 import AxeBuilder from '@axe-core/playwright'
 import { expect, test, type Page } from '@playwright/test'
+import { readFileSync } from 'node:fs'
+import { fileURLToPath } from 'node:url'
 import { CORRELATION_LABELS, OVERVIEW_LABELS, SHELL_LABELS } from '../src/shell/labels'
 import { formatNumber } from '../src/shell/overview'
 import { PLOT_INSET } from '../src/shell/timeChart'
@@ -394,6 +396,20 @@ test('lanes shrink with the viewport and never scroll the page', async ({ page }
   await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true)
   const lane = (await page.getByTestId('track-rps').getByTestId('time-chart').boundingBox())!
   await expect.poll(async () => (await page.getByTestId('track-rps').locator('svg').first().boundingBox())!.width).toBeLessThanOrEqual(lane.width)
+})
+
+const binding = JSON.parse(readFileSync(fileURLToPath(new URL('../../fixtures/stages/stage-binding.sample.json', import.meta.url)), 'utf8'))
+test('declared stages are drawn on every lane and named on the top lane', async ({ page }) => {
+  await openOverview(page, { ...failing, evidence: [...failing.evidence, binding] }, runOf(120))
+  const texts = (key: string) => page.getByTestId(`track-${key}`).locator('svg text').allTextContents()
+  await expect.poll(() => texts('rps')).toEqual(expect.arrayContaining(['ramp-up', 'steady', 'ramp-down']))
+  expect(await texts('p95')).not.toContain('steady')
+})
+
+test('a result without stages draws no stage names', async ({ page }) => {
+  await openOverview(page, failing, runOf(120))
+  await expect(page.getByTestId('track-rps').locator('svg text').first()).toBeVisible()
+  expect(await page.getByTestId('track-rps').locator('svg text').allTextContents()).not.toContain('steady')
 })
 
 test('an empty page shows a plain message instead of a zero line', async ({ page }) => {

@@ -7,6 +7,7 @@ import { CAPACITY_LABELS } from './labels.tables'
 import PlatformMap from './PlatformMap.vue'
 import SharedCursorChart from './SharedCursorChart.vue'
 import { attentionItems, capacityBlock, keyMetrics, loadSeries, type AttentionKind, type AttentionTarget } from './overview'
+import { stageBands } from './timeChart'
 import type { AnalysisResult, AnalysisSummary } from '../types'
 
 const props = defineProps<{
@@ -23,6 +24,7 @@ const LIMIT = 6
 const expanded = ref(false)
 const items = computed(() => attentionItems(props.result))
 const visibleItems = computed(() => expanded.value ? items.value : items.value.slice(0, LIMIT))
+const stages = computed(() => stageBands(props.result, 0))
 const staged = computed(() => props.result.evidence.some((item) => item.type === 'stage_binding'))
 const capacity = computed(() => props.result.analysis_mode === 'capacity_step' ? capacityBlock(props.result) : null)
 const tiles = computed(() => keyMetrics(props.result))
@@ -362,6 +364,7 @@ const kindLabels: Record<AttentionKind, string> = {
       <SharedCursorChart
         v-else-if="series.points.length"
         :series="series"
+        :stages="stages"
       />
       <p
         v-else

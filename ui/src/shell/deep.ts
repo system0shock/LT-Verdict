@@ -1,6 +1,7 @@
 import type { AnalysisResult, Bucket, BucketPage, ResourceSeriesEntry, ResourceSeriesValues } from '../types'
-import { OVERVIEW_LABELS } from './labels'
+import { DEEP_LABELS, OVERVIEW_LABELS } from './labels'
 import { formatNumber, loadSeries } from './overview'
+import type { ChartLane, ChartToken } from './timeChart'
 
 export interface SnapshotGrid { startMs: number; stepMs: number; pointCount: number }
 export interface DeepPoint { startMs: number; value: number | null; observed: number | null }
@@ -261,4 +262,26 @@ export function trackPath(track: DeepTrack, axis: TimeAxis, width: number, heigh
     })
     return points.length ? [points.join(' ')] : []
   })
+}
+
+const deepColors: Record<string, ChartToken> = { 'load-rps': 'brand', 'load-p95': 'warn' }
+
+export function deepLane(track: DeepTrack, axis: TimeAxis): ChartLane {
+  const scale = trackScale(track)
+  return {
+    key: track.key,
+    color: deepColors[track.key] ?? 'text',
+    segments: track.segments.flatMap((segment) => {
+      const points = segment.flatMap((index) => {
+        const point = track.points[index]
+        const end = index === track.points.length - 1 ? track.endMs : point.startMs + track.stepMs
+        if (end <= axis.fromMs || point.startMs >= axis.toMs || point.value === null) return []
+        return [{ x: point.startMs + (end - point.startMs) / 2, y: point.value }]
+      })
+      return points.length ? [points] : []
+    }),
+    lo: scale.lo,
+    hi: scale.hi,
+    thresholds: track.thresholds.map((item) => ({ id: item.ruleId, value: item.value, text: DEEP_LABELS.thresholdMark(formatNumber(item.value), track.unit), violated: item.violated })),
+  }
 }

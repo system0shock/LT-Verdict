@@ -1,6 +1,10 @@
 import AxeBuilder from '@axe-core/playwright'
 import { expect, test, type Page } from '@playwright/test'
+import { readFileSync } from 'node:fs'
+import { fileURLToPath } from 'node:url'
 import { CORRELATION_LABELS, OVERVIEW_LABELS, SHELL_LABELS } from '../src/shell/labels'
+import { formatNumber } from '../src/shell/overview'
+import { PLOT_INSET } from '../src/shell/timeChart'
 
 const reference = { run_id: 'overview-run', analysis_id: 'a'.repeat(64) }
 const run = { ...reference, source_type: 'jmeter', sha256: 'b'.repeat(64), size_bytes: 100, original_filename: 'overview.jtl' }
@@ -275,7 +279,7 @@ test('the load chart draws three tracks on one time axis and never joins the lin
   await expect(page.getByRole('group', { name: OVERVIEW_LABELS.chartAria })).toHaveCount(1)
   for (const key of ['rps', 'errors', 'p95']) {
     await expect(page.getByTestId(`track-${key}`)).toBeVisible()
-    await expect(page.getByTestId(`track-line-${key}`)).toHaveCount(2)
+    await expect(page.getByTestId(`track-${key}`).getByTestId('time-chart')).toHaveAttribute('data-segments', '2')
   }
   await expect(page.getByTestId('load-gaps')).toHaveText(OVERVIEW_LABELS.loadGaps(1))
   await expect(page.getByTestId('load-summary')).toHaveText(OVERVIEW_LABELS.loadSummary(6, 1))
@@ -335,6 +339,139 @@ test('hovering the plot moves the same cursor to the nearest interval', async ({
   expect(errors).toBe(p95)
 })
 
+test('each lane has value ticks and only the bottom lane has time ticks', async ({ page }) => {
+  await openOverview(page)
+  const texts = (key: string) => page.getByTestId(`track-${key}`).locator('svg text').allTextContents()
+  await expect.poll(() => texts('rps')).toEqual(expect.arrayContaining(['0', '100', '200']))
+  expect(await texts('p95')).toEqual(expect.arrayContaining(['0', formatNumber(500), formatNumber(1000), '0:00', '0:04', '0:06']))
+  expect(await texts('rps')).not.toContain('0:04')
+})
+
+test('hovering shows the value at the cursor in every lane and the time on the axis', async ({ page }) => {
+  await openOverview(page)
+  await page.getByTestId('chart-plot').scrollIntoViewIfNeeded()
+  const box = (await page.getByTestId('chart-plot').boundingBox())!
+  const x = box.x + PLOT_INSET.left + (box.width - PLOT_INSET.left - PLOT_INSET.right) * (4000 / 6000)
+  await page.mouse.move(x, box.y + 8)
+  await expect(slider(page)).toHaveValue('3')
+  await expect(page.getByTestId('cursor-value-p95')).toHaveText(`${formatNumber(900)} ${OVERVIEW_LABELS.unitMs}`)
+  await expect(page.getByTestId('cursor-value-rps')).toHaveText(`${formatNumber(90)} ${OVERVIEW_LABELS.unitRps}`)
+  await expect(page.getByTestId('cursor-time-mark')).toHaveText('0:04')
+  await expect(page.getByTestId('cursor-time-mark')).toHaveCount(1)
+})
+
+test('the cursor time mark never overlaps a time axis tick label', async ({ page }) => {
+  await openOverview(page)
+  await page.getByTestId('chart-plot').scrollIntoViewIfNeeded()
+  const box = (await page.getByTestId('chart-plot').boundingBox())!
+  // 3980 ms of 6000: the nearest point is the 4 s one, so the mark sits right next to the "0:04" tick.
+  await page.mouse.move(box.x + PLOT_INSET.left + (box.width - PLOT_INSET.left - PLOT_INSET.right) * (4000 / 6000), box.y + 8)
+  await expect(page.getByTestId('cursor-time-mark')).toHaveText('0:04')
+  const mark = (await page.getByTestId('cursor-time-mark').boundingBox())!
+  const labels = page.getByTestId('track-p95').locator('svg text').filter({ hasText: /^\d+:\d\d$/ })
+  expect(await labels.count()).toBeGreaterThan(3)
+  for (const label of await labels.all()) {
+    const rect = (await label.boundingBox())!
+    const apart = mark.y >= rect.y + rect.height || mark.y + mark.height <= rect.y || mark.x >= rect.x + rect.width || mark.x + mark.width <= rect.x
+    expect(apart, `mark ${JSON.stringify(mark)} against tick label ${await label.textContent()} ${JSON.stringify(rect)}`).toBe(true)
+  }
+})
+
+test('the axis title is aligned with the plot area and no legend row is left under the charts', async ({ page }) => {
+  await openOverview(page)
+  await page.getByTestId('chart-plot').scrollIntoViewIfNeeded()
+  const plot = (await page.getByTestId('chart-plot').boundingBox())!
+  const title = page.getByTestId('chart-axis-title')
+  await expect(title).toHaveText(OVERVIEW_LABELS.axisLabel)
+  await expect(page.locator('.shared-chart__axis-labels')).toHaveCount(0)
+  const rect = (await title.boundingBox())!
+  expect(rect.x).toBeGreaterThanOrEqual(plot.x + PLOT_INSET.left - 1)
+  expect(rect.x + rect.width).toBeLessThanOrEqual(plot.x + plot.width - PLOT_INSET.right + 1)
+  expect(rect.y).toBeGreaterThanOrEqual(plot.y + plot.height - 1)
+})
+
+test('the charts raise no CSP violation under the real server policy', async ({ page }) => {
+  expect((await page.request.get('/')).headers()['content-security-policy']).toContain("style-src 'self'")
+  await page.addInitScript(() => {
+    (window as never as { csp: string[] }).csp = []
+    document.addEventListener('securitypolicyviolation', (event) => (window as never as { csp: string[] }).csp.push(`${event.violatedDirective} ${event.blockedURI}`))
+  })
+  await openOverview(page)
+  await expect(page.getByTestId('track-rps').locator('svg text').first()).toBeVisible()
+  await page.getByTestId('chart-plot').scrollIntoViewIfNeeded()
+  const box = (await page.getByTestId('chart-plot').boundingBox())!
+  await page.mouse.move(box.x + box.width / 2, box.y + 8)
+  await slider(page).focus()
+  await page.keyboard.press('End')
+  await page.locator('.theme-toggle').click()
+  expect(await page.evaluate(() => (window as never as { csp: string[] }).csp)).toEqual([])
+})
+
+test('the lanes follow the theme toggle', async ({ page }) => {
+  await openOverview(page)
+  const line = page.getByTestId('track-rps').locator('svg path[stroke-width="2"]').first()
+  const brand = () => page.evaluate(() => { const probe = document.createElement('span'); probe.style.color = 'var(--brand)'; document.body.append(probe); const color = getComputedStyle(probe).color; probe.remove(); return color })
+  await expect.poll(async () => line.evaluate((el) => getComputedStyle(el).stroke)).toBe(await brand())
+  const before = await brand()
+  await page.locator('.theme-toggle').click()
+  await expect.poll(async () => line.evaluate((el) => getComputedStyle(el).stroke)).toBe(await brand())
+  expect(await brand()).not.toBe(before)
+})
+
+test('the lanes follow the operating system theme when no theme is chosen', async ({ page }) => {
+  await page.emulateMedia({ colorScheme: 'light' })
+  await openOverview(page)
+  // The app writes data-theme once at start; without it the tokens follow the operating system.
+  await page.evaluate(() => document.documentElement.removeAttribute('data-theme'))
+  const line = page.getByTestId('track-rps').locator('svg path[stroke-width="2"]').first()
+  const stroke = () => line.evaluate((el) => getComputedStyle(el).stroke)
+  const brand = () => page.evaluate(() => { const probe = document.createElement('span'); probe.style.color = 'var(--brand)'; document.body.append(probe); const color = getComputedStyle(probe).color; probe.remove(); return color })
+  await expect.poll(stroke).toBe(await brand())
+  const light = await brand()
+  await page.emulateMedia({ colorScheme: 'dark' })
+  await expect.poll(brand).not.toBe(light)
+  await expect.poll(stroke).toBe(await brand())
+})
+
+test('lanes shrink with the viewport and never scroll the page', async ({ page }) => {
+  await openOverview(page)
+  await page.setViewportSize({ width: 320, height: 800 })
+  await slider(page).focus()
+  await page.keyboard.press('End')
+  await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true)
+  const lane = (await page.getByTestId('track-rps').getByTestId('time-chart').boundingBox())!
+  await expect.poll(async () => (await page.getByTestId('track-rps').locator('svg').first().boundingBox())!.width).toBeLessThanOrEqual(lane.width)
+})
+
+const binding = JSON.parse(readFileSync(fileURLToPath(new URL('../../fixtures/stages/stage-binding.sample.json', import.meta.url)), 'utf8'))
+test('declared stages are drawn on every lane and named on the top lane', async ({ page }) => {
+  await openOverview(page, { ...failing, evidence: [...failing.evidence, binding] }, runOf(120))
+  const texts = (key: string) => page.getByTestId(`track-${key}`).locator('svg text').allTextContents()
+  await expect.poll(() => texts('rps')).toEqual(expect.arrayContaining(['ramp-up', 'steady', 'ramp-down']))
+  expect(await texts('p95')).not.toContain('steady')
+})
+
+test('the cursor value label stays clear of the stage name and does not hide the line', async ({ page }) => {
+  await openOverview(page, { ...failing, evidence: [...failing.evidence, binding] }, runOf(120))
+  await page.getByTestId('chart-plot').scrollIntoViewIfNeeded()
+  const box = (await page.getByTestId('chart-plot').boundingBox())!
+  // The middle of the steady stage (40 s to 100 s of a 120 s run).
+  await page.mouse.move(box.x + PLOT_INSET.left + (box.width - PLOT_INSET.left - PLOT_INSET.right) * (70 / 120), box.y + 8)
+  await expect(page.getByTestId('cursor-value-rps')).toBeVisible()
+  const value = (await page.getByTestId('cursor-value-rps').boundingBox())!
+  const name = (await page.getByTestId('track-rps').locator('svg text', { hasText: 'steady' }).boundingBox())!
+  const apart = value.y >= name.y + name.height || value.y + value.height <= name.y || value.x >= name.x + name.width || value.x + value.width <= name.x
+  expect(apart, `value ${JSON.stringify(value)} against stage name ${JSON.stringify(name)}`).toBe(true)
+  const background = await page.getByTestId('cursor-value-rps').evaluate((el) => getComputedStyle(el).backgroundColor)
+  expect(Number(/(?:\/|,)\s*([0-9.]+)\s*\)$/.exec(background)?.[1] ?? 1), background).toBeLessThan(1)
+})
+
+test('a result without stages draws no stage names', async ({ page }) => {
+  await openOverview(page, failing, runOf(120))
+  await expect(page.getByTestId('track-rps').locator('svg text').first()).toBeVisible()
+  expect(await page.getByTestId('track-rps').locator('svg text').allTextContents()).not.toContain('steady')
+})
+
 test('an empty page shows a plain message instead of a zero line', async ({ page }) => {
   await openOverview(page, failing, { buckets: [], next_from_ms: null })
 
@@ -356,7 +493,12 @@ test('a 4 hour run is shown in full at a 10 s step and the caption says so', asy
   await expect(page.getByTestId('load-step')).toHaveText(OVERVIEW_LABELS.loadStep(10))
   await expect(page.getByTestId('load-partial')).toHaveCount(0)
   await expect(page.getByTestId('load-gaps')).toHaveCount(0)
-  await expect(page.locator('.shared-chart__axis-labels span').last()).toHaveText('3:59:50')
+  await expect(page.locator('.shared-chart__axis-labels')).toHaveCount(0)
+  const ticks = page.getByTestId('track-p95').locator('svg text').filter({ hasText: /^\d+:\d\d(:\d\d)?$/ })
+  await expect(ticks.last()).toHaveText('3:59:50')
+  const lane = (await page.getByTestId('track-p95').getByTestId('time-chart').boundingBox())!
+  const end = (await ticks.last().boundingBox())!
+  expect(end.x + end.width).toBeLessThanOrEqual(lane.x + lane.width)
   await expect(slider(page)).toHaveAttribute('max', '1439')
   await slider(page).focus()
   await page.keyboard.press('End')

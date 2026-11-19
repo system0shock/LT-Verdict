@@ -71,6 +71,17 @@ class AdvisoryRuntimeConsistencyTest {
         assertEquals("token-plan.ap-southeast-1.maas.aliyuncs.com:443", endpointHostOf(QwenCode0211.PROVIDER_ENDPOINT))
     }
 
+    @Test
+    fun `both shell runners allow one tool call and keep ordinary tools excluded`() {
+        for (script in listOf(qwenScript, text("tools/advisory_ai_runtime_local.sh"))) {
+            assertEquals("1", group(script, """--max-tool-calls=([0-9]+)"""))
+            assertTrue(script.contains("--exclude-tools=read_file,edit,notebook_edit,run_shell_command"))
+            assertTrue(script.contains("--bare"))
+            assertTrue(script.contains("--safe-mode"))
+            assertTrue(script.contains("--approval-mode=default"))
+        }
+    }
+
     private fun text(path: String) = Files.readString(Path.of(path)).replace("\r\n", "\n")
 
     private fun group(

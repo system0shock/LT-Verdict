@@ -167,7 +167,7 @@ run() {
   [ -n "$model" ] && cli+=("--model=$model")
   cli+=("--system-prompt=$(cat "$root/system-prompt.md")"
     --input-format=text --output-format=json "--json-schema=@$(native_path "$schema")"
-    --exclude-tools=read_file,edit,notebook_edit,run_shell_command --max-tool-calls=0 --max-wall-time=600s
+    --exclude-tools=read_file,edit,notebook_edit,run_shell_command --max-tool-calls=1 --max-wall-time=600s
     --approval-mode=default --chat-recording=false --openai-logging=false --telemetry=false)
   [ "${#extra[@]}" -eq 0 ] || cli+=("${extra[@]}")
 

@@ -48,7 +48,7 @@ internal object QwenCode0211 {
                     "--output-format=json",
                     "--json-schema=@$schemaPath",
                     "--exclude-tools=read_file,edit,notebook_edit,run_shell_command",
-                    "--max-tool-calls=0",
+                    "--max-tool-calls=1",
                     "--max-wall-time=600s",
                     "--approval-mode=default",
                     "--chat-recording=false",

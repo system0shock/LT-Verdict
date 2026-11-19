@@ -59,7 +59,7 @@ Windows с Git Bash его путь задаёт `LT_VERDICT_AI_LOCAL_BASH`, п�
 CLI получает аргументы контейнерного пути (`tools/advisory_ai_runtime_qwen.sh`):
 `--bare --safe-mode --model --system-prompt --input-format=text --output-format=json
 --json-schema=@... --exclude-tools=read_file,edit,notebook_edit,run_shell_command
---max-tool-calls=0 --max-wall-time=600s --approval-mode=default
+--max-tool-calls=1 --max-wall-time=600s --approval-mode=default
 --chat-recording=false --openai-logging=false --telemetry=false`; evidence в
 stdin. Отличия: нет `--openai-base-url`; `--auth-type` не передаётся, пока оператор
 не задал `LT_VERDICT_AI_LOCAL_AUTH_TYPE`; `--bare` можно убрать
@@ -105,6 +105,16 @@ Launcher сверяет SHA-256 файла CLI с закреплённым оп�
 `FAILED/INVALID_OUTPUT`. Проверка апостериорная: `--output-format=json` печатает
 события в конце, запрос к этому моменту уже ушёл; она не даёт сохранить совет, но
 не предотвращает отправку.
+
+**Поправка 2026-10-13 к Д4:** по решению владельца от 2026-10-12 во всех runners
+бюджет изменён с `--max-tool-calls=0` на `--max-tool-calls=1`. Реальный gigacode CLI
+считает единственный разрешённый `structured_output` как tool call и при бюджете
+`0` прерывается с `FatalBudgetExceededError`. Остаточный риск: теперь технически
+возможен один вызов неисключённого инструмента; проверка `init` апостериорная.
+Компенсирующие меры: `--exclude-tools=read_file,edit,notebook_edit,run_shell_command`,
+`--bare --safe-mode` и `--approval-mode=default` (headless не может подтвердить
+вызов инструмента). При `LT_VERDICT_AI_LOCAL_OMIT_BARE=1` флаг `--bare` отсутствует;
+остальные меры сохраняются. Единственным разрешённым вызовом остаётся `structured_output`.
 
 ### Д5. Модель и файл конфигурации моделей
 
@@ -175,7 +185,7 @@ Launcher сверяет SHA-256 файла CLI с закреплённым оп�
 - Проверка соответствия модели, названной CLI, и оценка «модель измерена».
 
 Смягчения (коротко): те же защитные флаги CLI (`--bare --safe-mode
---max-tool-calls=0 --exclude-tools`), очищенное окружение без прокси и чужих токенов,
+--max-tool-calls=1 --exclude-tools`), очищенное окружение без прокси и чужих токенов,
 SHA-256 оператора, проверка `init`, очистка evidence от секретов до отправки,
 валидатор совета и ссылок, лимиты вывода и таймауты, вердикт не меняется.
 Приемлемо для он-прем контура без внешней сети (решения 2026-10-04 и 2026-10-08).
@@ -194,7 +204,8 @@ GigaCode после ручной авторизации держит выбор 
 `--bare` CLI регистрирует весь набор встроенных инструментов (53, среди них `web_fetch`,
 `agent`, `computer_use__*`) даже с `--safe-mode`, поэтому проверка `init` в этом
 режиме требует только наличия `structured_output` и пустого `mcp_servers`, а вызовы
-инструментов остановлены `--max-tool-calls=0`; при необходимости
+инструментов ограничены `--max-tool-calls=1` для `structured_output` (остаточный
+риск и компенсирующие меры — в поправке 2026-10-13 к Д4); при необходимости
 `LT_VERDICT_AI_LOCAL_EXTRA_ARGS=--exclude-tools=...` расширяет список исключённых.
 `LT_VERDICT_AI_LOCAL_EXTRA_ARGS` позволяет передать CLI недостающий флаг без правки
 кода. Решение за владельцем; на

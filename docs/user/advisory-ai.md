@@ -374,8 +374,10 @@ Bash). `LT_VERDICT_AI_CREDENTIAL_ENV_FILE` и `LT_VERDICT_AI_QWEN_ROOT` в эт�
 
 Как это работает. Продукт запускает `tools/advisory_ai_runtime_local.sh`: он проверяет
 SHA-256 CLI, запускает его процессом без relay с теми же аргументами, что в
-контейнере (`--bare --safe-mode --max-tool-calls=0 --exclude-tools=...
---json-schema=@...`), передаёт evidence в stdin и ждёт не дольше 605 с. Затем продукт
+контейнере (`--bare --safe-mode --max-tool-calls=1 --exclude-tools=...
+--json-schema=@...`), передаёт evidence в stdin и ждёт не дольше 605 с. Бюджет `1`
+нужен для единственного разрешённого `structured_output`: реальный gigacode CLI
+учитывает его как tool call и при бюджете `0` выдаёт `FatalBudgetExceededError`. Затем продукт
 проверяет событие `init` (`tools` только `structured_output`, `mcp_servers` пусты,
 версия любая допустимой формы) и сохраняет совет. Окружение CLI очищено: `PATH`,
 настоящий `HOME` (профиль и авторизация CLI живут там), системные переменные и
@@ -392,7 +394,11 @@ SHA-256 CLI, запускает его процессом без relay с тем
 необходимости `LT_VERDICT_AI_LOCAL_OMIT_BARE=1` (CLI читает профиль пользователя;
 `--safe-mode` остаётся, но без `--bare` Qwen Code регистрирует все встроенные
 инструменты, поэтому проверка `init` в этом режиме требует только `structured_output`
-и пустой `mcp_servers`, а вызовы инструментов запрещены `--max-tool-calls=0`). Это переключатели «если вход CLI не
+и пустой `mcp_servers`, а `--max-tool-calls=1` оставляет один вызов для `structured_output`).
+Один вызов неисключённого инструмента технически возможен; защитные флаги
+`--exclude-tools=read_file,edit,notebook_edit,run_shell_command` и
+`--approval-mode=default` сохраняются (headless не может подтвердить вызов инструмента).
+Это переключатели «если вход CLI не
 подхватывается»; правка кода на месте не нужна. Ошибки: `RUNNER_ARTIFACT_MISSING` (файл
 CLI, Node для `.js` или `bash` не найдены), `RUNNER_ARTIFACT_MISMATCH` (SHA-256 не
 совпал; в интерфейсе сообщение говорит о Qwen Code), `MODEL_CONFIG_INVALID` (нет
@@ -407,7 +413,7 @@ echo '{"schema_version":"ai-evidence.v1","facts":[],"findings":[],"evidence":[]}
   /opt/gigacode/gigacode --bare --safe-mode --auth-type=qwen-oauth --model=<слаг> \
   --system-prompt="$(cat docs/contracts/advice/v1/system-prompt.md)" --input-format=text --output-format=json \
   --json-schema=@docs/contracts/advice/v1/ai-advice-output.schema.json \
-  --exclude-tools=read_file,edit,notebook_edit,run_shell_command --max-tool-calls=0 --max-wall-time=600s \
+  --exclude-tools=read_file,edit,notebook_edit,run_shell_command --max-tool-calls=1 --max-wall-time=600s \
   --approval-mode=default --chat-recording=false --openai-logging=false --telemetry=false
 ```
 

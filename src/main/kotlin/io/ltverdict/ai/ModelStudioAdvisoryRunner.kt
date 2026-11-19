@@ -586,7 +586,8 @@ internal fun parseDirectCliOutput(
     // A fork may not report its version; the pinned hash is what identifies the artifact.
     val version = if ("qwen_code_version" in init.keys) init.string("qwen_code_version") else "unknown"
     // Without --bare the CLI registers its whole built-in tool set (53 tools in Qwen Code 0.21.1, even with --safe-mode): then only
-    // structured_output must be present and calls are stopped by --max-tool-calls=0 and --exclude-tools (ADR 0027, D4).
+    // structured_output must be present; --max-tool-calls=1 allows it. Other calls are restricted by
+    // --exclude-tools and --approval-mode=default (ADR 0027, D4).
     val toolsAllowed = if (relaxedTools) tools != null && "structured_output" in tools else tools == listOf("structured_output")
     if (!toolsAllowed ||
         servers == null ||

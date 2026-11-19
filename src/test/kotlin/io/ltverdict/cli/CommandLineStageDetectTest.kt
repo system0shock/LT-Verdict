@@ -353,6 +353,60 @@ class CommandLineStageDetectTest {
     }
 
     @Test
+    fun `a kept degraded gap leaves the throughput of its step alone`() {
+        // Re-review N3: the gap merged into its step pulled a 100 rps step to about 92 rps, and a rule throughput_rps >= 95 bound
+        // to the step failed for the wrong reason. As its own window the gap leaves the step at its level.
+        val cases =
+            listOf(
+                Triple(StageProfiles.degradedRiseGap, "all", "step-2" to (1_200_000L until 2_100_000L)),
+                Triple(StageProfiles.degradedDeclineGap, "top", "step-1" to (60_000L until 960_000L)),
+            )
+        cases.forEachIndexed { index, (profile, mode, bound) ->
+            val (window, careful) = bound
+            val jtl = profile.writeJtl(tempDir.resolve("gap-$index.jtl"))
+            val detected = run("stages", "detect", jtl.toString(), "--steady-steps", mode)
+            assertEquals(0, detected.exitCode, detected.stderr)
+            assertTrue(detected.stderr.contains("warning code=DEGRADED_GAP_KEPT stage_id=gap-2 "), detected.stderr)
+            val proposal = Files.writeString(tempDir.resolve("gap-$index-proposal.json"), detected.stdout)
+            val policy =
+                Files.writeString(
+                    tempDir.resolve("gap-$index-policy.json"),
+                    """{"schema_version":"policy.v1","policy_id":"gap","defaults":{"sample_floor":1,"min_samples":1},"rules":[""" +
+                        """{"id":"rps","metric":"throughput_rps","operator":"gte","threshold":95,"scope":{"kind":"overall"},""" +
+                        """"window_ids":["$window"]}]}""",
+                )
+            val shift = profile.firstRequestOffsetMillis()
+            val declared =
+                Files.writeString(
+                    tempDir.resolve("gap-$index-careful.json"),
+                    """{"schema_version":"load-stages.v1","stages":[{"id":"$window","role":"steady",""" +
+                        """"from_offset_ms":${careful.first - shift},"to_offset_ms":${careful.last + 1 - shift}}]}""",
+                )
+
+            val byProposal = verdictWith(jtl, proposal, policy, "gp$index")
+            val byCareful = verdictWith(jtl, declared, policy, "gc$index")
+
+            assertEquals("PASS", byCareful, "${profile.name}:\n${detected.stderr}")
+            assertEquals(byCareful, byProposal, "${profile.name}:\n${detected.stderr}")
+        }
+    }
+
+    private fun verdictWith(
+        jtl: Path,
+        stages: Path,
+        policy: Path,
+        name: String,
+    ): String {
+        val result = run("analyze", jtl.toString(), "--policy", policy.toString(), "--stages", stages.toString(), "--data-dir", data(name))
+        assertTrue(result.exitCode in 0..3, result.stderr)
+        return Json
+            .parseToJsonElement(result.stdout)
+            .jsonObject
+            .getValue("policy_verdict")
+            .jsonPrimitive.content
+    }
+
+    @Test
     fun `a degraded tail prints the judged stretch and its facts`() {
         val jtl = StageProfiles.collapse(600, 20.0).writeJtl(tempDir.resolve("collapse.jtl"))
 

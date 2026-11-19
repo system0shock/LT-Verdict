@@ -305,7 +305,7 @@ private class RunFacts(
 
 /** A run of plateau pieces `[first, last]` that becomes one stage; [opening] is the plateau that opened it. */
 private class Step(
-    var first: Int,
+    val first: Int,
     var last: Int,
     val opening: Piece,
 )
@@ -497,21 +497,13 @@ private fun detectInCells(
     val tailStretch =
         judged(if (riseAfterSteady) "AFTER_STEADY" else "TAIL", lastEnd, gridEnd, steps.lastIndex, run.cells * cellMillis - lastEnd)
 
-    // Step 9b (D14): a degraded stretch is never excluded. A lower step becomes its own steady window; a gap or a tail joins
-    // the window of the step it was judged against, which becomes steady if it was not. Two plateau levels are never pooled.
+    // Step 9b (D14): a degraded stretch is never excluded. A lower step becomes its own steady window, and so does a gap
+    // (`gap-K` before `step-K`): a transition at another rate merged into a step would move the step's throughput and
+    // percentiles (re-review N3). A tail joins the last step, which becomes steady if it was not. Two levels are never pooled.
     for ((index, stretch) in stepStretches) if (stretch.verdict == StretchVerdict.DEGRADED) steadyFlags[index] = true
-    for ((index, stretch) in gapStretches) {
-        if (stretch.verdict != StretchVerdict.DEGRADED) continue
-        if (stretch.referenceId == ids[index - 1]) {
-            steps[index - 1].last = steps[index].first - 1
-            bounds[index - 1] = bounds[index - 1].copy(to = bounds[index].from, trimmedTo = 0)
-            steadyFlags[index - 1] = true
-        } else {
-            steps[index].first = steps[index - 1].last + 1
-            bounds[index] = bounds[index].copy(from = bounds[index - 1].to, trimmedFrom = 0)
-            steadyFlags[index] = true
-        }
-    }
+    val keptGaps = gapStretches.filterValues { it.verdict == StretchVerdict.DEGRADED }.keys
+
+    fun gapId(index: Int) = "gap-${index + 1}"
     val tailKept = tailStretch?.kind == "TAIL" && tailStretch.verdict == StretchVerdict.DEGRADED
     if (tailKept) {
         steps.last().last = pieces.lastIndex
@@ -535,6 +527,10 @@ private fun detectInCells(
     }
     val steadyStages = ArrayList<Pair<Step, String>>()
     steps.forEachIndexed { index, step ->
+        if (index in keptGaps) {
+            stages += StageV1(gapId(index), StageRole.STEADY, stepEnd(index - 1), bounds[index].from * cellMillis)
+            boundaries += StageBoundaryFact(gapId(index), "DEGRADED_GAP", null, null, null, 0)
+        }
         val id = ids[index]
         val steady = steadyFlags[index]
         val from = bounds[index].from
@@ -624,7 +620,7 @@ private fun detectInCells(
             warnings +=
                 StageProposalWarning(
                     "DEGRADED_GAP_KEPT",
-                    gap.referenceId,
+                    gapId(index),
                     gap.fromOffsetMillis,
                     previous.level / perSecond,
                     next.level / perSecond,

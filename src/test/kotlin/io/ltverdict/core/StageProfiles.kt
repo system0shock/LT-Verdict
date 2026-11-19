@@ -522,6 +522,41 @@ internal object StageProfiles {
             poissonSeed = 11L,
         )
 
+    /** Re-review N3: steps 30 and 100 rps, the 240 s rise between them at 400 ms (steps at 100 ms). */
+    val degradedRiseGap =
+        StageProfile(
+            "N3 degraded rise between steps",
+            listOf(ramp(60, 0.0, 30.0), flat(900, 30.0), RatePiece(240, 30.0, 100.0, 400), flat(900, 100.0), ramp(60, 100.0, 0.0)),
+            poissonSeed = 11L,
+        )
+
+    /** Re-review N3: steps 100 and 40 rps, the 240 s decline between them at 400 ms. */
+    val degradedDeclineGap =
+        StageProfile(
+            "N3 degraded decline between steps",
+            listOf(ramp(60, 0.0, 100.0), flat(900, 100.0), RatePiece(240, 100.0, 40.0, 400), flat(900, 40.0), ramp(60, 40.0, 0.0)),
+            poissonSeed = 11L,
+        )
+
+    /** Re-review N3: eight 300 s steps alternating 100 and 60 rps, 90 s transitions; degraded: 1500 ms and 10 % errors. */
+    fun alternatingSteps(degraded: Boolean) =
+        StageProfile(
+            "N3 alternating steps, degraded $degraded",
+            buildList {
+                add(ramp(60, 0.0, 100.0))
+                for (step in 0 until 8) {
+                    val level = if (step % 2 == 0) 100.0 else 60.0
+                    if (step > 0) {
+                        val previous = if (step % 2 == 0) 60.0 else 100.0
+                        add(if (degraded) RatePiece(90, previous, level, 1500, 0.10) else ramp(90, previous, level))
+                    }
+                    add(flat(300, level))
+                }
+                add(ramp(60, 60.0, 0.0))
+            },
+            poissonSeed = 11L,
+        )
+
     /** R6: a warm-up at 40 % for 15 minutes before a 1000 s plateau. */
     val warmUp40 =
         StageProfile(

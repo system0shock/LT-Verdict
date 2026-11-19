@@ -123,16 +123,26 @@ class StageProposalDegradationTest {
     }
 
     @Test
-    fun `a degraded decline between steps stays in the window of the higher step`() {
+    fun `a degraded decline between steps becomes its own steady window`() {
         for (mode in SteadySteps.entries) {
             val proposal = detectLoadStages(StageProfiles.degradedGap.series(), mode)
+            // The steps are those of the same rates without the degradation: the gap never widens a step (re-review N3).
+            val healthy =
+                StageProfiles.degradedGap.copy(
+                    pieces = StageProfiles.degradedGap.pieces.map { it.copy(latencyMs = 100, errorRatio = 0.0) },
+                )
+            val plain = detectLoadStages(healthy.series(), mode)
 
             val steps = proposal.stages.filter { it.id.startsWith("step-") }
-            assertEquals(listOf("step-1", "step-2"), steps.map { it.id }, "$mode ${explain(proposal)}")
+            assertEquals(plain.stages.filter { it.id.startsWith("step-") }, steps, "$mode ${explain(proposal)}")
             assertEquals(StageRole.STEADY, steps[0].role)
-            assertTrue(steps[1].fromOffsetMillis - steps[0].toOffsetMillis < 60_000, "$mode ${explain(proposal)}")
+            val gap = proposal.stages.single { it.id == "gap-2" }
+            assertEquals(StageRole.STEADY, gap.role)
+            assertEquals(steps[0].toOffsetMillis, gap.fromOffsetMillis, explain(proposal))
+            assertEquals(steps[1].fromOffsetMillis, gap.toOffsetMillis, explain(proposal))
             val kept = proposal.warnings.single { it.code == "DEGRADED_GAP_KEPT" }
-            assertEquals("step-1", kept.stageId, explain(proposal))
+            assertEquals("gap-2", kept.stageId, explain(proposal))
+            assertEquals("step-1", kept.stretch!!.referenceId, explain(proposal))
             assertTrue(kept.durationMillis!! >= 240_000, explain(proposal))
             assertTrue(proposal.warnings.none { it.code == "LOAD_DECLINE_BETWEEN_STEPS" }, explain(proposal))
             assertEquals(StageProposalConfidence.LOW, proposal.confidence)
@@ -181,7 +191,8 @@ class StageProposalDegradationTest {
             val degraded = detectLoadStages(StageProfiles.degradedDip(seed).series())
 
             val ids = healthy.stages.filter { it.role == StageRole.STEADY }.map { it.id }
-            assertEquals(ids, degraded.stages.filter { it.role == StageRole.STEADY }.map { it.id }, "seed $seed ${explain(degraded)}")
+            val degradedIds = degraded.stages.filter { it.role == StageRole.STEADY }.map { it.id }
+            assertEquals(ids, degradedIds.filterNot { it.startsWith("gap-") }, "seed $seed ${explain(degraded)}")
             val steady = degraded.stages.filter { it.role == StageRole.STEADY }
             steady.zipWithNext().forEach { (a, b) -> assertTrue(b.fromOffsetMillis - a.toOffsetMillis < 60_000, explain(degraded)) }
             if (healthy.warnings.any { it.code == "LOAD_DECLINE_BETWEEN_STEPS" && it.durationMillis!! >= 60_000 }) {
@@ -255,6 +266,17 @@ class StageProposalDegradationTest {
         // A rise that ends above the step stays a rise after steady (R3).
         assertTrue(detectLoadStages(StageProfiles.riseAbort.series()).stages.any { it.id == "after-steady" })
         assertTrue(detectLoadStages(StageProfiles.creep.series()).stages.any { it.id == "after-steady" })
+    }
+
+    @Test
+    fun `kept gaps beyond the stage limit refuse the proposal instead of dropping a gap`() {
+        val healthy = detectLoadStages(StageProfiles.alternatingSteps(degraded = false).series(), SteadySteps.ALL)
+        val degraded = detectLoadStages(StageProfiles.alternatingSteps(degraded = true).series(), SteadySteps.ALL)
+
+        assertEquals(StageProposalStatus.DETECTED, healthy.status, explain(healthy))
+        assertEquals(StageProposalStatus.NOT_DETECTED, degraded.status, explain(degraded))
+        assertEquals("TOO_MANY_STAGES", degraded.reason, explain(degraded))
+        assertTrue(degraded.detail!!.removePrefix("stages=").toInt() > 16, explain(degraded))
     }
 
     @Test

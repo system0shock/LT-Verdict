@@ -1,8 +1,10 @@
 import { expect, test } from '@playwright/test'
 import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
-import type { Bucket } from '../src/types'
-import { loadFrame, loadLane, loadSeries } from '../src/shell/overview'
+import type { Bucket, ResourceSeriesEntry, ResourceSeriesValues } from '../src/types'
+import { deepLane, resourceTrack } from '../src/shell/deep'
+import { DEEP_LABELS } from '../src/shell/labels'
+import { formatNumber, loadFrame, loadLane, loadSeries } from '../src/shell/overview'
 import {
   PLOT_INSET,
   cursorX,
@@ -90,4 +92,24 @@ test('stage areas are clipped to the frame and labelled only when wide enough', 
     .toEqual([['ramp-up', 0, 40_000, true], ['steady', 40_000, 100_000, true], ['ramp-down', 100_000, 119_000, true]])
   expect(areas({ fromMs: 50_000, toMs: 104_000, originMs: 0 }, true).map(([a]) => [a.name, a.label.show])).toEqual([['steady', true], ['ramp-down', false]])
   expect(areas({ fromMs: 0, toMs: 119_000, originMs: 0 }, false).every(([a]) => !a.label.show)).toBe(true)
+})
+
+test('thresholds become dashed mark lines coloured by violation', () => {
+  const thresholds = [{ id: 'cpu-high', value: 5, text: 'порог 5 %', violated: true }, { id: 'queue-ok', value: 50, text: 'порог 50 %', violated: false }]
+  type Mark = { yAxis: number; lineStyle: { color: string }; label: { formatter: string; color: string; fontFamily: string } }
+  const line = (laneOption({ ...lane, thresholds }, { fromMs: 0, toMs: 6000, originMs: 0 }, [], { timeLabels: false, stageLabels: false }, colors).series as Array<{ markLine: { silent: boolean; data: Mark[] } }>)[0].markLine
+  expect(line.silent).toBe(true)
+  expect(line.data.map((item) => [item.yAxis, item.label.formatter, item.lineStyle.color, item.label.color, item.label.fontFamily]))
+    .toEqual([[5, 'порог 5 %', colors.fail, colors.fail, 'sans-serif'], [50, 'порог 50 %', colors.muted, colors.muted, 'sans-serif']])
+})
+test('deepLane keeps cell middles, breaks at nulls and carries thresholds', () => {
+  const entry = { id: 'cpu', metric: 'cpu', unit: '%', entity: 'node', role: 'system', aggregation: 'interval_mean', reducer: 'mean', labels: {}, observed_cells: 2 } as ResourceSeriesEntry
+  const valueGrid = { start_epoch_ms: 0, source_step_ms: 15_000, step_ms: 60_000, first_cell_start_ms: 0, cell_count: 3, source_cells_per_cell: 4, last_cell_source_cells: 4 } as ResourceSeriesValues['grid']
+  const series = { id: 'cpu', aggregation: 'interval_mean', reducer: 'mean', values: [2, null, 4], observed: [4, 0, 4] } as ResourceSeriesValues['series'][number]
+  const track = resourceTrack(entry, series, valueGrid, [{ ruleId: 'high', operator: 'gt', value: 8, violated: false }])
+  const result = deepLane(track, { fromMs: 0, toMs: 180_000 })
+  expect(result).toMatchObject({ key: 'cpu', color: 'text' })
+  expect(result.segments).toEqual([[{ x: 30_000, y: 2 }], [{ x: 150_000, y: 4 }]])
+  expect([result.lo, result.hi]).toEqual([0, 8])
+  expect(result.thresholds).toEqual([{ id: 'high', value: 8, text: DEEP_LABELS.thresholdMark(formatNumber(8), '%'), violated: false }])
 })

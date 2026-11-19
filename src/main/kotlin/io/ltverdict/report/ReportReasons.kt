@@ -56,6 +56,8 @@ private val REASON_WORDS: Map<String, String> =
         "SOURCE_ACQUISITION_PARTIAL" to "Онлайн-источник вернул данные не по всем запросам.",
         "SOURCE_ACQUISITION_FAILED" to "Онлайн-источник не вернул данные.",
         "SOURCE_REQUEST_CAP_EXCEEDED" to "Достигнут предел числа запросов к источнику, часть данных не запрошена.",
+        "STAGE_WINDOW_SNAPSHOT_PARTIAL" to
+            "Снимок ресурсов покрывает окно стадии steady не целиком: ресурсные правила проверены только на покрытой части окна.",
         // Оценка ёмкости
         "CAPACITY_RUN_NOT_VALID" to "Нагрузка разобрана не полностью, ёмкость оценить нельзя.",
         "CAPACITY_WINDOW_EVIDENCE_MISSING" to "Для ступени нет окна или итогов окна.",

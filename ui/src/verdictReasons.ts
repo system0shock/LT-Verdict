@@ -47,6 +47,7 @@ export const REASONS: Record<string, ReasonEntry> = {
   SOURCE_ACQUISITION_PARTIAL: { noVerdict: false, text: 'Онлайн-источник вернул данные не по всем запросам.' },
   SOURCE_ACQUISITION_FAILED: { noVerdict: false, text: 'Онлайн-источник не вернул данные.' },
   SOURCE_REQUEST_CAP_EXCEEDED: { noVerdict: false, text: 'Достигнут предел числа запросов к источнику, часть данных не запрошена.' },
+  STAGE_WINDOW_SNAPSHOT_PARTIAL: { noVerdict: false, text: 'Снимок ресурсов покрывает окно стадии steady не целиком: ресурсные правила проверены только на покрытой части окна.' },
   // Оценка ёмкости
   CAPACITY_RUN_NOT_VALID: { noVerdict: true, text: 'Нагрузка разобрана не полностью, ёмкость оценить нельзя.' },
   CAPACITY_WINDOW_EVIDENCE_MISSING: { noVerdict: true, text: 'Для ступени нет окна или итогов окна.' },

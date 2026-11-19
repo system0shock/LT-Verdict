@@ -145,7 +145,8 @@ EXPECTED FILES TO CHANGE:
    `|b| · m / ℓ <= MAX_DRIFT_RATIO` и `sqrt(SSE / m) / ℓ <= MAX_RESIDUAL_CV`; иначе `UNSTABLE`, если разброс остатков больше
    `MAX_RESIDUAL_CV`; иначе `RISING` при `b > 0` и `FALLING` при `b < 0`. Соседние `FLAT` сливаются (слева направо, до
    неподвижной точки), если `|ℓ_a - ℓ_b| <= max(LEVEL_MERGE_RATIO · max(ℓ_a, ℓ_b), LEVEL_MERGE_SIGMAS · σ · sqrt(1/m_a + 1/m_b))`
-   и объединённый отрезок по пересчёту остаётся `FLAT`.
+   и объединённый отрезок по пересчёту остаётся `FLAT`. Поправка при реализации PR 1: сливаются только отрезки не короче
+   `MIN_STEADY_MILLIS` (иначе короткий переход между ступенями сливается со следующим плато и попадает в его окно).
 5. **Кандидаты в steady.** `FLAT` длиной не меньше `MIN_STEADY_MILLIS`, у которых `ℓ >= STEADY_LEVEL_RATIO · ℓ_max` или длина
    не меньше `STEADY_DURATION_RATIO` длины самого длинного `FLAT` (`ℓ_max` по `FLAT`). Нет кандидатов: отказ `NO_PLATEAU`.
 6. **Простой внутри.** `IDLE` длиной не меньше `IDLE_GAP_MIN_MILLIS` между началом первого и концом последнего кандидата: отказ
@@ -154,8 +155,9 @@ EXPECTED FILES TO CHANGE:
    любых отрезков короче `DROP_MIN_MILLIS`. Всё между концом последнего кандидата и началом этого суффикса присоединяется к
    последней стадии steady (D4 ADR 0036).
 8. **Стадии steady.** Кандидаты идут по времени. Следующий кандидат открывает новую стадию, только если его уровень выше уровня
-   текущей стадии больше чем на порог слияния п. 4 и между ними нет отрезков, кроме `RISING`; переход между ними становится
-   зазором. Иначе всё от текущей стадии до конца следующего кандидата сливается в одну стадию. Если внутри стадии есть отрезок с
+   текущей стадии больше чем на порог слияния п. 4 и между ними нет отрезков, кроме `RISING` и (поправка при реализации PR 1)
+   растущих `FLAT` короче `MIN_STEADY_MILLIS`; переход между ними становится зазором. Без поправки переход +10 % за 10 с
+   (дрейф 0,09 не больше `MAX_DRIFT_RATIO`) классифицируется `FLAT`, и ступени 80 и 90 rps сливаются в одно окно. Иначе всё от текущей стадии до конца следующего кандидата сливается в одну стадию. Если внутри стадии есть отрезок с
    уровнем ниже `(1 - LEVEL_MERGE_RATIO) ·` уровня первого плато стадии, ставится `LOAD_DROP_INSIDE_STEADY` (смещение начала
    самого раннего такого отрезка, уровни до и после в rps).
 8a. **Режим ступеней (D12).** Пункты 1-8 строят стадии-ступени одинаково в обоих режимах. `--steady-steps all`: роль `steady`
@@ -384,7 +386,9 @@ internal const val STAGE_PROPOSAL_METHOD = "rps-plateau-segmentation.v1"
   - `row order does not change the series` — те же строки в обратном порядке дают равные массивы;
   - `an invalid input is refused` — JTL с нечисловым `timeStamp` в средней строке (парсер даёт `INVALID`,
     `JtlCsvParser.kt:289-292`): `Refused("INPUT_INVALID")`;
-  - `a file without requests is refused` — JTL только из строк контейнера: `Refused("NO_REQUEST_SAMPLES")`;
+  - `a file without requests is refused` — журнал Gatling только из строк GROUP: `Refused("NO_REQUEST_SAMPLES")` (поправка при
+    реализации: JTL только из строк контейнера парсер не распознаёт как контейнеры, он отмечает их только в смеси с другими
+    строками);
   - `a run of exactly seven days is read and one millisecond more is refused` — две выборки с разницей 604800000 мс
     (минус `elapsed`) дают `Series` длины 604801; разница на 1 мс больше даёт `Refused("RUN_TOO_LONG")`.
 - [ ] **Шаг 3: запуск, ожидается FAIL** (нет `readLoadSecondSeries`):
@@ -486,8 +490,9 @@ internal const val STAGE_PROPOSAL_METHOD = "rps-plateau-segmentation.v1"
     `--steady-steps middle`, повтор `--steady-steps`;
   - `a missing or unsupported input exits 4` — нет файла: stderr `INVALID_INPUT`; текстовый файл не JTL: stderr
     `UNSUPPORTED_INPUT` (литерал `FormatDetector.kt:135`);
-  - `the gatling log is accepted` — `fixtures/slice0/simulation.log`: код 0 или 3, первая строка stderr начинается с
-    `stage_proposal status=`;
+  - `the gatling log is accepted` — `fixtures/slice0/simulation.log`: код 4 и `reason=INPUT_INVALID`, как у `ltv analyze`
+    (поправка при реализации: строки REQUEST этой фикстуры Slice 0 не в формате парсера); журналы
+    `fixtures/slice1/gatling/text-3.12.0` и `binary-3.15.1`: код 0 или 3, первая строка stderr начинается с `stage_proposal status=`;
   - `the command takes no data directory` — `--data-dir` не принимается (код 64); `CliStages.kt` не обращается к
     `DataDirectory` (проверяется ревью диффа).
 - [ ] **Шаг 2: запуск, ожидается FAIL:** `./gradlew test --tests 'io.ltverdict.cli.CommandLineStageDetectTest'`.
@@ -640,9 +645,13 @@ proposal: <объект load-stages.v1> | null}`; числа это JSON-чис�
   (у профиля ступеней это уровень ступени).
 - **С шумом (F5):** начало в `[T - W, T + max(3W, 0,02 D)]`, конец в `[T_end - max(3W, 0,02 D), T_end + W]`, истинный уровень
   каждой ячейки steady в пределах 10 % уровня плато.
+- **Пологий склон (F5, F10), поправка при реализации PR 1:** ячейки склона в пределах шума плато неотличимы от него, поэтому
+  наружный допуск равен внутреннему, `max(3W, 0,02 D)`; проверка истинного уровня каждой ячейки остаётся. Замер: F5 начало
+  −7 с, конец +3 с; F10 конец +3 с.
 - **С падением (F3, F10), правило D4:** правило 5 % не применяется, потому что падение остаётся в steady намеренно. F3: одна
   стадия steady, начало в `[60 с - W, 60 с + 2W]`, конец в `[3600 с - 2W, 3600 с + W]`, момент падения 2400 с лежит внутри
-  неё, предупреждение `LOAD_DROP_INSIDE_STEADY` с `at_offset_ms` в `[2400000 - W, 2400000 + W]`. F10: steady в
+  неё, предупреждение `LOAD_DROP_INSIDE_STEADY` с `at_offset_ms` в `[2400000 - 2W, 2400000 + W]` (поправка при реализации:
+  момент это начало переходного отрезка не короче трёх ячеек; замер −3 с при `W` = 2 с). F10: steady в
   `[60 с - W, 660 с + W]` по тем же правилам начала и конца, `ramp-down` начинается в `[660 с - 2W, 660 с + W]`.
 
 ## Риски

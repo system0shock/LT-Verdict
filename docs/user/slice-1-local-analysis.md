@@ -2104,8 +2104,9 @@ bundle. Семантически одинаковые данные с други
 выполняет. Если вы знаете границы стадий, объявите их файлом `load-stages.v1`: стадии с ролью
 `steady` становятся окнами, и существующая оконная оценка политики считает вердикт только по
 ним. Вердикт при этом говорит вслух: «Вердикт посчитан по окну steady, разгон исключён».
-Решение и границы: [ADR 0030](../adr/0030-load-stages-steady-window.md). Автоопределения
-плато нет: окна задаёте вы, ядро их не угадывает.
+Решение и границы: [ADR 0030](../adr/0030-load-stages-steady-window.md). Ядро окна не
+угадывает: стадии всегда задаёте вы; черновик можно получить командой `ltv stages detect`
+(раздел «Предложение стадий: `ltv stages detect`»).
 
 Режим включается только явным объявлением. Без `--stages` (и без части `stages` в API)
 ничего не меняется: вердикт, `analysis_id`, `identity.json`, `junit.xml`, `summary.txt` и
@@ -2210,6 +2211,147 @@ rules: 2 (PASS 2, FAIL 0, NO_VERDICT 0)
 Анализ сохраняет объявление рядом с `identity.json` файлом `load-stages.json` (канонические
 байты); его SHA-256 входит в identity как `load_stages_sha256`. Тот же файл с другим
 порядком стадий или пробелами даёт тот же `analysis_id`.
+
+### Предложение стадий: `ltv stages detect`
+
+Если границы стадий точно неизвестны, черновик объявления строит команда:
+
+```powershell
+ltv stages detect fixtures/stages/ramp-steady-rampdown.jtl --out stages.json
+```
+
+Команда читает только журнал нагрузки (JTL CSV или XML JMeter, журнал Gatling), каталог данных
+не открывает и ничего не сохраняет, поэтому её можно запускать рядом с `ltv ui`. Анализ,
+`analysis_id` и identity она не меняет: предложение становится стадиями, только когда вы
+передаёте файл в `--stages`. Решение и метод: [ADR 0036](../adr/0036-load-stage-proposal.md).
+
+- В stdout или в файл `--out` пишется обычный документ `load-stages.v1` в каноническом виде,
+  и только если предложение построено. `--out` не перезаписывает существующий файл и не
+  проходит по ссылке (`STAGES_OUT_EXISTS`, код `4`).
+- В stderr пишется объяснение строками `ключ=значение` на английском; порядок строк
+  постоянный, те же байты входа дают те же байты вывода.
+
+Предложение это черновик: проверьте его, при необходимости поправьте и передайте в анализ как
+обычный файл:
+
+```powershell
+ltv analyze fixtures/stages/ramp-steady-rampdown.jtl --policy policy.json --stages stages.json --out-dir out
+```
+
+На опорной фикстуре предложение побайтно совпадает с примером
+[ramp-steady-down.json](../contracts/stages/v1/examples/valid/ramp-steady-down.json), и анализ
+даёт тот же `PASS` (600 выборок, p95 194 мс, 10 rps). Объяснение (вывод реального запуска):
+
+```text
+stage_proposal status=DETECTED method=rps-plateau-segmentation.v1 steady_steps=top confidence=HIGH calibrated=false
+run start_epoch_ms=1767225600000 end_epoch_ms=1767225719800 cell_ms=5000 cells=23 noise_rps=0.200
+segment from_offset_ms=0 to_offset_ms=40000 kind=FLAT level_rps=2.000 drift=0.000 residual_cv=0.000
+segment from_offset_ms=40000 to_offset_ms=100000 kind=FLAT level_rps=10.000 drift=0.000 residual_cv=0.000
+segment from_offset_ms=100000 to_offset_ms=115000 kind=FLAT level_rps=2.000 drift=0.000 residual_cv=0.000
+stage id=ramp-up role=excluded from_offset_ms=0 to_offset_ms=40000 basis=BEFORE_FIRST_STEADY
+stage id=steady role=steady from_offset_ms=40000 to_offset_ms=100000 basis=PLATEAU level_rps=10.000 from_contrast_sigma=40.000 to_contrast_sigma=40.000 trimmed_cells=0
+stage id=ramp-down role=excluded from_offset_ms=100000 to_offset_ms=120000 basis=AFTER_LAST_STEADY
+next: review the stages, then run ltv analyze <input> --stages <file>
+```
+
+- `run`: начало и конец прогона (то же правило, что в анализе: самая ранняя выборка любого
+  вида), ширина ячейки `cell_ms`, число ячеек и шум ряда `noise_rps`. Ряд запросов по
+  секундам складывается в ячейки 1, 2, 5, 10, 15, 30, 60, 120 или 300 с; берётся самая узкая,
+  при которой ячеек не больше 2400 и у верхней четверти ячеек не меньше 50 запросов. Все
+  границы предложения кратны ширине ячейки.
+- `segment`: найденные отрезки ряда (кусочно-линейная сегментация со штрафом за каждый
+  отрезок): уровень в rps, дрейф уровня за отрезок, разброс остатков, вид `FLAT` (плато),
+  `RISING`, `FALLING`, `IDLE` (почти без запросов) или `UNSTABLE`.
+- `stage`: предложенные стадии и основание каждой границы. У плато печатаются уровень,
+  контраст границ в единицах шума (`-`, если соседа нет) и число ячеек, на которые сдвинут
+  край.
+
+Как метод ставит границы:
+
+- всё до первого плато (простой, прогрев, разгон) исключается; низкий и короткий прогрев
+  (уровень меньше половины плато и длина меньше 3/4 самого длинного плато) становится частью
+  разгона;
+- падение нагрузки после начала плато не вырезается: окно без этого участка дало бы ложный
+  `PASS`, ведь в замкнутой модели JMeter нагрузка падает, когда система тормозит. Участок
+  остаётся в `steady`, ставится предупреждение `LOAD_DROP_INSIDE_STEADY` и уверенность `LOW`;
+- хвост после последнего плато становится `ramp-down`, если он состоит из спада, простоя или
+  участков короче 60 с; длинное плато на пониженном уровне остаётся в `steady`;
+- если после плато ничего нет, конец `steady` округляется вверх до сетки ячеек, а анализ
+  обрезает его до конца прогона (`clipped_to_run_end`, раздел «Steady до конца профиля»).
+
+**Несколько плато (профиль ёмкости).** Ступени называются `step-1` ... `step-N`, переходы
+между ними в стадии не входят (зазоры допустимы). Роли задаёт `--steady-steps`:
+
+| Режим | Роль `steady` |
+| --- | --- |
+| `top` (по умолчанию) | только у последней, наивысшей ступени; остальные ступени `excluded` под теми же именами |
+| `all` | у каждой ступени; каждое окно проверяется отдельно |
+
+Режим меняет только роли: границы, имена и отказы одинаковы. При одном плато режимы дают
+одни и те же байты, а объяснение отличается только значением `steady_steps`. Умолчание `top`
+выбрано потому, что окно, собранное из ступеней разного уровня, смешивает задержки разных
+нагрузок; окончательное умолчание ждёт решения владельца (ADR 0036, D12). Правило политики с
+`window_ids: ["steady"]` при нескольких ступенях окна не находит (`RULE_WINDOW_NOT_FOUND`):
+привяжите его к `step-N`.
+
+**Уверенность** (`confidence`) выводится по правилам, а не как вероятность, и всегда
+сопровождается `calibrated=false`: константы метода подобраны на синтетических профилях и
+опорной фикстуре и не калибровались на реальных прогонах.
+
+| Уверенность | Когда |
+| --- | --- |
+| `LOW` | есть `LOAD_DROP_INSIDE_STEADY` или `LONG_RAMP_DOWN` |
+| `MEDIUM` | есть `LEAD_IN_IDLE`, `STEADY_DRIFT` или `DEGRADED_INPUT`; граница `steady` выделяется меньше чем на 6 единиц шума; разброс плато больше 15 % |
+| `HIGH` | иначе |
+
+| Предупреждение | Что значит |
+| --- | --- |
+| `LEAD_IN_IDLE` | до нагрузки есть простой (например, выборка setUp); он стал стадией `lead-in` |
+| `LOAD_DROP_INSIDE_STEADY` | внутри `steady` нагрузка упала больше чем на 5 %: момент и уровни до и после в rps |
+| `LONG_RAMP_DOWN` | остановка длиннее 60 с и длиннее четверти плато: возможно, это умирание системы, а не плановая остановка |
+| `STEADY_DRIFT` | уровень плато уходит на 5-10 % за его длину |
+| `DEGRADED_INPUT` | вход разобран с потерями (`DEGRADED`) |
+
+Коды выхода: `0` предложение построено; `3` предложение не построено (метод отказался, stdout
+пуст, файл `--out` не создаётся); `4` вход не найден, не распознан или непригоден
+(`INPUT_INVALID`), `--out` уже существует или не записан; `64` ошибка использования
+(`--data-dir` команда не принимает).
+
+| Причина отказа (`reason`) | Условие |
+| --- | --- |
+| `INPUT_INVALID` | вход непригоден, как `INVALID` у `ltv analyze` (код `4`) |
+| `NO_REQUEST_SAMPLES` | в журнале нет запросов (только контроллеры или группы) |
+| `RUN_TOO_LONG` | прогон длиннее 7 суток |
+| `RUN_TOO_SHORT` | прогон короче 60 с или меньше 12 ячеек |
+| `RATE_TOO_LOW` | ни одна ширина ячейки не набирает 50 запросов в верхней четверти ячеек |
+| `RATE_OUT_OF_RANGE` | переполнение целых сумм (защитный код) |
+| `IDLE_GAP_INSIDE_RUN` | простой 30 с и дольше между плато: похоже на два теста в одном файле |
+| `NO_PLATEAU` | плато нет или плато занимают меньше 30 % прогона без начального простоя (например, непрерывный рост) |
+| `TOO_MANY_STAGES` | стадий получилось больше 16 |
+
+Строка `detail` отказа называет измеренный факт: `steady_share=0.000`, `idle_gap_ms=60000`,
+`stages=18`, `run_ms=45080`.
+
+**Пример с ранней выборкой setUp** (раздел «Ловушка начала прогона»). На той же фикстуре с
+выборкой setUp за 30 с до нагрузки предложение само исключает простой (строки объяснения):
+
+```text
+stage_proposal status=DETECTED method=rps-plateau-segmentation.v1 steady_steps=top confidence=MEDIUM calibrated=false
+stage id=lead-in role=excluded from_offset_ms=0 to_offset_ms=30000 basis=LEAD_IN_IDLE
+stage id=ramp-up role=excluded from_offset_ms=30000 to_offset_ms=70000 basis=BEFORE_FIRST_STEADY
+stage id=steady role=steady from_offset_ms=70000 to_offset_ms=130000 basis=PLATEAU level_rps=10.000 from_contrast_sigma=40.000 to_contrast_sigma=40.000 trimmed_cells=0
+stage id=ramp-down role=excluded from_offset_ms=130000 to_offset_ms=150000 basis=AFTER_LAST_STEADY
+warning code=LEAD_IN_IDLE stage_id=lead-in at_offset_ms=0 duration_ms=30000
+```
+
+Анализ с этим предложением снова даёт `PASS` по 600 выборкам плато с p95 194 мс, без ручного
+сдвига смещений.
+
+**Порядок работы.** Хэш объявления входит в ключ сопоставимости (раздел «Сопоставимость»), а
+предложение, построенное заново для каждого прогона, может сдвинуться на ячейку. Поэтому
+постройте предложение на одном прогоне профиля, проверьте его, сохраните файл рядом со
+сценарием и передавайте этот файл во все прогоны профиля. Проверка готового объявления на
+новом прогоне (`--like`) запланирована отдельным срезом (ADR 0036, D13).
 
 ### Что вердикт говорит вслух и где
 
@@ -2462,7 +2604,8 @@ ADR 0030).
 
 ### Ограничения
 
-- Автоопределения плато нет: границы объявляете вы.
+- Ядро окна не угадывает: стадии объявляете вы; `ltv stages detect` только предлагает черновик,
+  его константы не калибровались на реальных прогонах.
 - Стадии нельзя сочетать с планом ёмкости, планом корреляций, планом тренда и снимком с
   собственными `windows`; снимок без `windows` и онлайн-источник разрешены (ADR 0037).
 - Формы загрузки стадий в UI нет (только CLI и API).
@@ -2536,6 +2679,7 @@ HTML-отчёт (`ltv report --format html`, `report.html` из `--out-dir`, с�
 ```text
 ltv ui [--data-dir <path>] [--analysis-parallelism <n>] [--histogram-significant-digits <3..5>]
 ltv analyze <input> [--policy <policy.json>|-] [--stages <load-stages.json>] [--resources <snapshot.json>] [--histogram-significant-digits <3..5>] [--data-dir <path>] [--out-dir <dir> [--baseline <analysis-result.json>]]
+ltv stages detect <input> [--out <file>] [--steady-steps top|all]
 ltv policy validate <policy.json>|-
 ltv report <run-id> <analysis-id> --format json|html|asciidoc|confluence|svg [--baseline <analysis-result.json>] [--data-dir <path>]
 ltv summary <run-id> <analysis-id> [--baseline <analysis-result.json>] [--data-dir <path>]

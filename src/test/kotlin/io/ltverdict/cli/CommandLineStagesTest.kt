@@ -113,7 +113,159 @@ class CommandLineStagesTest {
         assertEquals("STAGES_CAPACITY_CONFLICT", withCapacity.stderr.trim())
         assertEquals("STAGES_CAPACITY_CONFLICT", both.stderr.trim())
         assertEquals(4, withSource.exitCode)
-        assertEquals("STAGES_SOURCE_CONFLICT", withSource.stderr.trim())
+        // ADR 0037, D7: stages no longer refuse an online request; the missing source file is reported
+        assertEquals(
+            "SOURCE_FILE_INVALID",
+            withSource.stderr
+                .lineSequence()
+                .first()
+                .trim(),
+        )
+        assertFalse(Files.exists(Path.of(dir)), "no data directory is created")
+    }
+
+    @Test
+    fun `stages with a snapshot without windows analyze and print the steady scope`() {
+        val out = tempDir.resolve("out")
+
+        val result =
+            run(
+                "analyze",
+                load,
+                "--policy",
+                PLATFORM_POLICY,
+                "--stages",
+                stages,
+                "--resources",
+                SNAPSHOT,
+                "--out-dir",
+                out.toString(),
+                "--data-dir",
+                data("a"),
+            )
+
+        assertEquals(0, result.exitCode, result.stderr)
+        listOf("report.html", "junit.xml", "summary.txt", "result.json").forEach {
+            assertTrue(Files.isRegularFile(out.resolve(it)), it)
+        }
+        assertTrue(Files.readString(out.resolve("summary.txt")).contains("scope: steady window (steady)"))
+        val html = Files.readString(out.resolve("report.html"))
+        assertTrue(html.contains("Область вердикта") && html.contains("Привязка ресурсов"))
+        val evidence =
+            Json
+                .parseToJsonElement(Files.readString(out.resolve("result.json")))
+                .jsonObject
+                .getValue("evidence")
+                .jsonArray
+        val binding = evidence.single { it.type() == "resource_binding" }.jsonObject
+        assertEquals("declared_stages", binding.getValue("mode").jsonPrimitive.content)
+        val steady =
+            evidence
+                .single { it.type() == "stage_binding" }
+                .jsonObject
+                .getValue("stages")
+                .jsonArray
+                .single {
+                    it.jsonObject
+                        .getValue("id")
+                        .jsonPrimitive.content == "steady"
+                }.jsonObject
+        assertEquals("1767225645000", steady.getValue("resource_from_epoch_ms").jsonPrimitive.content)
+        assertEquals("1767225690000", steady.getValue("resource_to_epoch_ms").jsonPrimitive.content)
+    }
+
+    @Test
+    fun `a snapshot that starts inside the steady stage is partial coverage named in words in the report`() {
+        val out = tempDir.resolve("out")
+        val late =
+            tempDir.resolve("late-snapshot.json").also {
+                Files.writeString(
+                    it,
+                    Files
+                        .readString(Path.of(SNAPSHOT))
+                        .replace("\"start_epoch_ms\": 1767225600000", "\"start_epoch_ms\": 1767225660000")
+                        .replace("\"point_count\": 8", "\"point_count\": 4")
+                        .replace("[0.2, 0.2, 0.9, 0.9, 0.2, 0.2, 0.2, 0.2]", "[0.2, 0.2, 0.2, 0.2]")
+                        .replace("[0, 0, 0, 0, 0, 0, 0, 0]", "[0, 0, 0, 0]"),
+                )
+            }
+
+        val result =
+            run(
+                "analyze",
+                load,
+                "--policy",
+                PLATFORM_POLICY,
+                "--stages",
+                stages,
+                "--resources",
+                late.toString(),
+                "--out-dir",
+                out.toString(),
+                "--data-dir",
+                data("a"),
+            )
+
+        assertEquals(0, result.exitCode, result.stderr)
+        val coverage =
+            Json
+                .parseToJsonElement(result.stdout)
+                .jsonObject
+                .getValue("analysis_coverage")
+                .jsonObject
+        assertEquals("INCOMPLETE", coverage.getValue("status").jsonPrimitive.content)
+        assertTrue(coverage.getValue("reasons").toString().contains("STAGE_WINDOW_SNAPSHOT_PARTIAL"))
+        val html = Files.readString(out.resolve("report.html"))
+        assertTrue(html.contains("STAGE_WINDOW_SNAPSHOT_PARTIAL"))
+        assertFalse(html.contains("Причина без расшифровки"), "the coverage reason is named in words")
+    }
+
+    @Test
+    fun `stages refuse a capacity plan, a snapshot with windows, a correlation plan and a trend plan in this order`() {
+        val windowed = Path.of("docs/contracts/resources/v1/examples/valid/basic.json").toString()
+        val capacity = Path.of("docs/contracts/capacity/v1/examples/valid/rps.json").toString()
+        val dir = data("refused")
+
+        // the plans do not exist: the refusals come before they are opened
+        val withCorrelation = run("analyze", load, "--stages", stages, "--correlation", "c.json", "--data-dir", dir)
+        val withTrend = run("analyze", load, "--stages", stages, "--trend", "t.json", "--data-dir", dir)
+        val windowedFirst =
+            run(
+                "analyze",
+                load,
+                "--stages",
+                stages,
+                "--resources",
+                windowed,
+                "--correlation",
+                "c.json",
+                "--trend",
+                "t.json",
+                "--data-dir",
+                dir,
+            )
+        val capacityFirst = run("analyze", load, "--stages", stages, "--resources", windowed, "--capacity", capacity, "--data-dir", dir)
+        val correlationFirst = run("analyze", load, "--stages", stages, "--correlation", "c.json", "--trend", "t.json", "--data-dir", dir)
+        // an online request is no longer refused for stages: the missing connections file is reported instead
+        val withSource =
+            run("analyze", load, "--stages", stages, "--connections", "c.json", "--source", "s.json", "--data-dir", dir)
+
+        assertEquals(4, withCorrelation.exitCode)
+        assertEquals("STAGES_CORRELATION_CONFLICT", withCorrelation.stderr.trim())
+        assertEquals(4, withTrend.exitCode)
+        assertEquals("STAGES_TREND_CONFLICT", withTrend.stderr.trim())
+        assertEquals(4, windowedFirst.exitCode)
+        assertEquals("STAGES_RESOURCES_CONFLICT", windowedFirst.stderr.trim())
+        assertEquals("STAGES_CAPACITY_CONFLICT", capacityFirst.stderr.trim())
+        assertEquals("STAGES_CORRELATION_CONFLICT", correlationFirst.stderr.trim())
+        assertEquals(4, withSource.exitCode)
+        assertEquals(
+            "SOURCE_FILE_INVALID",
+            withSource.stderr
+                .lineSequence()
+                .first()
+                .trim(),
+        )
         assertFalse(Files.exists(Path.of(dir)), "no data directory is created")
     }
 
@@ -250,5 +402,11 @@ class CommandLineStagesTest {
         val stderr = ByteArrayOutputStream()
         val exitCode = runCli(arrayOf(*args), PrintStream(stdout, true, UTF_8), PrintStream(stderr, true, UTF_8))
         return CliResult(exitCode, stdout.toString(UTF_8), stderr.toString(UTF_8))
+    }
+
+    private companion object {
+        // ADR 0037: a snapshot without windows on a 15 s grid for this JTL and a policy with a platform SLA rule
+        val SNAPSHOT = Path.of("fixtures/stages/cross-version/snapshot-15s.json").toString()
+        val PLATFORM_POLICY = Path.of("fixtures/stages/cross-version/policy-platform.json").toString()
     }
 }

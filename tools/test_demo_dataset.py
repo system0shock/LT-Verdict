@@ -440,5 +440,123 @@ class OpenSearchTest(unittest.TestCase):
             self.assertEqual(document["end_epoch_ms"], timeline[-1]["to_epoch_ms"])
 
 
+RUN_FILES = (
+    "load.jtl",
+    "load-stages.json",
+    "opensearch-errors.json",
+    "arm-A/resource-snapshot.json",
+    "arm-A/trend-plan.json",
+    "arm-A/pod-view.json",
+    "arm-A/correlation-plan.json",
+    "arm-B/resource-snapshot.json",
+    "arm-B/trend-plan.json",
+    "arm-B/pod-view.json",
+    "arm-B/correlation-plan.json",
+)
+GOLDEN_TINY_2026_09_3 = {
+    "arm-A/correlation-plan.json": "64ceae12fbd858a9df014d5126f209a47e867e0bf6cfbb6c5ae19fdb3c497832",
+    "arm-A/pod-view.json": "d62b9dac9f0a8559b4ae6a0c638913b74f125b5fbb2e2f7017584e4395c4f2a5",
+    "arm-A/resource-snapshot.json": "038a0f39a2d3ede70614285effc7c9e14060a7f39bd69ec37b761391c7f65e7b",
+    "arm-A/trend-plan.json": "236db17d80c87ad428e9d7b403c1698d7ba66a879dbe93f2fecd84581191946b",
+    "arm-B/correlation-plan.json": "5724d50cc078651f54f663a12b8021e3eb9117d63dec9d408b04739119b9dde7",
+    "arm-B/pod-view.json": "f781b5b3fcaf8237a16d5953f53d8fe565f08865c67558f6e0fb46b668712397",
+    "arm-B/resource-snapshot.json": "9d4df8400cbed8028219fde4ba75d020b8b9f92b8672e7eb00f12b67044ed40f",
+    "arm-B/trend-plan.json": "b1a80ed08a8701f6a68f9da78cc1bbb3c3f62f92a92f9da99986c00b9d301cc7",
+    "load-stages.json": "f10fc3e4f45784964ca3be2814bd6b13e04644b86b8dd7394b9966893167ebc3",
+    "load.jtl": "87b13298dc2b950be86a308c7e7c82b82dca24172cd1b760e523615a8b0866c5",
+    "opensearch-errors.json": "c41c1af9d8cbf78d74faeaae46e4042bc5d0a62fdf7f05728186d6b67150e849",
+}
+
+
+def file_sha(path):
+    return hashlib.sha256(Path(path).read_bytes()).hexdigest()
+
+
+def tree_hashes(root):
+    root = Path(root)
+    return {str(p.relative_to(root)).replace(chr(92), "/"): file_sha(p) for p in sorted(root.rglob("*")) if p.is_file()}
+
+
+class GenerateTest(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.scenario = dd.load_scenario(SCENARIO_PATH)
+        cls.profile = dd.resolve_profile("tiny")
+        cls.folders = [tempfile.TemporaryDirectory(), tempfile.TemporaryDirectory()]
+        cls.manifests = [dd.generate(Path(folder.name), cls.profile, cls.scenario, None) for folder in cls.folders]
+        cls.out = Path(cls.folders[0].name)
+
+    @classmethod
+    def tearDownClass(cls):
+        for folder in cls.folders:
+            folder.cleanup()
+
+    def test_generate_tiny_all_files(self):
+        for release in self.scenario["releases"]:
+            for name in RUN_FILES:
+                self.assertTrue((self.out / release["id"] / name).is_file(), (release["id"], name))
+        for name in ("policy.json", "policy-stages.json", "manifest.json"):
+            self.assertTrue((self.out / name).is_file(), name)
+        expected = {"policy.json", "policy-stages.json", "manifest.json"} | {f"{r['id']}/{n}" for r in self.scenario["releases"] for n in RUN_FILES}
+        self.assertEqual(set(tree_hashes(self.out)), expected)
+
+    def test_generate_byte_identical(self):
+        self.assertEqual(tree_hashes(self.folders[0].name), tree_hashes(self.folders[1].name))
+        self.assertEqual(self.manifests[0], self.manifests[1])
+
+    def test_generate_golden_hashes(self):
+        actual = {name: file_sha(self.out / "2026.09.3" / name) for name in RUN_FILES}
+        self.assertEqual(actual, GOLDEN_TINY_2026_09_3)
+
+    def test_generate_only_one_release(self):
+        with tempfile.TemporaryDirectory() as folder:
+            dd.generate(Path(folder), self.profile, self.scenario, "2026.09.2")
+            self.assertEqual({p.name for p in Path(folder).iterdir() if p.is_dir()}, {"2026.09.2"})
+            self.assertEqual(file_sha(Path(folder) / "2026.09.2" / "load.jtl"), file_sha(self.out / "2026.09.2" / "load.jtl"))
+            with self.assertRaises(ValueError):
+                dd.generate(Path(folder), self.profile, self.scenario, "no-such-release")
+
+    def test_no_wall_clock(self):
+        import datetime as real_datetime
+        from unittest import mock
+
+        class Guard(real_datetime.datetime):
+            @classmethod
+            def now(cls, tz=None):
+                raise AssertionError("wall clock read")
+
+            @classmethod
+            def utcnow(cls):
+                raise AssertionError("wall clock read")
+
+        def forbidden(*args, **kwargs):
+            raise AssertionError("wall clock read")
+
+        with tempfile.TemporaryDirectory() as folder, mock.patch("time.time", forbidden), mock.patch.object(dd, "datetime", Guard):
+            dd.generate(Path(folder), self.profile, self.scenario, "2026.09.2")
+
+    def test_bindings_consistent(self):
+        for release in self.scenario["releases"]:
+            base = self.out / release["id"]
+            load_sha = file_sha(base / "load.jtl")
+            self.assertEqual(json.loads((base / "opensearch-errors.json").read_text(encoding="utf-8"))["load_input_sha256"], load_sha)
+            for arm in ("A", "B"):
+                read = lambda name: json.loads((base / f"arm-{arm}" / name).read_text(encoding="utf-8"), parse_float=Decimal, parse_int=Decimal)
+                snapshot = read("resource-snapshot.json")
+                semantic = dd.stats_validation.snapshot_hash(snapshot)
+                self.assertEqual(snapshot["load_input_sha256"], load_sha)
+                self.assertEqual(read("pod-view.json")["load_input_sha256"], load_sha)
+                for name in ("pod-view.json", "trend-plan.json", "correlation-plan.json"):
+                    self.assertEqual(read(name)["resource_snapshot_sha256"], semantic, (release["id"], arm, name))
+                self.assertEqual({row["labels"]["arm"] for row in snapshot["series"]}, {arm})
+
+    def test_manifest_lists_files(self):
+        manifest = json.loads((self.out / "manifest.json").read_text(encoding="utf-8"))
+        self.assertEqual(manifest["profile"], "tiny")
+        self.assertEqual(manifest["releases"]["2026.09.3"]["load_sha256"], file_sha(self.out / "2026.09.3" / "load.jtl"))
+        self.assertEqual(manifest["files"]["2026.09.3/load.jtl"]["sha256"], file_sha(self.out / "2026.09.3" / "load.jtl"))
+        self.assertEqual(manifest["files"]["policy.json"]["bytes"], (self.out / "policy.json").stat().st_size)
+
+
 if __name__ == "__main__":
     unittest.main()

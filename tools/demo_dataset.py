@@ -689,3 +689,93 @@ def build_opensearch_errors(load_sha256: str, release: dict, profile: dict, scen
             "sample_message_bytes_max": 4096,
         },
     }
+
+
+# ---------------------------------------------------------------- generate command (Task 6)
+
+import argparse
+
+
+def pretty(value, level: int = 0) -> str:
+    """Indented JSON for the small documents; Raw numbers are kept as written."""
+    pad, inner = "  " * level, "  " * (level + 1)
+    if isinstance(value, Raw):
+        return str(value)
+    if isinstance(value, dict):
+        if not value:
+            return "{}"
+        return "{\n" + ",\n".join(f"{inner}{json.dumps(key)}: {pretty(item, level + 1)}" for key, item in value.items()) + "\n" + pad + "}"
+    if isinstance(value, list):
+        if not value:
+            return "[]"
+        if all(not isinstance(item, (dict, list)) for item in value):
+            return "[" + ", ".join(pretty(item) for item in value) + "]"
+        return "[\n" + ",\n".join(inner + pretty(item, level + 1) for item in value) + "\n" + pad + "]"
+    return json.dumps(value, ensure_ascii=False)
+
+
+def write_text(root: Path, name: str, text: str, files: dict) -> None:
+    data = text.encode("utf-8")
+    path = root / name
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_bytes(data)
+    files[name] = {"bytes": len(data), "sha256": sha256(data).hexdigest()}
+
+
+def generate(out: Path, profile: dict, scenario: dict, only: str | None = None) -> dict:
+    """Writes the inputs of every release under `out` and returns (and writes) the manifest.
+
+    The chain of hashes: JTL, its SHA-256, the snapshot of each arm, its semantic hash, the plans and pod-view bound to it."""
+    releases = [item for item in scenario["releases"] if only in (None, item["id"])]
+    if not releases:
+        raise ValueError(f"no release {only!r} in the scenario")
+    out = Path(out)
+    out.mkdir(parents=True, exist_ok=True)
+    files: dict = {}
+    write_text(out, "policy.json", pretty(build_policy(scenario, profile)) + "\n", files)
+    write_text(out, "policy-stages.json", pretty(build_policy_stages(scenario, profile)) + "\n", files)
+    manifest_releases = {}
+    for release in releases:
+        base = release["id"]
+        load_path = out / base / "load.jtl"
+        load_path.parent.mkdir(parents=True, exist_ok=True)
+        load_sha = write_jtl(load_path, release, profile, scenario)
+        files[f"{base}/load.jtl"] = {"bytes": load_path.stat().st_size, "sha256": load_sha}
+        write_text(out, f"{base}/load-stages.json", pretty(build_load_stages(profile, scenario)) + "\n", files)
+        write_text(out, f"{base}/opensearch-errors.json", dumps(build_opensearch_errors(load_sha, release, profile, scenario)) + "\n", files)
+        manifest_releases[base] = {"load_sha256": load_sha, "start_epoch_ms": start_epoch_ms(release), "snapshot_sha256": {}}
+        for arm in scenario["arms"]:
+            model = simulate_arm(arm, release, profile, scenario)
+            snapshot = build_snapshot(arm, release, profile, scenario, load_sha, model)
+            semantic = snapshot_hash(snapshot)
+            manifest_releases[base]["snapshot_sha256"][arm] = semantic
+            write_text(out, f"{base}/arm-{arm}/resource-snapshot.json", snapshot_text(snapshot), files)
+            write_text(out, f"{base}/arm-{arm}/trend-plan.json", pretty(build_trend_plan(semantic, scenario, profile)) + "\n", files)
+            write_text(out, f"{base}/arm-{arm}/correlation-plan.json", pretty(build_correlation_plan(semantic, arm, scenario)) + "\n", files)
+            write_text(out, f"{base}/arm-{arm}/pod-view.json", dumps(build_pod_view(model, semantic, load_sha, release, profile, scenario)) + "\n", files)
+    manifest = {"schema": "demo-dataset-manifest.v1", "profile": profile["name"], "releases": manifest_releases, "files": dict(sorted(files.items()))}
+    write_text(out, "manifest.json", pretty(manifest) + "\n", {})
+    return manifest
+
+
+def main(argv: list | None = None) -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    commands = parser.add_subparsers(dest="command", required=True)
+    gen = commands.add_parser("generate", help="write the inputs of every release")
+    gen.add_argument("--out", type=Path, required=True)
+    gen.add_argument("--profile", choices=sorted(PROFILES), default="demo")
+    gen.add_argument("--scenario", type=Path, default=DEFAULT_SCENARIO)
+    gen.add_argument("--only", help="generate one release id only")
+    args = parser.parse_args(argv)
+    scenario = load_scenario(args.scenario)
+    try:
+        manifest = generate(args.out, resolve_profile(args.profile), scenario, args.only)
+    except ValueError as failure:
+        parser.error(str(failure))
+    total = sum(item["bytes"] for item in manifest["files"].values())
+    print(f"{len(manifest['releases'])} releases, {len(manifest['files'])} files, {total / 1048576:.1f} MiB in {args.out}")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

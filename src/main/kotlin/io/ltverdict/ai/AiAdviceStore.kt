@@ -206,6 +206,6 @@ private fun corrupt(message: String): Nothing = throw IllegalStateException("COR
 private const val ADVICE_DIRECTORY = "advice"
 private const val ADVICE_FILE = "ai-advice.json"
 private const val MANIFEST_FILE = "manifest.json"
-private const val MAX_STORED_ADVICE_BYTES = 160 * 1024
+private const val MAX_STORED_ADVICE_BYTES = 1_048_576 + 32 * 1024
 private const val MAX_ADVICE_MANIFEST_BYTES = 16 * 1024
 private val IS_WINDOWS = System.getProperty("os.name").startsWith("Windows", ignoreCase = true)

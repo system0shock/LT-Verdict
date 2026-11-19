@@ -26,7 +26,7 @@ try {
         throw "Runtime preflight did not succeed: status=$($runtimeResult.status) failure=$($runtimeResult.failure_code) unavailable=$($runtimeResult.unavailable_reason) stage=$($runtimeResult.stage)"
     }
     if (-not (Test-Path -LiteralPath $output -PathType Leaf)) { throw "Runtime output is missing." }
-    if ((Get-Item -LiteralPath $output).Length -gt 131072) { throw "Runtime output exceeds its bound." }
+    if ((Get-Item -LiteralPath $output).Length -gt 1048576) { throw "Runtime output exceeds its bound." }
     $advice = Get-Content -LiteralPath $output -Raw -Encoding UTF8 | ConvertFrom-Json
     if ([string]$advice.schema_version -ne "ai-advice-output.v1") { throw "Runtime output contract differs." }
 

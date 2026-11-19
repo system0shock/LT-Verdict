@@ -2,11 +2,11 @@
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import * as echarts from 'echarts/core'
 import { LineChart } from 'echarts/charts'
-import { GridComponent, MarkAreaComponent } from 'echarts/components'
+import { GridComponent, MarkAreaComponent, MarkLineComponent } from 'echarts/components'
 import { SVGRenderer } from 'echarts/renderers'
 import { PLOT_INSET, cursorX, laneGrid, laneOption, type ChartColors, type ChartFrame, type ChartLane, type ChartStage, type LaneFlags } from './timeChart'
 
-echarts.use([LineChart, GridComponent, MarkAreaComponent, SVGRenderer])
+echarts.use([LineChart, GridComponent, MarkAreaComponent, MarkLineComponent, SVGRenderer])
 
 const props = defineProps<{
   lane: ChartLane

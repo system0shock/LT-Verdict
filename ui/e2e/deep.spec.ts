@@ -2,6 +2,7 @@ import AxeBuilder from '@axe-core/playwright'
 import { expect, test, type Page } from '@playwright/test'
 import { DEEP_LABELS, OVERVIEW_LABELS, SHELL_LABELS, SHELL_TABS } from '../src/shell/labels'
 import { formatNumber } from '../src/shell/overview'
+import { PLOT_INSET } from '../src/shell/timeChart'
 
 const runId = 'deep-run'
 const analysisId = 'a'.repeat(64)
@@ -89,6 +90,44 @@ async function openDeep(page: Page) {
   await expect(page.getByTestId('deep-panel').getByRole('status')).toHaveCount(0)
 }
 
+test('resource lanes show value ticks and a threshold label on the axis', async ({ page }) => {
+  fixtureApi(page, { passRule: true })
+  await openDeep(page)
+  const cpu = page.getByTestId('deep-track-cpu').locator('svg text')
+  await expect(cpu.filter({ hasText: DEEP_LABELS.thresholdMark(formatNumber(5), '%') })).toHaveCount(1)
+  expect(await cpu.allTextContents()).toEqual(expect.arrayContaining(['0', formatNumber(1000), formatNumber(2000)]))
+})
+
+test('hovering the middle of the plot reads every lane at the middle of the period', async ({ page }) => {
+  const mock = fixtureApi(page)
+  await openDeep(page)
+  await page.getByTestId('deep-plot').scrollIntoViewIfNeeded()
+  const box = (await page.getByTestId('deep-plot').boundingBox())!
+  await page.mouse.move(box.x + PLOT_INSET.left + (box.width - PLOT_INSET.left - PLOT_INSET.right) / 2, box.y + 30)
+  await expect(page.getByTestId('deep-cursor-time')).toHaveAttribute('data-ms', '90000')
+  await expect(page.getByTestId('cursor-value-cpu')).toHaveText(`${formatNumber(mock.sourceValue('cpu', 90), 2)} %`)
+  await expect(page.getByTestId('cursor-time-mark')).toHaveText('1:30')
+})
+
+test('deep charts raise no CSP violation under the real server policy', async ({ page }) => {
+  const csp = (await page.request.get('/')).headers()['content-security-policy']
+  test.skip(csp === undefined, 'deep-ui.config.ts serves through vite without CSP; the main config runs this check')
+  await page.addInitScript(() => {
+    (window as never as { csp: string[] }).csp = []
+    document.addEventListener('securitypolicyviolation', (event) => (window as never as { csp: string[] }).csp.push(`${event.violatedDirective} ${event.blockedURI}`))
+  })
+  fixtureApi(page, { passRule: true })
+  await openDeep(page)
+  await expect(page.getByTestId('deep-track-cpu').locator('svg text').first()).toBeVisible()
+  await page.getByTestId('deep-plot').scrollIntoViewIfNeeded()
+  const box = (await page.getByTestId('deep-plot').boundingBox())!
+  await page.mouse.move(box.x + box.width / 2, box.y + 30)
+  await page.getByTestId('deep-cursor').focus()
+  await page.keyboard.press('End')
+  await page.locator('.theme-toggle').click()
+  expect(await page.evaluate(() => (window as never as { csp: string[] }).csp)).toEqual([])
+})
+
 test('a failed resource diagnostic in overview opens and focuses deep analysis', async ({ page }) => {
   const mock = fixtureApi(page, { diagnosticFail: true })
   await page.goto('/?shell=new')
@@ -118,7 +157,7 @@ test('tab follows overview and no snapshot uses only load, including catalog 404
   await openDeep(page)
   await expect(page.getByTestId('deep-no-snapshot')).toBeVisible()
   await expect(page.getByTestId('deep-error')).toHaveCount(0)
-  await expect(page.getByTestId('track-line-load-rps')).toHaveCount(1)
+  await expect(page.getByTestId('deep-track-load-rps').getByTestId('time-chart')).toHaveAttribute('data-segments', '1')
   await page.getByTestId('deep-cursor').focus()
   await page.keyboard.press('Home')
   await expect(page.getByTestId('deep-cursor-time')).toHaveAttribute('data-epoch-ms', String(origin))
@@ -134,7 +173,7 @@ test('failure-first selection, six-series cap, filtering and thresholds', async 
   await expect(page.getByTestId('deep-series-spare')).toBeDisabled()
   await expect(page.getByTestId('deep-limit-hint')).toBeVisible()
   await expect(page.getByTestId('deep-selected-count')).toHaveText(DEEP_LABELS.seriesCount(6, 6))
-  await expect(page.getByTestId('deep-threshold-cpu-high')).toHaveCount(1)
+  await expect(page.getByTestId('deep-track-cpu').locator('svg text').filter({ hasText: DEEP_LABELS.thresholdMark(formatNumber(5), '%') })).toHaveCount(1)
   await expect(page.getByTestId('deep-threshold-label-cpu-high')).toHaveCount(1)
   await page.getByTestId('deep-series-filter').fill('spa')
   await expect(page.getByTestId('deep-series-spare')).toBeVisible()
@@ -146,16 +185,16 @@ test('only failed rule thresholds use violation text and color', async ({ page }
   await openDeep(page)
   const failedLabel = page.getByTestId('deep-threshold-label-cpu-high')
   const passedLabel = page.getByTestId('deep-threshold-label-queue-ok')
-  const failedLine = page.getByTestId('deep-threshold-cpu-high')
-  const passedLine = page.getByTestId('deep-threshold-queue-ok')
+  const failedMark = page.getByTestId('deep-track-cpu').locator('svg text').filter({ hasText: DEEP_LABELS.thresholdMark(formatNumber(5), '%') })
+  const passedMark = page.getByTestId('deep-track-queue').locator('svg text').filter({ hasText: DEEP_LABELS.thresholdMark(formatNumber(5000), '%') })
   await expect(failedLabel).toHaveAttribute('data-violated', 'true')
   await expect(failedLabel).toHaveText(DEEP_LABELS.thresholdLabel('gt', formatNumber(5), '%', true))
   await expect(passedLabel).toHaveAttribute('data-violated', 'false')
   await expect(passedLabel).toHaveText(DEEP_LABELS.thresholdLabel('gt', formatNumber(5000), '%', false))
-  await expect(failedLine).toHaveAttribute('data-violated', 'true')
-  await expect(passedLine).toHaveAttribute('data-violated', 'false')
+  await expect(failedMark).toHaveCount(1)
+  await expect(passedMark).toHaveCount(1)
   expect(await failedLabel.evaluate((element) => getComputedStyle(element).color)).not.toBe(await passedLabel.evaluate((element) => getComputedStyle(element).color))
-  expect(await failedLine.evaluate((element) => getComputedStyle(element).stroke)).not.toBe(await passedLine.evaluate((element) => getComputedStyle(element).stroke))
+  expect(await failedMark.evaluate((element) => getComputedStyle(element).fill)).not.toBe(await passedMark.evaluate((element) => getComputedStyle(element).fill))
 })
 
 test('shared cursor reads every track and keyboard navigates stops', async ({ page }) => {
@@ -174,7 +213,7 @@ test('shared cursor reads every track and keyboard navigates stops', async ({ pa
   const plot = page.getByTestId('deep-plot')
   await plot.locator('svg').first().hover({ position: { x: 200, y: 30 } })
   const box = (await plot.boundingBox())!
-  await page.mouse.move(box.x + box.width / 2, box.y + 30)
+  await page.mouse.move(box.x + PLOT_INSET.left + (box.width - PLOT_INSET.left - PLOT_INSET.right) / 2, box.y + 30)
   await expect(page.getByTestId('deep-cursor-time')).toHaveAttribute('data-ms', '90000')
   for (const id of mock.names.slice(0, 6)) await expect(page.getByTestId(`track-value-${id}`)).toHaveAttribute('data-value', String(mock.sourceValue(id, 90)))
 })
@@ -229,7 +268,7 @@ test('pre-run axis and cursor offsets are formatted as signed times', async ({ p
 test('null cells break paths and coarse partial cells show observed count', async ({ page }) => {
   fixtureApi(page, { pointCount: 3001 })
   await openDeep(page)
-  await expect(page.getByTestId('track-line-cpu')).toHaveCount(2)
+  await expect(page.getByTestId('deep-track-cpu').getByTestId('time-chart')).toHaveAttribute('data-segments', '2')
   await page.getByTestId('deep-cursor').focus()
   await page.keyboard.press('Home')
   await expect(page.getByTestId('deep-track-cpu')).toContainText(DEEP_LABELS.partialCell(2, 3))
@@ -247,7 +286,7 @@ test('deep chart polylines remain unfilled with visible strokes', async ({ page 
   fixtureApi(page)
   await openDeep(page)
   for (const key of ['load-rps', 'load-p95', 'cpu']) {
-    const line = page.getByTestId(`deep-track-${key}`).locator('polyline').first()
+    const line = page.getByTestId(`deep-track-${key}`).locator('svg path[stroke-width="2"]').first()
     expect(await line.evaluate((el) => getComputedStyle(el).fill), key).toBe('none')
     expect(await line.evaluate((el) => getComputedStyle(el).stroke), key).not.toBe('none')
   }
@@ -310,7 +349,8 @@ test('catalog and values pages are merged', async ({ page }) => {
   const mock = fixtureApi(page, { catalogPage: 4, valuesPage: 50 })
   await openDeep(page)
   await expect(page.getByTestId('deep-series-spare')).toBeVisible()
-  await expect(page.getByTestId('deep-track-cpu').getByTestId('track-line-cpu').last()).toBeVisible()
+  await expect(page.getByTestId('deep-track-cpu').getByTestId('time-chart')).toBeVisible()
+  await expect(page.getByTestId('deep-track-cpu').getByTestId('time-chart')).toHaveAttribute('data-segments', /^[1-9]/)
   expect(mock.calls.filter((url) => url.pathname.endsWith('/resource-series'))).toHaveLength(2)
   expect(mock.calls.filter((url) => url.pathname.endsWith('/values')).length).toBeGreaterThan(1)
 })

@@ -16,6 +16,7 @@
 | [basic/pod-view.json](basic/pod-view.json) | Один под `catalog-01`, контейнер `app`, две строки метрик |
 | [basic/load-stages.json](basic/load-stages.json) | Стадии: 0–40 секунд разгон, 40–100 плато, 100–120 снижение |
 | [basic/run.md](basic/run.md) | Подготовка, команды по порядку и расположение результатов |
+| [demo-8h/README.md](demo-8h/README.md) | Генератор синтетического набора на 8 часов (шесть релизов, два плеча) и сборка каталога данных для показа UI |
 
 Сценарий использует JTL из `fixtures/stages/ramp-steady-rampdown.jtl`.
 Ресурсные значения и pod-view иллюстративные: это не запись реального стенда.

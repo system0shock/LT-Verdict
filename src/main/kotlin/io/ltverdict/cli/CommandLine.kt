@@ -248,12 +248,20 @@ private fun analyze(
     if (baselinePath != null && outDir == null) throw CliFailure(EXIT_INVALID_INPUT, "BASELINE_OUT_DIR_REQUIRED")
     val baselineAt = baselinePath?.let { baselineLocation(it, dataDir) }
     if ((sourcePath == null) != (connectionsPath == null)) usage()
-    // ADR 0030, R3: stages and a snapshot, a capacity plan or an online request are two sources of windows; refused before any read.
-    if (stagesPath != null) {
-        if (capacityPath != null) throw CliFailure(EXIT_INVALID_INPUT, "STAGES_CAPACITY_CONFLICT")
-        if (resourcesPath != null) throw CliFailure(EXIT_INVALID_INPUT, "STAGES_RESOURCES_CONFLICT")
-        if (sourcePath != null) throw CliFailure(EXIT_INVALID_INPUT, "STAGES_SOURCE_CONFLICT")
-    }
+    // ADR 0030, R3, narrowed by ADR 0037 (D3, D8, D9): stages meet a snapshot without windows and an online request. A capacity
+    // plan, a snapshot that declares windows, a correlation plan and a trend plan are refused in this order (as in the core and
+    // the API), before the policy is read; with stages the snapshot is read here to see its windows.
+    val stagedResources =
+        if (stagesPath != null) {
+            if (capacityPath != null) throw CliFailure(EXIT_INVALID_INPUT, "STAGES_CAPACITY_CONFLICT")
+            val snapshot = resourcesPath?.let(::readResources)
+            if (snapshot?.snapshot?.windows?.isNotEmpty() == true) throw CliFailure(EXIT_INVALID_INPUT, "STAGES_RESOURCES_CONFLICT")
+            if (diagnosticsPath != null) throw CliFailure(EXIT_INVALID_INPUT, "STAGES_CORRELATION_CONFLICT")
+            if (trendPath != null) throw CliFailure(EXIT_INVALID_INPUT, "STAGES_TREND_CONFLICT")
+            snapshot
+        } else {
+            null
+        }
     if (sourcePath != null &&
         (
             resourcesPath != null ||
@@ -274,7 +282,7 @@ private fun analyze(
     val source = if (sourceRequest == null) null else PromqlSource(profiles, SourceHttp(profiles))
     val policy = policyPath?.let { readPolicy(it, stdin) }
     val stages = stagesPath?.let(::readStages)
-    val resources = resourcesPath?.let(::readResources)
+    val resources = stagedResources ?: resourcesPath?.let(::readResources)
     val diagnostics = diagnosticsPath?.let(::readDiagnostics)
     val capacity = capacityPath?.let(::readCapacity)
     val trend = trendPath?.let(::readTrend)

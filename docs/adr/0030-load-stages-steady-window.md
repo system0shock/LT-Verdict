@@ -89,6 +89,10 @@ JMeter или Gatling без снимка ресурсов. У такого пр
 снимком нужны окна снимка, потери нет. Цена ошибки: отказ там, где можно было
 договориться (безопасная сторона).
 
+> Изменено [ADR 0037](0037-stages-with-resource-snapshot.md): стадии сочетаются со
+> снимком без `windows` и с онлайн-запросом источника; отказ остаётся для плана
+> ёмкости, снимка с собственными окнами, плана корреляций и плана тренда.
+
 **R5. Показатели окна публикуются типом `window_metric_summary`, не
 `metric_summary`.** Тип уже читают сравнение окон (условия baseline,
 [ADR 0028](0028-baseline-conditions-confirmation.md)) и оба отчёта; он содержит
@@ -100,6 +104,10 @@ JMeter или Gatling без снимка ресурсов. У такого пр
 требует снимок, а со стадиями снимка быть не может (R3). Цена ошибки: потребитель,
 ждущий steady-метрики в `metric_summary`, их не найдёт; новый код читает по
 `window_id`.
+
+> Уточнено [ADR 0037](0037-stages-with-resource-snapshot.md) (D9): после снятия
+> запрета R3 на снимок коллизия id с диагностикой возможна, поэтому план корреляций
+> со стадиями отвергается кодом `STAGES_CORRELATION_CONFLICT`.
 
 **R6. Ключ сопоставимости получает условное звено `load_stages_sha256`, слоты
 baseline не меняются.** Звено добавляется по образцу `resource_arm`:
@@ -342,6 +350,12 @@ policy и снимка (дубли ключей, NaN, большие числа 
 | 3 | стадии и `resources != null` | `STAGES_RESOURCES_CONFLICT` |
 | 4 | стадии и `sourceRequest != null` (CLI `--source`, API часть `source_request`) | `STAGES_SOURCE_CONFLICT` |
 | 5 | существующие `DIAGNOSTIC_RESOURCE_REQUIRED`, `TREND_RESOURCE_REQUIRED`, `POD_VIEW_RESOURCE_REQUIRED` | без изменений (эти входы требуют снимок, со стадиями он невозможен) |
+
+> Изменено [ADR 0037](0037-stages-with-resource-snapshot.md): строка 3 действует только
+> для снимка с непустым `windows`, строка 4 снята (`STAGES_SOURCE_CONFLICT` не выдаётся,
+> снимок онлайн-запроса со стадиями строится без окон), в строке 5 стадии с планом
+> корреляций или тренда дают `STAGES_CORRELATION_CONFLICT` или `STAGES_TREND_CONFLICT`
+> (со снимком и без него) раньше `DIAGNOSTIC_RESOURCE_REQUIRED` и `TREND_RESOURCE_REQUIRED`.
 
 С `postgres` (пред- и постснимки) поведение прежнее. Офлайн-контекст OpenSearch
 (`--source-context`) без снимка разрешён: он добавляет только evidence и окон не

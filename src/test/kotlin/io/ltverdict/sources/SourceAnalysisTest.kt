@@ -4,16 +4,26 @@ import com.sun.net.httpserver.HttpServer
 import io.ltverdict.core.AnalysisOutcome
 import io.ltverdict.core.AnalysisRequest
 import io.ltverdict.core.AnalysisService
+import io.ltverdict.core.CapacityPlanValidation
+import io.ltverdict.core.DiagnosticValidation
 import io.ltverdict.core.EngineConfig
+import io.ltverdict.core.LoadStagesValidation
 import io.ltverdict.core.RUN_PERIOD_RECOGNITION_METHOD
 import io.ltverdict.core.RUN_PERIOD_SCHEMA_VERSION
 import io.ltverdict.core.RUN_PERIOD_STATUS_RECOGNIZED
 import io.ltverdict.core.ResourceAggregation
 import io.ltverdict.core.ResourceRole
+import io.ltverdict.core.ResourceValidation
 import io.ltverdict.core.RunPeriodV1
+import io.ltverdict.core.TrendPlanValidation
 import io.ltverdict.core.canonicalJson
 import io.ltverdict.core.recognizeRunPeriod
 import io.ltverdict.core.runPeriodJson
+import io.ltverdict.core.validateCapacityPlan
+import io.ltverdict.core.validateDiagnosticPlan
+import io.ltverdict.core.validateLoadStages
+import io.ltverdict.core.validateResourceSnapshot
+import io.ltverdict.core.validateTrendPlan
 import io.ltverdict.storage.AcceptedInput
 import io.ltverdict.storage.DataDirectory
 import io.ltverdict.storage.RunBundleStore
@@ -532,6 +542,143 @@ class SourceAnalysisTest {
         }
     }
 
+    @Test
+    fun `an explicit online window with stages builds a snapshot without windows`() {
+        RecordingPrometheus().use { fixture ->
+            withService { store, service, _ ->
+                val input = accept(store, contiguousCsv(RUN_START, 30), "explicit-stages.jtl")
+
+                val outcome =
+                    analyzeWithSources(
+                        service,
+                        AnalysisRequest(input, null, sourceRequest = EXPLICIT_V3, stages = STEADY_STAGES),
+                        fixture.source(),
+                    )
+
+                assertFalse("windows" in storedSnapshot(outcome))
+                assertEquals(LEGACY_SUMMARY_FIELDS + "window_origin", sourceSummary(outcome).keys)
+                assertEquals("declared_stages", bindingEvidence(outcome).getValue("mode").jsonPrimitive.content)
+                assertEquals(
+                    listOf("steady"),
+                    evidence(outcome, "stage_binding").getValue("evaluated_window_ids").jsonArray.map { it.jsonPrimitive.content },
+                )
+            }
+        }
+    }
+
+    @Test
+    fun `an explicit online window of several profiles with stages builds a snapshot without windows`() {
+        RecordingPrometheus().use { fixture ->
+            withService { store, service, _ ->
+                val input = accept(store, contiguousCsv(RUN_START, 30), "explicit-multi-stages.jtl")
+                val request =
+                    readWindowedSourceRequest(
+                        """{"schema_version":"source-request.v3","profile_ids":["local","second"],
+                        "window":{"origin":"explicit","start_epoch_ms":1767225600000,"end_epoch_ms":1767225630000,
+                "step_ms":1000}}""".byteInputStream(),
+                    )
+
+                val outcome =
+                    analyzeWithSources(
+                        service,
+                        AnalysisRequest(input, null, sourceRequest = request, stages = STEADY_STAGES),
+                        fixture.source(),
+                    )
+
+                assertFalse("windows" in storedSnapshot(outcome))
+                assertEquals("declared_stages", bindingEvidence(outcome).getValue("mode").jsonPrimitive.content)
+            }
+        }
+    }
+
+    @Test
+    fun `an explicit online window without stages keeps the full window`() {
+        RecordingPrometheus().use { fixture ->
+            withService { store, service, _ ->
+                val input = accept(store, contiguousCsv(RUN_START, 30), "explicit-full.jtl")
+
+                val outcome = analyzeWithSources(service, AnalysisRequest(input, null, sourceRequest = EXPLICIT_V3), fixture.source())
+
+                val window =
+                    storedSnapshot(outcome)
+                        .getValue("windows")
+                        .jsonArray
+                        .single()
+                        .jsonObject
+                assertEquals("full", window.getValue("id").jsonPrimitive.content)
+                assertEquals(RUN_START, window.getValue("from_epoch_ms").jsonPrimitive.long)
+                assertEquals(RUN_END, window.getValue("to_epoch_ms").jsonPrimitive.long)
+                assertEquals("explicit_windows", bindingEvidence(outcome).getValue("mode").jsonPrimitive.content)
+            }
+        }
+    }
+
+    @Test
+    fun `an auto online window with stages covers every steady stage`() {
+        RecordingPrometheus().use { fixture ->
+            withService { store, service, _ ->
+                val input = accept(store, contiguousCsv(RUN_START, 30), "auto-stages.jtl")
+
+                val outcome =
+                    analyzeWithSources(
+                        service,
+                        AnalysisRequest(input, null, sourceRequest = GRID_AUTO, stages = STEADY_STAGES),
+                        fixture.source(),
+                    )
+
+                val coverage =
+                    Json
+                        .parseToJsonElement(outcome.canonicalResult.decodeToString())
+                        .jsonObject
+                        .getValue("analysis_coverage")
+                assertFalse(coverage.toString().contains("STAGE_WINDOW_SNAPSHOT_PARTIAL"), coverage.toString())
+                assertEquals("declared_stages", bindingEvidence(outcome).getValue("mode").jsonPrimitive.content)
+                assertEquals("auto", sourceSummary(outcome).getValue("window_origin").jsonPrimitive.content)
+            }
+        }
+    }
+
+    @Test
+    fun `stages refuse a capacity plan, a snapshot with windows, a correlation plan and a trend plan before the source is called`() {
+        RecordingPrometheus().use { fixture ->
+            withService { store, service, _ ->
+                val input = accept(store, contiguousCsv(RUN_START, 30), "stages-refused.jtl")
+                val capacity =
+                    validateCapacityPlan(Files.newInputStream(Path.of("docs/contracts/capacity/v1/examples/valid/rps.json")))
+                        as CapacityPlanValidation.Valid
+                val windowed =
+                    validateResourceSnapshot(Files.newInputStream(Path.of("docs/contracts/resources/v1/examples/valid/basic.json")))
+                        as ResourceValidation.Valid
+                val correlation =
+                    validateDiagnosticPlan(Files.newInputStream(Path.of("docs/contracts/diagnostics/v1/examples/valid/basic.json")))
+                        as DiagnosticValidation.Valid
+                val trend =
+                    validateTrendPlan(Files.newInputStream(Path.of("docs/contracts/trend/v1/examples/valid/basic.json")))
+                        as TrendPlanValidation.Valid
+                val staged = AnalysisRequest(input, null, sourceRequest = EXPLICIT_V3, stages = STEADY_STAGES)
+
+                fun refusal(request: AnalysisRequest): String? =
+                    assertThrows(IllegalArgumentException::class.java) { analyzeWithSources(service, request, fixture.source()) }.message
+
+                // ADR 0037: the order of the core, the CLI and the API, before the online request reaches the source
+                assertEquals(
+                    "STAGES_CAPACITY_CONFLICT",
+                    refusal(staged.copy(capacity = capacity, resources = windowed, diagnostics = correlation, trend = trend)),
+                )
+                assertEquals(
+                    "STAGES_RESOURCES_CONFLICT",
+                    refusal(staged.copy(resources = windowed, diagnostics = correlation, trend = trend)),
+                )
+                assertEquals("STAGES_CORRELATION_CONFLICT", refusal(staged.copy(diagnostics = correlation, trend = trend)))
+                assertEquals("STAGES_TREND_CONFLICT", refusal(staged.copy(trend = trend)))
+                assertEquals(0, fixture.requests.get(), "the source is not called")
+            }
+        }
+    }
+
+    private fun storedSnapshot(outcome: AnalysisOutcome): JsonObject =
+        Json.parseToJsonElement(Files.readString(outcome.analysisDirectory.resolve("resource-snapshot.json"))).jsonObject
+
     private fun withService(block: (RunBundleStore, AnalysisService, Path) -> Unit) {
         val root = tempDir.resolve("data-${System.nanoTime()}")
         DataDirectory.open(root).use { directory ->
@@ -658,6 +805,21 @@ class SourceAnalysisTest {
         val MARGIN_WINDOW = AutoWindow(60_000L, 1_800_000L, 15_000L)
 
         val MARGIN_AUTO = autoRequest(MARGIN_WINDOW)
+
+        val EXPLICIT_V3: WindowedSourceRequest =
+            readWindowedSourceRequest(
+                """{"schema_version":"source-request.v3","profile_ids":["local"],
+                "window":{"origin":"explicit","start_epoch_ms":1767225600000,"end_epoch_ms":1767225630000,
+                "step_ms":1000}}""".byteInputStream(),
+            )
+
+        // ADR 0037: one steady stage inside the 30 s run of contiguousCsv
+        val STEADY_STAGES: LoadStagesValidation.Valid =
+            validateLoadStages(
+                """{"schema_version":"load-stages.v1","stages":[
+                {"id":"ramp-up","role":"excluded","from_offset_ms":0,"to_offset_ms":5000},
+                {"id":"steady","role":"steady","from_offset_ms":5000,"to_offset_ms":25000}]}""".byteInputStream(),
+            ) as LoadStagesValidation.Valid
 
         val LEGACY_SUMMARY_FIELDS =
             setOf(

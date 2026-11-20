@@ -5,6 +5,13 @@ import io.ltverdict.core.EngineConfig
 import io.ltverdict.core.MAX_LOAD_STAGES_BYTES
 import io.ltverdict.core.sha256Hex
 import io.ltverdict.jobs.AnalysisJobs
+import io.ltverdict.sources.ONLINE_LOAD
+import io.ltverdict.sources.ONLINE_SOURCE_REQUEST
+import io.ltverdict.sources.OnlineSourceFixture
+import io.ltverdict.sources.PromqlSource
+import io.ltverdict.sources.SourceHttp
+import io.ltverdict.sources.analyzeWithSources
+import io.ltverdict.sources.readSourceProfiles
 import io.ltverdict.storage.DataDirectory
 import io.ltverdict.storage.RunBundleStore
 import kotlinx.serialization.json.Json
@@ -144,8 +151,139 @@ class LocalApiStagesTest {
                 "STAGES_CAPACITY_CONFLICT" to "/capacity_plan",
                 conflict(api.createJob(runId, stages = stages, resources = resources, capacity = capacity)),
             )
-            assertEquals("STAGES_SOURCE_CONFLICT" to "/source_request", conflict(api.createJob(runId, stages = stages, source = source)))
+            // ADR 0037, D7: stages no longer refuse an online request; with no profile configured the request is malformed
+            val online = api.createJob(runId, stages = stages, source = source)
+            assertEquals(400, online.statusCode(), online.body())
+            assertEquals("MALFORMED_REQUEST", online.json().errorCode())
         }
+
+    @Test
+    fun `a job with stages and a snapshot without windows evaluates the steady window on both sides`() =
+        withServer { store, api, runId ->
+            val accepted = api.createJob(runId, policy = PLATFORM_POLICY, stages = stages, resources = SNAPSHOT)
+
+            assertEquals(202, accepted.statusCode(), accepted.body())
+            val result = result(store, runId, complete(api, accepted))
+            val evidence = result.getValue("evidence").jsonArray.map { it.jsonObject }
+            assertEquals("PASS", result.getValue("policy_verdict").jsonPrimitive.content)
+            assertTrue(evidence.any { it["type"]?.jsonPrimitive?.content == "stage_binding" })
+            assertEquals(
+                "declared_stages",
+                evidence
+                    .single { it["type"]?.jsonPrimitive?.content == "resource_binding" }
+                    .getValue("mode")
+                    .jsonPrimitive.content,
+            )
+        }
+
+    @Test
+    fun `stages refuse a snapshot with windows, a correlation plan and a trend plan with their pointers in this order`() =
+        withServer { _, api, runId ->
+            val windowed = Files.readAllBytes(Path.of("docs/contracts/resources/v1/examples/valid/basic.json"))
+            val correlation = Files.readAllBytes(Path.of("docs/contracts/diagnostics/v1/examples/valid/basic.json"))
+            val trend = Files.readAllBytes(Path.of("docs/contracts/trend/v1/examples/valid/basic.json"))
+
+            fun detail(response: HttpResponse<String>): Triple<String, String, String> {
+                assertEquals(422, response.statusCode(), response.body())
+                val error = response.json().getValue("error").jsonObject
+                assertEquals("INVALID_STAGES", error.getValue("code").jsonPrimitive.content)
+                val detail =
+                    error
+                        .getValue("details")
+                        .jsonArray
+                        .single()
+                        .jsonObject
+                return Triple(
+                    detail.getValue("code").jsonPrimitive.content,
+                    detail.getValue("json_pointer").jsonPrimitive.content,
+                    detail.getValue("message").jsonPrimitive.content,
+                )
+            }
+
+            assertEquals(
+                Triple(
+                    "STAGES_RESOURCES_CONFLICT",
+                    "/resource_snapshot",
+                    "Stages cannot be combined with a resource snapshot that declares its own windows",
+                ),
+                detail(api.createJob(runId, stages = stages, resources = windowed, correlation = correlation, trend = trend)),
+            )
+            assertEquals(
+                "STAGES_CORRELATION_CONFLICT" to "/correlation_plan",
+                detail(api.createJob(runId, stages = stages, correlation = correlation, trend = trend)).let { it.first to it.second },
+            )
+            assertEquals(
+                "STAGES_TREND_CONFLICT" to "/trend_plan",
+                detail(api.createJob(runId, stages = stages, trend = trend)).let { it.first to it.second },
+            )
+            // with a snapshot without windows the plans are refused by the same codes, before the snapshot binding is checked
+            assertEquals(
+                "STAGES_CORRELATION_CONFLICT" to "/correlation_plan",
+                detail(
+                    api.createJob(runId, stages = stages, resources = SNAPSHOT, correlation = correlation),
+                ).let { it.first to it.second },
+            )
+            assertEquals(
+                "STAGES_TREND_CONFLICT" to "/trend_plan",
+                detail(api.createJob(runId, stages = stages, resources = SNAPSHOT, trend = trend)).let { it.first to it.second },
+            )
+        }
+
+    @Test
+    fun `a job with stages and an online request analyzes on a snapshot without windows`() {
+        OnlineSourceFixture().use { fixture ->
+            val profiles = readSourceProfiles(fixture.profilesJson().byteInputStream())
+            val source = PromqlSource(profiles, SourceHttp(profiles))
+            val window =
+                """{"schema_version":"load-stages.v1","stages":[{"id":"steady","role":"steady","from_offset_ms":0,"to_offset_ms":1000}]}"""
+            DataDirectory.open(tempDir.resolve("data-online")).use { directory ->
+                val store = RunBundleStore(directory)
+                val service = AnalysisService(store, EngineConfig())
+                AnalysisJobs(1) { request, progress, cancelled -> analyzeWithSources(service, request, source, progress, cancelled) }
+                    .use { jobs ->
+                        startLocalServer(LocalApiContext(store, jobs, profiles), openBrowser = false).use { server ->
+                            val api = ApiClient(server.origin)
+                            api.bootstrap()
+                            val input = store.acceptInput(ONLINE_LOAD.byteInputStream(), "online.jtl")
+
+                            val accepted =
+                                api.createJob(
+                                    input.runId,
+                                    stages = window.encodeToByteArray(),
+                                    source = ONLINE_SOURCE_REQUEST.encodeToByteArray(),
+                                )
+
+                            assertEquals(202, accepted.statusCode(), accepted.body())
+                            val analysisId = complete(api, accepted)
+                            assertEquals(1, fixture.requests.get())
+                            val stored = checkNotNull(store.readAnalysis(input.runId, analysisId)).path
+                            assertFalse(
+                                "windows" in Json.parseToJsonElement(Files.readString(stored.resolve("resource-snapshot.json"))).jsonObject,
+                            )
+                            val evidence =
+                                result(store, input.runId, analysisId).getValue("evidence").jsonArray.map { it.jsonObject }
+                            assertEquals(
+                                "declared_stages",
+                                evidence
+                                    .single { it["type"]?.jsonPrimitive?.content == "resource_binding" }
+                                    .getValue(
+                                        "mode",
+                                    ).jsonPrimitive.content,
+                            )
+                            val steady =
+                                evidence
+                                    .single { it["type"]?.jsonPrimitive?.content == "stage_binding" }
+                                    .getValue("stages")
+                                    .jsonArray
+                                    .single()
+                                    .jsonObject
+                            assertEquals("1767225600000", steady.getValue("resource_from_epoch_ms").jsonPrimitive.content)
+                            assertEquals("1767225601000", steady.getValue("resource_to_epoch_ms").jsonPrimitive.content)
+                        }
+                    }
+            }
+        }
+    }
 
     @Test
     fun `a steady stage past the run end fails the job with STAGE_OUTSIDE_RUN`() =
@@ -281,6 +419,8 @@ class LocalApiStagesTest {
             resources: ByteArray? = null,
             capacity: ByteArray? = null,
             source: ByteArray? = null,
+            correlation: ByteArray? = null,
+            trend: ByteArray? = null,
         ): HttpResponse<String> =
             multipart(
                 buildList {
@@ -290,6 +430,8 @@ class LocalApiStagesTest {
                     if (resources != null) add(FormPart("resource_snapshot", resources, "resources.json"))
                     if (capacity != null) add(FormPart("capacity_plan", capacity, "capacity.json"))
                     if (source != null) add(FormPart("source_request", source, "source.json"))
+                    if (correlation != null) add(FormPart("correlation_plan", correlation, "correlation.json"))
+                    if (trend != null) add(FormPart("trend_plan", trend, "trend.json"))
                 },
             )
 
@@ -332,5 +474,9 @@ class LocalApiStagesTest {
                     """{"id":"p95","metric":"response_time_p95_ms","operator":"lte","threshold":250,"scope":{"kind":"overall"}},""" +
                     """{"id":"rps","metric":"throughput_rps","operator":"gte","threshold":9,"scope":{"kind":"overall"}}]}"""
             ).encodeToByteArray()
+
+        // ADR 0037: a snapshot without windows on a 15 s grid for this JTL and a policy with a platform SLA rule
+        val SNAPSHOT: ByteArray = Files.readAllBytes(Path.of("fixtures/stages/cross-version/snapshot-15s.json"))
+        val PLATFORM_POLICY: ByteArray = Files.readAllBytes(Path.of("fixtures/stages/cross-version/policy-platform.json"))
     }
 }

@@ -1,0 +1,32 @@
+{
+  "schema_version": "resource-snapshot.v1",
+  "load_input_sha256": "ec01e6fe71409fc8ad3654e16f759bf7c7ad0661aad40802f45ecb0f894fd3e4",
+  "start_epoch_ms": 1767225600000,
+  "step_ms": 15000,
+  "point_count": 8,
+  "series": [
+    {
+      "id": "cpu-orders",
+      "metric": "openshift_container_cpu_limit_ratio",
+      "unit": "ratio",
+      "entity": "orders",
+      "role": "system",
+      "aggregation": "interval_mean",
+      "values": [0.2, 0.2, 0.9, 0.9, 0.2, 0.2, 0.2, 0.2]
+    },
+    {
+      "id": "replicas-orders",
+      "metric": "openshift_unavailable_replicas",
+      "unit": "count",
+      "entity": "orders",
+      "role": "system",
+      "aggregation": "interval_max",
+      "values": [0, 0, 0, 0, 0, 0, 0, 0]
+    }
+  ],
+  "provenance": {
+    "source_kind": "fixture",
+    "query_semantics": "interval values aligned to the declared UTC grid",
+    "clock_alignment": "unknown"
+  }
+}

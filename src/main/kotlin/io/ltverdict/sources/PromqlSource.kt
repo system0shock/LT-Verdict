@@ -368,7 +368,8 @@ private fun snapshotBytes(
                 },
             )
             // Авто-окно шире прогона, поэтому объявленного окна нет: привязка идёт по пересечению с прогоном.
-            if (!request.autoDerivedWindow) {
+            // Со стадиями окна задают только стадии (ADR 0037, D7), окно `full` тоже не пишется.
+            if (!request.autoDerivedWindow && !request.stagesDeclared) {
                 put(
                     "windows",
                     buildJsonArray {

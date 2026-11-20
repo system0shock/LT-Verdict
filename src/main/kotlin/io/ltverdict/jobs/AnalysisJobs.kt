@@ -244,11 +244,21 @@ internal class AnalysisJobs(
                                                 "A steady stage starts at or after the end of the run; check the stage offsets",
                                             )
                                         "STAGES_RESOURCES_CONFLICT" ->
-                                            Diagnostic("STAGES_RESOURCES_CONFLICT", "Stages cannot be combined with a resource snapshot")
+                                            Diagnostic(
+                                                "STAGES_RESOURCES_CONFLICT",
+                                                "Stages cannot be combined with a resource snapshot that declares its own windows",
+                                            )
                                         "STAGES_CAPACITY_CONFLICT" ->
                                             Diagnostic("STAGES_CAPACITY_CONFLICT", "Stages cannot be combined with a capacity plan")
-                                        "STAGES_SOURCE_CONFLICT" ->
-                                            Diagnostic("STAGES_SOURCE_CONFLICT", "Stages cannot be combined with an online source request")
+                                        "STAGES_CORRELATION_CONFLICT" ->
+                                            Diagnostic("STAGES_CORRELATION_CONFLICT", "Stages cannot be combined with a correlation plan")
+                                        "STAGES_TREND_CONFLICT" ->
+                                            Diagnostic("STAGES_TREND_CONFLICT", "Stages cannot be combined with a trend plan")
+                                        "STAGE_WINDOW_NO_FULL_CELLS" ->
+                                            Diagnostic(
+                                                "STAGE_WINDOW_NO_FULL_CELLS",
+                                                "A steady stage holds no full cell of the resource snapshot grid; check the stages and the snapshot",
+                                            )
                                         "AUTO_WINDOW_UNAVAILABLE" ->
                                             Diagnostic(
                                                 "AUTO_WINDOW_UNAVAILABLE",

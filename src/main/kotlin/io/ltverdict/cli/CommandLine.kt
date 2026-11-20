@@ -88,6 +88,7 @@ internal fun runCli(
             }
             "analyze" -> analyze(args.drop(1), stdout, stderr, stdin)
             "policy" -> validatePolicyCommand(args.drop(1), stdout, stdin)
+            "stages" -> stagesCommand(args.drop(1), stdout, stderr)
             "report" -> report(args.drop(1), stdout)
             "summary" -> report(args.drop(1) + listOf("--format", "summary"), stdout)
             "ui" -> ui(args.drop(1))
@@ -972,6 +973,7 @@ private fun usageText(): String =
             "[--end-epoch-ms <n>] [--format text|json] | " +
             "ltv source hash <resource-snapshot.json> | ltv source hash --run <run-id> --analysis <analysis-id> [--data-dir <path>] | " +
             "ltv opensearch prepare --context <file> --templates <file> --load-sha256 <hash> --output-dir <new-dir> | " +
+            "ltv stages detect <input> [--out <file>] [--steady-steps top|all] | " +
             "ltv policy validate <policy.json>|- | ltv report <run-id> <analysis-id> " +
             "--format json|html|asciidoc|confluence|svg [--baseline <analysis-result.json>] [--data-dir <path>] | " +
             "ltv summary <run-id> <analysis-id> [--baseline <analysis-result.json>] [--data-dir <path>] | ltv --help | ltv --version" +
@@ -992,7 +994,7 @@ internal class CliFailure(
 
 internal const val EXIT_OK = 0
 private const val EXIT_FAIL = 2
-private const val EXIT_NO_VERDICT = 3
+internal const val EXIT_NO_VERDICT = 3
 internal const val EXIT_INVALID_INPUT = 4
 private const val EXIT_INVALID_POLICY = 5
 internal const val EXIT_DATA_DIR_BUSY = 6

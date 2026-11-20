@@ -332,7 +332,7 @@ private fun parseStages(element: JsonElement): List<StageV1> {
     return sorted.map { it.second }
 }
 
-private fun stagesJson(stages: List<StageV1>): JsonObject =
+internal fun stagesJson(stages: List<StageV1>): JsonObject =
     buildJsonObject {
         put("schema_version", LOAD_STAGES_SCHEMA_VERSION)
         put(

@@ -18,8 +18,8 @@ CLI ─────────────────────────�
                                          immutable input · atomic analysis
 ```
 
-`ltv ui`, `ltv analyze`, `ltv report`, `ltv policy validate`, `ltv source` и
-`ltv opensearch` запускаются из одной JVM distribution (`CommandLine.kt`,
+`ltv ui`, `ltv analyze`, `ltv report`, `ltv policy validate`, `ltv stages detect`,
+`ltv source` и `ltv opensearch` запускаются из одной JVM distribution (`CommandLine.kt`,
 `runCli`). CLI вызывает application core напрямую; Web UI обращается к тому
 же core через private loopback API. HTTP/session state не входит в parsers,
 metrics или canonical result.

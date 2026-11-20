@@ -2,15 +2,22 @@
 import { computed, ref, useId, watch } from 'vue'
 import { DEEP_LABELS } from './labels'
 import { formatNumber, formatOffset } from './overview'
-import { cursorReadouts, cursorStops, nearestTime, trackPath, trackScale, valueY, type DeepTrack, type TimeAxis } from './deep'
+import { cursorReadouts, cursorStops, deepLane, nearestTime, type DeepTrack, type TimeAxis } from './deep'
+import TimeChart from './TimeChart.vue'
+import { plotFraction, type ChartStage } from './timeChart'
 
-const props = defineProps<{ tracks: DeepTrack[]; axis: TimeAxis; originMs: number }>()
+const props = withDefaults(defineProps<{ tracks: DeepTrack[]; axis: TimeAxis; originMs: number; stages?: ChartStage[] }>(), { stages: () => [] })
 const cursorMs = ref<number | null>(null)
 const hintId = useId()
 const stops = computed(() => cursorStops(props.tracks).filter((time) => time >= props.axis.fromMs && time < props.axis.toMs))
 const readouts = computed(() => cursorMs.value === null ? [] : cursorReadouts(props.tracks, cursorMs.value))
 const relativeMs = computed(() => cursorMs.value === null ? null : cursorMs.value - props.originMs)
-const cursorX = computed(() => cursorMs.value === null || props.axis.toMs <= props.axis.fromMs ? 0 : (cursorMs.value - props.axis.fromMs) / (props.axis.toMs - props.axis.fromMs) * 1000)
+const frame = computed(() => ({ ...props.axis, originMs: props.originMs }))
+const lanes = computed(() => props.tracks.map((track, index) => ({
+  track,
+  lane: deepLane(track, props.axis),
+  flags: { timeLabels: index === props.tracks.length - 1, stageLabels: index === 0 },
+})))
 const stopIndex = computed(() => cursorMs.value === null ? 0 : Math.max(0, stops.value.findLastIndex((time) => time <= cursorMs.value!)))
 const offset = (ms: number) => ms < 0 ? `-${formatOffset(-ms)}` : formatOffset(ms)
 const ariaText = computed(() => {
@@ -28,16 +35,13 @@ watch(() => [props.axis.fromMs, props.axis.toMs], () => { cursorMs.value = null 
 
 function onPointer(event: PointerEvent) {
   const rect = (event.currentTarget as HTMLElement).getBoundingClientRect()
-  if (rect.width > 0) cursorMs.value = nearestTime(props.axis, (event.clientX - rect.left) / rect.width)
+  if (rect.width > 0) cursorMs.value = nearestTime(props.axis, plotFraction(event.clientX, rect))
 }
 function inputCursor(event: Event) {
   cursorMs.value = stops.value[Number((event.target as HTMLInputElement).value)] ?? null
 }
 function focusCursor() {
   if (cursorMs.value === null) cursorMs.value = stops.value[stopIndex.value] ?? null
-}
-function paths(track: DeepTrack) {
-  return trackPath(track, props.axis, 1000, 80)
 }
 function valueText(track: DeepTrack) {
   const item = readout(track.key)
@@ -63,7 +67,7 @@ function readout(key: string) {
       @pointerdown="onPointer"
     >
       <div
-        v-for="track in tracks"
+        v-for="{ track, lane, flags } in lanes"
         :key="track.key"
         class="deep-track"
         :class="track.kind === 'resource' ? 'resource' : track.key"
@@ -89,68 +93,22 @@ function readout(key: string) {
             :data-violated="threshold.violated"
           >{{ DEEP_LABELS.thresholdLabel(threshold.operator, formatNumber(threshold.value), track.unit, threshold.violated) }}</span>
         </p>
-        <svg
-          viewBox="0 0 1000 80"
-          preserveAspectRatio="none"
-          aria-hidden="true"
-          focusable="false"
-        >
-          <line
-            class="axis"
-            x1="0"
-            :y1="valueY(trackScale(track), 0, 80)"
-            x2="1000"
-            :y2="valueY(trackScale(track), 0, 80)"
-          />
-          <template
-            v-for="(points, index) in paths(track)"
-            :key="index"
-          >
-            <polyline
-              :data-testid="'track-line-' + track.key"
-              :points="points"
-              fill="none"
-              vector-effect="non-scaling-stroke"
-              stroke-linecap="round"
-            />
-            <circle
-              v-if="!points.includes(' ')"
-              :data-testid="'track-dot-' + track.key"
-              :cx="Number(points.split(',')[0])"
-              :cy="Number(points.split(',')[1])"
-              r="3"
-              vector-effect="non-scaling-stroke"
-            />
-          </template>
-          <line
-            v-for="threshold in track.thresholds"
-            :key="threshold.ruleId"
-            class="threshold"
-            :class="{ violated: threshold.violated }"
-            :data-testid="'deep-threshold-' + threshold.ruleId"
-            :data-violated="threshold.violated"
-            x1="0"
-            :y1="valueY(trackScale(track), threshold.value, 80)"
-            x2="1000"
-            :y2="valueY(trackScale(track), threshold.value, 80)"
-            stroke-dasharray="5 4"
-            vector-effect="non-scaling-stroke"
-          />
-          <line
-            v-if="cursorMs !== null"
-            class="cursor"
-            :data-testid="'cursor-line-' + track.key"
-            :x1="cursorX"
-            y1="0"
-            :x2="cursorX"
-            y2="80"
-            vector-effect="non-scaling-stroke"
-          />
-        </svg>
+        <TimeChart
+          :lane="lane"
+          :frame="frame"
+          :stages="stages"
+          :flags="flags"
+          :cursor-ms="cursorMs"
+          :cursor-value="valueText(track)"
+          :cursor-time="flags.timeLabels && relativeMs !== null ? offset(relativeMs) : null"
+        />
       </div>
     </div>
-    <p class="axis-labels">
-      <span>{{ offset(axis.fromMs - originMs) }}</span><span>{{ DEEP_LABELS.axisLabel }}</span><span>{{ offset(axis.toMs - originMs) }}</span>
+    <p
+      class="axis-title"
+      data-testid="chart-axis-title"
+    >
+      {{ DEEP_LABELS.axisLabel }}
     </p>
     <p
       data-testid="deep-cursor-time"
@@ -187,22 +145,10 @@ function readout(key: string) {
 .deep-chart,.deep-plot { display:grid; gap:8px; min-width:0; }
 .deep-plot { touch-action:pan-y; }
 .deep-track { min-width:0; }
-.deep-track svg { display:block; width:100%; height:80px; background:var(--surface-inset); }
-.deep-track polyline { stroke-width:2; fill:none; }
-.deep-track.load-rps polyline,.deep-track.load-rps circle { stroke:var(--brand); }
-.deep-track.load-rps circle { fill:var(--brand); }
-.deep-track.load-p95 polyline,.deep-track.load-p95 circle { stroke:var(--warn); }
-.deep-track.load-p95 circle { fill:var(--warn); }
-.deep-track.resource polyline,.deep-track.resource circle { stroke:var(--text); }
-.deep-track.resource circle { fill:var(--text); }
-.axis { stroke:var(--border); }
-.threshold { stroke:var(--text-muted); stroke-width:1.5; }
-.threshold.violated { stroke:var(--fail); }
 .threshold-text { color:var(--text-muted); }
 .threshold-text.violated { color:var(--fail); }
-.cursor { stroke:var(--text); stroke-width:1; }
 .deep-head { display:flex; flex-wrap:wrap; gap:4px 12px; margin:0 0 4px; overflow-wrap:anywhere; }
 .track-name { font-weight:600; }
-.axis-labels { display:flex; justify-content:space-between; flex-wrap:wrap; gap:8px; margin:0; }
+.axis-title { margin:0 16px 0 56px; text-align:center; }
 .slider { width:100%; min-height:44px; margin:0; }
 </style>

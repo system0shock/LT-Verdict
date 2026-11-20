@@ -3,6 +3,7 @@ import { CORRELATION_LABELS, OVERVIEW_LABELS, type ShellTabKey, type TrendDirect
 import { diagnosticFailedLinesOf, failedLinesOf, summarizeVerdict } from '../verdictSummary'
 import { CAPACITY_LABELS } from './labels.tables'
 import { capacityNumber, capacityView, type CapacityView } from './tables'
+import type { ChartFrame, ChartLane, ChartToken } from './timeChart'
 
 export type TrackKey = 'rps' | 'errors' | 'p95'
 
@@ -475,4 +476,25 @@ export function cursorSummary(series: LoadSeries, index: number): CursorReadout 
     raw: { rps: point.rps.toFixed(2), errors: String(point.errors), p95: String(point.p95) },
     text: OVERVIEW_LABELS.cursorText(time, rps, errors, p95),
   }
+}
+
+const laneColors: Record<TrackKey, ChartToken> = { rps: 'brand', errors: 'fail', p95: 'warn' }
+
+export function loadLane(series: LoadSeries, key: TrackKey): ChartLane {
+  return {
+    key,
+    color: laneColors[key],
+    segments: series.segments.map((segment) => segment.map((index) => ({ x: series.points[index].startMs, y: series.points[index][key] }))),
+    lo: 0,
+    hi: series.max[key],
+    ...(key === 'errors' ? { integer: true } : {}),
+  }
+}
+
+export function loadFrame(series: LoadSeries): ChartFrame {
+  const first = series.points[0]?.startMs ?? 0
+  const last = series.points[series.points.length - 1]?.startMs ?? 0
+  if (last > first) return { fromMs: first, toMs: last, originMs: 0 }
+  const half = series.rollupSeconds * 500
+  return { fromMs: first - half, toMs: first + half, originMs: 0 }
 }

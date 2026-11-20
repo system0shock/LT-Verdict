@@ -10,10 +10,12 @@ import {
   runStartMs, thresholdsFor, type DeepTrack, type SnapshotGrid, type TimeAxis,
 } from './deep'
 import DeepCursorChart from './DeepCursorChart.vue'
+import { stageBands } from './timeChart'
 
 const props = defineProps<{ result: AnalysisResult; runId: string; analysisId: string }>()
 const origin = runStartMs(props.result)
 const originMs = origin ?? 0
+const stages = computed(() => stageBands(props.result, originMs))
 const hasSnapshot = ref(origin !== null)
 const catalog = ref<ResourceSeriesEntry[]>([])
 const grid = ref<SnapshotGrid | null>(null)
@@ -322,6 +324,7 @@ onUnmounted(() => { revision += 1; controller?.abort() })
             :tracks="tracks"
             :axis="axis"
             :origin-ms="originMs"
+            :stages="stages"
           />
           <p v-if="loadOutside">
             {{ DEEP_LABELS.loadOutsideRun }}

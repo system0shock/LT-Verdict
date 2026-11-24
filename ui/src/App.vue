@@ -712,6 +712,11 @@ async function refreshAnalyses(runId = currentRun.value?.run_id, after?: string)
   nextAnalysisAfter.value = page.next_after
 }
 
+async function selectAnalysisById(analysisId: string) {
+  const found = analyses.value.find((item) => item.analysis_id === analysisId)
+  if (found) await selectAnalysis(found)
+}
+
 async function selectAnalysis(analysis: AnalysisSummary) {
   const runId = currentRun.value?.run_id
   if (!runId) return
@@ -1002,6 +1007,8 @@ function focusPolicy() {
             :result="result"
             :run-id="result.run_id"
             :analysis-id="selectedAnalysisId"
+            :analyses="analyses"
+            @select-analysis="selectAnalysisById"
           />
 
           <PodHeatmap

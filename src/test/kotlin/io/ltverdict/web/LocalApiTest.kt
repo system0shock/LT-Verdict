@@ -3889,6 +3889,88 @@ class LocalApiTest {
         }
 
     @Test
+    fun `bucket API returns p50 and p99 only when include=percentiles is requested and rejects invalid include`() =
+        withServer { store, api ->
+            val input = store.acceptInput(ByteArrayInputStream(SPIKE_DROP.bytes()), SPIKE_DROP.filename)
+            val identity = analysisIdentity(input, null, EngineConfig())
+            val analysisId = sha256Hex(identity)
+
+            val values = List(100) { index -> (index + 1) * 10L }
+            val histogram = PackedHistogram(1, 86_400_000, 3).apply { values.forEach { recordValue(it) } }
+            val buffer = ByteBuffer.allocate(histogram.neededByteBufferCapacity)
+            val encoded = Base64.getEncoder().encodeToString(buffer.array().copyOf(histogram.encodeIntoCompressedByteBuffer(buffer)))
+            val maxLatency = 500L
+            val row =
+                "{\"bucket_start_ms\":0,\"error_count\":1,\"hdr_v2_base64\":\"$encoded\"," +
+                    "\"max_latency_ms\":$maxLatency,\"sample_count\":${values.size}}\n"
+            store.writeAnalysisAtomically(input.runId, analysisId) { staging ->
+                Files.write(staging.resolve("identity.json"), identity)
+                Files.writeString(staging.resolve("normalized-1s.ndjson"), row)
+            }
+            api.bootstrap()
+
+            val defaultBucket =
+                api
+                    .get("/api/runs/${input.runId}/analyses/$analysisId/buckets?rollup=1&limit=10")
+                    .jsonObject()
+                    .getValue("buckets")
+                    .jsonArray
+                    .single()
+                    .jsonObject
+            assertEquals(
+                setOf("bucket_start_ms", "sample_count", "error_count", "max_latency_ms", "p95_latency_ms", "hdr_v2_base64"),
+                defaultBucket.keys,
+            )
+
+            val withPercentilesResponse =
+                api.get("/api/runs/${input.runId}/analyses/$analysisId/buckets?rollup=1&limit=10&include=percentiles")
+            assertEquals(200, withPercentilesResponse.statusCode())
+            val withPercentiles =
+                withPercentilesResponse
+                    .jsonObject()
+                    .getValue("buckets")
+                    .jsonArray
+                    .single()
+                    .jsonObject
+            assertEquals(
+                setOf(
+                    "bucket_start_ms",
+                    "sample_count",
+                    "error_count",
+                    "max_latency_ms",
+                    "p50_latency_ms",
+                    "p95_latency_ms",
+                    "p99_latency_ms",
+                    "hdr_v2_base64",
+                ),
+                withPercentiles.keys,
+            )
+            assertEquals(
+                minOf(histogram.getValueAtPercentile(50.0), maxLatency),
+                withPercentiles.getValue("p50_latency_ms").jsonPrimitive.long,
+            )
+            assertEquals(
+                minOf(histogram.getValueAtPercentile(95.0), maxLatency),
+                withPercentiles.getValue("p95_latency_ms").jsonPrimitive.long,
+            )
+            assertEquals(
+                minOf(histogram.getValueAtPercentile(99.0), maxLatency),
+                withPercentiles.getValue("p99_latency_ms").jsonPrimitive.long,
+            )
+
+            listOf(
+                "?rollup=1&include=bogus",
+                "?rollup=1&include=",
+                "?rollup=1&include=percentiles&include=percentiles",
+            ).forEach { query ->
+                assertError(
+                    api.get("/api/runs/${input.runId}/analyses/$analysisId/buckets$query"),
+                    400,
+                )
+            }
+        }
+
+    @Test
     fun `report downloads preserve result bytes and reject invalid queries without new analyses`() =
         withServer { store, api ->
             val input = store.acceptInput(ByteArrayInputStream(SPIKE_DROP.bytes()), SPIKE_DROP.filename)

@@ -161,16 +161,19 @@ internal fun Route.runRoutes(context: LocalApiContext) {
     }
 
     get("/api/runs/{runId}/analyses/{analysisId}/buckets") {
-        call.requireOnlyQueries("rollup", "from_ms", "to_ms", "limit")
+        call.requireOnlyQueries("rollup", "from_ms", "to_ms", "limit", "include")
         val rollup = call.singleQuery("rollup")?.toIntOrNull()
         if (rollup !in ROLLUPS) malformed("rollup must be 1, 10, 30 or 60")
         val from = call.longQuery("from_ms", 0)
         val to = call.optionalLongQuery("to_ms")
         val limit = call.intQuery("limit", DEFAULT_BUCKET_LIMIT, 1..MAX_BUCKET_LIMIT)
         if (from < 0 || to != null && to <= from) malformed("Bucket range is invalid")
+        val include = call.singleQuery("include")
+        if (include != null && include != "percentiles") malformed("include is invalid")
+        val includePercentiles = include == "percentiles"
         val stored = context.store.requireAnalysis(call)
         val file = if (rollup == 1) NORMALIZED_FILE else "rollup-${rollup}s.ndjson"
-        val page = withContext(Dispatchers.IO) { readBucketPage(stored.path.resolve(file), from, to, limit) }
+        val page = withContext(Dispatchers.IO) { readBucketPage(stored.path.resolve(file), from, to, limit, includePercentiles) }
         call.respondJson(
             buildJsonObject {
                 put("buckets", JsonArray(page.buckets))
@@ -185,6 +188,7 @@ private fun readBucketPage(
     from: Long,
     to: Long?,
     limit: Int,
+    includePercentiles: Boolean,
 ): BucketPage {
     val buckets = mutableListOf<JsonElement>()
     var next: Long? = null
@@ -198,21 +202,34 @@ private fun readBucketPage(
                 next = start
                 break
             }
-            buckets += bucket.withP95()
+            buckets += bucket.withLatencies(includePercentiles)
         }
     }
     return BucketPage(buckets, next)
 }
 
-private fun JsonObject.withP95(): JsonObject {
+private fun JsonObject.withLatencies(includePercentiles: Boolean): JsonObject {
     val encoded = getValue("hdr_v2_base64").jsonPrimitive.content
     val histogram =
         PackedHistogram.decodeFromCompressedByteBuffer(
             ByteBuffer.wrap(Base64.getDecoder().decode(encoded)),
             MAX_BUCKET_LATENCY_MILLIS,
         )
-    val p95 = minOf(histogram.getValueAtPercentile(95.0), getValue("max_latency_ms").jsonPrimitive.long)
-    return JsonObject(this + ("p95_latency_ms" to JsonPrimitive(p95)))
+    val maxLatency = getValue("max_latency_ms").jsonPrimitive.long
+    val p95 = minOf(histogram.getValueAtPercentile(95.0), maxLatency)
+    if (!includePercentiles) {
+        return JsonObject(this + ("p95_latency_ms" to JsonPrimitive(p95)))
+    }
+    val p50 = minOf(histogram.getValueAtPercentile(50.0), maxLatency)
+    val p99 = minOf(histogram.getValueAtPercentile(99.0), maxLatency)
+    return JsonObject(
+        this +
+            mapOf(
+                "p50_latency_ms" to JsonPrimitive(p50),
+                "p95_latency_ms" to JsonPrimitive(p95),
+                "p99_latency_ms" to JsonPrimitive(p99),
+            ),
+    )
 }
 
 private data class BucketPage(

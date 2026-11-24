@@ -1,7 +1,10 @@
-import type { AnalysisResult, Bucket, BucketPage, ResourceSeriesEntry, ResourceSeriesValues } from '../types'
+import type {
+  AnalysisResult, Bucket, BucketPage, PolicyCheckEvidence, ResourceSeriesCatalog, ResourceSeriesEntry,
+  ResourceSeriesValues, StageBindingEvidence, WindowPolicySummaryEvidence,
+} from '../types'
 import { DEEP_LABELS, OVERVIEW_LABELS } from './labels'
 import { formatNumber, loadSeries } from './overview'
-import type { ChartLane, ChartToken } from './timeChart'
+import { stageBands, type ChartLane, type ChartStage, type ChartToken } from './timeChart'
 
 export interface SnapshotGrid { startMs: number; stepMs: number; pointCount: number }
 export interface DeepPoint { startMs: number; value: number | null; observed: number | null }
@@ -12,6 +15,7 @@ export interface DeepTrack {
   unit: string
   kind: 'load' | 'resource'
   reducer: 'mean' | 'max' | 'min' | null
+  integer?: boolean
   stepMs: number
   endMs: number
   sourceCellsPerCell: number
@@ -23,6 +27,24 @@ export interface DeepTrack {
   thresholds: DeepThreshold[]
 }
 export interface TimeAxis { fromMs: number; toMs: number }
+export interface StageButton { id: string; role: string; fromMs: number; toMs: number; fromMin: number; toMin: number; steady: boolean }
+export interface WindowMetricStats {
+  count: number
+  min: number | null
+  avg: number | null
+  p50: number | null
+  p95: number | null
+  max: number | null
+  timeAboveThresholdMs: number | null
+  hasThresholds: boolean
+}
+export type MetricCatalogGroupKey = 'delays' | 'load' | 'errors' | 'platform'
+export interface LoadCatalogItem { key: string; label: string; unit: string; group: 'delays' | 'load' | 'errors' }
+export interface GroupedMetricCatalog {
+  services: string[]
+  groups: Array<{ key: MetricCatalogGroupKey; label: string; loadItems: LoadCatalogItem[]; platformItems: ResourceSeriesEntry[] }>
+  platformByRole: { system: ResourceSeriesEntry[]; generator: ResourceSeriesEntry[] }
+}
 
 export const MAX_SELECTED_SERIES = 6
 export const TARGET_CELLS = 1500
@@ -202,6 +224,207 @@ export function loadTracks(buckets: Bucket[], rollupSeconds: number, originMs: n
   })
 }
 
+export const LOAD_CATALOG_ITEMS: readonly LoadCatalogItem[] = [
+  { key: 'load-p50', label: DEEP_LABELS.metricP50, unit: OVERVIEW_LABELS.unitMs, group: 'delays' },
+  { key: 'load-p95', label: OVERVIEW_LABELS.trackP95, unit: OVERVIEW_LABELS.unitMs, group: 'delays' },
+  { key: 'load-p99', label: DEEP_LABELS.metricP99, unit: OVERVIEW_LABELS.unitMs, group: 'delays' },
+  { key: 'load-max', label: DEEP_LABELS.metricMax, unit: OVERVIEW_LABELS.unitMs, group: 'delays' },
+  { key: 'load-rps', label: OVERVIEW_LABELS.trackRps, unit: OVERVIEW_LABELS.unitRps, group: 'load' },
+  { key: 'load-errors', label: OVERVIEW_LABELS.trackErrors, unit: DEEP_LABELS.unitErrors, group: 'errors' },
+  { key: 'load-error-rate', label: DEEP_LABELS.metricErrorRate, unit: DEEP_LABELS.unitPercent, group: 'errors' },
+]
+
+const POLICY_METRIC_TRACK: Record<string, string> = {
+  response_time_p95_ms: 'load-p95',
+  response_time_p99_ms: 'load-p99',
+  throughput_rps: 'load-rps',
+  error_rate_ratio: 'load-error-rate',
+}
+
+function loadThresholdsFor(result: AnalysisResult | undefined, trackKey: string): DeepThreshold[] {
+  if (!result) return []
+  const checks = result.evidence.filter((item): item is PolicyCheckEvidence =>
+    item.type === 'policy_check' && item.scope?.kind === 'overall' && POLICY_METRIC_TRACK[item.metric] === trackKey)
+  const thresholds: DeepThreshold[] = []
+  const seen = new Set<string>()
+  for (const item of checks) {
+    if (seen.has(item.rule_id)) continue
+    const raw = Number(item.threshold)
+    if (!Number.isFinite(raw)) continue
+    seen.add(item.rule_id)
+    const value = item.metric === 'error_rate_ratio' ? raw * 100 : raw
+    const operator: 'gt' | 'lt' = item.operator === 'gte' ? 'lt' : 'gt'
+    const violated = checks.some((candidate) => candidate.rule_id === item.rule_id && candidate.status === 'FAIL')
+    thresholds.push({ ruleId: item.rule_id, operator, value, violated })
+  }
+  return thresholds
+}
+
+export function allLoadTracks(buckets: Bucket[], rollupSeconds: number, originMs: number, result?: AnalysisResult): DeepTrack[] {
+  const sorted = [...buckets].sort((left, right) => left.bucket_start_ms - right.bucket_start_ms)
+  const stepMs = rollupSeconds * 1000
+  const endMs = sorted.length ? sorted[sorted.length - 1].bucket_start_ms + originMs + stepMs : originMs
+  const extract = (key: string, bucket: Bucket): number | null => {
+    switch (key) {
+      case 'load-p50': return typeof bucket.p50_latency_ms === 'number' ? bucket.p50_latency_ms : null
+      case 'load-p95': return bucket.p95_latency_ms
+      case 'load-p99': return typeof bucket.p99_latency_ms === 'number' ? bucket.p99_latency_ms : null
+      case 'load-max': return bucket.max_latency_ms
+      case 'load-rps': return bucket.sample_count / rollupSeconds
+      case 'load-errors': return bucket.error_count
+      case 'load-error-rate': return bucket.sample_count > 0 ? (bucket.error_count / bucket.sample_count) * 100 : null
+      default: return null
+    }
+  }
+  return LOAD_CATALOG_ITEMS.map((item) => {
+    const points = sorted.map((bucket) => ({ startMs: bucket.bucket_start_ms + originMs, value: extract(item.key, bucket), observed: null }))
+    return {
+      key: item.key,
+      label: item.label,
+      unit: item.unit,
+      kind: 'load',
+      reducer: null,
+      ...(item.key === 'load-errors' ? { integer: true } : {}),
+      stepMs,
+      endMs,
+      sourceCellsPerCell: 1,
+      lastCellSourceCells: 1,
+      points,
+      ...pointStats(points, stepMs),
+      thresholds: loadThresholdsFor(result, item.key),
+    }
+  })
+}
+
+export function stageButtons(
+  result: AnalysisResult,
+  catalogWindows: ResourceSeriesCatalog['windows'] = [],
+  originMs = 0,
+): StageButton[] {
+  const binding = result.evidence.find((item): item is StageBindingEvidence => item.type === 'stage_binding')
+  if (binding?.stages?.length) {
+    return binding.stages
+      .filter((stage) => stage.to_offset_ms > stage.from_offset_ms)
+      .map((stage) => ({
+        id: stage.id,
+        role: stage.role,
+        fromMs: originMs + stage.from_offset_ms,
+        toMs: originMs + stage.to_offset_ms,
+        fromMin: stage.from_offset_ms / 60_000,
+        toMin: stage.to_offset_ms / 60_000,
+        steady: stage.role === 'steady',
+      }))
+  }
+  if (catalogWindows.length) {
+    return catalogWindows
+      .filter((win) => win.to_epoch_ms > win.from_epoch_ms)
+      .map((win) => ({
+        id: win.id,
+        role: 'steady',
+        fromMs: win.from_epoch_ms,
+        toMs: win.to_epoch_ms,
+        fromMin: (win.from_epoch_ms - originMs) / 60_000,
+        toMin: (win.to_epoch_ms - originMs) / 60_000,
+        steady: true,
+      }))
+  }
+  const seen = new Set<string>()
+  const summaryWindows: StageButton[] = []
+  for (const item of result.evidence) {
+    if (item.type !== 'window_policy_summary') continue
+    const win = item as WindowPolicySummaryEvidence
+    if (seen.has(win.window_id) || !(win.to_epoch_ms > win.from_epoch_ms)) continue
+    seen.add(win.window_id)
+    summaryWindows.push({
+      id: win.window_id,
+      role: 'steady',
+      fromMs: win.from_epoch_ms,
+      toMs: win.to_epoch_ms,
+      fromMin: (win.from_epoch_ms - originMs) / 60_000,
+      toMin: (win.to_epoch_ms - originMs) / 60_000,
+      steady: true,
+    })
+  }
+  return summaryWindows
+}
+
+export function deepStages(
+  result: AnalysisResult,
+  catalogWindows: ResourceSeriesCatalog['windows'] = [],
+  originMs = 0,
+): ChartStage[] {
+  const declared = stageBands(result, originMs)
+  if (declared.length) return declared
+  return stageButtons(result, catalogWindows, originMs).map((win) => ({
+    id: win.id,
+    fromMs: win.fromMs,
+    toMs: win.toMs,
+    steady: win.steady,
+  }))
+}
+
+export function windowMetricStats(track: DeepTrack, axis: TimeAxis): WindowMetricStats {
+  const values: number[] = []
+  let violatedMs = 0
+  const hasThresholds = track.thresholds.length > 0
+  for (let index = 0; index < track.points.length; index += 1) {
+    const point = track.points[index]
+    const cellEnd = index === track.points.length - 1 ? track.endMs : point.startMs + track.stepMs
+    const from = Math.max(point.startMs, axis.fromMs)
+    const to = Math.min(cellEnd, axis.toMs)
+    if (to <= from || point.value === null || !Number.isFinite(point.value)) continue
+    values.push(point.value)
+    if (hasThresholds) {
+      const violated = track.thresholds.some((t) => (t.operator === 'gt' ? point.value! > t.value : point.value! < t.value))
+      if (violated) violatedMs += to - from
+    }
+  }
+  if (!values.length) {
+    return { count: 0, min: null, avg: null, p50: null, p95: null, max: null, timeAboveThresholdMs: null, hasThresholds }
+  }
+  const sorted = [...values].sort((left, right) => left - right)
+  const rank = (pct: number) => sorted[Math.max(0, Math.ceil(pct * sorted.length) - 1)]
+  const sum = values.reduce((acc, value) => acc + value, 0)
+  return {
+    count: values.length,
+    min: sorted[0],
+    avg: sum / values.length,
+    p50: rank(0.5),
+    p95: rank(0.95),
+    max: sorted[sorted.length - 1],
+    timeAboveThresholdMs: hasThresholds ? violatedMs : null,
+    hasThresholds,
+  }
+}
+
+export function groupMetricCatalog(
+  catalog: ResourceSeriesEntry[],
+  textFilter = '',
+  serviceFilter = '',
+): GroupedMetricCatalog {
+  const needle = textFilter.trim().toLocaleLowerCase()
+  const services = [...new Set(catalog.map((entry) => entry.entity).filter(Boolean))].sort((a, b) => (a < b ? -1 : a > b ? 1 : 0))
+  const loadByGroup = (group: 'delays' | 'load' | 'errors') =>
+    LOAD_CATALOG_ITEMS.filter((item) => item.group === group && (!needle || `${item.key} ${item.label}`.toLocaleLowerCase().includes(needle)))
+  const platformItems = catalog.filter((entry) =>
+    (!serviceFilter || entry.entity === serviceFilter)
+    && (!needle || `${entry.id} ${entry.metric} ${entry.entity}`.toLocaleLowerCase().includes(needle)),
+  )
+  return {
+    services,
+    groups: [
+      { key: 'delays', label: DEEP_LABELS.groupLabels.delays, loadItems: loadByGroup('delays'), platformItems: [] },
+      { key: 'load', label: DEEP_LABELS.groupLabels.load, loadItems: loadByGroup('load'), platformItems: [] },
+      { key: 'errors', label: DEEP_LABELS.groupLabels.errors, loadItems: loadByGroup('errors'), platformItems: [] },
+      { key: 'platform', label: DEEP_LABELS.groupLabels.platform, loadItems: [], platformItems },
+    ],
+    platformByRole: {
+      system: platformItems.filter((entry) => entry.role === 'system'),
+      generator: platformItems.filter((entry) => entry.role === 'generator'),
+    },
+  }
+}
+
 export function cellAt(track: DeepTrack, timeMs: number): DeepPoint | null {
   for (let index = 0; index < track.points.length; index += 1) {
     const point = track.points[index]
@@ -264,13 +487,22 @@ export function trackPath(track: DeepTrack, axis: TimeAxis, width: number, heigh
   })
 }
 
-const deepColors: Record<string, ChartToken> = { 'load-rps': 'brand', 'load-p95': 'warn' }
+const deepColors: Record<string, ChartToken> = {
+  'load-rps': 'brand',
+  'load-p50': 'brand',
+  'load-p95': 'warn',
+  'load-p99': 'warn',
+  'load-max': 'fail',
+  'load-errors': 'fail',
+  'load-error-rate': 'fail',
+}
 
 export function deepLane(track: DeepTrack, axis: TimeAxis): ChartLane {
   const scale = trackScale(track)
   return {
     key: track.key,
     color: deepColors[track.key] ?? 'text',
+    ...(track.integer ? { integer: true } : {}),
     segments: track.segments.flatMap((segment) => {
       const points = segment.flatMap((index) => {
         const point = track.points[index]

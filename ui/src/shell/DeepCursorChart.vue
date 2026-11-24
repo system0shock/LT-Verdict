@@ -6,24 +6,39 @@ import { cursorReadouts, cursorStops, deepLane, nearestTime, type DeepTrack, typ
 import TimeChart from './TimeChart.vue'
 import { plotFraction, type ChartStage } from './timeChart'
 
-const props = withDefaults(defineProps<{ tracks: DeepTrack[]; axis: TimeAxis; originMs: number; stages?: ChartStage[] }>(), { stages: () => [] })
+const props = withDefaults(defineProps<{
+  tracks: DeepTrack[]
+  primaryTrack?: DeepTrack | null
+  axis: TimeAxis
+  originMs: number
+  stages?: ChartStage[]
+}>(), { primaryTrack: null, stages: () => [] })
 const cursorMs = ref<number | null>(null)
 const hintId = useId()
-const stops = computed(() => cursorStops(props.tracks).filter((time) => time >= props.axis.fromMs && time < props.axis.toMs))
-const readouts = computed(() => cursorMs.value === null ? [] : cursorReadouts(props.tracks, cursorMs.value))
+const allTracks = computed(() => props.primaryTrack ? [props.primaryTrack, ...props.tracks] : props.tracks)
+const stops = computed(() => cursorStops(allTracks.value).filter((time) => time >= props.axis.fromMs && time < props.axis.toMs))
+const readouts = computed(() => cursorMs.value === null ? [] : cursorReadouts(allTracks.value, cursorMs.value))
 const relativeMs = computed(() => cursorMs.value === null ? null : cursorMs.value - props.originMs)
 const frame = computed(() => ({ ...props.axis, originMs: props.originMs }))
-const lanes = computed(() => props.tracks.map((track, index) => ({
-  track,
-  lane: deepLane(track, props.axis),
-  flags: { timeLabels: index === props.tracks.length - 1, stageLabels: index === 0 },
-})))
+const lanes = computed(() => allTracks.value.map((track, index) => {
+  const isPrimary = Boolean(props.primaryTrack && index === 0)
+  const timeLabels = index === allTracks.value.length - 1
+  const stageLabels = index === 0
+  return {
+    track,
+    isPrimary,
+    lane: deepLane(track, props.axis),
+    flags: isPrimary
+      ? { timeLabels, stageLabels, plotHeight: timeLabels ? 192 : 236, ySplits: 4 }
+      : { timeLabels, stageLabels },
+  }
+}))
 const stopIndex = computed(() => cursorMs.value === null ? 0 : Math.max(0, stops.value.findLastIndex((time) => time <= cursorMs.value!)))
 const offset = (ms: number) => ms < 0 ? `-${formatOffset(-ms)}` : formatOffset(ms)
 const ariaText = computed(() => {
   if (relativeMs.value === null) return DEEP_LABELS.cursorNone
   const time = DEEP_LABELS.cursorText(formatNumber(relativeMs.value, 0), offset(relativeMs.value))
-  const values = props.tracks.map((track) => {
+  const values = allTracks.value.map((track) => {
     const item = readouts.value.find((row) => row.key === track.key)
     const value = item?.gap ? DEEP_LABELS.gap : `${item?.text ?? DEEP_LABELS.gap} ${track.unit}`
     const partial = item?.partial ? ` (${DEEP_LABELS.partialCell(item.observed!, item.total!)})` : ''
@@ -66,43 +81,59 @@ function readout(key: string) {
       @pointermove="onPointer"
       @pointerdown="onPointer"
     >
-      <div
-        v-for="{ track, lane, flags } in lanes"
+      <template
+        v-for="({ track, isPrimary, lane, flags }, laneIndex) in lanes"
         :key="track.key"
-        class="deep-track"
-        :class="track.kind === 'resource' ? 'resource' : track.key"
-        :data-testid="'deep-track-' + track.key"
       >
-        <p class="deep-head">
-          <span class="track-name">{{ track.label }}<template v-if="track.reducer"> ({{ DEEP_LABELS.reducerLabels[track.reducer] }})</template></span>
-          <strong
-            :data-testid="'track-value-' + track.key"
-            :data-value="readout(track.key)?.raw ?? ''"
-          >{{ valueText(track) }}</strong>
-          <span
-            v-if="readout(track.key)?.partial"
-            class="muted"
-          >{{ DEEP_LABELS.partialCell(readout(track.key)!.observed!, readout(track.key)!.total!) }}</span>
-          <span class="muted">{{ DEEP_LABELS.trackMax(formatNumber(track.max)) }} {{ track.unit }}</span>
-          <span
-            v-for="threshold in track.thresholds"
-            :key="threshold.ruleId"
-            class="threshold-text"
-            :class="{ violated: threshold.violated }"
-            :data-testid="'deep-threshold-label-' + threshold.ruleId"
-            :data-violated="threshold.violated"
-          >{{ DEEP_LABELS.thresholdLabel(threshold.operator, formatNumber(threshold.value), track.unit, threshold.violated) }}</span>
+        <p
+          v-if="primaryTrack && tracks.length && laneIndex === 1"
+          class="pinned-heading muted"
+          data-testid="deep-pinned-heading"
+        >
+          {{ DEEP_LABELS.pinnedTitle }}
         </p>
-        <TimeChart
-          :lane="lane"
-          :frame="frame"
-          :stages="stages"
-          :flags="flags"
-          :cursor-ms="cursorMs"
-          :cursor-value="valueText(track)"
-          :cursor-time="flags.timeLabels && relativeMs !== null ? offset(relativeMs) : null"
-        />
-      </div>
+        <div
+          class="deep-track"
+          :class="[track.kind === 'resource' ? 'resource' : track.key, { 'deep-track--primary': isPrimary }]"
+          :data-testid="'deep-track-' + track.key"
+          :data-primary="isPrimary ? 'true' : 'false'"
+        >
+          <p class="deep-head">
+            <span
+              v-if="isPrimary"
+              class="primary-badge"
+              data-testid="deep-primary-badge"
+            >{{ DEEP_LABELS.primaryBadge }}</span>
+            <span class="track-name">{{ track.label }}<template v-if="track.reducer"> ({{ DEEP_LABELS.reducerLabels[track.reducer] }})</template></span>
+            <strong
+              :data-testid="'track-value-' + track.key"
+              :data-value="readout(track.key)?.raw ?? ''"
+            >{{ valueText(track) }}</strong>
+            <span
+              v-if="readout(track.key)?.partial"
+              class="muted"
+            >{{ DEEP_LABELS.partialCell(readout(track.key)!.observed!, readout(track.key)!.total!) }}</span>
+            <span class="muted">{{ DEEP_LABELS.trackMax(formatNumber(track.max)) }} {{ track.unit }}</span>
+            <span
+              v-for="threshold in track.thresholds"
+              :key="threshold.ruleId"
+              class="threshold-text"
+              :class="{ violated: threshold.violated }"
+              :data-testid="'deep-threshold-label-' + threshold.ruleId"
+              :data-violated="threshold.violated"
+            >{{ DEEP_LABELS.thresholdLabel(threshold.operator, formatNumber(threshold.value), track.unit, threshold.violated) }}</span>
+          </p>
+          <TimeChart
+            :lane="lane"
+            :frame="frame"
+            :stages="stages"
+            :flags="flags"
+            :cursor-ms="cursorMs"
+            :cursor-value="valueText(track)"
+            :cursor-time="flags.timeLabels && relativeMs !== null ? offset(relativeMs) : null"
+          />
+        </div>
+      </template>
     </div>
     <p
       class="axis-title"
@@ -145,6 +176,9 @@ function readout(key: string) {
 .deep-chart,.deep-plot { display:grid; gap:8px; min-width:0; }
 .deep-plot { touch-action:pan-y; }
 .deep-track { min-width:0; }
+.deep-track--primary { padding:8px 0; border-bottom:1px solid var(--border); }
+.primary-badge { padding:0 6px; border-radius:4px; background:var(--info-bg); color:var(--brand); font-size:12px; font-weight:600; }
+.pinned-heading { margin:4px 0 0; font-size:13px; font-weight:600; }
 .threshold-text { color:var(--text-muted); }
 .threshold-text.violated { color:var(--fail); }
 .deep-head { display:flex; flex-wrap:wrap; gap:4px 12px; margin:0 0 4px; overflow-wrap:anywhere; }

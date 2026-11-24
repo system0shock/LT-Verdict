@@ -2,7 +2,7 @@ import AxeBuilder from '@axe-core/playwright'
 import { expect, test, type Page } from '@playwright/test'
 import { BASELINE_ERROR_LABELS } from '../src/shell/labels'
 import { HISTORY_LABELS } from '../src/shell/labels.history'
-import { DEFAULT_VISIBLE_RELEASES, historyDynamicsOption, type DynamicsPoint, type HistoryChartColors } from '../src/shell/history'
+import { DEFAULT_VISIBLE_RELEASES, dynamicsPoints, historyDynamicsOption, type DynamicsPoint, type HistoryChartColors } from '../src/shell/history'
 import type { Release, ReleaseAnalysis, ReleaseProfile } from '../src/types'
 
 // The tab against a mocked server: table, expansion, numbers and their absence, the form payload, error phrases, accessibility.
@@ -422,6 +422,24 @@ test('historyDynamicsOption maps verdicts to circle/rect/triangle, avoids toolti
     ['triangle', '#4', 210],
   ])
   expect(series.markLine?.data[0]).toMatchObject({ yAxis: 120, lineStyle: { color: '#1' } })
+})
+
+test('dynamicsPoints omits empty or whitespace strings instead of plotting zero', () => {
+  const rel1 = release(1)
+  const rel2 = release(2)
+  const rel3 = release(3)
+  const rel4 = release(4)
+  const values: Record<string, string | null> = {
+    [rel1.analyses[0]!.analysis_id]: '',
+    [rel2.analyses[0]!.analysis_id]: '   ',
+    [rel3.analyses[0]!.analysis_id]: '0',
+    [rel4.analyses[0]!.analysis_id]: '120.5',
+  }
+  const points = dynamicsPoints([rel4, rel2, rel1, rel3], (id) => values[id] ?? null)
+  expect(points.map((point) => [point.release.label, point.value])).toEqual([
+    ['v1.3', 0],
+    ['v1.4', 120.5],
+  ])
 })
 
 test('without numbers the chart says so instead of drawing zeros', async ({ page }) => {

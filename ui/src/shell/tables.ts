@@ -317,7 +317,7 @@ const TREND_STATUS_RANK: Record<string, number> = {
 const trendSortValues = new WeakMap<TrendRow, { slope: number; shift: number; median: number }>()
 
 function decimalSort(value: string | null | undefined): number {
-  if (value == null) return Number.NEGATIVE_INFINITY
+  if (value == null || value.trim() === '') return Number.NEGATIVE_INFINITY
   const parsed = Number(value)
   return Number.isFinite(parsed) ? parsed : Number.NEGATIVE_INFINITY
 }
@@ -394,6 +394,7 @@ export type ResourceCheckSortKey = 'default' | 'window_id' | 'rule_id' | 'servic
 function numOrNegInf(value: unknown): number {
   if (typeof value === 'number') return Number.isFinite(value) ? value : Number.NEGATIVE_INFINITY
   if (typeof value === 'string') {
+    if (value.trim() === '') return Number.NEGATIVE_INFINITY
     const parsed = Number(value)
     return Number.isFinite(parsed) ? parsed : Number.NEGATIVE_INFINITY
   }
@@ -409,11 +410,11 @@ export function sortResourceSummaries<T extends Record<string, unknown>>(
   return rows.map((row, index) => ({ row, index })).sort((left, right) => {
     let order = 0
     if (sort === 'observed_cells' || sort === 'missing_cells') {
-      order = numOrNegInf(left.row[sort]) - numOrNegInf(right.row[sort])
+      order = compareNumbers(numOrNegInf(left.row[sort]), numOrNegInf(right.row[sort]))
     } else if (sort === 'min' || sort === 'max' || sort === 'mean' || sort === 'median' || sort === 'q95' || sort === 'slope_per_second') {
       const leftStats = left.row.statistics as Record<string, unknown> | undefined
       const rightStats = right.row.statistics as Record<string, unknown> | undefined
-      order = numOrNegInf(leftStats?.[sort]) - numOrNegInf(rightStats?.[sort])
+      order = compareNumbers(numOrNegInf(leftStats?.[sort]), numOrNegInf(rightStats?.[sort]))
     } else {
       order = compareExact(String(left.row[sort] ?? ''), String(right.row[sort] ?? ''))
     }

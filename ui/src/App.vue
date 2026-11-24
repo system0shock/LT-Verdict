@@ -727,7 +727,7 @@ async function refreshAnalyses(runId = currentRun.value?.run_id, after?: string)
 
 async function selectAnalysisById(analysisId: string) {
   const found = analyses.value.find((item) => item.analysis_id === analysisId)
-  if (found) await selectAnalysis(found)
+  if (found) await selectAnalysis(found, { switchTab: false })
 }
 
 async function selectAnalysis(analysis: AnalysisSummary, options: { tabAtStart?: number; switchTab?: boolean } = {}) {
@@ -825,8 +825,14 @@ function showError(failure: unknown) {
 // Opens the analysis of a history row; the baseline panel shows the baseline of the release series.
 async function openReference({ release, analysis }: { release: Release; analysis: ReleaseAnalysis }, tab: ShellTabKey) {
   showBaselineSeries(release.series)
-  await selectRun(runs.value.find((run) => run.run_id === release.run_id) ?? runSummaryFromId(release.run_id), { autoOpen: false })
-  await selectAnalysis(analysisSummary(analysis), { switchTab: false })
+  const runPromise = selectRun(runs.value.find((run) => run.run_id === release.run_id) ?? runSummaryFromId(release.run_id), { autoOpen: false })
+  const runRevision = analysisRevision
+  await runPromise
+  if (runRevision !== analysisRevision || currentRun.value?.run_id !== release.run_id) return
+  const analysisPromise = selectAnalysis(analysisSummary(analysis), { switchTab: false })
+  const loadRevision = analysisRevision
+  await analysisPromise
+  if (loadRevision !== analysisRevision || currentRun.value?.run_id !== release.run_id || selectedAnalysisId.value !== analysis.analysis_id) return
   activeTab.value = tab
 }
 

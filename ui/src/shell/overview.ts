@@ -387,20 +387,22 @@ export function capacityBlock(result: AnalysisResult): CapacityBlock | null {
 }
 
 export function loadSeries(buckets: Bucket[], rollupSeconds: number): LoadSeries {
+  const safeRollup = Number.isFinite(rollupSeconds) && rollupSeconds > 0 ? rollupSeconds : 0
+  const finiteOrZero = (value: number) => (Number.isFinite(value) ? value : 0)
   const points = [...buckets].sort((left, right) => left.bucket_start_ms - right.bucket_start_ms).map((bucket) => ({
     startMs: bucket.bucket_start_ms,
-    rps: bucket.sample_count / rollupSeconds,
-    errors: bucket.error_count,
-    p95: bucket.p95_latency_ms,
+    rps: safeRollup > 0 ? finiteOrZero(bucket.sample_count) / safeRollup : 0,
+    errors: finiteOrZero(bucket.error_count),
+    p95: finiteOrZero(bucket.p95_latency_ms),
   }))
   const segments: number[][] = []
   let missingIntervals = 0
   for (let index = 0; index < points.length; index += 1) {
     const previous = points[index - 1]
     const point = points[index]
-    if (!previous || point.startMs > previous.startMs + rollupSeconds * 1000) {
+    if (!previous || safeRollup <= 0 || point.startMs > previous.startMs + safeRollup * 1000) {
       segments.push([index])
-      if (previous) missingIntervals += Math.round((point.startMs - previous.startMs) / (rollupSeconds * 1000)) - 1
+      if (previous && safeRollup > 0) missingIntervals += Math.round((point.startMs - previous.startMs) / (safeRollup * 1000)) - 1
     } else {
       segments[segments.length - 1].push(index)
     }
@@ -409,7 +411,7 @@ export function loadSeries(buckets: Bucket[], rollupSeconds: number): LoadSeries
     points,
     segments,
     missingIntervals,
-    rollupSeconds,
+    rollupSeconds: safeRollup,
     max: {
       rps: Math.max(0, ...points.map((point) => point.rps)),
       errors: Math.max(0, ...points.map((point) => point.errors)),

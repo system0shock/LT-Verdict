@@ -207,4 +207,36 @@ test('compareLanes, compareFrame, compareStops and compareReadout align current 
     current: { rps: '150', errors: '2', p95: '250' },
     baseline: { rps: '—', errors: '—', p95: '—' },
   })
+  expect(compareReadout(cur, base, -5000).time).toBe('-0:05')
+})
+
+test('compareThresholds resolves transaction scope via metric_evidence_id and isolates rule thresholds', () => {
+  const result = {
+    evidence: [
+      { id: 'm-overall', type: 'metric_summary', scope: { kind: 'overall' } },
+      { id: 'm-tx', type: 'metric_summary', scope: { kind: 'transaction', group_path: [], label: 'POST /pay', sample_kind: 'JMETER_SAMPLER' } },
+      { id: 'c-tx', type: 'policy_check', rule_id: 'tx-pay-p95', metric: 'response_time_p95_ms', operator: 'lte', threshold: 250, status: 'FAIL', metric_evidence_id: 'm-tx' },
+      { id: 'c-w1', type: 'policy_check', rule_id: 'p95-sla', metric: 'response_time_p95_ms', operator: 'lte', threshold: 100, status: 'PASS', window_id: 'w1', metric_evidence_id: 'm-overall' },
+      { id: 'c-w2', type: 'policy_check', rule_id: 'p95-sla', metric: 'response_time_p95_ms', operator: 'lte', threshold: 200, status: 'FAIL', window_id: 'w2', metric_evidence_id: 'm-overall' },
+    ],
+  } as unknown as AnalysisResult
+  expect(compareThresholds(result)).toEqual({
+    rps: [],
+    p95: [
+      { id: 'p95-sla', value: 100, text: COMPARE_LABELS.chartsThresholdMark('100', 'мс'), violated: false },
+      { id: 'p95-sla', value: 200, text: COMPARE_LABELS.chartsThresholdMark('200', 'мс'), violated: true },
+    ],
+  })
+})
+
+test('loadSeries and compareLanes guard NaN bucket metrics and zero rollup', () => {
+  const zeroRollup = loadSeries([bucket(0, 10, 1, 50), bucket(1000, 20, 0, 60)], 0)
+  expect(zeroRollup.points.map((p) => p.rps)).toEqual([0, 0])
+  expect(Number.isFinite(zeroRollup.missingIntervals)).toBe(true)
+
+  const nanSeries = loadSeries([bucket(0, Number.NaN, Number.NaN, Number.NaN)], 1)
+  const validSeries = loadSeries([bucket(0, 10, 1, 50)], 1)
+  const tainted = { ...validSeries, max: { rps: Number.NaN, errors: Number.NaN, p95: Number.NaN } }
+  const lanes = compareLanes(nanSeries, tainted, null)
+  expect([lanes.rps.hi, lanes.errors.hi, lanes.p95.hi]).toEqual([0, 0, 0])
 })

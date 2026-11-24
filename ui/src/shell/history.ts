@@ -173,7 +173,7 @@ export function dynamicsPoints(releases: readonly Release[], valueOf: (analysisI
   for (const release of releases) {
     const analysis = release.analyses[0]
     const raw = analysis ? valueOf(analysis.analysis_id) : null
-    const value = raw === null ? Number.NaN : Number(raw)
+    const value = raw === null || raw.trim() === '' ? Number.NaN : Number(raw)
     if (analysis && Number.isFinite(value)) points.push({ release, verdict: analysis.policy_verdict, value })
   }
   return points.sort((a, b) => (a.release.started_at < b.release.started_at ? -1 : a.release.started_at > b.release.started_at ? 1 : 0))

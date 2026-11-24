@@ -303,3 +303,26 @@ test('sorting helpers order rules, transactions (p50/status), trends, and resour
   expect(tablesTargetSubTab(r, 'diagnostic-results')).toBe('diagnostics')
   expect(tablesTargetSubTab(r, 'normalized-data')).toBe('normalized')
 })
+
+test('trend and resource summary sorting treats empty strings as missing and keeps stable order', () => {
+  const trends = trendView(build({
+    evidence: [
+      { ...trendCheck, id: 't-empty', check_id: 'empty', slope_per_second: '' },
+      { ...trendCheck, id: 't-space', check_id: 'space', slope_per_second: '   ' },
+      { ...trendCheck, id: 't-neg', check_id: 'neg', slope_per_second: '-0.5' },
+      { ...trendCheck, id: 't-pos', check_id: 'pos', slope_per_second: '0.25' },
+    ],
+  }))!.rows
+  expect(sortTrendRows(trends, 'slope', 1).map((r) => r.check)).toEqual(['empty', 'space', 'neg', 'pos'])
+  expect(sortTrendRows(trends, 'slope', -1).map((r) => r.check)).toEqual(['pos', 'neg', 'empty', 'space'])
+
+  const summaries = [
+    { id: 's-empty', observed_cells: '', statistics: { min: '' } },
+    { id: 's-neg', observed_cells: '-1', statistics: { min: '-5.5' } },
+    { id: 's-null', observed_cells: null, statistics: { min: null } },
+    { id: 's-pos', observed_cells: '4', statistics: { min: '2.0' } },
+  ]
+  expect(sortResourceSummaries(summaries, 'min', 1).map((r) => r.id)).toEqual(['s-empty', 's-null', 's-neg', 's-pos'])
+  expect(sortResourceSummaries(summaries, 'min', -1).map((r) => r.id)).toEqual(['s-pos', 's-neg', 's-empty', 's-null'])
+  expect(sortResourceSummaries(summaries, 'observed_cells', 1).map((r) => r.id)).toEqual(['s-empty', 's-null', 's-neg', 's-pos'])
+})

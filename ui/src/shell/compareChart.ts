@@ -1,8 +1,8 @@
-import type { AnalysisResult, PolicyCheckEvidence } from '../types'
+import type { AnalysisResult, MetricSummaryEvidence, PolicyCheckEvidence } from '../types'
 import { OVERVIEW_LABELS } from './labels'
 import { COMPARE_LABELS, type CompareLabels } from './labels.compare'
-import { formatNumber, formatOffset, type LoadPoint, type LoadSeries, type TrackKey } from './overview'
-import type { ChartFrame, ChartLane, ChartPoint, ChartThreshold, ChartToken } from './timeChart'
+import { formatNumber, type LoadPoint, type LoadSeries, type TrackKey } from './overview'
+import { signedOffset, type ChartFrame, type ChartLane, type ChartPoint, type ChartThreshold, type ChartToken } from './timeChart'
 
 const laneColors: Record<TrackKey, ChartToken> = { rps: 'brand', errors: 'fail', p95: 'warn' }
 
@@ -19,18 +19,32 @@ export function compareThresholds(
   labels: CompareLabels = COMPARE_LABELS,
 ): { rps: ChartThreshold[]; p95: ChartThreshold[] } {
   if (!result) return { rps: [], p95: [] }
-  const checks = result.evidence.filter(
-    (item): item is PolicyCheckEvidence => item.type === 'policy_check' && item.scope?.kind !== 'transaction',
+  const metrics = new Map(
+    result.evidence
+      .filter((item): item is MetricSummaryEvidence => item.type === 'metric_summary')
+      .map((item) => [item.id, item]),
   )
+  const checks = result.evidence.filter((item): item is PolicyCheckEvidence => {
+    if (item.type !== 'policy_check') return false
+    const scope = item.scope ?? (item.metric_evidence_id ? metrics.get(item.metric_evidence_id)?.scope : undefined)
+    return scope?.kind !== 'transaction'
+  })
   const rps: ChartThreshold[] = []
   const p95: ChartThreshold[] = []
   const seen = new Set<string>()
   for (const check of checks) {
-    if (seen.has(check.rule_id)) continue
     if (check.metric !== 'throughput_rps' && check.metric !== 'response_time_p95_ms') continue
     if (!Number.isFinite(check.threshold)) continue
-    seen.add(check.rule_id)
-    const violated = checks.some((candidate) => candidate.rule_id === check.rule_id && candidate.status === 'FAIL')
+    const key = `${check.metric}:${check.rule_id}:${check.threshold}`
+    if (seen.has(key)) continue
+    seen.add(key)
+    const violated = checks.some(
+      (candidate) =>
+        candidate.metric === check.metric
+        && candidate.rule_id === check.rule_id
+        && candidate.threshold === check.threshold
+        && candidate.status === 'FAIL',
+    )
     const unit = check.metric === 'throughput_rps' ? OVERVIEW_LABELS.unitRps : OVERVIEW_LABELS.unitMs
     const entry: ChartThreshold = {
       id: check.rule_id,
@@ -55,9 +69,12 @@ export function compareLanes(
     const laneThresholds = key === 'rps' ? thresholds.rps : key === 'p95' ? thresholds.p95 : []
     const baseline = seriesSegments(baselineSeries, key)
     const hi = Math.max(
-      currentSeries.max[key],
-      baselineSeries.max[key],
-      ...laneThresholds.map((item) => item.value),
+      0,
+      ...[
+        currentSeries.max[key],
+        baselineSeries.max[key],
+        ...laneThresholds.map((item) => item.value),
+      ].filter(Number.isFinite),
     )
     return {
       key,
@@ -140,10 +157,10 @@ export function compareReadout(
   const cur = pointAt(currentSeries, ms)
   const base = pointAt(baselineSeries, ms)
   const fmt = (point: LoadPoint | null, key: TrackKey) => {
-    if (!point) return '—'
+    if (!point || !Number.isFinite(point[key])) return '—'
     return formatNumber(point[key], key === 'errors' ? 0 : 2)
   }
-  const time = formatOffset(ms)
+  const time = signedOffset(ms)
   const current = { rps: fmt(cur, 'rps'), errors: fmt(cur, 'errors'), p95: fmt(cur, 'p95') }
   const baseline = { rps: fmt(base, 'rps'), errors: fmt(base, 'errors'), p95: fmt(base, 'p95') }
   const pair = (key: TrackKey) => `${current[key]} / ${baseline[key]}`

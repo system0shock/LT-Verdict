@@ -32,7 +32,10 @@ CLI использует [пример source request](../contracts/sources/v1/r
 .\build\install\ltv\bin\ltv.bat analyze input.jtl --connections connections.json --source source.json --data-dir data
 ```
 
-Профили загружаются при запуске; изменение файла требует перезапуска backend.
+Профили загружаются при запуске; в `ltv ui` обновлённый файл `--connections`
+можно перечитать без перезапуска backend кнопкой «Перечитать профили» на вкладке
+«Новый анализ» или запросом `POST /api/sources/reload`. При ошибке файла
+профилей сохраняется прежний набор.
 `source_kind`: `prometheus`, `victoria_metrics` или `influxdb`; `transport`:
 `direct` или `grafana_proxy`. Для PromQL direct добавляет `/api/v1/query_range`
 к `base_url` (VM tenant prefix сохраняется), а Grafana добавляет
@@ -277,13 +280,16 @@ VictoriaMetrics использует тот же PromQL. OpenSearch и PostgreSQ
 
 ### Чек-лист перед `ltv analyze`
 
-Сначала выполните `ltv source validate --connections <file>` и проверьте
-статусы в отчёте, а не только код выхода. Затем для `prometheus`,
-`victoria_metrics` или `influxdb` выполните
-`ltv source probe --connections <file> --profile <id> --query-id <id>`:
-проверьте доступность, число серий и `decoder_check` для нужного запроса.
-OpenSearch и PostgreSQL команда `probe` пока не поддерживает.
-Подробности — в разделе «Проверка профиля» ниже.
+Сначала выполните `ltv source validate --connections <file>` или сводную
+диагностику `ltv doctor --connections <file>` (оба запуска офлайн по
+умолчанию) и проверьте статусы в отчёте, а не только код выхода. Затем для
+`prometheus`, `victoria_metrics` или `influxdb` выполните
+`ltv source probe --connections <file> --profile <id> --query-id <id>` (либо
+`ltv doctor --connections <file> --online`): проверьте доступность, число серий
+и `decoder_check` для нужного запроса. В `ltv ui` те же действия доступны без
+перезапуска сервера через кнопки «Перечитать профили», «Проверить профиль» и
+«Пробный запрос» на вкладке «Новый анализ». OpenSearch и PostgreSQL команда
+`probe` пока не поддерживает. Подробности — в разделе «Проверка профиля» ниже.
 
 ## Правила ресурсных SLA
 
@@ -1207,6 +1213,86 @@ ltv source hash --run <run-id> --analysis <analysis-id> [--data-dir <path>]
 берут из `identity.json`, который отдаёт API. Анализ без снимка ресурсов даёт `RESOURCE_SNAPSHOT_NOT_PROVIDED`, неизвестный `ANALYSIS_NOT_FOUND`,
 повреждённый пакет `ANALYSIS_CORRUPT` (код 4).
 
+### Сводная проверка: `ltv doctor`
+
+```powershell
+# Офлайн по умолчанию (сеть не проверяется, выводит «сеть не проверялась: нужен --online»).
+ltv doctor --connections profiles.json [--profile prom-main] [--format text|json]
+
+# Последовательный опрос сохранённых запросов в рамках max_requests_per_run.
+ltv doctor --connections profiles.json --online [--profile prom-main] [--format text|json]
+```
+
+Команда объединяет офлайн-проверки `source-check.v1` и, при наличии `--online`,
+последовательный запуск зондов `probeSource` для каждого запроса профиля с
+учётом общего лимитера `SourceHttp` и бюджета `max_requests_per_run` (сверх
+бюджета запросы получают статус `SKIPPED` и код `SOURCE_REQUEST_CAP_EXCEEDED`).
+При провале боевого декодера (`decoder_check.accepted = false`) запрос получает
+`FAIL`, за исключением `EMPTY_RESULT` (пустой ответ вне прогона даёт `WARN`).
+
+Агрегация `resource_side` (на профиль и в целом, от худшего к лучшему:
+`UNAVAILABLE`, `DEGRADED`, `READY`; при отсутствии `--online` и офлайн-ошибок —
+`NOT_PROBED`):
+
+- `NOT_PROBED` — `--online` не задан и нет офлайн-`FAIL` (либо у профиля нет
+  запросов для онлайн-проверки).
+- `UNAVAILABLE` — есть офлайн-`FAIL` или все онлайн-запросы завершились `FAIL`.
+- `DEGRADED` — часть запросов завершилась `FAIL`, `WARN` или `SKIPPED`.
+- `READY` — все онлайн-запросы приняты (`OK`).
+
+Коды выхода `ltv doctor`: `0` (отчёт построен, `summary.fail == 0`), `7`
+(отчёт построен, есть хотя бы один `FAIL`), `4` (ошибка файла `--connections`
+или неизвестный `--profile`), `64` (ошибка флагов CLI). Схема JSON —
+`docs/contracts/sources/probe/v1/doctor-report.schema.json` (`doctor-report.v1`).
+Как и в `ltv source probe`, адреса, имена и значения переменных окружения,
+параметры TLS и сырые тела ответов никогда не попадают в отчёт.
+
+### Перезагрузка профилей и диагностика в UI и локальном API
+
+При запуске `ltv ui --connections <file>` профили хранятся в атомарном реестре
+`SourceRegistry`:
+
+- `POST /api/sources/reload` (без тела, с заголовками `Origin`, cookie и
+  `X-LTV-CSRF`) заново читает настроенный при старте файл `--connections`
+  (обычный файл без симлинков, до 1 МиБ), считает SHA-256 `revision` от тех же
+  байт и атомарно переключает набор для новых операций и заданий
+  (`source-reload.v1`). Успешная перезагрузка ограничена интервалом 5 с
+  (`429 RELOAD_TOO_FREQUENT`). Если файл содержит ошибку, активным остаётся
+  прежний набор (`422 SOURCE_CONFIG_INVALID`), а при параллельной перезагрузке
+  возвращается `409 BUSY`. Без `--connections` маршрут отвечает
+  `404 SOURCE_RELOAD_NOT_CONFIGURED`. Путь к файлу из тела запроса не
+  принимается (`400 MALFORMED_REQUEST`).
+- `POST /api/sources/validate` (`{"profile_id"?: "<id>"}`) выполняет
+  офлайн-проверку профилей текущего снимка реестра (`source-check.v1`).
+- `POST /api/sources/probe` (`{"profile_id", "query_id", "window_ms"?, "step_ms"?, "end_epoch_ms"?}`)
+  выполняет один зонд только в режиме `profile_query` (произвольные выражения
+  `ad_hoc` / `expression` отклоняются кодом `400 INVALID_PROBE` по
+  [ADR 0033](../adr/0033-source-probes-and-profile-reload.md)); одновременно
+  допускается не более 2 зондов (`409 BUSY`).
+- `POST /api/resources/semantic-hash` принимает JSON снимка
+  `resource-snapshot.v1` (до 32 МиБ, обязателен `Content-Length`) и возвращает
+  `resource-hash.v1` с `semantic_sha256`.
+
+На вкладке «Новый анализ» (новая оболочка; прежний интерфейс `?shell=old`
+заморожен и не изменяется) доступны:
+
+- «Перечитать профили» — вызывает `POST /api/sources/reload`, обновляет списки
+  `#source-profile` и `#postgres-profile` и сбрасывает удалённые из файла
+  выбранные ID; при ошибке сохраняет прежний список и показывает только
+  закрытый код ошибки без текста файла, URL и секретов.
+- «Проверить профиль» — вызывает `POST /api/sources/validate` для выбранного
+  профиля (или всех профилей).
+- «Пробный запрос» (при выборе одного профиля Prometheus, VictoriaMetrics или
+  InfluxDB) — запрашивает `query_id` из профиля, вызывает
+  `POST /api/sources/probe` и показывает число серий, `decoder_check`,
+  `redacted_count` и очищенные метки.
+
+Каждое задание анализа и каждый запрос к источнику используют один согласованный
+снимок реестра на всю операцию: уже запущенное задание завершается на прежнем
+поколении профилей, а поставленное в очередь задание при удалении профиля после
+перезагрузки завершается диагностикой `SOURCE_PROFILE_NOT_FOUND`. `GET /api/sources`
+остаётся неизменным.
+
 ## Credentials и limits
 
 Auth по умолчанию `{"type":"none"}`. Bearer:
@@ -1311,8 +1397,9 @@ $env:LTV_GRAFANA_MTLS_PASSWORD = Read-Host -MaskInput "PKCS12 password"
 защищает ключ, если файл всё же утёк. Ключ не пишется в артефакты и временные
 файлы.
 
-Сертификаты и CA читаются один раз; после замены файлов перезапустите backend
-(так же, как после правки профилей). Неудачная сборка не запоминается: если файл
+Сертификаты и CA читаются один раз для поколения реестра; после замены файлов
+в `ltv ui` нажмите «Перечитать профили» (или вызовите `POST /api/sources/reload`),
+либо перезапустите процесс CLI. Неудачная сборка не запоминается: если файл
 был не на месте, достаточно положить его и повторить анализ. Срок клиентского
 сертификата проверяется локально при каждом запросе: истёкший срок даёт
 `SOURCE_TLS_CLIENT_CERT_EXPIRED` без обращения к серверу. Предупреждения о скором

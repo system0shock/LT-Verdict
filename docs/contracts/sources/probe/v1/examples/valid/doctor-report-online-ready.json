@@ -1,0 +1,51 @@
+{
+  "schema_version": "doctor-report.v1",
+  "online": true,
+  "connections": {
+    "status": "OK",
+    "profile_count": 1
+  },
+  "profiles": [
+    {
+      "profile_id": "prom-main",
+      "source_kind": "prometheus",
+      "transport": "direct",
+      "arm": null,
+      "query_count": 1,
+      "rule_count": 1,
+      "checks": [
+        { "id": "config", "status": "OK", "code": null },
+        { "id": "url", "status": "OK", "code": null },
+        { "id": "credentials", "status": "OK", "code": null, "auth_kind": "none" },
+        { "id": "tls", "status": "SKIPPED", "code": null },
+        { "id": "rules", "status": "OK", "code": null },
+        { "id": "governor", "status": "OK", "code": null }
+      ],
+      "resource_side": "READY",
+      "online": {
+        "queries": [
+          {
+            "query_id": "cpu",
+            "status": "OK",
+            "code": null,
+            "http_status": 200,
+            "series_count": 1,
+            "observed_cells": 20,
+            "expected_cells": 20,
+            "decoder_check": {
+              "accepted": true,
+              "code": null
+            }
+          }
+        ]
+      }
+    }
+  ],
+  "summary": {
+    "ok": 6,
+    "warn": 0,
+    "fail": 0,
+    "skipped": 1
+  },
+  "resource_side": "READY"
+}

@@ -1,0 +1,74 @@
+{
+  "schema_version": "doctor-report.v1",
+  "online": true,
+  "connections": {
+    "status": "OK",
+    "profile_count": 1
+  },
+  "profiles": [
+    {
+      "profile_id": "prom-main",
+      "source_kind": "prometheus",
+      "transport": "direct",
+      "arm": null,
+      "query_count": 3,
+      "rule_count": 1,
+      "checks": [
+        { "id": "config", "status": "OK", "code": null },
+        { "id": "url", "status": "OK", "code": null },
+        { "id": "credentials", "status": "OK", "code": null, "auth_kind": "none" },
+        { "id": "tls", "status": "SKIPPED", "code": null },
+        { "id": "rules", "status": "OK", "code": null },
+        { "id": "governor", "status": "OK", "code": null }
+      ],
+      "resource_side": "DEGRADED",
+      "online": {
+        "queries": [
+          {
+            "query_id": "cpu",
+            "status": "WARN",
+            "code": "EMPTY_RESULT",
+            "http_status": 200,
+            "series_count": 0,
+            "observed_cells": 0,
+            "expected_cells": 20,
+            "decoder_check": {
+              "accepted": false,
+              "code": "EMPTY_RESULT"
+            }
+          },
+          {
+            "query_id": "mem",
+            "status": "FAIL",
+            "code": "AMBIGUOUS_SERIES",
+            "http_status": 200,
+            "series_count": 3,
+            "observed_cells": null,
+            "expected_cells": 20,
+            "decoder_check": {
+              "accepted": false,
+              "code": "AMBIGUOUS_SERIES"
+            }
+          },
+          {
+            "query_id": "disk",
+            "status": "SKIPPED",
+            "code": "SOURCE_REQUEST_CAP_EXCEEDED",
+            "http_status": null,
+            "series_count": null,
+            "observed_cells": null,
+            "expected_cells": null,
+            "decoder_check": null
+          }
+        ]
+      }
+    }
+  ],
+  "summary": {
+    "ok": 5,
+    "warn": 1,
+    "fail": 1,
+    "skipped": 2
+  },
+  "resource_side": "DEGRADED"
+}

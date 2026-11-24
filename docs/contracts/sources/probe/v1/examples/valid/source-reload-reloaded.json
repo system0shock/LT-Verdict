@@ -1,0 +1,10 @@
+{
+  "schema_version": "source-reload.v1",
+  "status": "RELOADED",
+  "profile_count": 2,
+  "profiles": ["pg-main", "prom-new"],
+  "added": ["prom-new"],
+  "removed": ["prom-old"],
+  "changed": ["pg-main"],
+  "revision": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+}

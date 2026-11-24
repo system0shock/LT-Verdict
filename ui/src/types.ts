@@ -59,6 +59,90 @@ export interface SourcesResponse {
   profiles: SourceProfile[]
 }
 
+export interface SourceReloadResponse {
+  schema_version: 'source-reload.v1'
+  status: 'RELOADED'
+  profile_count: number
+  profiles: string[]
+  added: string[]
+  removed: string[]
+  changed: string[]
+  revision: string
+}
+
+export interface SourceCheckItem {
+  id: 'config' | 'url' | 'credentials' | 'tls' | 'rules' | 'governor'
+  status: 'OK' | 'WARN' | 'FAIL' | 'SKIPPED'
+  code: string | null
+  auth_kind?: 'none' | 'bearer' | 'token' | 'basic'
+}
+
+export interface SourceCheckProfile {
+  profile_id: string
+  source_kind: string
+  transport: string | null
+  arm: string | null
+  query_count: number
+  rule_count: number
+  checks: SourceCheckItem[]
+}
+
+export interface SourceCheckResponse {
+  schema_version: 'source-check.v1'
+  profiles: SourceCheckProfile[]
+}
+
+// Зонд принимает только сохранённый query_id из профиля (ADR 0033, Q1).
+export interface SourceProbeRequest {
+  profile_id: string
+  query_id: string
+  window_ms?: number
+  step_ms?: number
+  end_epoch_ms?: number
+}
+
+export interface SourceProbeSeries {
+  labels: Record<string, string>
+  observed_cells: number
+  expected_cells: number
+}
+
+export interface SourceProbeLabelKey {
+  key: string
+  distinct_values: number
+  sample_values: string[]
+  truncated: boolean
+}
+
+export interface SourceProbeResponse {
+  schema_version: 'source-probe.v1'
+  profile_id: string
+  source_kind: string
+  transport: string
+  mode: 'profile_query'
+  query_id: string
+  expression_sha256: string
+  window: {
+    start_epoch_ms: number
+    end_epoch_ms: number
+    step_ms: number
+    cells: number
+  }
+  status: 'OK' | 'FAILED'
+  code: string | null
+  http_status: number | null
+  series_count: number | null
+  series: SourceProbeSeries[]
+  series_truncated: boolean
+  label_keys: SourceProbeLabelKey[]
+  label_keys_truncated: boolean
+  redacted_count: number
+  warnings: string[]
+  decoder_check: { accepted: boolean; code: string | null } | null
+  request_count: number
+  elapsed_ms: number
+}
+
 export interface PostgresCaptureResponse {
   schema_version: 'postgres-capture.v1'
   phase_json: string

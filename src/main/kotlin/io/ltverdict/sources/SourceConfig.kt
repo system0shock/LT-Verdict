@@ -1315,7 +1315,7 @@ internal class SourceInputFailure(
     val detail: String? = null,
 ) : IllegalArgumentException(code)
 
-private const val MAX_SOURCE_CONFIG_BYTES = 1_048_576
+internal const val MAX_SOURCE_CONFIG_BYTES = 1_048_576
 private const val MAX_SOURCE_REQUEST_BYTES = 16 * 1024
 internal const val MAX_MARGIN_MILLIS = 3_600_000L
 private const val MAX_SCRAPE_INTERVAL_MILLIS = 3_600_000L

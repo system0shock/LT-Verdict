@@ -1,0 +1,30 @@
+{
+  "schema_version": "doctor-report.v1",
+  "online": false,
+  "connections": {
+    "status": "OK",
+    "profile_count": 1
+  },
+  "profiles": [
+    {
+      "profile_id": "prom-main",
+      "source_kind": "prometheus",
+      "transport": "direct",
+      "arm": null,
+      "query_count": 1,
+      "rule_count": 1,
+      "checks": [
+        { "id": "config", "status": "BROKEN", "code": null },
+        { "id": "url", "status": "OK", "code": null }
+      ],
+      "resource_side": "NOT_PROBED"
+    }
+  ],
+  "summary": {
+    "ok": 1,
+    "warn": 0,
+    "fail": 1,
+    "skipped": 0
+  },
+  "resource_side": "NOT_PROBED"
+}

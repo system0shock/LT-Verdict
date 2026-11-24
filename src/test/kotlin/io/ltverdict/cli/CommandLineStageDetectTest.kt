@@ -48,6 +48,10 @@ class CommandLineStageDetectTest {
 
         assertEquals(0, help.exitCode)
         assertTrue(help.stdout.contains("ltv stages detect <input> [--out <file>] [--steady-steps top|all]"), help.stdout)
+        assertTrue(
+            help.stdout.contains("ltv stages detect <input> [--out <file>] [--steady-steps top|all] [--like <load-stages.json>]"),
+            help.stdout,
+        )
     }
 
     @Test
@@ -525,6 +529,157 @@ class CommandLineStageDetectTest {
 
         assertEquals(0, result.exitCode, result.stderr)
         assertTrue(stages(result.stdout).contains("steady:70000-130000"), result.stdout)
+    }
+
+    @Test
+    fun `--like matches a non-canonical example and prints its canonical bytes`() {
+        val result = run("stages", "detect", load.toString(), "--like", example.toString())
+
+        assertEquals(0, result.exitCode, result.stderr)
+        assertEquals(exampleCanonical(), result.stdout)
+        assertTrue(
+            result.stderr.startsWith(
+                "stage_proposal status=MATCHED method=rps-plateau-segmentation.v2 steady_steps=top confidence=HIGH calibrated=false\n",
+            ),
+            result.stderr,
+        )
+        assertTrue(
+            result.stderr.contains(
+                "\nlike stage_id=steady proposal_id=steady declared_from_ms=40000 declared_to_ms=100000 " +
+                    "proposal_from_ms=40000 proposal_to_ms=100000 from_diff_ms=0 to_diff_ms=0 tolerance_ms=10000\n",
+            ),
+            result.stderr,
+        )
+        assertTrue(result.stderr.endsWith("\nnext: run ltv analyze <input> --stages <file>\n"), result.stderr)
+    }
+
+    @Test
+    fun `--like keeps declared bytes within 2W on stdout and --out`() {
+        val jtl = StageProfiles.f1.writeJtl(tempDir.resolve("f1.jtl"))
+        val baseline = run("stages", "detect", jtl.toString())
+        assertEquals(0, baseline.exitCode, baseline.stderr)
+        val steady =
+            Json
+                .parseToJsonElement(baseline.stdout)
+                .jsonObject
+                .getValue("stages")
+                .jsonArray
+                .map { it.jsonObject }
+                .single { it.getValue("role").jsonPrimitive.content == "steady" }
+        val w = Regex("cell_ms=(\\d+)").find(baseline.stderr)!!.groupValues[1].toLong()
+        val from =
+            steady
+                .getValue("from_offset_ms")
+                .jsonPrimitive
+                .content
+                .toLong() + 2 * w
+        val to =
+            steady
+                .getValue("to_offset_ms")
+                .jsonPrimitive
+                .content
+                .toLong() - 2 * w
+        val customDeclared =
+            Files.writeString(
+                tempDir.resolve("declared-2w.json"),
+                """{"schema_version":"load-stages.v1","stages":[{"id":"steady-custom","role":"steady","from_offset_ms":$from,"to_offset_ms":$to}]}""",
+            )
+
+        val matchedStdout = run("stages", "detect", jtl.toString(), "--like", customDeclared.toString())
+        assertEquals(0, matchedStdout.exitCode, matchedStdout.stderr)
+        assertTrue(matchedStdout.stdout.contains("steady-custom"), matchedStdout.stdout)
+        assertTrue(matchedStdout.stderr.contains("from_diff_ms=${2 * w} to_diff_ms=-${2 * w}"), matchedStdout.stderr)
+
+        val out = tempDir.resolve("matched-out.json")
+        val matchedOut = run("stages", "detect", jtl.toString(), "--like", customDeclared.toString(), "--out", out.toString())
+        assertEquals(0, matchedOut.exitCode, matchedOut.stderr)
+        assertEquals("", matchedOut.stdout)
+        assertEquals(matchedStdout.stdout, Files.readString(out))
+    }
+
+    @Test
+    fun `--like refuses large boundary shifts, shape mismatch, and NO_PLATEAU with exit 3 and no --out file`() {
+        val jtl = StageProfiles.f1.writeJtl(tempDir.resolve("f1-refuse.jtl"))
+        val baseline = run("stages", "detect", jtl.toString())
+        val steady =
+            Json
+                .parseToJsonElement(baseline.stdout)
+                .jsonObject
+                .getValue("stages")
+                .jsonArray
+                .map { it.jsonObject }
+                .single { it.getValue("role").jsonPrimitive.content == "steady" }
+        val w = Regex("cell_ms=(\\d+)").find(baseline.stderr)!!.groupValues[1].toLong()
+        val from =
+            steady
+                .getValue("from_offset_ms")
+                .jsonPrimitive
+                .content
+                .toLong() + 10 * w
+        val to =
+            steady
+                .getValue("to_offset_ms")
+                .jsonPrimitive
+                .content
+                .toLong()
+        val shifted =
+            Files.writeString(
+                tempDir.resolve("shifted-10w.json"),
+                """{"schema_version":"load-stages.v1","stages":[{"id":"steady","role":"steady","from_offset_ms":$from,"to_offset_ms":$to}]}""",
+            )
+        val outShifted = tempDir.resolve("never-shifted.json")
+        val refusedShift = run("stages", "detect", jtl.toString(), "--like", shifted.toString(), "--out", outShifted.toString())
+        assertEquals(3, refusedShift.exitCode, refusedShift.stderr)
+        assertEquals("", refusedShift.stdout)
+        assertFalse(Files.exists(outShifted))
+        assertTrue(refusedShift.stderr.contains("status=NOT_MATCHED") && refusedShift.stderr.contains("reason=LIKE_BOUNDARY_SHIFTED"))
+        assertTrue(refusedShift.stderr.contains("\nstage id=steady "), refusedShift.stderr)
+        assertTrue(refusedShift.stderr.contains("\ndetail "), refusedShift.stderr)
+
+        val f2Jtl = StageProfiles.f2.writeJtl(tempDir.resolve("f2.jtl"))
+        val outShape = tempDir.resolve("never-shape.json")
+        val refusedShape = run("stages", "detect", f2Jtl.toString(), "--like", example.toString(), "--out", outShape.toString())
+        assertEquals(3, refusedShape.exitCode, refusedShape.stderr)
+        assertEquals("", refusedShape.stdout)
+        assertFalse(Files.exists(outShape))
+        assertTrue(refusedShape.stderr.contains("reason=LIKE_SHAPE_DIFFERS"), refusedShape.stderr)
+
+        val f4Jtl = StageProfiles.f4.writeJtl(tempDir.resolve("f4.jtl"))
+        val outNoPlateau = tempDir.resolve("never-f4.json")
+        val refusedF4 = run("stages", "detect", f4Jtl.toString(), "--like", example.toString(), "--out", outNoPlateau.toString())
+        assertEquals(3, refusedF4.exitCode, refusedF4.stderr)
+        assertEquals("", refusedF4.stdout)
+        assertFalse(Files.exists(outNoPlateau))
+        assertTrue(refusedF4.stderr.contains("status=NOT_DETECTED") && refusedF4.stderr.contains("reason=NO_PLATEAU"))
+    }
+
+    @Test
+    fun `--like validates arguments and pre-flight stages before reading input`() {
+        val input = load.toString()
+        assertEquals(64, run("stages", "detect", input, "--like").exitCode)
+        assertEquals(64, run("stages", "detect", input, "--like", example.toString(), "--like", example.toString()).exitCode)
+
+        val missing = run("stages", "detect", input, "--like", tempDir.resolve("missing.json").toString())
+        assertEquals(4, missing.exitCode)
+        assertTrue(missing.stderr.startsWith("INVALID_STAGES"), missing.stderr)
+
+        val invalid = run("stages", "detect", input, "--like", "docs/contracts/stages/v1/examples/invalid/no-steady.json")
+        assertEquals(4, invalid.exitCode)
+        assertTrue(invalid.stderr.startsWith("STAGES_NO_STEADY /stages:"), invalid.stderr)
+    }
+
+    @Test
+    fun `--like is deterministic regardless of JTL row order`() {
+        val lines = Files.readAllLines(load)
+        val reversed = tempDir.resolve("reversed-like.jtl")
+        Files.writeString(reversed, (listOf(lines.first()) + lines.drop(1).reversed()).joinToString("\n", postfix = "\n"))
+
+        val first = run("stages", "detect", load.toString(), "--like", example.toString())
+        val second = run("stages", "detect", reversed.toString(), "--like", example.toString())
+
+        assertEquals(0, first.exitCode, first.stderr)
+        assertArrayEquals(first.stdout.toByteArray(UTF_8), second.stdout.toByteArray(UTF_8))
+        assertArrayEquals(first.stderr.toByteArray(UTF_8), second.stderr.toByteArray(UTF_8))
     }
 
     private fun exampleCanonical(): String =

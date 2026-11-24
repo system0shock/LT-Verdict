@@ -324,3 +324,50 @@
   min-width: 0;
   scroll-margin-top: 96px;
 }
+
+.shell .stages-json {
+  width: 100%;
+  min-width: 0;
+  font-family: "Cascadia Mono", Consolas, monospace;
+  font-size: 12px;
+  line-height: 18px;
+  border: 1px solid var(--control-border);
+  border-radius: 4px;
+  background: var(--surface-inset);
+  color: var(--text);
+  padding: 8px 12px;
+  resize: vertical;
+}
+
+.shell .stages-json:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+
+.shell .stages-json:disabled {
+  cursor: not-allowed;
+  opacity: .6;
+}
+
+.shell .stages-explanation {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--shell-radius);
+  background: var(--surface-inset);
+  overflow-wrap: anywhere;
+}
+
+.shell .stages-explanation h4,
+.shell .stages-explanation p,
+.shell .stages-explanation ul {
+  margin: 0;
+}
+
+.shell .stages-explanation ul {
+  padding-left: 20px;
+  display: grid;
+  gap: 4px;
+}

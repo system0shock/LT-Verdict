@@ -854,7 +854,7 @@ private fun readResources(path: Path): ResourceValidation.Valid {
     }
 }
 
-private fun readStages(path: Path): LoadStagesValidation.Valid {
+internal fun readStages(path: Path): LoadStagesValidation.Valid {
     requireRegularFile(path, EXIT_INVALID_INPUT, "INVALID_STAGES")
     val validation =
         try {
@@ -984,7 +984,7 @@ private fun usageText(): String =
             "ltv source hash <resource-snapshot.json> | ltv source hash --run <run-id> --analysis <analysis-id> [--data-dir <path>] | " +
             "ltv doctor --connections <profiles.json> [--profile <id>] [--online] [--format text|json] | " +
             "ltv opensearch prepare --context <file> --templates <file> --load-sha256 <hash> --output-dir <new-dir> | " +
-            "ltv stages detect <input> [--out <file>] [--steady-steps top|all] | " +
+            "ltv stages detect <input> [--out <file>] [--steady-steps top|all] [--like <load-stages.json>] | " +
             "ltv policy validate <policy.json>|- | ltv report <run-id> <analysis-id> " +
             "--format json|html|asciidoc|confluence|svg [--baseline <analysis-result.json>] [--data-dir <path>] | " +
             "ltv summary <run-id> <analysis-id> [--baseline <analysis-result.json>] [--data-dir <path>] | ltv --help | ltv --version" +

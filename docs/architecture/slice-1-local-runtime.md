@@ -331,6 +331,7 @@ GET    /api/bootstrap
 GET    /api/runs?after=<run-id>&limit=1..100
 GET    /api/runs/<run-id>/analyses?after=<analysis-id>&limit=1..100
 POST   /api/inputs
+POST   /api/runs/<run-id>/stage-proposal
 POST   /api/policies/validate
 POST   /api/jobs
 GET    /api/jobs?state=active
@@ -356,7 +357,10 @@ Runs выдаются максимум по `100`, buckets — по `500`. Сп�
 `COMPLETE`, `FAILED` и `CANCELLED`. `GET /api/jobs?state=active` возвращает `{jobs:[JobStatus]}` для
 задач `QUEUED` и `PROCESSING` в порядке принятия (не больше
 `2 * parallelism`); любой другой query даёт `400 MALFORMED_REQUEST`
-(ADR [0015](../adr/0015-list-active-analysis-jobs.md)). Upload ограничен
+(ADR [0015](../adr/0015-list-active-analysis-jobs.md)). `POST /api/runs/<run-id>/stage-proposal`
+принимает пустое тело без query-параметров, проверяет вход на `Dispatchers.IO` (`404` при
+отсутствии или неверном id) и ограничен семафором `Semaphore(1)` (`409 BUSY` при параллельном
+вызове); артефактов в `RunBundle` не сохраняет. Upload ограничен
 4 GiB, policy — 1 MiB.
 
 Handled failures используют envelope

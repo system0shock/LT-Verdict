@@ -49,6 +49,7 @@
 /api/runs/{runId}/analyses/{analysisId}/source-context/{index}/(method:GET)
 /api/runs/{runId}/analyses/{analysisId}/trend-plan/(method:GET)
 /api/runs/{runId}/analyses/{analysisId}/trend/(method:GET)
+/api/runs/{runId}/stage-proposal/(method:POST)
 /api/sources/(method:GET)
 /api/sources/postgresql/post/(method:POST)
 /api/sources/postgresql/pre/(method:POST)

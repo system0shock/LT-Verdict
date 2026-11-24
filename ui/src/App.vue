@@ -41,6 +41,7 @@ import {
   listRuns,
   listSources,
   probeSourceQuery,
+  proposeStages,
   reloadSources,
   uploadInput,
   validatePolicy,
@@ -49,7 +50,7 @@ import {
 import { pairSourceRequests } from './shell/setup'
 import { summarizeVerdict } from './verdictSummary'
 import type { AttentionTarget } from './shell/overview'
-import type { AdvisoryAiConfig, AnalysisResult, AnalysisSummary, Bucket, JobStatus, OpenSearchEvidence, Policy, PolicyError, PostgresContextEvidence, Release, ReleaseAnalysis, RunSummary, SourceCheckResponse, SourceProbeResponse, SourceProfile, SourceRequest, SourceStepMode, Theme } from './types'
+import type { AdvisoryAiConfig, AnalysisResult, AnalysisSummary, Bucket, JobStatus, OpenSearchEvidence, Policy, PolicyError, PostgresContextEvidence, Release, ReleaseAnalysis, RunSummary, SourceCheckResponse, SourceProbeResponse, SourceProfile, SourceRequest, SourceStepMode, StageProposalResponse, Theme } from './types'
 import { COMPARE_LABELS } from './shell/labels.compare'
 import { ANALYTICS_LABELS, DOWNLOAD_LABELS, EN_ANALYTICS_LABELS, EN_DOWNLOAD_LABELS, EXPORT_LABELS } from './shell/labels.export'
 
@@ -145,6 +146,11 @@ const adviceAutoFor = ref<string | null>(null)
 const policy = ref<Policy | null>(null)
 const policyStatus = ref('')
 const policyErrors = ref<PolicyError[]>([])
+const stagesJson = ref('')
+const stageProposal = ref<StageProposalResponse | null>(null)
+const stageProposalError = ref('')
+const stagesErrors = ref<PolicyError[]>([])
+const proposingStages = ref(false)
 const uploadProgress = ref(0)
 const uploading = ref(false)
 const uploadCancelled = ref(false)
@@ -180,6 +186,8 @@ let policyEdits = 0
 let adviceRevision = 0
 let sourceValidationRevision = 0
 let sourceProbeRevision = 0
+let stageProposalRevision = 0
+let uploadedInput: { file: File; run: RunSummary } | null = null
 let uploadAbort: AbortController | null = null
 
 const verdictSummary = computed(() => {
@@ -281,7 +289,13 @@ onMounted(async () => {
 })
 
 function selectInput(file: File | null) {
+  if (file !== uploadedInput?.file) uploadedInput = null
   inputFile.value = file
+  stageProposalRevision += 1
+  proposingStages.value = false
+  stageProposal.value = null
+  stageProposalError.value = ''
+  stagesErrors.value = []
   queueBusy.value = false
   uploadCancelled.value = false
   errorMessage.value = ''
@@ -344,7 +358,7 @@ function sourceOperationErrorText(failure: unknown): string {
 }
 
 function sourcesBusy() {
-  return working.value || (uploadProgress.value > 0 && !job.value) || !!postgresCapturePhase.value || trialBusy.value
+  return working.value || (uploadProgress.value > 0 && !job.value) || !!postgresCapturePhase.value || trialBusy.value || proposingStages.value
 }
 
 async function reloadSourceProfiles() {
@@ -546,8 +560,74 @@ async function validateDraft(draft: Policy | File): Promise<Policy | null> {
   }
 }
 
+async function ensureUploadedInput(file: File, isCurrent: () => boolean): Promise<RunSummary> {
+  if (uploadedInput && uploadedInput.file === file) {
+    currentRun.value = uploadedInput.run
+    return uploadedInput.run
+  }
+  const controller = new AbortController()
+  uploadAbort = controller
+  uploading.value = true
+  uploadProgress.value = 1
+  let accepted: RunSummary
+  try {
+    accepted = await uploadInput(
+      file,
+      (value) => (uploadProgress.value = Math.max(1, value)),
+      controller.signal,
+    )
+  } finally {
+    if (uploadAbort === controller) {
+      uploadAbort = null
+      uploading.value = false
+    }
+  }
+  if (inputFile.value === file) uploadedInput = { file, run: accepted }
+  if (!isCurrent()) return accepted
+  currentRun.value = accepted
+  await refreshRuns()
+  return accepted
+}
+
+async function requestStageProposal() {
+  if (!shellNew || !inputFile.value || proposingStages.value || working.value || (uploadProgress.value > 0 && !job.value) || postgresCapturePhase.value || trialBusy.value) return
+  const file = inputFile.value
+  const revision = ++stageProposalRevision
+  proposingStages.value = true
+  queueBusy.value = false
+  uploadCancelled.value = false
+  errorMessage.value = ''
+  stageProposalError.value = ''
+  stagesErrors.value = []
+  try {
+    const run = await ensureUploadedInput(file, () => revision === stageProposalRevision)
+    if (revision !== stageProposalRevision) return
+    uploadProgress.value = 0
+    const proposal = await proposeStages(run.run_id)
+    if (revision !== stageProposalRevision) return
+    stageProposal.value = proposal
+    if (proposal.status === 'DETECTED' && proposal.proposal) {
+      stagesJson.value = JSON.stringify(proposal.proposal, null, 2)
+    }
+  } catch (failure) {
+    if (revision !== stageProposalRevision) return
+    uploadProgress.value = 0
+    if (failure instanceof DOMException && failure.name === 'AbortError') {
+      uploadCancelled.value = true
+      return
+    }
+    if (failure instanceof ApiError && failure.code === 'BUSY') {
+      stageProposalError.value = SETUP_LABELS.stagesBusy
+    } else {
+      stageProposalError.value = failure instanceof ApiError || failure instanceof Error ? failure.message : 'Unexpected local application error.'
+    }
+  } finally {
+    if (revision === stageProposalRevision) proposingStages.value = false
+  }
+}
+
 async function analyze(pairSlots?: string[][]) {
-  if (!inputFile.value || working.value || postgresCapturePhase.value) return
+  if (!inputFile.value || working.value || postgresCapturePhase.value || proposingStages.value) return
   if (pairSlots && !sourceRequestState.value.request) return
   if (sourceRequestState.value.error) {
     errorMessage.value = sourceRequestState.value.error
@@ -565,11 +645,13 @@ async function analyze(pairSlots?: string[][]) {
     errorMessage.value = setupMsg.trendNeedsSnapshot
     return
   }
+  const file = inputFile.value
   const revision = ++analysisRevision
   const tabAtStart = tabRevision
   adviceAutoFor.value = null
   queueBusy.value = false
   errorMessage.value = ''
+  stagesErrors.value = []
   result.value = null
   buckets.value = []
   selectedAnalysisId.value = null
@@ -591,25 +673,10 @@ async function analyze(pairSlots?: string[][]) {
       return
     }
     if (revision !== analysisRevision) return
-    const controller = new AbortController()
-    uploadAbort = controller
-    uploading.value = true
-    let accepted: RunSummary
-    try {
-      accepted = await uploadInput(
-        inputFile.value,
-        (value) => (uploadProgress.value = Math.max(1, value)),
-        controller.signal,
-      )
-    } finally {
-      if (uploadAbort === controller) {
-        uploadAbort = null
-        uploading.value = false
-      }
-    }
+    const accepted = await ensureUploadedInput(file, () => revision === analysisRevision)
     if (revision !== analysisRevision) return
-    currentRun.value = accepted
-    await refreshRuns()
+    const stagesText = shellNew ? stagesJson.value.trim() : ''
+    const stagesBlob = stagesText ? new Blob([stagesText], { type: 'application/json' }) : null
     // Пара плеч: тот же загруженный вход, по заданию на плечо, строго по очереди; одиночный запуск - один проход цикла.
     const requests = pairSlots ? pairSourceRequests(sourceRequestState.value.request!, pairSlots) : [sourceRequestState.value.request]
     for (const [index, request] of requests.entries()) {
@@ -625,6 +692,7 @@ async function analyze(pairSlots?: string[][]) {
         pgProfileHtmlFile.value,
         capacityFile.value,
         trendFile.value,
+        stagesBlob,
       )
       if (index === 0) {
         // Запрос ИИ-разбора относится к этому запуску: запоминаем его и сбрасываем переключатель.
@@ -638,8 +706,15 @@ async function analyze(pairSlots?: string[][]) {
   } catch (failure) {
     if (revision !== analysisRevision) return
     uploadProgress.value = 0
-    if (failure instanceof ApiError && failure.code === 'BUSY') queueBusy.value = true
-    else showError(failure)
+    if (failure instanceof ApiError && failure.code === 'INVALID_STAGES') {
+      stagesErrors.value = failure.details.length
+        ? failure.details
+        : [{ code: failure.code, json_pointer: '/stages', message: failure.message }]
+    } else if (failure instanceof ApiError && failure.code === 'BUSY') {
+      queueBusy.value = true
+    } else {
+      showError(failure)
+    }
   }
 }
 
@@ -776,6 +851,8 @@ function cancelUpload() {
   if (!uploadAbort) return
   const controller = uploadAbort
   analysisRevision += 1
+  stageProposalRevision += 1
+  proposingStages.value = false
   uploadProgress.value = 0
   uploadCancelled.value = true
   uploadAbort = null
@@ -1242,10 +1319,15 @@ function focusPolicy() {
             :policy="policy"
             :policy-status="policyStatus"
             :policy-errors="policyErrors"
-            :busy="working || (uploadProgress > 0 && !job) || !!postgresCapturePhase || trialBusy"
+            :busy="working || (uploadProgress > 0 && !job) || !!postgresCapturePhase || trialBusy || proposingStages"
             :ai-requested="shellNew ? aiRequested : undefined"
             :ai-config="shellNew ? aiConfig : undefined"
             :ai-model="shellNew ? aiModel : undefined"
+            :stages-json="shellNew ? stagesJson : undefined"
+            :stage-proposal="shellNew ? stageProposal : undefined"
+            :stage-proposal-error="shellNew ? stageProposalError : undefined"
+            :stages-errors="shellNew ? stagesErrors : undefined"
+            :proposing-stages="shellNew ? proposingStages : undefined"
 
             @input="selectInput"
             @resources="selectResources"
@@ -1274,6 +1356,8 @@ function focusPolicy() {
             @open-rules="activeTab = 'rules'"
             @ai-requested="aiRequested = $event"
             @ai-model="aiModel = $event"
+            @stages-json="stagesJson = $event; stagesErrors = []"
+            @propose-stages="requestStageProposal"
             @analyze="analyze"
             @analyze-pair="analyze"
           />

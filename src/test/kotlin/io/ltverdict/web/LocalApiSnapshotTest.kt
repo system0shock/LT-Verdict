@@ -350,6 +350,11 @@ class LocalApiSnapshotTest {
             record("GET /api/runs/{runId}/analyses?limit=1", api.get("$base?limit=1"))
             record("GET /api/runs/{runId}/analyses?limit=0", api.get("$base?limit=0"))
             record("GET /api/runs/{unknown}/analyses", api.get("/api/runs/jmeter_jtl_csv-${"1".repeat(64)}/analyses"))
+            record("POST /api/runs/{runId}/stage-proposal", api.post("/api/runs/$runId/stage-proposal", "application/json", none))
+            record(
+                "POST /api/runs/{unknown}/stage-proposal",
+                api.post("/api/runs/jmeter_jtl_csv-${"1".repeat(64)}/stage-proposal", "application/json", none),
+            )
             for (id in listOf(bareId, resourceId, passId)) {
                 val path = "$base/$id"
                 record("GET .../{analysisId}/result", api.get("$path/result"))

@@ -16,6 +16,7 @@ export interface ReadinessInput {
   sourceRequestError: string
   contextCount: number
   postgres: { pre: boolean; post: boolean; html: boolean }
+  hasStages?: boolean
   // Только при включённом запуске пары плеч: причины блокировки и метки плеч (пусто, пока плечи не определены).
   pair?: { blockers: string[]; arms: string[] } | null
 }
@@ -93,6 +94,7 @@ export function buildReadiness(input: ReadinessInput): Readiness {
   const blockers = items.filter((item) => item.level === 'block').map((item) => item.key)
   const will = [
     input.policyId !== null && !input.policyHasErrors ? SETUP_LABELS.willVerdict(input.policyId) : SETUP_LABELS.willNoVerdict,
+    input.hasStages ? SETUP_LABELS.willStages : null,
     input.onlineProfileCount > 0 ? SETUP_LABELS.willResourcesOnline : input.resourceName ? SETUP_LABELS.willResourcesFile : null,
     planNames ? SETUP_LABELS.willPlans(planNames) : null,
     input.contextCount > 0 ? SETUP_LABELS.willContext : null,

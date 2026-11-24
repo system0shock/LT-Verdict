@@ -1,6 +1,12 @@
 package io.ltverdict.cli
 
+import io.ltverdict.core.INCIDENT_METHOD
+import io.ltverdict.core.canonicalJson
 import io.ltverdict.core.sha256Hex
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 import org.junit.jupiter.api.Assertions.assertArrayEquals
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertTrue
@@ -85,24 +91,57 @@ class TypedBoundaryGoldenBytesTest {
             assertArrayEquals(result, stdout.toByteArray(), "${case.name}: stdout is the stored result")
             assertEquals(analysis.fileName.toString().length, 64)
 
-            val golden = Path.of("fixtures/typed-boundary/golden").resolve(case.name)
+            val goldenPreIncident = Path.of("fixtures/typed-boundary/golden").resolve(case.name)
+            val goldenIncidents = Path.of("fixtures/typed-boundary/golden-incidents").resolve(case.name)
             if (update) {
-                Files.createDirectories(golden)
-                Files.write(golden.resolve("analysis-result.json"), result)
-                Files.write(golden.resolve("identity.json"), identity)
-                Files.writeString(golden.resolve("analysis_id.txt"), analysis.fileName.toString() + "\n")
+                Files.createDirectories(goldenIncidents)
+                Files.write(goldenIncidents.resolve("analysis-result.json"), result)
+                Files.write(goldenIncidents.resolve("identity.json"), identity)
+                Files.writeString(goldenIncidents.resolve("analysis_id.txt"), analysis.fileName.toString() + "\n")
                 if (case.name ==
                     "csv-pass"
                 ) {
-                    compactBundle(dataDir.resolve("runs/$runId"), analysis, Path.of("fixtures/typed-boundary/bundle-v1"))
+                    compactBundle(dataDir.resolve("runs/$runId"), analysis, Path.of("fixtures/typed-boundary/bundle-v2"))
                 }
             }
-            assertArrayEquals(Files.readAllBytes(golden.resolve("analysis-result.json")), result, "${case.name}: analysis-result.json")
-            assertArrayEquals(Files.readAllBytes(golden.resolve("identity.json")), identity, "${case.name}: identity.json")
+            assertArrayEquals(
+                Files.readAllBytes(goldenIncidents.resolve("analysis-result.json")),
+                result,
+                "${case.name}: golden-incidents analysis-result.json",
+            )
+            assertArrayEquals(
+                Files.readAllBytes(goldenIncidents.resolve("identity.json")),
+                identity,
+                "${case.name}: golden-incidents identity.json",
+            )
             assertEquals(
-                Files.readString(golden.resolve("analysis_id.txt")).trim(),
+                Files.readString(goldenIncidents.resolve("analysis_id.txt")).trim(),
                 analysis.fileName.toString(),
-                "${case.name}: analysis_id",
+                "${case.name}: golden-incidents analysis_id",
+            )
+
+            // Ruling S4: pre-incident goldens remain unchanged and must match when `incidents` and `incident_method` are stripped.
+            val resultObj = Json.parseToJsonElement(result.decodeToString()).jsonObject
+            val identityObj = Json.parseToJsonElement(identity.decodeToString()).jsonObject
+            assertTrue(resultObj.containsKey("incidents"), "${case.name}: missing incidents")
+            assertEquals(INCIDENT_METHOD, identityObj["incident_method"]?.jsonPrimitive?.content, "${case.name}: missing incident_method")
+
+            val strippedResult = canonicalJson(JsonObject(resultObj - "incidents"))
+            val strippedIdentity = canonicalJson(JsonObject(identityObj - "incident_method"))
+            assertArrayEquals(
+                Files.readAllBytes(goldenPreIncident.resolve("analysis-result.json")),
+                strippedResult,
+                "${case.name}: pre-incident analysis-result.json",
+            )
+            assertArrayEquals(
+                Files.readAllBytes(goldenPreIncident.resolve("identity.json")),
+                strippedIdentity,
+                "${case.name}: pre-incident identity.json",
+            )
+            assertEquals(
+                Files.readString(goldenPreIncident.resolve("analysis_id.txt")).trim(),
+                sha256Hex(strippedIdentity),
+                "${case.name}: pre-incident analysis_id",
             )
         }
     }

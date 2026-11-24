@@ -38,10 +38,27 @@ internal class IncidentSeries(
     val role: String?,
 )
 
+internal val INCIDENT_EVIDENCE_TYPES =
+    setOf(
+        "policy_check",
+        "metric_summary",
+        "window_policy_summary",
+        "resource_binding",
+        "resource_summary",
+        "resource_policy_check",
+        "anomaly_check",
+        "trend_check",
+        "rule_window_check",
+    )
+
 internal class IncidentEvidenceIndex(
     private val evidence: List<JsonObject>,
 ) {
-    val byId: Map<String, JsonObject> = evidence.mapNotNull { item -> item.string("id")?.let { it to item } }.toMap()
+    val byId: Map<String, JsonObject> =
+        evidence
+            .filter { it.string("type") in INCIDENT_EVIDENCE_TYPES }
+            .mapNotNull { item -> item.string("id")?.let { it to item } }
+            .toMap()
     val hasBinding: Boolean = evidence.any { it.string("type") == "resource_binding" }
 
     private fun ofType(type: String): List<JsonObject> = evidence.filter { it.string("type") == type }

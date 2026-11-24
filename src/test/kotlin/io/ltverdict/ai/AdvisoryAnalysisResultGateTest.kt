@@ -34,6 +34,8 @@ class AdvisoryAnalysisResultGateTest {
             setOf(
                 base.keys,
                 base.keys + "capacity_summary",
+                base.keys + "incidents",
+                base.keys + "capacity_summary" + "incidents",
             )
         if (document.keys !in sets) return AdviceFailure.INVALID_ANALYSIS
 

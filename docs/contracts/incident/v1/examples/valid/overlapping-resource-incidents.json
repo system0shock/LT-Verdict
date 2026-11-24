@@ -70,6 +70,15 @@
           "evidence_ids": [
             "anomaly-check-8426f2ef8e17ca8c"
           ]
+        },
+        {
+          "check": "CHECKS_NOT_EVALUATED",
+          "outcome": "NOT_EVALUATED",
+          "reason_code": "MISSING_RESOURCE_CELLS",
+          "text": "Часть проверок в окне steady не выполнена: 1; код: MISSING_RESOURCE_CELLS.",
+          "evidence_ids": [
+            "resource-policy-check-1c8569158e6a2911"
+          ]
         }
       ],
       "next_checks": [
@@ -84,6 +93,13 @@
           "check": "OPEN_SAME_WINDOW_SIGNALS",
           "text": "Открыть сигналы окна steady, совпавшие по времени: 1.",
           "evidence_ids": []
+        },
+        {
+          "check": "COMPLETE_NOT_EVALUATED_CHECKS",
+          "text": "Устранить недостаток данных для проверок, помеченных как не выполненные.",
+          "evidence_ids": [
+            "resource-policy-check-1c8569158e6a2911"
+          ]
         }
       ],
       "coincident_with": [
@@ -139,6 +155,14 @@
       ],
       "refs_truncated": false,
       "negative_evidence": [
+        {
+          "check": "NO_ANOMALY_EPISODES",
+          "outcome": "NOT_CONFIRMED",
+          "text": "Проверки отклонений в окне steady не нашли эпизодов: 1.",
+          "evidence_ids": [
+            "anomaly-check-8426f2ef8e17ca8c"
+          ]
+        },
         {
           "check": "CHECKS_NOT_EVALUATED",
           "outcome": "NOT_EVALUATED",

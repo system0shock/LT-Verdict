@@ -39,7 +39,13 @@ class RunTimelineReportTest {
         val actual =
             inputs.mapValues { (name, input) ->
                 val outcome = StagedResults.analyze(tempDir.resolve(name), input.first, input.second)
-                sha256(renderHtmlReport(outcome.canonicalResult, "fixed", readErrorGroupsFile(outcome.analysisDirectory)))
+                sha256(
+                    renderHtmlReport(
+                        StagedResults.withoutIncidents(outcome.canonicalResult),
+                        "fixed",
+                        readErrorGroupsFile(outcome.analysisDirectory),
+                    ),
+                )
             }
         assertEquals(expected, actual)
     }

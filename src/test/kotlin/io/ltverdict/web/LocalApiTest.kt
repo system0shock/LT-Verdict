@@ -2953,6 +2953,7 @@ class LocalApiTest {
                     "analysis_coverage",
                     "findings",
                     "evidence",
+                    "incidents",
                 ),
                 resultJson.keys,
             )

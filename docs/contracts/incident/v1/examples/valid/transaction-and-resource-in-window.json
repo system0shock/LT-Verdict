@@ -73,6 +73,15 @@
           ]
         },
         {
+          "check": "RESOURCE_RULES_WITHIN_LIMITS",
+          "outcome": "NOT_CONFIRMED",
+          "text": "Правила ресурсов в окне steady не нарушены: проверок 2.",
+          "evidence_ids": [
+            "resource-policy-check-b116a11bd1d980c0",
+            "resource-policy-check-bd6c804476258fba"
+          ]
+        },
+        {
           "check": "GENERATOR_RESOURCES_WITHIN_LIMITS",
           "outcome": "NOT_CONFIRMED",
           "text": "Правила ресурсов нагрузочного генератора в окне steady не нарушены: проверок 1.",
@@ -166,6 +175,14 @@
           "evidence_ids": [
             "resource-policy-check-b116a11bd1d980c0",
             "resource-policy-check-bd6c804476258fba"
+          ]
+        },
+        {
+          "check": "GENERATOR_RESOURCES_WITHIN_LIMITS",
+          "outcome": "NOT_CONFIRMED",
+          "text": "Правила ресурсов нагрузочного генератора в окне steady не нарушены: проверок 1.",
+          "evidence_ids": [
+            "resource-policy-check-c9de125c60d7f70a"
           ]
         },
         {

@@ -119,19 +119,19 @@
     },
     {
       "path": "fixtures/slice1/identity/analysis-identity-resources.sha256",
-      "sha256": "63ad6daa26f4dd26e3f3ce856f28f8d1993cfba4bda01ed4af2f9cc52ca5c971"
+      "sha256": "bdd5b0bbde96575a9edfd8cf894d0986fb30d2c9e4f4b5101a1b9ef0787ac9f1"
     },
     {
       "path": "fixtures/slice1/identity/analysis-identity-resources.v1.json",
-      "sha256": "899d77d66167f09c70b6aa82235ea329319b5fb8788d4c39915e30b8f7fbe749"
+      "sha256": "b89a6640e6bed5705b9250a772c806b2bba308b1118805d66d0f895bfbcf7442"
     },
     {
       "path": "fixtures/slice1/identity/analysis-identity.sha256",
-      "sha256": "10d2d19699a6cdcd1fbf7c2dd9c20ab513a76262948874db3e5f4d0a7c3601c8"
+      "sha256": "b6e020cca433d644491023a66752d62176e9374815d571e514e31e0b323e03ec"
     },
     {
       "path": "fixtures/slice1/identity/analysis-identity.v1.json",
-      "sha256": "b54b23bf045dc8c8eabcb2f7542f7ce75a0b2a202a98d9d871b81d9b1fe0377e"
+      "sha256": "c1d9f0c6f7400920caa4ccc68d067eddbe093a22bce15af9b1fa29ef4ee53d90"
     },
     {
       "path": "fixtures/slice1/identity/legacy-pre-adr-0016.v1.json",

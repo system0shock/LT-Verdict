@@ -12,6 +12,7 @@ export interface AnalysisResultDocument {
   findings: Array<Record<string, unknown>>
   evidence: Array<Record<string, unknown>>
   capacity_summary?: Record<string, unknown>
+  incidents?: Record<string, unknown>
 }
 
 export type AnalysisMode = 'standard' | 'capacity_step'
@@ -49,6 +50,7 @@ export interface AnalysisIdentityDocument {
   pod_view_version?: string
   load_stages_sha256?: string
   load_stages_version?: string
+  incident_method?: string
   engine: ComponentRef
   parsers: Array<ComponentRef>
   modules: Array<ComponentRef>

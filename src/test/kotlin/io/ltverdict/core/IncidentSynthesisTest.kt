@@ -76,45 +76,7 @@ class IncidentSynthesisTest {
                 .filter { it.startsWith("contract-") }
                 .map { it.removePrefix("contract-") }
                 .sorted()
-        // The two examples that show a window-wide check on one incident of the window only are not outputs of ADR 0029 for any input;
-        // they are checked by `the two examples ...` below through their variant fixtures.
-        assertEquals(examples - NOT_EXACT.keys, cases)
-    }
-
-    @Test
-    fun `the two examples that show a window-wide check on one incident only differ from the output by exactly those checks`() {
-        for ((example, variant) in NOT_EXACT) {
-            val case = FIXTURES.resolve(variant.fixture)
-            val input = Json.parseToJsonElement(Files.readString(case.resolve("input.json"))).jsonObject
-            val actual =
-                synthesizeIncidents(
-                    RunValidity.valueOf(input.getValue("run_validity").jsonPrimitive.content),
-                    input.getValue("findings").jsonArray.map { it.jsonObject },
-                    input.getValue("evidence").jsonArray.map { it.jsonObject },
-                )
-            var removed = 0
-            val trimmed =
-                actual.items().mapIndexed { position, item ->
-                    val (negative, next) = variant.extra.getValue(position)
-                    val negatives = item.getValue("negative_evidence").jsonArray.filter { it.jsonObject.str("check") !in negative }
-                    val nexts = item.getValue("next_checks").jsonArray.filter { it.jsonObject.str("check") !in next }
-                    removed +=
-                        item.getValue("negative_evidence").jsonArray.size - negatives.size + item.getValue("next_checks").jsonArray.size -
-                        nexts.size
-                    JsonObject(item + mapOf("negative_evidence" to JsonArray(negatives), "next_checks" to JsonArray(nexts)))
-                }
-            assertEquals(variant.extra.values.sumOf { it.first.size + it.second.size }, removed, example)
-            val expected =
-                Json
-                    .parseToJsonElement(
-                        Files.readString(Path.of("docs/contracts/incident/v1/examples/valid/$example.json")),
-                    ).jsonObject
-            assertEquals(
-                String(canonicalJson(expected)),
-                String(canonicalJson(JsonObject(actual + mapOf("items" to JsonArray(trimmed))))),
-                example,
-            )
-        }
+        assertEquals(examples, cases)
     }
 
     // ------------------------------------------------------------------------------------------ status, shape, explicit nulls
@@ -332,6 +294,32 @@ class IncidentSynthesisTest {
         dupEvidence.evidence += dupEvidence.evidence.first()
         assertThrows(IllegalArgumentException::class.java) { dupEvidence.run() }
         assertThrows(IllegalArgumentException::class.java) { dupFindings.run(RunValidity.INVALID) }
+    }
+
+    @Test
+    fun `repeated ids on ignored evidence or finding types such as opensearch_errors succeed deterministically`() {
+        val case =
+            Case().apply {
+                tx("1", "steady", "login")
+                evidence += obj("type" to "opensearch_errors", "id" to "opensearch-errors:errors", "profile_id" to "errors-a")
+                evidence += obj("type" to "opensearch_errors", "id" to "opensearch-errors:errors", "profile_id" to "errors-b")
+                // Even if an ignored type shares an id with a supported type, it must not collide in byId or fail synthesis.
+                evidence += obj("type" to "source_summary", "id" to "pc-1", "status" to "COMPLETE")
+                findings += obj("type" to "correlation_candidate", "id" to "ignored-dup", "window_id" to "steady")
+                findings += obj("type" to "correlation_candidate", "id" to "ignored-dup", "window_id" to "steady")
+            }
+        val expected = Case().apply { tx("1", "steady", "login") }.run()
+        val actual = case.run()
+        assertEquals(String(canonicalJson(expected)), String(canonicalJson(actual)))
+
+        val random = Random(42L)
+        repeat(3) {
+            val shuffled = synthesizeIncidents(RunValidity.VALID, case.findings.shuffled(random), case.evidence.shuffled(random))
+            assertEquals(String(canonicalJson(actual)), String(canonicalJson(shuffled)))
+        }
+        val invalid = case.run(RunValidity.INVALID)
+        assertEquals("NOT_EVALUATED", invalid.str("status"))
+        assertTrue(invalid.items().isEmpty())
     }
 
     @Test
@@ -1409,34 +1397,6 @@ class IncidentSynthesisTest {
             )
 
         private val FIXTURES: Path = Path.of("fixtures/incidents")
-
-        /** An example of the contract that no input reproduces, the fixture with the input of a variant and what the output adds, by rank. */
-        private class Variant(
-            val fixture: String,
-            val extra: Map<Int, Pair<Set<String>, Set<String>>>,
-        )
-
-        private val NOT_EXACT =
-            mapOf(
-                // the example gives the transaction no RESOURCE_RULES_WITHIN_LIMITS and the resource incident no GENERATOR_RESOURCES_WITHIN_LIMITS
-                "transaction-and-resource-in-window" to
-                    Variant(
-                        "both-families-in-window",
-                        mapOf(
-                            0 to (setOf("RESOURCE_RULES_WITHIN_LIMITS") to emptySet()),
-                            1 to (setOf("GENERATOR_RESOURCES_WITHIN_LIMITS") to emptySet()),
-                        ),
-                    ),
-                // the example gives host-a no CHECKS_NOT_EVALUATED and host-b no NO_ANOMALY_EPISODES, though both checks are of the whole window
-                "overlapping-resource-incidents" to
-                    Variant(
-                        "entity-neighbours-in-window",
-                        mapOf(
-                            0 to (setOf("CHECKS_NOT_EVALUATED") to setOf("COMPLETE_NOT_EVALUATED_CHECKS")),
-                            1 to (setOf("NO_ANOMALY_EPISODES") to emptySet()),
-                        ),
-                    ),
-            )
 
         private fun fixtureCases(): List<Path> =
             Files.list(FIXTURES).use { stream -> stream.filter { Files.isDirectory(it) }.sorted().toList() }

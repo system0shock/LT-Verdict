@@ -70,4 +70,10 @@ internal object StagedResults {
             }
         return canonicalJson(JsonObject(root + ("evidence" to JsonArray(evidence))))
     }
+
+    /** Removes `incidents` from a result so pre-incident report goldens keep proving nothing else in report rendering changed. */
+    fun withoutIncidents(result: ByteArray): ByteArray {
+        val root = Json.parseToJsonElement(result.decodeToString()).jsonObject
+        return canonicalJson(JsonObject(root - "incidents"))
+    }
 }

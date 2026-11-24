@@ -34,6 +34,7 @@ internal data class AnalysisResultDocument(
     val findings: List<JsonObject>,
     val evidence: List<JsonObject>,
     @SerialName("capacity_summary") val capacitySummary: JsonObject? = null,
+    @SerialName("incidents") val incidents: JsonObject? = null,
 )
 
 @Serializable
@@ -111,6 +112,7 @@ internal data class AnalysisIdentityDocument(
     @SerialName("pod_view_version") val podViewVersion: String? = null,
     @SerialName("load_stages_sha256") val loadStagesSha256: String? = null,
     @SerialName("load_stages_version") val loadStagesVersion: String? = null,
+    @SerialName("incident_method") val incidentMethod: String? = null,
     val engine: ComponentRef,
     val parsers: List<ComponentRef>,
     val modules: List<ComponentRef>,
@@ -128,15 +130,15 @@ private val RESULT_ALLOWED_KEYS = (0 until RESULT_FIELDS.elementsCount).map(RESU
 
 /**
  * True when the document has every required field of [AnalysisResultDocument] and no field outside it. Optional fields
- * (today `capacity_summary`; the ADR 0029 `incidents` field when it is added to the model) may each be present or absent.
+ * (`capacity_summary` and the ADR 0029 `incidents` field) may each be present or absent.
  */
 internal fun hasSupportedAnalysisResultKeys(document: JsonObject): Boolean =
     document.keys.containsAll(RESULT_REQUIRED_KEYS) && RESULT_ALLOWED_KEYS.containsAll(document.keys)
 
 /**
- * `findings`, `evidence` and `capacity_summary` are opaque JSON payloads in this slice. They are spliced into the encoded
- * tree instead of going through the serializer: kotlinx writes a JsonElement number as Long or Double, which would round
- * "12345678901234567890.5" or fail on "1e400". Any new payload field (ADR 0029 `incidents`) must be spliced the same way;
+ * `findings`, `evidence`, `capacity_summary` and `incidents` are opaque JSON payloads in this slice. They are spliced into the
+ * encoded tree instead of going through the serializer: kotlinx writes a JsonElement number as Long or Double, which would round
+ * "12345678901234567890.5" or fail on "1e400", and `explicitNulls = false` would strip explicit nulls required by incident.v1.
  * AnalysisDocumentsEquivalenceTest compares wide numbers in every payload.
  */
 internal fun encodeAnalysisResult(document: AnalysisResultDocument): ByteArray {
@@ -145,10 +147,12 @@ internal fun encodeAnalysisResult(document: AnalysisResultDocument): ByteArray {
             findings = emptyList(),
             evidence = emptyList(),
             capacitySummary = document.capacitySummary?.let { JsonObject(emptyMap()) },
+            incidents = document.incidents?.let { JsonObject(emptyMap()) },
         )
     val tree = ANALYSIS_DOCUMENT_JSON.encodeToJsonElement(AnalysisResultDocument.serializer(), shell).jsonObject
     val payloads = mutableMapOf<String, JsonElement>("findings" to JsonArray(document.findings), "evidence" to JsonArray(document.evidence))
     document.capacitySummary?.let { payloads["capacity_summary"] = it }
+    document.incidents?.let { payloads["incidents"] = it }
     return canonicalJson(JsonObject(tree + payloads))
 }
 

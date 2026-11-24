@@ -61,16 +61,26 @@ internal fun incidentDisplayName(name: String): String {
     return text.substring(0, text.offsetByCodePoints(0, INCIDENT_NAME_CODE_POINTS_MAX - 1)) + "…"
 }
 
+private val INCIDENT_FINDING_TYPES =
+    setOf(
+        "policy_failure",
+        "resource_threshold_violation",
+        "anomaly_episode",
+        "resource_trend",
+    )
+
 internal fun synthesizeIncidents(
     validity: RunValidity,
     findings: List<JsonObject>,
     evidence: List<JsonObject>,
 ): JsonObject {
-    requireUniqueIds(findings, "findings")
-    requireUniqueIds(evidence, "evidence")
+    val supportedFindings = findings.filter { it.string("type") in INCIDENT_FINDING_TYPES }
+    val supportedEvidence = evidence.filter { it.string("type") in INCIDENT_EVIDENCE_TYPES }
+    requireUniqueIds(supportedFindings, "findings")
+    requireUniqueIds(supportedEvidence, "evidence")
     if (validity == RunValidity.INVALID) return incidentDocument(notEvaluated = true, total = 0, omitted = 0, items = emptyList())
-    val index = IncidentEvidenceIndex(evidence)
-    val drafts = group(findings.mapNotNull { atomOf(it, index) })
+    val index = IncidentEvidenceIndex(supportedEvidence)
+    val drafts = group(supportedFindings.mapNotNull { atomOf(it, index) })
     val stored = drafts.sortedWith(PRIORITY_ORDER).take(INCIDENT_STORED_MAX)
     val links = stored.map { draft -> eligibleLinks(draft, stored) }
     val items = stored.mapIndexed { position, draft -> incidentItem(position + 1, draft, links[position], validity, index) }

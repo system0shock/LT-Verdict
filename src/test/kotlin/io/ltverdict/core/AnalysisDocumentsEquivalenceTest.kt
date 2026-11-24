@@ -107,17 +107,20 @@ class AnalysisDocumentsEquivalenceTest {
                                     pod,
                                 )
                             val actual =
-                                analysisIdentity(
-                                    accepted,
-                                    policy,
-                                    config,
-                                    resource,
-                                    diag,
-                                    optionalHashes,
-                                    optionalHashes,
-                                    cap,
-                                    trendPlan,
-                                    pod,
+                                stripTopLevelKey(
+                                    analysisIdentity(
+                                        accepted,
+                                        policy,
+                                        config,
+                                        resource,
+                                        diag,
+                                        optionalHashes,
+                                        optionalHashes,
+                                        cap,
+                                        trendPlan,
+                                        pod,
+                                    ),
+                                    "incident_method",
                                 )
                             assertArrayEquals(expected, actual, "$type $config ${policy?.sha256} ${resource?.semanticSha256} $extras")
                             assertEquals(sha256Hex(expected), sha256Hex(actual))
@@ -136,7 +139,7 @@ class AnalysisDocumentsEquivalenceTest {
             val accepted = input(SourceType.JMETER_CSV, runId)
             assertArrayEquals(
                 legacyAnalysisIdentity(accepted, null, EngineConfig()),
-                analysisIdentity(accepted, null, EngineConfig()),
+                stripTopLevelKey(analysisIdentity(accepted, null, EngineConfig()), "incident_method"),
                 runId,
             )
         }
@@ -180,7 +183,7 @@ class AnalysisDocumentsEquivalenceTest {
                                 )) {
                                     val evaluation = PolicyEvaluation(verdict, reasons, findings, evidence)
                                     val expected = legacyAnalysisResult("run-1", validity, evaluation, mode, cap)
-                                    val actual = analysisResult("run-1", validity, evaluation, mode, cap)
+                                    val actual = stripTopLevelKey(analysisResult("run-1", validity, evaluation, mode, cap), "incidents")
                                     assertEquals(expected.decodeToString(), actual.decodeToString())
                                     assertArrayEquals(expected, actual)
                                     compared++
@@ -201,14 +204,17 @@ class AnalysisDocumentsEquivalenceTest {
                 "fixtures/slice1/identity/analysis-identity.v1.json",
                 "fixtures/slice1/identity/analysis-identity-resources.v1.json",
                 "fixtures/slice1/identity/legacy-pre-adr-0016.v1.json",
-            ) + goldenFiles("identity.json")
+            ) + goldenFiles("fixtures/typed-boundary/golden", "identity.json") +
+                goldenFiles("fixtures/typed-boundary/golden-incidents", "identity.json")
         identityFiles.forEach { file ->
             val bytes = Files.readAllBytes(Path.of(file))
             val document = ANALYSIS_DOCUMENT_JSON.decodeFromString(AnalysisIdentityDocument.serializer(), bytes.decodeToString())
             assertArrayEquals(bytes, encodeAnalysisIdentity(document), file)
         }
-        val resultFiles = goldenFiles("analysis-result.json")
-        assertTrue(resultFiles.size >= 8)
+        val resultFiles =
+            goldenFiles("fixtures/typed-boundary/golden", "analysis-result.json") +
+                goldenFiles("fixtures/typed-boundary/golden-incidents", "analysis-result.json")
+        assertTrue(resultFiles.size >= 16)
         resultFiles.forEach { file ->
             val bytes = Files.readAllBytes(Path.of(file))
             val document = ANALYSIS_DOCUMENT_JSON.decodeFromString(AnalysisResultDocument.serializer(), bytes.decodeToString())
@@ -217,7 +223,7 @@ class AnalysisDocumentsEquivalenceTest {
     }
 
     @Test
-    fun `a result with a capacity summary round-trips and absence stays absence`() {
+    fun `a result with a capacity summary or incidents round-trips with wide numbers and absence stays absence`() {
         val withCapacity =
             """{"analysis_coverage":{"reasons":[],"status":"COMPLETE"},"analysis_mode":"capacity_step","capacity_summary":{"a":1},"evidence":[],"findings":[],"policy_verdict":"PASS","run_id":"r","run_validity":"VALID","schema_version":"analysis-result.v1"}"""
         val document = ANALYSIS_DOCUMENT_JSON.decodeFromString(AnalysisResultDocument.serializer(), withCapacity)
@@ -225,7 +231,13 @@ class AnalysisDocumentsEquivalenceTest {
         val without = withCapacity.replace(""""capacity_summary":{"a":1},""", "")
         val plain = ANALYSIS_DOCUMENT_JSON.decodeFromString(AnalysisResultDocument.serializer(), without)
         assertEquals(null, plain.capacitySummary)
+        assertEquals(null, plain.incidents)
         assertEquals(without, encodeAnalysisResult(plain).decodeToString())
+
+        val withIncidents =
+            """{"analysis_coverage":{"reasons":[],"status":"COMPLETE"},"analysis_mode":"standard","capacity_summary":{"a":12345678901234567890.5},"evidence":[],"findings":[],"incidents":{"items":[{"cluster_from_epoch_ms":null,"wide":98765432109876543210.123456789}],"status":"EVALUATED"},"policy_verdict":"PASS","run_id":"r","run_validity":"VALID","schema_version":"analysis-result.v1"}"""
+        val incidentsDoc = ANALYSIS_DOCUMENT_JSON.decodeFromString(AnalysisResultDocument.serializer(), withIncidents)
+        assertEquals(withIncidents, encodeAnalysisResult(incidentsDoc).decodeToString())
     }
 
     @Test
@@ -244,7 +256,18 @@ class AnalysisDocumentsEquivalenceTest {
         val base = JsonObject(required.associateWith { kotlinx.serialization.json.JsonNull })
         assertTrue(hasSupportedAnalysisResultKeys(base))
         assertTrue(hasSupportedAnalysisResultKeys(JsonObject(base + ("capacity_summary" to kotlinx.serialization.json.JsonNull))))
-        assertEquals(false, hasSupportedAnalysisResultKeys(JsonObject(base + ("incidents" to kotlinx.serialization.json.JsonNull))))
+        assertTrue(hasSupportedAnalysisResultKeys(JsonObject(base + ("incidents" to kotlinx.serialization.json.JsonNull))))
+        assertTrue(
+            hasSupportedAnalysisResultKeys(
+                JsonObject(
+                    base +
+                        mapOf(
+                            "capacity_summary" to kotlinx.serialization.json.JsonNull,
+                            "incidents" to kotlinx.serialization.json.JsonNull,
+                        ),
+                ),
+            ),
+        )
         assertEquals(false, hasSupportedAnalysisResultKeys(JsonObject(base - "evidence")))
         assertEquals(false, hasSupportedAnalysisResultKeys(JsonObject(base + ("extra" to kotlinx.serialization.json.JsonNull))))
         assertEquals(setOf("analysis-result.v1"), SUPPORTED_ANALYSIS_RESULT_VERSIONS)
@@ -252,8 +275,16 @@ class AnalysisDocumentsEquivalenceTest {
 
     private fun obj(text: String): JsonObject = Json.parseToJsonElement(text).jsonObject
 
-    private fun goldenFiles(name: String): List<String> =
-        Files.list(Path.of("fixtures/typed-boundary/golden")).use { dirs ->
+    private fun stripTopLevelKey(
+        bytes: ByteArray,
+        key: String,
+    ): ByteArray = canonicalJson(JsonObject(Json.parseToJsonElement(bytes.decodeToString()).jsonObject - key))
+
+    private fun goldenFiles(
+        dir: String,
+        name: String,
+    ): List<String> =
+        Files.list(Path.of(dir)).use { dirs ->
             dirs.map { it.resolve(name).toString() }.sorted().toList()
         }
 }

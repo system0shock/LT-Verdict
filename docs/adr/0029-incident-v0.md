@@ -114,7 +114,8 @@ MCP; «пропадают» (только счётчик) лишь инциде�
 **R10. Непригодный и частично разобранный прогон.** `INVALID`: `NOT_EVALUATED`,
 `items` пуст. `DEGRADED` (сегодня это Gatling binary, разобранный не полностью):
 правила policy по транзакциям не вычисляются (`Policy.kt:104`), поэтому
-TRANSACTION-инцидентов нет, а ресурсная сторона вычисляется; каждый инцидент
+TRANSACTION-инцидентов нет, а ресурсная сторона вычисляется; каждый
+RESOURCE-инцидент (транзакционные инциденты в `DEGRADED` не строятся)
 получает отрицательное свидетельство `POLICY_NOT_EVALUATED` с `reason_code`
 `RUN_DEGRADED`, чтобы пустая транзакционная сторона не читалась как «нарушений
 нет». Цена ошибки: если «Обзор» не покажет это свидетельство, `DEGRADED` читается
@@ -289,6 +290,22 @@ evidence. Группы ошибок входят в семейство TRANSACTI
 `diagnosticUnavailable` и `trendUnavailable`). `policy_verdict` `NO_VERDICT` инциденты не отключает:
 найденное нарушение остаётся видимым.
 
+Правило отображения «Требует внимания» в «Обзоре» (ruling U1): при
+`incidents.status` = `EVALUATED` и непустом `items` карточка инцидента заменяет
+запись списка «Требует внимания» тогда и только тогда, когда evidence-источник
+этой записи (`policy_check` или `resource_policy_check` для `violation` и
+`diagnostic:resource:*`; `trend_check` для `diagnostic:trend:*`) входит в
+объединение `evidence_ids` сохранённых инцидентов (`items`). Записи, чьи
+evidence не попали в сохранённые `items` (из-за лимита 64 или усечения
+`evidence_ids` до 24), не теряются. **Сохраняются всегда** (не заменяются
+карточками): причины `NO_VERDICT` (`no_verdict`), отсутствие политики
+`NO_POLICY` (`policy:none`), ограничения покрытия и валидности (`coverage:*`:
+`DEGRADED`/`INVALID`, примечания покрытия, пустые ресурсные ряды),
+корреляционные находки (`diagnostic:correlation:*`, в v0 не входят в инциденты)
+и нарушения ёмкости в режиме `capacity_step` (`violation:capacity`). При
+отсутствии поля `incidents` (старые анализы) или `incidents.status` =
+`NOT_EVALUATED` прежний список «Требует внимания» остаётся без изменений.
+
 ### Отрицательные свидетельства
 
 `negative_evidence` фиксирует, что проверено и не подтвердилось. Два исхода,
@@ -300,20 +317,27 @@ evidence. Группы ошибок входят в семейство TRANSACTI
 - `NOT_EVALUATED`: проверка не выполнялась или не дала вердикта; обязателен
   `reason_code`; `evidence_ids` может быть пустым.
 
-Проверки (по одной записи каждого вида на инцидент, в этом порядке, не более 8),
-область: evidence того же `window_id`, что у инцидента (без окна только
-`POLICY_NOT_EVALUATED`, `OTHER_POLICY_CHECKS_PASSED` и `RESOURCE_DATA_NOT_PROVIDED`):
+Проверки (по одной записи каждого вида на инцидент, в этом порядке, не более 8).
+Оконные проверки (`RESOURCE_RULES_WITHIN_LIMITS`,
+`GENERATOR_RESOURCES_WITHIN_LIMITS`, `NO_ANOMALY_EPISODES`, `NO_MATERIAL_TREND`,
+`CHECKS_NOT_EVALUATED`) оценивают **всё окно `window_id` целиком** и поэтому
+выводятся **на каждом инциденте этого окна** обоих семейств (`TRANSACTION` и
+`RESOURCE`), а не на одном выбранном инциденте окна (с оговорками ниже для
+собственной и неизвестной сущности в `RESOURCE_RULES_WITHIN_LIMITS`). Без окна
+(`window_id == null`, возможны только `TRANSACTION`-инциденты) выполняются только
+`OTHER_POLICY_CHECKS_PASSED` (по `policy_check` без `window_id`) и
+`RESOURCE_DATA_NOT_PROVIDED`:
 
 | `check` | Исход | Условие |
 | --- | --- | --- |
-| `POLICY_NOT_EVALUATED` | `NOT_EVALUATED` | `run_validity` равен `DEGRADED`; `reason_code` = `RUN_DEGRADED`; `evidence_ids` пуст |
+| `POLICY_NOT_EVALUATED` | `NOT_EVALUATED` | в RESOURCE-инциденте, когда `run_validity` равен `DEGRADED`; `reason_code` = `RUN_DEGRADED`; `evidence_ids` пуст |
 | `OTHER_POLICY_CHECKS_PASSED` | `NOT_CONFIRMED` | в TRANSACTION-инциденте: `policy_check` со `status` `PASS` в том же окне, не входящие в его evidence |
-| `RESOURCE_RULES_WITHIN_LIMITS` | `NOT_CONFIRMED` | `resource_policy_check` со `status` `PASS` в окне; роль ряда не `generator`; в RESOURCE-инциденте без собственной сущности |
-| `GENERATOR_RESOURCES_WITHIN_LIMITS` | `NOT_CONFIRMED` | `resource_policy_check` `PASS` в окне, роль ряда `generator` (роль берётся из `resource_summary` по паре `window_id`, `series_id`) |
-| `NO_ANOMALY_EPISODES` | `NOT_CONFIRMED` | `anomaly_check` со `status` `NO_MATERIAL_CHANGE` в окне; вывод оконный, `anomaly_check` не содержит сущности и сигнала, поэтому запись не относится к сущности инцидента |
-| `NO_MATERIAL_TREND` | `NOT_CONFIRMED` | `trend_check` со `status` `NO_MATERIAL_TREND` в окне |
+| `RESOURCE_RULES_WITHIN_LIMITS` | `NOT_CONFIRMED` | `resource_policy_check` со `status` `PASS` в окне; роль ряда не `generator`; в RESOURCE-инциденте исключаются проверки его собственной сущности и проверки, чья сущность неизвестна (нет `resource_summary` по паре `window_id`, `series_id`); в TRANSACTION-инциденте включаются все проверки окна с ролью не `generator` (в том числе без `resource_summary`) |
+| `GENERATOR_RESOURCES_WITHIN_LIMITS` | `NOT_CONFIRMED` | на каждом инциденте окна обоих семейств: `resource_policy_check` `PASS` в окне, роль ряда `generator` (роль берётся из `resource_summary` по паре `window_id`, `series_id`) |
+| `NO_ANOMALY_EPISODES` | `NOT_CONFIRMED` | на каждом инциденте окна обоих семейств: `anomaly_check` со `status` `NO_MATERIAL_CHANGE` в окне; вывод оконный, `anomaly_check` не содержит сущности и сигнала, поэтому запись не относится к сущности инцидента |
+| `NO_MATERIAL_TREND` | `NOT_CONFIRMED` | на каждом инциденте окна обоих семейств: `trend_check` со `status` `NO_MATERIAL_TREND` в окне |
 | `RESOURCE_DATA_NOT_PROVIDED` | `NOT_EVALUATED` | в результате нет `resource_binding`; `reason_code` = `RESOURCE_SNAPSHOT_NOT_PROVIDED`; `evidence_ids` пуст |
-| `CHECKS_NOT_EVALUATED` | `NOT_EVALUATED` | в окне есть проверки без вердикта (`NO_VERDICT`, `INSUFFICIENT_*`, `UNAVAILABLE`); `reason_code` минимальный по байтам UTF-8 среди их кодов |
+| `CHECKS_NOT_EVALUATED` | `NOT_EVALUATED` | на каждом инциденте окна обоих семейств: в окне есть проверки без вердикта (`policy_check` / `resource_policy_check` / `rule_window_check` со статусом `NO_VERDICT`, `anomaly_check` `INSUFFICIENT_DATA`, `trend_check` `INSUFFICIENT_CELLS` или `UNAVAILABLE`); `reason_code` минимальный по байтам UTF-8 среди их кодов (при отсутствии кода — статус проверки) |
 
 Исход и `reason_code` каждого вида фиксированы (`POLICY_NOT_EVALUATED`,
 `RESOURCE_DATA_NOT_PROVIDED`, `CHECKS_NOT_EVALUATED` это `NOT_EVALUATED`, остальные
@@ -344,7 +368,7 @@ UTF-8. Ни одна запись не зависит от порядка мас
 
 | `check` | Когда | Шаблон текста |
 | --- | --- | --- |
-| `COMPARE_WITH_BASELINE` | TRANSACTION, всегда | `Сравнить метрики {область} с baseline.` |
+| `COMPARE_WITH_BASELINE` | TRANSACTION, всегда | `Сравнить метрики {область_р} с baseline.` |
 | `OPEN_RESOURCE_SERIES` | RESOURCE, всегда | `Открыть ряды сущности {entity} за интервал находок.` (для `overall`: `Открыть ряды нагрузки за интервал находок.`) |
 | `OPEN_SAME_WINDOW_SIGNALS` | есть `coincident_with` | `Открыть сигналы окна {window_id}, совпавшие по времени: {n}.` |
 | `PROVIDE_RESOURCE_SNAPSHOT` | есть `RESOURCE_DATA_NOT_PROVIDED` | `Передать снимок ресурсов, чтобы проверить ресурсные сигналы на том же интервале.` |
@@ -360,7 +384,8 @@ UTF-8. Ни одна запись не зависит от порядка мас
 | RESOURCE, `entity` равно `overall` | `Сигналы нагрузки в окне {window_id}` | `На интервале по общей нагрузке найдено находок: {n}; их интервалы перекрываются или соприкасаются.` |
 
 `{область}` это `весь прогон` для `overall` и `транзакция {label}` для
-`transaction`. Подстановки данных (имена транзакций и сущностей) задаёт
+`transaction`, `{область_р}` — родительный падеж (`всего прогона` и
+`транзакции {label}`). Подстановки данных (имена транзакций и сущностей) задаёт
 пользователь: ограничение по словам относится к тексту шаблонов, не к данным.
 Пределы имён сведены к ядру: `label` не длиннее 4096 байт UTF-8 (так режут все
 четыре парсера: JTL CSV и XML, Gatling текст и бинарный), каждый элемент
@@ -534,7 +559,9 @@ UTF-16. Худший `title` (128 + 128 кодовых точек подстан
 4. **Ссылки.** Каждый id в `finding_ids` есть в `findings`, каждый в
    `evidence_ids`, `negative_evidence[].evidence_ids`, `next_checks[].evidence_ids`
    есть в `evidence`; в каждом инциденте не меньше одной находки и одного
-   evidence; id в массивах результата уникальны (иначе тест падает до синтеза).
+   evidence; id поддерживаемых синтезом типов в массивах результата уникальны
+   (неиспользуемые в v0 типы вроде `opensearch_errors` допускают повторы, иначе
+   тест падает до синтеза).
 5. **Идентификатор.** `id` равен SHA-256 канонического `grouping.key`; значения для
    валидных примеров контракта совпадают с Python-проверкой (`verify_slice0.py`).
 6. **Независимость вердикта.** Результат без `incidents` побайтно равен результату
@@ -603,8 +630,12 @@ UTF-16. Худший `title` (128 + 128 кодовых точек подстан
   contracts»); в PR нет изменений кода ядра и `analysis-result.schema.json`.
 - Реализация W3.7 включает: чистую функцию синтеза в core, вызов из
   `analysisResult()`, поле `incident_method` в identity, расширение белого списка
-  `AdvisoryAi.kt`, перегенерацию золотых identity, раздел «Обзор» вместо плоского
-  списка «Требует внимания», раздел в HTML-отчёте, инструмент MCP `list_incidents`.
+  `AdvisoryAi.kt`, перегенерацию золотых identity, раздел «Обзор» (≤7 карточек
+  инцидентов и строка «ещё N» с разбивкой по семействам; замена записей
+  «Требует внимания», чьи evidence покрыты сохранёнными инцидентами, с
+  сохранением `NO_VERDICT`, `NO_POLICY`, ограничений покрытия `coverage:*`,
+  корреляций и нарушений ёмкости по ruling U1), раздел в HTML-отчёте, инструмент
+  MCP `list_incidents`.
 - Новых зависимостей нет. Проверка примеров в Python использует только стандартную
   библиотеку и отвергает ключевые слова схемы, которых не знает, чтобы правка схемы
   не ослабила проверку молча.

@@ -41,7 +41,7 @@ class PlainReportsGoldenTest {
         val update = System.getenv("LTV_UPDATE_PLAIN_REPORTS") == "1"
         scenarios.forEach { scenario ->
             val outcome = StagedResults.analyze(tempDir.resolve(scenario.name), scenario.input, scenario.policy)
-            val result = outcome.canonicalResult
+            val result = StagedResults.withoutIncidents(outcome.canonicalResult)
             val groups = readErrorGroupsFile(outcome.analysisDirectory)
             val exit =
                 when {

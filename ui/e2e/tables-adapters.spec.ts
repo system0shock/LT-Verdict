@@ -1,6 +1,18 @@
 import { expect, test } from '@playwright/test'
 import type { AnalysisResult, CapacitySummary } from '../src/types'
-import { capacityView, DEFAULT_TX_QUERY, queryTransactions, ruleRows, transactionRows, trendView } from '../src/shell/tables'
+import {
+  capacityView,
+  DEFAULT_TX_QUERY,
+  queryTransactions,
+  ruleRows,
+  sortResourceChecks,
+  sortResourceSummaries,
+  sortRuleRows,
+  sortTrendRows,
+  tablesTargetSubTab,
+  transactionRows,
+  trendView,
+} from '../src/shell/tables'
 import { CAPACITY_LABELS, TABLES_LABELS, TREND_LABELS } from '../src/shell/labels.tables'
 import { reasonText } from '../src/verdictReasons'
 
@@ -237,4 +249,57 @@ test('trend missing values and summary-only evidence stay readable', () => {
   const summary = { id: 'trend-summary', type: 'trend_summary', checks_total: 4, observed: 1, not_material: 1, insufficient: 1, unavailable: 1, method: 'slope-materiality.v1', uncertainty: 'NOT_ESTIMATED' }
   expect(trendView(build({ evidence: [summary] }))).toEqual({ summaryText: TREND_LABELS.summary(4, 1, 1, 1, 1), rows: [] })
   expect(trendView(build({}))).toBeNull()
+})
+
+test('sorting helpers order rules, transactions (p50/status), trends, and resource tables deterministically', () => {
+  const rules = ruleRows(build({
+    policy_verdict: 'FAIL',
+    evidence: [
+      overall, checkout, login,
+      check({ id: 'c1', rule_id: 'b-rule', status: 'PASS', metric_evidence_id: 'm-login' }),
+      check({ id: 'c2', rule_id: 'a-rule', status: 'FAIL', metric_evidence_id: 'm-checkout', window_id: 'steady' }),
+    ],
+  }))
+  expect(sortRuleRows(rules, 'ruleId', 1).map((r) => r.ruleId)).toEqual(['a-rule', 'b-rule'])
+  expect(sortRuleRows(rules, 'status', 1).map((r) => r.status)).toEqual(['FAIL', 'PASS'])
+  expect(sortRuleRows(rules, 'status', -1).map((r) => r.status)).toEqual(['PASS', 'FAIL'])
+
+  const txs = transactionRows(build({
+    policy_verdict: 'FAIL',
+    evidence: [overall, login, checkout, check({}), check({ id: 'c2', rule_id: 'l', status: 'PASS', metric_evidence_id: 'm-login' })],
+  }))
+  expect(queryTransactions(txs, { ...DEFAULT_TX_QUERY, sort: 'p50', dir: 1 }).map((r) => r.label)).toEqual(['POST /login', 'POST /checkout'])
+  expect(queryTransactions(txs, { ...DEFAULT_TX_QUERY, sort: 'status', dir: -1 }).map((r) => r.status)).toEqual(['PASS', 'FAIL'])
+
+  const trends = trendView(build({
+    evidence: [
+      trendCheck,
+      { ...trendCheck, id: 'trend-2', check_id: 'aaa-trend', status: 'NO_MATERIAL_TREND', slope_per_second: '0.0001' },
+    ],
+  }))!.rows
+  expect(sortTrendRows(trends, 'check', 1).map((r) => r.check)).toEqual(['aaa-trend', 'cpu-trend'])
+  expect(sortTrendRows(trends, 'slope', -1).map((r) => r.check)).toEqual(['cpu-trend', 'aaa-trend'])
+
+  const summaries = [
+    { id: '1', series_id: 'z-cpu', observed_cells: 5, statistics: { max: '10.5' } },
+    { id: '2', series_id: 'a-mem', observed_cells: 20, statistics: { max: '2.5' } },
+  ]
+  expect(sortResourceSummaries(summaries, 'series_id', 1).map((r) => r.series_id)).toEqual(['a-mem', 'z-cpu'])
+  expect(sortResourceSummaries(summaries, 'max', -1).map((r) => r.series_id)).toEqual(['z-cpu', 'a-mem'])
+
+  const resChecks = [
+    { id: '1', rule_id: 'r2', status: 'PASS' },
+    { id: '2', rule_id: 'r1', status: 'FAIL' },
+  ]
+  expect(sortResourceChecks(resChecks, 'status', 1).map((r) => r.rule_id)).toEqual(['r1', 'r2'])
+
+  const r = build({ evidence: [overall, checkout, check({ id: 'c1' })] })
+  expect(tablesTargetSubTab(r, 'summary-metrics')).toBe('rules')
+  expect(tablesTargetSubTab(r, 'ev-c1')).toBe('rules')
+  expect(tablesTargetSubTab(r, 'ev-m-checkout')).toBe('transactions')
+  expect(tablesTargetSubTab(r, 'capacity-results')).toBe('capacity')
+  expect(tablesTargetSubTab(r, 'resource-results')).toBe('resources')
+  expect(tablesTargetSubTab(r, 'trend-results')).toBe('trends')
+  expect(tablesTargetSubTab(r, 'diagnostic-results')).toBe('diagnostics')
+  expect(tablesTargetSubTab(r, 'normalized-data')).toBe('normalized')
 })

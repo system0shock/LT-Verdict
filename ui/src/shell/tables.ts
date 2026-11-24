@@ -1,7 +1,7 @@
 import type { AnalysisResult, CapacityKneeDiagnosticEvidence, CapacityStage, ExactRatio, MetricSummaryEvidence, PolicyCheckEvidence, RuleWindowCheckEvidence, TrendCheckEvidence, TrendSummaryEvidence } from '../types'
 import { metricLabel, scopeLabel, valueText } from '../verdictSummary'
 import { reasonText as verdictReasonText } from '../verdictReasons'
-import { CAPACITY_LABELS, TABLES_LABELS, TREND_LABELS } from './labels.tables'
+import { CAPACITY_LABELS, TABLES_LABELS, TREND_LABELS, type TablesSubTabKey } from './labels.tables'
 
 export type RuleStatus = 'PASS' | 'FAIL' | 'NO_VERDICT'
 
@@ -84,6 +84,21 @@ export function ruleRows(result: AnalysisResult): RuleRow[] {
   return [...rows, ...unknownWindows]
 }
 
+export type RuleSortKey = 'default' | 'ruleId' | 'scope' | 'metric' | 'window' | 'status'
+
+const RULE_STATUS_RANK: Record<RuleStatus, number> = { FAIL: 0, NO_VERDICT: 1, PASS: 2 }
+
+export function sortRuleRows(rows: readonly RuleRow[], sort: RuleSortKey, dir: 1 | -1): RuleRow[] {
+  if (sort === 'default') return [...rows]
+  return rows.map((row, index) => ({ row, index })).sort((left, right) => {
+    let order = 0
+    if (sort === 'status') order = RULE_STATUS_RANK[left.row.status] - RULE_STATUS_RANK[right.row.status]
+    else if (sort === 'window') order = compareExact(left.row.window ?? '', right.row.window ?? '')
+    else order = compareExact(left.row[sort], right.row[sort])
+    return order * dir || left.index - right.index
+  }).map((item) => item.row)
+}
+
 export type TxStatus = 'FAIL' | 'NO_VERDICT' | 'PASS' | 'NO_POLICY' | 'NOT_CHECKED'
 
 export interface TxRow {
@@ -98,7 +113,7 @@ export interface TxRow {
   p99: string
   rps: string
   status: TxStatus
-  sort: { samples: number; errors: number; errorRate: number; p95: number; p99: number; rps: number }
+  sort: { samples: number; errors: number; errorRate: number; p50: number; p95: number; p99: number; rps: number }
 }
 
 function ratioNumber(value: ExactRatio | null | undefined): number {
@@ -150,6 +165,7 @@ export function transactionRows(result: AnalysisResult): TxRow[] {
           samples: finite(item.sample_count),
           errors: finite(item.error_count),
           errorRate: finite(ratioNumber(item.error_rate_ratio)),
+          p50: finite(p50),
           p95: finite(p95),
           p99: finite(p99),
           rps: finite(ratioNumber(item.throughput_rps)),
@@ -158,9 +174,10 @@ export function transactionRows(result: AnalysisResult): TxRow[] {
     })
 }
 
-export type TxSortKey = 'impact' | 'label' | 'samples' | 'errors' | 'errorRate' | 'p95' | 'p99' | 'rps'
+export type TxSortKey = 'impact' | 'label' | 'samples' | 'errors' | 'errorRate' | 'p50' | 'p95' | 'p99' | 'rps' | 'status'
 export interface TxQuery { text: string; status: 'all' | TxStatus; sort: TxSortKey; dir: 1 | -1 }
 export const DEFAULT_TX_QUERY: TxQuery = { text: '', status: 'all', sort: 'impact', dir: 1 }
+const TX_STATUS_RANK: Record<TxStatus, number> = { FAIL: 0, NO_VERDICT: 1, PASS: 2, NOT_CHECKED: 3, NO_POLICY: 4 }
 
 function compareExact(left: string, right: string): number {
   return left < right ? -1 : left > right ? 1 : 0
@@ -183,7 +200,9 @@ export function queryTransactions(rows: readonly TxRow[], query: TxQuery): TxRow
       if (query.sort === 'impact') return impact(left, right)
       const order = query.sort === 'label'
         ? compareExact(`${left.path}/${left.label}`, `${right.path}/${right.label}`)
-        : left.sort[query.sort] - right.sort[query.sort]
+        : query.sort === 'status'
+          ? TX_STATUS_RANK[left.status] - TX_STATUS_RANK[right.status]
+          : left.sort[query.sort] - right.sort[query.sort]
       return order * query.dir || impact(left, right)
     })
 }
@@ -286,6 +305,41 @@ export interface TrendRow {
 }
 
 export interface TrendView { summaryText: string; rows: TrendRow[] }
+export type TrendSortKey = 'default' | 'check' | 'series' | 'window' | 'status' | 'slope' | 'shift' | 'median'
+
+const TREND_STATUS_RANK: Record<string, number> = {
+  TREND_OBSERVED: 0,
+  NO_MATERIAL_TREND: 1,
+  INSUFFICIENT_CELLS: 2,
+  UNAVAILABLE: 3,
+}
+
+const trendSortValues = new WeakMap<TrendRow, { slope: number; shift: number; median: number }>()
+
+function decimalSort(value: string | null | undefined): number {
+  if (value == null) return Number.NEGATIVE_INFINITY
+  const parsed = Number(value)
+  return Number.isFinite(parsed) ? parsed : Number.NEGATIVE_INFINITY
+}
+
+function compareNumbers(left: number, right: number): number {
+  if (left === right) return 0
+  return left < right ? -1 : 1
+}
+
+export function sortTrendRows(rows: readonly TrendRow[], sort: TrendSortKey, dir: 1 | -1): TrendRow[] {
+  if (sort === 'default') return [...rows]
+  return rows.map((row, index) => ({ row, index })).sort((left, right) => {
+    let order = 0
+    if (sort === 'status') order = (TREND_STATUS_RANK[left.row.status] ?? 9) - (TREND_STATUS_RANK[right.row.status] ?? 9)
+    else if (sort === 'slope' || sort === 'shift' || sort === 'median') {
+      const leftVal = trendSortValues.get(left.row)?.[sort] ?? Number.NEGATIVE_INFINITY
+      const rightVal = trendSortValues.get(right.row)?.[sort] ?? Number.NEGATIVE_INFINITY
+      order = compareNumbers(leftVal, rightVal)
+    } else order = compareExact(left.row[sort], right.row[sort])
+    return order * dir || left.index - right.index
+  }).map((item) => item.row)
+}
 
 function trendMeasure(value: string | null | undefined, unit: string | null, slope = false): string {
   return value == null ? TREND_LABELS.noData : `${value.replace('.', ',')}${unit == null ? '' : ` ${unit}${slope ? '/\u0441' : ''}`}`
@@ -304,21 +358,98 @@ export function trendView(result: AnalysisResult): TrendView | null {
       summary?.insufficient ?? count('INSUFFICIENT_CELLS'),
       summary?.unavailable ?? count('UNAVAILABLE'),
     ),
-    rows: checks.map((check) => ({
-      key: check.id,
-      check: check.check_id,
-      series: check.series_id,
-      window: check.window_id,
-      declared: (TREND_LABELS.declaredText as Record<string, string>)[check.declared_direction] ?? check.declared_direction,
-      status: check.status,
-      statusText: (TREND_LABELS.statusText as Record<string, string>)[check.status] ?? check.status,
-      observed: check.observed_direction == null ? TREND_LABELS.noData : (TREND_LABELS.observedText as Record<string, string>)[check.observed_direction] ?? check.observed_direction,
-      slope: trendMeasure(check.slope_per_second, check.unit, true),
-      shift: trendMeasure(check.split_half_shift, check.unit),
-      median: trendMeasure(check.median, check.unit),
-      required: trendMeasure(check.magnitude_gate?.required_split_half_shift_units, check.unit),
-      cells: `${capacityNumber(check.observed_cells)} / ${capacityNumber(check.expected_cells)}`,
-      reasons: (check.reasons ?? []).map((code) => ({ code, text: TREND_LABELS.reasonWords[code] ?? verdictReasonText(code) })),
-    })),
+    rows: checks.map((check) => {
+      const row: TrendRow = {
+        key: check.id,
+        check: check.check_id,
+        series: check.series_id,
+        window: check.window_id,
+        declared: (TREND_LABELS.declaredText as Record<string, string>)[check.declared_direction] ?? check.declared_direction,
+        status: check.status,
+        statusText: (TREND_LABELS.statusText as Record<string, string>)[check.status] ?? check.status,
+        observed: check.observed_direction == null ? TREND_LABELS.noData : (TREND_LABELS.observedText as Record<string, string>)[check.observed_direction] ?? check.observed_direction,
+        slope: trendMeasure(check.slope_per_second, check.unit, true),
+        shift: trendMeasure(check.split_half_shift, check.unit),
+        median: trendMeasure(check.median, check.unit),
+        required: trendMeasure(check.magnitude_gate?.required_split_half_shift_units, check.unit),
+        cells: `${capacityNumber(check.observed_cells)} / ${capacityNumber(check.expected_cells)}`,
+        reasons: (check.reasons ?? []).map((code) => ({ code, text: TREND_LABELS.reasonWords[code] ?? verdictReasonText(code) })),
+      }
+      trendSortValues.set(row, {
+        slope: decimalSort(check.slope_per_second),
+        shift: decimalSort(check.split_half_shift),
+        median: decimalSort(check.median),
+      })
+      return row
+    }),
   }
+}
+
+export type ResourceSummarySortKey =
+  | 'default' | 'series_id' | 'metric' | 'entity' | 'window_id'
+  | 'observed_cells' | 'missing_cells' | 'min' | 'max' | 'mean' | 'median' | 'q95' | 'slope_per_second'
+
+export type ResourceCheckSortKey = 'default' | 'window_id' | 'rule_id' | 'service' | 'series_id' | 'status'
+
+function numOrNegInf(value: unknown): number {
+  if (typeof value === 'number') return Number.isFinite(value) ? value : Number.NEGATIVE_INFINITY
+  if (typeof value === 'string') {
+    const parsed = Number(value)
+    return Number.isFinite(parsed) ? parsed : Number.NEGATIVE_INFINITY
+  }
+  return Number.NEGATIVE_INFINITY
+}
+
+export function sortResourceSummaries<T extends Record<string, unknown>>(
+  rows: readonly T[],
+  sort: ResourceSummarySortKey,
+  dir: 1 | -1,
+): T[] {
+  if (sort === 'default') return [...rows]
+  return rows.map((row, index) => ({ row, index })).sort((left, right) => {
+    let order = 0
+    if (sort === 'observed_cells' || sort === 'missing_cells') {
+      order = numOrNegInf(left.row[sort]) - numOrNegInf(right.row[sort])
+    } else if (sort === 'min' || sort === 'max' || sort === 'mean' || sort === 'median' || sort === 'q95' || sort === 'slope_per_second') {
+      const leftStats = left.row.statistics as Record<string, unknown> | undefined
+      const rightStats = right.row.statistics as Record<string, unknown> | undefined
+      order = numOrNegInf(leftStats?.[sort]) - numOrNegInf(rightStats?.[sort])
+    } else {
+      order = compareExact(String(left.row[sort] ?? ''), String(right.row[sort] ?? ''))
+    }
+    return order * dir || left.index - right.index
+  }).map((item) => item.row)
+}
+
+const CHECK_STATUS_RANK: Record<string, number> = { FAIL: 0, NO_VERDICT: 1, PASS: 2, NO_POLICY: 3, NOT_CHECKED: 4 }
+
+export function sortResourceChecks<T extends Record<string, unknown>>(
+  rows: readonly T[],
+  sort: ResourceCheckSortKey,
+  dir: 1 | -1,
+): T[] {
+  if (sort === 'default') return [...rows]
+  return rows.map((row, index) => ({ row, index })).sort((left, right) => {
+    const order = sort === 'status'
+      ? (CHECK_STATUS_RANK[String(left.row.status ?? '')] ?? 9) - (CHECK_STATUS_RANK[String(right.row.status ?? '')] ?? 9)
+      : compareExact(String(left.row[sort] ?? ''), String(right.row[sort] ?? ''))
+    return order * dir || left.index - right.index
+  }).map((item) => item.row)
+}
+
+export function tablesTargetSubTab(result: AnalysisResult | null, targetId: string): TablesSubTabKey {
+  if (targetId === 'summary-metrics' || targetId === 'policy-results') return 'rules'
+  if (targetId === 'transaction-metrics') return 'transactions'
+  if (targetId === 'capacity-results') return 'capacity'
+  if (targetId === 'resource-results') return 'resources'
+  if (targetId === 'trend-results') return 'trends'
+  if (targetId === 'diagnostic-results' || targetId === 'source-acquisition') return 'diagnostics'
+  if (targetId === 'normalized-data') return 'normalized'
+  if (targetId.startsWith('ev-') && result) {
+    const evidenceId = targetId.slice(3)
+    const match = result.evidence.find((item) => 'id' in item && item.id === evidenceId)
+    if (match?.type === 'metric_summary' && match.scope.kind === 'transaction') return 'transactions'
+    return 'rules'
+  }
+  return 'all'
 }

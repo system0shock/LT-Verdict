@@ -1,11 +1,29 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import type { AnalysisResult } from '../types'
-import { TREND_LABELS } from './labels.tables'
-import { trendView } from './tables'
+import { TABLES_LABELS, TREND_LABELS } from './labels.tables'
+import { sortTrendRows, trendView, type TrendSortKey } from './tables'
 
 const props = defineProps<{ result: AnalysisResult }>()
+const sortKey = ref<TrendSortKey>('default')
+const sortDir = ref<1 | -1>(1)
 const view = computed(() => trendView(props.result))
+const rows = computed(() => view.value ? sortTrendRows(view.value.rows, sortKey.value, sortDir.value) : [])
+
+const sortColumns: Array<TrendSortKey | null> = ['check', 'series', 'window', null, 'status', null, 'slope', 'shift', 'median', null, null, null]
+
+function sortAria(key: TrendSortKey | null): 'ascending' | 'descending' | 'none' | undefined {
+  if (!key) return undefined
+  return sortKey.value !== key ? 'none' : sortDir.value === 1 ? 'ascending' : 'descending'
+}
+
+function toggleSort(key: TrendSortKey) {
+  if (sortKey.value === key) sortDir.value = sortDir.value === 1 ? -1 : 1
+  else {
+    sortKey.value = key
+    sortDir.value = key === 'slope' || key === 'shift' || key === 'median' ? -1 : 1
+  }
+}
 </script>
 
 <template>
@@ -35,17 +53,28 @@ const view = computed(() => trendView(props.result))
         <thead>
           <tr>
             <th
-              v-for="head in TREND_LABELS.heads"
+              v-for="(head, index) in TREND_LABELS.heads"
               :key="head"
               scope="col"
+              :aria-sort="sortAria(sortColumns[index])"
             >
-              {{ head }}
+              <button
+                v-if="sortColumns[index]"
+                type="button"
+                :aria-label="TABLES_LABELS.sortBy(head)"
+                @click="toggleSort(sortColumns[index]!)"
+              >
+                {{ head }}
+              </button>
+              <template v-else>
+                {{ head }}
+              </template>
             </th>
           </tr>
         </thead>
         <tbody>
           <tr
-            v-for="row in view.rows"
+            v-for="row in rows"
             :key="row.key"
             data-testid="trend-row"
           >
@@ -88,6 +117,9 @@ const view = computed(() => trendView(props.result))
 <style scoped>
 section { min-width: 0; }
 table { min-width: 100rem; }
+th button { min-height: 44px; min-width: 44px; border: 0; background: transparent; color: inherit; font: inherit; text-align: left; padding: 0 4px; cursor: pointer; }
+th[aria-sort="ascending"] button::after { content: " \2191"; }
+th[aria-sort="descending"] button::after { content: " \2193"; }
 tbody td:nth-child(2) { min-width: 10rem; }
 tbody td:nth-child(3) { min-width: 8rem; }
 tbody td:nth-child(5) { min-width: 9rem; }

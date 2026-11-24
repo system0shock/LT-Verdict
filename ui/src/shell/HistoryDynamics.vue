@@ -1,26 +1,108 @@
 <script setup lang="ts">
-import { computed } from 'vue'
-import type { DynamicsPoint } from './history'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import * as echarts from 'echarts/core'
+import { LineChart } from 'echarts/charts'
+import { GridComponent, MarkLineComponent } from 'echarts/components'
+import { SVGRenderer } from 'echarts/renderers'
+import { historyDynamicsOption, type DynamicsPoint, type HistoryChartColors } from './history'
 import { HISTORY_LABELS } from './labels.history'
 import { formatNumber } from './overview'
+import { PLOT_INSET, plotFraction } from './timeChart'
 
-const props = defineProps<{ points: readonly DynamicsPoint[]; hidden: readonly string[] }>()
+echarts.use([LineChart, GridComponent, MarkLineComponent, SVGRenderer])
+
+const props = withDefaults(defineProps<{
+  points: readonly DynamicsPoint[]
+  hidden: readonly string[]
+  baselineValue?: number | null
+}>(), {
+  baselineValue: null,
+})
+
 const L = HISTORY_LABELS
-const WIDTH = 640
-const HEIGHT = 220
-const LEFT = 64
-const RIGHT = 16
-const TOP = 16
-const BOTTOM = 44
+const host = ref<HTMLElement | null>(null)
+const selected = ref<number | null>(null)
+let chart: echarts.ECharts | null = null
+let resizeObserver: ResizeObserver | null = null
+let themeObserver: MutationObserver | null = null
+const systemTheme = window.matchMedia('(prefers-color-scheme: dark)')
 
-const maxValue = computed(() => Math.max(1, ...props.points.map((point) => point.value)) * 1.1)
-const plotted = computed(() => props.points.map((point, index) => ({
-  point,
-  x: props.points.length === 1 ? (LEFT + WIDTH - RIGHT) / 2 : LEFT + (index * (WIDTH - LEFT - RIGHT)) / (props.points.length - 1),
-  y: TOP + (HEIGHT - TOP - BOTTOM) * (1 - point.value / maxValue.value),
-  title: L.dynamicsPoint(point.release.label, point.verdict, formatNumber(point.value)),
-})))
-const shortLabel = (label: string) => (label.length > 10 ? `${label.slice(0, 9)}...` : label)
+const summaries = computed(() =>
+  props.points.map((point) => L.dynamicsPoint(point.release.label, point.verdict, formatNumber(point.value))),
+)
+const activeSummary = computed(() => (selected.value === null ? null : summaries.value[selected.value] ?? null))
+
+function colors(): HistoryChartColors {
+  const css = getComputedStyle(document.documentElement)
+  const token = (name: string) => css.getPropertyValue(name).trim()
+  return {
+    brand: token('--brand'),
+    pass: token('--pass'),
+    fail: token('--fail'),
+    warn: token('--warn'),
+    text: token('--text'),
+    muted: token('--text-muted'),
+    border: token('--border'),
+    fontFamily: getComputedStyle(document.body).fontFamily,
+  }
+}
+
+function draw() {
+  if (!host.value || !props.points.length) {
+    chart?.dispose()
+    chart = null
+    return
+  }
+  if (!chart) chart = echarts.init(host.value, null, { renderer: 'svg' })
+  chart.setOption(historyDynamicsOption(props.points, colors(), props.baselineValue), { notMerge: true })
+}
+
+function onPointer(event: PointerEvent) {
+  if (!props.points.length) return
+  const rect = (event.currentTarget as HTMLElement).getBoundingClientRect()
+  if (rect.width <= 0) return
+  const fraction = plotFraction(event.clientX, rect)
+  const index = Math.min(props.points.length - 1, Math.max(0, Math.round(fraction * (props.points.length - 1))))
+  selected.value = index
+}
+
+function focusCursor(event: FocusEvent) {
+  if (selected.value === null && props.points.length) selected.value = Number((event.target as HTMLInputElement).value)
+}
+
+function inputCursor(event: Event) {
+  selected.value = Number((event.target as HTMLInputElement).value)
+}
+
+onMounted(() => {
+  draw()
+  if (host.value) {
+    resizeObserver = new ResizeObserver(() => chart?.resize())
+    resizeObserver.observe(host.value)
+  }
+  themeObserver = new MutationObserver(draw)
+  themeObserver.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] })
+  systemTheme.addEventListener('change', draw)
+})
+
+watch(() => [props.points, props.baselineValue], () => {
+  selected.value = null
+  draw()
+  if (host.value && resizeObserver) {
+    resizeObserver.disconnect()
+    resizeObserver.observe(host.value)
+  }
+}, { flush: 'post' })
+
+onBeforeUnmount(() => {
+  resizeObserver?.disconnect()
+  themeObserver?.disconnect()
+  systemTheme.removeEventListener('change', draw)
+  chart?.dispose()
+  chart = null
+})
+
+void PLOT_INSET
 </script>
 
 <template>
@@ -35,77 +117,45 @@ const shortLabel = (label: string) => (label.length > 10 ? `${label.slice(0, 9)}
     >
       {{ L.dynamicsEmpty }}
     </p>
-    <svg
-      v-else
-      class="history-dynamics__plot"
-      :viewBox="`0 0 ${WIDTH} ${HEIGHT}`"
-      role="img"
-      :aria-label="L.dynamicsAria(points.length, plotted.map((item) => item.title).join('; '))"
-    >
-      <line
-        :x1="LEFT"
-        :y1="HEIGHT - BOTTOM"
-        :x2="WIDTH - RIGHT"
-        :y2="HEIGHT - BOTTOM"
-        class="history-dynamics__axis"
-      />
-      <line
-        :x1="LEFT"
-        :y1="TOP"
-        :x2="LEFT"
-        :y2="HEIGHT - BOTTOM"
-        class="history-dynamics__axis"
-      />
-      <text
-        :x="LEFT - 6"
-        :y="HEIGHT - BOTTOM"
-        text-anchor="end"
-        class="history-dynamics__text"
-      >0</text>
-      <text
-        :x="LEFT - 6"
-        :y="TOP + 10"
-        text-anchor="end"
-        class="history-dynamics__text"
-      >{{ formatNumber(maxValue) }}</text>
-      <polyline
-        v-if="plotted.length > 1"
-        :points="plotted.map((item) => `${item.x},${item.y}`).join(' ')"
-        class="history-dynamics__line"
-      />
-      <g
-        v-for="item in plotted"
-        :key="item.point.release.release_id"
-        :class="`history-dynamics__mark history-dynamics__mark--${item.point.verdict === 'PASS' ? 'pass' : item.point.verdict === 'FAIL' ? 'fail' : 'other'}`"
+    <template v-else>
+      <div
+        class="history-dynamics__chart"
+        role="img"
+        :aria-label="L.dynamicsAria(points.length, summaries.join('; '))"
+        @pointermove="onPointer"
+        @pointerdown="onPointer"
       >
-        <title>{{ item.title }}</title>
-        <circle
-          v-if="item.point.verdict === 'PASS'"
-          :cx="item.x"
-          :cy="item.y"
-          r="6"
+        <div
+          ref="host"
+          class="history-dynamics__host"
+          aria-hidden="true"
         />
-        <rect
-          v-else-if="item.point.verdict === 'FAIL'"
-          :x="item.x - 6"
-          :y="item.y - 6"
-          width="12"
-          height="12"
-        />
-        <polygon
-          v-else
-          :points="`${item.x},${item.y - 7} ${item.x + 7},${item.y + 6} ${item.x - 7},${item.y + 6}`"
-        />
-        <text
-          :x="item.x"
-          :y="HEIGHT - BOTTOM + 16"
-          text-anchor="middle"
-          class="history-dynamics__text"
-        >{{ shortLabel(item.point.release.label) }}</text>
-      </g>
-    </svg>
+      </div>
+      <p
+        class="history-dynamics__readout"
+        data-testid="history-dynamics-readout"
+      >
+        {{ activeSummary ?? L.dynamicsCursorNone }}
+      </p>
+      <input
+        v-if="points.length > 1"
+        type="range"
+        class="history-dynamics__slider"
+        data-testid="history-dynamics-cursor"
+        :aria-label="L.dynamicsCursorLabel"
+        min="0"
+        :max="points.length - 1"
+        step="1"
+        :value="selected ?? 0"
+        :aria-valuetext="activeSummary ?? summaries[0] ?? L.dynamicsCursorNone"
+        @focus="focusCursor"
+        @input="inputCursor"
+      >
+    </template>
     <p class="field__hint">
-      {{ L.dynamicsLegend }}
+      {{ L.dynamicsLegend }}<template v-if="baselineValue !== null">
+        {{ ' ' + L.dynamicsBaselineLegend }}
+      </template>
     </p>
     <p
       v-if="hidden.length"
@@ -116,14 +166,39 @@ const shortLabel = (label: string) => (label.length > 10 ? `${label.slice(0, 9)}
   </div>
 </template>
 
-<style>
-.history-dynamics { min-width: 0; }
-.history-dynamics__plot { display: block; width: 100%; max-width: 640px; height: auto; border: 1px solid var(--border); background: var(--surface-inset); }
-.history-dynamics__axis { stroke: var(--border-strong); stroke-width: 1; }
-.history-dynamics__line { fill: none; stroke: var(--text-muted); stroke-width: 1.5; }
-.history-dynamics__text { fill: var(--text-muted); font-size: 11px; }
-.history-dynamics__mark--pass { fill: var(--pass); stroke: var(--pass); }
-.history-dynamics__mark--fail { fill: var(--fail); stroke: var(--fail); }
-.history-dynamics__mark--other { fill: var(--warn); stroke: var(--warn); }
-.history-dynamics__mark text { stroke: none; fill: var(--text-muted); }
+<style scoped>
+.history-dynamics {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+
+.history-dynamics__chart {
+  width: 100%;
+  max-width: 640px;
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  background: var(--surface-inset);
+  touch-action: pan-y;
+}
+
+.history-dynamics__host {
+  width: 100%;
+  height: 220px;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.history-dynamics__readout {
+  margin: 0;
+  font-size: 13px;
+}
+
+.history-dynamics__slider {
+  width: 100%;
+  max-width: 640px;
+  min-height: 44px;
+  margin: 0;
+}
 </style>

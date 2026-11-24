@@ -12,6 +12,7 @@ export interface ChartLane {
   key: string
   color: ChartToken
   segments: ChartPoint[][]
+  baseline?: ChartPoint[][]
   lo: number
   hi: number
   integer?: boolean
@@ -165,19 +166,35 @@ export function laneOption(lane: ChartLane, frame: ChartFrame, stages: ChartStag
       axisTick: { show: false },
       splitLine: { lineStyle: { color: colors.border } },
     },
-    series: [{
-      type: 'line',
-      silent: true,
-      symbol: 'none',
-      showSymbol: true,
-      showAllSymbol: true,
-      symbolSize: 6,
-      connectNulls: false,
-      lineStyle: { width: 2, color: colors[lane.color] },
-      itemStyle: { color: colors[lane.color] },
-      data: lineData(lane.segments),
-      ...(lane.thresholds?.length ? { markLine: { silent: true, symbol: 'none', data: lane.thresholds.map((threshold) => thresholdLine(threshold, axis.max, colors)) } } : {}),
-      ...(areas.length ? { markArea: { silent: true, data: areas } } : {}),
-    }],
+    series: [
+      {
+        type: 'line',
+        silent: true,
+        symbol: 'none',
+        showSymbol: true,
+        showAllSymbol: true,
+        symbolSize: 6,
+        connectNulls: false,
+        lineStyle: { width: 2, color: colors[lane.color] },
+        itemStyle: { color: colors[lane.color] },
+        data: lineData(lane.segments),
+        ...(lane.thresholds?.length ? { markLine: { silent: true, symbol: 'none', data: lane.thresholds.map((threshold) => thresholdLine(threshold, axis.max, colors)) } } : {}),
+        ...(areas.length ? { markArea: { silent: true, data: areas } } : {}),
+      },
+      ...(lane.baseline?.length
+        ? [{
+            type: 'line',
+            silent: true,
+            symbol: 'none',
+            showSymbol: true,
+            showAllSymbol: true,
+            symbolSize: 5,
+            connectNulls: false,
+            lineStyle: { width: 1.5, type: [6, 4], color: colors.muted },
+            itemStyle: { color: colors.muted },
+            data: lineData(lane.baseline),
+          }]
+        : []),
+    ],
   }
 }

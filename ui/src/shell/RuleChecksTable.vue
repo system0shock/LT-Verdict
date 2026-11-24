@@ -1,11 +1,28 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import type { AnalysisResult } from '../types'
 import { TABLES_LABELS } from './labels.tables'
-import { ruleRows } from './tables'
+import { ruleRows, sortRuleRows, type RuleSortKey } from './tables'
 
 const props = defineProps<{ result: AnalysisResult }>()
-const rows = computed(() => ruleRows(props.result))
+const sortKey = ref<RuleSortKey>('default')
+const sortDir = ref<1 | -1>(1)
+const rows = computed(() => sortRuleRows(ruleRows(props.result), sortKey.value, sortDir.value))
+
+const sortColumns: Array<RuleSortKey | null> = ['ruleId', 'scope', 'metric', null, null, 'window', null, 'status', null]
+
+function sortAria(key: RuleSortKey | null): 'ascending' | 'descending' | 'none' | undefined {
+  if (!key) return undefined
+  return sortKey.value !== key ? 'none' : sortDir.value === 1 ? 'ascending' : 'descending'
+}
+
+function toggleSort(key: RuleSortKey) {
+  if (sortKey.value === key) sortDir.value = sortDir.value === 1 ? -1 : 1
+  else {
+    sortKey.value = key
+    sortDir.value = 1
+  }
+}
 </script>
 
 <template>
@@ -35,11 +52,22 @@ const rows = computed(() => ruleRows(props.result))
         <thead>
           <tr>
             <th
-              v-for="head in TABLES_LABELS.ruleHeads"
+              v-for="(head, index) in TABLES_LABELS.ruleHeads"
               :key="head"
               scope="col"
+              :aria-sort="sortAria(sortColumns[index])"
             >
-              {{ head }}
+              <button
+                v-if="sortColumns[index]"
+                type="button"
+                :aria-label="TABLES_LABELS.sortBy(head)"
+                @click="toggleSort(sortColumns[index]!)"
+              >
+                {{ head }}
+              </button>
+              <template v-else>
+                {{ head }}
+              </template>
             </th>
           </tr>
         </thead>
@@ -83,6 +111,9 @@ const rows = computed(() => ruleRows(props.result))
 
 <style scoped>
 section { min-width: 0; }
+th button { min-height: 44px; min-width: 44px; border: 0; background: transparent; color: inherit; font: inherit; text-align: left; padding: 0 4px; cursor: pointer; }
+th[aria-sort="ascending"] button::after { content: " \2191"; }
+th[aria-sort="descending"] button::after { content: " \2193"; }
 td, th { overflow-wrap: anywhere; }
 .status-text { white-space: nowrap; overflow-wrap: normal; }
 tbody th { background: var(--surface); color: var(--text); }

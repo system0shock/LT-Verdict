@@ -187,4 +187,152 @@ export const NORMALIZED_LABELS = {
   shown: (shown: number, total: number): string => `Показано ${shown} из ${total} интервалов`,
   more: (step: number): string => `Показать ещё ${step}`,
   all: (total: number): string => `Показать все (${total})`,
+  pageSummary: (shown: number, fromMs: number, rollup: number): string =>
+    `Показано интервалов на странице: ${shown} (с ${fromMs.toLocaleString('ru-RU')} мс, шаг ${rollup} с; не более 500 на странице).`,
+  nextPage: 'Следующая страница интервалов',
+  charts: {
+    legend: 'Сплошная: текущий · пунктир: baseline. Относительное время, общая шкала; пропуски не интерполируются.',
+    openSearchNote: 'Пунктир — события OpenSearch на общей временной оси; совпадение во времени не доказывает причину.',
+    rpsTitle: 'Запросы в секунду',
+    rpsUnit: 'RPS',
+    errorsTitle: 'Ошибки за интервал',
+    errorsUnit: 'шт/инт',
+    p95Title: 'p95 отклика',
+    p95Unit: 'мс',
+    axisTitle: 'Время от начала прогона (мс)',
+    locale: 'ru-RU',
+  },
+} as const
+
+export type TablesSubTabKey = 'all' | 'rules' | 'transactions' | 'capacity' | 'resources' | 'trends' | 'diagnostics' | 'normalized'
+
+export const TABLES_NAV_LABELS = {
+  navLabel: 'Разделы таблиц',
+  tabs: {
+    all: 'Все',
+    rules: 'Правила и сводка',
+    transactions: 'Транзакции',
+    capacity: 'Ёмкость',
+    resources: 'Ресурсы',
+    trends: 'Тренды',
+    diagnostics: 'Диагностика и источники',
+    normalized: 'Интервалы',
+  } as Record<TablesSubTabKey, string>,
+} as const
+
+export const SUMMARY_METRICS_LABELS = {
+  eyebrow: 'Весь прогон',
+  title: 'Сводные метрики',
+  p50: 'p50',
+  p95: 'p95',
+  p99: 'p99',
+  latencyHint: 'Перцентиль отклика',
+  throughput: 'Пропускная способность',
+  throughputHint: 'Окно прогона',
+  noData: 'нет данных',
+  msUnit: 'мс',
+  rpsUnit: 'RPS',
+} as const
+
+export const RESOURCE_TABLES_LABELS = {
+  eyebrow: 'Снимок ресурсов',
+  title: 'Статистика ресурсов и SLA',
+  bindingSummary: 'Привязка снимка ресурсов',
+  windowPolicyRegion: 'Сводка политики по окнам',
+  windowPolicyHeads: ['Окно', 'Начало (epoch, мс)', 'Конец (epoch, мс)', 'Бизнес-вердикт', 'Ресурсный вердикт', 'Итог'],
+  summariesRegion: 'Сводка по рядам ресурсов',
+  summaryHeads: [
+    'Ряд', 'Метрика', 'Единица', 'Сущность', 'Роль', 'Агрегация', 'Окно',
+    'Покрытие (наблюдено / ожидалось)', 'Пропущено ячеек', 'Наибольший пропуск',
+    'Мин.', 'Макс.', 'Среднее', 'Медиана', 'Q05', 'Q25', 'Q75', 'Q95', 'IQR', 'MAD',
+    'Станд. отклонение', 'Наклон в секунду', 'Сдвиг половин окна', 'Причины',
+  ],
+  checksRegion: 'Проверки ресурсных правил',
+  platformRule: (id: string): string => `(платформенное правило ${id})`,
+  operators: { gt: 'выше', lt: 'ниже', gte: 'не ниже', lte: 'не выше' } as Record<string, string>,
+  effects: { sla: 'SLA', diagnostic: 'диагностика' } as Record<string, string>,
+  missingCoverage: (missing: number, longest: string): string => `; пропущено ячеек: ${missing}, макс. разрыв: ${longest}`,
+  presumedViolation: '; предположительное нарушение (серия достигнута только за счёт пропущенных ячеек)',
+} as const
+
+export const SOURCE_ACQUISITION_LABELS = {
+  eyebrow: 'Онлайн-источник',
+  title: 'Сбор данных из источников',
+  region: (profileId: string): string => `Сбор данных из источника: ${profileId}`,
+  profileHeads: ['Профиль', 'Источник', 'Статус', 'Запросы / повторы', 'Ожидание (мс)', 'Лимит запросов'],
+  capExceeded: 'Превышен',
+  capNotExceeded: 'Не превышен',
+  queryHeads: ['Запрос', 'Статус', 'Причина'],
+  windowProvenanceRegion: 'Происхождение окна',
+  windowProvenanceHeads: ['Параметр окна', 'Значение'],
+  windowRows: {
+    windowOrigin: 'Источник окна',
+    recognizedPeriod: 'Распознанный период',
+    requestedMargin: 'Запрошенный запас',
+    appliedMargin: 'Применённый запас',
+    maxIdleGap: 'Макс. простой',
+    detectedIdleGaps: 'Найдено простоев',
+    longestIdleGap: 'Наибольший простой',
+    autoWindowStatus: 'Статус авто-окна',
+    stepOrigin: 'Источник шага',
+    requestedStep: 'Запрошенный шаг',
+    appliedStep: 'Применённый шаг',
+    seriesCells: 'Рядов × ячеек',
+    ofWord: 'из',
+  },
+  resolutionReduced: (requested: string, applied: string): string =>
+    `шаг увеличен с ${requested} до ${applied}. Короткие всплески внутри более крупного интервала усредняются для следующих рядов:`,
+} as const
+
+export const OPENSEARCH_LABELS = {
+  region: (profileId: string): string => `Ошибки OpenSearch: ${profileId}`,
+  title: (profileId: string): string => `Ошибки OpenSearch — ${profileId}`,
+  summary: (total: number | string, rate: number | string, status: string): string =>
+    `Ошибок: ${total} · ${rate} ошибок/мин · Покрытие: ${status}`,
+  note: 'Контекст ошибок не меняет вердикт SLA. Приведены ограниченные примеры, а не полный журнал ошибок.',
+  groupsRegion: (profileId: string): string => `Группы ошибок OpenSearch: ${profileId}`,
+  heads: ['Сервис', 'Тип ошибки', 'Количество', 'Первая / последняя (epoch, мс)', 'Примеры'],
+  truncated: ' [обрезано]',
+  sourceDocument: 'Исходный документ',
+} as const
+
+export const POSTGRES_LABELS = {
+  unknownProfile: 'профиль не указан',
+  region: (profileId: string): string => `Контекст PostgreSQL: ${profileId}`,
+  title: (profileId: string): string => `Изменения PostgreSQL — ${profileId}`,
+  noGaps: 'Пропусков покрытия нет',
+  configTitle: 'Изменения конфигурации',
+  configRegion: 'Изменения конфигурации PostgreSQL',
+  configHeads: ['Параметр', 'До', 'После'],
+  tablesTitle: 'Изменения таблиц',
+  tablesRegion: 'Изменения таблиц PostgreSQL',
+  tableHeads: ['Таблица', 'Статус / причины', 'Δ строк', 'Вставлено / удалено / обновлено', 'Изменённые ключи'],
+  truncated: ' [обрезано]',
+  noTables: 'Снимков таблиц нет.',
+  statementsTitle: 'Дельты запросов (statements)',
+  statementsRegion: 'Дельты запросов PostgreSQL',
+  unmatched: (pre: number, post: number): string => `не сопоставлено до / после: ${pre} / ${post}`,
+  statementHeads: ['БД / пользователь / запрос', 'Вызовы', 'Суммарное время', 'Строки', 'Shared-блоки (hit / read)', 'Записано temp-блоков'],
+  na: 'н/д',
+  nested: ' (вложенный)',
+  noStatements: 'Сопоставленных дельт запросов нет.',
+  pgProfileNote: (status: string, reasons: string): string =>
+    `pg_profile: ${status} · ${reasons}. Приложенный HTML доступен только для скачивания и не отображается.`,
+} as const
+
+export const DIAGNOSTICS_LABELS = {
+  title: 'Диагностика прогона',
+  lead: 'Наблюдаемые ассоциации и эпизоды отклонений относительно опорного окна. Они не доказывают причинно-следственную связь и не меняют вердикт SLA. Отсутствие находок не доказывает штатную работу.',
+  uncertainty: { NOT_ESTIMATED: 'Не оценивалась' } as Record<string, string>,
+  summaryStatus: (status: string, uncertainty: string): string => `Статус: ${status} · Неопределённость: ${uncertainty}`,
+  summaryCounts: (evaluable: number, tested: number, anomalies: number, episodes: number, suppressed: number): string =>
+    `Пар для оценки: ${evaluable} из ${tested}; проверок аномалий: ${anomalies}; эпизодов: ${episodes}; подавлено коротких эпизодов: ${suppressed}.`,
+  anomalyChecksRegion: 'Проверки аномалий относительно опорного окна',
+  anomalyCheckHeads: ['Правило / окно / опора', 'Опорная медиана / MAD', 'Опорные ячейки', 'Ячейки оценки', 'Эпизоды / подавлено', 'Статус / причины'],
+  na: 'н/д',
+  episodesRegion: 'Наблюдаемые эпизоды аномалий',
+  episodeHeads: ['Правило / окно / опора', 'Метрика / сущность', 'Интервал UTC (epoch, мс)', 'Длительность / направление', 'Диапазон / единица', 'Макс. абс. дельта', 'Причины'],
+  durationSec: (value: string): string => `${value} с`,
+  durationMin: (value: string): string => `${value} мин`,
+  rawSummary: 'Исходные данные диагностики',
 } as const

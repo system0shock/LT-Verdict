@@ -16,7 +16,7 @@ function sortAria(key: TxSortKey): 'ascending' | 'descending' | 'none' {
 }
 
 function toggleSort(key: TxSortKey) {
-  query.value = { ...query.value, sort: key, dir: query.value.sort === key ? (query.value.dir === 1 ? -1 : 1) : key === 'label' ? 1 : -1 }
+  query.value = { ...query.value, sort: key, dir: query.value.sort === key ? (query.value.dir === 1 ? -1 : 1) : (key === 'label' || key === 'status') ? 1 : -1 }
 }
 </script>
 
@@ -134,8 +134,17 @@ function toggleSort(key: TxSortKey) {
                 {{ heads.errorRate }}
               </button>
             </th>
-            <th scope="col">
-              {{ heads.p50 }}
+            <th
+              scope="col"
+              :aria-sort="sortAria('p50')"
+            >
+              <button
+                type="button"
+                :aria-label="TABLES_LABELS.sortBy(heads.p50)"
+                @click="toggleSort('p50')"
+              >
+                {{ heads.p50 }}
+              </button>
             </th>
             <th
               scope="col"
@@ -173,8 +182,17 @@ function toggleSort(key: TxSortKey) {
                 {{ heads.rps }}
               </button>
             </th>
-            <th scope="col">
-              {{ heads.status }}
+            <th
+              scope="col"
+              :aria-sort="sortAria('status')"
+            >
+              <button
+                type="button"
+                :aria-label="TABLES_LABELS.sortBy(heads.status)"
+                @click="toggleSort('status')"
+              >
+                {{ heads.status }}
+              </button>
             </th>
           </tr>
         </thead>

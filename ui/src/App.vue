@@ -18,11 +18,14 @@ import DeepAnalysisPanel from './shell/DeepAnalysisPanel.vue'
 import PodHeatmap from './shell/PodHeatmap.vue'
 import CapacityTable from './shell/CapacityTable.vue'
 import RuleChecksTable from './shell/RuleChecksTable.vue'
+import TablesPanel from './shell/TablesPanel.vue'
 import TransactionsTable from './shell/TransactionsTable.vue'
 import TrendTable from './shell/TrendTable.vue'
 import ShellPanel from './shell/ShellPanel.vue'
 import ShellTabs from './shell/ShellTabs.vue'
 import { JOB_LABELS, SETUP_MESSAGES, SHELL_DEFAULT_TAB, SHELL_LABELS, UPLOAD_LABELS, type ShellTabKey } from './shell/labels'
+import { NORMALIZED_LABELS, type TablesSubTabKey } from './shell/labels.tables'
+import { tablesTargetSubTab } from './shell/tables'
 import { browserStorage, resolveNewShell } from './shell/shell'
 import {
   ApiError,
@@ -53,6 +56,7 @@ const uploadLabels = shellNew
   ? UPLOAD_LABELS
   : { cancel: 'Cancel upload', cancelled: 'Upload cancelled. No analysis was started; choose the file again if needed.' }
 const activeTab = ref<ShellTabKey>(SHELL_DEFAULT_TAB)
+const tablesSubTab = ref<TablesSubTabKey>('all')
 const legacyHref = window.location.pathname + '?shell=old'
 const chrome = shellNew
   ? { noRun: SHELL_LABELS.noRun, completed: SHELL_LABELS.completed, toDark: SHELL_LABELS.themeToDark, toLight: SHELL_LABELS.themeToLight, runsTitle: SHELL_LABELS.runsTitle, runsEmpty: SHELL_LABELS.runsEmpty, runsMore: SHELL_LABELS.runsMore, analysesTitle: SHELL_LABELS.analysesTitle, analysisItem: SHELL_LABELS.analysisItem, analysesEmpty: SHELL_LABELS.analysesEmpty, analysesMore: SHELL_LABELS.analysesMore }
@@ -155,6 +159,8 @@ const rollup = ref(1)
 const rangeStart = ref('')
 const rangeEnd = ref('')
 let analysisRevision = 0
+let tabRevision = 0
+let activeAnalysisLoad: { runId: string; analysisId: string; promise: Promise<void> } | null = null
 let bucketRevision = 0
 let policyRevision = 0
 let policyFileCheck: Promise<unknown> | null = null
@@ -167,7 +173,7 @@ const verdictSummary = computed(() => {
   const analysis = analyses.value.find((item) => item.analysis_id === selectedAnalysisId.value)
   return summarizeVerdict(result.value, { policySha256: analysis?.policy_sha256, policyId: analysis?.policy_id, tabs: shellNew })
 })
-watch(result, (value) => { if (shellNew && value && !trialBusy.value) activeTab.value = 'overview' })
+watch(activeTab, () => { tabRevision += 1 })
 // Under 960 px the side column stacks above the workspace: scroll to the workspace, not to the page top.
 watch([activeTab, selectedAnalysisId], () => {
   if (shellNew) window.scrollTo(0, window.scrollY + (document.querySelector('.workspace')?.getBoundingClientRect().top ?? -window.scrollY))
@@ -439,6 +445,7 @@ async function analyze(pairSlots?: string[][]) {
     return
   }
   const revision = ++analysisRevision
+  const tabAtStart = tabRevision
   adviceAutoFor.value = null
   queueBusy.value = false
   errorMessage.value = ''
@@ -504,7 +511,7 @@ async function analyze(pairSlots?: string[][]) {
         aiRequested.value = false
         uploadProgress.value = 100
       }
-      await pollJob(revision)
+      await pollJob(revision, tabAtStart)
       if (revision !== analysisRevision || job.value?.state !== 'COMPLETE') break
     }
   } catch (failure) {
@@ -548,7 +555,7 @@ async function trialRun() {
   }
 }
 
-async function pollJob(revision: number) {
+async function pollJob(revision: number, tabAtStart = tabRevision) {
   const startedAt = Date.now()
   let failures = 0
   let firstFailureAt: number | null = null
@@ -588,7 +595,9 @@ async function pollJob(revision: number) {
   const loaded = await getResult(job.value.run_id, selectedAnalysisId.value)
   if (revision !== analysisRevision) return
   if (adviceRevision === revision) adviceAutoFor.value = selectedAnalysisId.value
+  tablesSubTab.value = 'all'
   result.value = loaded
+  if (shellNew && !trialBusy.value && tabRevision === tabAtStart) activeTab.value = 'overview'
   completedAt.value = new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'medium' }).format(new Date())
   await refreshAnalyses(job.value.run_id)
   if (revision !== analysisRevision || !result.value) return
@@ -679,8 +688,9 @@ async function refreshSources() {
   sourceProfiles.value = (await listSources()).profiles
 }
 
-async function selectRun(run: RunSummary) {
+async function selectRun(run: RunSummary, options: { autoOpen?: boolean } = {}) {
   const revision = ++analysisRevision
+  const tabAtStart = tabRevision
   adviceAutoFor.value = null
   job.value = null
   uploadProgress.value = 0
@@ -698,6 +708,9 @@ async function selectRun(run: RunSummary) {
   try {
     await refreshAnalyses(run.run_id)
     if (revision !== analysisRevision) return
+    if (shellNew && options.autoOpen !== false && analyses.value.length > 0) {
+      await selectAnalysis(analyses.value[0], { tabAtStart })
+    }
   } catch (failure) {
     if (revision === analysisRevision) showError(failure)
   }
@@ -717,10 +730,24 @@ async function selectAnalysisById(analysisId: string) {
   if (found) await selectAnalysis(found)
 }
 
-async function selectAnalysis(analysis: AnalysisSummary) {
+async function selectAnalysis(analysis: AnalysisSummary, options: { tabAtStart?: number; switchTab?: boolean } = {}) {
   const runId = currentRun.value?.run_id
   if (!runId) return
+  if (shellNew && selectedAnalysisId.value === analysis.analysis_id) {
+    if (result.value) {
+      if (options.switchTab !== false) activeTab.value = 'overview'
+      return
+    }
+    if (activeAnalysisLoad && activeAnalysisLoad.runId === runId && activeAnalysisLoad.analysisId === analysis.analysis_id) {
+      await activeAnalysisLoad.promise
+      if (options.switchTab !== false && result.value && selectedAnalysisId.value === analysis.analysis_id) {
+        activeTab.value = 'overview'
+      }
+      return
+    }
+  }
   const revision = ++analysisRevision
+  const tabAtStart = options.tabAtStart ?? tabRevision
   adviceAutoFor.value = null
   job.value = null
   uploadProgress.value = 0
@@ -732,13 +759,26 @@ async function selectAnalysis(analysis: AnalysisSummary) {
   completedAt.value = ''
   bucketNextFrom.value = null
   errorMessage.value = ''
+  const loadPromise = (async () => {
+    try {
+      const loaded = await getResult(runId, analysis.analysis_id)
+      if (revision !== analysisRevision || selectedAnalysisId.value !== analysis.analysis_id) return
+      tablesSubTab.value = 'all'
+      result.value = loaded
+      if (shellNew && options.switchTab !== false && !trialBusy.value && tabRevision === tabAtStart) {
+        activeTab.value = 'overview'
+      }
+      if (loaded.run_validity !== 'INVALID') await refreshBuckets()
+    } catch (failure) {
+      if (revision === analysisRevision) showError(failure)
+    }
+  })()
+  const entry = { runId, analysisId: analysis.analysis_id, promise: loadPromise }
+  activeAnalysisLoad = entry
   try {
-    const loaded = await getResult(runId, analysis.analysis_id)
-    if (revision !== analysisRevision || selectedAnalysisId.value !== analysis.analysis_id) return
-    result.value = loaded
-    if (loaded.run_validity !== 'INVALID') await refreshBuckets()
-  } catch (failure) {
-    if (revision === analysisRevision) showError(failure)
+    await loadPromise
+  } finally {
+    if (activeAnalysisLoad === entry) activeAnalysisLoad = null
   }
 }
 
@@ -785,8 +825,8 @@ function showError(failure: unknown) {
 // Opens the analysis of a history row; the baseline panel shows the baseline of the release series.
 async function openReference({ release, analysis }: { release: Release; analysis: ReleaseAnalysis }, tab: ShellTabKey) {
   showBaselineSeries(release.series)
-  await selectRun(runs.value.find((run) => run.run_id === release.run_id) ?? runSummaryFromId(release.run_id))
-  await selectAnalysis(analysisSummary(analysis))
+  await selectRun(runs.value.find((run) => run.run_id === release.run_id) ?? runSummaryFromId(release.run_id), { autoOpen: false })
+  await selectAnalysis(analysisSummary(analysis), { switchTab: false })
   activeTab.value = tab
 }
 
@@ -805,6 +845,9 @@ async function showVerdict() {
 }
 
 async function jumpTo(target: AttentionTarget) {
+  if (shellNew && target.tab === 'tables' && tablesSubTab.value !== 'all') {
+    tablesSubTab.value = tablesTargetSubTab(result.value, target.targetId)
+  }
   activeTab.value = target.tab
   await nextTick()
   const element = document.getElementById(target.targetId)
@@ -1135,6 +1178,8 @@ function focusPolicy() {
             :version="baselineVersion"
             :preferred-series="preferredSeries"
             :facts="baselineFacts"
+            :result="result"
+            :use-echarts="shellNew"
             @active-series="baselineSeries = $event"
           />
 
@@ -1259,41 +1304,70 @@ function focusPolicy() {
             :selection="selectedReference"
           />
 
-          <template v-if="shellNew && result && shownIn('tables')">
-            <CapacityTable :result="result" />
-            <RuleChecksTable :result="result" />
-            <TransactionsTable :result="result" />
-            <TrendTable :result="result" />
-          </template>
-          <AnalysisView
-            v-if="result && shownIn('tables')"
+          <TablesPanel
+            v-if="shellNew && result && shownIn('tables')"
+            v-model="tablesSubTab"
             :result="result"
-            :shell-tables="shellNew"
-            :buckets="buckets"
-            :markers="chartMarkers"
-            :rollup="rollup"
-            :bucket-rollup="bucketRollup"
-            :range-start="rangeStart"
-            :range-end="rangeEnd"
-            @update:rollup="rollup = $event"
-            @update:range-start="rangeStart = $event"
-            @update:range-end="rangeEnd = $event"
-            @refresh-buckets="refreshBuckets"
           />
-          <p
-            v-if="result && result.run_validity !== 'INVALID' && shownIn('tables')"
-            class="muted"
+          <div
+            v-if="result && shownIn('tables')"
+            id="tables-subpanel"
+            class="tables-subpanel"
           >
-            Showing {{ buckets.length }} buckets from {{ bucketPageFrom.toLocaleString() }} ms
-            ({{ bucketRollup }} s rollup; maximum 500 per page).
-            <button
-              v-if="bucketNextFrom !== null"
-              type="button"
-              @click="refreshBuckets(bucketNextFrom)"
+            <template v-if="shellNew">
+              <CapacityTable
+                v-if="tablesSubTab === 'all' || tablesSubTab === 'capacity'"
+                :result="result"
+              />
+              <RuleChecksTable
+                v-if="tablesSubTab === 'all' || tablesSubTab === 'rules'"
+                :result="result"
+              />
+              <TransactionsTable
+                v-if="tablesSubTab === 'all' || tablesSubTab === 'transactions'"
+                :result="result"
+              />
+              <TrendTable
+                v-if="tablesSubTab === 'all' || tablesSubTab === 'trends'"
+                :result="result"
+              />
+            </template>
+            <AnalysisView
+              :result="result"
+              :shell-tables="shellNew"
+              :visible-group="shellNew ? tablesSubTab : 'all'"
+              :buckets="buckets"
+              :markers="chartMarkers"
+              :rollup="rollup"
+              :bucket-rollup="bucketRollup"
+              :range-start="rangeStart"
+              :range-end="rangeEnd"
+              @update:rollup="rollup = $event"
+              @update:range-start="rangeStart = $event"
+              @update:range-end="rangeEnd = $event"
+              @refresh-buckets="refreshBuckets"
+            />
+            <p
+              v-if="result.run_validity !== 'INVALID' && (!shellNew || tablesSubTab === 'all' || tablesSubTab === 'normalized')"
+              class="muted"
+              :lang="shellNew ? 'ru' : undefined"
             >
-              Next bucket page
-            </button>
-          </p>
+              <template v-if="shellNew">
+                {{ NORMALIZED_LABELS.pageSummary(buckets.length, bucketPageFrom, bucketRollup) }}
+              </template>
+              <template v-else>
+                Showing {{ buckets.length }} buckets from {{ bucketPageFrom.toLocaleString() }} ms
+                ({{ bucketRollup }} s rollup; maximum 500 per page).
+              </template>
+              <button
+                v-if="bucketNextFrom !== null"
+                type="button"
+                @click="refreshBuckets(bucketNextFrom)"
+              >
+                {{ shellNew ? NORMALIZED_LABELS.nextPage : 'Next bucket page' }}
+              </button>
+            </p>
+          </div>
           <RulesPanel
             v-if="shellNew"
             v-show="shownIn('rules')"

@@ -285,3 +285,56 @@ test('the sticky header does not cover the verdict card after the chip jump', as
   const verdictBox = await page.locator('#verdict').boundingBox()
   expect(verdictBox!.y).toBeGreaterThanOrEqual(headerBox!.y + headerBox!.height - 1)
 })
+
+test('clicking a run opens its analysis in 1 click in the new shell, while old shell keeps 2-click', async ({ page }) => {
+  await fixtureApi(page)
+  await page.goto('/?shell=new')
+  await expect(tabByKey(page, 'setup')).toHaveAttribute('aria-selected', 'true')
+  await page.getByRole('button', { name: 'shell.jtl' }).click()
+  await expect(tabByKey(page, 'overview')).toHaveAttribute('aria-selected', 'true')
+  await expect(page.locator('#verdict')).toBeVisible()
+  await expect(page.getByTestId('overview-panel')).toBeVisible()
+
+  await page.goto('/?shell=old')
+  await page.getByRole('button', { name: 'shell.jtl' }).click()
+  await expect(page.getByRole('heading', { name: 'Saved analyses' })).toBeVisible()
+  await expect(page.locator('#verdict')).toHaveCount(0)
+  await page.locator(`button[title="${reference.analysis_id}"]`).click()
+  await expect(page.locator('#verdict')).toBeVisible()
+})
+
+test('new shell handles a run with 0 analyses and a run with multiple analyses cleanly', async ({ page }) => {
+  const secondId = 'f'.repeat(64)
+  await page.route('**/api/**', async (route) => {
+    const path = new URL(route.request().url()).pathname
+    const method = route.request().method()
+    let body: unknown
+    if (path === '/api/bootstrap') body = { csrf_token: 'ui-test', max_upload_bytes: 1000000 }
+    else if (method === 'GET' && path === '/api/jobs') body = { jobs: [] }
+    else if (method === 'GET' && (path === '/api/jenkins' || path === '/api/grafana' || path === '/api/sources')) body = { profiles: [] }
+    else if (method === 'GET' && /\/advice$/.test(path)) body = { advice: null, job: null }
+    else if (path === '/api/baseline') body = { baseline: null }
+    else if (path === '/api/runs') body = { runs: [run, { ...run, run_id: 'empty-run', original_filename: 'empty.jtl' }], next_after: null }
+    else if (path.includes('/empty-run/analyses')) body = { analyses: [], next_after: null }
+    else if (path.endsWith('/analyses')) body = {
+      analyses: [
+        { analysis_id: reference.analysis_id, policy_sha256: 'c'.repeat(64), policy_verdict: 'FAIL', run_validity: 'VALID' },
+        { analysis_id: secondId, policy_sha256: 'd'.repeat(64), policy_verdict: 'PASS', run_validity: 'VALID' },
+      ],
+      next_after: null,
+    }
+    else if (path.endsWith('/result')) body = path.includes(secondId) ? { ...failing, policy_verdict: 'PASS' } : failing
+    else if (path.endsWith('/buckets')) body = { buckets: [], next_from_ms: null }
+    else throw new Error(`Unexpected UI request ${path}`)
+    await route.fulfill({ json: body })
+  })
+  await page.goto('/?shell=new')
+  await page.getByRole('button', { name: 'empty.jtl' }).click()
+  await expect(page.getByText(SHELL_LABELS.analysesEmpty)).toBeVisible()
+  await expect(tabByKey(page, 'setup')).toHaveAttribute('aria-selected', 'true')
+
+  await page.getByRole('button', { name: 'shell.jtl' }).click()
+  await expect(page.locator('#verdict')).toContainText('FAIL')
+  await page.locator(`button[title="${secondId}"]`).click()
+  await expect(page.locator('#verdict')).toContainText('PASS')
+})

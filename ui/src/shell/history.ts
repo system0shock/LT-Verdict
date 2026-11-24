@@ -1,4 +1,8 @@
+import type { EChartsCoreOption } from 'echarts/core'
 import type { AnalysisSummary, Release, ReleaseAnalysis, ReleaseProfile, ReleaseRequest, ReleaseUpdate } from '../types'
+import { HISTORY_LABELS } from './labels.history'
+import { formatNumber } from './overview'
+import { valueAxis } from './timeChart'
 
 export const DEFAULT_VISIBLE_RELEASES = 4
 // The suggestion and the statistical count look at the newest releases of the series (20 is the statistical maximum), the table shows four.
@@ -148,6 +152,20 @@ export function statisticalAvailability(releases: readonly Release[], opened: Re
 }
 
 export interface DynamicsPoint { release: Release; verdict: ReleaseAnalysis['policy_verdict']; value: number }
+export interface HistoryChartColors {
+  brand: string
+  pass: string
+  fail: string
+  warn: string
+  text: string
+  muted: string
+  border: string
+  fontFamily: string
+}
+
+export function shortDynamicsLabel(label: string): string {
+  return label.length > 10 ? `${label.slice(0, 9)}...` : label
+}
 
 // Points of the p95 chart in ascending time order; a release without a number is not drawn.
 export function dynamicsPoints(releases: readonly Release[], valueOf: (analysisId: string) => string | null): DynamicsPoint[] {
@@ -159,6 +177,70 @@ export function dynamicsPoints(releases: readonly Release[], valueOf: (analysisI
     if (analysis && Number.isFinite(value)) points.push({ release, verdict: analysis.policy_verdict, value })
   }
   return points.sort((a, b) => (a.release.started_at < b.release.started_at ? -1 : a.release.started_at > b.release.started_at ? 1 : 0))
+}
+
+export function historyDynamicsOption(
+  points: readonly DynamicsPoint[],
+  colors: HistoryChartColors,
+  baselineValue: number | null = null,
+): EChartsCoreOption {
+  const hasBaseline = baselineValue !== null && Number.isFinite(baselineValue)
+  const maxValue = Math.max(1, ...points.map((point) => point.value), hasBaseline ? baselineValue : 0)
+  const axis = valueAxis(0, maxValue)
+  const text = { color: colors.muted, fontSize: 12, fontFamily: colors.fontFamily }
+  return {
+    animation: false,
+    grid: { left: 56, right: 16, top: 18, bottom: 44 },
+    xAxis: {
+      type: 'category',
+      data: points.map((point) => shortDynamicsLabel(point.release.label)),
+      axisLine: { lineStyle: { color: colors.border } },
+      axisTick: { show: false },
+      axisLabel: { ...text, interval: 0, hideOverlap: true },
+    },
+    yAxis: {
+      type: 'value',
+      min: axis.min,
+      max: axis.max,
+      interval: axis.interval,
+      axisLine: { show: false },
+      axisTick: { show: false },
+      splitLine: { lineStyle: { color: colors.border } },
+      axisLabel: { ...text, formatter: (value: number) => formatNumber(value) },
+    },
+    series: [{
+      type: 'line',
+      silent: true,
+      showSymbol: true,
+      showAllSymbol: true,
+      symbolSize: 12,
+      lineStyle: { color: colors.muted, width: 1.5 },
+      data: points.map((point) => {
+        const symbol = point.verdict === 'PASS' ? 'circle' : point.verdict === 'FAIL' ? 'rect' : 'triangle'
+        const color = point.verdict === 'PASS' ? colors.pass : point.verdict === 'FAIL' ? colors.fail : colors.warn
+        return { value: point.value, symbol, itemStyle: { color } }
+      }),
+      ...(hasBaseline
+        ? {
+            markLine: {
+              silent: true,
+              symbol: 'none',
+              data: [{
+                yAxis: baselineValue,
+                lineStyle: { type: [5, 4], width: 1.5, color: colors.brand },
+                label: {
+                  formatter: HISTORY_LABELS.dynamicsBaseline(formatNumber(baselineValue)),
+                  position: baselineValue >= axis.max ? 'insideStartBottom' : 'insideStartTop',
+                  color: colors.brand,
+                  fontSize: 12,
+                  fontFamily: colors.fontFamily,
+                },
+              }],
+            },
+          }
+        : {}),
+    }],
+  }
 }
 
 export function releaseUpdate(release: Release, analysisId: string): ReleaseUpdate {

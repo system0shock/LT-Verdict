@@ -2,13 +2,32 @@
 import { computed, nextTick, ref, watch } from 'vue'
 import LoadCharts from './LoadCharts.vue'
 import { CORRELATION_LABELS } from './shell/labels'
-import { NORMALIZED_LABELS, RESOURCE_CHECK_LABELS } from './shell/labels.tables'
+import {
+  DIAGNOSTICS_LABELS,
+  NORMALIZED_LABELS,
+  OPENSEARCH_LABELS,
+  POSTGRES_LABELS,
+  RESOURCE_CHECK_LABELS,
+  RESOURCE_TABLES_LABELS,
+  SOURCE_ACQUISITION_LABELS,
+  SUMMARY_METRICS_LABELS,
+  TABLES_LABELS,
+  type TablesSubTabKey,
+} from './shell/labels.tables'
 import { selectedCorrelations, unavailableFamilies } from './shell/overview'
+import {
+  sortResourceChecks,
+  sortResourceSummaries,
+  type ResourceCheckSortKey,
+  type ResourceSummarySortKey,
+} from './shell/tables'
+import { reasonText as verdictReasonText } from './verdictReasons'
 import type { AnalysisResult, Bucket, SourceSummaryEvidence, OpenSearchEvidence, PostgresContextEvidence, TrendCheckEvidence, TrendSummaryEvidence } from './types'
 
 const props = defineProps<{
   result: AnalysisResult
   shellTables?: boolean
+  visibleGroup?: TablesSubTabKey
   buckets: Bucket[]
   rollup: number
   bucketRollup: number
@@ -16,6 +35,9 @@ const props = defineProps<{
   rangeStart: string
   rangeEnd: string
 }>()
+
+const showGroup = (group: TablesSubTabKey) =>
+  !props.shellTables || !props.visibleGroup || props.visibleGroup === 'all' || props.visibleGroup === group
 
 const emit = defineEmits<{
   'update:rollup': [value: number]
@@ -37,13 +59,62 @@ const platformChecks = computed(() => resourceChecks.value.some((item) => item.s
 const presumedCheckIds = computed(() => new Set(props.result.findings
   .filter((finding) => finding.type === 'resource_threshold_violation' && finding.presumed === true)
   .map((finding) => finding.evidence_id)))
+const resSummarySort = ref<ResourceSummarySortKey>('default')
+const resSummaryDir = ref<1 | -1>(1)
+const resCheckSort = ref<ResourceCheckSortKey>('default')
+const resCheckDir = ref<1 | -1>(1)
+const sortedResourceSummaries = computed(() =>
+  props.shellTables ? sortResourceSummaries(resourceSummaries.value, resSummarySort.value, resSummaryDir.value) : resourceSummaries.value)
+const sortedResourceChecks = computed(() =>
+  props.shellTables ? sortResourceChecks(resourceChecks.value, resCheckSort.value, resCheckDir.value) : resourceChecks.value)
+
+const resSummarySortCols: Array<ResourceSummarySortKey | null> = [
+  'series_id', 'metric', null, 'entity', null, null, 'window_id',
+  'observed_cells', 'missing_cells', null, 'min', 'max', 'mean', 'median',
+  null, null, null, 'q95', null, null, null, 'slope_per_second', null, null,
+]
+
+function resSummaryAria(key: ResourceSummarySortKey | null): 'ascending' | 'descending' | 'none' | undefined {
+  if (!props.shellTables || !key) return undefined
+  return resSummarySort.value !== key ? 'none' : resSummaryDir.value === 1 ? 'ascending' : 'descending'
+}
+
+function toggleResSummarySort(key: ResourceSummarySortKey) {
+  if (resSummarySort.value === key) resSummaryDir.value = resSummaryDir.value === 1 ? -1 : 1
+  else {
+    resSummarySort.value = key
+    resSummaryDir.value = key === 'series_id' || key === 'metric' || key === 'entity' || key === 'window_id' ? 1 : -1
+  }
+}
+
+function resCheckAria(key: ResourceCheckSortKey): 'ascending' | 'descending' | 'none' | undefined {
+  if (!props.shellTables) return undefined
+  return resCheckSort.value !== key ? 'none' : resCheckDir.value === 1 ? 'ascending' : 'descending'
+}
+
+function toggleResCheckSort(key: ResourceCheckSortKey) {
+  if (resCheckSort.value === key) resCheckDir.value = resCheckDir.value === 1 ? -1 : 1
+  else {
+    resCheckSort.value = key
+    resCheckDir.value = 1
+  }
+}
+
+function statusLabel(value: unknown): string {
+  const raw = formatOptional(value)
+  if (!props.shellTables) return raw
+  return (TABLES_LABELS.statusText as Record<string, string>)[raw] ?? raw
+}
+
 function checkCoverage(item: Evidence): string | null {
   const expected = item.expected_cells
   const observed = item.observed_cells
   if (typeof expected !== 'number' || typeof observed !== 'number' || expected <= 0) return null
   const percent = new Intl.NumberFormat(props.shellTables ? 'ru-RU' : 'en-US', { maximumFractionDigits: 2 }).format((observed / expected) * 100)
   const gaps = typeof item.missing_cells === 'number' && item.missing_cells > 0
-    ? `; missing cells ${item.missing_cells}, longest gap ${formatOptional(item.longest_gap_cells)}`
+    ? props.shellTables
+      ? RESOURCE_TABLES_LABELS.missingCoverage(item.missing_cells, formatOptional(item.longest_gap_cells))
+      : `; missing cells ${item.missing_cells}, longest gap ${formatOptional(item.longest_gap_cells)}`
     : ''
   return `${observed} / ${expected} (${percent} %)${gaps}`
 }
@@ -62,26 +133,28 @@ const windowProvenance = computed(() => props.result.evidence
 const windowProvenanceRows = computed(() => {
   const provenance = windowProvenance.value
   if (!provenance) return []
-  const rows = [{ label: 'Window origin', value: String(provenance.window_origin) }]
+  const w = SOURCE_ACQUISITION_LABELS.windowRows
+  const ru = Boolean(props.shellTables)
+  const rows = [{ label: ru ? w.windowOrigin : 'Window origin', value: String(provenance.window_origin) }]
   const recognizedStart = provenance.recognized_start_epoch_ms
   const recognizedEnd = provenance.recognized_end_epoch_ms
   if (recognizedStart !== undefined && recognizedEnd !== undefined) {
-    rows.push({ label: 'Recognized period', value: `${formatEpochMs(recognizedStart)} – ${formatEpochMs(recognizedEnd)}` })
+    rows.push({ label: ru ? w.recognizedPeriod : 'Recognized period', value: `${formatEpochMs(recognizedStart)} – ${formatEpochMs(recognizedEnd)}` })
   }
-  if (provenance.requested_margin_ms !== undefined) rows.push({ label: 'Requested margin', value: formatMillis(provenance.requested_margin_ms) })
-  if (provenance.applied_margin_ms !== undefined) rows.push({ label: 'Applied margin', value: formatMillis(provenance.applied_margin_ms) })
-  if (provenance.max_idle_gap_ms !== undefined) rows.push({ label: 'Max idle gap', value: formatMillis(provenance.max_idle_gap_ms) })
-  if (provenance.detected_idle_gaps !== undefined) rows.push({ label: 'Detected idle gaps', value: String(provenance.detected_idle_gaps) })
+  if (provenance.requested_margin_ms !== undefined) rows.push({ label: ru ? w.requestedMargin : 'Requested margin', value: formatMillis(provenance.requested_margin_ms) })
+  if (provenance.applied_margin_ms !== undefined) rows.push({ label: ru ? w.appliedMargin : 'Applied margin', value: formatMillis(provenance.applied_margin_ms) })
+  if (provenance.max_idle_gap_ms !== undefined) rows.push({ label: ru ? w.maxIdleGap : 'Max idle gap', value: formatMillis(provenance.max_idle_gap_ms) })
+  if (provenance.detected_idle_gaps !== undefined) rows.push({ label: ru ? w.detectedIdleGaps : 'Detected idle gaps', value: String(provenance.detected_idle_gaps) })
   const longestIdleGap = provenance.longest_idle_gap_ms
-  if (longestIdleGap !== undefined) rows.push({ label: 'Longest idle gap', value: longestIdleGap === null ? '—' : formatMillis(longestIdleGap) })
-  if (provenance.auto_window_status !== undefined) rows.push({ label: 'Auto window status', value: provenance.auto_window_status })
-  if (provenance.step_origin !== undefined) rows.push({ label: 'Step origin', value: provenance.step_origin })
-  if (provenance.requested_step_ms !== undefined) rows.push({ label: 'Requested step', value: formatMillis(provenance.requested_step_ms) })
+  if (longestIdleGap !== undefined) rows.push({ label: ru ? w.longestIdleGap : 'Longest idle gap', value: longestIdleGap === null ? '—' : formatMillis(longestIdleGap) })
+  if (provenance.auto_window_status !== undefined) rows.push({ label: ru ? w.autoWindowStatus : 'Auto window status', value: provenance.auto_window_status })
+  if (provenance.step_origin !== undefined) rows.push({ label: ru ? w.stepOrigin : 'Step origin', value: provenance.step_origin })
+  if (provenance.requested_step_ms !== undefined) rows.push({ label: ru ? w.requestedStep : 'Requested step', value: formatMillis(provenance.requested_step_ms) })
   // The applied step is published only inside the RESOLUTION_REDUCED warning; without a warning it is not stated.
   const reduced = provenance.warnings?.[0]
-  if (reduced !== undefined) rows.push({ label: 'Applied step', value: formatMillis(reduced.applied_step_ms) })
+  if (reduced !== undefined) rows.push({ label: ru ? w.appliedStep : 'Applied step', value: formatMillis(reduced.applied_step_ms) })
   if (provenance.series_count !== undefined && provenance.cells_per_series !== undefined) {
-    rows.push({ label: 'Series × cells', value: `${provenance.series_count} × ${provenance.cells_per_series} of ${provenance.cell_budget ?? '—'}` })
+    rows.push({ label: ru ? w.seriesCells : 'Series × cells', value: `${provenance.series_count} × ${provenance.cells_per_series} ${ru ? w.ofWord : 'of'} ${provenance.cell_budget ?? '—'}` })
   }
   return rows
 })
@@ -264,6 +337,9 @@ function arrayAt(item: Evidence, key: string): string[] {
 }
 
 function formatMillis(value: number | undefined) {
+  if (props.shellTables) {
+    return value === undefined ? SUMMARY_METRICS_LABELS.noData : `${value.toLocaleString('ru-RU')} ${SUMMARY_METRICS_LABELS.msUnit}`
+  }
   return value === undefined ? 'Not available' : `${value.toLocaleString()} ms`
 }
 
@@ -272,21 +348,25 @@ function formatEpochMs(value: number) {
 }
 
 function formatRatio(value: unknown) {
-  if (value === null || typeof value !== 'object' || Array.isArray(value)) return 'Not available'
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) return props.shellTables ? SUMMARY_METRICS_LABELS.noData : 'Not available'
   const numerator = numberAt(value as Evidence, 'numerator')
   const denominator = numberAt(value as Evidence, 'denominator')
   return numerator === undefined || denominator === undefined || denominator === 0
-    ? 'Not available'
+    ? (props.shellTables ? SUMMARY_METRICS_LABELS.noData : 'Not available')
     : `${((numerator / denominator) * 100).toFixed(2)}%`
 }
 
 function formatThroughput(value: unknown) {
-  if (value === null || typeof value !== 'object' || Array.isArray(value)) return 'Not available'
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) return props.shellTables ? SUMMARY_METRICS_LABELS.noData : 'Not available'
   const numerator = numberAt(value as Evidence, 'numerator')
   const denominator = numberAt(value as Evidence, 'denominator')
-  return numerator === undefined || denominator === undefined || denominator === 0
-    ? 'Not available'
-    : `${(numerator / denominator).toFixed(2)} RPS`
+  if (numerator === undefined || denominator === undefined || denominator === 0) {
+    return props.shellTables ? SUMMARY_METRICS_LABELS.noData : 'Not available'
+  }
+  const rps = numerator / denominator
+  return props.shellTables
+    ? `${new Intl.NumberFormat('ru-RU', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(rps)} ${SUMMARY_METRICS_LABELS.rpsUnit}`
+    : `${rps.toFixed(2)} RPS`
 }
 
 function formatValue(value: unknown) {
@@ -352,6 +432,12 @@ function scopeText(value: Evidence) {
 }
 
 function formatDuration(milliseconds: number) {
+  if (props.shellTables) {
+    const fmt = (val: number) => new Intl.NumberFormat('ru-RU', { minimumFractionDigits: 1, maximumFractionDigits: 1 }).format(val)
+    return milliseconds < 60_000
+      ? DIAGNOSTICS_LABELS.durationSec(fmt(milliseconds / 1_000))
+      : DIAGNOSTICS_LABELS.durationMin(fmt(milliseconds / 60_000))
+  }
   return milliseconds < 60_000 ? `${(milliseconds / 1_000).toFixed(1)} s` : `${(milliseconds / 60_000).toFixed(1)} min`
 }
 
@@ -372,29 +458,31 @@ function updateRange(name: 'update:range-start' | 'update:range-end', event: Eve
 
 <template>
   <section
+    v-if="showGroup('rules')"
     id="summary-metrics"
     tabindex="-1"
+    :lang="shellTables ? 'ru' : undefined"
     aria-labelledby="summary-metrics-title"
   >
     <div class="section-heading">
       <p class="eyebrow">
-        Overall
+        {{ shellTables ? SUMMARY_METRICS_LABELS.eyebrow : 'Overall' }}
       </p><h2 id="summary-metrics-title">
-        Summary metrics
+        {{ shellTables ? SUMMARY_METRICS_LABELS.title : 'Summary metrics' }}
       </h2>
     </div>
     <div class="metric-grid">
       <article class="metric-card">
-        <p>P50</p><strong>{{ overallMetrics.p50 }}</strong><small>Latency percentile</small>
+        <p>{{ shellTables ? SUMMARY_METRICS_LABELS.p50 : 'P50' }}</p><strong>{{ overallMetrics.p50 }}</strong><small>{{ shellTables ? SUMMARY_METRICS_LABELS.latencyHint : 'Latency percentile' }}</small>
       </article>
       <article class="metric-card">
-        <p>P95</p><strong>{{ overallMetrics.p95 }}</strong><small>Latency percentile</small>
+        <p>{{ shellTables ? SUMMARY_METRICS_LABELS.p95 : 'P95' }}</p><strong>{{ overallMetrics.p95 }}</strong><small>{{ shellTables ? SUMMARY_METRICS_LABELS.latencyHint : 'Latency percentile' }}</small>
       </article>
       <article class="metric-card">
-        <p>P99</p><strong>{{ overallMetrics.p99 }}</strong><small>Latency percentile</small>
+        <p>{{ shellTables ? SUMMARY_METRICS_LABELS.p99 : 'P99' }}</p><strong>{{ overallMetrics.p99 }}</strong><small>{{ shellTables ? SUMMARY_METRICS_LABELS.latencyHint : 'Latency percentile' }}</small>
       </article>
       <article class="metric-card">
-        <p>Throughput</p><strong>{{ formatThroughput(valueAt(overall, 'throughput_rps')) }}</strong><small>Run window</small>
+        <p>{{ shellTables ? SUMMARY_METRICS_LABELS.throughput : 'Throughput' }}</p><strong>{{ formatThroughput(valueAt(overall, 'throughput_rps')) }}</strong><small>{{ shellTables ? SUMMARY_METRICS_LABELS.throughputHint : 'Run window' }}</small>
       </article>
     </div>
   </section>
@@ -552,23 +640,24 @@ function updateRange(name: 'update:range-start' | 'update:range-end', event: Eve
   </section>
 
   <section
-    v-if="resourceSummaries.length || windowPolicySummaries.length || resourceChecks.length || resourceBindings.length"
+    v-if="showGroup('resources') && (resourceSummaries.length || windowPolicySummaries.length || resourceChecks.length || resourceBindings.length)"
     id="resource-results"
     class="panel"
+    :lang="shellTables ? 'ru' : undefined"
     aria-labelledby="resource-results-title"
   >
     <div class="section-heading">
       <p class="eyebrow">
-        Resource snapshot
+        {{ shellTables ? RESOURCE_TABLES_LABELS.eyebrow : 'Resource snapshot' }}
       </p><h2 id="resource-results-title">
-        Resource statistics and SLA
+        {{ shellTables ? RESOURCE_TABLES_LABELS.title : 'Resource statistics and SLA' }}
       </h2>
     </div>
     <details
       v-for="item in resourceBindings"
       :key="String(item.id)"
     >
-      <summary>Resource binding</summary>
+      <summary>{{ shellTables ? RESOURCE_TABLES_LABELS.bindingSummary : 'Resource binding' }}</summary>
       <pre>{{ bindingText(item) }}</pre>
     </details>
     <div
@@ -576,10 +665,20 @@ function updateRange(name: 'update:range-start' | 'update:range-end', event: Eve
       class="table-wrap"
       tabindex="0"
       role="region"
-      aria-label="Window policy summaries"
+      :aria-label="shellTables ? RESOURCE_TABLES_LABELS.windowPolicyRegion : 'Window policy summaries'"
     >
       <table>
-        <thead><tr><th>Window</th><th>From epoch (ms)</th><th>To epoch (ms)</th><th>Business verdict</th><th>Resource verdict</th><th>Verdict</th></tr></thead>
+        <thead>
+          <tr>
+            <th
+              v-for="head in (shellTables ? RESOURCE_TABLES_LABELS.windowPolicyHeads : ['Window', 'From epoch (ms)', 'To epoch (ms)', 'Business verdict', 'Resource verdict', 'Verdict'])"
+              :key="head"
+              scope="col"
+            >
+              {{ head }}
+            </th>
+          </tr>
+        </thead>
         <tbody>
           <tr
             v-for="item in windowPolicySummaries"
@@ -589,17 +688,17 @@ function updateRange(name: 'update:range-start' | 'update:range-end', event: Eve
               <span
                 class="status-text"
                 :data-status="formatOptional(item.business_verdict)"
-              >{{ formatOptional(item.business_verdict) }}</span>
+              >{{ statusLabel(item.business_verdict) }}</span>
             </td><td>
               <span
                 class="status-text"
                 :data-status="formatOptional(item.resource_verdict)"
-              >{{ formatOptional(item.resource_verdict) }}</span>
+              >{{ statusLabel(item.resource_verdict) }}</span>
             </td><td>
               <span
                 class="status-text"
                 :data-status="formatOptional(item.verdict)"
-              >{{ formatOptional(item.verdict) }}</span>
+              >{{ statusLabel(item.verdict) }}</span>
             </td>
           </tr>
         </tbody>
@@ -610,13 +709,34 @@ function updateRange(name: 'update:range-start' | 'update:range-end', event: Eve
       class="table-wrap"
       tabindex="0"
       role="region"
-      aria-label="Resource summaries"
+      :aria-label="shellTables ? RESOURCE_TABLES_LABELS.summariesRegion : 'Resource summaries'"
     >
       <table>
-        <thead><tr><th>Series</th><th>Metric</th><th>Unit</th><th>Entity</th><th>Role</th><th>Aggregation</th><th>Window</th><th>Coverage (observed / expected)</th><th>Missing cells</th><th>Longest gap</th><th>Min</th><th>Max</th><th>Mean</th><th>Median</th><th>Q05</th><th>Q25</th><th>Q75</th><th>Q95</th><th>IQR</th><th>MAD</th><th>Sample standard deviation</th><th>Slope per second</th><th>Split-half shift</th><th>Reasons</th></tr></thead>
+        <thead>
+          <tr>
+            <th
+              v-for="(head, index) in (shellTables ? RESOURCE_TABLES_LABELS.summaryHeads : ['Series', 'Metric', 'Unit', 'Entity', 'Role', 'Aggregation', 'Window', 'Coverage (observed / expected)', 'Missing cells', 'Longest gap', 'Min', 'Max', 'Mean', 'Median', 'Q05', 'Q25', 'Q75', 'Q95', 'IQR', 'MAD', 'Sample standard deviation', 'Slope per second', 'Split-half shift', 'Reasons'])"
+              :key="head"
+              scope="col"
+              :aria-sort="resSummaryAria(resSummarySortCols[index])"
+            >
+              <button
+                v-if="shellTables && resSummarySortCols[index]"
+                type="button"
+                :aria-label="TABLES_LABELS.sortBy(head)"
+                @click="toggleResSummarySort(resSummarySortCols[index]!)"
+              >
+                {{ head }}
+              </button>
+              <template v-else>
+                {{ head }}
+              </template>
+            </th>
+          </tr>
+        </thead>
         <tbody>
           <tr
-            v-for="item in resourceSummaries"
+            v-for="item in sortedResourceSummaries"
             :key="String(item.id)"
           >
             <td>{{ formatOptional(item.series_id) }}</td><td>{{ formatOptional(item.metric) }}</td><td>{{ formatOptional(item.unit) }}</td><td>{{ formatOptional(item.entity) }}</td><td>{{ formatOptional(item.role) }}</td><td>{{ formatOptional(item.aggregation) }}</td><td>{{ formatOptional(item.window_id) }}</td><td>{{ formatOptional(item.observed_cells) }} / {{ formatOptional(item.expected_cells) }}</td><td>{{ formatOptional(item.missing_cells) }}</td><td>{{ formatOptional(item.longest_gap_cells) }}</td><td :title="statisticTitle(item, 'min')">
@@ -645,7 +765,17 @@ function updateRange(name: 'update:range-start' | 'update:range-end', event: Eve
               {{ statistic(item, 'slope_per_second') }}
             </td><td :title="statisticTitle(item, 'split_half_shift')">
               {{ statistic(item, 'split_half_shift') }}
-            </td><td>{{ arrayAt(item, 'reasons').join(', ') || '—' }}</td>
+            </td><td>
+              <template v-if="shellTables && arrayAt(item, 'reasons').length">
+                <span
+                  v-for="code in arrayAt(item, 'reasons')"
+                  :key="code"
+                >{{ verdictReasonText(code) }} <code>{{ code }}</code> </span>
+              </template>
+              <template v-else>
+                {{ arrayAt(item, 'reasons').join(', ') || '—' }}
+              </template>
+            </td>
           </tr>
         </tbody>
       </table>
@@ -655,22 +785,65 @@ function updateRange(name: 'update:range-start' | 'update:range-end', event: Eve
       class="table-wrap"
       tabindex="0"
       role="region"
-      aria-label="Resource policy checks"
+      :aria-label="shellTables ? RESOURCE_TABLES_LABELS.checksRegion : 'Resource policy checks'"
     >
       <table>
         <thead :lang="shellTables ? 'ru' : undefined">
           <tr>
-            <th>
-              {{ checkHeads.window }}
+            <th :aria-sort="resCheckAria('window_id')">
+              <button
+                v-if="shellTables"
+                type="button"
+                :aria-label="TABLES_LABELS.sortBy(checkHeads.window)"
+                @click="toggleResCheckSort('window_id')"
+              >
+                {{ checkHeads.window }}
+              </button>
+              <template v-else>
+                {{ checkHeads.window }}
+              </template>
             </th>
-            <th>
-              {{ checkHeads.rule }}
+            <th :aria-sort="resCheckAria('rule_id')">
+              <button
+                v-if="shellTables"
+                type="button"
+                :aria-label="TABLES_LABELS.sortBy(checkHeads.rule)"
+                @click="toggleResCheckSort('rule_id')"
+              >
+                {{ checkHeads.rule }}
+              </button>
+              <template v-else>
+                {{ checkHeads.rule }}
+              </template>
             </th>
-            <th v-if="platformChecks">
-              {{ checkHeads.service }}
+            <th
+              v-if="platformChecks"
+              :aria-sort="resCheckAria('service')"
+            >
+              <button
+                v-if="shellTables"
+                type="button"
+                :aria-label="TABLES_LABELS.sortBy(checkHeads.service)"
+                @click="toggleResCheckSort('service')"
+              >
+                {{ checkHeads.service }}
+              </button>
+              <template v-else>
+                {{ checkHeads.service }}
+              </template>
             </th>
-            <th>
-              {{ checkHeads.series }}
+            <th :aria-sort="resCheckAria('series_id')">
+              <button
+                v-if="shellTables"
+                type="button"
+                :aria-label="TABLES_LABELS.sortBy(checkHeads.series)"
+                @click="toggleResCheckSort('series_id')"
+              >
+                {{ checkHeads.series }}
+              </button>
+              <template v-else>
+                {{ checkHeads.series }}
+              </template>
             </th>
             <th>
               {{ checkHeads.operator }}
@@ -681,8 +854,18 @@ function updateRange(name: 'update:range-start' | 'update:range-end', event: Eve
             <th>
               {{ checkHeads.effect }}
             </th>
-            <th>
-              {{ checkHeads.status }}
+            <th :aria-sort="resCheckAria('status')">
+              <button
+                v-if="shellTables"
+                type="button"
+                :aria-label="TABLES_LABELS.sortBy(checkHeads.status)"
+                @click="toggleResCheckSort('status')"
+              >
+                {{ checkHeads.status }}
+              </button>
+              <template v-else>
+                {{ checkHeads.status }}
+              </template>
             </th>
             <th>
               {{ checkHeads.reason }}
@@ -694,7 +877,7 @@ function updateRange(name: 'update:range-start' | 'update:range-end', event: Eve
         </thead>
         <tbody>
           <tr
-            v-for="item in resourceChecks"
+            v-for="item in sortedResourceChecks"
             :key="String(item.id)"
           >
             <td>{{ formatOptional(item.window_id) }}</td><td>{{ formatOptional(item.rule_id) }}</td><td
@@ -702,19 +885,26 @@ function updateRange(name: 'update:range-start' | 'update:range-end', event: Eve
               data-testid="resource-check-service"
             >
               {{ item.service === undefined ? '—' : formatOptional(item.service) }}<template v-if="item.platform_rule_id !== undefined">
-                (platform rule {{ formatOptional(item.platform_rule_id) }})
+                {{ shellTables ? RESOURCE_TABLES_LABELS.platformRule(formatOptional(item.platform_rule_id)) : `(platform rule ${formatOptional(item.platform_rule_id)})` }}
               </template>
-            </td><td>{{ formatOptional(item.series_id) }}</td><td>{{ formatOptional(item.operator) }}</td><td>{{ formatOptional(item.threshold) }} {{ formatOptional(item.unit) }}</td><td>{{ formatOptional(item.effect) }}</td><td>
+            </td><td>{{ formatOptional(item.series_id) }}</td><td>{{ shellTables ? (RESOURCE_TABLES_LABELS.operators[String(item.operator ?? '')] ?? formatOptional(item.operator)) : formatOptional(item.operator) }}</td><td>{{ formatOptional(item.threshold) }} {{ formatOptional(item.unit) }}</td><td>{{ shellTables ? (RESOURCE_TABLES_LABELS.effects[String(item.effect ?? '')] ?? formatOptional(item.effect)) : formatOptional(item.effect) }}</td><td>
               <span
                 class="status-text"
                 :data-status="formatOptional(item.status)"
-              >{{ formatOptional(item.status) }}</span>
-            </td><td>{{ formatOptional(item.reason) }}</td><td
+              >{{ statusLabel(item.status) }}</span>
+            </td><td>
+              <template v-if="shellTables && typeof item.reason === 'string' && item.reason">
+                {{ verdictReasonText(item.reason) }} <code>{{ item.reason }}</code>
+              </template>
+              <template v-else>
+                {{ formatOptional(item.reason) }}
+              </template>
+            </td><td
               v-if="platformChecks"
               data-testid="resource-check-coverage"
             >
               {{ checkCoverage(item) ?? '—' }}<template v-if="presumedCheckIds.has(item.id)">
-                ; presumed violation (the series is reached only through missing cells)
+                {{ shellTables ? RESOURCE_TABLES_LABELS.presumedViolation : '; presumed violation (the series is reached only through missing cells)' }}
               </template>
             </td>
           </tr>
@@ -724,17 +914,18 @@ function updateRange(name: 'update:range-start' | 'update:range-end', event: Eve
   </section>
 
   <section
-    v-if="sourceSummaries.length"
+    v-if="showGroup('diagnostics') && sourceSummaries.length"
     id="source-acquisition"
     data-testid="source-acquisition"
     class="panel"
+    :lang="shellTables ? 'ru' : undefined"
     aria-labelledby="source-acquisition-title"
   >
     <div class="section-heading">
       <p class="eyebrow">
-        Online source
+        {{ shellTables ? SOURCE_ACQUISITION_LABELS.eyebrow : 'Online source' }}
       </p><h2 id="source-acquisition-title">
-        Source acquisition
+        {{ shellTables ? SOURCE_ACQUISITION_LABELS.title : 'Source acquisition' }}
       </h2>
     </div>
     <div
@@ -743,14 +934,32 @@ function updateRange(name: 'update:range-start' | 'update:range-end', event: Eve
       class="table-wrap"
       tabindex="0"
       role="region"
-      :aria-label="`Source acquisition: ${item.profile_id}`"
+      :aria-label="shellTables ? SOURCE_ACQUISITION_LABELS.region(item.profile_id) : `Source acquisition: ${item.profile_id}`"
     >
       <table>
-        <thead><tr><th>Profile</th><th>Source</th><th>Status</th><th>Requests / retries</th><th>Throttle wait (ms)</th><th>Request cap</th></tr></thead>
-        <tbody><tr><td>{{ item.profile_id }}</td><td>{{ item.source_kind }} / {{ item.transport }}</td><td>{{ item.status }}</td><td>{{ item.request_count }} / {{ item.retries }}</td><td>{{ item.throttle_wait_ms }}</td><td>{{ item.cap_exceeded ? 'Exceeded' : 'Not exceeded' }}</td></tr></tbody>
+        <thead>
+          <tr>
+            <th
+              v-for="head in (shellTables ? SOURCE_ACQUISITION_LABELS.profileHeads : ['Profile', 'Source', 'Status', 'Requests / retries', 'Throttle wait (ms)', 'Request cap'])"
+              :key="head"
+            >
+              {{ head }}
+            </th>
+          </tr>
+        </thead>
+        <tbody><tr><td>{{ item.profile_id }}</td><td>{{ item.source_kind }} / {{ item.transport }}</td><td>{{ item.status }}</td><td>{{ item.request_count }} / {{ item.retries }}</td><td>{{ item.throttle_wait_ms }}</td><td>{{ item.cap_exceeded ? (shellTables ? SOURCE_ACQUISITION_LABELS.capExceeded : 'Exceeded') : (shellTables ? SOURCE_ACQUISITION_LABELS.capNotExceeded : 'Not exceeded') }}</td></tr></tbody>
       </table>
       <table>
-        <thead><tr><th>Query</th><th>Status</th><th>Reason</th></tr></thead>
+        <thead>
+          <tr>
+            <th
+              v-for="head in (shellTables ? SOURCE_ACQUISITION_LABELS.queryHeads : ['Query', 'Status', 'Reason'])"
+              :key="head"
+            >
+              {{ head }}
+            </th>
+          </tr>
+        </thead>
         <tbody>
           <tr
             v-for="query in item.queries"
@@ -767,10 +976,19 @@ function updateRange(name: 'update:range-start' | 'update:range-end', event: Eve
       class="table-wrap"
       tabindex="0"
       role="region"
-      aria-label="Window provenance"
+      :aria-label="shellTables ? SOURCE_ACQUISITION_LABELS.windowProvenanceRegion : 'Window provenance'"
     >
       <table>
-        <thead><tr><th>Window</th><th>Value</th></tr></thead>
+        <thead>
+          <tr>
+            <th
+              v-for="head in (shellTables ? SOURCE_ACQUISITION_LABELS.windowProvenanceHeads : ['Window', 'Value'])"
+              :key="head"
+            >
+              {{ head }}
+            </th>
+          </tr>
+        </thead>
         <tbody>
           <tr
             v-for="row in windowProvenanceRows"
@@ -789,8 +1007,13 @@ function updateRange(name: 'update:range-start' | 'update:range-end', event: Eve
       role="note"
     >
       <p>
-        {{ warning.code }}: the step was raised from {{ formatMillis(warning.requested_step_ms) }} to {{ formatMillis(warning.applied_step_ms) }}.
-        Short spikes inside a coarser interval are averaged out for these series:
+        <template v-if="shellTables">
+          <code>{{ warning.code }}</code>: {{ SOURCE_ACQUISITION_LABELS.resolutionReduced(formatMillis(warning.requested_step_ms), formatMillis(warning.applied_step_ms)) }}
+        </template>
+        <template v-else>
+          {{ warning.code }}: the step was raised from {{ formatMillis(warning.requested_step_ms) }} to {{ formatMillis(warning.applied_step_ms) }}.
+          Short spikes inside a coarser interval are averaged out for these series:
+        </template>
       </p>
       <ul>
         <li
@@ -803,241 +1026,118 @@ function updateRange(name: 'update:range-start' | 'update:range-end', event: Eve
     </div>
   </section>
 
-  <section
-    v-for="context in errorContexts"
-    :key="`${context.profile_id}:${context.id}`"
-    class="panel"
-    data-testid="opensearch-context"
-    :aria-label="`OpenSearch errors: ${context.profile_id}`"
-  >
-    <h2>OpenSearch errors — {{ context.profile_id }}</h2>
-    <p>{{ context.total_errors }} errors · {{ context.error_rate_per_minute }} errors/min · {{ context.coverage.status }}</p>
-    <p v-if="context.coverage.reasons.length">
-      {{ context.coverage.reasons.join(', ') }}
-    </p>
-    <p>Error context does not change SLA verdicts. Samples are bounded, not an exhaustive error log.</p>
-    <div
-      class="table-wrap"
-      tabindex="0"
-      role="region"
-      :aria-label="`OpenSearch error groups: ${context.profile_id}`"
+  <template v-if="showGroup('diagnostics')">
+    <section
+      v-for="context in errorContexts"
+      :key="`${context.profile_id}:${context.id}`"
+      class="panel"
+      data-testid="opensearch-context"
+      :lang="shellTables ? 'ru' : undefined"
+      :aria-label="shellTables ? OPENSEARCH_LABELS.region(context.profile_id) : `OpenSearch errors: ${context.profile_id}`"
     >
-      <table>
-        <thead><tr><th>Service</th><th>Error type</th><th>Count</th><th>First / last (epoch ms)</th><th>Samples</th></tr></thead>
-        <tbody>
-          <tr
-            v-for="group in context.groups"
-            :key="JSON.stringify([group.service, group.error_type])"
-          >
-            <td>{{ group.service }}</td><td>{{ group.error_type }}</td><td>{{ group.count }}</td>
-            <td>{{ group.first_epoch_ms }} / {{ group.last_epoch_ms }}</td>
-            <td>
-              <div
-                v-for="(sample, index) in group.samples"
-                :key="index"
-              >
-                <p>{{ sample.message }}{{ sample.message_truncated ? ' [truncated]' : '' }}</p>
-                <a
-                  :href="sample.source_url"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                >Source document</a>
-              </div>
-            </td>
-          </tr>
-        </tbody>
-      </table>
-    </div>
-  </section>
-
-  <section
-    v-for="context in postgresContexts"
-    :key="context.profile_id ?? 'postgres-context'"
-    class="panel"
-    data-testid="postgres-context"
-    :aria-label="`PostgreSQL context: ${context.profile_id ?? 'unknown profile'}`"
-  >
-    <h2>PostgreSQL changes — {{ context.profile_id ?? 'unknown profile' }}</h2>
-    <p>{{ context.status }} · {{ context.reasons.join(', ') || 'No coverage gaps' }}</p>
-    <template v-if="context.configuration_changes?.length">
-      <h3>Configuration changes</h3>
+      <h2>{{ shellTables ? OPENSEARCH_LABELS.title(context.profile_id) : `OpenSearch errors — ${context.profile_id}` }}</h2>
+      <p>{{ shellTables ? OPENSEARCH_LABELS.summary(context.total_errors, context.error_rate_per_minute, context.coverage.status) : `${context.total_errors} errors · ${context.error_rate_per_minute} errors/min · ${context.coverage.status}` }}</p>
+      <p v-if="context.coverage.reasons.length">
+        {{ context.coverage.reasons.join(', ') }}
+      </p>
+      <p>{{ shellTables ? OPENSEARCH_LABELS.note : 'Error context does not change SLA verdicts. Samples are bounded, not an exhaustive error log.' }}</p>
       <div
         class="table-wrap"
         tabindex="0"
         role="region"
-        aria-label="PostgreSQL configuration changes"
-      >
-        <table>
-          <thead>
-            <tr>
-              <th scope="col">
-                Setting
-              </th>
-              <th scope="col">
-                Pre
-              </th>
-              <th scope="col">
-                Post
-              </th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr
-              v-for="change in context.configuration_changes"
-              :key="change.name"
-            >
-              <td>{{ change.name }}</td><td>{{ formatOptional(change.pre) }}</td><td>{{ formatOptional(change.post) }}</td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-    </template>
-    <h3>Table changes</h3>
-    <div
-      v-if="context.tables.length"
-      class="table-wrap"
-      tabindex="0"
-      role="region"
-      aria-label="PostgreSQL table changes"
-    >
-      <table>
-        <thead>
-          <tr>
-            <th scope="col">
-              Table
-            </th>
-            <th scope="col">
-              Status / reasons
-            </th>
-            <th scope="col">
-              Rows Δ
-            </th>
-            <th scope="col">
-              Inserted / deleted / updated
-            </th>
-            <th scope="col">
-              Changed keys
-            </th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr
-            v-for="table in context.tables"
-            :key="`${table.schema}.${table.table}`"
-          >
-            <td>{{ table.schema }}.{{ table.table }}</td>
-            <td>{{ table.status }} · {{ table.reasons.join(', ') || '—' }}</td>
-            <td>{{ formatOptional(table.row_count_delta) }}</td>
-            <td>{{ formatOptional(table.inserted) }} / {{ formatOptional(table.deleted) }} / {{ formatOptional(table.updated) }}</td>
-            <td>
-              {{ table.changed_keys.map((change) => `${change.change}: ${change.key.join(' / ')}`).join(', ') || '—' }}{{ table.keys_truncated ? ' [truncated]' : '' }}
-            </td>
-          </tr>
-        </tbody>
-      </table>
-    </div>
-    <p v-else>
-      No table captures.
-    </p>
-    <h3>Statement deltas</h3>
-    <p>
-      {{ context.statements.status }} · {{ context.statements.reasons.join(', ') || 'No coverage gaps' }} ·
-      unmatched pre/post: {{ context.statements.unmatched_pre.length }} / {{ context.statements.unmatched_post.length }}
-    </p>
-    <div
-      v-if="context.statements.rows.length"
-      class="table-wrap"
-      tabindex="0"
-      role="region"
-      aria-label="PostgreSQL statement deltas"
-    >
-      <table>
-        <thead>
-          <tr>
-            <th scope="col">
-              Database / user / query
-            </th>
-            <th scope="col">
-              Calls
-            </th>
-            <th scope="col">
-              Total execution time
-            </th>
-            <th scope="col">
-              Rows
-            </th>
-            <th scope="col">
-              Shared blocks hit / read
-            </th>
-            <th scope="col">
-              Temp blocks written
-            </th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr
-            v-for="statement in context.statements.rows"
-            :key="JSON.stringify([statement.dbid, statement.userid, statement.queryid, statement.toplevel])"
-          >
-            <td>{{ statement.dbid }} / {{ statement.userid }} / {{ statement.queryid ?? 'N/A' }}{{ statement.toplevel ? '' : ' (nested)' }}</td>
-            <td>{{ statement.calls }}</td>
-            <td>{{ statement.total_exec_time }}</td>
-            <td>{{ statement.rows }}</td>
-            <td>{{ statement.shared_blks_hit }} / {{ statement.shared_blks_read }}</td>
-            <td>{{ statement.temp_blks_written }}</td>
-          </tr>
-        </tbody>
-      </table>
-    </div>
-    <p v-else>
-      No matched statement deltas.
-    </p>
-    <p>
-      pg_profile: {{ context.pg_profile.status }} · {{ context.pg_profile.reasons.join(', ') || 'No coverage gaps' }}.
-      Attached HTML is download-only and is never rendered here.
-    </p>
-  </section>
-
-  <section
-    v-if="diagnosticSummaries.length || correlationPairs.length || anomalyChecks.length || anomalyEpisodes.length"
-    id="diagnostic-results"
-    class="panel"
-    aria-labelledby="diagnostic-results-title"
-  >
-    <h2 id="diagnostic-results-title">
-      Run diagnostics
-    </h2>
-    <p>Observed associations and reference-based episodes. They do not establish causality or change SLA verdicts. No finding does not establish healthy operation.</p>
-    <div
-      v-for="item in diagnosticSummaries"
-      :key="item.id"
-    >
-      <p>{{ item.status }} · Uncertainty: {{ item.uncertainty }}</p>
-      <p>{{ item.pairs_evaluable }} / {{ item.pairs_tested }} pairs evaluable; {{ item.anomalies_tested }} anomaly checks; {{ item.episodes_reported }} episodes; {{ item.suppressed_short_episodes }} short episodes suppressed.</p>
-      <p v-if="item.reasons.length">
-        {{ item.reasons.join(', ') }}
-      </p>
-    </div>
-    <div
-      v-if="shellTables && correlationPairs.length"
-      data-testid="correlation-hypotheses"
-    >
-      <h3>{{ CORRELATION_LABELS.title }}</h3>
-      <p data-testid="correlation-note">
-        {{ CORRELATION_LABELS.note }}
-      </p>
-      <div
-        v-if="selectedHypotheses.length"
-        class="table-wrap"
-        tabindex="0"
-        role="region"
-        :aria-label="CORRELATION_LABELS.regionAria"
+        :aria-label="shellTables ? OPENSEARCH_LABELS.groupsRegion(context.profile_id) : `OpenSearch error groups: ${context.profile_id}`"
       >
         <table>
           <thead>
             <tr>
               <th
-                v-for="head in CORRELATION_LABELS.heads"
+                v-for="head in (shellTables ? OPENSEARCH_LABELS.heads : ['Service', 'Error type', 'Count', 'First / last (epoch ms)', 'Samples'])"
+                :key="head"
+              >
+                {{ head }}
+              </th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr
+              v-for="group in context.groups"
+              :key="JSON.stringify([group.service, group.error_type])"
+            >
+              <td>{{ group.service }}</td><td>{{ group.error_type }}</td><td>{{ group.count }}</td>
+              <td>{{ group.first_epoch_ms }} / {{ group.last_epoch_ms }}</td>
+              <td>
+                <div
+                  v-for="(sample, index) in group.samples"
+                  :key="index"
+                >
+                  <p>{{ sample.message }}{{ sample.message_truncated ? (shellTables ? OPENSEARCH_LABELS.truncated : ' [truncated]') : '' }}</p>
+                  <a
+                    :href="sample.source_url"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >{{ shellTables ? OPENSEARCH_LABELS.sourceDocument : 'Source document' }}</a>
+                </div>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section
+      v-for="context in postgresContexts"
+      :key="context.profile_id ?? 'postgres-context'"
+      class="panel"
+      data-testid="postgres-context"
+      :lang="shellTables ? 'ru' : undefined"
+      :aria-label="shellTables ? POSTGRES_LABELS.region(context.profile_id ?? POSTGRES_LABELS.unknownProfile) : `PostgreSQL context: ${context.profile_id ?? 'unknown profile'}`"
+    >
+      <h2>{{ shellTables ? POSTGRES_LABELS.title(context.profile_id ?? POSTGRES_LABELS.unknownProfile) : `PostgreSQL changes — ${context.profile_id ?? 'unknown profile'}` }}</h2>
+      <p>{{ context.status }} · {{ context.reasons.join(', ') || (shellTables ? POSTGRES_LABELS.noGaps : 'No coverage gaps') }}</p>
+      <template v-if="context.configuration_changes?.length">
+        <h3>{{ shellTables ? POSTGRES_LABELS.configTitle : 'Configuration changes' }}</h3>
+        <div
+          class="table-wrap"
+          tabindex="0"
+          role="region"
+          :aria-label="shellTables ? POSTGRES_LABELS.configRegion : 'PostgreSQL configuration changes'"
+        >
+          <table>
+            <thead>
+              <tr>
+                <th
+                  v-for="head in (shellTables ? POSTGRES_LABELS.configHeads : ['Setting', 'Pre', 'Post'])"
+                  :key="head"
+                  scope="col"
+                >
+                  {{ head }}
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr
+                v-for="change in context.configuration_changes"
+                :key="change.name"
+              >
+                <td>{{ change.name }}</td><td>{{ formatOptional(change.pre) }}</td><td>{{ formatOptional(change.post) }}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </template>
+      <h3>{{ shellTables ? POSTGRES_LABELS.tablesTitle : 'Table changes' }}</h3>
+      <div
+        v-if="context.tables.length"
+        class="table-wrap"
+        tabindex="0"
+        role="region"
+        :aria-label="shellTables ? POSTGRES_LABELS.tablesRegion : 'PostgreSQL table changes'"
+      >
+        <table>
+          <thead>
+            <tr>
+              <th
+                v-for="head in (shellTables ? POSTGRES_LABELS.tableHeads : ['Table', 'Status / reasons', 'Rows Δ', 'Inserted / deleted / updated', 'Changed keys'])"
                 :key="head"
                 scope="col"
               >
@@ -1047,171 +1147,278 @@ function updateRange(name: 'update:range-start' | 'update:range-end', event: Eve
           </thead>
           <tbody>
             <tr
-              v-for="hypothesis in selectedHypotheses"
-              :key="hypothesis.key"
+              v-for="table in context.tables"
+              :key="`${table.schema}.${table.table}`"
             >
-              <td>{{ hypothesis.windowId }}</td>
-              <td>{{ hypothesis.series }}</td>
-              <td>{{ hypothesis.loadMetric }}</td>
-              <td>{{ hypothesis.lagSeconds }}</td>
-              <td>{{ hypothesis.rho }}</td>
-              <td>{{ hypothesis.adjustedP }}</td>
-              <td>{{ hypothesis.familySize }}</td>
-              <td>{{ hypothesis.note }}</td>
+              <td>{{ table.schema }}.{{ table.table }}</td>
+              <td>{{ table.status }} · {{ table.reasons.join(', ') || '—' }}</td>
+              <td>{{ formatOptional(table.row_count_delta) }}</td>
+              <td>{{ formatOptional(table.inserted) }} / {{ formatOptional(table.deleted) }} / {{ formatOptional(table.updated) }}</td>
+              <td>
+                {{ table.changed_keys.map((change) => `${change.change}: ${change.key.join(' / ')}`).join(', ') || '—' }}{{ table.keys_truncated ? (shellTables ? POSTGRES_LABELS.truncated : ' [truncated]') : '' }}
+              </td>
             </tr>
           </tbody>
         </table>
       </div>
       <p v-else>
-        {{ CORRELATION_LABELS.empty }}
+        {{ shellTables ? POSTGRES_LABELS.noTables : 'No table captures.' }}
       </p>
-      <ul
-        v-if="unavailableHypotheses.length"
-        data-testid="correlation-unavailable"
+      <h3>{{ shellTables ? POSTGRES_LABELS.statementsTitle : 'Statement deltas' }}</h3>
+      <p>
+        {{ context.statements.status }} · {{ context.statements.reasons.join(', ') || (shellTables ? POSTGRES_LABELS.noGaps : 'No coverage gaps') }} ·
+        {{ shellTables ? POSTGRES_LABELS.unmatched(context.statements.unmatched_pre.length, context.statements.unmatched_post.length) : `unmatched pre/post: ${context.statements.unmatched_pre.length} / ${context.statements.unmatched_post.length}` }}
+      </p>
+      <div
+        v-if="context.statements.rows.length"
+        class="table-wrap"
+        tabindex="0"
+        role="region"
+        :aria-label="shellTables ? POSTGRES_LABELS.statementsRegion : 'PostgreSQL statement deltas'"
       >
-        <li
-          v-for="family in unavailableHypotheses"
-          :key="family.windowId"
+        <table>
+          <thead>
+            <tr>
+              <th
+                v-for="head in (shellTables ? POSTGRES_LABELS.statementHeads : ['Database / user / query', 'Calls', 'Total execution time', 'Rows', 'Shared blocks hit / read', 'Temp blocks written'])"
+                :key="head"
+                scope="col"
+              >
+                {{ head }}
+              </th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr
+              v-for="statement in context.statements.rows"
+              :key="JSON.stringify([statement.dbid, statement.userid, statement.queryid, statement.toplevel])"
+            >
+              <td>{{ statement.dbid }} / {{ statement.userid }} / {{ statement.queryid ?? (shellTables ? POSTGRES_LABELS.na : 'N/A') }}{{ statement.toplevel ? '' : (shellTables ? POSTGRES_LABELS.nested : ' (nested)') }}</td>
+              <td>{{ statement.calls }}</td>
+              <td>{{ statement.total_exec_time }}</td>
+              <td>{{ statement.rows }}</td>
+              <td>{{ statement.shared_blks_hit }} / {{ statement.shared_blks_read }}</td>
+              <td>{{ statement.temp_blks_written }}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <p v-else>
+        {{ shellTables ? POSTGRES_LABELS.noStatements : 'No matched statement deltas.' }}
+      </p>
+      <p>
+        <template v-if="shellTables">
+          {{ POSTGRES_LABELS.pgProfileNote(context.pg_profile.status, context.pg_profile.reasons.join(', ') || POSTGRES_LABELS.noGaps) }}
+        </template>
+        <template v-else>
+          pg_profile: {{ context.pg_profile.status }} · {{ context.pg_profile.reasons.join(', ') || 'No coverage gaps' }}.
+          Attached HTML is download-only and is never rendered here.
+        </template>
+      </p>
+    </section>
+
+    <section
+      v-if="diagnosticSummaries.length || correlationPairs.length || anomalyChecks.length || anomalyEpisodes.length"
+      id="diagnostic-results"
+      class="panel"
+      :lang="shellTables ? 'ru' : undefined"
+      aria-labelledby="diagnostic-results-title"
+    >
+      <h2 id="diagnostic-results-title">
+        {{ shellTables ? DIAGNOSTICS_LABELS.title : 'Run diagnostics' }}
+      </h2>
+      <p>{{ shellTables ? DIAGNOSTICS_LABELS.lead : 'Observed associations and reference-based episodes. They do not establish causality or change SLA verdicts. No finding does not establish healthy operation.' }}</p>
+      <div
+        v-for="item in diagnosticSummaries"
+        :key="item.id"
+      >
+        <p>{{ shellTables ? DIAGNOSTICS_LABELS.summaryStatus(item.status, DIAGNOSTICS_LABELS.uncertainty[item.uncertainty] ?? item.uncertainty) : `${item.status} · Uncertainty: ${item.uncertainty}` }}</p>
+        <p>{{ shellTables ? DIAGNOSTICS_LABELS.summaryCounts(item.pairs_evaluable, item.pairs_tested, item.anomalies_tested, item.episodes_reported, item.suppressed_short_episodes) : `${item.pairs_evaluable} / ${item.pairs_tested} pairs evaluable; ${item.anomalies_tested} anomaly checks; ${item.episodes_reported} episodes; ${item.suppressed_short_episodes} short episodes suppressed.` }}</p>
+        <p v-if="item.reasons.length">
+          {{ item.reasons.join(', ') }}
+        </p>
+      </div>
+      <div
+        v-if="shellTables && correlationPairs.length"
+        data-testid="correlation-hypotheses"
+      >
+        <h3>{{ CORRELATION_LABELS.title }}</h3>
+        <p data-testid="correlation-note">
+          {{ CORRELATION_LABELS.note }}
+        </p>
+        <div
+          v-if="selectedHypotheses.length"
+          class="table-wrap"
+          tabindex="0"
+          role="region"
+          :aria-label="CORRELATION_LABELS.regionAria"
         >
-          {{ CORRELATION_LABELS.unavailableLine(family.windowId, family.count, family.total, family.reasons) }}
-        </li>
-      </ul>
-    </div>
-    <div
-      v-if="correlationPairs.length && !shellTables"
-      class="table-wrap"
-      tabindex="0"
-      role="region"
-      aria-label="Observed associations"
-    >
-      <table>
-        <thead>
-          <tr>
-            <th scope="col">
-              Pair / window
-            </th><th scope="col">
-              Resource / entity
-            </th><th scope="col">
-              Load metric
-            </th><th scope="col">
-              Paired / expected cells
-            </th><th scope="col">
-              Raw rho
-            </th><th scope="col">
-              Partial rho (zero lag)
-            </th><th scope="col">
-              Best lag (ms) / rho
-            </th><th scope="col">
-              Status / uncertainty / reasons
-            </th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr
-            v-for="item in correlationPairs"
-            :key="item.id"
+          <table>
+            <thead>
+              <tr>
+                <th
+                  v-for="head in CORRELATION_LABELS.heads"
+                  :key="head"
+                  scope="col"
+                >
+                  {{ head }}
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr
+                v-for="hypothesis in selectedHypotheses"
+                :key="hypothesis.key"
+              >
+                <td>{{ hypothesis.windowId }}</td>
+                <td>{{ hypothesis.series }}</td>
+                <td>{{ hypothesis.loadMetric }}</td>
+                <td>{{ hypothesis.lagSeconds }}</td>
+                <td>{{ hypothesis.rho }}</td>
+                <td>{{ hypothesis.adjustedP }}</td>
+                <td>{{ hypothesis.familySize }}</td>
+                <td>{{ hypothesis.note }}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p v-else>
+          {{ CORRELATION_LABELS.empty }}
+        </p>
+        <ul
+          v-if="unavailableHypotheses.length"
+          data-testid="correlation-unavailable"
+        >
+          <li
+            v-for="family in unavailableHypotheses"
+            :key="family.windowId"
           >
-            <td>{{ item.pair_id }} / {{ item.window_id }}</td>
-            <td>{{ item.resource_series_id }} ({{ item.resource_unit }}) / {{ item.entity }}</td>
-            <td>{{ item.load_metric }} ({{ item.load_unit }})</td>
-            <td>{{ item.paired_cells }} / {{ item.expected_cells }}</td>
-            <td>{{ item.raw_rho ?? 'N/A' }}</td>
-            <td>{{ item.partial_rho ?? 'N/A' }}</td>
-            <td>{{ item.best_lag_ms ?? 'N/A' }} / {{ item.best_lag_rho ?? 'N/A' }}</td>
-            <td>{{ item.status }} · {{ item.uncertainty }} · {{ item.reasons.join(', ') || '—' }}</td>
-          </tr>
-        </tbody>
-      </table>
-    </div>
-    <div
-      v-if="anomalyChecks.length"
-      class="table-wrap"
-      tabindex="0"
-      role="region"
-      aria-label="Reference anomaly checks"
-    >
-      <table>
-        <thead>
-          <tr>
-            <th scope="col">
-              Rule / window / reference
-            </th><th scope="col">
-              Reference median / MAD
-            </th><th scope="col">
-              Reference cells
-            </th><th scope="col">
-              Evaluation cells
-            </th><th scope="col">
-              Episodes / suppressed
-            </th><th scope="col">
-              Status / reasons
-            </th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr
-            v-for="item in anomalyChecks"
-            :key="item.id"
-          >
-            <td>{{ item.rule_id }} / {{ item.window_id }} / {{ item.reference_window_id }}</td>
-            <td>{{ item.reference_median ?? 'N/A' }} / {{ item.reference_mad ?? 'N/A' }}</td>
-            <td>{{ item.reference_observed_cells }} / {{ item.reference_expected_cells }}</td>
-            <td>{{ item.observed_cells }} / {{ item.expected_cells }}</td>
-            <td>{{ item.episodes_reported }} / {{ item.suppressed_short_episodes }}</td>
-            <td>{{ item.status }} · {{ item.reasons.join(', ') || '—' }}</td>
-          </tr>
-        </tbody>
-      </table>
-    </div>
-    <div
-      v-if="anomalyEpisodes.length"
-      class="table-wrap"
-      tabindex="0"
-      role="region"
-      aria-label="Observed anomaly episodes"
-      data-testid="anomaly-episodes"
-    >
-      <table>
-        <thead>
-          <tr>
-            <th scope="col">
-              Rule / window / reference
-            </th><th scope="col">
-              Metric / entity
-            </th><th scope="col">
-              UTC interval (epoch ms)
-            </th><th scope="col">
-              Duration / direction
-            </th><th scope="col">
-              Observed range / unit
-            </th><th scope="col">
-              Maximum absolute delta
-            </th><th scope="col">
-              Reasons
-            </th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr
-            v-for="item in anomalyEpisodes"
-            :key="String(item.id)"
-          >
-            <td>{{ item.rule_id }} / {{ item.window_id }} / {{ item.reference_window_id }}</td>
-            <td>{{ item.metric }} / {{ item.entity }}</td>
-            <td>{{ item.from_epoch_ms }}–{{ item.to_epoch_ms }}</td>
-            <td>{{ formatDuration(Number(item.duration_ms)) }} / {{ item.direction }}</td>
-            <td>{{ formatOptional(item.observed_min) }}–{{ formatOptional(item.observed_max) }} {{ item.unit }}</td>
-            <td>{{ formatOptional(item.max_abs_delta) }}</td>
-            <td>{{ arrayAt(item, 'reasons').join(', ') || '—' }}</td>
-          </tr>
-        </tbody>
-      </table>
-    </div>
-    <details>
-      <summary>Raw diagnostic evidence</summary>
-      <pre>{{ diagnosticDetails }}</pre>
-    </details>
-  </section>
+            {{ CORRELATION_LABELS.unavailableLine(family.windowId, family.count, family.total, family.reasons) }}
+          </li>
+        </ul>
+      </div>
+      <div
+        v-if="correlationPairs.length && !shellTables"
+        class="table-wrap"
+        tabindex="0"
+        role="region"
+        aria-label="Observed associations"
+      >
+        <table>
+          <thead>
+            <tr>
+              <th scope="col">
+                Pair / window
+              </th><th scope="col">
+                Resource / entity
+              </th><th scope="col">
+                Load metric
+              </th><th scope="col">
+                Paired / expected cells
+              </th><th scope="col">
+                Raw rho
+              </th><th scope="col">
+                Partial rho (zero lag)
+              </th><th scope="col">
+                Best lag (ms) / rho
+              </th><th scope="col">
+                Status / uncertainty / reasons
+              </th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr
+              v-for="item in correlationPairs"
+              :key="item.id"
+            >
+              <td>{{ item.pair_id }} / {{ item.window_id }}</td>
+              <td>{{ item.resource_series_id }} ({{ item.resource_unit }}) / {{ item.entity }}</td>
+              <td>{{ item.load_metric }} ({{ item.load_unit }})</td>
+              <td>{{ item.paired_cells }} / {{ item.expected_cells }}</td>
+              <td>{{ item.raw_rho ?? (shellTables ? DIAGNOSTICS_LABELS.na : 'N/A') }}</td>
+              <td>{{ item.partial_rho ?? (shellTables ? DIAGNOSTICS_LABELS.na : 'N/A') }}</td>
+              <td>{{ item.best_lag_ms ?? (shellTables ? DIAGNOSTICS_LABELS.na : 'N/A') }} / {{ item.best_lag_rho ?? (shellTables ? DIAGNOSTICS_LABELS.na : 'N/A') }}</td>
+              <td>{{ item.status }} · {{ item.uncertainty }} · {{ item.reasons.join(', ') || '—' }}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <div
+        v-if="anomalyChecks.length"
+        class="table-wrap"
+        tabindex="0"
+        role="region"
+        :aria-label="shellTables ? DIAGNOSTICS_LABELS.anomalyChecksRegion : 'Reference anomaly checks'"
+      >
+        <table>
+          <thead>
+            <tr>
+              <th
+                v-for="head in (shellTables ? DIAGNOSTICS_LABELS.anomalyCheckHeads : ['Rule / window / reference', 'Reference median / MAD', 'Reference cells', 'Evaluation cells', 'Episodes / suppressed', 'Status / reasons'])"
+                :key="head"
+                scope="col"
+              >
+                {{ head }}
+              </th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr
+              v-for="item in anomalyChecks"
+              :key="item.id"
+            >
+              <td>{{ item.rule_id }} / {{ item.window_id }} / {{ item.reference_window_id }}</td>
+              <td>{{ item.reference_median ?? (shellTables ? DIAGNOSTICS_LABELS.na : 'N/A') }} / {{ item.reference_mad ?? (shellTables ? DIAGNOSTICS_LABELS.na : 'N/A') }}</td>
+              <td>{{ item.reference_observed_cells }} / {{ item.reference_expected_cells }}</td>
+              <td>{{ item.observed_cells }} / {{ item.expected_cells }}</td>
+              <td>{{ item.episodes_reported }} / {{ item.suppressed_short_episodes }}</td>
+              <td>{{ item.status }} · {{ item.reasons.join(', ') || '—' }}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <div
+        v-if="anomalyEpisodes.length"
+        class="table-wrap"
+        tabindex="0"
+        role="region"
+        :aria-label="shellTables ? DIAGNOSTICS_LABELS.episodesRegion : 'Observed anomaly episodes'"
+        data-testid="anomaly-episodes"
+      >
+        <table>
+          <thead>
+            <tr>
+              <th
+                v-for="head in (shellTables ? DIAGNOSTICS_LABELS.episodeHeads : ['Rule / window / reference', 'Metric / entity', 'UTC interval (epoch ms)', 'Duration / direction', 'Observed range / unit', 'Maximum absolute delta', 'Reasons'])"
+                :key="head"
+                scope="col"
+              >
+                {{ head }}
+              </th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr
+              v-for="item in anomalyEpisodes"
+              :key="String(item.id)"
+            >
+              <td>{{ item.rule_id }} / {{ item.window_id }} / {{ item.reference_window_id }}</td>
+              <td>{{ item.metric }} / {{ item.entity }}</td>
+              <td>{{ item.from_epoch_ms }}–{{ item.to_epoch_ms }}</td>
+              <td>{{ formatDuration(Number(item.duration_ms)) }} / {{ item.direction }}</td>
+              <td>{{ formatOptional(item.observed_min) }}–{{ formatOptional(item.observed_max) }} {{ item.unit }}</td>
+              <td>{{ formatOptional(item.max_abs_delta) }}</td>
+              <td>{{ arrayAt(item, 'reasons').join(', ') || '—' }}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <details>
+        <summary>{{ shellTables ? DIAGNOSTICS_LABELS.rawSummary : 'Raw diagnostic evidence' }}</summary>
+        <pre>{{ diagnosticDetails }}</pre>
+      </details>
+    </section>
+  </template>
 
   <section
     v-if="!shellTables"
@@ -1252,6 +1459,7 @@ function updateRange(name: 'update:range-start' | 'update:range-end', event: Eve
   </section>
 
   <section
+    v-if="showGroup('normalized')"
     id="normalized-data"
     class="panel"
     aria-labelledby="normalized-data-title"
@@ -1293,11 +1501,12 @@ function updateRange(name: 'update:range-start' | 'update:range-end', event: Eve
         {{ normText.refresh }}
       </button>
     </div>
-    <div :lang="shellTables ? 'en' : undefined">
+    <div>
       <LoadCharts
         :markers="markers"
         :buckets="buckets"
         :rollup="bucketRollup"
+        :labels="shellTables ? NORMALIZED_LABELS.charts : undefined"
       />
     </div>
     <div
@@ -1358,6 +1567,9 @@ function updateRange(name: 'update:range-start' | 'update:range-end', event: Eve
 </template>
 
 <style scoped>
+th button { min-height: 44px; min-width: 44px; border: 0; background: transparent; color: inherit; font: inherit; text-align: left; padding: 0 4px; cursor: pointer; }
+th[aria-sort="ascending"] button::after { content: " \2191"; }
+th[aria-sort="descending"] button::after { content: " \2193"; }
 .bucket-more { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin-top: 12px; }
 .bucket-more p { margin: 0; }
 .bucket-more button { width: auto; min-height: 44px; }

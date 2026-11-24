@@ -1,7 +1,8 @@
+import { existsSync } from 'node:fs'
 import { mkdtemp, rm } from 'node:fs/promises'
 import http from 'node:http'
 import os from 'node:os'
-import { resolve } from 'node:path'
+import { delimiter, resolve } from 'node:path'
 import { spawn } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
 
@@ -13,12 +14,38 @@ if ((rawPort !== undefined && rawPort !== '' && !/^[0-9]+$/.test(rawPort)) ||
 }
 
 const root = resolve(fileURLToPath(new URL('../..', import.meta.url)))
+const usePrebuilt = process.env.LTV_E2E_PREBUILT === '1'
+const testClassesDir = resolve(root, 'build/classes/kotlin/test')
+const installLibDir = resolve(root, 'build/install/ltv/lib')
+if (usePrebuilt) {
+  if (!existsSync(testClassesDir)) {
+    throw new Error(`Missing prebuilt E2E test classes directory: ${testClassesDir}`)
+  }
+  if (!existsSync(installLibDir)) {
+    throw new Error(`Missing prebuilt E2E runtime lib directory: ${installLibDir}`)
+  }
+}
 const tempPrefix = resolve(os.tmpdir(), 'lt-verdict-e2e-')
 const dataDir = await mkdtemp(tempPrefix)
 if (!dataDir.startsWith(tempPrefix)) throw new Error(`Unexpected E2E data directory: ${dataDir}`)
-const gradleArgs = ['runE2eServer', '-x', 'npmCi', `-Pe2eDataDir=${dataDir}`]
-const command = process.platform === 'win32' ? process.env.ComSpec ?? 'cmd.exe' : './gradlew'
-const args = process.platform === 'win32' ? ['/d', '/s', '/c', 'gradlew.bat', ...gradleArgs] : gradleArgs
+let command
+let args
+if (usePrebuilt) {
+  const javaHome = process.env.JAVA_HOME?.trim()
+  const javaExe = process.platform === 'win32' ? 'java.exe' : 'java'
+  const javaBin = javaHome ? resolve(javaHome, 'bin', javaExe) : 'java'
+  command = javaBin
+  args = [
+    `-De2eDataDir=${dataDir}`,
+    '-cp',
+    `${testClassesDir}${delimiter}${resolve(installLibDir, '*')}`,
+    'io.ltverdict.e2e.E2eServerMainKt',
+  ]
+} else {
+  const gradleArgs = ['runE2eServer', '-x', 'npmCi', `-Pe2eDataDir=${dataDir}`]
+  command = process.platform === 'win32' ? process.env.ComSpec ?? 'cmd.exe' : './gradlew'
+  args = process.platform === 'win32' ? ['/d', '/s', '/c', 'gradlew.bat', ...gradleArgs] : gradleArgs
+}
 const child = spawn(command, args, {
   cwd: root,
   stdio: 'inherit',

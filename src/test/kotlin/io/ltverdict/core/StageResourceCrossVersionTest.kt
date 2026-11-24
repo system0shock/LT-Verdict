@@ -3,10 +3,12 @@ package io.ltverdict.core
 import io.ltverdict.storage.DataDirectory
 import io.ltverdict.storage.RunBundleStore
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import org.junit.jupiter.api.Assertions.assertArrayEquals
+import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertInstanceOf
 import org.junit.jupiter.api.Assertions.assertNotEquals
 import org.junit.jupiter.api.Assertions.assertTrue
@@ -29,8 +31,16 @@ class StageResourceCrossVersionTest {
         MODES.forEach { mode ->
             val (identity, result) = analyzeStored(JTL, mode.policy, mode.snapshot, mode.stages)
 
-            assertArrayEquals(Files.readAllBytes(CROSS_VERSION.resolve("${mode.name}/identity.json")), identity, mode.name)
-            assertArrayEquals(Files.readAllBytes(CROSS_VERSION.resolve("${mode.name}/analysis-result.json")), result, mode.name)
+            assertArrayEquals(
+                Files.readAllBytes(CROSS_VERSION.resolve("${mode.name}/identity.json")),
+                stripKey(identity, "incident_method"),
+                mode.name,
+            )
+            assertArrayEquals(
+                Files.readAllBytes(CROSS_VERSION.resolve("${mode.name}/analysis-result.json")),
+                stripKey(result, "incidents"),
+                mode.name,
+            )
         }
     }
 
@@ -41,8 +51,16 @@ class StageResourceCrossVersionTest {
 
         MODES.forEach { mode ->
             val (identity, result) = analyzeStored(JTL, mode.policy, mode.snapshot, mode.stages)
-            assertArrayEquals(Files.readAllBytes(CROSS_VERSION.resolve("${mode.name}/identity.json")), identity, mode.name)
-            assertArrayEquals(Files.readAllBytes(CROSS_VERSION.resolve("${mode.name}/analysis-result.json")), result, mode.name)
+            assertArrayEquals(
+                Files.readAllBytes(CROSS_VERSION.resolve("${mode.name}/identity.json")),
+                stripKey(identity, "incident_method"),
+                mode.name,
+            )
+            assertArrayEquals(
+                Files.readAllBytes(CROSS_VERSION.resolve("${mode.name}/analysis-result.json")),
+                stripKey(result, "incidents"),
+                mode.name,
+            )
             assertNotEquals(sha256Hex(identity), combinedId, mode.name)
         }
         val types =
@@ -98,6 +116,18 @@ class StageResourceCrossVersionTest {
             Files.readAllBytes(outcome.analysisDirectory.resolve("identity.json")) to
                 Files.readAllBytes(outcome.analysisDirectory.resolve("analysis-result.json"))
         }
+
+    private fun stripKey(
+        bytes: ByteArray,
+        key: String,
+    ): ByteArray {
+        val obj = Json.parseToJsonElement(bytes.decodeToString()).jsonObject
+        assertTrue(obj.containsKey(key), "missing $key")
+        if (key == "incident_method") {
+            assertEquals(INCIDENT_METHOD, obj.getValue(key).jsonPrimitive.content)
+        }
+        return canonicalJson(JsonObject(obj - key))
+    }
 
     private data class Mode(
         val name: String,

@@ -1,0 +1,4 @@
+timeStamp,elapsed,label,responseCode,responseMessage,threadName,dataType,success,failureMessage,bytes,sentBytes,grpThreads,allThreads,URL,Latency,IdleTime,Connect
+1788211917499,496,GET /health,200,OK,fixture 1-1,text,true,,0,0,1,1,null,0,0,0
+1788211917996,62,"GET /items, detail",500,Internal Server Error,fixture 1-1,text,false,,0,0,1,1,null,0,0,0
+1788211918058,84,POST /orders,201,Created,fixture 1-1,text,true,,0,0,1,1,null,0,0,0

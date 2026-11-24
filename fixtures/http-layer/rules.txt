@@ -44,20 +44,20 @@ POST /api/baseline: invalid UTF-8 | 400 | {"error":{"code":"MALFORMED_REQUEST","
 POST /api/baseline: 16 KiB + 1 | 413 | {"error":{"code":"RESOURCE_LIMIT_EXCEEDED","details":[],"message":"Baseline request exceeds 16 KiB"}}
 POST /api/baseline: manual too large | 422 | {"error":{"code":"BASELINE_CANDIDATE_TOO_LARGE","details":[],"message":"Baseline candidate is unavailable: BASELINE_CANDIDATE_TOO_LARGE"}}
 POST /api/baseline: statistical too large | 422 | {"error":{"code":"BASELINE_CANDIDATE_TOO_LARGE","details":[],"message":"Baseline candidate is unavailable: BASELINE_CANDIDATE_TOO_LARGE"}}
-POST /api/baseline: manual padded series | 200 | {"baseline":{"algorithm":null,"candidates":[{"analysis_id":"ef28f7a1cf44e1fc1e5392438b0e2fc08317b285c87d1acd3e0e0a744244d41d","run_id":"jmeter_jtl_csv-6d8b83decbc5a86a9527ff1c53553fa43ce8eb469a1011e96a47a40cc2137636"}],"mode":"manual","reference":{"analysis_id":"ef28f7a1cf44e1fc1e5392438b0e2fc08317b285c87d1acd3e0e0a744244d41d","run_id":"jmeter_jtl_csv-6d8b83decbc5a86a9527ff1c53553fa43ce8eb469a1011e96a47a40cc2137636"},"schema_version":"local-baseline.v1","scores":[],"series":"reĺ"}}
-GET /api/baseline: after manual | 200 | len=1099 sha256=dcd572b71e60e60ed2fe61020a6bb8f0bd11e016c288729f13107eab04766a76
-POST /api/baseline: manual small sample | 200 | {"baseline":{"algorithm":null,"candidates":[{"analysis_id":"f785730f00fa93a2e1b51036b95ba25e76297fd0efc08dc3873bf09b4fe5f8b5","run_id":"jmeter_jtl_csv-c14c10de4373983a7434ac9c67707c21706faffeb5b9345a24f7353124100256"}],"mode":"manual","reference":{"analysis_id":"f785730f00fa93a2e1b51036b95ba25e76297fd0efc08dc3873bf09b4fe5f8b5","run_id":"jmeter_jtl_csv-c14c10de4373983a7434ac9c67707c21706faffeb5b9345a24f7353124100256"},"schema_version":"local-baseline.v1","scores":[],"series":"small"}}
-POST /api/baseline: statistical 3 | 200 | len=1447 sha256=c11cba882dcad11da49dc71b2b0a9f490483a6110eb6ca3279571a663ab77834
-POST /api/baseline: statistical 4 | 200 | len=1819 sha256=0a23d6c544da68e6cb549776db39b19d4bc06c126cc6ddc12c07637c2ce889d0
-POST /api/baseline: statistical 6 | 200 | len=2565 sha256=b186f90a267f8397bf8f97a6ef3e1749eee3c88c5303311ca12ee0667dba9df3
-POST /api/baseline: statistical with small sample | 200 | len=1451 sha256=51eb2326a11f8f4bc6255fbd2683526f8902e5dab6b28d021e2da4236f147138
-POST /api/baseline: statistical reversed | 200 | len=1821 sha256=d689c4d67b60115228bab351ff2c68e23466f02a600c18eccde291b150ceed79
-GET /api/baseline: all slots | 200 | len=10971 sha256=3b6cd305011f7218b840085746f0fb7a8ee50811c436bbfa8e732faced7956f0
-GET comparison?series=stat-3 | 200 | len=2367 sha256=6fc400c172d56fe87a59fd43310d97b29434e59f294a7bab4422225a54e6435d
+POST /api/baseline: manual padded series | 200 | {"baseline":{"algorithm":null,"candidates":[{"analysis_id":"2ad58ae0cb5d98318f339cc24ae1dab8b5019147d235076031c5934706c2bf39","run_id":"jmeter_jtl_csv-6d8b83decbc5a86a9527ff1c53553fa43ce8eb469a1011e96a47a40cc2137636"}],"mode":"manual","reference":{"analysis_id":"2ad58ae0cb5d98318f339cc24ae1dab8b5019147d235076031c5934706c2bf39","run_id":"jmeter_jtl_csv-6d8b83decbc5a86a9527ff1c53553fa43ce8eb469a1011e96a47a40cc2137636"},"schema_version":"local-baseline.v1","scores":[],"series":"reĺ"}}
+GET /api/baseline: after manual | 200 | len=1099 sha256=0728f630ed851c3e2b314b1a41ca687f3558de1d457939b344e7af66842848f8
+POST /api/baseline: manual small sample | 200 | {"baseline":{"algorithm":null,"candidates":[{"analysis_id":"406a912d7a528a1e645facda5e15ef22ef539f96b3335ba7b1a4f1cfab4a97cc","run_id":"jmeter_jtl_csv-c14c10de4373983a7434ac9c67707c21706faffeb5b9345a24f7353124100256"}],"mode":"manual","reference":{"analysis_id":"406a912d7a528a1e645facda5e15ef22ef539f96b3335ba7b1a4f1cfab4a97cc","run_id":"jmeter_jtl_csv-c14c10de4373983a7434ac9c67707c21706faffeb5b9345a24f7353124100256"},"schema_version":"local-baseline.v1","scores":[],"series":"small"}}
+POST /api/baseline: statistical 3 | 200 | len=1447 sha256=1c915c4aefcd05889492b440ade2bf4cf780731f252655204afaa0a7be17461e
+POST /api/baseline: statistical 4 | 200 | len=1819 sha256=cb61afac831c23543dc7961acda58982cf26b0978b28abfbc370b6975f3b12ad
+POST /api/baseline: statistical 6 | 200 | len=2565 sha256=07d9e9bbfbe4838ca22fb98aac3ef8e92eb27a820f3266566a07b309974cdecf
+POST /api/baseline: statistical with small sample | 200 | len=1451 sha256=7fea94a316876ff86808ddaa11a149f467025a20b99fbf93ffc80e395b263594
+POST /api/baseline: statistical reversed | 200 | len=1821 sha256=618ce7c56e5e6e326b08ddcb9ee8290c5735487abcdb702113ba2ef221c3e27d
+GET /api/baseline: all slots | 200 | len=10971 sha256=d75313766472214801c98345f5bf0408cd662d2df50bf26986b69890f83f4c3d
+GET comparison?series=stat-3 | 200 | len=2367 sha256=b9b4733b77c37fd9e97022035424c8f63c27210719f4aac85737655fec209fee
 GET baseline-conditions?series=stat-3 | 200 | {"conditions":null}
-GET comparison?series=%20stat-3%20 | 200 | len=2367 sha256=6fc400c172d56fe87a59fd43310d97b29434e59f294a7bab4422225a54e6435d
+GET comparison?series=%20stat-3%20 | 200 | len=2367 sha256=b9b4733b77c37fd9e97022035424c8f63c27210719f4aac85737655fec209fee
 GET baseline-conditions?series=%20stat-3%20 | 200 | {"conditions":null}
-GET comparison?series=stat-4 | 200 | len=2739 sha256=405fcc1fbde05720cb037809a6c1a5b8d7b7c7ecd9b1c1d020627dd502cdc8b9
+GET comparison?series=stat-4 | 200 | len=2739 sha256=6f59b8835bbc49dc1bb89bec9a83f05c0bf7bd8a8e5ad2cb6ae0c1526890b1e8
 GET baseline-conditions?series=stat-4 | 200 | {"conditions":null}
 GET comparison?series=release | 404 | {"error":{"code":"NOT_FOUND","details":[],"message":"No baseline is selected"}}
 GET baseline-conditions?series=release | 404 | {"error":{"code":"NOT_FOUND","details":[],"message":"No baseline is selected"}}
@@ -80,17 +80,17 @@ GET comparison: long window | 400 | {"error":{"code":"MALFORMED_REQUEST","detail
 GET baseline-conditions: long window | 400 | {"error":{"code":"MALFORMED_REQUEST","details":[],"message":"Both window IDs must contain 1–128 UTF-8 bytes without control characters"}}
 GET comparison: control window | 400 | {"error":{"code":"MALFORMED_REQUEST","details":[],"message":"Both window IDs must contain 1–128 UTF-8 bytes without control characters"}}
 GET baseline-conditions: control window | 400 | {"error":{"code":"MALFORMED_REQUEST","details":[],"message":"Both window IDs must contain 1–128 UTF-8 bytes without control characters"}}
-GET comparison: defaults | 200 | len=2705 sha256=2e51c9b7f093db8aa2b3da9c8d98cbb61078638588b652a783157c06f6d590af
+GET comparison: defaults | 200 | len=2705 sha256=d86904de3f2060863868be96583d73293e60142a69f0a64ae5ed9a29f5ad1d91
 GET baseline-conditions: defaults | 200 | {"conditions":null}
 GET comparison: change 0 | 400 | {"error":{"code":"MALFORMED_REQUEST","details":[],"message":"min_change_percent is invalid"}}
 GET baseline-conditions: change 0 | 200 | {"conditions":null}
-GET comparison: change 1000 | 200 | len=2708 sha256=a8fc2abaa2296a5e5701273eb9f04b1ddf80bc280ca4c956d1a2ed4d34fbe4ea
+GET comparison: change 1000 | 200 | len=2708 sha256=40f9434af0471cf24d28bcfcc3bc574f8519de4927922d5adf22fb24c72406fe
 GET baseline-conditions: change 1000 | 200 | {"conditions":null}
 GET comparison: change 1001 | 400 | {"error":{"code":"MALFORMED_REQUEST","details":[],"message":"min_change_percent is invalid"}}
 GET baseline-conditions: change 1001 | 200 | {"conditions":null}
-GET comparison: change 12.5 | 200 | len=2708 sha256=415b444d7625a301dd6fade4c19e179c803958d34e97232630210258a9a164a8
+GET comparison: change 12.5 | 200 | len=2708 sha256=10a81536a21a7af6a1b9f7e4be657c308377b6dc7e137930f383d40f07fdb629
 GET baseline-conditions: change 12.5 | 200 | {"conditions":null}
-GET comparison: change 1e2 | 200 | len=2707 sha256=a63d6e1d9cb1c71ff535888d432c8fa337b75f508ed9c36e1c59bf82057b6f6e
+GET comparison: change 1e2 | 200 | len=2707 sha256=318529847a8319ceb336f68d306b4872b276601d5cc75fc63230af1837a5434f
 GET baseline-conditions: change 1e2 | 200 | {"conditions":null}
 GET comparison: change 1e999 | 400 | {"error":{"code":"MALFORMED_REQUEST","details":[],"message":"min_change_percent is invalid"}}
 GET baseline-conditions: change 1e999 | 200 | {"conditions":null}
@@ -102,28 +102,28 @@ GET comparison: change long | 400 | {"error":{"code":"MALFORMED_REQUEST","detail
 GET baseline-conditions: change long | 200 | {"conditions":null}
 GET comparison: change precision 33 | 400 | {"error":{"code":"MALFORMED_REQUEST","details":[],"message":"min_change_percent is invalid"}}
 GET baseline-conditions: change precision 33 | 200 | {"conditions":null}
-GET comparison: error 1 | 200 | len=2701 sha256=32f261efc644ddacd4faa67ba06ce7d093535c41ed4e4c74f2e7c08a5a2b9c5f
+GET comparison: error 1 | 200 | len=2701 sha256=38477bdd84191145e91408dbb6f3503af947158b1b92554fd740c0b5363019fe
 GET baseline-conditions: error 1 | 200 | {"conditions":null}
 GET comparison: error 1.1 | 400 | {"error":{"code":"MALFORMED_REQUEST","details":[],"message":"min_error_rate_delta is invalid"}}
 GET baseline-conditions: error 1.1 | 200 | {"conditions":null}
-GET comparison: error 0.0005 | 200 | len=2706 sha256=d121d181d57cb972e84805e081f3d5a8f42559cd5bc8fc28806fa36954bccd0e
+GET comparison: error 0.0005 | 200 | len=2706 sha256=c517095da4c83ce0ccc8fe24dc9bb93e38e0659c71a1b415200750d30c5e4974
 GET baseline-conditions: error 0.0005 | 200 | {"conditions":null}
 GET comparison: error scale 13 | 400 | {"error":{"code":"MALFORMED_REQUEST","details":[],"message":"min_error_rate_delta is invalid"}}
 GET baseline-conditions: error scale 13 | 200 | {"conditions":null}
-POST baseline-conditions: CONFIRMED | 200 | {"conditions":{"baseline":{"analysis_id":"569a1b68495c2ddab1b2dcda9c4aafb123e18f115e61868d21a2bc5420ccc4bf","run_id":"jmeter_jtl_csv-aef2dfe571a827411a3bdf6e08ee695a34e0f6c8632d7af2e9d2b11580b86a11"},"current":{"analysis_id":"7455002759b4fa995ce6856f6335587a4750a4708538b4128296f26d870168ca","run_id":"jmeter_jtl_csv-6ae6cc246377e723ab1f1eac222bdc93f7b4f242722a197151cb59059590c0ee"},"decision":"CONFIRMED","provenance":"EXPLICIT_LOCAL_ACTION","schema_version":"local-baseline-conditions.v1","updated_at":"<ts>","windows":null}}
-POST baseline-conditions: NOT_CONFIRMED | 200 | {"conditions":{"baseline":{"analysis_id":"569a1b68495c2ddab1b2dcda9c4aafb123e18f115e61868d21a2bc5420ccc4bf","run_id":"jmeter_jtl_csv-aef2dfe571a827411a3bdf6e08ee695a34e0f6c8632d7af2e9d2b11580b86a11"},"current":{"analysis_id":"7455002759b4fa995ce6856f6335587a4750a4708538b4128296f26d870168ca","run_id":"jmeter_jtl_csv-6ae6cc246377e723ab1f1eac222bdc93f7b4f242722a197151cb59059590c0ee"},"decision":"NOT_CONFIRMED","provenance":"EXPLICIT_LOCAL_ACTION","schema_version":"local-baseline-conditions.v1","updated_at":"<ts>","windows":null}}
-POST baseline-conditions: UNKNOWN | 200 | {"conditions":{"baseline":{"analysis_id":"569a1b68495c2ddab1b2dcda9c4aafb123e18f115e61868d21a2bc5420ccc4bf","run_id":"jmeter_jtl_csv-aef2dfe571a827411a3bdf6e08ee695a34e0f6c8632d7af2e9d2b11580b86a11"},"current":{"analysis_id":"7455002759b4fa995ce6856f6335587a4750a4708538b4128296f26d870168ca","run_id":"jmeter_jtl_csv-6ae6cc246377e723ab1f1eac222bdc93f7b4f242722a197151cb59059590c0ee"},"decision":"UNKNOWN","provenance":"EXPLICIT_LOCAL_ACTION","schema_version":"local-baseline-conditions.v1","updated_at":"<ts>","windows":null}}
+POST baseline-conditions: CONFIRMED | 200 | {"conditions":{"baseline":{"analysis_id":"10ef2dcc632c53248fa1c7986d47aa2248206066681e7cddb5d1707db4201e98","run_id":"jmeter_jtl_csv-aef2dfe571a827411a3bdf6e08ee695a34e0f6c8632d7af2e9d2b11580b86a11"},"current":{"analysis_id":"4021d76a19f71409704ca2b25c600f94b94aa4024d2ec0b69f10689ee75566da","run_id":"jmeter_jtl_csv-6ae6cc246377e723ab1f1eac222bdc93f7b4f242722a197151cb59059590c0ee"},"decision":"CONFIRMED","provenance":"EXPLICIT_LOCAL_ACTION","schema_version":"local-baseline-conditions.v1","updated_at":"<ts>","windows":null}}
+POST baseline-conditions: NOT_CONFIRMED | 200 | {"conditions":{"baseline":{"analysis_id":"10ef2dcc632c53248fa1c7986d47aa2248206066681e7cddb5d1707db4201e98","run_id":"jmeter_jtl_csv-aef2dfe571a827411a3bdf6e08ee695a34e0f6c8632d7af2e9d2b11580b86a11"},"current":{"analysis_id":"4021d76a19f71409704ca2b25c600f94b94aa4024d2ec0b69f10689ee75566da","run_id":"jmeter_jtl_csv-6ae6cc246377e723ab1f1eac222bdc93f7b4f242722a197151cb59059590c0ee"},"decision":"NOT_CONFIRMED","provenance":"EXPLICIT_LOCAL_ACTION","schema_version":"local-baseline-conditions.v1","updated_at":"<ts>","windows":null}}
+POST baseline-conditions: UNKNOWN | 200 | {"conditions":{"baseline":{"analysis_id":"10ef2dcc632c53248fa1c7986d47aa2248206066681e7cddb5d1707db4201e98","run_id":"jmeter_jtl_csv-aef2dfe571a827411a3bdf6e08ee695a34e0f6c8632d7af2e9d2b11580b86a11"},"current":{"analysis_id":"4021d76a19f71409704ca2b25c600f94b94aa4024d2ec0b69f10689ee75566da","run_id":"jmeter_jtl_csv-6ae6cc246377e723ab1f1eac222bdc93f7b4f242722a197151cb59059590c0ee"},"decision":"UNKNOWN","provenance":"EXPLICIT_LOCAL_ACTION","schema_version":"local-baseline-conditions.v1","updated_at":"<ts>","windows":null}}
 POST baseline-conditions: lowercase | 400 | {"error":{"code":"MALFORMED_REQUEST","details":[],"message":"decision is invalid"}}
 POST baseline-conditions: number | 400 | {"error":{"code":"MALFORMED_REQUEST","details":[],"message":"decision must be a string"}}
 POST baseline-conditions: extra key | 400 | {"error":{"code":"MALFORMED_REQUEST","details":[],"message":"Baseline condition fields are invalid"}}
 POST baseline-conditions: no decision | 400 | {"error":{"code":"MALFORMED_REQUEST","details":[],"message":"Baseline condition fields are invalid"}}
-POST baseline-conditions: windows | 200 | {"conditions":{"baseline":{"analysis_id":"569a1b68495c2ddab1b2dcda9c4aafb123e18f115e61868d21a2bc5420ccc4bf","run_id":"jmeter_jtl_csv-aef2dfe571a827411a3bdf6e08ee695a34e0f6c8632d7af2e9d2b11580b86a11"},"current":{"analysis_id":"7455002759b4fa995ce6856f6335587a4750a4708538b4128296f26d870168ca","run_id":"jmeter_jtl_csv-6ae6cc246377e723ab1f1eac222bdc93f7b4f242722a197151cb59059590c0ee"},"decision":"CONFIRMED","provenance":"EXPLICIT_LOCAL_ACTION","schema_version":"local-baseline-conditions.v1","updated_at":"<ts>","windows":{"baseline_window":"a","current_window":"b"}}}
-GET baseline-conditions: stored | 200 | {"conditions":{"baseline":{"analysis_id":"569a1b68495c2ddab1b2dcda9c4aafb123e18f115e61868d21a2bc5420ccc4bf","run_id":"jmeter_jtl_csv-aef2dfe571a827411a3bdf6e08ee695a34e0f6c8632d7af2e9d2b11580b86a11"},"current":{"analysis_id":"7455002759b4fa995ce6856f6335587a4750a4708538b4128296f26d870168ca","run_id":"jmeter_jtl_csv-6ae6cc246377e723ab1f1eac222bdc93f7b4f242722a197151cb59059590c0ee"},"decision":"UNKNOWN","provenance":"EXPLICIT_LOCAL_ACTION","schema_version":"local-baseline-conditions.v1","updated_at":"<ts>","windows":null}}
-GET comparison: confirmed | 200 | len=2874 sha256=c0bfe5789ce71731eb4fd5dac872ab34826a40a273267048e863e51ae88ea4cc
-GET comparison: windows after decisions | 200 | len=3257 sha256=efc124c3725596f5136d5a235875536cbf4129f1ca58cfcb1ae8c0693da4c001
+POST baseline-conditions: windows | 200 | {"conditions":{"baseline":{"analysis_id":"10ef2dcc632c53248fa1c7986d47aa2248206066681e7cddb5d1707db4201e98","run_id":"jmeter_jtl_csv-aef2dfe571a827411a3bdf6e08ee695a34e0f6c8632d7af2e9d2b11580b86a11"},"current":{"analysis_id":"4021d76a19f71409704ca2b25c600f94b94aa4024d2ec0b69f10689ee75566da","run_id":"jmeter_jtl_csv-6ae6cc246377e723ab1f1eac222bdc93f7b4f242722a197151cb59059590c0ee"},"decision":"CONFIRMED","provenance":"EXPLICIT_LOCAL_ACTION","schema_version":"local-baseline-conditions.v1","updated_at":"<ts>","windows":{"baseline_window":"a","current_window":"b"}}}
+GET baseline-conditions: stored | 200 | {"conditions":{"baseline":{"analysis_id":"10ef2dcc632c53248fa1c7986d47aa2248206066681e7cddb5d1707db4201e98","run_id":"jmeter_jtl_csv-aef2dfe571a827411a3bdf6e08ee695a34e0f6c8632d7af2e9d2b11580b86a11"},"current":{"analysis_id":"4021d76a19f71409704ca2b25c600f94b94aa4024d2ec0b69f10689ee75566da","run_id":"jmeter_jtl_csv-6ae6cc246377e723ab1f1eac222bdc93f7b4f242722a197151cb59059590c0ee"},"decision":"UNKNOWN","provenance":"EXPLICIT_LOCAL_ACTION","schema_version":"local-baseline-conditions.v1","updated_at":"<ts>","windows":null}}
+GET comparison: confirmed | 200 | len=2874 sha256=2ef521db5199df9b0921535004571d9e7333149873a22f6bb5779145fc5979c9
+GET comparison: windows after decisions | 200 | len=3257 sha256=e88577723ea68ab464079a0eac534efa32a386b83fedd624bf02eecd15aaf214
 POST /api/releases: series of a baseline | 201 | {"analyses":[{"analysis_id":"78cb91ee1ba92c3186f08a59e7f7ea5f28c8a5b2a17a2009a545cd4815aacfd9","analysis_state":"OK","arm":null,"baseline_eligible":true,"coverage_reasons":[],"coverage_status":"COMPLETE","ineligible_reasons":[],"policy_sha256":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","policy_verdict":"PASS","run_validity":"VALID"}],"baseline_eligible":true,"created_at":"<ts>","ineligible_reasons":[],"label":"1.0","notes":null,"profile":null,"release_id":"<release_id>","run_id":"jmeter_jtl_csv-6ae6cc246377e723ab1f1eac222bdc93f7b4f242722a197151cb59059590c0ee","schema_version":"local-release.v1","series":"stat-3","started_at":"<ts>","updated_at":"<ts>"}
 GET comparison: query contradicts release series | 422 | {"error":{"code":"BASELINE_SERIES_CONFLICT","details":[],"message":"Series differs from the release series"}}
-GET comparison: release series without query | 200 | len=2433 sha256=dd9242173d64d036863dbda8420d62e07651be8c1bdcad3f97c469e77099eac5
+GET comparison: release series without query | 200 | len=2433 sha256=59207b36046f68d7e6fbad65739266233f6ac78a3a10ef296734f0cae34fabcd
 GET baseline-conditions: query contradicts release series | 422 | {"error":{"code":"BASELINE_SERIES_CONFLICT","details":[],"message":"Series differs from the release series"}}
 DELETE /api/baseline: arm without series | 400 | {"error":{"code":"MALFORMED_REQUEST","details":[],"message":"arm requires series"}}
 DELETE /api/baseline: blank arm | 400 | {"error":{"code":"MALFORMED_REQUEST","details":[],"message":"arm is invalid"}}
@@ -135,9 +135,9 @@ DELETE /api/baseline: padded series | 200 | {"baseline":null}
 DELETE /api/baseline: repeated series | 400 | {"error":{"code":"MALFORMED_REQUEST","details":[],"message":"Query parameters are invalid"}}
 DELETE /api/baseline: unknown parameter | 400 | {"error":{"code":"MALFORMED_REQUEST","details":[],"message":"Query parameters are invalid"}}
 DELETE /api/baseline: arm that does not match | 200 | {"baseline":null}
-GET /api/baseline: after deletes | 200 | len=9106 sha256=e858ba8b2913db6e2d783c0c4871c16bd089091eeb03b5e010252a6439abbb44
+GET /api/baseline: after deletes | 200 | len=9106 sha256=ee86bb631a04d1d0b4cadbd2e6285f294d577e4aa3e81527c2e85483b55f7bf1
 DELETE /api/baseline: legacy | 200 | {"baseline":null}
-GET /api/baseline: final | 200 | len=9106 sha256=e858ba8b2913db6e2d783c0c4871c16bd089091eeb03b5e010252a6439abbb44
+GET /api/baseline: final | 200 | len=9106 sha256=ee86bb631a04d1d0b4cadbd2e6285f294d577e4aa3e81527c2e85483b55f7bf1
 POST /api/releases invalid: extra key | 400 | {"error":{"code":"MALFORMED_REQUEST","details":[],"message":"Release fields are invalid"}}
 POST /api/releases invalid: missing notes | 400 | {"error":{"code":"MALFORMED_REQUEST","details":[],"message":"Release fields are invalid"}}
 POST /api/releases invalid: missing profile | 400 | {"error":{"code":"MALFORMED_REQUEST","details":[],"message":"Release fields are invalid"}}

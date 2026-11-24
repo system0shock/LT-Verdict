@@ -659,6 +659,7 @@ export interface AnalysisResult {
   findings: Array<Record<string, unknown>>
   evidence: AnalysisEvidence[]
   capacity_summary?: CapacitySummary
+  incidents?: Record<string, unknown>
 }
 
 export interface Bucket {

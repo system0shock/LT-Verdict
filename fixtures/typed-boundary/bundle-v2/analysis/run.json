@@ -1,0 +1,1 @@
+{"analysis_mode":"standard","ended_at":"2026-08-31T21:31:58.142Z","inputs":[{"path":"inputs/source.bin","sha256":"6f9e658876e83eda9a3727dbb32612a2f54800ee34ea22641deeab6781f82601","type":"jmeter_jtl_csv"}],"run_id":"jmeter_jtl_csv-6f9e658876e83eda9a3727dbb32612a2f54800ee34ea22641deeab6781f82601","schema_version":"run.v1","started_at":"2026-08-31T21:31:57.499Z"}

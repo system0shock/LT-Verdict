@@ -87,6 +87,9 @@ internal fun analysisIdentity(
             // mode into the comparability key; the hash itself is the conditional link of that key.
             loadStagesSha256 = stages?.sha256,
             loadStagesVersion = stages?.let { "load-stages.v1" },
+            // ADR 0029, R3: unconditional top-level binding; stays out of modules, input_versions, outputs and limits, which are
+            // part of the comparability key.
+            incidentMethod = INCIDENT_METHOD,
             engine = ComponentRef(config.engineId, config.engineVersion),
             parsers =
                 listOf(ComponentRef(input.sourceType.parserId(), if (input.sourceType == SourceType.JMETER_CSV) "2" else "1")),
@@ -154,6 +157,7 @@ internal fun analysisResult(
             findings = evaluation.findings,
             evidence = evaluation.evidence,
             capacitySummary = capacity?.capacityJson,
+            incidents = synthesizeIncidents(validity, evaluation.findings, evaluation.evidence),
         ),
     )
 

@@ -32,13 +32,15 @@ class AnalysisResultGoldenTest {
             validatePolicy(
                 ByteArrayInputStream(Files.readAllBytes(Path.of("fixtures/slice1/identity/policy.canonical.json"))),
             ) as PolicyValidation.Valid
-        val expected = Files.readAllBytes(Path.of("fixtures/slice1/identity/analysis-identity.v1.json"))
-        val expectedHash =
-            Files
-                .readString(Path.of("fixtures/slice1/identity/analysis-identity.sha256"))
-                .trim()
-
+        val identityPath = Path.of("fixtures/slice1/identity/analysis-identity.v1.json")
+        val hashPath = Path.of("fixtures/slice1/identity/analysis-identity.sha256")
         val actual = analysisIdentity(input, policy, EngineConfig())
+        if (System.getenv("LTV_UPDATE_IDENTITY_GOLDEN") == "1") {
+            Files.write(identityPath, actual)
+            Files.writeString(hashPath, sha256Hex(actual) + "\n")
+        }
+        val expected = Files.readAllBytes(identityPath)
+        val expectedHash = Files.readString(hashPath).trim()
 
         assertArrayEquals(expected, actual)
         assertEquals(expectedHash, sha256Hex(actual))
@@ -167,13 +169,15 @@ class AnalysisResultGoldenTest {
             validateResourceSnapshot(
                 ByteArrayInputStream(Files.readAllBytes(Path.of("docs/contracts/resources/v1/examples/valid/basic.json"))),
             ) as ResourceValidation.Valid
-        val expected = Files.readAllBytes(Path.of("fixtures/slice1/identity/analysis-identity-resources.v1.json"))
-        val expectedHash =
-            Files
-                .readString(Path.of("fixtures/slice1/identity/analysis-identity-resources.sha256"))
-                .trim()
-
+        val identityPath = Path.of("fixtures/slice1/identity/analysis-identity-resources.v1.json")
+        val hashPath = Path.of("fixtures/slice1/identity/analysis-identity-resources.sha256")
         val actual = analysisIdentity(input, policy, EngineConfig(), resources = resources)
+        if (System.getenv("LTV_UPDATE_IDENTITY_GOLDEN") == "1") {
+            Files.write(identityPath, actual)
+            Files.writeString(hashPath, sha256Hex(actual) + "\n")
+        }
+        val expected = Files.readAllBytes(identityPath)
+        val expectedHash = Files.readString(hashPath).trim()
 
         assertArrayEquals(expected, actual)
         assertEquals(expectedHash, sha256Hex(actual))
@@ -211,6 +215,8 @@ class AnalysisResultGoldenTest {
                     """"analysis_mode":"standard","evidence":[{"id":"metric:z","type":"metric_summary"},""" +
                     """{"id":"check:rule-b","type":"policy_check"}],""" +
                     """"findings":[{"id":"finding:rule-b","type":"policy_failure"}],""" +
+                    """"incidents":{"items":[],"method":"incident-synthesis.v1","omitted_count":0,""" +
+                    """"overview_limit":7,"schema_version":"incident.v1","status":"EVALUATED","total_count":0},""" +
                     """"policy_verdict":"FAIL","run_id":"run-1","run_validity":"VALID",""" +
                     """"schema_version":"analysis-result.v1"}"""
             ).encodeToByteArray()
@@ -231,6 +237,7 @@ class AnalysisResultGoldenTest {
                 "analysis_coverage",
                 "findings",
                 "evidence",
+                "incidents",
             ),
             result.keys,
         )

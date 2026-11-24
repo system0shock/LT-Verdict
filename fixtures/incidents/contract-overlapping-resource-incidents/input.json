@@ -1,0 +1,136 @@
+{
+  "run_validity": "VALID",
+  "findings": [
+    {
+      "type": "resource_threshold_violation",
+      "id": "resource_threshold_violation-5f05601c1015767a",
+      "window_id": "steady",
+      "entity": "host-a",
+      "from_epoch_ms": 1767225615000,
+      "to_epoch_ms": 1767225626250,
+      "evidence_id": "resource-policy-check-0038b22240772073",
+      "rule_id": "rule",
+      "series_id": "series-resource-policy-check-0038b22240772073"
+    },
+    {
+      "type": "resource_threshold_violation",
+      "id": "resource_threshold_violation-71b521fd2b866f7a",
+      "window_id": "steady",
+      "entity": "host-a",
+      "from_epoch_ms": 1767225622500,
+      "to_epoch_ms": 1767225630000,
+      "evidence_id": "resource-policy-check-a077d5dd1dce8e12",
+      "rule_id": "rule",
+      "series_id": "series-resource-policy-check-a077d5dd1dce8e12"
+    },
+    {
+      "type": "resource_threshold_violation",
+      "id": "resource_threshold_violation-2c498cc9633183bf",
+      "window_id": "steady",
+      "entity": "host-b",
+      "from_epoch_ms": 1767225622000,
+      "to_epoch_ms": 1767225630000,
+      "evidence_id": "resource-policy-check-862a55ec3cf36279",
+      "rule_id": "rule",
+      "series_id": "series-resource-policy-check-862a55ec3cf36279"
+    }
+  ],
+  "evidence": [
+    {
+      "type": "window_policy_summary",
+      "id": "window-policy-summary-steady",
+      "window_id": "steady",
+      "from_epoch_ms": 1767225600000,
+      "to_epoch_ms": 1767225660000,
+      "verdict": "FAIL"
+    },
+    {
+      "type": "resource_policy_check",
+      "id": "resource-policy-check-0038b22240772073",
+      "window_id": "steady",
+      "rule_id": "rule",
+      "series_id": "series-resource-policy-check-0038b22240772073",
+      "effect": "sla",
+      "status": "FAIL",
+      "reason": null
+    },
+    {
+      "type": "resource_policy_check",
+      "id": "resource-policy-check-a077d5dd1dce8e12",
+      "window_id": "steady",
+      "rule_id": "rule",
+      "series_id": "series-resource-policy-check-a077d5dd1dce8e12",
+      "effect": "diagnostic",
+      "status": "FAIL",
+      "reason": null
+    },
+    {
+      "type": "resource_policy_check",
+      "id": "resource-policy-check-b116a11bd1d980c0",
+      "window_id": "steady",
+      "rule_id": "rule",
+      "series_id": "series-resource-policy-check-b116a11bd1d980c0",
+      "effect": "sla",
+      "status": "PASS",
+      "reason": null
+    },
+    {
+      "type": "resource_summary",
+      "id": "resource-summary-resource-policy-check-b116a11bd1d980c0",
+      "window_id": "steady",
+      "series_id": "series-resource-policy-check-b116a11bd1d980c0",
+      "entity": "host-b",
+      "role": "system"
+    },
+    {
+      "type": "resource_policy_check",
+      "id": "resource-policy-check-bd6c804476258fba",
+      "window_id": "steady",
+      "rule_id": "rule",
+      "series_id": "series-resource-policy-check-bd6c804476258fba",
+      "effect": "sla",
+      "status": "PASS",
+      "reason": null
+    },
+    {
+      "type": "resource_summary",
+      "id": "resource-summary-resource-policy-check-bd6c804476258fba",
+      "window_id": "steady",
+      "series_id": "series-resource-policy-check-bd6c804476258fba",
+      "entity": "host-b",
+      "role": "system"
+    },
+    {
+      "type": "anomaly_check",
+      "id": "anomaly-check-8426f2ef8e17ca8c",
+      "window_id": "steady",
+      "status": "NO_MATERIAL_CHANGE",
+      "reasons": []
+    },
+    {
+      "type": "resource_policy_check",
+      "id": "resource-policy-check-862a55ec3cf36279",
+      "window_id": "steady",
+      "rule_id": "rule",
+      "series_id": "series-resource-policy-check-862a55ec3cf36279",
+      "effect": "diagnostic",
+      "status": "FAIL",
+      "reason": null
+    },
+    {
+      "type": "resource_policy_check",
+      "id": "resource-policy-check-1c8569158e6a2911",
+      "window_id": "steady",
+      "rule_id": "rule",
+      "series_id": "series-resource-policy-check-1c8569158e6a2911",
+      "effect": "sla",
+      "status": "NO_VERDICT",
+      "reason": "MISSING_RESOURCE_CELLS"
+    },
+    {
+      "type": "resource_binding",
+      "id": "resource-binding",
+      "mode": "explicit_windows"
+    }
+  ]
+}

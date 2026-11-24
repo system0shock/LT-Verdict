@@ -3,11 +3,13 @@ package io.ltverdict.core
 import io.ltverdict.storage.DataDirectory
 import io.ltverdict.storage.RunBundleStore
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
+import org.junit.jupiter.api.Assertions.assertNotEquals
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.io.TempDir
@@ -27,9 +29,15 @@ class ErrorGroupsIdentityTest {
             val store = RunBundleStore(directory)
             val input = store.acceptInput(ByteArrayInputStream(FAILED_CSV.encodeToByteArray()), "failed.jtl")
             val outcome = AnalysisService(store, EngineConfig()).analyze(AnalysisRequest(input, null))
+            val identityObj = Json.parseToJsonElement(Files.readString(outcome.analysisDirectory.resolve("identity.json"))).jsonObject
+            val resultObj = Json.parseToJsonElement(outcome.canonicalResult.decodeToString()).jsonObject
 
-            assertEquals(EXPECTED_ANALYSIS_ID, outcome.analysisId)
-            assertEquals(EXPECTED_RESULT_SHA256, sha256Hex(outcome.canonicalResult))
+            assertEquals(INCIDENT_METHOD, identityObj["incident_method"]?.jsonPrimitive?.content)
+            assertTrue(resultObj.containsKey("incidents"))
+            assertEquals(EXPECTED_PRE_INCIDENT_ANALYSIS_ID, sha256Hex(canonicalJson(JsonObject(identityObj - "incident_method"))))
+            assertEquals(EXPECTED_PRE_INCIDENT_RESULT_SHA256, sha256Hex(canonicalJson(JsonObject(resultObj - "incidents"))))
+            assertNotEquals(EXPECTED_PRE_INCIDENT_ANALYSIS_ID, outcome.analysisId)
+            assertNotEquals(EXPECTED_PRE_INCIDENT_RESULT_SHA256, sha256Hex(outcome.canonicalResult))
         }
     }
 
@@ -103,8 +111,8 @@ class ErrorGroupsIdentityTest {
     }
 }
 
-private const val EXPECTED_ANALYSIS_ID = "cede7f378c0f5177e15365f3418dc25edfe3bc514be136aa10c75176a52460db"
-private const val EXPECTED_RESULT_SHA256 = "c5f592260b11f1ea9c89af8724590eb14d2c641851797970177d5b19a83149a8"
+private const val EXPECTED_PRE_INCIDENT_ANALYSIS_ID = "cede7f378c0f5177e15365f3418dc25edfe3bc514be136aa10c75176a52460db"
+private const val EXPECTED_PRE_INCIDENT_RESULT_SHA256 = "c5f592260b11f1ea9c89af8724590eb14d2c641851797970177d5b19a83149a8"
 
 private val FAILED_CSV =
     listOf(

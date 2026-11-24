@@ -15,7 +15,7 @@
 // items of fixtures/typed-evidence/samples-input-evidence.ndjson (the window provenance that a source_summary may carry is merged after the
 // typed item, so it is not in the generated type and not in the samples; the hand-written type keeps those keys, see providedElsewhere).
 // The check source is virtual (never written to disk) and compiled with the options of ui/tsconfig.json.
-import { readdirSync, readFileSync } from 'node:fs'
+import { existsSync, readdirSync, readFileSync } from 'node:fs'
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import ts from 'typescript'
@@ -26,9 +26,12 @@ const virtualFile = resolve(uiRoot, 'src/__verify_generated_types__.ts')
 
 const readJson = (path) => JSON.parse(readFileSync(path, 'utf8'))
 const goldenRoot = resolve(repoRoot, 'fixtures/typed-boundary/golden')
+const goldenIncidentsRoot = resolve(repoRoot, 'fixtures/typed-boundary/golden-incidents')
 const cases = readdirSync(goldenRoot).sort()
+const incidentCases = existsSync(goldenIncidentsRoot) ? readdirSync(goldenIncidentsRoot).sort() : []
 const identityFiles = [
   ...cases.map((name) => [`golden/${name}`, resolve(goldenRoot, name, 'identity.json')]),
+  ...incidentCases.map((name) => [`golden-incidents/${name}`, resolve(goldenIncidentsRoot, name, 'identity.json')]),
   ['slice1/analysis-identity', resolve(repoRoot, 'fixtures/slice1/identity/analysis-identity.v1.json')],
   ['slice1/analysis-identity-resources', resolve(repoRoot, 'fixtures/slice1/identity/analysis-identity-resources.v1.json')],
   ['slice1/legacy-pre-adr-0016', resolve(repoRoot, 'fixtures/slice1/identity/legacy-pre-adr-0016.v1.json')],
@@ -111,8 +114,11 @@ const lines = [
 ]
 let index = 0
 let itemCount = 0
-for (const name of cases) {
-  const result = readJson(resolve(goldenRoot, name, 'analysis-result.json'))
+for (const resultPath of [
+  ...cases.map((name) => resolve(goldenRoot, name, 'analysis-result.json')),
+  ...incidentCases.map((name) => resolve(goldenIncidentsRoot, name, 'analysis-result.json')),
+]) {
+  const result = readJson(resultPath)
   lines.push(`export const result${index++}: AnalysisResultDocument = ${JSON.stringify(result)}`)
   for (const [array, union] of [
     ['evidence', 'GeneratedEvidence'],
@@ -161,9 +167,11 @@ const negatives = [
   ['unknown coverage status', 'AnalysisResultDocument', { ...sample, analysis_coverage: { status: 'MAYBE', reasons: [] } }],
   ['extra result key', 'AnalysisResultDocument', { ...sample, extra: 1 }],
   ['missing result key', 'AnalysisResultDocument', Object.fromEntries(Object.entries(sample).filter(([key]) => key !== 'findings'))],
+  ['wrong incidents type', 'AnalysisResultDocument', { ...sample, incidents: [] }],
   ['number in a string limit', 'AnalysisIdentityDocument', { ...identitySample, limits: { csv_columns_max: 64 } }],
   ['extra identity key', 'AnalysisIdentityDocument', { ...identitySample, extra: 1 }],
   ['missing identity key', 'AnalysisIdentityDocument', Object.fromEntries(Object.entries(identitySample).filter(([key]) => key !== 'engine'))],
+  ['wrong incident_method type', 'AnalysisIdentityDocument', { ...identitySample, incident_method: 123 }],
 ]
 const richest = (tag) => [...samples, ...derivedSamples, ...inputSamples].filter((sample) => sample.type === tag).sort((a, b) => Object.keys(b).length - Object.keys(a).length)[0]
 const policyCheck = richest('policy_check')

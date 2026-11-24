@@ -76,7 +76,13 @@ class HumanReportAppendixTest {
             val outcome = StagedResults.analyze(tempDir.resolve(name), input, policy, stages)
             val groups = readErrorGroupsFile(outcome.analysisDirectory)
             val timeline = readRunTimeline(outcome.analysisDirectory)
-            return renderHtmlReport(outcome.canonicalResult, "fixed", groups, comparison, timeline).decodeToString()
+            return renderHtmlReport(
+                StagedResults.withoutIncidents(outcome.canonicalResult),
+                "fixed",
+                groups,
+                comparison,
+                timeline,
+            ).decodeToString()
         }
         return linkedMapOf(
             "ramp-pass" to plain("ramp-pass", StagedResults.RAMP, StagedResults.policy(StagedResults.p95(100_000))),

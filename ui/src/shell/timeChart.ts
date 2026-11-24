@@ -18,7 +18,7 @@ export interface ChartLane {
   thresholds?: ChartThreshold[]
 }
 export interface ChartColors { brand: string; warn: string; fail: string; text: string; muted: string; border: string; fontFamily: string }
-export interface LaneFlags { timeLabels: boolean; stageLabels: boolean }
+export interface LaneFlags { timeLabels: boolean; stageLabels: boolean; plotHeight?: number; ySplits?: number }
 
 export const PLOT_INSET = { left: 56, right: 16 } as const
 const PLOT_HEIGHT = 78
@@ -28,7 +28,8 @@ const TIME_STEPS_MS = [1, 2, 5, 10, 15, 30, 60, 120, 300, 600, 900, 1800, 3600, 
 export function laneGrid(flags: LaneFlags) {
   const top = flags.stageLabels ? 18 : 6
   const bottom = flags.timeLabels ? 50 : 6
-  return { left: PLOT_INSET.left, right: PLOT_INSET.right, top, bottom, height: PLOT_HEIGHT + top + bottom }
+  const plotHeight = flags.plotHeight ?? PLOT_HEIGHT
+  return { left: PLOT_INSET.left, right: PLOT_INSET.right, top, bottom, height: plotHeight + top + bottom }
 }
 
 export function niceCeil(value: number): number {
@@ -40,12 +41,14 @@ export function niceCeil(value: number): number {
   return Number((step * scale).toPrecision(12))
 }
 
-export function valueAxis(lo: number, hi: number, integer = false): { min: number; max: number; interval: number } {
+export function valueAxis(lo: number, hi: number, integer = false, splits = 2): { min: number; max: number; interval: number } {
   const min = lo < 0 ? -niceCeil(-lo) : 0
   const ceiling = niceCeil(Math.max(hi, 0))
-  // Counts: an even maximum keeps the middle tick a whole number.
-  const max = integer && ceiling % 2 !== 0 ? ceiling + 1 : ceiling
-  return { min, max, interval: (max - min) / 2 }
+  const safeSplits = Math.max(1, Math.round(splits))
+  // Counts: a multiple of splits keeps every tick a whole number.
+  const remainder = integer ? (ceiling - min) % safeSplits : 0
+  const max = remainder !== 0 ? ceiling + (safeSplits - remainder) : ceiling
+  return { min, max, interval: (max - min) / safeSplits }
 }
 
 // Fraction digits that show the tick step exactly (0,025 must not read as 0,03).
@@ -137,7 +140,7 @@ function thresholdLine(threshold: ChartThreshold, axisMax: number, colors: Chart
 export function laneOption(lane: ChartLane, frame: ChartFrame, stages: ChartStage[], flags: LaneFlags, colors: ChartColors): EChartsCoreOption {
   const grid = laneGrid(flags)
   const ticks = timeTicks(frame)
-  const axis = valueAxis(lane.lo, lane.hi, lane.integer)
+  const axis = valueAxis(lane.lo, lane.hi, lane.integer, flags.ySplits ?? 2)
   const text = { color: colors.muted, fontSize: 12, fontFamily: colors.fontFamily }
   const areas = stageAreas(stages, frame, flags, colors)
   return {

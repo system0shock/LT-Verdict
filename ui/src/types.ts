@@ -666,7 +666,9 @@ export interface Bucket {
   bucket_start_ms: number
   sample_count: number
   error_count: number
+  p50_latency_ms?: number
   p95_latency_ms: number
+  p99_latency_ms?: number
   max_latency_ms: number
   hdr_v2_base64: string
 }

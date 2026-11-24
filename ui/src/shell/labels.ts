@@ -317,6 +317,46 @@ export const DEEP_LABELS = {
   thresholdLabel: (operator: 'gt' | 'lt', value: string, unit: string, violated: boolean) =>
     `${violated ? 'нарушение' : 'порог правила:'} ${operator === 'gt' ? 'выше' : 'ниже'} ${value} ${unit}`,
   thresholdMark: (value: string, unit: string) => `порог ${value} ${unit}`,
+
+  // Срез P1.2: каталог метрик, главный график, стадии, плитки статистик, плечи
+  catalogTitle: 'Каталог метрик',
+  groupLabels: {
+    delays: 'Задержки',
+    load: 'Нагрузка',
+    errors: 'Ошибки',
+    platform: 'Платформа и ресурсы',
+  },
+  roleLabels: {
+    system: 'Система',
+    generator: 'Генератор нагрузки',
+  },
+  serviceFilter: 'Сервис',
+  serviceAll: 'Все сервисы',
+  primaryBadge: 'Главный график',
+  primarySelect: 'На главный график',
+  pinToggle: 'Закрепить',
+  pinnedTitle: 'Закреплённые ряды для сравнения',
+  metricP50: 'p50 отклика',
+  metricP99: 'p99 отклика',
+  metricMax: 'Максимум отклика',
+  metricErrorRate: 'Доля ошибок',
+  unitPercent: '%',
+  unitErrors: 'шт.',
+  stagesTitle: 'Стадии',
+  stageSteady: 'целевая',
+  stageExcluded: 'исключена',
+  statsTitle: 'Статистики окна',
+  statMin: 'Минимум',
+  statAvg: 'Среднее',
+  statP50: 'p50 окна',
+  statP95: 'p95 окна',
+  statMax: 'Максимум',
+  statAboveThreshold: 'Время выше порога',
+  statNoData: 'нет данных',
+  statNoThreshold: 'порог не задан',
+  armTitle: 'Плечо анализа',
+  armButton: (arm: string) => `Плечо ${arm}`,
+  podJump: 'К тепловой карте подов',
 } as const
 
 // Отмена загрузки входного файла (JobStatus.vue): кнопка и сообщение после отмены.

@@ -8,6 +8,7 @@ import { formatNumber, loadFrame, loadLane, loadSeries } from '../src/shell/over
 import {
   PLOT_INSET,
   cursorX,
+  laneGrid,
   laneOption,
   lineData,
   niceCeil,
@@ -138,4 +139,14 @@ test('a threshold on the top edge of the axis puts its label below the line', ()
   const thresholds = [{ id: 'top', value: 200, text: 'порог 200', violated: false }, { id: 'inside', value: 50, text: 'порог 50', violated: false }]
   const line = (laneOption({ ...lane, thresholds }, { fromMs: 0, toMs: 6000, originMs: 0 }, [], { timeLabels: false, stageLabels: false }, colors).series as Array<{ markLine: { data: Array<{ label: { position: string } }> } }>)[0].markLine
   expect(line.data.map((item) => item.label.position)).toEqual(['insideStartBottom', 'insideStartTop'])
+})
+
+test('laneGrid and valueAxis support optional plotHeight and ySplits while preserving defaults', () => {
+  expect(laneGrid({ timeLabels: false, stageLabels: false })).toEqual({ left: 56, right: 16, top: 6, bottom: 6, height: 90 })
+  expect(laneGrid({ timeLabels: false, stageLabels: true, plotHeight: 236, ySplits: 4 })).toEqual({ left: 56, right: 16, top: 18, bottom: 6, height: 260 })
+  expect(valueAxis(0, 100, false, 4)).toEqual({ min: 0, max: 100, interval: 25 })
+  expect(valueAxis(0, 5, true, 4)).toEqual({ min: 0, max: 8, interval: 2 })
+  expect(valueAxis(0, 7, true, 4)).toEqual({ min: 0, max: 12, interval: 3 })
+  const option = laneOption({ ...lane, hi: 100 }, { fromMs: 0, toMs: 6000, originMs: 0 }, [], { timeLabels: false, stageLabels: true, plotHeight: 236, ySplits: 4 }, colors)
+  expect(option.yAxis).toMatchObject({ min: 0, max: 100, interval: 25 })
 })

@@ -2,10 +2,10 @@ import { expect, test } from '@playwright/test'
 import type { Bucket, ResourceSeriesEntry, ResourceSeriesValues } from '../src/types'
 import { getBuckets, getResourceSeriesCatalog, getResourceSeriesValues, resourceSeriesValuesPath } from '../src/api'
 import {
-  batchSeriesIds, cellAt, chooseLoadRollup, chooseResourceStep, cursorReadouts, cursorStops,
-  defaultSelection, gridEndMs, loadBucketRange, loadTracks, mergePages, nearestTime,
-  planResourcePeriod, resourceTrack, runStartMs, snapPeriod, thresholdsFor, trackPath,
-  trackScale, valueY,
+  allLoadTracks, batchSeriesIds, cellAt, chooseLoadRollup, chooseResourceStep, cursorReadouts,
+  cursorStops, deepStages, defaultSelection, gridEndMs, groupMetricCatalog, loadBucketRange,
+  loadTracks, mergePages, nearestTime, planResourcePeriod, resourceTrack, runStartMs, snapPeriod,
+  stageButtons, thresholdsFor, trackPath, trackScale, valueY, windowMetricStats,
 } from '../src/shell/deep'
 
 const grid = { startMs: 1_767_225_600_000, stepMs: 17_000, pointCount: 1_700 }
@@ -199,4 +199,107 @@ test('API path encodes ids once and requests carry abort signals', async () => {
   } finally {
     globalThis.fetch = original
   }
+})
+
+test('allLoadTracks exposes percentiles, max, rps, errors, error-rate and overall policy thresholds only', () => {
+  const buckets: Bucket[] = [
+    { bucket_start_ms: 0, sample_count: 100, error_count: 5, p50_latency_ms: 20, p95_latency_ms: 120, p99_latency_ms: 240, max_latency_ms: 300, hdr_v2_base64: '' },
+    { bucket_start_ms: 10_000, sample_count: 0, error_count: 0, p95_latency_ms: 0, max_latency_ms: 0, hdr_v2_base64: '' },
+  ]
+  const result = {
+    evidence: [
+      { id: 'c1', type: 'policy_check', rule_id: 'p95-sla', metric: 'response_time_p95_ms', operator: 'lte', threshold: 100, status: 'FAIL', scope: { kind: 'overall' } },
+      { id: 'c2', type: 'policy_check', rule_id: 'tx-p95', metric: 'response_time_p95_ms', operator: 'lte', threshold: 50, status: 'FAIL', scope: { kind: 'transaction', label: 'pay', group_path: ['pay'], sample_kind: 'jmeter' } },
+      { id: 'c3', type: 'policy_check', rule_id: 'rps-min', metric: 'throughput_rps', operator: 'gte', threshold: 20, status: 'FAIL', scope: { kind: 'overall' } },
+      { id: 'c4', type: 'policy_check', rule_id: 'err-max', metric: 'error_rate_ratio', operator: 'lte', threshold: 0.02, status: 'FAIL', scope: { kind: 'overall' } },
+    ],
+  } as never
+  const tracks = allLoadTracks(buckets, 10, 1000, result)
+  expect(tracks.map((track) => track.key)).toEqual([
+    'load-p50', 'load-p95', 'load-p99', 'load-max', 'load-rps', 'load-errors', 'load-error-rate',
+  ])
+  expect(tracks.find((t) => t.key === 'load-p50')?.points.map((p) => p.value)).toEqual([20, null])
+  expect(tracks.find((t) => t.key === 'load-p99')?.points.map((p) => p.value)).toEqual([240, null])
+  expect(tracks.find((t) => t.key === 'load-max')?.points.map((p) => p.value)).toEqual([300, 0])
+  expect(tracks.find((t) => t.key === 'load-rps')?.points.map((p) => p.value)).toEqual([10, 0])
+  expect(tracks.find((t) => t.key === 'load-errors')?.points.map((p) => p.value)).toEqual([5, 0])
+  expect(tracks.find((t) => t.key === 'load-error-rate')?.points.map((p) => p.value)).toEqual([5, null])
+  expect(tracks.find((t) => t.key === 'load-p95')?.thresholds).toEqual([{ ruleId: 'p95-sla', operator: 'gt', value: 100, violated: true }])
+  expect(tracks.find((t) => t.key === 'load-rps')?.thresholds).toEqual([{ ruleId: 'rps-min', operator: 'lt', value: 20, violated: true }])
+  expect(tracks.find((t) => t.key === 'load-error-rate')?.thresholds).toEqual([{ ruleId: 'err-max', operator: 'gt', value: 2, violated: true }])
+})
+
+test('stageButtons and deepStages read stage_binding first and fall back to catalog windows or window_policy_summary', () => {
+  const withBinding = {
+    evidence: [{
+      id: 'sb',
+      type: 'stage_binding',
+      stages: [
+        { id: 'ramp', role: 'excluded', from_offset_ms: 0, to_offset_ms: 60_000, from_epoch_ms: 1000, to_epoch_ms: 61_000 },
+        { id: 'steady', role: 'steady', from_offset_ms: 60_000, to_offset_ms: 180_000, from_epoch_ms: 61_000, to_epoch_ms: 181_000 },
+      ],
+    }],
+  } as never
+  const catalogWindows = [{ id: 'plateau-1', from_epoch_ms: 61_000, to_epoch_ms: 181_000 }]
+  expect(stageButtons(withBinding, catalogWindows, 1000)).toEqual([
+    { id: 'ramp', role: 'excluded', fromMs: 1000, toMs: 61_000, fromMin: 0, toMin: 1, steady: false },
+    { id: 'steady', role: 'steady', fromMs: 61_000, toMs: 181_000, fromMin: 1, toMin: 3, steady: true },
+  ])
+  expect(stageButtons({ evidence: [] } as never, catalogWindows, 1000)).toEqual([
+    { id: 'plateau-1', role: 'steady', fromMs: 61_000, toMs: 181_000, fromMin: 1, toMin: 3, steady: true },
+  ])
+  const withPolicyWindow = {
+    evidence: [{ id: 'wps', type: 'window_policy_summary', window_id: 'soak', from_epoch_ms: 121_000, to_epoch_ms: 241_000, business_verdict: 'PASS', resource_verdict: 'PASS', verdict: 'PASS' }],
+  } as never
+  expect(stageButtons(withPolicyWindow, [], 1000)).toEqual([
+    { id: 'soak', role: 'steady', fromMs: 121_000, toMs: 241_000, fromMin: 2, toMin: 4, steady: true },
+  ])
+  expect(deepStages({ evidence: [] } as never, catalogWindows, 1000)).toEqual([
+    { id: 'plateau-1', fromMs: 61_000, toMs: 181_000, steady: true },
+  ])
+})
+
+test('windowMetricStats computes min, avg, p50, p95, max and threshold duration excluding nulls and clipping boundaries', () => {
+  const track = resourceTrack(
+    entry('cpu'),
+    values('cpu', [10, null, 20, 30, 40], [4, 0, 4, 4, 2]),
+    valueGrid(0, 5, 4, 2, 60_000),
+    [{ ruleId: 'cpu-hi', operator: 'gt', value: 25, violated: true }],
+  )
+  // Cells: [0,60k)=10, [60k,120k)=null, [120k,180k)=20, [180k,240k)=30 (>25), [240k,270k)=40 (>25, short tail 30s)
+  const full = windowMetricStats(track, { fromMs: 0, toMs: 270_000 })
+  expect(full).toEqual({
+    count: 4,
+    min: 10,
+    avg: 25,
+    p50: 20,
+    p95: 40,
+    max: 40,
+    timeAboveThresholdMs: 90_000,
+    hasThresholds: true,
+  })
+  // Window clipped inside [150_000, 255_000): cells [120k,180k)=20, [180k,240k)=30 (>25, 60s), [240k,270k)=40 (>25, clipped 15s)
+  const clipped = windowMetricStats(track, { fromMs: 150_000, toMs: 255_000 })
+  expect(clipped.timeAboveThresholdMs).toBe(75_000)
+
+  const ltTrack = resourceTrack(entry('free'), values('free', [1, 5, 2], [4, 4, 4]), valueGrid(0, 3), [{ ruleId: 'low', operator: 'lt', value: 3, violated: true }])
+  expect(windowMetricStats(ltTrack, { fromMs: 0, toMs: 180_000 }).timeAboveThresholdMs).toBe(120_000)
+
+  const noThreshold = resourceTrack(entry('mem'), values('mem', [null, null], [0, 0]), valueGrid(0, 2), [])
+  expect(windowMetricStats(noThreshold, { fromMs: 0, toMs: 120_000 })).toEqual({
+    count: 0, min: null, avg: null, p50: null, p95: null, max: null, timeAboveThresholdMs: null, hasThresholds: false,
+  })
+})
+
+test('groupMetricCatalog categorizes load metrics and filters platform resources by service and role', () => {
+  const catalog: ResourceSeriesEntry[] = [
+    { ...entry('api.cpu'), entity: 'checkout-api', metric: 'cpu', role: 'system' },
+    { ...entry('db.conn'), entity: 'checkout-db', metric: 'connections', role: 'system' },
+    { ...entry('gen.queue'), entity: 'loadgen', metric: 'queue', role: 'generator' },
+  ]
+  const grouped = groupMetricCatalog(catalog, '', 'checkout-api')
+  expect(grouped.services).toEqual(['checkout-api', 'checkout-db', 'loadgen'])
+  expect(grouped.groups.map((g) => g.key)).toEqual(['delays', 'load', 'errors', 'platform'])
+  expect(grouped.platformByRole.system.map((e) => e.id)).toEqual(['api.cpu'])
+  expect(grouped.platformByRole.generator).toEqual([])
 })

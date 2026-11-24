@@ -12,7 +12,31 @@ const analysisId = 'a'.repeat(64)
 const origin = 1_767_225_600_000
 const ids = ['queue', 'cpu', 'memory', 'disk', 'network', 'latency', 'spare']
 const overall = { id: 'overall', type: 'metric_summary', scope: { kind: 'overall' }, sample_count: 180, error_count: 0, error_rate_ratio: { numerator: 0, denominator: 180 }, throughput_rps: { numerator: 180000, denominator: 180000 }, latency_ms: { p50: 100, p95: 100, p99: 100, max: 100 } }
-type Options = { snapshot?: boolean; missingCatalog?: boolean; pointCount?: number; stepMs?: number; startMs?: number; ids?: string[]; catalogPage?: number; valuesPage?: number; invalid?: boolean; mode?: string; loadCount?: number; delayValues?: (call: number) => number; delayDeepBucket?: number; failValuesAt?: number; delayCatalogSecondPage?: number; passRule?: boolean; diagnosticFail?: boolean; stages?: boolean }
+type Options = {
+  snapshot?: boolean
+  missingCatalog?: boolean
+  pointCount?: number
+  stepMs?: number
+  startMs?: number
+  ids?: string[]
+  entities?: Record<string, string>
+  roles?: Record<string, 'system' | 'generator'>
+  windows?: Array<{ id: string; from_epoch_ms: number; to_epoch_ms: number }>
+  arms?: Array<{ arm: string; analysisId: string; snapshotSha?: string }>
+  policyChecks?: Array<Record<string, unknown>>
+  catalogPage?: number
+  valuesPage?: number
+  invalid?: boolean
+  mode?: string
+  loadCount?: number
+  delayValues?: (call: number) => number
+  delayDeepBucket?: number
+  failValuesAt?: number
+  delayCatalogSecondPage?: number
+  passRule?: boolean
+  diagnosticFail?: boolean
+  stages?: boolean
+}
 
 function fixtureApi(page: Page, options: Options = {}) {
   const names = options.ids ?? ids
@@ -21,14 +45,29 @@ function fixtureApi(page: Page, options: Options = {}) {
   const count = options.pointCount ?? 180
   const calls: URL[] = []
   let valuesCalls = 0
-  const evidence = [overall, ...(options.stages ? [stageBinding] : []), ...(options.snapshot === false ? [] : [{ id: 'binding', type: 'resource_binding', run_from_epoch_ms: origin }]),
+  const evidence = [
+    overall,
+    ...(options.stages ? [stageBinding] : []),
+    ...(options.policyChecks ?? []),
+    ...(options.snapshot === false ? [] : [{ id: 'binding', type: 'resource_binding', run_from_epoch_ms: origin }]),
     ...[0, 1].map((n) => ({ id: `rule-${n}`, type: 'resource_policy_check', window_id: `w${n}`, rule_id: 'cpu-high', series_id: 'cpu', unit: '%', operator: 'gt', threshold: '5', effect: 'sla', status: 'FAIL', reason: null })),
     ...(options.passRule ? [{ id: 'queue-rule', type: 'resource_policy_check', window_id: 'w0', rule_id: 'queue-ok', series_id: 'queue', unit: '%', operator: 'gt', threshold: '5000', effect: 'sla', status: 'PASS', reason: null }] : []),
-    ...(options.diagnosticFail ? [{ id: 'rule-diagnostic', type: 'resource_policy_check', window_id: 'w0', rule_id: 'cpu-high-diag', series_id: 'cpu', unit: '%', operator: 'gt', threshold: '5', effect: 'diagnostic', status: 'FAIL', reason: null }] : [])]
+    ...(options.diagnosticFail ? [{ id: 'rule-diagnostic', type: 'resource_policy_check', window_id: 'w0', rule_id: 'cpu-high-diag', series_id: 'cpu', unit: '%', operator: 'gt', threshold: '5', effect: 'diagnostic', status: 'FAIL', reason: null }] : []),
+  ]
   const findings = options.diagnosticFail ? [{ type: 'resource_threshold_violation', rule_id: 'cpu-high-diag', window_id: 'w0', entity: 'node', from_epoch_ms: origin, to_epoch_ms: origin + 1000, cell_count: 1, observed_min: '6', observed_max: '6' }] : []
   const result = { schema_version: 'analysis-result.v1', run_id: runId, analysis_mode: options.mode ?? 'standard', run_validity: options.invalid ? 'INVALID' : 'VALID', policy_verdict: 'FAIL', analysis_coverage: { status: 'COMPLETE', reasons: [] }, findings, evidence }
-  const entry = (id: string) => ({ id, metric: `metric-${id}`, unit: '%', entity: 'node', role: 'system', aggregation: 'interval_mean', reducer: 'mean', labels: {}, observed_cells: id === 'spare' ? 0 : count })
+  const entry = (id: string) => ({ id, metric: `metric-${id}`, unit: '%', entity: options.entities?.[id] ?? 'node', role: options.roles?.[id] ?? 'system', aggregation: 'interval_mean', reducer: 'mean', labels: {}, observed_cells: id === 'spare' ? 0 : count })
   const sourceValue = (id: string, index: number) => index === 2 || index === 6 ? null : names.indexOf(id) * 1000 + index + 1
+  const analysesList = options.arms
+    ? options.arms.map((item) => ({
+      analysis_id: item.analysisId,
+      policy_sha256: 'c'.repeat(64),
+      policy_verdict: 'FAIL',
+      run_validity: result.run_validity,
+      resource_arm: item.arm,
+      ...(item.snapshotSha ? { resource_snapshot_sha256: item.snapshotSha } : {}),
+    }))
+    : [{ analysis_id: analysisId, policy_sha256: 'c'.repeat(64), policy_verdict: 'FAIL', run_validity: result.run_validity }]
   page.route('**/api/**', async (route) => {
     const url = new URL(route.request().url())
     const path = url.pathname
@@ -38,9 +77,10 @@ function fixtureApi(page: Page, options: Options = {}) {
     else if (path === '/api/jenkins' || path === '/api/grafana' || path === '/api/sources') body = { profiles: [] }
     else if (path === '/api/runs') body = { runs: [{ run_id: runId, source_type: 'jmeter', sha256: 'b'.repeat(64), size_bytes: 100, original_filename: 'deep.jtl' }], next_after: null }
     else if (path === '/api/baseline') body = { baseline: null }
-    else if (path.endsWith('/analyses')) body = { analyses: [{ analysis_id: analysisId, policy_sha256: 'c'.repeat(64), policy_verdict: 'FAIL', run_validity: result.run_validity }], next_after: null }
-    else if (path.endsWith('/result')) body = result
+    else if (path.endsWith('/analyses')) body = { analyses: analysesList, next_after: null }
+    else if (path.endsWith('/result')) { calls.push(url); body = result }
     else if (path.endsWith('/advice')) body = { advice: null, job: null }
+    else if (path.endsWith('/pod-view')) { await route.fulfill({ status: 404, json: { code: 'POD_VIEW_NOT_FOUND', message: 'missing' } }); return }
     else if (path.endsWith('/resource-series')) {
       calls.push(url)
       if (options.missingCatalog) { await route.fulfill({ status: 404, json: { code: 'NOT_FOUND', message: 'missing' } }); return }
@@ -49,7 +89,7 @@ function fixtureApi(page: Page, options: Options = {}) {
       const offset = after ? names.indexOf(after) + 1 : 0
       const size = options.catalogPage ?? 256
       const slice = names.slice(offset, offset + size)
-      body = { schema_version: 'resource-series.v1', kind: 'catalog', resource_snapshot_sha256: 'd'.repeat(64), numeric_encoding: 'ieee754-double', grid: { start_epoch_ms: start, step_ms: step, point_count: count }, windows: [], series: slice.map(entry), next_after: offset + size < names.length ? slice.at(-1) : null }
+      body = { schema_version: 'resource-series.v1', kind: 'catalog', resource_snapshot_sha256: 'd'.repeat(64), numeric_encoding: 'ieee754-double', grid: { start_epoch_ms: start, step_ms: step, point_count: count }, windows: options.windows ?? [], series: slice.map(entry), next_after: offset + size < names.length ? slice.at(-1) : null }
     } else if (path.endsWith('/resource-series/values')) {
       calls.push(url)
       valuesCalls += 1
@@ -75,9 +115,21 @@ function fixtureApi(page: Page, options: Options = {}) {
       const rollup = Number(url.searchParams.get('rollup'))
       const from = Number(url.searchParams.get('from_ms') ?? 0)
       const to = Number(url.searchParams.get('to_ms') ?? (options.loadCount ?? 180) * 1000)
+      const includePercentiles = url.searchParams.get('include') === 'percentiles'
       const limit = Math.min(500, options.loadCount && options.loadCount > 6000 ? 500 : 500)
       const starts = Array.from({ length: limit }, (_, i) => from + i * rollup * 1000).filter((n) => n < to && n < (options.loadCount ?? 180) * 1000)
-      body = { buckets: starts.map((bucket_start_ms) => ({ bucket_start_ms, sample_count: rollup, error_count: 0, p95_latency_ms: 100, max_latency_ms: 100, hdr_v2_base64: '' })), next_from_ms: starts.length === limit && starts.at(-1)! + rollup * 1000 < to ? starts.at(-1)! + rollup * 1000 : null }
+      body = {
+        buckets: starts.map((bucket_start_ms) => ({
+          bucket_start_ms,
+          sample_count: rollup,
+          error_count: bucket_start_ms % 2000 === 0 ? 1 : 0,
+          ...(includePercentiles ? { p50_latency_ms: 50, p99_latency_ms: 150 } : {}),
+          p95_latency_ms: 100,
+          max_latency_ms: 200,
+          hdr_v2_base64: '',
+        })),
+        next_from_ms: starts.length === limit && starts.at(-1)! + rollup * 1000 < to ? starts.at(-1)! + rollup * 1000 : null,
+      }
     } else throw new Error(`Unexpected UI request ${path}`)
     await route.fulfill({ json: body })
   })
@@ -477,4 +529,127 @@ test('empty deep tab repeats the overview notice', async ({ page }) => {
   await page.goto('/?shell=new')
   await page.locator('#shell-tab-deep').click()
   await expect(page.getByText(SHELL_LABELS.overviewEmpty)).toBeVisible()
+})
+
+test('grouped metric catalog switches the ~260px primary chart, pins load metrics and keeps shared cursor in sync', async ({ page }) => {
+  const mock = fixtureApi(page, {
+    roles: { queue: 'generator' },
+    policyChecks: [{ id: 'p95-rule', type: 'policy_check', rule_id: 'p95-sla', metric: 'response_time_p95_ms', operator: 'lte', threshold: 90, status: 'FAIL', scope: { kind: 'overall' } }],
+  })
+  await page.goto('/?shell=new')
+  await page.getByRole('button', { name: 'deep.jtl' }).click()
+  await page.locator(`button[title="${analysisId}"]`).click()
+  await expect(page.getByTestId('overview-panel')).toBeVisible()
+  await expect(page.getByTestId('load-loading')).toHaveCount(0)
+  await expect.poll(() => mock.calls.filter((u) => u.pathname.endsWith('/buckets')).length).toBe(3)
+  mock.calls.length = 0
+  await page.locator('#shell-tab-deep').click()
+  await expect(page.getByTestId('deep-panel')).toBeVisible()
+  await expect(page.getByTestId('deep-panel').getByRole('status')).toHaveCount(0)
+  const deepBucketCalls = mock.calls.filter((u) => u.pathname.endsWith('/buckets'))
+  expect(deepBucketCalls.length).toBeGreaterThan(0)
+  expect(deepBucketCalls.every((u) => u.searchParams.get('include') === 'percentiles')).toBe(true)
+
+  for (const group of ['delays', 'load', 'errors', 'platform']) {
+    await expect(page.getByTestId(`deep-group-${group}`)).toBeVisible()
+  }
+  await expect(page.getByTestId('deep-role-system')).toBeVisible()
+  await expect(page.getByTestId('deep-role-generator')).toBeVisible()
+
+  const primaryHost = page.getByTestId('deep-track-load-rps').locator('.time-chart__host')
+  const secondaryHost = page.getByTestId('deep-track-load-p95').locator('.time-chart__host')
+  expect((await primaryHost.boundingBox())!.height).toBeGreaterThanOrEqual(255)
+  expect((await secondaryHost.boundingBox())!.height).toBeLessThan(150)
+  await expect(page.getByTestId('deep-track-load-rps')).toHaveAttribute('data-primary', 'true')
+
+  // Pin p99 and switch primary to p50, then move cursor and verify primary + pinned readouts stay synced.
+  await page.getByTestId('deep-pin-load-p99').check()
+  await page.getByTestId('deep-metric-select-load-p50').click()
+  await expect(page.getByTestId('deep-track-load-p50')).toHaveAttribute('data-primary', 'true')
+  await expect(page.getByTestId('deep-track-load-rps')).toBeVisible()
+  await expect(page.getByTestId('deep-track-load-p99')).toBeVisible()
+  await page.getByTestId('deep-cursor').focus()
+  await page.keyboard.press('Home')
+  await expect(page.getByTestId('track-value-load-p50')).toHaveAttribute('data-value', '50')
+  await expect(page.getByTestId('track-value-load-p99')).toHaveAttribute('data-value', '150')
+  await expect(page.getByTestId('track-value-load-rps')).toHaveAttribute('data-value', '1')
+  await expect(page.getByTestId('track-value-cpu')).toHaveAttribute('data-value', '1001')
+
+  // Switch primary to an unpinned resource series ('spare') even when 6/6 pinned.
+  await page.getByTestId('deep-metric-select-spare').click()
+  await expect(page.getByTestId('deep-track-spare')).toHaveAttribute('data-primary', 'true')
+})
+
+test('stage buttons switch periods from stage_binding, catalog.windows fallback and stage-only runs', async ({ page }) => {
+  // 1) stage_binding
+  const withBinding = fixtureApi(page, { stages: true })
+  await openDeep(page)
+  await expect(page.getByTestId('deep-stage-bar')).toBeVisible()
+  await expect(page.getByTestId('deep-stage-all')).toHaveAttribute('aria-pressed', 'true')
+  const steadyBtn = page.getByTestId('deep-stage-steady')
+  const box = (await steadyBtn.boundingBox())!
+  expect(box.width).toBeGreaterThanOrEqual(44)
+  expect(box.height).toBeGreaterThanOrEqual(44)
+  await steadyBtn.click()
+  await expect(steadyBtn).toHaveAttribute('aria-pressed', 'true')
+  await expect(page.getByTestId('deep-stage-all')).toHaveAttribute('aria-pressed', 'false')
+  await expect(page.getByTestId('deep-period-snapped')).toBeVisible()
+  await expect.poll(() => withBinding.calls.filter((u) => u.pathname.endsWith('/values')).at(-1)?.searchParams.get('from_ms')).toBe(String(origin + 40_000))
+  const lastValues = withBinding.calls.filter((u) => u.pathname.endsWith('/values')).at(-1)!
+  expect(lastValues.searchParams.get('from_ms')).toBe(String(origin + 40_000))
+  expect(lastValues.searchParams.get('to_ms')).toBe(String(origin + 100_000))
+
+  // 2) demo-8h arm A/B shape: no stage_binding, fallback to catalog.windows
+  await page.reload()
+  fixtureApi(page, { windows: [{ id: 'plateau-1', from_epoch_ms: origin + 30_000, to_epoch_ms: origin + 90_000 }] })
+  await openDeep(page)
+  await expect(page.getByTestId('deep-stage-plateau-1')).toBeVisible()
+  await page.getByTestId('deep-stage-plateau-1').click()
+  await expect(page.getByTestId('deep-stage-plateau-1')).toHaveAttribute('aria-pressed', 'true')
+
+  // 3) stage-only run (snapshot: false, stages: true)
+  await page.reload()
+  const stageOnly = fixtureApi(page, { snapshot: false, stages: true })
+  await openDeep(page)
+  await expect(page.getByTestId('deep-stage-steady')).toBeVisible()
+  await page.getByTestId('deep-stage-steady').click()
+  expect(stageOnly.calls.filter((u) => u.pathname.endsWith('/buckets')).at(-1)!.searchParams.get('from_ms')).toBe('40000')
+})
+
+test('window stat tiles show min/avg/p50/p95/max/timeAboveThreshold and update per metric & stage', async ({ page }) => {
+  fixtureApi(page, { stages: true })
+  await openDeep(page)
+  await expect(page.getByTestId('deep-stat-tiles')).toBeVisible()
+  await expect(page.getByTestId('deep-stat-tile')).toHaveCount(6)
+  // Switch primary to cpu (which violates rule > 5 on almost every cell).
+  await page.getByTestId('deep-metric-select-cpu').click()
+  const thresholdTile = page.getByTestId('deep-stat-tile').filter({ has: page.locator('[data-stat="threshold"]') })
+  await expect(page.locator('[data-stat="threshold"]')).not.toHaveAttribute('data-value', '')
+  await expect(page.locator('[data-stat="threshold"]')).not.toHaveAttribute('data-value', '0')
+  expect(await thresholdTile.count()).toBe(0) // [data-stat="threshold"] is on the tile itself
+  await expect(page.locator('[data-testid="deep-stat-tile"][data-stat="min"]')).toContainText('1\u00a0001')
+  await page.getByTestId('deep-stage-steady').click()
+  await expect(page.locator('[data-testid="deep-stat-tile"][data-stat="min"]')).toContainText('1\u00a0041')
+})
+
+test('shoulder switcher, service filter and pod-jump navigation work together', async ({ page }) => {
+  const armB = 'b'.repeat(64)
+  const mock = fixtureApi(page, {
+    ids: ['api.cpu', 'db.conn'],
+    entities: { 'api.cpu': 'checkout-api', 'db.conn': 'checkout-db' },
+    arms: [
+      { arm: 'A', analysisId, snapshotSha: 'd'.repeat(64) },
+      { arm: 'B', analysisId: armB, snapshotSha: 'e'.repeat(64) },
+    ],
+  })
+  await openDeep(page)
+  await expect(page.getByTestId('deep-arm-switcher')).toBeVisible()
+  await expect(page.getByTestId('deep-pod-jump')).toBeVisible()
+
+  await page.getByTestId('deep-service-filter').selectOption('checkout-api')
+  await expect(page.getByTestId('deep-series-api.cpu')).toBeVisible()
+  await expect(page.getByTestId('deep-series-db.conn')).toHaveCount(0)
+
+  await page.getByTestId('deep-arm-B').click()
+  await expect.poll(() => mock.calls.some((u) => u.pathname.includes(`/analyses/${armB}/result`))).toBe(true)
 })

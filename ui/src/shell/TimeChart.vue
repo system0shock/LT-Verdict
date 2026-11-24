@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import * as echarts from 'echarts/core'
 import { LineChart } from 'echarts/charts'
 import { GridComponent, MarkAreaComponent, MarkLineComponent } from 'echarts/components'
@@ -59,6 +59,10 @@ onMounted(() => {
 })
 
 watch(() => [props.lane, props.frame, props.stages, props.flags], draw)
+watch(() => grid.value.height, async () => {
+  await nextTick()
+  chart?.resize()
+})
 
 onBeforeUnmount(() => {
   resizeObserver?.disconnect()

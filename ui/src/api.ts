@@ -210,10 +210,12 @@ export function getBuckets(
   fromMillis?: number,
   toMillis?: number,
   signal?: AbortSignal,
+  include?: 'percentiles',
 ): Promise<BucketPage> {
   const query = new URLSearchParams({ rollup: String(rollup), limit: '500' })
   if (fromMillis !== undefined) query.set('from_ms', String(fromMillis))
   if (toMillis !== undefined) query.set('to_ms', String(toMillis))
+  if (include) query.set('include', include)
   return request(
     `/api/runs/${encodeURIComponent(runId)}/analyses/${encodeURIComponent(analysisId)}/buckets?${query}`,
     { signal },

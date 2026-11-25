@@ -80,16 +80,28 @@ CLI вызывает `compareAnalyses(..., conditionsConfirmed = null)`. Поэ�
 `comparability`, но CLI всегда пишет `UNCONFIRMED`. Цена ошибки: CI-пользователь не получит
 «кандидата на регрессию» без подтверждения; это намеренно.
 
-### D3. Сравнение не меняет вердикт и код выхода
+### D3. Сравнение не меняет вердикт и код выхода (по умолчанию)
 
-Код выхода `ltv analyze` определяется вердиктом, как прежде: `PASS` и `NO_POLICY` дают 0, `FAIL` 2,
-`NO_VERDICT` и `DEGRADED` 3, `INVALID` 4. Несопоставимость (`INCOMPATIBLE_METRIC_DEFINITION`, нет
-окна, разное объявление стадий) не ошибка: раздел называет причину словами, код выхода не
-меняется. `ltv report` и `ltv summary` при успехе дают 0. `junit.xml`, `chart.svg`, `result.json`,
-stdout `analyze`, `analysis_id` и вердикт от эталона не зависят.
+По умолчанию (`defaults.baseline_regression` не задан или `"ignore"`) код выхода
+`ltv analyze` определяется вердиктом политики, как прежде: `PASS` и `NO_POLICY` дают 0,
+`FAIL` 2, `NO_VERDICT` и `DEGRADED` 3, `INVALID` 4. Несопоставимость
+(`INCOMPATIBLE_METRIC_DEFINITION`, нет окна, разное объявление стадий) не ошибка: раздел
+называет причину словами, код выхода не меняется. `ltv report` и `ltv summary` при
+успехе дают 0. `junit.xml`, `chart.svg`, `result.json`, stdout `analyze`, `analysis_id` и
+вердикт от эталона не зависят.
 
 Ошибки эталона останавливают команду кодом выхода 4, чтобы CI, который просил сравнение, не получил
 молча анализ без него (раздел «Коды ошибок» ниже).
+
+> Дополнение W4.2 (opt-in `defaults.baseline_regression: "fail"` в `policy.v1`):
+> если политика явно включает `"baseline_regression": "fail"`, сравнение с эталоном
+> влияет на `policy_verdict` и код выхода при `run_validity = VALID` (CLI `--baseline`,
+> `POST /api/jobs` и MCP `analyze` с частью/параметром `baseline`). Отсутствие эталона
+> даёт `NO_VERDICT` (`BASELINE_REQUIRED`), несопоставимость или невычисляемость окна —
+> `NO_VERDICT` (`BASELINE_REGRESSION_NOT_EVALUATED`), материальная деградация сверх
+> внутриоконного шума — `FAIL` с находками `baseline_regression_failure`. В этом режиме
+> `identity.json` фиксирует `baseline_analysis_id`, чтобы кэш анализов разделял запуски
+> с разными эталонами. Без `"baseline_regression": "fail"` поведение и байты прежние.
 
 ### D4. Где разрешён флаг
 
@@ -122,6 +134,24 @@ p95, p99, пропускная способность и доля ошибок �
 `CURRENT_WINDOW_NOT_FOUND`); раздел пишет её словами, таблицу не показывает и дельты «весь прогон»
 не подставляет. Предупреждение ядра `WHOLE_RUN_METRICS_WITH_STAGES` в разделе со стадиями не
 выводится (оно о метриках, которые раздел не использует). Арифметика ядра не меняется.
+
+> Дополнение W4.2:
+>
+> - **Внутриоконная модель шума (`WITHIN_NOISE`)**: при наличии 1-секундных бакетов
+>   (`normalized-1s.ndjson` / `RunLoadSeries`) `BaselineComparison` оценивает
+>   стандартную ошибку оконных метрик круговыми блоками (`blockSize = min(14, N/4)`
+>   при `8 <= N <= 100000`). Если дельта превышает порог заметного изменения, но не
+>   превышает `3.68 * sqrt(se_base^2 + se_cur^2)`, окно получает статус
+>   `NO_MATERIAL_CHANGE` с причиной `WITHIN_NOISE`; при отсутствии 1-секундного ряда
+>   работает прежний пороговый режим.
+> - **Допуск по RPS в `stage_binding`**: разные `load_stages_sha256` допускаются к
+>   сравнению (`comparableSemantics`), если совпадают `evaluated_window_ids` и
+>   последовательность `(id, role)` в `stage_binding.stages`, а `throughput_rps` каждого
+>   оценённого окна удовлетворяет симметричному условию
+>   `|cur - base| <= 0.05 * min(cur, base)` (`DEFAULT_STAGE_RPS_TOLERANCE = 0.05`,
+>   то есть `max(cur, base) / min(cur, base) <= 1.05`, диапазон от `−4,76 %` до
+>   `+5,00 %` относительно baseline, обеспечивающий симметрию `comparableSemantics`
+>   в `statisticalBaselineSelection` и `RunComparison`).
 
 ### D6. Эталон без политики допустим
 

@@ -8,6 +8,7 @@ import io.ktor.server.routing.delete
 import io.ktor.server.routing.get
 import io.ktor.server.routing.post
 import io.ltverdict.core.BaselineScope
+import io.ltverdict.core.ComparisonSeriesContext
 import io.ltverdict.core.ReleaseComparisonContext
 import io.ltverdict.core.WindowComparisonRequest
 import io.ltverdict.core.baselineArm
@@ -154,9 +155,22 @@ internal fun Route.comparisonRoutes(context: LocalApiContext) {
         val baselineReference = selected.getValue("reference").jsonObject
         val (baselineResult, baselineIdentity) = context.store.baselineDocuments(baselineReference)
         val (currentResult, currentIdentity) = context.store.baselineDocuments(current)
+        val baselineRunId = baselineReference.getValue("run_id").jsonPrimitive.content
         val baselineAnalysis = baselineReference.getValue("analysis_id").jsonPrimitive.content
+        val currentRunId = current.getValue("run_id").jsonPrimitive.content
         val currentAnalysis = current.getValue("analysis_id").jsonPrimitive.content
         val releases = withContext(Dispatchers.IO) { context.store.releasesOfAnalyses(setOf(baselineAnalysis, currentAnalysis)) }
+        val series =
+            if (windows != null) {
+                baselineOperation {
+                    ComparisonSeriesContext(
+                        context.store.readRunLoadSeries(baselineRunId, baselineAnalysis),
+                        context.store.readRunLoadSeries(currentRunId, currentAnalysis),
+                    )
+                }
+            } else {
+                null
+            }
         val comparison =
             compareAnalyses(
                 selected,
@@ -168,6 +182,7 @@ internal fun Route.comparisonRoutes(context: LocalApiContext) {
                 windows,
                 conditions?.let(::baselineConditionConfirmation),
                 ReleaseComparisonContext(releases[baselineAnalysis], releases[currentAnalysis]),
+                series,
             )
         call.respondJson(
             buildJsonObject {

@@ -1,6 +1,7 @@
 package io.ltverdict.core
 
 import io.ltverdict.ingest.SourceType
+import io.ltverdict.metrics.NormalizedBucket
 import io.ltverdict.storage.AcceptedInput
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
@@ -14,14 +15,17 @@ import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
+import org.HdrHistogram.PackedHistogram
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertThrows
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
+import java.nio.ByteBuffer
 import java.nio.file.Files
 import java.nio.file.Path
 import java.time.Instant
+import java.util.Base64
 
 class BaselineComparisonTest {
     @Test
@@ -1643,6 +1647,308 @@ class BaselineComparisonTest {
 
             else -> error("unsupported test ratio")
         }
+
+    @Test
+    fun `within-window sub20 noise model suppresses autocorrelated noise and detects genuine shifts`() {
+        val runStart = 1_700_000_000_000L
+        val durationMs = 240_000L
+        val baseSeries = noisySeries(runStart, 240, baseMs = 200L, amplitudeMs = 60L)
+        // Small shift (+6% = +12 ms) inside autocorrelated noise (SE ~ 10-15 ms -> 3.68 * combinedSe > 12 ms)
+        val withinNoiseSeries = noisySeries(runStart, 240, baseMs = 212L, amplitudeMs = 60L)
+        // Large shift (+50% = +100 ms) well above 3.68 * combinedSe
+        val genuineShiftSeries = noisySeries(runStart, 240, baseMs = 300L, amplitudeMs = 60L)
+        // Constant series (SE == 0) with +10% shift -> CANDIDATE
+        val constBase = constantSeries(runStart, 60, latencyMs = 100L)
+        val constShifted = constantSeries(runStart, 60, latencyMs = 110L)
+
+        val selection = manualBaselineSelection("release", reference('a'))
+        val baselineResult = windowResult("steady", runStart, runStart + durationMs, 200L, 4_800L, 0L)
+        val noisyCurrent = windowResult("steady", runStart, runStart + durationMs, 212L, 4_800L, 0L)
+        val shiftedCurrent = windowResult("steady", runStart, runStart + durationMs, 300L, 4_800L, 0L)
+
+        val suppressed =
+            compareAnalyses(
+                selection,
+                reference('b'),
+                baselineResult,
+                identity(),
+                noisyCurrent,
+                identity(),
+                WindowComparisonRequest("steady", "steady"),
+                conditionsConfirmed = true,
+                series = ComparisonSeriesContext(baseSeries, withinNoiseSeries),
+            )
+        val suppressedRow =
+            suppressed
+                .getValue("window_comparison")
+                .jsonObject
+                .getValue("metrics")
+                .jsonArray
+                .first {
+                    it.jsonObject
+                        .getValue("metric")
+                        .jsonPrimitive.content == "response_time_p95_ms"
+                }.jsonObject
+        assertEquals("NO_MATERIAL_CHANGE", suppressedRow.getValue("status").jsonPrimitive.content)
+        assertEquals("WITHIN_NOISE", suppressedRow.getValue("reason").jsonPrimitive.content)
+
+        // Fallback when series is null keeps fixed-threshold CANDIDATE behavior
+        val fallback =
+            compareAnalyses(
+                selection,
+                reference('b'),
+                baselineResult,
+                identity(),
+                noisyCurrent,
+                identity(),
+                WindowComparisonRequest("steady", "steady"),
+                conditionsConfirmed = true,
+                series = null,
+            )
+        val fallbackRow =
+            fallback
+                .getValue("window_comparison")
+                .jsonObject
+                .getValue("metrics")
+                .jsonArray
+                .first {
+                    it.jsonObject
+                        .getValue("metric")
+                        .jsonPrimitive.content == "response_time_p95_ms"
+                }.jsonObject
+        assertEquals("CANDIDATE", fallbackRow.getValue("status").jsonPrimitive.content)
+
+        // Genuine shift exceeds 3.68 * SE -> CANDIDATE (and deterministic across repeated invocations)
+        val detected =
+            compareAnalyses(
+                selection,
+                reference('b'),
+                baselineResult,
+                identity(),
+                shiftedCurrent,
+                identity(),
+                WindowComparisonRequest("steady", "steady"),
+                conditionsConfirmed = true,
+                series = ComparisonSeriesContext(baseSeries, genuineShiftSeries),
+            )
+        val detectedRepeat =
+            compareAnalyses(
+                selection,
+                reference('b'),
+                baselineResult,
+                identity(),
+                shiftedCurrent,
+                identity(),
+                WindowComparisonRequest("steady", "steady"),
+                conditionsConfirmed = true,
+                series = ComparisonSeriesContext(baseSeries, genuineShiftSeries.copy(buckets = genuineShiftSeries.buckets.reversed())),
+            )
+        assertEquals(detected, detectedRepeat)
+        val detectedRow =
+            detected
+                .getValue("window_comparison")
+                .jsonObject
+                .getValue("metrics")
+                .jsonArray
+                .first {
+                    it.jsonObject
+                        .getValue("metric")
+                        .jsonPrimitive.content == "response_time_p95_ms"
+                }.jsonObject
+        assertEquals("CANDIDATE", detectedRow.getValue("status").jsonPrimitive.content)
+        assertEquals(JsonNull, detectedRow.getValue("reason"))
+
+        // Constant series (SE == 0) still detects >= 5% shift
+        val constResult =
+            compareAnalyses(
+                selection,
+                reference('b'),
+                windowResult("steady", runStart, runStart + 60_000L, 100L, 600L, 0L),
+                identity(),
+                windowResult("steady", runStart, runStart + 60_000L, 110L, 600L, 0L),
+                identity(),
+                WindowComparisonRequest("steady", "steady"),
+                conditionsConfirmed = true,
+                series = ComparisonSeriesContext(constBase, constShifted),
+            )
+        val constRow =
+            constResult
+                .getValue("window_comparison")
+                .jsonObject
+                .getValue("metrics")
+                .jsonArray
+                .first {
+                    it.jsonObject
+                        .getValue("metric")
+                        .jsonPrimitive.content == "response_time_p95_ms"
+                }.jsonObject
+        assertEquals("CANDIDATE", constRow.getValue("status").jsonPrimitive.content)
+
+        // Corrupt zlib payload or mismatched histogram sample count safely falls back to fixed thresholds instead of throwing DataFormatException
+        val corruptSeries =
+            RunLoadSeries(
+                runStart,
+                withinNoiseSeries.buckets.mapIndexed { idx, b ->
+                    if (idx == 0) b.copy(hdrV2Base64 = Base64.getEncoder().encodeToString(byteArrayOf(1, 2, 3, 4))) else b
+                },
+                runStart + durationMs,
+            )
+        val corruptFallback =
+            compareAnalyses(
+                selection,
+                reference('b'),
+                baselineResult,
+                identity(),
+                noisyCurrent,
+                identity(),
+                WindowComparisonRequest("steady", "steady"),
+                conditionsConfirmed = true,
+                series = ComparisonSeriesContext(baseSeries, corruptSeries),
+            )
+        val corruptRow =
+            corruptFallback
+                .getValue("window_comparison")
+                .jsonObject
+                .getValue("metrics")
+                .jsonArray
+                .first {
+                    it.jsonObject
+                        .getValue("metric")
+                        .jsonPrimitive.content == "response_time_p95_ms"
+                }.jsonObject
+        assertEquals("CANDIDATE", corruptRow.getValue("status").jsonPrimitive.content)
+
+        val mismatchedCountSeries =
+            RunLoadSeries(
+                runStart,
+                withinNoiseSeries.buckets.mapIndexed { idx, b ->
+                    if (idx == 0) b.copy(sampleCount = b.sampleCount + 1L) else b
+                },
+                runStart + durationMs,
+            )
+        val mismatchedFallback =
+            compareAnalyses(
+                selection,
+                reference('b'),
+                baselineResult,
+                identity(),
+                noisyCurrent,
+                identity(),
+                WindowComparisonRequest("steady", "steady"),
+                conditionsConfirmed = true,
+                series = ComparisonSeriesContext(baseSeries, mismatchedCountSeries),
+            )
+        val mismatchedRow =
+            mismatchedFallback
+                .getValue("window_comparison")
+                .jsonObject
+                .getValue("metrics")
+                .jsonArray
+                .first {
+                    it.jsonObject
+                        .getValue("metric")
+                        .jsonPrimitive.content == "response_time_p95_ms"
+                }.jsonObject
+        assertEquals("CANDIDATE", mismatchedRow.getValue("status").jsonPrimitive.content)
+    }
+
+    @Test
+    fun `evaluateBaselineRegression detects regressions only in degradation direction and fails closed when incompatible`() {
+        fun overallResult(
+            p50: Long,
+            p95: Long,
+            p99: Long,
+            throughput: Pair<Long, Long>,
+            errors: Pair<Long, Long>,
+        ) = buildJsonObject {
+            put("analysis_mode", "standard")
+            put("run_validity", "VALID")
+            put("policy_verdict", "PASS")
+            put(
+                "evidence",
+                buildJsonArray {
+                    add(
+                        buildJsonObject {
+                            put("id", "metric-summary-overall")
+                            put("type", "metric_summary")
+                            put("scope", buildJsonObject { put("kind", "overall") })
+                            put("sample_count", 100L)
+                            put("error_count", errors.first)
+                            put(
+                                "latency_ms",
+                                buildJsonObject {
+                                    put("p50", p50)
+                                    put("p95", p95)
+                                    put("p99", p99)
+                                    put("max", p99 + 10)
+                                },
+                            )
+                            put("throughput_rps", ratio(throughput))
+                            put("error_rate_ratio", ratio(errors))
+                        },
+                    )
+                },
+            )
+        }
+
+        val base = overallResult(80L, 100L, 120L, 10L to 1L, 0L to 100L)
+        val improved = overallResult(40L, 50L, 60L, 20L to 1L, 0L to 100L)
+        val regressedLatency = overallResult(160L, 200L, 240L, 10L to 1L, 0L to 100L)
+        val regressedThroughput = overallResult(80L, 100L, 120L, 5L to 1L, 0L to 100L)
+
+        assertTrue(evaluateBaselineRegression(base, identity(), improved, identity()) is BaselineRegressionOutcome.Pass)
+        val latOutcome = evaluateBaselineRegression(base, identity(), regressedLatency, identity())
+        assertTrue(latOutcome is BaselineRegressionOutcome.Regressed)
+        assertTrue((latOutcome as BaselineRegressionOutcome.Regressed).failures.any { it.metric == "response_time_p95_ms" })
+        val rpsOutcome = evaluateBaselineRegression(base, identity(), regressedThroughput, identity())
+        assertTrue(rpsOutcome is BaselineRegressionOutcome.Regressed)
+        assertTrue((rpsOutcome as BaselineRegressionOutcome.Regressed).failures.any { it.metric == "throughput_rps" })
+        assertTrue(
+            evaluateBaselineRegression(base, identity(arm = "A"), regressedLatency, identity(arm = "B"))
+                is BaselineRegressionOutcome.NotEvaluated,
+        )
+    }
+
+    private fun noisySeries(
+        runStart: Long,
+        seconds: Int,
+        baseMs: Long,
+        amplitudeMs: Long,
+    ): RunLoadSeries {
+        val buckets =
+            (0 until seconds).map { idx ->
+                // Low-frequency wave (~40s period) produces strong block-level variance across b=14s blocks
+                val wave = if ((idx / 20) % 2 == 0) amplitudeMs else -amplitudeMs
+                bucket(idx * 1_000L, 20, maxOf(1L, baseMs + wave))
+            }
+        return RunLoadSeries(runStart, buckets, runStart + seconds * 1_000L)
+    }
+
+    private fun constantSeries(
+        runStart: Long,
+        seconds: Int,
+        latencyMs: Long,
+    ): RunLoadSeries =
+        RunLoadSeries(
+            runStart,
+            (0 until seconds).map { idx -> bucket(idx * 1_000L, 10, latencyMs) },
+            runStart + seconds * 1_000L,
+        )
+
+    private fun bucket(
+        offsetMs: Long,
+        samples: Int,
+        latencyMs: Long,
+    ): NormalizedBucket {
+        val hist = PackedHistogram(1L, 86_400_000L, 3)
+        repeat(samples) { hist.recordValue(latencyMs) }
+        val buf = ByteBuffer.allocate(hist.neededByteBufferCapacity)
+        val written = hist.encodeIntoCompressedByteBuffer(buf)
+        val bytes = ByteArray(written)
+        buf.flip()
+        buf.get(bytes)
+        return NormalizedBucket(offsetMs, samples.toLong(), 0L, latencyMs, Base64.getEncoder().encodeToString(bytes))
+    }
 
     private fun identity(
         version: String = "same",

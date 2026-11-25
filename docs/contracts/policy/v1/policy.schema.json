@@ -21,7 +21,8 @@
         "min_samples": { "type": "integer", "minimum": 1, "maximum": 1000000 },
         "max_missing_fraction": { "type": "number", "minimum": 0, "exclusiveMaximum": 1 },
         "max_gap_cells": { "type": "integer", "minimum": 0, "maximum": 100000 },
-        "missing_transaction": { "enum": ["no_verdict", "warn"] }
+        "missing_transaction": { "enum": ["no_verdict", "warn"] },
+        "baseline_regression": { "enum": ["ignore", "fail"] }
       }
     },
     "rules": {

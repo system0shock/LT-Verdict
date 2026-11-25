@@ -1,5 +1,7 @@
 package io.ltverdict.cli
 
+import io.ltverdict.core.ComparisonSeriesContext
+import io.ltverdict.core.RunLoadSeries
 import io.ltverdict.core.WindowComparisonRequest
 import io.ltverdict.core.compareAnalyses
 import io.ltverdict.core.hasStageBinding
@@ -29,6 +31,7 @@ internal class BaselineAnalysis(
     val analysisId: String,
     val result: JsonObject,
     val identity: JsonObject,
+    val loadSeries: RunLoadSeries? = null,
 )
 
 /** The run id and analysis id of a saved analysis-result.json inside [dataDir]; looks at paths only, so nothing is created. */
@@ -80,7 +83,7 @@ internal fun readBaselineAnalysis(
             if (failure.message?.startsWith("CORRUPT") == true) throw CliFailure(EXIT_INVALID_INPUT, "BASELINE_CORRUPT")
             throw failure
         }
-    return BaselineAnalysis(runId, analysisId, documents.first, documents.second)
+    return BaselineAnalysis(runId, analysisId, documents.first, documents.second, store.readRunLoadSeries(runId, analysisId))
 }
 
 /** The analysis just made or asked for: its stored documents, without the size bound of a baseline (the verdict never depends on it). */
@@ -99,7 +102,7 @@ internal fun readCurrentAnalysis(
         } catch (failure: IllegalStateException) {
             if (failure.message?.startsWith("CORRUPT") == true) null else throw failure
         } ?: throw CliFailure(EXIT_INVALID_INPUT, "BASELINE_CORRUPT")
-    return BaselineAnalysis(runId, analysisId, documents.first, documents.second)
+    return BaselineAnalysis(runId, analysisId, documents.first, documents.second, store.readRunLoadSeries(runId, analysisId))
 }
 
 /**
@@ -114,9 +117,19 @@ internal fun baselineComparison(
     val baselineReference = reference(baseline)
     val currentReference = reference(current)
     val selection = manualBaselineSelection(BASELINE_SERIES, baselineReference)
+    val series = ComparisonSeriesContext(baseline.loadSeries, current.loadSeries)
 
     fun compare(windows: WindowComparisonRequest?) =
-        compareAnalyses(selection, currentReference, baseline.result, baseline.identity, current.result, current.identity, windows)
+        compareAnalyses(
+            selection,
+            currentReference,
+            baseline.result,
+            baseline.identity,
+            current.result,
+            current.identity,
+            windows,
+            series = if (windows != null) series else null,
+        )
 
     val staged = hasStageBinding(baseline.result) || hasStageBinding(current.result)
     val warnings = compare(null).getValue("warnings") as JsonArray

@@ -151,6 +151,7 @@ private object UsefulnessValidationRunner {
     private data class CoreRun(
         val result: JsonObject,
         val identity: JsonObject,
+        val loadSeries: RunLoadSeries,
     )
 
     private fun usefulnessCases(corpus: Path): List<Case> {
@@ -266,11 +267,12 @@ private object UsefulnessValidationRunner {
                             ) + evaluated.evidence,
                     )
                 }
+            val finishedMetrics = metrics.finish()
             var evaluation =
                 evaluateSharedWindowPolicy(
                     null,
                     first.validity,
-                    metrics.finish(),
+                    finishedMetrics,
                     windowMetrics.finish(),
                     resourceEvaluation,
                     windows,
@@ -295,7 +297,7 @@ private object UsefulnessValidationRunner {
             val result = Json.parseToJsonElement(resultBytes.decodeToString()).jsonObject
             val identityBytes = analysisIdentity(input, null, EngineConfig(), resources, diagnostics)
             val identity = Json.parseToJsonElement(identityBytes.decodeToString()).jsonObject
-            CoreRun(result, identity)
+            CoreRun(result, identity, RunLoadSeries(runStart, finishedMetrics.oneSecondBuckets, runEnd))
         }
     }
 
@@ -323,6 +325,7 @@ private object UsefulnessValidationRunner {
                     input.getValue("current_window_id").jsonPrimitive.content,
                 ),
                 conditionsConfirmed,
+                series = ComparisonSeriesContext(baseline.loadSeries, current.loadSeries),
             )
         return buildJsonObject {
             put("baseline", projection(baseline.result))

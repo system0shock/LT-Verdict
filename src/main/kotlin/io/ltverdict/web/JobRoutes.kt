@@ -14,6 +14,7 @@ import io.ktor.server.routing.get
 import io.ktor.server.routing.post
 import io.ktor.utils.io.jvm.javaio.toInputStream
 import io.ltverdict.core.AnalysisRequest
+import io.ltverdict.core.BaselineAnalysisInput
 import io.ltverdict.core.CapacityPlanValidation
 import io.ltverdict.core.DiagnosticValidation
 import io.ltverdict.core.LoadStagesValidation
@@ -52,6 +53,7 @@ import io.ltverdict.storage.RunBundleStore
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.withContext
+import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
@@ -213,6 +215,7 @@ private class JobParts {
     var stages: LoadStagesValidation.Valid? = null
     var jenkinsBuild: String? = null
     var commit: String? = null
+    var baselineReference: Pair<String, String>? = null
     var sourceRequest: WindowedSourceRequest? = null
     val sourceContexts = mutableListOf<ByteArray>()
     val postgresFiles = mutableMapOf<String, ByteArray>()
@@ -225,6 +228,7 @@ private class JobParts {
     var stagesSeen = false
     var jenkinsBuildSeen = false
     var commitSeen = false
+    var baselineSeen = false
     var invalidParts = false
 }
 
@@ -415,6 +419,23 @@ private suspend fun readJobParts(call: ApplicationCall): JobParts {
                             }
                     }
 
+                    (part is PartData.FileItem || part is PartData.FormItem) &&
+                        part.name == "baseline" &&
+                        !job.baselineSeen &&
+                        !job.invalidParts -> {
+                        job.baselineSeen = true
+                        val bytes =
+                            when (part) {
+                                is PartData.FileItem ->
+                                    withContext(Dispatchers.IO) {
+                                        part.provider().toInputStream().readNBytes(MAX_BASELINE_REQUEST_BYTES + 1)
+                                    }
+                                is PartData.FormItem -> part.value.encodeToByteArray()
+                            }
+                        if (bytes.size > MAX_BASELINE_REQUEST_BYTES) tooLarge("Baseline reference exceeds its resource limit")
+                        job.baselineReference = parseBaselineReference(bytes)
+                    }
+
                     else -> job.invalidParts = true
                 }
             } finally {
@@ -595,6 +616,37 @@ private suspend fun bindJob(
                 malformed("PostgreSQL artifacts are invalid")
             }
         }
+    val baseline =
+        job.baselineReference?.let { (baseRunId, baseAnalysisId) ->
+            val verified =
+                withContext(Dispatchers.IO) {
+                    try {
+                        store.readVerifiedAnalysis(baseRunId, baseAnalysisId)
+                    } catch (failure: IllegalArgumentException) {
+                        if (failure.message == "RESULT_TOO_LARGE") {
+                            throw ApiFailure(
+                                HttpStatusCode.UnprocessableEntity,
+                                "BASELINE_TOO_LARGE",
+                                "Baseline result exceeds its size limit",
+                            )
+                        }
+                        null
+                    } catch (_: NoSuchElementException) {
+                        null
+                    } catch (failure: IllegalStateException) {
+                        if (failure.message?.startsWith("CORRUPT") == true) {
+                            throw ApiFailure(
+                                HttpStatusCode.UnprocessableEntity,
+                                "BASELINE_CORRUPT",
+                                "Baseline analysis is corrupt",
+                            )
+                        }
+                        throw failure
+                    }
+                } ?: notFound("Baseline analysis was not found")
+            val loadSeries = withContext(Dispatchers.IO) { store.readRunLoadSeries(baseRunId, baseAnalysisId) }
+            BaselineAnalysisInput(baseRunId, baseAnalysisId, verified.result, verified.identity, loadSeries)
+        }
     return AnalysisRequest(
         input,
         policy,
@@ -609,6 +661,7 @@ private suspend fun bindJob(
         postgres = postgres,
         jenkinsBuild = job.jenkinsBuild,
         commit = job.commit,
+        baseline = baseline,
     )
 }
 
@@ -681,7 +734,26 @@ private const val MAX_JOB_REQUEST_BYTES =
         MAX_POLICY_BYTES + MAX_DIAGNOSTIC_BYTES + MAX_CAPACITY_PLAN_BYTES + MAX_TREND_PLAN_BYTES + MAX_POD_VIEW_BYTES +
         MAX_MULTIPART_OVERHEAD_BYTES
 
-// 25 before release provenance; two more parts for jenkins_build and commit.
+private fun parseBaselineReference(bytes: ByteArray): Pair<String, String> {
+    val obj =
+        try {
+            Json.parseToJsonElement(bytes.decodeToString()) as? JsonObject
+        } catch (_: Exception) {
+            null
+        } ?: malformed("Baseline reference is invalid")
+    if (obj.keys != BASELINE_REFERENCE_FIELDS) malformed("Baseline reference is invalid")
+    val runId = (obj["run_id"] as? JsonPrimitive)?.takeIf(JsonPrimitive::isString)?.content
+    val analysisId = (obj["analysis_id"] as? JsonPrimitive)?.takeIf(JsonPrimitive::isString)?.content
+    if (runId == null || !RUN_ID.matches(runId) || analysisId == null || !BASELINE_SHA256.matches(analysisId)) {
+        malformed("Baseline reference is invalid")
+    }
+    return runId to analysisId
+}
+
+private val BASELINE_REFERENCE_FIELDS = setOf("run_id", "analysis_id")
+private val BASELINE_SHA256 = Regex("[0-9a-f]{64}")
+
+// 25 before release provenance; 27 keeps the multipart ceiling while allowing optional provenance or baseline.
 private const val MAX_JOB_PARTS = 27
 
 private val POSTGRES_PART_LIMITS =

@@ -227,7 +227,14 @@ export interface PolicyRule {
 export interface Policy {
   schema_version: 'policy.v1'
   policy_id: string
-  defaults?: { sample_floor?: number; min_samples?: number; max_missing_fraction?: number; max_gap_cells?: number }
+  defaults?: {
+    sample_floor?: number
+    min_samples?: number
+    max_missing_fraction?: number
+    max_gap_cells?: number
+    missing_transaction?: 'no_verdict' | 'warn'
+    baseline_regression?: 'ignore' | 'fail'
+  }
   rules: PolicyRule[]
 }
 

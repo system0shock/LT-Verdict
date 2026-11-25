@@ -6,6 +6,7 @@ import io.ltverdict.ai.AiAdviceStore
 import io.ltverdict.ai.advisoryAiSetup
 import io.ltverdict.core.AnalysisRequest
 import io.ltverdict.core.AnalysisService
+import io.ltverdict.core.BaselineAnalysisInput
 import io.ltverdict.core.CapacityPlanValidation
 import io.ltverdict.core.DiagnosticValidation
 import io.ltverdict.core.EngineConfig
@@ -422,6 +423,10 @@ private fun analyze(
                         postgres = postgres,
                         jenkinsBuild = normalizedJenkinsBuild,
                         commit = normalizedCommit,
+                        baseline =
+                            baselineAnalysis?.let {
+                                BaselineAnalysisInput(it.runId, it.analysisId, it.result, it.identity, it.loadSeries)
+                            },
                     ),
                     source,
                 ).also { outcome ->

@@ -58,6 +58,10 @@ private val REASON_WORDS: Map<String, String> =
         "SOURCE_REQUEST_CAP_EXCEEDED" to "Достигнут предел числа запросов к источнику, часть данных не запрошена.",
         "STAGE_WINDOW_SNAPSHOT_PARTIAL" to
             "Снимок ресурсов покрывает окно стадии steady не целиком: ресурсные правила проверены только на покрытой части окна.",
+        "BASELINE_REQUIRED" to
+            "Политика требует сравнения с baseline (baseline_regression: fail), но эталонный анализ не передан.",
+        "BASELINE_REGRESSION_NOT_EVALUATED" to
+            "Не удалось оценить регрессию относительно baseline (несовместимые анализы, нет окна или недостаточно данных).",
         // Оценка ёмкости
         "CAPACITY_RUN_NOT_VALID" to "Нагрузка разобрана не полностью, ёмкость оценить нельзя.",
         "CAPACITY_WINDOW_EVIDENCE_MISSING" to "Для ступени нет окна или итогов окна.",

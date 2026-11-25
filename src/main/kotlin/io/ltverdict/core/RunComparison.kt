@@ -1,7 +1,6 @@
 package io.ltverdict.core
 
 import kotlinx.serialization.json.JsonArray
-import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
@@ -33,12 +32,13 @@ internal fun buildRunDynamics(
     limit: Int = DEFAULT_DYNAMICS_LIMIT,
 ): JsonObject {
     require(limit in 1..MAX_DYNAMICS_LIMIT) { "INVALID_DYNAMICS_LIMIT" }
-    val currentKey =
-        comparisonSemanticKey(current.result, current.identity) ?: throw IllegalArgumentException("INVALID_COMPARISON_IDENTITY")
+    if (!comparableSemantics(current.result, current.identity, current.result, current.identity)) {
+        throw IllegalArgumentException("INVALID_COMPARISON_IDENTITY")
+    }
     val all = (saved + current).distinctBy { it.reference }
     val compatible =
         all
-            .filter { comparisonSemanticKey(it.result, it.identity) == currentKey }
+            .filter { comparableSemantics(it.result, it.identity, current.result, current.identity) }
             .sortedWith(compareByDescending<SavedAnalysisForComparison> { it.startedAt() }.thenBy { it.reference.toString() })
     val rows = compatible.take(limit)
     val baseline = baselineReference?.let { reference -> compatible.singleOrNull { it.reference == reference } }
@@ -119,8 +119,7 @@ internal fun compareTransactions(
     }
     val baseline = baselineResult.transactionMetrics()
     val current = currentResult.transactionMetrics()
-    val compatible =
-        comparisonSemanticKey(baselineResult, baselineIdentity)?.let { it == comparisonSemanticKey(currentResult, currentIdentity) } == true
+    val compatible = comparableSemantics(baselineResult, baselineIdentity, currentResult, currentIdentity)
     val lowered = normalizedFilter?.lowercase(Locale.ROOT)
     val keys =
         (baseline.keys + current.keys)
@@ -313,19 +312,6 @@ private fun JsonObject.ratio(name: String): ExactValue? {
     return ExactValue(numerator, denominator)
 }
 
-private fun comparisonSemanticKey(
-    result: JsonObject,
-    identity: JsonObject,
-): List<JsonElement>? {
-    val values = mutableListOf(result["analysis_mode"] ?: return null)
-    COMPARISON_SEMANTIC_FIELDS.forEach { field -> values += identity[field] ?: return null }
-    // ADR 0014, часть 5: плечо входит в ключ условно. Отсутствие у обоих анализов равно равенству, отсутствие у одного - несовместимость.
-    values += identity["resource_arm"] ?: JsonNull
-    // ADR 0030, R6: the declared stages are a conditional link too; the windows 5-25 min and 5-30 min are different metrics.
-    values += identity["load_stages_sha256"] ?: JsonNull
-    return values
-}
-
 private fun kotlinx.serialization.json.JsonObjectBuilder.putExact(
     name: String,
     value: ExactValue?,
@@ -425,5 +411,3 @@ private const val MAX_TRANSACTION_LIMIT = 200
 private const val MAX_TRANSACTION_FILTER_BYTES = 256
 private const val DISPLAY_SCALE = 6
 private val HUNDRED = BigInteger.valueOf(100)
-private val COMPARISON_SEMANTIC_FIELDS =
-    listOf("source_type", "engine", "parsers", "modules", "input_versions", "outputs", "histogram", "normalization", "limits")

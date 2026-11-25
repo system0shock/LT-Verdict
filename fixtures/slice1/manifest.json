@@ -83,7 +83,7 @@
     },
     {
       "path": "docs/contracts/policy/v1/policy.schema.json",
-      "sha256": "0a54dbdecf9cc1667b7052d8ef8c6d86d3b9b296028edec9878e8e5463dbfa21"
+      "sha256": "35e09f4aa4ab9e8a69b84537134ba12068157a79155a1bc5280399625f7794df"
     },
     {
       "path": "fixtures/slice1/gatling/binary-3.13.5/oracle.json",

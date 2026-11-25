@@ -514,4 +514,56 @@ test.describe('verdict summary', () => {
       expect(isNoVerdictReason(code)).toBe(entry.noVerdict)
     }
   })
+
+  test('regression-only FAIL shows baseline regression headline, p50 label, and failure line', () => {
+    const summary = summarizeVerdict(build({
+      policy_verdict: 'FAIL',
+      evidence: [overall, p95Rule('ok-rule', 'PASS', 100)],
+      findings: [
+        {
+          id: 'baseline-regression-failure-1234',
+          type: 'baseline_regression_failure',
+          window_id: 'steady',
+          metric: 'response_time_p50_ms',
+          baseline: '100',
+          current: '140',
+          delta: '40',
+          delta_percent: '40',
+        },
+      ],
+    }))
+
+    expect(summary.headline).toBe('Прогон не проходит — обнаружена регрессия относительно baseline')
+    expect(summary.chip).toBe('регрессия baseline (1)')
+    expect(summary.linesTitle).toBe('Что нарушено')
+    expect(summary.lines).toEqual([
+      {
+        key: 'baseline-regression-failure-1234',
+        title: 'Регрессия относительно baseline · p50 отклика · окно steady',
+        detail: '100 → 140 (40 %)',
+      },
+    ])
+  })
+
+  test('mixed rule and baseline regression FAIL includes both counts', () => {
+    const summary = summarizeVerdict(build({
+      policy_verdict: 'FAIL',
+      evidence: [overall, checkout, p95Rule('checkout-p95', 'FAIL', 2340)],
+      findings: [
+        {
+          id: 'baseline-regression-failure-5678',
+          type: 'baseline_regression_failure',
+          metric: 'response_time_p95_ms',
+          baseline: '200',
+          current: '250',
+          delta: '50',
+          delta_percent: '25',
+        },
+      ],
+    }))
+
+    expect(summary.headline).toBe('Прогон не проходит — нарушено проверок: 1 из 1; регрессий относительно baseline: 1')
+    expect(summary.chip).toBe('нарушено 1 из 1 · регрессия (1)')
+    expect(summary.lines).toHaveLength(2)
+  })
 })

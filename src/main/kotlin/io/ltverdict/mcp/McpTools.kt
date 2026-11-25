@@ -82,6 +82,13 @@ internal class McpTools(
             } catch (_: IllegalArgumentException) {
                 throw McpToolInputException("INVALID_PROVENANCE", "commit is invalid")
             }
+        args.optionalObject("baseline")?.let { baselineObj ->
+            if (baselineObj.keys != setOf("run_id", "analysis_id")) {
+                throw McpToolInputException("INVALID_ARGUMENT", "baseline must contain only run_id and analysis_id")
+            }
+            baselineObj.requiredRunId()
+            baselineObj.requiredAnalysisId()
+        }
 
         val uploaded = api.uploadInputFile(inputPath)
         val runId = uploaded.stringField("run_id") ?: throw McpToolInputException("INVALID_API_RESPONSE", "run_id missing")
@@ -613,6 +620,7 @@ private val ANALYZE_JSON_PARTS =
         "capacity_plan" to "capacity_plan",
         "trend_plan" to "trend_plan",
         "pod_view" to "pod_view",
+        "baseline" to "baseline",
     )
 
 private val PROBE_FORBIDDEN_KEYS = setOf("url", "base_url", "expression", "credentials")
@@ -666,6 +674,13 @@ private val TOOL_DEFINITIONS: JsonArray =
                     put("capacity_plan", prop("object", "Optional capacity-plan.v1 JSON object."))
                     put("trend_plan", prop("object", "Optional trend-plan.v1 JSON object."))
                     put("pod_view", prop("object", "Optional pod-view.v1 JSON object."))
+                    put(
+                        "baseline",
+                        prop(
+                            "object",
+                            "Optional baseline reference {\"run_id\", \"analysis_id\"} for baseline_regression policies.",
+                        ),
+                    )
                     put("timeout_seconds", prop("integer", "Job polling timeout in seconds (1..600, default 120)."))
                 },
             ),

@@ -148,6 +148,7 @@ const RU_REASONS: Record<string, string> = {
   ZERO_BASELINE: 'нулевой baseline',
   EMPTY_WINDOW: 'пустое окно',
   MISSING_METRIC: 'нет значения метрики',
+  WITHIN_NOISE: 'в пределах внутриоконного шума',
   CONDITIONS_UNCONFIRMED: 'условия не подтверждены',
   INCOMPATIBLE_METRIC_DEFINITION: 'несовместимое определение метрики',
   BASELINE_WINDOW_NOT_FOUND: 'окно baseline не найдено',

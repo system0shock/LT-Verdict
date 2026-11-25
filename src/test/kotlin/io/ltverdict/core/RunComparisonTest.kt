@@ -271,6 +271,96 @@ class RunComparisonTest {
                 .jsonPrimitive.content,
         )
     }
+
+    @Test
+    fun `staged analyses with matching structure and steady RPS within 5 percent are comparable in dynamics and transactions`() {
+        fun stagedSaved(
+            suffix: Char,
+            hash: String,
+            steadyRpsNumerator: Long,
+            role: String = "steady",
+        ): SavedAnalysisForComparison {
+            val res =
+                buildJsonObject {
+                    put("analysis_mode", "standard")
+                    put("policy_verdict", "PASS")
+                    put(
+                        "evidence",
+                        buildJsonArray {
+                            add(metricSummary(buildJsonObject { put("kind", "overall") }, 100L, 100L, 1L))
+                            add(
+                                buildJsonObject {
+                                    put("id", "stage-binding")
+                                    put("type", "stage_binding")
+                                    put("mode", "declared_stages")
+                                    put("declaration_sha256", hash)
+                                    put("evaluated_window_ids", buildJsonArray { add(JsonPrimitive("steady")) })
+                                    put(
+                                        "stages",
+                                        buildJsonArray {
+                                            add(
+                                                buildJsonObject {
+                                                    put("id", "steady")
+                                                    put("role", role)
+                                                },
+                                            )
+                                        },
+                                    )
+                                },
+                            )
+                            add(
+                                buildJsonObject {
+                                    put("id", "window-metric-summary-steady")
+                                    put("type", "window_metric_summary")
+                                    put("window_id", "steady")
+                                    put("from_epoch_ms", 0L)
+                                    put("to_epoch_ms", 10_000L)
+                                    put("sample_count", 100L)
+                                    put("error_count", 0L)
+                                    put("error_rate_ratio", ratio(0L, 100L))
+                                    put("throughput_rps", ratio(steadyRpsNumerator, 1L))
+                                    put(
+                                        "latency_ms",
+                                        buildJsonObject {
+                                            put("p50", 80L)
+                                            put("p95", 100L)
+                                            put("p99", 110L)
+                                            put("max", 120L)
+                                        },
+                                    )
+                                },
+                            )
+                        },
+                    )
+                }
+            val id = JsonObject(identity() + ("load_stages_sha256" to JsonPrimitive(hash)))
+            return saved(suffix, "2026-09-0${suffix - 'a' + 1}T10:00:00Z", 100L).copy(result = res, identity = id)
+        }
+
+        val current = stagedSaved('a', "1".repeat(64), 100L)
+        val withinTolerance = stagedSaved('b', "2".repeat(64), 105L)
+        val overTolerance = stagedSaved('c', "3".repeat(64), 106L)
+        val wrongRole = stagedSaved('d', "4".repeat(64), 100L, role = "ramp_up")
+
+        val dynamics = buildRunDynamics(current, listOf(withinTolerance, overTolerance, wrongRole))
+        assertEquals(2, dynamics.getValue("comparable_count").jsonPrimitive.int)
+        assertEquals(2, dynamics.getValue("excluded_incompatible_count").jsonPrimitive.int)
+        assertEquals(
+            JsonPrimitive(true),
+            compareTransactions(current.result, current.identity, withinTolerance.result, withinTolerance.identity)
+                .getValue("compatible"),
+        )
+        assertEquals(
+            JsonPrimitive(false),
+            compareTransactions(current.result, current.identity, overTolerance.result, overTolerance.identity)
+                .getValue("compatible"),
+        )
+        assertEquals(
+            JsonPrimitive(false),
+            compareTransactions(current.result, current.identity, wrongRole.result, wrongRole.identity)
+                .getValue("compatible"),
+        )
+    }
 }
 
 private fun JsonObject.metric(name: String): JsonObject =

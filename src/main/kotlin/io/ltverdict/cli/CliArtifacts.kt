@@ -134,6 +134,18 @@ internal fun summaryText(
                 val detail = if (check.text("status") == "NO_VERDICT") reasonOf(check) ?: description(check) else description(check)
                 append("${check.text("status")} ${checkName(check)}: $detail\n")
             }
+            (root["findings"] as? JsonArray)
+                .orEmpty()
+                .mapNotNull { it as? JsonObject }
+                .filter { it.text("type") == "baseline_regression_failure" }
+                .forEach { failure ->
+                    val scope = failure["window_id"]?.takeUnless { it is JsonNull }?.let { " @ ${valueText(it)}" } ?: ""
+                    val pct = failure["delta_percent"]?.takeUnless { it is JsonNull }?.let { " (${valueText(it)} %)" } ?: ""
+                    val metric = failure.text("metric")
+                    val baselineValue = failure.text("baseline")
+                    val currentValue = failure.text("current")
+                    append("FAIL baseline_regression$scope: $metric $baselineValue -> $currentValue$pct\n")
+                }
             baselineChangesView(baseline)?.lines?.forEach { append(it).append('\n') }
             errors?.let { view ->
                 append("top errors (whole run, ${view.total} total):\n")

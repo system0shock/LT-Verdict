@@ -857,6 +857,56 @@ export interface BucketPage {
   next_from_ms: number | null
 }
 
+export interface TransactionBucket {
+  bucket_start_ms: number
+  sample_count: number
+  error_count: number
+  p50_latency_ms: number
+  p95_latency_ms: number
+  p99_latency_ms: number
+  max_latency_ms: number
+}
+
+export interface TransactionBucketSeriesPage {
+  tx: string
+  buckets: TransactionBucket[]
+  next_from_ms: number | null
+}
+
+export interface TransactionBucketsResponse {
+  rollup_seconds: number
+  series: TransactionBucketSeriesPage[]
+}
+
+export interface ErrorGroupItem {
+  id: string
+  scope: {
+    kind: string
+    label: string
+    group_path: string[]
+    sample_kind?: string
+  }
+  response_code: string | null
+  message: string | null
+  message_truncated?: boolean
+  count: number
+  from_epoch_ms: number
+  to_epoch_ms: number
+}
+
+export interface ErrorGroupsResponse {
+  available?: boolean
+  schema_version?: string
+  run_id?: string
+  scope_note?: string
+  total_error_count?: number
+  tracked_error_count?: number
+  untracked_error_count?: number
+  omitted_group_count?: number
+  omitted_error_count?: number
+  groups: ErrorGroupItem[]
+}
+
 export interface AnalysisReference {
   run_id: string
   analysis_id: string
